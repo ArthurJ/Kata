@@ -1,0 +1,21 @@
+# Teste simples de operacoes com float
+
+multiplica :: Float Float => Float
+lambda a b:
+    * a b
+
+soma :: Float Float => Float
+lambda a b:
+    + a b
+
+compara :: Float Float => Bool
+lambda a b:
+    > a b
+
+action main
+    let x 3.14
+    let y 2.0
+    let resultado $(multiplica x y)
+    echo! $(str resultado)
+
+main!

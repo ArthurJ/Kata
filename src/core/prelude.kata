@@ -1,0 +1,48 @@
+# Kata-Lang Prelude
+# O teto arquitetural de todos os projetos na linguagem.
+# Aqui expomos de forma limpa os blocos basicos da linguagem
+
+import types.(SHOW HASH EQ ORD)
+import types.(NUM Float Int and or xor not)
+
+import io.(echo)
+import csp.(fork channel queue broadcast)
+
+# FFI para map usando KataClosure
+# Recebe uma closure e uma lista, retorna nova lista mapeada
+@ffi("kata_rt_map")
+map :: (A->B) [A] => [B]
+
+# FFI para filter usando KataClosure
+# Recebe uma closure predicado e uma lista, retorna lista filtrada
+@ffi("kata_rt_filter")
+filter :: (A->Bool) [A] => [A]
+
+# FFI para fold usando KataClosure
+# Recebe closure (acc val -> acc), valor inicial, lista
+@ffi("kata_rt_fold")
+fold :: (A A -> A) A [A] => A
+
+# FFI para zip
+# Combina duas listas em uma lista de tuplas
+@ffi("kata_rt_zip")
+zip :: [A] [B] => [(A B)]
+
+# Concatenação de listas
++ :: [A] [A] => [A]
+λ [] b: b
+λ [x:xs] b: x:$(+ xs b)
+
+# Introspecção e Formatação (Phase 9)
+@ffi("kata_rt_type")
+type :: A => Text
+
+@ffi("kata_rt_fields")
+fields :: A => [Text]
+
+@ffi("kata_rt_format")
+format :: Text A => Text
+
+# Uma vez importadas as vertentes puras de cada modulo isolado,
+# exportamos tudo numa tacada so para o ambiente raiz do usuario.
+export mod + type fields format fork channel queue broadcast

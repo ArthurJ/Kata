@@ -1,0 +1,20 @@
+enum IMC
+    | Magreza(< _ 18.5)
+    | Normal(<= _ 25.0)
+    | Sobrepeso(<= _ 30.0)
+    | Obesidade
+
+data Peso as (Float, > _ 0.0)
+data Altura as (Float, > _ 0.0)
+
+calcular_imc :: Peso Altura => IMC
+lambda p a:
+    IMC imc
+    with
+        imc as / p (* a a)
+
+action main
+    let c calcular_imc 70.0 1.75
+    echo! "Concluido"
+
+main!

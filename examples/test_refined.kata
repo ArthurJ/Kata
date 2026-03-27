@@ -1,0 +1,14 @@
+# Teste de Tipos Refinados e Validação Estática de Literais
+
+# 1. Declarando um Tipo Refinado
+alias (Int, > _ 0) as PositiveInt
+
+# 2. Função que exige o tipo refinado puro
+processar_idade :: PositiveInt => Text
+lambda idade:
+    "Idade processada com sucesso!"
+
+action main! ()
+    # O compilador avalia '15 > 0'. Sendo True, ele engole o Literal
+    # '15' como um PositiveInt nativo sem erro.
+    let invalido $(processar_idade -5)

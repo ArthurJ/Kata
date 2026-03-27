@@ -1,0 +1,14 @@
+# Kata: Phase 6 Module System Test
+# Verifica se import/export funciona no pipeline de compilação.
+
+import mock_math
+import mock_math.triplicar
+
+action main
+    let resultado $(mock_math.dobrar 21)
+    let triplo $(triplicar 21)
+    echo! "Import OK"
+    echo! $(+ "Dobro: " resultado)
+    echo! $(+ "Triplo: " triplo)
+
+main!

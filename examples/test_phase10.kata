@@ -1,0 +1,21 @@
+# test_phase10.kata - Concorrência (Fase 10)
+# Demonstra channel!, queue!, broadcast! e spawn!
+
+action main
+    echo! "=== Fase 10: Concorrência ==="
+
+    # Teste 1: Canal Rendezvous (channel!)
+    let (tx rx) channel!()
+    echo! "Canal Rendezvous criado (tx, rx)"
+
+    # Teste 2: Queue Assíncrona com buffer (queue!)
+    let (qtx qrx) queue!(16)
+    echo! "Queue com buffer 16 criada (qtx, qrx)"
+
+    # Teste 3: Broadcast PubSub (broadcast!)
+    let (btx factory) broadcast!()
+    echo! "Broadcast PubSub criado (btx, factory)"
+
+    echo! "=== Fase 10: Testes passaram! ==="
+
+main!

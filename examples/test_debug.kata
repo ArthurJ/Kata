@@ -1,0 +1,9 @@
+# Comentário
+# Comentário com + simbolo
+
+action main
+    let v_linha {1 2 3 ;}
+    let v_coluna {4 ; 5 ; 6}
+    let escalar dot v_linha v_coluna
+
+main!

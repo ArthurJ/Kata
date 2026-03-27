@@ -1,0 +1,16 @@
+# Teste simples de TCO (Tail Call Optimization)
+# Fatorial tail-recursivo
+
+fat_tail :: Int Int => Int
+lambda 0 acc: acc
+lambda n acc: fat_tail $(- n 1) $(* n acc)
+
+fatorial :: Int => Int
+lambda n: fat_tail n 1
+
+# Teste: calcular 5!
+action main
+    let f $(fatorial 5)
+    echo! $(str f)
+
+main!

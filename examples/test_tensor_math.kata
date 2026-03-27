@@ -1,0 +1,33 @@
+@ffi("kata_rt_dot")
+dot :: Tensor::Int::T Tensor::Int::T => Int
+
+@ffi("kata_rt_add")
++ :: Tensor::Int::T Tensor::Int::T => Tensor::Int::T
+
+action main
+    let v_linha {1 2 3 ;}
+
+    let v_coluna {
+        4 ;
+        5 ;
+        6
+    }
+
+    # Deve dar Type Mismatch pq as tuplas das dimensões são diferentes
+    let escalar dot v_linha v_coluna
+
+    let m1 {
+        1 2 3 ;
+        4 5 6
+    }
+
+    let m2 {
+        10 10 10 ;
+        20 20 20
+    }
+
+    let matriz_soma + m1 m2
+
+    echo! "Matematica de Tensores aprovada na compilacao!"
+
+main!

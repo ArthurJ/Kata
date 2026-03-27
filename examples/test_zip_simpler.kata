@@ -1,0 +1,12 @@
+zip :: [Int] => [Int]
+lambda []:
+    []
+lambda [x:xs]:
+    [x : $(zip xs)]
+
+action main
+    let lista_a [1 2 3]
+    let z zip lista_a
+    echo! "Zip funcionou"
+
+main!

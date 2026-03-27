@@ -1,0 +1,13 @@
+zip :: [A] [B] => [(A B)]
+lambda [] _: []
+lambda _ []: []
+lambda [x:xs] [y:ys]:
+    [(x y) : $(zip xs ys)]
+
+action main
+    let lista_a [1 2 3]
+    let lista_b [10 20 30]
+    let z zip lista_a lista_b
+    echo! "Zip funcionou"
+
+main!

@@ -1,0 +1,20 @@
+fizzbuzz :: Int => Text
+lambda x:
+    both: "FizzBuzz"
+    fizz: "Fizz"
+    buzz: "Buzz"
+    otherwise: str x
+    with
+        fizz as = 0 $(mod x 3)
+        buzz as = 0 mod x 5
+        both as and fizz buzz
+
+action main
+    # Vamos testar a arvore de fluxo diretamente chamando as FFI
+    echo! $(fizzbuzz 3)
+    echo! $(fizzbuzz 5)
+    echo! $(fizzbuzz 15)
+    echo! fizzbuzz 7
+    echo! fizzbuzz 2
+
+main!

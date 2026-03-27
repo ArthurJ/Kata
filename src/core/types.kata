@@ -1,0 +1,219 @@
+enum Result::(T, E)
+    | Ok(T)
+    | Err(E)
+
+enum Optional::T
+    | Some(T)
+    | None
+
+# ==========================================
+# Lógica Booleana
+# ==========================================
+
+enum Bool
+    | True
+    | False
+
+Bool implements SHOW
+    str :: Bool => Text
+    λ True: "True"
+    λ False: "False"
+
+    @ffi("kata_rt_bool_to_str")
+    repr :: Bool => Text
+
+and :: Bool Bool => Bool
+λ True True: True
+otherwise: False
+
+or :: Bool Bool => Bool
+λ True _: True
+λ _ True: True
+otherwise: False
+
+xor :: Bool Bool => Bool
+λ True False: True
+λ False True: True
+otherwise: False
+
+not :: Bool => Bool
+λ False: True
+λ True: False
+
+# ==========================================
+# Interfaces
+# ==========================================
+
+interface SHOW implements REPR
+    str :: SHOW => Text
+    λ x: repr x
+
+interface HASH
+    hash :: A => Text
+
+interface EQ implements HASH
+    @comutative
+    = :: A A => Bool
+    
+    @comutative
+    != :: A A => Bool
+    λ x y: not $(= x y)
+
+interface ORD implements EQ
+    >  :: A A => Bool
+    >= :: A A => Bool
+    <  :: A A => Bool
+    <= :: A A => Bool
+
+alias (NUM, != _ 0) as NonZero
+
+interface NUM implements ORD SHOW
+    + :: NUM NUM => NUM
+    - :: NUM NUM => NUM
+    * :: NUM NUM => NUM
+    ** :: NUM NUM => NUM
+    div :: NUM NUM => Result::(Float, Text)
+    /   :: NUM NonZero => Float
+    //  :: NUM NonZero => Int
+    mod :: NUM NonZero => NUM
+
+# ==========================================
+# Despacho Múltiplo (Multiple Dispatch)
+# ==========================================
+
+Int implements NUM
+    @ffi("kata_rt_add_int")
+    + :: Int Int => Int
+
+    @ffi("kata_rt_sub_int")
+    - :: Int Int => Int
+
+    @ffi("kata_rt_mul_int")
+    * :: Int Int => Int
+
+    @ffi("kata_rt_exp_int")
+    ** :: Int Int => Int
+    
+    @ffi("kata_rt_real_div_int")
+    / :: Int NonZero => Float
+    
+    @ffi("kata_rt_div_int")
+    // :: Int NonZero => Int
+
+    @ffi("kata_rt_safe_div_int")
+    div :: Int Int => Result::(Float, Text)
+
+    @ffi("kata_rt_mod_int")
+    mod :: Int NonZero => Int
+
+    @ffi("kata_rt_eq_int")
+    = :: Int Int => Bool
+    
+    @ffi("kata_rt_gt_int")
+    > :: Int Int => Bool
+    
+    @ffi("kata_rt_ge_int")
+    >= :: Int Int => Bool
+    
+    @ffi("kata_rt_lt_int")
+    < :: Int Int => Bool
+    
+    @ffi("kata_rt_le_int")
+    <= :: Int Int => Bool
+    
+    @ffi("kata_rt_int_to_str")
+    str :: Int => Text
+
+    repr :: Int => Text
+    λ x: str x
+
+    hash :: Int => Text
+    λ x: str x
+
+Float implements NUM
+    @ffi("kata_rt_add_flt")
+    @comutative
+    + :: Float Float => Float
+
+    @ffi("kata_rt_sub_flt")
+    @comutative
+    - :: Float Float => Float
+
+    @ffi("kata_rt_mul_flt")
+    @comutative
+    * :: Float Float => Float
+
+    @ffi("kata_rt_exp_flt")
+    @comutative
+    ** :: Float Float => Float
+    
+    @ffi("kata_rt_real_div_flt")
+    / :: Float NonZero => Float
+    
+    @ffi("kata_rt_div_flt")
+    // :: Float NonZero => Int
+
+    @ffi("kata_rt_safe_div_flt")
+    div :: Float Float => Result::(Float, Text)
+
+    @ffi("kata_rt_mod_flt")
+    @comutative
+    mod :: Float NonZero => Float
+
+    @ffi("kata_rt_eq_flt")
+    @comutative
+    = :: Float Float => Bool
+    
+    @ffi("kata_rt_gt_flt")
+    @comutative
+    > :: Float Float => Bool
+    
+    @ffi("kata_rt_ge_flt")
+    @comutative
+    >= :: Float Float => Bool
+    
+    @ffi("kata_rt_lt_flt")
+    @comutative
+    < :: Float Float => Bool
+    
+    @ffi("kata_rt_le_flt")
+    @comutative
+    <= :: Float Float => Bool
+    
+    @ffi("kata_rt_flt_to_str")
+    str :: Float => Text
+
+    repr :: Float => Text
+    λ x: str x
+
+    hash :: Float => Text
+    λ x: str x
+    
+    @ffi("kata_rt_round")
+    round :: Float => Float
+    
+    @ffi("kata_rt_ceil")
+    ceil :: Float => Float
+    
+    @ffi("kata_rt_floor")
+    floor :: Float => Float
+
+export NUM Float Int
+
+# ==========================================
+# Texto
+# ==========================================
+
+@ffi("kata_rt_concat_text")
++ :: Text Text => Text
+
+interface REPR
+    @ffi("kata_rt_default_repr")
+    repr :: REPR => Text
+
+Text implements SHOW
+    str :: Text => Text
+    λ x: x
+    
+    @ffi("kata_rt_repr_text")
+    repr :: Text => Text

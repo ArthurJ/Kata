@@ -1,0 +1,12 @@
+# Kata: Phase 6 Concurrency Test
+# Verifica se o parser de fork! e channel! passa na checagem de tipos (I/O).
+
+action tarefa_pesada
+    echo! "Processando tarefa"
+
+action main
+    echo! "Iniciando Main Thread"
+    fork! tarefa_pesada
+    echo! "Fim da Main Thread"
+
+main!

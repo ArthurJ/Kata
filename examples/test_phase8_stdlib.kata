@@ -1,0 +1,18 @@
+# Teste do suporte para a StdLib importada nativamente da pasta `core/`
+
+double :: Int => Int
+lambda x: * x 2
+
+action main
+    let my_list 1:2:[]
+    let my_list2 [1 2]
+    let my_list3 1:2:[]
+    #let doubled_list map double my_list
+    let some_value Some 42
+    let no_value None
+    let success_result Ok 100
+    let error_result Err "Failed to fetch"
+    echo! "Testando as definições da Phase 8!"
+    echo! "Tudo está disponível globalmente."
+
+main!

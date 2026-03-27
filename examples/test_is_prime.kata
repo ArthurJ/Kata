@@ -1,0 +1,19 @@
+is_prime_aux :: Int Int List::Int => Bool
+lambda _ _ []: True
+lambda x 0 lst: True # is_prime_aux x (x |> float _ |> sqrt _ |> int _) lst
+lambda x sx [y:ys]:
+   eh_divisor: False
+   passou_limite: True
+   otherwise: True # is_prime_aux x sx ys
+   with
+       eh_divisor as = 0 $(mod x y)
+       passou_limite as > y sx
+
+is_prime :: Int => Bool
+lambda x: is_prime_aux x 0 [2..x]
+
+action main
+    let r $(is_prime 7)
+    echo! $(str r)
+
+main!

@@ -1,0 +1,5 @@
+action main
+    let nums [1..15]
+    echo! "Range criado"
+
+main!

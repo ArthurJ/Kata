@@ -1,0 +1,10 @@
+# Teste simples de pattern
+
+foo :: Int => Int
+lambda x:
+    x
+
+action main
+    echo! "Teste"
+
+main!

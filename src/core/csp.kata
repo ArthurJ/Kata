@@ -1,0 +1,17 @@
+# Modelo de Concorrência Sequencial e Canais (CSP)
+
+# 1. A criação das *Green Threads* em M:N
+@ffi("kata_rt_fork")
+action fork(Action)
+
+# 2. Infraestrutura de Canais
+@ffi("kata_rt_chan_create_rendezvous")
+action channel => (Sender::T Receiver::T)
+
+@ffi("kata_rt_chan_create_queue")
+action queue(Int) => (Sender::T Receiver::T)
+
+@ffi("kata_rt_chan_create_broadcast")
+action broadcast => (Sender::T (Int -> Receiver::T))
+
+export fork channel queue broadcast

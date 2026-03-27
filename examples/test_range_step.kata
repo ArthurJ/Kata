@@ -1,0 +1,25 @@
+# Teste de ranges com step
+# [0..2..10] -> [0 2 4 6 8]
+# [0..3..=10] -> [0 3 6 9]
+
+# Range simples (step = 1)
+simples :: Int => List::Int
+lambda x: [1..x]
+
+# Range com step
+com_step :: Int Int Int => List::Int
+lambda inicio passo fim: [inicio..passo..fim]
+
+# Range inclusivo com step
+inclusivo_com_step :: Int Int Int => List::Int
+lambda inicio passo fim: [inicio..passo..=fim]
+
+action main
+    let r1 [0..2..10]
+    echo! $(str r1)
+
+    let r2 [0..3..=10]
+    echo! $(str r2)
+
+    let r3 [10..-1..=0]
+    echo! $(str r3)

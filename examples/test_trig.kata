@@ -1,0 +1,8 @@
+action main
+    let angulo 3.14159
+    let s sin angulo
+    let c cos 0.0
+    let a abs -42.5
+    echo! "Trig!"
+
+main!
