@@ -2,7 +2,7 @@ fib :: Int => Int
 lambda 0: 0
 lambda 1: 1
 lambda n:
-    + (fib $(- n 1)) (fib $(- n 2))
+    + $(fib $(- n 1)) $(fib $(- n 2))
 
 action main
     let f $(fib 40)

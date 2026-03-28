@@ -1,6 +1,6 @@
 fizzbuzz_list :: List::Int => List::Text
 lambda lista:
-    lista |> map (fizzbuzz) _
+    lista |> map fizzbuzz
 
 action main
     let nums [1..15]

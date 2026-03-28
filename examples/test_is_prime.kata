@@ -1,6 +1,6 @@
 is_prime_aux :: Int Int List::Int => Bool
 lambda _ _ []: True
-lambda x 0 lst: True # is_prime_aux x (x |> float _ |> sqrt _ |> int _) lst
+lambda x 0 lst: True # is_prime_aux x $(x |> float |> sqrt |> int) lst
 lambda x sx [y:ys]:
    eh_divisor: False
    passou_limite: True

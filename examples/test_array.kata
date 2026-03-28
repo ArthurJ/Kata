@@ -1,7 +1,7 @@
 # Função pura que processa um array dinâmico
 processar_vendas :: Array::Float => Array::Float
 lambda vendas:
-    vendas |> map (* 1.1 _) _ |> filter (> _ 50.0) _
+    vendas |> map $(* _ 1.1) |> filter $(> _ 50.0)
 
 action main
     # 1. Criação de um Array (Memória Contígua Dinâmica)

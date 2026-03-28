@@ -74,8 +74,8 @@ Resolvidos por *Multiple Dispatch* em tempo de compilação.
 
 #### **1.4. Manipulação de Dicionários e Conjuntos**
 
-* get :: Dict::K::V K \=\> Optional::V (Extração segura de valor por chave).  
-* insert :: Dict::K::V K V \=\> Dict::K::V (Retorna um novo dicionário contendo a nova chave-valor).  
+* get :: Dict::(K, V) K \=\> Optional::V (Extração segura de valor por chave).  
+* insert :: Dict::(K, V) K V \=\> Dict::(K, V) (Retorna um novo dicionário contendo a nova chave-valor).  
 * has :: Set::T T \=\> Bool (Verifica a existência de um elemento no conjunto. Também aplicável a chaves de Dicionários).  
 * union :: Set::T Set::T \=\> Set::T (Álgebra de conjuntos: união de todos os elementos únicos).  
 * intersect :: Set::T Set::T \=\> Set::T (Álgebra de conjuntos: interseção dos elementos presentes em ambos).  
@@ -345,10 +345,10 @@ data Vec2 (x y)
 Vec2 implements ADD\_BEHAVIOR    
     \# Assinaturas explícitas definem as rotas do despacho    
     \+ :: Vec2 Float \=\> Vec2    
-    lambda (v f) ...
+    lambda v f: ...
 
     \+ :: Vec2 Vec2 \=\> Vec2    
-    lambda (v1 v2) ...
+    lambda v1 v2: ...
 
 #### **2.3 Herança de Interfaces (Super-Traits)**
 
@@ -365,7 +365,7 @@ Se o compilador não conseguir unificar os tipos internamente, ele exigirá que 
 
 \# Função genérica com Early Checking    
 soma\_generica :: A B \=\> C    
-lambda (x y) \+ x y    
+lambda x y: + x y    
 with     
     \# A restrição obriga a existência prévia desta assinatura no TypeEnv    
     \+ :: A B \=\> C
@@ -423,14 +423,14 @@ Para manter a pureza da Mônada Funcional, a construção imperativa match é **
 Vec2 implements ADD\_BEHAVIOR
     \# Prometemos que a saída será sempre PositiveInt (sem Result)
     \+ :: PositiveInt Int \=\> PositiveInt
-    lambda (p i)
+    lambda p i:
         \# 1\. A soma $(- p i) degrada para Int.
         \# 2\. O construtor 'PositiveInt' reavalia e retorna Result.
         \# 3\. O Pipe despacha para os lambdas de resolução de padrão.
-        PositiveInt $(+ p i) |\> (
-            lambda (Ok valor\_puro) valor\_puro     \# Ramo de Sucesso
-            lambda (Err erro) 1                   \# Ramo de Falha
-        ) \_
+        PositiveInt $(+ p i) |\> $(
+            lambda Ok valor\_puro: valor\_puro     \# Ramo de Sucesso
+            lambda Err erro: 1                   \# Ramo de Falha
+        )
     \# O fallback deve respeitar o tipo de retorno.
     \# '1' é aceito estaticamente pelo compilador como PositiveInt.  
 
@@ -449,16 +449,16 @@ No domínio das **Functions**, não existem laços de repetição imperativos (f
 O controlo de fluxo primário é feito pela assinatura do lambda. Uma função pode ser composta por múltiplas definições de lambda. O compilador avaliará os argumentos de cima para baixo e executará o primeiro corpo cujo padrão estrutural (*Pattern*) corresponda à entrada.
 
 fibonacci :: Int \=\> Int    
-lambda (0) 0             \# Match exato literal    
-lambda (1) 1    
-lambda (n) \+ fibonacci $(- n 1) fibonacci $(- n 2)
+lambda 0: 0             \# Match exato literal    
+lambda 1: 1    
+lambda n: + fibonacci $(- n 1) fibonacci $(- n 2)
 
 #### **1.2. Desestruturação e Omissão de Valores em Lambdas**
 
 O *Pattern Matching* também atua como mecanismo primário de desestruturação de tuplos e estruturas nos argumentos. Não existem "Holes indexados" (como \_:2) na linguagem; para extrair ou ignorar valores específicos de coleções aninhadas durante um pipeline, utiliza-se a desestruturação posicional no cabeçalho do lambda, omitindo a variável indesejada no corpo:
 
 \# Somando apenas o 1º, 2º e 4º elementos de tuplos de tamanho 4
-let resultados $(lista\_tuplos |\> map (lambda ((a b c d)) sum a b d) \_)
+let resultados $(lista\_tuplos |\> map $(lambda (a b c d): sum a b d))
 
 *(O compilador identifica que c não é utilizado e o elimina estaticamente como código morto na otimização da Representação Intermediária).*
 
@@ -473,7 +473,7 @@ A linguagem requer o uso explícito da cláusula **otherwise** como *fallback* m
 **Curto-Circuito Garantido:** O compilador assegura que a avaliação dos *Guards* obedece a um comportamento de curto-circuito (*Short-Circuit*). Isto significa que o processamento do bloco falso é omitido no *runtime*, protegendo a execução de potenciais avaliações que causariam *panic\!*.
 
 max :: Int Int \=\> Int
-lambda (x y)
+lambda x y:
     maior: x
     menor: y
     otherwise: y
@@ -492,7 +492,7 @@ A linguagem provê dois mecanismos estritos para amarração de nomes (*bindings
   2. Anexar restrições de Tipos Genéricos (Contratos de Interface).
 
 processar :: T \=\> Int    
-lambda (entrada)    
+lambda entrada:    
     \# 'let' com desestruturação para computação sequencial    
     let (identificador, carga) as (extrair\_tupla entrada)  
         
@@ -586,7 +586,7 @@ A linguagem Kata separa estritamente os tipos de dados básicos das estruturas d
 
 Os blocos de construção atómicos da linguagem são geridos de forma nativa e, na sua maioria, são tipos copiáveis de baixo custo:
 
-* **Int / Float:** Numéricos com precisão padrão da arquitetura (ex: 64-bit).  
+* **Int / Float:** Numéricos com precisão padrão da arquitetura (ex: 64-bit). Suportam o uso de `_` como separador visual (ex: `10_000`). Inteiros podem ser representados nas bases binária (`0b`), octal (`0o`) e hexadecimal (`0x`).  
 * **Byte:** Inteiro sem sinal de 8-bit (0-255), essencial para manipulação de I/O.  
 * **Text:** Cadeias de caracteres UTF-8. Tratado como dado "cego" e puro pelo analisador léxico, sem suporte a interpolação embutida (mágica) para preservar a pureza do fluxo.  
 * **Unit:** Representado também pelo literal tuplo vazio (), indica a ausência matemática de valor, substituindo conceitos como void.
@@ -622,7 +622,7 @@ A linguagem divide as coleções fundamentadas em três eixos: tipagem (homogén
 
 #### **2.5. Dicionários Persistentes (Dict)**
 
-* **Assinatura:** Dict::K::V (onde o tipo K deve obrigatoriamente implementar as interfaces HASH e EQ).  
+* **Assinatura:** Dict::(K, V) (onde o tipo K deve obrigatoriamente implementar as interfaces HASH e EQ).  
 * **Sintaxe de Construção:** A invocação do próprio tipo como construtor, recebendo uma List de tuplos chave-valor. Duplicatas subescrevem o valor anterior silenciosamente.
   let capitais Dict \[("Brasil" "Brasília") ("Japão" "Tóquio")\]  
 * **Comportamento:** Estruturas de mapeamento não-ordenadas e imutáveis baseadas em árvores de partilha estrutural (HAMT). O método insert devolve um novo dicionário fundido, e o método get obriga o retorno sob um Optional para segurança espacial.
@@ -640,7 +640,7 @@ A linguagem divide as coleções fundamentadas em três eixos: tipagem (homogén
 * **Assinatura:** Range::T (onde T implementa NUM).  
 * **Comportamento:** Um Range é um gerador preguiçoso (*Lazy Iterator*). O motor do compilador armazena apenas os limites e a passada, sem alocar memória em bloco na *Heap*.  
   * São consumidos nativamente por laços for imperativos nas *Actions*.  
-  * Podem ser acoplados a processos do *Stream Fusion* no domínio funcional (ex: \[1..100\] |\> map f ?).  
+  * Podem ser acoplados a processos do *Stream Fusion* no domínio funcional (ex: \[1..100\] |\> map f).  
   * Se houver a necessidade de os materializar numa coleção estrita em memória, o programador deve fornecer o Range ao construtor desejado (ex: List \[1..10\]).
 
 ### **3\. Tipos Algébricos de Dados (ADTs)**
@@ -835,7 +835,7 @@ O sistema de pacotes da Kata-Lang é concebido para evitar ambiguidade de resolu
 let pi 3.14159 \# Privado    
     
 soma :: Int Int \=\> Int    
-lambda (x y) \+ x y    
+lambda x y: + x y    
     
 export soma
 
@@ -888,11 +888,10 @@ alias MatrizLocal Matrix
 
 \# 2\. Implementa-se a interface externa (sob o namespace) no tipo local    
 MatrizLocal implements biblioteca\_json.JsonSerializable    
-    to\_json :: MatrizLocal \=\> Text    
-    lambda (mat) …
+    to\_json :: MatrizLocal \=\> Text
+    lambda mat: …
 
-## **Concorrência e Isolamento (Modelo CSP)**
-
+    ## **Concorrência e Isolamento (Modelo CSP)**
 A Kata-Lang implementa concorrência exclusivamente no domínio das **Actions**. O modelo baseia-se em *Communicating Sequential Processes* (CSP). Não existe partilha de memória entre processos paralelos; o isolamento é absoluto e a sincronização ocorre estritamente através da passagem de mensagens por canais tipados.
 
 ### **1\. Criação de Processos (fork\!)**
@@ -1017,9 +1016,9 @@ A diretiva recebe os seus argumentos através de um bloco de chaves { }:
 
 @cache\_strategy{strategy: 'lru', size: 1000}    
 fibonacci :: Int \=\> Int    
-lambda (0) 0    
-lambda (1) 1    
-lambda (n) \+ fibonacci $(- n 1) fibonacci $(- n 2)
+lambda 0: 0    
+lambda 1: 1    
+lambda n: + fibonacci $(- n 1) fibonacci $(- n 2)
 
 ### **4\. Foreign Function Interface (@ffi)**
 
@@ -1104,4 +1103,6 @@ action test\_socket\_operacional ()
 
     let socket unwrap\_or\_panic\! operacao "Falha na desestruturação"
     assert\! socket.is\_open "O socket instanciado não está aberto"
+
+berto"
 
