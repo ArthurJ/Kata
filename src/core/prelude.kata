@@ -7,6 +7,7 @@ import types.(NUM Float Int and or xor not)
 
 import io.(echo)
 import csp.(fork channel queue broadcast)
+import assert.(assert assert_eq)
 
 # FFI para map usando KataClosure
 # Recebe uma closure e uma lista, retorna nova lista mapeada

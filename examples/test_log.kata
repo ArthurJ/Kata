@@ -1,0 +1,17 @@
+# Teste da diretiva @log com LogLevel Enum
+
+@log(Debug)
+somar :: Int Int => Int
+lambda a b:
+    + a b
+
+@log(Info, "Calculando o fatorial...")
+fatorial :: Int => Int
+lambda 0: 1
+lambda n: * n fatorial (- n 1)
+
+@log(Error, "Ação crítica")
+action main
+    let res somar 10 20
+    let fat fatorial 5
+    echo! "Finalizado"

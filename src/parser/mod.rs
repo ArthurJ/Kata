@@ -41,6 +41,7 @@ pub fn parse_stmt(
         .parse(stream)
 }
 
+#[allow(dead_code)]
 pub fn run_stub() {
     log::info!("Iniciando Parser (Stub com AST parcial)");
 }

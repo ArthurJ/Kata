@@ -1,0 +1,9 @@
+# Teste de Aridade e Prefixa
+soma :: Int Int => Int
+
+lambda x y:
+    + x y
+
+action main
+    let resultado soma 10 20
+    echo! resultado

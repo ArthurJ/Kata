@@ -3,20 +3,46 @@ use crate::parser::ast::*;
 use crate::parser::error::ParserError;
 use crate::parser::core::tokens::ident_string;
 use crate::parser::grammar::types::type_ref_parser;
-use crate::parser::grammar::expr::{expr_parser, pattern_atom_parser};
+use crate::parser::grammar::expr::{expr_parser, pattern_atom_parser, with_block_parser};
 use crate::parser::grammar::stmt::stmt_parser;
 use chumsky::prelude::*;
 
 pub fn top_level_parser() -> impl Parser<Token, Spanned<TopLevel>, Error = ParserError> + Clone {
     recursive(|top_level| {
+        let directive_parser = filter_map(|span, tok| match tok {
+            Token::Directive(s) => Ok(s),
+            _ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
+        })
+        .then(
+            expr_parser().separated_by(just(Token::Comma).or_not())
+                .delimited_by(just(Token::LParen), just(Token::RParen))
+                .or_not()
+                .map(|opt| opt.unwrap_or_default())
+        )
+        .map_with_span(|(name, args), span| (Directive { name, args }, span));
+
+        let directives_list = directive_parser
+            .then_ignore(just(Token::Newline).repeated())
+            .repeated();
+
         let data_decl = just(Token::Data)
             .ignore_then(ident_string())
             .then(
-                ident_string()
-                    .repeated()
-                    .delimited_by(just(Token::LParen), just(Token::RParen))
-            )
-            .map(|(name, fields)| TopLevel::Data(name, fields));
+                choice((
+                    ident_string()
+                        .repeated()
+                        .delimited_by(just(Token::LParen), just(Token::RParen))
+                        .map(DataDef::Struct),
+                    just(Token::As)
+                        .ignore_then(
+                            type_ref_parser()
+                                .then_ignore(just(Token::Comma).or_not())
+                                .then(expr_parser().separated_by(just(Token::Comma).or_not()))
+                                .delimited_by(just(Token::LParen), just(Token::RParen))
+                        )
+                        .map(|(base, predicates)| DataDef::Refined(base, predicates))
+                ))
+            );
 
         let variant_parser = just(Token::Pipe)
             .ignore_then(ident_string())
@@ -42,6 +68,14 @@ pub fn top_level_parser() -> impl Parser<Token, Spanned<TopLevel>, Error = Parse
 
         let enum_decl = just(Token::Enum)
             .ignore_then(ident_string())
+            .then(
+                just(Token::DoubleColon).ignore_then(
+                    choice((
+                        type_ref_parser().separated_by(just(Token::Comma).or_not()).delimited_by(just(Token::LParen), just(Token::RParen)),
+                        type_ref_parser().map(|t| vec![t])
+                    ))
+                ).or_not()
+            )
             .then_ignore(just(Token::Newline).repeated())
             .then(
                 just(Token::Indent)
@@ -50,17 +84,22 @@ pub fn top_level_parser() -> impl Parser<Token, Spanned<TopLevel>, Error = Parse
                     )
                     .then_ignore(just(Token::Dedent))
             )
-            .map(|(name, variants)| TopLevel::Enum(name, variants));
+            .map(|((name, _generics), variants)| (name, variants));
 
         let export_decl = just(Token::Export)
             .ignore_then(ident_string().repeated())
-            .map(TopLevel::Export);
+            .map(|v| TopLevel::Export(v));
 
         let import_decl = just(Token::Import)
             .ignore_then(ident_string().separated_by(just(Token::Dot)))
-            .map(|parts| {
+            .then(
+                just(Token::Dot).ignore_then(
+                    ident_string().repeated().delimited_by(just(Token::LParen), just(Token::RParen))
+                ).or_not()
+            )
+            .map(|(parts, specific)| {
                 let path = parts.join(".");
-                TopLevel::Import(path, None)
+                TopLevel::Import(path, specific.unwrap_or_default())
             });
 
         let signature_decl = ident_string()
@@ -68,20 +107,35 @@ pub fn top_level_parser() -> impl Parser<Token, Spanned<TopLevel>, Error = Parse
             .then(type_ref_parser().repeated())
             .then_ignore(just(Token::FatArrow))
             .then(type_ref_parser())
-            .map(|((name, args), ret)| TopLevel::Signature(name, args, ret));
+            .map(|((name, args), ret)| (name, args, ret));
 
-        let action_arg = ident_string()
-            .then_ignore(just(Token::DoubleColon))
-            .then(type_ref_parser());
+        let action_arg = choice((
+            ident_string()
+                .then(just(Token::DoubleColon).ignore_then(type_ref_parser()).or_not())
+                .map(|(name, ty_opt)| {
+                    if let Some(ty) = ty_opt {
+                        (name, ty)
+                    } else {
+                        ("_".to_string(), (TypeRef::Simple(name), 0..0))
+                    }
+                }),
+            type_ref_parser().map(|t| ("_".to_string(), t))
+        ));
 
         let action_def = just(Token::Action)
             .ignore_then(ident_string())
             .then(
                 action_arg.separated_by(just(Token::Comma).or_not())
                     .delimited_by(just(Token::LParen), just(Token::RParen))
+                    .or_not()
+                    .map(|opt: Option<Vec<(String, Spanned<TypeRef>)>>| opt.unwrap_or_default())
             )
-            .then_ignore(just(Token::FatArrow))
-            .then(type_ref_parser())
+            .then(
+                just(Token::FatArrow)
+                    .ignore_then(type_ref_parser())
+                    .or_not()
+                    .map(|opt| opt.unwrap_or((TypeRef::Simple("()".to_string()), 0..0)))
+            )
             .then(
                 just(Token::Newline).repeated()
                     .ignore_then(just(Token::Indent))
@@ -92,7 +146,7 @@ pub fn top_level_parser() -> impl Parser<Token, Spanned<TopLevel>, Error = Parse
                     .or_not()
                     .map(|opt| opt.unwrap_or_default())
             )
-            .map(|(((name, args), ret), stmts)| TopLevel::ActionDef(name, args, ret, stmts));
+            .map(|(((name, args), ret), stmts)| (name, args, ret, stmts));
 
         let interface_decl = just(Token::Interface)
             .ignore_then(ident_string())
@@ -107,7 +161,7 @@ pub fn top_level_parser() -> impl Parser<Token, Spanned<TopLevel>, Error = Parse
                     .or_not()
                     .map(|opt| opt.unwrap_or_default())
             )
-            .map(|((name, supertraits), methods)| TopLevel::Interface(name, supertraits, methods));
+            .map(|((name, supertraits), methods)| (name, supertraits, methods));
 
         let implements_decl = ident_string()
             .then_ignore(just(Token::Implements))
@@ -125,27 +179,68 @@ pub fn top_level_parser() -> impl Parser<Token, Spanned<TopLevel>, Error = Parse
         let alias_decl = just(Token::Alias)
             .ignore_then(ident_string())
             .then(ident_string())
-            .map(|(name, target)| TopLevel::Alias(name, target));
+            .map(|(name, target)| (name, target));
+
+        let lambda_body = {
+            let sequence = expr_parser();
+            
+            let lambda_block = just(Token::Newline).repeated()
+                .ignore_then(just(Token::Indent))
+                .ignore_then(
+                    sequence.clone()
+                        .separated_by(just(Token::Newline).repeated().at_least(1))
+                        .allow_trailing()
+                )
+                .then_ignore(just(Token::Dedent))
+                .map_with_span(|mut exprs, span| {
+                    if exprs.len() == 1 {
+                        exprs.remove(0)
+                    } else {
+                        (Expr::Sequence(exprs), span)
+                    }
+                });
+
+            let inline_body = sequence;
+
+            choice((lambda_block, inline_body))
+        };
 
         let lambda_def = just(Token::Lambda)
             .ignore_then(pattern_atom_parser().repeated())
             .then_ignore(just(Token::Colon))
-            .then(expr_parser()) 
-            .map_with_span(|(args, (body, span_body)), _span| {
-                TopLevel::LambdaDef(args, (body, span_body), Vec::new())
-            });
+            .then(lambda_body)
+            .then(with_block_parser())
+            .map(|((args, body), with)| (args, body, with));
 
-        data_decl
-            .or(enum_decl)
-            .or(export_decl)
-            .or(import_decl)
-            .or(signature_decl)
-            .or(lambda_def)
-            .or(action_def)
-            .or(interface_decl)
-            .or(implements_decl)
-            .or(alias_decl)
-            .map_with_span(|ast, span| (ast, span))
+        directives_list.then(
+            choice((
+                data_decl.map(|(name, def)| TopLevel::Data(name, def, Vec::new())),
+                enum_decl.map(|(name, variants)| TopLevel::Enum(name, variants, Vec::new())),
+                signature_decl.map(|(name, args, ret)| TopLevel::Signature(name, args, ret, Vec::new())),
+                lambda_def.map(|(args, body, with)| TopLevel::LambdaDef(args, body, with, Vec::new())),
+                action_def.map(|(name, args, ret, stmts)| TopLevel::ActionDef(name, args, ret, stmts, Vec::new())),
+                interface_decl.map(|(name, supers, methods)| TopLevel::Interface(name, supers, methods, Vec::new())),
+                alias_decl.map(|(name, target)| TopLevel::Alias(name, target, Vec::new())),
+                export_decl,
+                import_decl,
+                implements_decl,
+            ))
+        ).map(|(dirs, mut tl)| {
+            match &mut tl {
+                TopLevel::Data(_, _, ref mut d) => *d = dirs,
+                TopLevel::Enum(_, _, ref mut d) => *d = dirs,
+                TopLevel::Signature(_, _, _, ref mut d) => *d = dirs,
+                TopLevel::LambdaDef(_, _, _, ref mut d) => *d = dirs,
+                TopLevel::ActionDef(_, _, _, _, ref mut d) => *d = dirs,
+                TopLevel::Interface(_, _, _, ref mut d) => *d = dirs,
+                TopLevel::Alias(_, _, ref mut d) => *d = dirs,
+                TopLevel::Export(_) | TopLevel::Import(_, _) | TopLevel::Implements(..) => {
+                    // Essas ainda não suportam diretivas na AST ou não faz sentido
+                }
+            }
+            tl
+        })
+        .map_with_span(|ast, span| (ast, span))
     })
 }
 

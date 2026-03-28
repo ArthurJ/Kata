@@ -58,6 +58,8 @@ pub enum Token {
     ChannelSend,
     ChannelRecv,
     ChannelRecvNonBlock,
+
+    Directive(String),
 }
 
 impl fmt::Display for Token {
@@ -117,6 +119,7 @@ impl fmt::Display for Token {
             Token::ChannelSend => write!(f, "!>"),
             Token::ChannelRecv => write!(f, "<!"),
             Token::ChannelRecvNonBlock => write!(f, "<!?"),
+            Token::Directive(s) => write!(f, "@{}", s),
         }
     }
 }

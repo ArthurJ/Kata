@@ -1,0 +1,15 @@
+interface NUM
+
+# Definimos apenas Int + Float e marcamos como comutativa
+@commutative
++ :: Int Float => Float
+lambda i f: f
+
+action main
+    # 1. Caso Direto: Int + Float (Bate com a assinatura)
+    let a + 10 2.5
+    
+    # 2. Caso Inverso: Float + Int (Não existe assinatura, mas @commutative salva!)
+    let b + 2.5 10
+    
+    echo! "Teste de Comutatividade concluído com sucesso!"

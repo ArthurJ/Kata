@@ -1,0 +1,17 @@
+# Teste da Barreira de Pureza na Kata-Lang
+
+# Ação Impura (Legal)
+action falar
+    echo! "Olá do lado impuro!"
+
+# Função Pura válida
+somar :: Int Int => Int
+lambda a b:
+    + a b
+
+# Função Pura INVÁLIDA (Quebrando a barreira!)
+# Tenta invocar uma Ação dentro de um bloco Matemático
+imprimir_e_somar :: Int Int => Int
+lambda a b:
+    echo! "Isso deve falhar o compilador!"
+    + a b

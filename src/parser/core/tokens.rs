@@ -5,6 +5,7 @@ use chumsky::prelude::*;
 pub fn ident_string() -> impl Parser<Token, String, Error = ParserError> + Clone {
     filter_map(|span, tok| match tok {
         Token::Ident(s) => Ok(s),
+        Token::ActionIdent(s) => Ok(s),
         Token::TypeID(s) => Ok(s),
         Token::TypeVar(s) => Ok(s),
         Token::InterfaceID(s) => Ok(s),

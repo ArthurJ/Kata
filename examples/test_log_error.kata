@@ -1,0 +1,4 @@
+# Teste de nível de log inválido
+@log(extreme, "Isso deve falhar")
+action main
+    echo! "Ola"

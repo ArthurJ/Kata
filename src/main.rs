@@ -115,8 +115,45 @@ fn main() -> miette::Result<()> {
                 println!("{:#?}", module);
             }
 
-            type_checker::run_stub();
-            codegen::run_stub();
+            // 3. Type Checker (Arity Resolution & Types)
+            let mut checker = type_checker::Checker::new();
+            
+            // Carrega os modulos do core (Prelude)
+            let core_files = ["src/core/types.kata", "src/core/io.kata", "src/core/csp.kata", "src/core/assert.kata", "src/core/prelude.kata"];
+            let mut prelude_modules = Vec::new();
+            for file in core_files {
+                match std::fs::read_to_string(file) {
+                    Ok(src) => {
+                        match lexer::lex(&src, lexer::LexMode::File) {
+                            Ok(toks) => {
+                                match parser::parse_module(toks, src.len()) {
+                                    Ok(m) => prelude_modules.push(m),
+                                    Err(e) => log::error!("Erro ao parsear o prelude {}: {:?}", file, e),
+                                }
+                            }
+                            Err(e) => log::error!("Erro ao fazer lex no prelude {}: {:?}", file, e),
+                        }
+                    }
+                    Err(e) => log::error!("Erro ao ler o arquivo {}: {:?}", file, e),
+                }
+            }
+            checker.load_prelude(&prelude_modules);
+
+            checker.check_module(&module);
+
+            if !checker.errors.is_empty() {
+                log::error!("Erros Semanticos detectados na Fase 3:");
+                for e in &checker.errors {
+                    log::error!("{}", e);
+                }
+            }
+
+            if cli.dump_tast {
+                println!("--- TAST (RESOLVIDA) ---");
+                println!("{:#?}", checker.tast);
+            }
+
+            // codegen::run_stub();
         }
         Commands::Run {
             entrypoint,
@@ -126,13 +163,57 @@ fn main() -> miette::Result<()> {
             log::info!("Entrypoint: {}", entrypoint);
             log::info!("Release mode: {}", release);
 
-            parser::run_stub();
-            type_checker::run_stub();
-            kata_rt::init_stub();
+            // parser::run_stub();
+            // type_checker::run_stub();
+            // kata_rt::init_stub();
         }
         Commands::Test { path } => {
             log::info!("Comando: TEST");
             log::info!("Path: {}", path);
+
+            // Tenta ler o arquivo
+            let source = std::fs::read_to_string(&path)
+                .map_err(|e| miette::miette!("Falha ao ler o arquivo de teste {}: {}", path, e))?;
+
+            // 1. Lexer
+            let tokens = match lexer::lex(&source, lexer::LexMode::File) {
+                Ok(t) => t,
+                Err(_) => return Err(miette::miette!("Falha na análise léxica do teste.")),
+            };
+
+            // 2. Parser
+            let source_len = source.chars().count();
+            let module = match parser::parse_module(tokens.clone(), source_len) {
+                Ok(m) => m,
+                Err(_) => return Err(miette::miette!("Falha na análise sintática do teste.")),
+            };
+
+            // 3. Type Checker
+            let mut checker = type_checker::Checker::new();
+            let core_files = ["src/core/types.kata", "src/core/io.kata", "src/core/csp.kata", "src/core/assert.kata", "src/core/prelude.kata"];
+            let mut prelude_modules = Vec::new();
+            for file in core_files {
+                if let Ok(src) = std::fs::read_to_string(file) {
+                    if let Ok(toks) = lexer::lex(&src, lexer::LexMode::File) {
+                        if let Ok(m) = parser::parse_module(toks, src.len()) {
+                            prelude_modules.push(m);
+                        }
+                    }
+                }
+            }
+            checker.load_prelude(&prelude_modules);
+            checker.check_module(&module);
+
+            println!("--- TESTES ENCONTRADOS ---");
+            if checker.tests.is_empty() {
+                println!("Nenhum bloco de teste anotado com @test encontrado.");
+            } else {
+                for (i, t) in checker.tests.iter().enumerate() {
+                    let tipo = if t.is_action { "[Action / Impuro]" } else { "[Função / Puro]" };
+                    println!("{}) {} {} - \"{}\"", i + 1, tipo, t.name, t.description);
+                }
+                println!("\nPronto para gerar o Entrypoint Sintético para {} teste(s) via Cranelift (Fase 4/6).", checker.tests.len());
+            }
         }
         Commands::Repl => {
             log::info!("Comando: REPL");

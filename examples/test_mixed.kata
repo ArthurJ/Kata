@@ -1,0 +1,13 @@
+interface NUM
+
+# Despacho para Inteiros
++ :: Int Int => Int
+lambda a b: a
+
+# Despacho para Floats
++ :: Float Float => Float
+lambda a b: a
+
+action main
+    # 1 é Int, 0.0 é Float
+    let misturado + 1 0.0

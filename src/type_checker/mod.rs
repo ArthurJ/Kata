@@ -1,3 +1,8 @@
-pub fn run_stub() {
-    log::info!("Iniciando Type Checker (Stub)");
-}
+pub mod tast;
+pub mod environment;
+pub mod arity_resolver;
+pub mod checker;
+#[cfg(test)]
+pub mod tests;
+
+pub use checker::Checker;

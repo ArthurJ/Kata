@@ -1,0 +1,37 @@
+# 1. Simples (Unitárias, Aridade 0)
+enum Sinal
+    | Verde
+    | Amarelo
+    | Vermelho
+
+# 2. Tipado Genérico (Com Tipo, Aridade 1)
+enum Optional::T
+    | Some(T)
+    | None
+
+# 3. Valores Fixos (Constantes atreladas, Aridade 0)
+enum StatusHTTP
+    | OK(200)
+    | NotFound(404)
+    | InternalError(500)
+
+# 4. Predicados (Smart Constructors, Aridade 1)
+enum IMC
+    | Magreza(< _ 18.5)
+    | Normal(<= _ 25.0)
+    | Obesidade
+
+action main
+    # Simples
+    let s Verde
+
+    # Tipado: Some tem aridade 1, logo engole o "10"
+    let opt Some 10
+
+    # Fixo: OK tem aridade 0
+    let status OK
+
+    # Predicado: O construtor inteligente "IMC" tem aridade 1
+    let imc IMC 22.5
+
+    echo! status

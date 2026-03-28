@@ -6,6 +6,7 @@ pub enum TypeRef {
     Simple(String),
     Generic(String, Vec<Spanned<TypeRef>>),
     Function(Vec<Spanned<TypeRef>>, Box<Spanned<TypeRef>>),
+    Refined(Box<Spanned<TypeRef>>, Vec<Spanned<Expr>>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -20,6 +21,7 @@ pub enum Expr {
     ChannelRecv,
     ChannelRecvNonBlock,
     Try(Box<Spanned<Expr>>),
+    ExplicitApp(Box<Spanned<Expr>>), // Operador $
     Tuple(Vec<Spanned<Expr>>),
     List(Vec<Spanned<Expr>>),
     #[allow(dead_code)]
@@ -71,17 +73,29 @@ pub struct Variant {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct Directive {
+    pub name: String,
+    pub args: Vec<Spanned<Expr>>, // Argumentos como Expr (strings, ints, etc)
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum DataDef {
+    Struct(Vec<String>),
+    Refined(Spanned<TypeRef>, Vec<Spanned<Expr>>),
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum TopLevel {
-    Data(String, Vec<String>), 
-    Enum(String, Vec<Variant>),
-    Interface(String, Vec<String>, Vec<Spanned<TopLevel>>), 
+    Data(String, DataDef, Vec<Spanned<Directive>>), 
+    Enum(String, Vec<Variant>, Vec<Spanned<Directive>>),
+    Interface(String, Vec<String>, Vec<Spanned<TopLevel>>, Vec<Spanned<Directive>>), 
     Implements(String, String, Vec<Spanned<TopLevel>>), 
     Export(Vec<String>),
-    Import(String, Option<String>),
-    Signature(String, Vec<Spanned<TypeRef>>, Spanned<TypeRef>), 
-    LambdaDef(Vec<Spanned<Pattern>>, Spanned<Expr>, Vec<Spanned<Expr>>), 
-    ActionDef(String, Vec<(String, Spanned<TypeRef>)>, Spanned<TypeRef>, Vec<Spanned<Stmt>>),
-    Alias(String, String),
+    Import(String, Vec<String>),
+    Signature(String, Vec<Spanned<TypeRef>>, Spanned<TypeRef>, Vec<Spanned<Directive>>), 
+    LambdaDef(Vec<Spanned<Pattern>>, Spanned<Expr>, Vec<Spanned<Expr>>, Vec<Spanned<Directive>>), 
+    ActionDef(String, Vec<(String, Spanned<TypeRef>)>, Spanned<TypeRef>, Vec<Spanned<Stmt>>, Vec<Spanned<Directive>>),
+    Alias(String, String, Vec<Spanned<Directive>>),
 }
 
 #[derive(Debug, Clone, PartialEq)]

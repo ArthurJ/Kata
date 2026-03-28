@@ -46,6 +46,9 @@ fn raw_lexer() -> impl Parser<char, Vec<(RawToken, Span)>, Error = Simple<char>>
         .map(|s| RawToken::Tok(Token::String(s)));
 
     let op = choice((
+        just("!>").to(Token::ChannelSend),
+        just("<!?").to(Token::ChannelRecvNonBlock),
+        just("<!").to(Token::ChannelRecv),
         just("::").to(Token::DoubleColon),
         just("->").to(Token::Arrow),
         just("=>").to(Token::FatArrow),
@@ -123,6 +126,10 @@ fn raw_lexer() -> impl Parser<char, Vec<(RawToken, Span)>, Error = Simple<char>>
 
     let ident = choice((alphanumeric_ident, symbolic_ident));
 
+    let directive = just('@')
+        .ignore_then(filter(|c: &char| c.is_alphanumeric() || *c == '_').repeated().at_least(1).collect::<String>())
+        .map(|s| RawToken::Tok(Token::Directive(s)));
+
     let lambda_char = just('λ').to(RawToken::Tok(Token::Lambda));
 
     let comment = just('#')
@@ -143,6 +150,7 @@ fn raw_lexer() -> impl Parser<char, Vec<(RawToken, Span)>, Error = Simple<char>>
         num,
         string,
         op,
+        directive,
         ident,
         lambda_char,
         comment,

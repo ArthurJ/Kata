@@ -399,18 +399,36 @@ data RealPositivo as (NUM, except Complex, except Fraction, \> \_ 0\)
 * **Retorno do Construtor:** Sempre retorna Result::(T, Err).  
 * **O tipo Err:** É um alias para Text (String). A mensagem de erro não precisa de ser escrita pelo utilizador; o compilador injeta automaticamente a expressão do predicado violado (ex: "Value '-5' does not satisfy the predicate '\> \_ 0'" ou "Type 'Complex' does not satisfy the predicate 'except Complex'").
 
-#### **4.2 Degradação Matemática e Recuperação de Tipo**
+#### **4.2 Preservação e Composição de Predicados (Predicate Inheritance)**
 
-As operações matemáticas aplicadas a tipos-refinados atuam sobre o tipo base subjacente. A pureza matemática é mantida pela **degradação do tipo**.
+Na Kata-Lang, as operações matemáticas entre Tipos Refinados (ou entre um Tipo Refinado e sua Base) não descartam as restrições associadas. O sistema de tipos aplica o princípio da **Herança Automática de Predicados**.
 
-Se a e b são PositiveInt, a operação (- a b) retorna estritamente um Int. O compilador emite um erro de tipagem caso o programa tente usar esse resultado diretamente onde um PositiveInt é exigido.
+*   **Interseção Lógica de Predicados:** Sempre que uma função numérica é invocada e não existe uma sobrecarga manual específica para a combinação exata de tipos, o compilador utiliza a implementação da Base (ex: `Int`), mas o tipo de retorno herda a **composição lógica (AND)** de todos os predicados presentes nos argumentos.
+    *   *Exemplo:* `PositiveInt` (> _ 0) + `NonZeroInt` (!= _ 0) resulta em um tipo que deve satisfazer ambos os predicados: `Result::((Int, > _ 0, != _ 0), Text)`.
+*   **Prova Dinâmica via Result:** Como o resultado de uma operação pode violar as restrições herdadas (ex: `1 - 10`), o compilador envolve o retorno automaticamente em `Result::(T, Text)`. O Runtime revalida a árvore de predicados acumulada sobre o novo valor antes de entregar o `Ok`.
+*   **Sobrecarga Pura (Supressão de Result):** Este comportamento automático é suprimido se o desenvolvedor fornecer uma **implementação explícita** para a combinação de tipos (ex: provar matematicamente que a soma de dois `PositiveInt` é sempre um `PositiveInt`). Nestes casos, o compilador respeita a assinatura manual e retorna o tipo puro.
+*   **Otimização @comptime:** Se os argumentos forem literais constantes conhecidos em tempo de compilação, o compilador executa a interseção de predicados estaticamente. Se o valor satisfizer todas as restrições, o `Result` é eliminado e o valor puro é embutido no binário.
 
-Para recuperar o tipo-refinado após uma operação matemática, o programador tem dois caminhos:
+#### **Exemplo: Composição Automática e Sobrecarga Pura**
 
-1. **Comportamento Padrão (Via Construtor Dinâmico):** O programador submete o resultado degradado de volta ao construtor do tipo (ex: PositiveInt (- a b)). O construtor fará a validação em tempo de execução e retornará, obrigatoriamente, um Result::(PositiveInt, Err).  
-2. **Sobrecarga Pura (Via Implementação Explícita):** O programador pode definir funções ou assinar contratos que interceptam o tipo subjacente e tratam a violação internamente (provendo fallbacks ou provas lógicas). Isso permite contornar a mecânica padrão do Result, garantindo que a função retorne o tipo-refinado original em estado puro.
+```kata
+# 1. Composição Automática (Interseção de Predicados)
+# x será Result::((Int, > _ 0, != _ 0), Text)
+let x (+ 10_PositiveInt 5_NonZeroInt) 
+
+# 2. Sobrecarga Pura (Manual)
+PositiveInt implements ADD_BEHAVIOR
+    + :: PositiveInt PositiveInt => PositiveInt
+    lambda a b:
+        # O desenvolvedor garante o retorno do tipo puro
+        PositiveInt $(+ a b) |> $(
+            lambda Ok valor: valor
+            lambda Err _: 1 # Fallback seguro
+        )
+```
 
 #### **4.3 Fallbacks Literais Estáticos**
+
 
 Literais numéricos constantes inseridos no código-fonte são avaliados em tempo de compilação. Se o literal passar no predicado (ex: o literal 1 num contexto que exige PositiveInt), o compilador aceita-o como um tipo nativo PositiveInt, dispensando o construtor dinâmico e o retorno de Result.
 

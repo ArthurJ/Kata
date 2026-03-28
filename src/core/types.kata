@@ -198,7 +198,18 @@ Float implements NUM
     @ffi("kata_rt_floor")
     floor :: Float => Float
 
-export NUM Float Int
+# ==========================================
+# Log e Diagnóstico
+# ==========================================
+
+enum LogLevel
+    | Error
+    | Warn
+    | Info
+    | Debug
+    | Trace
+
+export NUM Float Int LogLevel
 
 # ==========================================
 # Texto

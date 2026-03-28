@@ -1,0 +1,17 @@
+# Ações utilitárias de asserção para testes imperativos
+
+# O panic! é a interface real com o SO para abortar a Green Thread
+@ffi("kata_rt_panic")
+action panic(Text)
+
+# assert! implementado em puro Kata
+action assert(condicao mensagem)
+    match condicao
+        True: ()
+        False: panic! mensagem
+
+# assert_eq! pode usar o assert! internamente no futuro
+@ffi("kata_rt_assert_eq")
+action assert_eq(A A Text)
+
+export assert assert_eq panic

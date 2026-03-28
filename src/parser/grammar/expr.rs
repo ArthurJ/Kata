@@ -22,7 +22,13 @@ pub fn pattern_atom_parser() -> impl Parser<Token, Spanned<Pattern>, Error = Par
         )).map(Pattern::Literal);
 
         let hole = just(Token::Hole).to(Pattern::Hole);
-        let ident = ident_string().map(Pattern::Ident);
+        let ident = filter_map(|span, tok| match tok {
+            Token::Ident(s) => Ok(Pattern::Ident(s)),
+            Token::TypeID(s) => Ok(Pattern::Ident(s)),
+            Token::InterfaceID(s) => Ok(Pattern::Ident(s)),
+            Token::Otherwise => Ok(Pattern::Ident("otherwise".to_string())),
+            _ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
+        });
 
         let tuple = pattern.clone()
             .separated_by(just(Token::Comma).or_not())
@@ -49,7 +55,7 @@ pub fn pattern_sequence_parser() -> impl Parser<Token, Spanned<Pattern>, Error =
     })
 }
 
-fn with_block_parser() -> impl Parser<Token, Vec<Spanned<Expr>>, Error = ParserError> + Clone {
+pub fn with_block_parser() -> impl Parser<Token, Vec<Spanned<Expr>>, Error = ParserError> + Clone {
     let sequence = atom_expr_parser().repeated().at_least(1).map_with_span(|mut atoms, span| {
         if atoms.len() == 1 {
             atoms.remove(0)
@@ -95,6 +101,8 @@ fn atom_expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = ParserError> 
         let ident = filter_map(|span, tok| match tok {
             Token::Ident(s) => Ok(Expr::Ident(s)),
             Token::TypeID(s) => Ok(Expr::Ident(s)),
+            Token::InterfaceID(s) => Ok(Expr::Ident(s)),
+            Token::Otherwise => Ok(Expr::Ident("otherwise".to_string())),
             _ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
         });
 
@@ -124,8 +132,12 @@ fn atom_expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = ParserError> 
             .delimited_by(just(Token::LBrace), just(Token::RBrace))
             .map(Expr::Array);
 
+        let dollar_app = just(Token::Dollar)
+            .ignore_then(expr.clone())
+            .map(|e| Expr::ExplicitApp(Box::new(e)));
+
         let atom = choice((
-            int, float, string, ident, action_call, channel_send, channel_recv, channel_recv_non_block, hole, tuple, list, array
+            int, float, string, ident, action_call, channel_send, channel_recv, channel_recv_non_block, hole, tuple, list, array, dollar_app
         )).map_with_span(|ast, span| (ast, span));
 
         let try_atom = atom.then(just(Token::Question).repeated())

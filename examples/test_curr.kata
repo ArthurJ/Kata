@@ -1,0 +1,17 @@
+# Teste de Aplicação Explícita e Currying
+
+interface NUM
++ :: Int Int => Int
+lambda a b: a
+
+action main
+    # 1. Aplicação explícita para desambiguar tuplas
+    let a $(+ 10 20)
+    
+    # 2. Currying/Hole (O ArityResolver deve aceitar o Hole)
+    let soma_cinco (+ 5 _)
+    
+    # 3. Composição combinada
+    let b $(+ a 5)
+    
+    echo! "Operadores $ e _ validados na TAST"

@@ -14,7 +14,7 @@ mod tests {
         let input = "enum IMC\n    | Magreza(< _ 18.5)\n    | Normal(<= _ 25.0)\n    | Sobrepeso(<= _ 30.0)\n    | Obesidade";
         let module = parse(input);
         match &module.declarations[0].0 {
-            TopLevel::Enum(name, variants) => {
+            TopLevel::Enum(name, variants, _) => {
                 assert_eq!(name, "IMC");
                 assert_eq!(variants.len(), 4);
                 assert!(matches!(variants[0].data, VariantData::Predicate(_)));
@@ -29,7 +29,7 @@ mod tests {
         let input = "enum StatusHTTP\n    | OK(200)\n    | NotFound(404)";
         let module = parse(input);
         match &module.declarations[0].0 {
-            TopLevel::Enum(_, variants) => {
+            TopLevel::Enum(_, variants, _) => {
                 assert_eq!(variants.len(), 2);
                 match &variants[0].data {
                     VariantData::FixedValue(Expr::Int(v)) => assert_eq!(v, "200"),
@@ -47,7 +47,7 @@ mod tests {
         assert_eq!(module.declarations.len(), 4);
         // Signature + 3 LambdaDefs
         match &module.declarations[1].0 {
-            TopLevel::LambdaDef(args, _, _) => {
+            TopLevel::LambdaDef(args, _, _, _) => {
                 match &args[0].0 {
                     Pattern::Literal(Expr::Int(v)) => assert_eq!(v, "0"),
                     _ => panic!("Expected Pattern::Literal(0)"),
@@ -62,7 +62,7 @@ mod tests {
         let input = "action test (r::Result::(Int, Err)) => Unit\n    match r\n        Ok v: echo! v\n        Err m: panic! m";
         let module = parse(input);
         match &module.declarations[0].0 {
-            TopLevel::ActionDef(_, _, _, stmts) => {
+            TopLevel::ActionDef(_, _, _, stmts, _) => {
                 match &stmts[0].0 {
                     Stmt::Match(_, arms) => {
                         assert_eq!(arms.len(), 2);
@@ -100,7 +100,7 @@ mod tests {
         let input = "action test () => Unit\n    let (a, b) (1, 2)\n";
         let module = parse(input);
         match &module.declarations[0].0 {
-            TopLevel::ActionDef(_, _, _, stmts) => {
+            TopLevel::ActionDef(_, _, _, stmts, _) => {
                 match &stmts[0].0 {
                     Stmt::Let(pat, _) => {
                         assert!(matches!(pat.0, Pattern::Tuple(_)));
@@ -153,7 +153,7 @@ mod tests {
         let input = "action test () => Unit\n    let x \\ \n 10\n";
         let module = parse(input);
         match &module.declarations[0].0 {
-            TopLevel::ActionDef(_, _, _, stmts) => {
+            TopLevel::ActionDef(_, _, _, stmts, _) => {
                 assert_eq!(stmts.len(), 1);
                 match &stmts[0].0 {
                     Stmt::Let(_, expr) => {
@@ -174,7 +174,7 @@ mod tests {
         let input = "action test () => Unit\n    let lista [\n        1\n        2\n    ]\n";
         let module = parse(input);
         match &module.declarations[0].0 {
-            TopLevel::ActionDef(_, _, _, stmts) => {
+            TopLevel::ActionDef(_, _, _, stmts, _) => {
                 match &stmts[0].0 {
                     Stmt::Let(_, expr) => {
                         match &expr.0 {
@@ -195,7 +195,7 @@ mod tests {
         let module = parse(input);
         assert_eq!(module.declarations.len(), 1);
         match &module.declarations[0].0 {
-            TopLevel::ActionDef(_, _, _, stmts) => {
+            TopLevel::ActionDef(_, _, _, stmts, _) => {
                 assert_eq!(stmts.len(), 1); // Only `let x 10` remains
             }
             _ => panic!("Expected ActionDef"),
@@ -207,7 +207,7 @@ mod tests {
         let input = "action test () => Unit\n    let val ler_arquivo! caminho ?\n";
         let module = parse(input);
         match &module.declarations[0].0 {
-            TopLevel::ActionDef(_, _, _, stmts) => {
+            TopLevel::ActionDef(_, _, _, stmts, _) => {
                 match &stmts[0].0 {
                     Stmt::Let(_, expr) => {
                         match &expr.0 {
