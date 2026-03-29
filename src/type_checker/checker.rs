@@ -27,6 +27,7 @@ pub enum TTopLevel {
     Signature(String, Vec<Spanned<TypeRef>>, Spanned<TypeRef>, Vec<Spanned<crate::parser::ast::Directive>>),
     LambdaDef(Vec<Spanned<Pattern>>, Spanned<TExpr>, Vec<Spanned<TExpr>>, Vec<Spanned<crate::parser::ast::Directive>>),
     ActionDef(String, Vec<(String, Spanned<TypeRef>)>, Spanned<TypeRef>, Vec<Spanned<TStmt>>, Vec<Spanned<crate::parser::ast::Directive>>),
+    Execution(Spanned<TExpr>),
 }
 
 impl Checker {
@@ -391,6 +392,16 @@ impl Checker {
                 }
 
                 Some(TTopLevel::ActionDef(name.clone(), params.clone(), ret.clone(), t_body, dirs.clone()))
+            }
+            TopLevel::Execution(expr) => {
+                resolver.pure_context.set(false); // Top-level execution allows actions
+                *resolver.current_action.borrow_mut() = None;
+                
+                resolver.local_vars.borrow_mut().clear();
+                resolver.constraints.borrow_mut().clear();
+                
+                let t_expr = resolver.resolve_expr(expr);
+                Some(TTopLevel::Execution(t_expr))
             }
             _ => None,
         }

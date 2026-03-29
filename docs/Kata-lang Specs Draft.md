@@ -994,9 +994,23 @@ action multiplexador (rx\_a rx\_b tx\_c)
 
 ## **Diretivas de Compilação e Runtime**
 
-As diretivas são anotações sintáticas prefixadas pelo símbolo @. Atuam como instruções explícitas para o compilador e para o *runtime*, alterando características não-funcionais do código (como políticas de resiliência, alocação de memória ou ligação a bibliotecas externas) sem modificar a semântica matemática do programa.
+As diretivas são anotações sintáticas prefixadas pelo símbolo @. Atuam como instruções explícitas para o compilador e para o *runtime*, alterando características não-funcionais do código (como políticas de resiliência, alocação de memória ou ligação a bibliotecas externas) ou instruindo o otimizador sem modificar a semântica matemática do programa.
 
-### **1\. Políticas de Reinicialização e Resiliência (@restart)**
+### **1\. Otimização e Despacho (@commutative e @associative)**
+
+Utilizadas primariamente para otimizar funções de biblioteca padrão e algoritmos recursivos.
+
+* **@commutative:** Informa o *Type Checker* que a ordem dos argumentos na função não altera o resultado (ex: `a + b == b + a`). Isso permite ao compilador tentar resolver ambiguidades de *Multiple Dispatch* trocando os argumentos de lugar caso a assinatura direta não seja encontrada.
+* **@associative([identidade]):** Informa o compilador que a função obedece à propriedade associativa (Semigrupo) e, opcionalmente, fornece o seu **elemento neutro** (Monoide). Esta diretiva é vital para o **TRMA (Tail Recursion Modulo Associativity)**. Quando o otimizador deteta uma recursão bloqueada por uma função associativa, se o elemento neutro tiver sido fornecido, ele utilizará esse valor para injetar automaticamente um acumulador, convertendo o algoritmo para uma recursão de cauda perfeita (TCO) sem custo na *Call Stack*. Caso a função seja apenas associativa mas não possua elemento neutro (ex: `max`), a diretiva pode ser declarada sem argumentos (apenas `@associative`), impedindo o TRMA mas abrindo portas a outras otimizações estáticas da AST.
+
+```kata
+@commutative
+@associative(0)
++ :: Int Int => Int
+lambda a b: ...
+```
+
+### **2\. Políticas de Reinicialização e Resiliência (@restart)**
 
 Delegar a resiliência e o controle de exceções transientes ao *Work-Stealing Scheduler* reduz a presença de laços imperativos. A diretiva @restart acopla metadados de ciclo de vida direto à raiz de uma *Action*. Se a execução atingir um estado de pânico (panic\!) ou for terminada de modo não premeditado, o escalonador tenta reinstanciá-la conforme a política definida.
 

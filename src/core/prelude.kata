@@ -31,6 +31,8 @@ fold :: (A A -> A) A [A] => A
 zip :: [A] [B] => [(A B)]
 
 # Concatenação de listas
+@commutative
+@associative([])
 + :: [A] [A] => [A]
 λ [] b: b
 λ (Cons x xs) b: Cons x $(+ xs b)

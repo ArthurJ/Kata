@@ -2,6 +2,7 @@ mod cli;
 mod codegen;
 mod kata_rt;
 mod lexer;
+mod optimizer;
 mod parser;
 mod repl;
 mod type_checker;
@@ -157,6 +158,22 @@ fn main() -> miette::Result<()> {
             if cli.dump_tast {
                 println!("--- TAST (RESOLVIDA) ---");
                 println!("{:#?}", checker.tast);
+            }
+
+            let mut opt = optimizer::Optimizer::new(&checker.env);
+            let optimized_tast = opt.optimize(checker.tast, *release);
+
+            if !opt.errors.is_empty() {
+                log::error!("Erros de Otimizacao detectados na Fase 4:");
+                for e in &opt.errors {
+                    log::error!("{}", e.message);
+                }
+                return Err(miette::miette!("Falha na otimizacao."));
+            }
+
+            if cli.dump_tast {
+                println!("--- TAST (OTIMIZADA) ---");
+                println!("{:#?}", optimized_tast);
             }
 
             // codegen::run_stub();

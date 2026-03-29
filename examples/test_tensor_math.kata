@@ -2,6 +2,7 @@
 dot :: Tensor::Int::T Tensor::Int::T => Int
 
 @ffi("kata_rt_add")
+@commutative
 + :: Tensor::Int::T Tensor::Int::T => Tensor::Int::T
 
 action main

@@ -239,6 +239,8 @@ pub fn top_level_parser() -> impl Parser<Token, Spanned<TopLevel>, Error = Parse
             .ignore_then(lambda_body)
             .map(|(body, with)| TopLevel::LambdaDef(vec![(Pattern::Ident("otherwise".to_string()), 0..0)], body, with, Vec::new()));
 
+        let execution_decl = expr_parser().map(TopLevel::Execution);
+
         directives_list.then(
             choice((
                 data_decl.map(|(name, def)| TopLevel::Data(name, def, Vec::new())),
@@ -252,6 +254,7 @@ pub fn top_level_parser() -> impl Parser<Token, Spanned<TopLevel>, Error = Parse
                 export_decl,
                 import_decl,
                 implements_decl,
+                execution_decl,
             ))
         ).map(|(dirs, mut tl)| {
             match &mut tl {
@@ -262,7 +265,7 @@ pub fn top_level_parser() -> impl Parser<Token, Spanned<TopLevel>, Error = Parse
                 TopLevel::ActionDef(_, _, _, _, ref mut d) => *d = dirs,
                 TopLevel::Interface(_, _, _, ref mut d) => *d = dirs,
                 TopLevel::Alias(_, _, ref mut d) => *d = dirs,
-                TopLevel::Export(_) | TopLevel::Import(_, _) | TopLevel::Implements(..) => {
+                TopLevel::Export(_) | TopLevel::Import(_, _) | TopLevel::Implements(..) | TopLevel::Execution(_) => {
                     // Essas ainda não suportam diretivas na AST ou não faz sentido
                 }
             }

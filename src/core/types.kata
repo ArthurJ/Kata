@@ -22,15 +22,21 @@ Bool implements SHOW
     @ffi("kata_rt_bool_to_str")
     repr :: Bool => Text
 
+@commutative
+@associative(True)
 and :: Bool Bool => Bool
 λ True True: True
 otherwise: False
 
+@commutative
+@associative(False)
 or :: Bool Bool => Bool
 λ True _: True
 λ _ True: True
 otherwise: False
 
+@commutative
+@associative(False)
 xor :: Bool Bool => Bool
 λ True False: True
 λ False True: True
@@ -52,10 +58,10 @@ interface HASH
     hash :: A => Text
 
 interface EQ implements HASH
-    @comutative
+    @commutative
     = :: A A => Bool
     
-    @comutative
+    @commutative
     != :: A A => Bool
     λ x y: not $(= x y)
 
@@ -83,12 +89,16 @@ interface NUM implements ORD SHOW
 
 Int implements NUM
     @ffi("kata_rt_add_int")
+    @commutative
+    @associative(0)
     + :: Int Int => Int
 
     @ffi("kata_rt_sub_int")
     - :: Int Int => Int
 
     @ffi("kata_rt_mul_int")
+    @commutative
+    @associative(1)
     * :: Int Int => Int
 
     @ffi("kata_rt_exp_int")
@@ -107,6 +117,7 @@ Int implements NUM
     mod :: Int NonZero => Int
 
     @ffi("kata_rt_eq_int")
+    @commutative
     = :: Int Int => Bool
     
     @ffi("kata_rt_gt_int")
@@ -132,19 +143,19 @@ Int implements NUM
 
 Float implements NUM
     @ffi("kata_rt_add_flt")
-    @comutative
+    @commutative
+    @associative(0.0)
     + :: Float Float => Float
 
     @ffi("kata_rt_sub_flt")
-    @comutative
     - :: Float Float => Float
 
     @ffi("kata_rt_mul_flt")
-    @comutative
+    @commutative
+    @associative(1.0)
     * :: Float Float => Float
 
     @ffi("kata_rt_exp_flt")
-    @comutative
     ** :: Float Float => Float
     
     @ffi("kata_rt_real_div_flt")
@@ -157,27 +168,22 @@ Float implements NUM
     div :: Float Float => Result::(Float, Text)
 
     @ffi("kata_rt_mod_flt")
-    @comutative
     mod :: Float NonZero => Float
 
     @ffi("kata_rt_eq_flt")
-    @comutative
+    @commutative
     = :: Float Float => Bool
     
     @ffi("kata_rt_gt_flt")
-    @comutative
     > :: Float Float => Bool
     
     @ffi("kata_rt_ge_flt")
-    @comutative
     >= :: Float Float => Bool
     
     @ffi("kata_rt_lt_flt")
-    @comutative
     < :: Float Float => Bool
     
     @ffi("kata_rt_le_flt")
-    @comutative
     <= :: Float Float => Bool
     
     @ffi("kata_rt_flt_to_str")
@@ -216,6 +222,7 @@ export NUM Float Int LogLevel Bool and or xor not Result Optional str repr SHOW 
 # ==========================================
 
 @ffi("kata_rt_concat_text")
+@associative("")
 + :: Text Text => Text
 
 interface REPR

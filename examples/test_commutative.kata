@@ -2,6 +2,7 @@ interface NUM
 
 # Definimos apenas Int + Float e marcamos como comutativa
 @commutative
+@associative(0.0)
 + :: Int Float => Float
 lambda i f: f
 

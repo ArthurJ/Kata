@@ -1,10 +1,14 @@
 interface NUM
 
 # Despacho para Inteiros
+@commutative
+@associative(0)
 + :: Int Int => Int
 lambda a b: a
 
 # Despacho para Floats
+@commutative
+@associative(0.0)
 + :: Float Float => Float
 lambda a b: a
 

@@ -35,7 +35,7 @@ A separação entre `data`, `lambdas` e `actions` deve ser garantida taticamente
 #### 5. Integração com a Standard Library (Prelude)
 A biblioteca padrão da Kata-Lang (`@src/core/**`) atua como a fundação lógica do sistema.
 *   **Auto-Importação do Prelude:** O `TypeEnv` deve ser inicializado processando automaticamente o arquivo `src/core/prelude.kata` (e suas dependências como `types.kata`, `io.kata`, `csp.kata`).
-*   **Tratamento de Diretivas `@ffi` e Atributos Mágicos:** O Parser e a TAST devem ser ajustados para suportar metadados/atributos nas declarações top-level (ex: `@ffi("kata_rt_map")` e `@comutative`), essenciais para ligar assinaturas puras a código de máquina Rust ou alterar o comportamento do Multiple Dispatch.
+*   **Tratamento de Diretivas `@ffi` e Atributos Mágicos:** O Parser e a TAST devem ser ajustados para suportar metadados/atributos nas declarações top-level (ex: `@ffi("kata_rt_map")` e `@commutative`), essenciais para ligar assinaturas puras a código de máquina Rust ou alterar o comportamento do Multiple Dispatch.
 *   **Abertura do Namespace:** Tudo o que o `prelude.kata` declarar via `export` deve ser injetado no namespace global de qualquer módulo de usuário que for compilado.
 
 ### Requisitos Não-Funcionais

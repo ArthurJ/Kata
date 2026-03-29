@@ -98,6 +98,7 @@ pub enum TopLevel {
     LambdaDef(Vec<Spanned<Pattern>>, Spanned<Expr>, Vec<Spanned<Expr>>, Vec<Spanned<Directive>>), 
     ActionDef(String, Vec<(String, Spanned<TypeRef>)>, Spanned<TypeRef>, Vec<Spanned<Stmt>>, Vec<Spanned<Directive>>),
     Alias(String, String, Vec<Spanned<Directive>>),
+    Execution(Spanned<Expr>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
