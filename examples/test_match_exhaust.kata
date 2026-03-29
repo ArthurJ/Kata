@@ -15,10 +15,10 @@ action main
 
     # Match Invalido (Falta Rosa e otherwise)
     match minha_cor
-        Azul: echo! "A"
-        Verde: echo! "V"
+        Azul: echo!("A")
+        Verde: echo!("V")
         
     # Match Valido (Falta Rosa, mas tem otherwise)
     match minha_cor
-        Azul: echo! "A"
-        otherwise: echo! "Outro"
+        Azul: echo!("A")
+        otherwise: echo!("Outro")

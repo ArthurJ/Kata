@@ -7,8 +7,8 @@ import mock_math.triplicar
 action main
     let resultado $(mock_math.dobrar 21)
     let triplo $(triplicar 21)
-    echo! "Import OK"
-    echo! $(+ "Dobro: " resultado)
-    echo! $(+ "Triplo: " triplo)
+    echo!("Import OK")
+    echo!($(+ "Dobro: " resultado))
+    echo!($(+ "Triplo: " triplo))
 
-main!
+main!()

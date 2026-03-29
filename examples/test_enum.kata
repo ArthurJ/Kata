@@ -34,4 +34,4 @@ action main
     # Predicado: O construtor inteligente "IMC" tem aridade 1
     let imc IMC 22.5
 
-    echo! status
+    echo!(status)

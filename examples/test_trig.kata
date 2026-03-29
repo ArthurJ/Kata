@@ -3,6 +3,6 @@ action main
     let s sin angulo
     let c cos 0.0
     let a abs -42.5
-    echo! "Trig!"
+    echo!("Trig!")
 
-main!
+main!()

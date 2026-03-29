@@ -119,15 +119,21 @@ fn main() -> miette::Result<()> {
             let mut checker = type_checker::Checker::new();
             
             // Carrega os modulos do core (Prelude)
-            let core_files = ["src/core/types.kata", "src/core/io.kata", "src/core/csp.kata", "src/core/assert.kata", "src/core/prelude.kata"];
+            let core_files = [
+                ("types", "src/core/types.kata"), 
+                ("io", "src/core/io.kata"), 
+                ("csp", "src/core/csp.kata"), 
+                ("assert", "src/core/assert.kata"), 
+                ("prelude", "src/core/prelude.kata")
+            ];
             let mut prelude_modules = Vec::new();
-            for file in core_files {
+            for (name, file) in core_files {
                 match std::fs::read_to_string(file) {
                     Ok(src) => {
                         match lexer::lex(&src, lexer::LexMode::File) {
                             Ok(toks) => {
                                 match parser::parse_module(toks, src.len()) {
-                                    Ok(m) => prelude_modules.push(m),
+                                    Ok(m) => prelude_modules.push((name, m)),
                                     Err(e) => log::error!("Erro ao parsear o prelude {}: {:?}", file, e),
                                 }
                             }
@@ -144,7 +150,7 @@ fn main() -> miette::Result<()> {
             if !checker.errors.is_empty() {
                 log::error!("Erros Semanticos detectados na Fase 3:");
                 for e in &checker.errors {
-                    log::error!("{}", e);
+                    log::error!("{}", e.0);
                 }
             }
 
@@ -190,13 +196,19 @@ fn main() -> miette::Result<()> {
 
             // 3. Type Checker
             let mut checker = type_checker::Checker::new();
-            let core_files = ["src/core/types.kata", "src/core/io.kata", "src/core/csp.kata", "src/core/assert.kata", "src/core/prelude.kata"];
+            let core_files = [
+                ("types", "src/core/types.kata"), 
+                ("io", "src/core/io.kata"), 
+                ("csp", "src/core/csp.kata"), 
+                ("assert", "src/core/assert.kata"), 
+                ("prelude", "src/core/prelude.kata")
+            ];
             let mut prelude_modules = Vec::new();
-            for file in core_files {
+            for (name, file) in core_files {
                 if let Ok(src) = std::fs::read_to_string(file) {
                     if let Ok(toks) = lexer::lex(&src, lexer::LexMode::File) {
                         if let Ok(m) = parser::parse_module(toks, src.len()) {
-                            prelude_modules.push(m);
+                            prelude_modules.push((name, m));
                         }
                     }
                 }

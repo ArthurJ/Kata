@@ -59,7 +59,7 @@ mod tests {
 
     #[test]
     fn test_pattern_matching_match_action() {
-        let input = "action test (r::Result::(Int, Err)) => Unit\n    match r\n        Ok v: echo! v\n        Err m: panic! m";
+        let input = "action test (r::Result::(Int, Err)) => Unit\n    match r\n        Ok v: echo!(v)\n        Err m: panic!(m)";
         let module = parse(input);
         match &module.declarations[0].0 {
             TopLevel::ActionDef(_, _, _, stmts, _) => {
@@ -204,26 +204,23 @@ mod tests {
 
     #[test]
     fn test_postfix_try() {
-        let input = "action test () => Unit\n    let val ler_arquivo! caminho ?\n";
+        let input = "action test () => Unit\n    let val ler_arquivo!(caminho) ?\n";
         let module = parse(input);
         match &module.declarations[0].0 {
             TopLevel::ActionDef(_, _, _, stmts, _) => {
                 match &stmts[0].0 {
                     Stmt::Let(_, expr) => {
                         match &expr.0 {
-                            Expr::Sequence(atoms) => {
-                                assert_eq!(atoms.len(), 2);
-                                match &atoms[1].0 {
-                                    Expr::Try(inner) => {
-                                        match &inner.0 {
-                                            Expr::Ident(id) => assert_eq!(id, "caminho"),
-                                            _ => panic!("Expected inner Ident"),
-                                        }
+                            Expr::Try(inner) => {
+                                match &inner.0 {
+                                    Expr::ActionCall(id, args) => {
+                                        assert_eq!(id, "ler_arquivo");
+                                        assert_eq!(args.len(), 1);
                                     }
-                                    _ => panic!("Expected Try expression"),
+                                    _ => panic!("Expected inner ActionCall, found {:?}", inner.0),
                                 }
                             }
-                            _ => panic!("Expected Sequence"),
+                            _ => panic!("Expected Try expression, found {:?}", expr.0),
                         }
                     },
                     _ => panic!("Expected Stmt::Let"),

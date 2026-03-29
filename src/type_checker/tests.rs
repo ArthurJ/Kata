@@ -60,7 +60,7 @@ action main
         let module = crate::parser::parse_module(tokens, src.len()).unwrap();
         checker.check_module(&module);
 
-        assert!(checker.errors.iter().any(|e| e.contains("Erro de Tipo")), "Deveria ter erro de tipo.");
+        assert!(checker.errors.iter().any(|e| e.0.contains("Erro de Tipo")), "Deveria ter erro de tipo.");
     }
 
     #[test]
@@ -70,21 +70,21 @@ action log! (msg) => ()
 
 soma :: Int Int => Int
 lambda a b:
-    log! \"tentando logar no lambda\"
+    log!(\"tentando logar no lambda\")
     + a b
 ";
         let checker = check(src);
-        assert!(checker.errors.iter().any(|e| e.contains("Erro de Pureza")), "Deveria ter erro de pureza.");
+        assert!(checker.errors.iter().any(|e| e.0.contains("Erro de Pureza")), "Deveria ter erro de pureza.");
     }
 
     #[test]
     fn test_action_recursion() {
         let src = "
-action recursiva
-    recursiva!
+action recursiva ()
+    recursiva!()
 ";
         let checker = check(src);
-        assert!(checker.errors.iter().any(|e| e.contains("Recursao proibida")), "Deveria ter erro de recursao.");
+        assert!(checker.errors.iter().any(|e| e.0.contains("Recursao proibida")), "Deveria ter erro de recursao.");
     }
 
     #[test]
@@ -99,7 +99,7 @@ action processar (s::Status)
         Ok: ()
 ";
         let checker = check(src);
-        assert!(checker.errors.iter().any(|e| e.contains("nao eh exaustivo")), "Deveria ter erro de exaustividade.");
+        assert!(checker.errors.iter().any(|e| e.0.contains("nao eh exaustivo")), "Deveria ter erro de exaustividade.");
     }
 
     #[test]
@@ -110,7 +110,7 @@ ExtType implements ExtInterface
     lambda _: ()
 ";
         let checker = check(src);
-        assert!(checker.errors.iter().any(|e| e.contains("Orphan Rule")), "Deveria ter violado a Orphan Rule.");
+        assert!(checker.errors.iter().any(|e| e.0.contains("Orphan Rule")), "Deveria ter violado a Orphan Rule.");
     }
 
     #[test]
@@ -148,7 +148,7 @@ action main
     let a processar 10 20
 ";
         let checker = check(src);
-        assert!(checker.errors.iter().any(|e| e.contains("Ambiguidade")), "Deveria ter detectado ambiguidade.");
+        assert!(checker.errors.iter().any(|e| e.0.contains("Ambiguidade")), "Deveria ter detectado ambiguidade.");
     }
 
     #[test]
@@ -193,7 +193,7 @@ with
 ";
         let checker_fail = check(src_fail);
         assert!(!checker_fail.errors.is_empty(), "O TypeChecker permitiu acesso ao '+' para um tipo que so assina SHOW");
-        assert!(checker_fail.errors.iter().any(|e| e.contains("Erro de Tipo: `+`") || e.contains("Type Mismatch")), "Erros reais: {:?}", checker_fail.errors);
+        assert!(checker_fail.errors.iter().any(|e| e.0.contains("Erro de Tipo: `+`") || e.0.contains("Type Mismatch")), "Erros reais: {:?}", checker_fail.errors);
     }
 
     #[test]
@@ -257,7 +257,7 @@ lambda Ok: 1
         let module = crate::parser::parse_module(tokens, src.len()).unwrap();
         let mut checker = crate::type_checker::Checker::new();
         checker.check_module(&module);
-        assert!(checker.errors.iter().any(|e| e.contains("nao eh exaustivo")), "Deveria ter erro de exaustividade no lambda.");
+        assert!(checker.errors.iter().any(|e| e.0.contains("nao eh exaustivo")), "Deveria ter erro de exaustividade no lambda.");
     }
 
     #[test]

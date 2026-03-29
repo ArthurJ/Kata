@@ -12,7 +12,7 @@ action main
     let no_value None
     let success_result Ok 100
     let error_result Err "Failed to fetch"
-    echo! "Testando as definições da Phase 8!"
-    echo! "Tudo está disponível globalmente."
+    echo!("Testando as definições da Phase 8!")
+    echo!("Tudo está disponível globalmente.")
 
-main!
+main!()

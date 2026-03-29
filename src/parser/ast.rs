@@ -7,6 +7,7 @@ pub enum TypeRef {
     Generic(String, Vec<Spanned<TypeRef>>),
     Function(Vec<Spanned<TypeRef>>, Box<Spanned<TypeRef>>),
     Refined(Box<Spanned<TypeRef>>, Vec<Spanned<Expr>>),
+    Variadic(Box<Spanned<TypeRef>>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -16,7 +17,7 @@ pub enum Expr {
     Float(String),
     String(String),
     Hole,
-    ActionCall(String),
+    ActionCall(String, Vec<Spanned<Expr>>),
     ChannelSend,
     ChannelRecv,
     ChannelRecvNonBlock,
@@ -27,6 +28,7 @@ pub enum Expr {
     #[allow(dead_code)]
     Array(Vec<Spanned<Expr>>),
     Sequence(Vec<Spanned<Expr>>), 
+    Guard(Vec<(String, Spanned<Expr>)>, Box<Spanned<Expr>>),
     Lambda(Vec<Spanned<Pattern>>, Box<Spanned<Expr>>, Vec<Spanned<Expr>>), 
     WithDecl(String, Box<Spanned<Expr>>), 
 }
@@ -91,7 +93,7 @@ pub enum TopLevel {
     Interface(String, Vec<String>, Vec<Spanned<TopLevel>>, Vec<Spanned<Directive>>), 
     Implements(String, String, Vec<Spanned<TopLevel>>), 
     Export(Vec<String>),
-    Import(String, Vec<String>),
+    Import(String, Vec<(String, Option<String>)>),
     Signature(String, Vec<Spanned<TypeRef>>, Spanned<TypeRef>, Vec<Spanned<Directive>>), 
     LambdaDef(Vec<Spanned<Pattern>>, Spanned<Expr>, Vec<Spanned<Expr>>, Vec<Spanned<Directive>>), 
     ActionDef(String, Vec<(String, Spanned<TypeRef>)>, Spanned<TypeRef>, Vec<Spanned<Stmt>>, Vec<Spanned<Directive>>),

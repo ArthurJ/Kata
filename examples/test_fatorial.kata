@@ -7,6 +7,6 @@ lambda n: fat_tail n 1
 
 action main
     let f $(fatorial 5)
-    echo! $(str f)
+    echo!($(str f))
 
-main!
+main!()

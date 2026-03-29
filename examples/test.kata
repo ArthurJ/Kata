@@ -6,4 +6,4 @@ lambda x y:
 
 action main
     let resultado soma 10 20
-    echo! resultado
+    echo!(resultado)

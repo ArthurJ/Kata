@@ -45,3 +45,4 @@ pub fn parse_stmt(
 pub fn run_stub() {
     log::info!("Iniciando Parser (Stub com AST parcial)");
 }
+mod tests_import;

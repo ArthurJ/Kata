@@ -6,12 +6,12 @@ action fork(Action)
 
 # 2. Infraestrutura de Canais
 @ffi("kata_rt_chan_create_rendezvous")
-action channel => (Sender::T Receiver::T)
+action channel() => (Sender::T Receiver::T)
 
 @ffi("kata_rt_chan_create_queue")
 action queue(Int) => (Sender::T Receiver::T)
 
 @ffi("kata_rt_chan_create_broadcast")
-action broadcast => (Sender::T (Int -> Receiver::T))
+action broadcast() => (Sender::T (Int -> Receiver::T))
 
 export fork channel queue broadcast

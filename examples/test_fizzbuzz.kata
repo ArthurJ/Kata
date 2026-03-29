@@ -11,10 +11,9 @@ lambda x:
 
 action main
     # Vamos testar a arvore de fluxo diretamente chamando as FFI
-    echo! $(fizzbuzz 3)
-    echo! $(fizzbuzz 5)
-    echo! $(fizzbuzz 15)
-    echo! fizzbuzz 7
-    echo! fizzbuzz 2
-
-main!
+    echo!($(fizzbuzz 3))
+    echo!($(fizzbuzz 5))
+    echo!($(fizzbuzz 15))
+    echo!(fizzbuzz 7)
+    echo!(fizzbuzz 2)
+    ()

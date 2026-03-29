@@ -10,6 +10,7 @@ pub enum TExpr {
     List(Vec<Spanned<TExpr>>, TypeRef),
     Lambda(Vec<Spanned<Pattern>>, Box<Spanned<TExpr>>, TypeRef),
     Sequence(Vec<Spanned<TExpr>>, TypeRef),
+    Guard(Vec<(Spanned<TExpr>, Spanned<TExpr>)>, Box<Spanned<TExpr>>, TypeRef),
     Try(Box<Spanned<TExpr>>, TypeRef),
     ChannelSend(Box<Spanned<TExpr>>, Box<Spanned<TExpr>>, TypeRef),
     ChannelRecv(Box<Spanned<TExpr>>, TypeRef),

@@ -3,10 +3,10 @@ ler_banco :: () => Array::Int
 lambda : {10 20 30 40}
 
 action processa_ok (tensor_seguro)
-    echo! "Sucesso"
+    echo!("Sucesso")
 
 action processa_err (motivo)
-    echo! "Falhou"
+    echo!("Falhou")
 
 action main
     let dados_dinamicos ler_banco
@@ -15,6 +15,6 @@ action main
     # A variável 'tentativa' é do tipo Result::(Tensor::Int::(2 2))::Text
     let tentativa Tensor dados_dinamicos
 
-    echo! "Tratamento delegado para as funcoes acima"
+    echo!("Tratamento delegado para as funcoes acima")
 
-main!
+main!()

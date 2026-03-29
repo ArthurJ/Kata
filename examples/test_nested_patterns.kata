@@ -21,8 +21,8 @@ action main
     let a $(foo (1 2))
     let b $(bar (1 (2 3)))
     let c $(sum_list [1 2 3 4 5])
-    echo! "foo:" a
-    echo! "bar:" b
-    echo! "sum_list:" c
+    echo!("foo:" a)
+    echo!("bar:" b)
+    echo!("sum_list:" c)
 
-main!
+main!()

@@ -14,5 +14,5 @@ action main
     # Tipo: Ident("+", Float)
     let num_float + 10.5 2.5
     
-    # Tipo Errado: Vai falhar no Multiple Dispatch e gerar Erro Semântico!
+    # Tipo Errado: Vai falhar no Multiple Dispatch e gerar Erro Semântico!()
     let invalido + 10 "erro"

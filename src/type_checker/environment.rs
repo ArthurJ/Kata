@@ -29,8 +29,10 @@ pub struct TypeEnv {
     pub interfaces: HashMap<String, InterfaceInfo>,
     pub implementations: HashMap<String, Vec<String>>, // TypeName -> [Interface1, Interface2, ...]
     pub aliases: HashMap<String, String>, // AliasName -> TargetName
+    pub interface_methods: HashMap<String, Vec<String>>, // InterfaceName -> [Method1, Method2]
+    pub type_methods: HashMap<String, Vec<String>>,      // TypeName -> [Method1, Method2]
     pub exports: std::collections::HashSet<String>,
-    pub imports: Vec<(String, Vec<String>)>, // (module_path, specific_items)
+    pub imports: Vec<(String, Vec<(String, Option<String>)>)>, // (module_path, [(item, alias)])
     pub parent: Option<Box<TypeEnv>>,
 }
 
@@ -114,4 +116,117 @@ impl TypeEnv {
     pub fn lookup_first(&self, name: &str) -> Option<&SymbolInfo> {
         self.lookup_all(name).and_then(|vec| vec.first())
     }
+
+        pub fn expand_exports(&mut self) {
+        let mut new_exports = Vec::new();
+        for exp in &self.exports {
+            if let Some(methods) = self.interface_methods.get(exp) {
+                new_exports.extend(methods.clone());
+            }
+            if let Some(methods) = self.type_methods.get(exp) {
+                new_exports.extend(methods.clone());
+            }
+        }
+        for exp in new_exports {
+            self.exports.insert(exp);
+        }
+    }
+
+    pub fn import_from(&mut self, other: &TypeEnv, module_name: &str, specific: &[(String, Option<String>)]) {
+        let is_namespace = specific.is_empty();
+        let prefix = if is_namespace { format!("{}.", module_name) } else { "".to_string() };
+
+        let mut expanded_specific = specific.to_vec();
+        if !is_namespace {
+            let mut new_specific = Vec::new();
+            for (item, _) in specific {
+                if let Some(methods) = other.interface_methods.get(item) {
+                    for m in methods { new_specific.push((m.clone(), None)); }
+                }
+                if let Some(methods) = other.type_methods.get(item) {
+                    for m in methods { new_specific.push((m.clone(), None)); }
+                }
+            }
+            expanded_specific.extend(new_specific);
+        }
+        let specific_slice = &expanded_specific;
+
+        // Helper to check if an item is exported from `other`
+        let is_exported = |name: &str| -> bool {
+            other.exports.contains(name)
+        };
+
+        // Helper to get the imported name
+        let get_imported_name = |name: &str| -> Option<String> {
+            if !is_exported(name) { return None; }
+            if is_namespace { return Some(format!("{}{}", prefix, name)); }
+            
+            for (item, alias) in specific_slice {
+                if item == name {
+                    return Some(alias.clone().unwrap_or(name.to_string()));
+                }
+            }
+            None
+        };
+
+        // Copy Symbols
+        for (name, infos) in &other.symbols {
+            if let Some(imported_name) = get_imported_name(name) {
+                self.symbols.insert(imported_name, infos.clone());
+            }
+        }
+
+        // Copy Enums
+        for (name, variants) in &other.enums {
+            if let Some(imported_name) = get_imported_name(name) {
+                self.enums.insert(imported_name, variants.clone());
+                for var in variants {
+                    if let Some(infos) = other.symbols.get(var) {
+                        let imported_var = if is_namespace {
+                            format!("{}{}", prefix, var)
+                        } else {
+                            var.to_string()
+                        };
+                        self.symbols.insert(imported_var, infos.clone());
+                    }
+                }
+            }
+        }
+
+        // Copy Refined Types
+        for (name, info) in &other.refined_types {
+            if let Some(imported_name) = get_imported_name(name) {
+                self.refined_types.insert(imported_name, info.clone());
+            }
+        }
+
+        // Copy Interfaces
+        for (name, info) in &other.interfaces {
+            if let Some(imported_name) = get_imported_name(name) {
+                self.interfaces.insert(imported_name, info.clone());
+            }
+        }
+
+        // Copy Aliases
+        for (name, target) in &other.aliases {
+            if let Some(imported_name) = get_imported_name(name) {
+                self.aliases.insert(imported_name, target.clone());
+            }
+        }
+
+        // Implementations (Global Contracts)
+        for (type_name, ifaces) in &other.implementations {
+            let imported_type_name = if let Some(n) = get_imported_name(type_name) { n } else { continue; };
+            
+            for iface in ifaces {
+                let imported_iface_name = if is_namespace {
+                    if is_exported(iface) { format!("{}.", module_name) + iface } else { iface.clone() }
+                } else {
+                    iface.clone()
+                };
+                self.define_implementation(imported_type_name.clone(), imported_iface_name);
+            }
+        }
+    }
+
 }

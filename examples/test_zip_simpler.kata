@@ -7,6 +7,6 @@ lambda [x:xs]:
 action main
     let lista_a [1 2 3]
     let z zip lista_a
-    echo! "Zip funcionou"
+    echo!("Zip funcionou")
 
-main!
+main!()

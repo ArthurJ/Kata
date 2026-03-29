@@ -18,7 +18,7 @@ Uma vez que o Parser da Fase 2 agrupou a notação prefixada em `Sequence`s line
 *   **Varredura Gulosa (Greedy):** Percorrer as `Sequence`s da esquerda para a direita. Ao encontrar um identificador registado como função/construtor, o compilador consulta a sua aridade no `TypeEnv` e "engole" (consome) a exata quantidade de expressões seguintes para montar o nó de `Call`.
 *   **Apoio do Operador `$`:** Resolução de blocos que utilizam a aplicação explícita (desambiguação forçada de tuplos).
 *   **Currying Explícito:** Identificar o operador *Hole* (`_`) numa sequência de aplicação e transformar o nó num *Lambda* (closure) que aguarda a injeção do argumento em falta.
-*   **Actions vs. Funções:** Enquanto funções puras têm aridade estritamente fixa, as Actions variam (ex: `echo!` é variádica e consome o resto da instrução, `queue! 16` consome apenas 1 argumento).
+*   **Actions vs. Funções:** Enquanto funções puras têm aridade estritamente fixa, as Actions **consomem estritamente uma única tupla** (ex: `echo!("Olá")` e `queue!(16)` consomem exatamente 1 argumento: a tupla que os segue). O variadismo ocorre apenas dentro da tupla.
 
 #### 3. Type Checking e Múltiplo Despacho
 O sistema de tipos da Kata-Lang entra em ação.

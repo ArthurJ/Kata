@@ -107,9 +107,15 @@ fn atom_expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = ParserError> 
         });
 
         let action_call = filter_map(|span, tok| match tok {
-            Token::ActionIdent(s) => Ok(Expr::ActionCall(s)),
+            Token::ActionIdent(s) => Ok(s),
             _ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
-        });
+        })
+        .then(
+            expr.clone()
+                .separated_by(just(Token::Comma).or_not())
+                .delimited_by(just(Token::LParen), just(Token::RParen))
+        )
+        .map(|(name, args)| Expr::ActionCall(name, args));
 
         let channel_send = just(Token::ChannelSend).to(Expr::ChannelSend);
         let channel_recv = just(Token::ChannelRecv).to(Expr::ChannelRecv);
@@ -163,6 +169,29 @@ pub fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = ParserError> +
     });
 
     let lambda_body = {
+        let guard_branch = ident_string()
+            .then_ignore(just(Token::Colon))
+            .then(sequence.clone());
+
+        let otherwise_branch = just(Token::Otherwise)
+            .ignore_then(just(Token::Colon))
+            .ignore_then(sequence.clone());
+
+        let guards_block = just(Token::Newline).repeated()
+            .ignore_then(just(Token::Indent))
+            .ignore_then(
+                guard_branch.separated_by(just(Token::Newline).repeated().at_least(1))
+                    .allow_trailing()
+                    .at_least(1)
+            )
+            .then_ignore(just(Token::Newline).repeated())
+            .then(otherwise_branch)
+            .then(with_block_parser())
+            .then_ignore(just(Token::Dedent))
+            .map_with_span(|((branches, otherwise_body), w), span| {
+                ((Expr::Guard(branches, Box::new(otherwise_body)), span), w)
+            });
+
         let lambda_block = just(Token::Newline).repeated()
             .ignore_then(just(Token::Indent))
             .ignore_then(
@@ -183,7 +212,7 @@ pub fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = ParserError> +
 
         let inline_body = sequence.clone().then(with_block_parser());
 
-        choice((lambda_block, inline_body))
+        choice((guards_block, lambda_block, inline_body))
     };
 
     let lambda = just(Token::Lambda)

@@ -1,6 +1,6 @@
 # A infraestrutura de Entrada e Saída base
 
 @ffi("kata_rt_print_str")
-action echo(Text)
+action echo(Text...)
 
 export echo

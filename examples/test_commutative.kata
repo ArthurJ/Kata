@@ -9,7 +9,7 @@ action main
     # 1. Caso Direto: Int + Float (Bate com a assinatura)
     let a + 10 2.5
     
-    # 2. Caso Inverso: Float + Int (Não existe assinatura, mas @commutative salva!)
+    # 2. Caso Inverso: Float + Int (Não existe assinatura, mas @commutative salva!())
     let b + 2.5 10
     
-    echo! "Teste de Comutatividade concluído com sucesso!"
+    echo!("Teste de Comutatividade concluído com sucesso!")

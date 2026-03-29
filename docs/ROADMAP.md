@@ -91,7 +91,7 @@ O coração do compilador. É aqui que as sequências planas ganham significado 
 ### 3.2 Resolução de Aridade (Construção da Árvore Real)
 - [ ] Varredura das `Sequence`s da esquerda para a direita.
 - [ ] Transformação de identificadores em nós de `Call`, consumindo a quantidade exata de argumentos subsequentes baseada na Aridade da Tabela de Símbolos.
-- [ ] **Actions Variádicas vs Fixas:** Resolução de funções impuras (ex: `echo!` consome até o fim da linha; `queue! 16` consome apenas 1 argumento, deixando o resto da linha intacto).
+- [ ] **Actions Variádicas vs Fixas:** Resolução de funções impuras passando de greedy cego para exigir uma Tupla exata (ex: `echo!("Olá", "mundo")` e `queue!(16)` consomem exatamente 1 argumento: a tupla agrupando seus parâmetros). O variadismo reside dentro da tupla.
 
 ### 3.3 Type Checking e Múltiplo Despacho
 - [ ] **Algoritmo de Especificidade (Multiple Dispatch):** Resolução de sobrecargas pontuando: Correspondência Exata > Subtipo/Interface > Generic `TypeVar`.

@@ -2,8 +2,9 @@
 # O teto arquitetural de todos os projetos na linguagem.
 # Aqui expomos de forma limpa os blocos basicos da linguagem
 
-import types.(SHOW HASH EQ ORD)
-import types.(NUM Float Int and or xor not)
+import types.(SHOW HASH EQ ORD REPR NonZero str repr)
+import types.(NUM Float Int and or xor not Bool Result Optional)
+import types.(= != > >= < <= + - * ** div / // mod round ceil floor hash)
 
 import io.(echo)
 import csp.(fork channel queue broadcast)
@@ -32,7 +33,7 @@ zip :: [A] [B] => [(A B)]
 # Concatenação de listas
 + :: [A] [A] => [A]
 λ [] b: b
-λ [x:xs] b: x:$(+ xs b)
+λ (Cons x xs) b: Cons x $(+ xs b)
 
 # Introspecção e Formatação (Phase 9)
 @ffi("kata_rt_type")
@@ -46,4 +47,4 @@ format :: Text A => Text
 
 # Uma vez importadas as vertentes puras de cada modulo isolado,
 # exportamos tudo numa tacada so para o ambiente raiz do usuario.
-export mod + type fields format fork channel queue broadcast
+export mod + type fields format fork channel queue broadcast str repr SHOW HASH EQ ORD REPR NonZero NUM Float Int and or xor not Bool Result Optional echo assert assert_eq = != > >= < <= - * ** div / // round ceil floor hash

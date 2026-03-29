@@ -4,6 +4,6 @@
 action main
     let arr {1 2 3 4}
     let tensor_result::Tensor (arr)
-    echo! "Coercion OK"
+    echo!("Coercion OK")
 
-main!
+main!()

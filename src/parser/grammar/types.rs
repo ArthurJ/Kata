@@ -58,7 +58,16 @@ pub fn type_ref_parser() -> impl Parser<Token, Spanned<TypeRef>, Error = ParserE
                 }
             });
 
-        choice((function_type, list_type, refined_type, tuple_type, generic_type, simple_type))
-            .map_with_span(|ast, span| (ast, span))
+        let base_type = choice((function_type, list_type, refined_type, tuple_type, generic_type, simple_type));
+
+        base_type
+            .then(just(Token::Ellipsis).or_not())
+            .map_with_span(|(ast, is_variadic), span| {
+                if is_variadic.is_some() {
+                    (TypeRef::Variadic(Box::new((ast, span.clone()))), span)
+                } else {
+                    (ast, span)
+                }
+            })
     })
 }

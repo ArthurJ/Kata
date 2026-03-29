@@ -13,14 +13,14 @@ action main
     let my_config Config "localhost" 8080
     let t type my_config
     let f fields my_config
-    echo! t
+    echo!(t)
     let formatted_str format "Configs passadas: {}" my_config
-    echo! formatted_str
+    echo!(formatted_str)
 
     # 3. Shape do novo Tensor (deveria validar se Tensor existir ou pode dar mismatch,
     # vamos evitar erro do Tensor opaco por agora e ignorar se Tensor n existir nativamente)
     # let my_shape shape my_tensor
 
-    echo! "Phase 9 Features Passed!"
+    echo!("Phase 9 Features Passed!")
 
-main!
+main!()

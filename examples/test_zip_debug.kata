@@ -2,6 +2,6 @@ action main
     let lista_a [1 2 3]
     let lista_b [10 20 30]
     let z zip lista_a lista_b
-    echo! "Zip funcionou"
+    echo!("Zip funcionou")
 
-main!
+main!()

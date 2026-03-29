@@ -14,6 +14,6 @@ lambda x: is_prime_aux x 0 [2..x]
 
 action main
     let r $(is_prime 7)
-    echo! $(str r)
+    echo!($(str r))
 
-main!
+main!()

@@ -3,10 +3,10 @@
 @test("Matemática pura com assertions imperativos")
 action test_math_asserts
     let soma + 10 20
-    assert_eq! soma 30 "Soma deveria ser 30"
+    assert_eq!(soma 30 "Soma deveria ser 30")
     
     let is_maior > soma 15
-    assert! is_maior "A soma deveria ser maior que 15"
+    assert!(is_maior "A soma deveria ser maior que 15")
 
 @test("Igualdade de tipos puros (Zero-Cost em prod)")
 test_pure_equality :: () => Bool

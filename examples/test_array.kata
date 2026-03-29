@@ -12,6 +12,6 @@ action main
     let vendas_brutas {45.0 100.0 30.5}
     let vendas_com_imposto $(processar_vendas vendas_brutas)
     
-    echo! "Array Original Processado"
+    echo!("Array Original Processado")
 
-main!
+main!()

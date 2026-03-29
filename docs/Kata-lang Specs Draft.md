@@ -228,21 +228,22 @@ A linguagem faz uma distinção estrita no *parsing* baseada no domínio de exec
 
 #### **3.2 Currying Explícito (O Operador Hole \_)**
 
-Para realizar aplicação parcial de uma função em escopo livre (sem uso de parênteses), a linguagem exige o preenchimento da aridade através do operador *Hole* (\_).
+O operador *Hole* (\_) permite realizar aplicação parcial de uma função, transformando a chamada numa *closure* (Lambda) que aguarda a injeção dos argumentos faltantes. O uso do \_ é independente do operador de aplicação `$`.
 
-* **Mecânica Sintática:** O Parser avalia o \_ como um argumento estruturalmente válido, satisfazendo a contagem de aridade exigida pela notação prefixa.  
-* **Mecânica Semântica:** O *Type Checker* intercepta a chamada contendo *Holes* e converte-a numa *closure* (Lambda) que aguarda a injeção dos argumentos faltantes.  
-* *Sintaxe:* let f \+ 1 \_  
-* *AST Primária :* Application(+, Args:\[1, Hole\])  
+* *Sintaxe Greedy:* let f \+ 1 \_  
+* *Sintaxe Explícita:* let f $(+ 1 \_)
 * *AST Tipada :* Lambda(Arity: 1, Closure: \[1\])
 
-#### **3.3 Actions (Marcador Imperativo e Variadismo)**
+#### **3.3 Actions (Marcador Imperativo e Tuplas Obrigatórias)**
 
-* **Regra:** Todas as chamadas a Actions devem ser explicitamente sufixadas com um ponto de exclamação \! (ex: echo\!, channel\!). Ao contrário das funções, as Actions podem ser variádicas.
-* **Mecânica do Parser:** Actions seguem a mesma regra de aplicação greedy que funções. Argumentos são separados por espaços, sem necessidade de parênteses.
-  * *Válido:* echo\! "Erro no processamento" id\_utilizador data
-  * *Válido:* echo\! $(fizzbuzz 3) *(aplicação explícita com $)*
-  * *Nota:* Parênteses criam tuplas. Use `$` para aplicar expressões como argumentos.
+* **Regra:** Todas as chamadas a Actions devem ser explicitamente sufixadas com um ponto de exclamação \! (ex: echo\!, channel\!). Ao contrário das funções, as Actions **consomem obrigatoriamente uma única tupla** como argumento.
+* **Mecânica do Parser:** Diferente do modelo *greedy* das funções, uma Action exige delimitadores explícitos (parênteses) que englobam todos os seus argumentos, formando uma tupla.
+  * *Válido:* echo\!("Erro no processamento" id\_utilizador data)
+  * *Válido:* echo\!($(fizzbuzz 3)) *(tupla com um único elemento que resulta de aplicação explícita)*
+  * *Inválido:* echo\! "Erro no processamento" id\_utilizador data *(Erro de compilação: Tupla esperada)*
+* **Variadismo Fortemente Tipado:** Actions podem ser variádicas definindo seus tipos como sequências utilizando reticências `...`. O variadismo é expresso puramente no nível do *Type Checker* através da tupla recebida.
+  * *Exemplo de Assinatura:* action echo(SHOW...) *(A Action aceita uma tupla com zero ou múltiplos argumentos, onde cada um deve implementar SHOW)*.
+  * *Exemplo de Tipagem Mista:* action log(LogLevel Text...) *(Aceita uma tupla onde o primeiro elemento é um LogLevel e os demais são Text).*
 
 ### **4\. Strings e Templates (Dados Cegos)**
 
@@ -263,19 +264,9 @@ Dentro de parênteses, os itens podem ser separados por espaços ou vírgulas. P
 #### **5.2 Regras de Avaliação**
 
 1. **Aplicação Greedy (sem parênteses):** Uma função seguida de argumentos sem parênteses é aplicada automaticamente.
-   * *Entrada:* + 1 2 \-\> *AST:* Application(+, Args:\[1, 2\])
-   * *Entrada:* fib $(- n 1) fib $(- n 2) \-\> *AST:* Application(fib, Args:\[$(- n 1), fib, $(- n 2)\])
-2. **Tuplas (com parênteses, sem $):** Parênteses sempre criam tuplas, nunca invocam funções.
-   * *Entrada:* (+ 1 2\) \-\> *AST:* Tuple(\[+, 1, 2\]) *(tupla de 3 elementos)*
-3. **Aplicação Explícita com $:** O operador `$` força a avaliação do conteúdo entre parênteses como aplicação.
-   * *Entrada:* $(+ 1 2\) \-\> *AST:* Application(+, Args:\[1, 2\])
-   * *Entrada:* $(fib 40\) \-\> *AST:* Application(fib, Args:\[40\])
-4. **Redução de Unidade:** Uma tupla contendo apenas um elemento resolve-se para o próprio elemento.
-   * *Entrada:* (42) \-\> *AST:* Literal(42)
-5. **Currying Explícito com Hole:** Para criar uma função parcialmente aplicada, usa-se o operador *Hole* (\_).
-   * *Entrada:* $(+ 1 \_) \-\> *AST:* Lambda(Closure:\[1\], Arity: 1\)
-6. **Dados Literais:** Qualquer agrupamento entre parênteses sem o operador `$` é uma tupla literal.
-   * *Entrada:* (1 "Teste") \-\> *AST:* Tuple(\[1, "Teste"\])
+2. **Tuplas (com parênteses, sem $):** Parênteses sempre criam tuplas, nunca invocam funções. Tuplas de um único elemento preservam a sua topologia: `(42)` é uma Tupla(42), não o inteiro 42.
+3. **Aplicação Explícita com $:** O operador `$` força a avaliação do conteúdo entre parênteses como aplicação de função, resolvendo ambiguidades onde um tuplo literal seria esperado.
+4. **Currying Explícito com Hole:** O operador `_` pode ser usado em qualquer um dos modos acima para criar aplicações parciais.
 
 #### **5.3 Tuplas Implícitas em Assinaturas e Tipos de Funções**
 
@@ -396,8 +387,7 @@ data RealPositivo as (NUM, except Complex, except Fraction, \> \_ 0\)
 
 **O Predicado except:** O except não altera a mecânica estrutural do motor de tipos (não introduz "tipagem negativa" no unificador Hindley-Milner). Ele atua estritamente como uma função de ordem superior (*Higher-Order Function*) avaliada em tempo de execução ou de compilação. Quando recebe um tipo genérico ou interface (como Complex), o except devolve uma *Closure* de validação lógica (T \-\> Bool). Assim, a sintaxe (NUM, except Complex) é processada nativamente como uma lista de funções de validação dentro da tupla do Tipo Refinado, dispensando o uso do operador Hole (\_). Se o tipo passado coincidir com o tipo excluído, o predicado falha. O compilador gera automaticamente um *Smart Constructor* para o tipo-refinado.
 
-* **Retorno do Construtor:** Sempre retorna Result::(T, Err).  
-* **O tipo Err:** É um alias para Text (String). A mensagem de erro não precisa de ser escrita pelo utilizador; o compilador injeta automaticamente a expressão do predicado violado (ex: "Value '-5' does not satisfy the predicate '\> \_ 0'" ou "Type 'Complex' does not satisfy the predicate 'except Complex'").
+* **O tipo de erro em Result:** Tipos-refinados e operações falíveis retornam `Result::(T, E)`. A variante de falha `Err(E)` costuma carregar um `Text` com a descrição do erro, mas pode carregar qualquer tipo `E` definido na assinatura.
 
 #### **4.2 Preservação e Composição de Predicados (Predicate Inheritance)**
 
@@ -465,6 +455,11 @@ No domínio das **Functions**, não existem laços de repetição imperativos (f
 #### **1.1. Pattern Matching (Despacho de Lambda)**
 
 O controlo de fluxo primário é feito pela assinatura do lambda. Uma função pode ser composta por múltiplas definições de lambda. O compilador avaliará os argumentos de cima para baixo e executará o primeiro corpo cujo padrão estrutural (*Pattern*) corresponda à entrada.
+
+O `otherwise:` pode ser usado como uma definição única de catch-all para o corpo da função quando não há necessidade de desvios condicionais internos (Guards).
+
+otherwise\_true :: A \=\> Bool
+otherwise: True
 
 fibonacci :: Int \=\> Int    
 lambda 0: 0             \# Match exato literal    
@@ -550,20 +545,20 @@ action conectar\_servidor
         \# Limite de segurança para evitar loops infinitos acidentais    
         match (\> tentativas 5\)    
             True:    
-                echo\! "Limite de tentativas excedido. Abortando."    
+                echo\!("Limite de tentativas excedido. Abortando.")    
                 break    
             False:    
                 () \# Continua a execução normalmente    
             
-        let pronto ping\!    
+        let pronto ping\!()    
             
         match pronto    
             False:    
-                echo\! "Servidor indisponível. Aguardando..."    
-                sleep\! 1000    
+                echo\!("Servidor indisponível. Aguardando...")    
+                sleep\!(1000)    
                 continue  \# Pula o restante do bloco e inicia nova iteração    
             True:    
-                echo\! "Conexão estabelecida com sucesso\!"    
+                echo\!("Conexão estabelecida com sucesso\!")    
                 break     \# Sai do loop imediatamente
 
 #### **2.3. Desestruturação Exaustiva (match) A palavra-chave if não existe na linguagem Kata. O desvio condicional dentro do mundo imperativo é centralizado no bloco match. O match é obrigatório para lidar com Tipos de Soma (como Result::(T, E) e Optional::T), e deve ser estritamente exaustivo. O compilador recusará qualquer programa que não cubra todas as variantes possíveis da estrutura, a menos que a cláusula de fallback otherwise: seja fornecida.**
@@ -573,12 +568,12 @@ action ler\_banco (id\_utilizador)
 
     match resposta
         \# Extração de valores em caso de sucesso
-        Ok dados: echo\! format "Nome: {}" dados.nome
+        Ok dados: echo\!(format "Nome: {}" dados.nome)
 
         \# O compilador força o tratamento do 'Err', prevenindo crashes silenciosos
         Err falha:
-            log\! format "Falha no banco: {}" falha
-            panic\! "Abortando ação."
+            log\!(format "Falha no banco: {}" falha)
+            panic\!("Abortando ação.")
 
 #### **2.4. Propagação de Erros (Operador ?)**
 
@@ -682,7 +677,7 @@ data Caixa::T (conteudo::T peso::Int)
     
 action processar\_vetor
     let v Vetor2D 10.5 20.0
-    echo\! format "Eixo X: {}" v.x
+    echo\!(format "Eixo X: {}" v.x)
 
 *(Nota: Tuplos (A B) são, na sua essência, Tipos Produto anónimos sem chaves nomeadas).*
 
@@ -700,9 +695,9 @@ enum Transacao
 
 action verificar\_pagamento (t::Transacao)
     match t
-        Aprovada: echo\! "Sucesso"
-        Recusada motivo: echo\! format "Falha: {}" motivo
-        Pendente: echo\! "Aguardando processamento"
+        Aprovada: echo\!("Sucesso")
+        Recusada motivo: echo\!(format "Falha: {}" motivo)
+        Pendente: echo\!("Aguardando processamento")
 
 #### **3.2.1. Variantes com Predicados e Valores Fixos**
 
@@ -801,17 +796,17 @@ O pattern matching extrai o valor das variantes de forma usual:
 
 \# Com default unitário (valor descartado)
 match resultado
-    Magreza(v): echo\! format "Abaixo do peso (IMC: {})" v
-    Normal(v): echo\! format "Peso normal (IMC: {})" v
-    Sobrepeso(v): echo\! format "Sobrepeso (IMC: {})" v
-    Obesidade: echo\! "Obesidade (IMC >= 30.0)"
+    Magreza(v): echo\!(format "Abaixo do peso (IMC: {})" v)
+    Normal(v): echo\!(format "Peso normal (IMC: {})" v)
+    Sobrepeso(v): echo\!(format "Sobrepeso (IMC: {})" v)
+    Obesidade: echo\!("Obesidade (IMC >= 30.0)")
 
 \# Com default preservando valor
 match resultado_detalhado
-    Magreza(v): echo\! format "Abaixo do peso (IMC: {})" v
-    Normal(v): echo\! format "Peso normal (IMC: {})" v
-    Sobrepeso(v): echo\! format "Sobrepeso (IMC: {})" v
-    Obesidade(v): echo\! format "Obesidade (IMC: {})" v
+    Magreza(v): echo\!(format "Abaixo do peso (IMC: {})" v)
+    Normal(v): echo\!(format "Peso normal (IMC: {})" v)
+    Sobrepeso(v): echo\!(format "Sobrepeso (IMC: {})" v)
+    Obesidade(v): echo\!(format "Obesidade (IMC: {})" v)
 
 ### **3.3. Tipos Soma Fundamentais (Standard Library)**
 
@@ -857,15 +852,16 @@ lambda x y: + x y
     
 export soma
 
-* **Importação e Namespaces:** A linguagem suporta duas mecânicas estritas de importação para evitar colisões de identificadores:
-  * **Importação por Namespace:** Ao importar um módulo inteiro (import biblioteca), todos os identificadores exportados ficam confinados ao *namespace* do próprio módulo, sendo acedidos via notação de ponto (ex: biblioteca.funcao).
-  * **Importação Unitária:** Para importar um único identificador diretamente para o escopo léxico atual, utiliza-se a notação de ponto na própria diretiva (import biblioteca.Item).
+* **Importação e Namespaces:** A linguagem suporta três mecânicas estritas de importação:
+  * **Importação por Namespace:** `import biblioteca`. Acesso via `biblioteca.funcao`.
+  * **Importação Unitária:** `import biblioteca.Item`.
+  * **Importação em Bloco:** `import biblioteca.(ItemA ItemB ItemC)`. Importa múltiplos itens selecionados para o escopo atual.
 
 import sistema_ficheiros              # Importa o namespace completo
 import modulo_matematico.soma         # Importação unitária
 
 action principal
-    let fd sistema_ficheiros.abrir\! "config.txt"
+    let fd sistema_ficheiros.abrir\!("config.txt")
     let calc soma 10 20                         
 
 ### **2\. Declaração de Contratos (implements)**
@@ -917,7 +913,7 @@ A Kata-Lang implementa concorrência exclusivamente no domínio das **Actions**.
 A primitiva fork\! aceita a invocação de uma Action e submete-a ao escalonador do *runtime*. Por predefinição, a execução ocorre numa *Green Thread* cooperativa (M:N).
 
 action worker (id)
-    echo\! format "Worker {} a iniciar" id
+    echo\!(format "Worker {} a iniciar" id)
 
 action main    
     \# Inicia a execução concorrente e liberta a thread atual imediatamente    
@@ -966,12 +962,12 @@ action produtor (tx)
 
 action consumidor (rx)
     let dados (\<\! rx)
-    echo\! dados
+    echo\!(dados)
 
 action consumidor\_nao\_bloqueante (rx)
     match (\<\!? rx)
-        Some dados: echo\! format "Recebido agora: {}" dados
-        None: echo\! "Nenhum dado disponível no canal. Continuando..."
+        Some dados: echo\!(format "Recebido agora: {}" dados)
+        None: echo\!("Nenhum dado disponível no canal. Continuando...")
 
 ### **4\. Multiplexagem Não-Determinística (select)**
 
@@ -990,11 +986,11 @@ action multiplexador (rx\_a rx\_b tx\_c)
 
             \# Ramo de emissão (só executa se tx\_c tiver espaço no buffer)
             case ("Ping" \!\> tx\_c):
-                echo\! "Sinal enviado para C"
+                echo\!("Sinal enviado para C")
 
             \# Desbloqueio temporal
             timeout 1000:
-                echo\! "Inatividade detetada. 1s passado."
+                echo\!("Inatividade detetada. 1s passado.")
 
 ## **Diretivas de Compilação e Runtime**
 
@@ -1044,7 +1040,7 @@ Utilizada para ligar assinaturas de funções Kata a símbolos compilados extern
 
 \# O compilador não gera o corpo desta Action, apenas cria a ligação no Linker    
 @ffi('kata\_rt\_print')    
-echo\! :: Text \=\> Action::Unit
+echo\! :: (Text) \=\> Action::Unit
 
 ### **5\. Execução em Tempo de Compilação (@comptime)**
 

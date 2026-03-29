@@ -13,10 +13,11 @@ pub struct TestInfo {
 pub struct Checker {
     pub env: TypeEnv,
     pub tast: Vec<Spanned<TTopLevel>>,
-    pub errors: Vec<String>,
+    pub errors: Vec<(String, crate::parser::ast::Span)>,
     pub tests: Vec<TestInfo>,
     pub local_types: std::collections::HashSet<String>,
     pub local_interfaces: std::collections::HashSet<String>,
+    pub compiled_modules: std::collections::HashMap<String, TypeEnv>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -37,26 +38,52 @@ impl Checker {
             tests: Vec::new(),
             local_types: std::collections::HashSet::new(),
             local_interfaces: std::collections::HashSet::new(),
+            compiled_modules: std::collections::HashMap::new(),
         }
     }
 
-    pub fn load_prelude(&mut self, prelude_modules: &[Module]) {
-        for module in prelude_modules {
-            for (decl, _span) in &module.declarations {
-                self.collect_top_level(decl);
+    pub fn load_prelude(&mut self, prelude_modules: &[(&str, Module)]) {
+        for (name, module) in prelude_modules {
+            let mut temp_checker = Checker::new();
+            temp_checker.compiled_modules = self.compiled_modules.clone();
+            
+            for decl in &module.declarations {
+                temp_checker.collect_top_level(&decl.0, &decl.1);
             }
+            
+            let imports = temp_checker.env.imports.clone();
+            for (path, specific) in imports {
+                if let Some(target_module_name) = path.split('.').next() {
+                    if let Some(target_env) = self.compiled_modules.get(target_module_name) {
+                        temp_checker.env.import_from(target_env, target_module_name, &specific);
+                    }
+                }
+            }
+
+            // Mark all items as exported if this is the core prelude? No, the .kata files have `export` statements!
+            // Wait, we just keep whatever they `export`.
+            self.compiled_modules.insert(name.to_string(), temp_checker.env);
         }
+        
+        // After all prelude modules are compiled, the actual "prelude.kata" module is the one we want to inject globally.
+        if let Some(prelude_env) = self.compiled_modules.get("prelude") {
+            let env_clone = prelude_env.clone();
+            let all_exports: Vec<(String, Option<String>)> = env_clone.exports.iter().map(|e| (e.clone(), None)).collect();
+            // Injeção global silenciosa
+            self.env.import_from(&env_clone, "prelude", &all_exports);
+        }
+        
         self.local_types.clear();
         self.local_interfaces.clear();
     }
 
-    fn process_lambda_group(&self, group: &mut Vec<&Vec<Spanned<Pattern>>>, sig: &Option<(String, Vec<Spanned<TypeRef>>, Spanned<TypeRef>)>, errs: &mut Vec<String>) {
+    fn process_lambda_group(&self, group: &mut Vec<&Vec<Spanned<Pattern>>>, sig: &Option<(String, Vec<Spanned<TypeRef>>, Spanned<TypeRef>)>, errs: &mut Vec<(String, crate::parser::ast::Span)>) {
         if let Some((name, params, _)) = sig {
             if !group.is_empty() && !params.is_empty() {
                 for i in 0..params.len() {
                     let param_type = &params[i].0;
                     let patterns: Vec<&Pattern> = group.iter().filter_map(|p| p.get(i).map(|pat| &pat.0)).collect();
-                    self.check_exhaustiveness(param_type, &patterns, errs, &format!("Pattern Matching (arg {}) em `{}`", i, name));
+                    self.check_exhaustiveness(param_type, &patterns, errs, &format!("Pattern Matching (arg {}) em `{}`", i, name), &(0..0));
                 }
             }
         }
@@ -64,12 +91,14 @@ impl Checker {
     }
 
     pub fn check_module(&mut self, module: &Module) {
-        for (decl, _span) in &module.declarations {
-            self.collect_top_level(decl);
+        let mut local_errors: Vec<(String, crate::parser::ast::Span)> = Vec::new();
+        for (decl, span) in &module.declarations {
+            self.collect_top_level(decl, span);
         }
+        
+        self.env.expand_exports();
 
         let resolver = ArityResolver::new(&self.env);
-        let mut local_errors = Vec::new();
         let mut last_signature: Option<(String, Vec<Spanned<TypeRef>>, Spanned<TypeRef>)> = None;
         let mut lambda_group: Vec<&Vec<Spanned<Pattern>>> = Vec::new();
 
@@ -88,7 +117,7 @@ impl Checker {
                 }
             }
 
-            if let Some(t_decl) = self.resolve_top_level(decl, &resolver, &mut local_errors, &last_signature) {
+            if let Some(t_decl) = self.resolve_top_level(decl, span, &resolver, &mut local_errors, &last_signature) {
                 self.tast.push((t_decl, span.clone()));
             }
         }
@@ -98,21 +127,21 @@ impl Checker {
         self.errors.extend(resolver.errors.into_inner());
     }
 
-    fn collect_top_level(&mut self, decl: &TopLevel) {
-        let mut local_errs = Vec::new();
+    fn collect_top_level(&mut self, decl: &TopLevel, span: &crate::parser::ast::Span) {
+        let mut local_errs: Vec<(String, crate::parser::ast::Span)> = Vec::new();
 
-        let validate_directives = |dirs: &[Spanned<crate::parser::ast::Directive>]| -> Vec<String> {
-            let mut errs = Vec::new();
-            for (dir, _) in dirs {
+        let validate_directives = |dirs: &[Spanned<crate::parser::ast::Directive>]| -> Vec<(String, crate::parser::ast::Span)> {
+            let mut errs: Vec<(String, crate::parser::ast::Span)> = Vec::new();
+            for (dir, dir_span) in dirs {
                 if dir.name == "log" {
                     if let Some((arg, _)) = dir.args.first() {
                         if let crate::parser::ast::Expr::Ident(level) = arg {
                             let valid_variants = ["Error", "Warn", "Info", "Debug", "Trace"];
                             if !valid_variants.contains(&level.as_str()) {
-                                errs.push(format!("Diretiva @log invalida: Variante de LogLevel '{}' desconhecida. Use uma de {:?}", level, valid_variants));
+                                errs.push((format!("Diretiva @log invalida: Variante de LogLevel '{}' desconhecida. Use uma de {:?}", level, valid_variants), dir_span.clone()));
                             }
                         } else {
-                            errs.push("Diretiva @log invalida: O primeiro argumento deve ser uma variante de LogLevel (ex: Info).".to_string());
+                            errs.push(("Diretiva @log invalida: O primeiro argumento deve ser uma variante de LogLevel (ex: Info).".to_string(), dir_span.clone()));
                         }
                     }
                 }
@@ -121,7 +150,7 @@ impl Checker {
         };
 
         let extract_test_desc = |dirs: &[Spanned<crate::parser::ast::Directive>]| -> Option<String> {
-            for (dir, _) in dirs {
+            for (dir, dir_span) in dirs {
                 if dir.name == "test" {
                     if let Some((crate::parser::ast::Expr::String(desc), _)) = dir.args.first() {
                         return Some(desc.clone());
@@ -192,9 +221,9 @@ impl Checker {
                     for (i, variant) in variants.iter().enumerate() {
                         let is_pred = matches!(variant.data, crate::parser::ast::VariantData::Predicate(_));
                         if i < len - 1 && !is_pred {
-                            local_errs.push(format!("Enum Predicativo Invalido ({}): Variante '{}' no meio da declaracao nao possui predicado.", name, variant.name));
+                            local_errs.push((format!("Enum Predicativo Invalido ({}): Variante '{}' no meio da declaracao nao possui predicado.", name, variant.name), span.clone()));
                         } else if i == len - 1 && is_pred {
-                            local_errs.push(format!("Enum Predicativo Invalido ({}): A ultima variante ('{}') deve ser um catch-all sem predicado.", name, variant.name));
+                            local_errs.push((format!("Enum Predicativo Invalido ({}): A ultima variante ('{}') deve ser um catch-all sem predicado.", name, variant.name), span.clone()));
                         }
                     }
                 }
@@ -218,21 +247,31 @@ impl Checker {
                 local_errs.extend(validate_directives(dirs));
                 self.local_interfaces.insert(name.clone());
                 self.env.define_interface(name.clone(), super_traits.clone());
-                for (m, _span) in methods {
-                    self.collect_top_level(m);
+                let mut method_names = Vec::new();
+                for (m, span) in methods {
+                    if let TopLevel::Signature(m_name, _, _, _) = m {
+                        method_names.push(m_name.clone());
+                    }
+                    self.collect_top_level(m, span);
                 }
+                self.env.interface_methods.insert(name.clone(), method_names);
             }
             TopLevel::Implements(type_name, interface_name, methods) => {
                 if !self.local_types.contains(type_name) && !self.local_interfaces.contains(interface_name) {
-                    local_errs.push(format!(
+                    local_errs.push((format!(
                         "Erro de Coerencia (Orphan Rule): Nao eh permitido implementar a Interface `{}` para o Tipo `{}` pois ambos sao externos ao modulo atual.",
                         interface_name, type_name
-                    ));
+                    ), span.clone()));
                 }
                 self.env.define_implementation(type_name.clone(), interface_name.clone());
-                for (m, _span) in methods {
-                    self.collect_top_level(m);
+                let mut method_names = Vec::new();
+                for (m, span) in methods {
+                    if let TopLevel::Signature(m_name, _, _, _) = m {
+                        method_names.push(m_name.clone());
+                    }
+                    self.collect_top_level(m, span);
                 }
+                self.env.type_methods.entry(type_name.clone()).or_default().extend(method_names);
             }
             TopLevel::Signature(name, params, ret, dirs) => {
                 local_errs.extend(validate_directives(dirs));
@@ -273,7 +312,7 @@ impl Checker {
         self.errors.extend(local_errs);
     }
 
-    fn resolve_top_level(&self, decl: &TopLevel, resolver: &ArityResolver, local_errors: &mut Vec<String>, last_signature: &Option<(String, Vec<Spanned<TypeRef>>, Spanned<TypeRef>)>) -> Option<TTopLevel> {
+    fn resolve_top_level(&self, decl: &TopLevel, span: &crate::parser::ast::Span, resolver: &ArityResolver, local_errors: &mut Vec<(String, crate::parser::ast::Span)>, last_signature: &Option<(String, Vec<Spanned<TypeRef>>, Spanned<TypeRef>)>) -> Option<TTopLevel> {
         match decl {
             TopLevel::Data(name, def, dirs) => Some(TTopLevel::Data(name.clone(), def.clone(), dirs.clone())),
             TopLevel::Enum(name, variants, dirs) => Some(TTopLevel::Enum(name.clone(), variants.clone(), dirs.clone())),
@@ -309,7 +348,7 @@ impl Checker {
                     let t_body = resolver.resolve_expr(body);
                     let body_ty = ArityResolver::get_expr_type(&t_body.0);
                     if !resolver.types_compatible(&body_ty, &expected_ret.0) {
-                        local_errors.push(format!("Type Mismatch: Expected return type `{:?}`, Found `{:?}` in Lambda", expected_ret.0, body_ty));
+                        local_errors.push((format!("Type Mismatch: Expected return type `{:?}`, Found `{:?}` in Lambda", expected_ret.0, body_ty), body.1.clone()));
                     }
 
                     let mut t_with = Vec::new();
@@ -348,7 +387,7 @@ impl Checker {
                 }
 
                 if !resolver.types_compatible(&last_stmt_ty, &ret.0) {
-                    local_errors.push(format!("Type Mismatch: Expected return type `{:?}`, Found `{:?}` in Action `{}`", ret.0, last_stmt_ty, name));
+                    local_errors.push((format!("Type Mismatch: Expected return type `{:?}`, Found `{:?}` in Action `{}`", ret.0, last_stmt_ty, name), ret.1.clone()));
                 }
 
                 Some(TTopLevel::ActionDef(name.clone(), params.clone(), ret.clone(), t_body, dirs.clone()))
@@ -356,7 +395,7 @@ impl Checker {
             _ => None,
         }
     }
-    fn check_exhaustiveness(&self, target_type: &TypeRef, patterns: &[&Pattern], local_errors: &mut Vec<String>, context: &str) {
+    fn check_exhaustiveness(&self, target_type: &TypeRef, patterns: &[&Pattern], local_errors: &mut Vec<(String, crate::parser::ast::Span)>, context: &str, span: &crate::parser::ast::Span) {
         let enum_name = match target_type {
             TypeRef::Simple(n) => n.clone(),
             TypeRef::Generic(n, _) => n.clone(),
@@ -389,13 +428,13 @@ impl Checker {
                         if !covered_variants.contains(var) { missing.push(var.clone()); }
                     }
                     if !missing.is_empty() {
-                        local_errors.push(format!("Erro Semantico: {} em `{}` nao eh exaustivo. Faltam: {:?}", context, enum_name, missing));
+                        local_errors.push((format!("Erro Semantico: {} em `{}` nao eh exaustivo. Faltam: {:?}", context, enum_name, missing), span.clone()));
                     }
                 }
             }
     }
 
-    fn resolve_stmt(&self, stmt: &Spanned<Stmt>, resolver: &ArityResolver, local_errors: &mut Vec<String>) -> Spanned<TStmt> {
+    fn resolve_stmt(&self, stmt: &Spanned<Stmt>, resolver: &ArityResolver, local_errors: &mut Vec<(String, crate::parser::ast::Span)>) -> Spanned<TStmt> {
         let (s, span) = stmt;
         match s {
             Stmt::Let(p, e) => {
@@ -445,7 +484,7 @@ impl Checker {
                     _ => TypeRef::Simple("Unknown".to_string()),
                 };
 
-                self.check_exhaustiveness(&target_type, &patterns, local_errors, "Match");
+                self.check_exhaustiveness(&target_type, &patterns, local_errors, "Match", span);
 
                 (TStmt::Match(t_target, t_arms), span.clone())
             }

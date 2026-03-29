@@ -65,7 +65,7 @@ interface ORD implements EQ
     <  :: A A => Bool
     <= :: A A => Bool
 
-alias (NUM, != _ 0) as NonZero
+data NonZero as (NUM, != _ 0)
 
 interface NUM implements ORD SHOW
     + :: NUM NUM => NUM
@@ -209,7 +209,7 @@ enum LogLevel
     | Debug
     | Trace
 
-export NUM Float Int LogLevel
+export NUM Float Int LogLevel Bool and or xor not Result Optional str repr SHOW REPR HASH EQ ORD NonZero = != > >= < <= + - * ** div / // mod round ceil floor hash
 
 # ==========================================
 # Texto

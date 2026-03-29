@@ -14,6 +14,5 @@ lambda x y:
 
 action main
     let m $(max 10 20)
-    echo! $(str m)
-
-main!
+    echo!($(str m))
+    ()

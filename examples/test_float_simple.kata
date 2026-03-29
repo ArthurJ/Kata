@@ -16,6 +16,6 @@ action main
     let x 3.14
     let y 2.0
     let resultado $(multiplica x y)
-    echo! $(str resultado)
+    echo!($(str resultado))
 
-main!
+main!()

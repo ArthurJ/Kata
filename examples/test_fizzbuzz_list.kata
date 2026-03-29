@@ -5,6 +5,6 @@ lambda lista:
 action main
     let nums [1..15]
     let result $(fizzbuzz_list nums)
-    echo! $(str result)
+    echo!($(str result))
 
-main!
+main!()

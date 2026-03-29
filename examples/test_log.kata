@@ -14,4 +14,4 @@ lambda n: * n fatorial (- n 1)
 action main
     let res somar 10 20
     let fat fatorial 5
-    echo! "Finalizado"
+    echo!("Finalizado")

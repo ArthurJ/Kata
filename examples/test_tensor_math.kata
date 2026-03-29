@@ -28,6 +28,6 @@ action main
 
     let matriz_soma + m1 m2
 
-    echo! "Matematica de Tensores aprovada na compilacao!"
+    echo!("Matematica de Tensores aprovada na compilacao!")
 
-main!
+main!()

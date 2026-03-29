@@ -15,6 +15,6 @@ lambda p a:
 
 action main
     let c calcular_imc 70.0 1.75
-    echo! "Concluido"
+    echo!("Concluido")
 
-main!
+main!()

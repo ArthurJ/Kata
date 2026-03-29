@@ -94,7 +94,10 @@ pub fn top_level_parser() -> impl Parser<Token, Spanned<TopLevel>, Error = Parse
             .ignore_then(ident_string().separated_by(just(Token::Dot)))
             .then(
                 just(Token::Dot).ignore_then(
-                    ident_string().repeated().delimited_by(just(Token::LParen), just(Token::RParen))
+                    ident_string()
+                        .then(just(Token::As).ignore_then(ident_string()).or_not())
+                        .separated_by(just(Token::Comma).or_not())
+                        .delimited_by(just(Token::LParen), just(Token::RParen))
                 ).or_not()
             )
             .map(|(parts, specific)| {
@@ -111,15 +114,10 @@ pub fn top_level_parser() -> impl Parser<Token, Spanned<TopLevel>, Error = Parse
 
         let action_arg = choice((
             ident_string()
-                .then(just(Token::DoubleColon).ignore_then(type_ref_parser()).or_not())
-                .map(|(name, ty_opt)| {
-                    if let Some(ty) = ty_opt {
-                        (name, ty)
-                    } else {
-                        ("_".to_string(), (TypeRef::Simple(name), 0..0))
-                    }
-                }),
-            type_ref_parser().map(|t| ("_".to_string(), t))
+                .then(just(Token::DoubleColon).ignore_then(type_ref_parser()))
+                .map(|(name, ty)| (name, ty)),
+            type_ref_parser().map(|t| ("_".to_string(), t)),
+            ident_string().map(|name| (name, (TypeRef::Simple("Unknown".to_string()), 0..0)))
         ));
 
         let action_def = just(Token::Action)
@@ -184,6 +182,29 @@ pub fn top_level_parser() -> impl Parser<Token, Spanned<TopLevel>, Error = Parse
         let lambda_body = {
             let sequence = expr_parser();
             
+            let guard_branch = ident_string()
+                .then_ignore(just(Token::Colon))
+                .then(sequence.clone());
+
+            let otherwise_branch = just(Token::Otherwise)
+                .ignore_then(just(Token::Colon))
+                .ignore_then(sequence.clone());
+
+            let guards_block = just(Token::Newline).repeated()
+                .ignore_then(just(Token::Indent))
+                .ignore_then(
+                    guard_branch.separated_by(just(Token::Newline).repeated().at_least(1))
+                        .allow_trailing()
+                        .at_least(1)
+                )
+                .then_ignore(just(Token::Newline).repeated())
+                .then(otherwise_branch)
+                .then(with_block_parser())
+                .then_ignore(just(Token::Dedent))
+                .map_with_span(|((branches, otherwise_body), w), span| {
+                    ((Expr::Guard(branches, Box::new(otherwise_body)), span), w)
+                });
+
             let lambda_block = just(Token::Newline).repeated()
                 .ignore_then(just(Token::Indent))
                 .ignore_then(
@@ -191,26 +212,32 @@ pub fn top_level_parser() -> impl Parser<Token, Spanned<TopLevel>, Error = Parse
                         .separated_by(just(Token::Newline).repeated().at_least(1))
                         .allow_trailing()
                 )
+                .then(with_block_parser())
                 .then_ignore(just(Token::Dedent))
-                .map_with_span(|mut exprs, span| {
-                    if exprs.len() == 1 {
+                .map_with_span(|(mut exprs, w), span| {
+                    let body = if exprs.len() == 1 {
                         exprs.remove(0)
                     } else {
                         (Expr::Sequence(exprs), span)
-                    }
+                    };
+                    (body, w)
                 });
 
-            let inline_body = sequence;
+            let inline_body = sequence.then(with_block_parser());
 
-            choice((lambda_block, inline_body))
+            choice((guards_block, lambda_block, inline_body))
         };
 
         let lambda_def = just(Token::Lambda)
             .ignore_then(pattern_atom_parser().repeated())
             .then_ignore(just(Token::Colon))
-            .then(lambda_body)
-            .then(with_block_parser())
-            .map(|((args, body), with)| (args, body, with));
+            .then(lambda_body.clone())
+            .map(|(args, (body, with))| (args, body, with));
+
+        let otherwise_lambda_def = just(Token::Otherwise)
+            .then_ignore(just(Token::Colon))
+            .ignore_then(lambda_body)
+            .map(|(body, with)| TopLevel::LambdaDef(vec![(Pattern::Ident("otherwise".to_string()), 0..0)], body, with, Vec::new()));
 
         directives_list.then(
             choice((
@@ -218,6 +245,7 @@ pub fn top_level_parser() -> impl Parser<Token, Spanned<TopLevel>, Error = Parse
                 enum_decl.map(|(name, variants)| TopLevel::Enum(name, variants, Vec::new())),
                 signature_decl.map(|(name, args, ret)| TopLevel::Signature(name, args, ret, Vec::new())),
                 lambda_def.map(|(args, body, with)| TopLevel::LambdaDef(args, body, with, Vec::new())),
+                otherwise_lambda_def,
                 action_def.map(|(name, args, ret, stmts)| TopLevel::ActionDef(name, args, ret, stmts, Vec::new())),
                 interface_decl.map(|(name, supers, methods)| TopLevel::Interface(name, supers, methods, Vec::new())),
                 alias_decl.map(|(name, target)| TopLevel::Alias(name, target, Vec::new())),
