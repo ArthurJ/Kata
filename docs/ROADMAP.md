@@ -133,9 +133,9 @@ A biblioteca base em Rust embutida no binário gerado, focada no modelo CSP (Com
 ## 📍 Fase 6: Backend (Codegen via Cranelift)
 Geração de código nativo (AOT) usando o Cranelift IR Emitter.
 
-- [ ] **Functions (Lambdas):** Compilação para código linear rápido utilizando C-ABI nativa (Stack do Sistema Operacional).
-- [ ] **Actions (State Machines):** Compilação para **Máquinas de Estado (Futures do Rust)**. Quando encontram `sleep!` ou bloqueios de canal (`<!`), salvam o contexto na Arena e cedem controle (`yield` / `Poll::Pending`) para o Tokio não travar a CPU.
-- [ ] **Linker:** Geração do arquivo Objeto (`.o`) e linkagem final com o `kata-rt` para gerar o executável nativo standalone.
+- [x] **Functions (Lambdas):** Compilação para código linear rápido utilizando C-ABI nativa (Stack do Sistema Operacional).
+- [x] **Actions (State Machines):** Compilação para **Máquinas de Estado (Futures do Rust)**. Quando encontram `sleep!` ou bloqueios de canal (`<!`), salvam o contexto na Arena e cedem controle (`yield` / `Poll::Pending`) para o Tokio não travar a CPU.
+- [x] **Linker:** Geração do arquivo Objeto (`.o`) e linkagem final com o `kata-rt` para gerar o executável nativo standalone.
 
 ---
 
@@ -146,4 +146,13 @@ Ambiente de desenvolvimento iterativo de alta performance. Reutiliza as fases 1 
 - [ ] **SessionContext:** Type Checker mantém um ambiente vivo na memória, persistindo imports e variáveis léxicas entre os comandos.
 - [ ] **Cranelift JIT:** A TAST resultante é compilada diretamente na RAM (sem gerar arquivo `.o`).
 - [ ] **Injeção de FFI (SHOW):** O REPL envelopa o resultado das expressões numa chamada invisível para a interface `SHOW.str()`, executa o ponteiro de memória e imprime a string na tela.
-pa o resultado das expressões numa chamada invisível para a interface `SHOW.str()`, executa o ponteiro de memória e imprime a string na tela.
+
+---
+
+## 📍 Fase 8: Green Threads Reais (Coroutines e State Machines)
+Evolução final do Backend para permitir concorrência massiva real (M:N) sem bloquear threads do Sistema Operacional.
+
+- [ ] **Remoção do Workaround (`spawn_blocking`):** Substituir o uso de threads bloqueantes do S.O. por suspensão cooperativa de verdade nas Actions.
+- [ ] **Integração de Fibras (Fibers / Stack Switching):** Implementar um mecanismo de troca de contexto de pilha de execução (Stack Switching) compatível com Cranelift (ex: integrar com o pacote `wasmtime-fiber`).
+- [ ] **Ou Transformação em Máquinas de Estado (AST/MIR):** Como alternativa, caso Fibras não sejam adotadas, compilar as Actions gerando código linear de Máquinas de Estado (`Futures` do Rust) explícito no Cranelift, fatiando os blocos de I/O em callbacks e usando as Arenas Locais como estruturas persistentes de estado (`struct` alocado na Heap Global para a Task).
+- [ ] **Otimização do Escalonador:** O `kata-rt` passará a integrar os `wakers` reais do Tokio com o avanço de estado compilado da Action.

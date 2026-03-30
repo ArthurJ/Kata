@@ -1,0 +1,4 @@
+action test_csp (tx rx)
+    !> tx 10
+    let val $(<! rx)?
+    ()

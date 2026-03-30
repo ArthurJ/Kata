@@ -177,6 +177,20 @@ fn main() -> miette::Result<()> {
             }
 
             // codegen::run_stub();
+            let out_bin = output.clone().unwrap_or_else(|| {
+                std::path::Path::new(&entrypoint)
+                    .file_stem()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .to_string()
+            });
+
+            if let Err(e) = codegen::compile_and_link(optimized_tast, &out_bin) {
+                log::error!("Erro de Compilacao/Codegen: {}", e);
+                return Err(miette::miette!("Falha na geracao de codigo nativo."));
+            }
+            log::info!("Binario gerado com sucesso: {}", out_bin);
         }
         Commands::Run {
             entrypoint,
