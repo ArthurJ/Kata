@@ -38,6 +38,9 @@ impl<'a> Optimizer<'a> {
         let mut monomorph = passes::monomorph::Monomorphizer::new(self.env);
         optimized_tast = monomorph.run(optimized_tast, &mut self.errors);
 
+        let mut escape = passes::escape::EscapeAnalysis::new();
+        optimized_tast = escape.run(optimized_tast, &mut self.errors);
+
         let mut tco = passes::tco::TcoPass::new();
         optimized_tast = tco.run(optimized_tast, &mut self.errors);
 

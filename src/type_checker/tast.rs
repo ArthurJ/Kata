@@ -1,13 +1,19 @@
 use crate::parser::ast::{Spanned, TypeRef, Pattern};
 
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub enum AllocMode {
+    Local,
+    Shared,
+}
+
 #[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum TExpr {
     Literal(TLiteral),
     Ident(String, TypeRef),
     Call(Box<Spanned<TExpr>>, Vec<Spanned<TExpr>>, TypeRef),
-    Tuple(Vec<Spanned<TExpr>>, TypeRef),
-    List(Vec<Spanned<TExpr>>, TypeRef),
+    Tuple(Vec<Spanned<TExpr>>, TypeRef, AllocMode),
+    List(Vec<Spanned<TExpr>>, TypeRef, AllocMode),
     Lambda(Vec<Spanned<Pattern>>, Box<Spanned<TExpr>>, TypeRef),
     Sequence(Vec<Spanned<TExpr>>, TypeRef),
     Guard(Vec<(Spanned<TExpr>, Spanned<TExpr>)>, Box<Spanned<TExpr>>, TypeRef),

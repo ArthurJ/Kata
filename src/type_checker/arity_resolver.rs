@@ -34,7 +34,7 @@ impl<'a> ArityResolver<'a> {
             TExpr::Literal(TLiteral::String(_)) => TypeRef::Simple("Text".to_string()),
             TExpr::Literal(TLiteral::Bool(_)) => TypeRef::Simple("Bool".to_string()),
             TExpr::Literal(TLiteral::Unit) => TypeRef::Simple("()".to_string()),
-            TExpr::Ident(_, ty) | TExpr::Call(_, _, ty) | TExpr::Tuple(_, ty) | TExpr::List(_, ty) | TExpr::Lambda(_, _, ty) | TExpr::Sequence(_, ty) | TExpr::Guard(_, _, ty) | TExpr::Try(_, ty) | TExpr::ChannelSend(_, _, ty) | TExpr::ChannelRecv(_, ty) | TExpr::ChannelRecvNonBlock(_, ty) => ty.clone(),
+            TExpr::Ident(_, ty) | TExpr::Call(_, _, ty) | TExpr::Tuple(_, ty, _) | TExpr::List(_, ty, _) | TExpr::Lambda(_, _, ty) | TExpr::Sequence(_, ty) | TExpr::Guard(_, _, ty) | TExpr::Try(_, ty) | TExpr::ChannelSend(_, _, ty) | TExpr::ChannelRecv(_, ty) | TExpr::ChannelRecvNonBlock(_, ty) => ty.clone(),
             TExpr::Hole => TypeRef::Simple("Unknown".to_string()),
         }
     }
@@ -393,7 +393,7 @@ impl<'a> ArityResolver<'a> {
                     types.push((Self::get_expr_type(&t_e.0), 0..0));
                     resolved.push(t_e);
                 }
-                (TExpr::Tuple(resolved, TypeRef::Generic("Tuple".into(), types)), span.clone())
+                (TExpr::Tuple(resolved, TypeRef::Generic("Tuple".into(), types), crate::type_checker::tast::AllocMode::Local), span.clone())
             }
             Expr::List(es) => {
                 let mut resolved = Vec::new();
@@ -403,7 +403,7 @@ impl<'a> ArityResolver<'a> {
                     elem_ty = Self::get_expr_type(&t_e.0);
                     resolved.push(t_e);
                 }
-                (TExpr::List(resolved, TypeRef::Generic("List".into(), vec![(elem_ty, 0..0)])), span.clone())
+                (TExpr::List(resolved, TypeRef::Generic("List".into(), vec![(elem_ty, 0..0)]), crate::type_checker::tast::AllocMode::Local), span.clone())
             }
             Expr::ExplicitApp(inner) => {
                 let (e, s) = &**inner;

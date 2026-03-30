@@ -80,13 +80,15 @@ impl ConstantFolder {
 
                 TExpr::Call(folded_callee, folded_args, ty)
             }
-            TExpr::Tuple(exprs, ty) => TExpr::Tuple(
+            TExpr::Tuple(exprs, ty, alloc) => TExpr::Tuple(
                 exprs.into_iter().map(|e| self.fold_expr_spanned(e)).collect(),
                 ty,
+                alloc
             ),
-            TExpr::List(exprs, ty) => TExpr::List(
+            TExpr::List(exprs, ty, alloc) => TExpr::List(
                 exprs.into_iter().map(|e| self.fold_expr_spanned(e)).collect(),
                 ty,
+                alloc
             ),
             TExpr::Lambda(params, body, ty) => {
                 TExpr::Lambda(params, Box::new(self.fold_expr_spanned(*body)), ty)

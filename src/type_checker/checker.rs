@@ -452,7 +452,7 @@ impl Checker {
                 let t_e = resolver.resolve_expr(e);
                 if let Pattern::Ident(name) = &p.0 {
                     let ty = match &t_e.0 {
-                        TExpr::Ident(_, ty) | TExpr::Call(_, _, ty) | TExpr::Tuple(_, ty) | TExpr::List(_, ty) | TExpr::Lambda(_, _, ty) | TExpr::Sequence(_, ty) => ty.clone(),
+                        TExpr::Ident(_, ty) | TExpr::Call(_, _, ty) | TExpr::Tuple(_, ty, _) | TExpr::List(_, ty, _) | TExpr::Lambda(_, _, ty) | TExpr::Sequence(_, ty) => ty.clone(),
                         _ => TypeRef::Simple("Unknown".to_string()),
                     };
                     resolver.declare_local(name.clone(), ty);
@@ -462,7 +462,7 @@ impl Checker {
             Stmt::Var(n, e) => {
                 let t_e = resolver.resolve_expr(e);
                 let ty = match &t_e.0 {
-                    TExpr::Ident(_, ty) | TExpr::Call(_, _, ty) | TExpr::Tuple(_, ty) | TExpr::List(_, ty) | TExpr::Lambda(_, _, ty) | TExpr::Sequence(_, ty) => ty.clone(),
+                    TExpr::Ident(_, ty) | TExpr::Call(_, _, ty) | TExpr::Tuple(_, ty, _) | TExpr::List(_, ty, _) | TExpr::Lambda(_, _, ty) | TExpr::Sequence(_, ty) => ty.clone(),
                     _ => TypeRef::Simple("Unknown".to_string()),
                 };
                 resolver.declare_local(n.clone(), ty);
@@ -509,7 +509,7 @@ impl Checker {
             Stmt::For(ident, target, body) => {
                 let t_target = resolver.resolve_expr(target);
                 let target_ty = match &t_target.0 {
-                    TExpr::Ident(_, ty) | TExpr::Call(_, _, ty) | TExpr::Sequence(_, ty) | TExpr::List(_, ty) | TExpr::Tuple(_, ty) => ty.clone(),
+                    TExpr::Ident(_, ty) | TExpr::Call(_, _, ty) | TExpr::Sequence(_, ty) | TExpr::List(_, ty, _) | TExpr::Tuple(_, ty, _) => ty.clone(),
                     _ => TypeRef::Simple("Unknown".to_string()),
                 };
                 

@@ -157,7 +157,7 @@ impl<'a> TreeShaker<'a> {
                     self.visit_expr(a);
                 }
             }
-            TExpr::Tuple(exprs, _) | TExpr::List(exprs, _) | TExpr::Sequence(exprs, _) => {
+            TExpr::Tuple(exprs, _, _) | TExpr::List(exprs, _, _) | TExpr::Sequence(exprs, _) => {
                 for e in exprs {
                     self.visit_expr(e);
                 }

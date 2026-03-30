@@ -126,8 +126,8 @@ impl StreamFusionPass {
                 let folded_args: Vec<_> = args.into_iter().map(|a| self.fold_expr_spanned(a, errors)).collect();
                 TExpr::Call(folded_callee, folded_args, ty)
             }
-            TExpr::Tuple(exprs, ty) => TExpr::Tuple(exprs.into_iter().map(|e| self.fold_expr_spanned(e, errors)).collect(), ty),
-            TExpr::List(exprs, ty) => TExpr::List(exprs.into_iter().map(|e| self.fold_expr_spanned(e, errors)).collect(), ty),
+            TExpr::Tuple(exprs, ty, alloc) => TExpr::Tuple(exprs.into_iter().map(|e| self.fold_expr_spanned(e, errors)).collect(), ty.clone(), alloc),
+            TExpr::List(exprs, ty, alloc) => TExpr::List(exprs.into_iter().map(|e| self.fold_expr_spanned(e, errors)).collect(), ty.clone(), alloc),
             TExpr::Lambda(params, body, ty) => TExpr::Lambda(params, Box::new(self.fold_expr_spanned(*body, errors)), ty),
             TExpr::Sequence(exprs, ty) => TExpr::Sequence(exprs.into_iter().map(|e| self.fold_expr_spanned(e, errors)).collect(), ty),
             TExpr::Guard(branches, otherwise, ty) => {
@@ -202,7 +202,7 @@ impl StreamFusionPass {
         // Caso Base: lambda [] ... : []
         let base_lambda = TTopLevel::LambdaDef(
             base_args,
-            (TExpr::List(vec![], ret_ty.clone()), 0..0),
+            (TExpr::List(vec![], ret_ty.clone(), crate::type_checker::tast::AllocMode::Local), 0..0),
             Vec::new(),
             Vec::new()
         );
@@ -244,7 +244,7 @@ impl StreamFusionPass {
         }
 
         // Concatena o elemento resultante com a chamada recursiva: + [current_val] rec_call
-        let yield_list = (TExpr::List(vec![current_val], ret_ty.clone()), 0..0);
+        let yield_list = (TExpr::List(vec![current_val], ret_ty.clone(), crate::type_checker::tast::AllocMode::Local), 0..0);
         let concat_callee = Box::new((TExpr::Ident("+".to_string(), TypeRef::Simple("Unknown".to_string())), 0..0));
         let yield_expr = (TExpr::Call(concat_callee, vec![yield_list, rec_call.clone()], ret_ty.clone()), 0..0);
 

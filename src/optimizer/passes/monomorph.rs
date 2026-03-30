@@ -135,8 +135,8 @@ impl<'a> Monomorphizer<'a> {
 
                 TExpr::Call(folded_callee, folded_args, ty)
             }
-            TExpr::Tuple(exprs, ty) => TExpr::Tuple(exprs.into_iter().map(|e| self.fold_expr_spanned(e, errors)).collect(), ty),
-            TExpr::List(exprs, ty) => TExpr::List(exprs.into_iter().map(|e| self.fold_expr_spanned(e, errors)).collect(), ty),
+            TExpr::Tuple(exprs, ty, alloc) => TExpr::Tuple(exprs.into_iter().map(|e| self.fold_expr_spanned(e, errors)).collect(), ty.clone(), alloc),
+            TExpr::List(exprs, ty, alloc) => TExpr::List(exprs.into_iter().map(|e| self.fold_expr_spanned(e, errors)).collect(), ty.clone(), alloc),
             TExpr::Lambda(params, body, ty) => TExpr::Lambda(params, Box::new(self.fold_expr_spanned(*body, errors)), ty),
             TExpr::Sequence(exprs, ty) => TExpr::Sequence(exprs.into_iter().map(|e| self.fold_expr_spanned(e, errors)).collect(), ty),
             TExpr::Guard(branches, otherwise, ty) => {
@@ -308,8 +308,8 @@ impl TypeSubstituter {
                     self.substitute_type(ty)
                 )
             }
-            TExpr::Tuple(exprs, ty) => TExpr::Tuple(exprs.iter().map(|e| self.substitute_expr(e)).collect(), self.substitute_type(ty)),
-            TExpr::List(exprs, ty) => TExpr::List(exprs.iter().map(|e| self.substitute_expr(e)).collect(), self.substitute_type(ty)),
+            TExpr::Tuple(exprs, ty, alloc) => TExpr::Tuple(exprs.iter().map(|e| self.substitute_expr(e)).collect(), self.substitute_type(ty), *alloc),
+            TExpr::List(exprs, ty, alloc) => TExpr::List(exprs.iter().map(|e| self.substitute_expr(e)).collect(), self.substitute_type(ty), *alloc),
             TExpr::Lambda(params, body, ty) => TExpr::Lambda(params.clone(), Box::new(self.substitute_expr(body)), self.substitute_type(ty)),
             TExpr::Sequence(exprs, ty) => TExpr::Sequence(exprs.iter().map(|e| self.substitute_expr(e)).collect(), self.substitute_type(ty)),
             TExpr::Guard(branches, otherwise, ty) => {

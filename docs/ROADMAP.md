@@ -124,9 +124,9 @@ A biblioteca base em Rust embutida no binário gerado, focada no modelo CSP (Com
   - `queue!(N)` -> Canal com buffer e *Backpressure* via `mpsc::channel(N)`.
   - `broadcast!` -> Topologia Pub/Sub 1-para-N via `tokio::sync::broadcast`.
   - `select` -> Mapeado para a macro `tokio::select!`.
-- [ ] **Gerenciamento de Memória:**
-  - *Arenas Locais:* Estado e variáveis da Action pertencem inteiramente à Task do Tokio (Lock-free, limpo em O(1)).
-  - *ARC Global:* Promoção de referências para `Arc<T>` (Atomic Reference Counting) quando dados imutáveis são enviados através de canais CSP.
+- [ ] **Gerenciamento de Memória (APIs de Alocação):**
+  - *Arenas Locais:* API lock-free de Bump Allocation (O(1)) para dados estritamente locais (sem fuga), limpos em O(1) no fim da Task do Tokio.
+  - *ARC Global:* API para alocação direta na Heap de objetos partilhados identificados pelo *Escape Analysis*, permitindo envio Zero-Copy seguro pelos canais CSP.
 
 ---
 
@@ -146,3 +146,4 @@ Ambiente de desenvolvimento iterativo de alta performance. Reutiliza as fases 1 
 - [ ] **SessionContext:** Type Checker mantém um ambiente vivo na memória, persistindo imports e variáveis léxicas entre os comandos.
 - [ ] **Cranelift JIT:** A TAST resultante é compilada diretamente na RAM (sem gerar arquivo `.o`).
 - [ ] **Injeção de FFI (SHOW):** O REPL envelopa o resultado das expressões numa chamada invisível para a interface `SHOW.str()`, executa o ponteiro de memória e imprime a string na tela.
+pa o resultado das expressões numa chamada invisível para a interface `SHOW.str()`, executa o ponteiro de memória e imprime a string na tela.

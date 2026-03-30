@@ -161,18 +161,16 @@ A Kata-Lang não possui *Garbage Collector* tradicional de varredura (Tracing GC
 * **Ausência de Aliasing Mutável:** Como os dados são estritamente imutáveis, o compilador autoriza múltiplas referências (aliasing) para o mesmo endereço de memória dentro da Arena sem risco de concorrência. A palavra-chave var na Action apenas muta a referência na *Stack*, nunca o dado na Arena.  
 * **Ciclo de Vida:** Todas as alocações locais são afixadas na Arena e inicializadas com um cabeçalho de metadados reservado para promoções. Não há limpeza individual de objetos. Quando a Action conclui, a Arena inteira é libertada em tempo O(1), garantindo que nenhuma referência sobrevive ao dono original.
 
-#### **3.2 Ownership Partilhado e Promoção (Global Heap)**
+#### **3.2 Ownership Partilhado e Análise de Fuga (Escape Analysis)**
 
-A memória só sobrevive à destruição da Arena local se sofrer "Escape" através da passagem de mensagens inter-processos. O compilador não permite o envio de ponteiros da Arena local por canais.
+A linguagem utiliza uma abordagem híbrida guiada pelo compilador (Escape Analysis) para evitar o custo de cópias profundas em tempo de execução (Zero-Copy) ao enviar dados por canais, sem penalizar a performance de dados estritamente locais.
 
-Quando um dado é enviado via channel\!, o runtime executa a seguinte rotina de promoção:
+* **Análise Estática (Escape Analysis):** Durante a compilação, o otimizador rastreia o ciclo de vida de cada dado. Se um dado (ou parte dele) for enviado por um canal (usando o operador `!>`), o compilador determina estaticamente que esse dado "foge" (escapes) do escopo local da *Action*.
+* **Alocação Direta na Heap Global (ARC):** Estruturas que sofrem fuga são alocadas **diretamente na Heap Global** partilhada desde o seu nascimento, encapsuladas num bloco ARC (Atomic Reference Counting).
+* **Envio O(1) (Zero-Copy):** Quando o dado é enviado pelo canal, o *runtime* não precisa realizar verificações de cabeçalho ou cópias. Ele apenas incrementa o contador atómico e transfere o ponteiro (8 bytes). Não há cópia de memória em runtime, independentemente do tamanho e profundidade da estrutura.
+* **Isolamento Local (Arenas):** Se o dado nunca for enviado para um canal (o que representa a esmagadora maioria dos casos em cálculos puros), ele é alocado na Arena local, garantindo máxima performance de cache (*Cache Locality*) e libertação em O(1) sem nenhum *overhead* atómico.
 
-1. **Verificação de Encaminhamento:** O runtime verifica o cabeçalho do objeto na Arena.  
-2. **Promoção Inédita:** Se o cabeçalho estiver vazio, o dado é copiado fisicamente para a **Heap Global** partilhada. O bloco global recebe um encapsulamento ARC (Atomic Reference Counting) iniciado em 1\. O endereço deste novo bloco global é então gravado no cabeçalho do objeto original na Arena (Forwarding Pointer).  
-3. **Múltiplos Envios (Broadcast):** Se a mesma Action tentar enviar o mesmo dado para um segundo canal, o runtime deteta o Forwarding Pointer no cabeçalho. Em vez de duplicar a memória, ele segue o ponteiro até à Heap Global e realiza um incremento atómico no ARC (passando para 2, 3, etc.).  
-4. **Reencaminhamento Inter-Actions:** Se uma Action receber um dado da Heap Global e o repassar para outro canal, o runtime apenas incrementa o ARC atómico do bloco global. O ARC nunca é incrementado por atribuições de variáveis locais.
-
-Esta arquitetura isola o custo da sincronização de memória atómica estritamente ao I/O de mensagens, evita duplicações desnecessárias na memória partilhada, e resolve o ownership sem intervenção manual do programador. **A clonagem explícita profunda (*Deep Copy*) é inexistente e desnecessária na linguagem**, uma vez que a pureza dos dados garante a segurança da partilha estrutural sob este modelo.
+Esta arquitetura delega a responsabilidade de roteamento de memória para o compilador, isolando o custo da sincronização atómica estritamente ao I/O de mensagens, evitando duplicações na memória partilhada e resolvendo o ownership sem intervenção manual do programador. **A clonagem explícita profunda (*Deep Copy*) é inexistente e desnecessária na linguagem**, uma vez que a pureza dos dados garante a segurança da partilha estrutural sob este modelo por ponteiros.
 
 ### **4\. O Runtime da Kata-Lang e Geração de Binário**
 
