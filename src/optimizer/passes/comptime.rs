@@ -1,6 +1,6 @@
 use crate::type_checker::checker::TTopLevel;
 use crate::type_checker::tast::{TExpr, TLiteral, TMatchArm, TStmt};
-use crate::parser::ast::{Spanned, Expr, TypeRef};
+use crate::parser::ast::{Spanned, Expr};
 use crate::type_checker::environment::TypeEnv;
 use crate::optimizer::error::OptimizerError;
 
@@ -199,7 +199,8 @@ impl<'a> ComptimeEval<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::ast::Span;
+    use crate::parser::ast::{Expr, TypeRef};
+    
 
     #[test]
     fn test_comptime_refined_pass() {
@@ -216,7 +217,7 @@ mod tests {
             ]
         );
 
-        let mut eval = ComptimeEval::new(&env);
+        let eval = ComptimeEval::new(&env);
         let mut errors = Vec::new();
 
         let call = TExpr::Call(
@@ -246,7 +247,7 @@ mod tests {
             ]
         );
 
-        let mut eval = ComptimeEval::new(&env);
+        let eval = ComptimeEval::new(&env);
         let mut errors = Vec::new();
 
         let call = TExpr::Call(

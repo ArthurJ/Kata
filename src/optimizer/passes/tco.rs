@@ -1,3 +1,4 @@
+use crate::type_checker::directives::KataDirective;
 use crate::type_checker::checker::TTopLevel;
 use crate::type_checker::tast::{TExpr, TLiteral, TStmt};
 use crate::parser::ast::{Spanned, TypeRef, Pattern};
@@ -47,7 +48,7 @@ impl TcoPass {
         let mut current_sig_name = None;
 
         for spanned_decl in tast {
-            let (decl, span) = &spanned_decl;
+            let (decl, _span) = &spanned_decl;
             match decl {
                 TTopLevel::Signature(name, _, ret, dirs) => {
                     current_sig_name = Some(name.clone());
@@ -55,9 +56,9 @@ impl TcoPass {
 
                     // Analisar diretiva @associative([identidade])
                     for (dir, _) in dirs {
-                        if dir.name == "associative" {
+                        if let KataDirective::Associative(arg_opt) = dir {
                             let key = format!("{}_{}", name, self.type_to_string(&ret.0));
-                            if let Some((arg_expr, _)) = match &dir.args { crate::parser::ast::DirectiveArgs::Positional(p) => p.first(), crate::parser::ast::DirectiveArgs::Named(_) => None } {
+                            if let Some(arg_expr) = arg_opt {
                                 let texpr = match arg_expr {
                                     crate::parser::ast::Expr::Int(i) => Some(TExpr::Literal(TLiteral::Int(i.parse().unwrap_or(0)))),
                                     crate::parser::ast::Expr::Float(f) => Some(TExpr::Literal(TLiteral::Float(f.parse().unwrap_or(0.0)))),
@@ -69,7 +70,6 @@ impl TcoPass {
                                 };
                                 self.associative_ops.insert(key, texpr);
                             } else {
-                                // @associative sem argumentos (Apenas Semigrupo, sem identidade)
                                 self.associative_ops.insert(key, None);
                             }
                         }
@@ -434,7 +434,7 @@ impl TcoPass {
     }
 
     fn check_action_recursion(&self, stmt: &Spanned<TStmt>, func_name: &str, errors: &mut Vec<OptimizerError>) {
-        let (s, span) = stmt;
+        let (s, _span) = stmt;
         match s {
             TStmt::Let(_, expr) | TStmt::Var(_, expr) | TStmt::Expr(expr) => {
                 self.check_action_expr(expr, func_name, errors);
@@ -510,7 +510,8 @@ impl TcoPass {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::ast::{Span, Directive, Expr};
+    use crate::parser::ast::{Expr, Directive};
+use crate::type_checker::directives::KataDirective;
 
     // Helper to create a dummy expression
     fn dummy_ident(name: &str) -> Spanned<TExpr> {
@@ -527,7 +528,7 @@ mod tests {
         
         // Simular a presença do operador '*' com diretiva @associative(1)
         let mul_sig = (TTopLevel::Signature("*".to_string(), vec![(TypeRef::Simple("Int".to_string()), 0..0), (TypeRef::Simple("Int".to_string()), 0..0)], (TypeRef::Simple("Int".to_string()), 0..0), vec![
-            (Directive { name: "associative".to_string(), args: crate::parser::ast::DirectiveArgs::Positional(vec![(Expr::Int("1".to_string()), 0..0)]) }, 0..0)
+            (KataDirective::Associative(Some(Expr::Int("1".to_string()))), 0..0)
         ]), 0..0);
 
         // lambda n: * n (fact (- n 1))

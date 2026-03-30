@@ -1,5 +1,6 @@
-use crate::parser::ast::{Module, TopLevel, Expr, Spanned, TypeRef, Pattern, Stmt};
+use crate::parser::ast::{Module, TopLevel, Spanned, TypeRef, Pattern};
 use crate::type_checker::Checker;
+
 
 #[cfg(test)]
 mod tests {

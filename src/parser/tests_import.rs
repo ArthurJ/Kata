@@ -5,6 +5,7 @@ use crate::lexer::LexMode;
 use super::grammar::module::module_parser;
 
 
+#[allow(dead_code)]
 fn parse(input: &str) -> Module {
     let tokens = lex(input, LexMode::File).unwrap();
     let len = input.len();

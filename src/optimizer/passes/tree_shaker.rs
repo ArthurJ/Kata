@@ -1,5 +1,5 @@
 use crate::type_checker::checker::TTopLevel;
-use crate::type_checker::tast::{TExpr, TStmt, TMatchArm};
+use crate::type_checker::tast::{TExpr, TStmt};
 use crate::type_checker::environment::TypeEnv;
 use crate::parser::ast::Spanned;
 use std::collections::HashSet;
@@ -51,7 +51,7 @@ impl<'a> TreeShaker<'a> {
                             }
                         }
                     }
-                    TTopLevel::LambdaDef(params, body, with, _) => {
+                    TTopLevel::LambdaDef(_params, body, with, _) => {
                         // O nome não está na AST do LambdaDef (vem da Signature anterior),
                         // mas se este nó estiver ligado a uma assinatura alcançável,
                         // teríamos de o marcar. 

@@ -1,12 +1,12 @@
 use crate::type_checker::checker::TTopLevel;
 use crate::type_checker::tast::{TExpr, TStmt, TMatchArm};
-use crate::parser::ast::{Spanned, TypeRef, Pattern};
+use crate::parser::ast::{Spanned, TypeRef};
 use crate::type_checker::environment::TypeEnv;
 use crate::optimizer::error::OptimizerError;
 use std::collections::HashMap;
 
 pub struct Monomorphizer<'a> {
-    pub env: &'a TypeEnv,
+    pub _env: &'a TypeEnv,
     pub instantiations: HashMap<String, Vec<TTopLevel>>,
     pub templates: HashMap<String, Vec<TTopLevel>>,
 }
@@ -14,7 +14,7 @@ pub struct Monomorphizer<'a> {
 impl<'a> Monomorphizer<'a> {
     pub fn new(env: &'a TypeEnv) -> Self {
         Self {
-            env,
+            _env: env,
             instantiations: HashMap::new(),
             templates: HashMap::new(),
         }

@@ -2,6 +2,7 @@ use crate::parser::ast::{Module, TopLevel, Spanned, TypeRef, Pattern, Stmt};
 use crate::type_checker::environment::TypeEnv;
 use crate::type_checker::tast::{TExpr, TStmt};
 use crate::type_checker::arity_resolver::ArityResolver;
+use crate::type_checker::directives::{KataDirective, validate_and_parse_directives};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TestInfo {
@@ -22,11 +23,11 @@ pub struct Checker {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TTopLevel {
-    Data(String, crate::parser::ast::DataDef, Vec<Spanned<crate::parser::ast::Directive>>),
-    Enum(String, Vec<crate::parser::ast::Variant>, Vec<Spanned<crate::parser::ast::Directive>>),
-    Signature(String, Vec<Spanned<TypeRef>>, Spanned<TypeRef>, Vec<Spanned<crate::parser::ast::Directive>>),
-    LambdaDef(Vec<Spanned<Pattern>>, Spanned<TExpr>, Vec<Spanned<TExpr>>, Vec<Spanned<crate::parser::ast::Directive>>),
-    ActionDef(String, Vec<(String, Spanned<TypeRef>)>, Spanned<TypeRef>, Vec<Spanned<TStmt>>, Vec<Spanned<crate::parser::ast::Directive>>),
+    Data(String, crate::parser::ast::DataDef, Vec<Spanned<KataDirective>>),
+    Enum(String, Vec<crate::parser::ast::Variant>, Vec<Spanned<KataDirective>>),
+    Signature(String, Vec<Spanned<TypeRef>>, Spanned<TypeRef>, Vec<Spanned<KataDirective>>),
+    LambdaDef(Vec<Spanned<Pattern>>, Spanned<TExpr>, Vec<Spanned<TExpr>>, Vec<Spanned<KataDirective>>),
+    ActionDef(String, Vec<(String, Spanned<TypeRef>)>, Spanned<TypeRef>, Vec<Spanned<TStmt>>, Vec<Spanned<KataDirective>>),
     Execution(Spanned<TExpr>),
 }
 
@@ -131,24 +132,6 @@ impl Checker {
     fn collect_top_level(&mut self, decl: &TopLevel, span: &crate::parser::ast::Span) {
         let mut local_errs: Vec<(String, crate::parser::ast::Span)> = Vec::new();
 
-        let validate_directives = |dirs: &[Spanned<crate::parser::ast::Directive>]| -> Vec<(String, crate::parser::ast::Span)> {
-            let mut errs: Vec<(String, crate::parser::ast::Span)> = Vec::new();
-            for (dir, dir_span) in dirs {
-                if dir.name == "log" {
-                    if let Some((arg, _)) = match &dir.args { crate::parser::ast::DirectiveArgs::Positional(p) => p.first(), _ => None } {
-                        if let crate::parser::ast::Expr::Ident(level) = arg {
-                            let valid_variants = ["Error", "Warn", "Info", "Debug", "Trace"];
-                            if !valid_variants.contains(&level.as_str()) {
-                                errs.push((format!("Diretiva @log invalida: Variante de LogLevel '{}' desconhecida. Use uma de {:?}", level, valid_variants), dir_span.clone()));
-                            }
-                        } else {
-                            errs.push(("Diretiva @log invalida: O primeiro argumento deve ser uma variante de LogLevel (ex: Info).".to_string(), dir_span.clone()));
-                        }
-                    }
-                }
-            }
-            errs
-        };
 
         let extract_test_desc = |dirs: &[Spanned<crate::parser::ast::Directive>]| -> Option<String> {
             for (dir, dir_span) in dirs {
@@ -162,13 +145,12 @@ impl Checker {
             None
         };
 
-        let is_commutative = |dirs: &[Spanned<crate::parser::ast::Directive>]| -> bool {
-            dirs.iter().any(|(d, _)| d.name == "commutative")
-        };
+
 
         match decl {
             TopLevel::Data(name, def, dirs) => {
-                local_errs.extend(validate_directives(dirs));
+                let (parsed_dirs, errs) = validate_and_parse_directives(dirs);
+                local_errs.extend(errs);
                 self.local_types.insert(name.clone());
                 match def {
                     crate::parser::ast::DataDef::Struct(fields) => {
@@ -200,7 +182,8 @@ impl Checker {
                 }
             }
             TopLevel::Enum(name, variants, dirs) => {
-                local_errs.extend(validate_directives(dirs));
+                let (parsed_dirs, errs) = validate_and_parse_directives(dirs);
+                local_errs.extend(errs);
                 self.local_types.insert(name.clone());
                 let mut has_smart_constructor = false;
                 let mut has_predicate = false;
@@ -245,7 +228,8 @@ impl Checker {
                 }
             }
             TopLevel::Interface(name, super_traits, methods, dirs) => {
-                local_errs.extend(validate_directives(dirs));
+                let (parsed_dirs, errs) = validate_and_parse_directives(dirs);
+                local_errs.extend(errs);
                 self.local_interfaces.insert(name.clone());
                 self.env.define_interface(name.clone(), super_traits.clone());
                 let mut method_names = Vec::new();
@@ -275,15 +259,17 @@ impl Checker {
                 self.env.type_methods.entry(type_name.clone()).or_default().extend(method_names);
             }
             TopLevel::Signature(name, params, ret, dirs) => {
-                local_errs.extend(validate_directives(dirs));
-                if let Some(desc) = extract_test_desc(dirs) {
+                let (parsed_dirs, errs) = validate_and_parse_directives(dirs);
+                local_errs.extend(errs);
+                if let Some(desc) = parsed_dirs.iter().find_map(|(d, _)| if let KataDirective::Test(s) = d { Some(s.clone()) } else { None }) {
                     self.tests.push(TestInfo { name: name.clone(), description: desc, is_action: false });
                 }
-                self.env.define(name.clone(), params.len(), TypeRef::Function(params.clone(), Box::new(ret.clone())), false, is_commutative(dirs));
+                self.env.define(name.clone(), params.len(), TypeRef::Function(params.clone(), Box::new(ret.clone())), false, parsed_dirs.iter().any(|(d, _)| matches!(d, KataDirective::Commutative)));
             }
             TopLevel::ActionDef(name, params, ret, _, dirs) => {
-                local_errs.extend(validate_directives(dirs));
-                if let Some(desc) = extract_test_desc(dirs) {
+                let (parsed_dirs, errs) = validate_and_parse_directives(dirs);
+                local_errs.extend(errs);
+                if let Some(desc) = parsed_dirs.iter().find_map(|(d, _)| if let KataDirective::Test(s) = d { Some(s.clone()) } else { None }) {
                     self.tests.push(TestInfo { name: name.clone(), description: desc, is_action: true });
                 }
                 self.env.define(
@@ -291,11 +277,12 @@ impl Checker {
                     params.len(), 
                     TypeRef::Function(params.iter().map(|(_, t)| t.clone()).collect(), Box::new(ret.clone())), 
                     true,
-                    is_commutative(dirs)
+                    parsed_dirs.iter().any(|(d, _)| matches!(d, KataDirective::Commutative))
                 );
             }
             TopLevel::Alias(name, target, dirs) => {
-                local_errs.extend(validate_directives(dirs));
+                let (parsed_dirs, errs) = validate_and_parse_directives(dirs);
+                local_errs.extend(errs);
                 self.local_types.insert(name.clone());
                 self.env.define_alias(name.clone(), target.clone());
             }
@@ -315,9 +302,9 @@ impl Checker {
 
     fn resolve_top_level(&self, decl: &TopLevel, span: &crate::parser::ast::Span, resolver: &ArityResolver, local_errors: &mut Vec<(String, crate::parser::ast::Span)>, last_signature: &Option<(String, Vec<Spanned<TypeRef>>, Spanned<TypeRef>)>) -> Option<TTopLevel> {
         match decl {
-            TopLevel::Data(name, def, dirs) => Some(TTopLevel::Data(name.clone(), def.clone(), dirs.clone())),
-            TopLevel::Enum(name, variants, dirs) => Some(TTopLevel::Enum(name.clone(), variants.clone(), dirs.clone())),
-            TopLevel::Signature(name, params, ret, dirs) => Some(TTopLevel::Signature(name.clone(), params.clone(), ret.clone(), dirs.clone())),
+            TopLevel::Data(name, def, dirs) => Some(TTopLevel::Data(name.clone(), def.clone(), validate_and_parse_directives(dirs).0)),
+            TopLevel::Enum(name, variants, dirs) => Some(TTopLevel::Enum(name.clone(), variants.clone(), validate_and_parse_directives(dirs).0)),
+            TopLevel::Signature(name, params, ret, dirs) => Some(TTopLevel::Signature(name.clone(), params.clone(), ret.clone(), validate_and_parse_directives(dirs).0)),
             TopLevel::LambdaDef(params, body, with, dirs) => {
                 resolver.pure_context.set(true);
                 *resolver.current_action.borrow_mut() = None;
@@ -356,14 +343,14 @@ impl Checker {
                     for w in with {
                         t_with.push(resolver.resolve_expr(w));
                     }
-                    Some(TTopLevel::LambdaDef(params.clone(), t_body, t_with, dirs.clone()))
+                    Some(TTopLevel::LambdaDef(params.clone(), t_body, t_with, validate_and_parse_directives(dirs).0))
                 } else {
                     let t_body = resolver.resolve_expr(body);
                     let mut t_with = Vec::new();
                     for w in with {
                         t_with.push(resolver.resolve_expr(w));
                     }
-                    Some(TTopLevel::LambdaDef(params.clone(), t_body, t_with, dirs.clone()))
+                    Some(TTopLevel::LambdaDef(params.clone(), t_body, t_with, validate_and_parse_directives(dirs).0))
                 }
             }
             TopLevel::ActionDef(name, params, ret, body, dirs) => {
@@ -391,7 +378,7 @@ impl Checker {
                     local_errors.push((format!("Type Mismatch: Expected return type `{:?}`, Found `{:?}` in Action `{}`", ret.0, last_stmt_ty, name), ret.1.clone()));
                 }
 
-                Some(TTopLevel::ActionDef(name.clone(), params.clone(), ret.clone(), t_body, dirs.clone()))
+                Some(TTopLevel::ActionDef(name.clone(), params.clone(), ret.clone(), t_body, validate_and_parse_directives(dirs).0))
             }
             TopLevel::Execution(expr) => {
                 resolver.pure_context.set(false); // Top-level execution allows actions

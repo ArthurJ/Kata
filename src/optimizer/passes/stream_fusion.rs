@@ -275,7 +275,7 @@ impl StreamFusionPass {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::ast::Span;
+    
 
     fn dummy_ident(name: &str, ty: &str) -> Spanned<TExpr> {
         (TExpr::Ident(name.to_string(), TypeRef::Simple(ty.to_string())), 0..0)
