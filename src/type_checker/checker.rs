@@ -135,7 +135,7 @@ impl Checker {
             let mut errs: Vec<(String, crate::parser::ast::Span)> = Vec::new();
             for (dir, dir_span) in dirs {
                 if dir.name == "log" {
-                    if let Some((arg, _)) = dir.args.first() {
+                    if let Some((arg, _)) = match &dir.args { crate::parser::ast::DirectiveArgs::Positional(p) => p.first(), _ => None } {
                         if let crate::parser::ast::Expr::Ident(level) = arg {
                             let valid_variants = ["Error", "Warn", "Info", "Debug", "Trace"];
                             if !valid_variants.contains(&level.as_str()) {
@@ -153,7 +153,7 @@ impl Checker {
         let extract_test_desc = |dirs: &[Spanned<crate::parser::ast::Directive>]| -> Option<String> {
             for (dir, dir_span) in dirs {
                 if dir.name == "test" {
-                    if let Some((crate::parser::ast::Expr::String(desc), _)) = dir.args.first() {
+                    if let Some((crate::parser::ast::Expr::String(desc), _)) = match &dir.args { crate::parser::ast::DirectiveArgs::Positional(p) => p.first(), _ => None } {
                         return Some(desc.clone());
                     }
                     return Some("Sem descricao".to_string());

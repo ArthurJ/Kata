@@ -205,21 +205,10 @@ Float implements NUM
     floor :: Float => Float
 
 # ==========================================
-# Log e Diagnóstico
-# ==========================================
-
-enum LogLevel
-    | Error
-    | Warn
-    | Info
-    | Debug
-    | Trace
-
-export NUM Float Int LogLevel Bool and or xor not Result Optional str repr SHOW REPR HASH EQ ORD NonZero = != > >= < <= + - * ** div / // mod round ceil floor hash
-
-# ==========================================
 # Texto
 # ==========================================
+
+export NUM Float Int Bool and or xor not Result Optional str repr SHOW REPR HASH EQ ORD NonZero = != > >= < <= + - * ** div / // mod round ceil floor hash
 
 @ffi("kata_rt_concat_text")
 @associative("")

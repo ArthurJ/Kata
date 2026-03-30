@@ -1067,14 +1067,20 @@ lambda (precisao) ...
 \# O resultado desta computação será chumbado no binário    
 \# como um literal Array::Float sem qualquer custo de runtime.
 
-### **6\. Registro de Logs Transparentes (@log)**
+### **6\. Registro de Logs, Telemetria e Auditoria Transparentes (@log)**
 
-Para manter a pureza das funções matemáticas (Functions) intacta sem prejudicar a observabilidade em ambientes de produção, a linguagem fornece a diretiva `@log`.
+Para manter a pureza das funções matemáticas (Functions) intacta sem prejudicar a observabilidade em ambientes de produção, a linguagem fornece a diretiva `@log`. Esta diretiva atua como um mecanismo unificado para log tradicional, telemetria de alta performance e auditoria rigorosa.
 
-* **Mecânica:** Quando uma função ou ação é anotada com `@log`, o compilador injeta invisivelmente código de I/O em volta da sua execução (antes e depois do bloco). Isso permite registrar no log do sistema os argumentos de entrada e o resultado retornado.
-* **Isolamento de Pureza:** Como o registro no log é tratado estritamente pela infraestrutura da máquina virtual (*Runtime* via Cranelift) e injetado por fora da função, a pureza interna da equação não é violada perante o Type Checker, pois o programador não precisou escrever um `echo!` imperativo no meio da conta.
+* **Mecânica:** Quando uma função ou ação é anotada com `@log`, o compilador injeta invisivelmente código de envio de mensagens (I/O assíncrono via Canais CSP) em volta da sua execução. O *runtime* captura os argumentos de entrada, o resultado retornado, e metadados de execução, enviando-os para uma *Action* roteadora no domínio imperativo.
+* **Argumentos Fortemente Tipados (Compilador):** A diretiva recebe parâmetros posicionais para configurar a emissão da mensagem: `@log(Level, "Mensagem", "Topic", "OnFullPolicy")`.
+  * `Level`: O nível de severidade (Error, Warn, Info, Debug, Trace). Trata-se de um conceito intrínseco do compilador (embutido na diretiva), não dependendo de *enums* do usuário.
+  * `Msg`: Uma mensagem textual personalizada para descrever o bloco.
+  * `Topic`: O nome do canal/tópico de difusão (`broadcast!`). Permite que o programador crie *Actions* específicas para escutar tópicos diferentes (ex: "auditoria_financeira", "metricas_cpu") e decida se grava no banco de dados, envia para o Datadog, etc.
+  * `OnFull`: A política de resiliência e *backpressure* caso o canal de log fique cheio (ex: disco lento):
+    * `"drop"` (Ideal para Telemetria/Métricas): Se o canal encher, o log é descartado silenciosamente. Garante que a função pura continue operando em velocidade máxima sem penalizar a CPU.
+    * `"block"` (Ideal para Auditoria): Se o canal encher, a *Green Thread* atual é bloqueada pelo escalonador até que o log possa ser gravado de forma segura. Garante zero perda de dados críticos.
 
-@log
+@log(Info, "Processando calculo complexo", "metricas_math", "drop")
 soma_complexa :: Int Int => Int
 lambda (x y)
     + (* x 2) (* y 3)

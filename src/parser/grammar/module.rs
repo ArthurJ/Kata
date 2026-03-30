@@ -19,7 +19,7 @@ pub fn top_level_parser() -> impl Parser<Token, Spanned<TopLevel>, Error = Parse
                 .or_not()
                 .map(|opt| opt.unwrap_or_default())
         )
-        .map_with_span(|(name, args), span| (Directive { name, args }, span));
+        .map_with_span(|(name, args), span| (Directive { name, args: crate::parser::ast::DirectiveArgs::Positional(args) }, span));
 
         let directives_list = directive_parser
             .then_ignore(just(Token::Newline).repeated())

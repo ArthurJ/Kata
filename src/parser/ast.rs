@@ -75,9 +75,15 @@ pub struct Variant {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum DirectiveArgs {
+    Positional(Vec<Spanned<Expr>>),
+    Named(Vec<(String, Spanned<Expr>)>),
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct Directive {
     pub name: String,
-    pub args: Vec<Spanned<Expr>>, // Argumentos como Expr (strings, ints, etc)
+    pub args: DirectiveArgs,
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -57,7 +57,7 @@ impl TcoPass {
                     for (dir, _) in dirs {
                         if dir.name == "associative" {
                             let key = format!("{}_{}", name, self.type_to_string(&ret.0));
-                            if let Some((arg_expr, _)) = dir.args.first() {
+                            if let Some((arg_expr, _)) = match &dir.args { crate::parser::ast::DirectiveArgs::Positional(p) => p.first(), crate::parser::ast::DirectiveArgs::Named(_) => None } {
                                 let texpr = match arg_expr {
                                     crate::parser::ast::Expr::Int(i) => Some(TExpr::Literal(TLiteral::Int(i.parse().unwrap_or(0)))),
                                     crate::parser::ast::Expr::Float(f) => Some(TExpr::Literal(TLiteral::Float(f.parse().unwrap_or(0.0)))),
@@ -527,7 +527,7 @@ mod tests {
         
         // Simular a presença do operador '*' com diretiva @associative(1)
         let mul_sig = (TTopLevel::Signature("*".to_string(), vec![(TypeRef::Simple("Int".to_string()), 0..0), (TypeRef::Simple("Int".to_string()), 0..0)], (TypeRef::Simple("Int".to_string()), 0..0), vec![
-            (Directive { name: "associative".to_string(), args: vec![(Expr::Int("1".to_string()), 0..0)] }, 0..0)
+            (Directive { name: "associative".to_string(), args: crate::parser::ast::DirectiveArgs::Positional(vec![(Expr::Int("1".to_string()), 0..0)]) }, 0..0)
         ]), 0..0);
 
         // lambda n: * n (fact (- n 1))
