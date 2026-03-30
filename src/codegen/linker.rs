@@ -1,4 +1,3 @@
-use std::process::Command;
 
 pub fn link_executable(object_file: &str, output_bin: &str) -> Result<(), String> {
     log::info!("Iniciando Linker: conectando {} com kata-rt", object_file);

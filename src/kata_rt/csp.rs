@@ -1,6 +1,5 @@
 use tokio::sync::mpsc;
 use tokio::sync::broadcast;
-use tokio::task;
 
 pub struct RendezvousChannel {
     pub tx: mpsc::Sender<*mut u8>,

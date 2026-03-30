@@ -1,6 +1,5 @@
 use cranelift_codegen::settings::{self, Configurable};
 use cranelift_object::{ObjectBuilder, ObjectModule};
-use cranelift_module::Module;
 use cranelift_module::default_libcall_names;
 use cranelift_module::FuncId;
 use std::collections::HashMap;

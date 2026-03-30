@@ -2,8 +2,8 @@ use crate::type_checker::checker::TTopLevel;
 use crate::parser::ast::{Spanned, TypeRef};
 use crate::type_checker::directives::KataDirective;
 use super::context::CodegenContext;
-use cranelift_codegen::ir::{AbiParam, Signature, Type as IrType, types, InstBuilder};
-use cranelift_module::{Linkage, Module, FuncId};
+use cranelift_codegen::ir::{AbiParam, Type as IrType, types, InstBuilder};
+use cranelift_module::{Linkage, Module};
 use cranelift_codegen::Context;
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_codegen::entity::EntityRef;
@@ -41,7 +41,7 @@ impl<'a> FunctionTranslator<'a> {
                 TTopLevel::ActionDef(name, params, ret, body, dirs) => {
                     self.translate_action(&name, &params, &ret.0, &body, &dirs)?;
                 }
-                TTopLevel::LambdaDef(params, body, _, _) => {
+                TTopLevel::LambdaDef(_params, _body, _, _) => {
                     // Requires matching the lambda back to its signature.
                     // For the MVP, we assume Monomorphization left functions with explicit names if they are generic,
                     // but the LambdaDef itself doesn't hold its name directly in our current AST structure unless it's immediately after a Signature.

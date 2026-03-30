@@ -133,8 +133,8 @@ impl Checker {
         let mut local_errs: Vec<(String, crate::parser::ast::Span)> = Vec::new();
 
 
-        let extract_test_desc = |dirs: &[Spanned<crate::parser::ast::Directive>]| -> Option<String> {
-            for (dir, dir_span) in dirs {
+        let _extract_test_desc = |dirs: &[Spanned<crate::parser::ast::Directive>]| -> Option<String> {
+            for (dir, _dir_span) in dirs {
                 if dir.name == "test" {
                     if let Some((crate::parser::ast::Expr::String(desc), _)) = match &dir.args { crate::parser::ast::DirectiveArgs::Positional(p) => p.first(), _ => None } {
                         return Some(desc.clone());
@@ -149,7 +149,7 @@ impl Checker {
 
         match decl {
             TopLevel::Data(name, def, dirs) => {
-                let (parsed_dirs, errs) = validate_and_parse_directives(dirs);
+                let (_parsed_dirs, errs) = validate_and_parse_directives(dirs);
                 local_errs.extend(errs);
                 self.local_types.insert(name.clone());
                 match def {
@@ -182,7 +182,7 @@ impl Checker {
                 }
             }
             TopLevel::Enum(name, variants, dirs) => {
-                let (parsed_dirs, errs) = validate_and_parse_directives(dirs);
+                let (_parsed_dirs, errs) = validate_and_parse_directives(dirs);
                 local_errs.extend(errs);
                 self.local_types.insert(name.clone());
                 let mut has_smart_constructor = false;
@@ -228,7 +228,7 @@ impl Checker {
                 }
             }
             TopLevel::Interface(name, super_traits, methods, dirs) => {
-                let (parsed_dirs, errs) = validate_and_parse_directives(dirs);
+                let (_parsed_dirs, errs) = validate_and_parse_directives(dirs);
                 local_errs.extend(errs);
                 self.local_interfaces.insert(name.clone());
                 self.env.define_interface(name.clone(), super_traits.clone());
@@ -281,7 +281,7 @@ impl Checker {
                 );
             }
             TopLevel::Alias(name, target, dirs) => {
-                let (parsed_dirs, errs) = validate_and_parse_directives(dirs);
+                let (_parsed_dirs, errs) = validate_and_parse_directives(dirs);
                 local_errs.extend(errs);
                 self.local_types.insert(name.clone());
                 self.env.define_alias(name.clone(), target.clone());
@@ -300,7 +300,7 @@ impl Checker {
         self.errors.extend(local_errs);
     }
 
-    fn resolve_top_level(&self, decl: &TopLevel, span: &crate::parser::ast::Span, resolver: &ArityResolver, local_errors: &mut Vec<(String, crate::parser::ast::Span)>, last_signature: &Option<(String, Vec<Spanned<TypeRef>>, Spanned<TypeRef>)>) -> Option<TTopLevel> {
+    fn resolve_top_level(&self, decl: &TopLevel, _span: &crate::parser::ast::Span, resolver: &ArityResolver, local_errors: &mut Vec<(String, crate::parser::ast::Span)>, last_signature: &Option<(String, Vec<Spanned<TypeRef>>, Spanned<TypeRef>)>) -> Option<TTopLevel> {
         match decl {
             TopLevel::Data(name, def, dirs) => Some(TTopLevel::Data(name.clone(), def.clone(), validate_and_parse_directives(dirs).0)),
             TopLevel::Enum(name, variants, dirs) => Some(TTopLevel::Enum(name.clone(), variants.clone(), validate_and_parse_directives(dirs).0)),

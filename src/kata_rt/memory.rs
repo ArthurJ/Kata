@@ -1,6 +1,5 @@
 use bumpalo::Bump;
 use std::alloc::Layout;
-use std::ptr::NonNull;
 
 pub struct LocalArena {
     bump: Bump,

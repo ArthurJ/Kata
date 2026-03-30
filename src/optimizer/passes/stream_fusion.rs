@@ -189,7 +189,7 @@ impl StreamFusionPass {
         let mut rec_args = vec![(Pattern::List(vec![(Pattern::Ident("x".to_string()), 0..0), (Pattern::Ident("xs".to_string()), 0..0)]), 0..0)];
         let mut fw_args = vec![(TExpr::Ident("xs".to_string(), TypeRef::Simple("Unknown".to_string())), 0..0)];
 
-        for (i, op) in pipeline.iter().enumerate() {
+        for (i, _op) in pipeline.iter().enumerate() {
             sig_params.push((TypeRef::Simple("Unknown".to_string()), 0..0)); // A closure
             let f_name = format!("f{}", i);
             base_args.push((Pattern::Ident("_".to_string()), 0..0));
