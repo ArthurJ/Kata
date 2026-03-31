@@ -34,7 +34,7 @@ impl<'a> ArityResolver<'a> {
             TExpr::Literal(TLiteral::String(_)) => TypeRef::Simple("Text".to_string()),
             TExpr::Literal(TLiteral::Bool(_)) => TypeRef::Simple("Bool".to_string()),
             TExpr::Literal(TLiteral::Unit) => TypeRef::Simple("()".to_string()),
-            TExpr::Ident(_, ty) | TExpr::Call(_, _, ty) | TExpr::Tuple(_, ty, _) | TExpr::List(_, ty, _) | TExpr::Lambda(_, _, ty) | TExpr::Sequence(_, ty) | TExpr::Guard(_, _, ty) | TExpr::Try(_, ty) | TExpr::ChannelSend(_, _, ty) | TExpr::ChannelRecv(_, ty) | TExpr::ChannelRecvNonBlock(_, ty) => ty.clone(),
+            TExpr::Ident(_, ty) | TExpr::Call(_, _, ty) | TExpr::Tuple(_, ty, _) | TExpr::List(_, ty, _) | TExpr::Lambda(_, _, ty, _) | TExpr::Sequence(_, ty) | TExpr::Guard(_, _, ty) | TExpr::Try(_, ty) | TExpr::ChannelSend(_, _, ty) | TExpr::ChannelRecv(_, ty) | TExpr::ChannelRecvNonBlock(_, ty) => ty.clone(),
             TExpr::Hole => TypeRef::Simple("Unknown".to_string()),
         }
     }
@@ -325,7 +325,7 @@ impl<'a> ArityResolver<'a> {
                                 
                                 let lambda_type = TypeRef::Function(lambda_args, Box::new((return_type, span.clone())));
                                 
-                                return Some((TExpr::Lambda(lambda_params, Box::new(inner_call), lambda_type), span.clone()));
+                                return Some((TExpr::Lambda(lambda_params, Box::new(inner_call), lambda_type, crate::type_checker::tast::AllocMode::Local), span.clone()));
                             } else {
                                 let callee = Box::new((TExpr::Ident(name, final_info.map(|i| i.type_info.clone()).unwrap_or(TypeRef::Simple("Unknown".into()))), span.clone()));
                                 return Some((TExpr::Call(callee, final_args, return_type), span.clone()));
@@ -516,7 +516,7 @@ impl<'a> ArityResolver<'a> {
                     arg_types.push((TypeRef::Simple("Unknown".into()), 0..0));
                 }
                 let ty = TypeRef::Function(arg_types, Box::new((ret_ty, span.clone())));
-                (TExpr::Lambda(args.clone(), Box::new(resolved_body), ty), span.clone())
+                (TExpr::Lambda(args.clone(), Box::new(resolved_body), ty, crate::type_checker::tast::AllocMode::Local), span.clone())
             }
             _ => (TExpr::Literal(TLiteral::Unit), span.clone()), 
         }

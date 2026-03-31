@@ -23,41 +23,18 @@ impl<'a, 'b> ExprTranslator<'a, 'b> {
         match s {
             TStmt::Let(pat, expr) => {
                 let val = self.translate_expr(expr)?;
-                let name = match &pat.0 {
-                    Pattern::Ident(n) => n.clone(),
-                    _ => return Err("Apenas binding simples (let nome = expr) e suportado no MVP AOT.".to_string()),
-                };
-
-                let ty = match &expr.0 {
-                    TExpr::Literal(TLiteral::Int(_)) => types::I64,
-                    TExpr::Literal(TLiteral::Float(_)) => types::F64,
-                    TExpr::Literal(TLiteral::Bool(_)) => types::I8,
-                    TExpr::Call(_, _, ty) | TExpr::Ident(_, ty) => self.map_type(ty),
-                    _ => types::I64,
-                };
-
-                let var = Variable::from_u32(*self.var_index as u32);
-                *self.var_index += 1;
-                self.builder.declare_var(var, ty);
-                self.builder.def_var(var, val);
-                self.variables.insert(name, var);
-                
+                let expr_ty = crate::type_checker::arity_resolver::ArityResolver::get_expr_type(&expr.0);
+                self.bind_pattern(&pat.0, val, &expr_ty)?;
                 Ok(None)
             }
             TStmt::Var(name, expr) => {
                 let val = self.translate_expr(expr)?;
-
-                let ty = match &expr.0 {
-                    TExpr::Literal(TLiteral::Int(_)) => types::I64,
-                    TExpr::Literal(TLiteral::Float(_)) => types::F64,
-                    TExpr::Literal(TLiteral::Bool(_)) => types::I8,
-                    TExpr::Call(_, _, ty) | TExpr::Ident(_, ty) => self.map_type(ty),
-                    _ => types::I64,
-                };
+                let expr_ty = crate::type_checker::arity_resolver::ArityResolver::get_expr_type(&expr.0);
+                let ir_ty = self.map_type(&expr_ty);
 
                 let var = Variable::from_u32(*self.var_index as u32);
                 *self.var_index += 1;
-                self.builder.declare_var(var, ty);
+                self.builder.declare_var(var, ir_ty);
                 self.builder.def_var(var, val);
                 self.variables.insert(name.clone(), var);
                 
@@ -95,7 +72,7 @@ impl<'a, 'b> ExprTranslator<'a, 'b> {
                                 let const_val = self.builder.ins().iconst(types::I8, 0);
                                 is_match = Some(self.builder.ins().icmp(cranelift_codegen::ir::condcodes::IntCC::Equal, target_val, const_val));
                             } else {
-                                // Default binding for MVP (catch-all)
+                                // Default binding for TODO (catch-all)
                                 let true_val = self.builder.ins().iconst(types::I8, 1);
                                 is_match = Some(true_val);
                             }
@@ -134,7 +111,7 @@ impl<'a, 'b> ExprTranslator<'a, 'b> {
 
                 Ok(None)
             }
-            _ => Err(format!("Statement não suportado no MVP: {:?}", s)),
+            _ => Err(format!("Statement não suportado no TODO: {:?}", s)),
         }
     }
 
@@ -183,7 +160,7 @@ impl<'a, 'b> ExprTranslator<'a, 'b> {
             TExpr::Call(callee, args, _) => {
                 let (name, callee_ty) = match &callee.0 {
                     TExpr::Ident(n, ty) => (n.clone(), ty.clone()),
-                    _ => return Err("Chamadas anonimas ou high-order nao suportadas no MVP.".to_string()),
+                    _ => return Err("Chamadas anonimas ou high-order nao suportadas no TODO.".to_string()),
                 };
 
                 let mut mangled_name = name.clone();
@@ -222,14 +199,47 @@ impl<'a, 'b> ExprTranslator<'a, 'b> {
                 }
                 Ok(last_val.unwrap_or_else(|| self.builder.ins().iconst(types::I32, 0))) // Unit fallback
             }
-            TExpr::Tuple(exprs, _, _) => {
+            TExpr::Tuple(exprs, _, alloc_mode) => {
                 if exprs.is_empty() {
                     Ok(self.builder.ins().iconst(types::I32, 0)) // Unit
                 } else {
-                    Err(format!("Tuplas com elementos não suportadas no MVP: {:?}", e))
+                    let ptr_type = self.module.target_config().pointer_type();
+                    let size = (exprs.len() * 8) as i64;
+                    let align = 8_i64;
+
+                    let size_val = self.builder.ins().iconst(ptr_type, size);
+                    let align_val = self.builder.ins().iconst(ptr_type, align);
+
+                    let alloc_func_name = match alloc_mode {
+                        crate::type_checker::tast::AllocMode::Local => "kata_rt_alloc_local",
+                        crate::type_checker::tast::AllocMode::Shared => "kata_rt_alloc_shared",
+                    };
+
+                    let alloc_func_id = self.functions.get(alloc_func_name)
+                        .ok_or_else(|| format!("Função {} não encontrada.", alloc_func_name))?;
+                    
+                    let local_alloc_func = self.module.declare_func_in_func(*alloc_func_id, self.builder.func);
+                    
+                    let call = self.builder.ins().call(local_alloc_func, &[size_val, align_val]);
+                    let ptr_val = self.builder.inst_results(call)[0];
+
+                    for (i, ex) in exprs.iter().enumerate() {
+                        let mut val = self.translate_expr(ex)?;
+                        let val_type = self.builder.func.dfg.value_type(val);
+                        if val_type == types::I8 || val_type == types::I32 {
+                            val = self.builder.ins().uextend(types::I64, val);
+                        } else if val_type == types::F64 {
+                            val = self.builder.ins().bitcast(types::I64, cranelift_codegen::ir::MemFlags::new(), val);
+                        }
+
+                        let offset = (i * 8) as i32;
+                        self.builder.ins().store(cranelift_codegen::ir::MemFlags::new(), val, ptr_val, offset);
+                    }
+
+                    Ok(ptr_val)
                 }
             }
-            _ => Err(format!("Expressão não suportada no MVP: {:?}", e)),
+            _ => Err(format!("Expressão não suportada no TODO: {:?}", e)),
         }
     }
 
@@ -240,6 +250,47 @@ impl<'a, 'b> ExprTranslator<'a, 'b> {
             TypeRef::Simple(n) if n == "Bool" => types::I8,
             TypeRef::Simple(n) if n == "()" || n == "Unit" => types::I32,
             _ => types::I64,
+        }
+    }
+
+    fn bind_pattern(&mut self, pat: &Pattern, val: Value, ty: &TypeRef) -> Result<(), String> {
+        match pat {
+            Pattern::Ident(name) => {
+                let ir_ty = self.map_type(ty);
+                let var = Variable::from_u32(*self.var_index as u32);
+                *self.var_index += 1;
+                self.builder.declare_var(var, ir_ty);
+                self.builder.def_var(var, val);
+                self.variables.insert(name.clone(), var);
+                Ok(())
+            }
+            Pattern::Tuple(pats) => {
+                let elem_types = if let TypeRef::Generic(n, args) = ty {
+                    if n == "Tuple" { args.clone() } else { return Err("Expected Tuple type for Tuple pattern".to_string()) }
+                } else {
+                    return Err("Expected Tuple type for Tuple pattern".to_string())
+                };
+
+                if pats.len() != elem_types.len() {
+                    return Err("Tuple pattern arity mismatch".to_string());
+                }
+
+                for (i, p) in pats.iter().enumerate() {
+                    let offset = (i * 8) as i32;
+                    let mut loaded_val = self.builder.ins().load(types::I64, cranelift_codegen::ir::MemFlags::new(), val, offset);
+                    
+                    let ir_ty = self.map_type(&elem_types[i].0);
+                    if ir_ty == types::I8 || ir_ty == types::I32 {
+                        loaded_val = self.builder.ins().ireduce(ir_ty, loaded_val);
+                    } else if ir_ty == types::F64 {
+                        loaded_val = self.builder.ins().bitcast(types::F64, cranelift_codegen::ir::MemFlags::new(), loaded_val);
+                    }
+
+                    self.bind_pattern(&p.0, loaded_val, &elem_types[i].0)?;
+                }
+                Ok(())
+            }
+            _ => Err("Pattern não suportado no Let (apenas Ident e Tuple no AOT)".to_string())
         }
     }
 }

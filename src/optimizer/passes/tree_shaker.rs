@@ -162,7 +162,7 @@ impl<'a> TreeShaker<'a> {
                     self.visit_expr(e);
                 }
             }
-            TExpr::Lambda(_, body, _) => {
+            TExpr::Lambda(_, body, _, _) => {
                 self.visit_expr(body);
             }
             TExpr::Guard(branches, otherwise, _) => {

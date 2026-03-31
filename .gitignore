@@ -2,4 +2,5 @@
 .idea
 .claude
 *.py
+*.o
 Cargo.lock

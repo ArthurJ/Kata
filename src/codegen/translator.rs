@@ -260,6 +260,25 @@ impl<'a> FunctionTranslator<'a> {
     }
 
     fn declare_signatures(&mut self, tast: &[Spanned<TTopLevel>]) -> Result<(), String> {
+        let ptr_type = self.ctx.module.target_config().pointer_type();
+
+        let mut alloc_sig = self.ctx.module.make_signature();
+        alloc_sig.params.push(AbiParam::new(ptr_type));
+        alloc_sig.params.push(AbiParam::new(ptr_type));
+        alloc_sig.returns.push(AbiParam::new(ptr_type));
+        
+        if !self.ctx.functions.contains_key("kata_rt_alloc_local") {
+            let local_id = self.ctx.module.declare_function("kata_rt_alloc_local", Linkage::Import, &alloc_sig)
+                .map_err(|e| format!("Falha: {}", e))?;
+            self.ctx.functions.insert("kata_rt_alloc_local".to_string(), local_id);
+        }
+
+        if !self.ctx.functions.contains_key("kata_rt_alloc_shared") {
+            let shared_id = self.ctx.module.declare_function("kata_rt_alloc_shared", Linkage::Import, &alloc_sig)
+                .map_err(|e| format!("Falha: {}", e))?;
+            self.ctx.functions.insert("kata_rt_alloc_shared".to_string(), shared_id);
+        }
+
         let mut current_sig_name = None;
 
         for (decl, _) in tast {

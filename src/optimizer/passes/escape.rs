@@ -117,7 +117,7 @@ impl EscapeAnalysis {
             TExpr::Tuple(exprs, _, _) | TExpr::List(exprs, _, _) | TExpr::Sequence(exprs, _) => {
                 for ex in exprs { self.extract_idents(ex, vars); }
             }
-            TExpr::Lambda(_, body, _) => self.extract_idents(body, vars),
+            TExpr::Lambda(_, body, _, _) => self.extract_idents(body, vars),
             TExpr::Guard(branches, otherwise, _) => {
                 for (cond, body) in branches {
                     self.extract_idents(cond, vars);
@@ -150,7 +150,7 @@ impl EscapeAnalysis {
             TExpr::Tuple(exprs, _, _) | TExpr::List(exprs, _, _) | TExpr::Sequence(exprs, _) => {
                 for ex in exprs { self.extract_channel_sends(ex, escaping); }
             }
-            TExpr::Lambda(_, body, _) => self.extract_channel_sends(body, escaping),
+            TExpr::Lambda(_, body, _, _) => self.extract_channel_sends(body, escaping),
             TExpr::Guard(branches, otherwise, _) => {
                 for (cond, body) in branches {
                     self.extract_channel_sends(cond, escaping);
@@ -232,7 +232,10 @@ impl EscapeAnalysis {
                 )
             }
             TExpr::Sequence(exprs, ty) => TExpr::Sequence(exprs.into_iter().map(|e| self.rewrite_expr(e, escaping, force_shared)).collect(), ty),
-            TExpr::Lambda(params, body, ty) => TExpr::Lambda(params, Box::new(self.rewrite_expr(*body, escaping, false)), ty),
+            TExpr::Lambda(params, body, ty, alloc) => {
+                let new_alloc = if force_shared { AllocMode::Shared } else { alloc };
+                TExpr::Lambda(params, Box::new(self.rewrite_expr(*body, escaping, false)), ty, new_alloc)
+            },
             TExpr::Guard(branches, otherwise, ty) => {
                 let new_branches = branches.into_iter()
                     .map(|(c, b)| (self.rewrite_expr(c, escaping, false), self.rewrite_expr(b, escaping, force_shared)))

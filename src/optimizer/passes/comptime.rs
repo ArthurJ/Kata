@@ -124,8 +124,8 @@ impl<'a> ComptimeEval<'a> {
                 ty,
                 alloc
             ),
-            TExpr::Lambda(params, body, ty) => {
-                TExpr::Lambda(params, Box::new(self.fold_expr_spanned(*body, errors)), ty)
+            TExpr::Lambda(params, body, ty, alloc) => {
+                TExpr::Lambda(params, Box::new(self.fold_expr_spanned(*body, errors)), ty, alloc)
             }
             TExpr::Sequence(exprs, ty) => TExpr::Sequence(
                 exprs.into_iter().map(|e| self.fold_expr_spanned(e, errors)).collect(),

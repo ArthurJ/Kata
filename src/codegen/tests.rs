@@ -6,11 +6,11 @@ mod tests {
     use crate::codegen::compile_and_link;
 
     #[test]
-    fn test_codegen_mvp_simple() {
+    fn test_codegen_todo_simple() {
         // TAST: action main () => Unit { let x = + 2 2 }
         
         let call_expr = TExpr::Call(
-            Box::new((TExpr::Ident("+".to_string(), TypeRef::Simple("Unknown".to_string())), 0..0)),
+            Box::new((TExpr::Ident("+".to_string(), TypeRef::Function(vec![(TypeRef::Simple("Int".to_string()), 0..0), (TypeRef::Simple("Int".to_string()), 0..0)], Box::new((TypeRef::Simple("Int".to_string()), 0..0)))), 0..0)),
             vec![
                 (TExpr::Literal(TLiteral::Int(2)), 0..0),
                 (TExpr::Literal(TLiteral::Int(2)), 0..0)
@@ -54,7 +54,7 @@ mod tests {
         let out_bin = "target/test_codegen_simple";
         let result = compile_and_link(tast, &crate::type_checker::environment::TypeEnv::new(), out_bin);
 
-        assert!(result.is_ok(), "Compilacao e Linkagem do MVP deve suceder. Erro: {:?}", result.err());
+        assert!(result.is_ok(), "Compilacao e Linkagem do TODO deve suceder. Erro: {:?}", result.err());
 
         // Cleanup
         let _ = std::fs::remove_file(format!("{}.o", out_bin));

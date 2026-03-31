@@ -128,7 +128,7 @@ impl StreamFusionPass {
             }
             TExpr::Tuple(exprs, ty, alloc) => TExpr::Tuple(exprs.into_iter().map(|e| self.fold_expr_spanned(e, errors)).collect(), ty.clone(), alloc),
             TExpr::List(exprs, ty, alloc) => TExpr::List(exprs.into_iter().map(|e| self.fold_expr_spanned(e, errors)).collect(), ty.clone(), alloc),
-            TExpr::Lambda(params, body, ty) => TExpr::Lambda(params, Box::new(self.fold_expr_spanned(*body, errors)), ty),
+            TExpr::Lambda(params, body, ty, alloc) => TExpr::Lambda(params, Box::new(self.fold_expr_spanned(*body, errors)), ty, alloc),
             TExpr::Sequence(exprs, ty) => TExpr::Sequence(exprs.into_iter().map(|e| self.fold_expr_spanned(e, errors)).collect(), ty),
             TExpr::Guard(branches, otherwise, ty) => {
                 let mut folded_branches = Vec::new();

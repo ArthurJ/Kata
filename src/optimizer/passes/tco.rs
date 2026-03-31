@@ -231,7 +231,7 @@ impl TcoPass {
                 args.iter().any(|a| self.has_any_recursion(a, func_name))
             }
             TExpr::Tuple(es, _, _) | TExpr::List(es, _, _) | TExpr::Sequence(es, _) => es.iter().any(|e| self.has_any_recursion(e, func_name)),
-            TExpr::Lambda(_, b, _) => self.has_any_recursion(b, func_name),
+            TExpr::Lambda(_, b, _, _) => self.has_any_recursion(b, func_name),
             TExpr::Guard(branches, otherwise, _) => {
                 branches.iter().any(|(c, b)| self.has_any_recursion(c, func_name) || self.has_any_recursion(b, func_name)) || self.has_any_recursion(otherwise, func_name)
             }
@@ -315,7 +315,7 @@ impl TcoPass {
                 }
                 trma.unwrap_or(TcoStatus::Tail)
             }
-            TExpr::Lambda(_, body, _) => {
+            TExpr::Lambda(_, body, _, _) => {
                 if self.has_any_recursion(body, func_name) { return TcoStatus::Invalid; }
                 TcoStatus::Tail
             }
@@ -482,7 +482,7 @@ impl TcoPass {
                 }
                 self.check_action_expr(otherwise, func_name, errors);
             }
-            TExpr::Lambda(_, body, _) => {
+            TExpr::Lambda(_, body, _, _) => {
                 self.check_action_expr(body, func_name, errors);
             }
             TExpr::Try(inner, _) => self.check_action_expr(inner, func_name, errors),
