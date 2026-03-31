@@ -2,34 +2,72 @@
 pub fn link_executable(object_file: &str, output_bin: &str) -> Result<(), String> {
     log::info!("Iniciando Linker: conectando {} com kata-rt", object_file);
 
-    // No MVP, vamos usar o `cc` do sistema host para linkar o objeto.
-    // Tambem precisamos do runtime `libkata_rt.a` compilado, o que num setup real do compilador Kata seria injetado ou construido.
-    // Como o Kata está sendo construído em Rust, por enquanto instruímos o usuário a gerar o runtime usando o Cargo, ou o Linker apontaria para as dependencias em Rust.
-    // Por simplicidade do MVP, vamos simular a compilação de um pequeno main.c que chama a funcao gerada e a executa.
-
     let main_c_path = "kata_entry.c";
-    let main_c_content = "
-extern void main();
-extern void kata_rt_boot(void (*main_action)());
+    let main_c_content = r#"
+#include <stdio.h>
+#include <stdlib.h>
+
+extern void kata_main();
+
+void kata_rt_boot(void (*main_action)()) {
+    main_action();
+}
+
+long kata_rt_add_int(long a, long b) { return a + b; }
+long kata_rt_sub_int(long a, long b) { return a - b; }
+long kata_rt_mul_int(long a, long b) { return a * b; }
+long kata_rt_div_int(long a, long b) { return b == 0 ? 0 : a / b; }
+long kata_rt_mod_int(long a, long b) { return b == 0 ? 0 : a % b; }
+char kata_rt_eq_int(long a, long b) { return a == b; }
+char kata_rt_gt_int(long a, long b) { return a > b; }
+char kata_rt_ge_int(long a, long b) { return a >= b; }
+char kata_rt_lt_int(long a, long b) { return a < b; }
+char kata_rt_le_int(long a, long b) { return a <= b; }
+
+char* kata_rt_int_to_str(long a) {
+    char* buf = malloc(32);
+    snprintf(buf, 32, "%ld", a);
+    return buf;
+}
+
+char* kata_rt_flt_to_str(double a) {
+    char* buf = malloc(64);
+    snprintf(buf, 64, "%f", a);
+    return buf;
+}
+
+char* kata_rt_default_repr(void* a) {
+    return "repr";
+}
+
+char kata_rt_eq_generic(void* a, void* b) {
+    return a == b;
+}
+
+void kata_rt_print_str(const char* ptr) {
+    printf("%s\n", ptr);
+}
 
 int main(int argc, char** argv) {
-    kata_rt_boot(main);
+    kata_rt_boot(kata_main);
     return 0;
 }
-";
+"#;
     std::fs::write(main_c_path, main_c_content).map_err(|e| format!("Falha ao gerar o entrypoint C: {}", e))?;
 
-    // Nós precisaríamos linkar com a library kata-rt, que está no Cargo atual.
-    // Para resolver isso no Rust + Cranelift MVP sem cross-compilation complexa de C+Rust:
-    // O ideal seria que a propria function main gerasse um binário.
-    // Contudo, faremos de conta que invocamos o compilador C nativo se o ambiente permitir.
+    let status = std::process::Command::new("cc")
+        .arg(main_c_path)
+        .arg(object_file)
+        .arg("-o")
+        .arg(output_bin)
+        .status()
+        .map_err(|e| format!("Falha ao invocar o compilador C (cc): {}", e))?;
 
-    // Isso é um mockup funcional, que exigiria que o binario Kata-lang fosse exportado como uma staticlib (libkata.a) 
-    // ou que compilássemos tudo via `rustc`.
-    
-    // Por enquanto, apenas avisamos o que o linker faria.
-    log::warn!("MVP: Em um ambiente de producao real, o `cc` uniria {} com libkata_rt.a.", object_file);
-    log::info!("Simulando linkagem de sucesso para {}", output_bin);
+    if !status.success() {
+        return Err(format!("Linker falhou com status: {}", status));
+    }
+
+    log::info!("Linkagem concluída com sucesso. Executável: {}", output_bin);
 
     Ok(())
 }

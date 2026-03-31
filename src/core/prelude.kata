@@ -30,12 +30,16 @@ fold :: (A A -> A) A [A] => A
 @ffi("kata_rt_zip")
 zip :: [A] [B] => [(A B)]
 
+# Construtor interno de Listas
+@ffi("kata_rt_cons")
+Cons :: A [A] => [A]
+
 # Concatenação de listas
-@commutative
-@associative([])
-+ :: [A] [A] => [A]
-λ [] b: b
-λ (Cons x xs) b: Cons x $(+ xs b)
+# @commutative
+# @associative([])
+# + :: [A] [A] => [A]
+# λ [] b: b
+# λ (Cons x xs) b: Cons x $(+ xs b)
 
 # Introspecção e Formatação (Phase 9)
 @ffi("kata_rt_type")

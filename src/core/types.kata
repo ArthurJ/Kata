@@ -58,6 +58,7 @@ interface HASH
     hash :: A => Text
 
 interface EQ implements HASH
+    @ffi("kata_rt_eq_generic")
     @commutative
     = :: A A => Bool
     

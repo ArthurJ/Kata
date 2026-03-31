@@ -186,7 +186,7 @@ fn main() -> miette::Result<()> {
                     .to_string()
             });
 
-            if let Err(e) = codegen::compile_and_link(optimized_tast, &out_bin) {
+            if let Err(e) = codegen::compile_and_link(optimized_tast, &checker.env, &out_bin) {
                 log::error!("Erro de Compilacao/Codegen: {}", e);
                 return Err(miette::miette!("Falha na geracao de codigo nativo."));
             }

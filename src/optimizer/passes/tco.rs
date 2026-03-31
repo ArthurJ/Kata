@@ -38,23 +38,136 @@ impl TcoPass {
 
     pub fn run(&mut self, tast: Vec<Spanned<TTopLevel>>, errors: &mut Vec<OptimizerError>) -> Vec<Spanned<TTopLevel>> {
         log::debug!("Executando Enforcement de TCO e Transformação TRMA (Tail Recursion Modulo Associativity)...");
-        
-        // Fase 1: Agrupar funções para análise
-        let mut funcs: HashMap<String, Vec<Spanned<TTopLevel>>> = HashMap::new();
-        let mut signatures: HashMap<String, Spanned<TTopLevel>> = HashMap::new();
-        let mut actions = Vec::new();
-        let mut others = Vec::new();
 
-        let mut current_sig_name = None;
+        let mut final_tast = Vec::new();
+        let mut current_sig: Option<Spanned<TTopLevel>> = None;
+        let mut current_lambdas: Vec<Spanned<TTopLevel>> = Vec::new();
+
+        let process_group = |sig_opt: Option<Spanned<TTopLevel>>, lambdas: Vec<Spanned<TTopLevel>>, final_tast: &mut Vec<Spanned<TTopLevel>>, errors: &mut Vec<OptimizerError>, me: &TcoPass| {
+            if let Some(sig_decl) = sig_opt {
+                if lambdas.is_empty() {
+                    final_tast.push(sig_decl);
+                    return;
+                }
+
+                let func_name = match &sig_decl.0 {
+                    TTopLevel::Signature(n, _, _, _) => n.clone(),
+                    _ => unreachable!(),
+                };
+
+                let mut requires_trma = false;
+                let mut trma_op = None;
+                let mut is_invalid = false;
+                let mut has_recursion = false;
+
+                for lambda in &lambdas {
+                    if let TTopLevel::LambdaDef(_, body, _, _) = &lambda.0 {
+                        if me.has_any_recursion(body, &func_name) {
+                            has_recursion = true;
+                        }
+                        
+                        let status = me.analyze_recursion(body, &func_name, true);
+                        match status {
+                            TcoStatus::Invalid => { is_invalid = true; }
+                            TcoStatus::Trma { op, .. } => {
+                                requires_trma = true;
+                                if let Some(existing_op) = &trma_op {
+                                    if existing_op != &op {
+                                        is_invalid = true;
+                                    }
+                                } else {
+                                    trma_op = Some(op);
+                                }
+                            }
+                            TcoStatus::Tail => {}
+                        }
+                    }
+                }
+
+                if is_invalid && has_recursion {
+                    errors.push(OptimizerError::new(
+                        format!("Erro Fatal de TCO: A função `{}` possui recursão que não está em posição de cauda (Ex: Fibonacci ramificado ou chamadas encadeadas complexas) e não pôde ser otimizada automaticamente. Reescreva a lógica.", func_name),
+                        lambdas[0].1.clone()
+                    ));
+                    final_tast.push(sig_decl);
+                    final_tast.extend(lambdas);
+                    return;
+                }
+
+                if requires_trma && !is_invalid {
+                    let op = trma_op.unwrap();
+                    if let TTopLevel::Signature(_, params, ret, _) = &sig_decl.0.clone() {
+                        let ret_type = &ret.0;
+                        let identity_expr_opt = me.get_identity(&op, ret_type);
+
+                        if let Some(identity_expr) = identity_expr_opt {
+                            if let Some(identity) = identity_expr {
+                                log::info!("Otimizando recursão de `{}` para TCO usando Acumulador (Operação: {}).", func_name, op);
+                                
+                                let acc_name = format!("{}_acc", func_name);
+                                let mut acc_params = params.clone();
+                                acc_params.push((ret_type.clone(), 0..0));
+                                let acc_sig = TTopLevel::Signature(acc_name.clone(), acc_params, ret.clone(), Vec::new());
+                                final_tast.push((acc_sig, 0..0));
+
+                                for lambda in &lambdas {
+                                    if let TTopLevel::LambdaDef(l_params, body, with, dirs) = &lambda.0 {
+                                        let mut new_params = l_params.clone();
+                                        new_params.push((Pattern::Ident("__acc".to_string()), 0..0));
+                                        let new_body = me.rewrite_trma_body(body, &func_name, &acc_name, &op, ret_type);
+                                        final_tast.push((TTopLevel::LambdaDef(new_params, new_body, with.clone(), dirs.clone()), lambda.1.clone()));
+                                    }
+                                }
+
+                                final_tast.push(sig_decl);
+                                let mut fw_params = Vec::new();
+                                let mut fw_args = Vec::new();
+                                for (i, (p_ty, _)) in params.iter().enumerate() {
+                                    let p_name = format!("__arg{}", i);
+                                    fw_params.push((Pattern::Ident(p_name.clone()), 0..0));
+                                    fw_args.push((TExpr::Ident(p_name, p_ty.clone()), 0..0));
+                                }
+                                fw_args.push((identity.clone(), 0..0));
+                                
+                                let callee = Box::new((TExpr::Ident(acc_name, TypeRef::Simple("Unknown".to_string())), 0..0));
+                                let fw_body = TExpr::Call(callee, fw_args, ret_type.clone());
+                                final_tast.push((TTopLevel::LambdaDef(fw_params, (fw_body, 0..0), Vec::new(), Vec::new()), 0..0));
+                            } else {
+                                errors.push(OptimizerError::new(
+                                    format!("Erro Fatal de TCO: A função `{}` falha a otimização de cauda. A operação `{}` é associativa, mas não declarou um elemento neutro na diretiva @associative. O compilador não pode injetar um acumulador de forma segura. Reescreva a função usando um laço/acumulador manual.", func_name, op),
+                                    lambdas[0].1.clone()
+                                ));
+                                final_tast.push(sig_decl);
+                                final_tast.extend(lambdas);
+                            }
+                        } else {
+                            errors.push(OptimizerError::new(
+                                format!("Erro de TRMA: A operação `{}` retorna `{:?}` na função `{}`, mas não possui a diretiva @associative declarada na sua assinatura original.", op, ret_type, func_name),
+                                lambdas[0].1.clone()
+                            ));
+                            final_tast.push(sig_decl);
+                            final_tast.extend(lambdas);
+                        }
+                    }
+                } else {
+                    final_tast.push(sig_decl);
+                    final_tast.extend(lambdas);
+                }
+            } else {
+                final_tast.extend(lambdas);
+            }
+        };
+
+        let mut actions = Vec::new();
 
         for spanned_decl in tast {
             let (decl, _span) = &spanned_decl;
             match decl {
                 TTopLevel::Signature(name, _, ret, dirs) => {
-                    current_sig_name = Some(name.clone());
-                    signatures.insert(name.clone(), spanned_decl.clone());
+                    process_group(current_sig.take(), std::mem::take(&mut current_lambdas), &mut final_tast, errors, self);
+                    
+                    current_sig = Some(spanned_decl.clone());
 
-                    // Analisar diretiva @associative([identidade])
                     for (dir, _) in dirs {
                         if let KataDirective::Associative(arg_opt) = dir {
                             let key = format!("{}_{}", name, self.type_to_string(&ret.0));
@@ -76,154 +189,32 @@ impl TcoPass {
                     }
                 }
                 TTopLevel::LambdaDef(..) => {
-                    if let Some(name) = &current_sig_name {
-                        funcs.entry(name.clone()).or_default().push(spanned_decl.clone());
+                    if current_sig.is_some() {
+                        current_lambdas.push(spanned_decl.clone());
                     } else {
-                        others.push(spanned_decl.clone());
+                        final_tast.push(spanned_decl.clone());
                     }
                 }
                 TTopLevel::ActionDef(..) => {
-                    current_sig_name = None;
+                    process_group(current_sig.take(), std::mem::take(&mut current_lambdas), &mut final_tast, errors, self);
                     actions.push(spanned_decl.clone());
-                }
-                TTopLevel::Execution(_) => {
-                    current_sig_name = None;
-                    others.push(spanned_decl.clone());
+                    final_tast.push(spanned_decl.clone());
                 }
                 _ => {
-                    current_sig_name = None;
-                    others.push(spanned_decl.clone());
+                    process_group(current_sig.take(), std::mem::take(&mut current_lambdas), &mut final_tast, errors, self);
+                    final_tast.push(spanned_decl.clone());
                 }
             }
         }
+        process_group(current_sig.take(), std::mem::take(&mut current_lambdas), &mut final_tast, errors, self);
 
-        let mut final_tast = Vec::new();
-        final_tast.extend(others);
-
-        // Fase 2: Analisar e transformar funções puras
-        for (func_name, lambdas) in funcs {
-            let mut requires_trma = false;
-            let mut trma_op = None;
-            let mut is_invalid = false;
-            let mut has_recursion = false;
-
-            for (lambda, _span) in &lambdas {
-                if let TTopLevel::LambdaDef(_, body, _, _) = lambda {
-                    if self.has_any_recursion(body, &func_name) {
-                        has_recursion = true;
-                    }
-                    
-                    let status = self.analyze_recursion(body, &func_name, true);
-                    match status {
-                        TcoStatus::Invalid => { is_invalid = true; }
-                        TcoStatus::Trma { op, .. } => {
-                            requires_trma = true;
-                            if let Some(existing_op) = &trma_op {
-                                if existing_op != &op {
-                                    is_invalid = true; // Mistura de operadores não suportada
-                                }
-                            } else {
-                                trma_op = Some(op);
-                            }
-                        }
-                        TcoStatus::Tail => {}
-                    }
-                }
-            }
-
-            if is_invalid && has_recursion {
-                errors.push(OptimizerError::new(
-                    format!("Erro Fatal de TCO: A função `{}` possui recursão que não está em posição de cauda (Ex: Fibonacci ramificado ou chamadas encadeadas complexas) e não pôde ser otimizada automaticamente. Reescreva a lógica.", func_name),
-                    lambdas[0].1.clone()
-                ));
-                
-                // Repõe a original apenas para continuar a compilação e mostrar mais erros
-                if let Some(sig) = signatures.get(&func_name) { final_tast.push(sig.clone()); }
-                final_tast.extend(lambdas);
-                continue;
-            }
-
-            if requires_trma && !is_invalid {
-                let op = trma_op.unwrap();
-                let sig = signatures.get(&func_name).unwrap();
-                
-                if let TTopLevel::Signature(_, params, ret, _) = &sig.0 {
-                    // Descobrir o elemento neutro via diretiva
-                    let ret_type = &ret.0;
-                    let identity_expr_opt = self.get_identity(&op, ret_type);
-
-                    // A operação está registada, mas temos de verificar se possui elemento neutro
-                    if let Some(identity_expr) = identity_expr_opt {
-                        if let Some(identity) = identity_expr {
-                            log::info!("Otimizando recursão de `{}` para TCO usando Acumulador (Operação: {}).", func_name, op);
-                            
-                            let acc_name = format!("{}_acc", func_name);
-                            
-                            // Nova Assinatura: func_acc :: Params... RetType => RetType
-                            let mut acc_params = params.clone();
-                            acc_params.push((ret_type.clone(), 0..0));
-                            let acc_sig = TTopLevel::Signature(acc_name.clone(), acc_params, ret.clone(), Vec::new());
-                            final_tast.push((acc_sig, 0..0));
-
-                            // Novos Lambdas com Acumulador
-                            for (lambda, span) in &lambdas {
-                                if let TTopLevel::LambdaDef(l_params, body, with, dirs) = lambda {
-                                    let mut new_params = l_params.clone();
-                                    new_params.push((Pattern::Ident("__acc".to_string()), 0..0));
-                                    
-                                    let new_body = self.rewrite_trma_body(body, &func_name, &acc_name, &op, ret_type);
-                                    final_tast.push((TTopLevel::LambdaDef(new_params, new_body, with.clone(), dirs.clone()), span.clone()));
-                                }
-                            }
-
-                            // Substituir a função original por um forwarder: lambda arg1 arg2: func_acc arg1 arg2 IDENTITY
-                            final_tast.push(sig.clone());
-                            let mut fw_params = Vec::new();
-                            let mut fw_args = Vec::new();
-                            for (i, (p_ty, _)) in params.iter().enumerate() {
-                                let p_name = format!("__arg{}", i);
-                                fw_params.push((Pattern::Ident(p_name.clone()), 0..0));
-                                fw_args.push((TExpr::Ident(p_name, p_ty.clone()), 0..0));
-                            }
-                            fw_args.push((identity.clone(), 0..0));
-                            
-                            let callee = Box::new((TExpr::Ident(acc_name, TypeRef::Simple("Unknown".to_string())), 0..0));
-                            let fw_body = TExpr::Call(callee, fw_args, ret_type.clone());
-                            
-                            final_tast.push((TTopLevel::LambdaDef(fw_params, (fw_body, 0..0), Vec::new(), Vec::new()), 0..0));
-                        } else {
-                            // Operação registada como associativa, mas SEM elemento neutro
-                            errors.push(OptimizerError::new(
-                                format!("Erro Fatal de TCO: A função `{}` falha a otimização de cauda. A operação `{}` é associativa, mas não declarou um elemento neutro na diretiva @associative. O compilador não pode injetar um acumulador de forma segura. Reescreva a função usando um laço/acumulador manual.", func_name, op),
-                                lambdas[0].1.clone()
-                            ));
-                            if let Some(sig) = signatures.get(&func_name) { final_tast.push(sig.clone()); }
-                            final_tast.extend(lambdas);
-                        }
-                    } else {
-                        errors.push(OptimizerError::new(
-                            format!("Erro de TRMA: A operação `{}` retorna `{:?}` na função `{}`, mas não possui a diretiva @associative declarada na sua assinatura original.", op, ret_type, func_name),
-                            lambdas[0].1.clone()
-                        ));
-                        if let Some(sig) = signatures.get(&func_name) { final_tast.push(sig.clone()); }
-                        final_tast.extend(lambdas);
-                    }
-                }
-            } else {
-                // TCO Perfeito ou sem recursão. Mantém intacto.
-                if let Some(sig) = signatures.get(&func_name) { final_tast.push(sig.clone()); }
-                final_tast.extend(lambdas);
-            }
-        }
-
-        // Fase 3: Validar Actions (Hard Error para recursão)
-        for (action, span) in actions {
+        // Fase 3: Validar Actions
+        for (action, _span) in actions {
             if let TTopLevel::ActionDef(name, _, _, body, _) = &action {
                 for stmt in body {
                     self.check_action_recursion(stmt, name, errors);
                 }
             }
-            final_tast.push((action, span));
         }
 
         final_tast

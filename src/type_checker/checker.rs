@@ -45,14 +45,18 @@ impl Checker {
     }
 
     pub fn load_prelude(&mut self, prelude_modules: &[(&str, Module)]) {
+        let mut all_prelude_tast = Vec::new();
+        
         for (name, module) in prelude_modules {
             let mut temp_checker = Checker::new();
             temp_checker.compiled_modules = self.compiled_modules.clone();
             
-            for decl in &module.declarations {
-                temp_checker.collect_top_level(&decl.0, &decl.1);
-            }
+            // We must call check_module to resolve everything and generate TAST
+            temp_checker.check_module(module);
             
+            all_prelude_tast.extend(temp_checker.tast);
+            self.errors.extend(temp_checker.errors);
+
             let imports = temp_checker.env.imports.clone();
             for (path, specific) in imports {
                 if let Some(target_module_name) = path.split('.').next() {
@@ -62,19 +66,16 @@ impl Checker {
                 }
             }
 
-            // Mark all items as exported if this is the core prelude? No, the .kata files have `export` statements!
-            // Wait, we just keep whatever they `export`.
             self.compiled_modules.insert(name.to_string(), temp_checker.env);
         }
         
-        // After all prelude modules are compiled, the actual "prelude.kata" module is the one we want to inject globally.
         if let Some(prelude_env) = self.compiled_modules.get("prelude") {
             let env_clone = prelude_env.clone();
             let all_exports: Vec<(String, Option<String>)> = env_clone.exports.iter().map(|e| (e.clone(), None)).collect();
-            // Injeção global silenciosa
             self.env.import_from(&env_clone, "prelude", &all_exports);
         }
         
+        self.tast.extend(all_prelude_tast);
         self.local_types.clear();
         self.local_interfaces.clear();
     }
@@ -82,14 +83,33 @@ impl Checker {
     fn process_lambda_group(&self, group: &mut Vec<&Vec<Spanned<Pattern>>>, sig: &Option<(String, Vec<Spanned<TypeRef>>, Spanned<TypeRef>)>, errs: &mut Vec<(String, crate::parser::ast::Span)>) {
         if let Some((name, params, _)) = sig {
             if !group.is_empty() && !params.is_empty() {
-                for i in 0..params.len() {
-                    let param_type = &params[i].0;
-                    let patterns: Vec<&Pattern> = group.iter().filter_map(|p| p.get(i).map(|pat| &pat.0)).collect();
-                    self.check_exhaustiveness(param_type, &patterns, errs, &format!("Pattern Matching (arg {}) em `{}`", i, name), &(0..0));
+                // If any lambda in the group is a catch-all "otherwise" (params.len() == 1 and it's "otherwise"), 
+                // then it covers everything.
+                let has_otherwise = group.iter().any(|p| p.len() == 1 && matches!(&p[0].0, Pattern::Ident(n) if n == "otherwise"));
+                if !has_otherwise {
+                    for i in 0..params.len() {
+                        let param_type = &params[i].0;
+                        let patterns: Vec<&Pattern> = group.iter().filter_map(|p| p.get(i).map(|pat| &pat.0)).collect();
+                        self.check_exhaustiveness(param_type, &patterns, errs, &format!("Pattern Matching (arg {}) em `{}`", i, name), &(0..0));
+                    }
                 }
             }
         }
         group.clear();
+    }
+
+    fn flatten_declarations(decls: &[Spanned<TopLevel>]) -> Vec<Spanned<TopLevel>> {
+        let mut flat = Vec::new();
+        for (decl, span) in decls {
+            flat.push((decl.clone(), span.clone()));
+            match decl {
+                TopLevel::Interface(_, _, methods, _) | TopLevel::Implements(_, _, methods) => {
+                    flat.extend(Self::flatten_declarations(methods));
+                }
+                _ => {}
+            }
+        }
+        flat
     }
 
     pub fn check_module(&mut self, module: &Module) {
@@ -104,7 +124,9 @@ impl Checker {
         let mut last_signature: Option<(String, Vec<Spanned<TypeRef>>, Spanned<TypeRef>)> = None;
         let mut lambda_group: Vec<&Vec<Spanned<Pattern>>> = Vec::new();
 
-        for (decl, span) in &module.declarations {
+        let flat_decls = Self::flatten_declarations(&module.declarations);
+
+        for (decl, span) in &flat_decls {
             match decl {
                 TopLevel::Signature(name, params, ret, _) => {
                     self.process_lambda_group(&mut lambda_group, &last_signature, &mut local_errors);
