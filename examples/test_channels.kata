@@ -1,0 +1,16 @@
+# test_channels.kata - Teste de Canais CSP com desestruturação
+
+action main()
+    echo!("=== Teste de Canais CSP ===")
+
+    # Cria canal com desestruturação de tupla
+    let (tx rx) channel!()
+    echo!("Canal criado com desestruturacao!")
+
+    # Teste de sleep
+    sleep!(50)
+    echo!("Sleep concluído")
+
+    echo!("=== Teste concluído ===")
+
+main!()

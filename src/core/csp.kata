@@ -5,13 +5,19 @@
 action fork(Action)
 
 # 2. Infraestrutura de Canais
+# Retorna dois handles: (sender, receiver)
 @ffi("kata_rt_chan_create_rendezvous")
-action channel() => (Sender::T Receiver::T)
+action channel() => (Int, Int)
 
 @ffi("kata_rt_chan_create_queue")
-action queue(Int) => (Sender::T Receiver::T)
+action queue(Int) => (Int, Int)
 
+# Broadcast retorna um único handle por enquanto
 @ffi("kata_rt_chan_create_broadcast")
-action broadcast() => (Sender::T (Int -> Receiver::T))
+action broadcast(Int) => Int
 
-export fork channel queue broadcast
+# 3. Sleep (temporário até ter async real)
+@ffi("kata_rt_sleep_sync")
+action sleep(Int)
+
+export fork channel queue broadcast sleep

@@ -5,6 +5,17 @@ edition = "2021"
 authors = ["Arthur Julião"]
 description = "Kata Language"
 
+# Biblioteca kata_rt compilada como staticlib para linkagem com binários
+[lib]
+name = "kata_rt"
+path = "src/kata_rt/mod.rs"
+crate-type = ["staticlib", "rlib"]
+
+# Compilador principal como binário
+[[bin]]
+name = "kata"
+path = "src/main.rs"
+
 [dependencies]
 rustyline = "13.0"
 miette = { version = "7.2.0", features = ["fancy"] }
@@ -25,3 +36,8 @@ ariadne = "0.6.0"
 clap = { version = "4.6.0", features = ["derive"] }
 tokio = { version = "1.50.0", features = ["full"] }
 bumpalo = "3.20.2"
+futures = "0.3"
+parking_lot = "0.12"
+
+[build-dependencies]
+cc = "1.0"

@@ -1,0 +1,27 @@
+# test_channel_send_recv.kata - Teste de envio e receção síncrona
+
+action enviar(tx, val)
+    !> tx val
+
+action receber(rx)
+    let v <! rx
+    echo!(v)
+
+action main()
+    echo!("=== Teste de envio e receção ===")
+
+    # Cria canal
+    let (tx rx) channel!()
+    echo!("Canal criado!")
+
+    # Testa envio
+    enviar(tx, 42)
+    echo!("Enviado!")
+
+    # Testa receção
+    receber(rx)
+    echo!("Recebido!")
+
+    echo!("=== Fim do teste ===")
+
+main!()

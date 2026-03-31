@@ -45,18 +45,14 @@ impl Checker {
     }
 
     pub fn load_prelude(&mut self, prelude_modules: &[(&str, Module)]) {
-        let mut all_prelude_tast = Vec::new();
-        
         for (name, module) in prelude_modules {
             let mut temp_checker = Checker::new();
             temp_checker.compiled_modules = self.compiled_modules.clone();
             
-            // We must call check_module to resolve everything and generate TAST
-            temp_checker.check_module(module);
+            for decl in &module.declarations {
+                temp_checker.collect_top_level(&decl.0, &decl.1);
+            }
             
-            all_prelude_tast.extend(temp_checker.tast);
-            self.errors.extend(temp_checker.errors);
-
             let imports = temp_checker.env.imports.clone();
             for (path, specific) in imports {
                 if let Some(target_module_name) = path.split('.').next() {
@@ -66,16 +62,19 @@ impl Checker {
                 }
             }
 
+            // Mark all items as exported if this is the core prelude? No, the .kata files have `export` statements!
+            // Wait, we just keep whatever they `export`.
             self.compiled_modules.insert(name.to_string(), temp_checker.env);
         }
         
+        // After all prelude modules are compiled, the actual "prelude.kata" module is the one we want to inject globally.
         if let Some(prelude_env) = self.compiled_modules.get("prelude") {
             let env_clone = prelude_env.clone();
             let all_exports: Vec<(String, Option<String>)> = env_clone.exports.iter().map(|e| (e.clone(), None)).collect();
+            // Injeção global silenciosa
             self.env.import_from(&env_clone, "prelude", &all_exports);
         }
         
-        self.tast.extend(all_prelude_tast);
         self.local_types.clear();
         self.local_interfaces.clear();
     }
@@ -83,33 +82,14 @@ impl Checker {
     fn process_lambda_group(&self, group: &mut Vec<&Vec<Spanned<Pattern>>>, sig: &Option<(String, Vec<Spanned<TypeRef>>, Spanned<TypeRef>)>, errs: &mut Vec<(String, crate::parser::ast::Span)>) {
         if let Some((name, params, _)) = sig {
             if !group.is_empty() && !params.is_empty() {
-                // If any lambda in the group is a catch-all "otherwise" (params.len() == 1 and it's "otherwise"), 
-                // then it covers everything.
-                let has_otherwise = group.iter().any(|p| p.len() == 1 && matches!(&p[0].0, Pattern::Ident(n) if n == "otherwise"));
-                if !has_otherwise {
-                    for i in 0..params.len() {
-                        let param_type = &params[i].0;
-                        let patterns: Vec<&Pattern> = group.iter().filter_map(|p| p.get(i).map(|pat| &pat.0)).collect();
-                        self.check_exhaustiveness(param_type, &patterns, errs, &format!("Pattern Matching (arg {}) em `{}`", i, name), &(0..0));
-                    }
+                for i in 0..params.len() {
+                    let param_type = &params[i].0;
+                    let patterns: Vec<&Pattern> = group.iter().filter_map(|p| p.get(i).map(|pat| &pat.0)).collect();
+                    self.check_exhaustiveness(param_type, &patterns, errs, &format!("Pattern Matching (arg {}) em `{}`", i, name), &(0..0));
                 }
             }
         }
         group.clear();
-    }
-
-    fn flatten_declarations(decls: &[Spanned<TopLevel>]) -> Vec<Spanned<TopLevel>> {
-        let mut flat = Vec::new();
-        for (decl, span) in decls {
-            flat.push((decl.clone(), span.clone()));
-            match decl {
-                TopLevel::Interface(_, _, methods, _) | TopLevel::Implements(_, _, methods) => {
-                    flat.extend(Self::flatten_declarations(methods));
-                }
-                _ => {}
-            }
-        }
-        flat
     }
 
     pub fn check_module(&mut self, module: &Module) {
@@ -124,9 +104,7 @@ impl Checker {
         let mut last_signature: Option<(String, Vec<Spanned<TypeRef>>, Spanned<TypeRef>)> = None;
         let mut lambda_group: Vec<&Vec<Spanned<Pattern>>> = Vec::new();
 
-        let flat_decls = Self::flatten_declarations(&module.declarations);
-
-        for (decl, span) in &flat_decls {
+        for (decl, span) in &module.declarations {
             match decl {
                 TopLevel::Signature(name, params, ret, _) => {
                     self.process_lambda_group(&mut lambda_group, &last_signature, &mut local_errors);
@@ -376,15 +354,17 @@ impl Checker {
                 }
             }
             TopLevel::ActionDef(name, params, ret, body, dirs) => {
-                resolver.pure_context.set(false); 
-                *resolver.current_action.borrow_mut() = Some(name.clone()); 
+                resolver.pure_context.set(false);
+                *resolver.current_action.borrow_mut() = Some(name.clone());
 
-                resolver.local_vars.borrow_mut().clear();
-                resolver.constraints.borrow_mut().clear();
+                resolver.clear_for_new_action();
 
                 for (p_name, p_ty) in params {
                     resolver.declare_local(p_name.clone(), p_ty.0.clone());
                 }
+
+                // Check if this is an FFI action (external implementation)
+                let is_ffi = dirs.iter().any(|d| d.0.name == "ffi");
 
                 let mut t_body = Vec::new();
                 let mut last_stmt_ty = TypeRef::Simple("()".into());
@@ -396,11 +376,30 @@ impl Checker {
                     t_body.push(res_stmt);
                 }
 
-                if !resolver.types_compatible(&last_stmt_ty, &ret.0) {
+                // Apply any pending type updates from CSP operations
+                resolver.apply_pending_updates();
+
+                // Skip return type check for FFI actions - they have external implementations
+                if !is_ffi && !resolver.types_compatible(&last_stmt_ty, &ret.0) {
                     local_errors.push((format!("Type Mismatch: Expected return type `{:?}`, Found `{:?}` in Action `{}`", ret.0, last_stmt_ty, name), ret.1.clone()));
                 }
 
-                Some(TTopLevel::ActionDef(name.clone(), params.clone(), ret.clone(), t_body, validate_and_parse_directives(dirs).0))
+                // Update parameter types based on inferred types from usage
+                let inferred_params: Vec<(String, Spanned<TypeRef>)> = params.iter().map(|(p_name, p_ty)| {
+                    if let Some(inferred_ty) = resolver.local_vars.borrow().get(p_name).cloned() {
+                        let was_unknown = matches!(&p_ty.0, TypeRef::Simple(n) if n == "Unknown");
+                        let is_not_unknown = !matches!(&inferred_ty, TypeRef::Simple(n) if n == "Unknown");
+                        if was_unknown && is_not_unknown {
+                            (p_name.clone(), (inferred_ty, p_ty.1.clone()))
+                        } else {
+                            (p_name.clone(), p_ty.clone())
+                        }
+                    } else {
+                        (p_name.clone(), p_ty.clone())
+                    }
+                }).collect();
+
+                Some(TTopLevel::ActionDef(name.clone(), inferred_params, ret.clone(), t_body, validate_and_parse_directives(dirs).0))
             }
             TopLevel::Execution(expr) => {
                 resolver.pure_context.set(false); // Top-level execution allows actions

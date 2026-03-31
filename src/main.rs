@@ -1,11 +1,13 @@
 mod cli;
 mod codegen;
-mod kata_rt;
 mod lexer;
 mod optimizer;
 mod parser;
 mod repl;
 mod type_checker;
+
+// Importa a biblioteca kata_rt compilada separadamente
+use kata_rt;
 
 use clap::Parser;
 use cli::{Cli, Commands};
@@ -186,7 +188,7 @@ fn main() -> miette::Result<()> {
                     .to_string()
             });
 
-            if let Err(e) = codegen::compile_and_link(optimized_tast, &checker.env, &out_bin) {
+            if let Err(e) = codegen::compile_and_link(optimized_tast, &out_bin) {
                 log::error!("Erro de Compilacao/Codegen: {}", e);
                 return Err(miette::miette!("Falha na geracao de codigo nativo."));
             }

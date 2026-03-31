@@ -6,6 +6,11 @@ enum Optional::T
     | Some(T)
     | None
 
+# Canal opaco para comunicação entre Actions
+# Implementado como ponteiro no runtime
+enum ChannelHandle
+    | Handle(Int)
+
 # ==========================================
 # Lógica Booleana
 # ==========================================
@@ -58,7 +63,6 @@ interface HASH
     hash :: A => Text
 
 interface EQ implements HASH
-    @ffi("kata_rt_eq_generic")
     @commutative
     = :: A A => Bool
     
@@ -209,7 +213,7 @@ Float implements NUM
 # Texto
 # ==========================================
 
-export NUM Float Int Bool and or xor not Result Optional str repr SHOW REPR HASH EQ ORD NonZero = != > >= < <= + - * ** div / // mod round ceil floor hash
+export NUM Float Int Bool and or xor not Result Optional str repr SHOW REPR HASH EQ ORD NonZero = != > >= < <= + - * ** div / // mod round ceil floor hash ChannelHandle
 
 @ffi("kata_rt_concat_text")
 @associative("")

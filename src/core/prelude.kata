@@ -7,7 +7,7 @@ import types.(NUM Float Int and or xor not Bool Result Optional)
 import types.(= != > >= < <= + - * ** div / // mod round ceil floor hash)
 
 import io.(echo)
-import csp.(fork channel queue broadcast)
+import csp.(fork channel queue broadcast sleep)
 import assert.(assert assert_eq)
 
 # FFI para map usando KataClosure
@@ -30,16 +30,12 @@ fold :: (A A -> A) A [A] => A
 @ffi("kata_rt_zip")
 zip :: [A] [B] => [(A B)]
 
-# Construtor interno de Listas
-@ffi("kata_rt_cons")
-Cons :: A [A] => [A]
-
 # Concatenação de listas
-# @commutative
-# @associative([])
-# + :: [A] [A] => [A]
-# λ [] b: b
-# λ (Cons x xs) b: Cons x $(+ xs b)
+@commutative
+@associative([])
++ :: [A] [A] => [A]
+λ [] b: b
+λ (Cons x xs) b: Cons x $(+ xs b)
 
 # Introspecção e Formatação (Phase 9)
 @ffi("kata_rt_type")
@@ -53,4 +49,4 @@ format :: Text A => Text
 
 # Uma vez importadas as vertentes puras de cada modulo isolado,
 # exportamos tudo numa tacada so para o ambiente raiz do usuario.
-export mod + type fields format fork channel queue broadcast str repr SHOW HASH EQ ORD REPR NonZero NUM Float Int and or xor not Bool Result Optional echo assert assert_eq = != > >= < <= - * ** div / // round ceil floor hash
+export mod + type fields format fork channel queue broadcast sleep str repr SHOW HASH EQ ORD REPR NonZero NUM Float Int and or xor not Bool Result Optional echo assert assert_eq = != > >= < <= - * ** div / // round ceil floor hash

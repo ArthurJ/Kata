@@ -1,0 +1,6 @@
+# test_simple_action.kata - Teste básico de Action
+
+action main()
+    echo!("Hello from Kata!")
+
+main!()

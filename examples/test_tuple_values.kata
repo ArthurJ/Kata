@@ -1,0 +1,11 @@
+# test_tuple_values.kata - Teste de valores em tuplas
+
+action main()
+    echo!("Testando valores de tupla")
+
+    # Cria tupla e destructura
+    let (a b) (10, 20)
+
+    echo!("Valores extraidos da tupla")
+
+main!()

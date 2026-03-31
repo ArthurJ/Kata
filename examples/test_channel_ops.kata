@@ -1,0 +1,26 @@
+# test_channel_ops.kata - Teste de operações de canal
+
+action produtor(tx)
+    echo!("Produtor: enviando 42")
+    !> tx 42
+    echo!("Produtor: enviado!")
+
+action consumidor(rx)
+    echo!("Consumidor: aguardando...")
+    let valor <! rx
+    echo!("Consumidor: recebeu valor")
+
+action main()
+    echo!("=== Teste de Operacoes de Canal ===")
+
+    # Cria canal
+    let (tx rx) channel!()
+    echo!("Canal criado")
+
+    # Teste síncrono simples
+    # Por ora, testamos apenas a sintaxe
+    # (falta implementar fork! para execução concorrente)
+
+    echo!("=== Teste concluído ===")
+
+main!()

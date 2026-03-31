@@ -1,0 +1,13 @@
+# test_tuple.kata - Teste de desestruturação de tuplas
+
+action main()
+    echo!("Testando tuplas")
+
+    # Teste simples de tupla
+    let (a b) (1, 2)
+    echo!("a = ")
+    echo!("b = ")
+
+    echo!("Fim do teste")
+
+main!()

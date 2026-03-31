@@ -52,7 +52,7 @@ mod tests {
         ];
 
         let out_bin = "target/test_codegen_simple";
-        let result = compile_and_link(tast, &crate::type_checker::environment::TypeEnv::new(), out_bin);
+        let result = compile_and_link(tast, out_bin);
 
         assert!(result.is_ok(), "Compilacao e Linkagem do MVP deve suceder. Erro: {:?}", result.err());
 

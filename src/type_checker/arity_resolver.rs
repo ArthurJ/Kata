@@ -9,22 +9,55 @@ pub struct ArityResolver<'a> {
     pub errors: std::cell::RefCell<Vec<(String, crate::parser::ast::Span)>>,
     pub pure_context: std::cell::Cell<bool>,
     pub current_action: std::cell::RefCell<Option<String>>,
+    /// Pending type updates to apply after releasing all borrows
+    pending_type_updates: std::cell::RefCell<Vec<(String, TypeRef)>>,
 }
 
 impl<'a> ArityResolver<'a> {
     pub fn new(env: &'a TypeEnv) -> Self {
-        Self { 
-            env, 
-            local_vars: std::cell::RefCell::new(std::collections::HashMap::new()), 
+        Self {
+            env,
+            local_vars: std::cell::RefCell::new(std::collections::HashMap::new()),
             constraints: std::cell::RefCell::new(std::collections::HashMap::new()),
             errors: std::cell::RefCell::new(Vec::new()),
             pure_context: std::cell::Cell::new(true),
             current_action: std::cell::RefCell::new(None),
+            pending_type_updates: std::cell::RefCell::new(Vec::new()),
         }
     }
 
     pub fn declare_local(&self, name: String, ty: TypeRef) {
         self.local_vars.borrow_mut().insert(name, ty);
+    }
+
+    /// Clear all state for a new action
+    pub fn clear_for_new_action(&self) {
+        self.local_vars.borrow_mut().clear();
+        self.constraints.borrow_mut().clear();
+        self.pending_type_updates.borrow_mut().clear();
+    }
+
+    /// Queue a type update to be applied later (avoids RefCell borrow conflicts)
+    pub fn queue_type_update(&self, name: String, new_ty: TypeRef) {
+        self.pending_type_updates.borrow_mut().push((name, new_ty));
+    }
+
+    /// Apply all pending type updates
+    pub fn apply_pending_updates(&self) {
+        let updates: Vec<(String, TypeRef)> = self.pending_type_updates.borrow_mut().drain(..).collect();
+        for (name, new_ty) in updates {
+            let should_update = {
+                let vars = self.local_vars.borrow();
+                if let Some(current) = vars.get(&name) {
+                    matches!(current, TypeRef::Simple(n) if n == "Unknown")
+                } else {
+                    false
+                }
+            };
+            if should_update {
+                self.local_vars.borrow_mut().insert(name, new_ty);
+            }
+        }
     }
 
     pub fn get_expr_type(expr: &TExpr) -> TypeRef {
@@ -284,17 +317,44 @@ impl<'a> ArityResolver<'a> {
 
                     match expr {
                         Expr::ChannelSend if final_args.len() == 2 => {
-                            let target = Box::new(final_args.remove(0));
-                            let val = Box::new(final_args.remove(0));
-                            return Some((TExpr::ChannelSend(target, val, return_type), span.clone()));
+                            let mut target = final_args.remove(0);
+                            let val = final_args.remove(0);
+
+                            // Infer types for CSP operations: channel handles are Int
+                            if let TExpr::Ident(name, ty) = &target.0 {
+                                if matches!(ty, TypeRef::Simple(n) if n == "Unknown") {
+                                    self.queue_type_update(name.clone(), TypeRef::Simple("Int".to_string()));
+                                    target.0 = TExpr::Ident(name.clone(), TypeRef::Simple("Int".to_string()));
+                                }
+                            }
+
+                            return Some((TExpr::ChannelSend(Box::new(target), Box::new(val), return_type), span.clone()));
                         }
                         Expr::ChannelRecv if final_args.len() == 1 => {
-                            let target = Box::new(final_args.remove(0));
-                            return Some((TExpr::ChannelRecv(target, return_type), span.clone()));
+                            let mut target = final_args.remove(0);
+
+                            // Infer types for CSP operations: channel handles are Int
+                            if let TExpr::Ident(name, ty) = &target.0 {
+                                if matches!(ty, TypeRef::Simple(n) if n == "Unknown") {
+                                    self.queue_type_update(name.clone(), TypeRef::Simple("Int".to_string()));
+                                    target.0 = TExpr::Ident(name.clone(), TypeRef::Simple("Int".to_string()));
+                                }
+                            }
+
+                            return Some((TExpr::ChannelRecv(Box::new(target), return_type), span.clone()));
                         }
                         Expr::ChannelRecvNonBlock if final_args.len() == 1 => {
-                            let target = Box::new(final_args.remove(0));
-                            return Some((TExpr::ChannelRecvNonBlock(target, return_type), span.clone()));
+                            let mut target = final_args.remove(0);
+
+                            // Infer types for CSP operations: channel handles are Int
+                            if let TExpr::Ident(name, ty) = &target.0 {
+                                if matches!(ty, TypeRef::Simple(n) if n == "Unknown") {
+                                    self.queue_type_update(name.clone(), TypeRef::Simple("Int".to_string()));
+                                    target.0 = TExpr::Ident(name.clone(), TypeRef::Simple("Int".to_string()));
+                                }
+                            }
+
+                            return Some((TExpr::ChannelRecvNonBlock(Box::new(target), return_type), span.clone()));
                         }
                         _ => {
                             let has_holes = final_args.iter().any(|(a, _)| matches!(a, TExpr::Hole));
