@@ -24,6 +24,22 @@ char kata_rt_ge_int(long a, long b) { return a >= b; }
 char kata_rt_lt_int(long a, long b) { return a < b; }
 char kata_rt_le_int(long a, long b) { return a <= b; }
 
+double kata_rt_int_to_float(long a) { return (double)a; }
+double kata_rt_add_flt(double a, double b) { return a + b; }
+double kata_rt_sub_flt(double a, double b) { return a - b; }
+double kata_rt_mul_flt(double a, double b) { return a * b; }
+double kata_rt_real_div_flt(double a, double b) { return a / b; }
+long kata_rt_div_flt(double a, double b) { return (long)(a / b); }
+char kata_rt_eq_flt(double a, double b) { return a == b; }
+char kata_rt_gt_flt(double a, double b) { return a > b; }
+char kata_rt_ge_flt(double a, double b) { return a >= b; }
+char kata_rt_lt_flt(double a, double b) { return a < b; }
+char kata_rt_le_flt(double a, double b) { return a <= b; }
+
+void* kata_rt_alloc_local(long size, long align) { return malloc(size); }
+void* kata_rt_alloc_shared(long size, long align) { return malloc(size); }
+void kata_rt_decref(void* ptr) { /* Stub for MVP arc */ }
+
 char* kata_rt_int_to_str(long a) {
     char* buf = malloc(32);
     snprintf(buf, 32, "%ld", a);

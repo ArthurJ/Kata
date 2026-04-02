@@ -255,20 +255,102 @@ warning: variant `Named` is never constructed
    = note: `DirectiveArgs` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
 
 warning: associated function `replace_hole` is never used
-   --> src/type_checker/checker.rs:104:8
+   --> src/type_checker/checker.rs:101:8
     |
  34 | impl Checker {
     | ------------ associated function in this implementation
 ...
-104 |     fn replace_hole(expr: &mut crate::parser::ast::Expr, replacement: &crate::parser::ast::Expr) {
+101 |     fn replace_hole(expr: &mut crate::parser::ast::Expr, replacement: &crate::parser::ast::Expr) {
     |        ^^^^^^^^^^^^
 
-[31mError:[0m Token inesperado: :
-   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m examples/test_phase8_stdlib.kata:7:18 [38;5;246m][0m
-   [38;5;246m│[0m
- [38;5;246m7 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249ml[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mm[0m[38;5;249my[0m[38;5;249m_[0m[38;5;249ml[0m[38;5;249mi[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249m1[0m[31m:[0m[38;5;249m2[0m[38;5;249m:[0m[38;5;249m[[0m[38;5;249m][0m
- [38;5;240m  │[0m                  [31m┬[0m  
- [38;5;240m  │[0m                  [31m╰[0m[31m─[0m[31m─[0m Token inesperado: :
-[38;5;246m───╯[0m
-Error:   × Falha na análise sintática.
+warning: `kata` (bin "kata") generated 31 warnings (run `cargo fix --bin "kata" -p kata` to apply 12 suggestions)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.07s
+     Running `target/debug/kata build examples/mock_math.kata`
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function str -> str_Bool
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function repr -> repr_Bool
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function and -> and_Bool_Bool
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function or -> or_Bool_Bool
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function xor -> xor_Bool_Bool
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function not -> not_Bool
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function str -> str_SHOW
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function hash -> hash_A
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function = -> eq_A_A
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function != -> neq_A_A
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function > -> gt_A_A
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function >= -> gteq_A_A
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function < -> lt_A_A
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function <= -> lteq_A_A
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function + -> add_NUM_NUM
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function - -> sub_NUM_NUM
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function * -> mul_NUM_NUM
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function ** -> pow_NUM_NUM
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function div -> div_NUM_NUM
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function / -> div_NUM_NonZero
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function // -> idiv_NUM_NonZero
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function mod -> mod_NUM_NonZero
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function + -> add_Int_Int
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function - -> sub_Int_Int
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function * -> mul_Int_Int
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function ** -> pow_Int_Int
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function / -> div_Int_NonZero
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function // -> idiv_Int_NonZero
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function div -> div_Int_Int
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function mod -> mod_Int_NonZero
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function = -> eq_Int_Int
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function > -> gt_Int_Int
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function >= -> gteq_Int_Int
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function < -> lt_Int_Int
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function <= -> lteq_Int_Int
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function str -> str_Int
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function repr -> repr_Int
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function hash -> hash_Int
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function + -> add_Float_Float
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function - -> sub_Float_Float
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function * -> mul_Float_Float
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function ** -> pow_Float_Float
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function / -> div_Float_NonZero
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function // -> idiv_Float_NonZero
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function div -> div_Float_Float
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function mod -> mod_Float_NonZero
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function = -> eq_Float_Float
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function > -> gt_Float_Float
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function >= -> gteq_Float_Float
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function < -> lt_Float_Float
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function <= -> lteq_Float_Float
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function str -> str_Float
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function repr -> repr_Float
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function hash -> hash_Float
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function round -> round_Float
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function ceil -> ceil_Float
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function floor -> floor_Float
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function float -> float_Int
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function < -> lt_Int_Float
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function < -> lt_Float_Int
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function <= -> lteq_Int_Float
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function <= -> lteq_Float_Int
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function > -> gt_Int_Float
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function > -> gt_Float_Int
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function >= -> gteq_Int_Float
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function >= -> gteq_Float_Int
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function + -> add_Text_Text
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function repr -> repr_REPR
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function str -> str_Text
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function repr -> repr_Text
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function next -> next_ITERATOR
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function iter -> iter_ITERABLE
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function map -> map_Func_ITERABLE_A
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function filter -> filter_Func_ITERABLE_A
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function fold -> fold_Func_A_ITERABLE_A
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function zip -> zip_ITERABLE_A_ITERABLE_B
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function Cons -> Cons_A_List_A
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function type -> type_A
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function fields -> fields_A
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function format -> format_Text_A
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function dobrar -> dobrar_Int
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function triplicar -> triplicar_Int
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function =_A_A -> eq_A_A_A_A
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function =_A_A -> eq_A_A_Int_Int
+[2026-04-02T20:54:17Z ERROR kata::codegen::translator] DEBUG: Inserting function =_A_A -> eq_A_A_Float_Float
+[2026-04-02T20:54:17Z ERROR kata] Erro de Compilacao/Codegen: Função `add` não encontrada no modulo.
+Error:   × Falha na geracao de codigo nativo.
 

@@ -43,6 +43,9 @@ pub extern "C" fn kata_rt_le_int(a: i64, b: i64) -> bool { a <= b }
 
 // FLOAT
 #[no_mangle]
+pub extern "C" fn kata_rt_int_to_float(a: i64) -> f64 { a as f64 }
+
+#[no_mangle]
 pub extern "C" fn kata_rt_add_flt(a: f64, b: f64) -> f64 { a + b }
 
 #[no_mangle]

@@ -49,6 +49,15 @@ impl<'a> FunctionTranslator<'a> {
         let mut compile_lambdas = |mangled_name: &str, sig_params: &[Spanned<TypeRef>], sig_ret: &TypeRef, lambdas: &[(Vec<Spanned<crate::parser::ast::Pattern>>, crate::type_checker::tast::TExpr)], env: &TypeEnv, ctx: &mut CodegenContext, builder_context: &mut FunctionBuilderContext| -> Result<(), String> {
             if lambdas.is_empty() { return Ok(()); }
             
+            let is_generic = sig_params.iter().any(|(p_ty, _)| {
+                let ty_str = Self::type_to_string_simple(p_ty);
+                ty_str.len() == 1 && ty_str.chars().next().unwrap().is_uppercase()
+            });
+
+            if is_generic {
+                return Ok(()); // O Otimizador (Monomorphizer) já cuidou das instâncias concretas. O backend não compila moldes abstratos.
+            }
+
             let func_id = ctx.functions.get(mangled_name).ok_or_else(|| format!("ID não encontrado: {}", mangled_name))?;
             let mut cl_ctx = Context::new();
             let func_decl = ctx.module.declarations().get_function_decl(*func_id);

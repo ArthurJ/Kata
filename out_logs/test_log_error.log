@@ -45,10 +45,10 @@ warning: variable does not need to be mutable
 warning: variable does not need to be mutable
   --> src/codegen/translator.rs:49:13
    |
-49 |         let mut compile_lambdas = |mangled_name: &str, sig_params: &[Spanned<TypeRef>], sig_ret: &TypeRef, lambdas: &[(Vec<Spanned<crate::parser::ast::Pattern>>, crate::type_checker::tast::TExpr)], env: &TypeEnv, ctx: &mut CodegenContext, builder_context: &mut FunctionBuilderContext| -> Result<(), String> {
-   |             ----^^^^^^^^^^^^^^^
-   |             |
-   |             help: remove this `mut`
+49 | ...   let mut compile_lambdas = |mangled_name: &str, sig_params: &[Spanned<TypeRef>], sig_ret: &TypeRef, lambdas: &[(Vec<Spanned<crate::parser::ast::Pattern>>, crate::type_checker::tast::TExpr)], env: &TypeEnv, ctx: &m...
+   |           ----^^^^^^^^^^^^^^^
+   |           |
+   |           help: remove this `mut`
 
 warning: variable `current_sig_name` is assigned to, but never used
   --> src/codegen/translator.rs:41:13
@@ -60,54 +60,54 @@ warning: variable `current_sig_name` is assigned to, but never used
    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
 
 warning: value assigned to `current_sig_name` is never read
-   --> src/codegen/translator.rs:191:21
+   --> src/codegen/translator.rs:200:21
     |
-191 |                     current_sig_name = Some(name.clone());
+200 |                     current_sig_name = Some(name.clone());
     |                     ^^^^^^^^^^^^^^^^
     |
     = help: maybe it is overwritten before being read?
     = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
 
 warning: value assigned to `current_sig_name` is never read
-   --> src/codegen/translator.rs:217:21
+   --> src/codegen/translator.rs:226:21
     |
-217 |                     current_sig_name = None;
+226 |                     current_sig_name = None;
     |                     ^^^^^^^^^^^^^^^^
     |
     = help: maybe it is overwritten before being read?
 
 warning: variable `current_sig_name` is assigned to, but never used
-   --> src/codegen/translator.rs:348:13
+   --> src/codegen/translator.rs:357:13
     |
-348 |         let mut current_sig_name = None;
+357 |         let mut current_sig_name = None;
     |             ^^^^^^^^^^^^^^^^^^^^
     |
     = note: consider using `_current_sig_name` instead
 
 warning: value assigned to `current_sig_name` is never read
-   --> src/codegen/translator.rs:353:21
+   --> src/codegen/translator.rs:362:21
     |
-353 |                     current_sig_name = Some(name.clone());
+362 |                     current_sig_name = Some(name.clone());
     |                     ^^^^^^^^^^^^^^^^
     |
     = help: maybe it is overwritten before being read?
 
 warning: value assigned to `current_sig_name` is never read
-   --> src/codegen/translator.rs:389:21
+   --> src/codegen/translator.rs:398:21
     |
-389 |                     current_sig_name = None;
+398 |                     current_sig_name = None;
     |                     ^^^^^^^^^^^^^^^^
     |
     = help: maybe it is overwritten before being read?
 
 warning: unreachable pattern
-   --> src/codegen/expr.rs:254:13
+   --> src/codegen/expr.rs:291:13
     |
-254 |             _ => Err(format!("Statement não suportado no TODO: {:?}", s)),
+291 |             _ => Err(format!("Statement não suportado no TODO: {:?}", s)),
     |             ^ no value can reach this
     |
 note: multiple earlier patterns match some of the same values
-   --> src/codegen/expr.rs:254:13
+   --> src/codegen/expr.rs:291:13
     |
  25 |             TStmt::Let(pat, expr) => {
     |             --------------------- matches some of the same values
@@ -121,23 +121,59 @@ note: multiple earlier patterns match some of the same values
  48 |             TStmt::Match(target, arms) => {
     |             -------------------------- matches some of the same values
 ...
-254 |             _ => Err(format!("Statement não suportado no TODO: {:?}", s)),
+291 |             _ => Err(format!("Statement não suportado no TODO: {:?}", s)),
     |             ^ ...and 6 other patterns collectively make this unreachable
     = note: `#[warn(unreachable_patterns)]` (part of `#[warn(unused)]`) on by default
 
 warning: variable does not need to be mutable
-   --> src/codegen/expr.rs:523:29
+   --> src/codegen/expr.rs:552:21
     |
-523 |                         let mut loaded_val = self.builder.ins().load(ir_payload_ty, cranelift_codegen::ir::MemFlags::new(), val, offset);
+552 |                 let mut current_block = self.builder.current_block().unwrap_or_else(|| self.builder.create_block());
+    |                     ----^^^^^^^^^^^^^
+    |                     |
+    |                     help: remove this `mut`
+
+warning: variable `found_type_name` is assigned to, but never used
+   --> src/codegen/expr.rs:362:21
+    |
+362 |                 let mut found_type_name = type_name.clone();
+    |                     ^^^^^^^^^^^^^^^^^^^
+    |
+    = note: consider using `_found_type_name` instead
+
+warning: unused variable: `current_block`
+   --> src/codegen/expr.rs:552:21
+    |
+552 |                 let mut current_block = self.builder.current_block().unwrap_or_else(|| self.builder.create_block());
+    |                     ^^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_current_block`
+
+warning: value assigned to `found_type_name` is never read
+   --> src/codegen/expr.rs:374:29
+    |
+374 | ...                   found_type_name = t_name.clone();
+    |                       ^^^^^^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+
+warning: variable does not need to be mutable
+   --> src/codegen/expr.rs:681:29
+    |
+681 |                         let mut loaded_val = self.builder.ins().load(ir_payload_ty, cranelift_codegen::ir::MemFlags::new(), val, offset);
     |                             ----^^^^^^^^^^
     |                             |
     |                             help: remove this `mut`
 
 warning: unused variable: `ptr_type`
-   --> src/codegen/expr.rs:502:29
+   --> src/codegen/expr.rs:644:29
     |
-502 |                         let ptr_type = self.module.target_config().pointer_type();
+644 |                         let ptr_type = self.module.target_config().pointer_type();
     |                             ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_ptr_type`
+
+warning: unused variable: `name`
+   --> src/codegen/expr.rs:658:52
+    |
+658 | ...                   if let TypeRef::Simple(name) = ty {
+    |                                              ^^^^ help: if this is intentional, prefix it with an underscore: `_name`
 
 warning: variable does not need to be mutable
    --> src/type_checker/arity_resolver.rs:462:25
@@ -218,7 +254,16 @@ warning: variant `Named` is never constructed
    |
    = note: `DirectiveArgs` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
 
-[2026-04-02T18:04:02Z ERROR kata] Erros Semanticos detectados na Fase 3:
-[2026-04-02T18:04:02Z ERROR kata] Diretiva @log: Level 'extreme' invalido. Use Error, Warn, Info, Debug ou Trace.
+warning: associated function `replace_hole` is never used
+   --> src/type_checker/checker.rs:104:8
+    |
+ 34 | impl Checker {
+    | ------------ associated function in this implementation
+...
+104 |     fn replace_hole(expr: &mut crate::parser::ast::Expr, replacement: &crate::parser::ast::Expr) {
+    |        ^^^^^^^^^^^^
+
+[2026-04-02T20:59:24Z ERROR kata] Erros Semanticos detectados na Fase 3:
+[2026-04-02T20:59:24Z ERROR kata] Diretiva @log: Level 'extreme' invalido. Use Error, Warn, Info, Debug ou Trace.
 Error:   × Falha na analise semantica.
 

@@ -142,7 +142,24 @@ impl<'a> Monomorphizer<'a> {
 
                         self.schedule_instantiation(name, &mangled_name, &concrete_types);
 
-                        folded_callee = Box::new((TExpr::Ident(mangled_name, callee_ty.clone()), folded_callee.1.clone()));
+                        let mut mapping = HashMap::new();
+                        if let Some(template_decls) = self.templates.get(name).cloned() {
+                            for decl in &template_decls {
+                                if let TTopLevel::Signature(_, params, _, _) = decl {
+                                    for (i, param) in params.iter().enumerate() {
+                                        if i < concrete_types.len() {
+                                            self.build_mapping(&param.0, &concrete_types[i], &mut mapping);
+                                        }
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        let substituter = TypeSubstituter { mapping };
+                        let concrete_callee_ty = substituter.substitute_type(callee_ty);
+
+                        folded_callee = Box::new((TExpr::Ident(mangled_name, concrete_callee_ty), folded_callee.1.clone()));
                     }
                 }
 

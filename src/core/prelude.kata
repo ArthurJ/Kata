@@ -2,7 +2,7 @@
 # O teto arquitetural de todos os projetos na linguagem.
 # Aqui expomos de forma limpa os blocos basicos da linguagem
 
-import types.(SHOW HASH EQ ORD REPR NonZero NUM Float Int Bool Result Optional and or xor not Text)
+import types.(SHOW HASH EQ ORD REPR NonZero NUM Float Int Bool Result Optional and or xor not Text ITERATOR ITERABLE float)
 
 import io.(echo)
 import csp.(fork channel queue broadcast)
@@ -51,4 +51,4 @@ format :: Text A => Text
 
 # Uma vez importadas as vertentes puras de cada modulo isolado,
 # exportamos tudo numa tacada so para o ambiente raiz do usuario.
-export map filter fold zip Cons type fields format fork channel queue broadcast SHOW HASH EQ ORD REPR NonZero NUM Float Int Bool Result Optional and or xor not echo assert assert_eq Text ITERATOR ITERABLE
+export map filter fold zip Cons type fields format fork channel queue broadcast SHOW HASH EQ ORD REPR NonZero NUM Float Int Bool Result Optional and or xor not echo assert assert_eq Text ITERATOR ITERABLE float

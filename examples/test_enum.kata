@@ -5,15 +5,14 @@ enum Sinal
     | Vermelho
 
 # 2. Tipado Genérico (Com Tipo, Aridade 1)
-enum Optional::T
-    | Some(T)
-    | None
+# O Optional já é fornecido no Prelude. (Usaremos ele diretamente)
 
 # 3. Valores Fixos (Constantes atreladas, Aridade 0)
 enum StatusHTTP
     | OK(200)
     | NotFound(404)
     | InternalError(500)
+    | UnknownStatus
 
 # 4. Predicados (Smart Constructors, Aridade 1)
 enum IMC
@@ -34,4 +33,4 @@ action main
     # Predicado: O construtor inteligente "IMC" tem aridade 1
     let imc IMC 22.5
 
-    echo!(status)
+main!()

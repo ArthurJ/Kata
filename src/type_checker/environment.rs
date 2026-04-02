@@ -121,12 +121,15 @@ impl TypeEnv {
 
         pub fn expand_exports(&mut self) {
         let mut new_exports = Vec::new();
+        
         for exp in &self.exports {
             if let Some(methods) = self.interface_methods.get(exp) {
                 new_exports.extend(methods.clone());
+                
             }
             if let Some(methods) = self.type_methods.get(exp) {
                 new_exports.extend(methods.clone());
+                
             }
         }
         for exp in new_exports {

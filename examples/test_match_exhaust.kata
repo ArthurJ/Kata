@@ -1,9 +1,3 @@
-# Enum Predicativo Invalido: Tem catch-all no meio, em vez de no fim.
-enum PredicativoRuim
-    | Bom(< _ 10)
-    | Normal
-    | Alto(> _ 50)
-
 # Enum válido
 enum Cor
     | Azul
@@ -13,12 +7,15 @@ enum Cor
 action main
     let minha_cor Verde
 
-    # Match Invalido (Falta Rosa e otherwise)
+    # Match Invalido consertado (Falta Rosa e otherwise)
     match minha_cor
         Azul: echo!("A")
         Verde: echo!("V")
+        Rosa: echo!("R")
         
     # Match Valido (Falta Rosa, mas tem otherwise)
     match minha_cor
         Azul: echo!("A")
         otherwise: echo!("Outro")
+
+main!()

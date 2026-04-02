@@ -205,11 +205,38 @@ Float implements NUM
     @ffi("kata_rt_floor")
     floor :: Float => Float
 
+@ffi("kata_rt_int_to_float")
+float :: Int => Float
+
+< :: Int Float => Bool
+λ a b: < float a b
+
+< :: Float Int => Bool
+λ a b: < a float b
+
+<= :: Int Float => Bool
+λ a b: <= float a b
+
+<= :: Float Int => Bool
+λ a b: <= a float b
+
+> :: Int Float => Bool
+λ a b: > float a b
+
+> :: Float Int => Bool
+λ a b: > a float b
+
+>= :: Int Float => Bool
+λ a b: >= float a b
+
+>= :: Float Int => Bool
+λ a b: >= a float b
+
 # ==========================================
 # Texto
 # ==========================================
 
-export NUM Float Int Bool and or xor not Result Optional SHOW REPR HASH EQ ORD NonZero Text ITERATOR ITERABLE
+export NUM Float Int Bool and or xor not Result Optional SHOW REPR HASH EQ ORD NonZero Text ITERATOR ITERABLE float
 
 @ffi("kata_rt_concat_text")
 @associative("")

@@ -66,12 +66,15 @@ impl Checker {
                 }
             }
 
+            temp_checker.env.expand_exports(); // Expand again to catch methods imported from interfaces/types
+
             self.compiled_modules.insert(name.to_string(), temp_checker.env);
         }
         
         if let Some(prelude_env) = self.compiled_modules.get("prelude") {
             let env_clone = prelude_env.clone();
             let all_exports: Vec<(String, Option<String>)> = env_clone.exports.iter().map(|e| (e.clone(), None)).collect();
+
             self.env.import_from(&env_clone, "prelude", &all_exports);
         }
         
@@ -96,6 +99,54 @@ impl Checker {
             }
         }
         group.clear();
+    }
+
+    fn replace_hole(expr: &mut crate::parser::ast::Expr, replacement: &crate::parser::ast::Expr) {
+        match expr {
+            crate::parser::ast::Expr::Hole => {
+                *expr = replacement.clone();
+            }
+            crate::parser::ast::Expr::ActionCall(_, args) => {
+                for arg in args {
+                    Self::replace_hole(&mut arg.0, replacement);
+                }
+            }
+            crate::parser::ast::Expr::Try(inner) | crate::parser::ast::Expr::ExplicitApp(inner) => {
+                Self::replace_hole(&mut inner.0, replacement);
+            }
+            crate::parser::ast::Expr::Pipe(l, r) => {
+                Self::replace_hole(&mut l.0, replacement);
+                Self::replace_hole(&mut r.0, replacement);
+            }
+            crate::parser::ast::Expr::Tuple(es) | crate::parser::ast::Expr::List(es) | crate::parser::ast::Expr::Sequence(es) => {
+                for e in es {
+                    Self::replace_hole(&mut e.0, replacement);
+                }
+            }
+            crate::parser::ast::Expr::Array(rows) => {
+                for row in rows {
+                    for e in row {
+                        Self::replace_hole(&mut e.0, replacement);
+                    }
+                }
+            }
+            crate::parser::ast::Expr::Guard(branches, otherwise) => {
+                for (_, body) in branches {
+                    Self::replace_hole(&mut body.0, replacement);
+                }
+                Self::replace_hole(&mut otherwise.0, replacement);
+            }
+            crate::parser::ast::Expr::Lambda(_, body, with) => {
+                Self::replace_hole(&mut body.0, replacement);
+                for w in with {
+                    Self::replace_hole(&mut w.0, replacement);
+                }
+            }
+            crate::parser::ast::Expr::WithDecl(_, e) => {
+                Self::replace_hole(&mut e.0, replacement);
+            }
+            _ => {}
+        }
     }
 
     fn flatten_declarations(decls: &[Spanned<TopLevel>]) -> Vec<Spanned<TopLevel>> {
@@ -141,7 +192,8 @@ impl Checker {
                 }
             }
 
-            if let Some(t_decl) = self.resolve_top_level(decl, span, &resolver, &mut local_errors, &last_signature) {
+            let t_decls = self.resolve_top_level(decl, span, &resolver, &mut local_errors, &last_signature);
+            for t_decl in t_decls {
                 self.tast.push((t_decl, span.clone()));
             }
         }
@@ -331,11 +383,80 @@ impl Checker {
         self.errors.extend(local_errs);
     }
 
-    fn resolve_top_level(&self, decl: &TopLevel, _span: &crate::parser::ast::Span, resolver: &ArityResolver, local_errors: &mut Vec<(String, crate::parser::ast::Span)>, last_signature: &Option<(String, Vec<Spanned<TypeRef>>, Spanned<TypeRef>)>) -> Option<TTopLevel> {
+    fn resolve_top_level(&self, decl: &TopLevel, _span: &crate::parser::ast::Span, resolver: &ArityResolver, local_errors: &mut Vec<(String, crate::parser::ast::Span)>, last_signature: &Option<(String, Vec<Spanned<TypeRef>>, Spanned<TypeRef>)>) -> Vec<TTopLevel> {
         match decl {
-            TopLevel::Data(name, def, dirs) => Some(TTopLevel::Data(name.clone(), def.clone(), validate_and_parse_directives(dirs).0)),
-            TopLevel::Enum(name, variants, dirs) => Some(TTopLevel::Enum(name.clone(), variants.clone(), validate_and_parse_directives(dirs).0)),
-            TopLevel::Signature(name, params, ret, dirs) => Some(TTopLevel::Signature(name.clone(), params.clone(), ret.clone(), validate_and_parse_directives(dirs).0)),
+            TopLevel::Data(name, def, dirs) => vec![TTopLevel::Data(name.clone(), def.clone(), validate_and_parse_directives(dirs).0)],
+            TopLevel::Enum(name, variants, dirs) => {
+                let mut has_predicate = false;
+                for variant in variants {
+                    if matches!(variant.data, crate::parser::ast::VariantData::Predicate(_)) {
+                        has_predicate = true; break;
+                    }
+                }
+
+                let mut decls = Vec::new();
+
+                if has_predicate {
+                    let mut branches = Vec::new();
+                    let mut otherwise_branch = None;
+
+                    for variant in variants {
+                        if let crate::parser::ast::VariantData::Predicate(expr) = &variant.data {
+                            // Construir a condição: aplicar o predicado ao parâmetro recebido `val`
+                            let (op, rhs) = if let crate::parser::ast::Expr::Sequence(seq) = expr {
+                                if seq.len() == 3 && matches!(seq[1].0, crate::parser::ast::Expr::Hole) {
+                                    (seq[0].clone(), seq[2].clone())
+                                } else { panic!("Formato invalido de predicado") }
+                            } else { panic!("Formato invalido de predicado") };
+
+                            let val_ident = (TExpr::Ident("__val".to_string(), TypeRef::Simple("A".to_string())), _span.clone());
+                            
+                            // Resolver o operador para o TAST
+                            let mut op_expr = resolver.resolve_expr(&op);
+                            if let TExpr::Ident(ref op_name, _) = op_expr.0 {
+                                op_expr = (TExpr::Ident(op_name.clone(), TypeRef::Function(vec![(TypeRef::Simple("A".to_string()), 0..0), (TypeRef::Simple("A".to_string()), 0..0)], Box::new((TypeRef::Simple("Bool".to_string()), 0..0)))), _span.clone());
+                            }
+                            let rhs_expr = resolver.resolve_expr(&rhs);
+                            
+                            let cond_call = (TExpr::Call(Box::new(op_expr), vec![val_ident.clone(), rhs_expr], TypeRef::Simple("Bool".to_string())), _span.clone());
+
+                            let variant_callee = Box::new((TExpr::Ident(variant.name.clone(), TypeRef::Simple(name.clone())), _span.clone()));
+                            let body_call = (TExpr::Call(variant_callee, vec![val_ident], TypeRef::Simple(name.clone())), _span.clone());
+
+                            branches.push((cond_call, body_call));
+                        } else {
+                            let val_ident = (TExpr::Ident("__val".to_string(), TypeRef::Simple("A".to_string())), _span.clone());
+                            let variant_callee = Box::new((TExpr::Ident(variant.name.clone(), TypeRef::Simple(name.clone())), _span.clone()));
+                            let body_call = (TExpr::Call(variant_callee, vec![val_ident], TypeRef::Simple(name.clone())), _span.clone());
+                            otherwise_branch = Some(body_call);
+                        }
+                    }
+
+                    if let Some(other) = otherwise_branch {
+                        let guard_expr = (TExpr::Guard(branches, Box::new(other), TypeRef::Simple(name.clone())), _span.clone());
+                        let lambda_def = TTopLevel::LambdaDef(
+                            vec![(Pattern::Ident("__val".to_string()), _span.clone())],
+                            guard_expr,
+                            Vec::new(),
+                            Vec::new()
+                        );
+                        
+                        let sig_def = TTopLevel::Signature(
+                            name.clone(),
+                            vec![(TypeRef::Simple("A".to_string()), _span.clone())],
+                            (TypeRef::Simple(name.clone()), _span.clone()),
+                            Vec::new()
+                        );
+
+                        decls.push(sig_def);
+                        decls.push(lambda_def);
+                    }
+                }
+
+                decls.push(TTopLevel::Enum(name.clone(), variants.clone(), validate_and_parse_directives(dirs).0));
+                decls
+            }
+            TopLevel::Signature(name, params, ret, dirs) => vec![TTopLevel::Signature(name.clone(), params.clone(), ret.clone(), validate_and_parse_directives(dirs).0)],
             TopLevel::LambdaDef(params, body, with, dirs) => {
                 resolver.pure_context.set(true);
                 *resolver.current_action.borrow_mut() = None;
@@ -374,14 +495,14 @@ impl Checker {
                     for w in with {
                         t_with.push(resolver.resolve_expr(w));
                     }
-                    Some(TTopLevel::LambdaDef(params.clone(), t_body, t_with, validate_and_parse_directives(dirs).0))
+                    vec![TTopLevel::LambdaDef(params.clone(), t_body, t_with, validate_and_parse_directives(dirs).0)]
                 } else {
                     let t_body = resolver.resolve_expr(body);
                     let mut t_with = Vec::new();
                     for w in with {
                         t_with.push(resolver.resolve_expr(w));
                     }
-                    Some(TTopLevel::LambdaDef(params.clone(), t_body, t_with, validate_and_parse_directives(dirs).0))
+                    vec![TTopLevel::LambdaDef(params.clone(), t_body, t_with, validate_and_parse_directives(dirs).0)]
                 }
             }
             TopLevel::ActionDef(name, params, ret, body, dirs) => {
@@ -412,7 +533,7 @@ impl Checker {
                     local_errors.push((format!("Type Mismatch: Expected return type `{:?}`, Found `{:?}` in Action `{}`", ret.0, last_stmt_ty, name), ret.1.clone()));
                 }
 
-                Some(TTopLevel::ActionDef(name.clone(), params.clone(), ret.clone(), t_body, parsed_dirs))
+                vec![TTopLevel::ActionDef(name.clone(), params.clone(), ret.clone(), t_body, parsed_dirs)]
             }
             TopLevel::Execution(expr) => {
                 resolver.pure_context.set(false); // Top-level execution allows actions
@@ -422,9 +543,9 @@ impl Checker {
                 resolver.constraints.borrow_mut().clear();
                 
                 let t_expr = resolver.resolve_expr(expr);
-                Some(TTopLevel::Execution(t_expr))
+                vec![TTopLevel::Execution(t_expr)]
             }
-            _ => None,
+            _ => Vec::new(),
         }
     }
     fn check_exhaustiveness(&self, target_type: &TypeRef, patterns: &[&Pattern], local_errors: &mut Vec<(String, crate::parser::ast::Span)>, context: &str, span: &crate::parser::ast::Span) {

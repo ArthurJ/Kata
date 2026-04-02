@@ -47,6 +47,7 @@ impl<'a, 'b> ExprTranslator<'a, 'b> {
             }
             TStmt::Match(target, arms) => {
                 let target_val = self.translate_expr(target)?;
+                let target_ty = crate::type_checker::arity_resolver::ArityResolver::get_expr_type(&target.0);
                 
                 let mut next_cond_block = self.builder.create_block();
                 let end_block = self.builder.create_block();
@@ -73,15 +74,48 @@ impl<'a, 'b> ExprTranslator<'a, 'b> {
                                 let const_val = self.builder.ins().iconst(types::I8, 0);
                                 is_match = Some(self.builder.ins().icmp(cranelift_codegen::ir::condcodes::IntCC::Equal, target_val, const_val));
                             } else {
-                                // Default binding for TODO (catch-all)
-                                let true_val = self.builder.ins().iconst(types::I8, 1);
-                                is_match = Some(true_val);
+                                let type_name = match &target_ty {
+                                    crate::parser::ast::TypeRef::Generic(n, _) => n.clone(),
+                                    crate::parser::ast::TypeRef::Simple(n) => n.clone(),
+                                    _ => "".to_string(),
+                                };
+                                
+                if let Some(variants) = self.env.enums.get(&type_name) {
+                                    if let Some(pos) = variants.iter().position(|v| v == name) {
+                                        let tag_val = self.builder.ins().load(types::I64, cranelift_codegen::ir::MemFlags::new(), target_val, 0);
+                                        let const_val = self.builder.ins().iconst(types::I64, pos as i64);
+                                        is_match = Some(self.builder.ins().icmp(cranelift_codegen::ir::condcodes::IntCC::Equal, tag_val, const_val));
+                                    } else {
+                                        let true_val = self.builder.ins().iconst(types::I8, 1);
+                                        is_match = Some(true_val);
+                                    }
+                                } else {
+                                    let true_val = self.builder.ins().iconst(types::I8, 1);
+                                    is_match = Some(true_val);
+                                }
                             }
                         }
                         crate::parser::ast::Pattern::Literal(crate::parser::ast::Expr::Int(val_str)) => {
                             let val_i64 = val_str.parse::<i64>().unwrap_or(0);
                             let const_val = self.builder.ins().iconst(types::I64, val_i64);
                             is_match = Some(self.builder.ins().icmp(cranelift_codegen::ir::condcodes::IntCC::Equal, target_val, const_val));
+                        }
+                        crate::parser::ast::Pattern::Sequence(pats) => {
+                            if let Some(crate::parser::ast::Pattern::Ident(variant_name)) = pats.first().map(|p| &p.0) {
+                                let type_name = match &target_ty {
+                                    crate::parser::ast::TypeRef::Generic(n, _) => n.clone(),
+                                    crate::parser::ast::TypeRef::Simple(n) => n.clone(),
+                                    _ => "".to_string(),
+                                };
+                                
+                if let Some(variants) = self.env.enums.get(&type_name) {
+                                    if let Some(pos) = variants.iter().position(|v| v == variant_name) {
+                                        let tag_val = self.builder.ins().load(types::I64, cranelift_codegen::ir::MemFlags::new(), target_val, 0);
+                                        let const_val = self.builder.ins().iconst(types::I64, pos as i64);
+                                        is_match = Some(self.builder.ins().icmp(cranelift_codegen::ir::condcodes::IntCC::Equal, tag_val, const_val));
+                                    }
+                                }
+                            }
                         }
                         _ => {}
                     }
@@ -94,6 +128,9 @@ impl<'a, 'b> ExprTranslator<'a, 'b> {
 
                     self.builder.switch_to_block(arm_body_block);
                     self.builder.seal_block(arm_body_block);
+
+                    // Bind pattern variables
+                    self.bind_pattern(&arm.pattern.0, target_val, &target_ty)?;
 
                     // Translate body
                     for stmt in &arm.body {
@@ -289,9 +326,15 @@ impl<'a, 'b> ExprTranslator<'a, 'b> {
                         TypeRef::Simple(n) => n.clone(),
                         _ => "".to_string(),
                     };
-                    if let Some(variants) = self.env.enums.get(&type_name) {
-                        if let Some(pos) = variants.iter().position(|v| v == name) {
-                            return Ok(self.builder.ins().iconst(types::I8, pos as i64));
+                    
+                if let Some(variants) = self.env.enums.get(&type_name) {
+                        let base_name = name.split('_').next().unwrap_or(&name);
+                        if let Some(pos) = variants.iter().position(|v| v == base_name) {
+                            if type_name == "Bool" {
+                                return Ok(self.builder.ins().iconst(types::I8, pos as i64));
+                            } else {
+                                return Ok(self.builder.ins().iconst(types::I64, pos as i64));
+                            }
                         }
                     }
                     Err(format!("Variável ou Variante não encontrada: {}", name))
@@ -303,35 +346,88 @@ impl<'a, 'b> ExprTranslator<'a, 'b> {
                     _ => return Err("Chamadas anonimas ou high-order nao suportadas no TODO.".to_string()),
                 };
 
-                let func_id_opt = if let Some(info) = self.env.lookup_first(&name) {
+                let type_name = match &callee_ty {
+                    crate::parser::ast::TypeRef::Function(_, ret) => {
+                        match &ret.0 {
+                            crate::parser::ast::TypeRef::Simple(n) => n.clone(),
+                            crate::parser::ast::TypeRef::Generic(n, _) => n.clone(),
+                            _ => "".to_string(),
+                        }
+                    }
+                    _ => "".to_string(),
+                };
+
+                let base_name = name.split('_').next().unwrap_or(&name);
+                let mut found_pos = None;
+                let mut found_type_name = type_name.clone();
+
+                if let Some(variants) = self.env.enums.get(&type_name) {
+                    if let Some(pos) = variants.iter().position(|v| v == base_name) {
+                        found_pos = Some(pos);
+                    }
+                }
+                
+                if found_pos.is_none() {
+                    for (t_name, variants) in &self.env.enums {
+                        if let Some(pos) = variants.iter().position(|v| v == base_name) {
+                            found_pos = Some(pos);
+                            found_type_name = t_name.clone();
+                            break;
+                        }
+                    }
+                }
+
+                if let Some(pos) = found_pos {
+                        let ptr_type = self.module.target_config().pointer_type();
+                        let size_val = self.builder.ins().iconst(ptr_type, 16);
+                        let align_val = self.builder.ins().iconst(ptr_type, 8);
+                        
+                        let alloc_func_id = self.functions.get("kata_rt_alloc_local")
+                            .ok_or_else(|| "Função kata_rt_alloc_local não encontrada.".to_string())?;
+                        let local_alloc_func = self.module.declare_func_in_func(*alloc_func_id, self.builder.func);
+                        let call = self.builder.ins().call(local_alloc_func, &[size_val, align_val]);
+                        let ptr_val = self.builder.inst_results(call)[0];
+                        
+                        let tag_val = self.builder.ins().iconst(types::I8, pos as i64);
+                        self.builder.ins().store(cranelift_codegen::ir::MemFlags::new(), tag_val, ptr_val, 0);
+                        
+                        let mut payload_val = self.translate_expr(&args[0])?;
+                        let val_type = self.builder.func.dfg.value_type(payload_val);
+                        if val_type == types::I8 || val_type == types::I32 {
+                            payload_val = self.builder.ins().uextend(types::I64, payload_val);
+                        } else if val_type == types::F64 {
+                            payload_val = self.builder.ins().bitcast(types::I64, cranelift_codegen::ir::MemFlags::new(), payload_val);
+                        }
+                        
+                        self.builder.ins().store(cranelift_codegen::ir::MemFlags::new(), payload_val, ptr_val, 8);
+                        
+                        return Ok(ptr_val);
+                }
+
+                let mut mangled_name = name.clone();
+                if name != "main" {
+                    if let crate::parser::ast::TypeRef::Function(params, _) = &callee_ty {
+                        for (p_ty, _) in params {
+                            mangled_name.push('_');
+                            mangled_name.push_str(&crate::codegen::translator::FunctionTranslator::type_to_string_simple(p_ty));
+                        }
+                    }
+                }
+                
+                log::debug!("DEBUG MANGLE: original={}, callee_ty={:?}, mangled={}", name, callee_ty, mangled_name);
+
+                mangled_name = crate::codegen::translator::FunctionTranslator::sanitize_name(&mangled_name);
+
+                let func_id = if let Some(info) = self.env.lookup_first(&name) {
                     if let Some(ffi_name) = &info.ffi_name {
-                        self.functions.get(ffi_name)
+                        self.functions.get(ffi_name).or_else(|| self.functions.get(&mangled_name))
                     } else {
-                        None
+                        self.functions.get(&mangled_name)
                     }
                 } else {
-                    None
-                };
+                    self.functions.get(&mangled_name)
+                }.ok_or_else(|| format!("Função `{}` não encontrada no modulo.", mangled_name))?;
 
-                let func_id = match func_id_opt {
-                    Some(id) => id,
-                    None => {
-                        let mut mangled_name = name.clone();
-                        if name != "main" {
-                            if let crate::parser::ast::TypeRef::Function(params, _) = &callee_ty {
-                                for (p_ty, _) in params {
-                                    mangled_name.push('_');
-                                    mangled_name.push_str(&crate::codegen::translator::FunctionTranslator::type_to_string_simple(p_ty));
-                                }
-                            }
-                        }
-                        mangled_name = crate::codegen::translator::FunctionTranslator::sanitize_name(&mangled_name);
-
-                        self.functions.get(&mangled_name)
-                            .ok_or_else(|| format!("Função `{}` não encontrada no modulo.", mangled_name))?
-                    }
-                };
-                
                 let local_func = self.module.declare_func_in_func(*func_id, self.builder.func);
                 
                 let mut arg_vals = Vec::new();
@@ -439,6 +535,52 @@ impl<'a, 'b> ExprTranslator<'a, 'b> {
                     Ok(ptr_val)
                 }
             }
+            TExpr::Guard(branches, otherwise, ty) => {
+                let mut cond_blocks = Vec::new();
+                for _ in branches {
+                    cond_blocks.push(self.builder.create_block());
+                }
+                
+                let otherwise_block = self.builder.create_block();
+                let end_block = self.builder.create_block();
+                
+                let ir_ty = self.map_type(ty);
+                let result_var = Variable::from_u32(*self.var_index as u32);
+                *self.var_index += 1;
+                self.builder.declare_var(result_var, ir_ty);
+
+                let mut current_block = self.builder.current_block().unwrap_or_else(|| self.builder.create_block());
+
+                for (i, (cond, body)) in branches.iter().enumerate() {
+                    let next_cond_block = if i + 1 < branches.len() { cond_blocks[i] } else { otherwise_block };
+                    let body_block = self.builder.create_block();
+
+                    let cond_val = self.translate_expr(cond)?;
+                    let true_val = self.builder.ins().iconst(types::I8, 1);
+                    let cmp = self.builder.ins().icmp(cranelift_codegen::ir::condcodes::IntCC::Equal, cond_val, true_val);
+                    
+                    self.builder.ins().brif(cmp, body_block, &[], next_cond_block, &[]);
+                    
+                    self.builder.switch_to_block(body_block);
+                    self.builder.seal_block(body_block);
+                    
+                    let body_val = self.translate_expr(body)?;
+                    self.builder.def_var(result_var, body_val);
+                    self.builder.ins().jump(end_block, &[]);
+                    
+                    self.builder.switch_to_block(next_cond_block);
+                    self.builder.seal_block(next_cond_block);
+                }
+
+                let otherwise_val = self.translate_expr(otherwise)?;
+                self.builder.def_var(result_var, otherwise_val);
+                self.builder.ins().jump(end_block, &[]);
+
+                self.builder.switch_to_block(end_block);
+                self.builder.seal_block(end_block);
+
+                Ok(self.builder.use_var(result_var))
+            }
             _ => Err(format!("Expressão não suportada no TODO: {:?}", e)),
         }
     }
@@ -513,7 +655,23 @@ impl<'a, 'b> ExprTranslator<'a, 'b> {
                                 TypeRef::Simple("Unknown".to_string())
                             }
                         } else {
-                            TypeRef::Simple("Unknown".to_string())
+                            if let TypeRef::Simple(name) = ty {
+                                if let Some(info) = self.env.lookup_first(enum_variant) {
+                                    if let TypeRef::Function(args, _) = &info.type_info {
+                                        if !args.is_empty() {
+                                            args[0].0.clone()
+                                        } else {
+                                            TypeRef::Simple("Unknown".to_string())
+                                        }
+                                    } else {
+                                        TypeRef::Simple("Unknown".to_string())
+                                    }
+                                } else {
+                                    TypeRef::Simple("Unknown".to_string())
+                                }
+                            } else {
+                                TypeRef::Simple("Unknown".to_string())
+                            }
                         };
 
                         let ir_payload_ty = self.map_type(&payload_ty);
