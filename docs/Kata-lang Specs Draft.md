@@ -374,14 +374,14 @@ Estados inválidos são irrepresentáveis.
 
 #### **4.1 Sintaxe e Predicados**
 
-\# Restrição numérica padrão  
-data PositiveInt as (Int, \> \_ 0\)
+# Restrição numérica padrão  
+data (Int, \> \_ 0\) as PositiveInt
 
-\# Restrição por Exclusão (Except) operando como Predicado nativo  
-data Real as (NUM, except Complex)
+# Restrição por Exclusão (Except) operando como Predicado nativo  
+data (NUM, except Complex) as Real
 
-\# Encadeamento de múltiplos predicados e exclusões  
-data RealPositivo as (NUM, except Complex, except Fraction, \> \_ 0\)
+# Encadeamento de múltiplos predicados e exclusões  
+data (NUM, except Complex, except Fraction, \> \_ 0\) as RealPositivo
 
 **O Predicado except:** O except não altera a mecânica estrutural do motor de tipos (não introduz "tipagem negativa" no unificador Hindley-Milner). Ele atua estritamente como uma função de ordem superior (*Higher-Order Function*) avaliada em tempo de execução ou de compilação. Quando recebe um tipo genérico ou interface (como Complex), o except devolve uma *Closure* de validação lógica (T \-\> Bool). Assim, a sintaxe (NUM, except Complex) é processada nativamente como uma lista de funções de validação dentro da tupla do Tipo Refinado, dispensando o uso do operador Hole (\_). Se o tipo passado coincidir com o tipo excluído, o predicado falha. O compilador gera automaticamente um *Smart Constructor* para o tipo-refinado.
 

@@ -72,7 +72,7 @@ interface ORD implements EQ
     <  :: A A => Bool
     <= :: A A => Bool
 
-data NonZero as (NUM, != _ 0)
+data (NUM, != _ 0) as NonZero
 
 interface NUM implements ORD SHOW
     + :: NUM NUM => NUM

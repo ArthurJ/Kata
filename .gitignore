@@ -3,4 +3,5 @@
 .claude
 *.py
 *.o
+GEMINI.md
 Cargo.lock

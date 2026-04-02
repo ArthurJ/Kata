@@ -4,8 +4,8 @@ enum IMC
     | Sobrepeso(<= _ 30.0)
     | Obesidade
 
-data Peso as (Float, > _ 0.0)
-data Altura as (Float, > _ 0.0)
+data (Float, > _ 0.0) as Peso
+data (Float, > _ 0.0) as Altura
 
 calcular_imc :: Peso Altura => IMC
 lambda p a:

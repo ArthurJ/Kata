@@ -26,23 +26,22 @@ pub fn top_level_parser() -> impl Parser<Token, Spanned<TopLevel>, Error = Parse
             .repeated();
 
         let data_decl = just(Token::Data)
-            .ignore_then(ident_string())
-            .then(
-                choice((
-                    ident_string()
-                        .repeated()
-                        .delimited_by(just(Token::LParen), just(Token::RParen))
-                        .map(DataDef::Struct),
-                    just(Token::As)
-                        .ignore_then(
-                            type_ref_parser()
-                                .then_ignore(just(Token::Comma).or_not())
-                                .then(expr_parser().separated_by(just(Token::Comma).or_not()))
-                                .delimited_by(just(Token::LParen), just(Token::RParen))
-                        )
-                        .map(|(base, predicates)| DataDef::Refined(base, predicates))
-                ))
-            );
+            .ignore_then(choice((
+                type_ref_parser()
+                    .then_ignore(just(Token::Comma).or_not())
+                    .then(expr_parser().separated_by(just(Token::Comma).or_not()))
+                    .delimited_by(just(Token::LParen), just(Token::RParen))
+                    .then_ignore(just(Token::As))
+                    .then(ident_string())
+                    .map(|((base, predicates), name)| (name, DataDef::Refined(base, predicates))),
+                ident_string()
+                    .then(
+                        ident_string()
+                            .repeated()
+                            .delimited_by(just(Token::LParen), just(Token::RParen))
+                    )
+                    .map(|(name, fields)| (name, DataDef::Struct(fields)))
+            )));
 
         let variant_parser = just(Token::Pipe)
             .ignore_then(ident_string())

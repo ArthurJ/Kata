@@ -203,8 +203,8 @@ with
         use crate::parser::ast::TypeRef;
 
         let source = "
-data PositiveInt as (Int, > _ 0)
-data NonZeroInt as (Int, != _ 0)
+data (Int, > _ 0) as PositiveInt
+data (Int, != _ 0) as NonZeroInt
 
 test_inherit :: PositiveInt NonZeroInt => Result::((Int, > _ 0, != _ 0), Text)
 lambda a b: + a b
