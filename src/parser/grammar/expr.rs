@@ -23,22 +23,37 @@ pub fn pattern_atom_parser() -> impl Parser<Token, Spanned<Pattern>, Error = Par
 
         let hole = just(Token::Hole).to(Pattern::Hole);
         let ident = filter_map(|span, tok| match tok {
-            Token::Ident(s) => Ok(Pattern::Ident(s)),
-            Token::TypeID(s) => Ok(Pattern::Ident(s)),
-            Token::InterfaceID(s) => Ok(Pattern::Ident(s)),
-            Token::Otherwise => Ok(Pattern::Ident("otherwise".to_string())),
+            Token::Ident(s) => Ok(s),
+            Token::TypeID(s) => Ok(s),
+            Token::InterfaceID(s) => Ok(s),
+            Token::Otherwise => Ok("otherwise".to_string()),
             _ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
-        });
+        })
+        .separated_by(just(Token::DoubleColon))
+        .at_least(1)
+        .map(|parts| Pattern::Ident(parts.join("::")));
 
         let tuple = pattern.clone()
             .separated_by(just(Token::Comma).or_not())
             .delimited_by(just(Token::LParen), just(Token::RParen))
             .map(Pattern::Tuple);
 
-        let list = pattern.clone()
-            .separated_by(just(Token::Comma).or_not())
-            .delimited_by(just(Token::LBracket), just(Token::RBracket))
-            .map(Pattern::List);
+        let pat_list_items = pattern.clone().separated_by(just(Token::Comma).or_not());
+        
+        let pat_list_cons = pattern.clone()
+            .then_ignore(just(Token::Colon))
+            .then(pattern.clone())
+            .map(|(head, tail)| Pattern::Sequence(vec![
+                (Pattern::Ident("Cons".to_string()), head.1.start..head.1.start),
+                head,
+                tail
+            ]));
+
+        let list = choice((
+            pat_list_cons,
+            pat_list_items.map(Pattern::List),
+        ))
+        .delimited_by(just(Token::LBracket), just(Token::RBracket));
 
         choice((lit, hole, ident, tuple, list))
             .map_with_span(|ast, span| (ast, span))
@@ -99,12 +114,15 @@ fn atom_expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = ParserError> 
         });
 
         let ident = filter_map(|span, tok| match tok {
-            Token::Ident(s) => Ok(Expr::Ident(s)),
-            Token::TypeID(s) => Ok(Expr::Ident(s)),
-            Token::InterfaceID(s) => Ok(Expr::Ident(s)),
-            Token::Otherwise => Ok(Expr::Ident("otherwise".to_string())),
+            Token::Ident(s) => Ok(s),
+            Token::TypeID(s) => Ok(s),
+            Token::InterfaceID(s) => Ok(s),
+            Token::Otherwise => Ok("otherwise".to_string()),
             _ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
-        });
+        })
+        .separated_by(just(Token::DoubleColon))
+        .at_least(1)
+        .map(|parts| Expr::Ident(parts.join("::")));
 
         let action_call = filter_map(|span, tok| match tok {
             Token::ActionIdent(s) => Ok(s),
@@ -128,10 +146,22 @@ fn atom_expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = ParserError> 
             .delimited_by(just(Token::LParen), just(Token::RParen))
             .map(Expr::Tuple);
 
-        let list = expr.clone()
-            .separated_by(just(Token::Comma).or_not())
-            .delimited_by(just(Token::LBracket), just(Token::RBracket))
-            .map(Expr::List);
+        let list_items = expr.clone().separated_by(just(Token::Comma).or_not());
+        
+        let list_cons = expr.clone()
+            .then_ignore(just(Token::Colon))
+            .then(expr.clone())
+            .map(|(head, tail)| Expr::Sequence(vec![
+                (Expr::Ident("Cons".to_string()), head.1.start..head.1.start),
+                head,
+                tail
+            ]));
+
+        let list = choice((
+            list_cons,
+            list_items.map(Expr::List),
+        ))
+        .delimited_by(just(Token::LBracket), just(Token::RBracket));
 
         let array = expr.clone()
             .separated_by(just(Token::Comma).or_not())

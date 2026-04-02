@@ -6,12 +6,29 @@ use chumsky::prelude::*;
 
 pub fn type_ref_parser() -> impl Parser<Token, Spanned<TypeRef>, Error = ParserError> + Clone {
     recursive(|type_ref| {
-        let simple_type = filter_map(|span, tok| match tok {
-            Token::TypeID(s) => Ok(TypeRef::Simple(s)),
-            Token::InterfaceID(s) => Ok(TypeRef::Simple(s)),
-            Token::TypeVar(s) => Ok(TypeRef::Simple(s)),
+        let module_path = filter_map(|span, tok| match tok {
+            Token::Ident(s) => Ok(s),
             _ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
-        });
+        })
+        .then_ignore(just(Token::DoubleColon))
+        .repeated();
+
+        let base_name = module_path
+            .then(filter_map(|span, tok| match tok {
+                Token::TypeID(s) => Ok(s),
+                Token::InterfaceID(s) => Ok(s),
+                Token::TypeVar(s) => Ok(s),
+                _ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
+            }))
+            .map(|(mods, name)| {
+                if mods.is_empty() {
+                    name
+                } else {
+                    format!("{}::{}", mods.join("::"), name)
+                }
+            });
+
+        let simple_type = base_name.clone().map(TypeRef::Simple);
 
         let generic_args = choice((
             type_ref.clone()
@@ -20,13 +37,9 @@ pub fn type_ref_parser() -> impl Parser<Token, Spanned<TypeRef>, Error = ParserE
             type_ref.clone().map(|t| vec![t])
         ));
 
-        let generic_type = filter_map(|span, tok| match tok {
-            Token::TypeID(s) => Ok(s),
-            Token::InterfaceID(s) => Ok(s),
-            _ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
-        })
-        .then(just(Token::DoubleColon).ignore_then(generic_args))
-        .map(|(name, args)| TypeRef::Generic(name, args));
+        let generic_type = base_name.clone()
+            .then(just(Token::DoubleColon).ignore_then(generic_args))
+            .map(|(name, args)| TypeRef::Generic(name, args));
 
         let function_type = type_ref.clone()
             .repeated()

@@ -21,7 +21,7 @@ O objetivo final é declarar as Fases 1 a 6 como estritamente completas e pronta
 
 ## 3. Melhorias no Frontend (Lexer & Parser)
 
-- [ ] **3.1. Correção de Sintaxe Faltante (Coerção e Coleções):**
+- [x] **3.1. Correção de Sintaxe Faltante (Coerção e Coleções):**
     *   *Problema:* O parser falha em coerções explícitas e *namespaces* compostos (ex: `tensor_result::Tensor`), e em instâncias de expressões como `[pivo : resto]`.
     *   *Solução:* Ajustar a gramática de expressões (`expr_parser`) e de tipos para suportar `DoubleColon` na composição de caminhos de acesso. A sintaxe de *cons* de listas (`[pivo : resto]`) já foi suportada em `expr.rs`.
 - [x] **3.2. Nova Sintaxe para Tipos Refinados:**

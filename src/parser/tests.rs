@@ -229,4 +229,50 @@ mod tests {
             _ => panic!("Expected ActionDef"),
         }
     }
+
+    #[test]
+    fn test_compound_ident() {
+        let src = "action main\n    let t tensor_result::Tensor\n";
+        let module = parse(src);
+        match &module.declarations[0].0 {
+            TopLevel::ActionDef(_, _, _, stmts, _) => {
+                match &stmts[0].0 {
+                    Stmt::Let(_, expr) => {
+                        match &expr.0 {
+                            Expr::Ident(id) => assert_eq!(id, "tensor_result::Tensor"),
+                            _ => panic!("Expected Expr::Ident(tensor_result::Tensor), found {:?}", expr.0),
+                        }
+                    },
+                    _ => panic!("Expected Let stmt"),
+                }
+            },
+            _ => panic!("Expected ActionDef"),
+        }
+    }
+
+    #[test]
+    fn test_list_cons() {
+        let src = "action main\n    let l [head : tail]\n";
+        let module = parse(src);
+        match &module.declarations[0].0 {
+            TopLevel::ActionDef(_, _, _, stmts, _) => {
+                match &stmts[0].0 {
+                    Stmt::Let(_, expr) => {
+                        match &expr.0 {
+                            Expr::Sequence(seq) => {
+                                assert_eq!(seq.len(), 3);
+                                match &seq[0].0 {
+                                    Expr::Ident(id) => assert_eq!(id, "Cons"),
+                                    _ => panic!("Expected Cons"),
+                                }
+                            },
+                            _ => panic!("Expected Expr::Sequence for list cons"),
+                        }
+                    },
+                    _ => panic!("Expected Let stmt"),
+                }
+            },
+            _ => panic!("Expected ActionDef"),
+        }
+    }
 }
