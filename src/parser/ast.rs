@@ -24,10 +24,11 @@ pub enum Expr {
     ChannelRecvNonBlock,
     Try(Box<Spanned<Expr>>),
     ExplicitApp(Box<Spanned<Expr>>), // Operador $
+    Pipe(Box<Spanned<Expr>>, Box<Spanned<Expr>>), // Operador |>
     Tuple(Vec<Spanned<Expr>>),
     List(Vec<Spanned<Expr>>),
     #[allow(dead_code)]
-    Array(Vec<Spanned<Expr>>),
+    Array(Vec<Vec<Spanned<Expr>>>),
     Sequence(Vec<Spanned<Expr>>), 
     Guard(Vec<(String, Spanned<Expr>)>, Box<Spanned<Expr>>),
     Lambda(Vec<Spanned<Pattern>>, Box<Spanned<Expr>>, Vec<Spanned<Expr>>), 

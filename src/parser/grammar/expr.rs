@@ -163,9 +163,21 @@ fn atom_expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = ParserError> 
         ))
         .delimited_by(just(Token::LBracket), just(Token::RBracket));
 
-        let array = expr.clone()
+        let array_row = expr.clone()
             .separated_by(just(Token::Comma).or_not())
-            .delimited_by(just(Token::LBrace), just(Token::RBrace))
+            .at_least(1);
+
+        let array = array_row
+            .separated_by(
+                just(Token::Newline).repeated()
+                    .ignore_then(just(Token::Semicolon))
+                    .then_ignore(just(Token::Newline).repeated())
+            )
+            .allow_trailing()
+            .delimited_by(
+                just(Token::LBrace).then_ignore(just(Token::Newline).repeated()), 
+                just(Token::Newline).repeated().ignore_then(just(Token::RBrace))
+            )
             .map(Expr::Array);
 
         let dollar_app = just(Token::Dollar)
@@ -198,14 +210,26 @@ pub fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = ParserError> +
         }
     });
 
+    let pipeline = sequence
+        .separated_by(just(Token::RightPipe))
+        .at_least(1)
+        .map_with_span(|mut seqs, span| {
+            let mut it = seqs.into_iter();
+            let mut acc = it.next().unwrap();
+            for step in it {
+                acc = (Expr::Pipe(Box::new(acc), Box::new(step)), span.clone());
+            }
+            acc
+        });
+
     let lambda_body = {
         let guard_branch = ident_string()
             .then_ignore(just(Token::Colon))
-            .then(sequence.clone());
+            .then(pipeline.clone());
 
         let otherwise_branch = just(Token::Otherwise)
             .ignore_then(just(Token::Colon))
-            .ignore_then(sequence.clone());
+            .ignore_then(pipeline.clone());
 
         let guards_block = just(Token::Newline).repeated()
             .ignore_then(just(Token::Indent))
@@ -225,7 +249,7 @@ pub fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = ParserError> +
         let lambda_block = just(Token::Newline).repeated()
             .ignore_then(just(Token::Indent))
             .ignore_then(
-                sequence.clone()
+                pipeline.clone()
                     .separated_by(just(Token::Newline).repeated().at_least(1))
                     .allow_trailing()
             )
@@ -240,7 +264,7 @@ pub fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = ParserError> +
                 (body, w)
             });
 
-        let inline_body = sequence.clone().then(with_block_parser());
+        let inline_body = pipeline.clone().then(with_block_parser());
 
         choice((guards_block, lambda_block, inline_body))
     };
@@ -253,5 +277,5 @@ pub fn expr_parser() -> impl Parser<Token, Spanned<Expr>, Error = ParserError> +
             (Expr::Lambda(args, Box::new(b), w), span)
         });
 
-    choice((lambda, sequence))
+    choice((lambda, pipeline))
 }

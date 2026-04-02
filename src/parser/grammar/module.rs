@@ -52,8 +52,11 @@ pub fn top_level_parser() -> impl Parser<Token, Spanned<TopLevel>, Error = Parse
                         fn has_hole(e: &Expr) -> bool {
                             match e {
                                 Expr::Hole => true,
-                                Expr::Tuple(es) | Expr::List(es) | Expr::Array(es) | Expr::Sequence(es) => {
+                                Expr::Tuple(es) | Expr::List(es) | Expr::Sequence(es) => {
                                     es.iter().any(|(ex, _)| has_hole(ex))
+                                }
+                                Expr::Array(rows) => {
+                                    rows.iter().any(|row| row.iter().any(|(ex, _)| has_hole(ex)))
                                 }
                                 _ => false,
                             }

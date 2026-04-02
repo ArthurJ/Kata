@@ -192,6 +192,9 @@ impl<'a, 'b> ExprTranslator<'a, 'b> {
                     Ok(results[0])
                 }
             }
+            TExpr::Array(_, _, _) => {
+                Err("Array literal unsupported by current Cranelift codegen".to_string())
+            }
             TExpr::Sequence(exprs, _) => {
                 let mut last_val = None;
                 for ex in exprs {
@@ -289,6 +292,43 @@ impl<'a, 'b> ExprTranslator<'a, 'b> {
                     self.bind_pattern(&p.0, loaded_val, &elem_types[i].0)?;
                 }
                 Ok(())
+            }
+            Pattern::Sequence(pats) => {
+                if pats.len() == 2 {
+                    if let Pattern::Ident(enum_variant) = &pats[0].0 {
+                        // Trata a extração do payload de um Enum (ex: Ok v)
+                        let payload_pat = &pats[1].0;
+                        
+                        // Na representação padrão da Kata, o Enum é um ponteiro para um bloco alocado.
+                        // O byte 0 contém a tag discriminatória (i8).
+                        // Os bytes 8 em diante contêm o payload propriamente dito.
+                        let ptr_type = self.module.target_config().pointer_type();
+                        
+                        // Determinar o tipo do payload com base na assinatura do enum
+                        let payload_ty = if let TypeRef::Generic(name, args) = ty {
+                            // Se for Result ou Optional, podemos inferir o tipo do payload
+                            if name == "Result" && args.len() == 2 {
+                                if enum_variant == "Ok" { args[0].0.clone() }
+                                else { args[1].0.clone() }
+                            } else if name == "Optional" && args.len() == 1 {
+                                args[0].0.clone()
+                            } else {
+                                TypeRef::Simple("Unknown".to_string())
+                            }
+                        } else {
+                            TypeRef::Simple("Unknown".to_string())
+                        };
+
+                        let ir_payload_ty = self.map_type(&payload_ty);
+                        
+                        // Carregar a partir do ponteiro base + 8 (padding/alignment safe)
+                        let offset = 8;
+                        let mut loaded_val = self.builder.ins().load(ir_payload_ty, cranelift_codegen::ir::MemFlags::new(), val, offset);
+                        
+                        return self.bind_pattern(payload_pat, loaded_val, &payload_ty);
+                    }
+                }
+                Err("Pattern::Sequence complexo não suportado na extração de layout".to_string())
             }
             _ => Err("Pattern não suportado no Let (apenas Ident e Tuple no AOT)".to_string())
         }

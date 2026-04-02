@@ -34,7 +34,7 @@ impl<'a> ArityResolver<'a> {
             TExpr::Literal(TLiteral::String(_)) => TypeRef::Simple("Text".to_string()),
             TExpr::Literal(TLiteral::Bool(_)) => TypeRef::Simple("Bool".to_string()),
             TExpr::Literal(TLiteral::Unit) => TypeRef::Simple("()".to_string()),
-            TExpr::Ident(_, ty) | TExpr::Call(_, _, ty) | TExpr::Tuple(_, ty, _) | TExpr::List(_, ty, _) | TExpr::Lambda(_, _, ty, _) | TExpr::Sequence(_, ty) | TExpr::Guard(_, _, ty) | TExpr::Try(_, ty) | TExpr::ChannelSend(_, _, ty) | TExpr::ChannelRecv(_, ty) | TExpr::ChannelRecvNonBlock(_, ty) => ty.clone(),
+            TExpr::Ident(_, ty) | TExpr::Call(_, _, ty) | TExpr::Tuple(_, ty, _) | TExpr::List(_, ty, _) | TExpr::Array(_, ty, _) | TExpr::Lambda(_, _, ty, _) | TExpr::Sequence(_, ty) | TExpr::Guard(_, _, ty) | TExpr::Try(_, ty) | TExpr::ChannelSend(_, _, ty) | TExpr::ChannelRecv(_, ty) | TExpr::ChannelRecvNonBlock(_, ty) => ty.clone(),
             TExpr::Hole => TypeRef::Simple("Unknown".to_string()),
         }
     }
@@ -404,6 +404,20 @@ impl<'a> ArityResolver<'a> {
                     resolved.push(t_e);
                 }
                 (TExpr::List(resolved, TypeRef::Generic("List".into(), vec![(elem_ty, 0..0)]), crate::type_checker::tast::AllocMode::Local), span.clone())
+            }
+            Expr::Array(rows) => {
+                let mut resolved_rows = Vec::new();
+                let mut elem_ty = TypeRef::Simple("Unknown".into());
+                for row in rows {
+                    let mut resolved_row = Vec::new();
+                    for e in row {
+                        let t_e = self.resolve_expr(e);
+                        elem_ty = Self::get_expr_type(&t_e.0);
+                        resolved_row.push(t_e);
+                    }
+                    resolved_rows.push(resolved_row);
+                }
+                (TExpr::Array(resolved_rows, TypeRef::Generic("Array".into(), vec![(elem_ty, 0..0)]), crate::type_checker::tast::AllocMode::Local), span.clone())
             }
             Expr::ExplicitApp(inner) => {
                 let (e, s) = &**inner;

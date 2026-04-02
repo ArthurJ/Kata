@@ -40,7 +40,7 @@ O objetivo final é declarar as Fases 1 a 6 como estritamente completas e pronta
 
 Remover os atalhos e *hacks* do gerador de código de máquina:
 
-- [ ] **4.1. Remoção de Tipagem Hardcoded (Payloads de Enum):**
+- [x] **4.1. Remoção de Tipagem Hardcoded (Payloads de Enum):**
     *   *Problema:* O `Match` de enums assume prematuramente que quase todos os *payloads* são castáveis para `I64` no MVP.
     *   *Solução:* Implementar a resolução dinâmica do *layout* de memória no `Match`, consultando o `TypeEnv` para gerar a instrução Cranelift correta (`F64`, Pointers complexos, Tuplas, etc.) ao extrair dados na posição `+8` do ponteiro.
 - [ ] **4.2. Respeito ao Escape Analysis e Emissão de ARC:**
@@ -60,6 +60,9 @@ Ajustar as análises para não deixarem "pontas soltas" que corrompam lógicas a
     *   *(Resolvido)* O rastreio de variáveis capturadas por *closures* (`free_vars.rs`) foi expandido para suportar *patterns* de *Match Arms*.
 - [x] **5.2. Type Checker & Prelude Exports:**
     *   *(Resolvido)* Corrigida a necessidade de exportar explicitamente operadores matemáticos nativos (`+`, `<`, etc) no `prelude.kata`.
+- [ ] **5.3. Validação de Auto-Expansão de Exports (Clean Exports):**
+    *   *Problema:* O arquivo `src/core/types.kata` possui uma lista gigante de exportações explícitas desnecessárias (ex: `export NUM Float Int ... = != > >= + - * ...`). Como a função `expand_exports()` já existe no `TypeEnv`, a exportação de uma Interface ou Tipo deve exportar automaticamente todos os seus métodos.
+    *   *Solução:* Limpar as exportações redundantes em `types.kata` e `prelude.kata`, mantendo apenas os tipos e interfaces base. Criar um teste no `type_checker/tests.rs` para garantir que as funções vinculadas são corretamente expostas ao importar apenas a entidade pai.
 - [ ] **5.4. Igualdade Estrutural de Tipos Refinados:**
     *   *Problema:* `types_equal_ignore_span` checa apenas se dois tipos refinados têm a mesma base e a mesma quantidade de predicados (verificação rasa).
     *   *Solução:* Implementar uma função de igualdade profunda de AST (`Expr`) para comparar matematicamente se os predicados de um `PositiveInt` são logicamente os mesmos de outro tipo antes de permitir a compatibilidade.

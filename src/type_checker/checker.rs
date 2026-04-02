@@ -213,13 +213,13 @@ impl Checker {
 
                 for variant in variants {
                     var_names.push(variant.name.clone());
-                    let arity = match &variant.data {
-                        crate::parser::ast::VariantData::Unit => 0,
-                        crate::parser::ast::VariantData::Type(_) => 1,
-                        crate::parser::ast::VariantData::FixedValue(_) => { has_smart_constructor = true; 0 },
-                        crate::parser::ast::VariantData::Predicate(_) => { has_smart_constructor = true; has_predicate = true; 1 },
+                    let (arity, type_info) = match &variant.data {
+                        crate::parser::ast::VariantData::Unit => (0, TypeRef::Simple(name.clone())),
+                        crate::parser::ast::VariantData::Type(t) => (1, TypeRef::Function(vec![t.clone()], Box::new((TypeRef::Simple(name.clone()), 0..0)))),
+                        crate::parser::ast::VariantData::FixedValue(_) => { has_smart_constructor = true; (0, TypeRef::Simple(name.clone())) },
+                        crate::parser::ast::VariantData::Predicate(_) => { has_smart_constructor = true; has_predicate = true; (1, TypeRef::Function(vec![(TypeRef::Simple("Unknown".to_string()), 0..0)], Box::new((TypeRef::Simple(name.clone()), 0..0)))) },
                     };
-                    self.env.define(variant.name.clone(), arity, TypeRef::Simple(name.clone()), false, false);
+                    self.env.define(variant.name.clone(), arity, type_info, false, false);
                 }
 
                 if has_predicate {

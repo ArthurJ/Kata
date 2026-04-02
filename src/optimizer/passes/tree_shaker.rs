@@ -162,6 +162,13 @@ impl<'a> TreeShaker<'a> {
                     self.visit_expr(e);
                 }
             }
+            TExpr::Array(rows, _, _) => {
+                for row in rows {
+                    for e in row {
+                        self.visit_expr(e);
+                    }
+                }
+            }
             TExpr::Lambda(_, body, _, _) => {
                 self.visit_expr(body);
             }

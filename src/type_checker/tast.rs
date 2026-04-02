@@ -14,6 +14,7 @@ pub enum TExpr {
     Call(Box<Spanned<TExpr>>, Vec<Spanned<TExpr>>, TypeRef),
     Tuple(Vec<Spanned<TExpr>>, TypeRef, AllocMode),
     List(Vec<Spanned<TExpr>>, TypeRef, AllocMode),
+    Array(Vec<Vec<Spanned<TExpr>>>, TypeRef, AllocMode),
     Lambda(Vec<Spanned<Pattern>>, Box<Spanned<TExpr>>, TypeRef, AllocMode),
     Sequence(Vec<Spanned<TExpr>>, TypeRef),
     Guard(Vec<(Spanned<TExpr>, Spanned<TExpr>)>, Box<Spanned<TExpr>>, TypeRef),
