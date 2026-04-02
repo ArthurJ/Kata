@@ -1,7 +1,7 @@
 # Teste de Tipos Refinados e Validação Estática de Literais
 
 # 1. Declarando um Tipo Refinado
-alias (Int, > _ 0) as PositiveInt
+data (Int, > _ 0) as PositiveInt
 
 # 2. Função que exige o tipo refinado puro
 processar_idade :: PositiveInt => Text

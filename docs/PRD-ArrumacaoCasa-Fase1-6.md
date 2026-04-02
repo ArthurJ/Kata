@@ -30,7 +30,7 @@ O objetivo final é declarar as Fases 1 a 6 como estritamente completas e pronta
 - [ ] **3.3. Tokens e Sintaxe para `select` e `timeout`:**
     *   *Problema:* A linguagem promete multiplexação de canais não-determinística, mas os tokens e as estruturas na AST não existem no Lexer e no Parser.
     *   *Solução:* Adicionar os tokens pertinentes e estender a gramática de `Stmt` para suportar o bloco imperativo `select` com ramos `case` e `timeout`.
-- [ ] **3.4. Nova Assinatura para Tensores:**
+- [x] **3.4. Nova Assinatura para Tensores:**
     *   *Problema:* O formato atual de declaração de tensores não é rigoroso o suficiente quanto aos tipos numéricos e variabilidade de dimensões esperadas.
     *   *Solução:* Atualizar a gramática e a resolução de tipos para suportar e validar a assinatura no padrão `Tensor::(NUM, (Int...))`, especificando diretamente o tipo dos dados e as dimensões no tipo parametrizado.
 

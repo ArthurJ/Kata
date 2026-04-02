@@ -33,6 +33,13 @@ impl TcoPass {
             TypeRef::Function(_, _) => "Func".to_string(),
             TypeRef::Refined(base, _) => format!("Refined_{}", self.type_to_string(&base.0)),
             TypeRef::Variadic(inner) => format!("Var_{}", self.type_to_string(&inner.0)),
+            TypeRef::Const(expr) => match expr {
+                crate::parser::ast::Expr::Int(i) => format!("ConstInt_{}", i),
+                crate::parser::ast::Expr::Float(f) => format!("ConstFloat_{}", f.replace(".", "_")),
+                crate::parser::ast::Expr::String(s) => format!("ConstStr_{}", s),
+                crate::parser::ast::Expr::Ident(id) => format!("ConstId_{}", id),
+                _ => "ConstUnknown".to_string(),
+            },
         }
     }
 

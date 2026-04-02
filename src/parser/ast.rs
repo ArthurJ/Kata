@@ -8,6 +8,7 @@ pub enum TypeRef {
     Function(Vec<Spanned<TypeRef>>, Box<Spanned<TypeRef>>),
     Refined(Box<Spanned<TypeRef>>, Vec<Spanned<Expr>>),
     Variadic(Box<Spanned<TypeRef>>),
+    Const(Expr),
 }
 
 #[derive(Debug, Clone, PartialEq)]

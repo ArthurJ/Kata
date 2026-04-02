@@ -1,0 +1,15 @@
+# Teste de Recursão em Actions e Regra de Coerência
+
+# 1. Erro de Recursão (Proibido em Actions)
+action loop_infinito
+    echo!("Recursando...")
+    loop_infinito!()# Deve gerar erro semântico
+
+# 2. Erro de Coerência (Orphan Rule)
+# Int é do core, SHOW é do core. Nenhum é local.
+Int implements SHOW
+    str :: Int => Text
+    lambda x: "Erro"
+
+action main
+    loop_infinito!()

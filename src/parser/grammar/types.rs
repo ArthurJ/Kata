@@ -30,8 +30,19 @@ pub fn type_ref_parser() -> impl Parser<Token, Spanned<TypeRef>, Error = ParserE
 
         let simple_type = base_name.clone().map(TypeRef::Simple);
 
+        let const_type = choice((
+            filter_map(|span, tok| match tok {
+                Token::Int(s) => Ok(Expr::Int(s)),
+                Token::Float(s) => Ok(Expr::Float(s)),
+                Token::String(s) => Ok(Expr::String(s)),
+                Token::Ident(s) if s == "True" || s == "False" => Ok(Expr::Ident(s)),
+                _ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
+            }).map(TypeRef::Const),
+        ));
+
         let generic_args = choice((
             type_ref.clone()
+                .or(const_type.map_with_span(|ast, span| (ast, span)))
                 .separated_by(just(Token::Comma).or_not())
                 .delimited_by(just(Token::LParen), just(Token::RParen)),
             type_ref.clone().map(|t| vec![t])
@@ -61,6 +72,7 @@ pub fn type_ref_parser() -> impl Parser<Token, Spanned<TypeRef>, Error = ParserE
             .map(|(base, predicates)| TypeRef::Refined(Box::new(base), predicates));
 
         let tuple_type = type_ref.clone()
+            .or(const_type.map_with_span(|ast, span| (ast, span)))
             .separated_by(just(Token::Comma).or_not())
             .delimited_by(just(Token::LParen), just(Token::RParen))
             .map(|types| {
