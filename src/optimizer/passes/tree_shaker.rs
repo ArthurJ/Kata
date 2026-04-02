@@ -141,8 +141,26 @@ impl<'a> TreeShaker<'a> {
                     }
                 }
             }
+            TStmt::Select(arms, timeout) => {
+                for arm in arms {
+                    self.visit_expr(&arm.operation);
+                    for s in &arm.body {
+                        self.visit_stmt(s);
+                    }
+                }
+                if let Some((e, b)) = timeout {
+                    self.visit_expr(e);
+                    for s in b {
+                        self.visit_stmt(s);
+                    }
+                }
+            }
+            TStmt::ActionAssign(t, v) => {
+                self.visit_expr(t);
+                self.visit_expr(v);
+            }
             TStmt::Expr(expr) => self.visit_expr(expr),
-            TStmt::Break | TStmt::Continue => {}
+            TStmt::Break | TStmt::Continue | TStmt::DropShared(_) => {}
         }
     }
 

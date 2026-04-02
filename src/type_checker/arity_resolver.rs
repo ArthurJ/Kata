@@ -72,6 +72,14 @@ impl<'a> ArityResolver<'a> {
                 self.types_compatible(arg, &base.0)
             },
             (TypeRef::Generic(a_name, a_args), TypeRef::Generic(p_name, p_args)) => {
+                if p_name == "ITERABLE" {
+                    if a_name == "List" || a_name == "Array" || a_name == "Range" {
+                        if a_args.len() == 1 && p_args.len() == 1 {
+                            return self.types_compatible(&a_args[0].0, &p_args[0].0);
+                        }
+                    }
+                }
+
                 if a_name != p_name {
                     return false;
                 }
@@ -451,7 +459,12 @@ impl<'a> ArityResolver<'a> {
                 self.check_recursion(name, span);
                 let mut resolved_args = Vec::new();
                 for arg in args {
-                    resolved_args.push(self.resolve_expr(arg));
+                    let mut res_arg = self.resolve_expr(arg);
+                    let arg_ty = Self::get_expr_type(&res_arg.0);
+                    
+
+                    
+                    resolved_args.push(res_arg);
                 }
 
                 if let Some(infos) = self.env.lookup_all(name) {
@@ -467,6 +480,25 @@ impl<'a> ArityResolver<'a> {
                                 match &params[p_idx].0 {
                                     TypeRef::Variadic(inner_p) => {
                                         let arg_ty = Self::get_expr_type(&resolved_args[a_idx].0);
+                                        
+                                        // Conversão implícita para SHOW (Variadic)
+                                        if let TypeRef::Simple(n) = &inner_p.0 {
+                                            if n == "SHOW" && !self.types_compatible(&arg_ty, &TypeRef::Simple("Text".to_string())) {
+                                                let type_name = match &arg_ty {
+                                                    TypeRef::Simple(tn) => tn.clone(),
+                                                    TypeRef::Generic(tn, _) => tn.clone(),
+                                                    _ => "".to_string(),
+                                                };
+                                                if self.env.implements(&type_name, "SHOW") {
+                                                    let span = resolved_args[a_idx].1.clone();
+                                                    let str_ty = TypeRef::Function(vec![(arg_ty.clone(), 0..0)], Box::new((TypeRef::Simple("Text".to_string()), 0..0)));
+                                                    let str_callee = Box::new((TExpr::Ident("str".to_string(), str_ty), span.clone()));
+                                                    resolved_args[a_idx] = (TExpr::Call(str_callee, vec![resolved_args[a_idx].clone()], TypeRef::Simple("Text".to_string())), span);
+                                                }
+                                            }
+                                        }
+                                        
+                                        let arg_ty = Self::get_expr_type(&resolved_args[a_idx].0);
                                         if self.types_compatible(&arg_ty, &inner_p.0) {
                                             // Greedy consume
                                             a_idx += 1;
@@ -476,6 +508,25 @@ impl<'a> ArityResolver<'a> {
                                         }
                                     }
                                     other_p => {
+                                        let arg_ty = Self::get_expr_type(&resolved_args[a_idx].0);
+                                        
+                                        // Conversão implícita para SHOW (Positional)
+                                        if let TypeRef::Simple(n) = other_p {
+                                            if n == "SHOW" && !self.types_compatible(&arg_ty, &TypeRef::Simple("Text".to_string())) {
+                                                let type_name = match &arg_ty {
+                                                    TypeRef::Simple(tn) => tn.clone(),
+                                                    TypeRef::Generic(tn, _) => tn.clone(),
+                                                    _ => "".to_string(),
+                                                };
+                                                if self.env.implements(&type_name, "SHOW") {
+                                                    let span = resolved_args[a_idx].1.clone();
+                                                    let str_ty = TypeRef::Function(vec![(arg_ty.clone(), 0..0)], Box::new((TypeRef::Simple("Text".to_string()), 0..0)));
+                                                    let str_callee = Box::new((TExpr::Ident("str".to_string(), str_ty), span.clone()));
+                                                    resolved_args[a_idx] = (TExpr::Call(str_callee, vec![resolved_args[a_idx].clone()], TypeRef::Simple("Text".to_string())), span);
+                                                }
+                                            }
+                                        }
+                                        
                                         let arg_ty = Self::get_expr_type(&resolved_args[a_idx].0);
                                         if self.types_compatible(&arg_ty, other_p) {
                                             a_idx += 1;

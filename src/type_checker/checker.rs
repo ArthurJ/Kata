@@ -176,7 +176,11 @@ impl Checker {
                 self.local_types.insert(name.clone());
                 match def {
                     crate::parser::ast::DataDef::Struct(fields) => {
-                        self.env.define(name.clone(), fields.len(), TypeRef::Simple(name.clone()), false, false);
+                        let mut params = Vec::new();
+                        for _ in 0..fields.len() {
+                            params.push((TypeRef::Simple("Unknown".to_string()), 0..0));
+                        }
+                        self.env.define(name.clone(), fields.len(), TypeRef::Function(params, Box::new((TypeRef::Simple(name.clone()), 0..0))), false, false, None);
                     }
                     crate::parser::ast::DataDef::Refined((base, _), predicates) => {
                         self.env.define_refined(name.clone(), base.clone(), predicates.iter().map(|(e, _)| e.clone()).collect());
@@ -198,7 +202,8 @@ impl Checker {
                                 ))
                             ),
                             false,
-                            false
+                            false,
+                            None
                         );
                     }
                 }
@@ -219,7 +224,7 @@ impl Checker {
                         crate::parser::ast::VariantData::FixedValue(_) => { has_smart_constructor = true; (0, TypeRef::Simple(name.clone())) },
                         crate::parser::ast::VariantData::Predicate(_) => { has_smart_constructor = true; has_predicate = true; (1, TypeRef::Function(vec![(TypeRef::Simple("Unknown".to_string()), 0..0)], Box::new((TypeRef::Simple(name.clone()), 0..0)))) },
                     };
-                    self.env.define(variant.name.clone(), arity, type_info, false, false);
+                    self.env.define(variant.name.clone(), arity, type_info, false, false, None);
                 }
 
                 if has_predicate {
@@ -245,7 +250,8 @@ impl Checker {
                             Box::new((TypeRef::Simple(name.clone()), 0..0))
                         ),
                         false,
-                        false
+                        false,
+                        None
                     );
                 }
             }
@@ -286,7 +292,8 @@ impl Checker {
                 if let Some(desc) = parsed_dirs.iter().find_map(|(d, _)| if let KataDirective::Test(s) = d { Some(s.clone()) } else { None }) {
                     self.tests.push(TestInfo { name: name.clone(), description: desc, is_action: false });
                 }
-                self.env.define(name.clone(), params.len(), TypeRef::Function(params.clone(), Box::new(ret.clone())), false, parsed_dirs.iter().any(|(d, _)| matches!(d, KataDirective::Commutative)));
+                let ffi_name = parsed_dirs.iter().find_map(|(d, _)| if let KataDirective::Ffi(name) = d { Some(name.clone()) } else { None });
+                self.env.define(name.clone(), params.len(), TypeRef::Function(params.clone(), Box::new(ret.clone())), false, parsed_dirs.iter().any(|(d, _)| matches!(d, KataDirective::Commutative)), ffi_name);
             }
             TopLevel::ActionDef(name, params, ret, _, dirs) => {
                 let (parsed_dirs, errs) = validate_and_parse_directives(dirs);
@@ -294,12 +301,14 @@ impl Checker {
                 if let Some(desc) = parsed_dirs.iter().find_map(|(d, _)| if let KataDirective::Test(s) = d { Some(s.clone()) } else { None }) {
                     self.tests.push(TestInfo { name: name.clone(), description: desc, is_action: true });
                 }
+                let ffi_name = parsed_dirs.iter().find_map(|(d, _)| if let KataDirective::Ffi(name) = d { Some(name.clone()) } else { None });
                 self.env.define(
                     name.clone(), 
                     params.len(), 
                     TypeRef::Function(params.iter().map(|(_, t)| t.clone()).collect(), Box::new(ret.clone())), 
                     true,
-                    parsed_dirs.iter().any(|(d, _)| matches!(d, KataDirective::Commutative))
+                    parsed_dirs.iter().any(|(d, _)| matches!(d, KataDirective::Commutative)),
+                    ffi_name
                 );
             }
             TopLevel::Alias(name, target, dirs) => {
@@ -396,11 +405,14 @@ impl Checker {
                     t_body.push(res_stmt);
                 }
 
-                if !resolver.types_compatible(&last_stmt_ty, &ret.0) {
+                let parsed_dirs = validate_and_parse_directives(dirs).0;
+                let is_ffi = parsed_dirs.iter().any(|(d, _)| matches!(d, KataDirective::Ffi(_)));
+
+                if !is_ffi && !resolver.types_compatible(&last_stmt_ty, &ret.0) {
                     local_errors.push((format!("Type Mismatch: Expected return type `{:?}`, Found `{:?}` in Action `{}`", ret.0, last_stmt_ty, name), ret.1.clone()));
                 }
 
-                Some(TTopLevel::ActionDef(name.clone(), params.clone(), ret.clone(), t_body, validate_and_parse_directives(dirs).0))
+                Some(TTopLevel::ActionDef(name.clone(), params.clone(), ret.clone(), t_body, parsed_dirs))
             }
             TopLevel::Execution(expr) => {
                 resolver.pure_context.set(false); // Top-level execution allows actions
@@ -523,7 +535,7 @@ impl Checker {
                 };
                 
                 let elem_ty = if let TypeRef::Generic(name, args) = &target_ty {
-                    if (name == "List" || name == "Array" || name == "Range") && !args.is_empty() {
+                    if (name == "List" || name == "Array" || name == "Range" || name == "ITERABLE") && !args.is_empty() {
                         args[0].0.clone()
                     } else {
                         TypeRef::Simple("Unknown".to_string())
@@ -540,7 +552,53 @@ impl Checker {
                 }
                 (TStmt::For(ident.clone(), t_target, t_body), span.clone())
             }
-            _ => (TStmt::Break, span.clone()),
+            Stmt::Select(arms, timeout) => {
+                let mut t_arms = Vec::new();
+                for arm in arms {
+                    let t_op = resolver.resolve_expr(&arm.operation);
+                    
+                    if let Some(ref b) = arm.binding {
+                        if let Pattern::Ident(name) = &b.0 {
+                            let ty = match &t_op.0 {
+                                TExpr::Ident(_, ty) | TExpr::Call(_, _, ty) | TExpr::Sequence(_, ty) | TExpr::Tuple(_, ty, _) | TExpr::List(_, ty, _) | TExpr::Lambda(_, _, ty, _) => ty.clone(),
+                                _ => TypeRef::Simple("Unknown".to_string()),
+                            };
+                            resolver.declare_local(name.clone(), ty);
+                        }
+                    }
+
+                    let mut t_body = Vec::new();
+                    for s in &arm.body {
+                        t_body.push(self.resolve_stmt(s, resolver, local_errors));
+                    }
+                    
+                    t_arms.push(crate::type_checker::tast::TSelectArm {
+                        operation: t_op,
+                        binding: arm.binding.clone(),
+                        body: t_body,
+                    });
+                }
+                
+                let t_timeout = if let Some((t_expr, t_stmts)) = timeout {
+                    let tt_expr = resolver.resolve_expr(t_expr);
+                    let mut tt_body = Vec::new();
+                    for s in t_stmts {
+                        tt_body.push(self.resolve_stmt(s, resolver, local_errors));
+                    }
+                    Some((tt_expr, tt_body))
+                } else {
+                    None
+                };
+                
+                (TStmt::Select(t_arms, t_timeout), span.clone())
+            }
+            Stmt::ActionAssign(target, val) => {
+                let t_target = resolver.resolve_expr(target);
+                let t_val = resolver.resolve_expr(val);
+                (TStmt::ActionAssign(t_target, t_val), span.clone())
+            }
+            Stmt::Break => (TStmt::Break, span.clone()),
+            Stmt::Continue => (TStmt::Continue, span.clone()),
         }
     }
 }

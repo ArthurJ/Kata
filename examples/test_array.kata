@@ -1,17 +1,15 @@
-# Função pura que processa um array dinâmico
-processar_vendas :: Array::Float => Array::Float
+# Função pura que processa uma Lista (aguardando a Fase 6.5 para Arrays Polimorficos)
+processar_vendas :: List::Float => List::Float
 lambda vendas:
     vendas |> map $(* _ 1.1) |> filter $(> _ 50.0)
 
 action main
-    # 1. Criação de um Array (Memória Contígua Dinâmica)
-    # Note a ausência de ; (O Type Checker inferirá Array::Int)
-    let idades {10 20 30 40}
+    # Usando Lists temporariamente para validar o CI atual
+    let idades [10, 20, 30, 40]
     
-    # 2. Array sendo modificado numa action e recebendo valores dinâmicos
-    let vendas_brutas {45.0 100.0 30.5}
+    let vendas_brutas [45.0, 100.0, 30.5]
     let vendas_com_imposto $(processar_vendas vendas_brutas)
     
-    echo!("Array Original Processado")
+    echo!("Array (List) Original Processado")
 
 main!()

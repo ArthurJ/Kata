@@ -1,34 +1,33 @@
-use tokio::sync::mpsc;
-use tokio::sync::broadcast;
 
-pub struct RendezvousChannel {
-    pub tx: mpsc::Sender<*mut u8>,
-    pub rx: mpsc::Receiver<*mut u8>,
+use tokio::sync::{mpsc, broadcast, oneshot};
+
+pub enum KataSender {
+    Rendezvous(mpsc::Sender<(*mut u8, Option<oneshot::Sender<()>>)>),
+    Queue(mpsc::Sender<*mut u8>),
+    Broadcast(broadcast::Sender<*mut u8>),
 }
 
-pub struct QueueChannel {
-    pub tx: mpsc::Sender<*mut u8>,
-    pub rx: mpsc::Receiver<*mut u8>,
+pub enum KataReceiver {
+    Rendezvous(mpsc::Receiver<(*mut u8, Option<oneshot::Sender<()>>)>),
+    Queue(mpsc::Receiver<*mut u8>),
+    Broadcast(broadcast::Receiver<*mut u8>),
 }
 
+// We also need a Subscribe mechanism for broadcast.
+// Kata broadcast returns (Sender, SubscribeFunc).
+// Since C-ABI is tricky, we can just return a special Channel that can be subscribed to.
 pub struct BroadcastChannel {
     pub tx: broadcast::Sender<*mut u8>,
 }
 
-impl RendezvousChannel {
-    pub fn new() -> (mpsc::Sender<*mut u8>, mpsc::Receiver<*mut u8>) {
-        mpsc::channel(1) // Emulating rendezvous with a buffer of 1, but we might want a pure rendezvous
+impl KataSender {
+    pub fn new_rendezvous() -> (Self, KataReceiver) {
+        let (tx, rx) = mpsc::channel(1);
+        (KataSender::Rendezvous(tx), KataReceiver::Rendezvous(rx))
     }
-}
-
-impl QueueChannel {
-    pub fn new(size: usize) -> (mpsc::Sender<*mut u8>, mpsc::Receiver<*mut u8>) {
-        mpsc::channel(size)
-    }
-}
-
-impl BroadcastChannel {
-    pub fn new(size: usize) -> (broadcast::Sender<*mut u8>, broadcast::Receiver<*mut u8>) {
-        broadcast::channel(size)
+    
+    pub fn new_queue(size: usize) -> (Self, KataReceiver) {
+        let (tx, rx) = mpsc::channel(size);
+        (KataSender::Queue(tx), KataReceiver::Queue(rx))
     }
 }

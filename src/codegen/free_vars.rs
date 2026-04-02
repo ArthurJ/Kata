@@ -107,6 +107,29 @@ pub fn get_free_vars_stmt(stmt: &Spanned<TStmt>, bound_vars: &mut HashSet<String
             }
         }
         TStmt::Expr(expr) => get_free_vars(expr, bound_vars, free_vars, env),
-        TStmt::Break | TStmt::Continue => {}
+        TStmt::Select(arms, timeout) => {
+            for arm in arms {
+                get_free_vars(&arm.operation, bound_vars, free_vars, env);
+                let mut new_bound = bound_vars.clone();
+                if let Some(ref b) = arm.binding {
+                    extract_bound_vars(&b.0, &mut new_bound);
+                }
+                for s in &arm.body {
+                    get_free_vars_stmt(s, &mut new_bound, free_vars, env);
+                }
+            }
+            if let Some((t_expr, t_stmts)) = timeout {
+                get_free_vars(t_expr, bound_vars, free_vars, env);
+                let mut new_bound = bound_vars.clone();
+                for s in t_stmts {
+                    get_free_vars_stmt(s, &mut new_bound, free_vars, env);
+                }
+            }
+        }
+        TStmt::ActionAssign(t, v) => {
+            get_free_vars(t, bound_vars, free_vars, env);
+            get_free_vars(v, bound_vars, free_vars, env);
+        }
+        TStmt::Break | TStmt::Continue | TStmt::DropShared(_) => {}
     }
 }

@@ -1,0 +1,4 @@
+import types.(Text, SHOW)
+
+action main
+    echo!("Teste")

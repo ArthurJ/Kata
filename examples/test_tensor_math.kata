@@ -1,9 +1,9 @@
 @ffi("kata_rt_dot")
-dot :: Tensor::Int::T Tensor::Int::T => Int
+dot :: Tensor::(Int, T) Tensor::(Int, T) => Int
 
 @ffi("kata_rt_add")
 @commutative
-+ :: Tensor::Int::T Tensor::Int::T => Tensor::Int::T
++ :: Tensor::(Int, T) Tensor::(Int, T) => Tensor::(Int, T)
 
 action main
     let v_linha {1 2 3 ;}

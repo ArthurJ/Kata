@@ -1,0 +1,225 @@
+warning: unused imports: `Module`, `Pattern`, `Spanned`, `TopLevel`, and `TypeRef`
+ --> src/type_checker/tests.rs:2:26
+  |
+2 | use crate::parser::ast::{Module, TopLevel, Spanned, TypeRef, Pattern};
+  |                          ^^^^^^  ^^^^^^^^  ^^^^^^^  ^^^^^^^  ^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `crate::type_checker::Checker`
+ --> src/type_checker/tests.rs:3:5
+  |
+3 | use crate::type_checker::Checker;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: variable does not need to be mutable
+   --> src/parser/grammar/expr.rs:216:25
+    |
+216 |         .map_with_span(|mut seqs, span| {
+    |                         ----^^^^
+    |                         |
+    |                         help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `cranelift_codegen::entity::EntityRef`
+ --> src/codegen/translator.rs:9:5
+  |
+9 | use cranelift_codegen::entity::EntityRef;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `cranelift_codegen::entity::EntityRef`
+ --> src/codegen/expr.rs:9:5
+  |
+9 | use cranelift_codegen::entity::EntityRef;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: variable does not need to be mutable
+  --> src/codegen/translator.rs:46:13
+   |
+46 |         let mut executions = Vec::new();
+   |             ----^^^^^^^^^^
+   |             |
+   |             help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> src/codegen/translator.rs:49:13
+   |
+49 |         let mut compile_lambdas = |mangled_name: &str, sig_params: &[Spanned<TypeRef>], sig_ret: &TypeRef, lambdas: &[(Vec<Spanned<crate::parser::ast::Pattern>>, crate::type_checker::tast::TExpr)], env: &TypeEnv, ctx: &mut CodegenContext, builder_context: &mut FunctionBuilderContext| -> Result<(), String> {
+   |             ----^^^^^^^^^^^^^^^
+   |             |
+   |             help: remove this `mut`
+
+warning: variable `current_sig_name` is assigned to, but never used
+  --> src/codegen/translator.rs:41:13
+   |
+41 |         let mut current_sig_name: Option<String> = None;
+   |             ^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: consider using `_current_sig_name` instead
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: value assigned to `current_sig_name` is never read
+   --> src/codegen/translator.rs:191:21
+    |
+191 |                     current_sig_name = Some(name.clone());
+    |                     ^^^^^^^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: value assigned to `current_sig_name` is never read
+   --> src/codegen/translator.rs:217:21
+    |
+217 |                     current_sig_name = None;
+    |                     ^^^^^^^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+
+warning: variable `current_sig_name` is assigned to, but never used
+   --> src/codegen/translator.rs:348:13
+    |
+348 |         let mut current_sig_name = None;
+    |             ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: consider using `_current_sig_name` instead
+
+warning: value assigned to `current_sig_name` is never read
+   --> src/codegen/translator.rs:353:21
+    |
+353 |                     current_sig_name = Some(name.clone());
+    |                     ^^^^^^^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+
+warning: value assigned to `current_sig_name` is never read
+   --> src/codegen/translator.rs:389:21
+    |
+389 |                     current_sig_name = None;
+    |                     ^^^^^^^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+
+warning: unreachable pattern
+   --> src/codegen/expr.rs:254:13
+    |
+254 |             _ => Err(format!("Statement não suportado no TODO: {:?}", s)),
+    |             ^ no value can reach this
+    |
+note: multiple earlier patterns match some of the same values
+   --> src/codegen/expr.rs:254:13
+    |
+ 25 |             TStmt::Let(pat, expr) => {
+    |             --------------------- matches some of the same values
+...
+ 31 |             TStmt::Var(name, expr) => {
+    |             ---------------------- matches some of the same values
+...
+ 44 |             TStmt::Expr(expr) => {
+    |             ----------------- matches some of the same values
+...
+ 48 |             TStmt::Match(target, arms) => {
+    |             -------------------------- matches some of the same values
+...
+254 |             _ => Err(format!("Statement não suportado no TODO: {:?}", s)),
+    |             ^ ...and 6 other patterns collectively make this unreachable
+    = note: `#[warn(unreachable_patterns)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+   --> src/codegen/expr.rs:523:29
+    |
+523 |                         let mut loaded_val = self.builder.ins().load(ir_payload_ty, cranelift_codegen::ir::MemFlags::new(), val, offset);
+    |                             ----^^^^^^^^^^
+    |                             |
+    |                             help: remove this `mut`
+
+warning: unused variable: `ptr_type`
+   --> src/codegen/expr.rs:502:29
+    |
+502 |                         let ptr_type = self.module.target_config().pointer_type();
+    |                             ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_ptr_type`
+
+warning: variable does not need to be mutable
+   --> src/type_checker/arity_resolver.rs:462:25
+    |
+462 |                     let mut res_arg = self.resolve_expr(arg);
+    |                         ----^^^^^^^
+    |                         |
+    |                         help: remove this `mut`
+
+warning: unused variable: `arg_ty`
+   --> src/type_checker/arity_resolver.rs:463:25
+    |
+463 |                     let arg_ty = Self::get_expr_type(&res_arg.0);
+    |                         ^^^^^^ help: if this is intentional, prefix it with an underscore: `_arg_ty`
+
+warning: method `clear` is never used
+  --> src/kata_rt/memory.rs:19:12
+   |
+ 8 | impl LocalArena {
+   | --------------- method in this implementation
+...
+19 |     pub fn clear(&mut self) {
+   |            ^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: associated function `free` is never used
+  --> src/kata_rt/memory.rs:32:12
+   |
+26 | impl SharedMemory {
+   | ----------------- associated function in this implementation
+...
+32 |     pub fn free(ptr: *mut u8, size: usize, align: usize) {
+   |            ^^^^
+
+warning: variant `Broadcast` is never constructed
+  --> src/kata_rt/csp.rs:13:5
+   |
+10 | pub enum KataReceiver {
+   |          ------------ variant in this enum
+...
+13 |     Broadcast(broadcast::Receiver<*mut u8>),
+   |     ^^^^^^^^^
+
+warning: field `tx` is never read
+  --> src/kata_rt/csp.rs:20:9
+   |
+19 | pub struct BroadcastChannel {
+   |            ---------------- field in this struct
+20 |     pub tx: broadcast::Sender<*mut u8>,
+   |         ^^
+
+warning: function `clear_local` is never used
+  --> src/kata_rt/task.rs:14:8
+   |
+14 | pub fn clear_local() {
+   |        ^^^^^^^^^^^
+
+warning: variant `ActionAssign` is never constructed
+  --> src/parser/ast.rs:68:5
+   |
+61 | pub enum Stmt {
+   |          ---- variant in this enum
+...
+68 |     ActionAssign(Spanned<Expr>, Spanned<Expr>), // x! = expr
+   |     ^^^^^^^^^^^^
+   |
+   = note: `Stmt` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: variant `Named` is never constructed
+  --> src/parser/ast.rs:91:5
+   |
+89 | pub enum DirectiveArgs {
+   |          ------------- variant in this enum
+90 |     Positional(Vec<Spanned<Expr>>),
+91 |     Named(Vec<(String, Spanned<Expr>)>),
+   |     ^^^^^
+   |
+   = note: `DirectiveArgs` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+[2026-04-02T18:04:09Z ERROR kata] Erros Semanticos detectados na Fase 3:
+[2026-04-02T18:04:09Z ERROR kata] Erro de Tipo: `dot`
+[2026-04-02T18:04:09Z ERROR kata] Erro de Tipo: `+`
+Error:   × Falha na analise semantica.
+

@@ -57,9 +57,22 @@ impl ConstantFolder {
                     .collect();
                 TStmt::Match(folded_target, folded_arms)
             }
+            TStmt::Select(arms, timeout) => {
+                let folded_arms = arms.into_iter().map(|arm| crate::type_checker::tast::TSelectArm {
+                    operation: self.fold_expr_spanned(arm.operation),
+                    binding: arm.binding,
+                    body: arm.body.into_iter().map(|s| self.fold_stmt_spanned(s)).collect(),
+                }).collect();
+                let folded_timeout = timeout.map(|(e, b)| {
+                    (self.fold_expr_spanned(e), b.into_iter().map(|s| self.fold_stmt_spanned(s)).collect())
+                });
+                TStmt::Select(folded_arms, folded_timeout)
+            }
+            TStmt::ActionAssign(t, v) => TStmt::ActionAssign(self.fold_expr_spanned(t), self.fold_expr_spanned(v)),
             TStmt::Expr(expr) => TStmt::Expr(self.fold_expr_spanned(expr)),
             TStmt::Break => TStmt::Break,
             TStmt::Continue => TStmt::Continue,
+            TStmt::DropShared(v) => TStmt::DropShared(v),
         };
         (folded, span)
     }

@@ -15,6 +15,7 @@ pub struct ExprTranslator<'a, 'b> {
     pub variables: &'a mut HashMap<String, Variable>,
     pub var_index: &'a mut usize,
     pub env: &'a crate::type_checker::environment::TypeEnv,
+    pub loop_ctx: Vec<(cranelift_codegen::ir::Block, cranelift_codegen::ir::Block)>,
 }
 
 impl<'a, 'b> ExprTranslator<'a, 'b> {
@@ -111,6 +112,145 @@ impl<'a, 'b> ExprTranslator<'a, 'b> {
 
                 Ok(None)
             }
+            TStmt::Loop(body) => {
+                let header_block = self.builder.create_block();
+                let exit_block = self.builder.create_block();
+
+                self.builder.ins().jump(header_block, &[]);
+                self.builder.switch_to_block(header_block);
+                
+                self.loop_ctx.push((header_block, exit_block));
+
+                for stmt in body {
+                    self.translate_stmt(stmt)?;
+                }
+
+                self.loop_ctx.pop();
+
+                if !self.builder.is_unreachable() {
+                    self.builder.ins().jump(header_block, &[]);
+                }
+
+                self.builder.switch_to_block(exit_block);
+                self.builder.seal_block(header_block);
+                self.builder.seal_block(exit_block);
+
+                Ok(None)
+            }
+            TStmt::Break => {
+                if let Some(&(_, exit_block)) = self.loop_ctx.last() {
+                    self.builder.ins().jump(exit_block, &[]);
+                    let next_block = self.builder.create_block();
+                    self.builder.switch_to_block(next_block);
+                    self.builder.seal_block(next_block);
+                    Ok(None)
+                } else {
+                    Err("Break fora de um loop".to_string())
+                }
+            }
+            TStmt::Continue => {
+                if let Some(&(header_block, _)) = self.loop_ctx.last() {
+                    self.builder.ins().jump(header_block, &[]);
+                    let next_block = self.builder.create_block();
+                    self.builder.switch_to_block(next_block);
+                    self.builder.seal_block(next_block);
+                    Ok(None)
+                } else {
+                    Err("Continue fora de um loop".to_string())
+                }
+            }
+            TStmt::For(name, iter, body) => {
+                let iter_val = self.translate_expr(iter)?;
+                
+                // Get element type
+                let iter_ty = crate::type_checker::arity_resolver::ArityResolver::get_expr_type(&iter.0);
+                let elem_ty = if let TypeRef::Generic(n, args) = &iter_ty {
+                    if (n == "List" || n == "Array" || n == "Range" || n == "ITERABLE") && !args.is_empty() {
+                        args[0].0.clone()
+                    } else { TypeRef::Simple("Unknown".to_string()) }
+                } else { TypeRef::Simple("Unknown".to_string()) };
+                let ir_elem_ty = self.map_type(&elem_ty);
+
+                // Load length
+                let length_val = self.builder.ins().load(types::I64, cranelift_codegen::ir::MemFlags::new(), iter_val, 0);
+                
+                // Setup var_idx
+                let var_idx = Variable::from_u32(*self.var_index as u32);
+                *self.var_index += 1;
+                self.builder.declare_var(var_idx, types::I64);
+                let zero = self.builder.ins().iconst(types::I64, 0);
+                self.builder.def_var(var_idx, zero);
+
+                // Blocks
+                let header_block = self.builder.create_block();
+                let body_block = self.builder.create_block();
+                let exit_block = self.builder.create_block();
+
+                self.builder.ins().jump(header_block, &[]);
+                self.builder.switch_to_block(header_block);
+
+                // Condition
+                let current_idx = self.builder.use_var(var_idx);
+                let cmp = self.builder.ins().icmp(cranelift_codegen::ir::condcodes::IntCC::UnsignedLessThan, current_idx, length_val);
+                self.builder.ins().brif(cmp, body_block, &[], exit_block, &[]);
+
+                self.builder.switch_to_block(body_block);
+
+                // Element Loading
+                let ptr_type = self.module.target_config().pointer_type();
+                let one = self.builder.ins().iconst(types::I64, 1);
+                let idx_plus_one = self.builder.ins().iadd(current_idx, one);
+                let eight = self.builder.ins().iconst(types::I64, 8);
+                let offset_val = self.builder.ins().imul(idx_plus_one, eight);
+                let offset_ptr = self.builder.ins().ireduce(ptr_type, offset_val); // Ensure pointer width
+                let elem_ptr = self.builder.ins().iadd(iter_val, offset_ptr);
+                
+                let mut loaded_val = self.builder.ins().load(types::I64, cranelift_codegen::ir::MemFlags::new(), elem_ptr, 0);
+                if ir_elem_ty == types::I8 || ir_elem_ty == types::I32 {
+                    loaded_val = self.builder.ins().ireduce(ir_elem_ty, loaded_val);
+                } else if ir_elem_ty == types::F64 {
+                    loaded_val = self.builder.ins().bitcast(types::F64, cranelift_codegen::ir::MemFlags::new(), loaded_val);
+                }
+
+                // Bind variable
+                let var_elem = Variable::from_u32(*self.var_index as u32);
+                *self.var_index += 1;
+                self.builder.declare_var(var_elem, ir_elem_ty);
+                self.builder.def_var(var_elem, loaded_val);
+                self.variables.insert(name.clone(), var_elem);
+
+                // Translate body
+                self.loop_ctx.push((header_block, exit_block));
+                for stmt in body {
+                    self.translate_stmt(stmt)?;
+                }
+                self.loop_ctx.pop();
+
+                // Increment index
+                if !self.builder.is_unreachable() {
+                    let current_idx_end = self.builder.use_var(var_idx);
+                    let next_idx = self.builder.ins().iadd(current_idx_end, one);
+                    self.builder.def_var(var_idx, next_idx);
+                    self.builder.ins().jump(header_block, &[]);
+                }
+
+                self.builder.switch_to_block(exit_block);
+                self.builder.seal_block(header_block);
+                self.builder.seal_block(exit_block);
+
+                Ok(None)
+            }
+            TStmt::DropShared(name) => {
+                if let Some(var) = self.variables.get(name) {
+                    let ptr_val = self.builder.use_var(*var);
+                    let decref_func_id = self.functions.get("kata_rt_decref")
+                        .ok_or_else(|| "Função kata_rt_decref não encontrada.".to_string())?;
+                    let local_decref_func = self.module.declare_func_in_func(*decref_func_id, self.builder.func);
+                    self.builder.ins().call(local_decref_func, &[ptr_val]);
+                }
+                Ok(None)
+            }
+            TStmt::Select(_, _) | TStmt::ActionAssign(_, _) => Err("Nó não suportado no codegen AOT".into()),
             _ => Err(format!("Statement não suportado no TODO: {:?}", s)),
         }
     }
@@ -163,19 +303,34 @@ impl<'a, 'b> ExprTranslator<'a, 'b> {
                     _ => return Err("Chamadas anonimas ou high-order nao suportadas no TODO.".to_string()),
                 };
 
-                let mut mangled_name = name.clone();
-                if name != "main" {
-                    if let crate::parser::ast::TypeRef::Function(params, _) = &callee_ty {
-                        for (p_ty, _) in params {
-                            mangled_name.push('_');
-                            mangled_name.push_str(&crate::codegen::translator::FunctionTranslator::type_to_string_simple(p_ty));
-                        }
+                let func_id_opt = if let Some(info) = self.env.lookup_first(&name) {
+                    if let Some(ffi_name) = &info.ffi_name {
+                        self.functions.get(ffi_name)
+                    } else {
+                        None
                     }
-                }
-                mangled_name = crate::codegen::translator::FunctionTranslator::sanitize_name(&mangled_name);
+                } else {
+                    None
+                };
 
-                let func_id = self.functions.get(&mangled_name)
-                    .ok_or_else(|| format!("Função `{}` não encontrada no modulo.", mangled_name))?;
+                let func_id = match func_id_opt {
+                    Some(id) => id,
+                    None => {
+                        let mut mangled_name = name.clone();
+                        if name != "main" {
+                            if let crate::parser::ast::TypeRef::Function(params, _) = &callee_ty {
+                                for (p_ty, _) in params {
+                                    mangled_name.push('_');
+                                    mangled_name.push_str(&crate::codegen::translator::FunctionTranslator::type_to_string_simple(p_ty));
+                                }
+                            }
+                        }
+                        mangled_name = crate::codegen::translator::FunctionTranslator::sanitize_name(&mangled_name);
+
+                        self.functions.get(&mangled_name)
+                            .ok_or_else(|| format!("Função `{}` não encontrada no modulo.", mangled_name))?
+                    }
+                };
                 
                 let local_func = self.module.declare_func_in_func(*func_id, self.builder.func);
                 
@@ -192,8 +347,50 @@ impl<'a, 'b> ExprTranslator<'a, 'b> {
                     Ok(results[0])
                 }
             }
-            TExpr::Array(_, _, _) => {
-                Err("Array literal unsupported by current Cranelift codegen".to_string())
+            TExpr::Array(rows, _, alloc_mode) => {
+                if rows.is_empty() {
+                    Ok(self.builder.ins().iconst(types::I32, 0))
+                } else {
+                    let ptr_type = self.module.target_config().pointer_type();
+                    let mut flat_exprs = Vec::new();
+                    for row in rows {
+                        for ex in row {
+                            flat_exprs.push(ex);
+                        }
+                    }
+                    let size = (flat_exprs.len() * 8) as i64;
+                    let align = 8_i64;
+
+                    let size_val = self.builder.ins().iconst(ptr_type, size);
+                    let align_val = self.builder.ins().iconst(ptr_type, align);
+
+                    let alloc_func_name = match alloc_mode {
+                        crate::type_checker::tast::AllocMode::Local => "kata_rt_alloc_local",
+                        crate::type_checker::tast::AllocMode::Shared => "kata_rt_alloc_shared",
+                    };
+
+                    let alloc_func_id = self.functions.get(alloc_func_name)
+                        .ok_or_else(|| format!("Função {} não encontrada.", alloc_func_name))?;
+                    
+                    let local_alloc_func = self.module.declare_func_in_func(*alloc_func_id, self.builder.func);
+                    let call = self.builder.ins().call(local_alloc_func, &[size_val, align_val]);
+                    let ptr_val = self.builder.inst_results(call)[0];
+
+                    for (i, ex) in flat_exprs.iter().enumerate() {
+                        let mut val = self.translate_expr(ex)?;
+                        let val_type = self.builder.func.dfg.value_type(val);
+                        if val_type == types::I8 || val_type == types::I32 {
+                            val = self.builder.ins().uextend(types::I64, val);
+                        } else if val_type == types::F64 {
+                            val = self.builder.ins().bitcast(types::I64, cranelift_codegen::ir::MemFlags::new(), val);
+                        }
+
+                        let offset = (i * 8) as i32;
+                        self.builder.ins().store(cranelift_codegen::ir::MemFlags::new(), val, ptr_val, offset);
+                    }
+
+                    Ok(ptr_val)
+                }
             }
             TExpr::Sequence(exprs, _) => {
                 let mut last_val = None;
@@ -202,7 +399,7 @@ impl<'a, 'b> ExprTranslator<'a, 'b> {
                 }
                 Ok(last_val.unwrap_or_else(|| self.builder.ins().iconst(types::I32, 0))) // Unit fallback
             }
-            TExpr::Tuple(exprs, _, alloc_mode) => {
+            TExpr::Tuple(exprs, _, alloc_mode) | TExpr::List(exprs, _, alloc_mode) => {
                 if exprs.is_empty() {
                     Ok(self.builder.ins().iconst(types::I32, 0)) // Unit
                 } else {
@@ -279,7 +476,7 @@ impl<'a, 'b> ExprTranslator<'a, 'b> {
                 }
 
                 for (i, p) in pats.iter().enumerate() {
-                    let offset = (i * 8) as i32;
+                    let offset = ((i + 1) * 8) as i32;
                     let mut loaded_val = self.builder.ins().load(types::I64, cranelift_codegen::ir::MemFlags::new(), val, offset);
                     
                     let ir_ty = self.map_type(&elem_types[i].0);

@@ -62,6 +62,30 @@ pub fn stmt_parser() -> impl Parser<Token, Spanned<Stmt>, Error = ParserError> +
         let break_stmt = just(Token::Break).to(Stmt::Break);
         let continue_stmt = just(Token::Continue).to(Stmt::Continue);
 
+        let select_case_arm = just(Token::Case)
+            .ignore_then(expr_parser())
+            .then(just(Token::Arrow).ignore_then(pattern_atom_parser()).or_not())
+            .then_ignore(just(Token::Colon))
+            .then(choice((block.clone(), stmt.clone().map(|s| vec![s]))))
+            .map(|((operation, binding), body)| SelectArm { operation, binding, body });
+
+        let select_timeout_arm = just(Token::Timeout)
+            .ignore_then(expr_parser())
+            .then_ignore(just(Token::Colon))
+            .then(choice((block.clone(), stmt.clone().map(|s| vec![s]))));
+
+        let select_block = just(Token::Newline).repeated()
+            .ignore_then(just(Token::Indent))
+            .ignore_then(
+                select_case_arm.separated_by(just(Token::Newline).repeated()).allow_trailing()
+                    .then(select_timeout_arm.or_not().then_ignore(just(Token::Newline).repeated()))
+            )
+            .then_ignore(just(Token::Dedent));
+
+        let select_stmt = just(Token::Select)
+            .ignore_then(select_block)
+            .map(|(cases, timeout)| Stmt::Select(cases, timeout));
+
         let expr_stmt = expr_parser().map(Stmt::Expr);
 
         choice((
@@ -70,6 +94,7 @@ pub fn stmt_parser() -> impl Parser<Token, Spanned<Stmt>, Error = ParserError> +
             loop_stmt,
             for_stmt,
             match_stmt,
+            select_stmt,
             break_stmt,
             continue_stmt,
             expr_stmt

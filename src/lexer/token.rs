@@ -35,6 +35,9 @@ pub enum Token {
     As,
     Otherwise,
     Alias,
+    Select,
+    Case,
+    Timeout,
 
     // Punctuation
     LParen,
@@ -99,6 +102,9 @@ impl fmt::Display for Token {
             Token::As => write!(f, "as"),
             Token::Otherwise => write!(f, "otherwise"),
             Token::Alias => write!(f, "alias"),
+            Token::Select => write!(f, "select"),
+            Token::Case => write!(f, "case"),
+            Token::Timeout => write!(f, "timeout"),
 
             Token::LParen => write!(f, "("),
             Token::RParen => write!(f, ")"),

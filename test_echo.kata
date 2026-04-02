@@ -1,0 +1,2 @@
+action main
+    echo!("Teste")

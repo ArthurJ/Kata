@@ -50,7 +50,10 @@ impl EscapeAnalysis {
                     .map(|stmt| self.rewrite_stmt(stmt, &escaping_vars, false))
                     .collect();
 
-                TTopLevel::ActionDef(name, params, ret, new_body, dirs)
+                // Pass 3: Inject DropShared statements for escaping variables
+                let final_body = self.inject_drops(new_body, &escaping_vars);
+
+                TTopLevel::ActionDef(name, params, ret, final_body, dirs)
             }
             TTopLevel::LambdaDef(params, body, with, dirs) => {
                 // Pure functions don't have ChannelSends natively, but they can be passed an allocator context in advanced implementations.
@@ -61,6 +64,116 @@ impl EscapeAnalysis {
             }
             other => other,
         }
+    }
+
+    fn extract_bound_vars(&self, pat: &Pattern, bound_vars: &mut HashSet<String>) {
+        match pat {
+            Pattern::Ident(name) => {
+                if name != "otherwise" {
+                    bound_vars.insert(name.clone());
+                }
+            }
+            Pattern::Tuple(pats) | Pattern::List(pats) | Pattern::Sequence(pats) => {
+                for p in pats {
+                    self.extract_bound_vars(&p.0, bound_vars);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn inject_drops(&self, body: Vec<Spanned<TStmt>>, escaping: &HashSet<String>) -> Vec<Spanned<TStmt>> {
+        let mut new_body = Vec::new();
+        let mut scope_vars = Vec::new();
+
+        for (stmt, span) in body {
+            let (new_stmt, new_span) = match stmt {
+                TStmt::Loop(inner_body) => {
+                    (TStmt::Loop(self.inject_drops(inner_body, escaping)), span.clone())
+                }
+                TStmt::For(iter_name, iter_expr, inner_body) => {
+                    let mut inner_body_injected = self.inject_drops(inner_body, escaping);
+                    if escaping.contains(&iter_name) {
+                        inner_body_injected.push((TStmt::DropShared(iter_name.clone()), span.clone()));
+                    }
+                    (TStmt::For(iter_name, iter_expr, inner_body_injected), span.clone())
+                }
+                TStmt::Match(target, arms) => {
+                    let mut new_arms = Vec::new();
+                    for arm in arms {
+                        let mut inner_body_injected = self.inject_drops(arm.body, escaping);
+                        
+                        let mut bound_vars = HashSet::new();
+                        self.extract_bound_vars(&arm.pattern.0, &mut bound_vars);
+                        for var in bound_vars {
+                            if escaping.contains(&var) {
+                                inner_body_injected.push((TStmt::DropShared(var), span.clone()));
+                            }
+                        }
+                        
+                        new_arms.push(TMatchArm {
+                            pattern: arm.pattern,
+                            body: inner_body_injected,
+                        });
+                    }
+                    (TStmt::Match(target, new_arms), span.clone())
+                }
+                TStmt::Select(arms, timeout) => {
+                    let mut new_arms = Vec::new();
+                    for arm in arms {
+                        let mut inner_body_injected = self.inject_drops(arm.body, escaping);
+                        
+                        if let Some(ref b) = arm.binding {
+                            let mut bound_vars = HashSet::new();
+                            self.extract_bound_vars(&b.0, &mut bound_vars);
+                            for var in bound_vars {
+                                if escaping.contains(&var) {
+                                    inner_body_injected.push((TStmt::DropShared(var), span.clone()));
+                                }
+                            }
+                        }
+                        
+                        new_arms.push(crate::type_checker::tast::TSelectArm {
+                            operation: arm.operation,
+                            binding: arm.binding,
+                            body: inner_body_injected,
+                        });
+                    }
+
+                    let new_timeout = if let Some((t_expr, t_body)) = timeout {
+                        Some((t_expr, self.inject_drops(t_body, escaping)))
+                    } else { None };
+
+                    (TStmt::Select(new_arms, new_timeout), span.clone())
+                }
+                TStmt::Let(pat, expr) => {
+                    let mut bound_vars = HashSet::new();
+                    self.extract_bound_vars(&pat.0, &mut bound_vars);
+                    for var in bound_vars {
+                        if escaping.contains(&var) {
+                            scope_vars.push((var, span.clone()));
+                        }
+                    }
+                    (TStmt::Let(pat, expr), span.clone())
+                }
+                TStmt::Var(name, expr) => {
+                    if escaping.contains(&name) {
+                        scope_vars.push((name.clone(), span.clone()));
+                    }
+                    (TStmt::Var(name, expr), span.clone())
+                }
+                _ => (stmt, span.clone()),
+            };
+
+            new_body.push((new_stmt, new_span));
+        }
+
+        // Emit drop statements for scope variables in reverse order
+        for (var, span) in scope_vars.into_iter().rev() {
+            new_body.push((TStmt::DropShared(var), span));
+        }
+
+        new_body
     }
 
     fn collect_dependencies(&self, stmt: &Spanned<TStmt>, deps: &mut HashMap<String, Vec<String>>, escaping: &mut HashSet<String>) {
@@ -99,10 +212,28 @@ impl EscapeAnalysis {
                     }
                 }
             }
+            TStmt::Select(arms, timeout) => {
+                for arm in arms {
+                    self.extract_channel_sends(&arm.operation, escaping);
+                    for s in &arm.body {
+                        self.collect_dependencies(s, deps, escaping);
+                    }
+                }
+                if let Some((e, b)) = timeout {
+                    self.extract_channel_sends(e, escaping);
+                    for s in b {
+                        self.collect_dependencies(s, deps, escaping);
+                    }
+                }
+            }
+            TStmt::ActionAssign(t, v) => {
+                self.extract_channel_sends(t, escaping);
+                self.extract_channel_sends(v, escaping);
+            }
             TStmt::Expr(expr) => {
                 self.extract_channel_sends(expr, escaping);
             }
-            TStmt::Break | TStmt::Continue => {}
+            TStmt::Break | TStmt::Continue | TStmt::DropShared(_) => {}
         }
     }
 
@@ -210,7 +341,20 @@ impl EscapeAnalysis {
                     }).collect()
                 )
             }
+            TStmt::Select(arms, timeout) => {
+                let folded_arms = arms.into_iter().map(|arm| crate::type_checker::tast::TSelectArm {
+                    operation: self.rewrite_expr(arm.operation, escaping, force_shared),
+                    binding: arm.binding,
+                    body: arm.body.into_iter().map(|s| self.rewrite_stmt(s, escaping, force_shared)).collect(),
+                }).collect();
+                let folded_timeout = timeout.map(|(e, b)| {
+                    (self.rewrite_expr(e, escaping, force_shared), b.into_iter().map(|s| self.rewrite_stmt(s, escaping, force_shared)).collect())
+                });
+                TStmt::Select(folded_arms, folded_timeout)
+            }
+            TStmt::ActionAssign(t, v) => TStmt::ActionAssign(self.rewrite_expr(t, escaping, force_shared), self.rewrite_expr(v, escaping, force_shared)),
             TStmt::Expr(expr) => TStmt::Expr(self.rewrite_expr(expr, escaping, force_shared)),
+            TStmt::DropShared(v) => TStmt::DropShared(v),
             other => other,
         };
         (new_s, span)

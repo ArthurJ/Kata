@@ -51,12 +51,21 @@ pub enum MatchArm {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct SelectArm {
+    pub operation: Spanned<Expr>,
+    pub binding: Option<Spanned<Pattern>>,
+    pub body: Vec<Spanned<Stmt>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
     Let(Spanned<Pattern>, Spanned<Expr>), // let (a, b) = ...
     Var(String, Spanned<Expr>),
     Loop(Vec<Spanned<Stmt>>),
     For(String, Spanned<Expr>, Vec<Spanned<Stmt>>),
     Match(Spanned<Expr>, Vec<MatchArm>),
+    Select(Vec<SelectArm>, Option<(Spanned<Expr>, Vec<Spanned<Stmt>>)>),
+    ActionAssign(Spanned<Expr>, Spanned<Expr>), // x! = expr
     Expr(Spanned<Expr>),
     Break,
     Continue,

@@ -465,7 +465,25 @@ impl TcoPass {
                     }
                 }
             }
-            TStmt::Break | TStmt::Continue => {}
+            TStmt::Select(arms, timeout) => {
+                for arm in arms {
+                    self.check_action_expr(&arm.operation, func_name, errors);
+                    for s in &arm.body {
+                        self.check_action_recursion(s, func_name, errors);
+                    }
+                }
+                if let Some((e, b)) = timeout {
+                    self.check_action_expr(e, func_name, errors);
+                    for s in b {
+                        self.check_action_recursion(s, func_name, errors);
+                    }
+                }
+            }
+            TStmt::ActionAssign(t, v) => {
+                self.check_action_expr(t, func_name, errors);
+                self.check_action_expr(v, func_name, errors);
+            }
+            TStmt::Break | TStmt::Continue | TStmt::DropShared(_) => {}
         }
     }
 

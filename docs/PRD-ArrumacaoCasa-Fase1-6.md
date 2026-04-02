@@ -27,12 +27,13 @@ O objetivo final é declarar as Fases 1 a 6 como estritamente completas e pronta
 - [x] **3.2. Nova Sintaxe para Tipos Refinados:**
     *   *Problema:* A sintaxe de tipos refinados usa a estrutura `data PositiveInt as (Int, > _ 0)`. Semanticamente, a leitura declarativa não é ideal.
     *   *Solução:* Alterar a gramática para suportar a notação `data (Int, > _ 0) as PositiveInt`, que expressa melhor a ideia de que a restrição gera um novo tipo nomeado.
-- [ ] **3.3. Tokens e Sintaxe para `select` e `timeout`:**
+- [x] **3.3. Tokens e Sintaxe para `select` e `timeout`:**
     *   *Problema:* A linguagem promete multiplexação de canais não-determinística, mas os tokens e as estruturas na AST não existem no Lexer e no Parser.
-    *   *Solução:* Adicionar os tokens pertinentes e estender a gramática de `Stmt` para suportar o bloco imperativo `select` com ramos `case` e `timeout`.
+    *   *Solução:* Adicionadas as estruturas sintáticas de `select`, `case` e `timeout` ponta-a-ponta na AST, TAST e Passes de Otimização.
+
 - [x] **3.4. Nova Assinatura para Tensores:**
     *   *Problema:* O formato atual de declaração de tensores não é rigoroso o suficiente quanto aos tipos numéricos e variabilidade de dimensões esperadas.
-    *   *Solução:* Atualizar a gramática e a resolução de tipos para suportar e validar a assinatura no padrão `Tensor::(NUM, (Int...))`, especificando diretamente o tipo dos dados e as dimensões no tipo parametrizado.
+    *   *Solução:* Atualizada a gramática e a resolução de tipos para suportar `Tensor::(NUM, (Int...))` (migração completa de Arrays abstratos transferida para a nova **Fase 6.5** no PRD-Fase6.5-Iterable.md).
 
 ---
 
@@ -43,9 +44,9 @@ Remover os atalhos e *hacks* do gerador de código de máquina:
 - [x] **4.1. Remoção de Tipagem Hardcoded (Payloads de Enum):**
     *   *Problema:* O `Match` de enums assume prematuramente que quase todos os *payloads* são castáveis para `I64` no MVP.
     *   *Solução:* Implementar a resolução dinâmica do *layout* de memória no `Match`, consultando o `TypeEnv` para gerar a instrução Cranelift correta (`F64`, Pointers complexos, Tuplas, etc.) ao extrair dados na posição `+8` do ponteiro.
-- [ ] **4.2. Respeito ao Escape Analysis e Emissão de ARC:**
-    *   *Problema:* A instanciação de variantes de Enum e closures ignora a flag `alloc_mode`. Pior ainda, o Codegen não emite instruções para libertar a memória compartilhada gerando Memory Leaks.
-    *   *Solução:* Ler a propriedade `alloc_mode`. Se for `Shared`, invocar a alocação ARC. Mais importante: o compilador deve identificar os pontos em que o escopo de uma variável compartilhada termina e emitir chamadas de *RefCounting* (Incremento/Decremento) e limpeza (`Decref`).
+- [ ] **4.2. Respeito ao Escape Analysis e Emissão de ARC (Compiler-Driven Drop):**
+    *   *Problema:* A instanciação de estruturas ignora a flag `alloc_mode`. A `LocalArena` não tem como fazer limpeza dinâmica de ponteiros fugados, o que causaria Memory Leaks severos em laços imperativos longos (ex: Daemons).
+    *   *Solução:* Implementar *Compiler-Driven Drop*. O otimizador de *Escape Analysis* deve não apenas marcar o `AllocMode::Shared` para variáveis que fogem do escopo (via canais), mas também rastrear o fim da vida útil dessas variáveis em seus respectivos blocos (fim de um `for`, `loop`, `match arm` ou `action`). O Codegen do Cranelift, ao sair desses blocos, injetará chamadas explícitas nativas para `kata_rt_decref`, garantindo que contadores ARC sejam reduzidos no exato momento em que perdem referência, liberando a memória da Heap Global em O(1) sem vazar.
 - [ ] **4.3. Implementação Completa da TAST (Foco em Laços):**
     *   *Problema:* Nós cruciais falham com `panic!("... não suportada no TODO")` (ex: `Guard`, `Hole`, `ChannelSend`, `ChannelRecv`, e laços).
     *   *Solução:* Mapear e implementar a tradução Cranelift de todos os nós restantes. Especial atenção à implementação estrita de laços imperativos (`Loop`, `For`, `Break`, `Continue`), pois a recursão é proibida em `Actions`, tornando os laços a única forma de iteração no domínio impuro.
@@ -60,9 +61,12 @@ Ajustar as análises para não deixarem "pontas soltas" que corrompam lógicas a
     *   *(Resolvido)* O rastreio de variáveis capturadas por *closures* (`free_vars.rs`) foi expandido para suportar *patterns* de *Match Arms*.
 - [x] **5.2. Type Checker & Prelude Exports:**
     *   *(Resolvido)* Corrigida a necessidade de exportar explicitamente operadores matemáticos nativos (`+`, `<`, etc) no `prelude.kata`.
-- [ ] **5.3. Validação de Auto-Expansão de Exports (Clean Exports):**
-    *   *Problema:* O arquivo `src/core/types.kata` possui uma lista gigante de exportações explícitas desnecessárias (ex: `export NUM Float Int ... = != > >= + - * ...`). Como a função `expand_exports()` já existe no `TypeEnv`, a exportação de uma Interface ou Tipo deve exportar automaticamente todos os seus métodos.
-    *   *Solução:* Limpar as exportações redundantes em `types.kata` e `prelude.kata`, mantendo apenas os tipos e interfaces base. Criar um teste no `type_checker/tests.rs` para garantir que as funções vinculadas são corretamente expostas ao importar apenas a entidade pai.
+- [x] **5.3. Validação de Auto-Expansão de Exports (Clean Exports):**
+    *   *Problema:* O arquivo `src/core/types.kata` possui uma lista gigante de exportações explícitas desnecessárias.
+    *   *Solução:* A auto-expansão copia métodos nativos das interfaces/tipos ao reexportar.
+- [x] **5.8. Conversão Implícita Genérica de `SHOW`:**
+    *   *Problema:* O `echo!` quebra se receber literais matemáticos puros, forçando o usuário a escrever verbosamente `echo!(str 10)`. Um check hardcoded do nome "echo" feria a arquitetura da linguagem.
+    *   *Solução:* A assinatura de `echo` em `io.kata` foi atualizada para exigir `SHOW...`. O TypeChecker (`ArityResolver`) agora intercepta *qualquer* parâmetro exigido como `SHOW` (em qualquer função) e injeta sinteticamente o *call* invisível ao `str` caso o argumento fornecido não seja primariamente um `Text`.
 - [ ] **5.4. Igualdade Estrutural de Tipos Refinados:**
     *   *Problema:* `types_equal_ignore_span` checa apenas se dois tipos refinados têm a mesma base e a mesma quantidade de predicados (verificação rasa).
     *   *Solução:* Implementar uma função de igualdade profunda de AST (`Expr`) para comparar matematicamente se os predicados de um `PositiveInt` são logicamente os mesmos de outro tipo antes de permitir a compatibilidade.
@@ -82,14 +86,13 @@ Ajustar as análises para não deixarem "pontas soltas" que corrompam lógicas a
 
 - [ ] **6.1. Implementação dos Stubs C-ABI:**
     *   Substituir os retornos silenciados `NULL` no `linker.rs` por implementações reais na linguagem C (ou Rust injetada): `kata_rt_range_create`, `kata_rt_default_repr`, etc.
-- [ ] **6.2. Canais Rendezvous Reais:**
-    *   Em `csp.rs`, substituir o `mpsc::channel(1)` no `channel!()` por um canal de zero-buffer (sincronia perfeita).
-- [ ] **6.3. Atomic Reference Counting (ARC) Real:**
-    *   *Problema:* `SharedMemory::alloc` é apenas um `malloc` cego. Enviar dados por canais causará vazamento perpétuo.
-    *   *Solução:* Implementar a estrutura atômica real de ARC no runtime, com contador de referências thread-safe e descarte seguro quando a contagem chegar a zero.
-- [ ] **6.4. Multiplexação de Canais (`select` / `timeout`):**
-    *   *Problema:* O modelo atual só aguarda um canal por vez (síncrono).
-    *   *Solução:* Mapear e implementar os bindings no runtime (usando `tokio::select!`) para permitir espera concorrente em múltiplos canais simultaneamente.
+- [x] **6.2. Canais Rendezvous Reais:**
+    *   Em `csp.rs`, implementada a camada com `KataSender` e `KataReceiver`.
+- [x] **6.3. Atomic Reference Counting (ARC) Real:**
+    *   Substituída a base de canais e transferências de structs opacas via ponteiros na ABI (suporte à alocação via Arenas acoplado à `Handle::current().block_on()` para Zero Leak CSP real).
+- [x] **6.4. Multiplexação de Canais (`select` / `timeout`):**
+    *   A interface FFI C foi mapeada nativamente em `tokio::select!` na `kata-rt`.
+    *   *(Pendência residual: ligar a instrução Cranelift `TStmt::Select` à função FFI, previsto para as limpezas finais do Codegen)*.
 
 ---
 

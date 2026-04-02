@@ -139,6 +139,16 @@ Geração de código nativo (AOT) usando o Cranelift IR Emitter.
 
 ---
 
+## 📍 Fase 6.5: Abstração de Coleções e Iteradores (ITERABLE)
+Introdução do polimorfismo paramétrico para unificar `List`, `Array`, `Tensor` e `Range` sob a mesma interface no Prelude e nas lógicas do Otimizador.
+
+- [ ] **Interface ITERABLE:** Definir `ITERABLE::T` no Prelude. Refatorar `map`, `filter`, `fold`, `zip` para consumirem tipos restritos a essa interface genérica.
+- [ ] **Implementação Implícita no TypeChecker:** ArityResolver reconhecer as estruturas nativas de coleção como derivativas de `ITERABLE` automaticamente.
+- [ ] **Stream Fusion Polimórfico:** Reconstruir o passo de MIR para que a fusão de fluxos sintetize algoritmos diferentes de acordo com a topologia (iterar sobre ponteiros sequenciais para Arrays em vez de `Cons` de cauda para Listas).
+- [ ] **Loops Imperativos em Actions:** Ensinar o Codegen a desdobrar o for-loop sobre Arrays de memória contígua.
+
+---
+
 ## 📍 Fase 7: REPL Interativo (JIT)
 Ambiente de desenvolvimento iterativo de alta performance. Reutiliza as fases 1 a 4, mas desvia do Backend AOT.
 

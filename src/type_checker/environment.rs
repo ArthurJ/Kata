@@ -8,6 +8,7 @@ pub struct SymbolInfo {
     pub type_info: TypeRef,
     pub is_action: bool,
     pub is_commutative: bool,
+    pub ffi_name: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -96,13 +97,14 @@ impl TypeEnv {
         self.enums.insert(enum_name, variants);
     }
 
-    pub fn define(&mut self, name: String, arity: usize, type_info: TypeRef, is_action: bool, is_commutative: bool) {
+    pub fn define(&mut self, name: String, arity: usize, type_info: TypeRef, is_action: bool, is_commutative: bool, ffi_name: Option<String>) {
         let info = SymbolInfo {
             name: name.clone(),
             arity,
             type_info,
             is_action,
             is_commutative,
+            ffi_name,
         };
         self.symbols.entry(name).or_default().push(info);
     }
@@ -197,6 +199,22 @@ impl TypeEnv {
         for (name, info) in &other.refined_types {
             if let Some(imported_name) = get_imported_name(name) {
                 self.refined_types.insert(imported_name, info.clone());
+            }
+        }
+
+        // Copy Interface Methods
+        for (iface, methods) in &other.interface_methods {
+            if let Some(imported_iface) = get_imported_name(iface) {
+                let imported_methods: Vec<String> = methods.iter().filter_map(|m| get_imported_name(m)).collect();
+                self.interface_methods.insert(imported_iface, imported_methods);
+            }
+        }
+
+        // Copy Type Methods
+        for (ty, methods) in &other.type_methods {
+            if let Some(imported_ty) = get_imported_name(ty) {
+                let imported_methods: Vec<String> = methods.iter().filter_map(|m| get_imported_name(m)).collect();
+                self.type_methods.insert(imported_ty, imported_methods);
             }
         }
 

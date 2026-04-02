@@ -148,16 +148,17 @@ fn main() -> miette::Result<()> {
 
             checker.check_module(&module);
 
+            if cli.dump_tast {
+                println!("--- TAST (RESOLVIDA) ---");
+                println!("{:#?}", checker.tast);
+            }
+
             if !checker.errors.is_empty() {
                 log::error!("Erros Semanticos detectados na Fase 3:");
                 for e in &checker.errors {
                     log::error!("{}", e.0);
                 }
-            }
-
-            if cli.dump_tast {
-                println!("--- TAST (RESOLVIDA) ---");
-                println!("{:#?}", checker.tast);
+                return Err(miette::miette!("Falha na analise semantica."));
             }
 
             let mut opt = optimizer::Optimizer::new(&checker.env);

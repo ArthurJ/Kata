@@ -35,6 +35,13 @@ pub enum TLiteral {
     Unit,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct TSelectArm {
+    pub operation: Spanned<TExpr>,
+    pub binding: Option<Spanned<Pattern>>,
+    pub body: Vec<Spanned<TStmt>>,
+}
+
 #[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum TStmt {
@@ -43,9 +50,12 @@ pub enum TStmt {
     Loop(Vec<Spanned<TStmt>>),
     For(String, Spanned<TExpr>, Vec<Spanned<TStmt>>),
     Match(Spanned<TExpr>, Vec<TMatchArm>),
+    Select(Vec<TSelectArm>, Option<(Spanned<TExpr>, Vec<Spanned<TStmt>>)>),
+    ActionAssign(Spanned<TExpr>, Spanned<TExpr>),
     Expr(Spanned<TExpr>),
     Break,
     Continue,
+    DropShared(String),
 }
 
 #[derive(Debug, Clone, PartialEq)]

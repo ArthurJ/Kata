@@ -30,7 +30,7 @@ action main
                 (TypeRef::Simple("Int".to_string()), 0..0)
             ],
             Box::new((TypeRef::Simple("Int".to_string()), 0..0))
-        ), false, true);
+        ), false, true, None);
 
         let tokens = crate::lexer::lex(src, crate::lexer::LexMode::File).unwrap();
         let module = crate::parser::parse_module(tokens, src.len()).unwrap();
@@ -55,7 +55,7 @@ action main
                 (TypeRef::Simple("Int".to_string()), 0..0)
             ],
             Box::new((TypeRef::Simple("Int".to_string()), 0..0))
-        ), false, true);
+        ), false, true, None);
 
         let tokens = crate::lexer::lex(src, crate::lexer::LexMode::File).unwrap();
         let module = crate::parser::parse_module(tokens, src.len()).unwrap();
@@ -219,7 +219,7 @@ lambda a b: + a b
                 (TypeRef::Simple("Int".to_string()), 0..0)
             ],
             Box::new((TypeRef::Simple("Int".to_string()), 0..0))
-        ), false, true);
+        ), false, true, None);
 
         checker.check_module(&module);
         
@@ -295,5 +295,62 @@ action test_csp (tx rx)
                 // Ok
             } else { panic!("Esperado Try dentro de Let, encontrado: {:?}", body[2].0); }
         }
+    }
+
+    #[test]
+    fn test_auto_expand_exports_and_imports() {
+        let mod_a_src = "
+interface TEST_IFACE
+    metodo_iface :: TEST_IFACE => Int
+
+data MeuTipo (x)
+
+MeuTipo implements TEST_IFACE
+    metodo_iface :: MeuTipo => Int
+    lambda a: 42
+    
+    metodo_extra :: MeuTipo => Text
+    lambda a: \"extra\"
+
+export MeuTipo
+";
+        
+        let mod_b_src = "
+import mod_a.(MeuTipo)
+
+action main
+    let t MeuTipo 10
+    let x metodo_extra t
+    let y metodo_iface t
+";
+
+        let tokens_a = crate::lexer::lex(mod_a_src, crate::lexer::LexMode::File).unwrap();
+        let ast_a = crate::parser::parse_module(tokens_a, mod_a_src.len()).unwrap();
+        
+        let mut checker_a = Checker::new();
+        checker_a.check_module(&ast_a);
+        assert!(checker_a.errors.is_empty(), "Mod A: {:?}", checker_a.errors);
+        
+        let tokens_b = crate::lexer::lex(mod_b_src, crate::lexer::LexMode::File).unwrap();
+        let ast_b = crate::parser::parse_module(tokens_b, mod_b_src.len()).unwrap();
+        
+        let mut checker_b = Checker::new();
+        checker_b.compiled_modules.insert("mod_a".to_string(), checker_a.env.clone());
+        
+        checker_b.check_module(&ast_b); 
+        
+        let mut final_checker = Checker::new();
+        final_checker.compiled_modules = checker_b.compiled_modules.clone();
+        
+        for (path, specific) in &checker_b.env.imports {
+            if let Some(target_module_name) = path.split('.').next() {
+                if let Some(target_env) = final_checker.compiled_modules.get(target_module_name) {
+                    final_checker.env.import_from(target_env, target_module_name, specific);
+                }
+            }
+        }
+        
+        final_checker.check_module(&ast_b);
+        assert!(final_checker.errors.is_empty(), "Erros encontrados ao importar o tipo pai: {:?}", final_checker.errors);
     }
 }

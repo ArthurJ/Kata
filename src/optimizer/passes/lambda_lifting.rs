@@ -104,6 +104,25 @@ impl<'a> LambdaLifting<'a> {
                 }).collect();
                 TStmt::Match(new_target, new_arms)
             }
+            TStmt::Select(arms, timeout) => {
+                let folded_arms = arms.into_iter().map(|arm| {
+                    let mut b_vars = bound_vars.clone();
+                    if let Some(b) = &arm.binding {
+                        Self::extract_bound_vars(&b.0, &mut b_vars);
+                    }
+                    crate::type_checker::tast::TSelectArm {
+                        operation: self.fold_expr_spanned(arm.operation, bound_vars, errors),
+                        binding: arm.binding,
+                        body: arm.body.into_iter().map(|s| self.fold_stmt_spanned(s, &mut b_vars, errors)).collect(),
+                    }
+                }).collect();
+                let folded_timeout = timeout.map(|(e, b)| {
+                    let mut b_vars = bound_vars.clone();
+                    (self.fold_expr_spanned(e, bound_vars, errors), b.into_iter().map(|s| self.fold_stmt_spanned(s, &mut b_vars, errors)).collect())
+                });
+                TStmt::Select(folded_arms, folded_timeout)
+            }
+            TStmt::ActionAssign(t, v) => TStmt::ActionAssign(self.fold_expr_spanned(t, bound_vars, errors), self.fold_expr_spanned(v, bound_vars, errors)),
             TStmt::Expr(expr) => TStmt::Expr(self.fold_expr_spanned(expr, bound_vars, errors)),
             other => other,
         };

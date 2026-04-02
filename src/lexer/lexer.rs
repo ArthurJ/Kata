@@ -52,6 +52,7 @@ fn raw_lexer() -> impl Parser<char, Vec<(RawToken, Span)>, Error = Simple<char>>
         just("::").to(Token::DoubleColon),
         just("->").to(Token::Arrow),
         just("=>").to(Token::FatArrow),
+        just("|>").to(Token::RightPipe),
         just("(").to(Token::LParen),
         just(")").to(Token::RParen),
         just("[").to(Token::LBracket),
@@ -100,6 +101,9 @@ fn raw_lexer() -> impl Parser<char, Vec<(RawToken, Span)>, Error = Simple<char>>
                 "as" => RawToken::Tok(Token::As),
                 "otherwise" => RawToken::Tok(Token::Otherwise),
                 "alias" => RawToken::Tok(Token::Alias),
+                "select" => RawToken::Tok(Token::Select),
+                "case" => RawToken::Tok(Token::Case),
+                "timeout" => RawToken::Tok(Token::Timeout),
                 _ => {
                     let chars: Vec<char> = s.chars().collect();
                     if chars[0].is_uppercase() {

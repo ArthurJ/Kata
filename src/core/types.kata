@@ -209,7 +209,7 @@ Float implements NUM
 # Texto
 # ==========================================
 
-export NUM Float Int Bool and or xor not Result Optional str repr SHOW REPR HASH EQ ORD NonZero = != > >= < <= + - * ** div / // mod round ceil floor hash
+export NUM Float Int Bool and or xor not Result Optional SHOW REPR HASH EQ ORD NonZero Text ITERATOR ITERABLE
 
 @ffi("kata_rt_concat_text")
 @associative("")
@@ -225,3 +225,13 @@ Text implements SHOW
     
     @ffi("kata_rt_repr_text")
     repr :: Text => Text
+
+# ==========================================
+# Iteradores e Coleções (ITERABLE)
+# ==========================================
+
+interface ITERATOR
+    next :: ITERATOR => Optional::(Tuple::(A ITERATOR))
+
+interface ITERABLE
+    iter :: ITERABLE => ITERATOR

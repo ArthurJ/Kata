@@ -43,6 +43,8 @@ impl<'a> FunctionTranslator<'a> {
         let mut current_sig_params: Option<Vec<Spanned<TypeRef>>> = None;
         let mut current_sig_ret: Option<TypeRef> = None;
         let mut current_lambdas = Vec::new();
+        let mut executions = Vec::new();
+        let mut has_main_action = false;
 
         let mut compile_lambdas = |mangled_name: &str, sig_params: &[Spanned<TypeRef>], sig_ret: &TypeRef, lambdas: &[(Vec<Spanned<crate::parser::ast::Pattern>>, crate::type_checker::tast::TExpr)], env: &TypeEnv, ctx: &mut CodegenContext, builder_context: &mut FunctionBuilderContext| -> Result<(), String> {
             if lambdas.is_empty() { return Ok(()); }
@@ -147,6 +149,7 @@ impl<'a> FunctionTranslator<'a> {
                     variables: &mut variables,
                     var_index: &mut var_index,
                     env,
+                    loop_ctx: Vec::new(),
                 };
                 let result_val = expr_translator.translate_expr(&(body.clone(), 0..0))?;
 
@@ -194,6 +197,7 @@ impl<'a> FunctionTranslator<'a> {
                     current_lambdas.push((params, body.0));
                 }
                 TTopLevel::ActionDef(name, params, ret, body, dirs) => {
+                    if name == "main" { has_main_action = true; }
                     if !current_lambdas.is_empty() {
                         if let (Some(mangled_name), Some(sig_params), Some(sig_ret)) = (&current_mangled_name, &current_sig_params, &current_sig_ret) {
                             compile_lambdas(mangled_name, sig_params, sig_ret, &current_lambdas, self.env, self.ctx, &mut self.builder_context)?;
@@ -225,6 +229,41 @@ impl<'a> FunctionTranslator<'a> {
                 compile_lambdas(mangled_name, sig_params, sig_ret, &current_lambdas, self.env, self.ctx, &mut self.builder_context)?;
             }
             current_lambdas.clear();
+        }
+
+        if !has_main_action {
+            let func_id = *self.ctx.functions.get("main").unwrap();
+            let mut cl_ctx = Context::new();
+            let func_decl = self.ctx.module.declarations().get_function_decl(func_id);
+            cl_ctx.func.signature = func_decl.signature.clone();
+            
+            let mut builder = FunctionBuilder::new(&mut cl_ctx.func, &mut self.builder_context);
+            let entry_block = builder.create_block();
+            builder.switch_to_block(entry_block);
+            builder.seal_block(entry_block);
+            
+            let mut var_index = 0;
+            let mut variables = std::collections::HashMap::new();
+            
+            let mut expr_translator = crate::codegen::expr::ExprTranslator {
+                builder: &mut builder,
+                module: &mut self.ctx.module,
+                functions: &self.ctx.functions,
+                variables: &mut variables,
+                var_index: &mut var_index,
+                env: self.env,
+                loop_ctx: Vec::new(),
+            };
+            
+            for expr in executions {
+                let stmt = crate::type_checker::tast::TStmt::Expr(expr);
+                expr_translator.translate_stmt(&(stmt, 0..0))?;
+            }
+            
+            expr_translator.builder.ins().return_(&[]);
+            builder.finalize();
+            self.ctx.module.define_function(func_id, &mut cl_ctx).unwrap();
+            self.ctx.module.clear_context(&mut cl_ctx);
         }
 
         Ok(())
@@ -267,6 +306,18 @@ impl<'a> FunctionTranslator<'a> {
     }
 
     fn declare_signatures(&mut self, tast: &[Spanned<TTopLevel>]) -> Result<(), String> {
+        let mut has_main = false;
+        for (decl, _) in tast {
+            if let TTopLevel::ActionDef(name, ..) = decl {
+                if name == "main" { has_main = true; }
+            }
+        }
+        if !has_main && !self.ctx.functions.contains_key("main") {
+            let sig = self.ctx.module.make_signature();
+            let func_id = self.ctx.module.declare_function("kata_main", Linkage::Export, &sig).unwrap();
+            self.ctx.functions.insert("main".to_string(), func_id);
+        }
+
         let ptr_type = self.ctx.module.target_config().pointer_type();
 
         let mut alloc_sig = self.ctx.module.make_signature();
@@ -284,6 +335,14 @@ impl<'a> FunctionTranslator<'a> {
             let shared_id = self.ctx.module.declare_function("kata_rt_alloc_shared", Linkage::Import, &alloc_sig)
                 .map_err(|e| format!("Falha: {}", e))?;
             self.ctx.functions.insert("kata_rt_alloc_shared".to_string(), shared_id);
+        }
+
+        let mut decref_sig = self.ctx.module.make_signature();
+        decref_sig.params.push(AbiParam::new(ptr_type));
+        if !self.ctx.functions.contains_key("kata_rt_decref") {
+            let decref_id = self.ctx.module.declare_function("kata_rt_decref", Linkage::Import, &decref_sig)
+                .map_err(|e| format!("Falha: {}", e))?;
+            self.ctx.functions.insert("kata_rt_decref".to_string(), decref_id);
         }
 
         let mut current_sig_name = None;
@@ -408,8 +467,8 @@ impl<'a> FunctionTranslator<'a> {
             variables: &mut variables,
             var_index: &mut var_index,
             env: self.env,
+            loop_ctx: Vec::new(),
         };
-
         let mut last_val = None;
         for stmt in body {
             last_val = expr_translator.translate_stmt(stmt)?;
@@ -437,5 +496,4 @@ impl<'a> FunctionTranslator<'a> {
 
         Ok(())
     }
-
-    }
+}

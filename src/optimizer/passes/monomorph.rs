@@ -108,9 +108,22 @@ impl<'a> Monomorphizer<'a> {
                     .collect();
                 TStmt::Match(folded_target, folded_arms)
             }
+            TStmt::Select(arms, timeout) => {
+                let folded_arms = arms.into_iter().map(|arm| crate::type_checker::tast::TSelectArm {
+                    operation: self.fold_expr_spanned(arm.operation, errors),
+                    binding: arm.binding,
+                    body: arm.body.into_iter().map(|s| self.fold_stmt_spanned(s, errors)).collect(),
+                }).collect();
+                let folded_timeout = timeout.map(|(e, b)| {
+                    (self.fold_expr_spanned(e, errors), b.into_iter().map(|s| self.fold_stmt_spanned(s, errors)).collect())
+                });
+                TStmt::Select(folded_arms, folded_timeout)
+            }
+            TStmt::ActionAssign(t, v) => TStmt::ActionAssign(self.fold_expr_spanned(t, errors), self.fold_expr_spanned(v, errors)),
             TStmt::Expr(expr) => TStmt::Expr(self.fold_expr_spanned(expr, errors)),
             TStmt::Break => TStmt::Break,
             TStmt::Continue => TStmt::Continue,
+            TStmt::DropShared(v) => TStmt::DropShared(v),
         };
         (folded, span)
     }
@@ -354,9 +367,22 @@ impl TypeSubstituter {
                 }).collect();
                 TStmt::Match(self.substitute_expr(target), new_arms)
             }
+            TStmt::Select(arms, timeout) => {
+                let folded_arms = arms.iter().map(|arm| crate::type_checker::tast::TSelectArm {
+                    operation: self.substitute_expr(&arm.operation),
+                    binding: arm.binding.clone(),
+                    body: arm.body.iter().map(|s| self.substitute_stmt(s)).collect(),
+                }).collect();
+                let folded_timeout = timeout.as_ref().map(|(e, b)| {
+                    (self.substitute_expr(e), b.iter().map(|s| self.substitute_stmt(s)).collect())
+                });
+                TStmt::Select(folded_arms, folded_timeout)
+            }
+            TStmt::ActionAssign(t, v) => TStmt::ActionAssign(self.substitute_expr(t), self.substitute_expr(v)),
             TStmt::Expr(expr) => TStmt::Expr(self.substitute_expr(expr)),
             TStmt::Break => TStmt::Break,
             TStmt::Continue => TStmt::Continue,
+            TStmt::DropShared(v) => TStmt::DropShared(v.clone()),
         };
         (new_s, span.clone())
     }

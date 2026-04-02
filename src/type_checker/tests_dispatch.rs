@@ -8,6 +8,8 @@ mod tests {
         let module = crate::parser::parse_module(tokens, src.len()).unwrap();
         let mut checker = Checker::new();
         checker.check_module(&module);
+        println!("AST PARSED: {:#?}", module);
+        println!("ERROS: {:?}", checker.errors);
         checker
     }
 
