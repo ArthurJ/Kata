@@ -44,10 +44,10 @@ Remover os atalhos e *hacks* do gerador de código de máquina:
 - [x] **4.1. Remoção de Tipagem Hardcoded (Payloads de Enum):**
     *   *Problema:* O `Match` de enums assume prematuramente que quase todos os *payloads* são castáveis para `I64` no MVP.
     *   *Solução:* Implementar a resolução dinâmica do *layout* de memória no `Match`, consultando o `TypeEnv` para gerar a instrução Cranelift correta (`F64`, Pointers complexos, Tuplas, etc.) ao extrair dados na posição `+8` do ponteiro.
-- [ ] **4.2. Respeito ao Escape Analysis e Emissão de ARC (Compiler-Driven Drop):**
+- [x] **4.2. Respeito ao Escape Analysis e Emissão de ARC (Compiler-Driven Drop):**
     *   *Problema:* A instanciação de estruturas ignora a flag `alloc_mode`. A `LocalArena` não tem como fazer limpeza dinâmica de ponteiros fugados, o que causaria Memory Leaks severos em laços imperativos longos (ex: Daemons).
     *   *Solução:* Implementar *Compiler-Driven Drop*. O otimizador de *Escape Analysis* deve não apenas marcar o `AllocMode::Shared` para variáveis que fogem do escopo (via canais), mas também rastrear o fim da vida útil dessas variáveis em seus respectivos blocos (fim de um `for`, `loop`, `match arm` ou `action`). O Codegen do Cranelift, ao sair desses blocos, injetará chamadas explícitas nativas para `kata_rt_decref`, garantindo que contadores ARC sejam reduzidos no exato momento em que perdem referência, liberando a memória da Heap Global em O(1) sem vazar.
-- [ ] **4.3. Implementação Completa da TAST (Foco em Laços):**
+- [x] **4.3. Implementação Completa da TAST (Foco em Laços):**
     *   *Problema:* Nós cruciais falham com `panic!("... não suportada no TODO")` (ex: `Guard`, `Hole`, `ChannelSend`, `ChannelRecv`, e laços).
     *   *Solução:* Mapear e implementar a tradução Cranelift de todos os nós restantes. Especial atenção à implementação estrita de laços imperativos (`Loop`, `For`, `Break`, `Continue`), pois a recursão é proibida em `Actions`, tornando os laços a única forma de iteração no domínio impuro.
 
@@ -67,6 +67,9 @@ Ajustar as análises para não deixarem "pontas soltas" que corrompam lógicas a
 - [x] **5.8. Conversão Implícita Genérica de `SHOW`:**
     *   *Problema:* O `echo!` quebra se receber literais matemáticos puros, forçando o usuário a escrever verbosamente `echo!(str 10)`. Um check hardcoded do nome "echo" feria a arquitetura da linguagem.
     *   *Solução:* A assinatura de `echo` em `io.kata` foi atualizada para exigir `SHOW...`. O TypeChecker (`ArityResolver`) agora intercepta *qualquer* parâmetro exigido como `SHOW` (em qualquer função) e injeta sinteticamente o *call* invisível ao `str` caso o argumento fornecido não seja primariamente um `Text`.
+- [x] **5.9. Síntese de Construtores Inteligentes (Enum Predicativo):**
+    *   *Problema:* Enums que usavam predicados lógicos (ex: `< _ 18.5`) criavam a assinatura vazia para a variante, causando link error em tempo de máquina. O compilador não criava a função de checagem de IFs para o Múltiplo Despacho.
+    *   *Solução:* O Type Checker agora forja uma árvore sintática `TAST` de `LambdaDef` com um encadeamento de `Guards` e a injeta silenciosamente para avaliação dinâmica em Run-Time.
 - [ ] **5.4. Igualdade Estrutural de Tipos Refinados:**
     *   *Problema:* `types_equal_ignore_span` checa apenas se dois tipos refinados têm a mesma base e a mesma quantidade de predicados (verificação rasa).
     *   *Solução:* Implementar uma função de igualdade profunda de AST (`Expr`) para comparar matematicamente se os predicados de um `PositiveInt` são logicamente os mesmos de outro tipo antes de permitir a compatibilidade.
