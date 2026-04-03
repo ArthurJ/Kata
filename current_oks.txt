@@ -1,0 +1,14 @@
+Testando examples/mock_math.kata... [0;32m[OK][0m
+Testando examples/test_coercion.kata... [0;32m[OK][0m
+Testando examples/test_comment.kata... [0;32m[OK][0m
+Testando examples/test_commutative.kata... [0;32m[OK][0m
+Testando examples/test_fatorial.kata... [0;32m[OK][0m
+Testando examples/test_float_simple.kata... [0;32m[OK][0m
+Testando examples/test_indent.kata... [0;32m[OK][0m
+Testando examples/test.kata... [0;32m[OK][0m
+Testando examples/test_leading_nl.kata... [0;32m[OK][0m
+Testando examples/test_match_exhaust.kata... [0;32m[OK][0m
+Testando examples/test_pattern_simple.kata... [0;32m[OK][0m
+Testando examples/test_refined.kata... [0;32m[OK][0m
+Testando examples/test_simple.kata... [0;32m[OK][0m
+Testando examples/test_tco_simple.kata... [0;32m[OK][0m

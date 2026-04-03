@@ -130,3 +130,11 @@ Ajustar as análises para não deixarem "pontas soltas" que corrompam lógicas a
 - [x] **Testes Funcionais:** O comando `kata test` invocado na raiz do projeto deve localizar arquivos, compilar, testar as lógicas puras (booleanas) e impuras (`assert!`), e sair com *Exit Code 0* ou *1* conforme os resultados.
 - [ ] **CLI Operacional:** O comando `kata run test_concurrency.kata` deve funcionar perfeitamente de ponta a ponta.omando `kata test` invocado na raiz do projeto deve localizar arquivos, compilar, testar as lógicas puras (booleanas) e impuras (`assert!`), e sair com *Exit Code 0* ou *1* conforme os resultados.
 - [ ] **CLI Operacional:** O comando `kata run test_concurrency.kata` deve funcionar perfeitamente de ponta a ponta.
+---
+
+## 9. Proximos Passos Evolutivos (Definidos em Sessao)
+
+- [ ] **Sistema de Erros Estruturado (Error Codes):** O formato atual de erros limitou a precisao dos testes de *Expected Failures*. A solucao proposta e estabelecer um ecossistema nativo de codigos de erro.
+    - **Definicao em Kata-Lang:** O `Enum` base de erros de compilacao e execucao devera ser definido em *puro Kata* (ex: dentro da StdLib `core/errors.kata`), permitindo que a propria linguagem descreva as variantes (`TypeError`, `PurityError`, `OrphanRuleError`, `TcoError`).
+    - **Extensibilidade (User-Defined Errors):** A infraestrutura deve permitir que o desenvolvedor crie seus proprios erros estruturados derivados das interfaces do compilador, viabilizando assercoes precisas e *Domain-Driven Testing*.
+    - **Integracao no Compilador:** O *TypeChecker* e o *Optimizer* serao refatorados para emitir estruturas Rust atreladas as variantes definidas no codigo-fonte Kata, em vez de Strings formatadas aleatorias.

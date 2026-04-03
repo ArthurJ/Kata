@@ -1,0 +1,214 @@
+=====================================
+  Rodando Exemplos Kata-lang (Build) 
+=====================================
+Os logs completos de cada teste estarao em out_logs/
+
+Testando examples/mock_math.kata... [0;32m[OK][0m
+Testando examples/test2fail_fibonacci.kata... [0;31m[ERRO][0m
+    [2026-04-03T04:55:54Z ERROR kata] Erros de Otimizacao detectados na Fase 4:
+    [2026-04-03T04:55:54Z ERROR kata] Erro Fatal de TCO: A função `fib` possui recursão que não está em posição de cauda (Ex: Fibonacci ramificado ou chamadas encadeadas complexas) e não pôde ser otimizada automaticamente. Reescreva a lógica.
+    Error:   × Falha na otimizacao.
+Testando examples/test2fail_purity.kata... [0;31m[ERRO][0m
+    [2026-04-03T04:55:55Z ERROR kata] Erros Semanticos detectados na Fase 3:
+    [2026-04-03T04:55:55Z ERROR kata] Erro de Pureza: `echo`
+    Error:   × Falha na analise semantica.
+Testando examples/test2fail_recr.kata... [0;31m[ERRO][0m
+    [2026-04-03T04:55:55Z ERROR kata] Erros Semanticos detectados na Fase 3:
+    [2026-04-03T04:55:55Z ERROR kata] Erro de Coerencia (Orphan Rule): Nao eh permitido implementar a Interface `SHOW` para o Tipo `Int` pois ambos sao externos ao modulo atual.
+    [2026-04-03T04:55:55Z ERROR kata] Erro Semantico: Recursao proibida na Action `loop_infinito`. Use loops (for/loop) para iteracoes impuras.
+Testando examples/test_array.kata... [0;31m[ERRO][0m
+    [2026-04-03T04:55:56Z ERROR kata] Erros Semanticos detectados na Fase 3:
+    Error:   × Falha na analise semantica.
+Testando examples/test_assert.kata... [0;31m[ERRO][0m
+    [2026-04-03T04:55:56Z ERROR kata] Erro de Compilacao/Codegen: Falha ao compilar a funcao `assert_eq_A_A_Text`: Duplicate definition of identifier: assert_eq_A_A_Text
+    Error:   × Falha na geracao de codigo nativo.
+Testando examples/test_coercion.kata... [0;32m[OK][0m
+Testando examples/test_comment.kata... [0;32m[OK][0m
+Testando examples/test_commutative.kata... [0;32m[OK][0m
+Testando examples/test_concurrency.kata... [0;31m[ERRO][0m
+    [2026-04-03T04:55:58Z ERROR kata] Erros Semanticos detectados na Fase 3:
+    [2026-04-03T04:55:58Z ERROR kata] Erro de Tipo na chamada da Action `fork`
+    Error:   × Falha na analise semantica.
+Testando examples/test_curr.kata... [0;31m[ERRO][0m
+    [2026-04-03T04:55:59Z ERROR kata] Erros Semanticos detectados na Fase 3:
+    [2026-04-03T04:55:59Z ERROR kata] Erro Semantico (Ambiguidade): `+`
+    [2026-04-03T04:55:59Z ERROR kata] Erro Semantico (Ambiguidade): `+`
+Testando examples/test_debug.kata... [0;31m[ERRO][0m
+    [2026-04-03T04:55:59Z ERROR kata] Erro de Compilacao/Codegen: Função `dot` não encontrada no modulo.
+    Error:   × Falha na geracao de codigo nativo.
+Testando examples/test_dispatch.kata... [0;31m[ERRO][0m
+    [2026-04-03T04:56:00Z ERROR kata] Erros Semanticos detectados na Fase 3:
+    [2026-04-03T04:56:00Z ERROR kata] Erro Semantico (Ambiguidade): `+`
+    [2026-04-03T04:56:00Z ERROR kata] Erro Semantico (Ambiguidade): `+`
+Testando examples/test_enum.kata... [0;31m[ERRO][0m
+    [2026-04-03T04:56:00Z ERROR kata] Erro de Compilacao/Codegen: Falha: Compilation error: Verifier errors
+    Error:   × Falha na geracao de codigo nativo.
+Testando examples/test_fatorial.kata... [0;32m[OK][0m
+Testando examples/test_fibonacci.kata... [0;31m[ERRO][0m
+    [2026-04-03T04:56:01Z ERROR kata] Erros de Otimizacao detectados na Fase 4:
+    [2026-04-03T04:56:01Z ERROR kata] Erro Fatal de TCO: A função `fib` possui recursão que não está em posição de cauda (Ex: Fibonacci ramificado ou chamadas encadeadas complexas) e não pôde ser otimizada automaticamente. Reescreva a lógica.
+    Error:   × Falha na otimizacao.
+Testando examples/test_fizzbuzz.kata... [0;31m[ERRO][0m
+    [2026-04-03T04:56:02Z ERROR kata] Erros Semanticos detectados na Fase 3:
+    [2026-04-03T04:56:02Z ERROR kata] Erro de Tipo: `mod`
+    [2026-04-03T04:56:02Z ERROR kata] Erro de Tipo: `mod`
+Testando examples/test_fizzbuzz_list.kata... [0;31m[ERRO][0m
+    [31mError:[0m Token inesperado: .
+    Error:   × Falha na análise sintática.
+Testando examples/test_float_simple.kata... [0;32m[OK][0m
+Testando examples/test_imc.kata... [0;31m[ERRO][0m
+    [2026-04-03T04:56:03Z ERROR kata] Erros Semanticos detectados na Fase 3:
+    [2026-04-03T04:56:03Z ERROR kata] Erro de Tipo: `/`
+    [2026-04-03T04:56:03Z ERROR kata] Erro de Tipo: `calcular_imc`
+Testando examples/test_imports.kata... [0;31m[ERRO][0m
+    [31mError:[0m Token inesperado: .
+    Error:   × Falha na análise sintática.
+Testando examples/test_indent.kata... [0;32m[OK][0m
+Testando examples/test_is_prime.kata... [0;31m[ERRO][0m
+    [31mError:[0m Token inesperado: .
+    Error:   × Falha na análise sintática.
+Testando examples/test.kata... [0;32m[OK][0m
+Testando examples/test_leading_nl.kata... [0;32m[OK][0m
+Testando examples/test_log_error.kata... [0;31m[ERRO][0m
+    [2026-04-03T04:56:06Z ERROR kata] Erros Semanticos detectados na Fase 3:
+    [2026-04-03T04:56:06Z ERROR kata] Diretiva @log: Level 'extreme' invalido. Use Error, Warn, Info, Debug ou Trace.
+    Error:   × Falha na analise semantica.
+Testando examples/test_log.kata... [0;31m[ERRO][0m
+    [2026-04-03T04:56:07Z ERROR kata] Erros Semanticos detectados na Fase 3:
+    [2026-04-03T04:56:07Z ERROR kata] Erro de Tipo: `fatorial`
+    Error:   × Falha na analise semantica.
+Testando examples/test_main.kata... [0;31m[ERRO][0m
+    [2026-04-03T04:56:07Z ERROR kata] Erros Semanticos detectados na Fase 3:
+    Error:   × Falha na analise semantica.
+Testando examples/test_match_exhaust.kata... [0;32m[OK][0m
+Testando examples/test_maxmin.kata... [0;31m[ERRO][0m
+    [2026-04-03T04:56:08Z ERROR kata] Erro de Compilacao/Codegen: Variável ou Variante não encontrada: maior
+    Error:   × Falha na geracao de codigo nativo.
+Testando examples/test_mixed.kata... [0;31m[ERRO][0m
+    [2026-04-03T04:56:09Z ERROR kata] Erro de Compilacao/Codegen: Falha ao compilar a funcao `main`: Compilation error: Verifier errors
+    Error:   × Falha na geracao de codigo nativo.
+Testando examples/test_nested_patterns.kata... [0;31m[ERRO][0m
+    [2026-04-03T04:56:09Z ERROR kata] Erros Semanticos detectados na Fase 3:
+    [2026-04-03T04:56:09Z ERROR kata] Erro Semantico (Ambiguidade): `+`
+    [2026-04-03T04:56:09Z ERROR kata] Erro Semantico (Ambiguidade): `+`
+Testando examples/test_pattern_simple.kata... [0;32m[OK][0m
+Testando examples/test_phase10.kata... [0;31m[ERRO][0m
+    [2026-04-03T04:56:11Z ERROR kata] Erro de Compilacao/Codegen: Falha ao compilar a funcao `broadcast`: Duplicate definition of identifier: broadcast
+    Error:   × Falha na geracao de codigo nativo.
+Testando examples/test_phase8_stdlib.kata... [0;31m[ERRO][0m
+    [31mError:[0m Token inesperado: :
+    Error:   × Falha na análise sintática.
+Testando examples/test_phase9.kata... [0;31m[ERRO][0m
+    [31mError:[0m Token inesperado: <NEWLINE>
+    Error:   × Falha na análise sintática.
+Testando examples/test_purity.kata... [0;31m[ERRO][0m
+    [2026-04-03T04:56:12Z ERROR kata] Erros Semanticos detectados na Fase 3:
+    [2026-04-03T04:56:12Z ERROR kata] Erro de Pureza: `echo`
+    Error:   × Falha na analise semantica.
+Testando examples/test_quicksort.kata... [0;31m[ERRO][0m
+    [2026-04-03T04:56:12Z ERROR kata] Erros Semanticos detectados na Fase 3:
+    [2026-04-03T04:56:12Z ERROR kata] Erro de Tipo: `quicksort`
+    [2026-04-03T04:56:12Z ERROR kata] Erro de Tipo: `quicksort`
+Testando examples/test_range_simple.kata... [0;31m[ERRO][0m
+    [31mError:[0m Token inesperado: .
+    Error:   × Falha na análise sintática.
+Testando examples/test_range_step.kata... [0;31m[ERRO][0m
+    [31mError:[0m Token inesperado: .
+    Error:   × Falha na análise sintática.
+Testando examples/test_recr.kata... [0;31m[ERRO][0m
+    [2026-04-03T04:56:14Z ERROR kata] Erros Semanticos detectados na Fase 3:
+    [2026-04-03T04:56:14Z ERROR kata] Erro de Coerencia (Orphan Rule): Nao eh permitido implementar a Interface `SHOW` para o Tipo `Int` pois ambos sao externos ao modulo atual.
+    [2026-04-03T04:56:14Z ERROR kata] Erro Semantico: Recursao proibida na Action `loop_infinito`. Use loops (for/loop) para iteracoes impuras.
+Testando examples/test_refined.kata... [0;32m[OK][0m
+Testando examples/test_simple.kata... [0;32m[OK][0m
+Testando examples/test_tco_simple.kata... [0;32m[OK][0m
+Testando examples/test_tensor_boundary.kata... [0;31m[ERRO][0m
+    [2026-04-03T04:56:16Z ERROR kata] Erro de Compilacao/Codegen: Variável ou Variante não encontrada: ler_banco
+    Error:   × Falha na geracao de codigo nativo.
+Testando examples/test_tensor_math.kata... [0;31m[ERRO][0m
+    [2026-04-03T04:56:17Z ERROR kata] Erros Semanticos detectados na Fase 3:
+    [2026-04-03T04:56:17Z ERROR kata] Erro de Tipo: `dot`
+    [2026-04-03T04:56:17Z ERROR kata] Erro Semantico (Ambiguidade): `+`
+Testando examples/test_trig.kata... [0;31m[ERRO][0m
+    [2026-04-03T04:56:17Z ERROR kata] Erros Semanticos detectados na Fase 3:
+    [2026-04-03T04:56:17Z ERROR kata] Erro de Tipo: `-`
+    Error:   × Falha na analise semantica.
+Testando examples/test_zip_debug.kata... [0;31m[ERRO][0m
+    [2026-04-03T04:56:18Z ERROR kata] Erro de Compilacao/Codegen: Linker falhou com status: exit status: 1
+    Error:   × Falha na geracao de codigo nativo.
+Testando examples/test_zip.kata... [0;31m[ERRO][0m
+    [2026-04-03T04:56:18Z ERROR kata] Erros Semanticos detectados na Fase 3:
+    [2026-04-03T04:56:18Z ERROR kata] Erro de Tipo: `zip`
+    [2026-04-03T04:56:18Z ERROR kata] Erro de Tipo: `Cons`
+Testando examples/test_zip_simple.kata... [0;31m[ERRO][0m
+    [2026-04-03T04:56:19Z ERROR kata] Erros Semanticos detectados na Fase 3:
+    [2026-04-03T04:56:19Z ERROR kata] Erro de Tipo: `zip`
+    [2026-04-03T04:56:19Z ERROR kata] Erro de Tipo: `Cons`
+Testando examples/test_zip_simpler.kata... [0;31m[ERRO][0m
+    [2026-04-03T04:56:19Z ERROR kata] Erros Semanticos detectados na Fase 3:
+    [2026-04-03T04:56:19Z ERROR kata] Erro de Tipo: `zip`
+    [2026-04-03T04:56:19Z ERROR kata] Erro de Tipo: `Cons`
+
+=====================================
+[0;32m### SUCESSOS (14) ###[0m
+  - examples/mock_math.kata
+  - examples/test_coercion.kata
+  - examples/test_comment.kata
+  - examples/test_commutative.kata
+  - examples/test_fatorial.kata
+  - examples/test_float_simple.kata
+  - examples/test_indent.kata
+  - examples/test.kata
+  - examples/test_leading_nl.kata
+  - examples/test_match_exhaust.kata
+  - examples/test_pattern_simple.kata
+  - examples/test_refined.kata
+  - examples/test_simple.kata
+  - examples/test_tco_simple.kata
+
+[0;31m### FALHAS (37) ###[0m
+  - examples/test2fail_fibonacci.kata
+  - examples/test2fail_purity.kata
+  - examples/test2fail_recr.kata
+  - examples/test_array.kata
+  - examples/test_assert.kata
+  - examples/test_concurrency.kata
+  - examples/test_curr.kata
+  - examples/test_debug.kata
+  - examples/test_dispatch.kata
+  - examples/test_enum.kata
+  - examples/test_fibonacci.kata
+  - examples/test_fizzbuzz.kata
+  - examples/test_fizzbuzz_list.kata
+  - examples/test_imc.kata
+  - examples/test_imports.kata
+  - examples/test_is_prime.kata
+  - examples/test_log_error.kata
+  - examples/test_log.kata
+  - examples/test_main.kata
+  - examples/test_maxmin.kata
+  - examples/test_mixed.kata
+  - examples/test_nested_patterns.kata
+  - examples/test_phase10.kata
+  - examples/test_phase8_stdlib.kata
+  - examples/test_phase9.kata
+  - examples/test_purity.kata
+  - examples/test_quicksort.kata
+  - examples/test_range_simple.kata
+  - examples/test_range_step.kata
+  - examples/test_recr.kata
+  - examples/test_tensor_boundary.kata
+  - examples/test_tensor_math.kata
+  - examples/test_trig.kata
+  - examples/test_zip_debug.kata
+  - examples/test_zip.kata
+  - examples/test_zip_simple.kata
+  - examples/test_zip_simpler.kata
+=====================================
+
+Resumo Final: [0;32m14 Sucessos[0m / [0;31m37 Falhas[0m
+./run_examples.sh: line 68: 01:52:07]: arithmetic syntax error in expression (error token is ":52:07]")
+./run_examples.sh: line 70: [: -gt: unary operator expected
+./run_examples.sh: line 72: [: -lt: unary operator expected
+-> Historico salvo em meta_status_log.txt
+

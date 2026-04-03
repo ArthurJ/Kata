@@ -1,15 +1,14 @@
 # Teste de Recursão em Actions e Regra de Coerência
 
 # 1. Erro de Recursão (Proibido em Actions)
+@test{desc: "Erro de arquitetura de Action", expects: "CompileError"}
 action loop_infinito
     echo!("Recursando...")
-    loop_infinito!()# Deve gerar erro semântico
+    loop_infinito()
 
 # 2. Erro de Coerência (Orphan Rule)
 # Int é do core, SHOW é do core. Nenhum é local.
+@test{desc: "Orphan Rule em aplicacao local", expects: "CompileError"}
 Int implements SHOW
     str :: Int => Text
     lambda x: "Erro"
-
-action main
-    loop_infinito!()

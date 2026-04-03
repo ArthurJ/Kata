@@ -22,7 +22,11 @@ for file in examples/*.kata; do
     bin_name="${filename%.*}"
     log_file="out_logs/${bin_name}.log"
     
-    cargo run -q -- build "$file" > "$log_file" 2>&1
+    if [[ "$filename" == test2fail* ]]; then
+        cargo run -q -- test "$file" > "$log_file" 2>&1
+    else
+        cargo run -q -- build "$file" > "$log_file" 2>&1
+    fi
     
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}[OK]${NC}"
@@ -62,7 +66,11 @@ CURRENT_FAILS=${#FAILED_LIST[@]}
 # Read previous success count if log exists
 PREV_SUCCESS=$CURRENT_SUCCESS
 if [ -f "$LOG_FILE" ]; then
-    PREV_SUCCESS=$(grep "Sucessos:" "$LOG_FILE" | tail -n 1 | awk '{print $2}')
+    # Extracts the last "Sucessos: N " pattern
+    LAST_SUC=$(grep "Sucessos: [0-9]" "$LOG_FILE" | tail -n 1 | awk '{print $2}')
+    if [ ! -z "$LAST_SUC" ]; then
+        PREV_SUCCESS=$LAST_SUC
+    fi
 fi
 
 DIFF=$((CURRENT_SUCCESS - PREV_SUCCESS))
@@ -76,5 +84,9 @@ else
 fi
 
 echo "[$TIMESTAMP] Sucessos: $CURRENT_SUCCESS $DIFF_STR | Falhas: $CURRENT_FAILS" >> "$LOG_FILE"
-echo "-> Historico salvo em $LOG_FILE"
+echo "Success_List: ${SUCCESS_LIST[*]}" >> "$LOG_FILE"
+echo "Failed_List: ${FAILED_LIST[*]}" >> "$LOG_FILE"
+echo "" >> "$LOG_FILE"
+
+echo "-> Historico detalhado salvo em $LOG_FILE"
 echo ""

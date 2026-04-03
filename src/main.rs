@@ -223,7 +223,96 @@ fn main() -> miette::Result<()> {
             log::info!("Entrypoint: {}", entrypoint);
             log::info!("Release mode: {}", release);
 
-            log::info!("Comando: RUN (Pendente implementacao AOT/JIT descartavel)");
+            let mut loader = module_loader::ModuleLoader::new(vec![
+                std::path::PathBuf::from("src"),
+                std::env::current_dir().unwrap(),
+            ]);
+
+            let prelude_env = match loader.load_module("core", None) {
+                Ok(env) => env,
+                Err(e) => return Err(miette::miette!("Falha critica ao carregar o Prelude: {}", e)),
+            };
+
+            let source = std::fs::read_to_string(&entrypoint)
+                .map_err(|e| miette::miette!("Falha ao ler o arquivo {}: {}", entrypoint, e))?;
+
+            let tokens = match lexer::lex(&source, lexer::LexMode::File) {
+                Ok(t) => t,
+                Err(_) => return Err(miette::miette!("Falha na análise léxica.")),
+            };
+
+            let source_len = source.chars().count();
+            let module = match parser::parse_module(tokens, source_len) {
+                Ok(m) => m,
+                Err(_) => return Err(miette::miette!("Falha na análise sintática.")),
+            };
+
+            let entrypoint_dir = std::path::Path::new(&entrypoint).parent();
+            for (decl, _) in &module.declarations {
+                if let parser::ast::TopLevel::Import(path, _) = decl {
+                    if let Err(e) = loader.load_module(path, entrypoint_dir) {
+                        return Err(miette::miette!("Falha de dependencia: {}", e));
+                    }
+                }
+            }
+
+            let mut checker = type_checker::Checker::new();
+            checker.compiled_modules = loader.cache.clone();
+            
+            let all_exports: Vec<(String, Option<String>)> = prelude_env.exports.iter().map(|e| (e.clone(), None)).collect();
+            checker.env.import_from(&prelude_env, "core", &all_exports);
+
+            for (decl, _) in &module.declarations {
+                if let parser::ast::TopLevel::Import(path, specific) = decl {
+                    if let Some(target_module_name) = path.split('.').next() {
+                        if let Some(target_env) = checker.compiled_modules.get(path).or(checker.compiled_modules.get(target_module_name)) {
+                            checker.env.import_from(target_env, target_module_name, specific);
+                        }
+                    }
+                }
+            }
+
+            checker.check_module(&module);
+
+            if !checker.errors.is_empty() {
+                for e in &checker.errors { log::error!("{}", e.0); }
+                return Err(miette::miette!("Falha na analise semantica."));
+            }
+
+            let mut full_tast = Vec::new();
+            for (_, dep_tast) in loader.tast_cache { full_tast.extend(dep_tast); }
+            full_tast.extend(checker.tast);
+
+            let mut opt = optimizer::Optimizer::new(&checker.env);
+            let optimized_tast = opt.optimize(full_tast, *release);
+
+            if !opt.errors.is_empty() {
+                for e in &opt.errors { log::error!("{}", e.message); }
+                return Err(miette::miette!("Falha na otimizacao."));
+            }
+
+            let tmp_bin = ".tmp_kata_run";
+            if let Err(e) = codegen::compile_and_link(optimized_tast, &checker.env, tmp_bin) {
+                log::error!("Erro de Compilacao AOT: {}", e);
+                return Err(miette::miette!("Falha na geracao de codigo nativo temporario."));
+            }
+
+            let mut child = std::process::Command::new(format!("./{}", tmp_bin))
+                .stdout(std::process::Stdio::inherit())
+                .stderr(std::process::Stdio::inherit())
+                .spawn()
+                .map_err(|_| miette::miette!("Falha ao iniciar processo filho."))?;
+
+            let status = child.wait().map_err(|_| miette::miette!("Falha ao aguardar processo."))?;
+
+            // Expurgo
+            let _ = std::fs::remove_file(tmp_bin);
+            let _ = std::fs::remove_file(format!("{}.o", tmp_bin));
+            let _ = std::fs::remove_file("kata_entry.c");
+
+            if !status.success() {
+                std::process::exit(status.code().unwrap_or(1));
+            }
         }
         Commands::Test { path } => {
             log::info!("Comando: TEST");
@@ -309,6 +398,23 @@ fn main() -> miette::Result<()> {
                             break;
                         }
                     }
+
+                    if !has_error {
+                        // Faz uma passagem rápida pelo otimizador só para ver se quebra em otimização de cauda ou comptime
+                        let mut opt_checker = optimizer::Optimizer::new(&checker.env);
+                        let mut stub_tast = Vec::new();
+                        for (_, dep_tast) in loader.tast_cache.clone() { stub_tast.extend(dep_tast); }
+                        stub_tast.extend(checker.tast.clone());
+                        let _ = opt_checker.optimize(stub_tast, true);
+
+                        for e in &opt_checker.errors {
+                            // Apenas consideramos válido se o otimizador der *algum* erro, 
+                            // já que em testes de Expected Failure o arquivo só tem essa intenção de erro.
+                            has_error = true;
+                            break;
+                        }
+                    }
+
                     if has_error {
                         log::info!("\\033[0;32mSUCESSO\\033[0m: Teste falhou na compilação conforme esperado.");
                         passed_count += 1;

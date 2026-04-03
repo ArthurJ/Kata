@@ -14,12 +14,21 @@ pub fn top_level_parser() -> impl Parser<Token, Spanned<TopLevel>, Error = Parse
             _ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
         })
         .then(
-            expr_parser().separated_by(just(Token::Comma).or_not())
-                .delimited_by(just(Token::LParen), just(Token::RParen))
-                .or_not()
-                .map(|opt| opt.unwrap_or_default())
+            choice((
+                expr_parser().separated_by(just(Token::Comma).or_not())
+                    .delimited_by(just(Token::LParen), just(Token::RParen))
+                    .map(|args| crate::parser::ast::DirectiveArgs::Positional(args)),
+                ident_string()
+                    .then_ignore(just(Token::Colon))
+                    .then(expr_parser())
+                    .separated_by(just(Token::Comma).or_not())
+                    .delimited_by(just(Token::LBrace), just(Token::RBrace))
+                    .map(|args| crate::parser::ast::DirectiveArgs::Named(args))
+            ))
+            .or_not()
+            .map(|opt| opt.unwrap_or(crate::parser::ast::DirectiveArgs::Positional(Vec::new())))
         )
-        .map_with_span(|(name, args), span| (Directive { name, args: crate::parser::ast::DirectiveArgs::Positional(args) }, span));
+        .map_with_span(|(name, args), span| (Directive { name, args }, span));
 
         let directives_list = directive_parser
             .then_ignore(just(Token::Newline).repeated())

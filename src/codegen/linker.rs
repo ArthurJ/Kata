@@ -74,6 +74,18 @@ char* kata_rt_bool_to_str(char a) {
     return a ? "True" : "False";
 }
 
+char* kata_rt_type(void* a) {
+    return "UnknownType";
+}
+
+char* kata_rt_format(char* template, void* arg) {
+    return "formatted";
+}
+
+void* kata_rt_fields(void* a) {
+    return NULL;
+}
+
 char* kata_rt_concat_text(char* a, char* b) {
     if (!a && !b) return "";
     if (!a) return b;

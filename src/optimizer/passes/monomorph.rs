@@ -159,7 +159,8 @@ impl<'a> Monomorphizer<'a> {
                         let substituter = TypeSubstituter { mapping, env: self._env };
                         let concrete_callee_ty = substituter.substitute_type(callee_ty);
 
-                        folded_callee = Box::new((TExpr::Ident(mangled_name, concrete_callee_ty), folded_callee.1.clone()));
+                        // Mantem o nome original intacto, apenas atualiza o tipo concreto
+                        folded_callee = Box::new((TExpr::Ident(name.clone(), concrete_callee_ty), folded_callee.1.clone()));
                     } else if let Some(infos) = self._env.lookup_all(name) {
                         // Re-resolver chamadas comuns se necessário, dado que tipos podem ter mudado.
                         // (Isso corrige o Verifier Error pois pega a instrução final correta após a substituição)
@@ -289,7 +290,7 @@ impl<'a> Monomorphizer<'a> {
                     TTopLevel::Signature(_, params, ret, dirs) => {
                         let new_params = params.iter().map(|(t, s)| (substituter.substitute_type(t), s.clone())).collect();
                         let new_ret = (substituter.substitute_type(&ret.0), ret.1.clone());
-                        new_decls.push(TTopLevel::Signature(mangled_name.to_string(), new_params, new_ret, dirs));
+                        new_decls.push(TTopLevel::Signature(original_name.to_string(), new_params, new_ret, dirs));
                     }
                     TTopLevel::LambdaDef(params, body, with, dirs) => {
                         let new_body = substituter.substitute_expr(&body);
@@ -300,7 +301,7 @@ impl<'a> Monomorphizer<'a> {
                         let new_params = params.iter().map(|(n, (t, s))| (n.clone(), (substituter.substitute_type(t), s.clone()))).collect();
                         let new_ret = (substituter.substitute_type(&ret.0), ret.1.clone());
                         let new_body = body.iter().map(|s| substituter.substitute_stmt(s)).collect();
-                        new_decls.push(TTopLevel::ActionDef(mangled_name.to_string(), new_params, new_ret, new_body, dirs));
+                        new_decls.push(TTopLevel::ActionDef(original_name.to_string(), new_params, new_ret, new_body, dirs));
                     }
                     other => {
                         new_decls.push(other);

@@ -1,9 +1,9 @@
+# Teste Negativo: A Kata-Lang proibe recursão que não possa ser otimizada via TCO (Tail Call Optimization) ou TRMA.
+# A função de Fibonacci abaixo (ramificada) gera 2 chamadas não-terminais, sendo banida na Fase 4 (Otimizador).
+
+@test{desc: "Recursão ramificada de Fibonacci falha no Otimizador", expects: "CompileError"}
 fib :: Int => Int
 lambda 0: 0
 lambda 1: 1
 lambda n:
     + $(fib $(- n 1)) $(fib $(- n 2))
-
-action main
-    let f $(fib 40)
-    echo!($(str f))

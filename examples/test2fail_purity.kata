@@ -11,6 +11,7 @@ lambda a b:
 
 # Função Pura INVÁLIDA (Quebrando a barreira!())
 # Tenta invocar uma Ação dentro de um bloco Matemático
+@test{desc: "Erro de Pureza emitido pelo TypeChecker se usar FFI Action", expects: "CompileError"}
 imprimir_e_somar :: Int Int => Int
 lambda a b:
     echo!("Isso deve falhar o compilador!")
