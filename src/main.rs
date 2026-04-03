@@ -1,5 +1,6 @@
 mod cli;
 mod codegen;
+mod errors;
 mod kata_rt;
 mod lexer;
 mod module_loader;
@@ -393,7 +394,7 @@ fn main() -> miette::Result<()> {
                     log::info!("\nValidando Teste de Compilação: {}...", t.name);
                     let mut has_error = false;
                     for (err_msg, _) in &checker.errors {
-                        if err_msg.contains(&t.name) {
+                        if err_msg.to_string().contains(&t.name) {
                             has_error = true;
                             break;
                         }

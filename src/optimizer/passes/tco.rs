@@ -94,7 +94,7 @@ impl TcoPass {
 
                 if is_invalid && has_recursion {
                     errors.push(OptimizerError::new(
-                        format!("Erro Fatal de TCO: A função `{}` possui recursão que não está em posição de cauda (Ex: Fibonacci ramificado ou chamadas encadeadas complexas) e não pôde ser otimizada automaticamente. Reescreva a lógica.", func_name),
+                        crate::errors::KataError::TcoError(format!("A função `{}` possui recursão que não está em posição de cauda (Ex: Fibonacci ramificado ou chamadas encadeadas complexas) e não pôde ser otimizada automaticamente. Reescreva a lógica.", func_name)),
                         lambdas[0].1.clone()
                     ));
                     final_tast.push(sig_decl);
@@ -142,7 +142,7 @@ impl TcoPass {
                                 final_tast.push((TTopLevel::LambdaDef(fw_params, (fw_body, 0..0), Vec::new(), Vec::new()), 0..0));
                             } else {
                                 errors.push(OptimizerError::new(
-                                    format!("Erro Fatal de TCO: A função `{}` falha a otimização de cauda. A operação `{}` é associativa, mas não declarou um elemento neutro na diretiva @associative. O compilador não pode injetar um acumulador de forma segura. Reescreva a função usando um laço/acumulador manual.", func_name, op),
+                                    crate::errors::KataError::TcoError(format!("A função `{}` falha a otimização de cauda. A operação `{}` é associativa, mas não declarou um elemento neutro na diretiva @associative. O compilador não pode injetar um acumulador de forma segura. Reescreva a função usando um laço/acumulador manual.", func_name, op)),
                                     lambdas[0].1.clone()
                                 ));
                                 final_tast.push(sig_decl);
@@ -150,7 +150,7 @@ impl TcoPass {
                             }
                         } else {
                             errors.push(OptimizerError::new(
-                                format!("Erro de TRMA: A operação `{}` retorna `{:?}` na função `{}`, mas não possui a diretiva @associative declarada na sua assinatura original.", op, ret_type, func_name),
+                                crate::errors::KataError::TcoError(format!("A operação `{}` retorna `{:?}` na função `{}`, mas não possui a diretiva @associative declarada na sua assinatura original.", op, ret_type, func_name)),
                                 lambdas[0].1.clone()
                             ));
                             final_tast.push(sig_decl);
@@ -495,7 +495,7 @@ impl TcoPass {
                 if let TExpr::Ident(callee_name, _) = &callee.0 {
                     if callee_name == func_name {
                         errors.push(OptimizerError::new(
-                            format!("Erro Fatal de Arquitetura: A Action `{}` e recursiva. Actions compilam para Maquinas de Estado impuras e nao suportam recursao. Use loops imperativos (loop/for).", func_name),
+                            crate::errors::KataError::TcoError(format!("A Action `{}` e recursiva. Actions compilam para Maquinas de Estado impuras e nao suportam recursao. Use loops imperativos (loop/for).", func_name)),
                             span.clone()
                         ));
                     }
@@ -604,6 +604,6 @@ use crate::type_checker::directives::KataDirective;
         pass.run(tast, &mut errors);
 
         assert_eq!(errors.len(), 1, "Deveria ter disparado exatamente 1 erro de compilação.");
-        assert!(errors[0].message.contains("Erro Fatal de TCO"), "A mensagem de erro não bate certo.");
+        assert!(errors[0].message.to_string().contains("TcoError"), "A mensagem de erro não bate certo.");
     }
 }

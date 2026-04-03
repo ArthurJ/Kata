@@ -99,7 +99,7 @@ impl<'a> ComptimeEval<'a> {
                                         Ok(false) => {
                                             all_passed = false;
                                             errors.push(OptimizerError::new(
-                                                format!("Comptime Error: Literal {:?} não satisfaz o predicado do tipo refinado `{}`.", lit, name),
+                                                crate::errors::KataError::ComptimeError(format!("Literal {:?} não satisfaz o predicado do tipo refinado `{}`.", lit, name)),
                                                 span.clone(),
                                             ));
                                             break;
@@ -107,7 +107,7 @@ impl<'a> ComptimeEval<'a> {
                                         Err(msg) => {
                                             all_passed = false;
                                             errors.push(OptimizerError::new(
-                                                format!("Comptime Error ao avaliar predicado para `{}`: {}", name, msg),
+                                                crate::errors::KataError::ComptimeError(format!("ao avaliar predicado para `{}`: {}", name, msg)),
                                                 span.clone(),
                                             ));
                                             break;
@@ -272,6 +272,6 @@ mod tests {
         eval.fold_expr_spanned((call, 0..0), &mut errors);
 
         assert_eq!(errors.len(), 1, "Deveria haver exatamente 1 erro.");
-        assert!(errors[0].message.contains("não satisfaz o predicado"), "Mensagem de erro incorreta: {}", errors[0].message);
+        assert!(errors[0].message.to_string().contains("não satisfaz o predicado"), "Mensagem de erro incorreta: {}", errors[0].message);
     }
 }

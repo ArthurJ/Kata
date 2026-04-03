@@ -39,7 +39,7 @@ pub struct ArityResolver<'a> {
     pub env: &'a TypeEnv,
     pub local_vars: std::cell::RefCell<std::collections::HashMap<String, TypeRef>>,
     pub constraints: std::cell::RefCell<std::collections::HashMap<String, String>>,
-    pub errors: std::cell::RefCell<Vec<(String, crate::parser::ast::Span)>>,
+    pub errors: std::cell::RefCell<Vec<(crate::errors::KataError, crate::parser::ast::Span)>>,
     pub pure_context: std::cell::Cell<bool>,
     pub current_action: std::cell::RefCell<Option<String>>,
 }
@@ -209,10 +209,10 @@ impl<'a> ArityResolver<'a> {
     fn check_recursion(&self, name: &str, span: &crate::parser::ast::Span) {
         if let Some(curr) = &*self.current_action.borrow() {
             if curr == name {
-                self.errors.borrow_mut().push((format!(
-                    "Erro Semantico: Recursao proibida na Action `{}`. Use loops (for/loop) para iteracoes impuras.",
+                self.errors.borrow_mut().push((crate::errors::KataError::TcoError(format!(
+                    "Recursao proibida na Action `{}`. Use loops (for/loop) para iteracoes impuras.",
                     name
-                ), span.clone()));
+                )), span.clone()));
             }
         }
     }
@@ -373,9 +373,9 @@ impl<'a> ArityResolver<'a> {
                         }
 
                         if is_ambiguous {
-                            self.errors.borrow_mut().push((format!("Erro Semantico (Ambiguidade): `{}`", name), span.clone()));
+                            self.errors.borrow_mut().push((crate::errors::KataError::AmbiguityError(format!("`{}`", name)), span.clone()));
                         } else if best_match.is_none() && !first_info.is_action {
-                            self.errors.borrow_mut().push((format!("Erro de Tipo: `{}`", name), span.clone()));
+                            self.errors.borrow_mut().push((crate::errors::KataError::TypeError(format!("`{}`", name)), span.clone()));
                         }
                     } else {
                         // Operadores de canal ou ident desconhecido
@@ -396,7 +396,7 @@ impl<'a> ArityResolver<'a> {
                     if args_were_swapped { final_args.swap(0, 1); }
 
                     if self.pure_context.get() && is_action {
-                        self.errors.borrow_mut().push((format!("Erro de Pureza: `{}`", name), span.clone()));
+                        self.errors.borrow_mut().push((crate::errors::KataError::PurityError(format!("`{}`", name)), span.clone()));
                     }
                     self.check_recursion(&name, span);
 
@@ -583,9 +583,9 @@ impl<'a> ArityResolver<'a> {
                 }
             }
             Expr::Ident(name) => {
-                if let Some(ty) = self.local_vars.borrow().get(name) { (TExpr::Ident(name.clone(), ty.clone()), span.clone()) } 
+                if let Some(ty) = self.local_vars.borrow().get(name) { (TExpr::Ident(name.clone(), ty.clone()), span.clone()) }
                 else if let Some(info) = self.env.lookup_first(name) {
-                    if self.pure_context.get() && info.is_action { self.errors.borrow_mut().push((format!("Erro de Pureza: `{}`", name), span.clone())); }
+                    if self.pure_context.get() && info.is_action { self.errors.borrow_mut().push((crate::errors::KataError::PurityError(format!("`{}`", name)), span.clone())); }
                     self.check_recursion(name, span);
                     (TExpr::Ident(name.clone(), info.type_info.clone()), span.clone())
                 } else {
@@ -595,7 +595,7 @@ impl<'a> ArityResolver<'a> {
             }
             Expr::ActionCall(name, args) => {
                 if self.pure_context.get() {
-                    self.errors.borrow_mut().push((format!("Erro de Pureza: `{}`", name), span.clone()));
+                    self.errors.borrow_mut().push((crate::errors::KataError::PurityError(format!("`{}`", name)), span.clone()));
                 }
                 self.check_recursion(name, span);
                 let mut resolved_args = Vec::new();
@@ -687,7 +687,7 @@ impl<'a> ArityResolver<'a> {
                             }
                             
                             if !all_match {
-                                self.errors.borrow_mut().push((format!("Erro de Tipo na chamada da Action `{}`", name), span.clone()));
+                                self.errors.borrow_mut().push((crate::errors::KataError::TypeError(format!("Chamada da Action `{}` com argumentos invalidos", name)), span.clone()));
                             }
                             return (TExpr::Call(
                                 Box::new((TExpr::Ident(name.clone(), info.type_info.clone()), span.clone())),
@@ -698,7 +698,7 @@ impl<'a> ArityResolver<'a> {
                     }
                 }
                 
-                self.errors.borrow_mut().push((format!("Action desconhecida: `{}`", name), span.clone()));
+                self.errors.borrow_mut().push((crate::errors::KataError::NameError(format!("Action desconhecida: `{}`", name)), span.clone()));
                 (TExpr::Literal(TLiteral::Unit), span.clone())
             }
             Expr::ChannelSend => (TExpr::Ident("!>".into(), TypeRef::Simple("Unknown".into())), span.clone()),

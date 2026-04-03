@@ -29,14 +29,14 @@ mod tests {
         let align = 8;
         let ptr = SharedMemory::alloc(size, align);
         assert!(!ptr.is_null());
-        
+
         // Escreve algo para testar se a memória é válida
         unsafe {
             *ptr = 42;
             assert_eq!(*ptr, 42);
         }
 
-        // Libera a memória compartilhada
-        SharedMemory::free(ptr, size, align);
+        // Libera a memória compartilhada via ARC (decref)
+        SharedMemory::decref(ptr);
     }
 }

@@ -15,7 +15,7 @@ pub struct TestInfo {
 pub struct Checker {
     pub env: TypeEnv,
     pub tast: Vec<Spanned<TTopLevel>>,
-    pub errors: Vec<(String, crate::parser::ast::Span)>,
+    pub errors: Vec<(crate::errors::KataError, crate::parser::ast::Span)>,
     pub tests: Vec<TestInfo>,
     pub local_types: std::collections::HashSet<String>,
     pub local_interfaces: std::collections::HashSet<String>,
@@ -84,7 +84,7 @@ impl Checker {
         self.local_interfaces.clear();
     }
 
-    fn process_lambda_group(&self, group: &mut Vec<&Vec<Spanned<Pattern>>>, sig: &Option<(String, Vec<Spanned<TypeRef>>, Spanned<TypeRef>)>, errs: &mut Vec<(String, crate::parser::ast::Span)>) {
+    fn process_lambda_group(&self, group: &mut Vec<&Vec<Spanned<Pattern>>>, sig: &Option<(String, Vec<Spanned<TypeRef>>, Spanned<TypeRef>)>, errs: &mut Vec<(crate::errors::KataError, crate::parser::ast::Span)>) {
         if let Some((name, params, _)) = sig {
             if !group.is_empty() && !params.is_empty() {
                 // If any lambda in the group is a catch-all "otherwise" (params.len() == 1 and it's "otherwise"), 
@@ -165,7 +165,7 @@ impl Checker {
     }
 
     pub fn check_module(&mut self, module: &Module) {
-        let mut local_errors: Vec<(String, crate::parser::ast::Span)> = Vec::new();
+        let mut local_errors: Vec<(crate::errors::KataError, crate::parser::ast::Span)> = Vec::new();
         for (decl, span) in &module.declarations {
             self.collect_top_level(decl, span);
         }
@@ -205,7 +205,7 @@ impl Checker {
     }
 
     fn collect_top_level(&mut self, decl: &TopLevel, span: &crate::parser::ast::Span) {
-        let mut local_errs: Vec<(String, crate::parser::ast::Span)> = Vec::new();
+        let mut local_errs: Vec<(crate::errors::KataError, crate::parser::ast::Span)> = Vec::new();
 
 
         let _extract_test_info = |dirs: &[Spanned<crate::parser::ast::Directive>]| -> Option<(String, Option<String>)> {
@@ -296,9 +296,9 @@ impl Checker {
                     for (i, variant) in variants.iter().enumerate() {
                         let is_pred = matches!(variant.data, crate::parser::ast::VariantData::Predicate(_));
                         if i < len - 1 && !is_pred {
-                            local_errs.push((format!("Enum Predicativo Invalido ({}): Variante '{}' no meio da declaracao nao possui predicado.", name, variant.name), span.clone()));
+                            local_errs.push((crate::errors::KataError::SyntaxError(format!("Enum Predicativo Invalido ({}): Variante '{}' no meio da declaracao nao possui predicado.", name, variant.name)), span.clone()));
                         } else if i == len - 1 && is_pred {
-                            local_errs.push((format!("Enum Predicativo Invalido ({}): A ultima variante ('{}') deve ser um catch-all sem predicado.", name, variant.name), span.clone()));
+                            local_errs.push((crate::errors::KataError::SyntaxError(format!("Enum Predicativo Invalido ({}): A ultima variante ('{}') deve ser um catch-all sem predicado.", name, variant.name)), span.clone()));
                         }
                     }
                 }
@@ -335,10 +335,10 @@ impl Checker {
             }
             TopLevel::Implements(type_name, interface_name, methods) => {
                 if !self.local_types.contains(type_name) && !self.local_interfaces.contains(interface_name) {
-                    local_errs.push((format!(
-                        "Erro de Coerencia (Orphan Rule): Nao eh permitido implementar a Interface `{}` para o Tipo `{}` pois ambos sao externos ao modulo atual.",
+                    local_errs.push((crate::errors::KataError::OrphanRuleError(format!(
+                        "Nao eh permitido implementar a Interface `{}` para o Tipo `{}` pois ambos sao externos ao modulo atual.",
                         interface_name, type_name
-                    ), span.clone()));
+                    )), span.clone()));
                 }
                 self.env.define_implementation(type_name.clone(), interface_name.clone());
                 let mut method_names = Vec::new();
@@ -395,7 +395,7 @@ impl Checker {
         self.errors.extend(local_errs);
     }
 
-    fn resolve_top_level(&self, decl: &TopLevel, _span: &crate::parser::ast::Span, resolver: &ArityResolver, local_errors: &mut Vec<(String, crate::parser::ast::Span)>, last_signature: &Option<(String, Vec<Spanned<TypeRef>>, Spanned<TypeRef>)>) -> Vec<TTopLevel> {
+    fn resolve_top_level(&self, decl: &TopLevel, _span: &crate::parser::ast::Span, resolver: &ArityResolver, local_errors: &mut Vec<(crate::errors::KataError, crate::parser::ast::Span)>, last_signature: &Option<(String, Vec<Spanned<TypeRef>>, Spanned<TypeRef>)>) -> Vec<TTopLevel> {
         match decl {
             TopLevel::Data(name, def, dirs) => vec![TTopLevel::Data(name.clone(), def.clone(), validate_and_parse_directives(dirs).0)],
             TopLevel::Enum(name, variants, dirs) => {
@@ -508,7 +508,7 @@ impl Checker {
                     let t_body = resolver.resolve_expr(body);
                     let body_ty = ArityResolver::get_expr_type(&t_body.0);
                     if !resolver.types_compatible(&body_ty, &expected_ret.0) {
-                        local_errors.push((format!("Type Mismatch: Expected return type `{:?}`, Found `{:?}` in Lambda", expected_ret.0, body_ty), body.1.clone()));
+                        local_errors.push((crate::errors::KataError::TypeError(format!("Expected return type `{:?}`, Found `{:?}` in Lambda", expected_ret.0, body_ty)), body.1.clone()));
                     }
 
                     let mut t_with = Vec::new();
@@ -550,7 +550,7 @@ impl Checker {
                 let is_ffi = parsed_dirs.iter().any(|(d, _)| matches!(d, KataDirective::Ffi(_)));
 
                 if !is_ffi && !resolver.types_compatible(&last_stmt_ty, &ret.0) {
-                    local_errors.push((format!("Type Mismatch: Expected return type `{:?}`, Found `{:?}` in Action `{}`", ret.0, last_stmt_ty, name), ret.1.clone()));
+                    local_errors.push((crate::errors::KataError::TypeError(format!("Expected return type `{:?}`, Found `{:?}` in Action `{}`", ret.0, last_stmt_ty, name)), ret.1.clone()));
                 }
 
                 vec![TTopLevel::ActionDef(name.clone(), params.clone(), ret.clone(), t_body, parsed_dirs)]
@@ -568,7 +568,7 @@ impl Checker {
             _ => Vec::new(),
         }
     }
-    fn check_exhaustiveness(&self, target_type: &TypeRef, patterns: &[&Pattern], local_errors: &mut Vec<(String, crate::parser::ast::Span)>, context: &str, span: &crate::parser::ast::Span) {
+    fn check_exhaustiveness(&self, target_type: &TypeRef, patterns: &[&Pattern], local_errors: &mut Vec<(crate::errors::KataError, crate::parser::ast::Span)>, context: &str, span: &crate::parser::ast::Span) {
         let enum_name = match target_type {
             TypeRef::Simple(n) => n.clone(),
             TypeRef::Generic(n, _) => n.clone(),
@@ -601,13 +601,13 @@ impl Checker {
                         if !covered_variants.contains(var) { missing.push(var.clone()); }
                     }
                     if !missing.is_empty() {
-                        local_errors.push((format!("Erro Semantico: {} em `{}` nao eh exaustivo. Faltam: {:?}", context, enum_name, missing), span.clone()));
+                        local_errors.push((crate::errors::KataError::ExhaustivenessError(format!("{} em `{}` nao eh exaustivo. Faltam: {:?}", context, enum_name, missing)), span.clone()));
                     }
                 }
             }
     }
 
-    fn resolve_stmt(&self, stmt: &Spanned<Stmt>, resolver: &ArityResolver, local_errors: &mut Vec<(String, crate::parser::ast::Span)>) -> Spanned<TStmt> {
+    fn resolve_stmt(&self, stmt: &Spanned<Stmt>, resolver: &ArityResolver, local_errors: &mut Vec<(crate::errors::KataError, crate::parser::ast::Span)>) -> Spanned<TStmt> {
         let (s, span) = stmt;
         match s {
             Stmt::Let(p, e) => {
