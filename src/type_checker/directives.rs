@@ -68,7 +68,10 @@ pub enum KataDirective {
         topic: Option<String>,
         on_full: BackpressurePolicy,
     },
-    Test(String),
+    Test {
+        desc: String,
+        expects: Option<String>,
+    },
     Ffi(String),
     Commutative,
     Associative(Option<Expr>),
@@ -156,12 +159,40 @@ pub fn validate_and_parse_directives(
                 parsed.push((KataDirective::Log { level, msg, topic, on_full }, span.clone()));
             }
             "test" => {
-                let desc = if let Some((Expr::String(s), _)) = match &dir.args { crate::parser::ast::DirectiveArgs::Positional(p) => p.first(), _ => None } {
-                    s.clone()
-                } else {
-                    "Sem descricao".to_string()
-                };
-                parsed.push((KataDirective::Test(desc), span.clone()));
+                match &dir.args {
+                    crate::parser::ast::DirectiveArgs::Positional(p) => {
+                        let desc = if let Some((Expr::String(s), _)) = p.first() {
+                            s.clone()
+                        } else {
+                            "Sem descricao".to_string()
+                        };
+                        parsed.push((KataDirective::Test { desc, expects: None }, span.clone()));
+                    }
+                    crate::parser::ast::DirectiveArgs::Named(n) => {
+                        let mut desc = "Sem descricao".to_string();
+                        let mut expects = None;
+
+                        for (k, v) in n {
+                            match k.as_str() {
+                                "desc" => {
+                                    if let Expr::String(s) = &v.0 { desc = s.clone(); }
+                                    else { errors.push(("O argumento 'desc' deve ser uma String literal.".to_string(), v.1.clone())); }
+                                }
+                                "expects" => {
+                                    if let Expr::String(s) = &v.0 { expects = Some(s.clone()); }
+                                    else { errors.push(("O argumento 'expects' deve ser uma String literal (ex: \"CompileError\", \"Panic\").".to_string(), v.1.clone())); }
+                                }
+                                _ => errors.push((format!("Argumento nomeado '{}' desconhecido para @test.", k), v.1.clone())),
+                            }
+                        }
+
+                        if expects.as_deref() != Some("CompileError") && expects.as_deref() != Some("Panic") && expects.is_some() {
+                            errors.push((format!("Valor invalido para 'expects': {:?}. Valores permitidos: \"CompileError\", \"Panic\".", expects), span.clone()));
+                        }
+
+                        parsed.push((KataDirective::Test { desc, expects }, span.clone()));
+                    }
+                }
             }
             "ffi" => {
                 if match &dir.args { crate::parser::ast::DirectiveArgs::Positional(p) => p.is_empty(), _ => false } {

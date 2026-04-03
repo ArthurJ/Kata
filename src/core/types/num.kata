@@ -1,58 +1,6 @@
-enum Result::(T, E)
-    | Ok(T)
-    | Err(E)
-
-enum Optional::T
-    | Some(T)
-    | None
-
-# ==========================================
-# Lógica Booleana
-# ==========================================
-
-enum Bool
-    | True
-    | False
-
-Bool implements SHOW
-    str :: Bool => Text
-    λ True: "True"
-    λ False: "False"
-
-    @ffi("kata_rt_bool_to_str")
-    repr :: Bool => Text
-
-@commutative
-@associative(True)
-and :: Bool Bool => Bool
-λ True True: True
-otherwise: False
-
-@commutative
-@associative(False)
-or :: Bool Bool => Bool
-λ True _: True
-λ _ True: True
-otherwise: False
-
-@commutative
-@associative(False)
-xor :: Bool Bool => Bool
-λ True False: True
-λ False True: True
-otherwise: False
-
-not :: Bool => Bool
-λ False: True
-λ True: False
-
-# ==========================================
-# Interfaces
-# ==========================================
-
-interface SHOW implements REPR
-    str :: SHOW => Text
-    λ x: repr x
+import text.(Text SHOW repr str)
+import bool.(Bool not)
+import result.(Result)
 
 interface HASH
     hash :: A => Text
@@ -83,10 +31,6 @@ interface NUM implements ORD SHOW
     /   :: NUM NonZero => Float
     //  :: NUM NonZero => Int
     mod :: NUM NonZero => NUM
-
-# ==========================================
-# Despacho Múltiplo (Multiple Dispatch)
-# ==========================================
 
 Int implements NUM
     @ffi("kata_rt_add_int")
@@ -232,33 +176,4 @@ float :: Int => Float
 >= :: Float Int => Bool
 λ a b: >= a float b
 
-# ==========================================
-# Texto
-# ==========================================
-
-export NUM Float Int Bool and or xor not Result Optional SHOW REPR HASH EQ ORD NonZero Text ITERATOR ITERABLE float
-
-@ffi("kata_rt_concat_text")
-@associative("")
-+ :: Text Text => Text
-
-interface REPR
-    @ffi("kata_rt_default_repr")
-    repr :: REPR => Text
-
-Text implements SHOW
-    str :: Text => Text
-    λ x: x
-    
-    @ffi("kata_rt_repr_text")
-    repr :: Text => Text
-
-# ==========================================
-# Iteradores e Coleções (ITERABLE)
-# ==========================================
-
-interface ITERATOR
-    next :: ITERATOR => Optional::(Tuple::(A ITERATOR))
-
-interface ITERABLE
-    iter :: ITERABLE => ITERATOR
+export NUM Float Int NonZero EQ ORD HASH = != > >= < <= + - * ** div / // mod float round ceil floor

@@ -1,0 +1,33 @@
+import result.(Optional)
+
+interface ITERATOR
+    next :: ITERATOR => Optional::(Tuple::(A ITERATOR))
+
+interface ITERABLE
+    iter :: ITERABLE => ITERATOR
+
+# FFI para map usando KataClosure
+# Recebe uma closure e um iteravel, retorna nova lista mapeada
+@ffi("kata_rt_map")
+map :: (A->B) ITERABLE::A => List::B
+
+# FFI para filter usando KataClosure
+# Recebe uma closure predicado e um iteravel, retorna lista filtrada
+@ffi("kata_rt_filter")
+filter :: (A->Bool) ITERABLE::A => List::A
+
+# FFI para fold usando KataClosure
+# Recebe closure (acc val -> acc), valor inicial, iteravel
+@ffi("kata_rt_fold")
+fold :: (A A -> A) A ITERABLE::A => A
+
+# FFI para zip
+# Combina dois iteraveis em uma lista de tuplas
+@ffi("kata_rt_zip")
+zip :: ITERABLE::A ITERABLE::B => List::(Tuple::(A B))
+
+# Construtor interno de Listas
+@ffi("kata_rt_cons")
+Cons :: A [A] => [A]
+
+export map filter fold zip Cons ITERATOR ITERABLE

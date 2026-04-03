@@ -2,6 +2,7 @@ mod cli;
 mod codegen;
 mod kata_rt;
 mod lexer;
+mod module_loader;
 mod optimizer;
 mod parser;
 mod repl;
@@ -47,7 +48,22 @@ fn main() -> miette::Result<()> {
             log::info!("Output: {:?}", output);
             log::info!("Release mode: {}", release);
 
-            // Tenta ler o arquivo
+            // Inicializa o Gerenciador de Modulos com acesso a raiz padrao da StdLib e pasta local
+            let mut loader = module_loader::ModuleLoader::new(vec![
+                std::path::PathBuf::from("src"), // Para achar 'core.prelude' etc
+                std::env::current_dir().unwrap(), // Para achar imports do usuario locais
+            ]);
+
+            // Carrega o ambiente magico base que todos os arquivos precisam implicitamente
+            let prelude_env = match loader.load_module("core", None) {
+                Ok(env) => env,
+                Err(e) => {
+                    log::error!("Falha critica ao carregar o Prelude (StdLib): {}", e);
+                    return Err(miette::miette!("Falha na instalacao da stdlib"));
+                }
+            };
+
+            // Tenta ler o arquivo de entrada
             let source = std::fs::read_to_string(&entrypoint)
                 .map_err(|e| miette::miette!("Falha ao ler o arquivo {}: {}", entrypoint, e))?;
 
@@ -116,35 +132,35 @@ fn main() -> miette::Result<()> {
                 println!("{:#?}", module);
             }
 
-            // 3. Type Checker (Arity Resolution & Types)
-            let mut checker = type_checker::Checker::new();
-            
-            // Carrega os modulos do core (Prelude)
-            let core_files = [
-                ("types", "src/core/types.kata"), 
-                ("io", "src/core/io.kata"), 
-                ("csp", "src/core/csp.kata"), 
-                ("assert", "src/core/assert.kata"), 
-                ("prelude", "src/core/prelude.kata")
-            ];
-            let mut prelude_modules = Vec::new();
-            for (name, file) in core_files {
-                match std::fs::read_to_string(file) {
-                    Ok(src) => {
-                        match lexer::lex(&src, lexer::LexMode::File) {
-                            Ok(toks) => {
-                                match parser::parse_module(toks, src.len()) {
-                                    Ok(m) => prelude_modules.push((name, m)),
-                                    Err(e) => log::error!("Erro ao parsear o prelude {}: {:?}", file, e),
-                                }
-                            }
-                            Err(e) => log::error!("Erro ao fazer lex no prelude {}: {:?}", file, e),
-                        }
+            // Carrega qualquer outro import explicito que o arquivo Entrypoint faca
+            let entrypoint_dir = std::path::Path::new(&entrypoint).parent();
+            for (decl, _) in &module.declarations {
+                if let parser::ast::TopLevel::Import(path, _) = decl {
+                    if let Err(e) = loader.load_module(path, entrypoint_dir) {
+                        log::error!("Erro de importacao: {}", e);
+                        return Err(miette::miette!("Dependencia nao encontrada."));
                     }
-                    Err(e) => log::error!("Erro ao ler o arquivo {}: {:?}", file, e),
                 }
             }
-            checker.load_prelude(&prelude_modules);
+
+            // 3. Type Checker (Arity Resolution & Types) do arquivo principal
+            let mut checker = type_checker::Checker::new();
+            checker.compiled_modules = loader.cache.clone();
+            
+            // Injeta o Prelude magicamente em todos os arquivos de Entrypoint compilados na raiz
+            let all_exports: Vec<(String, Option<String>)> = prelude_env.exports.iter().map(|e| (e.clone(), None)).collect();
+            checker.env.import_from(&prelude_env, "core", &all_exports);
+
+            // Import_from nativo das dependencias locais do Entrypoint antes de validar
+            for (decl, _) in &module.declarations {
+                if let parser::ast::TopLevel::Import(path, specific) = decl {
+                    if let Some(target_module_name) = path.split('.').next() {
+                        if let Some(target_env) = checker.compiled_modules.get(target_module_name) {
+                            checker.env.import_from(target_env, target_module_name, specific);
+                        }
+                    }
+                }
+            }
 
             checker.check_module(&module);
 
@@ -161,8 +177,15 @@ fn main() -> miette::Result<()> {
                 return Err(miette::miette!("Falha na analise semantica."));
             }
 
+            // Precisamos compilar o TAST do proprio arquivo + a TAST de todas as dependencias de que ele precisa
+            let mut full_tast = Vec::new();
+            for (_, dep_tast) in loader.tast_cache {
+                full_tast.extend(dep_tast);
+            }
+            full_tast.extend(checker.tast);
+
             let mut opt = optimizer::Optimizer::new(&checker.env);
-            let optimized_tast = opt.optimize(checker.tast, *release);
+            let optimized_tast = opt.optimize(full_tast, *release);
 
             if !opt.errors.is_empty() {
                 log::error!("Erros de Otimizacao detectados na Fase 4:");
@@ -224,36 +247,171 @@ fn main() -> miette::Result<()> {
             };
 
             // 3. Type Checker
+            let mut loader = module_loader::ModuleLoader::new(vec![
+                std::path::PathBuf::from("src"),
+                std::env::current_dir().unwrap(),
+            ]);
+
+            let prelude_env = match loader.load_module("core", None) {
+                Ok(env) => env,
+                Err(e) => return Err(miette::miette!("Falha ao carregar a stdlib no teste: {}", e)),
+            };
+
             let mut checker = type_checker::Checker::new();
-            let core_files = [
-                ("types", "src/core/types.kata"), 
-                ("io", "src/core/io.kata"), 
-                ("csp", "src/core/csp.kata"), 
-                ("assert", "src/core/assert.kata"), 
-                ("prelude", "src/core/prelude.kata")
-            ];
-            let mut prelude_modules = Vec::new();
-            for (name, file) in core_files {
-                if let Ok(src) = std::fs::read_to_string(file) {
-                    if let Ok(toks) = lexer::lex(&src, lexer::LexMode::File) {
-                        if let Ok(m) = parser::parse_module(toks, src.len()) {
-                            prelude_modules.push((name, m));
+            checker.compiled_modules = loader.cache.clone();
+            let all_exports: Vec<(String, Option<String>)> = prelude_env.exports.iter().map(|e| (e.clone(), None)).collect();
+            checker.env.import_from(&prelude_env, "core", &all_exports);
+
+            for (decl, _) in &module.declarations {
+                if let parser::ast::TopLevel::Import(path, specific) = decl {
+                    if let Err(e) = loader.load_module(path, Some(std::path::Path::new(&path))) {
+                        return Err(miette::miette!("Falha de importacao no teste: {}", e));
+                    }
+                    if let Some(target_module_name) = path.split('.').next() {
+                        if let Some(target_env) = loader.cache.get(target_module_name) {
+                            checker.env.import_from(target_env, target_module_name, specific);
                         }
                     }
                 }
             }
-            checker.load_prelude(&prelude_modules);
+
             checker.check_module(&module);
 
-            println!("--- TESTES ENCONTRADOS ---");
+            log::info!("--- TESTES ENCONTRADOS ---");
             if checker.tests.is_empty() {
-                println!("Nenhum bloco de teste anotado com @test encontrado.");
+                log::info!("Nenhum bloco de teste anotado com @test encontrado.");
             } else {
+                let mut compile_only_tests = Vec::new();
+                let mut runtime_tests = Vec::new();
+
                 for (i, t) in checker.tests.iter().enumerate() {
                     let tipo = if t.is_action { "[Action / Impuro]" } else { "[Função / Puro]" };
-                    println!("{}) {} {} - \"{}\"", i + 1, tipo, t.name, t.description);
+                    let expectation = if let Some(e) = &t.expects { format!(" (Expects: {})", e) } else { "".to_string() };
+                    log::info!("{}) {} {} - \"{}\"{}", i + 1, tipo, t.name, t.description, expectation);
+
+                    if t.expects.as_deref() == Some("CompileError") {
+                        compile_only_tests.push(t.clone());
+                    } else {
+                        runtime_tests.push(t.clone());
+                    }
                 }
-                println!("\nPronto para gerar o Entrypoint Sintético para {} teste(s) via Cranelift (Fase 4/6).", checker.tests.len());
+
+                let mut failed_count = 0;
+                let mut passed_count = 0;
+
+                // 1. Processa testes de Compilação (CompileError)
+                for t in compile_only_tests {
+                    log::info!("\nValidando Teste de Compilação: {}...", t.name);
+                    let mut has_error = false;
+                    for (err_msg, _) in &checker.errors {
+                        if err_msg.contains(&t.name) {
+                            has_error = true;
+                            break;
+                        }
+                    }
+                    if has_error {
+                        log::info!("\\033[0;32mSUCESSO\\033[0m: Teste falhou na compilação conforme esperado.");
+                        passed_count += 1;
+                    } else {
+                        log::error!("\\033[0;31mFALHA\\033[0m: Teste deveria ter gerado um CompileError, mas compilou limpo.");
+                        failed_count += 1;
+                    }
+                }
+
+                // 2. Processa testes de Runtime
+                if !runtime_tests.is_empty() {
+                    log::info!("\nGerando Entrypoint Sintético para {} teste(s) de runtime via Cranelift...", runtime_tests.len());
+
+                    let mut test_body = Vec::new();
+                    for test in &runtime_tests {
+                        let call_span = 0..0;
+                        
+                        let echo_ident = (type_checker::tast::TExpr::Ident("echo".to_string(), parser::ast::TypeRef::Simple("Unknown".to_string())), call_span.clone());
+                        let msg_literal = (type_checker::tast::TExpr::Literal(type_checker::tast::TLiteral::String(format!("Executando teste: {}...", test.name))), call_span.clone());
+                        let echo_call = type_checker::tast::TStmt::Expr((type_checker::tast::TExpr::Call(Box::new(echo_ident), vec![msg_literal], parser::ast::TypeRef::Simple("()".to_string())), call_span.clone()));
+                        test_body.push((echo_call, call_span.clone()));
+
+                        if test.is_action {
+                            let callee = Box::new((type_checker::tast::TExpr::Ident(test.name.clone(), parser::ast::TypeRef::Simple("Unknown".to_string())), call_span.clone()));
+                            let call_expr = (type_checker::tast::TExpr::Call(callee, vec![], parser::ast::TypeRef::Simple("()".to_string())), call_span.clone());
+                            test_body.push((type_checker::tast::TStmt::Expr(call_expr), call_span.clone()));
+                        } else {
+                            let callee = Box::new((type_checker::tast::TExpr::Ident(test.name.clone(), parser::ast::TypeRef::Simple("Unknown".to_string())), call_span.clone()));
+                            let call_expr = (type_checker::tast::TExpr::Call(callee, vec![], parser::ast::TypeRef::Simple("Bool".to_string())), call_span.clone());
+                            
+                            let assert_ident = (type_checker::tast::TExpr::Ident("assert".to_string(), parser::ast::TypeRef::Simple("Unknown".to_string())), call_span.clone());
+                            let assert_msg = (type_checker::tast::TExpr::Literal(type_checker::tast::TLiteral::String(format!("Falha matematica no teste puro: {}", test.name))), call_span.clone());
+                            
+                            let assert_call = type_checker::tast::TStmt::Expr((type_checker::tast::TExpr::Call(Box::new(assert_ident), vec![call_expr, assert_msg], parser::ast::TypeRef::Simple("()".to_string())), call_span.clone()));
+                            test_body.push((assert_call, call_span.clone()));
+                        }
+                    }
+
+                    let call_span = 0..0;
+                    let echo_ident = (type_checker::tast::TExpr::Ident("echo".to_string(), parser::ast::TypeRef::Simple("Unknown".to_string())), call_span.clone());
+                    let msg_literal = (type_checker::tast::TExpr::Literal(type_checker::tast::TLiteral::String(format!("\\033[0;32mRUNTIME FINALIZADO\\033[0m: Testes concluidos com exit code 0."))), call_span.clone());
+                    let echo_call = type_checker::tast::TStmt::Expr((type_checker::tast::TExpr::Call(Box::new(echo_ident), vec![msg_literal], parser::ast::TypeRef::Simple("()".to_string())), call_span.clone()));
+                    test_body.push((echo_call, call_span.clone()));
+
+                    let test_main = type_checker::checker::TTopLevel::ActionDef(
+                        "main".to_string(),
+                        vec![],
+                        (parser::ast::TypeRef::Simple("()".to_string()), 0..0),
+                        test_body,
+                        vec![]
+                    );
+
+                    let mut full_tast = Vec::new();
+                    for (_, dep_tast) in loader.tast_cache {
+                        full_tast.extend(dep_tast);
+                    }
+                    full_tast.extend(checker.tast);
+                    full_tast.push((test_main, 0..0));
+
+                    let mut opt = optimizer::Optimizer::new(&checker.env);
+                    let optimized_tast = opt.optimize(full_tast, true); 
+                    
+                    let out_bin = ".tmp_kata_test";
+                    if let Err(e) = codegen::compile_and_link(optimized_tast, &checker.env, out_bin) {
+                        log::error!("Erro de Compilacao no Teste Runtime: {}", e);
+                        return Err(miette::miette!("Falha ao compilar testes de runtime."));
+                    }
+
+                    log::info!("--- EXECUTANDO TESTES NATIVOS ---");
+                    let status = std::process::Command::new(format!("./{}", out_bin))
+                        .stdout(std::process::Stdio::inherit())
+                        .stderr(std::process::Stdio::inherit())
+                        .status()
+                        .map_err(|_| miette::miette!("Falha ao invocar o binario de teste."))?;
+
+                    let _ = std::fs::remove_file(out_bin);
+                    let _ = std::fs::remove_file(format!("{}.o", out_bin));
+                    let _ = std::fs::remove_file("kata_entry.c");
+
+                    let has_expected_panic = runtime_tests.iter().any(|t| t.expects.as_deref() == Some("Panic"));
+                    
+                    if status.success() {
+                        if has_expected_panic {
+                            log::error!("\\033[0;31mFALHA GERAL\\033[0m: A suite rodou inteira, mas um teste esperava Panic.");
+                            failed_count += runtime_tests.len();
+                        } else {
+                            passed_count += runtime_tests.len();
+                        }
+                    } else {
+                        if has_expected_panic {
+                            log::info!("\\033[0;32mSUCESSO (PANIC)\\033[0m: A execucao falhou conforme esperado (Panic interceptado).");
+                            passed_count += runtime_tests.len();
+                        } else {
+                            log::error!("\\033[0;31mFALHA DE RUNTIME\\033[0m: Os testes falharam com erro de execucao (Panic Nao Esperado).");
+                            failed_count += runtime_tests.len();
+                        }
+                    }
+                }
+
+                log::info!("\n=== RESULTADO FINAL: {} Passaram, {} Falharam ===", passed_count, failed_count);
+                if failed_count > 0 {
+                    return Err(miette::miette!("A suite de testes possui falhas."));
+                }
             }
         }
         Commands::Repl => {

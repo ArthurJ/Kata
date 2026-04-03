@@ -93,7 +93,7 @@ Ajustar as análises para não deixarem "pontas soltas" que corrompam lógicas a
 
 ## 6. FFI, Standard Library e Kata-Runtime
 
-- [ ] **6.1. Implementação Real dos Stubs C-ABI (Feature Complete):**
+- [x] **6.1. Implementação Real dos Stubs C-ABI (Feature Complete):**
     *   *Problema:* O `linker.rs` e o `kata_rt/ffi` ainda possuem stubs, retornos `NULL` (no cache) e delegações para `malloc/free` em C (ARC simplificado).
     *   *Solução:* Implementar a gestão real de memória em Rust exportada via C-ABI. O ARC (Atomic Reference Counting) alocará um bloco `[AtomicUsize + Payload]` garantindo incremento/decremento thread-safe e desalocação limpa sem vazamentos. O cache (`@cache_strategy`) utilizará um mapa de alta performance (como `DashMap` ou `std::collections::HashMap` com locks adequados) no runtime em vez de um "miss" perpétuo. As lógicas injetadas via texto em `linker.rs` devem ser eliminadas em favor da lib estática.
 - [x] **6.2. Canais Rendezvous Reais:**
@@ -110,12 +110,12 @@ Ajustar as análises para não deixarem "pontas soltas" que corrompam lógicas a
 
 - [ ] **7.1. Comando `kata run` Completo:**
     *   Substituir os comentários no bloco `Commands::Run` de `main.rs` pela compilação temporária em `.tmp` seguida de execução imediata e descarte seguro (ou JIT).
-- [ ] **7.2. Expurgo Definitivo de Stubs:**
+- [x] **7.2. Expurgo Definitivo de Stubs:**
     *   *Solução:* Remover fisicamente `run_stub()`, `init_stub()` e `start()` sem função de todos os módulos. Limpar o `linker.rs` de implementações C inline (`kata_rt_add_int` etc.) que mascaram a verdadeira biblioteca compilada em Rust.
-- [ ] **7.3. Resolução Real de Imports no File System (O Estilo mod.kata):**
+- [x] **7.3. Resolução Real de Imports no File System (O Estilo mod.kata):**
     *   *Problema:* O compilador não tem visibilidade do File System e carrega módulos de forma hardcoded (`src/core/types.kata`).
     *   *Solução:* Criar o `ModuleLoader`. Ele interpretará `import modulo.submodulo` buscando por `modulo/submodulo.kata` ou `modulo/submodulo/mod.kata` (análogo ao `mod.rs` de Rust). O Loader utilizará um cache (`HashMap<String, TypeEnv>`) para manter módulos já parseados e evitar ciclos de importação.
-- [ ] **7.4. Execução Efetiva do `kata test`:**
+- [x] **7.4. Execução Efetiva do `kata test`:**
     *   *Problema:* O comando de testes atual apenas imprime na tela "Pronto para gerar Entrypoint", sem testar nada.
     *   *Solução:* Gerar dinamicamente um AST de entrypoint que invoque todas as funções anotadas com `@test`, passá-lo pelo pipeline (Codegen) e executar o binário reportando o resultado (Success/Fail) para o usuário.
 
@@ -127,6 +127,6 @@ Ajustar as análises para não deixarem "pontas soltas" que corrompam lógicas a
 - [ ] **Segurança de Memória (ARC Zero Leak):** Uma suíte de testes de estresse enviando milhares de `Enum` por canais não deve vazar RAM ao finalizar o programa (validado com Valgrind/Heaptrack).
 - [x] **Captura Limpa:** *Closures* definidas dentro do ramo `Ok` de um bloco `match` devem capturar variáveis sem erro de runtime.
 - [ ] **Multiplexação Ativa:** O comando `select` deverá escutar dois canais independentes e um timer (`timeout`) com resolução limpa no terminal.
-- [ ] **Testes Funcionais:** O comando `kata test` invocado na raiz do projeto deve localizar arquivos, compilar, testar as lógicas puras (booleanas) e impuras (`assert!`), e sair com *Exit Code 0* ou *1* conforme os resultados.
+- [x] **Testes Funcionais:** O comando `kata test` invocado na raiz do projeto deve localizar arquivos, compilar, testar as lógicas puras (booleanas) e impuras (`assert!`), e sair com *Exit Code 0* ou *1* conforme os resultados.
 - [ ] **CLI Operacional:** O comando `kata run test_concurrency.kata` deve funcionar perfeitamente de ponta a ponta.omando `kata test` invocado na raiz do projeto deve localizar arquivos, compilar, testar as lógicas puras (booleanas) e impuras (`assert!`), e sair com *Exit Code 0* ou *1* conforme os resultados.
 - [ ] **CLI Operacional:** O comando `kata run test_concurrency.kata` deve funcionar perfeitamente de ponta a ponta.

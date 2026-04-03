@@ -8,6 +8,7 @@ use crate::type_checker::directives::{KataDirective, validate_and_parse_directiv
 pub struct TestInfo {
     pub name: String,
     pub description: String,
+    pub expects: Option<String>,
     pub is_action: bool,
 }
 
@@ -207,13 +208,24 @@ impl Checker {
         let mut local_errs: Vec<(String, crate::parser::ast::Span)> = Vec::new();
 
 
-        let _extract_test_desc = |dirs: &[Spanned<crate::parser::ast::Directive>]| -> Option<String> {
+        let _extract_test_info = |dirs: &[Spanned<crate::parser::ast::Directive>]| -> Option<(String, Option<String>)> {
             for (dir, _dir_span) in dirs {
                 if dir.name == "test" {
-                    if let Some((crate::parser::ast::Expr::String(desc), _)) = match &dir.args { crate::parser::ast::DirectiveArgs::Positional(p) => p.first(), _ => None } {
-                        return Some(desc.clone());
+                    match &dir.args {
+                        crate::parser::ast::DirectiveArgs::Positional(p) => {
+                            let desc = if let Some((crate::parser::ast::Expr::String(s), _)) = p.first() { s.clone() } else { "Sem descricao".to_string() };
+                            return Some((desc, None));
+                        }
+                        crate::parser::ast::DirectiveArgs::Named(n) => {
+                            let mut desc = "Sem descricao".to_string();
+                            let mut expects = None;
+                            for (k, v) in n {
+                                if k == "desc" { if let crate::parser::ast::Expr::String(s) = &v.0 { desc = s.clone(); } }
+                                if k == "expects" { if let crate::parser::ast::Expr::String(s) = &v.0 { expects = Some(s.clone()); } }
+                            }
+                            return Some((desc, expects));
+                        }
                     }
-                    return Some("Sem descricao".to_string());
                 }
             }
             None
@@ -341,8 +353,8 @@ impl Checker {
             TopLevel::Signature(name, params, ret, dirs) => {
                 let (parsed_dirs, errs) = validate_and_parse_directives(dirs);
                 local_errs.extend(errs);
-                if let Some(desc) = parsed_dirs.iter().find_map(|(d, _)| if let KataDirective::Test(s) = d { Some(s.clone()) } else { None }) {
-                    self.tests.push(TestInfo { name: name.clone(), description: desc, is_action: false });
+                if let Some((desc, expects)) = _extract_test_info(dirs) {
+                    self.tests.push(TestInfo { name: name.clone(), description: desc, expects, is_action: false });
                 }
                 let ffi_name = parsed_dirs.iter().find_map(|(d, _)| if let KataDirective::Ffi(name) = d { Some(name.clone()) } else { None });
                 self.env.define(name.clone(), params.len(), TypeRef::Function(params.clone(), Box::new(ret.clone())), false, parsed_dirs.iter().any(|(d, _)| matches!(d, KataDirective::Commutative)), ffi_name);
@@ -350,8 +362,8 @@ impl Checker {
             TopLevel::ActionDef(name, params, ret, _, dirs) => {
                 let (parsed_dirs, errs) = validate_and_parse_directives(dirs);
                 local_errs.extend(errs);
-                if let Some(desc) = parsed_dirs.iter().find_map(|(d, _)| if let KataDirective::Test(s) = d { Some(s.clone()) } else { None }) {
-                    self.tests.push(TestInfo { name: name.clone(), description: desc, is_action: true });
+                if let Some((desc, expects)) = _extract_test_info(dirs) {
+                    self.tests.push(TestInfo { name: name.clone(), description: desc, expects, is_action: true });
                 }
                 let ffi_name = parsed_dirs.iter().find_map(|(d, _)| if let KataDirective::Ffi(name) = d { Some(name.clone()) } else { None });
                 self.env.define(

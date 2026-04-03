@@ -1,0 +1,23 @@
+# Kata-Lang Prelude
+# O teto arquitetural de todos os projetos na linguagem.
+# Aqui expomos de forma limpa os blocos basicos da linguagem
+
+import types.(SHOW HASH EQ ORD REPR NonZero NUM Float Int Bool Result Optional and or xor not Text ITERATOR ITERABLE float map filter fold zip Cons = != > >= < <= + - * ** div / // mod round ceil floor)
+
+import io.(echo)
+import csp.(fork channel queue broadcast)
+import testing.(assert assert_eq panic)
+
+# Introspecção e Formatação (Phase 9)
+@ffi("kata_rt_type")
+type :: A => Text
+
+@ffi("kata_rt_fields")
+fields :: A => [Text]
+
+@ffi("kata_rt_format")
+format :: Text A => Text
+
+# Uma vez importadas as vertentes puras de cada modulo isolado,
+# exportamos tudo numa tacada so para o ambiente raiz do usuario.
+export SHOW HASH EQ ORD REPR NonZero NUM Float Int Bool Result Optional and or xor not Text ITERATOR ITERABLE float map filter fold zip Cons = != > >= < <= + - * ** div / // mod round ceil floor echo fork channel queue broadcast assert assert_eq panic type fields format

@@ -1,0 +1,39 @@
+import text.(SHOW Text repr)
+
+enum Bool
+    | True
+    | False
+
+Bool implements SHOW
+    str :: Bool => Text
+    λ True: "True"
+    λ False: "False"
+
+    @ffi("kata_rt_bool_to_str")
+    repr :: Bool => Text
+
+@commutative
+@associative(True)
+and :: Bool Bool => Bool
+λ True True: True
+otherwise: False
+
+@commutative
+@associative(False)
+or :: Bool Bool => Bool
+λ True _: True
+λ _ True: True
+otherwise: False
+
+@commutative
+@associative(False)
+xor :: Bool Bool => Bool
+λ True False: True
+λ False True: True
+otherwise: False
+
+not :: Bool => Bool
+λ False: True
+λ True: False
+
+export Bool and or xor not

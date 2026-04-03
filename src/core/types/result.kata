@@ -1,0 +1,9 @@
+enum Result::(T, E)
+    | Ok(T)
+    | Err(E)
+
+enum Optional::T
+    | Some(T)
+    | None
+
+export Result Optional

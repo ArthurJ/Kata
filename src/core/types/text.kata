@@ -1,0 +1,20 @@
+interface REPR
+    @ffi("kata_rt_default_repr")
+    repr :: REPR => Text
+
+interface SHOW implements REPR
+    str :: SHOW => Text
+    λ x: repr x
+
+@ffi("kata_rt_concat_text")
+@associative("")
++ :: Text Text => Text
+
+Text implements SHOW
+    str :: Text => Text
+    λ x: x
+    
+    @ffi("kata_rt_repr_text")
+    repr :: Text => Text
+
+export Text SHOW REPR +
