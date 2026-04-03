@@ -10,7 +10,7 @@ O `kata-rt` não interpreta código. Ele fornece uma API ABI (Application Binary
 *   **Domínio Impuro (Actions):** Compiladas como Máquinas de Estado Assíncronas (Futures). Quando uma Action executa I/O ou bloqueia num canal, ela cede controle (`yield` / `Poll::Pending`) para o Tokio.
 *   **Domínio Puro (Functions):** Executam código de máquina síncrono e linear diretamente na *Call Stack* da CPU. Não sofrem interrupção do escalonador cooperativo e alocam estruturas efêmeras em Arenas.
 
-## 3. Modelo de Memória Híbrido (Zero-Cost & Zero-Copy)
+## 3. Modelo de Memória Híbrido (Low-Cost & Zero-Copy)
 Com a implementação do *Escape Analysis* no otimizador (Fase 4), a Kata-Lang elimina o custo de cópias profundas e a necessidade de um *Tracing Garbage Collector*.
 
 *   **Alocação Local (Arenas):** Dados que não sofrem fuga (não são enviados por canais) são alocados no `BumpAllocator` anexado à Task do Tokio atual. Alocação e limpeza custam `O(1)`. Ideal para processamento matemático puro e garantindo *Cache Locality*.

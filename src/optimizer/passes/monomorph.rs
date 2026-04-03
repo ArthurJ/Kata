@@ -21,7 +21,7 @@ impl<'a> Monomorphizer<'a> {
     }
 
     pub fn run(&mut self, tast: Vec<Spanned<TTopLevel>>, errors: &mut Vec<OptimizerError>) -> Vec<Spanned<TTopLevel>> {
-        log::debug!("Executando Monomorfização (Zero-Cost Generics)...");
+        log::debug!("Executando Monomorfização (Low-Cost Generics)...");
 
         let mut current_sig_name = None;
         for (decl, _) in &tast {
@@ -194,7 +194,7 @@ impl<'a> Monomorphizer<'a> {
 
     fn is_generic_type(&self, ty: &TypeRef) -> bool {
         match ty {
-            TypeRef::Simple(n) if n.len() == 1 && n.chars().next().unwrap().is_uppercase() => true,
+            TypeRef::TypeVar(_) => true,
             TypeRef::Generic(_, args) => args.iter().any(|a| self.is_generic_type(&a.0)),
             TypeRef::Function(args, ret) => args.iter().any(|a| self.is_generic_type(&a.0)) || self.is_generic_type(&ret.0),
             TypeRef::Refined(base, _) => self.is_generic_type(&base.0),
@@ -214,6 +214,7 @@ impl<'a> Monomorphizer<'a> {
 
     fn type_to_string(&self, ty: &TypeRef) -> String {
         match ty {
+            TypeRef::TypeVar(n) => n.clone(),
             TypeRef::Simple(n) => n.clone(),
             TypeRef::Generic(n, args) => {
                 let args_str: Vec<String> = args.iter().map(|a| self.type_to_string(&a.0)).collect();
@@ -234,7 +235,7 @@ impl<'a> Monomorphizer<'a> {
 
     fn build_mapping(&self, param: &TypeRef, concrete: &TypeRef, mapping: &mut HashMap<String, TypeRef>) {
         match (param, concrete) {
-            (TypeRef::Simple(p_name), _) if p_name.len() == 1 && p_name.chars().next().unwrap().is_uppercase() => {
+            (TypeRef::TypeVar(p_name), _) => {
                 mapping.insert(p_name.clone(), concrete.clone());
             }
             (TypeRef::Generic(_, p_args), TypeRef::Generic(_, c_args)) => {
@@ -309,13 +310,14 @@ struct TypeSubstituter {
 impl TypeSubstituter {
     fn substitute_type(&self, ty: &TypeRef) -> TypeRef {
         match ty {
-            TypeRef::Simple(n) => {
+            TypeRef::TypeVar(n) => {
                 if let Some(concrete) = self.mapping.get(n) {
                     concrete.clone()
                 } else {
-                    ty.clone()
+                    ty.clone() // Isso so acontece se houver um free TypeVar nao resolvido, o que nao deveria ocorrer em monomorfizacoes completas
                 }
             }
+            TypeRef::Simple(n) => ty.clone(),
             TypeRef::Generic(n, args) => {
                 TypeRef::Generic(n.clone(), args.iter().map(|(a, s)| (self.substitute_type(a), s.clone())).collect())
             }

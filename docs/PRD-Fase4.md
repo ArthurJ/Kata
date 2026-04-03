@@ -3,7 +3,7 @@
 ## Fase 4: Otimizador (MIR - Mid-level Intermediate Representation)
 
 ### Visão Geral
-A Fase 4 introduz a camada de otimização na Typed Abstract Syntax Tree (TAST), operando estritamente antes da geração de código de máquina pelo backend. Uma vez que o compilador utiliza o **Cranelift** (um gerador de código rápido, porém de muito baixo nível que desconhece conceitos de alto nível como polimorfismo ou recursão de cauda), esta fase é inteiramente responsável por garantir o princípio de **Zero-Cost Abstractions**. O Otimizador transforma código funcional abstrato, genérico e seguro numa estrutura imperativa interna, estática e despida de custos dinâmicos (V-Tables, *boxing*, verificações redundantes em *runtime* ou alocações intermediárias).
+A Fase 4 introduz a camada de otimização na Typed Abstract Syntax Tree (TAST), operando estritamente antes da geração de código de máquina pelo backend. Uma vez que o compilador utiliza o **Cranelift** (um gerador de código rápido, porém de muito baixo nível que desconhece conceitos de alto nível como polimorfismo ou recursão de cauda), esta fase é inteiramente responsável por garantir o princípio de **Low-Cost Abstractions**. O Otimizador transforma código funcional abstrato, genérico e seguro numa estrutura imperativa interna, estática e despida de custos dinâmicos (V-Tables, *boxing*, verificações redundantes em *runtime* ou alocações intermediárias).
 
 ### Estrutura de Diretórios (Arquitetura)
 O otimizador deve ser construído como um *pipeline* de passagens (Passes), onde cada módulo recebe a TAST e devolve uma versão otimizada da mesma.

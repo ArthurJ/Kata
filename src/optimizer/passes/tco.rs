@@ -25,6 +25,7 @@ impl TcoPass {
 
     fn type_to_string(&self, ty: &TypeRef) -> String {
         match ty {
+            TypeRef::TypeVar(n) => n.clone(),
             TypeRef::Simple(n) => n.clone(),
             TypeRef::Generic(n, args) => {
                 let args_str: Vec<String> = args.iter().map(|a| self.type_to_string(&a.0)).collect();

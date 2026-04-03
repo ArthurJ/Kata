@@ -102,7 +102,7 @@ O coração do compilador. É aqui que as sequências planas ganham significado 
 ---
 
 ## 📍 Fase 4: Otimizador (MIR)
-Garantir o princípio de *Zero-Cost Abstractions* transformando a TAST antes da geração de código de máquina.
+Garantir o princípio de *Low-Cost Abstractions* transformando a TAST antes da geração de código de máquina.
 
 - [ ] **Monomorfização:** Duplicar e especializar funções genéricas (Generics `with T as NUM`) para os tipos concretos inferidos, eliminando V-Tables dinâmicas.
 - [ ] **Avaliação @comptime (Fallbacks Literais Estáticos):** Se um Tipo Refinado (ex: `PositiveInt`) receber um literal que passa no predicado (ex: `10`), provar estaticamente e remover a emissão do `Result`.

@@ -1,11 +1,12 @@
 use crate::type_checker::checker::TTopLevel;
 use crate::type_checker::tast::{TExpr, TStmt};
 use crate::type_checker::environment::TypeEnv;
-use crate::parser::ast::Spanned;
+use crate::parser::ast::{Spanned, TypeRef, Expr};
 use std::collections::HashSet;
 
 pub struct TreeShaker<'a> {
     pub reachable_functions: HashSet<String>,
+    pub reachable_types: HashSet<String>,
     pub env: &'a TypeEnv,
 }
 
@@ -13,6 +14,7 @@ impl<'a> TreeShaker<'a> {
     pub fn new(env: &'a TypeEnv) -> Self {
         Self {
             reachable_functions: HashSet::new(),
+            reachable_types: HashSet::new(),
             env,
         }
     }
@@ -20,64 +22,106 @@ impl<'a> TreeShaker<'a> {
     pub fn run(&mut self, tast: Vec<Spanned<TTopLevel>>) -> Vec<Spanned<TTopLevel>> {
         log::debug!("Executando Early Tree-Shaking...");
         
-        // Fase 1: Identificar os pontos de entrada dinamicamente
-        
-        // Para Bibliotecas: Tudo o que for exportado é considerado raiz inatingível
         for export_name in &self.env.exports {
             self.reachable_functions.insert(export_name.clone());
+            self.reachable_types.insert(export_name.clone());
         }
 
         for (decl, _) in &tast {
             if let TTopLevel::Execution(expr) = decl {
-                // Para Executáveis: A execução de topo é a raiz
                 self.visit_expr(expr);
             }
         }
         
-        // Também devemos preservar structs, interfaces e enums para já,
-        // concentrando a eliminação em funções/ações não chamadas.
         let mut progress = true;
-        
         while progress {
             progress = false;
-            let initial_size = self.reachable_functions.len();
+            let initial_funcs = self.reachable_functions.len();
+            let initial_types = self.reachable_types.len();
             
+            let mut current_sig_reachable = false;
+
             for (decl, _) in &tast {
                 match decl {
-                    TTopLevel::ActionDef(name, _, _, body, _) => {
+                    TTopLevel::Signature(name, params, ret, _) => {
+                        current_sig_reachable = self.reachable_functions.contains(name);
+                        if current_sig_reachable {
+                            for (ty, _) in params { self.visit_type(ty); }
+                            self.visit_type(&ret.0);
+                        }
+                    }
+                    TTopLevel::LambdaDef(_params, body, with, _) => {
+                        if current_sig_reachable {
+                            self.visit_expr(body);
+                            for w in with {
+                                self.visit_expr(w);
+                            }
+                        }
+                    }
+                    TTopLevel::ActionDef(name, params, ret, body, _) => {
+                        current_sig_reachable = false;
                         if self.reachable_functions.contains(name) {
+                            for (_, (ty, _)) in params { self.visit_type(ty); }
+                            self.visit_type(&ret.0);
                             for stmt in body {
                                 self.visit_stmt(stmt);
                             }
                         }
                     }
-                    TTopLevel::LambdaDef(_params, body, with, _) => {
-                        // O nome não está na AST do LambdaDef (vem da Signature anterior),
-                        // mas se este nó estiver ligado a uma assinatura alcançável,
-                        // teríamos de o marcar. 
-                        // Como a TAST separa a Signature do LambdaDef, a associação
-                        // é feita posicionalmente ou pelo nome na Signature anterior.
-                        // Para simplificar, o TypeChecker devia agrupar isso, mas aqui
-                        // visitamos os lambdas apenas se a sua "posse" for alcançável.
-                        // Numa versão inicial, marcamos todas as dependências internas.
-                        self.visit_expr(body);
-                        for w in with {
-                            self.visit_expr(w);
+                    TTopLevel::Data(name, def, _) => {
+                        current_sig_reachable = false;
+                        if self.reachable_types.contains(name) || self.reachable_functions.contains(name) {
+                            self.reachable_types.insert(name.clone());
+                            self.reachable_functions.insert(name.clone());
+                            match def {
+                                crate::parser::ast::DataDef::Struct(_) => {}
+                                crate::parser::ast::DataDef::Refined((base, _), preds) => {
+                                    self.visit_type(base);
+                                    for (p, _) in preds {
+                                        self.visit_ast_expr(p);
+                                    }
+                                }
+                            }
                         }
                     }
-                    _ => {}
+                    TTopLevel::Enum(name, variants, _) => {
+                        current_sig_reachable = false;
+                        let mut enum_reachable = self.reachable_types.contains(name) || self.reachable_functions.contains(name);
+                        if !enum_reachable {
+                            for v in variants {
+                                if self.reachable_functions.contains(&v.name) {
+                                    enum_reachable = true;
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        if enum_reachable {
+                            self.reachable_types.insert(name.clone());
+                            for v in variants {
+                                self.reachable_functions.insert(v.name.clone());
+                                match &v.data {
+                                    crate::parser::ast::VariantData::Type(t) => self.visit_type(&t.0),
+                                    crate::parser::ast::VariantData::FixedValue(e) => self.visit_ast_expr(e),
+                                    crate::parser::ast::VariantData::Predicate(e) => self.visit_ast_expr(e),
+                                    crate::parser::ast::VariantData::Unit => {}
+                                }
+                            }
+                        }
+                    }
+                    TTopLevel::Execution(_) => {
+                        current_sig_reachable = false;
+                    }
                 }
             }
-            
-            if self.reachable_functions.len() > initial_size {
+
+            if self.reachable_functions.len() > initial_funcs || self.reachable_types.len() > initial_types {
                 progress = true;
             }
         }
 
         let initial_nodes = tast.len();
 
-        // Fase 2: Filtrar a TAST com base na alcançabilidade.
-        // Precisamos rastrear a `Signature` atual para saber se os `LambdaDef`s subsequentes devem ser mantidos.
         let mut optimized = Vec::new();
         let mut current_sig_reachable = false;
 
@@ -88,22 +132,24 @@ impl<'a> TreeShaker<'a> {
                     current_sig_reachable
                 }
                 TTopLevel::LambdaDef(..) => {
-                    // Mantém o LambdaDef apenas se a assinatura imediatamente anterior for alcançável
                     current_sig_reachable
                 }
                 TTopLevel::ActionDef(name, _, _, _, _) => {
-                    current_sig_reachable = false; // Quebra a associação
+                    current_sig_reachable = false;
                     self.reachable_functions.contains(name)
                 }
                 TTopLevel::Execution(expr) => {
                     current_sig_reachable = false;
-                    self.visit_expr(expr); // Marca de novo caso o late-shaker limpe
-                    true // Sempre preserva a execução de topo
+                    self.visit_expr(expr); 
+                    true 
                 }
-                TTopLevel::Data(..) | TTopLevel::Enum(..) => {
+                TTopLevel::Data(name, _, _) => {
                     current_sig_reachable = false;
-                    // Por enquanto, Tipos e Enums são sempre preservados. 
-                    true
+                    self.reachable_types.contains(name) || self.reachable_functions.contains(name)
+                }
+                TTopLevel::Enum(name, variants, _) => {
+                    current_sig_reachable = false;
+                    self.reachable_types.contains(name) || self.reachable_functions.contains(name) || variants.iter().any(|v| self.reachable_functions.contains(&v.name))
                 }
             };
 
@@ -111,6 +157,10 @@ impl<'a> TreeShaker<'a> {
                 optimized.push((decl, span));
             } else if let TTopLevel::Signature(name, _, _, _) = &decl {
                 log::debug!("Tree-Shaking: Removendo código morto/genérico: {}", name);
+            } else if let TTopLevel::Data(name, _, _) = &decl {
+                log::debug!("Tree-Shaking: Removendo Tipo inativo: {}", name);
+            } else if let TTopLevel::Enum(name, _, _) = &decl {
+                log::debug!("Tree-Shaking: Removendo Enum inativo: {}", name);
             }
         }
 
@@ -118,9 +168,82 @@ impl<'a> TreeShaker<'a> {
         optimized
     }
 
+    fn visit_type(&mut self, ty: &TypeRef) {
+        match ty {
+            TypeRef::TypeVar(n) => {
+                self.reachable_types.insert(n.clone());
+            }
+            TypeRef::Simple(n) => {
+                self.reachable_types.insert(n.clone());
+            }
+            TypeRef::Generic(n, args) => {
+                self.reachable_types.insert(n.clone());
+                for (a, _) in args {
+                    self.visit_type(a);
+                }
+            }
+            TypeRef::Function(args, ret) => {
+                for (a, _) in args {
+                    self.visit_type(a);
+                }
+                self.visit_type(&ret.0);
+            }
+            TypeRef::Refined(base, preds) => {
+                self.visit_type(&base.0);
+                for (p, _) in preds {
+                    self.visit_ast_expr(p);
+                }
+            }
+            TypeRef::Variadic(inner) => {
+                self.visit_type(&inner.0);
+            }
+            TypeRef::Const(expr) => {
+                self.visit_ast_expr(expr);
+            }
+        }
+    }
+
+    fn visit_ast_expr(&mut self, expr: &Expr) {
+        match expr {
+            Expr::Ident(n) => {
+                self.reachable_functions.insert(n.clone());
+                self.reachable_types.insert(n.clone());
+            }
+            Expr::ActionCall(n, args) => {
+                self.reachable_functions.insert(n.clone());
+                for (a, _) in args { self.visit_ast_expr(a); }
+            }
+            Expr::Try(inner) | Expr::ExplicitApp(inner) => self.visit_ast_expr(&inner.0),
+            Expr::Pipe(l, r) => { self.visit_ast_expr(&l.0); self.visit_ast_expr(&r.0); }
+            Expr::Tuple(es) | Expr::List(es) | Expr::Sequence(es) => {
+                for (e, _) in es { self.visit_ast_expr(e); }
+            }
+            Expr::Array(rows) => {
+                for row in rows {
+                    for (e, _) in row { self.visit_ast_expr(e); }
+                }
+            }
+            Expr::Guard(branches, otherwise) => {
+                for (c, b) in branches { self.reachable_functions.insert(c.clone()); self.reachable_types.insert(c.clone()); self.visit_ast_expr(&b.0); }
+                self.visit_ast_expr(&otherwise.0);
+            }
+            Expr::Lambda(_, body, with) => {
+                self.visit_ast_expr(&body.0);
+                for (w, _) in with { self.visit_ast_expr(w); }
+            }
+            Expr::WithDecl(n, e) => {
+                self.reachable_types.insert(n.clone());
+                self.visit_ast_expr(&e.0);
+            }
+            _ => {}
+        }
+    }
+
     fn visit_stmt(&mut self, stmt: &Spanned<TStmt>) {
         match &stmt.0 {
-            TStmt::Let(_, expr) => self.visit_expr(expr),
+            TStmt::Let(_, expr) => {
+                self.visit_expr(expr);
+            }
             TStmt::Var(_, expr) => self.visit_expr(expr),
             TStmt::Loop(body) => {
                 for s in body {
@@ -165,9 +288,19 @@ impl<'a> TreeShaker<'a> {
     }
 
     fn visit_expr(&mut self, expr: &Spanned<TExpr>) {
+        let ty = match &expr.0 {
+            TExpr::Ident(_, ty) | TExpr::Call(_, _, ty) | TExpr::Tuple(_, ty, _) | TExpr::List(_, ty, _) | TExpr::Array(_, ty, _) | TExpr::Lambda(_, _, ty, _) | TExpr::Sequence(_, ty) | TExpr::Guard(_, _, ty) | TExpr::Try(_, ty) | TExpr::ChannelSend(_, _, ty) | TExpr::ChannelRecv(_, ty) | TExpr::ChannelRecvNonBlock(_, ty) => Some(ty.clone()),
+            _ => None,
+        };
+        
+        if let Some(t) = ty {
+            self.visit_type(&t);
+        }
+
         match &expr.0 {
             TExpr::Ident(name, _) => {
                 self.reachable_functions.insert(name.clone());
+                self.reachable_types.insert(name.clone());
             }
             TExpr::Call(callee, args, _) => {
                 self.visit_expr(callee);

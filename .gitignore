@@ -1,6 +1,7 @@
 /target
 .idea
 .claude
+out_logs/*
 *.py
 *.o
 GEMINI.md

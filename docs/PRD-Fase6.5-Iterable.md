@@ -5,7 +5,7 @@
 ### 1. Visão Geral e Objetivo
 Atualmente, as funções fundamentais de transformação de dados (`map`, `filter`, `fold`, `zip`) na Kata-lang operam estritamente sobre Listas Encadeadas (`[T]`). Com a introdução de novos layouts de memória (Arrays Contíguos `{T}`, Tensores N-Dimensionais e Ranges `[a..b]`), o Múltiplo Despacho falha ao tentar aplicar lógicas funcionais sobre essas coleções.
 
-O objetivo da Fase 6.5 é introduzir o polimorfismo paramétrico de coleções através da super-interface `ITERABLE`, unificando o comportamento de todas as coleções do sistema sem sacrificar a performance (Zero-Cost Abstractions) e sem violar a tipagem forte.
+O objetivo da Fase 6.5 é introduzir o polimorfismo paramétrico de coleções através da super-interface `ITERABLE`, unificando o comportamento de todas as coleções do sistema sem sacrificar a performance (Low-Cost Abstractions) e sem violar a tipagem forte.
 
 ---
 

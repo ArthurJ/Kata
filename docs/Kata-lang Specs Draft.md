@@ -387,11 +387,18 @@ data (NUM, except Complex, except Fraction, \> \_ 0\) as RealPositivo
 
 * **O tipo de erro em Result:** Tipos-refinados e operações falíveis retornam `Result::(T, E)`. A variante de falha `Err(E)` costuma carregar um `Text` com a descrição do erro, mas pode carregar qualquer tipo `E` definido na assinatura.
 
-#### **4.2 Preservação e Composição de Predicados (Predicate Inheritance)**
+#### **4.2 O Princípio Nominal-Estrutural (Atrito Sadio)**
+
+A linguagem adota uma abordagem híbrida (**Nominal-Estrutural**) para resolver a ambiguidade entre reaproveitamento matemático e segurança de domínio:
+
+* **Nas Fronteiras de Funções (Nominal):** O sistema de tipos exige **Nominalidade Estrita**. Se uma função é desenhada para receber o tipo `IdadeValida`, ela **rejeitará** qualquer outro tipo (como `QuantidadeValida` ou `Int` cru), mesmo que os predicados matemáticos subjacentes sejam idênticos. Isso protege a semântica da função e força o desenvolvedor a declarar sua intenção usando os Construtores Inteligentes, prevenindo erros lógicos de domínio.
+* **Nas Operações Base (Estrutural):** Um tipo refinado nunca perde a sua essência e herda a interoperabilidade da sua base matemática. Se uma função (como o operador `+`) exige um `Int`, um `IdadeValida` (cuja base é `Int`) será implicitamente aceito, desempacotado e computado.
+
+#### **4.3 Preservação e Composição de Predicados (Predicate Inheritance)**
 
 Na Kata-Lang, as operações matemáticas entre Tipos Refinados (ou entre um Tipo Refinado e sua Base) não descartam as restrições associadas. O sistema de tipos aplica o princípio da **Herança Automática de Predicados**.
 
-*   **Interseção Lógica de Predicados:** Sempre que uma função numérica é invocada e não existe uma sobrecarga manual específica para a combinação exata de tipos, o compilador utiliza a implementação da Base (ex: `Int`), mas o tipo de retorno herda a **composição lógica (AND)** de todos os predicados presentes nos argumentos.
+*   **Interseção Lógica e Deduplicação:** Sempre que uma função numérica é invocada e não existe uma sobrecarga manual, o compilador utiliza a implementação da Base (ex: `Int`), mas o tipo de retorno herda a **composição lógica (AND)** de todos os predicados originais. O compilador usa uma validação profunda da AST para deduplicar predicados idênticos.
     *   *Exemplo:* `PositiveInt` (> _ 0) + `NonZeroInt` (!= _ 0) resulta em um tipo que deve satisfazer ambos os predicados: `Result::((Int, > _ 0, != _ 0), Text)`.
 *   **Prova Dinâmica via Result:** Como o resultado de uma operação pode violar as restrições herdadas (ex: `1 - 10`), o compilador envolve o retorno automaticamente em `Result::(T, Text)`. O Runtime revalida a árvore de predicados acumulada sobre o novo valor antes de entregar o `Ok`.
 *   **Sobrecarga Pura (Supressão de Result):** Este comportamento automático é suprimido se o desenvolvedor fornecer uma **implementação explícita** para a combinação de tipos (ex: provar matematicamente que a soma de dois `PositiveInt` é sempre um `PositiveInt`). Nestes casos, o compilador respeita a assinatura manual e retorna o tipo puro.
@@ -415,7 +422,7 @@ PositiveInt implements ADD_BEHAVIOR
         )
 ```
 
-#### **4.3 Fallbacks Literais Estáticos**
+#### **4.4 Fallbacks Literais Estáticos**
 
 
 Literais numéricos constantes inseridos no código-fonte são avaliados em tempo de compilação. Se o literal passar no predicado (ex: o literal 1 num contexto que exige PositiveInt), o compilador aceita-o como um tipo nativo PositiveInt, dispensando o construtor dinâmico e o retorno de Result.
@@ -1087,7 +1094,7 @@ lambda (x y)
 
 ## **7\. Infraestrutura de Testes e Asserções**
 
-A Kata-Lang fornece um ambiente de testes integrado (invocado via kata test) desenhado sob a premissa de **Zero-Cost Abstraction** no ambiente de produção. O isolamento entre o código de teste e a lógica de domínio garante que o binário gerado via kata build permanece estritamente desprovido de abstrações mortas.
+A Kata-Lang fornece um ambiente de testes integrado (invocado via kata test) desenhado sob a premissa de **Low-Cost Abstraction** no ambiente de produção. O isolamento entre o código de teste e a lógica de domínio garante que o binário gerado via kata build permanece estritamente desprovido de abstrações mortas.
 
 ### **1\. A Diretiva @test e Eliminação Estática**
 

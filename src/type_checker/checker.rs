@@ -274,7 +274,7 @@ impl Checker {
                         crate::parser::ast::VariantData::Unit => (0, TypeRef::Simple(name.clone())),
                         crate::parser::ast::VariantData::Type(t) => (1, TypeRef::Function(vec![t.clone()], Box::new((TypeRef::Simple(name.clone()), 0..0)))),
                         crate::parser::ast::VariantData::FixedValue(_) => { has_smart_constructor = true; (0, TypeRef::Simple(name.clone())) },
-                        crate::parser::ast::VariantData::Predicate(_) => { has_smart_constructor = true; has_predicate = true; (1, TypeRef::Function(vec![(TypeRef::Simple("Unknown".to_string()), 0..0)], Box::new((TypeRef::Simple(name.clone()), 0..0)))) },
+                        crate::parser::ast::VariantData::Predicate(_) => { has_smart_constructor = true; has_predicate = true; (1, TypeRef::Function(vec![(TypeRef::TypeVar("A".to_string()), 0..0)], Box::new((TypeRef::Simple(name.clone()), 0..0)))) },
                     };
                     self.env.define(variant.name.clone(), arity, type_info, false, false, None);
                 }
@@ -298,7 +298,7 @@ impl Checker {
                         name.clone(),
                         1,
                         TypeRef::Function(
-                            vec![(TypeRef::Simple("A".to_string()), 0..0)],
+                            vec![(TypeRef::TypeVar("A".to_string()), 0..0)],
                             Box::new((TypeRef::Simple(name.clone()), 0..0))
                         ),
                         false,
@@ -620,22 +620,59 @@ impl Checker {
                     pat
                 }).collect();
 
+                let target_type = match &t_target.0 {
+                    TExpr::Ident(_, ty) | TExpr::Call(_, _, ty) | TExpr::Sequence(_, ty) => ty.clone(),
+                    _ => TypeRef::Simple("Unknown".to_string()),
+                };
+
                 for arm in arms {
                     let crate::parser::ast::MatchArm::Pattern((pat, pat_span), stmts) = arm;
+                    
+                    // Salvar o estado anterior do escopo local para não vazar variáveis do arm atual
+                    let old_locals = resolver.local_vars.borrow().clone();
+
+                    // Inferência de Tipo do Payload do Enum
+                    if let Pattern::Sequence(atoms) = pat {
+                        if atoms.len() == 2 {
+                            if let (Pattern::Ident(variant_name), _) = &atoms[0] {
+                                if let (Pattern::Ident(var_name), _) = &atoms[1] {
+                                    let mut payload_ty = TypeRef::Simple("Unknown".to_string());
+                                    
+                                    if let TypeRef::Generic(enum_name, args) = &target_type {
+                                        if enum_name == "Result" && args.len() == 2 {
+                                            payload_ty = if variant_name == "Ok" { args[0].0.clone() } else { args[1].0.clone() };
+                                        } else if enum_name == "Optional" && args.len() == 1 {
+                                            payload_ty = args[0].0.clone();
+                                        }
+                                    } else if let TypeRef::Simple(enum_name) = &target_type {
+                                        if let Some(info) = self.env.lookup_first(variant_name) {
+                                            if let TypeRef::Function(params, _) = &info.type_info {
+                                                if !params.is_empty() {
+                                                    payload_ty = params[0].0.clone();
+                                                }
+                                            }
+                                        }
+                                    }
+                                    
+                                    resolver.declare_local(var_name.clone(), payload_ty);
+                                }
+                            }
+                        }
+                    }
+
                     let mut t_stmts = Vec::new();
                     for s in stmts {
                         t_stmts.push(self.resolve_stmt(s, resolver, local_errors));
                     }
+
+                    // Restaurar o escopo
+                    *resolver.local_vars.borrow_mut() = old_locals;
+
                     t_arms.push(crate::type_checker::tast::TMatchArm {
                         pattern: (pat.clone(), pat_span.clone()),
                         body: t_stmts,
                     });
                 }
-
-                let target_type = match &t_target.0 {
-                    TExpr::Ident(_, ty) | TExpr::Call(_, _, ty) | TExpr::Sequence(_, ty) => ty.clone(),
-                    _ => TypeRef::Simple("Unknown".to_string()),
-                };
 
                 self.check_exhaustiveness(&target_type, &patterns, local_errors, "Match", span);
 

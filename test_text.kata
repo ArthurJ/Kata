@@ -1,4 +1,0 @@
-import types.(Text)
-
-action main
-    let x "Teste"

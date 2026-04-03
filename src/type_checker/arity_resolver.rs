@@ -1,3 +1,36 @@
+
+pub fn exprs_equal(a: &crate::parser::ast::Expr, b: &crate::parser::ast::Expr) -> bool {
+    use crate::parser::ast::Expr::*;
+    match (a, b) {
+        (Ident(a), Ident(b)) => a == b,
+        (Int(a), Int(b)) => a == b,
+        (Float(a), Float(b)) => a == b,
+        (String(a), String(b)) => a == b,
+        (Hole, Hole) => true,
+        (ActionCall(na, aa), ActionCall(nb, ab)) => {
+            na == nb && aa.len() == ab.len() && aa.iter().zip(ab.iter()).all(|(x, y)| exprs_equal(&x.0, &y.0))
+        }
+        (ChannelSend, ChannelSend) | (ChannelRecv, ChannelRecv) | (ChannelRecvNonBlock, ChannelRecvNonBlock) => true,
+        (Try(a), Try(b)) | (ExplicitApp(a), ExplicitApp(b)) => exprs_equal(&a.0, &b.0),
+        (Pipe(la, ra), Pipe(lb, rb)) => exprs_equal(&la.0, &lb.0) && exprs_equal(&ra.0, &rb.0),
+        (Tuple(aa), Tuple(ab)) | (List(aa), List(ab)) | (Sequence(aa), Sequence(ab)) => {
+            aa.len() == ab.len() && aa.iter().zip(ab.iter()).all(|(x, y)| exprs_equal(&x.0, &y.0))
+        }
+        (Array(aa), Array(ab)) => {
+            aa.len() == ab.len() && aa.iter().zip(ab.iter()).all(|(ra, rb)| {
+                ra.len() == rb.len() && ra.iter().zip(rb.iter()).all(|(x, y)| exprs_equal(&x.0, &y.0))
+            })
+        }
+        (Guard(ba, oa), Guard(bb, ob)) => {
+            ba.len() == bb.len() && ba.iter().zip(bb.iter()).all(|(ca, cb)| ca.0 == cb.0 && exprs_equal(&ca.1.0, &cb.1.0)) && exprs_equal(&oa.0, &ob.0)
+        }
+        (Lambda(pa, ba, wa), Lambda(pb, bb, wb)) => {
+            pa == pb && exprs_equal(&ba.0, &bb.0) && wa.len() == wb.len() && wa.iter().zip(wb.iter()).all(|(x, y)| exprs_equal(&x.0, &y.0))
+        }
+        (WithDecl(na, ea), WithDecl(nb, eb)) => na == nb && exprs_equal(&ea.0, &eb.0),
+        _ => false,
+    }
+}
 use crate::parser::ast::{Expr, Spanned, TypeRef};
 use crate::type_checker::environment::TypeEnv;
 use crate::type_checker::tast::{TExpr, TLiteral};
@@ -39,37 +72,78 @@ impl<'a> ArityResolver<'a> {
         }
     }
 
+
+    pub fn unpack_type<'t>(&'t self, ty: &'t TypeRef) -> (TypeRef, Vec<crate::parser::ast::Expr>) {
+        match ty {
+            TypeRef::Refined(base, preds) => {
+                let (inner_base, mut inner_preds) = self.unpack_type(&base.0);
+                inner_preds.extend(preds.iter().map(|(e, _)| e.clone()));
+                (inner_base, inner_preds)
+            }
+            TypeRef::Simple(n) => {
+                if let Some(refined) = self.env.lookup_refined(n) {
+                    let (inner_base, mut inner_preds) = self.unpack_type(&refined.base);
+                    inner_preds.extend(refined.predicates.clone());
+                    (inner_base, inner_preds)
+                } else {
+                    (ty.clone(), vec![])
+                }
+            }
+            _ => (ty.clone(), vec![]),
+        }
+    }
+
     pub fn types_compatible(&self, arg: &TypeRef, param: &TypeRef) -> bool {
-        match (arg, param) {
+        let (arg_base, arg_preds) = self.unpack_type(arg);
+        let (param_base, param_preds) = self.unpack_type(param);
+
+        // Regra Nominal-Estrutural (O Atrito Sadio):
+        // 1. Se o parâmetro exige predicados (é um tipo restrito), o nome do tipo DEVE ser exatamente o mesmo 
+        //    (preservando a semântica/intenção do domínio).
+        //    NÃO basta que a estrutura de predicados seja igual, precisa ser o mesmo "Newtype" refinado.
+        // 2. Se o parâmetro é a base nua (ex: `Int`), ele aceita os derivados (ex: `PositiveInt` desempacota para `Int` puro).
+        if !param_preds.is_empty() {
+            let arg_name = match arg {
+                TypeRef::Simple(n) => n.clone(),
+                TypeRef::Refined(base, _) => match &base.0 {
+                    TypeRef::Simple(n) => n.clone(),
+                    _ => "".to_string(),
+                },
+                _ => "".to_string(),
+            };
+            
+            let param_name = match param {
+                TypeRef::Simple(n) => n.clone(),
+                TypeRef::Refined(base, _) => match &base.0 {
+                    TypeRef::Simple(n) => n.clone(),
+                    _ => "".to_string(),
+                },
+                _ => "".to_string(),
+            };
+
+            if arg_name != param_name {
+                return false;
+            }
+        }
+
+        match (&arg_base, &param_base) {
             (TypeRef::Generic(n, args), TypeRef::Simple(p)) if n == "Tuple" && args.is_empty() && p == "()" => true,
             (TypeRef::Simple(a), TypeRef::Generic(n, args)) if a == "()" && n == "Tuple" && args.is_empty() => true,
             (TypeRef::Simple(a), TypeRef::Simple(p)) => {
                 if a == p || a == "Unknown" || p == "Unknown" {
                     true
-                } else if p.len() == 1 && p.chars().next().unwrap().is_uppercase() {
-                    // param is an unbound generic parameter of the called function (e.g. A in map)
-                    true
-                } else if a.len() == 1 && a.chars().next().unwrap().is_uppercase() {
-                    // arg is a generic type variable from the current function's constraints
-                    if let Some(constraint) = self.constraints.borrow().get(a) {
-                        self.env.implements(constraint, p)
-                    } else {
-                        false
-                    }
-                } else if let Some(refined_p) = self.env.lookup_refined(p) {
-                    self.types_compatible(arg, &refined_p.base)
-                } else if let Some(refined_a) = self.env.lookup_refined(a) {
-                    // Refined matches its base
-                    self.types_compatible(&refined_a.base, param)
                 } else {
                     self.env.implements(a, p)
                 }
             },
-            (TypeRef::Refined(base, _), p) => {
-                self.types_compatible(&base.0, p)
-            },
-            (arg, TypeRef::Refined(base, _)) => {
-                self.types_compatible(arg, &base.0)
+            (_, TypeRef::TypeVar(_)) => true, // O parâmetro é um Genérico Livre (A), engole tudo
+            (TypeRef::TypeVar(a), TypeRef::Simple(p)) => {
+                // O argumento é uma variável Genérica (do escopo do with T as ...), e o parâmetro é nominal
+                if let Some(constraint) = self.constraints.borrow().get(a) {
+                    self.env.implements(constraint, p)
+                } else {
+                    false
+                }
             },
             (TypeRef::Generic(a_name, a_args), TypeRef::Generic(p_name, p_args)) => {
                 if p_name == "ITERABLE" {
@@ -84,13 +158,11 @@ impl<'a> ArityResolver<'a> {
                     return false;
                 }
                 
-                // Variadic check specifically for Tuples
                 if p_name == "Tuple" && p_args.len() > 0 {
                     let mut a_idx = 0;
                     for p_arg in p_args {
                         match &p_arg.0 {
                             TypeRef::Variadic(inner_p) => {
-                                // Consume remaining args as long as they match inner_p
                                 while a_idx < a_args.len() {
                                     if !self.types_compatible(&a_args[a_idx].0, &inner_p.0) {
                                         return false;
@@ -129,8 +201,7 @@ impl<'a> ArityResolver<'a> {
                     }
                 }
                 true
-            }
-            (_, TypeRef::Simple(p)) if p.len() == 1 && p.chars().next().unwrap().is_uppercase() => true, 
+            } 
             _ => false,
         }
     }
@@ -200,8 +271,15 @@ impl<'a> ArityResolver<'a> {
                                         if !self.types_compatible(&arg_type, param_type) { all_match = false; break; }
                                         score += match (&arg_type, param_type) {
                                             (TypeRef::Simple(a), TypeRef::Simple(p)) if a == p => 10,
-                                            (_, TypeRef::Simple(p)) if p.len() == 1 => 1,
-                                            _ => 5,
+                                            (_, TypeRef::TypeVar(p)) => {
+                                                // Se a TypeVar tem restrições de Interface, o score sobe
+                                                if self.constraints.borrow().contains_key(p) {
+                                                    5
+                                                } else {
+                                                    1
+                                                }
+                                            },
+                                            _ => 5, // Casts, Subtipos de interfaces, etc
                                         };
                                     }
                                     if all_match {
@@ -273,15 +351,16 @@ impl<'a> ArityResolver<'a> {
                         }
                     };
 
-                    // Herança de Predicados
-                    let mut inherited_predicates = Vec::new();
+                    // Herança de Predicados (deduplicados)
+                    let mut inherited_predicates: Vec<crate::parser::ast::Spanned<crate::parser::ast::Expr>> = Vec::new();
                     let max_possible_score = final_args.len() as i32 * 10;
                     if best_score >= 0 && best_score < max_possible_score {
                         for arg in &final_args {
-                            match Self::get_expr_type(&arg.0) {
-                                TypeRef::Simple(n) => if let Some(r) = self.env.lookup_refined(&n) { inherited_predicates.extend(r.predicates.iter().map(|p| (p.clone(), 0..0))); }
-                                TypeRef::Refined(_, preds) => inherited_predicates.extend(preds.clone()),
-                                _ => {}
+                            let (_, arg_preds) = self.unpack_type(&Self::get_expr_type(&arg.0));
+                            for p in arg_preds {
+                                if !inherited_predicates.iter().any(|(existing, _)| exprs_equal(existing, &p)) {
+                                    inherited_predicates.push((p, 0..0));
+                                }
                             }
                         }
                     }

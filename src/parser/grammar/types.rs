@@ -13,22 +13,30 @@ pub fn type_ref_parser() -> impl Parser<Token, Spanned<TypeRef>, Error = ParserE
         .then_ignore(just(Token::DoubleColon))
         .repeated();
 
-        let base_name = module_path
+        let base_name_tok = module_path
             .then(filter_map(|span, tok| match tok {
-                Token::TypeID(s) => Ok(s),
-                Token::InterfaceID(s) => Ok(s),
-                Token::TypeVar(s) => Ok(s),
+                Token::TypeID(s) => Ok((s, false)),
+                Token::InterfaceID(s) => Ok((s, false)),
+                Token::TypeVar(s) => Ok((s, true)),
                 _ => Err(Simple::expected_input_found(span, Vec::new(), Some(tok))),
-            }))
-            .map(|(mods, name)| {
+            }));
+            
+        let base_name = base_name_tok.clone().map(|(mods, (name, _))| {
                 if mods.is_empty() {
                     name
                 } else {
                     format!("{}::{}", mods.join("::"), name)
                 }
-            });
+        });
 
-        let simple_type = base_name.clone().map(TypeRef::Simple);
+        let simple_type = base_name_tok.clone().map(|(mods, (name, is_var))| {
+            if mods.is_empty() && is_var {
+                TypeRef::TypeVar(name)
+            } else {
+                let n = if mods.is_empty() { name } else { format!("{}::{}", mods.join("::"), name) };
+                TypeRef::Simple(n)
+            }
+        });
 
         let const_type = choice((
             filter_map(|span, tok| match tok {

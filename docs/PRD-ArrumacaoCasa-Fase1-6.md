@@ -70,15 +70,21 @@ Ajustar as análises para não deixarem "pontas soltas" que corrompam lógicas a
 - [x] **5.9. Síntese de Construtores Inteligentes (Enum Predicativo):**
     *   *Problema:* Enums que usavam predicados lógicos (ex: `< _ 18.5`) criavam a assinatura vazia para a variante, causando link error em tempo de máquina. O compilador não criava a função de checagem de IFs para o Múltiplo Despacho.
     *   *Solução:* O Type Checker agora forja uma árvore sintática `TAST` de `LambdaDef` com um encadeamento de `Guards` e a injeta silenciosamente para avaliação dinâmica em Run-Time.
-- [ ] **5.4. Igualdade Estrutural de Tipos Refinados:**
-    *   *Problema:* `types_equal_ignore_span` checa apenas se dois tipos refinados têm a mesma base e a mesma quantidade de predicados (verificação rasa).
-    *   *Solução:* Implementar uma função de igualdade profunda de AST (`Expr`) para comparar matematicamente se os predicados de um `PositiveInt` são logicamente os mesmos de outro tipo antes de permitir a compatibilidade.
-- [ ] **5.5. Limpeza Final no Tree-Shaker:**
+- [x] **5.4. Igualdade Estrutural e Tipagem Nominal-Estrutural de Tipos Refinados:**
+    *   *Problema:* O Type Checker checava compatibilidade de forma rasa, ignorando os predicados, e extraía falhamente o payload de Enums em blocos `match`.
+    *   *Solução:* Implementada igualdade profunda da AST (`exprs_equal`). Ajustada a regra de `types_compatible` para o "Meio-Termo" (Nominal nas fronteiras de funções para garantir intenção semântica, mas estrutural/interoperável com o tipo base para matemática). Corrigida a inferência do Payload em Pattern Matching (`MatchArm`).
+- [x] **5.5. Limpeza Final no Tree-Shaker:**
     *   *Problema:* Tipos de dados, Enums e Interfaces não utilizados não estão sendo extirpados.
-    *   *Solução:* Estender o `tree_shaker.rs` para rastrear o grafo de dependência de `Data` e `Enum`.
-- [ ] **5.6. Refinamento de Generics (Scoring):**
+    *   *Solução:* O `tree_shaker.rs` foi estendido para rastrear o grafo de dependência profundo de `TypeRef` e `Expr`, removendo `Data` e `Enum` inativos da TAST.
+- [x] **5.6. Refinamento de Generics (Scoring):**
     *   *Problema:* O compilador assume que "qualquer tipo com uma letra maiúscula" é Genérico.
-    *   *Solução:* Usar o `TypeEnv` real para verificar *TypeVars*, e refinar o algoritmo de *scoring* do `ArityResolver` para diferenciar e desempatar assinaturas genéricas puras das resoluções via super-traits.
+    *   *Solução:* Introduzido o nó explícito `TypeRef::TypeVar` na AST desde o Parser. O algoritmo de Múltiplo Despacho agora pontua genéricos com base real nas restrições de Interface (`TypeEnv::constraints`), eliminando a adivinhação de strings.
+- [ ] **5.10. Re-resolução de Chamadas no Monomorfizador (Fix Cranelift Verifier Error):**
+    *   *Problema:* O Monomorfizador (Fase 4) realiza apenas a substituição nominal de tipos (ex: troca a variável `A` por `Float` no corpo de funções genéricas e construtores sintéticos de Enums), mas **não re-avalia** as chamadas de funções internas (`TExpr::Call`). Isso faz com que operações polimórficas (como `< __val 18.5`) continuem apontando para a instrução de máquina do fallback deduzido na Fase 3 (ex: `lt_Int_Int`). Quando o Cranelift (Fase 6) recebe a variável substituída (`f64`) para executar numa instrução `i64`, ocorre um *Verifier Error*.
+    *   *Solução Planejada:* O `Monomorphizer` deverá re-invocar a lógica de resolução de despacho (similar ao `ArityResolver`) para os nós de `Call` do corpo da função após a substituição de tipos. Isso garantirá que as operações internas sejam religadas para as instruções de máquina corretas (ex: `lt_Float_Float`) com base nos novos tipos concretos instanciados. Essa abordagem mantém a DX intacta (polimorfismo total) sem gerar overhead no runtime.
+- [ ] **5.11. Igualdade Semântica de Enums Predicativos (Domain-Driven Equality):**
+    *   *Problema:* Atualmente, a linguagem não define um comportamento claro de igualdade para instâncias de Enums que carregam *payloads* diferentes mas que caem na mesma variante lógica (ex: `IMC(18)` e `IMC(15)` caindo em `Magreza`). Compará-los via igualdade estrutural tradicional retornaria `False`, o que fere a semântica de domínio onde a "identidade da variante" deve ter precedência sobre o valor bruto medido.
+    *   *Solução Planejada:* Quando o TypeChecker sintetizar a implementação da interface `EQ` para um Enum Predicativo, o operador `=` deve realizar apenas o *Tag Matching* (comparação do discriminador da variante). Assim, `IMC(18) == IMC(15)` avaliará para `True`, consolidando o design focado no domínio.
 - [ ] **5.7. Memoização via `@cache_strategy`:**
     *   *Problema:* A diretiva de cache é validada sintaticamente mas ignorada no resto do pipeline.
     *   *Solução:* Criar uma passagem no otimizador que intercepte funções puras anotadas com `@cache_strategy` e injete verificações a uma *Hash Table* global gerenciada pelo `kata-rt`.

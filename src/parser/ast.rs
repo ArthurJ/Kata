@@ -4,6 +4,7 @@ pub type Spanned<T> = (T, Span);
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypeRef {
     Simple(String),
+    TypeVar(String),
     Generic(String, Vec<Spanned<TypeRef>>),
     Function(Vec<Spanned<TypeRef>>, Box<Spanned<TypeRef>>),
     Refined(Box<Spanned<TypeRef>>, Vec<Spanned<Expr>>),
