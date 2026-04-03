@@ -26,3 +26,4 @@ clap = { version = "4.6.0", features = ["derive"] }
 tokio = { version = "1.50.0", features = ["full"] }
 bumpalo = "3.20.2"
 wasmtime-fiber = "34.0.2"
+dashmap = "6.1.0"

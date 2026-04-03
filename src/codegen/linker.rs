@@ -1,4 +1,3 @@
-
 pub fn link_executable(object_file: &str, output_bin: &str) -> Result<(), String> {
     log::info!("Iniciando Linker: conectando {} com kata-rt", object_file);
 
@@ -37,10 +36,10 @@ char kata_rt_lt_flt(double a, double b) { return a < b; }
 char kata_rt_le_flt(double a, double b) { return a <= b; }
 
 void* kata_rt_alloc_local(long size, long align) { return malloc(size); }
-void* kata_rt_alloc_shared(long size, long align) { return malloc(size); }
+void* kata_rt_alloc_shared(long size, long align) { return malloc(size + 16) + 16; /* dummy ARC struct offset */ }
 void kata_rt_decref(void* ptr) { 
     if (ptr) {
-        free(ptr); // Simplified ARC decrement for MVP
+        free(ptr - 16); 
     }
 }
 void* kata_rt_cache_get(long hash) { return NULL; }
