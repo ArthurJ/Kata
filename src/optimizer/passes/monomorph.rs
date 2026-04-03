@@ -131,7 +131,7 @@ impl<'a> Monomorphizer<'a> {
     fn fold_expr_spanned(&mut self, expr: Spanned<TExpr>, errors: &mut Vec<OptimizerError>) -> Spanned<TExpr> {
         let (e, span) = expr;
         let folded = match e {
-            TExpr::Call(callee, args, ty) => {
+            TExpr::Call(callee, args, mut ty) => {
                 let mut folded_callee = Box::new(self.fold_expr_spanned(*callee, errors));
                 let folded_args: Vec<_> = args.into_iter().map(|a| self.fold_expr_spanned(a, errors)).collect();
 
@@ -156,10 +156,21 @@ impl<'a> Monomorphizer<'a> {
                             }
                         }
                         
-                        let substituter = TypeSubstituter { mapping };
+                        let substituter = TypeSubstituter { mapping, env: self._env };
                         let concrete_callee_ty = substituter.substitute_type(callee_ty);
 
                         folded_callee = Box::new((TExpr::Ident(mangled_name, concrete_callee_ty), folded_callee.1.clone()));
+                    } else if let Some(infos) = self._env.lookup_all(name) {
+                        // Re-resolver chamadas comuns se necessário, dado que tipos podem ter mudado.
+                        // (Isso corrige o Verifier Error pois pega a instrução final correta após a substituição)
+                        let concrete_types: Vec<TypeRef> = folded_args.iter().map(|a| crate::type_checker::arity_resolver::ArityResolver::get_expr_type(&a.0)).collect();
+                        let resolver = crate::type_checker::arity_resolver::ArityResolver::new(self._env);
+                        if let Ok((best_match, _, _)) = resolver.resolve_dispatch(name, &concrete_types, infos) {
+                            if let TypeRef::Function(_, ret_ty) = &best_match.type_info {
+                                ty = ret_ty.0.clone();
+                                folded_callee = Box::new((TExpr::Ident(name.clone(), best_match.type_info.clone()), folded_callee.1.clone()));
+                            }
+                        }
                     }
                 }
 
@@ -271,9 +282,8 @@ impl<'a> Monomorphizer<'a> {
                 }
             }
 
-            let substituter = TypeSubstituter { mapping };
+            let substituter = TypeSubstituter { mapping, env: self._env };
             let mut new_decls = Vec::new();
-
             for decl in template_decls {
                 match decl {
                     TTopLevel::Signature(_, params, ret, dirs) => {
@@ -303,11 +313,12 @@ impl<'a> Monomorphizer<'a> {
     }
 }
 
-struct TypeSubstituter {
+struct TypeSubstituter<'env> {
     mapping: HashMap<String, TypeRef>,
+    env: &'env TypeEnv,
 }
 
-impl TypeSubstituter {
+impl<'env> TypeSubstituter<'env> {
     fn substitute_type(&self, ty: &TypeRef) -> TypeRef {
         match ty {
             TypeRef::TypeVar(n) => {

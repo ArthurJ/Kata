@@ -177,7 +177,6 @@ fn main() -> miette::Result<()> {
                 println!("{:#?}", optimized_tast);
             }
 
-            // codegen::run_stub();
             let out_bin = output.clone().unwrap_or_else(|| {
                 std::path::Path::new(&entrypoint)
                     .file_stem()
@@ -201,9 +200,7 @@ fn main() -> miette::Result<()> {
             log::info!("Entrypoint: {}", entrypoint);
             log::info!("Release mode: {}", release);
 
-            // parser::run_stub();
-            // type_checker::run_stub();
-            // kata_rt::init_stub();
+            log::info!("Comando: RUN (Pendente implementacao AOT/JIT descartavel)");
         }
         Commands::Test { path } => {
             log::info!("Comando: TEST");
@@ -261,7 +258,7 @@ fn main() -> miette::Result<()> {
         }
         Commands::Repl => {
             log::info!("Comando: REPL");
-            repl::start_stub();
+            repl::start();
         }
     }
 

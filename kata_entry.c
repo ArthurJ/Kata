@@ -1,9 +1,4 @@
 
-pub fn link_executable(object_file: &str, output_bin: &str) -> Result<(), String> {
-    log::info!("Iniciando Linker: conectando {} com kata-rt", object_file);
-
-    let main_c_path = "kata_entry.c";
-    let main_c_content = r#"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -38,11 +33,7 @@ char kata_rt_le_flt(double a, double b) { return a <= b; }
 
 void* kata_rt_alloc_local(long size, long align) { return malloc(size); }
 void* kata_rt_alloc_shared(long size, long align) { return malloc(size); }
-void kata_rt_decref(void* ptr) { 
-    if (ptr) {
-        free(ptr); // Simplified ARC decrement for MVP
-    }
-}
+void kata_rt_decref(void* ptr) { /* Stub for MVP arc */ }
 void* kata_rt_cache_get(long hash) { return NULL; }
 void kata_rt_cache_set(long hash, void* ptr) {}
 
@@ -59,33 +50,7 @@ char* kata_rt_flt_to_str(double a) {
 }
 
 char* kata_rt_default_repr(void* a) {
-    char* buf = malloc(64);
-    snprintf(buf, 64, "Object@%p", a);
-    return buf;
-}
-
-char* kata_rt_repr_text(char* a) {
-    if (!a) return "null";
-    char* buf = malloc(1024);
-    snprintf(buf, 1024, "\"%s\"", a);
-    return buf;
-}
-
-char* kata_rt_bool_to_str(char a) {
-    return a ? "True" : "False";
-}
-
-char* kata_rt_concat_text(char* a, char* b) {
-    if (!a && !b) return "";
-    if (!a) return b;
-    if (!b) return a;
-    size_t len_a = 0; while(a[len_a]) len_a++;
-    size_t len_b = 0; while(b[len_b]) len_b++;
-    char* buf = malloc(len_a + len_b + 1);
-    for(size_t i=0; i<len_a; i++) buf[i] = a[i];
-    for(size_t i=0; i<len_b; i++) buf[len_a + i] = b[i];
-    buf[len_a + len_b] = '\0';
-    return buf;
+    return "repr";
 }
 
 char kata_rt_eq_generic(void* a, void* b) {
@@ -98,33 +63,10 @@ char kata_rt_eq_enum(char* a, char* b) {
 }
 
 void kata_rt_print_str(const char* ptr) {
-    if (ptr) {
-        printf("%s\n", ptr);
-    } else {
-        printf("null\n");
-    }
+    printf("%s\n", ptr);
 }
 
 int main(int argc, char** argv) {
     kata_rt_boot(kata_main);
     return 0;
-}
-"#;
-    std::fs::write(main_c_path, main_c_content).map_err(|e| format!("Falha ao gerar o entrypoint C: {}", e))?;
-
-    let status = std::process::Command::new("cc")
-        .arg(main_c_path)
-        .arg(object_file)
-        .arg("-o")
-        .arg(output_bin)
-        .status()
-        .map_err(|e| format!("Falha ao invocar o compilador C (cc): {}", e))?;
-
-    if !status.success() {
-        return Err(format!("Linker falhou com status: {}", status));
-    }
-
-    log::info!("Linkagem concluída com sucesso. Executável: {}", output_bin);
-
-    Ok(())
 }

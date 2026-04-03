@@ -47,6 +47,9 @@ impl<'a> Optimizer<'a> {
         let mut stream_fusion = passes::stream_fusion::StreamFusionPass::new();
         optimized_tast = stream_fusion.run(optimized_tast, &mut self.errors);
 
+        let mut memoize = passes::memoize::MemoizePass::new();
+        optimized_tast = memoize.run(optimized_tast, &mut self.errors);
+
         if release_mode {
             let mut late_shaker = passes::tree_shaker::TreeShaker::new(self.env);
             optimized_tast = late_shaker.run(optimized_tast);

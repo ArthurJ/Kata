@@ -217,7 +217,69 @@ impl<'a> ArityResolver<'a> {
         }
     }
 
-    fn resolve_next_expr(&self, iter: &mut std::iter::Peekable<std::slice::Iter<'_, Spanned<Expr>>>) -> Option<Spanned<TExpr>> {
+    pub fn resolve_dispatch<'env>(&self, name: &str, arg_types: &[TypeRef], infos: &'env [crate::type_checker::environment::SymbolInfo]) -> Result<(&'env crate::type_checker::environment::SymbolInfo, bool, i32), String> {
+        let mut best_match = None;
+        let mut best_score = -1;
+        let mut args_were_swapped = false;
+        let mut is_ambiguous = false;
+
+        for info in infos {
+            if let TypeRef::Function(params, _) = &info.type_info {
+                if params.len() == arg_types.len() {
+                    let mut all_match = true;
+                    let mut score = 0;
+                    for (i, arg_type) in arg_types.iter().enumerate() {
+                        let param_type = &params[i].0;
+                        if !self.types_compatible(arg_type, param_type) { all_match = false; break; }
+                        score += match (arg_type, param_type) {
+                            (TypeRef::Simple(a), TypeRef::Simple(p)) if a == p => 10,
+                            (_, TypeRef::TypeVar(p)) => {
+                                if self.constraints.borrow().contains_key(p) {
+                                    5
+                                } else {
+                                    1
+                                }
+                            },
+                            _ => 5,
+                        };
+                    }
+                    if all_match {
+                        if score > best_score { best_score = score; best_match = Some(info); is_ambiguous = false; args_were_swapped = false; }
+                        else if score == best_score && best_match != Some(info) { is_ambiguous = true; }
+                    }
+
+                    if info.is_commutative && arg_types.len() == 2 {
+                        let mut all_match_swapped = true;
+                        let mut score_swapped = 0;
+                        let swapped_types = [&arg_types[1], &arg_types[0]];
+                        for (i, arg_type) in swapped_types.iter().enumerate() {
+                            let param_type = &params[i].0;
+                            if !self.types_compatible(arg_type, param_type) { all_match_swapped = false; break; }
+                            score_swapped += match (arg_type, param_type) {
+                                (TypeRef::Simple(a), TypeRef::Simple(p)) if a == p => 10,
+                                (_, TypeRef::Simple(p)) if p.len() == 1 => 1,
+                                _ => 5,
+                            };
+                        }
+                        if all_match_swapped {
+                            if score_swapped > best_score { best_score = score_swapped; best_match = Some(info); is_ambiguous = false; args_were_swapped = true; }
+                            else if score_swapped == best_score && best_match != Some(info) { is_ambiguous = true; }
+                        }
+                    }
+                }
+            }
+        }
+
+        if is_ambiguous {
+            Err(format!("Erro Semantico (Ambiguidade): `{}`", name))
+        } else if let Some(m) = best_match {
+            Ok((m, args_were_swapped, best_score))
+        } else {
+            Err(format!("Erro de Tipo: `{}`", name))
+        }
+    }
+
+    pub fn resolve_next_expr(&self, iter: &mut std::iter::Peekable<std::slice::Iter<'_, Spanned<Expr>>>) -> Option<Spanned<TExpr>> {
         let (expr, span) = iter.next()?;
         match expr {
             Expr::Ident(_) | Expr::ChannelSend | Expr::ChannelRecv | Expr::ChannelRecvNonBlock => {

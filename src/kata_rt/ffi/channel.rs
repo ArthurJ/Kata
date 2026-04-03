@@ -43,59 +43,27 @@ pub extern "C" fn kata_rt_chan_create_broadcast() -> *mut u8 {
 #[no_mangle]
 pub extern "C" fn kata_rt_chan_send(sender_ptr: *mut u8, val: *mut u8) {
     if sender_ptr.is_null() { return; }
-    let sender = unsafe { &mut *(sender_ptr as *mut KataSender) };
     
-    // We are inside a spawn_blocking! So we can use Handle::current().block_on()
-    if let Ok(handle) = Handle::try_current() {
-        handle.block_on(async {
-            match sender {
-                KataSender::Rendezvous(tx) => {
-                    let (ack_tx, ack_rx) = oneshot::channel();
-                    if tx.send((val, Some(ack_tx))).await.is_ok() {
-                        let _ = ack_rx.await; // Wait for receiver to process it!
-                    }
-                }
-                KataSender::Queue(tx) => {
-                    let _ = tx.send(val).await;
-                }
-                KataSender::Broadcast(tx) => {
-                    let _ = tx.send(val);
-                }
-            }
-        });
-    }
+    let sender = unsafe { &*(sender_ptr as *mut KataSender) };
+    let intent = match sender {
+        KataSender::Rendezvous(_) => crate::kata_rt::task::FiberIntent::SendRendezvous(sender_ptr as *mut KataSender, val),
+        KataSender::Queue(_) => crate::kata_rt::task::FiberIntent::SendQueue(sender_ptr as *mut KataSender, val),
+        KataSender::Broadcast(_) => crate::kata_rt::task::FiberIntent::SendBroadcast(sender_ptr as *mut KataSender, val),
+    };
+    
+    crate::kata_rt::task::yield_cooperative(intent);
 }
 
 #[no_mangle]
 pub extern "C" fn kata_rt_chan_recv(recv_ptr: *mut u8) -> *mut u8 {
     if recv_ptr.is_null() { return std::ptr::null_mut(); }
-    let receiver = unsafe { &mut *(recv_ptr as *mut KataReceiver) };
     
-    if let Ok(handle) = Handle::try_current() {
-        handle.block_on(async {
-            match receiver {
-                KataReceiver::Rendezvous(rx) => {
-                    if let Some((val, ack_tx)) = rx.recv().await {
-                        if let Some(ack) = ack_tx {
-                            let _ = ack.send(()); // Acknowledge receipt
-                        }
-                        return val;
-                    }
-                }
-                KataReceiver::Queue(rx) => {
-                    if let Some(val) = rx.recv().await {
-                        return val;
-                    }
-                }
-                KataReceiver::Broadcast(rx) => {
-                    if let Ok(val) = rx.recv().await {
-                        return val;
-                    }
-                }
-            }
-            std::ptr::null_mut()
-        })
-    } else {
-        std::ptr::null_mut()
-    }
+    let receiver = unsafe { &*(recv_ptr as *mut KataReceiver) };
+    let intent = match receiver {
+        KataReceiver::Rendezvous(_) => crate::kata_rt::task::FiberIntent::RecvRendezvous(recv_ptr as *mut KataReceiver),
+        KataReceiver::Queue(_) => crate::kata_rt::task::FiberIntent::RecvQueue(recv_ptr as *mut KataReceiver),
+        KataReceiver::Broadcast(_) => crate::kata_rt::task::FiberIntent::RecvBroadcast(recv_ptr as *mut KataReceiver),
+    };
+    
+    crate::kata_rt::task::yield_cooperative(intent)
 }

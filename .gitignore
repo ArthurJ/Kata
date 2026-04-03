@@ -2,6 +2,7 @@
 .idea
 .claude
 out_logs/*
+meta_status_log.txt
 *.py
 *.o
 GEMINI.md

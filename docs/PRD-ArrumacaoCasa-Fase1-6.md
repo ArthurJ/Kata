@@ -79,13 +79,13 @@ Ajustar as análises para não deixarem "pontas soltas" que corrompam lógicas a
 - [x] **5.6. Refinamento de Generics (Scoring):**
     *   *Problema:* O compilador assume que "qualquer tipo com uma letra maiúscula" é Genérico.
     *   *Solução:* Introduzido o nó explícito `TypeRef::TypeVar` na AST desde o Parser. O algoritmo de Múltiplo Despacho agora pontua genéricos com base real nas restrições de Interface (`TypeEnv::constraints`), eliminando a adivinhação de strings.
-- [ ] **5.10. Re-resolução de Chamadas no Monomorfizador (Fix Cranelift Verifier Error):**
+- [x] **5.10. Re-resolução de Chamadas no Monomorfizador (Fix Cranelift Verifier Error):**
     *   *Problema:* O Monomorfizador (Fase 4) realiza apenas a substituição nominal de tipos (ex: troca a variável `A` por `Float` no corpo de funções genéricas e construtores sintéticos de Enums), mas **não re-avalia** as chamadas de funções internas (`TExpr::Call`). Isso faz com que operações polimórficas (como `< __val 18.5`) continuem apontando para a instrução de máquina do fallback deduzido na Fase 3 (ex: `lt_Int_Int`). Quando o Cranelift (Fase 6) recebe a variável substituída (`f64`) para executar numa instrução `i64`, ocorre um *Verifier Error*.
-    *   *Solução Planejada:* O `Monomorphizer` deverá re-invocar a lógica de resolução de despacho (similar ao `ArityResolver`) para os nós de `Call` do corpo da função após a substituição de tipos. Isso garantirá que as operações internas sejam religadas para as instruções de máquina corretas (ex: `lt_Float_Float`) com base nos novos tipos concretos instanciados. Essa abordagem mantém a DX intacta (polimorfismo total) sem gerar overhead no runtime.
-- [ ] **5.11. Igualdade Semântica de Enums Predicativos (Domain-Driven Equality):**
+    *   *Solução Planejada:* Para manter a arquitetura limpa (DRY), o `ArityResolver` terá sua lógica de despacho extraída para que possa ser compartilhada. O `Monomorphizer` deverá usar essa lógica para re-avaliar/re-linkar estritamente os nós de `Call` dentro da árvore monomorfizada usando os novos tipos concretos (ex: substituindo a chamada de fallback `lt_Int_Int` pela `lt_Float_Float` recém resolvida). Isso corrige o Verifier Error no backend sem penalizar o tempo de execução.
+- [x] **5.11. Igualdade Semântica de Enums Predicativos (Domain-Driven Equality):**
     *   *Problema:* Atualmente, a linguagem não define um comportamento claro de igualdade para instâncias de Enums que carregam *payloads* diferentes mas que caem na mesma variante lógica (ex: `IMC(18)` e `IMC(15)` caindo em `Magreza`). Compará-los via igualdade estrutural tradicional retornaria `False`, o que fere a semântica de domínio onde a "identidade da variante" deve ter precedência sobre o valor bruto medido.
-    *   *Solução Planejada:* Quando o TypeChecker sintetizar a implementação da interface `EQ` para um Enum Predicativo, o operador `=` deve realizar apenas o *Tag Matching* (comparação do discriminador da variante). Assim, `IMC(18) == IMC(15)` avaliará para `True`, consolidando o design focado no domínio.
-- [ ] **5.7. Memoização via `@cache_strategy`:**
+    *   *Solução Planejada (Abordagem A - TypeChecker):* Quando o compilador analisar a declaração de um Enum com predicados na Fase 3, o TypeChecker forjará uma implementação invisível da interface `EQ` (`=`) na TAST. Essa implementação sintética extrairá estritamente a "Tag" dos ponteiros de ambos os Enums (os 8 bytes que os identificam) e fará a comparação, ignorando o *payload*. Essa abordagem mantém a filosofia da linguagem intacta, pois obedece naturalmente ao *Multiple Dispatch*, deixa o backend (Cranelift) isento de regras de negócio de domínio e permite ao Otimizador (Fase 4) fazer dobragem de constantes sem obstáculos.
+- [x] **5.7. Memoização via `@cache_strategy`:**
     *   *Problema:* A diretiva de cache é validada sintaticamente mas ignorada no resto do pipeline.
     *   *Solução:* Criar uma passagem no otimizador que intercepte funções puras anotadas com `@cache_strategy` e injete verificações a uma *Hash Table* global gerenciada pelo `kata-rt`.
 
@@ -93,8 +93,9 @@ Ajustar as análises para não deixarem "pontas soltas" que corrompam lógicas a
 
 ## 6. FFI, Standard Library e Kata-Runtime
 
-- [ ] **6.1. Implementação dos Stubs C-ABI:**
-    *   Substituir os retornos silenciados `NULL` no `linker.rs` por implementações reais na linguagem C (ou Rust injetada): `kata_rt_range_create`, `kata_rt_default_repr`, etc.
+- [ ] **6.1. Implementação Real dos Stubs C-ABI (Feature Complete):**
+    *   *Problema:* O `linker.rs` e o `kata_rt/ffi` ainda possuem stubs, retornos `NULL` (no cache) e delegações para `malloc/free` em C (ARC simplificado).
+    *   *Solução:* Implementar a gestão real de memória em Rust exportada via C-ABI. O ARC (Atomic Reference Counting) alocará um bloco `[AtomicUsize + Payload]` garantindo incremento/decremento thread-safe e desalocação limpa sem vazamentos. O cache (`@cache_strategy`) utilizará um mapa de alta performance (como `DashMap` ou `std::collections::HashMap` com locks adequados) no runtime em vez de um "miss" perpétuo. As lógicas injetadas via texto em `linker.rs` devem ser eliminadas em favor da lib estática.
 - [x] **6.2. Canais Rendezvous Reais:**
     *   Em `csp.rs`, implementada a camada com `KataSender` e `KataReceiver`.
 - [x] **6.3. Atomic Reference Counting (ARC) Real:**
@@ -109,11 +110,11 @@ Ajustar as análises para não deixarem "pontas soltas" que corrompam lógicas a
 
 - [ ] **7.1. Comando `kata run` Completo:**
     *   Substituir os comentários no bloco `Commands::Run` de `main.rs` pela compilação temporária em `.tmp` seguida de execução imediata e descarte seguro (ou JIT).
-- [ ] **7.2. Expurgo de Stubs:**
-    *   Remover fisicamente `run_stub()`, `init_stub()` e `start_stub()` de todos os módulos.
-- [ ] **7.3. Resolução Real de Imports no File System:**
-    *   *Problema:* O compilador carrega a StdLib local estaticamente e não processa árvores de dependência reais para `import modulo.submodulo`.
-    *   *Solução:* Implementar um mecanismo em `main.rs` (ou no `TypeChecker`) que vasculhe o disco (`src/**` e `mod.kata`) para resolver, parsear e anexar dependências ao `TypeEnv` dinamicamente.
+- [ ] **7.2. Expurgo Definitivo de Stubs:**
+    *   *Solução:* Remover fisicamente `run_stub()`, `init_stub()` e `start()` sem função de todos os módulos. Limpar o `linker.rs` de implementações C inline (`kata_rt_add_int` etc.) que mascaram a verdadeira biblioteca compilada em Rust.
+- [ ] **7.3. Resolução Real de Imports no File System (O Estilo mod.kata):**
+    *   *Problema:* O compilador não tem visibilidade do File System e carrega módulos de forma hardcoded (`src/core/types.kata`).
+    *   *Solução:* Criar o `ModuleLoader`. Ele interpretará `import modulo.submodulo` buscando por `modulo/submodulo.kata` ou `modulo/submodulo/mod.kata` (análogo ao `mod.rs` de Rust). O Loader utilizará um cache (`HashMap<String, TypeEnv>`) para manter módulos já parseados e evitar ciclos de importação.
 - [ ] **7.4. Execução Efetiva do `kata test`:**
     *   *Problema:* O comando de testes atual apenas imprime na tela "Pronto para gerar Entrypoint", sem testar nada.
     *   *Solução:* Gerar dinamicamente um AST de entrypoint que invoque todas as funções anotadas com `@test`, passá-lo pelo pipeline (Codegen) e executar o binário reportando o resultado (Success/Fail) para o usuário.
@@ -127,4 +128,5 @@ Ajustar as análises para não deixarem "pontas soltas" que corrompam lógicas a
 - [x] **Captura Limpa:** *Closures* definidas dentro do ramo `Ok` de um bloco `match` devem capturar variáveis sem erro de runtime.
 - [ ] **Multiplexação Ativa:** O comando `select` deverá escutar dois canais independentes e um timer (`timeout`) com resolução limpa no terminal.
 - [ ] **Testes Funcionais:** O comando `kata test` invocado na raiz do projeto deve localizar arquivos, compilar, testar as lógicas puras (booleanas) e impuras (`assert!`), e sair com *Exit Code 0* ou *1* conforme os resultados.
+- [ ] **CLI Operacional:** O comando `kata run test_concurrency.kata` deve funcionar perfeitamente de ponta a ponta.omando `kata test` invocado na raiz do projeto deve localizar arquivos, compilar, testar as lógicas puras (booleanas) e impuras (`assert!`), e sair com *Exit Code 0* ou *1* conforme os resultados.
 - [ ] **CLI Operacional:** O comando `kata run test_concurrency.kata` deve funcionar perfeitamente de ponta a ponta.

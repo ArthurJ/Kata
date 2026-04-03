@@ -443,13 +443,21 @@ impl Checker {
                         
                         let sig_def = TTopLevel::Signature(
                             name.clone(),
-                            vec![(TypeRef::Simple("A".to_string()), _span.clone())],
+                            vec![(TypeRef::TypeVar("A".to_string()), _span.clone())],
                             (TypeRef::Simple(name.clone()), _span.clone()),
                             Vec::new()
                         );
 
+                        let eq_sig = TTopLevel::Signature(
+                            "=".to_string(),
+                            vec![(TypeRef::Simple(name.clone()), _span.clone()), (TypeRef::Simple(name.clone()), _span.clone())],
+                            (TypeRef::Simple("Bool".to_string()), _span.clone()),
+                            vec![(KataDirective::Ffi("kata_rt_eq_enum".to_string()), _span.clone()), (KataDirective::Commutative, _span.clone())]
+                        );
+
                         decls.push(sig_def);
                         decls.push(lambda_def);
+                        decls.push(eq_sig);
                     }
                 }
 

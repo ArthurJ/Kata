@@ -41,6 +41,12 @@ pub extern "C" fn kata_rt_lt_int(a: i64, b: i64) -> bool { a < b }
 pub extern "C" fn kata_rt_le_int(a: i64, b: i64) -> bool { a <= b }
 
 
+#[no_mangle]
+pub extern "C" fn kata_rt_eq_enum(a: *const u8, b: *const u8) -> bool {
+    if a.is_null() || b.is_null() { return false; }
+    unsafe { *a == *b }
+}
+
 // FLOAT
 #[no_mangle]
 pub extern "C" fn kata_rt_int_to_float(a: i64) -> f64 { a as f64 }

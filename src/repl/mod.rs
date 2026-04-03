@@ -1,3 +1,3 @@
-pub fn start_stub() {
-    log::info!("Iniciando REPL (Stub)");
+pub fn start() {
+    log::info!("Iniciando REPL (Pendente implementacao)");
 }
