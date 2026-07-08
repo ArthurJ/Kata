@@ -4,7 +4,9 @@
 //! lexing source strings and verifying the resulting AST structure.
 
 mod basics;
+mod guards;
 mod helpers;
 mod lambdas;
 mod match_tests;
+mod pipe;
 mod signatures;

@@ -1,8 +1,8 @@
 //! Declarations — parse_module, directives, sig, data, enum, fields.
 
 use kata_ast::{
-    Directive, DirectiveArg, DirectiveValue, FieldDecl, Item, LambdaClause, Module, Spanned, Token,
-    VariantDecl,
+    Directive, DirectiveArg, DirectiveValue, Expr, FieldDecl, Item, LambdaClause, Module, Spanned,
+    Token, VariantDecl,
 };
 use kata_diagnostics::FrontendError;
 
@@ -335,13 +335,36 @@ impl Parser {
 
         // Fase 5: body é expressão única (sem guards).
         // Fase 6: se há INDENT após `:`, é bloco com guards + with.
-        let body = if matches!(self.peek(), Token::Indent) {
-            // Fase 6 implementará guards + with.
-            // Por agora, todo!() — não deveria ser alcançado em Fase 5.
-            todo!("Fase 6: parse_lambda_clause com guards + with")
-        } else {
-            parse_expr(self)?
-        };
+        if matches!(self.peek(), Token::Indent) {
+            // Bloco indentado — guards + with.
+            // Reusar parse_lambda_body_block do expressions module.
+            // Precisamos extrair guards e with_bindings do Lambda retornado.
+            let clause_start = self.peek_span();
+            let lambda_expr = self.parse_lambda_body_block(clause_start, patterns)?;
+            // Desempacotar o Lambda para extrair guards e with_bindings
+            match lambda_expr.node {
+                Expr::Lambda {
+                    patterns,
+                    body,
+                    guards,
+                    with_bindings,
+                } => {
+                    // Consume trailing StmtSep
+                    if matches!(self.peek(), Token::StmtSep) {
+                        self.advance();
+                    }
+                    return Ok(LambdaClause {
+                        patterns,
+                        body: *body,
+                        guards,
+                        with_bindings,
+                    });
+                }
+                other => panic!("parse_lambda_body_block returned {other:?}, expected Lambda"),
+            }
+        }
+
+        let body = parse_expr(self)?;
 
         // Consume trailing StmtSep
         if matches!(self.peek(), Token::StmtSep) {
