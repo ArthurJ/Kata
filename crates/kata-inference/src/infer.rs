@@ -13,6 +13,7 @@ use kata_core::ty::{PrimTy, Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 use kata_resolution::{ResolvedModule, Signature};
 
+use crate::desugar;
 use crate::typed::{Effect, TypedExpr, TypedExprKind, TypedModule};
 
 /// Erro de inferência — wrapped `MiddleError` (carrega Span).
@@ -74,7 +75,16 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
     for item in &module.items {
         match &item.node {
             Item::EntryExpr(expr) => {
-                let typed = infer_expr(&expr.node, &expr.span, &mut type_env, &dispatch_table)?;
+                // Desugar Pipe e Hole antes do typeck. Após isto, a AST
+                // não contém Expr::Pipe nem Expr::Hole — o typeck nunca os
+                // vê. Isto é total: TAST nunca contém Pipe nem Hole.
+                let desugared = desugar::desugar(expr);
+                let typed = infer_expr(
+                    &desugared.node,
+                    &desugared.span,
+                    &mut type_env,
+                    &dispatch_table,
+                )?;
                 entry_expr = Some(Spanned::new(typed, expr.span));
             }
             Item::Sig { .. } | Item::DataDecl { .. } | Item::EnumDecl { .. } => {
@@ -327,11 +337,26 @@ fn infer_expr(
             }
         }
 
-        // ── Fio 2: stubs — implementação nas Fases 7-8 ────────
+        // ── Fio 2: desugared antes do typeck ──────────────────
+        // Hole e Pipe são eliminados pelo `desugar` pass antes de `infer_expr`.
+        // Se chegam aqui, é bug no pipeline — produz erro claro em vez de panic.
+        Expr::Hole => {
+            return Err(MiddleError::TypeMismatch {
+                expected: "expressão (Hole deve ter sido desugared)".into(),
+                found: "Hole".into(),
+                span: (*span).into(),
+            });
+        }
+        Expr::Pipe { .. } => {
+            return Err(MiddleError::TypeMismatch {
+                expected: "expressão (Pipe deve ter sido desugared)".into(),
+                found: "Pipe".into(),
+                span: (*span).into(),
+            });
+        }
+        // Lambda e Match são implementados na Fase 8.
         Expr::Lambda { .. } => todo!("Fase 8: infer_lambda"),
         Expr::Match { .. } => todo!("Fase 8: infer_match"),
-        Expr::Hole => todo!("Fase 7: desugar_hole — Hole não deve chegar ao infer_expr"),
-        Expr::Pipe { .. } => todo!("Fase 7: desugar_pipe — Pipe não deve chegar ao infer_expr"),
     };
 
     // Em Fio 1, toda expressão é pura. tail_pos é marcado pelo chamador

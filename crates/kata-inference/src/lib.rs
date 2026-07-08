@@ -7,6 +7,7 @@
 //! Entry point: [`infer_module`] — consome `Module` (AST) + `ResolvedModule`
 //! e produz `TypedModule`.
 
+pub mod desugar;
 pub mod infer;
 pub mod typed;
 
