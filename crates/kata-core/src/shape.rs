@@ -36,9 +36,7 @@ pub enum TypeShape {
         ret: Box<TypeShape>,
     },
     /// Tupla heterogênea (antecipado de Fio 5; Fio 2 usa para patterns).
-    Tuple {
-        elements: Vec<TypeShape>,
-    },
+    Tuple { elements: Vec<TypeShape> },
 }
 
 impl TypeShape {

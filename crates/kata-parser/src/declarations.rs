@@ -1,8 +1,8 @@
 //! Declarations — parse_module, directives, sig, data, enum, fields.
 
 use kata_ast::{
-    Directive, DirectiveArg, DirectiveValue, FieldDecl, Item, LambdaClause, Module, Spanned,
-    Token, VariantDecl,
+    Directive, DirectiveArg, DirectiveValue, FieldDecl, Item, LambdaClause, Module, Spanned, Token,
+    VariantDecl,
 };
 use kata_diagnostics::FrontendError;
 

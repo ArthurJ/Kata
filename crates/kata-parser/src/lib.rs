@@ -6,9 +6,9 @@
 //!
 //! Aplicação é greedy: `f a b c` vira um único `Apply { callee: f, args: [a, b, c] }`.
 
+mod _match;
 mod declarations;
 mod expressions;
-mod _match;
 mod patterns;
 mod types;
 

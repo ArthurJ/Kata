@@ -57,10 +57,7 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
             Item::EnumDecl { name, variants, .. } => {
                 type_env.define(name, Ty::Sum(name.clone()));
                 // Fio 2: cataloga variantes no EnumRegistry
-                enum_registry.register(
-                    name,
-                    variants.iter().map(|v| v.name.clone()).collect(),
-                );
+                enum_registry.register(name, variants.iter().map(|v| v.name.clone()).collect());
             }
             _ => {}
         }

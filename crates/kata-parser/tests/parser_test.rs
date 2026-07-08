@@ -436,10 +436,7 @@ fn lambda_anon_variant_pattern() {
             Expr::Lambda { patterns, .. } => {
                 assert_eq!(patterns.len(), 1);
                 match &patterns[0].node {
-                    kata_ast::Pattern::Variant {
-                        enum_name,
-                        variant,
-                    } => {
+                    kata_ast::Pattern::Variant { enum_name, variant } => {
                         assert_eq!(enum_name, "Boolean");
                         assert_eq!(variant, "True");
                     }
@@ -516,7 +513,9 @@ fn hole_multiple() {
 
 #[test]
 fn sig_with_lambda_clauses() {
-    let m = parse_src("fat :: Int Int => Int\n    lambda 0 acc: acc\n    lambda n acc: fat (- n 1) (* n acc)");
+    let m = parse_src(
+        "fat :: Int Int => Int\n    lambda 0 acc: acc\n    lambda n acc: fat (- n 1) (* n acc)",
+    );
     let item = first_item(&m);
     match item {
         Item::Sig { name, body, .. } => {

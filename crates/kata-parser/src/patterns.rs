@@ -85,7 +85,10 @@ impl Parser {
 
     /// Parse `(p1, p2, ...)` → Tuple pattern.
     /// `()` → Tuple vazia (ou Unit — typeck decide).
-    fn parse_tuple_pattern(&mut self, start: kata_ast::Span) -> Result<Spanned<Pattern>, FrontendError> {
+    fn parse_tuple_pattern(
+        &mut self,
+        start: kata_ast::Span,
+    ) -> Result<Spanned<Pattern>, FrontendError> {
         self.expect(&Token::LParen, "`(`")?;
 
         // `()` → Tuple vazio
@@ -114,7 +117,10 @@ impl Parser {
     }
 
     /// Parse `[h : t]` → Cons pattern, `[]` → Cons Nil (stub Fio 8).
-    fn parse_cons_pattern(&mut self, start: kata_ast::Span) -> Result<Spanned<Pattern>, FrontendError> {
+    fn parse_cons_pattern(
+        &mut self,
+        start: kata_ast::Span,
+    ) -> Result<Spanned<Pattern>, FrontendError> {
         self.expect(&Token::LBracket, "`[`")?;
 
         // `[]` → Nil pattern (stub)
