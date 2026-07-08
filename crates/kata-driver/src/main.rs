@@ -145,6 +145,7 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
     ResolvedModule {
         type_env,
         signatures,
+        enum_registry: prelude.enum_registry,
     }
 }
 

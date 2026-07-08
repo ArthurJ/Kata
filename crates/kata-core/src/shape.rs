@@ -35,6 +35,10 @@ pub enum TypeShape {
         params: Vec<TypeShape>,
         ret: Box<TypeShape>,
     },
+    /// Tupla heterogênea (antecipado de Fio 5; Fio 2 usa para patterns).
+    Tuple {
+        elements: Vec<TypeShape>,
+    },
 }
 
 impl TypeShape {
@@ -49,6 +53,7 @@ impl TypeShape {
             TypeShape::Struct { .. } => true,
             TypeShape::Sum { .. } => true,
             TypeShape::Func { .. } => true,
+            TypeShape::Tuple { .. } => true,
         }
     }
 }
@@ -70,6 +75,9 @@ impl Ty {
             Ty::Function(params, ret) => TypeShape::Func {
                 params: params.iter().map(|t| t.to_shape()).collect(),
                 ret: Box::new(ret.to_shape()),
+            },
+            Ty::Tuple(elements) => TypeShape::Tuple {
+                elements: elements.iter().map(|t| t.to_shape()).collect(),
             },
             // Tolerante a tipos não-resolvidos durante typeck
             Ty::InferVar(_) => TypeShape::Unit,

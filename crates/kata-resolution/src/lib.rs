@@ -8,13 +8,15 @@
 pub mod prelude;
 
 use kata_ast::{Item, Module, TypeExpr};
-use kata_core::{PrimTy, Ty, TypeEnv};
+use kata_core::{EnumRegistry, PrimTy, Ty, TypeEnv};
 
 /// Resultado da resolution — TypeEnv populado + assinaturas coletadas.
 #[derive(Debug, Clone)]
 pub struct ResolvedModule {
     pub type_env: TypeEnv,
     pub signatures: Vec<Signature>,
+    /// Catálogo de variantes por enum (Fio 2).
+    pub enum_registry: EnumRegistry,
 }
 
 /// Assinatura de função coletada no Pass 1.
@@ -40,6 +42,7 @@ pub enum ResolveError {
 pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
     let mut type_env = TypeEnv::new();
     let mut signatures: Vec<Signature> = Vec::new();
+    let mut enum_registry = EnumRegistry::new();
     let errors: Vec<ResolveError> = Vec::new();
 
     // Pass 0: popula TypeEnv com tipos declarados
@@ -51,8 +54,13 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
                 // na inferência quando cruzar com a diretiva @ffi.
                 type_env.define(name, Ty::Struct(name.clone()));
             }
-            Item::EnumDecl { name, .. } => {
+            Item::EnumDecl { name, variants, .. } => {
                 type_env.define(name, Ty::Sum(name.clone()));
+                // Fio 2: cataloga variantes no EnumRegistry
+                enum_registry.register(
+                    name,
+                    variants.iter().map(|v| v.name.clone()).collect(),
+                );
             }
             _ => {}
         }
@@ -115,6 +123,7 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
     Ok(ResolvedModule {
         type_env,
         signatures,
+        enum_registry,
     })
 }
 
@@ -172,6 +181,8 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<ResolveError>> {
 
     // Variantes de Boolean
     // (serão registradas como construtores no DispatchTable na inferência)
+    let mut enum_registry = EnumRegistry::new();
+    enum_registry.register("Boolean", vec!["True".into(), "False".into()]);
 
     // Assinaturas do prelude
     let signatures = vec![
@@ -402,6 +413,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<ResolveError>> {
     Ok(ResolvedModule {
         type_env,
         signatures,
+        enum_registry,
     })
 }
 

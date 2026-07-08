@@ -11,11 +11,13 @@
 //! - [`Score`] — score 4D (exact, alias, refined, iface) para seleção
 
 pub mod dispatch;
+pub mod enum_registry;
 pub mod ffi;
 pub mod shape;
 pub mod ty;
 
 pub use dispatch::{DispatchError, DispatchTable, OverloadInfo, Score};
+pub use enum_registry::EnumRegistry;
 pub use ffi::FfiSymbol;
 pub use shape::{TypeId, TypeShape};
 pub use ty::{PrimTy, Ty, TypeEnv};
