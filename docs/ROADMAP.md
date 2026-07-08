@@ -224,6 +224,18 @@ faz scoring por dominância (mesmo que só tenha 1 candidato). `Boolean` é um
   fios posteriores)
 - `Boolean` já existe no TypeEnv via prelude (Fio 1) — Fio 2 usa para guards,
   não constrói a maquinaria de enum (já existe em Fio 1 para variantes unitárias)
+- Partial dispatch no DispatchTable: resolve overloads com argumentos
+  ausentes (Hole) — casa apenas os args presentes, extrai tipos esperados
+  para posições ausentes do overload único casado
+- Hint top-down (`hint: Option<&Ty>`) em `infer_expr` — ascription propaga
+  tipo esperado para dentro de lambdas; `infer_lambda` extrai tipos dos
+  parâmetros do hint quando é `Ty::Function`
+- Holes com ascription (`_::Int`) — o tipo anotado resolve o hole sem
+  partial dispatch; desambigua overloads quando combined com partial dispatch
+- `LambdaInferenceFail` — erro distinto quando nenhum mecanismo fornece
+  tipos dos parâmetros (não `NoOverload` opaco)
+- Apply de lambda inline — args fornecem tipos dos parâmetros do lambda
+  (síntese bottom-up: `42 → Int` define `x: Int` no escopo do lambda)
 
 **Features:**
 - Assinaturas (`nome :: T1 T2 => TRet`)
@@ -241,7 +253,9 @@ faz scoring por dominância (mesmo que só tenha 1 candidato). `Boolean` é um
 
 **DoD:** Fatorial recursivo executa sem stack overflow (TCO via Cranelift).
 Match exaustivo em Boolean funciona. Guards com `otherwise` validam.
-`let soma_dez := + 10 _` gera closure de aridade 1.
+`let soma_dez := + 10 _` gera closure de aridade 1 (partial dispatch
+resolve tipo do hole). `(lambda x: + x 1)::(Int -> Int)` extrai tipos dos
+params do hint. `LambdaInferenceFail` quando nenhum mecanismo resolve.
 
 ---
 
@@ -363,6 +377,8 @@ Após Fio 5. Paga débito horizontal acumulado nos 5 fios verticais.
 - Avaliação constante de predicados (typeck local, NÃO comptime): substitui `_`
   por literal, reduz expressão booleana, verifica `True`/`False`
 - Ret-directed dispatch: hint de retorno na ascription seleciona sobrecarga
+  (reusa `hint: Option<&Ty>` de Fio 2 — agora o hint também participa da
+  seleção de overload, não apenas da inferência de lambda)
 - Grouped (barreira vs strip — `((expr))::Type`)
 
 **Features:**
@@ -398,6 +414,13 @@ typeck — não usa JIT-and-execute (Fio 12). Não criar dependência Fio 6 → 
 - `mono_instance: u64` na TAST (monomorph rastreia qual instância cada call
   resolve)
 - `@commutative` (dispatch tenta argumentos invertidos ao procurar sobrecargas)
+- Unificação `unify` para `Ty::Generic` (type params de generics) — resolve
+  substituições top-down nos call sites (não é union-find; é casamento
+  posicional param→arg, reusando o padrão de Kata4)
+- `InferVar` resolution via dispatch: quando partial dispatch de Fio 2
+  encontra `InferVar` numa posição onde o overload espera `Generic(T)`,
+  resolve `InferVar := T` via `unify` (extensão do partial dispatch para
+  suportar type params genéricos)
 
 **Features:**
 - `interface NOME` com `implements SUPERINTERFACE...`
@@ -457,6 +480,14 @@ produz `{8 9}`. `arr.0 ?` desempacota. `len (10, 20)` é `2` (compile-time).
 - `capture: Vec<CaptureInfo>` na TAST (o que esta lambda captura e como)
 - `CaptureStorage` Stack/Heap (promoção quando closure escapa)
 - Escape analysis em 4 passes
+- Capture analysis (`collect_captures`): coleta free variables do body do
+  lambda contra o escopo externo (reusa padrão de Kata4 — `apply_lambda.rs`
+  e `lambda.rs` fazem coleta após inferir o body)
+- `Pattern::Ident` com anotação de tipo (`lambda x::Int: ...`) — extensão
+  do AST e parser para permitir anotação de tipo em parâmetros de pattern;
+  alternativa ao hint top-down e partial dispatch para resolver tipos de
+  parâmetros (Fio 2 usa ascription no lambda inteiro; Fio 9 pode trazer
+  anotação por parâmetro se a DX justificar)
 
 **Features:**
 - Closures com captura léxica (Hole desugar já existe de Fio 2; agora captura

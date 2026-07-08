@@ -418,15 +418,17 @@ fn lower_expr(
             Ok(ctx.builder.use_var(*var))
         }
 
-        // ── Apply: call FFI ──
-        TypedExprKind::Apply {
+        // ── Closure: call FFI (call direto) ou call_indirect ──
+        TypedExprKind::Closure {
             callee: _,
             args,
             ffi_symbol,
+            captures: _,
+            escapes: _,
         } => {
             let sym_name = ffi_symbol
                 .as_ref()
-                .ok_or_else(|| CodegenError::UnsupportedNode("Apply sem ffi_symbol".into()))?;
+                .ok_or_else(|| CodegenError::UnsupportedNode("Closure sem ffi_symbol (call_indirect não implementado ainda)".into()))?;
 
             let func_ref = ctx
                 .ffi_refs
@@ -521,6 +523,14 @@ fn lower_expr(
                 )))
             }
         }
+
+        // ── Fio 2 Fase 8: Lambda e Match (lowering é Fase 9) ──
+        TypedExprKind::Lambda { .. } => Err(CodegenError::UnsupportedNode(
+            "lower_lambda: Fase 9 (não implementado ainda)".into(),
+        )),
+        TypedExprKind::Match { .. } => Err(CodegenError::UnsupportedNode(
+            "lower_match: Fase 9 (não implementado ainda)".into(),
+        )),
     }
 }
 

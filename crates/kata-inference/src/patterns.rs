@@ -1,0 +1,250 @@
+//! Pattern checking e verificação de exaustividade (Fase 8).
+//!
+//! `check_pattern` converte um `Pattern` da AST em `TypedPattern`,
+//! resolvendo `Ident("True")` → `Variant` via `EnumRegistry`, e definindo
+//! bindings no `TypeEnv`.
+//!
+//! `check_exhaustiveness` verifica se os braços cobrem todas as variantes
+//! de um `Sum`, ou exige `otherwise` para tipos infinitos.
+
+use kata_ast::{Pattern, Span, Spanned};
+use kata_core::enum_registry::EnumRegistry;
+use kata_core::ty::{Ty, TypeEnv};
+use kata_diagnostics::MiddleError;
+
+use crate::typed::{Effect, TypedExpr, TypedExprKind, TypedPattern};
+
+/// Tipo de erro de inferência — alias para `Result<T, MiddleError>`.
+pub type PatternResult<T> = Result<T, MiddleError>;
+
+/// Verifica um pattern contra o tipo do scrutinee, produzindo `TypedPattern`
+/// e definindo bindings no `env`.
+///
+/// Resolução de variantes sem qualificação: `Pattern::Ident("True")` em
+/// scrutinee `Ty::Sum("Boolean")` é resolvido para `TypedPattern::Variant`
+/// se `True` é variante de `Boolean` no `EnumRegistry`. Caso contrário,
+/// é tratado como binding (`Ident`).
+pub fn check_pattern(
+    pat: &Spanned<Pattern>,
+    scrutinee_ty: &Ty,
+    enum_registry: &EnumRegistry,
+    env: &mut TypeEnv,
+) -> PatternResult<Spanned<TypedPattern>> {
+    let typed = check_pattern_inner(&pat.node, scrutinee_ty, enum_registry, env, &pat.span)?;
+    Ok(Spanned::new(typed, pat.span))
+}
+
+fn check_pattern_inner(
+    pat: &Pattern,
+    scrutinee_ty: &Ty,
+    enum_registry: &EnumRegistry,
+    env: &mut TypeEnv,
+    span: &Span,
+) -> PatternResult<TypedPattern> {
+    match pat {
+        // ── Ident: pode ser binding ou variante sem qualificação ──
+        Pattern::Ident(name) => {
+            // Se o scrutinee é Sum e o nome é variante desse enum, resolve.
+            if let Ty::Sum(enum_name) = scrutinee_ty {
+                if enum_registry.is_variant(enum_name, name) {
+                    return Ok(TypedPattern::Variant {
+                        enum_name: enum_name.clone(),
+                        variant: name.clone(),
+                    });
+                }
+            }
+            // Caso contrário, é binding. Define no escopo.
+            env.define(name, scrutinee_ty.clone());
+            Ok(TypedPattern::Ident {
+                name: name.clone(),
+                ty: scrutinee_ty.clone(),
+            })
+        }
+
+        // ── Wildcard: aceita qualquer tipo, não liga nome ──
+        Pattern::Wildcard => Ok(TypedPattern::Wildcard),
+
+        // ── Literal: verifica tipo do literal contra scrutinee ──
+        Pattern::Literal(expr) => {
+            // O literal precisa ser do mesmo tipo que o scrutinee.
+            // Inferimosos o tipo da expr literal e comparamos.
+            let literal_ty = literal_expr_ty(&expr.node, scrutinee_ty);
+            if !pattern_type_compatible(&literal_ty, scrutinee_ty) {
+                return Err(MiddleError::TypeMismatch {
+                    expected: format!("{:?}", scrutinee_ty),
+                    found: format!("{:?}", literal_ty),
+                    span: (*span).into(),
+                });
+            }
+            // Constrói TypedExpr para o literal.
+            let typed_expr = TypedExpr {
+                span: expr.span,
+                ty: literal_ty,
+                tail_pos: false,
+                effect: Effect::Puro,
+                kind: literal_to_typed_kind(&expr.node),
+            };
+            Ok(TypedPattern::Literal {
+                value: Spanned::new(typed_expr, expr.span),
+            })
+        }
+
+        // ── Variant: verifica que enum e variante existem ──
+        Pattern::Variant { enum_name, variant } => {
+            // Verifica que o enum existe e tem a variante.
+            if !enum_registry.is_variant(enum_name, variant) {
+                return Err(MiddleError::UnboundName {
+                    name: format!("{}::{}", enum_name, variant),
+                    span: (*span).into(),
+                });
+            }
+            // Verifica que o scrutinee é o enum esperado.
+            match scrutinee_ty {
+                Ty::Sum(s) if s == enum_name => {}
+                _ => {
+                    return Err(MiddleError::TypeMismatch {
+                        expected: format!("{:?}", scrutinee_ty),
+                        found: format!("Sum({})", enum_name),
+                        span: (*span).into(),
+                    });
+                }
+            }
+            Ok(TypedPattern::Variant {
+                enum_name: enum_name.clone(),
+                variant: variant.clone(),
+            })
+        }
+
+        // ── Tuple: verifica cada sub-pattern contra sub-tipo ──
+        Pattern::Tuple(elements) => {
+            let element_tys = match scrutinee_ty {
+                Ty::Tuple(tys) => tys,
+                _ => {
+                    return Err(MiddleError::TypeMismatch {
+                        expected: format!("{:?}", scrutinee_ty),
+                        found: "tupla".into(),
+                        span: (*span).into(),
+                    });
+                }
+            };
+            if elements.len() != element_tys.len() {
+                return Err(MiddleError::ArityMismatch {
+                    expected: element_tys.len(),
+                    found: elements.len(),
+                    span: (*span).into(),
+                });
+            }
+            let mut typed_elements = Vec::with_capacity(elements.len());
+            for (pat, ty) in elements.iter().zip(element_tys.iter()) {
+                let typed = check_pattern_inner(&pat.node, ty, enum_registry, env, &pat.span)?;
+                typed_elements.push(Spanned::new(typed, pat.span));
+            }
+            Ok(TypedPattern::Tuple {
+                elements: typed_elements,
+            })
+        }
+
+        // ── Cons: stub — List é Fio 8 ──
+        Pattern::Cons { .. } => Err(MiddleError::TypeMismatch {
+            expected: "pattern suportado em Fio 2".into(),
+            found: "List pattern (Cons) — List é Fio 8".into(),
+            span: (*span).into(),
+        }),
+    }
+}
+
+/// Determina o tipo de uma expressão literal em pattern.
+fn literal_expr_ty(expr: &kata_ast::Expr, scrutinee_ty: &Ty) -> Ty {
+    match expr {
+        kata_ast::Expr::IntLit { .. } => Ty::int(),
+        kata_ast::Expr::FloatLit { .. } => Ty::float(),
+        kata_ast::Expr::TextLit { .. } => Ty::text(),
+        kata_ast::Expr::Unit => Ty::Unit,
+        // Demais expressões em pattern literal não são esperadas em Fio 2.
+        _ => scrutinee_ty.clone(),
+    }
+}
+
+/// Constrói `TypedExprKind` para um literal em pattern.
+fn literal_to_typed_kind(expr: &kata_ast::Expr) -> TypedExprKind {
+    match expr {
+        kata_ast::Expr::IntLit { text } => TypedExprKind::IntLit { text: text.clone() },
+        kata_ast::Expr::FloatLit { text } => TypedExprKind::FloatLit { text: text.clone() },
+        kata_ast::Expr::TextLit { text } => TypedExprKind::TextLit { text: text.clone() },
+        kata_ast::Expr::Unit => TypedExprKind::Unit,
+        _ => TypedExprKind::Unit, // fallback — não deveria acontecer
+    }
+}
+
+/// Verifica compatibilidade de tipo entre literal e scrutinee.
+/// Int compatível com Int, Float com Float, etc. Ascription de literal
+/// (Int→Float) não se aplica em patterns — o literal deve ser do mesmo tipo.
+fn pattern_type_compatible(literal_ty: &Ty, scrutinee_ty: &Ty) -> bool {
+    literal_ty == scrutinee_ty
+}
+
+/// Verifica exaustividade de braços de match contra o tipo do scrutinee.
+///
+/// - `Ty::Sum(name)`: coleta variantes cobertas. Se todas cobertas → exaustivo.
+///   Se não → `NonExhaustiveMatch` com variantes faltantes.
+/// - `Ty::Prim`, `Ty::Unit`, `Ty::Struct`, `Ty::Tuple`: tipos infinitos → exige
+///   `otherwise` ou `Wildcard`. Retorna `MissingOtherwise` se não há fallback.
+/// - `Ty::Function`, `Ty::InferVar`: não faz sentido fazer match → type error.
+///
+/// `has_otherwise` indica se algum braço é `otherwise` (pattern None) ou
+/// `Wildcard`. Esses cobrem qualquer valor.
+pub fn check_exhaustiveness(
+    covered_variants: &[String],
+    scrutinee_ty: &Ty,
+    has_otherwise: bool,
+    enum_registry: &EnumRegistry,
+    span: &Span,
+) -> PatternResult<()> {
+    if has_otherwise {
+        // otherwise/wildcard cobre tudo — sempre exaustivo.
+        return Ok(());
+    }
+
+    match scrutinee_ty {
+        Ty::Sum(enum_name) => {
+            let all_variants = enum_registry.variants_of(enum_name);
+            if all_variants.is_empty() {
+                // Enum desconhecido — não há variantes para cobrir.
+                // Trata como tipo infinito: exige otherwise (já checado acima).
+                return Err(MiddleError::MissingOtherwise {
+                    span: (*span).into(),
+                });
+            }
+            // Coleta variantes não cobertas.
+            let missing: Vec<String> = all_variants
+                .iter()
+                .filter(|v| !covered_variants.iter().any(|c| c == *v))
+                .cloned()
+                .collect();
+            if missing.is_empty() {
+                Ok(()) // exaustivo
+            } else {
+                Err(MiddleError::NonExhaustiveMatch {
+                    missing,
+                    span: (*span).into(),
+                })
+            }
+        }
+        Ty::Prim(_) | Ty::Unit | Ty::Struct(_) | Ty::Tuple(_) => {
+            // Tipos infinitos exigem otherwise/wildcard.
+            Err(MiddleError::MissingOtherwise {
+                span: (*span).into(),
+            })
+        }
+        Ty::Function(_, _) => Err(MiddleError::TypeMismatch {
+            expected: "tipo não-função para match".into(),
+            found: "função".into(),
+            span: (*span).into(),
+        }),
+        Ty::InferVar(_) => Err(MiddleError::TypeMismatch {
+            expected: "tipo concreto para match".into(),
+            found: "variável de inferência".into(),
+            span: (*span).into(),
+        }),
+    }
+}

@@ -65,4 +65,27 @@ pub enum MiddleError {
         #[label]
         span: MietteSpan,
     },
+
+    #[error("match não-exaustivo: nem todas as variantes estão cobertas")]
+    #[diagnostic(code = "type.non_exhaustive_match")]
+    NonExhaustiveMatch {
+        /// Variantes que faltam (ex: "False").
+        missing: Vec<String>,
+        #[label]
+        span: MietteSpan,
+    },
+
+    #[error("guard sem `otherwise` em tipo infinito")]
+    #[diagnostic(code = "type.missing_otherwise")]
+    MissingOtherwise {
+        #[label]
+        span: MietteSpan,
+    },
+
+    #[error("cláusula redundante: sombreada por cláusula anterior")]
+    #[diagnostic(code = "type.redundant_clause")]
+    RedundantClause {
+        #[label]
+        span: MietteSpan,
+    },
 }

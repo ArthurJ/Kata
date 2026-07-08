@@ -74,10 +74,12 @@ fn infer_int_add() {
     let entry = entry_typed(&tmod);
     assert_eq!(entry.ty, Ty::int());
     match &entry.kind {
-        TypedExprKind::Apply {
+        TypedExprKind::Closure {
             callee,
             args,
             ffi_symbol,
+            captures: _,
+            escapes: _,
         } => {
             assert!(matches!(callee.node.kind, TypedExprKind::Ident { .. }));
             assert_eq!(args.len(), 2);
@@ -95,7 +97,7 @@ fn infer_float_add() {
     let entry = entry_typed(&tmod);
     assert_eq!(entry.ty, Ty::float());
     match &entry.kind {
-        TypedExprKind::Apply { ffi_symbol, .. } => {
+        TypedExprKind::Closure { ffi_symbol, .. } => {
             assert_eq!(ffi_symbol.as_deref(), Some("kata_rt_fadd"));
         }
         other => panic!("expected Apply, got {other:?}"),
@@ -109,7 +111,7 @@ fn infer_rational_add() {
     let entry = entry_typed(&tmod);
     assert_eq!(entry.ty, Ty::rational());
     match &entry.kind {
-        TypedExprKind::Apply { ffi_symbol, .. } => {
+        TypedExprKind::Closure { ffi_symbol, .. } => {
             assert_eq!(ffi_symbol.as_deref(), Some("kata_rt_rat_add"));
         }
         other => panic!("expected Apply, got {other:?}"),
@@ -122,7 +124,7 @@ fn infer_int_comparison_returns_boolean() {
     let entry = entry_typed(&tmod);
     assert_eq!(entry.ty, Ty::boolean());
     match &entry.kind {
-        TypedExprKind::Apply { ffi_symbol, .. } => {
+        TypedExprKind::Closure { ffi_symbol, .. } => {
             assert_eq!(ffi_symbol.as_deref(), Some("kata_rt_bi_eq"));
         }
         other => panic!("expected Apply, got {other:?}"),
@@ -135,7 +137,7 @@ fn infer_float_comparison_returns_boolean() {
     let entry = entry_typed(&tmod);
     assert_eq!(entry.ty, Ty::boolean());
     match &entry.kind {
-        TypedExprKind::Apply { ffi_symbol, .. } => {
+        TypedExprKind::Closure { ffi_symbol, .. } => {
             assert_eq!(ffi_symbol.as_deref(), Some("kata_rt_fcmp_lt"));
         }
         other => panic!("expected Apply, got {other:?}"),
@@ -148,7 +150,7 @@ fn infer_bigint_mul() {
     let entry = entry_typed(&tmod);
     assert_eq!(entry.ty, Ty::int());
     match &entry.kind {
-        TypedExprKind::Apply { ffi_symbol, .. } => {
+        TypedExprKind::Closure { ffi_symbol, .. } => {
             assert_eq!(ffi_symbol.as_deref(), Some("kata_rt_bi_mul"));
         }
         other => panic!("expected Apply, got {other:?}"),
@@ -169,7 +171,7 @@ fn infer_show_int_returns_text() {
     let entry = entry_typed(&tmod);
     assert_eq!(entry.ty, Ty::text());
     match &entry.kind {
-        TypedExprKind::Apply { ffi_symbol, .. } => {
+        TypedExprKind::Closure { ffi_symbol, .. } => {
             assert_eq!(ffi_symbol.as_deref(), Some("kata_rt_bi_show"));
         }
         other => panic!("expected Apply, got {other:?}"),
@@ -183,7 +185,7 @@ fn infer_show_rational_returns_text() {
     let entry = entry_typed(&tmod);
     assert_eq!(entry.ty, Ty::text());
     match &entry.kind {
-        TypedExprKind::Apply { ffi_symbol, .. } => {
+        TypedExprKind::Closure { ffi_symbol, .. } => {
             assert_eq!(ffi_symbol.as_deref(), Some("kata_rt_rat_show"));
         }
         other => panic!("expected Apply, got {other:?}"),
@@ -196,7 +198,7 @@ fn infer_echo_returns_unit() {
     let entry = entry_typed(&tmod);
     assert_eq!(entry.ty, Ty::Unit);
     match &entry.kind {
-        TypedExprKind::Apply { ffi_symbol, .. } => {
+        TypedExprKind::Closure { ffi_symbol, .. } => {
             assert_eq!(ffi_symbol.as_deref(), Some("kata_rt_print"));
         }
         other => panic!("expected Apply, got {other:?}"),
@@ -230,7 +232,7 @@ fn infer_let_then_use_in_apply() {
     let entry = entry_typed(&tmod);
     assert_eq!(entry.ty, Ty::int());
     match &entry.kind {
-        TypedExprKind::Apply { args, .. } => {
+        TypedExprKind::Closure { args, .. } => {
             assert_eq!(args[0].node.ty, Ty::int());
             assert_eq!(args[1].node.ty, Ty::int());
         }
@@ -323,15 +325,22 @@ fn infer_boolean_false() {
     assert_eq!(entry.ty, Ty::boolean());
 }
 
-// ── Tuple (não suportado em Fio 1) ─────────────────────────────────
+// ── Tuple (suportado em Fio 2 — Ty::Tuple antecipado) ─────────────
 
 #[test]
-fn infer_tuple_is_error_in_fio1() {
-    let err = infer_src_err("(1, 2, 3)");
-    assert!(matches!(
-        err,
-        kata_diagnostics::MiddleError::TypeMismatch { .. }
-    ));
+fn infer_tuple_three_elements() {
+    let tmod = infer_src("(1, 2, 3)");
+    let entry = entry_typed(&tmod);
+    assert_eq!(entry.ty, Ty::Tuple(vec![Ty::int(), Ty::int(), Ty::int()]));
+    match &entry.kind {
+        TypedExprKind::Tuple { elements } => {
+            assert_eq!(elements.len(), 3);
+            assert_eq!(elements[0].node.ty, Ty::int());
+            assert_eq!(elements[1].node.ty, Ty::int());
+            assert_eq!(elements[2].node.ty, Ty::int());
+        }
+        other => panic!("expected Tuple, got {other:?}"),
+    }
 }
 
 // ── Erros ─────────────────────────────────────────────────────────
@@ -414,7 +423,7 @@ fn dispatch_table_resolves_int_over_float() {
     // Deve resolver para Int overload (kata_rt_bi_add), não Float
     let entry = entry_typed(&tmod);
     match &entry.kind {
-        TypedExprKind::Apply { ffi_symbol, .. } => {
+        TypedExprKind::Closure { ffi_symbol, .. } => {
             assert_eq!(ffi_symbol.as_deref(), Some("kata_rt_bi_add"));
         }
         other => panic!("expected Apply, got {other:?}"),

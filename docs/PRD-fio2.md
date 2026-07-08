@@ -977,18 +977,53 @@ funções com corpo Kata, mas o prelude continua usando `@ffi` para tudo.
     patterns desqualificados e verificar exaustividade.
 26. Manual atualizado se implementação divergiu do PRD.
 
+### Inferência de tipos de parâmetros (bidirecional limitada)
+
+27. **Partial dispatch**: `+ 10 _` despacha com apenas o primeiro argumento
+    tipado (`Int`). O DispatchTable retorna o overload único que casa e os
+    tipos esperados para as posições ausentes. O hole recebe o tipo do
+    parâmetro correspondente do overload casado. Se mais de um overload
+    casa (ambíguo), o typeck não resolve — exige contexto (DoD 29 ou 30).
+28. **Holes com ascription**: `_::Int` em posição de argumento fornece o
+    tipo do hole diretamente. `+ 10 _::Int` funciona sem partial dispatch
+    (a ascription resolve). `+ _::Int _::Float` desambigua: o segundo arg
+    exclui overloads Int e Rational, deixando só Float, que por partial
+    dispatch resolve o primeiro hole como Float.
+29. **Hint top-down via ascription em lambda**: `(lambda x: + x
+    1)::(Int -> Int)` extrai `x: Int` do tipo anotado. O typeck propaga
+    o tipo esperado (`hint: Option<&Ty>`) pela recursão de `infer_expr`.
+    Quando o hint é `Ty::Function(params, ret)`, `infer_lambda` define os
+    parâmetros com os tipos de `params` em vez de criar `InferVar`.
+30. **`LambdaInferenceFail`**: quando nenhum mecanismo (partial dispatch,
+    ascription de hole, hint top-down, assinatura de Sig) fornece o tipo
+    de um parâmetro de lambda, o typeck produz `LambdaInferenceFail` com
+    span do lambda — não `NoOverload` opaco apontando para uma operação
+    arbitrária dentro do corpo.
+31. **Apply de lambda inline**: `(lambda x: + x 1) 42` infere os
+    argumentos primeiro (síntese bottom-up: `42 → Int`), define `x: Int`
+    no escopo do lambda a partir do tipo do argumento, e infere o corpo
+    com o tipo conhecido. Equivalente ao partial dispatch para callee
+    lambda em vez de nome no DispatchTable.
+
 ## Não Inclui
 
 - Actions/return/`;`/`?` (Fio 3)
 - Enums com payload/Result/Optional/`|` (Fio 4)
 - Structs com campos/Tuples/alias (Fio 5)
-- Tipos refinados/Ascription de expressão (Fio 6)
+- Tipos refinados/Ascription de expressão como validação (Fio 6 — Fio 2
+  usa ascription apenas como hint de tipo para inferência bidirecional,
+  não como validação de predicados)
 - Interfaces/Generics/Dispatch polimórfico (Fio 7)
 - Coleções/ITERABLE/Stream Fusion (Fio 8)
 - Closures com captura/Escape Analysis/ARC/TRMA (Fio 9)
 - `|` fallback local (Fio 4 — exige Result/Optional)
 - `?` fail-fast (Fio 3 — exige Actions)
 - List patterns em runtime (Fio 8 — exige List)
+- Anotação de tipo em `Pattern::Ident` (`lambda x::Int: ...`) — futuro
+  (exige mudança no AST e parser; Fio 2 usa ascription no lambda inteiro
+  ou partial dispatch para resolver tipos de parâmetros)
+- Unificação Hindley-Milner com union-find (não planejado — Fio 2 usa
+  bidirecional limitada: partial dispatch + hint top-down)
 
 ## Arquitetura
 
