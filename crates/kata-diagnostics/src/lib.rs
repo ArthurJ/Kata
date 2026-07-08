@@ -7,6 +7,6 @@
 //! Códigos namespaced por domínio (`type.mismatch`, `parse.unexpected_token`),
 //! sem códigos numéricos.
 
+pub mod backend;
 pub mod frontend;
 pub mod middleend;
-pub mod backend;

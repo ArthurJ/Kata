@@ -9,3 +9,6 @@ description = "AST de dados puros — Expr, Span, Spanned, Pattern, TypeExpr"
 id-arena.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
