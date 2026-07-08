@@ -204,30 +204,40 @@ fn infer_expr(
             let inner = infer_expr(&expr.node, &expr.span, env, table)?;
             let target_ty = resolve_type_expr(&ty.node, env);
 
-            // Valida compatibilidade. Em Fio 1, os casos válidos:
-            //   - FloatLit::Rational (rebaixa Float → Rational)
-            //   - IntLit::Rational (rebaixa Int → Rational)
-            //   - Mesmo tipo (no-op / confirmação)
-            // Conversão Int→Float não é ascription — é `from_int` (apply).
-            match (&inner.kind, &target_ty) {
-                (TypedExprKind::FloatLit { .. }, Ty::Prim(PrimTy::Rational)) => {
-                    // Rebaixa FloatLit para Rational. O codegen emite
-                    // kata_rt_rat_literal com o texto bruto.
-                }
-                (TypedExprKind::IntLit { .. }, Ty::Prim(PrimTy::Rational)) => {
-                    // Rebaixa IntLit para Rational. O codegen emite
-                    // kata_rt_rat_literal ou kata_rt_int_to_rational.
-                }
-                _ => {
-                    // Mesmo tipo? OK (ascription no-op).
-                    if inner.ty != target_ty {
-                        return Err(MiddleError::TypeMismatch {
-                            expected: format!("{:?}", target_ty),
-                            found: format!("{:?}", inner.ty),
-                            span: expr.span.into(),
-                        });
-                    }
-                }
+            // Valida compatibilidade. Rebaixamento só se aplica a literais:
+            // o literal é reinterpretado no tipo alvo desde o início (sem
+            // conversão em runtime). Para não-literais, ascription é
+            // no-op (mesmo tipo) ou erro (use a função de conversão).
+            //
+            // Rebaixamentos válidos em Fio 1:
+            //   - IntLit  → Int, Float, Rational  (texto bruto reinterpretado)
+            //   - FloatLit → Float, Rational      (texto bruto reinterpretado)
+            //   - TextLit  → Text                  (no-op, mesmo tipo)
+            //
+            // O codegen inspeciona (inner.kind, target_ty) para decidir
+            // o símbolo FFI: IntLit→Float = f64 const, IntLit→Rational =
+            // kata_rt_rat_literal, FloatLit→Rational = kata_rt_rat_literal.
+            let rebaixa_ok = match (&inner.kind, &target_ty) {
+                // IntLit rebaixa para Int (no-op), Float, Rational
+                (TypedExprKind::IntLit { .. }, Ty::Prim(PrimTy::Int)) => true,
+                (TypedExprKind::IntLit { .. }, Ty::Prim(PrimTy::Float)) => true,
+                (TypedExprKind::IntLit { .. }, Ty::Prim(PrimTy::Rational)) => true,
+                // FloatLit rebaixa para Float (no-op), Rational
+                (TypedExprKind::FloatLit { .. }, Ty::Prim(PrimTy::Float)) => true,
+                (TypedExprKind::FloatLit { .. }, Ty::Prim(PrimTy::Rational)) => true,
+                // TextLit rebaixa para Text (no-op)
+                (TypedExprKind::TextLit { .. }, Ty::Prim(PrimTy::Text)) => true,
+                // Demais casos: mesmo tipo (no-op) é OK
+                _ if inner.ty == target_ty => true,
+                _ => false,
+            };
+
+            if !rebaixa_ok {
+                return Err(MiddleError::TypeMismatch {
+                    expected: format!("{:?}", target_ty),
+                    found: format!("{:?}", inner.ty),
+                    span: expr.span.into(),
+                });
             }
 
             (

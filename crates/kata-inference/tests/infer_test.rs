@@ -262,9 +262,24 @@ fn infer_ascription_same_type_noop() {
 }
 
 #[test]
+fn infer_ascription_int_to_float_rebaixa() {
+    // IntLit rebaixa para Float — o literal "42" nasce como f64.
+    let tmod = infer_src("42::Float");
+    let entry = entry_typed(&tmod);
+    assert_eq!(entry.ty, Ty::float());
+    match &entry.kind {
+        TypedExprKind::TypeAscription { target_ty, .. } => {
+            assert_eq!(*target_ty, Ty::float());
+        }
+        other => panic!("expected TypeAscription, got {other:?}"),
+    }
+}
+
+#[test]
 fn infer_ascription_mismatch_error() {
-    // Int não pode ser ascribed como Float diretamente
-    let err = infer_src_err("42::Float");
+    // Text não pode ser ascribed como Int — não há rebaixamento entre
+    // tipos de natureza diferente (apenas dentro da mesma categoria).
+    let err = infer_src_err("\"hello\"::Int");
     assert!(matches!(
         err,
         kata_diagnostics::MiddleError::TypeMismatch { .. }
