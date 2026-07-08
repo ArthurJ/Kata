@@ -18,7 +18,7 @@ pub struct MietteSpan(pub Span);
 
 impl From<MietteSpan> for miette::SourceSpan {
     fn from(s: MietteSpan) -> Self {
-        miette::SourceSpan::new(s.0.offset.into(), s.0.len.into())
+        miette::SourceSpan::new(s.0.offset.into(), s.0.len)
     }
 }
 
