@@ -66,6 +66,17 @@ struct Candidate {
     score: Score,
 }
 
+/// Resultado de dispatch parcial — args ausentes (holes) recebem tipos do overload.
+#[derive(Debug, Clone)]
+pub struct PartialDispatchResult {
+    /// O overload que casou.
+    pub overload: OverloadInfo,
+    /// Tipos esperados nas posições ausentes (holes).
+    /// `Some(ty)` na posição i = a posição i era ausente (hole) e o tipo esperado é `ty`.
+    /// `None` na posição i = a posição i era presente (não é hole).
+    pub hole_types: Vec<Option<Ty>>,
+}
+
 /// Tabela de dispatch indexada por nome.
 #[derive(Debug, Clone)]
 pub struct DispatchTable {
@@ -137,6 +148,121 @@ impl DispatchTable {
     /// selecionar o de maior score. Empate → AmbiguousDispatch.
     pub fn resolve(&self, name: &str, args: &[Ty]) -> Result<OverloadInfo, DispatchError> {
         self.resolve_inner(name, args, false)
+    }
+
+    /// Resolve uma chamada parcial: alguns args são `None` (holes ausentes).
+    ///
+    /// Holes (`None`) não participam do scoring — não somam nem excluem.
+    /// Se exatamente um overload casa com os args presentes, retorna os tipos
+    /// esperados nas posições ausentes. Se múltiplos casam, é ambíguo.
+    pub fn resolve_partial(
+        &self,
+        name: &str,
+        args: &[Option<Ty>],
+    ) -> Result<PartialDispatchResult, DispatchError> {
+        self.resolve_partial_inner(name, args, false)
+    }
+
+    fn resolve_partial_inner(
+        &self,
+        name: &str,
+        args: &[Option<Ty>],
+        tried_commutative: bool,
+    ) -> Result<PartialDispatchResult, DispatchError> {
+        let overloads = self
+            .entries
+            .get(name)
+            .ok_or(DispatchError::FunctionNotFound {
+                name: name.to_string(),
+                arg_count: args.len(),
+            })?;
+
+        let mut candidates: Vec<(OverloadInfo, Vec<Option<Ty>>)> = Vec::new();
+
+        for info in overloads {
+            // Arity mismatch → skip
+            if info.params.len() != args.len() {
+                continue;
+            }
+
+            // Pontua apenas args presentes. None = não restringe.
+            let mut compatible = true;
+            for (arg_opt, param) in args.iter().zip(&info.params) {
+                if let Some(arg_ty) = arg_opt {
+                    if arg_ty != param {
+                        compatible = false;
+                        break;
+                    }
+                }
+                // None (hole) — não pontua, não exclui
+            }
+
+            if compatible {
+                // Constrói hole_types: Some(param_ty) onde arg era None, None onde era Some.
+                let hole_types: Vec<Option<Ty>> = args
+                    .iter()
+                    .zip(&info.params)
+                    .map(|(arg_opt, param)| {
+                        if arg_opt.is_none() {
+                            Some(param.clone())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+
+                candidates.push((info.clone(), hole_types));
+            }
+        }
+
+        // Commutative short-circuit: se 0 candidatos e função é comutativa, tenta invertida
+        if candidates.is_empty()
+            && !tried_commutative
+            && self.commutative.contains(name)
+            && args.len() == 2
+        {
+            let swapped = vec![args[1].clone(), args[0].clone()];
+            return self.resolve_partial_inner(name, &swapped, true);
+        }
+
+        if candidates.is_empty() {
+            if self.has_function(name)
+                && let Some(first) = overloads.first()
+            {
+                return Err(DispatchError::TypeMismatch {
+                    name: name.to_string(),
+                    expected: format!("{:?}", first.params),
+                    found: format!("{:?}", args),
+                });
+            }
+            return Err(DispatchError::FunctionNotFound {
+                name: name.to_string(),
+                arg_count: args.len(),
+            });
+        }
+
+        // Comutativo pode gerar múltiplos candidatos via swap — pegamos o primeiro.
+        // Para dispatch parcial, se múltiplos overloads diferentes casam (não via
+        // comutatividade), é ambíguo. Verificamos se há overloads distintos.
+        let unique_overloads: Vec<&OverloadInfo> = candidates.iter().map(|(info, _)| info).collect();
+        let first_params = &unique_overloads[0].params;
+        let all_same = unique_overloads
+            .iter()
+            .all(|oi| oi.params == *first_params);
+
+        if all_same {
+            // Todos casam com o mesmo overload (ex: comutatividade duplicou) — retorna o primeiro
+            return Ok(PartialDispatchResult {
+                overload: candidates[0].0.clone(),
+                hole_types: candidates[0].1.clone(),
+            });
+        }
+
+        // Múltiplos overloads distintos casam → ambíguo
+        Err(DispatchError::AmbiguousDispatch {
+            name: name.to_string(),
+            arg_count: args.len(),
+        })
     }
 
     fn resolve_inner(

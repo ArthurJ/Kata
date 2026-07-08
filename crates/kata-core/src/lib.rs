@@ -16,7 +16,7 @@ pub mod ffi;
 pub mod shape;
 pub mod ty;
 
-pub use dispatch::{DispatchError, DispatchTable, OverloadInfo, Score};
+pub use dispatch::{DispatchError, DispatchTable, OverloadInfo, PartialDispatchResult, Score};
 pub use enum_registry::EnumRegistry;
 pub use ffi::FfiSymbol;
 pub use shape::{TypeId, TypeShape};

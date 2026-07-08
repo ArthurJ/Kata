@@ -19,7 +19,7 @@
 //! compilador. Cada Lambda cria escopo próprio, então nomes重复 entre
 //! Lambdas aninhadas não conflitam (shadowing lexical normal).
 
-use kata_ast::{Expr, GuardClause, MatchArm, Pattern, Span, Spanned, WithBinding};
+use kata_ast::{Expr, GuardClause, MatchArm, Pattern, Span, Spanned, TypeExpr, WithBinding};
 
 /// Ponto de entrada do desugar. Elimina Pipe e Hole da AST.
 ///
@@ -198,6 +198,15 @@ fn peel_grouping(expr: &Spanned<Expr>) -> &Spanned<Expr> {
     }
 }
 
+/// Verifica se uma expressão é um hole puro ou um hole com ascription (`_::Int`).
+fn is_hole_or_ascribed_hole(expr: &Expr) -> bool {
+    match expr {
+        Expr::Hole => true,
+        Expr::TypeAscription { expr, .. } => matches!(expr.node, Expr::Hole),
+        _ => false,
+    }
+}
+
 // ── Fase 2: eliminar Hole ──────────────────────────────────────────
 
 fn desugar_holes(expr: &Spanned<Expr>) -> Spanned<Expr> {
@@ -207,11 +216,13 @@ fn desugar_holes(expr: &Spanned<Expr>) -> Spanned<Expr> {
             let callee_d = desugar_holes(callee);
             let args_d: Vec<Spanned<Expr>> = args.iter().map(desugar_holes).collect();
 
-            // Conta holes nos args (após desugar recursivo)
+            // Conta holes nos args (após desugar recursivo).
+            // Um "hole" é tanto `Expr::Hole` puro quanto `TypeAscription { expr: Hole, ty }`
+            // (DoD 28: `_::Int` em posição de argumento).
             let hole_positions: Vec<usize> = args_d
                 .iter()
                 .enumerate()
-                .filter(|(_, a)| matches!(a.node, Expr::Hole))
+                .filter(|(_, a)| is_hole_or_ascribed_hole(&a.node))
                 .map(|(i, _)| i)
                 .collect();
 
@@ -224,14 +235,35 @@ fn desugar_holes(expr: &Spanned<Expr>) -> Spanned<Expr> {
                     expr.span,
                 )
             } else {
-                // Gera Lambda com um parâmetro fresh por Hole
+                // Gera Lambda com um parâmetro fresh por Hole.
+                // Se o hole tem ascription (_::Int), preserva a ascription no arg
+                // substituído para que try_partial_dispatch use o tipo anotado.
+                // Extrai ascriptions ANTES de mover args_d para new_args.
+                let hole_ascriptions: Vec<Option<Spanned<TypeExpr>>> = hole_positions
+                    .iter()
+                    .map(|&pos| match &args_d[pos].node {
+                        Expr::TypeAscription { ty, .. } => Some(ty.clone()),
+                        Expr::Hole => None,
+                        _ => unreachable!("is_hole_or_ascribed_hole garante que só Hole ou TypeAscription(Hole)"),
+                    })
+                    .collect();
                 let mut new_args = args_d;
                 let mut patterns: Vec<Spanned<Pattern>> = Vec::with_capacity(hole_positions.len());
 
                 for (idx, &pos) in hole_positions.iter().enumerate() {
                     let name = format!("__hole_{idx}");
-                    new_args[pos] =
-                        Spanned::new(Expr::Ident { name: name.clone() }, Span::synthetic());
+                    let ident = Spanned::new(Expr::Ident { name: name.clone() }, Span::synthetic());
+
+                    new_args[pos] = match &hole_ascriptions[idx] {
+                        Some(ty) => Spanned::new(
+                            Expr::TypeAscription {
+                                expr: Box::new(ident),
+                                ty: ty.clone(),
+                            },
+                            new_args[pos].span,
+                        ),
+                        None => ident,
+                    };
                     patterns.push(Spanned::new(Pattern::Ident(name), Span::synthetic()));
                 }
 
