@@ -107,9 +107,39 @@ consome `Vec<T => Bool>` com estratégia de combinação:
 O typeck decide a estratégia pela forma da declaração: `data` com
 predicados → `All`; `enum` com predicados → `First`.
 
-Ascription `expr::Type`: validação compile-time para literais, entrega
-tipo refined sem `Result`. Ret-directed dispatch (ascription como hint de
-retorno). Grouped como barreira de hint (`((/ 1 3))::Rational`).
+Ascription `expr::Type`: três modos semânticos (ver manual §4.2.7):
+1. **Rebaixamento de literal** — texto bruto reinterpretado no tipo alvo
+   desde o início (`42::Float`, `3.14::Rational`). Sem conversão em
+   runtime. Disponível desde Fio 1.
+2. **Confirmação de tipo** — verifica que a expressão já tem o tipo
+   alvo (`42::Int`). No-op em runtime. Disponível desde Fio 1.
+3. **Ascription-construção** (Fio 5+) — promove tupla anónima a tipo
+   nominal (`("João" 30)::Pessoa`). Valida shape e anexa `type_id`.
+
+Ascription para tipos refinados:
+- **Literais:** validação compile-time (avaliação constante local ao
+  typeck), entrega tipo refined sem `Result`. Zero-cost.
+- **Não-literais:** produz `TypedExprKind::Ascription` para o comptime
+  pass (Fio 12) avaliar via JIT. Se o comptime não consegue avaliar,
+  erro de compilação.
+
+**Ret-directed dispatch** (Fio 6): a ascription propaga o tipo anotado
+como `hint_ret` para `DispatchTable::resolve`. O dispatch filtra
+sobrecargas cujo retorno é compatível com o hint. Desambigua operações
+polimórficas: `(/ 1 3)::Int` seleciona `idiv`, `(/ 1.0 3.0)::Float`
+seleciona `fdiv`.
+
+**Grouped como barreira de hint** (Fio 6): `Grouped(inner)` = strip
+(hint atravessa). `Grouped(Grouped(...))` = barrier (avalia sem hint,
+depois converte via `convert_typed_expr`). Permite `((/ 1 3))::Rational`
+quando `(/ 1 3)::Rational` falha.
+
+**Ascription vs construtor** (ver manual §4.2.8): quatro diferenças —
+identidade (nominal vs estrutural), first-class, validação de shape,
+refinamento. Ascription é zero-cost para literais; construtor é geral
+para valores não-literais (retorna `Result`). Ambos falham com
+`TypeMismatch`; ascription additionally falha com **refinamento não
+atendido** (predicado avaliado em typeck rejeita antes do codegen).
 
 Coerção contextual no `|`: fallback literal validado em compile-time
 contra predicados.

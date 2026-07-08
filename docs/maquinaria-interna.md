@@ -666,6 +666,132 @@ struct ComptimePass {
 
 ---
 
+## 17. Ascription Hint Pipeline — Ret-directed Dispatch e Grouped Barrier
+
+A ascription `expr::Type` não é apenas uma anotação pós-inferência. Em Kata4
+ela participa ativamente do dispatch através de três mecanismos que Kata5
+precisa implementar quando chegar aos fios relevantes (Fio 6+).
+
+### 17.1. Ret-directed dispatch
+
+```rust
+fn infer_with_hint(&mut self, expr: &Spanned<Expr>, hint_ret: Option<&Type>)
+```
+
+- **Fio:** 6 (ascription refined), mas útil desde Fio 1 para operações
+  polimórficas como `/`
+- **Função:** Quando a ascription anota uma aplicação de função (ex:
+  `(/ 1 3)::Int`), o tipo anotado propaga como `hint_ret` para
+  `DispatchTable::resolve`. O dispatch filtra sobrecargas cujo tipo de
+  retorno é compatível com o hint.
+- **Porquê:** Sem ret-directed dispatch, `(/ 1 3)::Int` despacha pela
+  primeira sobrecarga de `/` com args `[Int, Int]` — que é `idiv` (ret Int).
+  Mas `(/ 1.0 3.0)::Float` precisa selecionar `fdiv` (ret Float), não `idiv`.
+  O hint de retorno desambigua sobrecargas que têm os mesmos tipos de
+  argumento mas retornos diferentes.
+- **Exemplo:**
+
+```kata
+(/ 1 3)::Int         # 0 — dispatch seleciona idiv (ret Int) ✓
+(/ 1.0 3.0)::Float   # 0.333... — dispatch seleciona fdiv (ret Float) ✓
+(/ 1 3)::Rational    # erro — nenhuma sobrecarga de / com args [Int Int] retorna Rational
+```
+
+- **Implementação Kata4:** `infer_ascription` chama `infer_with_hint(expr,
+  Some(&ann_ty))`. O hint atravessa `Apply` e é passado para
+  `dispatch_table.resolve(name, args, Some(hint_ret))`. O dispatcher
+  pontua não só por compatibilidade de args, mas também por compatibilidade
+  de retorno com o hint.
+- **Invariantes:**
+  - O hint é `Option<&Type>` — `None` quando não há ascription. O dispatch
+    com `None` ignora o retorno (comportamento actual do Kata5).
+  - O hint não força o retorno — apenas filtra. Se nenhuma sobrecarga
+    retorna o tipo esperado, é erro claro, não coerção implícita.
+
+### 17.2. Grouped como barreira de hint
+
+```rust
+// Grouped(inner) onde inner não é Grouped = strip (hint atravessa)
+// Grouped(Grouped(...)) = barrier (avalia sem hint, depois converte)
+```
+
+- **Fio:** 6 (ascription refined), mas o mecanismo é do parser
+- **Função:** Parênteses extras forçam avaliação independente antes da
+  ascription. Um nível de `Grouped` é transparente ao hint (strip). Dois ou
+  mais níveis de `Grouped` são barreira: o mais interno avalia sem hint,
+  dissolve, e o externo converte o resultado.
+- **Porquê:** `(/ 1 3)::Rational` falha porque o hint diz "quero Rational"
+  mas nenhuma sobrecarga de `/` com args `[Int, Int]` retorna Rational.
+  `((/ 1 3))::Rational` funciona: o `Grouped` interno avalia `/ 1 3`
+  **sem hint** → resulta em `Int 0` (idiv default), depois o externo
+  converte `Int 0 → Rational` via `from_int`.
+
+```kata
+(/ 1 3)::Rational     # erro — hint Rational, nenhuma sobrecarga de / retorna Rational
+((/ 1 3))::Rational  # 1/3 — Grouped interno avalia sem hint → Int 0, depois from_int converte
+```
+
+- **Implementação Kata4:** `infer_ascription` detecta `Grouped(Grouped(...))`
+  e desempacota até o `Grouped` mais interno. Inferir o expr interno sem
+  hint, depois chamar `convert_typed_expr(inner, ann_ty)`.
+- **Invariantes:**
+  - `Grouped(inner)` onde inner **não é Grouped** = strip — cai no fluxo
+    padrão (hint atravessa).
+  - `Grouped(Grouped(...))` = barrier — cada nível extra é uma nova barreira.
+  - O strip é o comportamento default; o barrier é a exceção.
+
+### 17.3. convert_typed_expr — conversão runtime via dispatch
+
+```rust
+fn convert_typed_expr(
+    inner: TypedExpr,
+    target_ty: &Type,
+    span: Span,
+) -> TypeResult<TypedExpr>
+```
+
+- **Fio:** 6 (grouped barrier precisa de conversão)
+- **Função:** Converte um `TypedExpr` de `from_ty` para `target_ty` via
+  dispatch normal. Procura uma função de conversão no `DispatchTable`
+  (ex: `from_int`, `from_float`, `to_float`) que aceite `from_ty` e retorne
+  `target_ty`.
+- **Tabela de conversões conhecidas (Kata4):**
+
+```rust
+match (&inner.ty, target_ty) {
+    (Int, Rational) => "from_int",
+    (Float, Rational) => "from_float",
+    (Rational, Float) => "to_float",
+    _ => TypeMismatch,
+}
+```
+
+- **Porquê:** O barrier de `Grouped` produz um valor de tipo `from_ty`
+  que precisa ser convertido para `target_ty` da ascription. Sem
+  `convert_typed_expr`, o barrier não tem como entregar o tipo esperado.
+- **Invariantes:**
+  - Literais têm caminho compile-time (não passam por dispatch) —
+    `Int(n) → Rational(n.to_string())` direto na TAST.
+  - Não-literais passam por dispatch — `from_int`, `from_float`, `to_float`
+    são funções normais no `DispatchTable`.
+  - Se não há função de conversão conhecida, é `TypeMismatch` — não há
+    coerção implícita.
+
+### Resumo dos três mecanismos
+
+| Mecanismo | Onde atua | Fio |
+|---|---|---|
+| Ret-directed dispatch | `DispatchTable::resolve` recebe `hint_ret` | 6 |
+| Grouped barrier | `infer_ascription` detecta `Grouped(Grouped(...))` | 6 |
+| convert_typed_expr | Barrier chama conversão via dispatch | 6 |
+
+Os três são complementares: ret-directed dispatch resolve ambiguidade de
+retorno, grouped barrier força avaliação independente, convert_typed_expr
+converte o resultado do barrier para o tipo esperado. Sem os três, a
+ascription não consegue desambiguar sobrecargas polimórficas.
+
+---
+
 ## Resumo: Invariantes de design
 
 | Estrutura | Invariante a respeitar desde o início |
@@ -685,6 +811,7 @@ struct ComptimePass {
 | Collect lambdas | lambda_addr passado explicitamente (não addr do parâmetro) |
 | Lazy specialization | Especializa sob demanda, não ahead-of-time |
 | Comptime cache | Evita recompilar/reexecutar a mesma expressão |
+| Ascription hint | Ret-directed dispatch + grouped barrier + convert_typed_expr (Fio 6) |
 
 Cada invariante acima existe porque violá-lo produz bugs concretos — não são
 preferências estéticas. O documento os captura como prescrição, não como história.
