@@ -389,6 +389,61 @@ fn infer_apply(
     enum_registry: &EnumRegistry,
     _tail_pos: bool,
 ) -> InferResult<(Ty, TypedExprKind, Effect)> {
+    // DoD 31: Apply de lambda inline — se o callee é um lambda (possivelmente
+    // envolto em Grouping ou TypeAscription), inferir args primeiro (síntese
+    // bottom-up), usar arg_tys como tipos dos parâmetros do lambda, e inferir
+    // o body com tipos conhecidos.
+    let callee_core = peel_grouping_expr(&callee.node);
+    match callee_core {
+        Expr::Lambda {
+            patterns,
+            body,
+            guards,
+            with_bindings,
+        } => {
+            return infer_apply_lambda(
+                patterns,
+                body,
+                guards,
+                with_bindings,
+                args,
+                span,
+                env,
+                table,
+                enum_registry,
+            );
+        }
+        Expr::TypeAscription { expr: inner, ty } => {
+            // Ascription em lambda: `((lambda ...)::(Int -> Int)) 42`.
+            // O hint da ascription fornece os tipos dos params.
+            let inner_core = peel_grouping_expr(&inner.node);
+            if let Expr::Lambda {
+                patterns,
+                body,
+                guards,
+                with_bindings,
+            } = inner_core
+            {
+                let hint_ty = resolve_type_expr(&ty.node, env);
+                return infer_apply_lambda_with_hint(
+                    patterns,
+                    body,
+                    guards,
+                    with_bindings,
+                    args,
+                    &hint_ty,
+                    span,
+                    env,
+                    table,
+                    enum_registry,
+                );
+            }
+            // Ascription em non-lambda: não é apply de lambda inline.
+            // Cair para o caminho de Ident abaixo (que vai falhar com UnboundName).
+        }
+        _ => {}
+    }
+
     let func_name = match &callee.node {
         Expr::Ident { name } => name.clone(),
         _ => {
@@ -1016,4 +1071,342 @@ fn peel_grouping_expr(expr: &Expr) -> &Expr {
         Expr::Grouping { inner } => peel_grouping_expr(&inner.node),
         _ => expr,
     }
+}
+
+// ── DoD 31: Apply de lambda inline ─────────────────────────────────
+
+/// Infere `(lambda x: ...) 42` — args fornecem tipos dos parâmetros.
+///
+/// Síntese bottom-up: infere cada arg, usa `arg_tys` como tipos dos params
+/// do lambda. Infere o body com tipos conhecidos. Retorna `Closure` com
+/// `ffi_symbol=None` (call_indirect no codegen).
+#[allow(clippy::too_many_arguments)]
+fn infer_apply_lambda(
+    patterns: &[Spanned<Pattern>],
+    body: &Spanned<Expr>,
+    guards: &[GuardClause],
+    with_bindings: &[WithBinding],
+    args: &[Spanned<Expr>],
+    span: &Span,
+    env: &mut TypeEnv,
+    table: &DispatchTable,
+    enum_registry: &EnumRegistry,
+) -> InferResult<(Ty, TypedExprKind, Effect)> {
+    // Verifica aridade.
+    if args.len() != patterns.len() {
+        return Err(MiddleError::ArityMismatch {
+            expected: patterns.len(),
+            found: args.len(),
+            span: (*span).into(),
+        });
+    }
+
+    // Infere args (síntese bottom-up).
+    let mut typed_args: Vec<Spanned<TypedExpr>> = Vec::with_capacity(args.len());
+    let mut arg_tys: Vec<Ty> = Vec::with_capacity(args.len());
+    for arg in args {
+        let typed = infer_expr(&arg.node, &arg.span, env, table, enum_registry, false)?;
+        arg_tys.push(typed.ty.clone());
+        typed_args.push(Spanned::new(typed, arg.span));
+    }
+
+    // Cria escopo filho e define params com tipos dos args.
+    let mut lambda_env = env.push_scope();
+    let mut typed_patterns: Vec<Spanned<TypedPattern>> = Vec::with_capacity(patterns.len());
+    for (i, pat) in patterns.iter().enumerate() {
+        let typed_pat = patterns::check_pattern(pat, &arg_tys[i], enum_registry, &mut lambda_env)?;
+        typed_patterns.push(typed_pat);
+    }
+
+    // Processa with bindings.
+    let mut typed_with_bindings: Vec<TypedWithBinding> = Vec::new();
+    for wb in with_bindings {
+        let typed_value = infer_expr(
+            &wb.value.node,
+            &wb.value.span,
+            &mut lambda_env,
+            table,
+            enum_registry,
+            false,
+        )?;
+        let val_ty = typed_value.ty.clone();
+        lambda_env.define(&wb.name, val_ty);
+        typed_with_bindings.push(TypedWithBinding {
+            name: wb.name.clone(),
+            value: Spanned::new(typed_value, wb.value.span),
+        });
+    }
+
+    // Infere o body.
+    let (ret_ty, typed_body, typed_guards) =
+        infer_lambda_body(body, guards, &mut lambda_env, table, enum_registry)?;
+
+    let lambda_ty = Ty::Function(arg_tys.clone(), Box::new(ret_ty.clone()));
+
+    let lambda_kind = TypedExprKind::Lambda {
+        func_name: None,
+        param_types: arg_tys,
+        ret_ty: ret_ty.clone(),
+        clauses: vec![TypedLambdaClause {
+            patterns: typed_patterns,
+            body: Spanned::new(typed_body, body.span),
+            guards: typed_guards,
+            with_bindings: typed_with_bindings,
+        }],
+    };
+
+    let callee_typed = TypedExpr {
+        span: *span,
+        ty: lambda_ty.clone(),
+        tail_pos: false,
+        effect: Effect::Puro,
+        kind: lambda_kind,
+    };
+
+    Ok((
+        ret_ty,
+        TypedExprKind::Closure {
+            callee: Box::new(Spanned::new(callee_typed, *span)),
+            args: typed_args,
+            ffi_symbol: None,
+            captures: Vec::new(),
+            escapes: false,
+        },
+        Effect::Puro,
+    ))
+}
+
+/// Infere `((lambda ...)::(Int -> Int)) 42` — hint da ascription fornece os
+/// tipos dos params, args são verificados contra eles.
+#[allow(clippy::too_many_arguments)]
+fn infer_apply_lambda_with_hint(
+    patterns: &[Spanned<Pattern>],
+    body: &Spanned<Expr>,
+    guards: &[GuardClause],
+    with_bindings: &[WithBinding],
+    args: &[Spanned<Expr>],
+    hint_ty: &Ty,
+    span: &Span,
+    env: &mut TypeEnv,
+    table: &DispatchTable,
+    enum_registry: &EnumRegistry,
+) -> InferResult<(Ty, TypedExprKind, Effect)> {
+    // Verifica aridade.
+    if args.len() != patterns.len() {
+        return Err(MiddleError::ArityMismatch {
+            expected: patterns.len(),
+            found: args.len(),
+            span: (*span).into(),
+        });
+    }
+
+    // Extrai param types do hint.
+    let (hint_params, hint_ret) = match hint_ty {
+        Ty::Function(params, ret) => (params.clone(), (**ret).clone()),
+        _ => {
+            return Err(MiddleError::TypeMismatch {
+                expected: "Function".into(),
+                found: format!("{hint_ty:?}"),
+                span: (*span).into(),
+            });
+        }
+    };
+
+    if hint_params.len() != patterns.len() {
+        return Err(MiddleError::ArityMismatch {
+            expected: patterns.len(),
+            found: hint_params.len(),
+            span: (*span).into(),
+        });
+    }
+
+    // Infere args e verifica contra hint_params.
+    let mut typed_args: Vec<Spanned<TypedExpr>> = Vec::with_capacity(args.len());
+    for (i, arg) in args.iter().enumerate() {
+        let typed = infer_expr(&arg.node, &arg.span, env, table, enum_registry, false)?;
+        if typed.ty != hint_params[i] {
+            return Err(MiddleError::TypeMismatch {
+                expected: format!("{:?}", hint_params[i]),
+                found: format!("{:?}", typed.ty),
+                span: arg.span.into(),
+            });
+        }
+        typed_args.push(Spanned::new(typed, arg.span));
+    }
+
+    // Cria escopo filho e define params com tipos do hint.
+    let mut lambda_env = env.push_scope();
+    let mut typed_patterns: Vec<Spanned<TypedPattern>> = Vec::with_capacity(patterns.len());
+    for (i, pat) in patterns.iter().enumerate() {
+        let typed_pat =
+            patterns::check_pattern(pat, &hint_params[i], enum_registry, &mut lambda_env)?;
+        typed_patterns.push(typed_pat);
+    }
+
+    // Processa with bindings.
+    let mut typed_with_bindings: Vec<TypedWithBinding> = Vec::new();
+    for wb in with_bindings {
+        let typed_value = infer_expr(
+            &wb.value.node,
+            &wb.value.span,
+            &mut lambda_env,
+            table,
+            enum_registry,
+            false,
+        )?;
+        let val_ty = typed_value.ty.clone();
+        lambda_env.define(&wb.name, val_ty);
+        typed_with_bindings.push(TypedWithBinding {
+            name: wb.name.clone(),
+            value: Spanned::new(typed_value, wb.value.span),
+        });
+    }
+
+    // Infere o body.
+    let (ret_ty, typed_body, typed_guards) =
+        infer_lambda_body(body, guards, &mut lambda_env, table, enum_registry)?;
+
+    // Verifica que o ret_ty bate com o hint_ret.
+    if ret_ty != hint_ret {
+        return Err(MiddleError::TypeMismatch {
+            expected: format!("{:?}", hint_ret),
+            found: format!("{:?}", ret_ty),
+            span: body.span.into(),
+        });
+    }
+
+    let lambda_ty = Ty::Function(hint_params.clone(), Box::new(hint_ret.clone()));
+
+    let lambda_kind = TypedExprKind::Lambda {
+        func_name: None,
+        param_types: hint_params,
+        ret_ty: hint_ret.clone(),
+        clauses: vec![TypedLambdaClause {
+            patterns: typed_patterns,
+            body: Spanned::new(typed_body, body.span),
+            guards: typed_guards,
+            with_bindings: typed_with_bindings,
+        }],
+    };
+
+    let callee_typed = TypedExpr {
+        span: *span,
+        ty: lambda_ty,
+        tail_pos: false,
+        effect: Effect::Puro,
+        kind: lambda_kind,
+    };
+
+    Ok((
+        hint_ret,
+        TypedExprKind::Closure {
+            callee: Box::new(Spanned::new(callee_typed, *span)),
+            args: typed_args,
+            ffi_symbol: None,
+            captures: Vec::new(),
+            escapes: false,
+        },
+        Effect::Puro,
+    ))
+}
+
+/// Infere o body de um lambda (com ou sem guards) — fatorado de infer_lambda.
+fn infer_lambda_body(
+    body: &Spanned<Expr>,
+    guards: &[GuardClause],
+    lambda_env: &mut TypeEnv,
+    table: &DispatchTable,
+    enum_registry: &EnumRegistry,
+) -> InferResult<(Ty, TypedExpr, Vec<TypedGuardClause>)> {
+    let mut typed_guards: Vec<TypedGuardClause> = Vec::new();
+    let (ret_ty, typed_body) = if guards.is_empty() {
+        let typed_body = infer_expr(
+            &body.node,
+            &body.span,
+            lambda_env,
+            table,
+            enum_registry,
+            true,
+        )?;
+        (typed_body.ty.clone(), typed_body)
+    } else {
+        let mut guard_ret_ty: Option<Ty> = None;
+        for guard in guards {
+            if let Some(cond) = &guard.condition {
+                let cond_typed = infer_expr(
+                    &cond.node,
+                    &cond.span,
+                    lambda_env,
+                    table,
+                    enum_registry,
+                    false,
+                )?;
+                if cond_typed.ty != Ty::boolean() {
+                    return Err(MiddleError::TypeMismatch {
+                        expected: "Boolean".into(),
+                        found: format!("{:?}", cond_typed.ty),
+                        span: cond.span.into(),
+                    });
+                }
+                let body_typed = infer_expr(
+                    &guard.body.node,
+                    &guard.body.span,
+                    lambda_env,
+                    table,
+                    enum_registry,
+                    true,
+                )?;
+                if let Some(ref existing) = guard_ret_ty {
+                    if *existing != body_typed.ty {
+                        return Err(MiddleError::TypeMismatch {
+                            expected: format!("{:?}", existing),
+                            found: format!("{:?}", body_typed.ty),
+                            span: guard.body.span.into(),
+                        });
+                    }
+                } else {
+                    guard_ret_ty = Some(body_typed.ty.clone());
+                }
+                typed_guards.push(TypedGuardClause {
+                    condition: Some(Spanned::new(cond_typed, cond.span)),
+                    body: Spanned::new(body_typed, guard.body.span),
+                });
+                continue;
+            }
+            let body_typed = infer_expr(
+                &guard.body.node,
+                &guard.body.span,
+                lambda_env,
+                table,
+                enum_registry,
+                true,
+            )?;
+            if let Some(ref existing) = guard_ret_ty {
+                if *existing != body_typed.ty {
+                    return Err(MiddleError::TypeMismatch {
+                        expected: format!("{:?}", existing),
+                        found: format!("{:?}", body_typed.ty),
+                        span: guard.body.span.into(),
+                    });
+                }
+            } else {
+                guard_ret_ty = Some(body_typed.ty.clone());
+            }
+            typed_guards.push(TypedGuardClause {
+                condition: None,
+                body: Spanned::new(body_typed, guard.body.span),
+            });
+        }
+        (
+            guard_ret_ty.clone().expect("pelo menos um guard deve existir"),
+            TypedExpr {
+                span: body.span,
+                ty: guard_ret_ty.expect("pelo menos um guard"),
+                tail_pos: true,
+                effect: Effect::Puro,
+                kind: TypedExprKind::Unit,
+            },
+        )
+    };
+    Ok((ret_ty, typed_body, typed_guards))
 }

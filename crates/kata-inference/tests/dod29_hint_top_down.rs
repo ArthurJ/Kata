@@ -100,12 +100,8 @@ fn hint_top_down_then_apply() {
 }
 
 /// `((lambda x: + x 1)::(Int -> Int)) 42` — aplica o lambda tipado.
-///
-/// TODO: requer DoD 31 (apply de lambda inline) — `infer_apply` só aceita
-/// `Expr::Ident` como callee. Quando o callee é `TypeAscription(Grouping(Lambda))`,
-/// precisa dispatch indireto via TypeEnv.
+/// DoD 31: apply de lambda inline com ascription.
 #[test]
-#[ignore = "requer DoD 31 — apply de lambda inline"]
 fn hint_top_down_direct_apply() {
     let tmod = infer_src("((lambda x: + x 1)::(Int -> Int)) 42");
     let entry = entry_typed(&tmod);
