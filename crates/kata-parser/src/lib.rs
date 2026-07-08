@@ -8,6 +8,7 @@
 
 mod declarations;
 mod expressions;
+mod patterns;
 mod types;
 
 use kata_ast::{Module, Span, Token, TokenWithSpan};

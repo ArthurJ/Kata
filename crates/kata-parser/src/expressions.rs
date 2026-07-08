@@ -16,6 +16,8 @@ impl Parser {
                 | Token::Ident(_)
                 | Token::LParen
                 | Token::Let
+                | Token::Lambda
+                | Token::Match
         )
     }
 
@@ -60,9 +62,17 @@ impl Parser {
                 Ok(Spanned::new(Expr::TextLit { text: s }, start))
             }
             Token::Let => self.parse_let(),
+            Token::Lambda => self.parse_lambda(),
+            Token::Match => self.parse_match(),
             Token::LParen => self.parse_paren_expr(),
             Token::Ident(name) => {
                 self.advance();
+                // `_` em posição de expressão → Hole (currying).
+                // Em posição de pattern, o parser produz Pattern::Wildcard
+                // (disambiguação no parser, não no typeck).
+                if name == "_" {
+                    return Ok(Spanned::new(Expr::Hole, start));
+                }
                 // Check for VariantQual: Ident :: Ident
                 // But `::` is also TypeAscription (expr::Type).
                 // Disambiguation: if the Ident after `::` is a known type name vs variant...
@@ -177,6 +187,64 @@ impl Parser {
     /// Arguments don't greedily consume more arguments themselves.
     pub(crate) fn parse_expr_atom_or_ascription(&mut self) -> Result<Spanned<Expr>, FrontendError> {
         self.parse_expr_post_ascription()
+    }
+
+    /// Parse `lambda <patterns>: <body>` — lambda anônimo (cláusula única).
+    ///
+    /// Fase 3: body é expressão única após `:` (sem guards, sem with).
+    /// Fase 6: body pode ser bloco indentado com guard clauses + with.
+    pub(crate) fn parse_lambda(&mut self) -> Result<Spanned<Expr>, FrontendError> {
+        let start = self.peek_span();
+        self.expect(&Token::Lambda, "`lambda`")?;
+
+        // Parse patterns (1 ou mais, separados por espaço)
+        let patterns = self.parse_patterns()?;
+
+        // Expect `:`
+        self.expect(&Token::Colon, "`:` após patterns do lambda")?;
+
+        // Fase 3: body é uma expressão única (sem guards).
+        // Fase 6: se há INDENT após `:`, é bloco com guards + with.
+        let body = if matches!(self.peek(), Token::Indent) {
+            // Bloco indentado — Fase 6 implementará guards + with.
+            // Por agora, parsear como bloco de guard clauses.
+            self.parse_lambda_body_block(start, patterns.len())?
+        } else {
+            // Expressão única na mesma linha
+            let body_expr = parse_expr(self)?;
+            body_expr
+        };
+
+        let span = start.cover(body.span);
+        Ok(Spanned::new(
+            Expr::Lambda {
+                patterns,
+                body: Box::new(body),
+                guards: Vec::new(),
+                with_bindings: Vec::new(),
+            },
+            span,
+        ))
+    }
+
+    /// Parse o bloco indentado de guards dentro de um lambda body.
+    /// Fase 6: implementação completa com guards + with.
+    /// Por agora (Fase 3), não deveria ser chamado — todo!().
+    fn parse_lambda_body_block(
+        &mut self,
+        _start: kata_ast::Span,
+        _num_patterns: usize,
+    ) -> Result<Spanned<Expr>, FrontendError> {
+        // Fase 6 implementará: INDENT guard_clause+ (with with_binding+)? DEDENT
+        // Por agora, se chegamos aqui, é erro.
+        todo!("Fase 6: parse_lambda_body_block com guards + with")
+    }
+
+    /// Parse `match <scrutinee>` com braços indentados.
+    /// Fase 4: implementação completa.
+    pub(crate) fn parse_match(&mut self) -> Result<Spanned<Expr>, FrontendError> {
+        // Fase 4 implementará: match expr INDENT arm+ DEDENT
+        todo!("Fase 4: parse_match com braços indentados")
     }
 }
 
