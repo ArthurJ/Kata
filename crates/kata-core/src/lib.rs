@@ -7,11 +7,15 @@
 //! - [`FfiSymbol`] — enum tipado de símbolos FFI
 //! - [`TypeShape`] — projeção runtime para reflexão estrutural
 //! - [`TypeId`] — identificador u32 para a type table do runtime
+//! - [`DispatchTable`] — tabela de overloads com despacho por dominância
+//! - [`Score`] — score 4D (exact, alias, refined, iface) para seleção
 
+pub mod dispatch;
 pub mod ffi;
 pub mod shape;
 pub mod ty;
 
+pub use dispatch::{DispatchError, DispatchTable, OverloadInfo, Score};
 pub use ffi::FfiSymbol;
 pub use shape::{TypeId, TypeShape};
 pub use ty::{PrimTy, Ty, TypeEnv};
