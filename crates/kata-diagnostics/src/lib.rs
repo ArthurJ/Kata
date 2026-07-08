@@ -10,3 +10,7 @@
 pub mod backend;
 pub mod frontend;
 pub mod middleend;
+
+pub use backend::BackendError;
+pub use frontend::{FrontendError, MietteSpan};
+pub use middleend::MiddleError;

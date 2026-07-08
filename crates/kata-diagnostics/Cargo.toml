@@ -9,3 +9,6 @@ description = "Erros estruturados do compilador — 1 crate, 3 submódulos (fron
 miette.workspace = true
 thiserror.workspace = true
 kata-ast.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
