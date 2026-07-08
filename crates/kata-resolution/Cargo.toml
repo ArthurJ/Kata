@@ -1,0 +1,15 @@
+[package]
+name = "kata-resolution"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "Pass 0+1 — popula TypeEnv, resolve imports, coleta assinaturas, expande smart constructors"
+
+[dependencies]
+kata-core.workspace = true
+kata-ast.workspace = true
+kata-diagnostics.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
+proptest.workspace = true

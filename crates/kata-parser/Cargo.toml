@@ -1,0 +1,15 @@
+[package]
+name = "kata-parser"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "Parser recursive-descent prefix-only (sem Pratt parsing)"
+
+[dependencies]
+kata-ast.workspace = true
+kata-lexer.workspace = true
+kata-diagnostics.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
+proptest.workspace = true

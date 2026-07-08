@@ -1,0 +1,23 @@
+[package]
+name = "kata-driver"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "CLI do compilador Kata — orquestra o pipeline completo"
+
+[[bin]]
+name = "kata"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
+kata-lexer.workspace = true
+kata-parser.workspace = true
+kata-resolution.workspace = true
+kata-inference.workspace = true
+kata-codegen.workspace = true
+kata-optimizer.workspace = true
+kata-core.workspace = true
+kata-ast.workspace = true
+kata-diagnostics.workspace = true
+kata-rt.workspace = true

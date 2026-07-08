@@ -1,0 +1,66 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/kata-core",
+    "crates/kata-ast",
+    "crates/kata-diagnostics",
+    "crates/kata-lexer",
+    "crates/kata-parser",
+    "crates/kata-resolution",
+    "crates/kata-inference",
+    "crates/kata-codegen",
+    "crates/kata-optimizer",
+    "crates/kata-rt",
+    "crates/kata-driver",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+authors = ["Arthur Juliao"]
+description = "Kata Language Compiler — LTS 1.0"
+
+[workspace.dependencies]
+# ── Diagnostics ──────────────────────────────────────────
+miette = { version = "7", features = ["fancy"] }
+thiserror = "2"
+
+# ── CLI ───────────────────────────────────────────────────
+clap = { version = "4", features = ["derive"] }
+
+# ── AST infrastructure ───────────────────────────────────
+id-arena = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# ── Codegen ──────────────────────────────────────────────
+cranelift-jit = "0.133"
+cranelift-module = "0.133"
+cranelift-native = "0.133"
+cranelift-codegen = "0.133"
+cranelift-frontend = "0.133"
+cranelift-object = "0.133"
+
+# ── Runtime ──────────────────────────────────────────────
+bumpalo = "3"
+num-bigint = "0.4"
+num-rational = "0.4"
+num-traits = "0.2"
+
+# ── Dev / Testing ────────────────────────────────────────
+proptest = "1"
+insta = "1"
+criterion = "0.5"
+trybuild = "1"
+
+# ── Internal crates ──────────────────────────────────────
+kata-core = { path = "crates/kata-core" }
+kata-ast = { path = "crates/kata-ast" }
+kata-diagnostics = { path = "crates/kata-diagnostics" }
+kata-lexer = { path = "crates/kata-lexer" }
+kata-parser = { path = "crates/kata-parser" }
+kata-resolution = { path = "crates/kata-resolution" }
+kata-inference = { path = "crates/kata-inference" }
+kata-codegen = { path = "crates/kata-codegen" }
+kata-optimizer = { path = "crates/kata-optimizer" }
+kata-rt = { path = "crates/kata-rt" }

@@ -1,0 +1,16 @@
+[package]
+name = "kata-inference"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "Pass 2 — type-check dos corpos, inferência, dispatch por dominância, TAST enriquecida"
+
+[dependencies]
+kata-core.workspace = true
+kata-ast.workspace = true
+kata-diagnostics.workspace = true
+kata-resolution.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
+proptest.workspace = true

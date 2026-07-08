@@ -1,0 +1,14 @@
+[package]
+name = "kata-lexer"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "Analisador léxico indent-sensitive — emite INDENT/DEDENT sintéticos"
+
+[dependencies]
+kata-ast.workspace = true
+kata-diagnostics.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
+proptest.workspace = true

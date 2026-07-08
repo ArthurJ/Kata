@@ -1,0 +1,15 @@
+[package]
+name = "kata-rt"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "Runtime isolado — BigInt/SMI, Float, Rational, Text, arena, print, ponte C-ABI"
+
+[dependencies]
+bumpalo.workspace = true
+num-bigint.workspace = true
+num-rational.workspace = true
+num-traits.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true

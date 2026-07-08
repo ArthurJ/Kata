@@ -1,0 +1,11 @@
+[package]
+name = "kata-ast"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "AST de dados puros — Expr, Span, Spanned, Pattern, TypeExpr"
+
+[dependencies]
+id-arena.workspace = true
+serde.workspace = true
+serde_json.workspace = true

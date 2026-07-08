@@ -1,0 +1,10 @@
+[package]
+name = "kata-optimizer"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "Passes de otimização — TRMA, StreamFusion, ARC pass (stub no Fio 1)"
+
+[dependencies]
+kata-core.workspace = true
+kata-ast.workspace = true

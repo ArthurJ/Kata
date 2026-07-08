@@ -1,0 +1,9 @@
+[package]
+name = "kata-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "Fundação transversal — Ty, PrimTy, TypeEnv, FfiSymbol, TypeShape, type_id"
+
+[dependencies]
+kata-ast.workspace = true

@@ -1,0 +1,11 @@
+[package]
+name = "kata-diagnostics"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "Erros estruturados do compilador — 1 crate, 3 submódulos (frontend, middleend, backend)"
+
+[dependencies]
+miette.workspace = true
+thiserror.workspace = true
+kata-ast.workspace = true

@@ -1,0 +1,21 @@
+[package]
+name = "kata-codegen"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "Lowering TAST→CLIF + MetadataTable sidecar + emit Cranelift JIT"
+
+[dependencies]
+cranelift-jit.workspace = true
+cranelift-module.workspace = true
+cranelift-native.workspace = true
+cranelift-codegen.workspace = true
+cranelift-frontend.workspace = true
+cranelift-object.workspace = true
+kata-core.workspace = true
+kata-ast.workspace = true
+kata-rt.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
+proptest.workspace = true
