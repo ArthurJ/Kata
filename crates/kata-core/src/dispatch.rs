@@ -11,6 +11,7 @@
 //! iface (Fio 7) são sempre 0. Mas a estrutura do algoritmo está pronta.
 
 use crate::ty::Ty;
+use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
 
 /// Informação de uma sobrecarga registrada.
@@ -185,14 +186,14 @@ impl DispatchTable {
 
         if candidates.is_empty() {
             // Tenta dar mensagem útil
-            if self.has_function(name) {
-                if let Some(first) = overloads.first() {
-                    return Err(DispatchError::TypeMismatch {
-                        name: name.to_string(),
-                        expected: format!("{:?}", first.params),
-                        found: format!("{:?}", args),
-                    });
-                }
+            if self.has_function(name)
+                && let Some(first) = overloads.first()
+            {
+                return Err(DispatchError::TypeMismatch {
+                    name: name.to_string(),
+                    expected: format!("{:?}", first.params),
+                    found: format!("{:?}", args),
+                });
             }
             return Err(DispatchError::FunctionNotFound {
                 name: name.to_string(),
@@ -201,7 +202,7 @@ impl DispatchTable {
         }
 
         // Ordenar por score decrescente (lexicográfico)
-        candidates.sort_by(|a, b| b.score.cmp(&a.score));
+        candidates.sort_by_key(|b| Reverse(b.score));
 
         let best = &candidates[0];
         let best_score = best.score;
@@ -250,9 +251,9 @@ pub enum DispatchError {
 /// retorna Score::incompatible() (todos zero).
 fn match_score(args: &[Ty], params: &[Ty]) -> Score {
     let mut exact = 0;
-    let mut alias = 0;
-    let mut refined = 0;
-    let mut iface = 0;
+    let alias = 0;
+    let refined = 0;
+    let iface = 0;
 
     for (arg, param) in args.iter().zip(params) {
         if arg == param {
