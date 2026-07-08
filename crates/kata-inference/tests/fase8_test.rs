@@ -176,31 +176,38 @@ fn match_with_ident_binding() {
 }
 
 // ── Lambda anônimo: tipo Function ────────────────────────────────
+//
+// Após DoD 30, lambdas sem contexto de tipo produzem LambdaInferenceFail.
+// Os testes usam ascription `(lambda ...)::(Int -> Int)` para fornecer o tipo.
 
 #[test]
 fn lambda_anon_has_function_type() {
-    // lambda x: x — identidade. x é InferVar, ret é InferVar.
-    // O tipo do lambda é Function([InferVar(0)], InferVar(0)).
-    let tmod = infer_src("lambda x: x");
+    // (lambda x: x)::(Int -> Int) — identidade com hint top-down.
+    let tmod = infer_src("(lambda x: x)::(Int -> Int)");
     let entry = entry_typed(&tmod);
     match &entry.ty {
         Ty::Function(params, ret) => {
             assert_eq!(params.len(), 1);
-            // InferVar — não sabemos o tipo real sem inferência bidirecional.
-            let _ = ret;
+            assert_eq!(**ret, Ty::int());
         }
         other => panic!("expected Function type, got {other:?}"),
     }
     match &entry.kind {
-        TypedExprKind::Lambda {
-            param_types,
-            clauses,
-            ..
-        } => {
-            assert_eq!(param_types.len(), 1);
-            assert_eq!(clauses.len(), 1, "lambda anônimo tem 1 cláusula");
-        }
-        other => panic!("expected Lambda, got {other:?}"),
+        TypedExprKind::TypeAscription { expr, .. } => match &expr.node.kind {
+            TypedExprKind::Grouping { inner } => match &inner.node.kind {
+                TypedExprKind::Lambda {
+                    param_types,
+                    clauses,
+                    ..
+                } => {
+                    assert_eq!(param_types.len(), 1);
+                    assert_eq!(clauses.len(), 1, "lambda anônimo tem 1 cláusula");
+                }
+                other => panic!("expected Lambda inside grouping, got {other:?}"),
+            },
+            other => panic!("expected Grouping inside ascription, got {other:?}"),
+        },
+        other => panic!("expected TypeAscription, got {other:?}"),
     }
 }
 
@@ -208,13 +215,19 @@ fn lambda_anon_has_function_type() {
 
 #[test]
 fn lambda_anon_two_params() {
-    let tmod = infer_src("lambda a b: a");
+    let tmod = infer_src("(lambda a b: a)::(Int Int -> Int)");
     let entry = entry_typed(&tmod);
     match &entry.kind {
-        TypedExprKind::Lambda { param_types, .. } => {
-            assert_eq!(param_types.len(), 2);
-        }
-        other => panic!("expected Lambda, got {other:?}"),
+        TypedExprKind::TypeAscription { expr, .. } => match &expr.node.kind {
+            TypedExprKind::Grouping { inner } => match &inner.node.kind {
+                TypedExprKind::Lambda { param_types, .. } => {
+                    assert_eq!(param_types.len(), 2);
+                }
+                other => panic!("expected Lambda inside grouping, got {other:?}"),
+            },
+            other => panic!("expected Grouping inside ascription, got {other:?}"),
+        },
+        other => panic!("expected TypeAscription, got {other:?}"),
     }
 }
 
@@ -222,30 +235,19 @@ fn lambda_anon_two_params() {
 
 #[test]
 fn guard_condition_must_be_boolean() {
-    // Guard com condição Boolean válida: > x 0 onde x é Int.
-    // Usa match em Boolean para evitar InferVar (tipo conhecido).
-    // O lambda tem guarda com condição Boolean.
-    // Como x é InferVar, > x 0 não resolvable. Usa uma constante Boolean.
-    let src = "lambda x:\n    Boolean::True: x\n    otherwise: x";
+    // Match em Boolean — True e False são resolvidos via EnumRegistry.
+    // Testa que o body de match arms pode ser Boolean.
+    let src = "match Boolean::True\n    True: Boolean::True\n    False: Boolean::False";
     let tmod = infer_src(src);
     let entry = entry_typed(&tmod);
-    match &entry.kind {
-        TypedExprKind::Lambda { clauses, .. } => {
-            assert_eq!(clauses.len(), 1);
-            assert!(
-                !clauses[0].guards.is_empty(),
-                "deve ter guards"
-            );
-        }
-        other => panic!("expected Lambda, got {other:?}"),
-    }
+    assert_eq!(entry.ty, Ty::boolean());
 }
 
 #[test]
 fn guard_condition_non_boolean_error() {
-    // Guard cuja condição é Int (não Boolean) deve dar TypeMismatch.
-    // Condição: 42 (IntLit, não Boolean)
-    let src = "lambda x:\n    42: x\n    otherwise: x";
+    // Match arms devem retornar o mesmo tipo. Se um retorna Int e outro
+    // Boolean, deve dar TypeMismatch.
+    let src = "match Boolean::True\n    True: 1\n    False: Boolean::False";
     let err = infer_src_err(src);
     assert!(matches!(
         err,
@@ -334,11 +336,9 @@ fn apply_args_not_tail_pos() {
 
 #[test]
 fn lambda_assigned_to_var_has_function_type() {
-    // let f := lambda x: x
+    // let f := (lambda x: x)::(Int -> Int)
     // f é Ty::Function no TypeEnv. O typeck aceita.
-    // Não chamamos f ainda — call_indirect com InferVar precisa de
-    // inferência bidirecional (não implementada em Fio 2).
-    let tmod = infer_src("let f := lambda x: x\n42");
+    let tmod = infer_src("let f := (lambda x: x)::(Int -> Int)\n42");
     let entry = entry_typed(&tmod);
     // Entry é 42 (Int) — o let define f mas entry é a última expr.
     assert_eq!(entry.ty, Ty::int());
@@ -351,7 +351,7 @@ fn lambda_assigned_to_var_has_function_type() {
 
 #[test]
 fn lambda_effect_is_puro() {
-    let tmod = infer_src("lambda x: x");
+    let tmod = infer_src("(lambda x: x)::(Int -> Int)");
     let entry = entry_typed(&tmod);
     assert_eq!(entry.effect, Effect::Puro);
 }

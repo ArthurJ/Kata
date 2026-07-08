@@ -549,6 +549,16 @@ fn infer_lambda(
         partial
     };
 
+    // DoD 30: LambdaInferenceFail — se nenhum mecanismo resolveu os tipos
+    // dos parâmetros (partial dispatch vazio, sem hint), produzir erro
+    // distinto em vez de criar InferVar e deixar o dispatch falhar com
+    // NoOverload opaco.
+    if param_type_hints.len() < patterns.len() {
+        return Err(MiddleError::LambdaInferenceFail {
+            span: (*span).into(),
+        });
+    }
+
     // Processa padrões — usa hint do partial dispatch se disponível, senão InferVar.
     let mut param_types: Vec<Ty> = Vec::with_capacity(patterns.len());
     let mut typed_patterns: Vec<Spanned<TypedPattern>> = Vec::with_capacity(patterns.len());

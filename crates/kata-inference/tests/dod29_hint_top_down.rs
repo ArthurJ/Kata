@@ -4,8 +4,8 @@
 //! O typeck propaga o tipo anotado como hint top-down para o lambda,
 //! permitindo que os parâmetros sejam tipados sem partial dispatch.
 //!
-//! Nota de sintaxe: o parser de type expressions exige parênteses nos
-//! params da função: `(Int) -> Int`, não `Int -> Int`.
+//! Sintaxe de type expression de função: `(A B C -> D)` — params separados
+//! por espaço, `->` separa params do retorno, tudo dentro dos parênteses.
 
 use kata_core::ty::Ty;
 use kata_inference::{infer_module, TypedExprKind};
@@ -26,12 +26,12 @@ fn entry_typed(tmod: &kata_inference::TypedModule) -> &kata_inference::TypedExpr
 
 // ── Casos do DoD 29 ────────────────────────────────────────────────
 
-/// `(lambda x: + x 1)::((Int) -> Int)` — ascription em lambda.
+/// `(lambda x: + x 1)::(Int -> Int)` — ascription em lambda.
 /// O hint `Int -> Int` propaga `x: Int` para dentro do lambda.
 /// Nota: o parser wrapping `()` produz Grouping em volta do lambda na TAST.
 #[test]
 fn hint_top_down_lambda_ascription() {
-    let tmod = infer_src("(lambda x: + x 1)::((Int) -> Int)");
+    let tmod = infer_src("(lambda x: + x 1)::(Int -> Int)");
     let entry = entry_typed(&tmod);
 
     assert_eq!(
@@ -64,26 +64,23 @@ fn hint_top_down_lambda_ascription() {
     }
 }
 
-/// `(lambda x y: + x y)::((Int, Int) -> Int)` — dois parâmetros.
+/// `(lambda x y: + x y)::(Int Int -> Int)` — dois parâmetros.
 #[test]
 fn hint_top_down_two_params() {
-    let tmod = infer_src("(lambda x y: + x y)::((Int, Int) -> Int)");
+    let tmod = infer_src("(lambda x y: + x y)::(Int Int -> Int)");
     let entry = entry_typed(&tmod);
 
     assert_eq!(
         entry.ty,
-        Ty::Function(
-            vec![Ty::int(), Ty::int()],
-            Box::new(Ty::int())
-        ),
-        "lambda de 2 params deve ter tipo (Int, Int) -> Int"
+        Ty::Function(vec![Ty::int(), Ty::int()], Box::new(Ty::int())),
+        "lambda de 2 params deve ter tipo (Int Int -> Int)"
     );
 }
 
-/// `(lambda x: + x 1.0)::((Float) -> Float)` — hint Float.
+/// `(lambda x: + x 1.0)::(Float -> Float)` — hint Float.
 #[test]
 fn hint_top_down_float() {
-    let tmod = infer_src("(lambda x: + x 1.0)::((Float) -> Float)");
+    let tmod = infer_src("(lambda x: + x 1.0)::(Float -> Float)");
     let entry = entry_typed(&tmod);
 
     assert_eq!(
@@ -93,16 +90,16 @@ fn hint_top_down_float() {
     );
 }
 
-/// `let f := (lambda x: + x 1)::((Int) -> Int); f 5` — aplicação do lambda tipado via hint.
+/// `let f := (lambda x: + x 1)::(Int -> Int); f 5` — aplicação do lambda tipado via hint.
 #[test]
 fn hint_top_down_then_apply() {
-    let tmod = infer_src("let f := (lambda x: + x 1)::((Int) -> Int)\nf 5");
+    let tmod = infer_src("let f := (lambda x: + x 1)::(Int -> Int)\nf 5");
     let entry = entry_typed(&tmod);
 
     assert_eq!(entry.ty, Ty::int(), "f 5 deve retornar Int");
 }
 
-/// `((lambda x: + x 1)::((Int) -> Int)) 42` — aplica o lambda tipado.
+/// `((lambda x: + x 1)::(Int -> Int)) 42` — aplica o lambda tipado.
 ///
 /// TODO: requer DoD 31 (apply de lambda inline) — `infer_apply` só aceita
 /// `Expr::Ident` como callee. Quando o callee é `TypeAscription(Grouping(Lambda))`,
@@ -110,7 +107,7 @@ fn hint_top_down_then_apply() {
 #[test]
 #[ignore = "requer DoD 31 — apply de lambda inline"]
 fn hint_top_down_direct_apply() {
-    let tmod = infer_src("((lambda x: + x 1)::((Int) -> Int)) 42");
+    let tmod = infer_src("((lambda x: + x 1)::(Int -> Int)) 42");
     let entry = entry_typed(&tmod);
 
     assert_eq!(entry.ty, Ty::int(), "aplicação deve retornar Int");

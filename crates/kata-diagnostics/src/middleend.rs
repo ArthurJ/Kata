@@ -88,4 +88,11 @@ pub enum MiddleError {
         #[label]
         span: MietteSpan,
     },
+
+    #[error("não foi possível inferir os tipos dos parâmetros do lambda — forneça uma anotação de tipo (ex: ::(Int -> Int))")]
+    #[diagnostic(code = "type.lambda_inference_fail")]
+    LambdaInferenceFail {
+        #[label("lambda sem tipo inferível")]
+        span: MietteSpan,
+    },
 }

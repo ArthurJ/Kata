@@ -15,68 +15,59 @@ impl Parser {
             }
             Token::LParen => {
                 self.advance(); // consume (
+
                 // `()` = Unit type
                 if matches!(self.peek(), Token::RParen) {
                     self.advance();
                     return Ok(Spanned::new(TypeExpr::Unit, start));
                 }
-                let first = self.parse_type_expr()?;
 
-                // No comma → either grouping `(T)` or function type `(T) -> U`
-                if matches!(self.peek(), Token::RParen) {
-                    self.advance();
-                    // Check for `->` (function type with single param)
+                // Coleta tipos até `->` ou `)`. Sintaxe: `(A B C -> D)`.
+                // Params separados por espaço, `->` separa params do retorno.
+                let mut params = Vec::new();
+
+                loop {
+                    let ty = self.parse_type_expr()?;
+
                     if matches!(self.peek(), Token::ThinArrow) {
-                        self.advance();
+                        // `ty ->` — ty é o último param, próximo é o retorno.
+                        params.push(ty);
+                        self.advance(); // consume ->
                         let ret = self.parse_type_expr()?;
+                        self.expect(&Token::RParen, "\")\"")?;
                         let span = start.cover(ret.span);
                         return Ok(Spanned::new(
                             TypeExpr::Func {
-                                params: vec![first],
+                                params,
                                 ret: Box::new(ret),
                             },
                             span,
                         ));
                     }
-                    let span = start.cover(first.span);
-                    return Ok(Spanned::new(TypeExpr::Grouping(Box::new(first)), span));
-                }
 
-                // Comma present → could be Func type if ThinArrow follows
-                let mut params = vec![first];
-                while matches!(self.peek(), Token::Comma) {
-                    self.advance();
                     if matches!(self.peek(), Token::RParen) {
-                        break;
+                        // `ty)` — sem `->`, é grouping de um único tipo.
+                        if params.is_empty() {
+                            self.advance(); // consume )
+                            let span = start.cover(ty.span);
+                            return Ok(Spanned::new(TypeExpr::Grouping(Box::new(ty)), span));
+                        }
+                        // Múltiplos tipos sem `->` — não é válido em código
+                        // bem-formado. Retornamos grouping do primeiro como
+                        // fallback (não deveria acontecer).
+                        params.push(ty);
+                        self.advance(); // consume )
+                        let span = start.cover(params.last().expect("non-empty").span);
+                        return Ok(Spanned::new(
+                            TypeExpr::Grouping(Box::new(
+                                params.into_iter().next().expect("at least one"),
+                            )),
+                            span,
+                        ));
                     }
-                    params.push(self.parse_type_expr()?);
-                }
-                self.expect(&Token::RParen, "`)`")?;
 
-                // Check for `->` (function type)
-                if matches!(self.peek(), Token::ThinArrow) {
-                    self.advance();
-                    let ret = self.parse_type_expr()?;
-                    let span = start.cover(ret.span);
-                    return Ok(Spanned::new(
-                        TypeExpr::Func {
-                            params,
-                            ret: Box::new(ret),
-                        },
-                        span,
-                    ));
+                    params.push(ty);
                 }
-
-                // No `->` — this could be ParamApp but we don't have the type name here.
-                // For Fio 1, this case shouldn't arise. Return as grouping of first param
-                // as a fallback (this is a simplification).
-                let span = start.cover(params.last().expect("non-empty params").span);
-                Ok(Spanned::new(
-                    TypeExpr::Grouping(Box::new(
-                        params.into_iter().next().expect("at least one param"),
-                    )),
-                    span,
-                ))
             }
             _ => Err(self.error("type expression")),
         }
