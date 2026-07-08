@@ -1,0 +1,442 @@
+//! BigInt com SMI tagging — representação nativa de Int.
+//!
+//! **Invariante de transparência:** o compilador vê `i64` em todo o pipeline.
+//! O runtime decide representação: SMI inline (zero alocação) ou heap BigInt.
+//!
+//! ## SMI Tagging
+//!
+//! O bit menos significativo (LSB) do `i64` é a tag:
+//! - **LSB = 1** → SMI (Small Integer). O valor está embutido: `value >> 1`.
+//!   O range de SMI é `[-2^62, 2^62 - 1]` (63 bits de payload com sinal).
+//! - **LSB = 0** → Ponteiro para heap BigInt. O `i64` é o endereço do bloco
+//!   heap (alinhado a 8 bytes, então LSB é sempre 0).
+//!
+//! O codegen nunca precisa distinguir — todas as operações (`bi_add`,
+//! `bi_eq`, etc.) fazem dispatch interno: se ambos operandos são SMI e o
+//! resultado cabe em SMI, opera inline; caso contrário, promove para heap.
+//!
+//! ## Por que SMI tagging
+//!
+//! - Valores pequenos (esmagadora maioria) são zero-allocation.
+//! - O compilador não precisa saber — vê `i64`, codegen passa `i64`.
+//! - BigInt de precisão arbitrária para valores grandes, sem overflow.
+
+use num_bigint::BigInt;
+use num_traits::{One, ToPrimitive, Zero};
+
+// ── Constantes de tagging ─────────────────────────────────
+
+/// Tag SMI: LSB = 1.
+const SMI_TAG: u64 = 1;
+/// Máscara para extrair payload de SMI: `value >> 1`.
+/// Usamos shift right 1 para obter o payload, shift left 1 + tag para codificar.
+const SMI_SHIFT: u32 = 1;
+
+/// Limite superior de SMI: 2^62 - 1 (maior i62 não-negativo).
+const SMI_MAX: i64 = (1i64 << 62) - 1;
+/// Limite inferior de SMI: -2^62 (menor i62).
+const SMI_MIN: i64 = -(1i64 << 62);
+
+/// Verifica se um i64 é SMI (LSB = 1).
+#[inline]
+fn is_smi(val: i64) -> bool {
+    (val as u64) & SMI_TAG == SMI_TAG
+}
+
+/// Codifica um i64 como SMI. Não verifica range — caller deve checar.
+#[inline]
+fn encode_smi(val: i64) -> i64 {
+    (val << SMI_SHIFT) | (SMI_TAG as i64)
+}
+
+/// Decodifica SMI para i64 (payload).
+#[inline]
+fn decode_smi(val: i64) -> i64 {
+    val >> SMI_SHIFT
+}
+
+/// Verifica se um i64 cabe em SMI.
+#[inline]
+fn fits_smi(val: i64) -> bool {
+    val >= SMI_MIN && val <= SMI_MAX
+}
+
+// ── Heap BigInt ───────────────────────────────────────────
+
+/// Layout do bloco heap para BigInt.
+/// Usamos um header com refcount (para futura integração com ARC) seguido
+/// dos digits do BigInt. Para Fio 1, o refcount é mantido em 1 (sem sharing).
+///
+/// Em Fio 1, usamos `Box<BigInt>` diretamente — o `i64` retornado é um
+/// ponteiro não-null para o heap. O LSB é 0 (alinhamento natural de Box).
+///
+/// **Invariante:** `i64` com LSB=0 é sempre ponteiro válido para `Box<BigInt>`.
+/// O caller nunca deve aritmética de ponteiros — usa as funções deste módulo.
+
+/// Aloca BigInt no heap e retorna o ponteiro como i64.
+/// O LSB será 0 (alinhamento de Box<BigInt> é ≥ 8 bytes).
+fn alloc_bigint(n: BigInt) -> i64 {
+    let boxed = Box::new(n);
+    let ptr = Box::into_raw(boxed) as *mut BigInt as i64;
+    // LSB deve ser 0 — Box<BigInt> tem alinhamento ≥ 8.
+    debug_assert!(!is_smi(ptr), "BigInt pointer colide com SMI tag");
+    ptr
+}
+
+/// Recupera &BigInt de um ponteiro heap (LSB = 0).
+///
+/// # Safety
+/// `val` deve ser um ponteiro válido de `alloc_bigint` ainda não liberado.
+unsafe fn deref_bigint<'a>(val: i64) -> &'a BigInt {
+    unsafe { &*(val as *const BigInt) }
+}
+
+/// Libera um BigInt heap (LSB = 0).
+///
+/// # Safety
+/// `val` deve ser um ponteiro válido de `alloc_bigint` e não ter sido
+/// liberado antes. Após isto, `val` é inválido.
+#[allow(dead_code)] // Chamado pelo codegen via FFI em fios posteriores
+unsafe fn free_bigint(val: i64) {
+    unsafe {
+        let _ = Box::from_raw(val as *mut BigInt);
+    }
+}
+
+// ── API pública C-ABI ─────────────────────────────────────
+
+/// Cria um Int a partir de string decimal. Usado para literais.
+/// Se cabe em SMI, retorna SMI; caso contrário, aloca heap BigInt.
+///
+/// # Safety
+/// `s` deve ser um ponteiro válido para string C null-terminated.
+/// (Em Fio 1, chamado internamente — não expomos C string ainda.)
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_tag_int(val: i64) -> i64 {
+    if fits_smi(val) {
+        encode_smi(val)
+    } else {
+        alloc_bigint(BigInt::from(val))
+    }
+}
+
+/// Cria um Int a partir de texto bruto do literal.
+/// Suporta decimal, hex (0x), octal (0o), bin (0b), separador _.
+/// (Versão interna — chamada pelo codegen ao lowerar IntLit.)
+pub fn tag_int_from_str(text: &str) -> i64 {
+    let cleaned = text.replace('_', "");
+    let n = if let Some(hex) = cleaned
+        .strip_prefix("0x")
+        .or_else(|| cleaned.strip_prefix("0X"))
+    {
+        BigInt::parse_bytes(hex.as_bytes(), 16)
+    } else if let Some(oct) = cleaned
+        .strip_prefix("0o")
+        .or_else(|| cleaned.strip_prefix("0O"))
+    {
+        BigInt::parse_bytes(oct.as_bytes(), 8)
+    } else if let Some(bin) = cleaned
+        .strip_prefix("0b")
+        .or_else(|| cleaned.strip_prefix("0B"))
+    {
+        BigInt::parse_bytes(bin.as_bytes(), 2)
+    } else if let Some(dec) = cleaned
+        .strip_prefix("0d")
+        .or_else(|| cleaned.strip_prefix("0D"))
+    {
+        BigInt::parse_bytes(dec.as_bytes(), 10)
+    } else {
+        BigInt::parse_bytes(cleaned.as_bytes(), 10)
+    };
+    let n = n.expect("número inválido");
+    if let Some(small) = n.to_i64() {
+        if fits_smi(small) {
+            return encode_smi(small);
+        }
+    }
+    alloc_bigint(n)
+}
+
+/// Soma dois Int. Se ambos SMI e resultado cabe, opera inline.
+/// Caso contrário, promove para BigInt.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_bi_add(a: i64, b: i64) -> i64 {
+    if is_smi(a) && is_smi(b) {
+        let ra = decode_smi(a);
+        let rb = decode_smi(b);
+        match ra.checked_add(rb) {
+            Some(result) if fits_smi(result) => return encode_smi(result),
+            _ => {}
+        }
+        // Overflow SMI — promove
+        let result = BigInt::from(ra) + BigInt::from(rb);
+        return alloc_bigint(result);
+    }
+    // Pelo menos um é BigInt
+    let result = unsafe {
+        let ba = if is_smi(a) {
+            BigInt::from(decode_smi(a))
+        } else {
+            deref_bigint(a).clone()
+        };
+        let bb = if is_smi(b) {
+            BigInt::from(decode_smi(b))
+        } else {
+            deref_bigint(b).clone()
+        };
+        ba + bb
+    };
+    // Se resultado cabe em SMI, retorna SMI (evita heap desnecessário)
+    if let Some(small) = result.to_i64() {
+        if fits_smi(small) {
+            return encode_smi(small);
+        }
+    }
+    alloc_bigint(result)
+}
+
+/// Subtração dois Int.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_bi_sub(a: i64, b: i64) -> i64 {
+    if is_smi(a) && is_smi(b) {
+        let ra = decode_smi(a);
+        let rb = decode_smi(b);
+        match ra.checked_sub(rb) {
+            Some(result) if fits_smi(result) => return encode_smi(result),
+            _ => {}
+        }
+        let result = BigInt::from(ra) - BigInt::from(rb);
+        return alloc_bigint(result);
+    }
+    let result = unsafe {
+        let ba = if is_smi(a) {
+            BigInt::from(decode_smi(a))
+        } else {
+            deref_bigint(a).clone()
+        };
+        let bb = if is_smi(b) {
+            BigInt::from(decode_smi(b))
+        } else {
+            deref_bigint(b).clone()
+        };
+        ba - bb
+    };
+    if let Some(small) = result.to_i64() {
+        if fits_smi(small) {
+            return encode_smi(small);
+        }
+    }
+    alloc_bigint(result)
+}
+
+/// Multiplicação dois Int.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_bi_mul(a: i64, b: i64) -> i64 {
+    if is_smi(a) && is_smi(b) {
+        let ra = decode_smi(a);
+        let rb = decode_smi(b);
+        match ra.checked_mul(rb) {
+            Some(result) if fits_smi(result) => return encode_smi(result),
+            _ => {}
+        }
+        let result = BigInt::from(ra) * BigInt::from(rb);
+        return alloc_bigint(result);
+    }
+    let result = unsafe {
+        let ba = if is_smi(a) {
+            BigInt::from(decode_smi(a))
+        } else {
+            deref_bigint(a).clone()
+        };
+        let bb = if is_smi(b) {
+            BigInt::from(decode_smi(b))
+        } else {
+            deref_bigint(b).clone()
+        };
+        ba * bb
+    };
+    if let Some(small) = result.to_i64() {
+        if fits_smi(small) {
+            return encode_smi(small);
+        }
+    }
+    alloc_bigint(result)
+}
+
+/// Divisão inteira. Pânico se divisor é zero (o typeck deve prevenir
+/// via NonZero refined — Fio 6). Para Fio 1, divisão por zero = abort.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_bi_div(a: i64, b: i64) -> i64 {
+    let result = unsafe {
+        let ba = if is_smi(a) {
+            BigInt::from(decode_smi(a))
+        } else {
+            deref_bigint(a).clone()
+        };
+        let bb = if is_smi(b) {
+            BigInt::from(decode_smi(b))
+        } else {
+            deref_bigint(b).clone()
+        };
+        if bb.is_zero() {
+            panic!("divisão por zero em kata_rt_bi_div");
+        }
+        ba / bb
+    };
+    if let Some(small) = result.to_i64() {
+        if fits_smi(small) {
+            return encode_smi(small);
+        }
+    }
+    alloc_bigint(result)
+}
+
+/// Igualdade. Retorna 1 (True) ou 0 (False) como i64 (Boolean::True/False).
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_bi_eq(a: i64, b: i64) -> i64 {
+    if is_smi(a) && is_smi(b) {
+        return if decode_smi(a) == decode_smi(b) { 1 } else { 0 };
+    }
+    let result = unsafe {
+        let ba: BigInt = if is_smi(a) {
+            BigInt::from(decode_smi(a))
+        } else {
+            deref_bigint(a).clone()
+        };
+        let bb: BigInt = if is_smi(b) {
+            BigInt::from(decode_smi(b))
+        } else {
+            deref_bigint(b).clone()
+        };
+        ba == bb
+    };
+    if result { 1 } else { 0 }
+}
+
+/// Menor que. Retorna 1 (True) ou 0 (False).
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_bi_lt(a: i64, b: i64) -> i64 {
+    if is_smi(a) && is_smi(b) {
+        return if decode_smi(a) < decode_smi(b) { 1 } else { 0 };
+    }
+    let result = unsafe {
+        let ba: BigInt = if is_smi(a) {
+            BigInt::from(decode_smi(a))
+        } else {
+            deref_bigint(a).clone()
+        };
+        let bb: BigInt = if is_smi(b) {
+            BigInt::from(decode_smi(b))
+        } else {
+            deref_bigint(b).clone()
+        };
+        ba < bb
+    };
+    if result { 1 } else { 0 }
+}
+
+/// Maior que. Retorna 1 (True) ou 0 (False).
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_bi_gt(a: i64, b: i64) -> i64 {
+    // a > b == b < a == !(a <= b)
+    if is_smi(a) && is_smi(b) {
+        return if decode_smi(a) > decode_smi(b) { 1 } else { 0 };
+    }
+    let result = unsafe {
+        let ba: BigInt = if is_smi(a) {
+            BigInt::from(decode_smi(a))
+        } else {
+            deref_bigint(a).clone()
+        };
+        let bb: BigInt = if is_smi(b) {
+            BigInt::from(decode_smi(b))
+        } else {
+            deref_bigint(b).clone()
+        };
+        ba > bb
+    };
+    if result { 1 } else { 0 }
+}
+
+/// Desigualdade. Retorna 1 (True) ou 0 (False).
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_bi_neq(a: i64, b: i64) -> i64 {
+    if kata_rt_bi_eq(a, b) == 1 { 0 } else { 1 }
+}
+
+/// Menor ou igual. Retorna 1 (True) ou 0 (False).
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_bi_le(a: i64, b: i64) -> i64 {
+    if kata_rt_bi_lt(a, b) == 1 || kata_rt_bi_eq(a, b) == 1 {
+        1
+    } else {
+        0
+    }
+}
+
+/// Maior ou igual. Retorna 1 (True) ou 0 (False).
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_bi_ge(a: i64, b: i64) -> i64 {
+    if kata_rt_bi_gt(a, b) == 1 || kata_rt_bi_eq(a, b) == 1 {
+        1
+    } else {
+        0
+    }
+}
+
+/// Converte Int para String (para show/println).
+/// Retorna String alocada no heap (propriedade transferida ao caller).
+pub fn bigint_to_string(val: i64) -> String {
+    if is_smi(val) {
+        decode_smi(val).to_string()
+    } else {
+        unsafe { deref_bigint(val).to_string() }
+    }
+}
+
+/// `show` de Int — retorna string formatada.
+/// (Interno — o codegen chama `kata_rt_int_to_text` que produz ponteiro C.)
+pub fn show(val: i64) -> String {
+    bigint_to_string(val)
+}
+
+/// Converte Int para Rational (para interoperabilidade).
+pub fn to_rational(val: i64) -> num_rational::BigRational {
+    let n = if is_smi(val) {
+        BigInt::from(decode_smi(val))
+    } else {
+        unsafe { deref_bigint(val).clone() }
+    };
+    num_rational::BigRational::new(n, BigInt::one())
+}
+
+// ── Debug helpers (não C-ABI) ─────────────────────────────
+
+/// Verifica se valor é SMI. Para testes e debug.
+pub fn is_smi_pub(val: i64) -> bool {
+    is_smi(val)
+}
+
+/// Decodifica SMI para i64. Para testes e debug.
+pub fn decode_smi_pub(val: i64) -> i64 {
+    decode_smi(val)
+}
+
+/// Codifica i64 como SMI. Para testes e debug.
+pub fn encode_smi_pub(val: i64) -> i64 {
+    encode_smi(val)
+}
+
+/// Verifica se i64 cabe em SMI. Para testes e debug.
+pub fn fits_smi_pub(val: i64) -> bool {
+    fits_smi(val)
+}
+
+/// Cria Int a partir de i64. Para testes e debug.
+pub fn tag_int_pub(val: i64) -> i64 {
+    if fits_smi(val) {
+        encode_smi(val)
+    } else {
+        alloc_bigint(BigInt::from(val))
+    }
+}

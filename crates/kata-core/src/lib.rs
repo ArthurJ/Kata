@@ -6,6 +6,12 @@
 //! - [`TypeEnv`] — árvore de escopos para name resolution
 //! - [`FfiSymbol`] — enum tipado de símbolos FFI
 //! - [`TypeShape`] — projeção runtime para reflexão estrutural
-//! - [`type_id`] — identificador u32 para a type table do runtime
+//! - [`TypeId`] — identificador u32 para a type table do runtime
 
-// Implementação vem no Fio 1.
+pub mod ffi;
+pub mod shape;
+pub mod ty;
+
+pub use ffi::FfiSymbol;
+pub use shape::{TypeId, TypeShape};
+pub use ty::{PrimTy, Ty, TypeEnv};
