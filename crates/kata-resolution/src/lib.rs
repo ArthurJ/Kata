@@ -7,9 +7,8 @@
 
 pub mod prelude;
 
-use kata_ast::{Item, Module, Spanned, TypeExpr};
+use kata_ast::{Item, Module, TypeExpr};
 use kata_core::{PrimTy, Ty, TypeEnv};
-use std::collections::HashMap;
 
 /// Resultado da resolution — TypeEnv populado + assinaturas coletadas.
 #[derive(Debug, Clone)]
@@ -41,7 +40,7 @@ pub enum ResolveError {
 pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
     let mut type_env = TypeEnv::new();
     let mut signatures: Vec<Signature> = Vec::new();
-    let mut errors: Vec<ResolveError> = Vec::new();
+    let errors: Vec<ResolveError> = Vec::new();
 
     // Pass 0: popula TypeEnv com tipos declarados
     for item in &module.items {
