@@ -52,34 +52,111 @@ struct ModuleLoader {
 
 ```rust
 struct DispatchTable {
-    overloads: HashMap<(String, Vec<Ty>), OverloadInfo>,
-    // index secundário por nome para lookup rápido
-    by_name: HashMap<String, Vec<OverloadKey>>,
+    // index por nome → lista de overloads (params estão dentro de OverloadInfo)
+    entries: HashMap<String, Vec<OverloadInfo>>,
+    // funções marcadas com @commutative (dispatch tenta args invertidos)
+    commutative: HashSet<String>,
 }
 
 struct OverloadInfo {
-    signature: Signature,
-    substitutions: Option<HashMap<String, Ty>>,  // generics (Fio 7)
-    generic_ast_key: Option<String>,
-    generic_param_names: Vec<String>,
+    name: String,
+    params: Vec<Ty>,
+    ret: Ty,
+    ffi_symbol: Option<String>,
+    is_action: bool,
+    is_generic: bool,        // Fio 7
+    is_constructor: bool,    // smart constructors
+    associative_neutral: Option<i64>,  // @associative(0) para TRMA
+    // Fio 7 adiciona:
+    // substitutions: Option<HashMap<String, Ty>>,
+    // generic_ast_key: Option<String>,
+    // generic_param_names: Vec<String>,
 }
 ```
 
 - **Fio:** 1 (nasce com scoring), 7 (múltiplas overloads + generics)
-- **Função:** Tabela de overloads indexada por (nome, tipos de argumentos).
-  O dispatcher coleta candidatos por nome, pontua por compatibilidade de tipos,
-  e seleciona o de maior score. Empate → `AmbiguousDispatch`.
+- **Função:** Tabela de overloads indexada por nome. O dispatcher coleta
+  candidatos por nome, pontua por compatibilidade de tipos, e seleciona o de
+  maior score. Empate → `AmbiguousDispatch`.
 - **Porquê:** O scoring por dominância nasce em Fio 1 mesmo com 1 overload.
   O algoritmo não fica mais complexo com mais entradas — fica mais complexo
   quando existem ambiguidades, e isso só acontece com interfaces (Fio 7).
   Nascer com scoring evita retrofit.
-- **Invariantes:**
-  - Actions são registradas com `vec![]` (zero params) no Pass 1. O typeck
-    faz bypass do dispatch table para actions com args (ex: `fork!(consumer! ch)`
-    — o action `consumer` tem 0 params declarados mas recebe 1 arg via
-    thread-local `fork_arg!()`).
-  - O `substitutions` é `None` para funções não-genéricas e `Some(map)` para
-    instâncias monomorfizadas (Fio 7).
+
+### Score 4D — Categorias de Match
+
+O scoring classifica cada par (arg, param) em uma de quatro categorias,
+ordenadas lexicograficamente por prioridade:
+
+```rust
+struct Score {
+    exact: usize,   // arg == param (tipo idêntico)
+    alias: usize,   // arg é alias de param via alias_registry (Fio 5)
+    refined: usize, // arg é subtipo refinado de param (Fio 6: PositiveInt <: Int)
+    iface: usize,   // arg implementa param (Fio 7: Int implementa NUM)
+    is_generic_origin: bool,  // tiebreak: concreto (false) vence genérico (true)
+}
+```
+
+**Ordenação:** lexicográfica decrescente. Mais `exact` vence; empate em
+`exact` → mais `alias` vence; empate em `alias` → mais `refined`; empate em
+`refined` → mais `iface`; empate total → concreto vence genérico.
+
+**Evolução por fio:**
+
+| Fio | exact | alias | refined | iface | is_generic |
+|-----|-------|-------|---------|-------|------------|
+| 1   | ✅    | —     | —       | —     | —          |
+| 5   | ✅    | ✅    | —       | —     | —          |
+| 6   | ✅    | ✅    | ✅      | —     | —          |
+| 7   | ✅    | ✅    | ✅      | ✅    | ✅         |
+
+Em Fio 1, só `exact` é não-zero. As outras dimensões são sempre 0, mas a
+estrutura do Score e a ordenação lexicográfica já estão prontas — adicionar
+uma dimensão nova é preencher um campo que já existe, não mudar o algoritmo.
+
+### Algoritmo de Resolução
+
+```
+resolve(name, args):
+    1. FILTRAR: para cada overload com mesma arity:
+       score = match_score(args, params)
+       se score.is_compatible(args.len()):
+           adiciona candidato (overload, score)
+    2. COMMUTATIVE: se 0 candidatos e @commutative e arity == 2:
+       tenta args invertidos (uma única vez)
+    3. ORDENAR: lexicográfico decrescente por Score
+    4. TOPO ÚNICO → Ok(info)
+    5. EMPATE → AmbiguousDispatch
+```
+
+O `match_score` itera posição-a-posição. Para cada par `(arg, param)`:
+- `arg == param` → `exact++`
+- alias match → `alias++` (Fio 5)
+- refined subtype → `refined++` (Fio 6)
+- interface compatível → `iface++` (Fio 7)
+- nenhum → `Score::incompatible()` (todos zero, descarta candidato)
+
+Se `exact + alias + refined + iface != args.len()`, o candidato é
+incompatível e descartado.
+
+### Commutative
+
+Funções marcadas com `@commutative` (ex: `=`, `+`) têm um short-circuit: se
+nenhum candidato compatível é encontrado com os args originais e a função é
+comutativa com arity 2, o dispatcher tenta args invertidos. Isto resolve
+casos como `Float == Int` quando só existe overload `Int == Float`.
+
+### Invariantes
+
+- Actions são registradas com `vec![]` (zero params) no Pass 1. O typeck
+  faz bypass do dispatch table para actions com args (ex: `fork!(consumer! ch)`
+  — o action `consumer` tem 0 params declarados mas recebe 1 arg via
+  thread-local `fork_arg!()`).
+- O `substitutions` (Fio 7) é `None` para funções não-genéricas e `Some(map)`
+  para instâncias monomorfizadas.
+- FFI e smart constructors **sempre mantidos** no tree shaking — não são
+  alcançáveis via refs normais mas são necessários.
 
 ### Overload counters
 
@@ -594,7 +671,7 @@ struct ComptimePass {
 | Estrutura | Invariante a respeitar desde o início |
 |---|---|
 | TypeEnv + cache | Cache de módulos previne ciclos de import |
-| DispatchTable | Scoring por dominância nasce em Fio 1, mesmo com 1 overload |
+| DispatchTable | Scoring por dominância nasce em Fio 1, mesmo com 1 overload. Score 4D: (exact, alias, refined, iface) + tiebreak genérico |
 | InterfaceRegistry | DFS com HashSet para cycle detection no registro |
 | EscapeCtx + shared_exprs | Shared é recursivo: ARC pointer nunca tem fields arena |
 | TypeIdAssignment | `ids` DEVE ser armazenado no TypedModule (não descartado) |
