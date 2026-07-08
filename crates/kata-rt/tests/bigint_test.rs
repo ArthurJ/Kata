@@ -190,6 +190,109 @@ fn tag_int_with_underscore_separator() {
 }
 
 #[test]
+fn tag_int_from_decimal_explicit() {
+    let tagged = tag_int_from_str("0d42");
+    assert_eq!(decode_smi_pub(tagged), 42);
+}
+
+#[test]
+fn tag_int_from_decimal_explicit_large() {
+    let tagged = tag_int_from_str("0d99999999999999999999");
+    assert!(!is_smi_pub(tagged));
+    assert_eq!(kata_rt::bigint_to_string(tagged), "99999999999999999999");
+}
+
+#[test]
+fn tag_int_from_hex_uppercase_prefix() {
+    let tagged = tag_int_from_str("0XFF");
+    assert_eq!(decode_smi_pub(tagged), 255);
+}
+
+#[test]
+fn tag_int_from_oct_uppercase_prefix() {
+    let tagged = tag_int_from_str("0O77");
+    assert_eq!(decode_smi_pub(tagged), 63);
+}
+
+#[test]
+fn tag_int_from_bin_uppercase_prefix() {
+    let tagged = tag_int_from_str("0B1010");
+    assert_eq!(decode_smi_pub(tagged), 10);
+}
+
+#[test]
+fn tag_int_from_decimal_explicit_uppercase_prefix() {
+    let tagged = tag_int_from_str("0D42");
+    assert_eq!(decode_smi_pub(tagged), 42);
+}
+
+#[test]
+fn tag_int_hex_with_underscore() {
+    let tagged = tag_int_from_str("0xFF_FF");
+    assert_eq!(decode_smi_pub(tagged), 65535);
+}
+
+#[test]
+fn tag_int_bin_with_underscore() {
+    let tagged = tag_int_from_str("0b1010_1010");
+    assert_eq!(decode_smi_pub(tagged), 170);
+}
+
+#[test]
+fn tag_int_oct_with_underscore() {
+    let tagged = tag_int_from_str("0o777_777");
+    assert_eq!(decode_smi_pub(tagged), 262143);
+}
+
+#[test]
+fn tag_int_decimal_with_multiple_underscores() {
+    let tagged = tag_int_from_str("1_000_000");
+    assert_eq!(decode_smi_pub(tagged), 1000000);
+}
+
+#[test]
+fn tag_int_decimal_explicit_with_underscore() {
+    let tagged = tag_int_from_str("0d1_000");
+    assert_eq!(decode_smi_pub(tagged), 1000);
+}
+
+#[test]
+fn tag_int_zero() {
+    let tagged = tag_int_from_str("0");
+    assert_eq!(decode_smi_pub(tagged), 0);
+}
+
+#[test]
+fn tag_int_hex_zero() {
+    let tagged = tag_int_from_str("0x0");
+    assert_eq!(decode_smi_pub(tagged), 0);
+}
+
+#[test]
+fn tag_int_negative_decimal() {
+    let tagged = tag_int_from_str("-42");
+    assert_eq!(decode_smi_pub(tagged), -42);
+}
+
+#[test]
+fn tag_int_hex_lowercase_digits() {
+    let tagged = tag_int_from_str("0xdeadbeef");
+    assert_eq!(decode_smi_pub(tagged), 0xdeadbeef);
+}
+
+#[test]
+fn tag_int_hex_uppercase_digits() {
+    let tagged = tag_int_from_str("0xDEADBEEF");
+    assert_eq!(decode_smi_pub(tagged), 0xDEADBEEF);
+}
+
+#[test]
+fn tag_int_hex_mixed_case_digits() {
+    let tagged = tag_int_from_str("0xDeAdBeEf");
+    assert_eq!(decode_smi_pub(tagged), 0xDEADBEEF);
+}
+
+#[test]
 fn tag_int_bigint_from_hex() {
     let tagged = tag_int_from_str("0xDEADBEEF1234567890");
     assert!(!is_smi_pub(tagged));
