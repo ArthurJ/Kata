@@ -1,7 +1,8 @@
 //! Declarations — parse_module, directives, sig, data, enum, fields.
 
 use kata_ast::{
-    Directive, DirectiveArg, DirectiveValue, FieldDecl, Item, Module, Spanned, Token, VariantDecl,
+    Directive, DirectiveArg, DirectiveValue, FieldDecl, Item, LambdaClause, Module, Spanned,
+    Token, VariantDecl,
 };
 use kata_diagnostics::FrontendError;
 
@@ -258,8 +259,23 @@ impl Parser {
         self.expect(&Token::FatArrow, "`=>`")?;
         let ret = self.parse_type_expr()?;
 
-        // Optional body (lambda) — for Fio 1, signatures typically have no body
-        let body = None;
+        // Fio 2: cláusulas lambda após assinatura (função nomeada com corpo Kata).
+        // Se há INDENT seguido de Lambda, parsear cláusulas.
+        // Se não, body = None (FFI — corpo suprido por @ffi).
+        let body = if matches!(self.peek(), Token::Indent) {
+            // Verifica se o primeiro token após INDENT é `lambda`
+            if let Some(next) = self.tokens.get(self.pos + 1) {
+                if matches!(next.token, Token::Lambda) {
+                    Some(self.parse_sig_clauses()?)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
 
         // Consume trailing StmtSep if present
         if matches!(self.peek(), Token::StmtSep) {
@@ -272,6 +288,71 @@ impl Parser {
             ret,
             directives,
             body,
+        })
+    }
+
+    /// Parse cláusulas lambda indentadas após uma assinatura.
+    ///
+    /// ```text
+    /// fat :: Int Int => Int
+    ///     lambda 0 acc: acc
+    ///     lambda n acc: fat (- n 1) (* n acc)
+    /// ```
+    fn parse_sig_clauses(&mut self) -> Result<Vec<Spanned<LambdaClause>>, FrontendError> {
+        self.expect(&Token::Indent, "INDENT (cláusulas lambda)")?;
+
+        let mut clauses = Vec::new();
+        loop {
+            // Skip StmtSep entre cláusulas
+            while matches!(self.peek(), Token::StmtSep) {
+                self.advance();
+            }
+            if matches!(self.peek(), Token::Dedent | Token::Eof) {
+                break;
+            }
+
+            let clause_start = self.peek_span();
+            let clause = self.parse_lambda_clause()?;
+            let span = clause_start.cover(clause.body.span);
+            clauses.push(Spanned::new(clause, span));
+        }
+
+        self.expect(&Token::Dedent, "DEDENT (fim das cláusulas lambda)")?;
+        Ok(clauses)
+    }
+
+    /// Parse uma cláusula lambda: `lambda <patterns>: <body>`.
+    /// Fase 5: body é expressão única (sem guards, sem with).
+    /// Fase 6: body pode ser bloco indentado com guards + with.
+    fn parse_lambda_clause(&mut self) -> Result<LambdaClause, FrontendError> {
+        self.expect(&Token::Lambda, "`lambda`")?;
+
+        // Parse patterns (1 ou mais, separados por espaço)
+        let patterns = self.parse_patterns()?;
+
+        // Expect `:`
+        self.expect(&Token::Colon, "`:` após patterns da cláusula")?;
+
+        // Fase 5: body é expressão única (sem guards).
+        // Fase 6: se há INDENT após `:`, é bloco com guards + with.
+        let body = if matches!(self.peek(), Token::Indent) {
+            // Fase 6 implementará guards + with.
+            // Por agora, todo!() — não deveria ser alcançado em Fase 5.
+            todo!("Fase 6: parse_lambda_clause com guards + with")
+        } else {
+            parse_expr(self)?
+        };
+
+        // Consume trailing StmtSep
+        if matches!(self.peek(), Token::StmtSep) {
+            self.advance();
+        }
+
+        Ok(LambdaClause {
+            patterns,
+            body,
+            guards: Vec::new(),
+            with_bindings: Vec::new(),
         })
     }
 
