@@ -1,7 +1,7 @@
 //! Signature and directive parsing: sig declarations, @ffi, @associative,
 //! stacked directives, named functions with lambda clauses.
 
-use super::helpers::{parse_src, first_item};
+use super::helpers::{first_item, parse_src};
 use kata_ast::{DirectiveArg, Expr, Item, TypeExpr};
 
 #[test]

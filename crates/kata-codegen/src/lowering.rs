@@ -342,8 +342,7 @@ impl<'a, 'b> LowerCtx<'a, 'b> {
         let did = self
             .module
             .declare_data(&sym, Linkage::Local, false, false)
-            .map_err(|e| CodegenError::Cranelift(format!("declare_data {sym}: {e}")))
-            .unwrap();
+            .expect("declare_data falhou para string literal");
         // declare_data_in_func cria o GlobalValue apontando para o data symbol.
         self.module.declare_data_in_func(did, self.builder.func)
     }

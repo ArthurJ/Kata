@@ -1,7 +1,7 @@
 //! Basic expression parsing: apply, let, ascription, tuples, grouping, unit,
 //! variant qual, text literal, ident, declarations, multi-item, greedy application.
 
-use super::helpers::{parse_src, first_item};
+use super::helpers::{first_item, parse_src};
 use kata_ast::{DirectiveArg, Expr, Item, TypeExpr};
 
 #[test]

@@ -1,6 +1,6 @@
 //! Lambda and hole parsing: anonymous lambdas, patterns, holes in apply.
 
-use super::helpers::{parse_src, first_item};
+use super::helpers::{first_item, parse_src};
 use kata_ast::{Expr, Item};
 
 #[test]
