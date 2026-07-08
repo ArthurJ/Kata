@@ -166,7 +166,8 @@ Rational é um número racional de precisão arbitrária
 (`BigRational`: `BigInt` / `BigInt`). Diferente de Float, **toda operação é
 exata** — `1/3 * 3 = 1`, não `0.999...`. Não há rounding, não há erro de runtime.
 
-Literais Rational usam ascription de tipo `::Rational`:
+Literais Rational usam ascription de tipo `::Rational` (rebaixamento de
+literal — ver §4.2.7):
 
 ```kata
 3.14::Rational    # racional exato a partir do texto bruto
@@ -982,39 +983,95 @@ O principal motivo de existência do `alias` é resolver a **Regra de Coerência
 (Orphan Rule)** — permite implementar uma interface externa num tipo externo
 encapsulando-o localmente.
 
-#### 4.2.7. Ascription vs Construtor — quando usar cada um
+#### 4.2.7. Ascription — três modos semânticos
 
-O sistema oferece dois caminhos para criar valores de tipos refinados:
+`::` é um operador (reconhecido pelo parser desde Fio 1). Tem três modos
+que se distinguem pelo que fazem em runtime:
 
-**Construtor (com atrito):**
+**1. Rebaixamento de literal** — o texto bruto do literal é reinterpretado
+no tipo alvo desde o início, sem conversão em runtime:
+
 ```kata
-let x := PositiveInt 25 | 0       # construtor retorna Result, | desempacota
-let y := PositiveInt 42 ?          # em Actions, ? desempacota
+42::Float        # "42" nasce como f64, não Int convertido
+3.14::Rational   # "3.14" nasce como Rational, nunca passa por f64
+1::Rational      # "1" nasce como Rational
 ```
 
-O construtor retorna `Result::(T, Error)`. O programador é obrigado a lidar com
-a falha via `|` (em funções puras) ou `?` (em Actions). É o caminho correto para
-valores não conhecidos em compile-time (`f(x)`).
+Rebaixamento só se aplica a literais. `x::Float` onde `x` é variável Int
+não rebaixa — é `TypeMismatch` (use `from_int x`). O codegen inspeciona
+`(literal_kind, target_ty)` para decidir o símbolo FFI: `IntLit→Float` =
+`f64 const`, `IntLit→Rational` = `kata_rt_rat_literal`,
+`FloatLit→Rational` = `kata_rt_rat_literal`.
 
-**Ascription (sem atrito):**
+**2. Confirmação de tipo** — verifica que a expressão já tem o tipo alvo.
+No-op em runtime:
+
 ```kata
-let x := 5::PositiveInt            # PositiveInt direto, sem Result
+42::Int          # já é Int, ascription é anotação defensiva
+x::Int           # se x é Int, OK; senão TypeMismatch
+```
+
+**3. Ascription-construção** (Fio 5+) — promove uma tupla anónima a um
+tipo nominal, alocando com `type_id` e copiando campos:
+
+```kata
+("João" 30)::Pessoa   # tupla (Text, Int) → Pessoa com type_id
+```
+
+A tupla carrega a mesma forma que o struct. O `::Pessoa` valida que os
+**tipos** dos elementos batem com os campos (verificação de shape) e
+anexa a identidade nominal. A identidade é extrínseca — a tupla é
+anónima, a ascription é o que a promove.
+
+#### 4.2.8. Ascription vs Construtor — diferenças
+
+Ascription-construção e construtor sintetizado ambos produzem valores
+de tipos user-defined, mas diferem em quatro pontos:
+
+| | Construtor | Ascription-construção |
+|---|---|---|
+| Identidade | Nominal (intrínseca) | Estrutural → nominal (extrínseca) |
+| First-class | Sim (valor no DispatchTable) | Não (sintaxe) |
+| Validação de shape | Tipos dos args no dispatch | Forma da tupla vs campos do struct |
+| Refinamento | Injeta check (guard chain no corpo) | Avalia predicado local no typeck |
+
+**Identidade:** `Pessoa "João" 30` liga argumentos a campos **por nome
+na assinatura** (nominal). `("João" 30)::Pessoa` liga elementos a campos
+**por posição** (estrutural). Se alguém reordenar os campos na
+declaração, o construtor continua correcto; a ascription parte.
+
+**First-class:** `Pessoa` é um valor — uma função no `DispatchTable`,
+passável como argumento, componível. `::Pessoa` é sintaxe inline, não
+um valor.
+
+**Validação de shape:** o construtor valida os tipos dos argumentos
+na fronteira do dispatch. A ascription valida a forma da tupla contra
+os campos do struct. Ambos rejeitam shape incorreto, mas em fronteiras
+diferentes.
+
+**Refinamento:** a ascription é onde o predicado do tipo refined é
+avaliado — é o ato de atribuir tipo, e o refinamento é parte do tipo.
+O construtor tem que importar o check de fora (guard chain no corpo
+sintetizado). A ascription valida em compile-time (avaliação constante
+local ao typeck, não comptime); o construtor valida em runtime.
+
+**Falha:** ambos podem falhar com `TypeMismatch`. Ascription additionally
+falha com **refinamento não atendido** — o predicado é avaliado em
+typeck e rejeita o programa antes do codegen. O construtor falível
+devolve `Result::(T, Error)`, forçando o programador a lidar com a
+falha via `|` (funções puras) ou `?` (Actions).
+
+```kata
+let x := 5::PositiveInt            # ascription: predicado avaliado em typeck
 let erro := (-5)::PositiveInt      # type error: predicado falhou em compile-time
+let y := PositiveInt 25 | 0        # construtor: Result, | desempacota
+let z := PositiveInt 42 ?          # em Actions, ? desempacota
 ```
 
-A ascription `expr::Type` valida os predicados em compile-time (avaliação
-constante local ao typeck — não é comptime). Se o valor é um literal e o
-predicado passa, o tipo refined é entregue direto, sem `Result`, sem
-desempacotamento. Se o predicado falha, é type error antes do codegen.
+**Ascription em expressão não-literal (`f(x)::PositiveInt`):** type
+error. A ascription exige prova compile-time, não fé. Use o construtor.
 
-**Quando usar cada um:**
-- **Literal que satisfaz o predicado:** ascription. Zero-cost, sem atrito.
-- **Valor não-literal (`f(x)`):** construtor. Não dá para provar em
-  compile-time, então o atrito de `Result` é necessário.
-- **Ascription em expressão não-literal (`f(x)::PositiveInt`):** type error. A
-  ascription exige prova compile-time, não fé. Use o construtor.
-
-#### 4.2.8. `repr` como implementação automática de SHOW
+#### 4.2.9. `repr` como implementação automática de SHOW
 
 Separado dos smart constructors, o typeck sintetiza automaticamente a função
 `repr` para tipos `data` com campos. Esta função é a implementação automática
@@ -1040,7 +1097,7 @@ A síntese de `repr` é por tipo de campo:
 smart constructor sem `repr` (se não implementa `SHOW`), e pode ter `repr` sem
 smart constructor (se o usuário define `show` manualmente).
 
-#### 4.2.9. O Princípio Nominal-Estrutural ("Atrito Sadio")
+#### 4.2.10. O Princípio Nominal-Estrutural ("Atrito Sadio")
 
 * **Nas Fronteiras das Funções (Rigidez Nominal):** Se uma função espera
   `IdadeValida`, rejeita `Int` puro ou outro tipo refinado com os mesmos
