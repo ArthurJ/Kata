@@ -360,9 +360,11 @@ fn infer_no_overload_for_mixed_types() {
 #[test]
 fn infer_unknown_function_error() {
     let err = infer_src_err("foobar 1 2");
+    // `foobar` não existe no DispatchTable — UnboundName, não NoOverload.
+    // NoOverload é "a função existe mas nenhuma sobrecarga casa com os tipos".
     assert!(matches!(
         err,
-        kata_diagnostics::MiddleError::NoOverload { .. }
+        kata_diagnostics::MiddleError::UnboundName { .. }
     ));
 }
 

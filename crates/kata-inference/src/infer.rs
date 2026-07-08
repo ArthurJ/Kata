@@ -173,6 +173,19 @@ fn infer_expr(
                 }
             };
 
+            // Verifica se a função existe ANTES de inferir os args.
+            // Se não existe, o erro aponta para o callee (o nome que o
+            // usuário escreveu), não para um arg arbitrário que pode
+            // não estar no escopo (ex: `in` não é função, mas sem esta
+            // checagem o erro aponta para o primeiro arg `+` que também
+            // não está no TypeEnv).
+            if !table.has_function(&func_name) {
+                return Err(MiddleError::UnboundName {
+                    name: func_name,
+                    span: callee.span.into(),
+                });
+            }
+
             // Infere tipos dos argumentos recursivamente
             let mut typed_args: Vec<Spanned<TypedExpr>> = Vec::with_capacity(args.len());
             let mut arg_types: Vec<Ty> = Vec::with_capacity(args.len());
