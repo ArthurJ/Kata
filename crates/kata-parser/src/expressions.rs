@@ -239,13 +239,6 @@ impl Parser {
         // Por agora, se chegamos aqui, é erro.
         todo!("Fase 6: parse_lambda_body_block com guards + with")
     }
-
-    /// Parse `match <scrutinee>` com braços indentados.
-    /// Fase 4: implementação completa.
-    pub(crate) fn parse_match(&mut self) -> Result<Spanned<Expr>, FrontendError> {
-        // Fase 4 implementará: match expr INDENT arm+ DEDENT
-        todo!("Fase 4: parse_match com braços indentados")
-    }
 }
 
 /// Parse an expression with greedy application.

@@ -8,6 +8,7 @@
 
 mod declarations;
 mod expressions;
+mod _match;
 mod patterns;
 mod types;
 
