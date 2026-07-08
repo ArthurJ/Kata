@@ -30,62 +30,55 @@ enum Command {
     Run { file: String },
 }
 
-fn main() {
+fn main() -> miette::Result<()> {
     let cli = Cli::parse();
     match cli.command {
-        Command::Lex { file } => {
-            if let Err(e) = cmd_lex(&file) {
-                eprintln!("erro: {e:?}");
-                std::process::exit(1);
-            }
-        }
-        Command::Parse { file } => {
-            if let Err(e) = cmd_parse(&file) {
-                eprintln!("erro: {e:?}");
-                std::process::exit(1);
-            }
-        }
-        Command::Eval { expr } => {
-            if let Err(e) = cmd_eval(&expr) {
-                eprintln!("erro: {e:?}");
-                std::process::exit(1);
-            }
-        }
-        Command::Run { file } => {
-            if let Err(e) = cmd_run(&file) {
-                eprintln!("erro: {e:?}");
-                std::process::exit(1);
-            }
-        }
+        Command::Lex { file } => cmd_lex(&file),
+        Command::Parse { file } => cmd_parse(&file),
+        Command::Eval { expr } => cmd_eval(&expr),
+        Command::Run { file } => cmd_run(&file),
+    }
+}
+
+// ── Conversão de erros para miette::Report ──────────────────
+
+/// Converte um erro que implementa `miette::Diagnostic` em `miette::Report`.
+trait IntoReport {
+    fn into_report(self) -> miette::Report;
+}
+
+impl<E: miette::Diagnostic + Send + Sync + 'static> IntoReport for E {
+    fn into_report(self) -> miette::Report {
+        miette::Report::new_boxed(Box::new(self))
     }
 }
 
 // ── Comandos ───────────────────────────────────────────────
 
-fn cmd_lex(file: &str) -> Result<(), Box<dyn std::fmt::Debug>> {
+fn cmd_lex(file: &str) -> miette::Result<()> {
     let source = read_source(file)?;
-    let tokens = lex(&source).map_err(|e| Box::new(e) as Box<dyn std::fmt::Debug>)?;
+    let tokens = lex(&source).map_err(IntoReport::into_report)?;
     for tok in &tokens {
         println!("{tok:?}");
     }
     Ok(())
 }
 
-fn cmd_parse(file: &str) -> Result<(), Box<dyn std::fmt::Debug>> {
+fn cmd_parse(file: &str) -> miette::Result<()> {
     let source = read_source(file)?;
-    let tokens = lex(&source).map_err(|e| Box::new(e) as Box<dyn std::fmt::Debug>)?;
-    let module = parse(tokens).map_err(|e| Box::new(e) as Box<dyn std::fmt::Debug>)?;
+    let tokens = lex(&source).map_err(IntoReport::into_report)?;
+    let module = parse(tokens).map_err(IntoReport::into_report)?;
     println!("{module:#?}");
     Ok(())
 }
 
-fn cmd_eval(expr: &str) -> Result<(), Box<dyn std::fmt::Debug>> {
+fn cmd_eval(expr: &str) -> miette::Result<()> {
     let result = run_pipeline(expr)?;
     print_result(&result);
     Ok(())
 }
 
-fn cmd_run(file: &str) -> Result<(), Box<dyn std::fmt::Debug>> {
+fn cmd_run(file: &str) -> miette::Result<()> {
     let source = read_source(file)?;
     let result = run_pipeline(&source)?;
     print_result(&result);
@@ -101,27 +94,29 @@ struct ExecResult {
 }
 
 /// Executa o pipeline completo: lex → parse → resolve → infer → optimize → codegen → JIT.
-fn run_pipeline(source: &str) -> Result<ExecResult, Box<dyn std::fmt::Debug>> {
+fn run_pipeline(source: &str) -> miette::Result<ExecResult> {
     // 1. Lex
-    let tokens = lex(source).map_err(|e| Box::new(e) as Box<dyn std::fmt::Debug>)?;
+    let tokens = lex(source).map_err(IntoReport::into_report)?;
 
     // 2. Parse
-    let module = parse(tokens).map_err(|e| Box::new(e) as Box<dyn std::fmt::Debug>)?;
+    let module = parse(tokens).map_err(IntoReport::into_report)?;
 
     // 3. Resolve (prelude + módulo do usuário)
-    let prelude = load_prelude().map_err(|e| Box::new(e) as Box<dyn std::fmt::Debug>)?;
-    let user = resolve(&module).map_err(|e| Box::new(e) as Box<dyn std::fmt::Debug>)?;
+    let prelude = load_prelude()
+        .map_err(|e| miette::Report::msg(format!("erro ao carregar prelude: {e:?}")))?;
+    let user =
+        resolve(&module).map_err(|e| miette::Report::msg(format!("erro de resolução: {e:?}")))?;
     let resolved = merge_resolved(prelude, user);
 
     // 4. Infer (typeck + dispatch)
-    let typed =
-        infer_module(&module, &resolved).map_err(|e| Box::new(e) as Box<dyn std::fmt::Debug>)?;
+    let typed = infer_module(&module, &resolved).map_err(IntoReport::into_report)?;
 
     // 5. Optimize (pass-through em Fio 1)
     let typed = optimize(typed);
 
     // 6. Codegen + JIT + executar
-    let jit = jit_eval(&typed).map_err(|e| Box::new(e) as Box<dyn std::fmt::Debug>)?;
+    let jit =
+        jit_eval(&typed).map_err(|e| miette::Report::msg(format!("erro de codegen: {e:?}")))?;
 
     Ok(ExecResult {
         raw: jit.raw,
@@ -208,7 +203,8 @@ fn print_result(result: &ExecResult) {
 // ── Helpers ────────────────────────────────────────────────
 
 /// Lê o conteúdo de um arquivo.
-fn read_source(path: &str) -> Result<String, Box<dyn std::fmt::Debug>> {
+fn read_source(path: &str) -> miette::Result<String> {
     let path = Path::new(path);
-    std::fs::read_to_string(path).map_err(|e| Box::new(e) as Box<dyn std::fmt::Debug>)
+    std::fs::read_to_string(path)
+        .map_err(|e| miette::Report::msg(format!("não foi possível ler `{}`: {e}", path.display())))
 }

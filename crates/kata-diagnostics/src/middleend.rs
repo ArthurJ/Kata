@@ -21,7 +21,7 @@ pub enum MiddleError {
     TypeMismatch {
         expected: String,
         found: String,
-        #[label]
+        #[label("tipos incompatíveis")]
         span: MietteSpan,
     },
 

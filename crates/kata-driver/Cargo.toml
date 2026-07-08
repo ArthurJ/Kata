@@ -11,6 +11,7 @@ path = "src/main.rs"
 
 [dependencies]
 clap.workspace = true
+miette.workspace = true
 kata-lexer.workspace = true
 kata-parser.workspace = true
 kata-resolution.workspace = true
