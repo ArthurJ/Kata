@@ -8,3 +8,4 @@ description = "Passes de otimização — TRMA, StreamFusion, ARC pass (stub no 
 [dependencies]
 kata-core.workspace = true
 kata-ast.workspace = true
+kata-inference.workspace = true

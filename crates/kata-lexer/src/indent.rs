@@ -61,14 +61,14 @@ pub(crate) fn process_indent(
                 span: Span::synthetic(),
             });
         } else if indent < current {
-            while indent < *indent_stack.last().unwrap() {
+            while indent < *indent_stack.last().expect("indent_stack não vazia") {
                 indent_stack.pop();
                 tokens.push(TokenWithSpan {
                     token: Token::Dedent,
                     span: Span::synthetic(),
                 });
             }
-            let new_current = *indent_stack.last().unwrap();
+            let new_current = *indent_stack.last().expect("indent_stack não vazia");
             if indent != new_current {
                 return Err(FrontendError::InconsistentIndent {
                     expected: new_current,

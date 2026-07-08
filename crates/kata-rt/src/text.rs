@@ -15,7 +15,7 @@ pub extern "C" fn kata_rt_string_concat(
     let b = unsafe { std::ffi::CStr::from_ptr(b).to_string_lossy().into_owned() };
     let result = format!("{a}{b}");
     CString::new(result)
-        .unwrap_or_else(|_| CString::new("").unwrap())
+        .unwrap_or_else(|_| CString::new("").expect("CString vazia sempre válida"))
         .into_raw()
 }
 
@@ -59,4 +59,66 @@ pub fn text_replace_first(template: &str, replacement: &str) -> String {
     } else {
         template.to_string()
     }
+}
+
+// ── Wrappers C-ABI para codegen ───────────────────────────
+
+/// Cria string literal a partir de texto (ponteiro + len).
+/// Retorna ponteiro C string (ownership transferida ao caller).
+/// Chamado pelo codegen via `FfiSymbol::TextLiteral`.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_text_literal(
+    s: *const std::os::raw::c_char,
+    len: i64,
+) -> *mut std::os::raw::c_char {
+    let bytes = if s.is_null() || len <= 0 {
+        &b""[..]
+    } else {
+        unsafe { std::slice::from_raw_parts(s as *const u8, len as usize) }
+    };
+    let text = std::str::from_utf8(bytes).unwrap_or("");
+    std::ffi::CString::new(text)
+        .unwrap_or_else(|_| std::ffi::CString::new("").unwrap())
+        .into_raw()
+}
+
+/// Converte Boolean (0/1) para Text "True"/"False" (ponteiro C string).
+/// Chamado pelo codegen via `FfiSymbol::BoolToText`.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_bool_to_text(val: i64) -> *mut std::os::raw::c_char {
+    let s = bool_to_text(val);
+    std::ffi::CString::new(s)
+        .unwrap_or_else(|_| std::ffi::CString::new("").unwrap())
+        .into_raw()
+}
+
+/// Substitui primeira ocorrência de `{}` por valor (ponteiro C string).
+/// Chamado pelo codegen via `FfiSymbol::TextReplaceFirst`.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_text_replace_first(
+    template: *const std::os::raw::c_char,
+    replacement: *const std::os::raw::c_char,
+) -> *mut std::os::raw::c_char {
+    let template = if template.is_null() {
+        String::new()
+    } else {
+        unsafe {
+            std::ffi::CStr::from_ptr(template)
+                .to_string_lossy()
+                .into_owned()
+        }
+    };
+    let replacement = if replacement.is_null() {
+        String::new()
+    } else {
+        unsafe {
+            std::ffi::CStr::from_ptr(replacement)
+                .to_string_lossy()
+                .into_owned()
+        }
+    };
+    let result = text_replace_first(&template, &replacement);
+    std::ffi::CString::new(result)
+        .unwrap_or_else(|_| std::ffi::CString::new("").unwrap())
+        .into_raw()
 }

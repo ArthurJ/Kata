@@ -17,7 +17,7 @@ impl Arena {
 
     /// Aloca `size` bytes alinhados a `align`. Retorna ponteiro bruto.
     pub fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
-        self.bump.alloc_layout(layout).as_ptr() as *mut u8
+        self.bump.alloc_layout(layout).as_ptr()
     }
 
     /// Reseta a arena (libera tudo). O(1).

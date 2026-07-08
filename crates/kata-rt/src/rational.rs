@@ -12,8 +12,7 @@ use num_traits::{One, Signed, ToPrimitive, Zero};
 pub fn rat_from_text(text: &str) -> BigRational {
     // Parser manual: separa parte inteira e decimal
     if let Some((int_part, dec_part)) = text.split_once('.') {
-        let int_val =
-            BigInt::parse_bytes(int_part.as_bytes(), 10).unwrap_or_else(|| BigInt::zero());
+        let int_val = BigInt::parse_bytes(int_part.as_bytes(), 10).unwrap_or_else(BigInt::zero);
         let dec_str = dec_part.trim_end_matches('0');
         if dec_str.is_empty() {
             return BigRational::new(int_val, BigInt::one());
@@ -218,5 +217,68 @@ pub fn rat_to_float(r: &BigRational) -> f64 {
 
 /// Converte Float para Rational (mais próximo).
 pub fn float_to_rat(f: f64) -> BigRational {
-    BigRational::from_float(f).unwrap_or_else(|| BigRational::zero())
+    BigRational::from_float(f).unwrap_or_else(BigRational::zero)
+}
+
+// ── Wrappers C-ABI para codegen ───────────────────────────
+
+/// `show` de Rational — retorna ponteiro C string.
+/// Chamado pelo codegen via `FfiSymbol::RatShow`.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_rat_show(r: *const BigRational) -> *mut std::os::raw::c_char {
+    let r = unsafe { &*r };
+    let s = rat_to_string(r);
+    std::ffi::CString::new(s)
+        .unwrap_or_else(|_| std::ffi::CString::new("").unwrap())
+        .into_raw()
+}
+
+/// `show` de Rational a partir de ponteiro bruto (i64).
+/// Versão para o driver que não tem acesso ao tipo `BigRational`.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_rat_show_raw(r_raw: i64) -> *mut std::os::raw::c_char {
+    let r = r_raw as *const BigRational;
+    kata_rt_rat_show(r)
+}
+
+/// Converte Rational para Float.
+/// Chamado pelo codegen via `FfiSymbol::RatToFloat`.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_rat_to_float(r: *const BigRational) -> f64 {
+    let r = unsafe { &*r };
+    rat_to_float(r)
+}
+
+/// Converte Float para Rational (retorna ponteiro).
+/// Chamado pelo codegen via `FfiSymbol::RatFromFloat`.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_rat_from_float(f: f64) -> *mut BigRational {
+    let r = float_to_rat(f);
+    Box::into_raw(Box::new(r))
+}
+
+/// Cria Rational a partir de string bruta do literal (ponteiro C + len).
+/// Chamado pelo codegen via `FfiSymbol::RatLiteral`.
+/// Não passa por f64 — preserva precisão do texto.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_rat_literal(
+    s: *const std::os::raw::c_char,
+    len: i64,
+) -> *mut BigRational {
+    let bytes = if s.is_null() || len <= 0 {
+        &b""[..]
+    } else {
+        unsafe { std::slice::from_raw_parts(s as *const u8, len as usize) }
+    };
+    let text = std::str::from_utf8(bytes).unwrap_or("");
+    let r = rat_from_text(text);
+    Box::into_raw(Box::new(r))
+}
+
+/// Converte Int tagged para Rational (retorna ponteiro).
+/// Chamado pelo codegen via `FfiSymbol::IntToRational`.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_int_to_rational(val: i64) -> *mut BigRational {
+    let r = crate::bigint::to_rational(val);
+    Box::into_raw(Box::new(r))
 }

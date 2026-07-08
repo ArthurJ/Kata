@@ -1,0 +1,1 @@
+show (/ 1::Rational 3::Rational)

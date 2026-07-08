@@ -104,8 +104,8 @@ fn bi_mul_smi_smi() {
 
 #[test]
 fn bi_add_overflow_promotes_to_bigint() {
-    let a = tag_int_pub((1i64 << 61));
-    let b = tag_int_pub((1i64 << 61));
+    let a = tag_int_pub(1i64 << 61);
+    let b = tag_int_pub(1i64 << 61);
     let result = unsafe { kata_rt_bi_add(a, b) };
     // 2^61 + 2^61 = 2^62 que não cabe em SMI
     assert!(!is_smi_pub(result), "overflow deve promover para BigInt");

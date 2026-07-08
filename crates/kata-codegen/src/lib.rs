@@ -4,4 +4,11 @@
 //! Block arguments nativos (Cranelift 0.133) — sem stack slots.
 //! MetadataTable é read-only após lowering, consultada pelo ARC pass.
 
-// Implementação vem no Fio 1.
+pub mod ffi_sigs;
+pub mod lowering;
+pub mod metadata;
+
+pub use lowering::{
+    CodegenError, JitResult, declare_ffi_symbols, jit_eval, lower_module, register_ffi_symbols,
+};
+pub use metadata::MetadataTable;

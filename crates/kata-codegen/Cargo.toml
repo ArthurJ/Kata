@@ -14,6 +14,7 @@ cranelift-frontend.workspace = true
 cranelift-object.workspace = true
 kata-core.workspace = true
 kata-ast.workspace = true
+kata-inference.workspace = true
 kata-rt.workspace = true
 
 [dev-dependencies]

@@ -4,8 +4,7 @@
 //! (via prelude) e verificando o `TypedModule` resultante: tipos em cada nó,
 //! dispatch de overloads, ascription, let, variant qual, erros.
 
-use kata_ast::{Expr, Item, Module, Span, Spanned};
-use kata_core::ty::{PrimTy, Ty};
+use kata_core::ty::Ty;
 use kata_inference::{Effect, TypedExprKind, infer_module};
 use kata_lexer::lex;
 use kata_parser::parse;

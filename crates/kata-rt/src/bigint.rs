@@ -58,26 +58,27 @@ fn decode_smi(val: i64) -> i64 {
 /// Verifica se um i64 cabe em SMI.
 #[inline]
 fn fits_smi(val: i64) -> bool {
-    val >= SMI_MIN && val <= SMI_MAX
+    (SMI_MIN..=SMI_MAX).contains(&val)
 }
 
 // ── Heap BigInt ───────────────────────────────────────────
 
-/// Layout do bloco heap para BigInt.
-/// Usamos um header com refcount (para futura integração com ARC) seguido
-/// dos digits do BigInt. Para Fio 1, o refcount é mantido em 1 (sem sharing).
-///
-/// Em Fio 1, usamos `Box<BigInt>` diretamente — o `i64` retornado é um
-/// ponteiro não-null para o heap. O LSB é 0 (alinhamento natural de Box).
-///
-/// **Invariante:** `i64` com LSB=0 é sempre ponteiro válido para `Box<BigInt>`.
-/// O caller nunca deve aritmética de ponteiros — usa as funções deste módulo.
+// Layout do bloco heap para BigInt.
+// Usamos um header com refcount (para futura integração com ARC) seguido
+// dos digits do BigInt. Para Fio 1, o refcount é mantido em 1 (sem sharing).
+//
+// Em Fio 1, usamos `Box<BigInt>` diretamente — o `i64` retornado é um
+// ponteiro não-null para o heap. O LSB é 0 (alinhamento natural de Box).
+//
+// **Invariante:** `i64` com LSB=0 é sempre ponteiro válido para `Box<BigInt>`.
+// O caller nunca deve aritmética de ponteiros — usa as funções deste módulo.
 
+// SAFETY: FFI — o codegen chama estas funções via `#[unsafe(no_mangle)]`.
 /// Aloca BigInt no heap e retorna o ponteiro como i64.
 /// O LSB será 0 (alinhamento de Box<BigInt> é ≥ 8 bytes).
 fn alloc_bigint(n: BigInt) -> i64 {
     let boxed = Box::new(n);
-    let ptr = Box::into_raw(boxed) as *mut BigInt as i64;
+    let ptr = Box::into_raw(boxed) as i64;
     // LSB deve ser 0 — Box<BigInt> tem alinhamento ≥ 8.
     debug_assert!(!is_smi(ptr), "BigInt pointer colide com SMI tag");
     ptr
@@ -120,6 +121,20 @@ pub extern "C" fn kata_rt_tag_int(val: i64) -> i64 {
     }
 }
 
+/// Cria um Int a partir de texto bruto (ponteiro C + len).
+/// Versão C-ABI para o codegen — suporta decimal, hex, octal, bin, underscore.
+/// Chamado pelo codegen para literais que não cabem em SMI (BigInts).
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_tag_int_from_str(s: *const std::os::raw::c_char, len: i64) -> i64 {
+    let bytes = if s.is_null() || len <= 0 {
+        &b"0"[..]
+    } else {
+        unsafe { std::slice::from_raw_parts(s as *const u8, len as usize) }
+    };
+    let text = std::str::from_utf8(bytes).unwrap_or("0");
+    tag_int_from_str(text)
+}
+
 /// Cria um Int a partir de texto bruto do literal.
 /// Suporta decimal, hex (0x), octal (0o), bin (0b), separador _.
 /// (Versão interna — chamada pelo codegen ao lowerar IntLit.)
@@ -158,10 +173,10 @@ pub fn tag_int_from_str(text: &str) -> i64 {
     };
     let n = n.expect("número inválido");
     let n = if sign < 0 { -n } else { n };
-    if let Some(small) = n.to_i64() {
-        if fits_smi(small) {
-            return encode_smi(small);
-        }
+    if let Some(small) = n.to_i64()
+        && fits_smi(small)
+    {
+        return encode_smi(small);
     }
     alloc_bigint(n)
 }
@@ -196,10 +211,10 @@ pub extern "C" fn kata_rt_bi_add(a: i64, b: i64) -> i64 {
         ba + bb
     };
     // Se resultado cabe em SMI, retorna SMI (evita heap desnecessário)
-    if let Some(small) = result.to_i64() {
-        if fits_smi(small) {
-            return encode_smi(small);
-        }
+    if let Some(small) = result.to_i64()
+        && fits_smi(small)
+    {
+        return encode_smi(small);
     }
     alloc_bigint(result)
 }
@@ -230,10 +245,10 @@ pub extern "C" fn kata_rt_bi_sub(a: i64, b: i64) -> i64 {
         };
         ba - bb
     };
-    if let Some(small) = result.to_i64() {
-        if fits_smi(small) {
-            return encode_smi(small);
-        }
+    if let Some(small) = result.to_i64()
+        && fits_smi(small)
+    {
+        return encode_smi(small);
     }
     alloc_bigint(result)
 }
@@ -264,10 +279,10 @@ pub extern "C" fn kata_rt_bi_mul(a: i64, b: i64) -> i64 {
         };
         ba * bb
     };
-    if let Some(small) = result.to_i64() {
-        if fits_smi(small) {
-            return encode_smi(small);
-        }
+    if let Some(small) = result.to_i64()
+        && fits_smi(small)
+    {
+        return encode_smi(small);
     }
     alloc_bigint(result)
 }
@@ -292,10 +307,10 @@ pub extern "C" fn kata_rt_bi_div(a: i64, b: i64) -> i64 {
         }
         ba / bb
     };
-    if let Some(small) = result.to_i64() {
-        if fits_smi(small) {
-            return encode_smi(small);
-        }
+    if let Some(small) = result.to_i64()
+        && fits_smi(small)
+    {
+        return encode_smi(small);
     }
     alloc_bigint(result)
 }
@@ -417,6 +432,36 @@ pub fn to_rational(val: i64) -> num_rational::BigRational {
         unsafe { deref_bigint(val).clone() }
     };
     num_rational::BigRational::new(n, BigInt::one())
+}
+
+// ── Wrappers C-ABI para codegen ───────────────────────────
+
+/// `show` de Int — retorna ponteiro C string (ownership transferida).
+/// Chamado pelo codegen via `FfiSymbol::BiShow`.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_bi_show(val: i64) -> *mut std::os::raw::c_char {
+    let s = bigint_to_string(val);
+    std::ffi::CString::new(s)
+        .unwrap_or_else(|_| std::ffi::CString::new("").expect("CString vazia sempre válida"))
+        .into_raw()
+}
+
+/// Converte Int tagged para Rational (ponteiro).
+/// Chamado pelo codegen via `FfiSymbol::BiToRational`.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_bi_to_rational(val: i64) -> *mut num_rational::BigRational {
+    let r = to_rational(val);
+    Box::into_raw(Box::new(r))
+}
+
+/// Converte Int tagged para Text (ponteiro C string).
+/// Chamado pelo codegen via `FfiSymbol::IntToText`.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_int_to_text(val: i64) -> *mut std::os::raw::c_char {
+    let s = bigint_to_string(val);
+    std::ffi::CString::new(s)
+        .unwrap_or_else(|_| std::ffi::CString::new("").expect("CString vazia sempre válida"))
+        .into_raw()
 }
 
 // ── Debug helpers (não C-ABI) ─────────────────────────────

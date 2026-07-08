@@ -42,7 +42,11 @@ fn populate_dispatch_table(signatures: &[Signature]) -> DispatchTable {
             // Heurística simples: operadores de 1 char que são associativos
             // são comutativos para efeito de dispatch (tentar args invertidos).
             // Em Fio 1, + e * são comutativos; - e / não.
-            let c = sig.name.chars().next().unwrap();
+            let c = sig
+                .name
+                .chars()
+                .next()
+                .expect("nome de operador tem 1 char");
             if c == '+' || c == '*' {
                 table.mark_commutative(&sig.name);
             }
