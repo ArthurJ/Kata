@@ -1,0 +1,710 @@
+# Roadmap — Kata-Lang 1.0
+
+## Estratégia
+
+Cada fio é uma **tracer bullet**: vai do frontend ao backend, implementando uma
+feature end-to-end. Nenhum fio é "só typeck" ou "só codegen" — se o typeck
+aprova, o codegen executa. A árvore de dependências entre features determina a
+ordem dos fios.
+
+Zeladorias são planejadas após marcos naturais, não como afterthought. O modelo
+vertical acumula débito horizontal; as zeladorias pagam essa dívida.
+
+## Maquinaria do Sistema de Tipos
+
+O sistema de tipos não é um fio — é o esqueleto que sustenta todos os fios. Cada
+fio constrói parte da maquinaria. O roadmap marca explicitamente qual
+maquinaria cada fio traz, para que a infraestrutura seja construída na ordem
+correta e não retrofitted.
+
+### Linha do tempo da maquinaria
+
+| Maquinaria | Fio | Por quê |
+|---|---|---|
+| `TypeEnv` (escopos, name resolution) | Fio 1 | Toda inferência precisa resolver nomes |
+| `Ty` canônico: `Prim`, `Unit`, `Struct`, `Sum` | Fio 1 | Tipos básicos (Prim = mapeamento FFI, não tipo da linguagem) |
+| `PrimTy` (mapeamento de representação nativa) | Fio 1 | Contrato FFI: `i64`, `f64`, `kata_rt_string`. Não é tipo da linguagem — é como o codegen mapeia `Ty → ABI` |
+| `data` (tipos opacos: `data Int ()` com `@ffi`) | Fio 1 | Prelude declara `Int`, `Float`, `Text` como `data` opacos com `@ffi` — não primitivos |
+| `enum` básico (variantes unitárias) | Fio 1 | Prelude declara `enum Boolean { True, False }` — não primitivo |
+| `Ty::Sum` com variantes unitárias | Fio 1 | `Boolean` |
+| `::` em assinatura (parser → `Signature`) | Fio 1 | Prelude declara `+ :: Int Int => Int` |
+| `::` em qualificação de variante (`Boolean::True`) | Fio 1 | Enums unitários |
+| `::` postfix reconhecido pelo parser | Fio 1 | Parser tem a tabela postfix completa desde o início |
+| `DispatchTable` com scoring por dominância | Fio 1 | Nasce com scoring, mesmo com 1 overload |
+| `FfiSymbol` enum tipado | Fio 1 | Catálogo de símbolos FFI |
+| Inferência básica (tipo de expressões) | Fio 1 | `+ 1 2` precisa inferir `Int` |
+| Assinaturas de função (`=>`) | Fio 2 | Lambdas |
+| Tipo de função como valor (`->`) | Fio 2 | Higher-order functions |
+| Hole `_` (desugar no typeck → `lambda`) | Fio 2 | Currying explícito, predicados |
+| `tail_pos: bool` na TAST | Fio 2 | TCO delegado ao Cranelift |
+| `effect: Effect` na TAST | Fio 2 | Puro/IO/Spawn/ChannelOp |
+| `Ty::Sum` com payload | Fio 4 | `Ok(T)`, `Some(T)`, variantes com dados |
+| `::` em type params (`Result::(T, E)`) | Fio 4 | Enums genéricos (params posicionais, não interfaces) |
+| Smart constructor synthesis (falível) | Fio 4 | Construtores de enum predicado (reusado em Fio 6 para refined) |
+| `Ty::Struct` com campos, `Ty::Tuple` | Fio 5 | Data com campos, tuples |
+| `::` em campos de struct (`nome::Text`) | Fio 5 | Structs |
+| Smart constructor synthesis (infalível) | Fio 5 | Construtores de struct |
+| `Ty::Generic`, `Ty::Interface` | Fio 7 | Interfaces, generics |
+| Dispatch por dominância com múltiplas overloads | Fio 7 | Scoring já existe; agora múltiplos candidatos |
+| Monomorphization nos call sites | Fio 7 | Especialização genérica |
+| `mono_instance: u64` na TAST | Fio 7 | Monomorph rastreia instância |
+| `::` em ascription de expressão (`expr::Type`) | Fio 6 | Ascription |
+| Avaliação constante de predicados (typeck local) | Fio 6 | `5::PositiveInt` valida `> _ 0` em compile-time |
+| Ret-directed dispatch (hint de retorno) | Fio 6 | `(/ 1 3)::Int` seleciona sobrecarga por retorno |
+| `escape: EscapeKind` na TAST | Fio 9 | Escape analysis |
+| `capture: Vec<CaptureInfo>` na TAST | Fio 9 | Closures com captura |
+| `CaptureStorage` Stack/Heap | Fio 9 | Escape analysis promoção |
+
+### Nota: ascription refined NÃO é comptime
+
+A validação compile-time de predicados em ascription (`5::PositiveInt` avalia
+`> _ 0` substituindo `_` por `5`) é **avaliação constante local ao typeck** —
+não usa JIT-and-execute (Fio 12). O typeck reduz a expressão booleana com o
+literal substituído e verifica `True`/`False`. Não criar dependência Fio 6 →
+Fio 12.
+
+### Nota: `::` é um operador, contextos são typeck
+
+O parser reconhece `::` desde Fio 1 (tabela postfix). Os contextos (assinatura,
+campo, type param, variante, ascription) são tratados progressivamente pelo
+typeck, não pelo parser. O parser produz a AST; o typeck interpreta por
+contexto. Não há mudança no parser entre Fio 1 e Fio 6 — só o typeck ganha
+interpretações novas.
+
+### Nota: dispatch por dominância nasce em Fio 1
+
+O `DispatchTable` nasce com scoring por dominância em Fio 1, mesmo que só tenha
+uma overload por nome. O algoritmo (coletar candidatos, pontuar, selecionar) é o
+mesmo com 1 ou 100 overloads. A diferença é que ambiguidades (duas overloads com
+score igual) só surgem em Fio 7 com interfaces. Mas a estrutura do algoritmo
+está pronta — não precisa retrofit.
+
+## Árvore de Dependências
+
+```
+Fio 1: Fundação + Aritmética + CLI
+│   (Int/BigInt/SMI, Float, Text, Rational, Boolean, +, -, *, /, =, <, >,
+│    let, @ffi, data, enum)
+│   Maquinaria: TypeEnv, Ty, PrimTy (mapeamento FFI), DispatchTable com scoring,
+│               FfiSymbol, :: em assinatura, data opaco, enum unitário (Boolean)
+│
+├── Fio 2: Funções, Lambdas, Guards, Match, Hole
+│   │   (=>, ->, lambda, clauses, guards, otherwise, match, patterns,
+│   │    Hole _, |>, with, tail_pos, effect)
+│   │   Maquinaria: assinaturas, tipo de função, Hole desugar, TAST enriquecida
+│   │
+│   └── Fio 9: Closures, Escape Analysis, ARC, TRMA
+│       (captures, Arc<T>, FnValueCall, @associative → TRMA)
+│       Maquinaria: escape, capture, CaptureStorage
+│
+├── Fio 3: Actions, return, ;, Caller's Arena
+│   │   (action, !, var, loop, for, break, continue, return, ;, ?, arena)
+│   │
+│   └── Fio 11: CSP, Scheduler Multithread
+│       │   (channel!, queue!, broadcast!, fork!, select, timeout, @parallel)
+│       │
+│       └── Fio 14: @log, @test, Test Runner
+│           (@log telemetria via CSP, @test positivo/negativo, kata test)
+│
+├── Fio 4: Enum Avançado — Payload, Result, Optional, |
+│   │   (variantes com payload, Result::(T, E), Optional::T, |, variantes
+│   │    predicadas, match general case, panic!, assert!)
+│   │   Maquinaria: Ty::Sum com payload, :: em type params, smart constructor
+│   │              falível, match general case
+│   │
+│   └── Fio 8: Coleções, ITERABLE, Stream Fusion
+│       │   (List, Array, Range, map/filter/fold, .N, len, INDEXABLE, COUNTABLE)
+│       │
+│       └── Fio 13: Dict, Set (HAMT)
+│
+├── Fio 5: Data, Structs, Tuples, alias
+│   │   (data, field access, Tuple, .N em tupla, alias/newtype)
+│   │   Maquinaria: Ty::Struct, Ty::Tuple, :: em campos, smart constructor
+│   │
+│   └── Fio 6: Tipos Refinados, Ascription
+│       (data com predicados, smart constructors falíveis, ::Type,
+│        atrito sadio, avaliação constante de predicados)
+│       Maquinaria: :: em ascription, smart constructor falível,
+│                   avaliação constante, ret-directed dispatch
+│
+├── Fio 7: Interfaces, Generics, Dispatch
+│   │   (interface, implements, multiple dispatch, ITERABLE/COUNTABLE/INDEXABLE,
+│   │    ORD/EQ/NUM/SHOW, generics, monomorph, @commutative)
+│   │   Maquinaria: Ty::Generic, Ty::Interface, dispatch com múltiplas overloads,
+│   │              monomorph, mono_instance
+│   │
+│   └── Fio 8 depende deste (ITERABLE para map/filter/fold)
+│
+├── Fio 10: Módulos, Prelude, FFI Completo
+│   (import, export, as, module loader, filesystem, cycle detection,
+│    prelude de stdlib/core.kata substituindo prelude hardcoded)
+│
+├── Fio 12: Comptime, @cache_strategy
+│   (@comptime definition/call-site, JIT-and-execute, HeapSnapshot,
+│    @cache_strategy LRU)
+│
+└── Fio 15: AOT, REPL
+    (kata build — Cranelift object + linker, kata repl — TypeEnv persistente)
+```
+
+## Fios
+
+### Fio 1: Fundação + Aritmética + CLI
+
+**Tracer bullet.** Estabelece o pipeline end-to-end mínimo: source → lexer →
+parser → resolution → inference → codegen → CLIF → Cranelift JIT → runtime →
+resultado. Tudo o que não existe ainda é stub ou trivial.
+
+**Camadas criadas:** kata-core, kata-ast, kata-lexer, kata-parser,
+kata-diagnostics (frontend), kata-resolution, kata-inference, kata-codegen,
+kata-rt, kata-driver.
+
+**Maquinaria de tipos construída:**
+- `TypeEnv` (árvore de escopos, name resolution)
+- `Ty` canônico: `Prim(Int|Float|Text|Rational)` (mapeamento de representação
+  FFI — `i64`, `f64`, `kata_rt_string`, `kata_rt_rat`), `Unit`, `Struct`, `Sum`
+- `PrimTy` — mapeamento de representação nativa, não tipo da linguagem. Os
+  tipos da linguagem (`Int`, `Float`, `Text`, `Rational`) são `data` com `@ffi`
+  no prelude; `Boolean` é `enum` no prelude. `PrimTy` é o contrato FFI que o
+  codegen usa para mapear `Ty → ABI`.
+- Inferência básica (tipo de expressões literais e aritméticas)
+- `DispatchTable` com scoring por dominância (nasce com scoring, mesmo com 1
+  overload por nome — não é lookup simples)
+- `FfiSymbol` enum tipado (catálogo de símbolos FFI com metadados)
+- `::` em assinatura (parser reconhece e produz `Signature`; typeck valida)
+- `::` postfix reconhecido na tabela postfix do parser (pronto para todos os
+  contextos futuros — typeck interpreta progressivamente)
+- `data` declaração (tipos opacos: `data Int ()` com `@ffi("i64")`)
+- `enum` declaração básica (variantes unitárias: `enum Boolean { True, False }`)
+- `Ty::Sum` com variantes unitárias (Boolean — sem payload ainda)
+- `::` em qualificação de variante (`Boolean::True`)
+
+**Features:**
+- Literais: Int (BigInt/SMI tagging nativo do runtime desde o início), Float,
+  Text, Rational
+- `let` bindings
+- Aplicação prefixa (`+ 1 2`)
+- Operadores aritméticos (`+`, `-`, `*`, `/`) e comparação (`=`, `<`, `>`)
+- `@ffi` directive (parser + codegen import)
+- `data` (tipos opacos: `data Int ()`, `data Float ()`, `data Text ()`,
+  `data Rational ()`)
+- `enum` básico (variantes unitárias: `enum Boolean { True, False }`)
+- Prelude em `stdlib/core.kata` (declara tipos, Boolean, e operadores via @ffi)
+
+**Runtime (kata-rt):**
+- `kata_rt_bi_*` (BigInt com SMI tagging — nativo desde o início, não retrofit)
+- `kata_rt_iadd`, `kata_rt_isub`, `kata_rt_imul`, `kata_rt_idiv` (legacy, se
+  necessário)
+- `kata_rt_fadd`, `kata_rt_fsub`, `kata_rt_fmul`, `kata_rt_fdiv`
+- `kata_rt_icmp_*`, `kata_rt_fcmp_*`
+- `kata_rt_rat_*` (Rational: add, sub, mul, div, eq, lt, show, to_float,
+  from_float, int_to_rational)
+- `kata_rt_bi_eq`, `kata_rt_bi_lt`, `kata_rt_bi_show`, `kata_rt_bi_to_rational`
+- `kata_rt_print`, `kata_rt_string_concat`, `kata_rt_text_literal`
+
+**CLI:** `lex`, `parse`, `eval`, `run`
+
+**Depende de:** nada (fundação)
+
+**DoD:** `kata eval '+ 1 2'` imprime `3`. `kata run examples/arithmetic.kata`
+executa e imprime resultado. Pipeline completo funciona end-to-end. DispatchTable
+faz scoring por dominância (mesmo que só tenha 1 candidato). `Boolean` é um
+`enum` no prelude, não primitivo do compilador.
+
+---
+
+### Fio 2: Funções, Lambdas, Guards, Match, Hole
+
+**Maquinaria de tipos construída:**
+- Assinaturas de função (`=>`) — typeck valida `nome :: T1 T2 => TRet`
+- Tipo de função como valor (`->`) — `(A -> B)` como tipo transitável
+- Hole `_` — desugar no typeck: `+ 10 _` vira `lambda x: + 10 x` com captures
+- `tail_pos: bool` na TAST — marcado pelo typeck, usado pelo Cranelift para TCO
+- `effect: Effect` na TAST — `Puro` por enquanto (IO/Spawn/ChannelOp vem em
+  fios posteriores)
+- `Boolean` já existe no TypeEnv via prelude (Fio 1) — Fio 2 usa para guards,
+  não constrói a maquinaria de enum (já existe em Fio 1 para variantes unitárias)
+
+**Features:**
+- Assinaturas (`nome :: T1 T2 => TRet`)
+- Tipo de função como valor (`(A -> B)`)
+- `lambda`/`λ`, múltiplas cláusulas
+- Guards (`> x 0: ...`, `otherwise: ...`)
+- `match` com pattern matching e verificação de exaustividade
+- Patterns: Ident, Wildcard, Literal, Variant, Tuple, Cons
+- `with` block (computações prévias para guards, restrições de genéricos)
+- Pipeline `|>` (desugar no typeck)
+- Hole `_` (currying explícito: `+ 10 _`, `- _ 10`, `+ _ _`)
+- TCO delegado ao Cranelift (`tail_pos: bool` na TAST)
+
+**Depende de:** Fio 1
+
+**DoD:** Fatorial recursivo executa sem stack overflow (TCO via Cranelift).
+Match exaustivo em Boolean funciona. Guards com `otherwise` validam.
+`let soma_dez := + 10 _` gera closure de aridade 1.
+
+---
+
+### Fio 3: Actions, return, ;, Caller's Arena
+
+**Maquinaria de tipos construída:**
+- `effect: Effect` ganha `IO` (Actions têm efeito IO)
+- Verificação de proibição de recursão em Actions (call graph analysis)
+- `?` desugar: injeta `return Err(e)` na TAST
+
+**Features:**
+- `action` declaração, `!` sufixo de chamada
+- `var` (binding mutável, exclusivo de Actions)
+- `loop`, `for`, `break`, `continue`
+- `return` (early return explícito, caller's arena)
+- `;` (terminador de statement, retorno implícito vs Unit)
+- `?` (fail-fast, injeta `return Err(e)`)
+- Proibição de recursão em Actions (hard error)
+- Arena per-fiber (bump allocator, liberação O(1))
+- Scheduler básico (single fiber, wasmtime-fiber)
+
+**Runtime:**
+- `kata_rt_arena_create`, `kata_rt_arena_alloc`, `kata_rt_arena_destroy`
+- wasmtime-fiber integration (yield em operações bloqueantes)
+
+**Depende de:** Fio 1, 2
+
+**DoD:** Action com `loop`, `var`, `break` executa. Action retorna coleção sem
+use-after-free (caller's arena). `?` propaga erro corretamente.
+
+---
+
+### Fio 4: Enum Avançado — Payload, Result, Optional, |
+
+**Maquinaria de tipos construída:**
+- `Ty::Sum` com variantes que carregam payload (já existe para unitárias de
+  Fio 1; agora variantes com `Ok(T)`, `Some(T)`)
+- `::` em type params (`Result::(T, E)`) — typeck resolve params posicionais
+- Match general case (3+ variantes com switch/branch chain) — match em 2
+  variantes já funciona de Fio 2; general case é 3+
+- Smart constructor synthesis falível — variantes predicadas (`enum IMC` com
+  `Magreza(< _ 18.5)`) geram construtor que despacha para a variante cujo
+  predicado satisfaz. Reusa Hole de Fio 2 e `Result` (definido neste fio).
+  Esta maquinaria é reusada em Fio 6 para refined types.
+
+**Features:**
+- Variantes com payload (`Ok(T)`, `Some(T)`, `Aprovada(Valor)`)
+- Sum com payload = sempre ponteiro (invariante de codegen)
+- `Result::(T, E)`, `Optional::T` (definidos no prelude)
+- `|` (fallback local, generalizado para qualquer enum com payload)
+- Variantes predicadas (`enum IMC`, smart constructors falíveis)
+- Match general case (3+ variantes com switch/branch chain)
+- `panic!`, `assert!`
+
+**Runtime:**
+- `kata_rt_store_sum_result`, `kata_rt_tag_int`
+
+**Depende de:** Fio 2 (match, Hole para predicados), Fio 3 (Actions para `?`)
+
+**DoD:** `Result` com `|` e `?` funciona. Enum predicado `IMC(17.0)` despacha
+para `Magreza`. Match em 4+ variantes executa sem trap.
+
+---
+
+### Fio 5: Data, Structs, Tuples, alias
+
+**Maquinaria de tipos construída:**
+- `Ty::Struct` com campos tipados
+- `Ty::Tuple` com elementos tipados (tamanho estático conhecido)
+- `::` em campos de struct (`nome::Text`) — typeck valida
+- Smart constructor synthesis (infalível: `Pessoa :: Text Int => Pessoa`)
+- Tuple como heap type (invariante de codegen: sempre ponteiro)
+- `.N` em tupla (IndexAccess compile-time, bounds check, índice negativo)
+
+**Features:**
+- `data` declaração (posicional e indentada)
+- Field access (`expr.nome`)
+- Tuple (vírgula obrigatória, heap type, `.N` com compile-time bounds check,
+  índice negativo `t.(-1)`)
+- `alias` (newtype, construtor sintetizado, orphan rule)
+- Smart constructors para structs (infalíveis)
+- `format` (builtin sintetizado, substitui `{}`)
+- `$` spread (interceptado pelo typeck)
+
+**Runtime:**
+- Struct/tuple arena alloc + Store por campo/elemento
+
+**Depende de:** Fio 1, 2
+
+**DoD:** Struct com field access funciona. Tuple com `.N` e `t.(-1)` funciona.
+`alias` permite implementar interface em tipo externo. `format "{} {}" (a, b)`
+interpola.
+
+---
+
+### ── ZELADORIA 1: Language Core ──
+
+Após Fio 5. Paga débito horizontal acumulado nos 5 fios verticais.
+
+**Foco:**
+- God objects > 500 linhas
+- `unwrap()` em produção → `expect()`
+- Snapshots do pipeline (lexer, parser, resolution, inference, codegen)
+- Cross-fio test runner
+- Manual sync (verificar se Fios 1-5 divergiram do manual)
+- `pub(crate)` audit
+- DispatchTable: verificar que scoring por dominância funciona com múltiplos
+  candidatos (preparar para Fio 7)
+
+---
+
+### Fio 6: Tipos Refinados, Ascription
+
+**Maquinaria de tipos construída:**
+- `::` em ascription de expressão (`expr::Type`) — typeck valida
+- Smart constructor falível para refined types (reusa maquinaria de Fio 4 —
+  `data (Int, > _ 0) as PositiveInt` gera construtor `Int => Result::(T, Error)`,
+  mesmo padrão de smart constructor falível de enum predicado)
+- Avaliação constante de predicados (typeck local, NÃO comptime): substitui `_`
+  por literal, reduz expressão booleana, verifica `True`/`False`
+- Ret-directed dispatch: hint de retorno na ascription seleciona sobrecarga
+- Grouped (barreira vs strip — `((expr))::Type`)
+
+**Features:**
+- `data (Int, > _ 0) as PositiveInt` (predicados com Hole — Hole já existe de
+  Fio 2, smart constructor falível já existe de Fio 4)
+- Smart constructors falíveis para refined types (`Result::(T, Error)`)
+- Ascription `expr::Type` (compile-time validation para literais)
+- Ret-directed dispatch (hint de retorno na ascription)
+- Grouped (barreira vs strip — `((expr))::Type`)
+- Coerção contextual no `|` (fallback literal validado em compile-time)
+
+**Depende de:** Fio 5 (data, smart constructor infalível), Fio 4 (Result, smart
+constructor falível), Fio 2 (Hole para predicados)
+
+**DoD:** `5::PositiveInt` é `PositiveInt` direto. `(-5)::PositiveInt` é type
+error. `PositiveInt 25 | 0` desempacota com fallback validado. `(/ 1 3)::Int`
+seleciona idiv por ret-directed dispatch.
+
+**Nota:** A validação compile-time de predicados é avaliação constante local ao
+typeck — não usa JIT-and-execute (Fio 12). Não criar dependência Fio 6 → Fio 12.
+
+---
+
+### Fio 7: Interfaces, Generics, Dispatch
+
+**Maquinaria de tipos construída:**
+- `Ty::Generic` (type params não-resolvidos)
+- `Ty::Interface` (contratos nominais)
+- `InterfaceRegistry` (catálogo de interfaces e seus impls)
+- Dispatch por dominância com múltiplas overloads (scoring já existe de Fio 1;
+  agora múltiplos candidatos competem)
+- Monomorphization nos call sites (especializa `List(Int)` vs `List(Text)`)
+- `mono_instance: u64` na TAST (monomorph rastreia qual instância cada call
+  resolve)
+- `@commutative` (dispatch tenta argumentos invertidos ao procurar sobrecargas)
+
+**Features:**
+- `interface NOME` com `implements SUPERINTERFACE...`
+- Interfaces parametrizadas (`ITERABLE(A)`, `INDEXABLE(A)`)
+- Multiple dispatch por dominância (múltiplos candidatos, scoring, seleção)
+- Interfaces base: `ORD`, `EQ`, `NUM`, `SHOW`
+- `COUNTABLE` (`len :: Self => Int`)
+- `INDEXABLE(A)` (`at :: Self Int => Result::(A, Err)`)
+- Generics (parametric polymorphism)
+- Monomorphization nos call sites
+- `@commutative` (dispatch tenta argumentos invertidos)
+
+**Depende de:** Fio 4 (enums para variantes de interface), Fio 5 (data/struct
+para tipos concretos)
+
+**DoD:** `Int implements NUM` com `+`, `-`, `*`, `abs`, `div`. `List(A)
+implements ITERABLE(A)` despacha corretamente. Monomorphization especializa
+`List(Int)` vs `List(Text)`. Dispatch com 2+ candidatos seleciona por dominância.
+
+---
+
+### Fio 8: Coleções, ITERABLE, Stream Fusion
+
+**Maquinaria de tipos construída:**
+- `.N` em coleções (desugar para `at` via INDEXABLE, retorna `Result`)
+- `len` (síntese compile-time para Tuple — special case; COUNTABLE dispatch para
+  coleções)
+- `@builtin("map"/"filter"/"fold")` — typeck gera nós TAST especializados
+
+**Features:**
+- List `[T]` (Cons, pattern `[h : t]`, `[]`)
+- Array `{T}` (contíguo, imutável)
+- Range `[a..b]`, `[a..=b]`, `[a..step..b]` (lazy, ITERABLE)
+- `map`, `filter`, `fold` (`@builtin`, nós TAST especializados)
+- Stream fusion (Map/Filter aninhados → único loop)
+- `.N` em coleções (desugar para `at`, retorna `Result`)
+- `len` (COUNTABLE dispatch para coleções, síntese para Tuple)
+
+**Runtime:**
+- `kata_rt_list_nil/cons/is_empty/head/tail`
+- `kata_rt_array_alloc/len/get/set`
+- `kata_rt_array_get_checked` (retorna Result)
+- `kata_rt_string_len`, `kata_rt_string_get_checked`
+
+**Depende de:** Fio 7 (ITERABLE, INDEXABLE, COUNTABLE), Fio 5 (Tuple para
+special case de `len` e `.N`)
+
+**DoD:** `map (+ 10 _) [1 2 3]` produz `[11 12 13]`. `filter (> _ 5) {1 8 3 9}`
+produz `{8 9}`. `arr.0 ?` desempacota. `len (10, 20)` é `2` (compile-time).
+
+---
+
+### Fio 9: Closures, Escape Analysis, ARC, TRMA
+
+**Maquinaria de tipos construída:**
+- `escape: EscapeKind` na TAST (NãoEscapa / EscapaParaHeap / EscapaParaClosure)
+- `capture: Vec<CaptureInfo>` na TAST (o que esta lambda captura e como)
+- `CaptureStorage` Stack/Heap (promoção quando closure escapa)
+- Escape analysis em 4 passes
+
+**Features:**
+- Closures com captura léxica (Hole desugar já existe de Fio 2; agora captura
+  variáveis externas)
+- Escape analysis (4 passes, CaptureStorage Stack/Heap)
+- `Arc<T>` nativo para closures que escapam
+- `FnValueCall` (chamada a closure escapada via `call_indirect`)
+- `@associative(0)` → TRMA (reescrita com acumulador no TAST)
+
+**Runtime:**
+- `kata_rt_alloc_arc`, `kata_rt_incref`, `kata_rt_decref`
+- Layout ARC: `Arc<ClosureBox { fn_ptr, captures }>`
+
+**Depende de:** Fio 2 (lambdas, Hole), Fio 3 (Actions para fork/escape context)
+
+**DoD:** `let add_n := + _ n` captura `n`. Closure retornada por função pura
+escapa para heap (Arc). TRMA converte fatorial com `@associative(0)` em
+recursão de cauda.
+
+---
+
+### ── ZELADORIA 2: Type System + Collections ──
+
+Após Fio 9. Paga débito horizontal do sistema de tipos.
+
+**Foco:**
+- Consistência typeck-codegen (match general case, enum predicado)
+- Escape analysis edge cases (nested closures, closures em canais)
+- Stream fusion correctness (Map/Filter/Fold aninhados)
+- TRMA correctness (mais operadores associativos)
+- Dispatch edge cases (ambiguidade real com múltiplas interfaces)
+- Cross-fio test runner atualizado
+- Manual sync
+
+---
+
+### Fio 10: Módulos, Prelude, FFI Completo
+
+**Features:**
+- `import`, `export`, `as`
+- Module loader (filesystem, cache, cycle detection)
+- Path resolution (file direto + agregador de diretório `mod.kata`)
+- Prelude de `stdlib/core.kata` (substitui prelude hardcoded)
+- Reexportação (`export MOD.(itens)`)
+- **`Complex`** — tipo numérico implementado inteiramente em Kata, sem `@ffi`.
+  Demonstra que o princípio "sem builtins" funciona: `data Complex (re::Float,
+  im::Float)` com `implements NUM/ORD/EQ/SHOW` usando lambdas puras. É o exemplo
+  canônico de que o compilador não precisa saber que um tipo existe para que ele
+  funcione — `Complex` é um tipo como qualquer outro que o usuário poderia
+  definir. Vive em `stdlib/complex.kata` como módulo da stdlib.
+
+**Depende de:** Fio 1-9 (prelude precisa de todas as features implementadas)
+
+**DoD:** `import utilidades.matematica` carrega de filesystem. Ciclo de imports
+detectado. Prelude carregado de `stdlib/core.kata`. Hardcoded prelude removido.
+`Complex` funciona com `+`, `show`, e comparação — sem `@ffi`, sem tratamento
+especial no compilador.
+
+---
+
+### Fio 11: CSP, Scheduler Multithread
+
+**Maquinaria de tipos construída:**
+- `effect: Effect` ganha `Spawn` e `ChannelOp` (fork!, !>, <!)
+
+**Features:**
+- `channel!` (rendezvous), `queue!(N)` (buffered), `broadcast!` (pub-sub)
+- `fork!` (submete Action ao scheduler)
+- `select` com `timeout` (multiplexação de canais)
+- `!>` (envio), `<!` (recebimento)
+- Scheduler M:N multithread (struct explícita, work-stealing)
+- Channels lock-free (MPSC/MPMC)
+- `@parallel` (multiprocess via fork + IPC)
+
+**Runtime:**
+- `kata_rt_channel_create/send/recv`
+- `kata_rt_queue_create`, `kata_rt_broadcast_create`
+- `kata_rt_select`, `kata_rt_fork`
+- Scheduler struct (run_queue, blocked, pending_wakes, timers)
+- TLS apenas para yield
+
+**Depende de:** Fio 3 (Actions, arena), Fio 9 (escape analysis para dados em
+canais → Arc<T>)
+
+**DoD:** `fork!` submete Action em fiber separada. Channel rendezvous
+sincroniza sender/receiver. `select` multiplexa 2+ canais. `@parallel` spawn
+processo OS separado.
+
+---
+
+### Fio 12: Comptime, @cache_strategy
+
+**Features:**
+- `@comptime` definition-site (hint — avalia se consegue, senão runtime)
+- `@comptime` call-site (guarantee — se não consegue, erro de compilação)
+- JIT-and-execute (compila via pipeline normal, executa no kata-rt real)
+- HeapSnapshot (bytes + fixups para tipos complexos)
+- Pureza verification (walk TAST: se não contém ActionCall, é pura)
+- `@cache_strategy{strategy: "LRU"}` (memoização automática)
+
+**Depende de:** Fio 10 (módulos para organizar comptime), Fio 1-9 (pipeline
+completo para JIT-and-execute)
+
+**DoD:** `@comptime dobro 21` substitui por literal `42`. `@comptime aux input`
+é erro (args não-constantes). `@cache_strategy{strategy: "LRU"}` memoiza
+função pura repetida.
+
+---
+
+### Fio 13: Dict, Set (HAMT)
+
+**Features:**
+- `Dict::(K, V)` — dicionário persistente imutável (HAMT)
+- `Set::T` — conjunto persistente imutável (HAMT)
+- `Dict implements ITERABLE((K, V)), COUNTABLE, INDEXABLE(V)`
+- `Set implements ITERABLE(T), COUNTABLE`
+- `at dict key` → `Result::(V, Err)` (lookup por chave)
+- `contains set elem` → `Boolean`
+
+**Runtime:**
+- HAMT implementation (hash, trie nodes, bitmap, persistent sharing)
+- `kata_rt_dict_insert/get/len/iter`
+- `kata_rt_set_insert/contains/len/iter`
+
+**Depende de:** Fio 7 (interfaces), Fio 8 (ITERABLE/COUNTABLE/INDEXABLE)
+
+**DoD:** `Dict::(Text, Int)` com insert/get funciona. `Set::Int` com
+contains/union/intersection funciona. Iteração via ITERABLE produz pares.
+
+---
+
+### Fio 14: @log, @test, Test Runner
+
+**Features:**
+- `@log{level, msg, topic, policy}` (telemetria via canais CSP)
+  - Política `"drop"` (descarta se sobrecarregado)
+  - Política `"block"` (bloqueia até confirmação)
+- `@test("descrição")` (teste positivo)
+- `@test{desc, expects: "CompileError"}` (teste negativo)
+- `kata test` (test runner: descobre @test, executa em JIT isolado)
+- Tree shaking de `@test` em produção
+
+**Depende de:** Fio 11 (CSP para @log), Fio 4 (Result para testes)
+
+**DoD:** `kata test examples/test_assert.kata` roda testes e reporta
+pass/fail/error. Teste negativo que falha compilação = PASS. @log envia
+telemetria sem contaminar pureza.
+
+---
+
+### ── ZELADORIA 3: Advanced Features ──
+
+Após Fio 14. Paga débito horizontal das features avançadas.
+
+**Foco:**
+- CSP edge cases (deadlock detection, fiber starvation)
+- Comptime edge cases (nested comptime, comptime + closures)
+- HAMT correctness (persistent sharing, collision handling)
+- @log + @parallel interaction
+- AOT readiness audit (todas as features compilam em modo AOT?)
+- Cross-fio test runner completo
+- Manual sync final
+
+---
+
+### Fio 15: AOT, REPL
+
+**Features:**
+- `kata build` (AOT: Cranelift object file + linker → executável)
+  - `cranelift-object` para emissão de `.o`
+  - Link com `kata-rt` estático
+  - Tree shaking incondicional (sem `--release`)
+- `kata repl` (REPL interativo)
+  - Persistência de `TypeEnv` entre expressões
+  - Histórico persistente (rustyline)
+  - Comandos: `:help`, `:type <expr>`, `:env`, `:quit`
+
+**Depende de:** Fio 1-14 (todas as features precisam funcionar em AOT)
+
+**DoD:** `kata build examples/fatorial.kata` produz executável nativo que
+executa sem o compilador. `kata repl` mantém bindings entre expressões.
+
+---
+
+## Resumo Visual
+
+```
+Fio 1  ──────────────────────────────────────────────── CLI day-1
+  │       TypeEnv, Ty, PrimTy (FFI), DispatchTable com scoring, FfiSymbol,
+  │       ::, data opaco, enum unitário (Boolean), Int/BigInt/SMI, Rational
+  ├── Fio 2 ── Fio 9 (closures, escape)
+  │       assinaturas, ->, Hole, tail_pos, effect      escape, capture, Arc, TRMA
+  ├── Fio 3 ── Fio 11 ── Fio 14 (@log, @test)
+  │       Actions, return, ;, ?                         CSP, scheduler M:N
+  ├── Fio 4 ── Fio 8 ── Fio 13 (Dict/Set)
+  │       Ty::Sum com payload, :: type params           ITERABLE, .N, len, stream fusion
+  ├── Fio 5 ── Fio 6 (refined)
+  │       Ty::Struct/Tuple, :: campos                  :: ascription, avaliação constante
+  ├── Fio 7 ── Fio 8 (dependência)
+  │       Ty::Generic/Interface, monomorph             (desbloqueia coleções)
+  ├── Fio 10 (módulos)
+  ├── Fio 12 (comptime)
+  └── Fio 15 (AOT, REPL)
+
+Zeladoria 1: após Fio 5
+Zeladoria 2: após Fio 9
+Zeladoria 3: após Fio 14
+```
+
+## Princípios do Roadmap
+
+1. **Typeck + codegen no mesmo fio:** se o typeck aprova, o codegen executa.
+   Não aprovar no typeck o que o codegen não implementa.
+2. **Manual sync como DoD:** cada fio atualiza o manual se a implementação
+   divergiu do PRD.
+3. **`run` day-1:** disponível desde Fio 1. `test` vem com `@test` (Fio 14).
+   `build` e `repl` são Fio 15.
+4. **Zeladorias planejadas:** não são falhas do processo, são consequência do
+   modelo vertical.
+5. **Cross-fio test runner:** cada fio adiciona testes ao suite global.
+6. **Sem builtins:** tudo via `@ffi` ou `@builtin`. O compilador conhece apenas
+   `FfiSymbol`, 3 strings de mapeamento, e `@builtin`.
+7. **Comptime via JIT-and-execute:** não interpretador de TAST.
+8. **SMI tagging transparente:** runtime decide representação, compilador vê
+   tipo canônico.
+9. **`@builtin` como padrão de interceptação:** funções interceptadas pelo
+   typeck seguem o padrão (stdlib + diretiva + nó TAST especializado).
+10. **Return + caller's arena:** design de Actions desde o início, não
+    zeladoria tardia.
+11. **Dispatch por dominância nasce em Fio 1:** scoring desde o início, mesmo
+    com 1 overload. Não retrofit em Fio 7.
+12. **Hole nasce em Fio 2:** currying explícito desde funções/lambdas. Não
+    adiar para Fio 9.
+13. **Ascription refined NÃO é comptime:** avaliação constante local ao typeck.
+    Não criar dependência Fio 6 → Fio 12.
+14. **`::` é um operador, contextos são typeck:** parser reconhece `::` desde
+    Fio 1. Contextos (assinatura, campo, type param, variante, ascription) são
+    interpretados progressivamente pelo typeck.
+15. **Sem primitivos:** `Int`, `Float`, `Text` são `data` opacos com `@ffi` no
+    prelude; `Boolean` é `enum` no prelude. O compilador não tem tipos
+    primitivos da linguagem — `PrimTy` é mapeamento de representação FFI
+    (`i64`, `f64`, `kata_rt_string`), não tipo da linguagem. `enum` básico
+    (variantes unitárias) existe em Fio 1 porque o prelude precisa declarar
+    `Boolean`.
+
+## Fora do Escopo 1.0
+
+- Tensor/SIMD
+- `@heapstack` (otimização heurística de arena em loops)
+- `@restart` (retry policy para Actions)
+- Doc comments (`///`, `"""doc"""`)
