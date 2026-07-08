@@ -17,6 +17,9 @@ Thumbs.db
 # Hermes
 .hermes/
 
+# Zeladoria
+.zeladoria-last-run
+
 # Graphify
 /graphify-out/
 
