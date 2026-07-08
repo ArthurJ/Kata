@@ -381,8 +381,23 @@ pub(crate) fn parse_expr(parser: &mut Parser) -> Result<Spanned<Expr>, FrontendE
 
 /// Parse a greedy application: callee + arguments.
 /// Does NOT consume `|>` — that's handled by `parse_expr`.
+///
+/// Invariant sintática: em notação prefixa estrita, só `Ident`,
+/// `VariantQual`, e `Grouping` (com lambda dentro) podem ser callee.
+/// Literais (`IntLit`, `FloatLit`, `TextLit`, `Unit`) não são chamáveis —
+/// se o parser os consumisse como callee, `5 in + x 1` seria parseado como
+/// `Apply(5, [in, +, x, 1])` em vez de parar em `5` e reportar `in` como
+/// token inesperado.
 fn parse_apply(parser: &mut Parser) -> Result<Spanned<Expr>, FrontendError> {
     let callee = parser.parse_expr_post_ascription()?;
+
+    // Literais não são callee — não consomem argumentos.
+    if matches!(
+        &callee.node,
+        Expr::IntLit { .. } | Expr::FloatLit { .. } | Expr::TextLit { .. } | Expr::Unit
+    ) {
+        return Ok(callee);
+    }
 
     let mut args = Vec::new();
     while parser.can_start_expr() {

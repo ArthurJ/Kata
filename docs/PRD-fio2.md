@@ -1113,3 +1113,13 @@ Expr::Apply { callee: +, args: [1, 5] }
    tentar fazer tudo de uma vez. Abordagem incremental: (1) lambda anônimo
    primeiro, (2) funções nomeadas com múltiplas cláusulas, (3) match, (4)
    guards, (5) hole, (6) pipe, (7) with.
+
+8. **Dump da AST no driver**: O driver deve ter um subcomando `kata ast
+   <file>` (ou `kata ast -e <expr>`) que imprime a AST (pretty-printed ou
+   `Debug`) logo após o parse, antes de qualquer pass posterior. Isto é
+   infraestrutura de debugging essencial — sem ela, diagnosticar erros como
+   `let x := 5 in + x 1` (onde `in` é tokenizado como `Ident("in")` e
+   consumido greedy pelo `parse_apply` do `let`) requer testes ad hoc com
+   `eprintln!`. O driver já tem `lex` e `parse` como subcomandos; `ast` é
+   o complemento natural. Considerar também um flag `--dump-ast` para
+   `eval`/`run` que imprime a AST antes de falhar.
