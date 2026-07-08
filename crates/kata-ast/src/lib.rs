@@ -12,7 +12,8 @@ pub mod span;
 pub mod token;
 
 pub use expr::{
-    Directive, DirectiveArg, DirectiveValue, Expr, FieldDecl, Item, Module, TypeExpr, VariantDecl,
+    Directive, DirectiveArg, DirectiveValue, Expr, FieldDecl, GuardClause, Item, LambdaClause,
+    MatchArm, Module, Pattern, TypeExpr, VariantDecl, WithBinding,
 };
 pub use span::{Span, Spanned};
 pub use token::{Token, TokenWithSpan};

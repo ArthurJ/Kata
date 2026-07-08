@@ -326,6 +326,12 @@ fn infer_expr(
                 })?,
             }
         }
+
+        // ── Fio 2: stubs — implementação nas Fases 7-8 ────────
+        Expr::Lambda { .. } => todo!("Fase 8: infer_lambda"),
+        Expr::Match { .. } => todo!("Fase 8: infer_match"),
+        Expr::Hole => todo!("Fase 7: desugar_hole — Hole não deve chegar ao infer_expr"),
+        Expr::Pipe { .. } => todo!("Fase 7: desugar_pipe — Pipe não deve chegar ao infer_expr"),
     };
 
     // Em Fio 1, toda expressão é pura. tail_pos é marcado pelo chamador

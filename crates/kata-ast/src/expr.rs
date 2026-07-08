@@ -64,6 +64,109 @@ pub enum Expr {
     /// O parser não sabe se `Boolean` é tipo ou módulo — produz
     /// `VariantQual` e o typeck resolve.
     VariantQual { enum_name: String, variant: String },
+
+    // ── Fio 2: Funções, Lambdas, Match, Hole, Pipe ─────────────
+    /// `lambda <padrões>: <corpo>` — lambda anônimo (cláusula única).
+    ///
+    /// Se `guards` é vazio: `body` é a expressão única após `:`.
+    ///   `lambda x: + x 1`
+    ///
+    /// Se `guards` é não-vazio: o corpo é um bloco indentado de guard clauses.
+    ///   `lambda x:`
+    ///       `> x 0: x`
+    ///       `otherwise: - 0 x`
+    ///   Neste caso, `body` é ignorado (ou pode ser usado como fallback final).
+    Lambda {
+        patterns: Vec<Spanned<Pattern>>,
+        body: Box<Spanned<Expr>>,
+        /// Guards opcionais dentro do corpo. Se não-vazio, o corpo é
+        /// uma sequência de guard clauses (bloco indentado após `:`).
+        guards: Vec<GuardClause>,
+        /// `with` block opcional (bindings prévios, pós-escritos mas pré-avaliados).
+        with_bindings: Vec<WithBinding>,
+    },
+
+    /// `match <scrutinee>` com braços indentados.
+    Match {
+        scrutinee: Box<Spanned<Expr>>,
+        arms: Vec<MatchArm>,
+    },
+
+    /// `_` em posição de argumento — hole para currying.
+    /// O parser produz `Expr::Hole` quando encontra `Ident("_")` em posição
+    /// de argumento de `Apply`. Em posição de pattern, o parser produz
+    /// `Pattern::Wildcard` — a disambiguação é no parser, não no typeck.
+    /// Desugared pelo typeck em Lambda. Nunca chega à TAST.
+    Hole,
+
+    /// `lhs |> rhs` — pipeline.
+    /// Desugared pelo typeck. Nunca chega à TAST.
+    Pipe {
+        lhs: Box<Spanned<Expr>>,
+        rhs: Box<Spanned<Expr>>,
+    },
+}
+
+/// Pattern — usado em match arms e cláusulas lambda.
+///
+/// Disambiguação no parser: `_` em posição de pattern → `Wildcard`.
+/// `True` em posição de pattern → `Ident("True")` (typeck resolve via
+/// `EnumRegistry` para `Variant` se for variante de enum do scrutinee).
+#[derive(Debug, Clone, PartialEq)]
+pub enum Pattern {
+    /// `x` — liga o valor ao nome.
+    Ident(String),
+    /// `_` — wildcard, aceita qualquer valor sem ligar nome.
+    Wildcard,
+    /// `42`, `"texto"`, `3.14` — literal exato.
+    Literal(Spanned<Expr>),
+    /// `Boolean::True`, `Result::Ok` — variante de enum qualificada.
+    Variant { enum_name: String, variant: String },
+    /// `(a, b, c)` — tupla.
+    Tuple(Vec<Spanned<Pattern>>),
+    /// `[h : t]` — cons (cabeça : cauda). `[]` para lista vazia.
+    /// Fio 2 reconhece a sintaxe; Fio 8 (List) dá semântica de runtime.
+    /// Em Fio 2, pattern Cons/Nil só funciona se List existir (não existe
+    /// ainda — stub que produz erro limpo).
+    Cons {
+        head: Box<Spanned<Pattern>>,
+        tail: Box<Spanned<Pattern>>,
+    },
+}
+
+/// Uma cláusula lambda após uma assinatura.
+/// Múltiplas cláusulas = função nomeada; 1 cláusula = lambda anônimo.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LambdaClause {
+    pub patterns: Vec<Spanned<Pattern>>,
+    pub body: Spanned<Expr>,
+    pub guards: Vec<GuardClause>,
+    pub with_bindings: Vec<WithBinding>,
+}
+
+/// Um guard: `condição: corpo` ou `otherwise: corpo`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GuardClause {
+    /// `None` = `otherwise` (sempre passa).
+    pub condition: Option<Spanned<Expr>>,
+    pub body: Spanned<Expr>,
+}
+
+/// Um braço de match: `pattern: corpo` ou `otherwise: corpo`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MatchArm {
+    /// `None` = `otherwise` (fallback).
+    pub pattern: Option<Spanned<Pattern>>,
+    /// Guard opcional após pattern (Fio 2: não implementado no parser ainda).
+    pub guard: Option<Spanned<Expr>>,
+    pub body: Spanned<Expr>,
+}
+
+/// Binding de `with` block: `nome := expr` (sem keyword `let`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct WithBinding {
+    pub name: String,
+    pub value: Spanned<Expr>,
 }
 
 /// Item de top-level — declaração que aparece no nível de módulo.
@@ -79,7 +182,9 @@ pub enum Item {
         params: Vec<Spanned<TypeExpr>>,
         ret: Spanned<TypeExpr>,
         directives: Vec<Directive>,
-        body: Option<Spanned<Expr>>, // None para FFI (corpo suprido por @ffi)
+        // Fio 1: sempre None (FFI — corpo suprido por @ffi).
+        // Fio 2: Some(clauses) = função pura com corpo Kata.
+        body: Option<Vec<Spanned<LambdaClause>>>,
     },
 
     // ── Declarações de tipo ─────────────────────────────
