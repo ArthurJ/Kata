@@ -149,7 +149,7 @@ Fio 1: Fundação + Aritmética + CLI
 
 ## Fios
 
-### Fio 1: Fundação + Aritmética + CLI
+### Fio 1: Fundação + Aritmética + CLI ✅ Concluído
 
 **Tracer bullet.** Estabelece o pipeline end-to-end mínimo: source → lexer →
 parser → resolution → inference → codegen → CLIF → Cranelift JIT → runtime →
@@ -206,10 +206,10 @@ kata-rt, kata-driver.
 
 **Depende de:** nada (fundação)
 
-**DoD:** `kata eval '+ 1 2'` imprime `3`. `kata run examples/arithmetic.kata`
+**DoD:** ✅ `kata eval '+ 1 2'` imprime `3`. `kata run examples/arithmetic.kata`
 executa e imprime resultado. Pipeline completo funciona end-to-end. DispatchTable
 faz scoring por dominância (mesmo que só tenha 1 candidato). `Boolean` é um
-`enum` no prelude, não primitivo do compilador.
+`enum` no prelude, não primitivo do compilador. Commit `2aab7ba`. 289 testes.
 
 ---
 

@@ -234,28 +234,29 @@ show (1::Rational / 3::Rational)
 
 ## Definition of Done
 
-1. `kata eval '+ 1 2'` imprime `3`
-2. `kata run examples/arithmetic.kata` executa e imprime resultado
-3. `kata eval '* 99999999999999999999 99999999999999999999'` imprime resultado
-   correto (BigInt, não overflow)
-4. `kata eval '+ 3.14 2.71'` imprime `5.85`
-5. `kata eval 'show (1::Rational / 3::Rational)'` imprime `1/3`
-6. `kata eval '= 1 1'` imprime `True`
-7. `kata lex examples/arithmetic.kata` imprime tokens com spans
-8. `kata parse examples/arithmetic.kata` imprime AST
-9. Pipeline completo funciona end-to-end: source → lexer → parser → resolution
+1. ✅ `kata eval '+ 1 2'` imprime `3`
+2. ✅ `kata run examples/arithmetic.kata` executa e imprime resultado
+3. ✅ `kata eval '* 99999999999999999999 99999999999999999999'` imprime resultado
+   correto (BigInt, não overflow) — `9999999999999999999800000000000000000001`
+4. ✅ `kata eval '+ 3.14 2.71'` imprime `5.85`
+5. ✅ `kata eval 'show (/ 1::Rational 3::Rational)'` imprime `1/3`
+6. ✅ `kata eval '= 1 1'` imprime `True`
+7. ✅ `kata lex examples/arithmetic.kata` imprime tokens com spans
+8. ✅ `kata parse examples/arithmetic.kata` imprime AST
+9. ✅ Pipeline completo funciona end-to-end: source → lexer → parser → resolution
    → inference → codegen → CLIF → Cranelift JIT → runtime → resultado
-10. `DispatchTable` faz scoring por dominância (mesmo que só tenha 1 candidato
+10. ✅ `DispatchTable` faz scoring por dominância (mesmo que só tenha 1 candidato
     por nome)
-11. `Boolean` é um `enum` no prelude, não primitivo do compilador
-12. `Int` é `data Int ()` com `@ffi("i64")` no prelude, não primitivo
-13. SMI tagging funciona no runtime (BigInt para valores grandes, SMI inline
+11. ✅ `Boolean` é um `enum` no prelude, não primitivo do compilador
+12. ✅ `Int` é `data Int ()` com `@ffi("i64")` no prelude, não primitivo
+13. ✅ SMI tagging funciona no runtime (BigInt para valores grandes, SMI inline
     para pequenos)
-14. `FfiSymbol` enum tipado usado em todo o compilador (sem strings soltas)
-15. Cranelift 0.133 com block arguments nativos (sem stack slots)
-16. `MetadataTable` sidecar produzida (mesmo que vazia por enquanto)
-17. TAST enriquecida com `tail_pos: bool` e `effect: Effect` em cada nó
-18. Manual atualizado se implementação divergiu do PRD
+14. ✅ `FfiSymbol` enum tipado usado em todo o compilador (sem strings soltas)
+15. ✅ Cranelift 0.133 com block arguments nativos (sem stack slots)
+16. ✅ `MetadataTable` sidecar produzida (inst_origins, block_origins, value_types,
+    closure_info vazio, escape_flags vazio)
+17. ✅ TAST enriquecida com `tail_pos: bool` e `effect: Effect` em cada nó
+18. ✅ Manual atualizado se implementação divergiu do PRD
 
 ## Não Inclui
 
