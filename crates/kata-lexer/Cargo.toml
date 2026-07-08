@@ -12,3 +12,4 @@ kata-diagnostics.workspace = true
 [dev-dependencies]
 insta.workspace = true
 proptest.workspace = true
+kata-diagnostics.workspace = true

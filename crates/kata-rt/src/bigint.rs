@@ -125,30 +125,39 @@ pub extern "C" fn kata_rt_tag_int(val: i64) -> i64 {
 /// (Versão interna — chamada pelo codegen ao lowerar IntLit.)
 pub fn tag_int_from_str(text: &str) -> i64 {
     let cleaned = text.replace('_', "");
-    let n = if let Some(hex) = cleaned
+    // Extrai sinal antes do dispatch de base
+    let (sign, digits) = if let Some(rest) = cleaned.strip_prefix('-') {
+        (-1i32, rest)
+    } else if let Some(rest) = cleaned.strip_prefix('+') {
+        (1i32, rest)
+    } else {
+        (1i32, cleaned.as_str())
+    };
+    let n = if let Some(hex) = digits
         .strip_prefix("0x")
-        .or_else(|| cleaned.strip_prefix("0X"))
+        .or_else(|| digits.strip_prefix("0X"))
     {
         BigInt::parse_bytes(hex.as_bytes(), 16)
-    } else if let Some(oct) = cleaned
+    } else if let Some(oct) = digits
         .strip_prefix("0o")
-        .or_else(|| cleaned.strip_prefix("0O"))
+        .or_else(|| digits.strip_prefix("0O"))
     {
         BigInt::parse_bytes(oct.as_bytes(), 8)
-    } else if let Some(bin) = cleaned
+    } else if let Some(bin) = digits
         .strip_prefix("0b")
-        .or_else(|| cleaned.strip_prefix("0B"))
+        .or_else(|| digits.strip_prefix("0B"))
     {
         BigInt::parse_bytes(bin.as_bytes(), 2)
-    } else if let Some(dec) = cleaned
+    } else if let Some(dec) = digits
         .strip_prefix("0d")
-        .or_else(|| cleaned.strip_prefix("0D"))
+        .or_else(|| digits.strip_prefix("0D"))
     {
         BigInt::parse_bytes(dec.as_bytes(), 10)
     } else {
-        BigInt::parse_bytes(cleaned.as_bytes(), 10)
+        BigInt::parse_bytes(digits.as_bytes(), 10)
     };
     let n = n.expect("número inválido");
+    let n = if sign < 0 { -n } else { n };
     if let Some(small) = n.to_i64() {
         if fits_smi(small) {
             return encode_smi(small);

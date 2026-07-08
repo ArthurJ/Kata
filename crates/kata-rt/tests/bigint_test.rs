@@ -275,6 +275,43 @@ fn tag_int_negative_decimal() {
 }
 
 #[test]
+fn tag_int_negative_hex() {
+    let tagged = tag_int_from_str("-0xFF");
+    assert_eq!(decode_smi_pub(tagged), -255);
+}
+
+#[test]
+fn tag_int_negative_oct() {
+    let tagged = tag_int_from_str("-0o77");
+    assert_eq!(decode_smi_pub(tagged), -63);
+}
+
+#[test]
+fn tag_int_negative_bin() {
+    let tagged = tag_int_from_str("-0b1010");
+    assert_eq!(decode_smi_pub(tagged), -10);
+}
+
+#[test]
+fn tag_int_negative_decimal_explicit() {
+    let tagged = tag_int_from_str("-0d42");
+    assert_eq!(decode_smi_pub(tagged), -42);
+}
+
+#[test]
+fn tag_int_negative_hex_uppercase_prefix() {
+    let tagged = tag_int_from_str("-0XFF");
+    assert_eq!(decode_smi_pub(tagged), -255);
+}
+
+#[test]
+fn tag_int_negative_bigint() {
+    let tagged = tag_int_from_str("-99999999999999999999");
+    assert!(!is_smi_pub(tagged));
+    assert_eq!(kata_rt::bigint_to_string(tagged), "-99999999999999999999");
+}
+
+#[test]
 fn tag_int_hex_lowercase_digits() {
     let tagged = tag_int_from_str("0xdeadbeef");
     assert_eq!(decode_smi_pub(tagged), 0xdeadbeef);
