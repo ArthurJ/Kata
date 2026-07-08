@@ -91,23 +91,21 @@ impl Parser {
                 // TypeAscription with `::` is only for literals (`3.14::Rational`).
                 // So: Ident :: Ident → VariantQual
                 //     Literal :: Type → TypeAscription
-                if matches!(self.peek(), Token::DoubleColon) {
-                    // Ident :: Ident → VariantQual
-                    if let Some(next) = self.tokens.get(self.pos + 1) {
-                        if let Token::Ident(variant) = &next.token {
-                            let variant = variant.clone();
-                            self.advance(); // consume ::
-                            self.advance(); // consume variant Ident
-                            let span = start.cover(self.tokens[self.pos - 1].span);
-                            return Ok(Spanned::new(
-                                Expr::VariantQual {
-                                    enum_name: name,
-                                    variant,
-                                },
-                                span,
-                            ));
-                        }
-                    }
+                if matches!(self.peek(), Token::DoubleColon)
+                    && let Some(next) = self.tokens.get(self.pos + 1)
+                    && let Token::Ident(variant) = &next.token
+                {
+                    let variant = variant.clone();
+                    self.advance(); // consume ::
+                    self.advance(); // consume variant Ident
+                    let span = start.cover(self.tokens[self.pos - 1].span);
+                    return Ok(Spanned::new(
+                        Expr::VariantQual {
+                            enum_name: name,
+                            variant,
+                        },
+                        span,
+                    ));
                 }
                 Ok(Spanned::new(Expr::Ident { name }, start))
             }
@@ -211,8 +209,7 @@ impl Parser {
             self.parse_lambda_body_block(start, patterns.len())?
         } else {
             // Expressão única na mesma linha
-            let body_expr = parse_expr(self)?;
-            body_expr
+            parse_expr(self)?
         };
 
         let span = start.cover(body.span);

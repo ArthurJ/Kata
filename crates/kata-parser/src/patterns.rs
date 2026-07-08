@@ -32,22 +32,21 @@ impl Parser {
             // `Enum::Variant` → Variant qualificado
             Token::Ident(name) => {
                 self.advance();
-                if matches!(self.peek(), Token::DoubleColon) {
-                    if let Some(next) = self.tokens.get(self.pos + 1) {
-                        if let Token::Ident(variant) = &next.token {
-                            let variant = variant.clone();
-                            self.advance(); // consume ::
-                            self.advance(); // consume variant
-                            let span = start.cover(self.tokens[self.pos - 1].span);
-                            return Ok(Spanned::new(
-                                Pattern::Variant {
-                                    enum_name: name,
-                                    variant,
-                                },
-                                span,
-                            ));
-                        }
-                    }
+                if matches!(self.peek(), Token::DoubleColon)
+                    && let Some(next) = self.tokens.get(self.pos + 1)
+                    && let Token::Ident(variant) = &next.token
+                {
+                    let variant = variant.clone();
+                    self.advance(); // consume ::
+                    self.advance(); // consume variant
+                    let span = start.cover(self.tokens[self.pos - 1].span);
+                    return Ok(Spanned::new(
+                        Pattern::Variant {
+                            enum_name: name,
+                            variant,
+                        },
+                        span,
+                    ));
                 }
                 // Ident simples — pode ser binding ou variante desqualificada.
                 // O typeck resolve via EnumRegistry.

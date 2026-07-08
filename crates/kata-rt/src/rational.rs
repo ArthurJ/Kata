@@ -38,41 +38,57 @@ pub fn rat_from_int(int_val: i64) -> BigRational {
     crate::bigint::to_rational(int_val)
 }
 
+/// # Safety
+///
+/// `a` e `b` devem ser ponteiros válidos para `BigRational`.
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_rat_add(
+pub unsafe extern "C" fn kata_rt_rat_add(
     a: *const BigRational,
     b: *const BigRational,
 ) -> *mut BigRational {
+    // SAFETY: caller (JIT codegen) garante ponteiros válidos.
     let a = unsafe { &*a };
     let b = unsafe { &*b };
     Box::into_raw(Box::new(a + b))
 }
 
+/// # Safety
+///
+/// `a` e `b` devem ser ponteiros válidos para `BigRational`.
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_rat_sub(
+pub unsafe extern "C" fn kata_rt_rat_sub(
     a: *const BigRational,
     b: *const BigRational,
 ) -> *mut BigRational {
+    // SAFETY: caller (JIT codegen) garante ponteiros válidos.
     let a = unsafe { &*a };
     let b = unsafe { &*b };
     Box::into_raw(Box::new(a - b))
 }
 
+/// # Safety
+///
+/// `a` e `b` devem ser ponteiros válidos para `BigRational`.
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_rat_mul(
+pub unsafe extern "C" fn kata_rt_rat_mul(
     a: *const BigRational,
     b: *const BigRational,
 ) -> *mut BigRational {
+    // SAFETY: caller (JIT codegen) garante ponteiros válidos.
     let a = unsafe { &*a };
     let b = unsafe { &*b };
     Box::into_raw(Box::new(a * b))
 }
 
+/// # Safety
+///
+/// `a` e `b` devem ser ponteiros válidos para `BigRational`.
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_rat_div(
+pub unsafe extern "C" fn kata_rt_rat_div(
     a: *const BigRational,
     b: *const BigRational,
 ) -> *mut BigRational {
+    // SAFETY: caller (JIT codegen) garante ponteiros válidos.
     let a = unsafe { &*a };
     let b = unsafe { &*b };
     if b.is_zero() {
@@ -81,47 +97,75 @@ pub extern "C" fn kata_rt_rat_div(
     Box::into_raw(Box::new(a / b))
 }
 
+/// # Safety
+///
+/// `a` e `b` devem ser ponteiros válidos para `BigRational`.
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_rat_eq(a: *const BigRational, b: *const BigRational) -> i64 {
+pub unsafe extern "C" fn kata_rt_rat_eq(a: *const BigRational, b: *const BigRational) -> i64 {
+    // SAFETY: caller (JIT codegen) garante ponteiros válidos.
     let a = unsafe { &*a };
     let b = unsafe { &*b };
     if a == b { 1 } else { 0 }
 }
 
+/// # Safety
+///
+/// `a` e `b` devem ser ponteiros válidos para `BigRational`.
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_rat_lt(a: *const BigRational, b: *const BigRational) -> i64 {
+pub unsafe extern "C" fn kata_rt_rat_lt(a: *const BigRational, b: *const BigRational) -> i64 {
+    // SAFETY: caller (JIT codegen) garante ponteiros válidos.
     let a = unsafe { &*a };
     let b = unsafe { &*b };
     if a < b { 1 } else { 0 }
 }
 
+/// # Safety
+///
+/// `a` e `b` devem ser ponteiros válidos para `BigRational`.
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_rat_gt(a: *const BigRational, b: *const BigRational) -> i64 {
+pub unsafe extern "C" fn kata_rt_rat_gt(a: *const BigRational, b: *const BigRational) -> i64 {
+    // SAFETY: caller (JIT codegen) garante ponteiros válidos.
     let a = unsafe { &*a };
     let b = unsafe { &*b };
     if a > b { 1 } else { 0 }
 }
 
+/// # Safety
+///
+/// `a` e `b` devem ser ponteiros válidos para `BigRational`.
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_rat_neq(a: *const BigRational, b: *const BigRational) -> i64 {
-    if kata_rt_rat_eq(a, b) == 1 { 0 } else { 1 }
+pub unsafe extern "C" fn kata_rt_rat_neq(a: *const BigRational, b: *const BigRational) -> i64 {
+    // SAFETY: caller (JIT codegen) garante ponteiros válidos.
+    unsafe { if kata_rt_rat_eq(a, b) == 1 { 0 } else { 1 } }
 }
 
+/// # Safety
+///
+/// `a` e `b` devem ser ponteiros válidos para `BigRational`.
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_rat_le(a: *const BigRational, b: *const BigRational) -> i64 {
-    if kata_rt_rat_lt(a, b) == 1 || kata_rt_rat_eq(a, b) == 1 {
-        1
-    } else {
-        0
+pub unsafe extern "C" fn kata_rt_rat_le(a: *const BigRational, b: *const BigRational) -> i64 {
+    // SAFETY: caller (JIT codegen) garante ponteiros válidos.
+    unsafe {
+        if kata_rt_rat_lt(a, b) == 1 || kata_rt_rat_eq(a, b) == 1 {
+            1
+        } else {
+            0
+        }
     }
 }
 
+/// # Safety
+///
+/// `a` e `b` devem ser ponteiros válidos para `BigRational`.
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_rat_ge(a: *const BigRational, b: *const BigRational) -> i64 {
-    if kata_rt_rat_gt(a, b) == 1 || kata_rt_rat_eq(a, b) == 1 {
-        1
-    } else {
-        0
+pub unsafe extern "C" fn kata_rt_rat_ge(a: *const BigRational, b: *const BigRational) -> i64 {
+    // SAFETY: caller (JIT codegen) garante ponteiros válidos.
+    unsafe {
+        if kata_rt_rat_gt(a, b) == 1 || kata_rt_rat_eq(a, b) == 1 {
+            1
+        } else {
+            0
+        }
     }
 }
 
@@ -224,35 +268,55 @@ pub fn float_to_rat(f: f64) -> BigRational {
 
 /// `show` de Rational — retorna ponteiro C string.
 /// Chamado pelo codegen via `FfiSymbol::RatShow`.
+///
+/// # Safety
+///
+/// `r` deve ser ponteiro válido para `BigRational`.
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_rat_show(r: *const BigRational) -> *mut std::os::raw::c_char {
+pub unsafe extern "C" fn kata_rt_rat_show(r: *const BigRational) -> *mut std::os::raw::c_char {
+    // SAFETY: caller (JIT codegen) garante ponteiro válido.
     let r = unsafe { &*r };
     let s = rat_to_string(r);
     std::ffi::CString::new(s)
-        .unwrap_or_else(|_| std::ffi::CString::new("").unwrap())
+        .unwrap_or_else(|_| std::ffi::CString::new("").expect("CString vazia sempre válida"))
         .into_raw()
 }
 
 /// `show` de Rational a partir de ponteiro bruto (i64).
 /// Versão para o driver que não tem acesso ao tipo `BigRational`.
+///
+/// # Safety
+///
+/// `r_raw` deve ser um i64 que representa um ponteiro válido para `BigRational`.
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_rat_show_raw(r_raw: i64) -> *mut std::os::raw::c_char {
+pub unsafe extern "C" fn kata_rt_rat_show_raw(r_raw: i64) -> *mut std::os::raw::c_char {
     let r = r_raw as *const BigRational;
-    kata_rt_rat_show(r)
+    // SAFETY: caller (driver) garante que r_raw é ponteiro válido.
+    unsafe { kata_rt_rat_show(r) }
 }
 
 /// Converte Rational para Float.
 /// Chamado pelo codegen via `FfiSymbol::RatToFloat`.
+///
+/// # Safety
+///
+/// `r` deve ser ponteiro válido para `BigRational`.
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_rat_to_float(r: *const BigRational) -> f64 {
+pub unsafe extern "C" fn kata_rt_rat_to_float(r: *const BigRational) -> f64 {
+    // SAFETY: caller (JIT codegen) garante ponteiro válido.
     let r = unsafe { &*r };
     rat_to_float(r)
 }
 
 /// Converte Float para Rational (retorna ponteiro).
 /// Chamado pelo codegen via `FfiSymbol::RatFromFloat`.
+///
+/// # Safety
+///
+/// Esta função é safe para qualquer `f64` — não dereferencia ponteiros.
+/// Marcada `unsafe` apenas por convenção C-ABI.
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_rat_from_float(f: f64) -> *mut BigRational {
+pub unsafe extern "C" fn kata_rt_rat_from_float(f: f64) -> *mut BigRational {
     let r = float_to_rat(f);
     Box::into_raw(Box::new(r))
 }
@@ -260,14 +324,20 @@ pub extern "C" fn kata_rt_rat_from_float(f: f64) -> *mut BigRational {
 /// Cria Rational a partir de string bruta do literal (ponteiro C + len).
 /// Chamado pelo codegen via `FfiSymbol::RatLiteral`.
 /// Não passa por f64 — preserva precisão do texto.
+///
+/// # Safety
+///
+/// `s` deve ser um ponteiro C string válido (nulo-terminado) ou NULL.
+/// Se não for NULL, `len` deve ser o comprimento em bytes.
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_rat_literal(
+pub unsafe extern "C" fn kata_rt_rat_literal(
     s: *const std::os::raw::c_char,
     len: i64,
 ) -> *mut BigRational {
     let bytes = if s.is_null() || len <= 0 {
         &b""[..]
     } else {
+        // SAFETY: caller (JIT codegen) garante ponteiro e len válidos.
         unsafe { std::slice::from_raw_parts(s as *const u8, len as usize) }
     };
     let text = std::str::from_utf8(bytes).unwrap_or("");
@@ -277,8 +347,13 @@ pub extern "C" fn kata_rt_rat_literal(
 
 /// Converte Int tagged para Rational (retorna ponteiro).
 /// Chamado pelo codegen via `FfiSymbol::IntToRational`.
+///
+/// # Safety
+///
+/// Esta função é safe para qualquer `i64` — não dereferencia ponteiros.
+/// Marcada `unsafe` apenas por convenção C-ABI.
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_int_to_rational(val: i64) -> *mut BigRational {
+pub unsafe extern "C" fn kata_rt_int_to_rational(val: i64) -> *mut BigRational {
     let r = crate::bigint::to_rational(val);
     Box::into_raw(Box::new(r))
 }

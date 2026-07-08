@@ -315,6 +315,7 @@ struct LowerCtx<'a, 'b> {
     builder: &'a mut FunctionBuilder<'b>,
     module: &'a mut cranelift_jit::JITModule,
     ffi_refs: &'a HashMap<String, cranelift_codegen::ir::FuncRef>,
+    #[allow(dead_code)]
     metadata: &'a mut MetadataTable,
     string_table: &'a mut StringTable,
     var_map: HashMap<String, cranelift_frontend::Variable>,
@@ -527,7 +528,7 @@ fn lower_expr(
 // ── Helpers de SMI tagging (duplicados do runtime para uso em compile-time) ──
 
 fn fits_smi(val: i64) -> bool {
-    val >= -(1i64 << 62) && val <= (1i64 << 62) - 1
+    (-(1i64 << 62)..(1i64 << 62)).contains(&val)
 }
 
 fn encode_smi(val: i64) -> i64 {
