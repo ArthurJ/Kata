@@ -994,6 +994,8 @@ funções com corpo Kata, mas o prelude continua usando `@ffi` para tudo.
     o tipo esperado (`hint: Option<&Ty>`) pela recursão de `infer_expr`.
     Quando o hint é `Ty::Function(params, ret)`, `infer_lambda` define os
     parâmetros com os tipos de `params` em vez de criar `InferVar`.
+    Sintaxe de type expression de função: `(A B C -> D)` — params
+    separados por espaço, `->` separa params do retorno.
 30. **`LambdaInferenceFail`**: quando nenhum mecanismo (partial dispatch,
     ascription de hole, hint top-down, assinatura de Sig) fornece o tipo
     de um parâmetro de lambda, o typeck produz `LambdaInferenceFail` com
