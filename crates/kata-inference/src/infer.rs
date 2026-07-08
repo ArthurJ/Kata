@@ -135,6 +135,25 @@ fn infer_expr(
     enum_registry: &EnumRegistry,
     tail_pos: bool,
 ) -> InferResult<TypedExpr> {
+    infer_expr_hinted(expr, span, env, table, enum_registry, tail_pos, None)
+}
+
+/// Like `infer_expr` but accepts an optional type hint (DoD 29).
+///
+/// When `hint` is `Some(Ty::Function(params, ret))` and `expr` is a `Lambda`,
+/// the params are used as the lambda's parameter types instead of InferVar.
+/// When `hint` is `Some(ty)` and `expr` is a `TypeAscription`, the hint is
+/// propagated to the inner expression (ascription already provides a target
+/// type, so the hint is redundant there but harmless).
+fn infer_expr_hinted(
+    expr: &Expr,
+    span: &Span,
+    env: &mut TypeEnv,
+    table: &DispatchTable,
+    enum_registry: &EnumRegistry,
+    tail_pos: bool,
+    hint: Option<&Ty>,
+) -> InferResult<TypedExpr> {
     let (ty, kind, effect) = match expr {
         // ── Literais ─────────────────────────────────────────
         Expr::IntLit { text } => (
@@ -177,8 +196,19 @@ fn infer_expr(
 
         // ── Ascription de tipo ───────────────────────────────
         Expr::TypeAscription { expr, ty } => {
-            let inner = infer_expr(&expr.node, &expr.span, env, table, enum_registry, false)?;
             let target_ty = resolve_type_expr(&ty.node, env);
+            // Propaga o tipo anotado como hint top-down (DoD 29).
+            // Isto permite que `(lambda x: + x 1)::(Int -> Int)` extraia
+            // x: Int do tipo anotado.
+            let inner = infer_expr_hinted(
+                &expr.node,
+                &expr.span,
+                env,
+                table,
+                enum_registry,
+                false,
+                Some(&target_ty),
+            )?;
 
             let rebaixa_ok = match (&inner.kind, &target_ty) {
                 (TypedExprKind::IntLit { .. }, Ty::Prim(PrimTy::Int)) => true,
@@ -209,9 +239,17 @@ fn infer_expr(
             )
         }
 
-        // ── Grouping — transparente ─────────────────────────
+        // ── Grouping — transparente, propaga hint ────────────
         Expr::Grouping { inner } => {
-            let typed_inner = infer_expr(&inner.node, &inner.span, env, table, enum_registry, tail_pos)?;
+            let typed_inner = infer_expr_hinted(
+                &inner.node,
+                &inner.span,
+                env,
+                table,
+                enum_registry,
+                tail_pos,
+                hint,
+            )?;
             (
                 typed_inner.ty.clone(),
                 TypedExprKind::Grouping {
@@ -318,6 +356,7 @@ fn infer_expr(
             table,
             enum_registry,
             tail_pos,
+            hint,
         )?,
 
         // ── Fio 2 Fase 8: Match ───────────────────────────────
@@ -471,6 +510,7 @@ fn infer_lambda(
     table: &DispatchTable,
     enum_registry: &EnumRegistry,
     tail_pos: bool,
+    hint: Option<&Ty>,
 ) -> InferResult<(Ty, TypedExprKind, Effect)> {
     // Para lambda anônimo, os tipos dos parâmetros são InferVar — não temos
     // inferência de tipos real ainda. Em Fio 2, o lambda anônimo só funciona
@@ -492,7 +532,22 @@ fn infer_lambda(
     // Se o body é um Apply com callee Ident, e alguns args são parâmetros do
     // lambda (Ident com nome = nome do pattern), tenta resolve_partial com
     // None nessas posições e tipos concretos nas demais.
-    let param_type_hints = try_partial_dispatch(patterns, body, env, table);
+    let partial = try_partial_dispatch(patterns, body, env, table);
+
+    // DoD 29: Hint top-down via ascription em lambda.
+    // O hint tem PRIORIDADE sobre partial dispatch — a anotação explícita
+    // do programador (`(lambda ...)::(Int -> Int)`) vince a inferência
+    // bottom-up. Se o body não type-checka com os tipos hinted, isso é
+    // um erro legítimo de tipo.
+    let param_type_hints = if let Some(Ty::Function(hint_params, _)) = hint {
+        if !hint_params.is_empty() {
+            hint_params.clone()
+        } else {
+            partial
+        }
+    } else {
+        partial
+    };
 
     // Processa padrões — usa hint do partial dispatch se disponível, senão InferVar.
     let mut param_types: Vec<Ty> = Vec::with_capacity(patterns.len());

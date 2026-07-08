@@ -22,9 +22,22 @@ impl Parser {
                 }
                 let first = self.parse_type_expr()?;
 
-                // No comma → grouping
+                // No comma → either grouping `(T)` or function type `(T) -> U`
                 if matches!(self.peek(), Token::RParen) {
                     self.advance();
+                    // Check for `->` (function type with single param)
+                    if matches!(self.peek(), Token::ThinArrow) {
+                        self.advance();
+                        let ret = self.parse_type_expr()?;
+                        let span = start.cover(ret.span);
+                        return Ok(Spanned::new(
+                            TypeExpr::Func {
+                                params: vec![first],
+                                ret: Box::new(ret),
+                            },
+                            span,
+                        ));
+                    }
                     let span = start.cover(first.span);
                     return Ok(Spanned::new(TypeExpr::Grouping(Box::new(first)), span));
                 }
