@@ -429,3 +429,18 @@ fn dispatch_table_resolves_int_over_float() {
         other => panic!("expected Apply, got {other:?}"),
     }
 }
+
+#[test]
+fn infer_grouping_callee() {
+    // `(+)` é Grouping(Ident("+")). O callee descascado deve ser
+    // despachado corretamente via DispatchTable.
+    let tmod = infer_src("(+) (3) (4)");
+    let entry = entry_typed(&tmod);
+    assert_eq!(entry.ty, Ty::int());
+    match &entry.kind {
+        TypedExprKind::Closure { ffi_symbol, .. } => {
+            assert_eq!(ffi_symbol.as_deref(), Some("kata_rt_bi_add"));
+        }
+        other => panic!("expected Closure (Apply), got {other:?}"),
+    }
+}
