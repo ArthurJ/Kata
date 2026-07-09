@@ -8,22 +8,39 @@ use kata_core::ty::Ty;
 use kata_inference::{Effect, TypedExprKind, infer_module};
 use kata_lexer::lex;
 use kata_parser::parse;
-use kata_resolution::load_prelude;
+use kata_resolution::{ResolvedModule, load_prelude, resolve};
 
 // ── Helpers (duplicados de infer_test.rs para isolamento) ─────────
+
+/// Combina prelude + módulo do usuário (replica do fase9_e2e.rs).
+fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModule {
+    let mut signatures = prelude.signatures;
+    signatures.extend(user.signatures);
+    let type_env = kata_core::ty::TypeEnv::with_parent(prelude.type_env);
+    ResolvedModule {
+        type_env,
+        signatures,
+        enum_registry: prelude.enum_registry,
+        functions: user.functions,
+    }
+}
 
 fn infer_src(src: &str) -> kata_inference::TypedModule {
     let tokens = lex(src).unwrap();
     let module = parse(tokens).unwrap();
     let prelude = load_prelude().unwrap();
-    infer_module(&module, &prelude).expect("inferência deve succeed")
+    let user = resolve(&module).unwrap();
+    let resolved = merge_resolved(prelude, user);
+    infer_module(&module, &resolved).expect("inferência deve succeed")
 }
 
 fn infer_src_err(src: &str) -> kata_diagnostics::MiddleError {
     let tokens = lex(src).unwrap();
     let module = parse(tokens).unwrap();
     let prelude = load_prelude().unwrap();
-    infer_module(&module, &prelude).expect_err("inferência deve falhar")
+    let user = resolve(&module).unwrap();
+    let resolved = merge_resolved(prelude, user);
+    infer_module(&module, &resolved).expect_err("inferência deve falhar")
 }
 
 fn entry_typed(tmod: &kata_inference::TypedModule) -> &kata_inference::TypedExpr {
@@ -354,4 +371,86 @@ fn match_effect_is_puro() {
     let tmod = infer_src("match Boolean::True\n    True: 1\n    False: 0");
     let entry = entry_typed(&tmod);
     assert_eq!(entry.effect, Effect::Puro);
+}
+
+// ── DoD 12: RedundantClause — cláusulas sobrepostas ──────────────
+
+/// Cláusula wildcard seguida de cláusula ident → redundante.
+/// `lambda _: 1` cobre tudo; `lambda n: n` é inalcançável.
+#[test]
+fn redundant_clause_wildcard_then_ident() {
+    let src = "\
+fun :: Int => Int\n\
+\x20   lambda _: 1\n\
+\x20   lambda n: n\n\
+fun 5";
+    let err = infer_src_err(src);
+    assert!(
+        matches!(err, kata_diagnostics::MiddleError::RedundantClause { .. }),
+        "esperava RedundantClause, got {err:?}"
+    );
+}
+
+/// Cláusula ident seguida de cláusula ident → redundante.
+/// `lambda x: 1` cobre tudo; `lambda y: 2` é inalcançável.
+#[test]
+fn redundant_clause_ident_then_ident() {
+    let src = "\
+fun :: Int => Int\n\
+\x20   lambda x: 1\n\
+\x20   lambda y: 2\n\
+fun 5";
+    let err = infer_src_err(src);
+    assert!(
+        matches!(err, kata_diagnostics::MiddleError::RedundantClause { .. }),
+        "esperava RedundantClause, got {err:?}"
+    );
+}
+
+/// Cláusula literal seguida da mesma literal → redundante.
+/// `lambda 0: 1` cobre 0; `lambda 0: 2` é inalcançável.
+#[test]
+fn redundant_clause_same_literal() {
+    let src = "\
+fun :: Int => Int\n\
+\x20   lambda 0: 1\n\
+\x20   lambda 0: 2\n\
+fun 5";
+    let err = infer_src_err(src);
+    assert!(
+        matches!(err, kata_diagnostics::MiddleError::RedundantClause { .. }),
+        "esperava RedundantClause, got {err:?}"
+    );
+}
+
+/// Cláusulas não-sobrepostas NÃO produzem RedundantClause.
+/// `lambda 0: 1` e `lambda n: n` não são sobrepostas.
+#[test]
+fn non_redundant_clauses_ok() {
+    let src = "\
+fun :: Int => Int\n\
+\x20   lambda 0: 1\n\
+\x20   lambda n: n\n\
+fun 5";
+    let tmod = infer_src(src);
+    let entry = entry_typed(&tmod);
+    assert_eq!(entry.ty, Ty::int());
+}
+
+/// Cláusula com guards não é redundante mesmo se o pattern cobre.
+/// `lambda x: 1` (sem guards) seguida de `lambda x: 2` (com guard `> x 0`)
+/// — a segunda não é redundante porque o guard pode falhar.
+#[test]
+fn redundant_clause_with_guards_not_redundant() {
+    let src = "\
+fun :: Int => Int\n\
+\x20   lambda x: 1\n\
+\x20   lambda x:\n\
+\x20\x20\x20\x20\x20   > x 0: 2\n\
+\x20\x20\x20\x20\x20   otherwise: 3\n\
+fun 5";
+    // Não deve falhar — a segunda cláusula tem guards.
+    let tmod = infer_src(src);
+    let entry = entry_typed(&tmod);
+    assert_eq!(entry.ty, Ty::int());
 }

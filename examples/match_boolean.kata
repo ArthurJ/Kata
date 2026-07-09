@@ -1,0 +1,4 @@
+# Match exaustivo em Boolean (variantes sem qualificação)
+match = 1 1
+    True: "igual"
+    False: "diferente"

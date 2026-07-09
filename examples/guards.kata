@@ -1,0 +1,7 @@
+# Guards com otherwise
+abs :: Int => Int
+    lambda x:
+        > x 0: x
+        otherwise: - 0 x
+
+abs (- 0 5)

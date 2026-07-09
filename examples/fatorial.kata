@@ -1,0 +1,6 @@
+# Fatorial recursivo com TCO via Cranelift
+fat :: Int Int => Int
+    lambda 0 acc: acc
+    lambda n acc: fat (- n 1) (* n acc)
+
+fat 5 1

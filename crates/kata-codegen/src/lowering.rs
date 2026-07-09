@@ -849,13 +849,35 @@ fn lower_expr(
         // ── Unit: i64 zero ──
         TypedExprKind::Unit => Ok(ctx.builder.ins().iconst(I64, 0)),
 
-        // ── Ident: use_var ──
+        // ── Ident: use_var (variável local) ou function pointer (função nomeada) ──
         TypedExprKind::Ident { name } => {
-            let var = ctx
-                .var_map
-                .get(name)
-                .ok_or_else(|| CodegenError::UnsupportedNode(format!("unbound ident: {name}")))?;
-            Ok(ctx.builder.use_var(*var))
+            // Caminho 1: variável local no var_map (let bindings, parâmetros).
+            if let Some(var) = ctx.var_map.get(name) {
+                return Ok(ctx.builder.use_var(*var));
+            }
+            // Caminho 2: função Kata nomeada — carrega o function pointer
+            // via GlobalValue (mesmo mecanismo do TypedExprKind::Lambda com
+            // func_name = Some). Permite `let g := fat` → g carrega ptr de fat.
+            if let Some(&func_id) = ctx.kata_ids.get(name) {
+                let func_ref = ctx.module.declare_func_in_func(func_id, ctx.builder.func);
+                let ext_func_name = ctx.builder.func.dfg.ext_funcs[func_ref].name.clone();
+                let func_gv = ctx
+                    .builder
+                    .func
+                    .create_global_value(GlobalValueData::Symbol {
+                        name: ext_func_name,
+                        offset: 0.into(),
+                        colocated: true,
+                        tls: false,
+                    });
+                return Ok(ctx
+                    .builder
+                    .ins()
+                    .global_value(ctx.module.target_config().pointer_type(), func_gv));
+            }
+            Err(CodegenError::UnsupportedNode(format!(
+                "unbound ident: {name}"
+            )))
         }
 
         // ── Closure: call FFI, call direto (Kata), ou call_indirect ──

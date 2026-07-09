@@ -1,0 +1,2 @@
+# Pipeline |> — left-assoc, desugars para (* 2 (+ 1 5))
+5 |> + 1 _ |> * 2 _

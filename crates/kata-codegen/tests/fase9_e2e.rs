@@ -152,3 +152,38 @@ double_or_zero 5";
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
     assert_eq!(untag_smi(raw), 10, "double_or_zero 5 deve ser 10");
 }
+
+// ── DoD 21: Função nomeada atribuída a variável (call_indirect) ───
+
+/// `let g := fat` carrega function pointer de função nomeada.
+/// `g 5 1` → 120 via call_indirect.
+#[test]
+fn funcao_nomeada_como_valor() {
+    let src = "\
+fat :: Int Int => Int\n\
+\x20   lambda 0 acc: acc\n\
+\x20   lambda n acc: fat (- n 1) (* n acc)\n\
+let g := fat\n\
+g 5 1";
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Prim(PrimTy::Int));
+    assert_eq!(
+        untag_smi(raw),
+        120,
+        "g 5 1 deve ser 120 (fat via call_indirect)"
+    );
+}
+
+// ── DoD 22: Tuple pattern em lambda ─────────────────────────────
+// TODO: Implementar codegen de Tuple (expressão + pattern).
+// O typeck já funciona (match_tuple_pattern em fase8_test.rs passa).
+// O codegen não suporta TypedExprKind::Tuple nem TypedPattern::Tuple.
+// Trabalho de Fio 5 — próxima sessão.
+
+// ── DoD 9: TCO — fatorial com profundidade alta ─────────────────
+// TODO: TCO não funciona. O codegen usa jump(cont_block, result) + return_
+// no caller. O Cranelift não faz TCO porque o `call` não está em tail
+// position na IR (há um `jump` entre o `call` e o `return_`).
+// Para TCO funcionar, o codegen precisa emitir return_(call_result)
+// diretamente quando o body é uma chamada em tail_pos, em vez de
+// jump(cont_block, call_result). Próxima sessão.
