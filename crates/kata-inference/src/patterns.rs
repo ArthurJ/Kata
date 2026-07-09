@@ -15,7 +15,7 @@ use kata_diagnostics::MiddleError;
 use crate::typed::{Effect, TypedExpr, TypedExprKind, TypedPattern};
 
 /// Tipo de erro de inferência — alias para `Result<T, MiddleError>`.
-pub type PatternResult<T> = Result<T, MiddleError>;
+pub(crate) type PatternResult<T> = Result<T, MiddleError>;
 
 /// Verifica um pattern contra o tipo do scrutinee, produzindo `TypedPattern`
 /// e definindo bindings no `env`.
@@ -24,7 +24,7 @@ pub type PatternResult<T> = Result<T, MiddleError>;
 /// scrutinee `Ty::Sum("Boolean")` é resolvido para `TypedPattern::Variant`
 /// se `True` é variante de `Boolean` no `EnumRegistry`. Caso contrário,
 /// é tratado como binding (`Ident`).
-pub fn check_pattern(
+pub(crate) fn check_pattern(
     pat: &Spanned<Pattern>,
     scrutinee_ty: &Ty,
     enum_registry: &EnumRegistry,
@@ -194,7 +194,7 @@ fn pattern_type_compatible(literal_ty: &Ty, scrutinee_ty: &Ty) -> bool {
 ///
 /// `has_otherwise` indica se algum braço é `otherwise` (pattern None) ou
 /// `Wildcard`. Esses cobrem qualquer valor.
-pub fn check_exhaustiveness(
+pub(crate) fn check_exhaustiveness(
     covered_variants: &[String],
     scrutinee_ty: &Ty,
     has_otherwise: bool,

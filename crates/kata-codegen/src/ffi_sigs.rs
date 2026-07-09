@@ -18,7 +18,7 @@ use kata_core::ty::{PrimTy, Ty};
 /// Unit → sem retorno (void).
 /// Function → I64 (function pointer — Fio 9+).
 /// InferVar → I64 (fallback graceful — não deveria chegar aqui).
-pub fn ty_to_clif(ty: &Ty) -> cranelift_codegen::ir::Type {
+pub(crate) fn ty_to_clif(ty: &Ty) -> cranelift_codegen::ir::Type {
     match ty {
         Ty::Prim(PrimTy::Int) => I64,
         Ty::Prim(PrimTy::Float) => F64,
@@ -34,7 +34,7 @@ pub fn ty_to_clif(ty: &Ty) -> cranelift_codegen::ir::Type {
 ///
 /// Match exaustivo — se uma variante nova for adicionada ao enum
 /// `FfiSymbol` sem assinatura aqui, o compilador Rust emite erro.
-pub fn ffi_signature(sym: FfiSymbol) -> Signature {
+pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
     let mut sig = Signature::new(CallConv::SystemV);
 
     match sym {

@@ -3,6 +3,7 @@
 //! Populado durante o lowering TAST→CLIF, consultado por passes futuros
 //! (ARC pass, comptime, debugger). Em Fio 1, `closure_info` e `escape_flags`
 //! são vazios — existem para evitar retrofit.
+#![allow(dead_code)]
 
 use std::collections::HashMap;
 
@@ -11,21 +12,21 @@ use kata_core::ty::Ty;
 
 /// Origem de uma instrução CLIF — mapeia para o nó da TAST que a gerou.
 #[derive(Debug, Clone, Copy)]
-pub struct InstOrigin {
+pub(crate) struct InstOrigin {
     /// Índice da expressão na TAST (profundidade-first order).
     pub expr_idx: usize,
 }
 
 /// Origem de um bloco CLIF.
 #[derive(Debug, Clone, Copy)]
-pub struct BlockOrigin {
+pub(crate) struct BlockOrigin {
     /// Rótulo semântico do bloco (ex: "entry", "let_merge").
     pub label: &'static str,
 }
 
 /// Tipo de um valor CLIF mapeado para `Ty` do compilador.
 #[derive(Debug, Clone)]
-pub struct ValueMeta {
+pub(crate) struct ValueMeta {
     /// Tipo canônico do valor.
     pub ty: Ty,
     /// Se o valor é resultado de chamada FFI.
@@ -34,7 +35,7 @@ pub struct ValueMeta {
 
 /// Metadados de closure — vazio em Fio 1 (closures são Fio 9).
 #[derive(Debug, Clone, Default)]
-pub struct ClosureInfo {
+pub(crate) struct ClosureInfo {
     /// Nome da closure (se nomeada).
     pub name: Option<String>,
     /// Se a closure escapa (captura variável do escopo externo).
@@ -43,7 +44,7 @@ pub struct ClosureInfo {
 
 /// Flags de escape analysis — vazio em Fio 1 (TRMA é Fio 11).
 #[derive(Debug, Clone, Default)]
-pub struct EscapeFlags {
+pub(crate) struct EscapeFlags {
     /// Se o valor alocado no heap escapa do escopo atual.
     pub escapes: bool,
 }
@@ -53,7 +54,7 @@ pub struct EscapeFlags {
 /// Cada campo é indexado por `Inst`/`Block`/`Value` do Cranelift.
 /// O codegen popula durante o lowering; passes futuros consultam.
 #[derive(Debug, Clone, Default)]
-pub struct MetadataTable {
+pub(crate) struct MetadataTable {
     /// Origem de cada instrução CLIF.
     pub inst_origins: HashMap<Inst, InstOrigin>,
     /// Origem de cada bloco CLIF.
