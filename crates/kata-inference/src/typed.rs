@@ -95,7 +95,6 @@ pub enum TypedExprKind {
     VariantQual { enum_name: String, variant: String },
 
     // ── Fio 2: Lambda, Match ──────────────────────────────────────
-
     /// Lambda — função pura com corpo Kata.
     /// Pode ser anônimo (em posição de expressão) ou nomeado (cláusulas de Sig).
     Lambda {
@@ -192,7 +191,9 @@ pub enum TypedPattern {
     /// `Pattern::Variant { enum_name, variant }`.
     Variant { enum_name: String, variant: String },
     /// `(a, b, c)` — tupla. Cada sub-pattern é tipado recursivamente.
-    Tuple { elements: Vec<Spanned<TypedPattern>> },
+    Tuple {
+        elements: Vec<Spanned<TypedPattern>>,
+    },
     /// `[h : t]` — cons (stub em Fio 2 — List é Fio 8).
     Cons {
         head: Box<Spanned<TypedPattern>>,
@@ -202,14 +203,38 @@ pub enum TypedPattern {
 
 /// Módulo tipado — artefato final do Pass 2.
 ///
-/// Contém a TAST do entry point e o DispatchTable populado com todas as
-/// assinaturas (prelude + módulo do usuário). O codegen consome isto.
+/// Contém a TAST do entry point, o DispatchTable populado com todas as
+/// assinaturas (prelude + módulo do usuário), e as funções nomeadas com
+/// corpo Kata (já tipadas). O codegen consome isto.
 #[derive(Debug, Clone)]
 pub struct TypedModule {
+    /// Expressões top-level anteriores ao entry point (let bindings, etc.).
+    /// Loweradas em sequência antes do entry — compartilham o var_map.
+    pub pre_entry: Vec<Spanned<TypedExpr>>,
     /// Entry point tipado — última expressão top-level do módulo.
     pub entry: Spanned<TypedExpr>,
     /// DispatchTable populado com prelude + assinaturas do módulo.
     pub dispatch_table: DispatchTable,
     /// Snapshot do TypeEnv ao final do typeck (para inspeção/debug).
     pub type_env: TypeEnv,
+    /// Funções nomeadas com corpo Kata (não-FFI), já tipadas.
+    /// Cada função vira uma função Cranelift separada no codegen.
+    pub functions: Vec<TypedFunction>,
+}
+
+/// Função nomeada tipada — pronta para o codegen.
+///
+/// Produzida pelo inference quando `FunctionDef` (do resolution) tem cláusulas.
+/// O codegen declara uma função Cranelift com `name`, assinatura
+/// `(param_types → ret_ty)`, e lowera cada cláusula como branch chain.
+#[derive(Debug, Clone)]
+pub struct TypedFunction {
+    /// Nome da função no JITModule (para call direto).
+    pub name: String,
+    /// Tipos dos parâmetros (da assinatura do Sig).
+    pub param_types: Vec<Ty>,
+    /// Tipo de retorno (da assinatura do Sig).
+    pub ret_ty: Ty,
+    /// Cláusulas tipadas (padrões + corpo + guards + with bindings).
+    pub clauses: Vec<TypedLambdaClause>,
 }

@@ -20,3 +20,7 @@ kata-rt.workspace = true
 [dev-dependencies]
 insta.workspace = true
 proptest.workspace = true
+kata-lexer.workspace = true
+kata-parser.workspace = true
+kata-resolution.workspace = true
+kata-optimizer.workspace = true

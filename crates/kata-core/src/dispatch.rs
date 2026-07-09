@@ -188,11 +188,12 @@ impl DispatchTable {
             // Pontua apenas args presentes. None = não restringe.
             let mut compatible = true;
             for (arg_opt, param) in args.iter().zip(&info.params) {
-                if let Some(arg_ty) = arg_opt {
-                    if arg_ty != param {
+                match arg_opt {
+                    Some(arg_ty) if arg_ty != param => {
                         compatible = false;
                         break;
                     }
+                    _ => {}
                 }
                 // None (hole) — não pontua, não exclui
             }
@@ -244,11 +245,10 @@ impl DispatchTable {
         // Comutativo pode gerar múltiplos candidatos via swap — pegamos o primeiro.
         // Para dispatch parcial, se múltiplos overloads diferentes casam (não via
         // comutatividade), é ambíguo. Verificamos se há overloads distintos.
-        let unique_overloads: Vec<&OverloadInfo> = candidates.iter().map(|(info, _)| info).collect();
+        let unique_overloads: Vec<&OverloadInfo> =
+            candidates.iter().map(|(info, _)| info).collect();
         let first_params = &unique_overloads[0].params;
-        let all_same = unique_overloads
-            .iter()
-            .all(|oi| oi.params == *first_params);
+        let all_same = unique_overloads.iter().all(|oi| oi.params == *first_params);
 
         if all_same {
             // Todos casam com o mesmo overload (ex: comutatividade duplicou) — retorna o primeiro

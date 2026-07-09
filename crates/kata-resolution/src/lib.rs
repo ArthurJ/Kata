@@ -7,7 +7,7 @@
 
 pub mod prelude;
 
-use kata_ast::{Item, Module, TypeExpr};
+use kata_ast::{Item, LambdaClause, Module, Spanned, TypeExpr};
 use kata_core::{EnumRegistry, PrimTy, Ty, TypeEnv};
 
 /// Resultado da resolution — TypeEnv populado + assinaturas coletadas.
@@ -17,6 +17,9 @@ pub struct ResolvedModule {
     pub signatures: Vec<Signature>,
     /// Catálogo de variantes por enum (Fio 2).
     pub enum_registry: EnumRegistry,
+    /// Funções nomeadas com corpo Kata (Fio 2 Fase 10).
+    /// Cada entrada preserva as cláusulas lambda para o inference processar.
+    pub functions: Vec<FunctionDef>,
 }
 
 /// Assinatura de função coletada no Pass 1.
@@ -28,6 +31,19 @@ pub struct Signature {
     pub ffi_symbol: Option<String>,
     pub is_associative: bool,
     pub associative_neutral: Option<i64>,
+}
+
+/// Definição de função nomeada com corpo Kata (não-FFI).
+///
+/// Produzida no resolution quando `Item::Sig` tem `body = Some(clauses)`.
+/// O inference consome as cláusulas e produz `TypedExprKind::Lambda` com
+/// `func_name = Some(name)` e os tipos da assinatura.
+#[derive(Debug, Clone)]
+pub struct FunctionDef {
+    pub name: String,
+    pub param_types: Vec<Ty>,
+    pub return_type: Ty,
+    pub clauses: Vec<Spanned<LambdaClause>>,
 }
 
 /// Erro de resolution (wrapped FrontendError/MiddleError).
@@ -42,6 +58,7 @@ pub enum ResolveError {
 pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
     let mut type_env = TypeEnv::new();
     let mut signatures: Vec<Signature> = Vec::new();
+    let mut functions: Vec<FunctionDef> = Vec::new();
     let mut enum_registry = EnumRegistry::new();
     let errors: Vec<ResolveError> = Vec::new();
 
@@ -70,7 +87,7 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
             params,
             ret,
             directives,
-            body: _,
+            body,
         } = &item.node
         {
             // Converte TypeExpr → Ty
@@ -102,6 +119,16 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
                 }
             }
 
+            // Se tem corpo Kata (cláusulas lambda), preserva para o inference.
+            if let Some(clauses) = body {
+                functions.push(FunctionDef {
+                    name: name.clone(),
+                    param_types: param_types.clone(),
+                    return_type: return_type.clone(),
+                    clauses: clauses.clone(),
+                });
+            }
+
             signatures.push(Signature {
                 name: name.clone(),
                 param_types,
@@ -121,6 +148,7 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
         type_env,
         signatures,
         enum_registry,
+        functions,
     })
 }
 
@@ -411,6 +439,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<ResolveError>> {
         type_env,
         signatures,
         enum_registry,
+        functions: Vec::new(),
     })
 }
 

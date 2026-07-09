@@ -12,8 +12,8 @@ pub mod infer;
 pub mod patterns;
 pub mod typed;
 
-pub use infer::{infer_module, InferResult};
+pub use infer::{InferResult, infer_module};
 pub use typed::{
-    CaptureInfo, CaptureStorage, Effect, TypedExpr, TypedExprKind, TypedLambdaClause,
-    TypedMatchArm, TypedModule, TypedPattern,
+    CaptureInfo, CaptureStorage, Effect, TypedExpr, TypedExprKind, TypedFunction, TypedGuardClause,
+    TypedLambdaClause, TypedMatchArm, TypedModule, TypedPattern, TypedWithBinding,
 };

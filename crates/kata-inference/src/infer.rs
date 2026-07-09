@@ -20,7 +20,7 @@ use kata_resolution::{ResolvedModule, Signature};
 use crate::desugar;
 use crate::patterns;
 use crate::typed::{
-    Effect, TypedExpr, TypedExprKind, TypedGuardClause, TypedLambdaClause,
+    Effect, TypedExpr, TypedExprKind, TypedFunction, TypedGuardClause, TypedLambdaClause,
     TypedMatchArm, TypedModule, TypedPattern, TypedWithBinding,
 };
 
@@ -63,7 +63,7 @@ fn populate_dispatch_table(signatures: &[Signature]) -> DispatchTable {
 
 /// Infere o tipo de um módulo completo.
 ///
-/// Pipeline: popula DispatchTable → percorre items → infere entry point.
+/// Pipeline: popula DispatchTable → processa funções nomeadas → infere entry point.
 /// Retorna `TypedModule` ou o primeiro erro de typeck encontrado.
 pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<TypedModule> {
     // 1. Popula DispatchTable com as assinaturas (prelude + módulo)
@@ -73,8 +73,28 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
     //    locais (let) sem mutar o original.
     let mut type_env = resolved.type_env.clone();
 
-    // 3. Percorre items — Sigs e decls de tipo já foram processados no
-    //    resolution. Aqui só processamos EntryExpr (a última expr).
+    // 3. Processa funções nomeadas com corpo Kata (Fase 10).
+    //    Cada função é inferida com os tipos da assinatura (não InferVar).
+    //    A função também é registrada no TypeEnv como Ty::Function para permitir
+    //    `let g := fat` (função como valor).
+    let mut typed_functions: Vec<TypedFunction> = Vec::new();
+    for func_def in &resolved.functions {
+        let typed_func = infer_named_function(func_def, &dispatch_table, &resolved.enum_registry)?;
+        // Registra no TypeEnv para permitir uso como valor (call_indirect).
+        type_env.define(
+            &typed_func.name,
+            Ty::Function(
+                typed_func.param_types.clone(),
+                Box::new(typed_func.ret_ty.clone()),
+            ),
+        );
+        typed_functions.push(typed_func);
+    }
+
+    // 4. Percorre items — infere cada EntryExpr em sequência.
+    //    O último vira o entry point; os anteriores viram pre_entry
+    //    (lowerados em sequência pelo codegen, compartilhando var_map).
+    let mut pre_entry: Vec<Spanned<TypedExpr>> = Vec::new();
     let mut entry_expr: Option<Spanned<TypedExpr>> = None;
 
     for item in &module.items {
@@ -92,10 +112,14 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
                     &resolved.enum_registry,
                     true, // entry point está em tail position
                 )?;
+                // Se já temos um entry_expr, ele vira pre_entry; o novo vira entry.
+                if let Some(prev) = entry_expr.take() {
+                    pre_entry.push(prev);
+                }
                 entry_expr = Some(Spanned::new(typed, expr.span));
             }
             Item::Sig { .. } | Item::DataDecl { .. } | Item::EnumDecl { .. } => {
-                // Já processado no resolution. Nada a fazer no inference.
+                // Já processado no resolution/inference de funções nomeadas.
             }
         }
     }
@@ -106,9 +130,112 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
     })?;
 
     Ok(TypedModule {
+        pre_entry,
         entry,
         dispatch_table,
         type_env,
+        functions: typed_functions,
+    })
+}
+
+/// Infere uma função nomeada com corpo Kata (múltiplas cláusulas).
+///
+/// Cada cláusula é inferida com os tipos da assinatura (param_types/ret_ty
+/// do Sig). Os padrões são casados contra os tipos dos parâmetros. O corpo
+/// de cada cláusula é inferido em escopo filho com os bindings dos padrões.
+fn infer_named_function(
+    func_def: &kata_resolution::FunctionDef,
+    table: &DispatchTable,
+    enum_registry: &EnumRegistry,
+) -> InferResult<TypedFunction> {
+    let param_types = &func_def.param_types;
+    let ret_ty = &func_def.return_type;
+
+    let mut typed_clauses: Vec<TypedLambdaClause> = Vec::new();
+
+    for clause in &func_def.clauses {
+        let clause_inner = &clause.node;
+
+        // Cria escopo filho para a cláusula.
+        let mut clause_env = TypeEnv::new();
+
+        // Casa padrões contra tipos dos parâmetros.
+        let mut typed_patterns: Vec<Spanned<TypedPattern>> = Vec::new();
+        for (i, pat) in clause_inner.patterns.iter().enumerate() {
+            let param_ty = &param_types[i];
+            let typed_pat = patterns::check_pattern(pat, param_ty, enum_registry, &mut clause_env)?;
+            typed_patterns.push(typed_pat);
+        }
+
+        // Processa with bindings (açúcar → let chain).
+        let mut typed_with_bindings: Vec<TypedWithBinding> = Vec::new();
+        for wb in &clause_inner.with_bindings {
+            let typed_value = infer_expr(
+                &wb.value.node,
+                &wb.value.span,
+                &mut clause_env,
+                table,
+                enum_registry,
+                false,
+            )?;
+            let val_ty = typed_value.ty.clone();
+            clause_env.define(&wb.name, val_ty);
+            typed_with_bindings.push(TypedWithBinding {
+                name: wb.name.clone(),
+                value: Spanned::new(typed_value, wb.value.span),
+            });
+        }
+
+        // Infere body (com ou sem guards).
+        let (typed_body, typed_guards) = if clause_inner.guards.is_empty() {
+            let typed_body = infer_expr(
+                &clause_inner.body.node,
+                &clause_inner.body.span,
+                &mut clause_env,
+                table,
+                enum_registry,
+                true, // tail_pos = true em body de função
+            )?;
+            // Verifica que o body retorna o tipo esperado.
+            if typed_body.ty != *ret_ty {
+                return Err(MiddleError::TypeMismatch {
+                    expected: format!("{:?}", ret_ty),
+                    found: format!("{:?}", typed_body.ty),
+                    span: clause_inner.body.span.into(),
+                });
+            }
+            (typed_body, Vec::new())
+        } else {
+            let (guard_ret, typed_body, guards) = infer_lambda_body(
+                &clause_inner.body,
+                &clause_inner.guards,
+                &mut clause_env,
+                table,
+                enum_registry,
+            )?;
+            if guard_ret != *ret_ty {
+                return Err(MiddleError::TypeMismatch {
+                    expected: format!("{:?}", ret_ty),
+                    found: format!("{:?}", guard_ret),
+                    span: clause_inner.body.span.into(),
+                });
+            }
+            (typed_body, guards)
+        };
+
+        typed_clauses.push(TypedLambdaClause {
+            patterns: typed_patterns,
+            body: Spanned::new(typed_body, clause_inner.body.span),
+            guards: typed_guards,
+            with_bindings: typed_with_bindings,
+        });
+    }
+
+    Ok(TypedFunction {
+        name: func_def.name.clone(),
+        param_types: param_types.clone(),
+        ret_ty: ret_ty.clone(),
+        clauses: typed_clauses,
     })
 }
 
@@ -279,7 +406,8 @@ fn infer_expr_hinted(
 
         // ── Let binding ──────────────────────────────────────
         Expr::Let { name, value } => {
-            let typed_value = infer_expr(&value.node, &value.span, env, table, enum_registry, false)?;
+            let typed_value =
+                infer_expr(&value.node, &value.span, env, table, enum_registry, false)?;
             let val_ty = typed_value.ty.clone();
 
             env.define(name, val_ty);
@@ -296,13 +424,13 @@ fn infer_expr_hinted(
 
         // ── Qualificação de variante ─────────────────────────
         Expr::VariantQual { enum_name, variant } => {
-            let enum_ty = env
-                .lookup(enum_name)
-                .cloned()
-                .ok_or_else(|| MiddleError::UnboundName {
-                    name: enum_name.clone(),
-                    span: (*span).into(),
-                })?;
+            let enum_ty =
+                env.lookup(enum_name)
+                    .cloned()
+                    .ok_or_else(|| MiddleError::UnboundName {
+                        name: enum_name.clone(),
+                        span: (*span).into(),
+                    })?;
 
             match &enum_ty {
                 Ty::Sum(name) => {
@@ -555,6 +683,7 @@ fn infer_apply(
 /// assinatura fornece os tipos. Aqui tratamos apenas lambda anônimo
 /// (sem assinatura); funções nomeadas são tratadas no resolution/inference
 /// do Sig (Fase 10).
+#[allow(clippy::too_many_arguments)]
 fn infer_lambda(
     patterns: &[Spanned<Pattern>],
     body: &Spanned<Expr>,
@@ -622,7 +751,7 @@ fn infer_lambda(
         let param_ty = param_type_hints
             .get(i)
             .cloned()
-            .unwrap_or_else(|| Ty::InferVar(i as u32));
+            .unwrap_or(Ty::InferVar(i as u32));
         let typed_pat = patterns::check_pattern(pat, &param_ty, enum_registry, &mut lambda_env)?;
         param_types.push(param_ty);
         typed_patterns.push(typed_pat);
@@ -632,7 +761,14 @@ fn infer_lambda(
     // with bindings são pré-avaliados antes dos guards.
     let mut typed_with_bindings: Vec<TypedWithBinding> = Vec::new();
     for wb in with_bindings {
-        let typed_value = infer_expr(&wb.value.node, &wb.value.span, &mut lambda_env, table, enum_registry, false)?;
+        let typed_value = infer_expr(
+            &wb.value.node,
+            &wb.value.span,
+            &mut lambda_env,
+            table,
+            enum_registry,
+            false,
+        )?;
         let val_ty = typed_value.ty.clone();
         lambda_env.define(&wb.name, val_ty);
         typed_with_bindings.push(TypedWithBinding {
@@ -648,14 +784,28 @@ fn infer_lambda(
     // Se não há guards, o body é a expressão única após `:`.
     let mut typed_guards: Vec<TypedGuardClause> = Vec::new();
     let (ret_ty, typed_body) = if guards.is_empty() {
-        let typed_body = infer_expr(&body.node, &body.span, &mut lambda_env, table, enum_registry, tail_pos)?;
+        let typed_body = infer_expr(
+            &body.node,
+            &body.span,
+            &mut lambda_env,
+            table,
+            enum_registry,
+            tail_pos,
+        )?;
         (typed_body.ty.clone(), typed_body)
     } else {
         let mut guard_ret_ty: Option<Ty> = None;
         for guard in guards {
             let guard_body_typed = if let Some(cond) = &guard.condition {
                 // Guard com condição: infere condição (deve ser Boolean) e body.
-                let cond_typed = infer_expr(&cond.node, &cond.span, &mut lambda_env, table, enum_registry, false)?;
+                let cond_typed = infer_expr(
+                    &cond.node,
+                    &cond.span,
+                    &mut lambda_env,
+                    table,
+                    enum_registry,
+                    false,
+                )?;
                 // Verifica que a condição é Boolean.
                 if cond_typed.ty != Ty::boolean() {
                     return Err(MiddleError::TypeMismatch {
@@ -664,7 +814,14 @@ fn infer_lambda(
                         span: cond.span.into(),
                     });
                 }
-                let body_typed = infer_expr(&guard.body.node, &guard.body.span, &mut lambda_env, table, enum_registry, tail_pos)?;
+                let body_typed = infer_expr(
+                    &guard.body.node,
+                    &guard.body.span,
+                    &mut lambda_env,
+                    table,
+                    enum_registry,
+                    tail_pos,
+                )?;
                 if let Some(ref existing) = guard_ret_ty {
                     if *existing != body_typed.ty {
                         return Err(MiddleError::TypeMismatch {
@@ -682,7 +839,14 @@ fn infer_lambda(
                 }
             } else {
                 // otherwise: body sem condição.
-                let body_typed = infer_expr(&guard.body.node, &guard.body.span, &mut lambda_env, table, enum_registry, tail_pos)?;
+                let body_typed = infer_expr(
+                    &guard.body.node,
+                    &guard.body.span,
+                    &mut lambda_env,
+                    table,
+                    enum_registry,
+                    tail_pos,
+                )?;
                 if let Some(ref existing) = guard_ret_ty {
                     if *existing != body_typed.ty {
                         return Err(MiddleError::TypeMismatch {
@@ -751,7 +915,14 @@ fn infer_match(
     tail_pos: bool,
 ) -> InferResult<(Ty, TypedExprKind, Effect)> {
     // Infere o scrutinee.
-    let typed_scrutinee = infer_expr(&scrutinee.node, &scrutinee.span, env, table, enum_registry, false)?;
+    let typed_scrutinee = infer_expr(
+        &scrutinee.node,
+        &scrutinee.span,
+        env,
+        table,
+        enum_registry,
+        false,
+    )?;
     let scrutinee_ty = typed_scrutinee.ty.clone();
 
     // Processa cada braço.
@@ -765,7 +936,8 @@ fn infer_match(
         let mut arm_env = env.push_scope();
 
         let typed_pattern = if let Some(pat) = &arm.pattern {
-            let typed_pat = patterns::check_pattern(pat, &scrutinee_ty, enum_registry, &mut arm_env)?;
+            let typed_pat =
+                patterns::check_pattern(pat, &scrutinee_ty, enum_registry, &mut arm_env)?;
             // Coleta variantes cobertas para exaustividade.
             if let TypedPattern::Variant { variant, .. } = &typed_pat.node {
                 covered_variants.push(variant.clone());
@@ -786,7 +958,14 @@ fn infer_match(
 
         // Infere guard (se houver).
         let typed_guard = if let Some(guard_expr) = &arm.guard {
-            let guard_typed = infer_expr(&guard_expr.node, &guard_expr.span, &mut arm_env, table, enum_registry, false)?;
+            let guard_typed = infer_expr(
+                &guard_expr.node,
+                &guard_expr.span,
+                &mut arm_env,
+                table,
+                enum_registry,
+                false,
+            )?;
             if guard_typed.ty != Ty::boolean() {
                 return Err(MiddleError::TypeMismatch {
                     expected: "Boolean".into(),
@@ -800,7 +979,14 @@ fn infer_match(
         };
 
         // Infere body do braço.
-        let typed_body = infer_expr(&arm.body.node, &arm.body.span, &mut arm_env, table, enum_registry, tail_pos)?;
+        let typed_body = infer_expr(
+            &arm.body.node,
+            &arm.body.span,
+            &mut arm_env,
+            table,
+            enum_registry,
+            tail_pos,
+        )?;
 
         // Verifica que todos os braços retornam o mesmo tipo.
         if let Some(ref existing) = match_ret_ty {
@@ -973,6 +1159,7 @@ fn try_partial_dispatch(
             Expr::TypeAscription { expr: inner, ty } => {
                 // Verifica se o inner é um Ident que é parâmetro do lambda (hole com ascription).
                 let inner_core = peel_grouping_expr(&inner.node);
+                #[allow(clippy::collapsible_if)]
                 if let Expr::Ident { name } = inner_core {
                     if param_names.contains(&name.as_str()) {
                         // Hole com ascription: None no dispatch + hint direto da ascription
@@ -1029,16 +1216,15 @@ fn try_partial_dispatch(
             let arg_core = peel_grouping_expr(&args[arg_idx].node);
             let arg_name = match arg_core {
                 Expr::Ident { name } => name,
-                Expr::TypeAscription { expr: inner, .. } => {
-                    match peel_grouping_expr(&inner.node) {
-                        Expr::Ident { name } => name,
-                        _ => continue,
-                    }
-                }
+                Expr::TypeAscription { expr: inner, .. } => match peel_grouping_expr(&inner.node) {
+                    Expr::Ident { name } => name,
+                    _ => continue,
+                },
                 _ => continue,
             };
             // Encontra o índice do parâmetro com este nome
             for (pat_idx, pat) in patterns.iter().enumerate() {
+                #[allow(clippy::collapsible_if)]
                 if let Pattern::Ident(pat_name) = &pat.node {
                     if pat_name == arg_name {
                         hints[pat_idx] = Some(ty.clone());
@@ -1059,7 +1245,10 @@ fn try_partial_dispatch(
 
     // Só retorna se todos os parâmetros receberam tipos
     if hints.iter().all(|h| h.is_some()) {
-        hints.into_iter().map(|h| h.expect("checked above")).collect()
+        hints
+            .into_iter()
+            .map(|h| h.expect("checked above"))
+            .collect()
     } else {
         Vec::new()
     }
@@ -1398,7 +1587,9 @@ fn infer_lambda_body(
             });
         }
         (
-            guard_ret_ty.clone().expect("pelo menos um guard deve existir"),
+            guard_ret_ty
+                .clone()
+                .expect("pelo menos um guard deve existir"),
             TypedExpr {
                 span: body.span,
                 ty: guard_ret_ty.expect("pelo menos um guard"),

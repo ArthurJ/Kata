@@ -5,7 +5,7 @@
 //! porque `+` tem overloads Int/Float/Rational e `10` (Int) exclui Float e Rational.
 
 use kata_core::ty::Ty;
-use kata_inference::{infer_module, TypedExprKind};
+use kata_inference::{TypedExprKind, infer_module};
 use kata_lexer::lex;
 use kata_parser::parse;
 use kata_resolution::load_prelude;

@@ -6,7 +6,7 @@
 //! O typeck usa o tipo anotado diretamente.
 
 use kata_core::ty::{PrimTy, Ty};
-use kata_inference::{infer_module, TypedExprKind};
+use kata_inference::{TypedExprKind, infer_module};
 use kata_lexer::lex;
 use kata_parser::parse;
 use kata_resolution::load_prelude;
@@ -46,7 +46,11 @@ fn hole_ascription_int_direct() {
     );
 
     match &entry.kind {
-        TypedExprKind::Lambda { param_types, ret_ty, .. } => {
+        TypedExprKind::Lambda {
+            param_types,
+            ret_ty,
+            ..
+        } => {
             assert_eq!(param_types, &[Ty::int()], "parâmetro deve ser Int");
             assert_eq!(*ret_ty, Ty::int(), "retorno deve ser Int");
         }

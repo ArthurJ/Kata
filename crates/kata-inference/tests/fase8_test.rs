@@ -5,7 +5,7 @@
 //! O codegen de Lambda/Match será implementado na Fase 9.
 
 use kata_core::ty::Ty;
-use kata_inference::{infer_module, Effect, TypedExprKind};
+use kata_inference::{Effect, TypedExprKind, infer_module};
 use kata_lexer::lex;
 use kata_parser::parse;
 use kata_resolution::load_prelude;
@@ -121,10 +121,7 @@ fn match_unqualified_variants_resolved() {
             for arm in arms {
                 if let Some(pat) = &arm.pattern {
                     assert!(
-                        matches!(
-                            &pat.node,
-                            kata_inference::TypedPattern::Variant { .. }
-                        ),
+                        matches!(&pat.node, kata_inference::TypedPattern::Variant { .. }),
                         "pattern deve ser Variant, não Ident"
                     );
                 }
@@ -138,8 +135,7 @@ fn match_unqualified_variants_resolved() {
 
 #[test]
 fn match_qualified_variants() {
-    let tmod =
-        infer_src("match Boolean::True\n    Boolean::True: 1\n    Boolean::False: 0");
+    let tmod = infer_src("match Boolean::True\n    Boolean::True: 1\n    Boolean::False: 0");
     let entry = entry_typed(&tmod);
     assert_eq!(entry.ty, Ty::int());
 }
@@ -305,10 +301,7 @@ fn let_value_not_tail_pos() {
     let entry = entry_typed(&tmod);
     match &entry.kind {
         TypedExprKind::Let { value, .. } => {
-            assert!(
-                !value.node.tail_pos,
-                "let value deve ser tail_pos = false"
-            );
+            assert!(!value.node.tail_pos, "let value deve ser tail_pos = false");
         }
         other => panic!("expected Let, got {other:?}"),
     }

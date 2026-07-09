@@ -244,7 +244,9 @@ fn desugar_holes(expr: &Spanned<Expr>) -> Spanned<Expr> {
                     .map(|&pos| match &args_d[pos].node {
                         Expr::TypeAscription { ty, .. } => Some(ty.clone()),
                         Expr::Hole => None,
-                        _ => unreachable!("is_hole_or_ascribed_hole garante que só Hole ou TypeAscription(Hole)"),
+                        _ => unreachable!(
+                            "is_hole_or_ascribed_hole garante que só Hole ou TypeAscription(Hole)"
+                        ),
                     })
                     .collect();
                 let mut new_args = args_d;

@@ -8,7 +8,7 @@
 //! - DoD 31: apply de lambda inline (`(lambda x: + x 1) 42`)
 
 use kata_core::ty::Ty;
-use kata_inference::{infer_module, TypedExprKind};
+use kata_inference::{TypedExprKind, infer_module};
 use kata_lexer::lex;
 use kata_parser::parse;
 use kata_resolution::load_prelude;
@@ -83,7 +83,10 @@ fn dod29_hint_top_down() {
 fn dod30_lambda_inference_fail() {
     let err = infer_src_err("lambda x: x");
     assert!(
-        matches!(err, kata_diagnostics::MiddleError::LambdaInferenceFail { .. }),
+        matches!(
+            err,
+            kata_diagnostics::MiddleError::LambdaInferenceFail { .. }
+        ),
         "esperava LambdaInferenceFail, got {err:?}"
     );
 }

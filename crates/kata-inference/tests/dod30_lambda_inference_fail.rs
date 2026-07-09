@@ -64,5 +64,9 @@ fn lambda_with_hint_does_not_fail() {
     let module = parse(tokens).unwrap();
     let prelude = load_prelude().unwrap();
     let result = infer_module(&module, &prelude);
-    assert!(result.is_ok(), "lambda com hint deve succeed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "lambda com hint deve succeed: {:?}",
+        result.err()
+    );
 }

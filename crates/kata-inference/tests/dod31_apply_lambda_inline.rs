@@ -7,7 +7,7 @@
 //! O hint da ascription fornece os tipos dos params, args são verificados.
 
 use kata_core::ty::Ty;
-use kata_inference::{infer_module, TypedExprKind};
+use kata_inference::{TypedExprKind, infer_module};
 use kata_lexer::lex;
 use kata_parser::parse;
 use kata_resolution::load_prelude;

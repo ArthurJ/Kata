@@ -45,6 +45,7 @@ fn check_pattern_inner(
         // ── Ident: pode ser binding ou variante sem qualificação ──
         Pattern::Ident(name) => {
             // Se o scrutinee é Sum e o nome é variante desse enum, resolve.
+            #[allow(clippy::collapsible_if)]
             if let Ty::Sum(enum_name) = scrutinee_ty {
                 if enum_registry.is_variant(enum_name, name) {
                     return Ok(TypedPattern::Variant {
