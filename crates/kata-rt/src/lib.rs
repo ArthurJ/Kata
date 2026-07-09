@@ -23,6 +23,7 @@ pub use rational::{float_to_rat, rat_from_int, rat_from_text, rat_to_float, rat_
 pub use text::{bool_to_text, int_to_text, text_literal, text_replace_first};
 
 // Re-exports de funções C-ABI para o codegen registrar no JIT.
+pub use arena::{kata_rt_arena_alloc, kata_rt_arena_create, kata_rt_arena_destroy, reset_arena};
 pub use bigint::{
     kata_rt_bi_add, kata_rt_bi_div, kata_rt_bi_eq, kata_rt_bi_ge, kata_rt_bi_gt, kata_rt_bi_le,
     kata_rt_bi_lt, kata_rt_bi_mul, kata_rt_bi_neq, kata_rt_bi_show, kata_rt_bi_sub,

@@ -174,11 +174,86 @@ g 5 1";
     );
 }
 
-// ── DoD 22: Tuple pattern em lambda ─────────────────────────────
-// TODO: Implementar codegen de Tuple (expressão + pattern).
-// O typeck já funciona (match_tuple_pattern em fase8_test.rs passa).
-// O codegen não suporta TypedExprKind::Tuple nem TypedPattern::Tuple.
-// Trabalho de Fio 5 — próxima sessão.
+// ── DoD 22: Tuple pattern em match e lambda ──────────────────────
+
+/// `match (1, 2)` com braço `(a, b): a` + `otherwise: 0` → 1
+#[test]
+fn match_tuple_pattern_fst() {
+    let src = "match (1, 2)\n   (a, b): a\n   otherwise: 0";
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Prim(PrimTy::Int));
+    assert_eq!(untag_smi(raw), 1, "match (1,2) (a,b): a deve ser 1");
+}
+
+/// `match (1, 2)` com braço `(a, b): b` + `otherwise: 0` → 2
+#[test]
+fn match_tuple_pattern_snd() {
+    let src = "match (1, 2)\n   (a, b): b\n   otherwise: 0";
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Prim(PrimTy::Int));
+    assert_eq!(untag_smi(raw), 2, "match (1,2) (a,b): b deve ser 2");
+}
+
+/// `match (10, 20, 30)` com braço `(a, b, c): c` + `otherwise: 0` → 30
+#[test]
+fn match_tuple_pattern_third() {
+    let src = "match (10, 20, 30)\n   (a, b, c): c\n   otherwise: 0";
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Prim(PrimTy::Int));
+    assert_eq!(
+        untag_smi(raw),
+        30,
+        "match (10,20,30) (a,b,c): c deve ser 30"
+    );
+}
+
+/// Lambda com tuple pattern — **bloqueado pela inferência de tipos**.
+///
+/// `let fst := lambda (a, b): a` falha com `LambdaInferenceFail` porque o
+/// typeck não consegue inferir os tipos de `a` e `b` sem contexto. A solução
+/// seria uma assinatura com tipo tupla (`fst :: (Int, Int) => Int`), mas o
+/// parser de type expressions não suporta vírgula em tipos — `TypeExpr::Tuple`
+/// é trabalho de Fio 5.
+///
+/// O codegen de `TypedPattern::Tuple` em lambda ESTÁ implementado (via
+/// `test_single_pattern`). O bloqueio é upstream (parser + inferência).
+#[test]
+#[ignore = "bloqueado pela inferência: TypeExpr::Tuple é Fio 5"]
+fn lambda_tuple_pattern() {
+    let src = "let fst := lambda (a, b): a\nfst (10, 20)";
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Prim(PrimTy::Int));
+    assert_eq!(untag_smi(raw), 10, "fst (10,20) deve ser 10");
+}
+
+/// Tuple pattern com wildcard: `match (1, 2) (_, b): b` + `otherwise: 0` → 2
+#[test]
+fn match_tuple_pattern_wildcard() {
+    let src = "match (1, 2)\n   (_, b): b\n   otherwise: 0";
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Prim(PrimTy::Int));
+    assert_eq!(untag_smi(raw), 2, "match (1,2) (_,b): b deve ser 2");
+}
+
+/// Tuple pattern com literal: `match (1, 2)` com `(1, b): b` e `otherwise: 0`
+/// → 2 (o primeiro braço encaixa porque o primeiro elemento é 1)
+#[test]
+fn match_tuple_pattern_with_literal() {
+    let src = "match (1, 2)\n   (1, b): b\n   otherwise: 0";
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Prim(PrimTy::Int));
+    assert_eq!(untag_smi(raw), 2, "match (1,2) (1,b): b deve ser 2");
+}
+
+/// Tuple pattern com literal que NÃO encaixa: `match (5, 2)` com `(1, b): b`
+/// e `otherwise: 0` → 0 (o primeiro braço não encaixa, cai em otherwise)
+#[test]
+fn match_tuple_pattern_literal_miss() {
+    let src = "match (5, 2)\n   (1, b): b\n   otherwise: 0";
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Prim(PrimTy::Int));
+    assert_eq!(untag_smi(raw), 0, "match (5,2) (1,b) não encaixa → 0");
+}
 
 // ── DoD 9: TCO — fatorial com profundidade alta ─────────────────
 

@@ -12,7 +12,9 @@
 use std::collections::HashMap;
 
 use cranelift_codegen::ir::types::I64;
-use cranelift_codegen::ir::{AbiParam, BlockArg, GlobalValueData, InstBuilder, Signature};
+use cranelift_codegen::ir::{
+    AbiParam, BlockArg, GlobalValueData, InstBuilder, MemFlagsData, Signature,
+};
 use cranelift_codegen::isa::CallConv;
 use cranelift_codegen::settings::Configurable;
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
@@ -136,7 +138,16 @@ pub fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
     // I/O
     builder.symbol("kata_rt_print", rt::kata_rt_print as *const u8);
     builder.symbol("kata_rt_println", rt::kata_rt_println as *const u8);
-    // Arena — não exportado como C-ABI em Fio 1; registrar em fios posteriores.
+    // Arena — C-ABI para alocação de tuplas (DoD 22)
+    builder.symbol(
+        "kata_rt_arena_create",
+        rt::kata_rt_arena_create as *const u8,
+    );
+    builder.symbol("kata_rt_arena_alloc", rt::kata_rt_arena_alloc as *const u8);
+    builder.symbol(
+        "kata_rt_arena_destroy",
+        rt::kata_rt_arena_destroy as *const u8,
+    );
 }
 
 /// Declara todos os símbolos FFI no module e retorna o mapa nome → FuncId.
@@ -218,6 +229,9 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         TextReplaceFirst,
         Print,
         Println,
+        ArenaCreate,
+        ArenaAlloc,
+        ArenaDestroy,
     ]
 }
 
@@ -709,10 +723,22 @@ fn test_clause_patterns(
                     )));
                 }
             }
-            TypedPattern::Tuple { .. } => {
-                return Err(CodegenError::UnsupportedNode(
-                    "Pattern Tuple em cláusula lambda: ainda não implementado".into(),
-                ));
+            TypedPattern::Tuple { elements } => {
+                // O valor é um ponteiro para tupla (I64). Cada sub-pattern é
+                // testado contra o elemento no offset i * 8.
+                let flags = MemFlagsData::new();
+                for (i, sub_pat) in elements.iter().enumerate() {
+                    let offset = (i * 8) as i32;
+                    let elem_val = lower.builder.ins().load(I64, flags, *val, offset);
+                    // Recursive: testa o sub-pattern contra o elemento.
+                    let sub_cond = test_single_pattern(sub_pat, elem_val, lower)?;
+                    if let Some(cond) = sub_cond {
+                        all_matches = Some(match all_matches {
+                            None => cond,
+                            Some(prev) => lower.builder.ins().band(prev, cond),
+                        });
+                    }
+                }
             }
             TypedPattern::Cons { .. } => {
                 return Err(CodegenError::UnsupportedNode(
@@ -723,6 +749,68 @@ fn test_clause_patterns(
     }
 
     Ok(all_matches)
+}
+
+/// Testa um único pattern contra um valor. Retorna `Some(cond)` se há teste
+/// condicional, `None` se o pattern é incondicional (Ident/Wildcard).
+/// Usado por `TypedPattern::Tuple` para recursão sobre sub-patterns.
+fn test_single_pattern(
+    pat: &kata_ast::Spanned<TypedPattern>,
+    val: cranelift_codegen::ir::Value,
+    lower: &mut LowerCtx,
+) -> Result<Option<cranelift_codegen::ir::Value>, CodegenError> {
+    match &pat.node {
+        TypedPattern::Ident { name, ty } => {
+            let clif_ty = ty_to_clif(ty);
+            let var = lower.new_var(name, clif_ty);
+            lower.builder.def_var(var, val);
+            Ok(None)
+        }
+        TypedPattern::Wildcard => Ok(None),
+        TypedPattern::Literal { value } => {
+            let lit_val = lower_expr(&value.node, lower)?;
+            let eq = lower.builder.ins().icmp(
+                cranelift_codegen::ir::condcodes::IntCC::Equal,
+                val,
+                lit_val,
+            );
+            Ok(Some(eq))
+        }
+        TypedPattern::Variant { enum_name, variant } => {
+            if enum_name == "Boolean" {
+                let expected = if variant == "True" { 1 } else { 0 };
+                let eq = lower.builder.ins().icmp_imm(
+                    cranelift_codegen::ir::condcodes::IntCC::Equal,
+                    val,
+                    expected,
+                );
+                Ok(Some(eq))
+            } else {
+                Err(CodegenError::UnsupportedNode(format!(
+                    "Pattern Variant não-Boolean: {enum_name}::{variant}"
+                )))
+            }
+        }
+        TypedPattern::Tuple { elements } => {
+            let flags = MemFlagsData::new();
+            let mut all_matches = None;
+            for (i, sub_pat) in elements.iter().enumerate() {
+                let offset = (i * 8) as i32;
+                let elem_val = lower.builder.ins().load(I64, flags, val, offset);
+                let sub_cond = test_single_pattern(sub_pat, elem_val, lower)?;
+                if let Some(cond) = sub_cond {
+                    all_matches = Some(match all_matches {
+                        None => cond,
+                        Some(prev) => lower.builder.ins().band(prev, cond),
+                    });
+                }
+            }
+            Ok(all_matches)
+        }
+        TypedPattern::Cons { .. } => Err(CodegenError::UnsupportedNode(
+            "Pattern Cons: List é Fio 8".into(),
+        )),
+    }
 }
 
 /// Lowera with bindings (computações prévias).
@@ -1027,10 +1115,36 @@ fn lower_expr(
         // ── Grouping: transparente ──
         TypedExprKind::Grouping { inner } => lower_expr(&inner.node, ctx),
 
-        // ── Tuple: não suportado em Fio 2 ──
-        TypedExprKind::Tuple { .. } => Err(CodegenError::UnsupportedNode(
-            "tuple não suportado em Fio 2 codegen".into(),
-        )),
+        // ── Tuple: aloca N×8 bytes na arena, store de cada elemento ──
+        TypedExprKind::Tuple { elements } => {
+            let n = elements.len();
+            if n == 0 {
+                // Tupla vazia = Unit (zero-sized). Retorna 0.
+                return Ok(ctx.builder.ins().iconst(I64, 0));
+            }
+
+            // Aloca N * 8 bytes na arena via kata_rt_arena_alloc(handle, size).
+            // handle = sentinel 1 (arena thread-local; arena_create é chamado
+            // no início do entry point, mas alloc usa thread_local diretamente).
+            let handle = ctx.builder.ins().iconst(I64, 1);
+            let size = ctx.builder.ins().iconst(I64, (n * 8) as i64);
+            let func_ref = ctx
+                .ffi_refs
+                .get("kata_rt_arena_alloc")
+                .ok_or_else(|| CodegenError::FfiSymbolNotFound("kata_rt_arena_alloc".into()))?;
+            let call_inst = ctx.builder.ins().call(*func_ref, &[handle, size]);
+            let ptr = ctx.builder.inst_results(call_inst)[0];
+
+            // Store de cada elemento no offset i * 8.
+            let flags = MemFlagsData::new();
+            for (i, elem) in elements.iter().enumerate() {
+                let val = lower_expr(&elem.node, ctx)?;
+                let offset = (i * 8) as i32;
+                ctx.builder.ins().store(flags, val, ptr, offset);
+            }
+
+            Ok(ptr)
+        }
 
         // ── Let: define variável ──
         TypedExprKind::Let { name, value } => {
@@ -1252,9 +1366,10 @@ fn lower_match(
                     }
                 }
                 TypedPattern::Tuple { .. } => {
-                    return Err(CodegenError::UnsupportedNode(
-                        "Match Tuple: ainda não implementado".into(),
-                    ));
+                    // O scrutinee é um ponteiro para tupla. Usa test_single_pattern
+                    // para extrair elementos e testar sub-patterns recursivamente.
+                    let cond = test_single_pattern(pat, scrutinee_val, ctx)?;
+                    pattern_cond = cond;
                 }
                 TypedPattern::Cons { .. } => {
                     return Err(CodegenError::UnsupportedNode(
