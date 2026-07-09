@@ -720,13 +720,19 @@ soma_dez 5                    # callee é Ident("soma_dez"), resolve no TypeEnv
 - `call_indirect` com `CaptureBox` (Arc, captures) é Fio 9. Fio 2 só tem
   function pointer nu — sem captura, sem Arc.
 
-#### TCO via `tail_pos`
+#### TCO via `return_call` (DoD 9)
 
 - Quando `Apply` tem `tail_pos = true` e o callee é uma função Kata (não FFI):
-  o Cranelift pode otimizar como tail call. O codegen emite `call` normal;
-  o Cranelift decide TCO na pass de otimização.
-- Para Fio 2, o TCO é delegado ao Cranelift — não há pass próprio. O
-  `tail_pos: bool` na TAST é o marcador que o codegen repassa como hint.
+  o codegen emite `return_call`/`return_call_indirect` explícitos — o Cranelift
+  **não** faz TCO automático com `call` + `return_`.
+- TCO exige: (1) `CallConv::Tail` na assinatura, (2) `return_call` (terminador),
+  (3) `preserve_frame_pointers = true` nas flags do ISA.
+- Entry point (`SystemV`) não pode fazer `return_call` para funções Kata (`Tail`) —
+  calling conventions devem bater. Flag `no_tail_calls` no `LowerCtx` desabilita
+  tail calls no entry.
+- `return_call` é terminador: criar block dummy unreachable com `return_` para
+  satisfazer o builder. `emitted_tail_call` flag evita `return_` duplo.
+- Verificado: `fat 100000 1` executa sem stack overflow.
 
 ## Sintaxe
 
@@ -945,8 +951,8 @@ funções com corpo Kata, mas o prelude continua usando `@ffi` para tudo.
    compile-time, não runtime trap).
 8. `let soma_dez := + 10 _` gera closure de aridade 1. `soma_dez 5` imprime
    `15`.
-9. Fatorial recursivo executa sem stack overflow (TCO via Cranelift com
-   `tail_pos`).
+9. Fatorial recursivo executa sem stack overflow (TCO via `return_call` +
+   `CallConv::Tail` + `preserve_frame_pointers`). `[x]`
 10. `|>` é total no typeck — TAST nunca contém `Pipe`.
 11. `Expr::Hole` é total no typeck — TAST nunca contém `Hole` (vira Lambda).
 12. Cláusulas lambda com sobreposição produzem `RedundantClause`.
