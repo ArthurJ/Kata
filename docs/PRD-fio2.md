@@ -973,7 +973,9 @@ funções com corpo Kata, mas o prelude continua usando `@ffi` para tudo.
 21. Função nomeada atribuída a variável (`let g := fat`) carrega function
     pointer e é chamável via `call_indirect`.
 22. Tuple patterns funcionam em match e lambda (`match (1, 2) (a, b): a`
-    produz `1`).
+    produz `1`). `[x]` — match: 6 testes E2E passando. Lambda: codegen
+    implementado mas bloqueado pela inferência (`TypeExpr::Tuple` no parser
+    é Fio 5).
 23. `Ty::Tuple(Vec<Ty>)` existe em `kata-core` (antecipado de Fio 5, sem
     field access nem `.N`).
 24. Variantes de Enum são acessíveis sem qualificação (`True` em vez de
