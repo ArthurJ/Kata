@@ -181,9 +181,23 @@ g 5 1";
 // Trabalho de Fio 5 — próxima sessão.
 
 // ── DoD 9: TCO — fatorial com profundidade alta ─────────────────
-// TODO: TCO não funciona. O codegen usa jump(cont_block, result) + return_
-// no caller. O Cranelift não faz TCO porque o `call` não está em tail
-// position na IR (há um `jump` entre o `call` e o `return_`).
-// Para TCO funcionar, o codegen precisa emitir return_(call_result)
-// diretamente quando o body é uma chamada em tail_pos, em vez de
-// jump(cont_block, call_result). Próxima sessão.
+
+/// `fat 100000 1` deve executar sem stack overflow.
+/// O Cranelift faz TCO quando o `call` está em tail position (call → return_).
+/// O codegen emite `return_(body_val)` direto em cada cláusula, sem `jump`
+/// intermediário. Se TCO não funcionar, este teste crasha com SIGSEGV.
+///
+/// Nota: o resultado é 0 porque 100000! mod 2^63 contém fatores de 2
+/// suficientes para zerar todos os bits. O importante é não crashar.
+#[test]
+fn fatorial_tco_profundidade_alta() {
+    let src = "\
+fat :: Int Int => Int\n\
+\x20   lambda 0 acc: acc\n\
+\x20   lambda n acc: fat (- n 1) (* n acc)\n\
+fat 100000 1";
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Prim(PrimTy::Int));
+    // Não verificamos o valor — só que não houve stack overflow.
+    let _ = untag_smi(raw);
+}

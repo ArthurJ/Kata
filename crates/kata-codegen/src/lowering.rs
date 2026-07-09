@@ -14,6 +14,7 @@ use std::collections::HashMap;
 use cranelift_codegen::ir::types::I64;
 use cranelift_codegen::ir::{AbiParam, BlockArg, GlobalValueData, InstBuilder, Signature};
 use cranelift_codegen::isa::CallConv;
+use cranelift_codegen::settings::Configurable;
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_module::{Linkage, Module};
 use kata_core::ffi::FfiSymbol;
@@ -300,6 +301,8 @@ pub fn lower_module(
             string_table: &mut string_table,
             var_map: HashMap::new(),
             anon_counter: 0,
+            emitted_tail_call: false,
+            no_tail_calls: true, // entry point usa SystemV — sem return_call
         };
 
         // Lowera pre_entry (let bindings e outras expressões top-level anteriores).
@@ -353,7 +356,7 @@ fn declare_kata_function(
     func: &TypedFunction,
     module: &mut cranelift_jit::JITModule,
 ) -> Result<cranelift_module::FuncId, CodegenError> {
-    let mut sig = Signature::new(CallConv::SystemV);
+    let mut sig = Signature::new(CallConv::Tail);
     for pt in &func.param_types {
         sig.params.push(AbiParam::new(ty_to_clif(pt)));
     }
@@ -377,7 +380,7 @@ fn define_kata_function(
     // Constrói a assinatura.
     {
         let func_ir = &mut ctx.func;
-        let mut sig = Signature::new(CallConv::SystemV);
+        let mut sig = Signature::new(CallConv::Tail);
         for pt in &func.param_types {
             sig.params.push(AbiParam::new(ty_to_clif(pt)));
         }
@@ -420,6 +423,8 @@ fn define_kata_function(
             string_table,
             var_map: HashMap::new(),
             anon_counter: 0,
+            emitted_tail_call: false,
+            no_tail_calls: false,
         };
 
         // Para uma única cláusula com patterns Ident: bindar params diretamente.
@@ -431,12 +436,14 @@ fn define_kata_function(
             // Lowerar with bindings.
             lower_with_bindings(&clause.with_bindings, &mut lower)?;
             // Lowerar body (ou guards).
+            lower.emitted_tail_call = false;
             let result = lower_clause_body(clause, &mut lower)?;
-            lower.builder.ins().return_(&[result]);
+            if !lower.emitted_tail_call {
+                lower.builder.ins().return_(&[result]);
+            }
         } else {
-            // Múltiplas cláusulas: branch chain.
-            let result = lower_clause_chain(&func.clauses, &params, &mut lower)?;
-            lower.builder.ins().return_(&[result]);
+            // Múltiplas cláusulas: branch chain (cada cláusula emite return_ direto).
+            lower_clause_chain(&func.clauses, &params, &mut lower)?;
         }
 
         builder.finalize();
@@ -590,12 +597,7 @@ fn lower_clause_chain(
     clauses: &[TypedLambdaClause],
     params: &[cranelift_codegen::ir::Value],
     lower: &mut LowerCtx,
-) -> Result<cranelift_codegen::ir::Value, CodegenError> {
-    let ret_clif = ty_to_clif(&clauses[0].body.node.ty);
-
-    let cont_block = lower.builder.create_block();
-    lower.builder.append_block_param(cont_block, ret_clif);
-
+) -> Result<(), CodegenError> {
     let mut next_clause_block = lower.builder.create_block();
     lower.builder.ins().jump(next_clause_block, &[]);
     lower.builder.seal_block(next_clause_block);
@@ -634,11 +636,13 @@ fn lower_clause_chain(
         lower_with_bindings(&clause.with_bindings, lower)?;
 
         // Lowera o body (com ou sem guards).
+        // Se o body é um tail call (return_call), lower_expr emite return_call
+        // e seta emitted_tail_call — não emitir return_ depois.
+        lower.emitted_tail_call = false;
         let body_val = lower_clause_body(clause, lower)?;
-        lower
-            .builder
-            .ins()
-            .jump(cont_block, &[BlockArg::Value(body_val)]);
+        if !lower.emitted_tail_call {
+            lower.builder.ins().return_(&[body_val]);
+        }
     }
 
     // Nenhuma cláusula encaixou — runtime trap (não deveria acontecer se
@@ -650,10 +654,7 @@ fn lower_clause_chain(
         .trap(cranelift_codegen::ir::TrapCode::user(1).unwrap());
     // next_clause_block já foi selado dentro do loop.
 
-    lower.builder.seal_block(cont_block);
-    lower.builder.switch_to_block(cont_block);
-    let result = lower.builder.block_params(cont_block)[0];
-    Ok(result)
+    Ok(())
 }
 
 /// Testa patterns de uma cláusula contra os parâmetros.
@@ -752,6 +753,12 @@ struct LowerCtx<'a, 'b> {
     string_table: &'a mut StringTable,
     var_map: HashMap<String, cranelift_frontend::Variable>,
     anon_counter: u32,
+    /// Flag: se `true`, o último `lower_expr` emitiu um `return_call` (tail call).
+    /// O caller NÃO deve emitir `return_` depois — a função já terminou.
+    emitted_tail_call: bool,
+    /// Se `true`, tail calls estão desabilitados (entry point usa SystemV,
+    /// não pode fazer return_call para funções Kata com CallConv::Tail).
+    no_tail_calls: bool,
 }
 
 impl<'a, 'b> LowerCtx<'a, 'b> {
@@ -896,7 +903,7 @@ fn lower_expr(
             }
 
             if let Some(sym_name) = ffi_symbol {
-                // Call FFI direto.
+                // Call FFI direto — FFI nunca é tail call (CallConv::SystemV).
                 let func_ref = ctx
                     .ffi_refs
                     .get(sym_name)
@@ -909,6 +916,20 @@ fn lower_expr(
                 if let TypedExprKind::Ident { name } = &callee.node.kind {
                     if let Some(&func_ref) = ctx.kata_refs.get(name) {
                         // Call direto para função Kata nomeada.
+                        if expr.tail_pos && !ctx.no_tail_calls {
+                            // Tail call: emite return_call (TCO via Cranelift).
+                            ctx.builder.ins().return_call(func_ref, &arg_values);
+                            ctx.emitted_tail_call = true;
+                            // return_call é terminador — não pode adicionar instruções depois.
+                            // Criar block dummy unreachable para satisfazer o builder:
+                            // todo block precisa de um terminador, mesmo que inalcançável.
+                            let dummy = ctx.builder.create_block();
+                            ctx.builder.switch_to_block(dummy);
+                            ctx.builder.seal_block(dummy);
+                            let val = ctx.builder.ins().iconst(I64, 0);
+                            ctx.builder.ins().return_(&[val]);
+                            return Ok(val);
+                        }
                         let call_inst = ctx.builder.ins().call(func_ref, &arg_values);
                         return Ok(ctx.builder.inst_results(call_inst)[0]);
                     }
@@ -920,12 +941,27 @@ fn lower_expr(
                         // O tipo do callee é Ty::Function(params, ret).
                         let callee_ty = &callee.node.ty;
                         if let Ty::Function(param_types, ret_ty) = callee_ty {
-                            let mut sig = Signature::new(CallConv::SystemV);
+                            let mut sig = Signature::new(CallConv::Tail);
                             for pt in param_types {
                                 sig.params.push(AbiParam::new(ty_to_clif(pt)));
                             }
                             sig.returns.push(AbiParam::new(ty_to_clif(ret_ty)));
                             let sig_ref = ctx.builder.func.import_signature(sig);
+                            if expr.tail_pos && !ctx.no_tail_calls {
+                                // Tail call indireto: return_call_indirect.
+                                ctx.builder.ins().return_call_indirect(
+                                    sig_ref,
+                                    func_ptr,
+                                    &arg_values,
+                                );
+                                ctx.emitted_tail_call = true;
+                                let dummy = ctx.builder.create_block();
+                                ctx.builder.switch_to_block(dummy);
+                                ctx.builder.seal_block(dummy);
+                                let val = ctx.builder.ins().iconst(I64, 0);
+                                ctx.builder.ins().return_(&[val]);
+                                return Ok(val);
+                            }
                             let call_inst =
                                 ctx.builder
                                     .ins()
@@ -1035,7 +1071,7 @@ fn lower_expr(
             };
 
             // Declara a função anônima.
-            let mut sig = Signature::new(CallConv::SystemV);
+            let mut sig = Signature::new(CallConv::Tail);
             for pt in param_types {
                 sig.params.push(AbiParam::new(ty_to_clif(pt)));
             }
@@ -1056,7 +1092,7 @@ fn lower_expr(
             {
                 let mut ctx2 = ctx.module.make_context();
                 let func_ir = &mut ctx2.func;
-                let mut sig2 = Signature::new(CallConv::SystemV);
+                let mut sig2 = Signature::new(CallConv::Tail);
                 for pt in param_types {
                     sig2.params.push(AbiParam::new(ty_to_clif(pt)));
                 }
@@ -1098,6 +1134,8 @@ fn lower_expr(
                     string_table: ctx.string_table,
                     var_map: HashMap::new(),
                     anon_counter: 0,
+                    emitted_tail_call: false,
+                    no_tail_calls: false,
                 };
 
                 // Lowera as cláusulas do lambda.
@@ -1105,11 +1143,14 @@ fn lower_expr(
                     let clause = &clauses[0];
                     bind_patterns_to_params(&clause.patterns, &params, &mut lower2);
                     lower_with_bindings(&clause.with_bindings, &mut lower2)?;
+                    lower2.emitted_tail_call = false;
                     let result = lower_clause_body(clause, &mut lower2)?;
-                    lower2.builder.ins().return_(&[result]);
+                    if !lower2.emitted_tail_call {
+                        lower2.builder.ins().return_(&[result]);
+                    }
                 } else {
-                    let result = lower_clause_chain(clauses, &params, &mut lower2)?;
-                    lower2.builder.ins().return_(&[result]);
+                    // Múltiplas cláusulas: branch chain (cada cláusula emite return_ direto).
+                    lower_clause_chain(clauses, &params, &mut lower2)?;
                 }
 
                 builder2.finalize();
@@ -1354,8 +1395,21 @@ pub struct JitResult {
 /// lower_module → finalize_definitions → get_finalized_function →
 /// transmutar → executar.
 pub fn jit_eval(typed: &TypedModule) -> Result<JitResult, CodegenError> {
-    let mut builder = cranelift_jit::JITBuilder::new(cranelift_module::default_libcall_names())
-        .map_err(|e| CodegenError::Cranelift(format!("JITBuilder: {e}")))?;
+    // Configura preserve_frame_pointers = true (necessário para CallConv::Tail / return_call).
+    let mut flags_builder = cranelift_codegen::settings::builder();
+    flags_builder
+        .set("preserve_frame_pointers", "true")
+        .map_err(|e| CodegenError::Cranelift(format!("set preserve_frame_pointers: {e}")))?;
+    let flags = cranelift_codegen::settings::Flags::new(flags_builder);
+
+    let isa_builder = cranelift_native::builder()
+        .map_err(|e| CodegenError::Cranelift(format!("native isa builder: {e}")))?;
+    let isa = isa_builder
+        .finish(flags)
+        .map_err(|e| CodegenError::Cranelift(format!("isa finish: {e}")))?;
+
+    let mut builder =
+        cranelift_jit::JITBuilder::with_isa(isa, cranelift_module::default_libcall_names());
 
     register_ffi_symbols(&mut builder);
 
