@@ -22,6 +22,7 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
         signatures,
         enum_registry: prelude.enum_registry,
         functions: user.functions,
+        actions: user.actions,
     }
 }
 

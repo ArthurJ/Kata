@@ -70,7 +70,19 @@ fn assert_no_holes(expr: &Spanned<Expr>) {
         | Expr::TextLit { .. }
         | Expr::Ident { .. }
         | Expr::Unit
-        | Expr::VariantQual { .. } => {}
+        | Expr::VariantQual { .. }
+        | Expr::Break
+        | Expr::Continue => {}
+        // Fio 3: novos nós — recursão nos filhos
+        Expr::ActionCall { args, .. } => assert_no_holes(args),
+        Expr::Return(inner) => assert_no_holes(inner),
+        Expr::Loop { body } => body.iter().for_each(assert_no_holes),
+        Expr::Var { value, .. } => assert_no_holes(value),
+        Expr::Question(inner) => assert_no_holes(inner),
+        Expr::PipeFallback { lhs, rhs } => {
+            assert_no_holes(lhs);
+            assert_no_holes(rhs);
+        }
     }
 }
 
@@ -118,7 +130,19 @@ fn assert_no_pipes(expr: &Spanned<Expr>) {
         | Expr::TextLit { .. }
         | Expr::Ident { .. }
         | Expr::Unit
-        | Expr::VariantQual { .. } => {}
+        | Expr::VariantQual { .. }
+        | Expr::Break
+        | Expr::Continue => {}
+        // Fio 3: novos nós — recursão nos filhos
+        Expr::ActionCall { args, .. } => assert_no_pipes(args),
+        Expr::Return(inner) => assert_no_pipes(inner),
+        Expr::Loop { body } => body.iter().for_each(assert_no_pipes),
+        Expr::Var { value, .. } => assert_no_pipes(value),
+        Expr::Question(inner) => assert_no_pipes(inner),
+        Expr::PipeFallback { lhs, rhs } => {
+            assert_no_pipes(lhs);
+            assert_no_pipes(rhs);
+        }
     }
 }
 

@@ -261,6 +261,109 @@ pub(crate) fn infer_expr_hinted(
         Expr::Match { scrutinee, arms } => {
             infer_match(scrutinee, arms, span, env, table, enum_registry, tail_pos)?
         }
+
+        // ── Fio 3: ActionCall — dispatch para Action builtin ou definida ──
+        Expr::ActionCall { callee, args } => {
+            // Lowera a tupla de argumentos.
+            let typed_args = infer_expr(&args.node, &args.span, env, table, enum_registry, false)?;
+            // Extrai tipos dos elementos da tupla para dispatch.
+            let arg_tys: Vec<Ty> = match &typed_args.kind {
+                TypedExprKind::Tuple { elements } => {
+                    elements.iter().map(|e| e.node.ty.clone()).collect()
+                }
+                TypedExprKind::Unit => Vec::new(), // `!()` = tupla vazia
+                _ => vec![typed_args.ty.clone()], // args não-tupla (não deveria acontecer)
+            };
+
+            // Resolve no DispatchTable.
+            let overload = table.resolve(callee, &arg_tys).map_err(|e| {
+                super::helpers::dispatch_to_middle_error(e, *span)
+            })?;
+
+            // Verifica que é uma Action (is_action = true).
+            if !overload.is_action {
+                return Err(MiddleError::TypeMismatch {
+                    expected: format!("Action `{callee}` (is_action=true)"),
+                    found: format!("função pura `{callee}` — use sem `!`"),
+                    span: (*span).into(),
+                });
+            }
+
+            (
+                overload.ret,
+                TypedExprKind::ActionCall {
+                    callee: callee.clone(),
+                    args: Box::new(Spanned::new(typed_args, args.span)),
+                    caller_arena: 0, // placeholder — preenchido no codegen
+                    ffi_symbol: overload
+                        .ffi_symbol
+                        .clone()
+                        .filter(|s| overload.is_action),
+                },
+                Effect::Puro, // Fio 3 não ativa Effect
+            )
+        }
+
+        // ── Fio 3: var — binding mutável (exclusivo de Actions) ──
+        Expr::Var { name, value } => {
+            let typed_value = infer_expr(&value.node, &value.span, env, table, enum_registry, false)?;
+            let val_ty = typed_value.ty.clone();
+            env.define(name, val_ty);
+            (
+                Ty::Unit,
+                TypedExprKind::Var {
+                    name: name.clone(),
+                    value: Box::new(Spanned::new(typed_value, value.span)),
+                },
+                Effect::Puro,
+            )
+        }
+
+        // ── Fio 3: return/loop/break/continue — Fase 2 e 4 ──
+        Expr::Return(_) => {
+            return Err(MiddleError::TypeMismatch {
+                expected: "expressão (return em Actions — Fase 2)".into(),
+                found: "Return".into(),
+                span: (*span).into(),
+            });
+        }
+        Expr::Loop { .. } => {
+            return Err(MiddleError::TypeMismatch {
+                expected: "expressão (loop em Actions — Fase 4)".into(),
+                found: "Loop".into(),
+                span: (*span).into(),
+            });
+        }
+        Expr::Break => {
+            return Err(MiddleError::TypeMismatch {
+                expected: "expressão (break em Actions — Fase 4)".into(),
+                found: "Break".into(),
+                span: (*span).into(),
+            });
+        }
+        Expr::Continue => {
+            return Err(MiddleError::TypeMismatch {
+                expected: "expressão (continue em Actions — Fase 4)".into(),
+                found: "Continue".into(),
+                span: (*span).into(),
+            });
+        }
+
+        // ── Fio 3: Question e PipeFallback — desugar é Fase 7 e 8 ──
+        Expr::Question(_) => {
+            return Err(MiddleError::TypeMismatch {
+                expected: "expressão (? desugar — Fase 7)".into(),
+                found: "Question".into(),
+                span: (*span).into(),
+            });
+        }
+        Expr::PipeFallback { .. } => {
+            return Err(MiddleError::TypeMismatch {
+                expected: "expressão (| desugar — Fase 8)".into(),
+                found: "PipeFallback".into(),
+                span: (*span).into(),
+            });
+        }
     };
 
     Ok(TypedExpr {

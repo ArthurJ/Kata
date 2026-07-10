@@ -2,7 +2,7 @@
 
 use kata_ast::{
     Directive, DirectiveArg, DirectiveValue, Expr, FieldDecl, Item, LambdaClause, Module, Spanned,
-    Token, VariantDecl,
+    Token, TypeExpr, VariantDecl,
 };
 use kata_diagnostics::FrontendError;
 
@@ -43,6 +43,10 @@ impl Parser {
                 }
                 Token::Enum => {
                     let item = self.parse_enum_decl(directives)?;
+                    items.push(Spanned::new(item, item_start));
+                }
+                Token::Action => {
+                    let item = self.parse_action_decl(directives)?;
                     items.push(Spanned::new(item, item_start));
                 }
                 Token::Let => {
@@ -486,6 +490,81 @@ impl Parser {
             name,
             variants,
             directives,
+        })
+    }
+
+    /// Parse `action nome (params) -> ret` com body indentado.
+    ///
+    /// Sintaxe:
+    /// ```text
+    /// action greet
+    ///     echo!("hello")
+    ///     echo!("world")
+    /// ```
+    ///
+    /// Sem parênteses de params = Action sem parâmetros.
+    /// Sem `-> ret` = retorno Unit (padrão).
+    fn parse_action_decl(&mut self, directives: Vec<Directive>) -> Result<Item, FrontendError> {
+        self.expect(&Token::Action, "`action`")?;
+        let name = match self.peek() {
+            Token::Ident(s) => {
+                let n = s.clone();
+                self.advance();
+                n
+            }
+            _ => return Err(self.error("action name")),
+        };
+
+        // Params opcionais: `action nome (T1 T2) -> Ret`
+        // ou `action nome -> Ret`
+        let mut params = Vec::new();
+        let ret;
+
+        if matches!(self.peek(), Token::LParen) {
+            self.advance(); // consume (
+            // Parse type params until )
+            while !matches!(self.peek(), Token::RParen | Token::Eof) {
+                params.push(self.parse_type_expr()?);
+            }
+            self.expect(&Token::RParen, "`)` (action params)")?;
+
+            // `->` Ret
+            if matches!(self.peek(), Token::ThinArrow) {
+                self.advance();
+                ret = self.parse_type_expr()?;
+            } else {
+                // Sem `->` = Unit
+                ret = Spanned::new(TypeExpr::Unit, self.peek_span());
+            }
+        } else if matches!(self.peek(), Token::ThinArrow) {
+            self.advance();
+            ret = self.parse_type_expr()?;
+        } else {
+            // Sem params, sem `->` = Action sem parâmetros, retorna Unit
+            ret = Spanned::new(TypeExpr::Unit, self.peek_span());
+        }
+
+        // Body indentado
+        self.expect(&Token::Indent, "INDENT (action body)")?;
+        let mut body = Vec::new();
+        loop {
+            while matches!(self.peek(), Token::StmtSep | Token::Semicolon) {
+                self.advance();
+            }
+            if matches!(self.peek(), Token::Dedent | Token::Eof) {
+                break;
+            }
+            let stmt = parse_expr(self)?;
+            body.push(stmt);
+        }
+        self.expect(&Token::Dedent, "DEDENT (fim do action body)")?;
+
+        Ok(Item::ActionDecl {
+            name,
+            params,
+            ret,
+            directives,
+            body,
         })
     }
 }

@@ -7,7 +7,7 @@
 
 pub mod prelude;
 
-use kata_ast::{Item, LambdaClause, Module, Spanned, TypeExpr};
+use kata_ast::{Expr, Item, LambdaClause, Module, Spanned, TypeExpr};
 use kata_core::{EnumRegistry, PrimTy, Ty, TypeEnv};
 
 /// Resultado da resolution — TypeEnv populado + assinaturas coletadas.
@@ -20,6 +20,8 @@ pub struct ResolvedModule {
     /// Funções nomeadas com corpo Kata (Fio 2 Fase 10).
     /// Cada entrada preserva as cláusulas lambda para o inference processar.
     pub functions: Vec<FunctionDef>,
+    /// Actions definidas no módulo (Fio 3).
+    pub actions: Vec<ActionDef>,
 }
 
 /// Assinatura de função coletada no Pass 1.
@@ -31,6 +33,9 @@ pub struct Signature {
     pub ffi_symbol: Option<String>,
     pub is_associative: bool,
     pub associative_neutral: Option<i64>,
+    /// Se `true`, esta assinatura é uma Action (Fio 3).
+    /// Actions são chamadas com `!` e têm `is_action = true` no DispatchTable.
+    pub is_action: bool,
 }
 
 /// Definição de função nomeada com corpo Kata (não-FFI).
@@ -46,6 +51,18 @@ pub struct FunctionDef {
     pub clauses: Vec<Spanned<LambdaClause>>,
 }
 
+/// Definição de Action com body Kata (Fio 3).
+///
+/// Produzida no resolution quando `Item::ActionDecl` é encontrado.
+/// O inference consome o body e produz `TypedAction`.
+#[derive(Debug, Clone)]
+pub struct ActionDef {
+    pub name: String,
+    pub param_types: Vec<Ty>,
+    pub return_type: Ty,
+    pub body: Vec<Spanned<Expr>>,
+}
+
 /// Erro de resolution (wrapped FrontendError/MiddleError).
 #[derive(Debug, Clone)]
 pub enum ResolveError {
@@ -59,6 +76,7 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
     let mut type_env = TypeEnv::new();
     let mut signatures: Vec<Signature> = Vec::new();
     let mut functions: Vec<FunctionDef> = Vec::new();
+    let mut actions: Vec<ActionDef> = Vec::new();
     let mut enum_registry = EnumRegistry::new();
     let errors: Vec<ResolveError> = Vec::new();
 
@@ -82,61 +100,85 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
 
     // Pass 1: coleta assinaturas de funções
     for item in &module.items {
-        if let Item::Sig {
-            name,
-            params,
-            ret,
-            directives,
-            body,
-        } = &item.node
-        {
-            // Converte TypeExpr → Ty
-            let param_types: Vec<Ty> = params
-                .iter()
-                .map(|t| resolve_type_expr(&t.node, &type_env))
-                .collect();
-            let return_type = resolve_type_expr(&ret.node, &type_env);
+        match &item.node {
+            Item::Sig {
+                name,
+                params,
+                ret,
+                directives,
+                body,
+            } => {
+                // Converte TypeExpr → Ty
+                let param_types: Vec<Ty> = params
+                    .iter()
+                    .map(|t| resolve_type_expr(&t.node, &type_env))
+                    .collect();
+                let return_type = resolve_type_expr(&ret.node, &type_env);
 
-            // Extrai metadados de diretivas
-            let mut ffi_symbol = None;
-            let mut is_associative = false;
-            let mut associative_neutral = None;
+                // Extrai metadados de diretivas
+                let mut ffi_symbol = None;
+                let mut is_associative = false;
+                let mut associative_neutral = None;
 
-            for d in directives {
-                match d.name.as_str() {
-                    "ffi" => {
-                        if let Some(kata_ast::DirectiveArg::Str(s)) = d.args.first() {
-                            ffi_symbol = Some(s.clone());
+                for d in directives {
+                    match d.name.as_str() {
+                        "ffi" => {
+                            if let Some(kata_ast::DirectiveArg::Str(s)) = d.args.first() {
+                                ffi_symbol = Some(s.clone());
+                            }
                         }
-                    }
-                    "associative" => {
-                        is_associative = true;
-                        if let Some(kata_ast::DirectiveArg::Int(n)) = d.args.first() {
-                            associative_neutral = Some(*n);
+                        "associative" => {
+                            is_associative = true;
+                            if let Some(kata_ast::DirectiveArg::Int(n)) = d.args.first() {
+                                associative_neutral = Some(*n);
+                            }
                         }
+                        _ => {}
                     }
-                    _ => {}
                 }
-            }
 
-            // Se tem corpo Kata (cláusulas lambda), preserva para o inference.
-            if let Some(clauses) = body {
-                functions.push(FunctionDef {
+                // Se tem corpo Kata (cláusulas lambda), preserva para o inference.
+                if let Some(clauses) = body {
+                    functions.push(FunctionDef {
+                        name: name.clone(),
+                        param_types: param_types.clone(),
+                        return_type: return_type.clone(),
+                        clauses: clauses.clone(),
+                    });
+                }
+
+                signatures.push(Signature {
                     name: name.clone(),
-                    param_types: param_types.clone(),
-                    return_type: return_type.clone(),
-                    clauses: clauses.clone(),
+                    param_types,
+                    return_type,
+                    ffi_symbol,
+                    is_associative,
+                    associative_neutral,
+                    is_action: false,
                 });
             }
+            Item::ActionDecl {
+                name,
+                params,
+                ret,
+                body,
+                ..
+            } => {
+                // Converte TypeExpr → Ty para os parâmetros e retorno.
+                let param_types: Vec<Ty> = params
+                    .iter()
+                    .map(|t| resolve_type_expr(&t.node, &type_env))
+                    .collect();
+                let return_type = resolve_type_expr(&ret.node, &type_env);
 
-            signatures.push(Signature {
-                name: name.clone(),
-                param_types,
-                return_type,
-                ffi_symbol,
-                is_associative,
-                associative_neutral,
-            });
+                actions.push(ActionDef {
+                    name: name.clone(),
+                    param_types,
+                    return_type,
+                    body: body.clone(),
+                });
+            }
+            _ => {}
         }
     }
 
@@ -149,6 +191,7 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
         signatures,
         enum_registry,
         functions,
+        actions,
     })
 }
 
@@ -407,14 +450,12 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<ResolveError>> {
             false,
             None,
         ),
-        // I/O
-        sig(
+        // I/O — echo é uma Action builtin (Fio 3)
+        sig_action(
             "echo",
             vec![Ty::text()],
             Ty::Unit,
             "kata_rt_print",
-            false,
-            None,
         ),
         // Show
         sig(
@@ -440,6 +481,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<ResolveError>> {
         signatures,
         enum_registry,
         functions: Vec::new(),
+        actions: Vec::new(),
     })
 }
 
@@ -459,5 +501,19 @@ fn sig(
         ffi_symbol: Some(ffi.to_string()),
         is_associative: assoc,
         associative_neutral: neutral,
+        is_action: false,
+    }
+}
+
+/// Helper para construir Signature de Action builtin (Fio 3).
+fn sig_action(name: &str, params: Vec<Ty>, ret: Ty, ffi: &str) -> Signature {
+    Signature {
+        name: name.to_string(),
+        param_types: params,
+        return_type: ret,
+        ffi_symbol: Some(ffi.to_string()),
+        is_associative: false,
+        associative_neutral: None,
+        is_action: true,
     }
 }

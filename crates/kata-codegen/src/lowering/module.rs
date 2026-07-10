@@ -5,12 +5,13 @@
 
 use std::collections::HashMap;
 
+use cranelift_codegen::ir::types::I64;
 use cranelift_codegen::ir::{AbiParam, InstBuilder, Signature};
 use cranelift_codegen::isa::CallConv;
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_module::{Linkage, Module};
 use kata_core::ty::Ty;
-use kata_inference::{TypedFunction, TypedLambdaClause, TypedModule};
+use kata_inference::{TypedAction, TypedFunction, TypedLambdaClause, TypedModule};
 
 use super::clause::{
     all_patterns_are_ident, bind_patterns_to_params, lower_clause_body, lower_clause_chain,
@@ -69,6 +70,16 @@ pub(crate) fn lower_module(
 
     for func in &typed.functions {
         define_kata_function(func, module, ffi_ids, &symbol_table, &mut string_table)?;
+    }
+
+    // ── Fio 3: declara e define Actions antes do entry point ──
+    for action in &typed.actions {
+        let func_id = declare_kata_action(action, module)?;
+        symbol_table.insert(action.name.clone(), func_id);
+    }
+
+    for action in &typed.actions {
+        define_kata_action(action, module, ffi_ids, &symbol_table, &mut string_table)?;
     }
 
     // Determina o tipo de retorno do entry point.
@@ -156,7 +167,9 @@ pub(crate) fn lower_module(
             .declare_data(&sym, Linkage::Local, false, false)
             .map_err(|e| CodegenError::Cranelift(format!("declare_data {sym}: {e}")))?;
         let mut data_desc = cranelift_module::DataDescription::new();
-        data_desc.define(s.as_bytes().to_vec().into());
+        // Null-terminated C string: o runtime usa CStr::from_ptr.
+        let bytes = format!("{s}\0").into_bytes();
+        data_desc.define(bytes.into());
         module
             .define_data(did, &data_desc)
             .map_err(|e| CodegenError::Cranelift(format!("define_data {sym}: {e}")))?;
@@ -293,4 +306,147 @@ fn define_kata_function(
         symbol_table,
         string_table,
     )
+}
+/// Declara uma Action no JITModule (sem definir ainda).
+///
+/// A assinatura da Action é `(caller_arena: i64, arg1, ..., argN) -> ret_ty`
+/// com `CallConv::Tail` — mesmo ABI das funções nomeadas, mas com `caller_arena`
+/// como primeiro parâmetro.
+fn declare_kata_action(
+    action: &TypedAction,
+    module: &mut cranelift_jit::JITModule,
+) -> Result<cranelift_module::FuncId, CodegenError> {
+    let mut sig = Signature::new(CallConv::Tail);
+    // Primeiro parâmetro: caller_arena handle (i64).
+    sig.params.push(AbiParam::new(I64));
+    // Parâmetros da Action.
+    for pt in &action.param_types {
+        sig.params.push(AbiParam::new(ty_to_clif(pt)));
+    }
+    sig.returns.push(AbiParam::new(ty_to_clif(&action.ret_ty)));
+    module
+        .declare_function(&action.name, Linkage::Export, &sig)
+        .map_err(|e| CodegenError::Cranelift(format!("declare action {}: {e}", action.name)))
+}
+
+/// Define (compila o corpo de) uma Action.
+///
+/// Prólogo: cria `local_arena` via `kata_rt_arena_create()`.
+/// Body: lowera cada statement em sequência. O último statement é o
+/// retorno implícito da Action.
+/// Epílogo: destrói `local_arena` via `kata_rt_arena_destroy()` e `return_`.
+fn define_kata_action(
+    action: &TypedAction,
+    module: &mut cranelift_jit::JITModule,
+    ffi_ids: &HashMap<String, cranelift_module::FuncId>,
+    symbol_table: &SymbolTable,
+    string_table: &mut StringTable,
+) -> Result<(), CodegenError> {
+    let mut ctx = module.make_context();
+    let mut metadata = MetadataTable::new();
+
+    {
+        let func_ir = &mut ctx.func;
+        let mut sig = Signature::new(CallConv::Tail);
+        sig.params.push(AbiParam::new(I64)); // caller_arena
+        for pt in &action.param_types {
+            sig.params.push(AbiParam::new(ty_to_clif(pt)));
+        }
+        sig.returns.push(AbiParam::new(ty_to_clif(&action.ret_ty)));
+        func_ir.signature = sig;
+
+        // Declara FFI e funções Kata no Function.
+        let mut ffi_refs: HashMap<String, cranelift_codegen::ir::FuncRef> = HashMap::new();
+        for (fname, &fid) in ffi_ids {
+            let func_ref = module.declare_func_in_func(fid, func_ir);
+            ffi_refs.insert(fname.clone(), func_ref);
+        }
+        let mut kata_refs: HashMap<String, cranelift_codegen::ir::FuncRef> = HashMap::new();
+        for (fname, &fid) in symbol_table {
+            let func_ref = module.declare_func_in_func(fid, func_ir);
+            kata_refs.insert(fname.clone(), func_ref);
+        }
+
+        let mut func_ctx = FunctionBuilderContext::new();
+        let mut builder = FunctionBuilder::new(func_ir, &mut func_ctx);
+
+        let entry_block = builder.create_block();
+        builder.append_block_params_for_function_params(entry_block);
+        builder.switch_to_block(entry_block);
+        builder.seal_block(entry_block);
+
+        let params: Vec<cranelift_codegen::ir::Value> = builder.block_params(entry_block).to_vec();
+
+        // caller_arena é params[0]; os params da Action são params[1..].
+        let mut lower = LowerCtx {
+            builder: &mut builder,
+            module,
+            ffi_refs: &ffi_refs,
+            kata_refs: &kata_refs,
+            ffi_ids,
+            kata_ids: symbol_table,
+            metadata: &mut metadata,
+            string_table,
+            var_map: HashMap::new(),
+            anon_counter: 0,
+            emitted_tail_call: false,
+            no_tail_calls: false,
+        };
+
+        // Prólogo: cria local_arena via kata_rt_arena_create().
+        let arena_create_ref = lower
+            .ffi_refs
+            .get("kata_rt_arena_create")
+            .copied()
+            .ok_or_else(|| CodegenError::FfiSymbolNotFound("kata_rt_arena_create".into()))?;
+        let local_arena = lower.builder.ins().call(arena_create_ref, &[]);
+        let local_arena = lower.builder.inst_results(local_arena)[0];
+
+        // Liga parâmetros da Action (params[1..]) a variáveis nomeadas.
+        // O inference define params como __param_0, __param_1, ...
+        for (i, pt) in action.param_types.iter().enumerate() {
+            let clif_ty = ty_to_clif(pt);
+            let var = lower.new_var(&format!("__param_{i}"), clif_ty);
+            lower.builder.def_var(var, params[i + 1]);
+        }
+
+        // Body: lowera cada statement em sequência.
+        // O último statement é o retorno implícito.
+        let n = action.body.len();
+        let mut last_result = lower.builder.ins().iconst(I64, 0); // Unit default
+        for (i, stmt) in action.body.iter().enumerate() {
+            last_result = lower_expr(&stmt.node, &mut lower)?;
+            // Se o último statement emitiu tail call, não continuar.
+            if i == n - 1 && lower.emitted_tail_call {
+                break;
+            }
+        }
+
+        // Epílogo: destrói local_arena e retorna.
+        if !lower.emitted_tail_call {
+            let arena_destroy_ref = lower
+                .ffi_refs
+                .get("kata_rt_arena_destroy")
+                .copied()
+                .ok_or_else(|| CodegenError::FfiSymbolNotFound("kata_rt_arena_destroy".into()))?;
+            lower.builder.ins().call(arena_destroy_ref, &[local_arena]);
+            lower.builder.ins().return_(&[last_result]);
+        }
+
+        builder.finalize();
+    }
+
+    // Define a função no module.
+    let func_id = module
+        .get_name(&action.name)
+        .ok_or_else(|| CodegenError::Cranelift(format!("action {} not declared", action.name)))?;
+    let func_id = match func_id {
+        cranelift_module::FuncOrDataId::Func(fid) => fid,
+        _ => return Err(CodegenError::Cranelift(format!("{} is not a function", action.name))),
+    };
+    module
+        .define_function(func_id, &mut ctx)
+        .map_err(|e| CodegenError::Cranelift(format!("define action {}: {e}", action.name)))?;
+    module.clear_context(&mut ctx);
+    Ok(())
 }

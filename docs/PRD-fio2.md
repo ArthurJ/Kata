@@ -199,8 +199,11 @@ avaliados antes dos guards e estão disponíveis em todo o escopo da cláusula.
   como `where` em Haskell).
 - Em Fio 2, `with` também é usado para restrições de genéricos (placeholder —
   genéricos são Fio 7; o parser reconhece, o typeck ignora as restrições).
-- Semântica: açúcar sintático para `let` chain no escopo da cláusula. O
-  typeck desugars `with` para `let` bindings antes de processar os guards.
+- Semântica: equivalente a `let` chain no escopo da cláusula. O typeck infere
+  cada binding e registra no `TypeEnv` antes de processar os guards; a TAST
+  preserva os bindings como `TypedWithBinding` na `TypedLambdaClause` (não
+  desugared para `Expr::Let` — a representação é separada mas a semântica é
+  a mesma).
 - Os bindings do `with` são imutáveis (mesma semântica de `let`).
 
 ## Crates Afetadas
@@ -983,7 +986,7 @@ funções com corpo Kata, mas o prelude continua usando `@ffi` para tudo.
     válidas em patterns e expressões.
 25. `EnumRegistry` cataloga variantes por enum e é usado para resolver
     patterns desqualificados e verificar exaustividade.
-26. Manual atualizado se implementação divergiu do PRD.
+26. Manual atualizado se implementação divergiu do PRD. `[x]`
 
 ### Inferência de tipos de parâmetros (bidirecional limitada)
 

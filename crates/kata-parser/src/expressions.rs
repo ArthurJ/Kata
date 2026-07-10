@@ -16,8 +16,13 @@ impl Parser {
                 | Token::Ident(_)
                 | Token::LParen
                 | Token::Let
+                | Token::Var
                 | Token::Lambda
                 | Token::Match
+                | Token::Return
+                | Token::Loop
+                | Token::Break
+                | Token::Continue
         )
     }
 
@@ -62,8 +67,19 @@ impl Parser {
                 Ok(Spanned::new(Expr::TextLit { text: s }, start))
             }
             Token::Let => self.parse_let(),
+            Token::Var => self.parse_var(),
             Token::Lambda => self.parse_lambda(),
             Token::Match => self.parse_match(),
+            Token::Return => self.parse_return(),
+            Token::Loop => self.parse_loop(),
+            Token::Break => {
+                self.advance();
+                Ok(Spanned::new(Expr::Break, start))
+            }
+            Token::Continue => {
+                self.advance();
+                Ok(Spanned::new(Expr::Continue, start))
+            }
             Token::LParen => self.parse_paren_expr(),
             Token::Ident(name) => {
                 self.advance();
@@ -103,6 +119,21 @@ impl Parser {
                         Expr::VariantQual {
                             enum_name: name,
                             variant,
+                        },
+                        span,
+                    ));
+                }
+                // Check for ActionCall: Ident ! (tuple)
+                // `echo!("msg")` → ActionCall { callee: "echo", args: Tuple }
+                if matches!(self.peek(), Token::Bang) {
+                    self.advance(); // consume !
+                    // `!` deve ser seguido de `(` para a tupla de argumentos.
+                    let args = self.parse_paren_expr()?;
+                    let span = start.cover(args.span);
+                    return Ok(Spanned::new(
+                        Expr::ActionCall {
+                            callee: name,
+                            args: Box::new(args),
                         },
                         span,
                     ));
@@ -328,6 +359,67 @@ impl Parser {
         }
 
         Ok(GuardClause { condition, body })
+    }
+
+    /// Parse `var nome := expr` — binding mutável (exclusivo de Actions).
+    pub(crate) fn parse_var(&mut self) -> Result<Spanned<Expr>, FrontendError> {
+        let start = self.peek_span();
+        self.expect(&Token::Var, "`var`")?;
+        let name = match self.peek() {
+            Token::Ident(s) => {
+                let n = s.clone();
+                self.advance();
+                n
+            }
+            _ => return Err(self.error("binding name after `var`")),
+        };
+        self.expect(&Token::BindAssign, "`:=`")?;
+        let value = parse_expr(self)?;
+        let span = start.cover(value.span);
+        Ok(Spanned::new(
+            Expr::Var {
+                name,
+                value: Box::new(value),
+            },
+            span,
+        ))
+    }
+
+    /// Parse `return expr` — early return (exclusivo de Actions).
+    pub(crate) fn parse_return(&mut self) -> Result<Spanned<Expr>, FrontendError> {
+        let start = self.peek_span();
+        self.expect(&Token::Return, "`return`")?;
+        let value = parse_expr(self)?;
+        let span = start.cover(value.span);
+        Ok(Spanned::new(Expr::Return(Box::new(value)), span))
+    }
+
+    /// Parse `loop` with indented body — laço infinito (exclusivo de Actions).
+    pub(crate) fn parse_loop(&mut self) -> Result<Spanned<Expr>, FrontendError> {
+        let start = self.peek_span();
+        self.expect(&Token::Loop, "`loop`")?;
+        self.expect(&Token::Indent, "INDENT (loop body)")?;
+
+        let mut body = Vec::new();
+        loop {
+            while matches!(self.peek(), Token::StmtSep | Token::Semicolon) {
+                self.advance();
+            }
+            if matches!(self.peek(), Token::Dedent | Token::Eof) {
+                break;
+            }
+            let stmt = parse_expr(self)?;
+            body.push(stmt);
+        }
+
+        self.expect(&Token::Dedent, "DEDENT (fim do loop body)")?;
+        let end_span = self
+            .tokens
+            .get(self.pos - 1)
+            .map(|t| t.span)
+            .unwrap_or(start);
+        let span = start.cover(end_span);
+        Ok(Spanned::new(Expr::Loop { body }, span))
     }
 
     /// Parse um binding do `with` block: `nome := expr`.

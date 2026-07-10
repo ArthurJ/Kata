@@ -17,14 +17,14 @@ mod lambda;
 mod partial_dispatch;
 
 use kata_ast::{Item, Module, Spanned};
-use kata_core::dispatch::DispatchTable;
+use kata_core::dispatch::{DispatchTable, OverloadInfo};
 use kata_core::enum_registry::EnumRegistry;
 use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 use kata_resolution::ResolvedModule;
 
 use crate::desugar;
-use crate::typed::{TypedExpr, TypedFunction, TypedLambdaClause, TypedModule};
+use crate::typed::{TypedAction, TypedExpr, TypedFunction, TypedLambdaClause, TypedModule};
 
 use self::apply_lambda::infer_lambda_body;
 use self::expr::infer_expr;
@@ -40,7 +40,22 @@ pub use self::helpers::InferResult;
 /// Retorna `TypedModule` ou o primeiro erro de typeck encontrado.
 pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<TypedModule> {
     // 1. Popula DispatchTable com as assinaturas (prelude + módulo)
-    let dispatch_table = populate_dispatch_table(&resolved.signatures);
+    let mut dispatch_table = populate_dispatch_table(&resolved.signatures);
+
+    // 1a. Registra Actions definidas pelo usuário no DispatchTable (is_action = true).
+    //     Actions não têm ffi_symbol (são compiladas como funções Kata).
+    for action_def in &resolved.actions {
+        dispatch_table.insert(OverloadInfo {
+            name: action_def.name.clone(),
+            params: action_def.param_types.clone(),
+            ret: action_def.return_type.clone(),
+            ffi_symbol: None,
+            is_action: true,
+            is_generic: false,
+            is_constructor: false,
+            associative_neutral: None,
+        });
+    }
 
     // 2. Clona o TypeEnv do ResolvedModule — o typeck pode adicionar bindings
     //    locais (let) sem mutar o original.
@@ -62,6 +77,14 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
             ),
         );
         typed_functions.push(typed_func);
+    }
+
+    // 3a. Processa Actions (Fio 3). Cada Action é inferida com os tipos
+    //     da assinatura. O body é uma sequência de statements.
+    let mut typed_actions: Vec<TypedAction> = Vec::new();
+    for action_def in &resolved.actions {
+        let typed_action = infer_action(action_def, &dispatch_table, &resolved.enum_registry)?;
+        typed_actions.push(typed_action);
     }
 
     // 4. Percorre items — infere cada EntryExpr em sequência.
@@ -94,6 +117,9 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
             Item::Sig { .. } | Item::DataDecl { .. } | Item::EnumDecl { .. } => {
                 // Já processado no resolution/inference de funções nomeadas.
             }
+            Item::ActionDecl { .. } => {
+                // Já processado no inference de Actions (abaixo).
+            }
         }
     }
 
@@ -108,6 +134,7 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
         dispatch_table,
         type_env,
         functions: typed_functions,
+        actions: typed_actions,
     })
 }
 
@@ -200,5 +227,63 @@ fn infer_named_function(
         param_types: param_types.clone(),
         ret_ty: ret_ty.clone(),
         clauses: typed_clauses,
+    })
+}
+
+/// Infere uma Action — produz `TypedAction` a partir de `ActionDef`.
+///
+/// O body é uma sequência de statements. Cada statement é inferido em
+/// sequência no mesmo escopo. O último statement (sem `;`) é o retorno
+/// implícito — verifica tipo contra `ret_ty`.
+fn infer_action(
+    action_def: &kata_resolution::ActionDef,
+    table: &DispatchTable,
+    enum_registry: &EnumRegistry,
+) -> InferResult<TypedAction> {
+    let param_types = &action_def.param_types;
+    let ret_ty = &action_def.return_type;
+
+    // Cria escopo para a Action.
+    let mut action_env = TypeEnv::new();
+
+    // Define parâmetros no escopo.
+    for (i, ty) in param_types.iter().enumerate() {
+        action_env.define(&format!("__param_{i}"), ty.clone());
+    }
+
+    // Infere cada statement do body em sequência.
+    // O último statement é o retorno implícito (tail_pos = true).
+    let mut typed_body: Vec<Spanned<TypedExpr>> = Vec::new();
+    let n = action_def.body.len();
+    for (i, stmt) in action_def.body.iter().enumerate() {
+        let is_last = i == n - 1;
+        let desugared = desugar::desugar(stmt);
+        let typed = infer_expr(
+            &desugared.node,
+            &desugared.span,
+            &mut action_env,
+            table,
+            enum_registry,
+            is_last, // último statement é retorno implícito (tail_pos)
+        )?;
+        typed_body.push(Spanned::new(typed, stmt.span));
+    }
+
+    // Verifica que o último statement retorna o tipo esperado.
+    if let Some(last) = typed_body.last() {
+        if last.node.ty != *ret_ty {
+            return Err(MiddleError::TypeMismatch {
+                expected: format!("{ret_ty:?}"),
+                found: format!("{:?}", last.node.ty),
+                span: last.span.into(),
+            });
+        }
+    }
+
+    Ok(TypedAction {
+        name: action_def.name.clone(),
+        param_types: param_types.clone(),
+        ret_ty: ret_ty.clone(),
+        body: typed_body,
     })
 }

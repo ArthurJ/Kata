@@ -1689,6 +1689,37 @@ Sem `if/else`, a Kata-Lang usa pattern matching estrutural e guards condicionais
   retorna.
 * **`otherwise:`** Fallback mandatário no fim de qualquer corrente de Guards.
 
+### 16.1 `with` Block — Computações Prévias
+
+`with` é um bloco de bindings nomeados que aparece **depois dos guards** no fim
+da cláusula lambda (como `where` em Haskell). Os bindings são visíveis em
+**todos os guards da cláusula**, mesmo sendo escritos depois — a ordem é visual
+(legibilidade), a semântica é que os bindings são avaliados antes dos guards.
+
+```kata
+classify :: Int => Text
+lambda x:
+    > doubled 10: "grande"
+    otherwise: "pequeno"
+    with
+        doubled := * x 2
+```
+
+* **Sintaxe:** `with` seguido de bindings indentados (`nome := expr`, sem keyword
+  `let`). A ausência de `let` é visual — distingue o bloco `with` do corpo
+  principal da cláusula.
+* **Avaliação:** Os bindings são avaliados antes dos guards, em ordem top-down.
+* **Escopo:** Bindings do `with` são visíveis em todos os guards da cláusula
+  (não apenas nos que vêm depois — `with` é pós-escrito mas pré-avaliado).
+* **Imutabilidade:** Os bindings são imutáveis (mesma semântica de `let`).
+* **Representação na TAST:** Os bindings são preservados como
+  `TypedWithBinding` na `TypedLambdaClause` (não desugared para `let` — o
+  typeck infere cada binding e registra no escopo antes de processar os
+  guards; o codegen os lowera antes do body da cláusula).
+
+`with` também é usado para restrições de genéricos (placeholder — genéricos são
+Fio 7; o parser reconhece, o typeck ignora as restrições em Fio 2).
+
 ## 17. Aridade Estrita e Aplicação Parcial (Currying)
 
 * **Funções Puras:** Aridade fixa, conhecida estaticamente. Variádicas proibidas.

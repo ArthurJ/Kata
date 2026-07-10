@@ -115,6 +115,29 @@ pub enum TypedExprKind {
         scrutinee: Box<Spanned<TypedExpr>>,
         arms: Vec<TypedMatchArm>,
     },
+
+    // ── Fio 3: Actions, var ──────────────────────────────────────
+
+    /// Chamada de Action (`nome!(args)`).
+    /// O codegen emite call para a função Cranelift da Action, passando
+    /// caller_arena handle como primeiro parâmetro implícito.
+    ActionCall {
+        callee: String,
+        args: Box<Spanned<TypedExpr>>,
+        /// caller_arena handle para a Action chamada alocar retornos.
+        /// É o local_arena do caller (que se torna caller_arena do callee).
+        caller_arena: i64,
+        /// Símbolo FFI se a Action é builtin (ex: "kata_rt_print" para echo).
+        /// None para Actions definidas pelo usuário (despacha via kata_refs).
+        ffi_symbol: Option<String>,
+    },
+
+    /// `var nome := expr` — binding mutável.
+    /// Semântica igual a `Let` na TAST (o codegen trata a mutabilidade).
+    Var {
+        name: String,
+        value: Box<Spanned<TypedExpr>>,
+    },
 }
 
 /// Informação sobre uma variável capturada por uma closure.
@@ -220,6 +243,9 @@ pub struct TypedModule {
     /// Funções nomeadas com corpo Kata (não-FFI), já tipadas.
     /// Cada função vira uma função Cranelift separada no codegen.
     pub functions: Vec<TypedFunction>,
+    /// Actions tipadas (Fio 3). Cada Action vira uma função Cranelift
+    /// com ABI estendido (caller_arena handle como primeiro param).
+    pub actions: Vec<TypedAction>,
 }
 
 /// Função nomeada tipada — pronta para o codegen.
@@ -237,4 +263,21 @@ pub struct TypedFunction {
     pub ret_ty: Ty,
     /// Cláusulas tipadas (padrões + corpo + guards + with bindings).
     pub clauses: Vec<TypedLambdaClause>,
+}
+
+/// Action tipada — pronta para o codegen (Fio 3).
+///
+/// Produzida pelo inference quando `ActionDef` (do resolution) é encontrado.
+/// O codegen declara uma função Cranelift com ABI estendido:
+/// `(caller_arena: i64, arg1, ...) -> ret_ty`.
+#[derive(Debug, Clone)]
+pub struct TypedAction {
+    /// Nome da Action no JITModule.
+    pub name: String,
+    /// Tipos dos parâmetros (elementos da tupla de argumentos).
+    pub param_types: Vec<Ty>,
+    /// Tipo de retorno.
+    pub ret_ty: Ty,
+    /// Body da Action (statements sequenciais).
+    pub body: Vec<Spanned<TypedExpr>>,
 }

@@ -40,7 +40,7 @@ correta e não retrofitted.
 | `effect: Effect` na TAST | Fio 2 | Puro/IO/Spawn/ChannelOp |
 | `Ty::Sum` com payload | Fio 4 | `Ok(T)`, `Some(T)`, variantes com dados |
 | `::` em type params (`Result::(T, E)`) | Fio 4 | Enums genéricos (params posicionais, não interfaces) |
-| Smart constructor synthesis (falível) | Fio 4 | Construtores de enum predicado (reusado em Fio 6 para refined) |
+| Smart constructor synthesis (falível) | Fio 6 | Construtores de enum predicado e refined types (reusa Hole de Fio 2 + Result de Fio 4) |
 | `Ty::Struct` com campos, `Ty::Tuple` | Fio 5 | Data com campos, tuples |
 | `::` em campos de struct (`nome::Text`) | Fio 5 | Structs |
 | Smart constructor synthesis (infalível) | Fio 5 | Construtores de struct |
@@ -51,7 +51,7 @@ correta e não retrofitted.
 | `::` em ascription de expressão (`expr::Type`) | Fio 6 | Ascription |
 | Avaliação constante de predicados (typeck local) | Fio 6 | `5::PositiveInt` valida `> _ 0` em compile-time |
 | Ret-directed dispatch (hint de retorno) | Fio 6 | `(/ 1 3)::Int` seleciona sobrecarga por retorno |
-| `escape: EscapeKind` na TAST | Fio 9 | Escape analysis |
+| `escape: EscapeKind` na TAST | Fio 9 | Escape analysis (definido em kata-core, não inference, para evitar dependência circular) |
 | `capture: Vec<CaptureInfo>` na TAST | Fio 9 | Closures com captura |
 | `CaptureStorage` Stack/Heap | Fio 9 | Escape analysis promoção |
 
@@ -98,7 +98,8 @@ Fio 1: Fundação + Aritmética + CLI
 │       Maquinaria: escape, capture, CaptureStorage
 │
 ├── Fio 3: Actions, return, ;, Caller's Arena
-│   │   (action, !, var, loop, for, break, continue, return, ;, ?, arena)
+│   │   (action, !, var, loop, break, continue, return, ;, ?, arena)
+│   │   (`for` adiada para Fio 7+8)
 │   │
 │   └── Fio 11: CSP, Scheduler Multithread
 │       │   (channel!, queue!, broadcast!, fork!, select, timeout, @parallel)
@@ -107,13 +108,15 @@ Fio 1: Fundação + Aritmética + CLI
 │           (@log telemetria via CSP, @test positivo/negativo, kata test)
 │
 ├── Fio 4: Enum Avançado — Payload, Result, Optional, |
-│   │   (variantes com payload, Result::(T, E), Optional::T, |, variantes
-│   │    predicadas, match general case, panic!, assert!)
-│   │   Maquinaria: Ty::Sum com payload, :: em type params, smart constructor
-│   │              falível, match general case
+│   │   (variantes com payload, Result::(T, E), Optional::T, |,
+│   │    match general case, panic!, assert!)
+│   │   (variantes predicadas adiadas para Fio 6)
+│   │   Maquinaria: Ty::Sum com payload, :: em type params, match
+│   │              general case
 │   │
 │   └── Fio 8: Coleções, ITERABLE, Stream Fusion
-│       │   (List, Array, Range, map/filter/fold, .N, len, INDEXABLE, COUNTABLE)
+│       │   (List, Array, Range, map/filter/fold, .N, len, INDEXABLE,
+│       │    COUNTABLE, `for x in` iteration)
 │       │
 │       └── Fio 13: Dict, Set (HAMT)
 │
@@ -269,7 +272,7 @@ params do hint. `LambdaInferenceFail` quando nenhum mecanismo resolve.
 **Features:**
 - `action` declaração, `!` sufixo de chamada
 - `var` (binding mutável, exclusivo de Actions)
-- `loop`, `for`, `break`, `continue`
+- `loop`, `break`, `continue` (`for` adiada para Fio 7+8)
 - `return` (early return explícito, caller's arena)
 - `;` (terminador de statement, retorno implícito vs Unit)
 - `?` (fail-fast, injeta `return Err(e)`)
@@ -296,27 +299,24 @@ use-after-free (caller's arena). `?` propaga erro corretamente.
 - `::` em type params (`Result::(T, E)`) — typeck resolve params posicionais
 - Match general case (3+ variantes com switch/branch chain) — match em 2
   variantes já funciona de Fio 2; general case é 3+
-- Smart constructor synthesis falível — variantes predicadas (`enum IMC` com
-  `Magreza(< _ 18.5)`) geram construtor que despacha para a variante cujo
-  predicado satisfaz. Reusa Hole de Fio 2 e `Result` (definido neste fio).
-  Esta maquinaria é reusada em Fio 6 para refined types.
+- (Smart constructor synthesis falível adiado para Fio 6)
 
 **Features:**
 - Variantes com payload (`Ok(T)`, `Some(T)`, `Aprovada(Valor)`)
 - Sum com payload = sempre ponteiro (invariante de codegen)
 - `Result::(T, E)`, `Optional::T` (definidos no prelude)
 - `|` (fallback local, generalizado para qualquer enum com payload)
-- Variantes predicadas (`enum IMC`, smart constructors falíveis)
+- (Variantes predicadas adiadas para Fio 6)
 - Match general case (3+ variantes com switch/branch chain)
 - `panic!`, `assert!`
 
 **Runtime:**
 - `kata_rt_store_sum_result`, `kata_rt_tag_int`
 
-**Depende de:** Fio 2 (match, Hole para predicados), Fio 3 (Actions para `?`)
+**Depende de:** Fio 2 (match, Hole), Fio 3 (Actions para `?`)
 
-**DoD:** `Result` com `|` e `?` funciona. Enum predicado `IMC(17.0)` despacha
-para `Magreza`. Match em 4+ variantes executa sem trap.
+**DoD:** `Result` com `|` e `?` funciona. Match em 4+ variantes executa sem
+trap. (Enum predicado `IMC(17.0)` é Fio 6.)
 
 ---
 
@@ -371,9 +371,10 @@ Após Fio 5. Paga débito horizontal acumulado nos 5 fios verticais.
 
 **Maquinaria de tipos construída:**
 - `::` em ascription de expressão (`expr::Type`) — typeck valida
-- Smart constructor falível para refined types (reusa maquinaria de Fio 4 —
-  `data (Int, > _ 0) as PositiveInt` gera construtor `Int => Result::(T, Error)`,
-  mesmo padrão de smart constructor falível de enum predicado)
+- Smart constructor falível (construído neste fio) — usado para refined types
+  (`data (Int, > _ 0) as PositiveInt` gera construtor `Int => Result::(T, Error)`)
+  e para variantes predicadas de enum (`enum IMC` com `Magreza(< _ 18.5)`)
+  — reusa Hole de Fio 2, Result de Fio 4, guard chain de Fio 2
 - Avaliação constante de predicados (typeck local, NÃO comptime): substitui `_`
   por literal, reduz expressão booleana, verifica `True`/`False`
 - Ret-directed dispatch: hint de retorno na ascription seleciona sobrecarga
@@ -383,19 +384,23 @@ Após Fio 5. Paga débito horizontal acumulado nos 5 fios verticais.
 
 **Features:**
 - `data (Int, > _ 0) as PositiveInt` (predicados com Hole — Hole já existe de
-  Fio 2, smart constructor falível já existe de Fio 4)
+  Fio 2; smart constructor falível é construído neste fio, reusando
+  maquinaria de guard chain + Result de Fio 4)
 - Smart constructors falíveis para refined types (`Result::(T, Error)`)
+- Variantes predicadas de enum (`enum IMC`, smart constructors falíveis —
+  movido de Fio 4 para cá)
 - Ascription `expr::Type` (compile-time validation para literais)
 - Ret-directed dispatch (hint de retorno na ascription)
 - Grouped (barreira vs strip — `((expr))::Type`)
 - Coerção contextual no `|` (fallback literal validado em compile-time)
 
-**Depende de:** Fio 5 (data, smart constructor infalível), Fio 4 (Result, smart
-constructor falível), Fio 2 (Hole para predicados)
+**Depende de:** Fio 5 (data, smart constructor infalível), Fio 4 (Result,
+Sum com payload), Fio 2 (Hole para predicados, guard chain)
 
 **DoD:** `5::PositiveInt` é `PositiveInt` direto. `(-5)::PositiveInt` é type
 error. `PositiveInt 25 | 0` desempacota com fallback validado. `(/ 1 3)::Int`
-seleciona idiv por ret-directed dispatch.
+seleciona idiv por ret-directed dispatch. Enum predicado `IMC(17.0)` despacha
+para `Magreza`.
 
 **Nota:** A validação compile-time de predicados é avaliação constante local ao
 typeck — não usa JIT-and-execute (Fio 12). Não criar dependência Fio 6 → Fio 12.
@@ -458,6 +463,8 @@ implements ITERABLE(A)` despacha corretamente. Monomorphization especializa
 - Stream fusion (Map/Filter aninhados → único loop)
 - `.N` em coleções (desugar para `at`, retorna `Result`)
 - `len` (COUNTABLE dispatch para coleções, síntese para Tuple)
+- `for x in colecao` (iteração via ITERABLE — movido de Fio 3 para cá, onde
+  ITERABLE e coleções existem)
 
 **Runtime:**
 - `kata_rt_list_nil/cons/is_empty/head/tail`
@@ -470,6 +477,7 @@ special case de `len` e `.N`)
 
 **DoD:** `map (+ 10 _) [1 2 3]` produz `[11 12 13]`. `filter (> _ 5) {1 8 3 9}`
 produz `{8 9}`. `arr.0 ?` desempacota. `len (10, 20)` é `2` (compile-time).
+`for x in {1 2 3 4 5}` itera via ITERABLE.
 
 ---
 
@@ -514,7 +522,7 @@ recursão de cauda.
 Após Fio 9. Paga débito horizontal do sistema de tipos.
 
 **Foco:**
-- Consistência typeck-codegen (match general case, enum predicado)
+- Consistência typeck-codegen (match general case, variantes predicadas — Fio 6)
 - Escape analysis edge cases (nested closures, closures em canais)
 - Stream fusion correctness (Map/Filter/Fold aninhados)
 - TRMA correctness (mais operadores associativos)

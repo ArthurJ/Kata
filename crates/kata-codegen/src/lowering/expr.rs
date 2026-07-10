@@ -368,5 +368,81 @@ pub(crate) fn lower_expr(
 
         // ── Match: pattern matching com branch chain ──
         TypedExprKind::Match { scrutinee, arms } => lower_match(scrutinee, arms, ctx),
+
+        // ── Fio 3: ActionCall — call para Action com caller_arena handle ──
+        TypedExprKind::ActionCall {
+            callee,
+            args,
+            caller_arena: _,
+            ffi_symbol,
+        } => {
+            // Lowera os argumentos (tupla).
+            let args_val = lower_expr(&args.node, ctx)?;
+
+            // Extrai os elementos da tupla para passar como args individuais.
+            // O ABI da Action é: (caller_arena: i64, arg1, arg2, ...) -> ret_ty.
+            let mut arg_values = Vec::new();
+
+            // caller_arena handle — por enquanto, sentinel 1 (thread-local arena).
+            // Fase 3 trará múltiplas arenas.
+            arg_values.push(ctx.builder.ins().iconst(I64, 1));
+
+            // Extrai elementos da tupla. Se é Unit (tupla vazia), não há args.
+            match &args.node.kind {
+                TypedExprKind::Unit => {}
+                TypedExprKind::Tuple { elements } => {
+                    // args_val é um ponteiro para a tupla na arena.
+                    // Carrega cada elemento no offset i * 8.
+                    let flags = MemFlagsData::new();
+                    for (i, _elem) in elements.iter().enumerate() {
+                        let offset = (i * 8) as i32;
+                        let val = ctx.builder.ins().load(I64, flags, args_val, offset);
+                        arg_values.push(val);
+                    }
+                }
+                _ => {
+                    // Args não-tupla (não deveria acontecer — parser sempre produz tupla).
+                    arg_values.push(args_val);
+                }
+            }
+
+            // Despacha: se tem ffi_symbol, é Action builtin FFI.
+            // Se não, é Action definida pelo usuário (despacha via kata_refs).
+            if let Some(sym_name) = ffi_symbol {
+                // Action builtin FFI (ex: echo → kata_rt_print).
+                // O ABI da Action builtin não tem caller_arena — é FFI direto.
+                // Remove o caller_arena handle (primeiro arg).
+                let ffi_args = &arg_values[1..];
+                let func_ref = ctx
+                    .ffi_refs
+                    .get(sym_name)
+                    .ok_or_else(|| super::CodegenError::FfiSymbolNotFound(sym_name.clone()))?;
+                let call_inst = ctx.builder.ins().call(*func_ref, ffi_args);
+                // echo retorna Unit — se não há return values, retorna 0.
+                if let Some(ret) = ctx.builder.inst_results(call_inst).first() {
+                    Ok(*ret)
+                } else {
+                    Ok(ctx.builder.ins().iconst(I64, 0))
+                }
+            } else if let Some(&func_ref) = ctx.kata_refs.get(callee) {
+                // Action definida pelo usuário.
+                let call_inst = ctx.builder.ins().call(func_ref, &arg_values);
+                Ok(ctx.builder.inst_results(call_inst)[0])
+            } else {
+                Err(super::CodegenError::UnsupportedNode(format!(
+                    "ActionCall: callee `{callee}` não encontrado"
+                )))
+            }
+        }
+
+        // ── Fio 3: Var — mesmo codegen que Let ──
+        TypedExprKind::Var { name, value } => {
+            let val = lower_expr(&value.node, ctx)?;
+            let clif_ty = ty_to_clif(&value.node.ty);
+            let var = ctx.new_var(name, clif_ty);
+            ctx.builder.def_var(var, val);
+            // Var retorna Unit (como Let).
+            Ok(ctx.builder.ins().iconst(I64, 0))
+        }
     }
 }

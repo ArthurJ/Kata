@@ -119,7 +119,52 @@ fn desugar_pipes(expr: &Spanned<Expr>) -> Spanned<Expr> {
         | Expr::Ident { .. }
         | Expr::Unit
         | Expr::Hole
-        | Expr::VariantQual { .. } => expr.clone(),
+        | Expr::VariantQual { .. }
+        | Expr::Break
+        | Expr::Continue => expr.clone(),
+
+        // ── Fio 3: novos nós — recursão nos filhos ──────────
+        Expr::ActionCall { callee, args } => Spanned::new(
+            Expr::ActionCall {
+                callee: callee.clone(),
+                args: Box::new(desugar_pipes(args)),
+            },
+            expr.span,
+        ),
+        Expr::Return(inner) => Spanned::new(
+            Expr::Return(Box::new(desugar_pipes(inner))),
+            expr.span,
+        ),
+        Expr::Loop { body } => Spanned::new(
+            Expr::Loop {
+                body: body.iter().map(desugar_pipes).collect(),
+            },
+            expr.span,
+        ),
+        Expr::Var { name, value } => Spanned::new(
+            Expr::Var {
+                name: name.clone(),
+                value: Box::new(desugar_pipes(value)),
+            },
+            expr.span,
+        ),
+        Expr::Question(inner) => Spanned::new(
+            Expr::Question(Box::new(desugar_pipes(inner))),
+            expr.span,
+        ),
+        Expr::PipeFallback { lhs, rhs } => {
+            // `|` fallback — não é Pipe (`|>`). Desugar do pipe não toca.
+            // Mas os filhos podem conter pipes internos.
+            let lhs_d = desugar_pipes(lhs);
+            let rhs_d = desugar_pipes(rhs);
+            Spanned::new(
+                Expr::PipeFallback {
+                    lhs: Box::new(lhs_d),
+                    rhs: Box::new(rhs_d),
+                },
+                expr.span,
+            )
+        }
     }
 }
 
@@ -359,8 +404,47 @@ fn desugar_holes(expr: &Spanned<Expr>) -> Spanned<Expr> {
         | Expr::Ident { .. }
         | Expr::Unit
         | Expr::Hole
-        | Expr::VariantQual { .. } => expr.clone(),
+        | Expr::VariantQual { .. }
+        | Expr::Break
+        | Expr::Continue => expr.clone(),
         // Pipe não deve aparecer aqui (desugar_pipes roda primeiro)
         Expr::Pipe { .. } => expr.clone(),
+
+        // ── Fio 3: novos nós — recursão nos filhos ──────────
+        Expr::ActionCall { callee, args } => Spanned::new(
+            Expr::ActionCall {
+                callee: callee.clone(),
+                args: Box::new(desugar_holes(args)),
+            },
+            expr.span,
+        ),
+        Expr::Return(inner) => Spanned::new(
+            Expr::Return(Box::new(desugar_holes(inner))),
+            expr.span,
+        ),
+        Expr::Loop { body } => Spanned::new(
+            Expr::Loop {
+                body: body.iter().map(desugar_holes).collect(),
+            },
+            expr.span,
+        ),
+        Expr::Var { name, value } => Spanned::new(
+            Expr::Var {
+                name: name.clone(),
+                value: Box::new(desugar_holes(value)),
+            },
+            expr.span,
+        ),
+        Expr::Question(inner) => Spanned::new(
+            Expr::Question(Box::new(desugar_holes(inner))),
+            expr.span,
+        ),
+        Expr::PipeFallback { lhs, rhs } => Spanned::new(
+            Expr::PipeFallback {
+                lhs: Box::new(desugar_holes(lhs)),
+                rhs: Box::new(desugar_holes(rhs)),
+            },
+            expr.span,
+        ),
     }
 }

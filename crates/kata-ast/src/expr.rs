@@ -105,6 +105,51 @@ pub enum Expr {
         lhs: Box<Spanned<Expr>>,
         rhs: Box<Spanned<Expr>>,
     },
+
+    // ── Fio 3: Actions, return, var, loop, break, continue ───────────
+
+    /// `nome!(args)` — chamada de Action.
+    /// `!` é o marcador de impureza. O parser produz `ActionCall` quando vê `!`
+    /// após um identificador seguido de parênteses (tupla de argumentos).
+    ActionCall {
+        callee: String,
+        /// Tupla de argumentos (sempre uma tupla, mesmo que vazia: `!()`).
+        args: Box<Spanned<Expr>>,
+    },
+
+    /// `return expr` — early return em Actions.
+    /// Exclusivo de Actions. Não existe em funções puras.
+    Return(Box<Spanned<Expr>>),
+
+    /// `loop` — laço infinito. Só sai via `break`.
+    /// Body é uma sequência de statements (expressões).
+    Loop {
+        body: Vec<Spanned<Expr>>,
+    },
+
+    /// `break` — sai do laço.
+    Break,
+
+    /// `continue` — próxima iteração.
+    Continue,
+
+    /// `var nome := expr` — binding mutável (exclusivo de Actions).
+    Var {
+        name: String,
+        value: Box<Spanned<Expr>>,
+    },
+
+    /// `expr ?` — fail-fast (exclusivo de Actions).
+    /// Desugared pelo typeck em Match + Return. Nunca chega à TAST.
+    Question(Box<Spanned<Expr>>),
+
+    /// `lhs | rhs` — fallback local (coalescência de erro).
+    /// Desugared pelo typeck em Match. Nunca chega à TAST.
+    /// Distinto de `|>` (PipeForward — pipeline de transformação pura).
+    PipeFallback {
+        lhs: Box<Spanned<Expr>>,
+        rhs: Box<Spanned<Expr>>,
+    },
 }
 
 /// Pattern — usado em match arms e cláusulas lambda.
@@ -205,6 +250,20 @@ pub enum Item {
         name: String,
         variants: Vec<VariantDecl>,
         directives: Vec<Directive>,
+    },
+
+    // ── Fio 3: Actions ─────────────────────────────────
+    /// `action nome` com body indentado.
+    /// Actions são o domínio impuro. Declaração com `action nome` (sem `!`).
+    /// O body é uma sequência de statements (expressões).
+    ActionDecl {
+        name: String,
+        /// Parâmetros da Action (uma tupla tipada, ou vazia).
+        params: Vec<Spanned<TypeExpr>>,
+        ret: Spanned<TypeExpr>,
+        directives: Vec<Directive>,
+        /// Body da Action (statements sequenciais).
+        body: Vec<Spanned<Expr>>,
     },
 
     // ── Expressão de entry point ────────────────────────

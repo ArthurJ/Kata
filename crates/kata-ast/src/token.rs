@@ -68,6 +68,12 @@ pub enum Token {
     Match,
     /// `return` — early return em Actions
     Return,
+    /// `loop` — laço infinito (exclusivo de Actions, Fio 3)
+    Loop,
+    /// `break` — sai de `loop` (exclusivo de Actions, Fio 3)
+    Break,
+    /// `continue` — próxima iteração de `loop` (exclusivo de Actions, Fio 3)
+    Continue,
     /// `otherwise` — fallback em guards
     Otherwise,
 
@@ -161,6 +167,9 @@ impl Token {
                 | Token::With
                 | Token::Match
                 | Token::Return
+                | Token::Loop
+                | Token::Break
+                | Token::Continue
                 | Token::Otherwise
         )
     }
@@ -186,6 +195,9 @@ impl std::fmt::Display for Token {
             Token::With => write!(f, "with"),
             Token::Match => write!(f, "match"),
             Token::Return => write!(f, "return"),
+            Token::Loop => write!(f, "loop"),
+            Token::Break => write!(f, "break"),
+            Token::Continue => write!(f, "continue"),
             Token::Otherwise => write!(f, "otherwise"),
             Token::BindAssign => write!(f, ":="),
             Token::DoubleColon => write!(f, "::"),

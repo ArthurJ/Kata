@@ -32,7 +32,7 @@ pub(crate) fn populate_dispatch_table(signatures: &[Signature]) -> DispatchTable
             params: sig.param_types.clone(),
             ret: sig.return_type.clone(),
             ffi_symbol,
-            is_action: false,
+            is_action: sig.is_action,
             is_generic: false,
             is_constructor: false,
             associative_neutral,
