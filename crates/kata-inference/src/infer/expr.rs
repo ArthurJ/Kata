@@ -299,13 +299,26 @@ pub(crate) fn infer_expr_hinted(
             )
         }
 
-        // ── Fio 3: return/loop/break/continue — Fase 2 e 4 ──
-        Expr::Return(_) => {
-            return Err(MiddleError::TypeMismatch {
-                expected: "expressão (return em Actions — Fase 2)".into(),
-                found: "Return".into(),
+        // ── Fio 3: return — early return de Action (Fase 2) ──
+        Expr::Return(inner) => {
+            let ret_ty = ctx.ret_ty.ok_or_else(|| MiddleError::TypeMismatch {
+                expected: "return dentro de Action".into(),
+                found: "return fora de Action".into(),
                 span: (*span).into(),
-            });
+            })?;
+            let typed_inner = infer_expr(&inner.node, &inner.span, env, ctx, false)?;
+            if typed_inner.ty != *ret_ty {
+                return Err(MiddleError::TypeMismatch {
+                    expected: format!("{ret_ty:?}"),
+                    found: format!("{:?}", typed_inner.ty),
+                    span: inner.span.into(),
+                });
+            }
+            (
+                typed_inner.ty.clone(),
+                TypedExprKind::Return(Box::new(Spanned::new(typed_inner, inner.span))),
+                Effect::Puro,
+            )
         }
         Expr::Loop { .. } => {
             return Err(MiddleError::TypeMismatch {

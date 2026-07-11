@@ -442,5 +442,17 @@ pub(crate) fn lower_expr(
             // Var retorna Unit (como Let).
             Ok(ctx.builder.ins().iconst(I64, 0))
         }
+
+        // ── Fio 3 Fase 2: return — jump para epilogue_block ──
+        TypedExprKind::Return(inner) => {
+            let val = lower_expr(&inner.node, ctx)?;
+            let epilogue = ctx.epilogue_block.expect("return fora de Action");
+            ctx.builder
+                .ins()
+                .jump(epilogue, &[cranelift_codegen::ir::BlockArg::Value(val)]);
+            // return não produz valor no fluxo linear — o jump já terminou o block.
+            // Retornamos iconst(0) como placeholder; Cranelift elimina código unreachable.
+            Ok(ctx.builder.ins().iconst(I64, 0))
+        }
     }
 }

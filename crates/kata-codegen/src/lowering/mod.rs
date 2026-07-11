@@ -25,7 +25,7 @@ pub use jit::{JitResult, jit_eval};
 pub use module::CodegenError;
 use module::StringTable;
 
-use cranelift_codegen::ir::GlobalValue;
+use cranelift_codegen::ir::{Block, GlobalValue, Value};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
 use std::collections::HashMap;
@@ -52,6 +52,16 @@ pub(crate) struct LowerCtx<'a, 'b> {
     /// Se `true`, tail calls estão desabilitados (entry point usa SystemV,
     /// não pode fazer return_call para funções Kata com CallConv::Tail).
     pub no_tail_calls: bool,
+    /// Epílogo da Action atual — block que executa `arena_destroy` + `return_`.
+    /// `None` para funções puras e entry point. `Some(block)` dentro de Actions.
+    /// `return` faz `jump epilogue_block(value)` com o valor de retorno.
+    pub epilogue_block: Option<Block>,
+    /// Handle da arena local da Action atual. Usado para alocar tuplas
+    /// em computação local (Fase 3 — caller's arena). `None` fora de Actions.
+    pub local_arena: Option<Value>,
+    /// Handle da arena do caller. Usado para alocar tuplas que sobrevivem
+    /// à destruição da arena local (valores retornados). `None` fora de Actions.
+    pub caller_arena: Option<Value>,
 }
 
 impl<'a, 'b> LowerCtx<'a, 'b> {

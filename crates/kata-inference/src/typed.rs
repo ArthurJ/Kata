@@ -137,6 +137,13 @@ pub enum TypedExprKind {
         name: String,
         value: Box<Spanned<TypedExpr>>,
     },
+
+    /// `return expr` — early return de uma Action.
+    /// O typeck verificou que o tipo de `expr` bate com `ret_ty` da Action.
+    /// O codegen emite `jump epilogue_block(value)` — o epílogo faz
+    /// `arena_destroy(local_arena)` + `return_(result)`.
+    /// Statements após `return` são unreachable (não produzidos pelo typeck).
+    Return(Box<Spanned<TypedExpr>>),
 }
 
 /// Informação sobre uma variável capturada por uma closure.

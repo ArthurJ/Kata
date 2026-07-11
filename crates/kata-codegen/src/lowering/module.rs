@@ -137,6 +137,9 @@ pub(crate) fn lower_module(
             anon_counter: 0,
             emitted_tail_call: false,
             no_tail_calls: true, // entry point usa SystemV — sem return_call
+            epilogue_block: None,
+            local_arena: None,
+            caller_arena: None,
         };
 
         // Lowera pre_entry (let bindings e outras expressões top-level anteriores).
@@ -255,6 +258,9 @@ pub(crate) fn define_function_body(
             anon_counter: 0,
             emitted_tail_call: false,
             no_tail_calls: false,
+            epilogue_block: None,
+            local_arena: None,
+            caller_arena: None,
         };
 
         if clauses.len() == 1 && all_patterns_are_ident(&clauses[0].patterns) {
@@ -391,6 +397,9 @@ fn define_kata_action(
             anon_counter: 0,
             emitted_tail_call: false,
             no_tail_calls: false,
+            epilogue_block: None,
+            local_arena: None,
+            caller_arena: None,
         };
 
         // Prólogo: cria local_arena via kata_rt_arena_create().
@@ -401,6 +410,20 @@ fn define_kata_action(
             .ok_or_else(|| CodegenError::FfiSymbolNotFound("kata_rt_arena_create".into()))?;
         let local_arena = lower.builder.ins().call(arena_create_ref, &[]);
         let local_arena = lower.builder.inst_results(local_arena)[0];
+
+        // Cria epilogue_block com 1 block param (result).
+        // O body faz jump epilogue_block(last_result) no fluxo normal,
+        // ou jump epilogue_block(return_value) via `return`.
+        let ret_clif_ty = ty_to_clif(&action.ret_ty);
+        let epilogue_block = lower.builder.create_block();
+        lower
+            .builder
+            .append_block_param(epilogue_block, ret_clif_ty);
+
+        // Configura LowerCtx com epilogue_block e arenas.
+        lower.epilogue_block = Some(epilogue_block);
+        lower.local_arena = Some(local_arena);
+        lower.caller_arena = Some(params[0]); // caller_arena é params[0]
 
         // Liga parâmetros da Action (params[1..]) a variáveis nomeadas.
         // O inference define params como __param_0, __param_1, ...
@@ -414,24 +437,40 @@ fn define_kata_action(
         // O último statement é o retorno implícito.
         let n = action.body.len();
         let mut last_result = lower.builder.ins().iconst(I64, 0); // Unit default
+        let mut hit_return = false;
         for (i, stmt) in action.body.iter().enumerate() {
             last_result = lower_expr(&stmt.node, &mut lower)?;
+            // Se emitiu return (jump para epilogue_block), não continuar.
+            if matches!(stmt.node.kind, kata_inference::TypedExprKind::Return(_)) {
+                hit_return = true;
+                break;
+            }
             // Se o último statement emitiu tail call, não continuar.
             if i == n - 1 && lower.emitted_tail_call {
                 break;
             }
         }
 
-        // Epílogo: destrói local_arena e retorna.
-        if !lower.emitted_tail_call {
-            let arena_destroy_ref = lower
-                .ffi_refs
-                .get("kata_rt_arena_destroy")
-                .copied()
-                .ok_or_else(|| CodegenError::FfiSymbolNotFound("kata_rt_arena_destroy".into()))?;
-            lower.builder.ins().call(arena_destroy_ref, &[local_arena]);
-            lower.builder.ins().return_(&[last_result]);
+        // Epílogo: se não terminou via return ou tail call,
+        // jump para epilogue_block com o último resultado.
+        if !hit_return && !lower.emitted_tail_call {
+            lower.builder.ins().jump(
+                epilogue_block,
+                &[cranelift_codegen::ir::BlockArg::Value(last_result)],
+            );
         }
+
+        // Define o epilogue_block: arena_destroy + return_.
+        lower.builder.switch_to_block(epilogue_block);
+        lower.builder.seal_block(epilogue_block);
+        let result = lower.builder.block_params(epilogue_block)[0];
+        let arena_destroy_ref = lower
+            .ffi_refs
+            .get("kata_rt_arena_destroy")
+            .copied()
+            .ok_or_else(|| CodegenError::FfiSymbolNotFound("kata_rt_arena_destroy".into()))?;
+        lower.builder.ins().call(arena_destroy_ref, &[local_arena]);
+        lower.builder.ins().return_(&[result]);
 
         builder.finalize();
     }

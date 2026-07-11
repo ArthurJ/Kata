@@ -24,7 +24,9 @@ use kata_diagnostics::MiddleError;
 use kata_resolution::ResolvedModule;
 
 use crate::desugar;
-use crate::typed::{TypedAction, TypedExpr, TypedFunction, TypedLambdaClause, TypedModule};
+use crate::typed::{
+    TypedAction, TypedExpr, TypedExprKind, TypedFunction, TypedLambdaClause, TypedModule,
+};
 
 use self::apply_lambda::infer_lambda_body;
 use self::expr::{InferCtx, infer_expr};
@@ -263,6 +265,7 @@ fn infer_action(
 
     // Infere cada statement do body em sequência.
     // O último statement é o retorno implícito (tail_pos = true).
+    // Após um `return`, statements subsequentes são unreachable — paramos.
     let mut typed_body: Vec<Spanned<TypedExpr>> = Vec::new();
     let n = action_def.body.len();
     for (i, stmt) in action_def.body.iter().enumerate() {
@@ -275,11 +278,18 @@ fn infer_action(
             ctx,
             is_last, // último statement é retorno implícito (tail_pos)
         )?;
+        let is_return = matches!(typed.kind, TypedExprKind::Return(_));
         typed_body.push(Spanned::new(typed, stmt.span));
+        if is_return {
+            break; // statements após return são unreachable
+        }
     }
 
-    // Verifica que o último statement retorna o tipo esperado.
+    // Verifica que o último statement produz o tipo esperado.
+    // Se o body terminou com `return`, o tipo já foi validado em infer_return.
+    // Senão, o último statement é o retorno implícito.
     if let Some(last) = typed_body.last()
+        && !matches!(last.node.kind, TypedExprKind::Return(_))
         && last.node.ty != *ret_ty
     {
         return Err(MiddleError::TypeMismatch {
