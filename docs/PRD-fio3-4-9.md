@@ -1171,11 +1171,11 @@ não por fio. Cada fase depende apenas das anteriores.
     A retorna valor na arena do caller de A. Sem use-after-free em nenhum
     nível. ✅ (validado por `examples/action_stress.kata` — 3 Actions encadeadas)
 
-### Fase 4 — loop, break, continue
+### Fase 4 — loop, break, continue ✅
 
-11. `kata run examples/loop_action.kata` imprime 0-5 (loop com var, break).
-12. `break` sai de `loop`. `continue` próxima iteração.
-13. `loop`/`break`/`continue` fora de Action produzem erro de parser.
+11. `kata run examples/loop_action.kata` imprime 0-5 (loop com var, break). ✅
+12. `break` sai de `loop`. `continue` próxima iteração. ✅
+13. `loop`/`break`/`continue` fora de Action produzem erro de parser. ✅
 
 ### Fase 5 — Sum com payload
 
