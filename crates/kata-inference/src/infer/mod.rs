@@ -27,7 +27,7 @@ use crate::desugar;
 use crate::typed::{TypedAction, TypedExpr, TypedFunction, TypedLambdaClause, TypedModule};
 
 use self::apply_lambda::infer_lambda_body;
-use self::expr::infer_expr;
+use self::expr::{InferCtx, infer_expr};
 use self::helpers::{
     check_patterns, item_span_or_synthetic, populate_dispatch_table, process_with_bindings,
 };
@@ -67,7 +67,12 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
     //    `let g := fat` (função como valor).
     let mut typed_functions: Vec<TypedFunction> = Vec::new();
     for func_def in &resolved.functions {
-        let typed_func = infer_named_function(func_def, &dispatch_table, &resolved.enum_registry)?;
+        let ctx = InferCtx {
+            table: &dispatch_table,
+            enum_registry: &resolved.enum_registry,
+            ret_ty: None,
+        };
+        let typed_func = infer_named_function(func_def, &ctx)?;
         // Registra no TypeEnv para permitir uso como valor (call_indirect).
         type_env.define(
             &typed_func.name,
@@ -83,7 +88,12 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
     //     da assinatura. O body é uma sequência de statements.
     let mut typed_actions: Vec<TypedAction> = Vec::new();
     for action_def in &resolved.actions {
-        let typed_action = infer_action(action_def, &dispatch_table, &resolved.enum_registry)?;
+        let ctx = InferCtx {
+            table: &dispatch_table,
+            enum_registry: &resolved.enum_registry,
+            ret_ty: Some(&action_def.return_type),
+        };
+        let typed_action = infer_action(action_def, &ctx)?;
         typed_actions.push(typed_action);
     }
 
@@ -100,12 +110,16 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
                 // não contém Expr::Pipe nem Expr::Hole — o typeck nunca os
                 // vê. Isto é total: TAST nunca contém Pipe nem Hole.
                 let desugared = desugar::desugar(expr);
+                let ctx = InferCtx {
+                    table: &dispatch_table,
+                    enum_registry: &resolved.enum_registry,
+                    ret_ty: None,
+                };
                 let typed = infer_expr(
                     &desugared.node,
                     &desugared.span,
                     &mut type_env,
-                    &dispatch_table,
-                    &resolved.enum_registry,
+                    &ctx,
                     true, // entry point está em tail position
                 )?;
                 // Se já temos um entry_expr, ele vira pre_entry; o novo vira entry.
@@ -145,8 +159,7 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
 /// de cada cláusula é inferido em escopo filho com os bindings dos padrões.
 fn infer_named_function(
     func_def: &kata_resolution::FunctionDef,
-    table: &DispatchTable,
-    enum_registry: &EnumRegistry,
+    ctx: &InferCtx,
 ) -> InferResult<TypedFunction> {
     let param_types = &func_def.param_types;
     let ret_ty = &func_def.return_type;
@@ -163,17 +176,13 @@ fn infer_named_function(
         let typed_patterns = check_patterns(
             &clause_inner.patterns,
             param_types,
-            enum_registry,
+            ctx.enum_registry,
             &mut clause_env,
         )?;
 
         // Processa with bindings (açúcar → let chain).
-        let typed_with_bindings = process_with_bindings(
-            &clause_inner.with_bindings,
-            &mut clause_env,
-            table,
-            enum_registry,
-        )?;
+        let typed_with_bindings =
+            process_with_bindings(&clause_inner.with_bindings, &mut clause_env, ctx)?;
 
         // Infere body (com ou sem guards).
         let (typed_body, typed_guards) = if clause_inner.guards.is_empty() {
@@ -181,8 +190,7 @@ fn infer_named_function(
                 &clause_inner.body.node,
                 &clause_inner.body.span,
                 &mut clause_env,
-                table,
-                enum_registry,
+                ctx,
                 true, // tail_pos = true em body de função
             )?;
             // Verifica que o body retorna o tipo esperado.
@@ -199,8 +207,7 @@ fn infer_named_function(
                 &clause_inner.body,
                 &clause_inner.guards,
                 &mut clause_env,
-                table,
-                enum_registry,
+                ctx,
             )?;
             if guard_ret != *ret_ty {
                 return Err(MiddleError::TypeMismatch {
@@ -241,8 +248,7 @@ fn infer_named_function(
 /// implícito — verifica tipo contra `ret_ty`.
 fn infer_action(
     action_def: &kata_resolution::ActionDef,
-    table: &DispatchTable,
-    enum_registry: &EnumRegistry,
+    ctx: &InferCtx,
 ) -> InferResult<TypedAction> {
     let param_types = &action_def.param_types;
     let ret_ty = &action_def.return_type;
@@ -266,8 +272,7 @@ fn infer_action(
             &desugared.node,
             &desugared.span,
             &mut action_env,
-            table,
-            enum_registry,
+            ctx,
             is_last, // último statement é retorno implícito (tail_pos)
         )?;
         typed_body.push(Spanned::new(typed, stmt.span));

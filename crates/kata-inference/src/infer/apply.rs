@@ -14,7 +14,7 @@ use kata_diagnostics::MiddleError;
 use crate::typed::{Effect, TypedExpr, TypedExprKind};
 
 use super::apply_lambda::{infer_apply_lambda, infer_apply_lambda_with_hint};
-use super::expr::infer_expr;
+use super::expr::{InferCtx, infer_expr};
 use super::helpers::{
     InferResult, dispatch_to_middle_error, peel_grouping_expr, resolve_type_expr,
 };
@@ -30,8 +30,7 @@ pub(crate) fn infer_apply(
     args: &[Spanned<Expr>],
     span: &Span,
     env: &mut TypeEnv,
-    table: &DispatchTable,
-    enum_registry: &EnumRegistry,
+    ctx: &InferCtx,
 ) -> InferResult<(Ty, TypedExprKind, Effect)> {
     // DoD 31: Apply de lambda inline — se o callee é um lambda (possivelmente
     // envolto em Grouping ou TypeAscription), inferir args primeiro (síntese
@@ -45,17 +44,7 @@ pub(crate) fn infer_apply(
             guards,
             with_bindings,
         } => {
-            return infer_apply_lambda(
-                patterns,
-                body,
-                guards,
-                with_bindings,
-                args,
-                span,
-                env,
-                table,
-                enum_registry,
-            );
+            return infer_apply_lambda(patterns, body, guards, with_bindings, args, span, env, ctx);
         }
         Expr::TypeAscription { expr: inner, ty } => {
             // Ascription em lambda: `((lambda ...)::(Int -> Int)) 42`.
@@ -78,8 +67,7 @@ pub(crate) fn infer_apply(
                     &hint_ty,
                     span,
                     env,
-                    table,
-                    enum_registry,
+                    ctx,
                 );
             }
             // Ascription em non-lambda: não é apply de lambda inline.
@@ -103,14 +91,15 @@ pub(crate) fn infer_apply(
     let mut arg_types: Vec<Ty> = Vec::with_capacity(args.len());
 
     for arg in args {
-        let typed = infer_expr(&arg.node, &arg.span, env, table, enum_registry, false)?;
+        let typed = infer_expr(&arg.node, &arg.span, env, ctx, false)?;
         arg_types.push(typed.ty.clone());
         typed_args.push(Spanned::new(typed, arg.span));
     }
 
     // Caminho 1: DispatchTable (call direto para FFI ou função Kata nomeada).
-    if table.has_function(&func_name) {
-        let overload = table
+    if ctx.table.has_function(&func_name) {
+        let overload = ctx
+            .table
             .resolve(&func_name, &arg_types)
             .map_err(|e| dispatch_to_middle_error(e, *span))?;
 

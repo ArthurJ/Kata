@@ -17,6 +17,19 @@ use super::apply::infer_apply;
 use super::helpers::{InferResult, resolve_type_expr};
 use super::lambda::infer_lambda;
 
+/// Contexto de inferência — carrega dependências compartilhadas entre
+/// todas as funções de inferência. Substitui parâmetros individuais
+/// `table` e `enum_registry`, e adiciona `ret_ty` para validação de
+/// `return` em Actions (Fase 2).
+pub(crate) struct InferCtx<'a> {
+    pub table: &'a DispatchTable,
+    pub enum_registry: &'a EnumRegistry,
+    /// Tipo de retorno da Action atual — `Some(ty)` quando inferindo
+    /// o body de uma Action, `None` caso contrário. Usado por `infer_return`
+    /// para verificar que `return expr` produz o tipo esperado.
+    pub ret_ty: Option<&'a Ty>,
+}
+
 /// Infere o tipo de uma expressão, produzindo um `TypedExpr`.
 ///
 /// `tail_pos` é `true` quando a expressão está em posição de cauda. O entry
@@ -28,11 +41,10 @@ pub(crate) fn infer_expr(
     expr: &Expr,
     span: &Span,
     env: &mut TypeEnv,
-    table: &DispatchTable,
-    enum_registry: &EnumRegistry,
+    ctx: &InferCtx,
     tail_pos: bool,
 ) -> InferResult<TypedExpr> {
-    infer_expr_hinted(expr, span, env, table, enum_registry, tail_pos, None)
+    infer_expr_hinted(expr, span, env, ctx, tail_pos, None)
 }
 
 /// Like `infer_expr` but accepts an optional type hint (DoD 29).
@@ -47,8 +59,7 @@ pub(crate) fn infer_expr_hinted(
     expr: &Expr,
     span: &Span,
     env: &mut TypeEnv,
-    table: &DispatchTable,
-    enum_registry: &EnumRegistry,
+    ctx: &InferCtx,
     tail_pos: bool,
     hint: Option<&Ty>,
 ) -> InferResult<TypedExpr> {
@@ -88,7 +99,7 @@ pub(crate) fn infer_expr_hinted(
         }
 
         // ── Aplicação prefixa ────────────────────────────────
-        Expr::Apply { callee, args } => infer_apply(callee, args, span, env, table, enum_registry)?,
+        Expr::Apply { callee, args } => infer_apply(callee, args, span, env, ctx)?,
 
         // ── Ascription de tipo ───────────────────────────────
         Expr::TypeAscription { expr, ty } => {
@@ -96,15 +107,8 @@ pub(crate) fn infer_expr_hinted(
             // Propaga o tipo anotado como hint top-down (DoD 29).
             // Isto permite que `(lambda x: + x 1)::(Int -> Int)` extraia
             // x: Int do tipo anotado.
-            let inner = infer_expr_hinted(
-                &expr.node,
-                &expr.span,
-                env,
-                table,
-                enum_registry,
-                false,
-                Some(&target_ty),
-            )?;
+            let inner =
+                infer_expr_hinted(&expr.node, &expr.span, env, ctx, false, Some(&target_ty))?;
 
             let rebaixa_ok = match (&inner.kind, &target_ty) {
                 (TypedExprKind::IntLit { .. }, Ty::Prim(PrimTy::Int)) => true,
@@ -137,15 +141,8 @@ pub(crate) fn infer_expr_hinted(
 
         // ── Grouping — transparente, propaga hint ────────────
         Expr::Grouping { inner } => {
-            let typed_inner = infer_expr_hinted(
-                &inner.node,
-                &inner.span,
-                env,
-                table,
-                enum_registry,
-                tail_pos,
-                hint,
-            )?;
+            let typed_inner =
+                infer_expr_hinted(&inner.node, &inner.span, env, ctx, tail_pos, hint)?;
             (
                 typed_inner.ty.clone(),
                 TypedExprKind::Grouping {
@@ -160,7 +157,7 @@ pub(crate) fn infer_expr_hinted(
             let mut typed_elements = Vec::with_capacity(elements.len());
             let mut element_tys = Vec::with_capacity(elements.len());
             for elem in elements {
-                let typed = infer_expr(&elem.node, &elem.span, env, table, enum_registry, false)?;
+                let typed = infer_expr(&elem.node, &elem.span, env, ctx, false)?;
                 element_tys.push(typed.ty.clone());
                 typed_elements.push(Spanned::new(typed, elem.span));
             }
@@ -175,8 +172,7 @@ pub(crate) fn infer_expr_hinted(
 
         // ── Let binding ──────────────────────────────────────
         Expr::Let { name, value } => {
-            let typed_value =
-                infer_expr(&value.node, &value.span, env, table, enum_registry, false)?;
+            let typed_value = infer_expr(&value.node, &value.span, env, ctx, false)?;
             let val_ty = typed_value.ty.clone();
 
             env.define(name, val_ty);
@@ -243,27 +239,15 @@ pub(crate) fn infer_expr_hinted(
             body,
             guards,
             with_bindings,
-        } => infer_lambda(
-            patterns,
-            body,
-            guards,
-            with_bindings,
-            span,
-            env,
-            table,
-            enum_registry,
-            hint,
-        )?,
+        } => infer_lambda(patterns, body, guards, with_bindings, span, env, ctx, hint)?,
 
         // ── Fio 2 Fase 8: Match ───────────────────────────────
-        Expr::Match { scrutinee, arms } => {
-            infer_match(scrutinee, arms, span, env, table, enum_registry, tail_pos)?
-        }
+        Expr::Match { scrutinee, arms } => infer_match(scrutinee, arms, span, env, ctx, tail_pos)?,
 
         // ── Fio 3: ActionCall — dispatch para Action builtin ou definida ──
         Expr::ActionCall { callee, args } => {
             // Lowera a tupla de argumentos.
-            let typed_args = infer_expr(&args.node, &args.span, env, table, enum_registry, false)?;
+            let typed_args = infer_expr(&args.node, &args.span, env, ctx, false)?;
             // Extrai tipos dos elementos da tupla para dispatch.
             let arg_tys: Vec<Ty> = match &typed_args.kind {
                 TypedExprKind::Tuple { elements } => {
@@ -274,7 +258,8 @@ pub(crate) fn infer_expr_hinted(
             };
 
             // Resolve no DispatchTable.
-            let overload = table
+            let overload = ctx
+                .table
                 .resolve(callee, &arg_tys)
                 .map_err(|e| super::helpers::dispatch_to_middle_error(e, *span))?;
 
@@ -301,8 +286,7 @@ pub(crate) fn infer_expr_hinted(
 
         // ── Fio 3: var — binding mutável (exclusivo de Actions) ──
         Expr::Var { name, value } => {
-            let typed_value =
-                infer_expr(&value.node, &value.span, env, table, enum_registry, false)?;
+            let typed_value = infer_expr(&value.node, &value.span, env, ctx, false)?;
             let val_ty = typed_value.ty.clone();
             env.define(name, val_ty);
             (

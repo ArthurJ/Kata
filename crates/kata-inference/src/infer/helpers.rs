@@ -14,7 +14,7 @@ use kata_resolution::Signature;
 use crate::patterns;
 use crate::typed::{TypedPattern, TypedWithBinding};
 
-use super::expr::infer_expr;
+use super::expr::{InferCtx, infer_expr};
 
 /// Erro de inferência — wrapped `MiddleError` (carrega Span).
 pub type InferResult<T> = Result<T, MiddleError>;
@@ -147,19 +147,11 @@ pub(crate) fn check_patterns(
 pub(crate) fn process_with_bindings(
     wbs: &[WithBinding],
     env: &mut TypeEnv,
-    table: &DispatchTable,
-    enum_registry: &EnumRegistry,
+    ctx: &InferCtx,
 ) -> InferResult<Vec<TypedWithBinding>> {
     let mut typed_with_bindings: Vec<TypedWithBinding> = Vec::new();
     for wb in wbs {
-        let typed_value = infer_expr(
-            &wb.value.node,
-            &wb.value.span,
-            env,
-            table,
-            enum_registry,
-            false,
-        )?;
+        let typed_value = infer_expr(&wb.value.node, &wb.value.span, env, ctx, false)?;
         let val_ty = typed_value.ty.clone();
         env.define(&wb.name, val_ty);
         typed_with_bindings.push(TypedWithBinding {

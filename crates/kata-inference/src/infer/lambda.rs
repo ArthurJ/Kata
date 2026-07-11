@@ -14,6 +14,7 @@ use kata_diagnostics::MiddleError;
 use crate::typed::{Effect, TypedExprKind, TypedLambdaClause};
 
 use super::apply_lambda::infer_lambda_body;
+use super::expr::{InferCtx, infer_expr};
 use super::helpers::{InferResult, check_patterns, process_with_bindings};
 use super::partial_dispatch::try_partial_dispatch;
 
@@ -35,8 +36,7 @@ pub(crate) fn infer_lambda(
     with_bindings: &[WithBinding],
     span: &Span,
     env: &mut TypeEnv,
-    table: &DispatchTable,
-    enum_registry: &EnumRegistry,
+    ctx: &InferCtx,
     hint: Option<&Ty>,
 ) -> InferResult<(Ty, TypedExprKind, Effect)> {
     // Para lambda anônimo, os tipos dos parâmetros são InferVar — não temos
@@ -59,7 +59,7 @@ pub(crate) fn infer_lambda(
     // Se o body é um Apply com callee Ident, e alguns args são parâmetros do
     // lambda (Ident com nome = nome do pattern), tenta resolve_partial com
     // None nessas posições e tipos concretos nas demais.
-    let partial = try_partial_dispatch(patterns, body, env, table);
+    let partial = try_partial_dispatch(patterns, body, env, ctx.table);
 
     // DoD 29: Hint top-down via ascription em lambda.
     // O hint tem PRIORIDADE sobre partial dispatch — a anotação explícita
@@ -97,19 +97,18 @@ pub(crate) fn infer_lambda(
                 .unwrap_or(Ty::InferVar(i as u32))
         })
         .collect();
-    let typed_patterns = check_patterns(patterns, &param_types, enum_registry, &mut lambda_env)?;
+    let typed_patterns =
+        check_patterns(patterns, &param_types, ctx.enum_registry, &mut lambda_env)?;
 
     // Processa with bindings (açúcar → let chain no escopo do lambda).
     // with bindings são pré-avaliados antes dos guards.
-    let typed_with_bindings =
-        process_with_bindings(with_bindings, &mut lambda_env, table, enum_registry)?;
+    let typed_with_bindings = process_with_bindings(with_bindings, &mut lambda_env, ctx)?;
 
     // Infere o corpo do lambda — delega para infer_lambda_body (fatorado).
     // O body de um lambda é sempre tail_pos=true dentro do lambda, pois
     // representa o valor de retorno do lambda. O tail_pos do contexto onde
     // o lambda aparece é irrelevante para a posição de cauda do corpo.
-    let (ret_ty, typed_body, typed_guards) =
-        infer_lambda_body(body, guards, &mut lambda_env, table, enum_registry)?;
+    let (ret_ty, typed_body, typed_guards) = infer_lambda_body(body, guards, &mut lambda_env, ctx)?;
 
     let lambda_ty = Ty::Function(param_types.clone(), Box::new(ret_ty.clone()));
 

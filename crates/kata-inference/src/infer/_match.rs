@@ -12,7 +12,7 @@ use kata_diagnostics::MiddleError;
 use crate::patterns;
 use crate::typed::{Effect, TypedExprKind, TypedMatchArm, TypedPattern};
 
-use super::expr::infer_expr;
+use super::expr::{InferCtx, infer_expr};
 use super::helpers::InferResult;
 
 /// Infere um `match` — pattern matching com verificação de exaustividade.
@@ -21,19 +21,11 @@ pub(crate) fn infer_match(
     arms: &[MatchArm],
     span: &Span,
     env: &mut TypeEnv,
-    table: &DispatchTable,
-    enum_registry: &EnumRegistry,
+    ctx: &InferCtx,
     tail_pos: bool,
 ) -> InferResult<(Ty, TypedExprKind, Effect)> {
     // Infere o scrutinee.
-    let typed_scrutinee = infer_expr(
-        &scrutinee.node,
-        &scrutinee.span,
-        env,
-        table,
-        enum_registry,
-        false,
-    )?;
+    let typed_scrutinee = infer_expr(&scrutinee.node, &scrutinee.span, env, ctx, false)?;
     let scrutinee_ty = typed_scrutinee.ty.clone();
 
     // Processa cada braço.
@@ -48,7 +40,7 @@ pub(crate) fn infer_match(
 
         let typed_pattern = if let Some(pat) = &arm.pattern {
             let typed_pat =
-                patterns::check_pattern(pat, &scrutinee_ty, enum_registry, &mut arm_env)?;
+                patterns::check_pattern(pat, &scrutinee_ty, ctx.enum_registry, &mut arm_env)?;
             // Coleta variantes cobertas para exaustividade.
             if let TypedPattern::Variant { variant, .. } = &typed_pat.node {
                 covered_variants.push(variant.clone());
@@ -69,14 +61,8 @@ pub(crate) fn infer_match(
 
         // Infere guard (se houver).
         let typed_guard = if let Some(guard_expr) = &arm.guard {
-            let guard_typed = infer_expr(
-                &guard_expr.node,
-                &guard_expr.span,
-                &mut arm_env,
-                table,
-                enum_registry,
-                false,
-            )?;
+            let guard_typed =
+                infer_expr(&guard_expr.node, &guard_expr.span, &mut arm_env, ctx, false)?;
             if guard_typed.ty != Ty::boolean() {
                 return Err(MiddleError::TypeMismatch {
                     expected: "Boolean".into(),
@@ -90,14 +76,7 @@ pub(crate) fn infer_match(
         };
 
         // Infere body do braço.
-        let typed_body = infer_expr(
-            &arm.body.node,
-            &arm.body.span,
-            &mut arm_env,
-            table,
-            enum_registry,
-            tail_pos,
-        )?;
+        let typed_body = infer_expr(&arm.body.node, &arm.body.span, &mut arm_env, ctx, tail_pos)?;
 
         // Verifica que todos os braços retornam o mesmo tipo.
         if let Some(ref existing) = match_ret_ty {
@@ -130,7 +109,7 @@ pub(crate) fn infer_match(
         &covered_variants,
         &scrutinee_ty,
         has_otherwise,
-        enum_registry,
+        ctx.enum_registry,
         span,
     )?;
 
