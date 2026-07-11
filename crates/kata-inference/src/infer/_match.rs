@@ -4,8 +4,6 @@
 //! verifica uniformidade de tipo entre braços e exaustividade.
 
 use kata_ast::{Expr, MatchArm, Span, Spanned};
-use kata_core::dispatch::DispatchTable;
-use kata_core::enum_registry::EnumRegistry;
 use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 

@@ -2,6 +2,8 @@
 
 use super::helpers::{first_item, parse_src};
 use kata_ast::{Expr, Item, TypeExpr};
+use kata_lexer::lex;
+use kata_parser::parse;
 
 // ── ActionCall (bang call) ─────────────────────────────────────────
 
@@ -280,4 +282,95 @@ fn action_decl_tuple_return_type_three() {
         },
         other => panic!("expected ActionDecl, got {other:?}"),
     }
+}
+
+// ── loop, break, continue (Fase 4) ─────────────────────────────────
+
+#[test]
+fn loop_inside_action() {
+    let src = "action contador\n    var i := 0\n    loop\n        i := + i 1\n        echo!(i)";
+    let m = parse_src(src);
+    let item = first_item(&m);
+    match item {
+        Item::ActionDecl { body, .. } => {
+            // body[0] = var i := 0
+            // body[1] = loop { ... }
+            assert_eq!(body.len(), 2);
+            assert!(matches!(&body[0].expr.node, Expr::Var { name, .. } if name == "i"));
+            match &body[1].expr.node {
+                Expr::Loop { body: loop_body } => {
+                    assert_eq!(loop_body.len(), 2);
+                    // loop_body[0] = i := + i 1 (Reassign)
+                    assert!(
+                        matches!(&loop_body[0].node, Expr::Reassign { name, .. } if name == "i")
+                    );
+                    // loop_body[1] = echo!(i) (ActionCall)
+                    assert!(
+                        matches!(&loop_body[1].node, Expr::ActionCall { callee, .. } if callee == "echo")
+                    );
+                }
+                other => panic!("expected Loop, got {other:?}"),
+            }
+        }
+        other => panic!("expected ActionDecl, got {other:?}"),
+    }
+}
+
+#[test]
+fn break_continue_inside_loop_in_action() {
+    let src = "action contador\n    var i := 0\n    loop\n        i := + i 1\n        echo!(i)\n        match > i 5\n            True: break\n            False: continue";
+    let m = parse_src(src);
+    let item = first_item(&m);
+    match item {
+        Item::ActionDecl { body, .. } => {
+            // body[1] = loop { ... }
+            match &body[1].expr.node {
+                Expr::Loop { body: loop_body } => {
+                    // loop_body[2] = match > i 5 { True: break, False: continue }
+                    match &loop_body[2].node {
+                        Expr::Match { arms, .. } => {
+                            assert_eq!(arms.len(), 2);
+                            // arm 0: True: break
+                            match &arms[0].body.node {
+                                Expr::Break => {}
+                                other => panic!("expected Break, got {other:?}"),
+                            }
+                            // arm 1: False: continue
+                            match &arms[1].body.node {
+                                Expr::Continue => {}
+                                other => panic!("expected Continue, got {other:?}"),
+                            }
+                        }
+                        other => panic!("expected Match, got {other:?}"),
+                    }
+                }
+                other => panic!("expected Loop, got {other:?}"),
+            }
+        }
+        other => panic!("expected ActionDecl, got {other:?}"),
+    }
+}
+
+#[test]
+fn loop_outside_action_errors() {
+    let tokens = lex("loop\n    echo!(1)").unwrap();
+    let result = parse(tokens);
+    assert!(result.is_err(), "loop fora de Action deve produzir erro");
+}
+
+#[test]
+fn break_outside_action_errors() {
+    let tokens = lex("break").unwrap();
+    let result = parse(tokens);
+    assert!(result.is_err(), "break fora de Action deve produzir erro");
+}
+
+#[test]
+fn continue_outside_action_errors() {
+    let tokens = lex("continue").unwrap();
+    let result = parse(tokens);
+    assert!(
+        result.is_err(),
+        "continue fora de Action deve produzir erro"
+    );
 }

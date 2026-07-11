@@ -81,12 +81,25 @@ impl Parser {
                 }
                 self.parse_return()
             }
-            Token::Loop => self.parse_loop(),
+            Token::Loop => {
+                if !self.in_action_body {
+                    return Err(self.error("`loop` fora de Action (loop só existe em Actions)"));
+                }
+                self.parse_loop()
+            }
             Token::Break => {
+                if !self.in_action_body {
+                    return Err(self.error("`break` fora de Action (break só existe em Actions)"));
+                }
                 self.advance();
                 Ok(Spanned::new(Expr::Break, start))
             }
             Token::Continue => {
+                if !self.in_action_body {
+                    return Err(
+                        self.error("`continue` fora de Action (continue só existe em Actions)")
+                    );
+                }
                 self.advance();
                 Ok(Spanned::new(Expr::Continue, start))
             }
@@ -343,10 +356,26 @@ pub(crate) fn parse_expr(parser: &mut Parser) -> Result<Spanned<Expr>, FrontendE
 fn parse_apply(parser: &mut Parser) -> Result<Spanned<Expr>, FrontendError> {
     let callee = parser.parse_expr_post_ascription()?;
 
-    // Literais não são callee — não consomem argumentos.
+    // Literais, construções de statement e keywords de controle de fluxo
+    // não são callee — não consomem argumentos.
+    // Liturais: IntLit, FloatLit, TextLit, Unit
+    // Statements: Let, Var, Reassign (bindings auto-delimitados)
+    // Blocos: Match, Loop (consomem INDENT/DEDENT)
+    // Keywords: Break, Continue, Return (controle de fluxo)
     if matches!(
         &callee.node,
-        Expr::IntLit { .. } | Expr::FloatLit { .. } | Expr::TextLit { .. } | Expr::Unit
+        Expr::IntLit { .. }
+            | Expr::FloatLit { .. }
+            | Expr::TextLit { .. }
+            | Expr::Unit
+            | Expr::Let { .. }
+            | Expr::Var { .. }
+            | Expr::Reassign { .. }
+            | Expr::Match { .. }
+            | Expr::Loop { .. }
+            | Expr::Break
+            | Expr::Continue
+            | Expr::Return(..)
     ) {
         return Ok(callee);
     }

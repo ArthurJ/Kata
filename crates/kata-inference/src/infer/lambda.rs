@@ -6,15 +6,13 @@
 //! 3. Erro LambdaInferenceFail (DoD 30) se nenhum mecanismo resolve
 
 use kata_ast::{Expr, GuardClause, Pattern, Span, Spanned, WithBinding};
-use kata_core::dispatch::DispatchTable;
-use kata_core::enum_registry::EnumRegistry;
 use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 
 use crate::typed::{Effect, TypedExprKind, TypedLambdaClause};
 
 use super::apply_lambda::infer_lambda_body;
-use super::expr::{InferCtx, infer_expr};
+use super::expr::InferCtx;
 use super::helpers::{InferResult, check_patterns, process_with_bindings};
 use super::partial_dispatch::try_partial_dispatch;
 

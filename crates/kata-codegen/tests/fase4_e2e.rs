@@ -1,0 +1,108 @@
+//! Testes E2E da Fase 4 — loop, break, continue.
+//!
+//! Pipeline completo: lex → parse → resolve → infer → optimize → codegen → JIT.
+
+use kata_codegen::jit_eval;
+use kata_core::ty::{PrimTy, Ty};
+use kata_inference::infer_module;
+use kata_lexer::lex;
+use kata_optimizer::optimize;
+use kata_parser::parse;
+use kata_resolution::{ResolvedModule, load_prelude, resolve};
+
+/// Executa o pipeline completo e retorna o valor bruto do JIT + tipo.
+fn eval_src(src: &str) -> (i64, Ty) {
+    let tokens = lex(src).expect("lex deve succeed");
+    let module = parse(tokens).expect("parse deve succeed");
+    let prelude = load_prelude().expect("prelude deve carregar");
+    let user = resolve(&module).expect("resolve deve succeed");
+    let resolved = merge_resolved(prelude, user);
+    let typed = infer_module(&module, &resolved).expect("infer deve succeed");
+    let typed = optimize(typed);
+    let jit = jit_eval(&typed).expect("codegen+JIT deve succeed");
+    (jit.raw, jit.ty)
+}
+
+/// Combina prelude + módulo do usuário (replica do driver).
+fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModule {
+    let mut signatures = prelude.signatures;
+    signatures.extend(user.signatures);
+    let type_env = kata_core::ty::TypeEnv::with_parent(prelude.type_env);
+    ResolvedModule {
+        type_env,
+        signatures,
+        enum_registry: prelude.enum_registry,
+        functions: user.functions,
+        actions: user.actions,
+    }
+}
+
+/// Decodifica um SMI (val << 1 | 1) de volta para i64.
+fn untag_smi(raw: i64) -> i64 {
+    raw >> 1
+}
+
+/// Loop com break: soma 1 a 5 e retorna o acumulador.
+/// O break sai do loop quando i > 5.
+#[test]
+fn loop_com_break_soma_1_a_5() {
+    let src = r#"action soma_loop -> Int
+    var i := 0
+    var acc := 0
+    loop
+        i := + i 1
+        match > i 5
+            True: break
+            False: acc := + acc i
+    acc
+soma_loop!()"#;
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Prim(PrimTy::Int));
+    // 1 + 2 + 3 + 4 + 5 = 15
+    assert_eq!(untag_smi(raw), 15, "soma_loop deve ser 15 (1+2+3+4+5)");
+}
+
+/// Loop com break incondicional: executa uma vez e sai.
+#[test]
+fn loop_break_incondicional() {
+    let src = r#"action loop_una -> Int
+    var x := 0
+    loop
+        x := + x 1
+        break
+    x
+loop_una!()"#;
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Prim(PrimTy::Int));
+    assert_eq!(
+        untag_smi(raw),
+        1,
+        "loop_una deve ser 1 (break na primeira iteracao)"
+    );
+}
+
+/// Loop com continue: soma 1 a 5 pulando o 3.
+/// Testa break (i > 5) e continue (i == 3) no mesmo loop.
+#[test]
+fn loop_continue_pula_3() {
+    let src = r#"action soma_pulando -> Int
+    var i := 0
+    var acc := 0
+    loop
+        i := + i 1
+        match > i 5
+            True: break
+            False: match = i 3
+                True: continue
+                False: acc := + acc i
+    acc
+soma_pulando!()"#;
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Prim(PrimTy::Int));
+    // 1 + 2 + 4 + 5 = 12 (pula 3 com continue)
+    assert_eq!(
+        untag_smi(raw),
+        12,
+        "soma_pulando deve ser 12 (1+2+4+5, pulando 3)"
+    );
+}

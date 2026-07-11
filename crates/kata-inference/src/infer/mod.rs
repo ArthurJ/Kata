@@ -17,8 +17,7 @@ mod lambda;
 mod partial_dispatch;
 
 use kata_ast::{Item, Module, Spanned};
-use kata_core::dispatch::{DispatchTable, OverloadInfo};
-use kata_core::enum_registry::EnumRegistry;
+use kata_core::dispatch::OverloadInfo;
 use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 use kata_resolution::ResolvedModule;
@@ -73,6 +72,7 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
             table: &dispatch_table,
             enum_registry: &resolved.enum_registry,
             ret_ty: None,
+            in_loop: false,
         };
         let typed_func = infer_named_function(func_def, &ctx)?;
         // Registra no TypeEnv para permitir uso como valor (call_indirect).
@@ -94,6 +94,7 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
             table: &dispatch_table,
             enum_registry: &resolved.enum_registry,
             ret_ty: Some(&action_def.return_type),
+            in_loop: false,
         };
         let typed_action = infer_action(action_def, &ctx)?;
         typed_actions.push(typed_action);
@@ -116,6 +117,7 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
                     table: &dispatch_table,
                     enum_registry: &resolved.enum_registry,
                     ret_ty: None,
+                    in_loop: false,
                 };
                 let typed = infer_expr(
                     &desugared.node,

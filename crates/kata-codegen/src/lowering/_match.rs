@@ -82,10 +82,21 @@ pub(crate) fn lower_match(
         // Lowera o body do arm.
         ctx.builder.switch_to_block(body_block);
         let body_val = lower_expr(&arm.body.node, ctx)?;
-        ctx.builder.ins().jump(
-            cont_block,
-            &[cranelift_codegen::ir::BlockArg::Value(body_val)],
+
+        // Se o body emitiu break/continue/return (terminador), não emitir
+        // jump para cont_block — o código é unreachable.
+        let is_terminator = matches!(
+            arm.body.node.kind,
+            kata_inference::TypedExprKind::Break
+                | kata_inference::TypedExprKind::Continue
+                | kata_inference::TypedExprKind::Return(_)
         );
+        if !is_terminator {
+            ctx.builder.ins().jump(
+                cont_block,
+                &[cranelift_codegen::ir::BlockArg::Value(body_val)],
+            );
+        }
     }
 
     // Nenhum arm encaixou — runtime trap.

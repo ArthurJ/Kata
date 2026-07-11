@@ -46,7 +46,7 @@ impl Default for Arena {
 // ── Pool de arenas thread-local para FFI ─────────────────────────────
 
 thread_local! {
-    static ARENAS: RefCell<Vec<Arena>> = RefCell::new(Vec::new());
+    static ARENAS: RefCell<Vec<Arena>> = const { RefCell::new(Vec::new()) };
 }
 
 /// Reseta todas as arenas do pool thread-local. Chamado entre execuções

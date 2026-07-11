@@ -140,6 +140,8 @@ pub(crate) fn lower_module(
             epilogue_block: None,
             local_arena: None,
             caller_arena: None,
+            loop_break_block: None,
+            loop_continue_block: None,
         };
 
         // Prólogo do entry point: cria arena global (handle 0 no pool).
@@ -274,6 +276,8 @@ pub(crate) fn define_function_body(
             epilogue_block: None,
             local_arena: None,
             caller_arena: None,
+            loop_break_block: None,
+            loop_continue_block: None,
         };
 
         if clauses.len() == 1 && all_patterns_are_ident(&clauses[0].patterns) {
@@ -413,6 +417,8 @@ fn define_kata_action(
             epilogue_block: None,
             local_arena: None,
             caller_arena: None,
+            loop_break_block: None,
+            loop_continue_block: None,
         };
 
         // Prólogo: cria local_arena via kata_rt_arena_create().

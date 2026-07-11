@@ -11,8 +11,6 @@
 //! process_with_bindings → infer_lambda_body → montar Closure.
 
 use kata_ast::{Expr, GuardClause, Pattern, Span, Spanned, WithBinding};
-use kata_core::dispatch::DispatchTable;
-use kata_core::enum_registry::EnumRegistry;
 use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 

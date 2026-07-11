@@ -62,6 +62,12 @@ pub(crate) struct LowerCtx<'a, 'b> {
     /// Handle da arena do caller. Usado para alocar tuplas que sobrevivem
     /// à destruição da arena local (valores retornados). `None` fora de Actions.
     pub caller_arena: Option<Value>,
+    /// Block de saída do loop atual — `break` faz `jump` para este block.
+    /// `None` fora de um loop.
+    pub loop_break_block: Option<Block>,
+    /// Block de continuação do loop atual — `continue` faz `jump` para este block.
+    /// `None` fora de um loop.
+    pub loop_continue_block: Option<Block>,
 }
 
 impl<'a, 'b> LowerCtx<'a, 'b> {

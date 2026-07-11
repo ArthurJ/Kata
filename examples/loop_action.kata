@@ -1,0 +1,16 @@
+# Fio 3 Fase 4 — loop, break, continue.
+#
+# DoD 11: kata run examples/loop_action.kata imprime 0-5 (loop com var, break).
+# DoD 12: break sai de loop. continue próxima iteração.
+# DoD 13: loop/break/continue fora de Action produzem erro de parser.
+
+action contador
+    var i := 0
+    loop
+        echo!(show i)
+        i := + i 1
+        match > i 5
+            True: break
+            False: continue
+
+contador!()

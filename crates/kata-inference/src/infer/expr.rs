@@ -28,6 +28,9 @@ pub(crate) struct InferCtx<'a> {
     /// o body de uma Action, `None` caso contrário. Usado por `infer_return`
     /// para verificar que `return expr` produz o tipo esperado.
     pub ret_ty: Option<&'a Ty>,
+    /// `true` quando inferindo dentro de um `loop`. Usado por `infer_break`
+    /// e `infer_continue` para validar que só aparecem dentro de loop.
+    pub in_loop: bool,
 }
 
 /// Infere o tipo de uma expressão, produzindo um `TypedExpr`.
@@ -355,26 +358,49 @@ pub(crate) fn infer_expr_hinted(
                 Effect::Puro,
             )
         }
-        Expr::Loop { .. } => {
-            return Err(MiddleError::TypeMismatch {
-                expected: "expressão (loop em Actions — Fase 4)".into(),
-                found: "Loop".into(),
-                span: (*span).into(),
-            });
+        Expr::Loop { body } => {
+            // Loop body é inferido com in_loop = true.
+            // Cada expr do body é inferida em sequência no mesmo escopo.
+            // O tipo do loop é Unit (break sem valor na Fase 4).
+            let loop_ctx = InferCtx {
+                table: ctx.table,
+                enum_registry: ctx.enum_registry,
+                ret_ty: ctx.ret_ty,
+                in_loop: true,
+            };
+            let mut typed_body = Vec::new();
+            for expr in body {
+                let typed = infer_expr(
+                    &expr.node, &expr.span, env, &loop_ctx,
+                    false, // body do loop nunca é tail_pos (loop retorna Unit)
+                )?;
+                typed_body.push(Spanned::new(typed, expr.span));
+            }
+            (
+                Ty::Unit,
+                TypedExprKind::Loop { body: typed_body },
+                Effect::Puro,
+            )
         }
         Expr::Break => {
-            return Err(MiddleError::TypeMismatch {
-                expected: "expressão (break em Actions — Fase 4)".into(),
-                found: "Break".into(),
-                span: (*span).into(),
-            });
+            if !ctx.in_loop {
+                return Err(MiddleError::TypeMismatch {
+                    expected: "expressão (break só existe dentro de loop)".into(),
+                    found: "Break".into(),
+                    span: (*span).into(),
+                });
+            }
+            (Ty::Unit, TypedExprKind::Break, Effect::Puro)
         }
         Expr::Continue => {
-            return Err(MiddleError::TypeMismatch {
-                expected: "expressão (continue em Actions — Fase 4)".into(),
-                found: "Continue".into(),
-                span: (*span).into(),
-            });
+            if !ctx.in_loop {
+                return Err(MiddleError::TypeMismatch {
+                    expected: "expressão (continue só existe dentro de loop)".into(),
+                    found: "Continue".into(),
+                    span: (*span).into(),
+                });
+            }
+            (Ty::Unit, TypedExprKind::Continue, Effect::Puro)
         }
 
         // ── Fio 3: Question e PipeFallback — desugar é Fase 7 e 8 ──

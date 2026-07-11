@@ -152,6 +152,18 @@ pub enum TypedExprKind {
     /// `arena_destroy(local_arena)` + `return_(result)`.
     /// Statements após `return` são unreachable (não produzidos pelo typeck).
     Return(Box<Spanned<TypedExpr>>),
+
+    // ── Fio 3 Fase 4: loop, break, continue ──────────────────────
+    /// `loop` — laço infinito. Body é uma sequência de expressões tipadas.
+    /// O tipo do loop é determinado pelo tipo do `break` (ou Unit se sem break).
+    Loop { body: Vec<Spanned<TypedExpr>> },
+
+    /// `break` — sai do laço.
+    /// O tipo do `break` determina o tipo do loop (unificado entre todos breaks).
+    Break,
+
+    /// `continue` — próxima iteração.
+    Continue,
 }
 
 /// Informação sobre uma variável capturada por uma closure.
