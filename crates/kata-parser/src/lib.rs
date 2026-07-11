@@ -24,11 +24,19 @@ use kata_diagnostics::{FrontendError, MietteSpan};
 pub(crate) struct Parser {
     pub(crate) tokens: Vec<TokenWithSpan>,
     pub(crate) pos: usize,
+    /// Flag: true quando o parser está dentro do body de uma Action.
+    /// `var` e `return` só são aceitos quando esta flag é true.
+    /// Fora de Action, produzem erro de parser.
+    pub(crate) in_action_body: bool,
 }
 
 impl Parser {
     pub(crate) fn new(tokens: Vec<TokenWithSpan>) -> Self {
-        Parser { tokens, pos: 0 }
+        Parser {
+            tokens,
+            pos: 0,
+            in_action_body: false,
+        }
     }
 
     // ── Token access helpers ──────────────────────────────────────

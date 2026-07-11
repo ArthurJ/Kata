@@ -288,10 +288,45 @@ pub(crate) fn infer_expr_hinted(
         Expr::Var { name, value } => {
             let typed_value = infer_expr(&value.node, &value.span, env, ctx, false)?;
             let val_ty = typed_value.ty.clone();
-            env.define(name, val_ty);
+            env.define_mutable(name, val_ty);
             (
                 Ty::Unit,
                 TypedExprKind::Var {
+                    name: name.clone(),
+                    value: Box::new(Spanned::new(typed_value, value.span)),
+                },
+                Effect::Puro,
+            )
+        }
+
+        // ── Fio 3: Reassign — reatribuição a variável `var` ──
+        Expr::Reassign { name, value } => {
+            // Verifica que a variável existe e foi declarada como mutável.
+            let existing_ty =
+                env.lookup(name)
+                    .cloned()
+                    .ok_or_else(|| MiddleError::UnboundName {
+                        name: name.clone(),
+                        span: (*span).into(),
+                    })?;
+            if !env.is_mutable(name) {
+                return Err(MiddleError::TypeMismatch {
+                    expected: format!("variável mutável `{name}` (declarada com `var`)"),
+                    found: format!("variável imutável `{name}` (declarada com `let`)"),
+                    span: (*span).into(),
+                });
+            }
+            let typed_value = infer_expr(&value.node, &value.span, env, ctx, false)?;
+            if typed_value.ty != existing_ty {
+                return Err(MiddleError::TypeMismatch {
+                    expected: format!("{existing_ty:?}"),
+                    found: format!("{:?}", typed_value.ty),
+                    span: value.span.into(),
+                });
+            }
+            (
+                Ty::Unit,
+                TypedExprKind::Reassign {
                     name: name.clone(),
                     value: Box::new(Spanned::new(typed_value, value.span)),
                 },

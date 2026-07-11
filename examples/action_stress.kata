@@ -1,0 +1,33 @@
+# Teste de estresse: encadeamento de 3 Actions com arenas separadas.
+# Cada Action retorna o resultado da próxima em tail_pos.
+# O valor deve fluir por toda a cadeia sem corrupção.
+#
+# Com arena single (bug antigo): arena_destroy de qualquer Action
+# intermediária reseta toda a arena thread_local → UAF.
+# Com pool de arenas + Modelo D: cada Action tem sua arena,
+# valores em tail_pos vão para a caller_arena transitiva (global).
+
+action innermost -> (Int, Int)
+    (111, 222)
+
+action middle -> (Int, Int)
+    # Aloca tupla local (non-tail-pos) — vai para local_arena de middle.
+    # Isso pode sobrescrever memória se arenas não são separadas.
+    (999, 888);
+    # Retorna innermost!() em tail_pos → vai para caller_arena de middle
+    # = caller_arena de outer = arena global (handle 0).
+    innermost!()
+
+action outer -> (Int, Int)
+    # Aloca tupla local (non-tail-pos) — vai para local_arena de outer.
+    # Mais uma alocação que poderia sobrescrever o valor de middle.
+    (777, 666);
+    # Retorna middle!() em tail_pos → vai para caller_arena de outer
+    # = arena global (handle 0).
+    middle!()
+
+# Entry point: outer!() em tail_pos → retorna na arena global.
+# Match extrai primeiro elemento (111). Se UAF, valor será garbage.
+match outer!()
+    (a, b): a
+    otherwise: 0

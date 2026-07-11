@@ -124,7 +124,8 @@ fn action_decl_no_params_no_ret() {
             assert!(directives.is_empty());
             // Body tem 1 statement.
             assert_eq!(body.len(), 1);
-            match &body[0].node {
+            assert!(!body[0].has_semicolon);
+            match &body[0].expr.node {
                 Expr::ActionCall { callee, args } => {
                     assert_eq!(callee, "echo");
                     // `!("hello")` = Grouping (1 elemento sem vírgula).
@@ -163,6 +164,7 @@ fn action_decl_with_params_and_ret() {
             assert_eq!(ret.node, TypeExpr::Named("Unit".into()));
             assert!(directives.is_empty());
             assert_eq!(body.len(), 1);
+            assert!(!body[0].has_semicolon);
         }
         other => panic!("expected ActionDecl, got {other:?}"),
     }
@@ -178,9 +180,13 @@ fn action_decl_multi_statements() {
             assert_eq!(name, "greet");
             assert_eq!(body.len(), 2);
             // Primeiro statement: echo!("hello")
-            assert!(matches!(&body[0].node, Expr::ActionCall { callee, .. } if callee == "echo"));
+            assert!(
+                matches!(&body[0].expr.node, Expr::ActionCall { callee, .. } if callee == "echo")
+            );
             // Segundo statement: echo!("world")
-            assert!(matches!(&body[1].node, Expr::ActionCall { callee, .. } if callee == "echo"));
+            assert!(
+                matches!(&body[1].expr.node, Expr::ActionCall { callee, .. } if callee == "echo")
+            );
         }
         other => panic!("expected ActionDecl, got {other:?}"),
     }
@@ -196,4 +202,82 @@ fn action_decl_then_entry_expr() {
         &m.items[1].node,
         Item::EntryExpr(e) if matches!(e.node, Expr::ActionCall { .. })
     ));
+}
+
+#[test]
+fn action_decl_semicolon_mark() {
+    // Statement com `;` marca computação local (has_semicolon = true).
+    let src = "action greet\n    echo!(\"hello\");\n    echo!(\"world\")";
+    let m = parse_src(src);
+    let item = first_item(&m);
+    match item {
+        Item::ActionDecl { body, .. } => {
+            assert_eq!(body.len(), 2);
+            // Primeiro statement tem `;`.
+            assert!(body[0].has_semicolon);
+            // Segundo statement não tem `;` (retorno implícito).
+            assert!(!body[1].has_semicolon);
+        }
+        other => panic!("expected ActionDecl, got {other:?}"),
+    }
+}
+
+#[test]
+fn action_decl_last_stmt_semicolon() {
+    // Último statement com `;` → retorna Unit.
+    let src = "action greet\n    echo!(\"hello\");";
+    let m = parse_src(src);
+    let item = first_item(&m);
+    match item {
+        Item::ActionDecl { body, .. } => {
+            assert_eq!(body.len(), 1);
+            assert!(body[0].has_semicolon);
+        }
+        other => panic!("expected ActionDecl, got {other:?}"),
+    }
+}
+
+#[test]
+fn action_decl_tuple_return_type() {
+    // Action com tipo de retorno tupla: `-> (Int, Int)`
+    let src = "action make_pair -> (Int, Int)\n    (1, 2)";
+    let m = parse_src(src);
+    let item = first_item(&m);
+    match item {
+        Item::ActionDecl {
+            name, params, ret, ..
+        } => {
+            assert_eq!(name, "make_pair");
+            assert!(params.is_empty());
+            match &ret.node {
+                TypeExpr::Tuple(elements) => {
+                    assert_eq!(elements.len(), 2);
+                    assert_eq!(elements[0].node, TypeExpr::Named("Int".into()));
+                    assert_eq!(elements[1].node, TypeExpr::Named("Int".into()));
+                }
+                other => panic!("expected TypeExpr::Tuple, got {other:?}"),
+            }
+        }
+        other => panic!("expected ActionDecl, got {other:?}"),
+    }
+}
+
+#[test]
+fn action_decl_tuple_return_type_three() {
+    // Tupla com 3 elementos: `-> (Int, Text, Boolean)`
+    let src = "action triple -> (Int, Text, Boolean)\n    (1, \"hi\", True)";
+    let m = parse_src(src);
+    let item = first_item(&m);
+    match item {
+        Item::ActionDecl { ret, .. } => match &ret.node {
+            TypeExpr::Tuple(elements) => {
+                assert_eq!(elements.len(), 3);
+                assert_eq!(elements[0].node, TypeExpr::Named("Int".into()));
+                assert_eq!(elements[1].node, TypeExpr::Named("Text".into()));
+                assert_eq!(elements[2].node, TypeExpr::Named("Boolean".into()));
+            }
+            other => panic!("expected TypeExpr::Tuple, got {other:?}"),
+        },
+        other => panic!("expected ActionDecl, got {other:?}"),
+    }
 }

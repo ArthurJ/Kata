@@ -1,0 +1,13 @@
+# DoD 10: Aninhamento de Actions com arenas encadeadas.
+# inner retorna (10, 20) na caller's arena (= local_arena de outer).
+# outer retorna inner!() na caller's arena do entry point.
+# O match no entry point extrai 10 e imprime.
+action inner -> (Int, Int)
+    (10, 20)
+
+action outer -> (Int, Int)
+    inner!()
+
+match outer!()
+    (a, b): a
+    otherwise: 0

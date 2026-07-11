@@ -1,0 +1,11 @@
+# Teste integrado: var, return, ; semântica, caller's arena.
+# var x := 10 (mutável), x := x + 32 (reatribuição), return x.
+# O `;` marca (1, 2) como computação local.
+# return x retorna o Int 42 via caller's arena.
+action compute -> Int
+    var x := 10
+    (1, 2);
+    x := + x 32
+    return x
+
+compute!()

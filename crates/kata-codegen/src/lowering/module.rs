@@ -142,6 +142,19 @@ pub(crate) fn lower_module(
             caller_arena: None,
         };
 
+        // Prólogo do entry point: cria arena global (handle 0 no pool).
+        // Esta arena é a caller_arena para Actions chamadas do entry point.
+        // Actions em tail_pos alocam retornos aqui — sobrevivem até o processo
+        // terminar. Não há epílogo que a destrua (o processo termina).
+        let arena_create_ref = lower
+            .ffi_refs
+            .get("kata_rt_arena_create")
+            .copied()
+            .ok_or_else(|| CodegenError::FfiSymbolNotFound("kata_rt_arena_create".into()))?;
+        let global_arena = lower.builder.ins().call(arena_create_ref, &[]);
+        let global_arena = lower.builder.inst_results(global_arena)[0];
+        lower.caller_arena = Some(global_arena);
+
         // Lowera pre_entry (let bindings e outras expressões top-level anteriores).
         // Estas são loweradas em sequência, compartilhando o var_map —
         // um `let` define uma variável que o entry pode usar.

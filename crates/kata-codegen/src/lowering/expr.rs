@@ -256,9 +256,22 @@ pub(crate) fn lower_expr(
             }
 
             // Aloca N * 8 bytes na arena via kata_rt_arena_alloc(handle, size).
-            // handle = sentinel 1 (arena thread-local; arena_create é chamado
-            // no início do entry point, mas alloc usa thread_local diretamente).
-            let handle = ctx.builder.ins().iconst(I64, 1);
+            // Escolha de arena baseada em tail_pos:
+            // - tail_pos = true (retorno) → caller_arena (sobrevive à destruição da local)
+            // - tail_pos = false (computação local) → local_arena (liberada no epílogo)
+            let handle = if expr.tail_pos {
+                // tail_pos = true: usar caller_arena. Se não há caller_arena
+                // (função pura), usa arena global (handle 0).
+                ctx.caller_arena
+                    .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0))
+            } else {
+                // tail_pos = false: usar local_arena. Se não há local_arena
+                // (entry point ou função pura), usa arena global (handle 0).
+                // Entry point: tudo é tail_pos, este branch não é atingido.
+                // Função pura: não há epílogo que destrua, arena global é segura.
+                ctx.local_arena
+                    .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0))
+            };
             let size = ctx.builder.ins().iconst(I64, (n * 8) as i64);
             let func_ref = ctx.ffi_refs.get("kata_rt_arena_alloc").ok_or_else(|| {
                 super::CodegenError::FfiSymbolNotFound("kata_rt_arena_alloc".into())
@@ -381,9 +394,26 @@ pub(crate) fn lower_expr(
             // O ABI da Action é: (caller_arena: i64, arg1, arg2, ...) -> ret_ty.
             let mut arg_values = Vec::new();
 
-            // caller_arena handle — por enquanto, sentinel 1 (thread-local arena).
-            // Fase 3 trará múltiplas arenas.
-            arg_values.push(ctx.builder.ins().iconst(I64, 1));
+            // caller_arena handle — decide qual arena passar como caller_arena
+            // do callee baseado em tail_pos:
+            // - tail_pos = true: passa ctx.caller_arena (arena do caller do caller).
+            //   O callee aloca retornos nessa arena, que persiste após o caller
+            //   terminar. Evita UAF: o valor retorado sobrevive à destruição da
+            //   local_arena do caller.
+            // - tail_pos = false: passa ctx.local_arena (arena local do caller).
+            //   O callee aloca retornos na arena local do caller, que é destruída
+            //   no epílogo. Correto para `;` statements (valor é descartado).
+            //
+            // Se não há caller_arena/local_arena (entry point), usa sentinel 0
+            // (arena global — handle 0 é a primeira arena criada no pool).
+            let caller_arena_val = if expr.tail_pos {
+                ctx.caller_arena
+                    .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0))
+            } else {
+                ctx.local_arena
+                    .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0))
+            };
+            arg_values.push(caller_arena_val);
 
             // Extrai elementos da tupla. Se é Unit (tupla vazia), não há args.
             match &args.node.kind {
@@ -443,6 +473,19 @@ pub(crate) fn lower_expr(
             Ok(ctx.builder.ins().iconst(I64, 0))
         }
 
+        // ── Fio 3: Reassign — def_var com novo valor (variável já existe) ──
+        TypedExprKind::Reassign { name, value } => {
+            let val = lower_expr(&value.node, ctx)?;
+            let var = *ctx.var_map.get(name).ok_or_else(|| {
+                super::CodegenError::UnsupportedNode(format!(
+                    "Reassign: variável `{name}` não encontrada no var_map"
+                ))
+            })?;
+            ctx.builder.def_var(var, val);
+            // Reassign retorna Unit.
+            Ok(ctx.builder.ins().iconst(I64, 0))
+        }
+
         // ── Fio 3 Fase 2: return — jump para epilogue_block ──
         TypedExprKind::Return(inner) => {
             let val = lower_expr(&inner.node, ctx)?;
@@ -450,9 +493,10 @@ pub(crate) fn lower_expr(
             ctx.builder
                 .ins()
                 .jump(epilogue, &[cranelift_codegen::ir::BlockArg::Value(val)]);
-            // return não produz valor no fluxo linear — o jump já terminou o block.
-            // Retornamos iconst(0) como placeholder; Cranelift elimina código unreachable.
-            Ok(ctx.builder.ins().iconst(I64, 0))
+            // Após jump (terminador), o block está fechado. Não pode adicionar
+            // instruções. Retornamos `val` — o caller do loop em define_kata_action
+            // detecta Return e break, então este valor é unreachable.
+            Ok(val)
         }
     }
 }

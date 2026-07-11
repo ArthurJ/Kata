@@ -147,6 +147,13 @@ fn desugar_pipes(expr: &Spanned<Expr>) -> Spanned<Expr> {
             },
             expr.span,
         ),
+        Expr::Reassign { name, value } => Spanned::new(
+            Expr::Reassign {
+                name: name.clone(),
+                value: Box::new(desugar_pipes(value)),
+            },
+            expr.span,
+        ),
         Expr::Question(inner) => {
             Spanned::new(Expr::Question(Box::new(desugar_pipes(inner))), expr.span)
         }
@@ -427,6 +434,13 @@ fn desugar_holes(expr: &Spanned<Expr>) -> Spanned<Expr> {
         ),
         Expr::Var { name, value } => Spanned::new(
             Expr::Var {
+                name: name.clone(),
+                value: Box::new(desugar_holes(value)),
+            },
+            expr.span,
+        ),
+        Expr::Reassign { name, value } => Spanned::new(
+            Expr::Reassign {
                 name: name.clone(),
                 value: Box::new(desugar_holes(value)),
             },

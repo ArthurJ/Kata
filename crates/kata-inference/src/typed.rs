@@ -138,6 +138,14 @@ pub enum TypedExprKind {
         value: Box<Spanned<TypedExpr>>,
     },
 
+    /// `nome := expr` — reatribuição a variável `var` (exclusivo de Actions).
+    /// O typeck verificou que `name` foi declarado como mutável e que o tipo
+    /// do valor é compatível. O codegen faz `def_var` com o novo valor.
+    Reassign {
+        name: String,
+        value: Box<Spanned<TypedExpr>>,
+    },
+
     /// `return expr` — early return de uma Action.
     /// O typeck verificou que o tipo de `expr` bate com `ret_ty` da Action.
     /// O codegen emite `jump epilogue_block(value)` — o epílogo faz

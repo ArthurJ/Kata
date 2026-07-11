@@ -1,0 +1,11 @@
+# DoD 9 (forte): `;` statement aloca tupla na local_arena (liberada no epílogo).
+# Retorno aloca tupla na caller's arena (sobrevive).
+# Se o `;` vazasse para a caller's arena, poderia corromper o retorno.
+# O match extrai 42 do retorno, não da tupla local.
+action leak_test -> (Int, Int)
+    (1, 2);
+    (42, 99)
+
+match leak_test!()
+    (a, b): a
+    otherwise: 0

@@ -7,7 +7,7 @@
 //! Os tipos da linguagem (`Int`, `Float`, `Text`, `Rational`) são `data`
 //! com `@ffi` no prelude. `Boolean` é `enum` no prelude.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// Tipo canônico do compilador.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -101,6 +101,10 @@ impl Ty {
 pub struct TypeEnv {
     bindings: HashMap<String, Ty>,
     parent: Option<Box<TypeEnv>>,
+    /// Nomes declarados como mutáveis (`var`) neste escopo.
+    /// Necessário para validar reatribuição (`x := 42` só é válido se `x`
+    /// foi declarado com `var`, não `let`).
+    mutables: HashSet<String>,
 }
 
 impl TypeEnv {
@@ -108,6 +112,7 @@ impl TypeEnv {
         TypeEnv {
             bindings: HashMap::new(),
             parent: None,
+            mutables: HashSet::new(),
         }
     }
 
@@ -115,12 +120,29 @@ impl TypeEnv {
         TypeEnv {
             bindings: HashMap::new(),
             parent: Some(Box::new(parent)),
+            mutables: HashSet::new(),
         }
     }
 
-    /// Define um nome no escopo atual.
+    /// Define um nome no escopo atual (binding imutável por default).
     pub fn define(&mut self, name: &str, ty: Ty) {
         self.bindings.insert(name.to_string(), ty);
+    }
+
+    /// Define um nome mutável no escopo atual (`var`).
+    /// Marca o nome como mutável para validação de reatribuição.
+    pub fn define_mutable(&mut self, name: &str, ty: Ty) {
+        self.bindings.insert(name.to_string(), ty);
+        self.mutables.insert(name.to_string());
+    }
+
+    /// Verifica se um nome foi declarado como mutável (`var`).
+    /// Percorre a cadeia de escopos.
+    pub fn is_mutable(&self, name: &str) -> bool {
+        if self.mutables.contains(name) {
+            return true;
+        }
+        self.parent.as_deref().is_some_and(|p| p.is_mutable(name))
     }
 
     /// Procura um nome na cadeia de escopos.

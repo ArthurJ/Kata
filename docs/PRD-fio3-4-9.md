@@ -233,10 +233,12 @@ programador Kata). O codegen passa o handle na chamada.
   Valores na caller's arena sobrevivem.
 - **Entry point**: recebe handle da arena global (criada no início de
   `__kata_entry`).
-- **Aninhamento**: Action A chama Action B. A passa seu `local_handle` como
-  `caller_handle` para B. B aloca retornos na arena de A. A arena de A persiste
-  até A terminar (ou até o caller de A terminar, se A também retornou na
-  caller's arena).
+- **Aninhamento**: Action A chama Action B. A passa `caller_arena` de A
+  (se B está em tail_pos em A) ou `local_arena` de A (se B está em `;`)
+  como `caller_handle` para B. B aloca retornos na arena recebida. Se B
+  está em tail_pos, o valor vai para a caller_arena de A — que persiste
+  até o caller de A terminar. Se B está em `;`, o valor vai para a
+  local_arena de A — destruída no epílogo de A (valor é descartado).
 
 O `LowerCtx` ganha dois handles:
 ```rust
@@ -247,9 +249,16 @@ pub struct LowerCtx {
 }
 ```
 
-Na função `__kata_entry`: `caller_arena = 0` (arena global), `local_arena = 1`
-(criada no entry). Em Actions: `caller_arena` vem do parâmetro implícito,
-`local_arena` é criada no prólogo.
+Na função `__kata_entry`: cria arena global no prólogo via
+`kata_rt_arena_create()` (handle 0 no pool de arenas). `caller_arena` =
+handle da arena global. `local_arena` = None (entry point não é Action,
+não tem `;` statements). Em Actions: `caller_arena` vem do parâmetro
+implícito, `local_arena` é criada no prólogo.
+
+O runtime mantém um **pool de arenas** thread-local (`Vec<Arena>`)
+indexado por handle. `kata_rt_arena_create` retorna um handle único
+(índice no Vec). `kata_rt_arena_destroy(handle)` reseta SÓ a arena
+daquele handle — outras arenas não são afetadas.
 
 ### Fio 4: Enum Avançado — Payload, Result, Optional, |
 
@@ -1136,31 +1145,31 @@ panic!(msg) }`.
 Os DoDs estão agrupados por **fase de implementação** (ordem de dependência),
 não por fio. Cada fase depende apenas das anteriores.
 
-### Fase 1 — Actions básicas
+### Fase 1 — Actions básicas ✅
 
-1. `kata run examples/hello_action.kata` imprime "hello" e "world".
+1. `kata run examples/hello_action.kata` imprime "hello" e "world". ✅
 2. `;` distingue computação local de retorno. Action com `;` no último
-   statement retorna `Unit`.
-3. `var` permite reatribuição. `let` em Action é imutável.
-4. `var` fora de Action produz erro de parser.
-5. `return` fora de Action produz erro de parser.
+   statement retorna `Unit`. ✅
+3. `var` permite reatribuição. `let` em Action é imutável. ✅
+4. `var` fora de Action produz erro de parser. ✅
+5. `return` fora de Action produz erro de parser. ✅
 6. `?` fora de Action produz erro de typeck (desugar no typeck precisa do
    tipo da expressão para distinguir `Result` de `Optional`).
 
-### Fase 2 — return, var, ; semântica
+### Fase 2 — return, var, ; semântica ✅
 
 7. `kata run examples/action_return.kata` imprime `42` (tupla retorna via
-   caller's arena sem use-after-free).
+   caller's arena sem use-after-free). ✅
 
-### Fase 3 — Caller's Arena
+### Fase 3 — Caller's Arena ✅
 
 8. Action retorna coleção (tupla) sem use-after-free. O valor sobrevive à
-   destruição da arena local da Action.
+   destruição da arena local da Action. ✅
 9. `;` statements não vazam ponteiros para a caller's arena — computação
-   local é liberada no epílogo.
+   local é liberada no epílogo. ✅
 10. Aninhamento: Action A chama Action B. B retorna valor na arena de A.
     A retorna valor na arena do caller de A. Sem use-after-free em nenhum
-    nível.
+    nível. ✅ (validado por `examples/action_stress.kata` — 3 Actions encadeadas)
 
 ### Fase 4 — loop, break, continue
 

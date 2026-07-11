@@ -245,9 +245,11 @@ fn infer_named_function(
 
 /// Infere uma Action — produz `TypedAction` a partir de `ActionDef`.
 ///
-/// O body é uma sequência de statements. Cada statement é inferido em
-/// sequência no mesmo escopo. O último statement (sem `;`) é o retorno
-/// implícito — verifica tipo contra `ret_ty`.
+/// O body é uma sequência de statements (`ActionStmt`). Cada statement é
+/// inferido em sequência no mesmo escopo. O último statement **sem `;`** é
+/// o retorno implícito — verifica tipo contra `ret_ty`. O último statement
+/// **com `;`** retorna `Unit` — se `ret_ty` não for `Unit`, é um erro.
+/// Após um `return`, statements subsequentes são unreachable — paramos.
 fn infer_action(
     action_def: &kata_resolution::ActionDef,
     ctx: &InferCtx,
@@ -264,22 +266,25 @@ fn infer_action(
     }
 
     // Infere cada statement do body em sequência.
-    // O último statement é o retorno implícito (tail_pos = true).
+    // O último statement sem `;` é o retorno implícito (tail_pos = true).
+    // O último statement com `;` retorna Unit (tail_pos = false).
     // Após um `return`, statements subsequentes são unreachable — paramos.
     let mut typed_body: Vec<Spanned<TypedExpr>> = Vec::new();
     let n = action_def.body.len();
     for (i, stmt) in action_def.body.iter().enumerate() {
         let is_last = i == n - 1;
-        let desugared = desugar::desugar(stmt);
+        // Se o último statement tem `;`, não é retorno implícito.
+        let tail_pos = is_last && !stmt.has_semicolon;
+        let desugared = desugar::desugar(&stmt.expr);
         let typed = infer_expr(
             &desugared.node,
             &desugared.span,
             &mut action_env,
             ctx,
-            is_last, // último statement é retorno implícito (tail_pos)
+            tail_pos,
         )?;
         let is_return = matches!(typed.kind, TypedExprKind::Return(_));
-        typed_body.push(Spanned::new(typed, stmt.span));
+        typed_body.push(Spanned::new(typed, stmt.expr.span));
         if is_return {
             break; // statements após return são unreachable
         }
@@ -287,16 +292,24 @@ fn infer_action(
 
     // Verifica que o último statement produz o tipo esperado.
     // Se o body terminou com `return`, o tipo já foi validado em infer_return.
-    // Senão, o último statement é o retorno implícito.
+    // Senão, o último statement é o retorno implícito (ou Unit se tinha `;`).
     if let Some(last) = typed_body.last()
         && !matches!(last.node.kind, TypedExprKind::Return(_))
-        && last.node.ty != *ret_ty
     {
-        return Err(MiddleError::TypeMismatch {
-            expected: format!("{ret_ty:?}"),
-            found: format!("{:?}", last.node.ty),
-            span: last.span.into(),
-        });
+        let actual_ty = &last.node.ty;
+        // Se o último statement tinha `;`, o retorno é Unit.
+        let expected_ty = if action_def.body.last().is_some_and(|s| s.has_semicolon) {
+            &Ty::Unit
+        } else {
+            ret_ty
+        };
+        if actual_ty != expected_ty {
+            return Err(MiddleError::TypeMismatch {
+                expected: format!("{expected_ty:?}"),
+                found: format!("{actual_ty:?}"),
+                span: last.span.into(),
+            });
+        }
     }
 
     Ok(TypedAction {

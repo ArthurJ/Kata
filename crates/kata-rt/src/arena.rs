@@ -4,11 +4,14 @@
 //! A arena libera tudo em O(1) no epílogo da Action.
 //!
 //! Em Fio 2 (DoD 22): funções C-ABI expostas para o codegen alocar tuplas.
-//! A arena é thread-local — cada thread (fiber, no futuro) tem sua própria.
-//! `kata_rt_arena_create` inicializa a arena thread-local e retorna um handle
-//! opaco (ponteiro para a `Arena`). `kata_rt_arena_alloc(handle, size)` aloca
-//! `size` bytes alinhados a 8 e retorna o ponteiro. `kata_rt_arena_destroy`
-//! reseta a arena.
+//! Em Fio 3 (Fase 3): pool de arenas indexado por handle — cada Action cria
+//! sua própria arena e a destrói no epílogo. Valores na caller's arena
+//! sobrevivem à destruição da arena local.
+//!
+//! `kata_rt_arena_create` cria uma nova arena no pool e retorna um handle
+//! opaco (índice no Vec). `kata_rt_arena_alloc(handle, size)` aloca `size`
+//! bytes alinhados a 8 na arena do handle. `kata_rt_arena_destroy(handle)`
+//! reseta SÓ a arena do handle (não o pool inteiro).
 
 use bumpalo::Bump;
 use std::cell::RefCell;
@@ -23,7 +26,7 @@ impl Arena {
         Arena { bump: Bump::new() }
     }
 
-    /// Aloca `size` bytes alinhados a `align`. Retorna ponteiro bruto.
+    /// Aloca `size` bytes alinhado a `align`. Retorna ponteiro bruto.
     pub(crate) fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
         self.bump.alloc_layout(layout).as_ptr()
     }
@@ -40,41 +43,44 @@ impl Default for Arena {
     }
 }
 
-// ── Arena thread-local para FFI ──────────────────────────────────────
+// ── Pool de arenas thread-local para FFI ─────────────────────────────
 
 thread_local! {
-    static ARENA: RefCell<Arena> = RefCell::new(Arena::new());
+    static ARENAS: RefCell<Vec<Arena>> = RefCell::new(Vec::new());
 }
 
-/// Reseta a arena thread-local. Chamado entre execuções de teste para
-/// evitar poluição de estado global.
-pub fn reset_arena() {
-    ARENA.with(|a| a.borrow_mut().reset());
+/// Reseta todas as arenas do pool thread-local. Chamado entre execuções
+/// de teste para evitar poluição de estado global.
+pub fn reset_all_arenas() {
+    ARENAS.with(|arenas| {
+        arenas.borrow_mut().clear();
+    });
 }
 
 // ── Funções C-ABI para o codegen ─────────────────────────────────────
 
-/// Cria (ou obtém) a arena thread-local e retorna um handle opaco.
-/// O handle é um ponteiro para a `Arena` interna — usado por `arena_alloc`.
+/// Cria uma nova arena no pool e retorna um handle opaco (índice no Vec).
 ///
-/// Em Fio 2, chamado uma vez no início do `__kata_entry`. Quando Fio 3
-/// adicionar fibers, cada fiber terá sua própria arena thread-local.
+/// O handle é válido até `kata_rt_arena_destroy(handle)` ser chamado.
+/// Handles não são reusados — cada `arena_create` produz um handle novo.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_arena_create() -> i64 {
-    // Retorna um handle não-nulo. Como a arena é thread_local, o handle
-    // é apenas um sentinel — `arena_alloc` usa a thread_local diretamente.
-    // Usamos 1 como sentinel válido (0 seria "arena não inicializada").
-    1
+    ARENAS.with(|arenas| {
+        let mut arenas = arenas.borrow_mut();
+        let id = arenas.len() as i64;
+        arenas.push(Arena::new());
+        id
+    })
 }
 
-/// Aloca `size` bytes alinhados a 8 na arena thread-local.
+/// Aloca `size` bytes alinhados a 8 na arena do handle.
 /// Retorna o ponteiro para o bloco alocado, ou 0 se falhar.
 ///
 /// # Safety
 /// `handle` deve ser um valor retornado por `kata_rt_arena_create`.
 /// `size` deve ser > 0.
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_arena_alloc(_handle: i64, size: i64) -> i64 {
+pub extern "C" fn kata_rt_arena_alloc(handle: i64, size: i64) -> i64 {
     if size <= 0 {
         return 0;
     }
@@ -82,8 +88,13 @@ pub extern "C" fn kata_rt_arena_alloc(_handle: i64, size: i64) -> i64 {
         Ok(l) => l,
         Err(_) => return 0,
     };
-    ARENA.with(|a| {
-        let ptr = a.borrow().alloc(layout);
+    ARENAS.with(|arenas| {
+        let arenas = arenas.borrow();
+        let idx = handle as usize;
+        if idx >= arenas.len() {
+            return 0;
+        }
+        let ptr = arenas[idx].alloc(layout);
         if ptr.is_null() {
             0
         } else {
@@ -96,14 +107,21 @@ pub extern "C" fn kata_rt_arena_alloc(_handle: i64, size: i64) -> i64 {
     })
 }
 
-/// Reseta a arena thread-local (libera toda a memória alocada).
-/// Chamado no final do `__kata_entry` ou entre execuções.
+/// Reseta SÓ a arena do handle (libera a memória daquela arena).
+/// Outras arenas no pool não são afetadas.
 ///
 /// # Safety
 /// `handle` deve ser um valor retornado por `kata_rt_arena_create`.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_arena_destroy(handle: i64) {
-    if handle != 0 {
-        reset_arena();
+    if handle < 0 {
+        return;
     }
+    ARENAS.with(|arenas| {
+        let mut arenas = arenas.borrow_mut();
+        let idx = handle as usize;
+        if let Some(a) = arenas.get_mut(idx) {
+            a.reset();
+        }
+    })
 }

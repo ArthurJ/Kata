@@ -136,6 +136,13 @@ pub enum Expr {
         value: Box<Spanned<Expr>>,
     },
 
+    /// `nome := expr` — reatribuição a variável `var` (exclusivo de Actions).
+    /// O parser produz `Reassign` quando vê `Ident :=` sem `let`/`var` prefix.
+    Reassign {
+        name: String,
+        value: Box<Spanned<Expr>>,
+    },
+
     /// `expr ?` — fail-fast (exclusivo de Actions).
     /// Desugared pelo typeck em Match + Return. Nunca chega à TAST.
     Question(Box<Spanned<Expr>>),
@@ -252,7 +259,7 @@ pub enum Item {
     // ── Fio 3: Actions ─────────────────────────────────
     /// `action nome` com body indentado.
     /// Actions são o domínio impuro. Declaração com `action nome` (sem `!`).
-    /// O body é uma sequência de statements (expressões).
+    /// O body é uma sequência de statements (`ActionStmt`).
     ActionDecl {
         name: String,
         /// Parâmetros da Action (uma tupla tipada, ou vazia).
@@ -260,7 +267,7 @@ pub enum Item {
         ret: Spanned<TypeExpr>,
         directives: Vec<Directive>,
         /// Body da Action (statements sequenciais).
-        body: Vec<Spanned<Expr>>,
+        body: Vec<ActionStmt>,
     },
 
     // ── Expressão de entry point ────────────────────────
@@ -335,12 +342,26 @@ pub enum TypeExpr {
         params: Vec<Spanned<TypeExpr>>,
     },
 
+    /// `(T1, T2, ...)` — tipo tupla. Múltiplos tipos separados por vírgula.
+    Tuple(Vec<Spanned<TypeExpr>>),
+
     /// `(T1 -> T2)` — tipo de função como valor.
     /// Exige parênteses para desambiguar.
     Func {
         params: Vec<Spanned<TypeExpr>>,
         ret: Box<Spanned<TypeExpr>>,
     },
+}
+
+/// Statement do body de uma Action.
+///
+/// Cada statement é uma expressão com uma marca de `;` — `has_semicolon = true`
+/// significa computação local (valor descartado); `has_semicolon = false` no
+/// último statement significa retorno implícito (valor é retornado).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ActionStmt {
+    pub expr: Spanned<Expr>,
+    pub has_semicolon: bool,
 }
 
 /// Um módulo completo — arquivo .kata.

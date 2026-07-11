@@ -8,7 +8,7 @@
 pub(crate) mod prelude;
 mod prelude_sigs;
 
-use kata_ast::{Expr, Item, LambdaClause, Module, Spanned, TypeExpr};
+use kata_ast::{ActionStmt, Item, LambdaClause, Module, Spanned, TypeExpr};
 use kata_core::{EnumRegistry, PrimTy, Ty, TypeEnv};
 
 /// Resultado da resolution — TypeEnv populado + assinaturas coletadas.
@@ -61,7 +61,7 @@ pub struct ActionDef {
     pub name: String,
     pub param_types: Vec<Ty>,
     pub return_type: Ty,
-    pub body: Vec<Spanned<Expr>>,
+    pub body: Vec<ActionStmt>,
 }
 
 /// Erro de resolution (wrapped FrontendError/MiddleError).
@@ -218,6 +218,13 @@ fn resolve_type_expr(expr: &TypeExpr, env: &TypeEnv) -> Ty {
         }
         TypeExpr::Unit => Ty::Unit,
         TypeExpr::Grouping(inner) => resolve_type_expr(&inner.node, env),
+        TypeExpr::Tuple(elements) => {
+            let tys: Vec<Ty> = elements
+                .iter()
+                .map(|t| resolve_type_expr(&t.node, env))
+                .collect();
+            Ty::Tuple(tys)
+        }
         TypeExpr::Func { params, ret } => {
             let param_types: Vec<Ty> = params
                 .iter()

@@ -67,10 +67,20 @@ impl Parser {
                 Ok(Spanned::new(Expr::TextLit { text: s }, start))
             }
             Token::Let => self.parse_let(),
-            Token::Var => self.parse_var(),
+            Token::Var => {
+                if !self.in_action_body {
+                    return Err(self.error("`var` fora de Action (var só existe em Actions)"));
+                }
+                self.parse_var()
+            }
             Token::Lambda => self.parse_lambda(),
             Token::Match => self.parse_match(),
-            Token::Return => self.parse_return(),
+            Token::Return => {
+                if !self.in_action_body {
+                    return Err(self.error("`return` fora de Action (return só existe em Actions)"));
+                }
+                self.parse_return()
+            }
             Token::Loop => self.parse_loop(),
             Token::Break => {
                 self.advance();
@@ -134,6 +144,20 @@ impl Parser {
                         Expr::ActionCall {
                             callee: name,
                             args: Box::new(args),
+                        },
+                        span,
+                    ));
+                }
+                // Check for Reassign: Ident := expr (sem `let`/`var` prefix).
+                // `x := 42` → Reassign { name: "x", value: 42 }.
+                if matches!(self.peek(), Token::BindAssign) {
+                    self.advance(); // consume :=
+                    let value = parse_expr(self)?;
+                    let span = start.cover(value.span);
+                    return Ok(Spanned::new(
+                        Expr::Reassign {
+                            name,
+                            value: Box::new(value),
                         },
                         span,
                     ));

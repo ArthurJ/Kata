@@ -78,6 +78,7 @@ fn assert_no_holes(expr: &Spanned<Expr>) {
         Expr::Return(inner) => assert_no_holes(inner),
         Expr::Loop { body } => body.iter().for_each(assert_no_holes),
         Expr::Var { value, .. } => assert_no_holes(value),
+        Expr::Reassign { value, .. } => assert_no_holes(value),
         Expr::Question(inner) => assert_no_holes(inner),
         Expr::PipeFallback { lhs, rhs } => {
             assert_no_holes(lhs);
@@ -138,6 +139,7 @@ fn assert_no_pipes(expr: &Spanned<Expr>) {
         Expr::Return(inner) => assert_no_pipes(inner),
         Expr::Loop { body } => body.iter().for_each(assert_no_pipes),
         Expr::Var { value, .. } => assert_no_pipes(value),
+        Expr::Reassign { value, .. } => assert_no_pipes(value),
         Expr::Question(inner) => assert_no_pipes(inner),
         Expr::PipeFallback { lhs, rhs } => {
             assert_no_pipes(lhs);

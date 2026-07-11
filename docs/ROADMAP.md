@@ -264,6 +264,12 @@ params do hint. `LambdaInferenceFail` quando nenhum mecanismo resolve.
 
 ### Fio 3: Actions, return, ;, Caller's Arena
 
+**Status:** Fase 1-3 COMPLETO (427 testes, 5 exemplos E2E). Pool de arenas
+real implementado — `Vec<Arena>` thread-local, handles indexados,
+`arena_destroy(handle)` reseta SÓ a arena do handle. Modelo D: ActionCall
+passa `caller_arena` em tail_pos, `local_arena` em `;`. Fase 4+ pendente
+(loop, break, continue, ?, scheduler).
+
 **Maquinaria de tipos construída:**
 - `effect: Effect` ganha `IO` (Actions têm efeito IO)
 - Verificação de proibição de recursão em Actions (call graph analysis)
