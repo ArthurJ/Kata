@@ -13,12 +13,12 @@ use cranelift_module::{Linkage, Module};
 use kata_core::ty::Ty;
 use kata_inference::{TypedAction, TypedFunction, TypedLambdaClause, TypedModule};
 
+use super::LowerCtx;
 use super::clause::{
     all_patterns_are_ident, bind_patterns_to_params, lower_clause_body, lower_clause_chain,
     lower_with_bindings,
 };
 use super::expr::lower_expr;
-use super::LowerCtx;
 use crate::ffi_sigs::ty_to_clif;
 use crate::metadata::MetadataTable;
 
@@ -197,6 +197,7 @@ fn declare_kata_function(
 ///
 /// Cria Context + FunctionBuilder, declara FFI/Kata refs, lowera cláusulas
 /// (single-Ident fast path ou branch chain), finaliza e define no module.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn define_function_body(
     name: &str,
     param_types: &[Ty],
@@ -239,8 +240,7 @@ pub(crate) fn define_function_body(
         builder.switch_to_block(entry_block);
         builder.seal_block(entry_block);
 
-        let params: Vec<cranelift_codegen::ir::Value> =
-            builder.block_params(entry_block).to_vec();
+        let params: Vec<cranelift_codegen::ir::Value> = builder.block_params(entry_block).to_vec();
 
         let mut lower = LowerCtx {
             builder: &mut builder,
@@ -442,7 +442,12 @@ fn define_kata_action(
         .ok_or_else(|| CodegenError::Cranelift(format!("action {} not declared", action.name)))?;
     let func_id = match func_id {
         cranelift_module::FuncOrDataId::Func(fid) => fid,
-        _ => return Err(CodegenError::Cranelift(format!("{} is not a function", action.name))),
+        _ => {
+            return Err(CodegenError::Cranelift(format!(
+                "{} is not a function",
+                action.name
+            )));
+        }
     };
     module
         .define_function(func_id, &mut ctx)

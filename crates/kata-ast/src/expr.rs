@@ -107,7 +107,6 @@ pub enum Expr {
     },
 
     // ── Fio 3: Actions, return, var, loop, break, continue ───────────
-
     /// `nome!(args)` — chamada de Action.
     /// `!` é o marcador de impureza. O parser produz `ActionCall` quando vê `!`
     /// após um identificador seguido de parênteses (tupla de argumentos).
@@ -123,9 +122,7 @@ pub enum Expr {
 
     /// `loop` — laço infinito. Só sai via `break`.
     /// Body é uma sequência de statements (expressões).
-    Loop {
-        body: Vec<Spanned<Expr>>,
-    },
+    Loop { body: Vec<Spanned<Expr>> },
 
     /// `break` — sai do laço.
     Break,

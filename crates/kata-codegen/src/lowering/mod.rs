@@ -14,14 +14,14 @@
 //! Tipos compartilhados (`LowerCtx`, `CodegenError`, `StringTable`) vivem
 //! aqui no `mod.rs` e são importados pelos submódulos via `super::`.
 
+mod _match;
 mod clause;
 mod expr;
 mod jit;
-mod _match;
 mod module;
 mod pattern;
 
-pub use jit::{jit_eval, JitResult};
+pub use jit::{JitResult, jit_eval};
 pub use module::CodegenError;
 use module::StringTable;
 

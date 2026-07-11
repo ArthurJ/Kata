@@ -1,0 +1,173 @@
+//! Lambda — parse_lambda, parse_lambda_body_block, guard clauses, with bindings.
+
+use kata_ast::{Expr, GuardClause, Spanned, Token, WithBinding};
+use kata_diagnostics::FrontendError;
+
+use crate::Parser;
+use crate::expressions::parse_expr;
+
+impl Parser {
+    /// Parse `lambda <patterns>: <body>` — lambda anônimo (cláusula única).
+    ///
+    /// Fase 3: body é expressão única após `:` (sem guards, sem with).
+    /// Fase 6: body pode ser bloco indentado com guard clauses + with.
+    pub(crate) fn parse_lambda(&mut self) -> Result<Spanned<Expr>, FrontendError> {
+        let start = self.peek_span();
+        self.expect(&Token::Lambda, "`lambda`")?;
+
+        // Parse patterns (1 ou mais, separados por espaço)
+        let patterns = self.parse_patterns()?;
+
+        // Expect `:`
+        self.expect(&Token::Colon, "`:` após patterns do lambda")?;
+
+        // Fase 3: body é uma expressão única (sem guards).
+        // Fase 6: se há INDENT após `:`, é bloco com guards + with.
+        let body = if matches!(self.peek(), Token::Indent) {
+            // Bloco indentado — Fase 6: guards + with.
+            // parse_lambda_body_block consome o INDENT e retorna
+            // o Lambda completo com guards/with preenchidos.
+            return self.parse_lambda_body_block(start, patterns);
+        } else {
+            // Expressão única na mesma linha
+            parse_expr(self)?
+        };
+
+        let span = start.cover(body.span);
+        Ok(Spanned::new(
+            Expr::Lambda {
+                patterns,
+                body: Box::new(body),
+                guards: Vec::new(),
+                with_bindings: Vec::new(),
+            },
+            span,
+        ))
+    }
+
+    /// Parse o bloco indentado de guards dentro de um lambda body.
+    ///
+    /// Sintaxe:
+    /// ```text
+    /// lambda x:
+    ///     > x 0: x              ← guard clause
+    ///     otherwise: - 0 x      ← otherwise
+    ///     with                   ← with block (optional, after guards)
+    ///         y := + x 1
+    /// ```
+    ///
+    /// Retorna um `Expr::Lambda` com guards e with_bindings preenchidos.
+    /// O `body` é preenchido com o body do último guard (ou otherwise) como fallback.
+    pub(crate) fn parse_lambda_body_block(
+        &mut self,
+        start: kata_ast::Span,
+        patterns: Vec<Spanned<kata_ast::Pattern>>,
+    ) -> Result<Spanned<Expr>, FrontendError> {
+        self.expect(&Token::Indent, "INDENT (guards do lambda)")?;
+
+        let mut guards = Vec::new();
+        let mut with_bindings = Vec::new();
+        let mut last_body = None;
+
+        loop {
+            // Skip StmtSep entre guard clauses
+            while matches!(self.peek(), Token::StmtSep) {
+                self.advance();
+            }
+            if matches!(self.peek(), Token::Dedent | Token::Eof) {
+                break;
+            }
+
+            // `with` block — aparece depois dos guards
+            if matches!(self.peek(), Token::With) {
+                self.advance(); // consume `with`
+                self.expect(&Token::Indent, "INDENT (with bindings)")?;
+                loop {
+                    while matches!(self.peek(), Token::StmtSep) {
+                        self.advance();
+                    }
+                    if matches!(self.peek(), Token::Dedent | Token::Eof) {
+                        break;
+                    }
+                    let wb = self.parse_with_binding()?;
+                    with_bindings.push(wb);
+                }
+                self.expect(&Token::Dedent, "DEDENT (fim do with)")?;
+                continue;
+            }
+
+            // Guard clause: `> expr: body` ou `otherwise: body`
+            let guard = self.parse_guard_clause()?;
+            last_body = Some(guard.body.clone());
+            guards.push(guard);
+        }
+
+        self.expect(&Token::Dedent, "DEDENT (fim dos guards)")?;
+
+        // body é o último guard body (fallback). Se não há guards, erro.
+        let body = last_body.unwrap_or_else(|| Spanned::new(Expr::Unit, start));
+
+        let end_span = self
+            .tokens
+            .get(self.pos - 1)
+            .map(|t| t.span)
+            .unwrap_or(start);
+        let span = start.cover(end_span);
+        Ok(Spanned::new(
+            Expr::Lambda {
+                patterns,
+                body: Box::new(body),
+                guards,
+                with_bindings,
+            },
+            span,
+        ))
+    }
+
+    /// Parse uma guard clause: `> expr: body` ou `otherwise: body`.
+    fn parse_guard_clause(&mut self) -> Result<GuardClause, FrontendError> {
+        let condition = if matches!(self.peek(), Token::Otherwise) {
+            self.advance(); // consume `otherwise`
+            None
+        } else {
+            // `>` é o token que inicia a condição do guard
+            // Mas `>` pode ser um identificador (operador prefixo `>`)
+            // O PRD usa `> x 0: x` — `>` é o callee de uma Apply
+            // Na notação prefixa, `> x 0` é `Expr::Apply { >, [x, 0] }`
+            // Parser: parse_expr greedy consome `> x 0` como Apply
+            let cond = parse_expr(self)?;
+            Some(cond)
+        };
+
+        self.expect(&Token::Colon, "`:` após guard condition")?;
+        let body = parse_expr(self)?;
+
+        // Consume trailing StmtSep
+        if matches!(self.peek(), Token::StmtSep) {
+            self.advance();
+        }
+
+        Ok(GuardClause { condition, body })
+    }
+
+    /// Parse um binding do `with` block: `nome := expr`.
+    fn parse_with_binding(&mut self) -> Result<WithBinding, FrontendError> {
+        let name = match self.peek() {
+            Token::Ident(s) => {
+                let n = s.clone();
+                self.advance();
+                n
+            }
+            _ => return Err(self.error("binding name in `with`")),
+        };
+        self.expect(&Token::BindAssign, "`:=` in with binding")?;
+        let value = parse_expr(self)?;
+
+        // Consume trailing StmtSep
+        if matches!(self.peek(), Token::StmtSep) {
+            self.advance();
+        }
+
+        Ok(WithBinding { name, value })
+    }
+}

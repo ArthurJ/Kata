@@ -9,8 +9,8 @@ use cranelift_codegen::ir::{InstBuilder, MemFlagsData};
 use kata_ast::Spanned;
 use kata_inference::TypedPattern;
 
-use super::expr::lower_expr;
 use super::LowerCtx;
+use super::expr::lower_expr;
 
 /// Testa patterns de uma cláusula contra os parâmetros.
 /// Retorna `Some(cond_val)` se há um teste condicional (brif), ou `None`

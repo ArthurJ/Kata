@@ -5,9 +5,7 @@
 //! vivem em submódulos irmãos.
 
 use cranelift_codegen::ir::types::I64;
-use cranelift_codegen::ir::{
-    AbiParam, GlobalValueData, InstBuilder, MemFlagsData, Signature,
-};
+use cranelift_codegen::ir::{AbiParam, GlobalValueData, InstBuilder, MemFlagsData, Signature};
 use cranelift_codegen::isa::CallConv;
 use cranelift_module::{Linkage, Module};
 use kata_core::ty::{PrimTy, Ty};
@@ -36,10 +34,9 @@ pub(crate) fn lower_expr(
                 }
                 // i64 mas não cabe em SMI — chama kata_rt_tag_int(val).
                 let raw = ctx.builder.ins().iconst(I64, val);
-                let func_ref = ctx
-                    .ffi_refs
-                    .get("kata_rt_tag_int")
-                    .ok_or_else(|| super::CodegenError::FfiSymbolNotFound("kata_rt_tag_int".into()))?;
+                let func_ref = ctx.ffi_refs.get("kata_rt_tag_int").ok_or_else(|| {
+                    super::CodegenError::FfiSymbolNotFound("kata_rt_tag_int".into())
+                })?;
                 let call_inst = ctx.builder.ins().call(*func_ref, &[raw]);
                 return Ok(ctx.builder.inst_results(call_inst)[0]);
             }
@@ -186,7 +183,9 @@ pub(crate) fn lower_expr(
                                 return Ok(val);
                             }
                             let call_inst =
-                                ctx.builder.ins().call_indirect(sig_ref, func_ptr, &arg_values);
+                                ctx.builder
+                                    .ins()
+                                    .call_indirect(sig_ref, func_ptr, &arg_values);
                             return Ok(ctx.builder.inst_results(call_inst)[0]);
                         }
                     }
@@ -261,10 +260,9 @@ pub(crate) fn lower_expr(
             // no início do entry point, mas alloc usa thread_local diretamente).
             let handle = ctx.builder.ins().iconst(I64, 1);
             let size = ctx.builder.ins().iconst(I64, (n * 8) as i64);
-            let func_ref = ctx
-                .ffi_refs
-                .get("kata_rt_arena_alloc")
-                .ok_or_else(|| super::CodegenError::FfiSymbolNotFound("kata_rt_arena_alloc".into()))?;
+            let func_ref = ctx.ffi_refs.get("kata_rt_arena_alloc").ok_or_else(|| {
+                super::CodegenError::FfiSymbolNotFound("kata_rt_arena_alloc".into())
+            })?;
             let call_inst = ctx.builder.ins().call(*func_ref, &[handle, size]);
             let ptr = ctx.builder.inst_results(call_inst)[0];
 

@@ -14,7 +14,7 @@ use kata_diagnostics::MiddleError;
 use crate::typed::{Effect, TypedExprKind, TypedLambdaClause};
 
 use super::apply_lambda::infer_lambda_body;
-use super::helpers::{check_patterns, process_with_bindings, InferResult};
+use super::helpers::{InferResult, check_patterns, process_with_bindings};
 use super::partial_dispatch::try_partial_dispatch;
 
 /// Infere um lambda anônimo ou cláusula lambda.
@@ -97,8 +97,7 @@ pub(crate) fn infer_lambda(
                 .unwrap_or(Ty::InferVar(i as u32))
         })
         .collect();
-    let typed_patterns =
-        check_patterns(patterns, &param_types, enum_registry, &mut lambda_env)?;
+    let typed_patterns = check_patterns(patterns, &param_types, enum_registry, &mut lambda_env)?;
 
     // Processa with bindings (açúcar → let chain no escopo do lambda).
     // with bindings são pré-avaliados antes dos guards.

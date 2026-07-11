@@ -8,9 +8,9 @@
 //! despachando `Apply` via `DispatchTable::resolve` ou `call_indirect`
 //! via `TypeEnv` lookup.
 
-mod apply_lambda;
-mod apply;
 mod _match;
+mod apply;
+mod apply_lambda;
 mod expr;
 mod helpers;
 mod lambda;
@@ -160,8 +160,12 @@ fn infer_named_function(
         let mut clause_env = TypeEnv::new();
 
         // Casa padrões contra tipos dos parâmetros.
-        let typed_patterns =
-            check_patterns(&clause_inner.patterns, param_types, enum_registry, &mut clause_env)?;
+        let typed_patterns = check_patterns(
+            &clause_inner.patterns,
+            param_types,
+            enum_registry,
+            &mut clause_env,
+        )?;
 
         // Processa with bindings (açúcar → let chain).
         let typed_with_bindings = process_with_bindings(
@@ -270,14 +274,14 @@ fn infer_action(
     }
 
     // Verifica que o último statement retorna o tipo esperado.
-    if let Some(last) = typed_body.last() {
-        if last.node.ty != *ret_ty {
-            return Err(MiddleError::TypeMismatch {
-                expected: format!("{ret_ty:?}"),
-                found: format!("{:?}", last.node.ty),
-                span: last.span.into(),
-            });
-        }
+    if let Some(last) = typed_body.last()
+        && last.node.ty != *ret_ty
+    {
+        return Err(MiddleError::TypeMismatch {
+            expected: format!("{ret_ty:?}"),
+            found: format!("{:?}", last.node.ty),
+            span: last.span.into(),
+        });
     }
 
     Ok(TypedAction {

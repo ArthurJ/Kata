@@ -15,7 +15,9 @@ use crate::typed::{Effect, TypedExpr, TypedExprKind};
 
 use super::apply_lambda::{infer_apply_lambda, infer_apply_lambda_with_hint};
 use super::expr::infer_expr;
-use super::helpers::{InferResult, dispatch_to_middle_error, peel_grouping_expr, resolve_type_expr};
+use super::helpers::{
+    InferResult, dispatch_to_middle_error, peel_grouping_expr, resolve_type_expr,
+};
 
 /// Infere uma aplicação prefixa — dois caminhos de callee (Fio 2).
 ///

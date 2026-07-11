@@ -5,7 +5,7 @@ use cranelift_module::Module;
 use kata_core::ty::{PrimTy, Ty};
 use kata_inference::TypedModule;
 
-use super::module::{lower_module, CodegenError};
+use super::module::{CodegenError, lower_module};
 
 /// Resultado da execução JIT — valor bruto + tipo canônico para display.
 pub struct JitResult {

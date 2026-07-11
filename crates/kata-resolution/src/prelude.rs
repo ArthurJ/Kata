@@ -4,9 +4,11 @@
 //! Por agora, o prelude é uma string constante que o resolution parseia
 //! e injeta no TypeEnv + DispatchTable.
 
+#![allow(dead_code)]
+
 /// Código fonte do prelude hardcoded.
 /// Define tipos opacos (Int, Float, Text, Rational), Boolean, e operadores via @ffi.
-pub const PRELUDE_SOURCE: &str = r#"# Tipos opacos (anchored via @ffi)
+pub(crate) const PRELUDE_SOURCE: &str = r#"# Tipos opacos (anchored via @ffi)
 @ffi("i64")
 data Int ()
 

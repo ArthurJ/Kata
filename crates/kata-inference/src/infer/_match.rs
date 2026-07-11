@@ -10,9 +10,7 @@ use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 
 use crate::patterns;
-use crate::typed::{
-    Effect, TypedExprKind, TypedMatchArm, TypedPattern,
-};
+use crate::typed::{Effect, TypedExprKind, TypedMatchArm, TypedPattern};
 
 use super::expr::infer_expr;
 use super::helpers::InferResult;

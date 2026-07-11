@@ -8,7 +8,9 @@
 
 mod _match;
 mod declarations;
+mod directives;
 mod expressions;
+mod lambda;
 mod patterns;
 mod types;
 
@@ -19,13 +21,13 @@ use kata_diagnostics::{FrontendError, MietteSpan};
 // Parser state
 // ────────────────────────────────────────────────────────────────
 
-pub struct Parser {
+pub(crate) struct Parser {
     pub(crate) tokens: Vec<TokenWithSpan>,
     pub(crate) pos: usize,
 }
 
 impl Parser {
-    pub fn new(tokens: Vec<TokenWithSpan>) -> Self {
+    pub(crate) fn new(tokens: Vec<TokenWithSpan>) -> Self {
         Parser { tokens, pos: 0 }
     }
 

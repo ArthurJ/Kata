@@ -14,9 +14,9 @@ use kata_inference::{
     TypedExpr, TypedGuardClause, TypedLambdaClause, TypedPattern, TypedWithBinding,
 };
 
+use super::LowerCtx;
 use super::expr::lower_expr;
 use super::pattern::test_clause_patterns;
-use super::LowerCtx;
 use crate::ffi_sigs::ty_to_clif;
 
 /// Verifica se todos os patterns são `Ident` (binding simples).

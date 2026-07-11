@@ -131,10 +131,9 @@ fn desugar_pipes(expr: &Spanned<Expr>) -> Spanned<Expr> {
             },
             expr.span,
         ),
-        Expr::Return(inner) => Spanned::new(
-            Expr::Return(Box::new(desugar_pipes(inner))),
-            expr.span,
-        ),
+        Expr::Return(inner) => {
+            Spanned::new(Expr::Return(Box::new(desugar_pipes(inner))), expr.span)
+        }
         Expr::Loop { body } => Spanned::new(
             Expr::Loop {
                 body: body.iter().map(desugar_pipes).collect(),
@@ -148,10 +147,9 @@ fn desugar_pipes(expr: &Spanned<Expr>) -> Spanned<Expr> {
             },
             expr.span,
         ),
-        Expr::Question(inner) => Spanned::new(
-            Expr::Question(Box::new(desugar_pipes(inner))),
-            expr.span,
-        ),
+        Expr::Question(inner) => {
+            Spanned::new(Expr::Question(Box::new(desugar_pipes(inner))), expr.span)
+        }
         Expr::PipeFallback { lhs, rhs } => {
             // `|` fallback — não é Pipe (`|>`). Desugar do pipe não toca.
             // Mas os filhos podem conter pipes internos.
@@ -418,10 +416,9 @@ fn desugar_holes(expr: &Spanned<Expr>) -> Spanned<Expr> {
             },
             expr.span,
         ),
-        Expr::Return(inner) => Spanned::new(
-            Expr::Return(Box::new(desugar_holes(inner))),
-            expr.span,
-        ),
+        Expr::Return(inner) => {
+            Spanned::new(Expr::Return(Box::new(desugar_holes(inner))), expr.span)
+        }
         Expr::Loop { body } => Spanned::new(
             Expr::Loop {
                 body: body.iter().map(desugar_holes).collect(),
@@ -435,10 +432,9 @@ fn desugar_holes(expr: &Spanned<Expr>) -> Spanned<Expr> {
             },
             expr.span,
         ),
-        Expr::Question(inner) => Spanned::new(
-            Expr::Question(Box::new(desugar_holes(inner))),
-            expr.span,
-        ),
+        Expr::Question(inner) => {
+            Spanned::new(Expr::Question(Box::new(desugar_holes(inner))), expr.span)
+        }
         Expr::PipeFallback { lhs, rhs } => Spanned::new(
             Expr::PipeFallback {
                 lhs: Box::new(desugar_holes(lhs)),

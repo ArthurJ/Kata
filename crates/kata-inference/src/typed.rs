@@ -117,7 +117,6 @@ pub enum TypedExprKind {
     },
 
     // ── Fio 3: Actions, var ──────────────────────────────────────
-
     /// Chamada de Action (`nome!(args)`).
     /// O codegen emite call para a função Cranelift da Action, passando
     /// caller_arena handle como primeiro parâmetro implícito.

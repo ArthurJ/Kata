@@ -88,9 +88,7 @@ pub(crate) fn infer_expr_hinted(
         }
 
         // ── Aplicação prefixa ────────────────────────────────
-        Expr::Apply { callee, args } => {
-            infer_apply(callee, args, span, env, table, enum_registry)?
-        }
+        Expr::Apply { callee, args } => infer_apply(callee, args, span, env, table, enum_registry)?,
 
         // ── Ascription de tipo ───────────────────────────────
         Expr::TypeAscription { expr, ty } => {
@@ -195,13 +193,13 @@ pub(crate) fn infer_expr_hinted(
 
         // ── Qualificação de variante ─────────────────────────
         Expr::VariantQual { enum_name, variant } => {
-            let enum_ty = env
-                .lookup(enum_name)
-                .cloned()
-                .ok_or_else(|| MiddleError::UnboundName {
-                    name: enum_name.clone(),
-                    span: (*span).into(),
-                })?;
+            let enum_ty =
+                env.lookup(enum_name)
+                    .cloned()
+                    .ok_or_else(|| MiddleError::UnboundName {
+                        name: enum_name.clone(),
+                        span: (*span).into(),
+                    })?;
 
             match &enum_ty {
                 Ty::Sum(name) => {
@@ -272,13 +270,13 @@ pub(crate) fn infer_expr_hinted(
                     elements.iter().map(|e| e.node.ty.clone()).collect()
                 }
                 TypedExprKind::Unit => Vec::new(), // `!()` = tupla vazia
-                _ => vec![typed_args.ty.clone()], // args não-tupla (não deveria acontecer)
+                _ => vec![typed_args.ty.clone()],  // args não-tupla (não deveria acontecer)
             };
 
             // Resolve no DispatchTable.
-            let overload = table.resolve(callee, &arg_tys).map_err(|e| {
-                super::helpers::dispatch_to_middle_error(e, *span)
-            })?;
+            let overload = table
+                .resolve(callee, &arg_tys)
+                .map_err(|e| super::helpers::dispatch_to_middle_error(e, *span))?;
 
             // Verifica que é uma Action (is_action = true).
             if !overload.is_action {
@@ -295,10 +293,7 @@ pub(crate) fn infer_expr_hinted(
                     callee: callee.clone(),
                     args: Box::new(Spanned::new(typed_args, args.span)),
                     caller_arena: 0, // placeholder — preenchido no codegen
-                    ffi_symbol: overload
-                        .ffi_symbol
-                        .clone()
-                        .filter(|s| overload.is_action),
+                    ffi_symbol: overload.ffi_symbol.clone().filter(|_s| overload.is_action),
                 },
                 Effect::Puro, // Fio 3 não ativa Effect
             )
@@ -306,7 +301,8 @@ pub(crate) fn infer_expr_hinted(
 
         // ── Fio 3: var — binding mutável (exclusivo de Actions) ──
         Expr::Var { name, value } => {
-            let typed_value = infer_expr(&value.node, &value.span, env, table, enum_registry, false)?;
+            let typed_value =
+                infer_expr(&value.node, &value.span, env, table, enum_registry, false)?;
             let val_ty = typed_value.ty.clone();
             env.define(name, val_ty);
             (

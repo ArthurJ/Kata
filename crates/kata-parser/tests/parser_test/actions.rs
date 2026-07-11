@@ -90,12 +90,7 @@ fn bang_call_multi_args() {
                 match &args.node {
                     Expr::Tuple { elements } => {
                         assert_eq!(elements.len(), 2);
-                        assert_eq!(
-                            elements[0].node,
-                            Expr::TextLit {
-                                text: "msg".into()
-                            }
-                        );
+                        assert_eq!(elements[0].node, Expr::TextLit { text: "msg".into() });
                         assert_eq!(elements[1].node, Expr::IntLit { text: "42".into() });
                     }
                     other => panic!("expected Tuple args, got {other:?}"),
@@ -134,12 +129,10 @@ fn action_decl_no_params_no_ret() {
                     assert_eq!(callee, "echo");
                     // `!("hello")` = Grouping (1 elemento sem vírgula).
                     match &args.node {
-                        Expr::Grouping { inner } => {
-                            match &inner.node {
-                                Expr::TextLit { text } => assert_eq!(text, "hello"),
-                                other => panic!("expected TextLit in Grouping, got {other:?}"),
-                            }
-                        }
+                        Expr::Grouping { inner } => match &inner.node {
+                            Expr::TextLit { text } => assert_eq!(text, "hello"),
+                            other => panic!("expected TextLit in Grouping, got {other:?}"),
+                        },
                         other => panic!("expected Grouping args, got {other:?}"),
                     }
                 }

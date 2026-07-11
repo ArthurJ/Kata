@@ -3,9 +3,9 @@
 use cranelift_codegen::ir::InstBuilder;
 use kata_inference::{TypedExpr, TypedMatchArm};
 
+use super::LowerCtx;
 use super::expr::lower_expr;
 use super::pattern::test_single_pattern;
-use super::LowerCtx;
 use crate::ffi_sigs::ty_to_clif;
 
 /// Lowera um match: branch chain com brif para cada arm.
@@ -82,9 +82,10 @@ pub(crate) fn lower_match(
         // Lowera o body do arm.
         ctx.builder.switch_to_block(body_block);
         let body_val = lower_expr(&arm.body.node, ctx)?;
-        ctx.builder
-            .ins()
-            .jump(cont_block, &[cranelift_codegen::ir::BlockArg::Value(body_val)]);
+        ctx.builder.ins().jump(
+            cont_block,
+            &[cranelift_codegen::ir::BlockArg::Value(body_val)],
+        );
     }
 
     // Nenhum arm encaixou — runtime trap.

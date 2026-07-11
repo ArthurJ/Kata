@@ -19,7 +19,7 @@ use kata_diagnostics::MiddleError;
 use crate::typed::{Effect, TypedExpr, TypedExprKind, TypedGuardClause, TypedLambdaClause};
 
 use super::expr::infer_expr;
-use super::helpers::{check_patterns, process_with_bindings, InferResult};
+use super::helpers::{InferResult, check_patterns, process_with_bindings};
 
 /// Infere `(lambda x: ...) 42` — args fornecem tipos dos parâmetros.
 ///
@@ -169,8 +169,7 @@ fn build_lambda_apply(
 ) -> InferResult<(Ty, TypedExprKind, Effect)> {
     // Cria escopo filho e define params com tipos conhecidos.
     let mut lambda_env = env.push_scope();
-    let typed_patterns =
-        check_patterns(patterns, &param_tys, enum_registry, &mut lambda_env)?;
+    let typed_patterns = check_patterns(patterns, &param_tys, enum_registry, &mut lambda_env)?;
 
     // Processa with bindings.
     let typed_with_bindings =
@@ -181,18 +180,18 @@ fn build_lambda_apply(
         infer_lambda_body(body, guards, &mut lambda_env, table, enum_registry)?;
 
     // Verifica o tipo de retorno se um esperado foi fornecido (caminho com hint).
-    if let Some(expected_ret) = ret_check {
-        if ret_ty != *expected_ret {
-            return Err(MiddleError::TypeMismatch {
-                expected: format!("{:?}", expected_ret),
-                found: format!("{:?}", ret_ty),
-                span: body.span.into(),
-            });
-        }
+    if let Some(expected_ret) = ret_check
+        && ret_ty != *expected_ret
+    {
+        return Err(MiddleError::TypeMismatch {
+            expected: format!("{:?}", expected_ret),
+            found: format!("{:?}", ret_ty),
+            span: body.span.into(),
+        });
     }
 
     // O tipo do lambda usa o tipo de retorno verificado (com hint) ou inferido (sem hint).
-    let lambda_ret = ret_check.map(|t| t.clone()).unwrap_or(ret_ty.clone());
+    let lambda_ret = ret_check.cloned().unwrap_or(ret_ty.clone());
     let lambda_ty = Ty::Function(param_tys.clone(), Box::new(lambda_ret.clone()));
 
     let lambda_kind = TypedExprKind::Lambda {

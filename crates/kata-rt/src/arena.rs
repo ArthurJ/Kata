@@ -14,22 +14,22 @@ use bumpalo::Bump;
 use std::cell::RefCell;
 
 /// Arena per-fiber. Dados locais são alocados aqui e liberados em O(1).
-pub struct Arena {
+pub(crate) struct Arena {
     bump: Bump,
 }
 
 impl Arena {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Arena { bump: Bump::new() }
     }
 
     /// Aloca `size` bytes alinhados a `align`. Retorna ponteiro bruto.
-    pub fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
+    pub(crate) fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
         self.bump.alloc_layout(layout).as_ptr()
     }
 
     /// Reseta a arena (libera tudo). O(1).
-    pub fn reset(&mut self) {
+    pub(crate) fn reset(&mut self) {
         self.bump = Bump::new();
     }
 }
