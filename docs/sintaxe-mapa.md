@@ -212,6 +212,25 @@ conectar_servidor!()
   - Algumas Actions são builtins do compilador (`fork!`, `panic!`, `assert!`), outras são stdlib (`echo!`), mas todas seguem a mesma sintaxe `!`.
   - Interage com `?` e `|` no tratamento de erro.
 
+### `panic!` e `assert!` (Builtins de Abort)
+
+```kata
+panic!("mensagem")              # aborta: stderr + exit(1), retorna Unit
+assert!(cond)                   # 1 arg: panic!("assertion failed") se False
+assert!(cond, "msg custom")     # 2 args: panic!(msg) se False
+```
+
+- **`panic!`**: Aborta imediatamente. Destrói a arena local. Retorna `Unit` no
+  tipo, mas o fluxo nunca chega ao retorno. Lowerado direto para FFI
+  (`kata_rt_panic`).
+- **`assert!`**: Interceptado no typeck antes do DispatchTable. Desugado para
+  `match cond { True: Unit, False: panic!(msg) }`. `cond` deve avaliar para
+  `Boolean`. 1 arg = mensagem default; 2 args = mensagem customizada.
+- **Domínio**: Ambos são Actions (exigem `!`). Não existem em funções puras.
+- **Relações**: `assert!` sobrevive a tree shaking (não é `@test`). Testes de
+  abort (`panic!`, `assert!(False)`) não podem usar `eval_src` — `exit(1)` mata
+  o runner. Usar `#[ignore]` e validar via `cargo run --bin kata -- run`.
+
 ### Canais CSP
 | Operador | Direção | Exemplo |
 |---|---|---|
@@ -333,7 +352,8 @@ lst.2 ?                  # indexação em lista (O(n) traversal, retorna Result)
     do fim (`t.(-1)` = `t.(len-1)`, resolvido estaticamente). Retorno direto —
     `T_N`, sem `Result`. Lowering é `Load` por offset.
   - **Coleções (INDEXABLE)**: `expr.N` é syntactic sugar para `at expr N`.
-    Retorna `Result::(A, Err>` — o programador usa `?` ou `|` para desempacotar.
+    Retorna `Result::(A, Err)` — o programador usa `?` (em Actions) ou `match`
+    explícito para desempacotar.
     Índice negativo conta do fim (runtime resolve). List é O(n), Array é O(1).
 - **Distinção**: o parser aceita `Ident` (field access) ou `Int` (indexação)
   após `.`. O typeck resolve pelo tipo: struct → field, tupla → IndexAccess
@@ -343,7 +363,8 @@ lst.2 ?                  # indexação em lista (O(n) traversal, retorna Result)
 - **Invariante de codegen**: Tuple é sempre heap type (ponteiro). Acesso por
   índice é `Load` por offset. Mesmo padrão que Sum com payload.
 - **Relações**: Interage com `?` em coleções: `arr.0 ?` (unwrap de Result).
-  `arr.0 | 0` é type error (Result não é compatível com `|` — use `?`).
+  `arr.0 | 0` é type error (Result não é compatível com `|` — use `?` em Actions
+  ou `match` explícito em funções puras).
   Em tuplas, `t.0 ?` é type error (`?` exige Result, tupla retorna direto)
   — o type system enforces a distinção.
 

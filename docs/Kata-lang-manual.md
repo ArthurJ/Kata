@@ -846,20 +846,24 @@ lambda v:
 * **Múltiplos predicados:** Se houver mais de um predicado, todos devem ser
   satisfeitos (AND lógico). Cada predicado gera uma cláusula no `Guard`. O
   primeiro que falha aborta a cadeia e retorna `Err`.
-* **Coerção contextual no `|`:** Se o payload do `Ok` é um tipo refinado e o
-  fallback é um literal do tipo base, o compilador valida os predicados do
-  fallback em compile-time.
-
 Exemplo de uso:
 
 ```kata
-let idade := PositiveInt 25 | 25          # Ok(25) desempacotado
-let invalido := PositiveInt (-5) | 0      # Err(0) desempacotado; fallback 0
-
 action validar
-    let x := PositiveInt 42 ?
+    let x := PositiveInt 42 ?            # ? desempacota Result em Actions
     echo!(x)
 validar!()
+```
+
+Em funções puras, `?` não existe — use `match` explícito:
+
+```kata
+extrai :: Result::(PositiveInt, Error) => Int
+lambda r:
+    match r
+        Result::Ok(v): v
+        Result::Err(_): 0
+        otherwise: 0
 ```
 
 #### 4.2.3. Tipos Produto (`data` struct)
@@ -1064,8 +1068,11 @@ falha via `|` (funções puras) ou `?` (Actions).
 ```kata
 let x := 5::PositiveInt            # ascription: predicado avaliado em typeck
 let erro := (-5)::PositiveInt      # type error: predicado falhou em compile-time
-let y := PositiveInt 25 | 0        # construtor: Result, | desempacota
-let z := PositiveInt 42 ?          # em Actions, ? desempacota
+let y := PositiveInt 25 ?          # em Actions, ? desempacota Result
+let z := match (PositiveInt 42)    # em funções puras, match explícito
+    Result::Ok(v): v
+    Result::Err(_): 0
+    otherwise: 0
 ```
 
 **Ascription em expressão não-literal (`f(x)::PositiveInt`):** type
@@ -1483,16 +1490,69 @@ No domínio impuro, `?` delega o erro ao orquestrador.
 
 ### 10.3. O Crash Determinístico (`panic!`)
 
-`panic!` aborta imediatamente em estados de corrupção. Destrói a Arena local da
-*Action*.
+```kata
+panic!("mensagem de erro")           # aborta imediatamente
+```
+
+`panic!` é uma Action builtin que aborta a execução imediatamente, escreve a
+mensagem no stderr e chama `exit(1)`. Destrói a Arena local da *Action*. Retorna
+`Unit` no sistema de tipos — mas o fluxo nunca chega ao retorno.
+
+`panic!` não desempacota nem valida — é para estados de corrupção onde continuar
+seria incorreto. O tempo de vida da arena é descartado; não há cleanup gracioso.
+
+### 10.3.1. Asserções (`assert!`)
+
+```kata
+assert!(cond)                        # 1 arg: panic!("assertion failed")
+assert!(cond, "mensagem customizada") # 2 args: panic!(msg)
+```
+
+`assert!` é uma Action builtin que desugara para `match` no typeck:
+
+```kata
+# assert!(cond, "msg") desugara para:
+match cond
+    Boolean::True: Unit
+    Boolean::False: panic!("msg")
+```
+
+Com 1 argumento, a mensagem default é `"assertion failed"`. Com 2 argumentos,
+o segundo é a mensagem de erro. O `cond` deve avaliar para `Boolean`.
+
+`assert!` é lowerado para `Guard` com `Panic` no fallback — código inline, não
+rastreável em nível de função. Em `kata build`, tree shaking elimina `@test`
+mas `assert!` sobrevive (não é diretiva `@test`).
 
 ### 10.4. Resolução de Falhas: Delegação (`?`) vs. Contenção (`|`)
 
-| Funcionalidade | `?` (Sufixo) | `|` (Infixo) |
+| Funcionalidade | `?` (Sufixo) | `\|` (Infixo) |
 |:---|:---|:---|
 | **Filosofia** | "Se falhar, aborto. Problema do chamador." | "Se falhar, contingência assume localmente." |
 | **Domínio** | Estritamente Actions. | Functions e Actions. |
-| **Fluxo** | Interrompe e retorna `Err(e)`. | Produz valor válido ou desvio. |
+| **Fluxo** | Interrompe e retorna `Err(e)`. | Desempacota payload da variante não-cauda; se cauda, avalia rhs. |
+| **Compatível com** | `Result`, `Optional` (e futuros enums com variante de erro). | `Optional` e qualquer enum cuja última variante seja **unitária** (cauda sem payload). |
+| **Incompatível** | Funções puras. | `Result` (`Err` tem payload — não é cauda unitária). Enums sem cauda unitária. |
+
+**`|` (fallback local)** é um operador infixo que desempacota o payload de
+qualquer variante não-cauda. Se a expressão à esquerda é a cauda (última
+variante, unitária), avalia e retorna a direita. Foi generalizado via
+`EnumRegistry` no typeck — funciona com qualquer enum cujas variantes (exceto a
+última) carreguem payload e a última seja unitária:
+
+- `Optional::Some(v) \| default` → desempacota `v`; `Optional::None \| default`
+  → avalia `default` (None é cauda unitária). ✅
+- `Result::Ok(v) \| 0` → **type error**: `Err(E)` tem payload, não é cauda
+  unitária. Use `?` para fail-fast. ❌
+- User enums com cauda unitária ganham `\|` automaticamente (ex: `enum Light
+  { On(bool), Off }` → `Light::On(true) \| Light::Off` desempacota `true`).
+
+O `|` é desugared para `Match` no typeck — a TAST nunca contém `PipeFallback`.
+
+**Coerção contextual no `|`:** Se o payload da variante não-cauda é um tipo
+refinado e o fallback é um literal do tipo base, o compilador valida os
+predicados do fallback em compile-time (coerção contextual). Isto aplica-se
+aos enums compatíveis com `|` (cauda unitária), não a `Result`.
 
 ## 11. Infraestrutura de Testes (*Low-Cost Abstraction*)
 
@@ -1843,6 +1903,10 @@ Acesso posicional em tuplas (`t.0`, `t.1`) e `len` em tuplas não são builtins 
 são special cases do typeck. `t.N` é `IndexAccess` com `Load` por offset;
 `len tupla` é `IntLiteral` (element_types.len()). Ver §14.3.
 
+`panic!` e `assert!` são Action builtins (não `@builtin`) — `panic!` é lowerado
+direto para FFI (`kata_rt_panic`); `assert!` é interceptado no typeck e desugado
+para `match cond { True: Unit, False: panic!(msg) }`. Ver §10.3.
+
 Builtins nunca chegam ao backend como calls — o middle-end os converte para nós
 TAST especializados antes do lowering.
 
@@ -1880,7 +1944,8 @@ O mesmo princípio aplica-se ao acesso posicional (ver §14.3):
   check em compile-time. Retorno direto — `t.0` é `Int`, não `Result`.
 * **Coleção `.N` / `at` (Dinâmico):** O tamanho é runtime. `.N` em coleções é
   syntactic sugar para `at` (interface `INDEXABLE(A)`), que retorna
-  `Result::(A, Err>`. O programador usa `?` ou `|` para desempacotar.
+  `Result::(A, Err)`. O programador usa `?` (em Actions) ou `match` explícito
+  para desempacotar.
 
 A distinção é a mesma: prova compile-time → sem `Result`; risco runtime →
 `Result` obrigatório.
