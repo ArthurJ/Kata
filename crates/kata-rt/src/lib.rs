@@ -8,9 +8,11 @@
 
 pub mod arena;
 pub mod bigint;
+pub mod fiber;
 pub mod float;
 pub mod io;
 pub mod rational;
+pub mod scheduler;
 pub mod sum;
 pub mod text;
 
@@ -42,6 +44,9 @@ pub use rational::{
     kata_rt_rat_from_float, kata_rt_rat_ge, kata_rt_rat_gt, kata_rt_rat_le, kata_rt_rat_literal,
     kata_rt_rat_lt, kata_rt_rat_mul, kata_rt_rat_neq, kata_rt_rat_show, kata_rt_rat_show_raw,
     kata_rt_rat_sub, kata_rt_rat_to_float,
+};
+pub use scheduler::{
+    kata_rt_run, kata_rt_scheduler_init, kata_rt_spawn, kata_rt_yield, reset_scheduler,
 };
 pub use sum::{kata_rt_store_sum_result, kata_rt_sum_tag_int};
 pub use text::{

@@ -197,6 +197,24 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
         FfiSymbol::Panic => {
             sig.params.push(AbiParam::new(I64)); // msg ptr
         }
+        // ── Scheduler/Fiber (Fase 10) ──
+        // scheduler_init: () -> i64 (1 = sucesso)
+        FfiSymbol::SchedulerInit => {
+            sig.returns.push(AbiParam::new(I64));
+        }
+        // spawn: (fn_ptr: i64, caller_arena: i64, args_ptr: i64) -> i64 (fiber_id)
+        FfiSymbol::Spawn => {
+            sig.params.push(AbiParam::new(I64)); // fn_ptr
+            sig.params.push(AbiParam::new(I64)); // caller_arena
+            sig.params.push(AbiParam::new(I64)); // args_ptr
+            sig.returns.push(AbiParam::new(I64)); // fiber_id
+        }
+        // run: () -> i64 (resultado do fiber)
+        FfiSymbol::Run => {
+            sig.returns.push(AbiParam::new(I64));
+        }
+        // yield: () → void (suspende fiber)
+        FfiSymbol::Yield => {}
     }
 
     sig

@@ -119,6 +119,14 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
         rt::kata_rt_store_sum_result as *const u8,
     );
     builder.symbol("kata_rt_sum_tag_int", rt::kata_rt_sum_tag_int as *const u8);
+    // Scheduler/Fiber (Fase 10)
+    builder.symbol(
+        "kata_rt_scheduler_init",
+        rt::kata_rt_scheduler_init as *const u8,
+    );
+    builder.symbol("kata_rt_spawn", rt::kata_rt_spawn as *const u8);
+    builder.symbol("kata_rt_run", rt::kata_rt_run as *const u8);
+    builder.symbol("kata_rt_yield", rt::kata_rt_yield as *const u8);
 }
 
 /// Declara todos os símbolos FFI no module e retorna o mapa nome → FuncId.
@@ -206,5 +214,9 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         StoreSumResult,
         SumTagInt,
         Panic,
+        SchedulerInit,
+        Spawn,
+        Run,
+        Yield,
     ]
 }

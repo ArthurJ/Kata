@@ -52,16 +52,22 @@ pub(crate) struct LowerCtx<'a, 'b> {
     /// Se `true`, tail calls estão desabilitados (entry point usa SystemV,
     /// não pode fazer return_call para funções Kata com CallConv::Tail).
     pub no_tail_calls: bool,
-    /// Epílogo da Action atual — block que executa `arena_destroy` + `return_`.
+    /// Epílogo da Action atual — block que executa `return_`.
     /// `None` para funções puras e entry point. `Some(block)` dentro de Actions.
     /// `return` faz `jump epilogue_block(value)` com o valor de retorno.
     pub epilogue_block: Option<Block>,
-    /// Handle da arena local da Action atual. Usado para alocar tuplas
-    /// em computação local (Fase 3 — caller's arena). `None` fora de Actions.
-    pub local_arena: Option<Value>,
+    /// Handle da arena do fiber atual. Usado para alocar tuplas
+    /// em computação local (não-tail-pos). `None` no entry point e funções puras.
+    /// Substitui `local_arena` da Fase 3 — agora a arena pertence ao fiber,
+    /// não é criada/destruída no prólogo/epílogo da Action.
+    pub fiber_arena: Option<Value>,
     /// Handle da arena do caller. Usado para alocar tuplas que sobrevivem
-    /// à destruição da arena local (valores retornados). `None` fora de Actions.
+    /// à destruição da arena do fiber (valores em tail_pos). `None` fora de
+    /// Actions e entry point.
     pub caller_arena: Option<Value>,
+    /// Se `true`, ActionCalls definidas pelo usuário emitem `spawn+run` (entry point).
+    /// Se `false`, ActionCalls definidas pelo usuário emitem `call` direto (dentro de Action).
+    pub scheduler_mode: bool,
     /// Block de saída do loop atual — `break` faz `jump` para este block.
     /// `None` fora de um loop.
     pub loop_break_block: Option<Block>,

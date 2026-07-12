@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 
 use cranelift_codegen::ir::types::I64;
-use cranelift_codegen::ir::{AbiParam, InstBuilder, Signature};
+use cranelift_codegen::ir::{AbiParam, InstBuilder, MemFlagsData, Signature};
 use cranelift_codegen::isa::CallConv;
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_module::{Linkage, Module};
@@ -138,16 +138,22 @@ pub(crate) fn lower_module(
             emitted_tail_call: false,
             no_tail_calls: true, // entry point usa SystemV — sem return_call
             epilogue_block: None,
-            local_arena: None,
+            fiber_arena: None,
             caller_arena: None,
+            scheduler_mode: true, // entry point: ActionCalls via spawn+run
             loop_break_block: None,
             loop_continue_block: None,
         };
 
-        // Prólogo do entry point: cria arena global (handle 0 no pool).
-        // Esta arena é a caller_arena para Actions chamadas do entry point.
-        // Actions em tail_pos alocam retornos aqui — sobrevivem até o processo
-        // terminar. Não há epílogo que a destrua (o processo termina).
+        // Prólogo do entry point: inicializa scheduler + cria arena global.
+        // A arena global serve como caller_arena para a primeira Action (via spawn).
+        let scheduler_init_ref = lower
+            .ffi_refs
+            .get("kata_rt_scheduler_init")
+            .copied()
+            .ok_or_else(|| CodegenError::FfiSymbolNotFound("kata_rt_scheduler_init".into()))?;
+        lower.builder.ins().call(scheduler_init_ref, &[]);
+
         let arena_create_ref = lower
             .ffi_refs
             .get("kata_rt_arena_create")
@@ -274,8 +280,9 @@ pub(crate) fn define_function_body(
             emitted_tail_call: false,
             no_tail_calls: false,
             epilogue_block: None,
-            local_arena: None,
+            fiber_arena: None,
             caller_arena: None,
+            scheduler_mode: false, // funções puras não chamam Actions
             loop_break_block: None,
             loop_continue_block: None,
         };
@@ -332,21 +339,20 @@ fn define_kata_function(
 }
 /// Declara uma Action no JITModule (sem definir ainda).
 ///
-/// A assinatura da Action é `(caller_arena: i64, arg1, ..., argN) -> ret_ty`
-/// com `CallConv::Tail` — mesmo ABI das funções nomeadas, mas com `caller_arena`
-/// como primeiro parâmetro.
+/// Assinatura uniforme (Fase 10): `(fiber_arena: i64, caller_arena: i64, args_ptr: i64) -> i64`
+/// com `CallConv::Tail`. Todos os params são I64, retorno é sempre I64
+/// (Float é bitcast na borda — epílogo da Action e caller).
 fn declare_kata_action(
     action: &TypedAction,
     module: &mut cranelift_jit::JITModule,
 ) -> Result<cranelift_module::FuncId, CodegenError> {
     let mut sig = Signature::new(CallConv::Tail);
-    // Primeiro parâmetro: caller_arena handle (i64).
-    sig.params.push(AbiParam::new(I64));
-    // Parâmetros da Action.
-    for pt in &action.param_types {
-        sig.params.push(AbiParam::new(ty_to_clif(pt)));
-    }
-    sig.returns.push(AbiParam::new(ty_to_clif(&action.ret_ty)));
+    // ABI uniforme: fiber_arena, caller_arena, args_ptr — todos I64.
+    sig.params.push(AbiParam::new(I64)); // fiber_arena
+    sig.params.push(AbiParam::new(I64)); // caller_arena
+    sig.params.push(AbiParam::new(I64)); // args_ptr
+    // Retorno sempre I64 (Float bitcast na borda).
+    sig.returns.push(AbiParam::new(I64));
     module
         .declare_function(&action.name, Linkage::Export, &sig)
         .map_err(|e| CodegenError::Cranelift(format!("declare action {}: {e}", action.name)))
@@ -354,10 +360,15 @@ fn declare_kata_action(
 
 /// Define (compila o corpo de) uma Action.
 ///
-/// Prólogo: cria `local_arena` via `kata_rt_arena_create()`.
-/// Body: lowera cada statement em sequência. O último statement é o
-/// retorno implícito da Action.
-/// Epílogo: destrói `local_arena` via `kata_rt_arena_destroy()` e `return_`.
+/// ABI uniforme (Fase 10): `(fiber_arena: i64, caller_arena: i64, args_ptr: i64) -> i64`.
+///
+/// Prólogo: sem `arena_create` — a arena do fiber é criada pelo scheduler
+/// e passada como `params[0]` (fiber_arena). `params[1]` = caller_arena.
+/// `params[2]` = args_ptr (ponteiro para tupla de args, ou 0 se Unit).
+///
+/// Body: extrai elementos da tupla de args_ptr, liga a variáveis, lowera statements.
+/// Epílogo: sem `arena_destroy` — o scheduler destrói a arena após o fiber retornar.
+/// Se `ret_ty == Float`, faz `bitcast(I64 ← F64)` antes do `return_`.
 fn define_kata_action(
     action: &TypedAction,
     module: &mut cranelift_jit::JITModule,
@@ -370,12 +381,12 @@ fn define_kata_action(
 
     {
         let func_ir = &mut ctx.func;
+        // Assinatura uniforme: (fiber_arena, caller_arena, args_ptr) -> i64.
         let mut sig = Signature::new(CallConv::Tail);
+        sig.params.push(AbiParam::new(I64)); // fiber_arena
         sig.params.push(AbiParam::new(I64)); // caller_arena
-        for pt in &action.param_types {
-            sig.params.push(AbiParam::new(ty_to_clif(pt)));
-        }
-        sig.returns.push(AbiParam::new(ty_to_clif(&action.ret_ty)));
+        sig.params.push(AbiParam::new(I64)); // args_ptr
+        sig.returns.push(AbiParam::new(I64)); // sempre I64 (Float bitcast na borda)
         func_ir.signature = sig;
 
         // Declara FFI e funções Kata no Function.
@@ -400,7 +411,11 @@ fn define_kata_action(
 
         let params: Vec<cranelift_codegen::ir::Value> = builder.block_params(entry_block).to_vec();
 
-        // caller_arena é params[0]; os params da Action são params[1..].
+        // ABI uniforme: params[0] = fiber_arena, params[1] = caller_arena, params[2] = args_ptr.
+        let fiber_arena = params[0];
+        let caller_arena = params[1];
+        let args_ptr = params[2];
+
         let mut lower = LowerCtx {
             builder: &mut builder,
             module,
@@ -415,41 +430,36 @@ fn define_kata_action(
             emitted_tail_call: false,
             no_tail_calls: false,
             epilogue_block: None,
-            local_arena: None,
-            caller_arena: None,
+            fiber_arena: Some(fiber_arena),
+            caller_arena: Some(caller_arena),
+            scheduler_mode: false, // dentro de Action: ActionCalls são call diretos
             loop_break_block: None,
             loop_continue_block: None,
         };
 
-        // Prólogo: cria local_arena via kata_rt_arena_create().
-        let arena_create_ref = lower
-            .ffi_refs
-            .get("kata_rt_arena_create")
-            .copied()
-            .ok_or_else(|| CodegenError::FfiSymbolNotFound("kata_rt_arena_create".into()))?;
-        let local_arena = lower.builder.ins().call(arena_create_ref, &[]);
-        let local_arena = lower.builder.inst_results(local_arena)[0];
-
         // Cria epilogue_block com 1 block param (result).
-        // O body faz jump epilogue_block(last_result) no fluxo normal,
-        // ou jump epilogue_block(return_value) via `return`.
+        // O tipo do param é o tipo NATURAL do retorno (F64 para Float, I64 para resto).
+        // O bitcast F64→I64 acontece no epilogue, após ler o block param.
+        // Se o param fosse I64 mas o body produz F64, o jump falha no verifier.
         let ret_clif_ty = ty_to_clif(&action.ret_ty);
         let epilogue_block = lower.builder.create_block();
         lower
             .builder
             .append_block_param(epilogue_block, ret_clif_ty);
 
-        // Configura LowerCtx com epilogue_block e arenas.
+        // Configura LowerCtx com epilogue_block.
         lower.epilogue_block = Some(epilogue_block);
-        lower.local_arena = Some(local_arena);
-        lower.caller_arena = Some(params[0]); // caller_arena é params[0]
 
-        // Liga parâmetros da Action (params[1..]) a variáveis nomeadas.
+        // Extrai elementos da tupla de args_ptr e liga a variáveis nomeadas.
         // O inference define params como __param_0, __param_1, ...
+        // args_ptr é um ponteiro para a tupla na arena (ou 0 se Unit).
+        let flags = cranelift_codegen::ir::MemFlagsData::new();
         for (i, pt) in action.param_types.iter().enumerate() {
             let clif_ty = ty_to_clif(pt);
             let var = lower.new_var(&format!("__param_{i}"), clif_ty);
-            lower.builder.def_var(var, params[i + 1]);
+            let offset = (i * 8) as i32;
+            let val = lower.builder.ins().load(clif_ty, flags, args_ptr, offset);
+            lower.builder.def_var(var, val);
         }
 
         // Body: lowera cada statement em sequência.
@@ -479,17 +489,22 @@ fn define_kata_action(
             );
         }
 
-        // Define o epilogue_block: arena_destroy + return_.
+        // Define o epilogue_block: return_ (sem arena_destroy — scheduler destrói).
         lower.builder.switch_to_block(epilogue_block);
         lower.builder.seal_block(epilogue_block);
         let result = lower.builder.block_params(epilogue_block)[0];
-        let arena_destroy_ref = lower
-            .ffi_refs
-            .get("kata_rt_arena_destroy")
-            .copied()
-            .ok_or_else(|| CodegenError::FfiSymbolNotFound("kata_rt_arena_destroy".into()))?;
-        lower.builder.ins().call(arena_destroy_ref, &[local_arena]);
-        lower.builder.ins().return_(&[result]);
+
+        // Float bitcast: se ret_ty == Float, o body produziu F64.
+        // A ABI retorna I64 — bitcast F64 → I64 antes do return_.
+        let ret_val = if action.ret_ty == Ty::float() {
+            lower
+                .builder
+                .ins()
+                .bitcast(I64, MemFlagsData::new(), result)
+        } else {
+            result
+        };
+        lower.builder.ins().return_(&[ret_val]);
 
         builder.finalize();
     }

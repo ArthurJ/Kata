@@ -80,6 +80,16 @@ pub enum FfiSymbol {
     // ── Control flow (Fase 9) ───────────────────────────────
     /// `kata_rt_panic(msg) -> !` — aborta com mensagem.
     Panic,
+
+    // ── Scheduler/Fiber (Fase 10) ───────────────────────────
+    /// `kata_rt_scheduler_init() -> i64` — inicializa scheduler thread-local.
+    SchedulerInit,
+    /// `kata_rt_spawn(fn_ptr, caller_arena, args_ptr) -> i64` — cria fiber.
+    Spawn,
+    /// `kata_rt_run() -> i64` — executa próximo fiber, retorna resultado.
+    Run,
+    /// `kata_rt_yield() -> ()` — suspende fiber atual (não usado em Fase 10).
+    Yield,
 }
 
 impl FfiSymbol {
@@ -138,6 +148,10 @@ impl FfiSymbol {
             FfiSymbol::StoreSumResult => "kata_rt_store_sum_result",
             FfiSymbol::SumTagInt => "kata_rt_sum_tag_int",
             FfiSymbol::Panic => "kata_rt_panic",
+            FfiSymbol::SchedulerInit => "kata_rt_scheduler_init",
+            FfiSymbol::Spawn => "kata_rt_spawn",
+            FfiSymbol::Run => "kata_rt_run",
+            FfiSymbol::Yield => "kata_rt_yield",
         }
     }
 
@@ -191,6 +205,11 @@ impl FfiSymbol {
             FfiSymbol::StoreSumResult | FfiSymbol::SumTagInt => Ty::int(),
             // Control flow — panic retorna Unit (aborta antes, mas o tipo é Unit)
             FfiSymbol::Panic => Ty::Unit,
+            // Scheduler/Fiber
+            FfiSymbol::SchedulerInit => Ty::int(),
+            FfiSymbol::Spawn => Ty::int(),
+            FfiSymbol::Run => Ty::int(),
+            FfiSymbol::Yield => Ty::Unit,
         }
     }
 
@@ -249,6 +268,10 @@ impl FfiSymbol {
             FfiSymbol::StoreSumResult,
             FfiSymbol::SumTagInt,
             FfiSymbol::Panic,
+            FfiSymbol::SchedulerInit,
+            FfiSymbol::Spawn,
+            FfiSymbol::Run,
+            FfiSymbol::Yield,
         ];
         all.iter().copied().find(|s| s.symbol_name() == name)
     }

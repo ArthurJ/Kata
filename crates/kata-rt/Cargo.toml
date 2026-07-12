@@ -10,6 +10,7 @@ bumpalo.workspace = true
 num-bigint.workspace = true
 num-rational.workspace = true
 num-traits.workspace = true
+wasmtime-fiber = "34.0.2"
 
 [dev-dependencies]
 proptest.workspace = true

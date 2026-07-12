@@ -743,6 +743,26 @@ pub(crate) fn infer_expr_hinted(
 
             // Lowera a tupla de argumentos.
             let typed_args = infer_expr(&args.node, &args.span, env, ctx, false)?;
+
+            // Normaliza Grouping → Tuple de 1 elemento para ActionCall args.
+            // `action!(x)` produz Grouping no parser; o codegen precisa de Tuple
+            // (ponteiro para array na arena) para passar args_ptr corretamente.
+            let typed_args = match &typed_args.kind {
+                TypedExprKind::Grouping { inner } => {
+                    let inner = inner.clone();
+                    TypedExpr {
+                        ty: Ty::Tuple(vec![inner.node.ty.clone()]),
+                        kind: TypedExprKind::Tuple {
+                            elements: vec![*inner],
+                        },
+                        span: typed_args.span,
+                        tail_pos: typed_args.tail_pos,
+                        effect: typed_args.effect,
+                    }
+                }
+                _ => typed_args,
+            };
+
             // Extrai tipos dos elementos da tupla para dispatch.
             let arg_tys: Vec<Ty> = match &typed_args.kind {
                 TypedExprKind::Tuple { elements } => {

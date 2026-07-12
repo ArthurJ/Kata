@@ -4,7 +4,7 @@
 //! Funções que não são do tipo expressão (module, match, clause, pattern)
 //! vivem em submódulos irmãos.
 
-use cranelift_codegen::ir::types::I64;
+use cranelift_codegen::ir::types::{F64, I64};
 use cranelift_codegen::ir::{AbiParam, GlobalValueData, InstBuilder, MemFlagsData, Signature};
 use cranelift_codegen::isa::CallConv;
 use cranelift_module::{Linkage, Module};
@@ -265,11 +265,11 @@ pub(crate) fn lower_expr(
                 ctx.caller_arena
                     .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0))
             } else {
-                // tail_pos = false: usar local_arena. Se não há local_arena
+                // tail_pos = false: usar fiber_arena. Se não há fiber_arena
                 // (entry point ou função pura), usa arena global (handle 0).
                 // Entry point: tudo é tail_pos, este branch não é atingido.
                 // Função pura: não há epílogo que destrua, arena global é segura.
-                ctx.local_arena
+                ctx.fiber_arena
                     .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0))
             };
             let size = ctx.builder.ins().iconst(I64, (n * 8) as i64);
@@ -418,73 +418,40 @@ pub(crate) fn lower_expr(
         // ── Match: pattern matching com branch chain ──
         TypedExprKind::Match { scrutinee, arms } => lower_match(scrutinee, arms, ctx),
 
-        // ── Fio 3: ActionCall — call para Action com caller_arena handle ──
+        // ── Fase 10: ActionCall — scheduler (entry) ou call direto (dentro de Action) ──
         TypedExprKind::ActionCall {
             callee,
             args,
             caller_arena: _,
             ffi_symbol,
         } => {
-            // Lowera os argumentos (tupla).
-            let args_val = lower_expr(&args.node, ctx)?;
+            // Lowera os argumentos (tupla) → args_ptr (ponteiro para a tupla na arena).
+            let args_ptr = lower_expr(&args.node, ctx)?;
 
-            // Extrai os elementos da tupla para passar como args individuais.
-            // O ABI da Action é: (caller_arena: i64, arg1, arg2, ...) -> ret_ty.
-            let mut arg_values = Vec::new();
-
-            // caller_arena handle — decide qual arena passar como caller_arena
-            // do callee baseado em tail_pos:
-            // - tail_pos = true: passa ctx.caller_arena (arena do caller do caller).
-            //   O callee aloca retornos nessa arena, que persiste após o caller
-            //   terminar. Evita UAF: o valor retorado sobrevive à destruição da
-            //   local_arena do caller.
-            // - tail_pos = false: passa ctx.local_arena (arena local do caller).
-            //   O callee aloca retornos na arena local do caller, que é destruída
-            //   no epílogo. Correto para `;` statements (valor é descartado).
-            //
-            // Se não há caller_arena/local_arena (entry point), usa sentinel 0
-            // (arena global — handle 0 é a primeira arena criada no pool).
-            let caller_arena_val = if expr.tail_pos {
-                ctx.caller_arena
-                    .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0))
-            } else {
-                ctx.local_arena
-                    .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0))
-            };
-            arg_values.push(caller_arena_val);
-
-            // Extrai elementos da tupla. Se é Unit (tupla vazia), não há args.
-            match &args.node.kind {
-                TypedExprKind::Unit => {}
-                TypedExprKind::Tuple { elements } => {
-                    // args_val é um ponteiro para a tupla na arena.
-                    // Carrega cada elemento no offset i * 8.
-                    let flags = MemFlagsData::new();
-                    for (i, _elem) in elements.iter().enumerate() {
-                        let offset = (i * 8) as i32;
-                        let val = ctx.builder.ins().load(I64, flags, args_val, offset);
-                        arg_values.push(val);
+            // Despacha: se tem ffi_symbol, é Action builtin FFI (ex: echo, panic).
+            // Builtins NÃO passam pelo scheduler — são calls FFI diretos.
+            if let Some(sym_name) = ffi_symbol {
+                // Extrai elementos da tupla para passar como args individuais ao FFI.
+                let mut ffi_args = Vec::new();
+                match &args.node.kind {
+                    TypedExprKind::Unit => {}
+                    TypedExprKind::Tuple { elements } => {
+                        let flags = MemFlagsData::new();
+                        for (i, _elem) in elements.iter().enumerate() {
+                            let offset = (i * 8) as i32;
+                            let val = ctx.builder.ins().load(I64, flags, args_ptr, offset);
+                            ffi_args.push(val);
+                        }
+                    }
+                    _ => {
+                        ffi_args.push(args_ptr);
                     }
                 }
-                _ => {
-                    // Args não-tupla (não deveria acontecer — parser sempre produz tupla).
-                    arg_values.push(args_val);
-                }
-            }
-
-            // Despacha: se tem ffi_symbol, é Action builtin FFI.
-            // Se não, é Action definida pelo usuário (despacha via kata_refs).
-            if let Some(sym_name) = ffi_symbol {
-                // Action builtin FFI (ex: echo → kata_rt_print).
-                // O ABI da Action builtin não tem caller_arena — é FFI direto.
-                // Remove o caller_arena handle (primeiro arg).
-                let ffi_args = &arg_values[1..];
                 let func_ref = ctx
                     .ffi_refs
                     .get(sym_name)
                     .ok_or_else(|| super::CodegenError::FfiSymbolNotFound(sym_name.clone()))?;
-                let call_inst = ctx.builder.ins().call(*func_ref, ffi_args);
-                // echo retorna Unit — se não há return values, retorna 0.
+                let call_inst = ctx.builder.ins().call(*func_ref, &ffi_args);
                 if let Some(ret) = ctx.builder.inst_results(call_inst).first() {
                     Ok(*ret)
                 } else {
@@ -492,15 +459,91 @@ pub(crate) fn lower_expr(
                 }
             } else if let Some(&func_ref) = ctx.kata_refs.get(callee) {
                 // Action definida pelo usuário.
-                let call_inst = ctx.builder.ins().call(func_ref, &arg_values);
-                Ok(ctx.builder.inst_results(call_inst)[0])
+                // ABI uniforme: (fiber_arena, caller_arena, args_ptr) -> i64.
+
+                // caller_arena decidido por tail_pos:
+                // - tail_pos = true: ctx.caller_arena (sobrevive à destruição do fiber)
+                // - tail_pos = false: ctx.fiber_arena (arena local do fiber)
+                let caller_arena_val = if expr.tail_pos {
+                    ctx.caller_arena
+                        .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0))
+                } else {
+                    ctx.fiber_arena
+                        .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0))
+                };
+
+                if ctx.scheduler_mode {
+                    // Entry point: spawn + run (scheduler cria fiber + arena).
+                    // 1. Obter fn_ptr via GlobalValue::Symbol.
+                    let callee_fid = ctx.kata_ids.get(callee).ok_or_else(|| {
+                        super::CodegenError::UnsupportedNode(format!(
+                            "ActionCall: callee `{callee}` não encontrado em kata_ids"
+                        ))
+                    })?;
+                    let func_ref2 = ctx
+                        .module
+                        .declare_func_in_func(*callee_fid, ctx.builder.func);
+                    let ext_func_name = ctx.builder.func.dfg.ext_funcs[func_ref2].name.clone();
+                    let func_gv = ctx.builder.func.create_global_value(
+                        cranelift_codegen::ir::GlobalValueData::Symbol {
+                            name: ext_func_name,
+                            offset: 0.into(),
+                            colocated: true,
+                            tls: false,
+                        },
+                    );
+                    let fn_ptr = ctx
+                        .builder
+                        .ins()
+                        .global_value(ctx.module.target_config().pointer_type(), func_gv);
+
+                    // 2. spawn(fn_ptr, caller_arena, args_ptr) → fiber_id
+                    let spawn_ref =
+                        ctx.ffi_refs.get("kata_rt_spawn").copied().ok_or_else(|| {
+                            super::CodegenError::FfiSymbolNotFound("kata_rt_spawn".into())
+                        })?;
+                    let spawn_inst = ctx
+                        .builder
+                        .ins()
+                        .call(spawn_ref, &[fn_ptr, caller_arena_val, args_ptr]);
+                    let _fiber_id = ctx.builder.inst_results(spawn_inst)[0];
+
+                    // 3. run() → result (i64)
+                    let run_ref = ctx.ffi_refs.get("kata_rt_run").copied().ok_or_else(|| {
+                        super::CodegenError::FfiSymbolNotFound("kata_rt_run".into())
+                    })?;
+                    let run_inst = ctx.builder.ins().call(run_ref, &[]);
+                    let result = ctx.builder.inst_results(run_inst)[0];
+
+                    // 4. Se ret_ty == Float: bitcast(F64 ← I64)
+                    if expr.ty == Ty::float() {
+                        Ok(ctx.builder.ins().bitcast(F64, MemFlagsData::new(), result))
+                    } else {
+                        Ok(result)
+                    }
+                } else {
+                    // Dentro de Action: call direto (mesmo fiber, mesmo stack).
+                    // arg_values = [fiber_arena, caller_arena, args_ptr]
+                    let fiber_arena_val = ctx
+                        .fiber_arena
+                        .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
+                    let arg_values = [fiber_arena_val, caller_arena_val, args_ptr];
+                    let call_inst = ctx.builder.ins().call(func_ref, &arg_values);
+                    let result = ctx.builder.inst_results(call_inst)[0];
+
+                    // Se ret_ty == Float: bitcast(F64 ← I64)
+                    if expr.ty == Ty::float() {
+                        Ok(ctx.builder.ins().bitcast(F64, MemFlagsData::new(), result))
+                    } else {
+                        Ok(result)
+                    }
+                }
             } else {
                 Err(super::CodegenError::UnsupportedNode(format!(
                     "ActionCall: callee `{callee}` não encontrado"
                 )))
             }
         }
-
         // ── Fio 3: Var — mesmo codegen que Let ──
         TypedExprKind::Var { name, value } => {
             let val = lower_expr(&value.node, ctx)?;
