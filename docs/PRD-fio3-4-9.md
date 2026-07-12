@@ -1177,13 +1177,13 @@ não por fio. Cada fase depende apenas das anteriores.
 12. `break` sai de `loop`. `continue` próxima iteração. ✅
 13. `loop`/`break`/`continue` fora de Action produzem erro de parser. ✅
 
-### Fase 5 — Sum com payload
+### Fase 5 — Sum com payload ✅
 
-14. `Result::Ok 42` constrói Sum com payload. Match extrai payload.
-15. `Optional::Some 42` e `Optional::None` funcionam.
-16. Match em 3+ variantes (general case) executa sem trap.
-17. Sum com payload é sempre ponteiro (box 8 bytes). Invariante de codegen.
-18. `kata_rt_store_sum_result` e `kata_rt_sum_tag_int` implementados no runtime.
+14. `Result::Ok 42` constrói Sum com payload. Match extrai payload. ✅
+15. `Optional::Some 42` e `Optional::None` funcionam. ✅
+16. Match em 3+ variantes (general case) executa sem trap. ✅
+17. Sum com payload é sempre ponteiro (box 8 bytes). Invariante de codegen. ✅
+18. `kata_rt_store_sum_result` e `kata_rt_sum_tag_int` implementados no runtime. ✅
 
 ### Fase 6 — Result/Optional no prelude
 
