@@ -15,6 +15,7 @@ mod expr;
 mod helpers;
 mod lambda;
 mod partial_dispatch;
+mod recursion;
 
 use kata_ast::{Item, Module, Spanned};
 use kata_core::dispatch::OverloadInfo;
@@ -100,6 +101,10 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
         let typed_action = infer_action(action_def, &ctx, &resolved.type_env)?;
         typed_actions.push(typed_action);
     }
+
+    // 3b. Fase 11 — verifica que nenhuma Action é recursiva.
+    //     Actions executam em fibers com stack fixa; recursão estouraria.
+    recursion::check_action_recursion(&typed_actions)?;
 
     // 4. Percorre items — infere cada EntryExpr em sequência.
     //    O último vira o entry point; os anteriores viram pre_entry

@@ -24,3 +24,4 @@ kata-lexer.workspace = true
 kata-parser.workspace = true
 kata-resolution.workspace = true
 kata-optimizer.workspace = true
+kata-diagnostics.workspace = true

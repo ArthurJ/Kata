@@ -97,4 +97,13 @@ pub enum MiddleError {
         #[label("lambda sem tipo inferível")]
         span: MietteSpan,
     },
+
+    #[error("ação `{action}` é recursiva: ciclo detectado ({cycle})")]
+    #[diagnostic(code = "action.recursive")]
+    RecursiveAction {
+        action: String,
+        cycle: String,
+        #[label]
+        span: MietteSpan,
+    },
 }
