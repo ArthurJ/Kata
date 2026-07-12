@@ -101,6 +101,8 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
     // I/O
     builder.symbol("kata_rt_print", rt::kata_rt_print as *const u8);
     builder.symbol("kata_rt_println", rt::kata_rt_println as *const u8);
+    // Control flow — panic (Fase 9)
+    builder.symbol("kata_rt_panic", rt::kata_rt_panic as *const u8);
     // Arena — C-ABI para alocação de tuplas (DoD 22)
     builder.symbol(
         "kata_rt_arena_create",
@@ -203,5 +205,6 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         ArenaDestroy,
         StoreSumResult,
         SumTagInt,
+        Panic,
     ]
 }

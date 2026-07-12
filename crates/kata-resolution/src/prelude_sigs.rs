@@ -280,6 +280,8 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
         ),
         // I/O — echo é uma Action builtin (Fio 3)
         sig_action("echo", vec![Ty::text()], Ty::Unit, "kata_rt_print"),
+        // Control flow — panic! é uma Action builtin (Fase 9)
+        sig_action("panic", vec![Ty::text()], Ty::Unit, "kata_rt_panic"),
         // Show
         sig(
             "show",

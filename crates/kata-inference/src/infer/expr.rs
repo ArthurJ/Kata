@@ -207,6 +207,228 @@ fn infer_question(
         kind: match_kind,
     })
 }
+/// Fase 8: Desugar `lhs | rhs` para `match lhs { Ok(v) => v, Err(_) => rhs }`.
+///
+/// `|` é coalescência de erro: desempacota `Ok(v)`/`Some(v)`, avalia `rhs`
+/// se `Err`/`None`. Diferença crucial do `?`: o braço de erro é `rhs` (uma
+/// expressão), não `return Err(e)`. Não aborta — é pura.
+///
+/// Funciona em qualquer contexto (funções puras e Actions). Não precisa
+/// de `ctx.ret_ty`.
+fn infer_pipe_fallback(
+    lhs: &Spanned<Expr>,
+    rhs: &Spanned<Expr>,
+    span: &Span,
+    env: &mut TypeEnv,
+    ctx: &InferCtx,
+) -> InferResult<TypedExpr> {
+    use kata_ast::{MatchArm, Pattern};
+
+    // Infere o scrutinee (lhs).
+    let typed_scrutinee = infer_expr(&lhs.node, &lhs.span, env, ctx, false)?;
+
+    // Determina o enum e constrói os braços do match sintético.
+    let (enum_name, ok_variant, err_variant, err_has_payload) = match &typed_scrutinee.ty {
+        Ty::Generic(name, args) if name == "Result" && args.len() == 2 => {
+            ("Result", "Ok", "Err", true)
+        }
+        Ty::Generic(name, _args) if name == "Optional" && _args.len() == 1 => {
+            ("Optional", "Some", "None", false)
+        }
+        _ => {
+            return Err(MiddleError::TypeMismatch {
+                expected: "Result<T, E> ou Optional<T>".into(),
+                found: format!("{:?}", typed_scrutinee.ty),
+                span: lhs.span.into(),
+            });
+        }
+    };
+
+    // Nome fresco para o binding do braço Ok/Some.
+    let ok_binding = "__pipe_ok";
+
+    // Pattern Ok(v) / Some(v).
+    let ok_pattern = Pattern::Variant {
+        enum_name: enum_name.to_string(),
+        variant: ok_variant.to_string(),
+        payload: Some(vec![Spanned::new(
+            Pattern::Ident(ok_binding.to_string()),
+            lhs.span,
+        )]),
+    };
+
+    // Pattern Err(_) / None.
+    // Err tem payload mas não ligamos — usamos Wildcard.
+    // None é unitária (payload = None).
+    let err_pattern = if err_has_payload {
+        Pattern::Variant {
+            enum_name: enum_name.to_string(),
+            variant: err_variant.to_string(),
+            payload: Some(vec![Spanned::new(Pattern::Wildcard, lhs.span)]),
+        }
+    } else {
+        Pattern::Variant {
+            enum_name: enum_name.to_string(),
+            variant: err_variant.to_string(),
+            payload: None,
+        }
+    };
+
+    // Body do braço Ok: `v` (o valor desempacotado).
+    let ok_body = Spanned::new(
+        Expr::Ident {
+            name: ok_binding.to_string(),
+        },
+        lhs.span,
+    );
+
+    // Body do braço Err: `rhs` (o fallback — não aborta).
+    let err_body = rhs.clone();
+
+    // Constrói os arms do match sintético.
+    let arms = vec![
+        MatchArm {
+            pattern: Some(Spanned::new(ok_pattern, lhs.span)),
+            guard: None,
+            body: ok_body,
+        },
+        MatchArm {
+            pattern: Some(Spanned::new(err_pattern, lhs.span)),
+            guard: None,
+            body: err_body,
+        },
+    ];
+
+    // Infere o match sintético.
+    let (match_ty, match_kind, match_effect) = infer_match(lhs, &arms, span, env, ctx, false)?;
+
+    Ok(TypedExpr {
+        span: *span,
+        ty: match_ty,
+        tail_pos: false,
+        effect: match_effect,
+        kind: match_kind,
+    })
+}
+
+/// Fase 9: Desugar `assert!(cond, "msg")` para `match cond { True: Unit, False: panic!(msg) }`.
+///
+/// `assert!` recebe uma condição (Boolean) e uma mensagem opcional (Text).
+/// Se a condição é falsa, chama `panic!(msg)`. O desugar constrói um match
+/// sintético sobre `cond` com dois braços.
+///
+/// Com 1 arg (sem msg): `assert!(cond)` → `match cond { True: Unit, False: panic!("assertion failed") }`.
+/// Com 2 args: `assert!(cond, "msg")` → `match cond { True: Unit, False: panic!("msg") }`.
+fn infer_assert(
+    args: &Spanned<Expr>,
+    span: &Span,
+    env: &mut TypeEnv,
+    ctx: &InferCtx,
+) -> InferResult<TypedExpr> {
+    use kata_ast::{MatchArm, Pattern};
+
+    // Extrai elementos da tupla de args.
+    let (cond_expr, msg_expr) = match &args.node {
+        Expr::Tuple { elements } => {
+            if elements.len() == 2 {
+                (elements[0].clone(), elements[1].clone())
+            } else if elements.len() == 1 {
+                // assert!(cond) — msg default
+                (
+                    elements[0].clone(),
+                    Spanned::new(
+                        Expr::TextLit {
+                            text: "assertion failed".into(),
+                        },
+                        args.span,
+                    ),
+                )
+            } else {
+                return Err(MiddleError::TypeMismatch {
+                    expected: "assert!(cond, msg?) — 1 ou 2 args".into(),
+                    found: format!("{} args", elements.len()),
+                    span: (*span).into(),
+                });
+            }
+        }
+        Expr::Grouping { inner } => {
+            // assert!(cond) — parêntese sem vírgula = Grouping
+            (
+                inner.as_ref().clone(),
+                Spanned::new(
+                    Expr::TextLit {
+                        text: "assertion failed".into(),
+                    },
+                    args.span,
+                ),
+            )
+        }
+        _ => {
+            return Err(MiddleError::TypeMismatch {
+                expected: "tupla de args para assert!".into(),
+                found: format!("{:?}", args.node),
+                span: (*span).into(),
+            });
+        }
+    };
+
+    // Constrói panic!(msg) como ActionCall.
+    let panic_call = Spanned::new(
+        Expr::ActionCall {
+            callee: "panic".into(),
+            args: Box::new(Spanned::new(
+                Expr::Tuple {
+                    elements: vec![msg_expr],
+                },
+                args.span,
+            )),
+        },
+        args.span,
+    );
+
+    // Constrói os braços do match sintético.
+    // True: Unit
+    let true_arm = MatchArm {
+        pattern: Some(Spanned::new(
+            Pattern::Variant {
+                enum_name: "Boolean".into(),
+                variant: "True".into(),
+                payload: None,
+            },
+            cond_expr.span,
+        )),
+        guard: None,
+        body: Spanned::new(Expr::Unit, cond_expr.span),
+    };
+    // False: panic!(msg)
+    let false_arm = MatchArm {
+        pattern: Some(Spanned::new(
+            Pattern::Variant {
+                enum_name: "Boolean".into(),
+                variant: "False".into(),
+                payload: None,
+            },
+            cond_expr.span,
+        )),
+        guard: None,
+        body: panic_call,
+    };
+
+    let arms = vec![true_arm, false_arm];
+
+    // Infere o match sintético.
+    let (match_ty, match_kind, match_effect) =
+        infer_match(&cond_expr, &arms, span, env, ctx, false)?;
+
+    Ok(TypedExpr {
+        span: *span,
+        ty: match_ty,
+        tail_pos: false,
+        effect: match_effect,
+        kind: match_kind,
+    })
+}
+
 ///
 /// When `hint` is `Some(Ty::Function(params, ret))` and `expr` is a `Lambda`,
 /// the params are used as the lambda's parameter types instead of InferVar.
@@ -472,6 +694,12 @@ pub(crate) fn infer_expr_hinted(
 
         // ── Fio 3: ActionCall — dispatch para Action builtin ou definida ──
         Expr::ActionCall { callee, args } => {
+            // Fase 9: assert! é desugared no typeck para
+            // match cond { True: Unit, False: panic!(msg) }.
+            if callee == "assert" {
+                return infer_assert(args, span, env, ctx);
+            }
+
             // Lowera a tupla de argumentos.
             let typed_args = infer_expr(&args.node, &args.span, env, ctx, false)?;
             // Extrai tipos dos elementos da tupla para dispatch.
@@ -630,12 +858,9 @@ pub(crate) fn infer_expr_hinted(
         Expr::Question(inner) => {
             return infer_question(inner, span, env, ctx, tail_pos);
         }
-        Expr::PipeFallback { .. } => {
-            return Err(MiddleError::TypeMismatch {
-                expected: "expressão (| desugar — Fase 8)".into(),
-                found: "PipeFallback".into(),
-                span: (*span).into(),
-            });
+        // ── Fase 8: `|` fallback — desugar para Match (coalescência pura) ──
+        Expr::PipeFallback { lhs, rhs } => {
+            return infer_pipe_fallback(lhs, rhs, span, env, ctx);
         }
     };
 

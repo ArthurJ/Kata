@@ -193,6 +193,10 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
             sig.params.push(AbiParam::new(I64)); // val (ptr to box)
             sig.returns.push(AbiParam::new(I64)); // tag
         }
+        // ── Control flow (ptr) → void (never returns) ──
+        FfiSymbol::Panic => {
+            sig.params.push(AbiParam::new(I64)); // msg ptr
+        }
     }
 
     sig

@@ -76,6 +76,10 @@ pub enum FfiSymbol {
     StoreSumResult,
     /// `kata_rt_sum_tag_int(val) -> tag` — extrai tag de Sum box.
     SumTagInt,
+
+    // ── Control flow (Fase 9) ───────────────────────────────
+    /// `kata_rt_panic(msg) -> !` — aborta com mensagem.
+    Panic,
 }
 
 impl FfiSymbol {
@@ -133,6 +137,7 @@ impl FfiSymbol {
             FfiSymbol::ArenaDestroy => "kata_rt_arena_destroy",
             FfiSymbol::StoreSumResult => "kata_rt_store_sum_result",
             FfiSymbol::SumTagInt => "kata_rt_sum_tag_int",
+            FfiSymbol::Panic => "kata_rt_panic",
         }
     }
 
@@ -184,6 +189,8 @@ impl FfiSymbol {
             FfiSymbol::ArenaDestroy => Ty::Unit,
             // Sum
             FfiSymbol::StoreSumResult | FfiSymbol::SumTagInt => Ty::int(),
+            // Control flow — panic retorna Unit (aborta antes, mas o tipo é Unit)
+            FfiSymbol::Panic => Ty::Unit,
         }
     }
 
@@ -241,6 +248,7 @@ impl FfiSymbol {
             FfiSymbol::ArenaDestroy,
             FfiSymbol::StoreSumResult,
             FfiSymbol::SumTagInt,
+            FfiSymbol::Panic,
         ];
         all.iter().copied().find(|s| s.symbol_name() == name)
     }

@@ -337,26 +337,50 @@ pub(crate) fn parse_expr(parser: &mut Parser) -> Result<Spanned<Expr>, FrontendE
         lhs = Spanned::new(Expr::Question(Box::new(lhs)), span);
     }
 
-    // `|>` pipe — lowest precedence, left-associative.
+    // `|>` pipe and `|` fallback — same precedence, left-associative.
     // `lhs |> rhs |> rhs2` = `(lhs |> rhs) |> rhs2`
-    while matches!(parser.peek(), Token::PipeForward) {
-        parser.advance(); // consume `|>`
-        let rhs = parse_apply(parser)?;
-        // Pipe rhs também pode ter `?` postfix: `x |> f ?` = `x |> (f ?)`.
-        let mut rhs = rhs;
-        while matches!(parser.peek(), Token::Question) {
-            let q_span = parser.advance();
-            let span = rhs.span.cover(q_span);
-            rhs = Spanned::new(Expr::Question(Box::new(rhs)), span);
+    // `lhs | rhs | rhs2`    = `(lhs | rhs) | rhs2`
+    // `lhs |> rhs | rhs2`  = `(lhs |> rhs) | rhs2`  (intercalado)
+    loop {
+        match parser.peek() {
+            Token::PipeForward => {
+                parser.advance(); // consume `|>`
+                let mut rhs = parse_apply(parser)?;
+                // rhs também pode ter `?` postfix: `x |> f ?` = `x |> (f ?)`.
+                while matches!(parser.peek(), Token::Question) {
+                    let q_span = parser.advance();
+                    let span = rhs.span.cover(q_span);
+                    rhs = Spanned::new(Expr::Question(Box::new(rhs)), span);
+                }
+                let span = lhs.span.cover(rhs.span);
+                lhs = Spanned::new(
+                    Expr::Pipe {
+                        lhs: Box::new(lhs),
+                        rhs: Box::new(rhs),
+                    },
+                    span,
+                );
+            }
+            Token::Pipe => {
+                let pipe_span = parser.advance(); // consume `|`
+                let mut rhs = parse_apply(parser)?;
+                // rhs também pode ter `?` postfix: `x | f ?` = `x | (f ?)`.
+                while matches!(parser.peek(), Token::Question) {
+                    let q_span = parser.advance();
+                    let span = rhs.span.cover(q_span);
+                    rhs = Spanned::new(Expr::Question(Box::new(rhs)), span);
+                }
+                let span = lhs.span.cover(pipe_span).cover(rhs.span);
+                lhs = Spanned::new(
+                    Expr::PipeFallback {
+                        lhs: Box::new(lhs),
+                        rhs: Box::new(rhs),
+                    },
+                    span,
+                );
+            }
+            _ => break,
         }
-        let span = lhs.span.cover(rhs.span);
-        lhs = Spanned::new(
-            Expr::Pipe {
-                lhs: Box::new(lhs),
-                rhs: Box::new(rhs),
-            },
-            span,
-        );
     }
 
     Ok(lhs)
