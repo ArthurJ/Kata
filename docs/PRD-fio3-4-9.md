@@ -1210,10 +1210,10 @@ não por fio. Cada fase depende apenas das anteriores.
 ### Fase 10 — Fibers
 
 28. Actions executam em fibers wasmtime-fiber. Cada fiber tem sua própria
-    stack e arena local.
+    stack e arena local. ✅
 29. Scheduler struct existe (mesmo que single-fiber em Fio 3). `run_queue`,
-    `current_fiber` presentes.
-30. Yield infrastructure existe (mesmo que não usado — sem canais em Fio 3).
+    `current_fiber` presentes. ✅
+30. Yield infrastructure existe (mesmo que não usado — sem canais em Fio 3). ✅
 
 ### Fase 11 — Proibição de recursão
 
