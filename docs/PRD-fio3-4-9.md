@@ -1187,12 +1187,12 @@ não por fio. Cada fase depende apenas das anteriores.
 
 ### Fase 6 — Result/Optional no prelude
 
-19. `Result::(T, E)` com type params posicionais resolve no typeck.
+19. `Result::(T, E)` com type params posicionais resolve no typeck. ✅
 
 ### Fase 7 — ? (fail-fast)
 
-20. Action com `?` desempacota `Result`/`Optional` corretamente.
-21. `?` desugared para Match + Return no typeck — TAST nunca contém `Question`.
+20. Action com `?` desempacota `Result`/`Optional` corretamente. ✅
+21. `?` desugared para Match + Return no typeck — TAST nunca contém `Question`. ✅
 
 ### Fase 8 — | (fallback)
 
