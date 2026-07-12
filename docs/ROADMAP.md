@@ -274,7 +274,8 @@ passa `caller_arena` em tail_pos, `local_arena` em `;`. Fase 4 ✅
 (? fail-fast, 9 testes E2E). Fase 8 ✅
 (| fallback, 9 testes E2E). Fase 9 ✅
 (panic!, assert!, 4 testes E2E). Fase 10 ✅
-(fibers, scheduler, 8 testes E2E).
+(fibers, scheduler, 8 testes E2E). Fase 11 ✅
+(proibição de recursão em Actions, 8 testes E2E).
 
 **Maquinaria de tipos construída:**
 - `effect: Effect` ganha `IO` (Actions têm efeito IO)

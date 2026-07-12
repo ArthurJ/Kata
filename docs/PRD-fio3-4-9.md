@@ -1218,7 +1218,7 @@ não por fio. Cada fase depende apenas das anteriores.
 ### Fase 11 — Proibição de recursão
 
 31. Proibição de recursão em Actions: `RecursiveAction` error se Action chama
-    a si mesma (direta ou indireta).
+    a si mesma (direta ou indireta). ✅
 
 ### Fase 12 — Closures com captura
 
