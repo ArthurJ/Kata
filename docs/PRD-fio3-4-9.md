@@ -417,12 +417,12 @@ pós-lowering) para saber onde inserir incref/decref.
 3. Monta argumentos.
 4. Emite `call_indirect`.
 
-#### TRMA — adiada
+#### TRMA — Fase 16
 
-TRMA (Tail Recursion Modulo Associativity) foi adiada para Zeladoria
-pós-Fio 3+4+9. `@associative` já existe no resolution (parseado e resolvido
-desde Fio 1). O TRMA pass no `kata-optimizer` é ortogonal a este PRD — não
-depende de Actions, Sum com payload, nem closures. Ver "Não Inclui".
+TRMA (Tail Recursion Modulo Associativity) é implementada na Fase 16 deste
+PRD. `@associative` já existe no resolution (parseado e resolvido desde Fio 1).
+O TRMA pass no `kata-optimizer` é ortogonal a Actions, Sum com payload, e
+closures — não depende deles.
 
 ### Fibers (wasmtime-fiber + scheduler struct mínimo)
 
@@ -491,8 +491,11 @@ kata-codegen/       Novo: lower_action, lower_return, lower_loop,
                     (ABI de Actions: +1 param implícito)
                     Novo módulo: escape.rs (ARC pass via MetadataTable)
                     (lower_for adiada para Fio 7+8)
-kata-optimizer/    (TRMA adiada para Zeladoria pós-Fio 3+4+9 — não modificado
-                    neste PRD)
+kata-optimizer/    Novo: TRMA pass (Fase 16) — @associative detecta auto-recursão
+                     direta com operador associativo e transforma em loop com
+                     acumulador. Ortogonal a Actions/Sum/closures.
+                     Modificado: ARC pass (Fase 15) consulta MetadataTable para
+                     inserir incref/decref.
 kata-rt/            Novo: kata_rt_store_sum_result, kata_rt_sum_tag_int,
                     kata_rt_alloc_arc, kata_rt_incref, kata_rt_decref,
                     kata_rt_panic, fiber integration (wasmtime-fiber),
@@ -909,9 +912,8 @@ Após o lowering, o ARC pass consulta a `MetadataTable` para inserir
 3. Para cada drop de um `Arc<T>` (fim de escopo, retorno sem uso): insert
    `decref`.
 
-O ARC pass é opcional neste PRD — pode ser stub (sem incref/decref, leak
-aceitável em Fio 3+4+9). A maquinaria de escape analysis é o que importa; o
-ARC pass automático pode ser refinado na Zeladoria 2.
+O ARC pass (Fase 15) insere incref/decref nos pontos apropriados consultando
+a MetadataTable. Sem leak — refcount correto para closures escapadas.
 
 #### Fiber integration
 
@@ -1100,9 +1102,9 @@ echo!(show (f 5))
 DoD: imprime `15`. `f` é uma closure escapada (retornada de `make_adder`).
 Captures promovidas para `Arc<T>`.
 
-### TRMA (adiado)
+### TRMA (Fase 16)
 
-TRMA foi adiada para Zeladoria pós-Fio 3+4+9. Ver "Não Inclui".
+TRMA é implementada na Fase 16 deste PRD. `@associative` já existe no resolution.
 
 ### panic!
 
@@ -1241,25 +1243,24 @@ não por fio. Cada fase depende apenas das anteriores.
 37. `FnValueCall` (call_indirect com CaptureBox) funciona.
 38. `kata_rt_alloc_arc`, `kata_rt_incref`, `kata_rt_decref` implementados.
 
-### Fase 15 — ARC pass (stub aceitável)
+### Fase 15 — ARC pass
 
-39. ARC pass insere incref/decref nos pontos apropriados (ou stub aceitável
-    — leak em Fio 3+4+9, refino na Zeladoria 2).
+39. ARC pass insere `incref`/`decref` nos pontos apropriados sem leak.
+    Closures escapadas têm refcount correto: `incref` ao capturar/aliased,
+    `decref` ao sair de escopo. Não-stub — implementação completa.
 
-### Fase 16 — Reservada (TRMA adiada)
+### Fase 16 — TRMA
 
-~~40. `@associative(0)` em `+` habilita TRMA. `soma 1000000` executa sem stack~~
-~~    overflow — sem TRMA, este valor causa stack overflow; com TRMA, executa~~
-~~    normalmente via recursão de cauda com acumulador.~~
-~~41. TRMA só funciona com auto-recursão direta. Recursão mútua não é otimizada.~~
-
-TRMA foi adiada para Zeladoria pós-Fio 3+4+9 (ver "Não Inclui").
+40. `@associative(0)` em `+` habilita TRMA. `soma 1000000` executa sem stack
+    overflow — sem TRMA, este valor causa stack overflow; com TRMA, executa
+    normalmente via recursão de cauda com acumulador.
+41. TRMA só funciona com auto-recursão direta. Recursão mútua não é otimizada.
 
 ### Geral
 
-40. Manual atualizado se implementação divergiu do PRD. Seções afetadas: §4.x
+42. Manual atualizado se implementação divergiu do PRD. Seções afetadas: §4.x
     Actions, §4.x Enum com payload, §4.x Closures.
-41. `Effect` não é ativado neste PRD — campo continua `Puro` em todos os nós.
+43. `Effect` não é ativado neste PRD — campo continua `Puro` em todos os nós.
     Pureza é garantida por regra de tipo: funções puras não podem conter
     `ActionCall` (erro de tipo, não de efeito). Revisitar em Fio 11 quando o
     scheduler precisar rastrear `Spawn`/`ChannelOp`.
@@ -1282,12 +1283,11 @@ TRMA foi adiada para Zeladoria pós-Fio 3+4+9 (ver "Não Inclui").
 - Stream fusion map/filter/fold (Fio 8)
 - Tipos refinados/ascription de expressão (Fio 6)
 - Structs com campos/field access (Fio 5) — Ty::Tuple já existe, sem .N
-- TRMA (Tail Recursion Modulo Associativity) — adiada para Zeladoria
-  pós-Fio 3+4+9. `@associative` já existe no resolution (parseado e
-  resolvido desde Fio 1); o TRMA pass no `kata-optimizer` é ortogonal a
-  este PRD (não depende de Actions, Sum com payload, nem closures).
-  Será implementado com teste que força stack overflow sem TRMA
-  (`soma 1000000`) e executa normalmente com TRMA.
+- TRMA (Tail Recursion Modulo Associativity) — **incluída neste PRD** (Fase 16).
+  `@associative` já existe no resolution (parseado e resolvido desde Fio 1);
+  o TRMA pass no `kata-optimizer` é ortogonal a Actions, Sum com payload, e
+  closures (não depende deles). Implementado com teste que força stack overflow
+  sem TRMA (`soma 1000000`) e executa normalmente com TRMA.
 
 ## Arquitetura
 
@@ -1393,9 +1393,9 @@ Pass 0: add_n é atribuído a let — não retorna de função, NãoEscapa
   (se NãoEscapa: direto na stack; se EscapaParaHeap: via Arc<ClosureBox>)
 ```
 
-### Pipeline do TRMA (adiado)
+### Pipeline do TRMA (Fase 16)
 
-TRMA foi adiada para Zeladoria pós-Fio 3+4+9. Ver "Não Inclui".
+TRMA é implementada na Fase 16 deste PRD. `@associative` já existe no resolution.
 
 ## Riscos
 
@@ -1426,7 +1426,9 @@ TRMA foi adiada para Zeladoria pós-Fio 3+4+9. Ver "Não Inclui".
    com casos de edge: closures aninhadas, closures em listas, closures em
    tuplas.
 
-6. **TRMA**: adiada para Zeladoria pós-Fio 3+4+9. Sem risco neste PRD.
+6. **TRMA**: implementada na Fase 16. `@associative` já existe no resolution.
+   Risco baixo — ortogonal a Actions/Sum/closures. Teste: `soma 1000000` sem
+   stack overflow.
 
 7. **`?` e `|` desugar para Match**: O desugar produz Match com braços
    específicos. Se o enum tem mais de 2 variantes, o desugar de `|` precisa

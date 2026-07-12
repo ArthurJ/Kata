@@ -60,15 +60,8 @@ fn closure_rename_int_add() {
     let entry = entry_typed(&tmod);
     assert_eq!(entry.ty, Ty::int());
     match &entry.kind {
-        TypedExprKind::Closure {
-            ffi_symbol,
-            captures,
-            escapes,
-            ..
-        } => {
+        TypedExprKind::Closure { ffi_symbol, .. } => {
             assert_eq!(ffi_symbol.as_deref(), Some("kata_rt_bi_add"));
-            assert!(captures.is_empty(), "Fio 2: captures sempre vazio");
-            assert!(!escapes, "Fio 2: escapes sempre false");
         }
         other => panic!("expected Closure, got {other:?}"),
     }

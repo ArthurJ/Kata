@@ -124,6 +124,7 @@ pub(crate) fn infer_lambda(
             param_types,
             ret_ty,
             clauses: vec![clause],
+            captures: Vec::new(),
         },
         Effect::Puro,
     ))

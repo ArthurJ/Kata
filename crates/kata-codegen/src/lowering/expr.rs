@@ -112,8 +112,6 @@ pub(crate) fn lower_expr(
             callee,
             args,
             ffi_symbol,
-            captures: _,
-            escapes: _,
         } => {
             // Lowera os argumentos.
             let mut arg_values = Vec::with_capacity(args.len());
@@ -157,11 +155,28 @@ pub(crate) fn lower_expr(
                     // Ty::Function (lambda como valor) — call_indirect.
                     if let Some(var) = ctx.var_map.get(name) {
                         let func_ptr = ctx.builder.use_var(*var);
+
+                        // Se há captures registradas para esta closure,
+                        // alocar CaptureBox e prefixar box_ptr nos args.
+                        let caps = ctx.closure_captures.get(name).cloned();
+                        let mut call_args = Vec::new();
+                        if let Some(ref captures) = caps {
+                            if !captures.is_empty() {
+                                let box_ptr = alloc_capture_box(func_ptr, captures, ctx)?;
+                                call_args.push(box_ptr);
+                            }
+                        }
+                        call_args.extend(arg_values.iter().copied());
+
                         // Constrói a assinatura para call_indirect.
                         // O tipo do callee é Ty::Function(params, ret).
                         let callee_ty = &callee.node.ty;
                         if let Ty::Function(param_types, ret_ty) = callee_ty {
                             let mut sig = Signature::new(CallConv::Tail);
+                            // Se há captures, box_ptr é o primeiro param da sig.
+                            if caps.as_ref().is_some_and(|c| !c.is_empty()) {
+                                sig.params.push(AbiParam::new(I64));
+                            }
                             for pt in param_types {
                                 sig.params.push(AbiParam::new(ty_to_clif(pt)));
                             }
@@ -169,11 +184,9 @@ pub(crate) fn lower_expr(
                             let sig_ref = ctx.builder.func.import_signature(sig);
                             if expr.tail_pos && !ctx.no_tail_calls {
                                 // Tail call indireto: return_call_indirect.
-                                ctx.builder.ins().return_call_indirect(
-                                    sig_ref,
-                                    func_ptr,
-                                    &arg_values,
-                                );
+                                ctx.builder
+                                    .ins()
+                                    .return_call_indirect(sig_ref, func_ptr, &call_args);
                                 ctx.emitted_tail_call = true;
                                 let dummy = ctx.builder.create_block();
                                 ctx.builder.switch_to_block(dummy);
@@ -182,10 +195,10 @@ pub(crate) fn lower_expr(
                                 ctx.builder.ins().return_(&[val]);
                                 return Ok(val);
                             }
-                            let call_inst =
-                                ctx.builder
-                                    .ins()
-                                    .call_indirect(sig_ref, func_ptr, &arg_values);
+                            let call_inst = ctx
+                                .builder
+                                .ins()
+                                .call_indirect(sig_ref, func_ptr, &call_args);
                             return Ok(ctx.builder.inst_results(call_inst)[0]);
                         }
                     }
@@ -292,6 +305,13 @@ pub(crate) fn lower_expr(
 
         // ── Let: define variável ──
         TypedExprKind::Let { name, value } => {
+            // Se o value é um Lambda com captures, registrar no closure_captures
+            // para o call site poder alocar o CaptureBox.
+            if let TypedExprKind::Lambda { captures, .. } = &value.node.kind {
+                if !captures.is_empty() {
+                    ctx.closure_captures.insert(name.clone(), captures.clone());
+                }
+            }
             let val = lower_expr(&value.node, ctx)?;
             let clif_ty = ty_to_clif(&value.node.ty);
             let var = ctx.new_var(name, clif_ty);
@@ -356,6 +376,7 @@ pub(crate) fn lower_expr(
             param_types,
             ret_ty,
             clauses,
+            captures,
         } => {
             // Para lambda anônimo (func_name = None): declarar e definir
             // uma função separada no JITModule.
@@ -367,7 +388,11 @@ pub(crate) fn lower_expr(
             };
 
             // Declara a função no module (sem definir o corpo ainda).
+            // Se há captures, o primeiro param é box_ptr (I64).
             let mut sig = Signature::new(CallConv::Tail);
+            if !captures.is_empty() {
+                sig.params.push(AbiParam::new(I64)); // box_ptr
+            }
             for pt in param_types {
                 sig.params.push(AbiParam::new(ty_to_clif(pt)));
             }
@@ -378,15 +403,12 @@ pub(crate) fn lower_expr(
                 .map_err(|e| super::CodegenError::Cranelift(format!("declare fn {name}: {e}")))?;
 
             // Compila o corpo usando o pipeline compartilhado.
-            // NOTA: isto é uma simplificação — em produção, lambdas anônimos
-            // deveriam ser compilados antes do entry point (como funções
-            // nomeadas). Por enquanto, compilamos inline e usamos
-            // finalize_definitions no jit_eval para resolver.
             super::module::define_function_body(
                 &name,
                 param_types,
                 ret_ty,
                 clauses,
+                captures,
                 ctx.module,
                 ctx.ffi_ids,
                 ctx.kata_ids,
@@ -655,4 +677,61 @@ pub(crate) fn lower_expr(
             Ok(unit)
         }
     }
+}
+
+/// Aloca um CaptureBox na arena global e retorna o ponteiro.
+///
+/// 1. Aloca um array temporário de `n_captures * 8` bytes na arena global.
+/// 2. Preenche o array com os valores das captures (lidos do var_map).
+/// 3. Chama `kata_rt_alloc_arc(fn_ptr, array_ptr, n_captures)` → `box_ptr`.
+///
+/// O CaptureBox contém: fn_ptr (offset 0), refcount=1 (offset 8),
+/// captures[0..n] (offset 16+).
+fn alloc_capture_box(
+    func_ptr: cranelift_codegen::ir::Value,
+    captures: &[kata_inference::CaptureInfo],
+    ctx: &mut LowerCtx,
+) -> Result<cranelift_codegen::ir::Value, super::CodegenError> {
+    let n = captures.len() as i64;
+    let flags = cranelift_codegen::ir::MemFlagsData::new();
+
+    // 1. Aloca array temporário na arena global (handle 0).
+    let arena_alloc_ref = ctx
+        .ffi_refs
+        .get("kata_rt_arena_alloc")
+        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound("kata_rt_arena_alloc".into()))?;
+    let global_arena = ctx.builder.ins().iconst(I64, 0);
+    let array_size = ctx.builder.ins().iconst(I64, n * 8);
+    let alloc_inst = ctx
+        .builder
+        .ins()
+        .call(*arena_alloc_ref, &[global_arena, array_size]);
+    let array_ptr = ctx.builder.inst_results(alloc_inst)[0];
+
+    // 2. Preenche o array com os valores das captures.
+    for (i, cap) in captures.iter().enumerate() {
+        let cap_var = ctx.var_map.get(&cap.name).ok_or_else(|| {
+            super::CodegenError::UnsupportedNode(format!(
+                "capture '{}' não encontrada no var_map",
+                cap.name
+            ))
+        })?;
+        let cap_val = ctx.builder.use_var(*cap_var);
+        let offset = (i * 8) as i32;
+        ctx.builder.ins().store(flags, cap_val, array_ptr, offset);
+    }
+
+    // 3. Chama kata_rt_alloc_arc(fn_ptr, array_ptr, n_captures) → box_ptr.
+    let alloc_arc_ref = ctx
+        .ffi_refs
+        .get("kata_rt_alloc_arc")
+        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound("kata_rt_alloc_arc".into()))?;
+    let n_val = ctx.builder.ins().iconst(I64, n);
+    let arc_inst = ctx
+        .builder
+        .ins()
+        .call(*alloc_arc_ref, &[func_ptr, array_ptr, n_val]);
+    let box_ptr = ctx.builder.inst_results(arc_inst)[0];
+
+    Ok(box_ptr)
 }

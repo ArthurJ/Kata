@@ -90,6 +90,16 @@ pub enum FfiSymbol {
     Run,
     /// `kata_rt_yield() -> ()` — suspende fiber atual (não usado em Fase 10).
     Yield,
+
+    // ── Arc<T> / CaptureBox (Fase 12) ───────────────────────
+    /// `kata_rt_alloc_arc(fn_ptr, captures_ptr, n_captures) -> box_ptr`
+    AllocArc,
+    /// `kata_rt_incref(box_ptr) -> 0` — incrementa refcount.
+    IncRef,
+    /// `kata_rt_decref(box_ptr) -> 0` — decrementa refcount.
+    DecRef,
+    /// `kata_rt_arc_fn_ptr(box_ptr) -> fn_ptr` — extrai fn_ptr do box.
+    ArcFnPtr,
 }
 
 impl FfiSymbol {
@@ -152,6 +162,10 @@ impl FfiSymbol {
             FfiSymbol::Spawn => "kata_rt_spawn",
             FfiSymbol::Run => "kata_rt_run",
             FfiSymbol::Yield => "kata_rt_yield",
+            FfiSymbol::AllocArc => "kata_rt_alloc_arc",
+            FfiSymbol::IncRef => "kata_rt_incref",
+            FfiSymbol::DecRef => "kata_rt_decref",
+            FfiSymbol::ArcFnPtr => "kata_rt_arc_fn_ptr",
         }
     }
 
@@ -210,6 +224,9 @@ impl FfiSymbol {
             FfiSymbol::Spawn => Ty::int(),
             FfiSymbol::Run => Ty::int(),
             FfiSymbol::Yield => Ty::Unit,
+            // Arc<T> / CaptureBox
+            FfiSymbol::AllocArc | FfiSymbol::ArcFnPtr => Ty::int(),
+            FfiSymbol::IncRef | FfiSymbol::DecRef => Ty::int(),
         }
     }
 
@@ -272,6 +289,10 @@ impl FfiSymbol {
             FfiSymbol::Spawn,
             FfiSymbol::Run,
             FfiSymbol::Yield,
+            FfiSymbol::AllocArc,
+            FfiSymbol::IncRef,
+            FfiSymbol::DecRef,
+            FfiSymbol::ArcFnPtr,
         ];
         all.iter().copied().find(|s| s.symbol_name() == name)
     }

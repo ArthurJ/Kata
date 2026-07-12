@@ -11,7 +11,7 @@ use cranelift_codegen::isa::CallConv;
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_module::{Linkage, Module};
 use kata_core::ty::Ty;
-use kata_inference::{TypedAction, TypedFunction, TypedLambdaClause, TypedModule};
+use kata_inference::{CaptureInfo, TypedAction, TypedFunction, TypedLambdaClause, TypedModule};
 
 use super::LowerCtx;
 use super::clause::{
@@ -143,6 +143,7 @@ pub(crate) fn lower_module(
             scheduler_mode: true, // entry point: ActionCalls via spawn+run
             loop_break_block: None,
             loop_continue_block: None,
+            closure_captures: HashMap::new(),
         };
 
         // Prólogo do entry point: inicializa scheduler + cria arena global.
@@ -227,6 +228,7 @@ pub(crate) fn define_function_body(
     param_types: &[Ty],
     ret_ty: &Ty,
     clauses: &[TypedLambdaClause],
+    captures: &[CaptureInfo],
     module: &mut cranelift_jit::JITModule,
     ffi_ids: &HashMap<String, cranelift_module::FuncId>,
     kata_ids: &HashMap<String, cranelift_module::FuncId>,
@@ -238,6 +240,10 @@ pub(crate) fn define_function_body(
     {
         let func_ir = &mut ctx.func;
         let mut sig = Signature::new(CallConv::Tail);
+        // Se há captures, o primeiro param é box_ptr (I64).
+        if !captures.is_empty() {
+            sig.params.push(AbiParam::new(I64)); // box_ptr
+        }
         for pt in param_types {
             sig.params.push(AbiParam::new(ty_to_clif(pt)));
         }
@@ -285,11 +291,32 @@ pub(crate) fn define_function_body(
             scheduler_mode: false, // funções puras não chamam Actions
             loop_break_block: None,
             loop_continue_block: None,
+            closure_captures: HashMap::new(),
+        };
+
+        // Se há captures, carrega cada capture do box_ptr e define variável.
+        // Layout do CaptureBox: offset 0 = fn_ptr, offset 8 = refcount,
+        // offset 16 + i*8 = captures[i].
+        // O box_ptr é o primeiro block param (params[0]).
+        let clause_params: Vec<cranelift_codegen::ir::Value> = if !captures.is_empty() {
+            let box_ptr = params[0];
+            let flags = cranelift_codegen::ir::MemFlagsData::new();
+            for (i, cap) in captures.iter().enumerate() {
+                let clif_ty = ty_to_clif(&cap.ty);
+                let offset = (16 + i * 8) as i32;
+                let val = lower.builder.ins().load(clif_ty, flags, box_ptr, offset);
+                lower.new_var(&cap.name, clif_ty);
+                let var = *lower.var_map.get(&cap.name).unwrap();
+                lower.builder.def_var(var, val);
+            }
+            params[1..].to_vec()
+        } else {
+            params.clone()
         };
 
         if clauses.len() == 1 && all_patterns_are_ident(&clauses[0].patterns) {
             let clause = &clauses[0];
-            bind_patterns_to_params(&clause.patterns, &params, &mut lower);
+            bind_patterns_to_params(&clause.patterns, &clause_params, &mut lower);
             lower_with_bindings(&clause.with_bindings, &mut lower)?;
             lower.emitted_tail_call = false;
             let result = lower_clause_body(clause, &mut lower)?;
@@ -297,7 +324,7 @@ pub(crate) fn define_function_body(
                 lower.builder.ins().return_(&[result]);
             }
         } else {
-            lower_clause_chain(clauses, &params, &mut lower)?;
+            lower_clause_chain(clauses, &clause_params, &mut lower)?;
         }
 
         builder.finalize();
@@ -331,6 +358,7 @@ fn define_kata_function(
         &func.param_types,
         &func.ret_ty,
         &func.clauses,
+        &[], // funções nomeadas não têm captures
         module,
         ffi_ids,
         symbol_table,
@@ -435,6 +463,7 @@ fn define_kata_action(
             scheduler_mode: false, // dentro de Action: ActionCalls são call diretos
             loop_break_block: None,
             loop_continue_block: None,
+            closure_captures: HashMap::new(),
         };
 
         // Cria epilogue_block com 1 block param (result).

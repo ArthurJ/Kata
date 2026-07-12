@@ -11,6 +11,7 @@
 mod _match;
 mod apply;
 mod apply_lambda;
+mod captures;
 mod expr;
 mod helpers;
 mod lambda;
@@ -152,14 +153,20 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
         span: item_span_or_synthetic(&module.items),
     })?;
 
-    Ok(TypedModule {
+    let mut typed_module = TypedModule {
         pre_entry,
         entry,
         dispatch_table,
         type_env,
         functions: typed_functions,
         actions: typed_actions,
-    })
+    };
+
+    // Fase 12: coleta captures (free variables) de cada Closure.
+    // Percorre a TAST já construída e muta in-place os campos `captures`.
+    captures::run(&mut typed_module);
+
+    Ok(typed_module)
 }
 
 /// Infere uma função nomeada com corpo Kata (múltiplas cláusulas).

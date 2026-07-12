@@ -6,6 +6,7 @@
 //! O compilador conhece apenas o enum `FfiSymbol` e as 3 strings de mapeamento
 //! (`"i64"`, `"f64"`, `"kata_rt_string"`). Toda a implementação vive aqui.
 
+pub mod arc;
 pub mod arena;
 pub mod bigint;
 pub mod fiber;
@@ -26,6 +27,7 @@ pub use rational::{float_to_rat, rat_from_int, rat_from_text, rat_to_float, rat_
 pub use text::{bool_to_text, int_to_text, text_literal, text_replace_first};
 
 // Re-exports de funções C-ABI para o codegen registrar no JIT.
+pub use arc::{kata_rt_alloc_arc, kata_rt_arc_fn_ptr, kata_rt_decref, kata_rt_incref};
 pub use arena::{
     kata_rt_arena_alloc, kata_rt_arena_create, kata_rt_arena_destroy, reset_all_arenas,
 };

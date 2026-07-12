@@ -78,8 +78,6 @@ fn infer_int_add() {
             callee,
             args,
             ffi_symbol,
-            captures: _,
-            escapes: _,
         } => {
             assert!(matches!(callee.node.kind, TypedExprKind::Ident { .. }));
             assert_eq!(args.len(), 2);

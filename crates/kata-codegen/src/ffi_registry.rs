@@ -127,6 +127,11 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
     builder.symbol("kata_rt_spawn", rt::kata_rt_spawn as *const u8);
     builder.symbol("kata_rt_run", rt::kata_rt_run as *const u8);
     builder.symbol("kata_rt_yield", rt::kata_rt_yield as *const u8);
+    // Arc<T> / CaptureBox (Fase 12)
+    builder.symbol("kata_rt_alloc_arc", rt::kata_rt_alloc_arc as *const u8);
+    builder.symbol("kata_rt_incref", rt::kata_rt_incref as *const u8);
+    builder.symbol("kata_rt_decref", rt::kata_rt_decref as *const u8);
+    builder.symbol("kata_rt_arc_fn_ptr", rt::kata_rt_arc_fn_ptr as *const u8);
 }
 
 /// Declara todos os símbolos FFI no module e retorna o mapa nome → FuncId.
@@ -218,5 +223,9 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         Spawn,
         Run,
         Yield,
+        AllocArc,
+        IncRef,
+        DecRef,
+        ArcFnPtr,
     ]
 }

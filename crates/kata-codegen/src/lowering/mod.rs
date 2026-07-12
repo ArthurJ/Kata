@@ -31,6 +31,7 @@ use cranelift_module::Module;
 use std::collections::HashMap;
 
 use crate::metadata::MetadataTable;
+use kata_inference::CaptureInfo;
 
 /// Contexto de lowering — compartilhado entre as chamadas recursivas.
 pub(crate) struct LowerCtx<'a, 'b> {
@@ -74,6 +75,10 @@ pub(crate) struct LowerCtx<'a, 'b> {
     /// Block de continuação do loop atual — `continue` faz `jump` para este block.
     /// `None` fora de um loop.
     pub loop_continue_block: Option<Block>,
+    /// Captures de closures let-bound: mapeia nome → lista de captures.
+    /// Populado quando `let f := lambda...` é lowerado. Usado no call site
+    /// para alocar o CaptureBox e passar `box_ptr` como primeiro arg.
+    pub closure_captures: HashMap<String, Vec<CaptureInfo>>,
 }
 
 impl<'a, 'b> LowerCtx<'a, 'b> {

@@ -215,6 +215,29 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
         }
         // yield: () → void (suspende fiber)
         FfiSymbol::Yield => {}
+        // ── Arc<T> / CaptureBox (Fase 12) ──
+        // alloc_arc: (fn_ptr, captures_ptr, n_captures) -> box_ptr
+        FfiSymbol::AllocArc => {
+            sig.params.push(AbiParam::new(I64)); // fn_ptr
+            sig.params.push(AbiParam::new(I64)); // captures_ptr
+            sig.params.push(AbiParam::new(I64)); // n_captures
+            sig.returns.push(AbiParam::new(I64)); // box_ptr
+        }
+        // incref: (box_ptr) -> 0
+        FfiSymbol::IncRef => {
+            sig.params.push(AbiParam::new(I64)); // box_ptr
+            sig.returns.push(AbiParam::new(I64));
+        }
+        // decref: (box_ptr) -> 0
+        FfiSymbol::DecRef => {
+            sig.params.push(AbiParam::new(I64)); // box_ptr
+            sig.returns.push(AbiParam::new(I64));
+        }
+        // arc_fn_ptr: (box_ptr) -> fn_ptr
+        FfiSymbol::ArcFnPtr => {
+            sig.params.push(AbiParam::new(I64)); // box_ptr
+            sig.returns.push(AbiParam::new(I64)); // fn_ptr
+        }
     }
 
     sig

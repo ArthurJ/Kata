@@ -56,9 +56,9 @@ pub enum TypedExprKind {
     Ident { name: String },
     /// Chamada de função na TAST. Renomeado de `Apply` em Fio 2 (PRD-fio2).
     ///
-    /// Em Fio 2: `captures` é sempre vazio (sem captura léxica — Fio 9),
-    /// `escapes` é sempre `false` (sem escape analysis — Fio 9).
-    /// A renomeação prepara a TAST para Fio 9 sem retrofit.
+    /// As variáveis capturadas pelo callee são lidas de `Lambda.captures`
+    /// (single source of truth). O call site aloca um CaptureBox via
+    /// `kata_rt_alloc_arc` e passa `box_ptr` como primeiro arg.
     Closure {
         callee: Box<Spanned<TypedExpr>>,
         args: Vec<Spanned<TypedExpr>>,
@@ -66,12 +66,6 @@ pub enum TypedExprKind {
         /// `None` para funções Kata puras (corpo no próprio módulo) ou
         /// para `call_indirect` (callee é variável com `Ty::Function`).
         ffi_symbol: Option<String>,
-        /// Variáveis capturadas do escopo externo (Fio 9).
-        /// Sempre vazio em Fio 2.
-        captures: Vec<CaptureInfo>,
-        /// Se a closure escapa → alocação heap/Arc (Fio 9).
-        /// Sempre `false` em Fio 2.
-        escapes: bool,
     },
     /// `expr::Type` — ascription de tipo. O typeck validou compatibilidade
     /// ou rebaixou (FloatLit → Rational).
@@ -124,6 +118,11 @@ pub enum TypedExprKind {
         /// Cláusulas (padrões + corpo). 1 cláusula = lambda anônimo.
         /// Múltiplas = função nomeada.
         clauses: Vec<TypedLambdaClause>,
+        /// Variáveis capturadas do escopo externo (Fase 12).
+        /// Populado por collect_captures. O codegen aloca um CaptureBox
+        /// (via `kata_rt_alloc_arc`) e passa `box_ptr` como primeiro arg
+        /// da função JIT. Sempre Heap — sem escape analysis.
+        captures: Vec<CaptureInfo>,
     },
 
     /// Match — pattern matching com verificação de exaustividade.
@@ -183,20 +182,10 @@ pub enum TypedExprKind {
 }
 
 /// Informação sobre uma variável capturada por uma closure.
-/// Preenchida em Fio 9 (escape analysis). Placeholder em Fio 2.
 #[derive(Debug, Clone)]
 pub struct CaptureInfo {
     pub name: String,
     pub ty: Ty,
-    /// Stack ou Heap (Fio 9). Sempre Stack em Fio 2.
-    pub storage: CaptureStorage,
-}
-
-/// Storage de uma variável capturada. Fio 2: sempre Stack.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CaptureStorage {
-    Stack,
-    Heap,
 }
 
 /// Cláusula lambda tipada — padrões + corpo, com guards e with bindings.

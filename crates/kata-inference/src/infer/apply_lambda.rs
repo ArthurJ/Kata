@@ -195,6 +195,7 @@ fn build_lambda_apply(
             guards: typed_guards,
             with_bindings: typed_with_bindings,
         }],
+        captures: Vec::new(),
     };
 
     let callee_typed = TypedExpr {
@@ -211,8 +212,6 @@ fn build_lambda_apply(
             callee: Box::new(Spanned::new(callee_typed, *span)),
             args: typed_args,
             ffi_symbol: None,
-            captures: Vec::new(),
-            escapes: false,
         },
         Effect::Puro,
     ))

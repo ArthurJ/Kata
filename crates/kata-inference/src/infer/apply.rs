@@ -122,8 +122,6 @@ pub(crate) fn infer_apply(
                 callee: Box::new(Spanned::new(callee_typed, callee.span)),
                 args: typed_args,
                 ffi_symbol: overload.ffi_symbol,
-                captures: Vec::new(),
-                escapes: false,
             },
             Effect::Puro,
         ));
@@ -166,8 +164,6 @@ pub(crate) fn infer_apply(
                 callee: Box::new(Spanned::new(callee_typed, callee.span)),
                 args: typed_args,
                 ffi_symbol: None, // call_indirect — sem FFI symbol
-                captures: Vec::new(),
-                escapes: false,
             },
             Effect::Puro,
         ));
