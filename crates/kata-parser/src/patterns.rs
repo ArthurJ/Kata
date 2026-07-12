@@ -29,7 +29,7 @@ impl Parser {
                 self.advance();
                 Ok(Spanned::new(Pattern::Wildcard, start))
             }
-            // `Enum::Variant` → Variant qualificado
+            // `Enum::Variant` → Variant qualificado (possivelmente com sub-pattern)
             Token::Ident(name) => {
                 self.advance();
                 if matches!(self.peek(), Token::DoubleColon)
@@ -39,11 +39,45 @@ impl Parser {
                     let variant = variant.clone();
                     self.advance(); // consume ::
                     self.advance(); // consume variant
-                    let span = start.cover(self.tokens[self.pos - 1].span);
+
+                    // Fase 5: verificar se há um sub-pattern após a variante.
+                    // `Result::Ok v` → Variant com payload sub-pattern.
+                    // `Result::Ok(v)` → Variant com payload sub-pattern (entre parênteses).
+                    // `Boolean::True` (sem sub-pattern) → Variant sem payload.
+                    let payload = if self.can_start_pattern() {
+                        // Sub-pattern sem parênteses: `Result::Ok v`
+                        Some(vec![self.parse_pattern()?])
+                    } else if matches!(self.peek(), Token::LParen) {
+                        // Sub-patterns entre parênteses: `Result::Ok(v)`
+                        self.advance(); // consume (
+                        let mut sub_pats = Vec::new();
+                        if !matches!(self.peek(), Token::RParen) {
+                            sub_pats.push(self.parse_pattern()?);
+                            while matches!(self.peek(), Token::Comma) {
+                                self.advance();
+                                if matches!(self.peek(), Token::RParen) {
+                                    break;
+                                }
+                                sub_pats.push(self.parse_pattern()?);
+                            }
+                        }
+                        self.expect(&Token::RParen, "`)` após sub-pattern do variant")?;
+                        Some(sub_pats)
+                    } else {
+                        None
+                    };
+
+                    let end_span = self
+                        .tokens
+                        .get(self.pos - 1)
+                        .map(|t| t.span)
+                        .unwrap_or(start);
+                    let span = start.cover(end_span);
                     return Ok(Spanned::new(
                         Pattern::Variant {
                             enum_name: name,
                             variant,
+                            payload,
                         },
                         span,
                     ));

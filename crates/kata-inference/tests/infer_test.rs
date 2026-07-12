@@ -310,7 +310,9 @@ fn infer_boolean_true() {
     let entry = entry_typed(&tmod);
     assert_eq!(entry.ty, Ty::boolean());
     match &entry.kind {
-        TypedExprKind::VariantQual { enum_name, variant } => {
+        TypedExprKind::VariantQual {
+            enum_name, variant, ..
+        } => {
             assert_eq!(enum_name, "Boolean");
             assert_eq!(variant, "True");
         }

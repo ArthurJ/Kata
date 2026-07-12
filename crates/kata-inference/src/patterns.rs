@@ -51,6 +51,8 @@ fn check_pattern_inner(
                     return Ok(TypedPattern::Variant {
                         enum_name: enum_name.clone(),
                         variant: name.clone(),
+                        sub_patterns: None,
+                        tag: enum_registry.variant_index(enum_name, name).unwrap_or(0),
                     });
                 }
             }
@@ -91,7 +93,11 @@ fn check_pattern_inner(
         }
 
         // ── Variant: verifica que enum e variante existem ──
-        Pattern::Variant { enum_name, variant } => {
+        Pattern::Variant {
+            enum_name,
+            variant,
+            payload,
+        } => {
             // Verifica que o enum existe e tem a variante.
             if !enum_registry.is_variant(enum_name, variant) {
                 return Err(MiddleError::UnboundName {
@@ -110,9 +116,52 @@ fn check_pattern_inner(
                     });
                 }
             }
+            // Fase 5: resolver sub-patterns do payload.
+            let sub_patterns = if let Some(sub_pats) = payload {
+                // Variante com payload — precisa ter tipo de payload no EnumRegistry.
+                let payload_ty = enum_registry
+                    .payload_ty(enum_name, variant)
+                    .ok_or_else(|| MiddleError::TypeMismatch {
+                        expected: "variante com payload".into(),
+                        found: format!("{}::{} sem payload", enum_name, variant),
+                        span: (*span).into(),
+                    })?;
+                // Fase 5: 1 sub-pattern por variante.
+                if sub_pats.len() != 1 {
+                    return Err(MiddleError::ArityMismatch {
+                        expected: 1,
+                        found: sub_pats.len(),
+                        span: (*span).into(),
+                    });
+                }
+                let mut typed_subs = Vec::with_capacity(sub_pats.len());
+                for sub_pat in sub_pats {
+                    let typed = check_pattern_inner(
+                        &sub_pat.node,
+                        payload_ty,
+                        enum_registry,
+                        env,
+                        &sub_pat.span,
+                    )?;
+                    typed_subs.push(Spanned::new(typed, sub_pat.span));
+                }
+                Some(typed_subs)
+            } else {
+                // Sem sub-pattern — verifica que a variante é unitária.
+                if enum_registry.payload_ty(enum_name, variant).is_some() {
+                    return Err(MiddleError::TypeMismatch {
+                        expected: "variante sem payload".into(),
+                        found: format!("{}::{} tem payload", enum_name, variant),
+                        span: (*span).into(),
+                    });
+                }
+                None
+            };
             Ok(TypedPattern::Variant {
                 enum_name: enum_name.clone(),
                 variant: variant.clone(),
+                sub_patterns,
+                tag: enum_registry.variant_index(enum_name, variant).unwrap_or(0),
             })
         }
 
@@ -220,7 +269,7 @@ pub(crate) fn check_exhaustiveness(
             let missing: Vec<String> = all_variants
                 .iter()
                 .filter(|v| !covered_variants.iter().any(|c| c == *v))
-                .cloned()
+                .map(|v| v.to_string())
                 .collect();
             if missing.is_empty() {
                 Ok(()) // exaustivo

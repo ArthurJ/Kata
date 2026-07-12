@@ -75,7 +75,9 @@ fn match_variant_qual_pattern() {
             Expr::Match { arms, .. } => {
                 assert_eq!(arms.len(), 2);
                 match &arms[0].pattern.as_ref().unwrap().node {
-                    kata_ast::Pattern::Variant { enum_name, variant } => {
+                    kata_ast::Pattern::Variant {
+                        enum_name, variant, ..
+                    } => {
                         assert_eq!(enum_name, "Boolean");
                         assert_eq!(variant, "True");
                     }

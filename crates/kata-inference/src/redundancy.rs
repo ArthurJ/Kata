@@ -71,10 +71,12 @@ fn pattern_covers(covering: &Pattern, covered: &Pattern) -> bool {
             Pattern::Variant {
                 enum_name: e1,
                 variant: v1,
+                ..
             },
             Pattern::Variant {
                 enum_name: e2,
                 variant: v2,
+                ..
             },
         ) => e1 == e2 && v1 == v2,
         (Pattern::Tuple(as_), Pattern::Tuple(bs)) => {

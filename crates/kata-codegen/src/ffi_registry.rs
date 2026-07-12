@@ -111,6 +111,12 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
         "kata_rt_arena_destroy",
         rt::kata_rt_arena_destroy as *const u8,
     );
+    // Sum (Fase 5)
+    builder.symbol(
+        "kata_rt_store_sum_result",
+        rt::kata_rt_store_sum_result as *const u8,
+    );
+    builder.symbol("kata_rt_sum_tag_int", rt::kata_rt_sum_tag_int as *const u8);
 }
 
 /// Declara todos os símbolos FFI no module e retorna o mapa nome → FuncId.
@@ -195,5 +201,7 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         ArenaCreate,
         ArenaAlloc,
         ArenaDestroy,
+        StoreSumResult,
+        SumTagInt,
     ]
 }

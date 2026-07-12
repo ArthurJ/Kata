@@ -157,6 +157,19 @@ impl TypeEnv {
     pub fn push_scope(&self) -> TypeEnv {
         TypeEnv::with_parent(self.clone())
     }
+
+    /// Drena os bindings (e mutables) de `other` para este escopo.
+    ///
+    /// Usado em `merge_resolved` para combinar o `type_env` do user module
+    /// com o escopo filho do prelude. `other` fica vazio após a chamada.
+    pub fn merge_bindings_from(&mut self, other: &mut TypeEnv) {
+        for (name, ty) in other.bindings.drain() {
+            self.bindings.insert(name, ty);
+        }
+        for name in other.mutables.drain() {
+            self.mutables.insert(name);
+        }
+    }
 }
 
 impl Default for TypeEnv {

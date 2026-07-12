@@ -347,11 +347,21 @@ impl Parser {
                 _ => return Err(self.error("variant name")),
             };
 
-            // For Fio 1, variants are unitary (no payload)
-            // Fio 4 will add payload types with `(Type)`
+            // Fase 5: parsear payload da variante.
+            // `Ok(Int)` → payload = Some(TypeExpr::Named("Int"))
+            // `None` (sem payload) → payload = None
+            let payload = if matches!(self.peek(), Token::LParen) {
+                self.advance(); // consume (
+                let ty = self.parse_type_expr()?;
+                self.expect(&Token::RParen, "`)` após tipo do payload")?;
+                Some(ty)
+            } else {
+                None
+            };
+
             variants.push(VariantDecl {
                 name: variant_name,
-                payload: None,
+                payload,
             });
         }
 

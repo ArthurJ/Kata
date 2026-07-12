@@ -11,6 +11,7 @@ pub mod bigint;
 pub mod float;
 pub mod io;
 pub mod rational;
+pub mod sum;
 pub mod text;
 
 // Re-exports convenientes para uso interno (não C-ABI)
@@ -42,6 +43,7 @@ pub use rational::{
     kata_rt_rat_lt, kata_rt_rat_mul, kata_rt_rat_neq, kata_rt_rat_show, kata_rt_rat_show_raw,
     kata_rt_rat_sub, kata_rt_rat_to_float,
 };
+pub use sum::{kata_rt_store_sum_result, kata_rt_sum_tag_int};
 pub use text::{
     kata_rt_bool_to_text, kata_rt_string_concat, kata_rt_string_len, kata_rt_text_literal,
     kata_rt_text_replace_first,

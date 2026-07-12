@@ -113,7 +113,9 @@ fn lambda_anon_variant_pattern() {
             Expr::Lambda { patterns, .. } => {
                 assert_eq!(patterns.len(), 1);
                 match &patterns[0].node {
-                    kata_ast::Pattern::Variant { enum_name, variant } => {
+                    kata_ast::Pattern::Variant {
+                        enum_name, variant, ..
+                    } => {
                         assert_eq!(enum_name, "Boolean");
                         assert_eq!(variant, "True");
                     }

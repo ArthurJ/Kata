@@ -44,6 +44,10 @@ pub(crate) fn infer_apply(
         } => {
             return infer_apply_lambda(patterns, body, guards, with_bindings, args, span, env, ctx);
         }
+        // Fase 5: Apply(VariantQual, [arg]) → construção de Sum com payload.
+        Expr::VariantQual { enum_name, variant } => {
+            return infer_variant_construct(enum_name, variant, args, span, env, ctx);
+        }
         Expr::TypeAscription { expr: inner, ty } => {
             // Ascription em lambda: `((lambda ...)::(Int -> Int)) 42`.
             // O hint da ascription fornece os tipos dos params.
@@ -174,4 +178,74 @@ pub(crate) fn infer_apply(
         name: func_name,
         span: callee.span.into(),
     })
+}
+
+/// Fase 5: Infere `Apply(VariantQual("Enum", "Variant"), [arg])` —
+/// construção de Sum com payload.
+///
+/// Verifica que a variante existe no EnumRegistry, que tem payload,
+/// e que o tipo do argumento é compatível com o tipo do payload.
+/// Produz `TypedExprKind::VariantConstruct { enum_name, variant, payload }`.
+fn infer_variant_construct(
+    enum_name: &str,
+    variant: &str,
+    args: &[Spanned<Expr>],
+    span: &Span,
+    env: &mut TypeEnv,
+    ctx: &InferCtx,
+) -> InferResult<(Ty, TypedExprKind, Effect)> {
+    use kata_core::ty::Ty;
+
+    // Verifica que o enum e a variante existem.
+    if !ctx.enum_registry.is_variant(enum_name, variant) {
+        return Err(MiddleError::UnboundName {
+            name: format!("{}::{}", enum_name, variant),
+            span: (*span).into(),
+        });
+    }
+
+    // Verifica que a variante tem payload.
+    let payload_ty = ctx
+        .enum_registry
+        .payload_ty(enum_name, variant)
+        .ok_or_else(|| MiddleError::TypeMismatch {
+            expected: "variante com payload".into(),
+            found: format!("{}::{} é unitária", enum_name, variant),
+            span: (*span).into(),
+        })?;
+
+    // Fase 5: exatamente 1 argumento.
+    if args.len() != 1 {
+        return Err(MiddleError::ArityMismatch {
+            expected: 1,
+            found: args.len(),
+            span: (*span).into(),
+        });
+    }
+
+    // Infere o argumento (tail_pos = false — é computação local).
+    let typed_arg = infer_expr(&args[0].node, &args[0].span, env, ctx, false)?;
+
+    // Verifica que o tipo do argumento é compatível com o payload.
+    if typed_arg.ty != *payload_ty {
+        return Err(MiddleError::TypeMismatch {
+            expected: format!("{:?}", payload_ty),
+            found: format!("{:?}", typed_arg.ty),
+            span: args[0].span.into(),
+        });
+    }
+
+    Ok((
+        Ty::Sum(enum_name.to_string()),
+        TypedExprKind::VariantConstruct {
+            enum_name: enum_name.to_string(),
+            variant: variant.to_string(),
+            payload: Box::new(Spanned::new(typed_arg, args[0].span)),
+            tag: ctx
+                .enum_registry
+                .variant_index(enum_name, variant)
+                .unwrap_or(0),
+        },
+        Effect::Puro,
+    ))
 }

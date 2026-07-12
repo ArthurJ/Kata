@@ -130,17 +130,19 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
     signatures.extend(user.signatures);
 
     // TypeEnv: prelude é o escopo base, user é filho.
-    let type_env = kata_core::ty::TypeEnv::with_parent(prelude.type_env);
-    // Adiciona bindings do user no escopo filho.
-    // (TypeEnv::with_parent cria escopo vazio com parent; bindings do user
-    // são adicionados via define durante infer_module.)
-    // Para Fio 1, user modules são só expressões (sem declarations próprias),
-    // então o type_env do prelude já tem tudo.
+    let mut type_env = kata_core::ty::TypeEnv::with_parent(prelude.type_env);
+    // Copia bindings do user (enums, structs declarados pelo usuário) para o escopo filho.
+    let mut user_type_env = user.type_env;
+    type_env.merge_bindings_from(&mut user_type_env);
+
+    // Merge enum_registry: prelude + user (user enums sobrescrevem prelude).
+    let mut enum_registry = prelude.enum_registry;
+    enum_registry.merge(user.enum_registry);
 
     ResolvedModule {
         type_env,
         signatures,
-        enum_registry: prelude.enum_registry,
+        enum_registry,
         functions: user.functions,
         actions: user.actions,
     }

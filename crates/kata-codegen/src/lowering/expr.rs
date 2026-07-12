@@ -301,15 +301,53 @@ pub(crate) fn lower_expr(
         }
 
         // ── VariantQual: Boolean::True = 1, Boolean::False = 0 ──
-        TypedExprKind::VariantQual { enum_name, variant } => {
+        // Para outros enums (Fase 5): VariantQual unitária → kata_rt_store_sum_result(tag, 0).
+        TypedExprKind::VariantQual {
+            enum_name,
+            variant,
+            tag,
+        } => {
             if enum_name == "Boolean" {
                 let val = if variant == "True" { 1 } else { 0 };
                 Ok(ctx.builder.ins().iconst(I64, val))
             } else {
-                Err(super::CodegenError::UnsupportedNode(format!(
-                    "VariantQual não suportado: {enum_name}::{variant}"
-                )))
+                // Variante unitária de enum do usuário: box com tag, payload = 0.
+                let tag_val = ctx.builder.ins().iconst(I64, *tag as i64);
+                let payload_val = ctx.builder.ins().iconst(I64, 0);
+                let func_ref = ctx
+                    .ffi_refs
+                    .get("kata_rt_store_sum_result")
+                    .ok_or_else(|| {
+                        super::CodegenError::FfiSymbolNotFound("kata_rt_store_sum_result".into())
+                    })?;
+                let call_inst = ctx.builder.ins().call(*func_ref, &[tag_val, payload_val]);
+                Ok(ctx.builder.inst_results(call_inst)[0])
             }
+        }
+
+        // ── VariantConstruct: Fase 5 — Sum com payload ──
+        // Result::Ok 42 → kata_rt_store_sum_result(tag, payload) → box_ptr
+        TypedExprKind::VariantConstruct {
+            enum_name: _,
+            variant: _,
+            payload,
+            tag,
+        } => {
+            // Lowera o payload.
+            let payload_val = lower_expr(&payload.node, ctx)?;
+
+            // Tag = índice da variante (embutido no TypedExpr pelo typeck).
+            let tag_val = ctx.builder.ins().iconst(I64, *tag as i64);
+
+            // Chama kata_rt_store_sum_result(tag, payload) → box_ptr.
+            let func_ref = ctx
+                .ffi_refs
+                .get("kata_rt_store_sum_result")
+                .ok_or_else(|| {
+                    super::CodegenError::FfiSymbolNotFound("kata_rt_store_sum_result".into())
+                })?;
+            let call_inst = ctx.builder.ins().call(*func_ref, &[tag_val, payload_val]);
+            Ok(ctx.builder.inst_results(call_inst)[0])
         }
 
         // ── Lambda: função Cranelift separada (anon) ou referência (nomeado) ──

@@ -170,7 +170,15 @@ pub enum Pattern {
     /// `42`, `"texto"`, `3.14` — literal exato.
     Literal(Spanned<Expr>),
     /// `Boolean::True`, `Result::Ok` — variante de enum qualificada.
-    Variant { enum_name: String, variant: String },
+    /// `payload` é None para variantes unitárias (`True`, `None`).
+    /// `Some(vec![sub_pat])` para variantes com payload (`Ok(v)`, `Some(x)`).
+    Variant {
+        enum_name: String,
+        variant: String,
+        /// Sub-patterns do payload. None = unitária.
+        /// Some(vec) = variantes com payload (1 elemento por enquanto).
+        payload: Option<Vec<Spanned<Pattern>>>,
+    },
     /// `(a, b, c)` — tupla.
     Tuple(Vec<Spanned<Pattern>>),
     /// `[h : t]` — cons (cabeça : cauda). `[]` para lista vazia.

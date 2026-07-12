@@ -190,7 +190,7 @@ pub(crate) fn infer_expr_hinted(
             )
         }
 
-        // ── Qualificação de variante ─────────────────────────
+        // ── Qualificação de variante (sem Apply = unitária) ─────
         Expr::VariantQual { enum_name, variant } => {
             let enum_ty =
                 env.lookup(enum_name)
@@ -202,12 +202,35 @@ pub(crate) fn infer_expr_hinted(
 
             match &enum_ty {
                 Ty::Sum(name) => {
-                    let _ = variant;
+                    // Verifica que a variante existe.
+                    if !ctx.enum_registry.is_variant(name, variant) {
+                        return Err(MiddleError::UnboundName {
+                            name: format!("{}::{}", name, variant),
+                            span: (*span).into(),
+                        });
+                    }
+                    // Fase 5: VariantQual sem Apply só é válido para variantes unitárias.
+                    // Variantes com payload exigem Apply (Result::Ok 42).
+                    if ctx.enum_registry.payload_ty(name, variant).is_some() {
+                        return Err(MiddleError::TypeMismatch {
+                            expected: "aplicação de argumento (Result::Ok valor)".into(),
+                            found: format!("{}::{} tem payload — use Apply", name, variant),
+                            span: (*span).into(),
+                        });
+                    }
+                    let tag = ctx
+                        .enum_registry
+                        .variant_index(name, variant)
+                        .ok_or_else(|| MiddleError::UnboundName {
+                            name: format!("{}::{}", name, variant),
+                            span: (*span).into(),
+                        })?;
                     (
                         enum_ty.clone(),
                         TypedExprKind::VariantQual {
                             enum_name: name.clone(),
                             variant: variant.clone(),
+                            tag,
                         },
                         Effect::Puro,
                     )

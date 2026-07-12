@@ -90,9 +90,25 @@ pub enum TypedExprKind {
         name: String,
         value: Box<Spanned<TypedExpr>>,
     },
-    /// `Enum::Variante` — qualificação de variante de enum.
+    /// `Enum::Variante` — qualificação de variante de enum unitária.
     /// `Boolean::True` → `Ty::Sum("Boolean")`.
-    VariantQual { enum_name: String, variant: String },
+    /// Só usado para variantes sem payload.
+    /// `tag` é o índice da variante no enum (para codegen de Sum não-Boolean).
+    VariantQual {
+        enum_name: String,
+        variant: String,
+        tag: usize,
+    },
+    /// `Enum::Variante payload` — construção de variante com payload.
+    /// `Result::Ok 42` → `Ty::Sum("Result")` com payload = 42.
+    /// Fase 5 — Sum com payload.
+    /// `tag` é o índice da variante no enum (para codegen).
+    VariantConstruct {
+        enum_name: String,
+        variant: String,
+        payload: Box<Spanned<TypedExpr>>,
+        tag: usize,
+    },
 
     // ── Fio 2: Lambda, Match ──────────────────────────────────────
     /// Lambda — função pura com corpo Kata.
@@ -238,7 +254,18 @@ pub enum TypedPattern {
     /// `Boolean::True`, `Result::Ok` — variante de enum.
     /// Resolvido pelo typeck a partir de `Pattern::Ident("True")` ou
     /// `Pattern::Variant { enum_name, variant }`.
-    Variant { enum_name: String, variant: String },
+    /// `sub_patterns` é None para variantes unitárias (`True`, `False`).
+    /// Some(vec) para variantes com payload (`Ok(v)`, `Some(x)`).
+    /// `tag` é o índice da variante no enum (para codegen de match).
+    Variant {
+        enum_name: String,
+        variant: String,
+        /// Sub-patterns do payload. None = unitária.
+        /// Some(vec) = variante com payload (1 sub-pattern por enquanto).
+        sub_patterns: Option<Vec<Spanned<TypedPattern>>>,
+        /// Índice da variante no enum (tag do Sum no codegen).
+        tag: usize,
+    },
     /// `(a, b, c)` — tupla. Cada sub-pattern é tipado recursivamente.
     Tuple {
         elements: Vec<Spanned<TypedPattern>>,

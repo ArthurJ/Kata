@@ -70,6 +70,12 @@ pub enum FfiSymbol {
     ArenaCreate,
     ArenaAlloc,
     ArenaDestroy,
+
+    // ── Sum (Fase 5) ──────────────────────────────────────
+    /// `kata_rt_store_sum_result(tag, payload) -> ptr` — aloca box Sum.
+    StoreSumResult,
+    /// `kata_rt_sum_tag_int(val) -> tag` — extrai tag de Sum box.
+    SumTagInt,
 }
 
 impl FfiSymbol {
@@ -125,6 +131,8 @@ impl FfiSymbol {
             FfiSymbol::ArenaCreate => "kata_rt_arena_create",
             FfiSymbol::ArenaAlloc => "kata_rt_arena_alloc",
             FfiSymbol::ArenaDestroy => "kata_rt_arena_destroy",
+            FfiSymbol::StoreSumResult => "kata_rt_store_sum_result",
+            FfiSymbol::SumTagInt => "kata_rt_sum_tag_int",
         }
     }
 
@@ -172,7 +180,10 @@ impl FfiSymbol {
             // I/O
             FfiSymbol::Print | FfiSymbol::Println => Ty::Unit,
             // Arena
-            FfiSymbol::ArenaCreate | FfiSymbol::ArenaAlloc | FfiSymbol::ArenaDestroy => Ty::Unit,
+            FfiSymbol::ArenaCreate | FfiSymbol::ArenaAlloc => Ty::int(),
+            FfiSymbol::ArenaDestroy => Ty::Unit,
+            // Sum
+            FfiSymbol::StoreSumResult | FfiSymbol::SumTagInt => Ty::int(),
         }
     }
 
@@ -228,6 +239,8 @@ impl FfiSymbol {
             FfiSymbol::ArenaCreate,
             FfiSymbol::ArenaAlloc,
             FfiSymbol::ArenaDestroy,
+            FfiSymbol::StoreSumResult,
+            FfiSymbol::SumTagInt,
         ];
         all.iter().copied().find(|s| s.symbol_name() == name)
     }

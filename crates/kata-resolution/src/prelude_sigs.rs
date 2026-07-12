@@ -6,7 +6,7 @@
 //!
 //! Fio 10 substitui isto por carregamento de `stdlib/core.kata` do filesystem.
 
-use kata_core::{EnumRegistry, PrimTy, Ty, TypeEnv};
+use kata_core::{EnumRegistry, PrimTy, Ty, TypeEnv, VariantInfo};
 
 use crate::{ResolvedModule, Signature};
 
@@ -28,7 +28,19 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
     // Variantes de Boolean
     // (serão registradas como construtores no DispatchTable na inferência)
     let mut enum_registry = EnumRegistry::new();
-    enum_registry.register("Boolean", vec!["True".into(), "False".into()]);
+    enum_registry.register(
+        "Boolean",
+        vec![
+            VariantInfo {
+                name: "True".into(),
+                payload_ty: None,
+            },
+            VariantInfo {
+                name: "False".into(),
+                payload_ty: None,
+            },
+        ],
+    );
 
     // Assinaturas do prelude
     let signatures = vec![

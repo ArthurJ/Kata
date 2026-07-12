@@ -59,7 +59,12 @@ pub(crate) fn test_single_pattern(
             );
             Ok(Some(eq))
         }
-        TypedPattern::Variant { enum_name, variant } => {
+        TypedPattern::Variant {
+            enum_name,
+            variant,
+            sub_patterns,
+            tag,
+        } => {
             if enum_name == "Boolean" {
                 let expected = if variant == "True" { 1 } else { 0 };
                 let eq = lower.builder.ins().icmp_imm(
@@ -69,9 +74,42 @@ pub(crate) fn test_single_pattern(
                 );
                 Ok(Some(eq))
             } else {
-                Err(super::CodegenError::UnsupportedNode(format!(
-                    "Pattern Variant não-Boolean: {enum_name}::{variant}"
-                )))
+                // Fase 5: Sum com payload — extrair tag e comparar.
+                let tag_func = lower.ffi_refs.get("kata_rt_sum_tag_int").ok_or_else(|| {
+                    super::CodegenError::FfiSymbolNotFound("kata_rt_sum_tag_int".into())
+                })?;
+                let tag_call = lower.builder.ins().call(*tag_func, &[val]);
+                let actual_tag = lower.builder.inst_results(tag_call)[0];
+
+                // Compara tag extraída com tag esperada (índice da variante).
+                let expected_tag = lower.builder.ins().iconst(I64, *tag as i64);
+                let eq = lower.builder.ins().icmp(
+                    cranelift_codegen::ir::condcodes::IntCC::Equal,
+                    actual_tag,
+                    expected_tag,
+                );
+
+                // Se há sub-patterns, extrair payload e testar sub-pattern.
+                if let Some(subs) = sub_patterns {
+                    // Payload está no offset 8 do box.
+                    let flags = MemFlagsData::new();
+                    let payload_val = lower.builder.ins().load(I64, flags, val, 8);
+                    // Testa o sub-pattern contra o payload extraído.
+                    // Por enquanto, 1 sub-pattern (Fase 5 não suporta multi-payload).
+                    let sub_cond = test_single_pattern(&subs[0], payload_val, lower)?;
+                    // Combina: tag == expected AND sub_pattern match.
+                    if let Some(cond) = sub_cond {
+                        let combined = lower.builder.ins().band(eq, cond);
+                        Ok(Some(combined))
+                    } else {
+                        // Sub-pattern é incondicional (Ident/Wildcard) — só precisa tag match.
+                        // Mas precisamos fazer o binding do sub-pattern (def_var).
+                        // O test_single_pattern já faz def_var para Ident.
+                        Ok(Some(eq))
+                    }
+                } else {
+                    Ok(Some(eq))
+                }
             }
         }
         TypedPattern::Tuple { elements } => {

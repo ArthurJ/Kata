@@ -9,7 +9,7 @@ pub(crate) mod prelude;
 mod prelude_sigs;
 
 use kata_ast::{ActionStmt, Item, LambdaClause, Module, Spanned, TypeExpr};
-use kata_core::{EnumRegistry, PrimTy, Ty, TypeEnv};
+use kata_core::{EnumRegistry, PrimTy, Ty, TypeEnv, VariantInfo};
 
 /// Resultado da resolution — TypeEnv populado + assinaturas coletadas.
 #[derive(Debug, Clone)]
@@ -92,8 +92,22 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
             }
             Item::EnumDecl { name, variants, .. } => {
                 type_env.define(name, Ty::Sum(name.clone()));
-                // Fio 2: cataloga variantes no EnumRegistry
-                enum_registry.register(name, variants.iter().map(|v| v.name.clone()).collect());
+                // Fio 2: cataloga variantes no EnumRegistry.
+                // Fase 5: resolve payload types das variantes.
+                let variant_infos: Vec<VariantInfo> = variants
+                    .iter()
+                    .map(|v| {
+                        let payload_ty = v
+                            .payload
+                            .as_ref()
+                            .map(|p| resolve_type_expr(&p.node, &type_env));
+                        VariantInfo {
+                            name: v.name.clone(),
+                            payload_ty,
+                        }
+                    })
+                    .collect();
+                enum_registry.register(name, variant_infos);
             }
             _ => {}
         }

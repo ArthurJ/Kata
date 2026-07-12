@@ -16,11 +16,15 @@ use kata_resolution::{ResolvedModule, load_prelude, resolve};
 fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModule {
     let mut signatures = prelude.signatures;
     signatures.extend(user.signatures);
-    let type_env = kata_core::ty::TypeEnv::with_parent(prelude.type_env);
+    let mut type_env = kata_core::ty::TypeEnv::with_parent(prelude.type_env);
+    let mut user_type_env = user.type_env;
+    type_env.merge_bindings_from(&mut user_type_env);
+    let mut enum_registry = prelude.enum_registry;
+    enum_registry.merge(user.enum_registry);
     ResolvedModule {
         type_env,
         signatures,
-        enum_registry: prelude.enum_registry,
+        enum_registry,
         functions: user.functions,
         actions: user.actions,
     }

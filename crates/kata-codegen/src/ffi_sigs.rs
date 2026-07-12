@@ -180,6 +180,16 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
         FfiSymbol::ArenaDestroy => {
             sig.params.push(AbiParam::new(I64)); // arena
         }
+        // ── Sum (i64, i64) → i64, (i64) → i64 ──
+        FfiSymbol::StoreSumResult => {
+            sig.params.push(AbiParam::new(I64)); // tag
+            sig.params.push(AbiParam::new(I64)); // payload
+            sig.returns.push(AbiParam::new(I64)); // ptr
+        }
+        FfiSymbol::SumTagInt => {
+            sig.params.push(AbiParam::new(I64)); // val (ptr to box)
+            sig.returns.push(AbiParam::new(I64)); // tag
+        }
     }
 
     sig
