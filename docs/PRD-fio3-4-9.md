@@ -301,26 +301,27 @@ Definidos no prelude. São enums genéricos com type params posicionais.
 #### `|` — fallback local (coalescência de erro)
 
 ```kata
-let x := PositiveInt 25 | 25          # Ok(25) desempacotado; fallback 25
-let y := PositiveInt (-5) | 0         # Err(0) desempacotado; fallback 0
-let z := arr.0 | 0                     # Result desempacotado; fallback 0
+let x := Optional::Some 42 | 0         # Some(42) desempacotado; fallback 0
+let y := Optional::None | 99            # None (cauda) → avalia direita: 99
+let z := arr.0 | 0                       # Result? NÃO — use ? para Result
 ```
 
-`|` é infixo entre duas expressões. Se a esquerda é `Ok(v)` ou `Some(v)`,
-desempacota `v`. Se `Err(_)` ou `None`, avalia e retorna a direita.
+`|` é infixo entre duas expressões. Desempacota o payload de qualquer
+variante não-cauda. Se a esquerda é a cauda (última variante, unitária),
+avalia e retorna a direita.
 
 - **Domínio**: funções puras e Actions.
 - **Invariante de enum**: `|` só se aplica a enums onde todas as variantes
   exceto a última carregam payload. A última variante é a "cauda" (unitária,
   default). Se a esquerda é a cauda, avalia a direita. Enums que não seguem
   esta estrutura (variantes unitárias intercaladas, payload na última) não
-  são compatíveis com `|` — erro de typeck.
+  são compatíveis com `|` — erro de typeck. `Result` NÃO é compatível com `|`
+  (Err tem payload) — use `?` para fail-fast com propagação de erro.
 - **Coerção contextual**: se o fallback é literal do tipo base, o compilador
   validará predicados em compile-time (para tipos refined — Fio 6, não
   implementado neste PRD).
-- **Desugar no typeck**: `lhs | rhs` vira `match lhs { Ok(v) => v, Err(_) =>
-  rhs }` (ou equivalente para o enum específico). A TAST contém `Match`, não
-  `Pipe`.
+- **Desugar no typeck**: `lhs | rhs` vira `match lhs { V1(v) => v, ..., Vn
+  => rhs }` (uma cláusula por variante). A TAST contém `Match`, não `Pipe`.
 - **Distinção de `|>`**: `|` é coalescência de erro (fallback). `|>` é pipeline
   de transformação pura.
 
@@ -1052,15 +1053,15 @@ validar!()
 
 DoD: imprime `42`. `?` desempacota `Ok(42)`.
 
-### Result com | (fallback)
+### Optional com | (fallback)
 
 ```kata
 # examples/fallback.kata
-let x := PositiveInt 25 | 25
+let x := Optional::Some 42 | 0
 echo!(show x)
 ```
 
-DoD: imprime `25`. `|` desempacota `Ok(25)`.
+DoD: imprime `42`. `|` desempacota `Some(42)`.
 
 ### Match em Sum com payload
 

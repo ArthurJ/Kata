@@ -177,15 +177,16 @@ let a := $(Altura typed_input!(...)) | exit!(...) # action
 ```
 
 - Posição: infixo entre duas expressões.
-- Semântica: Se esquerda é `Ok(v)` ou `Some(v)`, desempacota `v`. Se `Err(_)` ou
-  `None`, avalia e retorna a direita.
+- Semântica: Desempacota o payload de qualquer variante não-cauda. Se a
+  esquerda é a cauda (última variante, unitária), avalia e retorna a direita.
 - **Aplica-se a**: Qualquer enum cujas variantes (exceto a última) carreguem
-  payload. A generalização para qualquer enum (não apenas `Result`/`Optional`)
+  payload. A generalização para qualquer enum (não apenas `Optional`)
   foi uma decisão deliberada — `IMC` (4 variantes: Magreza/Normal/Sobrepeso/Obesidade)
   funciona com `|`: desempacota o payload se for qualquer variante não-cauda,
   avalia o lado direito se for a última. Enums com variantes unitárias não-cauda
   (ex: `Boolean` com `True` antes de `False`) não são compatíveis com `|` — type
-  error, porque não há payload para desempacotar.
+  error, porque não há payload para desempacotar. `Result` NÃO é compatível
+  com `|` (Err tem payload, não é cauda unitária) — use `?` para fail-fast.
 - **Domínio**: Funções puras e Actions.
 - **Relações**: Preserva pureza — ao contrário de `?`, não aborta fluxo. Com
   construtores refinados (notação prefixa `PositiveInt 25 | 0`), se o fallback é
@@ -341,9 +342,10 @@ lst.2 ?                  # indexação em lista (O(n) traversal, retorna Result)
   `Result` (runtime risk). Mesma distinção de `/` (exato) vs `div` (dinâmico).
 - **Invariante de codegen**: Tuple é sempre heap type (ponteiro). Acesso por
   índice é `Load` por offset. Mesmo padrão que Sum com payload.
-- **Relações**: Interage com `?` e `|` em coleções: `arr.0 ?` (unwrap),
-  `arr.0 | 0` (fallback). Em tuplas, `t.0 ?` é type error (`?` exige Result,
-  tupla retorna direto) — o type system enforces a distinção.
+- **Relações**: Interage com `?` em coleções: `arr.0 ?` (unwrap de Result).
+  `arr.0 | 0` é type error (Result não é compatível com `|` — use `?`).
+  Em tuplas, `t.0 ?` é type error (`?` exige Result, tupla retorna direto)
+  — o type system enforces a distinção.
 
 ---
 

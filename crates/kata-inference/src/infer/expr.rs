@@ -227,77 +227,119 @@ fn infer_pipe_fallback(
     // Infere o scrutinee (lhs).
     let typed_scrutinee = infer_expr(&lhs.node, &lhs.span, env, ctx, false)?;
 
-    // Determina o enum e constrói os braços do match sintético.
-    let (enum_name, ok_variant, err_variant, err_has_payload) = match &typed_scrutinee.ty {
-        Ty::Generic(name, args) if name == "Result" && args.len() == 2 => {
-            ("Result", "Ok", "Err", true)
-        }
-        Ty::Generic(name, _args) if name == "Optional" && _args.len() == 1 => {
-            ("Optional", "Some", "None", false)
-        }
+    // Extrai o nome do enum do tipo do scrutinee.
+    // Ty::Sum("Boolean") para enums não-genéricos, Ty::Generic("Optional", [T]) para genéricos.
+    let enum_name = match &typed_scrutinee.ty {
+        Ty::Sum(name) => name.clone(),
+        Ty::Generic(name, _) => name.clone(),
         _ => {
             return Err(MiddleError::TypeMismatch {
-                expected: "Result<T, E> ou Optional<T>".into(),
+                expected: "enum com cauda unitaria".into(),
                 found: format!("{:?}", typed_scrutinee.ty),
                 span: lhs.span.into(),
             });
         }
     };
 
-    // Nome fresco para o binding do braço Ok/Some.
-    let ok_binding = "__pipe_ok";
+    // Busca as variantes no EnumRegistry.
+    let variants =
+        ctx.enum_registry
+            .all_variants(&enum_name)
+            .ok_or_else(|| MiddleError::TypeMismatch {
+                expected: format!("enum conhecido: {enum_name}"),
+                found: "tipo desconhecido pelo EnumRegistry".into(),
+                span: lhs.span.into(),
+            })?;
 
-    // Pattern Ok(v) / Some(v).
-    let ok_pattern = Pattern::Variant {
-        enum_name: enum_name.to_string(),
-        variant: ok_variant.to_string(),
-        payload: Some(vec![Spanned::new(
-            Pattern::Ident(ok_binding.to_string()),
-            lhs.span,
-        )]),
-    };
+    if variants.is_empty() {
+        return Err(MiddleError::TypeMismatch {
+            expected: "enum com pelo menos uma variante".into(),
+            found: format!("{enum_name} sem variantes"),
+            span: lhs.span.into(),
+        });
+    }
 
-    // Pattern Err(_) / None.
-    // Err tem payload mas não ligamos — usamos Wildcard.
-    // None é unitária (payload = None).
-    let err_pattern = if err_has_payload {
-        Pattern::Variant {
-            enum_name: enum_name.to_string(),
-            variant: err_variant.to_string(),
-            payload: Some(vec![Spanned::new(Pattern::Wildcard, lhs.span)]),
+    // Valida a invariante do `|`: todas as variantes exceto a última carregam
+    // payload, e a última é unitária (cauda). Enums que não seguem esta
+    // estrutura (ex: Result onde Err tem payload, Boolean com todas unitárias)
+    // não são compatíveis com `|` — type error.
+    // O tipo do payload de variantes genéricas pode conter Ty::Var, mas isso
+    // não importa aqui — só precisamos distinguir Some(payload) vs None.
+    let last_idx = variants.len() - 1;
+    for (i, v) in variants.iter().enumerate() {
+        let is_last = i == last_idx;
+        match (is_last, &v.payload_ty) {
+            (false, None) => {
+                return Err(MiddleError::TypeMismatch {
+                    expected: format!(
+                        "variante {} com payload (apenas a ultima pode ser unitaria)",
+                        v.name
+                    ),
+                    found: format!("{}::{} sem payload", enum_name, v.name),
+                    span: lhs.span.into(),
+                });
+            }
+            (true, Some(_)) => {
+                return Err(MiddleError::TypeMismatch {
+                    expected: format!(
+                        "ultima variante de {} unitaria (cauda do fallback)",
+                        enum_name
+                    ),
+                    found: format!("{}::{} com payload", enum_name, v.name),
+                    span: lhs.span.into(),
+                });
+            }
+            _ => {}
         }
-    } else {
-        Pattern::Variant {
-            enum_name: enum_name.to_string(),
-            variant: err_variant.to_string(),
-            payload: None,
-        }
-    };
+    }
 
-    // Body do braço Ok: `v` (o valor desempacotado).
-    let ok_body = Spanned::new(
-        Expr::Ident {
-            name: ok_binding.to_string(),
-        },
-        lhs.span,
-    );
+    // Constrói os braços do match sintético.
+    // Cada variante com payload: Variant(v) => v (desempacota).
+    // Última variante (cauda unitária): Variant => rhs (fallback).
+    let binding = "__pipe_v";
+    let mut arms = Vec::with_capacity(variants.len());
 
-    // Body do braço Err: `rhs` (o fallback — não aborta).
-    let err_body = rhs.clone();
+    for (i, v) in variants.iter().enumerate() {
+        let is_last = i == last_idx;
 
-    // Constrói os arms do match sintético.
-    let arms = vec![
-        MatchArm {
-            pattern: Some(Spanned::new(ok_pattern, lhs.span)),
+        let pattern = if is_last {
+            // Cauda unitária: Variant sem payload.
+            Pattern::Variant {
+                enum_name: enum_name.clone(),
+                variant: v.name.clone(),
+                payload: None,
+            }
+        } else {
+            // Variante com payload: Variant(v) — liga o payload.
+            Pattern::Variant {
+                enum_name: enum_name.clone(),
+                variant: v.name.clone(),
+                payload: Some(vec![Spanned::new(
+                    Pattern::Ident(binding.to_string()),
+                    lhs.span,
+                )]),
+            }
+        };
+
+        let body = if is_last {
+            // Cauda: avalia o fallback (rhs).
+            rhs.clone()
+        } else {
+            // Não-cauda: retorna o valor desempacotado.
+            Spanned::new(
+                Expr::Ident {
+                    name: binding.to_string(),
+                },
+                lhs.span,
+            )
+        };
+
+        arms.push(MatchArm {
+            pattern: Some(Spanned::new(pattern, lhs.span)),
             guard: None,
-            body: ok_body,
-        },
-        MatchArm {
-            pattern: Some(Spanned::new(err_pattern, lhs.span)),
-            guard: None,
-            body: err_body,
-        },
-    ];
+            body,
+        });
+    }
 
     // Infere o match sintético.
     let (match_ty, match_kind, match_effect) = infer_match(lhs, &arms, span, env, ctx, false)?;
@@ -310,7 +352,6 @@ fn infer_pipe_fallback(
         kind: match_kind,
     })
 }
-
 /// Fase 9: Desugar `assert!(cond, "msg")` para `match cond { True: Unit, False: panic!(msg) }`.
 ///
 /// `assert!` recebe uma condição (Boolean) e uma mensagem opcional (Text).
