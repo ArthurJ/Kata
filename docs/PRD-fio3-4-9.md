@@ -1196,15 +1196,15 @@ não por fio. Cada fase depende apenas das anteriores.
 
 ### Fase 8 — | (fallback)
 
-22. `|` fallback desempacota `Ok(v)`/`Some(v)`, avalia direita se `Err`/`None`.
-23. `|` funciona em funções puras e Actions.
-24. `|` desugared para Match no typeck — TAST nunca contém `PipeFallback`.
-25. `effect = Puro` em `|` fallback (coalescência é pura — não aborta fluxo).
+22. `|` fallback desempacota `Ok(v)`/`Some(v)`, avalia direita se `Err`/`None`. ✅
+23. `|` funciona em funções puras e Actions. ✅
+24. `|` desugared para Match no typeck — TAST nunca contém `PipeFallback`. ✅
+25. `effect = Puro` em `|` fallback (coalescência é pura — não aborta fluxo). ✅
 
 ### Fase 9 — panic!, assert!
 
-26. `panic!("msg")` aborta com mensagem.
-27. `assert!(cond, "msg")` verifica condição, panic se falsa.
+26. `panic!("msg")` aborta com mensagem. ✅
+27. `assert!(cond, "msg")` verifica condição, panic se falsa. ✅
 
 ### Fase 10 — Fibers
 

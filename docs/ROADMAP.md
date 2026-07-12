@@ -271,8 +271,10 @@ passa `caller_arena` em tail_pos, `local_arena` em `;`. Fase 4 ✅
 (loop, break, continue implementados). Fase 5 ✅
 (Sum com payload, 8 testes E2E). Fase 6 ✅
 (Result/Optional genéricos no prelude, 8 testes E2E). Fase 7 ✅
-(? fail-fast, 9 testes E2E). Fase 8+ pendente
-(| fallback, panic!, assert!, scheduler).
+(? fail-fast, 9 testes E2E). Fase 8 ✅
+(| fallback, 9 testes E2E). Fase 9 ✅
+(panic!, assert!, 4 testes E2E). Fase 10+ pendente
+(fibers, scheduler).
 
 **Maquinaria de tipos construída:**
 - `effect: Effect` ganha `IO` (Actions têm efeito IO)
