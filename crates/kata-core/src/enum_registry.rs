@@ -25,6 +25,9 @@ pub struct VariantInfo {
 pub struct EnumRegistry {
     /// enum_name → lista de variantes (em ordem de declaração).
     variants: HashMap<String, Vec<VariantInfo>>,
+    /// enum_name → parâmetros de tipo (ex: `Result` → `["T", "E"]`).
+    /// Vazio para enums não-genéricos.
+    type_params: HashMap<String, Vec<String>>,
 }
 
 impl EnumRegistry {
@@ -35,6 +38,79 @@ impl EnumRegistry {
     /// Registra um enum com suas variantes (payloads opcionais).
     pub fn register(&mut self, enum_name: &str, variants: Vec<VariantInfo>) {
         self.variants.insert(enum_name.to_string(), variants);
+    }
+
+    /// Registra um enum genérico com type params e variantes.
+    /// `type_params` é a lista de nomes de parâmetros de tipo (ex: `["T", "E"]`).
+    /// As variantes podem ter `payload_ty` com `Ty::Var("T")` etc.
+    pub fn register_generic(
+        &mut self,
+        enum_name: &str,
+        type_params: Vec<String>,
+        variants: Vec<VariantInfo>,
+    ) {
+        self.type_params.insert(enum_name.to_string(), type_params);
+        self.variants.insert(enum_name.to_string(), variants);
+    }
+
+    /// Retorna os type params de um enum, se for genérico.
+    pub fn type_params_of(&self, enum_name: &str) -> Option<&[String]> {
+        self.type_params.get(enum_name).map(|v| v.as_slice())
+    }
+
+    /// Verifica se um enum é genérico (tem type params).
+    pub fn is_generic(&self, enum_name: &str) -> bool {
+        self.type_params.contains_key(enum_name)
+    }
+
+    /// Substitui `Ty::Var(name)` por `type_args[i]` correspondente.
+    /// Se `name` não está nos type_params, retorna o `Ty::Var` original
+    /// (não deveria acontecer se o typeck está correto).
+    fn substitute_vars(ty: &Ty, type_params: &[String], type_args: &[Ty]) -> Ty {
+        match ty {
+            Ty::Var(name) => {
+                let idx = type_params.iter().position(|p| p == name);
+                match idx {
+                    Some(i) if i < type_args.len() => type_args[i].clone(),
+                    _ => ty.clone(),
+                }
+            }
+            Ty::Function(params, ret) => Ty::Function(
+                params
+                    .iter()
+                    .map(|p| Self::substitute_vars(p, type_params, type_args))
+                    .collect(),
+                Box::new(Self::substitute_vars(ret, type_params, type_args)),
+            ),
+            Ty::Tuple(elements) => Ty::Tuple(
+                elements
+                    .iter()
+                    .map(|e| Self::substitute_vars(e, type_params, type_args))
+                    .collect(),
+            ),
+            Ty::Generic(name, args) => Ty::Generic(
+                name.clone(),
+                args.iter()
+                    .map(|a| Self::substitute_vars(a, type_params, type_args))
+                    .collect(),
+            ),
+            _ => ty.clone(),
+        }
+    }
+
+    /// Instancia o payload de uma variante com type_args concretos.
+    /// Ex: `instantiate_variant("Result", "Ok", [Int, Text])` → `Some(Ty::Prim(Int))`
+    /// (substitui `Ty::Var("T")` por `Ty::Prim(Int)`).
+    /// Retorna `None` se o enum/variante não existe ou não é genérico.
+    pub fn instantiate_variant(
+        &self,
+        enum_name: &str,
+        variant: &str,
+        type_args: &[Ty],
+    ) -> Option<Ty> {
+        let type_params = self.type_params_of(enum_name)?;
+        let payload_ty = self.payload_ty(enum_name, variant)?;
+        Some(Self::substitute_vars(payload_ty, type_params, type_args))
     }
 
     /// Verifica se um nome é variante de um enum.
@@ -96,6 +172,9 @@ impl EnumRegistry {
     pub fn merge(&mut self, other: EnumRegistry) {
         for (name, variants) in other.variants {
             self.variants.insert(name, variants);
+        }
+        for (name, params) in other.type_params {
+            self.type_params.insert(name, params);
         }
     }
 }

@@ -247,9 +247,17 @@ fn resolve_type_expr(expr: &TypeExpr, env: &TypeEnv) -> Ty {
             let return_type = resolve_type_expr(&ret.node, env);
             Ty::Function(param_types, Box::new(return_type))
         }
-        TypeExpr::ParamApp { name, params: _ } => {
-            // Fio 4: Result::(T, E) — por enquanto resolve como Sum
-            Ty::Sum(name.clone())
+        TypeExpr::ParamApp { name, params } => {
+            // Fase 6: Result::(Int, Text) → resolve params → Ty::Generic("Result", [Int, Text]).
+            // Se o enum é genérico no EnumRegistry, produz Ty::Generic.
+            // Se não é genérico (fallback), produz Ty::Sum como antes.
+            let resolved_params: Vec<Ty> = params
+                .iter()
+                .map(|p| resolve_type_expr(&p.node, env))
+                .collect();
+            // Tenta resolver como Ty::Var se o param é um nome que não está no TypeEnv
+            // (ex: "T" em Result::(T, E) dentro de uma declaração de função genérica).
+            Ty::Generic(name.clone(), resolved_params)
         }
     }
 }

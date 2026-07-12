@@ -28,6 +28,7 @@ use crate::typed::{
 };
 
 use self::apply_lambda::infer_lambda_body;
+use self::expr::fits_return;
 use self::expr::{InferCtx, infer_expr};
 use self::helpers::{
     check_patterns, item_span_or_synthetic, populate_dispatch_table, process_with_bindings,
@@ -96,7 +97,7 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
             ret_ty: Some(&action_def.return_type),
             in_loop: false,
         };
-        let typed_action = infer_action(action_def, &ctx)?;
+        let typed_action = infer_action(action_def, &ctx, &resolved.type_env)?;
         typed_actions.push(typed_action);
     }
 
@@ -255,12 +256,14 @@ fn infer_named_function(
 fn infer_action(
     action_def: &kata_resolution::ActionDef,
     ctx: &InferCtx,
+    module_type_env: &TypeEnv,
 ) -> InferResult<TypedAction> {
     let param_types = &action_def.param_types;
     let ret_ty = &action_def.return_type;
 
-    // Cria escopo para a Action.
-    let mut action_env = TypeEnv::new();
+    // Cria escopo para a Action com o type_env do módulo como parent.
+    // Isso permite que o body da Action acesse tipos do prelude (Result, Optional, etc).
+    let mut action_env = TypeEnv::with_parent(module_type_env.clone());
 
     // Define parâmetros no escopo.
     for (i, ty) in param_types.iter().enumerate() {
@@ -305,7 +308,7 @@ fn infer_action(
         } else {
             ret_ty
         };
-        if actual_ty != expected_ty {
+        if !fits_return(actual_ty, expected_ty) {
             return Err(MiddleError::TypeMismatch {
                 expected: format!("{expected_ty:?}"),
                 found: format!("{actual_ty:?}"),

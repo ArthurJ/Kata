@@ -27,6 +27,13 @@ pub enum Ty {
     Tuple(Vec<Ty>),
     /// Variável de inferência — preenchida pelo typeck.
     InferVar(u32),
+    /// Variável de tipo nomeada pelo usuário (ex: `T`, `E` em `Result::(T, E)`).
+    /// Distinta de InferVar — Var é parâmetro de tipo nomeado, InferVar é
+    /// gerada internamente pelo typeck.
+    Var(String),
+    /// Tipo genérico instanciado (ex: `Result<Int, Text>`).
+    /// Carrega o nome do enum + os argumentos de tipo concretos.
+    Generic(String, Vec<Ty>),
 }
 
 /// Mapeamento de representação FFI.

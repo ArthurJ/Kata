@@ -326,11 +326,29 @@ impl Parser {
 pub(crate) fn parse_expr(parser: &mut Parser) -> Result<Spanned<Expr>, FrontendError> {
     let mut lhs = parse_apply(parser)?;
 
+    // `?` postfix — fail-fast operator (Fase 7).
+    // `expr ?` → Expr::Question(Box<expr>).
+    // Precedência: maior que `|>` (pipe), menor que `::` (ascription).
+    // Ou seja: `Result::Ok 42 ?` = `(Result::Ok 42) ?`, e
+    // `x ? |> f` = `(x ?) |> f`.
+    while matches!(parser.peek(), Token::Question) {
+        let q_span = parser.advance(); // consume ?
+        let span = lhs.span.cover(q_span);
+        lhs = Spanned::new(Expr::Question(Box::new(lhs)), span);
+    }
+
     // `|>` pipe — lowest precedence, left-associative.
     // `lhs |> rhs |> rhs2` = `(lhs |> rhs) |> rhs2`
     while matches!(parser.peek(), Token::PipeForward) {
         parser.advance(); // consume `|>`
         let rhs = parse_apply(parser)?;
+        // Pipe rhs também pode ter `?` postfix: `x |> f ?` = `x |> (f ?)`.
+        let mut rhs = rhs;
+        while matches!(parser.peek(), Token::Question) {
+            let q_span = parser.advance();
+            let span = rhs.span.cover(q_span);
+            rhs = Spanned::new(Expr::Question(Box::new(rhs)), span);
+        }
         let span = lhs.span.cover(rhs.span);
         lhs = Spanned::new(
             Expr::Pipe {

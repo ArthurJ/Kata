@@ -27,6 +27,9 @@ pub(crate) fn ty_to_clif(ty: &Ty) -> cranelift_codegen::ir::Type {
         Ty::Struct(_) | Ty::Sum(_) | Ty::Tuple(_) => I64,
         Ty::Function(_, _) => I64,
         Ty::InferVar(_) => I64,
+        // Var e Generic: Sum é sempre ponteiro opaco (box tag+payload).
+        Ty::Var(_) => I64,
+        Ty::Generic(_, _) => I64,
     }
 }
 

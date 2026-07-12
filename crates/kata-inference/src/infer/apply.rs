@@ -186,6 +186,11 @@ pub(crate) fn infer_apply(
 /// Verifica que a variante existe no EnumRegistry, que tem payload,
 /// e que o tipo do argumento é compatível com o tipo do payload.
 /// Produz `TypedExprKind::VariantConstruct { enum_name, variant, payload }`.
+///
+/// Fase 6: Se o enum é genérico, o payload_ty pode ser `Ty::Var("T")`.
+/// Nesse caso, unifica `Ty::Var("T")` com `arg.ty` → binding `T = arg.ty`.
+/// Produz `Ty::Generic(enum_name, type_args)` onde type_args são os
+/// type params instanciados (não-inferidos ficam como `Ty::Var`).
 fn infer_variant_construct(
     enum_name: &str,
     variant: &str,
@@ -226,7 +231,59 @@ fn infer_variant_construct(
     // Infere o argumento (tail_pos = false — é computação local).
     let typed_arg = infer_expr(&args[0].node, &args[0].span, env, ctx, false)?;
 
-    // Verifica que o tipo do argumento é compatível com o payload.
+    // Fase 6: unificação com Ty::Var.
+    if ctx.enum_registry.is_generic(enum_name) {
+        let type_params = ctx
+            .enum_registry
+            .type_params_of(enum_name)
+            .expect("is_generic true implica type_params_of Some");
+
+        // Unifica payload_ty (que pode ser Ty::Var) com typed_arg.ty.
+        let arg_ty = &typed_arg.ty;
+        let mut type_args: Vec<Ty> = Vec::with_capacity(type_params.len());
+
+        for param_name in type_params {
+            // Se o payload_ty é Ty::Var(param_name), o arg fornece o tipo concreto.
+            if payload_ty == &Ty::Var(param_name.to_string()) {
+                type_args.push(arg_ty.clone());
+            } else {
+                // Type param não-inferido por esta variante — mantém como Ty::Var.
+                type_args.push(Ty::Var(param_name.to_string()));
+            }
+        }
+
+        // Verifica compatibilidade: se payload_ty é Ty::Var, aceita qualquer tipo.
+        // Se payload_ty é concreto (não deveria acontecer em enum genérico, mas
+        // pode se o payload não usa o type param), compara estruturalmente.
+        let compatible = match payload_ty {
+            Ty::Var(_) => true,
+            _ => payload_ty == arg_ty,
+        };
+        if !compatible {
+            return Err(MiddleError::TypeMismatch {
+                expected: format!("{:?}", payload_ty),
+                found: format!("{:?}", typed_arg.ty),
+                span: args[0].span.into(),
+            });
+        }
+
+        let result_ty = Ty::Generic(enum_name.to_string(), type_args);
+        return Ok((
+            result_ty,
+            TypedExprKind::VariantConstruct {
+                enum_name: enum_name.to_string(),
+                variant: variant.to_string(),
+                payload: Box::new(Spanned::new(typed_arg, args[0].span)),
+                tag: ctx
+                    .enum_registry
+                    .variant_index(enum_name, variant)
+                    .unwrap_or(0),
+            },
+            Effect::Puro,
+        ));
+    }
+
+    // Fase 5: enum não-genérico — comparação estrutural.
     if typed_arg.ty != *payload_ty {
         return Err(MiddleError::TypeMismatch {
             expected: format!("{:?}", payload_ty),

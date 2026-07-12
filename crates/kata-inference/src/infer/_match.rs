@@ -13,6 +13,20 @@ use crate::typed::{Effect, TypedExprKind, TypedMatchArm, TypedPattern};
 use super::expr::{InferCtx, infer_expr};
 use super::helpers::InferResult;
 
+/// Fase 6: Unificação limitada para tipos de braços de match.
+/// Se um é Ty::Var e o outro é concreto, retorna o concreto.
+/// Se ambos são Ty::Var com o mesmo nome, retorna um deles.
+/// Caso contrário, retorna None (incompatíveis).
+fn unify_arm_types(a: &Ty, b: &Ty) -> Option<Ty> {
+    match (a, b) {
+        (Ty::Var(_), Ty::Var(_)) if a == b => Some(a.clone()),
+        (Ty::Var(_), _) => Some(b.clone()),
+        (_, Ty::Var(_)) => Some(a.clone()),
+        _ if a == b => Some(a.clone()),
+        _ => None,
+    }
+}
+
 /// Infere um `match` — pattern matching com verificação de exaustividade.
 pub(crate) fn infer_match(
     scrutinee: &Spanned<Expr>,
@@ -77,17 +91,33 @@ pub(crate) fn infer_match(
         let typed_body = infer_expr(&arm.body.node, &arm.body.span, &mut arm_env, ctx, tail_pos)?;
 
         // Verifica que todos os braços retornam o mesmo tipo.
+        // Fase 6: unificação limitada — Ty::Var unifica com qualquer tipo concreto.
+        // Fase 7: Return é bottom — unifica com qualquer tipo (braço que aborta).
         if let Some(ref existing) = match_ret_ty {
             if *existing != typed_body.ty {
-                return Err(MiddleError::TypeMismatch {
-                    expected: format!("{:?}", existing),
-                    found: format!("{:?}", typed_body.ty),
-                    span: arm.body.span.into(),
-                });
+                // Return unifica com qualquer coisa — o braço aborta.
+                if matches!(typed_body.kind, TypedExprKind::Return(_)) {
+                    // Mantém o tipo existente (o braço Return não contribui).
+                } else {
+                    // Tenta unificar: se um é Var e o outro é concreto, usa o concreto.
+                    let unified = unify_arm_types(existing, &typed_body.ty);
+                    match unified {
+                        Some(ty) => match_ret_ty = Some(ty),
+                        None => {
+                            return Err(MiddleError::TypeMismatch {
+                                expected: format!("{:?}", existing),
+                                found: format!("{:?}", typed_body.ty),
+                                span: arm.body.span.into(),
+                            });
+                        }
+                    }
+                }
             }
-        } else {
+        } else if !matches!(typed_body.kind, TypedExprKind::Return(_)) {
+            // Primeiro braço não-Return define o tipo do match.
             match_ret_ty = Some(typed_body.ty.clone());
         }
+        // Se match_ret_ty é None e o braço é Return, não define — espera o próximo braço.
 
         typed_arms.push(TypedMatchArm {
             pattern: typed_pattern,

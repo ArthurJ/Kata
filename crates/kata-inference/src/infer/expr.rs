@@ -50,7 +50,163 @@ pub(crate) fn infer_expr(
     infer_expr_hinted(expr, span, env, ctx, tail_pos, None)
 }
 
-/// Like `infer_expr` but accepts an optional type hint (DoD 29).
+/// Verifica se `actual` cabe em `declared` — direcional (não simétrica).
+/// `Var("T")` no actual significa "não-constrangido" e aceita o declarado.
+/// Recursiva dentro de `Generic`.
+pub(crate) fn fits_return(actual: &Ty, declared: &Ty) -> bool {
+    match (actual, declared) {
+        (Ty::Var(_), _) => true,
+        (Ty::Generic(n1, a1), Ty::Generic(n2, a2)) if n1 == n2 && a1.len() == a2.len() => {
+            a1.iter().zip(a2).all(|(x, y)| fits_return(x, y))
+        }
+        _ => actual == declared,
+    }
+}
+
+/// Fase 7: Desugar `expr ?` para `match expr { Ok(v) => v, Err(e) => return Err(e) }`.
+///
+/// `?` é fail-fast: se o scrutinee é `Result<T, E>`, desempacota `Ok(v)` ou
+/// aborta com `return Err(e)`. Se é `Optional<T>`, desempacota `Some(v)` ou
+/// aborta com `return None`.
+///
+/// O `?` só é válido dentro de Action (precisa `ctx.ret_ty`).
+/// O tipo de retorno da Action deve ser compatível com a variante de erro.
+fn infer_question(
+    inner: &Spanned<Expr>,
+    span: &Span,
+    env: &mut TypeEnv,
+    ctx: &InferCtx,
+    _tail_pos: bool,
+) -> InferResult<TypedExpr> {
+    use kata_ast::{MatchArm, Pattern};
+
+    // `?` só funciona dentro de Action.
+    let _ret_ty = ctx.ret_ty.ok_or_else(|| MiddleError::TypeMismatch {
+        expected: "return dentro de Action".into(),
+        found: "? fora de Action".into(),
+        span: (*span).into(),
+    })?;
+
+    // Infere o scrutinee.
+    let typed_scrutinee = infer_expr(&inner.node, &inner.span, env, ctx, false)?;
+
+    // Determina o enum e constrói os braços do match sintético.
+    let (enum_name, ok_variant, err_variant, _ok_payload, err_payload) = match &typed_scrutinee.ty {
+        Ty::Generic(name, args) if name == "Result" && args.len() == 2 => (
+            "Result",
+            "Ok",
+            "Err",
+            Some(args[0].clone()),
+            Some(args[1].clone()),
+        ),
+        Ty::Generic(name, args) if name == "Optional" && args.len() == 1 => {
+            ("Optional", "Some", "None", Some(args[0].clone()), None)
+        }
+        _ => {
+            return Err(MiddleError::TypeMismatch {
+                expected: "Result<T, E> ou Optional<T>".into(),
+                found: format!("{:?}", typed_scrutinee.ty),
+                span: inner.span.into(),
+            });
+        }
+    };
+
+    // Nomes frescos para bindings.
+    let ok_binding = "__q_ok";
+    let err_binding = "__q_err";
+
+    // Constrói pattern Ok(v) / Some(v).
+    let ok_pattern = Pattern::Variant {
+        enum_name: enum_name.to_string(),
+        variant: ok_variant.to_string(),
+        payload: Some(vec![Spanned::new(
+            Pattern::Ident(ok_binding.to_string()),
+            inner.span,
+        )]),
+    };
+
+    // Constrói pattern Err(e) / None.
+    let err_pattern = match err_payload {
+        Some(_) => Pattern::Variant {
+            enum_name: enum_name.to_string(),
+            variant: err_variant.to_string(),
+            payload: Some(vec![Spanned::new(
+                Pattern::Ident(err_binding.to_string()),
+                inner.span,
+            )]),
+        },
+        None => Pattern::Variant {
+            enum_name: enum_name.to_string(),
+            variant: err_variant.to_string(),
+            payload: None,
+        },
+    };
+
+    // Constrói body do braço Ok: `v` (o valor desempacotado).
+    let ok_body = Spanned::new(
+        Expr::Ident {
+            name: ok_binding.to_string(),
+        },
+        inner.span,
+    );
+
+    // Constrói body do braço Err: `return Err(e)` ou `return None`.
+    let err_body_expr: Expr = match err_payload {
+        Some(_) => Expr::Return(Box::new(Spanned::new(
+            Expr::Apply {
+                callee: Box::new(Spanned::new(
+                    Expr::VariantQual {
+                        enum_name: enum_name.to_string(),
+                        variant: err_variant.to_string(),
+                    },
+                    inner.span,
+                )),
+                args: vec![Spanned::new(
+                    Expr::Ident {
+                        name: err_binding.to_string(),
+                    },
+                    inner.span,
+                )],
+            },
+            inner.span,
+        ))),
+        None => Expr::Return(Box::new(Spanned::new(
+            Expr::VariantQual {
+                enum_name: enum_name.to_string(),
+                variant: err_variant.to_string(),
+            },
+            inner.span,
+        ))),
+    };
+    let err_body = Spanned::new(err_body_expr, inner.span);
+
+    // Constrói os arms do match sintético.
+    let arms = vec![
+        MatchArm {
+            pattern: Some(Spanned::new(ok_pattern, inner.span)),
+            guard: None,
+            body: ok_body,
+        },
+        MatchArm {
+            pattern: Some(Spanned::new(err_pattern, inner.span)),
+            guard: None,
+            body: err_body,
+        },
+    ];
+
+    // Infere o match sintético.
+    // Passa o inner (expr original) como scrutinee e os arms construídos.
+    // infer_match re-infere o scrutinee, mas isso é seguro — o typeck é idempotente.
+    let (match_ty, match_kind, match_effect) = infer_match(inner, &arms, span, env, ctx, false)?;
+
+    Ok(TypedExpr {
+        span: *span,
+        ty: match_ty,
+        tail_pos: false,
+        effect: match_effect,
+        kind: match_kind,
+    })
+}
 ///
 /// When `hint` is `Some(Ty::Function(params, ret))` and `expr` is a `Lambda`,
 /// the params are used as the lambda's parameter types instead of InferVar.
@@ -201,6 +357,50 @@ pub(crate) fn infer_expr_hinted(
                     })?;
 
             match &enum_ty {
+                // Fase 6: enum genérico no TypeEnv como Ty::Sum, mas o EnumRegistry
+                // marca como genérico. Para variantes unitárias (Optional::None),
+                // produz Ty::Generic com type_args não-inferidos (Ty::Var).
+                Ty::Sum(name) if ctx.enum_registry.is_generic(name) => {
+                    if !ctx.enum_registry.is_variant(name, variant) {
+                        return Err(MiddleError::UnboundName {
+                            name: format!("{}::{}", name, variant),
+                            span: (*span).into(),
+                        });
+                    }
+                    if ctx.enum_registry.payload_ty(name, variant).is_some() {
+                        return Err(MiddleError::TypeMismatch {
+                            expected: "aplicação de argumento (Result::Ok valor)".into(),
+                            found: format!("{}::{} tem payload — use Apply", name, variant),
+                            span: (*span).into(),
+                        });
+                    }
+                    let tag = ctx
+                        .enum_registry
+                        .variant_index(name, variant)
+                        .ok_or_else(|| MiddleError::UnboundName {
+                            name: format!("{}::{}", name, variant),
+                            span: (*span).into(),
+                        })?;
+                    // Para variantes unitárias de enum genérico (Optional::None),
+                    // não há arg para inferir os type params. Produz Ty::Generic
+                    // com type_args como Ty::Var (não-inferido).
+                    let type_params = ctx
+                        .enum_registry
+                        .type_params_of(name)
+                        .expect("is_generic true");
+                    let type_args: Vec<Ty> =
+                        type_params.iter().map(|p| Ty::Var(p.clone())).collect();
+                    let result_ty = Ty::Generic(name.clone(), type_args);
+                    (
+                        result_ty,
+                        TypedExprKind::VariantQual {
+                            enum_name: name.clone(),
+                            variant: variant.clone(),
+                            tag,
+                        },
+                        Effect::Puro,
+                    )
+                }
                 Ty::Sum(name) => {
                     // Verifica que a variante existe.
                     if !ctx.enum_registry.is_variant(name, variant) {
@@ -368,7 +568,7 @@ pub(crate) fn infer_expr_hinted(
                 span: (*span).into(),
             })?;
             let typed_inner = infer_expr(&inner.node, &inner.span, env, ctx, false)?;
-            if typed_inner.ty != *ret_ty {
+            if !fits_return(&typed_inner.ty, ret_ty) {
                 return Err(MiddleError::TypeMismatch {
                     expected: format!("{ret_ty:?}"),
                     found: format!("{:?}", typed_inner.ty),
@@ -426,13 +626,9 @@ pub(crate) fn infer_expr_hinted(
             (Ty::Unit, TypedExprKind::Continue, Effect::Puro)
         }
 
-        // ── Fio 3: Question e PipeFallback — desugar é Fase 7 e 8 ──
-        Expr::Question(_) => {
-            return Err(MiddleError::TypeMismatch {
-                expected: "expressão (? desugar — Fase 7)".into(),
-                found: "Question".into(),
-                span: (*span).into(),
-            });
+        // ── Fase 7: `?` fail-fast — desugar para Match + Return ──
+        Expr::Question(inner) => {
+            return infer_question(inner, span, env, ctx, tail_pos);
         }
         Expr::PipeFallback { .. } => {
             return Err(MiddleError::TypeMismatch {

@@ -44,17 +44,21 @@ fn check_pattern_inner(
     match pat {
         // ── Ident: pode ser binding ou variante sem qualificação ──
         Pattern::Ident(name) => {
-            // Se o scrutinee é Sum e o nome é variante desse enum, resolve.
-            #[allow(clippy::collapsible_if)]
-            if let Ty::Sum(enum_name) = scrutinee_ty {
-                if enum_registry.is_variant(enum_name, name) {
-                    return Ok(TypedPattern::Variant {
-                        enum_name: enum_name.clone(),
-                        variant: name.clone(),
-                        sub_patterns: None,
-                        tag: enum_registry.variant_index(enum_name, name).unwrap_or(0),
-                    });
-                }
+            // Se o scrutinee é Sum ou Generic e o nome é variante desse enum, resolve.
+            let enum_name: Option<&str> = match scrutinee_ty {
+                Ty::Sum(enum_name) => Some(enum_name),
+                Ty::Generic(enum_name, _) => Some(enum_name),
+                _ => None,
+            };
+            if let Some(enum_name) = enum_name
+                && enum_registry.is_variant(enum_name, name)
+            {
+                return Ok(TypedPattern::Variant {
+                    enum_name: enum_name.to_string(),
+                    variant: name.clone(),
+                    sub_patterns: None,
+                    tag: enum_registry.variant_index(enum_name, name).unwrap_or(0),
+                });
             }
             // Caso contrário, é binding. Define no escopo.
             env.define(name, scrutinee_ty.clone());
@@ -106,17 +110,19 @@ fn check_pattern_inner(
                 });
             }
             // Verifica que o scrutinee é o enum esperado.
-            match scrutinee_ty {
-                Ty::Sum(s) if s == enum_name => {}
+            // Aceita Ty::Sum (não-genérico) ou Ty::Generic (instanciado).
+            let type_args: Vec<Ty> = match scrutinee_ty {
+                Ty::Sum(s) if s == enum_name => Vec::new(),
+                Ty::Generic(s, args) if s == enum_name => args.clone(),
                 _ => {
                     return Err(MiddleError::TypeMismatch {
                         expected: format!("{:?}", scrutinee_ty),
-                        found: format!("Sum({})", enum_name),
+                        found: format!("Sum({}) or Generic({})", enum_name, enum_name),
                         span: (*span).into(),
                     });
                 }
-            }
-            // Fase 5: resolver sub-patterns do payload.
+            };
+            // Fase 5/6: resolver sub-patterns do payload.
             let sub_patterns = if let Some(sub_pats) = payload {
                 // Variante com payload — precisa ter tipo de payload no EnumRegistry.
                 let payload_ty = enum_registry
@@ -126,6 +132,14 @@ fn check_pattern_inner(
                         found: format!("{}::{} sem payload", enum_name, variant),
                         span: (*span).into(),
                     })?;
+                // Fase 6: se o enum é genérico, instancia o payload_ty.
+                let effective_payload_ty = if enum_registry.is_generic(enum_name) {
+                    enum_registry
+                        .instantiate_variant(enum_name, variant, &type_args)
+                        .unwrap_or_else(|| payload_ty.clone())
+                } else {
+                    payload_ty.clone()
+                };
                 // Fase 5: 1 sub-pattern por variante.
                 if sub_pats.len() != 1 {
                     return Err(MiddleError::ArityMismatch {
@@ -138,7 +152,7 @@ fn check_pattern_inner(
                 for sub_pat in sub_pats {
                     let typed = check_pattern_inner(
                         &sub_pat.node,
-                        payload_ty,
+                        &effective_payload_ty,
                         enum_registry,
                         env,
                         &sub_pat.span,
@@ -256,7 +270,7 @@ pub(crate) fn check_exhaustiveness(
     }
 
     match scrutinee_ty {
-        Ty::Sum(enum_name) => {
+        Ty::Sum(enum_name) | Ty::Generic(enum_name, _) => {
             let all_variants = enum_registry.variants_of(enum_name);
             if all_variants.is_empty() {
                 // Enum desconhecido — não há variantes para cobrir.
@@ -294,6 +308,11 @@ pub(crate) fn check_exhaustiveness(
         Ty::InferVar(_) => Err(MiddleError::TypeMismatch {
             expected: "tipo concreto para match".into(),
             found: "variável de inferência".into(),
+            span: (*span).into(),
+        }),
+        Ty::Var(_) => Err(MiddleError::TypeMismatch {
+            expected: "tipo concreto para match".into(),
+            found: "variável de tipo".into(),
             span: (*span).into(),
         }),
     }

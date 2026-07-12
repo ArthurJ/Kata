@@ -42,6 +42,44 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
         ],
     );
 
+    // Fase 6: Result e Optional — enums genéricos do prelude.
+    // Result tem type_params ["T", "E"] — Ok carrega T, Err carrega E.
+    // Optional tem type_params ["T"] — Some carrega T, None é unitária.
+    enum_registry.register_generic(
+        "Result",
+        vec!["T".into(), "E".into()],
+        vec![
+            VariantInfo {
+                name: "Ok".into(),
+                payload_ty: Some(Ty::Var("T".into())),
+            },
+            VariantInfo {
+                name: "Err".into(),
+                payload_ty: Some(Ty::Var("E".into())),
+            },
+        ],
+    );
+    enum_registry.register_generic(
+        "Optional",
+        vec!["T".into()],
+        vec![
+            VariantInfo {
+                name: "Some".into(),
+                payload_ty: Some(Ty::Var("T".into())),
+            },
+            VariantInfo {
+                name: "None".into(),
+                payload_ty: None,
+            },
+        ],
+    );
+
+    // TypeEnv: registra Result e Optional como tipos.
+    // No TypeEnv, o tipo base é Ty::Sum — a instanciação (Ty::Generic) acontece
+    // no resolve_type_expr quando o usuário escreve Result::(Int, Text).
+    type_env.define("Result", Ty::Sum("Result".into()));
+    type_env.define("Optional", Ty::Sum("Optional".into()));
+
     // Assinaturas do prelude
     let signatures = vec![
         // Int aritmética

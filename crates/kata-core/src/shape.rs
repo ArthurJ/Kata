@@ -79,6 +79,13 @@ impl Ty {
             },
             // Tolerante a tipos não-resolvidos durante typeck
             Ty::InferVar(_) => TypeShape::Unit,
+            // Var: variável de tipo — não tem shape runtime próprio.
+            Ty::Var(_) => TypeShape::Unit,
+            // Generic: projeta como Sum (é um enum instanciado).
+            Ty::Generic(name, _) => TypeShape::Sum {
+                name: name.clone(),
+                variants: Vec::new(),
+            },
         }
     }
 }

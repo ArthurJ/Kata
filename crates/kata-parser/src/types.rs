@@ -11,6 +11,37 @@ impl Parser {
         match self.peek().clone() {
             Token::Ident(name) => {
                 self.advance();
+                // `Name::(T1, T2)` — tipo com parâmetros posicionais.
+                if matches!(self.peek(), Token::DoubleColon) {
+                    self.advance(); // consume ::
+                    self.expect(&Token::LParen, "\"(\"")?;
+                    let mut params = Vec::new();
+                    // Skip newlines after (
+                    while matches!(self.peek(), Token::StmtSep) {
+                        self.advance();
+                    }
+                    if matches!(self.peek(), Token::RParen) {
+                        let rparen_span = self.advance();
+                        let span = start.cover(rparen_span);
+                        return Ok(Spanned::new(TypeExpr::ParamApp { name, params }, span));
+                    }
+                    loop {
+                        let ty = self.parse_type_expr()?;
+                        params.push(ty);
+                        if matches!(self.peek(), Token::Comma) {
+                            self.advance();
+                            while matches!(self.peek(), Token::StmtSep) {
+                                self.advance();
+                            }
+                            continue;
+                        }
+                        break;
+                    }
+                    self.expect(&Token::RParen, "\")\"")?;
+                    let last_span = params.last().expect("non-empty").span;
+                    let span = start.cover(last_span);
+                    return Ok(Spanned::new(TypeExpr::ParamApp { name, params }, span));
+                }
                 Ok(Spanned::new(TypeExpr::Named(name), start))
             }
             Token::LParen => {
