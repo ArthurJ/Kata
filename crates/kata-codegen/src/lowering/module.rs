@@ -143,23 +143,17 @@ pub(crate) fn lower_module(
             closure_captures: HashMap::new(),
         };
 
-        // Prólogo do entry point: inicializa scheduler + cria arena global.
-        // A arena global serve como caller_arena para a primeira Action (via spawn).
+        // Prólogo do entry point: inicializa scheduler (cria arena raiz internamente).
+        // scheduler_init retorna o handle da arena raiz — usar como caller_arena.
+        // Pré-11: substitui a antiga arena global (handle 0, nunca destruída).
         let scheduler_init_ref = lower
             .ffi_refs
             .get("kata_rt_scheduler_init")
             .copied()
             .ok_or_else(|| CodegenError::FfiSymbolNotFound("kata_rt_scheduler_init".into()))?;
-        lower.builder.ins().call(scheduler_init_ref, &[]);
-
-        let arena_create_ref = lower
-            .ffi_refs
-            .get("kata_rt_arena_create")
-            .copied()
-            .ok_or_else(|| CodegenError::FfiSymbolNotFound("kata_rt_arena_create".into()))?;
-        let global_arena = lower.builder.ins().call(arena_create_ref, &[]);
-        let global_arena = lower.builder.inst_results(global_arena)[0];
-        lower.caller_arena = Some(global_arena);
+        let init_inst = lower.builder.ins().call(scheduler_init_ref, &[]);
+        let root_arena = lower.builder.inst_results(init_inst)[0];
+        lower.caller_arena = Some(root_arena);
 
         // Lowera pre_entry (let bindings e outras expressões top-level anteriores).
         // Estas são loweradas em sequência, compartilhando o var_map —
