@@ -11,12 +11,14 @@
 //! - [`Score`] — score 4D (exact, alias, refined, iface) para seleção
 
 pub mod dispatch;
+pub mod escape;
 pub mod enum_registry;
 pub mod ffi;
 pub mod shape;
 pub mod ty;
 
 pub use dispatch::{DispatchError, DispatchTable, OverloadInfo, PartialDispatchResult, Score};
+pub use escape::EscapeTarget;
 pub use enum_registry::{EnumRegistry, VariantInfo};
 pub use ffi::FfiSymbol;
 pub use shape::{TypeId, TypeShape};
