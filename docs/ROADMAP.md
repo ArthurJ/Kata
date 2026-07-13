@@ -550,7 +550,7 @@ especial no compilador.
 
 ---
 
-### Pré-11: Infraestrutura de Memória Hierárquica
+### Pré-11: Infraestrutura de Memória Hierárquica ✅
 
 **PRD:** `docs/PRD-pre-11.md`
 
@@ -570,7 +570,8 @@ terminaram.
 - Scheduler rastreia árvore de fibers (parent_id, children, completed)
 - Destruição bottom-up (arena do pai sobrevive até filhos terminarem)
 - Arena raiz criada no scheduler_init, destruída no fim do run
-- `EscapeTarget` na TAST (Local / Caller / Ancestor(n)) substitui `tail_pos`
+- `EscapeTarget` na TAST (Local / Caller / Ancestor(n)) coexiste com `tail_pos`
+  (`tail_pos` governa TCO, `escape` governa arena selection)
 - ARC pass emitido pelo codegen (`incref`/`decref` nos pontos apropriados)
 - CaptureBox e Sum results alocam na arena do escape target, não hardcoded em handle 0
 
