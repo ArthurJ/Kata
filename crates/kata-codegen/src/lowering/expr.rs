@@ -160,11 +160,11 @@ pub(crate) fn lower_expr(
                         // alocar CaptureBox e prefixar box_ptr nos args.
                         let caps = ctx.closure_captures.get(name).cloned();
                         let mut call_args = Vec::new();
-                        if let Some(ref captures) = caps {
-                            if !captures.is_empty() {
-                                let box_ptr = alloc_capture_box(func_ptr, captures, ctx)?;
-                                call_args.push(box_ptr);
-                            }
+                        if let Some(ref captures) = caps
+                            && !captures.is_empty()
+                        {
+                            let box_ptr = alloc_capture_box(func_ptr, captures, ctx)?;
+                            call_args.push(box_ptr);
                         }
                         call_args.extend(arg_values.iter().copied());
 
@@ -307,10 +307,10 @@ pub(crate) fn lower_expr(
         TypedExprKind::Let { name, value } => {
             // Se o value é um Lambda com captures, registrar no closure_captures
             // para o call site poder alocar o CaptureBox.
-            if let TypedExprKind::Lambda { captures, .. } = &value.node.kind {
-                if !captures.is_empty() {
-                    ctx.closure_captures.insert(name.clone(), captures.clone());
-                }
+            if let TypedExprKind::Lambda { captures, .. } = &value.node.kind
+                && !captures.is_empty()
+            {
+                ctx.closure_captures.insert(name.clone(), captures.clone());
             }
             let val = lower_expr(&value.node, ctx)?;
             let clif_ty = ty_to_clif(&value.node.ty);

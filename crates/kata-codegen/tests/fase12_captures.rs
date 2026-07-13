@@ -134,3 +134,39 @@ fn capture_multipla_e2e() {
     assert_eq!(ty, Ty::int());
     assert_eq!(untag_smi(raw), 13);
 }
+
+// ── Testes E2E avançados (Fase 14) ─────────────────────────────────
+
+#[test]
+fn closure_aninhada_e2e() {
+    // Closure que captura variável do escopo externo e é chamada depois.
+    // Equivalente a make_adder(10)(5) = 15.
+    let (raw, ty) = eval_src("let n := 10\nlet f := + _ n\nf 5");
+    assert_eq!(ty, Ty::int());
+    assert_eq!(untag_smi(raw), 15);
+}
+
+#[test]
+fn closure_em_tupla_e2e() {
+    // Closure armazenada em tupla — não deve crashar no codegen.
+    let (raw, ty) = eval_src("let f := + _ 1\n(f, 42)");
+    eprintln!("tupla => raw={raw}, ty={ty:?}");
+    assert!(matches!(ty, Ty::Tuple(_)));
+}
+
+#[test]
+fn closure_com_float_e2e() {
+    // Closure capturando Float, chamada com Float.
+    let (raw, ty) = eval_src("let pi := 3.14\nlet f := + _ pi\nf 1.0");
+    assert_eq!(ty, Ty::float());
+    let val = f64::from_bits(raw as u64);
+    assert!((val - 4.14).abs() < 0.001, "esperado ~4.14, got {val}");
+}
+
+#[test]
+fn closure_multipla_chamada_aninhada_e2e() {
+    // Duas closures com captures diferentes, uma chamando a outra.
+    let (raw, ty) = eval_src("let a := 1\nlet b := 2\nlet g := + _ a\nlet h := + _ b\nh (g 10)");
+    assert_eq!(ty, Ty::int());
+    assert_eq!(untag_smi(raw), 13);
+}

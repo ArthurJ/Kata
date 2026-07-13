@@ -13,8 +13,7 @@ use std::collections::HashSet;
 use kata_core::ty::TypeEnv;
 
 use crate::typed::{
-    CaptureInfo, TypedExpr, TypedExprKind, TypedLambdaClause, TypedMatchArm, TypedModule,
-    TypedPattern, TypedWithBinding,
+    CaptureInfo, TypedExpr, TypedExprKind, TypedMatchArm, TypedModule, TypedPattern,
 };
 
 /// Ponto de entrada — percorre toda a TAST e popula `captures` de cada Closure.
@@ -150,13 +149,13 @@ fn collect_captures_in_expr(expr: &mut TypedExpr, outer_env: &TypeEnv) {
                     if name.starts_with("__") {
                         continue;
                     }
-                    if let Some(ty) = outer_env.lookup(name) {
-                        if !all_captures.iter().any(|c| c.name == *name) {
-                            all_captures.push(CaptureInfo {
-                                name: name.clone(),
-                                ty: ty.clone(),
-                            });
-                        }
+                    if let Some(ty) = outer_env.lookup(name)
+                        && !all_captures.iter().any(|c| c.name == *name)
+                    {
+                        all_captures.push(CaptureInfo {
+                            name: name.clone(),
+                            ty: ty.clone(),
+                        });
                     }
                 }
             }
@@ -252,7 +251,7 @@ fn collect_free_vars(
                 collect_free_vars(&el.node, local_bindings, out);
             }
         }
-        TypedExprKind::Let { name, value } | TypedExprKind::Var { name, value } => {
+        TypedExprKind::Let { name: _, value } | TypedExprKind::Var { name: _, value } => {
             // value é avaliado antes do binding — free vars do value
             collect_free_vars(&value.node, local_bindings, out);
             // name vira local para as expressões seguintes — MAS como
@@ -269,9 +268,7 @@ fn collect_free_vars(
             collect_free_vars(&scrutinee.node, local_bindings, out);
             for arm in arms {
                 // Pattern binds são locais para o arm — não propagam free vars
-                if let Some(pattern) = &arm.pattern {
-                    // Pattern não tem free vars (só literals/sub-patterns)
-                }
+                // Pattern não tem free vars (só literals/sub-patterns)
                 if let Some(guard) = &arm.guard {
                     collect_free_vars(&guard.node, local_bindings, out);
                 }
