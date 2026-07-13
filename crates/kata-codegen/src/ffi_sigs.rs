@@ -183,10 +183,12 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
         FfiSymbol::ArenaDestroy => {
             sig.params.push(AbiParam::new(I64)); // arena
         }
-        // ── Sum (i64, i64) → i64, (i64) → i64 ──
+        // ── Sum (i64, i64, i64) → i64, (i64) → i64 ──
+        // Pré-11: store_sum_result recebe arena_handle como 3º param.
         FfiSymbol::StoreSumResult => {
             sig.params.push(AbiParam::new(I64)); // tag
             sig.params.push(AbiParam::new(I64)); // payload
+            sig.params.push(AbiParam::new(I64)); // arena_handle
             sig.returns.push(AbiParam::new(I64)); // ptr
         }
         FfiSymbol::SumTagInt => {
@@ -216,11 +218,13 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
         // yield: () → void (suspende fiber)
         FfiSymbol::Yield => {}
         // ── Arc<T> / CaptureBox (Fase 12) ──
-        // alloc_arc: (fn_ptr, captures_ptr, n_captures) -> box_ptr
+        // alloc_arc: (fn_ptr, captures_ptr, n_captures, arena_handle) -> box_ptr
+        // Pré-11: arena_handle adicionado como 4º param.
         FfiSymbol::AllocArc => {
             sig.params.push(AbiParam::new(I64)); // fn_ptr
             sig.params.push(AbiParam::new(I64)); // captures_ptr
             sig.params.push(AbiParam::new(I64)); // n_captures
+            sig.params.push(AbiParam::new(I64)); // arena_handle
             sig.returns.push(AbiParam::new(I64)); // box_ptr
         }
         // incref: (box_ptr) -> 0

@@ -8,6 +8,7 @@ use cranelift_codegen::ir::types::I64;
 use cranelift_codegen::ir::{AbiParam, GlobalValueData, InstBuilder, MemFlagsData, Signature};
 use cranelift_codegen::isa::CallConv;
 use cranelift_module::{Linkage, Module};
+use kata_core::escape::EscapeTarget;
 use kata_core::ty::{PrimTy, Ty};
 use kata_inference::{TypedExpr, TypedExprKind};
 
@@ -175,21 +176,16 @@ pub(crate) fn lower_expr(
             }
 
             // Aloca N * 8 bytes na arena via kata_rt_arena_alloc(handle, size).
-            // Escolha de arena baseada em tail_pos:
-            // - tail_pos = true (retorno) → caller_arena (sobrevive à destruição da local)
-            // - tail_pos = false (computação local) → local_arena (liberada no epílogo)
-            let handle = if expr.tail_pos {
-                // tail_pos = true: usar caller_arena. Se não há caller_arena
-                // (função pura), usa arena global (handle 0).
-                ctx.caller_arena
-                    .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0))
-            } else {
-                // tail_pos = false: usar fiber_arena. Se não há fiber_arena
-                // (entry point ou função pura), usa arena global (handle 0).
-                // Entry point: tudo é tail_pos, este branch não é atingido.
-                // Função pura: não há epílogo que destrua, arena global é segura.
-                ctx.fiber_arena
-                    .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0))
+            // Escolha de arena baseada em EscapeTarget (Pré-11):
+            // - Local → fiber_arena (liberada no epílogo do fiber)
+            // - Caller | Ancestor(_) → caller_arena (sobrevive à destruição da local)
+            let handle = match expr.escape {
+                EscapeTarget::Local => ctx
+                    .fiber_arena
+                    .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
+                EscapeTarget::Caller | EscapeTarget::Ancestor(_) => ctx
+                    .caller_arena
+                    .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
             };
             let size = ctx.builder.ins().iconst(I64, (n * 8) as i64);
             let func_ref = ctx.ffi_refs.get("kata_rt_arena_alloc").ok_or_else(|| {
@@ -240,13 +236,25 @@ pub(crate) fn lower_expr(
                 // Variante unitária de enum do usuário: box com tag, payload = 0.
                 let tag_val = ctx.builder.ins().iconst(I64, *tag as i64);
                 let payload_val = ctx.builder.ins().iconst(I64, 0);
+                // Arena baseada em EscapeTarget (Pré-11).
+                let arena_handle = match expr.escape {
+                    EscapeTarget::Local => ctx
+                        .fiber_arena
+                        .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
+                    EscapeTarget::Caller | EscapeTarget::Ancestor(_) => ctx
+                        .caller_arena
+                        .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
+                };
                 let func_ref = ctx
                     .ffi_refs
                     .get("kata_rt_store_sum_result")
                     .ok_or_else(|| {
                         super::CodegenError::FfiSymbolNotFound("kata_rt_store_sum_result".into())
                     })?;
-                let call_inst = ctx.builder.ins().call(*func_ref, &[tag_val, payload_val]);
+                let call_inst = ctx
+                    .builder
+                    .ins()
+                    .call(*func_ref, &[tag_val, payload_val, arena_handle]);
                 Ok(ctx.builder.inst_results(call_inst)[0])
             }
         }
@@ -265,14 +273,27 @@ pub(crate) fn lower_expr(
             // Tag = índice da variante (embutido no TypedExpr pelo typeck).
             let tag_val = ctx.builder.ins().iconst(I64, *tag as i64);
 
-            // Chama kata_rt_store_sum_result(tag, payload) → box_ptr.
+            // Arena baseada em EscapeTarget (Pré-11).
+            let arena_handle = match expr.escape {
+                EscapeTarget::Local => ctx
+                    .fiber_arena
+                    .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
+                EscapeTarget::Caller | EscapeTarget::Ancestor(_) => ctx
+                    .caller_arena
+                    .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
+            };
+
+            // Chama kata_rt_store_sum_result(tag, payload, arena_handle) → box_ptr.
             let func_ref = ctx
                 .ffi_refs
                 .get("kata_rt_store_sum_result")
                 .ok_or_else(|| {
                     super::CodegenError::FfiSymbolNotFound("kata_rt_store_sum_result".into())
                 })?;
-            let call_inst = ctx.builder.ins().call(*func_ref, &[tag_val, payload_val]);
+            let call_inst = ctx
+                .builder
+                .ins()
+                .call(*func_ref, &[tag_val, payload_val, arena_handle]);
             Ok(ctx.builder.inst_results(call_inst)[0])
         }
 

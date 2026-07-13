@@ -66,11 +66,13 @@ pub(crate) fn lower_closure(
                 // alocar CaptureBox e prefixar box_ptr nos args.
                 let caps = ctx.closure_captures.get(name).cloned();
                 let mut call_args = Vec::new();
+                let mut box_ptr: Option<cranelift_codegen::ir::Value> = None;
                 if let Some(ref captures) = caps
                     && !captures.is_empty()
                 {
-                    let box_ptr = alloc_capture_box(func_ptr, captures, ctx)?;
-                    call_args.push(box_ptr);
+                    let bp = alloc_capture_box(func_ptr, captures, ctx)?;
+                    call_args.push(bp);
+                    box_ptr = Some(bp);
                 }
                 call_args.extend(arg_values.iter().copied());
 
@@ -105,7 +107,24 @@ pub(crate) fn lower_closure(
                         .builder
                         .ins()
                         .call_indirect(sig_ref, func_ptr, &call_args);
-                    return Ok(ctx.builder.inst_results(call_inst)[0]);
+                    let result = ctx.builder.inst_results(call_inst)[0];
+                    // Pré-11 (Fase 5): ARC pass — decref após call_indirect
+                    // de CaptureBox. O refcount volta a 1 (caller terminou
+                    // de usar). Não libera memória (bumpalo), mas registra
+                    // o padrão correto para GC futuro.
+                    if let Some(bp) = box_ptr {
+                        let decref_ref = ctx
+                            .ffi_refs
+                            .get("kata_rt_decref")
+                            .copied()
+                            .ok_or_else(|| {
+                                super::CodegenError::FfiSymbolNotFound(
+                                    "kata_rt_decref".into(),
+                                )
+                            })?;
+                        ctx.builder.ins().call(decref_ref, &[bp]);
+                    }
+                    return Ok(result);
                 }
             }
         }
@@ -132,17 +151,19 @@ fn alloc_capture_box(
     let n = captures.len() as i64;
     let flags = MemFlagsData::new();
 
-    // 1. Aloca array temporário na arena global (handle 0).
+    // 1. Aloca array temporário na arena de escape (Pré-11: caller_arena).
     let arena_alloc_ref = ctx
         .ffi_refs
         .get("kata_rt_arena_alloc")
         .ok_or_else(|| super::CodegenError::FfiSymbolNotFound("kata_rt_arena_alloc".into()))?;
-    let global_arena = ctx.builder.ins().iconst(I64, 0);
+    let capture_arena = ctx
+        .caller_arena
+        .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
     let array_size = ctx.builder.ins().iconst(I64, n * 8);
     let alloc_inst = ctx
         .builder
         .ins()
-        .call(*arena_alloc_ref, &[global_arena, array_size]);
+        .call(*arena_alloc_ref, &[capture_arena, array_size]);
     let array_ptr = ctx.builder.inst_results(alloc_inst)[0];
 
     // 2. Preenche o array com os valores das captures.
@@ -167,7 +188,7 @@ fn alloc_capture_box(
     let arc_inst = ctx
         .builder
         .ins()
-        .call(*alloc_arc_ref, &[func_ptr, array_ptr, n_val]);
+        .call(*alloc_arc_ref, &[func_ptr, array_ptr, n_val, capture_arena]);
     let box_ptr = ctx.builder.inst_results(arc_inst)[0];
 
     Ok(box_ptr)

@@ -10,17 +10,15 @@
 //! offset 8: payload (i64) — valor do payload (SMI, ptr, etc.)
 //! ```
 
-/// Aloca 16 bytes na arena global, armazena tag e payload, retorna ponteiro.
+/// Aloca 16 bytes na arena especificada, armazena tag e payload, retorna ponteiro.
+///
+/// Pré-11: `arena_handle` substitui o handle 0 hardcoded.
 ///
 /// # Safety
 /// `tag` e `payload` são valores i64 válidos.
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_store_sum_result(tag: i64, payload: i64) -> i64 {
-    // Aloca 16 bytes na arena global (handle 0).
-    // A arena global é criada no prólogo do entry point e persiste
-    // durante toda a execução.
-    let handle: i64 = 0;
-    let ptr = crate::arena::kata_rt_arena_alloc(handle, 16);
+pub extern "C" fn kata_rt_store_sum_result(tag: i64, payload: i64, arena_handle: i64) -> i64 {
+    let ptr = crate::arena::kata_rt_arena_alloc(arena_handle, 16);
     if ptr == 0 {
         return 0; // falha na alocação
     }

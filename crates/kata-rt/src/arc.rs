@@ -20,7 +20,9 @@
 //!
 //! Layout: 16 bytes de header + n_captures * 8 bytes de captures data.
 
-/// Aloca um CaptureBox na arena global e retorna o ponteiro.
+/// Aloca um CaptureBox na arena especificada e retorna o ponteiro.
+///
+/// Pré-11: `arena_handle` substitui o handle 0 hardcoded.
 ///
 /// `fn_ptr` é o ponteiro da função JIT (para `call_indirect`).
 /// `captures_ptr` é um ponteiro para um array de i64 com os valores capturados.
@@ -30,7 +32,12 @@
 /// `captures_ptr` deve ser um ponteiro válido para `n_captures` i64s,
 /// ou 0/null se `n_captures == 0`.
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_alloc_arc(fn_ptr: i64, captures_ptr: i64, n_captures: i64) -> i64 {
+pub extern "C" fn kata_rt_alloc_arc(
+    fn_ptr: i64,
+    captures_ptr: i64,
+    n_captures: i64,
+    arena_handle: i64,
+) -> i64 {
     if n_captures < 0 {
         return 0;
     }
@@ -38,9 +45,7 @@ pub extern "C" fn kata_rt_alloc_arc(fn_ptr: i64, captures_ptr: i64, n_captures: 
     // Tamanho: 16 bytes header + n_captures * 8 bytes
     let total_size = 16 + n_captures * 8;
 
-    // Aloca na arena global (handle 0)
-    let handle: i64 = 0;
-    let box_ptr = crate::arena::kata_rt_arena_alloc(handle, total_size);
+    let box_ptr = crate::arena::kata_rt_arena_alloc(arena_handle, total_size);
     if box_ptr == 0 {
         return 0; // falha na alocação
     }
