@@ -2,12 +2,16 @@
 //!
 //! Não carregam [`Span`] — não há código do usuário para apontar (I6).
 //! Usam `expect()` com mensagens descritivas em vez de `unwrap()`.
+//!
+//! Scaffolding para o backend de codegen futuro — não usado em Fase 1.
+
+#![allow(dead_code)]
 
 use thiserror::Error;
 
 /// Erro interno do backend (bug do compilador, não do usuário).
 #[derive(Debug, Clone, Error)]
-pub enum BackendError {
+pub(crate) enum BackendError {
     #[error("codegen: tipo não suportado no lowering: {ty}")]
     UnsupportedType { ty: String },
 

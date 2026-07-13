@@ -20,7 +20,7 @@ use crate::typed::{
 ///
 /// Percorre: pre_entry, entry, functions (clauses), actions (body).
 /// Para cada `Closure` cujo callee é `Lambda`, coleta free vars do body.
-pub fn run(typed_module: &mut TypedModule) {
+pub(crate) fn run(typed_module: &mut TypedModule) {
     // Percorre pre_entry
     for expr in &mut typed_module.pre_entry {
         collect_captures_in_expr(&mut expr.node, &typed_module.type_env);

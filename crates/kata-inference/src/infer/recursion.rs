@@ -24,7 +24,7 @@ use crate::typed::{
 ///
 /// Retorna `RecursiveAction` no primeiro ciclo encontrado, com a chain
 /// (ex: "A → B → A") e o span do `ActionCall` que fecha o ciclo.
-pub fn check_action_recursion(actions: &[TypedAction]) -> Result<(), MiddleError> {
+pub(crate) fn check_action_recursion(actions: &[TypedAction]) -> Result<(), MiddleError> {
     let call_graph = build_call_graph(actions);
     detect_cycle(&call_graph)
 }

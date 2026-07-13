@@ -403,7 +403,7 @@ fn rewrite_with_accumulator(
 }
 
 /// Pass TRMA — percorre funções e reescreve candidatas.
-pub fn trma_pass(typed: &mut TypedModule) {
+pub(crate) fn trma_pass(typed: &mut TypedModule) {
     let mut new_functions = Vec::new();
     for func in &typed.functions {
         if let Some(pattern) = is_trma_candidate(func, &typed.dispatch_table) {

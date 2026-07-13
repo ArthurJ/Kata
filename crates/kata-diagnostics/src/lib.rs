@@ -7,10 +7,9 @@
 //! Códigos namespaced por domínio (`type.mismatch`, `parse.unexpected_token`),
 //! sem códigos numéricos.
 
-pub mod backend;
+pub(crate) mod backend;
 pub mod frontend;
 pub mod middleend;
 
-pub use backend::BackendError;
 pub use frontend::{FrontendError, MietteSpan};
 pub use middleend::MiddleError;
