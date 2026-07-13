@@ -9,6 +9,7 @@
 
 use kata_ast::{Pattern, Span, Spanned};
 use kata_core::enum_registry::EnumRegistry;
+use kata_core::escape::EscapeTarget;
 use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 
@@ -88,6 +89,7 @@ fn check_pattern_inner(
                 span: expr.span,
                 ty: literal_ty,
                 tail_pos: false,
+                escape: EscapeTarget::Local,
                 effect: Effect::Puro,
                 kind: literal_to_typed_kind(&expr.node),
             };

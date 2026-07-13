@@ -11,6 +11,7 @@
 //! process_with_bindings → infer_lambda_body → montar Closure.
 
 use kata_ast::{Expr, GuardClause, Pattern, Span, Spanned, WithBinding};
+use kata_core::escape::EscapeTarget;
 use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 
@@ -202,6 +203,7 @@ fn build_lambda_apply(
         span: *span,
         ty: lambda_ty,
         tail_pos: false,
+        escape: EscapeTarget::Local,
         effect: Effect::Puro,
         kind: lambda_kind,
     };
@@ -284,6 +286,7 @@ pub(crate) fn infer_lambda_body(
                 span: body.span,
                 ty: guard_ret_ty.expect("pelo menos um guard"),
                 tail_pos: true,
+                escape: EscapeTarget::Caller,
                 effect: Effect::Puro,
                 kind: TypedExprKind::Unit,
             },

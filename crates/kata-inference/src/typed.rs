@@ -8,6 +8,7 @@
 
 use kata_ast::{Span, Spanned};
 use kata_core::dispatch::DispatchTable;
+use kata_core::escape::EscapeTarget;
 use kata_core::ty::{Ty, TypeEnv};
 
 /// Efeito de uma expressão. Fio 1 só produz `Puro`.
@@ -34,6 +35,11 @@ pub struct TypedExpr {
     /// bloco/entry). Marcado em toda expr — o codegen usa para otimizar
     /// tail calls (Fio 9+) e o TRMA pass (fios posteriores).
     pub tail_pos: bool,
+    /// Destino de escape para seleção de arena (Pré-11).
+    /// Generaliza `tail_pos` para memória: `Local` = fiber_arena,
+    /// `Caller` = caller_arena, `Ancestor(n)` = arena do LCA.
+    /// Coexiste com `tail_pos` (que governa TCO, não memória).
+    pub escape: EscapeTarget,
     /// Efeito da expressão. `Puro` em Fio 1.
     pub effect: Effect,
     /// Variante da TAST — espelha `Expr` com nós filhos já tipados.

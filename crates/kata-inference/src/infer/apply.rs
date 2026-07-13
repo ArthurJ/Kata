@@ -6,6 +6,7 @@
 //! 3. TypeEnv: call_indirect para lambda como valor
 
 use kata_ast::{Expr, Span, Spanned};
+use kata_core::escape::EscapeTarget;
 use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 
@@ -110,6 +111,7 @@ pub(crate) fn infer_apply(
             span: callee.span,
             ty: callee_ty,
             tail_pos: false,
+            escape: EscapeTarget::Local,
             effect: Effect::Puro,
             kind: TypedExprKind::Ident {
                 name: func_name.clone(),
@@ -152,6 +154,7 @@ pub(crate) fn infer_apply(
             span: callee.span,
             ty: Ty::Function(param_types.clone(), ret_ty.clone()),
             tail_pos: false,
+            escape: EscapeTarget::Local,
             effect: Effect::Puro,
             kind: TypedExprKind::Ident {
                 name: func_name.clone(),

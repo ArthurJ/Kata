@@ -7,6 +7,7 @@
 use kata_ast::{Expr, Span, Spanned};
 use kata_core::dispatch::DispatchTable;
 use kata_core::enum_registry::EnumRegistry;
+use kata_core::escape::EscapeTarget;
 use kata_core::ty::{PrimTy, Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 
@@ -352,6 +353,7 @@ pub(crate) fn infer_expr_hinted(
                         },
                         span: typed_args.span,
                         tail_pos: typed_args.tail_pos,
+                        escape: typed_args.escape,
                         effect: typed_args.effect,
                     }
                 }
@@ -520,10 +522,24 @@ pub(crate) fn infer_expr_hinted(
         }
     };
 
+    // Deriva EscapeTarget de tail_pos + contexto (Action vs função pura/entry).
+    let escape = if ctx.ret_ty.is_some() {
+        // Dentro de Action: tail_pos = true → Caller, false → Local.
+        if tail_pos {
+            EscapeTarget::Caller
+        } else {
+            EscapeTarget::Local
+        }
+    } else {
+        // Função pura / entry point: sem fiber_arena, tudo vai para a raiz.
+        EscapeTarget::Ancestor(0)
+    };
+
     Ok(TypedExpr {
         span: *span,
         ty,
         tail_pos,
+        escape,
         effect,
         kind,
     })
