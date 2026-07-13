@@ -1222,26 +1222,19 @@ não por fio. Cada fase depende apenas das anteriores.
 31. Proibição de recursão em Actions: `RecursiveAction` error se Action chama
     a si mesma (direta ou indireta). ✅
 
-### Fase 12 — Closures com captura
+### Fase 12 — Closures com captura (wrapper-only) ✅
 
-32. `let add_n := + _ n` captura `n` do escopo externo.
-33. `collect_captures` coleta free variables do body do lambda.
+32. `let add_n := + _ n` captura `n` do escopo externo. ✅
+33. `collect_captures` coleta free variables do body do lambda. ✅
 
-### Fase 13 — Escape analysis
+> **Redesign (2026-07-12):** Fase 13 (escape analysis) ELIMINADA por decisão
+> de design — wrapper-only: toda closure com captures aloca CaptureBox no
+> heap via `kata_rt_alloc_arc`, sem escape analysis. DoD 34-36a marcados N/A.
 
-34. Closure retornada por função pura escapa para heap (`Arc<T>`).
-35. Escape analysis 4 passes marca `escape` corretamente:
-    - NãoEscapa para closures locais.
-    - EscapaParaHeap para closures retornadas.
-36. `CaptureStorage` Stack → Heap promoção funciona.
-36a. Closure que escapa por caminho não-óbvio (ex: `let t := (f, 42)` onde
-     `f` é closure) é marcada `EscapaParaHeap` — não há falso-negativo que
-     cause use-after-free.
+### Fase 14 — Arc<T> + FnValueCall ✅
 
-### Fase 14 — Arc<T> + FnValueCall
-
-37. `FnValueCall` (call_indirect com CaptureBox) funciona.
-38. `kata_rt_alloc_arc`, `kata_rt_incref`, `kata_rt_decref` implementados.
+37. `FnValueCall` (call_indirect com CaptureBox) funciona. ✅
+38. `kata_rt_alloc_arc`, `kata_rt_incref`, `kata_rt_decref` implementados. ✅
 
 ### Fase 15 — ARC pass
 
