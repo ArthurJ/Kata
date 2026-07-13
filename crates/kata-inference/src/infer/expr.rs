@@ -215,86 +215,10 @@ pub(crate) fn infer_expr_hinted(
                         span: (*span).into(),
                     })?;
 
-            match &enum_ty {
-                // Fase 6: enum genérico no TypeEnv como Ty::Sum, mas o EnumRegistry
-                // marca como genérico. Para variantes unitárias (Optional::None),
-                // produz Ty::Generic com type_args não-inferidos (Ty::Var).
-                Ty::Sum(name) if ctx.enum_registry.is_generic(name) => {
-                    if !ctx.enum_registry.is_variant(name, variant) {
-                        return Err(MiddleError::UnboundName {
-                            name: format!("{}::{}", name, variant),
-                            span: (*span).into(),
-                        });
-                    }
-                    if ctx.enum_registry.payload_ty(name, variant).is_some() {
-                        return Err(MiddleError::TypeMismatch {
-                            expected: "aplicação de argumento (Result::Ok valor)".into(),
-                            found: format!("{}::{} tem payload — use Apply", name, variant),
-                            span: (*span).into(),
-                        });
-                    }
-                    let tag = ctx
-                        .enum_registry
-                        .variant_index(name, variant)
-                        .ok_or_else(|| MiddleError::UnboundName {
-                            name: format!("{}::{}", name, variant),
-                            span: (*span).into(),
-                        })?;
-                    // Para variantes unitárias de enum genérico (Optional::None),
-                    // não há arg para inferir os type params. Produz Ty::Generic
-                    // com type_args como Ty::Var (não-inferido).
-                    let type_params = ctx
-                        .enum_registry
-                        .type_params_of(name)
-                        .expect("is_generic true");
-                    let type_args: Vec<Ty> =
-                        type_params.iter().map(|p| Ty::Var(p.clone())).collect();
-                    let result_ty = Ty::Generic(name.clone(), type_args);
-                    (
-                        result_ty,
-                        TypedExprKind::VariantQual {
-                            enum_name: name.clone(),
-                            variant: variant.clone(),
-                            tag,
-                        },
-                        Effect::Puro,
-                    )
-                }
-                Ty::Sum(name) => {
-                    // Verifica que a variante existe.
-                    if !ctx.enum_registry.is_variant(name, variant) {
-                        return Err(MiddleError::UnboundName {
-                            name: format!("{}::{}", name, variant),
-                            span: (*span).into(),
-                        });
-                    }
-                    // Fase 5: VariantQual sem Apply só é válido para variantes unitárias.
-                    // Variantes com payload exigem Apply (Result::Ok 42).
-                    if ctx.enum_registry.payload_ty(name, variant).is_some() {
-                        return Err(MiddleError::TypeMismatch {
-                            expected: "aplicação de argumento (Result::Ok valor)".into(),
-                            found: format!("{}::{} tem payload — use Apply", name, variant),
-                            span: (*span).into(),
-                        });
-                    }
-                    let tag = ctx
-                        .enum_registry
-                        .variant_index(name, variant)
-                        .ok_or_else(|| MiddleError::UnboundName {
-                            name: format!("{}::{}", name, variant),
-                            span: (*span).into(),
-                        })?;
-                    (
-                        enum_ty.clone(),
-                        TypedExprKind::VariantQual {
-                            enum_name: name.clone(),
-                            variant: variant.clone(),
-                            tag,
-                        },
-                        Effect::Puro,
-                    )
-                }
-                _ => Err(MiddleError::TypeMismatch {
+            match super::variant_qual::infer_variant_qual(enum_name, variant, &enum_ty, span, ctx)?
+            {
+                Some(result) => result,
+                None => Err(MiddleError::TypeMismatch {
                     expected: "enum".to_string(),
                     found: format!("{:?}", enum_ty),
                     span: (*span).into(),

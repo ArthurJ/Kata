@@ -19,6 +19,7 @@ mod partial_dispatch;
 mod recursion;
 mod sugar;
 mod variant;
+mod variant_qual;
 
 use kata_ast::{Item, Module, Spanned};
 use kata_core::dispatch::OverloadInfo;
