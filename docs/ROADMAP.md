@@ -376,22 +376,6 @@ interpola.
 
 ---
 
-### ── ZELADORIA 1: Language Core ──
-
-Após Fio 5. Paga débito horizontal acumulado nos 5 fios verticais.
-
-**Foco:**
-- God objects > 500 linhas
-- `unwrap()` em produção → `expect()`
-- Snapshots do pipeline (lexer, parser, resolution, inference, codegen)
-- Cross-fio test runner
-- Manual sync (verificar se Fios 1-5 divergiram do manual)
-- `pub(crate)` audit
-- DispatchTable: verificar que scoring por dominância funciona com múltiplos
-  candidatos (preparar para Fio 7)
-
----
-
 ### Fio 6: Tipos Refinados, Ascription
 
 **Maquinaria de tipos construída:**
@@ -542,21 +526,6 @@ recursão de cauda.
 
 ---
 
-### ── ZELADORIA 2: Type System + Collections ──
-
-Após Fio 9. Paga débito horizontal do sistema de tipos.
-
-**Foco:**
-- Consistência typeck-codegen (match general case, variantes predicadas — Fio 6)
-- Escape analysis edge cases (nested closures, closures em canais)
-- Stream fusion correctness (Map/Filter/Fold aninhados)
-- TRMA correctness (mais operadores associativos)
-- Dispatch edge cases (ambiguidade real com múltiplas interfaces)
-- Cross-fio test runner atualizado
-- Manual sync
-
----
-
 ### Fio 10: Módulos, Prelude, FFI Completo
 
 **Features:**
@@ -703,21 +672,6 @@ telemetria sem contaminar pureza.
 
 ---
 
-### ── ZELADORIA 3: Advanced Features ──
-
-Após Fio 14. Paga débito horizontal das features avançadas.
-
-**Foco:**
-- CSP edge cases (deadlock detection, fiber starvation)
-- Comptime edge cases (nested comptime, comptime + closures)
-- HAMT correctness (persistent sharing, collision handling)
-- @log + @parallel interaction
-- AOT readiness audit (todas as features compilam em modo AOT?)
-- Cross-fio test runner completo
-- Manual sync final
-
----
-
 ### Fio 15: AOT, REPL
 
 **Features:**
@@ -757,9 +711,7 @@ Fio 1  ────────────────────────�
   ├── Fio 12 (comptime)
   └── Fio 15 (AOT, REPL)
 
-Zeladoria 1: após Fio 5
-Zeladoria 2: após Fio 9
-Zeladoria 3: após Fio 14
+Zeladorias removidas — manutenção diária via skill `zeladoria-kata5` substitui zeladorias planejadas.
 ```
 
 ## Princípios do Roadmap
