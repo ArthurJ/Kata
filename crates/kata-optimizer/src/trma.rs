@@ -28,8 +28,8 @@ use kata_ast::{Span, Spanned};
 use kata_core::dispatch::DispatchTable;
 use kata_core::ty::Ty;
 use kata_inference::{
-    Effect, TypedExpr, TypedExprKind, TypedFunction, TypedLambdaClause, TypedMatchArm,
-    TypedModule, TypedPattern,
+    Effect, TypedExpr, TypedExprKind, TypedFunction, TypedLambdaClause, TypedMatchArm, TypedModule,
+    TypedPattern,
 };
 
 /// Verifica se uma expressão é uma chamada recursiva para `func_name`.
@@ -37,7 +37,9 @@ use kata_inference::{
 /// Aceita `Grouping` wrapper (parênteses) transparente.
 fn is_recursive_call(expr: &Spanned<TypedExpr>, func_name: &str) -> bool {
     match &expr.node.kind {
-        TypedExprKind::Closure { callee, ffi_symbol, .. } => {
+        TypedExprKind::Closure {
+            callee, ffi_symbol, ..
+        } => {
             // ffi_symbol = None significa função Kata pura (não FFI)
             ffi_symbol.is_none()
                 && matches!(&callee.node.kind, TypedExprKind::Ident { name } if name == func_name)
@@ -65,16 +67,7 @@ fn unwrap_grouping(expr: &Spanned<TypedExpr>) -> &Spanned<TypedExpr> {
 }
 
 /// Informação extraída de uma chamada recursiva dentro de um operador associativo.
-struct RecCallInfo {
-    /// O argumento passado para a chamada recursiva (ex: `(- n 1)`).
-    /// Já com Grouping removido se houver.
-    rec_arg: Spanned<TypedExpr>,
-}
-
-/// Informação do padrão TRMA detectado.
 struct TrmaPattern {
-    /// Nome da função recursiva (ex: "soma").
-    func_name: String,
     /// Operador associativo (ex: "+").
     op: String,
     /// ffi_symbol do operador (ex: "kata_rt_bi_add").
@@ -87,15 +80,10 @@ struct TrmaPattern {
     rec_arg: Spanned<TypedExpr>,
     /// Pattern do caso base (ex: `Literal(0)`).
     base_pattern: Spanned<TypedPattern>,
-    /// Valor retornado no caso base (ex: `0`).
-    base_value: Spanned<TypedExpr>,
 }
 
 /// Verifica se uma função é candidata a TRMA.
-fn is_trma_candidate(
-    func: &TypedFunction,
-    table: &DispatchTable,
-) -> Option<TrmaPattern> {
+fn is_trma_candidate(func: &TypedFunction, table: &DispatchTable) -> Option<TrmaPattern> {
     // 1. Tem exatamente 1 parâmetro.
     if func.param_types.len() != 1 {
         return None;
@@ -110,7 +98,7 @@ fn is_trma_candidate(
 
     // 3. O body é Match.
     let arms = match &clause.body.node.kind {
-        TypedExprKind::Match { scrutinee, arms } => arms,
+        TypedExprKind::Match { arms, .. } => arms,
         _ => return None,
     };
 
@@ -124,7 +112,7 @@ fn is_trma_candidate(
             return None;
         }
         // Verifica se o body é `op(arg, self_call(arg))` onde op é associativo
-        if let Some(_) = detect_assoc_recursion(&arm.body, &func.name, table) {
+        if detect_assoc_recursion(&arm.body, &func.name, table).is_some() {
             rec_arm = Some(arm);
         } else {
             base_arm = Some(arm);
@@ -138,14 +126,12 @@ fn is_trma_candidate(
     let rec_info = detect_assoc_recursion(&rec_arm.body, &func.name, table)?;
 
     Some(TrmaPattern {
-        func_name: func.name.clone(),
         op: rec_info.op_name,
         op_ffi: rec_info.op_ffi,
         neutral: rec_info.neutral,
         non_rec_arg: rec_info.non_rec_arg,
         rec_arg: rec_info.rec_arg,
         base_pattern: base_arm.pattern.clone()?,
-        base_value: base_arm.body.clone(),
     })
 }
 
@@ -389,9 +375,7 @@ fn rewrite_with_accumulator(
                                                 )),
                                                 args: vec![
                                                     syn_expr(
-                                                        TypedExprKind::Ident {
-                                                            name: "acc".into(),
-                                                        },
+                                                        TypedExprKind::Ident { name: "acc".into() },
                                                         param_ty.clone(),
                                                     ),
                                                     pattern.non_rec_arg.clone(),

@@ -11,7 +11,7 @@ use kata_inference::infer_module;
 use kata_lexer::lex;
 use kata_optimizer::optimize;
 use kata_parser::parse;
-use kata_resolution::{load_prelude, resolve, ResolvedModule};
+use kata_resolution::{ResolvedModule, load_prelude, resolve};
 
 /// Executa o pipeline completo e retorna o valor bruto do JIT + tipo.
 fn eval_src(src: &str) -> (i64, Ty) {
@@ -108,8 +108,8 @@ is_odd :: Int => Boolean
 is_even 10"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Sum("Boolean".into()));
-    // 10 é par → True (SMI 1 = (1 << 1) | 1 = 3)
-    assert_eq!(raw, 3);
+    // 10 é par → True. Boolean::True = 1, Boolean::False = 0 (sem SMI tag).
+    assert_eq!(raw, 1);
 }
 
 // ── Teste: TAST inspection — soma_acc aparece após optimize ────────

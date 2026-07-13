@@ -78,7 +78,7 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
             ret_ty: None,
             in_loop: false,
         };
-        let typed_func = infer_named_function(func_def, &ctx)?;
+        let typed_func = infer_named_function(func_def, &ctx, &resolved.type_env)?;
         // Registra no TypeEnv para permitir uso como valor (call_indirect).
         type_env.define(
             &typed_func.name,
@@ -178,6 +178,7 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
 fn infer_named_function(
     func_def: &kata_resolution::FunctionDef,
     ctx: &InferCtx,
+    module_type_env: &TypeEnv,
 ) -> InferResult<TypedFunction> {
     let param_types = &func_def.param_types;
     let ret_ty = &func_def.return_type;
@@ -187,8 +188,10 @@ fn infer_named_function(
     for clause in &func_def.clauses {
         let clause_inner = &clause.node;
 
-        // Cria escopo filho para a cláusula.
-        let mut clause_env = TypeEnv::new();
+        // Cria escopo filho para a cláusula, com acesso aos tipos do módulo
+        // (prelude + user). Sem parent, VariantQual como `Boolean::True` falha
+        // com UnboundName — o typeck precisa resolver o nome do enum no TypeEnv.
+        let mut clause_env = TypeEnv::with_parent(module_type_env.clone());
 
         // Casa padrões contra tipos dos parâmetros.
         let typed_patterns = check_patterns(
