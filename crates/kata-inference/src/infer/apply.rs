@@ -169,7 +169,28 @@ pub(crate) fn infer_apply(
         ));
     }
 
-    // Não encontrado em nenhum lugar.
+    // Não encontrado em DispatchTable nem TypeEnv.
+    // Fallback: pode ser variante com payload desqualificada (ex: `Ok 42`,
+    // `Some 42`). Busca no EnumRegistry.
+    let candidates = ctx.enum_registry.find_enums_with_variant(&func_name);
+    if candidates.len() == 1 {
+        let enum_name = candidates[0];
+        if ctx.enum_registry.payload_ty(enum_name, &func_name).is_some() {
+            return infer_variant_construct(enum_name, &func_name, args, span, env, ctx);
+        }
+    }
+    if candidates.len() > 1 {
+        return Err(MiddleError::UnboundName {
+            name: format!(
+                "variante '{}' é ambígua — existe em: {}. Qualifique (ex: {}::{})",
+                func_name,
+                candidates.join(", "),
+                candidates[0],
+                func_name
+            ),
+            span: callee.span.into(),
+        });
+    }
     Err(MiddleError::UnboundName {
         name: func_name,
         span: callee.span.into(),

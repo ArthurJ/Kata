@@ -100,18 +100,18 @@ pub(crate) fn infer_expr_hinted(
 
         // ── Identificador ────────────────────────────────────
         Expr::Ident { name } => {
-            let ty = env
-                .lookup(name)
-                .cloned()
-                .ok_or_else(|| MiddleError::UnboundName {
-                    name: name.clone(),
-                    span: (*span).into(),
-                })?;
-            (
-                ty,
-                TypedExprKind::Ident { name: name.clone() },
-                Effect::Puro,
-            )
+            // Caminho normal: é uma binding no type_env.
+            if let Some(ty) = env.lookup(name).cloned() {
+                (
+                    ty,
+                    TypedExprKind::Ident { name: name.clone() },
+                    Effect::Puro,
+                )
+            } else {
+                // Fallback: variante unitária desqualificada (ex: `True`,
+                // `None`, `Vermelho`). Busca no EnumRegistry.
+                resolve_unqual_variant(name, span, ctx)?
+            }
         }
 
         // ── Aplicação prefixa ────────────────────────────────
@@ -526,4 +526,70 @@ pub(crate) fn infer_expr_hinted(
         effect,
         kind,
     })
+}
+
+/// Resolve variante desqualificada em posição de expressão.
+///
+/// Quando `env.lookup(name)` falha, tenta o EnumRegistry: se `name` é variante
+/// unitária de exatamente 1 enum, produz `VariantQual`. Se múltiplos enums têm
+/// a variante, erro de ambiguidade. Se 0, `UnboundName`. Se tem payload, erro
+/// (precisa de Apply: `Ok 42`, não `Ok` sozinho).
+fn resolve_unqual_variant(
+    name: &str,
+    span: &Span,
+    ctx: &InferCtx,
+) -> InferResult<(Ty, TypedExprKind, Effect)> {
+    let candidates = ctx.enum_registry.find_enums_with_variant(name);
+    if candidates.is_empty() {
+        return Err(MiddleError::UnboundName {
+            name: name.to_string(),
+            span: (*span).into(),
+        });
+    }
+    if candidates.len() > 1 {
+        return Err(MiddleError::UnboundName {
+            name: format!(
+                "variante '{name}' é ambígua — existe em: {}. Qualifique (ex: {}::{name})",
+                candidates.join(", "),
+                candidates[0]
+            ),
+            span: (*span).into(),
+        });
+    }
+    let enum_name = candidates[0];
+    if ctx.enum_registry.payload_ty(enum_name, name).is_some() {
+        return Err(MiddleError::UnboundName {
+            name: format!(
+                "{enum_name}::{name} tem payload — use Apply (ex: {enum_name}::{name} valor)"
+            ),
+            span: (*span).into(),
+        });
+    }
+    let tag = ctx.enum_registry.variant_index(enum_name, name).unwrap_or(0);
+    if ctx.enum_registry.is_generic(enum_name) {
+        let type_params = ctx
+            .enum_registry
+            .type_params_of(enum_name)
+            .expect("is_generic true");
+        let type_args: Vec<Ty> = type_params.iter().map(|p| Ty::Var(p.clone())).collect();
+        Ok((
+            Ty::Generic(enum_name.to_string(), type_args),
+            TypedExprKind::VariantQual {
+                enum_name: enum_name.to_string(),
+                variant: name.to_string(),
+                tag,
+            },
+            Effect::Puro,
+        ))
+    } else {
+        Ok((
+            Ty::Sum(enum_name.to_string()),
+            TypedExprKind::VariantQual {
+                enum_name: enum_name.to_string(),
+                variant: name.to_string(),
+                tag,
+            },
+            Effect::Puro,
+        ))
+    }
 }

@@ -138,6 +138,17 @@ impl EnumRegistry {
             .map(|(enum_name, _)| enum_name.as_str())
     }
 
+    /// Busca TODOS os enums que têm uma variante com o nome dado.
+    /// Usado para resolver variantes desqualificadas em posição de expressão:
+    /// se exatamente 1 enum tem a variante, resolve; se múltiplos, ambíguo.
+    pub fn find_enums_with_variant(&self, variant_name: &str) -> Vec<&str> {
+        self.variants
+            .iter()
+            .filter(|(_, vs)| vs.iter().any(|v| v.name == variant_name))
+            .map(|(enum_name, _)| enum_name.as_str())
+            .collect()
+    }
+
     /// Retorna o índice de uma variante no enum (tag do Sum).
     /// `None` se o enum não existe ou a variante não pertence ao enum.
     pub fn variant_index(&self, enum_name: &str, variant: &str) -> Option<usize> {
@@ -228,6 +239,39 @@ mod tests {
         assert_eq!(registry.find_enum_of_variant("True"), Some("Boolean"));
         assert_eq!(registry.find_enum_of_variant("False"), Some("Boolean"));
         assert_eq!(registry.find_enum_of_variant("Maybe"), None);
+    }
+
+    #[test]
+    fn find_enums_with_variant() {
+        let mut registry = EnumRegistry::new();
+        registry.register(
+            "Boolean",
+            vec![
+                VariantInfo { name: "True".into(), payload_ty: None },
+                VariantInfo { name: "False".into(), payload_ty: None },
+            ],
+        );
+        registry.register(
+            "Flag",
+            vec![
+                VariantInfo { name: "True".into(), payload_ty: None },
+                VariantInfo { name: "Off".into(), payload_ty: None },
+            ],
+        );
+
+        // "True" existe em Boolean e Flag → ambíguo
+        let mut enums = registry.find_enums_with_variant("True");
+        enums.sort();
+        assert_eq!(enums, vec!["Boolean", "Flag"]);
+
+        // "False" só em Boolean
+        assert_eq!(registry.find_enums_with_variant("False"), vec!["Boolean"]);
+
+        // "Off" só em Flag
+        assert_eq!(registry.find_enums_with_variant("Off"), vec!["Flag"]);
+
+        // "Maybe" em nenhum
+        assert!(registry.find_enums_with_variant("Maybe").is_empty());
     }
 
     #[test]
