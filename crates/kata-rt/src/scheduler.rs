@@ -13,11 +13,11 @@ use crate::arena::{kata_rt_arena_create, kata_rt_arena_destroy};
 use crate::fiber::{KataFiber, SpawnArgs};
 
 /// Identificador de fiber no scheduler.
-pub type FiberId = u64;
+pub(crate) type FiberId = u64;
 
 /// Razão pela qual um fiber está bloqueado (não usado em Fase 10).
 #[allow(dead_code)]
-pub enum BlockReason {
+pub(crate) enum BlockReason {
     /// Esperando mensagem em canal (Fio 11+).
     WaitingOnChannel,
     /// Esperando outro fiber terminar.
@@ -32,7 +32,7 @@ struct FiberEntry {
 }
 
 /// Scheduler de fibers — coordena execução, arenas e (futuramente) yield.
-pub struct Scheduler {
+pub(crate) struct Scheduler {
     run_queue: VecDeque<FiberId>,
     /// Fibers bloqueados (vazio em Fase 10).
     #[allow(dead_code)]
@@ -44,7 +44,7 @@ pub struct Scheduler {
 
 impl Scheduler {
     /// Cria um scheduler vazio.
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Scheduler {
             run_queue: VecDeque::new(),
             blocked: std::collections::HashMap::new(),
@@ -60,7 +60,7 @@ impl Scheduler {
     /// handle no `SpawnArgs.fiber_arena`, e destrói a arena após `run`.
     ///
     /// Retorna o `FiberId` do fiber criado.
-    pub fn spawn(
+    pub(crate) fn spawn(
         &mut self,
         fn_ptr: i64,
         caller_arena: i64,
@@ -87,7 +87,7 @@ impl Scheduler {
     /// até completar (sem `yield`), retorna `i64`, e o scheduler destrói a arena.
     ///
     /// Retorna o resultado do fiber, ou 0 se a run_queue está vazia.
-    pub fn run(&mut self) -> i64 {
+    pub(crate) fn run(&mut self) -> i64 {
         while let Some(fiber_id) = self.run_queue.pop_front() {
             let Some(entry) = self.fibers.get_mut(&fiber_id) else {
                 continue;
@@ -98,7 +98,10 @@ impl Scheduler {
             self.current_fiber = None;
 
             // Destrói a arena do fiber e remove o fiber do scheduler.
-            let entry = self.fibers.remove(&fiber_id).unwrap();
+            let entry = self
+                .fibers
+                .remove(&fiber_id)
+                .expect("fiber_id must exist in fibers map");
             kata_rt_arena_destroy(entry.fiber.arena_handle);
 
             // Em Fase 10: run_queue sempre vazia após 1 fiber.
@@ -110,7 +113,7 @@ impl Scheduler {
 
     /// Suspende o fiber atual. Não chamado em Fase 10 (sem canais).
     #[allow(dead_code)]
-    pub fn yield_(&mut self) {
+    pub(crate) fn yield_(&mut self) {
         // Implementação real em Fio 11 — precisa de Suspend::suspend.
         // Em Fase 10, yield_ existe para satisfazer DoD 30 mas não é chamado.
     }

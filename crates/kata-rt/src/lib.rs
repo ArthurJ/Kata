@@ -9,11 +9,11 @@
 pub mod arc;
 pub mod arena;
 pub mod bigint;
-pub mod fiber;
+pub(crate) mod fiber;
 pub mod float;
 pub mod io;
 pub mod rational;
-pub mod scheduler;
+pub(crate) mod scheduler;
 pub mod sum;
 pub mod text;
 

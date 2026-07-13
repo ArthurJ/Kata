@@ -4,7 +4,7 @@
 //! Funções que não são do tipo expressão (module, match, clause, pattern)
 //! vivem em submódulos irmãos.
 
-use cranelift_codegen::ir::types::{F64, I64};
+use cranelift_codegen::ir::types::I64;
 use cranelift_codegen::ir::{AbiParam, GlobalValueData, InstBuilder, MemFlagsData, Signature};
 use cranelift_codegen::isa::CallConv;
 use cranelift_module::{Linkage, Module};
@@ -13,6 +13,8 @@ use kata_inference::{TypedExpr, TypedExprKind};
 
 use super::_match::lower_match;
 use super::LowerCtx;
+use super::action_call::lower_action_call;
+use super::closure::lower_closure;
 use crate::ffi_sigs::ty_to_clif;
 use crate::smi::{encode_smi, fits_smi, parse_int_literal};
 
@@ -112,103 +114,7 @@ pub(crate) fn lower_expr(
             callee,
             args,
             ffi_symbol,
-        } => {
-            // Lowera os argumentos.
-            let mut arg_values = Vec::with_capacity(args.len());
-            for arg in args {
-                let val = lower_expr(&arg.node, ctx)?;
-                arg_values.push(val);
-            }
-
-            if let Some(sym_name) = ffi_symbol {
-                // Call FFI direto — FFI nunca é tail call (CallConv::SystemV).
-                let func_ref = ctx
-                    .ffi_refs
-                    .get(sym_name)
-                    .ok_or_else(|| super::CodegenError::FfiSymbolNotFound(sym_name.clone()))?;
-                let call_inst = ctx.builder.ins().call(*func_ref, &arg_values);
-                Ok(ctx.builder.inst_results(call_inst)[0])
-            } else {
-                // ffi_symbol = None: função Kata nomeada ou lambda como valor.
-                // Tenta Kata function call direto primeiro.
-                if let TypedExprKind::Ident { name } = &callee.node.kind {
-                    if let Some(&func_ref) = ctx.kata_refs.get(name) {
-                        // Call direto para função Kata nomeada.
-                        if expr.tail_pos && !ctx.no_tail_calls {
-                            // Tail call: emite return_call (TCO via Cranelift).
-                            ctx.builder.ins().return_call(func_ref, &arg_values);
-                            ctx.emitted_tail_call = true;
-                            // return_call é terminador — não pode adicionar instruções depois.
-                            // Criar block dummy unreachable para satisfazer o builder:
-                            // todo block precisa de um terminador, mesmo que inalcançável.
-                            let dummy = ctx.builder.create_block();
-                            ctx.builder.switch_to_block(dummy);
-                            ctx.builder.seal_block(dummy);
-                            let val = ctx.builder.ins().iconst(I64, 0);
-                            ctx.builder.ins().return_(&[val]);
-                            return Ok(val);
-                        }
-                        let call_inst = ctx.builder.ins().call(func_ref, &arg_values);
-                        return Ok(ctx.builder.inst_results(call_inst)[0]);
-                    }
-                    // Ident não está no kata_refs: pode ser variável com
-                    // Ty::Function (lambda como valor) — call_indirect.
-                    if let Some(var) = ctx.var_map.get(name) {
-                        let func_ptr = ctx.builder.use_var(*var);
-
-                        // Se há captures registradas para esta closure,
-                        // alocar CaptureBox e prefixar box_ptr nos args.
-                        let caps = ctx.closure_captures.get(name).cloned();
-                        let mut call_args = Vec::new();
-                        if let Some(ref captures) = caps
-                            && !captures.is_empty()
-                        {
-                            let box_ptr = alloc_capture_box(func_ptr, captures, ctx)?;
-                            call_args.push(box_ptr);
-                        }
-                        call_args.extend(arg_values.iter().copied());
-
-                        // Constrói a assinatura para call_indirect.
-                        // O tipo do callee é Ty::Function(params, ret).
-                        let callee_ty = &callee.node.ty;
-                        if let Ty::Function(param_types, ret_ty) = callee_ty {
-                            let mut sig = Signature::new(CallConv::Tail);
-                            // Se há captures, box_ptr é o primeiro param da sig.
-                            if caps.as_ref().is_some_and(|c| !c.is_empty()) {
-                                sig.params.push(AbiParam::new(I64));
-                            }
-                            for pt in param_types {
-                                sig.params.push(AbiParam::new(ty_to_clif(pt)));
-                            }
-                            sig.returns.push(AbiParam::new(ty_to_clif(ret_ty)));
-                            let sig_ref = ctx.builder.func.import_signature(sig);
-                            if expr.tail_pos && !ctx.no_tail_calls {
-                                // Tail call indireto: return_call_indirect.
-                                ctx.builder
-                                    .ins()
-                                    .return_call_indirect(sig_ref, func_ptr, &call_args);
-                                ctx.emitted_tail_call = true;
-                                let dummy = ctx.builder.create_block();
-                                ctx.builder.switch_to_block(dummy);
-                                ctx.builder.seal_block(dummy);
-                                let val = ctx.builder.ins().iconst(I64, 0);
-                                ctx.builder.ins().return_(&[val]);
-                                return Ok(val);
-                            }
-                            let call_inst = ctx
-                                .builder
-                                .ins()
-                                .call_indirect(sig_ref, func_ptr, &call_args);
-                            return Ok(ctx.builder.inst_results(call_inst)[0]);
-                        }
-                    }
-                }
-                Err(super::CodegenError::UnsupportedNode(format!(
-                    "Closure sem ffi_symbol e callee não-Ident: {:?}",
-                    callee.node.kind
-                )))
-            }
-        }
+        } => lower_closure(expr, callee, args, ffi_symbol, ctx),
 
         // ── TypeAscription: inspeciona (inner.kind, target_ty) ──
         TypedExprKind::TypeAscription { expr, target_ty } => {
@@ -403,7 +309,7 @@ pub(crate) fn lower_expr(
                 .map_err(|e| super::CodegenError::Cranelift(format!("declare fn {name}: {e}")))?;
 
             // Compila o corpo usando o pipeline compartilhado.
-            super::module::define_function_body(
+            crate::lowering::function_def::define_function_body(
                 &name,
                 param_types,
                 ret_ty,
@@ -446,126 +352,7 @@ pub(crate) fn lower_expr(
             args,
             caller_arena: _,
             ffi_symbol,
-        } => {
-            // Lowera os argumentos (tupla) → args_ptr (ponteiro para a tupla na arena).
-            let args_ptr = lower_expr(&args.node, ctx)?;
-
-            // Despacha: se tem ffi_symbol, é Action builtin FFI (ex: echo, panic).
-            // Builtins NÃO passam pelo scheduler — são calls FFI diretos.
-            if let Some(sym_name) = ffi_symbol {
-                // Extrai elementos da tupla para passar como args individuais ao FFI.
-                let mut ffi_args = Vec::new();
-                match &args.node.kind {
-                    TypedExprKind::Unit => {}
-                    TypedExprKind::Tuple { elements } => {
-                        let flags = MemFlagsData::new();
-                        for (i, _elem) in elements.iter().enumerate() {
-                            let offset = (i * 8) as i32;
-                            let val = ctx.builder.ins().load(I64, flags, args_ptr, offset);
-                            ffi_args.push(val);
-                        }
-                    }
-                    _ => {
-                        ffi_args.push(args_ptr);
-                    }
-                }
-                let func_ref = ctx
-                    .ffi_refs
-                    .get(sym_name)
-                    .ok_or_else(|| super::CodegenError::FfiSymbolNotFound(sym_name.clone()))?;
-                let call_inst = ctx.builder.ins().call(*func_ref, &ffi_args);
-                if let Some(ret) = ctx.builder.inst_results(call_inst).first() {
-                    Ok(*ret)
-                } else {
-                    Ok(ctx.builder.ins().iconst(I64, 0))
-                }
-            } else if let Some(&func_ref) = ctx.kata_refs.get(callee) {
-                // Action definida pelo usuário.
-                // ABI uniforme: (fiber_arena, caller_arena, args_ptr) -> i64.
-
-                // caller_arena decidido por tail_pos:
-                // - tail_pos = true: ctx.caller_arena (sobrevive à destruição do fiber)
-                // - tail_pos = false: ctx.fiber_arena (arena local do fiber)
-                let caller_arena_val = if expr.tail_pos {
-                    ctx.caller_arena
-                        .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0))
-                } else {
-                    ctx.fiber_arena
-                        .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0))
-                };
-
-                if ctx.scheduler_mode {
-                    // Entry point: spawn + run (scheduler cria fiber + arena).
-                    // 1. Obter fn_ptr via GlobalValue::Symbol.
-                    let callee_fid = ctx.kata_ids.get(callee).ok_or_else(|| {
-                        super::CodegenError::UnsupportedNode(format!(
-                            "ActionCall: callee `{callee}` não encontrado em kata_ids"
-                        ))
-                    })?;
-                    let func_ref2 = ctx
-                        .module
-                        .declare_func_in_func(*callee_fid, ctx.builder.func);
-                    let ext_func_name = ctx.builder.func.dfg.ext_funcs[func_ref2].name.clone();
-                    let func_gv = ctx.builder.func.create_global_value(
-                        cranelift_codegen::ir::GlobalValueData::Symbol {
-                            name: ext_func_name,
-                            offset: 0.into(),
-                            colocated: true,
-                            tls: false,
-                        },
-                    );
-                    let fn_ptr = ctx
-                        .builder
-                        .ins()
-                        .global_value(ctx.module.target_config().pointer_type(), func_gv);
-
-                    // 2. spawn(fn_ptr, caller_arena, args_ptr) → fiber_id
-                    let spawn_ref =
-                        ctx.ffi_refs.get("kata_rt_spawn").copied().ok_or_else(|| {
-                            super::CodegenError::FfiSymbolNotFound("kata_rt_spawn".into())
-                        })?;
-                    let spawn_inst = ctx
-                        .builder
-                        .ins()
-                        .call(spawn_ref, &[fn_ptr, caller_arena_val, args_ptr]);
-                    let _fiber_id = ctx.builder.inst_results(spawn_inst)[0];
-
-                    // 3. run() → result (i64)
-                    let run_ref = ctx.ffi_refs.get("kata_rt_run").copied().ok_or_else(|| {
-                        super::CodegenError::FfiSymbolNotFound("kata_rt_run".into())
-                    })?;
-                    let run_inst = ctx.builder.ins().call(run_ref, &[]);
-                    let result = ctx.builder.inst_results(run_inst)[0];
-
-                    // 4. Se ret_ty == Float: bitcast(F64 ← I64)
-                    if expr.ty == Ty::float() {
-                        Ok(ctx.builder.ins().bitcast(F64, MemFlagsData::new(), result))
-                    } else {
-                        Ok(result)
-                    }
-                } else {
-                    // Dentro de Action: call direto (mesmo fiber, mesmo stack).
-                    // arg_values = [fiber_arena, caller_arena, args_ptr]
-                    let fiber_arena_val = ctx
-                        .fiber_arena
-                        .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
-                    let arg_values = [fiber_arena_val, caller_arena_val, args_ptr];
-                    let call_inst = ctx.builder.ins().call(func_ref, &arg_values);
-                    let result = ctx.builder.inst_results(call_inst)[0];
-
-                    // Se ret_ty == Float: bitcast(F64 ← I64)
-                    if expr.ty == Ty::float() {
-                        Ok(ctx.builder.ins().bitcast(F64, MemFlagsData::new(), result))
-                    } else {
-                        Ok(result)
-                    }
-                }
-            } else {
-                Err(super::CodegenError::UnsupportedNode(format!(
-                    "ActionCall: callee `{callee}` não encontrado"
-                )))
-            }
-        }
+        } => lower_action_call(expr, callee, args, ffi_symbol, ctx),
         // ── Fio 3: Var — mesmo codegen que Let ──
         TypedExprKind::Var { name, value } => {
             let val = lower_expr(&value.node, ctx)?;
@@ -677,61 +464,4 @@ pub(crate) fn lower_expr(
             Ok(unit)
         }
     }
-}
-
-/// Aloca um CaptureBox na arena global e retorna o ponteiro.
-///
-/// 1. Aloca um array temporário de `n_captures * 8` bytes na arena global.
-/// 2. Preenche o array com os valores das captures (lidos do var_map).
-/// 3. Chama `kata_rt_alloc_arc(fn_ptr, array_ptr, n_captures)` → `box_ptr`.
-///
-/// O CaptureBox contém: fn_ptr (offset 0), refcount=1 (offset 8),
-/// captures[0..n] (offset 16+).
-fn alloc_capture_box(
-    func_ptr: cranelift_codegen::ir::Value,
-    captures: &[kata_inference::CaptureInfo],
-    ctx: &mut LowerCtx,
-) -> Result<cranelift_codegen::ir::Value, super::CodegenError> {
-    let n = captures.len() as i64;
-    let flags = cranelift_codegen::ir::MemFlagsData::new();
-
-    // 1. Aloca array temporário na arena global (handle 0).
-    let arena_alloc_ref = ctx
-        .ffi_refs
-        .get("kata_rt_arena_alloc")
-        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound("kata_rt_arena_alloc".into()))?;
-    let global_arena = ctx.builder.ins().iconst(I64, 0);
-    let array_size = ctx.builder.ins().iconst(I64, n * 8);
-    let alloc_inst = ctx
-        .builder
-        .ins()
-        .call(*arena_alloc_ref, &[global_arena, array_size]);
-    let array_ptr = ctx.builder.inst_results(alloc_inst)[0];
-
-    // 2. Preenche o array com os valores das captures.
-    for (i, cap) in captures.iter().enumerate() {
-        let cap_var = ctx.var_map.get(&cap.name).ok_or_else(|| {
-            super::CodegenError::UnsupportedNode(format!(
-                "capture '{}' não encontrada no var_map",
-                cap.name
-            ))
-        })?;
-        let cap_val = ctx.builder.use_var(*cap_var);
-        let offset = (i * 8) as i32;
-        ctx.builder.ins().store(flags, cap_val, array_ptr, offset);
-    }
-
-    // 3. Chama kata_rt_alloc_arc(fn_ptr, array_ptr, n_captures) → box_ptr.
-    let alloc_arc_ref = ctx
-        .ffi_refs
-        .get("kata_rt_alloc_arc")
-        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound("kata_rt_alloc_arc".into()))?;
-    let n_val = ctx.builder.ins().iconst(I64, n);
-    let arc_inst = ctx
-        .builder
-        .ins()
-        .call(*alloc_arc_ref, &[func_ptr, array_ptr, n_val]);
-    let box_ptr = ctx.builder.inst_results(arc_inst)[0];
-
-    Ok(box_ptr)
 }

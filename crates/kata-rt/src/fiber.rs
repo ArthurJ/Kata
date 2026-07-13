@@ -19,15 +19,15 @@ const FIBER_STACK_SIZE: usize = 1024 * 1024; // 1 MB
 /// `#[repr(C)]` garante layout determinístico para a fronteira FFI.
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct SpawnArgs {
+pub(crate) struct SpawnArgs {
     /// Ponteiro da função JIT a executar (transmutado para `extern "C" fn`).
-    pub fn_ptr: i64,
+    pub(crate) fn_ptr: i64,
     /// Arena do caller — onde alocar valores de retorno (sobrevivem ao fiber).
-    pub caller_arena: i64,
+    pub(crate) caller_arena: i64,
     /// Ponteiro para a tupla de argumentos (0 se Unit).
-    pub args_ptr: i64,
+    pub(crate) args_ptr: i64,
     /// Arena do fiber — criada pelo scheduler, destruída após o fiber retornar.
-    pub fiber_arena: i64,
+    pub(crate) fiber_arena: i64,
 }
 
 /// Trampoline genérico: recebe `SpawnArgs` e chama a função JIT.
@@ -40,10 +40,10 @@ fn trampoline(args: SpawnArgs, _suspend: &mut wasmtime_fiber::Suspend<SpawnArgs,
 }
 
 /// Um fiber Kata com sua arena associada.
-pub struct KataFiber {
+pub(crate) struct KataFiber {
     fiber: Fiber<'static, SpawnArgs, (), i64>,
     /// Handle da arena do fiber — destruída quando o fiber termina.
-    pub arena_handle: i64,
+    pub(crate) arena_handle: i64,
 }
 
 impl KataFiber {
@@ -51,7 +51,7 @@ impl KataFiber {
     ///
     /// O caller é responsável por criar a arena (`kata_rt_arena_create`) e
     /// passar o handle aqui. A arena é destruída pelo scheduler após `resume`.
-    pub fn new(arena_handle: i64) -> Result<Self, String> {
+    pub(crate) fn new(arena_handle: i64) -> Result<Self, String> {
         let stack = FiberStack::new(FIBER_STACK_SIZE, false)
             .map_err(|e| format!("failed to create fiber stack: {e}"))?;
         let fiber =
@@ -67,12 +67,13 @@ impl KataFiber {
     /// Retorna `Ok(i64)` se o fiber completou, `Err(())` se suspendeu.
     /// Em Fase 10, `yield` não é usado — o fiber sempre completa em 1 `resume`.
     #[allow(clippy::result_unit_err)] // () representa "suspended", não erro
-    pub fn resume(&self, args: SpawnArgs) -> Result<i64, ()> {
+    pub(crate) fn resume(&self, args: SpawnArgs) -> Result<i64, ()> {
         self.fiber.resume(args)
     }
 
     /// Retorna `true` se o fiber já completou.
-    pub fn done(&self) -> bool {
+    #[allow(dead_code)] // não chamado em Fase 10 — usado em Fio 11 (yield/spawn)
+    pub(crate) fn done(&self) -> bool {
         self.fiber.done()
     }
 }

@@ -40,7 +40,8 @@ pub unsafe extern "C" fn kata_rt_string_len(s: *const std::os::raw::c_char) -> i
 
 /// Cria string literal a partir de texto (para codegen de TextLit).
 pub fn text_literal(s: &str) -> CString {
-    CString::new(s).unwrap_or_else(|_| CString::new("").unwrap())
+    CString::new(s)
+        .unwrap_or_else(|_| CString::new("").expect("empty string never contains nul bytes"))
 }
 
 /// Converte Int (i64 tagged) para String.
@@ -94,7 +95,9 @@ pub unsafe extern "C" fn kata_rt_text_literal(
     };
     let text = std::str::from_utf8(bytes).unwrap_or("");
     std::ffi::CString::new(text)
-        .unwrap_or_else(|_| std::ffi::CString::new("").unwrap())
+        .unwrap_or_else(|_| {
+            std::ffi::CString::new("").expect("empty string never contains nul bytes")
+        })
         .into_raw()
 }
 
@@ -109,7 +112,9 @@ pub unsafe extern "C" fn kata_rt_text_literal(
 pub unsafe extern "C" fn kata_rt_bool_to_text(val: i64) -> *mut std::os::raw::c_char {
     let s = bool_to_text(val);
     std::ffi::CString::new(s)
-        .unwrap_or_else(|_| std::ffi::CString::new("").unwrap())
+        .unwrap_or_else(|_| {
+            std::ffi::CString::new("").expect("empty string never contains nul bytes")
+        })
         .into_raw()
 }
 
@@ -146,6 +151,8 @@ pub unsafe extern "C" fn kata_rt_text_replace_first(
     };
     let result = text_replace_first(&template, &replacement);
     std::ffi::CString::new(result)
-        .unwrap_or_else(|_| std::ffi::CString::new("").unwrap())
+        .unwrap_or_else(|_| {
+            std::ffi::CString::new("").expect("empty string never contains nul bytes")
+        })
         .into_raw()
 }

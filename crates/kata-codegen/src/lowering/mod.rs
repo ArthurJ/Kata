@@ -15,8 +15,12 @@
 //! aqui no `mod.rs` e são importados pelos submódulos via `super::`.
 
 mod _match;
+mod action_call;
+mod action_def;
 mod clause;
+mod closure;
 mod expr;
+mod function_def;
 mod jit;
 mod module;
 mod pattern;
