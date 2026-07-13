@@ -279,13 +279,15 @@ passa `caller_arena` em tail_pos, `local_arena` em `;`. Fase 4 ✅
 (panic!, assert!, 4 testes E2E). Fase 10 ✅
 (fibers, scheduler, 8 testes E2E). Fase 11 ✅
 **(proibição de recursão em Actions, 8 testes E2E). **Fase 12 ✅**
-(closures com captura, wrapper-only, 10 testes E2E). **Fase 13
+**(closures com captura, wrapper-only, 10 testes E2E). **Fase 13
 ELIMINADA** (escape analysis cancelada — wrapper-only: toda closure
 com captures aloca CaptureBox via `kata_rt_alloc_arc`). **Fase 14 ✅**
 (Arc<T>: `alloc_arc`/`incref`/`decref` + testes E2E avançados —
 closure aninhada, closure em tupla, closure com Float, 500 testes).
-**Fases 15-16 PENDENTES**
-(ARC pass completo, TRMA — não-stub, sessão separada).
+**Fase 15 TRANSFERIDA** para o Pré-11 (ARC pass depende de EscapeTarget
+e árvore hierárquica de arenas). **Fase 16 ✅** (TRMA pass —
+`@associative(0)` em `+` habilita reescrita com acumulador, 5 testes E2E,
+505 testes no workspace).
 
 **Maquinaria de tipos construída:**
 - `effect: Effect` ganha `IO` (Actions têm efeito IO)

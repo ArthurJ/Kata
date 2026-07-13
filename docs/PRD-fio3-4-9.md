@@ -1243,12 +1243,12 @@ não por fio. Cada fase depende apenas das anteriores.
 > o estado atual: refcount escrito mas sem efeito prático (bumpalo não
 > suporta free individual). DoD #39 movido para o Pré-11.
 
-### Fase 16 — TRMA
+### Fase 16 — TRMA ✅
 
 40. `@associative(0)` em `+` habilita TRMA. `soma 1000000` executa sem stack
     overflow — sem TRMA, este valor causa stack overflow; com TRMA, executa
-    normalmente via recursão de cauda com acumulador.
-41. TRMA só funciona com auto-recursão direta. Recursão mútua não é otimizada.
+    normalmente via recursão de cauda com acumulador. ✅
+41. TRMA só funciona com auto-recursão direta. Recursão mútua não é otimizada. ✅
 
 ### Geral
 
