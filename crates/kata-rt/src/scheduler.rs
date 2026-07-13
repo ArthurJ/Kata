@@ -105,10 +105,10 @@ impl Scheduler {
             },
         );
         // Registrar este fiber como filho do pai.
-        if let Some(pid) = parent_id {
-            if let Some(parent) = self.fibers.get_mut(&pid) {
-                parent.children.push(id);
-            }
+        if let Some(pid) = parent_id
+            && let Some(parent) = self.fibers.get_mut(&pid)
+        {
+            parent.children.push(id);
         }
         self.run_queue.push_back(id);
         Ok(id)

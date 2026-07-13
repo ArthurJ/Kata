@@ -107,7 +107,8 @@ impl DispatchTable {
     }
 
     /// Registra uma função FFI (conveniência).
-    pub fn insert_ffi(
+    #[allow(dead_code)]
+    pub(crate) fn insert_ffi(
         &mut self,
         name: &str,
         params: Vec<Ty>,
@@ -347,7 +348,8 @@ impl DispatchTable {
     }
 
     /// Itera sobre todas as entradas (para debug/inspeção).
-    pub fn iter_entries(&self) -> impl Iterator<Item = (&String, &Vec<OverloadInfo>)> {
+    #[allow(dead_code)]
+    pub(crate) fn iter_entries(&self) -> impl Iterator<Item = (&String, &Vec<OverloadInfo>)> {
         self.entries.iter()
     }
 }

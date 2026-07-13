@@ -167,7 +167,8 @@ impl EnumRegistry {
     }
 
     /// Retorna informações completas de uma variante.
-    pub fn variant_info(&self, enum_name: &str, variant: &str) -> Option<&VariantInfo> {
+    #[allow(dead_code)]
+    pub(crate) fn variant_info(&self, enum_name: &str, variant: &str) -> Option<&VariantInfo> {
         self.variants
             .get(enum_name)
             .and_then(|vs| vs.iter().find(|v| v.name == variant))

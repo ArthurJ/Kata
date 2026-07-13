@@ -113,14 +113,9 @@ pub(crate) fn lower_closure(
                     // de usar). Não libera memória (bumpalo), mas registra
                     // o padrão correto para GC futuro.
                     if let Some(bp) = box_ptr {
-                        let decref_ref = ctx
-                            .ffi_refs
-                            .get("kata_rt_decref")
-                            .copied()
-                            .ok_or_else(|| {
-                                super::CodegenError::FfiSymbolNotFound(
-                                    "kata_rt_decref".into(),
-                                )
+                        let decref_ref =
+                            ctx.ffi_refs.get("kata_rt_decref").copied().ok_or_else(|| {
+                                super::CodegenError::FfiSymbolNotFound("kata_rt_decref".into())
                             })?;
                         ctx.builder.ins().call(decref_ref, &[bp]);
                     }

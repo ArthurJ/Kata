@@ -10,7 +10,7 @@ use kata_core::ty::Ty;
 use kata_lexer::lex;
 use kata_optimizer::optimize;
 use kata_parser::parse;
-use kata_resolution::{load_prelude, resolve, ResolvedModule};
+use kata_resolution::{ResolvedModule, load_prelude, resolve};
 
 /// Executa o pipeline completo e retorna o valor bruto do JIT + tipo.
 fn eval_src(src: &str) -> (i64, Ty) {

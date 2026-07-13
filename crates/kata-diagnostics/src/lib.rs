@@ -8,8 +8,8 @@
 //! sem códigos numéricos.
 
 pub(crate) mod backend;
-pub mod frontend;
-pub mod middleend;
+pub(crate) mod frontend;
+pub(crate) mod middleend;
 
 pub use frontend::{FrontendError, MietteSpan};
 pub use middleend::MiddleError;

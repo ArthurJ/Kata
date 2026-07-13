@@ -11,15 +11,14 @@
 //! - [`Score`] — score 4D (exact, alias, refined, iface) para seleção
 
 pub mod dispatch;
-pub mod escape;
 pub mod enum_registry;
+pub mod escape;
 pub mod ffi;
-pub mod shape;
+pub(crate) mod shape; // TypeShape/TypeId — zero consumidores cross-crate
 pub mod ty;
 
 pub use dispatch::{DispatchError, DispatchTable, OverloadInfo, PartialDispatchResult, Score};
-pub use escape::EscapeTarget;
 pub use enum_registry::{EnumRegistry, VariantInfo};
+pub use escape::EscapeTarget;
 pub use ffi::FfiSymbol;
-pub use shape::{TypeId, TypeShape};
 pub use ty::{PrimTy, Ty, TypeEnv};

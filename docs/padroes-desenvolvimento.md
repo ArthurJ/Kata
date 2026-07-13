@@ -4,8 +4,13 @@
 
 ### Limite de Linhas por Arquivo
 
-- **499 linhas por arquivo de código (produção ou teste).** Arquivos que atingem
-  ou ultrapassam esse limite devem ser divididos em módulos menores. Aplica-se a
+- **Soft limit: 450 linhas.** Arquivos acima de 450 linhas são candidatos à
+  análise de split. A decisão é por responsabilidade, não por tamanho — uma
+  arquivo coeso com responsabilidade única não deve ser splitado.
+- **Hard limit: 500 linhas.** Arquivos acima de 500 linhas excedem a capacidade
+  de leitura num único passo. Split é esperado (governado por responsabilidade)
+  ou escalado para Kanban se o arquivo for coeso e o split exigir refactor de
+  design. Aplica-se a
   `.rs`, `.kata` de exemplo, e documentação longa.
 
 ### Testes Unitários

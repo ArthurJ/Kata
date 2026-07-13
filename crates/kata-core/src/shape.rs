@@ -4,6 +4,9 @@
 //! O codegen emite `register_type(ptr, type_id)` após cada `alloc_arc`,
 //! permitindo que `typeof` e `pretty_print` funcionem em runtime.
 //!
+//! Scaffolding para fios futuros (reflexão runtime, debugger).
+#![allow(dead_code)]
+//!
 //! `type_id: u32` — identificador atribuído em compile-time para cada
 //! `Ty` distinto no módulo. Serve de chave para a type table do runtime.
 
@@ -15,7 +18,7 @@ use crate::ty::Ty;
 /// Por isso a type table é registrada Rust-to-Rust pelo driver, não
 /// serializada através da fronteira C-ABI (manual §maquinaria-interna).
 #[derive(Debug, Clone, PartialEq)]
-pub enum TypeShape {
+pub(crate) enum TypeShape {
     /// Tipos primitivos (Int, Float, Text, Rational).
     Prim,
     /// Unit (zero-sized).
@@ -44,7 +47,7 @@ impl TypeShape {
     ///
     /// Text, Rational, Struct, Sum, Tuple são heap types.
     /// Int, Float, Unit não são.
-    pub fn is_heap_type(&self) -> bool {
+    pub(crate) fn is_heap_type(&self) -> bool {
         match self {
             TypeShape::Prim => false, // Int e Float são i64/f64 inline
             TypeShape::Unit => false,
@@ -58,7 +61,7 @@ impl TypeShape {
 
 impl Ty {
     /// Projeta `Ty` para `TypeShape` (descarta InferVar → Unit).
-    pub fn to_shape(&self) -> TypeShape {
+    pub(crate) fn to_shape(&self) -> TypeShape {
         match self {
             Ty::Prim(_) => TypeShape::Prim,
             Ty::Unit => TypeShape::Unit,
@@ -92,4 +95,4 @@ impl Ty {
 
 /// Identificador de tipo — u32 atribuído em compile-time para cada
 /// `Ty` distinto no módulo.
-pub type TypeId = u32;
+pub(crate) type TypeId = u32;
