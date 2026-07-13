@@ -175,7 +175,11 @@ pub(crate) fn infer_apply(
     let candidates = ctx.enum_registry.find_enums_with_variant(&func_name);
     if candidates.len() == 1 {
         let enum_name = candidates[0];
-        if ctx.enum_registry.payload_ty(enum_name, &func_name).is_some() {
+        if ctx
+            .enum_registry
+            .payload_ty(enum_name, &func_name)
+            .is_some()
+        {
             return infer_variant_construct(enum_name, &func_name, args, span, env, ctx);
         }
     }

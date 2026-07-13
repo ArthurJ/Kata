@@ -247,15 +247,27 @@ mod tests {
         registry.register(
             "Boolean",
             vec![
-                VariantInfo { name: "True".into(), payload_ty: None },
-                VariantInfo { name: "False".into(), payload_ty: None },
+                VariantInfo {
+                    name: "True".into(),
+                    payload_ty: None,
+                },
+                VariantInfo {
+                    name: "False".into(),
+                    payload_ty: None,
+                },
             ],
         );
         registry.register(
             "Flag",
             vec![
-                VariantInfo { name: "True".into(), payload_ty: None },
-                VariantInfo { name: "Off".into(), payload_ty: None },
+                VariantInfo {
+                    name: "True".into(),
+                    payload_ty: None,
+                },
+                VariantInfo {
+                    name: "Off".into(),
+                    payload_ty: None,
+                },
             ],
         );
 
