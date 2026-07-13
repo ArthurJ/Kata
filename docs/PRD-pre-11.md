@@ -339,11 +339,97 @@ O que **permanece** no PRD dos Fios 3+4+9:
 - **Fase 16** (TRMA) — ortogonal, não depende de escape analysis nem ARC
 
 O Pré-11 **consome** a infraestrutura já entregue e a estende:
-- `EscapeTarget` substitui `tail_pos: bool` (e o `EscapeKind` que nunca
-  chegou a ser implementado)
+- `EscapeTarget` **coexiste** com `tail_pos: bool` (ver § Decisão de Design
+  abaixo) — `tail_pos` governa TCO (fluxo de controle), `escape` governa
+  arena selection (memória)
 - O ARC pass passa a ser **emitido** pelo codegen (hoje não é)
-- A arena de alocação do CaptureBox deixa de ser hardcoded para handle 0
+- A arena de alocação do CaptureBox e Sum results deixa de ser hardcoded
+  para handle 0
 - A arena raiz ganha destruction point no fim do scheduler run
+
+### Decisão de design: EscapeTarget coexiste com tail_pos
+
+`tail_pos: bool` serve dois propósitos hoje:
+1. **Arena selection** (`expr.rs`, `action_call.rs`): `if tail_pos { caller_arena } else { fiber_arena }`
+2. **TCO decision** (`closure.rs`): `if tail_pos && !no_tail_calls { return_call } else { call }`
+
+`EscapeTarget` generaliza o propósito 1 (para onde o valor escapa). Mas o
+propósito 2 (é a última expressão?) é sobre fluxo de controle, não memória.
+São correlacionados mas não idênticos:
+
+- Tupla em tail_pos numa função pura: `EscapeTarget::Ancestor(0)` (raiz),
+  mas `tail_pos = true` para TCO.
+- CaptureBox que escapa para o caller mas não está em tail_pos:
+  `EscapeTarget::Caller`, `tail_pos = false`.
+
+**Decisão:** `tail_pos: bool` permanece. `escape: EscapeTarget` é adicionado.
+O typeck seta ambos.
+
+### Fases de implementação
+
+#### Fase 1: `EscapeTarget` em kata-core
+
+- Criar `enum EscapeTarget { Local, Caller, Ancestor(u32) }` em
+  `crates/kata-core/src/escape.rs`
+- Adicionar campo `escape: EscapeTarget` em `Spanned<TypedExpr>` (coexiste
+  com `tail_pos: bool`)
+- Cascata: adicionar `escape` em todos os sites de construção de `TypedExpr`
+  no kata-inference (~20-28 sites). Default por heurística:
+  - `tail_pos: true` em Action → `EscapeTarget::Caller`
+  - `tail_pos: false` em Action → `EscapeTarget::Local`
+  - Entry point / função pura → `EscapeTarget::Ancestor(0)`
+
+#### Fase 2: Typeck produz EscapeTarget correto
+
+- Verificar e refinar os defaults da Fase 1 para edge cases
+- Pré-Fio 11 (sem canais), os únicos casos são:
+  - Retorno de Action → `Caller`
+  - Computação local em Action → `Local`
+  - Função pura / entry point → `Ancestor(0)` (raiz)
+
+#### Fase 3: Scheduler rastreia árvore de fibers
+
+- Estender `FiberEntry` com `parent_id: Option<FiberId>`,
+  `children: Vec<FiberId>`, `completed: bool`
+- `spawn` registra fiber atual como pai do novo fiber
+- `run` marca `completed = true` e tenta destruir (bottom-up):
+  - Fiber só é destruído quando `completed && children.is_empty()`
+  - Propagação recursiva: ao destruir filho, remover da lista do pai e
+    verificar se o pai pode ser destruído
+- Arena raiz criada em `scheduler_init` (não mais no prólogo do
+  `__kata_entry`), destruída quando o fiber raiz é destruído
+- `kata_rt_scheduler_init` retorna o handle da arena raiz (antes retornava 1)
+
+#### Fase 4: Codegen usa EscapeTarget e arena raiz
+
+- Entry point (`module.rs`) recebe arena raiz do `scheduler_init` como
+  `caller_arena` (não cria própria via `arena_create`)
+- `expr.rs` (tuple/sum alloc): substituir `if tail_pos { caller_arena } else
+  { fiber_arena }` por `match expr.escape { Local => fiber_arena, Caller |
+  Ancestor(_) => caller_arena }`
+- `action_call.rs`: mesmo switch em `escape` para `caller_arena_val`
+- FFI signatures mudam:
+  - `kata_rt_store_sum_result(tag, payload, arena_handle)` — era
+    `kata_rt_store_sum_result(tag, payload)` com handle 0 hardcoded
+  - `kata_rt_alloc_arc(fn_ptr, captures_ptr, n_captures, arena_handle)` — era
+    `kata_rt_alloc_arc(fn_ptr, captures_ptr, n_captures)` com handle 0 hardcoded
+- `alloc_capture_box` em `closure.rs` usa arena de escape (não global)
+
+#### Fase 5: ARC pass emitido
+
+- Codegen emite `kata_rt_decref(box_ptr)` após `call_indirect` de CaptureBox
+- `incref`/`decref` não liberam memória (bumpalo não suporta free individual),
+  mas registram o padrão correto para GC futuro
+- Não emitir `decref` em tail calls (`return_call`/`return_call_indirect`) —
+  o caller não retém a referência após return
+
+#### Fase 6: Testes E2E
+
+- Tupla em função pura: executa sem crash, ptr != 0
+- Closure com captura em função pura: executa, resultado correto
+- Sum result em função pura: executa sem crash, ptr != 0
+- Action com tupla local: executa, ptr != 0
+- Arena raiz destruída após scheduler run (verificação indireta)
 
 ## DoD
 
