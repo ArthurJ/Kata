@@ -31,8 +31,10 @@ O Fio 2 já deixou infraestrutura pronta para estes fios:
 - **`Ty::Tuple(Vec<Ty>)`** já existe (antecipado de Fio 5 em Fio 2). Sem field
   access, sem `.N` — só tipo estrutural para patterns.
 - **`TypedExprKind::Closure`** já existe com `captures: Vec<CaptureInfo>` (sempre
-  vazio em Fio 2) e `escapes: bool` (sempre `false` em Fio 2). Fio 9 promove
-  `escapes: bool` para `escape: EscapeKind` (definido em kata-core, 3 estados).
+  vazio em Fio 2) e `escapes: bool` (sempre `false` em Fio 2). O Pré-11
+  promove `escapes: bool` para `escape: EscapeTarget` (definido em kata-core,
+  com destino: `Local`, `Caller`, `Ancestor(n)`). `EscapeKind` (3 estados,
+  sem destino) foi substituído por `EscapeTarget` antes de ser implementado.
 - **`CaptureInfo`** e **`CaptureStorage`** (Stack/Heap) já existem como structs
   placeholder em `typed.rs`. Fio 9 preenche.
 - **`Effect`** já tem `Puro`, `IO`, `Spawn`, `ChannelOp`. Fio 2 só produz `Puro`.
@@ -443,11 +445,12 @@ Cada Action corre numa fiber. A fiber é a unidade de escalonamento.
 ## Crates Afetadas
 
 ```
-kata-core/           Novo: EscapeKind (3 estados), CaptureInfo preenchida,
+kata-core/           Novo: EscapeTarget (Pré-11, substitui EscapeKind),
+                     CaptureInfo preenchida,
                      FfiSymbol estendido (StoreSumResult, SumTagInt, AllocArc,
                      IncRef, DecRef, FiberCreate, FiberYield, FiberSwitch, Panic)
                      Modificado: OverloadInfo.is_action já existe (usado agora),
-                     TypedExprKind::Closure: escapes: bool → escape: EscapeKind
+                     TypedExprKind::Closure: escapes: bool → escape: EscapeTarget
 kata-ast/           Novos: Expr::ActionCall, Expr::Return, Expr::Loop,
                     Expr::Break, Expr::Continue, Expr::Var, Expr::Question,
                     Expr::PipeFallback, Item::ActionDecl, ActionClause struct
@@ -489,13 +492,13 @@ kata-codegen/       Novo: lower_action, lower_return, lower_loop,
                     test_single_pattern (Variant com payload), LowerCtx
                     (caller_arena, local_arena handles), define_function_body
                     (ABI de Actions: +1 param implícito)
-                    Novo módulo: escape.rs (ARC pass via MetadataTable)
+                    Novo módulo: escape.rs (ARC pass via MetadataTable — transferido para Pré-11)
                     (lower_for adiada para Fio 7+8)
 kata-optimizer/    Novo: TRMA pass (Fase 16) — @associative detecta auto-recursão
                      direta com operador associativo e transforma em loop com
                      acumulador. Ortogonal a Actions/Sum/closures.
-                     Modificado: ARC pass (Fase 15) consulta MetadataTable para
-                     inserir incref/decref.
+                     Modificado: ARC pass (Fase 15) transferido para Pré-11.
+                     kata-optimizer só mantém TRMA (Fase 16).
 kata-rt/            Novo: kata_rt_store_sum_result, kata_rt_sum_tag_int,
                     kata_rt_alloc_arc, kata_rt_incref, kata_rt_decref,
                     kata_rt_panic, fiber integration (wasmtime-fiber),
@@ -601,23 +604,18 @@ Variante predicada (com guard no payload) é adiada para Fio 6.
 
 ### kata-core
 
-#### `EscapeKind`
+#### `EscapeKind` (wrapper-only — substituído por `EscapeTarget` no Pré-11)
 
-Definido em kata-core (não em kata-inference) para que `TypedExprKind` possa
-referenciá-lo sem dependência circular. 3 estados:
-
-```rust
-/// Resultado da escape analysis (Fio 9).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EscapeKind {
-    /// A closure não escapa — captures na arena local, O(1).
-    NãoEscapa,
-    /// A closure escapa para heap — captures promovidas para Arc<T>.
-    EscapaParaHeap,
-    /// A closure escapa para outra closure — captures em closure aninhada.
-    EscapaParaClosure,
-}
-```
+> **Estado atual:** `EscapeKind` não existe no código. A Fase 13 (escape
+> analysis) foi eliminada por decisão de design — wrapper-only: toda
+> closure com captures aloca CaptureBox na arena global via
+> `kata_rt_alloc_arc`, sem análise de escape.
+>
+> **Futuro (Pré-11):** `EscapeKind` é substituído por `EscapeTarget`,
+> definido no Pré-11, que classifica não apenas *se* um valor escapa
+> mas *para onde* — `Local`, `Caller`, ou `Ancestor(n)`. Isso é
+> necessário para a árvore hierárquica de arenas. Ver
+> `docs/PRD-pre-11.md`.
 
 #### `FfiSymbol` — novos símbolos
 
@@ -736,9 +734,10 @@ pub struct TypedFunction {
     pub param_types: Vec<Ty>,
     pub ret_ty: Ty,
     pub clauses: Vec<TypedLambdaClause>,
-    /// Resultado da escape analysis (Fio 9).
-    /// NãoEscapa por padrão. Preenchido pelos 4 passes.
-    pub escape: EscapeKind,
+    /// Escape target (Pré-11). Substitui `EscapeKind` — classifica
+    /// não apenas se escapa, mas para onde. `Local` por padrão.
+    /// Ver `docs/PRD-pre-11.md`.
+    pub escape: EscapeTarget,
     /// Captures coletadas (Fio 9). Vazio se não há captura.
     pub captures: Vec<CaptureInfo>,
 }
@@ -816,24 +815,17 @@ O desugar é no typeck — a TAST contém `Match` + `Return`.
 
 O desugar é no typeck — a TAST contém `Match`.
 
-#### Escape analysis (4 passes)
+#### Escape analysis (transferida para Pré-11)
 
-**Pass 0 — Closures em retorno de funções puras:**
-Percorre a TAST. Se uma `TypedExprKind::Lambda` aparece em posição de retorno de
-uma função pura, marca `escape = EscapaParaHeap`.
-
-**Pass 1 — Inspeção sintática:**
-Procura por patterns que indicam escape: `Send` (canal, Fio 11 — stub),
-`Fork` (fork!, Fio 11 — stub), `ListLit` (lista contém closure), `ActionCall`
-(closure passada como argumento para Action). Marca `escape` apropriadamente.
-
-**Pass 2 — Propagação de aliases:**
-Se `let f := g` e `g` tem `escape = EscapaParaHeap`, então `f` também tem.
-Propaga por aliases.
-
-**Pass 3 — Promoção Stack → Heap:**
-Para cada `CaptureInfo` com `storage = Stack`, se a closure que a contém tem
-`escape != NãoEscapa`, promove para `Heap`.
+> A escape analysis (4 passes) foi projetada para classificar *se* uma
+> closure escapa. O Pré-11 reintroduz escape analysis com semântica
+> estendida: classificar *para onde* o valor escapa (`EscapeTarget`:
+> `Local`, `Caller`, `Ancestor(n)`), para suportar a árvore hierárquica
+> de arenas. Os 4 passes originais são reformulados no Pré-11 com base
+> em `EscapeTarget`. Ver `docs/PRD-pre-11.md`.
+>
+> **Estado atual:** sem escape analysis. Wrapper-only: toda closure com
+> captures aloca CaptureBox na arena global (handle 0).
 
 #### `collect_captures`
 
@@ -845,18 +837,21 @@ ser promovido para Heap no Pass 3).
 
 #### Lower Action
 
-Cada Action vira uma função Cranelift separada com ABI estendido:
+Cada Action vira uma função Cranelift separada com ABI uniforme:
 
 ```
-fn action_name(caller_arena: i64, arg1: ty1, arg2: ty2, ...) -> ret_ty
+fn action_name(fiber_arena: i64, caller_arena: i64, args_ptr: i64) -> i64
 ```
 
-- Primeiro parâmetro: `caller_arena` (i64, handle da arena do caller).
-- Parâmetros seguintes: elementos da tupla de argumentos.
-- Prólogo: `local_arena = kata_rt_arena_create()`.
-- Statements com `;`: alocam na `local_arena`.
+- Primeiro parâmetro: `fiber_arena` (i64, handle da arena do fiber atual).
+- Segundo parâmetro: `caller_arena` (i64, handle da arena do caller).
+- Terceiro parâmetro: `args_ptr` (i64, ponteiro para a tupla de argumentos, ou 0 se Unit).
+- Prólogo: sem `arena_create` — a arena do fiber é criada pelo scheduler
+  e passada como `params[0]`.
+- Statements com `;`: alocam na `fiber_arena`.
 - `return v` / retorno implícito: aloca na `caller_arena`.
-- Epílogo: `kata_rt_arena_destroy(local_arena)`, `return_`.
+- Epílogo: sem `arena_destroy` — o scheduler destrói a arena do fiber
+  após `resume()` retornar.
 
 #### Lower `return`
 
@@ -900,20 +895,16 @@ Return aloca na caller's arena.
 
 O desugar já produziu `Match`. O codegen lowera Match normalmente.
 
-#### ARC pass
+#### ARC pass (transferido para Pré-11)
 
-Após o lowering, o ARC pass consulta a `MetadataTable` para inserir
-`incref`/`decref`:
-
-1. Para cada `Arc<T>` allocation (`kata_rt_alloc_arc`): insert `incref` após
-   criação (refcount = 1).
-2. Para cada cópia de um `Arc<T>` (assignment, passagem de argumento): insert
-   `incref`.
-3. Para cada drop de um `Arc<T>` (fim de escopo, retorno sem uso): insert
-   `decref`.
-
-O ARC pass (Fase 15) insere incref/decref nos pontos apropriados consultando
-a MetadataTable. Sem leak — refcount correto para closures escapadas.
+> O ARC pass foi transferido para o Pré-11 (`docs/PRD-pre-11.md`).
+> A emissão de `incref`/`decref` depende de `EscapeTarget` (análise de
+> escape com destino classificado) e da árvore hierárquica de arenas.
+> Sem essa infraestrutura, o refcount é escrito mas nunca lido para
+> liberação — `bumpalo` não suporta free individual. O runtime
+> (`kata_rt_alloc_arc`, `kata_rt_incref`, `kata_rt_decref`) já existe
+> e está linkado, mas o lowering não os emite. Isso é corrigido no
+> Pré-11.
 
 #### Fiber integration
 
@@ -1230,17 +1221,27 @@ não por fio. Cada fase depende apenas das anteriores.
 > **Redesign (2026-07-12):** Fase 13 (escape analysis) ELIMINADA por decisão
 > de design — wrapper-only: toda closure com captures aloca CaptureBox no
 > heap via `kata_rt_alloc_arc`, sem escape analysis. DoD 34-36a marcados N/A.
+>
+> **Atualização (2026-07-13):** Fase 13 transferida para o Pré-11
+> (`docs/PRD-pre-11.md`). A escape analysis é reintroduzida lá como
+> `EscapeTarget` (não `EscapeKind`), com destino de escape classificado
+> para suportar a árvore hierárquica de arenas. O wrapper-only atual
+> permanece como comportamento até o Pré-11 ser implementado.
 
 ### Fase 14 — Arc<T> + FnValueCall ✅
 
 37. `FnValueCall` (call_indirect com CaptureBox) funciona. ✅
 38. `kata_rt_alloc_arc`, `kata_rt_incref`, `kata_rt_decref` implementados. ✅
 
-### Fase 15 — ARC pass
+### Fase 15 — ARC pass (transferida para Pré-11)
 
-39. ARC pass insere `incref`/`decref` nos pontos apropriados sem leak.
-    Closures escapadas têm refcount correto: `incref` ao capturar/aliased,
-    `decref` ao sair de escopo. Não-stub — implementação completa.
+> **Transferida (2026-07-13):** A Fase 15 (ARC pass) foi movida para o
+> Pré-11 (`docs/PRD-pre-11.md`). O ARC pass faz parte da infraestrutura
+> de memória hierárquica — sua emissão pelo codegen depende de
+> `EscapeTarget` e da árvore de arenas, que são construídas no Pré-11.
+> Implementar o ARC pass aqui, sem a infraestrutura de destino, repetiria
+> o estado atual: refcount escrito mas sem efeito prático (bumpalo não
+> suporta free individual). DoD #39 movido para o Pré-11.
 
 ### Fase 16 — TRMA
 
@@ -1276,6 +1277,10 @@ não por fio. Cada fase depende apenas das anteriores.
 - Stream fusion map/filter/fold (Fio 8)
 - Tipos refinados/ascription de expressão (Fio 6)
 - Structs com campos/field access (Fio 5) — Ty::Tuple já existe, sem .N
+- Escape analysis (Fase 13) e ARC pass (Fase 15) — **transferidos para o
+  Pré-11** (`docs/PRD-pre-11.md`). A escape analysis é reintroduzida como
+  `EscapeTarget` (com destino de escape, não apenas flag) para suportar
+  a árvore hierárquica de arenas. O ARC pass depende de `EscapeTarget`.
 - TRMA (Tail Recursion Modulo Associativity) — **incluída neste PRD** (Fase 16).
   `@associative` já existe no resolution (parseado e resolvido desde Fio 1);
   o TRMA pass no `kata-optimizer` é ortogonal a Actions, Sum com payload, e
@@ -1304,13 +1309,14 @@ kata-inference
     │
     ▼
 kata-codegen
-  declara função "name" no JITModule com ABI estendido:
-    (caller_arena: i64, arg1, arg2, ...) -> ret_ty
-  prólogo: local_arena = kata_rt_arena_create()
-  lowera body: statements com ; na local_arena,
+  declara função "name" no JITModule com ABI uniforme:
+    (fiber_arena: i64, caller_arena: i64, args_ptr: i64) -> i64
+  prólogo: arena do fiber criada pelo scheduler (não no codegen)
+  lowera body: statements com ; na fiber_arena,
               return/retorno implícito na caller_arena
-  epílogo: kata_rt_arena_destroy(local_arena)
-  calls to "name!" passam caller_arena = local_arena do caller
+  epílogo: sem arena_destroy — o scheduler destrói a arena do fiber
+  calls to "name!" via scheduler: spawn(fn_ptr, caller_arena, args_ptr) + run()
+  calls diretos (dentro de Action): passam (fiber_arena, caller_arena, args_ptr)
 ```
 
 ### Pipeline do Sum com payload

@@ -101,7 +101,10 @@ Fio 1: Fundação + Aritmética + CLI
 │   │   (action, !, var, loop, break, continue, return, ;, ?, arena)
 │   │   (`for` adiada para Fio 7+8)
 │   │
-│   └── Fio 11: CSP, Scheduler Multithread
+│   └── Pré-11: Infraestrutura de Memória Hierárquica
+│       │   (árvore de arenas, escape analysis para LCA, ARC pass emitido)
+│       │
+│       └── Fio 11: CSP, Scheduler Multithread
 │       │   (channel!, queue!, broadcast!, fork!, select, timeout, @parallel)
 │       │
 │       └── Fio 14: @log, @test, Test Runner
@@ -576,6 +579,38 @@ especial no compilador.
 
 ---
 
+### Pré-11: Infraestrutura de Memória Hierárquica
+
+**PRD:** `docs/PRD-pre-11.md`
+
+**Problema:** Todo objeto que escapa do fiber (CaptureBox, Sum results,
+tuplas em função pura) cai na arena global (handle 0), que nunca é
+destruída — vazamento permanente. O refcount (`incref`/`decref`) é
+registrado no FFI mas nunca emitido pelo codegen. A análise de escape
+(`tail_pos`) é binária e não sabe classificar o destino do escape.
+
+**Solução:** Árvore hierárquica de arenas — cada fiber tem sua arena e
+acesso às arenas dos ancestrais. Objetos que precisam ser compartilhados
+são alocados na arena do LCA via escape analysis em compile-time. A
+árvore garante a segurança: um pai só é destruído quando todos os filhos
+terminaram.
+
+**Features:**
+- Scheduler rastreia árvore de fibers (parent_id, children, completed)
+- Destruição bottom-up (arena do pai sobrevive até filhos terminarem)
+- Arena raiz criada no scheduler_init, destruída no fim do run
+- `EscapeTarget` na TAST (Local / Caller / Ancestor(n)) substitui `tail_pos`
+- ARC pass emitido pelo codegen (`incref`/`decref` nos pontos apropriados)
+- CaptureBox e Sum results alocam na arena do escape target, não hardcoded em handle 0
+
+**Depende de:** Fio 3 (Actions, arena, scheduler), Fio 9 (escape analysis, CaptureBox)
+
+**DoD:** Arena raiz destruída no fim do scheduler run (zero vazamento).
+Destruição bottom-up garantida. `EscapeTarget` anotado na TAST e usado
+pelo codegen. ARC pass emitido.
+
+---
+
 ### Fio 11: CSP, Scheduler Multithread
 
 **Maquinaria de tipos construída:**
@@ -597,8 +632,8 @@ especial no compilador.
 - Scheduler struct (run_queue, blocked, pending_wakes, timers)
 - TLS apenas para yield
 
-**Depende de:** Fio 3 (Actions, arena), Fio 9 (escape analysis para dados em
-canais → Arc<T>)
+**Depende de:** Pré-11 (árvore de arenas, escape analysis para LCA),
+Fio 3 (Actions, arena), Fio 9 (escape analysis para dados em canais → Arc<T>)
 
 **DoD:** `fork!` submete Action em fiber separada. Channel rendezvous
 sincroniza sender/receiver. `select` multiplexa 2+ canais. `@parallel` spawn
@@ -708,8 +743,8 @@ Fio 1  ────────────────────────�
   │       ::, data opaco, enum unitário (Boolean), Int/BigInt/SMI, Rational
   ├── Fio 2 ── Fio 9 (closures, escape)
   │       assinaturas, ->, Hole, tail_pos, effect      escape, capture, Arc, TRMA
-  ├── Fio 3 ── Fio 11 ── Fio 14 (@log, @test)
-  │       Actions, return, ;, ?                         CSP, scheduler M:N
+  ├── Fio 3 ── Pré-11 ── Fio 11 ── Fio 14 (@log, @test)
+  │       Actions, return, ;, ?    Memória hierárquica  CSP, scheduler M:N
   ├── Fio 4 ── Fio 8 ── Fio 13 (Dict/Set)
   │       Ty::Sum com payload, :: type params           ITERABLE, .N, len, stream fusion
   ├── Fio 5 ── Fio 6 (refined)
@@ -760,6 +795,27 @@ Zeladoria 3: após Fio 14
     (`i64`, `f64`, `kata_rt_string`), não tipo da linguagem. `enum` básico
     (variantes unitárias) existe em Fio 1 porque o prelude precisa declarar
     `Boolean`.
+
+## Nota: GC / Reclamation para Fibers Long-Lived
+
+O modelo hierárquico de arenas (PRD pré-11) garante que todo objeto tem um
+lifetime definido pela árvore de fibers — um pai só é destruído quando todos
+os filhos terminaram, então qualquer objeto promovido para o pai está vivo
+enquanto algum filho o referencia. Isso cobre o caso geral: fibers que nascem,
+comunicam-se, e morrem num ciclo fechado.
+
+O caso **não coberto** é o fiber long-lived — um fiber que permanece vivo
+indefinidamente (server, worker pool, event loop) enquanto spawna filhos
+curtos. Objetos promovidos para a arena desse fiber acumulam-se sem bound,
+porque a arena só seria liberada quando o próprio fiber terminar — o que
+não acontece.
+
+Para esse cenário, um mecanismo de reclamation granular é necessário. As
+opções incluem GC local à arena (mark-sweep / compactação sobre a arena
+do fiber long-lived) ou um allocator separado com free individual para
+objetos promovidos. Este mecanismo é **localizado** — só afeta fibers
+long-lived, não o modelo geral. Fica fora do escopo do PRD pré-11 e será
+abordado quando o Fio 11 introduzir casos reais de fibers long-lived.
 
 ## Fora do Escopo 1.0
 
