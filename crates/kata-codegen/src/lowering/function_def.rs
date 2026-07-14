@@ -20,8 +20,8 @@ use super::clause::{
 use crate::ffi_sigs::ty_to_clif;
 use crate::metadata::MetadataTable;
 
-use super::module::{CodegenError, StringTable};
 use super::LowerCtx;
+use super::module::{CodegenError, StringTable};
 
 /// Fio 5 Fase 5: bitcast na borda de retorno.
 ///

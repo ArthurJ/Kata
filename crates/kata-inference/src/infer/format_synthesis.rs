@@ -83,11 +83,7 @@ pub(crate) fn infer_format(
         result = text_replace_first(result, part);
     }
 
-    Ok((
-        Ty::text(),
-        result.node.kind,
-        Effect::Puro,
-    ))
+    Ok((Ty::text(), result.node.kind, Effect::Puro))
 }
 
 /// Converte um TypedExpr para Text, baseado no tipo.
@@ -101,36 +97,24 @@ fn convert_to_text(expr: Spanned<TypedExpr>) -> Spanned<TypedExpr> {
     let ty = &expr.node.ty;
     match ty {
         Ty::Prim(PrimTy::Text) => expr,
-        Ty::Prim(PrimTy::Int) => {
-            ffi_call1("kata_rt_int_to_text", expr, Ty::text())
-        }
-        Ty::Prim(PrimTy::Rational) => {
-            ffi_call1("kata_rt_rat_show", expr, Ty::text())
-        }
+        Ty::Prim(PrimTy::Int) => ffi_call1("kata_rt_int_to_text", expr, Ty::text()),
+        Ty::Prim(PrimTy::Rational) => ffi_call1("kata_rt_rat_show", expr, Ty::text()),
         Ty::Prim(PrimTy::Float) => {
             // Sem FFI de float_to_text — fallback para int_to_text
             ffi_call1("kata_rt_int_to_text", expr, Ty::text())
         }
-        Ty::Sum(name) if name == "Boolean" => {
-            ffi_call1("kata_rt_bool_to_text", expr, Ty::text())
-        }
+        Ty::Sum(name) if name == "Boolean" => ffi_call1("kata_rt_bool_to_text", expr, Ty::text()),
         Ty::Struct(name) => {
             // Chama `__kata_repr__{name}` via ffi_symbol mangled
             let mangled = format!("__kata_repr__{name}");
             repr_call(expr, mangled)
         }
-        _ => {
-            ffi_call1("kata_rt_int_to_text", expr, Ty::text())
-        }
+        _ => ffi_call1("kata_rt_int_to_text", expr, Ty::text()),
     }
 }
 
 /// Constrói `Closure { callee=Ident(ffi), args=[arg], ffi_symbol=Some(ffi) }`.
-fn ffi_call1(
-    ffi_name: &str,
-    arg: Spanned<TypedExpr>,
-    ret_ty: Ty,
-) -> Spanned<TypedExpr> {
+fn ffi_call1(ffi_name: &str, arg: Spanned<TypedExpr>, ret_ty: Ty) -> Spanned<TypedExpr> {
     let callee = TypedExpr {
         span: Span::synthetic(),
         ty: Ty::Function(vec![arg.node.ty.clone()], Box::new(ret_ty.clone())),

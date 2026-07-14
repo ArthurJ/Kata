@@ -199,10 +199,7 @@ fn dot_access_em_literal_da_erro() {
     let user = resolve(&module).unwrap();
     let resolved = merge_resolved(prelude, user);
     let result = infer_module(&module, &resolved);
-    assert!(
-        result.is_err(),
-        "42.nome deve falhar com NotIndexable"
-    );
+    assert!(result.is_err(), "42.nome deve falhar com NotIndexable");
 }
 
 /// Struct aninhada: `pessoa.endereco.rua` — field access encadeado.

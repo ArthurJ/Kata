@@ -360,39 +360,39 @@ fn expand_spread(
         if let Expr::Ident { name } = &args[i].node
             && name == "$"
         {
-                // Próximo arg deve ser Tuple
-                if i + 1 >= args.len() {
-                    return Err(MiddleError::UnboundName {
-                        name: "$ spread requires a following tuple".into(),
-                        span: args[i].span.into(),
-                    });
+            // Próximo arg deve ser Tuple
+            if i + 1 >= args.len() {
+                return Err(MiddleError::UnboundName {
+                    name: "$ spread requires a following tuple".into(),
+                    span: args[i].span.into(),
+                });
+            }
+            match &args[i + 1].node {
+                Expr::Tuple { elements } => {
+                    result.extend(elements.iter().cloned());
                 }
-                match &args[i + 1].node {
-                    Expr::Tuple { elements } => {
+                Expr::Grouping { inner } => {
+                    if let Expr::Tuple { elements } = &inner.node {
                         result.extend(elements.iter().cloned());
-                    }
-                    Expr::Grouping { inner } => {
-                        if let Expr::Tuple { elements } = &inner.node {
-                            result.extend(elements.iter().cloned());
-                        } else {
-                            return Err(MiddleError::TypeMismatch {
-                                expected: "Tuple".into(),
-                                found: format!("{:?}", inner.node),
-                                span: args[i + 1].span.into(),
-                            });
-                        }
-                    }
-                    _ => {
+                    } else {
                         return Err(MiddleError::TypeMismatch {
-                            expected: "Tuple after $".into(),
-                            found: format!("{:?}", args[i + 1].node),
+                            expected: "Tuple".into(),
+                            found: format!("{:?}", inner.node),
                             span: args[i + 1].span.into(),
                         });
                     }
                 }
-                i += 2; // pula $ e a tupla
-                continue;
+                _ => {
+                    return Err(MiddleError::TypeMismatch {
+                        expected: "Tuple after $".into(),
+                        found: format!("{:?}", args[i + 1].node),
+                        span: args[i + 1].span.into(),
+                    });
+                }
             }
+            i += 2; // pula $ e a tupla
+            continue;
+        }
         result.push(args[i].clone());
         i += 1;
     }

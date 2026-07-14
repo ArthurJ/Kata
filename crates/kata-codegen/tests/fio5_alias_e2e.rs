@@ -135,5 +135,8 @@ fn alias_counter_nao_igual_int_typeck() {
     let user = resolve(&module).expect("resolve deve succeed");
     let resolved = merge_resolved(prelude, user);
     let result = infer_module(&module, &resolved);
-    assert!(result.is_err(), "f c onde f espera Int e c é Counter deve falhar");
+    assert!(
+        result.is_err(),
+        "f c onde f espera Int e c é Counter deve falhar"
+    );
 }

@@ -151,7 +151,8 @@ fn format_boolean() {
 /// `format "{}" (pessoa)` — interpola struct via repr.
 #[test]
 fn format_struct_via_repr() {
-    let src = "data Pessoa (nome::Text idade::Int)\nlet p := Pessoa \"João\" 30\nformat \"{}\" (p,)";
+    let src =
+        "data Pessoa (nome::Text idade::Int)\nlet p := Pessoa \"João\" 30\nformat \"{}\" (p,)";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::text());
     let _ = raw;
@@ -182,7 +183,11 @@ fn varargs_em_action_desugara_para_tupla() {
     // — a feature de empacotamento no call site ainda não está implementada.
     let src = "action soma_tupla (Int...) -> Int\n    42\n42";
     let result = infer_src(src);
-    assert!(result.is_ok(), "varargs deve desugarar na assinatura: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "varargs deve desugarar na assinatura: {:?}",
+        result.err()
+    );
 }
 
 /// `...` em assinatura de Sig (função pura).

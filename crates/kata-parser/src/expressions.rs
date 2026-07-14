@@ -249,9 +249,7 @@ impl Parser {
                 }
                 Token::IntLit(text) => {
                     self.advance();
-                    let n: i64 = text
-                        .parse()
-                        .map_err(|_| self.error("inteiro após `.`"))?;
+                    let n: i64 = text.parse().map_err(|_| self.error("inteiro após `.`"))?;
                     DotIndex::Int(n)
                 }
                 // `t.(-1)` — índice negativo entre parênteses.

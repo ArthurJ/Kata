@@ -207,7 +207,10 @@ pub(crate) fn lower_expr(
 
         // ── StructConstruct: Fio 5 — aloca N×8 bytes, store por campo ──
         // Idêntico ao codegen de Tuple no layout — só muda identidade nominal.
-        TypedExprKind::StructConstruct { struct_name: _, values } => {
+        TypedExprKind::StructConstruct {
+            struct_name: _,
+            values,
+        } => {
             let n = values.len();
             if n == 0 {
                 // Struct sem campos = zero-sized. Retorna 0.

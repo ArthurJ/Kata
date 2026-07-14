@@ -290,10 +290,7 @@ pub enum Item {
     /// `alias Target as NewName` — cria um newtype (tipo nominal distinto
     /// com o mesmo layout do target). O construtor sintetizado é identity:
     /// `NewName :: Target => NewName`.
-    AliasDecl {
-        target: String,
-        new_name: String,
-    },
+    AliasDecl { target: String, new_name: String },
 
     // ── Fio 3: Actions ─────────────────────────────────
     /// `action nome` com body indentado.

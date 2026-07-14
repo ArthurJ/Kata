@@ -93,11 +93,10 @@ fn struct_aninhada_tem_constructor() {
     assert!(typed.dispatch_table.has_function("Pessoa"));
 
     // Pessoa tem 2 campos: Text, Struct("Endereco")
-    let c = typed
-        .functions
-        .iter()
-        .find(|f| f.name == "Pessoa")
-        .unwrap();
-    assert_eq!(c.param_types, vec![Ty::text(), Ty::Struct("Endereco".into())]);
+    let c = typed.functions.iter().find(|f| f.name == "Pessoa").unwrap();
+    assert_eq!(
+        c.param_types,
+        vec![Ty::text(), Ty::Struct("Endereco".into())]
+    );
     assert_eq!(c.ret_ty, Ty::Struct("Pessoa".into()));
 }

@@ -33,7 +33,9 @@ pub(crate) fn synthesize_repr_functions(
     let mut repr_functions = Vec::new();
 
     for struct_name in struct_registry.names() {
-        let struct_info = struct_registry.get(struct_name).unwrap();
+        let struct_info = struct_registry
+            .get(struct_name)
+            .expect("struct_name veio de struct_registry.names()");
 
         // Aliases não ganham repr próprio — usam o repr do target.
         if struct_info.alias_of.is_some() {
@@ -120,9 +122,7 @@ fn build_repr_body(
 
     // Reduz a lista com string_concat (left-associative):
     // concat(parts[0], concat(parts[1], concat(parts[2], ...)))
-    let result = parts.into_iter().reduce(|acc, next| {
-        string_concat(acc, next)
-    });
+    let result = parts.into_iter().reduce(string_concat);
 
     let body = result.expect("repr body tem pelo menos 2 parts");
 
@@ -233,11 +233,7 @@ fn text_lit(text: String) -> Spanned<TypedExpr> {
 }
 
 /// Constrói `Closure { callee=Ident(ffi), args=[arg], ffi_symbol=Some(ffi) }`.
-fn ffi_call1(
-    ffi_name: &str,
-    arg: Spanned<TypedExpr>,
-    ret_ty: Ty,
-) -> Spanned<TypedExpr> {
+fn ffi_call1(ffi_name: &str, arg: Spanned<TypedExpr>, ret_ty: Ty) -> Spanned<TypedExpr> {
     let callee = TypedExpr {
         span: Span::synthetic(),
         ty: Ty::Function(vec![arg.node.ty.clone()], Box::new(ret_ty.clone())),
