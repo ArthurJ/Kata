@@ -38,12 +38,14 @@ pub struct StructInfo {
 
 impl StructInfo {
     /// Número de campos.
-    pub fn num_fields(&self) -> usize {
+    #[allow(dead_code)] // usado apenas em testes
+    pub(crate) fn num_fields(&self) -> usize {
         self.fields.len()
     }
 
     /// Tamanho em bytes = num_fields * 8.
-    pub fn size_bytes(&self) -> u32 {
+    #[allow(dead_code)] // usado apenas em testes
+    pub(crate) fn size_bytes(&self) -> u32 {
         self.num_fields() as u32 * 8
     }
 
@@ -57,7 +59,8 @@ impl StructInfo {
     }
 
     /// Lista os tipos dos campos em ordem (para shape check de ascription-construção).
-    pub fn field_types(&self) -> Vec<&Ty> {
+    #[allow(dead_code)] // usado apenas em testes
+    pub(crate) fn field_types(&self) -> Vec<&Ty> {
         self.fields.iter().map(|f| &f.ty).collect()
     }
 }
@@ -98,7 +101,8 @@ impl StructRegistry {
     }
 
     /// Registra um struct com `StructInfo` pronto.
-    pub fn register_info(&mut self, info: StructInfo) {
+    #[allow(dead_code)] // zero callers — scaffolding para registro direto de StructInfo
+    pub(crate) fn register_info(&mut self, info: StructInfo) {
         self.structs.insert(info.name.clone(), info);
     }
 
@@ -108,7 +112,8 @@ impl StructRegistry {
     }
 
     /// Verifica se um nome é um struct registrado.
-    pub fn contains(&self, name: &str) -> bool {
+    #[allow(dead_code)] // usado apenas em testes
+    pub(crate) fn contains(&self, name: &str) -> bool {
         self.structs.contains_key(name)
     }
 
