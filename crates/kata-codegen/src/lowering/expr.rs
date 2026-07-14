@@ -205,6 +205,66 @@ pub(crate) fn lower_expr(
             Ok(ptr)
         }
 
+        // ── StructConstruct: Fio 5 — aloca N×8 bytes, store por campo ──
+        // Idêntico ao codegen de Tuple no layout — só muda identidade nominal.
+        TypedExprKind::StructConstruct { struct_name: _, values } => {
+            let n = values.len();
+            if n == 0 {
+                // Struct sem campos = zero-sized. Retorna 0.
+                return Ok(ctx.builder.ins().iconst(I64, 0));
+            }
+
+            // Arena baseada em EscapeTarget (igual a Tuple).
+            let handle = match expr.escape {
+                EscapeTarget::Local => ctx
+                    .fiber_arena
+                    .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
+                EscapeTarget::Caller | EscapeTarget::Ancestor(_) => ctx
+                    .caller_arena
+                    .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
+            };
+            let size = ctx.builder.ins().iconst(I64, (n * 8) as i64);
+            let func_ref = ctx.ffi_refs.get("kata_rt_arena_alloc").ok_or_else(|| {
+                super::CodegenError::FfiSymbolNotFound("kata_rt_arena_alloc".into())
+            })?;
+            let call_inst = ctx.builder.ins().call(*func_ref, &[handle, size]);
+            let ptr = ctx.builder.inst_results(call_inst)[0];
+
+            // Store de cada campo no offset i * 8.
+            let flags = MemFlagsData::new();
+            for (i, val_expr) in values.iter().enumerate() {
+                let val = lower_expr(&val_expr.node, ctx)?;
+                let offset = (i * 8) as i32;
+                ctx.builder.ins().store(flags, val, ptr, offset);
+            }
+
+            Ok(ptr)
+        }
+
+        // ── FieldAccess: Fio 5 — load ptr + field_index * 8 ──
+        TypedExprKind::FieldAccess {
+            expr: inner,
+            field_index,
+            ..
+        } => {
+            let ptr = lower_expr(&inner.node, ctx)?;
+            let flags = MemFlagsData::new();
+            let offset = (*field_index as i32) * 8;
+            Ok(ctx.builder.ins().load(I64, flags, ptr, offset))
+        }
+
+        // ── IndexAccess: Fio 5 — load ptr + element_index * 8 ──
+        TypedExprKind::IndexAccess {
+            expr: inner,
+            element_index,
+            ..
+        } => {
+            let ptr = lower_expr(&inner.node, ctx)?;
+            let flags = MemFlagsData::new();
+            let offset = (*element_index as i32) * 8;
+            Ok(ctx.builder.ins().load(I64, flags, ptr, offset))
+        }
+
         // ── Let: define variável ──
         TypedExprKind::Let { name, value } => {
             // Se o value é um Lambda com captures, registrar no closure_captures

@@ -154,6 +154,28 @@ pub enum Expr {
         lhs: Box<Spanned<Expr>>,
         rhs: Box<Spanned<Expr>>,
     },
+
+    // ── Fio 5: DotAccess (field access + index access) ──────────
+    /// `expr.nome` ou `expr.0` — access unificado.
+    /// O parser não decide se é field ou index — o typeck resolve
+    /// pelo tipo do receptor (`Struct` → field, `Tuple` → index).
+    DotAccess {
+        expr: Box<Spanned<Expr>>,
+        index: DotIndex,
+    },
+
+    /// `$` — marcador de spread (typeck expande, nunca chega à TAST).
+    Spread,
+}
+
+/// Índice de DotAccess — field nomeado ou inteiro.
+#[derive(Debug, Clone, PartialEq)]
+pub enum DotIndex {
+    /// `expr.nome` — field access em struct.
+    Field(String),
+    /// `expr.0`, `expr.(-1)` — index access em tupla.
+    /// Negativos são resolvidos em compile-time (`-1` = `len-1`).
+    Int(i64),
 }
 
 /// Pattern — usado em match arms e cláusulas lambda.
@@ -262,6 +284,15 @@ pub enum Item {
         name: String,
         variants: Vec<VariantDecl>,
         directives: Vec<Directive>,
+    },
+
+    // ── Fio 5: Aliases ──────────────────────────────────
+    /// `alias Target as NewName` — cria um newtype (tipo nominal distinto
+    /// com o mesmo layout do target). O construtor sintetizado é identity:
+    /// `NewName :: Target => NewName`.
+    AliasDecl {
+        target: String,
+        new_name: String,
     },
 
     // ── Fio 3: Actions ─────────────────────────────────

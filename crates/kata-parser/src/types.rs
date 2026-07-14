@@ -7,6 +7,17 @@ use crate::Parser;
 
 impl Parser {
     pub(crate) fn parse_type_expr(&mut self) -> Result<Spanned<TypeExpr>, FrontendError> {
+        let ty = self.parse_type_expr_inner()?;
+        // `Type...` → Tuple<Type> (varargs desugar em assinaturas).
+        if matches!(self.peek(), Token::Ellipsis) {
+            let ellipsis_span = self.advance();
+            let span = ty.span.cover(ellipsis_span);
+            return Ok(Spanned::new(TypeExpr::Tuple(vec![ty]), span));
+        }
+        Ok(ty)
+    }
+
+    fn parse_type_expr_inner(&mut self) -> Result<Spanned<TypeExpr>, FrontendError> {
         let start = self.peek_span();
         match self.peek().clone() {
             Token::Ident(name) => {

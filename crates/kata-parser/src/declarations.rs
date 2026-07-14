@@ -45,6 +45,10 @@ impl Parser {
                     let item = self.parse_enum_decl(directives)?;
                     items.push(Spanned::new(item, item_start));
                 }
+                Token::Alias => {
+                    let item = self.parse_alias_decl(directives)?;
+                    items.push(Spanned::new(item, item_start));
+                }
                 Token::Action => {
                     let item = self.parse_action_decl(directives)?;
                     items.push(Spanned::new(item, item_start));
@@ -277,6 +281,32 @@ impl Parser {
             fields,
             directives,
         })
+    }
+
+    /// `alias Target as NewName` — cria um newtype.
+    fn parse_alias_decl(&mut self, _directives: Vec<Directive>) -> Result<Item, FrontendError> {
+        self.expect(&Token::Alias, "`alias`")?;
+        let target = match self.peek() {
+            Token::Ident(s) => {
+                let n = s.clone();
+                self.advance();
+                n
+            }
+            _ => return Err(self.error("target type name after `alias`")),
+        };
+        self.expect(&Token::As, "`as`")?;
+        let new_name = match self.peek() {
+            Token::Ident(s) => {
+                let n = s.clone();
+                self.advance();
+                n
+            }
+            _ => return Err(self.error("new name after `as`")),
+        };
+        if matches!(self.peek(), Token::StmtSep) {
+            self.advance();
+        }
+        Ok(Item::AliasDecl { target, new_name })
     }
 
     fn parse_field_decls(&mut self) -> Result<Vec<FieldDecl>, FrontendError> {

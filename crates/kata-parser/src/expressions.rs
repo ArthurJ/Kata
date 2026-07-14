@@ -1,6 +1,6 @@
 //! Expressions — atoms, application, let, paren, type ascription.
 
-use kata_ast::{Expr, Spanned, Token};
+use kata_ast::{DotIndex, Expr, Spanned, Token};
 use kata_diagnostics::FrontendError;
 
 use crate::Parser;
@@ -230,7 +230,70 @@ impl Parser {
 
     /// Parse an expression with greedy application.
     pub(crate) fn parse_expr_post_ascription(&mut self) -> Result<Spanned<Expr>, FrontendError> {
-        let atom = self.parse_expr_atom()?;
+        let mut atom = self.parse_expr_atom()?;
+
+        // ── Fio 5: DotAccess postfix — `expr.nome`, `expr.0`, `expr.(-1)` ──
+        // Loop permite encadeamento: `pessoa.endereco.rua`.
+        // Precedência: dot é mais apertado que ascription (`pessoa.nome::Text`
+        // = `(pessoa.nome)::Text`).
+        loop {
+            if !matches!(self.peek(), Token::Dot) {
+                break;
+            }
+            self.advance(); // consume `.`
+
+            let index = match self.peek().clone() {
+                Token::Ident(name) => {
+                    self.advance();
+                    DotIndex::Field(name)
+                }
+                Token::IntLit(text) => {
+                    self.advance();
+                    let n: i64 = text
+                        .parse()
+                        .map_err(|_| self.error("inteiro após `.`"))?;
+                    DotIndex::Int(n)
+                }
+                // `t.(-1)` — índice negativo entre parênteses.
+                // `(` após `.` deve conter `[-] IntLit`.
+                Token::LParen => {
+                    self.advance(); // consume `(`
+                    let n: i64 = match self.peek().clone() {
+                        Token::IntLit(text) => {
+                            self.advance();
+                            text.parse()
+                                .map_err(|_| self.error("inteiro dentro de `.()`"))?
+                        }
+                        // `-` é Ident("-") na notação prefixa de Kata.
+                        Token::Ident(s) if s == "-" => {
+                            self.advance();
+                            match self.peek().clone() {
+                                Token::IntLit(text) => {
+                                    self.advance();
+                                    -(text
+                                        .parse::<i64>()
+                                        .map_err(|_| self.error("inteiro após `-`"))?)
+                                }
+                                _ => return Err(self.error("inteiro após `-`")),
+                            }
+                        }
+                        _ => return Err(self.error("inteiro ou `-inteiro` dentro de `.()`")),
+                    };
+                    self.expect(&Token::RParen, "`)`")?;
+                    DotIndex::Int(n)
+                }
+                _ => return Err(self.error("identificador, inteiro ou `(` após `.`")),
+            };
+
+            let span = atom.span.cover(self.tokens[self.pos - 1].span);
+            atom = Spanned::new(
+                Expr::DotAccess {
+                    expr: Box::new(atom),
+                    index,
+                },
+                span,
+            );
+        }
 
         // Check for TypeAscription: expr::Type
         if matches!(self.peek(), Token::DoubleColon) {

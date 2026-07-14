@@ -184,6 +184,17 @@ fn collect_captures_in_expr(expr: &mut TypedExpr, outer_env: &TypeEnv) {
         TypedExprKind::ActionCall { args, .. } => {
             collect_captures_in_expr(&mut args.node, outer_env);
         }
+        TypedExprKind::StructConstruct { values, .. } => {
+            for val in values {
+                collect_captures_in_expr(&mut val.node, outer_env);
+            }
+        }
+        TypedExprKind::FieldAccess { expr, .. } => {
+            collect_captures_in_expr(&mut expr.node, outer_env);
+        }
+        TypedExprKind::IndexAccess { expr, .. } => {
+            collect_captures_in_expr(&mut expr.node, outer_env);
+        }
         // Folhas sem sub-expressões
         TypedExprKind::IntLit { .. }
         | TypedExprKind::FloatLit { .. }
@@ -302,6 +313,17 @@ fn collect_free_vars(
         }
         TypedExprKind::ActionCall { args, .. } => {
             collect_free_vars(&args.node, local_bindings, out);
+        }
+        TypedExprKind::StructConstruct { values, .. } => {
+            for val in values {
+                collect_free_vars(&val.node, local_bindings, out);
+            }
+        }
+        TypedExprKind::FieldAccess { expr, .. } => {
+            collect_free_vars(&expr.node, local_bindings, out);
+        }
+        TypedExprKind::IndexAccess { expr, .. } => {
+            collect_free_vars(&expr.node, local_bindings, out);
         }
         // Folhas sem sub-expressões
         TypedExprKind::IntLit { .. }

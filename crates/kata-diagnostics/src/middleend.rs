@@ -106,4 +106,44 @@ pub enum MiddleError {
         #[label]
         span: MietteSpan,
     },
+
+    #[error("struct `{struct_name}` não tem campo `{field_name}`")]
+    #[diagnostic(code = "type.unknown_field")]
+    UnknownField {
+        struct_name: String,
+        field_name: String,
+        #[label]
+        span: MietteSpan,
+    },
+
+    #[error("índice {index} fora dos limites da tupla de {len} elementos")]
+    #[diagnostic(code = "type.index_out_of_bounds")]
+    IndexOutOfBounds {
+        index: i64,
+        len: usize,
+        #[label]
+        span: MietteSpan,
+    },
+
+    #[error("tipo `{ty}` não suporta acesso por `.` (esperado struct ou tupla)")]
+    #[diagnostic(code = "type.not_indexable")]
+    NotIndexable {
+        ty: String,
+        #[label]
+        span: MietteSpan,
+    },
+
+    #[error("tupla não tem campos nomeados — use `.N` para indexar")]
+    #[diagnostic(code = "type.field_access_on_tuple")]
+    FieldAccessOnTuple {
+        #[label]
+        span: MietteSpan,
+    },
+
+    #[error("struct não é indexável — use `.nome` para acessar campos")]
+    #[diagnostic(code = "type.index_access_on_struct")]
+    IndexAccessOnStruct {
+        #[label]
+        span: MietteSpan,
+    },
 }

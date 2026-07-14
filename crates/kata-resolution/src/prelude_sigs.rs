@@ -6,7 +6,7 @@
 //!
 //! Fio 10 substitui isto por carregamento de `stdlib/core.kata` do filesystem.
 
-use kata_core::{EnumRegistry, PrimTy, Ty, TypeEnv, VariantInfo};
+use kata_core::{EnumRegistry, PrimTy, StructRegistry, Ty, TypeEnv, VariantInfo};
 
 use crate::{ResolvedModule, Signature};
 
@@ -299,12 +299,46 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             false,
             None,
         ),
+        // Text conversions (Fio 5 Fase 6 — para repr)
+        sig(
+            "int_to_text",
+            vec![Ty::int()],
+            Ty::text(),
+            "kata_rt_int_to_text",
+            false,
+            None,
+        ),
+        sig(
+            "bool_to_text",
+            vec![Ty::boolean()],
+            Ty::text(),
+            "kata_rt_bool_to_text",
+            false,
+            None,
+        ),
+        sig(
+            "string_concat",
+            vec![Ty::text(), Ty::text()],
+            Ty::text(),
+            "kata_rt_string_concat",
+            false,
+            None,
+        ),
+        sig(
+            "text_replace",
+            vec![Ty::text(), Ty::text()],
+            Ty::text(),
+            "kata_rt_text_replace_first",
+            false,
+            None,
+        ),
     ];
 
     Ok(ResolvedModule {
         type_env,
         signatures,
         enum_registry,
+        struct_registry: StructRegistry::new(),
         functions: Vec::new(),
         actions: Vec::new(),
     })

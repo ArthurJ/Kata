@@ -9,7 +9,7 @@ pub(crate) mod prelude;
 mod prelude_sigs;
 
 use kata_ast::{ActionStmt, Item, LambdaClause, Module, Spanned, TypeExpr};
-use kata_core::{EnumRegistry, PrimTy, Ty, TypeEnv, VariantInfo};
+use kata_core::{EnumRegistry, FieldInfo, PrimTy, StructRegistry, Ty, TypeEnv, VariantInfo};
 
 /// Resultado da resolution — TypeEnv populado + assinaturas coletadas.
 #[derive(Debug, Clone)]
@@ -18,6 +18,8 @@ pub struct ResolvedModule {
     pub signatures: Vec<Signature>,
     /// Catálogo de variantes por enum (Fio 2).
     pub enum_registry: EnumRegistry,
+    /// Catálogo de structs com campos e offsets (Fio 5).
+    pub struct_registry: StructRegistry,
     /// Funções nomeadas com corpo Kata (Fio 2 Fase 10).
     /// Cada entrada preserva as cláusulas lambda para o inference processar.
     pub functions: Vec<FunctionDef>,
@@ -79,16 +81,47 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
     let mut functions: Vec<FunctionDef> = Vec::new();
     let mut actions: Vec<ActionDef> = Vec::new();
     let mut enum_registry = EnumRegistry::new();
+    let mut struct_registry = StructRegistry::new();
     let errors: Vec<ResolveError> = Vec::new();
 
     // Pass 0: popula TypeEnv com tipos declarados
     for item in &module.items {
         match &item.node {
-            Item::DataDecl { name, .. } => {
+            Item::DataDecl { name, fields, .. } => {
                 // data Int () com @ffi("i64") → Ty::Prim(PrimTy::Int)
                 // Por enquanto, registra como Struct. O FfiSymbol será resolvido
                 // na inferência quando cruzar com a diretiva @ffi.
                 type_env.define(name, Ty::Struct(name.clone()));
+
+                // Fio 5: se o DataDecl tem campos não-vazios, registra no StructRegistry.
+                // Offset de cada campo = field_index * 8 (todos os campos são words de 8 bytes).
+                if !fields.is_empty() {
+                    let field_infos: Vec<FieldInfo> = fields
+                        .iter()
+                        .enumerate()
+                        .map(|(i, f)| FieldInfo {
+                            name: f.name.clone(),
+                            ty: resolve_type_expr(&f.ty.node, &type_env),
+                            offset: (i as u32) * 8,
+                        })
+                        .collect();
+                    struct_registry.register(name, field_infos);
+                }
+            }
+            Item::AliasDecl { target, new_name } => {
+                // alias Target as NewName — cria tipo nominal distinto.
+                // O alias é Ty::Struct(new_name) independentemente do target.
+                type_env.define(new_name, Ty::Struct(new_name.clone()));
+
+                // Registra no StructRegistry com alias_of = Some(target).
+                // Se o target é um struct com campos, herda os campos (para field access).
+                // Se o target é primitivo/opaco, campos = vazio.
+                let fields = if let Some(target_info) = struct_registry.get(target) {
+                    target_info.fields.clone()
+                } else {
+                    Vec::new()
+                };
+                struct_registry.register_with_alias(new_name, fields, Some(target.clone()));
             }
             Item::EnumDecl { name, variants, .. } => {
                 type_env.define(name, Ty::Sum(name.clone()));
@@ -205,6 +238,7 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
         type_env,
         signatures,
         enum_registry,
+        struct_registry,
         functions,
         actions,
     })

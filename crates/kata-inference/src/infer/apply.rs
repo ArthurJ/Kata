@@ -14,6 +14,7 @@ use crate::typed::{Effect, TypedExpr, TypedExprKind};
 
 use super::apply_lambda::{infer_apply_lambda, infer_apply_lambda_with_hint};
 use super::expr::{InferCtx, infer_expr};
+use super::format_synthesis::infer_format;
 use super::helpers::{
     InferResult, dispatch_to_middle_error, peel_grouping_expr, resolve_type_expr,
 };
@@ -89,11 +90,23 @@ pub(crate) fn infer_apply(
         }
     };
 
-    // Infere tipos dos argumentos recursivamente (tail_pos = false para args).
-    let mut typed_args: Vec<Spanned<TypedExpr>> = Vec::with_capacity(args.len());
-    let mut arg_types: Vec<Ty> = Vec::with_capacity(args.len());
+    // Fase 6: `format "template {}" (a, b)` — builtin sintetizado.
+    // O typeck intercepta `format` e constrói a cadeia de text_replace_first
+    // inline. Não passa pelo DispatchTable.
+    if func_name == "format" && args.len() == 2 {
+        return infer_format(callee, args, span, env, ctx);
+    }
 
-    for arg in args {
+    // Fase 7: `$` spread — `f $ (a, b)` expande para `f a b`.
+    // Se um arg é `Ident("$")`, o próximo arg deve ser `Tuple` — substitui
+    // ambos pelos elementos individuais da tupla.
+    let expanded_args = expand_spread(args, span)?;
+
+    // Infere tipos dos argumentos recursivamente (tail_pos = false para args).
+    let mut typed_args: Vec<Spanned<TypedExpr>> = Vec::with_capacity(expanded_args.len());
+    let mut arg_types: Vec<Ty> = Vec::with_capacity(expanded_args.len());
+
+    for arg in &expanded_args {
         let typed = infer_expr(&arg.node, &arg.span, env, ctx, false)?;
         arg_types.push(typed.ty.clone());
         typed_args.push(Spanned::new(typed, arg.span));
@@ -145,7 +158,7 @@ pub(crate) fn infer_apply(
                 return Err(MiddleError::TypeMismatch {
                     expected: format!("{:?}", param_ty),
                     found: format!("{:?}", arg_ty),
-                    span: args[i].span.into(),
+                    span: expanded_args[i].span.into(),
                 });
             }
         }
@@ -329,4 +342,59 @@ fn infer_variant_construct(
         },
         Effect::Puro,
     ))
+}
+
+/// Fase 7: Expande `$` spread em argumentos de Apply.
+///
+/// `f $ (a, b)` → `f a b`. Se um arg é `Ident("$")`, o próximo arg deve ser
+/// `Expr::Tuple` — substitui ambos (`$` + `Tuple`) pelos elementos individuais.
+/// Se `$` não é seguido por tupla → `SpreadRequiresTuple` error.
+fn expand_spread(
+    args: &[Spanned<Expr>],
+    _span: &kata_ast::Span,
+) -> Result<Vec<Spanned<Expr>>, MiddleError> {
+    let mut result = Vec::new();
+    let mut i = 0;
+    while i < args.len() {
+        // Verifica se é `Ident("$")`
+        if let Expr::Ident { name } = &args[i].node
+            && name == "$"
+        {
+                // Próximo arg deve ser Tuple
+                if i + 1 >= args.len() {
+                    return Err(MiddleError::UnboundName {
+                        name: "$ spread requires a following tuple".into(),
+                        span: args[i].span.into(),
+                    });
+                }
+                match &args[i + 1].node {
+                    Expr::Tuple { elements } => {
+                        result.extend(elements.iter().cloned());
+                    }
+                    Expr::Grouping { inner } => {
+                        if let Expr::Tuple { elements } = &inner.node {
+                            result.extend(elements.iter().cloned());
+                        } else {
+                            return Err(MiddleError::TypeMismatch {
+                                expected: "Tuple".into(),
+                                found: format!("{:?}", inner.node),
+                                span: args[i + 1].span.into(),
+                            });
+                        }
+                    }
+                    _ => {
+                        return Err(MiddleError::TypeMismatch {
+                            expected: "Tuple after $".into(),
+                            found: format!("{:?}", args[i + 1].node),
+                            span: args[i + 1].span.into(),
+                        });
+                    }
+                }
+                i += 2; // pula $ e a tupla
+                continue;
+            }
+        result.push(args[i].clone());
+        i += 1;
+    }
+    Ok(result)
 }

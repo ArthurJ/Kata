@@ -84,6 +84,32 @@ pub enum TypedExprKind {
     Grouping { inner: Box<Spanned<TypedExpr>> },
     /// Tupla heterogênea. Em Fio 2, aceita para patterns (Ty::Tuple antecipado).
     Tuple { elements: Vec<Spanned<TypedExpr>> },
+    /// Construção de struct — smart constructor body.
+    /// Aloca `n * 8` bytes na arena e faz `store` por campo.
+    /// `struct_name` é a identidade nominal (ex: `Pessoa`).
+    /// `values` é um `Spanned<TypedExpr>` por campo, em ordem de declaração.
+    /// Semanticamente idêntico a `Tuple` no layout — só muda identidade nominal.
+    StructConstruct {
+        struct_name: String,
+        values: Vec<Spanned<TypedExpr>>,
+    },
+    /// `expr.nome` — field access em struct.
+    /// `field_index` é o offset em words (já calculado pelo typeck via StructRegistry).
+    /// Codegen faz `load ptr + field_index * 8`.
+    FieldAccess {
+        expr: Box<Spanned<TypedExpr>>,
+        struct_name: String,
+        field_name: String,
+        field_index: u32,
+    },
+    /// `expr.N` — index access em tupla.
+    /// `element_index` é o offset em words (já resolvido, negativos normalizados).
+    /// Codegen faz `load ptr + element_index * 8`.
+    IndexAccess {
+        expr: Box<Spanned<TypedExpr>>,
+        index: i64,
+        element_index: u32,
+    },
     /// `let nome := expr` — binding imutável. O typeck definiu `nome` no
     /// TypeEnv com `ty = expr.ty`. `tail_pos = false` sempre.
     Let {

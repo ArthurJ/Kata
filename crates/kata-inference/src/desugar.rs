@@ -170,6 +170,17 @@ fn desugar_pipes(expr: &Spanned<Expr>) -> Spanned<Expr> {
                 expr.span,
             )
         }
+        Expr::DotAccess { expr: inner, index } => {
+            // Recursão no receptor — DotAccess pode conter pipes internos.
+            Spanned::new(
+                Expr::DotAccess {
+                    expr: Box::new(desugar_pipes(inner)),
+                    index: index.clone(),
+                },
+                expr.span,
+            )
+        }
+        Expr::Spread => expr.clone(),
     }
 }
 
@@ -456,5 +467,13 @@ fn desugar_holes(expr: &Spanned<Expr>) -> Spanned<Expr> {
             },
             expr.span,
         ),
+        Expr::DotAccess { expr: inner, index } => Spanned::new(
+            Expr::DotAccess {
+                expr: Box::new(desugar_holes(inner)),
+                index: index.clone(),
+            },
+            expr.span,
+        ),
+        Expr::Spread => expr.clone(),
     }
 }

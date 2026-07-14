@@ -4,10 +4,11 @@
 //! `infer_expr_hinted` aceita um type hint opcional (DoD 29) para inferência
 //! bidirecional top-down.
 
-use kata_ast::{Expr, Span, Spanned};
+use kata_ast::{DotIndex, Expr, Span, Spanned};
 use kata_core::dispatch::DispatchTable;
 use kata_core::enum_registry::EnumRegistry;
 use kata_core::escape::EscapeTarget;
+use kata_core::struct_registry::StructRegistry;
 use kata_core::ty::{PrimTy, Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 
@@ -27,6 +28,9 @@ use super::variant::resolve_unqual_variant;
 pub(crate) struct InferCtx<'a> {
     pub table: &'a DispatchTable,
     pub enum_registry: &'a EnumRegistry,
+    /// Catálogo de structs com campos — para field access e
+    /// ascription-construção (Fio 5).
+    pub struct_registry: &'a StructRegistry,
     /// Tipo de retorno da Action atual — `Some(ty)` quando inferindo
     /// o body de uma Action, `None` caso contrário. Usado por `infer_return`
     /// para verificar que `return expr` produz o tipo esperado.
@@ -123,10 +127,77 @@ pub(crate) fn infer_expr_hinted(
         Expr::TypeAscription { expr, ty } => {
             let target_ty = resolve_type_expr(&ty.node, env);
             // Propaga o tipo anotado como hint top-down (DoD 29).
-            // Isto permite que `(lambda x: + x 1)::(Int -> Int)` extraia
-            // x: Int do tipo anotado.
             let inner =
                 infer_expr_hinted(&expr.node, &expr.span, env, ctx, false, Some(&target_ty))?;
+
+            // Fase 7: Ascription-construção — `(a, b)::Pessoa` → StructConstruct.
+            // Se inner é Tuple e target é Struct, e o shape bate (mesmo nº de
+            // elementos, tipos compatíveis), produz StructConstruct.
+            if let Ty::Struct(ref struct_name) = target_ty
+                && let TypedExprKind::Tuple { elements } = &inner.kind
+                && let Some(struct_info) = ctx.struct_registry.get(struct_name)
+                && !struct_info.fields.is_empty()
+                && struct_info.alias_of.is_none()
+            {
+                // Shape check: mesmo número de elementos
+                if elements.len() != struct_info.fields.len() {
+                    return Err(MiddleError::TypeMismatch {
+                        expected: format!(
+                            "Struct {} with {} fields",
+                            struct_name,
+                            struct_info.fields.len()
+                        ),
+                        found: format!("Tuple with {} elements", elements.len()),
+                        span: expr.span.into(),
+                    });
+                }
+                // Verifica tipos compatíveis
+                let mut shape_ok = true;
+                for (elem, field) in elements.iter().zip(struct_info.fields.iter()) {
+                    if elem.node.ty != field.ty {
+                        shape_ok = false;
+                        break;
+                    }
+                }
+                if shape_ok {
+                    let values = elements
+                        .iter()
+                        .map(|e| Spanned::new(e.node.clone(), e.span))
+                        .collect();
+                    return Ok(TypedExpr {
+                        span: *span,
+                        ty: target_ty.clone(),
+                        tail_pos,
+                        escape: if ctx.ret_ty.is_some() {
+                            if tail_pos {
+                                EscapeTarget::Caller
+                            } else {
+                                EscapeTarget::Local
+                            }
+                        } else {
+                            EscapeTarget::Ancestor(0)
+                        },
+                        effect: Effect::Puro,
+                        kind: TypedExprKind::StructConstruct {
+                            struct_name: struct_name.clone(),
+                            values,
+                        },
+                    });
+                }
+                // Shape mismatch (tipos incompatíveis) → error
+                return Err(MiddleError::TypeMismatch {
+                    expected: format!(
+                        "Struct {} fields {:?}",
+                        struct_name,
+                        struct_info.fields.iter().map(|f| &f.ty).collect::<Vec<_>>()
+                    ),
+                    found: format!(
+                        "Tuple elements {:?}",
+                        elements.iter().map(|e| &e.node.ty).collect::<Vec<_>>()
+                    ),
+                    span: expr.span.into(),
+                });
+            }
 
             let rebaixa_ok = match (&inner.kind, &target_ty) {
                 (TypedExprKind::IntLit { .. }, Ty::Prim(PrimTy::Int)) => true,
@@ -398,6 +469,7 @@ pub(crate) fn infer_expr_hinted(
             let loop_ctx = InferCtx {
                 table: ctx.table,
                 enum_registry: ctx.enum_registry,
+                struct_registry: ctx.struct_registry,
                 ret_ty: ctx.ret_ty,
                 in_loop: true,
             };
@@ -444,6 +516,17 @@ pub(crate) fn infer_expr_hinted(
         Expr::PipeFallback { lhs, rhs } => {
             return infer_pipe_fallback(lhs, rhs, span, env, ctx);
         }
+        // ── Fio 5: DotAccess (field access + index access) ──
+        Expr::DotAccess { expr, index } => {
+            return infer_dot_access(expr, index, span, env, ctx, tail_pos);
+        }
+        // ── Fio 5: Spread ($) — typeck expande, nunca deveria chegar aqui ──
+        Expr::Spread => {
+            return Err(MiddleError::UnboundName {
+                name: "Spread ($) em posição inesperada — typeck deveria ter expandido".into(),
+                span: (*span).into(),
+            });
+        }
     };
 
     // Deriva EscapeTarget de tail_pos + contexto (Action vs função pura/entry).
@@ -467,4 +550,97 @@ pub(crate) fn infer_expr_hinted(
         effect,
         kind,
     })
+}
+
+// ── Fio 5: DotAccess — field access em struct + index access em tupla ──
+
+/// Infere `expr.nome` (field access) ou `expr.N` (index access).
+///
+/// Desambiguação pelo tipo do receptor:
+/// - `Ty::Struct(name)` + `DotIndex::Field` → `FieldAccess`
+/// - `Ty::Struct(name)` + `DotIndex::Int` → erro `IndexAccessOnStruct`
+/// - `Ty::Tuple(elements)` + `DotIndex::Int(n)` → `IndexAccess` (negativos
+///   normalizados, bounds check compile-time)
+/// - `Ty::Tuple(elements)` + `DotIndex::Field` → erro `FieldAccessOnTuple`
+/// - Outro → erro `NotIndexable`
+fn infer_dot_access(
+    expr: &Spanned<Expr>,
+    index: &DotIndex,
+    span: &Span,
+    env: &mut TypeEnv,
+    ctx: &InferCtx,
+    tail_pos: bool,
+) -> InferResult<TypedExpr> {
+    let inner = infer_expr(&expr.node, &expr.span, env, ctx, false)?;
+    let inner_spanned = Spanned::new(inner.clone(), expr.span);
+    let inner_box = Box::new(inner_spanned);
+
+    match (&inner.ty, index) {
+        (Ty::Struct(struct_name), DotIndex::Field(field_name)) => {
+            let info =
+                ctx.struct_registry
+                    .get(struct_name)
+                    .ok_or_else(|| MiddleError::UnboundName {
+                        name: format!("struct `{struct_name}` não registrado no StructRegistry"),
+                        span: (*span).into(),
+                    })?;
+            let (field_index, field_info) =
+                info.find_field(field_name)
+                    .ok_or_else(|| MiddleError::UnknownField {
+                        struct_name: struct_name.clone(),
+                        field_name: field_name.clone(),
+                        span: (*span).into(),
+                    })?;
+            let ty = field_info.ty.clone();
+            Ok(TypedExpr {
+                span: *span,
+                ty,
+                tail_pos,
+                escape: inner.escape,
+                effect: inner.effect,
+                kind: TypedExprKind::FieldAccess {
+                    expr: inner_box,
+                    struct_name: struct_name.clone(),
+                    field_name: field_name.clone(),
+                    field_index,
+                },
+            })
+        }
+        (Ty::Struct(_), DotIndex::Int(_)) => Err(MiddleError::IndexAccessOnStruct {
+            span: (*span).into(),
+        }),
+        (Ty::Tuple(elements), DotIndex::Int(n)) => {
+            let len = elements.len() as i64;
+            // Normaliza negativo: -1 = len-1, -2 = len-2, etc.
+            let resolved = if *n < 0 { len + n } else { *n };
+            if resolved < 0 || resolved >= len {
+                return Err(MiddleError::IndexOutOfBounds {
+                    index: *n,
+                    len: len as usize,
+                    span: (*span).into(),
+                });
+            }
+            let element_index = resolved as u32;
+            let ty = elements[resolved as usize].clone();
+            Ok(TypedExpr {
+                span: *span,
+                ty,
+                tail_pos,
+                escape: inner.escape,
+                effect: inner.effect,
+                kind: TypedExprKind::IndexAccess {
+                    expr: inner_box,
+                    index: *n,
+                    element_index,
+                },
+            })
+        }
+        (Ty::Tuple(_), DotIndex::Field(_)) => Err(MiddleError::FieldAccessOnTuple {
+            span: (*span).into(),
+        }),
+        (other_ty, _) => Err(MiddleError::NotIndexable {
+            ty: format!("{other_ty:?}"),
+            span: (*span).into(),
+        }),
+    }
 }

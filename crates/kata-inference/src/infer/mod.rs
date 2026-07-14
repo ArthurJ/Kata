@@ -13,16 +13,19 @@ mod apply;
 mod apply_lambda;
 mod captures;
 mod expr;
+mod format_synthesis;
 mod helpers;
 mod lambda;
 mod partial_dispatch;
 mod recursion;
+mod repr_synthesis;
 mod sugar;
 mod variant;
 mod variant_qual;
 
 use kata_ast::{Item, Module, Spanned};
 use kata_core::dispatch::OverloadInfo;
+use kata_core::escape::EscapeTarget;
 use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 use kata_resolution::ResolvedModule;
@@ -30,6 +33,7 @@ use kata_resolution::ResolvedModule;
 use crate::desugar;
 use crate::typed::{
     TypedAction, TypedExpr, TypedExprKind, TypedFunction, TypedLambdaClause, TypedModule,
+    TypedPattern,
 };
 
 use self::apply_lambda::infer_lambda_body;
@@ -64,6 +68,243 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
         });
     }
 
+    // 1b. Fio 5 — sintetiza smart constructors para structs com campos.
+    //     `data Pessoa (nome::Text idade::Int)` → overload `Pessoa :: Text Int => Pessoa`
+    //     no DispatchTable + TypedFunction com body `StructConstruct`.
+    let mut struct_constructors: Vec<TypedFunction> = Vec::new();
+    for struct_name in resolved.struct_registry.names() {
+        let struct_info = resolved.struct_registry.get(struct_name).unwrap();
+        // Aliases são processados no passo 1c abaixo — pular aqui.
+        if struct_info.alias_of.is_some() {
+            continue;
+        }
+        if struct_info.fields.is_empty() {
+            continue; // struct sem campos = tipo opaco, não ganha construtor
+        }
+
+        let field_types: Vec<Ty> = struct_info.fields.iter().map(|f| f.ty.clone()).collect();
+        let ret_ty = Ty::Struct(struct_name.to_string());
+
+        // Registra overload no DispatchTable.
+        dispatch_table.insert(OverloadInfo {
+            name: struct_name.to_string(),
+            params: field_types.clone(),
+            ret: ret_ty.clone(),
+            ffi_symbol: None, // função Kata pura
+            is_action: false,
+            is_generic: false,
+            is_constructor: true,
+            associative_neutral: None,
+        });
+
+        // Sintetiza a TypedFunction com uma cláusula:
+        // patterns = [__field_0, __field_1, ...]
+        // body = StructConstruct { struct_name, values: [Ident(__field_0), ...] }
+        let patterns: Vec<Spanned<TypedPattern>> = field_types
+            .iter()
+            .enumerate()
+            .map(|(i, ty)| {
+                Spanned::new(
+                    TypedPattern::Ident {
+                        name: format!("__field_{i}"),
+                        ty: ty.clone(),
+                    },
+                    kata_ast::Span::synthetic(),
+                )
+            })
+            .collect();
+
+        let values: Vec<Spanned<TypedExpr>> = field_types
+            .iter()
+            .enumerate()
+            .map(|(i, ty)| {
+                Spanned::new(
+                    TypedExpr {
+                        span: kata_ast::Span::synthetic(),
+                        ty: ty.clone(),
+                        tail_pos: false,
+                        escape: EscapeTarget::Local,
+                        effect: crate::typed::Effect::Puro,
+                        kind: TypedExprKind::Ident {
+                            name: format!("__field_{i}"),
+                        },
+                    },
+                    kata_ast::Span::synthetic(),
+                )
+            })
+            .collect();
+
+        let body = TypedExpr {
+            span: kata_ast::Span::synthetic(),
+            ty: ret_ty.clone(),
+            tail_pos: true,
+            // Smart constructor é função pura — todos os valores vão para
+            // a arena raiz (Ancestor(0)), igual ao escape derivado em
+            // infer_expr_hinted quando ctx.ret_ty = None.
+            escape: EscapeTarget::Ancestor(0),
+            effect: crate::typed::Effect::Puro,
+            kind: TypedExprKind::StructConstruct {
+                struct_name: struct_name.to_string(),
+                values,
+            },
+        };
+
+        struct_constructors.push(TypedFunction {
+            name: struct_name.to_string(),
+            param_types: field_types,
+            ret_ty,
+            clauses: vec![TypedLambdaClause {
+                patterns,
+                body: Spanned::new(body, kata_ast::Span::synthetic()),
+                guards: Vec::new(),
+                with_bindings: Vec::new(),
+            }],
+        });
+    }
+
+    // 1c. Fio 5 Fase 5 — sintetiza smart constructors para aliases (newtypes).
+    //     `alias Float as Altura` → `Altura :: Float => Altura` (identity).
+    //     `alias Pessoa as Pessoa2` → `Pessoa2 :: Text Int => Pessoa2` (StructConstruct).
+    for struct_name in resolved.struct_registry.names() {
+        let struct_info = resolved.struct_registry.get(struct_name).unwrap();
+        let Some(ref target) = struct_info.alias_of else {
+            continue; // não é alias
+        };
+
+        let ret_ty = Ty::Struct(struct_name.to_string());
+
+        if struct_info.fields.is_empty() {
+            // Alias de primitivo/opaco — construtor identity.
+            // `Altura :: Float => Altura` — body é Ident(__field_0).
+            let target_ty = resolved
+                .type_env
+                .lookup(target)
+                .unwrap_or_else(|| panic!("alias target {target} não encontrado no TypeEnv"))
+                .clone();
+
+            dispatch_table.insert(OverloadInfo {
+                name: struct_name.to_string(),
+                params: vec![target_ty.clone()],
+                ret: ret_ty.clone(),
+                ffi_symbol: None,
+                is_action: false,
+                is_generic: false,
+                is_constructor: true,
+                associative_neutral: None,
+            });
+
+            let pattern = Spanned::new(
+                TypedPattern::Ident {
+                    name: "__field_0".into(),
+                    ty: target_ty.clone(),
+                },
+                kata_ast::Span::synthetic(),
+            );
+            let body = TypedExpr {
+                span: kata_ast::Span::synthetic(),
+                ty: ret_ty,
+                tail_pos: true,
+                escape: EscapeTarget::Ancestor(0),
+                effect: crate::typed::Effect::Puro,
+                kind: TypedExprKind::Ident {
+                    name: "__field_0".into(),
+                },
+            };
+            struct_constructors.push(TypedFunction {
+                name: struct_name.to_string(),
+                param_types: vec![target_ty],
+                ret_ty: Ty::Struct(struct_name.to_string()),
+                clauses: vec![TypedLambdaClause {
+                    patterns: vec![pattern],
+                    body: Spanned::new(body, kata_ast::Span::synthetic()),
+                    guards: Vec::new(),
+                    with_bindings: Vec::new(),
+                }],
+            });
+        } else {
+            // Alias de struct com campos — mesmo construtor do struct nativo,
+            // mas com struct_name = new_name.
+            let field_types: Vec<Ty> =
+                struct_info.fields.iter().map(|f| f.ty.clone()).collect();
+
+            dispatch_table.insert(OverloadInfo {
+                name: struct_name.to_string(),
+                params: field_types.clone(),
+                ret: ret_ty.clone(),
+                ffi_symbol: None,
+                is_action: false,
+                is_generic: false,
+                is_constructor: true,
+                associative_neutral: None,
+            });
+
+            let patterns: Vec<Spanned<TypedPattern>> = field_types
+                .iter()
+                .enumerate()
+                .map(|(i, ty)| {
+                    Spanned::new(
+                        TypedPattern::Ident {
+                            name: format!("__field_{i}"),
+                            ty: ty.clone(),
+                        },
+                        kata_ast::Span::synthetic(),
+                    )
+                })
+                .collect();
+
+            let values: Vec<Spanned<TypedExpr>> = field_types
+                .iter()
+                .enumerate()
+                .map(|(i, ty)| {
+                    Spanned::new(
+                        TypedExpr {
+                            span: kata_ast::Span::synthetic(),
+                            ty: ty.clone(),
+                            tail_pos: false,
+                            escape: EscapeTarget::Local,
+                            effect: crate::typed::Effect::Puro,
+                            kind: TypedExprKind::Ident {
+                                name: format!("__field_{i}"),
+                            },
+                        },
+                        kata_ast::Span::synthetic(),
+                    )
+                })
+                .collect();
+
+            let body = TypedExpr {
+                span: kata_ast::Span::synthetic(),
+                ty: ret_ty.clone(),
+                tail_pos: true,
+                escape: EscapeTarget::Ancestor(0),
+                effect: crate::typed::Effect::Puro,
+                kind: TypedExprKind::StructConstruct {
+                    struct_name: struct_name.to_string(),
+                    values,
+                },
+            };
+            struct_constructors.push(TypedFunction {
+                name: struct_name.to_string(),
+                param_types: field_types,
+                ret_ty,
+                clauses: vec![TypedLambdaClause {
+                    patterns,
+                    body: Spanned::new(body, kata_ast::Span::synthetic()),
+                    guards: Vec::new(),
+                    with_bindings: Vec::new(),
+                }],
+            });
+        }
+    }
+
+    // 1d. Fio 5 Fase 6 — sintetiza `repr` para structs com campos.
+    //     `repr :: Pessoa => Text` no DispatchTable + TypedFunction com body
+    //     que constrói "Pessoa(field0, field1, ...)" via string_concat FFI.
+    let mut repr_functions = repr_synthesis::synthesize_repr_functions(
+        &resolved.struct_registry,
+        &mut dispatch_table,
+    );
+
     // 2. Clona o TypeEnv do ResolvedModule — o typeck pode adicionar bindings
     //    locais (let) sem mutar o original.
     let mut type_env = resolved.type_env.clone();
@@ -77,6 +318,7 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
         let ctx = InferCtx {
             table: &dispatch_table,
             enum_registry: &resolved.enum_registry,
+            struct_registry: &resolved.struct_registry,
             ret_ty: None,
             in_loop: false,
         };
@@ -99,6 +341,7 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
         let ctx = InferCtx {
             table: &dispatch_table,
             enum_registry: &resolved.enum_registry,
+            struct_registry: &resolved.struct_registry,
             ret_ty: Some(&action_def.return_type),
             in_loop: false,
         };
@@ -126,6 +369,7 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
                 let ctx = InferCtx {
                     table: &dispatch_table,
                     enum_registry: &resolved.enum_registry,
+                    struct_registry: &resolved.struct_registry,
                     ret_ty: None,
                     in_loop: false,
                 };
@@ -142,7 +386,8 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
                 }
                 entry_expr = Some(Spanned::new(typed, expr.span));
             }
-            Item::Sig { .. } | Item::DataDecl { .. } | Item::EnumDecl { .. } => {
+            Item::Sig { .. } | Item::DataDecl { .. } | Item::EnumDecl { .. }
+            | Item::AliasDecl { .. } => {
                 // Já processado no resolution/inference de funções nomeadas.
             }
             Item::ActionDecl { .. } => {
@@ -161,7 +406,12 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
         entry,
         dispatch_table,
         type_env,
-        functions: typed_functions,
+        functions: {
+            let mut all_funcs = typed_functions;
+            all_funcs.extend(struct_constructors);
+            all_funcs.append(&mut repr_functions);
+            all_funcs
+        },
         actions: typed_actions,
     };
 

@@ -21,6 +21,30 @@ use crate::ffi_sigs::ty_to_clif;
 use crate::metadata::MetadataTable;
 
 use super::module::{CodegenError, StringTable};
+use super::LowerCtx;
+
+/// Fio 5 Fase 5: bitcast na borda de retorno.
+///
+/// Se o `ret_ty` mapeia para I64 mas o `result` é F64 (alias de Float),
+/// faz bitcast F64→I64. Necessário para construtores identity de alias
+/// de primitivos Float, onde o body retorna F64 mas a assinatura
+/// retorna I64 (`Ty::Struct` → I64).
+fn coerce_return(
+    result: cranelift_codegen::ir::Value,
+    ret_ty: &Ty,
+    lower: &mut LowerCtx,
+) -> cranelift_codegen::ir::Value {
+    let expected = ty_to_clif(ret_ty);
+    let actual = lower.builder.func.dfg.value_type(result);
+    if expected != actual {
+        lower
+            .builder
+            .ins()
+            .bitcast(expected, MemFlagsData::new(), result)
+    } else {
+        result
+    }
+}
 
 /// Declara uma função Kata nomeada no JITModule (sem definir ainda).
 pub(crate) fn declare_kata_function(
@@ -143,6 +167,10 @@ pub(crate) fn define_function_body(
             lower.emitted_tail_call = false;
             let result = lower_clause_body(clause, &mut lower)?;
             if !lower.emitted_tail_call {
+                // Fio 5 Fase 5: bitcast na borda de retorno.
+                // Necessário para alias de Float: o body retorna F64 mas a
+                // assinatura da função retorna I64 (Ty::Struct → I64).
+                let result = coerce_return(result, ret_ty, &mut lower);
                 lower.builder.ins().return_(&[result]);
             }
         } else {

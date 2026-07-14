@@ -21,10 +21,13 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
     type_env.merge_bindings_from(&mut user_type_env);
     let mut enum_registry = prelude.enum_registry;
     enum_registry.merge(user.enum_registry);
+    let mut struct_registry = prelude.struct_registry;
+    struct_registry.merge(user.struct_registry);
     ResolvedModule {
         type_env,
         signatures,
         enum_registry,
+        struct_registry,
         functions: user.functions,
         actions: user.actions,
     }

@@ -116,6 +116,8 @@ pub enum Token {
     Comma,
     /// `.` — acesso de campo / indexação
     Dot,
+    /// `...` — varargs em assinaturas (desugara para Tuple<Type>)
+    Ellipsis,
     /// `;` — terminador de statement (Actions) ou separador de dimensão (tensores)
     Semicolon,
     /// `:` — separa guard/pattern do corpo
@@ -215,6 +217,7 @@ impl std::fmt::Display for Token {
             Token::RBrace => write!(f, "}}"),
             Token::Comma => write!(f, ","),
             Token::Dot => write!(f, "."),
+            Token::Ellipsis => write!(f, "..."),
             Token::Semicolon => write!(f, ";"),
             Token::Colon => write!(f, ":"),
             Token::At => write!(f, "@"),

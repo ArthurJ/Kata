@@ -28,6 +28,12 @@ pub(crate) fn lower_closure(
 
     if let Some(sym_name) = ffi_symbol {
         // Call FFI direto — FFI nunca é tail call (CallConv::SystemV).
+        // Mas primeiro tenta kata_refs: funções Kata sintetizadas (ex: repr)
+        // usam ffi_symbol para carregar o nome mangled da função.
+        if let Some(&func_ref) = ctx.kata_refs.get(sym_name) {
+            let call_inst = ctx.builder.ins().call(func_ref, &arg_values);
+            return Ok(ctx.builder.inst_results(call_inst)[0]);
+        }
         let func_ref = ctx
             .ffi_refs
             .get(sym_name)

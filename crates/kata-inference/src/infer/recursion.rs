@@ -111,6 +111,17 @@ fn collect_action_calls(
                 collect_action_calls(&stmt.node, &stmt.span, out);
             }
         }
+        TypedExprKind::StructConstruct { values, .. } => {
+            for val in values {
+                collect_action_calls(&val.node, &val.span, out);
+            }
+        }
+        TypedExprKind::FieldAccess { expr, .. } => {
+            collect_action_calls(&expr.node, &expr.span, out);
+        }
+        TypedExprKind::IndexAccess { expr, .. } => {
+            collect_action_calls(&expr.node, &expr.span, out);
+        }
         // Folhas sem sub-expressões.
         TypedExprKind::IntLit { .. }
         | TypedExprKind::FloatLit { .. }

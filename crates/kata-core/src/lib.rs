@@ -15,10 +15,12 @@ pub mod enum_registry;
 pub mod escape;
 pub mod ffi;
 pub(crate) mod shape; // TypeShape/TypeId — zero consumidores cross-crate
+pub mod struct_registry;
 pub mod ty;
 
 pub use dispatch::{DispatchError, DispatchTable, OverloadInfo, PartialDispatchResult, Score};
 pub use enum_registry::{EnumRegistry, VariantInfo};
 pub use escape::EscapeTarget;
 pub use ffi::FfiSymbol;
+pub use struct_registry::{FieldInfo, StructInfo, StructRegistry};
 pub use ty::{PrimTy, Ty, TypeEnv};

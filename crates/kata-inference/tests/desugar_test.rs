@@ -84,6 +84,8 @@ fn assert_no_holes(expr: &Spanned<Expr>) {
             assert_no_holes(lhs);
             assert_no_holes(rhs);
         }
+        Expr::DotAccess { expr, .. } => assert_no_holes(expr),
+        Expr::Spread => {}
     }
 }
 
@@ -145,6 +147,8 @@ fn assert_no_pipes(expr: &Spanned<Expr>) {
             assert_no_pipes(lhs);
             assert_no_pipes(rhs);
         }
+        Expr::DotAccess { expr, .. } => assert_no_pipes(expr),
+        Expr::Spread => {}
     }
 }
 
