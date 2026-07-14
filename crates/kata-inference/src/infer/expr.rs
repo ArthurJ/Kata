@@ -4,7 +4,7 @@
 //! `infer_expr_hinted` aceita um type hint opcional (DoD 29) para inferência
 //! bidirecional top-down.
 
-use kata_ast::{DotIndex, Expr, Span, Spanned};
+use kata_ast::{Expr, Span, Spanned};
 use kata_core::dispatch::DispatchTable;
 use kata_core::enum_registry::EnumRegistry;
 use kata_core::escape::EscapeTarget;
@@ -15,10 +15,12 @@ use kata_diagnostics::MiddleError;
 use crate::typed::{Effect, TypedExpr, TypedExprKind};
 
 use super::_match::infer_match;
+use super::action_call::infer_action_call;
 use super::apply::infer_apply;
+use super::dot_access::infer_dot_access;
 use super::helpers::{InferResult, resolve_type_expr};
 use super::lambda::infer_lambda;
-use super::sugar::{infer_assert, infer_pipe_fallback, infer_question};
+use super::sugar::{infer_pipe_fallback, infer_question};
 use super::variant::resolve_unqual_variant;
 
 /// Contexto de inferência — carrega dependências compartilhadas entre
@@ -326,69 +328,10 @@ pub(crate) fn infer_expr_hinted(
 
         // ── Fio 3: ActionCall — dispatch para Action builtin ou definida ──
         Expr::ActionCall { callee, args } => {
-            // Fase 9: assert! é desugared no typeck para
-            // match cond { True: Unit, False: panic!(msg) }.
-            if callee == "assert" {
-                return infer_assert(args, span, env, ctx);
+            match infer_action_call(callee, args, span, env, ctx)? {
+                super::action_call::ActionDispatch::Complete(typed) => return Ok(typed),
+                super::action_call::ActionDispatch::Tuple(ty, kind, effect) => (ty, kind, effect),
             }
-
-            // Lowera a tupla de argumentos.
-            let typed_args = infer_expr(&args.node, &args.span, env, ctx, false)?;
-
-            // Normaliza Grouping → Tuple de 1 elemento para ActionCall args.
-            // `action!(x)` produz Grouping no parser; o codegen precisa de Tuple
-            // (ponteiro para array na arena) para passar args_ptr corretamente.
-            let typed_args = match &typed_args.kind {
-                TypedExprKind::Grouping { inner } => {
-                    let inner = inner.clone();
-                    TypedExpr {
-                        ty: Ty::Tuple(vec![inner.node.ty.clone()]),
-                        kind: TypedExprKind::Tuple {
-                            elements: vec![*inner],
-                        },
-                        span: typed_args.span,
-                        tail_pos: typed_args.tail_pos,
-                        escape: typed_args.escape,
-                        effect: typed_args.effect,
-                    }
-                }
-                _ => typed_args,
-            };
-
-            // Extrai tipos dos elementos da tupla para dispatch.
-            let arg_tys: Vec<Ty> = match &typed_args.kind {
-                TypedExprKind::Tuple { elements } => {
-                    elements.iter().map(|e| e.node.ty.clone()).collect()
-                }
-                TypedExprKind::Unit => Vec::new(), // `!()` = tupla vazia
-                _ => vec![typed_args.ty.clone()],  // args não-tupla (não deveria acontecer)
-            };
-
-            // Resolve no DispatchTable.
-            let overload = ctx
-                .table
-                .resolve(callee, &arg_tys)
-                .map_err(|e| super::helpers::dispatch_to_middle_error(e, *span))?;
-
-            // Verifica que é uma Action (is_action = true).
-            if !overload.is_action {
-                return Err(MiddleError::TypeMismatch {
-                    expected: format!("Action `{callee}` (is_action=true)"),
-                    found: format!("função pura `{callee}` — use sem `!`"),
-                    span: (*span).into(),
-                });
-            }
-
-            (
-                overload.ret,
-                TypedExprKind::ActionCall {
-                    callee: callee.clone(),
-                    args: Box::new(Spanned::new(typed_args, args.span)),
-                    caller_arena: 0, // placeholder — preenchido no codegen
-                    ffi_symbol: overload.ffi_symbol.clone().filter(|_s| overload.is_action),
-                },
-                Effect::Puro, // Fio 3 não ativa Effect
-            )
         }
 
         // ── Fio 3: var — binding mutável (exclusivo de Actions) ──
@@ -550,97 +493,4 @@ pub(crate) fn infer_expr_hinted(
         effect,
         kind,
     })
-}
-
-// ── Fio 5: DotAccess — field access em struct + index access em tupla ──
-
-/// Infere `expr.nome` (field access) ou `expr.N` (index access).
-///
-/// Desambiguação pelo tipo do receptor:
-/// - `Ty::Struct(name)` + `DotIndex::Field` → `FieldAccess`
-/// - `Ty::Struct(name)` + `DotIndex::Int` → erro `IndexAccessOnStruct`
-/// - `Ty::Tuple(elements)` + `DotIndex::Int(n)` → `IndexAccess` (negativos
-///   normalizados, bounds check compile-time)
-/// - `Ty::Tuple(elements)` + `DotIndex::Field` → erro `FieldAccessOnTuple`
-/// - Outro → erro `NotIndexable`
-fn infer_dot_access(
-    expr: &Spanned<Expr>,
-    index: &DotIndex,
-    span: &Span,
-    env: &mut TypeEnv,
-    ctx: &InferCtx,
-    tail_pos: bool,
-) -> InferResult<TypedExpr> {
-    let inner = infer_expr(&expr.node, &expr.span, env, ctx, false)?;
-    let inner_spanned = Spanned::new(inner.clone(), expr.span);
-    let inner_box = Box::new(inner_spanned);
-
-    match (&inner.ty, index) {
-        (Ty::Struct(struct_name), DotIndex::Field(field_name)) => {
-            let info =
-                ctx.struct_registry
-                    .get(struct_name)
-                    .ok_or_else(|| MiddleError::UnboundName {
-                        name: format!("struct `{struct_name}` não registrado no StructRegistry"),
-                        span: (*span).into(),
-                    })?;
-            let (field_index, field_info) =
-                info.find_field(field_name)
-                    .ok_or_else(|| MiddleError::UnknownField {
-                        struct_name: struct_name.clone(),
-                        field_name: field_name.clone(),
-                        span: (*span).into(),
-                    })?;
-            let ty = field_info.ty.clone();
-            Ok(TypedExpr {
-                span: *span,
-                ty,
-                tail_pos,
-                escape: inner.escape,
-                effect: inner.effect,
-                kind: TypedExprKind::FieldAccess {
-                    expr: inner_box,
-                    struct_name: struct_name.clone(),
-                    field_name: field_name.clone(),
-                    field_index,
-                },
-            })
-        }
-        (Ty::Struct(_), DotIndex::Int(_)) => Err(MiddleError::IndexAccessOnStruct {
-            span: (*span).into(),
-        }),
-        (Ty::Tuple(elements), DotIndex::Int(n)) => {
-            let len = elements.len() as i64;
-            // Normaliza negativo: -1 = len-1, -2 = len-2, etc.
-            let resolved = if *n < 0 { len + n } else { *n };
-            if resolved < 0 || resolved >= len {
-                return Err(MiddleError::IndexOutOfBounds {
-                    index: *n,
-                    len: len as usize,
-                    span: (*span).into(),
-                });
-            }
-            let element_index = resolved as u32;
-            let ty = elements[resolved as usize].clone();
-            Ok(TypedExpr {
-                span: *span,
-                ty,
-                tail_pos,
-                escape: inner.escape,
-                effect: inner.effect,
-                kind: TypedExprKind::IndexAccess {
-                    expr: inner_box,
-                    index: *n,
-                    element_index,
-                },
-            })
-        }
-        (Ty::Tuple(_), DotIndex::Field(_)) => Err(MiddleError::FieldAccessOnTuple {
-            span: (*span).into(),
-        }),
-        (other_ty, _) => Err(MiddleError::NotIndexable {
-            ty: format!("{other_ty:?}"),
-            span: (*span).into(),
-        }),
-    }
 }

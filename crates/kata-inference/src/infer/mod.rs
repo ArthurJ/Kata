@@ -9,9 +9,11 @@
 //! via `TypeEnv` lookup.
 
 mod _match;
+mod action_call;
 mod apply;
 mod apply_lambda;
 mod captures;
+mod dot_access;
 mod expr;
 mod format_synthesis;
 mod helpers;
@@ -73,7 +75,10 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
     //     no DispatchTable + TypedFunction com body `StructConstruct`.
     let mut struct_constructors: Vec<TypedFunction> = Vec::new();
     for struct_name in resolved.struct_registry.names() {
-        let struct_info = resolved.struct_registry.get(struct_name).unwrap();
+        let struct_info = resolved
+            .struct_registry
+            .get(struct_name)
+            .expect("struct_name veio de struct_registry.names()");
         // Aliases são processados no passo 1c abaixo — pular aqui.
         if struct_info.alias_of.is_some() {
             continue;
@@ -166,7 +171,10 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
     //     `alias Float as Altura` → `Altura :: Float => Altura` (identity).
     //     `alias Pessoa as Pessoa2` → `Pessoa2 :: Text Int => Pessoa2` (StructConstruct).
     for struct_name in resolved.struct_registry.names() {
-        let struct_info = resolved.struct_registry.get(struct_name).unwrap();
+        let struct_info = resolved
+            .struct_registry
+            .get(struct_name)
+            .expect("struct_name veio de struct_registry.names()");
         let Some(ref target) = struct_info.alias_of else {
             continue; // não é alias
         };
@@ -224,8 +232,7 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
         } else {
             // Alias de struct com campos — mesmo construtor do struct nativo,
             // mas com struct_name = new_name.
-            let field_types: Vec<Ty> =
-                struct_info.fields.iter().map(|f| f.ty.clone()).collect();
+            let field_types: Vec<Ty> = struct_info.fields.iter().map(|f| f.ty.clone()).collect();
 
             dispatch_table.insert(OverloadInfo {
                 name: struct_name.to_string(),
@@ -300,10 +307,8 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
     // 1d. Fio 5 Fase 6 — sintetiza `repr` para structs com campos.
     //     `repr :: Pessoa => Text` no DispatchTable + TypedFunction com body
     //     que constrói "Pessoa(field0, field1, ...)" via string_concat FFI.
-    let mut repr_functions = repr_synthesis::synthesize_repr_functions(
-        &resolved.struct_registry,
-        &mut dispatch_table,
-    );
+    let mut repr_functions =
+        repr_synthesis::synthesize_repr_functions(&resolved.struct_registry, &mut dispatch_table);
 
     // 2. Clona o TypeEnv do ResolvedModule — o typeck pode adicionar bindings
     //    locais (let) sem mutar o original.
@@ -386,7 +391,9 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
                 }
                 entry_expr = Some(Spanned::new(typed, expr.span));
             }
-            Item::Sig { .. } | Item::DataDecl { .. } | Item::EnumDecl { .. }
+            Item::Sig { .. }
+            | Item::DataDecl { .. }
+            | Item::EnumDecl { .. }
             | Item::AliasDecl { .. } => {
                 // Já processado no resolution/inference de funções nomeadas.
             }
