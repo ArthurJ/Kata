@@ -10,6 +10,7 @@ mod _match;
 mod action_decl;
 mod declarations;
 mod directives;
+mod expr_apply;
 mod expressions;
 mod lambda;
 mod patterns;
