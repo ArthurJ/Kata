@@ -34,6 +34,10 @@ pub struct StructInfo {
     /// `Some("Float")` significa `alias Float as Altura`.
     /// `None` para structs nativos declarados com `data`.
     pub alias_of: Option<String>,
+    /// Fio 6: nomes das funções predicado no DispatchTable.
+    /// `None` = struct normal. `Some(vec)` = tipo refinado.
+    /// Cada nome é uma função `BaseTy => Boolean` sintetizada no resolution.
+    pub predicates: Option<Vec<String>>,
 }
 
 impl StructInfo {
@@ -96,6 +100,26 @@ impl StructRegistry {
                 name: name.to_string(),
                 fields,
                 alias_of,
+                predicates: None,
+            },
+        );
+    }
+
+    /// Fio 6: registra um tipo refinado.
+    /// `alias_of` é o tipo base, `predicates` são nomes de funções no DispatchTable.
+    pub fn register_refined(
+        &mut self,
+        name: &str,
+        alias_of: &str,
+        predicates: Vec<String>,
+    ) {
+        self.structs.insert(
+            name.to_string(),
+            StructInfo {
+                name: name.to_string(),
+                fields: Vec::new(),
+                alias_of: Some(alias_of.to_string()),
+                predicates: Some(predicates),
             },
         );
     }

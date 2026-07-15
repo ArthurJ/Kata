@@ -34,10 +34,12 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             VariantInfo {
                 name: "True".into(),
                 payload_ty: None,
+                predicate: None,
             },
             VariantInfo {
                 name: "False".into(),
                 payload_ty: None,
+                predicate: None,
             },
         ],
     );
@@ -52,10 +54,12 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             VariantInfo {
                 name: "Ok".into(),
                 payload_ty: Some(Ty::Var("T".into())),
+                predicate: None,
             },
             VariantInfo {
                 name: "Err".into(),
                 payload_ty: Some(Ty::Var("E".into())),
+                predicate: None,
             },
         ],
     );
@@ -66,10 +70,12 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             VariantInfo {
                 name: "Some".into(),
                 payload_ty: Some(Ty::Var("T".into())),
+                predicate: None,
             },
             VariantInfo {
                 name: "None".into(),
                 payload_ty: None,
+                predicate: None,
             },
         ],
     );
@@ -339,6 +345,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
         signatures,
         enum_registry,
         struct_registry: StructRegistry::new(),
+        refined_decls: Vec::new(),
         functions: Vec::new(),
         actions: Vec::new(),
     })

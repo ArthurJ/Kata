@@ -3,7 +3,7 @@ name = "kata-resolution"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
-description = "Pass 0+1 — popula TypeEnv, resolve imports, coleta assinaturas, expande smart constructors"
+description = "Pass 0+1 — popula TypeEnv, resolve imports, coleta assinaturas, expanda smart constructors"
 
 [dependencies]
 kata-core.workspace = true
@@ -13,3 +13,5 @@ kata-diagnostics.workspace = true
 [dev-dependencies]
 insta.workspace = true
 proptest.workspace = true
+kata-lexer.workspace = true
+kata-parser.workspace = true

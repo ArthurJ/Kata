@@ -145,6 +145,7 @@ fn data_decl_empty() {
             name,
             fields,
             directives,
+            ..
         } => {
             assert_eq!(name, "Int");
             assert!(fields.is_empty());

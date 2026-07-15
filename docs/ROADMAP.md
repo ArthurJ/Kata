@@ -123,7 +123,7 @@ Fio 1: Fundação + Aritmética + CLI
 │       │
 │       └── Fio 13: Dict, Set (HAMT)
 │
-├── Fio 5: Data, Structs, Tuples, alias
+├── Fio 5: Data, Structs, Tuples, alias ✅ Concluído
 │   │   (data, field access, Tuple, .N em tupla, alias/newtype)
 │   │   Maquinaria: Ty::Struct, Ty::Tuple, :: em campos, smart constructor
 │   │
@@ -345,7 +345,7 @@ trap. (Enum predicado `IMC(17.0)` é Fio 6.)
 
 ---
 
-### Fio 5: Data, Structs, Tuples, alias
+### Fio 5: Data, Structs, Tuples, alias ✅ Concluído
 
 **Maquinaria de tipos construída:**
 - `Ty::Struct` com campos tipados

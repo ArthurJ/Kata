@@ -18,6 +18,10 @@ pub struct VariantInfo {
     /// `None` = variante unitária (`True`, `False`, `None`).
     /// `Some(ty)` = variante com payload (`Ok(Int)`, `Some(Float)`).
     pub payload_ty: Option<Ty>,
+    /// Fio 6: nome da função predicado no DispatchTable.
+    /// `None` = variante sem predicado (normal ou default/fallback).
+    /// `Some(name)` = variante predicada (ex: `Magreza(< _ 18.5)`).
+    pub predicate: Option<String>,
 }
 
 /// Catálogo de variantes por enum.
@@ -204,10 +208,12 @@ mod tests {
                 VariantInfo {
                     name: "True".into(),
                     payload_ty: None,
+                    predicate: None,
                 },
                 VariantInfo {
                     name: "False".into(),
                     payload_ty: None,
+                    predicate: None,
                 },
             ],
         );
@@ -229,10 +235,12 @@ mod tests {
                 VariantInfo {
                     name: "True".into(),
                     payload_ty: None,
+                    predicate: None,
                 },
                 VariantInfo {
                     name: "False".into(),
                     payload_ty: None,
+                    predicate: None,
                 },
             ],
         );
@@ -251,10 +259,12 @@ mod tests {
                 VariantInfo {
                     name: "True".into(),
                     payload_ty: None,
+                    predicate: None,
                 },
                 VariantInfo {
                     name: "False".into(),
                     payload_ty: None,
+                    predicate: None,
                 },
             ],
         );
@@ -264,10 +274,12 @@ mod tests {
                 VariantInfo {
                     name: "True".into(),
                     payload_ty: None,
+                    predicate: None,
                 },
                 VariantInfo {
                     name: "Off".into(),
                     payload_ty: None,
+                    predicate: None,
                 },
             ],
         );
@@ -303,10 +315,12 @@ mod tests {
                 VariantInfo {
                     name: "Ok".into(),
                     payload_ty: Some(Ty::int()),
+                    predicate: None,
                 },
                 VariantInfo {
                     name: "Err".into(),
                     payload_ty: Some(Ty::text()),
+                    predicate: None,
                 },
             ],
         );
@@ -329,10 +343,12 @@ mod tests {
                 VariantInfo {
                     name: "Some".into(),
                     payload_ty: Some(Ty::int()),
+                    predicate: None,
                 },
                 VariantInfo {
                     name: "None".into(),
                     payload_ty: None,
+                    predicate: None,
                 },
             ],
         );

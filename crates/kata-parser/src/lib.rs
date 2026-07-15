@@ -230,6 +230,7 @@ mod tests {
                 name,
                 fields,
                 directives,
+                ..
             } => {
                 assert_eq!(name, "Int");
                 assert!(fields.is_empty());

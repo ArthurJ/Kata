@@ -8,7 +8,7 @@
 pub(crate) mod prelude;
 mod prelude_sigs;
 
-use kata_ast::{ActionStmt, Item, LambdaClause, Module, Spanned, TypeExpr};
+use kata_ast::{ActionStmt, Expr, Item, LambdaClause, Module, Spanned, TypeExpr};
 use kata_core::{EnumRegistry, FieldInfo, PrimTy, StructRegistry, Ty, TypeEnv, VariantInfo};
 
 /// Resultado da resolution — TypeEnv populado + assinaturas coletadas.
@@ -20,6 +20,9 @@ pub struct ResolvedModule {
     pub enum_registry: EnumRegistry,
     /// Catálogo de structs com campos e offsets (Fio 5).
     pub struct_registry: StructRegistry,
+    /// Fio 6: declarações refined pendentes para o inference sintetizar
+    /// funções predicado e smart constructors falíveis.
+    pub refined_decls: Vec<RefinedDeclInfo>,
     /// Funções nomeadas com corpo Kata (Fio 2 Fase 10).
     /// Cada entrada preserva as cláusulas lambda para o inference processar.
     pub functions: Vec<FunctionDef>,
@@ -66,6 +69,18 @@ pub struct ActionDef {
     pub body: Vec<ActionStmt>,
 }
 
+/// Informação de um tipo refinado declarado pelo usuário (Fio 6).
+/// O inference sintetiza funções predicado e smart constructor falível a partir desta info.
+#[derive(Debug, Clone)]
+pub struct RefinedDeclInfo {
+    /// Nome do tipo refinado (ex: "PositiveInt").
+    pub name: String,
+    /// Tipo base (ex: Ty::Prim(PrimTy::Int)).
+    pub base_ty: Ty,
+    /// Predicados como `Spanned<Expr>` (com Hole como placeholder).
+    pub predicates: Vec<Spanned<Expr>>,
+}
+
 /// Erro de resolution (wrapped FrontendError/MiddleError).
 #[derive(Debug, Clone)]
 pub enum ResolveError {
@@ -82,12 +97,48 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
     let mut actions: Vec<ActionDef> = Vec::new();
     let mut enum_registry = EnumRegistry::new();
     let mut struct_registry = StructRegistry::new();
+    let mut refined_decls: Vec<RefinedDeclInfo> = Vec::new();
     let errors: Vec<ResolveError> = Vec::new();
 
     // Pass 0: popula TypeEnv com tipos declarados
     for item in &module.items {
         match &item.node {
-            Item::DataDecl { name, fields, .. } => {
+            Item::DataDecl {
+                name,
+                fields,
+                refined,
+                ..
+            } => {
+                // Fio 6: refined declaration?
+                if let Some(refined_decl) = refined {
+                    // `data (Int, > _ 0) as PositiveInt`
+                    // Registra no StructRegistry como refined:
+                    //   alias_of = base_ty_name, predicates = [nomes das funções]
+                    // As funções predicado são sintetizadas no inference.
+                    let base_ty_name = match &refined_decl.base_ty.node {
+                        TypeExpr::Named(n) => n.clone(),
+                        _ => {
+                            // TODO: base non-named (Tuple, etc.) — fora do escopo
+                            String::new()
+                        }
+                    };
+                    // Gera nomes das funções predicado: __pred_<TypeName>_<idx>
+                    let pred_names: Vec<String> = (0..refined_decl.predicates.len())
+                        .map(|i| format!("__pred_{name}_{i}"))
+                        .collect();
+                    struct_registry.register_refined(name, &base_ty_name, pred_names);
+                    type_env.define(name, Ty::Struct(name.clone()));
+
+                    // Guarda para o inference sintetizar as funções predicado.
+                    let base_ty = resolve_type_expr(&refined_decl.base_ty.node, &type_env);
+                    refined_decls.push(RefinedDeclInfo {
+                        name: name.clone(),
+                        base_ty,
+                        predicates: refined_decl.predicates.clone(),
+                    });
+                    continue;
+                }
+
                 // data Int () com @ffi("i64") → Ty::Prim(PrimTy::Int)
                 // Por enquanto, registra como Struct. O FfiSymbol será resolvido
                 // na inferência quando cruzar com a diretiva @ffi.
@@ -137,6 +188,7 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
                         VariantInfo {
                             name: v.name.clone(),
                             payload_ty,
+                            predicate: None,
                         }
                     })
                     .collect();
@@ -239,6 +291,7 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
         signatures,
         enum_registry,
         struct_registry,
+        refined_decls,
         functions,
         actions,
     })

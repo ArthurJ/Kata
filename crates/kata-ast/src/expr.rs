@@ -270,10 +270,14 @@ pub enum Item {
     /// `data Nome ()` — tipo opaco (sem campos).
     /// Em Fio 1: `data Int ()` com `@ffi("i64")`.
     /// Fio 5 trará campos: `data Pessoa (nome::Text idade::Int)`.
+    /// Fio 6 trará refined: `data (Int, > _ 0) as PositiveInt`.
     DataDecl {
         name: String,
         fields: Vec<FieldDecl>, // vazio para tipos opacos de Fio 1
         directives: Vec<Directive>,
+        /// Fio 6: refined declaration. None = struct normal.
+        /// Some(RefinedDecl) = tipo refinado com predicados.
+        refined: Option<RefinedDecl>,
     },
 
     /// `enum Nome` com variantes indentadas.
@@ -319,14 +323,28 @@ pub struct FieldDecl {
     pub ty: Spanned<TypeExpr>,
 }
 
+/// Declaração de tipo refinado: `data (Int, > _ 0) as PositiveInt`.
+/// Fio 6: o conteúdo de `()` é um TypeExpr (base) seguido de predicados (Expr).
+/// Cada predicado usa `Hole` (`_`) como placeholder para o valor a ser validado.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RefinedDecl {
+    /// Tipo base: `Int`, `Float`, etc.
+    pub base_ty: Spanned<TypeExpr>,
+    /// Predicados: `> _ 0`, `<= _ 100`, etc. AND lógico — todos devem passar.
+    pub predicates: Vec<Spanned<Expr>>,
+}
+
 /// Variante de enum.
 #[derive(Debug, Clone, PartialEq)]
 pub struct VariantDecl {
     pub name: String,
     /// Payload da variante. None = unitária (`True`).
     /// Some(ty) = carrega tipo (`Ok(T)`).
-    /// Predicados (Fio 4) não existem em Fio 1.
     pub payload: Option<Spanned<TypeExpr>>,
+    /// Fio 6: predicado da variante. None = sem predicado.
+    /// `Magreza(< _ 18.5)` → predicate = Some(Apply { <, [Hole, 18.5] }).
+    /// `Obesidade` → predicate = None (default/fallback).
+    pub predicate: Option<Spanned<Expr>>,
 }
 
 /// Diretiva `@nome`, `@nome("arg")`, `@nome{chave: valor}`.
