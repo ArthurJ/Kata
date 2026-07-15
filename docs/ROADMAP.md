@@ -127,7 +127,7 @@ Fio 1: Fundação + Aritmética + CLI
 │   │   (data, field access, Tuple, .N em tupla, alias/newtype)
 │   │   Maquinaria: Ty::Struct, Ty::Tuple, :: em campos, smart constructor
 │   │
-│   └── Fio 6: Tipos Refinados, Ascription
+│   └── Fio 6: Tipos Refinados, Ascription ✅ Concluído
 │       (data com predicados, smart constructors falíveis, ::Type,
 │        atrito sadio, avaliação constante de predicados)
 │       Maquinaria: :: em ascription, smart constructor falível,

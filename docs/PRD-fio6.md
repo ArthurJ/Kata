@@ -29,7 +29,7 @@ O Fio 5 já deixou infraestrutura pronta:
 
 - **`StructRegistry`** em `kata-core` com `StructInfo { name, fields, alias_of }`.
   O campo `alias_of: Option<String>` já existe para distinguir alias de struct
-  nativo. Fio 6 estende `StructInfo` com `predicates: Option<Vec<Spanned<Expr>>>`.
+  nativo. Fio 6 estende `StructInfo` com `predicates: Option<Vec<String>>` — nomes das funções predicado no DispatchTable.
 - **`Ty::Struct(String)`** já existe. Refined types são `Ty::Struct(name)` —
   a distinção refined vs alias vs struct é feita pelo `StructInfo` no registry,
   não pelo `Ty`. Isto reusa o mecanismo de alias: `alias Float as Altura` já
@@ -60,7 +60,7 @@ O Fio 5 já deixou infraestrutura pronta:
   Fio 6 reusa para ret-directed dispatch: o hint de retorno da ascription
   participa da seleção de overload, não apenas da inferência de lambda.
 - **`InferCtx`** — já carrega `table`, `enum_registry`, `struct_registry`.
-  Fio 6 adiciona `refined_registry: &'a RefinedRegistry`.
+  Fio 6 adiciona `refined_decls: &'a [RefinedDeclInfo]`.
 
 O que não existe e este PRD cria:
 
@@ -126,38 +126,20 @@ StructInfo {
 construtor falível produz `Result::(Ty::Struct("PositiveInt"), Error)` via
 `VariantConstruct` (`Ok(v)` / `Err(msg)`) — o `v` interno é `i64`.
 
-### `RefinedRegistry`
+### `RefinedDeclInfo` em `ResolvedModule`
 
-O `RefinedRegistry` vive no `ResolvedModule` (kata-resolution), que já
-depende de `kata-ast`. Isso permite guardar `Spanned<Expr>` diretamente,
-sem duplicar a representação de expressões em `kata-core`.
+Predicados são **funções** `f: T → Boolean` no DispatchTable, referenciadas
+por nome. `StructInfo.predicates: Option<Vec<String>>` guarda os nomes das
+funções predicado (`__pred_PositiveInt_0`). `VariantInfo.predicate:
+Option<String>` idem para enums. O `ResolvedModule.refined_decls:
+Vec<RefinedDeclInfo>` carrega as `Spanned<Expr>` dos predicados em
+kata-resolution para o inference sintetizar os corpos das funções predicado.
 
-```rust
-// kata-resolution/src/lib.rs
-pub struct RefinedRegistry {
-    /// refined_type_name → predicados (expressões com Hole como placeholder)
-    refined: HashMap<String, RefinedInfo>,
-}
-
-pub struct RefinedInfo {
-    pub name: String,
-    pub base_ty: Ty,           // Int, Float, etc.
-    pub predicates: Vec<Spanned<Expr>>,  // > _ 0, <= _ 100, etc.
-}
-```
-
-O `InferCtx` ganha `refined_registry: &'a RefinedRegistry`.
-
-**Por que no `ResolvedModule` e não no `kata-core`**: `kata-core` não pode
-depender de `kata-ast` (leaf crate). `Spanned<Expr>` vive em `kata-ast`.
-O `ResolvedModule` já depende de `kata-ast` e já carrega `StructRegistry`
-e `EnumRegistry` (de `kata-core`). O `RefinedRegistry` é o único registry
-que carrega `Expr` — vive no nível do resolution, não na fundação.
-
-**Alternativa considerada**: `PredicateExpr` serializado em `kata-core`
-(`PredicateExpr::IntLit(i64)`, `Apply { op, args }`). Rejeitado porque
-duplica a representação de expressões que já existe em `kata-ast`, e o
-typeck já sabe avaliar `Expr` — não precisa de uma representação paralela.
+**Decisão de design (2026-07-14)**: um predicado é uma função como
+qualquer outra. `StructInfo` guarda nomes (Strings), não `Spanned<Expr>`.
+Zero dependência de `kata-ast` em `kata-core`, single source of truth,
+predicado arbitrário (qualquer função `T → Boolean`). Esta decisão
+substitui a proposta original de `RefinedRegistry` em kata-resolution.
 
 ### Smart constructor falível
 
@@ -167,7 +149,7 @@ typeck já sabe avaliar `Expr` — não precisa de uma representação paralela.
 PositiveInt :: Int => Result::(PositiveInt, Error)
 lambda v:
     > v 0: Result::Ok(v)
-    otherwise: Result::Err("predicado > _ 0 falhou em PositiveInt")
+    otherwise: Result::Err(string_concat(show(v), " falhou no predicado > _ 0 na construção do PositiveInt"))
 ```
 
 A síntese reusa a maquinaria de guard chain que já existe:
@@ -238,19 +220,11 @@ pub struct VariantDecl {
 }
 ```
 
-**`VariantInfo`** em `kata-core` ganha `predicate_expr: Option<String>`
-(serialização mínima — o predicado como `Expr` vive no `RefinedRegistry`
-em kata-resolution; o `EnumRegistry` em kata-core só guarda um marcador
-para indicar que a variante tem predicado). Alternativa: o
-`RefinedRegistry` também guarda predicados de enum, indexado por
-`(enum_name, variant_name)`.
-
-**Decisão**: `RefinedRegistry` guarda tanto refined types quanto enum
-predicados. O `EnumRegistry` em `kata-core` não muda — só ganha um método
-`has_predicate(enum_name, variant)` que consulta o `RefinedRegistry`.
-Mas `EnumRegistry` não pode depender de `RefinedRegistry` (que está em
-kata-resolution). Então: o `InferCtx` carrega ambos, e o typeck consulta
-o `RefinedRegistry` quando precisa do predicado.
+**`VariantInfo`** em `kata-core` ganha `predicate: Option<String>` —
+nome da função predicado no DispatchTable (ex: `__pred_enum_IMC_Magreza`).
+O `EnumRegistry` em kata-core só guarda o marcador (nome da função); o
+corpo da função predicado é sintetizado no inference a partir de
+`enum_pred_decls` em `ResolvedModule`.
 
 ### Ascription-refined (4º modo)
 
@@ -525,20 +499,20 @@ valida).
 
 ## DoD
 
-1. **`5::PositiveInt` é `PositiveInt` direto.** Ascription refined valida
+1. **`5::PositiveInt` é `PositiveInt` direto.** ✅ Ascription refined valida
    predicado em compile-time, entrega `Ty::Struct("PositiveInt")` sem
    `Result`.
 
-2. **`(-5)::PositiveInt` é type error.** Predicado `> _ 0` falha em
+2. **`(-5)::PositiveInt` é type error.** ✅ Predicado `> _ 0` falha em
    compile-time. O programa não compila.
 
-3. **`PositiveInt 25 ?` desempacota.** Construtor falível retorna
+3. **`PositiveInt 25 ?` desempacota.** ✅ Construtor falível retorna
    `Result::Ok(25)`, `?` extrai 25.
 
-4. **`PositiveInt (-5)` retorna `Result::Err`.** Construtor falível
+4. **`PositiveInt (-5)` retorna `Result::Err`.** ✅ Construtor falível
    retorna `Result::Err("predicado > _ 0 falhou")`. `?` propaga erro.
 
-5. **Coerção contextual no `|` com enums de cauda unitária.** O `|`
+5. **Coerção contextual no `|` com enums de cauda unitária.** ✅ O `|`
    só funciona com enums cuja última variante é unitária (cauda sem
    payload). `Result` não é compatível (`Err` tem payload) — `|` não
    é estendido para `Result`. A coerção contextual se aplica quando o
@@ -554,37 +528,45 @@ valida).
    implementado desde Fio 2. `?` em Actions propaga. `match` é
    alternativa explícita.
 
-6. **`(/ 1 3)::Int` seleciona idiv.** Ret-directed dispatch: o hint
-   `Int` filtra overloads de `/` e seleciona `Int Int => Int`.
+6. **`(/ 1 3)::Int` seleciona idiv.** ✅ Ret-directed dispatch: o hint
+   `Int` filtra overloads de `/` e seleciona `Int Int => Int` (única
+   overload com retorno compatível). Resultado: 1/3 truncado = 0.
 
-7. **`(/ 1 3)::Rational` seleciona divisão exata.** Hint `Rational`
-   seleciona `Int Int => Rational`.
+7. **`(/ 1 3)::Rational` é type error.** ✅ Hint `Rational` filtra
+   overloads de `/` — a única overload com args `[Int, Int]` retorna
+   `Int`, não `Rational`. A overload `(Rational, Rational) → Rational`
+   tem retorno compatível, mas args `Int` não casam com params
+   `Rational` → `TypeMismatch`.
 
-8. **`(/ 1 3)` sem hint com múltiplas overloads é `AmbiguousDispatch`.**
-   Se a mesma função `/` tem duas overloads com `[Int, Int]` mas retorno
-   diferente (`Rational` e `Int`), ambas pontuam `exact: 2` — empate
-   perfeito. O dispatch retorna `AmbiguousDispatch` (não type error).
-   Isso é o comportamento correto do multiple dispatch: o scoring de
-   argumentos não consegue distinguir. O ret-directed dispatch é o
-   escape — o hint de retorno quebra o empate. Se `/` tem uma única
-   overload, despacha normalmente sem ambiguidade.
+8. **`(/ 1 3)` sem hint despacha normalmente.** ✅ Com única overload
+   `(Int, Int) → Int`, o scoring seleciona diretamente. Ambiguidade
+   só surge com múltiplas overloads de mesmo arg shape (DoD 8b).
 
-9. **Enum predicado `IMC(17.0)` despacha para `Magreza`.** O
+   **DoD 8b**: função custom com 2 overloads mesmo arg shape, retorno
+   diferente (`Int => Int` e `Int => Text`). Sem hint:
+   `AmbiguousDispatch` (empate perfeito no scoring). Com hint `Int`:
+   seleciona `Int => Int`. Com hint `Text`: seleciona `Int => Text`.
+
+9. **Enum predicado `IMC(17.0)` despacha para `Magreza`.** ✅ O
    construtor sintetizado avalia predicados em runtime e despacha
    para a variante correta.
 
-10. **`IMC(22.0)` despacha para `Normal`.** Segundo predicado
+10. **`IMC(22.0)` despacha para `Normal`.** ✅ Segundo predicado
     satisfeito.
 
-11. **`IMC(35.0)` despacha para `Obesidade`.** Nenhum predicado
+11. **`IMC(35.0)` despacha para `Obesidade`.** ✅ Nenhum predicado
     satisfeito → fallback (default variant).
 
-12. **`((/ 1 3))::Int` é type error.** Grouped ascription: o grouping
-    duplo é barreira, não propaga hint. `/ 1 3` sem hint despacha
-    normalmente (única overload → `Rational`). A ascription `::Int`
-    valida o resultado contra `Int` — como `Rational ≠ Int` e não há
-    rebaixamento de Rational para Int, é type mismatch. Para
-    desambiguar via hint, use `(/ 1 3)::Type` (sem grouping duplo).
+12. **`((/ 1 3))::Int` é OK; `((/ 1 3))::Rational` é type error.** ✅
+    Grouped ascription: o grouping duplo é barreira, não propaga hint.
+    `/ 1 3` sem hint despacha normalmente (única overload → `Int`).
+    A ascription `::Int` valida `Int == Int` → OK. A ascription
+    `::Rational` valida `Int ≠ Rational` → type mismatch (sem
+    rebaixamento). Para ret-directed dispatch (propagar hint), use
+    `(/ 1 3)::Type` (sem grouping duplo). A diferença entre
+    `(expr)::Type` e `((expr))::Type` só se manifesta com múltiplas
+    overloads: `(custom 42)::Int` seleciona via hint (ret-directed),
+    `((custom 42))::Int` sem hint → `AmbiguousDispatch` (barreira).
 
 ## Não faz parte deste PRD
 
