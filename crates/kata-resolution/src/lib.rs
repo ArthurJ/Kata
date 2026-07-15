@@ -23,6 +23,9 @@ pub struct ResolvedModule {
     /// Fio 6: declarações refined pendentes para o inference sintetizar
     /// funções predicado e smart constructors falíveis.
     pub refined_decls: Vec<RefinedDeclInfo>,
+    /// Fio 6: enums com variantes predicadas pendentes para o inference
+    /// sintetizar o construtor despachador.
+    pub enum_pred_decls: Vec<EnumPredDeclInfo>,
     /// Funções nomeadas com corpo Kata (Fio 2 Fase 10).
     /// Cada entrada preserva as cláusulas lambda para o inference processar.
     pub functions: Vec<FunctionDef>,
@@ -81,6 +84,31 @@ pub struct RefinedDeclInfo {
     pub predicates: Vec<Spanned<Expr>>,
 }
 
+/// Informação de um enum com variantes predicadas (Fio 6).
+/// O inference sintetiza o construtor que despacha para a variante correta.
+#[derive(Debug, Clone)]
+pub struct EnumPredDeclInfo {
+    /// Nome do enum (ex: "IMC").
+    pub name: String,
+    /// Tipo do payload comum a todas as variantes (ex: Ty::Prim(PrimTy::Float)).
+    pub payload_ty: Ty,
+    /// Variantes predicadas: (nome, predicado, tag).
+    /// A última variante (sem predicado) é o fallback/default.
+    pub variants: Vec<EnumPredVariant>,
+}
+
+/// Variante de um enum predicado.
+#[derive(Debug, Clone)]
+pub struct EnumPredVariant {
+    /// Nome da variante (ex: "Magreza").
+    pub name: String,
+    /// Predicado como `Spanned<Expr>` (com Hole como placeholder).
+    /// None = variante default/fallback.
+    pub predicate: Option<Spanned<Expr>>,
+    /// Tag da variante no enum (índice na declaração).
+    pub tag: usize,
+}
+
 /// Erro de resolution (wrapped FrontendError/MiddleError).
 #[derive(Debug, Clone)]
 pub enum ResolveError {
@@ -98,6 +126,7 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
     let mut enum_registry = EnumRegistry::new();
     let mut struct_registry = StructRegistry::new();
     let mut refined_decls: Vec<RefinedDeclInfo> = Vec::new();
+    let mut enum_pred_decls: Vec<EnumPredDeclInfo> = Vec::new();
     let errors: Vec<ResolveError> = Vec::new();
 
     // Pass 0: popula TypeEnv com tipos declarados
@@ -178,21 +207,97 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
                 type_env.define(name, Ty::Sum(name.clone()));
                 // Fio 2: cataloga variantes no EnumRegistry.
                 // Fase 5: resolve payload types das variantes.
-                let variant_infos: Vec<VariantInfo> = variants
-                    .iter()
-                    .map(|v| {
-                        let payload_ty = v
-                            .payload
-                            .as_ref()
-                            .map(|p| resolve_type_expr(&p.node, &type_env));
-                        VariantInfo {
-                            name: v.name.clone(),
-                            payload_ty,
-                            predicate: None,
-                        }
-                    })
-                    .collect();
+                // Fio 6: processa predicados das variantes.
+                let has_predicates = variants.iter().any(|v| v.predicate.is_some());
+
+                let variant_infos: Vec<VariantInfo> = {
+                    // Se tem predicados, infere payload_ty base a partir das
+                    // variantes predicadas. A variante default herda esse tipo.
+                    let base_payload_ty = if has_predicates {
+                        variants.iter().find_map(|v| {
+                            v.payload
+                                .as_ref()
+                                .map(|p| resolve_type_expr(&p.node, &type_env))
+                                .or_else(|| {
+                                    v.predicate
+                                        .as_ref()
+                                        .and_then(|pred| infer_payload_ty_from_pred(&pred.node))
+                                })
+                        })
+                    } else {
+                        None
+                    };
+
+                    variants
+                        .iter()
+                        .map(|v| {
+                            let payload_ty = v
+                                .payload
+                                .as_ref()
+                                .map(|p| resolve_type_expr(&p.node, &type_env))
+                                .or_else(|| {
+                                    v.predicate
+                                        .as_ref()
+                                        .and_then(|pred| infer_payload_ty_from_pred(&pred.node))
+                                })
+                                // Variante default herda payload_ty das variantes predicadas
+                                // (apenas quando o enum tem predicados).
+                                .or_else(|| base_payload_ty.clone());
+                            let predicate = v
+                                .predicate
+                                .as_ref()
+                                .map(|_| format!("__pred_enum_{name}_{}", v.name));
+                            VariantInfo {
+                                name: v.name.clone(),
+                                payload_ty,
+                                predicate,
+                            }
+                        })
+                        .collect()
+                };
                 enum_registry.register(name, variant_infos);
+
+                // Se tem variantes predicadas, guarda para o inference sintetizar
+                // o construtor despachador.
+                if has_predicates {
+                    // O tipo do payload é inferido a partir do predicado:
+                    // `Magreza(< _ 18.5)` → literal 18.5 é Float → payload é Float.
+                    // Se uma variante tem payload explícito, usa esse.
+                    // Senão, infere do literal no predicado.
+                    let payload_ty = variants
+                        .iter()
+                        .find_map(|v| {
+                            v.payload
+                                .as_ref()
+                                .map(|p| resolve_type_expr(&p.node, &type_env))
+                        })
+                        .unwrap_or_else(|| {
+                            // Infere do predicado: aplicação `op _ literal` → tipo do literal.
+                            variants
+                                .iter()
+                                .find_map(|v| {
+                                    v.predicate
+                                        .as_ref()
+                                        .and_then(|pred| infer_payload_ty_from_pred(&pred.node))
+                                })
+                                .unwrap_or(Ty::Unit)
+                        });
+
+                    let enum_variants: Vec<EnumPredVariant> = variants
+                        .iter()
+                        .enumerate()
+                        .map(|(i, v)| EnumPredVariant {
+                            name: v.name.clone(),
+                            predicate: v.predicate.clone(),
+                            tag: i,
+                        })
+                        .collect();
+                    enum_pred_decls.push(EnumPredDeclInfo {
+                        name: name.clone(),
+                        payload_ty,
+                        variants: enum_variants,
+                    });
+                }
             }
             _ => {}
         }
@@ -292,6 +397,7 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
         enum_registry,
         struct_registry,
         refined_decls,
+        enum_pred_decls,
         functions,
         actions,
     })
@@ -350,3 +456,27 @@ fn resolve_type_expr(expr: &TypeExpr, env: &TypeEnv) -> Ty {
 }
 
 pub use prelude_sigs::load_prelude;
+
+/// Infere o tipo do payload a partir do predicado da variante.
+///
+/// `Magreza(< _ 18.5)` → predicado `Apply { Ident("<"), [Hole, FloatLit("18.5")] }`
+/// → o tipo do payload é o tipo do literal (`Float`).
+///
+/// Suporta predicados no formato `op _ literal` (Apply com callee Ident e args [Hole, literal]).
+fn infer_payload_ty_from_pred(expr: &Expr) -> Option<Ty> {
+    if let Expr::Apply { callee, args } = expr {
+        // callee deve ser Ident (operador)
+        if matches!(callee.node, Expr::Ident { .. }) {
+            // args[0] deve ser Hole, args[1] deve ser literal
+            if args.len() == 2 && matches!(args[0].node, Expr::Hole) {
+                return match &args[1].node {
+                    Expr::IntLit { .. } => Some(Ty::Prim(PrimTy::Int)),
+                    Expr::FloatLit { .. } => Some(Ty::Prim(PrimTy::Float)),
+                    Expr::TextLit { .. } => Some(Ty::Prim(PrimTy::Text)),
+                    _ => None,
+                };
+            }
+        }
+    }
+    None
+}

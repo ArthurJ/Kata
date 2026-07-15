@@ -4,7 +4,7 @@
 //! (cláusulas multi-arg). `test_single_pattern` testa um pattern contra um
 //! valor, com recursão para sub-patterns de tupla.
 
-use cranelift_codegen::ir::types::I64;
+use cranelift_codegen::ir::types::{F64, I64};
 use cranelift_codegen::ir::{InstBuilder, MemFlagsData};
 use kata_ast::Spanned;
 use kata_inference::TypedPattern;
@@ -45,6 +45,18 @@ pub(crate) fn test_single_pattern(
     match &pat.node {
         TypedPattern::Ident { name, ty } => {
             let clif_ty = crate::ffi_sigs::ty_to_clif(ty);
+            // Se o valor recebido é I64 mas a var é F64 (ex: payload de Sum
+            // extraído como I64, mas o binding é Float), bitcast I64→F64.
+            let val = {
+                let val_ty = lower.builder.func.dfg.value_type(val);
+                if val_ty == I64 && clif_ty == cranelift_codegen::ir::types::F64 {
+                    lower.builder.ins().bitcast(F64, MemFlagsData::new(), val)
+                } else if val_ty == F64 && clif_ty == I64 {
+                    lower.builder.ins().bitcast(I64, MemFlagsData::new(), val)
+                } else {
+                    val
+                }
+            };
             let var = lower.new_var(name, clif_ty);
             lower.builder.def_var(var, val);
             Ok(None)

@@ -42,6 +42,7 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
         enum_registry,
         struct_registry,
         refined_decls: Vec::new(),
+        enum_pred_decls: Vec::new(),
         functions: user.functions,
         actions: user.actions,
     }

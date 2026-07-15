@@ -394,6 +394,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
         enum_registry,
         struct_registry: StructRegistry::new(),
         refined_decls: Vec::new(),
+        enum_pred_decls: Vec::new(),
         functions: Vec::new(),
         actions: Vec::new(),
     })

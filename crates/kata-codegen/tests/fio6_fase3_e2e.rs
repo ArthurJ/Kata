@@ -10,7 +10,7 @@
 //! - DoD 4: `PositiveInt (-5)` retorna `Result::Err` (construtor falível)
 
 use kata_codegen::jit_eval;
-use kata_core::ty::Ty;
+use kata_core::ty::{PrimTy, Ty};
 use kata_inference::infer_module;
 use kata_lexer::lex;
 use kata_optimizer::optimize;
@@ -29,12 +29,15 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
     struct_registry.merge(user.struct_registry);
     let mut refined_decls = prelude.refined_decls;
     refined_decls.extend(user.refined_decls);
+    let mut enum_pred_decls = prelude.enum_pred_decls;
+    enum_pred_decls.extend(user.enum_pred_decls);
     ResolvedModule {
         type_env,
         signatures,
         enum_registry,
         struct_registry,
         refined_decls,
+        enum_pred_decls,
         functions: user.functions,
         actions: user.actions,
     }
@@ -189,4 +192,39 @@ fn ascription_refined_exige_literal() {
         infer_fails(src),
         "x::PositiveInt deve falhar (ascription refined exige literal, não variável)"
     );
+}
+
+// ── DoDs 9-11: Enum predicado ───────────────────────────────────────
+
+/// DoD 9: `IMC 17.0` despacha para `Magreza`.
+/// O construtor sintetizado avalia predicados em runtime e despacha
+/// para a variante cujo predicado satisfaz.
+#[test]
+fn enum_predicado_despacha_magreza() {
+    let src = "enum IMC\n    Magreza(< _ 18.5)\n    Normal(<= _ 25.0)\n    Sobrepeso(<= _ 30.0)\n    Obesidade\nmatch IMC 17.0\n    IMC::Magreza x: x\n    IMC::Normal x: x\n    IMC::Sobrepeso x: x\n    IMC::Obesidade x: x";
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Prim(PrimTy::Float));
+    // O payload é Float 17.0 — o match extrai o valor
+    let f = f64::from_bits(raw as u64);
+    assert!((f - 17.0).abs() < 0.001, "esperado 17.0, got {f}");
+}
+
+/// DoD 10: `IMC 22.0` despacha para `Normal`.
+#[test]
+fn enum_predicado_despacha_normal() {
+    let src = "enum IMC\n    Magreza(< _ 18.5)\n    Normal(<= _ 25.0)\n    Sobrepeso(<= _ 30.0)\n    Obesidade\nmatch IMC 22.0\n    IMC::Magreza x: x\n    IMC::Normal x: x\n    IMC::Sobrepeso x: x\n    IMC::Obesidade x: x";
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Prim(PrimTy::Float));
+    let f = f64::from_bits(raw as u64);
+    assert!((f - 22.0).abs() < 0.001, "esperado 22.0, got {f}");
+}
+
+/// DoD 11: `IMC 35.0` despacha para `Obesidade` (fallback/default).
+#[test]
+fn enum_predicado_despacha_obesidade() {
+    let src = "enum IMC\n    Magreza(< _ 18.5)\n    Normal(<= _ 25.0)\n    Sobrepeso(<= _ 30.0)\n    Obesidade\nmatch IMC 35.0\n    IMC::Magreza x: x\n    IMC::Normal x: x\n    IMC::Sobrepeso x: x\n    IMC::Obesidade x: x";
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Prim(PrimTy::Float));
+    let f = f64::from_bits(raw as u64);
+    assert!((f - 35.0).abs() < 0.001, "esperado 35.0, got {f}");
 }

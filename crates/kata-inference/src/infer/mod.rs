@@ -88,6 +88,16 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
         &mut dispatch_table,
     )?;
 
+    // 1f. Fio 6 — sintetiza construtores despachadores para enums com
+    //     variantes predicadas (`enum IMC: Magreza(< _ 18.5), ...`).
+    let enum_pred_constructors = constructors_refined::synthesize_enum_pred(
+        &resolved.enum_pred_decls,
+        &resolved.enum_registry,
+        &resolved.struct_registry,
+        &resolved.type_env,
+        &mut dispatch_table,
+    )?;
+
     // 1d. Fio 5 Fase 6 — sintetiza `repr` para structs com campos.
     //     `repr :: Pessoa => Text` no DispatchTable + TypedFunction com body
     //     que constrói "Pessoa(field0, field1, ...)" via string_concat FFI.
@@ -204,6 +214,7 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
             let mut all_funcs = typed_functions;
             all_funcs.extend(struct_constructors);
             all_funcs.extend(refined_constructors);
+            all_funcs.extend(enum_pred_constructors);
             all_funcs.append(&mut repr_functions);
             all_funcs
         },

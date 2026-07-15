@@ -144,12 +144,16 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
     let mut refined_decls = prelude.refined_decls;
     refined_decls.extend(user.refined_decls);
 
+    let mut enum_pred_decls = prelude.enum_pred_decls;
+    enum_pred_decls.extend(user.enum_pred_decls);
+
     ResolvedModule {
         type_env,
         signatures,
         enum_registry,
         struct_registry,
         refined_decls,
+        enum_pred_decls,
         functions: user.functions,
         actions: user.actions,
     }
