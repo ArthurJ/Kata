@@ -21,6 +21,7 @@ mod constructors_refined;
 mod dot_access;
 mod expr;
 mod format_synthesis;
+mod generics;
 mod helpers;
 mod lambda;
 mod partial_dispatch;
@@ -70,6 +71,8 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
             is_generic: false,
             is_constructor: false,
             associative_neutral: None,
+            type_params: vec![],
+            substitutions: None,
         });
     }
 

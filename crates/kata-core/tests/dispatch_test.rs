@@ -11,6 +11,8 @@ fn make_ffi_info(name: &str, params: &[Ty], ret: Ty, ffi: &str) -> OverloadInfo 
         is_generic: false,
         is_constructor: false,
         associative_neutral: None,
+        type_params: vec![],
+        substitutions: None,
     }
 }
 

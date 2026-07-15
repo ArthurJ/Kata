@@ -10,6 +10,7 @@ use kata_core::dispatch::{OverloadInfo, Score, match_score};
 use kata_core::escape::EscapeTarget;
 use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
+use std::collections::HashMap;
 
 use crate::typed::{Effect, TypedExpr, TypedExprKind};
 
@@ -215,32 +216,104 @@ pub(crate) fn infer_apply(
             });
         }
 
-        let overload = ctx
+        // Fase 5: caminho genérico — se nenhuma overload não-genérica casa,
+        // procura overloads com type_params não-vazio e tenta unify.
+        let generic_result = ctx
             .table
-            .resolve(&func_name, &arg_types, ctx.interface_registry)
-            .map_err(|e| dispatch_to_middle_error(e, *span))?;
+            .resolve(&func_name, &arg_types, ctx.interface_registry);
+        match generic_result {
+            Ok(overload) => {
+                let callee_ty =
+                    Ty::Function(overload.params.clone(), Box::new(overload.ret.clone()));
+                let callee_typed = TypedExpr {
+                    span: callee.span,
+                    ty: callee_ty,
+                    tail_pos: false,
+                    escape: EscapeTarget::Local,
+                    effect: Effect::Puro,
+                    kind: TypedExprKind::Ident {
+                        name: func_name.clone(),
+                    },
+                };
 
-        let callee_ty = Ty::Function(overload.params.clone(), Box::new(overload.ret.clone()));
-        let callee_typed = TypedExpr {
-            span: callee.span,
-            ty: callee_ty,
-            tail_pos: false,
-            escape: EscapeTarget::Local,
-            effect: Effect::Puro,
-            kind: TypedExprKind::Ident {
-                name: func_name.clone(),
-            },
-        };
+                return Ok((
+                    overload.ret,
+                    TypedExprKind::Closure {
+                        callee: Box::new(Spanned::new(callee_typed, callee.span)),
+                        args: typed_args,
+                        ffi_symbol: overload.ffi_symbol,
+                    },
+                    Effect::Puro,
+                ));
+            }
+            Err(_) => {
+                // Tenta caminho genérico: procura overload com type_params não-vazio.
+                let mut arity_matched = false;
+                let mut unify_failed = false;
+                if let Some(overloads) = ctx.table.get_overloads(&func_name) {
+                    for oi in overloads.iter().filter(|oi| {
+                        oi.params.len() == arg_types.len() && !oi.type_params.is_empty()
+                    }) {
+                        arity_matched = true;
+                        let mut subs: super::generics::Substitutions = HashMap::new();
+                        match super::generics::unify(
+                            &oi.params,
+                            &arg_types,
+                            &oi.type_params,
+                            &mut subs,
+                        ) {
+                            Ok(_) => {
+                                // Aplica substitutions no tipo de retorno.
+                                let concrete_ret = super::generics::apply_subs(&oi.ret, &subs);
+                                let callee_ty =
+                                    Ty::Function(oi.params.clone(), Box::new(concrete_ret.clone()));
+                                let callee_typed = TypedExpr {
+                                    span: callee.span,
+                                    ty: callee_ty,
+                                    tail_pos: false,
+                                    escape: EscapeTarget::Local,
+                                    effect: Effect::Puro,
+                                    kind: TypedExprKind::Ident {
+                                        name: func_name.clone(),
+                                    },
+                                };
 
-        return Ok((
-            overload.ret,
-            TypedExprKind::Closure {
-                callee: Box::new(Spanned::new(callee_typed, callee.span)),
-                args: typed_args,
-                ffi_symbol: overload.ffi_symbol,
-            },
-            Effect::Puro,
-        ));
+                                return Ok((
+                                    concrete_ret,
+                                    TypedExprKind::Closure {
+                                        callee: Box::new(Spanned::new(callee_typed, callee.span)),
+                                        args: typed_args,
+                                        ffi_symbol: oi.ffi_symbol.clone(),
+                                    },
+                                    Effect::Puro,
+                                ));
+                            }
+                            Err(_) => {
+                                unify_failed = true;
+                            }
+                        }
+                    }
+                }
+
+                // Se uma overload genérica com aridade certa foi encontrada mas
+                // unify falhou, o erro é TypeMismatch (inconsistência de tipos).
+                if arity_matched && unify_failed {
+                    return Err(MiddleError::TypeMismatch {
+                        expected: format!("argumentos consistentes com type params de {func_name}"),
+                        found: format!("unify falhou para {func_name} com args {:?}", arg_types),
+                        span: (*span).into(),
+                    });
+                }
+
+                // Caminho genérico falhou — retorna o erro original do dispatch.
+                return Err(dispatch_to_middle_error(
+                    ctx.table
+                        .resolve(&func_name, &arg_types, ctx.interface_registry)
+                        .unwrap_err(),
+                    *span,
+                ));
+            }
+        }
     }
 
     // Caminho 2: TypeEnv (call_indirect para lambda como valor).

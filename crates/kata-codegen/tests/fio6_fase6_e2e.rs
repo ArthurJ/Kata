@@ -215,6 +215,7 @@ fn custom_overloads() -> Vec<Signature> {
             is_associative: false,
             associative_neutral: None,
             is_action: false,
+            type_params: vec![],
         },
         Signature {
             name: "custom".into(),
@@ -224,6 +225,7 @@ fn custom_overloads() -> Vec<Signature> {
             is_associative: false,
             associative_neutral: None,
             is_action: false,
+            type_params: vec![],
         },
     ]
 }

@@ -26,6 +26,13 @@ pub struct OverloadInfo {
     pub is_generic: bool,
     pub is_constructor: bool,
     pub associative_neutral: Option<i64>,
+    /// Fase 5: nomes dos type params (ex: `["T"]` para `id :: T => T`).
+    /// Vazio para funções não-genéricas.
+    pub type_params: Vec<String>,
+    /// Fase 6: instanciação nos call sites. `None` para função genérica
+    /// original e para funções não-genéricas. `Some(map)` para instâncias
+    /// monomorfizadas.
+    pub substitutions: Option<HashMap<String, Ty>>,
 }
 
 /// Score de um candidato — 4D + tiebreak genérico.
@@ -126,6 +133,8 @@ impl DispatchTable {
             is_generic: false,
             is_constructor: false,
             associative_neutral,
+            type_params: vec![],
+            substitutions: None,
         });
     }
 

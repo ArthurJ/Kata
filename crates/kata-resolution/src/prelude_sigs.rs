@@ -420,6 +420,7 @@ fn sig(
         is_associative: assoc,
         associative_neutral: neutral,
         is_action: false,
+        type_params: vec![],
     }
 }
 
@@ -433,5 +434,6 @@ fn sig_action(name: &str, params: Vec<Ty>, ret: Ty, ffi: &str) -> Signature {
         is_associative: false,
         associative_neutral: None,
         is_action: true,
+        type_params: vec![],
     }
 }

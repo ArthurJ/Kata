@@ -36,6 +36,8 @@ pub(crate) fn populate_dispatch_table(signatures: &[Signature]) -> DispatchTable
             is_generic: false,
             is_constructor: false,
             associative_neutral,
+            type_params: sig.type_params.clone(),
+            substitutions: None,
         });
 
         // Marca comutativa para operadores associativos (+, *)

@@ -51,6 +51,10 @@ pub struct Signature {
     /// Se `true`, esta assinatura é uma Action (Fio 3).
     /// Actions são chamadas com `!` e têm `is_action = true` no DispatchTable.
     pub is_action: bool,
+    /// Fase 5: type params da assinatura genérica (ex: `["T"]` para `id :: T => T`).
+    /// Vazio para funções não-genéricas. Coletado examinando os `Ty::Var` em
+    /// param_types e return_type cujo nome é UPPER_CASE e não está no TypeEnv.
+    pub type_params: Vec<String>,
 }
 
 /// Definição de função nomeada com corpo Kata (não-FFI).
@@ -426,6 +430,9 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
                     }
                 }
 
+                // Fase 5: coleta type params (Ty::Var UPPER_CASE em params/ret).
+                let type_params = collect_type_params(&param_types, &return_type);
+
                 // Se tem corpo Kata (cláusulas lambda), preserva para o inference.
                 if let Some(clauses) = body {
                     functions.push(FunctionDef {
@@ -444,6 +451,7 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
                     is_associative,
                     associative_neutral,
                     is_action: false,
+                    type_params,
                 });
             }
             Item::ActionDecl {
@@ -511,6 +519,9 @@ fn resolve_type_expr(expr: &TypeExpr, env: &TypeEnv, iface_reg: &InterfaceRegist
                         // Se é uma interface registrada, produz Ty::Interface.
                         if iface_reg.get_interface(name).is_some() {
                             Ty::Interface(name.clone())
+                        } else if is_type_param_name(name) {
+                            // Fase 5: UPPER_CASE sem :: é type param (ex: T, E, A).
+                            Ty::Var(name.clone())
                         } else {
                             Ty::Struct(name.clone()) // fallback: tipo declarado pelo usuário
                         }
@@ -577,4 +588,40 @@ fn infer_payload_ty_from_pred(expr: &Expr) -> Option<Ty> {
         }
     }
     None
+}
+
+/// Fase 5: verifica se um nome é um type param.
+///
+/// Convenção: UPPER_CASE (todas as letras maiúsculas, pelo menos 1 char).
+/// `T`, `E`, `A` → true. `Int`, `Complex`, `NUM` → false (tem minúsculas).
+/// `Self` → false (não é type param genérico, é placeholder de interface).
+fn is_type_param_name(name: &str) -> bool {
+    name.chars().all(|c| c.is_ascii_uppercase()) && !name.is_empty() && name != "Self"
+}
+
+/// Fase 5: coleta type params de uma assinatura resolvida.
+///
+/// Percorre param_types e return_type recursivamente buscando `Ty::Var(name)`
+/// onde `name` é UPPER_CASE. Recursa em `Ty::Generic` args. Remove duplicatas,
+/// preservando ordem de primeira ocorrência.
+fn collect_type_params(param_types: &[Ty], return_type: &Ty) -> Vec<String> {
+    fn collect_into(ty: &Ty, result: &mut Vec<String>) {
+        match ty {
+            Ty::Var(name) if is_type_param_name(name) && !result.contains(name) => {
+                result.push(name.clone());
+            }
+            Ty::Generic(_, args) => {
+                for arg in args {
+                    collect_into(arg, result);
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut result: Vec<String> = Vec::new();
+    for ty in param_types {
+        collect_into(ty, &mut result);
+    }
+    collect_into(return_type, &mut result);
+    result
 }

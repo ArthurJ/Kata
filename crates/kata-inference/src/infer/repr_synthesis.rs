@@ -63,6 +63,8 @@ pub(crate) fn synthesize_repr_functions(
             is_generic: false,
             is_constructor: false,
             associative_neutral: None,
+            type_params: vec![],
+            substitutions: None,
         });
 
         // Pattern: `__self` : Struct
