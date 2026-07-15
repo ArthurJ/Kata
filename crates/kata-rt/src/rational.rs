@@ -34,7 +34,8 @@ pub fn rat_from_text(text: &str) -> BigRational {
 }
 
 /// Cria Rational a partir de Int (i64 tagged).
-pub fn rat_from_int(int_val: i64) -> BigRational {
+#[allow(dead_code)]
+pub(crate) fn rat_from_int(int_val: i64) -> BigRational {
     crate::bigint::to_rational(int_val)
 }
 
@@ -171,7 +172,8 @@ pub unsafe extern "C" fn kata_rt_rat_ge(a: *const BigRational, b: *const BigRati
 
 /// show de Rational. Imprime decimal quando denominador é 2^a · 5^b,
 /// caso contrário imprime como fração.
-pub fn rat_to_string(r: &BigRational) -> String {
+#[allow(dead_code)]
+pub(crate) fn rat_to_string(r: &BigRational) -> String {
     // Se denominador é 1, é inteiro
     if r.denom() == &BigInt::one() {
         return r.numer().to_string();
@@ -255,12 +257,14 @@ fn try_decimal(r: &BigRational) -> Option<String> {
 }
 
 /// Converte Rational para Float.
-pub fn rat_to_float(r: &BigRational) -> f64 {
+#[allow(dead_code)]
+pub(crate) fn rat_to_float(r: &BigRational) -> f64 {
     r.to_f64().unwrap_or(f64::NAN)
 }
 
 /// Converte Float para Rational (mais próximo).
-pub fn float_to_rat(f: f64) -> BigRational {
+#[allow(dead_code)]
+pub(crate) fn float_to_rat(f: f64) -> BigRational {
     BigRational::from_float(f).unwrap_or_else(BigRational::zero)
 }
 

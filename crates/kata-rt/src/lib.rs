@@ -6,31 +6,31 @@
 //! O compilador conhece apenas o enum `FfiSymbol` e as 3 strings de mapeamento
 //! (`"i64"`, `"f64"`, `"kata_rt_string"`). Toda a implementação vive aqui.
 
-pub mod arc;
-pub mod arena;
-pub mod bigint;
+pub(crate) mod arc;
+pub(crate) mod arena;
+pub(crate) mod bigint;
 pub(crate) mod fiber;
-pub mod float;
-pub mod io;
-pub mod rational;
+pub(crate) mod float;
+pub(crate) mod io;
+pub(crate) mod rational;
 pub(crate) mod scheduler;
-pub mod sum;
-pub mod text;
+pub(crate) mod sum;
+pub(crate) mod text;
 
-// Re-exports convenientes para uso interno (não C-ABI)
+// Re-exports convenientes para uso interno (não C-ABI).
+// Símbolos não consumidos cross-crate foram removidos (to_rational, float_to_rat,
+// rat_from_int, rat_to_float, rat_to_string, reset_all_arenas, reset_scheduler).
 pub use bigint::{
     bigint_to_string, decode_smi_pub, encode_smi_pub, fits_smi_pub, is_smi_pub, show,
-    tag_int_from_str, tag_int_pub, to_rational,
+    tag_int_from_str, tag_int_pub,
 };
 pub use float::float_to_string;
-pub use rational::{float_to_rat, rat_from_int, rat_from_text, rat_to_float, rat_to_string};
+pub use rational::rat_from_text;
 pub use text::{bool_to_text, int_to_text, text_literal, text_replace_first};
 
 // Re-exports de funções C-ABI para o codegen registrar no JIT.
 pub use arc::{kata_rt_alloc_arc, kata_rt_arc_fn_ptr, kata_rt_decref, kata_rt_incref};
-pub use arena::{
-    kata_rt_arena_alloc, kata_rt_arena_create, kata_rt_arena_destroy, reset_all_arenas,
-};
+pub use arena::{kata_rt_arena_alloc, kata_rt_arena_create, kata_rt_arena_destroy};
 pub use bigint::{
     kata_rt_bi_add, kata_rt_bi_div, kata_rt_bi_eq, kata_rt_bi_ge, kata_rt_bi_gt, kata_rt_bi_le,
     kata_rt_bi_lt, kata_rt_bi_mul, kata_rt_bi_neq, kata_rt_bi_show, kata_rt_bi_sub,
@@ -48,9 +48,7 @@ pub use rational::{
     kata_rt_rat_lt, kata_rt_rat_mul, kata_rt_rat_neq, kata_rt_rat_show, kata_rt_rat_show_raw,
     kata_rt_rat_sub, kata_rt_rat_to_float,
 };
-pub use scheduler::{
-    kata_rt_run, kata_rt_scheduler_init, kata_rt_spawn, kata_rt_yield, reset_scheduler,
-};
+pub use scheduler::{kata_rt_run, kata_rt_scheduler_init, kata_rt_spawn, kata_rt_yield};
 pub use sum::{kata_rt_store_sum_result, kata_rt_sum_tag_int};
 pub use text::{
     kata_rt_bool_to_text, kata_rt_string_concat, kata_rt_string_len, kata_rt_text_literal,

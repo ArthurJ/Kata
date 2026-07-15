@@ -8,10 +8,10 @@
 //! e produz `TypedModule`.
 
 pub mod desugar;
-pub mod infer;
+pub(crate) mod infer;
 pub(crate) mod patterns;
 pub(crate) mod redundancy;
-pub mod typed;
+pub(crate) mod typed;
 
 pub use infer::{InferResult, infer_module};
 pub use typed::{

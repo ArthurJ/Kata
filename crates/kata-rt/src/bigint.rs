@@ -425,7 +425,8 @@ pub fn show(val: i64) -> String {
 }
 
 /// Converte Int para Rational (para interoperabilidade).
-pub fn to_rational(val: i64) -> num_rational::BigRational {
+#[allow(dead_code)]
+pub(crate) fn to_rational(val: i64) -> num_rational::BigRational {
     let n = if is_smi(val) {
         BigInt::from(decode_smi(val))
     } else {

@@ -7,9 +7,9 @@
 //! Esta crate é uma leaf crate: não depende de nenhum outro crate do projeto.
 //! `kata-core` depende de `kata-ast` para ter acesso a `Span` (orphan rule, I7).
 
-pub mod expr;
-pub mod span;
-pub mod token;
+pub(crate) mod expr;
+pub(crate) mod span;
+pub(crate) mod token;
 
 pub use expr::{
     ActionStmt, Directive, DirectiveArg, DirectiveValue, DotIndex, Expr, FieldDecl, GuardClause,

@@ -204,7 +204,8 @@ thread_local! {
 }
 
 /// Reseta o scheduler thread-local. Chamado entre execuções de teste.
-pub fn reset_scheduler() {
+#[allow(dead_code)]
+pub(crate) fn reset_scheduler() {
     SCHEDULER.with(|s| {
         s.borrow_mut().take();
     });
