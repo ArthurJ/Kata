@@ -20,10 +20,7 @@ fn refined_decl_registra_no_struct_registry() {
     assert_eq!(info.name, "PositiveInt");
     assert!(info.fields.is_empty());
     assert_eq!(info.alias_of.as_deref(), Some("Int"));
-    let preds = info
-        .predicates
-        .as_ref()
-        .expect("deve ter predicates");
+    let preds = info.predicates.as_ref().expect("deve ter predicates");
     assert_eq!(preds.len(), 1);
     assert_eq!(preds[0], "__pred_PositiveInt_0");
 }

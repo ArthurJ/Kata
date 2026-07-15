@@ -105,24 +105,40 @@ fn enum_predicado_simple() {
             // Magreza: predicado < _ 18.5
             assert_eq!(variants[0].name, "Magreza");
             assert!(variants[0].payload.is_none());
-            let pred = variants[0].predicate.as_ref().expect("predicate must be Some");
+            let pred = variants[0]
+                .predicate
+                .as_ref()
+                .expect("predicate must be Some");
             match &pred.node {
                 Expr::Apply { callee, args } => {
                     assert_eq!(callee.node, Expr::Ident { name: "<".into() });
                     assert_eq!(args.len(), 2);
                     assert_eq!(args[0].node, Expr::Hole);
-                    assert_eq!(args[1].node, Expr::FloatLit { text: "18.5".into() });
+                    assert_eq!(
+                        args[1].node,
+                        Expr::FloatLit {
+                            text: "18.5".into()
+                        }
+                    );
                 }
                 other => panic!("expected Apply, got {other:?}"),
             }
 
             // Normal: predicado <= _ 25.0
             assert_eq!(variants[1].name, "Normal");
-            let pred = variants[1].predicate.as_ref().expect("predicate must be Some");
+            let pred = variants[1]
+                .predicate
+                .as_ref()
+                .expect("predicate must be Some");
             match &pred.node {
                 Expr::Apply { callee, args } => {
                     assert_eq!(callee.node, Expr::Ident { name: "<=".into() });
-                    assert_eq!(args[1].node, Expr::FloatLit { text: "25.0".into() });
+                    assert_eq!(
+                        args[1].node,
+                        Expr::FloatLit {
+                            text: "25.0".into()
+                        }
+                    );
                 }
                 other => panic!("expected Apply, got {other:?}"),
             }
@@ -138,9 +154,7 @@ fn enum_predicado_simple() {
 #[test]
 fn enum_predicado_and_payload_mixed() {
     // Enum com variante com payload e variante com predicado
-    let m = parse_src(
-        "enum Estado\n    Ativo(Int)\n    Inativo(<= _ 0)\n    Encerrado",
-    );
+    let m = parse_src("enum Estado\n    Ativo(Int)\n    Inativo(<= _ 0)\n    Encerrado");
     let item = first_item(&m);
     match item {
         Item::EnumDecl { name, variants, .. } => {

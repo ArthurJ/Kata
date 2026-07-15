@@ -107,12 +107,7 @@ impl StructRegistry {
 
     /// Fio 6: registra um tipo refinado.
     /// `alias_of` é o tipo base, `predicates` são nomes de funções no DispatchTable.
-    pub fn register_refined(
-        &mut self,
-        name: &str,
-        alias_of: &str,
-        predicates: Vec<String>,
-    ) {
+    pub fn register_refined(&mut self, name: &str, alias_of: &str, predicates: Vec<String>) {
         self.structs.insert(
             name.to_string(),
             StructInfo {
