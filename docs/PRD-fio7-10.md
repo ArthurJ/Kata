@@ -390,7 +390,7 @@ constructors_refined.rs:1) + quaisquer outros. Buscar com
 
 **Verificação:** `cargo test -p kata-inference`
 
-### Fase 5: Generics — `Ty::Generic` para funções e tipos definidos pelo usuário
+### Fase 5: Generics — `Ty::Generic` para funções e tipos definidos pelo usuário ✅
 
 **Objetivo:** funções e tipos genéricos definidos pelo usuário, com type params
 que são resolvidos nos call sites.
@@ -663,7 +663,7 @@ implements SHOW for Complex
 | 3 | `import modulo` carrega de filesystem com cache e cycle detection | 3 |
 | 4 | `export item1 item2` marca itens como exportados | 3 |
 | 5 | `+ (Complex 1.0 2.0) (Complex 3.0 4.0)` despacha via `iface++` no Score ✅ | 4 |
-| 6 | `id 42` infere `T = Int` via `unify` e retorna `Int` | 5 |
+| 6 | `id 42` infere `T = Int` via `unify` e retorna `Int` ✅ | 5 |
 | 7 | `List(Int)` e `List(Text)` geram instâncias monomorfizadas distintas | 6 |
 | 8 | `@commutative` em `=` tenta args invertidos quando 0 candidatos | 7 |
 | 9 | `stdlib/core.kata` carregado como prelude substitui `prelude_sigs.rs` | 8 |
