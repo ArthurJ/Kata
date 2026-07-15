@@ -135,7 +135,8 @@ impl EnumRegistry {
     /// Busca o enum ao qual uma variante pertence.
     /// Retorna o nome do enum se `variant_name` for uma variante conhecida
     /// de algum enum. Usado para resolver patterns desqualificados.
-    pub fn find_enum_of_variant(&self, variant_name: &str) -> Option<&str> {
+    #[allow(dead_code)] // usado apenas em testes inline #[cfg(test)]
+    pub(crate) fn find_enum_of_variant(&self, variant_name: &str) -> Option<&str> {
         self.variants
             .iter()
             .find(|(_, vs)| vs.iter().any(|v| v.name == variant_name))

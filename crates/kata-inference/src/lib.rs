@@ -9,7 +9,7 @@
 
 pub mod desugar;
 pub mod infer;
-pub mod patterns;
+pub(crate) mod patterns;
 pub(crate) mod redundancy;
 pub mod typed;
 
