@@ -133,9 +133,43 @@ pub(crate) fn infer_expr_hinted(
         // ── Ascription de tipo ───────────────────────────────
         Expr::TypeAscription { expr, ty } => {
             let target_ty = resolve_type_expr(&ty.node, env);
-            // Propaga o tipo anotado como hint top-down (DoD 29).
-            let inner =
-                infer_expr_hinted(&expr.node, &expr.span, env, ctx, false, Some(&target_ty))?;
+
+            // Fase 6: Grouped ascription `((expr))::Type` — barreira de hint.
+            // Se expr é Grouping(Grouping(inner2)), o grouping duplo bloqueia
+            // a propagação do hint. Inferir inner2 sem hint (None), depois
+            // validar contra target_ty normalmente.
+            let (inner, _is_grouped) = match &expr.node {
+                Expr::Grouping { inner: g1 } => {
+                    if let Expr::Grouping { inner: g2 } = &g1.node {
+                        // ((expr))::Type — barreira: sem hint
+                        let typed = infer_expr_hinted(&g2.node, &g2.span, env, ctx, false, None)?;
+                        (typed, true)
+                    } else {
+                        // (expr)::Type — propaga hint normalmente
+                        let typed = infer_expr_hinted(
+                            &expr.node,
+                            &expr.span,
+                            env,
+                            ctx,
+                            false,
+                            Some(&target_ty),
+                        )?;
+                        (typed, false)
+                    }
+                }
+                _ => {
+                    // expr::Type — propaga hint normalmente
+                    let typed = infer_expr_hinted(
+                        &expr.node,
+                        &expr.span,
+                        env,
+                        ctx,
+                        false,
+                        Some(&target_ty),
+                    )?;
+                    (typed, false)
+                }
+            };
 
             // Fio 6: Ascription-refined — `5::PositiveInt` valida predicados
             // em compile-time. Se target é um tipo refined (StructInfo com

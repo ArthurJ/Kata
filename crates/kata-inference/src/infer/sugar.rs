@@ -5,7 +5,7 @@
 //!
 //! (Nome `sugar` para evitar colisão com `crate::desugar` já importado em mod.rs.)
 
-use kata_ast::{Expr, MatchArm, Pattern, Span, Spanned};
+use kata_ast::{Expr, MatchArm, Pattern, Span, Spanned, TypeExpr};
 use kata_core::escape::EscapeTarget;
 use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
@@ -245,9 +245,45 @@ pub(crate) fn infer_pipe_fallback(
     }
 
     // Constrói os braços do match sintético.
-    // Cada variante com payload: Variant(v) => v (desempacota).
-    // Última variante (cauda unitária): Variant => rhs (fallback).
+    // Fase 6: Coerção contextual no `|`. Se o payload da primeira variante
+    // não-cauda é um tipo refined (Struct com predicates), o fallback (rhs)
+    // é implicitamente tratado como o mesmo refined type. Envolver rhs em
+    // `TypeAscription { rhs::RefinedType }` valida o predicado em compile-time.
+    //
+    // Para enums genéricos, o payload_ty no EnumRegistry é Ty::Var("T").
+    // Precisamos instanciar com o tipo concreto do scrutinee: se o scrutinee
+    // é Generic("Optional", [Struct("PositiveInt")]), o payload Var("T")
+    // resolve para Struct("PositiveInt").
     let binding = "__pipe_v";
+    let type_args = match &typed_scrutinee.ty {
+        Ty::Generic(_, args) => Some(args.clone()),
+        _ => None,
+    };
+    let type_params = ctx.enum_registry.type_params_of(&enum_name);
+    let refined_name: Option<String> =
+        variants
+            .iter()
+            .find(|v| v.payload_ty.is_some())
+            .and_then(|v| {
+                let concrete_payload = v.payload_ty.as_ref().unwrap();
+                // Instancia Ty::Var com type_args do scrutinee.
+                let resolved = match (concrete_payload, &type_args, &type_params) {
+                    (Ty::Var(name), Some(args), Some(params)) => params
+                        .iter()
+                        .position(|p| p == name)
+                        .and_then(|idx| args.get(idx).cloned())
+                        .unwrap_or(concrete_payload.clone()),
+                    _ => concrete_payload.clone(),
+                };
+                if let Ty::Struct(ref name) = resolved
+                    && let Some(info) = ctx.struct_registry.get(name)
+                    && info.predicates.is_some()
+                {
+                    return Some(name.clone());
+                }
+                None
+            });
+
     let mut arms = Vec::with_capacity(variants.len());
 
     for (i, v) in variants.iter().enumerate() {
@@ -274,7 +310,19 @@ pub(crate) fn infer_pipe_fallback(
 
         let body = if is_last {
             // Cauda: avalia o fallback (rhs).
-            rhs.clone()
+            // Fase 6: Se o payload é refined, envolver rhs em ascription
+            // refined para validar o predicado em compile-time.
+            if let Some(ref rname) = refined_name {
+                Spanned::new(
+                    Expr::TypeAscription {
+                        expr: Box::new(rhs.clone()),
+                        ty: Spanned::new(TypeExpr::Named(rname.clone()), rhs.span),
+                    },
+                    rhs.span,
+                )
+            } else {
+                rhs.clone()
+            }
         } else {
             // Não-cauda: retorna o valor desempacotado.
             Spanned::new(
