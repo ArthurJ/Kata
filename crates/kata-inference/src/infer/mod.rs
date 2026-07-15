@@ -12,9 +12,11 @@ mod _match;
 mod action_call;
 mod apply;
 mod apply_lambda;
+mod ascription;
 mod captures;
 mod const_eval;
 mod constructors;
+mod constructors_enum_pred;
 mod constructors_refined;
 mod dot_access;
 mod expr;
@@ -90,7 +92,7 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
 
     // 1f. Fio 6 — sintetiza construtores despachadores para enums com
     //     variantes predicadas (`enum IMC: Magreza(< _ 18.5), ...`).
-    let enum_pred_constructors = constructors_refined::synthesize_enum_pred(
+    let enum_pred_constructors = constructors_enum_pred::synthesize_enum_pred(
         &resolved.enum_pred_decls,
         &resolved.enum_registry,
         &resolved.struct_registry,
