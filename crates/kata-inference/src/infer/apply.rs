@@ -6,6 +6,7 @@
 //! 3. TypeEnv: call_indirect para lambda como valor
 
 use kata_ast::{Expr, Span, Spanned};
+use kata_core::dispatch::{OverloadInfo, Score, match_score};
 use kata_core::escape::EscapeTarget;
 use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
@@ -31,6 +32,7 @@ pub(crate) fn infer_apply(
     span: &Span,
     env: &mut TypeEnv,
     ctx: &InferCtx,
+    hint: Option<&Ty>,
 ) -> InferResult<(Ty, TypedExprKind, Effect)> {
     // DoD 31: Apply de lambda inline — se o callee é um lambda (possivelmente
     // envolto em Grouping ou TypeAscription), inferir args primeiro (síntese
@@ -114,6 +116,102 @@ pub(crate) fn infer_apply(
 
     // Caminho 1: DispatchTable (call direto para FFI ou função Kata nomeada).
     if ctx.table.has_function(&func_name) {
+        // Fase 5: Ret-directed dispatch — se hint é Some(ty), filtra overloads
+        // cujo retorno é compatível com ty (via fits_return) antes do scoring.
+        if let Some(hint_ty) = hint {
+            let overloads = ctx.table.get_overloads(&func_name).unwrap();
+            let compatible: Vec<&OverloadInfo> = overloads
+                .iter()
+                .filter(|oi| oi.params.len() == arg_types.len())
+                .filter(|oi| super::expr::fits_return(&oi.ret, hint_ty))
+                .collect();
+
+            if compatible.is_empty() {
+                return Err(MiddleError::TypeMismatch {
+                    expected: format!("{hint_ty:?} (hint de retorno)"),
+                    found: format!(
+                        "nenhuma overload de {func_name} retorna tipo compatível com {hint_ty:?}"
+                    ),
+                    span: (*span).into(),
+                });
+            }
+
+            // Scoring por dominância entre as overloads compatíveis com o hint.
+            // Replicar a lógica de resolve_inner mas só entre os compatíveis.
+            let mut best_overload: Option<&OverloadInfo> = None;
+            let mut best_score: Option<Score> = None;
+            let mut top_count = 0;
+            for oi in &compatible {
+                let score = match_score(&arg_types, &oi.params);
+                if !score.is_compatible(arg_types.len()) {
+                    continue;
+                }
+                let score = Score {
+                    is_generic_origin: oi.is_generic,
+                    ..score
+                };
+                match best_score {
+                    None => {
+                        best_score = Some(score);
+                        best_overload = Some(oi);
+                        top_count = 1;
+                    }
+                    Some(bs) if score > bs => {
+                        best_score = Some(score);
+                        best_overload = Some(oi);
+                        top_count = 1;
+                    }
+                    Some(bs) if score == bs => {
+                        top_count += 1;
+                    }
+                    _ => {}
+                }
+            }
+
+            if top_count == 0 {
+                // Nenhuma overload compatível com o hint tem args que casam.
+                return Err(MiddleError::TypeMismatch {
+                    expected: format!("{hint_ty:?} (hint de retorno) com args compatíveis"),
+                    found: format!(
+                        "nenhuma overload de {func_name} com retorno {hint_ty:?} aceita os argumentos fornecidos"
+                    ),
+                    span: (*span).into(),
+                });
+            }
+
+            if top_count == 1
+                && let Some(oi) = best_overload
+            {
+                let overload = oi.clone();
+                let callee_ty =
+                    Ty::Function(overload.params.clone(), Box::new(overload.ret.clone()));
+                let callee_typed = TypedExpr {
+                    span: callee.span,
+                    ty: callee_ty,
+                    tail_pos: false,
+                    escape: EscapeTarget::Local,
+                    effect: Effect::Puro,
+                    kind: TypedExprKind::Ident {
+                        name: func_name.clone(),
+                    },
+                };
+                return Ok((
+                    overload.ret,
+                    TypedExprKind::Closure {
+                        callee: Box::new(Spanned::new(callee_typed, callee.span)),
+                        args: typed_args,
+                        ffi_symbol: overload.ffi_symbol,
+                    },
+                    Effect::Puro,
+                ));
+            }
+
+            return Err(MiddleError::AmbiguousDispatch {
+                name: func_name,
+                span: (*span).into(),
+            });
+        }
+
         let overload = ctx
             .table
             .resolve(&func_name, &arg_types)

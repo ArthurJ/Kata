@@ -127,7 +127,8 @@ pub(crate) fn infer_expr_hinted(
         }
 
         // ── Aplicação prefixa ────────────────────────────────
-        Expr::Apply { callee, args } => infer_apply(callee, args, span, env, ctx)?,
+        // Fase 5: propaga hint para infer_apply (ret-directed dispatch).
+        Expr::Apply { callee, args } => infer_apply(callee, args, span, env, ctx, hint)?,
 
         // ── Ascription de tipo ───────────────────────────────
         Expr::TypeAscription { expr, ty } => {

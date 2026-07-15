@@ -377,7 +377,7 @@ pub enum DispatchError {
 /// Em Fio 1: só `exact` existe. Alias (Fio 5), refined (Fio 6),
 /// iface (Fio 7) são sempre 0. Se qualquer posição é incompatível,
 /// retorna Score::incompatible() (todos zero).
-fn match_score(args: &[Ty], params: &[Ty]) -> Score {
+pub fn match_score(args: &[Ty], params: &[Ty]) -> Score {
     let mut exact = 0;
     let alias = 0;
     let refined = 0;
