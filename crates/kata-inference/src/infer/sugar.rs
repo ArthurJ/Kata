@@ -265,7 +265,10 @@ pub(crate) fn infer_pipe_fallback(
             .iter()
             .find(|v| v.payload_ty.is_some())
             .and_then(|v| {
-                let concrete_payload = v.payload_ty.as_ref().unwrap();
+                let concrete_payload = v
+                    .payload_ty
+                    .as_ref()
+                    .expect("find(|v| v.payload_ty.is_some()) garante Some");
                 // Instancia Ty::Var com type_args do scrutinee.
                 let resolved = match (concrete_payload, &type_args, &type_params) {
                     (Ty::Var(name), Some(args), Some(params)) => params

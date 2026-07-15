@@ -119,7 +119,10 @@ pub(crate) fn infer_apply(
         // Fase 5: Ret-directed dispatch — se hint é Some(ty), filtra overloads
         // cujo retorno é compatível com ty (via fits_return) antes do scoring.
         if let Some(hint_ty) = hint {
-            let overloads = ctx.table.get_overloads(&func_name).unwrap();
+            let overloads = ctx
+                .table
+                .get_overloads(&func_name)
+                .expect("has_function retornou true, overloads deve existir");
             let compatible: Vec<&OverloadInfo> = overloads
                 .iter()
                 .filter(|oi| oi.params.len() == arg_types.len())
