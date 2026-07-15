@@ -30,6 +30,9 @@ pub(crate) fn ty_to_clif(ty: &Ty) -> cranelift_codegen::ir::Type {
         // Var e Generic: Sum é sempre ponteiro opaco (box tag+payload).
         Ty::Var(_) => I64,
         Ty::Generic(_, _) => I64,
+        // Interface: não é tipo concreto — não deveria chegar ao codegen.
+        // Mapeia para I64 como fallback graceful.
+        Ty::Interface(_) => I64,
     }
 }
 

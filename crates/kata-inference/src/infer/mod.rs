@@ -193,8 +193,14 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
             Item::Sig { .. }
             | Item::DataDecl { .. }
             | Item::EnumDecl { .. }
-            | Item::AliasDecl { .. } => {
+            | Item::AliasDecl { .. }
+            | Item::InterfaceDecl { .. }
+            | Item::ImplementsDecl { .. }
+            | Item::ImportDecl { .. }
+            | Item::ExportDecl { .. } => {
                 // Já processado no resolution/inference de funções nomeadas.
+                // Fio 7: interfaces/implements/import/export são processados
+                // na Fase 2 (resolution) — o inference não os processa.
             }
             Item::ActionDecl { .. } => {
                 // Já processado no inference de Actions (abaixo).

@@ -12,8 +12,9 @@ pub(crate) mod span;
 pub(crate) mod token;
 
 pub use expr::{
-    ActionStmt, Directive, DirectiveArg, DirectiveValue, DotIndex, Expr, FieldDecl, GuardClause,
-    Item, LambdaClause, MatchArm, Module, Pattern, RefinedDecl, TypeExpr, VariantDecl, WithBinding,
+    ActionStmt, Directive, DirectiveArg, DirectiveValue, DotIndex, ExportItem, Expr, FieldDecl,
+    GuardClause, ImplMethod, InterfaceSig, Item, LambdaClause, MatchArm, Module, Pattern,
+    RefinedDecl, TypeExpr, VariantDecl, WithBinding,
 };
 pub use span::{Span, Spanned};
 pub use token::{Token, TokenWithSpan};

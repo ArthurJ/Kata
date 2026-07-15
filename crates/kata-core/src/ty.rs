@@ -34,6 +34,11 @@ pub enum Ty {
     /// Tipo genérico instanciado (ex: `Result<Int, Text>`).
     /// Carrega o nome do enum + os argumentos de tipo concretos.
     Generic(String, Vec<Ty>),
+    /// Interface (ex: `NUM`, `ORD`, `EQ`, `SHOW`).
+    /// Usada como tipo de parâmetro em assinaturas para indicar
+    /// "qualquer tipo que implementa esta interface". Não é um tipo
+    /// concreto — o dispatch resolve para o tipo real no call site.
+    Interface(String),
 }
 
 /// Mapeamento de representação FFI.

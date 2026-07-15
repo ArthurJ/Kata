@@ -452,6 +452,9 @@ fn resolve_type_expr(expr: &TypeExpr, env: &TypeEnv) -> Ty {
             // (ex: "T" em Result::(T, E) dentro de uma declaração de função genérica).
             Ty::Generic(name.clone(), resolved_params)
         }
+        // Fio 7: Self é resolvido na Fase 2 (resolution de implements).
+        // Por ora, mapeia para Ty::Var("Self") como placeholder.
+        TypeExpr::SelfRef => Ty::Var("Self".into()),
     }
 }
 

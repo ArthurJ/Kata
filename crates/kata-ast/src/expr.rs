@@ -310,6 +310,40 @@ pub enum Item {
         body: Vec<ActionStmt>,
     },
 
+    // ── Fio 7: Interfaces, Implements, Import, Export ──────────
+    /// `interface NOME implements SUPER1 SUPER2 ...` + bloco indentado
+    /// de assinaturas obrigatórias.
+    InterfaceDecl {
+        name: String,
+        supertraits: Vec<String>,
+        /// Type params da interface (ex: `A` em `ITERABLE(A)`).
+        type_params: Vec<String>,
+        signatures: Vec<InterfaceSig>,
+    },
+
+    /// `Tipo implements Interface` + bloco indentado com métodos.
+    ImplementsDecl {
+        type_name: String,
+        /// Type params do tipo (ex: `A` em `List(A) implements ITERABLE(A)`).
+        type_params: Vec<String>,
+        interface_name: String,
+        /// Params da interface vinculados (ex: `A` em `ITERABLE(A)`).
+        iface_params: Vec<String>,
+        /// Métodos: assinaturas concretas + corpo (lambda ou @ffi).
+        methods: Vec<ImplMethod>,
+    },
+
+    /// `import modulo.submodulo` / `import ... as alias` /
+    /// `import MOD.(items)`.
+    ImportDecl {
+        path: Vec<String>,
+        alias: Option<String>,
+        items: Option<Vec<String>>, // None = tudo, Some = seletivo
+    },
+
+    /// `export item1 item2 ...` / `export MOD.(itens)`.
+    ExportDecl { items: Vec<ExportItem> },
+
     // ── Expressão de entry point ────────────────────────
     /// Última expressão top-level — entry point implícito (I5).
     /// `+ 1 2` num arquivo é EntryExpr.
@@ -405,6 +439,11 @@ pub enum TypeExpr {
         params: Vec<Spanned<TypeExpr>>,
         ret: Box<Spanned<TypeExpr>>,
     },
+
+    /// `Self` — referência ao tipo que implementa a interface.
+    /// Válido apenas dentro de blocos `interface` e `implements`.
+    /// O resolution substitui pelo tipo concreto no impl.
+    SelfRef,
 }
 
 /// Statement do body de uma Action.
@@ -428,4 +467,39 @@ impl Module {
     pub fn new(items: Vec<Spanned<Item>>) -> Self {
         Module { items }
     }
+}
+
+// ── Fio 7: Structs auxiliares para interfaces ──────────────
+
+/// Assinatura dentro de interface — sem corpo, sem diretivas.
+/// `+ :: NUM NUM => NUM`
+#[derive(Debug, Clone, PartialEq)]
+pub struct InterfaceSig {
+    pub name: String,
+    pub params: Vec<Spanned<TypeExpr>>,
+    pub ret: Spanned<TypeExpr>,
+}
+
+/// Método dentro de implements — assinatura + corpo.
+/// `+ :: Complex Complex => Complex` + lambda ou @ffi.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ImplMethod {
+    pub name: String,
+    pub params: Vec<Spanned<TypeExpr>>,
+    pub ret: Spanned<TypeExpr>,
+    pub directives: Vec<Directive>,
+    /// None = FFI (precisa @ffi); Some = corpo Kata (cláusulas lambda).
+    pub body: Option<Vec<Spanned<LambdaClause>>>,
+}
+
+/// Item de export: nome simples ou reexportação de submódulo.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExportItem {
+    /// Nome do item exportado (ex: `+`, `TipoX`, `NUM`).
+    pub name: String,
+    /// Reexportação: `MOD.(itens)` — None = export direto,
+    /// Some = reexportar itens de outro módulo.
+    pub reexport_from: Option<String>,
+    /// Itens reexportados (quando reexport_from é Some).
+    pub reexport_items: Option<Vec<String>>,
 }

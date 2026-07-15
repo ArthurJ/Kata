@@ -116,6 +116,8 @@ pub(crate) fn resolve_type_expr(expr: &TypeExpr, env: &TypeEnv) -> Ty {
             Ty::Function(param_types, Box::new(return_type))
         }
         TypeExpr::ParamApp { name, .. } => Ty::Sum(name.clone()),
+        // Fio 7: Self é resolvido na Fase 2. Placeholder por ora.
+        TypeExpr::SelfRef => Ty::Var("Self".into()),
     }
 }
 

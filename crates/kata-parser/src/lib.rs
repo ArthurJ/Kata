@@ -12,6 +12,7 @@ mod declarations;
 mod directives;
 mod expr_apply;
 mod expressions;
+mod imports;
 mod lambda;
 mod patterns;
 mod types;

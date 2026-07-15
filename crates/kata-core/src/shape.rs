@@ -89,6 +89,8 @@ impl Ty {
                 name: name.clone(),
                 variants: Vec::new(),
             },
+            // Interface: não é um tipo concreto — mapeia para Unit graceful.
+            Ty::Interface(_) => TypeShape::Unit,
         }
     }
 }

@@ -22,6 +22,10 @@ impl Parser {
         match self.peek().clone() {
             Token::Ident(name) => {
                 self.advance();
+                // `Self` — referência ao tipo que implementa a interface.
+                if name == "Self" {
+                    return Ok(Spanned::new(TypeExpr::SelfRef, start));
+                }
                 // `Name::(T1, T2)` — tipo com parâmetros posicionais.
                 if matches!(self.peek(), Token::DoubleColon) {
                     self.advance(); // consume ::

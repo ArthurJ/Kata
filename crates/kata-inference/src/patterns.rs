@@ -317,5 +317,10 @@ pub(crate) fn check_exhaustiveness(
             found: "variável de tipo".into(),
             span: (*span).into(),
         }),
+        Ty::Interface(_) => Err(MiddleError::TypeMismatch {
+            expected: "tipo concreto para match".into(),
+            found: "interface".into(),
+            span: (*span).into(),
+        }),
     }
 }
