@@ -9,9 +9,12 @@ description = "Pass 0+1 — popula TypeEnv, resolve imports, coleta assinaturas,
 kata-core.workspace = true
 kata-ast.workspace = true
 kata-diagnostics.workspace = true
+kata-lexer.workspace = true
+kata-parser.workspace = true
 
 [dev-dependencies]
 insta.workspace = true
 proptest.workspace = true
 kata-lexer.workspace = true
 kata-parser.workspace = true
+tempfile = "3"

@@ -5,6 +5,7 @@
 //!
 //! Produz o `ResolvedModule` (imutável).
 
+pub mod module_loader;
 pub(crate) mod prelude;
 mod prelude_sigs;
 
