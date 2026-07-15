@@ -145,7 +145,7 @@ pub(crate) fn infer_apply(
             let mut best_score: Option<Score> = None;
             let mut top_count = 0;
             for oi in &compatible {
-                let score = match_score(&arg_types, &oi.params);
+                let score = match_score(&arg_types, &oi.params, ctx.interface_registry);
                 if !score.is_compatible(arg_types.len()) {
                     continue;
                 }
@@ -217,7 +217,7 @@ pub(crate) fn infer_apply(
 
         let overload = ctx
             .table
-            .resolve(&func_name, &arg_types)
+            .resolve(&func_name, &arg_types, ctx.interface_registry)
             .map_err(|e| dispatch_to_middle_error(e, *span))?;
 
         let callee_ty = Ty::Function(overload.params.clone(), Box::new(overload.ret.clone()));

@@ -8,6 +8,7 @@ use kata_ast::{Expr, Span, Spanned};
 use kata_core::dispatch::DispatchTable;
 use kata_core::enum_registry::EnumRegistry;
 use kata_core::escape::EscapeTarget;
+use kata_core::interface_registry::InterfaceRegistry;
 use kata_core::struct_registry::StructRegistry;
 use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
@@ -37,6 +38,9 @@ pub(crate) struct InferCtx<'a> {
     /// Fio 6: declarações refined para ascription-refined (validação
     /// compile-time de predicados sobre literais).
     pub refined_decls: &'a [RefinedDeclInfo],
+    /// Fio 7: catálogo de interfaces e implementações para dispatch
+    /// com `iface++` no Score.
+    pub interface_registry: &'a InterfaceRegistry,
     /// Tipo de retorno da Action atual — `Some(ty)` quando inferindo
     /// o body de uma Action, `None` caso contrário. Usado por `infer_return`
     /// para verificar que `return expr` produz o tipo esperado.
@@ -321,6 +325,7 @@ pub(crate) fn infer_expr_hinted(
                 enum_registry: ctx.enum_registry,
                 struct_registry: ctx.struct_registry,
                 refined_decls: ctx.refined_decls,
+                interface_registry: ctx.interface_registry,
                 ret_ty: ctx.ret_ty,
                 in_loop: true,
             };

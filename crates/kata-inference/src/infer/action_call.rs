@@ -77,7 +77,7 @@ pub(crate) fn infer_action_call(
     // Resolve no DispatchTable.
     let overload = ctx
         .table
-        .resolve(callee, &arg_tys)
+        .resolve(callee, &arg_tys, ctx.interface_registry)
         .map_err(|e| super::helpers::dispatch_to_middle_error(e, *span))?;
 
     // Verifica que é uma Action (is_action = true).

@@ -1,3 +1,4 @@
+use kata_core::interface_registry::InterfaceRegistry;
 use kata_core::{DispatchError, DispatchTable, OverloadInfo, Ty};
 
 fn make_ffi_info(name: &str, params: &[Ty], ret: Ty, ffi: &str) -> OverloadInfo {
@@ -25,7 +26,7 @@ fn resolve_single_overload_exact_match() {
         "kata_rt_bi_add",
     ));
 
-    let result = table.resolve("+", &[Ty::int(), Ty::int()]);
+    let result = table.resolve("+", &[Ty::int(), Ty::int()], &InterfaceRegistry::new());
     assert!(result.is_ok());
     assert_eq!(
         result.unwrap().ffi_symbol.as_deref(),
@@ -43,14 +44,14 @@ fn resolve_single_overload_type_mismatch() {
         "kata_rt_bi_add",
     ));
 
-    let result = table.resolve("+", &[Ty::int(), Ty::float()]);
+    let result = table.resolve("+", &[Ty::int(), Ty::float()], &InterfaceRegistry::new());
     assert!(result.is_err());
 }
 
 #[test]
 fn resolve_function_not_found() {
     let table = DispatchTable::new();
-    let result = table.resolve("nonexistent", &[Ty::int()]);
+    let result = table.resolve("nonexistent", &[Ty::int()], &InterfaceRegistry::new());
     assert_eq!(
         result.unwrap_err(),
         DispatchError::FunctionNotFound {
@@ -71,7 +72,11 @@ fn resolve_arity_mismatch() {
     ));
 
     // Pass 3 args para função de 2 params
-    let result = table.resolve("+", &[Ty::int(), Ty::int(), Ty::int()]);
+    let result = table.resolve(
+        "+",
+        &[Ty::int(), Ty::int(), Ty::int()],
+        &InterfaceRegistry::new(),
+    );
     assert!(result.is_err());
 }
 
@@ -103,7 +108,7 @@ fn resolve_multiple_overloads_selects_exact() {
     ));
 
     // Args Int Int → deve selecionar a overload Int
-    let result = table.resolve("+", &[Ty::int(), Ty::int()]);
+    let result = table.resolve("+", &[Ty::int(), Ty::int()], &InterfaceRegistry::new());
     assert!(result.is_ok());
     assert_eq!(
         result.unwrap().ffi_symbol.as_deref(),
@@ -134,7 +139,7 @@ fn resolve_multiple_overloads_selects_float() {
     ));
 
     // Args Float Float → deve selecionar a overload Float
-    let result = table.resolve("+", &[Ty::float(), Ty::float()]);
+    let result = table.resolve("+", &[Ty::float(), Ty::float()], &InterfaceRegistry::new());
     assert!(result.is_ok());
     assert_eq!(result.unwrap().ffi_symbol.as_deref(), Some("kata_rt_fadd"));
 }
@@ -161,7 +166,11 @@ fn resolve_multiple_overloads_selects_rational() {
         "kata_rt_rat_add",
     ));
 
-    let result = table.resolve("+", &[Ty::rational(), Ty::rational()]);
+    let result = table.resolve(
+        "+",
+        &[Ty::rational(), Ty::rational()],
+        &InterfaceRegistry::new(),
+    );
     assert!(result.is_ok());
     assert_eq!(
         result.unwrap().ffi_symbol.as_deref(),
@@ -186,7 +195,7 @@ fn resolve_mixed_args_no_match() {
     ));
 
     // Int + Float → nenhuma overload compatível
-    let result = table.resolve("+", &[Ty::int(), Ty::float()]);
+    let result = table.resolve("+", &[Ty::int(), Ty::float()], &InterfaceRegistry::new());
     assert!(result.is_err());
 }
 
@@ -205,7 +214,7 @@ fn resolve_commutative_swaps_args() {
     table.mark_commutative("==");
 
     // Float Int → commutative swap → Int Float → match
-    let result = table.resolve("==", &[Ty::float(), Ty::int()]);
+    let result = table.resolve("==", &[Ty::float(), Ty::int()], &InterfaceRegistry::new());
     assert!(result.is_ok());
     assert_eq!(result.unwrap().ffi_symbol.as_deref(), Some("kata_rt_eq"));
 }
@@ -222,7 +231,7 @@ fn resolve_commutative_no_swap_if_direct_match() {
     table.mark_commutative("==");
 
     // Int Int → match direto, sem swap
-    let result = table.resolve("==", &[Ty::int(), Ty::int()]);
+    let result = table.resolve("==", &[Ty::int(), Ty::int()], &InterfaceRegistry::new());
     assert!(result.is_ok());
 }
 

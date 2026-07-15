@@ -166,7 +166,11 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
                     type_env.define(name, Ty::Struct(name.clone()));
 
                     // Guarda para o inference sintetizar as funções predicado.
-                    let base_ty = resolve_type_expr(&refined_decl.base_ty.node, &type_env);
+                    let base_ty = resolve_type_expr(
+                        &refined_decl.base_ty.node,
+                        &type_env,
+                        &interface_registry,
+                    );
                     refined_decls.push(RefinedDeclInfo {
                         name: name.clone(),
                         base_ty,
@@ -188,7 +192,7 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
                         .enumerate()
                         .map(|(i, f)| FieldInfo {
                             name: f.name.clone(),
-                            ty: resolve_type_expr(&f.ty.node, &type_env),
+                            ty: resolve_type_expr(&f.ty.node, &type_env, &interface_registry),
                             offset: (i as u32) * 8,
                         })
                         .collect();
@@ -224,7 +228,7 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
                         variants.iter().find_map(|v| {
                             v.payload
                                 .as_ref()
-                                .map(|p| resolve_type_expr(&p.node, &type_env))
+                                .map(|p| resolve_type_expr(&p.node, &type_env, &interface_registry))
                                 .or_else(|| {
                                     v.predicate
                                         .as_ref()
@@ -241,7 +245,7 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
                             let payload_ty = v
                                 .payload
                                 .as_ref()
-                                .map(|p| resolve_type_expr(&p.node, &type_env))
+                                .map(|p| resolve_type_expr(&p.node, &type_env, &interface_registry))
                                 .or_else(|| {
                                     v.predicate
                                         .as_ref()
@@ -276,7 +280,7 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
                         .find_map(|v| {
                             v.payload
                                 .as_ref()
-                                .map(|p| resolve_type_expr(&p.node, &type_env))
+                                .map(|p| resolve_type_expr(&p.node, &type_env, &interface_registry))
                         })
                         .unwrap_or_else(|| {
                             // Infere do predicado: aplicação `op _ literal` → tipo do literal.
@@ -320,9 +324,9 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
                         params: s
                             .params
                             .iter()
-                            .map(|t| resolve_type_expr(&t.node, &type_env))
+                            .map(|t| resolve_type_expr(&t.node, &type_env, &interface_registry))
                             .collect(),
-                        ret: resolve_type_expr(&s.ret.node, &type_env),
+                        ret: resolve_type_expr(&s.ret.node, &type_env, &interface_registry),
                     })
                     .collect();
                 let info = InterfaceInfo {
@@ -361,9 +365,9 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
                             params: m
                                 .params
                                 .iter()
-                                .map(|t| resolve_type_expr(&t.node, &type_env))
+                                .map(|t| resolve_type_expr(&t.node, &type_env, &interface_registry))
                                 .collect(),
-                            ret: resolve_type_expr(&m.ret.node, &type_env),
+                            ret: resolve_type_expr(&m.ret.node, &type_env, &interface_registry),
                             ffi_symbol,
                         }
                     })
@@ -396,9 +400,9 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
                 // Converte TypeExpr → Ty
                 let param_types: Vec<Ty> = params
                     .iter()
-                    .map(|t| resolve_type_expr(&t.node, &type_env))
+                    .map(|t| resolve_type_expr(&t.node, &type_env, &interface_registry))
                     .collect();
-                let return_type = resolve_type_expr(&ret.node, &type_env);
+                let return_type = resolve_type_expr(&ret.node, &type_env, &interface_registry);
 
                 // Extrai metadados de diretivas
                 let mut ffi_symbol = None;
@@ -452,9 +456,9 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
                 // Converte TypeExpr → Ty para os parâmetros e retorno.
                 let param_types: Vec<Ty> = params
                     .iter()
-                    .map(|t| resolve_type_expr(&t.node, &type_env))
+                    .map(|t| resolve_type_expr(&t.node, &type_env, &interface_registry))
                     .collect();
-                let return_type = resolve_type_expr(&ret.node, &type_env);
+                let return_type = resolve_type_expr(&ret.node, &type_env, &interface_registry);
 
                 actions.push(ActionDef {
                     name: name.clone(),
@@ -485,7 +489,10 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
 }
 
 /// Converte TypeExpr → Ty usando TypeEnv para resolver nomes.
-fn resolve_type_expr(expr: &TypeExpr, env: &TypeEnv) -> Ty {
+///
+/// Se `name` é uma interface registrada no `InterfaceRegistry`, produz
+/// `Ty::Interface(name)` em vez de `Ty::Struct(name)`.
+fn resolve_type_expr(expr: &TypeExpr, env: &TypeEnv, iface_reg: &InterfaceRegistry) -> Ty {
     match expr {
         TypeExpr::Named(name) => {
             // Tenta resolver no TypeEnv
@@ -500,25 +507,32 @@ fn resolve_type_expr(expr: &TypeExpr, env: &TypeEnv) -> Ty {
                     "Rational" => Ty::Prim(PrimTy::Rational),
                     "Boolean" => Ty::Sum("Boolean".into()),
                     "Unit" => Ty::Unit,
-                    _ => Ty::Struct(name.clone()), // fallback: tipo declarado pelo usuário
+                    _ => {
+                        // Se é uma interface registrada, produz Ty::Interface.
+                        if iface_reg.get_interface(name).is_some() {
+                            Ty::Interface(name.clone())
+                        } else {
+                            Ty::Struct(name.clone()) // fallback: tipo declarado pelo usuário
+                        }
+                    }
                 }
             }
         }
         TypeExpr::Unit => Ty::Unit,
-        TypeExpr::Grouping(inner) => resolve_type_expr(&inner.node, env),
+        TypeExpr::Grouping(inner) => resolve_type_expr(&inner.node, env, iface_reg),
         TypeExpr::Tuple(elements) => {
             let tys: Vec<Ty> = elements
                 .iter()
-                .map(|t| resolve_type_expr(&t.node, env))
+                .map(|t| resolve_type_expr(&t.node, env, iface_reg))
                 .collect();
             Ty::Tuple(tys)
         }
         TypeExpr::Func { params, ret } => {
             let param_types: Vec<Ty> = params
                 .iter()
-                .map(|t| resolve_type_expr(&t.node, env))
+                .map(|t| resolve_type_expr(&t.node, env, iface_reg))
                 .collect();
-            let return_type = resolve_type_expr(&ret.node, env);
+            let return_type = resolve_type_expr(&ret.node, env, iface_reg);
             Ty::Function(param_types, Box::new(return_type))
         }
         TypeExpr::ParamApp { name, params } => {
@@ -527,7 +541,7 @@ fn resolve_type_expr(expr: &TypeExpr, env: &TypeEnv) -> Ty {
             // Se não é genérico (fallback), produz Ty::Sum como antes.
             let resolved_params: Vec<Ty> = params
                 .iter()
-                .map(|p| resolve_type_expr(&p.node, env))
+                .map(|p| resolve_type_expr(&p.node, env, iface_reg))
                 .collect();
             // Tenta resolver como Ty::Var se o param é um nome que não está no TypeEnv
             // (ex: "T" em Result::(T, E) dentro de uma declaração de função genérica).

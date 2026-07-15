@@ -89,11 +89,14 @@ pub(crate) fn synthesize_refined(
 
     // ── Passo 2: sintetiza TypedFunctions ──
     // Cria InferCtx com o DispatchTable já populado (borrow imutável).
+    // Construtores refined não usam interfaces — registry vazio.
+    let empty_iface_reg = kata_core::interface_registry::InterfaceRegistry::new();
     let ctx = InferCtx {
         table: &*dispatch_table,
         enum_registry,
         struct_registry,
         refined_decls: &[],
+        interface_registry: &empty_iface_reg,
         ret_ty: None,
         in_loop: false,
     };

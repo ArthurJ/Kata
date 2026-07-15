@@ -8,6 +8,7 @@
 
 use kata_ast::{Expr, Pattern, Spanned};
 use kata_core::dispatch::DispatchTable;
+use kata_core::interface_registry::InterfaceRegistry;
 use kata_core::ty::{Ty, TypeEnv};
 
 use super::helpers::{peel_grouping_expr, resolve_type_expr};
@@ -21,6 +22,7 @@ pub(crate) fn try_partial_dispatch(
     body: &Spanned<Expr>,
     env: &TypeEnv,
     table: &DispatchTable,
+    iface_reg: &InterfaceRegistry,
 ) -> Vec<Ty> {
     // Só funciona com 1+ patterns Ident (holes desugared viram lambda com 1 param).
     let param_names: Vec<&str> = patterns
@@ -109,7 +111,7 @@ pub(crate) fn try_partial_dispatch(
     }
 
     // Tenta resolve_partial.
-    let result = match table.resolve_partial(&callee_name, &partial_args) {
+    let result = match table.resolve_partial(&callee_name, &partial_args, iface_reg) {
         Ok(r) => r,
         Err(_) => {
             // Se resolve_partial falha, mas há ascription_hints, usa eles diretamente.

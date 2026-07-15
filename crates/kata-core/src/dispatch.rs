@@ -10,6 +10,7 @@
 //! Em Fio 1: só `exact` é não-zero. Alias (Fio 5), refined (Fio 6),
 //! iface (Fio 7) são sempre 0. Mas a estrutura do algoritmo está pronta.
 
+use crate::interface_registry::InterfaceRegistry;
 use crate::ty::Ty;
 use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
@@ -147,8 +148,13 @@ impl DispatchTable {
     ///
     /// Algoritmo: coletar candidatos por nome, pontuar por compatibilidade,
     /// selecionar o de maior score. Empate → AmbiguousDispatch.
-    pub fn resolve(&self, name: &str, args: &[Ty]) -> Result<OverloadInfo, DispatchError> {
-        self.resolve_inner(name, args, false)
+    pub fn resolve(
+        &self,
+        name: &str,
+        args: &[Ty],
+        iface_reg: &InterfaceRegistry,
+    ) -> Result<OverloadInfo, DispatchError> {
+        self.resolve_inner(name, args, false, iface_reg)
     }
 
     /// Resolve uma chamada parcial: alguns args são `None` (holes ausentes).
@@ -160,8 +166,9 @@ impl DispatchTable {
         &self,
         name: &str,
         args: &[Option<Ty>],
+        iface_reg: &InterfaceRegistry,
     ) -> Result<PartialDispatchResult, DispatchError> {
-        self.resolve_partial_inner(name, args, false)
+        self.resolve_partial_inner(name, args, false, iface_reg)
     }
 
     fn resolve_partial_inner(
@@ -169,6 +176,7 @@ impl DispatchTable {
         name: &str,
         args: &[Option<Ty>],
         tried_commutative: bool,
+        iface_reg: &InterfaceRegistry,
     ) -> Result<PartialDispatchResult, DispatchError> {
         let overloads = self
             .entries
@@ -189,12 +197,21 @@ impl DispatchTable {
             // Pontua apenas args presentes. None = não restringe.
             let mut compatible = true;
             for (arg_opt, param) in args.iter().zip(&info.params) {
-                match arg_opt {
-                    Some(arg_ty) if arg_ty != param => {
+                if let Some(arg_ty) = arg_opt
+                    && arg_ty != param
+                {
+                    // Fio 7: verifica iface match.
+                    let iface_match = match extract_iface_name(param) {
+                        Some(iface_name) => match extract_type_name(arg_ty) {
+                            Some(type_name) => iface_reg.type_implements(&type_name, &iface_name),
+                            None => false,
+                        },
+                        None => false,
+                    };
+                    if !iface_match {
                         compatible = false;
                         break;
                     }
-                    _ => {}
                 }
                 // None (hole) — não pontua, não exclui
             }
@@ -224,7 +241,7 @@ impl DispatchTable {
             && args.len() == 2
         {
             let swapped = vec![args[1].clone(), args[0].clone()];
-            return self.resolve_partial_inner(name, &swapped, true);
+            return self.resolve_partial_inner(name, &swapped, true, iface_reg);
         }
 
         if candidates.is_empty() {
@@ -271,6 +288,7 @@ impl DispatchTable {
         name: &str,
         args: &[Ty],
         tried_commutative: bool,
+        iface_reg: &InterfaceRegistry,
     ) -> Result<OverloadInfo, DispatchError> {
         let overloads = self
             .entries
@@ -288,7 +306,7 @@ impl DispatchTable {
                 continue;
             }
 
-            let score = match_score(args, &info.params);
+            let score = match_score(args, &info.params, iface_reg);
 
             if score.is_compatible(args.len()) {
                 candidates.push(Candidate {
@@ -308,7 +326,7 @@ impl DispatchTable {
             && args.len() == 2
         {
             let swapped = vec![args[1].clone(), args[0].clone()];
-            return self.resolve_inner(name, &swapped, true);
+            return self.resolve_inner(name, &swapped, true, iface_reg);
         }
 
         if candidates.is_empty() {
@@ -374,21 +392,29 @@ pub enum DispatchError {
 
 /// Conta matches por categoria: exact, alias, refined, iface.
 ///
-/// Em Fio 1: só `exact` existe. Alias (Fio 5), refined (Fio 6),
-/// iface (Fio 7) são sempre 0. Se qualquer posição é incompatível,
-/// retorna Score::incompatible() (todos zero).
-pub fn match_score(args: &[Ty], params: &[Ty]) -> Score {
+/// - `exact`: arg == param (já existe desde Fio 1)
+/// - `iface`: param é `Ty::Interface(name)` e arg implementa essa interface
+///   via `InterfaceRegistry::type_implements` (Fio 7)
+///
+/// Alias (Fio 5) e refined (Fio 6) ainda são sempre 0 — serão populados
+/// em fios posteriores. Se qualquer posição é incompatível, retorna
+/// `Score::incompatible()` (todos zero).
+pub fn match_score(args: &[Ty], params: &[Ty], iface_reg: &InterfaceRegistry) -> Score {
     let mut exact = 0;
     let alias = 0;
     let refined = 0;
-    let iface = 0;
+    let mut iface = 0;
 
     for (arg, param) in args.iter().zip(params) {
         if arg == param {
             exact += 1;
+        } else if let Some(iface_name) = extract_iface_name(param)
+            && let Some(type_name) = extract_type_name(arg)
+            && iface_reg.type_implements(&type_name, &iface_name)
+        {
+            iface += 1;
         } else {
-            // Fio 1: só exact match conta. Se não é exato, é incompatível.
-            // Fios posteriores adicionarão: alias, refined, iface aqui.
+            // Não é exato, não é alias, não é refined, não é iface → incompatível.
             return Score::incompatible();
         }
     }
@@ -399,5 +425,35 @@ pub fn match_score(args: &[Ty], params: &[Ty]) -> Score {
         refined,
         iface,
         is_generic_origin: false,
+    }
+}
+
+/// Extrai o nome de interface de um `Ty` se for `Ty::Interface` ou
+/// `Ty::Generic` cujo nome é uma interface registrada.
+/// `Ty::Interface("NUM")` → `"NUM"`
+/// `Ty::Generic("ITERABLE", [A])` → `"ITERABLE"` (interface parametrizada)
+fn extract_iface_name(ty: &Ty) -> Option<String> {
+    match ty {
+        Ty::Interface(name) => Some(name.clone()),
+        Ty::Generic(name, _) => Some(name.clone()),
+        _ => None,
+    }
+}
+
+/// Extrai o nome do tipo concreto de um `Ty` para consulta no InterfaceRegistry.
+/// `Ty::Prim(PrimTy::Int)` → `"Int"`
+/// `Ty::Struct("Complex")` → `"Complex"`
+/// `Ty::Sum("Boolean")` → `"Boolean"`
+/// `Ty::Generic("List", [Int])` → `"List"`
+fn extract_type_name(ty: &Ty) -> Option<String> {
+    match ty {
+        Ty::Prim(crate::ty::PrimTy::Int) => Some("Int".into()),
+        Ty::Prim(crate::ty::PrimTy::Float) => Some("Float".into()),
+        Ty::Prim(crate::ty::PrimTy::Text) => Some("Text".into()),
+        Ty::Prim(crate::ty::PrimTy::Rational) => Some("Rational".into()),
+        Ty::Struct(name) => Some(name.clone()),
+        Ty::Sum(name) => Some(name.clone()),
+        Ty::Generic(name, _) => Some(name.clone()),
+        _ => None,
     }
 }

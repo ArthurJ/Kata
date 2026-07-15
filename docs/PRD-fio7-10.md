@@ -345,7 +345,7 @@ export tipos.(Int Float Boolean)          # reexportação
 
 **Verificação:** `cargo test -p kata-resolution`
 
-### Fase 4: Inference — dispatch com interfaces, `iface++` no Score
+### Fase 4: Inference — dispatch com interfaces, `iface++` no Score ✅
 
 **Objetivo:** o match_score reconhece quando um argumento implementa a interface
 esperada e pontua `iface++`.
@@ -662,7 +662,7 @@ implements SHOW for Complex
 | 2 | `implements NUM for Int` parseia e registra overloads no DispatchTable | 1-2 |
 | 3 | `import modulo` carrega de filesystem com cache e cycle detection | 3 |
 | 4 | `export item1 item2` marca itens como exportados | 3 |
-| 5 | `+ (Complex 1.0 2.0) (Complex 3.0 4.0)` despacha via `iface++` no Score | 4 |
+| 5 | `+ (Complex 1.0 2.0) (Complex 3.0 4.0)` despacha via `iface++` no Score ✅ | 4 |
 | 6 | `id 42` infere `T = Int` via `unify` e retorna `Int` | 5 |
 | 7 | `List(Int)` e `List(Text)` geram instâncias monomorfizadas distintas | 6 |
 | 8 | `@commutative` em `=` tenta args invertidos quando 0 candidatos | 7 |

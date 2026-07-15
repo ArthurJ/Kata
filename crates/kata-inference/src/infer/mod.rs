@@ -121,6 +121,7 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
             enum_registry: &resolved.enum_registry,
             struct_registry: &resolved.struct_registry,
             refined_decls: &resolved.refined_decls,
+            interface_registry: &resolved.interface_registry,
             ret_ty: None,
             in_loop: false,
         };
@@ -145,6 +146,7 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
             enum_registry: &resolved.enum_registry,
             struct_registry: &resolved.struct_registry,
             refined_decls: &resolved.refined_decls,
+            interface_registry: &resolved.interface_registry,
             ret_ty: Some(&action_def.return_type),
             in_loop: false,
         };
@@ -174,6 +176,7 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
                     enum_registry: &resolved.enum_registry,
                     struct_registry: &resolved.struct_registry,
                     refined_decls: &resolved.refined_decls,
+                    interface_registry: &resolved.interface_registry,
                     ret_ty: None,
                     in_loop: false,
                 };
