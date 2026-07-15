@@ -55,6 +55,10 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
     builder.symbol("kata_rt_fcmp_le", rt::kata_rt_fcmp_le as *const u8);
     builder.symbol("kata_rt_fcmp_gt", rt::kata_rt_fcmp_gt as *const u8);
     builder.symbol("kata_rt_fcmp_ge", rt::kata_rt_fcmp_ge as *const u8);
+    builder.symbol(
+        "kata_rt_float_to_text",
+        rt::kata_rt_float_to_text as *const u8,
+    );
     // Rational
     builder.symbol("kata_rt_rat_add", rt::kata_rt_rat_add as *const u8);
     builder.symbol("kata_rt_rat_sub", rt::kata_rt_rat_sub as *const u8);
@@ -191,6 +195,7 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         FcmpLe,
         FcmpGt,
         FcmpGe,
+        FloatToText,
         RatAdd,
         RatSub,
         RatMul,

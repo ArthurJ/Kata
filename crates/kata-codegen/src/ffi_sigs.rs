@@ -90,6 +90,11 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
             sig.params.push(AbiParam::new(F64));
             sig.returns.push(AbiParam::new(I64));
         }
+        // ── Float → Text (f64) → i64 (ptr) ──
+        FfiSymbol::FloatToText => {
+            sig.params.push(AbiParam::new(F64));
+            sig.returns.push(AbiParam::new(I64));
+        }
         // ── Aritmética Rational (ptr, ptr) → ptr ──
         FfiSymbol::RatAdd | FfiSymbol::RatSub | FfiSymbol::RatMul | FfiSymbol::RatDiv => {
             sig.params.push(AbiParam::new(I64));

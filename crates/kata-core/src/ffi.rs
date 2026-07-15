@@ -36,6 +36,7 @@ pub enum FfiSymbol {
     FcmpLe,
     FcmpGt,
     FcmpGe,
+    FloatToText,
 
     // ── Rational ─────────────────────────────────────────
     RatAdd,
@@ -129,6 +130,7 @@ impl FfiSymbol {
             FfiSymbol::FcmpLe => "kata_rt_fcmp_le",
             FfiSymbol::FcmpGt => "kata_rt_fcmp_gt",
             FfiSymbol::FcmpGe => "kata_rt_fcmp_ge",
+            FfiSymbol::FloatToText => "kata_rt_float_to_text",
             FfiSymbol::RatAdd => "kata_rt_rat_add",
             FfiSymbol::RatSub => "kata_rt_rat_sub",
             FfiSymbol::RatMul => "kata_rt_rat_mul",
@@ -191,6 +193,7 @@ impl FfiSymbol {
             | FfiSymbol::FcmpLe
             | FfiSymbol::FcmpGt
             | FfiSymbol::FcmpGe => Ty::boolean(),
+            FfiSymbol::FloatToText => Ty::text(),
             // Rational
             FfiSymbol::RatAdd | FfiSymbol::RatSub | FfiSymbol::RatMul | FfiSymbol::RatDiv => {
                 Ty::rational()
@@ -256,6 +259,7 @@ impl FfiSymbol {
             FfiSymbol::FcmpLe,
             FfiSymbol::FcmpGt,
             FfiSymbol::FcmpGe,
+            FfiSymbol::FloatToText,
             FfiSymbol::RatAdd,
             FfiSymbol::RatSub,
             FfiSymbol::RatMul,

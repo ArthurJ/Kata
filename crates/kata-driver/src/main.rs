@@ -141,12 +141,15 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
     let mut struct_registry = prelude.struct_registry;
     struct_registry.merge(user.struct_registry);
 
+    let mut refined_decls = prelude.refined_decls;
+    refined_decls.extend(user.refined_decls);
+
     ResolvedModule {
         type_env,
         signatures,
         enum_registry,
         struct_registry,
-        refined_decls: Vec::new(),
+        refined_decls,
         functions: user.functions,
         actions: user.actions,
     }

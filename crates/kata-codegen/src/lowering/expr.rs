@@ -156,6 +156,11 @@ pub(crate) fn lower_expr(
                 }
                 // Mesmo tipo (no-op): lowerar inner.
                 _ if inner.ty == *target_ty => lower_expr(inner, ctx),
+                // Fio 6: ascription-refined `5::PositiveInt` — o typeck já
+                // validou os predicados em compile-time. Em runtime, o valor
+                // é o mesmo do tipo base (alias). Lowerar inner diretamente.
+                (TypedExprKind::IntLit { .. }, Ty::Struct(_))
+                | (TypedExprKind::FloatLit { .. }, Ty::Struct(_)) => lower_expr(inner, ctx),
                 // Demais casos: o typeck já deveria ter rejeitado.
                 _ => Err(super::CodegenError::UnsupportedNode(format!(
                     "ascription não suportada: {:?} → {:?}",
@@ -332,6 +337,19 @@ pub(crate) fn lower_expr(
         } => {
             // Lowera o payload.
             let payload_val = lower_expr(&payload.node, ctx)?;
+
+            // Bitcast F64→I64 se necessário: store_sum_result espera I64
+            // para o payload, mas Float lowera como F64.
+            let payload_val = {
+                let payload_ty = ctx.builder.func.dfg.value_type(payload_val);
+                if payload_ty == cranelift_codegen::ir::types::F64 {
+                    ctx.builder
+                        .ins()
+                        .bitcast(I64, MemFlagsData::new(), payload_val)
+                } else {
+                    payload_val
+                }
+            };
 
             // Tag = índice da variante (embutido no TypedExpr pelo typeck).
             let tag_val = ctx.builder.ins().iconst(I64, *tag as i64);

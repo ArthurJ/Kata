@@ -13,7 +13,9 @@ mod action_call;
 mod apply;
 mod apply_lambda;
 mod captures;
+mod const_eval;
 mod constructors;
+mod constructors_refined;
 mod dot_access;
 mod expr;
 mod format_synthesis;
@@ -76,6 +78,16 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
         &mut dispatch_table,
     );
 
+    // 1e. Fio 6 Fase 3 — sintetiza funções predicado e smart constructors
+    //     falíveis para tipos refinados (`data (Int, > _ 0) as PositiveInt`).
+    let refined_constructors = constructors_refined::synthesize_refined(
+        &resolved.refined_decls,
+        &resolved.enum_registry,
+        &resolved.struct_registry,
+        &resolved.type_env,
+        &mut dispatch_table,
+    )?;
+
     // 1d. Fio 5 Fase 6 — sintetiza `repr` para structs com campos.
     //     `repr :: Pessoa => Text` no DispatchTable + TypedFunction com body
     //     que constrói "Pessoa(field0, field1, ...)" via string_concat FFI.
@@ -96,6 +108,7 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
             table: &dispatch_table,
             enum_registry: &resolved.enum_registry,
             struct_registry: &resolved.struct_registry,
+            refined_decls: &resolved.refined_decls,
             ret_ty: None,
             in_loop: false,
         };
@@ -119,6 +132,7 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
             table: &dispatch_table,
             enum_registry: &resolved.enum_registry,
             struct_registry: &resolved.struct_registry,
+            refined_decls: &resolved.refined_decls,
             ret_ty: Some(&action_def.return_type),
             in_loop: false,
         };
@@ -147,6 +161,7 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
                     table: &dispatch_table,
                     enum_registry: &resolved.enum_registry,
                     struct_registry: &resolved.struct_registry,
+                    refined_decls: &resolved.refined_decls,
                     ret_ty: None,
                     in_loop: false,
                 };
@@ -188,6 +203,7 @@ pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<T
         functions: {
             let mut all_funcs = typed_functions;
             all_funcs.extend(struct_constructors);
+            all_funcs.extend(refined_constructors);
             all_funcs.append(&mut repr_functions);
             all_funcs
         },

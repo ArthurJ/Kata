@@ -145,6 +145,22 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             false,
             None,
         ),
+        sig(
+            "<=",
+            vec![Ty::int(), Ty::int()],
+            Ty::boolean(),
+            "kata_rt_bi_le",
+            false,
+            None,
+        ),
+        sig(
+            ">=",
+            vec![Ty::int(), Ty::int()],
+            Ty::boolean(),
+            "kata_rt_bi_ge",
+            false,
+            None,
+        ),
         // Float aritmética
         sig(
             "+",
@@ -202,6 +218,22 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             false,
             None,
         ),
+        sig(
+            "<=",
+            vec![Ty::float(), Ty::float()],
+            Ty::boolean(),
+            "kata_rt_fcmp_le",
+            false,
+            None,
+        ),
+        sig(
+            ">=",
+            vec![Ty::float(), Ty::float()],
+            Ty::boolean(),
+            "kata_rt_fcmp_ge",
+            false,
+            None,
+        ),
         // Rational aritmética
         sig(
             "+",
@@ -256,6 +288,22 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             vec![Ty::rational(), Ty::rational()],
             Ty::boolean(),
             "kata_rt_rat_gt",
+            false,
+            None,
+        ),
+        sig(
+            "<=",
+            vec![Ty::rational(), Ty::rational()],
+            Ty::boolean(),
+            "kata_rt_rat_le",
+            false,
+            None,
+        ),
+        sig(
+            ">=",
+            vec![Ty::rational(), Ty::rational()],
+            Ty::boolean(),
+            "kata_rt_rat_ge",
             false,
             None,
         ),

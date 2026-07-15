@@ -117,6 +117,8 @@ pub(crate) fn synthesize_constructors(
     // 1b. Smart constructors para aliases (newtypes).
     //     `alias Float as Altura` → `Altura :: Float => Altura` (identity).
     //     `alias Pessoa as Pessoa2` → `Pessoa2 :: Text Int => Pessoa2` (StructConstruct).
+    //     Fio 6: refined types (com predicates) são pulados aqui — o smart
+    //     constructor falível é sintetizado em constructors_refined.
     for struct_name in struct_registry.names() {
         let struct_info = struct_registry
             .get(struct_name)
@@ -124,6 +126,10 @@ pub(crate) fn synthesize_constructors(
         let Some(ref target) = struct_info.alias_of else {
             continue; // não é alias
         };
+        // Fio 6: pula refined types — têm predicates, ganham construtor falível.
+        if struct_info.predicates.is_some() {
+            continue;
+        }
 
         let ret_ty = Ty::Struct(struct_name.to_string());
 

@@ -59,3 +59,13 @@ pub fn float_to_string(val: f64) -> String {
         format!("{val}")
     }
 }
+
+/// `show` de Float — retorna ponteiro C string (ownership transferida).
+/// Chamado pelo codegen via `FfiSymbol::FloatToText`.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_float_to_text(val: f64) -> *mut std::os::raw::c_char {
+    let s = float_to_string(val);
+    std::ffi::CString::new(s)
+        .unwrap_or_else(|_| std::ffi::CString::new("").expect("CString vazia sempre válida"))
+        .into_raw()
+}

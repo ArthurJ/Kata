@@ -6,6 +6,7 @@
 
 use std::collections::HashMap;
 
+use cranelift_codegen::ir::types::I64;
 use cranelift_codegen::ir::{AbiParam, InstBuilder, Signature};
 use cranelift_codegen::isa::CallConv;
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
@@ -164,6 +165,21 @@ pub(crate) fn lower_module(
 
         let result = lower_expr(&typed.entry.node, &mut lower)?;
 
+        // Bitcast F64→I64 na borda de retorno do entry point.
+        // Necessário para refined types de Float: `17.5::Positivo` lowera
+        // como F64 mas a assinatura do __kata_entry é I64 (Ty::Struct → I64).
+        // Só bitcastar quando ret_clif é I64 e o valor é F64.
+        let result = {
+            let actual_ty = lower.builder.func.dfg.value_type(result);
+            if actual_ty == cranelift_codegen::ir::types::F64 && ret_clif == I64 {
+                lower
+                    .builder
+                    .ins()
+                    .bitcast(I64, cranelift_codegen::ir::MemFlagsData::new(), result)
+            } else {
+                result
+            }
+        };
         lower.builder.ins().return_(&[result]);
 
         builder.finalize();

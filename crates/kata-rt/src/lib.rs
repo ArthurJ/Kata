@@ -38,7 +38,8 @@ pub use bigint::{
 };
 pub use float::{
     kata_rt_fadd, kata_rt_fcmp_eq, kata_rt_fcmp_ge, kata_rt_fcmp_gt, kata_rt_fcmp_le,
-    kata_rt_fcmp_lt, kata_rt_fcmp_neq, kata_rt_fdiv, kata_rt_fmul, kata_rt_fsub,
+    kata_rt_fcmp_lt, kata_rt_fcmp_neq, kata_rt_fdiv, kata_rt_float_to_text, kata_rt_fmul,
+    kata_rt_fsub,
 };
 pub use io::{kata_rt_panic, kata_rt_print, kata_rt_println};
 pub use rational::{
