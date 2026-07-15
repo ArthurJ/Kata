@@ -9,7 +9,10 @@ pub(crate) mod prelude;
 mod prelude_sigs;
 
 use kata_ast::{ActionStmt, Expr, Item, LambdaClause, Module, Spanned, TypeExpr};
-use kata_core::{EnumRegistry, FieldInfo, PrimTy, StructRegistry, Ty, TypeEnv, VariantInfo};
+use kata_core::{
+    EnumRegistry, FieldInfo, ImplEntry, ImplMethodInfo, InterfaceInfo, InterfaceRegistry,
+    InterfaceSignature, PrimTy, StructRegistry, Ty, TypeEnv, VariantInfo,
+};
 
 /// Resultado da resolution — TypeEnv populado + assinaturas coletadas.
 #[derive(Debug, Clone)]
@@ -26,6 +29,8 @@ pub struct ResolvedModule {
     /// Fio 6: enums com variantes predicadas pendentes para o inference
     /// sintetizar o construtor despachador.
     pub enum_pred_decls: Vec<EnumPredDeclInfo>,
+    /// Fio 7: catálogo de interfaces e implementações.
+    pub interface_registry: InterfaceRegistry,
     /// Funções nomeadas com corpo Kata (Fio 2 Fase 10).
     /// Cada entrada preserva as cláusulas lambda para o inference processar.
     pub functions: Vec<FunctionDef>,
@@ -127,6 +132,7 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
     let mut struct_registry = StructRegistry::new();
     let mut refined_decls: Vec<RefinedDeclInfo> = Vec::new();
     let mut enum_pred_decls: Vec<EnumPredDeclInfo> = Vec::new();
+    let mut interface_registry = InterfaceRegistry::new();
     let errors: Vec<ResolveError> = Vec::new();
 
     // Pass 0: popula TypeEnv com tipos declarados
@@ -299,6 +305,79 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
                     });
                 }
             }
+            // Fio 7: InterfaceDecl — registra no InterfaceRegistry.
+            Item::InterfaceDecl {
+                name,
+                supertraits,
+                type_params,
+                signatures,
+            } => {
+                let iface_sigs: Vec<InterfaceSignature> = signatures
+                    .iter()
+                    .map(|s| InterfaceSignature {
+                        name: s.name.clone(),
+                        params: s
+                            .params
+                            .iter()
+                            .map(|t| resolve_type_expr(&t.node, &type_env))
+                            .collect(),
+                        ret: resolve_type_expr(&s.ret.node, &type_env),
+                    })
+                    .collect();
+                let info = InterfaceInfo {
+                    name: name.clone(),
+                    supertraits: supertraits.clone(),
+                    type_params: type_params.clone(),
+                    signatures: iface_sigs,
+                };
+                if let Err(e) = interface_registry.register_interface(info) {
+                    eprintln!("[resolution] warning: {e}");
+                }
+            }
+            // Fio 7: ImplementsDecl — registra no InterfaceRegistry.
+            // O registro no DispatchTable será feito quando o prelude migrar
+            // para Kata (Fase 8). Por ora, o InterfaceRegistry cataloga a impl.
+            Item::ImplementsDecl {
+                type_name,
+                type_params,
+                interface_name,
+                iface_params,
+                methods,
+            } => {
+                let impl_methods: Vec<ImplMethodInfo> = methods
+                    .iter()
+                    .map(|m| {
+                        let ffi_symbol = m.directives.iter().find_map(|d| {
+                            if d.name == "ffi"
+                                && let Some(kata_ast::DirectiveArg::Str(s)) = d.args.first()
+                            {
+                                return Some(s.clone());
+                            }
+                            None
+                        });
+                        ImplMethodInfo {
+                            name: m.name.clone(),
+                            params: m
+                                .params
+                                .iter()
+                                .map(|t| resolve_type_expr(&t.node, &type_env))
+                                .collect(),
+                            ret: resolve_type_expr(&m.ret.node, &type_env),
+                            ffi_symbol,
+                        }
+                    })
+                    .collect();
+                let entry = ImplEntry {
+                    type_name: type_name.clone(),
+                    type_params: type_params.clone(),
+                    interface_name: interface_name.clone(),
+                    iface_params: iface_params.clone(),
+                    methods: impl_methods,
+                };
+                if let Err(e) = interface_registry.register_impl(entry) {
+                    eprintln!("[resolution] warning: {e}");
+                }
+            }
             _ => {}
         }
     }
@@ -398,6 +477,7 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
         struct_registry,
         refined_decls,
         enum_pred_decls,
+        interface_registry,
         functions,
         actions,
     })

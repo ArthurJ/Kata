@@ -4,6 +4,7 @@
 //! Estes testes focam no typeck (Pass 2), não no codegen (Fase 9).
 //! O codegen de Lambda/Match será implementado na Fase 9.
 
+use kata_core::InterfaceRegistry;
 use kata_core::ty::Ty;
 use kata_inference::{Effect, TypedExprKind, infer_module};
 use kata_lexer::lex;
@@ -30,6 +31,7 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
         struct_registry,
         refined_decls: Vec::new(),
         enum_pred_decls: Vec::new(),
+        interface_registry: InterfaceRegistry::new(),
         functions: user.functions,
         actions: user.actions,
     }

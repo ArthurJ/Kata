@@ -10,6 +10,7 @@
 //! `cargo run --bin kata -- run <file>` e verificar exit code != 0.
 
 use kata_codegen::jit_eval;
+use kata_core::InterfaceRegistry;
 use kata_core::ty::Ty;
 use kata_inference::infer_module;
 use kata_lexer::lex;
@@ -48,6 +49,7 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
         struct_registry,
         refined_decls: Vec::new(),
         enum_pred_decls: Vec::new(),
+        interface_registry: InterfaceRegistry::new(),
         functions: user.functions,
         actions: user.actions,
     }

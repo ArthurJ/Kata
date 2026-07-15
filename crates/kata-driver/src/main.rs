@@ -147,6 +147,9 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
     let mut enum_pred_decls = prelude.enum_pred_decls;
     enum_pred_decls.extend(user.enum_pred_decls);
 
+    let mut interface_registry = prelude.interface_registry;
+    interface_registry.merge(user.interface_registry);
+
     ResolvedModule {
         type_env,
         signatures,
@@ -154,6 +157,7 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
         struct_registry,
         refined_decls,
         enum_pred_decls,
+        interface_registry,
         functions: user.functions,
         actions: user.actions,
     }

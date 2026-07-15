@@ -10,6 +10,7 @@
 //! - DoD 4: `PositiveInt (-5)` retorna `Result::Err` (construtor falível)
 
 use kata_codegen::jit_eval;
+use kata_core::InterfaceRegistry;
 use kata_core::ty::{PrimTy, Ty};
 use kata_inference::infer_module;
 use kata_lexer::lex;
@@ -38,6 +39,7 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
         struct_registry,
         refined_decls,
         enum_pred_decls,
+        interface_registry: InterfaceRegistry::new(),
         functions: user.functions,
         actions: user.actions,
     }

@@ -6,7 +6,9 @@
 //!
 //! Fio 10 substitui isto por carregamento de `stdlib/core.kata` do filesystem.
 
-use kata_core::{EnumRegistry, PrimTy, StructRegistry, Ty, TypeEnv, VariantInfo};
+use kata_core::{
+    EnumRegistry, InterfaceRegistry, PrimTy, StructRegistry, Ty, TypeEnv, VariantInfo,
+};
 
 use crate::{ResolvedModule, Signature};
 
@@ -395,6 +397,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
         struct_registry: StructRegistry::new(),
         refined_decls: Vec::new(),
         enum_pred_decls: Vec::new(),
+        interface_registry: InterfaceRegistry::new(),
         functions: Vec::new(),
         actions: Vec::new(),
     })

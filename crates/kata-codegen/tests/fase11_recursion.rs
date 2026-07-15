@@ -4,6 +4,7 @@
 //! (direta ou indiretamente). Testes usam `infer_module` diretamente
 //! porque o erro é capturado no typeck, antes do codegen.
 
+use kata_core::InterfaceRegistry;
 use kata_diagnostics::MiddleError;
 use kata_inference::infer_module;
 use kata_lexer::lex;
@@ -28,6 +29,7 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
         struct_registry,
         refined_decls: Vec::new(),
         enum_pred_decls: Vec::new(),
+        interface_registry: InterfaceRegistry::new(),
         functions: user.functions,
         actions: user.actions,
     }
