@@ -113,10 +113,9 @@ pub(crate) fn lower_action_call(
                     .global_value(ctx.module.target_config().pointer_type(), func_gv);
 
                 // 2. spawn(fn_ptr, caller_arena, args_ptr) → fiber_id
-                let spawn_ref =
-                    ctx.ffi_refs.get("kata_rt_spawn").copied().ok_or_else(|| {
-                        super::CodegenError::FfiSymbolNotFound("kata_rt_spawn".into())
-                    })?;
+                let spawn_ref = ctx.ffi_refs.get("kata_rt_spawn").copied().ok_or_else(|| {
+                    super::CodegenError::FfiSymbolNotFound("kata_rt_spawn".into())
+                })?;
                 let spawn_inst = ctx
                     .builder
                     .ins()
@@ -124,11 +123,10 @@ pub(crate) fn lower_action_call(
                 let _fiber_id = ctx.builder.inst_results(spawn_inst)[0];
 
                 // 3. run() → result (i64)
-                let run_ref = ctx
-                    .ffi_refs
-                    .get("kata_rt_run")
-                    .copied()
-                    .ok_or_else(|| super::CodegenError::FfiSymbolNotFound("kata_rt_run".into()))?;
+                let run_ref =
+                    ctx.ffi_refs.get("kata_rt_run").copied().ok_or_else(|| {
+                        super::CodegenError::FfiSymbolNotFound("kata_rt_run".into())
+                    })?;
                 let run_inst = ctx.builder.ins().call(run_ref, &[]);
                 let result = ctx.builder.inst_results(run_inst)[0];
 

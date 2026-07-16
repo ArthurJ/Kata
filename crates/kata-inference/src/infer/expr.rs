@@ -386,7 +386,8 @@ pub(crate) fn infer_expr_hinted(
         // ── Fio 8: Coleções — inferência implementada na Fase 5 ──
         Expr::ListLit { .. } | Expr::ArrayLit { .. } | Expr::RangeLit { .. } => {
             return Err(MiddleError::UnboundName {
-                name: "coleções (List/Array/Range) — inferência ainda não implementada (Fase 5)".into(),
+                name: "coleções (List/Array/Range) — inferência ainda não implementada (Fase 5)"
+                    .into(),
                 span: (*span).into(),
             });
         }

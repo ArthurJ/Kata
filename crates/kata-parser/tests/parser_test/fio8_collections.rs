@@ -216,7 +216,9 @@ fn for_in_parses_inside_action() {
                     assert_eq!(var_name, "x");
                     assert!(matches!(&iterable.node, Expr::Ident { name } if name == "arr"));
                     assert_eq!(for_body.len(), 1);
-                    assert!(matches!(&for_body[0].node, Expr::ActionCall { callee, .. } if callee == "echo"));
+                    assert!(
+                        matches!(&for_body[0].node, Expr::ActionCall { callee, .. } if callee == "echo")
+                    );
                 }
                 other => panic!("expected ForIn, got {other:?}"),
             }

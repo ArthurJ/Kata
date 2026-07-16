@@ -413,7 +413,8 @@ impl Parser {
         match self.peek() {
             Token::DotDot => return self.parse_range_rest(first, start),
             Token::DotDotEq => {
-                return Err(self.error("`..` (não `..=`) após start do range — o passo é separado por `..`"));
+                return Err(self
+                    .error("`..` (não `..=`) após start do range — o passo é separado por `..`"));
             }
             _ => {}
         }

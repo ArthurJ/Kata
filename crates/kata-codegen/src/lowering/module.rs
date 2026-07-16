@@ -74,7 +74,11 @@ pub(crate) fn lower_module(
         fn_counter += 1;
         let func_id = declare_kata_function(func, &cranelift_name, module)?;
         symbol_table.insert(
-            (func.name.clone(), func.param_types.clone(), func.ret_ty.clone()),
+            (
+                func.name.clone(),
+                func.param_types.clone(),
+                func.ret_ty.clone(),
+            ),
             func_id,
         );
         func_ids.push(func_id);
