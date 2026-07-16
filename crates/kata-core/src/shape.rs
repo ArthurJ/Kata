@@ -91,6 +91,20 @@ impl Ty {
             },
             // Interface: não é um tipo concreto — mapeia para Unit graceful.
             Ty::Interface(_) => TypeShape::Unit,
+            // List/Array/Range: coleções intrínsecas — heap types (ponteiro na arena).
+            // Mapeadas como Struct com nome para reflexão runtime (typeof, pretty_print).
+            Ty::List(_) => TypeShape::Struct {
+                name: "List".into(),
+                fields: Vec::new(),
+            },
+            Ty::Array(_) => TypeShape::Struct {
+                name: "Array".into(),
+                fields: Vec::new(),
+            },
+            Ty::Range(_) => TypeShape::Struct {
+                name: "Range".into(),
+                fields: Vec::new(),
+            },
         }
     }
 }

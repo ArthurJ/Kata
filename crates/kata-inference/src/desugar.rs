@@ -181,6 +181,33 @@ fn desugar_pipes(expr: &Spanned<Expr>) -> Spanned<Expr> {
             )
         }
         Expr::Spread => expr.clone(),
+        // ── Fio 8: Coleções — recursão nos elementos ───────────
+        Expr::ListLit { elements } => Spanned::new(
+            Expr::ListLit {
+                elements: elements.iter().map(desugar_pipes).collect(),
+            },
+            expr.span,
+        ),
+        Expr::ArrayLit { elements } => Spanned::new(
+            Expr::ArrayLit {
+                elements: elements.iter().map(desugar_pipes).collect(),
+            },
+            expr.span,
+        ),
+        Expr::RangeLit {
+            start,
+            step,
+            end,
+            inclusive,
+        } => Spanned::new(
+            Expr::RangeLit {
+                start: Box::new(desugar_pipes(start)),
+                step: Box::new(desugar_pipes(step)),
+                end: Box::new(desugar_pipes(end)),
+                inclusive: *inclusive,
+            },
+            expr.span,
+        ),
     }
 }
 
@@ -475,5 +502,32 @@ fn desugar_holes(expr: &Spanned<Expr>) -> Spanned<Expr> {
             expr.span,
         ),
         Expr::Spread => expr.clone(),
+        // ── Fio 8: Coleções — recursão nos elementos ───────────
+        Expr::ListLit { elements } => Spanned::new(
+            Expr::ListLit {
+                elements: elements.iter().map(desugar_holes).collect(),
+            },
+            expr.span,
+        ),
+        Expr::ArrayLit { elements } => Spanned::new(
+            Expr::ArrayLit {
+                elements: elements.iter().map(desugar_holes).collect(),
+            },
+            expr.span,
+        ),
+        Expr::RangeLit {
+            start,
+            step,
+            end,
+            inclusive,
+        } => Spanned::new(
+            Expr::RangeLit {
+                start: Box::new(desugar_holes(start)),
+                step: Box::new(desugar_holes(step)),
+                end: Box::new(desugar_holes(end)),
+                inclusive: *inclusive,
+            },
+            expr.span,
+        ),
     }
 }

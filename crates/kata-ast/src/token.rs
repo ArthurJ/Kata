@@ -76,6 +76,10 @@ pub enum Token {
     Continue,
     /// `otherwise` — fallback em guards
     Otherwise,
+    /// `for` — iteração via ITERABLE (exclusivo de Actions, Fio 8)
+    For,
+    /// `in` — separador em `for x in coll` e operador binário de membership
+    In,
 
     // ── Operadores e pontuação ──────────────────────────
     /// `:=` — operador de binding (exclusivo para `let` e `var`)
@@ -116,6 +120,10 @@ pub enum Token {
     Comma,
     /// `.` — acesso de campo / indexação
     Dot,
+    /// `..` — separador de componentes em Range: `[a..s..b]`
+    DotDot,
+    /// `..=` — separador de end inclusivo em Range: `[a..s..=b]`
+    DotDotEq,
     /// `...` — varargs em assinaturas (desugara para Tuple<Type>)
     Ellipsis,
     /// `;` — terminador de statement (Actions) ou separador de dimensão (tensores)
@@ -173,6 +181,8 @@ impl Token {
                 | Token::Break
                 | Token::Continue
                 | Token::Otherwise
+                | Token::For
+                | Token::In
         )
     }
 }
@@ -201,6 +211,8 @@ impl std::fmt::Display for Token {
             Token::Break => write!(f, "break"),
             Token::Continue => write!(f, "continue"),
             Token::Otherwise => write!(f, "otherwise"),
+            Token::For => write!(f, "for"),
+            Token::In => write!(f, "in"),
             Token::BindAssign => write!(f, ":="),
             Token::DoubleColon => write!(f, "::"),
             Token::FatArrow => write!(f, "=>"),
@@ -217,6 +229,8 @@ impl std::fmt::Display for Token {
             Token::RBrace => write!(f, "}}"),
             Token::Comma => write!(f, ","),
             Token::Dot => write!(f, "."),
+            Token::DotDot => write!(f, ".."),
+            Token::DotDotEq => write!(f, "..="),
             Token::Ellipsis => write!(f, "..."),
             Token::Semicolon => write!(f, ";"),
             Token::Colon => write!(f, ":"),

@@ -166,6 +166,23 @@ pub enum Expr {
 
     /// `$` — marcador de spread (typeck expande, nunca chega à TAST).
     Spread,
+
+    // ── Fio 8: Coleções ────────────────────────────────────
+    /// `[1 2 3]` — lista literal (Cons cells).
+    ListLit { elements: Vec<Spanned<Expr>> },
+
+    /// `{1 2 3}` — array literal (contíguo, imutável).
+    ArrayLit { elements: Vec<Spanned<Expr>> },
+
+    /// `[a..s..b]` ou `[a..s..=b]` — range lazy.
+    /// Step é sempre explícito na sintaxe.
+    RangeLit {
+        start: Box<Spanned<Expr>>,
+        step: Box<Spanned<Expr>>,
+        end: Box<Spanned<Expr>>,
+        /// true = `..=` (inclusive), false = `..` (exclusive)
+        inclusive: bool,
+    },
 }
 
 /// Índice de DotAccess — field nomeado ou inteiro.

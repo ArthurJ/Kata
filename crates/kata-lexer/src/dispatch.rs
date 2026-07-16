@@ -94,11 +94,18 @@ pub(crate) fn lex_token(lex: &mut Lexer) -> Result<TokenWithSpan, FrontendError>
         }
         '.' => {
             lex.advance();
-            // `...` → Ellipsis (varargs em assinaturas)
-            if lex.ch == Some('.') && lex.peek() == Some('.') {
+            if lex.ch == Some('.') {
+                // `..` — pode ser `..=`, `...`, ou `..`
                 lex.advance();
-                lex.advance();
-                Token::Ellipsis
+                if lex.ch == Some('=') {
+                    lex.advance();
+                    Token::DotDotEq
+                } else if lex.ch == Some('.') {
+                    lex.advance();
+                    Token::Ellipsis
+                } else {
+                    Token::DotDot
+                }
             } else {
                 Token::Dot
             }

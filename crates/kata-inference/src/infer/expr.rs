@@ -383,6 +383,13 @@ pub(crate) fn infer_expr_hinted(
                 span: (*span).into(),
             });
         }
+        // ── Fio 8: Coleções — inferência implementada na Fase 5 ──
+        Expr::ListLit { .. } | Expr::ArrayLit { .. } | Expr::RangeLit { .. } => {
+            return Err(MiddleError::UnboundName {
+                name: "coleções (List/Array/Range) — inferência ainda não implementada (Fase 5)".into(),
+                span: (*span).into(),
+            });
+        }
     };
 
     // Deriva EscapeTarget de tail_pos + contexto (Action vs função pura/entry).

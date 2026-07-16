@@ -86,6 +86,20 @@ fn assert_no_holes(expr: &Spanned<Expr>) {
         }
         Expr::DotAccess { expr, .. } => assert_no_holes(expr),
         Expr::Spread => {}
+        // Fio 8: Coleções — recursão nos elementos
+        Expr::ListLit { elements } | Expr::ArrayLit { elements } => {
+            elements.iter().for_each(assert_no_holes)
+        }
+        Expr::RangeLit {
+            start,
+            step,
+            end,
+            ..
+        } => {
+            assert_no_holes(start);
+            assert_no_holes(step);
+            assert_no_holes(end);
+        }
     }
 }
 
@@ -149,6 +163,17 @@ fn assert_no_pipes(expr: &Spanned<Expr>) {
         }
         Expr::DotAccess { expr, .. } => assert_no_pipes(expr),
         Expr::Spread => {}
+        // Fio 8: Coleções — recursão nos elementos
+        Expr::ListLit { elements } | Expr::ArrayLit { elements } => {
+            elements.iter().for_each(assert_no_pipes)
+        }
+        Expr::RangeLit {
+            start, step, end, ..
+        } => {
+            assert_no_pipes(start);
+            assert_no_pipes(step);
+            assert_no_pipes(end);
+        }
     }
 }
 

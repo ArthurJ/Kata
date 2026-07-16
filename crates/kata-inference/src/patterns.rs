@@ -296,7 +296,8 @@ pub(crate) fn check_exhaustiveness(
                 })
             }
         }
-        Ty::Prim(_) | Ty::Unit | Ty::Struct(_) | Ty::Tuple(_) => {
+        Ty::Prim(_) | Ty::Unit | Ty::Struct(_) | Ty::Tuple(_)
+        | Ty::List(_) | Ty::Array(_) | Ty::Range(_) => {
             // Tipos infinitos exigem otherwise/wildcard.
             Err(MiddleError::MissingOtherwise {
                 span: (*span).into(),

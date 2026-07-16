@@ -39,6 +39,12 @@ pub enum Ty {
     /// "qualquer tipo que implementa esta interface". Não é um tipo
     /// concreto — o dispatch resolve para o tipo real no call site.
     Interface(String),
+    /// Lista persistente: `[T]` — Cons cell encadeada.
+    List(Box<Ty>),
+    /// Array contíguo: `{T}` — bloco imutável.
+    Array(Box<Ty>),
+    /// Range lazy: `[a..s..b]` — start, step, end. Genérico sobre A.
+    Range(Box<Ty>),
 }
 
 /// Mapeamento de representação FFI.

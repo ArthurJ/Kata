@@ -6,6 +6,7 @@
 mod actions;
 mod basics;
 mod fio6;
+mod fio8_collections;
 mod guards;
 mod helpers;
 mod lambdas;

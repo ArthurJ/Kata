@@ -40,6 +40,8 @@ pub(crate) fn lex_ident(lex: &mut Lexer, start: &Pos) -> Result<TokenWithSpan, F
         "break" => Token::Break,
         "continue" => Token::Continue,
         "otherwise" => Token::Otherwise,
+        "for" => Token::For,
+        "in" => Token::In,
         _ => Token::Ident(ident.to_string()),
     };
 
