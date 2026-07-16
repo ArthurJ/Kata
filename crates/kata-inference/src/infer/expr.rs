@@ -390,6 +390,13 @@ pub(crate) fn infer_expr_hinted(
                 span: (*span).into(),
             });
         }
+        // ── Fio 8: ForIn e In — inferência implementada na Fase 5 ──
+        Expr::ForIn { .. } | Expr::In { .. } => {
+            return Err(MiddleError::UnboundName {
+                name: "for/in — inferência ainda não implementada (Fase 5)".into(),
+                span: (*span).into(),
+            });
+        }
     };
 
     // Deriva EscapeTarget de tail_pos + contexto (Action vs função pura/entry).

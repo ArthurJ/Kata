@@ -192,3 +192,75 @@ fn array_lit_empty() {
         other => panic!("expected EntryExpr, got {other:?}"),
     }
 }
+
+// ── Fase 3: for x in + operador in (DoDs 13-16) ──────────────────
+
+use kata_lexer::lex;
+use kata_parser::parse;
+
+#[test]
+fn for_in_parses_inside_action() {
+    // DoD 13: `for x in arr` parseia e produz Expr::ForIn
+    let src = "action iterar\n    for x in arr\n        echo!(x)";
+    let m = parse_src(src);
+    let item = first_item(&m);
+    match item {
+        Item::ActionDecl { body, .. } => {
+            assert_eq!(body.len(), 1);
+            match &body[0].expr.node {
+                Expr::ForIn {
+                    var_name,
+                    iterable,
+                    body: for_body,
+                } => {
+                    assert_eq!(var_name, "x");
+                    assert!(matches!(&iterable.node, Expr::Ident { name } if name == "arr"));
+                    assert_eq!(for_body.len(), 1);
+                    assert!(matches!(&for_body[0].node, Expr::ActionCall { callee, .. } if callee == "echo"));
+                }
+                other => panic!("expected ForIn, got {other:?}"),
+            }
+        }
+        other => panic!("expected ActionDecl, got {other:?}"),
+    }
+}
+
+#[test]
+fn for_in_outside_action_errors() {
+    // DoD 14: `for` fora de Action produz erro
+    let tokens = lex("for x in arr\n    echo!(x)").unwrap();
+    let result = parse(tokens);
+    assert!(result.is_err(), "for fora de Action deve produzir erro");
+}
+
+#[test]
+fn for_in_in_lambda_errors() {
+    // DoD 15: `for` em lambda produz compile error (parser rejeita —
+    // `for` não é aceito em lambda body porque não está em action_body)
+    let src = "lambda x: for y in x\n    echo!(y)";
+    let tokens = lex(src).unwrap();
+    let result = parse(tokens);
+    assert!(result.is_err(), "for em lambda deve produzir erro");
+}
+
+#[test]
+fn in_operator_parses() {
+    // DoD 16: `3 in {1 2 3}` parseia e produz Expr::In
+    let m = parse_src("3 in {1 2 3}");
+    let item = first_item(&m);
+    match item {
+        Item::EntryExpr(e) => match &e.node {
+            Expr::In { item, collection } => {
+                assert_eq!(item.node, Expr::IntLit { text: "3".into() });
+                match &collection.node {
+                    Expr::ArrayLit { elements } => {
+                        assert_eq!(elements.len(), 3);
+                    }
+                    other => panic!("expected ArrayLit in collection, got {other:?}"),
+                }
+            }
+            other => panic!("expected In, got {other:?}"),
+        },
+        other => panic!("expected EntryExpr, got {other:?}"),
+    }
+}

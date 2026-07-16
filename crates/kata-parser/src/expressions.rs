@@ -90,6 +90,12 @@ impl Parser {
                 }
                 self.parse_loop()
             }
+            Token::For => {
+                if !self.in_action_body {
+                    return Err(self.error("`for` fora de Action (for só existe em Actions)"));
+                }
+                self.parse_for_in()
+            }
             Token::Break => {
                 if !self.in_action_body {
                     return Err(self.error("`break` fora de Action (break só existe em Actions)"));
@@ -489,6 +495,60 @@ impl Parser {
         self.expect(&Token::RBrace, "`}`")?;
         let span = start.cover(self.tokens[self.pos - 1].span);
         Ok(Spanned::new(Expr::ArrayLit { elements }, span))
+    }
+
+    /// Parse `for x in colecao` com body indentado (exclusivo de Actions).
+    /// Como `loop`: consome INDENT, coleta statements até DEDENT.
+    pub(crate) fn parse_for_in(&mut self) -> Result<Spanned<Expr>, FrontendError> {
+        let start = self.peek_span();
+        self.expect(&Token::For, "`for`")?;
+
+        // `for` deve ser seguido de um identificador (variável de iteração)
+        let var_name = match self.peek() {
+            Token::Ident(s) => {
+                let n = s.clone();
+                self.advance();
+                n
+            }
+            _ => return Err(self.error("identificador após `for`")),
+        };
+
+        // `in` separa a variável da coleção
+        self.expect(&Token::In, "`in` após variável do for")?;
+
+        // Parseia a expressão iterável
+        let iterable = parse_expr(self)?;
+
+        // Body indentado
+        self.expect(&Token::Indent, "INDENT (for body)")?;
+
+        let mut body = Vec::new();
+        loop {
+            while matches!(self.peek(), Token::StmtSep | Token::Semicolon) {
+                self.advance();
+            }
+            if matches!(self.peek(), Token::Dedent | Token::Eof) {
+                break;
+            }
+            let stmt = parse_expr(self)?;
+            body.push(stmt);
+        }
+
+        self.expect(&Token::Dedent, "DEDENT (fim do for body)")?;
+        let end_span = self
+            .tokens
+            .get(self.pos - 1)
+            .map(|t| t.span)
+            .unwrap_or(start);
+        let span = start.cover(end_span);
+        Ok(Spanned::new(
+            Expr::ForIn {
+                var_name,
+                iterable: Box::new(iterable),
+                body,
+            },
+            span,
+        ))
     }
 }
 

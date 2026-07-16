@@ -208,6 +208,26 @@ fn desugar_pipes(expr: &Spanned<Expr>) -> Spanned<Expr> {
             },
             expr.span,
         ),
+        // ── Fio 8: ForIn e In ───────────────────────────────
+        Expr::ForIn {
+            var_name,
+            iterable,
+            body,
+        } => Spanned::new(
+            Expr::ForIn {
+                var_name: var_name.clone(),
+                iterable: Box::new(desugar_pipes(iterable)),
+                body: body.iter().map(desugar_pipes).collect(),
+            },
+            expr.span,
+        ),
+        Expr::In { item, collection } => Spanned::new(
+            Expr::In {
+                item: Box::new(desugar_pipes(item)),
+                collection: Box::new(desugar_pipes(collection)),
+            },
+            expr.span,
+        ),
     }
 }
 
@@ -526,6 +546,26 @@ fn desugar_holes(expr: &Spanned<Expr>) -> Spanned<Expr> {
                 step: Box::new(desugar_holes(step)),
                 end: Box::new(desugar_holes(end)),
                 inclusive: *inclusive,
+            },
+            expr.span,
+        ),
+        // ── Fio 8: ForIn e In ───────────────────────────────
+        Expr::ForIn {
+            var_name,
+            iterable,
+            body,
+        } => Spanned::new(
+            Expr::ForIn {
+                var_name: var_name.clone(),
+                iterable: Box::new(desugar_holes(iterable)),
+                body: body.iter().map(desugar_holes).collect(),
+            },
+            expr.span,
+        ),
+        Expr::In { item, collection } => Spanned::new(
+            Expr::In {
+                item: Box::new(desugar_holes(item)),
+                collection: Box::new(desugar_holes(collection)),
             },
             expr.span,
         ),

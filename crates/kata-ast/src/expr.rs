@@ -183,6 +183,19 @@ pub enum Expr {
         /// true = `..=` (inclusive), false = `..` (exclusive)
         inclusive: bool,
     },
+
+    /// `for x in colecao` — iteração via ITERABLE (exclusivo de Actions).
+    ForIn {
+        var_name: String,
+        iterable: Box<Spanned<Expr>>,
+        body: Vec<Spanned<Expr>>,
+    },
+
+    /// `x in coll` — operador de membership (dispatch via CONTAINS).
+    In {
+        item: Box<Spanned<Expr>>,
+        collection: Box<Spanned<Expr>>,
+    },
 }
 
 /// Índice de DotAccess — field nomeado ou inteiro.

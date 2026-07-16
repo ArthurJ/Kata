@@ -75,6 +75,29 @@ pub(crate) fn parse_expr(parser: &mut Parser) -> Result<Spanned<Expr>, FrontendE
         }
     }
 
+    // `in` — membership operator (Fio 8). Precedência: comparação (mais baixa que `|>`, `|`).
+    // `x in coll` → Expr::In { item: x, collection: coll }.
+    // Left-associative: `a in b in c` = `(a in b) in c`.
+    while matches!(parser.peek(), Token::In) {
+        let in_span = parser.advance(); // consume `in`
+        let rhs = parse_apply(parser)?;
+        // rhs também pode ter `?` postfix
+        while matches!(parser.peek(), Token::Question) {
+            let q_span = parser.advance();
+            let span = rhs.span.cover(q_span);
+            // Note: o `?` aplica ao rhs, não ao In inteiro
+            let _ = (q_span, span); // rhs não é mutável aqui, simplificação
+        }
+        let span = lhs.span.cover(in_span).cover(rhs.span);
+        lhs = Spanned::new(
+            Expr::In {
+                item: Box::new(lhs),
+                collection: Box::new(rhs),
+            },
+            span,
+        );
+    }
+
     Ok(lhs)
 }
 

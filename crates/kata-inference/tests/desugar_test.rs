@@ -91,14 +91,20 @@ fn assert_no_holes(expr: &Spanned<Expr>) {
             elements.iter().for_each(assert_no_holes)
         }
         Expr::RangeLit {
-            start,
-            step,
-            end,
-            ..
+            start, step, end, ..
         } => {
             assert_no_holes(start);
             assert_no_holes(step);
             assert_no_holes(end);
+        }
+        // Fio 8: ForIn e In
+        Expr::ForIn { iterable, body, .. } => {
+            assert_no_holes(iterable);
+            body.iter().for_each(assert_no_holes);
+        }
+        Expr::In { item, collection } => {
+            assert_no_holes(item);
+            assert_no_holes(collection);
         }
     }
 }
@@ -173,6 +179,15 @@ fn assert_no_pipes(expr: &Spanned<Expr>) {
             assert_no_pipes(start);
             assert_no_pipes(step);
             assert_no_pipes(end);
+        }
+        // Fio 8: ForIn e In
+        Expr::ForIn { iterable, body, .. } => {
+            assert_no_pipes(iterable);
+            body.iter().for_each(assert_no_pipes);
+        }
+        Expr::In { item, collection } => {
+            assert_no_pipes(item);
+            assert_no_pipes(collection);
         }
     }
 }
