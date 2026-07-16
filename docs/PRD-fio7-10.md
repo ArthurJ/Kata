@@ -490,7 +490,7 @@ e a função está no `commutative` set e arity == 2:
 
 **Verificação:** `cargo test -p kata-inference`
 
-### Fase 8: Prelude em Kata — `stdlib/core.kata`
+### Fase 8: Prelude em Kata — `stdlib/core.kata` ✅
 
 **Objetivo:** substituir `prelude_sigs.rs` por um módulo Kata carregado do filesystem.
 
@@ -666,13 +666,13 @@ implements SHOW for Complex
 | 6 | `id 42` infere `T = Int` via `unify` e retorna `Int` ✅ | 5 |
 | 7 | `List(Int)` e `List(Text)` geram instâncias monomorfizadas distintas ✅ | 6 |
 | 8 | `@commutative` em `=` tenta args invertidos quando 0 candidatos ✅ | 7 |
-| 9 | `stdlib/core.kata` carregado como prelude substitui `prelude_sigs.rs` | 8 |
-| 10 | `implements NUM for Int` em Kata registra `+` com `@ffi("kata_rt_bi_add")` | 8 |
+| 9 | `stdlib/core.kata` carregado como prelude substitui `prelude_sigs.rs` ✅ | 8 |
+| 10 | `implements NUM for Int` em Kata registra `+` com `@ffi("kata_rt_bi_add")` ✅ | 8 |
 | 11 | `Complex 3.0 4.0` constrói via smart constructor | 9 |
 | 12 | `+ (Complex 1.0 2.0) (Complex 3.0 4.0)` → `Complex 4.0 6.0` | 9 |
 | 13 | `show (Complex 3.0 4.0)` → `"(3.0 + 4.0i)"` via SHOW | 9 |
 | 14 | `+ (Complex 1.0 0.0) 5` → interoperabilidade NUM (Complex + Int) | 9 |
-| 15 | Todos os testes existentes passam com prelude em Kata | 8 |
+| 15 | Todos os testes existentes passam com prelude em Kata ✅ | 8 |
 
 ## Atualização da documentação
 
