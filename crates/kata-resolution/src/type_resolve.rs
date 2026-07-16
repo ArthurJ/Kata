@@ -71,9 +71,36 @@ pub(crate) fn resolve_type_expr(
                 .iter()
                 .map(|p| resolve_type_expr(&p.node, env, iface_reg))
                 .collect();
-            // Tenta resolver como Ty::Var se o param é um nome que não está no TypeEnv
-            // (ex: "T" em Result::(T, E) dentro de uma declaração de função genérica).
-            Ty::Generic(name.clone(), resolved_params)
+            // Fio 8: tipos intrínsecos de coleção — List::(A), Array::(A), Range::(A).
+            // São variants de Ty, não Ty::Generic. O codegen precisa do layout.
+            match name.as_str() {
+                "List" => {
+                    let elem = resolved_params
+                        .into_iter()
+                        .next()
+                        .unwrap_or(Ty::Var("A".into()));
+                    Ty::List(Box::new(elem))
+                }
+                "Array" => {
+                    let elem = resolved_params
+                        .into_iter()
+                        .next()
+                        .unwrap_or(Ty::Var("A".into()));
+                    Ty::Array(Box::new(elem))
+                }
+                "Range" => {
+                    let elem = resolved_params
+                        .into_iter()
+                        .next()
+                        .unwrap_or(Ty::Var("A".into()));
+                    Ty::Range(Box::new(elem))
+                }
+                _ => {
+                    // Tenta resolver como Ty::Var se o param é um nome que não está no TypeEnv
+                    // (ex: "T" em Result::(T, E) dentro de uma declaração de função genérica).
+                    Ty::Generic(name.clone(), resolved_params)
+                }
+            }
         }
         // Fio 7: Self é resolvido na Fase 2 (resolution de implements).
         // Por ora, mapeia para Ty::Var("Self") como placeholder.

@@ -711,11 +711,11 @@ Não há uma única função FFI — o codegen gera código específico por tipo
 **DoDs:**
 | # | Descrição | Fase |
 |---|---|---|
-| 17 | `ITERABLE(A)`, `COUNTABLE`, `INDEXABLE(A)`, `CONTAINS(A)` registradas no InterfaceRegistry | 4 |
-| 18 | `Array(A) implements ITERABLE(A)` registra no DispatchTable | 4 |
-| 19 | `List(A) implements ITERABLE(A)` registra no DispatchTable | 4 |
-| 20 | `Range(A) implements ITERABLE(A)` registra no DispatchTable | 4 |
-| 21 | `Text implements CONTAINS(Text)` registra no DispatchTable | 4 |
+| 17 | `ITERABLE(A)`, `COUNTABLE`, `INDEXABLE(A)`, `CONTAINS(A)` registradas no InterfaceRegistry | 4 | ✅
+| 18 | `Array(A) implements ITERABLE(A)` registra no DispatchTable | 4 | ✅
+| 19 | `List(A) implements ITERABLE(A)` registra no DispatchTable | 4 | ✅
+| 20 | `Range(A) implements ITERABLE(A)` registra no DispatchTable | 4 | ✅
+| 21 | `Text implements CONTAINS(Text)` registra no DispatchTable | 4 | ✅
 
 ### Fase 5: Inference — tipagem de coleções
 

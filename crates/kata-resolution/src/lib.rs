@@ -288,8 +288,11 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
                 let impl_methods: Vec<ImplMethodInfo> = methods
                     .iter()
                     .map(|m| {
+                        // Fio 8: extrai @ffi OU @builtin como símbolo.
+                        // @ffi("kata_rt_array_next") → Some("kata_rt_array_next")
+                        // @builtin("range_next") → Some("range_next")
                         let ffi_symbol = m.directives.iter().find_map(|d| {
-                            if d.name == "ffi"
+                            if (d.name == "ffi" || d.name == "builtin")
                                 && let Some(kata_ast::DirectiveArg::Str(s)) = d.args.first()
                             {
                                 return Some(s.clone());
@@ -331,7 +334,7 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
                     let return_type =
                         resolve_type_expr(&m.ret.node, &type_env, &interface_registry);
                     let ffi_symbol = m.directives.iter().find_map(|d| {
-                        if d.name == "ffi"
+                        if (d.name == "ffi" || d.name == "builtin")
                             && let Some(kata_ast::DirectiveArg::Str(s)) = d.args.first()
                         {
                             return Some(s.clone());

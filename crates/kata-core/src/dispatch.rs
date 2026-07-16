@@ -454,6 +454,9 @@ fn extract_iface_name(ty: &Ty) -> Option<String> {
 /// `Ty::Struct("Complex")` → `"Complex"`
 /// `Ty::Sum("Boolean")` → `"Boolean"`
 /// `Ty::Generic("List", [Int])` → `"List"`
+/// `Ty::List(Int)` → `"List"` (Fio 8 — tipo intrínseco)
+/// `Ty::Array(Int)` → `"Array"` (Fio 8 — tipo intrínseco)
+/// `Ty::Range(Int)` → `"Range"` (Fio 8 — tipo intrínseco)
 fn extract_type_name(ty: &Ty) -> Option<String> {
     match ty {
         Ty::Prim(crate::ty::PrimTy::Int) => Some("Int".into()),
@@ -463,6 +466,9 @@ fn extract_type_name(ty: &Ty) -> Option<String> {
         Ty::Struct(name) => Some(name.clone()),
         Ty::Sum(name) => Some(name.clone()),
         Ty::Generic(name, _) => Some(name.clone()),
+        Ty::List(_) => Some("List".into()),
+        Ty::Array(_) => Some("Array".into()),
+        Ty::Range(_) => Some("Range".into()),
         _ => None,
     }
 }
