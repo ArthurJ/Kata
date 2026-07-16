@@ -58,8 +58,11 @@ impl Parser {
                     items.push(Spanned::new(item, item_start));
                 }
                 Token::Implements => {
-                    let item = self.parse_implements_decl(directives)?;
-                    items.push(Spanned::new(item, item_start));
+                    // Sintaxe antiga `implements IFACE for TYPE` — não deve
+                    // aparecer como top-level item. A sintaxe correta é
+                    // `TYPE implements IFACE`, despachada no braço `_ =>`.
+                    // Se chega aqui, é erro de sintaxe.
+                    return Err(self.error("expected type name before `implements`"));
                 }
                 Token::Import => {
                     let item = self.parse_import_decl()?;
@@ -81,9 +84,13 @@ impl Parser {
                     // Actually, let's keep it as is — EntryExpr wrapping the Let expr.
                 }
                 _ => {
-                    // Could be a signature (name :: Type ...) or an expression.
-                    // Check: if next is Ident followed by DoubleColon, it's a Sig.
-                    if self.is_signature_start() {
+                    // Could be a signature (name :: Type...), an implements
+                    // decl (Tipo implements IFACE), or an expression.
+                    // Check: Ident [optional (params)] followed by Implements → ImplementsDecl.
+                    if self.is_implements_start() {
+                        let item = self.parse_implements_decl(directives)?;
+                        items.push(Spanned::new(item, item_start));
+                    } else if self.is_signature_start() {
                         let item = self.parse_sig(directives)?;
                         items.push(Spanned::new(item, item_start));
                     } else {
@@ -100,6 +107,35 @@ impl Parser {
         }
 
         Ok(Module { items })
+    }
+
+    /// Check if the current position starts an implements decl:
+    /// `Tipo implements IFACE` or `Tipo(params) implements IFACE`.
+    /// Looks ahead past optional `(params)` to find `implements`.
+    fn is_implements_start(&self) -> bool {
+        if !matches!(self.peek(), Token::Ident(_)) {
+            return false;
+        }
+        let mut lookahead = self.pos + 1;
+        // Skip optional `(params)` — type params of the tipo.
+        if let Some(t) = self.tokens.get(lookahead) {
+            if matches!(t.token, Token::LParen) {
+                let mut depth = 1;
+                lookahead += 1;
+                while lookahead < self.tokens.len() && depth > 0 {
+                    match &self.tokens[lookahead].token {
+                        Token::LParen => depth += 1,
+                        Token::RParen => depth -= 1,
+                        _ => {}
+                    }
+                    lookahead += 1;
+                }
+            }
+        }
+        self.tokens
+            .get(lookahead)
+            .map(|t| matches!(t.token, Token::Implements))
+            .unwrap_or(false)
     }
 
     /// Check if the current position starts a signature: `name :: Type... => RetType`

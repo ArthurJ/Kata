@@ -136,7 +136,7 @@ impl Parser {
     /// `Tipo implements Interface` + bloco indentado com métodos.
     /// Sintaxe:
     /// ```text
-    /// implements NUM for Complex
+    /// Complex implements NUM
     ///     + :: Complex Complex => Complex
     ///         lambda a b: Complex (+ a.re b.re) (+ a.im b.im)
     ///     - :: Complex Complex => Complex @ffi("kata_rt_complex_sub")
@@ -151,6 +151,51 @@ impl Parser {
         &mut self,
         _directives: Vec<Directive>,
     ) -> Result<Item, FrontendError> {
+        // Nome do tipo (primeiro token)
+        let type_name = match self.peek() {
+            Token::Ident(s) => {
+                let n = s.clone();
+                self.advance();
+                n
+            }
+            _ => return Err(self.error("type name before `implements`")),
+        };
+
+        // Type params do tipo opcionais: `List(A)`
+        let type_params = if matches!(self.peek(), Token::LParen) {
+            self.advance();
+            let mut params = Vec::new();
+            while matches!(self.peek(), Token::StmtSep) {
+                self.advance();
+            }
+            if !matches!(self.peek(), Token::RParen) {
+                loop {
+                    let pname = match self.peek() {
+                        Token::Ident(s) => {
+                            let n = s.clone();
+                            self.advance();
+                            n
+                        }
+                        _ => return Err(self.error("type param name")),
+                    };
+                    params.push(pname);
+                    if matches!(self.peek(), Token::Comma) {
+                        self.advance();
+                        while matches!(self.peek(), Token::StmtSep) {
+                            self.advance();
+                        }
+                        continue;
+                    }
+                    break;
+                }
+            }
+            self.expect(&Token::RParen, "`)` após type params")?;
+            params
+        } else {
+            Vec::new()
+        };
+
+        // `implements`
         self.expect(&Token::Implements, "`implements`")?;
 
         // Nome da interface
@@ -192,53 +237,6 @@ impl Parser {
                 }
             }
             self.expect(&Token::RParen, "`)` após iface params")?;
-            params
-        } else {
-            Vec::new()
-        };
-
-        // `for Tipo`
-        self.expect(&Token::Ident("for".into()), "`for`")?;
-
-        // Nome do tipo
-        let type_name = match self.peek() {
-            Token::Ident(s) => {
-                let n = s.clone();
-                self.advance();
-                n
-            }
-            _ => return Err(self.error("type name after `for`")),
-        };
-
-        // Type params do tipo opcionais: `List(A)`
-        let type_params = if matches!(self.peek(), Token::LParen) {
-            self.advance();
-            let mut params = Vec::new();
-            while matches!(self.peek(), Token::StmtSep) {
-                self.advance();
-            }
-            if !matches!(self.peek(), Token::RParen) {
-                loop {
-                    let pname = match self.peek() {
-                        Token::Ident(s) => {
-                            let n = s.clone();
-                            self.advance();
-                            n
-                        }
-                        _ => return Err(self.error("type param name")),
-                    };
-                    params.push(pname);
-                    if matches!(self.peek(), Token::Comma) {
-                        self.advance();
-                        while matches!(self.peek(), Token::StmtSep) {
-                            self.advance();
-                        }
-                        continue;
-                    }
-                    break;
-                }
-            }
-            self.expect(&Token::RParen, "`)` após type params")?;
             params
         } else {
             Vec::new()

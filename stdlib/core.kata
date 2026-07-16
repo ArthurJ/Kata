@@ -56,7 +56,7 @@ interface SHOW
 
 # ── Implementações para Int ───────────────────────────────────
 
-implements NUM for Int
+Int implements NUM
     + :: Int Int => Int @ffi("kata_rt_bi_add") @associative(0) @commutative
     - :: Int Int => Int @ffi("kata_rt_bi_sub")
     * :: Int Int => Int @ffi("kata_rt_bi_mul") @associative(1) @commutative
@@ -66,12 +66,12 @@ implements NUM for Int
     >= :: Int Int => Boolean @ffi("kata_rt_bi_ge")
     = :: Int Int => Boolean @ffi("kata_rt_bi_eq") @commutative
 
-implements SHOW for Int
+Int implements SHOW
     show :: Int => Text @ffi("kata_rt_bi_show")
 
 # ── Implementações para Float ──────────────────────────────────
 
-implements NUM for Float
+Float implements NUM
     + :: Float Float => Float @ffi("kata_rt_fadd") @commutative
     - :: Float Float => Float @ffi("kata_rt_fsub")
     * :: Float Float => Float @ffi("kata_rt_fmul") @commutative
@@ -81,12 +81,12 @@ implements NUM for Float
     >= :: Float Float => Boolean @ffi("kata_rt_fcmp_ge")
     = :: Float Float => Boolean @ffi("kata_rt_fcmp_eq") @commutative
 
-implements SHOW for Float
+Float implements SHOW
     show :: Float => Text @ffi("kata_rt_float_to_text")
 
 # ── Implementações para Rational ──────────────────────────────
 
-implements NUM for Rational
+Rational implements NUM
     + :: Rational Rational => Rational @ffi("kata_rt_rat_add") @associative(0) @commutative
     - :: Rational Rational => Rational @ffi("kata_rt_rat_sub")
     * :: Rational Rational => Rational @ffi("kata_rt_rat_mul") @associative(1) @commutative
@@ -97,10 +97,10 @@ implements NUM for Rational
     >= :: Rational Rational => Boolean @ffi("kata_rt_rat_ge")
     = :: Rational Rational => Boolean @ffi("kata_rt_rat_eq") @commutative
 
-implements SHOW for Rational
+Rational implements SHOW
     show :: Rational => Text @ffi("kata_rt_rat_show")
 
-# ── Implementações para Text ──────────────────────────────────
+# ── Text ──────────────────────────────────────────────────────
 # SHOW for Text: Text já é Text, show é identidade.
 # Não existe kata_rt_string_identity no runtime — usamos
 # string_concat com um único arg seria errado. Por ora, omitimos

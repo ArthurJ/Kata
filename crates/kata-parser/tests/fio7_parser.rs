@@ -83,7 +83,7 @@ fn interface_with_type_params() {
 
 #[test]
 fn implements_with_ffi() {
-    let src = "implements NUM for Int\n    + :: Int Int => Int @ffi(\"kata_rt_bi_add\")";
+    let src = "Int implements NUM\n    + :: Int Int => Int @ffi(\"kata_rt_bi_add\")";
     let m = parse_src(src);
     match first_item(&m) {
         Item::ImplementsDecl {
@@ -112,7 +112,7 @@ fn implements_with_ffi() {
 #[test]
 fn implements_with_lambda_body() {
     let src =
-        "implements NUM for Complex\n    + :: Complex Complex => Complex\n        lambda a b: a";
+        "Complex implements NUM\n    + :: Complex Complex => Complex\n        lambda a b: a";
     let m = parse_src(src);
     match first_item(&m) {
         Item::ImplementsDecl {
@@ -132,7 +132,7 @@ fn implements_with_lambda_body() {
 
 #[test]
 fn implements_with_type_params() {
-    let src = "implements ITERABLE(A) for List(A)\n    next :: List::(A) => Optional::(A)";
+    let src = "List(A) implements ITERABLE(A)\n    next :: List::(A) => Optional::(A)";
     let m = parse_src(src);
     match first_item(&m) {
         Item::ImplementsDecl {

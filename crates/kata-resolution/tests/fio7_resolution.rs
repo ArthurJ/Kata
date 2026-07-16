@@ -52,7 +52,7 @@ fn interface_com_type_params() {
 fn implements_decl_registra_no_registry() {
     let src = "\
 interface NUM\n    + :: NUM NUM => NUM
-implements NUM for Int\n    + :: Int Int => Int @ffi(\"kata_rt_bi_add\")";
+Int implements NUM\n    + :: Int Int => Int @ffi(\"kata_rt_bi_add\")";
     let resolved = resolve_src(src);
     assert!(resolved.interface_registry.type_implements("Int", "NUM"));
 }
@@ -61,7 +61,7 @@ implements NUM for Int\n    + :: Int Int => Int @ffi(\"kata_rt_bi_add\")";
 fn implements_com_type_params() {
     let src = "\
 interface ITERABLE(A)\n    next :: Self => Optional::(A)
-implements ITERABLE(A) for List\n    next :: List => Optional::(A)";
+List implements ITERABLE(A)\n    next :: List => Optional::(A)";
     let resolved = resolve_src(src);
     let impls = resolved.interface_registry.get_impls_for_type("List");
     assert_eq!(impls.len(), 1);
@@ -75,7 +75,7 @@ fn supertrait_propaga_type_implements() {
 interface EQ\n    = :: Self Self => Boolean
 interface ORD implements EQ\n    < :: Self Self => Boolean
 interface NUM implements ORD EQ\n    + :: NUM NUM => NUM
-implements NUM for Int\n    + :: Int Int => Int";
+Int implements NUM\n    + :: Int Int => Int";
     let resolved = resolve_src(src);
     // Int implementa NUM diretamente
     assert!(resolved.interface_registry.type_implements("Int", "NUM"));
@@ -89,7 +89,7 @@ implements NUM for Int\n    + :: Int Int => Int";
 fn metodo_com_ffi_symbol_registrado() {
     let src = "\
 interface NUM\n    + :: NUM NUM => NUM
-implements NUM for Int\n    + :: Int Int => Int @ffi(\"kata_rt_bi_add\")";
+Int implements NUM\n    + :: Int Int => Int @ffi(\"kata_rt_bi_add\")";
     let resolved = resolve_src(src);
     let impls = resolved.interface_registry.get_impls_for_type("Int");
     assert_eq!(impls.len(), 1);
@@ -102,7 +102,7 @@ implements NUM for Int\n    + :: Int Int => Int @ffi(\"kata_rt_bi_add\")";
 fn metodo_sem_ffi_tem_symbol_none() {
     let src = "\
 interface NUM\n    + :: NUM NUM => NUM
-implements NUM for Complex\n    + :: Complex Complex => Complex";
+Complex implements NUM\n    + :: Complex Complex => Complex";
     let resolved = resolve_src(src);
     let impls = resolved.interface_registry.get_impls_for_type("Complex");
     let method = &impls[0].methods[0];

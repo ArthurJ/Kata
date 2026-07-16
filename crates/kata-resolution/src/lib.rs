@@ -352,15 +352,27 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
 
                     signatures.push(Signature {
                         name: m.name.clone(),
-                        param_types,
-                        return_type,
-                        ffi_symbol,
+                        param_types: param_types.clone(),
+                        return_type: return_type.clone(),
+                        ffi_symbol: ffi_symbol.clone(),
                         is_associative,
                         associative_neutral,
                         is_action: false,
                         is_commutative,
                         type_params,
                     });
+
+                    // Fase 9: método com corpo Kata (lambda) precisa de
+                    // FunctionDef para o inference produzir TypedFunction.
+                    // Sem isso, o corpo é invisível para o inference/codegen.
+                    if let Some(clauses) = &m.body {
+                        functions.push(FunctionDef {
+                            name: m.name.clone(),
+                            param_types,
+                            return_type,
+                            clauses: clauses.clone(),
+                        });
+                    }
                 }
             }
             _ => {}

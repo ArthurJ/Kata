@@ -148,7 +148,7 @@ impl InterfaceRegistry {
 
     /// Verifica se um tipo implementa uma interface (direto ou via supertrait).
     ///
-    /// `type_implements("Int", "NUM")` → true se há `impl NUM for Int`.
+    /// `type_implements("Int", "NUM")` → true se há `Int implements NUM`.
     /// Também verifica supertraits: se `Int` implementa `NUM` e `NUM : ORD`,
     /// então `type_implements("Int", "ORD")` → true.
     pub fn type_implements(&self, type_name: &str, iface_name: &str) -> bool {
