@@ -11,6 +11,7 @@ use kata_core::InterfaceRegistry;
 use kata_core::ty::Ty;
 use kata_inference::{TypedExprKind, infer_module};
 use kata_lexer::lex;
+use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
 use kata_parser::parse;
 use kata_resolution::{ResolvedModule, load_prelude, resolve};
@@ -23,6 +24,7 @@ fn eval_src(src: &str) -> (i64, Ty) {
     let user = resolve(&module).expect("resolve deve succeed");
     let resolved = merge_resolved(prelude, user);
     let typed = infer_module(&module, &resolved).expect("infer deve succeed");
+    let typed = monomorphize(typed);
     let typed = optimize(typed);
     let jit = jit_eval(&typed).expect("codegen+JIT deve succeed");
     (jit.raw, jit.ty)

@@ -21,7 +21,7 @@ use kata_core::ty::Ty;
 use kata_diagnostics::MiddleError;
 
 /// Resultado de unificação — mapa de type param → tipo concreto.
-pub(crate) type Substitutions = HashMap<String, Ty>;
+pub type Substitutions = HashMap<String, Ty>;
 
 /// Unifica os tipos dos argumentos com os tipos dos parâmetros de uma
 /// assinatura genérica.
@@ -32,7 +32,7 @@ pub(crate) type Substitutions = HashMap<String, Ty>;
 ///
 /// `subs` já pode conter bindings prévios (passados de cima); a função
 /// apenas adiciona novos bindings e verifica consistência.
-pub(crate) fn unify(
+pub fn unify(
     params: &[Ty],
     args: &[Ty],
     type_params: &[String],
@@ -98,7 +98,7 @@ fn unify_one(
 /// concreto quando `name` está em `subs`.
 ///
 /// Recursiva em `Generic` (substitui nos argumentos de tipo).
-pub(crate) fn apply_subs(ty: &Ty, subs: &Substitutions) -> Ty {
+pub fn apply_subs(ty: &Ty, subs: &Substitutions) -> Ty {
     match ty {
         Ty::Var(name) => {
             if let Some(concrete) = subs.get(name) {

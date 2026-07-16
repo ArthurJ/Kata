@@ -10,6 +10,7 @@ members = [
     "crates/kata-inference",
     "crates/kata-codegen",
     "crates/kata-optimizer",
+    "crates/kata-monomorph",
     "crates/kata-rt",
     "crates/kata-driver",
 ]
@@ -63,4 +64,5 @@ kata-resolution = { path = "crates/kata-resolution" }
 kata-inference = { path = "crates/kata-inference" }
 kata-codegen = { path = "crates/kata-codegen" }
 kata-optimizer = { path = "crates/kata-optimizer" }
+kata-monomorph = { path = "crates/kata-monomorph" }
 kata-rt = { path = "crates/kata-rt" }

@@ -17,6 +17,7 @@ kata-parser.workspace = true
 kata-resolution.workspace = true
 kata-inference.workspace = true
 kata-codegen.workspace = true
+kata-monomorph.workspace = true
 kata-optimizer.workspace = true
 kata-core.workspace = true
 kata-ast.workspace = true

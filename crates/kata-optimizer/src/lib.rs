@@ -12,14 +12,14 @@
 
 mod trma;
 
-use kata_inference::TypedModule;
+use kata_monomorph::MonoModule;
 
-/// Otimiza o `TypedModule`.
+/// Otimiza o `MonoModule`.
 ///
 /// Passes aplicados (em ordem):
 /// 1. TRMA — detecta auto-recursão direta com operador associativo e
 ///    reescreve em recursão de cauda com acumulador.
-pub fn optimize(mut typed: TypedModule) -> TypedModule {
-    trma::trma_pass(&mut typed);
-    typed
+pub fn optimize(mut mono: MonoModule) -> MonoModule {
+    trma::trma_pass(&mut mono);
+    mono
 }

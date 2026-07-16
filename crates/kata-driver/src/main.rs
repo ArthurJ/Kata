@@ -5,6 +5,7 @@ use kata_codegen::jit_eval;
 use kata_core::ty::{PrimTy, Ty};
 use kata_inference::infer_module;
 use kata_lexer::lex;
+use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
 use kata_parser::parse;
 use kata_resolution::{ResolvedModule, load_prelude, resolve};
@@ -111,12 +112,15 @@ fn run_pipeline(source: &str) -> miette::Result<ExecResult> {
     // 4. Infer (typeck + dispatch)
     let typed = infer_module(&module, &resolved).map_err(IntoReport::into_report)?;
 
-    // 5. Optimize (pass-through em Fio 1)
-    let typed = optimize(typed);
+    // 5. Monomorph (Fase 6 — especializa call sites genéricos)
+    let mono = monomorphize(typed);
 
-    // 6. Codegen + JIT + executar
+    // 6. Optimize (TRMA + futuros passes)
+    let mono = optimize(mono);
+
+    // 7. Codegen + JIT + executar
     let jit =
-        jit_eval(&typed).map_err(|e| miette::Report::msg(format!("erro de codegen: {e:?}")))?;
+        jit_eval(&mono).map_err(|e| miette::Report::msg(format!("erro de codegen: {e:?}")))?;
 
     Ok(ExecResult {
         raw: jit.raw,

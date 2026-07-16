@@ -1,0 +1,17 @@
+[package]
+name = "kata-monomorph"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "Monomorphização — especializa call sites genéricos em funções concretas"
+
+[dependencies]
+kata-core.workspace = true
+kata-ast.workspace = true
+kata-inference.workspace = true
+
+[dev-dependencies]
+kata-lexer.workspace = true
+kata-parser.workspace = true
+kata-resolution.workspace = true
+kata-diagnostics.workspace = true

@@ -21,7 +21,7 @@ mod constructors_refined;
 mod dot_access;
 mod expr;
 mod format_synthesis;
-mod generics;
+pub mod generics;
 mod helpers;
 mod lambda;
 mod partial_dispatch;
