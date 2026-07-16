@@ -13,6 +13,7 @@ mod directives;
 mod expr_apply;
 mod expressions;
 mod imports;
+mod interface_decl;
 mod lambda;
 mod patterns;
 mod types;
