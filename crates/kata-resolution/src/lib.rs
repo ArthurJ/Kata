@@ -6,7 +6,6 @@
 //! Produz o `ResolvedModule` (imutável).
 
 pub mod module_loader;
-pub(crate) mod prelude;
 mod prelude_sigs;
 
 use kata_ast::{ActionStmt, Expr, Item, LambdaClause, Module, Spanned, TypeExpr};
@@ -134,6 +133,8 @@ pub enum ResolveError {
 /// Resolve um módulo: Pass 0 + Pass 1.
 pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
     let mut type_env = TypeEnv::new();
+    // Unit é tipo primitivo da linguagem — sempre disponível no TypeEnv.
+    type_env.define("Unit", Ty::Unit);
     let mut signatures: Vec<Signature> = Vec::new();
     let mut functions: Vec<FunctionDef> = Vec::new();
     let mut actions: Vec<ActionDef> = Vec::new();
@@ -150,6 +151,7 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
             Item::DataDecl {
                 name,
                 fields,
+                directives: data_dirs,
                 refined,
                 ..
             } => {
@@ -187,10 +189,25 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
                     continue;
                 }
 
-                // data Int () com @ffi("i64") → Ty::Prim(PrimTy::Int)
-                // Por enquanto, registra como Struct. O FfiSymbol será resolvido
-                // na inferência quando cruzar com a diretiva @ffi.
-                type_env.define(name, Ty::Struct(name.clone()));
+                // Fase 8: data Int () @ffi("i64") → Ty::Prim(PrimTy::Int)
+                // Mapeia FFI symbols conhecidos para PrimTy. Se não tem @ffi
+                // ou o símbolo não é reconhecido, registra como Ty::Struct.
+                let ffi_symbol = data_dirs.iter().find_map(|d| {
+                    if d.name == "ffi"
+                        && let Some(kata_ast::DirectiveArg::Str(s)) = d.args.first()
+                    {
+                        return Some(s.clone());
+                    }
+                    None
+                });
+                let ty = match ffi_symbol.as_deref() {
+                    Some("i64") => Ty::Prim(PrimTy::Int),
+                    Some("f64") => Ty::Prim(PrimTy::Float),
+                    Some("kata_rt_string") => Ty::Prim(PrimTy::Text),
+                    Some("kata_rt_rat") => Ty::Prim(PrimTy::Rational),
+                    _ => Ty::Struct(name.clone()),
+                };
+                type_env.define(name, ty);
 
                 // Fio 5: se o DataDecl tem campos não-vazios, registra no StructRegistry.
                 // Offset de cada campo = field_index * 8 (todos os campos são words de 8 bytes).
@@ -274,7 +291,23 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
                         })
                         .collect()
                 };
-                enum_registry.register(name, variant_infos);
+                enum_registry.register(name, variant_infos.clone());
+
+                // Fase 8: se variantes têm payloads Ty::Var (type params),
+                // registrar como enum genérico. Coleta type params dos payloads.
+                let type_params: Vec<String> = variant_infos
+                    .iter()
+                    .filter_map(|v| {
+                        if let Some(Ty::Var(n)) = &v.payload_ty {
+                            if is_type_param_name(n) { Some(n.clone()) } else { None }
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                if !type_params.is_empty() {
+                    enum_registry.register_generic(name, type_params, variant_infos);
+                }
 
                 // Se tem variantes predicadas, guarda para o inference sintetizar
                 // o construtor despachador.
@@ -390,6 +423,50 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
                 if let Err(e) = interface_registry.register_impl(entry) {
                     eprintln!("[resolution] warning: {e}");
                 }
+
+                // Fase 8: cada método de implements vira uma Signature flat
+                // (como se fosse uma Sig standalone). O dispatch usa estas
+                // signatures para popular o DispatchTable.
+                for m in methods {
+                    let param_types: Vec<Ty> = m
+                        .params
+                        .iter()
+                        .map(|t| resolve_type_expr(&t.node, &type_env, &interface_registry))
+                        .collect();
+                    let return_type =
+                        resolve_type_expr(&m.ret.node, &type_env, &interface_registry);
+                    let ffi_symbol = m.directives.iter().find_map(|d| {
+                        if d.name == "ffi"
+                            && let Some(kata_ast::DirectiveArg::Str(s)) = d.args.first()
+                        {
+                            return Some(s.clone());
+                        }
+                        None
+                    });
+                    let is_commutative = m.directives.iter().any(|d| d.name == "commutative");
+                    let is_associative = m.directives.iter().any(|d| d.name == "associative");
+                    let associative_neutral = m.directives.iter().find_map(|d| {
+                        if d.name == "associative"
+                            && let Some(kata_ast::DirectiveArg::Int(n)) = d.args.first()
+                        {
+                            return Some(*n);
+                        }
+                        None
+                    });
+                    let type_params = collect_type_params(&param_types, &return_type);
+
+                    signatures.push(Signature {
+                        name: m.name.clone(),
+                        param_types,
+                        return_type,
+                        ffi_symbol,
+                        is_associative,
+                        associative_neutral,
+                        is_action: false,
+                        is_commutative,
+                        type_params,
+                    });
+                }
             }
             _ => {}
         }
@@ -467,8 +544,8 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
                 name,
                 params,
                 ret,
+                directives: action_dirs,
                 body,
-                ..
             } => {
                 // Converte TypeExpr → Ty para os parâmetros e retorno.
                 let param_types: Vec<Ty> = params
@@ -477,12 +554,40 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
                     .collect();
                 let return_type = resolve_type_expr(&ret.node, &type_env, &interface_registry);
 
-                actions.push(ActionDef {
-                    name: name.clone(),
-                    param_types,
-                    return_type,
-                    body: body.clone(),
+                // Extrai ffi_symbol das diretivas da Action.
+                let ffi_symbol = action_dirs.iter().find_map(|d| {
+                    if d.name == "ffi"
+                        && let Some(kata_ast::DirectiveArg::Str(s)) = d.args.first()
+                    {
+                        return Some(s.clone());
+                    }
+                    None
                 });
+
+                // Se tem @ffi e body vazio → Action FFI builtin.
+                // Produz uma Signature com is_action = true para o DispatchTable.
+                // Não produz ActionDef (sem corpo Kata para o inference processar).
+                if ffi_symbol.is_some() && body.is_empty() {
+                    signatures.push(Signature {
+                        name: name.clone(),
+                        param_types: param_types.clone(),
+                        return_type: return_type.clone(),
+                        ffi_symbol,
+                        is_associative: false,
+                        associative_neutral: None,
+                        is_action: true,
+                        is_commutative: false,
+                        type_params: vec![],
+                    });
+                } else {
+                    // Action com corpo Kata — produz ActionDef para o inference.
+                    actions.push(ActionDef {
+                        name: name.clone(),
+                        param_types,
+                        return_type,
+                        body: body.clone(),
+                    });
+                }
             }
             _ => {}
         }

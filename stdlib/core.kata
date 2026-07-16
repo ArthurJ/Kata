@@ -1,0 +1,152 @@
+# Prelude do Kata — tipos primitivos, enums, operadores.
+# Carregado pelo ModuleLoader antes do módulo do usuário.
+
+# ── Tipos primitivos ──────────────────────────────────────────
+# @ffi mapeia para PrimTy no resolution: i64→Int, f64→Float,
+# kata_rt_string→Text, kata_rt_rat→Rational.
+
+@ffi("i64")
+data Int ()
+
+@ffi("f64")
+data Float ()
+
+@ffi("kata_rt_string")
+data Text ()
+
+@ffi("kata_rt_rat")
+data Rational ()
+
+# ── Boolean ───────────────────────────────────────────────────
+
+enum Boolean
+    True
+    False
+
+# ── Enums genéricos ───────────────────────────────────────────
+# Variantes com payload Ty::Var (UPPER_CASE) são detectadas pelo
+# resolution como type params → register_generic.
+
+enum Result
+    Ok(T)
+    Err(E)
+
+enum Optional
+    Some(T)
+    None
+
+# ── Interfaces base ───────────────────────────────────────────
+
+interface EQ
+    = :: Self Self => Boolean
+
+interface ORD implements EQ
+    < :: Self Self => Boolean
+    > :: Self Self => Boolean
+    <= :: Self Self => Boolean
+    >= :: Self Self => Boolean
+
+interface NUM implements ORD EQ
+    + :: NUM NUM => NUM
+    - :: NUM NUM => NUM
+    * :: NUM NUM => NUM
+
+interface SHOW
+    show :: Self => Text
+
+# ── Implementações para Int ───────────────────────────────────
+
+implements NUM for Int
+    + :: Int Int => Int @ffi("kata_rt_bi_add") @associative(0) @commutative
+    - :: Int Int => Int @ffi("kata_rt_bi_sub")
+    * :: Int Int => Int @ffi("kata_rt_bi_mul") @associative(1) @commutative
+    < :: Int Int => Boolean @ffi("kata_rt_bi_lt")
+    > :: Int Int => Boolean @ffi("kata_rt_bi_gt")
+    <= :: Int Int => Boolean @ffi("kata_rt_bi_le")
+    >= :: Int Int => Boolean @ffi("kata_rt_bi_ge")
+    = :: Int Int => Boolean @ffi("kata_rt_bi_eq") @commutative
+
+implements SHOW for Int
+    show :: Int => Text @ffi("kata_rt_bi_show")
+
+# ── Implementações para Float ──────────────────────────────────
+
+implements NUM for Float
+    + :: Float Float => Float @ffi("kata_rt_fadd") @commutative
+    - :: Float Float => Float @ffi("kata_rt_fsub")
+    * :: Float Float => Float @ffi("kata_rt_fmul") @commutative
+    < :: Float Float => Boolean @ffi("kata_rt_fcmp_lt")
+    > :: Float Float => Boolean @ffi("kata_rt_fcmp_gt")
+    <= :: Float Float => Boolean @ffi("kata_rt_fcmp_le")
+    >= :: Float Float => Boolean @ffi("kata_rt_fcmp_ge")
+    = :: Float Float => Boolean @ffi("kata_rt_fcmp_eq") @commutative
+
+implements SHOW for Float
+    show :: Float => Text @ffi("kata_rt_float_to_text")
+
+# ── Implementações para Rational ──────────────────────────────
+
+implements NUM for Rational
+    + :: Rational Rational => Rational @ffi("kata_rt_rat_add") @associative(0) @commutative
+    - :: Rational Rational => Rational @ffi("kata_rt_rat_sub")
+    * :: Rational Rational => Rational @ffi("kata_rt_rat_mul") @associative(1) @commutative
+    / :: Rational Rational => Rational @ffi("kata_rt_rat_div")
+    < :: Rational Rational => Boolean @ffi("kata_rt_rat_lt")
+    > :: Rational Rational => Boolean @ffi("kata_rt_rat_gt")
+    <= :: Rational Rational => Boolean @ffi("kata_rt_rat_le")
+    >= :: Rational Rational => Boolean @ffi("kata_rt_rat_ge")
+    = :: Rational Rational => Boolean @ffi("kata_rt_rat_eq") @commutative
+
+implements SHOW for Rational
+    show :: Rational => Text @ffi("kata_rt_rat_show")
+
+# ── Implementações para Text ──────────────────────────────────
+# SHOW for Text: Text já é Text, show é identidade.
+# Não existe kata_rt_string_identity no runtime — usamos
+# string_concat com um único arg seria errado. Por ora, omitimos
+# SHOW for Text (Text já é Text, não precisa conversão).
+
+# ── Operadores standalone (não-interface) ──────────────────────
+
+# Int divisão (retorna Int, não Result)
+@ffi("kata_rt_bi_div")
+/ :: Int Int => Int
+
+# Float divisão
+@ffi("kata_rt_fdiv")
+/ :: Float Float => Float
+
+# ── Conversões ────────────────────────────────────────────────
+
+@ffi("kata_rt_rat_to_float")
+to_float :: Rational => Float
+
+@ffi("kata_rt_rat_from_float")
+from_float :: Float => Rational
+
+@ffi("kata_rt_int_to_rational")
+from_int :: Int => Rational
+
+# ── I/O (Actions FFI builtin) ──────────────────────────────────
+
+@ffi("kata_rt_print")
+action echo (Text) -> Unit
+
+@ffi("kata_rt_panic")
+action panic (Text) -> Unit
+
+# ── Text conversions ───────────────────────────────────────────
+
+@ffi("kata_rt_int_to_text")
+int_to_text :: Int => Text
+
+@ffi("kata_rt_bool_to_text")
+bool_to_text :: Boolean => Text
+
+# ── Text operações ─────────────────────────────────────────────
+
+@ffi("kata_rt_string_concat")
+string_concat :: Text Text => Text
+
+@ffi("kata_rt_text_replace_first")
+text_replace :: Text Text => Text

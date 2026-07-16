@@ -19,7 +19,7 @@ impl Parser {
                 break;
             }
             let at_span = self.advance(); // consume @
-            // Expect an identifier (directive name)
+            // Expect an identifier (directive name).
             let name = match self.peek() {
                 Token::Ident(s) => {
                     let name = s.clone();

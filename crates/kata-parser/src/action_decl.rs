@@ -58,37 +58,45 @@ impl Parser {
             ret = Spanned::new(TypeExpr::Unit, self.peek_span());
         }
 
-        // Body indentado
-        self.expect(&Token::Indent, "INDENT (action body)")?;
-        let prev_in_action = self.in_action_body;
-        self.in_action_body = true;
-        let mut body = Vec::new();
-        loop {
-            // Skip leading statement separators (newlines) — but NOT semicolons,
-            // because a semicolon after an expression is a meaningful mark.
-            while matches!(self.peek(), Token::StmtSep) {
-                self.advance();
+        // Body indentado — opcional se a Action tem @ffi (builtin FFI).
+        let has_ffi = directives.iter().any(|d| d.name == "ffi");
+        let body = if has_ffi && !matches!(self.peek(), Token::Indent) {
+            // Action FFI builtin sem body — ex: @ffi("kata_rt_print")
+            //                          action echo (Text) -> Unit
+            Vec::new()
+        } else {
+            self.expect(&Token::Indent, "INDENT (action body)")?;
+            let prev_in_action = self.in_action_body;
+            self.in_action_body = true;
+            let mut body = Vec::new();
+            loop {
+                // Skip leading statement separators (newlines) — but NOT semicolons,
+                // because a semicolon after an expression is a meaningful mark.
+                while matches!(self.peek(), Token::StmtSep) {
+                    self.advance();
+                }
+                if matches!(self.peek(), Token::Dedent | Token::Eof) {
+                    break;
+                }
+                let stmt = parse_expr(self)?;
+                // Check for trailing `;` — marks this statement as local computation.
+                let has_semicolon = matches!(self.peek(), Token::Semicolon);
+                if has_semicolon {
+                    self.advance();
+                }
+                // Consume any trailing StmtSep after the statement (or after `;`).
+                while matches!(self.peek(), Token::StmtSep) {
+                    self.advance();
+                }
+                body.push(ActionStmt {
+                    expr: stmt,
+                    has_semicolon,
+                });
             }
-            if matches!(self.peek(), Token::Dedent | Token::Eof) {
-                break;
-            }
-            let stmt = parse_expr(self)?;
-            // Check for trailing `;` — marks this statement as local computation.
-            let has_semicolon = matches!(self.peek(), Token::Semicolon);
-            if has_semicolon {
-                self.advance();
-            }
-            // Consume any trailing StmtSep after the statement (or after `;`).
-            while matches!(self.peek(), Token::StmtSep) {
-                self.advance();
-            }
-            body.push(ActionStmt {
-                expr: stmt,
-                has_semicolon,
-            });
-        }
-        self.in_action_body = prev_in_action;
-        self.expect(&Token::Dedent, "DEDENT (fim do action body)")?;
+            self.in_action_body = prev_in_action;
+            self.expect(&Token::Dedent, "DEDENT (fim do action body)")?;
+            body
+        };
 
         Ok(Item::ActionDecl {
             name,
