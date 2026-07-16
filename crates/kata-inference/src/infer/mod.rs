@@ -29,6 +29,7 @@ mod recursion;
 mod repr_synthesis;
 mod sugar;
 mod variant;
+mod variant_construct;
 mod variant_qual;
 
 use kata_ast::{Item, Module, Spanned};
