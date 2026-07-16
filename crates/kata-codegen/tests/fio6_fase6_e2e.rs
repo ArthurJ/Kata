@@ -218,6 +218,7 @@ fn custom_overloads() -> Vec<Signature> {
             is_associative: false,
             associative_neutral: None,
             is_action: false,
+            is_commutative: false,
             type_params: vec![],
         },
         Signature {
@@ -228,6 +229,7 @@ fn custom_overloads() -> Vec<Signature> {
             is_associative: false,
             associative_neutral: None,
             is_action: false,
+            is_commutative: false,
             type_params: vec![],
         },
     ]

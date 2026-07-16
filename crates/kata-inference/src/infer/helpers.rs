@@ -24,7 +24,6 @@ pub(crate) fn populate_dispatch_table(signatures: &[Signature]) -> DispatchTable
     let mut table = DispatchTable::new();
     for sig in signatures {
         let ffi_symbol = sig.ffi_symbol.clone();
-        let is_associative = sig.is_associative;
         let associative_neutral = sig.associative_neutral;
 
         table.insert(OverloadInfo {
@@ -40,16 +39,9 @@ pub(crate) fn populate_dispatch_table(signatures: &[Signature]) -> DispatchTable
             substitutions: None,
         });
 
-        // Marca comutativa para operadores associativos (+, *)
-        if is_associative && sig.name.len() == 1 {
-            let c = sig
-                .name
-                .chars()
-                .next()
-                .expect("nome de operador tem 1 char");
-            if c == '+' || c == '*' {
-                table.mark_commutative(&sig.name);
-            }
+        // Fase 7: marca comutativa quando a assinatura tem @commutative.
+        if sig.is_commutative {
+            table.mark_commutative(&sig.name);
         }
     }
     table

@@ -98,6 +98,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             "kata_rt_bi_add",
             true,
             Some(0),
+            true,
         ),
         sig(
             "-",
@@ -106,6 +107,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             "kata_rt_bi_sub",
             false,
             None,
+            false,
         ),
         sig(
             "*",
@@ -114,6 +116,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             "kata_rt_bi_mul",
             true,
             Some(1),
+            true,
         ),
         sig(
             "/",
@@ -122,6 +125,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             "kata_rt_bi_div",
             false,
             None,
+            false,
         ),
         sig(
             "=",
@@ -130,6 +134,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             "kata_rt_bi_eq",
             false,
             None,
+            true,
         ),
         sig(
             "<",
@@ -138,6 +143,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             "kata_rt_bi_lt",
             false,
             None,
+            false,
         ),
         sig(
             ">",
@@ -146,6 +152,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             "kata_rt_bi_gt",
             false,
             None,
+            false,
         ),
         sig(
             "<=",
@@ -154,6 +161,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             "kata_rt_bi_le",
             false,
             None,
+            false,
         ),
         sig(
             ">=",
@@ -162,6 +170,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             "kata_rt_bi_ge",
             false,
             None,
+            false,
         ),
         // Float aritmética
         sig(
@@ -171,6 +180,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             "kata_rt_fadd",
             false,
             None,
+            true,
         ),
         sig(
             "-",
@@ -179,6 +189,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             "kata_rt_fsub",
             false,
             None,
+            false,
         ),
         sig(
             "*",
@@ -187,6 +198,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             "kata_rt_fmul",
             false,
             None,
+            true,
         ),
         sig(
             "/",
@@ -195,6 +207,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             "kata_rt_fdiv",
             false,
             None,
+            false,
         ),
         sig(
             "=",
@@ -203,6 +216,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             "kata_rt_fcmp_eq",
             false,
             None,
+            true,
         ),
         sig(
             "<",
@@ -211,6 +225,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             "kata_rt_fcmp_lt",
             false,
             None,
+            false,
         ),
         sig(
             ">",
@@ -219,6 +234,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             "kata_rt_fcmp_gt",
             false,
             None,
+            false,
         ),
         sig(
             "<=",
@@ -227,6 +243,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             "kata_rt_fcmp_le",
             false,
             None,
+            false,
         ),
         sig(
             ">=",
@@ -235,6 +252,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             "kata_rt_fcmp_ge",
             false,
             None,
+            false,
         ),
         // Rational aritmética
         sig(
@@ -244,6 +262,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             "kata_rt_rat_add",
             true,
             Some(0),
+            true,
         ),
         sig(
             "-",
@@ -252,6 +271,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             "kata_rt_rat_sub",
             false,
             None,
+            false,
         ),
         sig(
             "*",
@@ -260,6 +280,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             "kata_rt_rat_mul",
             true,
             Some(1),
+            true,
         ),
         sig(
             "/",
@@ -268,6 +289,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             "kata_rt_rat_div",
             false,
             None,
+            false,
         ),
         sig(
             "=",
@@ -276,6 +298,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             "kata_rt_rat_eq",
             false,
             None,
+            true,
         ),
         sig(
             "<",
@@ -284,6 +307,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             "kata_rt_rat_lt",
             false,
             None,
+            false,
         ),
         sig(
             ">",
@@ -292,6 +316,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             "kata_rt_rat_gt",
             false,
             None,
+            false,
         ),
         sig(
             "<=",
@@ -300,6 +325,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             "kata_rt_rat_le",
             false,
             None,
+            false,
         ),
         sig(
             ">=",
@@ -308,6 +334,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             "kata_rt_rat_ge",
             false,
             None,
+            false,
         ),
         // Conversões
         sig(
@@ -317,6 +344,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             "kata_rt_rat_to_float",
             false,
             None,
+            false,
         ),
         sig(
             "from_float",
@@ -325,6 +353,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             "kata_rt_rat_from_float",
             false,
             None,
+            false,
         ),
         sig(
             "from_int",
@@ -333,6 +362,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             "kata_rt_int_to_rational",
             false,
             None,
+            false,
         ),
         // I/O — echo é uma Action builtin (Fio 3)
         sig_action("echo", vec![Ty::text()], Ty::Unit, "kata_rt_print"),
@@ -346,6 +376,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             "kata_rt_bi_show",
             false,
             None,
+            false,
         ),
         sig(
             "show",
@@ -354,6 +385,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             "kata_rt_rat_show",
             false,
             None,
+            false,
         ),
         // Text conversions (Fio 5 Fase 6 — para repr)
         sig(
@@ -363,6 +395,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             "kata_rt_int_to_text",
             false,
             None,
+            false,
         ),
         sig(
             "bool_to_text",
@@ -371,6 +404,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             "kata_rt_bool_to_text",
             false,
             None,
+            false,
         ),
         sig(
             "string_concat",
@@ -379,6 +413,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             "kata_rt_string_concat",
             false,
             None,
+            false,
         ),
         sig(
             "text_replace",
@@ -387,6 +422,7 @@ pub fn load_prelude() -> Result<ResolvedModule, Vec<crate::ResolveError>> {
             "kata_rt_text_replace_first",
             false,
             None,
+            false,
         ),
     ];
 
@@ -411,6 +447,7 @@ fn sig(
     ffi: &str,
     assoc: bool,
     neutral: Option<i64>,
+    commut: bool,
 ) -> Signature {
     Signature {
         name: name.to_string(),
@@ -420,6 +457,7 @@ fn sig(
         is_associative: assoc,
         associative_neutral: neutral,
         is_action: false,
+        is_commutative: commut,
         type_params: vec![],
     }
 }
@@ -434,6 +472,7 @@ fn sig_action(name: &str, params: Vec<Ty>, ret: Ty, ffi: &str) -> Signature {
         is_associative: false,
         associative_neutral: None,
         is_action: true,
+        is_commutative: false,
         type_params: vec![],
     }
 }

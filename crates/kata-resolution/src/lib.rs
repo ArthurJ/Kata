@@ -51,6 +51,10 @@ pub struct Signature {
     /// Se `true`, esta assinatura é uma Action (Fio 3).
     /// Actions são chamadas com `!` e têm `is_action = true` no DispatchTable.
     pub is_action: bool,
+    /// Fase 7: se `true`, o dispatch tenta args invertidos quando 0 candidatos
+    /// compatíveis são encontrados e arity == 2. Populado pela diretiva
+    /// `@commutative` na resolution.
+    pub is_commutative: bool,
     /// Fase 5: type params da assinatura genérica (ex: `["T"]` para `id :: T => T`).
     /// Vazio para funções não-genéricas. Coletado examinando os `Ty::Var` em
     /// param_types e return_type cujo nome é UPPER_CASE e não está no TypeEnv.
@@ -412,6 +416,7 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
                 let mut ffi_symbol = None;
                 let mut is_associative = false;
                 let mut associative_neutral = None;
+                let mut is_commutative = false;
 
                 for d in directives {
                     match d.name.as_str() {
@@ -425,6 +430,9 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
                             if let Some(kata_ast::DirectiveArg::Int(n)) = d.args.first() {
                                 associative_neutral = Some(*n);
                             }
+                        }
+                        "commutative" => {
+                            is_commutative = true;
                         }
                         _ => {}
                     }
@@ -451,6 +459,7 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
                     is_associative,
                     associative_neutral,
                     is_action: false,
+                    is_commutative,
                     type_params,
                 });
             }
