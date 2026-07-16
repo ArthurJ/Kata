@@ -73,26 +73,28 @@ pub(crate) fn resolve_type_expr(
                 .collect();
             // Fio 8: tipos intrínsecos de coleção — List::(A), Array::(A), Range::(A).
             // São variants de Ty, não Ty::Generic. O codegen precisa do layout.
+            // O parser sempre produz pelo menos 1 param em ParamApp, então
+            // .expect() aqui é uma asserção de invariant, não um path de erro.
             match name.as_str() {
                 "List" => {
                     let elem = resolved_params
                         .into_iter()
                         .next()
-                        .unwrap_or(Ty::Var("A".into()));
+                        .expect("List::(A) exige exatamente 1 param");
                     Ty::List(Box::new(elem))
                 }
                 "Array" => {
                     let elem = resolved_params
                         .into_iter()
                         .next()
-                        .unwrap_or(Ty::Var("A".into()));
+                        .expect("Array::(A) exige exatamente 1 param");
                     Ty::Array(Box::new(elem))
                 }
                 "Range" => {
                     let elem = resolved_params
                         .into_iter()
                         .next()
-                        .unwrap_or(Ty::Var("A".into()));
+                        .expect("Range::(A) exige exatamente 1 param");
                     Ty::Range(Box::new(elem))
                 }
                 _ => {

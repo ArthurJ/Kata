@@ -354,7 +354,7 @@ pub enum Item {
     /// `Tipo implements Interface` + bloco indentado com métodos.
     ImplementsDecl {
         type_name: String,
-        /// Type params do tipo (ex: `A` em `List(A) implements ITERABLE(A)`).
+        /// Type params do tipo (ex: `A` em `List::(A) implements ITERABLE::(A)`).
         type_params: Vec<String>,
         interface_name: String,
         /// Params da interface vinculados (ex: `A` em `ITERABLE(A)`).

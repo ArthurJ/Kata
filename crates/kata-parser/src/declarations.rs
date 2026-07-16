@@ -110,25 +110,30 @@ impl Parser {
     }
 
     /// Check if the current position starts an implements decl:
-    /// `Tipo implements IFACE` or `Tipo(params) implements IFACE`.
-    /// Looks ahead past optional `(params)` to find `implements`.
+    /// `Tipo implements IFACE` or `Tipo::(params) implements IFACE`.
+    /// Looks ahead past optional `::(params)` to find `implements`.
     fn is_implements_start(&self) -> bool {
         if !matches!(self.peek(), Token::Ident(_)) {
             return false;
         }
         let mut lookahead = self.pos + 1;
-        // Skip optional `(params)` — type params of the tipo.
+        // Skip optional `::(params)` — type params of the tipo.
         if let Some(t) = self.tokens.get(lookahead) {
-            if matches!(t.token, Token::LParen) {
-                let mut depth = 1;
+            if matches!(t.token, Token::DoubleColon) {
                 lookahead += 1;
-                while lookahead < self.tokens.len() && depth > 0 {
-                    match &self.tokens[lookahead].token {
-                        Token::LParen => depth += 1,
-                        Token::RParen => depth -= 1,
-                        _ => {}
+                if let Some(t2) = self.tokens.get(lookahead) {
+                    if matches!(t2.token, Token::LParen) {
+                        let mut depth = 1;
+                        lookahead += 1;
+                        while lookahead < self.tokens.len() && depth > 0 {
+                            match &self.tokens[lookahead].token {
+                                Token::LParen => depth += 1,
+                                Token::RParen => depth -= 1,
+                                _ => {}
+                            }
+                            lookahead += 1;
+                        }
                     }
-                    lookahead += 1;
                 }
             }
         }

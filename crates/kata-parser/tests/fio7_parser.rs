@@ -59,7 +59,7 @@ fn interface_with_supertraits() {
 
 #[test]
 fn interface_with_type_params() {
-    let src = "interface ITERABLE(A)\n    next :: Self => Optional::(A)";
+    let src = "interface ITERABLE::(A)\n    next :: Self => Optional::(A)";
     let m = parse_src(src);
     match first_item(&m) {
         Item::InterfaceDecl {
@@ -131,7 +131,7 @@ fn implements_with_lambda_body() {
 
 #[test]
 fn implements_with_type_params() {
-    let src = "List(A) implements ITERABLE(A)\n    next :: List::(A) => Optional::(A)";
+    let src = "List::(A) implements ITERABLE::(A)\n    next :: List::(A) => Optional::(A)";
     let m = parse_src(src);
     match first_item(&m) {
         Item::ImplementsDecl {

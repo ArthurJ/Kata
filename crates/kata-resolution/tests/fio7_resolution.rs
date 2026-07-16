@@ -39,7 +39,7 @@ fn interface_com_supertraits() {
 
 #[test]
 fn interface_com_type_params() {
-    let src = "interface ITERABLE(A)\n    next :: Self => Optional::(A)";
+    let src = "interface ITERABLE::(A)\n    next :: Self => Optional::(A)";
     let resolved = resolve_src(src);
     let iface = resolved
         .interface_registry
@@ -60,8 +60,8 @@ Int implements NUM\n    + :: Int Int => Int @ffi(\"kata_rt_bi_add\")";
 #[test]
 fn implements_com_type_params() {
     let src = "\
-interface ITERABLE(A)\n    next :: Self => Optional::(A)
-List implements ITERABLE(A)\n    next :: List => Optional::(A)";
+interface ITERABLE::(A)\n    next :: Self => Optional::(A)
+List implements ITERABLE::(A)\n    next :: List => Optional::(A)";
     let resolved = resolve_src(src);
     let impls = resolved.interface_registry.get_impls_for_type("List");
     assert_eq!(impls.len(), 1);

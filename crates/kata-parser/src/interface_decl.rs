@@ -15,8 +15,8 @@ impl Parser {
     /// ```
     /// Ou com type params:
     /// ```text
-    /// interface ITERABLE(A)
-    ///     next :: Self => Optional(A)
+    /// interface ITERABLE::(A)
+    ///     next :: Self => Optional::(A)
     /// ```
     pub fn parse_interface_decl(
         &mut self,
@@ -33,9 +33,10 @@ impl Parser {
             _ => return Err(self.error("interface name after `interface`")),
         };
 
-        // Type params opcionais: `ITERABLE(A)` — parênteses após nome.
-        let type_params = if matches!(self.peek(), Token::LParen) {
-            self.advance(); // consume (
+        // Type params opcionais: `ITERABLE::(A)` — `::` seguido de parênteses.
+        let type_params = if matches!(self.peek(), Token::DoubleColon) {
+            self.advance(); // consume ::
+            self.expect(&Token::LParen, "`(` após `::` em type params")?;
             let mut params = Vec::new();
             // Skip newlines after (
             while matches!(self.peek(), Token::StmtSep) {
@@ -143,8 +144,8 @@ impl Parser {
     /// ```
     /// Ou com type params:
     /// ```text
-    /// List(A) implements ITERABLE(A)
-    ///     next :: List(A) => Optional(A)
+    /// List::(A) implements ITERABLE::(A)
+    ///     next :: List::(A) => Optional::(A)
     ///         lambda lst: ...
     /// ```
     pub fn parse_implements_decl(
@@ -161,9 +162,10 @@ impl Parser {
             _ => return Err(self.error("type name before `implements`")),
         };
 
-        // Type params do tipo opcionais: `List(A)`
-        let type_params = if matches!(self.peek(), Token::LParen) {
-            self.advance();
+        // Type params do tipo opcionais: `List::(A)` — `::` seguido de parênteses.
+        let type_params = if matches!(self.peek(), Token::DoubleColon) {
+            self.advance(); // consume ::
+            self.expect(&Token::LParen, "`(` após `::` em type params")?;
             let mut params = Vec::new();
             while matches!(self.peek(), Token::StmtSep) {
                 self.advance();
@@ -208,9 +210,10 @@ impl Parser {
             _ => return Err(self.error("interface name after `implements`")),
         };
 
-        // Params da interface opcionais: `ITERABLE(A)`
-        let iface_params = if matches!(self.peek(), Token::LParen) {
-            self.advance();
+        // Params da interface opcionais: `ITERABLE::(A)` — `::` seguido de parênteses.
+        let iface_params = if matches!(self.peek(), Token::DoubleColon) {
+            self.advance(); // consume ::
+            self.expect(&Token::LParen, "`(` após `::` em iface params")?;
             let mut params = Vec::new();
             while matches!(self.peek(), Token::StmtSep) {
                 self.advance();
