@@ -668,10 +668,10 @@ implements SHOW for Complex
 | 8 | `@commutative` em `=` tenta args invertidos quando 0 candidatos ✅ | 7 |
 | 9 | `stdlib/core.kata` carregado como prelude substitui `prelude_sigs.rs` ✅ | 8 |
 | 10 | `implements NUM for Int` em Kata registra `+` com `@ffi("kata_rt_bi_add")` ✅ | 8 |
-| 11 | `Complex 3.0 4.0` constrói via smart constructor | 9 |
-| 12 | `+ (Complex 1.0 2.0) (Complex 3.0 4.0)` → `Complex 4.0 6.0` | 9 |
-| 13 | `show (Complex 3.0 4.0)` → `"(3.0 + 4.0i)"` via SHOW | 9 |
-| 14 | `+ (Complex 1.0 0.0) 5` → interoperabilidade NUM (Complex + Int) | 9 |
+| 11 | `Complex 3.0 4.0` constrói via smart constructor ✅ | 9 |
+| 12 | `+ (Complex 1.0 2.0) (Complex 3.0 4.0)` → `Complex 4.0 6.0` ✅ | 9 |
+| 13 | `show (Complex 3.0 4.0)` → `"(3.0 + 4.0i)"` via SHOW ✅ | 9 |
+| 14 | `+ (Complex 1.0 0.0) 5` → interoperabilidade NUM (Complex + Int) ✅ | 9 |
 | 15 | Todos os testes existentes passam com prelude em Kata ✅ | 8 |
 
 ## Atualização da documentação

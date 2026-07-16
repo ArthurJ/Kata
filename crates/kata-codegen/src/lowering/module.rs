@@ -11,6 +11,7 @@ use cranelift_codegen::ir::{AbiParam, InstBuilder, Signature};
 use cranelift_codegen::isa::CallConv;
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_module::{Linkage, Module};
+use kata_core::ty::Ty;
 use kata_inference::TypedModule;
 
 use super::LowerCtx;
@@ -46,8 +47,13 @@ impl std::error::Error for CodegenError {}
 /// Tabela de strings literais — indexada por índice.
 pub(crate) type StringTable = Vec<String>;
 
-/// Tabela de símbolos de funções Kata nomeadas — mapeia nome → FuncId.
-pub(crate) type SymbolTable = HashMap<String, cranelift_module::FuncId>;
+/// Chave composta para funções Kata: (nome, tipos de entrada, tipo de saída).
+/// Substitui String para evitar colisão entre overloads do mesmo método.
+/// `Ty` já implementa `Hash + Eq`.
+pub(crate) type FuncKey = (String, Vec<Ty>, Ty);
+
+/// Tabela de símbolos de funções Kata nomeadas — mapeia chave composta → FuncId.
+pub(crate) type SymbolTable = HashMap<FuncKey, cranelift_module::FuncId>;
 
 /// Lower do `TypedModule` completo: cria a função `__kata_entry` e
 /// retorna o `MetadataTable` sidecar + a string table.
@@ -59,25 +65,58 @@ pub(crate) fn lower_module(
     let mut metadata = MetadataTable::new();
     let mut string_table = StringTable::new();
     let mut symbol_table: SymbolTable = HashMap::new();
+    let mut fn_counter = 0u64;
 
     // ── Fase 9: declara e define funções nomeadas antes do entry point ──
+    let mut func_ids: Vec<cranelift_module::FuncId> = Vec::new();
     for func in &typed.functions {
-        let func_id = declare_kata_function(func, module)?;
-        symbol_table.insert(func.name.clone(), func_id);
+        let cranelift_name = format!("__kata_fn_{fn_counter}");
+        fn_counter += 1;
+        let func_id = declare_kata_function(func, &cranelift_name, module)?;
+        symbol_table.insert(
+            (func.name.clone(), func.param_types.clone(), func.ret_ty.clone()),
+            func_id,
+        );
+        func_ids.push(func_id);
     }
 
-    for func in &typed.functions {
-        define_kata_function(func, module, ffi_ids, &symbol_table, &mut string_table)?;
+    for (i, func) in typed.functions.iter().enumerate() {
+        define_kata_function(
+            func,
+            func_ids[i],
+            module,
+            ffi_ids,
+            &symbol_table,
+            &mut string_table,
+        )?;
     }
 
     // ── Fio 3: declara e define Actions antes do entry point ──
+    let mut action_ids: Vec<cranelift_module::FuncId> = Vec::new();
     for action in &typed.actions {
-        let func_id = declare_kata_action(action, module)?;
-        symbol_table.insert(action.name.clone(), func_id);
+        let cranelift_name = format!("__kata_fn_{fn_counter}");
+        fn_counter += 1;
+        let func_id = declare_kata_action(action, &cranelift_name, module)?;
+        symbol_table.insert(
+            (
+                action.name.clone(),
+                action.param_types.clone(),
+                action.ret_ty.clone(),
+            ),
+            func_id,
+        );
+        action_ids.push(func_id);
     }
 
-    for action in &typed.actions {
-        define_kata_action(action, module, ffi_ids, &symbol_table, &mut string_table)?;
+    for (i, action) in typed.actions.iter().enumerate() {
+        define_kata_action(
+            action,
+            action_ids[i],
+            module,
+            ffi_ids,
+            &symbol_table,
+            &mut string_table,
+        )?;
     }
 
     // Determina o tipo de retorno do entry point.
@@ -108,10 +147,10 @@ pub(crate) fn lower_module(
         }
 
         // Declara funções Kata nomeadas no Function (para call direto).
-        let mut kata_refs: HashMap<String, cranelift_codegen::ir::FuncRef> = HashMap::new();
-        for (name, &fid) in &symbol_table {
+        let mut kata_refs: HashMap<FuncKey, cranelift_codegen::ir::FuncRef> = HashMap::new();
+        for (key, &fid) in &symbol_table {
             let func_ref = module.declare_func_in_func(fid, func);
-            kata_refs.insert(name.clone(), func_ref);
+            kata_refs.insert(key.clone(), func_ref);
         }
 
         let mut func_ctx = FunctionBuilderContext::new();
@@ -189,7 +228,6 @@ pub(crate) fn lower_module(
     module
         .define_function(entry_id, &mut ctx)
         .map_err(|e| CodegenError::Cranelift(format!("define __kata_entry: {e}")))?;
-
     module.clear_context(&mut ctx);
 
     // Define os data symbols para strings literais.

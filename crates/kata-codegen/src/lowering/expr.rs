@@ -89,22 +89,26 @@ pub(crate) fn lower_expr(
             // Caminho 2: função Kata nomeada — carrega o function pointer
             // via GlobalValue (mesmo mecanismo do TypedExprKind::Lambda com
             // func_name = Some). Permite `let g := fat` → g carrega ptr de fat.
-            if let Some(&func_id) = ctx.kata_ids.get(name) {
-                let func_ref = ctx.module.declare_func_in_func(func_id, ctx.builder.func);
-                let ext_func_name = ctx.builder.func.dfg.ext_funcs[func_ref].name.clone();
-                let func_gv = ctx
-                    .builder
-                    .func
-                    .create_global_value(GlobalValueData::Symbol {
-                        name: ext_func_name,
-                        offset: 0.into(),
-                        colocated: true,
-                        tls: false,
-                    });
-                return Ok(ctx
-                    .builder
-                    .ins()
-                    .global_value(ctx.module.target_config().pointer_type(), func_gv));
+            // Lookup por chave composta: (name, params, ret) extraída de expr.ty.
+            if let Ty::Function(params, ret) = &expr.ty {
+                let key = (name.clone(), params.clone(), (**ret).clone());
+                if let Some(&func_id) = ctx.kata_ids.get(&key) {
+                    let func_ref = ctx.module.declare_func_in_func(func_id, ctx.builder.func);
+                    let ext_func_name = ctx.builder.func.dfg.ext_funcs[func_ref].name.clone();
+                    let func_gv = ctx
+                        .builder
+                        .func
+                        .create_global_value(GlobalValueData::Symbol {
+                            name: ext_func_name,
+                            offset: 0.into(),
+                            colocated: true,
+                            tls: false,
+                        });
+                    return Ok(ctx
+                        .builder
+                        .ins()
+                        .global_value(ctx.module.target_config().pointer_type(), func_gv));
+                }
             }
             Err(super::CodegenError::UnsupportedNode(format!(
                 "unbound ident: {name}"
@@ -259,7 +263,11 @@ pub(crate) fn lower_expr(
             let ptr = lower_expr(&inner.node, ctx)?;
             let flags = MemFlagsData::new();
             let offset = (*field_index as i32) * 8;
-            Ok(ctx.builder.ins().load(I64, flags, ptr, offset))
+            // Carrega com o tipo CLIF correto do campo (expr.ty).
+            // Float mapeia para F64; sem isso, carrega como I64 e quebra
+            // a verificação de tipos do Cranelift em chamadas FFI.
+            let clif_ty = ty_to_clif(&expr.ty);
+            Ok(ctx.builder.ins().load(clif_ty, flags, ptr, offset))
         }
 
         // ── IndexAccess: Fio 5 — load ptr + element_index * 8 ──
@@ -271,7 +279,8 @@ pub(crate) fn lower_expr(
             let ptr = lower_expr(&inner.node, ctx)?;
             let flags = MemFlagsData::new();
             let offset = (*element_index as i32) * 8;
-            Ok(ctx.builder.ins().load(I64, flags, ptr, offset))
+            let clif_ty = ty_to_clif(&expr.ty);
+            Ok(ctx.builder.ins().load(clif_ty, flags, ptr, offset))
         }
 
         // ── Let: define variável ──
@@ -418,6 +427,7 @@ pub(crate) fn lower_expr(
                 ret_ty,
                 clauses,
                 captures,
+                func_id,
                 ctx.module,
                 ctx.ffi_ids,
                 ctx.kata_ids,

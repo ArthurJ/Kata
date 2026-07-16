@@ -208,6 +208,14 @@ struct ImplEntry {
   - `type_name_str` DEVE ter braço para `Ty::Interface(name) => name`.
     Sem isso, validação de assinatura compara com string vazia → sempre falha.
     Uma linha faltando quebra toda validação de interfaces.
+  - `register_impl` DEVE aceitar `ImplEntry` mesmo quando a interface não existe
+    no registry local do módulo do usuário. Interfaces do prelude (ex: `NUM`,
+    `SHOW`) são mergidas *depois* do resolve do módulo do usuário. Se
+    `register_impl` descarta o `ImplEntry` porque a interface não existe
+    localmente, a implementação nunca é registrada → dispatch via interface
+    não encontra a implementação. Sintoma: `[resolution] warning: interface
+    'NUM' não declarada` + dispatch falha. (Fase 9: `Complex implements NUM`
+    em `stdlib/complex.kata`.)
 
 ---
 
@@ -457,6 +465,33 @@ pub struct LowerCtx {
   se `ids` for descartado em pass2, o codegen não tem como descobrir o `type_id`.
   Solução: armazenar `ids` no `TypedModule` e propagar via `Rc` para o `LowerCtx`.
 
+### `kata_refs`/`kata_ids: HashMap<FuncKey, ...>`
+- **Mudança (Fase 9):** Agora usam `FuncKey = (String, Vec<Ty>, Ty)` como chave
+  (mesma mudança do `user_functions` no EmitCtx). O lookup por nome `String`
+  foi substituído pelo lookup por chave composta extraída de `callee.ty`
+  (params dos args, ret de `expr.ty`). Helper: `func_key_from_callee`.
+
+### FieldAccess/IndexAccess — carregamento com tipo CLIF correto
+- **Bug latente (Fase 5→9):** `FieldAccess` e `IndexAccess` carregavam sempre
+  como `I64` (`load(I64, ...)`) hard-coded. Para structs com campos `Int`
+  (todas as fases anteriores), isso funcionava porque `Int` mapeia para `I64`.
+  Mas quando `Complex` (campos `Float`) foi exercitado em funções Kata puras,
+  o `load(I64)` produzia `i64` em vez de `f64`, causando mismatch na chamada
+  FFI `kata_rt_fadd(f64, f64) -> f64` → `Cranelift("Verifier errors")`.
+- **Fix:** `load(ty_to_clif(&expr.ty), ...)` — usa o tipo da expressão.
+- **Diagnóstico:** IR dump via `eprintln!("{}", ctx.func.display())` no
+  `map_err` de `define_function` revelou o mismatch `load.i64` vs `f64`.
+
+### repr_synthesis — `kata_rt_float_to_text` para Float
+- **Bug latente (Fase 5→9):** `repr_synthesis.rs` usava `kata_rt_int_to_text`
+  (i64 → text) para converter campos `Float`, com um TODO stale dizendo
+  "adicionar kata_rt_float_to_text no runtime". Mas `kata_rt_float_to_text`
+  já existia no runtime e já estava registrada no `ffi_registry`.
+- **Fix:** trocar para `kata_rt_float_to_text` (f64 → text).
+- **Lição:** TODOs em código de síntese podem ficar stale quando a feature
+  mencionada já foi implementada. Sempre verificar se a FFI mencionada já
+  existe no runtime com `grep -rn "float_to_text\|kata_rt_float" crates/kata-rt/src/`.
+
 ---
 
 ## 9. EmitCtx — Emissão Cranelift
@@ -501,10 +536,28 @@ struct EmitCtx {
   `&Signature` ou `&SigRef`. Obter via `bcx.import_signature(clif_sig)` dentro
   do `FunctionBuilder` context. Armazenar no HashMap e dereference com `*sig`.
 
-### `user_functions: HashMap<String, FuncId>`
+### `user_functions: HashMap<FuncKey, FuncId>`
+
+```rust
+type FuncKey = (String, Vec<Ty>, Ty);  // (nome, tipos de entrada, tipo de saída)
+```
+
 - Pré-declaração de funções do usuário no Cranelift. `Inst::Call` e
   `Inst::FnPtr` consultam este mapa. Sem pré-declaração, o callee fica com
   assinatura vazia → `inst_results` retorna 0 elementos → panic.
+- **Mudança (Fase 9):** A chave mudou de `String` para `(String, Vec<Ty>, Ty)`.
+  Múltiplas overloads do mesmo método em `implements` com corpo Kata (ex:
+  `+ :: Complex Complex => Complex` e `+ :: Complex Int => Complex`) produzem
+  `FunctionDef` com o mesmo `name`. Com chave `String`, a segunda sobrescreve
+  a primeira no `symbol_table` → `module.get_name(name)` retorna o FuncId
+  errado → `Cranelift("Verifier errors")`. A chave composta `(nome, params, ret)`
+  distingue as overloads. `Ty` já implementa `Hash + Eq`.
+- **Nome no Cranelift é plumbing interno:** `__kata_fn_N` com contador
+  incremental. O `FuncId` é passado diretamente para `define_function_body`
+  e `define_kata_action`, eliminando o lookup por nome (`module.get_name`).
+- **Princípio (Arthur):** "funções do usuário e da linguagem devem ter o mesmo
+  nível de reconhecimento." A chave composta trata FFI e Kata igualmente —
+  mangling de nomes (`__kata_impl__...`) foi rejeitado por ser lossy e frágil.
 
 ---
 

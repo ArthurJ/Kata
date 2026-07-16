@@ -36,17 +36,44 @@ use cranelift_module::Module;
 use std::collections::HashMap;
 
 use crate::metadata::MetadataTable;
-use kata_inference::CaptureInfo;
+use kata_core::ty::Ty;
+use kata_inference::{CaptureInfo, TypedExpr, TypedExprKind};
+pub(crate) use module::FuncKey;
+
+/// Extrai a chave composta `(name, param_types, ret_ty)` de um callee tipado.
+///
+/// Usado nos sites de lookup em `kata_refs`/`kata_ids` para funções Kata puras.
+/// O `callee` deve ter `ty: Ty::Function(params, ret)` e `kind: Ident { name }`.
+pub(crate) fn func_key_from_callee(
+    callee: &kata_ast::Spanned<TypedExpr>,
+) -> Result<FuncKey, module::CodegenError> {
+    let name = match &callee.node.kind {
+        TypedExprKind::Ident { name } => name.clone(),
+        _ => {
+            return Err(module::CodegenError::UnsupportedNode(format!(
+                "callee não-Ident em func_key_from_callee: {:?}",
+                callee.node.kind
+            )));
+        }
+    };
+    match &callee.node.ty {
+        Ty::Function(params, ret) => Ok((name, params.clone(), (**ret).clone())),
+        _ => Err(module::CodegenError::UnsupportedNode(format!(
+            "callee.ty não é Function em func_key_from_callee: {:?}",
+            callee.node.ty
+        ))),
+    }
+}
 
 /// Contexto de lowering — compartilhado entre as chamadas recursivas.
 pub(crate) struct LowerCtx<'a, 'b> {
     pub builder: &'a mut FunctionBuilder<'b>,
     pub module: &'a mut cranelift_jit::JITModule,
     pub ffi_refs: &'a HashMap<String, cranelift_codegen::ir::FuncRef>,
-    pub kata_refs: &'a HashMap<String, cranelift_codegen::ir::FuncRef>,
+    pub kata_refs: &'a HashMap<FuncKey, cranelift_codegen::ir::FuncRef>,
     /// FuncIds globais (module-level) para re-declaração em lambdas anônimos.
     pub ffi_ids: &'a HashMap<String, cranelift_module::FuncId>,
-    pub kata_ids: &'a HashMap<String, cranelift_module::FuncId>,
+    pub kata_ids: &'a HashMap<FuncKey, cranelift_module::FuncId>,
     #[allow(dead_code)]
     pub metadata: &'a mut MetadataTable,
     pub string_table: &'a mut StringTable,

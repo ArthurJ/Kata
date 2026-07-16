@@ -133,7 +133,7 @@ Fio 1: Fundação + Aritmética + CLI
 │       Maquinaria: :: em ascription, smart constructor falível,
 │                   avaliação constante, ret-directed dispatch
 │
-├── Fio 7: Interfaces, Generics, Dispatch
+├── Fio 7: Interfaces, Generics, Dispatch ✅ Concluído
 │   │   (interface, implements, multiple dispatch, ITERABLE/COUNTABLE/INDEXABLE,
 │   │    ORD/EQ/NUM/SHOW, generics, monomorph, @commutative)
 │   │   Maquinaria: Ty::Generic, Ty::Interface, dispatch com múltiplas overloads,
@@ -141,7 +141,7 @@ Fio 1: Fundação + Aritmética + CLI
 │   │
 │   └── Fio 8 depende deste (ITERABLE para map/filter/fold)
 │
-├── Fio 10: Módulos, Prelude, FFI Completo
+├── Fio 10: Módulos, Prelude, FFI Completo ✅ Concluído
 │   (import, export, as, module loader, filesystem, cycle detection,
 │    prelude de stdlib/core.kata substituindo prelude hardcoded)
 │

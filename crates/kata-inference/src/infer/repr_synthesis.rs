@@ -166,10 +166,8 @@ fn field_repr(
             ffi_call1("kata_rt_rat_show", field_access, Ty::text())
         }
         Ty::Prim(PrimTy::Float) => {
-            // Float → não há FFI de float_to_text ainda.
-            // Usa int_to_text como fallback (mostra o bit pattern como int).
-            // TODO: adicionar kata_rt_float_to_text no runtime.
-            ffi_call1("kata_rt_int_to_text", field_access, Ty::text())
+            // Float → kata_rt_float_to_text (f64 -> text ptr)
+            ffi_call1("kata_rt_float_to_text", field_access, Ty::text())
         }
         Ty::Sum(name) if name == "Boolean" => {
             // Boolean → bool_to_text

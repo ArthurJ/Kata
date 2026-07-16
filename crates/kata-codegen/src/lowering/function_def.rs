@@ -21,7 +21,7 @@ use crate::ffi_sigs::ty_to_clif;
 use crate::metadata::MetadataTable;
 
 use super::LowerCtx;
-use super::module::{CodegenError, StringTable};
+use super::module::{CodegenError, FuncKey, StringTable};
 
 /// Fio 5 Fase 5: bitcast na borda de retorno.
 ///
@@ -47,8 +47,13 @@ fn coerce_return(
 }
 
 /// Declara uma função Kata nomeada no JITModule (sem definir ainda).
+///
+/// `cranelift_name` é o nome interno no JITModule — plumbing sem semântica
+/// (ex: `__kata_fn_0`). A identidade semântica vive na chave composta do
+/// `symbol_table`.
 pub(crate) fn declare_kata_function(
     func: &TypedFunction,
+    cranelift_name: &str,
     module: &mut cranelift_jit::JITModule,
 ) -> Result<cranelift_module::FuncId, CodegenError> {
     let mut sig = Signature::new(CallConv::Tail);
@@ -57,7 +62,7 @@ pub(crate) fn declare_kata_function(
     }
     sig.returns.push(AbiParam::new(ty_to_clif(&func.ret_ty)));
     module
-        .declare_function(&func.name, Linkage::Export, &sig)
+        .declare_function(cranelift_name, Linkage::Export, &sig)
         .map_err(|e| CodegenError::Cranelift(format!("declare kata fn {}: {e}", func.name)))
 }
 
@@ -72,9 +77,10 @@ pub(crate) fn define_function_body(
     ret_ty: &Ty,
     clauses: &[TypedLambdaClause],
     captures: &[CaptureInfo],
+    func_id: cranelift_module::FuncId,
     module: &mut cranelift_jit::JITModule,
     ffi_ids: &HashMap<String, cranelift_module::FuncId>,
-    kata_ids: &HashMap<String, cranelift_module::FuncId>,
+    kata_ids: &HashMap<FuncKey, cranelift_module::FuncId>,
     string_table: &mut StringTable,
 ) -> Result<(), CodegenError> {
     let mut ctx = module.make_context();
@@ -99,10 +105,10 @@ pub(crate) fn define_function_body(
             let func_ref = module.declare_func_in_func(fid, func_ir);
             ffi_refs.insert(fname.clone(), func_ref);
         }
-        let mut kata_refs: HashMap<String, cranelift_codegen::ir::FuncRef> = HashMap::new();
-        for (fname, &fid) in kata_ids {
+        let mut kata_refs: HashMap<FuncKey, cranelift_codegen::ir::FuncRef> = HashMap::new();
+        for (key, &fid) in kata_ids {
             let func_ref = module.declare_func_in_func(fid, func_ir);
-            kata_refs.insert(fname.clone(), func_ref);
+            kata_refs.insert(key.clone(), func_ref);
         }
 
         let mut func_ctx = FunctionBuilderContext::new();
@@ -180,14 +186,7 @@ pub(crate) fn define_function_body(
         builder.finalize();
     }
 
-    // Define a função no module.
-    let func_id = module
-        .get_name(name)
-        .ok_or_else(|| CodegenError::Cranelift(format!("func {name} not declared")))?;
-    let func_id = match func_id {
-        cranelift_module::FuncOrDataId::Func(fid) => fid,
-        _ => return Err(CodegenError::Cranelift(format!("{name} is not a function"))),
-    };
+    // Define a função no module — func_id passado diretamente (sem lookup por nome).
     module
         .define_function(func_id, &mut ctx)
         .map_err(|e| CodegenError::Cranelift(format!("define fn {name}: {e}")))?;
@@ -198,9 +197,10 @@ pub(crate) fn define_function_body(
 /// Define (compila o corpo de) uma função Kata nomeada.
 pub(crate) fn define_kata_function(
     func: &TypedFunction,
+    func_id: cranelift_module::FuncId,
     module: &mut cranelift_jit::JITModule,
     ffi_ids: &HashMap<String, cranelift_module::FuncId>,
-    symbol_table: &HashMap<String, cranelift_module::FuncId>,
+    symbol_table: &HashMap<FuncKey, cranelift_module::FuncId>,
     string_table: &mut StringTable,
 ) -> Result<(), CodegenError> {
     define_function_body(
@@ -209,6 +209,7 @@ pub(crate) fn define_kata_function(
         &func.ret_ty,
         &func.clauses,
         &[], // funções nomeadas não têm capture
+        func_id,
         module,
         ffi_ids,
         symbol_table,

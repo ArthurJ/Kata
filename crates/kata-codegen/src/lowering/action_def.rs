@@ -17,17 +17,20 @@ use super::expr::lower_expr;
 use crate::ffi_sigs::ty_to_clif;
 use crate::metadata::MetadataTable;
 
-use super::module::{CodegenError, StringTable};
-
-type SymbolTable = HashMap<String, cranelift_module::FuncId>;
+use super::module::{CodegenError, FuncKey, StringTable};
 
 /// Declara uma Action no JITModule (sem definir ainda).
+///
+/// `cranelift_name` é o nome interno no JITModule — plumbing sem semântica
+/// (ex: `__kata_fn_5`). A identidade semântica vive na chave composta do
+/// `symbol_table`.
 ///
 /// Assinatura uniforme (Fase 10): `(fiber_arena: i64, caller_arena: i64, args_ptr: i64) -> i64`
 /// com `CallConv::Tail`. Todos os params são I64, retorno é sempre I64
 /// (Float é bitcast na borda — epílogo da Action e caller).
 pub(crate) fn declare_kata_action(
     action: &TypedAction,
+    cranelift_name: &str,
     module: &mut cranelift_jit::JITModule,
 ) -> Result<cranelift_module::FuncId, CodegenError> {
     let mut sig = Signature::new(CallConv::Tail);
@@ -38,7 +41,7 @@ pub(crate) fn declare_kata_action(
     // Retorno sempre I64 (Float bitcast na borda).
     sig.returns.push(AbiParam::new(I64));
     module
-        .declare_function(&action.name, Linkage::Export, &sig)
+        .declare_function(cranelift_name, Linkage::Export, &sig)
         .map_err(|e| CodegenError::Cranelift(format!("declare action {}: {e}", action.name)))
 }
 
@@ -55,9 +58,10 @@ pub(crate) fn declare_kata_action(
 /// Se `ret_ty == Float`, faz `bitcast(I64 ← F64)` antes do `return_`.
 pub(crate) fn define_kata_action(
     action: &TypedAction,
+    func_id: cranelift_module::FuncId,
     module: &mut cranelift_jit::JITModule,
     ffi_ids: &HashMap<String, cranelift_module::FuncId>,
-    symbol_table: &SymbolTable,
+    symbol_table: &HashMap<FuncKey, cranelift_module::FuncId>,
     string_table: &mut StringTable,
 ) -> Result<(), CodegenError> {
     let mut ctx = module.make_context();
@@ -79,10 +83,10 @@ pub(crate) fn define_kata_action(
             let func_ref = module.declare_func_in_func(fid, func_ir);
             ffi_refs.insert(fname.clone(), func_ref);
         }
-        let mut kata_refs: HashMap<String, cranelift_codegen::ir::FuncRef> = HashMap::new();
-        for (fname, &fid) in symbol_table {
+        let mut kata_refs: HashMap<FuncKey, cranelift_codegen::ir::FuncRef> = HashMap::new();
+        for (key, &fid) in symbol_table {
             let func_ref = module.declare_func_in_func(fid, func_ir);
-            kata_refs.insert(fname.clone(), func_ref);
+            kata_refs.insert(key.clone(), func_ref);
         }
 
         let mut func_ctx = FunctionBuilderContext::new();
@@ -194,19 +198,7 @@ pub(crate) fn define_kata_action(
         builder.finalize();
     }
 
-    // Define a função no module.
-    let func_id = module
-        .get_name(&action.name)
-        .ok_or_else(|| CodegenError::Cranelift(format!("action {} not declared", action.name)))?;
-    let func_id = match func_id {
-        cranelift_module::FuncOrDataId::Func(fid) => fid,
-        _ => {
-            return Err(CodegenError::Cranelift(format!(
-                "{} is not a function",
-                action.name
-            )));
-        }
-    };
+    // Define a função no module — func_id passado diretamente (sem lookup por nome).
     module
         .define_function(func_id, &mut ctx)
         .map_err(|e| CodegenError::Cranelift(format!("define action {}: {e}", action.name)))?;

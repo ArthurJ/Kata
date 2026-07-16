@@ -30,7 +30,13 @@ pub(crate) fn lower_closure(
         // Call FFI direto — FFI nunca é tail call (CallConv::SystemV).
         // Mas primeiro tenta kata_refs: funções Kata sintetizadas (ex: repr)
         // usam ffi_symbol para carregar o nome mangled da função.
-        if let Some(&func_ref) = ctx.kata_refs.get(sym_name) {
+        // Como funções sintetizadas têm nomes únicos (ex: repr__Pessoa),
+        // fazemos lookup por chave composta usando o sym_name como nome
+        // e os tipos do callee.
+        let key = super::func_key_from_callee(callee)
+            .map(|(name, params, ret)| (sym_name.clone(), params, ret))
+            .unwrap_or_else(|_| (sym_name.clone(), Vec::new(), Ty::Unit));
+        if let Some(&func_ref) = ctx.kata_refs.get(&key) {
             let call_inst = ctx.builder.ins().call(func_ref, &arg_values);
             return Ok(ctx.builder.inst_results(call_inst)[0]);
         }
@@ -44,24 +50,27 @@ pub(crate) fn lower_closure(
         // ffi_symbol = None: função Kata nomeada ou lambda como valor.
         // Tenta Kata function call direto primeiro.
         if let TypedExprKind::Ident { name } = &callee.node.kind {
-            if let Some(&func_ref) = ctx.kata_refs.get(name) {
-                // Call direto para função Kata nomeada.
-                if expr.tail_pos && !ctx.no_tail_calls {
-                    // Tail call: emite return_call (TCO via Cranelift).
-                    ctx.builder.ins().return_call(func_ref, &arg_values);
-                    ctx.emitted_tail_call = true;
-                    // return_call é terminador — não pode adicionar instruções depois.
-                    // Criar block dummy unreachable para satisfazer o builder:
-                    // todo block precisa de um terminador, mesmo que inalcançável.
-                    let dummy = ctx.builder.create_block();
-                    ctx.builder.switch_to_block(dummy);
-                    ctx.builder.seal_block(dummy);
-                    let val = ctx.builder.ins().iconst(I64, 0);
-                    ctx.builder.ins().return_(&[val]);
-                    return Ok(val);
+            // Lookup por chave composta (name, param_types, ret_ty) extraída do callee.
+            if let Ok(key) = super::func_key_from_callee(callee) {
+                if let Some(&func_ref) = ctx.kata_refs.get(&key) {
+                    // Call direto para função Kata nomeada.
+                    if expr.tail_pos && !ctx.no_tail_calls {
+                        // Tail call: emite return_call (TCO via Cranelift).
+                        ctx.builder.ins().return_call(func_ref, &arg_values);
+                        ctx.emitted_tail_call = true;
+                        // return_call é terminador — não pode adicionar instruções depois.
+                        // Criar block dummy unreachable para satisfazer o builder:
+                        // todo block precisa de um terminador, mesmo que inalcançável.
+                        let dummy = ctx.builder.create_block();
+                        ctx.builder.switch_to_block(dummy);
+                        ctx.builder.seal_block(dummy);
+                        let val = ctx.builder.ins().iconst(I64, 0);
+                        ctx.builder.ins().return_(&[val]);
+                        return Ok(val);
+                    }
+                    let call_inst = ctx.builder.ins().call(func_ref, &arg_values);
+                    return Ok(ctx.builder.inst_results(call_inst)[0]);
                 }
-                let call_inst = ctx.builder.ins().call(func_ref, &arg_values);
-                return Ok(ctx.builder.inst_results(call_inst)[0]);
             }
             // Ident não está no kata_refs: pode ser variável com
             // Ty::Function (lambda como valor) — call_indirect.
