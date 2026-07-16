@@ -113,13 +113,20 @@ impl InterfaceRegistry {
         Ok(())
     }
 
-    /// Registra uma implementação. Valida que a interface existe.
+    /// Registra uma implementação.
+    ///
+    /// Se a interface não existe neste registry, ainda assim registra o
+    /// ImplEntry — a interface pode estar no prelude (mergiado depois).
+    /// A validação final acontece no inference, onde o InterfaceRegistry
+    /// completo (prelude + user) está disponível.
     pub fn register_impl(&mut self, entry: ImplEntry) -> Result<(), String> {
         if !self.interfaces.contains_key(&entry.interface_name) {
-            return Err(format!(
-                "interface '{}' não declarada (em implements para {})",
+            // Não é erro — a interface pode estar no prelude.
+            // Apenas loga warning e registra mesmo assim.
+            eprintln!(
+                "[resolution] warning: interface '{}' não declarada neste módulo (em implements para {}) — pode estar no prelude",
                 entry.interface_name, entry.type_name
-            ));
+            );
         }
         self.impls.push(entry);
         Ok(())
@@ -250,14 +257,18 @@ mod tests {
     }
 
     #[test]
-    fn register_impl_validates_interface_exists() {
+    fn register_impl_accepts_unknown_interface() {
+        // register_impl aceita implementações mesmo para interfaces não
+        // declaradas neste registry — a interface pode estar no prelude.
         let mut reg = InterfaceRegistry::new();
         reg.register_interface(iface("NUM", &["ORD"])).unwrap();
         reg.register_impl(impl_entry("Int", "NUM")).unwrap();
 
-        // Interface inexistente → erro
-        let err = reg.register_impl(impl_entry("Int", "SHOW"));
-        assert!(err.is_err());
+        // Interface inexistente → ainda registra (pode estar no prelude)
+        let result = reg.register_impl(impl_entry("Int", "SHOW"));
+        assert!(result.is_ok());
+        // O impl foi registrado
+        assert_eq!(reg.get_impls_for_interface("SHOW").len(), 1);
     }
 
     #[test]

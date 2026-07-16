@@ -1,0 +1,21 @@
+# Complex — exemplo canônico de tipo numérico implementado em Kata puro.
+# Demonstra que a infraestrutura de interfaces (Fases 1-8) funciona end-to-end
+# para um tipo definido pelo usuário sem FFI.
+
+import core
+
+data Complex (re::Float im::Float)
+
+Complex implements NUM
+    + :: Complex Complex => Complex
+        lambda a b: Complex (+ a.re b.re) (+ a.im b.im)
+    + :: Complex Int => Complex
+        lambda a b: Complex (+ a.re (to_float (from_int b))) a.im
+    - :: Complex Complex => Complex
+        lambda a b: Complex (- a.re b.re) (- a.im b.im)
+    * :: Complex Complex => Complex
+        lambda a b: Complex (- (* a.re b.re) (* a.im b.im)) (+ (* a.re b.im) (* a.im b.re))
+
+Complex implements SHOW
+    show :: Complex => Text
+        lambda a: string_concat "(" (string_concat (show a.re) (string_concat " + " (string_concat (show a.im) "i)")))
