@@ -432,7 +432,7 @@ Fio 2 para suportar type params genéricos.
 
 **Verificação:** `cargo test -p kata-inference`
 
-### Fase 6: Monomorphização — crate `kata-monomorph`
+### Fase 6: Monomorphização — crate `kata-monomorph` ✅
 
 **Objetivo:** especializar call sites genéricos em funções concretas.
 
@@ -664,7 +664,7 @@ implements SHOW for Complex
 | 4 | `export item1 item2` marca itens como exportados | 3 |
 | 5 | `+ (Complex 1.0 2.0) (Complex 3.0 4.0)` despacha via `iface++` no Score ✅ | 4 |
 | 6 | `id 42` infere `T = Int` via `unify` e retorna `Int` ✅ | 5 |
-| 7 | `List(Int)` e `List(Text)` geram instâncias monomorfizadas distintas | 6 |
+| 7 | `List(Int)` e `List(Text)` geram instâncias monomorfizadas distintas ✅ | 6 |
 | 8 | `@commutative` em `=` tenta args invertidos quando 0 candidatos | 7 |
 | 9 | `stdlib/core.kata` carregado como prelude substitui `prelude_sigs.rs` | 8 |
 | 10 | `implements NUM for Int` em Kata registra `+` com `@ffi("kata_rt_bi_add")` | 8 |
