@@ -472,7 +472,7 @@ não tem genéricos (módulo sem generics), é idêntico ao `TypedModule`.
 
 **Verificação:** `cargo test -p kata-monomorph && cargo test -p kata-codegen`
 
-### Fase 7: `@commutative` no dispatch
+### Fase 7: `@commutative` no dispatch ✅
 
 **Objetivo:** funções marcadas com `@commutative` tentam args invertidos quando
 0 candidatos compatíveis são encontrados.
@@ -665,7 +665,7 @@ implements SHOW for Complex
 | 5 | `+ (Complex 1.0 2.0) (Complex 3.0 4.0)` despacha via `iface++` no Score ✅ | 4 |
 | 6 | `id 42` infere `T = Int` via `unify` e retorna `Int` ✅ | 5 |
 | 7 | `List(Int)` e `List(Text)` geram instâncias monomorfizadas distintas ✅ | 6 |
-| 8 | `@commutative` em `=` tenta args invertidos quando 0 candidatos | 7 |
+| 8 | `@commutative` em `=` tenta args invertidos quando 0 candidatos ✅ | 7 |
 | 9 | `stdlib/core.kata` carregado como prelude substitui `prelude_sigs.rs` | 8 |
 | 10 | `implements NUM for Int` em Kata registra `+` com `@ffi("kata_rt_bi_add")` | 8 |
 | 11 | `Complex 3.0 4.0` constrói via smart constructor | 9 |
