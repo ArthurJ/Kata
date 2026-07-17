@@ -8,13 +8,14 @@
 //! `kata-core` depende de `kata-ast` para ter acesso a `Span` (orphan rule, I7).
 
 pub(crate) mod expr;
+pub(crate) mod item;
 pub(crate) mod span;
 pub(crate) mod token;
 
 pub use expr::{
-    ActionStmt, Directive, DirectiveArg, DirectiveValue, DotIndex, ExportItem, Expr, FieldDecl,
-    GuardClause, ImplMethod, InterfaceSig, Item, LambdaClause, MatchArm, Module, Pattern,
-    RefinedDecl, TypeExpr, VariantDecl, WithBinding,
+    ActionStmt, DotIndex, Expr, GuardClause, LambdaClause, MatchArm, Module, Pattern, TypeExpr,
+    WithBinding,
 };
+pub use item::*;
 pub use span::{Span, Spanned};
 pub use token::{Token, TokenWithSpan};
