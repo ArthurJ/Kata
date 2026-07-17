@@ -140,8 +140,33 @@ pub(crate) fn test_single_pattern(
             }
             Ok(all_matches)
         }
-        TypedPattern::Cons { .. } => Err(super::CodegenError::UnsupportedNode(
-            "Pattern Cons: List é Fio 8".into(),
-        )),
+        TypedPattern::Cons { head, tail } => {
+            // val é ponteiro para Cons cell (head@0, tail@8) ou 0 (Nil).
+            // Condição: val != 0 (não é Nil).
+            let not_nil = lower.builder.ins().icmp_imm(
+                cranelift_codegen::ir::condcodes::IntCC::NotEqual,
+                val,
+                0,
+            );
+
+            // Extrair head (offset 0) e tail (offset 8).
+            let flags = MemFlagsData::new();
+            let head_val = lower.builder.ins().load(I64, flags, val, 0);
+            let tail_val = lower.builder.ins().load(I64, flags, val, 8);
+
+            // Testar sub-patterns. Ident/Wildcard são incondicionais (apenas fazem binding).
+            let head_cond = test_single_pattern(head, head_val, lower)?;
+            let tail_cond = test_single_pattern(tail, tail_val, lower)?;
+
+            // Combinar: not_nil AND head_cond AND tail_cond.
+            let mut cond = not_nil;
+            if let Some(c) = head_cond {
+                cond = lower.builder.ins().band(cond, c);
+            }
+            if let Some(c) = tail_cond {
+                cond = lower.builder.ins().band(cond, c);
+            }
+            Ok(Some(cond))
+        }
     }
 }
