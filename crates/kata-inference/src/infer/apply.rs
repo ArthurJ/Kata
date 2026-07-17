@@ -115,35 +115,77 @@ pub(crate) fn infer_apply(
                 Effect::Puro,
             ));
         }
-        // Não é Tuple — cai para o dispatch normal (COUNTABLE).
-        // O caminho abaixo reinfere os args; para evitar dupla inferência,
-        // retornamos o dispatch diretamente aqui.
+        // Não é Tuple — cai para o dispatch normal (COUNTABLE) abaixo.
+        // Reusar o typed_arg já inferido para evitar dupla inferência.
         let typed_args = vec![Spanned::new(typed_arg, args[0].span)];
         let arg_types: Vec<Ty> = typed_args.iter().map(|t| t.node.ty.clone()).collect();
-        let overload = ctx
+
+        // Tenta dispatch normal (match_score).
+        if let Ok(overload) = ctx
             .table
             .resolve(&func_name, &arg_types, ctx.interface_registry)
-            .map_err(|e| dispatch_to_middle_error(e, *span))?;
-        let callee_ty = Ty::Function(overload.params.clone(), Box::new(overload.ret.clone()));
-        let callee_typed = TypedExpr {
-            span: callee.span,
-            ty: callee_ty,
-            tail_pos: false,
-            escape: EscapeTarget::Local,
-            effect: Effect::Puro,
-            kind: TypedExprKind::Ident {
-                name: func_name.clone(),
-            },
-        };
-        return Ok((
-            overload.ret,
-            TypedExprKind::Closure {
-                callee: Box::new(Spanned::new(callee_typed, callee.span)),
-                args: typed_args,
-                ffi_symbol: overload.ffi_symbol,
-            },
-            Effect::Puro,
-        ));
+        {
+            let callee_ty = Ty::Function(overload.params.clone(), Box::new(overload.ret.clone()));
+            let callee_typed = TypedExpr {
+                span: callee.span,
+                ty: callee_ty,
+                tail_pos: false,
+                escape: EscapeTarget::Local,
+                effect: Effect::Puro,
+                kind: TypedExprKind::Ident {
+                    name: func_name.clone(),
+                },
+            };
+            return Ok((
+                overload.ret,
+                TypedExprKind::Closure {
+                    callee: Box::new(Spanned::new(callee_typed, callee.span)),
+                    args: typed_args,
+                    ffi_symbol: overload.ffi_symbol,
+                },
+                Effect::Puro,
+            ));
+        }
+
+        // Tenta caminho genérico: overloads com type_params não-vazio.
+        if let Some(overloads) = ctx.table.get_overloads(&func_name) {
+            for oi in overloads
+                .iter()
+                .filter(|oi| oi.params.len() == arg_types.len() && !oi.type_params.is_empty())
+            {
+                let mut subs: super::generics::Substitutions = HashMap::new();
+                if super::generics::unify(&oi.params, &arg_types, &oi.type_params, &mut subs)
+                    .is_ok()
+                {
+                    let concrete_ret = super::generics::apply_subs(&oi.ret, &subs);
+                    let callee_ty = Ty::Function(oi.params.clone(), Box::new(concrete_ret.clone()));
+                    let callee_typed = TypedExpr {
+                        span: callee.span,
+                        ty: callee_ty,
+                        tail_pos: false,
+                        escape: EscapeTarget::Local,
+                        effect: Effect::Puro,
+                        kind: TypedExprKind::Ident {
+                            name: func_name.clone(),
+                        },
+                    };
+                    return Ok((
+                        concrete_ret,
+                        TypedExprKind::Closure {
+                            callee: Box::new(Spanned::new(callee_typed, callee.span)),
+                            args: typed_args,
+                            ffi_symbol: oi.ffi_symbol.clone(),
+                        },
+                        Effect::Puro,
+                    ));
+                }
+            }
+        }
+
+        return Err(MiddleError::NoOverload {
+            name: func_name,
+            span: (*span).into(),
+        });
     }
 
     // Fase 7: `$` spread — `f $ (a, b)` expande para `f a b`.

@@ -185,6 +185,13 @@ Text implements CONTAINS::Text
 @ffi("kata_rt_fdiv")
 / :: Float Float => Float
 
+# List head/tail (extrai primeiro elemento / resto da lista)
+@ffi("kata_rt_list_head")
+head :: List::A => A
+
+@ffi("kata_rt_list_tail")
+tail :: List::A => List::A
+
 # ── Conversões ────────────────────────────────────────────────
 
 @ffi("kata_rt_rat_to_float")

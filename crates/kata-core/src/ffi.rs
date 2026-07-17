@@ -101,6 +101,38 @@ pub enum FfiSymbol {
     DecRef,
     /// `kata_rt_arc_fn_ptr(box_ptr) -> fn_ptr` — extrai fn_ptr do box.
     ArcFnPtr,
+
+    // ── Collections (Fio 8 Fase 6) ───────────────────────────
+    /// `kata_rt_list_nil() -> ptr` — retorna 0 (null = Nil).
+    ListNil,
+    /// `kata_rt_list_cons(head, tail, arena) -> ptr` — aloca Cons cell.
+    ListCons,
+    /// `kata_rt_list_is_empty(ptr) -> i64` — ptr == 0?
+    ListIsEmpty,
+    /// `kata_rt_list_head(ptr) -> i64` — load ptr+0.
+    ListHead,
+    /// `kata_rt_list_tail(ptr) -> ptr` — load ptr+8.
+    ListTail,
+    /// `kata_rt_list_len(ptr) -> i64` — conta Cons cells.
+    ListLen,
+    /// `kata_rt_list_get_checked(ptr, idx) -> ptr` — Result box.
+    ListGetChecked,
+    /// `kata_rt_array_alloc(len, arena) -> ptr` — aloca header + data.
+    ArrayAlloc,
+    /// `kata_rt_array_len(ptr) -> i64` — load ptr+0.
+    ArrayLen,
+    /// `kata_rt_array_get(ptr, idx) -> i64` — load ptr+8+idx*8.
+    ArrayGet,
+    /// `kata_rt_array_set(ptr, idx, val) -> ()` — store ptr+8+idx*8.
+    ArraySet,
+    /// `kata_rt_array_get_checked(ptr, idx) -> ptr` — Result box.
+    ArrayGetChecked,
+    /// `kata_rt_range_alloc(arena) -> ptr` — aloca 3 words.
+    RangeAlloc,
+    /// `kata_rt_list_contains(ptr, item) -> i64` — percorre Cons cells.
+    ListContains,
+    /// `kata_rt_array_contains(ptr, item) -> i64` — percorre array.
+    ArrayContains,
 }
 
 impl FfiSymbol {
@@ -168,6 +200,22 @@ impl FfiSymbol {
             FfiSymbol::IncRef => "kata_rt_incref",
             FfiSymbol::DecRef => "kata_rt_decref",
             FfiSymbol::ArcFnPtr => "kata_rt_arc_fn_ptr",
+            // Collections
+            FfiSymbol::ListNil => "kata_rt_list_nil",
+            FfiSymbol::ListCons => "kata_rt_list_cons",
+            FfiSymbol::ListIsEmpty => "kata_rt_list_is_empty",
+            FfiSymbol::ListHead => "kata_rt_list_head",
+            FfiSymbol::ListTail => "kata_rt_list_tail",
+            FfiSymbol::ListLen => "kata_rt_list_len",
+            FfiSymbol::ListGetChecked => "kata_rt_list_get_checked",
+            FfiSymbol::ArrayAlloc => "kata_rt_array_alloc",
+            FfiSymbol::ArrayLen => "kata_rt_array_len",
+            FfiSymbol::ArrayGet => "kata_rt_array_get",
+            FfiSymbol::ArraySet => "kata_rt_array_set",
+            FfiSymbol::ArrayGetChecked => "kata_rt_array_get_checked",
+            FfiSymbol::RangeAlloc => "kata_rt_range_alloc",
+            FfiSymbol::ListContains => "kata_rt_list_contains",
+            FfiSymbol::ArrayContains => "kata_rt_array_contains",
         }
     }
 
@@ -230,6 +278,22 @@ impl FfiSymbol {
             // Arc<T> / CaptureBox
             FfiSymbol::AllocArc | FfiSymbol::ArcFnPtr => Ty::int(),
             FfiSymbol::IncRef | FfiSymbol::DecRef => Ty::int(),
+            // Collections — todas retornam I64 (ptr ou valor i64)
+            FfiSymbol::ListNil => Ty::int(),
+            FfiSymbol::ListCons => Ty::int(),
+            FfiSymbol::ListIsEmpty => Ty::boolean(),
+            FfiSymbol::ListHead => Ty::int(),
+            FfiSymbol::ListTail => Ty::int(),
+            FfiSymbol::ListLen => Ty::int(),
+            FfiSymbol::ListGetChecked => Ty::int(),
+            FfiSymbol::ArrayAlloc => Ty::int(),
+            FfiSymbol::ArrayLen => Ty::int(),
+            FfiSymbol::ArrayGet => Ty::int(),
+            FfiSymbol::ArraySet => Ty::Unit,
+            FfiSymbol::ArrayGetChecked => Ty::int(),
+            FfiSymbol::RangeAlloc => Ty::int(),
+            FfiSymbol::ListContains => Ty::boolean(),
+            FfiSymbol::ArrayContains => Ty::boolean(),
         }
     }
 
@@ -297,6 +361,22 @@ impl FfiSymbol {
             FfiSymbol::IncRef,
             FfiSymbol::DecRef,
             FfiSymbol::ArcFnPtr,
+            // Collections
+            FfiSymbol::ListNil,
+            FfiSymbol::ListCons,
+            FfiSymbol::ListIsEmpty,
+            FfiSymbol::ListHead,
+            FfiSymbol::ListTail,
+            FfiSymbol::ListLen,
+            FfiSymbol::ListGetChecked,
+            FfiSymbol::ArrayAlloc,
+            FfiSymbol::ArrayLen,
+            FfiSymbol::ArrayGet,
+            FfiSymbol::ArraySet,
+            FfiSymbol::ArrayGetChecked,
+            FfiSymbol::RangeAlloc,
+            FfiSymbol::ListContains,
+            FfiSymbol::ArrayContains,
         ];
         all.iter().copied().find(|s| s.symbol_name() == name)
     }

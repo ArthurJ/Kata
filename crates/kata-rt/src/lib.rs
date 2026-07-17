@@ -8,10 +8,13 @@
 
 pub(crate) mod arc;
 pub(crate) mod arena;
+pub(crate) mod array;
 pub(crate) mod bigint;
 pub(crate) mod fiber;
 pub(crate) mod float;
 pub(crate) mod io;
+pub(crate) mod list;
+pub(crate) mod range;
 pub(crate) mod rational;
 pub(crate) mod scheduler;
 pub(crate) mod sum;
@@ -31,6 +34,10 @@ pub use text::{bool_to_text, int_to_text, text_literal, text_replace_first};
 // Re-exports de funções C-ABI para o codegen registrar no JIT.
 pub use arc::{kata_rt_alloc_arc, kata_rt_arc_fn_ptr, kata_rt_decref, kata_rt_incref};
 pub use arena::{kata_rt_arena_alloc, kata_rt_arena_create, kata_rt_arena_destroy};
+pub use array::{
+    kata_rt_array_alloc, kata_rt_array_contains, kata_rt_array_get, kata_rt_array_get_checked,
+    kata_rt_array_len, kata_rt_array_set,
+};
 pub use bigint::{
     kata_rt_bi_add, kata_rt_bi_div, kata_rt_bi_eq, kata_rt_bi_ge, kata_rt_bi_gt, kata_rt_bi_le,
     kata_rt_bi_lt, kata_rt_bi_mul, kata_rt_bi_neq, kata_rt_bi_show, kata_rt_bi_sub,
@@ -42,6 +49,11 @@ pub use float::{
     kata_rt_fsub,
 };
 pub use io::{kata_rt_panic, kata_rt_print, kata_rt_println};
+pub use list::{
+    kata_rt_list_cons, kata_rt_list_contains, kata_rt_list_get_checked, kata_rt_list_head,
+    kata_rt_list_is_empty, kata_rt_list_len, kata_rt_list_nil, kata_rt_list_tail,
+};
+pub use range::kata_rt_range_alloc;
 pub use rational::{
     kata_rt_int_to_rational, kata_rt_rat_add, kata_rt_rat_div, kata_rt_rat_eq,
     kata_rt_rat_from_float, kata_rt_rat_ge, kata_rt_rat_gt, kata_rt_rat_le, kata_rt_rat_literal,

@@ -136,6 +136,37 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
     builder.symbol("kata_rt_incref", rt::kata_rt_incref as *const u8);
     builder.symbol("kata_rt_decref", rt::kata_rt_decref as *const u8);
     builder.symbol("kata_rt_arc_fn_ptr", rt::kata_rt_arc_fn_ptr as *const u8);
+    // Collections (Fio 8 Fase 6)
+    builder.symbol("kata_rt_list_nil", rt::kata_rt_list_nil as *const u8);
+    builder.symbol("kata_rt_list_cons", rt::kata_rt_list_cons as *const u8);
+    builder.symbol(
+        "kata_rt_list_is_empty",
+        rt::kata_rt_list_is_empty as *const u8,
+    );
+    builder.symbol("kata_rt_list_head", rt::kata_rt_list_head as *const u8);
+    builder.symbol("kata_rt_list_tail", rt::kata_rt_list_tail as *const u8);
+    builder.symbol("kata_rt_list_len", rt::kata_rt_list_len as *const u8);
+    builder.symbol(
+        "kata_rt_list_get_checked",
+        rt::kata_rt_list_get_checked as *const u8,
+    );
+    builder.symbol("kata_rt_array_alloc", rt::kata_rt_array_alloc as *const u8);
+    builder.symbol("kata_rt_array_len", rt::kata_rt_array_len as *const u8);
+    builder.symbol("kata_rt_array_get", rt::kata_rt_array_get as *const u8);
+    builder.symbol("kata_rt_array_set", rt::kata_rt_array_set as *const u8);
+    builder.symbol(
+        "kata_rt_array_get_checked",
+        rt::kata_rt_array_get_checked as *const u8,
+    );
+    builder.symbol("kata_rt_range_alloc", rt::kata_rt_range_alloc as *const u8);
+    builder.symbol(
+        "kata_rt_list_contains",
+        rt::kata_rt_list_contains as *const u8,
+    );
+    builder.symbol(
+        "kata_rt_array_contains",
+        rt::kata_rt_array_contains as *const u8,
+    );
 }
 
 /// Declara todos os símbolos FFI no module e retorna o mapa nome → FuncId.
@@ -232,5 +263,21 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         IncRef,
         DecRef,
         ArcFnPtr,
+        // Collections
+        ListNil,
+        ListCons,
+        ListIsEmpty,
+        ListHead,
+        ListTail,
+        ListLen,
+        ListGetChecked,
+        ArrayAlloc,
+        ArrayLen,
+        ArrayGet,
+        ArraySet,
+        ArrayGetChecked,
+        RangeAlloc,
+        ListContains,
+        ArrayContains,
     ]
 }

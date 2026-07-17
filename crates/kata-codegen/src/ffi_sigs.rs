@@ -252,6 +252,90 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
             sig.params.push(AbiParam::new(I64)); // box_ptr
             sig.returns.push(AbiParam::new(I64)); // fn_ptr
         }
+        // ── Collections (Fio 8 Fase 6) ──
+        // list_nil: () -> ptr (0 = null)
+        FfiSymbol::ListNil => {
+            sig.returns.push(AbiParam::new(I64));
+        }
+        // list_cons: (head, tail, arena) -> ptr
+        FfiSymbol::ListCons => {
+            sig.params.push(AbiParam::new(I64)); // head
+            sig.params.push(AbiParam::new(I64)); // tail
+            sig.params.push(AbiParam::new(I64)); // arena
+            sig.returns.push(AbiParam::new(I64)); // ptr
+        }
+        // list_is_empty: (ptr) -> i64 (0/1)
+        FfiSymbol::ListIsEmpty => {
+            sig.params.push(AbiParam::new(I64)); // ptr
+            sig.returns.push(AbiParam::new(I64)); // bool
+        }
+        // list_head: (ptr) -> i64
+        FfiSymbol::ListHead => {
+            sig.params.push(AbiParam::new(I64)); // ptr
+            sig.returns.push(AbiParam::new(I64)); // head
+        }
+        // list_tail: (ptr) -> ptr
+        FfiSymbol::ListTail => {
+            sig.params.push(AbiParam::new(I64)); // ptr
+            sig.returns.push(AbiParam::new(I64)); // tail
+        }
+        // list_len: (ptr) -> i64
+        FfiSymbol::ListLen => {
+            sig.params.push(AbiParam::new(I64)); // ptr
+            sig.returns.push(AbiParam::new(I64)); // len
+        }
+        // list_get_checked: (ptr, idx) -> ptr (Result box)
+        FfiSymbol::ListGetChecked => {
+            sig.params.push(AbiParam::new(I64)); // ptr
+            sig.params.push(AbiParam::new(I64)); // idx
+            sig.returns.push(AbiParam::new(I64)); // Result box
+        }
+        // array_alloc: (len, arena) -> ptr
+        FfiSymbol::ArrayAlloc => {
+            sig.params.push(AbiParam::new(I64)); // len
+            sig.params.push(AbiParam::new(I64)); // arena
+            sig.returns.push(AbiParam::new(I64)); // ptr
+        }
+        // array_len: (ptr) -> i64
+        FfiSymbol::ArrayLen => {
+            sig.params.push(AbiParam::new(I64)); // ptr
+            sig.returns.push(AbiParam::new(I64)); // len
+        }
+        // array_get: (ptr, idx) -> i64
+        FfiSymbol::ArrayGet => {
+            sig.params.push(AbiParam::new(I64)); // ptr
+            sig.params.push(AbiParam::new(I64)); // idx
+            sig.returns.push(AbiParam::new(I64)); // val
+        }
+        // array_set: (ptr, idx, val) -> void
+        FfiSymbol::ArraySet => {
+            sig.params.push(AbiParam::new(I64)); // ptr
+            sig.params.push(AbiParam::new(I64)); // idx
+            sig.params.push(AbiParam::new(I64)); // val
+        }
+        // array_get_checked: (ptr, idx) -> ptr (Result box)
+        FfiSymbol::ArrayGetChecked => {
+            sig.params.push(AbiParam::new(I64)); // ptr
+            sig.params.push(AbiParam::new(I64)); // idx
+            sig.returns.push(AbiParam::new(I64)); // Result box
+        }
+        // range_alloc: (arena) -> ptr
+        FfiSymbol::RangeAlloc => {
+            sig.params.push(AbiParam::new(I64)); // arena
+            sig.returns.push(AbiParam::new(I64)); // ptr
+        }
+        // list_contains: (ptr, item) -> i64 (0/1)
+        FfiSymbol::ListContains => {
+            sig.params.push(AbiParam::new(I64)); // ptr
+            sig.params.push(AbiParam::new(I64)); // item
+            sig.returns.push(AbiParam::new(I64)); // bool
+        }
+        // array_contains: (ptr, item) -> i64 (0/1)
+        FfiSymbol::ArrayContains => {
+            sig.params.push(AbiParam::new(I64)); // ptr
+            sig.params.push(AbiParam::new(I64)); // item
+            sig.returns.push(AbiParam::new(I64)); // bool
+        }
     }
 
     sig

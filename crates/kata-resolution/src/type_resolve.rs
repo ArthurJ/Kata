@@ -159,6 +159,15 @@ pub(crate) fn collect_type_params(param_types: &[Ty], return_type: &Ty) -> Vec<S
                     collect_into(arg, result);
                 }
             }
+            // Fio 8: coleções intrínsecas — recursar no tipo do elemento.
+            Ty::List(inner) | Ty::Array(inner) | Ty::Range(inner) => {
+                collect_into(inner, result);
+            }
+            Ty::Tuple(elements) => {
+                for elem in elements {
+                    collect_into(elem, result);
+                }
+            }
             _ => {}
         }
     }
