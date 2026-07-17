@@ -20,10 +20,14 @@ mod action_def;
 mod clause;
 mod closure;
 mod collections_hof;
+mod collections_literal;
 mod control_flow;
 mod expr;
+mod filter;
 mod function_def;
+mod fused_stream;
 mod jit;
+mod map;
 mod module;
 mod pattern;
 
