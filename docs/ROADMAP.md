@@ -104,8 +104,9 @@ Fio 1: Fundação + Aritmética + CLI
 │   └── Pré-11: Infraestrutura de Memória Hierárquica
 │       │   (árvore de arenas, escape analysis para LCA, ARC pass emitido)
 │       │
-│       └── Fio 11: CSP, Scheduler Multithread
-│       │   (channel!, queue!, broadcast!, fork!, select, timeout, @parallel)
+│       └── Fio 11: CSP, Concorrência, Paralelismo
+│       │   (channel!, queue!, broadcast!, fork!, select, !>, <!,
+│       │    yield points, structured concurrency, @parallel)
 │       │
 │       └── Fio 14: @log, @test, Test Runner
 │           (@log telemetria via CSP, @test positivo/negativo, kata test)
@@ -588,33 +589,49 @@ pelo codegen. ARC pass emitido.
 
 ---
 
-### Fio 11: CSP, Scheduler Multithread
+### Fio 11: CSP, Concorrência, Paralelismo
+
+**PRD:** `docs/PRD-fio11.md`
 
 **Maquinaria de tipos construída:**
 - `effect: Effect` ganha `Spawn` e `ChannelOp` (fork!, !>, <!)
+- `Ty::Sender(Box<Ty>)`, `Ty::Receiver(Box<Ty>)`, `Ty::ReceiverFactory(Box<Ty>)`
+- Escape analysis para LCA entre fibers que compartilham canais
 
 **Features:**
 - `channel!` (rendezvous), `queue!(N)` (buffered), `broadcast!` (pub-sub)
-- `fork!` (submete Action ao scheduler)
+- Criação retorna tupla `(Sender::T, Receiver::T)` ou `(Sender::T, ReceiverFactory::T)`
+- `fork!` (submete Action ao scheduler com args)
 - `select` com `timeout` (multiplexação de canais)
-- `!>` (envio), `<!` (recebimento)
-- Scheduler M:N multithread (struct explícita, work-stealing)
-- Channels lock-free (MPSC/MPMC)
-- `@parallel` (multiprocess via fork + IPC)
+- `!>` (envio), `<!` (recebimento) — operadores infixos
+- Yield cooperativo via `wasmtime-fiber::Suspend` com `YieldReason`
+- Yield points no codegen (back-edge checks em `Loop` e `ForIn`)
+- Structured concurrency (Action espera forks completarem)
+- Deadlock detection trivial no run loop
+- `@parallel` (paralelismo via multiprocess — fork+IPC com serialização TypeShape)
+
+**Três camadas:**
+- **Concorrência:** fibers + yield + canais (single-threaded, determinístico)
+- **Preempção cooperativa:** yield points no codegen (resolve head-of-line blocking)
+- **Paralelismo:** `@parallel` (processo OS separado, isolamento total)
+
+**M:N multithread é post-1.0.** A estrutura do scheduler é independente do
+número de threads. Se workloads reais demonstrarem que yield points +
+`@parallel` não chegam, M:N é adição incremental.
 
 **Runtime:**
-- `kata_rt_channel_create/send/recv`
-- `kata_rt_queue_create`, `kata_rt_broadcast_create`
-- `kata_rt_select`, `kata_rt_fork`
-- Scheduler struct (run_queue, blocked, pending_wakes, timers)
-- TLS apenas para yield
+- `kata_rt_channel_create/send/recv`, `kata_rt_queue_*`, `kata_rt_broadcast_*`
+- `kata_rt_select`, `kata_rt_yield`, `kata_rt_yield_check`
+- `kata_rt_broadcast_receiver_create` (receiver factory)
+- Scheduler: run_queue, blocked, pending_wakes, timers, árvore de fibers
 
 **Depende de:** Pré-11 (árvore de arenas, escape analysis para LCA),
 Fio 3 (Actions, arena), Fio 9 (escape analysis para dados em canais → Arc<T>)
 
-**DoD:** `fork!` submete Action em fiber separada. Channel rendezvous
-sincroniza sender/receiver. `select` multiplexa 2+ canais. `@parallel` spawn
-processo OS separado.
+**DoD:** `fork!` submete Action em fiber separada com args. Channel rendezvous
+sincroniza sender/receiver. `select` multiplexa 2+ receivers. Yield points
+previnem head-of-line blocking. Structured concurrency garante lifecycle.
+`@parallel` spawn processo OS separado com serialização TypeShape.
 
 ---
 
@@ -706,7 +723,7 @@ Fio 1  ────────────────────────�
   ├── Fio 2 ── Fio 9 (closures, escape)
   │       assinaturas, ->, Hole, tail_pos, effect      escape, capture, Arc, TRMA
   ├── Fio 3 ── Pré-11 ── Fio 11 ── Fio 14 (@log, @test)
-  │       Actions, return, ;, ?    Memória hierárquica  CSP, scheduler M:N
+  │       Actions, return, ;, ?    Memória hierárquica  CSP, yield points, @parallel
   ├── Fio 4 ── Fio 8 ── Fio 13 (Dict/Set)
   │       Ty::Sum com payload, :: type params           ITERABLE, .N, len, stream fusion
   ├── Fio 5 ── Fio 6 (refined)
