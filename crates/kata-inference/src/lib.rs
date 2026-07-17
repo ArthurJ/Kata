@@ -8,6 +8,7 @@
 //! e produz `TypedModule`.
 
 pub mod desugar;
+pub(crate) mod desugar_holes;
 pub(crate) mod infer;
 pub(crate) mod patterns;
 pub(crate) mod redundancy;
