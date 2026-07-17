@@ -311,36 +311,7 @@ pub(crate) fn lower_expr(
             enum_name,
             variant,
             tag,
-        } => {
-            if enum_name == "Boolean" {
-                let val = if variant == "True" { 1 } else { 0 };
-                Ok(ctx.builder.ins().iconst(I64, val))
-            } else {
-                // Variante unitária de enum do usuário: box com tag, payload = 0.
-                let tag_val = ctx.builder.ins().iconst(I64, *tag as i64);
-                let payload_val = ctx.builder.ins().iconst(I64, 0);
-                // Arena baseada em EscapeTarget (Pré-11).
-                let arena_handle = match expr.escape {
-                    EscapeTarget::Local => ctx
-                        .fiber_arena
-                        .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
-                    EscapeTarget::Caller | EscapeTarget::Ancestor(_) => ctx
-                        .caller_arena
-                        .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
-                };
-                let func_ref = ctx
-                    .ffi_refs
-                    .get("kata_rt_store_sum_result")
-                    .ok_or_else(|| {
-                        super::CodegenError::FfiSymbolNotFound("kata_rt_store_sum_result".into())
-                    })?;
-                let call_inst = ctx
-                    .builder
-                    .ins()
-                    .call(*func_ref, &[tag_val, payload_val, arena_handle]);
-                Ok(ctx.builder.inst_results(call_inst)[0])
-            }
-        }
+        } => super::variant::lower_variant_qual(expr, enum_name, variant, tag, ctx),
 
         // ── VariantConstruct: Fase 5 — Sum com payload ──
         // Result::Ok 42 → kata_rt_store_sum_result(tag, payload) → box_ptr
@@ -349,49 +320,7 @@ pub(crate) fn lower_expr(
             variant: _,
             payload,
             tag,
-        } => {
-            // Lowera o payload.
-            let payload_val = lower_expr(&payload.node, ctx)?;
-
-            // Bitcast F64→I64 se necessário: store_sum_result espera I64
-            // para o payload, mas Float lowera como F64.
-            let payload_val = {
-                let payload_ty = ctx.builder.func.dfg.value_type(payload_val);
-                if payload_ty == cranelift_codegen::ir::types::F64 {
-                    ctx.builder
-                        .ins()
-                        .bitcast(I64, MemFlagsData::new(), payload_val)
-                } else {
-                    payload_val
-                }
-            };
-
-            // Tag = índice da variante (embutido no TypedExpr pelo typeck).
-            let tag_val = ctx.builder.ins().iconst(I64, *tag as i64);
-
-            // Arena baseada em EscapeTarget (Pré-11).
-            let arena_handle = match expr.escape {
-                EscapeTarget::Local => ctx
-                    .fiber_arena
-                    .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
-                EscapeTarget::Caller | EscapeTarget::Ancestor(_) => ctx
-                    .caller_arena
-                    .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
-            };
-
-            // Chama kata_rt_store_sum_result(tag, payload, arena_handle) → box_ptr.
-            let func_ref = ctx
-                .ffi_refs
-                .get("kata_rt_store_sum_result")
-                .ok_or_else(|| {
-                    super::CodegenError::FfiSymbolNotFound("kata_rt_store_sum_result".into())
-                })?;
-            let call_inst = ctx
-                .builder
-                .ins()
-                .call(*func_ref, &[tag_val, payload_val, arena_handle]);
-            Ok(ctx.builder.inst_results(call_inst)[0])
-        }
+        } => super::variant::lower_variant_construct(expr, payload, tag, ctx),
 
         // ── Lambda: função Cranelift separada (anon) ou referência (nomeado) ──
         TypedExprKind::Lambda {

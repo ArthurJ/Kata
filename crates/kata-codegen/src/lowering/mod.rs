@@ -30,6 +30,7 @@ mod jit;
 mod map;
 mod module;
 mod pattern;
+mod variant;
 
 pub use jit::{JitResult, jit_eval};
 pub use module::CodegenError;
