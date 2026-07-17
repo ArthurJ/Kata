@@ -283,7 +283,11 @@ pub(crate) fn desugar_holes(expr: &Spanned<Expr>) -> Spanned<Expr> {
             },
             expr.span,
         ),
-        Expr::Select { arms, timeout_ms, timeout_body } => {
+        Expr::Select {
+            arms,
+            timeout_ms,
+            timeout_body,
+        } => {
             let arms: Vec<SelectArm> = arms
                 .iter()
                 .map(|arm| SelectArm {

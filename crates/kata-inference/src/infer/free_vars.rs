@@ -180,7 +180,11 @@ pub(crate) fn collect_free_vars(
         TypedExprKind::ChannelRecv { channel, .. } => {
             collect_free_vars(&channel.node, local_bindings, out);
         }
-        TypedExprKind::Select { arms, timeout_ms, timeout_body } => {
+        TypedExprKind::Select {
+            arms,
+            timeout_ms,
+            timeout_body,
+        } => {
             for arm in arms {
                 collect_free_vars(&arm.channel.node, local_bindings, out);
                 collect_free_vars(&arm.body.node, local_bindings, out);

@@ -262,7 +262,11 @@ fn collect_captures_in_expr(expr: &mut TypedExpr, outer_env: &TypeEnv) {
         TypedExprKind::ChannelRecv { channel, .. } => {
             collect_captures_in_expr(&mut channel.node, outer_env);
         }
-        TypedExprKind::Select { arms, timeout_ms, timeout_body } => {
+        TypedExprKind::Select {
+            arms,
+            timeout_ms,
+            timeout_body,
+        } => {
             for arm in arms {
                 collect_captures_in_expr(&mut arm.channel.node, outer_env);
                 collect_captures_in_expr(&mut arm.body.node, outer_env);

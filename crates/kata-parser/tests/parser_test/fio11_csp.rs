@@ -156,7 +156,11 @@ fn select_basic() {
         Item::ActionDecl { body, .. } => {
             assert_eq!(body.len(), 1);
             match &body[0].expr.node {
-                Expr::Select { arms, timeout_ms, timeout_body } => {
+                Expr::Select {
+                    arms,
+                    timeout_ms,
+                    timeout_body,
+                } => {
                     assert_eq!(arms.len(), 2);
                     assert!(timeout_ms.is_none());
                     assert!(timeout_body.is_none());
@@ -181,7 +185,11 @@ fn select_with_timeout() {
         Item::ActionDecl { body, .. } => {
             assert_eq!(body.len(), 1);
             match &body[0].expr.node {
-                Expr::Select { arms, timeout_ms, timeout_body } => {
+                Expr::Select {
+                    arms,
+                    timeout_ms,
+                    timeout_body,
+                } => {
                     assert_eq!(arms.len(), 1);
                     check_select_arm(&arms[0], "rx", "msg", "echo");
                     assert!(timeout_ms.is_some());
@@ -194,8 +202,18 @@ fn select_with_timeout() {
     }
 }
 
-fn check_select_arm(arm: &SelectArm, expected_channel: &str, expected_bind: &str, expected_callee: &str) {
-    assert_eq!(arm.channel.node, Expr::Ident { name: expected_channel.into() });
+fn check_select_arm(
+    arm: &SelectArm,
+    expected_channel: &str,
+    expected_bind: &str,
+    expected_callee: &str,
+) {
+    assert_eq!(
+        arm.channel.node,
+        Expr::Ident {
+            name: expected_channel.into()
+        }
+    );
     assert_eq!(arm.bind_name, expected_bind);
     match &arm.body.node {
         Expr::ActionCall { callee, .. } => {
@@ -214,7 +232,10 @@ fn select_outside_action_is_error() {
     let src = "select\n    rx <! msg: echo!(msg)";
     let tokens = lex(src).unwrap();
     let result = parse(tokens);
-    assert!(result.is_err(), "select outside Action should be a parse error");
+    assert!(
+        result.is_err(),
+        "select outside Action should be a parse error"
+    );
 }
 
 // ── Channel send/recv in let binding ───────────────────────────────
@@ -250,7 +271,10 @@ fn send_arrow_left_assoc() {
             Expr::ChannelSend { channel, value } => {
                 // channel = (a !> b)
                 match &channel.node {
-                    Expr::ChannelSend { channel: inner_ch, value: inner_val } => {
+                    Expr::ChannelSend {
+                        channel: inner_ch,
+                        value: inner_val,
+                    } => {
                         assert_eq!(inner_ch.node, Expr::Ident { name: "a".into() });
                         assert_eq!(inner_val.node, Expr::Ident { name: "b".into() });
                     }

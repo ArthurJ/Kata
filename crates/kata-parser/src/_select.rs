@@ -62,9 +62,7 @@ impl Parser {
                 let (channel, bind_name) = match recv_expr.node {
                     Expr::ChannelRecv { channel, bind_name } => (*channel, bind_name),
                     _ => {
-                        return Err(self.error(
-                            "esperado `receiver <! nome` no braço do select",
-                        ));
+                        return Err(self.error("esperado `receiver <! nome` no braço do select"));
                     }
                 };
 

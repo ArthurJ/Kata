@@ -190,7 +190,11 @@ fn collect_action_calls(
         TypedExprKind::ChannelRecv { channel, .. } => {
             collect_action_calls(&channel.node, &channel.span, out);
         }
-        TypedExprKind::Select { arms, timeout_ms, timeout_body } => {
+        TypedExprKind::Select {
+            arms,
+            timeout_ms,
+            timeout_body,
+        } => {
             for arm in arms {
                 collect_action_calls(&arm.channel.node, &arm.channel.span, out);
                 collect_action_calls(&arm.body.node, &arm.body.span, out);

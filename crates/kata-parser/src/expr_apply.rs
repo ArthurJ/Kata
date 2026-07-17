@@ -95,9 +95,8 @@ pub(crate) fn parse_expr(parser: &mut Parser) -> Result<Spanned<Expr>, FrontendE
                         n
                     }
                     _ => {
-                        return Err(parser.error(
-                            "identificador após `<!` (nome do binding de recebimento)",
-                        ));
+                        return Err(parser
+                            .error("identificador após `<!` (nome do binding de recebimento)"));
                     }
                 };
                 let end_span = parser

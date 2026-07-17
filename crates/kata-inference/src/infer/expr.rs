@@ -416,18 +416,24 @@ pub(crate) fn infer_expr_hinted(
 
         // ── Fio 11: CSP — typeck em csp.rs ──
         Expr::ChannelSend { channel, value } => {
-            return super::csp::infer_channel_send(
-                channel, value, span, env, ctx, tail_pos,
-            );
+            return super::csp::infer_channel_send(channel, value, span, env, ctx, tail_pos);
         }
         Expr::ChannelRecv { channel, bind_name } => {
-            return super::csp::infer_channel_recv(
-                channel, bind_name, span, env, ctx, tail_pos,
-            );
+            return super::csp::infer_channel_recv(channel, bind_name, span, env, ctx, tail_pos);
         }
-        Expr::Select { arms, timeout_ms, timeout_body } => {
+        Expr::Select {
+            arms,
+            timeout_ms,
+            timeout_body,
+        } => {
             return super::csp::infer_select(
-                arms, timeout_ms, timeout_body, span, env, ctx, tail_pos,
+                arms,
+                timeout_ms,
+                timeout_body,
+                span,
+                env,
+                ctx,
+                tail_pos,
             );
         }
     };

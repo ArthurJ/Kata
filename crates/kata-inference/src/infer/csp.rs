@@ -11,9 +11,9 @@ use kata_diagnostics::MiddleError;
 
 use crate::typed::{Effect, TypedExpr, TypedExprKind, TypedSelectArm};
 
+use super::expr::InferCtx;
 use super::expr::infer_expr_hinted;
 use super::helpers::InferResult;
-use super::expr::InferCtx;
 
 /// `tx !> valor` — envio por canal.
 ///
@@ -171,8 +171,14 @@ pub(crate) fn infer_select(
         let mut arm_env = env.push_scope();
         arm_env.define(&arm.bind_name, recv_ty.clone());
 
-        let typed_body =
-            infer_expr_hinted(&arm.body.node, &arm.body.span, &mut arm_env, ctx, tail_pos, None)?;
+        let typed_body = infer_expr_hinted(
+            &arm.body.node,
+            &arm.body.span,
+            &mut arm_env,
+            ctx,
+            tail_pos,
+            None,
+        )?;
 
         typed_arms.push(TypedSelectArm {
             channel: Spanned::new(typed_channel, arm.channel.span),

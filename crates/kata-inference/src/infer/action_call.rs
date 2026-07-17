@@ -11,7 +11,7 @@
 use kata_ast::{Expr, Span, Spanned};
 use kata_core::ty::{Ty, TypeEnv};
 
-use crate::typed::{Effect, TypedExpr, TypedExprKind, ChannelKind};
+use crate::typed::{ChannelKind, Effect, TypedExpr, TypedExprKind};
 
 use super::expr::{InferCtx, infer_expr};
 use super::helpers::InferResult;
@@ -175,15 +175,14 @@ fn infer_channel_builtin(
 
     let elem_ty = Ty::Var("T0".into());
     let ret_ty = match kind {
-        ChannelKind::Rendezvous | ChannelKind::Buffered(_) => {
-            Ty::Tuple(vec![Ty::Sender(Box::new(elem_ty.clone())), Ty::Receiver(Box::new(elem_ty.clone()))])
-        }
-        ChannelKind::Broadcast => {
-            Ty::Tuple(vec![
-                Ty::Sender(Box::new(elem_ty.clone())),
-                Ty::ReceiverFactory(Box::new(elem_ty.clone())),
-            ])
-        }
+        ChannelKind::Rendezvous | ChannelKind::Buffered(_) => Ty::Tuple(vec![
+            Ty::Sender(Box::new(elem_ty.clone())),
+            Ty::Receiver(Box::new(elem_ty.clone())),
+        ]),
+        ChannelKind::Broadcast => Ty::Tuple(vec![
+            Ty::Sender(Box::new(elem_ty.clone())),
+            Ty::ReceiverFactory(Box::new(elem_ty.clone())),
+        ]),
     };
 
     Ok(TypedExpr {
@@ -197,10 +196,7 @@ fn infer_channel_builtin(
 }
 
 /// `queue!(N)` — N deve ser Int literal positivo.
-fn infer_queue_builtin(
-    args: &Spanned<Expr>,
-    span: &Span,
-) -> InferResult<ActionDispatch> {
+fn infer_queue_builtin(args: &Spanned<Expr>, span: &Span) -> InferResult<ActionDispatch> {
     // args deve ser uma tupla/Grouping com 1 elemento Int.
     let capacity = match &args.node {
         Expr::Grouping { inner } => match &inner.node {
@@ -301,13 +297,12 @@ fn infer_fork_builtin(
     }
 
     // Verifica que é uma Action (is_action = true).
-    let overloads = ctx
-        .table
-        .get_overloads(&action_name)
-        .ok_or_else(|| kata_diagnostics::MiddleError::UnboundName {
+    let overloads = ctx.table.get_overloads(&action_name).ok_or_else(|| {
+        kata_diagnostics::MiddleError::UnboundName {
             name: format!("Action `{action_name}` não tem overloads"),
             span: elements[0].span.into(),
-        })?;
+        }
+    })?;
 
     let any_action = overloads.iter().any(|o| o.is_action);
     if !any_action {
@@ -320,13 +315,8 @@ fn infer_fork_builtin(
 
     // Segundo elemento: tupla de argumentos para a Action.
     // Infere o tipo para que o codegen saiba quantos args passar.
-    let typed_args = super::expr::infer_expr(
-        &elements[1].node,
-        &elements[1].span,
-        env,
-        ctx,
-        false,
-    )?;
+    let typed_args =
+        super::expr::infer_expr(&elements[1].node, &elements[1].span, env, ctx, false)?;
 
     // Normaliza Grouping → Tuple (mesmo que action_call.rs principal).
     let typed_args = match &typed_args.kind {

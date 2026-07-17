@@ -247,12 +247,19 @@ fn desugar_pipes(expr: &Spanned<Expr>) -> Spanned<Expr> {
             },
             expr.span,
         ),
-        Expr::Select { arms, timeout_ms, timeout_body } => {
-            let arms: Vec<SelectArm> = arms.iter().map(|arm| SelectArm {
-                channel: desugar_pipes(&arm.channel),
-                bind_name: arm.bind_name.clone(),
-                body: desugar_pipes(&arm.body),
-            }).collect();
+        Expr::Select {
+            arms,
+            timeout_ms,
+            timeout_body,
+        } => {
+            let arms: Vec<SelectArm> = arms
+                .iter()
+                .map(|arm| SelectArm {
+                    channel: desugar_pipes(&arm.channel),
+                    bind_name: arm.bind_name.clone(),
+                    body: desugar_pipes(&arm.body),
+                })
+                .collect();
             Spanned::new(
                 Expr::Select {
                     arms,

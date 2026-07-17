@@ -89,9 +89,7 @@ fn unify_one(
         // Fio 11: Sender/Receiver/ReceiverFactory — unifica o tipo do canal.
         (Ty::Sender(p), Ty::Sender(a)) => unify_one(p, a, type_params, subs),
         (Ty::Receiver(p), Ty::Receiver(a)) => unify_one(p, a, type_params, subs),
-        (Ty::ReceiverFactory(p), Ty::ReceiverFactory(a)) => {
-            unify_one(p, a, type_params, subs)
-        }
+        (Ty::ReceiverFactory(p), Ty::ReceiverFactory(a)) => unify_one(p, a, type_params, subs),
 
         // Match estrutural para tipos concretos
         _ if param == arg => Ok(()),

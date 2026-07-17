@@ -24,10 +24,15 @@ pub(crate) fn ty_to_clif(ty: &Ty) -> cranelift_codegen::ir::Type {
         Ty::Prim(PrimTy::Float) => F64,
         Ty::Prim(PrimTy::Text) | Ty::Prim(PrimTy::Rational) => I64,
         Ty::Unit => I64, // Unit é representado como I64 zero
-        Ty::Struct(_) | Ty::Sum(_) | Ty::Tuple(_) | Ty::List(_) | Ty::Array(_) | Ty::Range(_)
-        | Ty::Sender(_) | Ty::Receiver(_) | Ty::ReceiverFactory(_) => {
-            I64
-        }
+        Ty::Struct(_)
+        | Ty::Sum(_)
+        | Ty::Tuple(_)
+        | Ty::List(_)
+        | Ty::Array(_)
+        | Ty::Range(_)
+        | Ty::Sender(_)
+        | Ty::Receiver(_)
+        | Ty::ReceiverFactory(_) => I64,
         Ty::Function(_, _) => I64,
         Ty::InferVar(_) => I64,
         // Var e Generic: Sum é sempre ponteiro opaco (box tag+payload).
