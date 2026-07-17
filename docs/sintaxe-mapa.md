@@ -191,8 +191,30 @@ let a := $(Altura typed_input!(...)) | exit!(...) # action
 - **Relações**: Preserva pureza — ao contrário de `?`, não aborta fluxo. Com
   construtores refinados (notação prefixa `PositiveInt 25 | 0`), se o fallback é
   literal do tipo base, o compilador valida os predicados do fallback em
-  compile-time (coerção contextual). A declaração de `enum` **não** usa `|` —
-  variantes são listadas por indentação.
+  compile-time (coerção contextual). A declaração de `enum` **não** usa `|`
+  — variantes são listadas por indentação.
+
+---
+
+## Operador `in` (Membership / Contenção)
+
+```kata
+3 in {1 2 3}              # true — Array contains
+5 in [0..2..10]           # true — Range O(1) aritmético
+x in [1 2 3]             # List contains (percurso linear)
+```
+
+- **Posição**: infixo entre item (esquerda) e coleção (direita).
+- **Semântica**: Testa se o item pertence à coleção. Produz `Boolean`.
+- **Por tipo concreto** (inlined pelo codegen, sem dispatch em runtime):
+  - **List**: percurso linear via `kata_rt_list_contains`.
+  - **Array**: percurso linear via `kata_rt_array_contains`.
+  - **Range**: O(1) aritmético — `start <= item AND item < end` (não verifica
+    step). Dois `icmp` combinados com `band`, resultado `uextend` para I64.
+- **Domínio**: Funções puras e Actions.
+- **Relações**: Despacha via interface `CONTAINS(A)`. No codegen, o tipo concreto
+  é conhecido em compile-time pela TAST, então o dispatch é inlined por tipo —
+  sem FFI dispatch. Adicionado no Fio 8 (Fase 6).
 
 ---
 

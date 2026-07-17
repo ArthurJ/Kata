@@ -460,10 +460,10 @@ implements ITERABLE(A)` despacha corretamente. Monomorphization especializa
 
 ### Fio 8: Coleções, ITERABLE, Stream Fusion
 
-**Status:** Fases 1-4 ✅ (DoDs 1-21). Fase 5 parcial — TypedExprKind +
-collections.rs + Pattern Cons ✅, sintaxe `::A` sem parênteses ✅ (aditivo,
-`::(A)` ainda funciona). Pendente: `.N` desugar, `len` síntese, testes E2E
-(DoDs 22-32). 741 testes, 0 falhas, 3 ignored. HEAD `cd93c1f`.
+**Status:** Fases 1-7 ✅ (DoDs 1-56). Runtime + codegen de coleções
+implementados (List/Array/Range, ForIn, `in`, Pattern Cons). 770 testes,
+0 falhas, 3 ignored. HEAD `0f706be`. Pendente: Fase 8+ (map/filter/fold,
+stream fusion).
 
 **Maquinaria de tipos construída:**
 - `.N` em coleções (desugar para `at` via INDEXABLE, retorna `Result`)

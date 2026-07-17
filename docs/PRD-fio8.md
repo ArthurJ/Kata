@@ -833,16 +833,16 @@ variants de `Ty`. Tipos do usuário que implementam ITERABLE funcionam.
 **DoDs:**
 | # | Descrição | Fase |
 |---|---|---|
-| 33 | `kata_rt_list_nil` retorna 0 (null) | 6 |
-| 34 | `kata_rt_list_cons(head, tail)` aloca Cons cell na arena | 6 |
-| 35 | `kata_rt_array_alloc(len)` aloca array contíguo | 6 |
-| 36 | `kata_rt_array_get_checked(arr, idx)` retorna Result | 6 |
-| 37 | `kata_rt_range_alloc()` aloca struct Range (3 words) | 6 |
-| 38 | ListLit lowering produz Cons chain | 6 |
-| 39 | ArrayLit lowering produz array contíguo | 6 |
-| 40 | RangeLit lowering produz Range com operações inlined por tipo | 6 |
-| 41 | ForIn lowering desugara para loop + match | 6 |
-| 42 | `in` lowering desugara para dispatch CONTAINS | 6 |
+| 33 | `kata_rt_list_nil` retorna 0 (null) | 6 | ✅ |
+| 34 | `kata_rt_list_cons(head, tail)` aloca Cons cell na arena | 6 | ✅ |
+| 35 | `kata_rt_array_alloc(len)` aloca array contíguo | 6 | ✅ |
+| 36 | `kata_rt_array_get_checked(arr, idx)` retorna Result | 6 | ✅ |
+| 37 | `kata_rt_range_alloc()` aloca struct Range (3 words) | 6 | ✅ |
+| 38 | ListLit lowering produz Cons chain | 6 | ✅ |
+| 39 | ArrayLit lowering produz array contíguo | 6 | ✅ |
+| 40 | RangeLit lowering produz Range com operações inlined por tipo | 6 | ✅ |
+| 41 | ForIn lowering desugara para loop + match | 6 | ✅ |
+| 42 | `in` lowering desugara para dispatch CONTAINS | 6 | ✅ |
 
 ### Fase 7: Testes E2E
 
@@ -867,20 +867,20 @@ source + expressão, compilar + executar via JIT, verificar output).
 **DoDs:**
 | # | Descrição | Fase |
 |---|---|---|
-| 43 | `[1 2 3]` executa e produz List(Int) | 7 |
-| 44 | `{1 2 3}` executa e produz Array(Int) | 7 |
-| 45 | `[0..1..10]` executa e produz Range(Int) | 7 |
-| 46 | `[0..1..=10]` executa e produz Range(Int) inclusive | 7 |
-| 47 | `[0.0..0.1..1.0]` executa e produz Range(Float) | 7 |
-| 48 | `+ (head [1 2 3]) 10` → `11` (head de List) | 7 |
-| 49 | `arr.0 ?` em `{1 2 3}` → `1` (index + unwrap) | 7 |
-| 50 | `len [1 2 3]` → `3` (COUNTABLE dispatch) | 7 |
-| 51 | `len {1 2 3}` → `3` (COUNTABLE dispatch) | 7 |
-| 52 | `len (10, 20)` → `2` (síntese compile-time) | 7 |
-| 53 | `match [1 2 3] [h : t]: + h (head t)` → `3` (pattern Cons) | 7 |
-| 54 | `for x in {1 2 3 4 5}: echo!(show x)` imprime 1 2 3 4 5 | 7 |
-| 55 | `3 in {1 2 3}` → `true` (CONTAINS dispatch) | 7 |
-| 56 | `5 in [0..2..10]` → `true` (Range CONTAINS O(1)) | 7 |
+| 43 | `[1 2 3]` executa e produz List(Int) | 7 | ✅ |
+| 44 | `{1 2 3}` executa e produz Array(Int) | 7 | ✅ |
+| 45 | `[0..1..10]` executa e produz Range(Int) | 7 | ✅ |
+| 46 | `[0..1..=10]` executa e produz Range(Int) inclusive | 7 | ✅ |
+| 47 | `[0.0..0.1..1.0]` executa e produz Range(Float) | 7 | ✅ |
+| 48 | `+ (head [1 2 3]) 10` → `11` (head de List) | 7 | ✅ |
+| 49 | `arr.0 ?` em `{1 2 3}` → `1` (index + unwrap) | 7 | ✅ |
+| 50 | `len [1 2 3]` → `3` (COUNTABLE dispatch) | 7 | ✅ |
+| 51 | `len {1 2 3}` → `3` (COUNTABLE dispatch) | 7 | ✅ |
+| 52 | `len (10, 20)` → `2` (síntese compile-time) | 7 | ✅ |
+| 53 | `match [1 2 3] [h : t]: + h (head t)` → `3` (pattern Cons) | 7 | ✅ |
+| 54 | `for x in {1 2 3 4 5}: echo!(show x)` imprime 1 2 3 4 5 | 7 | ✅ |
+| 55 | `3 in {1 2 3}` → `true` (CONTAINS dispatch) | 7 | ✅ |
+| 56 | `5 in [0..2..10]` → `true` (Range CONTAINS O(1)) | 7 | ✅ |
 
 ### Fase 8: map/filter/fold + stream fusion
 

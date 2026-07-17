@@ -845,6 +845,96 @@ ascription não consegue desambiguar sobrecargas polimórficas.
 
 ---
 
+## 9. Codegen de Coleções (Fio 8, Fases 6-7)
+
+### FFI symbols do runtime
+
+**List (`crates/kata-rt/src/list.rs`):**
+- `kata_rt_list_nil()` → 0 (null pointer)
+- `kata_rt_list_cons(head, tail, arena_handle)` → ponteiro para Cons cell (16 bytes: head@0, tail@8)
+- `kata_rt_list_is_empty(ptr)` → 0/1
+- `kata_rt_list_head(ptr)` → load do offset 0
+- `kata_rt_list_tail(ptr)` → load do offset 8
+- `kata_rt_list_len(ptr)` → SMI-tagged (`(count << 1) | 1`)
+- `kata_rt_list_get_checked(ptr, idx)` → Result (SMI-tagged Int ou box Err)
+- `kata_rt_list_contains(ptr, item)` → 0/1
+
+**Array (`crates/kata-rt/src/array.rs`):**
+- `kata_rt_array_alloc(len, arena_handle)` → ponteiro (header 8 bytes + data len*8)
+- `kata_rt_array_len(ptr)` → SMI-tagged (load do offset 0, tagged)
+- `kata_rt_array_get(ptr, idx)` → load direto (sem bounds check)
+- `kata_rt_array_set(ptr, idx, val)` → store
+- `kata_rt_array_get_checked(ptr, idx)` → Result
+- `kata_rt_array_contains(ptr, item)` → 0/1
+
+**Range (`crates/kata-rt/src/range.rs`):**
+- `kata_rt_range_alloc(arena_handle)` → ponteiro (24 bytes: start@0, step@8, end@16)
+- Operações de next/done são **inlined pelo codegen**, não há FFI para isso.
+
+**Regra SMI tagging:** toda FFI de runtime que retorna `Int` (não ponteiro) deve
+retornar SMI-tagged: `(val << 1) | 1`. FFIs que retornam ponteiros (List, Array,
+Range, Sum box) não taggeiam (ponteiro cru, LSB=0). FFIs que retornam Boolean
+retornam 0/1 cru (Boolean não é SMI-tagged).
+
+### Lowering de literais
+
+**ListLit `[1 2 3]`** — constrói Cons chain de trás para frente:
+1. `nil = kata_rt_list_nil()` → 0
+2. Para cada elemento (em ordem reversa): `acc = kata_rt_list_cons(head, acc, arena)`
+3. Bitcast F64→I64 se o elemento for Float (Cons cell armazena i64 cru)
+4. Arena é selecionada por `expr.escape` (Local → fiber_arena, Caller/Ancestor → caller_arena)
+
+**ArrayLit `{1 2 3}`** — aloca header+data contíguo:
+1. `ptr = kata_rt_array_alloc(len, arena)`
+2. Para cada elemento: `kata_rt_array_set(ptr, idx, val)` (bitcast F64→I64 se Float)
+
+**RangeLit `[0..2..10]`** — aloca 3 words e store direto:
+1. `ptr = kata_rt_range_alloc(arena)`
+2. `store(start, ptr, 0)`, `store(step, ptr, 8)`, `store(end, ptr, 16)`
+3. Bitcast F64→I64 se os valores forem Float
+
+### Lowering de ForIn
+
+**Inlined por tipo concreto da coleção** — sem dispatch em runtime, o tipo é
+conhecido em compile-time pela TAST:
+
+- **List:** percorre Cons cells. `current = coll_ptr`; condição `current != 0`
+  (Nil); head = `load(current, 0)`, tail = `load(current, 8)`; define var =
+  head, current = tail; executa body; jump para loop.
+- **Array:** percorre índices 0..len. `len = load(coll_ptr, 0)`; `idx = 0`;
+  condição `idx >= len`; elem = `load(coll_ptr + 8 + idx*8)`; `idx += 1`;
+  executa body.
+- **Range:** percorre `current = start`, `current += step`; condição
+  `current >= end` (exclusive — inclusive ainda não implementado no codegen,
+  ver comentário no match); define var = current; `current += step`; executa
+  body.
+
+Reusa maquinaria de `loop`/`break`/`continue`: salva/restaura `loop_break_block`
+e `loop_continue_block` do LowerCtx. Cria três blocos: `loop_block`,
+`continue_block`, `break_block`.
+
+### Lowering de `in` (membership)
+
+**Dispatch por tipo concreto** (também inlined, sem FFI dispatch):
+
+- **List/Array:** chama FFI `contains(ptr, item)` → 0/1 cru. Bitcast F64→I64
+  se o item for Float.
+- **Range:** O(1) aritmético — `start <= item AND item < end`. Dois `icmp`
+  (I8 cada), combinados com `band` (I8), depois `uextend(I64, result)` para
+  cruzar a fronteira do entry point. Não verifica step.
+
+### Lowering de Pattern Cons `[h : t]`
+
+- `val` é ponteiro para Cons cell (head@0, tail@8) ou 0 (Nil).
+- Condição: `val != 0` (não-Nil) — `icmp_imm(Ne, val, 0)` → I8.
+- Extrai head = `load(val, 0)`, tail = `load(val, 8)`.
+- Testa sub-patterns (`head_cond`, `tail_cond`) via `test_single_pattern`.
+- Combina com `band`: `not_nil AND head_cond AND tail_cond` → I8.
+- **Regra:** `band` de dois I8 precisa `uextend(I64, result)` antes de
+  retornar do entry point (que espera I64). `icmp` retorna I8, não I64.
+
+---
+
 ## Resumo: Invariantes de design
 
 | Estrutura | Invariante a respeitar desde o início |
