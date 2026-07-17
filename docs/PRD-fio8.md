@@ -927,7 +927,7 @@ em um único loop, evitando coleções intermediárias.
 | 57 | `map (+ 10 _) [1 2 3]` → `[11 12 13]` | 8 | ✅ |
 | 58 | `filter (> _ 5) [1 8 3 9]` → `[8 9]` | 8 | ✅ |
 | 59 | `fold + 0 [1 2 3]` → `6` | 8 | ✅ |
-| 60 | `map (+ 10 _) (filter (> _ 5) [1 8 3 9])` → `[18 19]` (stream fusion) | — | Pendente (fase separada) |
+| 60 | `map (+ 10 _) (filter (> _ 5) [1 8 3 9])` → `[18 19]` (stream fusion) | 9 | ✅ |
 
 ## Atualização da documentação
 

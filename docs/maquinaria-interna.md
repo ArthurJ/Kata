@@ -965,6 +965,47 @@ produz SMI inválido (`(a<<1|1) + (b<<1|1) = (a+b)<<1 | 2`, LSB=0 em vez de 1).
 em 4 sites: `lower_map`, `lower_filter`, `lower_fold` (Range arm), e `ForIn`
 em `expr.rs` (bug pré-existente).
 
+### Lowering de stream fusion (Fase 9)
+
+**Optimizer pass** (`kata-optimizer/src/stream_fusion.rs`): detecta composições
+de `Map`/`Filter` na TAST e reescreve em `TypedExprKind::FusedStream`, eliminando
+coleções intermediárias.
+
+- `try_fuse(expr)` — recursão: funde o `collection` primeiro, depois adiciona
+  o stage atual. Se o collection não é fundível mas é Map/Filter simples, cria
+  FusedStream com 1 stage + o stage atual.
+- `expr_to_stage(expr)` — converte Map/Filter em `FusedStage`.
+- `stream_fusion_pass(typed)` — aplica `fuse_expr` no entry point + body de
+  cada função.
+
+**Padrões detectados:**
+- `Map(f, Filter(g, src))` → FusedStream [Filter(g), Map(f)]
+- `Map(f, Map(g, src))` → FusedStream [Map(g), Map(f)]
+- `Filter(g, Map(f, src))` → FusedStream [Map(f), Filter(g)]
+- `Filter(g, Filter(h, src))` → FusedStream [Filter(h), Filter(g)]
+- 3+ níveis: `Map(f, Map(g, Filter(h, src)))` → FusedStream [Filter(h), Map(g), Map(f)]
+
+**TAST:** `FusedStream { stages, source, coll_ty, source_elem_ty, result_elem_ty, ret_ty }`
+onde `stages: Vec<FusedStage>` (enum com `Filter { callback, input_elem_ty }` e
+`Map { callback, input_elem_ty, output_elem_ty }`). O novo variant exigiu cascata
+E0004 em 5 arquivos (captures, recursion, instantiate, monomorph rewrite).
+
+**Codegen** (`lower_fused_stream` em `collections_hof.rs`): mesmo loop de
+`lower_map` (List/Array/Range), mas chama `apply_stages` que aplica a cadeia
+completa. `apply_stages` retorna `(val, keep_flag)` — keep_flag é I64 (0=descartar,
+1=keep). Cada `FusedStage::Filter` faz `band(keep, pred_result)` — AND lógico em
+I64 cru. Cada `FusedStage::Map` chama o callback via `call_indirect`. Após
+`apply_stages`, `brif(keep != 0, cons_block, skip_block)` — cons só se keep=1.
+No final: `kata_rt_list_reverse(acc, arena)` + conversão List→Array se coll_ty
+era Array.
+
+**Sem short-circuit em SSA:** `apply_stages` sempre chama todos os callbacks,
+mesmo se keep já é 0. Filter chama o predicado (resultado ignorado pelo `band`),
+Map aplica a transformação (resultado ignorado pelo `brif`). O overhead é mínimo
+e a alternativa exigiria blocks condicionais para cada stage.
+
+**Limitação:** Fold não é fundido (sempre consome, não produz lista).
+
 ---
 
 ## Resumo: Invariantes de design
