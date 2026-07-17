@@ -101,6 +101,51 @@ pub(crate) fn infer_apply(
         return infer_format(callee, args, span, env, ctx);
     }
 
+    // Fio 8: `len tuple` — síntese compile-time.
+    // Tuple não implementa COUNTABLE, mas `len (10, 20)` deve retornar 2
+    // em compile-time. Intercepta antes do dispatch normal.
+    if func_name == "len" && args.len() == 1 {
+        let typed_arg = infer_expr(&args[0].node, &args[0].span, env, ctx, false)?;
+        if let Ty::Tuple(elements) = &typed_arg.ty {
+            return Ok((
+                Ty::int(),
+                TypedExprKind::IntLit {
+                    text: elements.len().to_string(),
+                },
+                Effect::Puro,
+            ));
+        }
+        // Não é Tuple — cai para o dispatch normal (COUNTABLE).
+        // O caminho abaixo reinfere os args; para evitar dupla inferência,
+        // retornamos o dispatch diretamente aqui.
+        let typed_args = vec![Spanned::new(typed_arg, args[0].span)];
+        let arg_types: Vec<Ty> = typed_args.iter().map(|t| t.node.ty.clone()).collect();
+        let overload = ctx
+            .table
+            .resolve(&func_name, &arg_types, ctx.interface_registry)
+            .map_err(|e| dispatch_to_middle_error(e, *span))?;
+        let callee_ty = Ty::Function(overload.params.clone(), Box::new(overload.ret.clone()));
+        let callee_typed = TypedExpr {
+            span: callee.span,
+            ty: callee_ty,
+            tail_pos: false,
+            escape: EscapeTarget::Local,
+            effect: Effect::Puro,
+            kind: TypedExprKind::Ident {
+                name: func_name.clone(),
+            },
+        };
+        return Ok((
+            overload.ret,
+            TypedExprKind::Closure {
+                callee: Box::new(Spanned::new(callee_typed, callee.span)),
+                args: typed_args,
+                ffi_symbol: overload.ffi_symbol,
+            },
+            Effect::Puro,
+        ));
+    }
+
     // Fase 7: `$` spread — `f $ (a, b)` expande para `f a b`.
     // Se um arg é `Ident("$")`, o próximo arg deve ser `Tuple` — substitui
     // ambos pelos elementos individuais da tupla.

@@ -130,6 +130,7 @@ fn parse_apply(parser: &mut Parser) -> Result<Spanned<Expr>, FrontendError> {
             | Expr::Reassign { .. }
             | Expr::Match { .. }
             | Expr::Loop { .. }
+            | Expr::ForIn { .. }
             | Expr::Break
             | Expr::Continue
             | Expr::Return(..)
