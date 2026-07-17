@@ -919,7 +919,7 @@ o parent continua.
 **DoD Fase 1:** `kata parse` de programa com `!>`, `<!`, `select` produz AST
 correta. Snapshots insta dos novos nós. ✅
 
-### Fase 2: Sistema de tipos (`Sender::T`, `Receiver::T`, `ReceiverFactory::T`)
+### Fase 2: Sistema de tipos (`Sender::T`, `Receiver::T`, `ReceiverFactory::T`) ✅
 
 **kata-core:**
 - `Ty::Sender(Box<Ty>)`, `Ty::Receiver(Box<Ty>)`, `Ty::ReceiverFactory(Box<Ty>)`
