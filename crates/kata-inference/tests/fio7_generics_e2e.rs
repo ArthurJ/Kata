@@ -10,9 +10,8 @@
 //! 7. unify detecta inconsistência: `id` com 2 args de tipos diferentes
 //! 8. Overload não-genérica vence sobre genérica (exact > generic)
 
-use kata_core::InterfaceRegistry;
 use kata_core::ty::Ty;
-use kata_inference::{Effect, TypedExprKind, infer_module};
+use kata_inference::infer_module;
 use kata_lexer::lex;
 use kata_parser::parse;
 use kata_resolution::{ResolvedModule, load_prelude, resolve};

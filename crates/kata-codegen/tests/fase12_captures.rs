@@ -75,10 +75,10 @@ fn find_last_lambda_captures(
 ) -> Option<Vec<kata_inference::CaptureInfo>> {
     let mut result = None;
     for expr in &typed.pre_entry {
-        if let TypedExprKind::Let { value, .. } = &expr.node.kind {
-            if let TypedExprKind::Lambda { captures, .. } = &value.node.kind {
-                result = Some(captures.clone());
-            }
+        if let TypedExprKind::Let { value, .. } = &expr.node.kind
+            && let TypedExprKind::Lambda { captures, .. } = &value.node.kind
+        {
+            result = Some(captures.clone());
         }
     }
     result

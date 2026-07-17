@@ -177,7 +177,7 @@ fn hole_multiple() {
     let item = first_item(&m);
     match item {
         Item::EntryExpr(e) => match &e.node {
-            Expr::Apply { callee, args } => {
+            Expr::Apply { callee: _, args } => {
                 assert_eq!(args.len(), 2);
                 assert_eq!(args[0].node, Expr::Hole);
                 assert_eq!(args[1].node, Expr::Hole);

@@ -2,7 +2,7 @@
 //! variant qual, text literal, ident, declarations, multi-item, greedy application.
 
 use super::helpers::{first_item, parse_src};
-use kata_ast::{DirectiveArg, Expr, Item, TypeExpr};
+use kata_ast::{Expr, Item, TypeExpr};
 
 #[test]
 fn apply_plus_1_2() {

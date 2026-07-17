@@ -4,7 +4,7 @@
 
 use kata_codegen::jit_eval;
 use kata_core::InterfaceRegistry;
-use kata_core::ty::{PrimTy, Ty};
+use kata_core::ty::Ty;
 use kata_inference::infer_module;
 use kata_lexer::lex;
 use kata_monomorph::monomorphize;
@@ -60,6 +60,8 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
     }
 }
 
+/// Decodifica um SMI (val << 1 | 1) de volta para i64.
+#[allow(dead_code)]
 fn untag_smi(raw: i64) -> i64 {
     raw >> 1
 }

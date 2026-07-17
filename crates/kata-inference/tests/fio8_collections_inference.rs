@@ -13,7 +13,6 @@
 //! 31. `len (10, 20)` → `2` (síntese compile-time)
 //! 32. `3 in {1 2 3}` infere `Boolean`
 
-use kata_core::InterfaceRegistry;
 use kata_core::ty::Ty;
 use kata_inference::{TypedExprKind, TypedPattern, infer_module};
 use kata_lexer::lex;
@@ -339,5 +338,3 @@ fn dot_n_on_range_is_type_error() {
         "deve falhar com NotIndexable ou TypeMismatch, encontrado {msg}"
     );
 }
-
-

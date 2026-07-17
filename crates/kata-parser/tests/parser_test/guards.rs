@@ -55,7 +55,7 @@ fn lambda_anon_with_guards() {
                     other => panic!("expected otherwise guard, got {other:?}"),
                 }
                 // body should be present (fallback or first body)
-                assert!(!with_bindings.is_empty() == false);
+                assert!(with_bindings.is_empty());
                 // body exists but is not used when guards are present
                 let _ = body;
             }

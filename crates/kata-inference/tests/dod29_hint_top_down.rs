@@ -41,7 +41,7 @@ fn hint_top_down_lambda_ascription() {
     );
 
     // Descasca Grouping (wrapping de parênteses) para chegar ao Lambda.
-    fn peel_grouping_typed<'a>(expr: &'a TypedExprKind) -> &'a TypedExprKind {
+    fn peel_grouping_typed(expr: &TypedExprKind) -> &TypedExprKind {
         match expr {
             TypedExprKind::Grouping { inner } => &inner.node.kind,
             other => other,

@@ -160,6 +160,7 @@ match cria_tupla!()
 
 /// Action retorna Float. O fiber retorna i64 (bitcast F64→I64 no epílogo),
 /// e o caller faz bitcast I64→F64 para usar o valor.
+#[allow(clippy::approx_constant)]
 #[test]
 fn action_retorna_float() {
     let src = r#"action pi -> Float

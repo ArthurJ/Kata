@@ -8,7 +8,7 @@
 //! - DoD 31: apply de lambda inline (`(lambda x: + x 1) 42`)
 
 use kata_core::ty::Ty;
-use kata_inference::{TypedExprKind, infer_module};
+use kata_inference::infer_module;
 use kata_lexer::lex;
 use kata_parser::parse;
 use kata_resolution::load_prelude;

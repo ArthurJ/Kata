@@ -9,7 +9,7 @@
 //! são funções Kata puras com corpo lambda.
 
 use kata_codegen::jit_eval;
-use kata_core::ty::{PrimTy, Ty};
+use kata_core::ty::Ty;
 use kata_inference::infer_module;
 use kata_lexer::lex;
 use kata_monomorph::monomorphize;
@@ -47,6 +47,7 @@ fn eval_src(src: &str) -> (i64, Ty) {
 }
 
 /// Executa o pipeline até inferência (sem JIT) — para verificar erros de typeck.
+#[allow(dead_code)]
 fn infer_src(src: &str) -> Result<kata_inference::TypedModule, kata_diagnostics::MiddleError> {
     let tokens = lex(src).expect("lex deve succeed");
     let module = parse(tokens).expect("parse deve succeed");
@@ -95,6 +96,7 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
 }
 
 /// Decodifica um SMI (val << 1 | 1) de volta para i64.
+#[allow(dead_code)]
 fn untag_smi(raw: i64) -> i64 {
     raw >> 1
 }
@@ -108,6 +110,7 @@ fn read_text(raw: i64) -> String {
 }
 
 /// Reinterpreta raw como f64 (bits).
+#[allow(dead_code)]
 fn raw_to_f64(raw: i64) -> f64 {
     f64::from_bits(raw as u64)
 }
