@@ -78,7 +78,7 @@ fn extract_iter_elem_ty(ctx: &InferCtx, iterable_ty: &Ty, span: &Span) -> InferR
     let mut subs = std::collections::HashMap::new();
     unify(
         &next_method.params,
-        &[iterable_ty.clone()],
+        std::slice::from_ref(iterable_ty),
         &entry.type_params,
         &mut subs,
     )
@@ -212,6 +212,7 @@ pub(crate) fn infer_array_lit(
 // ── RangeLit ─────────────────────────────────────────────────────────────
 
 /// `[a..s..b]` ou `[a..s..=b]` → Ty::Range(A) onde A = tipo de start/step/end.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn infer_range_lit(
     start: &Spanned<Expr>,
     step: &Spanned<Expr>,

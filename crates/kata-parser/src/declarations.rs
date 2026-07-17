@@ -118,26 +118,26 @@ impl Parser {
         }
         let mut lookahead = self.pos + 1;
         // Skip optional `::(params)` or `::Param` — type params of the tipo.
-        if let Some(t) = self.tokens.get(lookahead) {
-            if matches!(t.token, Token::DoubleColon) {
+        if let Some(t) = self.tokens.get(lookahead)
+            && matches!(t.token, Token::DoubleColon)
+        {
+            lookahead += 1;
+            if let Some(t2) = self.tokens.get(lookahead)
+                && matches!(t2.token, Token::LParen)
+            {
+                let mut depth = 1;
                 lookahead += 1;
-                if let Some(t2) = self.tokens.get(lookahead) {
-                    if matches!(t2.token, Token::LParen) {
-                        let mut depth = 1;
-                        lookahead += 1;
-                        while lookahead < self.tokens.len() && depth > 0 {
-                            match &self.tokens[lookahead].token {
-                                Token::LParen => depth += 1,
-                                Token::RParen => depth -= 1,
-                                _ => {}
-                            }
-                            lookahead += 1;
-                        }
-                    } else {
-                        // `::Param` — single param without parens, skip 1 token.
-                        lookahead += 1;
+                while lookahead < self.tokens.len() && depth > 0 {
+                    match &self.tokens[lookahead].token {
+                        Token::LParen => depth += 1,
+                        Token::RParen => depth -= 1,
+                        _ => {}
                     }
+                    lookahead += 1;
                 }
+            } else {
+                // `::Param` — single param without parens, skip 1 token.
+                lookahead += 1;
             }
         }
         self.tokens
