@@ -11,11 +11,13 @@ mod action_decl;
 mod declarations;
 mod directives;
 mod expr_apply;
+mod expr_containers;
 mod expressions;
 mod imports;
 mod interface_decl;
 mod lambda;
 mod patterns;
+mod type_decls;
 mod types;
 
 use kata_ast::{Module, Span, Token, TokenWithSpan};
