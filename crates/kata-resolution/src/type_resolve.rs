@@ -97,6 +97,28 @@ pub(crate) fn resolve_type_expr(
                         .expect("Range::(A) exige exatamente 1 param");
                     Ty::Range(Box::new(elem))
                 }
+                // Fio 11: tipos intrínsecos de canal.
+                "Sender" => {
+                    let elem = resolved_params
+                        .into_iter()
+                        .next()
+                        .expect("Sender::(A) exige exatamente 1 param");
+                    Ty::Sender(Box::new(elem))
+                }
+                "Receiver" => {
+                    let elem = resolved_params
+                        .into_iter()
+                        .next()
+                        .expect("Receiver::(A) exige exatamente 1 param");
+                    Ty::Receiver(Box::new(elem))
+                }
+                "ReceiverFactory" => {
+                    let elem = resolved_params
+                        .into_iter()
+                        .next()
+                        .expect("ReceiverFactory::(A) exige exatamente 1 param");
+                    Ty::ReceiverFactory(Box::new(elem))
+                }
                 _ => {
                     // Tenta resolver como Ty::Var se o param é um nome que não está no TypeEnv
                     // (ex: "T" em Result::(T, E) dentro de uma declaração de função genérica).
@@ -161,6 +183,10 @@ pub(crate) fn collect_type_params(param_types: &[Ty], return_type: &Ty) -> Vec<S
             }
             // Fio 8: coleções intrínsecas — recursar no tipo do elemento.
             Ty::List(inner) | Ty::Array(inner) | Ty::Range(inner) => {
+                collect_into(inner, result);
+            }
+            // Fio 11: canais — recursar no tipo do canal.
+            Ty::Sender(inner) | Ty::Receiver(inner) | Ty::ReceiverFactory(inner) => {
                 collect_into(inner, result);
             }
             Ty::Tuple(elements) => {

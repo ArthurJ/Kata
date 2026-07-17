@@ -17,7 +17,7 @@ pub(crate) mod typed;
 pub use infer::generics::{Substitutions, apply_subs, unify};
 pub use infer::{InferResult, infer_module};
 pub use typed::{
-    CaptureInfo, Effect, FusedStage, TypedAction, TypedExpr, TypedExprKind, TypedFunction,
-    TypedGuardClause, TypedLambdaClause, TypedMatchArm, TypedModule, TypedPattern,
-    TypedWithBinding,
+    CaptureInfo, ChannelKind, Effect, FusedStage, TypedAction, TypedExpr, TypedExprKind,
+    TypedFunction, TypedGuardClause, TypedLambdaClause, TypedMatchArm, TypedModule,
+    TypedPattern, TypedSelectArm, TypedWithBinding,
 };

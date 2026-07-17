@@ -415,7 +415,32 @@ fn rewrite_typed_expr(
         | TypedExprKind::Ident { .. }
         | TypedExprKind::VariantQual { .. }
         | TypedExprKind::Break
-        | TypedExprKind::Continue => {}
+        | TypedExprKind::Continue
+        // Fio 11: ChannelCreate não tem sub-exprs (args consumidos pelo typeck).
+        | TypedExprKind::ChannelCreate { .. } => {}
+        // Fio 11: CSP — recursão.
+        TypedExprKind::ChannelSend { channel, value } => {
+            rewrite_typed_expr(channel, ctx, instance_map, acc);
+            rewrite_typed_expr(value, ctx, instance_map, acc);
+        }
+        TypedExprKind::ChannelRecv { channel, .. } => {
+            rewrite_typed_expr(channel, ctx, instance_map, acc);
+        }
+        TypedExprKind::Select { arms, timeout_ms, timeout_body } => {
+            for arm in arms {
+                rewrite_typed_expr(&mut arm.channel, ctx, instance_map, acc);
+                rewrite_typed_expr(&mut arm.body, ctx, instance_map, acc);
+            }
+            if let Some(tm) = timeout_ms {
+                rewrite_typed_expr(tm, ctx, instance_map, acc);
+            }
+            if let Some(tb) = timeout_body {
+                rewrite_typed_expr(tb, ctx, instance_map, acc);
+            }
+        }
+        TypedExprKind::Fork { args, .. } => {
+            rewrite_typed_expr(args, ctx, instance_map, acc);
+        }
     }
 }
 

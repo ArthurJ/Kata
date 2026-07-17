@@ -45,6 +45,15 @@ pub enum Ty {
     Array(Box<Ty>),
     /// Range lazy: `[a..s..b]` — start, step, end. Genérico sobre A.
     Range(Box<Ty>),
+    /// Sender de canal — `Sender::T`. Pode fazer `!>`.
+    /// Funciona para Channel (rendezvous), Queue (buffered), Broadcast.
+    Sender(Box<Ty>),
+    /// Receiver de canal — `Receiver::T`. Pode fazer `<!`.
+    /// Funciona para Channel (rendezvous), Queue (buffered), Broadcast.
+    Receiver(Box<Ty>),
+    /// Fábrica de receivers para broadcast — `ReceiverFactory::T`.
+    /// Chamada como action produz `Receiver::T`.
+    ReceiverFactory(Box<Ty>),
 }
 
 /// Mapeamento de representação FFI.

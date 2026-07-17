@@ -172,6 +172,30 @@ pub(crate) fn collect_free_vars(
                 collect_free_vars(&cb.node, local_bindings, out);
             }
         }
+        // ── Fio 11: CSP — recursão ──
+        TypedExprKind::ChannelSend { channel, value } => {
+            collect_free_vars(&channel.node, local_bindings, out);
+            collect_free_vars(&value.node, local_bindings, out);
+        }
+        TypedExprKind::ChannelRecv { channel, .. } => {
+            collect_free_vars(&channel.node, local_bindings, out);
+        }
+        TypedExprKind::Select { arms, timeout_ms, timeout_body } => {
+            for arm in arms {
+                collect_free_vars(&arm.channel.node, local_bindings, out);
+                collect_free_vars(&arm.body.node, local_bindings, out);
+            }
+            if let Some(tm) = timeout_ms {
+                collect_free_vars(&tm.node, local_bindings, out);
+            }
+            if let Some(tb) = timeout_body {
+                collect_free_vars(&tb.node, local_bindings, out);
+            }
+        }
+        TypedExprKind::ChannelCreate { .. } => {}
+        TypedExprKind::Fork { args, .. } => {
+            collect_free_vars(&args.node, local_bindings, out);
+        }
         // Folhas sem sub-expressões
         TypedExprKind::IntLit { .. }
         | TypedExprKind::FloatLit { .. }

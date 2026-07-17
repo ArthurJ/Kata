@@ -320,7 +320,10 @@ pub(crate) fn check_exhaustiveness(
         | Ty::Tuple(_)
         | Ty::List(_)
         | Ty::Array(_)
-        | Ty::Range(_) => {
+        | Ty::Range(_)
+        | Ty::Sender(_)
+        | Ty::Receiver(_)
+        | Ty::ReceiverFactory(_) => {
             // Tipos infinitos exigem otherwise/wildcard.
             Err(MiddleError::MissingOtherwise {
                 span: (*span).into(),

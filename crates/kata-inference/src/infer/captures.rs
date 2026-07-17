@@ -254,6 +254,30 @@ fn collect_captures_in_expr(expr: &mut TypedExpr, outer_env: &TypeEnv) {
                 collect_captures_in_expr(&mut cb.node, outer_env);
             }
         }
+        // ── Fio 11: CSP — recursão ──
+        TypedExprKind::ChannelSend { channel, value } => {
+            collect_captures_in_expr(&mut channel.node, outer_env);
+            collect_captures_in_expr(&mut value.node, outer_env);
+        }
+        TypedExprKind::ChannelRecv { channel, .. } => {
+            collect_captures_in_expr(&mut channel.node, outer_env);
+        }
+        TypedExprKind::Select { arms, timeout_ms, timeout_body } => {
+            for arm in arms {
+                collect_captures_in_expr(&mut arm.channel.node, outer_env);
+                collect_captures_in_expr(&mut arm.body.node, outer_env);
+            }
+            if let Some(tm) = timeout_ms {
+                collect_captures_in_expr(&mut tm.node, outer_env);
+            }
+            if let Some(tb) = timeout_body {
+                collect_captures_in_expr(&mut tb.node, outer_env);
+            }
+        }
+        TypedExprKind::ChannelCreate { .. } => {}
+        TypedExprKind::Fork { args, .. } => {
+            collect_captures_in_expr(&mut args.node, outer_env);
+        }
         // Folhas sem sub-expressões
         TypedExprKind::IntLit { .. }
         | TypedExprKind::FloatLit { .. }

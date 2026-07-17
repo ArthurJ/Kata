@@ -105,6 +105,20 @@ impl Ty {
                 name: "Range".into(),
                 fields: Vec::new(),
             },
+            // Sender/Receiver/ReceiverFactory: handles de canal — heap types
+            // (ponteiro na arena). Mapeados como Struct para reflexão runtime.
+            Ty::Sender(_) => TypeShape::Struct {
+                name: "Sender".into(),
+                fields: Vec::new(),
+            },
+            Ty::Receiver(_) => TypeShape::Struct {
+                name: "Receiver".into(),
+                fields: Vec::new(),
+            },
+            Ty::ReceiverFactory(_) => TypeShape::Struct {
+                name: "ReceiverFactory".into(),
+                fields: Vec::new(),
+            },
         }
     }
 }

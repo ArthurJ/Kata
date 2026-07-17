@@ -414,12 +414,21 @@ pub(crate) fn infer_expr_hinted(
             return super::collections::infer_in(item, collection, span, env, ctx, tail_pos);
         }
 
-        // ── Fio 11: CSP — typeck implementado na Fase 2 ──
-        Expr::ChannelSend { .. } | Expr::ChannelRecv { .. } | Expr::Select { .. } => {
-            return Err(MiddleError::UnboundName {
-                name: "operação CSP (canais/select) — typeck pendente na Fase 2 do Fio 11".into(),
-                span: (*span).into(),
-            });
+        // ── Fio 11: CSP — typeck em csp.rs ──
+        Expr::ChannelSend { channel, value } => {
+            return super::csp::infer_channel_send(
+                channel, value, span, env, ctx, tail_pos,
+            );
+        }
+        Expr::ChannelRecv { channel, bind_name } => {
+            return super::csp::infer_channel_recv(
+                channel, bind_name, span, env, ctx, tail_pos,
+            );
+        }
+        Expr::Select { arms, timeout_ms, timeout_body } => {
+            return super::csp::infer_select(
+                arms, timeout_ms, timeout_body, span, env, ctx, tail_pos,
+            );
         }
     };
 

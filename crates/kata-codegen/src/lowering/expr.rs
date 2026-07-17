@@ -566,5 +566,15 @@ pub(crate) fn lower_expr(
             ret_ty,
             ctx,
         ),
+
+        // ── Fio 11: CSP — lowering das Fases 5-6 ──
+        TypedExprKind::ChannelSend { .. }
+        | TypedExprKind::ChannelRecv { .. }
+        | TypedExprKind::Select { .. }
+        | TypedExprKind::ChannelCreate { .. }
+        | TypedExprKind::Fork { .. } => Err(super::CodegenError::UnsupportedNode(format!(
+            "CSP lowering pendente (Fase 5-6 do Fio 11): {:?}",
+            expr.kind
+        ))),
     }
 }

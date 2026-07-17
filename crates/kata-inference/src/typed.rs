@@ -295,6 +295,66 @@ pub enum TypedExprKind {
         result_elem_ty: Ty,
         ret_ty: Ty,
     },
+
+    // ── Fio 11: CSP — canais, select, fork ──────────────────────
+    /// `tx !> valor` — envio por canal (effect = ChannelOp).
+    ChannelSend {
+        channel: Box<Spanned<TypedExpr>>,
+        value: Box<Spanned<TypedExpr>>,
+    },
+
+    /// `rx <! nome` — recebimento de canal (effect = ChannelOp).
+    /// `recv_ty` é o tipo do valor recebido (inferido do tipo do canal).
+    ChannelRecv {
+        channel: Box<Spanned<TypedExpr>>,
+        recv_ty: Ty,
+        bind_name: String,
+    },
+
+    /// `select` com braços (effect = ChannelOp).
+    Select {
+        arms: Vec<TypedSelectArm>,
+        timeout_ms: Option<Box<Spanned<TypedExpr>>>,
+        timeout_body: Option<Box<Spanned<TypedExpr>>>,
+    },
+
+    /// `channel!()`, `queue!(N)`, `broadcast!()` — criação de canal.
+    /// Interceptado em `infer_apply` (não despacha para DispatchTable).
+    /// Retorna `(Sender::T, Receiver::T)` ou `(Sender::T, ReceiverFactory::T)`.
+    ChannelCreate {
+        /// Tipo de canal: rendezvous, bufferizado, ou broadcast.
+        kind: ChannelKind,
+        /// Tipo do valor transportado (`T` em `Sender::T`).
+        elem_ty: Ty,
+    },
+
+    /// `fork!(action, args)` — spawn de fiber (effect = Spawn).
+    /// `action_name` é o nome da Action a executar no novo fiber.
+    /// `args` é a tupla de argumentos tipados.
+    Fork {
+        action_name: String,
+        args: Box<Spanned<TypedExpr>>,
+    },
+}
+
+/// Tipo de canal criado por `channel!()`, `queue!(N)`, `broadcast!()`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ChannelKind {
+    /// `channel!()` — rendezvous (síncrono, sem buffer).
+    Rendezvous,
+    /// `queue!(N)` — bufferizado com capacidade N.
+    Buffered(i64),
+    /// `broadcast!()` — pub-sub, latest only.
+    Broadcast,
+}
+
+/// Braço de `select` na TAST.
+#[derive(Debug, Clone)]
+pub struct TypedSelectArm {
+    pub channel: Spanned<TypedExpr>,
+    pub recv_ty: Ty,
+    pub bind_name: String,
+    pub body: Spanned<TypedExpr>,
 }
 
 /// Um estágio de um `FusedStream` — transformação individual na cadeia.

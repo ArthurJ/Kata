@@ -182,6 +182,33 @@ fn collect_action_calls(
                 collect_action_calls(&cb.node, &cb.span, out);
             }
         }
+        // ── Fio 11: CSP — recursão ──
+        TypedExprKind::ChannelSend { channel, value } => {
+            collect_action_calls(&channel.node, &channel.span, out);
+            collect_action_calls(&value.node, &value.span, out);
+        }
+        TypedExprKind::ChannelRecv { channel, .. } => {
+            collect_action_calls(&channel.node, &channel.span, out);
+        }
+        TypedExprKind::Select { arms, timeout_ms, timeout_body } => {
+            for arm in arms {
+                collect_action_calls(&arm.channel.node, &arm.channel.span, out);
+                collect_action_calls(&arm.body.node, &arm.body.span, out);
+            }
+            if let Some(tm) = timeout_ms {
+                collect_action_calls(&tm.node, &tm.span, out);
+            }
+            if let Some(tb) = timeout_body {
+                collect_action_calls(&tb.node, &tb.span, out);
+            }
+        }
+        // ChannelCreate não tem sub-expressões (args já foram consumidos pelo typeck).
+        TypedExprKind::ChannelCreate { .. } => {}
+        // Fork spawna uma Action — registra no call graph.
+        TypedExprKind::Fork { action_name, args } => {
+            out.push((action_name.clone(), expr.span));
+            collect_action_calls(&args.node, &args.span, out);
+        }
         // Folhas sem sub-expressões.
         TypedExprKind::IntLit { .. }
         | TypedExprKind::FloatLit { .. }

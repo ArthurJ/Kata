@@ -86,6 +86,12 @@ fn unify_one(
         (Ty::List(p), Ty::List(a)) => unify_one(p, a, type_params, subs),
         (Ty::Array(p), Ty::Array(a)) => unify_one(p, a, type_params, subs),
         (Ty::Range(p), Ty::Range(a)) => unify_one(p, a, type_params, subs),
+        // Fio 11: Sender/Receiver/ReceiverFactory — unifica o tipo do canal.
+        (Ty::Sender(p), Ty::Sender(a)) => unify_one(p, a, type_params, subs),
+        (Ty::Receiver(p), Ty::Receiver(a)) => unify_one(p, a, type_params, subs),
+        (Ty::ReceiverFactory(p), Ty::ReceiverFactory(a)) => {
+            unify_one(p, a, type_params, subs)
+        }
 
         // Match estrutural para tipos concretos
         _ if param == arg => Ok(()),
@@ -125,6 +131,10 @@ pub fn apply_subs(ty: &Ty, subs: &Substitutions) -> Ty {
         Ty::List(elem) => Ty::List(Box::new(apply_subs(elem, subs))),
         Ty::Array(elem) => Ty::Array(Box::new(apply_subs(elem, subs))),
         Ty::Range(elem) => Ty::Range(Box::new(apply_subs(elem, subs))),
+        // Fio 11: Sender/Receiver/ReceiverFactory — substitui no tipo do canal.
+        Ty::Sender(elem) => Ty::Sender(Box::new(apply_subs(elem, subs))),
+        Ty::Receiver(elem) => Ty::Receiver(Box::new(apply_subs(elem, subs))),
+        Ty::ReceiverFactory(elem) => Ty::ReceiverFactory(Box::new(apply_subs(elem, subs))),
         _ => ty.clone(),
     }
 }
