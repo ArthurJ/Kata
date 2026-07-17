@@ -15,6 +15,7 @@ use std::collections::HashMap;
 use crate::typed::{Effect, TypedExpr, TypedExprKind};
 
 use super::apply_lambda::{infer_apply_lambda, infer_apply_lambda_with_hint};
+use super::collections_hof::{infer_filter, infer_fold, infer_map};
 use super::expr::{InferCtx, infer_expr};
 use super::format_synthesis::infer_format;
 use super::helpers::{
@@ -99,6 +100,19 @@ pub(crate) fn infer_apply(
     // inline. Não passa pelo DispatchTable.
     if func_name == "format" && args.len() == 2 {
         return infer_format(callee, args, span, env, ctx);
+    }
+
+    // Fio 8 Fase 8: map/filter/fold — interceptados por nome.
+    // Não passam pelo DispatchTable. O typeck descobre o tipo concreto
+    // do container e produz nó TAST dedicado.
+    if func_name == "map" && args.len() == 2 {
+        return infer_map(args, span, env, ctx);
+    }
+    if func_name == "filter" && args.len() == 2 {
+        return infer_filter(args, span, env, ctx);
+    }
+    if func_name == "fold" && args.len() == 3 {
+        return infer_fold(args, span, env, ctx);
     }
 
     // Fio 8: `len tuple` — síntese compile-time.

@@ -226,3 +226,16 @@ string_concat :: Text Text => Text
 
 @ffi("kata_rt_text_replace_first")
 text_replace :: Text Text => Text
+
+# ── Higher-order: map/filter/fold (Fio 8 Fase 8) ──────────────
+# Interceptados no infer_apply — não passam pelo DispatchTable.
+# A assinatura é documentação; o typeck faz dispatch por tipo concreto.
+
+@builtin("map")
+map :: (A -> B) List::A => List::B
+
+@builtin("filter")
+filter :: (A -> Boolean) List::A => List::A
+
+@builtin("fold")
+fold :: (A B -> A) A List::B => A

@@ -51,7 +51,8 @@ pub use float::{
 pub use io::{kata_rt_panic, kata_rt_print, kata_rt_println};
 pub use list::{
     kata_rt_list_cons, kata_rt_list_contains, kata_rt_list_get_checked, kata_rt_list_head,
-    kata_rt_list_is_empty, kata_rt_list_len, kata_rt_list_nil, kata_rt_list_tail,
+    kata_rt_list_is_empty, kata_rt_list_len, kata_rt_list_nil, kata_rt_list_reverse,
+    kata_rt_list_tail,
 };
 pub use range::kata_rt_range_alloc;
 pub use rational::{

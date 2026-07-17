@@ -120,8 +120,7 @@ Fio 1: Fundação + Aritmética + CLI
 │   └── Fio 8: Coleções, ITERABLE, Stream Fusion — ATIVO
 │       │   (List, Array, Range, map/filter/fold, .N, len, INDEXABLE,
 │       │    COUNTABLE, `for x in` iteration)
-│       │   Fases 1-4 ✅, Fase 5 parcial (inferência + sintaxe ::A ✅,
-│       │    .N/len/testes pendentes)
+│       │   Fases 1-8 ✅ (DoDs 1-59, 780 testes). Pendente: stream fusion (DoD 60).
 │       │
 │       └── Fio 13: Dict, Set (HAMT)
 │

@@ -218,6 +218,30 @@ fn collect_captures_in_expr(expr: &mut TypedExpr, outer_env: &TypeEnv) {
             collect_captures_in_expr(&mut item.node, outer_env);
             collect_captures_in_expr(&mut collection.node, outer_env);
         }
+        // ── Fio 8 Fase 8: map/filter/fold — recursão ──
+        TypedExprKind::Map {
+            callback,
+            collection,
+            ..
+        }
+        | TypedExprKind::Filter {
+            callback,
+            collection,
+            ..
+        } => {
+            collect_captures_in_expr(&mut callback.node, outer_env);
+            collect_captures_in_expr(&mut collection.node, outer_env);
+        }
+        TypedExprKind::Fold {
+            callback,
+            initial,
+            collection,
+            ..
+        } => {
+            collect_captures_in_expr(&mut callback.node, outer_env);
+            collect_captures_in_expr(&mut initial.node, outer_env);
+            collect_captures_in_expr(&mut collection.node, outer_env);
+        }
         // Folhas sem sub-expressões
         TypedExprKind::IntLit { .. }
         | TypedExprKind::FloatLit { .. }
@@ -369,6 +393,30 @@ fn collect_free_vars(
         }
         TypedExprKind::In { item, collection } => {
             collect_free_vars(&item.node, local_bindings, out);
+            collect_free_vars(&collection.node, local_bindings, out);
+        }
+        // ── Fio 8 Fase 8: map/filter/fold — recursão ──
+        TypedExprKind::Map {
+            callback,
+            collection,
+            ..
+        }
+        | TypedExprKind::Filter {
+            callback,
+            collection,
+            ..
+        } => {
+            collect_free_vars(&callback.node, local_bindings, out);
+            collect_free_vars(&collection.node, local_bindings, out);
+        }
+        TypedExprKind::Fold {
+            callback,
+            initial,
+            collection,
+            ..
+        } => {
+            collect_free_vars(&callback.node, local_bindings, out);
+            collect_free_vars(&initial.node, local_bindings, out);
             collect_free_vars(&collection.node, local_bindings, out);
         }
         // Folhas sem sub-expressões

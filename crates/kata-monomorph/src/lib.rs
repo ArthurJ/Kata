@@ -367,6 +367,31 @@ fn rewrite_typed_expr(
             rewrite_typed_expr(collection, ctx, instance_map, acc);
         }
 
+        // ── Fio 8 Fase 8: map/filter/fold — recursão ──
+        TypedExprKind::Map {
+            callback,
+            collection,
+            ..
+        }
+        | TypedExprKind::Filter {
+            callback,
+            collection,
+            ..
+        } => {
+            rewrite_typed_expr(callback, ctx, instance_map, acc);
+            rewrite_typed_expr(collection, ctx, instance_map, acc);
+        }
+        TypedExprKind::Fold {
+            callback,
+            initial,
+            collection,
+            ..
+        } => {
+            rewrite_typed_expr(callback, ctx, instance_map, acc);
+            rewrite_typed_expr(initial, ctx, instance_map, acc);
+            rewrite_typed_expr(collection, ctx, instance_map, acc);
+        }
+
         // Folhas — sem sub-expressões.
         TypedExprKind::IntLit { .. }
         | TypedExprKind::FloatLit { .. }

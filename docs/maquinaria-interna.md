@@ -933,6 +933,38 @@ e `loop_continue_block` do LowerCtx. Cria três blocos: `loop_block`,
 - **Regra:** `band` de dois I8 precisa `uextend(I64, result)` antes de
   retornar do entry point (que espera I64). `icmp` retorna I8, não I64.
 
+### Lowering de map/filter/fold (Fase 8)
+
+**Interceptação no `infer_apply`** (não via DispatchTable): `map`/`filter`/`fold`
+são interceptados por nome no `infer_apply` antes do dispatch normal, como
+`format` e `len` já fazem. O typeck descobre o tipo concreto do container no
+call site e produz `TypedExprKind::Map`/`Filter`/`Fold`.
+
+**Codegen** (`collections_hof.rs`): cada função itera pela coleção concreta
+(List/Array/Range), chama o callback via `call_indirect`, e constrói o resultado.
+
+- **Map:** percorre coleção, chama callback(elem), constrói Cons chain com
+  `prepend` (inverte ordem), chama `kata_rt_list_reverse` no final. Se input
+  era Array, converte List→Array via `list_to_array`.
+- **Filter:** mesmo padrão, mas só faz `cons` se o predicado retornar true
+  (branch `cons_block`/`skip_block`). Reverte no final.
+- **Fold:** percorre coleção, `acc = call_indirect(callback, acc, elem)`,
+  retorna `acc`. Não constrói coleção.
+
+**Operador como callback standalone:** `fold + 0 [1 2 3]` — o `+` é
+`Expr::Ident` que só é resolvido via DispatchTable quando aparece como callee
+em `Apply`. Como callback standalone, `infer_expr_hinted` não o encontra.
+**Fix:** `resolve_operator_callback` em `collections_hof.rs` detecta
+`Expr::Ident` no DispatchTable e constrói um lambda sintético
+`lambda __hof_0 __hof_1 ...: op __hof_0 __hof_1 ...` que o pipeline normal
+sabe inferir e gerar.
+
+**SMI arithmetic no iterador de Range:** `iadd` de dois SMI-tagged values
+produz SMI inválido (`(a<<1|1) + (b<<1|1) = (a+b)<<1 | 2`, LSB=0 em vez de 1).
+**Fix:** `iadd_imm(result, -1)` após cada `iadd` no iterador de Range. Aplicado
+em 4 sites: `lower_map`, `lower_filter`, `lower_fold` (Range arm), e `ForIn`
+em `expr.rs` (bug pré-existente).
+
 ---
 
 ## Resumo: Invariantes de design

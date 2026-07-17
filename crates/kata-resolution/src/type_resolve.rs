@@ -168,6 +168,12 @@ pub(crate) fn collect_type_params(param_types: &[Ty], return_type: &Ty) -> Vec<S
                     collect_into(elem, result);
                 }
             }
+            Ty::Function(params, ret) => {
+                for p in params {
+                    collect_into(p, result);
+                }
+                collect_into(ret, result);
+            }
             _ => {}
         }
     }

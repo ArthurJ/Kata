@@ -110,3 +110,24 @@ pub extern "C" fn kata_rt_list_contains(ptr: i64, item: i64) -> i64 {
     }
     0
 }
+
+/// Reverte uma lista Cons (O(n), aloca nova lista na arena).
+///
+/// Percorre a lista original de frente, faz `cons(head, acc)` para cada
+/// elemento — o resultado é a lista reversa. Usado por map/filter no
+/// codegen: constroem a lista com prepend (que inverte) e chamam reverse
+/// para restaurar a ordem original.
+///
+/// # Safety
+/// `ptr` é um ponteiro para Cons cell ou 0 (Nil). `arena_handle` é válido.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_list_reverse(ptr: i64, arena_handle: i64) -> i64 {
+    let mut acc: i64 = 0; // Nil
+    let mut current = ptr;
+    while current != 0 {
+        let head = unsafe { std::ptr::read_unaligned(current as *const i64) };
+        acc = kata_rt_list_cons(head, acc, arena_handle);
+        current = unsafe { std::ptr::read_unaligned((current as *const u8).add(8) as *const i64) };
+    }
+    acc
+}

@@ -882,7 +882,7 @@ source + expressão, compilar + executar via JIT, verificar output).
 | 55 | `3 in {1 2 3}` → `true` (CONTAINS dispatch) | 7 | ✅ |
 | 56 | `5 in [0..2..10]` → `true` (Range CONTAINS O(1)) | 7 | ✅ |
 
-### Fase 8: map/filter/fold + stream fusion
+### Fase 8: map/filter/fold + stream fusion ✅ (DoDs 57-59)
 
 **Arquivos:**
 - `crates/kata-inference/src/infer/` — reconhecer `@builtin("map"/"filter"/"fold")` e gerar nós TAST
@@ -892,14 +892,20 @@ source + expressão, compilar + executar via JIT, verificar output).
 **Prelude adiciona:**
 ```kata
 @builtin("map")
-map :: (A -> B) ITERABLE(A) => List(B)
+map :: (A -> B) List::A => List::B
 
 @builtin("filter")
-filter :: (A -> Boolean) ITERABLE(A) => List(A)
+filter :: (A -> Boolean) List::A => List::A
 
 @builtin("fold")
-fold :: (A B -> A) A ITERABLE(B) => A
+fold :: (A B -> A) A List::B => A
 ```
+
+**Decisão de design (Arthur, 2026-07-17):** NÃO usar interfaces em assinaturas
+genéricas — `unify` não casa `Generic("ITERABLE", [A])` com `List(Int)`.
+Interceptar map/filter/fold no `infer_apply` por nome (como `format` e `len`).
+map/filter retornam sempre List; para Array, o codegen converte List→Array no
+final. Stream fusion postergada para fase separada (DoD 60).
 
 **@builtin no typeck:** Quando vê `@builtin("map")` em uma assinatura,
 o typeck intercepta a chamada e produz `TypedExprKind::Map` em vez de
@@ -918,10 +924,10 @@ em um único loop, evitando coleções intermediárias.
 **DoDs:**
 | # | Descrição | Fase |
 |---|---|---|
-| 57 | `map (+ 10 _) [1 2 3]` → `[11 12 13]` | 8 |
-| 58 | `filter (> _ 5) {1 8 3 9}` → `{8 9}` | 8 |
-| 59 | `fold + 0 {1 2 3}` → `6` | 8 |
-| 60 | `map (+ 10 _) (filter (> _ 5) {1 8 3 9})` → `{18 19}` (stream fusion) | 8 |
+| 57 | `map (+ 10 _) [1 2 3]` → `[11 12 13]` | 8 | ✅ |
+| 58 | `filter (> _ 5) [1 8 3 9]` → `[8 9]` | 8 | ✅ |
+| 59 | `fold + 0 [1 2 3]` → `6` | 8 | ✅ |
+| 60 | `map (+ 10 _) (filter (> _ 5) [1 8 3 9])` → `[18 19]` (stream fusion) | — | Pendente (fase separada) |
 
 ## Atualização da documentação
 

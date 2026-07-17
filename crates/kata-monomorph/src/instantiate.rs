@@ -416,6 +416,72 @@ fn instantiate_kind(kind: &TypedExprKind, subs: &Substitutions) -> TypedExprKind
                 collection.span,
             )),
         },
+
+        // ── Fio 8 Fase 8: map/filter/fold — instanciar sub-exprs + Ty ──
+        TypedExprKind::Map {
+            callback,
+            collection,
+            coll_ty,
+            elem_ty,
+            ret_ty,
+        } => TypedExprKind::Map {
+            callback: Box::new(Spanned::new(
+                instantiate_typed_expr(&callback.node, subs),
+                callback.span,
+            )),
+            collection: Box::new(Spanned::new(
+                instantiate_typed_expr(&collection.node, subs),
+                collection.span,
+            )),
+            coll_ty: apply_subs(coll_ty, subs),
+            elem_ty: apply_subs(elem_ty, subs),
+            ret_ty: apply_subs(ret_ty, subs),
+        },
+
+        TypedExprKind::Filter {
+            callback,
+            collection,
+            coll_ty,
+            elem_ty,
+            ret_ty,
+        } => TypedExprKind::Filter {
+            callback: Box::new(Spanned::new(
+                instantiate_typed_expr(&callback.node, subs),
+                callback.span,
+            )),
+            collection: Box::new(Spanned::new(
+                instantiate_typed_expr(&collection.node, subs),
+                collection.span,
+            )),
+            coll_ty: apply_subs(coll_ty, subs),
+            elem_ty: apply_subs(elem_ty, subs),
+            ret_ty: apply_subs(ret_ty, subs),
+        },
+
+        TypedExprKind::Fold {
+            callback,
+            initial,
+            collection,
+            coll_ty,
+            elem_ty,
+            ret_ty,
+        } => TypedExprKind::Fold {
+            callback: Box::new(Spanned::new(
+                instantiate_typed_expr(&callback.node, subs),
+                callback.span,
+            )),
+            initial: Box::new(Spanned::new(
+                instantiate_typed_expr(&initial.node, subs),
+                initial.span,
+            )),
+            collection: Box::new(Spanned::new(
+                instantiate_typed_expr(&collection.node, subs),
+                collection.span,
+            )),
+            coll_ty: apply_subs(coll_ty, subs),
+            elem_ty: apply_subs(elem_ty, subs),
+            ret_ty: apply_subs(ret_ty, subs),
+        },
     }
 }
 

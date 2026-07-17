@@ -145,6 +145,30 @@ fn collect_action_calls(
             collect_action_calls(&item.node, &item.span, out);
             collect_action_calls(&collection.node, &collection.span, out);
         }
+        // ── Fio 8 Fase 8: map/filter/fold — recursão ──
+        TypedExprKind::Map {
+            callback,
+            collection,
+            ..
+        }
+        | TypedExprKind::Filter {
+            callback,
+            collection,
+            ..
+        } => {
+            collect_action_calls(&callback.node, &callback.span, out);
+            collect_action_calls(&collection.node, &collection.span, out);
+        }
+        TypedExprKind::Fold {
+            callback,
+            initial,
+            collection,
+            ..
+        } => {
+            collect_action_calls(&callback.node, &callback.span, out);
+            collect_action_calls(&initial.node, &initial.span, out);
+            collect_action_calls(&collection.node, &collection.span, out);
+        }
         // Folhas sem sub-expressões.
         TypedExprKind::IntLit { .. }
         | TypedExprKind::FloatLit { .. }

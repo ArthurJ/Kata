@@ -336,6 +336,12 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
             sig.params.push(AbiParam::new(I64)); // item
             sig.returns.push(AbiParam::new(I64)); // bool
         }
+        // list_reverse: (ptr, arena) -> ptr (inverte Cons chain)
+        FfiSymbol::ListReverse => {
+            sig.params.push(AbiParam::new(I64)); // ptr
+            sig.params.push(AbiParam::new(I64)); // arena
+            sig.returns.push(AbiParam::new(I64)); // ptr (reversed list)
+        }
     }
 
     sig

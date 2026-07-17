@@ -19,6 +19,7 @@ mod action_call;
 mod action_def;
 mod clause;
 mod closure;
+mod collections_hof;
 mod control_flow;
 mod expr;
 mod function_def;

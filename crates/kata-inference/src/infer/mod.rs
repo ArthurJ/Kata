@@ -15,6 +15,7 @@ mod apply_lambda;
 mod ascription;
 mod captures;
 mod collections;
+mod collections_hof;
 mod const_eval;
 mod constructors;
 mod constructors_enum_pred;

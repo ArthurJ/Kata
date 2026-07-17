@@ -245,6 +245,38 @@ pub enum TypedExprKind {
         item: Box<Spanned<TypedExpr>>,
         collection: Box<Spanned<TypedExpr>>,
     },
+
+    // ── Fio 8 Fase 8: Higher-order — map/filter/fold ──────────
+    /// `map f coll` — aplica f a cada elemento, retorna List(B).
+    /// coll_ty é o tipo concreto (List/Array/Range). ret_ty é List(B).
+    /// Se coll_ty é Array, o codegen converte List→Array no final.
+    Map {
+        callback: Box<Spanned<TypedExpr>>,
+        collection: Box<Spanned<TypedExpr>>,
+        coll_ty: Ty,
+        elem_ty: Ty,
+        ret_ty: Ty,
+    },
+
+    /// `filter f coll` — filtra elementos por predicado, retorna List(A).
+    Filter {
+        callback: Box<Spanned<TypedExpr>>,
+        collection: Box<Spanned<TypedExpr>>,
+        coll_ty: Ty,
+        elem_ty: Ty,
+        ret_ty: Ty,
+    },
+
+    /// `fold f init coll` — reduz coleção com função e acumulador.
+    /// ret_ty é o tipo do acumulador (init).
+    Fold {
+        callback: Box<Spanned<TypedExpr>>,
+        initial: Box<Spanned<TypedExpr>>,
+        collection: Box<Spanned<TypedExpr>>,
+        coll_ty: Ty,
+        elem_ty: Ty,
+        ret_ty: Ty,
+    },
 }
 
 /// Informação sobre uma variável capturada por uma closure.
@@ -299,6 +331,7 @@ pub struct TypedWithBinding {
 /// se `True` é variante do enum do scrutinee. Para `Ident("x")` que não é
 /// variante, o typeck mantém `Ident` e liga `x` ao tipo do scrutinee.
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum TypedPattern {
     /// `x` — liga o valor ao nome. `ty` é o tipo do valor ligado.
     Ident { name: String, ty: Ty },

@@ -133,6 +133,8 @@ pub enum FfiSymbol {
     ListContains,
     /// `kata_rt_array_contains(ptr, item) -> i64` — percorre array.
     ArrayContains,
+    /// `kata_rt_list_reverse(ptr, arena) -> ptr` — inverte Cons chain.
+    ListReverse,
 }
 
 impl FfiSymbol {
@@ -216,6 +218,7 @@ impl FfiSymbol {
             FfiSymbol::RangeAlloc => "kata_rt_range_alloc",
             FfiSymbol::ListContains => "kata_rt_list_contains",
             FfiSymbol::ArrayContains => "kata_rt_array_contains",
+            FfiSymbol::ListReverse => "kata_rt_list_reverse",
         }
     }
 
@@ -294,6 +297,7 @@ impl FfiSymbol {
             FfiSymbol::RangeAlloc => Ty::int(),
             FfiSymbol::ListContains => Ty::boolean(),
             FfiSymbol::ArrayContains => Ty::boolean(),
+            FfiSymbol::ListReverse => Ty::int(),
         }
     }
 
@@ -377,6 +381,7 @@ impl FfiSymbol {
             FfiSymbol::RangeAlloc,
             FfiSymbol::ListContains,
             FfiSymbol::ArrayContains,
+            FfiSymbol::ListReverse,
         ];
         all.iter().copied().find(|s| s.symbol_name() == name)
     }

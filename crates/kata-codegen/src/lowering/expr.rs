@@ -16,6 +16,7 @@ use super::_match::lower_match;
 use super::LowerCtx;
 use super::action_call::lower_action_call;
 use super::closure::lower_closure;
+use super::collections_hof::{lower_filter, lower_fold, lower_map};
 use super::control_flow::lower_control_flow;
 use crate::ffi_sigs::ty_to_clif;
 use crate::smi::{encode_smi, fits_smi, parse_int_literal};
@@ -812,7 +813,9 @@ pub(crate) fn lower_expr(
                     ctx.builder.def_var(elem_var, elem_val);
 
                     // current += step
-                    let next = ctx.builder.ins().iadd(current, step_val);
+                    let next_raw = ctx.builder.ins().iadd(current, step_val);
+                    // SMI fix: (a<<1|1) + (b<<1|1) = (a+b)<<1 | 2. Subtrair 1 restaura tag.
+                    let next = ctx.builder.ins().iadd_imm(next_raw, -1);
                     ctx.builder.def_var(current_var, next);
 
                     for e in body {
@@ -915,5 +918,31 @@ pub(crate) fn lower_expr(
                 ))),
             }
         }
+
+        // ── Fio 8 Fase 8: map/filter/fold — lowering ──
+        TypedExprKind::Map {
+            callback,
+            collection,
+            coll_ty,
+            elem_ty,
+            ret_ty,
+        } => lower_map(callback, collection, coll_ty, elem_ty, ret_ty, ctx),
+
+        TypedExprKind::Filter {
+            callback,
+            collection,
+            coll_ty,
+            elem_ty,
+            ret_ty,
+        } => lower_filter(callback, collection, coll_ty, elem_ty, ret_ty, ctx),
+
+        TypedExprKind::Fold {
+            callback,
+            initial,
+            collection,
+            coll_ty,
+            elem_ty,
+            ret_ty,
+        } => lower_fold(callback, initial, collection, coll_ty, elem_ty, ret_ty, ctx),
     }
 }
