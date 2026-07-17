@@ -277,6 +277,43 @@ pub enum TypedExprKind {
         elem_ty: Ty,
         ret_ty: Ty,
     },
+
+    /// `map f (filter g coll)` (e composições) — stream fusion (DoD 60).
+    /// Itera a coleção fonte aplicando os estágios em cadeia num único loop,
+    /// sem materializar listas intermediárias.
+    ///
+    /// `stages` é uma cadeia de transformações: Filter aplica o predicado
+    /// (descarta elemento se false), Map aplica a transformação.
+    /// `source_elem_ty` é o tipo do elemento da coleção fonte.
+    /// `result_elem_ty` é o tipo do elemento após todos os estágios.
+    /// `ret_ty` é sempre `List(result_elem_ty)`.
+    FusedStream {
+        stages: Vec<FusedStage>,
+        source: Box<Spanned<TypedExpr>>,
+        coll_ty: Ty,
+        source_elem_ty: Ty,
+        result_elem_ty: Ty,
+        ret_ty: Ty,
+    },
+}
+
+/// Um estágio de um `FusedStream` — transformação individual na cadeia.
+#[derive(Debug, Clone)]
+pub enum FusedStage {
+    /// `filter g` — descarta elemento se predicado retorna false.
+    Filter {
+        callback: Box<Spanned<TypedExpr>>,
+        /// Tipo do elemento que este estágio recebe.
+        input_elem_ty: Ty,
+    },
+    /// `map f` — transforma elemento.
+    Map {
+        callback: Box<Spanned<TypedExpr>>,
+        /// Tipo do elemento que este estágio recebe.
+        input_elem_ty: Ty,
+        /// Tipo do elemento que este estágio produz.
+        output_elem_ty: Ty,
+    },
 }
 
 /// Informação sobre uma variável capturada por uma closure.

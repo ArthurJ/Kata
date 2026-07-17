@@ -13,7 +13,8 @@ use std::collections::HashMap;
 use kata_diagnostics::MiddleError;
 
 use crate::typed::{
-    TypedAction, TypedExpr, TypedExprKind, TypedLambdaClause, TypedMatchArm, TypedPattern,
+    FusedStage, TypedAction, TypedExpr, TypedExprKind, TypedLambdaClause, TypedMatchArm,
+    TypedPattern,
 };
 
 /// Verifica que nenhuma Action é recursiva (direta ou indireta).
@@ -168,6 +169,18 @@ fn collect_action_calls(
             collect_action_calls(&callback.node, &callback.span, out);
             collect_action_calls(&initial.node, &initial.span, out);
             collect_action_calls(&collection.node, &collection.span, out);
+        }
+        // ── Fio 8 Fase 9: FusedStream — recursão ──
+        TypedExprKind::FusedStream { stages, source, .. } => {
+            collect_action_calls(&source.node, &source.span, out);
+            for stage in stages {
+                let cb = match stage {
+                    FusedStage::Filter { callback, .. } | FusedStage::Map { callback, .. } => {
+                        callback
+                    }
+                };
+                collect_action_calls(&cb.node, &cb.span, out);
+            }
         }
         // Folhas sem sub-expressões.
         TypedExprKind::IntLit { .. }

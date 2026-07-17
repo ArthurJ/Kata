@@ -13,7 +13,7 @@ use std::collections::HashSet;
 use kata_core::ty::TypeEnv;
 
 use crate::typed::{
-    CaptureInfo, TypedExpr, TypedExprKind, TypedMatchArm, TypedModule, TypedPattern,
+    CaptureInfo, FusedStage, TypedExpr, TypedExprKind, TypedMatchArm, TypedModule, TypedPattern,
 };
 
 /// Ponto de entrada — percorre toda a TAST e popula `captures` de cada Closure.
@@ -242,6 +242,18 @@ fn collect_captures_in_expr(expr: &mut TypedExpr, outer_env: &TypeEnv) {
             collect_captures_in_expr(&mut initial.node, outer_env);
             collect_captures_in_expr(&mut collection.node, outer_env);
         }
+        // ── Fio 8 Fase 9: FusedStream — recursão ──
+        TypedExprKind::FusedStream { stages, source, .. } => {
+            collect_captures_in_expr(&mut source.node, outer_env);
+            for stage in stages {
+                let cb = match stage {
+                    FusedStage::Filter { callback, .. } | FusedStage::Map { callback, .. } => {
+                        callback
+                    }
+                };
+                collect_captures_in_expr(&mut cb.node, outer_env);
+            }
+        }
         // Folhas sem sub-expressões
         TypedExprKind::IntLit { .. }
         | TypedExprKind::FloatLit { .. }
@@ -418,6 +430,18 @@ fn collect_free_vars(
             collect_free_vars(&callback.node, local_bindings, out);
             collect_free_vars(&initial.node, local_bindings, out);
             collect_free_vars(&collection.node, local_bindings, out);
+        }
+        // ── Fio 8 Fase 9: FusedStream — recursão ──
+        TypedExprKind::FusedStream { stages, source, .. } => {
+            collect_free_vars(&source.node, local_bindings, out);
+            for stage in stages {
+                let cb = match stage {
+                    FusedStage::Filter { callback, .. } | FusedStage::Map { callback, .. } => {
+                        callback
+                    }
+                };
+                collect_free_vars(&cb.node, local_bindings, out);
+            }
         }
         // Folhas sem sub-expressões
         TypedExprKind::IntLit { .. }

@@ -36,8 +36,8 @@ use kata_ast::Spanned;
 use kata_core::dispatch::DispatchTable;
 use kata_core::ty::Ty;
 use kata_inference::{
-    Substitutions, TypedAction, TypedExpr, TypedExprKind, TypedFunction, TypedLambdaClause,
-    TypedModule, apply_subs, unify,
+    FusedStage, Substitutions, TypedAction, TypedExpr, TypedExprKind, TypedFunction,
+    TypedLambdaClause, TypedModule, apply_subs, unify,
 };
 
 use instantiate::{canonicalize_subs, instantiate_function};
@@ -390,6 +390,18 @@ fn rewrite_typed_expr(
             rewrite_typed_expr(callback, ctx, instance_map, acc);
             rewrite_typed_expr(initial, ctx, instance_map, acc);
             rewrite_typed_expr(collection, ctx, instance_map, acc);
+        }
+        // ── Fio 8 Fase 9: FusedStream — recursão ──
+        TypedExprKind::FusedStream { stages, source, .. } => {
+            rewrite_typed_expr(source, ctx, instance_map, acc);
+            for stage in stages {
+                let cb = match stage {
+                    FusedStage::Filter { callback, .. } | FusedStage::Map { callback, .. } => {
+                        callback
+                    }
+                };
+                rewrite_typed_expr(cb, ctx, instance_map, acc);
+            }
         }
 
         // Folhas — sem sub-expressões.

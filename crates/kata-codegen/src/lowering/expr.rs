@@ -16,7 +16,7 @@ use super::_match::lower_match;
 use super::LowerCtx;
 use super::action_call::lower_action_call;
 use super::closure::lower_closure;
-use super::collections_hof::{lower_filter, lower_fold, lower_map};
+use super::collections_hof::{lower_filter, lower_fold, lower_fused_stream, lower_map};
 use super::control_flow::lower_control_flow;
 use crate::ffi_sigs::ty_to_clif;
 use crate::smi::{encode_smi, fits_smi, parse_int_literal};
@@ -944,5 +944,23 @@ pub(crate) fn lower_expr(
             elem_ty,
             ret_ty,
         } => lower_fold(callback, initial, collection, coll_ty, elem_ty, ret_ty, ctx),
+
+        // ── Fio 8 Fase 9: FusedStream — stream fusion ──
+        TypedExprKind::FusedStream {
+            stages,
+            source,
+            coll_ty,
+            source_elem_ty,
+            result_elem_ty,
+            ret_ty,
+        } => lower_fused_stream(
+            stages,
+            source,
+            coll_ty,
+            source_elem_ty,
+            result_elem_ty,
+            ret_ty,
+            ctx,
+        ),
     }
 }

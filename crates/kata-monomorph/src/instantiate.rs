@@ -7,8 +7,8 @@
 use kata_ast::Spanned;
 use kata_core::ty::Ty;
 use kata_inference::{
-    Substitutions, TypedExpr, TypedExprKind, TypedFunction, TypedLambdaClause, TypedPattern,
-    apply_subs,
+    FusedStage, Substitutions, TypedExpr, TypedExprKind, TypedFunction, TypedLambdaClause,
+    TypedPattern, apply_subs,
 };
 
 /// Gera uma instância monomorfizada de uma `TypedFunction`.
@@ -482,6 +482,55 @@ fn instantiate_kind(kind: &TypedExprKind, subs: &Substitutions) -> TypedExprKind
             elem_ty: apply_subs(elem_ty, subs),
             ret_ty: apply_subs(ret_ty, subs),
         },
+
+        // ── Fio 8 Fase 9: FusedStream — instanciar stages + source + Ty ──
+        TypedExprKind::FusedStream {
+            stages,
+            source,
+            coll_ty,
+            source_elem_ty,
+            result_elem_ty,
+            ret_ty,
+        } => {
+            let new_stages = stages
+                .iter()
+                .map(|stage| match stage {
+                    FusedStage::Filter {
+                        callback,
+                        input_elem_ty,
+                    } => FusedStage::Filter {
+                        callback: Box::new(Spanned::new(
+                            instantiate_typed_expr(&callback.node, subs),
+                            callback.span,
+                        )),
+                        input_elem_ty: apply_subs(input_elem_ty, subs),
+                    },
+                    FusedStage::Map {
+                        callback,
+                        input_elem_ty,
+                        output_elem_ty,
+                    } => FusedStage::Map {
+                        callback: Box::new(Spanned::new(
+                            instantiate_typed_expr(&callback.node, subs),
+                            callback.span,
+                        )),
+                        input_elem_ty: apply_subs(input_elem_ty, subs),
+                        output_elem_ty: apply_subs(output_elem_ty, subs),
+                    },
+                })
+                .collect();
+            TypedExprKind::FusedStream {
+                stages: new_stages,
+                source: Box::new(Spanned::new(
+                    instantiate_typed_expr(&source.node, subs),
+                    source.span,
+                )),
+                coll_ty: apply_subs(coll_ty, subs),
+                source_elem_ty: apply_subs(source_elem_ty, subs),
+                result_elem_ty: apply_subs(result_elem_ty, subs),
+                ret_ty: apply_subs(ret_ty, subs),
+            }
+        }
     }
 }
 
