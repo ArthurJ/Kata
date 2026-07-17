@@ -502,5 +502,15 @@ pub(crate) fn lower_expr(
             // Unreachable — lower_control_flow handles all 4 variants above.
             unreachable!("lower_control_flow should handle Return/Loop/Break/Continue")
         }
+
+        // ── Fio 8: Coleções — lowering implementado na Fase 6 ──
+        TypedExprKind::ListLit { .. }
+        | TypedExprKind::ArrayLit { .. }
+        | TypedExprKind::RangeLit { .. }
+        | TypedExprKind::ForIn { .. }
+        | TypedExprKind::In { .. } => Err(super::CodegenError::UnsupportedNode(format!(
+            "{:?} — lowering de coleções é Fase 6",
+            expr.kind
+        ))),
     }
 }

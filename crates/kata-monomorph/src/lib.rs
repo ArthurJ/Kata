@@ -343,6 +343,30 @@ fn rewrite_typed_expr(
             rewrite_typed_expr(payload, ctx, instance_map, acc);
         }
 
+        // ── Fio 8: Coleções — recursão nos elementos ──
+        TypedExprKind::ListLit { elements } | TypedExprKind::ArrayLit { elements } => {
+            for el in elements.iter_mut() {
+                rewrite_typed_expr(el, ctx, instance_map, acc);
+            }
+        }
+        TypedExprKind::RangeLit {
+            start, step, end, ..
+        } => {
+            rewrite_typed_expr(start, ctx, instance_map, acc);
+            rewrite_typed_expr(step, ctx, instance_map, acc);
+            rewrite_typed_expr(end, ctx, instance_map, acc);
+        }
+        TypedExprKind::ForIn { iterable, body, .. } => {
+            rewrite_typed_expr(iterable, ctx, instance_map, acc);
+            for stmt in body.iter_mut() {
+                rewrite_typed_expr(stmt, ctx, instance_map, acc);
+            }
+        }
+        TypedExprKind::In { item, collection } => {
+            rewrite_typed_expr(item, ctx, instance_map, acc);
+            rewrite_typed_expr(collection, ctx, instance_map, acc);
+        }
+
         // Folhas — sem sub-expressões.
         TypedExprKind::IntLit { .. }
         | TypedExprKind::FloatLit { .. }

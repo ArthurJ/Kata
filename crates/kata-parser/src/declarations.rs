@@ -117,7 +117,7 @@ impl Parser {
             return false;
         }
         let mut lookahead = self.pos + 1;
-        // Skip optional `::(params)` — type params of the tipo.
+        // Skip optional `::(params)` or `::Param` — type params of the tipo.
         if let Some(t) = self.tokens.get(lookahead) {
             if matches!(t.token, Token::DoubleColon) {
                 lookahead += 1;
@@ -133,6 +133,9 @@ impl Parser {
                             }
                             lookahead += 1;
                         }
+                    } else {
+                        // `::Param` — single param without parens, skip 1 token.
+                        lookahead += 1;
                     }
                 }
             }

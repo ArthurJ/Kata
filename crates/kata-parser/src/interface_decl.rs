@@ -15,8 +15,8 @@ impl Parser {
     /// ```
     /// Ou com type params:
     /// ```text
-    /// interface ITERABLE::(A)
-    ///     next :: Self => Optional::(A)
+    /// interface ITERABLE::A
+    ///     next :: Self => Optional::A
     /// ```
     pub fn parse_interface_decl(
         &mut self,
@@ -33,38 +33,52 @@ impl Parser {
             _ => return Err(self.error("interface name after `interface`")),
         };
 
-        // Type params opcionais: `ITERABLE::(A)` — `::` seguido de parênteses.
+        // Type params opcionais: `ITERABLE::(A)` (tupla) ou `ITERABLE::A` (single).
+        // `::` marca a fronteira; `()` delimita tuplas, nada mais.
         let type_params = if matches!(self.peek(), Token::DoubleColon) {
             self.advance(); // consume ::
-            self.expect(&Token::LParen, "`(` após `::` em type params")?;
-            let mut params = Vec::new();
-            // Skip newlines after (
-            while matches!(self.peek(), Token::StmtSep) {
-                self.advance();
-            }
-            if !matches!(self.peek(), Token::RParen) {
-                loop {
-                    let pname = match self.peek() {
-                        Token::Ident(s) => {
-                            let n = s.clone();
-                            self.advance();
-                            n
-                        }
-                        _ => return Err(self.error("type param name")),
-                    };
-                    params.push(pname);
-                    if matches!(self.peek(), Token::Comma) {
-                        self.advance();
-                        while matches!(self.peek(), Token::StmtSep) {
-                            self.advance();
-                        }
-                        continue;
-                    }
-                    break;
+            if matches!(self.peek(), Token::LParen) {
+                self.advance(); // consume (
+                let mut params = Vec::new();
+                // Skip newlines after (
+                while matches!(self.peek(), Token::StmtSep) {
+                    self.advance();
                 }
+                if !matches!(self.peek(), Token::RParen) {
+                    loop {
+                        let pname = match self.peek() {
+                            Token::Ident(s) => {
+                                let n = s.clone();
+                                self.advance();
+                                n
+                            }
+                            _ => return Err(self.error("type param name")),
+                        };
+                        params.push(pname);
+                        if matches!(self.peek(), Token::Comma) {
+                            self.advance();
+                            while matches!(self.peek(), Token::StmtSep) {
+                                self.advance();
+                            }
+                            continue;
+                        }
+                        break;
+                    }
+                }
+                self.expect(&Token::RParen, "`)` após type params")?;
+                params
+            } else {
+                // `ITERABLE::A` — single param sem parênteses.
+                let pname = match self.peek() {
+                    Token::Ident(s) => {
+                        let n = s.clone();
+                        self.advance();
+                        n
+                    }
+                    _ => return Err(self.error("type param name after `::`")),
+                };
+                vec![pname]
             }
-            self.expect(&Token::RParen, "`)` após type params")?;
-            params
         } else {
             Vec::new()
         };
@@ -144,8 +158,8 @@ impl Parser {
     /// ```
     /// Ou com type params:
     /// ```text
-    /// List::(A) implements ITERABLE::(A)
-    ///     next :: List::(A) => Optional::(A)
+    /// List::A implements ITERABLE::A
+    ///     next :: List::A => Optional::A
     ///         lambda lst: ...
     /// ```
     pub fn parse_implements_decl(
@@ -162,37 +176,50 @@ impl Parser {
             _ => return Err(self.error("type name before `implements`")),
         };
 
-        // Type params do tipo opcionais: `List::(A)` — `::` seguido de parênteses.
+        // Type params do tipo opcionais: `List::(A)` (tupla) ou `List::A` (single).
         let type_params = if matches!(self.peek(), Token::DoubleColon) {
             self.advance(); // consume ::
-            self.expect(&Token::LParen, "`(` após `::` em type params")?;
-            let mut params = Vec::new();
-            while matches!(self.peek(), Token::StmtSep) {
-                self.advance();
-            }
-            if !matches!(self.peek(), Token::RParen) {
-                loop {
-                    let pname = match self.peek() {
-                        Token::Ident(s) => {
-                            let n = s.clone();
-                            self.advance();
-                            n
-                        }
-                        _ => return Err(self.error("type param name")),
-                    };
-                    params.push(pname);
-                    if matches!(self.peek(), Token::Comma) {
-                        self.advance();
-                        while matches!(self.peek(), Token::StmtSep) {
-                            self.advance();
-                        }
-                        continue;
-                    }
-                    break;
+            if matches!(self.peek(), Token::LParen) {
+                self.advance(); // consume (
+                let mut params = Vec::new();
+                while matches!(self.peek(), Token::StmtSep) {
+                    self.advance();
                 }
+                if !matches!(self.peek(), Token::RParen) {
+                    loop {
+                        let pname = match self.peek() {
+                            Token::Ident(s) => {
+                                let n = s.clone();
+                                self.advance();
+                                n
+                            }
+                            _ => return Err(self.error("type param name")),
+                        };
+                        params.push(pname);
+                        if matches!(self.peek(), Token::Comma) {
+                            self.advance();
+                            while matches!(self.peek(), Token::StmtSep) {
+                                self.advance();
+                            }
+                            continue;
+                        }
+                        break;
+                    }
+                }
+                self.expect(&Token::RParen, "`)` após type params")?;
+                params
+            } else {
+                // `List::A` — single param sem parênteses.
+                let pname = match self.peek() {
+                    Token::Ident(s) => {
+                        let n = s.clone();
+                        self.advance();
+                        n
+                    }
+                    _ => return Err(self.error("type param name after `::`")),
+                };
+                vec![pname]
             }
-            self.expect(&Token::RParen, "`)` após type params")?;
-            params
         } else {
             Vec::new()
         };
@@ -210,37 +237,50 @@ impl Parser {
             _ => return Err(self.error("interface name after `implements`")),
         };
 
-        // Params da interface opcionais: `ITERABLE::(A)` — `::` seguido de parênteses.
+        // Params da interface opcionais: `ITERABLE::(A)` (tupla) ou `ITERABLE::A` (single).
         let iface_params = if matches!(self.peek(), Token::DoubleColon) {
             self.advance(); // consume ::
-            self.expect(&Token::LParen, "`(` após `::` em iface params")?;
-            let mut params = Vec::new();
-            while matches!(self.peek(), Token::StmtSep) {
-                self.advance();
-            }
-            if !matches!(self.peek(), Token::RParen) {
-                loop {
-                    let pname = match self.peek() {
-                        Token::Ident(s) => {
-                            let n = s.clone();
-                            self.advance();
-                            n
-                        }
-                        _ => return Err(self.error("iface param name")),
-                    };
-                    params.push(pname);
-                    if matches!(self.peek(), Token::Comma) {
-                        self.advance();
-                        while matches!(self.peek(), Token::StmtSep) {
-                            self.advance();
-                        }
-                        continue;
-                    }
-                    break;
+            if matches!(self.peek(), Token::LParen) {
+                self.advance(); // consume (
+                let mut params = Vec::new();
+                while matches!(self.peek(), Token::StmtSep) {
+                    self.advance();
                 }
+                if !matches!(self.peek(), Token::RParen) {
+                    loop {
+                        let pname = match self.peek() {
+                            Token::Ident(s) => {
+                                let n = s.clone();
+                                self.advance();
+                                n
+                            }
+                            _ => return Err(self.error("iface param name")),
+                        };
+                        params.push(pname);
+                        if matches!(self.peek(), Token::Comma) {
+                            self.advance();
+                            while matches!(self.peek(), Token::StmtSep) {
+                                self.advance();
+                            }
+                            continue;
+                        }
+                        break;
+                    }
+                }
+                self.expect(&Token::RParen, "`)` após iface params")?;
+                params
+            } else {
+                // `ITERABLE::A` — single param sem parênteses.
+                let pname = match self.peek() {
+                    Token::Ident(s) => {
+                        let n = s.clone();
+                        self.advance();
+                        n
+                    }
+                    _ => return Err(self.error("iface param name after `::`")),
+                };
+                vec![pname]
             }
-            self.expect(&Token::RParen, "`)` após iface params")?;
-            params
         } else {
             Vec::new()
         };

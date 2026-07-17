@@ -56,16 +56,16 @@ interface SHOW
 
 # ── Interfaces de coleção (Fio 8) ──────────────────────────────
 
-interface ITERABLE::(A)
-    next :: Self => Optional::(A)
+interface ITERABLE::A
+    next :: Self => Optional::A
 
 interface COUNTABLE
     len :: Self => Int
 
-interface INDEXABLE::(A)
+interface INDEXABLE::A
     at :: Self Int => Result::(A, Err)
 
-interface CONTAINS::(A)
+interface CONTAINS::A
     contains :: Self A => Boolean
 
 # ── Implementações para Int ───────────────────────────────────
@@ -126,53 +126,53 @@ Rational implements SHOW
 # Range (operações inlined pelo codegen com base no tipo concreto).
 
 # Array implementa ITERABLE, COUNTABLE, INDEXABLE, CONTAINS
-Array::(A) implements ITERABLE::(A)
-    next :: Array::(A) => Optional::(A) @ffi("kata_rt_array_next")
+Array::A implements ITERABLE::A
+    next :: Array::A => Optional::A @ffi("kata_rt_array_next")
 
-Array::(A) implements COUNTABLE
-    len :: Array::(A) => Int @ffi("kata_rt_array_len")
+Array::A implements COUNTABLE
+    len :: Array::A => Int @ffi("kata_rt_array_len")
 
-Array::(A) implements INDEXABLE::(A)
-    at :: Array::(A) Int => Result::(A, Err) @ffi("kata_rt_array_get_checked")
+Array::A implements INDEXABLE::A
+    at :: Array::A Int => Result::(A, Err) @ffi("kata_rt_array_get_checked")
 
-Array::(A) implements CONTAINS::(A)
-    contains :: Array::(A) A => Boolean @ffi("kata_rt_array_contains")
+Array::A implements CONTAINS::A
+    contains :: Array::A A => Boolean @ffi("kata_rt_array_contains")
 
 # List implementa ITERABLE, COUNTABLE, INDEXABLE, CONTAINS
-List::(A) implements ITERABLE::(A)
-    next :: List::(A) => Optional::(A) @ffi("kata_rt_list_next")
+List::A implements ITERABLE::A
+    next :: List::A => Optional::A @ffi("kata_rt_list_next")
 
-List::(A) implements COUNTABLE
-    len :: List::(A) => Int @ffi("kata_rt_list_len")
+List::A implements COUNTABLE
+    len :: List::A => Int @ffi("kata_rt_list_len")
 
-List::(A) implements INDEXABLE::(A)
-    at :: List::(A) Int => Result::(A, Err) @ffi("kata_rt_list_get_checked")
+List::A implements INDEXABLE::A
+    at :: List::A Int => Result::(A, Err) @ffi("kata_rt_list_get_checked")
 
-List::(A) implements CONTAINS::(A)
-    contains :: List::(A) A => Boolean @ffi("kata_rt_list_contains")
+List::A implements CONTAINS::A
+    contains :: List::A A => Boolean @ffi("kata_rt_list_contains")
 
 # Range implementa ITERABLE, COUNTABLE, CONTAINS (não INDEXABLE)
 # Range usa @builtin — codegen inlined com base no tipo concreto de A
-Range::(A) implements ITERABLE::(A)
-    next :: Range::(A) => Optional::(A) @builtin("range_next")
+Range::A implements ITERABLE::A
+    next :: Range::A => Optional::A @builtin("range_next")
 
-Range::(A) implements COUNTABLE
-    len :: Range::(A) => Int @builtin("range_len")
+Range::A implements COUNTABLE
+    len :: Range::A => Int @builtin("range_len")
 
-Range::(A) implements CONTAINS::(A)
-    contains :: Range::(A) A => Boolean @builtin("range_contains")
+Range::A implements CONTAINS::A
+    contains :: Range::A A => Boolean @builtin("range_contains")
 
 # Text implementa ITERABLE, COUNTABLE, INDEXABLE, CONTAINS
-Text implements ITERABLE::(Text)
-    next :: Text => Optional::(Text) @ffi("kata_rt_string_next")
+Text implements ITERABLE::Text
+    next :: Text => Optional::Text @ffi("kata_rt_string_next")
 
 Text implements COUNTABLE
     len :: Text => Int @ffi("kata_rt_string_len")
 
-Text implements INDEXABLE::(Text)
+Text implements INDEXABLE::Text
     at :: Text Int => Result::(Text, Err) @ffi("kata_rt_string_get_checked")
 
-Text implements CONTAINS::(Text)
+Text implements CONTAINS::Text
     contains :: Text Text => Boolean @ffi("kata_rt_string_contains")
 
 # ── Operadores standalone (não-interface) ──────────────────────

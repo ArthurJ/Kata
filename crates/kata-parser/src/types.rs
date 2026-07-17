@@ -26,36 +26,51 @@ impl Parser {
                 if name == "Self" {
                     return Ok(Spanned::new(TypeExpr::SelfRef, start));
                 }
-                // `Name::(T1, T2)` — tipo com parâmetros posicionais.
+                // `Name::(T1, T2)` — tipo com parâmetros posicionais (tupla).
+                // `Name::T` — tipo com um parâmetro (single-param, sem parênteses).
                 if matches!(self.peek(), Token::DoubleColon) {
                     self.advance(); // consume ::
-                    self.expect(&Token::LParen, "\"(\"")?;
-                    let mut params = Vec::new();
-                    // Skip newlines after (
-                    while matches!(self.peek(), Token::StmtSep) {
-                        self.advance();
-                    }
-                    if matches!(self.peek(), Token::RParen) {
-                        let rparen_span = self.advance();
-                        let span = start.cover(rparen_span);
-                        return Ok(Spanned::new(TypeExpr::ParamApp { name, params }, span));
-                    }
-                    loop {
-                        let ty = self.parse_type_expr()?;
-                        params.push(ty);
-                        if matches!(self.peek(), Token::Comma) {
+                    if matches!(self.peek(), Token::LParen) {
+                        // `Name::(T1, T2)` — parênteses delimitam tupla de tipos.
+                        self.advance(); // consume (
+                        let mut params = Vec::new();
+                        // Skip newlines after (
+                        while matches!(self.peek(), Token::StmtSep) {
                             self.advance();
-                            while matches!(self.peek(), Token::StmtSep) {
-                                self.advance();
-                            }
-                            continue;
                         }
-                        break;
+                        if matches!(self.peek(), Token::RParen) {
+                            let rparen_span = self.advance();
+                            let span = start.cover(rparen_span);
+                            return Ok(Spanned::new(TypeExpr::ParamApp { name, params }, span));
+                        }
+                        loop {
+                            let ty = self.parse_type_expr()?;
+                            params.push(ty);
+                            if matches!(self.peek(), Token::Comma) {
+                                self.advance();
+                                while matches!(self.peek(), Token::StmtSep) {
+                                    self.advance();
+                                }
+                                continue;
+                            }
+                            break;
+                        }
+                        self.expect(&Token::RParen, "\")\"")?;
+                        let last_span = params.last().expect("non-empty").span;
+                        let span = start.cover(last_span);
+                        return Ok(Spanned::new(TypeExpr::ParamApp { name, params }, span));
+                    } else {
+                        // `Name::T` — single-param sem parênteses.
+                        let ty = self.parse_type_expr()?;
+                        let span = start.cover(ty.span);
+                        return Ok(Spanned::new(
+                            TypeExpr::ParamApp {
+                                name,
+                                params: vec![ty],
+                            },
+                            span,
+                        ));
                     }
-                    self.expect(&Token::RParen, "\")\"")?;
-                    let last_span = params.last().expect("non-empty").span;
-                    let span = start.cover(last_span);
-                    return Ok(Spanned::new(TypeExpr::ParamApp { name, params }, span));
                 }
                 Ok(Spanned::new(TypeExpr::Named(name), start))
             }

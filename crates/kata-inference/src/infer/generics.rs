@@ -82,6 +82,11 @@ fn unify_one(
         // (mesma semântica de fits_return)
         (Ty::Var(_), _) => Ok(()),
 
+        // Fio 8: List/Array/Range — unifica recursivamente o elem_ty.
+        (Ty::List(p), Ty::List(a)) => unify_one(p, a, type_params, subs),
+        (Ty::Array(p), Ty::Array(a)) => unify_one(p, a, type_params, subs),
+        (Ty::Range(p), Ty::Range(a)) => unify_one(p, a, type_params, subs),
+
         // Match estrutural para tipos concretos
         _ if param == arg => Ok(()),
 
@@ -116,6 +121,10 @@ pub fn apply_subs(ty: &Ty, subs: &Substitutions) -> Ty {
             Box::new(apply_subs(ret, subs)),
         ),
         Ty::Tuple(elems) => Ty::Tuple(elems.iter().map(|e| apply_subs(e, subs)).collect()),
+        // Fio 8: List/Array/Range — substitui no elem_ty.
+        Ty::List(elem) => Ty::List(Box::new(apply_subs(elem, subs))),
+        Ty::Array(elem) => Ty::Array(Box::new(apply_subs(elem, subs))),
+        Ty::Range(elem) => Ty::Range(Box::new(apply_subs(elem, subs))),
         _ => ty.clone(),
     }
 }

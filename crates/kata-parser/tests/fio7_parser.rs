@@ -243,3 +243,87 @@ fn self_in_interface_signature() {
         other => panic!("expected InterfaceDecl, got {other:?}"),
     }
 }
+
+// ── Fio 8: sintaxe :: sem parênteses para single-param ────────
+
+#[test]
+fn interface_type_params_single_param_no_parens() {
+    let src = "interface ITERABLE::A\n    next :: Self => Optional::A";
+    let m = parse_src(src);
+    match first_item(&m) {
+        Item::InterfaceDecl {
+            name,
+            type_params,
+            signatures,
+            ..
+        } => {
+            assert_eq!(name, "ITERABLE");
+            assert_eq!(type_params, &["A".to_string()]);
+            assert_eq!(signatures[0].name, "next");
+            // Optional::A → ParamApp { name: "Optional", params: [Named("A")] }
+            match &signatures[0].ret.node {
+                TypeExpr::ParamApp { name, params } => {
+                    assert_eq!(name, "Optional");
+                    assert_eq!(params.len(), 1);
+                    assert_eq!(params[0].node, TypeExpr::Named("A".into()));
+                }
+                other => panic!("expected ParamApp for ret, got {other:?}"),
+            }
+        }
+        other => panic!("expected InterfaceDecl, got {other:?}"),
+    }
+}
+
+#[test]
+fn implements_type_params_single_param_no_parens() {
+    let src = "List::A implements ITERABLE::A\n    next :: List::A => Optional::A";
+    let m = parse_src(src);
+    match first_item(&m) {
+        Item::ImplementsDecl {
+            type_name,
+            type_params,
+            interface_name,
+            iface_params,
+            ..
+        } => {
+            assert_eq!(type_name, "List");
+            assert_eq!(type_params, &["A".to_string()]);
+            assert_eq!(interface_name, "ITERABLE");
+            assert_eq!(iface_params, &["A".to_string()]);
+        }
+        other => panic!("expected ImplementsDecl, got {other:?}"),
+    }
+}
+
+#[test]
+fn type_expr_single_param_no_parens() {
+    // `List::A` como type expression em assinatura.
+    let src = "interface INDEXABLE::A\n    at :: Self Int => Result::(A, Err)";
+    let m = parse_src(src);
+    match first_item(&m) {
+        Item::InterfaceDecl {
+            name, type_params, ..
+        } => {
+            assert_eq!(name, "INDEXABLE");
+            assert_eq!(type_params, &["A".to_string()]);
+        }
+        other => panic!("expected InterfaceDecl, got {other:?}"),
+    }
+}
+
+#[test]
+fn type_expr_tuple_still_requires_parens() {
+    // `Result::(A, Err)` — tupla de tipos continua exigindo parênteses.
+    let src = "interface INDEXABLE::A\n    at :: Self Int => Result::(A, Err)";
+    let m = parse_src(src);
+    match first_item(&m) {
+        Item::InterfaceDecl { signatures, .. } => match &signatures[0].ret.node {
+            TypeExpr::ParamApp { name, params } => {
+                assert_eq!(name, "Result");
+                assert_eq!(params.len(), 2);
+            }
+            other => panic!("expected ParamApp for Result::(A, Err), got {other:?}"),
+        },
+        other => panic!("expected InterfaceDecl, got {other:?}"),
+    }
+}

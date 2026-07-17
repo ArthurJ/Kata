@@ -383,20 +383,35 @@ pub(crate) fn infer_expr_hinted(
                 span: (*span).into(),
             });
         }
-        // ── Fio 8: Coleções — inferência implementada na Fase 5 ──
-        Expr::ListLit { .. } | Expr::ArrayLit { .. } | Expr::RangeLit { .. } => {
-            return Err(MiddleError::UnboundName {
-                name: "coleções (List/Array/Range) — inferência ainda não implementada (Fase 5)"
-                    .into(),
-                span: (*span).into(),
-            });
+        // ── Fio 8: Coleções — inferência delegada para collections.rs ──
+        Expr::ListLit { elements } => {
+            return super::collections::infer_list_lit(elements, span, env, ctx, tail_pos);
         }
-        // ── Fio 8: ForIn e In — inferência implementada na Fase 5 ──
-        Expr::ForIn { .. } | Expr::In { .. } => {
-            return Err(MiddleError::UnboundName {
-                name: "for/in — inferência ainda não implementada (Fase 5)".into(),
-                span: (*span).into(),
-            });
+        Expr::ArrayLit { elements } => {
+            return super::collections::infer_array_lit(elements, span, env, ctx, tail_pos);
+        }
+        Expr::RangeLit {
+            start,
+            step,
+            end,
+            inclusive,
+        } => {
+            return super::collections::infer_range_lit(
+                start, step, end, *inclusive, span, env, ctx, tail_pos,
+            );
+        }
+        // ── Fio 8: ForIn e In ───────────────────────────────────────
+        Expr::ForIn {
+            var_name,
+            iterable,
+            body,
+        } => {
+            return super::collections::infer_for_in(
+                var_name, iterable, body, span, env, ctx, tail_pos,
+            );
+        }
+        Expr::In { item, collection } => {
+            return super::collections::infer_in(item, collection, span, env, ctx, tail_pos);
         }
     };
 

@@ -211,6 +211,40 @@ pub enum TypedExprKind {
 
     /// `continue` — próxima iteração.
     Continue,
+
+    // ── Fio 8: Coleções ──────────────────────────────────────────
+    /// `[1 2 3]` — lista literal (Cons cells). `elem_ty` é o tipo unificado.
+    ListLit { elements: Vec<Spanned<TypedExpr>> },
+
+    /// `{1 2 3}` — array literal (contíguo).
+    ArrayLit { elements: Vec<Spanned<TypedExpr>> },
+
+    /// `[a..s..b]` ou `[a..s..=b]` — range lazy.
+    /// `elem_ty` é o tipo do elemento (start/step/end mesmo tipo A).
+    /// `inclusive` = true para `..=`, false para `..`.
+    RangeLit {
+        start: Box<Spanned<TypedExpr>>,
+        step: Box<Spanned<TypedExpr>>,
+        end: Box<Spanned<TypedExpr>>,
+        inclusive: bool,
+        elem_ty: Ty,
+    },
+
+    /// `for x in colecao` — iteração via ITERABLE.
+    /// `var_ty` é o tipo A extraído do InterfaceRegistry.
+    /// O tipo do ForIn é Unit (como `loop`).
+    ForIn {
+        var_name: String,
+        var_ty: Ty,
+        iterable: Box<Spanned<TypedExpr>>,
+        body: Vec<Spanned<TypedExpr>>,
+    },
+
+    /// `x in coll` — membership via CONTAINS. Tipo: Boolean.
+    In {
+        item: Box<Spanned<TypedExpr>>,
+        collection: Box<Spanned<TypedExpr>>,
+    },
 }
 
 /// Informação sobre uma variável capturada por uma closure.

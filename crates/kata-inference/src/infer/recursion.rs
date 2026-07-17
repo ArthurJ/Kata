@@ -122,6 +122,29 @@ fn collect_action_calls(
         TypedExprKind::IndexAccess { expr, .. } => {
             collect_action_calls(&expr.node, &expr.span, out);
         }
+        // ── Fio 8: Coleções — recursão nos elementos ──
+        TypedExprKind::ListLit { elements } | TypedExprKind::ArrayLit { elements } => {
+            for el in elements {
+                collect_action_calls(&el.node, &el.span, out);
+            }
+        }
+        TypedExprKind::RangeLit {
+            start, step, end, ..
+        } => {
+            collect_action_calls(&start.node, &start.span, out);
+            collect_action_calls(&step.node, &step.span, out);
+            collect_action_calls(&end.node, &end.span, out);
+        }
+        TypedExprKind::ForIn { iterable, body, .. } => {
+            collect_action_calls(&iterable.node, &iterable.span, out);
+            for stmt in body {
+                collect_action_calls(&stmt.node, &stmt.span, out);
+            }
+        }
+        TypedExprKind::In { item, collection } => {
+            collect_action_calls(&item.node, &item.span, out);
+            collect_action_calls(&collection.node, &collection.span, out);
+        }
         // Folhas sem sub-expressões.
         TypedExprKind::IntLit { .. }
         | TypedExprKind::FloatLit { .. }

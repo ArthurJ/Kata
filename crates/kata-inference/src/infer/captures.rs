@@ -195,6 +195,29 @@ fn collect_captures_in_expr(expr: &mut TypedExpr, outer_env: &TypeEnv) {
         TypedExprKind::IndexAccess { expr, .. } => {
             collect_captures_in_expr(&mut expr.node, outer_env);
         }
+        // ── Fio 8: Coleções — recursão nos elementos ──
+        TypedExprKind::ListLit { elements } | TypedExprKind::ArrayLit { elements } => {
+            for el in elements {
+                collect_captures_in_expr(&mut el.node, outer_env);
+            }
+        }
+        TypedExprKind::RangeLit {
+            start, step, end, ..
+        } => {
+            collect_captures_in_expr(&mut start.node, outer_env);
+            collect_captures_in_expr(&mut step.node, outer_env);
+            collect_captures_in_expr(&mut end.node, outer_env);
+        }
+        TypedExprKind::ForIn { iterable, body, .. } => {
+            collect_captures_in_expr(&mut iterable.node, outer_env);
+            for stmt in body {
+                collect_captures_in_expr(&mut stmt.node, outer_env);
+            }
+        }
+        TypedExprKind::In { item, collection } => {
+            collect_captures_in_expr(&mut item.node, outer_env);
+            collect_captures_in_expr(&mut collection.node, outer_env);
+        }
         // Folhas sem sub-expressões
         TypedExprKind::IntLit { .. }
         | TypedExprKind::FloatLit { .. }
@@ -324,6 +347,29 @@ fn collect_free_vars(
         }
         TypedExprKind::IndexAccess { expr, .. } => {
             collect_free_vars(&expr.node, local_bindings, out);
+        }
+        // ── Fio 8: Coleções — recursão nos elementos ──
+        TypedExprKind::ListLit { elements } | TypedExprKind::ArrayLit { elements } => {
+            for el in elements {
+                collect_free_vars(&el.node, local_bindings, out);
+            }
+        }
+        TypedExprKind::RangeLit {
+            start, step, end, ..
+        } => {
+            collect_free_vars(&start.node, local_bindings, out);
+            collect_free_vars(&step.node, local_bindings, out);
+            collect_free_vars(&end.node, local_bindings, out);
+        }
+        TypedExprKind::ForIn { iterable, body, .. } => {
+            collect_free_vars(&iterable.node, local_bindings, out);
+            for stmt in body {
+                collect_free_vars(&stmt.node, local_bindings, out);
+            }
+        }
+        TypedExprKind::In { item, collection } => {
+            collect_free_vars(&item.node, local_bindings, out);
+            collect_free_vars(&collection.node, local_bindings, out);
         }
         // Folhas sem sub-expressões
         TypedExprKind::IntLit { .. }

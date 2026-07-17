@@ -210,12 +210,30 @@ fn check_pattern_inner(
             })
         }
 
-        // ── Cons: stub — List é Fio 8 ──
-        Pattern::Cons { .. } => Err(MiddleError::TypeMismatch {
-            expected: "pattern suportado em Fio 2".into(),
-            found: "List pattern (Cons) — List é Fio 8".into(),
-            span: (*span).into(),
-        }),
+        // ── Fio 8: Cons pattern — match em Ty::List(A) ──
+        Pattern::Cons { head, tail } => {
+            // Scrutinee deve ser Ty::List(A).
+            let elem_ty = match scrutinee_ty {
+                Ty::List(elem) => elem.as_ref().clone(),
+                _ => {
+                    return Err(MiddleError::TypeMismatch {
+                        expected: "List(A) para pattern Cons [h : t]".into(),
+                        found: format!("{scrutinee_ty:?}"),
+                        span: (*span).into(),
+                    });
+                }
+            };
+            // head: A, tail: List(A)
+            let typed_head =
+                check_pattern_inner(&head.node, &elem_ty, enum_registry, env, &head.span)?;
+            let tail_ty = Ty::List(Box::new(elem_ty));
+            let typed_tail =
+                check_pattern_inner(&tail.node, &tail_ty, enum_registry, env, &tail.span)?;
+            Ok(TypedPattern::Cons {
+                head: Box::new(Spanned::new(typed_head, head.span)),
+                tail: Box::new(Spanned::new(typed_tail, tail.span)),
+            })
+        }
     }
 }
 

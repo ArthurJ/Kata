@@ -353,6 +353,69 @@ fn instantiate_kind(kind: &TypedExprKind, subs: &Substitutions) -> TypedExprKind
         TypedExprKind::Ident { name } => TypedExprKind::Ident { name: name.clone() },
         TypedExprKind::Break => TypedExprKind::Break,
         TypedExprKind::Continue => TypedExprKind::Continue,
+
+        // ── Fio 8: Coleções — instanciar sub-expressões ──
+        TypedExprKind::ListLit { elements } => TypedExprKind::ListLit {
+            elements: elements
+                .iter()
+                .map(|e| Spanned::new(instantiate_typed_expr(&e.node, subs), e.span))
+                .collect(),
+        },
+        TypedExprKind::ArrayLit { elements } => TypedExprKind::ArrayLit {
+            elements: elements
+                .iter()
+                .map(|e| Spanned::new(instantiate_typed_expr(&e.node, subs), e.span))
+                .collect(),
+        },
+        TypedExprKind::RangeLit {
+            start,
+            step,
+            end,
+            inclusive,
+            elem_ty,
+        } => TypedExprKind::RangeLit {
+            start: Box::new(Spanned::new(
+                instantiate_typed_expr(&start.node, subs),
+                start.span,
+            )),
+            step: Box::new(Spanned::new(
+                instantiate_typed_expr(&step.node, subs),
+                step.span,
+            )),
+            end: Box::new(Spanned::new(
+                instantiate_typed_expr(&end.node, subs),
+                end.span,
+            )),
+            inclusive: *inclusive,
+            elem_ty: apply_subs(elem_ty, subs),
+        },
+        TypedExprKind::ForIn {
+            var_name,
+            var_ty,
+            iterable,
+            body,
+        } => TypedExprKind::ForIn {
+            var_name: var_name.clone(),
+            var_ty: apply_subs(var_ty, subs),
+            iterable: Box::new(Spanned::new(
+                instantiate_typed_expr(&iterable.node, subs),
+                iterable.span,
+            )),
+            body: body
+                .iter()
+                .map(|s| Spanned::new(instantiate_typed_expr(&s.node, subs), s.span))
+                .collect(),
+        },
+        TypedExprKind::In { item, collection } => TypedExprKind::In {
+            item: Box::new(Spanned::new(
+                instantiate_typed_expr(&item.node, subs),
+                item.span,
+            )),
+            collection: Box::new(Spanned::new(
+                instantiate_typed_expr(&collection.node, subs),
+                collection.span,
+            )),
+        },
     }
 }
 
