@@ -29,7 +29,9 @@ pub use bigint::{
 };
 pub use float::float_to_string;
 pub use rational::rat_from_text;
-pub use text::{bool_to_text, int_to_text, text_literal, text_replace_first};
+// text::{bool_to_text, int_to_text, text_literal, text_replace_first} —
+// rebaixados para pub(crate): zero consumidores cross-crate (apenas wrappers
+// C-ABI kata_rt_* no próprio text.rs os usam internamente).
 
 // Re-exports de funções C-ABI para o codegen registrar no JIT.
 pub use arc::{kata_rt_alloc_arc, kata_rt_arc_fn_ptr, kata_rt_decref, kata_rt_incref};
@@ -58,9 +60,10 @@ pub use range::kata_rt_range_alloc;
 pub use rational::{
     kata_rt_int_to_rational, kata_rt_rat_add, kata_rt_rat_div, kata_rt_rat_eq,
     kata_rt_rat_from_float, kata_rt_rat_ge, kata_rt_rat_gt, kata_rt_rat_le, kata_rt_rat_literal,
-    kata_rt_rat_lt, kata_rt_rat_mul, kata_rt_rat_neq, kata_rt_rat_show, kata_rt_rat_show_raw,
-    kata_rt_rat_sub, kata_rt_rat_to_float,
+    kata_rt_rat_lt, kata_rt_rat_mul, kata_rt_rat_neq, kata_rt_rat_show, kata_rt_rat_sub,
+    kata_rt_rat_to_float,
 };
+// kata_rt_rat_show_raw — rebaixado para pub(crate): zero consumidores cross-crate.
 pub use scheduler::{kata_rt_run, kata_rt_scheduler_init, kata_rt_spawn, kata_rt_yield};
 pub use sum::{kata_rt_store_sum_result, kata_rt_sum_tag_int};
 pub use text::{

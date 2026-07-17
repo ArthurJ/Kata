@@ -39,18 +39,20 @@ pub unsafe extern "C" fn kata_rt_string_len(s: *const std::os::raw::c_char) -> i
 }
 
 /// Cria string literal a partir de texto (para codegen de TextLit).
-pub fn text_literal(s: &str) -> CString {
+#[allow(dead_code)] // usado apenas em testes inline
+pub(crate) fn text_literal(s: &str) -> CString {
     CString::new(s)
         .unwrap_or_else(|_| CString::new("").expect("empty string never contains nul bytes"))
 }
 
 /// Converte Int (i64 tagged) para String.
-pub fn int_to_text(val: i64) -> String {
+#[allow(dead_code)] // usado apenas em testes inline
+pub(crate) fn int_to_text(val: i64) -> String {
     crate::bigint::bigint_to_string(val)
 }
 
 /// Converte Boolean (0/1) para String "True"/"False".
-pub fn bool_to_text(val: i64) -> String {
+pub(crate) fn bool_to_text(val: i64) -> String {
     if val == 1 {
         "True".into()
     } else {
@@ -59,7 +61,7 @@ pub fn bool_to_text(val: i64) -> String {
 }
 
 /// Substitui primeira ocorrência de `{}` por valor (para `format`).
-pub fn text_replace_first(template: &str, replacement: &str) -> String {
+pub(crate) fn text_replace_first(template: &str, replacement: &str) -> String {
     if let Some(pos) = template.find("{}") {
         format!(
             "{}{}{}",

@@ -293,7 +293,7 @@ pub unsafe extern "C" fn kata_rt_rat_show(r: *const BigRational) -> *mut std::os
 ///
 /// `r_raw` deve ser um i64 que representa um ponteiro válido para `BigRational`.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn kata_rt_rat_show_raw(r_raw: i64) -> *mut std::os::raw::c_char {
+pub(crate) unsafe extern "C" fn kata_rt_rat_show_raw(r_raw: i64) -> *mut std::os::raw::c_char {
     let r = r_raw as *const BigRational;
     // SAFETY: caller (driver) garante que r_raw é ponteiro válido.
     unsafe { kata_rt_rat_show(r) }
