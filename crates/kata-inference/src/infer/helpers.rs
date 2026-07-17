@@ -17,7 +17,7 @@ use crate::typed::{TypedPattern, TypedWithBinding};
 use super::expr::{InferCtx, infer_expr};
 
 /// Erro de inferência — wrapped `MiddleError` (carrega Span).
-pub type InferResult<T> = Result<T, MiddleError>;
+pub(crate) type InferResult<T> = Result<T, MiddleError>;
 
 /// Popula o DispatchTable a partir das assinaturas do ResolvedModule.
 pub(crate) fn populate_dispatch_table(signatures: &[Signature]) -> DispatchTable {

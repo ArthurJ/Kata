@@ -7,7 +7,7 @@
 use kata_ast::{Expr, LambdaClause, Pattern, Spanned};
 use kata_diagnostics::MiddleError;
 
-use crate::infer::InferResult;
+use crate::infer::helpers::InferResult;
 
 /// Verifica sobreposição de cláusulas (RedundantClause).
 ///

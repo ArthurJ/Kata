@@ -25,8 +25,8 @@ mod dot_access;
 mod expr;
 mod format_synthesis;
 mod free_vars;
-pub mod generics;
-mod helpers;
+pub(crate) mod generics;
+pub(crate) mod helpers;
 mod lambda;
 mod partial_dispatch;
 mod recursion;
@@ -52,16 +52,18 @@ use self::apply_lambda::infer_lambda_body;
 use self::expr::fits_return;
 use self::expr::{InferCtx, infer_expr};
 use self::helpers::{
-    check_patterns, item_span_or_synthetic, populate_dispatch_table, process_with_bindings,
+    InferResult, check_patterns, item_span_or_synthetic, populate_dispatch_table,
+    process_with_bindings,
 };
-
-pub use self::helpers::InferResult;
 
 /// Infere o tipo de um módulo completo.
 ///
 /// Pipeline: popula DispatchTable → processa funções nomeadas → infere entry point.
 /// Retorna `TypedModule` ou o primeiro erro de typeck encontrado.
-pub fn infer_module(module: &Module, resolved: &ResolvedModule) -> InferResult<TypedModule> {
+pub fn infer_module(
+    module: &Module,
+    resolved: &ResolvedModule,
+) -> Result<TypedModule, MiddleError> {
     // 1. Popula DispatchTable com as assinaturas (prelude + módulo)
     let mut dispatch_table = populate_dispatch_table(&resolved.signatures);
 
