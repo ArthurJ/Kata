@@ -117,9 +117,11 @@ Fio 1: Fundação + Aritmética + CLI
 │   │   Maquinaria: Ty::Sum com payload, :: em type params, match
 │   │              general case
 │   │
-│   └── Fio 8: Coleções, ITERABLE, Stream Fusion
+│   └── Fio 8: Coleções, ITERABLE, Stream Fusion — ATIVO
 │       │   (List, Array, Range, map/filter/fold, .N, len, INDEXABLE,
 │       │    COUNTABLE, `for x in` iteration)
+│       │   Fases 1-4 ✅, Fase 5 parcial (inferência + sintaxe ::A ✅,
+│       │    .N/len/testes pendentes)
 │       │
 │       └── Fio 13: Dict, Set (HAMT)
 │
@@ -457,6 +459,11 @@ implements ITERABLE(A)` despacha corretamente. Monomorphization especializa
 ---
 
 ### Fio 8: Coleções, ITERABLE, Stream Fusion
+
+**Status:** Fases 1-4 ✅ (DoDs 1-21). Fase 5 parcial — TypedExprKind +
+collections.rs + Pattern Cons ✅, sintaxe `::A` sem parênteses ✅ (aditivo,
+`::(A)` ainda funciona). Pendente: `.N` desugar, `len` síntese, testes E2E
+(DoDs 22-32). 741 testes, 0 falhas, 3 ignored. HEAD `cd93c1f`.
 
 **Maquinaria de tipos construída:**
 - `.N` em coleções (desugar para `at` via INDEXABLE, retorna `Result`)
