@@ -775,17 +775,17 @@ variants de `Ty`. Tipos do usuário que implementam ITERABLE funcionam.
 **DoDs:**
 | # | Descrição | Fase |
 |---|---|---|
-| 22 | `[1 2 3]` infere `List(Int)` | 5 |
-| 23 | `{1 2 3}` infere `Array(Int)` | 5 |
-| 24 | `[0..1..10]` infere `Range(Int)` | 5 |
-| 25 | `[0..1..=10]` infere `Range(Int)` com `inclusive=true` | 5 |
-| 26 | `[0.0..0.1..1.0]` infere `Range(Float)` | 5 |
-| 27 | `[]` infere `List(InferVar)` — tipo resolvido pelo uso | 5 |
-| 28 | `for x in [1 2 3]` define `x: Int` no escopo do body | 5 |
-| 29 | `[h : t]` pattern match em List: `h: Int, t: List(Int)` | 5 |
-| 30 | `arr.0` em Array desugara para `at arr 0` → `Result::(Int, Err)` | 5 |
-| 31 | `len (10, 20)` → `2` (síntese compile-time) | 5 |
-| 32 | `3 in {1 2 3}` infere `Boolean` | 5 |
+| 22 | `[1 2 3]` infere `List(Int)` | 5 | ✅ |
+| 23 | `{1 2 3}` infere `Array(Int)` | 5 | ✅ |
+| 24 | `[0..1..10]` infere `Range(Int)` | 5 | ✅ |
+| 25 | `[0..1..=10]` infere `Range(Int)` com `inclusive=true` | 5 | ✅ |
+| 26 | `[0.0..0.1..1.0]` infere `Range(Float)` | 5 | ✅ |
+| 27 | `[]` infere `List(InferVar)` — tipo resolvido pelo uso | 5 | ✅ |
+| 28 | `for x in [1 2 3]` define `x: Int` no escopo do body | 5 | ✅ |
+| 29 | `[h : t]` pattern match em List: `h: Int, t: List(Int)` | 5 | ✅ |
+| 30 | `arr.0` em Array desugara para `at arr 0` → `Result::(Int, Err)` | 5 | ✅ |
+| 31 | `len (10, 20)` → `2` (síntese compile-time) | 5 | ✅ |
+| 32 | `3 in {1 2 3}` infere `Boolean` | 5 | ✅ |
 
 ### Fase 6: Runtime + Codegen
 
