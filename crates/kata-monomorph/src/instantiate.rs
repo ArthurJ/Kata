@@ -1,14 +1,19 @@
-//! Instantiation — type specialization and naming helpers for monomorphization.
+//! Instantiation — type specialization for monomorphization.
 //!
 //! These functions take a generic `TypedFunction` / `TypedExpr` / `TypedPattern`
 //! and a `Substitutions` map, and produce a concrete instance with all
 //! `Ty::Var("T")` replaced by the concrete types.
+//!
+//! Naming helpers (`canonicalize_subs`, `ty_to_string`) foram extraídas para
+//! `naming.rs`. Arms de collections (`ListLit`, `ArrayLit`, `RangeLit`, `ForIn`,
+//! `In`, `Map`, `Filter`, `Fold`, `FusedStream`) foram extraídos para
+//! `instantiate_collections.rs`.
 
 use kata_ast::Spanned;
 use kata_core::ty::Ty;
 use kata_inference::{
-    FusedStage, Substitutions, TypedExpr, TypedExprKind, TypedFunction, TypedLambdaClause,
-    TypedPattern, apply_subs,
+    Substitutions, TypedExpr, TypedExprKind, TypedFunction, TypedLambdaClause, TypedPattern,
+    apply_subs,
 };
 
 /// Gera uma instância monomorfizada de uma `TypedFunction`.
@@ -41,7 +46,10 @@ pub(crate) fn instantiate_function(
 }
 
 /// Instancia uma cláusula — substitui Ty::Var nos padrões e corpo.
-fn instantiate_clause(clause: &TypedLambdaClause, subs: &Substitutions) -> TypedLambdaClause {
+pub(crate) fn instantiate_clause(
+    clause: &TypedLambdaClause,
+    subs: &Substitutions,
+) -> TypedLambdaClause {
     TypedLambdaClause {
         patterns: clause
             .patterns
@@ -86,7 +94,7 @@ fn instantiate_guard(
 }
 
 /// Instancia um `TypedPattern` — substitui Ty::Var no tipo dos bindings.
-fn instantiate_pattern(pattern: &TypedPattern, subs: &Substitutions) -> TypedPattern {
+pub(crate) fn instantiate_pattern(pattern: &TypedPattern, subs: &Substitutions) -> TypedPattern {
     match pattern {
         TypedPattern::Ident { name, ty } => TypedPattern::Ident {
             name: name.clone(),
@@ -131,7 +139,7 @@ fn instantiate_pattern(pattern: &TypedPattern, subs: &Substitutions) -> TypedPat
 }
 
 /// Instancia um `TypedExpr` — substitui Ty::Var no tipo do nó e recurse nos filhos.
-fn instantiate_typed_expr(expr: &TypedExpr, subs: &Substitutions) -> TypedExpr {
+pub(crate) fn instantiate_typed_expr(expr: &TypedExpr, subs: &Substitutions) -> TypedExpr {
     TypedExpr {
         span: expr.span,
         ty: apply_subs(&expr.ty, subs),
@@ -354,227 +362,15 @@ fn instantiate_kind(kind: &TypedExprKind, subs: &Substitutions) -> TypedExprKind
         TypedExprKind::Break => TypedExprKind::Break,
         TypedExprKind::Continue => TypedExprKind::Continue,
 
-        // ── Fio 8: Coleções — instanciar sub-expressões ──
-        TypedExprKind::ListLit { elements } => TypedExprKind::ListLit {
-            elements: elements
-                .iter()
-                .map(|e| Spanned::new(instantiate_typed_expr(&e.node, subs), e.span))
-                .collect(),
-        },
-        TypedExprKind::ArrayLit { elements } => TypedExprKind::ArrayLit {
-            elements: elements
-                .iter()
-                .map(|e| Spanned::new(instantiate_typed_expr(&e.node, subs), e.span))
-                .collect(),
-        },
-        TypedExprKind::RangeLit {
-            start,
-            step,
-            end,
-            inclusive,
-            elem_ty,
-        } => TypedExprKind::RangeLit {
-            start: Box::new(Spanned::new(
-                instantiate_typed_expr(&start.node, subs),
-                start.span,
-            )),
-            step: Box::new(Spanned::new(
-                instantiate_typed_expr(&step.node, subs),
-                step.span,
-            )),
-            end: Box::new(Spanned::new(
-                instantiate_typed_expr(&end.node, subs),
-                end.span,
-            )),
-            inclusive: *inclusive,
-            elem_ty: apply_subs(elem_ty, subs),
-        },
-        TypedExprKind::ForIn {
-            var_name,
-            var_ty,
-            iterable,
-            body,
-        } => TypedExprKind::ForIn {
-            var_name: var_name.clone(),
-            var_ty: apply_subs(var_ty, subs),
-            iterable: Box::new(Spanned::new(
-                instantiate_typed_expr(&iterable.node, subs),
-                iterable.span,
-            )),
-            body: body
-                .iter()
-                .map(|s| Spanned::new(instantiate_typed_expr(&s.node, subs), s.span))
-                .collect(),
-        },
-        TypedExprKind::In { item, collection } => TypedExprKind::In {
-            item: Box::new(Spanned::new(
-                instantiate_typed_expr(&item.node, subs),
-                item.span,
-            )),
-            collection: Box::new(Spanned::new(
-                instantiate_typed_expr(&collection.node, subs),
-                collection.span,
-            )),
-        },
-
-        // ── Fio 8 Fase 8: map/filter/fold — instanciar sub-exprs + Ty ──
-        TypedExprKind::Map {
-            callback,
-            collection,
-            coll_ty,
-            elem_ty,
-            ret_ty,
-        } => TypedExprKind::Map {
-            callback: Box::new(Spanned::new(
-                instantiate_typed_expr(&callback.node, subs),
-                callback.span,
-            )),
-            collection: Box::new(Spanned::new(
-                instantiate_typed_expr(&collection.node, subs),
-                collection.span,
-            )),
-            coll_ty: apply_subs(coll_ty, subs),
-            elem_ty: apply_subs(elem_ty, subs),
-            ret_ty: apply_subs(ret_ty, subs),
-        },
-
-        TypedExprKind::Filter {
-            callback,
-            collection,
-            coll_ty,
-            elem_ty,
-            ret_ty,
-        } => TypedExprKind::Filter {
-            callback: Box::new(Spanned::new(
-                instantiate_typed_expr(&callback.node, subs),
-                callback.span,
-            )),
-            collection: Box::new(Spanned::new(
-                instantiate_typed_expr(&collection.node, subs),
-                collection.span,
-            )),
-            coll_ty: apply_subs(coll_ty, subs),
-            elem_ty: apply_subs(elem_ty, subs),
-            ret_ty: apply_subs(ret_ty, subs),
-        },
-
-        TypedExprKind::Fold {
-            callback,
-            initial,
-            collection,
-            coll_ty,
-            elem_ty,
-            ret_ty,
-        } => TypedExprKind::Fold {
-            callback: Box::new(Spanned::new(
-                instantiate_typed_expr(&callback.node, subs),
-                callback.span,
-            )),
-            initial: Box::new(Spanned::new(
-                instantiate_typed_expr(&initial.node, subs),
-                initial.span,
-            )),
-            collection: Box::new(Spanned::new(
-                instantiate_typed_expr(&collection.node, subs),
-                collection.span,
-            )),
-            coll_ty: apply_subs(coll_ty, subs),
-            elem_ty: apply_subs(elem_ty, subs),
-            ret_ty: apply_subs(ret_ty, subs),
-        },
-
-        // ── Fio 8 Fase 9: FusedStream — instanciar stages + source + Ty ──
-        TypedExprKind::FusedStream {
-            stages,
-            source,
-            coll_ty,
-            source_elem_ty,
-            result_elem_ty,
-            ret_ty,
-        } => {
-            let new_stages = stages
-                .iter()
-                .map(|stage| match stage {
-                    FusedStage::Filter {
-                        callback,
-                        input_elem_ty,
-                    } => FusedStage::Filter {
-                        callback: Box::new(Spanned::new(
-                            instantiate_typed_expr(&callback.node, subs),
-                            callback.span,
-                        )),
-                        input_elem_ty: apply_subs(input_elem_ty, subs),
-                    },
-                    FusedStage::Map {
-                        callback,
-                        input_elem_ty,
-                        output_elem_ty,
-                    } => FusedStage::Map {
-                        callback: Box::new(Spanned::new(
-                            instantiate_typed_expr(&callback.node, subs),
-                            callback.span,
-                        )),
-                        input_elem_ty: apply_subs(input_elem_ty, subs),
-                        output_elem_ty: apply_subs(output_elem_ty, subs),
-                    },
-                })
-                .collect();
-            TypedExprKind::FusedStream {
-                stages: new_stages,
-                source: Box::new(Spanned::new(
-                    instantiate_typed_expr(&source.node, subs),
-                    source.span,
-                )),
-                coll_ty: apply_subs(coll_ty, subs),
-                source_elem_ty: apply_subs(source_elem_ty, subs),
-                result_elem_ty: apply_subs(result_elem_ty, subs),
-                ret_ty: apply_subs(ret_ty, subs),
+        // ── Fio 8: Coleções + Fase 8/9 HOFs/FusedStream ──
+        // Delegado para `instantiate_collections` — arms de collections.
+        _ => {
+            if let Some(kind) = crate::instantiate_collections::instantiate_collections(kind, subs)
+            {
+                kind
+            } else {
+                unreachable!("instantiate_kind: variante não tratada: {kind:?}")
             }
         }
-    }
-}
-
-// ── Naming ────────────────────────────────────────────────────
-
-/// Gera uma string canônica para um mapa de substitutions.
-///
-/// Ordena por nome do type param para que `T=Int, E=Text` e `E=Text, T=Int`
-/// produzam a mesma chave.
-pub(crate) fn canonicalize_subs(type_params: &[String], subs: &Substitutions) -> String {
-    let mut parts: Vec<String> = Vec::new();
-    for param in type_params {
-        if let Some(ty) = subs.get(param) {
-            parts.push(format!("{param}_{}", ty_to_string(ty)));
-        }
-    }
-    parts.join("_")
-}
-
-/// Converte um `Ty` para string canônica usada no nome da instância.
-fn ty_to_string(ty: &Ty) -> String {
-    match ty {
-        Ty::Prim(p) => format!("{p:?}"),
-        Ty::Var(name) => name.clone(),
-        Ty::Generic(name, args) => {
-            let args_str = args.iter().map(ty_to_string).collect::<Vec<_>>().join("_");
-            format!("{name}_{args_str}")
-        }
-        Ty::Sum(name) => name.clone(),
-        Ty::Function(params, ret) => {
-            let p = params
-                .iter()
-                .map(ty_to_string)
-                .collect::<Vec<_>>()
-                .join("_");
-            format!("Fn_{p}_{}", ty_to_string(ret))
-        }
-        Ty::Tuple(elems) => {
-            let e = elems.iter().map(ty_to_string).collect::<Vec<_>>().join("_");
-            format!("Tup_{e}")
-        }
-        Ty::Unit => "Unit".to_string(),
-        Ty::InferVar(_) => "Inf".to_string(),
-        Ty::Interface(name) => format!("Iface_{name}"),
-        _ => format!("{ty:?}"),
     }
 }

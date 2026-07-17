@@ -29,6 +29,8 @@
 //! duplicação.
 
 mod instantiate;
+mod instantiate_collections;
+mod naming;
 
 use std::collections::HashMap;
 
@@ -40,7 +42,8 @@ use kata_inference::{
     TypedLambdaClause, TypedModule, apply_subs, unify,
 };
 
-use instantiate::{canonicalize_subs, instantiate_function};
+use instantiate::instantiate_function;
+use naming::canonicalize_subs;
 
 /// Módulo monomorfizado — TAST com todos os tipos concretos.
 ///
