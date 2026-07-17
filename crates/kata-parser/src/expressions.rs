@@ -26,6 +26,7 @@ impl Parser {
                 | Token::Break
                 | Token::Continue
                 | Token::For
+                | Token::Select
         )
     }
 
@@ -95,6 +96,12 @@ impl Parser {
                     return Err(self.error("`for` fora de Action (for só existe em Actions)"));
                 }
                 self.parse_for_in()
+            }
+            Token::Select => {
+                if !self.in_action_body {
+                    return Err(self.error("`select` fora de Action (select só existe em Actions)"));
+                }
+                self.parse_select()
             }
             Token::Break => {
                 if !self.in_action_body {

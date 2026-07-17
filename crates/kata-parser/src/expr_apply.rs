@@ -29,7 +29,7 @@ pub(crate) fn parse_expr(parser: &mut Parser) -> Result<Spanned<Expr>, FrontendE
         lhs = Spanned::new(Expr::Question(Box::new(lhs)), span);
     }
 
-    // `|>` pipe and `|` fallback — same precedence, left-associative.
+    // `|>` pipe, `|` fallback, `!>` send, `<!` recv — same precedence, left-associative.
     // `lhs |> rhs |> rhs2` = `(lhs |> rhs) |> rhs2`
     // `lhs | rhs | rhs2`    = `(lhs | rhs) | rhs2`
     // `lhs |> rhs | rhs2`  = `(lhs |> rhs) | rhs2`  (intercalado)
@@ -67,6 +67,49 @@ pub(crate) fn parse_expr(parser: &mut Parser) -> Result<Spanned<Expr>, FrontendE
                     Expr::PipeFallback {
                         lhs: Box::new(lhs),
                         rhs: Box::new(rhs),
+                    },
+                    span,
+                );
+            }
+            Token::SendArrow => {
+                // `tx !> valor` — envio por canal (Fio 11).
+                parser.advance(); // consume `!>`
+                let rhs = parse_apply(parser)?;
+                let span = lhs.span.cover(rhs.span);
+                lhs = Spanned::new(
+                    Expr::ChannelSend {
+                        channel: Box::new(lhs),
+                        value: Box::new(rhs),
+                    },
+                    span,
+                );
+            }
+            Token::RecvArrow => {
+                // `rx <! nome` — recebimento de canal (Fio 11).
+                // `<!` exige um Ident como destino (binding name).
+                parser.advance(); // consume `<!`
+                let name = match parser.peek() {
+                    Token::Ident(s) => {
+                        let n = s.clone();
+                        parser.advance();
+                        n
+                    }
+                    _ => {
+                        return Err(parser.error(
+                            "identificador após `<!` (nome do binding de recebimento)",
+                        ));
+                    }
+                };
+                let end_span = parser
+                    .tokens
+                    .get(parser.pos.wrapping_sub(1))
+                    .map(|t| t.span)
+                    .unwrap_or(lhs.span);
+                let span = lhs.span.cover(end_span);
+                lhs = Spanned::new(
+                    Expr::ChannelRecv {
+                        channel: Box::new(lhs),
+                        bind_name: name,
                     },
                     span,
                 );
@@ -131,6 +174,7 @@ fn parse_apply(parser: &mut Parser) -> Result<Spanned<Expr>, FrontendError> {
             | Expr::Match { .. }
             | Expr::Loop { .. }
             | Expr::ForIn { .. }
+            | Expr::Select { .. }
             | Expr::Break
             | Expr::Continue
             | Expr::Return(..)

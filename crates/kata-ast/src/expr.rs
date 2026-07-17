@@ -196,6 +196,26 @@ pub enum Expr {
         item: Box<Spanned<Expr>>,
         collection: Box<Spanned<Expr>>,
     },
+
+    // ── Fio 11: CSP (Canais, Fork, Select) ───────────────────
+    /// `tx !> valor` — envio por canal.
+    ChannelSend {
+        channel: Box<Spanned<Expr>>,
+        value: Box<Spanned<Expr>>,
+    },
+
+    /// `rx <! nome` — recebimento de canal (binding em `nome`).
+    ChannelRecv {
+        channel: Box<Spanned<Expr>>,
+        bind_name: String,
+    },
+
+    /// `select` com braços de canal e timeout.
+    Select {
+        arms: Vec<SelectArm>,
+        timeout_ms: Option<Box<Spanned<Expr>>>,
+        timeout_body: Option<Box<Spanned<Expr>>>,
+    },
 }
 
 /// Índice de DotAccess — field nomeado ou inteiro.
@@ -268,6 +288,17 @@ pub struct MatchArm {
     pub pattern: Option<Spanned<Pattern>>,
     /// Guard opcional após pattern (Fio 2: não implementado no parser ainda).
     pub guard: Option<Spanned<Expr>>,
+    pub body: Spanned<Expr>,
+}
+
+/// Um braço de `select`: `rx <! nome: body` (Fio 11).
+#[derive(Debug, Clone, PartialEq)]
+pub struct SelectArm {
+    /// Receiver de onde receber (expressão que avalia para Receiver::T).
+    pub channel: Spanned<Expr>,
+    /// Nome do binding para o valor recebido.
+    pub bind_name: String,
+    /// Corpo do braço.
     pub body: Spanned<Expr>,
 }
 

@@ -20,7 +20,7 @@
 //! compilador. Cada Lambda cria escopo próprio, então nomes重复 entre
 //! Lambdas aninhadas não conflitam (shadowing lexical normal).
 
-use kata_ast::{Expr, GuardClause, MatchArm, Span, Spanned, WithBinding};
+use kata_ast::{Expr, GuardClause, MatchArm, SelectArm, Span, Spanned, WithBinding};
 
 use crate::desugar_holes::desugar_holes;
 
@@ -231,6 +231,37 @@ fn desugar_pipes(expr: &Spanned<Expr>) -> Spanned<Expr> {
             },
             expr.span,
         ),
+
+        // ── Fio 11: nós CSP preservam estrutura, recursam nos filhos ──
+        Expr::ChannelSend { channel, value } => Spanned::new(
+            Expr::ChannelSend {
+                channel: Box::new(desugar_pipes(channel)),
+                value: Box::new(desugar_pipes(value)),
+            },
+            expr.span,
+        ),
+        Expr::ChannelRecv { channel, bind_name } => Spanned::new(
+            Expr::ChannelRecv {
+                channel: Box::new(desugar_pipes(channel)),
+                bind_name: bind_name.clone(),
+            },
+            expr.span,
+        ),
+        Expr::Select { arms, timeout_ms, timeout_body } => {
+            let arms: Vec<SelectArm> = arms.iter().map(|arm| SelectArm {
+                channel: desugar_pipes(&arm.channel),
+                bind_name: arm.bind_name.clone(),
+                body: desugar_pipes(&arm.body),
+            }).collect();
+            Spanned::new(
+                Expr::Select {
+                    arms,
+                    timeout_ms: timeout_ms.as_ref().map(|t| Box::new(desugar_pipes(t))),
+                    timeout_body: timeout_body.as_ref().map(|t| Box::new(desugar_pipes(t))),
+                },
+                expr.span,
+            )
+        }
     }
 }
 

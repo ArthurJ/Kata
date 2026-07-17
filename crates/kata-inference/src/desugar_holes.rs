@@ -8,7 +8,9 @@
 //! compilador. Cada Lambda cria escopo próprio, então nomes repetidos entre
 //! Lambdas aninhadas não conflitam (shadowing lexical normal).
 
-use kata_ast::{Expr, GuardClause, MatchArm, Pattern, Span, Spanned, TypeExpr, WithBinding};
+use kata_ast::{
+    Expr, GuardClause, MatchArm, Pattern, SelectArm, Span, Spanned, TypeExpr, WithBinding,
+};
 
 /// Desugar holes — elimina todos `Expr::Hole` da AST.
 ///
@@ -265,6 +267,40 @@ pub(crate) fn desugar_holes(expr: &Spanned<Expr>) -> Spanned<Expr> {
             },
             expr.span,
         ),
+
+        // ── Fio 11: nós CSP não contêm holes, preservam estrutura ──
+        Expr::ChannelSend { channel, value } => Spanned::new(
+            Expr::ChannelSend {
+                channel: Box::new(desugar_holes(channel)),
+                value: Box::new(desugar_holes(value)),
+            },
+            expr.span,
+        ),
+        Expr::ChannelRecv { channel, bind_name } => Spanned::new(
+            Expr::ChannelRecv {
+                channel: Box::new(desugar_holes(channel)),
+                bind_name: bind_name.clone(),
+            },
+            expr.span,
+        ),
+        Expr::Select { arms, timeout_ms, timeout_body } => {
+            let arms: Vec<SelectArm> = arms
+                .iter()
+                .map(|arm| SelectArm {
+                    channel: desugar_holes(&arm.channel),
+                    bind_name: arm.bind_name.clone(),
+                    body: desugar_holes(&arm.body),
+                })
+                .collect();
+            Spanned::new(
+                Expr::Select {
+                    arms,
+                    timeout_ms: timeout_ms.as_ref().map(|t| Box::new(desugar_holes(t))),
+                    timeout_body: timeout_body.as_ref().map(|t| Box::new(desugar_holes(t))),
+                },
+                expr.span,
+            )
+        }
     }
 }
 

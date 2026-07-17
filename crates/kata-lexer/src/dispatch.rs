@@ -86,7 +86,12 @@ pub(crate) fn lex_token(lex: &mut Lexer) -> Result<TokenWithSpan, FrontendError>
         }
         '!' => {
             lex.advance();
-            Token::Bang
+            if lex.ch == Some('>') {
+                lex.advance();
+                Token::SendArrow
+            } else {
+                Token::Bang
+            }
         }
         '@' => {
             lex.advance();
@@ -141,6 +146,12 @@ pub(crate) fn lex_token(lex: &mut Lexer) -> Result<TokenWithSpan, FrontendError>
         '}' => {
             lex.advance();
             Token::RBrace
+        }
+        '<' if lex.peek() == Some('!') => {
+            // `<` seguido de `!` → RecvArrow (Fio 11).
+            lex.advance(); // consumir <
+            lex.advance(); // consumir !
+            Token::RecvArrow
         }
         _ => return lex_ident(lex, &start),
     };

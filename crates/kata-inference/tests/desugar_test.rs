@@ -106,6 +106,22 @@ fn assert_no_holes(expr: &Spanned<Expr>) {
             assert_no_holes(item);
             assert_no_holes(collection);
         }
+        // Fio 11: nós CSP não contêm holes, recursam nos filhos
+        Expr::ChannelSend { channel, value } => {
+            assert_no_holes(channel);
+            assert_no_holes(value);
+        }
+        Expr::ChannelRecv { channel, .. } => {
+            assert_no_holes(channel);
+        }
+        Expr::Select { arms, timeout_ms, timeout_body } => {
+            for arm in arms {
+                assert_no_holes(&arm.channel);
+                assert_no_holes(&arm.body);
+            }
+            if let Some(ms) = timeout_ms { assert_no_holes(ms); }
+            if let Some(b) = timeout_body { assert_no_holes(b); }
+        }
     }
 }
 
@@ -188,6 +204,26 @@ fn assert_no_pipes(expr: &Spanned<Expr>) {
         Expr::In { item, collection } => {
             assert_no_pipes(item);
             assert_no_pipes(collection);
+        }
+        // Fio 11: nós CSP não contêm pipes, recursam nos filhos
+        Expr::ChannelSend { channel, value } => {
+            assert_no_pipes(channel);
+            assert_no_pipes(value);
+        }
+        Expr::ChannelRecv { channel, .. } => {
+            assert_no_pipes(channel);
+        }
+        Expr::Select { arms, timeout_ms, timeout_body } => {
+            for arm in arms {
+                assert_no_pipes(&arm.channel);
+                assert_no_pipes(&arm.body);
+            }
+            if let Some(ms) = timeout_ms {
+                assert_no_pipes(ms);
+            }
+            if let Some(b) = timeout_body {
+                assert_no_pipes(b);
+            }
         }
     }
 }

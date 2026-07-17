@@ -80,6 +80,10 @@ pub enum Token {
     For,
     /// `in` — separador em `for x in coll` e operador binário de membership
     In,
+    /// `select` — multiplexação de canais CSP (Fio 11)
+    Select,
+    /// `timeout` — cláusula de `select` (Fio 11)
+    Timeout,
 
     // ── Operadores e pontuação ──────────────────────────
     /// `:=` — operador de binding (exclusivo para `let` e `var`)
@@ -98,6 +102,10 @@ pub enum Token {
     Question,
     /// `!` — sufixo de chamada de Action
     Bang,
+    /// `!>` — envio por canal CSP (Fio 11)
+    SendArrow,
+    /// `<!` — recebimento por canal CSP (Fio 11)
+    RecvArrow,
     /// `$` — spread/aplicação explícita (identificador interceptado pelo typeck)
     /// (Não é keyword — é Ident("$"). O lexer produz Ident para `$`.)
 
@@ -183,6 +191,8 @@ impl Token {
                 | Token::Otherwise
                 | Token::For
                 | Token::In
+                | Token::Select
+                | Token::Timeout
         )
     }
 }
@@ -213,6 +223,8 @@ impl std::fmt::Display for Token {
             Token::Otherwise => write!(f, "otherwise"),
             Token::For => write!(f, "for"),
             Token::In => write!(f, "in"),
+            Token::Select => write!(f, "select"),
+            Token::Timeout => write!(f, "timeout"),
             Token::BindAssign => write!(f, ":="),
             Token::DoubleColon => write!(f, "::"),
             Token::FatArrow => write!(f, "=>"),
@@ -221,6 +233,8 @@ impl std::fmt::Display for Token {
             Token::PipeForward => write!(f, "|>"),
             Token::Question => write!(f, "?"),
             Token::Bang => write!(f, "!"),
+            Token::SendArrow => write!(f, "!>"),
+            Token::RecvArrow => write!(f, "<!"),
             Token::LParen => write!(f, "("),
             Token::RParen => write!(f, ")"),
             Token::LBracket => write!(f, "["),
