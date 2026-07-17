@@ -307,7 +307,8 @@ fn pattern_cons_extrai_head_e_tail() {
 /// Sintaxe `for x in coll` exige INDENT para o body (não aceita `:`).
 #[test]
 fn for_in_array_com_echo_retorna_unit() {
-    let src = "action loop_print -> Unit\n    for x in {1 2 3 4 5}\n        echo!(show x)\nloop_print!()";
+    let src =
+        "action loop_print -> Unit\n    for x in {1 2 3 4 5}\n        echo!(show x)\nloop_print!()";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Unit, "for-in com echo! deve retornar Unit");
     assert_eq!(raw, 0, "Unit é 0");
