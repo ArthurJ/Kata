@@ -75,11 +75,17 @@ impl Parser {
                 }
                 loop {
                     // key : value
+                    // `timeout` é keyword do lexer (Token::Timeout) — aceitar
+                    // ambas como key (Token::Ident para demais chaves).
                     let key = match self.peek() {
                         Token::Ident(s) => {
                             let k = s.clone();
                             self.advance();
                             k
+                        }
+                        Token::Timeout => {
+                            self.advance();
+                            "timeout".to_string()
                         }
                         _ => return Err(self.error("directive key (identifier)")),
                     };
@@ -131,7 +137,78 @@ impl Parser {
                 self.advance();
                 Ok(DirectiveValue::Int(val))
             }
-            _ => Err(self.error("string or integer value")),
+            // Literais compostos (Fio 14): tupla e variant.
+            //
+            // Reusa a lógica de parse_directive_args para tuplas (recursivo),
+            // mas produz DirectiveValue::Tuple em vez de Vec<DirectiveArg>.
+            // O `()` vazio produz tupla vazia (diferente do @test() que produz
+            // Vec<DirectiveArg> vazio — mas isso é no nível do arg, não do value).
+            Token::LParen => {
+                self.advance(); // consume (
+                let mut elems = Vec::new();
+                if matches!(self.peek(), Token::RParen) {
+                    self.advance();
+                    return Ok(DirectiveValue::Tuple(elems));
+                }
+                loop {
+                    elems.push(self.parse_directive_value()?);
+                    match self.peek() {
+                        Token::Comma => {
+                            self.advance();
+                        }
+                        Token::RParen => {
+                            self.advance();
+                            break;
+                        }
+                        _ => return Err(self.error("`,` or `)` in tuple")),
+                    }
+                }
+                Ok(DirectiveValue::Tuple(elems))
+            }
+            // Variant: `Enum::Variante` ou `Enum::Variante(args)`.
+            // O lexer não distingue Ident uppercase de lowercase — detectamos
+            // variant pelo padrão Ident :: Ident (mesma heurística de
+            // parse_atom em expressions.rs:151-166).
+            Token::Ident(enum_name) if matches!(self.tokens.get(self.pos + 1), Some(t) if t.token == Token::DoubleColon) => {
+                let enum_name = enum_name.clone();
+                self.advance(); // consume enum name
+                self.advance(); // consume ::
+                let variant = match self.peek() {
+                    Token::Ident(v) => {
+                        let v = v.clone();
+                        self.advance();
+                        v
+                    }
+                    _ => return Err(self.error("variant name after `::`")),
+                };
+                // Opcional: args da variante entre parênteses.
+                let args = if matches!(self.peek(), Token::LParen) {
+                    self.advance();
+                    let mut args = Vec::new();
+                    if matches!(self.peek(), Token::RParen) {
+                        self.advance();
+                        return Ok(DirectiveValue::Variant(enum_name + "::" + &variant, args));
+                    }
+                    loop {
+                        args.push(self.parse_directive_value()?);
+                        match self.peek() {
+                            Token::Comma => {
+                                self.advance();
+                            }
+                            Token::RParen => {
+                                self.advance();
+                                break;
+                            }
+                            _ => return Err(self.error("`,` or `)` in variant args")),
+                        }
+                    }
+                    args
+                } else {
+                    Vec::new()
+                };
+                Ok(DirectiveValue::Variant(enum_name + "::" + &variant, args))
+            }
+            _ => Err(self.error("string, integer, tuple, or variant value")),
         }
     }
 }

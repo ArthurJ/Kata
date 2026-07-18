@@ -161,10 +161,22 @@ pub enum DirectiveArg {
 }
 
 /// Valor de argumento nomeado de diretiva.
+///
+/// Formas simples: `Str("kata_rt_bi_add")`, `Int(42)`.
+/// Formas compostas (Fio 14): tupla e variant. Sem `Struct` — structs em Kata
+/// são construídas via apply posicional (`Pessoa "João" 30`), não via
+/// `{campo: valor}`. Para passar uma struct como arg de teste, usa-se apply
+/// posicional, parseado pelo `parse_atom` existente.
 #[derive(Debug, Clone, PartialEq)]
 pub enum DirectiveValue {
     Str(String),
     Int(i64),
+    /// `(a, b, ...)` — tupla heterogênea. `(42,)` é tupla de 1 elemento.
+    Tuple(Vec<DirectiveValue>),
+    /// `Enum::Variante` ou `Enum::Variante(args...)` — variante de enum.
+    /// `String` é o nome do enum (ex: `Result`), `Vec` são os args da variante
+    /// (vazio para variantes unitárias).
+    Variant(String, Vec<DirectiveValue>),
 }
 
 /// Assinatura dentro de interface — sem corpo, sem diretivas.

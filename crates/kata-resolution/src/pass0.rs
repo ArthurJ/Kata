@@ -16,7 +16,7 @@ use kata_core::{
 use crate::type_resolve::{
     collect_type_params, infer_payload_ty_from_pred, is_type_param_name, resolve_type_expr,
 };
-use crate::types::{EnumPredDeclInfo, EnumPredVariant, FunctionDef, RefinedDeclInfo, Signature};
+use crate::types::{EnumPredDeclInfo, EnumPredVariant, FunctionDef, ResolveError, RefinedDeclInfo, Signature};
 
 /// Pass 0: popula TypeEnv + registries com tipos declarados no módulo.
 ///
@@ -33,6 +33,7 @@ pub(crate) fn run_pass0(
     interface_registry: &mut InterfaceRegistry,
     signatures: &mut Vec<Signature>,
     functions: &mut Vec<FunctionDef>,
+    errors: &mut Vec<ResolveError>,
 ) {
     for item in items {
         match &item.node {
@@ -43,6 +44,19 @@ pub(crate) fn run_pass0(
                 refined,
                 ..
             } => {
+                // Valida diretivas: só @ffi é válida em data. Outras → erro.
+                for d in data_dirs {
+                    match d.name.as_str() {
+                        "ffi" => {}
+                        other => {
+                            errors.push(ResolveError::UnknownDirective {
+                                name: other.to_string(),
+                                context: "data",
+                                item_name: name.clone(),
+                            });
+                        }
+                    }
+                }
                 // Refined declaration?
                 if let Some(refined_decl) = refined {
                     // `data (Int, > _ 0) as PositiveInt`
@@ -279,6 +293,22 @@ pub(crate) fn run_pass0(
                 iface_params,
                 methods,
             } => {
+                // Valida diretivas de cada método: só @ffi, @builtin, @commutative,
+                // @associative são válidas em implements. Outras → erro.
+                for m in methods {
+                    for d in &m.directives {
+                        match d.name.as_str() {
+                            "ffi" | "builtin" | "commutative" | "associative" => {}
+                            other => {
+                                errors.push(ResolveError::UnknownDirective {
+                                    name: other.to_string(),
+                                    context: "implements method",
+                                    item_name: m.name.clone(),
+                                });
+                            }
+                        }
+                    }
+                }
                 let impl_methods: Vec<ImplMethodInfo> = methods
                     .iter()
                     .map(|m| {

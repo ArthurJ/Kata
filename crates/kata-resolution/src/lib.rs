@@ -30,6 +30,8 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
     let mut refined_decls = Vec::new();
     let mut enum_pred_decls = Vec::new();
     let mut interface_registry = kata_core::InterfaceRegistry::new();
+    // Erros de validação de diretivas desconhecidas (coletado durante Pass 1).
+    let mut errors: Vec<ResolveError> = Vec::new();
 
     // Pass 0: popula TypeEnv com tipos declarados
     pass0::run_pass0(
@@ -42,6 +44,7 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
         &mut interface_registry,
         &mut signatures,
         &mut functions,
+        &mut errors,
     );
 
     // Pass 1: coleta assinaturas de funções
@@ -83,7 +86,15 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
                         "commutative" => {
                             is_commutative = true;
                         }
-                        _ => {}
+                        // Diretivas válidas em Sig mas sem processamento aqui.
+                        "builtin" => {}
+                        other => {
+                            errors.push(ResolveError::UnknownDirective {
+                                name: other.to_string(),
+                                context: "sig",
+                                item_name: name.clone(),
+                            });
+                        }
                     }
                 }
 
@@ -136,6 +147,22 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
                     None
                 });
 
+                // Valida diretivas: só @ffi e @test são válidas em Actions.
+                // Outras (@builtin, @commutative, @associative) pertencem a Sigs
+                // ou Implements — erro se aparecerem em Action.
+                for d in action_dirs {
+                    match d.name.as_str() {
+                        "ffi" | "test" => {}
+                        other => {
+                            errors.push(ResolveError::UnknownDirective {
+                                name: other.to_string(),
+                                context: "action",
+                                item_name: name.clone(),
+                            });
+                        }
+                    }
+                }
+
                 // Se tem @ffi e body vazio → Action FFI builtin.
                 // Produz uma Signature com is_action = true para o DispatchTable.
                 // Não produz ActionDef (sem corpo Kata para o inference processar).
@@ -165,7 +192,6 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
         }
     }
 
-    let errors: Vec<ResolveError> = Vec::new();
     if !errors.is_empty() {
         return Err(errors);
     }

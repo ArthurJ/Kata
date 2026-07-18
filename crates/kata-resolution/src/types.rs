@@ -127,4 +127,13 @@ pub enum ResolveError {
     UnknownType { name: String },
     UnknownFfi { name: String },
     DuplicateSignature { name: String },
+    /// Diretiva não reconhecida no contexto (Sig, Action, ou Implements method).
+    /// `name` é o nome da diretiva (ex: "tset"), `context` é onde apareceu
+    /// (ex: "action", "sig", "implements method"), `item_name` é o nome do
+    /// item onde a diretiva foi usada (ex: nome da action ou sig).
+    UnknownDirective {
+        name: String,
+        context: &'static str,
+        item_name: String,
+    },
 }
