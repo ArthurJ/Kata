@@ -382,11 +382,12 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
             sig.params.push(AbiParam::new(I64)); // handle
             sig.returns.push(AbiParam::new(I64)); // value
         }
-        // select: (handles_ptr, n_handles) -> i64 (packed idx+value ou -1)
+        // select: (handles_ptr, n_handles, timeout_ms) -> i64 (idx, -1=block, -2=timeout)
         FfiSymbol::ChannelSelect => {
             sig.params.push(AbiParam::new(I64)); // handles ptr
             sig.params.push(AbiParam::new(I64)); // n_handles
-            sig.returns.push(AbiParam::new(I64)); // packed result
+            sig.params.push(AbiParam::new(I64)); // timeout_ms (<=0 = sem timeout)
+            sig.returns.push(AbiParam::new(I64)); // index or sentinel
         }
     }
 

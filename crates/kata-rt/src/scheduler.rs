@@ -29,15 +29,16 @@ pub(crate) type FiberId = u64;
 
 /// Razão pela qual um fiber está bloqueado.
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // WaitingOnFiber e WaitingOnSelect são para fases futuras
+#[allow(dead_code)] // WaitingOnFiber é para fases futuras
 #[allow(clippy::enum_variant_names)] // Prefixo WaitingOn é intencional
 pub(crate) enum BlockReason {
     /// Esperando mensagem em canal (recv). `i64` = handle do canal.
     WaitingOnChannel(i64),
     /// Esperando espaço em canal (send). `i64` = handle do canal.
     WaitingOnChannelSend(i64),
-    /// Esperando select (Fase 6). `Vec<i64>` = handles.
-    WaitingOnSelect(Vec<i64>),
+    /// Esperando select. `Vec<i64>` = handles, `Option<Instant>` = deadline
+    /// de timeout (None = sem timeout).
+    WaitingOnSelect(Vec<i64>, Option<std::time::Instant>),
     /// Esperando outro fiber terminar.
     WaitingOnFiber(FiberId),
 }
@@ -177,10 +178,9 @@ impl Scheduler {
                         self.blocked
                             .insert(fiber_id, BlockReason::WaitingOnChannelSend(handle));
                     }
-                    Err(YieldReason::WaitingOnSelect(handles)) => {
-                        // Bloqueia em select (Fase 6 — mas YieldReason já existe).
+                    Err(YieldReason::WaitingOnSelect(handles, deadline)) => {
                         self.blocked
-                            .insert(fiber_id, BlockReason::WaitingOnSelect(handles));
+                            .insert(fiber_id, BlockReason::WaitingOnSelect(handles, deadline));
                     }
                     Err(YieldReason::Done) => {
                         unreachable!("YieldReason::Done não deve ser retornado por resume()")
@@ -198,14 +198,34 @@ impl Scheduler {
 
             // 2. run_queue vazia — verificar blocked.
             if !self.blocked.is_empty() {
-                // Sem timers na Fase 4. Deadlock detection.
+                // Verificar se há fibers com deadline de timeout pendente.
+                // Se sim, dormir até o deadline mais próximo e tentar novamente.
+                // Se nenhum fiber tem deadline, é deadlock real.
+                let earliest_deadline = self
+                    .blocked
+                    .values()
+                    .filter_map(|reason| {
+                        if let BlockReason::WaitingOnSelect(_, Some(dl)) = reason {
+                            Some(*dl)
+                        } else {
+                            None
+                        }
+                    })
+                    .min();
+
+                if let Some(deadline) = earliest_deadline {
+                    let now = std::time::Instant::now();
+                    if deadline > now {
+                        std::thread::sleep(deadline - now);
+                    }
+                    // Após dormir, fazer wake_pass para acordar fibers cujo
+                    // deadline expirou ou cujo canal recebeu dado.
+                    self.wake_pass();
+                    continue;
+                }
+
+                // Sem deadlines — deadlock real.
                 let n = self.blocked.len();
-                // Fibers suspensos não completarão. Seus `KataFiber` estão
-                // em `ManuallyDrop` — o `drain()` dropa `FiberEntry` mas
-                // NÃO dropa o `KataFiber` interno, evitando o panic
-                // "fiber dropped without finishing" do wasmtime-fiber.
-                // As arenas dos fibers são vazadas (não destruídas), mas
-                // o scheduler será resetado/dropado em seguida.
                 self.fibers.drain();
                 return Err(format!("deadlock: {n} fibers bloqueados sem progresso"));
             }
@@ -257,10 +277,16 @@ impl Scheduler {
                         None
                     }
                 }
-                BlockReason::WaitingOnSelect(handles) => {
-                    // Fase 6 — select. Verificar se algum canal tem dado.
+                BlockReason::WaitingOnSelect(handles, deadline) => {
+                    // Select: algum canal tem dado OU deadline expirou.
                     if handles.iter().any(|h| can_recv(*h)) {
                         Some(id)
+                    } else if let Some(dl) = deadline {
+                        if std::time::Instant::now() >= *dl {
+                            Some(id)
+                        } else {
+                            None
+                        }
                     } else {
                         None
                     }

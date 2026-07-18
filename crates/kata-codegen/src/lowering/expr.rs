@@ -512,10 +512,11 @@ pub(crate) fn lower_expr(
             super::csp::lower_fork(expr, action_name, args, ctx)
         }
 
-        // ── Fio 11 Fase 6: Select — ainda não implementado ──
-        TypedExprKind::Select { .. } => Err(super::CodegenError::UnsupportedNode(format!(
-            "CSP lowering pendente (Fase 6 do Fio 11): {:?}",
-            expr.kind
-        ))),
+        // ── Fio 11 Fase 6: Select — multiplexação de canais com timeout ──
+        TypedExprKind::Select {
+            arms,
+            timeout_ms,
+            timeout_body,
+        } => super::csp::lower_select(expr, arms, timeout_ms, timeout_body, ctx),
     }
 }

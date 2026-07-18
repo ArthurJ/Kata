@@ -42,7 +42,7 @@ pub(crate) struct SpawnArgs {
 /// o que fazer: `Cooperative` → volta para run_queue; channel/select →
 /// vai para blocked.
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // WaitingOnSelect e Done são para fases futuras (Fase 6+)
+#[allow(dead_code)] // Done é para exaustividade do enum
 pub(crate) enum YieldReason {
     /// Fiber fez yield cooperativo (back-edge check). Volta para run_queue.
     Cooperative,
@@ -50,8 +50,9 @@ pub(crate) enum YieldReason {
     WaitingOnChannel(i64),
     /// Fiber bloqueou esperando espaço em canal (send). `i64` = handle do canal.
     WaitingOnChannelSend(i64),
-    /// Fiber bloqueou em select. `Vec<i64>` = handles do select.
-    WaitingOnSelect(Vec<i64>),
+    /// Fiber bloqueou em select. `Vec<i64>` = handles, `Option<Instant>` =
+    /// deadline de timeout (None = sem timeout, espera indefinidamente).
+    WaitingOnSelect(Vec<i64>, Option<std::time::Instant>),
     /// Não usado — fiber completou. Existe para exaustividade do enum.
     Done,
 }

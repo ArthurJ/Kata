@@ -233,12 +233,13 @@ fn select_returns_from_first_ready() {
     // ch1 tem dado, ch2 não.
     kata_rt_channel_send(ch1, 42);
     let handles = [ch1, ch2];
-    let result = kata_rt_select(handles.as_ptr(), 2);
+    let result = kata_rt_select(handles.as_ptr(), 2, -1);
     assert_ne!(result, WOULD_BLOCK, "select deve encontrar ch1 pronto");
-    let idx = (result >> 32) as i64;
-    let val = result & 0xFFFF_FFFF;
-    assert_eq!(idx, 0, "índice deve ser 0 (ch1)");
-    assert_eq!(val, 42, "valor deve ser 42");
+    assert_eq!(result, 0, "índice deve ser 0 (ch1)");
+    // Na nova semântica, select retorna só o índice. O valor é obtido
+    // via channel_recv no canal selecionado.
+    let val = kata_rt_channel_recv(ch1);
+    assert_eq!(val, 42, "valor recebido deve ser 42");
     kata_rt_arena_destroy(arena);
 }
 
@@ -248,7 +249,7 @@ fn select_returns_would_block_when_all_empty() {
     let ch1 = kata_rt_channel_create(arena);
     let ch2 = kata_rt_channel_create(arena);
     let handles = [ch1, ch2];
-    let result = kata_rt_select(handles.as_ptr(), 2);
+    let result = kata_rt_select(handles.as_ptr(), 2, -1);
     assert_eq!(
         result, WOULD_BLOCK,
         "select com todos vazios deve WOULD_BLOCK"
@@ -264,12 +265,11 @@ fn select_skips_empty_finds_ready() {
     // ch2 tem dado, ch1 não.
     kata_rt_channel_send(ch2, 99);
     let handles = [ch1, ch2];
-    let result = kata_rt_select(handles.as_ptr(), 2);
+    let result = kata_rt_select(handles.as_ptr(), 2, -1);
     assert_ne!(result, WOULD_BLOCK);
-    let idx = (result >> 32) as i64;
-    let val = result & 0xFFFF_FFFF;
-    assert_eq!(idx, 1, "índice deve ser 1 (ch2)");
-    assert_eq!(val, 99, "valor deve ser 99");
+    assert_eq!(result, 1, "índice deve ser 1 (ch2)");
+    let val = kata_rt_channel_recv(ch2);
+    assert_eq!(val, 99, "valor recebido deve ser 99");
     kata_rt_arena_destroy(arena);
 }
 
