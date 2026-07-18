@@ -1,0 +1,270 @@
+//! Operações de canal — send, recv, e verificação sem consumo
+//! (`can_recv`/`can_send`) usada pelo wake pass do scheduler.
+//!
+//! Este submódulo concentra a lógica de despacho por tag para operações
+//! que consomem ou inspecionam o estado interno dos canais. As structs de
+//! canal (`ChannelInner`, `QueueInner`, `BroadcastInner`, `BroadcastReceiver`)
+//! e a FFI de criação permanecem no módulo pai [`crate::channel`].
+//!
+//! **Tags despachadas:**
+//! - `TAG_CHANNEL` (0b00) — rendezvous (slot único).
+//! - `TAG_QUEUE` (0b01) — fila bufferizada.
+//! - `TAG_BROADCAST` (0b10) — pub/sub fire-and-forget (sender/factory).
+//! - `TAG_BROADCAST_RX` (0b11) — receiver de broadcast.
+
+use super::{BroadcastInner, BroadcastReceiver, ChannelInner, QueueInner, ptr_of, tag_of};
+
+// ── Sentinel ─────────────────────────────────────────────────────────
+//
+// Retornado por send/recv quando a operação não pode completar
+// (canal vazio, buffer cheio). A versão com yield substitui por blocking real.
+
+pub(super) const WOULD_BLOCK: i64 = -1;
+pub(super) const OK: i64 = 0;
+
+// ── FFI: Envio (operador !>) ──────────────────────────────────────────
+
+/// Envia valor por um handle de canal. Despacha pela tag nos 2 bits
+/// baixos.
+///
+/// Retorna `0` (OK) se a operação completou. Se a operação bloquearia
+/// (canal rendezvous com slot ocupado, queue cheia):
+/// - **Dentro de um fiber** (Suspend em TLS): suspende o fiber com
+///   `YieldReason::WaitingOnChannelSend(handle)`. O scheduler acorda o
+///   fiber quando há espaço. Quando resumido, tenta novamente (loop).
+/// - **Fora de um fiber** (teste unitário): retorna `WOULD_BLOCK` (-1).
+///
+/// # Safety
+/// `handle` deve ser um handle válido de Channel, Queue, ou Broadcast.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_channel_send(handle: i64, value: i64) -> i64 {
+    loop {
+        let result = try_send(handle, value);
+        if result != WOULD_BLOCK {
+            return result;
+        }
+        // Não pode enviar agora. Se há fiber em execução, suspende.
+        let suspended = crate::fiber::with_suspend(|suspend| {
+            suspend.suspend(crate::fiber::YieldReason::WaitingOnChannelSend(handle));
+        });
+        if suspended.is_none() {
+            // Fora de fiber (teste unitário) — retorna WOULD_BLOCK.
+            return WOULD_BLOCK;
+        }
+        // Fiber foi resumido — scheduler acredita que pode enviar. Tentar novamente.
+    }
+}
+
+/// Tenta enviar sem bloquear. Retorna `OK` se completou, `WOULD_BLOCK` se
+/// não pode, `WOULD_BLOCK` para tag inválida.
+///
+/// Função interna extraída para permitir re-tentativa após resume.
+fn try_send(handle: i64, value: i64) -> i64 {
+    let tag = tag_of(handle);
+    let ptr = ptr_of(handle);
+    if ptr.is_null() {
+        return WOULD_BLOCK;
+    }
+    // SAFETY: handle veio da FFI de criação correspondente. O ponteiro
+    // é válido na arena. Tag identifica o tipo correto.
+    unsafe {
+        match tag {
+            super::TAG_CHANNEL => {
+                let inner = &*(ptr as *const ChannelInner);
+                let mut slot = inner.slot.lock().unwrap();
+                if slot.is_some() {
+                    // Slot ocupado — receptor ainda não consumiu.
+                    WOULD_BLOCK
+                } else {
+                    *slot = Some(value);
+                    inner.receiver_ready.notify_one();
+                    OK
+                }
+            }
+            super::TAG_QUEUE => {
+                let inner = &*(ptr as *const QueueInner);
+                let mut buffer = inner.buffer.lock().unwrap();
+                if buffer.len() >= inner.capacity {
+                    // Buffer cheio.
+                    WOULD_BLOCK
+                } else {
+                    buffer.push_back(value);
+                    inner.not_empty.notify_one();
+                    OK
+                }
+            }
+            super::TAG_BROADCAST => {
+                let inner = &*(ptr as *const BroadcastInner);
+                {
+                    let mut val = inner.value.lock().unwrap();
+                    *val = Some(value);
+                }
+                {
+                    let mut ver = inner.version.lock().unwrap();
+                    *ver += 1;
+                }
+                inner.new_msg.notify_all();
+                OK
+            }
+            _ => WOULD_BLOCK, // tag inválida ou broadcast receiver (não envia)
+        }
+    }
+}
+
+// ── FFI: Recebimento (operador <!) ────────────────────────────────────
+
+/// Recebe valor por um handle de canal. Despacha pela tag.
+///
+/// Retorna o valor se disponível. Se a operação bloquearia (canal vazio):
+/// - **Dentro de um fiber** (Suspend em TLS): suspende o fiber com
+///   `YieldReason::WaitingOnChannel(handle)`. O scheduler acorda o
+///   fiber quando há dado. Quando resumido, tenta novamente (loop).
+/// - **Fora de um fiber** (teste unitário): retorna `WOULD_BLOCK` (-1).
+///
+/// # Safety
+/// `handle` deve ser um handle válido de Channel, Queue, ou
+/// BroadcastReceiver.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_channel_recv(handle: i64) -> i64 {
+    loop {
+        let result = try_recv(handle);
+        if result != WOULD_BLOCK {
+            return result;
+        }
+        // Não pode receber agora. Se há fiber em execução, suspende.
+        let suspended = crate::fiber::with_suspend(|suspend| {
+            suspend.suspend(crate::fiber::YieldReason::WaitingOnChannel(handle));
+        });
+        if suspended.is_none() {
+            // Fora de fiber (teste unitário) — retorna WOULD_BLOCK.
+            return WOULD_BLOCK;
+        }
+        // Fiber foi resumido — scheduler acredita que há dado. Tentar novamente.
+    }
+}
+
+/// Tenta receber sem bloquear. Retorna o valor se disponível, `WOULD_BLOCK`
+/// se não há dado, `WOULD_BLOCK` para tag inválida.
+///
+/// Função interna extraída para permitir re-tentativa após resume.
+fn try_recv(handle: i64) -> i64 {
+    let tag = tag_of(handle);
+    let ptr = ptr_of(handle);
+    if ptr.is_null() {
+        return WOULD_BLOCK;
+    }
+    // SAFETY: handle veio da FFI de criação correspondente.
+    unsafe {
+        match tag {
+            super::TAG_CHANNEL => {
+                let inner = &*(ptr as *const ChannelInner);
+                let mut slot = inner.slot.lock().unwrap();
+                if let Some(v) = slot.take() {
+                    inner.sender_ready.notify_one();
+                    v
+                } else {
+                    WOULD_BLOCK
+                }
+            }
+            super::TAG_QUEUE => {
+                let inner = &*(ptr as *const QueueInner);
+                let mut buffer = inner.buffer.lock().unwrap();
+                if let Some(v) = buffer.pop_front() {
+                    inner.not_full.notify_one();
+                    v
+                } else {
+                    WOULD_BLOCK
+                }
+            }
+            super::TAG_BROADCAST_RX => {
+                let rx = &*(ptr as *const BroadcastReceiver);
+                // SAFETY: rx.inner aponta para um BroadcastInner válido
+                // na arena do criador. O criador é always-last.
+                let inner = &*rx.inner;
+                let ver = inner.version.lock().unwrap();
+                if *ver > rx.last_seen_version {
+                    let val = inner.value.lock().unwrap();
+                    let result = val.unwrap_or(WOULD_BLOCK);
+                    // Atualiza last_seen. Preciso soltar os locks primeiro.
+                    drop(val);
+                    drop(ver);
+                    // SAFETY: rx é &mut via ponteiro mutável (arena alloc).
+                    // Como single-threaded, sem data race.
+                    (*ptr.cast::<BroadcastReceiver>()).last_seen_version =
+                        *inner.version.lock().unwrap();
+                    result
+                } else {
+                    WOULD_BLOCK
+                }
+            }
+            _ => WOULD_BLOCK, // tag inválida ou broadcast sender (não recebe)
+        }
+    }
+}
+
+// ── Verificação sem consumo (para wake pass do scheduler) ────────────
+
+/// Verifica se `kata_rt_channel_recv(handle)` retornaria um valor (não
+/// WOULD_BLOCK) **sem consumir o valor**. Usado pelo scheduler no wake
+/// pass para decidir se um fiber blocked em recv pode ser acordado.
+///
+/// # Safety
+/// `handle` deve ser um handle válido.
+pub(crate) fn can_recv(handle: i64) -> bool {
+    let tag = tag_of(handle);
+    let ptr = ptr_of(handle);
+    if ptr.is_null() {
+        return false;
+    }
+    // SAFETY: handle veio da FFI de criação correspondente.
+    unsafe {
+        match tag {
+            super::TAG_CHANNEL => {
+                let inner = &*(ptr as *const ChannelInner);
+                inner.slot.lock().unwrap().is_some()
+            }
+            super::TAG_QUEUE => {
+                let inner = &*(ptr as *const QueueInner);
+                !inner.buffer.lock().unwrap().is_empty()
+            }
+            super::TAG_BROADCAST_RX => {
+                let rx = &*(ptr as *const BroadcastReceiver);
+                let inner = &*rx.inner;
+                *inner.version.lock().unwrap() > rx.last_seen_version
+            }
+            _ => false,
+        }
+    }
+}
+
+/// Verifica se `kata_rt_channel_send(handle, _)` retornaria OK (não
+/// WOULD_BLOCK) **sem enviar**. Usado pelo scheduler no wake pass para
+/// decidir se um fiber blocked em send pode ser acordado.
+///
+/// Broadcast sempre pode enviar (fire-and-forget), então `can_send`
+/// retorna `true` para broadcast.
+///
+/// # Safety
+/// `handle` deve ser um handle válido.
+pub(crate) fn can_send(handle: i64) -> bool {
+    let tag = tag_of(handle);
+    let ptr = ptr_of(handle);
+    if ptr.is_null() {
+        return false;
+    }
+    // SAFETY: handle veio da FFI de criação correspondente.
+    unsafe {
+        match tag {
+            super::TAG_CHANNEL => {
+                let inner = &*(ptr as *const ChannelInner);
+                inner.slot.lock().unwrap().is_none()
+            }
+            super::TAG_QUEUE => {
+                let inner = &*(ptr as *const QueueInner);
+                inner.buffer.lock().unwrap().len() < inner.capacity
+            }
+            super::TAG_BROADCAST => true, // broadcast sempre pode enviar
+            _ => false,
+        }
+    }
+}

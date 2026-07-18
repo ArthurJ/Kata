@@ -1,9 +1,9 @@
-//! Canais CSP — structs de runtime e FFI functions.
+//! Canais CSP — structs de runtime e FFI de criação.
 //!
-//! Fase 3 do Fio 11: cria canais (rendezvous, queue, broadcast) alocados
+//! Cria canais (rendezvous, queue, broadcast) alocados
 //! na arena do fiber criador. Handles são ponteiro+tag (2 bits baixos).
 //!
-//! Fase 4: blocking cooperativo. Quando `send`/`recv` não pode completar e
+//! Blocking cooperativo. Quando `send`/`recv` não pode completar e
 //! há um fiber em execução (Suspend em TLS), suspende o fiber com
 //! `YieldReason`. O scheduler acorda o fiber quando a operação pode prosseguir.
 //!
@@ -15,6 +15,22 @@
 //! **Invariante:** `bumpalo::Bump` não chama destructors no drop.
 //! `Mutex`/`Condvar` no Linux são futex (drop = no-op). Seguro em
 //! single-threaded sem contensão. Ver PRD-fio11 §Runtime/Handle.
+//!
+//! **Estrutura do móduto:** este arquivo (módulo pai) concentra as
+//! structs de canal, as tags de handle, os helpers de
+//! tag/ptr/make_handle, a FFI de **criação** de canais e o helper de
+//! alocação na arena. As operações de send/recv/can_recv/can_send
+//! estão em [`ops`] e a FFI de select em [`select`].
+
+pub(crate) mod ops;
+pub(crate) mod select;
+
+// Re-exports da camada de operações — `lib.rs` continua importando os
+// mesmos símbolos C-ABI.
+pub use ops::{kata_rt_channel_recv, kata_rt_channel_send};
+pub use select::kata_rt_select;
+// `can_recv`/`can_send` são usadas pelo scheduler (pub(crate) no ops).
+pub(crate) use ops::{can_recv, can_send};
 
 use std::collections::VecDeque;
 use std::sync::{Condvar, Mutex};
@@ -24,21 +40,21 @@ use std::sync::{Condvar, Mutex};
 // Ponteiros de heap são 8-byte aligned → bits 0-1 são sempre 0.
 // Usamos esses 2 bits para identificar a topologia.
 
-const TAG_CHANNEL: i64 = 0b00; // rendezvous
-const TAG_QUEUE: i64 = 0b01; // buffered
-const TAG_BROADCAST: i64 = 0b10; // sender/factory
-const TAG_BROADCAST_RX: i64 = 0b11; // receiver
+pub(super) const TAG_CHANNEL: i64 = 0b00; // rendezvous
+pub(super) const TAG_QUEUE: i64 = 0b01; // buffered
+pub(super) const TAG_BROADCAST: i64 = 0b10; // sender/factory
+pub(super) const TAG_BROADCAST_RX: i64 = 0b11; // receiver
 
 const TAG_MASK: i64 = 0b11;
 const PTR_MASK: i64 = !0b11;
 
 /// Extrai a tag (2 bits baixos) do handle.
-fn tag_of(handle: i64) -> i64 {
+pub(super) fn tag_of(handle: i64) -> i64 {
     handle & TAG_MASK
 }
 
 /// Extrai o ponteiro (bits altos) do handle, sem a tag.
-fn ptr_of(handle: i64) -> *mut u8 {
+pub(super) fn ptr_of(handle: i64) -> *mut u8 {
     (handle & PTR_MASK) as *mut u8
 }
 
@@ -51,7 +67,7 @@ fn make_handle(ptr: *mut u8, tag: i64) -> i64 {
 
 /// Canal rendezvous — sender bloqueia até receptor sincronizar.
 ///
-/// Fase 3: slot simples (sem blocking real). Fase 4: Condvar para
+/// Slot simples (sem blocking real). A versão com yield usa Condvar para
 /// yield/bloqueio cooperativo.
 pub(crate) struct ChannelInner {
     slot: Mutex<Option<i64>>,
@@ -80,14 +96,6 @@ pub(crate) struct BroadcastReceiver {
     inner: *mut BroadcastInner,
     last_seen_version: u64,
 }
-
-// ── Sentinel ─────────────────────────────────────────────────────────
-//
-// Retornado por send/recv quando a operação não pode completar
-// (canal vazio, buffer cheio). Fase 4 substitui por blocking real.
-
-const WOULD_BLOCK: i64 = -1;
-const OK: i64 = 0;
 
 // ── Funções auxiliares de alocação na arena ──────────────────────────
 
@@ -205,341 +213,3 @@ pub extern "C" fn kata_rt_broadcast_receiver_create(arena: i64, factory_handle: 
     }
     make_handle(ptr, TAG_BROADCAST_RX)
 }
-
-// ── FFI: Envio (operador !>) ──────────────────────────────────────────
-
-/// Envia valor por um handle de canal. Despacha pela tag nos 2 bits
-/// baixos.
-///
-/// Retorna `0` (OK) se a operação completou. Se a operação bloquearia
-/// (canal rendezvous com slot ocupado, queue cheia):
-/// - **Dentro de um fiber** (Suspend em TLS): suspende o fiber com
-///   `YieldReason::WaitingOnChannelSend(handle)`. O scheduler acorda o
-///   fiber quando há espaço. Quando resumido, tenta novamente (loop).
-/// - **Fora de um fiber** (teste unitário): retorna `WOULD_BLOCK` (-1).
-///
-/// # Safety
-/// `handle` deve ser um handle válido de Channel, Queue, ou Broadcast.
-#[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_channel_send(handle: i64, value: i64) -> i64 {
-    loop {
-        let result = try_send(handle, value);
-        if result != WOULD_BLOCK {
-            return result;
-        }
-        // Não pode enviar agora. Se há fiber em execução, suspende.
-        let suspended = crate::fiber::with_suspend(|suspend| {
-            suspend.suspend(crate::fiber::YieldReason::WaitingOnChannelSend(handle));
-        });
-        if suspended.is_none() {
-            // Fora de fiber (teste unitário) — retorna WOULD_BLOCK.
-            return WOULD_BLOCK;
-        }
-        // Fiber foi resumido — scheduler acredita que pode enviar. Tentar novamente.
-    }
-}
-
-/// Tenta enviar sem bloquear. Retorna `OK` se completou, `WOULD_BLOCK` se
-/// não pode, `WOULD_BLOCK` para tag inválida.
-///
-/// Função interna extraída para permitir re-tentativa após resume.
-fn try_send(handle: i64, value: i64) -> i64 {
-    let tag = tag_of(handle);
-    let ptr = ptr_of(handle);
-    if ptr.is_null() {
-        return WOULD_BLOCK;
-    }
-    // SAFETY: handle veio da FFI de criação correspondente. O ponteiro
-    // é válido na arena. Tag identifica o tipo correto.
-    unsafe {
-        match tag {
-            TAG_CHANNEL => {
-                let inner = &*(ptr as *const ChannelInner);
-                let mut slot = inner.slot.lock().unwrap();
-                if slot.is_some() {
-                    // Slot ocupado — receptor ainda não consumiu.
-                    WOULD_BLOCK
-                } else {
-                    *slot = Some(value);
-                    inner.receiver_ready.notify_one();
-                    OK
-                }
-            }
-            TAG_QUEUE => {
-                let inner = &*(ptr as *const QueueInner);
-                let mut buffer = inner.buffer.lock().unwrap();
-                if buffer.len() >= inner.capacity {
-                    // Buffer cheio.
-                    WOULD_BLOCK
-                } else {
-                    buffer.push_back(value);
-                    inner.not_empty.notify_one();
-                    OK
-                }
-            }
-            TAG_BROADCAST => {
-                let inner = &*(ptr as *const BroadcastInner);
-                {
-                    let mut val = inner.value.lock().unwrap();
-                    *val = Some(value);
-                }
-                {
-                    let mut ver = inner.version.lock().unwrap();
-                    *ver += 1;
-                }
-                inner.new_msg.notify_all();
-                OK
-            }
-            _ => WOULD_BLOCK, // tag inválida ou broadcast receiver (não envia)
-        }
-    }
-}
-
-// ── FFI: Recebimento (operador <!) ────────────────────────────────────
-
-/// Recebe valor por um handle de canal. Despacha pela tag.
-///
-/// Retorna o valor se disponível. Se a operação bloquearia (canal vazio):
-/// - **Dentro de um fiber** (Suspend em TLS): suspende o fiber com
-///   `YieldReason::WaitingOnChannel(handle)`. O scheduler acorda o
-///   fiber quando há dado. Quando resumido, tenta novamente (loop).
-/// - **Fora de um fiber** (teste unitário): retorna `WOULD_BLOCK` (-1).
-///
-/// # Safety
-/// `handle` deve ser um handle válido de Channel, Queue, ou
-/// BroadcastReceiver.
-#[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_channel_recv(handle: i64) -> i64 {
-    loop {
-        let result = try_recv(handle);
-        if result != WOULD_BLOCK {
-            return result;
-        }
-        // Não pode receber agora. Se há fiber em execução, suspende.
-        let suspended = crate::fiber::with_suspend(|suspend| {
-            suspend.suspend(crate::fiber::YieldReason::WaitingOnChannel(handle));
-        });
-        if suspended.is_none() {
-            // Fora de fiber (teste unitário) — retorna WOULD_BLOCK.
-            return WOULD_BLOCK;
-        }
-        // Fiber foi resumido — scheduler acredita que há dado. Tentar novamente.
-    }
-}
-
-/// Tenta receber sem bloquear. Retorna o valor se disponível, `WOULD_BLOCK`
-/// se não há dado, `WOULD_BLOCK` para tag inválida.
-///
-/// Função interna extraída para permitir re-tentativa após resume.
-fn try_recv(handle: i64) -> i64 {
-    let tag = tag_of(handle);
-    let ptr = ptr_of(handle);
-    if ptr.is_null() {
-        return WOULD_BLOCK;
-    }
-    // SAFETY: handle veio da FFI de criação correspondente.
-    unsafe {
-        match tag {
-            TAG_CHANNEL => {
-                let inner = &*(ptr as *const ChannelInner);
-                let mut slot = inner.slot.lock().unwrap();
-                if let Some(v) = slot.take() {
-                    inner.sender_ready.notify_one();
-                    v
-                } else {
-                    WOULD_BLOCK
-                }
-            }
-            TAG_QUEUE => {
-                let inner = &*(ptr as *const QueueInner);
-                let mut buffer = inner.buffer.lock().unwrap();
-                if let Some(v) = buffer.pop_front() {
-                    inner.not_full.notify_one();
-                    v
-                } else {
-                    WOULD_BLOCK
-                }
-            }
-            TAG_BROADCAST_RX => {
-                let rx = &*(ptr as *const BroadcastReceiver);
-                // SAFETY: rx.inner aponta para um BroadcastInner válido
-                // na arena do criador. O criador é always-last.
-                let inner = &*rx.inner;
-                let ver = inner.version.lock().unwrap();
-                if *ver > rx.last_seen_version {
-                    let val = inner.value.lock().unwrap();
-                    let result = val.unwrap_or(WOULD_BLOCK);
-                    // Atualiza last_seen. Preciso soltar os locks primeiro.
-                    drop(val);
-                    drop(ver);
-                    // SAFETY: rx é &mut via ponteiro mutável (arena alloc).
-                    // Como single-threaded, sem data race.
-                    (*ptr.cast::<BroadcastReceiver>()).last_seen_version =
-                        *inner.version.lock().unwrap();
-                    result
-                } else {
-                    WOULD_BLOCK
-                }
-            }
-            _ => WOULD_BLOCK, // tag inválida ou broadcast sender (não recebe)
-        }
-    }
-}
-
-// ── Verificação sem consumo (para wake pass do scheduler) ────────────
-
-/// Verifica se `kata_rt_channel_recv(handle)` retornaria um valor (não
-/// WOULD_BLOCK) **sem consumir o valor**. Usado pelo scheduler no wake
-/// pass para decidir se um fiber blocked em recv pode ser acordado.
-///
-/// # Safety
-/// `handle` deve ser um handle válido.
-pub(crate) fn can_recv(handle: i64) -> bool {
-    let tag = tag_of(handle);
-    let ptr = ptr_of(handle);
-    if ptr.is_null() {
-        return false;
-    }
-    // SAFETY: handle veio da FFI de criação correspondente.
-    unsafe {
-        match tag {
-            TAG_CHANNEL => {
-                let inner = &*(ptr as *const ChannelInner);
-                inner.slot.lock().unwrap().is_some()
-            }
-            TAG_QUEUE => {
-                let inner = &*(ptr as *const QueueInner);
-                !inner.buffer.lock().unwrap().is_empty()
-            }
-            TAG_BROADCAST_RX => {
-                let rx = &*(ptr as *const BroadcastReceiver);
-                let inner = &*rx.inner;
-                *inner.version.lock().unwrap() > rx.last_seen_version
-            }
-            _ => false,
-        }
-    }
-}
-
-/// Verifica se `kata_rt_channel_send(handle, _)` retornaria OK (não
-/// WOULD_BLOCK) **sem enviar**. Usado pelo scheduler no wake pass para
-/// decidir se um fiber blocked em send pode ser acordado.
-///
-/// Broadcast sempre pode enviar (fire-and-forget), então `can_send`
-/// retorna `true` para broadcast.
-///
-/// # Safety
-/// `handle` deve ser um handle válido.
-pub(crate) fn can_send(handle: i64) -> bool {
-    let tag = tag_of(handle);
-    let ptr = ptr_of(handle);
-    if ptr.is_null() {
-        return false;
-    }
-    // SAFETY: handle veio da FFI de criação correspondente.
-    unsafe {
-        match tag {
-            TAG_CHANNEL => {
-                let inner = &*(ptr as *const ChannelInner);
-                inner.slot.lock().unwrap().is_none()
-            }
-            TAG_QUEUE => {
-                let inner = &*(ptr as *const QueueInner);
-                inner.buffer.lock().unwrap().len() < inner.capacity
-            }
-            TAG_BROADCAST => true, // broadcast sempre pode enviar
-            _ => false,
-        }
-    }
-}
-
-// ── FFI: Select ──────────────────────────────────────────────────────
-
-/// Sentinel: timeout expirado (distinto de WOULD_BLOCK).
-const SELECT_TIMEOUT: i64 = -2;
-
-/// Tenta encontrar um canal pronto para recebimento (sem consumir).
-/// Retorna o índice (0..N-1) se algum canal tem dado, ou `WOULD_BLOCK` se
-/// nenhum tem. Usa `can_recv` (não-consome) — o codegen faz `channel_recv`
-/// no canal selecionado depois.
-///
-/// Função interna extraída para permitir re-tentativa após resume.
-fn try_select(handles_slice: &[i64]) -> i64 {
-    for (idx, &handle) in handles_slice.iter().enumerate() {
-        if can_recv(handle) {
-            return idx as i64;
-        }
-    }
-    WOULD_BLOCK
-}
-
-/// Select multiplexado — recebe de qualquer canal na lista.
-///
-/// Retorna o índice (0..N-1) do primeiro canal com dado disponível.
-/// O codegen então chama `kata_rt_channel_recv(handles[idx])` para consumir
-/// o valor. Single-threaded cooperativo: nenhum outro fiber executa entre
-/// `select_idx` e `recv`, então não há race condition.
-///
-/// - `timeout_ms`: se > 0, dispara timeout após N ms. Se <= 0, espera
-///   indefinidamente.
-/// - Retorna `SELECT_TIMEOUT` (-2) se o timeout expirou.
-/// - Retorna `WOULD_BLOCK` (-1) se chamado fora de fiber e nenhum canal
-///   tem dado.
-///
-/// **Blocking cooperativo:** se nenhum canal tem dado e há um fiber em
-/// execução (Suspend em TLS), suspende o fiber com
-/// `YieldReason::WaitingOnSelect(handles, deadline)`. O scheduler acorda
-/// o fiber quando algum canal tem dado ou o deadline expira.
-///
-/// # Safety
-/// `handles` deve apontar para um array de `n_handles` handles válidos
-/// de canal (receiver side).
-#[unsafe(no_mangle)]
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn kata_rt_select(handles: *const i64, n_handles: i64, timeout_ms: i64) -> i64 {
-    if handles.is_null() || n_handles <= 0 {
-        return WOULD_BLOCK;
-    }
-    // SAFETY: handles é um ponteiro válido para n_handles i64s (contrato FFI).
-    let handles_slice = unsafe { std::slice::from_raw_parts(handles, n_handles as usize) };
-    let handles_vec: Vec<i64> = handles_slice.to_vec();
-
-    // Calcular deadline se timeout_ms > 0.
-    let deadline = if timeout_ms > 0 {
-        Some(std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms as u64))
-    } else {
-        None
-    };
-
-    loop {
-        // 1. Tentar todos os canais (sem consumir).
-        let result = try_select(handles_slice);
-        if result != WOULD_BLOCK {
-            return result;
-        }
-
-        // 2. Verificar timeout.
-        if let Some(dl) = deadline
-            && std::time::Instant::now() >= dl
-        {
-            return SELECT_TIMEOUT;
-        }
-
-        // 3. Suspende o fiber com WaitingOnSelect.
-        let suspended = crate::fiber::with_suspend(|suspend| {
-            suspend.suspend(crate::fiber::YieldReason::WaitingOnSelect(
-                handles_vec.clone(),
-                deadline,
-            ));
-        });
-        if suspended.is_none() {
-            // Fora de fiber (teste unitário) — retorna WOULD_BLOCK.
-            return WOULD_BLOCK;
-        }
-        // Fiber resumido — scheduler acredita que há dado ou timeout expirou.
-        // Loop tenta novamente.
-    }
-}
-
-#[allow(dead_code)] // Exportado para testes externos verificarem o sentinel
-pub const SELECT_TIMEOUT_SENTINEL: i64 = SELECT_TIMEOUT;
