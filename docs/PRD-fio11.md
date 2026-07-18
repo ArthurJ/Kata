@@ -1046,7 +1046,7 @@ e executa. Producer/consumer via fork funciona. ✅
 
 **DoD Fase 7:** Fiber em `loop` pesado cede periodicamente. Outras fibers
 executam durante o loop. Sem yield points, loop pesado bloqueia outras fibers
-(verificado com teste de head-of-line blocking).
+(verificado com teste de head-of-line blocking). ✅
 
 ### Fase 8: Testes E2E
 
