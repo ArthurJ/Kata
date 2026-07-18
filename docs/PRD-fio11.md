@@ -1024,13 +1024,13 @@ Action que completa com forks vivos fica zombie até filhos terminarem. ✅
 **DoD Fase 5:** Programa Kata com `channel!`, `!>`, `<!`, `fork!` compila
 e executa. Producer/consumer via fork funciona. ✅
 
-### Fase 6: Codegen — `select`
+### Fase 6: Codegen — `select` ✅
 
 **kata-codegen:**
 - Lowering de `Select`: coleta handles, emite `kata_rt_select`, despacha braço
 - `timeout_ms` como argumento (ou -1 se sem timeout)
 
-**DoD Fase 6:** `select` com 2+ receivers funciona. `timeout` dispara após N ms.
+**DoD Fase 6:** `select` com 2+ receivers funciona. `timeout` dispara após N ms. ✅
 
 ### Fase 7: Yield points no codegen
 
