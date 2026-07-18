@@ -25,7 +25,7 @@ pub(crate) fn lower_collections_literal(
     ctx: &mut LowerCtx,
 ) -> Result<Option<cranelift_codegen::ir::Value>, super::CodegenError> {
     match &expr.kind {
-        // ── Fio 8 Fase 6: ListLit — constrói Cons chain de trás para frente ──
+        // ── ListLit — constrói Cons chain de trás para frente ──
         TypedExprKind::ListLit { elements } => {
             let arena_handle = match expr.escape {
                 kata_core::escape::EscapeTarget::Local => ctx
@@ -69,7 +69,7 @@ pub(crate) fn lower_collections_literal(
             Ok(Some(acc))
         }
 
-        // ── Fio 8 Fase 6: ArrayLit — aloca header+data, set cada elemento ──
+        // ── ArrayLit — aloca header+data, set cada elemento ──
         TypedExprKind::ArrayLit { elements } => {
             let n = elements.len() as i64;
             let arena_handle = match expr.escape {
@@ -111,7 +111,7 @@ pub(crate) fn lower_collections_literal(
             Ok(Some(ptr))
         }
 
-        // ── Fio 8 Fase 6: RangeLit — aloca 3 words, store start/step/end ──
+        // ── RangeLit — aloca 3 words, store start/step/end ──
         TypedExprKind::RangeLit {
             start,
             step,
@@ -178,7 +178,7 @@ pub(crate) fn lower_collections_literal(
             Ok(Some(ptr))
         }
 
-        // ── Fio 8 Fase 6: ForIn — loop inlined por tipo concreto ──
+        // ── ForIn — loop inlined por tipo concreto ──
         TypedExprKind::ForIn {
             var_name,
             var_ty,
@@ -207,7 +207,7 @@ pub(crate) fn lower_collections_literal(
 
                     ctx.builder.ins().jump(loop_block, &[]);
                     ctx.builder.switch_to_block(loop_block);
-                    // Fase 7: yield point no header.
+                    // Yield point no header.
                     let yc = ctx
                         .ffi_refs
                         .get("kata_rt_yield_check")
@@ -266,7 +266,7 @@ pub(crate) fn lower_collections_literal(
 
                     ctx.builder.ins().jump(loop_block, &[]);
                     ctx.builder.switch_to_block(loop_block);
-                    // Fase 7: yield point no header.
+                    // Yield point no header.
                     let yc = ctx
                         .ffi_refs
                         .get("kata_rt_yield_check")
@@ -327,7 +327,7 @@ pub(crate) fn lower_collections_literal(
 
                     ctx.builder.ins().jump(loop_block, &[]);
                     ctx.builder.switch_to_block(loop_block);
-                    // Fase 7: yield point no header.
+                    // Yield point no header.
                     let yc = ctx
                         .ffi_refs
                         .get("kata_rt_yield_check")
@@ -396,7 +396,7 @@ pub(crate) fn lower_collections_literal(
             Ok(Some(unit))
         }
 
-        // ── Fio 8 Fase 6: In (membership) — dispatch por tipo concreto ──
+        // ── In (membership) — dispatch por tipo concreto ──
         TypedExprKind::In { item, collection } => {
             let coll_val = lower_expr(&collection.node, ctx)?;
             let item_val = lower_expr(&item.node, ctx)?;

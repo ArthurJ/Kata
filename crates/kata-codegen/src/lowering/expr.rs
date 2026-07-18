@@ -166,7 +166,7 @@ pub(crate) fn lower_expr(
                 }
                 // Mesmo tipo (no-op): lowerar inner.
                 _ if inner.ty == *target_ty => lower_expr(inner, ctx),
-                // Fio 6: ascription-refined `5::PositiveInt` — o typeck já
+                // Ascription-refined `5::PositiveInt` — o typeck já
                 // validou os predicados em compile-time. Em runtime, o valor
                 // é o mesmo do tipo base (alias). Lowerar inner diretamente.
                 (TypedExprKind::IntLit { .. }, Ty::Struct(_))
@@ -220,7 +220,7 @@ pub(crate) fn lower_expr(
             Ok(ptr)
         }
 
-        // ── StructConstruct: Fio 5 — aloca N×8 bytes, store por campo ──
+        // ── StructConstruct: aloca N×8 bytes, store por campo ──
         // Idêntico ao codegen de Tuple no layout — só muda identidade nominal.
         TypedExprKind::StructConstruct {
             struct_name: _,
@@ -259,7 +259,7 @@ pub(crate) fn lower_expr(
             Ok(ptr)
         }
 
-        // ── FieldAccess: Fio 5 — load ptr + field_index * 8 ──
+        // ── FieldAccess: load ptr + field_index * 8 ──
         TypedExprKind::FieldAccess {
             expr: inner,
             field_index,
@@ -275,7 +275,7 @@ pub(crate) fn lower_expr(
             Ok(ctx.builder.ins().load(clif_ty, flags, ptr, offset))
         }
 
-        // ── IndexAccess: Fio 5 — load ptr + element_index * 8 ──
+        // ── IndexAccess: load ptr + element_index * 8 ──
         TypedExprKind::IndexAccess {
             expr: inner,
             element_index,
@@ -306,14 +306,14 @@ pub(crate) fn lower_expr(
         }
 
         // ── VariantQual: Boolean::True = 1, Boolean::False = 0 ──
-        // Para outros enums (Fase 5): VariantQual unitária → kata_rt_store_sum_result(tag, 0).
+        // Para outros enums: VariantQual unitária → kata_rt_store_sum_result(tag, 0).
         TypedExprKind::VariantQual {
             enum_name,
             variant,
             tag,
         } => super::variant::lower_variant_qual(expr, enum_name, variant, tag, ctx),
 
-        // ── VariantConstruct: Fase 5 — Sum com payload ──
+        // ── VariantConstruct: Sum com payload ──
         // Result::Ok 42 → kata_rt_store_sum_result(tag, payload) → box_ptr
         TypedExprKind::VariantConstruct {
             enum_name: _,
@@ -393,14 +393,14 @@ pub(crate) fn lower_expr(
         // ── Match: pattern matching com branch chain ──
         TypedExprKind::Match { scrutinee, arms } => lower_match(scrutinee, arms, ctx),
 
-        // ── Fase 10: ActionCall — scheduler (entry) ou call direto (dentro de Action) ──
+        // ── ActionCall — scheduler (entry) ou call direto (dentro de Action) ──
         TypedExprKind::ActionCall {
             callee,
             args,
             caller_arena: _,
             ffi_symbol,
         } => lower_action_call(expr, callee, args, ffi_symbol, ctx),
-        // ── Fio 3: Var — mesmo codegen que Let ──
+        // ── Var — mesmo codegen que Let ──
         TypedExprKind::Var { name, value } => {
             let val = lower_expr(&value.node, ctx)?;
             let clif_ty = ty_to_clif(&value.node.ty);
@@ -410,7 +410,7 @@ pub(crate) fn lower_expr(
             Ok(ctx.builder.ins().iconst(I64, 0))
         }
 
-        // ── Fio 3: Reassign — def_var com novo valor (variável já existe) ──
+        // ── Reassign — def_var com novo valor (variável já existe) ──
         TypedExprKind::Reassign { name, value } => {
             let val = lower_expr(&value.node, ctx)?;
             let var = *ctx.var_map.get(name).ok_or_else(|| {
@@ -423,8 +423,8 @@ pub(crate) fn lower_expr(
             Ok(ctx.builder.ins().iconst(I64, 0))
         }
 
-        // ── Fio 3 Fase 2: return — jump para epilogue_block ──
-        // ── Fio 3 Fase 4: loop, break, continue ──
+        // ── Return — jump para epilogue_block ──
+        // ── Loop, break, continue ──
         // Delegado para `control_flow` — arms Return, Loop, Break, Continue.
         TypedExprKind::Return(_)
         | TypedExprKind::Loop { .. }
@@ -437,7 +437,7 @@ pub(crate) fn lower_expr(
             unreachable!("lower_control_flow should handle Return/Loop/Break/Continue")
         }
 
-        // ── Fio 8 Fase 6: Coleções literais — ListLit, ArrayLit, RangeLit, ForIn, In ──
+        // ── Coleções literais — ListLit, ArrayLit, RangeLit, ForIn, In ──
         // Delegado para `collections_literal` — arms de coleções literais.
         TypedExprKind::ListLit { .. }
         | TypedExprKind::ArrayLit { .. }
@@ -452,7 +452,7 @@ pub(crate) fn lower_expr(
             )
         }
 
-        // ── Fio 8 Fase 8: map/filter/fold — lowering ──
+        // ── Map/filter/fold — lowering ──
         TypedExprKind::Map {
             callback,
             collection,
@@ -478,7 +478,7 @@ pub(crate) fn lower_expr(
             ret_ty,
         } => lower_fold(callback, initial, collection, coll_ty, elem_ty, ret_ty, ctx),
 
-        // ── Fio 8 Fase 9: FusedStream — stream fusion ──
+        // ── FusedStream — stream fusion ──
         TypedExprKind::FusedStream {
             stages,
             source,
@@ -496,7 +496,7 @@ pub(crate) fn lower_expr(
             ctx,
         ),
 
-        // ── Fio 11: CSP — lowering da Fase 5 ──
+        // ── CSP — lowering ──
         TypedExprKind::ChannelSend { channel, value } => {
             super::csp::lower_channel_send(channel, value, ctx)
         }
@@ -512,7 +512,7 @@ pub(crate) fn lower_expr(
             super::csp::lower_fork(expr, action_name, args, ctx)
         }
 
-        // ── Fio 11 Fase 6: Select — multiplexação de canais com timeout ──
+        // ── Select — multiplexação de canais com timeout ──
         TypedExprKind::Select {
             arms,
             timeout_ms,

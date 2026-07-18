@@ -13,7 +13,7 @@ use crate::typed::{Effect, TypedExprKind, TypedMatchArm, TypedPattern};
 use super::expr::{InferCtx, infer_expr};
 use super::helpers::InferResult;
 
-/// Fase 6: Unificação limitada para tipos de braços de match.
+/// Unificação limitada para tipos de braços de match.
 /// Se um é Ty::Var e o outro é concreto, retorna o concreto.
 /// Se ambos são Ty::Var com o mesmo nome, retorna um deles.
 /// Caso contrário, retorna None (incompatíveis).
@@ -91,8 +91,8 @@ pub(crate) fn infer_match(
         let typed_body = infer_expr(&arm.body.node, &arm.body.span, &mut arm_env, ctx, tail_pos)?;
 
         // Verifica que todos os braços retornam o mesmo tipo.
-        // Fase 6: unificação limitada — Ty::Var unifica com qualquer tipo concreto.
-        // Fase 7: Return é bottom — unifica com qualquer tipo (braço que aborta).
+        // Unificação limitada — Ty::Var unifica com qualquer tipo concreto.
+        // Return é bottom — unifica com qualquer tipo (braço que aborta).
         if let Some(ref existing) = match_ret_ty {
             if *existing != typed_body.ty {
                 // Return unifica com qualquer coisa — o braço aborta.

@@ -98,7 +98,7 @@ pub(crate) struct LowerCtx<'a, 'b> {
     pub epilogue_block: Option<Block>,
     /// Handle da arena do fiber atual. Usado para alocar tuplas
     /// em computação local (não-tail-pos). `None` no entry point e funções puras.
-    /// Substitui `local_arena` da Fase 3 — agora a arena pertence ao fiber,
+    /// Substitui `local_arena` — agora a arena pertence ao fiber,
     /// não é criada/destruída no prólogo/epílogo da Action.
     pub fiber_arena: Option<Value>,
     /// Handle da arena do caller. Usado para alocar tuplas que sobrevivem

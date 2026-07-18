@@ -1,4 +1,4 @@
-//! Fase 5: Unificação de type params genéricos.
+//! Unificação de type params genéricos.
 //!
 //! `unify` casa os tipos dos argumentos com os tipos dos parâmetros de uma
 //! assinatura genérica, produzindo um mapa de substitutions que mapeia
@@ -82,11 +82,11 @@ fn unify_one(
         // (mesma semântica de fits_return)
         (Ty::Var(_), _) => Ok(()),
 
-        // Fio 8: List/Array/Range — unifica recursivamente o elem_ty.
+        // List/Array/Range — unifica recursivamente o elem_ty.
         (Ty::List(p), Ty::List(a)) => unify_one(p, a, type_params, subs),
         (Ty::Array(p), Ty::Array(a)) => unify_one(p, a, type_params, subs),
         (Ty::Range(p), Ty::Range(a)) => unify_one(p, a, type_params, subs),
-        // Fio 11: Sender/Receiver/ReceiverFactory — unifica o tipo do canal.
+        // Sender/Receiver/ReceiverFactory — unifica o tipo do canal.
         (Ty::Sender(p), Ty::Sender(a)) => unify_one(p, a, type_params, subs),
         (Ty::Receiver(p), Ty::Receiver(a)) => unify_one(p, a, type_params, subs),
         (Ty::ReceiverFactory(p), Ty::ReceiverFactory(a)) => unify_one(p, a, type_params, subs),
@@ -125,11 +125,11 @@ pub fn apply_subs(ty: &Ty, subs: &Substitutions) -> Ty {
             Box::new(apply_subs(ret, subs)),
         ),
         Ty::Tuple(elems) => Ty::Tuple(elems.iter().map(|e| apply_subs(e, subs)).collect()),
-        // Fio 8: List/Array/Range — substitui no elem_ty.
+        // List/Array/Range — substitui no elem_ty.
         Ty::List(elem) => Ty::List(Box::new(apply_subs(elem, subs))),
         Ty::Array(elem) => Ty::Array(Box::new(apply_subs(elem, subs))),
         Ty::Range(elem) => Ty::Range(Box::new(apply_subs(elem, subs))),
-        // Fio 11: Sender/Receiver/ReceiverFactory — substitui no tipo do canal.
+        // Sender/Receiver/ReceiverFactory — substitui no tipo do canal.
         Ty::Sender(elem) => Ty::Sender(Box::new(apply_subs(elem, subs))),
         Ty::Receiver(elem) => Ty::Receiver(Box::new(apply_subs(elem, subs))),
         Ty::ReceiverFactory(elem) => Ty::ReceiverFactory(Box::new(apply_subs(elem, subs))),

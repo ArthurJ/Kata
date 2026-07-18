@@ -1,4 +1,4 @@
-//! Fio 6 Fase 3 — Síntese de funções predicado e smart constructors falíveis.
+//! Síntese de funções predicado e smart constructors falíveis.
 //!
 //! Para cada `RefinedDeclInfo` (declarado com `data (Int, > _ 0) as PositiveInt`):
 //!

@@ -1,4 +1,4 @@
-//! Fio 5: DotAccess — field access em struct + index access em tupla.
+//! DotAccess — field access em struct + index access em tupla.
 //!
 //! Extraído de `expr.rs` — `infer_dot_access` é self-contained: chama
 //! `infer_expr` mas não `infer_expr_hinted`, e tem seu próprio match
@@ -103,7 +103,7 @@ pub(crate) fn infer_dot_access(
         (Ty::Tuple(_), DotIndex::Field(_)) => Err(MiddleError::FieldAccessOnTuple {
             span: (*span).into(),
         }),
-        // Fio 8: .N em List/Array → desugar para `at receptor N` via INDEXABLE.
+        // .N em List/Array → desugar para `at receptor N` via INDEXABLE.
         // O dispatch retorna Result::(A, Err) — access checked.
         // `at` tem type_params (A é genérico), então precisa do caminho
         // genérico: percorrer overloads e fazer unify.

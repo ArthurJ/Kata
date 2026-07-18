@@ -67,7 +67,7 @@ pub(crate) fn lower_module(
     let mut symbol_table: SymbolTable = HashMap::new();
     let mut fn_counter = 0u64;
 
-    // ── Fase 9: declara e define funções nomeadas antes do entry point ──
+    // ── Declara e define funções nomeadas antes do entry point ──
     let mut func_ids: Vec<cranelift_module::FuncId> = Vec::new();
     for func in &typed.functions {
         let cranelift_name = format!("__kata_fn_{fn_counter}");
@@ -95,7 +95,7 @@ pub(crate) fn lower_module(
         )?;
     }
 
-    // ── Fio 3: declara e define Actions antes do entry point ──
+    // ── Declara e define Actions antes do entry point ──
     let mut action_ids: Vec<cranelift_module::FuncId> = Vec::new();
     for action in &typed.actions {
         let cranelift_name = format!("__kata_fn_{fn_counter}");

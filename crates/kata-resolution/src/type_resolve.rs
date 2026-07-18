@@ -37,7 +37,7 @@ pub(crate) fn resolve_type_expr(
                         if iface_reg.get_interface(name).is_some() {
                             Ty::Interface(name.clone())
                         } else if is_type_param_name(name) {
-                            // Fase 5: UPPER_CASE sem :: é type param (ex: T, E, A).
+                            // UPPER_CASE sem :: é type param (ex: T, E, A).
                             Ty::Var(name.clone())
                         } else {
                             Ty::Struct(name.clone()) // fallback: tipo declarado pelo usuário
@@ -64,14 +64,14 @@ pub(crate) fn resolve_type_expr(
             Ty::Function(param_types, Box::new(return_type))
         }
         TypeExpr::ParamApp { name, params } => {
-            // Fase 6: Result::(Int, Text) → resolve params → Ty::Generic("Result", [Int, Text]).
+            // Result::(Int, Text) → resolve params → Ty::Generic("Result", [Int, Text]).
             // Se o enum é genérico no EnumRegistry, produz Ty::Generic.
             // Se não é genérico (fallback), produz Ty::Sum como antes.
             let resolved_params: Vec<Ty> = params
                 .iter()
                 .map(|p| resolve_type_expr(&p.node, env, iface_reg))
                 .collect();
-            // Fio 8: tipos intrínsecos de coleção — List::(A), Array::(A), Range::(A).
+            // Tipos intrínsecos de coleção — List::(A), Array::(A), Range::(A).
             // São variants de Ty, não Ty::Generic. O codegen precisa do layout.
             // O parser sempre produz pelo menos 1 param em ParamApp, então
             // .expect() aqui é uma asserção de invariant, não um path de erro.
@@ -97,7 +97,7 @@ pub(crate) fn resolve_type_expr(
                         .expect("Range::(A) exige exatamente 1 param");
                     Ty::Range(Box::new(elem))
                 }
-                // Fio 11: tipos intrínsecos de canal.
+                // Tipos intrínsecos de canal.
                 "Sender" => {
                     let elem = resolved_params
                         .into_iter()
@@ -126,7 +126,7 @@ pub(crate) fn resolve_type_expr(
                 }
             }
         }
-        // Fio 7: Self é resolvido na Fase 2 (resolution de implements).
+        // Self é resolvido na resolution de implements.
         // Por ora, mapeia para Ty::Var("Self") como placeholder.
         TypeExpr::SelfRef => Ty::Var("Self".into()),
     }
@@ -156,7 +156,7 @@ pub(crate) fn infer_payload_ty_from_pred(expr: &Expr) -> Option<Ty> {
     None
 }
 
-/// Fase 5: verifica se um nome é um type param.
+/// Verifica se um nome é um type param.
 ///
 /// Convenção: UPPER_CASE (todas as letras maiúsculas, pelo menos 1 char).
 /// `T`, `E`, `A` → true. `Int`, `Complex`, `NUM` → false (tem minúsculas).
@@ -165,7 +165,7 @@ pub(crate) fn is_type_param_name(name: &str) -> bool {
     name.chars().all(|c| c.is_ascii_uppercase()) && !name.is_empty() && name != "Self"
 }
 
-/// Fase 5: coleta type params de uma assinatura resolvida.
+/// Coleta type params de uma assinatura resolvida.
 ///
 /// Percorre param_types e return_type recursivamente buscando `Ty::Var(name)`
 /// onde `name` é UPPER_CASE. Recursa em `Ty::Generic` args. Remove duplicatas,
@@ -181,11 +181,11 @@ pub(crate) fn collect_type_params(param_types: &[Ty], return_type: &Ty) -> Vec<S
                     collect_into(arg, result);
                 }
             }
-            // Fio 8: coleções intrínsecas — recursar no tipo do elemento.
+            // Coleções intrínsecas: recursar no tipo do elemento.
             Ty::List(inner) | Ty::Array(inner) | Ty::Range(inner) => {
                 collect_into(inner, result);
             }
-            // Fio 11: canais — recursar no tipo do canal.
+            // Canais: recursar no tipo do canal.
             Ty::Sender(inner) | Ty::Receiver(inner) | Ty::ReceiverFactory(inner) => {
                 collect_into(inner, result);
             }

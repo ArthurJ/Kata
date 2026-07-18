@@ -1,7 +1,7 @@
 //! `TypedExpr` — TAST enriquecida (saída do typeck, entrada do codegen).
 //!
 //! Cada nó carrega `ty: Ty`, `tail_pos: bool`, `effect: Effect` — os três
-//! populados desde Fio 1 para evitar retrofit (PRD-fio1 §17, Risco 5).
+//! populados desde o início para evitar retrofit (PRD-fio1 §17, Risco 5).
 //!
 //! `TypedExprKind` espelha `Expr` mas com `Spanned<TypedExpr>` em vez de
 //! `Spanned<Expr>` — a recursão é sobre a TAST, não sobre a AST.
@@ -17,16 +17,16 @@ pub use crate::typed_pattern::{
     TypedGuardClause, TypedLambdaClause, TypedMatchArm, TypedPattern, TypedWithBinding,
 };
 
-/// Efeito de uma expressão. Fio 1 só produz `Puro`.
+/// Efeito de uma expressão. só produz `Puro`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Effect {
-    /// Expressão pura — sem efeitos colaterais (Fio 1).
+    /// Expressão pura — sem efeitos colaterais.
     Puro,
-    /// Efeito de I/O — `echo`, leitura/escrita (Fio 3).
+    /// Efeito de I/O — `echo`, leitura/escrita.
     IO,
-    /// Spawn de fiber — `spawn` (Fio 11).
+    /// Spawn de fiber — `spawn`.
     Spawn,
-    /// Operação de canal — `send`/`recv` (Fio 11).
+    /// Operação de canal — `send`/`recv`.
     ChannelOp,
 }
 
@@ -39,14 +39,14 @@ pub struct TypedExpr {
     pub ty: Ty,
     /// `true` se a expressão está em posição de cauda (última expr de um
     /// bloco/entry). Marcado em toda expr — o codegen usa para otimizar
-    /// tail calls (Fio 9+) e o TRMA pass (fios posteriores).
+    /// tail calls (fios posteriores) e o TRMA pass (fios posteriores).
     pub tail_pos: bool,
     /// Destino de escape para seleção de arena (Pré-11).
     /// Generaliza `tail_pos` para memória: `Local` = fiber_arena,
     /// `Caller` = caller_arena, `Ancestor(n)` = arena do LCA.
     /// Coexiste com `tail_pos` (que governa TCO, não memória).
     pub escape: EscapeTarget,
-    /// Efeito da expressão. `Puro` em Fio 1.
+    /// Efeito da expressão. `Puro`.
     pub effect: Effect,
     /// Variante da TAST — espelha `Expr` com nós filhos já tipados.
     pub kind: TypedExprKind,
@@ -66,7 +66,7 @@ pub enum TypedExprKind {
     Unit,
     /// Identificador — referência a nome no escopo. O tipo vem do TypeEnv.
     Ident { name: String },
-    /// Chamada de função na TAST. Renomeado de `Apply` em Fio 2 (PRD-fio2).
+    /// Chamada de função na TAST. Renomeado de `Apply` (PRD-fio2).
     ///
     /// As variáveis capturadas pelo callee são lidas de `Lambda.captures`
     /// (single source of truth). O call site aloca um CaptureBox via
@@ -88,7 +88,7 @@ pub enum TypedExprKind {
     },
     /// `(expr)` — agrupamento (transparente ao codegen).
     Grouping { inner: Box<Spanned<TypedExpr>> },
-    /// Tupla heterogênea. Em Fio 2, aceita para patterns (Ty::Tuple antecipado).
+    /// Tupla heterogênea. Aceita para patterns (Ty::Tuple antecipado).
     Tuple { elements: Vec<Spanned<TypedExpr>> },
     /// Construção de struct — smart constructor body.
     /// Aloca `n * 8` bytes na arena e faz `store` por campo.
@@ -133,7 +133,7 @@ pub enum TypedExprKind {
     },
     /// `Enum::Variante payload` — construção de variante com payload.
     /// `Result::Ok 42` → `Ty::Sum("Result")` com payload = 42.
-    /// Fase 5 — Sum com payload.
+    /// Sum com payload.
     /// `tag` é o índice da variante no enum (para codegen).
     VariantConstruct {
         enum_name: String,
@@ -142,7 +142,7 @@ pub enum TypedExprKind {
         tag: usize,
     },
 
-    // ── Fio 2: Lambda, Match ──────────────────────────────────────
+    // ── Lambda, Match ──────────────────────────────────────
     /// Lambda — função pura com corpo Kata.
     /// Pode ser anônimo (em posição de expressão) ou nomeado (cláusulas de Sig).
     Lambda {
@@ -156,7 +156,7 @@ pub enum TypedExprKind {
         /// Cláusulas (padrões + corpo). 1 cláusula = lambda anônimo.
         /// Múltiplas = função nomeada.
         clauses: Vec<TypedLambdaClause>,
-        /// Variáveis capturadas do escopo externo (Fase 12).
+        /// Variáveis capturadas do escopo externo.
         /// Populado por collect_captures. O codegen aloca um CaptureBox
         /// (via `kata_rt_alloc_arc`) e passa `box_ptr` como primeiro arg
         /// da função JIT. Sempre Heap — sem escape analysis.
@@ -169,7 +169,7 @@ pub enum TypedExprKind {
         arms: Vec<TypedMatchArm>,
     },
 
-    // ── Fio 3: Actions, var ──────────────────────────────────────
+    // ── Actions, var ──────────────────────────────────────
     /// Chamada de Action (`nome!(args)`).
     /// O codegen emite call para a função Cranelift da Action, passando
     /// caller_arena handle como primeiro parâmetro implícito.
@@ -206,7 +206,7 @@ pub enum TypedExprKind {
     /// Statements após `return` são unreachable (não produzidos pelo typeck).
     Return(Box<Spanned<TypedExpr>>),
 
-    // ── Fio 3 Fase 4: loop, break, continue ──────────────────────
+    // ── Loop, break, continue ──────────────────────
     /// `loop` — laço infinito. Body é uma sequência de expressões tipadas.
     /// O tipo do loop é determinado pelo tipo do `break` (ou Unit se sem break).
     Loop { body: Vec<Spanned<TypedExpr>> },
@@ -218,7 +218,7 @@ pub enum TypedExprKind {
     /// `continue` — próxima iteração.
     Continue,
 
-    // ── Fio 8: Coleções ──────────────────────────────────────────
+    // ── Coleções ──────────────────────────────────────────
     /// `[1 2 3]` — lista literal (Cons cells). `elem_ty` é o tipo unificado.
     ListLit { elements: Vec<Spanned<TypedExpr>> },
 
@@ -252,7 +252,7 @@ pub enum TypedExprKind {
         collection: Box<Spanned<TypedExpr>>,
     },
 
-    // ── Fio 8 Fase 8: Higher-order — map/filter/fold ──────────
+    // ── Higher-order — map/filter/fold ──────────
     /// `map f coll` — aplica f a cada elemento, retorna List(B).
     /// coll_ty é o tipo concreto (List/Array/Range). ret_ty é List(B).
     /// Se coll_ty é Array, o codegen converte List→Array no final.
@@ -302,7 +302,7 @@ pub enum TypedExprKind {
         ret_ty: Ty,
     },
 
-    // ── Fio 11: CSP — canais, select, fork ──────────────────────
+    // ── CSP — canais, select, fork ──────────────────────
     /// `tx !> valor` — envio por canal (effect = ChannelOp).
     ChannelSend {
         channel: Box<Spanned<TypedExpr>>,
@@ -408,7 +408,7 @@ pub struct TypedModule {
     /// Funções nomeadas com corpo Kata (não-FFI), já tipadas.
     /// Cada função vira uma função Cranelift separada no codegen.
     pub functions: Vec<TypedFunction>,
-    /// Actions tipadas (Fio 3). Cada Action vira uma função Cranelift
+    /// Actions tipadas. Cada Action vira uma função Cranelift
     /// com ABI estendido (caller_arena handle como primeiro param).
     pub actions: Vec<TypedAction>,
 }
@@ -430,7 +430,7 @@ pub struct TypedFunction {
     pub clauses: Vec<TypedLambdaClause>,
 }
 
-/// Action tipada — pronta para o codegen (Fio 3).
+/// Action tipada — pronta para o codegen.
 ///
 /// Produzida pelo inference quando `ActionDef` (do resolution) é encontrado.
 /// O codegen declara uma função Cranelift com ABI estendido:

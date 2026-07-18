@@ -1,4 +1,4 @@
-//! Fio 3: ActionCall — dispatch para Action builtin ou definida pelo usuário.
+//! ActionCall — dispatch para Action builtin ou definida pelo usuário.
 //!
 //! Extraído de `expr.rs` — o braço `Expr::ActionCall` é self-contained:
 //! chama `infer_expr` (para inferir args) e `infer_assert` (de sugar.rs),
@@ -45,14 +45,14 @@ pub(crate) fn infer_action_call(
     env: &mut TypeEnv,
     ctx: &InferCtx,
 ) -> InferResult<ActionDispatch> {
-    // Fase 9: assert! é desugared no typeck para
+    // Assert! é desugared no typeck para
     // match cond { True: Unit, False: panic!(msg) }.
     if callee == "assert" {
         let typed = infer_assert(args, span, env, ctx)?;
         return Ok(ActionDispatch::Complete(typed));
     }
 
-    // ── Fio 11: Builtins CSP ──
+    // ── Builtins CSP ──
     if callee == "channel" {
         return Ok(ActionDispatch::Complete(infer_channel_builtin(
             ChannelKind::Rendezvous,
@@ -74,7 +74,7 @@ pub(crate) fn infer_action_call(
         return infer_fork_builtin(args, span, env, ctx);
     }
 
-    // ── Fio 11: Receiver factory call ──
+    // ── Receiver factory call ──
     // `rxf!()` onde `rxf` é uma variável do tipo `ReceiverFactory::T`.
     // O callee não é um builtin nomeado — é o nome da variável.
     // Se não está no DispatchTable mas é ReceiverFactory no env, despacha.
@@ -149,7 +149,7 @@ pub(crate) fn infer_action_call(
             caller_arena: 0, // placeholder — preenchido no codegen
             ffi_symbol: overload.ffi_symbol.clone().filter(|_s| overload.is_action),
         },
-        Effect::Puro, // Fio 3 não ativa Effect
+        Effect::Puro, // Não ativa Effect
     ))
 }
 

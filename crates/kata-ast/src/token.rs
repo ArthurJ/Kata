@@ -40,7 +40,7 @@ pub enum Token {
     // ── Palavras-chave ─────────────────────────────────
     /// `let` — binding imutável
     Let,
-    /// `var` — binding mutável (exclusivo de Actions, Fio 3)
+    /// `var` — binding mutável (exclusivo de Actions, )
     Var,
     /// `data` — declara tipo produto
     Data,
@@ -68,21 +68,21 @@ pub enum Token {
     Match,
     /// `return` — early return em Actions
     Return,
-    /// `loop` — laço infinito (exclusivo de Actions, Fio 3)
+    /// `loop` — laço infinito (exclusivo de Actions, )
     Loop,
-    /// `break` — sai de `loop` (exclusivo de Actions, Fio 3)
+    /// `break` — sai de `loop` (exclusivo de Actions, )
     Break,
-    /// `continue` — próxima iteração de `loop` (exclusivo de Actions, Fio 3)
+    /// `continue` — próxima iteração de `loop` (exclusivo de Actions, )
     Continue,
     /// `otherwise` — fallback em guards
     Otherwise,
-    /// `for` — iteração via ITERABLE (exclusivo de Actions, Fio 8)
+    /// `for` — iteração via ITERABLE (exclusivo de Actions, )
     For,
     /// `in` — separador em `for x in coll` e operador binário de membership
     In,
-    /// `select` — multiplexação de canais CSP (Fio 11)
+    /// `select` — multiplexação de canais CSP
     Select,
-    /// `timeout` — cláusula de `select` (Fio 11)
+    /// `timeout` — cláusula de `select`
     Timeout,
 
     // ── Operadores e pontuação ──────────────────────────
@@ -102,9 +102,9 @@ pub enum Token {
     Question,
     /// `!` — sufixo de chamada de Action
     Bang,
-    /// `!>` — envio por canal CSP (Fio 11)
+    /// `!>` — envio por canal CSP
     SendArrow,
-    /// `<!` — recebimento por canal CSP (Fio 11)
+    /// `<!` — recebimento por canal CSP
     RecvArrow,
     /// `$` — spread/aplicação explícita (identificador interceptado pelo typeck)
     /// (Não é keyword — é Ident("$"). O lexer produz Ident para `$`.)

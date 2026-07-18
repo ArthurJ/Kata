@@ -1,4 +1,4 @@
-//! Fio 8 Fase 5: Inferência de coleções — ListLit, ArrayLit, RangeLit, ForIn, In.
+//! Inferência de coleções — ListLit, ArrayLit, RangeLit, ForIn, In.
 //!
 //! Cada função é self-contained: chama `infer_expr` para sub-expressões mas
 //! tem lógica própria de tipagem. O módulo é importado por `expr.rs` que

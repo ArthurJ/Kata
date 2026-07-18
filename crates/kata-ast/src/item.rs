@@ -12,7 +12,7 @@ use crate::span::{Span, Spanned};
 pub enum Item {
     // ── Assinaturas de função ───────────────────────────
     /// `nome :: T1 T2 => TRet` — assinatura de função.
-    /// Em Fio 1, usada para declarar operadores FFI no prelude:
+    /// Usada para declarar operadores FFI no prelude:
     /// `+ :: Int Int => Int`
     /// Pode ter diretivas anexas (`@ffi`, `@associative`).
     Sig {
@@ -20,42 +20,42 @@ pub enum Item {
         params: Vec<Spanned<TypeExpr>>,
         ret: Spanned<TypeExpr>,
         directives: Vec<Directive>,
-        // Fio 1: sempre None (FFI — corpo suprido por @ffi).
-        // Fio 2: Some(clauses) = função pura com corpo Kata.
+        // Sempre None (FFI — corpo suprido por @ffi).
+        // Some(clauses) = função pura com corpo Kata.
         body: Option<Vec<Spanned<LambdaClause>>>,
     },
 
     // ── Declarações de tipo ─────────────────────────────
     /// `data Nome ()` — tipo opaco (sem campos).
-    /// Em Fio 1: `data Int ()` com `@ffi("i64")`.
-    /// Fio 5 trará campos: `data Pessoa (nome::Text idade::Int)`.
-    /// Fio 6 trará refined: `data (Int, > _ 0) as PositiveInt`.
+    /// `data Int ()` com `@ffi("i64")`.
+    /// Trará campos: `data Pessoa (nome::Text idade::Int)`.
+    /// Trará refined: `data (Int, > _ 0) as PositiveInt`.
     DataDecl {
         name: String,
-        fields: Vec<FieldDecl>, // vazio para tipos opacos de Fio 1
+        fields: Vec<FieldDecl>, // vazio para tipos opacos
         directives: Vec<Directive>,
-        /// Fio 6: refined declaration. None = struct normal.
+        /// Refined declaration. None = struct normal.
         /// Some(RefinedDecl) = tipo refinado com predicados.
         refined: Option<RefinedDecl>,
     },
 
     /// `enum Nome` com variantes indentadas.
-    /// Em Fio 1: `enum Boolean { True, False }` — variantes unitárias.
-    /// Fio 4 trará payload: `Ok(T)`, `Some(T)`.
-    /// Fio 4 trará predicados: `Magreza(< _ 18.5)`.
+    /// `enum Boolean { True, False }` — variantes unitárias.
+    /// Trará payload: `Ok(T)`, `Some(T)`.
+    /// Trará predicados: `Magreza(< _ 18.5)`.
     EnumDecl {
         name: String,
         variants: Vec<VariantDecl>,
         directives: Vec<Directive>,
     },
 
-    // ── Fio 5: Aliases ──────────────────────────────────
+    // ── Aliases ──────────────────────────────────
     /// `alias Target as NewName` — cria um newtype (tipo nominal distinto
     /// com o mesmo layout do target). O construtor sintetizado é identity:
     /// `NewName :: Target => NewName`.
     AliasDecl { target: String, new_name: String },
 
-    // ── Fio 3: Actions ─────────────────────────────────
+    // ── Actions ─────────────────────────────────
     /// `action nome` com body indentado.
     /// Actions são o domínio impuro. Declaração com `action nome` (sem `!`).
     /// O body é uma sequência de statements (`ActionStmt`).
@@ -69,7 +69,7 @@ pub enum Item {
         body: Vec<crate::expr::ActionStmt>,
     },
 
-    // ── Fio 7: Interfaces, Implements, Import, Export ──────────
+    // ── Interfaces, Implements, Import, Export ──────────
     /// `interface NOME implements SUPER1 SUPER2 ...` + bloco indentado
     /// de assinaturas obrigatórias.
     InterfaceDecl {
@@ -117,7 +117,7 @@ pub struct FieldDecl {
 }
 
 /// Declaração de tipo refinado: `data (Int, > _ 0) as PositiveInt`.
-/// Fio 6: o conteúdo de `()` é um TypeExpr (base) seguido de predicados (Expr).
+/// O conteúdo de `()` é um TypeExpr (base) seguido de predicados (Expr).
 /// Cada predicado usa `Hole` (`_`) como placeholder para o valor a ser validado.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RefinedDecl {
@@ -134,7 +134,7 @@ pub struct VariantDecl {
     /// Payload da variante. None = unitária (`True`).
     /// Some(ty) = carrega tipo (`Ok(T)`).
     pub payload: Option<Spanned<TypeExpr>>,
-    /// Fio 6: predicado da variante. None = sem predicado.
+    /// Predicado da variante. None = sem predicado.
     /// `Magreza(< _ 18.5)` → predicate = Some(Apply { <, [Hole, 18.5] }).
     /// `Obesidade` → predicate = None (default/fallback).
     pub predicate: Option<Spanned<Expr>>,

@@ -16,7 +16,7 @@ use kata_core::ty::{PrimTy, Ty};
 /// Float → F64.
 /// Text/Rational/Struct/Sum → I64 (ponteiro opaco).
 /// Unit → sem retorno (void).
-/// Function → I64 (function pointer — Fio 9+).
+/// Function → I64 (function pointer — fios posteriores).
 /// InferVar → I64 (fallback graceful — não deveria chegar aqui).
 pub(crate) fn ty_to_clif(ty: &Ty) -> cranelift_codegen::ir::Type {
     match ty {
@@ -215,7 +215,7 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
         FfiSymbol::Panic => {
             sig.params.push(AbiParam::new(I64)); // msg ptr
         }
-        // ── Scheduler/Fiber (Fase 10) ──
+        // ── Scheduler/Fiber ──
         // scheduler_init: () -> i64 (1 = sucesso)
         FfiSymbol::SchedulerInit => {
             sig.returns.push(AbiParam::new(I64));
@@ -233,9 +233,9 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
         }
         // yield: () → void (suspende fiber)
         FfiSymbol::Yield => {}
-        // yield_check: () → void (yield point no header de loops, Fase 7)
+        // yield_check: () → void (yield point no header de loops, )
         FfiSymbol::YieldCheck => {}
-        // ── Arc<T> / CaptureBox (Fase 12) ──
+        // ── Arc<T> / CaptureBox ──
         // alloc_arc: (fn_ptr, captures_ptr, n_captures, arena_handle) -> box_ptr
         // Pré-11: arena_handle adicionado como 4º param.
         FfiSymbol::AllocArc => {
@@ -260,7 +260,7 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
             sig.params.push(AbiParam::new(I64)); // box_ptr
             sig.returns.push(AbiParam::new(I64)); // fn_ptr
         }
-        // ── Collections (Fio 8 Fase 6) ──
+        // ── Collections ──
         // list_nil: () -> ptr (0 = null)
         FfiSymbol::ListNil => {
             sig.returns.push(AbiParam::new(I64));
@@ -350,7 +350,7 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
             sig.params.push(AbiParam::new(I64)); // arena
             sig.returns.push(AbiParam::new(I64)); // ptr (reversed list)
         }
-        // ── Canais CSP (Fio 11 Fase 3) ──
+        // ── Canais CSP ──
         // channel_create: (arena) -> handle
         FfiSymbol::ChannelCreate => {
             sig.params.push(AbiParam::new(I64)); // arena

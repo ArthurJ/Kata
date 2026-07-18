@@ -1,6 +1,6 @@
 //! Prelude — carrega `stdlib/core.kata` como módulo Kata normal.
 //!
-//! Fase 8: substitui o catálogo hardcoded por parse+resolve do prelude
+//! Substitui o catálogo hardcoded por parse+resolve do prelude
 //! em Kata. O arquivo `stdlib/core.kata` é embutido no binário via
 //! `include_str!` e processado pelo mesmo pipeline lex→parse→resolve
 //! que qualquer módulo do usuário.

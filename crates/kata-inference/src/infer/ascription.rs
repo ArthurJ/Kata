@@ -1,4 +1,4 @@
-//! Fio 5/6 — Inferência de `TypeAscription` (`expr::Type`).
+//! Inferência de `TypeAscription` (`expr::Type`).
 //!
 //! Extraído de `expr.rs` — responsabilidade: lidar com ascription-refined
 //! (validação compile-time de predicados), ascription-construção
@@ -32,7 +32,7 @@ pub(crate) fn infer_type_ascription(
 ) -> InferResult<TypedExpr> {
     let target_ty = resolve_type_expr(&ty.node, env);
 
-    // Fase 6: Grouped ascription `((expr))::Type` — barreira de hint.
+    // Grouped ascription `((expr))::Type` — barreira de hint.
     // Se expr é Grouping(Grouping(inner2)), o grouping duplo bloqueia
     // a propagação do hint. Inferir inner2 sem hint (None), depois
     // validar contra target_ty normalmente.
@@ -57,7 +57,7 @@ pub(crate) fn infer_type_ascription(
         }
     };
 
-    // Fio 6: Ascription-refined — `5::PositiveInt` valida predicados
+    // Ascription-refined — `5::PositiveInt` valida predicados
     // em compile-time. Se target é um tipo refined (StructInfo com
     // predicates) e expr é literal, avalia cada predicado via
     // const_eval. Se todos passam → TypeAscription com target_ty.
@@ -137,7 +137,7 @@ pub(crate) fn infer_type_ascription(
         });
     }
 
-    // Fase 7: Ascription-construção — `(a, b)::Pessoa` → StructConstruct.
+    // Ascription-construção — `(a, b)::Pessoa` → StructConstruct.
     // Se inner é Tuple e target é Struct, e o shape bate (mesmo nº de
     // elementos, tipos compatíveis), produz StructConstruct.
     if let Ty::Struct(ref struct_name) = target_ty

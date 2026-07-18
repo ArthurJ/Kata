@@ -17,7 +17,7 @@ impl Parser {
     ) -> Result<Item, FrontendError> {
         self.expect(&Token::Data, "`data`")?;
 
-        // Fio 6: disambiguação via lookahead de 1 token.
+        // Disambiguação via lookahead de 1 token.
         // `data Name (...)` → struct normal (Ident após data).
         // `data (Int, > _ 0) as PositiveInt` → refined (LParen após data).
         if matches!(self.peek(), Token::LParen) {
@@ -223,7 +223,7 @@ impl Parser {
                 _ => return Err(self.error("variant name")),
             };
 
-            // Fio 6: disambiguação payload vs predicado.
+            // Disambiguação payload vs predicado.
             // `Ok(Int)` → payload = Some(TypeExpr), predicate = None
             // `Magreza(< _ 18.5)` → payload = None, predicate = Some(Expr)
             // Disambiguação: após `(`, se primeiro token é operador de comparação

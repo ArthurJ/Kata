@@ -148,7 +148,7 @@ pub(crate) fn lex_token(lex: &mut Lexer) -> Result<TokenWithSpan, FrontendError>
             Token::RBrace
         }
         '<' if lex.peek() == Some('!') => {
-            // `<` seguido de `!` → RecvArrow (Fio 11).
+            // `<` seguido de `!` → RecvArrow.
             lex.advance(); // consumir <
             lex.advance(); // consumir !
             Token::RecvArrow

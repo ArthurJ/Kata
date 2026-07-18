@@ -1,4 +1,4 @@
-//! Fio 8 Fase 8: Lowering de map/filter/fold — higher-order sobre coleções.
+//! Lowering de map/filter/fold — higher-order sobre coleções.
 //!
 //! Estas funções são interceptadas no typeck (infer_apply) e produzidas
 //! como nós TAST dedicados (Map/Filter/Fold). O codegen percorre a coleção

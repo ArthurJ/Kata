@@ -1,4 +1,4 @@
-//! Typeck de expressões CSP (Fio 11).
+//! Typeck de expressões CSP.
 //!
 //! `ChannelSend` (`!>`), `ChannelRecv` (`<!`), e `Select` são inferidos aqui.
 //! `channel!()`, `queue!()`, `broadcast!()`, `rxf!()`, `fork!()` são

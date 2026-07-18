@@ -19,7 +19,7 @@ pub(crate) fn lower_control_flow(
     ctx: &mut LowerCtx,
 ) -> Result<Option<cranelift_codegen::ir::Value>, super::CodegenError> {
     match &expr.kind {
-        // ── Fio 3 Fase 2: return — jump para epilogue_block ──
+        // ── Return — jump para epilogue_block ──
         TypedExprKind::Return(inner) => {
             let val = lower_expr(&inner.node, ctx)?;
             let epilogue = ctx.epilogue_block.expect("return fora de Action");
@@ -30,7 +30,7 @@ pub(crate) fn lower_control_flow(
             Ok(Some(val))
         }
 
-        // ── Fio 3 Fase 4: loop, break, continue ──
+        // ── Loop, break, continue ──
         TypedExprKind::Loop { body } => {
             // Cria 3 blocks: loop_block (início do body), continue_block
             // (target de continue), break_block (target de break / saída).
@@ -49,7 +49,7 @@ pub(crate) fn lower_control_flow(
 
             // Lowera o body no loop_block.
             ctx.builder.switch_to_block(loop_block);
-            // Fase 7: yield point no header do loop. A cada YIELD_INTERVAL
+            // Yield point no header do loop. A cada YIELD_INTERVAL
             // iterações, se há outra fiber pronta, suspende cooperativamente.
             // 2 instruções no hot path (dec + branch dentro da FFI).
             let yield_check_ref = ctx

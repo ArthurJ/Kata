@@ -8,8 +8,8 @@
 //! chama `optimize(&typed_module)` entre inference e codegen.
 //!
 //! Passes implementados:
-//! - Fase 16: TRMA (Tail Recursion Modulo Associativity)
-//! - Fio 8 Fase 9: Stream Fusion (DoD 60)
+//! - TRMA (Tail Recursion Modulo Associativity)
+//! - Stream Fusion (DoD 60)
 
 mod stream_fusion;
 mod trma;

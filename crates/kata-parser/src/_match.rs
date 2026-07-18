@@ -86,7 +86,7 @@ impl Parser {
         let _ = arm_start; // span do braço não é armazenado em MatchArm
         Ok(MatchArm {
             pattern,
-            guard: None, // Fio 2: guard opcional após pattern (não implementado)
+            guard: None, // Guard opcional após pattern (não implementado)
             body,
         })
     }

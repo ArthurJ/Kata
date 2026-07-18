@@ -1,6 +1,6 @@
 //! Aplicação prefixa — resolução de callee.
 //!
-//! Três caminhos de callee (Fio 2):
+//! Três caminhos de callee:
 //! 1. Lambda inline (DoD 31): `(lambda x: ...) 42` — args fornecem tipos
 //! 2. DispatchTable: call direto para FFI ou função Kata nomeada
 //! 3. TypeEnv: call_indirect para lambda como valor
@@ -23,7 +23,7 @@ use super::helpers::{
 };
 use super::variant_construct::{expand_spread, infer_variant_construct};
 
-/// Infere uma aplicação prefixa — dois caminhos de callee (Fio 2).
+/// Infere uma aplicação prefixa — dois caminhos de callee.
 ///
 /// 1. Callee é nome no DispatchTable: `table.resolve(name, arg_types)` → call direto.
 /// 2. Callee é variável no TypeEnv com `Ty::Function`: `call_indirect` no codegen.
@@ -51,7 +51,7 @@ pub(crate) fn infer_apply(
         } => {
             return infer_apply_lambda(patterns, body, guards, with_bindings, args, span, env, ctx);
         }
-        // Fase 5: Apply(VariantQual, [arg]) → construção de Sum com payload.
+        // Apply(VariantQual, [arg]) → construção de Sum com payload.
         Expr::VariantQual { enum_name, variant } => {
             return infer_variant_construct(enum_name, variant, args, span, env, ctx);
         }
@@ -95,14 +95,14 @@ pub(crate) fn infer_apply(
         }
     };
 
-    // Fase 6: `format "template {}" (a, b)` — builtin sintetizado.
+    // `format "template {}" (a, b)` — builtin sintetizado.
     // O typeck intercepta `format` e constrói a cadeia de text_replace_first
     // inline. Não passa pelo DispatchTable.
     if func_name == "format" && args.len() == 2 {
         return infer_format(callee, args, span, env, ctx);
     }
 
-    // Fio 8 Fase 8: map/filter/fold — interceptados por nome.
+    // Map/filter/fold — interceptados por nome.
     // Não passam pelo DispatchTable. O typeck descobre o tipo concreto
     // do container e produz nó TAST dedicado.
     if func_name == "map" && args.len() == 2 {
@@ -115,7 +115,7 @@ pub(crate) fn infer_apply(
         return infer_fold(args, span, env, ctx);
     }
 
-    // Fio 8: `len tuple` — síntese compile-time.
+    // `len tuple` — síntese compile-time.
     // Tuple não implementa COUNTABLE, mas `len (10, 20)` deve retornar 2
     // em compile-time. Intercepta antes do dispatch normal.
     if func_name == "len" && args.len() == 1 {
@@ -202,7 +202,7 @@ pub(crate) fn infer_apply(
         });
     }
 
-    // Fase 7: `$` spread — `f $ (a, b)` expande para `f a b`.
+    // `$` spread — `f $ (a, b)` expande para `f a b`.
     // Se um arg é `Ident("$")`, o próximo arg deve ser `Tuple` — substitui
     // ambos pelos elementos individuais da tupla.
     let expanded_args = expand_spread(args, span)?;
@@ -219,7 +219,7 @@ pub(crate) fn infer_apply(
 
     // Caminho 1: DispatchTable (call direto para FFI ou função Kata nomeada).
     if ctx.table.has_function(&func_name) {
-        // Fase 5: Ret-directed dispatch — se hint é Some(ty), filtra overloads
+        // Ret-directed dispatch — se hint é Some(ty), filtra overloads
         // cujo retorno é compatível com ty (via fits_return) antes do scoring.
         if let Some(hint_ty) = hint {
             let overloads = ctx
@@ -318,7 +318,7 @@ pub(crate) fn infer_apply(
             });
         }
 
-        // Fase 5: caminho genérico — se nenhuma overload não-genérica casa,
+        // Caminho genérico — se nenhuma overload não-genérica casa,
         // procura overloads com type_params não-vazio e tenta unify.
         let generic_result = ctx
             .table

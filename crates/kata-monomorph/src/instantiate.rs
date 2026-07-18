@@ -362,7 +362,7 @@ fn instantiate_kind(kind: &TypedExprKind, subs: &Substitutions) -> TypedExprKind
         TypedExprKind::Break => TypedExprKind::Break,
         TypedExprKind::Continue => TypedExprKind::Continue,
 
-        // ── Fio 8: Coleções + Fase 8/9 HOFs/FusedStream ──
+        // ── Coleções + HOFs/FusedStream ──
         // Delegado para `instantiate_collections` — arms de collections.
         _ => {
             if let Some(kind) = crate::instantiate_collections::instantiate_collections(kind, subs)

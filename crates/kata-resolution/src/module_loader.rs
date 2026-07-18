@@ -1,10 +1,10 @@
 //! Module Loader — carrega módulos do filesystem com cache e cycle detection.
 //!
-//! Fio 7 Fase 3: infraestrutura para `import modulo.submodulo`.
+//! Infraestrutura para `import modulo.submodulo`.
 //! O loader resolve paths, parsea, resolve, e cacheia o resultado.
 //! Ciclos de import são detectados via HashSet de paths em loading.
 
-#![allow(dead_code)] // Scaffolding Fio 7 Fase 3 — não utilizado ainda
+#![allow(dead_code)] // Scaffolding — não utilizado ainda
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};

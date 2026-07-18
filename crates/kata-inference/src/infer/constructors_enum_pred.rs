@@ -1,4 +1,4 @@
-//! Fio 6 — Construtores despachadores para enums com variantes predicadas.
+//! Construtores despachadores para enums com variantes predicadas.
 //!
 //! Sintetiza funções predicado e construtor despachador para enums do tipo
 //! `enum IMC: Magreza(< _ 18.5), Normal(<= _ 25.0), ...`.

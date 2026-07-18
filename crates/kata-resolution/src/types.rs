@@ -18,22 +18,22 @@ use kata_core::{EnumRegistry, InterfaceRegistry, StructRegistry, Ty, TypeEnv};
 pub struct ResolvedModule {
     pub type_env: TypeEnv,
     pub signatures: Vec<Signature>,
-    /// Catálogo de variantes por enum (Fio 2).
+    /// Catálogo de variantes por enum.
     pub enum_registry: EnumRegistry,
-    /// Catálogo de structs com campos e offsets (Fio 5).
+    /// Catálogo de structs com campos e offsets.
     pub struct_registry: StructRegistry,
-    /// Fio 6: declarações refined pendentes para o inference sintetizar
+    /// Declarações refined pendentes para o inference sintetizar
     /// funções predicado e smart constructors falíveis.
     pub refined_decls: Vec<RefinedDeclInfo>,
-    /// Fio 6: enums com variantes predicadas pendentes para o inference
+    /// Enums com variantes predicadas pendentes para o inference
     /// sintetizar o construtor despachador.
     pub enum_pred_decls: Vec<EnumPredDeclInfo>,
-    /// Fio 7: catálogo de interfaces e implementações.
+    /// Catálogo de interfaces e implementações.
     pub interface_registry: InterfaceRegistry,
-    /// Funções nomeadas com corpo Kata (Fio 2 Fase 10).
+    /// Funções nomeadas com corpo Kata.
     /// Cada entrada preserva as cláusulas lambda para o inference processar.
     pub functions: Vec<FunctionDef>,
-    /// Actions definidas no módulo (Fio 3).
+    /// Actions definidas no módulo.
     pub actions: Vec<ActionDef>,
 }
 
@@ -46,14 +46,14 @@ pub struct Signature {
     pub ffi_symbol: Option<String>,
     pub is_associative: bool,
     pub associative_neutral: Option<i64>,
-    /// Se `true`, esta assinatura é uma Action (Fio 3).
+    /// Se `true`, esta assinatura é uma Action.
     /// Actions são chamadas com `!` e têm `is_action = true` no DispatchTable.
     pub is_action: bool,
-    /// Fase 7: se `true`, o dispatch tenta args invertidos quando 0 candidatos
+    /// Se `true`, o dispatch tenta args invertidos quando 0 candidatos
     /// compatíveis são encontrados e arity == 2. Populado pela diretiva
     /// `@commutative` na resolution.
     pub is_commutative: bool,
-    /// Fase 5: type params da assinatura genérica (ex: `["T"]` para `id :: T => T`).
+    /// Type params da assinatura genérica (ex: `["T"]` para `id :: T => T`).
     /// Vazio para funções não-genéricas. Coletado examinando os `Ty::Var` em
     /// param_types e return_type cujo nome é UPPER_CASE e não está no TypeEnv.
     pub type_params: Vec<String>,
@@ -72,7 +72,7 @@ pub struct FunctionDef {
     pub clauses: Vec<Spanned<LambdaClause>>,
 }
 
-/// Definição de Action com body Kata (Fio 3).
+/// Definição de Action com body Kata.
 ///
 /// Produzida no resolution quando `Item::ActionDecl` é encontrado.
 /// O inference consome o body e produz `TypedAction`.
@@ -84,7 +84,7 @@ pub struct ActionDef {
     pub body: Vec<ActionStmt>,
 }
 
-/// Informação de um tipo refinado declarado pelo usuário (Fio 6).
+/// Informação de um tipo refinado declarado pelo usuário.
 /// O inference sintetiza funções predicado e smart constructor falível a partir desta info.
 #[derive(Debug, Clone)]
 pub struct RefinedDeclInfo {
@@ -96,7 +96,7 @@ pub struct RefinedDeclInfo {
     pub predicates: Vec<Spanned<Expr>>,
 }
 
-/// Informação de um enum com variantes predicadas (Fio 6).
+/// Informação de um enum com variantes predicadas.
 /// O inference sintetiza o construtor que despacha para a variante correta.
 #[derive(Debug, Clone)]
 pub struct EnumPredDeclInfo {

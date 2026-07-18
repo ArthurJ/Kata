@@ -16,7 +16,7 @@ use super::_match::infer_match;
 use super::expr::{InferCtx, infer_expr};
 use super::helpers::InferResult;
 
-/// Fase 7: Desugar `expr ?` para `match expr { Ok(v) => v, Err(e) => return Err(e) }`.
+/// Desugar `expr ?` para `match expr { Ok(v) => v, Err(e) => return Err(e) }`.
 ///
 /// `?` é fail-fast: se o scrutinee é `Result<T, E>`, desempacota `Ok(v)` ou
 /// aborta com `return Err(e)`. Se é `Optional<T>`, desempacota `Some(v)` ou
@@ -160,7 +160,7 @@ pub(crate) fn infer_question(
     })
 }
 
-/// Fase 8: Desugar `lhs | rhs` para `match lhs { Ok(v) => v, Err(_) => rhs }`.
+/// Desugar `lhs | rhs` para `match lhs { Ok(v) => v, Err(_) => rhs }`.
 ///
 /// `|` é coalescência de erro: desempacota `Ok(v)`/`Some(v)`, avalia `rhs`
 /// se `Err`/`None`. Diferença crucial do `?`: o braço de erro é `rhs` (uma
@@ -245,7 +245,7 @@ pub(crate) fn infer_pipe_fallback(
     }
 
     // Constrói os braços do match sintético.
-    // Fase 6: Coerção contextual no `|`. Se o payload da primeira variante
+    // Coerção contextual no `|`. Se o payload da primeira variante
     // não-cauda é um tipo refined (Struct com predicates), o fallback (rhs)
     // é implicitamente tratado como o mesmo refined type. Envolver rhs em
     // `TypeAscription { rhs::RefinedType }` valida o predicado em compile-time.
@@ -313,7 +313,7 @@ pub(crate) fn infer_pipe_fallback(
 
         let body = if is_last {
             // Cauda: avalia o fallback (rhs).
-            // Fase 6: Se o payload é refined, envolver rhs em ascription
+            // Se o payload é refined, envolver rhs em ascription
             // refined para validar o predicado em compile-time.
             if let Some(ref rname) = refined_name {
                 Spanned::new(
@@ -356,7 +356,7 @@ pub(crate) fn infer_pipe_fallback(
     })
 }
 
-/// Fase 9: Desugar `assert!(cond, "msg")` para `match cond { True: Unit, False: panic!(msg) }`.
+/// Desugar `assert!(cond, "msg")` para `match cond { True: Unit, False: panic!(msg) }`.
 ///
 /// `assert!` recebe uma condição (Boolean) e uma mensagem opcional (Text).
 /// Se a condição é falsa, chama `panic!(msg)`. O desugar constrói um match

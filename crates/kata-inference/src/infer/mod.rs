@@ -84,14 +84,14 @@ pub fn infer_module(
         });
     }
 
-    // 1a/1c. Fio 5 — sintetiza smart constructors para structs com campos e aliases.
+    // 1a/1c. sintetiza smart constructors para structs com campos e aliases.
     let struct_constructors = constructors::synthesize_constructors(
         &resolved.struct_registry,
         &resolved.type_env,
         &mut dispatch_table,
     );
 
-    // 1e. Fio 6 Fase 3 — sintetiza funções predicado e smart constructors
+    // 1e. sintetiza funções predicado e smart constructors
     //     falíveis para tipos refinados (`data (Int, > _ 0) as PositiveInt`).
     let refined_constructors = constructors_refined::synthesize_refined(
         &resolved.refined_decls,
@@ -101,7 +101,7 @@ pub fn infer_module(
         &mut dispatch_table,
     )?;
 
-    // 1f. Fio 6 — sintetiza construtores despachadores para enums com
+    // 1f. sintetiza construtores despachadores para enums com
     //     variantes predicadas (`enum IMC: Magreza(< _ 18.5), ...`).
     let enum_pred_constructors = constructors_enum_pred::synthesize_enum_pred(
         &resolved.enum_pred_decls,
@@ -111,7 +111,7 @@ pub fn infer_module(
         &mut dispatch_table,
     )?;
 
-    // 1d. Fio 5 Fase 6 — sintetiza `repr` para structs com campos.
+    // 1d. sintetiza `repr` para structs com campos.
     //     `repr :: Pessoa => Text` no DispatchTable + TypedFunction com body
     //     que constrói "Pessoa(field0, field1, ...)" via string_concat FFI.
     let mut repr_functions =
@@ -121,7 +121,7 @@ pub fn infer_module(
     //    locais (let) sem mutar o original.
     let mut type_env = resolved.type_env.clone();
 
-    // 3. Processa funções nomeadas com corpo Kata (Fase 10).
+    // 3. Processa funções nomeadas com corpo Kata.
     //    Cada função é inferida com os tipos da assinatura (não InferVar).
     //    A função também é registrada no TypeEnv como Ty::Function para permitir
     //    `let g := fat` (função como valor).
@@ -148,7 +148,7 @@ pub fn infer_module(
         typed_functions.push(typed_func);
     }
 
-    // 3a. Processa Actions (Fio 3). Cada Action é inferida com os tipos
+    // 3a. Processa Actions. Cada Action é inferida com os tipos
     //     da assinatura. O body é uma sequência de statements.
     let mut typed_actions: Vec<TypedAction> = Vec::new();
     for action_def in &resolved.actions {
@@ -165,7 +165,7 @@ pub fn infer_module(
         typed_actions.push(typed_action);
     }
 
-    // 3b. Fase 11 — verifica que nenhuma Action é recursiva.
+    // 3b. verifica que nenhuma Action é recursiva.
     //     Actions executam em fibers com stack fixa; recursão estouraria.
     recursion::check_action_recursion(&typed_actions)?;
 
@@ -213,8 +213,8 @@ pub fn infer_module(
             | Item::ImportDecl { .. }
             | Item::ExportDecl { .. } => {
                 // Já processado no resolution/inference de funções nomeadas.
-                // Fio 7: interfaces/implements/import/export são processados
-                // na Fase 2 (resolution) — o inference não os processa.
+                // Interfaces/implements/import/export são processados
+                // (resolution) — o inference não os processa.
             }
             Item::ActionDecl { .. } => {
                 // Já processado no inference de Actions (abaixo).
@@ -243,7 +243,7 @@ pub fn infer_module(
         actions: typed_actions,
     };
 
-    // Fase 12: coleta captures (free variables) de cada Closure.
+    // Coleta captures (free variables) de cada Closure.
     // Percorre a TAST já construída e muta in-place os campos `captures`.
     captures::run(&mut typed_module);
 

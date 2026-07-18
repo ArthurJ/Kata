@@ -23,7 +23,7 @@ use crate::metadata::MetadataTable;
 use super::LowerCtx;
 use super::module::{CodegenError, FuncKey, StringTable};
 
-/// Fio 5 Fase 5: bitcast na borda de retorno.
+/// Bitcast na borda de retorno.
 ///
 /// Se o `ret_ty` mapeia para I64 mas o `result` é F64 (alias de Float),
 /// faz bitcast F64→I64. Necessário para construtores identity de alias
@@ -173,7 +173,7 @@ pub(crate) fn define_function_body(
             lower.emitted_tail_call = false;
             let result = lower_clause_body(clause, &mut lower)?;
             if !lower.emitted_tail_call {
-                // Fio 5 Fase 5: bitcast na borda de retorno.
+                // Bitcast na borda de retorno.
                 // Necessário para alias de Float: o body retorna F64 mas a
                 // assinatura da função retorna I64 (Ty::Struct → I64).
                 let result = coerce_return(result, ret_ty, &mut lower);

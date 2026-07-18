@@ -9,8 +9,8 @@ use crate::expressions::parse_expr;
 impl Parser {
     /// Parse `lambda <patterns>: <body>` — lambda anônimo (cláusula única).
     ///
-    /// Fase 3: body é expressão única após `:` (sem guards, sem with).
-    /// Fase 6: body pode ser bloco indentado com guard clauses + with.
+    /// Body é expressão única após `:` (sem guards, sem with).
+    /// Body pode ser bloco indentado com guard clauses + with.
     pub(crate) fn parse_lambda(&mut self) -> Result<Spanned<Expr>, FrontendError> {
         let start = self.peek_span();
         self.expect(&Token::Lambda, "`lambda`")?;
@@ -21,10 +21,10 @@ impl Parser {
         // Expect `:`
         self.expect(&Token::Colon, "`:` após patterns do lambda")?;
 
-        // Fase 3: body é uma expressão única (sem guards).
-        // Fase 6: se há INDENT após `:`, é bloco com guards + with.
+        // Body é uma expressão única (sem guards).
+        // Se há INDENT após `:`, é bloco com guards + with.
         let body = if matches!(self.peek(), Token::Indent) {
-            // Bloco indentado — Fase 6: guards + with.
+            // Bloco indentado — guards + with.
             // parse_lambda_body_block consome o INDENT e retorna
             // o Lambda completo com guards/with preenchidos.
             return self.parse_lambda_body_block(start, patterns);

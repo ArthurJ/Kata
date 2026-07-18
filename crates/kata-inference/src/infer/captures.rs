@@ -1,4 +1,4 @@
-//! Fase 12 — Coleta de captures (free variables) de closures.
+//! Coleta de captures (free variables) de closures.
 //!
 //! Percorre a TAST pós-inferência e, para cada `Closure` cujo callee é um
 //! `Lambda`, coleta as free variables do body do lambda contra os bindings
@@ -195,7 +195,7 @@ fn collect_captures_in_expr(expr: &mut TypedExpr, outer_env: &TypeEnv) {
         TypedExprKind::IndexAccess { expr, .. } => {
             collect_captures_in_expr(&mut expr.node, outer_env);
         }
-        // ── Fio 8: Coleções — recursão nos elementos ──
+        // ── Coleções — recursão nos elementos ──
         TypedExprKind::ListLit { elements } | TypedExprKind::ArrayLit { elements } => {
             for el in elements {
                 collect_captures_in_expr(&mut el.node, outer_env);
@@ -218,7 +218,7 @@ fn collect_captures_in_expr(expr: &mut TypedExpr, outer_env: &TypeEnv) {
             collect_captures_in_expr(&mut item.node, outer_env);
             collect_captures_in_expr(&mut collection.node, outer_env);
         }
-        // ── Fio 8 Fase 8: map/filter/fold — recursão ──
+        // ── Map/filter/fold — recursão ──
         TypedExprKind::Map {
             callback,
             collection,
@@ -242,7 +242,7 @@ fn collect_captures_in_expr(expr: &mut TypedExpr, outer_env: &TypeEnv) {
             collect_captures_in_expr(&mut initial.node, outer_env);
             collect_captures_in_expr(&mut collection.node, outer_env);
         }
-        // ── Fio 8 Fase 9: FusedStream — recursão ──
+        // ── FusedStream — recursão ──
         TypedExprKind::FusedStream { stages, source, .. } => {
             collect_captures_in_expr(&mut source.node, outer_env);
             for stage in stages {
@@ -254,7 +254,7 @@ fn collect_captures_in_expr(expr: &mut TypedExpr, outer_env: &TypeEnv) {
                 collect_captures_in_expr(&mut cb.node, outer_env);
             }
         }
-        // ── Fio 11: CSP — recursão ──
+        // ── CSP — recursão ──
         TypedExprKind::ChannelSend { channel, value } => {
             collect_captures_in_expr(&mut channel.node, outer_env);
             collect_captures_in_expr(&mut value.node, outer_env);

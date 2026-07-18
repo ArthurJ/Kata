@@ -72,29 +72,29 @@ pub enum FfiSymbol {
     ArenaAlloc,
     ArenaDestroy,
 
-    // ── Sum (Fase 5) ──────────────────────────────────────
+    // ── Sum ──────────────────────────────────────
     /// `kata_rt_store_sum_result(tag, payload) -> ptr` — aloca box Sum.
     StoreSumResult,
     /// `kata_rt_sum_tag_int(val) -> tag` — extrai tag de Sum box.
     SumTagInt,
 
-    // ── Control flow (Fase 9) ───────────────────────────────
+    // ── Control flow ───────────────────────────────
     /// `kata_rt_panic(msg) -> !` — aborta com mensagem.
     Panic,
 
-    // ── Scheduler/Fiber (Fase 10) ───────────────────────────
+    // ── Scheduler/Fiber ───────────────────────────
     /// `kata_rt_scheduler_init() -> i64` — inicializa scheduler thread-local.
     SchedulerInit,
     /// `kata_rt_spawn(fn_ptr, caller_arena, args_ptr) -> i64` — cria fiber.
     Spawn,
     /// `kata_rt_run() -> i64` — executa próximo fiber, retorna resultado.
     Run,
-    /// `kata_rt_yield() -> ()` — suspende fiber atual (não usado em Fase 10).
+    /// `kata_rt_yield() -> ()` — suspende fiber atual (não usado).
     Yield,
-    /// `kata_rt_yield_check() -> ()` — yield point no header de loops (Fase 7).
+    /// `kata_rt_yield_check() -> ()` — yield point no header de loops.
     YieldCheck,
 
-    // ── Arc<T> / CaptureBox (Fase 12) ───────────────────────
+    // ── Arc<T> / CaptureBox ───────────────────────
     /// `kata_rt_alloc_arc(fn_ptr, captures_ptr, n_captures) -> box_ptr`
     AllocArc,
     /// `kata_rt_incref(box_ptr) -> 0` — incrementa refcount.
@@ -104,7 +104,7 @@ pub enum FfiSymbol {
     /// `kata_rt_arc_fn_ptr(box_ptr) -> fn_ptr` — extrai fn_ptr do box.
     ArcFnPtr,
 
-    // ── Collections (Fio 8 Fase 6) ───────────────────────────
+    // ── Collections ───────────────────────────
     /// `kata_rt_list_nil() -> ptr` — retorna 0 (null = Nil).
     ListNil,
     /// `kata_rt_list_cons(head, tail, arena) -> ptr` — aloca Cons cell.
@@ -138,7 +138,7 @@ pub enum FfiSymbol {
     /// `kata_rt_list_reverse(ptr, arena) -> ptr` — inverte Cons chain.
     ListReverse,
 
-    // ── Canais CSP (Fio 11 Fase 3) ────────────────────────────
+    // ── Canais CSP ────────────────────────────
     /// `kata_rt_channel_create(arena) -> i64` — canal rendezvous.
     ChannelCreate,
     /// `kata_rt_queue_create(arena, capacity) -> i64` — fila bufferizada.

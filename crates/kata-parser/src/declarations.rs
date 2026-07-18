@@ -195,7 +195,7 @@ impl Parser {
         self.expect(&Token::FatArrow, "`=>`")?;
         let ret = self.parse_type_expr()?;
 
-        // Fio 2: cláusulas lambda após assinatura (função nomeada com corpo Kata).
+        // Cláusulas lambda após assinatura (função nomeada com corpo Kata).
         // Se há INDENT seguido de Lambda, parsear cláusulas.
         // Se não, body = None (FFI — corpo suprido por @ffi).
         let body = if matches!(self.peek(), Token::Indent) {
@@ -260,8 +260,8 @@ impl Parser {
     }
 
     /// Parse uma cláusula lambda: `lambda <patterns>: <body>`.
-    /// Fase 5: body é expressão única (sem guards, sem with).
-    /// Fase 6: body pode ser bloco indentado com guards + with.
+    /// Body é expressão única (sem guards, sem with).
+    /// Body pode ser bloco indentado com guards + with.
     fn parse_lambda_clause(&mut self) -> Result<LambdaClause, FrontendError> {
         self.expect(&Token::Lambda, "`lambda`")?;
 
@@ -271,8 +271,8 @@ impl Parser {
         // Expect `:`
         self.expect(&Token::Colon, "`:` após patterns da cláusula")?;
 
-        // Fase 5: body é expressão única (sem guards).
-        // Fase 6: se há INDENT após `:`, é bloco com guards + with.
+        // Body é expressão única (sem guards).
+        // Se há INDENT após `:`, é bloco com guards + with.
         if matches!(self.peek(), Token::Indent) {
             // Bloco indentado — guards + with.
             // Reusar parse_lambda_body_block do expressions module.

@@ -1,4 +1,4 @@
-//! Testes unitários do scheduler com yield e structured concurrency (Fio 11 Fase 4).
+//! Testes unitários do scheduler com yield e structured concurrency.
 //!
 //! Estes testes criam fibers reais (wasmtime-fiber) que executam funções C
 //! de teste. As funções simulam o comportamento de funções JIT: yield,

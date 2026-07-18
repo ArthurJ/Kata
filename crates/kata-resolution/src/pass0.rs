@@ -43,7 +43,7 @@ pub(crate) fn run_pass0(
                 refined,
                 ..
             } => {
-                // Fio 6: refined declaration?
+                // Refined declaration?
                 if let Some(refined_decl) = refined {
                     // `data (Int, > _ 0) as PositiveInt`
                     // Registra no StructRegistry como refined:
@@ -74,7 +74,7 @@ pub(crate) fn run_pass0(
                     continue;
                 }
 
-                // Fase 8: data Int () @ffi("i64") → Ty::Prim(PrimTy::Int)
+                // data Int () @ffi("i64") → Ty::Prim(PrimTy::Int)
                 // Mapeia FFI symbols conhecidos para PrimTy. Se não tem @ffi
                 // ou o símbolo não é reconhecido, registra como Ty::Struct.
                 let ffi_symbol = data_dirs.iter().find_map(|d| {
@@ -94,7 +94,7 @@ pub(crate) fn run_pass0(
                 };
                 type_env.define(name, ty);
 
-                // Fio 5: se o DataDecl tem campos não-vazios, registra no StructRegistry.
+                // Se o DataDecl tem campos não-vazios, registra no StructRegistry.
                 // Offset de cada campo = field_index * 8 (todos os campos são words de 8 bytes).
                 if !fields.is_empty() {
                     let field_infos: Vec<FieldInfo> = fields
@@ -126,9 +126,9 @@ pub(crate) fn run_pass0(
             }
             Item::EnumDecl { name, variants, .. } => {
                 type_env.define(name, Ty::Sum(name.clone()));
-                // Fio 2: cataloga variantes no EnumRegistry.
-                // Fase 5: resolve payload types das variantes.
-                // Fio 6: processa predicados das variantes.
+                // Cataloga variantes no EnumRegistry.
+                // Resolve payload types das variantes.
+                // Processa predicados das variantes.
                 let has_predicates = variants.iter().any(|v| v.predicate.is_some());
 
                 let variant_infos: Vec<kata_core::VariantInfo> = {
@@ -178,7 +178,7 @@ pub(crate) fn run_pass0(
                 };
                 enum_registry.register(name, variant_infos.clone());
 
-                // Fase 8: se variantes têm payloads Ty::Var (type params),
+                // Se variantes têm payloads Ty::Var (type params),
                 // registrar como enum genérico. Coleta type params dos payloads.
                 let type_params: Vec<String> = variant_infos
                     .iter()
@@ -240,7 +240,7 @@ pub(crate) fn run_pass0(
                     });
                 }
             }
-            // Fio 7: InterfaceDecl — registra no InterfaceRegistry.
+            // InterfaceDecl — registra no InterfaceRegistry.
             Item::InterfaceDecl {
                 name,
                 supertraits,
@@ -269,9 +269,9 @@ pub(crate) fn run_pass0(
                     eprintln!("[resolution] warning: {e}");
                 }
             }
-            // Fio 7: ImplementsDecl — registra no InterfaceRegistry.
+            // ImplementsDecl — registra no InterfaceRegistry.
             // O registro no DispatchTable será feito quando o prelude migrar
-            // para Kata (Fase 8). Por ora, o InterfaceRegistry cataloga a impl.
+            // para Kata. Por ora, o InterfaceRegistry cataloga a impl.
             Item::ImplementsDecl {
                 type_name,
                 type_params,
@@ -282,7 +282,7 @@ pub(crate) fn run_pass0(
                 let impl_methods: Vec<ImplMethodInfo> = methods
                     .iter()
                     .map(|m| {
-                        // Fio 8: extrai @ffi OU @builtin como símbolo.
+                        // Extrai @ffi OU @builtin como símbolo.
                         // @ffi("kata_rt_array_next") → Some("kata_rt_array_next")
                         // @builtin("range_next") → Some("range_next")
                         let ffi_symbol = m.directives.iter().find_map(|d| {
@@ -316,7 +316,7 @@ pub(crate) fn run_pass0(
                     eprintln!("[resolution] warning: {e}");
                 }
 
-                // Fase 8: cada método de implements vira uma Signature flat
+                // Cada método de implements vira uma Signature flat
                 // (como se fosse uma Sig standalone). O dispatch usa estas
                 // signatures para popular o DispatchTable.
                 for m in methods {
@@ -358,7 +358,7 @@ pub(crate) fn run_pass0(
                         type_params,
                     });
 
-                    // Fase 9: método com corpo Kata (lambda) precisa de
+                    // Método com corpo Kata (lambda) precisa de
                     // FunctionDef para o inference produzir TypedFunction.
                     // Sem isso, o corpo é invisível para o inference/codegen.
                     if let Some(clauses) = &m.body {

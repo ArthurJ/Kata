@@ -1,11 +1,11 @@
-//! Testes unitários do runtime de canais CSP (Fio 11 Fase 3).
+//! Testes unitários do runtime de canais CSP.
 //!
 //! Sem JIT — testa as FFI functions diretamente. Cada teste cria uma
 //! arena via `kata_rt_arena_create`, passa para as funções de criação
 //! de canal, e verifica comportamento.
 //!
-//! Fase 3: sem blocking real. `WOULD_BLOCK` (-1) é retornado quando
-//! a operação não pode completar. Fase 4 substitui por yield.
+//! Sem blocking real. `WOULD_BLOCK` (-1) é retornado quando
+//! a operação não pode completar. A versão com yield substitui por blocking cooperativo.
 
 use kata_rt::{
     kata_rt_arena_create, kata_rt_arena_destroy, kata_rt_broadcast_create,

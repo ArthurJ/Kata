@@ -28,7 +28,7 @@ pub(crate) fn infer_variant_qual(
     ctx: &InferCtx,
 ) -> Result<Option<(Ty, TypedExprKind, Effect)>, MiddleError> {
     match enum_ty {
-        // Fase 6: enum genérico no TypeEnv como Ty::Sum, mas o EnumRegistry
+        // Enum genérico no TypeEnv como Ty::Sum, mas o EnumRegistry
         // marca como genérico. Para variantes unitárias (Optional::None),
         // produz Ty::Generic com type_args não-inferidos (Ty::Var).
         Ty::Sum(name) if ctx.enum_registry.is_generic(name) => {
@@ -79,7 +79,7 @@ pub(crate) fn infer_variant_qual(
                     span: (*span).into(),
                 });
             }
-            // Fase 5: VariantQual sem Apply só é válido para variantes unitárias.
+            // VariantQual sem Apply só é válido para variantes unitárias.
             // Variantes com payload exigem Apply (Result::Ok 42).
             if ctx.enum_registry.payload_ty(name, variant).is_some() {
                 return Err(MiddleError::TypeMismatch {

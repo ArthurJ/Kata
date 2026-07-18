@@ -6,7 +6,7 @@
 //!
 //! 1. **`desugar_pipes`** — elimina todos `Expr::Pipe`. Para cada `lhs |> rhs`:
 //!    - Se `rhs` é `Apply` com `Hole` em algum arg: substitui o **primeiro** Hole
-//!      por `lhs`. Holes restantes permanecem para a fase 2.
+//!      por `lhs`. Holes restantes permanecem.
 //!    - Se `rhs` é `Apply` sem `Hole`: injeta `lhs` como primeiro argumento.
 //!    - Se `rhs` é `Ident`: vira `Apply { callee: rhs, args: [lhs] }`.
 //!    - Grouping é transparente — peel para encontrar o Apply/Ident interno.
@@ -32,7 +32,7 @@ pub fn desugar(expr: &Spanned<Expr>) -> Spanned<Expr> {
     desugar_holes(&no_pipes)
 }
 
-// ── Fase 1: eliminar Pipe ──────────────────────────────────────────
+// ── Eliminar Pipe ──────────────────────────────────────────
 
 fn desugar_pipes(expr: &Spanned<Expr>) -> Spanned<Expr> {
     match &expr.node {
@@ -126,7 +126,7 @@ fn desugar_pipes(expr: &Spanned<Expr>) -> Spanned<Expr> {
         | Expr::Break
         | Expr::Continue => expr.clone(),
 
-        // ── Fio 3: novos nós — recursão nos filhos ──────────
+        // ── Novos nós — recursão nos filhos ──────────
         Expr::ActionCall { callee, args } => Spanned::new(
             Expr::ActionCall {
                 callee: callee.clone(),
@@ -184,7 +184,7 @@ fn desugar_pipes(expr: &Spanned<Expr>) -> Spanned<Expr> {
             )
         }
         Expr::Spread => expr.clone(),
-        // ── Fio 8: Coleções — recursão nos elementos ───────────
+        // ── Coleções — recursão nos elementos ───────────
         Expr::ListLit { elements } => Spanned::new(
             Expr::ListLit {
                 elements: elements.iter().map(desugar_pipes).collect(),
@@ -211,7 +211,7 @@ fn desugar_pipes(expr: &Spanned<Expr>) -> Spanned<Expr> {
             },
             expr.span,
         ),
-        // ── Fio 8: ForIn e In ───────────────────────────────
+        // ── ForIn e In ───────────────────────────────
         Expr::ForIn {
             var_name,
             iterable,
@@ -232,7 +232,7 @@ fn desugar_pipes(expr: &Spanned<Expr>) -> Spanned<Expr> {
             expr.span,
         ),
 
-        // ── Fio 11: nós CSP preservam estrutura, recursam nos filhos ──
+        // ── Nós CSP preservam estrutura, recursam nos filhos ──
         Expr::ChannelSend { channel, value } => Spanned::new(
             Expr::ChannelSend {
                 channel: Box::new(desugar_pipes(channel)),
@@ -327,7 +327,7 @@ fn apply_pipe(lhs: &Spanned<Expr>, rhs: &Spanned<Expr>, span: Span) -> Spanned<E
         ),
         _ => {
             // rhs é algo else (Lambda, Match, etc.) — injeta como primeiro arg.
-            // O typeck fará dispatch do callee não-Ident na Fase 8+.
+            // O typeck fará dispatch do callee não-Ident na fases posteriores.
             Spanned::new(
                 Expr::Apply {
                     callee: Box::new(rhs.clone()),

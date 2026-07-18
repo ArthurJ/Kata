@@ -123,7 +123,7 @@ pub(crate) fn lower_closure(
                         .ins()
                         .call_indirect(sig_ref, func_ptr, &call_args);
                     let result = ctx.builder.inst_results(call_inst)[0];
-                    // Pré-11 (Fase 5): ARC pass — decref após call_indirect
+                    // Pré-11: ARC pass — decref após call_indirect
                     // de CaptureBox. O refcount volta a 1 (caller terminou
                     // de usar). Não libera memória (bumpalo), mas registra
                     // o padrão correto para GC futuro.

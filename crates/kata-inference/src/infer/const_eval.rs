@@ -1,7 +1,7 @@
-//! Fio 6 Fase 3c — Avaliação constante de predicados para ascription-refined.
+//! Avaliação constante de predicados para ascription-refined.
 //!
 //! Avalia predicados de tipos refinados em compile-time para validar
-//! ascription-refined (`5::PositiveInt`). NÃO é comptime (Fio 12) — é
+//! ascription-refined (`5::PositiveInt`). NÃO é comptime — é
 //! um avaliador minimal local ao typeck.
 //!
 //! Suporta: `Apply { Ident(op), [literal, literal] }` para `=`, `<`, `>`,

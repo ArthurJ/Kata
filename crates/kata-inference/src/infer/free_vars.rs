@@ -113,7 +113,7 @@ pub(crate) fn collect_free_vars(
         TypedExprKind::IndexAccess { expr, .. } => {
             collect_free_vars(&expr.node, local_bindings, out);
         }
-        // ── Fio 8: Coleções — recursão nos elementos ──
+        // ── Coleções — recursão nos elementos ──
         TypedExprKind::ListLit { elements } | TypedExprKind::ArrayLit { elements } => {
             for el in elements {
                 collect_free_vars(&el.node, local_bindings, out);
@@ -136,7 +136,7 @@ pub(crate) fn collect_free_vars(
             collect_free_vars(&item.node, local_bindings, out);
             collect_free_vars(&collection.node, local_bindings, out);
         }
-        // ── Fio 8 Fase 8: map/filter/fold — recursão ──
+        // ── Map/filter/fold — recursão ──
         TypedExprKind::Map {
             callback,
             collection,
@@ -160,7 +160,7 @@ pub(crate) fn collect_free_vars(
             collect_free_vars(&initial.node, local_bindings, out);
             collect_free_vars(&collection.node, local_bindings, out);
         }
-        // ── Fio 8 Fase 9: FusedStream — recursão ──
+        // ── FusedStream — recursão ──
         TypedExprKind::FusedStream { stages, source, .. } => {
             collect_free_vars(&source.node, local_bindings, out);
             for stage in stages {
@@ -172,7 +172,7 @@ pub(crate) fn collect_free_vars(
                 collect_free_vars(&cb.node, local_bindings, out);
             }
         }
-        // ── Fio 11: CSP — recursão ──
+        // ── CSP — recursão ──
         TypedExprKind::ChannelSend { channel, value } => {
             collect_free_vars(&channel.node, local_bindings, out);
             collect_free_vars(&value.node, local_bindings, out);

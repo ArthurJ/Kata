@@ -105,7 +105,7 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
     // I/O
     builder.symbol("kata_rt_print", rt::kata_rt_print as *const u8);
     builder.symbol("kata_rt_println", rt::kata_rt_println as *const u8);
-    // Control flow — panic (Fase 9)
+    // Control flow — panic
     builder.symbol("kata_rt_panic", rt::kata_rt_panic as *const u8);
     // Arena — C-ABI para alocação de tuplas (DoD 22)
     builder.symbol(
@@ -117,13 +117,13 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
         "kata_rt_arena_destroy",
         rt::kata_rt_arena_destroy as *const u8,
     );
-    // Sum (Fase 5)
+    // Sum
     builder.symbol(
         "kata_rt_store_sum_result",
         rt::kata_rt_store_sum_result as *const u8,
     );
     builder.symbol("kata_rt_sum_tag_int", rt::kata_rt_sum_tag_int as *const u8);
-    // Scheduler/Fiber (Fase 10)
+    // Scheduler/Fiber
     builder.symbol(
         "kata_rt_scheduler_init",
         rt::kata_rt_scheduler_init as *const u8,
@@ -132,12 +132,12 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
     builder.symbol("kata_rt_run", rt::kata_rt_run as *const u8);
     builder.symbol("kata_rt_yield", rt::kata_rt_yield as *const u8);
     builder.symbol("kata_rt_yield_check", rt::kata_rt_yield_check as *const u8);
-    // Arc<T> / CaptureBox (Fase 12)
+    // Arc<T> / CaptureBox
     builder.symbol("kata_rt_alloc_arc", rt::kata_rt_alloc_arc as *const u8);
     builder.symbol("kata_rt_incref", rt::kata_rt_incref as *const u8);
     builder.symbol("kata_rt_decref", rt::kata_rt_decref as *const u8);
     builder.symbol("kata_rt_arc_fn_ptr", rt::kata_rt_arc_fn_ptr as *const u8);
-    // Collections (Fio 8 Fase 6)
+    // Collections
     builder.symbol("kata_rt_list_nil", rt::kata_rt_list_nil as *const u8);
     builder.symbol("kata_rt_list_cons", rt::kata_rt_list_cons as *const u8);
     builder.symbol(
@@ -172,7 +172,7 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
         "kata_rt_array_contains",
         rt::kata_rt_array_contains as *const u8,
     );
-    // Canais CSP (Fio 11 Fase 3)
+    // Canais CSP
     builder.symbol(
         "kata_rt_channel_create",
         rt::kata_rt_channel_create as *const u8,

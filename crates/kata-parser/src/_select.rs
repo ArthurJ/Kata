@@ -1,4 +1,4 @@
-//! Select — parse_select com braços de canal e timeout (Fio 11).
+//! Select — parse_select com braços de canal e timeout.
 //!
 //! Sintaxe:
 //! ```text

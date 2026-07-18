@@ -39,7 +39,7 @@ pub(crate) fn populate_dispatch_table(signatures: &[Signature]) -> DispatchTable
             substitutions: None,
         });
 
-        // Fase 7: marca comutativa quando a assinatura tem @commutative.
+        // Marca comutativa quando a assinatura tem @commutative.
         if sig.is_commutative {
             table.mark_commutative(&sig.name);
         }
@@ -110,7 +110,7 @@ pub(crate) fn resolve_type_expr(expr: &TypeExpr, env: &TypeEnv) -> Ty {
             Ty::Function(param_types, Box::new(return_type))
         }
         TypeExpr::ParamApp { name, .. } => Ty::Sum(name.clone()),
-        // Fio 7: Self é resolvido na Fase 2. Placeholder por ora.
+        // Self é resolvido. Placeholder por ora.
         TypeExpr::SelfRef => Ty::Var("Self".into()),
     }
 }

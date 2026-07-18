@@ -112,7 +112,7 @@ fn run_pipeline(source: &str) -> miette::Result<ExecResult> {
     // 4. Infer (typeck + dispatch)
     let typed = infer_module(&module, &resolved).map_err(IntoReport::into_report)?;
 
-    // 5. Monomorph (Fase 6 — especializa call sites genéricos)
+    // 5. Monomorph (especializa call sites genéricos)
     let mono = monomorphize(typed);
 
     // 6. Optimize (TRMA + futuros passes)

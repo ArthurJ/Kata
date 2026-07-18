@@ -16,7 +16,7 @@
 //! `kata_rt_decref(box_ptr)` decrementa o refcount. Quando chega a 0,
 //! o box seria liberado — mas como a arena gerencia o lifetime, o
 //! decremento é registrado sem liberar a memória agora. A liberação
-//! real acontece no `arena_destroy` (Fase 15 ativará free real).
+//! real acontece no `arena_destroy` (free real ativado futuramente).
 //!
 //! Layout: 16 bytes de header + n_captures * 8 bytes de captures data.
 
@@ -92,7 +92,7 @@ pub extern "C" fn kata_rt_incref(box_ptr: i64) -> i64 {
 ///
 /// Quando o refcount chega a 0, o box seria liberado. Por ora (sem TRMA),
 /// a arena gerencia o lifetime — o decremento é registrado mas a memória
-/// não é liberada explicitamente. Fase 15 ativará a liberação real.
+/// não é liberada explicitamente. A liberação real será ativada futuramente.
 ///
 /// # Safety
 /// `box_ptr` deve ser um ponteiro válido retornado por `kata_rt_alloc_arc`.
@@ -107,7 +107,7 @@ pub extern "C" fn kata_rt_decref(box_ptr: i64) -> i64 {
         if count > 0 {
             std::ptr::write_unaligned(refcount_ptr, count - 1);
         }
-        // Fase 15: se count == 1 (vai para 0), liberar o box.
+        // Se count == 1 (vai para 0), liberar o box.
         // Por ora, a arena cuida do lifetime.
     }
     0

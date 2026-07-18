@@ -1,7 +1,7 @@
 //! `MetadataTable` — sidecar read-only com metadados do lowering.
 //!
 //! Populado durante o lowering TAST→CLIF, consultado por passes futuros
-//! (ARC pass, comptime, debugger). Em Fio 1, `closure_info` e `escape_flags`
+//! (ARC pass, comptime, debugger). `closure_info` e `escape_flags`
 //! são vazios — existem para evitar retrofit.
 #![allow(dead_code)]
 
@@ -33,7 +33,7 @@ pub(crate) struct ValueMeta {
     pub from_ffi: bool,
 }
 
-/// Metadados de closure — vazio em Fio 1 (closures são Fio 9).
+/// Metadados de closure — vazio (closures).
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ClosureInfo {
     /// Nome da closure (se nomeada).
@@ -42,7 +42,7 @@ pub(crate) struct ClosureInfo {
     pub escapes: bool,
 }
 
-/// Flags de escape analysis — vazio em Fio 1 (TRMA é Fio 11).
+/// Flags de escape analysis — vazio (TRMA).
 #[derive(Debug, Clone, Default)]
 pub(crate) struct EscapeFlags {
     /// Se o valor alocado no heap escapa do escopo atual.
@@ -61,9 +61,9 @@ pub(crate) struct MetadataTable {
     pub block_origins: HashMap<Block, BlockOrigin>,
     /// Metadados de tipo por valor CLIF.
     pub value_types: HashMap<Value, ValueMeta>,
-    /// Informações de closure (vazio em Fio 1).
+    /// Informações de closure (vazio).
     pub closure_info: HashMap<String, ClosureInfo>,
-    /// Flags de escape (vazio em Fio 1).
+    /// Flags de escape (vazio).
     pub escape_flags: HashMap<Value, EscapeFlags>,
 }
 

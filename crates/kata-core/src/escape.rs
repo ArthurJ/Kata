@@ -14,7 +14,7 @@
 /// - `Caller` → `caller_arena` (arena do pai direto)
 /// - `Ancestor(n)` → arena do ancestral n níveis acima (LCA)
 ///
-/// Pré-Fio 11 (sem canais), os únicos casos são:
+/// Pré- (sem canais), os únicos casos são:
 /// - Função pura / entry point → `Ancestor(0)` (raiz)
 /// - Retorno de Action → `Caller`
 /// - Computação local em Action → `Local`

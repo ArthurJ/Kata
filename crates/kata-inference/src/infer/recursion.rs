@@ -1,4 +1,4 @@
-//! Fase 11 — Proibição de recursão em Actions.
+//! Proibição de recursão em Actions.
 //!
 //! Actions executam em fibers com stack fixa (1 MB). Recursão — direta ou
 //! indireta — poderia estourar a stack sem o programador perceber. Esta
@@ -123,7 +123,7 @@ fn collect_action_calls(
         TypedExprKind::IndexAccess { expr, .. } => {
             collect_action_calls(&expr.node, &expr.span, out);
         }
-        // ── Fio 8: Coleções — recursão nos elementos ──
+        // ── Coleções — recursão nos elementos ──
         TypedExprKind::ListLit { elements } | TypedExprKind::ArrayLit { elements } => {
             for el in elements {
                 collect_action_calls(&el.node, &el.span, out);
@@ -146,7 +146,7 @@ fn collect_action_calls(
             collect_action_calls(&item.node, &item.span, out);
             collect_action_calls(&collection.node, &collection.span, out);
         }
-        // ── Fio 8 Fase 8: map/filter/fold — recursão ──
+        // ── Map/filter/fold — recursão ──
         TypedExprKind::Map {
             callback,
             collection,
@@ -170,7 +170,7 @@ fn collect_action_calls(
             collect_action_calls(&initial.node, &initial.span, out);
             collect_action_calls(&collection.node, &collection.span, out);
         }
-        // ── Fio 8 Fase 9: FusedStream — recursão ──
+        // ── FusedStream — recursão ──
         TypedExprKind::FusedStream { stages, source, .. } => {
             collect_action_calls(&source.node, &source.span, out);
             for stage in stages {
@@ -182,7 +182,7 @@ fn collect_action_calls(
                 collect_action_calls(&cb.node, &cb.span, out);
             }
         }
-        // ── Fio 11: CSP — recursão ──
+        // ── CSP — recursão ──
         TypedExprKind::ChannelSend { channel, value } => {
             collect_action_calls(&channel.node, &channel.span, out);
             collect_action_calls(&value.node, &value.span, out);

@@ -21,7 +21,7 @@ pub(crate) fn instantiate_collections(
     subs: &Substitutions,
 ) -> Option<TypedExprKind> {
     match kind {
-        // ── Fio 8: Coleções — instanciar sub-expressões ──
+        // ── Coleções: instanciar sub-expressões ──
         TypedExprKind::ListLit { elements } => Some(TypedExprKind::ListLit {
             elements: elements
                 .iter()
@@ -84,7 +84,7 @@ pub(crate) fn instantiate_collections(
             )),
         }),
 
-        // ── Fio 8 Fase 8: map/filter/fold — instanciar sub-exprs + Ty ──
+        // ── map/filter/fold: instanciar sub-exprs + Ty ──
         TypedExprKind::Map {
             callback,
             collection,
@@ -150,7 +150,7 @@ pub(crate) fn instantiate_collections(
             ret_ty: apply_subs(ret_ty, subs),
         }),
 
-        // ── Fio 8 Fase 9: FusedStream — instanciar stages + source + Ty ──
+        // ── FusedStream: instanciar stages + source + Ty ──
         TypedExprKind::FusedStream {
             stages,
             source,

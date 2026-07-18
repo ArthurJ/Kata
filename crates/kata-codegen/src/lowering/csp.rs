@@ -1,4 +1,4 @@
-//! Lowering de operações CSP (Fio 11 Fases 5-6) — canais, fork, select.
+//! Lowering de operações CSP — canais, fork, select.
 //!
 //! Lowera `ChannelCreate`, `ChannelSend`, `ChannelRecv`, `Fork`, e `Select`
 //! da TAST para chamadas FFI do runtime.

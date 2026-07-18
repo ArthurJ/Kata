@@ -1,4 +1,4 @@
-//! Fio 8 Fase 8: Inferência de map/filter/fold — interceptação no infer_apply.
+//! Inferência de map/filter/fold — interceptação no infer_apply.
 //!
 //! Estas funções não passam pelo DispatchTable. O typeck descobre
 //! o tipo concreto do container (List/Array/Range), extrai elem_ty,

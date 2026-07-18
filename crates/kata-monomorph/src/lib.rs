@@ -1,4 +1,4 @@
-//! Fase 6: Monomorphização — especializa call sites genéricos em funções concretas.
+//! Monomorphização — especializa call sites genéricos em funções concretas.
 //!
 //! Recebe `TypedModule` (TAST com tipos genéricos) → produz `MonoModule`
 //! (TAST com tipos concretos). Cada call site genérico é substituído por
@@ -346,7 +346,7 @@ fn rewrite_typed_expr(
             rewrite_typed_expr(payload, ctx, instance_map, acc);
         }
 
-        // ── Fio 8: Coleções — recursão nos elementos ──
+        // ── Coleções: recursão nos elementos ──
         TypedExprKind::ListLit { elements } | TypedExprKind::ArrayLit { elements } => {
             for el in elements.iter_mut() {
                 rewrite_typed_expr(el, ctx, instance_map, acc);
@@ -370,7 +370,7 @@ fn rewrite_typed_expr(
             rewrite_typed_expr(collection, ctx, instance_map, acc);
         }
 
-        // ── Fio 8 Fase 8: map/filter/fold — recursão ──
+        // ── map/filter/fold: recursão ──
         TypedExprKind::Map {
             callback,
             collection,
@@ -394,7 +394,7 @@ fn rewrite_typed_expr(
             rewrite_typed_expr(initial, ctx, instance_map, acc);
             rewrite_typed_expr(collection, ctx, instance_map, acc);
         }
-        // ── Fio 8 Fase 9: FusedStream — recursão ──
+        // ── FusedStream: recursão ──
         TypedExprKind::FusedStream { stages, source, .. } => {
             rewrite_typed_expr(source, ctx, instance_map, acc);
             for stage in stages {
@@ -416,9 +416,9 @@ fn rewrite_typed_expr(
         | TypedExprKind::VariantQual { .. }
         | TypedExprKind::Break
         | TypedExprKind::Continue
-        // Fio 11: ChannelCreate não tem sub-exprs (args consumidos pelo typeck).
+        // ChannelCreate não tem sub-exprs (args consumidos pelo typeck).
         | TypedExprKind::ChannelCreate { .. } => {}
-        // Fio 11: CSP — recursão.
+        // CSP — recursão.
         TypedExprKind::ChannelSend { channel, value } => {
             rewrite_typed_expr(channel, ctx, instance_map, acc);
             rewrite_typed_expr(value, ctx, instance_map, acc);

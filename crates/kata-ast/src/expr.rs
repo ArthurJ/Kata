@@ -35,8 +35,8 @@ pub enum Expr {
     },
 
     /// `expr::Type` — ascription de tipo.
-    /// Em Fio 1: `3.14::Rational` (rebaixa FloatLit a Rational).
-    /// Em Fio 6: `5::PositiveInt` (valida predicados, entrega refined).
+    /// `3.14::Rational` (rebaixa FloatLit a Rational).
+    /// `5::PositiveInt` (valida predicados, entrega refined).
     TypeAscription {
         expr: Box<Spanned<Expr>>,
         ty: Spanned<TypeExpr>,
@@ -65,7 +65,7 @@ pub enum Expr {
     /// `VariantQual` e o typeck resolve.
     VariantQual { enum_name: String, variant: String },
 
-    // ── Fio 2: Funções, Lambdas, Match, Hole, Pipe ─────────────
+    // ── Funções, Lambdas, Match, Hole, Pipe ─────────────
     /// `lambda <padrões>: <corpo>` — lambda anônimo (cláusula única).
     ///
     /// Se `guards` é vazio: `body` é a expressão única após `:`.
@@ -106,7 +106,7 @@ pub enum Expr {
         rhs: Box<Spanned<Expr>>,
     },
 
-    // ── Fio 3: Actions, return, var, loop, break, continue ───────────
+    // ── Actions, return, var, loop, break, continue ───────────
     /// `nome!(args)` — chamada de Action.
     /// `!` é o marcador de impureza. O parser produz `ActionCall` quando vê `!`
     /// após um identificador seguido de parênteses (tupla de argumentos).
@@ -155,7 +155,7 @@ pub enum Expr {
         rhs: Box<Spanned<Expr>>,
     },
 
-    // ── Fio 5: DotAccess (field access + index access) ──────────
+    // ── DotAccess (field access + index access) ──────────
     /// `expr.nome` ou `expr.0` — access unificado.
     /// O parser não decide se é field ou index — o typeck resolve
     /// pelo tipo do receptor (`Struct` → field, `Tuple` → index).
@@ -167,7 +167,7 @@ pub enum Expr {
     /// `$` — marcador de spread (typeck expande, nunca chega à TAST).
     Spread,
 
-    // ── Fio 8: Coleções ────────────────────────────────────
+    // ── Coleções ────────────────────────────────────
     /// `[1 2 3]` — lista literal (Cons cells).
     ListLit { elements: Vec<Spanned<Expr>> },
 
@@ -197,7 +197,7 @@ pub enum Expr {
         collection: Box<Spanned<Expr>>,
     },
 
-    // ── Fio 11: CSP (Canais, Fork, Select) ───────────────────
+    // ── CSP (Canais, Fork, Select) ───────────────────
     /// `tx !> valor` — envio por canal.
     ChannelSend {
         channel: Box<Spanned<Expr>>,
@@ -254,8 +254,8 @@ pub enum Pattern {
     /// `(a, b, c)` — tupla.
     Tuple(Vec<Spanned<Pattern>>),
     /// `[h : t]` — cons (cabeça : cauda). `[]` para lista vazia.
-    /// Fio 2 reconhece a sintaxe; Fio 8 (List) dá semântica de runtime.
-    /// Em Fio 2, pattern Cons/Nil só funciona se List existir (não existe
+    /// Reconhece a sintaxe; (List) dá semântica de runtime.
+    /// Pattern Cons/Nil só funciona se List existir (não existe
     /// ainda — stub que produz erro limpo).
     Cons {
         head: Box<Spanned<Pattern>>,
@@ -286,12 +286,12 @@ pub struct GuardClause {
 pub struct MatchArm {
     /// `None` = `otherwise` (fallback).
     pub pattern: Option<Spanned<Pattern>>,
-    /// Guard opcional após pattern (Fio 2: não implementado no parser ainda).
+    /// Guard opcional após pattern ( : não implementado no parser ainda).
     pub guard: Option<Spanned<Expr>>,
     pub body: Spanned<Expr>,
 }
 
-/// Um braço de `select`: `rx <! nome: body` (Fio 11).
+/// Um braço de `select`: `rx <! nome: body`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SelectArm {
     /// Receiver de onde receber (expressão que avalia para Receiver::T).
@@ -325,7 +325,7 @@ pub enum TypeExpr {
 
     /// `Result::(T, E)` — tipo com parâmetros posicionais.
     /// O primeiro componente é o nome do tipo, os parênteses são os args.
-    /// Em Fio 1 não usado (enums genéricos são Fio 4).
+    /// Não usado (enums genéricos).
     ParamApp {
         name: String,
         params: Vec<Spanned<TypeExpr>>,

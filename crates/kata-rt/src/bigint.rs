@@ -65,9 +65,9 @@ fn fits_smi(val: i64) -> bool {
 
 // Layout do bloco heap para BigInt.
 // Usamos um header com refcount (para futura integração com ARC) seguido
-// dos digits do BigInt. Para Fio 1, o refcount é mantido em 1 (sem sharing).
+// dos digits do BigInt. O refcount é mantido em 1 (sem sharing).
 //
-// Em Fio 1, usamos `Box<BigInt>` diretamente — o `i64` retornado é um
+// Usamos `Box<BigInt>` diretamente — o `i64` retornado é um
 // ponteiro não-null para o heap. O LSB é 0 (alinhamento natural de Box).
 //
 // **Invariante:** `i64` com LSB=0 é sempre ponteiro válido para `Box<BigInt>`.
@@ -111,7 +111,7 @@ unsafe fn free_bigint(val: i64) {
 ///
 /// # Safety
 /// `s` deve ser um ponteiro válido para string C null-terminated.
-/// (Em Fio 1, chamado internamente — não expomos C string ainda.)
+/// (Chamado internamente — não expomos C string ainda.)
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_tag_int(val: i64) -> i64 {
     if fits_smi(val) {
@@ -288,7 +288,7 @@ pub extern "C" fn kata_rt_bi_mul(a: i64, b: i64) -> i64 {
 }
 
 /// Divisão inteira. Pânico se divisor é zero (o typeck deve prevenir
-/// via NonZero refined — Fio 6). Para Fio 1, divisão por zero = abort.
+/// via NonZero refined). Divisão por zero = abort.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_bi_div(a: i64, b: i64) -> i64 {
     let result = unsafe {

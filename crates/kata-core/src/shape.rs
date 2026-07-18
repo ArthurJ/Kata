@@ -38,7 +38,7 @@ pub(crate) enum TypeShape {
         params: Vec<TypeShape>,
         ret: Box<TypeShape>,
     },
-    /// Tupla heterogênea (antecipado de Fio 5; Fio 2 usa para patterns).
+    /// Tupla heterogênea (antecipado; usa para patterns).
     Tuple { elements: Vec<TypeShape> },
 }
 

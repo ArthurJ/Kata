@@ -87,7 +87,7 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
                     }
                 }
 
-                // Fase 5: coleta type params (Ty::Var UPPER_CASE em params/ret).
+                // Coleta type params (Ty::Var UPPER_CASE em params/ret).
                 let type_params = collect_type_params(&param_types, &return_type);
 
                 // Se tem corpo Kata (cláusulas lambda), preserva para o inference.

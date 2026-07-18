@@ -1,10 +1,10 @@
 //! Arena — bump allocator per-fiber.
 //!
-//! Em Fio 1: estrutura pronta, mas sem uso (Actions vêm em Fio 3).
+//! Estrutura pronta, mas sem uso em Actions ainda.
 //! A arena libera tudo em O(1) no epílogo da Action.
 //!
-//! Em Fio 2 (DoD 22): funções C-ABI expostas para o codegen alocar tuplas.
-//! Em Fio 3 (Fase 3): pool de arenas indexado por handle — cada Action cria
+//! Funções C-ABI expostas para o codegen alocar tuplas.
+//! Pool de arenas indexado por handle — cada Action cria
 //! sua própria arena e a destrói no epílogo. Valores na caller's arena
 //! sobrevivem à destruição da arena local.
 //!

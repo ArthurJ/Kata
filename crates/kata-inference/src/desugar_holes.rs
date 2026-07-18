@@ -1,4 +1,4 @@
-//! Desugar Fase 2 — elimina `Expr::Hole` da AST.
+//! Desugar — elimina `Expr::Hole` da AST.
 //!
 //! Para cada `Apply` com `Hole` em args: gera `Expr::Lambda` com N parâmetros
 //! fresh (um por Hole), substitui cada Hole pelo `Ident` do parâmetro
@@ -14,7 +14,7 @@ use kata_ast::{
 
 /// Desugar holes — elimina todos `Expr::Hole` da AST.
 ///
-/// Deve ser chamado APÓS `desugar_pipes` (Fase 1).
+/// Deve ser chamado APÓS `desugar_pipes`.
 pub(crate) fn desugar_holes(expr: &Spanned<Expr>) -> Spanned<Expr> {
     // Bottom-up: desugar children primeiro, depois processa o nó atual.
     match &expr.node {
@@ -171,7 +171,7 @@ pub(crate) fn desugar_holes(expr: &Spanned<Expr>) -> Spanned<Expr> {
         // Pipe não deve aparecer aqui (desugar_pipes roda primeiro)
         Expr::Pipe { .. } => expr.clone(),
 
-        // ── Fio 3: novos nós — recursão nos filhos ──────────
+        // ── Novos nós — recursão nos filhos ──────────
         Expr::ActionCall { callee, args } => Spanned::new(
             Expr::ActionCall {
                 callee: callee.clone(),
@@ -220,7 +220,7 @@ pub(crate) fn desugar_holes(expr: &Spanned<Expr>) -> Spanned<Expr> {
             expr.span,
         ),
         Expr::Spread => expr.clone(),
-        // ── Fio 8: Coleções — recursão nos elementos ───────────
+        // ── Coleções — recursão nos elementos ───────────
         Expr::ListLit { elements } => Spanned::new(
             Expr::ListLit {
                 elements: elements.iter().map(desugar_holes).collect(),
@@ -247,7 +247,7 @@ pub(crate) fn desugar_holes(expr: &Spanned<Expr>) -> Spanned<Expr> {
             },
             expr.span,
         ),
-        // ── Fio 8: ForIn e In ───────────────────────────────
+        // ── ForIn e In ───────────────────────────────
         Expr::ForIn {
             var_name,
             iterable,
@@ -268,7 +268,7 @@ pub(crate) fn desugar_holes(expr: &Spanned<Expr>) -> Spanned<Expr> {
             expr.span,
         ),
 
-        // ── Fio 11: nós CSP não contêm holes, preservam estrutura ──
+        // ── Nós CSP não contêm holes, preservam estrutura ──
         Expr::ChannelSend { channel, value } => Spanned::new(
             Expr::ChannelSend {
                 channel: Box::new(desugar_holes(channel)),

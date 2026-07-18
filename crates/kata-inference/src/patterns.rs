@@ -1,4 +1,4 @@
-//! Pattern checking e verificação de exaustividade (Fase 8).
+//! Pattern checking e verificação de exaustividade.
 //!
 //! `check_pattern` converte um `Pattern` da AST em `TypedPattern`,
 //! resolvendo `Ident("True")` → `Variant` via `EnumRegistry`, e definindo
@@ -124,7 +124,7 @@ fn check_pattern_inner(
                     });
                 }
             };
-            // Fase 5/6: resolver sub-patterns do payload.
+            //  /6: resolver sub-patterns do payload.
             let sub_patterns = if let Some(sub_pats) = payload {
                 // Variante com payload — precisa ter tipo de payload no EnumRegistry.
                 let payload_ty = enum_registry
@@ -134,7 +134,7 @@ fn check_pattern_inner(
                         found: format!("{}::{} sem payload", enum_name, variant),
                         span: (*span).into(),
                     })?;
-                // Fase 6: se o enum é genérico, instancia o payload_ty.
+                // Se o enum é genérico, instancia o payload_ty.
                 let effective_payload_ty = if enum_registry.is_generic(enum_name) {
                     enum_registry
                         .instantiate_variant(enum_name, variant, &type_args)
@@ -142,7 +142,7 @@ fn check_pattern_inner(
                 } else {
                     payload_ty.clone()
                 };
-                // Fase 5: 1 sub-pattern por variante.
+                // 1 sub-pattern por variante.
                 if sub_pats.len() != 1 {
                     return Err(MiddleError::ArityMismatch {
                         expected: 1,
@@ -210,7 +210,7 @@ fn check_pattern_inner(
             })
         }
 
-        // ── Fio 8: Cons pattern — match em Ty::List(A) ──
+        // ── Cons pattern — match em Ty::List(A) ──
         Pattern::Cons { head, tail } => {
             // Scrutinee deve ser Ty::List(A).
             let elem_ty = match scrutinee_ty {
@@ -244,7 +244,7 @@ fn literal_expr_ty(expr: &kata_ast::Expr, scrutinee_ty: &Ty) -> Ty {
         kata_ast::Expr::FloatLit { .. } => Ty::float(),
         kata_ast::Expr::TextLit { .. } => Ty::text(),
         kata_ast::Expr::Unit => Ty::Unit,
-        // Demais expressões em pattern literal não são esperadas em Fio 2.
+        // Demais expressões em pattern literal não são esperadas.
         _ => scrutinee_ty.clone(),
     }
 }

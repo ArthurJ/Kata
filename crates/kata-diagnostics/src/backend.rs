@@ -3,7 +3,7 @@
 //! Não carregam [`Span`] — não há código do usuário para apontar (I6).
 //! Usam `expect()` com mensagens descritivas em vez de `unwrap()`.
 //!
-//! Scaffolding para o backend de codegen futuro — não usado em Fase 1.
+//! Scaffolding para o backend de codegen futuro — não usado ainda.
 
 #![allow(dead_code)]
 

@@ -13,14 +13,14 @@ use crate::typed::{Effect, TypedExprKind};
 use super::expr::{InferCtx, infer_expr};
 use super::helpers::InferResult;
 
-/// Fase 5: Infere `Apply(VariantQual("Enum", "Variant"), [arg])` —
+/// Infere `Apply(VariantQual("Enum", "Variant"), [arg])` —
 /// construção de Sum com payload.
 ///
 /// Verifica que a variante existe no EnumRegistry, que tem payload,
 /// e que o tipo do argumento é compatível com o tipo do payload.
 /// Produz `TypedExprKind::VariantConstruct { enum_name, variant, payload }`.
 ///
-/// Fase 6: Se o enum é genérico, o payload_ty pode ser `Ty::Var("T")`.
+/// Se o enum é genérico, o payload_ty pode ser `Ty::Var("T")`.
 /// Nesse caso, unifica `Ty::Var("T")` com `arg.ty` → binding `T = arg.ty`.
 /// Produz `Ty::Generic(enum_name, type_args)` onde type_args são os
 /// type params instanciados (não-inferidos ficam como `Ty::Var`).
@@ -52,7 +52,7 @@ pub(crate) fn infer_variant_construct(
             span: (*span).into(),
         })?;
 
-    // Fase 5: exatamente 1 argumento.
+    // Exatamente 1 argumento.
     if args.len() != 1 {
         return Err(MiddleError::ArityMismatch {
             expected: 1,
@@ -64,7 +64,7 @@ pub(crate) fn infer_variant_construct(
     // Infere o argumento (tail_pos = false — é computação local).
     let typed_arg = infer_expr(&args[0].node, &args[0].span, env, ctx, false)?;
 
-    // Fase 6: unificação com Ty::Var.
+    // Unificação com Ty::Var.
     if ctx.enum_registry.is_generic(enum_name) {
         let type_params = ctx
             .enum_registry
@@ -116,7 +116,7 @@ pub(crate) fn infer_variant_construct(
         ));
     }
 
-    // Fase 5: enum não-genérico — comparação estrutural.
+    // Enum não-genérico — comparação estrutural.
     if typed_arg.ty != *payload_ty {
         return Err(MiddleError::TypeMismatch {
             expected: format!("{:?}", payload_ty),
@@ -140,7 +140,7 @@ pub(crate) fn infer_variant_construct(
     ))
 }
 
-/// Fase 7: Expande `$` spread em argumentos de Apply.
+/// Expande `$` spread em argumentos de Apply.
 ///
 /// `f $ (a, b)` → `f a b`. Se um arg é `Ident("$")`, o próximo arg deve ser
 /// `Expr::Tuple` — substitui ambos (`$` + `Tuple`) pelos elementos individuais.

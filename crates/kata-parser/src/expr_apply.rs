@@ -18,7 +18,7 @@ use crate::Parser;
 pub(crate) fn parse_expr(parser: &mut Parser) -> Result<Spanned<Expr>, FrontendError> {
     let mut lhs = parse_apply(parser)?;
 
-    // `?` postfix — fail-fast operator (Fase 7).
+    // `?` postfix — fail-fast operator.
     // `expr ?` → Expr::Question(Box<expr>).
     // Precedência: maior que `|>` (pipe), menor que `::` (ascription).
     // Ou seja: `Result::Ok 42 ?` = `(Result::Ok 42) ?`, e
@@ -72,7 +72,7 @@ pub(crate) fn parse_expr(parser: &mut Parser) -> Result<Spanned<Expr>, FrontendE
                 );
             }
             Token::SendArrow => {
-                // `tx !> valor` — envio por canal (Fio 11).
+                // `tx !> valor` — envio por canal.
                 parser.advance(); // consume `!>`
                 let rhs = parse_apply(parser)?;
                 let span = lhs.span.cover(rhs.span);
@@ -85,7 +85,7 @@ pub(crate) fn parse_expr(parser: &mut Parser) -> Result<Spanned<Expr>, FrontendE
                 );
             }
             Token::RecvArrow => {
-                // `rx <! nome` — recebimento de canal (Fio 11).
+                // `rx <! nome` — recebimento de canal.
                 // `<!` exige um Ident como destino (binding name).
                 parser.advance(); // consume `<!`
                 let name = match parser.peek() {
@@ -117,7 +117,7 @@ pub(crate) fn parse_expr(parser: &mut Parser) -> Result<Spanned<Expr>, FrontendE
         }
     }
 
-    // `in` — membership operator (Fio 8). Precedência: comparação (mais baixa que `|>`, `|`).
+    // `in` — membership operator. Precedência: comparação (mais baixa que `|>`, `|`).
     // `x in coll` → Expr::In { item: x, collection: coll }.
     // Left-associative: `a in b in c` = `(a in b) in c`.
     while matches!(parser.peek(), Token::In) {

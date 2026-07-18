@@ -21,7 +21,7 @@ use super::partial_dispatch::try_partial_dispatch;
 /// Para lambda anônimo: 1 cláusula, sem nome de função.
 /// Para função nomeada (cláusulas de Sig): múltiplas cláusulas, com nome.
 ///
-/// Em Fio 2, lambda anônimo não tem assinatura — os tipos dos parâmetros
+/// Lambda anônimo não tem assinatura — os tipos dos parâmetros
 /// são inferidos a partir do primeiro uso. Para funções nomeadas, a
 /// assinatura fornece os tipos. Aqui tratamos apenas lambda anônimo
 /// (sem assinatura); funções nomeadas são tratadas em `infer_named_function`
@@ -38,14 +38,14 @@ pub(crate) fn infer_lambda(
     hint: Option<&Ty>,
 ) -> InferResult<(Ty, TypedExprKind, Effect)> {
     // Para lambda anônimo, os tipos dos parâmetros são InferVar — não temos
-    // inferência de tipos real ainda. Em Fio 2, o lambda anônimo só funciona
+    // inferência de tipos real ainda. O lambda anônimo só funciona
     // quando o tipo é determinado pelo contexto (ex: `let f := lambda x: + x 1`
     // infere x:Int porque + exige Int). Mas sem inferência bidirecional, isso
-    // não é possível. Fio 2 usa uma abordagem simples: InferVar e unificação
+    // não é possível. usa uma abordagem simples: InferVar e unificação
     // não estão implementados — o lambda ganha tipos InferVar e o primeiro
     // uso determina o tipo.
     //
-    // Para Fase 8, implementamos a estrutura do TypedLambdaClause mas a
+    // Para , implementamos a estrutura do TypedLambdaClause mas a
     // inferência de tipos do lambda é limitada: cada padrão Ident ganha
     // InferVar e o body é inferido no escopo. O tipo de retorno é o tipo
     // do body. O tipo do lambda é Function(param_types, ret_ty).
@@ -120,7 +120,7 @@ pub(crate) fn infer_lambda(
     Ok((
         lambda_ty,
         TypedExprKind::Lambda {
-            func_name: None, // lambda anônimo — Fase 10 atribui nome para Sig
+            func_name: None, // lambda anônimo — atribui nome para Sig
             param_types,
             ret_ty,
             clauses: vec![clause],

@@ -74,7 +74,7 @@ pub use text::{
     kata_rt_bool_to_text, kata_rt_string_concat, kata_rt_string_len, kata_rt_text_literal,
     kata_rt_text_replace_first,
 };
-// Canais CSP (Fio 11 Fase 3)
+// Canais CSP
 pub use channel::{
     kata_rt_broadcast_create, kata_rt_broadcast_receiver_create, kata_rt_channel_create,
     kata_rt_channel_recv, kata_rt_channel_send, kata_rt_queue_create, kata_rt_select,

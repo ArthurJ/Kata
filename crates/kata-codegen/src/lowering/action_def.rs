@@ -25,7 +25,7 @@ use super::module::{CodegenError, FuncKey, StringTable};
 /// (ex: `__kata_fn_5`). A identidade semântica vive na chave composta do
 /// `symbol_table`.
 ///
-/// Assinatura uniforme (Fase 10): `(fiber_arena: i64, caller_arena: i64, args_ptr: i64) -> i64`
+/// Assinatura uniforme: `(fiber_arena: i64, caller_arena: i64, args_ptr: i64) -> i64`
 /// com `CallConv::Tail`. Todos os params são I64, retorno é sempre I64
 /// (Float é bitcast na borda — epílogo da Action e caller).
 pub(crate) fn declare_kata_action(
@@ -47,7 +47,7 @@ pub(crate) fn declare_kata_action(
 
 /// Define (compila o corpo de) uma Action.
 ///
-/// ABI uniforme (Fase 10): `(fiber_arena: i64, caller_arena: i64, args_ptr: i64) -> i64`.
+/// ABI uniforme: `(fiber_arena: i64, caller_arena: i64, args_ptr: i64) -> i64`.
 ///
 /// Prólogo: sem `arena_create` — a arena do fiber é criada pelo scheduler
 /// e passada como `params[0]` (fiber_arena). `params[1]` = caller_arena.

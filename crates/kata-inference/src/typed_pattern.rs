@@ -43,7 +43,7 @@ pub enum TypedPattern {
     Tuple {
         elements: Vec<Spanned<TypedPattern>>,
     },
-    /// `[h : t]` — cons (stub em Fio 2 — List é Fio 8).
+    /// `[h : t]` — cons (stub — List).
     Cons {
         head: Box<Spanned<TypedPattern>>,
         tail: Box<Spanned<TypedPattern>>,

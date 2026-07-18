@@ -22,7 +22,7 @@ pub enum Ty {
     Sum(String),
     /// Tipo função — `(A B -> C)`.
     Function(Vec<Ty>, Box<Ty>),
-    /// Antecipado de Fio 5. Sem field access, sem .N — só tipo estrutural
+    /// Antecipado. Sem field access, sem .N — só tipo estrutural
     /// para suportar tuple patterns em match/lambda.
     Tuple(Vec<Ty>),
     /// Variável de inferência — preenchida pelo typeck.

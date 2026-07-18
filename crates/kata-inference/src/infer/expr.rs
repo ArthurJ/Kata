@@ -28,17 +28,17 @@ use super::variant::resolve_unqual_variant;
 /// Contexto de inferência — carrega dependências compartilhadas entre
 /// todas as funções de inferência. Substitui parâmetros individuais
 /// `table` e `enum_registry`, e adiciona `ret_ty` para validação de
-/// `return` em Actions (Fase 2).
+/// `return` em Actions.
 pub(crate) struct InferCtx<'a> {
     pub table: &'a DispatchTable,
     pub enum_registry: &'a EnumRegistry,
     /// Catálogo de structs com campos — para field access e
-    /// ascription-construção (Fio 5).
+    /// ascription-construção.
     pub struct_registry: &'a StructRegistry,
-    /// Fio 6: declarações refined para ascription-refined (validação
+    /// Declarações refined para ascription-refined (validação
     /// compile-time de predicados sobre literais).
     pub refined_decls: &'a [RefinedDeclInfo],
-    /// Fio 7: catálogo de interfaces e implementações para dispatch
+    /// Catálogo de interfaces e implementações para dispatch
     /// com `iface++` no Score.
     pub interface_registry: &'a InterfaceRegistry,
     /// Tipo de retorno da Action atual — `Some(ty)` quando inferindo
@@ -131,7 +131,7 @@ pub(crate) fn infer_expr_hinted(
         }
 
         // ── Aplicação prefixa ────────────────────────────────
-        // Fase 5: propaga hint para infer_apply (ret-directed dispatch).
+        // Propaga hint para infer_apply (ret-directed dispatch).
         Expr::Apply { callee, args } => infer_apply(callee, args, span, env, ctx, hint)?,
 
         // ── Ascription de tipo ───────────────────────────────
@@ -210,7 +210,7 @@ pub(crate) fn infer_expr_hinted(
             }
         }
 
-        // ── Fio 2: desugared antes do typeck ──────────────────
+        // ── Desugared antes do typeck ──────────────────
         Expr::Hole => {
             return Err(MiddleError::TypeMismatch {
                 expected: "expressão (Hole deve ter sido desugared)".into(),
@@ -226,7 +226,7 @@ pub(crate) fn infer_expr_hinted(
             });
         }
 
-        // ── Fio 2 Fase 8: Lambda ──────────────────────────────
+        // ── Lambda ──────────────────────────────
         Expr::Lambda {
             patterns,
             body,
@@ -234,10 +234,10 @@ pub(crate) fn infer_expr_hinted(
             with_bindings,
         } => infer_lambda(patterns, body, guards, with_bindings, span, env, ctx, hint)?,
 
-        // ── Fio 2 Fase 8: Match ───────────────────────────────
+        // ── Match ───────────────────────────────
         Expr::Match { scrutinee, arms } => infer_match(scrutinee, arms, span, env, ctx, tail_pos)?,
 
-        // ── Fio 3: ActionCall — dispatch para Action builtin ou definida ──
+        // ── ActionCall — dispatch para Action builtin ou definida ──
         Expr::ActionCall { callee, args } => {
             match infer_action_call(callee, args, span, env, ctx)? {
                 super::action_call::ActionDispatch::Complete(typed) => return Ok(typed),
@@ -245,7 +245,7 @@ pub(crate) fn infer_expr_hinted(
             }
         }
 
-        // ── Fio 3: var — binding mutável (exclusivo de Actions) ──
+        // ── Var — binding mutável (exclusivo de Actions) ──
         Expr::Var { name, value } => {
             let typed_value = infer_expr(&value.node, &value.span, env, ctx, false)?;
             let val_ty = typed_value.ty.clone();
@@ -260,7 +260,7 @@ pub(crate) fn infer_expr_hinted(
             )
         }
 
-        // ── Fio 3: Reassign — reatribuição a variável `var` ──
+        // ── Reassign — reatribuição a variável `var` ──
         Expr::Reassign { name, value } => {
             // Verifica que a variável existe e foi declarada como mutável.
             let existing_ty =
@@ -295,7 +295,7 @@ pub(crate) fn infer_expr_hinted(
             )
         }
 
-        // ── Fio 3: return — early return de Action (Fase 2) ──
+        // ── Return — early return de Action ──
         Expr::Return(inner) => {
             let ret_ty = ctx.ret_ty.ok_or_else(|| MiddleError::TypeMismatch {
                 expected: "return dentro de Action".into(),
@@ -319,7 +319,7 @@ pub(crate) fn infer_expr_hinted(
         Expr::Loop { body } => {
             // Loop body é inferido com in_loop = true.
             // Cada expr do body é inferida em sequência no mesmo escopo.
-            // O tipo do loop é Unit (break sem valor na Fase 4).
+            // O tipo do loop é Unit (break sem valor).
             let loop_ctx = InferCtx {
                 table: ctx.table,
                 enum_registry: ctx.enum_registry,
@@ -364,26 +364,26 @@ pub(crate) fn infer_expr_hinted(
             (Ty::Unit, TypedExprKind::Continue, Effect::Puro)
         }
 
-        // ── Fase 7: `?` fail-fast — desugar para Match + Return ──
+        // ── `?` fail-fast — desugar para Match + Return ──
         Expr::Question(inner) => {
             return infer_question(inner, span, env, ctx, tail_pos);
         }
-        // ── Fase 8: `|` fallback — desugar para Match (coalescência pura) ──
+        // ── `|` fallback — desugar para Match (coalescência pura) ──
         Expr::PipeFallback { lhs, rhs } => {
             return infer_pipe_fallback(lhs, rhs, span, env, ctx);
         }
-        // ── Fio 5: DotAccess (field access + index access) ──
+        // ── DotAccess (field access + index access) ──
         Expr::DotAccess { expr, index } => {
             return infer_dot_access(expr, index, span, env, ctx, tail_pos);
         }
-        // ── Fio 5: Spread ($) — typeck expande, nunca deveria chegar aqui ──
+        // ── Spread ($) — typeck expande, nunca deveria chegar aqui ──
         Expr::Spread => {
             return Err(MiddleError::UnboundName {
                 name: "Spread ($) em posição inesperada — typeck deveria ter expandido".into(),
                 span: (*span).into(),
             });
         }
-        // ── Fio 8: Coleções — inferência delegada para collections.rs ──
+        // ── Coleções — inferência delegada para collections.rs ──
         Expr::ListLit { elements } => {
             return super::collections::infer_list_lit(elements, span, env, ctx, tail_pos);
         }
@@ -400,7 +400,7 @@ pub(crate) fn infer_expr_hinted(
                 start, step, end, *inclusive, span, env, ctx, tail_pos,
             );
         }
-        // ── Fio 8: ForIn e In ───────────────────────────────────────
+        // ── ForIn e In ───────────────────────────────────────
         Expr::ForIn {
             var_name,
             iterable,
@@ -414,7 +414,7 @@ pub(crate) fn infer_expr_hinted(
             return super::collections::infer_in(item, collection, span, env, ctx, tail_pos);
         }
 
-        // ── Fio 11: CSP — typeck em csp.rs ──
+        // ── CSP — typeck em csp.rs ──
         Expr::ChannelSend { channel, value } => {
             return super::csp::infer_channel_send(channel, value, span, env, ctx, tail_pos);
         }

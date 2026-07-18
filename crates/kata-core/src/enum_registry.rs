@@ -18,7 +18,7 @@ pub struct VariantInfo {
     /// `None` = variante unitária (`True`, `False`, `None`).
     /// `Some(ty)` = variante com payload (`Ok(Int)`, `Some(Float)`).
     pub payload_ty: Option<Ty>,
-    /// Fio 6: nome da função predicado no DispatchTable.
+    /// Nome da função predicado no DispatchTable.
     /// `None` = variante sem predicado (normal ou default/fallback).
     /// `Some(name)` = variante predicada (ex: `Magreza(< _ 18.5)`).
     pub predicate: Option<String>,

@@ -19,8 +19,8 @@ impl Parser {
     /// - `Ident` → Ident (pode ser variante desqualificada — typeck resolve)
     /// - `Enum::Variant` → Variant (qualificado)
     /// - `(p1, p2, ...)` → Tuple
-    /// - `[h : t]` → Cons (stub Fio 8)
-    /// - `[]` → Cons Nil (stub Fio 8)
+    /// - `[h : t]` → Cons (stub )
+    /// - `[]` → Cons Nil (stub )
     pub(crate) fn parse_pattern(&mut self) -> Result<Spanned<Pattern>, FrontendError> {
         let start = self.peek_span();
         match self.peek().clone() {
@@ -40,7 +40,7 @@ impl Parser {
                     self.advance(); // consume ::
                     self.advance(); // consume variant
 
-                    // Fase 5: verificar se há um sub-pattern após a variante.
+                    // Verificar se há um sub-pattern após a variante.
                     // `Result::Ok v` → Variant com payload sub-pattern.
                     // `Result::Ok(v)` → Variant com payload sub-pattern (entre parênteses).
                     // `Boolean::True` (sem sub-pattern) → Variant sem payload.
@@ -110,7 +110,7 @@ impl Parser {
             }
             // `()` → Unit literal pattern
             Token::LParen => self.parse_tuple_pattern(start),
-            // `[]` ou `[h : t]` → Cons pattern (stub Fio 8)
+            // `[]` ou `[h : t]` → Cons pattern (stub )
             Token::LBracket => self.parse_cons_pattern(start),
             _ => Err(self.error("pattern")),
         }
@@ -149,7 +149,7 @@ impl Parser {
         Ok(Spanned::new(Pattern::Tuple(elements), span))
     }
 
-    /// Parse `[h : t]` → Cons pattern, `[]` → Cons Nil (stub Fio 8).
+    /// Parse `[h : t]` → Cons pattern, `[]` → Cons Nil (stub ).
     fn parse_cons_pattern(
         &mut self,
         start: kata_ast::Span,
@@ -160,10 +160,10 @@ impl Parser {
         if matches!(self.peek(), Token::RBracket) {
             self.advance();
             // Nil não é um Pattern variant próprio — usamos Cons com Wildcard
-            // como stub. O typeck rejeita com erro "List patterns são Fio 8".
+            // como stub. O typeck rejeita com erro "List patterns".
             // Representação: Cons { head: Wildcard, tail: Wildcard } marcado
             // como nil. Como não há variant Nil, simplificamos: o typeck
-            // rejeita qualquer Cons pattern em Fio 2.
+            // rejeita qualquer Cons pattern.
             return Ok(Spanned::new(
                 Pattern::Cons {
                     head: Box::new(Spanned::new(Pattern::Wildcard, start)),

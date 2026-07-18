@@ -1,14 +1,14 @@
 //! `DispatchTable` — tabela de overloads com despacho por dominância.
 //!
-//! Algoritmo (nasce em Fio 1, mesmo com 1 overload):
+//! Algoritmo (nasce, mesmo com 1 overload):
 //! 1. FILTRAR: candidatas compatíveis (arity + match_score)
 //! 2. PONTUAR: match_score → Score(exact, alias, refined, iface)
 //! 3. ORDENAR: lexicográfico decrescente (exact, alias, refined, iface, !generic)
 //! 4. TOPO ÚNICO → Ok
 //! 5. EMPATE → AmbiguousDispatch
 //!
-//! Em Fio 1: só `exact` é não-zero. Alias (Fio 5), refined (Fio 6),
-//! iface (Fio 7) são sempre 0. Mas a estrutura do algoritmo está pronta.
+//! Só `exact` é não-zero. Alias, refined,
+//! iface são sempre 0. Mas a estrutura do algoritmo está pronta.
 
 use crate::interface_registry::InterfaceRegistry;
 use crate::ty::Ty;
@@ -26,10 +26,10 @@ pub struct OverloadInfo {
     pub is_generic: bool,
     pub is_constructor: bool,
     pub associative_neutral: Option<i64>,
-    /// Fase 5: nomes dos type params (ex: `["T"]` para `id :: T => T`).
+    /// Nomes dos type params (ex: `["T"]` para `id :: T => T`).
     /// Vazio para funções não-genéricas.
     pub type_params: Vec<String>,
-    /// Fase 6: instanciação nos call sites. `None` para função genérica
+    /// Instanciação nos call sites. `None` para função genérica
     /// original e para funções não-genéricas. `Some(map)` para instâncias
     /// monomorfizadas.
     pub substitutions: Option<HashMap<String, Ty>>,
@@ -209,7 +209,7 @@ impl DispatchTable {
                 if let Some(arg_ty) = arg_opt
                     && arg_ty != param
                 {
-                    // Fio 7: verifica iface match.
+                    // Verifica iface match.
                     let iface_match = match extract_iface_name(param) {
                         Some(iface_name) => match extract_type_name(arg_ty) {
                             Some(type_name) => iface_reg.type_implements(&type_name, &iface_name),
@@ -401,11 +401,11 @@ pub enum DispatchError {
 
 /// Conta matches por categoria: exact, alias, refined, iface.
 ///
-/// - `exact`: arg == param (já existe desde Fio 1)
+/// - `exact`: arg == param (já existe desde o início)
 /// - `iface`: param é `Ty::Interface(name)` e arg implementa essa interface
-///   via `InterfaceRegistry::type_implements` (Fio 7)
+///   via `InterfaceRegistry::type_implements`
 ///
-/// Alias (Fio 5) e refined (Fio 6) ainda são sempre 0 — serão populados
+/// Alias e refined ainda são sempre 0 — serão populados
 /// em fios posteriores. Se qualquer posição é incompatível, retorna
 /// `Score::incompatible()` (todos zero).
 pub fn match_score(args: &[Ty], params: &[Ty], iface_reg: &InterfaceRegistry) -> Score {
@@ -454,9 +454,9 @@ fn extract_iface_name(ty: &Ty) -> Option<String> {
 /// `Ty::Struct("Complex")` → `"Complex"`
 /// `Ty::Sum("Boolean")` → `"Boolean"`
 /// `Ty::Generic("List", [Int])` → `"List"`
-/// `Ty::List(Int)` → `"List"` (Fio 8 — tipo intrínseco)
-/// `Ty::Array(Int)` → `"Array"` (Fio 8 — tipo intrínseco)
-/// `Ty::Range(Int)` → `"Range"` (Fio 8 — tipo intrínseco)
+/// `Ty::List(Int)` → `"List"` (tipo intrínseco)
+/// `Ty::Array(Int)` → `"Array"` (tipo intrínseco)
+/// `Ty::Range(Int)` → `"Range"` (tipo intrínseco)
 fn extract_type_name(ty: &Ty) -> Option<String> {
     match ty {
         Ty::Prim(crate::ty::PrimTy::Int) => Some("Int".into()),

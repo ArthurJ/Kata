@@ -144,7 +144,7 @@ impl Parser {
                 // If left side is an Ident and we see `::` followed by something that's a
                 // type expression (not a simple Ident that could be a variant) → ambiguous
                 //
-                // For Fio 1: the only use of `::` with an Ident on the left is VariantQual.
+                // The only use of `::` with an Ident on the left is VariantQual.
                 // TypeAscription with `::` is only for literals (`3.14::Rational`).
                 // So: Ident :: Ident → VariantQual
                 //     Literal :: Type → TypeAscription
@@ -250,7 +250,7 @@ impl Parser {
     pub(crate) fn parse_expr_post_ascription(&mut self) -> Result<Spanned<Expr>, FrontendError> {
         let mut atom = self.parse_expr_atom()?;
 
-        // ── Fio 5: DotAccess postfix — `expr.nome`, `expr.0`, `expr.(-1)` ──
+        // ── DotAccess postfix — `expr.nome`, `expr.0`, `expr.(-1)` ──
         // Loop permite encadeamento: `pessoa.endereco.rua`.
         // Precedência: dot é mais apertado que ascription (`pessoa.nome::Text`
         // = `(pessoa.nome)::Text`).

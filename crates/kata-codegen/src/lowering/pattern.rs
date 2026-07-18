@@ -86,7 +86,7 @@ pub(crate) fn test_single_pattern(
                 );
                 Ok(Some(eq))
             } else {
-                // Fase 5: Sum com payload — extrair tag e comparar.
+                // Sum com payload — extrair tag e comparar.
                 let tag_func = lower.ffi_refs.get("kata_rt_sum_tag_int").ok_or_else(|| {
                     super::CodegenError::FfiSymbolNotFound("kata_rt_sum_tag_int".into())
                 })?;
@@ -107,7 +107,7 @@ pub(crate) fn test_single_pattern(
                     let flags = MemFlagsData::new();
                     let payload_val = lower.builder.ins().load(I64, flags, val, 8);
                     // Testa o sub-pattern contra o payload extraído.
-                    // Por enquanto, 1 sub-pattern (Fase 5 não suporta multi-payload).
+                    // Por enquanto, 1 sub-pattern ( não suporta multi-payload).
                     let sub_cond = test_single_pattern(&subs[0], payload_val, lower)?;
                     // Combina: tag == expected AND sub_pattern match.
                     if let Some(cond) = sub_cond {
