@@ -998,7 +998,7 @@ sender/receiver. Queue respeita capacidade. Broadcast entrega última msg a
 múltiplos receivers (latest only, future only). Receiver factory cria
 receivers independentes.
 
-### Fase 4: Scheduler — yield e structured concurrency
+### Fase 4: Scheduler — yield e structured concurrency ✅
 
 **kata-rt:**
 - `YieldReason` enum em `fiber.rs`
@@ -1012,7 +1012,7 @@ receivers independentes.
 
 **DoD Fase 4:** Fiber que faz `<!` em canal vazio bloqueia (yield). Scheduler
 executa outro fiber. Quando canal recebe dado, fiber bloqueado é acordado.
-Action que completa com forks vivos fica zombie até filhos terminarem.
+Action que completa com forks vivos fica zombie até filhos terminarem. ✅
 
 ### Fase 5: Codegen — `!>`, `<!`, `channel!`, `queue!`, `broadcast!`, `fork!`
 
