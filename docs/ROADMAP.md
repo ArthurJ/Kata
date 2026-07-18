@@ -318,7 +318,13 @@ use-after-free (caller's arena). `?` propaga erro corretamente.
 
 ---
 
-### Fio 4: Enum Avançado — Payload, Result, Optional, |
+### Fio 4: Enum Avançado — Payload, Result, Optional, | ✅ Concluído
+
+**Status:** Implementado como fases do Fio 3 (commits `13787c3` Fase 5 — Sum
+com payload, `d4386ea` Fase 6+7 — Generics de Enum + ? fail-fast, `0752bc5`
+Fase 8+9 — | fallback + panic!/assert!). DoD satisfeito: variantes com
+payload, `Result::(T, E)`, `Optional::T`, `|`, `?`, `panic!`, `assert!`,
+match general case. Fio 8 e Fio 6 já consumiram as dependências deste fio.
 
 **Maquinaria de tipos construída:**
 - `Ty::Sum` com variantes que carregam payload (já existe para unitárias de
