@@ -2,7 +2,10 @@
 //!
 //! Fase 3 do Fio 11: cria canais (rendezvous, queue, broadcast) alocados
 //! na arena do fiber criador. Handles são ponteiro+tag (2 bits baixos).
-//! Sem blocking real — Fase 4 implementa yield via wasmtime-fiber.
+//!
+//! Fase 4: blocking cooperativo. Quando `send`/`recv` não pode completar e
+//! há um fiber em execução (Suspend em TLS), suspende o fiber com
+//! `YieldReason`. O scheduler acorda o fiber quando a operação pode prosseguir.
 //!
 //! **Lifetime:** canais são alocados via `kata_rt_arena_alloc` na arena
 //! do fiber criador. Handles fluem apenas descendente na árvore de
@@ -208,14 +211,39 @@ pub extern "C" fn kata_rt_broadcast_receiver_create(arena: i64, factory_handle: 
 /// Envia valor por um handle de canal. Despacha pela tag nos 2 bits
 /// baixos.
 ///
-/// Retorna `0` (OK) se a operação completou, `-1` se bloquearia
-/// (canal rendezvous sem receptor, queue cheia). Fase 4 substitui
-/// `WOULD_BLOCK` por blocking cooperativo real.
+/// Retorna `0` (OK) se a operação completou. Se a operação bloquearia
+/// (canal rendezvous com slot ocupado, queue cheia):
+/// - **Dentro de um fiber** (Suspend em TLS): suspende o fiber com
+///   `YieldReason::WaitingOnChannelSend(handle)`. O scheduler acorda o
+///   fiber quando há espaço. Quando resumido, tenta novamente (loop).
+/// - **Fora de um fiber** (teste unitário): retorna `WOULD_BLOCK` (-1).
 ///
 /// # Safety
 /// `handle` deve ser um handle válido de Channel, Queue, ou Broadcast.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_channel_send(handle: i64, value: i64) -> i64 {
+    loop {
+        let result = try_send(handle, value);
+        if result != WOULD_BLOCK {
+            return result;
+        }
+        // Não pode enviar agora. Se há fiber em execução, suspende.
+        let suspended = crate::fiber::with_suspend(|suspend| {
+            suspend.suspend(crate::fiber::YieldReason::WaitingOnChannelSend(handle));
+        });
+        if suspended.is_none() {
+            // Fora de fiber (teste unitário) — retorna WOULD_BLOCK.
+            return WOULD_BLOCK;
+        }
+        // Fiber foi resumido — scheduler acredita que pode enviar. Tentar novamente.
+    }
+}
+
+/// Tenta enviar sem bloquear. Retorna `OK` se completou, `WOULD_BLOCK` se
+/// não pode, `WOULD_BLOCK` para tag inválida.
+///
+/// Função interna extraída para permitir re-tentativa após resume.
+fn try_send(handle: i64, value: i64) -> i64 {
     let tag = tag_of(handle);
     let ptr = ptr_of(handle);
     if ptr.is_null() {
@@ -230,11 +258,9 @@ pub extern "C" fn kata_rt_channel_send(handle: i64, value: i64) -> i64 {
                 let mut slot = inner.slot.lock().unwrap();
                 if slot.is_some() {
                     // Slot ocupado — receptor ainda não consumiu.
-                    // Fase 3: retorna WOULD_BLOCK. Fase 4: yield.
                     WOULD_BLOCK
                 } else {
                     *slot = Some(value);
-                    // Notifica receptor esperando (Fase 4). Fase 3: no-op.
                     inner.receiver_ready.notify_one();
                     OK
                 }
@@ -243,7 +269,7 @@ pub extern "C" fn kata_rt_channel_send(handle: i64, value: i64) -> i64 {
                 let inner = &*(ptr as *const QueueInner);
                 let mut buffer = inner.buffer.lock().unwrap();
                 if buffer.len() >= inner.capacity {
-                    // Buffer cheio. Fase 3: WOULD_BLOCK. Fase 4: yield.
+                    // Buffer cheio.
                     WOULD_BLOCK
                 } else {
                     buffer.push_back(value);
@@ -273,14 +299,39 @@ pub extern "C" fn kata_rt_channel_send(handle: i64, value: i64) -> i64 {
 
 /// Recebe valor por um handle de canal. Despacha pela tag.
 ///
-/// Retorna o valor se disponível, `WOULD_BLOCK` (-1) se bloquearia.
-/// Fase 4 substitui `WOULD_BLOCK` por blocking cooperativo real.
+/// Retorna o valor se disponível. Se a operação bloquearia (canal vazio):
+/// - **Dentro de um fiber** (Suspend em TLS): suspende o fiber com
+///   `YieldReason::WaitingOnChannel(handle)`. O scheduler acorda o
+///   fiber quando há dado. Quando resumido, tenta novamente (loop).
+/// - **Fora de um fiber** (teste unitário): retorna `WOULD_BLOCK` (-1).
 ///
 /// # Safety
 /// `handle` deve ser um handle válido de Channel, Queue, ou
 /// BroadcastReceiver.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_channel_recv(handle: i64) -> i64 {
+    loop {
+        let result = try_recv(handle);
+        if result != WOULD_BLOCK {
+            return result;
+        }
+        // Não pode receber agora. Se há fiber em execução, suspende.
+        let suspended = crate::fiber::with_suspend(|suspend| {
+            suspend.suspend(crate::fiber::YieldReason::WaitingOnChannel(handle));
+        });
+        if suspended.is_none() {
+            // Fora de fiber (teste unitário) — retorna WOULD_BLOCK.
+            return WOULD_BLOCK;
+        }
+        // Fiber foi resumido — scheduler acredita que há dado. Tentar novamente.
+    }
+}
+
+/// Tenta receber sem bloquear. Retorna o valor se disponível, `WOULD_BLOCK`
+/// se não há dado, `WOULD_BLOCK` para tag inválida.
+///
+/// Função interna extraída para permitir re-tentativa após resume.
+fn try_recv(handle: i64) -> i64 {
     let tag = tag_of(handle);
     let ptr = ptr_of(handle);
     if ptr.is_null() {
@@ -335,6 +386,73 @@ pub extern "C" fn kata_rt_channel_recv(handle: i64) -> i64 {
     }
 }
 
+// ── Verificação sem consumo (para wake pass do scheduler) ────────────
+
+/// Verifica se `kata_rt_channel_recv(handle)` retornaria um valor (não
+/// WOULD_BLOCK) **sem consumir o valor**. Usado pelo scheduler no wake
+/// pass para decidir se um fiber blocked em recv pode ser acordado.
+///
+/// # Safety
+/// `handle` deve ser um handle válido.
+pub(crate) fn can_recv(handle: i64) -> bool {
+    let tag = tag_of(handle);
+    let ptr = ptr_of(handle);
+    if ptr.is_null() {
+        return false;
+    }
+    // SAFETY: handle veio da FFI de criação correspondente.
+    unsafe {
+        match tag {
+            TAG_CHANNEL => {
+                let inner = &*(ptr as *const ChannelInner);
+                inner.slot.lock().unwrap().is_some()
+            }
+            TAG_QUEUE => {
+                let inner = &*(ptr as *const QueueInner);
+                !inner.buffer.lock().unwrap().is_empty()
+            }
+            TAG_BROADCAST_RX => {
+                let rx = &*(ptr as *const BroadcastReceiver);
+                let inner = &*rx.inner;
+                *inner.version.lock().unwrap() > rx.last_seen_version
+            }
+            _ => false,
+        }
+    }
+}
+
+/// Verifica se `kata_rt_channel_send(handle, _)` retornaria OK (não
+/// WOULD_BLOCK) **sem enviar**. Usado pelo scheduler no wake pass para
+/// decidir se um fiber blocked em send pode ser acordado.
+///
+/// Broadcast sempre pode enviar (fire-and-forget), então `can_send`
+/// retorna `true` para broadcast.
+///
+/// # Safety
+/// `handle` deve ser um handle válido.
+pub(crate) fn can_send(handle: i64) -> bool {
+    let tag = tag_of(handle);
+    let ptr = ptr_of(handle);
+    if ptr.is_null() {
+        return false;
+    }
+    // SAFETY: handle veio da FFI de criação correspondente.
+    unsafe {
+        match tag {
+            TAG_CHANNEL => {
+                let inner = &*(ptr as *const ChannelInner);
+                inner.slot.lock().unwrap().is_none()
+            }
+            TAG_QUEUE => {
+                let inner = &*(ptr as *const QueueInner);
+                inner.buffer.lock().unwrap().len() < inner.capacity
+            }
+            TAG_BROADCAST => true, // broadcast sempre pode enviar
+            _ => false,
+        }
+    }
+}
+
 // ── FFI: Select ──────────────────────────────────────────────────────
 
 /// Tenta receber de qualquer receiver na lista. Retorna
@@ -356,7 +474,7 @@ pub extern "C" fn kata_rt_select(handles: *const i64, n_handles: i64) -> i64 {
     // SAFETY: handles é um ponteiro válido para n_handles i64s (contrato FFI).
     let handles_slice = unsafe { std::slice::from_raw_parts(handles, n_handles as usize) };
     for (idx, &handle) in handles_slice.iter().enumerate() {
-        let val = kata_rt_channel_recv(handle);
+        let val = try_recv(handle);
         if val != WOULD_BLOCK {
             // Pack: high 32 = idx, low 32 = value.
             // Valores SMI cabem em 32 bits (inteiros pequenos).

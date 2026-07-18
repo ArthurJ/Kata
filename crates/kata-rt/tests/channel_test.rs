@@ -44,7 +44,10 @@ fn channel_recv_empty_returns_would_block() {
     let arena = kata_rt_arena_create();
     let handle = kata_rt_channel_create(arena);
     let val = kata_rt_channel_recv(handle);
-    assert_eq!(val, WOULD_BLOCK, "recv em canal vazio deve retornar WOULD_BLOCK");
+    assert_eq!(
+        val, WOULD_BLOCK,
+        "recv em canal vazio deve retornar WOULD_BLOCK"
+    );
     kata_rt_arena_destroy(arena);
 }
 
@@ -55,7 +58,10 @@ fn channel_send_full_returns_would_block() {
     let status1 = kata_rt_channel_send(handle, 10);
     assert_eq!(status1, OK, "primeiro send deve OK");
     let status2 = kata_rt_channel_send(handle, 20);
-    assert_eq!(status2, WOULD_BLOCK, "segundo send (slot ocupado) deve WOULD_BLOCK");
+    assert_eq!(
+        status2, WOULD_BLOCK,
+        "segundo send (slot ocupado) deve WOULD_BLOCK"
+    );
     kata_rt_arena_destroy(arena);
 }
 
@@ -119,7 +125,11 @@ fn queue_recv_makes_space_for_send() {
     assert_eq!(kata_rt_channel_send(handle, 2), WOULD_BLOCK);
     // Após recv, há espaço.
     assert_eq!(kata_rt_channel_recv(handle), 1);
-    assert_eq!(kata_rt_channel_send(handle, 2), OK, "send após recv deve OK");
+    assert_eq!(
+        kata_rt_channel_send(handle, 2),
+        OK,
+        "send após recv deve OK"
+    );
     kata_rt_arena_destroy(arena);
 }
 
@@ -239,7 +249,10 @@ fn select_returns_would_block_when_all_empty() {
     let ch2 = kata_rt_channel_create(arena);
     let handles = [ch1, ch2];
     let result = kata_rt_select(handles.as_ptr(), 2);
-    assert_eq!(result, WOULD_BLOCK, "select com todos vazios deve WOULD_BLOCK");
+    assert_eq!(
+        result, WOULD_BLOCK,
+        "select com todos vazios deve WOULD_BLOCK"
+    );
     kata_rt_arena_destroy(arena);
 }
 
@@ -294,6 +307,9 @@ fn broadcast_receiver_create_with_wrong_tag_returns_zero() {
     let arena = kata_rt_arena_create();
     let ch = kata_rt_channel_create(arena); // tag 0b00, não broadcast
     let result = kata_rt_broadcast_receiver_create(arena, ch);
-    assert_eq!(result, 0, "receiver_create com handle não-broadcast deve retornar 0");
+    assert_eq!(
+        result, 0,
+        "receiver_create com handle não-broadcast deve retornar 0"
+    );
     kata_rt_arena_destroy(arena);
 }

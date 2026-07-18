@@ -14,3 +14,4 @@ wasmtime-fiber = "34.0.2"
 
 [dev-dependencies]
 proptest.workspace = true
+serial_test = "3"
