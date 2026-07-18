@@ -1014,7 +1014,7 @@ receivers independentes.
 executa outro fiber. Quando canal recebe dado, fiber bloqueado é acordado.
 Action que completa com forks vivos fica zombie até filhos terminarem. ✅
 
-### Fase 5: Codegen — `!>`, `<!`, `channel!`, `queue!`, `broadcast!`, `fork!`
+### Fase 5: Codegen — `!>`, `<!`, `channel!`, `queue!`, `broadcast!`, `fork!` ✅
 
 **kata-codegen:**
 - Lowering de `ChannelCreate`, `ChannelSend`, `ChannelRecv`, `Fork`
@@ -1022,7 +1022,7 @@ Action que completa com forks vivos fica zombie até filhos terminarem. ✅
 - `fork!(action, args)` → `kata_rt_spawn(fn_ptr, caller_arena, args_ptr)`
 
 **DoD Fase 5:** Programa Kata com `channel!`, `!>`, `<!`, `fork!` compila
-e executa. Producer/consumer via fork funciona.
+e executa. Producer/consumer via fork funciona. ✅
 
 ### Fase 6: Codegen — `select`
 
