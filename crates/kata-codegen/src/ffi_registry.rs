@@ -131,6 +131,7 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
     builder.symbol("kata_rt_spawn", rt::kata_rt_spawn as *const u8);
     builder.symbol("kata_rt_run", rt::kata_rt_run as *const u8);
     builder.symbol("kata_rt_yield", rt::kata_rt_yield as *const u8);
+    builder.symbol("kata_rt_yield_check", rt::kata_rt_yield_check as *const u8);
     // Arc<T> / CaptureBox (Fase 12)
     builder.symbol("kata_rt_alloc_arc", rt::kata_rt_alloc_arc as *const u8);
     builder.symbol("kata_rt_incref", rt::kata_rt_incref as *const u8);
@@ -289,6 +290,7 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         Spawn,
         Run,
         Yield,
+        YieldCheck,
         AllocArc,
         IncRef,
         DecRef,

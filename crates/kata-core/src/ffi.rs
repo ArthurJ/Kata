@@ -91,6 +91,8 @@ pub enum FfiSymbol {
     Run,
     /// `kata_rt_yield() -> ()` — suspende fiber atual (não usado em Fase 10).
     Yield,
+    /// `kata_rt_yield_check() -> ()` — yield point no header de loops (Fase 7).
+    YieldCheck,
 
     // ── Arc<T> / CaptureBox (Fase 12) ───────────────────────
     /// `kata_rt_alloc_arc(fn_ptr, captures_ptr, n_captures) -> box_ptr`
@@ -214,6 +216,7 @@ impl FfiSymbol {
             FfiSymbol::Spawn => "kata_rt_spawn",
             FfiSymbol::Run => "kata_rt_run",
             FfiSymbol::Yield => "kata_rt_yield",
+            FfiSymbol::YieldCheck => "kata_rt_yield_check",
             FfiSymbol::AllocArc => "kata_rt_alloc_arc",
             FfiSymbol::IncRef => "kata_rt_incref",
             FfiSymbol::DecRef => "kata_rt_decref",
@@ -302,6 +305,7 @@ impl FfiSymbol {
             FfiSymbol::Spawn => Ty::int(),
             FfiSymbol::Run => Ty::int(),
             FfiSymbol::Yield => Ty::Unit,
+            FfiSymbol::YieldCheck => Ty::Unit,
             // Arc<T> / CaptureBox
             FfiSymbol::AllocArc | FfiSymbol::ArcFnPtr => Ty::int(),
             FfiSymbol::IncRef | FfiSymbol::DecRef => Ty::int(),
@@ -393,6 +397,7 @@ impl FfiSymbol {
             FfiSymbol::Spawn,
             FfiSymbol::Run,
             FfiSymbol::Yield,
+            FfiSymbol::YieldCheck,
             FfiSymbol::AllocArc,
             FfiSymbol::IncRef,
             FfiSymbol::DecRef,

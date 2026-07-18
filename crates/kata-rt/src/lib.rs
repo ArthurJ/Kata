@@ -67,7 +67,7 @@ pub use rational::{
 // kata_rt_rat_show_raw — rebaixado para pub(crate): zero consumidores cross-crate.
 pub use scheduler::{
     DEADLOCK_SENTINEL, kata_rt_run, kata_rt_scheduler_init, kata_rt_spawn, kata_rt_yield,
-    reset_scheduler,
+    kata_rt_yield_check, reset_scheduler,
 };
 pub use sum::{kata_rt_store_sum_result, kata_rt_sum_tag_int};
 pub use text::{

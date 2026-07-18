@@ -49,6 +49,17 @@ pub(crate) fn lower_control_flow(
 
             // Lowera o body no loop_block.
             ctx.builder.switch_to_block(loop_block);
+            // Fase 7: yield point no header do loop. A cada YIELD_INTERVAL
+            // iterações, se há outra fiber pronta, suspende cooperativamente.
+            // 2 instruções no hot path (dec + branch dentro da FFI).
+            let yield_check_ref = ctx
+                .ffi_refs
+                .get("kata_rt_yield_check")
+                .copied()
+                .ok_or_else(|| {
+                    super::CodegenError::FfiSymbolNotFound("kata_rt_yield_check".into())
+                })?;
+            ctx.builder.ins().call(yield_check_ref, &[]);
             let mut hit_terminator = false;
             for e in body {
                 lower_expr(&e.node, ctx)?;

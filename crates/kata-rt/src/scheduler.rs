@@ -246,6 +246,14 @@ impl Scheduler {
         };
         let spawn_args = entry.spawn_args;
         self.current_fiber = Some(fiber_id);
+        // Fase 7: snapshot do estado do scheduler para `kata_rt_yield_check`.
+        // HAS_READY_FIBER indica se há outra fiber pronta na run_queue (além
+        // desta). Evita o double-borrow do SCHEDULER durante resume (pitfall #44).
+        let has_ready = !self.run_queue.is_empty();
+        HAS_READY_FIBER.with(|h| h.set(has_ready));
+        // Reseta o contador — cada resume começa com orçamento fresco, evita
+        // que uma fiber recém-resumida faça yield imediatamente.
+        YIELD_COUNTER.with(|c| c.set(YIELD_INTERVAL));
         let result = entry.fiber.resume(spawn_args);
         self.current_fiber = None;
         result
@@ -393,6 +401,24 @@ thread_local! {
     static PENDING_SPAWNS: std::cell::RefCell<Vec<(i64, i64, i64)>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
+// ── Yield points (Fase 7) ──────────────────────────────────────────────
+//
+// `kata_rt_yield_check()` é chamada pelo codegen no header de cada iteração
+// de `Loop` e `ForIn`. Para evitar o custo de suspender a cada iteração,
+// decrementa um contador TLS e só pergunta ao scheduler se há outra fiber
+// pronta a cada YIELD_INTERVAL iterações.
+//
+// `HAS_READY_FIBER` é um snapshot booleano do estado do scheduler, setado
+// antes de cada `resume()` em `resume_fiber`. Isto evita o double-borrow do
+// `SCHEDULER` (pitfall #44): durante `resume()`, a função JIT pode chamar
+// `kata_rt_yield_check`, que lê apenas esta TLS — sem acessar o RefCell.
+const YIELD_INTERVAL: i64 = 1000;
+
+thread_local! {
+    static YIELD_COUNTER: std::cell::Cell<i64> = const { std::cell::Cell::new(YIELD_INTERVAL) };
+    static HAS_READY_FIBER: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
 /// Reseta o scheduler thread-local. Chamado entre execuções de teste.
 pub fn reset_scheduler() {
     SCHEDULER.with(|s| {
@@ -401,6 +427,8 @@ pub fn reset_scheduler() {
     PENDING_SPAWNS.with(|p| {
         p.borrow_mut().clear();
     });
+    YIELD_COUNTER.with(|c| c.set(YIELD_INTERVAL));
+    HAS_READY_FIBER.with(|h| h.set(false));
 }
 
 /// Inicializa o scheduler thread-local e cria a arena raiz.
@@ -490,6 +518,42 @@ pub const DEADLOCK_SENTINEL: i64 = i64::MIN + 1;
 /// Se chamada fora de um fiber (sem `Suspend` em TLS), é no-op.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_yield() {
+    crate::fiber::with_suspend(|suspend| {
+        suspend.suspend(YieldReason::Cooperative);
+    });
+}
+
+/// Yield point chamado pelo codegen no header de cada iteração de `Loop` e
+/// `ForIn` (Fase 7, Decisão G).
+///
+/// Hot path (a cada iteração): decrementa `YIELD_COUNTER` TLS. Se ainda > 0,
+/// retorna imediatamente — 2 instruções no hot path (dec + branch).
+///
+/// Slow path (a cada `YIELD_INTERVAL` iterações): reseta o contador e checa
+/// `HAS_READY_FIBER`. Se `true` (há outra fiber pronta na run_queue),
+/// suspende cooperativamente via `kata_rt_yield`. Se `false`, retorna sem
+/// suspender — evita suspend/resume desnecessário quando só há uma fiber.
+///
+/// `HAS_READY_FIBER` é setado pelo scheduler antes de cada `resume()` em
+/// `resume_fiber`, evitando o double-borrow do `SCHEDULER` (pitfall #44):
+/// esta FFI lê apenas a TLS, sem acessar o `RefCell` do scheduler.
+///
+/// Se chamada fora de um fiber (sem `Suspend` em TLS), é no-op em ambos os
+/// caminhos — `with_suspend` não faz nada se não há `Suspend` ativo.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_yield_check() {
+    let remaining = YIELD_COUNTER.with(|c| {
+        let v = c.get() - 1;
+        c.set(v);
+        v
+    });
+    if remaining > 0 {
+        return;
+    }
+    YIELD_COUNTER.with(|c| c.set(YIELD_INTERVAL));
+    if !HAS_READY_FIBER.with(|h| h.get()) {
+        return;
+    }
     crate::fiber::with_suspend(|suspend| {
         suspend.suspend(YieldReason::Cooperative);
     });

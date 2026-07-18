@@ -233,6 +233,8 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
         }
         // yield: () → void (suspende fiber)
         FfiSymbol::Yield => {}
+        // yield_check: () → void (yield point no header de loops, Fase 7)
+        FfiSymbol::YieldCheck => {}
         // ── Arc<T> / CaptureBox (Fase 12) ──
         // alloc_arc: (fn_ptr, captures_ptr, n_captures, arena_handle) -> box_ptr
         // Pré-11: arena_handle adicionado como 4º param.

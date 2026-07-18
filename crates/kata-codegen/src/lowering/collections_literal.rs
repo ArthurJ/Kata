@@ -207,6 +207,15 @@ pub(crate) fn lower_collections_literal(
 
                     ctx.builder.ins().jump(loop_block, &[]);
                     ctx.builder.switch_to_block(loop_block);
+                    // Fase 7: yield point no header.
+                    let yc = ctx
+                        .ffi_refs
+                        .get("kata_rt_yield_check")
+                        .copied()
+                        .ok_or_else(|| {
+                            super::CodegenError::FfiSymbolNotFound("kata_rt_yield_check".into())
+                        })?;
+                    ctx.builder.ins().call(yc, &[]);
                     let current = ctx.builder.use_var(current_var);
                     let is_nil = ctx.builder.ins().icmp_imm(
                         cranelift_codegen::ir::condcodes::IntCC::Equal,
@@ -257,6 +266,15 @@ pub(crate) fn lower_collections_literal(
 
                     ctx.builder.ins().jump(loop_block, &[]);
                     ctx.builder.switch_to_block(loop_block);
+                    // Fase 7: yield point no header.
+                    let yc = ctx
+                        .ffi_refs
+                        .get("kata_rt_yield_check")
+                        .copied()
+                        .ok_or_else(|| {
+                            super::CodegenError::FfiSymbolNotFound("kata_rt_yield_check".into())
+                        })?;
+                    ctx.builder.ins().call(yc, &[]);
                     let idx = ctx.builder.use_var(idx_var);
                     let done = ctx.builder.ins().icmp(
                         cranelift_codegen::ir::condcodes::IntCC::SignedGreaterThanOrEqual,
@@ -309,6 +327,15 @@ pub(crate) fn lower_collections_literal(
 
                     ctx.builder.ins().jump(loop_block, &[]);
                     ctx.builder.switch_to_block(loop_block);
+                    // Fase 7: yield point no header.
+                    let yc = ctx
+                        .ffi_refs
+                        .get("kata_rt_yield_check")
+                        .copied()
+                        .ok_or_else(|| {
+                            super::CodegenError::FfiSymbolNotFound("kata_rt_yield_check".into())
+                        })?;
+                    ctx.builder.ins().call(yc, &[]);
                     let current = ctx.builder.use_var(current_var);
                     // Para inclusive: current > end → break
                     // Para exclusive: current >= end → break
