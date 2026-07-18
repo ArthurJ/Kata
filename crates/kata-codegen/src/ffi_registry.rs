@@ -171,6 +171,32 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
         "kata_rt_array_contains",
         rt::kata_rt_array_contains as *const u8,
     );
+    // Canais CSP (Fio 11 Fase 3)
+    builder.symbol(
+        "kata_rt_channel_create",
+        rt::kata_rt_channel_create as *const u8,
+    );
+    builder.symbol(
+        "kata_rt_queue_create",
+        rt::kata_rt_queue_create as *const u8,
+    );
+    builder.symbol(
+        "kata_rt_broadcast_create",
+        rt::kata_rt_broadcast_create as *const u8,
+    );
+    builder.symbol(
+        "kata_rt_broadcast_receiver_create",
+        rt::kata_rt_broadcast_receiver_create as *const u8,
+    );
+    builder.symbol(
+        "kata_rt_channel_send",
+        rt::kata_rt_channel_send as *const u8,
+    );
+    builder.symbol(
+        "kata_rt_channel_recv",
+        rt::kata_rt_channel_recv as *const u8,
+    );
+    builder.symbol("kata_rt_select", rt::kata_rt_select as *const u8);
 }
 
 /// Declara todos os símbolos FFI no module e retorna o mapa nome → FuncId.
@@ -284,5 +310,13 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         ListContains,
         ArrayContains,
         ListReverse,
+        // Canais CSP
+        ChannelCreate,
+        QueueCreate,
+        BroadcastCreate,
+        BroadcastReceiverCreate,
+        ChannelSend,
+        ChannelRecv,
+        ChannelSelect,
     ]
 }

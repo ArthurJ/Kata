@@ -135,6 +135,22 @@ pub enum FfiSymbol {
     ArrayContains,
     /// `kata_rt_list_reverse(ptr, arena) -> ptr` — inverte Cons chain.
     ListReverse,
+
+    // ── Canais CSP (Fio 11 Fase 3) ────────────────────────────
+    /// `kata_rt_channel_create(arena) -> i64` — canal rendezvous.
+    ChannelCreate,
+    /// `kata_rt_queue_create(arena, capacity) -> i64` — fila bufferizada.
+    QueueCreate,
+    /// `kata_rt_broadcast_create(arena) -> i64` — broadcast pub-sub.
+    BroadcastCreate,
+    /// `kata_rt_broadcast_receiver_create(arena, factory) -> i64` — receiver.
+    BroadcastReceiverCreate,
+    /// `kata_rt_channel_send(handle, value) -> i64` — envia (0=OK, -1=block).
+    ChannelSend,
+    /// `kata_rt_channel_recv(handle) -> i64` — recebe (valor ou -1=block).
+    ChannelRecv,
+    /// `kata_rt_select(handles, n) -> i64` — select multiplex.
+    ChannelSelect,
 }
 
 impl FfiSymbol {
@@ -219,6 +235,14 @@ impl FfiSymbol {
             FfiSymbol::ListContains => "kata_rt_list_contains",
             FfiSymbol::ArrayContains => "kata_rt_array_contains",
             FfiSymbol::ListReverse => "kata_rt_list_reverse",
+            // Canais CSP
+            FfiSymbol::ChannelCreate => "kata_rt_channel_create",
+            FfiSymbol::QueueCreate => "kata_rt_queue_create",
+            FfiSymbol::BroadcastCreate => "kata_rt_broadcast_create",
+            FfiSymbol::BroadcastReceiverCreate => "kata_rt_broadcast_receiver_create",
+            FfiSymbol::ChannelSend => "kata_rt_channel_send",
+            FfiSymbol::ChannelRecv => "kata_rt_channel_recv",
+            FfiSymbol::ChannelSelect => "kata_rt_select",
         }
     }
 
@@ -298,6 +322,14 @@ impl FfiSymbol {
             FfiSymbol::ListContains => Ty::boolean(),
             FfiSymbol::ArrayContains => Ty::boolean(),
             FfiSymbol::ListReverse => Ty::int(),
+            // Canais CSP — handles são i64 (ponteiro+tag)
+            FfiSymbol::ChannelCreate => Ty::int(),
+            FfiSymbol::QueueCreate => Ty::int(),
+            FfiSymbol::BroadcastCreate => Ty::int(),
+            FfiSymbol::BroadcastReceiverCreate => Ty::int(),
+            FfiSymbol::ChannelSend => Ty::int(),
+            FfiSymbol::ChannelRecv => Ty::int(),
+            FfiSymbol::ChannelSelect => Ty::int(),
         }
     }
 
@@ -382,6 +414,14 @@ impl FfiSymbol {
             FfiSymbol::ListContains,
             FfiSymbol::ArrayContains,
             FfiSymbol::ListReverse,
+            // Canais CSP
+            FfiSymbol::ChannelCreate,
+            FfiSymbol::QueueCreate,
+            FfiSymbol::BroadcastCreate,
+            FfiSymbol::BroadcastReceiverCreate,
+            FfiSymbol::ChannelSend,
+            FfiSymbol::ChannelRecv,
+            FfiSymbol::ChannelSelect,
         ];
         all.iter().copied().find(|s| s.symbol_name() == name)
     }

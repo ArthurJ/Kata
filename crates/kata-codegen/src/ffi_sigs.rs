@@ -348,6 +348,46 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
             sig.params.push(AbiParam::new(I64)); // arena
             sig.returns.push(AbiParam::new(I64)); // ptr (reversed list)
         }
+        // ── Canais CSP (Fio 11 Fase 3) ──
+        // channel_create: (arena) -> handle
+        FfiSymbol::ChannelCreate => {
+            sig.params.push(AbiParam::new(I64)); // arena
+            sig.returns.push(AbiParam::new(I64)); // handle
+        }
+        // queue_create: (arena, capacity) -> handle
+        FfiSymbol::QueueCreate => {
+            sig.params.push(AbiParam::new(I64)); // arena
+            sig.params.push(AbiParam::new(I64)); // capacity
+            sig.returns.push(AbiParam::new(I64)); // handle
+        }
+        // broadcast_create: (arena) -> handle
+        FfiSymbol::BroadcastCreate => {
+            sig.params.push(AbiParam::new(I64)); // arena
+            sig.returns.push(AbiParam::new(I64)); // handle
+        }
+        // broadcast_receiver_create: (arena, factory_handle) -> handle
+        FfiSymbol::BroadcastReceiverCreate => {
+            sig.params.push(AbiParam::new(I64)); // arena
+            sig.params.push(AbiParam::new(I64)); // factory_handle
+            sig.returns.push(AbiParam::new(I64)); // handle
+        }
+        // channel_send: (handle, value) -> i64 (0=OK, -1=block)
+        FfiSymbol::ChannelSend => {
+            sig.params.push(AbiParam::new(I64)); // handle
+            sig.params.push(AbiParam::new(I64)); // value
+            sig.returns.push(AbiParam::new(I64)); // status
+        }
+        // channel_recv: (handle) -> i64 (valor ou -1=block)
+        FfiSymbol::ChannelRecv => {
+            sig.params.push(AbiParam::new(I64)); // handle
+            sig.returns.push(AbiParam::new(I64)); // value
+        }
+        // select: (handles_ptr, n_handles) -> i64 (packed idx+value ou -1)
+        FfiSymbol::ChannelSelect => {
+            sig.params.push(AbiParam::new(I64)); // handles ptr
+            sig.params.push(AbiParam::new(I64)); // n_handles
+            sig.returns.push(AbiParam::new(I64)); // packed result
+        }
     }
 
     sig

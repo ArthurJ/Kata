@@ -542,11 +542,46 @@ Canais não são declarados no prelude. São tipos intrínsecos do compilador
 
 ### Canais
 
+#### Handle — representação e lifetime
+
+Handle de canal é `i64` opaco ao codegen. O runtime extrai topologia e
+ponteiro dos bits do handle.
+
+**Tag nos 2 bits baixos** (ponteiros de heap são 8-byte aligned, bits 0-1
+são 0):
+
+| Bits baixos | Topologia | Struct apontado |
+|---|---|---|
+| `0b00` | Channel (rendezvous) | `ChannelInner` |
+| `0b01` | Queue (buffered) | `QueueInner` |
+| `0b10` | Broadcast sender/factory | `BroadcastInner` |
+| `0b11` | Broadcast receiver | `BroadcastReceiver` |
+
+**Lifetime via arena (não via refcounting):** canais são alocados na arena
+do fiber criador via `kata_rt_arena_alloc`. Handles fluem apenas de forma
+descendente (pai → filho → neto) na árvore de fibers, e um fiber só é
+destruído quando todos os descendentes já terminaram (structured
+concurrency, Decisão E). Logo, o fiber criador é sempre o último vivo entre
+os que detêm o handle. Quando o criador morre, `kata_rt_arena_destroy`
+libera a arena — o canal é liberado junto, sem tracking explícito no
+Scheduler.
+
+**Invariante — Mutex/Condvar no drop:** as arenas usam `bumpalo::Bump`,
+que não chama destructors no drop. `Mutex`/`Condvar` no Linux são futex
+(drop é no-op, não leakam recursos do SO). Em single-threaded (Decisão A)
+sem contensão, não chamar drop é seguro. Se migrar para uma plataforma
+onde Mutex/Condvar leakam recursos no drop, precisa de tracking explícito
+no Scheduler.
+
+**Fase 3 (sem fibers):** testes unitários criam uma arena via
+`kata_rt_arena_create`, passam para `channel_create`. O handle é válido
+dentro da arena. Fase 4 adiciona yield/blocking via
+`wasmtime-fiber::Suspend`.
+
+#### Structs
+
 ```rust
 // crates/kata-rt/src/channel.rs
-
-/// Handle de canal — opaco ao codegen (i64).
-/// O runtime sabe a topologia pelo handle.
 
 /// Canal rendezvous — sender bloqueia até receptor sincronizar.
 struct ChannelInner {
@@ -569,6 +604,12 @@ struct BroadcastInner {
     version: Mutex<u64>,          // incrementa a cada send
     new_msg: Condvar,             // acorda receivers bloqueados
 }
+
+/// Receiver de broadcast — um por rxf!(), mantém last_seen_version próprio.
+struct BroadcastReceiver {
+    inner: *mut BroadcastInner,   // compartilha o BroadcastInner do sender
+    last_seen_version: u64,       // inicializado = version atual na criação
+}
 ```
 
 **Broadcast — mecânica por receiver:**
@@ -585,8 +626,9 @@ else:
 ```
 
 `tx !> valor`: `value = Some(valor)`, `version += 1`, `notify_all()`.
-Múltiplos receivers compartilham o mesmo `value`/`version`. O `value` é um
-`i64` (handle/ponteiro para `Arc<T>`) — múltiplos readers é seguro via Arc.
+Múltiplos receivers compartilham o mesmo `BroadcastInner` via ponteiro
+`inner`. O `value` é um `i64` (handle/ponteiro para valor na arena) —
+múltiplos readers é seguro porque o runtime é single-threaded (Decisão A).
 
 ### FFI functions
 
@@ -594,19 +636,19 @@ Múltiplos receivers compartilham o mesmo `value`/`version`. O `value` é um
 // C-ABI para o codegen:
 
 // ── Criação de canais ──────────────────────────────────
-/// Cria canal rendezvous. Retorna (sender_handle, receiver_handle)
-/// empacotado como i64 (high 32 bits = sender, low 32 = receiver).
-kata_rt_channel_create() -> i64
-/// Cria fila bufferizada com capacidade N. Retorna (sender, receiver).
-kata_rt_queue_create(capacity: i64) -> i64
-/// Cria broadcast. Retorna (sender, receiver_factory).
-kata_rt_broadcast_create() -> i64
+// Todos recebem arena_handle do fiber criador. O canal é alocado na arena;
+// o handle é ponteiro+tag (ver seção "Handle" acima). Sender e Receiver
+// compartilham o mesmo handle — o type system distingue em compile time.
+kata_rt_channel_create(arena: i64) -> i64
+kata_rt_queue_create(arena: i64, capacity: i64) -> i64
+kata_rt_broadcast_create(arena: i64) -> i64
 
-/// Cria um novo receiver a partir de uma receiver_factory de broadcast.
-kata_rt_broadcast_receiver_create(factory_handle: i64) -> i64
+// Cria um novo receiver a partir do handle de broadcast (tag 0b10).
+// Aloca BroadcastReceiver na arena do caller. Retorna handle com tag 0b11.
+kata_rt_broadcast_receiver_create(arena: i64, factory_handle: i64) -> i64
 
 // ── Envio (operador !>) ────────────────────────────────
-/// Envia valor por sender. O runtime despacha pela topologia do handle.
+/// Envia valor por sender. O runtime despacha pela tag nos 2 bits baixos.
 kata_rt_channel_send(handle: i64, value: i64)
 
 // ── Recebimento (operador <!) ──────────────────────────
@@ -943,7 +985,7 @@ correta. Snapshots insta dos novos nós. ✅
 diferentes. `fork!(nao_eh_action, ())` é erro. `channel!()` infere tipo
 corretamente. `broadcast!()` produz receiver factory que cria receivers.
 
-### Fase 3: Runtime — canais
+### Fase 3: Runtime — canais ✅
 
 **kata-rt:**
 - `channel.rs`: `Channel`, `Queue`, `Broadcast` structs
