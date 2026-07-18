@@ -496,13 +496,25 @@ pub(crate) fn lower_expr(
             ctx,
         ),
 
-        // ── Fio 11: CSP — lowering das Fases 5-6 ──
-        TypedExprKind::ChannelSend { .. }
-        | TypedExprKind::ChannelRecv { .. }
-        | TypedExprKind::Select { .. }
-        | TypedExprKind::ChannelCreate { .. }
-        | TypedExprKind::Fork { .. } => Err(super::CodegenError::UnsupportedNode(format!(
-            "CSP lowering pendente (Fase 5-6 do Fio 11): {:?}",
+        // ── Fio 11: CSP — lowering da Fase 5 ──
+        TypedExprKind::ChannelSend { channel, value } => {
+            super::csp::lower_channel_send(channel, value, ctx)
+        }
+        TypedExprKind::ChannelRecv {
+            channel,
+            recv_ty,
+            bind_name,
+        } => super::csp::lower_channel_recv(channel, bind_name, recv_ty, ctx),
+        TypedExprKind::ChannelCreate { kind, elem_ty } => {
+            super::csp::lower_channel_create(expr, kind, elem_ty, ctx)
+        }
+        TypedExprKind::Fork { action_name, args } => {
+            super::csp::lower_fork(expr, action_name, args, ctx)
+        }
+
+        // ── Fio 11 Fase 6: Select — ainda não implementado ──
+        TypedExprKind::Select { .. } => Err(super::CodegenError::UnsupportedNode(format!(
+            "CSP lowering pendente (Fase 6 do Fio 11): {:?}",
             expr.kind
         ))),
     }
