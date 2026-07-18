@@ -279,6 +279,10 @@ fn collect_captures_in_expr(expr: &mut TypedExpr, outer_env: &TypeEnv) {
             }
         }
         TypedExprKind::ChannelCreate { .. } => {}
+        // ReceiverFactoryCall: o factory é uma sub-expressão (Ident do rxf).
+        TypedExprKind::ReceiverFactoryCall { factory, .. } => {
+            collect_captures_in_expr(&mut factory.node, outer_env);
+        }
         TypedExprKind::Fork { args, .. } => {
             collect_captures_in_expr(&mut args.node, outer_env);
         }

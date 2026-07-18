@@ -78,18 +78,40 @@ pub(crate) fn infer_action_call(
     // `rxf!()` onde `rxf` é uma variável do tipo `ReceiverFactory::T`.
     // O callee não é um builtin nomeado — é o nome da variável.
     // Se não está no DispatchTable mas é ReceiverFactory no env, despacha.
+    //
+    // Constrói `TypedExprKind::ReceiverFactoryCall { factory, elem_ty }`
+    // (não `ChannelCreate { Broadcast }` — aquela cria um broadcast novo;
+    // esta pede um receiver a um factory existente). O codegen lowera
+    // para `kata_rt_broadcast_receiver_create(arena, factory_handle)`.
     if !ctx.table.has_function(callee)
         && let Some(ty) = env.lookup(callee)
         && let Ty::ReceiverFactory(inner) = ty
     {
+        // args deve ser Unit (`rxf!()` não recebe argumentos).
+        if !matches!(args.node, Expr::Unit) {
+            return Err(kata_diagnostics::MiddleError::TypeMismatch {
+                expected: "`()` — rxf!() não recebe argumentos".into(),
+                found: format!("{:?}", args.node),
+                span: args.span.into(),
+            });
+        }
+        // Expressão factory: Ident do callee, tipada como ReceiverFactory.
+        let factory_typed = TypedExpr {
+            span: *span,
+            ty: ty.clone(),
+            tail_pos: false,
+            escape: kata_core::escape::EscapeTarget::Local,
+            effect: Effect::Puro,
+            kind: TypedExprKind::Ident { name: callee.to_string() },
+        };
         let typed = TypedExpr {
             span: *span,
             ty: Ty::Receiver(Box::new((**inner).clone())),
             tail_pos: false,
             escape: kata_core::escape::EscapeTarget::Local,
             effect: Effect::ChannelOp,
-            kind: TypedExprKind::ChannelCreate {
-                kind: ChannelKind::Broadcast,
+            kind: TypedExprKind::ReceiverFactoryCall {
+                factory: Box::new(Spanned::new(factory_typed, *span)),
                 elem_ty: (**inner).clone(),
             },
         };

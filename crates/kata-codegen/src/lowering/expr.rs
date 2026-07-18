@@ -508,6 +508,9 @@ pub(crate) fn lower_expr(
         TypedExprKind::ChannelCreate { kind, elem_ty } => {
             super::csp::lower_channel_create(expr, kind, elem_ty, ctx)
         }
+        TypedExprKind::ReceiverFactoryCall { factory, elem_ty } => {
+            super::csp::lower_receiver_factory_call(expr, factory, elem_ty, ctx)
+        }
         TypedExprKind::Fork { action_name, args } => {
             super::csp::lower_fork(expr, action_name, args, ctx)
         }

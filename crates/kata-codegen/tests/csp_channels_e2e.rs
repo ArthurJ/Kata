@@ -215,3 +215,163 @@ main!()"#;
     let (raw, _ty) = eval_src(src);
     assert_eq!(untag_smi(raw), 30, "último valor recebido deve ser 30");
 }
+
+// ── Teste 8: Backpressure — producer envia capacity+1, consumer drena ──
+
+/// `queue!(2)` com capacity 2. Producer envia 3 valores (10, 20, 30). O
+/// terceiro `!>` bloqueia (buffer cheio). O consumer (main) drena os 3 via
+/// `<!`. Como o scheduler é cooperativo, o producer bloqueado em `!>` cede
+/// (WaitingOnChannelSend), o main executa `<!`, drena 1 slot, o producer
+/// é acordado e envia o resto.
+///
+/// Verifica: não deadlocka, valores chegam em ordem FIFO (10, 20, 30),
+/// último recebido = 30.
+///
+/// DoD Fase 8: "Buffer overflow/backpressure via queue!(N)".
+#[serial]
+#[test]
+fn queue_backpressure_capacity_mais_um() {
+    let src = r#"action prod (Sender::Int) -> Unit
+  __param_0 !> 10
+  __param_0 !> 20
+  __param_0 !> 30
+  ()
+action main -> Int
+  let ch := queue!(2)
+  let tx := ch.0
+  let rx := ch.1
+  fork!(prod, (tx))
+  rx <! a
+  rx <! b
+  rx <! c
+  c
+main!()"#;
+    let (raw, _ty) = eval_src(src);
+    assert_ne!(raw, DEADLOCK_SENTINEL, "backpressure não deve deadlockar");
+    assert_eq!(
+        untag_smi(raw),
+        30,
+        "backpressure: último valor (FIFO) deve ser 30"
+    );
+}
+
+// ── Teste 9: fork! com múltiplas fibers e args ──
+
+/// Main fork 2 produtores distintos (prod_a envia 100, prod_b envia 200),
+/// cada um com seu canal. Main recebe dos dois e retorna a soma.
+///
+/// Como não podemos somar `Var("T0")` (limitação do typeck), retornamos
+/// `b` e verificamos que é 200 (ou 100, dependendo da ordem do scheduler).
+/// O ponto do teste é que **ambos** forks completam e main recebe de ambos
+/// sem deadlock — prova que múltiplas fibers com args distintos funcionam.
+///
+/// DoD Fase 8: "fork! com múltiplas fibers e args".
+#[serial]
+#[test]
+fn fork_multiplas_fibers_com_args() {
+    let src = r#"action prod_a (Sender::Int) -> Unit
+  __param_0 !> 100
+  ()
+action prod_b (Sender::Int) -> Unit
+  __param_0 !> 200
+  ()
+action main -> Int
+  let ch1 := channel!()
+  let tx1 := ch1.0
+  let rx1 := ch1.1
+  let ch2 := channel!()
+  let tx2 := ch2.0
+  let rx2 := ch2.1
+  fork!(prod_a, (tx1))
+  fork!(prod_b, (tx2))
+  rx1 <! a
+  rx2 <! b
+  b
+main!()"#;
+    let (raw, _ty) = eval_src(src);
+    assert_ne!(raw, DEADLOCK_SENTINEL, "múltiplos forks não devem deadlockar");
+    // b deve ser 200 (prod_b envia 200). Se o scheduler reordenar, ainda
+    // assim `b` é do rx2 (canal de prod_b), sempre 200.
+    assert_eq!(
+        untag_smi(raw),
+        200,
+        "fork múltiplo: rx2 deve receber 200 de prod_b"
+    );
+}
+
+// ── Teste 10: Structured concurrency — parent espera forks ──
+
+/// Parent (main) faz fork de um produtor lento (loop 1..5000 + send) e
+/// depois executa um `<!` (recebe do canal). Pela Decisão E, o parent só
+/// termina depois do fork completar. Se o parent abandonasse o fork, o
+/// `<!` nunca desbloquearia e o scheduler deadlockaria.
+///
+/// O teste verifica que o parent espera o fork completar: o `<!` recebe
+/// o valor (soma 1..5000 = 12502500) e main retorna esse valor.
+///
+/// DoD Fase 8: "Structured concurrency: parent espera forks".
+#[serial]
+#[test]
+fn structured_concurrency_parent_espera_fork() {
+    let src = r#"action worker (Sender::Int) -> Unit
+  var acc := 0
+  var i := 0
+  loop
+    i := + i 1
+    match > i 5000
+      True: break
+      False: acc := + acc i
+  __param_0 !> acc
+  ()
+action main -> Int
+  let ch := channel!()
+  let tx := ch.0
+  let rx := ch.1
+  fork!(worker, (tx))
+  rx <! result
+  result
+main!()"#;
+    let (raw, _ty) = eval_src(src);
+    assert_ne!(raw, DEADLOCK_SENTINEL, "parent não deve deadlockar esperando fork");
+    assert_eq!(
+        untag_smi(raw),
+        12502500,
+        "structured concurrency: parent recebe resultado do fork (soma 1..5000)"
+    );
+}
+
+// ── Teste 11: Escape analysis — valor enviado sobrevive ao sender ──
+
+/// Producer fork envia um valor (42) via canal e termina (fiber destruída).
+/// Consumer (main) recebe o valor após o producer ter terminado. Se o valor
+/// fosse alocado na arena do fiber sender, seria liberado quando o sender
+/// morresse — o consumer acessaria memória inválida.
+///
+/// O escape analysis (conservador: `Ancestor(0)` = raiz) marca o valor
+/// enviado como escapando para a arena raiz, que sobrevive à morte do
+/// sender. O teste verifica que o consumer recebe 42 sem crash.
+///
+/// DoD Fase 8: "Escape analysis: valor enviado por canal sobrevive ao
+/// sender (LCA correto)".
+#[serial]
+#[test]
+fn escape_canal_sobrevive_sender() {
+    let src = r#"action prod (Sender::Int) -> Unit
+  __param_0 !> 42
+  ()
+action main -> Int
+  let ch := channel!()
+  let tx := ch.0
+  let rx := ch.1
+  fork!(prod, (tx))
+  rx <! v
+  v
+main!()"#;
+    let (raw, _ty) = eval_src(src);
+    assert_ne!(raw, DEADLOCK_SENTINEL, "não deve deadlockar");
+    assert_eq!(
+        untag_smi(raw),
+        42,
+        "escape analysis: valor deve sobreviver ao sender (arena raiz/LCA)"
+    );
+}

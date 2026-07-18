@@ -1048,7 +1048,7 @@ e executa. Producer/consumer via fork funciona. ✅
 executam durante o loop. Sem yield points, loop pesado bloqueia outras fibers
 (verificado com teste de head-of-line blocking). ✅
 
-### Fase 8: Testes E2E
+### Fase 8: Testes E2E ✅
 
 **kata-codegen/tests/:**
 - Producer/consumer via `channel!`

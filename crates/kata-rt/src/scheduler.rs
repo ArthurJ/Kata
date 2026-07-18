@@ -71,6 +71,12 @@ struct FiberEntry {
     children: Vec<FiberId>,
     /// Fiber terminou execução (`resume()` retornou Ok).
     completed: bool,
+    /// `Suspend` ptr capturado após o `resume()` que suspendeu o fiber.
+    /// Usado para re-setar `CURRENT_SUSPEND` antes do próximo `resume()` —
+    /// o `SuspendGuard` do trampoline assume disciplina de pilha, mas
+    /// fibers suspendem/retomam em ordem arbitrária. `None` se o fiber
+    /// ainda não executou (primeiro resume) ou completou sem suspender.
+    suspend_ptr: Option<crate::fiber::SuspendPtr>,
 }
 
 /// Scheduler de fibers — coordena execução, arenas e yield.
@@ -120,12 +126,6 @@ impl Scheduler {
     ) -> Result<FiberId, String> {
         let fiber_arena = kata_rt_arena_create();
         let parent_id = self.current_fiber;
-        let spawn_args = SpawnArgs {
-            fn_ptr,
-            caller_arena,
-            args_ptr,
-            fiber_arena,
-        };
         let fiber = KataFiber::new(fiber_arena)?;
         let id = self.next_id;
         self.next_id += 1;
@@ -133,10 +133,16 @@ impl Scheduler {
             id,
             FiberEntry {
                 fiber: std::mem::ManuallyDrop::new(fiber),
-                spawn_args,
+                spawn_args: SpawnArgs {
+                    fn_ptr,
+                    caller_arena,
+                    args_ptr,
+                    fiber_arena,
+                },
                 parent_id,
                 children: Vec::new(),
                 completed: false,
+                suspend_ptr: None,
             },
         );
         // Registrar este fiber como filho do pai.
@@ -259,17 +265,32 @@ impl Scheduler {
             return Ok(0); // fiber já destruído
         };
         let spawn_args = entry.spawn_args;
+        // Re-setar `CURRENT_SUSPEND` antes de cada resume(). O `SuspendGuard`
+        // do trampoline assume disciplina de pilha (save/restore nested),
+        // mas fibers suspendem/retomam em ordem arbitrária: quando A suspende
+        // e B resumiu entre-temps, `CURRENT_SUSPEND` ainda contém o `Suspend`
+        // de B. O trampoline publica o `Suspend` ptr em `LAST_SUSPEND_PTR`
+        // (TLS) a cada execução; o scheduler captura após `resume()` retornar
+        // `Err(YieldReason)` e re-seta `CURRENT_SUSPEND` aqui no próximo
+        // resume. No primeiro resume (suspend_ptr=None), o trampoline seta
+        // `CURRENT_SUSPEND` via `SuspendGuard`.
+        if let Some(suspend) = entry.suspend_ptr {
+            crate::fiber::set_current_suspend(suspend);
+        }
         self.current_fiber = Some(fiber_id);
-        // Snapshot do estado do scheduler para `kata_rt_yield_check`.
-        // HAS_READY_FIBER indica se há outra fiber pronta na run_queue (além
-        // desta). Evita o double-borrow do SCHEDULER durante resume (pitfall #44).
         let has_ready = !self.run_queue.is_empty();
         HAS_READY_FIBER.with(|h| h.set(has_ready));
-        // Reseta o contador — cada resume começa com orçamento fresco, evita
-        // que uma fiber recém-resumida faça yield imediatamente.
         YIELD_COUNTER.with(|c| c.set(YIELD_INTERVAL));
         let result = entry.fiber.resume(spawn_args);
         self.current_fiber = None;
+        // Se o fiber suspendeu, capturar o `Suspend` ptr publicado pelo
+        // trampoline para re-setar `CURRENT_SUSPEND` no próximo resume.
+        if result.is_err() {
+            let suspend_ptr = crate::fiber::take_last_suspend();
+            if let Some(entry) = self.fibers.get_mut(&fiber_id) {
+                entry.suspend_ptr = suspend_ptr;
+            }
+        }
         result
     }
 

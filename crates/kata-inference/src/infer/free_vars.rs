@@ -197,6 +197,10 @@ pub(crate) fn collect_free_vars(
             }
         }
         TypedExprKind::ChannelCreate { .. } => {}
+        // ReceiverFactoryCall: o factory é uma sub-expressão (Ident do rxf).
+        TypedExprKind::ReceiverFactoryCall { factory, .. } => {
+            collect_free_vars(&factory.node, local_bindings, out);
+        }
         TypedExprKind::Fork { args, .. } => {
             collect_free_vars(&args.node, local_bindings, out);
         }

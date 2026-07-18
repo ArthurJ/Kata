@@ -418,6 +418,10 @@ fn rewrite_typed_expr(
         | TypedExprKind::Continue
         // ChannelCreate não tem sub-exprs (args consumidos pelo typeck).
         | TypedExprKind::ChannelCreate { .. } => {}
+        // ReceiverFactoryCall: o factory é sub-expr (Ident do rxf).
+        TypedExprKind::ReceiverFactoryCall { factory, .. } => {
+            rewrite_typed_expr(factory, ctx, instance_map, acc);
+        }
         // CSP — recursão.
         TypedExprKind::ChannelSend { channel, value } => {
             rewrite_typed_expr(channel, ctx, instance_map, acc);

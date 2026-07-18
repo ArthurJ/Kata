@@ -208,6 +208,10 @@ fn collect_action_calls(
         }
         // ChannelCreate não tem sub-expressões (args já foram consumidos pelo typeck).
         TypedExprKind::ChannelCreate { .. } => {}
+        // ReceiverFactoryCall: o factory é uma sub-expressão (Ident do rxf).
+        TypedExprKind::ReceiverFactoryCall { factory, .. } => {
+            collect_action_calls(&factory.node, &factory.span, out);
+        }
         // Fork spawna uma Action — registra no call graph.
         TypedExprKind::Fork { action_name, args } => {
             out.push((action_name.clone(), expr.span));

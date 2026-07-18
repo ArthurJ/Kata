@@ -334,6 +334,17 @@ pub enum TypedExprKind {
         elem_ty: Ty,
     },
 
+    /// `rxf!()` — pedido de receiver a uma ReceiverFactory existente.
+    /// O `factory` avalia para um handle de `ReceiverFactory::T`; o codegen
+    /// chama `kata_rt_broadcast_receiver_create(arena, factory_handle)` e
+    /// retorna um `Receiver::T` independente (latest-only, future-only).
+    ReceiverFactoryCall {
+        /// Expressão que avalia para o handle da ReceiverFactory.
+        factory: Box<Spanned<TypedExpr>>,
+        /// Tipo do valor transportado (`T` em `Receiver::T`).
+        elem_ty: Ty,
+    },
+
     /// `fork!(action, args)` — spawn de fiber (effect = Spawn).
     /// `action_name` é o nome da Action a executar no novo fiber.
     /// `args` é a tupla de argumentos tipados.

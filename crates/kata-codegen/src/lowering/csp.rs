@@ -77,21 +77,15 @@ pub(crate) fn lower_channel_create(
         }
     };
 
-    // 2. Para broadcast, criar o receiver via broadcast_receiver_create.
+    // 2. Para broadcast, o segundo elemento da tupla é a **ReceiverFactory**.
+    //    A factory é o próprio BroadcastInner (tag 0b10) — o mesmo handle do
+    //    sender. O typeck marca `bcast.1` como `ReceiverFactory::T`; em runtime
+    //    é o mesmo ponteiro+tag do BroadcastInner. `rxf!()` chama
+    //    `broadcast_receiver_create(arena, factory_handle)` passando este
+    //    handle, que aceita tag 0b10 (ver `kata_rt_broadcast_receiver_create`).
+    //    O primeiro receiver **não** é criado aqui — ele só nasce via `rxf!()`.
     let rx_handle = match kind {
-        ChannelKind::Broadcast => {
-            let fref = ctx
-                .ffi_refs
-                .get("kata_rt_broadcast_receiver_create")
-                .copied()
-                .ok_or_else(|| {
-                    super::CodegenError::FfiSymbolNotFound(
-                        "kata_rt_broadcast_receiver_create".into(),
-                    )
-                })?;
-            let inst = ctx.builder.ins().call(fref, &[arena, handle]);
-            ctx.builder.inst_results(inst)[0]
-        }
+        ChannelKind::Broadcast => handle,
         // Rendezvous/Buffered: sender e receiver são o mesmo handle.
         _ => handle,
     };
@@ -112,6 +106,44 @@ pub(crate) fn lower_channel_create(
     ctx.builder.ins().store(flags, rx_handle, ptr, 8);
 
     Ok(ptr)
+}
+
+/// Lowera `TypedExprKind::ReceiverFactoryCall` (`rxf!()`).
+///
+/// O `factory` avalia para o handle de `ReceiverFactory::T` (tag 0b10).
+/// Chama `kata_rt_broadcast_receiver_create(arena, factory_handle)` e
+/// retorna o handle do novo `Receiver::T` (tag 0b11). Diferente de
+/// `lower_channel_create` para `Broadcast`, esta **não** cria um novo
+/// `BroadcastInner` — pede um receiver ao factory existente.
+pub(crate) fn lower_receiver_factory_call(
+    expr: &TypedExpr,
+    factory: &kata_ast::Spanned<TypedExpr>,
+    _elem_ty: &Ty,
+    ctx: &mut LowerCtx,
+) -> Result<cranelift_codegen::ir::Value, super::CodegenError> {
+    // Arena onde o BroadcastReceiver é alocado.
+    let arena = ctx
+        .caller_arena
+        .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
+
+    // Lowera o factory (Ident do rxf) → handle i64 (tag 0b10).
+    let factory_handle = super::expr::lower_expr(&factory.node, ctx)?;
+
+    // Chama kata_rt_broadcast_receiver_create(arena, factory_handle) → rx_handle.
+    let fref = ctx
+        .ffi_refs
+        .get("kata_rt_broadcast_receiver_create")
+        .copied()
+        .ok_or_else(|| {
+            super::CodegenError::FfiSymbolNotFound("kata_rt_broadcast_receiver_create".into())
+        })?;
+    let inst = ctx.builder.ins().call(fref, &[arena, factory_handle]);
+    let rx_handle = ctx.builder.inst_results(inst)[0];
+
+    // ReceiverFactoryCall retorna o handle do receiver (i64), não uma tupla.
+    // O typeck já marcou o tipo como `Receiver::T` — o codegen trata como i64.
+    let _ = expr; // silencia unused
+    Ok(rx_handle)
 }
 
 /// Lowera `TypedExprKind::ChannelSend` (`tx !> valor`).

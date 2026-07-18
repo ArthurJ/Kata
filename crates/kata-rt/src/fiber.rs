@@ -20,6 +20,14 @@ use wasmtime_fiber::{Fiber, FiberStack};
 /// Tamanho da stack de cada fiber.
 const FIBER_STACK_SIZE: usize = 1024 * 1024; // 1 MB
 
+/// Ponteiro para o `Suspend` de um fiber. Armazenado no `KataFiber` para
+/// que o scheduler re-sete `CURRENT_SUSPEND` antes de cada `resume()`.
+///
+/// O `Suspend` é criado no stack do fiber em `fiber_start` (wasmtime-fiber)
+/// e reusado em todas as suspensões/resumes do mesmo fiber — o endereço
+/// é estável durante todo o ciclo de vida do fiber.
+pub(crate) type SuspendPtr = *mut wasmtime_fiber::Suspend<SpawnArgs, YieldReason, i64>;
+
 /// Argumentos passados do scheduler para o fiber via `resume()`.
 ///
 /// `#[repr(C)]` garante layout determinístico para a fronteira FFI.
@@ -69,6 +77,19 @@ pub(crate) enum YieldReason {
 thread_local! {
     static CURRENT_SUSPEND: Cell<*mut wasmtime_fiber::Suspend<SpawnArgs, YieldReason, i64>> =
         const { Cell::new(std::ptr::null_mut()) };
+
+    // TLS onde o trampoline publica o `Suspend` do fiber que está executando.
+    // O scheduler lê esta TLS após cada `resume()` que retorna `Err(YieldReason)`
+    // (fiber suspendeu) para capturar o `Suspend` ptr daquele fiber — assim,
+    // resumes subsequentes podem re-setar `CURRENT_SUSPEND` com o ptr correto.
+    //
+    // Necessário porque o `SuspendGuard` assume disciplina de pilha
+    // (save/restore nested), mas fibers suspendem/retomam em ordem arbitrária:
+    // quando A suspende e B resumiu entre-temps, `CURRENT_SUSPEND` ainda contém
+    // o `Suspend` de B. O scheduler re-seta `CURRENT_SUSPEND` antes de cada
+    // `resume()` com o `Suspend` capturado aqui.
+    static LAST_SUSPEND_PTR: Cell<*mut wasmtime_fiber::Suspend<SpawnArgs, YieldReason, i64>> =
+        const { Cell::new(std::ptr::null_mut()) };
 }
 
 /// Guarda o ponteiro do `Suspend` no TLS. Retornado pelo trampoline para
@@ -97,11 +118,23 @@ impl Drop for SuspendGuard {
 /// Guarda o `Suspend` no TLS para que `kata_rt_yield()` e FFIs de canal
 /// possam acessá-lo. O `SuspendGuard` limpa o TLS ao sair (mesmo se a
 /// função JIT paniquar).
+///
+/// **Publicação do `Suspend` para resumes futuros:** o `SuspendGuard`
+/// assume disciplina de pilha (save/restore nested), mas fibers suspendem/
+/// retomam em ordem arbitrária. Quando A suspende e B resumiu entre-temps,
+/// `CURRENT_SUSPEND` contém o `Suspend` de B ao resumir A. O scheduler
+/// re-seta `CURRENT_SUSPEND` antes de cada `resume()` com o `Suspend` ptr
+/// publicado aqui (estável por todo o ciclo de vida do fiber — criado em
+/// `fiber_start` no stack do fiber).
 fn trampoline(
     args: SpawnArgs,
     suspend: &mut wasmtime_fiber::Suspend<SpawnArgs, YieldReason, i64>,
 ) -> i64 {
     let _guard = SuspendGuard::new(suspend);
+    // Publica o `Suspend` ptr para o scheduler capturar após `resume()`.
+    // O ptr é estável enquanto o fiber não completa — criado em `fiber_start`
+    // no stack do fiber, reusado em todas as suspensões/resumes do mesmo fiber.
+    LAST_SUSPEND_PTR.with(|cell| cell.set(suspend as *mut _));
     let func: extern "C" fn(i64, i64, i64) -> i64 = unsafe { core::mem::transmute(args.fn_ptr) };
     func(args.fiber_arena, args.caller_arena, args.args_ptr)
 }
@@ -112,6 +145,35 @@ fn trampoline(
 /// (dentro de fiber) ou acessar o scheduler diretamente (fora de fiber).
 pub(crate) fn is_in_fiber() -> bool {
     CURRENT_SUSPEND.with(|cell| !cell.get().is_null())
+}
+
+/// Re-seta `CURRENT_SUSPEND` com o `Suspend` de um fiber que será resumido.
+///
+/// O `SuspendGuard` no trampoline assume disciplina de pilha (save/restore
+/// nested), mas fibers suspendem/retomam em ordem arbitrária. Quando A
+/// suspende e B resumiu entre-temps, `CURRENT_SUSPEND` contém o `Suspend`
+/// de B ao resumir A — A usaria o `Suspend` errado e panicaria em
+/// `wasmtime-fiber/nostd.rs:188` (`assert!(!ret.is_null())`).
+///
+/// O scheduler chama esta função antes de cada `resume()` com o `Suspend`
+/// capturado via `take_last_suspend()` após o `resume()` anterior.
+pub(crate) fn set_current_suspend(ptr: SuspendPtr) {
+    CURRENT_SUSPEND.with(|cell| cell.set(ptr));
+}
+
+/// Consome o `Suspend` ptr publicado pelo trampoline na última execução
+/// de um fiber. O scheduler chama após cada `resume()` que retorna
+/// `Err(YieldReason)` (fiber suspendeu) para armazenar o `Suspend` ptr
+/// daquele fiber e re-setar `CURRENT_SUSPEND` no próximo `resume()`.
+///
+/// Retorna `None` se o trampoline não publicou (ex: fiber completou sem
+/// suspender — `resume()` retornou `Ok`).
+pub(crate) fn take_last_suspend() -> Option<SuspendPtr> {
+    LAST_SUSPEND_PTR.with(|cell| {
+        let p = cell.get();
+        cell.set(std::ptr::null_mut());
+        if p.is_null() { None } else { Some(p) }
+    })
 }
 
 /// Tenta obter uma referência mutável ao `Suspend` do fiber atual.
