@@ -1,8 +1,8 @@
-//! Integration tests for `desugar` pass (Fase 7 — Fio 2).
+//! Integration tests for `desugar` pass (desugar de Hole/Pipe).
 //!
 //! Testa `desugar::desugar` como função pura sobre `Spanned<Expr>`: verifica
 //! que Hole e Pipe são totalmente eliminados da AST. Não passa pelo
-//! inference completo (lambda/match são Fase 8 — testamos só a transformação).
+//! inference completo (lambda/match são inferência de lambda/match — testamos só a transformação).
 
 use kata_ast::{Expr, Pattern, Spanned};
 use kata_inference::desugar;

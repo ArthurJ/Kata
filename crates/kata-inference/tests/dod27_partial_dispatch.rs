@@ -116,7 +116,7 @@ fn partial_dispatch_minus_int_hole() {
 /// `+ 10 _` seguido de aplicação: `let f := + 10 _; f 5`
 /// O lambda deve ser `Int -> Int` e aplicação `f 5` retorna `Int`.
 /// `f` é uma variável no TypeEnv (não no DispatchTable), então `ffi_symbol`
-/// é `None` (call_indirect) — o codegen na Fase 9 decide como chamar.
+/// é `None` (call_indirect) — o codegen decide como chamar.
 #[test]
 fn partial_dispatch_hole_then_apply() {
     let tmod = infer_src("let f := + 10 _\nf 5");
@@ -126,7 +126,7 @@ fn partial_dispatch_hole_then_apply() {
     match &entry.kind {
         TypedExprKind::Closure { ffi_symbol, .. } => {
             // f é call_indirect (variável no TypeEnv, não no DispatchTable).
-            // ffi_symbol é None — o codegen usa call_indirect na Fase 9.
+            // ffi_symbol é None — o codegen usa call_indirect.
             assert_eq!(
                 ffi_symbol, &None,
                 "f é call_indirect (TypeEnv), não call direto (DispatchTable)"

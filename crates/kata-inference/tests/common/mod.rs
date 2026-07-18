@@ -55,7 +55,7 @@ pub fn assert_no_holes(expr: &Spanned<Expr>) {
         | Expr::VariantQual { .. }
         | Expr::Break
         | Expr::Continue => {}
-        // Fio 3: novos nós — recursão nos filhos
+        // Novos nós: recursão nos filhos
         Expr::ActionCall { args, .. } => assert_no_holes(args),
         Expr::Return(inner) => assert_no_holes(inner),
         Expr::Loop { body } => body.iter().for_each(assert_no_holes),
@@ -68,7 +68,7 @@ pub fn assert_no_holes(expr: &Spanned<Expr>) {
         }
         Expr::DotAccess { expr, .. } => assert_no_holes(expr),
         Expr::Spread => {}
-        // Fio 8: Coleções — recursão nos elementos
+        // Coleções: recursão nos elementos
         Expr::ListLit { elements } | Expr::ArrayLit { elements } => {
             elements.iter().for_each(assert_no_holes)
         }
@@ -79,7 +79,7 @@ pub fn assert_no_holes(expr: &Spanned<Expr>) {
             assert_no_holes(step);
             assert_no_holes(end);
         }
-        // Fio 8: ForIn e In
+        // ForIn e In
         Expr::ForIn { iterable, body, .. } => {
             assert_no_holes(iterable);
             body.iter().for_each(assert_no_holes);
@@ -88,7 +88,7 @@ pub fn assert_no_holes(expr: &Spanned<Expr>) {
             assert_no_holes(item);
             assert_no_holes(collection);
         }
-        // Fio 11: nós CSP não contêm holes, recursam nos filhos
+        // Nós CSP não contêm holes, recursam nos filhos
         Expr::ChannelSend { channel, value } => {
             assert_no_holes(channel);
             assert_no_holes(value);
@@ -162,7 +162,7 @@ pub fn assert_no_pipes(expr: &Spanned<Expr>) {
         | Expr::VariantQual { .. }
         | Expr::Break
         | Expr::Continue => {}
-        // Fio 3: novos nós — recursão nos filhos
+        // Novos nós: recursão nos filhos
         Expr::ActionCall { args, .. } => assert_no_pipes(args),
         Expr::Return(inner) => assert_no_pipes(inner),
         Expr::Loop { body } => body.iter().for_each(assert_no_pipes),
@@ -175,7 +175,7 @@ pub fn assert_no_pipes(expr: &Spanned<Expr>) {
         }
         Expr::DotAccess { expr, .. } => assert_no_pipes(expr),
         Expr::Spread => {}
-        // Fio 8: Coleções — recursão nos elementos
+        // Coleções: recursão nos elementos
         Expr::ListLit { elements } | Expr::ArrayLit { elements } => {
             elements.iter().for_each(assert_no_pipes)
         }
@@ -186,7 +186,7 @@ pub fn assert_no_pipes(expr: &Spanned<Expr>) {
             assert_no_pipes(step);
             assert_no_pipes(end);
         }
-        // Fio 8: ForIn e In
+        // ForIn e In
         Expr::ForIn { iterable, body, .. } => {
             assert_no_pipes(iterable);
             body.iter().for_each(assert_no_pipes);
@@ -195,7 +195,7 @@ pub fn assert_no_pipes(expr: &Spanned<Expr>) {
             assert_no_pipes(item);
             assert_no_pipes(collection);
         }
-        // Fio 11: nós CSP não contêm pipes, recursam nos filhos
+        // Nós CSP não contêm pipes, recursam nos filhos
         Expr::ChannelSend { channel, value } => {
             assert_no_pipes(channel);
             assert_no_pipes(value);

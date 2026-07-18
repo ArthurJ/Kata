@@ -5,12 +5,12 @@
 
 mod actions;
 mod basics;
-mod fio11_csp;
-mod fio6;
-mod fio8_collections;
+mod collections;
+mod csp;
 mod guards;
 mod helpers;
 mod lambdas;
 mod match_tests;
 mod pipe;
+mod refined_decls;
 mod signatures;

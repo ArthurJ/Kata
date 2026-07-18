@@ -284,7 +284,7 @@ fn action_decl_tuple_return_type_three() {
     }
 }
 
-// ── loop, break, continue (Fase 4) ─────────────────────────────────
+// ── loop, break, continue ─────────────────────────────────
 
 #[test]
 fn loop_inside_action() {

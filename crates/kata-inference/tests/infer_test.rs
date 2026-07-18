@@ -325,7 +325,7 @@ fn infer_boolean_false() {
     assert_eq!(entry.ty, Ty::boolean());
 }
 
-// ── Tuple (suportado em Fio 2 — Ty::Tuple antecipado) ─────────────
+// ── Tuple (suportado — Ty::Tuple antecipado) ─────────────
 
 #[test]
 fn infer_tuple_three_elements() {
