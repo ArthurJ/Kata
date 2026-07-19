@@ -56,12 +56,12 @@ pub(crate) type FuncKey = (String, Vec<Ty>, Ty);
 pub(crate) type SymbolTable = HashMap<FuncKey, cranelift_module::FuncId>;
 
 /// Lower do `TypedModule` completo: cria a função `__kata_entry` e
-/// retorna o `MetadataTable` sidecar + a string table.
+/// retorna o `MetadataTable` sidecar, a string table, e os wrappers de teste.
 pub(crate) fn lower_module(
     typed: &TypedModule,
     module: &mut cranelift_jit::JITModule,
     ffi_ids: &HashMap<String, cranelift_module::FuncId>,
-) -> Result<(MetadataTable, StringTable), CodegenError> {
+) -> Result<(MetadataTable, StringTable, Vec<super::test_runner::TestWrapper>), CodegenError> {
     let mut metadata = MetadataTable::new();
     let mut string_table = StringTable::new();
     let mut symbol_table: SymbolTable = HashMap::new();
@@ -122,6 +122,17 @@ pub(crate) fn lower_module(
             &mut string_table,
         )?;
     }
+
+    // ── Gera wrappers de teste `__kata_test_*` para cada @test ──
+    // Após Actions declaradas/definidas (symbol_table populado com FuncIds).
+    let _test_wrappers = super::test_runner::generate_test_wrappers(
+        typed,
+        module,
+        ffi_ids,
+        &symbol_table,
+        &mut string_table,
+        &mut fn_counter,
+    )?;
 
     // Determina o tipo de retorno do entry point.
     let ret_ty = &typed.entry.node.ty;
@@ -249,5 +260,5 @@ pub(crate) fn lower_module(
             .map_err(|e| CodegenError::Cranelift(format!("define_data {sym}: {e}")))?;
     }
 
-    Ok((metadata, string_table))
+    Ok((metadata, string_table, _test_wrappers))
 }

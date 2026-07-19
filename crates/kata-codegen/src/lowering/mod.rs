@@ -31,10 +31,12 @@ mod jit;
 mod map;
 mod module;
 mod pattern;
+mod test_runner;
 mod variant;
 
-pub use jit::{JitResult, jit_eval};
+pub use jit::{JitResult, jit_compile_tests, jit_eval};
 pub use module::CodegenError;
+pub use test_runner::TestWrapper;
 use module::StringTable;
 
 use cranelift_codegen::ir::{Block, GlobalValue, Value};

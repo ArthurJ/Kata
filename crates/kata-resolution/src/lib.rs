@@ -169,6 +169,12 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
                     }
                 }
 
+                // Extrai casos de teste das diretivas @test.
+                // @test("desc") — forma curta: desc é o primeiro posicional.
+                // @test{desc: "...", args: (1,2), timeout: 5000, expects: "Panic: msg"}
+                //   — forma dict: chaves nomeadas.
+                let tests = extract_test_specs(action_dirs, name, &mut errors);
+
                 // Se tem @ffi e body vazio → Action FFI builtin.
                 // Produz uma Signature com is_action = true para o DispatchTable.
                 // Não produz ActionDef (sem corpo Kata para o inference processar).
@@ -191,6 +197,7 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
                         param_types,
                         return_type,
                         body: body.clone(),
+                        tests,
                     });
                 }
             }
@@ -213,6 +220,133 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
         functions,
         actions,
     })
+}
+
+/// Extrai `TestSpec` das diretivas `@test` de uma `ActionDecl`.
+///
+/// Suporta duas formas:
+/// - `@test("desc")` — tupla posicional: `desc` é o primeiro `Expr`.
+/// - `@test{desc: "...", args: (1,2), timeout: 5000, expects: "Panic: msg"}`
+///   — dict nomeado: chaves `desc`, `args`, `timeout`, `expects`.
+///
+/// Valida tipos dos valores: `desc`/`expects` devem ser `TextLit`,
+/// `timeout` deve ser `IntLit`, `args` pode ser qualquer `Expr` (o inference tipa).
+fn extract_test_specs(
+    directives: &[kata_ast::Directive],
+    action_name: &str,
+    errors: &mut Vec<ResolveError>,
+) -> Vec<TestSpec> {
+    let mut specs = Vec::new();
+    for d in directives {
+        if d.name != "test" {
+            continue;
+        }
+        let mut spec = TestSpec {
+            desc: None,
+            args: None,
+            timeout: None,
+            expects: None,
+        };
+        match d.args.as_slice() {
+            // @test("desc") — forma curta: 1 posicional.
+            [kata_ast::DirectiveArg::Expr(e)] => {
+                if let kata_ast::Expr::TextLit { text } = &e.node {
+                    spec.desc = Some(text.clone());
+                } else {
+                    errors.push(ResolveError::UnknownDirective {
+                        name: "test".into(),
+                        context: "action",
+                        item_name: format!(
+                            "{action_name}: desc posicional deve ser Text"
+                        ),
+                    });
+                }
+            }
+            // @test{desc: "...", args: (...), timeout: N, expects: "..."}
+            args if args.iter().all(|a| matches!(a, kata_ast::DirectiveArg::Named { .. })) => {
+                for arg in args {
+                    if let kata_ast::DirectiveArg::Named { key, value } = arg {
+                        match key.as_str() {
+                            "desc" => {
+                                if let kata_ast::Expr::TextLit { text } = &value.node {
+                                    spec.desc = Some(text.clone());
+                                } else {
+                                    errors.push(ResolveError::UnknownDirective {
+                                        name: "test".into(),
+                                        context: "action",
+                                        item_name: format!(
+                                            "{action_name}: desc deve ser Text"
+                                        ),
+                                    });
+                                }
+                            }
+                            "args" => {
+                                spec.args = Some((**value).clone());
+                            }
+                            "timeout" => {
+                                if let kata_ast::Expr::IntLit { text } = &value.node {
+                                    if let Ok(n) = text.parse::<i64>() {
+                                        spec.timeout = Some(n);
+                                    } else {
+                                        errors.push(ResolveError::UnknownDirective {
+                                            name: "test".into(),
+                                            context: "action",
+                                            item_name: format!(
+                                                "{action_name}: timeout inválido: {text}"
+                                            ),
+                                        });
+                                    }
+                                } else {
+                                    errors.push(ResolveError::UnknownDirective {
+                                        name: "test".into(),
+                                        context: "action",
+                                        item_name: format!(
+                                            "{action_name}: timeout deve ser Int"
+                                        ),
+                                    });
+                                }
+                            }
+                            "expects" => {
+                                if let kata_ast::Expr::TextLit { text } = &value.node {
+                                    spec.expects = Some(text.clone());
+                                } else {
+                                    errors.push(ResolveError::UnknownDirective {
+                                        name: "test".into(),
+                                        context: "action",
+                                        item_name: format!(
+                                            "{action_name}: expects deve ser Text"
+                                        ),
+                                    });
+                                }
+                            }
+                            other => {
+                                errors.push(ResolveError::UnknownDirective {
+                                    name: "test".into(),
+                                    context: "action",
+                                    item_name: format!(
+                                        "{action_name}: chave desconhecida: {other}"
+                                    ),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            // @test() — sem args, ou mistura inválida.
+            [] => {}
+            _ => {
+                errors.push(ResolveError::UnknownDirective {
+                    name: "test".into(),
+                    context: "action",
+                    item_name: format!(
+                        "{action_name}: args de @test devem ser todos posicionais ou todos nomeados"
+                    ),
+                });
+            }
+        }
+        specs.push(spec);
+    }
+    specs
 }
 
 pub use prelude_sigs::load_prelude;

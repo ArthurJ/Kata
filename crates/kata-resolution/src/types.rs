@@ -82,6 +82,31 @@ pub struct ActionDef {
     pub param_types: Vec<Ty>,
     pub return_type: Ty,
     pub body: Vec<ActionStmt>,
+    /// Casos de teste anotados com `@test`. Cada `@test` vira um `TestSpec`
+    /// cujos args são `Expr` não-tipado — o inference tipa via `infer_expr`.
+    /// Vazio quando a action não tem `@test`.
+    pub tests: Vec<TestSpec>,
+}
+
+/// Especificação de um caso de teste `@test` anotado em uma action.
+///
+/// Produzida no resolution a partir das diretivas `@test` da `ActionDecl`.
+/// O inference tipa `args` (`Spanned<Expr>` → `Spanned<TypedExpr>`) e
+/// propaga o `TestSpec` tipado em `TypedAction.tests`. O codegen gera
+/// um wrapper `__kata_test_*` por `TestSpec` (exceto negativos CompileError).
+///
+/// - `desc`: identificação do teste no relatório do driver.
+/// - `args`: argumentos literais para chamar a action (None = Unit).
+/// - `timeout`: timeout em ms para o runner (`kata_rt_set_test_timeout`).
+/// - `expects`: mensagem esperada de erro. Prefixo `"CompileError:"` marca
+///   teste negativo — o codegen NÃO gera wrapper; o driver tenta compilar
+///   o sub-módulo isolado e verifica a falha.
+#[derive(Debug, Clone)]
+pub struct TestSpec {
+    pub desc: Option<String>,
+    pub args: Option<Spanned<Expr>>,
+    pub timeout: Option<i64>,
+    pub expects: Option<String>,
 }
 
 /// Informação de um tipo refinado declarado pelo usuário.

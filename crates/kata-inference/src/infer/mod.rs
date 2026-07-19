@@ -46,6 +46,7 @@ use kata_resolution::ResolvedModule;
 use crate::desugar;
 use crate::typed::{
     TypedAction, TypedExpr, TypedExprKind, TypedFunction, TypedLambdaClause, TypedModule,
+    TypedTestSpec,
 };
 
 use self::apply_lambda::infer_lambda_body;
@@ -413,10 +414,36 @@ fn infer_action(
         }
     }
 
+    // Tipa os args de cada @test spec (Expr → TypedExpr).
+    // infer_expr pode falhar (type mismatch nos args) — propaga o erro.
+    let mut typed_tests: Vec<TypedTestSpec> = Vec::new();
+    for spec in &action_def.tests {
+        let typed_args = if let Some(args_expr) = &spec.args {
+            let desugared = desugar::desugar(args_expr);
+            let typed = infer_expr(
+                &desugared.node,
+                &desugared.span,
+                &mut action_env,
+                ctx,
+                false,
+            )?;
+            Some(Spanned::new(typed, args_expr.span))
+        } else {
+            None
+        };
+        typed_tests.push(TypedTestSpec {
+            desc: spec.desc.clone(),
+            args: typed_args,
+            timeout: spec.timeout,
+            expects: spec.expects.clone(),
+        });
+    }
+
     Ok(TypedAction {
         name: action_def.name.clone(),
         param_types: param_types.clone(),
         ret_ty: ret_ty.clone(),
         body: typed_body,
+        tests: typed_tests,
     })
 }

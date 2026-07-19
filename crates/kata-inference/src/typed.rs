@@ -456,4 +456,20 @@ pub struct TypedAction {
     pub ret_ty: Ty,
     /// Body da Action (statements sequenciais).
     pub body: Vec<Spanned<TypedExpr>>,
+    /// Casos de teste `@test` com args já tipados. O codegen gera
+    /// um wrapper por spec (exceto negativos CompileError).
+    pub tests: Vec<TypedTestSpec>,
+}
+
+/// `TestSpec` tipado — args já inferidos pelo typeck.
+///
+/// Produzido pelo inference a partir do `TestSpec` do resolution:
+/// `args: Option<Spanned<Expr>>` → `args: Option<Spanned<TypedExpr>>`.
+/// O codegen lê `args` para lowerar a tupla de argumentos do wrapper.
+#[derive(Debug, Clone)]
+pub struct TypedTestSpec {
+    pub desc: Option<String>,
+    pub args: Option<Spanned<TypedExpr>>,
+    pub timeout: Option<i64>,
+    pub expects: Option<String>,
 }

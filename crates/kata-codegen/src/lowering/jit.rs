@@ -6,6 +6,7 @@ use kata_core::ty::{PrimTy, Ty};
 use kata_inference::TypedModule;
 
 use super::module::{CodegenError, lower_module};
+use super::test_runner::TestWrapper;
 
 /// Resultado da execução JIT — valor bruto + tipo canônico para display.
 pub struct JitResult {
@@ -46,7 +47,8 @@ pub fn jit_eval(typed: &TypedModule) -> Result<JitResult, CodegenError> {
 
     // Declara __kata_entry e faz o lowering.
     let ret_ty = typed.entry.node.ty.clone();
-    let (_metadata, _string_table) = lower_module(typed, &mut module, &ffi_ids)?;
+    let (_metadata, _string_table, _test_wrappers) =
+        lower_module(typed, &mut module, &ffi_ids)?;
 
     // Finaliza todas as definições — resolve relocations, compila machine code.
     module
@@ -98,4 +100,46 @@ pub fn jit_eval(typed: &TypedModule) -> Result<JitResult, CodegenError> {
     std::mem::forget(module);
 
     Ok(result)
+}
+
+/// Compila um `TypedModule` e retorna os wrappers de teste gerados.
+///
+/// Diferente de `jit_eval`, não executa o entry point — apenas compila
+/// e retorna os wrappers `__kata_test_*` descobertos. O driver `kata test`
+/// usa isto para descobrir e executar testes individualmente.
+///
+/// Mantém o `JITModule` vivo (retornado) para que os ponteiros dos
+/// wrappers permaneçam válidos durante a execução dos testes.
+pub fn jit_compile_tests(
+    typed: &TypedModule,
+) -> Result<(cranelift_jit::JITModule, Vec<TestWrapper>), CodegenError> {
+    let mut flags_builder = cranelift_codegen::settings::builder();
+    flags_builder
+        .set("preserve_frame_pointers", "true")
+        .map_err(|e| CodegenError::Cranelift(format!("set preserve_frame_pointers: {e}")))?;
+    let flags = cranelift_codegen::settings::Flags::new(flags_builder);
+
+    let isa_builder = cranelift_native::builder()
+        .map_err(|e| CodegenError::Cranelift(format!("native isa builder: {e}")))?;
+    let isa = isa_builder
+        .finish(flags)
+        .map_err(|e| CodegenError::Cranelift(format!("isa finish: {e}")))?;
+
+    let mut builder =
+        cranelift_jit::JITBuilder::with_isa(isa, cranelift_module::default_libcall_names());
+
+    crate::ffi_registry::register_ffi_symbols(&mut builder);
+
+    let mut module = cranelift_jit::JITModule::new(builder);
+
+    let ffi_ids = crate::ffi_registry::declare_ffi_symbols(&mut module)?;
+
+    let (_metadata, _string_table, test_wrappers) =
+        lower_module(typed, &mut module, &ffi_ids)?;
+
+    module
+        .finalize_definitions()
+        .map_err(|e| CodegenError::Cranelift(format!("finalize_definitions: {e}")))?;
+
+    Ok((module, test_wrappers))
 }
