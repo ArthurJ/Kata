@@ -195,6 +195,37 @@ soma!(1, 2)"#,
 #[ignore = "panic detection sem catch_unwind — mecanismo não implementado"]
 fn test_expects_panic_adiado() {}
 
+/// `@test` sem `args` em action que recebe params deve falhar com erro
+/// claro de codegen, não SIGSEGV em runtime. O wrapper passa `args_ptr = 0`
+/// (null) quando `@test` não tem `args` — a action lê params de null →
+/// null dereference. Validação no codegen detecta o mismatch antes do JIT.
+#[test]
+fn test_sem_args_em_action_com_params_falha_graciosamente() {
+    let path = write_temp_kata(
+        "test_sem_args_em_action_com_params_falha_graciosamente",
+        r#"@test("soma sem args")
+action soma (Int Int) -> Int
+    + __param_0 __param_1
+soma!(1, 2)"#,
+    );
+
+    let output = Command::new(kata_bin())
+        .args(["test", &path])
+        .output()
+        .expect("executar kata test");
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    // Driver deve falhar com erro de codegen (não SIGSEGV/signal).
+    assert!(
+        stderr.contains("args") && stderr.contains("soma"),
+        "deve reportar erro sobre args faltando em soma — stderr: {stderr}"
+    );
+    // SIGSEGV produz exit code 139 (128 + 11). Erro normal produz exit 1.
+    let code = output.status.code().unwrap_or(-1);
+    assert_ne!(code, 139, "não deve ser SIGSEGV (exit 139) — code: {code}");
+    assert_eq!(code, 1, "deve ser exit 1 (erro de codegen) — code: {code}");
+}
+
 /// `expects: "CompileError: msg"` exige que o driver compile um sub-módulo
 /// isolado e verifique que a inferência/codegen falha com o erro esperado.
 /// O design C1 (sub-módulos isolados) não tem fase atribuída — o driver

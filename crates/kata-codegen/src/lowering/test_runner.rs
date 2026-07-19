@@ -73,6 +73,17 @@ pub(crate) fn generate_test_wrappers(
                 continue;
             }
 
+            // Validação: action com params exige args no @test. Sem args,
+            // o wrapper passa args_ptr = 0 (null) e a action lê params de
+            // null → SIGSEGV em runtime. Falhar aqui com erro claro.
+            if !action.param_types.is_empty() && spec.args.is_none() {
+                return Err(CodegenError::UnsupportedNode(format!(
+                    "@test sem args em action `{}` que recebe {:?} — \
+                     forneça args: (..) no @test",
+                    action.name, action.param_types
+                )));
+            }
+
             let cranelift_name = format!("__kata_fn_{}", *fn_counter);
             *fn_counter += 1;
 
