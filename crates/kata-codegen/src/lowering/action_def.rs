@@ -12,11 +12,13 @@ use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_module::{Linkage, Module};
 use kata_core::ty::Ty;
 use kata_inference::TypedAction;
+use kata_inference::TypedLogSpec;
 
 use super::expr::lower_expr;
 use crate::ffi_sigs::ty_to_clif;
 use crate::metadata::MetadataTable;
 
+use super::log::inject_log;
 use super::module::{CodegenError, FuncKey, StringTable};
 
 /// Declara uma Action no JITModule (sem definir ainda).
@@ -156,6 +158,12 @@ pub(crate) fn define_kata_action(
         let n = action.body.len();
         let mut last_result = lower.builder.ins().iconst(I64, 0); // Unit default
         let mut hit_return = false;
+
+        // Se @log quando Enter, injeta antes do body (prólogo).
+        if let Some(TypedLogSpec::Enter { .. }) = &action.log {
+            inject_log(action.log.as_ref().unwrap(), &mut lower)?;
+        }
+
         for (i, stmt) in action.body.iter().enumerate() {
             last_result = lower_expr(&stmt.node, &mut lower)?;
             // Se emitiu return (jump para epilogue_block), não continuar.
@@ -182,6 +190,11 @@ pub(crate) fn define_kata_action(
         lower.builder.switch_to_block(epilogue_block);
         lower.builder.seal_block(epilogue_block);
         let result = lower.builder.block_params(epilogue_block)[0];
+
+        // Se @log quando Exit, injeta antes do return (epílogo).
+        if let Some(TypedLogSpec::Exit { .. }) = &action.log {
+            inject_log(action.log.as_ref().unwrap(), &mut lower)?;
+        }
 
         // Float bitcast: se ret_ty == Float, o body produziu F64.
         // A ABI retorna I64 — bitcast F64 → I64 antes do return_.

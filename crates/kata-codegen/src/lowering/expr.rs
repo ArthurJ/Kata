@@ -361,6 +361,7 @@ pub(crate) fn lower_expr(
                 ret_ty,
                 clauses,
                 captures,
+                &None, // lambdas anônimas não têm @log
                 func_id,
                 ctx.module,
                 ctx.ffi_ids,

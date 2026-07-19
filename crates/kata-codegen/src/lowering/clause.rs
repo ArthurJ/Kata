@@ -199,7 +199,14 @@ pub(crate) fn lower_clause_chain(
         lower.emitted_tail_call = false;
         let body_val = lower_clause_body(clause, lower)?;
         if !lower.emitted_tail_call {
-            lower.builder.ins().return_(&[body_val]);
+            if let Some(epi) = lower.epilogue_block {
+                lower
+                    .builder
+                    .ins()
+                    .jump(epi, &[cranelift_codegen::ir::BlockArg::Value(body_val)]);
+            } else {
+                lower.builder.ins().return_(&[body_val]);
+            }
         }
     }
 

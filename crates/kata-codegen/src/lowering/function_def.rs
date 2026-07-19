@@ -6,12 +6,12 @@
 use std::collections::HashMap;
 
 use cranelift_codegen::ir::types::I64;
-use cranelift_codegen::ir::{AbiParam, InstBuilder, MemFlagsData, Signature};
+use cranelift_codegen::ir::{AbiParam, BlockArg, InstBuilder, MemFlagsData, Signature};
 use cranelift_codegen::isa::CallConv;
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_module::{Linkage, Module};
 use kata_core::ty::Ty;
-use kata_inference::{CaptureInfo, TypedFunction, TypedLambdaClause};
+use kata_inference::{CaptureInfo, TypedFunction, TypedLambdaClause, TypedLogSpec};
 
 use super::clause::{
     all_patterns_are_ident, bind_patterns_to_params, lower_clause_body, lower_clause_chain,
@@ -21,6 +21,7 @@ use crate::ffi_sigs::ty_to_clif;
 use crate::metadata::MetadataTable;
 
 use super::LowerCtx;
+use super::log::inject_log;
 use super::module::{CodegenError, FuncKey, StringTable};
 
 /// Bitcast na borda de retorno.
@@ -77,6 +78,7 @@ pub(crate) fn define_function_body(
     ret_ty: &Ty,
     clauses: &[TypedLambdaClause],
     captures: &[CaptureInfo],
+    log: &Option<TypedLogSpec>,
     func_id: cranelift_module::FuncId,
     module: &mut cranelift_jit::JITModule,
     ffi_ids: &HashMap<String, cranelift_module::FuncId>,
@@ -166,6 +168,20 @@ pub(crate) fn define_function_body(
             params.clone()
         };
 
+        // Se @log quando Enter, injeta antes do body (prólogo).
+        if let Some(TypedLogSpec::Enter { .. }) = log {
+            inject_log(log.as_ref().unwrap(), &mut lower)?;
+        }
+
+        // Cria epilogue_block se @log Exit (para interceptar retornos).
+        let needs_epilogue = matches!(log, Some(TypedLogSpec::Exit { .. }));
+        if needs_epilogue {
+            let ret_clif_ty = ty_to_clif(ret_ty);
+            let epi = lower.builder.create_block();
+            lower.builder.append_block_param(epi, ret_clif_ty);
+            lower.epilogue_block = Some(epi);
+        }
+
         if clauses.len() == 1 && all_patterns_are_ident(&clauses[0].patterns) {
             let clause = &clauses[0];
             bind_patterns_to_params(&clause.patterns, &clause_params, &mut lower);
@@ -173,14 +189,35 @@ pub(crate) fn define_function_body(
             lower.emitted_tail_call = false;
             let result = lower_clause_body(clause, &mut lower)?;
             if !lower.emitted_tail_call {
-                // Bitcast na borda de retorno.
-                // Necessário para alias de Float: o body retorna F64 mas a
-                // assinatura da função retorna I64 (Ty::Struct → I64).
                 let result = coerce_return(result, ret_ty, &mut lower);
-                lower.builder.ins().return_(&[result]);
+                if needs_epilogue {
+                    // Jump para epilogue_block em vez de return_ direto.
+                    lower.builder.ins().jump(
+                        lower.epilogue_block.unwrap(),
+                        &[cranelift_codegen::ir::BlockArg::Value(result)],
+                    );
+                } else {
+                    lower.builder.ins().return_(&[result]);
+                }
             }
         } else {
             lower_clause_chain(clauses, &clause_params, &mut lower)?;
+        }
+
+        // Define o epilogue_block se criado: injeta log + return_.
+        if needs_epilogue {
+            let epi = lower.epilogue_block.unwrap();
+            lower.builder.switch_to_block(epi);
+            lower.builder.seal_block(epi);
+            let result = lower.builder.block_params(epi)[0];
+
+            // Injeta log no epílogo.
+            if let Some(TypedLogSpec::Exit { .. }) = log {
+                inject_log(log.as_ref().unwrap(), &mut lower)?;
+            }
+
+            let result = coerce_return(result, ret_ty, &mut lower);
+            lower.builder.ins().return_(&[result]);
         }
 
         builder.finalize();
@@ -209,6 +246,7 @@ pub(crate) fn define_kata_function(
         &func.ret_ty,
         &func.clauses,
         &[], // funções nomeadas não têm capture
+        &func.log,
         func_id,
         module,
         ffi_ids,
