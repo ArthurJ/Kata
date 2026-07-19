@@ -1,6 +1,6 @@
 # PRD — Fio 14: `@test` (Test Runner)
 
-**Status:** Planejamento
+**Status:** Implementação (Fases 1-6 ✅, Fase 7 em andamento)
 **Data:** 2026-07-18
 **Depende de:** Fio 4 ✅ (Result), Fio 11 ✅ (Actions, scheduler, JIT)
 **Não depende de:** `@parallel` (congelado), `@log` (segunda parte deste fio, adiada para sub-PRD)
@@ -248,7 +248,7 @@ real pertence ao Fio 15 (AOT).
 
 ## 9. Fases de implementação
 
-### Fase 1: Parser — permitir literais compostos como valor em diretiva
+### Fase 1: Parser — permitir literais compostos como valor em diretiva ✅
 
 Hoje o parser de diretivas aceita:
 - `@nome` — sem args
@@ -295,7 +295,7 @@ parseado pelo `parse_atom` existente.
 erro. `cargo test --workspace` não regrediu. Diretivas existentes continuam
 parseando.
 
-### Fase 2: Typeck — aceitar `@test` em `ActionDecl` + rejeitar desconhecidas
+### Fase 2: Typeck — aceitar `@test` em `ActionDecl` + rejeitar desconhecidas ✅
 
 - Resolution/inference: aceitar `@test` em `ActionDecl` sem reclamar. Hoje só
   `@ffi` era reconhecido em actions. Adicionar `test` à lista de diretivas
@@ -316,7 +316,7 @@ parseando.
 em todos os contextos. `kata parse` de módulo com `@test` em action não produz
 warning. `@tset` (typo) produz erro de resolution.
 
-### Fase 3: Codegen — gerar wrappers `__kata_test_*`
+### Fase 3: Codegen — gerar wrappers `__kata_test_*` ✅
 
 - `kata-codegen/src/lowering/`: novo módulo `test_runner.rs` (ou extensão de
   `module.rs`).
@@ -327,7 +327,7 @@ warning. `@tset` (typo) produz erro de resolution.
 **DoD Fase 3:** `cargo test` passa. `JITModule` contém os wrappers. Inspeção
 via `eprintln!(ctx.func.display())` mostra wrappers com args literais.
 
-### Fase 4: Runtime — timeout cooperativo via thread OS + AtomicBool
+### Fase 4: Runtime — timeout cooperativo via thread OS + AtomicBool ✅
 
 **Decisão A (fechada com Arthur, 2026-07-18):** o timeout é responsabilidade
 do runtime (porque `@test(timeout: N)` é argumento do teste), mas a **contagem
@@ -419,7 +419,7 @@ scheduler; `kata_rt_set_test_timeout` é chamada fora de `resume()`).
 retorna resultado normal (sem falso positivo da thread cancelada).
 `cargo test --workspace` não regrediu (883 + novos).
 
-### Fase 5: Driver — subcomando `kata test`
+### Fase 5: Driver — subcomando `kata test` ✅
 
 - `Command::Test { path: String, filter: Option<String> }` no `kata-driver`.
 - `cmd_test`: carrega módulo, roda pipeline, descobre `@test`, executa
@@ -427,7 +427,13 @@ retorna resultado normal (sem falso positivo da thread cancelada).
 
 **DoD Fase 5:** `kata test examples/test_assert.kata` roda testes e reporta.
 
-### Fase 6: Testes E2E
+### Fase 6: Testes E2E ✅
+
+5 testes E2E via subprocess em `crates/kata-driver/tests/test_runner_e2e.rs`:
+sem args, args tupla, timeout, múltiplos testes, `--filter`. 2 testes
+`#[ignore]` documentam mecanismos pendentes: `expects: "Panic: msg"`
+(sem `catch_unwind` no runtime) e `expects: "CompileError: msg"` (sub-módulos
+isolados C1 não implementados).
 
 - `crates/kata-codegen/tests/test_runner_e2e.rs` (ou `kata-driver/tests/`).
 - Mínimo: 5 testes
