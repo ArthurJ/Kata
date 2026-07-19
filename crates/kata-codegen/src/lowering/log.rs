@@ -6,7 +6,7 @@
 use cranelift_codegen::ir::InstBuilder;
 use cranelift_codegen::ir::types::I64;
 use cranelift_module::Module;
-use kata_inference::{TypedExpr, TypedLogSpec};
+use kata_inference::TypedLogSpec;
 
 use super::LowerCtx;
 use super::expr::lower_expr;

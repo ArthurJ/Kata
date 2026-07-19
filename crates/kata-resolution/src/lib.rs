@@ -108,7 +108,7 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
 
                 // Se tem corpo Kata (cláusulas lambda), preserva para o inference.
                 if let Some(clauses) = body {
-                    let log = extract_log_spec(directives, &name, "sig", &mut errors);
+                    let log = extract_log_spec(directives, name, "sig", &mut errors);
                     functions.push(FunctionDef {
                         name: name.clone(),
                         param_types: param_types.clone(),

@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 
 use cranelift_codegen::ir::types::I64;
-use cranelift_codegen::ir::{AbiParam, BlockArg, InstBuilder, MemFlagsData, Signature};
+use cranelift_codegen::ir::{AbiParam, InstBuilder, MemFlagsData, Signature};
 use cranelift_codegen::isa::CallConv;
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_module::{Linkage, Module};

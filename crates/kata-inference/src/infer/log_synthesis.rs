@@ -8,7 +8,7 @@
 //! 4. Chama `infer_format` para produzir a cadeia de `text_replace_first`.
 //! 5. Retorna `TypedLogSpec` com a expressão tipada da mensagem.
 
-use kata_ast::{DotIndex, Expr, Span, Spanned};
+use kata_ast::{Expr, Span, Spanned};
 use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 

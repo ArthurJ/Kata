@@ -10,6 +10,7 @@
 
 use kata_ast::{Expr, Span, Spanned};
 use kata_core::ty::{Ty, TypeEnv};
+use kata_diagnostics::MiddleError;
 
 use crate::typed::{ChannelKind, Effect, TypedExpr, TypedExprKind};
 
@@ -72,6 +73,17 @@ pub(crate) fn infer_action_call(
     }
     if callee == "fork" {
         return infer_fork_builtin(args, span, env, ctx);
+    }
+
+    // ── Builtins Log (Fio 14) ──
+    if callee == "log" {
+        return infer_log_builtin(args, span, env, ctx);
+    }
+    if callee == "log_recv" {
+        return infer_log_recv_builtin(args, span, env, ctx);
+    }
+    if callee == "log_config" {
+        return infer_log_config_builtin(args, span, env, ctx);
     }
 
     // ── Receiver factory call ──
@@ -371,4 +383,339 @@ fn infer_fork_builtin(
             args: Box::new(Spanned::new(typed_args, elements[1].span)),
         },
     }))
+}
+
+// ── Log builtins (Fio 14) ──────────────────────────────────
+
+/// `log!(level, msg, topic?, policy?)` — desugara para `kata_rt_log_publish`.
+///
+/// Args posicionais:
+/// - 0: LogLevel (VariantQual ex: `LogLevel::Info` → tag i64)
+/// - 1: Text (mensagem dinâmica)
+/// - 2: Text (tópico, opcional → 0 = config herdada)
+/// - 3: Text (policy, opcional → 0 = config herdada)
+fn infer_log_builtin(
+    args: &Spanned<Expr>,
+    _span: &Span,
+    env: &mut TypeEnv,
+    ctx: &InferCtx,
+) -> InferResult<ActionDispatch> {
+    let elements = extract_tuple_elements(args)?;
+    if elements.len() < 2 || elements.len() > 4 {
+        return Err(MiddleError::ArityMismatch {
+            expected: 4, // aceita 2-4, mas informamos max
+            found: elements.len(),
+            span: args.span.into(),
+        });
+    }
+
+    // Level: VariantQual (LogLevel::Info) → tag i64 via enum_registry.
+    let level_typed =
+        super::expr::infer_expr(&elements[0].node, &elements[0].span, env, ctx, false)?;
+    let level_val = resolve_log_level(&level_typed, ctx, &elements[0].span)?;
+
+    // Msg: Text.
+    let msg_typed = super::expr::infer_expr(&elements[1].node, &elements[1].span, env, ctx, false)?;
+    if msg_typed.ty != Ty::text() {
+        return Err(MiddleError::TypeMismatch {
+            expected: format!("{}", Ty::text()),
+            found: format!("{}", msg_typed.ty),
+            span: elements[1].span.into(),
+        });
+    }
+
+    // Topic: Text opcional → 0 se ausente.
+    let topic_typed = if let Some(elem) = elements.get(2) {
+        let t = super::expr::infer_expr(&elem.node, &elem.span, env, ctx, false)?;
+        if t.ty != Ty::text() {
+            return Err(MiddleError::TypeMismatch {
+                expected: format!("{}", Ty::text()),
+                found: format!("{}", t.ty),
+                span: elem.span.into(),
+            });
+        }
+        t
+    } else {
+        TypedExpr {
+            span: args.span,
+            ty: Ty::int(),
+            tail_pos: false,
+            escape: kata_core::escape::EscapeTarget::Local,
+            effect: Effect::Puro,
+            kind: TypedExprKind::IntLit { text: "0".into() },
+        }
+    };
+
+    // Policy: Text opcional → 0 se ausente.
+    let policy_typed = if let Some(elem) = elements.get(3) {
+        let t = super::expr::infer_expr(&elem.node, &elem.span, env, ctx, false)?;
+        if t.ty != Ty::text() {
+            return Err(MiddleError::TypeMismatch {
+                expected: format!("{}", Ty::text()),
+                found: format!("{}", t.ty),
+                span: elem.span.into(),
+            });
+        }
+        t
+    } else {
+        TypedExpr {
+            span: args.span,
+            ty: Ty::int(),
+            tail_pos: false,
+            escape: kata_core::escape::EscapeTarget::Local,
+            effect: Effect::Puro,
+            kind: TypedExprKind::IntLit { text: "0".into() },
+        }
+    };
+
+    // Constrói Closure { ffi_symbol: "kata_rt_log_publish" }.
+    let callee = TypedExpr {
+        span: args.span,
+        ty: Ty::Function(
+            vec![Ty::int(), Ty::text(), Ty::text(), Ty::text()],
+            Box::new(Ty::int()),
+        ),
+        tail_pos: false,
+        escape: kata_core::escape::EscapeTarget::Local,
+        effect: Effect::Puro,
+        kind: TypedExprKind::Ident {
+            name: "kata_rt_log_publish".into(),
+        },
+    };
+
+    let typed = TypedExpr {
+        span: args.span,
+        ty: Ty::int(),
+        tail_pos: false,
+        escape: kata_core::escape::EscapeTarget::Ancestor(0),
+        effect: Effect::Puro,
+        kind: TypedExprKind::Closure {
+            callee: Box::new(Spanned::new(callee, args.span)),
+            args: vec![
+                Spanned::new(level_val, elements[0].span),
+                Spanned::new(msg_typed, elements[1].span),
+                Spanned::new(
+                    topic_typed,
+                    elements.get(2).map(|e| e.span).unwrap_or(args.span),
+                ),
+                Spanned::new(
+                    policy_typed,
+                    elements.get(3).map(|e| e.span).unwrap_or(args.span),
+                ),
+            ],
+            ffi_symbol: Some("kata_rt_log_publish".into()),
+        },
+    };
+
+    Ok(ActionDispatch::Complete(typed))
+}
+
+/// `log_recv!(topic)` — desugara para `kata_rt_log_recv`.
+fn infer_log_recv_builtin(
+    args: &Spanned<Expr>,
+    _span: &Span,
+    env: &mut TypeEnv,
+    ctx: &InferCtx,
+) -> InferResult<ActionDispatch> {
+    let elements = extract_tuple_elements(args)?;
+    if elements.len() != 1 {
+        return Err(MiddleError::ArityMismatch {
+            expected: 1,
+            found: elements.len(),
+            span: args.span.into(),
+        });
+    }
+
+    let topic_typed =
+        super::expr::infer_expr(&elements[0].node, &elements[0].span, env, ctx, false)?;
+    if topic_typed.ty != Ty::text() {
+        return Err(MiddleError::TypeMismatch {
+            expected: format!("{}", Ty::text()),
+            found: format!("{}", topic_typed.ty),
+            span: elements[0].span.into(),
+        });
+    }
+
+    let callee = TypedExpr {
+        span: args.span,
+        ty: Ty::Function(vec![Ty::text()], Box::new(Ty::int())),
+        tail_pos: false,
+        escape: kata_core::escape::EscapeTarget::Local,
+        effect: Effect::Puro,
+        kind: TypedExprKind::Ident {
+            name: "kata_rt_log_recv".into(),
+        },
+    };
+
+    let typed = TypedExpr {
+        span: args.span,
+        ty: Ty::int(),
+        tail_pos: false,
+        escape: kata_core::escape::EscapeTarget::Ancestor(0),
+        effect: Effect::Puro,
+        kind: TypedExprKind::Closure {
+            callee: Box::new(Spanned::new(callee, args.span)),
+            args: vec![Spanned::new(topic_typed, elements[0].span)],
+            ffi_symbol: Some("kata_rt_log_recv".into()),
+        },
+    };
+
+    Ok(ActionDispatch::Complete(typed))
+}
+
+/// `log_config!(topic, policy, level)` — desugara para `kata_rt_log_config`.
+fn infer_log_config_builtin(
+    args: &Spanned<Expr>,
+    _span: &Span,
+    env: &mut TypeEnv,
+    ctx: &InferCtx,
+) -> InferResult<ActionDispatch> {
+    let elements = extract_tuple_elements(args)?;
+    if elements.len() != 3 {
+        return Err(MiddleError::ArityMismatch {
+            expected: 3,
+            found: elements.len(),
+            span: args.span.into(),
+        });
+    }
+
+    let topic_typed =
+        super::expr::infer_expr(&elements[0].node, &elements[0].span, env, ctx, false)?;
+    if topic_typed.ty != Ty::text() {
+        return Err(MiddleError::TypeMismatch {
+            expected: format!("{}", Ty::text()),
+            found: format!("{}", topic_typed.ty),
+            span: elements[0].span.into(),
+        });
+    }
+
+    let policy_typed =
+        super::expr::infer_expr(&elements[1].node, &elements[1].span, env, ctx, false)?;
+    if policy_typed.ty != Ty::text() {
+        return Err(MiddleError::TypeMismatch {
+            expected: format!("{}", Ty::text()),
+            found: format!("{}", policy_typed.ty),
+            span: elements[1].span.into(),
+        });
+    }
+
+    let level_typed =
+        super::expr::infer_expr(&elements[2].node, &elements[2].span, env, ctx, false)?;
+    let level_val = resolve_log_level(&level_typed, ctx, &elements[2].span)?;
+
+    let callee = TypedExpr {
+        span: args.span,
+        ty: Ty::Function(vec![Ty::text(), Ty::text(), Ty::int()], Box::new(Ty::Unit)),
+        tail_pos: false,
+        escape: kata_core::escape::EscapeTarget::Local,
+        effect: Effect::Puro,
+        kind: TypedExprKind::Ident {
+            name: "kata_rt_log_config".into(),
+        },
+    };
+
+    let typed = TypedExpr {
+        span: args.span,
+        ty: Ty::Unit,
+        tail_pos: false,
+        escape: kata_core::escape::EscapeTarget::Ancestor(0),
+        effect: Effect::Puro,
+        kind: TypedExprKind::Closure {
+            callee: Box::new(Spanned::new(callee, args.span)),
+            args: vec![
+                Spanned::new(topic_typed, elements[0].span),
+                Spanned::new(policy_typed, elements[1].span),
+                Spanned::new(level_val, elements[2].span),
+            ],
+            ffi_symbol: Some("kata_rt_log_config".into()),
+        },
+    };
+
+    Ok(ActionDispatch::Complete(typed))
+}
+
+/// Extrai elementos de uma tupla ou Grouping de tupla.
+fn extract_tuple_elements(args: &Spanned<Expr>) -> Result<Vec<Spanned<Expr>>, MiddleError> {
+    match &args.node {
+        Expr::Tuple { elements } => Ok(elements.clone()),
+        Expr::Grouping { inner } => match &inner.node {
+            Expr::Tuple { elements } => Ok(elements.clone()),
+            _ => Err(MiddleError::TypeMismatch {
+                expected: "Tuple".into(),
+                found: format!("{:?}", inner.node),
+                span: args.span.into(),
+            }),
+        },
+        Expr::Unit => Ok(Vec::new()),
+        _ => Err(MiddleError::TypeMismatch {
+            expected: "Tuple".into(),
+            found: format!("{:?}", args.node),
+            span: args.span.into(),
+        }),
+    }
+}
+
+/// Resolve uma expressão LogLevel (VariantQual ou IntLit) para tag i64.
+fn resolve_log_level(
+    typed: &TypedExpr,
+    _ctx: &InferCtx,
+    span: &Span,
+) -> Result<TypedExpr, MiddleError> {
+    // Se já é IntLit, retorna.
+    if let TypedExprKind::IntLit { .. } = &typed.kind {
+        return Ok(typed.clone());
+    }
+
+    // Se é VariantQual de LogLevel, extrai a tag.
+    if let TypedExprKind::VariantQual {
+        enum_name,
+        variant: _,
+        tag,
+        ..
+    } = &typed.kind
+        && enum_name == "LogLevel"
+    {
+        return Ok(TypedExpr {
+            span: typed.span,
+            ty: Ty::int(),
+            tail_pos: false,
+            escape: kata_core::escape::EscapeTarget::Local,
+            effect: Effect::Puro,
+            kind: TypedExprKind::IntLit {
+                text: tag.to_string(),
+            },
+        });
+    }
+
+    // Se é VariantConstruct de LogLevel.
+    if let TypedExprKind::VariantConstruct {
+        enum_name,
+        variant: _,
+        tag,
+        ..
+    } = &typed.kind
+        && enum_name == "LogLevel"
+    {
+        return Ok(TypedExpr {
+            span: typed.span,
+            ty: Ty::int(),
+            tail_pos: false,
+            escape: kata_core::escape::EscapeTarget::Local,
+            effect: Effect::Puro,
+            kind: TypedExprKind::IntLit {
+                text: tag.to_string(),
+            },
+        });
+    }
+
+    // Fallback: se o tipo é Int, usa direto.
+    if typed.ty == Ty::int() {
+        return Ok(typed.clone());
+    }
+
+    Err(MiddleError::TypeMismatch {
+        expected: "LogLevel variant (Debug, Info, Warn, Error) ou Int".into(),
+        found: format!("{}", typed.ty),
+        span: (*span).into(),
+    })
 }
