@@ -89,7 +89,7 @@ const DEADLOCK_SENTINEL: i64 = i64::MIN + 1;
 /// `last_seen_version` (inicializado = version atual = 0). Quando `tx !> 42`
 /// incrementa version para 1, ambos veem `version > last_seen` e desbloqueiam.
 ///
-/// DoD Fase 8: "Pub-sub via broadcast! com múltiplos receivers (latest only)".
+/// DoD: "Pub-sub via broadcast! com múltiplos receivers (latest only)".
 #[serial]
 #[test]
 fn broadcast_pubsub_multiplos_receivers() {
@@ -121,7 +121,7 @@ main!()"#;
 /// (future-only). Ao tentar `<!`, bloqueia (sem nova mensagem). Como não há
 /// outros fibers, o scheduler detecta deadlock.
 ///
-/// DoD Fase 8: "Receiver factory: múltiplos receivers independentes" +
+/// DoD: "Receiver factory: múltiplos receivers independentes" +
 /// "Late subscribers não recebem histórico" (Decisão F).
 
 #[test]
@@ -149,7 +149,7 @@ main!()"#;
 /// ao fazer `<!` vê apenas o último (30), pois `version` incrementou 3x
 /// e o receiver só lê o valor atual.
 ///
-/// DoD Fase 8: "Se o receiver é lento e perde mensagens intermediárias,
+/// DoD: "Se o receiver é lento e perde mensagens intermediárias,
 /// vê **a última** quando desbloqueia" (Decisão F).
 
 #[test]
@@ -196,5 +196,9 @@ fn rxf_retorna_receiver_que_pode_receber() {
 main!()"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
-    assert_eq!(untag_smi(raw), 42, "rxf!() deve produzir Receiver que recebe 42");
+    assert_eq!(
+        untag_smi(raw),
+        42,
+        "rxf!() deve produzir Receiver que recebe 42"
+    );
 }

@@ -227,7 +227,7 @@ main!()"#;
 /// Verifica: não deadlocka, valores chegam em ordem FIFO (10, 20, 30),
 /// último recebido = 30.
 ///
-/// DoD Fase 8: "Buffer overflow/backpressure via queue!(N)".
+/// DoD: "Buffer overflow/backpressure via queue!(N)".
 #[serial]
 #[test]
 fn queue_backpressure_capacity_mais_um() {
@@ -265,7 +265,7 @@ main!()"#;
 /// O ponto do teste é que **ambos** forks completam e main recebe de ambos
 /// sem deadlock — prova que múltiplas fibers com args distintos funcionam.
 ///
-/// DoD Fase 8: "fork! com múltiplas fibers e args".
+/// DoD: "fork! com múltiplas fibers e args".
 #[serial]
 #[test]
 fn fork_multiplas_fibers_com_args() {
@@ -289,7 +289,10 @@ action main -> Int
   b
 main!()"#;
     let (raw, _ty) = eval_src(src);
-    assert_ne!(raw, DEADLOCK_SENTINEL, "múltiplos forks não devem deadlockar");
+    assert_ne!(
+        raw, DEADLOCK_SENTINEL,
+        "múltiplos forks não devem deadlockar"
+    );
     // b deve ser 200 (prod_b envia 200). Se o scheduler reordenar, ainda
     // assim `b` é do rx2 (canal de prod_b), sempre 200.
     assert_eq!(
@@ -309,7 +312,7 @@ main!()"#;
 /// O teste verifica que o parent espera o fork completar: o `<!` recebe
 /// o valor (soma 1..5000 = 12502500) e main retorna esse valor.
 ///
-/// DoD Fase 8: "Structured concurrency: parent espera forks".
+/// DoD: "Structured concurrency: parent espera forks".
 #[serial]
 #[test]
 fn structured_concurrency_parent_espera_fork() {
@@ -332,7 +335,10 @@ action main -> Int
   result
 main!()"#;
     let (raw, _ty) = eval_src(src);
-    assert_ne!(raw, DEADLOCK_SENTINEL, "parent não deve deadlockar esperando fork");
+    assert_ne!(
+        raw, DEADLOCK_SENTINEL,
+        "parent não deve deadlockar esperando fork"
+    );
     assert_eq!(
         untag_smi(raw),
         12502500,
@@ -351,7 +357,7 @@ main!()"#;
 /// enviado como escapando para a arena raiz, que sobrevive à morte do
 /// sender. O teste verifica que o consumer recebe 42 sem crash.
 ///
-/// DoD Fase 8: "Escape analysis: valor enviado por canal sobrevive ao
+/// DoD: "Escape analysis: valor enviado por canal sobrevive ao
 /// sender (LCA correto)".
 #[serial]
 #[test]

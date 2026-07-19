@@ -1,4 +1,4 @@
-//! Testes de parsing de diretivas com valores compostos (Fio 14 `@test`).
+//! Testes de parsing de diretivas com valores compostos (`@test`).
 //!
 //! D2: `DirectiveArg` é `Expr(Box<Spanned<Expr>>)` (posicional) ou
 //! `Named { key, value: Box<Spanned<Expr>> }` (nomeado). Valores de diretiva
@@ -33,7 +33,12 @@ fn test_directive_short_form_string_only() {
     assert_eq!(d.name, "test");
     assert_eq!(d.args.len(), 1);
     match &d.args[0] {
-        DirectiveArg::Expr(e) => assert_eq!(e.node, Expr::TextLit { text: "descrição".into() }),
+        DirectiveArg::Expr(e) => assert_eq!(
+            e.node,
+            Expr::TextLit {
+                text: "descrição".into()
+            }
+        ),
         other => panic!("expected Expr TextLit, got {other:?}"),
     }
 }
@@ -50,7 +55,12 @@ fn test_directive_dict_with_tuple_value() {
     match &d.args[0] {
         DirectiveArg::Named { key, value } => {
             assert_eq!(key, "desc");
-            assert_eq!(value.node, Expr::TextLit { text: "soma".into() });
+            assert_eq!(
+                value.node,
+                Expr::TextLit {
+                    text: "soma".into()
+                }
+            );
         }
         other => panic!("expected Named desc, got {other:?}"),
     }
@@ -190,7 +200,12 @@ fn test_directive_dict_with_expects_and_timeout() {
     match &d.args[0] {
         DirectiveArg::Named { key, value } => {
             assert_eq!(key, "desc");
-            assert_eq!(value.node, Expr::TextLit { text: "espera pânico".into() });
+            assert_eq!(
+                value.node,
+                Expr::TextLit {
+                    text: "espera pânico".into()
+                }
+            );
         }
         other => panic!("expected Named desc, got {other:?}"),
     }
@@ -198,7 +213,12 @@ fn test_directive_dict_with_expects_and_timeout() {
     match &d.args[1] {
         DirectiveArg::Named { key, value } => {
             assert_eq!(key, "expects");
-            assert_eq!(value.node, Expr::TextLit { text: "Panic: div".into() });
+            assert_eq!(
+                value.node,
+                Expr::TextLit {
+                    text: "Panic: div".into()
+                }
+            );
         }
         other => panic!("expected Named expects, got {other:?}"),
     }
@@ -206,7 +226,12 @@ fn test_directive_dict_with_expects_and_timeout() {
     match &d.args[2] {
         DirectiveArg::Named { key, value } => {
             assert_eq!(key, "timeout");
-            assert_eq!(value.node, Expr::IntLit { text: "5000".into() });
+            assert_eq!(
+                value.node,
+                Expr::IntLit {
+                    text: "5000".into()
+                }
+            );
         }
         other => panic!("expected Named timeout, got {other:?}"),
     }
@@ -300,7 +325,9 @@ fn test_directive_negative_form() {
             assert_eq!(key, "expects");
             assert_eq!(
                 value.node,
-                Expr::TextLit { text: "CompileError: type mismatch".into() }
+                Expr::TextLit {
+                    text: "CompileError: type mismatch".into()
+                }
             );
         }
         other => panic!("expected Named expects, got {other:?}"),
