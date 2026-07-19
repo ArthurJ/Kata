@@ -1,6 +1,6 @@
 # PRD — Fio 14: `@test` (Test Runner)
 
-**Status:** Implementação (Fases 1-6 ✅, Fase 7 em andamento)
+**Status:** Implementação (Fases 1-7 ✅ — `@test` concluído). `@log` pendente (sub-PRD separado).
 **Data:** 2026-07-18
 **Depende de:** Fio 4 ✅ (Result), Fio 11 ✅ (Actions, scheduler, JIT)
 **Não depende de:** `@parallel` (congelado), `@log` (segunda parte deste fio, adiada para sub-PRD)
@@ -445,14 +445,14 @@ isolados C1 não implementados).
 
 **DoD Fase 6:** Todos os 5 testes passam. `cargo test --workspace` não regrediu.
 
-### Fase 7: Documentação
+### Fase 7: Documentação ✅
 
 - Atualizar `docs/ROADMAP.md` Fio 14 com status `@test` ✅.
 - Atualizar `docs/Kata-lang-manual.md` se a sintaxe divergiu do manual (linha
-  1338-1340 descreve `@test("descrição")` — confirmar compatibilidade).
-- Atualizar `docs/sintaxe-mapa.md` se a diretiva `@test` não estiver listada.
+  1338-1340 descreve `@test("descrição")` — confirmar compatibilidade). ✅ compatível.
+- Atualizar `docs/sintaxe-mapa.md` se a diretiva `@test` não estiver listada. ✅ listada (linha 427).
 
-**DoD Fase 7:** Documentação reflete a implementação.
+**DoD Fase 7:** Documentação reflete a implementação. ✅
 
 ## 10. DoD (Definition of Done)
 
