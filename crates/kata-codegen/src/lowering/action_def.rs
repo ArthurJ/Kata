@@ -142,7 +142,9 @@ pub(crate) fn define_kata_action(
         lower.epilogue_block = Some(epilogue_block);
 
         // Extrai elementos da tupla de args_ptr e liga a variáveis.
-        // O inference define params como __param_0, __param_1, ...
+        // O inference define params como __param_0, __param_1, ... no typeck.
+        // Se a action usa forma nomeada (`x::Tipo`), o body referencia `x`; o
+        // codegen registra `x` como alias da mesma Variable de `__param_N`.
         // args_ptr é um ponteiro para a tupla na arena (ou 0 se Unit).
         let flags = MemFlagsData::new();
         for (i, pt) in action.param_types.iter().enumerate() {
@@ -151,6 +153,11 @@ pub(crate) fn define_kata_action(
             let offset = (i * 8) as i32;
             let val = lower.builder.ins().load(clif_ty, flags, args_ptr, offset);
             lower.builder.def_var(var, val);
+            // Alias: se o param é nomeado (`x::Tipo`), registra `x` apontando
+            // para a mesma Variable. O body referencia `x`, não `__param_N`.
+            if let Some(Some(name)) = action.param_names.get(i) {
+                lower.var_map.insert(name.clone(), var);
+            }
         }
 
         // Body: lowera cada statement em sequência.

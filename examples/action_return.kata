@@ -1,7 +1,7 @@
 # DoD 7: Action retorna tupla via caller's arena sem use-after-free.
 # A Action make_pair constroi (42, 99) na caller's arena (tail_pos=true).
 # O match no entry point extrai o primeiro elemento (42) e imprime.
-action make_pair -> (Int, Int)
+action make_pair => (Int, Int)
     (42, 99)
 
 match make_pair!()

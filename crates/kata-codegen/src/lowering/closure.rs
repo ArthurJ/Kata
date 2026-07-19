@@ -38,14 +38,24 @@ pub(crate) fn lower_closure(
             .unwrap_or_else(|_| (sym_name.clone(), Vec::new(), Ty::Unit));
         if let Some(&func_ref) = ctx.kata_refs.get(&key) {
             let call_inst = ctx.builder.ins().call(func_ref, &arg_values);
-            return Ok(ctx.builder.inst_results(call_inst)[0]);
+            let results = ctx.builder.inst_results(call_inst);
+            if results.is_empty() {
+                return Ok(ctx.builder.ins().iconst(I64, 0));
+            }
+            return Ok(results[0]);
         }
         let func_ref = ctx
             .ffi_refs
             .get(sym_name)
             .ok_or_else(|| super::CodegenError::FfiSymbolNotFound(sym_name.clone()))?;
         let call_inst = ctx.builder.ins().call(*func_ref, &arg_values);
-        Ok(ctx.builder.inst_results(call_inst)[0])
+        // Void FFI (ex: kata_rt_log_config) — sem retorno. Retorna Unit (iconst 0).
+        let results = ctx.builder.inst_results(call_inst);
+        if results.is_empty() {
+            Ok(ctx.builder.ins().iconst(I64, 0))
+        } else {
+            Ok(results[0])
+        }
     } else {
         // ffi_symbol = None: função Kata nomeada ou lambda como valor.
         // Tenta Kata function call direto primeiro.

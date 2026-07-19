@@ -1,4 +1,16 @@
-//! Parse `action nome (params) -> ret` com body indentado.
+//! Parse `action nome (p1::T1, p2::T2, ...) => Ret` com body indentado.
+//!
+//! Sintaxe (após migração total para params nomeados):
+//! ```text
+//! action soma (x::Int, y::Int) => Int
+//!     + x y
+//! ```
+//!
+//! Formas sem params:
+//! - `action greet` — sem params, retorna Unit.
+//! - `action greet => Unit` — sem params, retorno explícito.
+//!
+//! A forma posicional legada (`action nome (T1 T2) -> Ret`) foi removida.
 
 use kata_ast::{ActionStmt, Directive, Item, Spanned, Token, TypeExpr};
 use kata_diagnostics::FrontendError;
@@ -7,17 +19,7 @@ use crate::Parser;
 use crate::expressions::parse_expr;
 
 impl Parser {
-    /// Parse `action nome (params) -> ret` com body indentado.
-    ///
-    /// Sintaxe:
-    /// ```text
-    /// action greet
-    ///     echo!("hello")
-    ///     echo!("world")
-    /// ```
-    ///
-    /// Sem parênteses de params = Action sem parâmetros.
-    /// Sem `-> ret` = retorno Unit (padrão).
+    /// Parse `action nome (p::T, ...) => Ret` com body indentado.
     pub fn parse_action_decl(&mut self, directives: Vec<Directive>) -> Result<Item, FrontendError> {
         self.expect(&Token::Action, "`action`")?;
         let name = match self.peek() {
@@ -29,32 +31,63 @@ impl Parser {
             _ => return Err(self.error("action name")),
         };
 
-        // Params opcionais: `action nome (T1 T2) -> Ret`
-        // ou `action nome -> Ret`
         let mut params = Vec::new();
+        let mut param_names = Vec::new();
         let ret;
 
         if matches!(self.peek(), Token::LParen) {
             self.advance(); // consume (
-            // Parse type params until )
-            while !matches!(self.peek(), Token::RParen | Token::Eof) {
-                params.push(self.parse_type_expr()?);
+            // Skip newlines após `(`
+            while matches!(self.peek(), Token::StmtSep) {
+                self.advance();
+            }
+
+            // Forma nomeada: (x::Tipo, y::Tipo, ...) => Ret
+            loop {
+                while matches!(self.peek(), Token::StmtSep) {
+                    self.advance();
+                }
+                if matches!(self.peek(), Token::RParen) {
+                    break;
+                }
+
+                // Espera: Ident :: Tipo
+                let pname = match self.peek() {
+                    Token::Ident(s) => {
+                        let n = s.clone();
+                        self.advance();
+                        n
+                    }
+                    _ => return Err(self.error("nome do parâmetro")),
+                };
+                self.expect(&Token::DoubleColon, "`::` após nome do parâmetro")?;
+                let ty = self.parse_type_expr()?;
+                params.push(ty);
+                param_names.push(Some(pname));
+
+                if matches!(self.peek(), Token::Comma) {
+                    self.advance();
+                    while matches!(self.peek(), Token::StmtSep) {
+                        self.advance();
+                    }
+                    continue;
+                }
+                break;
             }
             self.expect(&Token::RParen, "`)` (action params)")?;
 
-            // `->` Ret
-            if matches!(self.peek(), Token::ThinArrow) {
+            // `=>` Ret
+            if matches!(self.peek(), Token::FatArrow) {
                 self.advance();
                 ret = self.parse_type_expr()?;
             } else {
-                // Sem `->` = Unit
                 ret = Spanned::new(TypeExpr::Unit, self.peek_span());
             }
-        } else if matches!(self.peek(), Token::ThinArrow) {
+        } else if matches!(self.peek(), Token::FatArrow) {
             self.advance();
             ret = self.parse_type_expr()?;
         } else {
-            // Sem params, sem `->` = Action sem parâmetros, retorna Unit
+            // Sem params, sem `=>` = Action sem parâmetros, retorna Unit
             ret = Spanned::new(TypeExpr::Unit, self.peek_span());
         }
 
@@ -62,7 +95,7 @@ impl Parser {
         let has_ffi = directives.iter().any(|d| d.name == "ffi");
         let body = if has_ffi && !matches!(self.peek(), Token::Indent) {
             // Action FFI builtin sem body — ex: @ffi("kata_rt_print")
-            //                          action echo (Text) -> Unit
+            //                          action echo (msg::Text) => Unit
             Vec::new()
         } else {
             self.expect(&Token::Indent, "INDENT (action body)")?;
@@ -101,6 +134,7 @@ impl Parser {
         Ok(Item::ActionDecl {
             name,
             params,
+            param_names,
             ret,
             directives,
             body,

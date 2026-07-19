@@ -684,12 +684,15 @@ contains/union/intersection funciona. Iteração via ITERABLE produz pares.
 
 ### Fio 14: @log, @test, Test Runner
 
-**Status:** `@test` ✅ Concluído (Fases 1-7, 899 testes). `@log` pendente (sub-PRD separado).
+**Status:** `@test` ✅ Concluído (Fases 1-7, 899 testes). `@log` ✅ Concluído (Fases 1-7, 14 testes E2E).
 
 **Features:**
-- `@log{level, msg, topic, policy}` (telemetria via canais CSP) — **pendente**
+- `@log{level, msg, topic, policy}` (telemetria via canais CSP) — ✅
   - Política `"drop"` (descarta se sobrecarregado)
   - Política `"block"` (bloqueia até confirmação)
+- `log!()` action nativa (posicional) — ✅
+- `log_recv!()` consume telemetria — ✅
+- `log_config!()` herança via snapshot no spawn — ✅
 - `@test("descrição")` (teste positivo) — ✅
 - `@test{desc, expects: "CompileError"}` (teste negativo) — ✅
 - `kata test` (test runner: descobre @test, executa em JIT isolado) — ✅

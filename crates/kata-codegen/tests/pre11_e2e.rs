@@ -103,7 +103,7 @@ fn variant_unitaria_nao_vaza() {
 /// termina.
 #[test]
 fn action_tupla_local_destruida() {
-    let src = "action teste -> (Int, Int)\n    (1, 2)\nteste!()";
+    let src = "action teste => (Int, Int)\n    (1, 2)\nteste!()";
     let (val, _ty) = eval_src(src);
     assert!(val != 0, "tupla deve ser alocada");
 }
@@ -111,7 +111,7 @@ fn action_tupla_local_destruida() {
 /// Action que retorna Int.
 #[test]
 fn action_retorna_int() {
-    let src = "action soma -> Int\n    + 2 3\nsoma!()";
+    let src = "action soma => Int\n    + 2 3\nsoma!()";
     let (val, _ty) = eval_src(src);
     assert_eq!(val >> 1, 5, "soma! deve retornar 5");
 }

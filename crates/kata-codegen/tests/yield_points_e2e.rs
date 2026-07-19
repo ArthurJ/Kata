@@ -92,7 +92,7 @@ const DEADLOCK_SENTINEL: i64 = i64::MIN + 1;
 #[serial]
 #[test]
 fn loop_simples_funciona() {
-    let src = r#"action loop_simples -> Int
+    let src = r#"action loop_simples => Int
   var acc := 0
   var i := 0
   loop
@@ -127,7 +127,7 @@ loop_simples!()"#;
 #[serial]
 #[test]
 fn yield_loop_nao_bloqueia() {
-    let src = r#"action loop_worker (Sender::Int) -> Unit
+    let src = r#"action loop_worker (tx::Sender::Int) => Unit
   var acc := 0
   var i := 0
   loop
@@ -135,9 +135,9 @@ fn yield_loop_nao_bloqueia() {
     match > i 5000
       True: break
       False: acc := + acc i
-  __param_0 !> acc
+  tx !> acc
   ()
-action main -> Int
+action main => Int
   let ch := channel!()
   let tx := ch.0
   let rx := ch.1
@@ -164,13 +164,13 @@ main!()"#;
 #[serial]
 #[test]
 fn yield_forin_nao_bloqueia() {
-    let src = r#"action forin_worker (Sender::Int) -> Unit
+    let src = r#"action forin_worker (tx::Sender::Int) => Unit
   var acc := 0
   for x in {1 2 3 4 5}
     acc := + acc x
-  __param_0 !> acc
+  tx !> acc
   ()
-action main -> Int
+action main => Int
   let ch := channel!()
   let tx := ch.0
   let rx := ch.1

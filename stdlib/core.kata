@@ -206,10 +206,10 @@ from_int :: Int => Rational
 # ── I/O (Actions FFI builtin) ──────────────────────────────────
 
 @ffi("kata_rt_print")
-action echo (Text) -> Unit
+action echo (msg::Text) => Unit
 
 @ffi("kata_rt_panic")
-action panic (Text) -> Unit
+action panic (msg::Text) => Unit
 
 # ── Text conversions ───────────────────────────────────────────
 

@@ -15,7 +15,8 @@ use std::os::raw::c_char;
 
 use crate::arena::kata_rt_arena_create;
 use crate::channel::{
-    kata_rt_broadcast_create, kata_rt_channel_recv, kata_rt_channel_send, kata_rt_queue_create,
+    kata_rt_broadcast_create, kata_rt_broadcast_receiver_create, kata_rt_channel_recv,
+    kata_rt_channel_send, kata_rt_queue_create,
 };
 
 // ── LogConfig TLS ───────────────────────────────────────────
@@ -49,12 +50,26 @@ thread_local! {
     static TOPIC_REGISTRY: RefCell<HashMap<String, i64>> = RefCell::new(HashMap::new());
 }
 
+// Registry de receivers de broadcast por tópico.
+//
+// Para tópicos Broadcast (policy "drop"), `kata_rt_log_recv` precisa de um
+// receiver (tag `TAG_BROADCAST_RX`) para consumir mensagens. O receiver é
+// criado sob demanda na primeira `log_recv` para o tópico e cached aqui.
+// Tópicos Queue (policy "block") não precisam — o handle do canal é usado
+// diretamente.
+thread_local! {
+    static RECEIVER_REGISTRY: RefCell<HashMap<String, i64>> = RefCell::new(HashMap::new());
+}
+
 /// Reseta o estado de log entre execuções. Chamado por `reset_scheduler`.
 pub fn reset_log() {
     LOG_CONFIG.with(|c| {
         c.borrow_mut().take();
     });
     TOPIC_REGISTRY.with(|r| {
+        r.borrow_mut().clear();
+    });
+    RECEIVER_REGISTRY.with(|r| {
         r.borrow_mut().clear();
     });
 }
@@ -105,7 +120,18 @@ fn get_or_create_topic(topic: &str, policy: &str) -> i64 {
             kata_rt_queue_create(arena, 1)
         } else {
             // "drop" ou default → Broadcast
-            kata_rt_broadcast_create(arena)
+            let bh = kata_rt_broadcast_create(arena);
+            // Eagerly cria um receiver para o tópico Broadcast, garantindo
+            // que mensagens publicadas antes de qualquer log_recv! sejam
+            // visíveis. O receiver começa com last_seen_version = 0 (version
+            // atual = 0), então vê todas as mensagens futuras.
+            if bh != 0 {
+                let rx = kata_rt_broadcast_receiver_create(arena, bh);
+                RECEIVER_REGISTRY.with(|rr| {
+                    rr.borrow_mut().insert(topic.to_string(), rx);
+                });
+            }
+            bh
         };
         r.borrow_mut().insert(topic.to_string(), handle);
         handle
@@ -165,6 +191,10 @@ pub extern "C" fn kata_rt_log_publish(
 ///
 /// Recebe a próxima mensagem de telemetria do tópico. Bloqueia (yield point)
 /// se vazio. Retorna o valor (handle Text) ou 0 se canal fechou.
+///
+/// Para tópicos Broadcast (policy "drop"), obtém um receiver via
+/// `kata_rt_broadcast_receiver_create` e o cacheia no `RECEIVER_REGISTRY`.
+/// Para Queue (policy "block"), usa o handle diretamente.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_log_recv(topic_ptr: i64) -> i64 {
     let topic = if topic_ptr != 0 {
@@ -181,7 +211,30 @@ pub extern "C" fn kata_rt_log_recv(topic_ptr: i64) -> i64 {
     let handle = TOPIC_REGISTRY.with(|r| r.borrow().get(&topic).copied());
 
     match handle {
-        Some(h) => kata_rt_channel_recv(h),
+        Some(h) => {
+            // Verifica se é Broadcast (tag 0b10). Se sim, precisa de receiver.
+            let tag = h & 0b11;
+            if tag == 0b10 {
+                // Broadcast — obter ou criar receiver cached.
+                let rx_handle = RECEIVER_REGISTRY.with(|r| {
+                    if let Some(&rx) = r.borrow().get(&topic) {
+                        return rx;
+                    }
+                    // Criar receiver na arena raiz.
+                    let arena = kata_rt_arena_create();
+                    let rx = kata_rt_broadcast_receiver_create(arena, h);
+                    r.borrow_mut().insert(topic.clone(), rx);
+                    rx
+                });
+                if rx_handle == 0 {
+                    return 0; // Falha ao criar receiver.
+                }
+                kata_rt_channel_recv(rx_handle)
+            } else {
+                // Queue ou Channel — recv direto.
+                kata_rt_channel_recv(h)
+            }
+        }
         None => 0, // Tópico não existe → sem mensagem.
     }
 }

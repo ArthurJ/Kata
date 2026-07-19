@@ -78,7 +78,7 @@ fn find_wrapper<'a>(wrappers: &'a [TestWrapper], name: &str, idx: usize) -> &'a 
 #[test]
 fn test_wrapper_desc_sem_args() {
     let src = r#"@test("resposta da vida")
-action resposta -> Int
+action resposta => Int
     42
 resposta!()"#;
     let (_module, wrappers) = compile_tests(src);
@@ -102,8 +102,8 @@ resposta!()"#;
 #[test]
 fn test_wrapper_com_args_tupla() {
     let src = r#"@test{desc: "soma 3+4", args: (3, 4)}
-action soma (Int Int) -> Int
-    + __param_0 __param_1
+action soma (a::Int, b::Int) => Int
+    + a b
 soma!(1, 2)"#;
     let (_module, wrappers) = compile_tests(src);
     assert_eq!(wrappers.len(), 1);
@@ -121,7 +121,7 @@ soma!(1, 2)"#;
 fn test_wrapper_multiplos_tests_mesma_action() {
     let src = r#"@test("caso 1")
 @test("caso 2")
-action res -> Int
+action res => Int
     7
 res!()"#;
     let (_module, wrappers) = compile_tests(src);
@@ -143,7 +143,7 @@ res!()"#;
 #[test]
 fn test_wrapper_negativo_compileerror_placeholder() {
     let src = r#"@test{desc: "tipo errado", expects: "CompileError: TypeMismatch"}
-action valida -> Int
+action valida => Int
     42
 valida!()"#;
     let (_module, wrappers) = compile_tests(src);
@@ -169,7 +169,7 @@ valida!()"#;
 #[test]
 fn test_wrapper_com_timeout() {
     let src = r#"@test{desc: "com timeout", timeout: 5000}
-action rapida -> Int
+action rapida => Int
     1
 rapida!()"#;
     let (_module, wrappers) = compile_tests(src);
@@ -186,7 +186,7 @@ rapida!()"#;
 #[test]
 fn test_wrapper_positivo_tem_func_id_valido() {
     let src = r#"@test("positivo")
-action ok -> Int
+action ok => Int
     1
 ok!()"#;
     let (_module, wrappers) = compile_tests(src);

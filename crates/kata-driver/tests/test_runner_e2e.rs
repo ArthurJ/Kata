@@ -51,7 +51,7 @@ fn test_sem_args_passa() {
     let path = write_temp_kata(
         "test_sem_args_passa",
         r#"@test("resposta")
-action resposta -> Int
+action resposta => Int
     42
 resposta!()"#,
     );
@@ -82,8 +82,8 @@ fn test_com_args_tupla_passa() {
     let path = write_temp_kata(
         "test_com_args_tupla_passa",
         r#"@test{desc: "soma 3+4", args: (3, 4)}
-action soma (Int Int) -> Int
-    + __param_0 __param_1
+action soma (a::Int, b::Int) => Int
+    + a b
 soma!(1, 2)"#,
     );
 
@@ -110,7 +110,7 @@ fn test_timeout_falha() {
     let path = write_temp_kata(
         "test_timeout_falha",
         r#"@test{desc: "loop infinito", timeout: 100}
-action infinito -> Unit
+action infinito => Unit
     var i := 0
     loop
         i := + i 1
@@ -140,8 +140,8 @@ fn test_multiplos_casos_mesma_action() {
         "test_multiplos_casos_mesma_action",
         r#"@test{desc: "caso 3+4", args: (3, 4)}
 @test{desc: "caso 10+20", args: (10, 20)}
-action soma (Int Int) -> Int
-    + __param_0 __param_1
+action soma (a::Int, b::Int) => Int
+    + a b
 soma!(1, 2)"#,
     );
 
@@ -176,8 +176,8 @@ fn test_filter_por_substring() {
         "test_filter_por_substring",
         r#"@test{desc: "soma rapida", args: (3, 4)}
 @test{desc: "soma lenta", args: (10, 20)}
-action soma (Int Int) -> Int
-    + __param_0 __param_1
+action soma (a::Int, b::Int) => Int
+    + a b
 soma!(1, 2)"#,
     );
 
@@ -228,8 +228,8 @@ fn test_sem_args_em_action_com_params_falha_graciosamente() {
     let path = write_temp_kata(
         "test_sem_args_em_action_com_params_falha_graciosamente",
         r#"@test("soma sem args")
-action soma (Int Int) -> Int
-    + __param_0 __param_1
+action soma (a::Int, b::Int) => Int
+    + a b
 soma!(1, 2)"#,
     );
 

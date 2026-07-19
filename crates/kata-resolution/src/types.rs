@@ -102,6 +102,9 @@ pub struct FunctionDef {
 pub struct ActionDef {
     pub name: String,
     pub param_types: Vec<Ty>,
+    /// Nomes dos params. `Some(nome)` para params nomeados (`x::Tipo`),
+    /// `None` para posicional legado (não usado após migração total).
+    pub param_names: Vec<Option<String>>,
     pub return_type: Ty,
     pub body: Vec<ActionStmt>,
     /// Casos de teste anotados com `@test`. Cada `@test` vira um `TestSpec`

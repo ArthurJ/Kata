@@ -403,8 +403,19 @@ fn infer_action(
     let mut action_env = TypeEnv::with_parent(module_type_env.clone());
 
     // Define parâmetros no escopo.
+    // `__param_N` é o nome interno usado pelo codegen (def_var __param_N).
+    // O nome nomeado (`x`) é um alias apontando para o mesmo tipo.
     for (i, ty) in param_types.iter().enumerate() {
         action_env.define(&format!("__param_{i}"), ty.clone());
+    }
+    // Define nomes nomeados dos params (forma nomeada `x::Tipo`) no escopo,
+    // além de `__param_N`. O codegen mapeia `x` → `__param_N` via o typeck.
+    for (i, opt_name) in action_def.param_names.iter().enumerate() {
+        if let Some(name) = opt_name
+            && let Some(ty) = param_types.get(i)
+        {
+            action_env.define(name, ty.clone());
+        }
     }
 
     // Infere cada statement do body em sequência.
@@ -480,11 +491,15 @@ fn infer_action(
     }
 
     // Sintetiza log spec se a action tem @log.
-    // Para actions, params não têm nomes (são __param_0, __param_1, ...).
-    // when: "enter" com qualquer placeholder falha (param_names é vazio).
-    // when: "exit" infere o template no escopo da action (params + vars do corpo).
+    // Params nomeados (forma `x::Tipo`) ficam disponíveis para o template
+    // do `when: "enter"` via param_names. `when: "exit"` infere o template no
+    // escopo da action (params + vars do corpo).
     let log = if let Some(log_spec) = &action_def.log {
-        let param_names: Vec<String> = Vec::new(); // Actions não têm nomes de params
+        let param_names: Vec<String> = action_def
+            .param_names
+            .iter()
+            .filter_map(|n| n.clone())
+            .collect();
         Some(log_synthesis::synthesize_log_spec(
             log_spec,
             &param_names,
@@ -498,6 +513,7 @@ fn infer_action(
     Ok(TypedAction {
         name: action_def.name.clone(),
         param_types: param_types.clone(),
+        param_names: action_def.param_names.clone(),
         ret_ty: ret_ty.clone(),
         body: typed_body,
         tests: typed_tests,

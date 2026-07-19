@@ -184,7 +184,7 @@ fn dod27_empty_list_infere_list_infer_var() {
 
 #[test]
 fn dod28_for_in_defines_x_int() {
-    let src = "action iterar -> Int\n    var total := 0\n    for x in [1 2 3]\n        total := x\n    return total\n0";
+    let src = "action iterar => Int\n    var total := 0\n    for x in [1 2 3]\n        total := x\n    return total\n0";
     let typed = infer_src(src);
     // O for deve estar no body da action.
     let action = &typed.actions[0];

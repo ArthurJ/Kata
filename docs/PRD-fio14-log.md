@@ -1,6 +1,6 @@
 # PRD — Fio 14 `@log`: Telemetria via CSP
 
-**Status:** Planejamento
+**Status:** ✅ Concluído (Fases 1-7, 14 testes E2E)
 **Data:** 2026-07-19
 **Depende de:** Fio 11 ✅ (CSP, scheduler, fibers), Fio 4 ✅ (Result, enum payload)
 **Não depende de:** `@parallel` (congelado)

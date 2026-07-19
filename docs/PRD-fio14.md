@@ -1,6 +1,6 @@
 # PRD — Fio 14: `@test` (Test Runner)
 
-**Status:** Implementação (Fases 1-7 ✅ — `@test` concluído). `@log` pendente (sub-PRD separado).
+**Status:** ✅ Concluído (Fases 1-7 — `@test` e `@log` concluídos).
 **Data:** 2026-07-18
 **Depende de:** Fio 4 ✅ (Result), Fio 11 ✅ (Actions, scheduler, JIT)
 **Não depende de:** `@parallel` (congelado), `@log` (segunda parte deste fio, adiada para sub-PRD)

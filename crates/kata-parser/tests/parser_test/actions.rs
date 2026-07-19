@@ -115,6 +115,7 @@ fn action_decl_no_params_no_ret() {
         Item::ActionDecl {
             name,
             params,
+            param_names: _,
             ret,
             directives,
             body,
@@ -148,13 +149,14 @@ fn action_decl_no_params_no_ret() {
 
 #[test]
 fn action_decl_with_params_and_ret() {
-    let src = "action greet (Text) -> Unit\n    echo!(\"hello\")";
+    let src = "action greet (msg::Text) => Unit\n    echo!(\"hello\")";
     let m = parse_src(src);
     let item = first_item(&m);
     match item {
         Item::ActionDecl {
             name,
             params,
+            param_names,
             ret,
             directives,
             body,
@@ -162,7 +164,10 @@ fn action_decl_with_params_and_ret() {
             assert_eq!(name, "greet");
             assert_eq!(params.len(), 1);
             assert_eq!(params[0].node, TypeExpr::Named("Text".into()));
-            // `-> Unit` parseia como TypeExpr::Named("Unit"), não TypeExpr::Unit (que é `()`).
+            // param nomeado: `msg::Text` → param_names[0] = Some("msg").
+            assert_eq!(param_names.len(), 1);
+            assert_eq!(param_names[0], Some("msg".to_string()));
+            // `=> Unit` parseia como TypeExpr::Named("Unit"), não TypeExpr::Unit (que é `()`).
             assert_eq!(ret.node, TypeExpr::Named("Unit".into()));
             assert!(directives.is_empty());
             assert_eq!(body.len(), 1);
@@ -241,8 +246,8 @@ fn action_decl_last_stmt_semicolon() {
 
 #[test]
 fn action_decl_tuple_return_type() {
-    // Action com tipo de retorno tupla: `-> (Int, Int)`
-    let src = "action make_pair -> (Int, Int)\n    (1, 2)";
+    // Action com tipo de retorno tupla: `=> (Int, Int)`
+    let src = "action make_pair => (Int, Int)\n    (1, 2)";
     let m = parse_src(src);
     let item = first_item(&m);
     match item {
@@ -266,8 +271,8 @@ fn action_decl_tuple_return_type() {
 
 #[test]
 fn action_decl_tuple_return_type_three() {
-    // Tupla com 3 elementos: `-> (Int, Text, Boolean)`
-    let src = "action triple -> (Int, Text, Boolean)\n    (1, \"hi\", True)";
+    // Tupla com 3 elementos: `=> (Int, Text, Boolean)`
+    let src = "action triple => (Int, Text, Boolean)\n    (1, \"hi\", True)";
     let m = parse_src(src);
     let item = first_item(&m);
     match item {

@@ -208,7 +208,7 @@ fn sum_dentro_de_action() {
     Ok(Int)
     Err(Int)
 
-action extrai_ok -> Int
+action extrai_ok => Int
     match Result::Ok 42
         Result::Ok v: v
         Result::Err e: e

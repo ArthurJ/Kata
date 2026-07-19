@@ -60,7 +60,7 @@ fn untag_smi(raw: i64) -> i64 {
 /// O break sai do loop quando i > 5.
 #[test]
 fn loop_com_break_soma_1_a_5() {
-    let src = r#"action soma_loop -> Int
+    let src = r#"action soma_loop => Int
     var i := 0
     var acc := 0
     loop
@@ -79,7 +79,7 @@ soma_loop!()"#;
 /// Loop com break incondicional: executa uma vez e sai.
 #[test]
 fn loop_break_incondicional() {
-    let src = r#"action loop_una -> Int
+    let src = r#"action loop_una => Int
     var x := 0
     loop
         x := + x 1
@@ -99,7 +99,7 @@ loop_una!()"#;
 /// Testa break (i > 5) e continue (i == 3) no mesmo loop.
 #[test]
 fn loop_continue_pula_3() {
-    let src = r#"action soma_pulando -> Int
+    let src = r#"action soma_pulando => Int
     var i := 0
     var acc := 0
     loop

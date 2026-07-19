@@ -102,7 +102,7 @@ fn count_match_in_module(typed: &kata_inference::TypedModule) -> usize {
 /// continua com `Result::Ok 0`. O resultado final é `Ok(0)`.
 #[test]
 fn question_desempacota_result_ok() {
-    let src = r#"action extrai -> Result::(Int, Int)
+    let src = r#"action extrai => Result::(Int, Int)
     let r := Result::Ok 42
     r ?
     Result::Ok 0
@@ -126,7 +126,7 @@ extrai!()"#;
 /// não continua. O resultado final é `Err(99)`.
 #[test]
 fn question_aborta_result_err() {
-    let src = r#"action extrai -> Result::(Int, Int)
+    let src = r#"action extrai => Result::(Int, Int)
     let r := Result::Err 99
     r ?
     Result::Ok 0
@@ -147,7 +147,7 @@ extrai!()"#;
 /// DoD 20: `?` em `Optional::Some 42` desempacota o valor e continua.
 #[test]
 fn question_desempacota_optional_some() {
-    let src = r#"action extrai -> Optional::(Int)
+    let src = r#"action extrai => Optional::(Int)
     let r := Optional::Some 42
     r ?
     Optional::None
@@ -163,7 +163,7 @@ extrai!()"#;
 /// DoD 20: `?` em `Optional::None` aborta com `return None`.
 #[test]
 fn question_aborta_optional_none() {
-    let src = r#"action extrai -> Optional::(Int)
+    let src = r#"action extrai => Optional::(Int)
     let r := Optional::None
     r ?
     Optional::Some 0
@@ -182,7 +182,7 @@ extrai!()"#;
 /// A TAST nunca contém `Question` — sempre `Match`.
 #[test]
 fn question_desugared_para_match_na_tast() {
-    let src = r#"action extrai -> Result::(Int, Int)
+    let src = r#"action extrai => Result::(Int, Int)
     let r := Result::Ok 42
     r ?
     Result::Ok 0
@@ -200,7 +200,7 @@ extrai!()"#;
 /// DoD 20 (infra): Match em Result::Ok do prelude dentro de Action.
 #[test]
 fn match_result_ok_dentro_de_action() {
-    let src = r#"action extrai -> Int
+    let src = r#"action extrai => Int
     match Result::Ok 42
         Result::Ok v: v
         Result::Err e: 0
@@ -213,7 +213,7 @@ extrai!()"#;
 /// DoD 20 (infra): Match em Optional::Some do prelude dentro de Action.
 #[test]
 fn match_optional_some_dentro_de_action() {
-    let src = r#"action extrai -> Int
+    let src = r#"action extrai => Int
     match Optional::Some 42
         Optional::Some v: v
         Optional::None: 0
@@ -226,7 +226,7 @@ extrai!()"#;
 /// DoD 20 (infra): Match em Result::Err do prelude dentro de Action.
 #[test]
 fn match_result_err_dentro_de_action() {
-    let src = r#"action extrai -> Int
+    let src = r#"action extrai => Int
     match Result::Err 99
         Result::Ok v: v
         Result::Err e: 0
@@ -239,7 +239,7 @@ extrai!()"#;
 /// DoD 20 (infra): Match em Optional::None do prelude dentro de Action.
 #[test]
 fn match_optional_none_dentro_de_action() {
-    let src = r#"action extrai -> Int
+    let src = r#"action extrai => Int
     match Optional::None
         Optional::Some v: v
         Optional::None: 0

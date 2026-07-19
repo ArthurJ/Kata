@@ -93,7 +93,7 @@ const DEADLOCK_SENTINEL: i64 = i64::MIN + 1;
 #[serial]
 #[test]
 fn broadcast_pubsub_multiplos_receivers() {
-    let src = r#"action main -> Int
+    let src = r#"action main => Int
   let bcast := broadcast!()
   let tx := bcast.0
   let rxf := bcast.1
@@ -126,7 +126,7 @@ main!()"#;
 
 #[test]
 fn receiver_factory_late_subscriber_nao_recebe_historico() {
-    let src = r#"action main -> Int
+    let src = r#"action main => Int
   let bcast := broadcast!()
   let tx := bcast.0
   let rxf := bcast.1
@@ -154,7 +154,7 @@ main!()"#;
 
 #[test]
 fn broadcast_multiplos_sends_latest_only() {
-    let src = r#"action main -> Int
+    let src = r#"action main => Int
   let bcast := broadcast!()
   let tx := bcast.0
   let rxf := bcast.1
@@ -185,7 +185,7 @@ main!()"#;
 
 #[test]
 fn rxf_retorna_receiver_que_pode_receber() {
-    let src = r#"action main -> Int
+    let src = r#"action main => Int
   let bcast := broadcast!()
   let tx := bcast.0
   let rxf := bcast.1

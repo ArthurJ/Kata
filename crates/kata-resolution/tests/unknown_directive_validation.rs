@@ -51,7 +51,7 @@ fn unknown_directive_in_action_rejected() {
 #[test]
 fn test_directive_in_action_accepted() {
     // @test é válida em Action — resolve deve succeed
-    let tokens = lex("@test(\"desc\")\naction foo -> Int\n    return 42").unwrap();
+    let tokens = lex("@test(\"desc\")\naction foo => Int\n    return 42").unwrap();
     let module = parse(tokens).unwrap();
     resolve(&module).expect("@test em Action deve ser aceita");
 }

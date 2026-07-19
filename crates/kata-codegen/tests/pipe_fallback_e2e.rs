@@ -154,7 +154,7 @@ fn pipe_fallback_user_enum_segunda_variante() {
 /// DoD 23: `|` dentro de Action (com Optional).
 #[test]
 fn pipe_fallback_dentro_de_action() {
-    let src = "action extrai -> Int\n    let r := Optional::Some 42\n    r | 0\nextrai!()";
+    let src = "action extrai => Int\n    let r := Optional::Some 42\n    r | 0\nextrai!()";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
     assert_eq!(untag_smi(raw), 42, "r | 0 dentro de Action deve ser 42");
@@ -163,7 +163,7 @@ fn pipe_fallback_dentro_de_action() {
 /// DoD 23: `|` dentro de Action com None — avalia fallback.
 #[test]
 fn pipe_fallback_dentro_de_action_none() {
-    let src = "action extrai -> Int\n    let r := Optional::None\n    r | 0\nextrai!()";
+    let src = "action extrai => Int\n    let r := Optional::None\n    r | 0\nextrai!()";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
     assert_eq!(untag_smi(raw), 0, "r | 0 com None deve ser 0");

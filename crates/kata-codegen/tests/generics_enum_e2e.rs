@@ -116,7 +116,7 @@ fn result_com_tipos_diferentes() {
 /// DoD 19: Match em Result dentro de uma Action.
 #[test]
 fn result_dentro_de_action() {
-    let src = r#"action extrai_ok -> Int
+    let src = r#"action extrai_ok => Int
     match Result::Ok 42
         Result::Ok v: v
         Result::Err e: e
@@ -129,7 +129,7 @@ extrai_ok!()"#;
 /// DoD 19: Match em Result dentro de uma Action.
 #[test]
 fn optional_none_dentro_de_action() {
-    let src = r#"action extrai_optional -> Int
+    let src = r#"action extrai_optional => Int
     match Optional::None
         Optional::Some v: v
         Optional::None: 0

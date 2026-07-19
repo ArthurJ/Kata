@@ -189,7 +189,7 @@ fn varargs_em_action_desugara_para_tupla() {
     // A assinatura (Int...) deve desugarar para Tuple<Int>. O body da
     // Action é trivial (42). O erro de dispatch no call site é esperado
     // — a feature de empacotamento no call site ainda não está implementada.
-    let src = "action soma_tupla (Int...) -> Int\n    42\n42";
+    let src = "action soma_tupla (args::Int...) => Int\n    42\n42";
     let result = infer_src(src);
     assert!(
         result.is_ok(),

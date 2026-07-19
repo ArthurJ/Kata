@@ -132,7 +132,7 @@ fn queue_create_type_check() {
 // O body da action tem `let tx := (channel!()).0` e `tx !> 42`.
 #[test]
 fn channel_send_type_check() {
-    let src = "action prod -> Unit\n  let tx := (channel!()).0\n  tx !> 42\nprod!()";
+    let src = "action prod => Unit\n  let tx := (channel!()).0\n  tx !> 42\nprod!()";
     let tmod = infer_src(src);
     // Se chegou aqui sem erro, o typeck aceitou tx !> 42 com tx: Sender.
     let _ = entry(&tmod);
@@ -141,7 +141,7 @@ fn channel_send_type_check() {
 // ── Teste 5: rx !> 42 com rx: Receiver → TypeMismatch ───────────────
 #[test]
 fn send_from_receiver_type_mismatch() {
-    let src = "action prod -> Unit\n  let rx := (channel!()).1\n  rx !> 42\nprod!()";
+    let src = "action prod => Unit\n  let rx := (channel!()).1\n  rx !> 42\nprod!()";
     let err = infer_src_err(src);
     assert!(
         matches!(err, kata_diagnostics::MiddleError::TypeMismatch { .. }),
@@ -152,7 +152,7 @@ fn send_from_receiver_type_mismatch() {
 // ── Teste 6: tx <! v com tx: Sender → TypeMismatch ─────────────────
 #[test]
 fn recv_from_sender_type_mismatch() {
-    let src = "action prod -> Unit\n  let tx := (channel!()).0\n  let x := tx <! v\nprod!()";
+    let src = "action prod => Unit\n  let tx := (channel!()).0\n  let x := tx <! v\nprod!()";
     let err = infer_src_err(src);
     assert!(
         matches!(err, kata_diagnostics::MiddleError::TypeMismatch { .. }),
@@ -163,7 +163,7 @@ fn recv_from_sender_type_mismatch() {
 // ── Teste 7: fork!(nao_existe, ()) → UnboundName ────────────────────
 #[test]
 fn fork_non_action_unbound() {
-    let src = "action prod -> Unit\n  fork!(nao_existe, ())\nprod!()";
+    let src = "action prod => Unit\n  fork!(nao_existe, ())\nprod!()";
     let err = infer_src_err(src);
     assert!(
         matches!(err, kata_diagnostics::MiddleError::UnboundName { .. }),
@@ -174,7 +174,7 @@ fn fork_non_action_unbound() {
 // ── Teste 8: fork!(echo, ("hello")) → OK (echo é Action declarada) ──
 #[test]
 fn fork_valid_action() {
-    let src = "action prod -> Unit\n  fork!(echo, (\"hello\"))\nprod!()";
+    let src = "action prod => Unit\n  fork!(echo, (\"hello\"))\nprod!()";
     let tmod = infer_src(src);
     // Se chegou aqui, fork! aceitou echo como Action válida.
     let _ = entry(&tmod);

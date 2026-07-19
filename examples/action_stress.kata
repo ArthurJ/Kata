@@ -7,10 +7,10 @@
 # Com pool de arenas + Modelo D: cada Action tem sua arena,
 # valores em tail_pos vão para a caller_arena transitiva (global).
 
-action innermost -> (Int, Int)
+action innermost => (Int, Int)
     (111, 222)
 
-action middle -> (Int, Int)
+action middle => (Int, Int)
     # Aloca tupla local (non-tail-pos) — vai para local_arena de middle.
     # Isso pode sobrescrever memória se arenas não são separadas.
     (999, 888);
@@ -18,7 +18,7 @@ action middle -> (Int, Int)
     # = caller_arena de outer = arena global (handle 0).
     innermost!()
 
-action outer -> (Int, Int)
+action outer => (Int, Int)
     # Aloca tupla local (non-tail-pos) — vai para local_arena de outer.
     # Mais uma alocação que poderia sobrescrever o valor de middle.
     (777, 666);

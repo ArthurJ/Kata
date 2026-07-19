@@ -424,7 +424,7 @@ fn infer_log_builtin(
         });
     }
 
-    // Topic: Text opcional → 0 se ausente.
+    // Topic: Text opcional → 0 se ausente (Unit lowera como iconst(0), não SMI).
     let topic_typed = if let Some(elem) = elements.get(2) {
         let t = super::expr::infer_expr(&elem.node, &elem.span, env, ctx, false)?;
         if t.ty != Ty::text() {
@@ -442,11 +442,11 @@ fn infer_log_builtin(
             tail_pos: false,
             escape: kata_core::escape::EscapeTarget::Local,
             effect: Effect::Puro,
-            kind: TypedExprKind::IntLit { text: "0".into() },
+            kind: TypedExprKind::Unit,
         }
     };
 
-    // Policy: Text opcional → 0 se ausente.
+    // Policy: Text opcional → 0 se ausente (Unit lowera como iconst(0), não SMI).
     let policy_typed = if let Some(elem) = elements.get(3) {
         let t = super::expr::infer_expr(&elem.node, &elem.span, env, ctx, false)?;
         if t.ty != Ty::text() {
@@ -464,7 +464,7 @@ fn infer_log_builtin(
             tail_pos: false,
             escape: kata_core::escape::EscapeTarget::Local,
             effect: Effect::Puro,
-            kind: TypedExprKind::IntLit { text: "0".into() },
+            kind: TypedExprKind::Unit,
         }
     };
 
@@ -491,13 +491,15 @@ fn infer_log_builtin(
         effect: Effect::Puro,
         kind: TypedExprKind::Closure {
             callee: Box::new(Spanned::new(callee, args.span)),
+            // Ordem dos args coincide com a assinatura da FFI:
+            // kata_rt_log_publish(topic_ptr, level, msg, policy_ptr).
             args: vec![
-                Spanned::new(level_val, elements[0].span),
-                Spanned::new(msg_typed, elements[1].span),
                 Spanned::new(
                     topic_typed,
                     elements.get(2).map(|e| e.span).unwrap_or(args.span),
                 ),
+                Spanned::new(level_val, elements[0].span),
+                Spanned::new(msg_typed, elements[1].span),
                 Spanned::new(
                     policy_typed,
                     elements.get(3).map(|e| e.span).unwrap_or(args.span),
@@ -538,7 +540,7 @@ fn infer_log_recv_builtin(
 
     let callee = TypedExpr {
         span: args.span,
-        ty: Ty::Function(vec![Ty::text()], Box::new(Ty::int())),
+        ty: Ty::Function(vec![Ty::text()], Box::new(Ty::text())),
         tail_pos: false,
         escape: kata_core::escape::EscapeTarget::Local,
         effect: Effect::Puro,
@@ -549,7 +551,7 @@ fn infer_log_recv_builtin(
 
     let typed = TypedExpr {
         span: args.span,
-        ty: Ty::int(),
+        ty: Ty::text(),
         tail_pos: false,
         escape: kata_core::escape::EscapeTarget::Ancestor(0),
         effect: Effect::Puro,
@@ -634,17 +636,20 @@ fn infer_log_config_builtin(
     Ok(ActionDispatch::Complete(typed))
 }
 
-/// Extrai elementos de uma tupla ou Grouping de tupla.
+/// Extrai elementos de uma tupla, Grouping de tupla, ou Grouping de expr única.
+///
+/// O parser produz `Grouping(inner)` para `f!(x)` (1 arg) e `Tuple([...])` para
+/// `f!(x, y)` (2+ args). Para builtins como `log_recv!(x)` que exigem 1 arg,
+/// tratamos `Grouping(x)` como tupla de 1 elemento `[x]` — mesmo padrão que
+/// `infer_action_call` aplica ao normalizar args de ActionCall.
 fn extract_tuple_elements(args: &Spanned<Expr>) -> Result<Vec<Spanned<Expr>>, MiddleError> {
     match &args.node {
         Expr::Tuple { elements } => Ok(elements.clone()),
         Expr::Grouping { inner } => match &inner.node {
             Expr::Tuple { elements } => Ok(elements.clone()),
-            _ => Err(MiddleError::TypeMismatch {
-                expected: "Tuple".into(),
-                found: format!("{:?}", inner.node),
-                span: args.span.into(),
-            }),
+            // Grouping de expr única = tupla de 1 elemento.
+            // `log_recv!("x")` parseia como Grouping(TextLit("x")).
+            other => Ok(vec![Spanned::new(other.clone(), inner.span)]),
         },
         Expr::Unit => Ok(Vec::new()),
         _ => Err(MiddleError::TypeMismatch {

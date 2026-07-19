@@ -454,6 +454,9 @@ pub struct TypedAction {
     pub name: String,
     /// Tipos dos parâmetros (elementos da tupla de argumentos).
     pub param_types: Vec<Ty>,
+    /// Nomes dos params. `Some(nome)` para params nomeados (`x::Tipo`),
+    /// `None` para posicional legado. Paralelo a `param_types`.
+    pub param_names: Vec<Option<String>>,
     /// Tipo de retorno.
     pub ret_ty: Ty,
     /// Body da Action (statements sequenciais).

@@ -63,6 +63,9 @@ pub enum Item {
         name: String,
         /// Parâmetros da Action (uma tupla tipada, ou vazia).
         params: Vec<Spanned<TypeExpr>>,
+        /// Nomes dos params. `Some(nome)` se o param é nomeado (`x::Tipo`),
+        /// `None` se posicional (legado — não usado após migração total).
+        param_names: Vec<Option<String>>,
         ret: Spanned<TypeExpr>,
         directives: Vec<Directive>,
         /// Body da Action (statements sequenciais).

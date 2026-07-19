@@ -59,10 +59,10 @@ fn untag_smi(raw: i64) -> i64 {
 // ── Teste 1: Action simples executa em fiber — resultado correto ──
 
 /// Action sem args que retorna um literal Int.
-/// `action simples -> Int` retorna 42. Deve executar em 1 fiber.
+/// `action simples => Int` retorna 42. Deve executar em 1 fiber.
 #[test]
 fn action_simples_fiber() {
-    let src = "action simples -> Int\n    42\nsimples!()";
+    let src = "action simples => Int\n    42\nsimples!()";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
     assert_eq!(untag_smi(raw), 42, "simples!() deve retornar 42");
@@ -73,11 +73,11 @@ fn action_simples_fiber() {
 /// A chama B, B chama C, C retorna 7. Tudo no mesmo fiber.
 #[test]
 fn action_aninhada_a_b_c() {
-    let src = r#"action c -> Int
+    let src = r#"action c => Int
     7
-action b -> Int
+action b => Int
     c!()
-action a -> Int
+action a => Int
     b!()
 a!()"#;
     let (raw, ty) = eval_src(src);
@@ -90,8 +90,8 @@ a!()"#;
 /// Action com 2 args Int que os soma.
 #[test]
 fn action_com_args_tupla() {
-    let src = r#"action soma (Int Int) -> Int
-    + __param_0 __param_1
+    let src = r#"action soma (a::Int, b::Int) => Int
+    + a b
 soma!(3, 4)"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
@@ -103,8 +103,8 @@ soma!(3, 4)"#;
 /// `action!(x)` produz Grouping no parser, normalizado para Tuple de 1.
 #[test]
 fn action_com_1_arg_grouping() {
-    let src = r#"action dobra (Int) -> Int
-    * __param_0 2
+    let src = r#"action dobra (x::Int) => Int
+    * x 2
 dobra!(21)"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
@@ -116,7 +116,7 @@ dobra!(21)"#;
 /// `action!()` com Unit — args_ptr deve ser 0, sem loads.
 #[test]
 fn action_sem_args_unit() {
-    let src = r#"action resposta -> Int
+    let src = r#"action resposta => Int
     42
 resposta!()"#;
     let (raw, ty) = eval_src(src);
@@ -129,7 +129,7 @@ resposta!()"#;
 /// Action que aloca uma tupla na arena do fiber e a acessa.
 #[test]
 fn action_aloca_na_arena_do_fiber() {
-    let src = r#"action aloca -> Int
+    let src = r#"action aloca => Int
     let t := (10, 20)
     match t
         (a, b): + a b
@@ -146,7 +146,7 @@ aloca!()"#;
 /// O caller acessa o valor — deve ser válido após o fiber (e sua arena) ser destruído.
 #[test]
 fn action_valor_sobrevive_fiber() {
-    let src = r#"action cria_tupla -> (Int, Int)
+    let src = r#"action cria_tupla => (Int, Int)
     (1, 2)
 match cria_tupla!()
     (a, b): + a b
@@ -163,7 +163,7 @@ match cria_tupla!()
 #[allow(clippy::approx_constant)]
 #[test]
 fn action_retorna_float() {
-    let src = r#"action pi -> Float
+    let src = r#"action pi => Float
     3.14
 pi!()"#;
     let (raw, ty) = eval_src(src);

@@ -64,7 +64,7 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
 /// O braço True é tomado — retorna Unit. panic!(msg) não é avaliado.
 #[test]
 fn assert_true_retorna_unit() {
-    let src = "action valida -> Unit\n    assert!(Boolean::True, \"x deve ser positivo\")\n    echo!(\"ok\")\nvalida!()";
+    let src = "action valida => Unit\n    assert!(Boolean::True, \"x deve ser positivo\")\n    echo!(\"ok\")\nvalida!()";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Unit, "assert!(True) deve retornar Unit");
     assert_eq!(raw, 0, "Unit é 0");
@@ -74,7 +74,7 @@ fn assert_true_retorna_unit() {
 /// Desugar: `match Boolean::True { True: Unit, False: panic!("assertion failed") }`.
 #[test]
 fn assert_true_sem_msg() {
-    let src = "action valida -> Unit\n    assert!(Boolean::True)\n    echo!(\"ok\")\nvalida!()";
+    let src = "action valida => Unit\n    assert!(Boolean::True)\n    echo!(\"ok\")\nvalida!()";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Unit);
     assert_eq!(raw, 0);
@@ -84,7 +84,7 @@ fn assert_true_sem_msg() {
 //
 // panic! chama std::process::exit(1) que mata o processo de teste inteiro.
 // Para validar manualmente:
-//   echo 'action crash -> Unit
+//   echo 'action crash => Unit
 //       panic!("estado impossivel")
 //   crash!()' > /tmp/test_panic.kata
 //   cargo run --bin kata -- run /tmp/test_panic.kata
@@ -94,7 +94,7 @@ fn assert_true_sem_msg() {
 #[test]
 #[ignore = "panic! chama exit(1) — mata o runner de testes. Validar via `cargo run --bin kata -- run <file>`"]
 fn panic_aborta_com_mensagem() {
-    let src = "action crash -> Unit\n    panic!(\"estado impossivel\")\ncrash!()";
+    let src = "action crash => Unit\n    panic!(\"estado impossivel\")\ncrash!()";
     let (raw, _) = eval_src(src);
     // Se chegou aqui, panic! não abortou — bug.
     let _ = raw;
@@ -105,7 +105,7 @@ fn panic_aborta_com_mensagem() {
 #[test]
 #[ignore = "assert!(False) desugara para panic! que chama exit(1). Validar via subprocess."]
 fn assert_false_aborta() {
-    let src = "action valida -> Unit\n    assert!(Boolean::False, \"x deve ser positivo\")\n    echo!(\"nao chega\")\nvalida!()";
+    let src = "action valida => Unit\n    assert!(Boolean::False, \"x deve ser positivo\")\n    echo!(\"nao chega\")\nvalida!()";
     let (raw, _) = eval_src(src);
     let _ = raw;
     panic!("assert!(False) deveria ter abortado");

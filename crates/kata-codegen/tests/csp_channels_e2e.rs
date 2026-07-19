@@ -122,10 +122,10 @@ fn broadcast_create_retorna_tupla() {
 #[serial]
 #[test]
 fn producer_consumer_rendezvous() {
-    let src = r#"action prod (Sender::Int) -> Unit
-  __param_0 !> 42
+    let src = r#"action prod (tx::Sender::Int) => Unit
+  tx !> 42
   ()
-action main -> Int
+action main => Int
   let ch := channel!()
   let tx := ch.0
   let rx := ch.1
@@ -149,10 +149,10 @@ main!()"#;
 #[serial]
 #[test]
 fn producer_consumer_queue_buffered() {
-    let src = r#"action prod (Sender::Int) -> Unit
-  __param_0 !> 7
+    let src = r#"action prod (tx::Sender::Int) => Unit
+  tx !> 7
   ()
-action main -> Int
+action main => Int
   let ch := queue!(2)
   let tx := ch.0
   let rx := ch.1
@@ -176,7 +176,7 @@ main!()"#;
 #[serial]
 #[test]
 fn deadlock_sem_producer() {
-    let src = r#"action main -> Int
+    let src = r#"action main => Int
   let ch := channel!()
   let rx := ch.1
   rx <! val
@@ -197,12 +197,12 @@ main!()"#;
 #[serial]
 #[test]
 fn multiplos_valores_queue() {
-    let src = r#"action prod (Sender::Int) -> Unit
-  __param_0 !> 10
-  __param_0 !> 20
-  __param_0 !> 30
+    let src = r#"action prod (tx::Sender::Int) => Unit
+  tx !> 10
+  tx !> 20
+  tx !> 30
   ()
-action main -> Int
+action main => Int
   let ch := queue!(3)
   let tx := ch.0
   let rx := ch.1
@@ -231,12 +231,12 @@ main!()"#;
 #[serial]
 #[test]
 fn queue_backpressure_capacity_mais_um() {
-    let src = r#"action prod (Sender::Int) -> Unit
-  __param_0 !> 10
-  __param_0 !> 20
-  __param_0 !> 30
+    let src = r#"action prod (tx::Sender::Int) => Unit
+  tx !> 10
+  tx !> 20
+  tx !> 30
   ()
-action main -> Int
+action main => Int
   let ch := queue!(2)
   let tx := ch.0
   let rx := ch.1
@@ -260,7 +260,7 @@ main!()"#;
 /// Main fork 2 produtores distintos (prod_a envia 100, prod_b envia 200),
 /// cada um com seu canal. Main recebe dos dois e retorna a soma.
 ///
-/// Como não podemos somar `Var("T0")` (limitação do typeck), retornamos
+/// Como não podemos somar `Var(\"T0\")` (limitação do typeck), retornamos
 /// `b` e verificamos que é 200 (ou 100, dependendo da ordem do scheduler).
 /// O ponto do teste é que **ambos** forks completam e main recebe de ambos
 /// sem deadlock — prova que múltiplas fibers com args distintos funcionam.
@@ -269,13 +269,13 @@ main!()"#;
 #[serial]
 #[test]
 fn fork_multiplas_fibers_com_args() {
-    let src = r#"action prod_a (Sender::Int) -> Unit
-  __param_0 !> 100
+    let src = r#"action prod_a (tx::Sender::Int) => Unit
+  tx !> 100
   ()
-action prod_b (Sender::Int) -> Unit
-  __param_0 !> 200
+action prod_b (tx::Sender::Int) => Unit
+  tx !> 200
   ()
-action main -> Int
+action main => Int
   let ch1 := channel!()
   let tx1 := ch1.0
   let rx1 := ch1.1
@@ -316,7 +316,7 @@ main!()"#;
 #[serial]
 #[test]
 fn structured_concurrency_parent_espera_fork() {
-    let src = r#"action worker (Sender::Int) -> Unit
+    let src = r#"action worker (tx::Sender::Int) => Unit
   var acc := 0
   var i := 0
   loop
@@ -324,9 +324,9 @@ fn structured_concurrency_parent_espera_fork() {
     match > i 5000
       True: break
       False: acc := + acc i
-  __param_0 !> acc
+  tx !> acc
   ()
-action main -> Int
+action main => Int
   let ch := channel!()
   let tx := ch.0
   let rx := ch.1
@@ -362,10 +362,10 @@ main!()"#;
 #[serial]
 #[test]
 fn escape_canal_sobrevive_sender() {
-    let src = r#"action prod (Sender::Int) -> Unit
-  __param_0 !> 42
+    let src = r#"action prod (tx::Sender::Int) => Unit
+  tx !> 42
   ()
-action main -> Int
+action main => Int
   let ch := channel!()
   let tx := ch.0
   let rx := ch.1

@@ -1147,12 +1147,22 @@ Funções recebem dados, avaliam de forma estrita (eager) e devolvem dados.
 As *Actions* interagem com o sistema operativo, o escalonador e a memória
 mutável local.
 
-**Declaração:** A definição da Action não usa `!` no nome:
+**Declaração:** A definição da Action não usa `!` no nome. Params nomeados
+usam `nome::Tipo` separados por vírgula; `=>` separa params de retorno:
 
 ```kata
+action soma (a::Int, b::Int) => Int
+    + a b
+
 action conectar_servidor
     ...
 ```
+
+- **Params nomeados:** `(a::Int, b::Int)` — `::` etiqueta nome→tipo, vírgula
+  separa params. O body referencia `a`, `b` (não `__param_N`).
+- **Sem params:** `action nome` ou `action nome => Unit`.
+- **Retorno:** `=> Tipo` após os params (ou após o nome se sem params).
+  Sem `=>` = retorno `Unit` (padrão).
 
 **Chamada:** Toda chamada a *Action* exige obrigatoriamente o sufixo `!` e uma
 tupla como argumento:

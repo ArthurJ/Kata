@@ -57,10 +57,10 @@ fn infer_ok(src: &str) {
 
 // ── Teste 1: Recursão direta — A chama A ──────────────────────────────
 
-/// `action a -> Int\n    a!()` → RecursiveAction.
+/// `action a => Int\n    a!()` → RecursiveAction.
 #[test]
 fn recursao_direta() {
-    let src = "action a -> Int\n    a!()\na!()";
+    let src = "action a => Int\n    a!()\na!()";
     let err = infer_err(src);
     assert!(
         matches!(err, MiddleError::RecursiveAction { .. }),
@@ -73,7 +73,7 @@ fn recursao_direta() {
 /// A chama B, B chama A → ciclo A → B → A.
 #[test]
 fn recursao_indireta_a_b_a() {
-    let src = "action a -> Int\n    b!()\naction b -> Int\n    a!()\na!()";
+    let src = "action a => Int\n    b!()\naction b => Int\n    a!()\na!()";
     let err = infer_err(src);
     assert!(
         matches!(err, MiddleError::RecursiveAction { .. }),
@@ -93,16 +93,16 @@ fn recursao_indireta_a_b_a() {
 /// A chama B, B chama C, C retorna 7. Sem ciclo — deve passar.
 #[test]
 fn sem_recursao_cadeia_linear() {
-    let src = "action c -> Int\n    7\naction b -> Int\n    c!()\naction a -> Int\n    b!()\na!()";
+    let src = "action c => Int\n    7\naction b => Int\n    c!()\naction a => Int\n    b!()\na!()";
     infer_ok(src);
 }
 
 // ── Teste 4: Action sem chamadas ──────────────────────────────────────
 
-/// `action simples -> Int\n    42` — sem chamadas, sem recursão.
+/// `action simples => Int\n    42` — sem chamadas, sem recursão.
 #[test]
 fn action_sem_chamadas() {
-    let src = "action simples -> Int\n    42\nsimples!()";
+    let src = "action simples => Int\n    42\nsimples!()";
     infer_ok(src);
 }
 
@@ -114,7 +114,7 @@ fn action_chama_funcao_pura() {
     // Usa função nomeada do prelude (+ _ 1) aplicada na Action.
     // `+` é uma função pura — ActionCall só acontece com `!`.
     let src = r#"+ 5 1
-action a -> Int
+action a => Int
     + 5 1
 a!()"#;
     infer_ok(src);
@@ -125,7 +125,7 @@ a!()"#;
 /// Action chama echo! (builtin FFI) — não entra no call graph.
 #[test]
 fn ffi_builtin_nao_conta() {
-    let src = r#"action a -> Unit
+    let src = r#"action a => Unit
     echo!("hello")
 a!()"#;
     infer_ok(src);
@@ -133,10 +133,10 @@ a!()"#;
 
 // ── Teste 7: Recursão em Action com params ───────────────────────────
 
-/// `action fat (Int) -> Int\n    fat!(n)` → RecursiveAction.
+/// `action fat (n::Int) => Int\n    fat!(n)` → RecursiveAction.
 #[test]
 fn recursao_com_params() {
-    let src = "action fat (Int) -> Int\n    fat!(0)\nfat!(5)";
+    let src = "action fat (n::Int) => Int\n    fat!(0)\nfat!(5)";
     let err = infer_err(src);
     assert!(
         matches!(err, MiddleError::RecursiveAction { .. }),
@@ -150,7 +150,7 @@ fn recursao_com_params() {
 #[test]
 fn ciclo_de_tres() {
     let src =
-        "action a -> Int\n    b!()\naction b -> Int\n    c!()\naction c -> Int\n    a!()\na!()";
+        "action a => Int\n    b!()\naction b => Int\n    c!()\naction c => Int\n    a!()\na!()";
     let err = infer_err(src);
     assert!(
         matches!(err, MiddleError::RecursiveAction { .. }),

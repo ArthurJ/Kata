@@ -82,13 +82,13 @@ const DEADLOCK_SENTINEL: i64 = i64::MIN + 1;
 #[serial]
 #[test]
 fn select_2_receivers_dispara() {
-    let src = r#"action prod_a (Sender::Int) -> Unit
-  __param_0 !> 100
+    let src = r#"action prod_a (ch::Sender::Int) => Unit
+  ch !> 100
   ()
-action prod_b (Sender::Int) -> Unit
-  __param_0 !> 200
+action prod_b (ch::Sender::Int) => Unit
+  ch !> 200
   ()
-action main -> Int
+action main => Int
   let ch1 := channel!()
   let tx1 := ch1.0
   let rx1 := ch1.1
@@ -119,7 +119,7 @@ main!()"#;
 #[serial]
 #[test]
 fn select_timeout_dispara() {
-    let src = r#"action main -> Int
+    let src = r#"action main => Int
   let ch1 := channel!()
   let rx1 := ch1.1
   let ch2 := channel!()
@@ -146,7 +146,7 @@ main!()"#;
 #[serial]
 #[test]
 fn select_sem_timeout_deadlock() {
-    let src = r#"action main -> Int
+    let src = r#"action main => Int
   let ch1 := channel!()
   let rx1 := ch1.1
   let ch2 := channel!()
@@ -169,10 +169,10 @@ main!()"#;
 #[serial]
 #[test]
 fn select_3_receivers_primeiro_pronto() {
-    let src = r#"action prod (Sender::Int) -> Unit
-  __param_0 !> 42
+    let src = r#"action prod (ch::Sender::Int) => Unit
+  ch !> 42
   ()
-action main -> Int
+action main => Int
   let ch1 := channel!()
   let tx1 := ch1.0
   let rx1 := ch1.1
@@ -204,10 +204,10 @@ main!()"#;
 #[serial]
 #[test]
 fn select_dado_chega_antes_timeout() {
-    let src = r#"action prod (Sender::Int) -> Unit
-  __param_0 !> 55
+    let src = r#"action prod (ch::Sender::Int) => Unit
+  ch !> 55
   ()
-action main -> Int
+action main => Int
   let ch := channel!()
   let tx := ch.0
   let rx := ch.1

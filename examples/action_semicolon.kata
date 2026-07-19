@@ -2,7 +2,7 @@
 # Retorno aloca tupla na caller's arena (sobrevive).
 # Se o `;` vazasse para a caller's arena, poderia corromper o retorno.
 # O match extrai 42 do retorno, não da tupla local.
-action leak_test -> (Int, Int)
+action leak_test => (Int, Int)
     (1, 2);
     (42, 99)
 

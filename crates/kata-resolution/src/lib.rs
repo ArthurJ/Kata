@@ -133,6 +133,7 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
             Item::ActionDecl {
                 name,
                 params,
+                param_names,
                 ret,
                 directives: action_dirs,
                 body,
@@ -198,6 +199,7 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
                     actions.push(ActionDef {
                         name: name.clone(),
                         param_types,
+                        param_names: param_names.clone(),
                         return_type,
                         body: body.clone(),
                         tests,

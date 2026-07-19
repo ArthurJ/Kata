@@ -269,7 +269,7 @@ fn range_float_produz_range_float() {
 /// `Result::(Var("T"), Err)` — `fits_return` aceita porque `Var` unifica.
 #[test]
 fn index_unwrap_em_array_retorna_1() {
-    let src = "action extrai -> Result::(Int, Err)\n    let arr := {1 2 3}\n    arr.0 ?\n    Result::Ok 0\nextrai!()";
+    let src = "action extrai => Result::(Int, Err)\n    let arr := {1 2 3}\n    arr.0 ?\n    Result::Ok 0\nextrai!()";
     let (raw, ty) = eval_src(src);
     assert_eq!(
         ty,
@@ -308,7 +308,7 @@ fn pattern_cons_extrai_head_e_tail() {
 #[test]
 fn for_in_array_com_echo_retorna_unit() {
     let src =
-        "action loop_print -> Unit\n    for x in {1 2 3 4 5}\n        echo!(show x)\nloop_print!()";
+        "action loop_print => Unit\n    for x in {1 2 3 4 5}\n        echo!(show x)\nloop_print!()";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Unit, "for-in com echo! deve retornar Unit");
     assert_eq!(raw, 0, "Unit é 0");

@@ -452,7 +452,7 @@ len "hello"              # 5 — text (COUNTABLE dispatch, kata_rt_string_len)
 | Palavra | Uso |
 |---|---|
 | `lambda` / `λ` | Declara função anônima. Múltiplas cláusulas após assinatura: `lambda <padrões>: <corpo>` — a primeira que encaixa vence |
-| `action` | Declara Action |
+| `action` | Declara Action com params nomeados: `action nome (p::T, ...) => Ret` |
 | `data` | Declara tipo produto |
 | `enum` | Declara tipo soma |
 | `alias` | Cria Newtype |
