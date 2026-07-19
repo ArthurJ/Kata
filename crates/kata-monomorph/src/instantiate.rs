@@ -42,6 +42,7 @@ pub(crate) fn instantiate_function(
         param_types,
         ret_ty,
         clauses,
+        log: orig.log.clone(),
     }
 }
 

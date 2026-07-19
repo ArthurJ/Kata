@@ -90,6 +90,7 @@ pub(crate) fn synthesize_repr_functions(
                 guards: Vec::new(),
                 with_bindings: Vec::new(),
             }],
+            log: None,
         });
     }
 

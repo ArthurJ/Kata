@@ -154,6 +154,7 @@ pub(crate) fn synthesize_refined(
                     guards: Vec::new(),
                     with_bindings: Vec::new(),
                 }],
+                log: None,
             });
         }
 
@@ -210,6 +211,7 @@ pub(crate) fn synthesize_refined(
                 guards: Vec::new(),
                 with_bindings: Vec::new(),
             }],
+            log: None,
         });
     }
 

@@ -113,6 +113,7 @@ pub(crate) fn synthesize_constructors(
                 guards: Vec::new(),
                 with_bindings: Vec::new(),
             }],
+            log: None,
         });
     }
 
@@ -183,6 +184,7 @@ pub(crate) fn synthesize_constructors(
                     guards: Vec::new(),
                     with_bindings: Vec::new(),
                 }],
+                log: None,
             });
         } else {
             // Alias de struct com campos — mesmo construtor do struct nativo,
@@ -257,6 +259,7 @@ pub(crate) fn synthesize_constructors(
                     guards: Vec::new(),
                     with_bindings: Vec::new(),
                 }],
+                log: None,
             });
         }
     }

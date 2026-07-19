@@ -28,6 +28,7 @@ mod free_vars;
 pub(crate) mod generics;
 pub(crate) mod helpers;
 mod lambda;
+mod log_synthesis;
 mod partial_dispatch;
 mod recursion;
 mod refined_builders;
@@ -335,11 +336,50 @@ fn infer_named_function(
     // (sem condição adicional que a diferenciaria).
     crate::redundancy::check_redundant_clauses(&func_def.clauses)?;
 
+    // Sintetiza log spec se a função tem @log.
+    let log = if let Some(log_spec) = &func_def.log {
+        // Extrai nomes dos params dos patterns da primeira cláusula.
+        let param_names: Vec<String> = typed_clauses
+            .first()
+            .map(|c| {
+                c.patterns
+                    .iter()
+                    .filter_map(|p| match &p.node {
+                        crate::typed_pattern::TypedPattern::Ident { name, .. } => {
+                            Some(name.clone())
+                        }
+                        _ => None,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        // Cria escopo com bindings dos params para inferir o template.
+        let mut log_env = TypeEnv::with_parent(module_type_env.clone());
+        for (i, ty) in param_types.iter().enumerate() {
+            log_env.define(&format!("__param_{i}"), ty.clone());
+        }
+        // Se há nomes de params, define-os também (associados por posição).
+        for (i, name) in param_names.iter().enumerate() {
+            if let Some(ty) = param_types.get(i) {
+                log_env.define(name, ty.clone());
+            }
+        }
+        Some(log_synthesis::synthesize_log_spec(
+            log_spec,
+            &param_names,
+            &mut log_env,
+            ctx,
+        )?)
+    } else {
+        None
+    };
+
     Ok(TypedFunction {
         name: func_def.name.clone(),
         param_types: param_types.clone(),
         ret_ty: ret_ty.clone(),
         clauses: typed_clauses,
+        log,
     })
 }
 
@@ -439,11 +479,28 @@ fn infer_action(
         });
     }
 
+    // Sintetiza log spec se a action tem @log.
+    // Para actions, params não têm nomes (são __param_0, __param_1, ...).
+    // when: "enter" com qualquer placeholder falha (param_names é vazio).
+    // when: "exit" infere o template no escopo da action (params + vars do corpo).
+    let log = if let Some(log_spec) = &action_def.log {
+        let param_names: Vec<String> = Vec::new(); // Actions não têm nomes de params
+        Some(log_synthesis::synthesize_log_spec(
+            log_spec,
+            &param_names,
+            &mut action_env,
+            ctx,
+        )?)
+    } else {
+        None
+    };
+
     Ok(TypedAction {
         name: action_def.name.clone(),
         param_types: param_types.clone(),
         ret_ty: ret_ty.clone(),
         body: typed_body,
         tests: typed_tests,
+        log,
     })
 }

@@ -404,6 +404,7 @@ pub(crate) fn run_pass0(
                             param_types,
                             return_type,
                             clauses: clauses.clone(),
+                            log: None,
                         });
                     }
                 }

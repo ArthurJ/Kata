@@ -303,6 +303,7 @@ fn rewrite_with_accumulator(
             guards: vec![],
             with_bindings: vec![],
         }],
+        log: None,
     };
 
     // ── Função _acc: match n { base: acc, otherwise: _acc(rec_arg, op(acc, non_rec_arg)) } ──
@@ -400,6 +401,7 @@ fn rewrite_with_accumulator(
             guards: vec![],
             with_bindings: vec![],
         }],
+        log: None,
     };
 
     (original, acc_func)

@@ -134,6 +134,7 @@ pub(crate) fn synthesize_enum_pred(
                         guards: Vec::new(),
                         with_bindings: Vec::new(),
                     }],
+                    log: None,
                 });
             }
         }
@@ -214,6 +215,7 @@ pub(crate) fn synthesize_enum_pred(
                 guards,
                 with_bindings: Vec::new(),
             }],
+            log: None,
         });
     }
 

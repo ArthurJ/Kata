@@ -59,6 +59,26 @@ pub struct Signature {
     pub type_params: Vec<String>,
 }
 
+/// Especificação de logging `@log` anotada em Action ou função nomeada.
+///
+/// Produzida no resolution a partir das diretivas `@log`.
+/// O inference consome e produz `TypedLogSpec` em `TypedAction`/`TypedFunction`.
+/// O codegen injeta `kata_rt_log_publish` no prólogo (`when: "enter"`) ou
+/// epílogo (`when: "exit"`).
+#[derive(Debug, Clone)]
+pub struct LogSpec {
+    /// Template compile-time. `{expr}` interpola. `{{` escapa `{`.
+    pub msg: String,
+    /// `"enter"` = loga no prólogo. `"exit"` = loga no epílogo. Obrigatório.
+    pub when: String,
+    /// Tópico (nome do canal). None = usar config herdada do fiber.
+    pub topic: Option<String>,
+    /// Política: `"drop"` ou `"block"`. None = usar config herdada.
+    pub policy: Option<String>,
+    /// Level como variante do enum LogLevel (ex: `"Info"`). None = Info default.
+    pub level: Option<String>,
+}
+
 /// Definição de função nomeada com corpo Kata (não-FFI).
 ///
 /// Produzida no resolution quando `Item::Sig` tem `body = Some(clauses)`.
@@ -70,6 +90,8 @@ pub struct FunctionDef {
     pub param_types: Vec<Ty>,
     pub return_type: Ty,
     pub clauses: Vec<Spanned<LambdaClause>>,
+    /// Especificação de logging `@log`. None se a função não tem `@log`.
+    pub log: Option<LogSpec>,
 }
 
 /// Definição de Action com body Kata.
@@ -86,6 +108,8 @@ pub struct ActionDef {
     /// cujos args são `Expr` não-tipado — o inference tipa via `infer_expr`.
     /// Vazio quando a action não tem `@test`.
     pub tests: Vec<TestSpec>,
+    /// Especificação de logging `@log`. None se a action não tem `@log`.
+    pub log: Option<LogSpec>,
 }
 
 /// Especificação de um caso de teste `@test` anotado em uma action.

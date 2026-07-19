@@ -108,11 +108,13 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
 
                 // Se tem corpo Kata (cláusulas lambda), preserva para o inference.
                 if let Some(clauses) = body {
+                    let log = extract_log_spec(directives, &name, "sig", &mut errors);
                     functions.push(FunctionDef {
                         name: name.clone(),
                         param_types: param_types.clone(),
                         return_type: return_type.clone(),
                         clauses: clauses.clone(),
+                        log,
                     });
                 }
 
@@ -192,12 +194,14 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
                     });
                 } else {
                     // Action com corpo Kata — produz ActionDef para o inference.
+                    let log = extract_log_spec(action_dirs, name, "action", &mut errors);
                     actions.push(ActionDef {
                         name: name.clone(),
                         param_types,
                         return_type,
                         body: body.clone(),
                         tests,
+                        log,
                     });
                 }
             }
@@ -342,6 +346,135 @@ fn extract_test_specs(
         specs.push(spec);
     }
     specs
+}
+
+/// Extrai `LogSpec` da diretiva `@log` se presente.
+///
+/// `@log{msg: "...", when: "enter"/"exit", topic: "...", policy: "...", level: "Info"}`
+///
+/// `msg` e `when` são obrigatórios. `topic`, `policy`, `level` são opcionais.
+/// Retorna `None` se não há diretiva `@log`.
+fn extract_log_spec(
+    directives: &[kata_ast::Directive],
+    item_name: &str,
+    context: &'static str,
+    errors: &mut Vec<ResolveError>,
+) -> Option<LogSpec> {
+    let log_dir = directives.iter().find(|d| d.name == "log")?;
+    let mut msg = None;
+    let mut when = None;
+    let mut topic = None;
+    let mut policy = None;
+    let mut level = None;
+
+    for arg in &log_dir.args {
+        if let kata_ast::DirectiveArg::Named { key, value } = arg {
+            match key.as_str() {
+                "msg" => {
+                    if let kata_ast::Expr::TextLit { text } = &value.node {
+                        msg = Some(text.clone());
+                    } else {
+                        errors.push(ResolveError::UnknownDirective {
+                            name: "log".into(),
+                            context,
+                            item_name: format!("{item_name}: msg deve ser Text"),
+                        });
+                    }
+                }
+                "when" => {
+                    if let kata_ast::Expr::TextLit { text } = &value.node {
+                        when = Some(text.clone());
+                    } else {
+                        errors.push(ResolveError::UnknownDirective {
+                            name: "log".into(),
+                            context,
+                            item_name: format!("{item_name}: when deve ser Text"),
+                        });
+                    }
+                }
+                "topic" => {
+                    if let kata_ast::Expr::TextLit { text } = &value.node {
+                        topic = Some(text.clone());
+                    } else {
+                        errors.push(ResolveError::UnknownDirective {
+                            name: "log".into(),
+                            context,
+                            item_name: format!("{item_name}: topic deve ser Text"),
+                        });
+                    }
+                }
+                "policy" => {
+                    if let kata_ast::Expr::TextLit { text } = &value.node {
+                        policy = Some(text.clone());
+                    } else {
+                        errors.push(ResolveError::UnknownDirective {
+                            name: "log".into(),
+                            context,
+                            item_name: format!("{item_name}: policy deve ser Text"),
+                        });
+                    }
+                }
+                "level" => {
+                    // Level pode ser TextLit ("Info") ou VariantQual (LogLevel::Info).
+                    if let kata_ast::Expr::TextLit { text } = &value.node {
+                        level = Some(text.clone());
+                    } else if let kata_ast::Expr::VariantQual { variant, .. } = &value.node {
+                        level = Some(variant.clone());
+                    } else {
+                        errors.push(ResolveError::UnknownDirective {
+                            name: "log".into(),
+                            context,
+                            item_name: format!(
+                                "{item_name}: level deve ser Text ou variante de LogLevel"
+                            ),
+                        });
+                    }
+                }
+                other => {
+                    errors.push(ResolveError::UnknownDirective {
+                        name: "log".into(),
+                        context,
+                        item_name: format!("{item_name}: chave desconhecida: {other}"),
+                    });
+                }
+            }
+        }
+    }
+
+    // Valida campos obrigatórios.
+    let msg = msg.unwrap_or_else(|| {
+        errors.push(ResolveError::UnknownDirective {
+            name: "log".into(),
+            context,
+            item_name: format!("{item_name}: msg é obrigatório em @log"),
+        });
+        String::new()
+    });
+    let when = when.unwrap_or_else(|| {
+        errors.push(ResolveError::UnknownDirective {
+            name: "log".into(),
+            context,
+            item_name: format!("{item_name}: when é obrigatório em @log"),
+        });
+        String::new()
+    });
+
+    // Valida valor de when.
+    if when != "enter" && when != "exit" {
+        errors.push(ResolveError::UnknownDirective {
+            name: "log".into(),
+            context,
+            item_name: format!("{item_name}: when deve ser \"enter\" ou \"exit\", got \"{when}\""),
+        });
+    }
+
+    Some(LogSpec {
+        msg,
+        when,
+        topic,
+        policy,
+        level,
+    })
 }
 
 pub use prelude_sigs::load_prelude;

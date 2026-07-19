@@ -439,6 +439,8 @@ pub struct TypedFunction {
     pub ret_ty: Ty,
     /// Cláusulas tipadas (padrões + corpo + guards + with bindings).
     pub clauses: Vec<TypedLambdaClause>,
+    /// Especificação de logging `@log`. None se a função não tem `@log`.
+    pub log: Option<TypedLogSpec>,
 }
 
 /// Action tipada — pronta para o codegen.
@@ -459,6 +461,8 @@ pub struct TypedAction {
     /// Casos de teste `@test` com args já tipados. O codegen gera
     /// um wrapper por spec (exceto negativos CompileError).
     pub tests: Vec<TypedTestSpec>,
+    /// Especificação de logging `@log`. None se a action não tem `@log`.
+    pub log: Option<TypedLogSpec>,
 }
 
 /// `TestSpec` tipado — args já inferidos pelo typeck.
@@ -472,4 +476,28 @@ pub struct TypedTestSpec {
     pub args: Option<Spanned<TypedExpr>>,
     pub timeout: Option<i64>,
     pub expects: Option<String>,
+}
+
+/// Especificação de logging `@log` tipada — pronta para o codegen.
+///
+/// O typeck processa o template `msg` e produz `msg_expr` (expressão tipada
+/// que produz `Text` — cadeia de `text_replace_first` via `infer_format`).
+/// O codegen injeta `kata_rt_log_publish` no prólogo (`Enter`) ou
+/// epílogo (`Exit`) com o valor SSA de `msg_expr`.
+#[derive(Debug, Clone)]
+pub enum TypedLogSpec {
+    /// Loga no prólogo (entrada). Placeholders só podem referenciar params.
+    Enter {
+        msg_expr: Spanned<TypedExpr>,
+        topic: Option<String>,
+        policy: Option<String>,
+        level: i64,
+    },
+    /// Loga no epílogo (saída). Placeholders podem referenciar params e vars do corpo.
+    Exit {
+        msg_expr: Spanned<TypedExpr>,
+        topic: Option<String>,
+        policy: Option<String>,
+        level: i64,
+    },
 }
