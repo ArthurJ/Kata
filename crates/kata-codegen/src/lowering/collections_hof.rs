@@ -100,7 +100,7 @@ pub(crate) fn extract_callback_sig(callback: &TypedExpr) -> (Vec<Ty>, Ty, bool) 
     };
     match &callback.ty {
         Ty::Function(params, ret) => (params.clone(), (**ret).clone(), has_captures),
-        _ => panic!("callback não é Function: {:?}", callback.ty),
+        _ => panic!("callback não é Function: {}", callback.ty),
     }
 }
 

@@ -117,8 +117,8 @@ pub(crate) fn infer_apply_lambda_with_hint(
         let typed = infer_expr(&arg.node, &arg.span, env, ctx, false)?;
         if typed.ty != hint_params[i] {
             return Err(MiddleError::TypeMismatch {
-                expected: format!("{:?}", hint_params[i]),
-                found: format!("{:?}", typed.ty),
+                expected: format!("{}", hint_params[i]),
+                found: format!("{}", typed.ty),
                 span: arg.span.into(),
             });
         }
@@ -176,8 +176,8 @@ fn build_lambda_apply(
         && ret_ty != *expected_ret
     {
         return Err(MiddleError::TypeMismatch {
-            expected: format!("{:?}", expected_ret),
-            found: format!("{:?}", ret_ty),
+            expected: format!("{}", expected_ret),
+            found: format!("{}", ret_ty),
             span: body.span.into(),
         });
     }
@@ -238,7 +238,7 @@ pub(crate) fn infer_lambda_body(
                 if cond_typed.ty != Ty::boolean() {
                     return Err(MiddleError::TypeMismatch {
                         expected: "Boolean".into(),
-                        found: format!("{:?}", cond_typed.ty),
+                        found: format!("{}", cond_typed.ty),
                         span: cond.span.into(),
                     });
                 }
@@ -247,8 +247,8 @@ pub(crate) fn infer_lambda_body(
                 if let Some(ref existing) = guard_ret_ty {
                     if *existing != body_typed.ty {
                         return Err(MiddleError::TypeMismatch {
-                            expected: format!("{:?}", existing),
-                            found: format!("{:?}", body_typed.ty),
+                            expected: format!("{}", existing),
+                            found: format!("{}", body_typed.ty),
                             span: guard.body.span.into(),
                         });
                     }
@@ -265,8 +265,8 @@ pub(crate) fn infer_lambda_body(
             if let Some(ref existing) = guard_ret_ty {
                 if *existing != body_typed.ty {
                     return Err(MiddleError::TypeMismatch {
-                        expected: format!("{:?}", existing),
-                        found: format!("{:?}", body_typed.ty),
+                        expected: format!("{}", existing),
+                        found: format!("{}", body_typed.ty),
                         span: guard.body.span.into(),
                     });
                 }

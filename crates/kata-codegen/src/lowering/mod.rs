@@ -68,7 +68,7 @@ pub(crate) fn func_key_from_callee(
     match &callee.node.ty {
         Ty::Function(params, ret) => Ok((name, params.clone(), (**ret).clone())),
         _ => Err(module::CodegenError::UnsupportedNode(format!(
-            "callee.ty não é Function em func_key_from_callee: {:?}",
+            "callee.ty não é Function em func_key_from_callee: {}",
             callee.node.ty
         ))),
     }

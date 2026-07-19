@@ -32,8 +32,8 @@ pub(crate) fn infer_format(
     let template_expr = infer_expr(&args[0].node, &args[0].span, env, ctx, false)?;
     if template_expr.ty != Ty::text() {
         return Err(MiddleError::TypeMismatch {
-            expected: format!("{:?}", Ty::text()),
-            found: format!("{:?}", template_expr.ty),
+            expected: format!("{}", Ty::text()),
+            found: format!("{}", template_expr.ty),
             span: args[0].span.into(),
         });
     }

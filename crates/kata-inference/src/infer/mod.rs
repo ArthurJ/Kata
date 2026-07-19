@@ -298,8 +298,8 @@ fn infer_named_function(
             // Verifica que o body retorna o tipo esperado.
             if typed_body.ty != *ret_ty {
                 return Err(MiddleError::TypeMismatch {
-                    expected: format!("{:?}", ret_ty),
-                    found: format!("{:?}", typed_body.ty),
+                    expected: format!("{}", ret_ty),
+                    found: format!("{}", typed_body.ty),
                     span: clause_inner.body.span.into(),
                 });
             }
@@ -313,8 +313,8 @@ fn infer_named_function(
             )?;
             if guard_ret != *ret_ty {
                 return Err(MiddleError::TypeMismatch {
-                    expected: format!("{:?}", ret_ty),
-                    found: format!("{:?}", guard_ret),
+                    expected: format!("{}", ret_ty),
+                    found: format!("{}", guard_ret),
                     span: clause_inner.body.span.into(),
                 });
             }

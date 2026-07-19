@@ -204,7 +204,7 @@ pub(crate) fn infer_expr_hinted(
                 Some(result) => result,
                 None => Err(MiddleError::TypeMismatch {
                     expected: "enum".to_string(),
-                    found: format!("{:?}", enum_ty),
+                    found: format!("{}", enum_ty),
                     span: (*span).into(),
                 })?,
             }
@@ -281,7 +281,7 @@ pub(crate) fn infer_expr_hinted(
             if typed_value.ty != existing_ty {
                 return Err(MiddleError::TypeMismatch {
                     expected: format!("{existing_ty:?}"),
-                    found: format!("{:?}", typed_value.ty),
+                    found: format!("{}", typed_value.ty),
                     span: value.span.into(),
                 });
             }
@@ -306,7 +306,7 @@ pub(crate) fn infer_expr_hinted(
             if !fits_return(&typed_inner.ty, ret_ty) {
                 return Err(MiddleError::TypeMismatch {
                     expected: format!("{ret_ty:?}"),
-                    found: format!("{:?}", typed_inner.ty),
+                    found: format!("{}", typed_inner.ty),
                     span: inner.span.into(),
                 });
             }

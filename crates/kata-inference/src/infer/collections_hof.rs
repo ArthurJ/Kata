@@ -141,7 +141,7 @@ pub(crate) fn infer_map(
         _ => {
             return Err(MiddleError::TypeMismatch {
                 expected: "Function".into(),
-                found: format!("{:?}", callback_typed.ty),
+                found: format!("{}", callback_typed.ty),
                 span: args[0].span.into(),
             });
         }
@@ -207,14 +207,14 @@ pub(crate) fn infer_filter(
         Ty::Function(_, ret) => {
             return Err(MiddleError::TypeMismatch {
                 expected: "Boolean".into(),
-                found: format!("{:?}", ret),
+                found: format!("{}", ret),
                 span: args[0].span.into(),
             });
         }
         _ => {
             return Err(MiddleError::TypeMismatch {
                 expected: "Function".into(),
-                found: format!("{:?}", callback_typed.ty),
+                found: format!("{}", callback_typed.ty),
                 span: args[0].span.into(),
             });
         }
@@ -286,14 +286,14 @@ pub(crate) fn infer_fold(
         Ty::Function(_, ret) => {
             return Err(MiddleError::TypeMismatch {
                 expected: format!("{acc_ty:?}"),
-                found: format!("{:?}", ret),
+                found: format!("{}", ret),
                 span: args[0].span.into(),
             });
         }
         _ => {
             return Err(MiddleError::TypeMismatch {
                 expected: "Function".into(),
-                found: format!("{:?}", callback_typed.ty),
+                found: format!("{}", callback_typed.ty),
                 span: args[0].span.into(),
             });
         }

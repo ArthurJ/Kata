@@ -94,8 +94,8 @@ pub(crate) fn infer_variant_construct(
         };
         if !compatible {
             return Err(MiddleError::TypeMismatch {
-                expected: format!("{:?}", payload_ty),
-                found: format!("{:?}", typed_arg.ty),
+                expected: format!("{}", payload_ty),
+                found: format!("{}", typed_arg.ty),
                 span: args[0].span.into(),
             });
         }
@@ -119,8 +119,8 @@ pub(crate) fn infer_variant_construct(
     // Enum não-genérico — comparação estrutural.
     if typed_arg.ty != *payload_ty {
         return Err(MiddleError::TypeMismatch {
-            expected: format!("{:?}", payload_ty),
-            found: format!("{:?}", typed_arg.ty),
+            expected: format!("{}", payload_ty),
+            found: format!("{}", typed_arg.ty),
             span: args[0].span.into(),
         });
     }

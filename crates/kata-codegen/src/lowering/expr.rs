@@ -173,7 +173,7 @@ pub(crate) fn lower_expr(
                 | (TypedExprKind::FloatLit { .. }, Ty::Struct(_)) => lower_expr(inner, ctx),
                 // Demais casos: o typeck já deveria ter rejeitado.
                 _ => Err(super::CodegenError::UnsupportedNode(format!(
-                    "ascription não suportada: {:?} → {:?}",
+                    "ascription não suportada: {:?} → {}",
                     inner.kind, target_ty
                 ))),
             }

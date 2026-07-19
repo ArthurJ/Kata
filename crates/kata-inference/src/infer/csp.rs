@@ -47,7 +47,7 @@ pub(crate) fn infer_channel_send(
     if !type_compatible(&typed_value.ty, &elem_ty) {
         return Err(MiddleError::TypeMismatch {
             expected: format!("{elem_ty:?}"),
-            found: format!("{:?}", typed_value.ty),
+            found: format!("{}", typed_value.ty),
             span: value.span.into(),
         });
     }
@@ -200,7 +200,7 @@ pub(crate) fn infer_select(
         if !type_compatible(&tm_typed.ty, &Ty::int()) {
             return Err(MiddleError::TypeMismatch {
                 expected: "Int (timeout em milissegundos)".into(),
-                found: format!("{:?}", tm_typed.ty),
+                found: format!("{}", tm_typed.ty),
                 span: tm.span.into(),
             });
         }
@@ -213,7 +213,7 @@ pub(crate) fn infer_select(
         if !type_compatible(&tb_typed.ty, &select_ty) {
             return Err(MiddleError::TypeMismatch {
                 expected: format!("{select_ty:?} (tipo do select)"),
-                found: format!("{:?}", tb_typed.ty),
+                found: format!("{}", tb_typed.ty),
                 span: tb.span.into(),
             });
         }

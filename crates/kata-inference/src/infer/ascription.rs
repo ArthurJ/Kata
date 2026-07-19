@@ -194,13 +194,13 @@ pub(crate) fn infer_type_ascription(
         // Shape mismatch (tipos incompatíveis) → error
         return Err(MiddleError::TypeMismatch {
             expected: format!(
-                "Struct {} fields {:?}",
+                "Struct {} fields [{}]",
                 struct_name,
-                struct_info.fields.iter().map(|f| &f.ty).collect::<Vec<_>>()
+                struct_info.fields.iter().map(|f| f.ty.to_string()).collect::<Vec<_>>().join(", ")
             ),
             found: format!(
-                "Tuple elements {:?}",
-                elements.iter().map(|e| &e.node.ty).collect::<Vec<_>>()
+                "Tuple elements [{}]",
+                elements.iter().map(|e| e.node.ty.to_string()).collect::<Vec<_>>().join(", ")
             ),
             span: expr.span.into(),
         });
@@ -219,8 +219,8 @@ pub(crate) fn infer_type_ascription(
 
     if !rebaixa_ok {
         return Err(MiddleError::TypeMismatch {
-            expected: format!("{:?}", target_ty),
-            found: format!("{:?}", inner.ty),
+            expected: format!("{}", target_ty),
+            found: format!("{}", inner.ty),
             span: expr.span.into(),
         });
     }

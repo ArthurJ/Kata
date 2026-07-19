@@ -134,7 +134,7 @@ pub(crate) fn infer_dot_access(
                         }
                     }
                     found.ok_or_else(|| MiddleError::TypeMismatch {
-                        expected: format!("`at` dispatch via INDEXABLE para {:?}", inner.ty),
+                        expected: format!("`at` dispatch via INDEXABLE para {}", inner.ty),
                         found: "nenhuma overload genérica de `at` unifica".into(),
                         span: (*span).into(),
                     })?
@@ -179,7 +179,7 @@ pub(crate) fn infer_dot_access(
         }
         // Range não implementa INDEXABLE — .N é type error.
         (Ty::Range(_), DotIndex::Int(_)) => Err(MiddleError::NotIndexable {
-            ty: format!("{:?}", inner.ty),
+            ty: format!("{}", inner.ty),
             span: (*span).into(),
         }),
         // Field access em coleção não faz sentido.

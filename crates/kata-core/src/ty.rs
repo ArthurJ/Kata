@@ -204,3 +204,78 @@ impl Default for TypeEnv {
         Self::new()
     }
 }
+
+// ---------------------------------------------------------------------------
+// Display — sintaxe que o usuário escreve, não Debug de Rust.
+// ---------------------------------------------------------------------------
+
+impl std::fmt::Display for PrimTy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PrimTy::Int => f.write_str("Int"),
+            PrimTy::Float => f.write_str("Float"),
+            PrimTy::Text => f.write_str("Text"),
+            PrimTy::Rational => f.write_str("Rational"),
+        }
+    }
+}
+
+impl std::fmt::Display for Ty {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Ty::Prim(p) => write!(f, "{p}"),
+            Ty::Unit => f.write_str("()"),
+            Ty::Var(name) => f.write_str(name),
+            Ty::Sum(name) | Ty::Struct(name) | Ty::Interface(name) => f.write_str(name),
+            Ty::Generic(name, args) => {
+                f.write_str(name)?;
+                f.write_str("::(")?;
+                for (i, arg) in args.iter().enumerate() {
+                    if i > 0 {
+                        f.write_str(", ")?;
+                    }
+                    write!(f, "{arg}")?;
+                }
+                f.write_str(")")
+            }
+            Ty::Tuple(elements) => {
+                f.write_str("(")?;
+                for (i, elem) in elements.iter().enumerate() {
+                    if i > 0 {
+                        f.write_str(", ")?;
+                    }
+                    write!(f, "{elem}")?;
+                }
+                f.write_str(")")
+            }
+            Ty::Function(params, ret) => {
+                f.write_str("(")?;
+                for (i, p) in params.iter().enumerate() {
+                    if i > 0 {
+                        f.write_str(", ")?;
+                    }
+                    write!(f, "{p}")?;
+                }
+                f.write_str(") -> ")?;
+                write!(f, "{ret}")
+            }
+            Ty::List(inner) => write!(f, "[{inner}]"),
+            Ty::Array(inner) => write!(f, "{{{inner}}}"),
+            Ty::Range(inner) => write!(f, "[..{inner}]"),
+            Ty::Sender(inner) => write!(f, "Sender::{inner}"),
+            Ty::Receiver(inner) => write!(f, "Receiver::{inner}"),
+            Ty::ReceiverFactory(inner) => write!(f, "ReceiverFactory::{inner}"),
+            Ty::InferVar(_) => f.write_str("?"),
+        }
+    }
+}
+
+/// Formata uma lista de tipos como `(T1, T2, T3)` — útil para mensagens
+/// de erro que mostram `Vec<Ty>` (ex: params de uma função, args de uma
+/// chamada). Usa `Display` em cada elemento.
+pub fn ty_list_to_string(tys: &[Ty]) -> String {
+    tys.iter()
+        .map(|t| t.to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
+}

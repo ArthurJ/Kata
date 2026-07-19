@@ -58,8 +58,8 @@ fn unify_one(
                 // Já tem binding — verifica consistência
                 if existing != arg {
                     return Err(MiddleError::TypeMismatch {
-                        expected: format!("{:?}", existing),
-                        found: format!("{:?}", arg),
+                        expected: format!("{}", existing),
+                        found: format!("{}", arg),
                         span: kata_ast::Span::synthetic().into(),
                     });
                 }
@@ -96,8 +96,8 @@ fn unify_one(
 
         // Incompatível
         _ => Err(MiddleError::TypeMismatch {
-            expected: format!("{:?}", param),
-            found: format!("{:?}", arg),
+            expected: format!("{}", param),
+            found: format!("{}", arg),
             span: kata_ast::Span::synthetic().into(),
         }),
     }

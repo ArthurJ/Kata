@@ -78,7 +78,7 @@ pub(crate) fn infer_match(
             if guard_typed.ty != Ty::boolean() {
                 return Err(MiddleError::TypeMismatch {
                     expected: "Boolean".into(),
-                    found: format!("{:?}", guard_typed.ty),
+                    found: format!("{}", guard_typed.ty),
                     span: guard_expr.span.into(),
                 });
             }
@@ -105,8 +105,8 @@ pub(crate) fn infer_match(
                         Some(ty) => match_ret_ty = Some(ty),
                         None => {
                             return Err(MiddleError::TypeMismatch {
-                                expected: format!("{:?}", existing),
-                                found: format!("{:?}", typed_body.ty),
+                                expected: format!("{}", existing),
+                                found: format!("{}", typed_body.ty),
                                 span: arm.body.span.into(),
                             });
                         }

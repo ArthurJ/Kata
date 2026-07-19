@@ -56,7 +56,7 @@ pub(crate) fn infer_question(
         _ => {
             return Err(MiddleError::TypeMismatch {
                 expected: "Result<T, E> ou Optional<T>".into(),
-                found: format!("{:?}", typed_scrutinee.ty),
+                found: format!("{}", typed_scrutinee.ty),
                 span: inner.span.into(),
             });
         }
@@ -186,7 +186,7 @@ pub(crate) fn infer_pipe_fallback(
         _ => {
             return Err(MiddleError::TypeMismatch {
                 expected: "enum com cauda unitaria".into(),
-                found: format!("{:?}", typed_scrutinee.ty),
+                found: format!("{}", typed_scrutinee.ty),
                 span: lhs.span.into(),
             });
         }

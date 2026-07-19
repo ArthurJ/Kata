@@ -79,8 +79,8 @@ fn check_pattern_inner(
             let literal_ty = literal_expr_ty(&expr.node, scrutinee_ty);
             if !pattern_type_compatible(&literal_ty, scrutinee_ty) {
                 return Err(MiddleError::TypeMismatch {
-                    expected: format!("{:?}", scrutinee_ty),
-                    found: format!("{:?}", literal_ty),
+                    expected: format!("{}", scrutinee_ty),
+                    found: format!("{}", literal_ty),
                     span: (*span).into(),
                 });
             }
@@ -118,7 +118,7 @@ fn check_pattern_inner(
                 Ty::Generic(s, args) if s == enum_name => args.clone(),
                 _ => {
                     return Err(MiddleError::TypeMismatch {
-                        expected: format!("{:?}", scrutinee_ty),
+                        expected: format!("{}", scrutinee_ty),
                         found: format!("Sum({}) or Generic({})", enum_name, enum_name),
                         span: (*span).into(),
                     });
@@ -187,7 +187,7 @@ fn check_pattern_inner(
                 Ty::Tuple(tys) => tys,
                 _ => {
                     return Err(MiddleError::TypeMismatch {
-                        expected: format!("{:?}", scrutinee_ty),
+                        expected: format!("{}", scrutinee_ty),
                         found: "tupla".into(),
                         span: (*span).into(),
                     });

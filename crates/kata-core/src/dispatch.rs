@@ -11,7 +11,7 @@
 //! iface são sempre 0. Mas a estrutura do algoritmo está pronta.
 
 use crate::interface_registry::InterfaceRegistry;
-use crate::ty::Ty;
+use crate::ty::{ty_list_to_string, Ty};
 use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
 
@@ -259,8 +259,8 @@ impl DispatchTable {
             {
                 return Err(DispatchError::TypeMismatch {
                     name: name.to_string(),
-                    expected: format!("{:?}", first.params),
-                    found: format!("{:?}", args),
+                    expected: ty_list_to_string(&first.params),
+                    found: args.iter().map(|a| a.as_ref().map(|t| t.to_string()).unwrap_or_else(|| "?".into())).collect::<Vec<_>>().join(", "),
                 });
             }
             return Err(DispatchError::FunctionNotFound {
@@ -345,8 +345,8 @@ impl DispatchTable {
             {
                 return Err(DispatchError::TypeMismatch {
                     name: name.to_string(),
-                    expected: format!("{:?}", first.params),
-                    found: format!("{:?}", args),
+                    expected: ty_list_to_string(&first.params),
+                    found: ty_list_to_string(args),
                 });
             }
             return Err(DispatchError::FunctionNotFound {

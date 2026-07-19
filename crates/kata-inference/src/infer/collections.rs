@@ -7,7 +7,7 @@
 use kata_ast::{Expr, Span, Spanned};
 use kata_core::escape::EscapeTarget;
 use kata_core::interface_registry::ImplEntry;
-use kata_core::ty::{Ty, TypeEnv};
+use kata_core::ty::{ty_list_to_string, Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 
 use crate::typed::{Effect, TypedExpr, TypedExprKind};
@@ -52,14 +52,14 @@ fn find_impl<'a>(ctx: &'a InferCtx, type_name: &str, iface_name: &str) -> Option
 fn extract_iter_elem_ty(ctx: &InferCtx, iterable_ty: &Ty, span: &Span) -> InferResult<Ty> {
     let type_name = concrete_type_name(iterable_ty).ok_or_else(|| MiddleError::TypeMismatch {
         expected: "tipo iterável (implementa ITERABLE)".into(),
-        found: format!("{iterable_ty:?}"),
+        found: format!("{iterable_ty}"),
         span: (*span).into(),
     })?;
 
     let entry =
         find_impl(ctx, &type_name, "ITERABLE").ok_or_else(|| MiddleError::TypeMismatch {
             expected: format!("tipo que implementa ITERABLE ({type_name} não implementa)"),
-            found: format!("{iterable_ty:?}"),
+            found: format!("{iterable_ty}"),
             span: (*span).into(),
         })?;
 
@@ -83,8 +83,8 @@ fn extract_iter_elem_ty(ctx: &InferCtx, iterable_ty: &Ty, span: &Span) -> InferR
         &mut subs,
     )
     .map_err(|_| MiddleError::TypeMismatch {
-        expected: format!("{:?}", next_method.params),
-        found: format!("{iterable_ty:?}"),
+        expected: ty_list_to_string(&next_method.params),
+        found: format!("{iterable_ty}"),
         span: (*span).into(),
     })?;
 
@@ -94,7 +94,7 @@ fn extract_iter_elem_ty(ctx: &InferCtx, iterable_ty: &Ty, span: &Span) -> InferR
         Ty::Generic(name, args) if name == "Optional" && !args.is_empty() => Ok(args[0].clone()),
         _ => Err(MiddleError::TypeMismatch {
             expected: "Optional(A) como retorno de next".into(),
-            found: format!("{concrete_ret:?}"),
+            found: format!("{concrete_ret}"),
             span: (*span).into(),
         }),
     }
@@ -120,8 +120,8 @@ pub(crate) fn infer_list_lit(
             Some(existing) => {
                 if &typed.ty != existing {
                     return Err(MiddleError::TypeMismatch {
-                        expected: format!("{existing:?}"),
-                        found: format!("{:?}", typed.ty),
+                        expected: format!("{existing}"),
+                        found: format!("{}", typed.ty),
                         span: elem.span.into(),
                     });
                 }
@@ -175,8 +175,8 @@ pub(crate) fn infer_array_lit(
             Some(existing) => {
                 if &typed.ty != existing {
                     return Err(MiddleError::TypeMismatch {
-                        expected: format!("{existing:?}"),
-                        found: format!("{:?}", typed.ty),
+                        expected: format!("{existing}"),
+                        found: format!("{}", typed.ty),
                         span: elem.span.into(),
                     });
                 }
@@ -231,15 +231,15 @@ pub(crate) fn infer_range_lit(
     let elem_ty = typed_start.ty.clone();
     if typed_step.ty != elem_ty {
         return Err(MiddleError::TypeMismatch {
-            expected: format!("{elem_ty:?}"),
-            found: format!("{:?}", typed_step.ty),
+            expected: format!("{elem_ty}"),
+            found: format!("{}", typed_step.ty),
             span: step.span.into(),
         });
     }
     if typed_end.ty != elem_ty {
         return Err(MiddleError::TypeMismatch {
-            expected: format!("{elem_ty:?}"),
-            found: format!("{:?}", typed_end.ty),
+            expected: format!("{elem_ty}"),
+            found: format!("{}", typed_end.ty),
             span: end.span.into(),
         });
     }
@@ -349,14 +349,14 @@ pub(crate) fn infer_in(
     let coll_type_name =
         concrete_type_name(&typed_collection.ty).ok_or_else(|| MiddleError::TypeMismatch {
             expected: "tipo que implementa CONTAINS".into(),
-            found: format!("{:?}", typed_collection.ty),
+            found: format!("{}", typed_collection.ty),
             span: (*span).into(),
         })?;
 
     let entry =
         find_impl(ctx, &coll_type_name, "CONTAINS").ok_or_else(|| MiddleError::TypeMismatch {
             expected: format!("tipo que implementa CONTAINS ({coll_type_name} não implementa)"),
-            found: format!("{:?}", typed_collection.ty),
+            found: format!("{}", typed_collection.ty),
             span: (*span).into(),
         })?;
 
@@ -389,8 +389,8 @@ pub(crate) fn infer_in(
         &mut subs,
     )
     .map_err(|_| MiddleError::TypeMismatch {
-        expected: format!("{:?}", &contains_method.params[1]),
-        found: format!("{:?}", typed_item.ty),
+        expected: format!("{}", &contains_method.params[1]),
+        found: format!("{}", typed_item.ty),
         span: item.span.into(),
     })?;
 
