@@ -202,6 +202,10 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
         rt::kata_rt_channel_recv as *const u8,
     );
     builder.symbol("kata_rt_select", rt::kata_rt_select as *const u8);
+    // Log (Fio 14)
+    builder.symbol("kata_rt_log_publish", rt::kata_rt_log_publish as *const u8);
+    builder.symbol("kata_rt_log_recv", rt::kata_rt_log_recv as *const u8);
+    builder.symbol("kata_rt_log_config", rt::kata_rt_log_config as *const u8);
 }
 
 /// Declara todos os símbolos FFI no module e retorna o mapa nome → FuncId.
@@ -325,5 +329,9 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         ChannelSend,
         ChannelRecv,
         ChannelSelect,
+        // Log (Fio 14)
+        LogPublish,
+        LogRecv,
+        LogConfig,
     ]
 }

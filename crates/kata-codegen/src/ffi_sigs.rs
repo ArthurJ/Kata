@@ -396,6 +396,26 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
             sig.params.push(AbiParam::new(I64)); // timeout_ms (<=0 = sem timeout)
             sig.returns.push(AbiParam::new(I64)); // index or sentinel
         }
+        // log_publish: (topic_ptr, level, msg, policy_ptr) -> i64 (0=OK, -1=erro)
+        FfiSymbol::LogPublish => {
+            sig.params.push(AbiParam::new(I64)); // topic_ptr (handle Text ou 0)
+            sig.params.push(AbiParam::new(I64)); // level (tag do enum LogLevel)
+            sig.params.push(AbiParam::new(I64)); // msg (handle Text)
+            sig.params.push(AbiParam::new(I64)); // policy_ptr (handle Text ou 0)
+            sig.returns.push(AbiParam::new(I64)); // status
+        }
+        // log_recv: (topic_ptr) -> i64 (valor ou 0 se canal fechou)
+        FfiSymbol::LogRecv => {
+            sig.params.push(AbiParam::new(I64)); // topic_ptr (handle Text ou 0)
+            sig.returns.push(AbiParam::new(I64)); // value
+        }
+        // log_config: (topic_ptr, policy_ptr, level) -> ()
+        FfiSymbol::LogConfig => {
+            sig.params.push(AbiParam::new(I64)); // topic_ptr (handle Text ou 0)
+            sig.params.push(AbiParam::new(I64)); // policy_ptr (handle Text ou 0)
+            sig.params.push(AbiParam::new(I64)); // level (tag do enum LogLevel)
+            // sem returns — Unit
+        }
     }
 
     sig

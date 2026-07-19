@@ -10,6 +10,8 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::ffi::CStr;
+use std::os::raw::c_char;
 
 use crate::arena::kata_rt_arena_create;
 use crate::channel::{
@@ -71,6 +73,19 @@ pub fn restore_log_config(cfg: Option<LogConfig>) {
     });
 }
 
+/// Lê uma string de um handle Text (ponteiro `*const c_char` castado para i64).
+/// Retorna string vazia se `ptr == 0`.
+fn read_text(ptr: i64) -> String {
+    if ptr == 0 {
+        return String::new();
+    }
+    unsafe {
+        CStr::from_ptr(ptr as *const c_char)
+            .to_string_lossy()
+            .into_owned()
+    }
+}
+
 /// Obtém ou cria o canal para um tópico. A política determina o tipo:
 /// - `"drop"` → Broadcast (fire-and-forget)
 /// - `"block"` → Queue bounded cap=1 (bloqueia até consumo)
@@ -85,12 +100,12 @@ fn get_or_create_topic(topic: &str, policy: &str) -> i64 {
         }
         drop(registry);
         // Cria o canal na arena raiz.
-        let arena = unsafe { kata_rt_arena_create() };
+        let arena = kata_rt_arena_create();
         let handle = if policy == "block" {
-            unsafe { kata_rt_queue_create(arena, 1) }
+            kata_rt_queue_create(arena, 1)
         } else {
             // "drop" ou default → Broadcast
-            unsafe { kata_rt_broadcast_create(arena) }
+            kata_rt_broadcast_create(arena)
         };
         r.borrow_mut().insert(topic.to_string(), handle);
         handle
@@ -112,17 +127,13 @@ fn get_or_create_topic(topic: &str, policy: &str) -> i64 {
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_log_publish(
     topic_ptr: i64,
-    level: i64,
+    _level: i64,
     msg: i64,
     policy_ptr: i64,
 ) -> i64 {
     // Resolve tópico: se topic_ptr != 0, usar a string apontada; senão, config.
     let topic = if topic_ptr != 0 {
-        // topic_ptr é um handle Text — ler a string.
-        // Por ora, usamos um tópico default "default" pois não há FFI de
-        // leitura de Text a partir de handle aqui.
-        // TODO: ler string do handle Text.
-        "default".to_string()
+        read_text(topic_ptr)
     } else {
         LOG_CONFIG.with(|c| {
             c.borrow()
@@ -133,8 +144,7 @@ pub extern "C" fn kata_rt_log_publish(
     };
 
     let policy = if policy_ptr != 0 {
-        // TODO: ler string do handle Text.
-        "drop".to_string()
+        read_text(policy_ptr)
     } else {
         LOG_CONFIG.with(|c| {
             c.borrow()
@@ -147,7 +157,7 @@ pub extern "C" fn kata_rt_log_publish(
     let handle = get_or_create_topic(&topic, &policy);
     // Envia a mensagem no canal. Para "block", channel_send suspende se cheio.
     // Para "drop" (Broadcast), channel_send é fire-and-forget.
-    let _ = unsafe { kata_rt_channel_send(handle, msg) };
+    let _ = kata_rt_channel_send(handle, msg);
     0
 }
 
@@ -158,8 +168,7 @@ pub extern "C" fn kata_rt_log_publish(
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_log_recv(topic_ptr: i64) -> i64 {
     let topic = if topic_ptr != 0 {
-        // TODO: ler string do handle Text.
-        "default".to_string()
+        read_text(topic_ptr)
     } else {
         LOG_CONFIG.with(|c| {
             c.borrow()
@@ -169,12 +178,10 @@ pub extern "C" fn kata_rt_log_recv(topic_ptr: i64) -> i64 {
         })
     };
 
-    let handle = TOPIC_REGISTRY.with(|r| {
-        r.borrow().get(&topic).copied()
-    });
+    let handle = TOPIC_REGISTRY.with(|r| r.borrow().get(&topic).copied());
 
     match handle {
-        Some(h) => unsafe { kata_rt_channel_recv(h) },
+        Some(h) => kata_rt_channel_recv(h),
         None => 0, // Tópico não existe → sem mensagem.
     }
 }
@@ -187,20 +194,14 @@ pub extern "C" fn kata_rt_log_recv(topic_ptr: i64) -> i64 {
 /// `topic_ptr` e `policy_ptr` são handles para strings Text na arena.
 /// Se 0, mantém o valor anterior (não sobrescreve).
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_log_config(
-    topic_ptr: i64,
-    policy_ptr: i64,
-    level: i64,
-) {
+pub extern "C" fn kata_rt_log_config(topic_ptr: i64, policy_ptr: i64, level: i64) {
     LOG_CONFIG.with(|c| {
         let mut cfg = c.borrow_mut().take().unwrap_or_default();
         if topic_ptr != 0 {
-            // TODO: ler string do handle Text.
-            cfg.topic = Some("default".to_string());
+            cfg.topic = Some(read_text(topic_ptr));
         }
         if policy_ptr != 0 {
-            // TODO: ler string do handle Text.
-            cfg.policy = Some("drop".to_string());
+            cfg.policy = Some(read_text(policy_ptr));
         }
         cfg.level = Some(level);
         *c.borrow_mut() = Some(cfg);
