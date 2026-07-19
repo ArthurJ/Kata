@@ -22,13 +22,61 @@ use cranelift_codegen::ir::{AbiParam, GlobalValueData, InstBuilder, Signature};
 use cranelift_codegen::isa::CallConv;
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_module::{Linkage, Module};
-use kata_core::ty::Ty;
+use kata_core::ty::{PrimTy, Ty};
 use kata_inference::{TypedAction, TypedTestSpec};
 
 use super::expr::lower_expr;
 use super::module::{CodegenError, FuncKey, StringTable};
 use super::LowerCtx;
 use crate::metadata::MetadataTable;
+
+/// Formata `Ty` na sintaxe que o usuário escreve (não Debug de Rust).
+/// `Prim(Int)` → `Int`, `Unit` → `()`, `Generic("Result", [Int, Text])` →
+/// `Result::(Int, Text)`, etc. Evita vazar representação interna.
+fn ty_user_string(ty: &Ty) -> String {
+    match ty {
+        Ty::Prim(PrimTy::Int) => "Int".into(),
+        Ty::Prim(PrimTy::Float) => "Float".into(),
+        Ty::Prim(PrimTy::Text) => "Text".into(),
+        Ty::Prim(PrimTy::Rational) => "Rational".into(),
+        Ty::Unit => "()".into(),
+        Ty::Var(name) => name.clone(),
+        Ty::Generic(name, args) => {
+            let args_s = args
+                .iter()
+                .map(ty_user_string)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("{name}::({args_s})")
+        }
+        Ty::Sum(name) => name.clone(),
+        Ty::Struct(name) => name.clone(),
+        Ty::Tuple(elements) => {
+            let elems = elements
+                .iter()
+                .map(ty_user_string)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("({elems})")
+        }
+        Ty::Function(params, ret) => {
+            let params_s = params
+                .iter()
+                .map(ty_user_string)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("({params_s}) -> {}", ty_user_string(ret))
+        }
+        Ty::List(inner) => format!("[{}]", ty_user_string(inner)),
+        Ty::Array(inner) => format!("{{{}}}", ty_user_string(inner)),
+        Ty::Range(inner) => format!("[..{}]", ty_user_string(inner)),
+        Ty::Interface(name) => name.clone(),
+        Ty::Sender(inner) => format!("Sender::{}", ty_user_string(inner)),
+        Ty::Receiver(inner) => format!("Receiver::{}", ty_user_string(inner)),
+        Ty::ReceiverFactory(inner) => format!("ReceiverFactory::{}", ty_user_string(inner)),
+        Ty::InferVar(_) => "?".into(),
+    }
+}
 
 /// Identidade semântica de um wrapper de teste — tupla, não string fabricada.
 /// `(action_name, test_index)` onde `test_index` é posicional dentro de
@@ -77,10 +125,16 @@ pub(crate) fn generate_test_wrappers(
             // o wrapper passa args_ptr = 0 (null) e a action lê params de
             // null → SIGSEGV em runtime. Falhar aqui com erro claro.
             if !action.param_types.is_empty() && spec.args.is_none() {
+                let params = action
+                    .param_types
+                    .iter()
+                    .map(ty_user_string)
+                    .collect::<Vec<_>>()
+                    .join(", ");
                 return Err(CodegenError::UnsupportedNode(format!(
-                    "@test sem args em action `{}` que recebe {:?} — \
+                    "@test sem args em action `{}` que recebe ({}) — \
                      forneça args: (..) no @test",
-                    action.name, action.param_types
+                    action.name, params
                 )));
             }
 
