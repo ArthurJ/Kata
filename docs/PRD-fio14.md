@@ -131,13 +131,22 @@ estáticos); compartilhar TLS sem reset não é.
 
 ### 4.2. Timeout
 
-O runner inicia um timer antes de chamar o wrapper. Se o wrapper não retorna
-dentro de `timeout` ms, o runner:
-- Para testes sem CSP: aborta a execução (mata o fiber se houver)
-- Para testes com CSP (canais): sinaliza deadlock ao scheduler, que retorna
-  `DEADLOCK_SENTINEL`
+O runner chama `kata_rt_set_test_timeout(N)` antes de `kata_rt_run` se
+`@test(timeout: N)` está presente. Isto spawna uma thread OS que faz
+`thread::park_timeout(Duration::from_millis(N))` e seta `TIMEOUT_EXPIRED`
+(`AtomicBool` global) ao expirar. O `kata_rt_yield_check` slow path (a cada
+1000 iterações de `Loop`/`ForIn`) checa a flag antes do guard `HAS_READY_FIBER`
+— suspende com `YieldReason::Timeout` se expirada, mesmo com fiber único.
 
-O runner reporta "timeout" como falha.
+O scheduler trata `Err(YieldReason::Timeout)` drenando os fibers (sem dropar —
+pitfall #43) e retornando `Err("timeout")`. `kata_rt_run` mapeia para
+`TIMEOUT_SENTINEL` (i64::MIN + 2, distinto de `DEADLOCK_SENTINEL`). O runner
+reporta "timeout" como falha.
+
+Se o teste termina antes do deadline, `reset_scheduler` faz `unpark + join` na
+thread timer (cancelamento limpo — a thread distingue `TimedOut` de `Unparked`
+e não seta a flag no caso de cancelamento, evitando falso positivo no próximo
+teste).
 
 ## 5. Relatório
 
@@ -318,39 +327,97 @@ warning. `@tset` (typo) produz erro de resolution.
 **DoD Fase 3:** `cargo test` passa. `JITModule` contém os wrappers. Inspeção
 via `eprintln!(ctx.func.display())` mostra wrappers com args literais.
 
-### Fase 4: Runtime — checar deadline no scheduler + reset de TLS
+### Fase 4: Runtime — timeout cooperativo via thread OS + AtomicBool
 
-O scheduler já recupera controle periodicamente via yield cooperativo
-(`YIELD_INTERVAL=1000`, `kata_rt_yield_check` no header de Loop/ForIn). A
-mudança é fazer o scheduler checar o deadline do teste antes de cada
-`resume()` no loop principal — sem adicionar `YieldReason::Timeout` novo,
-sem `scheduler_signal_timeout`, sem thread OS.
+**Decisão A (fechada com Arthur, 2026-07-18):** o timeout é responsabilidade
+do runtime (porque `@test(timeout: N)` é argumento do teste), mas a **contagem
+de tempo fica fora da estrutura de fibers** — a medição não roda na stack do
+fiber. O fiber só lê um `AtomicBool`.
 
-**Mudanças:**
-- `kata-rt/src/scheduler.rs`: adicionar campo `test_deadline: Option<Instant>`
-  ao `Scheduler`. No loop principal (antes de `resume_fiber`), checar:
-  se `test_deadline` está expirado, retornar `TIMEOUT_SENTINEL` (i64::MIN + 2,
-  distinto de `DEADLOCK_SENTINEL` = i64::MIN + 1).
-- `kata-rt/src/scheduler.rs`: expor `set_test_deadline(Option<Instant>)` para
-  o runner configurar antes de cada teste.
-- Adicionar `kata_rt_scheduler_reset` (ou equivalente) a `kata-rt` — reseta
-  TLS do scheduler entre testes. Pitfall #31: registrar em TODOS os sites —
-  `FfiSymbol` enum (`kata-core/src/ffi.rs`), `symbol_name()`, `return_type()`,
-  `from_name()`, `ffi_signature()` (`kata-codegen/src/ffi_sigs.rs`),
-  `all_ffi_symbols()` e `declare_ffi_symbols` (`kata-codegen/src/ffi_registry.rs`),
-  `register_ffi_symbols` (builder.symbol).
-- Teste Rust: chama `reset_all_arenas()` + `scheduler_reset()` e verifica
-  arenas/scheduler limpos. Teste de timeout: configura deadline curto (ex: 10ms)
-  e roda action com loop infinito cooperativo — deve retornar `TIMEOUT_SENTINEL`.
+A proposta original (checar `test_deadline` antes de cada `resume()` no
+scheduler, sem `YieldReason::Timeout` novo, sem thread OS) foi **descartada**
+por dois furos identificados na sessão de design:
 
-**Pitfalls aplicáveis:** #38 (extern "C" é nounwind — nunca `panic!` na stack
-de `Fiber::resume()` — retornar sentinela), #43 (wasmtime-fiber panica no Drop
-se não completou — `ManuallyDrop`), #44 (FFI durante `resume()` não pode
-re-borrow `SCHEDULER` RefCell — usar TLS `PENDING_SPAWNS`).
+1. **Scheduler bloqueado em `resume()`:** se o fiber está em loop infinito,
+   `resume()` não retorna — checar deadline antes de `resume()` só ajuda se
+   `resume()` retornar.
+2. **`HAS_READY_FIBER` é false com fiber único:** `kata_rt_yield_check` só
+   suspende cooperativamente se `HAS_READY_FIBER` for true. Com um único
+   fiber, após `pop_front` a `run_queue` está vazia → `HAS_READY_FIBER = false`
+   → o fiber nunca cede → o scheduler nunca recupera controle.
 
-**DoD Fase 4:** `cargo test -p kata-rt` passa. Scheduler reseta corretamente.
-Teste de timeout com loop cooperativo retorna `TIMEOUT_SENTINEL` dentro do
-deadline.
+**Mecanismo (Decisão A):**
+
+1. `static TIMEOUT_EXPIRED: AtomicBool` em `kata-rt` (global, NÃO-TLS —
+   precisa ser visível entre a thread timer e a thread do fiber). **Implica
+   serialização de testes:** como a flag é global, `kata_rt_run` não pode
+   ser chamada de múltiplas threads concorrentemente. O driver deve serializar
+   a execução de testes. Compatível com o scheduler single-threaded (Decisão
+   A do Fio 11) — `kata_rt_run` já não é concorrente.
+2. `static PENDING_TIMER: Mutex<Option<JoinHandle<()>>>` em `kata-rt`
+   (global). Necessária para `reset_scheduler` acessar o `JoinHandle` da
+   thread timer anterior e cancelá-la.
+3. Nova FFI `kata_rt_set_test_timeout(millis: i64)` — spawna uma thread OS
+   que faz `thread::park_timeout(Duration::from_millis(millis))` direto
+   (granularidade de ms aceitável para testes). Ao acordar, **distingue
+   timeout de cancelamento** via `ParkTimeoutResult::TimedOut` (seta flag)
+   vs `Unparked` (cancelada pelo runner, NÃO seta — evita falso positivo
+   que poluiria o próximo teste). Cancelável: se o teste termina antes do
+   deadline, o runtime faz `thread.unpark()` + `join()` na thread anterior.
+4. `kata_rt_yield_check` slow path ganha um check **antes** do guard
+   `HAS_READY_FIBER`: se `TIMEOUT_EXPIRED` está true, suspende com
+   `YieldReason::Timeout` e retorna. Runs normais (`TIMEOUT_EXPIRED = false`)
+   não mudam comportamento. Runs de teste checam o deadline a cada 1000
+   iterações mesmo sendo fiber único.
+5. `YieldReason::Timeout` novo variant. Scheduler match arm
+   `Err(YieldReason::Timeout)`: `drain fibers + return Err("timeout")`, mesmo
+   padrão do deadlock (pitfall #43 — `drain()` esquece fibers sem dropar,
+   `wasmtime-fiber` panica no Drop de fiber não-completado).
+6. `kata_rt_run`: `Err("timeout")` → `TIMEOUT_SENTINEL` (i64::MIN + 2,
+   distinto de `DEADLOCK_SENTINEL` = i64::MIN + 1).
+7. `reset_scheduler` reseta `TIMEOUT_EXPIRED = false` e faz `unpark + join`
+   na thread timer pendente. **Ordem obrigatória:** `join` antes de
+   `store(false)` — se inverter, a thread anterior pode setar `true` depois
+   do reset.
+8. Registrar `kata_rt_set_test_timeout` em TODOS os sites (pitfall #31):
+   `FfiSymbol` enum, `symbol_name`, `return_type`, `from_name`,
+   `ffi_signature`, `all_ffi_symbols`, `declare_ffi_symbols`,
+   `register_ffi_symbols` (builder.symbol).
+
+**Mudança no modelo mental da crate `kata-rt`:** `kata-rt` é "single-threaded"
+desde o Fio 11 (TLS de arenas, scheduler, `LAST_SUSPEND_PTR` presumem uma
+thread). A Decisão A introduz uma thread OS em `kata-rt`. Isto é aceitável
+porque a thread só escreve num `AtomicBool` isolado — não toca scheduler,
+arenas, nem TLS. A invariant do Fio 11 (scheduler/arenas/TLS acessados por uma
+thread só) é preservada. A crate deixa de ser "single-threaded" no sentido
+estrito (há duas threads vivas durante um teste com timeout), mas o modelo de
+memória do scheduler permanece single-threaded.
+
+**Limitação aceita:** não preemptiva — só dispara em `yield_check` (codegen
+injeta em `Loop`/`ForIn`). Recursão pura e I/O sem loop não cobertos. Inerente
+a qualquer solução cooperativa sem preempção OS. A thread OS poderia servir de
+base para preempção real no futuro (via signal), mas isso é especulação sobre
+`@parallel` (congelado).
+
+**Distinção semântica deadlock vs timeout:** deadlock é deadlock, timeout é
+hang. O runner reporta `DEADLOCK_SENTINEL` para deadlock real (mais
+informativo — "N fibers bloqueados sem progresso") e `TIMEOUT_SENTINEL` para
+hang por loop infinito. O path de deadlock existente (scheduler.rs:219-251) já
+detecta deadlock estrutural imediatamente — o check de `TIMEOUT_EXPIRED` no
+path de deadlock é desnecessário.
+
+**Pitfalls aplicáveis:** #21 (E0004 em cascata ao adicionar `YieldReason::Timeout`),
+#31 (registrar FFI em 8+ sites), #38 (extern "C" é nounwind — nunca `panic!`
+na stack de `Fiber::resume()` — retornar sentinela), #43 (wasmtime-fiber
+panica no Drop se não completou — `ManuallyDrop`, `drain()` no caminho de
+erro), #44 (FFI durante `resume()` não pode re-borrow `SCHEDULER` RefCell —
+`kata_rt_yield_check` lê apenas `TIMEOUT_EXPIRED` AtomicBool, sem acessar o
+scheduler; `kata_rt_set_test_timeout` é chamada fora de `resume()`).
+
+**DoD Fase 4:** `cargo test -p kata-rt` passa. Teste de timeout retorna
+`TIMEOUT_SENTINEL` (não `DEADLOCK_SENTINEL`, não hang). Teste de cancelamento
+retorna resultado normal (sem falso positivo da thread cancelada).
+`cargo test --workspace` não regrediu (883 + novos).
 
 ### Fase 5: Driver — subcomando `kata test`
 
@@ -417,10 +484,10 @@ deadline.
 
 - **`@test` em action com CSP pode bloquear o runner.** Se a action faz `<!`
   em canal sem sender, o scheduler deadlocka. Solução: timeout cooperativo
-  via `YIELD_INTERVAL` existente — o scheduler já recupera controle
-  periodicamente via `kata_rt_yield_check`. A mudança é fazer o scheduler
-  checar `test_deadline` antes de cada `resume()` no loop principal e
-  retornar `TIMEOUT_SENTINEL` se expirado. Sem thread OS (que quebraria o
-  invariant single-threaded do runtime), sem `YieldReason::Timeout` novo.
-  Mesmo loops infinitos cooperativos disparam o timeout — o scheduler checa
-  o deadline a cada iteração do loop principal.
+  via thread OS + `AtomicBool` (Decisão A da Fase 4). A thread timer faz
+  `park_timeout` e seta `TIMEOUT_EXPIRED`; o `kata_rt_yield_check` slow path
+  checa a flag antes do guard `HAS_READY_FIBER` e suspende com
+  `YieldReason::Timeout` — mesmo com fiber único. O scheduler drena os
+  fibers e retorna `TIMEOUT_SENTINEL`. Limitação: não preemptiva — só dispara
+  em `yield_check` de `Loop`/`ForIn`. Recursão pura e I/O sem loop não
+  cobertos. Inerente a qualquer solução cooperativa sem preempção OS.
