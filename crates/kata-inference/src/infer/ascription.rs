@@ -196,11 +196,20 @@ pub(crate) fn infer_type_ascription(
             expected: format!(
                 "Struct {} fields [{}]",
                 struct_name,
-                struct_info.fields.iter().map(|f| f.ty.to_string()).collect::<Vec<_>>().join(", ")
+                struct_info
+                    .fields
+                    .iter()
+                    .map(|f| f.ty.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ),
             found: format!(
                 "Tuple elements [{}]",
-                elements.iter().map(|e| e.node.ty.to_string()).collect::<Vec<_>>().join(", ")
+                elements
+                    .iter()
+                    .map(|e| e.node.ty.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ),
             span: expr.span.into(),
         });

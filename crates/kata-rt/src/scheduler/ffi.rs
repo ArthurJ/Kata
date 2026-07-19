@@ -16,19 +16,19 @@ use crate::fiber::{YieldReason, is_in_fiber, with_suspend};
 
 use super::Scheduler;
 
-use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-// ── Test timeout (Decisão A — Fio 14 Fase 4) ──────────────────────────
+// ── Test timeout cooperativo ──────────────────────────
 //
 // `TIMEOUT_EXPIRED` é global (NÃO-TLS) porque precisa ser visível entre a
 // thread OS timer e a thread do fiber. Setada pela thread timer quando o
 // `park_timeout` expira; lida pelo `kata_rt_yield_check` slow path a cada
 // `YIELD_INTERVAL` iterações. Implica serialização de testes — `kata_rt_run`
 // não pode ser chamada de múltiplas threads concorrentemente (compatível com
-// o scheduler single-threaded do Fio 11).
+// o scheduler single-threaded).
 static TIMEOUT_EXPIRED: AtomicBool = AtomicBool::new(false);
 
 // Handle da thread OS timer pendente. `reset_scheduler` faz `unpark + join`
@@ -188,12 +188,11 @@ pub extern "C" fn kata_rt_run() -> i64 {
 pub const DEADLOCK_SENTINEL: i64 = i64::MIN + 1;
 
 /// Valor retornado por `kata_rt_run` quando timeout de teste expira
-/// (`@test(timeout: N)` — Decisão A, Fio 14 Fase 4). Distinto de
-/// `DEADLOCK_SENTINEL` para que o runner reporte "timeout" em vez de
-/// "deadlock".
+/// (`@test(timeout: N)`). Distinto de `DEADLOCK_SENTINEL` para que o
+/// runner reporte "timeout" em vez de "deadlock".
 pub const TIMEOUT_SENTINEL: i64 = i64::MIN + 2;
 
-/// Configura o timeout de teste (Decisão A — Fio 14 Fase 4).
+/// Configura o timeout de teste.
 ///
 /// Spawna uma thread OS que faz `thread::park_timeout(Duration::from_millis(millis))`
 /// direto (granularidade de ms aceitável para testes). Ao acordar, distingue:
@@ -204,7 +203,7 @@ pub const TIMEOUT_SENTINEL: i64 = i64::MIN + 2;
 /// A thread é cancelável: `reset_scheduler` faz `unpark + join` na thread
 /// pendente antes de resetar `TIMEOUT_EXPIRED`. A thread OS só escreve no
 /// `AtomicBool` isolado — não toca scheduler, arenas, nem TLS. A invariant
-/// single-threaded do Fio 11 é preservada.
+/// single-threaded é preservada.
 ///
 /// `TIMEOUT_EXPIRED` é global (NÃO-TLS) — implica serialização de testes:
 /// `kata_rt_run` não pode ser chamada de múltiplas threads concorrentemente.

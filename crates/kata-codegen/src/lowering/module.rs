@@ -61,7 +61,14 @@ pub(crate) fn lower_module(
     typed: &TypedModule,
     module: &mut cranelift_jit::JITModule,
     ffi_ids: &HashMap<String, cranelift_module::FuncId>,
-) -> Result<(MetadataTable, StringTable, Vec<super::test_runner::TestWrapper>), CodegenError> {
+) -> Result<
+    (
+        MetadataTable,
+        StringTable,
+        Vec<super::test_runner::TestWrapper>,
+    ),
+    CodegenError,
+> {
     let mut metadata = MetadataTable::new();
     let mut string_table = StringTable::new();
     let mut symbol_table: SymbolTable = HashMap::new();

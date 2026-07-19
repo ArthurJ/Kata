@@ -1,4 +1,4 @@
-//! Testes do timeout cooperativo de teste (Decisão A — Fio 14 Fase 4).
+//! Testes do timeout cooperativo de teste.
 //!
 //! Valida que:
 //! 1. `kata_rt_set_test_timeout(N)` + fiber em loop infinito cooperativo

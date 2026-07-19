@@ -47,8 +47,7 @@ pub fn jit_eval(typed: &TypedModule) -> Result<JitResult, CodegenError> {
 
     // Declara __kata_entry e faz o lowering.
     let ret_ty = typed.entry.node.ty.clone();
-    let (_metadata, _string_table, _test_wrappers) =
-        lower_module(typed, &mut module, &ffi_ids)?;
+    let (_metadata, _string_table, _test_wrappers) = lower_module(typed, &mut module, &ffi_ids)?;
 
     // Finaliza todas as definições — resolve relocations, compila machine code.
     module
@@ -134,8 +133,7 @@ pub fn jit_compile_tests(
 
     let ffi_ids = crate::ffi_registry::declare_ffi_symbols(&mut module)?;
 
-    let (_metadata, _string_table, test_wrappers) =
-        lower_module(typed, &mut module, &ffi_ids)?;
+    let (_metadata, _string_table, test_wrappers) = lower_module(typed, &mut module, &ffi_ids)?;
 
     module
         .finalize_definitions()

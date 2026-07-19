@@ -58,9 +58,18 @@ resposta!()"#,
 
     let (stdout, code) = run_kata_test(&path);
 
-    assert!(stdout.contains("[PASS]"), "deve ter [PASS] — stdout: {stdout}");
-    assert!(stdout.contains("resposta"), "deve citar a action — stdout: {stdout}");
-    assert!(stdout.contains("1 passed"), "deve ter 1 passed — stdout: {stdout}");
+    assert!(
+        stdout.contains("[PASS]"),
+        "deve ter [PASS] — stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("resposta"),
+        "deve citar a action — stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("1 passed"),
+        "deve ter 1 passed — stdout: {stdout}"
+    );
     assert_eq!(code, 0, "exit 0 quando todos passam — stdout: {stdout}");
 }
 
@@ -84,7 +93,10 @@ soma!(1, 2)"#,
         stdout.contains("[PASS]"),
         "deve ter [PASS] — stdout: {stdout}"
     );
-    assert!(stdout.contains("1 passed"), "deve ter 1 passed — stdout: {stdout}");
+    assert!(
+        stdout.contains("1 passed"),
+        "deve ter 1 passed — stdout: {stdout}"
+    );
     assert_eq!(code, 0, "exit 0 — stdout: {stdout}");
 }
 
@@ -111,7 +123,10 @@ infinito!()"#,
         stdout.contains("[TIMEOUT]"),
         "deve ter [TIMEOUT] — stdout: {stdout}"
     );
-    assert!(stdout.contains("1 failed"), "deve ter 1 failed — stdout: {stdout}");
+    assert!(
+        stdout.contains("1 failed"),
+        "deve ter 1 failed — stdout: {stdout}"
+    );
     assert_eq!(code, 1, "exit 1 quando há falhas — stdout: {stdout}");
 }
 
@@ -132,7 +147,10 @@ soma!(1, 2)"#,
 
     let (stdout, code) = run_kata_test(&path);
 
-    assert!(stdout.contains("[PASS]"), "deve ter [PASS] — stdout: {stdout}");
+    assert!(
+        stdout.contains("[PASS]"),
+        "deve ter [PASS] — stdout: {stdout}"
+    );
     assert!(
         stdout.contains("caso 3+4"),
         "deve citar caso 3+4 — stdout: {stdout}"
@@ -141,7 +159,10 @@ soma!(1, 2)"#,
         stdout.contains("caso 10+20"),
         "deve citar caso 10+20 — stdout: {stdout}"
     );
-    assert!(stdout.contains("2 passed"), "deve ter 2 passed — stdout: {stdout}");
+    assert!(
+        stdout.contains("2 passed"),
+        "deve ter 2 passed — stdout: {stdout}"
+    );
     assert_eq!(code, 0, "exit 0 quando todos passam — stdout: {stdout}");
 }
 
@@ -168,7 +189,10 @@ soma!(1, 2)"#,
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let code = output.status.code().unwrap_or(-1);
 
-    assert!(stdout.contains("soma rapida"), "deve citar soma rapida — stdout: {stdout}");
+    assert!(
+        stdout.contains("soma rapida"),
+        "deve citar soma rapida — stdout: {stdout}"
+    );
     assert!(
         !stdout.contains("[PASS].*soma lenta"),
         "não deve executar soma lenta — stdout: {stdout}"

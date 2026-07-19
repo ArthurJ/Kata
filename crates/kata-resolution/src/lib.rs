@@ -92,7 +92,7 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
                             is_commutative = true;
                         }
                         // Diretivas válidas em Sig mas sem processamento aqui.
-                        "builtin" => {}
+                        "builtin" | "log" => {}
                         other => {
                             errors.push(ResolveError::UnknownDirective {
                                 name: other.to_string(),
@@ -153,12 +153,12 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
                     None
                 });
 
-                // Valida diretivas: só @ffi e @test são válidas em Actions.
+                // Valida diretivas: @ffi, @test e @log são válidas em Actions.
                 // Outras (@builtin, @commutative, @associative) pertencem a Sigs
                 // ou Implements — erro se aparecerem em Action.
                 for d in action_dirs {
                     match d.name.as_str() {
-                        "ffi" | "test" => {}
+                        "ffi" | "test" | "log" => {}
                         other => {
                             errors.push(ResolveError::UnknownDirective {
                                 name: other.to_string(),
@@ -256,14 +256,15 @@ fn extract_test_specs(
                     errors.push(ResolveError::UnknownDirective {
                         name: "test".into(),
                         context: "action",
-                        item_name: format!(
-                            "{action_name}: desc posicional deve ser Text"
-                        ),
+                        item_name: format!("{action_name}: desc posicional deve ser Text"),
                     });
                 }
             }
             // @test{desc: "...", args: (...), timeout: N, expects: "..."}
-            args if args.iter().all(|a| matches!(a, kata_ast::DirectiveArg::Named { .. })) => {
+            args if args
+                .iter()
+                .all(|a| matches!(a, kata_ast::DirectiveArg::Named { .. })) =>
+            {
                 for arg in args {
                     if let kata_ast::DirectiveArg::Named { key, value } = arg {
                         match key.as_str() {
@@ -274,9 +275,7 @@ fn extract_test_specs(
                                     errors.push(ResolveError::UnknownDirective {
                                         name: "test".into(),
                                         context: "action",
-                                        item_name: format!(
-                                            "{action_name}: desc deve ser Text"
-                                        ),
+                                        item_name: format!("{action_name}: desc deve ser Text"),
                                     });
                                 }
                             }
@@ -300,9 +299,7 @@ fn extract_test_specs(
                                     errors.push(ResolveError::UnknownDirective {
                                         name: "test".into(),
                                         context: "action",
-                                        item_name: format!(
-                                            "{action_name}: timeout deve ser Int"
-                                        ),
+                                        item_name: format!("{action_name}: timeout deve ser Int"),
                                     });
                                 }
                             }
@@ -313,9 +310,7 @@ fn extract_test_specs(
                                     errors.push(ResolveError::UnknownDirective {
                                         name: "test".into(),
                                         context: "action",
-                                        item_name: format!(
-                                            "{action_name}: expects deve ser Text"
-                                        ),
+                                        item_name: format!("{action_name}: expects deve ser Text"),
                                     });
                                 }
                             }

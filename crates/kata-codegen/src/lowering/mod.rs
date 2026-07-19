@@ -36,8 +36,8 @@ mod variant;
 
 pub use jit::{JitResult, jit_compile_tests, jit_eval};
 pub use module::CodegenError;
-pub use test_runner::TestWrapper;
 use module::StringTable;
+pub use test_runner::TestWrapper;
 
 use cranelift_codegen::ir::{Block, GlobalValue, Value};
 use cranelift_frontend::FunctionBuilder;

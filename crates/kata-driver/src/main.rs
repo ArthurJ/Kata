@@ -1,14 +1,14 @@
 use std::path::{Path, PathBuf};
 
 use clap::Parser;
-use kata_codegen::{jit_compile_tests, jit_eval, TestWrapper};
+use kata_codegen::{TestWrapper, jit_compile_tests, jit_eval};
 use kata_core::ty::{PrimTy, Ty};
 use kata_inference::infer_module;
 use kata_lexer::lex;
 use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
 use kata_parser::parse;
-use kata_resolution::{load_prelude, resolve, ResolvedModule};
+use kata_resolution::{ResolvedModule, load_prelude, resolve};
 use kata_rt as rt;
 
 /// CLI do compilador Kata.
@@ -129,8 +129,8 @@ fn cmd_test(path: &str, filter: Option<&str>) -> miette::Result<()> {
         let module = parse(tokens).map_err(IntoReport::into_report)?;
         let prelude = load_prelude()
             .map_err(|e| miette::Report::msg(format!("erro ao carregar prelude: {e:?}")))?;
-        let user =
-            resolve(&module).map_err(|e| miette::Report::msg(format!("erro de resolução: {e:?}")))?;
+        let user = resolve(&module)
+            .map_err(|e| miette::Report::msg(format!("erro de resolução: {e:?}")))?;
         let resolved = merge_resolved(prelude, user);
         let typed = infer_module(&module, &resolved).map_err(IntoReport::into_report)?;
         let typed = monomorphize(typed);
@@ -151,9 +151,13 @@ fn cmd_test(path: &str, filter: Option<&str>) -> miette::Result<()> {
             }
 
             // Negativos CompileError não têm wrapper — não há nada para
-            // executar. O driver compila o sub-módulo isolado (Fase 5+).
+            // executar. O driver compila o sub-módulo isolado.
             // Por ora, reporta como pendente.
-            if w.spec.expects.as_deref().is_some_and(|e| e.starts_with("CompileError:")) {
+            if w.spec
+                .expects
+                .as_deref()
+                .is_some_and(|e| e.starts_with("CompileError:"))
+            {
                 println!("  [PENDENTE] {label}: {desc} (negativo CompileError)");
                 total_skip += 1;
                 continue;
@@ -210,9 +214,7 @@ fn run_test_wrapper(module: &cranelift_jit::JITModule, w: &TestWrapper) -> TestO
     // SAFETY: `code` é ponteiro válido após finalize_definitions. O wrapper
     // é `extern "C" fn() -> i64` — autossuficiente (faz scheduler_init +
     // spawn + run internamente).
-    let result: i64 = unsafe {
-        std::mem::transmute::<*const u8, extern "C" fn() -> i64>(code)()
-    };
+    let result: i64 = unsafe { std::mem::transmute::<*const u8, extern "C" fn() -> i64>(code)() };
 
     if result == rt::TIMEOUT_SENTINEL {
         TestOutcome::Timeout

@@ -236,7 +236,7 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
         // yield_check: () → void (yield point no header de loops, )
         FfiSymbol::YieldCheck => {}
         // set_test_timeout: (millis: i64) → void (configura timer de teste)
-        // Decisão A, Fio 14 Fase 4. Chamada pelo runner antes de kata_rt_run.
+        // Chamada pelo runner antes de kata_rt_run.
         FfiSymbol::SetTestTimeout => {
             sig.params.push(AbiParam::new(I64)); // millis
         }

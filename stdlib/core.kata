@@ -239,3 +239,12 @@ filter :: (A -> Boolean) List::A => List::A
 
 @builtin("fold")
 fold :: (A B -> A) A List::B => A
+
+# ── LogLevel (Fio 14 @log) ────────────────────────────────────
+# Enum fixo para níveis de telemetria. Variantes unitárias.
+
+enum LogLevel
+  Debug
+  Info
+  Warn
+  Error

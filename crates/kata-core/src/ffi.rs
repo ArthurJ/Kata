@@ -93,9 +93,8 @@ pub enum FfiSymbol {
     Yield,
     /// `kata_rt_yield_check() -> ()` — yield point no header de loops.
     YieldCheck,
-    /// `kata_rt_set_test_timeout(millis) -> ()` — configura timeout de teste
-    /// (Decisão A, Fio 14 Fase 4). Spawna thread OS timer que seta
-    /// `TIMEOUT_EXPIRED` ao expirar.
+    /// `kata_rt_set_test_timeout(millis) -> ()` — configura timeout de teste.
+    /// Spawna thread OS timer que seta `TIMEOUT_EXPIRED` ao expirar.
     SetTestTimeout,
 
     // ── Arc<T> / CaptureBox ───────────────────────

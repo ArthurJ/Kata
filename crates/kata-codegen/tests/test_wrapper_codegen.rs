@@ -1,4 +1,4 @@
-//! Testes E2E do codegen de wrappers `__kata_test_*` (Fase 3).
+//! Testes E2E do codegen de wrappers `__kata_test_*`.
 //!
 //! Pipeline completo: lex → parse → resolve → infer → optimize → codegen.
 //! Usa `jit_compile_tests` que compila sem executar e retorna
@@ -7,13 +7,13 @@
 //! e que negativos CompileError recebem func_id placeholder.
 
 use cranelift_module::FuncId;
-use kata_codegen::{jit_compile_tests, TestWrapper};
+use kata_codegen::{TestWrapper, jit_compile_tests};
 use kata_inference::infer_module;
 use kata_lexer::lex;
 use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
 use kata_parser::parse;
-use kata_resolution::{load_prelude, resolve, ResolvedModule};
+use kata_resolution::{ResolvedModule, load_prelude, resolve};
 
 /// Combina prelude + módulo do usuário (replica do driver).
 fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModule {

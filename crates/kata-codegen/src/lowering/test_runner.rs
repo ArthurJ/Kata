@@ -25,9 +25,9 @@ use cranelift_module::{Linkage, Module};
 use kata_core::ty::Ty;
 use kata_inference::{TypedAction, TypedTestSpec};
 
+use super::LowerCtx;
 use super::expr::lower_expr;
 use super::module::{CodegenError, FuncKey, StringTable};
-use super::LowerCtx;
 use crate::metadata::MetadataTable;
 
 /// Identidade semântica de um wrapper de teste — tupla, não string fabricada.
@@ -201,9 +201,7 @@ fn define_test_wrapper(
             .ffi_refs
             .get("kata_rt_scheduler_init")
             .copied()
-            .ok_or_else(|| {
-                CodegenError::FfiSymbolNotFound("kata_rt_scheduler_init".into())
-            })?;
+            .ok_or_else(|| CodegenError::FfiSymbolNotFound("kata_rt_scheduler_init".into()))?;
         let init_inst = lower.builder.ins().call(scheduler_init_ref, &[]);
         let root_arena = lower.builder.inst_results(init_inst)[0];
         lower.caller_arena = Some(root_arena);
@@ -233,12 +231,15 @@ fn define_test_wrapper(
             .module
             .declare_func_in_func(callee_fid, lower.builder.func);
         let ext_func_name = lower.builder.func.dfg.ext_funcs[func_ref].name.clone();
-        let func_gv = lower.builder.func.create_global_value(GlobalValueData::Symbol {
-            name: ext_func_name,
-            offset: 0.into(),
-            colocated: true,
-            tls: false,
-        });
+        let func_gv = lower
+            .builder
+            .func
+            .create_global_value(GlobalValueData::Symbol {
+                name: ext_func_name,
+                offset: 0.into(),
+                colocated: true,
+                tls: false,
+            });
         let fn_ptr = lower
             .builder
             .ins()

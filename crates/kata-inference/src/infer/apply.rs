@@ -8,7 +8,7 @@
 use kata_ast::{Expr, Span, Spanned};
 use kata_core::dispatch::{OverloadInfo, Score, match_score};
 use kata_core::escape::EscapeTarget;
-use kata_core::ty::{ty_list_to_string, Ty, TypeEnv};
+use kata_core::ty::{Ty, TypeEnv, ty_list_to_string};
 use kata_diagnostics::MiddleError;
 use std::collections::HashMap;
 
@@ -402,7 +402,10 @@ pub(crate) fn infer_apply(
                 if arity_matched && unify_failed {
                     return Err(MiddleError::TypeMismatch {
                         expected: format!("argumentos consistentes com type params de {func_name}"),
-                        found: format!("unify falhou para {func_name} com args [{}]", ty_list_to_string(&arg_types)),
+                        found: format!(
+                            "unify falhou para {func_name} com args [{}]",
+                            ty_list_to_string(&arg_types)
+                        ),
                         span: (*span).into(),
                     });
                 }
