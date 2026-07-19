@@ -71,7 +71,10 @@ fn try_send(handle: i64, value: i64) -> i64 {
         match tag {
             super::TAG_CHANNEL => {
                 let inner = &*(ptr as *const ChannelInner);
-                let mut slot = inner.slot.lock().unwrap();
+                let mut slot = inner
+                    .slot
+                    .lock()
+                    .expect("mutex never poisoned: single-threaded cooperative runtime");
                 if slot.is_some() {
                     // Slot ocupado — receptor ainda não consumiu.
                     WOULD_BLOCK
@@ -83,7 +86,10 @@ fn try_send(handle: i64, value: i64) -> i64 {
             }
             super::TAG_QUEUE => {
                 let inner = &*(ptr as *const QueueInner);
-                let mut buffer = inner.buffer.lock().unwrap();
+                let mut buffer = inner
+                    .buffer
+                    .lock()
+                    .expect("mutex never poisoned: single-threaded cooperative runtime");
                 if buffer.len() >= inner.capacity {
                     // Buffer cheio.
                     WOULD_BLOCK
@@ -96,11 +102,17 @@ fn try_send(handle: i64, value: i64) -> i64 {
             super::TAG_BROADCAST => {
                 let inner = &*(ptr as *const BroadcastInner);
                 {
-                    let mut val = inner.value.lock().unwrap();
+                    let mut val = inner
+                        .value
+                        .lock()
+                        .expect("mutex never poisoned: single-threaded cooperative runtime");
                     *val = Some(value);
                 }
                 {
-                    let mut ver = inner.version.lock().unwrap();
+                    let mut ver = inner
+                        .version
+                        .lock()
+                        .expect("mutex never poisoned: single-threaded cooperative runtime");
                     *ver += 1;
                 }
                 inner.new_msg.notify_all();
@@ -158,7 +170,10 @@ fn try_recv(handle: i64) -> i64 {
         match tag {
             super::TAG_CHANNEL => {
                 let inner = &*(ptr as *const ChannelInner);
-                let mut slot = inner.slot.lock().unwrap();
+                let mut slot = inner
+                    .slot
+                    .lock()
+                    .expect("mutex never poisoned: single-threaded cooperative runtime");
                 if let Some(v) = slot.take() {
                     inner.sender_ready.notify_one();
                     v
@@ -168,7 +183,10 @@ fn try_recv(handle: i64) -> i64 {
             }
             super::TAG_QUEUE => {
                 let inner = &*(ptr as *const QueueInner);
-                let mut buffer = inner.buffer.lock().unwrap();
+                let mut buffer = inner
+                    .buffer
+                    .lock()
+                    .expect("mutex never poisoned: single-threaded cooperative runtime");
                 if let Some(v) = buffer.pop_front() {
                     inner.not_full.notify_one();
                     v
@@ -181,17 +199,25 @@ fn try_recv(handle: i64) -> i64 {
                 // SAFETY: rx.inner aponta para um BroadcastInner válido
                 // na arena do criador. O criador é always-last.
                 let inner = &*rx.inner;
-                let ver = inner.version.lock().unwrap();
+                let ver = inner
+                    .version
+                    .lock()
+                    .expect("mutex never poisoned: single-threaded cooperative runtime");
                 if *ver > rx.last_seen_version {
-                    let val = inner.value.lock().unwrap();
+                    let val = inner
+                        .value
+                        .lock()
+                        .expect("mutex never poisoned: single-threaded cooperative runtime");
                     let result = val.unwrap_or(WOULD_BLOCK);
                     // Atualiza last_seen. Preciso soltar os locks primeiro.
                     drop(val);
                     drop(ver);
                     // SAFETY: rx é &mut via ponteiro mutável (arena alloc).
                     // Como single-threaded, sem data race.
-                    (*ptr.cast::<BroadcastReceiver>()).last_seen_version =
-                        *inner.version.lock().unwrap();
+                    (*ptr.cast::<BroadcastReceiver>()).last_seen_version = *inner
+                        .version
+                        .lock()
+                        .expect("mutex never poisoned: single-threaded cooperative runtime");
                     result
                 } else {
                     WOULD_BLOCK
@@ -221,16 +247,28 @@ pub(crate) fn can_recv(handle: i64) -> bool {
         match tag {
             super::TAG_CHANNEL => {
                 let inner = &*(ptr as *const ChannelInner);
-                inner.slot.lock().unwrap().is_some()
+                inner
+                    .slot
+                    .lock()
+                    .expect("mutex never poisoned: single-threaded cooperative runtime")
+                    .is_some()
             }
             super::TAG_QUEUE => {
                 let inner = &*(ptr as *const QueueInner);
-                !inner.buffer.lock().unwrap().is_empty()
+                !inner
+                    .buffer
+                    .lock()
+                    .expect("mutex never poisoned: single-threaded cooperative runtime")
+                    .is_empty()
             }
             super::TAG_BROADCAST_RX => {
                 let rx = &*(ptr as *const BroadcastReceiver);
                 let inner = &*rx.inner;
-                *inner.version.lock().unwrap() > rx.last_seen_version
+                *inner
+                    .version
+                    .lock()
+                    .expect("mutex never poisoned: single-threaded cooperative runtime")
+                    > rx.last_seen_version
             }
             _ => false,
         }
@@ -257,11 +295,20 @@ pub(crate) fn can_send(handle: i64) -> bool {
         match tag {
             super::TAG_CHANNEL => {
                 let inner = &*(ptr as *const ChannelInner);
-                inner.slot.lock().unwrap().is_none()
+                inner
+                    .slot
+                    .lock()
+                    .expect("mutex never poisoned: single-threaded cooperative runtime")
+                    .is_none()
             }
             super::TAG_QUEUE => {
                 let inner = &*(ptr as *const QueueInner);
-                inner.buffer.lock().unwrap().len() < inner.capacity
+                inner
+                    .buffer
+                    .lock()
+                    .expect("mutex never poisoned: single-threaded cooperative runtime")
+                    .len()
+                    < inner.capacity
             }
             super::TAG_BROADCAST => true, // broadcast sempre pode enviar
             _ => false,
