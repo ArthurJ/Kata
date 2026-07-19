@@ -77,6 +77,9 @@ struct FiberEntry {
     /// fibers suspendem/retomam em ordem arbitrária. `None` se o fiber
     /// ainda não executou (primeiro resume) ou completou sem suspender.
     suspend_ptr: Option<crate::fiber::SuspendPtr>,
+    /// Snapshot do `LOG_CONFIG` do pai no momento do spawn (herança β).
+    /// Setado no `LOG_CONFIG` TLS antes de cada `resume()` deste fiber.
+    log_config: Option<crate::log::LogConfig>,
 }
 
 /// Scheduler de fibers — coordena execução, arenas e yield.
@@ -126,6 +129,10 @@ impl Scheduler {
     ) -> Result<FiberId, String> {
         let fiber_arena = kata_rt_arena_create();
         let parent_id = self.current_fiber;
+        // Snapshot do LOG_CONFIG do pai (herança β). Copia a config atual
+        // do TLS para o fiber filho. Mudanças no pai após o spawn não
+        // propagam para filhos já spawnados.
+        let log_config = crate::log::snapshot_log_config();
         let fiber = KataFiber::new(fiber_arena)?;
         let id = self.next_id;
         self.next_id += 1;
@@ -143,6 +150,7 @@ impl Scheduler {
                 children: Vec::new(),
                 completed: false,
                 suspend_ptr: None,
+                log_config,
             },
         );
         // Registrar este fiber como filho do pai.
@@ -273,6 +281,7 @@ impl Scheduler {
             return Ok(0); // fiber já destruído
         };
         let spawn_args = entry.spawn_args;
+        let log_config = entry.log_config.clone();
         // Re-setar `CURRENT_SUSPEND` antes de cada resume(). O `SuspendGuard`
         // do trampoline assume disciplina de pilha (save/restore nested),
         // mas fibers suspendem/retomam em ordem arbitrária: quando A suspende
@@ -285,6 +294,8 @@ impl Scheduler {
         if let Some(suspend) = entry.suspend_ptr {
             crate::fiber::set_current_suspend(suspend);
         }
+        // Restaura LOG_CONFIG do snapshot do fiber (herança β).
+        crate::log::restore_log_config(log_config);
         self.current_fiber = Some(fiber_id);
         let has_ready = !self.run_queue.is_empty();
         HAS_READY_FIBER.with(|h| h.set(has_ready));

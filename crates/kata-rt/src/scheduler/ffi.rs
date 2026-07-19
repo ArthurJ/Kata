@@ -107,6 +107,8 @@ pub fn reset_scheduler() {
     // is_in_fiber() retorna true no próximo teste e kata_rt_spawn
     // enfileira em PENDING_SPAWNS em vez de registrar no scheduler.
     crate::fiber::clear_suspend_tls();
+    // Limpar TLS de log — LOG_CONFIG e registry de tópicos entre testes.
+    crate::log::reset_log();
 }
 
 /// Inicializa o scheduler thread-local e cria a arena raiz.

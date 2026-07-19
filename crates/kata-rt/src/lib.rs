@@ -15,6 +15,7 @@ pub(crate) mod fiber;
 pub(crate) mod float;
 pub(crate) mod io;
 pub(crate) mod list;
+pub(crate) mod log;
 pub(crate) mod range;
 pub(crate) mod rational;
 pub(crate) mod scheduler;
@@ -78,4 +79,8 @@ pub use text::{
 pub use channel::{
     kata_rt_broadcast_create, kata_rt_broadcast_receiver_create, kata_rt_channel_create,
     kata_rt_channel_recv, kata_rt_channel_send, kata_rt_queue_create, kata_rt_select,
+};
+// Telemetria (Fio 14 @log)
+pub use log::{
+    kata_rt_log_config, kata_rt_log_publish, kata_rt_log_recv, reset_log, snapshot_log_config,
 };
