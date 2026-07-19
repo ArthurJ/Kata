@@ -305,7 +305,12 @@ mod tests {
                 assert_eq!(directives[0].args.len(), 1);
                 match &directives[0].args[0] {
                     DirectiveArg::Expr(e) => {
-                        assert_eq!(e.node, Expr::TextLit { text: "kata_rt_bi_add".into() });
+                        assert_eq!(
+                            e.node,
+                            Expr::TextLit {
+                                text: "kata_rt_bi_add".into()
+                            }
+                        );
                     }
                     other => panic!("expected Expr arg, got {other:?}"),
                 }

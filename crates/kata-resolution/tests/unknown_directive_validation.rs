@@ -6,7 +6,7 @@
 
 use kata_lexer::lex;
 use kata_parser::parse;
-use kata_resolution::{resolve, ResolveError};
+use kata_resolution::{ResolveError, resolve};
 
 fn resolve_src_err(src: &str) -> Vec<ResolveError> {
     let tokens = lex(src).unwrap();

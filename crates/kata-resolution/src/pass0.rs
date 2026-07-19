@@ -16,7 +16,9 @@ use kata_core::{
 use crate::type_resolve::{
     collect_type_params, infer_payload_ty_from_pred, is_type_param_name, resolve_type_expr,
 };
-use crate::types::{EnumPredDeclInfo, EnumPredVariant, FunctionDef, ResolveError, RefinedDeclInfo, Signature};
+use crate::types::{
+    EnumPredDeclInfo, EnumPredVariant, FunctionDef, RefinedDeclInfo, ResolveError, Signature,
+};
 
 /// Pass 0: popula TypeEnv + registries com tipos declarados no módulo.
 ///

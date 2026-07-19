@@ -102,7 +102,9 @@ pub(crate) fn infer_action_call(
             tail_pos: false,
             escape: kata_core::escape::EscapeTarget::Local,
             effect: Effect::Puro,
-            kind: TypedExprKind::Ident { name: callee.to_string() },
+            kind: TypedExprKind::Ident {
+                name: callee.to_string(),
+            },
         };
         let typed = TypedExpr {
             span: *span,
