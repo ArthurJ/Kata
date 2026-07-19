@@ -1,14 +1,14 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use clap::Parser;
-use kata_codegen::jit_eval;
+use kata_codegen::{jit_compile_tests, jit_eval, TestWrapper};
 use kata_core::ty::{PrimTy, Ty};
 use kata_inference::infer_module;
 use kata_lexer::lex;
 use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
 use kata_parser::parse;
-use kata_resolution::{ResolvedModule, load_prelude, resolve};
+use kata_resolution::{load_prelude, resolve, ResolvedModule};
 use kata_rt as rt;
 
 /// CLI do compilador Kata.
@@ -29,6 +29,14 @@ enum Command {
     Eval { expr: String },
     /// Compila e executa arquivo via JIT
     Run { file: String },
+    /// Descobre e executa testes `@test` em arquivo ou diretório
+    Test {
+        /// Arquivo `.kata` ou diretório com `*.kata` (recursivo)
+        path: String,
+        /// Filtra testes por substring na descrição
+        #[arg(long)]
+        filter: Option<String>,
+    },
 }
 
 fn main() -> miette::Result<()> {
@@ -38,6 +46,7 @@ fn main() -> miette::Result<()> {
         Command::Parse { file } => cmd_parse(&file),
         Command::Eval { expr } => cmd_eval(&expr),
         Command::Run { file } => cmd_run(&file),
+        Command::Test { path, filter } => cmd_test(&path, filter.as_deref()),
     }
 }
 
@@ -84,6 +93,167 @@ fn cmd_run(file: &str) -> miette::Result<()> {
     let result = run_pipeline(&source)?;
     print_result(&result);
     Ok(())
+}
+
+// ── Test runner ────────────────────────────────────────────
+
+/// Resultado da execução de um único caso de teste.
+enum TestOutcome {
+    Pass,
+    Timeout,
+    Deadlock,
+}
+
+/// Executa o subcomando `kata test`.
+///
+/// Descobre arquivos `.kata` (arquivo único ou diretório recursivo),
+/// compila cada um via `jit_compile_tests`, e executa os wrappers
+/// `__kata_test_*` individualmente com scheduler fresco + timeout.
+fn cmd_test(path: &str, filter: Option<&str>) -> miette::Result<()> {
+    let files = discover_kata_files(path)?;
+    if files.is_empty() {
+        eprintln!("nenhum arquivo .kata encontrado em `{path}`");
+        return Ok(());
+    }
+
+    let mut total_pass = 0usize;
+    let mut total_fail = 0usize;
+    let mut total_skip = 0usize;
+
+    for file in &files {
+        let source = read_source(&file.to_string_lossy())?;
+        let label = file.display();
+
+        // Pipeline até jit_compile_tests.
+        let tokens = lex(&source).map_err(IntoReport::into_report)?;
+        let module = parse(tokens).map_err(IntoReport::into_report)?;
+        let prelude = load_prelude()
+            .map_err(|e| miette::Report::msg(format!("erro ao carregar prelude: {e:?}")))?;
+        let user =
+            resolve(&module).map_err(|e| miette::Report::msg(format!("erro de resolução: {e:?}")))?;
+        let resolved = merge_resolved(prelude, user);
+        let typed = infer_module(&module, &resolved).map_err(IntoReport::into_report)?;
+        let typed = monomorphize(typed);
+        let typed = optimize(typed);
+
+        let (jit_module, wrappers) = jit_compile_tests(&typed)
+            .map_err(|e| miette::Report::msg(format!("erro de codegen: {e:?}")))?;
+
+        for w in &wrappers {
+            let desc = w.spec.desc.as_deref().unwrap_or("(sem desc)");
+
+            // Filtro por substring na descrição.
+            if let Some(f) = filter
+                && !desc.contains(f)
+            {
+                total_skip += 1;
+                continue;
+            }
+
+            // Negativos CompileError não têm wrapper — não há nada para
+            // executar. O driver compila o sub-módulo isolado (Fase 5+).
+            // Por ora, reporta como pendente.
+            if w.spec.expects.as_deref().is_some_and(|e| e.starts_with("CompileError:")) {
+                println!("  [PENDENTE] {label}: {desc} (negativo CompileError)");
+                total_skip += 1;
+                continue;
+            }
+
+            let outcome = run_test_wrapper(&jit_module, w);
+
+            match outcome {
+                TestOutcome::Pass => {
+                    println!("  [PASS] {label}: {desc}");
+                    total_pass += 1;
+                }
+                TestOutcome::Timeout => {
+                    println!("  [TIMEOUT] {label}: {desc}");
+                    total_fail += 1;
+                }
+                TestOutcome::Deadlock => {
+                    println!("  [DEADLOCK] {label}: {desc}");
+                    total_fail += 1;
+                }
+            }
+        }
+    }
+
+    println!(
+        "\n{} passed, {} failed, {} skipped",
+        total_pass, total_fail, total_skip
+    );
+
+    if total_fail > 0 {
+        std::process::exit(1);
+    }
+    Ok(())
+}
+
+/// Executa um wrapper de teste individualmente.
+///
+/// Cada teste roda em scheduler fresco: `reset_scheduler` +
+/// `kata_rt_set_test_timeout(N)` + chamada do wrapper. O wrapper é
+/// `() -> i64` com `CallConv::SystemV` — autossuficiente.
+fn run_test_wrapper(module: &cranelift_jit::JITModule, w: &TestWrapper) -> TestOutcome {
+    // Resetar estado global entre testes.
+    rt::reset_scheduler();
+
+    // Configurar timeout — opt-in. Sem `@test{timeout: N}`, o teste
+    // roda até completar ou deadlock (TIMEOUT_EXPIRED fica false).
+    if let Some(ms) = w.spec.timeout {
+        rt::kata_rt_set_test_timeout(ms);
+    }
+
+    // Obter ponteiro do wrapper compilado.
+    let code = module.get_finalized_function(w.func_id);
+
+    // SAFETY: `code` é ponteiro válido após finalize_definitions. O wrapper
+    // é `extern "C" fn() -> i64` — autossuficiente (faz scheduler_init +
+    // spawn + run internamente).
+    let result: i64 = unsafe {
+        std::mem::transmute::<*const u8, extern "C" fn() -> i64>(code)()
+    };
+
+    if result == rt::TIMEOUT_SENTINEL {
+        TestOutcome::Timeout
+    } else if result == rt::DEADLOCK_SENTINEL {
+        TestOutcome::Deadlock
+    } else {
+        // Sucesso — o valor retornado é o resultado da action.
+        TestOutcome::Pass
+    }
+}
+
+/// Descobre arquivos `.kata` — arquivo único ou diretório recursivo.
+fn discover_kata_files(path: &str) -> miette::Result<Vec<PathBuf>> {
+    let p = Path::new(path);
+    if p.is_file() {
+        return Ok(vec![p.to_path_buf()]);
+    }
+    if !p.is_dir() {
+        return Err(miette::Report::msg(format!(
+            "caminho não é arquivo nem diretório: `{path}`"
+        )));
+    }
+    let mut files = Vec::new();
+    collect_kata_files(p, &mut files);
+    files.sort();
+    Ok(files)
+}
+
+/// Coleta arquivos `.kata` recursivamente.
+fn collect_kata_files(dir: &Path, out: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_kata_files(&path, out);
+        } else if path.extension().is_some_and(|ext| ext == "kata") {
+            out.push(path);
+        }
+    }
 }
 
 // ── Pipeline ───────────────────────────────────────────────

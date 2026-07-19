@@ -23,3 +23,5 @@ kata-core.workspace = true
 kata-ast.workspace = true
 kata-diagnostics.workspace = true
 kata-rt.workspace = true
+cranelift-jit.workspace = true
+cranelift-module.workspace = true
