@@ -93,9 +93,10 @@ pub(crate) fn run_pass0(
                 // ou o símbolo não é reconhecido, registra como Ty::Struct.
                 let ffi_symbol = data_dirs.iter().find_map(|d| {
                     if d.name == "ffi"
-                        && let Some(kata_ast::DirectiveArg::Str(s)) = d.args.first()
+                        && let Some(kata_ast::DirectiveArg::Expr(e)) = d.args.first()
+                        && let kata_ast::Expr::TextLit { text } = &e.node
                     {
-                        return Some(s.clone());
+                        return Some(text.clone());
                     }
                     None
                 });
@@ -317,9 +318,10 @@ pub(crate) fn run_pass0(
                         // @builtin("range_next") → Some("range_next")
                         let ffi_symbol = m.directives.iter().find_map(|d| {
                             if (d.name == "ffi" || d.name == "builtin")
-                                && let Some(kata_ast::DirectiveArg::Str(s)) = d.args.first()
+                                && let Some(kata_ast::DirectiveArg::Expr(e)) = d.args.first()
+                                && let kata_ast::Expr::TextLit { text } = &e.node
                             {
-                                return Some(s.clone());
+                                return Some(text.clone());
                             }
                             None
                         });
@@ -358,9 +360,10 @@ pub(crate) fn run_pass0(
                     let return_type = resolve_type_expr(&m.ret.node, type_env, interface_registry);
                     let ffi_symbol = m.directives.iter().find_map(|d| {
                         if (d.name == "ffi" || d.name == "builtin")
-                            && let Some(kata_ast::DirectiveArg::Str(s)) = d.args.first()
+                            && let Some(kata_ast::DirectiveArg::Expr(e)) = d.args.first()
+                            && let kata_ast::Expr::TextLit { text } = &e.node
                         {
-                            return Some(s.clone());
+                            return Some(text.clone());
                         }
                         None
                     });
@@ -368,9 +371,11 @@ pub(crate) fn run_pass0(
                     let is_associative = m.directives.iter().any(|d| d.name == "associative");
                     let associative_neutral = m.directives.iter().find_map(|d| {
                         if d.name == "associative"
-                            && let Some(kata_ast::DirectiveArg::Int(n)) = d.args.first()
+                            && let Some(kata_ast::DirectiveArg::Expr(e)) = d.args.first()
+                            && let kata_ast::Expr::IntLit { text } = &e.node
+                            && let Ok(n) = text.parse::<i64>()
                         {
-                            return Some(*n);
+                            return Some(n);
                         }
                         None
                     });

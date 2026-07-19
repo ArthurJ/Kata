@@ -1,6 +1,6 @@
 //! Directives — parse_directives, parse_directive_args, parse_directive_value.
 
-use kata_ast::{Directive, DirectiveArg, DirectiveValue, Token};
+use kata_ast::{Directive, DirectiveArg, Spanned, Token};
 use kata_diagnostics::FrontendError;
 
 use crate::Parser;
@@ -110,105 +110,19 @@ impl Parser {
     }
 
     fn parse_one_directive_arg(&mut self) -> Result<DirectiveArg, FrontendError> {
-        match self.peek() {
-            Token::TextLit(s) => {
-                let val = s.clone();
-                self.advance();
-                Ok(DirectiveArg::Str(val))
-            }
-            Token::IntLit(s) => {
-                let val: i64 = s.parse().map_err(|_| self.error("integer literal"))?;
-                self.advance();
-                Ok(DirectiveArg::Int(val))
-            }
-            _ => Err(self.error("string or integer argument")),
-        }
+        // D2: posicional é Expr livre (mesmo conjunto que nomeado).
+        // Reusa parse_apply — aceita literais, tupla, variant, apply posicional
+        // de construtor, mas não operadores de pipe/|>/| que não fazem sentido
+        // em valor de diretiva. O consumer (@ffi, @test) valida o tipo de Expr.
+        let expr = crate::expr_apply::parse_apply(self)?;
+        Ok(DirectiveArg::Expr(Box::new(expr)))
     }
 
-    fn parse_directive_value(&mut self) -> Result<DirectiveValue, FrontendError> {
-        match self.peek() {
-            Token::TextLit(s) => {
-                let val = s.clone();
-                self.advance();
-                Ok(DirectiveValue::Str(val))
-            }
-            Token::IntLit(s) => {
-                let val: i64 = s.parse().map_err(|_| self.error("integer literal"))?;
-                self.advance();
-                Ok(DirectiveValue::Int(val))
-            }
-            // Literais compostos (Fio 14): tupla e variant.
-            //
-            // Reusa a lógica de parse_directive_args para tuplas (recursivo),
-            // mas produz DirectiveValue::Tuple em vez de Vec<DirectiveArg>.
-            // O `()` vazio produz tupla vazia (diferente do @test() que produz
-            // Vec<DirectiveArg> vazio — mas isso é no nível do arg, não do value).
-            Token::LParen => {
-                self.advance(); // consume (
-                let mut elems = Vec::new();
-                if matches!(self.peek(), Token::RParen) {
-                    self.advance();
-                    return Ok(DirectiveValue::Tuple(elems));
-                }
-                loop {
-                    elems.push(self.parse_directive_value()?);
-                    match self.peek() {
-                        Token::Comma => {
-                            self.advance();
-                        }
-                        Token::RParen => {
-                            self.advance();
-                            break;
-                        }
-                        _ => return Err(self.error("`,` or `)` in tuple")),
-                    }
-                }
-                Ok(DirectiveValue::Tuple(elems))
-            }
-            // Variant: `Enum::Variante` ou `Enum::Variante(args)`.
-            // O lexer não distingue Ident uppercase de lowercase — detectamos
-            // variant pelo padrão Ident :: Ident (mesma heurística de
-            // parse_atom em expressions.rs:151-166).
-            Token::Ident(enum_name) if matches!(self.tokens.get(self.pos + 1), Some(t) if t.token == Token::DoubleColon) => {
-                let enum_name = enum_name.clone();
-                self.advance(); // consume enum name
-                self.advance(); // consume ::
-                let variant = match self.peek() {
-                    Token::Ident(v) => {
-                        let v = v.clone();
-                        self.advance();
-                        v
-                    }
-                    _ => return Err(self.error("variant name after `::`")),
-                };
-                // Opcional: args da variante entre parênteses.
-                let args = if matches!(self.peek(), Token::LParen) {
-                    self.advance();
-                    let mut args = Vec::new();
-                    if matches!(self.peek(), Token::RParen) {
-                        self.advance();
-                        return Ok(DirectiveValue::Variant(enum_name + "::" + &variant, args));
-                    }
-                    loop {
-                        args.push(self.parse_directive_value()?);
-                        match self.peek() {
-                            Token::Comma => {
-                                self.advance();
-                            }
-                            Token::RParen => {
-                                self.advance();
-                                break;
-                            }
-                            _ => return Err(self.error("`,` or `)` in variant args")),
-                        }
-                    }
-                    args
-                } else {
-                    Vec::new()
-                };
-                Ok(DirectiveValue::Variant(enum_name + "::" + &variant, args))
-            }
-            _ => Err(self.error("string, integer, tuple, or variant value")),
-        }
+    fn parse_directive_value(&mut self) -> Result<Box<Spanned<kata_ast::Expr>>, FrontendError> {
+        // D2: valor de dict é Expr livre (mesmo conjunto que posicional).
+        // Reusa parse_apply — aceita tupla, variant, apply posicional de
+        // construtor. O consumer (@test, @cache_strategy) valida o tipo.
+        let expr = crate::expr_apply::parse_apply(self)?;
+        Ok(Box::new(expr))
     }
 }

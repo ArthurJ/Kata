@@ -2,7 +2,7 @@
 //! stacked directives, named functions with lambda clauses.
 
 use super::helpers::{first_item, parse_src};
-use kata_ast::{DirectiveArg, Expr, Item, TypeExpr};
+use kata_ast::{DirectiveArg, Expr, Item, Span, Spanned, TypeExpr};
 
 #[test]
 fn sig_simple() {
@@ -41,10 +41,13 @@ fn directive_ffi_with_sig() {
             assert_eq!(name, "+");
             assert_eq!(directives.len(), 1);
             assert_eq!(directives[0].name, "ffi");
-            assert_eq!(
-                directives[0].args,
-                vec![DirectiveArg::Str("kata_rt_bi_add".into())]
-            );
+            assert_eq!(directives[0].args.len(), 1);
+            match &directives[0].args[0] {
+                DirectiveArg::Expr(e) => {
+                    assert_eq!(e.node, Expr::TextLit { text: "kata_rt_bi_add".into() });
+                }
+                other => panic!("expected Expr arg, got {other:?}"),
+            }
         }
         other => panic!("expected Sig with directive, got {other:?}"),
     }
@@ -58,7 +61,13 @@ fn directive_associative_int() {
         Item::Sig { directives, .. } => {
             assert_eq!(directives.len(), 1);
             assert_eq!(directives[0].name, "associative");
-            assert_eq!(directives[0].args, vec![DirectiveArg::Int(0)]);
+            assert_eq!(directives[0].args.len(), 1);
+            match &directives[0].args[0] {
+                DirectiveArg::Expr(e) => {
+                    assert_eq!(e.node, Expr::IntLit { text: "0".into() });
+                }
+                other => panic!("expected Expr arg, got {other:?}"),
+            }
         }
         other => panic!("expected Sig, got {other:?}"),
     }

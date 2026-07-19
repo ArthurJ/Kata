@@ -73,14 +73,19 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
                 for d in directives {
                     match d.name.as_str() {
                         "ffi" => {
-                            if let Some(kata_ast::DirectiveArg::Str(s)) = d.args.first() {
-                                ffi_symbol = Some(s.clone());
+                            if let Some(kata_ast::DirectiveArg::Expr(e)) = d.args.first()
+                                && let kata_ast::Expr::TextLit { text } = &e.node
+                            {
+                                ffi_symbol = Some(text.clone());
                             }
                         }
                         "associative" => {
                             is_associative = true;
-                            if let Some(kata_ast::DirectiveArg::Int(n)) = d.args.first() {
-                                associative_neutral = Some(*n);
+                            if let Some(kata_ast::DirectiveArg::Expr(e)) = d.args.first()
+                                && let kata_ast::Expr::IntLit { text } = &e.node
+                                && let Ok(n) = text.parse::<i64>()
+                            {
+                                associative_neutral = Some(n);
                             }
                         }
                         "commutative" => {
@@ -140,9 +145,10 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
                 // Extrai ffi_symbol das diretivas da Action.
                 let ffi_symbol = action_dirs.iter().find_map(|d| {
                     if d.name == "ffi"
-                        && let Some(kata_ast::DirectiveArg::Str(s)) = d.args.first()
+                        && let Some(kata_ast::DirectiveArg::Expr(e)) = d.args.first()
+                        && let kata_ast::Expr::TextLit { text } = &e.node
                     {
-                        return Some(s.clone());
+                        return Some(text.clone());
                     }
                     None
                 });

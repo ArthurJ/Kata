@@ -152,7 +152,7 @@ pub(crate) fn parse_expr(parser: &mut Parser) -> Result<Spanned<Expr>, FrontendE
 /// se o parser os consumisse como callee, `5 in + x 1` seria parseado como
 /// `Apply(5, [in, +, x, 1])` em vez de parar em `5` e reportar `in` como
 /// token inesperado.
-fn parse_apply(parser: &mut Parser) -> Result<Spanned<Expr>, FrontendError> {
+pub(crate) fn parse_apply(parser: &mut Parser) -> Result<Spanned<Expr>, FrontendError> {
     let callee = parser.parse_expr_post_ascription()?;
 
     // Literais, construções de statement e keywords de controle de fluxo

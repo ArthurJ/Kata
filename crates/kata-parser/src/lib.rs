@@ -102,7 +102,7 @@ pub fn parse(tokens: Vec<TokenWithSpan>) -> Result<Module, FrontendError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kata_ast::{DirectiveArg, Expr, Item, TypeExpr};
+    use kata_ast::{DirectiveArg, Expr, Item, Span, Spanned, TypeExpr};
     use kata_lexer::lex;
 
     fn parse_src(src: &str) -> Module {
@@ -302,10 +302,13 @@ mod tests {
                 assert_eq!(name, "+");
                 assert_eq!(directives.len(), 1);
                 assert_eq!(directives[0].name, "ffi");
-                assert_eq!(
-                    directives[0].args,
-                    vec![DirectiveArg::Str("kata_rt_bi_add".into())]
-                );
+                assert_eq!(directives[0].args.len(), 1);
+                match &directives[0].args[0] {
+                    DirectiveArg::Expr(e) => {
+                        assert_eq!(e.node, Expr::TextLit { text: "kata_rt_bi_add".into() });
+                    }
+                    other => panic!("expected Expr arg, got {other:?}"),
+                }
             }
             other => panic!("expected Sig with directive, got {other:?}"),
         }
@@ -319,7 +322,13 @@ mod tests {
             Item::Sig { directives, .. } => {
                 assert_eq!(directives.len(), 1);
                 assert_eq!(directives[0].name, "associative");
-                assert_eq!(directives[0].args, vec![DirectiveArg::Int(0)]);
+                assert_eq!(directives[0].args.len(), 1);
+                match &directives[0].args[0] {
+                    DirectiveArg::Expr(e) => {
+                        assert_eq!(e.node, Expr::IntLit { text: "0".into() });
+                    }
+                    other => panic!("expected Expr arg, got {other:?}"),
+                }
             }
             other => panic!("expected Sig, got {other:?}"),
         }
