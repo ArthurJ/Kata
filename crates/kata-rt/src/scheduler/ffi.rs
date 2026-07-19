@@ -16,6 +16,27 @@ use crate::fiber::{YieldReason, is_in_fiber, with_suspend};
 
 use super::Scheduler;
 
+use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
+use std::sync::Mutex;
+use std::thread::{self, JoinHandle};
+use std::time::{Duration, Instant};
+
+// ── Test timeout (Decisão A — Fio 14 Fase 4) ──────────────────────────
+//
+// `TIMEOUT_EXPIRED` é global (NÃO-TLS) porque precisa ser visível entre a
+// thread OS timer e a thread do fiber. Setada pela thread timer quando o
+// `park_timeout` expira; lida pelo `kata_rt_yield_check` slow path a cada
+// `YIELD_INTERVAL` iterações. Implica serialização de testes — `kata_rt_run`
+// não pode ser chamada de múltiplas threads concorrentemente (compatível com
+// o scheduler single-threaded do Fio 11).
+static TIMEOUT_EXPIRED: AtomicBool = AtomicBool::new(false);
+
+// Handle da thread OS timer pendente. `reset_scheduler` faz `unpark + join`
+// para cancelar a thread anterior antes de resetar `TIMEOUT_EXPIRED` — ordem
+// obrigatória: `join` antes de `store(false)` (evita que a thread sete `true`
+// após o reset, poluindo o próximo teste com falso positivo).
+static PENDING_TIMER: Mutex<Option<JoinHandle<()>>> = Mutex::new(None);
+
 // ── Scheduler thread-local ────────────────────────────────────────────
 // Scheduler thread-local — 1 por thread (single-threaded).
 thread_local! {
@@ -58,7 +79,21 @@ thread_local! {
 }
 
 /// Reseta o scheduler thread-local. Chamado entre execuções de teste.
+///
+/// Primeiro cancela e espera a thread OS timer anterior terminar (`unpark` +
+/// `join`) — sem isto, a thread anterior pode setar `TIMEOUT_EXPIRED = true`
+/// após o reset e poluir o próximo teste com falso positivo. Depois reseta
+/// `TIMEOUT_EXPIRED` (após `join`, a thread terminou — a flag está em estado
+/// final). Por fim, reseta o resto (scheduler, spawns, contadores).
 pub fn reset_scheduler() {
+    // 1. Cancelar e esperar a thread timer anterior terminar.
+    if let Some(handle) = PENDING_TIMER.lock().unwrap().take() {
+        handle.thread().unpark();
+        let _ = handle.join();
+    }
+    // 2. Resetar a flag (após join, a thread terminou — flag está em estado final).
+    TIMEOUT_EXPIRED.store(false, Relaxed);
+    // 3. Resetar o resto.
     SCHEDULER.with(|s| {
         s.borrow_mut().take();
     });
@@ -67,6 +102,11 @@ pub fn reset_scheduler() {
     });
     YIELD_COUNTER.with(|c| c.set(YIELD_INTERVAL));
     HAS_READY_FIBER.with(|h| h.set(false));
+    // Limpar TLS de Suspend — após timeout/drain, CURRENT_SUSPEND pode
+    // apontar para o Suspend de um fiber drenado (dangling). Sem isto,
+    // is_in_fiber() retorna true no próximo teste e kata_rt_spawn
+    // enfileira em PENDING_SPAWNS em vez de registrar no scheduler.
+    crate::fiber::clear_suspend_tls();
 }
 
 /// Inicializa o scheduler thread-local e cria a arena raiz.
@@ -120,7 +160,8 @@ pub extern "C" fn kata_rt_spawn(fn_ptr: i64, caller_arena: i64, args_ptr: i64) -
 /// Executa o scheduler até todos os fibers completarem.
 ///
 /// Retorna o resultado do fiber raiz (i64). Se deadlock for detectado,
-/// imprime a mensagem no stderr e retorna `DEADLOCK_SENTINEL`.
+/// imprime a mensagem no stderr e retorna `DEADLOCK_SENTINEL`. Se timeout
+/// de teste expirar, retorna `TIMEOUT_SENTINEL` (distinto de `DEADLOCK_SENTINEL`).
 ///
 /// Não faz `panic!` porque `extern "C"` é `nounwind` — um panic aqui
 /// aborta com SIGABRT (non-unwinding). O chamador (driver/teste)
@@ -134,6 +175,7 @@ pub extern "C" fn kata_rt_run() -> i64 {
     });
     match result {
         Ok(v) => v,
+        Err(msg) if msg == "timeout" => TIMEOUT_SENTINEL,
         Err(msg) => {
             eprintln!("kata_rt_run: {msg}");
             DEADLOCK_SENTINEL
@@ -144,6 +186,49 @@ pub extern "C" fn kata_rt_run() -> i64 {
 /// Valor retornado por `kata_rt_run` quando deadlock é detectado.
 /// Permite que o chamador distinga deadlock de um resultado legítimo.
 pub const DEADLOCK_SENTINEL: i64 = i64::MIN + 1;
+
+/// Valor retornado por `kata_rt_run` quando timeout de teste expira
+/// (`@test(timeout: N)` — Decisão A, Fio 14 Fase 4). Distinto de
+/// `DEADLOCK_SENTINEL` para que o runner reporte "timeout" em vez de
+/// "deadlock".
+pub const TIMEOUT_SENTINEL: i64 = i64::MIN + 2;
+
+/// Configura o timeout de teste (Decisão A — Fio 14 Fase 4).
+///
+/// Spawna uma thread OS que faz `thread::park_timeout(Duration::from_millis(millis))`
+/// direto (granularidade de ms aceitável para testes). Ao acordar, distingue:
+/// - `ParkTimeoutResult::TimedOut` → seta `TIMEOUT_EXPIRED = true` (timeout real).
+/// - `Unparked` → cancelada pelo runner (teste terminou antes), NÃO seta a flag
+///   — evita falso positivo que poluiria o próximo teste.
+///
+/// A thread é cancelável: `reset_scheduler` faz `unpark + join` na thread
+/// pendente antes de resetar `TIMEOUT_EXPIRED`. A thread OS só escreve no
+/// `AtomicBool` isolado — não toca scheduler, arenas, nem TLS. A invariant
+/// single-threaded do Fio 11 é preservada.
+///
+/// `TIMEOUT_EXPIRED` é global (NÃO-TLS) — implica serialização de testes:
+/// `kata_rt_run` não pode ser chamada de múltiplas threads concorrentemente.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_set_test_timeout(millis: i64) {
+    // Cancelar thread timer anterior (se houver) antes de iniciar nova.
+    if let Some(handle) = PENDING_TIMER.lock().unwrap().take() {
+        handle.thread().unpark();
+        let _ = handle.join();
+    }
+    let deadline = Instant::now() + Duration::from_millis(millis as u64);
+    let handle = thread::spawn(move || {
+        // `park_timeout` retorna `()` em Rust stable — não distingue timeout
+        // de unpark. Para distinguir, comparamos `Instant::now()` com o
+        // deadline após acordar. Se `now >= deadline`, foi timeout real;
+        // senão, foi unpark (cancelada pelo runner) — não seta a flag.
+        thread::park_timeout(deadline.saturating_duration_since(Instant::now()));
+        if Instant::now() >= deadline {
+            TIMEOUT_EXPIRED.store(true, Relaxed);
+        }
+        // Unparked antes do deadline = cancelada — não seta a flag.
+    });
+    *PENDING_TIMER.lock().unwrap() = Some(handle);
+}
 
 /// Suspende o fiber atual com `YieldReason::Cooperative`.
 ///
@@ -189,6 +274,13 @@ pub extern "C" fn kata_rt_yield_check() {
         return;
     }
     YIELD_COUNTER.with(|c| c.set(YIELD_INTERVAL));
+    // Test timeout — sempre checa, ANTES do guard `HAS_READY_FIBER`. Runs de
+    // teste com fiber único precisam detectar o timeout mesmo sem outra fiber
+    // pronta. Runs normais (`TIMEOUT_EXPIRED = false`) não mudam comportamento.
+    if TIMEOUT_EXPIRED.load(Relaxed) {
+        with_suspend(|s| s.suspend(YieldReason::Timeout));
+        return;
+    }
     if !HAS_READY_FIBER.with(|h| h.get()) {
         return;
     }

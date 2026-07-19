@@ -93,6 +93,10 @@ pub enum FfiSymbol {
     Yield,
     /// `kata_rt_yield_check() -> ()` — yield point no header de loops.
     YieldCheck,
+    /// `kata_rt_set_test_timeout(millis) -> ()` — configura timeout de teste
+    /// (Decisão A, Fio 14 Fase 4). Spawna thread OS timer que seta
+    /// `TIMEOUT_EXPIRED` ao expirar.
+    SetTestTimeout,
 
     // ── Arc<T> / CaptureBox ───────────────────────
     /// `kata_rt_alloc_arc(fn_ptr, captures_ptr, n_captures) -> box_ptr`
@@ -217,6 +221,7 @@ impl FfiSymbol {
             FfiSymbol::Run => "kata_rt_run",
             FfiSymbol::Yield => "kata_rt_yield",
             FfiSymbol::YieldCheck => "kata_rt_yield_check",
+            FfiSymbol::SetTestTimeout => "kata_rt_set_test_timeout",
             FfiSymbol::AllocArc => "kata_rt_alloc_arc",
             FfiSymbol::IncRef => "kata_rt_incref",
             FfiSymbol::DecRef => "kata_rt_decref",
@@ -306,6 +311,7 @@ impl FfiSymbol {
             FfiSymbol::Run => Ty::int(),
             FfiSymbol::Yield => Ty::Unit,
             FfiSymbol::YieldCheck => Ty::Unit,
+            FfiSymbol::SetTestTimeout => Ty::Unit,
             // Arc<T> / CaptureBox
             FfiSymbol::AllocArc | FfiSymbol::ArcFnPtr => Ty::int(),
             FfiSymbol::IncRef | FfiSymbol::DecRef => Ty::int(),
@@ -398,6 +404,7 @@ impl FfiSymbol {
             FfiSymbol::Run,
             FfiSymbol::Yield,
             FfiSymbol::YieldCheck,
+            FfiSymbol::SetTestTimeout,
             FfiSymbol::AllocArc,
             FfiSymbol::IncRef,
             FfiSymbol::DecRef,

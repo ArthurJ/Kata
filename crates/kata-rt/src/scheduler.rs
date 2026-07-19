@@ -26,8 +26,8 @@ pub(crate) mod ffi;
 
 // Re-exports da camada FFI — `lib.rs` continua importando os mesmos símbolos.
 pub use ffi::{
-    DEADLOCK_SENTINEL, kata_rt_run, kata_rt_scheduler_init, kata_rt_spawn, kata_rt_yield,
-    kata_rt_yield_check, reset_scheduler,
+    DEADLOCK_SENTINEL, TIMEOUT_SENTINEL, kata_rt_run, kata_rt_scheduler_init,
+    kata_rt_set_test_timeout, kata_rt_spawn, kata_rt_yield, kata_rt_yield_check, reset_scheduler,
 };
 
 use std::collections::{HashMap, VecDeque};
@@ -201,6 +201,14 @@ impl Scheduler {
                     Err(YieldReason::WaitingOnSelect(handles, deadline)) => {
                         self.blocked
                             .insert(fiber_id, BlockReason::WaitingOnSelect(handles, deadline));
+                    }
+                    Err(YieldReason::Timeout) => {
+                        // Timeout de teste — drenar fibers sem dropar (pitfall
+                        // #43: wasmtime-fiber panica no Drop de fiber não-completado)
+                        // e retornar Err("timeout"). `kata_rt_run` mapeia para
+                        // `TIMEOUT_SENTINEL`. Mesmo padrão do deadlock (linha 249).
+                        self.fibers.drain();
+                        return Err("timeout".to_string());
                     }
                     Err(YieldReason::Done) => {
                         unreachable!("YieldReason::Done não deve ser retornado por resume()")

@@ -61,6 +61,11 @@ pub(crate) enum YieldReason {
     /// Fiber bloqueou em select. `Vec<i64>` = handles, `Option<Instant>` =
     /// deadline de timeout (None = sem timeout, espera indefinidamente).
     WaitingOnSelect(Vec<i64>, Option<std::time::Instant>),
+    /// Timeout de teste expirado (`@test(timeout: N)`). O fiber estava em
+    /// loop/cooperative yield e a thread OS timer setou `TIMEOUT_EXPIRED`.
+    /// O scheduler drena os fibers (sem dropar — pitfall #43) e retorna
+    /// `Err("timeout")`, que `kata_rt_run` mapeia para `TIMEOUT_SENTINEL`.
+    Timeout,
     /// Não usado — fiber completou. Existe para exaustividade do enum.
     Done,
 }
@@ -145,6 +150,19 @@ fn trampoline(
 /// (dentro de fiber) ou acessar o scheduler diretamente (fora de fiber).
 pub(crate) fn is_in_fiber() -> bool {
     CURRENT_SUSPEND.with(|cell| !cell.get().is_null())
+}
+
+/// Limpa as TLS de Suspend (`CURRENT_SUSPEND` e `LAST_SUSPEND_PTR`).
+///
+/// Chamado por `reset_scheduler` entre testes. Após timeout/drain (fibers
+/// esquecidos sem dropar — pitfall #43), `CURRENT_SUSPEND` pode apontar
+/// para o `Suspend` de um fiber drenado (dangling). Sem esta limpeza,
+/// `is_in_fiber()` retorna `true` no próximo teste e `kata_rt_spawn`
+/// enfileira em `PENDING_SPAWNS` em vez de registrar no scheduler — o fiber
+/// nunca é criado e `root_result` fica `0`.
+pub(crate) fn clear_suspend_tls() {
+    CURRENT_SUSPEND.with(|cell| cell.set(std::ptr::null_mut()));
+    LAST_SUSPEND_PTR.with(|cell| cell.set(std::ptr::null_mut()));
 }
 
 /// Re-seta `CURRENT_SUSPEND` com o `Suspend` de um fiber que será resumido.

@@ -2,7 +2,7 @@
 //! stacked directives, named functions with lambda clauses.
 
 use super::helpers::{first_item, parse_src};
-use kata_ast::{DirectiveArg, Expr, Item, Span, Spanned, TypeExpr};
+use kata_ast::{DirectiveArg, Expr, Item, TypeExpr};
 
 #[test]
 fn sig_simple() {

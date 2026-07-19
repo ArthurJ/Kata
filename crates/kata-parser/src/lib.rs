@@ -102,7 +102,7 @@ pub fn parse(tokens: Vec<TokenWithSpan>) -> Result<Module, FrontendError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kata_ast::{DirectiveArg, Expr, Item, Span, Spanned, TypeExpr};
+    use kata_ast::{DirectiveArg, Expr, Item, TypeExpr};
     use kata_lexer::lex;
 
     fn parse_src(src: &str) -> Module {

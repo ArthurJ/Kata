@@ -235,6 +235,11 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
         FfiSymbol::Yield => {}
         // yield_check: () → void (yield point no header de loops, )
         FfiSymbol::YieldCheck => {}
+        // set_test_timeout: (millis: i64) → void (configura timer de teste)
+        // Decisão A, Fio 14 Fase 4. Chamada pelo runner antes de kata_rt_run.
+        FfiSymbol::SetTestTimeout => {
+            sig.params.push(AbiParam::new(I64)); // millis
+        }
         // ── Arc<T> / CaptureBox ──
         // alloc_arc: (fn_ptr, captures_ptr, n_captures, arena_handle) -> box_ptr
         // Pré-11: arena_handle adicionado como 4º param.
