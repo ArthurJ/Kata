@@ -3,11 +3,19 @@
 //! Análise de cobertura de patterns — verifica se uma cláusula é
 //! inalcançável porque uma cláusula anterior já cobre todos os
 //! valores que ela casaria.
+//!
+//! Opera sobre `TypedPattern` (pós-resolução do typeck) para distinguir
+//! `Ident("True")` resolvido para `Variant { Boolean, True }` de um
+//! binding `Ident { name: "x", ty: Int }`. Antes, operava sobre `Pattern`
+//! (AST não-tipada) e tratava todo `Ident` como wildcard — causando falso
+//! positivo em multi-cláusula com variantes de enum (`lambda True True`
+//! cobria `lambda True False`).
 
-use kata_ast::{Expr, LambdaClause, Pattern, Spanned};
 use kata_diagnostics::MiddleError;
 
 use crate::infer::helpers::InferResult;
+use crate::typed::TypedExpr;
+use crate::typed_pattern::{TypedLambdaClause, TypedPattern};
 
 /// Verifica sobreposição de cláusulas (RedundantClause).
 ///
@@ -15,27 +23,29 @@ use crate::infer::helpers::InferResult;
 /// "cobrem" todos os valores que a cláusula N casaria, e a cláusula N não
 /// tem guards (sem condição adicional que a diferenciaria), a cláusula N
 /// é inalcançável → `RedundantClause`.
-pub(crate) fn check_redundant_clauses(clauses: &[Spanned<LambdaClause>]) -> InferResult<()> {
+pub(crate) fn check_redundant_clauses(clauses: &[TypedLambdaClause]) -> InferResult<()> {
     for (i, clause) in clauses.iter().enumerate().skip(1) {
         // Cláusulas com guards não são redundantes por pattern alone —
         // a condição do guard pode diferenciá-las.
-        if !clause.node.guards.is_empty() {
+        if !clause.guards.is_empty() {
             continue;
         }
-        let clause_patterns: Vec<&Pattern> = clause.node.patterns.iter().map(|p| &p.node).collect();
+        let clause_patterns: Vec<&TypedPattern> =
+            clause.patterns.iter().map(|p| &p.node).collect();
 
         for prev in &clauses[..i] {
-            let prev_patterns: Vec<&Pattern> = prev.node.patterns.iter().map(|p| &p.node).collect();
+            let prev_patterns: Vec<&TypedPattern> =
+                prev.patterns.iter().map(|p| &p.node).collect();
 
             // Cláusula anterior com guards não torna a posterior redundante
             // — o guard pode falhar e deixar a posterior alcançável.
-            if !prev.node.guards.is_empty() {
+            if !prev.guards.is_empty() {
                 continue;
             }
 
             if patterns_cover(&prev_patterns, &clause_patterns) {
                 return Err(MiddleError::RedundantClause {
-                    span: clause.span.into(),
+                    span: clause.body.span.into(),
                 });
             }
         }
@@ -47,11 +57,11 @@ pub(crate) fn check_redundant_clauses(clauses: &[Spanned<LambdaClause>]) -> Infe
 ///
 /// `covering` cobre `covered` se, para cada par (c, d), `c` cobre `d`:
 /// - `Wildcard` cobre qualquer pattern
-/// - `Ident(_)` cobre qualquer pattern (liga o nome)
-/// - `Literal(x)` cobre `Literal(x)` (mesmo literal)
-/// - `Variant(E, V)` cobre `Variant(E, V)` (mesma variante)
+/// - `Ident { .. }` cobre qualquer pattern (liga o nome — é um binding, não variante)
+/// - `Literal(a)` cobre `Literal(b)` se os valores são iguais
+/// - `Variant(e, v)` cobre `Variant(e, v)` (mesma variante do mesmo enum)
 /// - `Tuple(as)` cobre `Tuple(bs)` se cada `a_i` cobre `b_i`
-fn patterns_cover(covering: &[&Pattern], covered: &[&Pattern]) -> bool {
+fn patterns_cover(covering: &[&TypedPattern], covered: &[&TypedPattern]) -> bool {
     if covering.len() != covered.len() {
         return false;
     }
@@ -61,25 +71,27 @@ fn patterns_cover(covering: &[&Pattern], covered: &[&Pattern]) -> bool {
         .all(|(c, d)| pattern_covers(c, d))
 }
 
-fn pattern_covers(covering: &Pattern, covered: &Pattern) -> bool {
+fn pattern_covers(covering: &TypedPattern, covered: &TypedPattern) -> bool {
     match (covering, covered) {
-        (Pattern::Wildcard, _) => true,
-        (Pattern::Ident(_), _) => true,
-        // Compara literais pelo conteúdo da expr, não pelo span.
-        (Pattern::Literal(a), Pattern::Literal(b)) => literal_eq(&a.node, &b.node),
+        (TypedPattern::Wildcard, _) => true,
+        (TypedPattern::Ident { .. }, _) => true,
+        // Literais: compara pelo valor tipado.
+        (TypedPattern::Literal { value: a }, TypedPattern::Literal { value: b }) => {
+            typed_literal_eq(&a.node, &b.node)
+        }
         (
-            Pattern::Variant {
+            TypedPattern::Variant {
                 enum_name: e1,
                 variant: v1,
                 ..
             },
-            Pattern::Variant {
+            TypedPattern::Variant {
                 enum_name: e2,
                 variant: v2,
                 ..
             },
         ) => e1 == e2 && v1 == v2,
-        (Pattern::Tuple(as_), Pattern::Tuple(bs)) => {
+        (TypedPattern::Tuple { elements: as_ }, TypedPattern::Tuple { elements: bs }) => {
             as_.len() == bs.len()
                 && as_
                     .iter()
@@ -90,13 +102,14 @@ fn pattern_covers(covering: &Pattern, covered: &Pattern) -> bool {
     }
 }
 
-/// Compara duas expressões literais por conteúdo (ignora span).
-fn literal_eq(a: &Expr, b: &Expr) -> bool {
-    match (a, b) {
-        (Expr::IntLit { text: t1 }, Expr::IntLit { text: t2 }) => t1 == t2,
-        (Expr::FloatLit { text: t1 }, Expr::FloatLit { text: t2 }) => t1 == t2,
-        (Expr::TextLit { text: t1 }, Expr::TextLit { text: t2 }) => t1 == t2,
-        (Expr::Unit, Expr::Unit) => true,
+/// Compara dois `TypedExpr` literais por conteúdo.
+fn typed_literal_eq(a: &TypedExpr, b: &TypedExpr) -> bool {
+    use crate::typed::TypedExprKind;
+    match (&a.kind, &b.kind) {
+        (TypedExprKind::IntLit { text: t1 }, TypedExprKind::IntLit { text: t2 }) => t1 == t2,
+        (TypedExprKind::FloatLit { text: t1 }, TypedExprKind::FloatLit { text: t2 }) => t1 == t2,
+        (TypedExprKind::TextLit { text: t1 }, TypedExprKind::TextLit { text: t2 }) => t1 == t2,
+        (TypedExprKind::Unit, TypedExprKind::Unit) => true,
         _ => false,
     }
 }

@@ -341,7 +341,7 @@ fn infer_named_function(
     // Uma cláusula é redundante se uma cláusula anterior já cobre todos
     // os valores que ela casaria, e a cláusula posterior não tem guards
     // (sem condição adicional que a diferenciaria).
-    crate::redundancy::check_redundant_clauses(&func_def.clauses)?;
+    crate::redundancy::check_redundant_clauses(&typed_clauses)?;
 
     // Sintetiza log spec se a função tem @log.
     let log = if let Some(log_spec) = &func_def.log {

@@ -473,3 +473,22 @@ fun 5";
     let entry = entry_typed(&tmod);
     assert_eq!(entry.ty, Ty::int());
 }
+
+/// Multi-cláusula com variantes de enum Boolean NÃO é redundante.
+/// `lambda True True: True` seguido de `lambda True False: False` —
+/// variantes diferentes não se cobrem. Antes do fix, o checker operava
+/// sobre `Pattern::Ident("True")` (pré-typeck) e tratava todo `Ident`
+/// como wildcard, causando falso positivo.
+#[test]
+fn non_redundant_boolean_variant_clauses() {
+    let src = "\
+and :: Boolean Boolean => Boolean\n\
+\x20   lambda True True: True\n\
+\x20   lambda True False: False\n\
+\x20   lambda False True: False\n\
+\x20   lambda False False: False\n\
+and True False";
+    let tmod = infer_src(src);
+    let entry = entry_typed(&tmod);
+    assert_eq!(entry.ty, Ty::boolean());
+}
