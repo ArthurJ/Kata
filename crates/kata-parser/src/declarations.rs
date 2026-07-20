@@ -7,7 +7,7 @@ use crate::Parser;
 use crate::expressions::parse_expr;
 
 impl Parser {
-    pub fn parse_module(&mut self) -> Result<Module, FrontendError> {
+    pub(crate) fn parse_module(&mut self) -> Result<Module, FrontendError> {
         let mut items: Vec<Spanned<Item>> = Vec::new();
 
         while !self.at_eof() {

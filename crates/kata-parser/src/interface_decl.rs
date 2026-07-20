@@ -18,7 +18,7 @@ impl Parser {
     /// interface ITERABLE::A
     ///     next :: Self => Optional::A
     /// ```
-    pub fn parse_interface_decl(
+    pub(crate) fn parse_interface_decl(
         &mut self,
         _directives: Vec<Directive>,
     ) -> Result<Item, FrontendError> {
@@ -162,7 +162,7 @@ impl Parser {
     ///     next :: List::A => Optional::A
     ///         lambda lst: ...
     /// ```
-    pub fn parse_implements_decl(
+    pub(crate) fn parse_implements_decl(
         &mut self,
         _directives: Vec<Directive>,
     ) -> Result<Item, FrontendError> {

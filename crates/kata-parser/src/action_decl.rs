@@ -20,7 +20,10 @@ use crate::expressions::parse_expr;
 
 impl Parser {
     /// Parse `action nome (p::T, ...) => Ret` com body indentado.
-    pub fn parse_action_decl(&mut self, directives: Vec<Directive>) -> Result<Item, FrontendError> {
+    pub(crate) fn parse_action_decl(
+        &mut self,
+        directives: Vec<Directive>,
+    ) -> Result<Item, FrontendError> {
         self.expect(&Token::Action, "`action`")?;
         let name = match self.peek() {
             Token::Ident(s) => {
