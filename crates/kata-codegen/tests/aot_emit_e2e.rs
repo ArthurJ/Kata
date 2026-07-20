@@ -14,9 +14,9 @@ use kata_inference::infer_module;
 use kata_lexer::lex;
 use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
-use kata_tree_shaking::tree_shake;
 use kata_parser::parse;
 use kata_resolution::{ResolvedModule, load_prelude, resolve};
+use kata_tree_shaking::tree_shake;
 
 /// Merge prelude + user resolved modules — mesmo helper dos testes JIT.
 fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModule {

@@ -144,7 +144,11 @@ fn fallback_unresolved_show(mono: &mut MonoModule) {
 fn fallback_in_expr(expr_span: &mut Spanned<TypedExpr>) {
     let expr = &mut expr_span.node;
     match &mut expr.kind {
-        TypedExprKind::Closure { callee, args, ffi_symbol } => {
+        TypedExprKind::Closure {
+            callee,
+            args,
+            ffi_symbol,
+        } => {
             for arg in args.iter_mut() {
                 fallback_in_expr(arg);
             }
@@ -152,7 +156,9 @@ fn fallback_in_expr(expr_span: &mut Spanned<TypedExpr>) {
                 && matches!(&callee.node.kind, TypedExprKind::Ident { name } if name == "show")
                 && args.iter().all(|a| matches!(a.node.ty, Ty::Var(_)))
             {
-                expr.kind = TypedExprKind::TextLit { text: "?".to_string() };
+                expr.kind = TypedExprKind::TextLit {
+                    text: "?".to_string(),
+                };
                 expr.ty = Ty::text();
             }
         }
@@ -162,7 +168,9 @@ fn fallback_in_expr(expr_span: &mut Spanned<TypedExpr>) {
             fallback_in_expr(inner);
         }
         TypedExprKind::Tuple { elements }
-        | TypedExprKind::StructConstruct { values: elements, .. } => {
+        | TypedExprKind::StructConstruct {
+            values: elements, ..
+        } => {
             for elem in elements.iter_mut() {
                 fallback_in_expr(elem);
             }
@@ -210,13 +218,14 @@ fn fallback_in_expr(expr_span: &mut Spanned<TypedExpr>) {
         TypedExprKind::VariantConstruct { payload, .. } => {
             fallback_in_expr(payload);
         }
-        TypedExprKind::ListLit { elements }
-        | TypedExprKind::ArrayLit { elements } => {
+        TypedExprKind::ListLit { elements } | TypedExprKind::ArrayLit { elements } => {
             for el in elements.iter_mut() {
                 fallback_in_expr(el);
             }
         }
-        TypedExprKind::RangeLit { start, step, end, .. } => {
+        TypedExprKind::RangeLit {
+            start, step, end, ..
+        } => {
             fallback_in_expr(start);
             fallback_in_expr(step);
             fallback_in_expr(end);
@@ -231,12 +240,25 @@ fn fallback_in_expr(expr_span: &mut Spanned<TypedExpr>) {
             fallback_in_expr(item);
             fallback_in_expr(collection);
         }
-        TypedExprKind::Map { callback, collection, .. }
-        | TypedExprKind::Filter { callback, collection, .. } => {
+        TypedExprKind::Map {
+            callback,
+            collection,
+            ..
+        }
+        | TypedExprKind::Filter {
+            callback,
+            collection,
+            ..
+        } => {
             fallback_in_expr(callback);
             fallback_in_expr(collection);
         }
-        TypedExprKind::Fold { callback, initial, collection, .. } => {
+        TypedExprKind::Fold {
+            callback,
+            initial,
+            collection,
+            ..
+        } => {
             fallback_in_expr(callback);
             fallback_in_expr(initial);
             fallback_in_expr(collection);
@@ -245,8 +267,9 @@ fn fallback_in_expr(expr_span: &mut Spanned<TypedExpr>) {
             fallback_in_expr(source);
             for stage in stages {
                 let cb = match stage {
-                    FusedStage::Filter { callback, .. }
-                    | FusedStage::Map { callback, .. } => callback,
+                    FusedStage::Filter { callback, .. } | FusedStage::Map { callback, .. } => {
+                        callback
+                    }
                 };
                 fallback_in_expr(cb);
             }
@@ -258,7 +281,11 @@ fn fallback_in_expr(expr_span: &mut Spanned<TypedExpr>) {
         TypedExprKind::ChannelRecv { channel, .. } => {
             fallback_in_expr(channel);
         }
-        TypedExprKind::Select { arms, timeout_ms, timeout_body } => {
+        TypedExprKind::Select {
+            arms,
+            timeout_ms,
+            timeout_body,
+        } => {
             for arm in arms {
                 fallback_in_expr(&mut arm.channel);
                 fallback_in_expr(&mut arm.body);

@@ -226,11 +226,9 @@ pub(crate) fn infer_apply(
     // Procura no InterfaceRegistry pela interface que o arg implementa e
     // verifica se `func_name` é uma de suas signatures. Substitui `Self`
     // pelo tipo da interface na signature para obter o tipo de retorno.
-    if let Some(iface_method_ret) = try_iface_method_dispatch(
-        &func_name,
-        &arg_types,
-        ctx.interface_registry,
-    ) {
+    if let Some(iface_method_ret) =
+        try_iface_method_dispatch(&func_name, &arg_types, ctx.interface_registry)
+    {
         let callee_ty = Ty::Function(arg_types.clone(), Box::new(iface_method_ret.clone()));
         let callee_typed = TypedExpr {
             span: callee.span,

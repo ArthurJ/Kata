@@ -18,9 +18,9 @@ use kata_inference::{TypedExpr, TypedExprKind, infer_module};
 use kata_lexer::lex;
 use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
-use kata_tree_shaking::tree_shake;
 use kata_parser::parse;
 use kata_resolution::{ResolvedModule, load_prelude, resolve};
+use kata_tree_shaking::tree_shake;
 
 /// Executa o pipeline completo e retorna o valor bruto do JIT + tipo.
 fn eval_src(src: &str) -> (i64, Ty) {
@@ -65,7 +65,11 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
         struct_registry,
         refined_decls: Vec::new(),
         enum_pred_decls: Vec::new(),
-        interface_registry: { let mut ir = prelude.interface_registry.clone(); ir.merge(user.interface_registry.clone()); ir },
+        interface_registry: {
+            let mut ir = prelude.interface_registry.clone();
+            ir.merge(user.interface_registry.clone());
+            ir
+        },
         functions: {
             let mut fns = prelude.functions;
             let user_fn_names: std::collections::HashSet<&str> =

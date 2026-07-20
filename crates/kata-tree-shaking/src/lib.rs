@@ -68,7 +68,12 @@ fn tree_shake_impl(typed: TypedModule, preserve_tests: bool) -> TypedModule {
 
     // Primeira passada: coleta direto do entry/pre_entry.
     for expr in &worklist {
-        collect_refs(&expr.node, &mut reached_fns, &mut reached_actions, &fn_names);
+        collect_refs(
+            &expr.node,
+            &mut reached_fns,
+            &mut reached_actions,
+            &fn_names,
+        );
     }
 
     // Passada transitiva: visita corpos das funções/actions alcançadas
@@ -82,15 +87,35 @@ fn tree_shake_impl(typed: TypedModule, preserve_tests: bool) -> TypedModule {
         for name in &snapshot_fns {
             if let Some(func) = functions.iter().find(|f| &f.name == name) {
                 for clause in &func.clauses {
-                    collect_refs(&clause.body.node, &mut reached_fns, &mut reached_actions, &fn_names);
+                    collect_refs(
+                        &clause.body.node,
+                        &mut reached_fns,
+                        &mut reached_actions,
+                        &fn_names,
+                    );
                     for guard in &clause.guards {
                         if let Some(cond) = &guard.condition {
-                            collect_refs(&cond.node, &mut reached_fns, &mut reached_actions, &fn_names);
+                            collect_refs(
+                                &cond.node,
+                                &mut reached_fns,
+                                &mut reached_actions,
+                                &fn_names,
+                            );
                         }
-                        collect_refs(&guard.body.node, &mut reached_fns, &mut reached_actions, &fn_names);
+                        collect_refs(
+                            &guard.body.node,
+                            &mut reached_fns,
+                            &mut reached_actions,
+                            &fn_names,
+                        );
                     }
                     for wb in &clause.with_bindings {
-                        collect_refs(&wb.value.node, &mut reached_fns, &mut reached_actions, &fn_names);
+                        collect_refs(
+                            &wb.value.node,
+                            &mut reached_fns,
+                            &mut reached_actions,
+                            &fn_names,
+                        );
                     }
                 }
             }
@@ -98,7 +123,12 @@ fn tree_shake_impl(typed: TypedModule, preserve_tests: bool) -> TypedModule {
         for name in &snapshot_actions {
             if let Some(action) = actions.iter().find(|a| &a.name == name) {
                 for stmt in &action.body {
-                    collect_refs(&stmt.node, &mut reached_fns, &mut reached_actions, &fn_names);
+                    collect_refs(
+                        &stmt.node,
+                        &mut reached_fns,
+                        &mut reached_actions,
+                        &fn_names,
+                    );
                 }
             }
         }
@@ -219,7 +249,9 @@ fn collect_refs(
         // ── Sub-expressões — recursão ──
         TypedExprKind::TypeAscription { expr, .. }
         | TypedExprKind::Grouping { inner: expr }
-        | TypedExprKind::Return(expr) => collect_refs(&expr.node, reached_fns, reached_actions, fn_names),
+        | TypedExprKind::Return(expr) => {
+            collect_refs(&expr.node, reached_fns, reached_actions, fn_names)
+        }
 
         TypedExprKind::Let { value, .. }
         | TypedExprKind::Var { value, .. }

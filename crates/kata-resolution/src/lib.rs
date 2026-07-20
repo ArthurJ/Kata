@@ -11,8 +11,8 @@ mod prelude_sigs;
 mod type_resolve;
 mod types;
 
-pub use types::*;
 pub use type_resolve::collect_type_params;
+pub use types::*;
 
 use kata_ast::{Item, Module};
 use kata_core::{Ty, TypeEnv};

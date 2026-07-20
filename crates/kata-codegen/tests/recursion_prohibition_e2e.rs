@@ -29,7 +29,11 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
         struct_registry,
         refined_decls: Vec::new(),
         enum_pred_decls: Vec::new(),
-        interface_registry: { let mut ir = prelude.interface_registry.clone(); ir.merge(user.interface_registry.clone()); ir },
+        interface_registry: {
+            let mut ir = prelude.interface_registry.clone();
+            ir.merge(user.interface_registry.clone());
+            ir
+        },
         functions: {
             let mut fns = prelude.functions;
             let user_fn_names: std::collections::HashSet<&str> =

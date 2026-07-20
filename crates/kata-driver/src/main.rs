@@ -168,9 +168,9 @@ fn cmd_test(path: &str, filter: Option<&str>) -> miette::Result<()> {
         // (ex: `echo` original type-erased após monomorfização) mas mantém
         // TypedTestSpec nas actions alcançadas para que jit_compile_tests
         // gere os wrappers `__kata_test_*`.
-        let typed = kata_monomorph::MonoModule::from(
-            kata_tree_shaking::tree_shake_preserve_tests(typed.inner),
-        );
+        let typed = kata_monomorph::MonoModule::from(kata_tree_shaking::tree_shake_preserve_tests(
+            typed.inner,
+        ));
 
         let (jit_module, wrappers) = jit_compile_tests(&typed)
             .map_err(|e| miette::Report::msg(format!("erro de codegen: {e:?}")))?;

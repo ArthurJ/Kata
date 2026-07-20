@@ -81,8 +81,7 @@ pub fn infer_module(
     //     Coleta type params (Ty::Var UPPER_CASE e Ty::Interface) para habilitar
     //     monomorfização de Actions polimórficas por interface (ex: echo :: SHOW).
     for action_def in &resolved.actions {
-        let type_params =
-            collect_type_params(&action_def.param_types, &action_def.return_type);
+        let type_params = collect_type_params(&action_def.param_types, &action_def.return_type);
         let is_generic = !type_params.is_empty();
         dispatch_table.insert(OverloadInfo {
             name: action_def.name.clone(),

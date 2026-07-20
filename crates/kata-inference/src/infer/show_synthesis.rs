@@ -24,8 +24,7 @@ use kata_core::struct_registry::StructRegistry;
 use kata_core::ty::{PrimTy, Ty};
 
 use crate::typed::{
-    Effect, TypedExpr, TypedExprKind, TypedFunction, TypedLambdaClause, TypedMatchArm,
-    TypedPattern,
+    Effect, TypedExpr, TypedExprKind, TypedFunction, TypedLambdaClause, TypedMatchArm, TypedPattern,
 };
 
 /// Verifica se um tipo já tem implementação manual do método `show` (via
@@ -289,15 +288,9 @@ fn field_show(
 
     match &field.ty {
         Ty::Prim(PrimTy::Text) => field_access,
-        Ty::Prim(PrimTy::Int) => {
-            ffi_call1("kata_rt_int_to_text", field_access, Ty::text())
-        }
-        Ty::Prim(PrimTy::Rational) => {
-            ffi_call1("kata_rt_rat_show", field_access, Ty::text())
-        }
-        Ty::Prim(PrimTy::Float) => {
-            ffi_call1("kata_rt_float_to_text", field_access, Ty::text())
-        }
+        Ty::Prim(PrimTy::Int) => ffi_call1("kata_rt_int_to_text", field_access, Ty::text()),
+        Ty::Prim(PrimTy::Rational) => ffi_call1("kata_rt_rat_show", field_access, Ty::text()),
+        Ty::Prim(PrimTy::Float) => ffi_call1("kata_rt_float_to_text", field_access, Ty::text()),
         Ty::Sum(name) => {
             // Enum (incluindo Boolean) — chama `__kata_show__{Enum}` mangled.
             show_call(field_access, name.clone(), &field.ty)
@@ -496,11 +489,7 @@ fn show_expr(arg: Spanned<TypedExpr>, arg_ty: &Ty) -> Spanned<TypedExpr> {
 }
 
 /// Constrói chamada a `__kata_show__{Type}` mangled (call direto via ffi_symbol).
-fn show_call(
-    arg: Spanned<TypedExpr>,
-    type_name: String,
-    arg_ty: &Ty,
-) -> Spanned<TypedExpr> {
+fn show_call(arg: Spanned<TypedExpr>, type_name: String, arg_ty: &Ty) -> Spanned<TypedExpr> {
     let mangled = format!("__kata_show__{type_name}");
     let callee = TypedExpr {
         span: Span::synthetic(),

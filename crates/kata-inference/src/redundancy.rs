@@ -30,12 +30,10 @@ pub(crate) fn check_redundant_clauses(clauses: &[TypedLambdaClause]) -> InferRes
         if !clause.guards.is_empty() {
             continue;
         }
-        let clause_patterns: Vec<&TypedPattern> =
-            clause.patterns.iter().map(|p| &p.node).collect();
+        let clause_patterns: Vec<&TypedPattern> = clause.patterns.iter().map(|p| &p.node).collect();
 
         for prev in &clauses[..i] {
-            let prev_patterns: Vec<&TypedPattern> =
-                prev.patterns.iter().map(|p| &p.node).collect();
+            let prev_patterns: Vec<&TypedPattern> = prev.patterns.iter().map(|p| &p.node).collect();
 
             // Cláusula anterior com guards não torna a posterior redundante
             // — o guard pode falhar e deixar a posterior alcançável.
