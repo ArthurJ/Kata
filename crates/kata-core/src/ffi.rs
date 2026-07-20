@@ -140,6 +140,8 @@ pub enum FfiSymbol {
     ArrayContains,
     /// `kata_rt_list_reverse(ptr, arena) -> ptr` — inverte Cons chain.
     ListReverse,
+    /// `kata_rt_list_concat(first, second, arena) -> ptr` — concatena duas listas.
+    ListConcat,
 
     // ── Canais CSP ────────────────────────────
     /// `kata_rt_channel_create(arena) -> i64` — canal rendezvous.
@@ -248,6 +250,7 @@ impl FfiSymbol {
             FfiSymbol::ListContains => "kata_rt_list_contains",
             FfiSymbol::ArrayContains => "kata_rt_array_contains",
             FfiSymbol::ListReverse => "kata_rt_list_reverse",
+            FfiSymbol::ListConcat => "kata_rt_list_concat",
             // Canais CSP
             FfiSymbol::ChannelCreate => "kata_rt_channel_create",
             FfiSymbol::QueueCreate => "kata_rt_queue_create",
@@ -341,6 +344,7 @@ impl FfiSymbol {
             FfiSymbol::ListContains => Ty::boolean(),
             FfiSymbol::ArrayContains => Ty::boolean(),
             FfiSymbol::ListReverse => Ty::int(),
+            FfiSymbol::ListConcat => Ty::int(),
             // Canais CSP — handles são i64 (ponteiro+tag)
             FfiSymbol::ChannelCreate => Ty::int(),
             FfiSymbol::QueueCreate => Ty::int(),
@@ -439,6 +443,7 @@ impl FfiSymbol {
             FfiSymbol::ListContains,
             FfiSymbol::ArrayContains,
             FfiSymbol::ListReverse,
+            FfiSymbol::ListConcat,
             // Canais CSP
             FfiSymbol::ChannelCreate,
             FfiSymbol::QueueCreate,

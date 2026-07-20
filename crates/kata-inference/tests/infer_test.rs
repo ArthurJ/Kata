@@ -422,8 +422,8 @@ fn dispatch_table_multiple_overloads_for_plus() {
         .dispatch_table
         .get_overloads("+")
         .expect("+ deve ter overloads");
-    // + tem 3 overloads: Int, Float, Rational
-    assert_eq!(overloads.len(), 3);
+    // + tem 4 overloads: Int, Float, Rational, List
+    assert_eq!(overloads.len(), 4);
 }
 
 #[test]

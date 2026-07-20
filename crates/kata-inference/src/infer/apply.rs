@@ -434,14 +434,11 @@ pub(crate) fn infer_apply(
                 }
 
                 // Se uma overload genérica com aridade certa foi encontrada mas
-                // unify falhou, o erro é TypeMismatch (inconsistência de tipos).
+                // unify falhou para todas, o erro é NoOverload — nenhuma
+                // sobrecarga (concreta ou genérica) casa com os tipos dos args.
                 if arity_matched && unify_failed {
-                    return Err(MiddleError::TypeMismatch {
-                        expected: format!("argumentos consistentes com type params de {func_name}"),
-                        found: format!(
-                            "unify falhou para {func_name} com args [{}]",
-                            ty_list_to_string(&arg_types)
-                        ),
+                    return Err(MiddleError::NoOverload {
+                        name: func_name.clone(),
                         span: (*span).into(),
                     });
                 }

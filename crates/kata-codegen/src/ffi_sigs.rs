@@ -355,6 +355,13 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
             sig.params.push(AbiParam::new(I64)); // arena
             sig.returns.push(AbiParam::new(I64)); // ptr (reversed list)
         }
+        // list_concat: (first, second, arena) -> ptr (concatena duas listas)
+        FfiSymbol::ListConcat => {
+            sig.params.push(AbiParam::new(I64)); // first
+            sig.params.push(AbiParam::new(I64)); // second
+            sig.params.push(AbiParam::new(I64)); // arena
+            sig.returns.push(AbiParam::new(I64)); // ptr (concatenated list)
+        }
         // ── Canais CSP ──
         // channel_create: (arena) -> handle
         FfiSymbol::ChannelCreate => {

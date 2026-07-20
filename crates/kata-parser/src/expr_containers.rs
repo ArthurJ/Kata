@@ -72,6 +72,24 @@ impl Parser {
             _ => {}
         }
 
+        // Se vê `:`, é Cons: `[h : t]` desugara para `cons h t`.
+        if matches!(self.peek(), Token::Colon) {
+            self.advance(); // consume :
+            let tail = parse_expr(self)?;
+            self.expect(&Token::RBracket, "`]` para fechar Cons")?;
+            let span = start.cover(self.tokens[self.pos - 1].span);
+            return Ok(Spanned::new(
+                Expr::Apply {
+                    callee: Box::new(Spanned::new(
+                        Expr::Ident { name: "cons".into() },
+                        start,
+                    )),
+                    args: vec![first, tail],
+                },
+                span,
+            ));
+        }
+
         // Caso contrário, é ListLit — coleta elementos restantes
         let mut elements = vec![first];
         while !matches!(self.peek(), Token::RBracket) {

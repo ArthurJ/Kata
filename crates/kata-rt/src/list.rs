@@ -131,3 +131,32 @@ pub extern "C" fn kata_rt_list_reverse(ptr: i64, arena_handle: i64) -> i64 {
     }
     acc
 }
+
+/// Concatena duas listas Cons (O(n) onde n = len da primeira lista).
+///
+/// Percorre a primeira lista, faz `cons(head, acc)` para cada elemento
+/// (invertendo), depois reverte o acc e faz `cons(head, second)` para
+/// cada elemento do acc (invertendo de volta) — resultado preserva
+/// a ordem de ambas as listas.
+///
+/// Alternativa mais simples: percorre a primeira lista recursivamente
+/// fazendo cons no final. Mas iteração é mais segura que recursão
+/// (sem risco de stack overflow para listas grandes).
+///
+/// # Safety
+/// `first` e `second` são ponteiros para Cons cell ou 0 (Nil). `arena_handle` é válido.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_list_concat(first: i64, second: i64, arena_handle: i64) -> i64 {
+    // Strategy: reverse first, then cons each element of reversed-first onto second.
+    // reverse(first) gives us first's elements in reverse order.
+    // consing them onto second prepends them in reverse-reverse = original order.
+    let reversed = kata_rt_list_reverse(first, arena_handle);
+    let mut current = reversed;
+    let mut acc = second;
+    while current != 0 {
+        let head = unsafe { std::ptr::read_unaligned(current as *const i64) };
+        acc = kata_rt_list_cons(head, acc, arena_handle);
+        current = unsafe { std::ptr::read_unaligned((current as *const u8).add(8) as *const i64) };
+    }
+    acc
+}

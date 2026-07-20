@@ -202,6 +202,14 @@ head :: List::A => A
 @ffi("kata_rt_list_tail")
 tail :: List::A => List::A
 
+# List cons (construtor: prepend elemento na lista)
+@ffi("kata_rt_list_cons")
+cons :: A List::A => List::A
+
+# List concat (+ standalone — não é NUM, dispatch resolve por tipo dos args)
+@ffi("kata_rt_list_concat")
++ :: List::A List::A => List::A
+
 # ── Conversões ────────────────────────────────────────────────
 
 @ffi("kata_rt_rat_to_float")
