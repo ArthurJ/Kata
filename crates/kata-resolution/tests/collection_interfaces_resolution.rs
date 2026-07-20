@@ -245,7 +245,7 @@ fn text_implements_iterable_countable_indexable_contains() {
     );
 
     let impls = resolved.interface_registry.get_impls_for_type("Text");
-    assert_eq!(impls.len(), 4, "Text deve ter 4 implements entries");
+    assert_eq!(impls.len(), 5, "Text deve ter 5 implements entries (ITERABLE, COUNTABLE, INDEXABLE, CONTAINS, SHOW)");
 
     let contains_impl = impls
         .iter()

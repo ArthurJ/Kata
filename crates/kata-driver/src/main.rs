@@ -349,6 +349,22 @@ pub(crate) fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> R
     let mut interface_registry = prelude.interface_registry;
     interface_registry.merge(user.interface_registry);
 
+    // Functions/actions: concatenar prelude + user, removendo duplicatas
+    // por nome (user sobrescreve prelude quando redefine). Sem isso,
+    // funções Kata da stdlib (mod, and) têm assinatura no DispatchTable mas
+    // não geram TypedFunction — codegen falha com UnsupportedNode.
+    let mut functions = prelude.functions;
+    let user_fn_names: std::collections::HashSet<&str> =
+        user.functions.iter().map(|f| f.name.as_str()).collect();
+    functions.retain(|f| !user_fn_names.contains(f.name.as_str()));
+    functions.extend(user.functions);
+
+    let mut actions = prelude.actions;
+    let user_action_names: std::collections::HashSet<&str> =
+        user.actions.iter().map(|a| a.name.as_str()).collect();
+    actions.retain(|a| !user_action_names.contains(a.name.as_str()));
+    actions.extend(user.actions);
+
     ResolvedModule {
         type_env,
         signatures,
@@ -357,8 +373,8 @@ pub(crate) fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> R
         refined_decls,
         enum_pred_decls,
         interface_registry,
-        functions: user.functions,
-        actions: user.actions,
+        functions,
+        actions,
     }
 }
 

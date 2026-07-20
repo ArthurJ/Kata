@@ -119,7 +119,7 @@ fn prelude_has_multiple_add_overloads() {
 }
 
 #[test]
-fn prelude_has_show_for_int_float_and_rational() {
+fn prelude_has_show_for_int_float_rational_and_text() {
     let resolved = load_prelude().expect("prelude deve resolver");
     let shows: Vec<_> = resolved
         .signatures
@@ -128,7 +128,7 @@ fn prelude_has_show_for_int_float_and_rational() {
         .collect();
     assert_eq!(
         shows.len(),
-        3,
-        "deve ter 3 overloads de show (Int, Float, Rational)"
+        4,
+        "deve ter 4 overloads de show (Int, Float, Rational, Text)"
     );
 }
