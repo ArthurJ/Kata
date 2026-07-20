@@ -656,8 +656,9 @@ fn rewrite_typed_expr(
 
             // Depois verifica se este ActionCall é genérico.
             // FFI builtins (ffi_symbol = Some) não são instanciados.
-            if ffi_symbol.is_none() {
-                if let Some(overloads) = ctx.dispatch_table.get_overloads(callee) {
+            if ffi_symbol.is_none()
+                && let Some(overloads) = ctx.dispatch_table.get_overloads(callee)
+            {
                     // Procura overload genérico com mesma aridade dos args.
                     let arg_types: Vec<Ty> = match &args.node.kind {
                         TypedExprKind::Tuple { elements } => {
@@ -711,7 +712,6 @@ fn rewrite_typed_expr(
                         // Rewrite o callee para o nome da instância.
                         *callee = instance_name;
                     }
-                }
             }
         }
 

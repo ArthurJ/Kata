@@ -10,6 +10,7 @@
 //! com body `Match` sobre `__self` — um braço por variante:
 //! - Variante unitária → `TextLit("VariantName")`
 //! - Variante com payload → `string_concat("VariantName(", show payload, ")")`
+//!
 //! Enums genéricos (ex: `Result::(T, E)`) geram `show` genérico — o body
 //! contém `show v` onde `v :: Ty::Var("T")`, resolvido pelo monomorphizador
 //! ao instanciar. A asserção implícita "todo Ty::Var implementa SHOW" é

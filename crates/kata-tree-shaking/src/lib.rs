@@ -211,10 +211,10 @@ fn collect_refs(
             // garante que funções sintetizadas não sejam removidas pelo tree
             // shaking. FFI puro (ex: kata_rt_print) não está em fn_names e é
             // resolvido via ffi_refs, que o tree shaking não toca.
-            if let Some(sym) = ffi_symbol {
-                if fn_names.contains(sym) {
-                    reached_fns.insert(sym.clone());
-                }
+            if let Some(sym) = ffi_symbol
+                && fn_names.contains(sym)
+            {
+                reached_fns.insert(sym.clone());
             }
             // Recursão nos argumentos.
             for arg in args {
