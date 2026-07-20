@@ -459,7 +459,7 @@ pub fn cmd_repl() -> miette::Result<()> {
         let multiline_action = first_trimmed.ends_with("=>");
 
         let mut buffer = first.clone();
-        let mut in_multiline = multiline_sig || multiline_action;
+        let in_multiline = multiline_sig || multiline_action;
 
         loop {
             if !in_multiline {
@@ -474,7 +474,6 @@ pub fn cmd_repl() -> miette::Result<()> {
                 Ok(line) => {
                     if line.trim().is_empty() {
                         // Linha vazia termina o bloco multiline.
-                        in_multiline = false;
                         break;
                     }
                     buffer.push('\n');
@@ -482,7 +481,6 @@ pub fn cmd_repl() -> miette::Result<()> {
                     // Se estávamos em modo multiline_sig e a nova linha
                     // não é indentada, o bloco terminou.
                     if multiline_sig && !line.starts_with(' ') && !line.starts_with('\t') {
-                        in_multiline = false;
                         break;
                     }
                 }
