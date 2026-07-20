@@ -1,8 +1,3 @@
-and :: Boolean Boolean => Boolean
-    lambda a b:
-        a: b
-        otherwise: False
-
 fizzbuzz :: Int => Text
     lambda x:
         both: "FizzBuzz"
@@ -10,8 +5,8 @@ fizzbuzz :: Int => Text
         buzz: "Buzz"
         otherwise: show x
         with
-            fizz := = 0 (- x (* 3 (/ x 3)))
-            buzz := = 0 (- x (* 5 (/ x 5)))
+            fizz := = 0 (mod x 3)
+            buzz := = 0 (mod x 5)
             both := and fizz buzz
 
 action main
