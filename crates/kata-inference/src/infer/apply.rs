@@ -550,35 +550,74 @@ fn try_iface_method_dispatch(
     arg_types: &[Ty],
     iface_reg: &kata_core::InterfaceRegistry,
 ) -> Option<Ty> {
-    // Para cada arg que é Ty::Interface(name), verifica se func_name é
-    // método dessa interface.
+    // Para cada arg, verifica se é Ty::Interface(name) ou Ty::Var(name).
+    //
+    // Ty::Interface(name): procura a interface `name` no registry e verifica
+    // se `func_name` é um de seus métodos. Substitui `Self` por
+    // `Interface(name)` para obter o tipo de retorno.
+    //
+    // Ty::Var(name): asserção implícita "todo Ty::Var implementa SHOW"
+    // (e qualquer interface — todo tipo concreto implementará). Retorna
+    // o tipo de retorno do método se a interface existir e tiver o método.
+    // O despacho concreto é resolvido pelo monomorphizador ao instanciar.
     for arg in arg_types {
-        if let Ty::Interface(iface_name) = arg {
-            if let Some(iface_info) = iface_reg.get_interface(iface_name) {
-                for sig in &iface_info.signatures {
-                    if sig.name == func_name && sig.params.len() == arg_types.len() {
-                        // Verifica que os params casam com os arg_types
-                        // (substituindo Self pelo tipo da interface).
-                        let mut params_match = true;
-                        for (sp, sa) in sig.params.iter().zip(arg_types) {
-                            // Self → tipo da interface (qualquer arg Interface aceita)
-                            if matches!(sp, Ty::Var(name) if name == "Self") {
-                                // Self deve ser o mesmo tipo do arg que é Interface(iface_name)
-                                if !matches!(sa, Ty::Interface(n) if n == iface_name) {
+        match arg {
+            Ty::Interface(iface_name) => {
+                if let Some(iface_info) = iface_reg.get_interface(iface_name) {
+                    for sig in &iface_info.signatures {
+                        if sig.name == func_name && sig.params.len() == arg_types.len() {
+                            let mut params_match = true;
+                            for (sp, sa) in sig.params.iter().zip(arg_types) {
+                                if matches!(sp, Ty::Var(name) if name == "Self") {
+                                    if !matches!(sa, Ty::Interface(n) if n == iface_name) {
+                                        params_match = false;
+                                        break;
+                                    }
+                                } else if sp != sa {
                                     params_match = false;
                                     break;
                                 }
-                            } else if sp != sa {
-                                params_match = false;
-                                break;
                             }
-                        }
-                        if params_match {
-                            return Some(sig.ret.clone());
+                            if params_match {
+                                return Some(sig.ret.clone());
+                            }
                         }
                     }
                 }
             }
+            Ty::Var(_) => {
+                // Ty::Var em função genérica sintetizada (ex: `show v` dentro
+                // de `__kata_show__Result`). Assumimos que o tipo concreto
+                // que substituirá o Var implementa a interface. Procuramos
+                // qualquer interface que tenha `func_name` como método e
+                // cujo número de params case, e retornamos seu `ret`.
+                // O despacho concreto é resolvido no monomorphizador.
+                for iface_info in iface_reg.all_interfaces() {
+                    for sig in &iface_info.signatures {
+                        if sig.name == func_name && sig.params.len() == arg_types.len() {
+                            // Verifica params: Self deve ser Ty::Var, outros
+                            // devem bater com arg_types.
+                            let mut params_match = true;
+                            for (sp, sa) in sig.params.iter().zip(arg_types) {
+                                if matches!(sp, Ty::Var(name) if name == "Self") {
+                                    // Self → Ty::Var aceita
+                                    if !matches!(sa, Ty::Var(_)) {
+                                        params_match = false;
+                                        break;
+                                    }
+                                } else if sp != sa {
+                                    params_match = false;
+                                    break;
+                                }
+                            }
+                            if params_match {
+                                return Some(sig.ret.clone());
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
         }
     }
     None

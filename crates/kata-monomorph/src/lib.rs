@@ -102,7 +102,191 @@ pub fn monomorphize(typed: TypedModule) -> MonoModule {
         }
     }
 
+    // Passada final: aplica fallback gracioso a Closures com ffi_symbol: None
+    // cujo arg_type é Ty::Var(_) não resolvido (ex: braço Err de show_Result
+    // quando só Result::Ok aparece). O braço nunca executa em runtime, mas o
+    // codegen precisa de um nó válido — substitui por TextLit("?").
+    fallback_unresolved_show(&mut mono);
+
     mono
+}
+
+/// Percorre todas as funções, actions, pre_entry e entry do módulo
+/// monomorfizado, substituindo Closures `show v` (ffi_symbol: None, arg
+/// Ty::Var não resolvido) por TextLit("?").
+fn fallback_unresolved_show(mono: &mut MonoModule) {
+    for func in &mut mono.functions {
+        for clause in &mut func.clauses {
+            fallback_in_expr(&mut clause.body);
+            for guard in &mut clause.guards {
+                if let Some(ref mut cond) = guard.condition {
+                    fallback_in_expr(cond);
+                }
+                fallback_in_expr(&mut guard.body);
+            }
+            for wb in &mut clause.with_bindings {
+                fallback_in_expr(&mut wb.value);
+            }
+        }
+    }
+    for action in &mut mono.actions {
+        for stmt in &mut action.body {
+            fallback_in_expr(stmt);
+        }
+    }
+    for expr in &mut mono.pre_entry {
+        fallback_in_expr(expr);
+    }
+    fallback_in_expr(&mut mono.entry);
+}
+
+/// Recursão sobre um `Spanned<TypedExpr>` aplicando o fallback.
+fn fallback_in_expr(expr_span: &mut Spanned<TypedExpr>) {
+    let expr = &mut expr_span.node;
+    match &mut expr.kind {
+        TypedExprKind::Closure { callee, args, ffi_symbol } => {
+            for arg in args.iter_mut() {
+                fallback_in_expr(arg);
+            }
+            if ffi_symbol.is_none()
+                && matches!(&callee.node.kind, TypedExprKind::Ident { name } if name == "show")
+                && args.iter().all(|a| matches!(a.node.ty, Ty::Var(_)))
+            {
+                expr.kind = TypedExprKind::TextLit { text: "?".to_string() };
+                expr.ty = Ty::text();
+            }
+        }
+        TypedExprKind::TypeAscription { expr: inner, .. }
+        | TypedExprKind::Grouping { inner }
+        | TypedExprKind::Return(inner) => {
+            fallback_in_expr(inner);
+        }
+        TypedExprKind::Tuple { elements }
+        | TypedExprKind::StructConstruct { values: elements, .. } => {
+            for elem in elements.iter_mut() {
+                fallback_in_expr(elem);
+            }
+        }
+        TypedExprKind::FieldAccess { expr: inner, .. }
+        | TypedExprKind::IndexAccess { expr: inner, .. } => {
+            fallback_in_expr(inner);
+        }
+        TypedExprKind::Let { value, .. }
+        | TypedExprKind::Var { value, .. }
+        | TypedExprKind::Reassign { value, .. } => {
+            fallback_in_expr(value);
+        }
+        TypedExprKind::Lambda { clauses, .. } => {
+            for clause in clauses.iter_mut() {
+                fallback_in_expr(&mut clause.body);
+                for guard in &mut clause.guards {
+                    if let Some(ref mut cond) = guard.condition {
+                        fallback_in_expr(cond);
+                    }
+                    fallback_in_expr(&mut guard.body);
+                }
+                for wb in &mut clause.with_bindings {
+                    fallback_in_expr(&mut wb.value);
+                }
+            }
+        }
+        TypedExprKind::Match { scrutinee, arms } => {
+            fallback_in_expr(scrutinee);
+            for arm in arms.iter_mut() {
+                if let Some(ref mut guard) = arm.guard {
+                    fallback_in_expr(guard);
+                }
+                fallback_in_expr(&mut arm.body);
+            }
+        }
+        TypedExprKind::ActionCall { args, .. } => {
+            fallback_in_expr(args);
+        }
+        TypedExprKind::Loop { body } => {
+            for stmt in body.iter_mut() {
+                fallback_in_expr(stmt);
+            }
+        }
+        TypedExprKind::VariantConstruct { payload, .. } => {
+            fallback_in_expr(payload);
+        }
+        TypedExprKind::ListLit { elements }
+        | TypedExprKind::ArrayLit { elements } => {
+            for el in elements.iter_mut() {
+                fallback_in_expr(el);
+            }
+        }
+        TypedExprKind::RangeLit { start, step, end, .. } => {
+            fallback_in_expr(start);
+            fallback_in_expr(step);
+            fallback_in_expr(end);
+        }
+        TypedExprKind::ForIn { iterable, body, .. } => {
+            fallback_in_expr(iterable);
+            for stmt in body.iter_mut() {
+                fallback_in_expr(stmt);
+            }
+        }
+        TypedExprKind::In { item, collection } => {
+            fallback_in_expr(item);
+            fallback_in_expr(collection);
+        }
+        TypedExprKind::Map { callback, collection, .. }
+        | TypedExprKind::Filter { callback, collection, .. } => {
+            fallback_in_expr(callback);
+            fallback_in_expr(collection);
+        }
+        TypedExprKind::Fold { callback, initial, collection, .. } => {
+            fallback_in_expr(callback);
+            fallback_in_expr(initial);
+            fallback_in_expr(collection);
+        }
+        TypedExprKind::FusedStream { stages, source, .. } => {
+            fallback_in_expr(source);
+            for stage in stages {
+                let cb = match stage {
+                    FusedStage::Filter { callback, .. }
+                    | FusedStage::Map { callback, .. } => callback,
+                };
+                fallback_in_expr(cb);
+            }
+        }
+        TypedExprKind::ChannelSend { channel, value } => {
+            fallback_in_expr(channel);
+            fallback_in_expr(value);
+        }
+        TypedExprKind::ChannelRecv { channel, .. } => {
+            fallback_in_expr(channel);
+        }
+        TypedExprKind::Select { arms, timeout_ms, timeout_body } => {
+            for arm in arms {
+                fallback_in_expr(&mut arm.channel);
+                fallback_in_expr(&mut arm.body);
+            }
+            if let Some(tm) = timeout_ms {
+                fallback_in_expr(tm);
+            }
+            if let Some(tb) = timeout_body {
+                fallback_in_expr(tb);
+            }
+        }
+        TypedExprKind::Fork { args, .. } => {
+            fallback_in_expr(args);
+        }
+        TypedExprKind::ReceiverFactoryCall { factory, .. } => {
+            fallback_in_expr(factory);
+        }
+        // Folhas — sem sub-expressões.
+        TypedExprKind::IntLit { .. }
+        | TypedExprKind::FloatLit { .. }
+        | TypedExprKind::TextLit { .. }
+        | TypedExprKind::Unit
+        | TypedExprKind::Ident { .. }
+        | TypedExprKind::VariantQual { .. }
+        | TypedExprKind::Break
+        | TypedExprKind::Continue
+        | TypedExprKind::ChannelCreate { .. } => {}
+    }
 }
 
 /// Uma passada de monomorphização.
@@ -187,6 +371,32 @@ struct RewriteAcc<'a> {
     new_actions: &'a mut Vec<TypedAction>,
 }
 
+/// Busca a overload genérica que casa com `arg_types` por `unify`.
+///
+/// Itera por todas as overloads com `type_params` não-vazio e mesma aridade,
+/// tentando `unify` em cada uma. Retorna a primeira que unifica com sucesso
+/// (junto com as substituições computadas). Isto é necessário porque pode
+/// haver múltiplas overloads genéricas com a mesma aridade — ex: `show` tem
+/// `show :: Optional<T> => Text` e `show :: Result<T,E> => Text`, ambas com
+/// `params.len()==1`. Um `.find()` simples pela aridade pararia na primeira
+/// (Optional) mesmo quando os args são `Result`, falhando o `unify` sem tentar
+/// a próxima.
+fn find_generic_overload<'a>(
+    overloads: &'a [kata_core::dispatch::OverloadInfo],
+    arg_types: &[Ty],
+) -> Option<(&'a kata_core::dispatch::OverloadInfo, Substitutions)> {
+    for oi in overloads {
+        if oi.type_params.is_empty() || oi.params.len() != arg_types.len() {
+            continue;
+        }
+        let mut subs: Substitutions = HashMap::new();
+        if unify(&oi.params, arg_types, &oi.type_params, &mut subs).is_ok() {
+            return Some((oi, subs));
+        }
+    }
+    None
+}
+
 /// Rewrita call sites genéricos em uma `TypedFunction`.
 fn rewrite_function(
     func: &mut TypedFunction,
@@ -245,67 +455,91 @@ fn rewrite_typed_expr(
             if let TypedExprKind::Ident { name } = &callee.node.kind {
                 let name = name.clone();
                 if let Some(overloads) = ctx.dispatch_table.get_overloads(&name) {
-                    // Procura overload genérica com mesma aridade dos args.
+                    // Procura overload genérica que unifica com os arg types.
+                    // Tenta unify em cada candidata (pode haver múltiplas
+                    // overloads genéricas com mesma aridade — ex: show para
+                    // Optional<T> e Result<T,E>).
                     let arg_types: Vec<Ty> = args.iter().map(|a| a.node.ty.clone()).collect();
-                    let generic_overload = overloads.iter().find(|oi| {
-                        !oi.type_params.is_empty() && oi.params.len() == arg_types.len()
-                    });
+                    let generic_overload = find_generic_overload(overloads, &arg_types);
 
-                    if let Some(oi) = generic_overload {
-                        // Recomputa substitutions via unify.
-                        let mut subs: Substitutions = HashMap::new();
-                        if unify(&oi.params, &arg_types, &oi.type_params, &mut subs).is_ok() {
-                            // Gera nome canônico da instância.
-                            let subs_key = canonicalize_subs(&oi.type_params, &subs);
-                            let instance_name = format!("{name}_{subs_key}");
+                    if let Some((oi, subs)) = generic_overload {
+                        // Gera nome canônico da instância.
+                        let subs_key = canonicalize_subs(&oi.type_params, &subs);
+                        let instance_name = format!("{name}_{subs_key}");
 
-                            // Verifica se a instância já existe.
-                            if !ctx.existing.contains(&instance_name)
-                                && !acc.new_overloads.iter().any(|o| o.name == instance_name)
-                            {
-                                // SEMPRE gera OverloadInfo (entrada no DispatchTable
-                                // com tipos concretos). Isto cobre o caso de funções
-                                // genéricas sem corpo (apenas Sig no DispatchTable,
-                                // como `id :: T => T` sem cláusulas).
-                                acc.new_overloads.push(kata_core::dispatch::OverloadInfo {
-                                    name: instance_name.clone(),
-                                    params: oi
-                                        .params
-                                        .iter()
-                                        .map(|t| apply_subs(t, &subs))
-                                        .collect(),
-                                    ret: apply_subs(&oi.ret, &subs),
-                                    ffi_symbol: oi.ffi_symbol.clone(),
-                                    is_action: false,
-                                    is_generic: false,
-                                    is_constructor: false,
-                                    associative_neutral: None,
-                                    type_params: vec![],
-                                    substitutions: Some(subs.clone()),
-                                });
+                        // Procura a função original (template) pelo nome
+                        // mangled (ffi_symbol) ou pelo nome direto. Isto
+                        // determina se a instância tem corpo Kata (função
+                        // sintetizada) ou é FFI pura (sem corpo).
+                        let func_lookup_name = oi
+                            .ffi_symbol
+                            .as_deref()
+                            .unwrap_or(name.as_str());
+                        let orig_func =
+                            ctx.functions.iter().find(|f| f.name == *func_lookup_name);
 
-                                // SÓ gera TypedFunction se a função original tem corpo.
-                                if let Some(orig_func) =
-                                    ctx.functions.iter().find(|f| f.name == *name)
-                                {
-                                    let mono_func =
-                                        instantiate_function(orig_func, &subs, &instance_name);
-                                    acc.new_functions.push(mono_func);
-                                }
-                            }
-
-                            // Atualiza o instance_map.
-                            instance_map.insert((name.clone(), subs_key), instance_name.clone());
-
-                            // Rewrite o callee para o nome da instância.
-                            callee.node.kind = TypedExprKind::Ident {
-                                name: instance_name,
+                        // Verifica se a instância já existe.
+                        if !ctx.existing.contains(&instance_name)
+                            && !acc.new_overloads.iter().any(|o| o.name == instance_name)
+                        {
+                            // SEMPRE gera OverloadInfo (entrada no DispatchTable
+                            // com tipos concretos). Isto cobre o caso de funções
+                            // genéricas sem corpo (apenas Sig no DispatchTable,
+                            // como `id :: T => T` sem cláusulas).
+                            //
+                            // ffi_symbol: se a instância tem corpo Kata (função
+                            // sintetizada, como `__kata_show__Result`), seta None
+                            // — o codegen resolve via kata_refs pelo nome da
+                            // instância. Se é FFI pura (sem corpo, como `head`),
+                            // mantém o ffi_symbol da template — o codegen resolve
+                            // via ffi_refs pelo sym_name.
+                            let instance_ffi_symbol = if orig_func.is_some() {
+                                None
+                            } else {
+                                oi.ffi_symbol.clone()
                             };
+                            acc.new_overloads.push(kata_core::dispatch::OverloadInfo {
+                                name: instance_name.clone(),
+                                params: oi
+                                    .params
+                                    .iter()
+                                    .map(|t| apply_subs(t, &subs))
+                                    .collect(),
+                                ret: apply_subs(&oi.ret, &subs),
+                                ffi_symbol: instance_ffi_symbol,
+                                is_action: false,
+                                is_generic: false,
+                                is_constructor: false,
+                                associative_neutral: None,
+                                type_params: vec![],
+                                substitutions: Some(subs.clone()),
+                            });
+
+                            // Gera TypedFunction se a função original tem corpo.
+                            if let Some(orig_func) = orig_func {
+                                let mono_func =
+                                    instantiate_function(orig_func, &subs, &instance_name);
+                                acc.new_functions.push(mono_func);
+                            }
                         }
+
+                        // Atualiza o instance_map.
+                        instance_map.insert((name.clone(), subs_key), instance_name.clone());
+
+                        // Rewrite o callee para o nome da instância, instancia
+                        // o callee.ty com as mesmas substituições (garante
+                        // consistência com param_types da instância em
+                        // kata_refs), e zera ffi_symbol — o codegen resolve
+                        // via kata_refs pelo nome do callee (instância).
+                        callee.node.kind = TypedExprKind::Ident {
+                            name: instance_name,
+                        };
+                        callee.node.ty = apply_subs(&callee.node.ty, &subs);
+                        *ffi_symbol = None;
                     }
                 }
 
-                // Resolução de ffi_symbol para Closures type-erased.
+                // Resolução de ffi_symbol para Closures type-erased (Layer 5).
                 //
                 // Quando uma Action polimórfica por interface é instanciada
                 // (ex: echo_SHOW_Int), o body contém Closures produzidas por
@@ -317,6 +551,13 @@ fn rewrite_typed_expr(
                 //
                 // Isto resolve `show msg` dentro de `echo_SHOW_Int`:
                 // DispatchTable tem `show :: Int => Text @ffi("kata_rt_bi_show")`.
+                //
+                // Fallback gracioso: se o arg_type é Ty::Var(_) (type param
+                // não resolvido — ex: `E` em `Result::Ok 42`, onde a variante
+                // Err nunca é construída), não há overload concreto. O braço
+                // do Match nunca executa em runtime, mas o codegen precisa de
+                // um nó válido. Substituímos a Closure por TextLit("?") após
+                // o match.
                 if ffi_symbol.is_none() {
                     let arg_types: Vec<Ty> =
                         args.iter().map(|a| a.node.ty.clone()).collect();
@@ -398,56 +639,50 @@ fn rewrite_typed_expr(
                         TypedExprKind::Unit => Vec::new(),
                         _ => vec![args.node.ty.clone()],
                     };
-                    let generic_overload = overloads.iter().find(|oi| {
-                        !oi.type_params.is_empty() && oi.params.len() == arg_types.len()
-                    });
+                    let generic_overload = find_generic_overload(overloads, &arg_types);
 
-                    if let Some(oi) = generic_overload {
-                        // Recomputa substitutions via unify.
-                        let mut subs: Substitutions = HashMap::new();
-                        if unify(&oi.params, &arg_types, &oi.type_params, &mut subs).is_ok() {
-                            // Gera nome canônico da instância.
-                            let subs_key = canonicalize_subs(&oi.type_params, &subs);
-                            let instance_name = format!("{callee}_{subs_key}");
+                    if let Some((oi, subs)) = generic_overload {
+                        // Gera nome canônico da instância.
+                        let subs_key = canonicalize_subs(&oi.type_params, &subs);
+                        let instance_name = format!("{callee}_{subs_key}");
 
-                            // Verifica se a instância já existe.
-                            if !ctx.existing.contains(&instance_name)
-                                && !acc.new_overloads.iter().any(|o| o.name == instance_name)
+                        // Verifica se a instância já existe.
+                        if !ctx.existing.contains(&instance_name)
+                            && !acc.new_overloads.iter().any(|o| o.name == instance_name)
+                        {
+                            // Gera OverloadInfo com tipos concretos.
+                            acc.new_overloads.push(kata_core::dispatch::OverloadInfo {
+                                name: instance_name.clone(),
+                                params: oi
+                                    .params
+                                    .iter()
+                                    .map(|t| apply_subs(t, &subs))
+                                    .collect(),
+                                ret: apply_subs(&oi.ret, &subs),
+                                ffi_symbol: None,
+                                is_action: true,
+                                is_generic: false,
+                                is_constructor: false,
+                                associative_neutral: None,
+                                type_params: vec![],
+                                substitutions: Some(subs.clone()),
+                            });
+
+                            // Gera TypedAction se a Action original tem corpo.
+                            if let Some(orig_action) =
+                                ctx.actions.iter().find(|a| a.name == *callee)
                             {
-                                // Gera OverloadInfo com tipos concretos.
-                                acc.new_overloads.push(kata_core::dispatch::OverloadInfo {
-                                    name: instance_name.clone(),
-                                    params: oi
-                                        .params
-                                        .iter()
-                                        .map(|t| apply_subs(t, &subs))
-                                        .collect(),
-                                    ret: apply_subs(&oi.ret, &subs),
-                                    ffi_symbol: None,
-                                    is_action: true,
-                                    is_generic: false,
-                                    is_constructor: false,
-                                    associative_neutral: None,
-                                    type_params: vec![],
-                                    substitutions: Some(subs.clone()),
-                                });
-
-                                // Gera TypedAction se a Action original tem corpo.
-                                if let Some(orig_action) =
-                                    ctx.actions.iter().find(|a| a.name == *callee)
-                                {
-                                    let mono_action =
-                                        instantiate_action(orig_action, &subs, &instance_name);
-                                    acc.new_actions.push(mono_action);
-                                }
+                                let mono_action =
+                                    instantiate_action(orig_action, &subs, &instance_name);
+                                acc.new_actions.push(mono_action);
                             }
-
-                            // Atualiza o instance_map.
-                            instance_map.insert((callee.clone(), subs_key), instance_name.clone());
-
-                            // Rewrite o callee para o nome da instância.
-                            *callee = instance_name;
                         }
+
+                        // Atualiza o instance_map.
+                        instance_map.insert((callee.clone(), subs_key), instance_name.clone());
+
+                        // Rewrite o callee para o nome da instância.
+                        *callee = instance_name;
                     }
                 }
             }

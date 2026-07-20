@@ -175,9 +175,10 @@ pub(crate) fn instantiate_pattern(pattern: &TypedPattern, subs: &Substitutions) 
 
 /// Instancia um `TypedExpr` — substitui Ty::Var no tipo do nó e recurse nos filhos.
 pub(crate) fn instantiate_typed_expr(expr: &TypedExpr, subs: &Substitutions) -> TypedExpr {
+    let new_ty = apply_subs(&expr.ty, subs);
     TypedExpr {
         span: expr.span,
-        ty: apply_subs(&expr.ty, subs),
+        ty: new_ty,
         tail_pos: expr.tail_pos,
         escape: expr.escape,
         effect: expr.effect,

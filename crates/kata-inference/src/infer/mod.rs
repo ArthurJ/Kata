@@ -33,7 +33,7 @@ mod log_synthesis;
 mod partial_dispatch;
 mod recursion;
 mod refined_builders;
-mod repr_synthesis;
+mod show_synthesis;
 mod sugar;
 mod variant;
 mod variant_construct;
@@ -70,6 +70,11 @@ pub fn infer_module(
 ) -> Result<TypedModule, MiddleError> {
     // 1. Popula DispatchTable com as assinaturas (prelude + módulo)
     let mut dispatch_table = populate_dispatch_table(&resolved.signatures);
+
+    // Clone mutável do InterfaceRegistry — a síntese de `show` registra
+    // impls de SHOW para structs e enums aqui, e o typeck (InferCtx)
+    // precisa enxergá-los para despachar `show` corretamente.
+    let mut interface_registry = resolved.interface_registry.clone();
 
     // 1a. Registra Actions definidas pelo usuário no DispatchTable (is_action = true).
     //     Actions não têm ffi_symbol (são compiladas como funções Kata).
@@ -120,11 +125,17 @@ pub fn infer_module(
         &mut dispatch_table,
     )?;
 
-    // 1d. sintetiza `repr` para structs com campos.
-    //     `repr :: Pessoa => Text` no DispatchTable + TypedFunction com body
+    // 1d. sintetiza `show` para structs com campos e todos os enums.
+    //     `show :: Pessoa => Text` no DispatchTable + TypedFunction com body
     //     que constrói "Pessoa(field0, field1, ...)" via string_concat FFI.
-    let mut repr_functions =
-        repr_synthesis::synthesize_repr_functions(&resolved.struct_registry, &mut dispatch_table);
+    //     `show :: Boolean => Text` etc. para enums (Match sobre variantes).
+    //     Registra `Struct/Enum implements SHOW` no InterfaceRegistry.
+    let mut show_functions = show_synthesis::synthesize_show_functions(
+        &resolved.struct_registry,
+        &resolved.enum_registry,
+        &mut dispatch_table,
+        &mut interface_registry,
+    );
 
     // 2. Clona o TypeEnv do ResolvedModule — o typeck pode adicionar bindings
     //    locais (let) sem mutar o original.
@@ -141,7 +152,7 @@ pub fn infer_module(
             enum_registry: &resolved.enum_registry,
             struct_registry: &resolved.struct_registry,
             refined_decls: &resolved.refined_decls,
-            interface_registry: &resolved.interface_registry,
+            interface_registry: &interface_registry,
             ret_ty: None,
             in_loop: false,
         };
@@ -166,7 +177,7 @@ pub fn infer_module(
             enum_registry: &resolved.enum_registry,
             struct_registry: &resolved.struct_registry,
             refined_decls: &resolved.refined_decls,
-            interface_registry: &resolved.interface_registry,
+            interface_registry: &interface_registry,
             ret_ty: Some(&action_def.return_type),
             in_loop: false,
         };
@@ -196,7 +207,7 @@ pub fn infer_module(
                     enum_registry: &resolved.enum_registry,
                     struct_registry: &resolved.struct_registry,
                     refined_decls: &resolved.refined_decls,
-                    interface_registry: &resolved.interface_registry,
+                    interface_registry: &interface_registry,
                     ret_ty: None,
                     in_loop: false,
                 };
@@ -246,7 +257,7 @@ pub fn infer_module(
             all_funcs.extend(struct_constructors);
             all_funcs.extend(refined_constructors);
             all_funcs.extend(enum_pred_constructors);
-            all_funcs.append(&mut repr_functions);
+            all_funcs.append(&mut show_functions);
             all_funcs
         },
         actions: typed_actions,

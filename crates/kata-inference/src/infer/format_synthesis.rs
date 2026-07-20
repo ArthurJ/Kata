@@ -103,10 +103,19 @@ fn convert_to_text(expr: Spanned<TypedExpr>) -> Spanned<TypedExpr> {
             // Sem FFI de float_to_text — fallback para int_to_text
             ffi_call1("kata_rt_int_to_text", expr, Ty::text())
         }
-        Ty::Sum(name) if name == "Boolean" => ffi_call1("kata_rt_bool_to_text", expr, Ty::text()),
+        Ty::Sum(name) if name == "Boolean" => {
+            // Boolean ganha `show` sintetizado (variantes True/False).
+            let mangled = format!("__kata_show__{name}");
+            repr_call(expr, mangled)
+        }
+        Ty::Sum(name) => {
+            // Enum — chama `__kata_show__{name}` via ffi_symbol mangled.
+            let mangled = format!("__kata_show__{name}");
+            repr_call(expr, mangled)
+        }
         Ty::Struct(name) => {
-            // Chama `__kata_repr__{name}` via ffi_symbol mangled
-            let mangled = format!("__kata_repr__{name}");
+            // Struct — chama `__kata_show__{name}` via ffi_symbol mangled.
+            let mangled = format!("__kata_show__{name}");
             repr_call(expr, mangled)
         }
         _ => ffi_call1("kata_rt_int_to_text", expr, Ty::text()),

@@ -179,6 +179,11 @@ impl EnumRegistry {
             .and_then(|vs| vs.iter().find(|v| v.name == variant))
     }
 
+    /// Lista os nomes de todos os enums registrados.
+    pub fn names(&self) -> impl Iterator<Item = &str> {
+        self.variants.keys().map(|s| s.as_str())
+    }
+
     /// Retorna todas as variantes de um enum com suas infos completas.
     pub fn all_variants(&self, enum_name: &str) -> Option<&[VariantInfo]> {
         self.variants.get(enum_name).map(|v| v.as_slice())

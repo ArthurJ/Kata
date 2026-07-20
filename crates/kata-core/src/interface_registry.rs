@@ -194,6 +194,12 @@ impl InterfaceRegistry {
         false
     }
 
+    /// Lista todas as interfaces registradas (para iteração).
+    /// Usado pelo dispatch de `Ty::Var` em funções genéricas sintetizadas.
+    pub fn all_interfaces(&self) -> impl Iterator<Item = &InterfaceInfo> {
+        self.interfaces.values()
+    }
+
     /// Mescla outro InterfaceRegistry neste. Interfaces e impls do outro
     /// são adicionados. Conflitos de nome de interface: o outro sobrescreve.
     /// Usado para combinar prelude + user module.

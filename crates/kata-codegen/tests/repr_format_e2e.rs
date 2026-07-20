@@ -83,13 +83,13 @@ fn untag_smi(raw: i64) -> i64 {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// repr — DoD 6: repr auto-sintetizado
+// show — DoD 6: show auto-sintetizado (repr renomeado para show)
 // ═══════════════════════════════════════════════════════════════
 
-/// `repr pessoa` retorna "Pessoa(João, 30)" — repr básico com Text + Int.
+/// `show pessoa` retorna "Pessoa(João, 30)" — show básico com Text + Int.
 #[test]
 fn repr_struct_text_int() {
-    let src = "data Pessoa (nome::Text idade::Int)\nlet p := Pessoa \"João\" 30\nrepr p";
+    let src = "data Pessoa (nome::Text idade::Int)\nlet p := Pessoa \"João\" 30\nshow p";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::text());
     // Text é ponteiro — não pode comparar valor diretamente.
@@ -97,48 +97,51 @@ fn repr_struct_text_int() {
     let _ = raw;
 }
 
-/// `repr ponto` retorna "Ponto(3, 4)" — repr com dois Ints.
+/// `show ponto` retorna "Ponto(3, 4)" — show com dois Ints.
 #[test]
 fn repr_struct_dois_ints() {
-    let src = "data Ponto (x::Int y::Int)\nlet p := Ponto 3 4\nrepr p";
+    let src = "data Ponto (x::Int y::Int)\nlet p := Ponto 3 4\nshow p";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::text());
     let _ = raw;
 }
 
-/// `repr` despacha por tipo — dois structs diferentes, mesmo nome "repr".
+/// `show` despacha por tipo — dois structs diferentes, mesmo nome "show".
 #[test]
 fn repr_despacha_por_tipo() {
-    let src = "data Pessoa (nome::Text idade::Int)\ndata Ponto (x::Int y::Int)\nlet p := Pessoa \"João\" 30\nlet pt := Ponto 3 4\nstring_concat (repr p) (repr pt)";
+    let src = "data Pessoa (nome::Text idade::Int)\ndata Ponto (x::Int y::Int)\nlet p := Pessoa \"João\" 30\nlet pt := Ponto 3 4\nstring_concat (show p) (show pt)";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::text());
     let _ = raw;
 }
 
-/// `repr` de struct com campo Boolean.
+/// `show` de struct com campo Boolean.
 #[test]
 fn repr_struct_com_boolean() {
-    let src = "data Flag (nome::Text ativa::Boolean)\nlet f := Flag \"test\" Boolean::True\nrepr f";
+    let src = "data Flag (nome::Text ativa::Boolean)\nlet f := Flag \"test\" Boolean::True\nshow f";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::text());
     let _ = raw;
 }
 
-/// `repr` de struct aninhada — struct com campo que é outro struct.
+/// `show` de struct aninhada — struct com campo que é outro struct.
 #[test]
 fn repr_struct_aninhada() {
-    let src = "data Endereco (rua::Text cidade::Text)\ndata Pessoa (nome::Text end::Endereco)\nlet e := Endereco \"Rua A\" \"Cidade B\"\nlet p := Pessoa \"João\" e\nrepr p";
+    let src = "data Endereco (rua::Text cidade::Text)\ndata Pessoa (nome::Text end::Endereco)\nlet e := Endereco \"Rua A\" \"Cidade B\"\nlet p := Pessoa \"João\" e\nshow p";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::text());
     let _ = raw;
 }
 
-/// `repr` não existe para structs sem campos (tipo opaco).
+/// `show` em Int funciona (Int implementa SHOW via prelude).
+/// Antes (com `repr`) isto falhava porque `repr` não cobria Int.
+/// Agora `show 42` despacha para `kata_rt_bi_show`.
 #[test]
 fn repr_struct_sem_campos_falha() {
-    let src = "data Vazio ()\nlet v := 42\nrepr v";
-    let result = infer_src(src);
-    assert!(result.is_err(), "repr em Int não deve despachar");
+    let src = "show 42";
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::text());
+    let _ = raw;
 }
 
 // ═══════════════════════════════════════════════════════════════
