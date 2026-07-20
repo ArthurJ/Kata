@@ -115,7 +115,11 @@ fn cmd_eval(expr: &str) -> miette::Result<()> {
 fn cmd_run(file: &str) -> miette::Result<()> {
     let source = read_source(file)?;
     let result = run_pipeline(&source)?;
-    display::print_result(result.raw, &result.ty);
+    // Unit de retorno de `main` não carrega informação — o output do
+    // programa já foi produzido via echo!/_print!. Suprimir o `()`.
+    if !matches!(result.ty, Ty::Unit) {
+        display::print_result(result.raw, &result.ty);
+    }
     Ok(())
 }
 
