@@ -5,6 +5,7 @@ use cranelift_module::Module;
 use kata_core::ty::{PrimTy, Ty};
 use kata_inference::TypedModule;
 
+use super::backend::{JitBackend, ModuleBackend};
 use super::module::{CodegenError, lower_module};
 use super::test_runner::TestWrapper;
 
@@ -20,7 +21,7 @@ pub struct JitResult {
 /// Compila e executa um `TypedModule` via Cranelift JIT.
 ///
 /// Pipeline: criar JITBuilder → registrar símbolos FFI → declarar FFI →
-/// lower_module → finalize_definitions → get_finalized_function →
+/// lower_module → finalize → get_finalized_function →
 /// transmutar → executar.
 pub fn jit_eval(typed: &TypedModule) -> Result<JitResult, CodegenError> {
     // Configura preserve_frame_pointers = true (necessário para CallConv::Tail / return_call).
@@ -41,28 +42,27 @@ pub fn jit_eval(typed: &TypedModule) -> Result<JitResult, CodegenError> {
 
     crate::ffi_registry::register_ffi_symbols(&mut builder);
 
-    let mut module = cranelift_jit::JITModule::new(builder);
+    let inner = cranelift_jit::JITModule::new(builder);
+    let mut backend = JitBackend::new(inner);
 
-    let ffi_ids = crate::ffi_registry::declare_ffi_symbols(&mut module)?;
+    let ffi_ids = crate::ffi_registry::declare_ffi_symbols(&mut backend)?;
 
     // Declara __kata_entry e faz o lowering.
     let ret_ty = typed.entry.node.ty.clone();
-    let (_metadata, _string_table, _test_wrappers) = lower_module(typed, &mut module, &ffi_ids)?;
+    let (_metadata, _string_table, _test_wrappers) = lower_module(typed, &mut backend, &ffi_ids)?;
 
     // Finaliza todas as definições — resolve relocations, compila machine code.
-    module
-        .finalize_definitions()
-        .map_err(|e| CodegenError::Cranelift(format!("finalize_definitions: {e}")))?;
+    backend.finalize()?;
 
     // Obtém o ponteiro da função entry.
-    let entry_id = module
+    let entry_id = backend
         .get_name("__kata_entry")
         .ok_or_else(|| CodegenError::Cranelift("__kata_entry não encontrado".into()))?;
     let entry_fid = match entry_id {
         cranelift_module::FuncOrDataId::Func(fid) => fid,
         _ => return Err(CodegenError::Cranelift("__kata_entry não é função".into())),
     };
-    let code = module.get_finalized_function(entry_fid);
+    let code = backend.get_finalized_function(entry_fid);
 
     // Mantém o module vivo enquanto executamos — os ponteiros são válidos
     // apenas enquanto o JITModule existe.
@@ -96,7 +96,7 @@ pub fn jit_eval(typed: &TypedModule) -> Result<JitResult, CodegenError> {
     // O module precisa sobreviver até aqui — dropping após execução.
     // Cranelift JIT mantém as páginas de código mapeadas enquanto o module vive.
     // Como `module` é dropped no fim deste escopo, o código já executou.
-    std::mem::forget(module);
+    std::mem::forget(backend.into_inner());
 
     Ok(result)
 }
@@ -129,15 +129,14 @@ pub fn jit_compile_tests(
 
     crate::ffi_registry::register_ffi_symbols(&mut builder);
 
-    let mut module = cranelift_jit::JITModule::new(builder);
+    let inner = cranelift_jit::JITModule::new(builder);
+    let mut backend = JitBackend::new(inner);
 
-    let ffi_ids = crate::ffi_registry::declare_ffi_symbols(&mut module)?;
+    let ffi_ids = crate::ffi_registry::declare_ffi_symbols(&mut backend)?;
 
-    let (_metadata, _string_table, test_wrappers) = lower_module(typed, &mut module, &ffi_ids)?;
+    let (_metadata, _string_table, test_wrappers) = lower_module(typed, &mut backend, &ffi_ids)?;
 
-    module
-        .finalize_definitions()
-        .map_err(|e| CodegenError::Cranelift(format!("finalize_definitions: {e}")))?;
+    backend.finalize()?;
 
-    Ok((module, test_wrappers))
+    Ok((backend.into_inner(), test_wrappers))
 }

@@ -1,0 +1,16 @@
+import csp.(sleep)
+import io.(echo)
+
+@log{level: Info, format: "[{level}] Action {name} concluded. Msg: {msg}", msg: "Hello from stdout daemon!"}
+action process_default_log
+    echo!("Inside process_default_log")
+    sleep!(10)
+
+action main
+    echo!("Starting main")
+    process_default_log!()
+    echo!("Waiting for stdout daemon to print")
+    sleep!(50)
+    echo!("Main exit")
+
+main!()

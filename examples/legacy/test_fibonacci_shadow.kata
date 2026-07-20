@@ -1,0 +1,12 @@
+@heapstack
+fib :: Int => Int
+lambda 0: 0
+lambda 1: 1
+lambda n:
+    + $(fib $(- n 1)) $(fib $(- n 2))
+
+action main
+    let res := fib 5
+    echo!("Fibonacci 5 concluido com shadow stack")
+
+main!()

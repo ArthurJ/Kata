@@ -1,0 +1,18 @@
+max :: Int Int => Int
+lambda x y:
+    maior: x
+    otherwise: y
+    with
+        maior := > x y
+
+min :: Int Int => Int
+lambda x y:
+    menor: x
+    otherwise: y
+    with
+        menor := < x y
+
+action main
+    let m := $(max 10 20)
+    echo!($(str m))
+    ()

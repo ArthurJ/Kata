@@ -1,0 +1,5 @@
+action main
+    echo!(42)
+    echo!("hello")
+    echo!(3.14)
+    echo!(())

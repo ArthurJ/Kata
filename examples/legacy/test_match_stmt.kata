@@ -1,0 +1,10 @@
+action main
+    let x := 150
+    var msg := ""
+    echo!("entrando")
+    match x
+        > _ 100: echo!("alto")
+        > _ 50: echo!("medio")
+        otherwise: echo!("baixo")
+    echo!(msg)
+    echo!(x)

@@ -1,0 +1,13 @@
+@test("produtor-consumidor com escape analysis")
+action pipeline_test
+    let ch := channel!()
+    fork!(produtor ch)
+    fork!(consumidor ch)
+
+action produtor (ch)
+    var arr := {1 2 3 4 5}
+    ch !> arr
+
+action consumidor (ch)
+    let val := ch <!
+    echo!(val)

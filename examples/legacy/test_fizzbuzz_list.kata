@@ -1,0 +1,21 @@
+fizzbuzz_list :: List::Int => List::Text
+lambda lista:
+    lista |> map $(fizzbuzz _)
+
+action main
+    let nums := [1..15]
+    let result := $(fizzbuzz_list nums)
+    echo!(str result)
+
+main!()
+fizzbuzz :: Int => Text
+lambda x:
+    both: "FizzBuzz"
+    fizz: "Fizz"
+    buzz: "Buzz"
+    otherwise: str x
+    with
+        fizz := = 0 $(mod x 3)
+        buzz := = 0 mod x 5
+        both := and fizz buzz
+

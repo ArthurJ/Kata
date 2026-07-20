@@ -1,0 +1,17 @@
+# Teste do Grupo E — Stream Fusion
+# Valida que o pipeline map + filter compila e executa corretamente
+# usando apenas funções simples. A otimização stream fusion
+# transforma filter(f, map(g, arr)) num único loop internamente.
+
+f :: Int => Bool
+lambda n: > n 0
+
+g :: Int => Int
+lambda n: * n 2
+
+processar :: Int => Int
+lambda arr: fold 0 + (filter f (map g arr))
+
+action main
+    let res := processar {1 -2 3 -4 5}
+    echo!("stream_fusion: pipeline processar executada com sucesso")

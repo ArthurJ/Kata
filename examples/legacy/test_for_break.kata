@@ -1,0 +1,9 @@
+action main
+    let arr := {1 2 3 4 5}
+    var i := 0
+    for x in arr
+        match i
+            > _ 1: break
+            otherwise:
+                echo!(x)
+                i := + i 1

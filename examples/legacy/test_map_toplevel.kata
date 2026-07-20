@@ -1,0 +1,7 @@
+# Testa map simple sem captures nem parenteses
+f :: Int => Int
+lambda x: + x 1
+
+action main
+    let resultado := map f [1 2 3]
+    echo!("ok")

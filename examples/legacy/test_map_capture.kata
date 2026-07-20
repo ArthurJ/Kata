@@ -1,0 +1,5 @@
+action main
+    let n := 10
+    let dados := {1 2 3}
+    let result := map (lambda x: + x n) dados
+    echo! result

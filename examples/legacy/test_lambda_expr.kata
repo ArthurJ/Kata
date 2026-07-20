@@ -1,0 +1,14 @@
+soma_um :: Int => Int
+lambda m: + 1 m
+
+dobrar :: Int => Int
+lambda x: * 2 x
+
+action main
+    let f := lambda m: + 1 m
+    let resultado := f 5
+    echo!(format "resultado: {}" (resultado))
+    let g := lambda x y: + x y
+    let soma := g 10 3
+    echo!(format "soma: {}" (soma))
+main!()

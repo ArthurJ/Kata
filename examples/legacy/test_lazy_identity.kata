@@ -1,0 +1,9 @@
+# Teste de especialização lazy: lambda sem restrições no corpo
+# deve ser monomorfizado no primeiro call site
+
+action main
+    let id := lambda x: x
+    let a := id 42
+    let b := id 1
+    echo!(a)
+    echo!(b)

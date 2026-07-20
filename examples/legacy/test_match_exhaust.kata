@@ -1,0 +1,21 @@
+# Enum válido
+enum Cor
+    | Azul
+    | Verde
+    | Rosa
+
+action main
+    let minha_cor := Verde
+
+    # Match Invalido consertado (Falta Rosa e otherwise)
+    match minha_cor
+        Azul: echo!("A")
+        Verde: echo!("V")
+        Rosa: echo!("R")
+        
+    # Match Valido (Falta Rosa, mas tem otherwise)
+    match minha_cor
+        Azul: echo!("A")
+        otherwise: echo!("Outro")
+
+main!()

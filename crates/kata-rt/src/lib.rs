@@ -11,6 +11,7 @@ pub(crate) mod arena;
 pub(crate) mod array;
 pub(crate) mod bigint;
 pub(crate) mod channel;
+pub(crate) mod display;
 pub(crate) mod fiber;
 pub(crate) mod float;
 pub(crate) mod io;
@@ -83,4 +84,10 @@ pub use channel::{
 // Telemetria (Fio 14 @log)
 pub use log::{
     kata_rt_log_config, kata_rt_log_publish, kata_rt_log_recv, reset_log, snapshot_log_config,
+};
+// Display de resultados (Fio 15 Fase 4) — ponto único de display para
+// driver JIT e shim AOT.
+pub use display::{
+    TYPE_BOOLEAN, TYPE_FLOAT, TYPE_INT, TYPE_OTHER, TYPE_RATIONAL, TYPE_TEXT, TYPE_UNIT,
+    kata_rt_print_result,
 };

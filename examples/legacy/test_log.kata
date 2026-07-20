@@ -1,0 +1,28 @@
+import io.(echo)
+import csp.(sleep fork log_subscribe)
+
+
+@log{level: Info, topic: "metrics", format: "[{level}] Action {name} concluded in {elapsed}ms. Msg: {msg}"}
+action process_data
+    echo!("Inside process_data, before sleep")
+    sleep!(10)
+    echo!("Inside process_data, after sleep")
+
+action auditor
+    let rx := log_subscribe!("metrics")
+    echo!("Auditor start")
+    let msg := <! rx
+    echo!(msg)
+
+action main
+    echo!("Forking auditor")
+    fork!(auditor)
+    echo!("Sleeping 5")
+    sleep!(5)
+    echo!("Calling process_data")
+    process_data!()
+    echo!("Sleeping 5 again")
+    sleep!(5)
+    echo!("Main exit")
+
+main!()

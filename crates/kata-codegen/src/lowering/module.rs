@@ -21,6 +21,8 @@ use super::function_def::{declare_kata_function, define_kata_function};
 use crate::ffi_sigs::ty_to_clif;
 use crate::metadata::MetadataTable;
 
+use super::backend::ModuleBackend;
+
 /// Erro de codegen.
 #[derive(Debug)]
 pub enum CodegenError {
@@ -59,7 +61,7 @@ pub(crate) type SymbolTable = HashMap<FuncKey, cranelift_module::FuncId>;
 /// retorna o `MetadataTable` sidecar, a string table, e os wrappers de teste.
 pub(crate) fn lower_module(
     typed: &TypedModule,
-    module: &mut cranelift_jit::JITModule,
+    module: &mut dyn ModuleBackend,
     ffi_ids: &HashMap<String, cranelift_module::FuncId>,
 ) -> Result<
     (

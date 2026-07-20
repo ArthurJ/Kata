@@ -1,0 +1,18 @@
+[package]
+name = "kata-tree-shaking"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "Tree shaking — remove funções, actions e @test specs não alcançadas a partir do entry point"
+
+[dependencies]
+kata-ast = { workspace = true }
+kata-core = { workspace = true }
+kata-inference = { workspace = true }
+
+[dev-dependencies]
+kata-lexer = { workspace = true }
+kata-parser = { workspace = true }
+kata-resolution = { workspace = true }
+kata-monomorph = { workspace = true }
+kata-optimizer = { workspace = true }

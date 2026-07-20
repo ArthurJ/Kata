@@ -1,0 +1,13 @@
+enum TestEnum
+    | A(< _ 10)
+    | B
+
+TestEnum implements SHOW
+    str :: TestEnum => Text
+    lambda A::_: "A"
+    lambda B: "B"
+
+action main
+    echo!(str TestEnum 5)
+
+main!()

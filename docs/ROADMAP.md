@@ -708,12 +708,15 @@ telemetria sem contaminar pureza.
 
 ### Fio 15: AOT, REPL
 
+**Status:** Em andamento (Fases 1-5 ✅, Fases 6-8 pendentes)
+
 **Features:**
 - `kata build` (AOT: Cranelift object file + linker → executável)
   - `cranelift-object` para emissão de `.o`
-  - Link com `kata-rt` estático
+  - Link com `kata-rt` estático (`libkata_rt.a`) ou dinâmico (`--dynamic`, `libkata_rt.so`)
   - Tree shaking incondicional (sem `--release`)
-- `kata repl` (REPL interativo)
+  - Shim C trivial que chama `__kata_entry` + `kata_rt_print_result` (display no runtime)
+- `kata repl` (REPL interativo) — pendente (Fases 6-7)
   - Persistência de `TypeEnv` entre expressões
   - Histórico persistente (rustyline)
   - Comandos: `:help`, `:type <expr>`, `:env`, `:quit`
@@ -722,6 +725,16 @@ telemetria sem contaminar pureza.
 
 **DoD:** `kata build examples/fatorial.kata` produz executável nativo que
 executa sem o compilador. `kata repl` mantém bindings entre expressões.
+
+**Progresso (2026-07-19):**
+- Fase 1 ✅ — `ModuleBackend` trait + `JitBackend`
+- Fase 2 ✅ — `AotBackend` + `aot_emit`
+- Fase 3 ✅ — `kata-tree-shaking` crate
+- Fase 4 ✅ — `kata-rt` staticlib/cdylib + linker (shim C + `cc`)
+- Fase 5 ✅ — `kata build` subcomando + pipeline completo + 8 testes E2E
+- Fase 6 ⏳ — REPL: TypeEnv persistente + `:type`
+- Fase 7 ⏳ — `:load` + multiline + E2E
+- Fase 8 ⏳ — Documentação
 
 ---
 

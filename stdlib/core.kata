@@ -185,6 +185,16 @@ Text implements CONTAINS::Text
 @ffi("kata_rt_fdiv")
 / :: Float Float => Float
 
+# Int módulo (resto da divisão inteira)
+mod :: Int Int => Int
+    lambda a b: - a (* b (/ a b))
+
+# AND lógico (Boolean é enum True/False, sem operador nativo)
+and :: Boolean Boolean => Boolean
+    lambda a b:
+        a: b
+        otherwise: False
+
 # List head/tail (extrai primeiro elemento / resto da lista)
 @ffi("kata_rt_list_head")
 head :: List::A => A

@@ -1,0 +1,32 @@
+enum IMC
+    | Magreza(< _ 18.5)
+    | Normal(<= _ 25.0)
+    | Sobrepeso(<= _ 30.0)
+    | Obesidade
+
+alias PositiveNonZero as Peso
+alias PositiveNonZero as Altura
+
+classificador_imc :: Peso Altura => IMC
+lambda p a:
+    IMC imc
+    with
+        imc := / p $(* a a)|1  # Exemplo de uso de fallback explícito
+
+action classificar
+    #let a::Altura typed_input!("Entre com a altura(m).") | exit!("Input inválido")  # Exemplo de uso de input tipado
+    #let p::Peso typed_input!("Entre com o peso(kg).") | exit!("Input inválido")     # junto com fallback
+
+    let imc := classificador_imc $(Peso 70) $(Altura 1.75)
+    echo!(imc)
+
+# Cada tipo (base ou refinado) deve oferecer um smart constructor
+
+# O resultado do typed_input!() é coagido para o tipo anotado na variavel.
+
+# o fallback (nos exemplos: `|1` e `| exit!("Input inválido")`)
+# Em caso de Result, o fallback é escolhido
+# Essa sintaxe é pensada especificamente para evitar a "explosão monádica", neste caso, evitando o uso de Result.
+
+
+classificar!()

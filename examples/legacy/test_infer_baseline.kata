@@ -1,0 +1,6 @@
+
+action main
+    let n := 10
+    let f := lambda x :: Int: + x n
+    let result := f 5
+    echo!(repr result)

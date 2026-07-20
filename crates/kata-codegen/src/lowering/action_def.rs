@@ -18,6 +18,7 @@ use super::expr::lower_expr;
 use crate::ffi_sigs::ty_to_clif;
 use crate::metadata::MetadataTable;
 
+use super::backend::ModuleBackend;
 use super::log::inject_log;
 use super::module::{CodegenError, FuncKey, StringTable};
 
@@ -33,7 +34,7 @@ use super::module::{CodegenError, FuncKey, StringTable};
 pub(crate) fn declare_kata_action(
     action: &TypedAction,
     cranelift_name: &str,
-    module: &mut cranelift_jit::JITModule,
+    module: &mut dyn ModuleBackend,
 ) -> Result<cranelift_module::FuncId, CodegenError> {
     let mut sig = Signature::new(CallConv::Tail);
     // ABI uniforme: fiber_arena, caller_arena, args_ptr — todos I64.
@@ -61,7 +62,7 @@ pub(crate) fn declare_kata_action(
 pub(crate) fn define_kata_action(
     action: &TypedAction,
     func_id: cranelift_module::FuncId,
-    module: &mut cranelift_jit::JITModule,
+    module: &mut dyn ModuleBackend,
     ffi_ids: &HashMap<String, cranelift_module::FuncId>,
     symbol_table: &HashMap<FuncKey, cranelift_module::FuncId>,
     string_table: &mut StringTable,

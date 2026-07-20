@@ -1,0 +1,24 @@
+and :: Boolean Boolean => Boolean
+    lambda a b:
+        a: b
+        otherwise: False
+
+fizzbuzz :: Int => Text
+    lambda x:
+        both: "FizzBuzz"
+        fizz: "Fizz"
+        buzz: "Buzz"
+        otherwise: show x
+        with
+            fizz := = 0 (- x (* 3 (/ x 3)))
+            buzz := = 0 (- x (* 5 (/ x 5)))
+            both := and fizz buzz
+
+action main
+    echo!(fizzbuzz 3)
+    echo!(fizzbuzz 5)
+    echo!(fizzbuzz 15)
+    echo!(fizzbuzz 7)
+    echo!(fizzbuzz 2)
+
+main!()

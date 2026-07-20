@@ -1,0 +1,19 @@
+action main ()
+    let (tx rx) := queue!(2)
+    
+    select
+        case (<! rx) -> valor:
+            echo!("O canal esta vazio, nao deveria receber")
+        timeout 50:
+            echo!("Passou no timeout")
+
+    sleep!(60)
+    !> tx "1"
+
+    select
+        case (<! rx) -> valor:
+            echo!("Recebeu o valor correto")
+        timeout 500:
+            echo!("Nao deveria dar timeout")
+
+main!()

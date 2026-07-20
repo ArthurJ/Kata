@@ -5,6 +5,9 @@ edition.workspace = true
 authors.workspace = true
 description = "Runtime isolado — BigInt/SMI, Float, Rational, Text, arena, print, ponte C-ABI"
 
+[lib]
+crate-type = ["staticlib", "rlib", "cdylib"]
+
 [dependencies]
 bumpalo.workspace = true
 num-bigint.workspace = true

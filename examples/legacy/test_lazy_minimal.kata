@@ -1,0 +1,3 @@
+action main
+    let id := lambda x: x
+    let a := id 42

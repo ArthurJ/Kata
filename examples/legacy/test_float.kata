@@ -1,0 +1,2 @@
+action main
+    echo!(3.14)

@@ -1,0 +1,6 @@
+# Testa captura stack via map com closure nomeada
+action main
+    let n := 10
+    let f := lambda x: + x n
+    let resultado := map f [1 2 3]
+    echo!("ok")

@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 description = "CLI do compilador Kata — orquestra o pipeline completo"
+build = "build.rs"
 
 [[bin]]
 name = "kata"
@@ -19,9 +20,11 @@ kata-inference.workspace = true
 kata-codegen.workspace = true
 kata-monomorph.workspace = true
 kata-optimizer.workspace = true
+kata-tree-shaking.workspace = true
 kata-core.workspace = true
 kata-ast.workspace = true
 kata-diagnostics.workspace = true
 kata-rt.workspace = true
 cranelift-jit.workspace = true
 cranelift-module.workspace = true
+rustyline.workspace = true

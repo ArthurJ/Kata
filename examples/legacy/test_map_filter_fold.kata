@@ -1,0 +1,23 @@
+action main
+    let numeros := {1 2 3 4 5}
+
+    echo!("--- map: multiplicar por 2 ---")
+    let dobro := map (* _ 2) numeros
+    for x in dobro
+        echo!(x)
+
+    echo!("--- filter: elementos pares ---")
+    let pares := filter (== 0 (mod _ 2)) numeros
+    for x in pares
+        echo!(x)
+
+    echo!("--- fold_from: soma acumulada ---")
+    let soma := fold_from 0 (+ _ _) numeros
+    echo!(soma)
+
+    echo!("--- map com lista ---")
+    let triplos := map (* _ 3) [1 2 3]
+    for x in triplos
+        echo!(x)
+
+    echo!("fim")

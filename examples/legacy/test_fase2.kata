@@ -1,0 +1,19 @@
+identidade :: Int => Int
+lambda a: a
+
+dobro :: Int => Int
+lambda a: * a 2
+
+@ffi("kata_rt_add_i64")
++ :: Int Int => Int
+
+@ffi("kata_rt_sub_i64")
+- :: Int Int => Int
+
+@ffi("kata_rt_mul_i64")
+* :: Int Int => Int
+
+action main
+    let x := 21
+    let y := dobro x
+    echo!(y)

@@ -1,0 +1,13 @@
+action main
+    match broadcast!()
+        (tx factory):
+            echo!("broadcast criado")
+            let sub1 := subscribe!(factory)
+            let sub2 := subscribe!(factory)
+            echo!("2 subscribers")
+            42 !> tx
+            var v := 0
+            v <! sub1
+            echo!(v)
+            v <! sub2
+            echo!(v)

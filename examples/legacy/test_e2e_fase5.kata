@@ -1,0 +1,35 @@
+checar_impar :: Int => Result::(Int, Text)
+lambda x:
+    == (mod x 2) 0: Err("Par")
+    otherwise: Ok(x)
+
+action main
+    var cont := 0
+
+    loop
+        cont := + cont 1
+        match cont
+            == _ 3: continue
+            > _ 5: break
+            otherwise: echo!(cont)
+
+    var soma := 0
+    var falhas := 0
+
+    for n in {1 2 3 4 5}
+        match checar_impar(n)
+            Ok(val): soma := + soma val
+            Err(e): falhas := + falhas 1
+    
+    echo!("Soma de impares:")
+    echo!(soma)
+    echo!("Falhas:")
+    echo!(falhas)
+
+    let seguro := checar_impar(2) | 99
+    echo!("Valor seguro (par):")
+    echo!(seguro)
+    
+    let seguro2 := checar_impar(3) | 99
+    echo!("Valor seguro (impar):")
+    echo!(seguro2)

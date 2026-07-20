@@ -1,0 +1,24 @@
+action worker (tx::Sender::(Int))
+    # Envia o valor 42 para a ponta de escrita do canal
+    42 !> tx
+    100 !> tx
+
+action main
+    # Cria o canal (retorna Sender e Receiver)
+    match channel!()
+        (tx rx):
+            # Faz fork da corrotina worker passando a ponta de envio
+            fork!(worker tx)
+            
+            var x := 0
+            # Recebe do canal (ponta de leitura) e coloca em x
+            x <! rx
+            
+            # Bloco select para multiplexação
+            select
+                case z rx:
+                    echo!("Recebido no select!")
+                timeout 1000:
+                    echo!("Timeout!")
+
+main!()

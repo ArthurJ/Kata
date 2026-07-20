@@ -1,0 +1,8 @@
+# Test: closure escapes via return (heap/ARC) — fully typed
+make_adder :: Int => (Int -> Int)
+lambda n :: Int: lambda x :: Int: + x n
+
+action main
+    let add5 := make_adder 5
+    let a := add5 3
+    echo! a

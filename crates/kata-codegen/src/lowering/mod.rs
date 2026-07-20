@@ -14,7 +14,9 @@
 //! Tipos compartilhados (`LowerCtx`, `CodegenError`, `StringTable`) vivem
 //! aqui no `mod.rs` e são importados pelos submódulos via `super::`.
 
+mod backend;
 mod _match;
+mod aot;
 mod action_call;
 mod action_def;
 mod clause;
@@ -35,7 +37,10 @@ mod pattern;
 mod test_runner;
 mod variant;
 
+pub(crate) use backend::ModuleBackend;
+
 pub use jit::{JitResult, jit_compile_tests, jit_eval};
+pub use aot::aot_emit;
 pub use module::CodegenError;
 use module::StringTable;
 pub use test_runner::TestWrapper;
@@ -78,7 +83,7 @@ pub(crate) fn func_key_from_callee(
 /// Contexto de lowering — compartilhado entre as chamadas recursivas.
 pub(crate) struct LowerCtx<'a, 'b> {
     pub builder: &'a mut FunctionBuilder<'b>,
-    pub module: &'a mut cranelift_jit::JITModule,
+    pub module: &'a mut dyn ModuleBackend,
     pub ffi_refs: &'a HashMap<String, cranelift_codegen::ir::FuncRef>,
     pub kata_refs: &'a HashMap<FuncKey, cranelift_codegen::ir::FuncRef>,
     /// FuncIds globais (module-level) para re-declaração em lambdas anônimos.

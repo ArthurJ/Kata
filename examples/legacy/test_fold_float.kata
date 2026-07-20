@@ -1,0 +1,9 @@
+@associative(0.0)
+soma_floats :: Float Float => Float
+lambda a b:
+    + a b
+
+action main
+    let floats := {1.5 2.5 3.5}
+    let resultado := fold soma_floats floats
+    echo!($(str resultado))

@@ -1,0 +1,15 @@
+# Teste do Grupo C — @parallel não bloqueia green threads
+# Uma ação @parallel com loop infinito não deve travar a main.
+
+@parallel
+action cpu_infinita (n :: Int)
+    echo!("cpu_infinita: iniciando loop infinito em thread OS...")
+    loop
+        var x := 0
+        x := + x 1
+
+action main
+    echo!("main: disparando cpu_infinita com @parallel...")
+    fork!(cpu_infinita 0)
+    echo!("main: NÃO fui bloqueada! @parallel funciona.")
+    echo!("main: o loop infinito está rodando em thread OS separada.")

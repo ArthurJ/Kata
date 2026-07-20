@@ -26,6 +26,7 @@ use kata_core::ty::Ty;
 use kata_inference::{TypedAction, TypedTestSpec};
 
 use super::LowerCtx;
+use super::backend::ModuleBackend;
 use super::expr::lower_expr;
 use super::module::{CodegenError, FuncKey, StringTable};
 use crate::metadata::MetadataTable;
@@ -50,7 +51,7 @@ pub struct TestWrapper {
 /// declarar e definir Actions (para que `symbol_table` tenha os FuncIds).
 pub(crate) fn generate_test_wrappers(
     typed: &kata_inference::TypedModule,
-    module: &mut cranelift_jit::JITModule,
+    module: &mut dyn ModuleBackend,
     ffi_ids: &HashMap<String, cranelift_module::FuncId>,
     symbol_table: &HashMap<FuncKey, cranelift_module::FuncId>,
     string_table: &mut StringTable,
@@ -119,7 +120,7 @@ pub(crate) fn generate_test_wrappers(
 /// Declara um wrapper `() -> i64` com `CallConv::SystemV`.
 fn declare_test_wrapper(
     cranelift_name: &str,
-    module: &mut cranelift_jit::JITModule,
+    module: &mut dyn ModuleBackend,
 ) -> Result<cranelift_module::FuncId, CodegenError> {
     let mut sig = Signature::new(CallConv::SystemV);
     sig.returns.push(AbiParam::new(I64));
@@ -141,7 +142,7 @@ fn define_test_wrapper(
     action: &TypedAction,
     spec: &TypedTestSpec,
     func_id: cranelift_module::FuncId,
-    module: &mut cranelift_jit::JITModule,
+    module: &mut dyn ModuleBackend,
     ffi_ids: &HashMap<String, cranelift_module::FuncId>,
     symbol_table: &HashMap<FuncKey, cranelift_module::FuncId>,
     string_table: &mut StringTable,

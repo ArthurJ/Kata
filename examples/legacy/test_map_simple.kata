@@ -1,0 +1,4 @@
+# Testa map simples sem closures
+action main
+    let resultado := map (* _ 2) [1 2 3]
+    echo!("ok")

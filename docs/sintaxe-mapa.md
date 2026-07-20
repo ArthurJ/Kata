@@ -431,6 +431,132 @@ len "hello"              # 5 — text (COUNTABLE dispatch, kata_rt_string_len)
   - `@ffi` → informa linker de símbolo externo.
   - `@builtin` → marca função para síntese de nó TAST especializado (map/filter/fold).
   - `@parallel` → spawn de processo OS separado (multiprocess).
+  - `@log` → veja seção dedicada abaixo.
+
+---
+
+## Diretiva `@log` (Telemetria via CSP)
+
+Anotação em actions e funções nomeadas que injeta `kata_rt_log_publish` no wrapping (prólogo ou epílogo da definição). Permite emitir telemetria estruturada sem contaminar a assinatura matemática — a pureza nominal da função não muda. Independente da action nativa `log!()` (que dispara na execução da linha).
+
+```kata
+@log{msg: "processando {x}", level: LogLevel::Info, topic: "audit", policy: "block", when: "exit"}
+action processar (x::Int) => Int
+  let result := * x 2
+  result
+```
+
+### Campos da diretiva
+
+| Campo | Tipo | Obrigatório | Descrição |
+|---|---|---|---|
+| `msg` | `Text` | **sim** | Template compile-time. `{expr}` interpola expressão do escopo (Ident ou `Ident.field`). `{{` escapa `{` literal; `}}` escapa `}`. `{` sem `}` = erro. Desugara para `format "template" (expr1, ...)` via `infer_format`. |
+| `when` | `Text` | **sim** (Decisão D1) | `"enter"` = loga no prólogo. `"exit"` = loga no epílogo. Ausente = erro compile-time (`when é obrigatório em @log`). Outro valor = erro. |
+| `level` | `LogLevel` | não | Variante do enum `LogLevel` do prelude (`Debug`/`Info`/`Warn`/`Error`). Default: `Info`. |
+| `topic` | `Text` | não | Nome do canal onde publicar. Default: herdado do fiber ancestral (ou `"default"` se nenhuma config). |
+| `policy` | `Text` | não | `"drop"` (fire-and-forget via Broadcast) ou `"block"` (Queue bounded cap=1 com ack, bloqueia se cheio). Default: herdado (ou `"drop"`). |
+
+### Restrições de `when`
+
+- `when: "enter"` → placeholders do `msg` **só podem referenciar params** da função. Referenciar variável do corpo é erro compile-time (a variável não existe no prólogo).
+- `when: "exit"` → placeholders podem referenciar params e variáveis do corpo. O codegen injeta a publicação antes de cada ponto de saída (`return` explícito, retorno implícito, braços de `match`).
+
+### Canais e policies
+
+Tópicos são canais nomeados, resolvidos sob demanda num registry `HashMap<String, i64>` (nome → handle). Primeira referência a `"audit"` cria o canal; subsequentes reusam.
+
+- **`"drop"`** → canal Broadcast single-slot (sobrescreve valor anterior — se FIFO necessário, use `"block"`). Não bloqueia. Reusa `kata_rt_broadcast_create` + `kata_rt_broadcast_send`.
+- **`"block"`** → Queue bounded (cap=1) com ack. Bloqueia o publisher via `YieldReason::BlockedOnSend` até o consumidor confirmar. Reusa `kata_rt_channel_create` + `kata_rt_channel_send`.
+
+### Enum `LogLevel` no prelude
+
+```kata
+enum LogLevel
+  Debug
+  Info
+  Warn
+  Error
+```
+
+Fixo no `stdlib/core.kata`. Extensibilidade (interfaces, herança de enum) é dívida técnica — não no escopo do Fio 14.
+
+### `TypedLogSpec` na TAST
+
+O typeck consome o `LogSpec` do resolution e produz `TypedLogSpec`, que é **enum** (não struct):
+
+```rust
+enum TypedLogSpec {
+    Enter { msg_expr: Spanned<TypedExpr>, topic: Option<String>, policy: Option<String>, level: i64 },
+    Exit  { msg_expr: Spanned<TypedExpr>, topic: Option<String>, policy: Option<String>, level: i64 },
+}
+```
+
+O codegen despacha no variant: `Enter` → injeta `kata_rt_log_publish` no prólogo; `Exit` → injeta antes de cada saída. `level` é tag numérica (`Debug=0, Info=1, Warn=2, Error=3`).
+
+### Configuração herdada via `log_config!()`
+
+Defaults de `topic`/`policy`/`level` são armazenados em TLS `LOG_CONFIG: RefCell<Option<LogConfig>>` no runtime. No `kata_rt_spawn`, o scheduler copia o `LOG_CONFIG` do fiber pai para o filho (snapshot). Mudanças no pai após o spawn não propagam para filhos já spawnados. Configura-se em runtime via `log_config!()` (abaixo).
+
+- **Relações**:
+  - Independente de `log!()` — ambos podem coexistir na mesma action.
+  - `@log` dispara no wrapping (chamada); `log!()` dispara na linha.
+  - `when` é obrigatório — diverge do PRD aspiracional (`§2.2`), que descreve automação; decisão fechada com Arthur (2026-07-19) tornou `when` obrigatório. PRD mantido como referência histórica.
+  - `policy: "block"` pode deadlockar se nenhum consumidor existe — mitigação via `DEADLOCK_SENTINEL` existente do scheduler.
+  - Não se aplica a métodos de `implements` — só actions e funções nomeadas.
+
+---
+
+## Actions nativas de log: `log!()`, `log_recv!()`, `log_config!()`
+
+Três actions interceptadas no typeck (como `format`, `map`, `filter`, `len`) — não passam pelo DispatchTable. Desugaram para FFIs do runtime (`kata_rt_log_publish`, `kata_rt_log_recv`, `kata_rt_log_config`).
+
+### `log!()` — publicação explícita
+
+```kata
+log!(LogLevel::Info, "mensagem dinâmica: {valor}", "audit", "drop")
+```
+
+Sintaxe posicional (action call existente: `Ident ! (tuple)`):
+
+| Pos | Tipo | Descrição |
+|---|---|---|
+| 0 | `LogLevel` | Level da mensagem. |
+| 1 | `Text` | Mensagem. Pode ser dinâmica (construída em runtime). |
+| 2 | `Text` | Tópico. Opcional — default herdado ou `"default"`. |
+| 3 | `Text` | Policy. Opcional — default herdado ou `"drop"`. |
+
+Typeck aceita 2, 3 ou 4 args. Dispara no ponto da chamada (linha), diferente de `@log` que dispara no wrapping.
+
+### `log_recv!()` — consumo de telemetria
+
+```kata
+let msg := log_recv!("audit")
+```
+
+| Pos | Tipo | Descrição |
+|---|---|---|
+| 0 | `Text` | Tópico a consumir. |
+
+Bloqueia via `YieldReason::BlockedOnRecv` até chegar mensagem. Retorna `Text` (payload) ou `Unit` se o canal fechou. Precisa estar em fiber context (`fork!()` ou action) — `kata_rt_channel_recv` só bloqueia dentro de um fiber; entry point não é fiber.
+
+Para Broadcast, o receiver é criado eagerly no `get_or_create_topic` (antes de qualquer publish) e cached em `RECEIVER_REGISTRY` (thread_local) — garante que mensagens publicadas antes de qualquer `log_recv` sejam visíveis.
+
+### `log_config!()` — configura defaults do fiber
+
+```kata
+log_config!("audit", "block", LogLevel::Info)
+```
+
+| Pos | Tipo | Descrição |
+|---|---|---|
+| 0 | `Text` | Tópico default. |
+| 1 | `Text` | Policy default. |
+| 2 | `LogLevel` | Level default. |
+
+Setta `LOG_CONFIG` TLS no fiber atual. Filhos spawnados herdam via snapshot no `kata_rt_spawn`.
+
+- **Relações**: `log_config!()` é action nativa (não diretiva) porque configura em runtime, dinamicamente. Diretiva seria compile-time.
+- **Void FFI**: `kata_rt_log_config` é void (sem retorno). O `lower_closure` verifica `inst_results.is_empty()` antes de indexar e retorna `iconst(I64, 0)` (Unit) — não panica no codegen.
 
 ---
 
@@ -452,7 +578,7 @@ len "hello"              # 5 — text (COUNTABLE dispatch, kata_rt_string_len)
 | Palavra | Uso |
 |---|---|
 | `lambda` / `λ` | Declara função anônima. Múltiplas cláusulas após assinatura: `lambda <padrões>: <corpo>` — a primeira que encaixa vence |
-| `action` | Declara Action com params nomeados: `action nome (p::T, ...) => Ret` |
+| `action` | Declara Action com params nomeados: `action nome (p::T, ...) => Ret`. Forma posicional legada `(T1 T2) -> Ret` removida na migração total. Params sem nome não são mais aceitos; `::` etiqueta é obrigatória em cada argumento. `=>` separa args de retorno (igual a assinaturas de função). Sem params: `action greet` (retorna `Unit`) ou `action greet => Unit` (retorno explícito). |
 | `data` | Declara tipo produto |
 | `enum` | Declara tipo soma |
 | `alias` | Cria Newtype |

@@ -1,0 +1,5 @@
+
+action main
+    echo!({1 2 3})
+main!()
+

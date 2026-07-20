@@ -1,0 +1,7 @@
+# Teste de Recursão em Actions
+
+@test{desc: "Erro de arquitetura de Action", expects: "CompileError"}
+action loop_infinito
+    echo!("Recursando...")
+    loop
+        var x := 1

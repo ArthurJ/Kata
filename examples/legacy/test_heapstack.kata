@@ -1,0 +1,14 @@
+# Teste do Grupo D — @heapstack
+
+@heapstack
+action loop_controlado (n :: Int)
+    echo!("loop_controlado: entrando...")
+    var i := 0
+    loop
+        i := + i 1
+        break
+
+action main
+    echo!("main: disparando loop_controlado com @heapstack")
+    fork!(loop_controlado 0)
+    echo!("main: feito.")

@@ -1,0 +1,19 @@
+# test_treeshake.kata — Teste de Tree Shaking (Dead Code Elimination)
+# Este arquivo tem funções usadas e não-usadas.
+# Com --release, as não-usadas devem ser eliminadas.
+
+# Função usada pela action main
+somar :: Int Int => Int
+lambda a b: + a b
+
+# Função NÃO referenciada — deve ser eliminada em --release
+nao_usada :: Int => Int
+lambda x: * x 100
+
+# Outra função não usada
+outra_nao_usada :: Text => Text
+lambda s: s
+
+action main
+    let resultado := somar 10 20
+    echo!("Ok")

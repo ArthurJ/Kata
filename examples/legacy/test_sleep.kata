@@ -1,0 +1,9 @@
+import csp.(sleep)
+import io.(echo)
+
+action main
+    echo!("Antes do sleep")
+    sleep!(100)
+    echo!("Depois do sleep")
+
+main!()

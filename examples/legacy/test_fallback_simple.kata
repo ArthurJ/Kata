@@ -1,0 +1,5 @@
+action main
+    let a := Ok(42) | 0
+    let b := Err("falha") | 0
+    echo!(a)
+    echo!(b)

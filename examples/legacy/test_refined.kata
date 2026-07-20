@@ -1,0 +1,17 @@
+# Teste de Tipos Refinados e Validação
+
+data (Int, > _ 0) as PositiveInt
+
+processar_idade :: PositiveInt => Text
+lambda idade:
+    "Idade processada com sucesso!"
+
+action main
+    let tentativa := PositiveInt 15
+    
+    match tentativa
+        Ok::idade_valida:
+            let msg := processar_idade idade_valida
+            echo!(msg)
+        Err::erro:
+            echo!("Falha ao processar idade")

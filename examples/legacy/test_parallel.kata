@@ -1,0 +1,10 @@
+# Teste do Grupo C — @parallel (OS Thread Isolation)
+
+@parallel
+action tarefa_cpu (n :: Int)
+    echo!("tarefa_cpu: executando em thread OS isolada")
+
+action main
+    echo!("main: disparando tarefa_cpu com @parallel...")
+    fork!(tarefa_cpu 42)
+    echo!("main: fork disparado.")

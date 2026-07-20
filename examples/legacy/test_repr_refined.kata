@@ -1,0 +1,7 @@
+data (Int, > _ 0) as PositiveInt
+
+action main
+    let res := PositiveInt(42)
+    match res
+        PositiveInt(v): echo!(v)
+        _: echo!("erro no construtor")

@@ -1,0 +1,31 @@
+data Ponto (x::Int y::Int)
+
+action main
+    echo!("--- Array via canal (Arc heap) ---")
+    match channel!()
+        (tx rx):
+            let arr := {10 20 30}
+            arr !> tx
+            var val := 0
+            val <! rx
+            echo!("array recebida (sem crash)")
+
+    echo!("--- Struct via canal (Arc heap) ---")
+    match channel!()
+        (tx rx):
+            let pt := $(Ponto 10 20)
+            pt !> tx
+            var pt2 := 0
+            pt2 <! rx
+            echo!("struct recebida (sem crash)")
+
+    echo!("--- Lista via canal (Arc heap) ---")
+    match channel!()
+        (tx rx):
+            let lst := [1 2 3]
+            lst !> tx
+            var lst2 := 0
+            lst2 <! rx
+            echo!("lista recebida (sem crash)")
+
+    echo!("--- Fim do teste Escape Analysis ---")

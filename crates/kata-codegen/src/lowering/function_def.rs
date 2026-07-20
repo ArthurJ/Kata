@@ -21,6 +21,7 @@ use crate::ffi_sigs::ty_to_clif;
 use crate::metadata::MetadataTable;
 
 use super::LowerCtx;
+use super::backend::ModuleBackend;
 use super::log::inject_log;
 use super::module::{CodegenError, FuncKey, StringTable};
 
@@ -55,7 +56,7 @@ fn coerce_return(
 pub(crate) fn declare_kata_function(
     func: &TypedFunction,
     cranelift_name: &str,
-    module: &mut cranelift_jit::JITModule,
+    module: &mut dyn ModuleBackend,
 ) -> Result<cranelift_module::FuncId, CodegenError> {
     let mut sig = Signature::new(CallConv::Tail);
     for pt in &func.param_types {
@@ -80,7 +81,7 @@ pub(crate) fn define_function_body(
     captures: &[CaptureInfo],
     log: &Option<TypedLogSpec>,
     func_id: cranelift_module::FuncId,
-    module: &mut cranelift_jit::JITModule,
+    module: &mut dyn ModuleBackend,
     ffi_ids: &HashMap<String, cranelift_module::FuncId>,
     kata_ids: &HashMap<FuncKey, cranelift_module::FuncId>,
     string_table: &mut StringTable,
@@ -235,7 +236,7 @@ pub(crate) fn define_function_body(
 pub(crate) fn define_kata_function(
     func: &TypedFunction,
     func_id: cranelift_module::FuncId,
-    module: &mut cranelift_jit::JITModule,
+    module: &mut dyn ModuleBackend,
     ffi_ids: &HashMap<String, cranelift_module::FuncId>,
     symbol_table: &HashMap<FuncKey, cranelift_module::FuncId>,
     string_table: &mut StringTable,

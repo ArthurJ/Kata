@@ -1,0 +1,14 @@
+# Definimos apenas Int + Float e marcamos como comutativa
+@commutative
+@associative(0.0)
+soma :: Int Float => Float
+lambda i f: f
+
+action main
+    # 1. Caso Direto: Int + Float (Bate com a assinatura)
+    let a := soma 10 2.5
+    
+    # 2. Caso Inverso: Float + Int (Não existe assinatura, mas @commutative salva!())
+    let b := soma 2.5 10
+    
+    echo!("Teste de Comutatividade concluído com sucesso!")

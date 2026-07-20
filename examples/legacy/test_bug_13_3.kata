@@ -1,0 +1,6 @@
+test_bug :: Int => Int
+lambda x: + x 10
+
+action main
+    let res := test_bug 5
+    echo!(res)

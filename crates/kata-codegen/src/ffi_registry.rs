@@ -9,11 +9,12 @@ use std::collections::HashMap;
 use cranelift_codegen::ir::types::I64;
 use cranelift_codegen::ir::{AbiParam, Signature};
 use cranelift_codegen::isa::CallConv;
-use cranelift_module::{Linkage, Module};
+use cranelift_module::Linkage;
 use kata_core::ffi::FfiSymbol;
 use kata_rt as rt;
 
 use crate::ffi_sigs::ffi_signature;
+use crate::lowering::ModuleBackend;
 use crate::lowering::CodegenError;
 
 /// Registro de símbolos FFI no JITBuilder.
@@ -210,7 +211,7 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
 
 /// Declara todos os símbolos FFI no module e retorna o mapa nome → FuncId.
 pub(crate) fn declare_ffi_symbols(
-    module: &mut cranelift_jit::JITModule,
+    module: &mut dyn ModuleBackend,
 ) -> Result<HashMap<String, cranelift_module::FuncId>, CodegenError> {
     let mut ffi_ids = HashMap::new();
     for sym in all_ffi_symbols() {

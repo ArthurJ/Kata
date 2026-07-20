@@ -1,0 +1,28 @@
+action main
+    let numeros := {10 20 30 40 50}
+    let frutas := ["maca" "banana" "uva"]
+
+    echo!("--- array de numeros ---")
+    for n in numeros
+        echo!(n)
+
+    echo!("--- soma acumulada ---")
+    var acc := 0
+    for n in numeros
+        acc := + acc n
+        echo!(acc)
+
+    echo!("--- frutas ---")
+    for f in frutas
+        echo!(f)
+
+    echo!("--- for aninhado ---")
+    for a in {1 2}
+        for b in {100 200}
+            echo!(+ a b)
+
+    echo!("--- lista vazia (nada) ---")
+    for x in []
+        echo!(x)
+
+    echo!("fim")

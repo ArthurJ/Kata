@@ -1,0 +1,13 @@
+data CustomIter (x::Int)
+CustomIter implements ITERABLE
+    iter :: CustomIter => CustomIter
+    lambda i: i
+
+CustomIter implements ITERATOR
+    next :: CustomIter => Optional
+    lambda i: None
+
+action main
+    let it := CustomIter(0)
+    for x in it
+        echo!(x)

@@ -1,0 +1,18 @@
+# Teste da nova sintaxe do bloco with
+# Demonstra: binding com :=, implements e signatures
+
+quicksort :: [Int] => [Int]
+lambda []: []
+lambda [pivo:resto]:
+    + $(quicksort menores) [pivo : $(quicksort maiores)]
+    with
+        menores := filter $(< _ pivo) resto
+        maiores := filter $(>= _ pivo) resto
+
+# Exemplo com implements e signature no bloco with
+comparar :: T T => Bool
+lambda x y:
+    > x y
+    with
+        T implements ORD EQ
+        maior :: T T => Bool

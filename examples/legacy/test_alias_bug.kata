@@ -1,0 +1,12 @@
+alias Float as Altura
+
+foo :: Altura => Float
+lambda a:
+    a
+
+action main
+    let my_float := 70.0
+    let c := foo my_float
+    echo!("Concluido")
+
+main!()
