@@ -123,7 +123,6 @@ fn monomorph_pass(
     Vec<TypedFunction>,
     Vec<TypedAction>,
 ) {
-    let mut instance_map: HashMap<(String, String), String> = HashMap::new();
     let mut new_overloads: Vec<kata_core::dispatch::OverloadInfo> = Vec::new();
     let mut new_functions: Vec<TypedFunction> = Vec::new();
     let mut new_actions: Vec<TypedAction> = Vec::new();
@@ -154,21 +153,21 @@ fn monomorph_pass(
 
     // ── Funções nomeadas ──
     for func in &mut mono.functions {
-        rewrite_function(func, &ctx, &mut instance_map, &mut acc);
+        rewrite_function(func, &ctx, &mut acc);
     }
 
     // ── Actions ──
     for action in &mut mono.actions {
-        rewrite_action(action, &ctx, &mut instance_map, &mut acc);
+        rewrite_action(action, &ctx, &mut acc);
     }
 
     // ── pre_entry ──
     for expr in &mut mono.pre_entry {
-        rewrite_typed_expr(expr, &ctx, &mut instance_map, &mut acc);
+        rewrite_typed_expr(expr, &ctx, &mut acc);
     }
 
     // ── entry ──
-    rewrite_typed_expr(&mut mono.entry, &ctx, &mut instance_map, &mut acc);
+    rewrite_typed_expr(&mut mono.entry, &ctx, &mut acc);
 
     (new_overloads, new_functions, new_actions)
 }
@@ -220,23 +219,148 @@ fn find_generic_overload<'a>(
     None
 }
 
+/// Tenta instanciar uma `Closure` cujo callee é `Ident(name)` com overload
+/// genérica que unifica com os tipos dos argumentos.
+///
+/// Se encontrar uma overload genérica que unifica, gera a instância
+/// (OverloadInfo + TypedFunction se o template tem corpo), rewrites o callee
+/// para o nome da instância, instancia `callee.ty` com as mesmas substituições,
+/// zera `ffi_symbol`, e retorna `true`. Retorna `false` se não há overload
+/// genérica casável (call site não-genérico).
+///
+/// ffi_symbol: se a instância tem corpo Kata (função sintetizada, como
+/// `__kata_show__Result`), seta None — o codegen resolve via kata_refs pelo
+/// nome da instância. Se é FFI pura (sem corpo, como `head`), mantém o
+/// ffi_symbol da template — o codegen resolve via ffi_refs pelo sym_name.
+fn instantiate_generic_closure(
+    callee: &mut Spanned<TypedExpr>,
+    args: &[Spanned<TypedExpr>],
+    ffi_symbol: &mut Option<String>,
+    name: &str,
+    ctx: &MonoCtx,
+    acc: &mut RewriteAcc,
+) -> bool {
+    let Some(overloads) = ctx.dispatch_table.get_overloads(name) else {
+        return false;
+    };
+
+    // Procura overload genérica que unifica com os arg types.
+    // Tenta unify em cada candidata (pode haver múltiplas overloads genéricas
+    // com mesma aridade — ex: show para Optional<T> e Result<T,E>).
+    let arg_types: Vec<Ty> = args.iter().map(|a| a.node.ty.clone()).collect();
+    let Some((oi, subs)) = find_generic_overload(overloads, &arg_types) else {
+        return false;
+    };
+
+    // Gera nome canônico da instância.
+    let subs_key = canonicalize_subs(&oi.type_params, &subs);
+    let instance_name = format!("{name}_{subs_key}");
+
+    // Procura a função original (template) pelo nome mangled (ffi_symbol)
+    // ou pelo nome direto. Isto determina se a instância tem corpo Kata
+    // (função sintetizada) ou é FFI pura (sem corpo).
+    let func_lookup_name = oi.ffi_symbol.as_deref().unwrap_or(name);
+    let orig_func = ctx.functions.iter().find(|f| f.name == func_lookup_name);
+
+    // Verifica se a instância já existe.
+    if !ctx.existing.contains(&instance_name)
+        && !acc.new_overloads.iter().any(|o| o.name == instance_name)
+    {
+        // SEMPRE gera OverloadInfo (entrada no DispatchTable com tipos
+        // concretos). Isto cobre o caso de funções genéricas sem corpo
+        // (apenas Sig no DispatchTable, como `id :: T => T` sem cláusulas).
+        let instance_ffi_symbol = if orig_func.is_some() {
+            None
+        } else {
+            oi.ffi_symbol.clone()
+        };
+        acc.new_overloads.push(kata_core::dispatch::OverloadInfo {
+            name: instance_name.clone(),
+            params: oi.params.iter().map(|t| apply_subs(t, &subs)).collect(),
+            ret: apply_subs(&oi.ret, &subs),
+            ffi_symbol: instance_ffi_symbol,
+            is_action: false,
+            is_generic: false,
+            is_constructor: false,
+            associative_neutral: None,
+            type_params: vec![],
+            substitutions: Some(subs.clone()),
+        });
+
+        // Gera TypedFunction se a função original tem corpo.
+        if let Some(orig_func) = orig_func {
+            let mono_func = instantiate_function(orig_func, &subs, &instance_name);
+            acc.new_functions.push(mono_func);
+        }
+    }
+
+    // Rewrite o callee para o nome da instância, instancia o callee.ty com
+    // as mesmas substituições (garante consistência com param_types da
+    // instância em kata_refs), e zera ffi_symbol — o codegen resolve via
+    // kata_refs pelo nome do callee (instância).
+    callee.node.kind = TypedExprKind::Ident {
+        name: instance_name,
+    };
+    callee.node.ty = apply_subs(&callee.node.ty, &subs);
+    *ffi_symbol = None;
+    true
+}
+
+/// Resolução de ffi_symbol para Closures type-erased (Layer 5).
+///
+/// Quando uma Action polimórfica por interface é instanciada (ex:
+/// `echo_SHOW_Int`), o body contém Closures produzidas por
+/// `try_iface_method_dispatch` com `ffi_symbol: None`. Após
+/// `instantiate_action` aplicar `apply_subs`, os tipos dos args são concretos
+/// (ex: [Int]). Se o DispatchTable tem um overload concreto (não-genérico)
+/// que casa e possui `ffi_symbol: Some(...)`, preenchemos aqui.
+///
+/// Isto resolve `show msg` dentro de `echo_SHOW_Int`: DispatchTable tem
+/// `show :: Int => Text @ffi("kata_rt_bi_show")`.
+///
+/// Fallback gracioso: se o arg_type é `Ty::Var(_)` (type param não resolvido
+/// — ex: `E` em `Result::Ok 42`, onde a variante Err nunca é construída),
+/// não há overload concreto. O braço do Match nunca executa em runtime, mas o
+/// codegen precisa de um nó válido. Substituímos a Closure por `TextLit("?")`
+/// após o match (ver `fallback::fallback_unresolved_show`).
+fn resolve_erased_ffi_symbol(
+    name: &str,
+    args: &[Spanned<TypedExpr>],
+    ffi_symbol: &mut Option<String>,
+    ctx: &MonoCtx,
+) {
+    if ffi_symbol.is_some() {
+        return;
+    }
+    let arg_types: Vec<Ty> = args.iter().map(|a| a.node.ty.clone()).collect();
+    if let Some(overloads) = ctx.dispatch_table.get_overloads(name) {
+        let concrete = overloads.iter().find(|oi| {
+            oi.type_params.is_empty()
+                && oi.params.len() == arg_types.len()
+                && oi.params == arg_types
+        });
+        if let Some(oi) = concrete {
+            *ffi_symbol = oi.ffi_symbol.clone();
+        }
+    }
+}
+
 /// Rewrita call sites genéricos em uma `TypedFunction`.
 fn rewrite_function(
     func: &mut TypedFunction,
     ctx: &MonoCtx,
-    instance_map: &mut HashMap<(String, String), String>,
     acc: &mut RewriteAcc,
 ) {
     for clause in &mut func.clauses {
-        rewrite_typed_expr(&mut clause.body, ctx, instance_map, acc);
+        rewrite_typed_expr(&mut clause.body, ctx, acc);
         for guard in &mut clause.guards {
             if let Some(ref mut cond) = guard.condition {
-                rewrite_typed_expr(cond, ctx, instance_map, acc);
+                rewrite_typed_expr(cond, ctx, acc);
             }
-            rewrite_typed_expr(&mut guard.body, ctx, instance_map, acc);
+            rewrite_typed_expr(&mut guard.body, ctx, acc);
         }
         for wb in &mut clause.with_bindings {
-            rewrite_typed_expr(&mut wb.value, ctx, instance_map, acc);
+            rewrite_typed_expr(&mut wb.value, ctx, acc);
         }
     }
 }
@@ -245,11 +369,10 @@ fn rewrite_function(
 fn rewrite_action(
     action: &mut TypedAction,
     ctx: &MonoCtx,
-    instance_map: &mut HashMap<(String, String), String>,
     acc: &mut RewriteAcc,
 ) {
     for stmt in &mut action.body {
-        rewrite_typed_expr(stmt, ctx, instance_map, acc);
+        rewrite_typed_expr(stmt, ctx, acc);
     }
 }
 
@@ -261,7 +384,6 @@ fn rewrite_action(
 fn rewrite_typed_expr(
     expr_span: &mut Spanned<TypedExpr>,
     ctx: &MonoCtx,
-    instance_map: &mut HashMap<(String, String), String>,
     acc: &mut RewriteAcc,
 ) {
     let expr = &mut expr_span.node;
@@ -270,130 +392,17 @@ fn rewrite_typed_expr(
         TypedExprKind::Closure { callee, args, ffi_symbol } => {
             // Primeiro recurse nos argumentos (podem ter call sites genéricos aninhados).
             for arg in args.iter_mut() {
-                rewrite_typed_expr(arg, ctx, instance_map, acc);
+                rewrite_typed_expr(arg, ctx, acc);
             }
 
-            // Depois verifica se este call site é genérico.
-            #[allow(clippy::collapsible_if)]
+            // Depois verifica se este call site é genérico ou precisa de
+            // resolução de ffi_symbol (Layer 5).
             if let TypedExprKind::Ident { name } = &callee.node.kind {
                 let name = name.clone();
-                if let Some(overloads) = ctx.dispatch_table.get_overloads(&name) {
-                    // Procura overload genérica que unifica com os arg types.
-                    // Tenta unify em cada candidata (pode haver múltiplas
-                    // overloads genéricas com mesma aridade — ex: show para
-                    // Optional<T> e Result<T,E>).
-                    let arg_types: Vec<Ty> = args.iter().map(|a| a.node.ty.clone()).collect();
-                    let generic_overload = find_generic_overload(overloads, &arg_types);
-
-                    if let Some((oi, subs)) = generic_overload {
-                        // Gera nome canônico da instância.
-                        let subs_key = canonicalize_subs(&oi.type_params, &subs);
-                        let instance_name = format!("{name}_{subs_key}");
-
-                        // Procura a função original (template) pelo nome
-                        // mangled (ffi_symbol) ou pelo nome direto. Isto
-                        // determina se a instância tem corpo Kata (função
-                        // sintetizada) ou é FFI pura (sem corpo).
-                        let func_lookup_name = oi
-                            .ffi_symbol
-                            .as_deref()
-                            .unwrap_or(name.as_str());
-                        let orig_func =
-                            ctx.functions.iter().find(|f| f.name == *func_lookup_name);
-
-                        // Verifica se a instância já existe.
-                        if !ctx.existing.contains(&instance_name)
-                            && !acc.new_overloads.iter().any(|o| o.name == instance_name)
-                        {
-                            // SEMPRE gera OverloadInfo (entrada no DispatchTable
-                            // com tipos concretos). Isto cobre o caso de funções
-                            // genéricas sem corpo (apenas Sig no DispatchTable,
-                            // como `id :: T => T` sem cláusulas).
-                            //
-                            // ffi_symbol: se a instância tem corpo Kata (função
-                            // sintetizada, como `__kata_show__Result`), seta None
-                            // — o codegen resolve via kata_refs pelo nome da
-                            // instância. Se é FFI pura (sem corpo, como `head`),
-                            // mantém o ffi_symbol da template — o codegen resolve
-                            // via ffi_refs pelo sym_name.
-                            let instance_ffi_symbol = if orig_func.is_some() {
-                                None
-                            } else {
-                                oi.ffi_symbol.clone()
-                            };
-                            acc.new_overloads.push(kata_core::dispatch::OverloadInfo {
-                                name: instance_name.clone(),
-                                params: oi
-                                    .params
-                                    .iter()
-                                    .map(|t| apply_subs(t, &subs))
-                                    .collect(),
-                                ret: apply_subs(&oi.ret, &subs),
-                                ffi_symbol: instance_ffi_symbol,
-                                is_action: false,
-                                is_generic: false,
-                                is_constructor: false,
-                                associative_neutral: None,
-                                type_params: vec![],
-                                substitutions: Some(subs.clone()),
-                            });
-
-                            // Gera TypedFunction se a função original tem corpo.
-                            if let Some(orig_func) = orig_func {
-                                let mono_func =
-                                    instantiate_function(orig_func, &subs, &instance_name);
-                                acc.new_functions.push(mono_func);
-                            }
-                        }
-
-                        // Atualiza o instance_map.
-                        instance_map.insert((name.clone(), subs_key), instance_name.clone());
-
-                        // Rewrite o callee para o nome da instância, instancia
-                        // o callee.ty com as mesmas substituições (garante
-                        // consistência com param_types da instância em
-                        // kata_refs), e zera ffi_symbol — o codegen resolve
-                        // via kata_refs pelo nome do callee (instância).
-                        callee.node.kind = TypedExprKind::Ident {
-                            name: instance_name,
-                        };
-                        callee.node.ty = apply_subs(&callee.node.ty, &subs);
-                        *ffi_symbol = None;
-                    }
-                }
-
-                // Resolução de ffi_symbol para Closures type-erased (Layer 5).
-                //
-                // Quando uma Action polimórfica por interface é instanciada
-                // (ex: echo_SHOW_Int), o body contém Closures produzidas por
-                // try_iface_method_dispatch com ffi_symbol: None. Após
-                // instantiate_action aplicar apply_subs, os tipos dos args
-                // são concretos (ex: [Int]). Se o DispatchTable tem um
-                // overload concreto (não-genérico) que casa e possui
-                // ffi_symbol: Some(...), preenchemos o ffi_symbol aqui.
-                //
-                // Isto resolve `show msg` dentro de `echo_SHOW_Int`:
-                // DispatchTable tem `show :: Int => Text @ffi("kata_rt_bi_show")`.
-                //
-                // Fallback gracioso: se o arg_type é Ty::Var(_) (type param
-                // não resolvido — ex: `E` em `Result::Ok 42`, onde a variante
-                // Err nunca é construída), não há overload concreto. O braço
-                // do Match nunca executa em runtime, mas o codegen precisa de
-                // um nó válido. Substituímos a Closure por TextLit("?") após
-                // o match.
-                if ffi_symbol.is_none() {
-                    let arg_types: Vec<Ty> =
-                        args.iter().map(|a| a.node.ty.clone()).collect();
-                    if let Some(overloads) = ctx.dispatch_table.get_overloads(&name) {
-                        let concrete = overloads.iter().find(|oi| {
-                            oi.type_params.is_empty()
-                                && oi.params.len() == arg_types.len()
-                                && oi.params == arg_types
-                        });
-                        if let Some(oi) = concrete {
-                            *ffi_symbol = oi.ffi_symbol.clone();
-                        }
-                    }
+                let instantiated =
+                    instantiate_generic_closure(callee, args, ffi_symbol, &name, ctx, acc);
+                if !instantiated {
+                    resolve_erased_ffi_symbol(&name, args, ffi_symbol, ctx);
                 }
             }
         }
@@ -402,7 +411,7 @@ fn rewrite_typed_expr(
         TypedExprKind::TypeAscription { expr: inner, .. }
         | TypedExprKind::Grouping { inner }
         | TypedExprKind::Return(inner) => {
-            rewrite_typed_expr(inner, ctx, instance_map, acc);
+            rewrite_typed_expr(inner, ctx, acc);
         }
 
         TypedExprKind::Tuple { elements }
@@ -410,34 +419,34 @@ fn rewrite_typed_expr(
             values: elements, ..
         } => {
             for elem in elements.iter_mut() {
-                rewrite_typed_expr(elem, ctx, instance_map, acc);
+                rewrite_typed_expr(elem, ctx, acc);
             }
         }
 
         TypedExprKind::FieldAccess { expr: inner, .. }
         | TypedExprKind::IndexAccess { expr: inner, .. } => {
-            rewrite_typed_expr(inner, ctx, instance_map, acc);
+            rewrite_typed_expr(inner, ctx, acc);
         }
 
         TypedExprKind::Let { value, .. }
         | TypedExprKind::Var { value, .. }
         | TypedExprKind::Reassign { value, .. } => {
-            rewrite_typed_expr(value, ctx, instance_map, acc);
+            rewrite_typed_expr(value, ctx, acc);
         }
 
         TypedExprKind::Lambda { clauses, .. } => {
             for clause in clauses.iter_mut() {
-                rewrite_lambda_clause(clause, ctx, instance_map, acc);
+                rewrite_lambda_clause(clause, ctx, acc);
             }
         }
 
         TypedExprKind::Match { scrutinee, arms } => {
-            rewrite_typed_expr(scrutinee, ctx, instance_map, acc);
+            rewrite_typed_expr(scrutinee, ctx, acc);
             for arm in arms.iter_mut() {
                 if let Some(ref mut guard) = arm.guard {
-                    rewrite_typed_expr(guard, ctx, instance_map, acc);
+                    rewrite_typed_expr(guard, ctx, acc);
                 }
-                rewrite_typed_expr(&mut arm.body, ctx, instance_map, acc);
+                rewrite_typed_expr(&mut arm.body, ctx, acc);
             }
         }
 
@@ -448,7 +457,7 @@ fn rewrite_typed_expr(
             ffi_symbol,
         } => {
             // Primeiro recurse nos argumentos (podem ter call sites genéricos aninhados).
-            rewrite_typed_expr(args, ctx, instance_map, acc);
+            rewrite_typed_expr(args, ctx, acc);
 
             // Depois verifica se este ActionCall é genérico.
             // FFI builtins (ffi_symbol = Some) não são instanciados.
@@ -502,8 +511,6 @@ fn rewrite_typed_expr(
                             }
                         }
 
-                        // Atualiza o instance_map.
-                        instance_map.insert((callee.clone(), subs_key), instance_name.clone());
 
                         // Rewrite o callee para o nome da instância.
                         *callee = instance_name;
@@ -513,36 +520,36 @@ fn rewrite_typed_expr(
 
         TypedExprKind::Loop { body } => {
             for stmt in body.iter_mut() {
-                rewrite_typed_expr(stmt, ctx, instance_map, acc);
+                rewrite_typed_expr(stmt, ctx, acc);
             }
         }
 
         TypedExprKind::VariantConstruct { payload, .. } => {
-            rewrite_typed_expr(payload, ctx, instance_map, acc);
+            rewrite_typed_expr(payload, ctx, acc);
         }
 
         // ── Coleções: recursão nos elementos ──
         TypedExprKind::ListLit { elements } | TypedExprKind::ArrayLit { elements } => {
             for el in elements.iter_mut() {
-                rewrite_typed_expr(el, ctx, instance_map, acc);
+                rewrite_typed_expr(el, ctx, acc);
             }
         }
         TypedExprKind::RangeLit {
             start, step, end, ..
         } => {
-            rewrite_typed_expr(start, ctx, instance_map, acc);
-            rewrite_typed_expr(step, ctx, instance_map, acc);
-            rewrite_typed_expr(end, ctx, instance_map, acc);
+            rewrite_typed_expr(start, ctx, acc);
+            rewrite_typed_expr(step, ctx, acc);
+            rewrite_typed_expr(end, ctx, acc);
         }
         TypedExprKind::ForIn { iterable, body, .. } => {
-            rewrite_typed_expr(iterable, ctx, instance_map, acc);
+            rewrite_typed_expr(iterable, ctx, acc);
             for stmt in body.iter_mut() {
-                rewrite_typed_expr(stmt, ctx, instance_map, acc);
+                rewrite_typed_expr(stmt, ctx, acc);
             }
         }
         TypedExprKind::In { item, collection } => {
-            rewrite_typed_expr(item, ctx, instance_map, acc);
-            rewrite_typed_expr(collection, ctx, instance_map, acc);
+            rewrite_typed_expr(item, ctx, acc);
+            rewrite_typed_expr(collection, ctx, acc);
         }
 
         // ── map/filter/fold: recursão ──
@@ -556,8 +563,8 @@ fn rewrite_typed_expr(
             collection,
             ..
         } => {
-            rewrite_typed_expr(callback, ctx, instance_map, acc);
-            rewrite_typed_expr(collection, ctx, instance_map, acc);
+            rewrite_typed_expr(callback, ctx, acc);
+            rewrite_typed_expr(collection, ctx, acc);
         }
         TypedExprKind::Fold {
             callback,
@@ -565,20 +572,20 @@ fn rewrite_typed_expr(
             collection,
             ..
         } => {
-            rewrite_typed_expr(callback, ctx, instance_map, acc);
-            rewrite_typed_expr(initial, ctx, instance_map, acc);
-            rewrite_typed_expr(collection, ctx, instance_map, acc);
+            rewrite_typed_expr(callback, ctx, acc);
+            rewrite_typed_expr(initial, ctx, acc);
+            rewrite_typed_expr(collection, ctx, acc);
         }
         // ── FusedStream: recursão ──
         TypedExprKind::FusedStream { stages, source, .. } => {
-            rewrite_typed_expr(source, ctx, instance_map, acc);
+            rewrite_typed_expr(source, ctx, acc);
             for stage in stages {
                 let cb = match stage {
                     FusedStage::Filter { callback, .. } | FusedStage::Map { callback, .. } => {
                         callback
                     }
                 };
-                rewrite_typed_expr(cb, ctx, instance_map, acc);
+                rewrite_typed_expr(cb, ctx, acc);
             }
         }
 
@@ -595,30 +602,30 @@ fn rewrite_typed_expr(
         | TypedExprKind::ChannelCreate { .. } => {}
         // ReceiverFactoryCall: o factory é sub-expr (Ident do rxf).
         TypedExprKind::ReceiverFactoryCall { factory, .. } => {
-            rewrite_typed_expr(factory, ctx, instance_map, acc);
+            rewrite_typed_expr(factory, ctx, acc);
         }
         // CSP — recursão.
         TypedExprKind::ChannelSend { channel, value } => {
-            rewrite_typed_expr(channel, ctx, instance_map, acc);
-            rewrite_typed_expr(value, ctx, instance_map, acc);
+            rewrite_typed_expr(channel, ctx, acc);
+            rewrite_typed_expr(value, ctx, acc);
         }
         TypedExprKind::ChannelRecv { channel, .. } => {
-            rewrite_typed_expr(channel, ctx, instance_map, acc);
+            rewrite_typed_expr(channel, ctx, acc);
         }
         TypedExprKind::Select { arms, timeout_ms, timeout_body } => {
             for arm in arms {
-                rewrite_typed_expr(&mut arm.channel, ctx, instance_map, acc);
-                rewrite_typed_expr(&mut arm.body, ctx, instance_map, acc);
+                rewrite_typed_expr(&mut arm.channel, ctx, acc);
+                rewrite_typed_expr(&mut arm.body, ctx, acc);
             }
             if let Some(tm) = timeout_ms {
-                rewrite_typed_expr(tm, ctx, instance_map, acc);
+                rewrite_typed_expr(tm, ctx, acc);
             }
             if let Some(tb) = timeout_body {
-                rewrite_typed_expr(tb, ctx, instance_map, acc);
+                rewrite_typed_expr(tb, ctx, acc);
             }
         }
         TypedExprKind::Fork { args, .. } => {
-            rewrite_typed_expr(args, ctx, instance_map, acc);
+            rewrite_typed_expr(args, ctx, acc);
         }
     }
 }
@@ -627,17 +634,16 @@ fn rewrite_typed_expr(
 fn rewrite_lambda_clause(
     clause: &mut TypedLambdaClause,
     ctx: &MonoCtx,
-    instance_map: &mut HashMap<(String, String), String>,
     acc: &mut RewriteAcc,
 ) {
-    rewrite_typed_expr(&mut clause.body, ctx, instance_map, acc);
+    rewrite_typed_expr(&mut clause.body, ctx, acc);
     for guard in &mut clause.guards {
         if let Some(ref mut cond) = guard.condition {
-            rewrite_typed_expr(cond, ctx, instance_map, acc);
+            rewrite_typed_expr(cond, ctx, acc);
         }
-        rewrite_typed_expr(&mut guard.body, ctx, instance_map, acc);
+        rewrite_typed_expr(&mut guard.body, ctx, acc);
     }
     for wb in &mut clause.with_bindings {
-        rewrite_typed_expr(&mut wb.value, ctx, instance_map, acc);
+        rewrite_typed_expr(&mut wb.value, ctx, acc);
     }
 }
