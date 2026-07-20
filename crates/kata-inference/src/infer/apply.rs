@@ -388,10 +388,15 @@ pub(crate) fn infer_apply(
                 // Tenta caminho genérico: procura overload com type_params não-vazio.
                 let mut arity_matched = false;
                 let mut unify_failed = false;
+                let mut total_candidates = 0u32;
                 if let Some(overloads) = ctx.table.get_overloads(&func_name) {
                     for oi in overloads.iter().filter(|oi| {
-                        oi.params.len() == arg_types.len() && !oi.type_params.is_empty()
+                        oi.params.len() == arg_types.len()
                     }) {
+                        total_candidates += 1;
+                        if oi.type_params.is_empty() {
+                            continue;
+                        }
                         arity_matched = true;
                         let mut subs: super::generics::Substitutions = HashMap::new();
                         match super::generics::unify(
@@ -434,11 +439,32 @@ pub(crate) fn infer_apply(
                 }
 
                 // Se uma overload genérica com aridade certa foi encontrada mas
-                // unify falhou para todas, o erro é NoOverload — nenhuma
-                // sobrecarga (concreta ou genérica) casa com os tipos dos args.
+                // unify falhou, decidir o erro pela cardinalidade total de
+                // overloads com aquela aridade:
+                // - 1 overload total: o usuário quis essa overload; unify falhou
+                //   por tipos inconsistentes → TypeMismatch.
+                // - >1 overloads totais: nenhuma casou (concretas nem genéricas)
+                //   → NoOverload — não há como o usuário pretendesse uma específica.
                 if arity_matched && unify_failed {
-                    return Err(MiddleError::NoOverload {
-                        name: func_name.clone(),
+                    if total_candidates > 1 {
+                        return Err(MiddleError::NoOverload {
+                            name: func_name.clone(),
+                            span: (*span).into(),
+                        });
+                    }
+                    // 1 overload total: unify falhou → tipos inconsistentes.
+                    // Constrói TypeMismatch com os tipos dos args conflitantes.
+                    // Para `duplicate T T => T` com args [Int, Float], expected
+                    // = primeiro tipo (Int), found = segundo tipo (Float).
+                    let (expected, found) = if arg_types.len() >= 2 {
+                        (format!("{}", arg_types[0]), format!("{}", arg_types[1]))
+                    } else {
+                        (format!("{}", arg_types.get(0).cloned().unwrap_or(Ty::Unit)),
+                         format!("{}", Ty::Unit))
+                    };
+                    return Err(MiddleError::TypeMismatch {
+                        expected,
+                        found,
                         span: (*span).into(),
                     });
                 }
