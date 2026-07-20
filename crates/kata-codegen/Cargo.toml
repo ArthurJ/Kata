@@ -26,4 +26,5 @@ kata-parser.workspace = true
 kata-resolution.workspace = true
 kata-optimizer.workspace = true
 kata-monomorph.workspace = true
+kata-tree-shaking.workspace = true
 kata-diagnostics.workspace = true

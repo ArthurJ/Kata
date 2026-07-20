@@ -12,6 +12,7 @@ use kata_inference::infer_module;
 use kata_lexer::lex;
 use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
+use kata_tree_shaking::tree_shake;
 use kata_parser::parse;
 use kata_resolution::{ResolvedModule, load_prelude, resolve};
 
@@ -25,6 +26,7 @@ fn eval_src(src: &str) -> (i64, Ty) {
     let typed = infer_module(&module, &resolved).expect("infer deve succeed");
     let typed = monomorphize(typed);
     let typed = optimize(typed);
+    let typed = kata_monomorph::MonoModule::from(tree_shake(typed.inner));
     let jit = jit_eval(&typed).expect("codegen+JIT deve succeed");
     (jit.raw, jit.ty)
 }
@@ -57,9 +59,23 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
         struct_registry,
         refined_decls: Vec::new(),
         enum_pred_decls: Vec::new(),
-        interface_registry: InterfaceRegistry::new(),
-        functions: user.functions,
-        actions: user.actions,
+        interface_registry: { let mut ir = prelude.interface_registry.clone(); ir.merge(user.interface_registry.clone()); ir },
+        functions: {
+            let mut fns = prelude.functions;
+            let user_fn_names: std::collections::HashSet<&str> =
+                user.functions.iter().map(|f| f.name.as_str()).collect();
+            fns.retain(|f| !user_fn_names.contains(f.name.as_str()));
+            fns.extend(user.functions);
+            fns
+        },
+        actions: {
+            let mut acts = prelude.actions;
+            let user_action_names: std::collections::HashSet<&str> =
+                user.actions.iter().map(|a| a.name.as_str()).collect();
+            acts.retain(|a| !user_action_names.contains(a.name.as_str()));
+            acts.extend(user.actions);
+            acts
+        },
     }
 }
 
@@ -132,15 +148,31 @@ fn trma_cria_funcao_acc() {
 
 soma 5"#;
     let typed = infer_src(src);
-    // Antes do optimize: só existe `soma`
-    assert_eq!(typed.functions.len(), 1);
-    assert_eq!(typed.functions[0].name, "soma");
+    // Antes do optimize: `soma` existe entre as funções (prelude + user).
+    // Filtra só as funções do usuário (não-prelude) para inspecionar.
+    let user_fns: Vec<_> = typed
+        .functions
+        .iter()
+        .filter(|f| f.name == "soma")
+        .collect();
+    assert_eq!(user_fns.len(), 1, "deve ter exatamente 1 função `soma`");
+    assert_eq!(user_fns[0].name, "soma");
 
     let typed = monomorphize(typed);
     let typed = optimize(typed);
+    // Sem tree_shake — este teste inspeciona a TAST após optimize,
+    // não executa codegen. Tree shaking removeria `soma` (não alcançada
+    // após TRMA rewrite) e quebraria a asserção de estrutura.
+    let typed = typed.inner;
     // Após optimize: existe `soma` (rewritten) e `soma_acc` (nova)
-    assert_eq!(typed.functions.len(), 2);
-    let names: Vec<&str> = typed.functions.iter().map(|f| f.name.as_str()).collect();
+    // entre as funções (prelude + user). Filtra só as relevantes.
+    let user_fns: Vec<_> = typed
+        .functions
+        .iter()
+        .filter(|f| f.name == "soma" || f.name == "soma_acc")
+        .collect();
+    assert_eq!(user_fns.len(), 2, "deve ter soma e soma_acc");
+    let names: Vec<&str> = user_fns.iter().map(|f| f.name.as_str()).collect();
     assert!(names.contains(&"soma"));
     assert!(names.contains(&"soma_acc"));
 
@@ -167,6 +199,7 @@ sub 5"#;
     let typed = infer_src(src);
     let typed = monomorphize(typed);
     let typed = optimize(typed);
+    let typed = kata_monomorph::MonoModule::from(tree_shake(typed.inner));
     // Sem TRMA: só existe `sub`, nenhuma `sub_acc`
     assert_eq!(typed.functions.len(), 1);
     assert_eq!(typed.functions[0].name, "sub");

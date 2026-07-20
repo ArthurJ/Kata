@@ -94,12 +94,14 @@ fn prelude_has_rational_add_signature() {
 #[test]
 fn prelude_has_echo_signature() {
     let resolved = load_prelude().expect("prelude deve resolver");
+    // echo agora é uma Action Kata (não FFI) com body que despacha show.
+    // Vai para resolved.actions, não resolved.signatures.
     let echo = resolved
-        .signatures
+        .actions
         .iter()
-        .find(|s| s.name == "echo")
-        .expect("deve ter echo :: Text => Unit");
-    assert_eq!(echo.param_types, vec![Ty::text()]);
+        .find(|a| a.name == "echo")
+        .expect("deve ter echo :: SHOW => Unit em actions");
+    assert_eq!(echo.param_types, vec![Ty::Interface("SHOW".into())]);
     assert_eq!(echo.return_type, Ty::Unit);
 }
 

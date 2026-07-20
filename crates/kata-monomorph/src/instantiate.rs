@@ -12,8 +12,8 @@
 use kata_ast::Spanned;
 use kata_core::ty::Ty;
 use kata_inference::{
-    Substitutions, TypedExpr, TypedExprKind, TypedFunction, TypedLambdaClause, TypedPattern,
-    apply_subs,
+    Substitutions, TypedAction, TypedExpr, TypedExprKind, TypedFunction, TypedLambdaClause,
+    TypedPattern, apply_subs,
 };
 
 /// Gera uma instância monomorfizada de uma `TypedFunction`.
@@ -42,6 +42,40 @@ pub(crate) fn instantiate_function(
         param_types,
         ret_ty,
         clauses,
+        log: orig.log.clone(),
+    }
+}
+
+/// Gera uma instância monomorfizada de uma `TypedAction`.
+///
+/// Análogo a `instantiate_function` mas para Actions: substitui
+/// `Ty::Var("T")` e `Ty::Interface("SHOW")` pelos tipos concretos em `subs`
+/// nos param_types, ret_ty, e no body (statements). Também propaga as
+/// substituições para os tipos dos parâmetros nomeados.
+pub(crate) fn instantiate_action(
+    orig: &TypedAction,
+    subs: &Substitutions,
+    instance_name: &str,
+) -> TypedAction {
+    let param_types: Vec<Ty> = orig
+        .param_types
+        .iter()
+        .map(|t| apply_subs(t, subs))
+        .collect();
+    let ret_ty = apply_subs(&orig.ret_ty, subs);
+    let body: Vec<Spanned<TypedExpr>> = orig
+        .body
+        .iter()
+        .map(|stmt| Spanned::new(instantiate_typed_expr(&stmt.node, subs), stmt.span))
+        .collect();
+
+    TypedAction {
+        name: instance_name.to_string(),
+        param_types,
+        param_names: orig.param_names.clone(),
+        ret_ty,
+        body,
+        tests: orig.tests.clone(),
         log: orig.log.clone(),
     }
 }

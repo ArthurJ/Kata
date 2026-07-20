@@ -44,6 +44,7 @@ use kata_core::dispatch::OverloadInfo;
 use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 use kata_resolution::ResolvedModule;
+use kata_resolution::collect_type_params;
 
 use crate::desugar;
 use crate::typed::{
@@ -72,17 +73,22 @@ pub fn infer_module(
 
     // 1a. Registra Actions definidas pelo usuário no DispatchTable (is_action = true).
     //     Actions não têm ffi_symbol (são compiladas como funções Kata).
+    //     Coleta type params (Ty::Var UPPER_CASE e Ty::Interface) para habilitar
+    //     monomorfização de Actions polimórficas por interface (ex: echo :: SHOW).
     for action_def in &resolved.actions {
+        let type_params =
+            collect_type_params(&action_def.param_types, &action_def.return_type);
+        let is_generic = !type_params.is_empty();
         dispatch_table.insert(OverloadInfo {
             name: action_def.name.clone(),
             params: action_def.param_types.clone(),
             ret: action_def.return_type.clone(),
             ffi_symbol: None,
             is_action: true,
-            is_generic: false,
+            is_generic,
             is_constructor: false,
             associative_neutral: None,
-            type_params: vec![],
+            type_params,
             substitutions: None,
         });
     }

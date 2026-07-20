@@ -216,7 +216,11 @@ from_int :: Int => Rational
 # ── I/O (Actions FFI builtin) ──────────────────────────────────
 
 @ffi("kata_rt_print")
-action echo (msg::Text) => Unit
+action _print (msg::Text) => Unit
+
+action echo (msg::SHOW) => Unit
+    let s := show msg
+    _print!(s)
 
 @ffi("kata_rt_panic")
 action panic (msg::Text) => Unit

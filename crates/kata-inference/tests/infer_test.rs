@@ -195,11 +195,18 @@ fn infer_echo_returns_unit() {
     let tmod = infer_src("echo \"hello\"");
     let entry = entry_typed(&tmod);
     assert_eq!(entry.ty, Ty::Unit);
+    // echo agora é uma Action Kata (não FFI direto) com body que despacha show.
+    // Closure { callee: Ident("echo"), ffi_symbol: None } — despacha via kata_refs.
     match &entry.kind {
-        TypedExprKind::Closure { ffi_symbol, .. } => {
-            assert_eq!(ffi_symbol.as_deref(), Some("kata_rt_print"));
+        TypedExprKind::Closure { callee, ffi_symbol, .. } => {
+            assert_eq!(*ffi_symbol, None, "echo é Action Kata, não FFI direto");
+            // callee é Ident("echo")
+            match &callee.node.kind {
+                TypedExprKind::Ident { name } => assert_eq!(name, "echo"),
+                other => panic!("expected Ident callee, got {other:?}"),
+            }
         }
-        other => panic!("expected Apply, got {other:?}"),
+        other => panic!("expected Closure, got {other:?}"),
     }
 }
 

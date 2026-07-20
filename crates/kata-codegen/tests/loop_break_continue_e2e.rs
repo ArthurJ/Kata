@@ -9,6 +9,7 @@ use kata_inference::infer_module;
 use kata_lexer::lex;
 use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
+use kata_tree_shaking::tree_shake;
 use kata_parser::parse;
 use kata_resolution::{ResolvedModule, load_prelude, resolve};
 
@@ -22,6 +23,7 @@ fn eval_src(src: &str) -> (i64, Ty) {
     let typed = infer_module(&module, &resolved).expect("infer deve succeed");
     let typed = monomorphize(typed);
     let typed = optimize(typed);
+    let typed = kata_monomorph::MonoModule::from(tree_shake(typed.inner));
     let jit = jit_eval(&typed).expect("codegen+JIT deve succeed");
     (jit.raw, jit.ty)
 }
@@ -45,9 +47,23 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
         struct_registry,
         refined_decls: Vec::new(),
         enum_pred_decls: Vec::new(),
-        interface_registry: InterfaceRegistry::new(),
-        functions: user.functions,
-        actions: user.actions,
+        interface_registry: { let mut ir = prelude.interface_registry.clone(); ir.merge(user.interface_registry.clone()); ir },
+        functions: {
+            let mut fns = prelude.functions;
+            let user_fn_names: std::collections::HashSet<&str> =
+                user.functions.iter().map(|f| f.name.as_str()).collect();
+            fns.retain(|f| !user_fn_names.contains(f.name.as_str()));
+            fns.extend(user.functions);
+            fns
+        },
+        actions: {
+            let mut acts = prelude.actions;
+            let user_action_names: std::collections::HashSet<&str> =
+                user.actions.iter().map(|a| a.name.as_str()).collect();
+            acts.retain(|a| !user_action_names.contains(a.name.as_str()));
+            acts.extend(user.actions);
+            acts
+        },
     }
 }
 

@@ -168,12 +168,19 @@ pub(crate) fn is_type_param_name(name: &str) -> bool {
 /// Coleta type params de uma assinatura resolvida.
 ///
 /// Percorre param_types e return_type recursivamente buscando `Ty::Var(name)`
-/// onde `name` é UPPER_CASE. Recursa em `Ty::Generic` args. Remove duplicatas,
-/// preservando ordem de primeira ocorrência.
-pub(crate) fn collect_type_params(param_types: &[Ty], return_type: &Ty) -> Vec<String> {
+/// onde `name` é UPPER_CASE, e `Ty::Interface(name)` (interfaces usadas como
+/// params de função/action — habilita monomorfização por interface).
+/// Recursa em `Ty::Generic` args. Remove duplicatas, preservando ordem de
+/// primeira ocorrência.
+pub fn collect_type_params(param_types: &[Ty], return_type: &Ty) -> Vec<String> {
     fn collect_into(ty: &Ty, result: &mut Vec<String>) {
         match ty {
             Ty::Var(name) if is_type_param_name(name) && !result.contains(name) => {
+                result.push(name.clone());
+            }
+            // Interface como param de função/action — coleta o nome para
+            // monomorfização por interface (ex: `echo :: SHOW => Unit`).
+            Ty::Interface(name) if !result.contains(name) => {
                 result.push(name.clone());
             }
             Ty::Generic(_, args) => {

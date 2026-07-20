@@ -10,6 +10,7 @@ use kata_optimizer::optimize;
 use kata_parser::parse;
 use kata_resolution::{ResolvedModule, load_prelude, resolve};
 use kata_rt as rt;
+use kata_tree_shaking::tree_shake;
 
 mod aot;
 mod display;
@@ -158,6 +159,14 @@ fn cmd_test(path: &str, filter: Option<&str>) -> miette::Result<()> {
         let typed = infer_module(&module, &resolved).map_err(IntoReport::into_report)?;
         let typed = monomorphize(typed);
         let typed = optimize(typed);
+
+        // Tree shaking preservando testes — remove actions não alcançadas
+        // (ex: `echo` original type-erased após monomorfização) mas mantém
+        // TypedTestSpec nas actions alcançadas para que jit_compile_tests
+        // gere os wrappers `__kata_test_*`.
+        let typed = kata_monomorph::MonoModule::from(
+            kata_tree_shaking::tree_shake_preserve_tests(typed.inner),
+        );
 
         let (jit_module, wrappers) = jit_compile_tests(&typed)
             .map_err(|e| miette::Report::msg(format!("erro de codegen: {e:?}")))?;
@@ -312,6 +321,13 @@ fn run_pipeline(source: &str) -> miette::Result<ExecResult> {
 
     // 6. Optimize (TRMA + futuros passes)
     let mono = optimize(mono);
+
+    // 6a. Tree shaking — remove funções/actions não alcançados.
+    //     Necessário para descartar Actions polimórficas originais
+    //     (ex: `echo :: SHOW`) após o monomorphizador instanciar
+    //     versões concretas (ex: `echo_SHOW_Int`). Sem isso, o codegen
+    //     tenta compilar o body type-erased e falha.
+    let mono = kata_monomorph::MonoModule::from(tree_shake(mono.inner));
 
     // 7. Codegen + JIT + executar
     let jit =

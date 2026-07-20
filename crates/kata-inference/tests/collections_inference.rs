@@ -40,8 +40,22 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
         refined_decls: Vec::new(),
         enum_pred_decls: Vec::new(),
         interface_registry,
-        functions: user.functions,
-        actions: user.actions,
+        functions: {
+            let mut fns = prelude.functions;
+            let user_fn_names: std::collections::HashSet<&str> =
+                user.functions.iter().map(|f| f.name.as_str()).collect();
+            fns.retain(|f| !user_fn_names.contains(f.name.as_str()));
+            fns.extend(user.functions);
+            fns
+        },
+        actions: {
+            let mut acts = prelude.actions;
+            let user_action_names: std::collections::HashSet<&str> =
+                user.actions.iter().map(|a| a.name.as_str()).collect();
+            acts.retain(|a| !user_action_names.contains(a.name.as_str()));
+            acts.extend(user.actions);
+            acts
+        },
     }
 }
 
@@ -186,8 +200,13 @@ fn dod27_empty_list_infere_list_infer_var() {
 fn dod28_for_in_defines_x_int() {
     let src = "action iterar => Int\n    var total := 0\n    for x in [1 2 3]\n        total := x\n    return total\n0";
     let typed = infer_src(src);
-    // O for deve estar no body da action.
-    let action = &typed.actions[0];
+    // O for deve estar no body da action `iterar` (não actions[0],
+    // que pode ser uma action do prelude como echo/_print).
+    let action = typed
+        .actions
+        .iter()
+        .find(|a| a.name == "iterar")
+        .expect("action `iterar` deve existir");
     // Procura o ForIn no body da action.
     let for_in = action
         .body

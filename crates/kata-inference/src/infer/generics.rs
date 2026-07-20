@@ -70,6 +70,26 @@ fn unify_one(
             Ok(())
         }
 
+        // Iface param: Ty::Interface("SHOW") onde "SHOW" está em type_params.
+        // Mesma semântica de Ty::Var — insere nome_da_interface → tipo_concreto.
+        // Habilita monomorfização de Actions/funções polimórficas por interface
+        // (ex: `echo :: SHOW => Unit` instanciado para cada tipo concreto que
+        // implementa SHOW).
+        (Ty::Interface(name), _) if type_params.contains(name) => {
+            if let Some(existing) = subs.get(name) {
+                if existing != arg {
+                    return Err(MiddleError::TypeMismatch {
+                        expected: format!("{}", existing),
+                        found: format!("{}", arg),
+                        span: kata_ast::Span::synthetic().into(),
+                    });
+                }
+            } else {
+                subs.insert(name.clone(), arg.clone());
+            }
+            Ok(())
+        }
+
         // Generic: unifica recursivamente os argumentos de tipo
         (Ty::Generic(n1, ps), Ty::Generic(n2, as_)) if n1 == n2 && ps.len() == as_.len() => {
             for (p, a) in ps.iter().zip(as_) {
@@ -110,6 +130,15 @@ fn unify_one(
 pub fn apply_subs(ty: &Ty, subs: &Substitutions) -> Ty {
     match ty {
         Ty::Var(name) => {
+            if let Some(concrete) = subs.get(name) {
+                concrete.clone()
+            } else {
+                ty.clone()
+            }
+        }
+        // Iface param: substitui quando o nome da interface está no mapa.
+        // Análogo a Ty::Var — habilita monomorfização de interfaces.
+        Ty::Interface(name) => {
             if let Some(concrete) = subs.get(name) {
                 concrete.clone()
             } else {

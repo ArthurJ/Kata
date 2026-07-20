@@ -21,6 +21,7 @@ use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
 use kata_parser::parse;
 use kata_resolution::{ResolvedModule, load_prelude, resolve};
+use kata_tree_shaking::tree_shake;
 use rustyline::Editor;
 use rustyline::error::ReadlineError;
 use rustyline::history::DefaultHistory;
@@ -377,6 +378,7 @@ impl ReplSession {
         let typed = infer_module(module, &resolved).map_err(|e| format!("erro de tipo: {e:?}"))?;
         let mono = monomorphize(typed);
         let mono = optimize(mono);
+        let mono = kata_monomorph::MonoModule::from(tree_shake(mono.inner));
         let jit = jit_eval(&mono).map_err(|e| format!("erro de codegen: {e:?}"))?;
         Ok(crate::ExecResult {
             raw: jit.raw,

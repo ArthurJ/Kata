@@ -42,7 +42,7 @@ use kata_inference::{
     TypedLambdaClause, TypedModule, apply_subs, unify,
 };
 
-use instantiate::instantiate_function;
+use instantiate::{instantiate_action, instantiate_function};
 use naming::canonicalize_subs;
 
 /// Módulo monomorfizado — TAST com todos os tipos concretos.
@@ -86,16 +86,19 @@ pub fn monomorphize(typed: TypedModule) -> MonoModule {
     // Fixpoint: a cada iteração, coleta call sites genéricos, gera
     // instâncias, e rewrites. Se nenhuma nova instância foi gerada, para.
     loop {
-        let (new_overloads, new_functions) = monomorph_pass(&mut mono);
+        let (new_overloads, new_functions, new_actions) = monomorph_pass(&mut mono);
         if new_overloads.is_empty() {
             break;
         }
-        // Registra as novas instâncias no DispatchTable e functions.
+        // Registra as novas instâncias no DispatchTable, functions e actions.
         for oi in &new_overloads {
             mono.dispatch_table.insert(oi.clone());
         }
         for func in new_functions {
             mono.functions.push(func);
+        }
+        for action in new_actions {
+            mono.actions.push(action);
         }
     }
 
@@ -108,26 +111,38 @@ pub fn monomorphize(typed: TypedModule) -> MonoModule {
 /// Retorna as novas `TypedFunction` geradas (vazio se fixpoint).
 fn monomorph_pass(
     mono: &mut MonoModule,
-) -> (Vec<kata_core::dispatch::OverloadInfo>, Vec<TypedFunction>) {
+) -> (
+    Vec<kata_core::dispatch::OverloadInfo>,
+    Vec<TypedFunction>,
+    Vec<TypedAction>,
+) {
     let mut instance_map: HashMap<(String, String), String> = HashMap::new();
     let mut new_overloads: Vec<kata_core::dispatch::OverloadInfo> = Vec::new();
     let mut new_functions: Vec<TypedFunction> = Vec::new();
+    let mut new_actions: Vec<TypedAction> = Vec::new();
 
-    // Snapshot do DispatchTable e functions ANTES de mutar — evita borrow conflict.
+    // Snapshot do DispatchTable, functions e actions ANTES de mutar — evita borrow conflict.
     let dispatch_table = mono.dispatch_table.clone();
-    let existing_names: std::collections::HashSet<String> =
-        mono.functions.iter().map(|f| f.name.clone()).collect();
+    let existing_names: std::collections::HashSet<String> = mono
+        .functions
+        .iter()
+        .map(|f| f.name.clone())
+        .chain(mono.actions.iter().map(|a| a.name.clone()))
+        .collect();
     let orig_functions: Vec<TypedFunction> = mono.functions.clone();
+    let orig_actions: Vec<TypedAction> = mono.actions.clone();
 
     let ctx = MonoCtx {
         dispatch_table: &dispatch_table,
         functions: &orig_functions,
+        actions: &orig_actions,
         existing: &existing_names,
     };
 
     let mut acc = RewriteAcc {
         new_overloads: &mut new_overloads,
         new_functions: &mut new_functions,
+        new_actions: &mut new_actions,
     };
 
     // ── Funções nomeadas ──
@@ -148,7 +163,7 @@ fn monomorph_pass(
     // ── entry ──
     rewrite_typed_expr(&mut mono.entry, &ctx, &mut instance_map, &mut acc);
 
-    (new_overloads, new_functions)
+    (new_overloads, new_functions, new_actions)
 }
 
 /// Contexto imutável para a passada de monomorphização.
@@ -158,16 +173,18 @@ fn monomorph_pass(
 struct MonoCtx<'a> {
     dispatch_table: &'a DispatchTable,
     functions: &'a [TypedFunction],
+    actions: &'a [TypedAction],
     existing: &'a std::collections::HashSet<String>,
 }
 
 /// Acumulador mutable para a passada de monomorphização.
 ///
-/// Centraliza as novas overloads e funções geradas, evitando
-/// passar dois `&mut Vec` separados pelas chamadas recursivas.
+/// Centraliza as novas overloads, funções e actions geradas, evitando
+/// passar três `&mut Vec` separados pelas chamadas recursivas.
 struct RewriteAcc<'a> {
     new_overloads: &'a mut Vec<kata_core::dispatch::OverloadInfo>,
     new_functions: &'a mut Vec<TypedFunction>,
+    new_actions: &'a mut Vec<TypedAction>,
 }
 
 /// Rewrita call sites genéricos em uma `TypedFunction`.
@@ -217,7 +234,7 @@ fn rewrite_typed_expr(
     let expr = &mut expr_span.node;
 
     match &mut expr.kind {
-        TypedExprKind::Closure { callee, args, .. } => {
+        TypedExprKind::Closure { callee, args, ffi_symbol } => {
             // Primeiro recurse nos argumentos (podem ter call sites genéricos aninhados).
             for arg in args.iter_mut() {
                 rewrite_typed_expr(arg, ctx, instance_map, acc);
@@ -226,7 +243,8 @@ fn rewrite_typed_expr(
             // Depois verifica se este call site é genérico.
             #[allow(clippy::collapsible_if)]
             if let TypedExprKind::Ident { name } = &callee.node.kind {
-                if let Some(overloads) = ctx.dispatch_table.get_overloads(name) {
+                let name = name.clone();
+                if let Some(overloads) = ctx.dispatch_table.get_overloads(&name) {
                     // Procura overload genérica com mesma aridade dos args.
                     let arg_types: Vec<Ty> = args.iter().map(|a| a.node.ty.clone()).collect();
                     let generic_overload = overloads.iter().find(|oi| {
@@ -286,6 +304,33 @@ fn rewrite_typed_expr(
                         }
                     }
                 }
+
+                // Resolução de ffi_symbol para Closures type-erased.
+                //
+                // Quando uma Action polimórfica por interface é instanciada
+                // (ex: echo_SHOW_Int), o body contém Closures produzidas por
+                // try_iface_method_dispatch com ffi_symbol: None. Após
+                // instantiate_action aplicar apply_subs, os tipos dos args
+                // são concretos (ex: [Int]). Se o DispatchTable tem um
+                // overload concreto (não-genérico) que casa e possui
+                // ffi_symbol: Some(...), preenchemos o ffi_symbol aqui.
+                //
+                // Isto resolve `show msg` dentro de `echo_SHOW_Int`:
+                // DispatchTable tem `show :: Int => Text @ffi("kata_rt_bi_show")`.
+                if ffi_symbol.is_none() {
+                    let arg_types: Vec<Ty> =
+                        args.iter().map(|a| a.node.ty.clone()).collect();
+                    if let Some(overloads) = ctx.dispatch_table.get_overloads(&name) {
+                        let concrete = overloads.iter().find(|oi| {
+                            oi.type_params.is_empty()
+                                && oi.params.len() == arg_types.len()
+                                && oi.params == arg_types
+                        });
+                        if let Some(oi) = concrete {
+                            *ffi_symbol = oi.ffi_symbol.clone();
+                        }
+                    }
+                }
             }
         }
 
@@ -332,8 +377,80 @@ fn rewrite_typed_expr(
             }
         }
 
-        TypedExprKind::ActionCall { args, .. } => {
+        TypedExprKind::ActionCall {
+            callee,
+            args,
+            caller_arena: _,
+            ffi_symbol,
+        } => {
+            // Primeiro recurse nos argumentos (podem ter call sites genéricos aninhados).
             rewrite_typed_expr(args, ctx, instance_map, acc);
+
+            // Depois verifica se este ActionCall é genérico.
+            // FFI builtins (ffi_symbol = Some) não são instanciados.
+            if ffi_symbol.is_none() {
+                if let Some(overloads) = ctx.dispatch_table.get_overloads(callee) {
+                    // Procura overload genérico com mesma aridade dos args.
+                    let arg_types: Vec<Ty> = match &args.node.kind {
+                        TypedExprKind::Tuple { elements } => {
+                            elements.iter().map(|e| e.node.ty.clone()).collect()
+                        }
+                        TypedExprKind::Unit => Vec::new(),
+                        _ => vec![args.node.ty.clone()],
+                    };
+                    let generic_overload = overloads.iter().find(|oi| {
+                        !oi.type_params.is_empty() && oi.params.len() == arg_types.len()
+                    });
+
+                    if let Some(oi) = generic_overload {
+                        // Recomputa substitutions via unify.
+                        let mut subs: Substitutions = HashMap::new();
+                        if unify(&oi.params, &arg_types, &oi.type_params, &mut subs).is_ok() {
+                            // Gera nome canônico da instância.
+                            let subs_key = canonicalize_subs(&oi.type_params, &subs);
+                            let instance_name = format!("{callee}_{subs_key}");
+
+                            // Verifica se a instância já existe.
+                            if !ctx.existing.contains(&instance_name)
+                                && !acc.new_overloads.iter().any(|o| o.name == instance_name)
+                            {
+                                // Gera OverloadInfo com tipos concretos.
+                                acc.new_overloads.push(kata_core::dispatch::OverloadInfo {
+                                    name: instance_name.clone(),
+                                    params: oi
+                                        .params
+                                        .iter()
+                                        .map(|t| apply_subs(t, &subs))
+                                        .collect(),
+                                    ret: apply_subs(&oi.ret, &subs),
+                                    ffi_symbol: None,
+                                    is_action: true,
+                                    is_generic: false,
+                                    is_constructor: false,
+                                    associative_neutral: None,
+                                    type_params: vec![],
+                                    substitutions: Some(subs.clone()),
+                                });
+
+                                // Gera TypedAction se a Action original tem corpo.
+                                if let Some(orig_action) =
+                                    ctx.actions.iter().find(|a| a.name == *callee)
+                                {
+                                    let mono_action =
+                                        instantiate_action(orig_action, &subs, &instance_name);
+                                    acc.new_actions.push(mono_action);
+                                }
+                            }
+
+                            // Atualiza o instance_map.
+                            instance_map.insert((callee.clone(), subs_key), instance_name.clone());
+
+                            // Rewrite o callee para o nome da instância.
+                            *callee = instance_name;
+                        }
+                    }
+                }
+            }
         }
 
         TypedExprKind::Loop { body } => {

@@ -217,6 +217,42 @@ pub(crate) fn infer_apply(
         typed_args.push(Spanned::new(typed, arg.span));
     }
 
+    // Caminho 0: Dispatch por método de interface (iface method dispatch).
+    // Quando um argumento é tipado como `Interface("SHOW")` e `func_name`
+    // é método dessa interface (ex: `show`), aceita o dispatch — o tipo
+    // concreto será resolvido pelo monomorphizador ao instanciar a Action
+    // polimórfica que contém esta chamada.
+    //
+    // Procura no InterfaceRegistry pela interface que o arg implementa e
+    // verifica se `func_name` é uma de suas signatures. Substitui `Self`
+    // pelo tipo da interface na signature para obter o tipo de retorno.
+    if let Some(iface_method_ret) = try_iface_method_dispatch(
+        &func_name,
+        &arg_types,
+        ctx.interface_registry,
+    ) {
+        let callee_ty = Ty::Function(arg_types.clone(), Box::new(iface_method_ret.clone()));
+        let callee_typed = TypedExpr {
+            span: callee.span,
+            ty: callee_ty,
+            tail_pos: false,
+            escape: EscapeTarget::Local,
+            effect: Effect::Puro,
+            kind: TypedExprKind::Ident {
+                name: func_name.clone(),
+            },
+        };
+        return Ok((
+            iface_method_ret,
+            TypedExprKind::Closure {
+                callee: Box::new(Spanned::new(callee_typed, callee.span)),
+                args: typed_args,
+                ffi_symbol: None,
+            },
+            Effect::Puro,
+        ));
+    }
+
     // Caminho 1: DispatchTable (call direto para FFI ou função Kata nomeada).
     if ctx.table.has_function(&func_name) {
         // Ret-directed dispatch — se hint é Some(ty), filtra overloads
@@ -494,4 +530,56 @@ pub(crate) fn infer_apply(
         name: func_name,
         span: callee.span.into(),
     })
+}
+
+/// Tenta dispatch por método de interface.
+///
+/// Quando um argumento é tipado como `Ty::Interface("SHOW")` e `func_name`
+/// é método dessa interface (ex: `show`), retorna o tipo de retorno do método
+/// com `Self` substituído pelo tipo da interface. Caso contrário, retorna `None`.
+///
+/// Ex: `show msg` onde `msg :: Interface("SHOW")`:
+/// - InterfaceRegistry tem `SHOW { signatures: [show :: Self => Text] }`
+/// - Substitui `Self` por `Interface("SHOW")` → retorna `Text`
+///
+/// O callee produzido é `Ident("show")` sem overload específico — o
+/// monomorphizador resolve a impl concreta ao instanciar a Action
+/// polimórfica que contém esta chamada.
+fn try_iface_method_dispatch(
+    func_name: &str,
+    arg_types: &[Ty],
+    iface_reg: &kata_core::InterfaceRegistry,
+) -> Option<Ty> {
+    // Para cada arg que é Ty::Interface(name), verifica se func_name é
+    // método dessa interface.
+    for arg in arg_types {
+        if let Ty::Interface(iface_name) = arg {
+            if let Some(iface_info) = iface_reg.get_interface(iface_name) {
+                for sig in &iface_info.signatures {
+                    if sig.name == func_name && sig.params.len() == arg_types.len() {
+                        // Verifica que os params casam com os arg_types
+                        // (substituindo Self pelo tipo da interface).
+                        let mut params_match = true;
+                        for (sp, sa) in sig.params.iter().zip(arg_types) {
+                            // Self → tipo da interface (qualquer arg Interface aceita)
+                            if matches!(sp, Ty::Var(name) if name == "Self") {
+                                // Self deve ser o mesmo tipo do arg que é Interface(iface_name)
+                                if !matches!(sa, Ty::Interface(n) if n == iface_name) {
+                                    params_match = false;
+                                    break;
+                                }
+                            } else if sp != sa {
+                                params_match = false;
+                                break;
+                            }
+                        }
+                        if params_match {
+                            return Some(sig.ret.clone());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
 }
