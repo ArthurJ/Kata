@@ -81,11 +81,11 @@ pub use channel::{
     kata_rt_broadcast_create, kata_rt_broadcast_receiver_create, kata_rt_channel_create,
     kata_rt_channel_recv, kata_rt_channel_send, kata_rt_queue_create, kata_rt_select,
 };
-// Telemetria (Fio 14 @log)
+// Telemetria (@log)
 pub use log::{
     kata_rt_log_config, kata_rt_log_publish, kata_rt_log_recv, reset_log, snapshot_log_config,
 };
-// Display de resultados (Fio 15 Fase 4) — ponto único de display para
+// Display de resultados — ponto único de display para
 // driver JIT e shim AOT.
 pub use display::{
     TYPE_BOOLEAN, TYPE_FLOAT, TYPE_INT, TYPE_OTHER, TYPE_RATIONAL, TYPE_TEXT, TYPE_UNIT,

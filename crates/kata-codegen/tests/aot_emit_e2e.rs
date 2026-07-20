@@ -5,7 +5,7 @@
 //! são um object file válido no formato nativo do host (ELF no Linux,
 //! Mach-O no macOS), com magic number correto e tamanho não-trivial.
 //!
-//! Não executa o binário — o linking é Fase 4. Aqui só validamos que o
+//! Não executa o binário — o linking é posterior. Aqui só validamos que o
 //! Cranelift emite um object file parseável.
 
 use kata_codegen::aot_emit;
@@ -117,8 +117,8 @@ fat 5 1";
 }
 
 /// `aot_emit` de um programa com Action também emite bytes válidos —
-/// verifica que o lowering de Actions funciona no AOT (Fase 4
-/// linkará contra libkata_rt que tem o scheduler).
+/// verifica que o lowering de Actions funciona no AOT
+/// (linkará contra libkata_rt que tem o scheduler).
 /// Usa sintaxe de `examples/hello_action.kata`.
 #[test]
 fn aot_emit_com_action_emite_bytes() {

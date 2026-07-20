@@ -2,7 +2,7 @@
 //!
 //! `ModuleBackend` extends `cranelift_module::Module` com `finalize()`.
 //! O lowering usa `&mut dyn ModuleBackend` para ser agnóstico ao backend
-//! (JIT hoje, AOT na Fase 2). O pipeline específico — execução JIT,
+//! (JIT hoje, AOT posteriormente). O pipeline específico — execução JIT,
 //! emissão de object file — vive fora do lowering, em `jit.rs` e `aot.rs`,
 //! onde o backend concreto é conhecido.
 //!

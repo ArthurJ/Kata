@@ -1,4 +1,4 @@
-//! Telemetria via CSP — FFIs de log (Fio 14 `@log`).
+//! Telemetria via CSP — FFIs de log (`@log`).
 //!
 //! `@log` e `log!()` publicam mensagens em tópicos (canais nomeados via
 //! registry). Políticas: `"drop"` (Broadcast, fire-and-forget) ou `"block"`

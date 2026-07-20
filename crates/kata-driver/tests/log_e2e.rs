@@ -1,4 +1,4 @@
-//! Testes E2E do Fio 14 `@log` — telemetria via CSP.
+//! Testes E2E do `@log` — telemetria via CSP.
 //!
 //! Cada teste cria um arquivo `.kata` temporário, invoca o binário `kata`
 //! via subprocess (`kata run` ou `kata test`), e verifica stdout + exit code.
@@ -17,7 +17,7 @@
 //! até receber a mensagem. Isso garante ordenação correta e que `log_recv!`
 //! executa dentro de um fiber (pode bloquear via scheduler cooperativo).
 //!
-//! Os 14 testes cobrem (sub-PRD §4 Fase 7):
+//! Os 14 testes cobrem (sub-PRD §4):
 //!  1. log_directive_prologo       — @log com só params, loga na entrada
 //!  2. log_directive_epilogo        — @log com vars do corpo, loga na saída
 //!  3. log_directive_when_enter     — when: "enter" explícito

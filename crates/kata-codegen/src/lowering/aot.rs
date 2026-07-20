@@ -4,7 +4,7 @@
 //! [`AotBackend`] wrap de `cranelift_object::ObjectModule`, declara os
 //! imports FFI (resolvidos em link-time, não há registro de ponteiros),
 //! chama `lower_module`, `finalize()`, e então [`AotBackend::emit`] para
-//! obter os bytes do object file. O linker do sistema (Fase 4) resolve
+//! obter os bytes do object file. O linker do sistema resolve
 //! os imports FFI contra `libkata_rt.a`/`.so`.
 
 use cranelift_codegen::settings::Configurable;
@@ -19,7 +19,7 @@ use super::module::{CodegenError, lower_module};
 /// `ObjectModule` → `AotBackend` → declarar FFI imports → `lower_module` →
 /// `finalize` → `emit`. Os bytes retornados são um object file no formato
 /// nativo do host (ELF/Mach-O/COFF) com relocations pendentes — o linker
-/// resolve contra `libkata_rt` (Fase 4).
+/// resolve contra `libkata_rt`.
 ///
 /// Diferença vs JIT: FFI são `Linkage::Import` sem registro de ponteiros
 /// no builder. O `ObjectBuilder` não tem API de `symbol()` — os imports

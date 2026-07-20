@@ -16,7 +16,7 @@
 //! - `ActionCall{callee}` com `ffi_symbol=None` → Action definida pelo usuário
 //! - `Fork{action_name}` → Action (aresta dinâmica por string, per R7)
 //!
-//! Limitação (DoD Fase 3): tree shaking só remove funções inteiras. DCE
+//! Limitação (DoD): tree shaking só remove funções inteiras. DCE
 //! intra-função é post-1.0.
 
 use std::collections::HashSet;

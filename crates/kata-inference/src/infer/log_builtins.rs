@@ -1,4 +1,4 @@
-//! Log builtins (Fio 14) — `log!`, `log_recv!`, `log_config!`.
+//! Log builtins — `log!`, `log_recv!`, `log_config!`.
 //!
 //! Extraído de `action_call.rs` — os três builtins de log são self-contained:
 //! compartilham apenas `extract_tuple_elements` e `resolve_log_level`

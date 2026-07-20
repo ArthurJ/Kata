@@ -75,7 +75,7 @@ pub(crate) fn infer_action_call(
         return infer_fork_builtin(args, span, env, ctx);
     }
 
-    // ── Builtins Log (Fio 14) ──
+    // ── Builtins Log ──
     if callee == "log" {
         return infer_log_builtin(args, span, env, ctx);
     }

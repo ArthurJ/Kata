@@ -256,7 +256,7 @@ impl FfiSymbol {
             FfiSymbol::ChannelSend => "kata_rt_channel_send",
             FfiSymbol::ChannelRecv => "kata_rt_channel_recv",
             FfiSymbol::ChannelSelect => "kata_rt_select",
-            // Log (Fio 14)
+            // Log
             FfiSymbol::LogPublish => "kata_rt_log_publish",
             FfiSymbol::LogRecv => "kata_rt_log_recv",
             FfiSymbol::LogConfig => "kata_rt_log_config",
@@ -349,7 +349,7 @@ impl FfiSymbol {
             FfiSymbol::ChannelSend => Ty::int(),
             FfiSymbol::ChannelRecv => Ty::int(),
             FfiSymbol::ChannelSelect => Ty::int(),
-            // Log (Fio 14) — LogPublish/LogRecv retornam i64 (status/valor), LogConfig retorna Unit
+            // Log — LogPublish/LogRecv retornam i64 (status/valor), LogConfig retorna Unit
             FfiSymbol::LogPublish => Ty::int(),
             FfiSymbol::LogRecv => Ty::int(),
             FfiSymbol::LogConfig => Ty::Unit,
@@ -447,7 +447,7 @@ impl FfiSymbol {
             FfiSymbol::ChannelSend,
             FfiSymbol::ChannelRecv,
             FfiSymbol::ChannelSelect,
-            // Log (Fio 14)
+            // Log
             FfiSymbol::LogPublish,
             FfiSymbol::LogRecv,
             FfiSymbol::LogConfig,
