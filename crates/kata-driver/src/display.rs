@@ -12,7 +12,7 @@ use kata_rt as rt;
 ///
 /// `raw` é o valor bruto retornado por `__kata_entry`. `ty` é o tipo do
 /// entry point (de `TypedModule.entry.node.ty`).
-pub fn print_result(raw: i64, ty: &Ty) {
+pub(crate) fn print_result(raw: i64, ty: &Ty) {
     let tag = ty_to_type_tag(ty);
     // SAFETY: `kata_rt_print_result` é `extern "C"` e lê `raw` + `tag`.
     // Para TYPE_TEXT/TYPE_RATIONAL, `raw` é ponteiro válido produzido

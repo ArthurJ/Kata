@@ -200,7 +200,8 @@ impl TypeEnv {
 
     /// Itera sobre os bindings deste escopo (não do parent).
     /// Retorna `(name, ty)` pares — usado pelo REPL `:env`.
-    pub fn local_bindings(&self) -> impl Iterator<Item = (&str, &Ty)> {
+    #[allow(dead_code)]
+    pub(crate) fn local_bindings(&self) -> impl Iterator<Item = (&str, &Ty)> {
         self.bindings.iter().map(|(k, v)| (k.as_str(), v))
     }
 }

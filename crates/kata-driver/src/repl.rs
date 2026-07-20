@@ -29,7 +29,7 @@ use crate::display;
 use crate::merge_resolved;
 
 /// Sessão REPL — acumula items do usuário entre expressões.
-pub struct ReplSession {
+pub(crate) struct ReplSession {
     /// Items top-level acumulados (let bindings, sigs, data, enum, etc.).
     items: Vec<Spanned<Item>>,
     /// Prelude resolvido (recarregado em `:reset`).
@@ -410,7 +410,7 @@ fn dirs() -> PathBuf {
 }
 
 /// Executa o subcomando `kata repl`.
-pub fn cmd_repl() -> miette::Result<()> {
+pub(crate) fn cmd_repl() -> miette::Result<()> {
     let mut session = ReplSession::new().map_err(miette::Report::msg)?;
 
     let mut rl = Editor::<(), DefaultHistory>::new()
