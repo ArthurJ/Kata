@@ -142,11 +142,11 @@ impl ReplSession {
                 // Fallback: listar nomes sem tipos.
                 let mut shown = false;
                 for item in &self.items {
-                    if let Item::EntryExpr(expr) = &item.node {
-                        if let Expr::Let { name, .. } = &expr.node {
-                            println!("  {name}");
-                            shown = true;
-                        }
+                    if let Item::EntryExpr(expr) = &item.node
+                        && let Expr::Let { name, .. } = &expr.node
+                    {
+                        println!("  {name}");
+                        shown = true;
                     }
                 }
                 if !shown {
@@ -300,10 +300,10 @@ impl ReplSession {
         let mut items = self.items.clone();
         if !expr_str.is_empty() {
             let tokens = lex(expr_str).ok();
-            if let Some(tokens) = tokens {
-                if let Ok(module) = parse(tokens) {
-                    items.extend(module.items);
-                }
+            if let Some(tokens) = tokens
+                && let Ok(module) = parse(tokens)
+            {
+                items.extend(module.items);
             }
         }
         Module { items }
@@ -411,7 +411,7 @@ fn dirs() -> PathBuf {
 
 /// Executa o subcomando `kata repl`.
 pub fn cmd_repl() -> miette::Result<()> {
-    let mut session = ReplSession::new().map_err(|e| miette::Report::msg(e))?;
+    let mut session = ReplSession::new().map_err(miette::Report::msg)?;
 
     let mut rl = Editor::<(), DefaultHistory>::new()
         .map_err(|e| miette::Report::msg(format!("erro ao iniciar rustyline: {e}")))?;

@@ -146,10 +146,10 @@ fn collect_refs(
             ..
         } => {
             // Closure não-FFI com callee Ident → função Kata.
-            if ffi_symbol.is_none() {
-                if let TypedExprKind::Ident { name } = &callee.node.kind {
-                    reached_fns.insert(name.clone());
-                }
+            if ffi_symbol.is_none()
+                && let TypedExprKind::Ident { name } = &callee.node.kind
+            {
+                reached_fns.insert(name.clone());
             }
             // Recursão nos argumentos.
             for arg in args {

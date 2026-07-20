@@ -521,14 +521,13 @@ int main(void) {{
     }
 
     // Linkar: cc -o <output> <shim.o> <cranelift.o> -L<lib_dir> -lkata_rt -lm -lpthread
-    let lib_name = if dynamic { "kata_rt" } else { "kata_rt" };
     let mut cmd = std::process::Command::new(&cc);
     cmd.args(["-o"]).arg(output).arg(&shim_o).arg(&cranelift_o);
 
     if dynamic {
         // Link dinâmico: -lkata_rt resolve contra libkata_rt.so
         cmd.arg(format!("-L{}", lib_dir.display()));
-        cmd.arg(format!("-l{lib_name}"));
+        cmd.arg("-lkata_rt");
         cmd.args(["-lm", "-lpthread"]);
         // rpath para encontrar libkata_rt.so em runtime
         cmd.arg(format!("-Wl,-rpath,{}", lib_dir.display()));
