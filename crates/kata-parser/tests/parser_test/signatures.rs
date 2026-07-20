@@ -171,3 +171,95 @@ fn sig_with_lambda_unicode_clause() {
         other => panic!("expected Sig, got {other:?}"),
     }
 }
+
+// ── List shorthand [T] → List::T ──────────────────────────────────
+
+#[test]
+fn list_shorthand_single_param() {
+    // `[Int]` desugara para `List::Int` (TypeExpr::ParamApp).
+    let m = parse_src("quicksort :: [Int] => [Int]");
+    let item = first_item(&m);
+    match item {
+        Item::Sig { name, params, ret, .. } => {
+            assert_eq!(name, "quicksort");
+            assert_eq!(params.len(), 1);
+            // params[0] = [Int] → List::Int
+            match &params[0].node {
+                TypeExpr::ParamApp { name, params } => {
+                    assert_eq!(name, "List");
+                    assert_eq!(params.len(), 1);
+                    assert_eq!(params[0].node, TypeExpr::Named("Int".into()));
+                }
+                other => panic!("expected ParamApp for param, got {other:?}"),
+            }
+            // ret = [Int] → List::Int
+            match &ret.node {
+                TypeExpr::ParamApp { name, params } => {
+                    assert_eq!(name, "List");
+                    assert_eq!(params.len(), 1);
+                    assert_eq!(params[0].node, TypeExpr::Named("Int".into()));
+                }
+                other => panic!("expected ParamApp for ret, got {other:?}"),
+            }
+        }
+        other => panic!("expected Sig, got {other:?}"),
+    }
+}
+
+#[test]
+fn list_shorthand_nested() {
+    // `[[Int]]` desugara para `List::(List::Int)`.
+    let m = parse_src("f :: [[Int]] => Int");
+    let item = first_item(&m);
+    match item {
+        Item::Sig { params, .. } => {
+            assert_eq!(params.len(), 1);
+            match &params[0].node {
+                TypeExpr::ParamApp { name, params } => {
+                    assert_eq!(name, "List");
+                    assert_eq!(params.len(), 1);
+                    // Inner: List::Int
+                    match &params[0].node {
+                        TypeExpr::ParamApp { name, params } => {
+                            assert_eq!(name, "List");
+                            assert_eq!(params.len(), 1);
+                            assert_eq!(params[0].node, TypeExpr::Named("Int".into()));
+                        }
+                        other => panic!("expected nested ParamApp, got {other:?}"),
+                    }
+                }
+                other => panic!("expected ParamApp, got {other:?}"),
+            }
+        }
+        other => panic!("expected Sig, got {other:?}"),
+    }
+}
+
+#[test]
+fn list_shorthand_multi_param() {
+    // `[A] [B]` — múltiplas listas como parâmetros separados.
+    let m = parse_src("zip :: [A] [B] => Int");
+    let item = first_item(&m);
+    match item {
+        Item::Sig { params, .. } => {
+            assert_eq!(params.len(), 2);
+            // params[0] = [A] → List::A
+            match &params[0].node {
+                TypeExpr::ParamApp { name, params } => {
+                    assert_eq!(name, "List");
+                    assert_eq!(params[0].node, TypeExpr::Named("A".into()));
+                }
+                other => panic!("expected ParamApp for param[0], got {other:?}"),
+            }
+            // params[1] = [B] → List::B
+            match &params[1].node {
+                TypeExpr::ParamApp { name, params } => {
+                    assert_eq!(name, "List");
+                    assert_eq!(params[0].node, TypeExpr::Named("B".into()));
+                }
+                other => panic!("expected ParamApp for param[1], got {other:?}"),
+            }
+        }
+        other => panic!("expected Sig, got {other:?}"),
+    }
+}

@@ -74,6 +74,21 @@ impl Parser {
                 }
                 Ok(Spanned::new(TypeExpr::Named(name), start))
             }
+            Token::LBracket => {
+                // `[T]` — açúcar sintático para `List::T`.
+                // Desugara no mesmo TypeExpr::ParamApp que `List::T` produz.
+                self.advance(); // consume [
+                let ty = self.parse_type_expr()?;
+                self.expect(&Token::RBracket, "\"]\"")?;
+                let span = start.cover(ty.span);
+                Ok(Spanned::new(
+                    TypeExpr::ParamApp {
+                        name: "List".into(),
+                        params: vec![ty],
+                    },
+                    span,
+                ))
+            }
             Token::LParen => {
                 self.advance(); // consume (
 

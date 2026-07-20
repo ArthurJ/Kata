@@ -122,6 +122,7 @@ guards e patterns). O `::` unificado com distinção por lookahead de 1 token
   - `Boolean` é `enum Boolean { True, False }` — variantes unitárias, sem payload.
   - `::` em assinatura é declaração; `->` é descrição de tipo de função como valor.
   - **Ascription de expressão** é pós-fixada: `expr::Type` etiqueta a expressão à esquerda com o tipo à direita. Para tipos refined com literal (`5::PositiveInt`), o compilador valida predicados em compile-time e entrega o tipo refined direto (sem `Result`). Para tipos base (`x::Int`), verifica e rebaixa ao tipo anotado. É o mesmo `::` dos outros contextos, agora em posição de expressão.
+  - **Açúcar `[T]`**: `quicksort :: [Int] => [Int]` é equivalente a `quicksort :: List::Int => List::Int`. O parser desugara `[T]` para `TypeExpr::ParamApp { name: "List", params: [T] }` — o mesmo nó AST que `List::T` produz. Funciona em qualquer posição de tipo: parâmetros, retorno, anotações. Aninhamento: `[[Int]]` → `List::(List::Int)`. Múltiplos: `[A] [B]` → duas `List::` independentes. O desugaring é puramente sintático — typeck, codegen e runtime veem apenas `List::T`.
 
 ---
 
