@@ -115,7 +115,8 @@ fn link(object_bytes: &[u8], output: &Path, dynamic: bool, type_tag: i32) -> Res
 
     // Diretório temporário para o shim e o .o do Cranelift.
     let tmp = std::env::temp_dir().join(format!("kata-build-{}", std::process::id()));
-    std::fs::create_dir_all(&tmp).map_err(|e| format!("não foi possível criar dir temporário: {e}"))?;
+    std::fs::create_dir_all(&tmp)
+        .map_err(|e| format!("não foi possível criar dir temporário: {e}"))?;
 
     // Escrever o .o do Cranelift.
     let cranelift_o = tmp.join("kata_module.o");

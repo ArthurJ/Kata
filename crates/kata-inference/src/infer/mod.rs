@@ -28,6 +28,7 @@ mod free_vars;
 pub(crate) mod generics;
 pub(crate) mod helpers;
 mod lambda;
+mod log_builtins;
 mod log_synthesis;
 mod partial_dispatch;
 mod recursion;
