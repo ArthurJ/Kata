@@ -10,6 +10,4 @@ pub(crate) mod lowering;
 pub(crate) mod metadata;
 pub(crate) mod smi;
 
-pub use lowering::{
-    CodegenError, JitResult, TestWrapper, aot_emit, jit_compile_tests, jit_eval,
-};
+pub use lowering::{CodegenError, JitResult, TestWrapper, aot_emit, jit_compile_tests, jit_eval};

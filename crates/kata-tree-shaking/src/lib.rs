@@ -174,9 +174,7 @@ fn collect_refs(
         }
 
         TypedExprKind::Fork {
-            action_name,
-            args,
-            ..
+            action_name, args, ..
         } => {
             // Aresta dinâmica — string match em action_name.
             reached_actions.insert(action_name.clone());
@@ -205,8 +203,7 @@ fn collect_refs(
             }
         }
 
-        TypedExprKind::FieldAccess { expr, .. }
-        | TypedExprKind::IndexAccess { expr, .. } => {
+        TypedExprKind::FieldAccess { expr, .. } | TypedExprKind::IndexAccess { expr, .. } => {
             collect_refs(&expr.node, reached_fns, reached_actions)
         }
 
@@ -245,19 +242,14 @@ fn collect_refs(
             }
         }
 
-        TypedExprKind::ForIn {
-            iterable, body, ..
-        } => {
+        TypedExprKind::ForIn { iterable, body, .. } => {
             collect_refs(&iterable.node, reached_fns, reached_actions);
             for stmt in body {
                 collect_refs(&stmt.node, reached_fns, reached_actions);
             }
         }
 
-        TypedExprKind::In {
-            item,
-            collection,
-        } => {
+        TypedExprKind::In { item, collection } => {
             collect_refs(&item.node, reached_fns, reached_actions);
             collect_refs(&collection.node, reached_fns, reached_actions);
         }
@@ -295,14 +287,13 @@ fn collect_refs(
             collect_refs(&collection.node, reached_fns, reached_actions);
         }
 
-        TypedExprKind::FusedStream {
-            stages, source, ..
-        } => {
+        TypedExprKind::FusedStream { stages, source, .. } => {
             collect_refs(&source.node, reached_fns, reached_actions);
             for stage in stages {
                 let cb = match stage {
-                    FusedStage::Filter { callback, .. }
-                    | FusedStage::Map { callback, .. } => callback,
+                    FusedStage::Filter { callback, .. } | FusedStage::Map { callback, .. } => {
+                        callback
+                    }
                 };
                 collect_refs(&cb.node, reached_fns, reached_actions);
             }

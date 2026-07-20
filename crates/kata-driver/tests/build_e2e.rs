@@ -116,7 +116,11 @@ fn build_text_literal() {
 
     let (stdout, code) = run_built_binary("build_text_literal_bin");
     assert_eq!(code, 0, "binário AOT deve exit 0 — stdout: {stdout}");
-    assert_eq!(stdout.trim(), "hello world", "text literal deve imprimir hello world");
+    assert_eq!(
+        stdout.trim(),
+        "hello world",
+        "text literal deve imprimir hello world"
+    );
 }
 
 // ── Teste 4: Boolean (match) ─────────────────────────────────
@@ -153,7 +157,11 @@ fn build_action_echo() {
     let (stdout, code) = run_built_binary("build_action_echo_bin");
     assert_eq!(code, 0, "binário AOT deve exit 0 — stdout: {stdout}");
     // echo! imprime sem newline, Unit imprime "()" — resultado: "helloworld()"
-    assert_eq!(stdout.trim(), "helloworld()", "action echo deve imprimir helloworld()");
+    assert_eq!(
+        stdout.trim(),
+        "helloworld()",
+        "action echo deve imprimir helloworld()"
+    );
 }
 
 // ── Teste 6: BigInt (overflow SMI) ───────────────────────────

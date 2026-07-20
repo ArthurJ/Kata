@@ -14,11 +14,11 @@
 //! Tipos compartilhados (`LowerCtx`, `CodegenError`, `StringTable`) vivem
 //! aqui no `mod.rs` e são importados pelos submódulos via `super::`.
 
-mod backend;
 mod _match;
-mod aot;
 mod action_call;
 mod action_def;
+mod aot;
+mod backend;
 mod clause;
 mod closure;
 mod collections_hof;
@@ -39,8 +39,8 @@ mod variant;
 
 pub(crate) use backend::ModuleBackend;
 
-pub use jit::{JitResult, jit_compile_tests, jit_eval};
 pub use aot::aot_emit;
+pub use jit::{JitResult, jit_compile_tests, jit_eval};
 pub use module::CodegenError;
 use module::StringTable;
 pub use test_runner::TestWrapper;

@@ -14,8 +14,8 @@ use kata_core::ffi::FfiSymbol;
 use kata_rt as rt;
 
 use crate::ffi_sigs::ffi_signature;
-use crate::lowering::ModuleBackend;
 use crate::lowering::CodegenError;
+use crate::lowering::ModuleBackend;
 
 /// Registro de símbolos FFI no JITBuilder.
 ///

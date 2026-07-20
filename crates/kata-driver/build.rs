@@ -9,8 +9,8 @@ use std::path::PathBuf;
 fn main() {
     // CARGO_MANIFEST_DIR é o diretório de kata-driver:
     // <workspace>/crates/kata-driver
-    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
-        .expect("CARGO_MANIFEST_DIR não definido");
+    let manifest_dir =
+        std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR não definido");
     let manifest_dir = PathBuf::from(manifest_dir);
     // workspace root = manifest_dir/../../
     let workspace_root = manifest_dir

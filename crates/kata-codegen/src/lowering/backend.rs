@@ -25,7 +25,7 @@
 //! `emit()`), espelhando o JIT que só chama `get_finalized_function`.
 
 use cranelift_codegen::control::ControlPlane;
-use cranelift_codegen::{isa, ir, Context};
+use cranelift_codegen::{Context, ir, isa};
 use cranelift_module::{
     DataDescription, DataId, FuncId, Linkage, Module, ModuleDeclarations, ModuleResult,
 };

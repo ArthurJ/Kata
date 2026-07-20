@@ -62,14 +62,20 @@ fn result_lines(output: &str) -> Vec<&str> {
 fn repl_eval_int_arith() {
     let out = run_repl(&["+ 1 2", ":quit"]);
     let lines = result_lines(&out);
-    assert!(lines.iter().any(|l| l.contains('3')), "esperava 3, got: {out}");
+    assert!(
+        lines.iter().any(|l| l.contains('3')),
+        "esperava 3, got: {out}"
+    );
 }
 
 #[test]
 fn repl_eval_float() {
     let out = run_repl(&["+ 1.5 2.5", ":quit"]);
     let lines = result_lines(&out);
-    assert!(lines.iter().any(|l| l.contains('4')), "esperava 4, got: {out}");
+    assert!(
+        lines.iter().any(|l| l.contains('4')),
+        "esperava 4, got: {out}"
+    );
 }
 
 #[test]
@@ -77,14 +83,20 @@ fn repl_eval_text_literal() {
     // Envia "hello" (literal Text) ao REPL.
     let out = run_repl(&["\"hello\"", ":quit"]);
     let lines = result_lines(&out);
-    assert!(lines.iter().any(|l| l.contains("hello")), "esperava hello, got: {out}");
+    assert!(
+        lines.iter().any(|l| l.contains("hello")),
+        "esperava hello, got: {out}"
+    );
 }
 
 #[test]
 fn repl_eval_boolean() {
     let out = run_repl(&["True", ":quit"]);
     let lines = result_lines(&out);
-    assert!(lines.iter().any(|l| l.contains("True")), "esperava True, got: {out}");
+    assert!(
+        lines.iter().any(|l| l.contains("True")),
+        "esperava True, got: {out}"
+    );
 }
 
 // ── Persistência de bindings ───────────────────────────────
@@ -102,12 +114,7 @@ fn repl_let_binding_persists() {
 
 #[test]
 fn repl_multiple_let_bindings() {
-    let out = run_repl(&[
-        "let x := 10",
-        "let y := 20",
-        "+ x y",
-        ":quit",
-    ]);
+    let out = run_repl(&["let x := 10", "let y := 20", "+ x y", ":quit"]);
     let lines = result_lines(&out);
     assert!(
         lines.iter().any(|l| l.trim() == "30"),
@@ -117,12 +124,7 @@ fn repl_multiple_let_bindings() {
 
 #[test]
 fn repl_let_shadowing() {
-    let out = run_repl(&[
-        "let x := 10",
-        "let x := 20",
-        "x",
-        ":quit",
-    ]);
+    let out = run_repl(&["let x := 10", "let x := 20", "x", ":quit"]);
     let lines = result_lines(&out);
     assert!(
         lines.iter().any(|l| l.trim() == "20"),
@@ -136,14 +138,20 @@ fn repl_let_shadowing() {
 fn repl_type_command() {
     let out = run_repl(&["let x := 10", ":type x", ":quit"]);
     let lines = result_lines(&out);
-    assert!(lines.iter().any(|l| l.contains("Int")), "esperava Int, got: {out}");
+    assert!(
+        lines.iter().any(|l| l.contains("Int")),
+        "esperava Int, got: {out}"
+    );
 }
 
 #[test]
 fn repl_type_expr_arith() {
     let out = run_repl(&[":type + 1 2", ":quit"]);
     let lines = result_lines(&out);
-    assert!(lines.iter().any(|l| l.contains("Int")), "esperava Int, got: {out}");
+    assert!(
+        lines.iter().any(|l| l.contains("Int")),
+        "esperava Int, got: {out}"
+    );
 }
 
 #[test]
@@ -169,12 +177,7 @@ fn repl_env_empty() {
 
 #[test]
 fn repl_reset_clears_bindings() {
-    let out = run_repl(&[
-        "let x := 10",
-        ":reset",
-        ":env",
-        ":quit",
-    ]);
+    let out = run_repl(&["let x := 10", ":reset", ":env", ":quit"]);
     let lines = result_lines(&out);
     // Após reset, :env deve mostrar nenhum binding.
     assert!(
@@ -185,12 +188,7 @@ fn repl_reset_clears_bindings() {
 
 #[test]
 fn repl_reset_reloads_prelude() {
-    let out = run_repl(&[
-        "let x := 10",
-        ":reset",
-        "+ 1 2",
-        ":quit",
-    ]);
+    let out = run_repl(&["let x := 10", ":reset", "+ 1 2", ":quit"]);
     let lines = result_lines(&out);
     // Após reset, + 1 2 deve funcionar (prelude recarregado).
     assert!(
@@ -205,26 +203,34 @@ fn repl_reset_reloads_prelude() {
 fn repl_help_lists_commands() {
     let out = run_repl(&[":help", ":quit"]);
     let lines = result_lines(&out);
-    assert!(lines.iter().any(|l| l.contains(":type")), "esperava :type no help, got: {out}");
-    assert!(lines.iter().any(|l| l.contains(":env")), "esperava :env no help, got: {out}");
-    assert!(lines.iter().any(|l| l.contains(":quit")), "esperava :quit no help, got: {out}");
+    assert!(
+        lines.iter().any(|l| l.contains(":type")),
+        "esperava :type no help, got: {out}"
+    );
+    assert!(
+        lines.iter().any(|l| l.contains(":env")),
+        "esperava :env no help, got: {out}"
+    );
+    assert!(
+        lines.iter().any(|l| l.contains(":quit")),
+        "esperava :quit no help, got: {out}"
+    );
 }
 
 #[test]
 fn repl_unknown_command_reports_error() {
     let out = run_repl(&[":bogus", ":quit"]);
-    assert!(out.contains("desconhecido"), "esperava mensagem de comando desconhecido, got: {out}");
+    assert!(
+        out.contains("desconhecido"),
+        "esperava mensagem de comando desconhecido, got: {out}"
+    );
 }
 
 // ── Erros não abortam sessão ────────────────────────────────
 
 #[test]
 fn repl_error_does_not_abort_session() {
-    let out = run_repl(&[
-        "undefined_name",
-        "+ 1 2",
-        ":quit",
-    ]);
+    let out = run_repl(&["undefined_name", "+ 1 2", ":quit"]);
     let lines = result_lines(&out);
     // Após erro, + 1 2 deve funcionar.
     assert!(
@@ -235,12 +241,7 @@ fn repl_error_does_not_abort_session() {
 
 #[test]
 fn repl_rollback_on_error_keeps_env() {
-    let out = run_repl(&[
-        "let x := 10",
-        "undefined_name",
-        ":env",
-        ":quit",
-    ]);
+    let out = run_repl(&["let x := 10", "undefined_name", ":env", ":quit"]);
     let lines = result_lines(&out);
     // x deve continuar no :env após erro.
     assert!(

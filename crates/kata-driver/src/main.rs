@@ -64,7 +64,11 @@ fn main() -> miette::Result<()> {
         Command::Eval { expr } => cmd_eval(&expr),
         Command::Run { file } => cmd_run(&file),
         Command::Test { path, filter } => cmd_test(&path, filter.as_deref()),
-        Command::Build { file, output, dynamic } => cmd_build(&file, output.as_deref(), dynamic),
+        Command::Build {
+            file,
+            output,
+            dynamic,
+        } => cmd_build(&file, output.as_deref(), dynamic),
         Command::Repl => repl::cmd_repl(),
     }
 }
@@ -370,7 +374,8 @@ fn cmd_build(file: &str, output: Option<&str>, dynamic: bool) -> miette::Result<
         Some(p) => PathBuf::from(p),
         None => {
             let p = Path::new(file);
-            let stem = p.file_stem()
+            let stem = p
+                .file_stem()
                 .ok_or_else(|| miette::Report::msg(format!("arquivo sem nome: `{file}`")))?
                 .to_string_lossy()
                 .into_owned();
@@ -384,8 +389,8 @@ fn cmd_build(file: &str, output: Option<&str>, dynamic: bool) -> miette::Result<
     let module = parse(tokens).map_err(IntoReport::into_report)?;
     let prelude = load_prelude()
         .map_err(|e| miette::Report::msg(format!("erro ao carregar prelude: {e:?}")))?;
-    let user = resolve(&module)
-        .map_err(|e| miette::Report::msg(format!("erro de resolução: {e:?}")))?;
+    let user =
+        resolve(&module).map_err(|e| miette::Report::msg(format!("erro de resolução: {e:?}")))?;
     let resolved = merge_resolved(prelude, user);
     let typed = infer_module(&module, &resolved).map_err(IntoReport::into_report)?;
 
@@ -431,12 +436,7 @@ fn ty_to_type_tag(ty: &Ty) -> i32 {
 ///
 /// O shim C chama `__kata_entry` e `kata_rt_print_result` — display
 /// vive no runtime, não há duplicação de lógica.
-fn link(
-    object_bytes: &[u8],
-    output: &Path,
-    dynamic: bool,
-    type_tag: i32,
-) -> Result<(), String> {
+fn link(object_bytes: &[u8], output: &Path, dynamic: bool, type_tag: i32) -> Result<(), String> {
     // Workspace root (definido por build.rs).
     let build_root = env!("KATA_BUILD_ROOT");
     let target_dir = Path::new(build_root).join("target");
@@ -454,15 +454,11 @@ fn link(
     let lib_dir = target_dir.join(profile_dir);
 
     // Descobrir linker (cc, gcc, clang — primeiro disponível).
-    let cc = find_linker().ok_or_else(|| {
-        "linker não encontrado: instale cc, gcc ou clang".to_string()
-    })?;
+    let cc = find_linker()
+        .ok_or_else(|| "linker não encontrado: instale cc, gcc ou clang".to_string())?;
 
     // Diretório temporário para o shim e o .o do Cranelift.
-    let tmp = std::env::temp_dir().join(format!(
-        "kata-build-{}",
-        std::process::id()
-    ));
+    let tmp = std::env::temp_dir().join(format!("kata-build-{}", std::process::id()));
     std::fs::create_dir_all(&tmp)
         .map_err(|e| format!("não foi possível criar dir temporário: {e}"))?;
 
@@ -543,7 +539,8 @@ int main(void) {{
         cmd.args(["-lm", "-lpthread"]);
     }
 
-    let status = cmd.status()
+    let status = cmd
+        .status()
         .map_err(|e| format!("falha ao invocar linker {cc}: {e}"))?;
     if !status.success() {
         return Err(format!("falha ao linkar (cc retornou {status})"));

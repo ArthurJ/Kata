@@ -65,7 +65,7 @@ fn expected_magic() -> &'static [u8] {
     match (os, target) {
         ("linux", _) => &[0x7f, 0x45, 0x4c, 0x46], // ELF
         ("macos", "x86_64") | ("macos", "aarch64") => &[0xcf, 0xfa, 0xed, 0xfe], // Mach-O 64 (LE)
-        _ => &[0x7f, 0x45, 0x4c, 0x46], // fallback assume ELF
+        _ => &[0x7f, 0x45, 0x4c, 0x46],            // fallback assume ELF
     }
 }
 

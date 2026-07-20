@@ -21,9 +21,9 @@ use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
 use kata_parser::parse;
 use kata_resolution::{ResolvedModule, load_prelude, resolve};
+use rustyline::Editor;
 use rustyline::error::ReadlineError;
 use rustyline::history::DefaultHistory;
-use rustyline::Editor;
 
 use crate::display;
 use crate::merge_resolved;
@@ -41,8 +41,7 @@ pub struct ReplSession {
 impl ReplSession {
     /// Cria nova sessão carregando o prelude.
     pub fn new() -> Result<Self, String> {
-        let prelude =
-            load_prelude().map_err(|e| format!("erro ao carregar prelude: {e:?}"))?;
+        let prelude = load_prelude().map_err(|e| format!("erro ao carregar prelude: {e:?}"))?;
         let history_path = dirs();
         Ok(Self {
             items: Vec::new(),
@@ -54,8 +53,7 @@ impl ReplSession {
     /// Reseta a sessão — limpa items e recarrega prelude.
     pub fn reset(&mut self) -> Result<(), String> {
         self.items.clear();
-        self.prelude =
-            load_prelude().map_err(|e| format!("erro ao carregar prelude: {e:?}"))?;
+        self.prelude = load_prelude().map_err(|e| format!("erro ao carregar prelude: {e:?}"))?;
         Ok(())
     }
 
@@ -329,7 +327,10 @@ impl ReplSession {
                 text: "0".to_string(),
             };
             let spanned = Spanned::new(zero, kata_ast::Span::synthetic());
-            items.push(Spanned::new(Item::EntryExpr(spanned), kata_ast::Span::synthetic()));
+            items.push(Spanned::new(
+                Item::EntryExpr(spanned),
+                kata_ast::Span::synthetic(),
+            ));
         }
         Module { items }
     }
