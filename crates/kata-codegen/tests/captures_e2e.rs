@@ -199,3 +199,60 @@ fn closure_multipla_chamada_aninhada_e2e() {
     assert_eq!(ty, Ty::int());
     assert_eq!(untag_smi(raw), 13);
 }
+
+// ── Função global pura referenciada em lambda não é capture ───────
+// `mod` é função definida em core.kata (não-FFI, DispatchTable).
+// Referenciar `mod` dentro de lambda NÃO deve gerar capture —
+// é resolvida em compile-time via call direto, não via CaptureBox.
+
+#[test]
+fn capture_nao_deve_incluir_funcao_global_tast() {
+    // let f := lambda x: mod x 2
+    // f captura NINGUÉM — mod é função global, x é param local.
+    let typed = infer_src("let f := lambda x: mod x 2\nf 7");
+    let captures = find_last_lambda_captures(&typed).expect("deveria ter um Lambda no pre_entry");
+    assert!(
+        captures.iter().all(|c| c.name != "mod"),
+        "mod é função global, não deveria ser capture. captures = {:?}",
+        captures
+    );
+}
+
+#[test]
+fn capture_nao_deve_incluir_funcao_global_and_tast() {
+    // `and` é função global (Boolean Boolean => Boolean) em core.kata.
+    // `t` é capturada (variável do escopo outer), `and` não deveria ser.
+    let typed = infer_src(
+        "let t := True\nlet f := lambda x: and x t\nf t",
+    );
+    let captures = find_last_lambda_captures(&typed).expect("deveria ter um Lambda no pre_entry");
+    assert!(
+        captures.iter().all(|c| c.name != "and"),
+        "and é função global, não deveria ser capture. captures = {:?}",
+        captures
+    );
+    // t SIM deve ser capturada — é variável do escopo outer.
+    assert!(
+        captures.iter().any(|c| c.name == "t"),
+        "t é variável do escopo outer, deveria ser capture. captures = {:?}",
+        captures
+    );
+}
+
+#[test]
+fn closure_com_funcao_global_mod_e2e() {
+    // lambda x: mod x 2 — mod é global, x é param. Sem captures.
+    // mod 7 2 = 1
+    let (raw, ty) = eval_src("let f := lambda x: mod x 2\nf 7");
+    assert_eq!(ty, Ty::int());
+    assert_eq!(untag_smi(raw), 1);
+}
+
+#[test]
+fn closure_com_funcao_global_and_e2e() {
+    // lambda x: and x t — and é global, x é param, t é capturada.
+    // and True True = True (SMI: True é variante 0 do enum Boolean → SMI 1)
+    let (raw, _) = eval_src("let t := True\nlet f := lambda x: and x t\nf t");
+    // True é variant index 0 do enum Boolean → SMI (0 << 1) | 1 = 1
+    assert_eq!(raw, 1, "esperado True (SMI=1), got raw={raw}");
+}

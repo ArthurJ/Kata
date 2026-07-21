@@ -1,0 +1,28 @@
+# map/filter/fold — higher-order functions sobre List::Int.
+# Exercita os três builtins interceptados pelo codegen (core.kata).
+
+action main
+    let numeros := [1 2 3 4 5]
+
+    echo!("--- map: multiplicar por 2 ---")
+    let dobro := map (* _ 2) numeros
+    for x in dobro
+        echo!(x)
+
+    echo!("--- filter: elementos pares ---")
+    let pares := filter (lambda x: = 0 (mod x 2)) numeros
+    for x in pares
+        echo!(x)
+
+    echo!("--- fold: soma acumulada ---")
+    let soma := fold (+ _ _) 0 numeros
+    echo!(soma)
+
+    echo!("--- map com lista ---")
+    let triplos := map (* _ 3) [1 2 3]
+    for x in triplos
+        echo!(x)
+
+    echo!("fim")
+
+main!()
