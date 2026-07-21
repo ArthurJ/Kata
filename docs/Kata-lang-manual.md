@@ -1757,13 +1757,14 @@ Sem `if/else`, a Kata-Lang usa pattern matching estrutural e guards condicionais
 * **Guards:** Testes computacionais booleanos. Separados por `:`.
 * **Curto-circuito:** Avaliação de cima para baixo. Primeiro guard verdadeiro
   retorna.
-* **`otherwise:`** Fallback mandatário no fim de qualquer corrente de Guards.
+* **`otherwise:`** Fallback mandatário no fim de qualquer corrente de Guards. Sem guards, o body direto dispensa `otherwise`.
 
 ### 16.1 `with` Block — Computações Prévias
 
-`with` é um bloco de bindings nomeados que aparece **depois dos guards** no fim
-da cláusula lambda (como `where` em Haskell). Os bindings são visíveis em
-**todos os guards da cláusula**, mesmo sendo escritos depois — a ordem é visual
+`with` é um bloco de bindings nomeados que aparece **depois dos guards** (ou do
+body direto, quando não há guards) no fim da cláusula lambda (como `where` em
+Haskell). Os bindings são visíveis em **todos os guards da cláusula**, mesmo
+sendo escritos depois — a ordem é visual
 (legibilidade), a semântica é que os bindings são avaliados antes dos guards.
 
 ```kata

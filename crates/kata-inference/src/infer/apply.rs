@@ -311,19 +311,13 @@ pub(crate) fn infer_apply(
             }
 
             if top_count == 0 {
-                // Nenhuma overload compatível com o hint tem args que casam.
-                return Err(MiddleError::TypeMismatch {
-                    expected: format!("{hint_ty:?} (hint de retorno) com args compatíveis"),
-                    found: format!(
-                        "nenhuma overload de {func_name} com retorno {hint_ty:?} aceita os argumentos fornecidos"
-                    ),
-                    span: (*span).into(),
-                });
-            }
-
-            if top_count == 1
-                && let Some(oi) = best_overload
-            {
+                // Nenhuma overload compatível com o hint tem args que casam
+                // via match_score. Pode ser que uma overload genérica casasse
+                // via unify (ex: `+ :: List::A List::A => List::A` com args
+                // `List(Int)`), mas match_score não unifica type params em
+                // Ty::List. Cair para o caminho genérico abaixo em vez de
+                // retornar erro imediatamente.
+            } else if top_count == 1 && let Some(oi) = best_overload {
                 let overload = oi.clone();
                 let callee_ty =
                     Ty::Function(overload.params.clone(), Box::new(overload.ret.clone()));
@@ -346,12 +340,14 @@ pub(crate) fn infer_apply(
                     },
                     Effect::Puro,
                 ));
+            } else {
+                // top_count > 1 — ambíguo
+                return Err(MiddleError::AmbiguousDispatch {
+                    name: func_name,
+                    span: (*span).into(),
+                });
             }
-
-            return Err(MiddleError::AmbiguousDispatch {
-                name: func_name,
-                span: (*span).into(),
-            });
+            // top_count == 0: cair para o caminho genérico abaixo
         }
 
         // Caminho genérico — se nenhuma overload não-genérica casa,

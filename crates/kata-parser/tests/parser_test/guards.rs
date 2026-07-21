@@ -157,3 +157,60 @@ fn lambda_with_block_multiple_bindings() {
         other => panic!("expected EntryExpr(Lambda), got {other:?}"),
     }
 }
+
+// ── Body direto sem guards + with (sem otherwise) ───────────────
+
+#[test]
+fn lambda_body_direct_with_block_no_guards() {
+    // Lambda com body direto (sem guards) + with block.
+    // `otherwise:` é dispensável quando não há guards competindo.
+    let src = "lambda [pivo:resto]:\n    + (quicksort menores) [pivo : (quicksort maiores)]\n    with\n        menores := filter (< _ pivo) resto\n        maiores := filter (>= _ pivo) resto";
+    let m = parse_src(src);
+    let item = first_item(&m);
+    match item {
+        Item::EntryExpr(e) => match &e.node {
+            Expr::Lambda {
+                guards,
+                body,
+                with_bindings,
+                ..
+            } => {
+                // Sem guards — body direto
+                assert!(guards.is_empty(), "deveria não ter guards");
+                // Body é a expressão direta (Apply de +)
+                match &body.node {
+                    Expr::Apply { callee, .. } => {
+                        assert_eq!(callee.node, Expr::Ident { name: "+".into() });
+                    }
+                    other => panic!("expected Apply body, got {other:?}"),
+                }
+                // with block tem 2 bindings
+                assert_eq!(with_bindings.len(), 2);
+                assert_eq!(with_bindings[0].name, "menores");
+                assert_eq!(with_bindings[1].name, "maiores");
+            }
+            other => panic!("expected Lambda, got {other:?}"),
+        },
+        other => panic!("expected EntryExpr(Lambda), got {other:?}"),
+    }
+}
+
+#[test]
+fn sig_clause_body_direct_no_guards_with_block() {
+    // Cláusula de função nomeada com body direto (sem guards) + with.
+    let src = "quicksort :: [Int] => [Int]\n    lambda []: []\n    lambda [pivo:resto]:\n        + (quicksort menores) [pivo : (quicksort maiores)]\n        with\n            menores := filter (< _ pivo) resto\n            maiores := filter (>= _ pivo) resto";
+    let m = parse_src(src);
+    let item = first_item(&m);
+    match item {
+        Item::Sig { name, body, .. } => {
+            assert_eq!(name, "quicksort");
+            let clauses = body.as_ref().expect("body should have clauses");
+            assert_eq!(clauses.len(), 2);
+            // Segunda cláusula: body direto sem guards
+            let clause = &clauses[1].node;
+            assert!(clause.guards.is_empty(), "segunda cláusula não deveria ter guards");
+            assert_eq!(clause.with_bindings.len(), 2);
+        }
+        other => panic!("expected Sig, got {other:?}"),
+    }
+}

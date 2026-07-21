@@ -589,7 +589,7 @@ Setta `LOG_CONFIG` TLS no fiber atual. Filhos spawnados herdam via snapshot no `
 | `export` | Exporta itens |
 | `as` | Alias de import (`import x as y`) ou de tipo (`data (...) as Nome`, `alias T as Nome`) |
 | `with` | Bloco bottom-up ao final de lambda: computações prévias nomeadas para Guards, e restrições de genéricos |
-| `match` | Pattern matching disponível em ambos os domínios (funções puras e Actions). `otherwise` é obrigatório quando o compilador não consegue provar estaticamente que os braços cobrem todas as variantes possíveis do tipo inspecionado. Em funções puras, cada braço deve retornar um valor (expressão); em Actions, braços podem ser statements. |
+| `match` | Pattern matching disponível em ambos os domínios (funções puras e Actions). `otherwise` é obrigatório quando há guards na cláusula e o compilador não consegue provar estaticamente que os braços cobrem todas as variantes possíveis do tipo inspecionado. Sem guards, o body direto dispensa `otherwise`. Em funções puras, cada braço deve retornar um valor (expressão); em Actions, braços podem ser statements. |
 | `return` | Early return em Actions. Não existe em funções puras. |
 | `if` | **Não existe — invariante absoluta.** Lógica condicional é expressa via pattern matching (que garante exaustividade) e guards (que garantem fallback via `otherwise`). |
 

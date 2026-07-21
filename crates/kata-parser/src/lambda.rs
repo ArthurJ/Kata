@@ -56,8 +56,17 @@ impl Parser {
     ///         y := + x 1
     /// ```
     ///
+    /// Ou, sem guards (apenas body + with opcional):
+    /// ```text
+    /// lambda [pivo:resto]:
+    ///     + (quicksort menores) [pivo : (quicksort maiores)]
+    ///     with
+    ///         menores := filter (< _ pivo) resto
+    /// ```
+    ///
     /// Retorna um `Expr::Lambda` com guards e with_bindings preenchidos.
-    /// O `body` é preenchido com o body do último guard (ou otherwise) como fallback.
+    /// O `body` é preenchido com o body do último guard (ou otherwise) como fallback,
+    /// ou com o body direto quando não há guards.
     pub(crate) fn parse_lambda_body_block(
         &mut self,
         start: kata_ast::Span,
@@ -78,7 +87,7 @@ impl Parser {
                 break;
             }
 
-            // `with` block — aparece depois dos guards
+            // `with` block — aparece depois dos guards (ou do body direto)
             if matches!(self.peek(), Token::With) {
                 self.advance(); // consume `with`
                 self.expect(&Token::Indent, "INDENT (with bindings)")?;
@@ -96,15 +105,42 @@ impl Parser {
                 continue;
             }
 
-            // Guard clause: `> expr: body` ou `otherwise: body`
-            let guard = self.parse_guard_clause()?;
-            last_body = Some(guard.body.clone());
-            guards.push(guard);
+            // `otherwise:` — guard sem condição
+            if matches!(self.peek(), Token::Otherwise) {
+                let guard = self.parse_guard_clause()?;
+                last_body = Some(guard.body.clone());
+                guards.push(guard);
+                continue;
+            }
+
+            // Não é `with` nem `otherwise`. Pode ser:
+            //   - guard clause: `expr: body` (condição seguida de `:`)
+            //   - body direto: `expr` (sem `:` — só quando não há guards)
+            let cond = parse_expr(self)?;
+            if matches!(self.peek(), Token::Colon) {
+                // Guard clause com condição
+                self.advance(); // consome `:`
+                let guard_body = parse_expr(self)?;
+                if matches!(self.peek(), Token::StmtSep) {
+                    self.advance();
+                }
+                last_body = Some(guard_body.clone());
+                guards.push(GuardClause {
+                    condition: Some(cond),
+                    body: guard_body,
+                });
+            } else {
+                // Body direto sem guards — expressão única (seguida de `with` opcional)
+                if matches!(self.peek(), Token::StmtSep) {
+                    self.advance();
+                }
+                last_body = Some(cond);
+            }
         }
 
         self.expect(&Token::Dedent, "DEDENT (fim dos guards)")?;
 
-        // body é o último guard body (fallback). Se não há guards, erro.
+        // body é o último guard body (fallback) ou body direto quando não há guards.
         let body = last_body.unwrap_or_else(|| Spanned::new(Expr::Unit, start));
 
         let end_span = self
