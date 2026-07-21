@@ -154,6 +154,24 @@ pub(crate) fn lower_guards(
     }
     // next_test_block já foi selado dentro do loop (ou é o fallback block).
     lower.builder.seal_block(cont_block);
+
+    // Se o último guard/otherwise emitiu um return_call (tail call), o builder
+    // está num block dummy e emitted_tail_call = true. O cont_block pode ainda
+    // ter predecessores (guards que não fizeram tail call) e precisa de terminador.
+    // Adicionar return_ no cont_block e criar dummy para o builder continuar.
+    if lower.emitted_tail_call {
+        // cont_block precisa de terminador — guards anteriores pulam para cá.
+        lower.builder.switch_to_block(cont_block);
+        let result = lower.builder.block_params(cont_block)[0];
+        lower.builder.ins().return_(&[result]);
+        // Dummy block para o builder continuar (inalcançável).
+        let dummy = lower.builder.create_block();
+        lower.builder.seal_block(dummy);
+        lower.builder.switch_to_block(dummy);
+        lower.builder.ins().trap(cranelift_codegen::ir::TrapCode::user(1).expect("trap code 1"));
+        return Ok(result);
+    }
+
     lower.builder.switch_to_block(cont_block);
     let result = lower.builder.block_params(cont_block)[0];
     Ok(result)
