@@ -97,5 +97,10 @@ pub extern "C" fn kata_rt_select(handles: *const i64, n_handles: i64, timeout_ms
     }
 }
 
-#[allow(dead_code)] // Exportado para testes externos verificarem o sentinel
-pub const SELECT_TIMEOUT_SENTINEL: i64 = SELECT_TIMEOUT;
+// Sentinel de timeout do select. Rebaixado de `pub` para `pub(crate)` na
+// auditoria de visibilidade (Passo 5): zero consumidores cross-crate e
+// nenhum re-export em `lib.rs`. `mod select` já é `pub(crate)`, então o
+// `pub` era redundante. Mantido como `pub(crate)` para uso intra-crate
+// futuro; `#[allow(dead_code)]` pois atualmente nenhum caller o lê.
+#[allow(dead_code)] // usado apenas em testes inline (quando houver)
+pub(crate) const SELECT_TIMEOUT_SENTINEL: i64 = SELECT_TIMEOUT;
