@@ -37,6 +37,7 @@ mod recursion;
 mod refined_builders;
 mod show_synthesis;
 mod show_synthesis_helpers;
+mod show_synthesis_list;
 mod sugar;
 mod variant;
 mod variant_construct;
@@ -139,7 +140,7 @@ pub fn infer_module(
     // 1e. sintetiza `show` para List::A — duas funções genéricas mutuamente
     //     recursivas (__kata_show__List e __kata_show__List_rest) com pattern
     //     matching Cons/Nil. Registra `List implements SHOW` (type_params: ["A"]).
-    let list_show_functions = show_synthesis::synthesize_list_show_functions(
+    let list_show_functions = show_synthesis_list::synthesize_list_show_functions(
         &mut dispatch_table,
         &mut interface_registry,
     );
@@ -310,7 +311,7 @@ fn infer_named_function(
             .guards
             .iter()
             .map(|g| GuardClause {
-                condition: g.condition.as_ref().map(|c| crate::desugar::desugar(c)),
+                condition: g.condition.as_ref().map(crate::desugar::desugar),
                 body: crate::desugar::desugar(&g.body),
             })
             .collect();

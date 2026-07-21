@@ -8,7 +8,7 @@
 use kata_ast::{Expr, Span, Spanned};
 use kata_core::dispatch::{OverloadInfo, Score, match_score};
 use kata_core::escape::EscapeTarget;
-use kata_core::ty::{Ty, TypeEnv, ty_list_to_string};
+use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 use std::collections::HashMap;
 
@@ -461,7 +461,7 @@ pub(crate) fn infer_apply(
                         (format!("{}", arg_types[0]), format!("{}", arg_types[1]))
                     } else {
                         (
-                            format!("{}", arg_types.get(0).cloned().unwrap_or(Ty::Unit)),
+                            format!("{}", arg_types.first().cloned().unwrap_or(Ty::Unit)),
                             format!("{}", Ty::Unit),
                         )
                     };
