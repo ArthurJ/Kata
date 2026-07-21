@@ -155,9 +155,10 @@ pub(crate) fn test_single_pattern(
             // seguro. O select garante que os loads usam val quando não-nulo
             // e o dummy quando nulo — o resultado do dummy é descartado porque
             // not_nil é false, então o braço Cons não é selecionado.
-            let dummy_slot = lower.builder.func.create_sized_stack_slot(
-                StackSlotData::new(StackSlotKind::ExplicitSlot, 16, 3),
-            );
+            let dummy_slot = lower
+                .builder
+                .func
+                .create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 16, 3));
             let zero = lower.builder.ins().iconst(I64, 0);
             lower.builder.ins().stack_store(zero, dummy_slot, 0);
             lower.builder.ins().stack_store(zero, dummy_slot, 8);
