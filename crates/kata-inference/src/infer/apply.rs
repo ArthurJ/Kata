@@ -317,7 +317,9 @@ pub(crate) fn infer_apply(
                 // `List(Int)`), mas match_score não unifica type params em
                 // Ty::List. Cair para o caminho genérico abaixo em vez de
                 // retornar erro imediatamente.
-            } else if top_count == 1 && let Some(oi) = best_overload {
+            } else if top_count == 1
+                && let Some(oi) = best_overload
+            {
                 let overload = oi.clone();
                 let callee_ty =
                     Ty::Function(overload.params.clone(), Box::new(overload.ret.clone()));

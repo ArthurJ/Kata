@@ -197,9 +197,7 @@ pub(crate) fn instantiate_generic_action_call(
 
     // Procura overload genérico com mesma aridade dos args.
     let arg_types: Vec<Ty> = match &args.node.kind {
-        TypedExprKind::Tuple { elements } => {
-            elements.iter().map(|e| e.node.ty.clone()).collect()
-        }
+        TypedExprKind::Tuple { elements } => elements.iter().map(|e| e.node.ty.clone()).collect(),
         TypedExprKind::Unit => Vec::new(),
         _ => vec![args.node.ty.clone()],
     };

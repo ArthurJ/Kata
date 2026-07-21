@@ -430,5 +430,3 @@ fn build_enum_show_arm(
         body,
     }
 }
-
-

@@ -208,7 +208,10 @@ fn sig_clause_body_direct_no_guards_with_block() {
             assert_eq!(clauses.len(), 2);
             // Segunda cláusula: body direto sem guards
             let clause = &clauses[1].node;
-            assert!(clause.guards.is_empty(), "segunda cláusula não deveria ter guards");
+            assert!(
+                clause.guards.is_empty(),
+                "segunda cláusula não deveria ter guards"
+            );
             assert_eq!(clause.with_bindings.len(), 2);
         }
         other => panic!("expected Sig, got {other:?}"),

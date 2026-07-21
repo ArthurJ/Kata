@@ -5,16 +5,15 @@
 //! - `__kata_show__List :: List::A => Text`
 //! - `__kata_show__List_rest :: List::A => Text`
 
-use kata_ast::Spanned;
 use kata_ast::Span;
+use kata_ast::Spanned;
 use kata_core::dispatch::{DispatchTable, OverloadInfo};
 use kata_core::escape::EscapeTarget;
 use kata_core::interface_registry::{ImplEntry, ImplMethodInfo, InterfaceRegistry};
 use kata_core::ty::Ty;
 
 use crate::typed::{
-    Effect, TypedExpr, TypedExprKind, TypedFunction, TypedLambdaClause, TypedMatchArm,
-    TypedPattern,
+    Effect, TypedExpr, TypedExprKind, TypedFunction, TypedLambdaClause, TypedMatchArm, TypedPattern,
 };
 
 use super::show_synthesis_helpers::{show_call, show_expr, string_concat, text_lit};
