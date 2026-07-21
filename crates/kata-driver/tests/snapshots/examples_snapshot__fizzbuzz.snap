@@ -1,0 +1,9 @@
+---
+source: crates/kata-driver/tests/examples_snapshot.rs
+expression: output
+---
+Fizz
+Buzz
+FizzBuzz
+7
+2
