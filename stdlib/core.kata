@@ -226,9 +226,12 @@ from_int :: Int => Rational
 @ffi("kata_rt_print")
 action _print (msg::Text) => Unit
 
+@ffi("kata_rt_println")
+action _println (msg::Text) => Unit
+
 action echo (msg::SHOW) => Unit
     let s := show msg
-    _print!(s)
+    _println!(s)
 
 @ffi("kata_rt_panic")
 action panic (msg::Text) => Unit

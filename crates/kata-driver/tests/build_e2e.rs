@@ -156,11 +156,11 @@ fn build_action_echo() {
 
     let (stdout, code) = run_built_binary("build_action_echo_bin");
     assert_eq!(code, 0, "binário AOT deve exit 0 — stdout: {stdout}");
-    // echo! imprime sem newline, Unit imprime "()" — resultado: "helloworld()"
+    // echo! imprime com newline, Unit imprime "()" — resultado: "hello\nworld\n()"
     assert_eq!(
         stdout.trim(),
-        "helloworld()",
-        "action echo deve imprimir helloworld()"
+        "hello\nworld\n()",
+        "action echo deve imprimir hello\\nworld\\n()"
     );
 }
 
