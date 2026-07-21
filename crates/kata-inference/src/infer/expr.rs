@@ -196,6 +196,75 @@ pub(crate) fn infer_expr_hinted(
                 Effect::Puro,
             )
         }
+        // ── LetDestruct: let (x, y, ...) := expr ──────────────
+        // Desugaring: `let __t := expr` + `let x := __t.0` + ...
+        // Gera um único nó TAST que faz o binding temporário e os
+        // bindings individuais via FieldAccess. O codegen processa
+        // os Lets em sequência (cada um define uma variável local).
+        Expr::LetDestruct { names, value } => {
+            let typed_value = infer_expr(&value.node, &value.span, env, ctx, false)?;
+            let val_ty = typed_value.ty.clone();
+            let temp_name = "__let_destruct";
+
+            // Define o temporário no escopo.
+            env.define(temp_name, val_ty.clone());
+
+            // Para cada nome (pulando `_`), define no escopo via FieldAccess.
+            let mut field_bindings: Vec<(String, Spanned<TypedExpr>)> = Vec::new();
+            for (i, name) in names.iter().enumerate() {
+                if name == "_" {
+                    continue;
+                }
+                // Tipo do elemento i da tupla.
+                let elem_ty = match &val_ty {
+                    Ty::Tuple(tys) => tys.get(i).cloned().unwrap_or(Ty::Unit),
+                    _ => {
+                        return Err(MiddleError::TypeMismatch {
+                            expected: "tupla para destructuring".into(),
+                            found: format!("{}", val_ty),
+                            span: value.span.into(),
+                        });
+                    }
+                };
+                env.define(name, elem_ty.clone());
+
+                // Constrói FieldAccess: __let_destruct.i
+                let temp_expr = TypedExpr {
+                    span: Span::synthetic(),
+                    ty: val_ty.clone(),
+                    tail_pos: false,
+                    escape: EscapeTarget::Local,
+                    effect: Effect::Puro,
+                    kind: TypedExprKind::Ident {
+                        name: temp_name.to_string(),
+                    },
+                };
+                let access = TypedExpr {
+                    span: Span::synthetic(),
+                    ty: elem_ty,
+                    tail_pos: false,
+                    escape: EscapeTarget::Local,
+                    effect: Effect::Puro,
+                    kind: TypedExprKind::FieldAccess {
+                        expr: Box::new(Spanned::new(temp_expr, Span::synthetic())),
+                        struct_name: String::new(),
+                        field_name: String::new(),
+                        field_index: i as u32,
+                    },
+                };
+                field_bindings.push((name.clone(), Spanned::new(access, Span::synthetic())));
+            }
+
+            (
+                Ty::Unit,
+                TypedExprKind::LetDestruct {
+                    temp_name: temp_name.to_string(),
+                    value: Box::new(Spanned::new(typed_value, value.span)),
+                    bindings: field_bindings,
+                },
+                Effect::Puro,
+            )
+        }
 
         // ── Qualificação de variante (sem Apply = unitária) ─────
         Expr::VariantQual { enum_name, variant } => {

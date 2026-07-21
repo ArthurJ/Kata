@@ -824,3 +824,8 @@ abordado quando o Fio 11 introduzir casos reais de fibers long-lived.
 - `@heapstack` (otimização heurística de arena em loops)
 - `@restart` (retry policy para Actions)
 - Doc comments (`///`, `"""doc"""`)
+- **Tuplas variádicas (`T...`)** — sintaxe `Text...` numa tupla indica "pelo menos um
+  elemento do tipo precedente" `(Int, Text..., Float)`. Permite que actions recebam
+  múltiplos argumentos de tipo heterogêneo com aridade variável. Exige extensão do
+  type system (`Ty::Tuple` com "rest element"), parser (`Token::TripleDot`), pattern
+  matching (rest binding em tupla), e codegen (loop sobre os elementos rest).

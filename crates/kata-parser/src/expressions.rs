@@ -33,6 +33,51 @@ impl Parser {
     pub(crate) fn parse_let(&mut self) -> Result<Spanned<Expr>, FrontendError> {
         let start = self.peek_span();
         self.expect(&Token::Let, "`let`")?;
+
+        // `let (x, y, ...) := expr` — destructuring de tupla.
+        if matches!(self.peek(), Token::LParen) {
+            self.advance(); // consume (
+            let mut names: Vec<String> = Vec::new();
+            // `()` — tupla vazia
+            if matches!(self.peek(), Token::RParen) {
+                self.advance();
+            } else {
+                loop {
+                    let name = match self.peek() {
+                        Token::Ident(s) => {
+                            let n = s.clone();
+                            self.advance();
+                            n
+                        }
+                        _ => return Err(self.error("binding name or `_` in destructuring")),
+                    };
+                    names.push(name);
+                    if matches!(self.peek(), Token::Comma) {
+                        self.advance();
+                        // trailing comma: `(x, y,)`
+                        if matches!(self.peek(), Token::RParen) {
+                            self.advance();
+                            break;
+                        }
+                    } else {
+                        self.expect(&Token::RParen, "`)` para fechar destructuring")?;
+                        break;
+                    }
+                }
+            }
+            self.expect(&Token::BindAssign, "`:=`")?;
+            let value = parse_expr(self)?;
+            let span = start.cover(value.span);
+            return Ok(Spanned::new(
+                Expr::LetDestruct {
+                    names,
+                    value: Box::new(value),
+                },
+                span,
+            ));
+        }
+
+        // `let name := expr` — binding simples.
         let name = match self.peek() {
             Token::Ident(s) => {
                 let n = s.clone();

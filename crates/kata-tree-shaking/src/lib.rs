@@ -254,6 +254,7 @@ fn collect_refs(
         }
 
         TypedExprKind::Let { value, .. }
+        | TypedExprKind::LetDestruct { value, .. }
         | TypedExprKind::Var { value, .. }
         | TypedExprKind::Reassign { value, .. } => {
             collect_refs(&value.node, reached_fns, reached_actions, fn_names)

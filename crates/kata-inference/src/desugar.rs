@@ -56,6 +56,13 @@ fn desugar_pipes(expr: &Spanned<Expr>) -> Spanned<Expr> {
             },
             expr.span,
         ),
+        Expr::LetDestruct { names, value } => Spanned::new(
+            Expr::LetDestruct {
+                names: names.clone(),
+                value: Box::new(desugar_pipes(value)),
+            },
+            expr.span,
+        ),
         Expr::Lambda {
             patterns,
             body,

@@ -30,6 +30,12 @@ pub(crate) fn show_expr(arg: Spanned<TypedExpr>, arg_ty: &Ty) -> Spanned<TypedEx
         Ty::Sum(name) => show_call(arg, name.clone(), arg_ty),
         Ty::Struct(name) => show_call(arg, name.clone(), arg_ty),
         Ty::List(_) => show_call(arg, "List".to_string(), arg_ty),
+        Ty::Tuple(element_tys) => {
+            // Constrói inline: string_concat("(", string_concat(show t.0,
+            //   string_concat(", ", string_concat(show t.1, ... ")"))))
+            // Cada elemento é acessado via FieldAccess com field_index = i.
+            build_tuple_show_inline(arg, element_tys)
+        }
         Ty::Var(name) => {
             // Ty::Var em enum genérico. Produz `show v` com ffi_symbol: None.
             // O monomorphizador, ao instanciar a função sintetizada, substitui
@@ -217,4 +223,55 @@ pub(crate) fn string_concat(
         },
         Span::synthetic(),
     )
+}
+
+/// Constrói `show` para `Tuple` inline (sem função separada no DispatchTable).
+///
+/// Gera: `string_concat("(", string_concat(show t.0, string_concat(", ",
+///   string_concat(show t.1, ")"))))` para tupla de 2 elementos.
+///
+/// Cada elemento é acessado via `FieldAccess { expr: <arg>, field_index: i }`
+/// — o codegen faz `load ptr + i*8`, que é o layout de tupla.
+///
+/// O `arg` é a expressão Ident que referencia a tupla (ex: `h` no body de
+/// `__kata_show__List`). Os `element_tys` são os tipos concretos de cada
+/// elemento — usados para despachar `show` ao tipo correto.
+fn build_tuple_show_inline(
+    arg: Spanned<TypedExpr>,
+    element_tys: &[Ty],
+) -> Spanned<TypedExpr> {
+    // Tupla vazia: "()"
+    if element_tys.is_empty() {
+        return text_lit("()".to_string());
+    }
+
+    let mut parts: Vec<Spanned<TypedExpr>> = Vec::new();
+    parts.push(text_lit("(".to_string()));
+
+    for (i, elem_ty) in element_tys.iter().enumerate() {
+        if i > 0 {
+            parts.push(text_lit(", ".to_string()));
+        }
+        // FieldAccess: arg.i — carrega o elemento i da tupla.
+        let access = TypedExpr {
+            span: Span::synthetic(),
+            ty: elem_ty.clone(),
+            tail_pos: false,
+            escape: EscapeTarget::Local,
+            effect: Effect::Puro,
+            kind: TypedExprKind::FieldAccess {
+                expr: Box::new(arg.clone()),
+                struct_name: String::new(),
+                field_name: String::new(),
+                field_index: i as u32,
+            },
+        };
+        let access_spanned = Spanned::new(access, Span::synthetic());
+        parts.push(show_expr(access_spanned, elem_ty));
+    }
+
+    parts.push(text_lit(")".to_string()));
+
+    let result = parts.into_iter().reduce(string_concat);
+    result.expect("tuple show tem pelo menos 2 parts (abre + fecha)")
 }

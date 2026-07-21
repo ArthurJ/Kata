@@ -278,6 +278,22 @@ fn instantiate_kind(kind: &TypedExprKind, subs: &Substitutions) -> TypedExprKind
             )),
         },
 
+        TypedExprKind::LetDestruct { temp_name, value, bindings } => {
+            TypedExprKind::LetDestruct {
+                temp_name: temp_name.clone(),
+                value: Box::new(Spanned::new(
+                    instantiate_typed_expr(&value.node, subs),
+                    value.span,
+                )),
+                bindings: bindings
+                    .iter()
+                    .map(|(name, expr)| {
+                        (name.clone(), Spanned::new(instantiate_typed_expr(&expr.node, subs), expr.span))
+                    })
+                    .collect(),
+            }
+        }
+
         TypedExprKind::Lambda {
             func_name,
             param_types,

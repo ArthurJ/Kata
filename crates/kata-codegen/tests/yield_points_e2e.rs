@@ -10,7 +10,7 @@
 //! 3. ForIn também cede — yield_check nos headers de List/Array/Range.
 //!
 //! Limitações do parser (pitfall #45):
-//! - `let (tx, rx) := ...` não suportado — usar `ch.0` / `ch.1`.
+//! - `let (tx, rx) := ...` suportado via destructuring de tupla.
 //! - `()` para Unit (não `Unit` como Ident).
 //! - Valores recebidos têm tipo `Var("T0")` — evitar operações aritméticas
 //!   sobre o valor recebido; retorná-lo diretamente.
@@ -154,9 +154,7 @@ fn yield_loop_nao_bloqueia() {
   tx !> acc
   ()
 action main => Int
-  let ch := channel!()
-  let tx := ch.0
-  let rx := ch.1
+  let (tx, rx) := channel!()
   fork!(loop_worker, (tx))
   rx <! val
   val
@@ -187,9 +185,7 @@ fn yield_forin_nao_bloqueia() {
   tx !> acc
   ()
 action main => Int
-  let ch := channel!()
-  let tx := ch.0
-  let rx := ch.1
+  let (tx, rx) := channel!()
   fork!(forin_worker, (tx))
   rx <! val
   val

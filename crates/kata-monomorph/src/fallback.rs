@@ -96,6 +96,7 @@ fn fallback_in_expr(expr_span: &mut Spanned<TypedExpr>) {
             fallback_in_expr(inner);
         }
         TypedExprKind::Let { value, .. }
+        | TypedExprKind::LetDestruct { value, .. }
         | TypedExprKind::Var { value, .. }
         | TypedExprKind::Reassign { value, .. } => {
             fallback_in_expr(value);

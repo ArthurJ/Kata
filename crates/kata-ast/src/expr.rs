@@ -57,6 +57,13 @@ pub enum Expr {
         name: String,
         value: Box<Spanned<Expr>>,
     },
+    /// `let (x, y, ...) := expr` — destructuring de tupla.
+    /// O typeck desugaring: `let __t := expr; let x := __t.0; let y := __t.1; ...`
+    /// Os nomes são os bindings; `_` pula o elemento (não gera binding).
+    LetDestruct {
+        names: Vec<String>,
+        value: Box<Spanned<Expr>>,
+    },
 
     // ── Qualificação de variante ────────────────────────
     /// `Enum::Variante` — qualificação de variante de enum.

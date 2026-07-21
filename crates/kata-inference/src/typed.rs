@@ -121,6 +121,16 @@ pub enum TypedExprKind {
         name: String,
         value: Box<Spanned<TypedExpr>>,
     },
+    /// `let (x, y, ...) := expr` — destructuring de tupla.
+    /// `temp_name` recebe o valor; cada binding em `bindings` é
+    /// `FieldAccess(temp_name, i)` com o tipo do elemento.
+    /// O codegen faz `def_var(temp_name, value)` seguido de
+    /// `def_var(name, field_access)` para cada binding.
+    LetDestruct {
+        temp_name: String,
+        value: Box<Spanned<TypedExpr>>,
+        bindings: Vec<(String, Spanned<TypedExpr>)>,
+    },
     /// `Enum::Variante` — qualificação de variante de enum unitária.
     /// `Boolean::True` → `Ty::Sum("Boolean")`.
     /// Só usado para variantes sem payload.

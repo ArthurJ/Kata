@@ -7,8 +7,7 @@
 //! Os testes producer/consumer usam `fork!` para criar fibers separados
 //! que comunicam via canais. O scheduler coordena o bloqueio/desbloqueio.
 //!
-//! Nota: o parser não suporta destructuring `let (tx, rx) := ...`.
-//! Usamos `ch.0` (sender) e `ch.1` (receiver) via DotAccess/FieldAccess.
+//! Destructuring `let (tx, rx) := ...` é suportado (desugar para FieldAccess).
 
 use kata_codegen::jit_eval;
 use kata_core::InterfaceRegistry;
@@ -146,9 +145,7 @@ fn producer_consumer_rendezvous() {
   tx !> 42
   ()
 action main => Int
-  let ch := channel!()
-  let tx := ch.0
-  let rx := ch.1
+  let (tx, rx) := channel!()
   fork!(prod, (tx))
   rx <! val
   val
@@ -173,9 +170,7 @@ fn producer_consumer_queue_buffered() {
   tx !> 7
   ()
 action main => Int
-  let ch := queue!(2)
-  let tx := ch.0
-  let rx := ch.1
+  let (tx, rx) := queue!(2)
   fork!(prod, (tx))
   rx <! val
   val
@@ -197,8 +192,7 @@ main!()"#;
 #[test]
 fn deadlock_sem_producer() {
     let src = r#"action main => Int
-  let ch := channel!()
-  let rx := ch.1
+  let (_, rx) := channel!()
   rx <! val
   val
 main!()"#;
@@ -223,9 +217,7 @@ fn multiplos_valores_queue() {
   tx !> 30
   ()
 action main => Int
-  let ch := queue!(3)
-  let tx := ch.0
-  let rx := ch.1
+  let (tx, rx) := queue!(3)
   fork!(prod, (tx))
   rx <! a
   rx <! b
@@ -257,9 +249,7 @@ fn queue_backpressure_capacity_mais_um() {
   tx !> 30
   ()
 action main => Int
-  let ch := queue!(2)
-  let tx := ch.0
-  let rx := ch.1
+  let (tx, rx) := queue!(2)
   fork!(prod, (tx))
   rx <! a
   rx <! b
@@ -347,9 +337,7 @@ fn structured_concurrency_parent_espera_fork() {
   tx !> acc
   ()
 action main => Int
-  let ch := channel!()
-  let tx := ch.0
-  let rx := ch.1
+  let (tx, rx) := channel!()
   fork!(worker, (tx))
   rx <! result
   result
@@ -386,9 +374,7 @@ fn escape_canal_sobrevive_sender() {
   tx !> 42
   ()
 action main => Int
-  let ch := channel!()
-  let tx := ch.0
-  let rx := ch.1
+  let (tx, rx) := channel!()
   fork!(prod, (tx))
   rx <! v
   v

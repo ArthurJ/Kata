@@ -33,9 +33,11 @@ mod instantiate;
 mod instantiate_collections;
 mod naming;
 mod overload_resolution;
+mod tuple_show;
 
 use kata_ast::Spanned;
 use kata_core::dispatch::DispatchTable;
+use kata_core::ty::Ty;
 use kata_inference::{
     FusedStage, TypedAction, TypedExpr, TypedExprKind, TypedFunction, TypedLambdaClause,
     TypedModule,
@@ -239,6 +241,20 @@ fn rewrite_typed_expr(expr_span: &mut Spanned<TypedExpr>, ctx: &MonoCtx, acc: &m
                 if !instantiated {
                     resolve_erased_ffi_symbol(&name, args, ffi_symbol, ctx);
                 }
+
+                // Layer 6: show de Tuple sem overload concreto.
+                // Se o ffi_symbol ainda é None e o callee é `show` com arg
+                // Ty::Tuple, substitui a Closure inteira pelo body inline
+                // (string_concat de show de cada elemento via FieldAccess).
+                if ffi_symbol.is_none() && name == "show" && args.len() == 1 {
+                    if let Ty::Tuple(_) = &args[0].node.ty {
+                        let replacement = crate::tuple_show::rewrite_show_tuple_call(
+                            &args[0],
+                        );
+                        *expr_span = replacement;
+                        return;
+                    }
+                }
             }
         }
 
@@ -264,6 +280,7 @@ fn rewrite_typed_expr(expr_span: &mut Spanned<TypedExpr>, ctx: &MonoCtx, acc: &m
         }
 
         TypedExprKind::Let { value, .. }
+        | TypedExprKind::LetDestruct { value, .. }
         | TypedExprKind::Var { value, .. }
         | TypedExprKind::Reassign { value, .. } => {
             rewrite_typed_expr(value, ctx, acc);

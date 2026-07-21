@@ -304,6 +304,35 @@ pub(crate) fn lower_expr(
             // Let retorna Unit.
             Ok(ctx.builder.ins().iconst(I64, 0))
         }
+        // ── LetDestruct: let (x, y, ...) := expr ──
+        // 1. Avalia expr e define no temp_name
+        // 2. Para cada binding, faz FieldAccess(temp, i) e define
+        TypedExprKind::LetDestruct {
+            temp_name,
+            value,
+            bindings,
+        } => {
+            // Se o value é um Lambda com captures, registrar.
+            if let TypedExprKind::Lambda { captures, .. } = &value.node.kind
+                && !captures.is_empty()
+            {
+                ctx.closure_captures.insert(temp_name.clone(), captures.clone());
+            }
+            let val = lower_expr(&value.node, ctx)?;
+            let clif_ty = ty_to_clif(&value.node.ty);
+            let temp_var = ctx.new_var(temp_name, clif_ty);
+            ctx.builder.def_var(temp_var, val);
+
+            // Para cada binding, carrega o elemento via FieldAccess.
+            for (name, access_expr) in bindings {
+                let elem_val = lower_expr(&access_expr.node, ctx)?;
+                let elem_clif_ty = ty_to_clif(&access_expr.node.ty);
+                let elem_var = ctx.new_var(name, elem_clif_ty);
+                ctx.builder.def_var(elem_var, elem_val);
+            }
+
+            Ok(ctx.builder.ins().iconst(I64, 0))
+        }
 
         // ── VariantQual: Boolean::True = 1, Boolean::False = 0 ──
         // Para outros enums: VariantQual unitária → kata_rt_store_sum_result(tag, 0).

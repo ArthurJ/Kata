@@ -12,8 +12,7 @@
 //!    próprio `last_seen_version`; late subscribers não recebem histórico.
 //! 3. Múltiplos sends — receivers veem apenas o mais recente ao desbloquear.
 //!
-//! Nota: o parser não suporta destructuring `let (tx, rxf) := ...`.
-//! Usamos `bcast.0` (sender) e `bcast.1` (receiver factory) via DotAccess.
+//! Destructuring `let (tx, rxf) := ...` é suportado (desugar para FieldAccess).
 //!
 //! Limitação do parser (pitfall #45): valores recebidos têm tipo `Var("T0")`
 //! — evitamos operações aritméticas sobre o valor recebido; retornamo-lo direto.
@@ -114,9 +113,7 @@ const DEADLOCK_SENTINEL: i64 = i64::MIN + 1;
 #[test]
 fn broadcast_pubsub_multiplos_receivers() {
     let src = r#"action main => Int
-  let bcast := broadcast!()
-  let tx := bcast.0
-  let rxf := bcast.1
+  let (tx, rxf) := broadcast!()
   let rx1 := rxf!()
   let rx2 := rxf!()
   tx !> 42
@@ -147,9 +144,7 @@ main!()"#;
 #[test]
 fn receiver_factory_late_subscriber_nao_recebe_historico() {
     let src = r#"action main => Int
-  let bcast := broadcast!()
-  let tx := bcast.0
-  let rxf := bcast.1
+  let (tx, rxf) := broadcast!()
   tx !> 99
   let rx := rxf!()
   rx <! v
@@ -175,9 +170,7 @@ main!()"#;
 #[test]
 fn broadcast_multiplos_sends_latest_only() {
     let src = r#"action main => Int
-  let bcast := broadcast!()
-  let tx := bcast.0
-  let rxf := bcast.1
+  let (tx, rxf) := broadcast!()
   let rx := rxf!()
   tx !> 10
   tx !> 20
@@ -206,9 +199,7 @@ main!()"#;
 #[test]
 fn rxf_retorna_receiver_que_pode_receber() {
     let src = r#"action main => Int
-  let bcast := broadcast!()
-  let tx := bcast.0
-  let rxf := bcast.1
+  let (tx, rxf) := broadcast!()
   let rx := rxf!()
   tx !> 42
   rx <! v

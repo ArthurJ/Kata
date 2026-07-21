@@ -15,7 +15,7 @@ pub fn assert_no_holes(expr: &Spanned<Expr>) {
             assert_no_holes(callee);
             args.iter().for_each(assert_no_holes);
         }
-        Expr::Let { value, .. } => assert_no_holes(value),
+        Expr::Let { value, .. } | Expr::LetDestruct { value, .. } => assert_no_holes(value),
         Expr::Lambda {
             body,
             guards,
@@ -125,7 +125,7 @@ pub fn assert_no_pipes(expr: &Spanned<Expr>) {
             assert_no_pipes(callee);
             args.iter().for_each(assert_no_pipes);
         }
-        Expr::Let { value, .. } => assert_no_pipes(value),
+        Expr::Let { value, .. } | Expr::LetDestruct { value, .. } => assert_no_pipes(value),
         Expr::Lambda {
             body,
             guards,

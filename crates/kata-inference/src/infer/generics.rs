@@ -111,6 +111,14 @@ fn unify_one(
         (Ty::Receiver(p), Ty::Receiver(a)) => unify_one(p, a, type_params, subs),
         (Ty::ReceiverFactory(p), Ty::ReceiverFactory(a)) => unify_one(p, a, type_params, subs),
 
+        // Tuple — unifica recursivamente cada elemento.
+        (Ty::Tuple(ps), Ty::Tuple(as_)) if ps.len() == as_.len() => {
+            for (p, a) in ps.iter().zip(as_) {
+                unify_one(p, a, type_params, subs)?;
+            }
+            Ok(())
+        }
+
         // Match estrutural para tipos concretos
         _ if param == arg => Ok(()),
 

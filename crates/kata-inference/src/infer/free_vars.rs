@@ -57,7 +57,9 @@ pub(crate) fn collect_free_vars(
                 collect_free_vars(&el.node, local_bindings, dispatch, out);
             }
         }
-        TypedExprKind::Let { name: _, value } | TypedExprKind::Var { name: _, value } => {
+        TypedExprKind::Let { name: _, value }
+        | TypedExprKind::LetDestruct { value, .. }
+        | TypedExprKind::Var { name: _, value } => {
             // value é avaliado antes do binding — free vars do value
             collect_free_vars(&value.node, local_bindings, dispatch, out);
             // name vira local para as expressões seguintes — MAS como
