@@ -5,7 +5,7 @@
 //! valor, com recursão para sub-patterns de tupla.
 
 use cranelift_codegen::ir::types::{F64, I64};
-use cranelift_codegen::ir::{InstBuilder, MemFlagsData};
+use cranelift_codegen::ir::{InstBuilder, MemFlagsData, StackSlotData, StackSlotKind};
 use kata_ast::Spanned;
 use kata_inference::TypedPattern;
 
@@ -149,10 +149,26 @@ pub(crate) fn test_single_pattern(
                 0,
             );
 
-            // Extrair head (offset 0) e tail (offset 8).
+            // Guard contra SIGSEGV: se val == 0 (Nil), os loads abaixo
+            // acessariam o endereço 0. Alocar uma stack slot de 16 bytes
+            // (head@0 + tail@8) inicializada com zeros como ponteiro dummy
+            // seguro. O select garante que os loads usam val quando não-nulo
+            // e o dummy quando nulo — o resultado do dummy é descartado porque
+            // not_nil é false, então o braço Cons não é selecionado.
+            let dummy_slot = lower.builder.func.create_sized_stack_slot(
+                StackSlotData::new(StackSlotKind::ExplicitSlot, 16, 3),
+            );
+            let zero = lower.builder.ins().iconst(I64, 0);
+            lower.builder.ins().stack_store(zero, dummy_slot, 0);
+            lower.builder.ins().stack_store(zero, dummy_slot, 8);
+            let dummy_addr = lower.builder.ins().stack_addr(I64, dummy_slot, 0);
+
+            let safe_ptr = lower.builder.ins().select(not_nil, val, dummy_addr);
+
+            // Extrair head (offset 0) e tail (offset 8) do ponteiro seguro.
             let flags = MemFlagsData::new();
-            let head_val = lower.builder.ins().load(I64, flags, val, 0);
-            let tail_val = lower.builder.ins().load(I64, flags, val, 8);
+            let head_val = lower.builder.ins().load(I64, flags, safe_ptr, 0);
+            let tail_val = lower.builder.ins().load(I64, flags, safe_ptr, 8);
 
             // Testar sub-patterns. Ident/Wildcard são incondicionais (apenas fazem binding).
             let head_cond = test_single_pattern(head, head_val, lower)?;
@@ -167,6 +183,15 @@ pub(crate) fn test_single_pattern(
                 cond = lower.builder.ins().band(cond, c);
             }
             Ok(Some(cond))
+        }
+        TypedPattern::Nil => {
+            // Nil: testa val == 0 (ponteiro nulo = lista vazia).
+            let is_nil = lower.builder.ins().icmp_imm(
+                cranelift_codegen::ir::condcodes::IntCC::Equal,
+                val,
+                0,
+            );
+            Ok(Some(is_nil))
         }
     }
 }

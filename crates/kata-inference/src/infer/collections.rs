@@ -103,12 +103,15 @@ fn extract_iter_elem_ty(ctx: &InferCtx, iterable_ty: &Ty, span: &Span) -> InferR
 // ── ListLit ──────────────────────────────────────────────────────────────
 
 /// `[1 2 3]` → Ty::List(elem_ty) onde elem_ty é unificado de todos elementos.
+/// Se `hint` for `Some(Ty::List(elem))` e a lista estiver vazia, usa `elem`
+/// como tipo do elemento (inferência bidirectional).
 pub(crate) fn infer_list_lit(
     elements: &[Spanned<Expr>],
     span: &Span,
     env: &mut TypeEnv,
     ctx: &InferCtx,
     tail_pos: bool,
+    hint: Option<&Ty>,
 ) -> InferResult<TypedExpr> {
     let mut typed_elements = Vec::with_capacity(elements.len());
     let mut elem_ty: Option<Ty> = None;
@@ -130,8 +133,17 @@ pub(crate) fn infer_list_lit(
         typed_elements.push(Spanned::new(typed, elem.span));
     }
 
-    // Lista vazia: List(InferVar(0)) — tipo resolvido pelo uso.
-    let list_ty = Ty::List(Box::new(elem_ty.unwrap_or(Ty::InferVar(0))));
+    // Lista vazia: se hint for Ty::List(elem), usa elem do hint (inferência
+    // bidirectional). Senão, List(InferVar(0)) — tipo resolvido pelo uso.
+    let list_ty = if elements.is_empty() {
+        if let Some(Ty::List(hint_elem)) = hint {
+            Ty::List(Box::new((**hint_elem).clone()))
+        } else {
+            Ty::List(Box::new(elem_ty.unwrap_or(Ty::InferVar(0))))
+        }
+    } else {
+        Ty::List(Box::new(elem_ty.unwrap_or(Ty::InferVar(0))))
+    };
 
     let escape = if ctx.ret_ty.is_some() {
         if tail_pos {

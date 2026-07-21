@@ -249,5 +249,51 @@ pub(crate) fn collect_pattern_binds_one(pattern: &TypedPattern, out: &mut HashSe
             collect_pattern_binds_one(&head.node, out);
             collect_pattern_binds_one(&tail.node, out);
         }
+        TypedPattern::Nil => {}
+    }
+}
+
+/// Coleta binds de um pattern recursivamente, com seus tipos.
+/// Usado por captures.rs para resolver tipos de captures que são
+/// bindings locais da cláusula (não estão no type_env global).
+pub(crate) fn collect_pattern_tys(
+    patterns: &[Spanned<TypedPattern>],
+    out: &mut std::collections::HashMap<String, kata_core::ty::Ty>,
+) {
+    for pattern in patterns {
+        collect_pattern_tys_one(&pattern.node, out);
+    }
+}
+
+/// Coleta binds + tipos de um pattern recursivamente.
+fn collect_pattern_tys_one(
+    pattern: &TypedPattern,
+    out: &mut std::collections::HashMap<String, kata_core::ty::Ty>,
+) {
+    match pattern {
+        TypedPattern::Ident { name, ty } => {
+            out.insert(name.clone(), ty.clone());
+        }
+        TypedPattern::Wildcard => {}
+        TypedPattern::Literal { .. } => {}
+        TypedPattern::Variant {
+            sub_patterns: Some(subs),
+            ..
+        } => {
+            for sub in subs {
+                collect_pattern_tys_one(&sub.node, out);
+            }
+        }
+        TypedPattern::Variant { .. } => {}
+        TypedPattern::Tuple { elements } => {
+            for el in elements {
+                collect_pattern_tys_one(&el.node, out);
+            }
+        }
+        TypedPattern::Cons { head, tail } => {
+            collect_pattern_tys_one(&head.node, out);
+            collect_pattern_tys_one(&tail.node, out);
+        }
+        TypedPattern::Nil => {}
     }
 }

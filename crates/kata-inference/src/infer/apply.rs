@@ -390,9 +390,10 @@ pub(crate) fn infer_apply(
                 let mut unify_failed = false;
                 let mut total_candidates = 0u32;
                 if let Some(overloads) = ctx.table.get_overloads(&func_name) {
-                    for oi in overloads.iter().filter(|oi| {
-                        oi.params.len() == arg_types.len()
-                    }) {
+                    for oi in overloads
+                        .iter()
+                        .filter(|oi| oi.params.len() == arg_types.len())
+                    {
                         total_candidates += 1;
                         if oi.type_params.is_empty() {
                             continue;
@@ -459,8 +460,10 @@ pub(crate) fn infer_apply(
                     let (expected, found) = if arg_types.len() >= 2 {
                         (format!("{}", arg_types[0]), format!("{}", arg_types[1]))
                     } else {
-                        (format!("{}", arg_types.get(0).cloned().unwrap_or(Ty::Unit)),
-                         format!("{}", Ty::Unit))
+                        (
+                            format!("{}", arg_types.get(0).cloned().unwrap_or(Ty::Unit)),
+                            format!("{}", Ty::Unit),
+                        )
                     };
                     return Err(MiddleError::TypeMismatch {
                         expected,

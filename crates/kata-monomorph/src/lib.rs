@@ -252,6 +252,18 @@ fn instantiate_generic_closure(
         return false;
     };
 
+    // Guarda: se algum type_param mapeia para Ty::Var(_), a instanciação é
+    // trivial (não-concreta). Isto acontece quando uma função genérica
+    // template (ex: __kata_show__List) está sendo percorrida pelo
+    // monomorphizador e contém chamadas a outras funções genéricas com
+    // args ainda não-resolvidos (ex: __kata_show__List_rest t onde
+    // t :: List(Var("A"))). Neste caso, não instanciar — a instanciação
+    // ocorrerá quando a função template for instanciada para um tipo
+    // concreto e o body for reescrito com tipos resolvidos.
+    if subs.values().any(|ty| matches!(ty, Ty::Var(_))) {
+        return false;
+    }
+
     // Gera nome canônico da instância.
     let subs_key = canonicalize_subs(&oi.type_params, &subs);
     let instance_name = format!("{name}_{subs_key}");
@@ -346,11 +358,7 @@ fn resolve_erased_ffi_symbol(
 }
 
 /// Rewrita call sites genéricos em uma `TypedFunction`.
-fn rewrite_function(
-    func: &mut TypedFunction,
-    ctx: &MonoCtx,
-    acc: &mut RewriteAcc,
-) {
+fn rewrite_function(func: &mut TypedFunction, ctx: &MonoCtx, acc: &mut RewriteAcc) {
     for clause in &mut func.clauses {
         rewrite_typed_expr(&mut clause.body, ctx, acc);
         for guard in &mut clause.guards {
@@ -366,11 +374,7 @@ fn rewrite_function(
 }
 
 /// Rewrita call sites genéricos em uma `TypedAction`.
-fn rewrite_action(
-    action: &mut TypedAction,
-    ctx: &MonoCtx,
-    acc: &mut RewriteAcc,
-) {
+fn rewrite_action(action: &mut TypedAction, ctx: &MonoCtx, acc: &mut RewriteAcc) {
     for stmt in &mut action.body {
         rewrite_typed_expr(stmt, ctx, acc);
     }
@@ -381,11 +385,7 @@ fn rewrite_action(
 /// Se o expr é uma `Closure` cujo callee é `Ident(name)` e `name` tem
 /// overload com `type_params` não-vazio, gera a instância e rewrites
 /// o callee para o nome da instância.
-fn rewrite_typed_expr(
-    expr_span: &mut Spanned<TypedExpr>,
-    ctx: &MonoCtx,
-    acc: &mut RewriteAcc,
-) {
+fn rewrite_typed_expr(expr_span: &mut Spanned<TypedExpr>, ctx: &MonoCtx, acc: &mut RewriteAcc) {
     let expr = &mut expr_span.node;
 
     match &mut expr.kind {
@@ -631,11 +631,7 @@ fn rewrite_typed_expr(
 }
 
 /// Rewrita call sites genéricos em uma `TypedLambdaClause`.
-fn rewrite_lambda_clause(
-    clause: &mut TypedLambdaClause,
-    ctx: &MonoCtx,
-    acc: &mut RewriteAcc,
-) {
+fn rewrite_lambda_clause(clause: &mut TypedLambdaClause, ctx: &MonoCtx, acc: &mut RewriteAcc) {
     rewrite_typed_expr(&mut clause.body, ctx, acc);
     for guard in &mut clause.guards {
         if let Some(ref mut cond) = guard.condition {

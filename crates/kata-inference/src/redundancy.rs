@@ -96,6 +96,7 @@ fn pattern_covers(covering: &TypedPattern, covered: &TypedPattern) -> bool {
                     .zip(bs.iter())
                     .all(|(a, b)| pattern_covers(&a.node, &b.node))
         }
+        (TypedPattern::Nil, TypedPattern::Nil) => true,
         _ => false,
     }
 }

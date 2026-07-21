@@ -253,14 +253,14 @@ pub enum Pattern {
     },
     /// `(a, b, c)` — tupla.
     Tuple(Vec<Spanned<Pattern>>),
-    /// `[h : t]` — cons (cabeça : cauda). `[]` para lista vazia.
-    /// Reconhece a sintaxe; (List) dá semântica de runtime.
-    /// Pattern Cons/Nil só funciona se List existir (não existe
-    /// ainda — stub que produz erro limpo).
+    /// `[h : t]` — cons (cabeça : cauda).
+    /// Reconhece a sintaxe; List dá semântica de runtime.
     Cons {
         head: Box<Spanned<Pattern>>,
         tail: Box<Spanned<Pattern>>,
     },
+    /// `[]` — lista vazia (Nil). Testa `val == 0` no codegen.
+    Nil,
 }
 
 /// Uma cláusula lambda após uma assinatura.

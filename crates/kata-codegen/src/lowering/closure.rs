@@ -11,6 +11,14 @@ use kata_inference::{CaptureInfo, TypedExpr, TypedExprKind};
 use super::LowerCtx;
 use crate::ffi_sigs::ty_to_clif;
 
+/// Arena handle a ser passada como primeiro param implícito para funções Kata
+/// e lambdas. Prefere fiber_arena (arena local do fiber), fallback caller_arena.
+fn caller_arena_handle(ctx: &mut LowerCtx) -> cranelift_codegen::ir::Value {
+    ctx.fiber_arena
+        .or(ctx.caller_arena)
+        .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0))
+}
+
 /// Lowera o arm `TypedExprKind::Closure` — FFI call, call direto (Kata), ou call_indirect.
 pub(crate) fn lower_closure(
     expr: &TypedExpr,
@@ -37,7 +45,11 @@ pub(crate) fn lower_closure(
             .map(|(_name, params, ret)| (sym_name.clone(), params, ret))
             .unwrap_or_else(|_| (sym_name.clone(), Vec::new(), Ty::Unit));
         if let Some(&func_ref) = ctx.kata_refs.get(&key) {
-            let call_inst = ctx.builder.ins().call(func_ref, &arg_values);
+            // Prefixar arena_handle (primeiro param implícito da nova ABI).
+            let arena = caller_arena_handle(ctx);
+            let mut kata_args = vec![arena];
+            kata_args.extend_from_slice(&arg_values);
+            let call_inst = ctx.builder.ins().call(func_ref, &kata_args);
             let results = ctx.builder.inst_results(call_inst);
             if results.is_empty() {
                 return Ok(ctx.builder.ins().iconst(I64, 0));
@@ -48,7 +60,17 @@ pub(crate) fn lower_closure(
             .ffi_refs
             .get(sym_name)
             .ok_or_else(|| super::CodegenError::FfiSymbolNotFound(sym_name.clone()))?;
-        let call_inst = ctx.builder.ins().call(*func_ref, &arg_values);
+        // FFIs que alocam na arena (cons, concat, reverse, array_alloc, etc.)
+        // esperam arena_handle como último param, mas o caller não fornece.
+        // Injetar automaticamente.
+        let mut call_args = arg_values;
+        if crate::ffi_sigs::ffi_needs_arena(sym_name) {
+            let arena = ctx
+                .fiber_arena
+                .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
+            call_args.push(arena);
+        }
+        let call_inst = ctx.builder.ins().call(*func_ref, &call_args);
         // Void FFI (ex: kata_rt_log_config) — sem retorno. Retorna Unit (iconst 0).
         let results = ctx.builder.inst_results(call_inst);
         if results.is_empty() {
@@ -67,7 +89,11 @@ pub(crate) fn lower_closure(
                 // Call direto para função Kata nomeada.
                 if expr.tail_pos && !ctx.no_tail_calls {
                     // Tail call: emite return_call (TCO via Cranelift).
-                    ctx.builder.ins().return_call(func_ref, &arg_values);
+                    // Prefixar arena_handle (primeiro param implícito).
+                    let arena = caller_arena_handle(ctx);
+                    let mut tail_args = vec![arena];
+                    tail_args.extend(arg_values.iter().copied());
+                    ctx.builder.ins().return_call(func_ref, &tail_args);
                     ctx.emitted_tail_call = true;
                     // return_call é terminador — não pode adicionar instruções depois.
                     // Criar block dummy unreachable para satisfazer o builder:
@@ -79,7 +105,10 @@ pub(crate) fn lower_closure(
                     ctx.builder.ins().return_(&[val]);
                     return Ok(val);
                 }
-                let call_inst = ctx.builder.ins().call(func_ref, &arg_values);
+                let arena = caller_arena_handle(ctx);
+                let mut call_args = vec![arena];
+                call_args.extend(arg_values.iter().copied());
+                let call_inst = ctx.builder.ins().call(func_ref, &call_args);
                 return Ok(ctx.builder.inst_results(call_inst)[0]);
             }
             // Ident não está no kata_refs: pode ser variável com
@@ -91,6 +120,9 @@ pub(crate) fn lower_closure(
                 // alocar CaptureBox e prefixar box_ptr nos args.
                 let caps = ctx.closure_captures.get(name).cloned();
                 let mut call_args = Vec::new();
+                // Primeiro param implícito: arena_handle.
+                let arena = caller_arena_handle(ctx);
+                call_args.push(arena);
                 let mut box_ptr: Option<cranelift_codegen::ir::Value> = None;
                 if let Some(ref captures) = caps
                     && !captures.is_empty()
@@ -106,9 +138,11 @@ pub(crate) fn lower_closure(
                 let callee_ty = &callee.node.ty;
                 if let Ty::Function(param_types, ret_ty) = callee_ty {
                     let mut sig = Signature::new(CallConv::Tail);
-                    // Se há captures, box_ptr é o primeiro param da sig.
+                    // arena_handle é o primeiro param da sig indireta.
+                    sig.params.push(AbiParam::new(I64)); // arena_handle
+                    // Se há captures, box_ptr é o segundo param da sig.
                     if caps.as_ref().is_some_and(|c| !c.is_empty()) {
-                        sig.params.push(AbiParam::new(I64));
+                        sig.params.push(AbiParam::new(I64)); // box_ptr
                     }
                     for pt in param_types {
                         sig.params.push(AbiParam::new(ty_to_clif(pt)));
@@ -163,7 +197,7 @@ pub(crate) fn lower_closure(
 ///
 /// O CaptureBox contém: fn_ptr (offset 0), refcount=1 (offset 8),
 /// captures[0..n] (offset 16+).
-fn alloc_capture_box(
+pub(crate) fn alloc_capture_box(
     func_ptr: cranelift_codegen::ir::Value,
     captures: &[CaptureInfo],
     ctx: &mut LowerCtx,
@@ -171,13 +205,16 @@ fn alloc_capture_box(
     let n = captures.len() as i64;
     let flags = MemFlagsData::new();
 
-    // 1. Aloca array temporário na arena de escape (Pré-11: caller_arena).
+    // 1. Aloca array temporário na arena disponível.
+    // Prefere fiber_arena (arena do caller passada como param implícito),
+    // fallback caller_arena (arena de escape do fiber).
     let arena_alloc_ref = ctx
         .ffi_refs
         .get("kata_rt_arena_alloc")
         .ok_or_else(|| super::CodegenError::FfiSymbolNotFound("kata_rt_arena_alloc".into()))?;
     let capture_arena = ctx
-        .caller_arena
+        .fiber_arena
+        .or(ctx.caller_arena)
         .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
     let array_size = ctx.builder.ins().iconst(I64, n * 8);
     let alloc_inst = ctx

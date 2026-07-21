@@ -43,11 +43,13 @@ pub enum TypedPattern {
     Tuple {
         elements: Vec<Spanned<TypedPattern>>,
     },
-    /// `[h : t]` — cons (stub — List).
+    /// `[h : t]` — cons (cabeça : cauda). Codegen testa `val != 0`.
     Cons {
         head: Box<Spanned<TypedPattern>>,
         tail: Box<Spanned<TypedPattern>>,
     },
+    /// `[]` — lista vazia (Nil). Codegen testa `val == 0`.
+    Nil,
 }
 
 /// Braço de match tipado.

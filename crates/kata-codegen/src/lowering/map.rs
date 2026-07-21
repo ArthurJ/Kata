@@ -26,7 +26,7 @@ pub(crate) fn lower_map(
     let coll_val = super::expr::lower_expr(&collection.node, ctx)?;
     let callback_val = super::expr::lower_expr(&callback.node, ctx)?;
 
-    let (cb_params, cb_ret, has_captures) = extract_callback_sig(&callback.node);
+    let (cb_params, cb_ret, cb_captures) = extract_callback_sig(&callback.node);
 
     // ret_ty = List(B). O elemento da lista de resultado é B (cb_ret).
     let result_elem_ty = cb_ret.clone();
@@ -83,9 +83,9 @@ pub(crate) fn lower_map(
                 &[head_val],
                 &cb_params,
                 &cb_ret,
-                has_captures,
+                &cb_captures,
                 ctx,
-            );
+            )?;
             let result_i64 = ensure_i64(ctx, result);
 
             // acc = cons(result, acc, arena)
@@ -131,9 +131,9 @@ pub(crate) fn lower_map(
                 &[elem_val],
                 &cb_params,
                 &cb_ret,
-                has_captures,
+                &cb_captures,
                 ctx,
-            );
+            )?;
             let result_i64 = ensure_i64(ctx, result);
 
             let acc = ctx.builder.use_var(acc_var);
@@ -176,9 +176,9 @@ pub(crate) fn lower_map(
                 &[elem_val],
                 &cb_params,
                 &cb_ret,
-                has_captures,
+                &cb_captures,
                 ctx,
-            );
+            )?;
             let result_i64 = ensure_i64(ctx, result);
 
             let acc = ctx.builder.use_var(acc_var);

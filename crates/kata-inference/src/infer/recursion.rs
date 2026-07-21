@@ -290,12 +290,13 @@ fn collect_pattern_calls(
             collect_pattern_calls(&head.node, &head.span, out);
             collect_pattern_calls(&tail.node, &tail.span, out);
         }
-        // Ident, Wildcard, Variant sem sub_patterns — sem sub-exprs.
+        // Ident, Wildcard, Variant sem sub_patterns, Nil — sem sub-exprs.
         TypedPattern::Ident { .. }
         | TypedPattern::Wildcard
         | TypedPattern::Variant {
             sub_patterns: None, ..
-        } => {}
+        }
+        | TypedPattern::Nil => {}
     }
 }
 

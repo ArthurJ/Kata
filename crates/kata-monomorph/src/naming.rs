@@ -30,6 +30,9 @@ fn ty_to_string(ty: &Ty) -> String {
             let args_str = args.iter().map(ty_to_string).collect::<Vec<_>>().join("_");
             format!("{name}_{args_str}")
         }
+        Ty::List(elem) => format!("List_{}", ty_to_string(elem)),
+        Ty::Array(elem) => format!("Array_{}", ty_to_string(elem)),
+        Ty::Range(elem) => format!("Range_{}", ty_to_string(elem)),
         Ty::Sum(name) => name.clone(),
         Ty::Function(params, ret) => {
             let p = params

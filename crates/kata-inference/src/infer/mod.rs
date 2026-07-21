@@ -43,7 +43,7 @@ mod variant_construct;
 mod variant_qual;
 
 use action_infer::infer_action;
-use kata_ast::{Item, Module, Spanned};
+use kata_ast::{GuardClause, Item, Module, Spanned, WithBinding};
 use kata_core::dispatch::OverloadInfo;
 use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
@@ -54,7 +54,7 @@ use crate::desugar;
 use crate::typed::{TypedAction, TypedExpr, TypedFunction, TypedLambdaClause, TypedModule};
 
 use self::apply_lambda::infer_lambda_body;
-use self::expr::{InferCtx, infer_expr};
+use self::expr::{InferCtx, infer_expr, infer_expr_hinted};
 use self::helpers::{
     InferResult, check_patterns, item_span_or_synthetic, populate_dispatch_table,
     process_with_bindings,
@@ -135,6 +135,15 @@ pub fn infer_module(
         &mut dispatch_table,
         &mut interface_registry,
     );
+
+    // 1e. sintetiza `show` para List::A — duas funções genéricas mutuamente
+    //     recursivas (__kata_show__List e __kata_show__List_rest) com pattern
+    //     matching Cons/Nil. Registra `List implements SHOW` (type_params: ["A"]).
+    let list_show_functions = show_synthesis::synthesize_list_show_functions(
+        &mut dispatch_table,
+        &mut interface_registry,
+    );
+    show_functions.extend(list_show_functions);
 
     // 2. Clona o TypeEnv do ResolvedModule — o typeck pode adicionar bindings
     //    locais (let) sem mutar o original.
@@ -292,6 +301,28 @@ fn infer_named_function(
         // com UnboundName — o typeck precisa resolver o nome do enum no TypeEnv.
         let mut clause_env = TypeEnv::with_parent(module_type_env.clone());
 
+        // Desugar: elimina Pipe e Hole da cláusula antes do typeck.
+        // O parser produz Expr::Hole para `_` em expressões como `< _ pivo`;
+        // o desugar converte isso em Lambda. Sem isso, o typeck vê Hole cru
+        // e falha com "Hole deve ter sido desugared".
+        let desugared_body = crate::desugar::desugar(&clause_inner.body);
+        let desugared_guards: Vec<GuardClause> = clause_inner
+            .guards
+            .iter()
+            .map(|g| GuardClause {
+                condition: g.condition.as_ref().map(|c| crate::desugar::desugar(c)),
+                body: crate::desugar::desugar(&g.body),
+            })
+            .collect();
+        let desugared_with_bindings: Vec<WithBinding> = clause_inner
+            .with_bindings
+            .iter()
+            .map(|w| WithBinding {
+                name: w.name.clone(),
+                value: crate::desugar::desugar(&w.value),
+            })
+            .collect();
+
         // Casa padrões contra tipos dos parâmetros.
         let typed_patterns = check_patterns(
             &clause_inner.patterns,
@@ -302,16 +333,17 @@ fn infer_named_function(
 
         // Processa with bindings (açúcar → let chain).
         let typed_with_bindings =
-            process_with_bindings(&clause_inner.with_bindings, &mut clause_env, ctx)?;
+            process_with_bindings(&desugared_with_bindings, &mut clause_env, ctx)?;
 
         // Infere body (com ou sem guards).
-        let (typed_body, typed_guards) = if clause_inner.guards.is_empty() {
-            let typed_body = infer_expr(
-                &clause_inner.body.node,
-                &clause_inner.body.span,
+        let (typed_body, typed_guards) = if desugared_guards.is_empty() {
+            let typed_body = infer_expr_hinted(
+                &desugared_body.node,
+                &desugared_body.span,
                 &mut clause_env,
                 ctx,
-                true, // tail_pos = true em body de função
+                true,         // tail_pos = true em body de função
+                Some(ret_ty), // hint = tipo de retorno da assinatura
             )?;
             // Verifica que o body retorna o tipo esperado.
             if typed_body.ty != *ret_ty {
@@ -323,12 +355,8 @@ fn infer_named_function(
             }
             (typed_body, Vec::new())
         } else {
-            let (guard_ret, typed_body, guards) = infer_lambda_body(
-                &clause_inner.body,
-                &clause_inner.guards,
-                &mut clause_env,
-                ctx,
-            )?;
+            let (guard_ret, typed_body, guards) =
+                infer_lambda_body(&desugared_body, &desugared_guards, &mut clause_env, ctx)?;
             if guard_ret != *ret_ty {
                 return Err(MiddleError::TypeMismatch {
                     expected: format!("{}", ret_ty),

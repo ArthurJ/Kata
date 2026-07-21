@@ -170,6 +170,7 @@ pub(crate) fn instantiate_pattern(pattern: &TypedPattern, subs: &Substitutions) 
                 tail.span,
             )),
         },
+        TypedPattern::Nil => TypedPattern::Nil,
     }
 }
 

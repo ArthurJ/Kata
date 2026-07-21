@@ -59,6 +59,9 @@ pub(crate) fn declare_kata_function(
     module: &mut dyn ModuleBackend,
 ) -> Result<cranelift_module::FuncId, CodegenError> {
     let mut sig = Signature::new(CallConv::Tail);
+    // arena_handle é o primeiro param implícito — passado pelo caller
+    // (fiber_arena ou caller_arena do contexto de chamada).
+    sig.params.push(AbiParam::new(I64));
     for pt in &func.param_types {
         sig.params.push(AbiParam::new(ty_to_clif(pt)));
     }
@@ -92,7 +95,9 @@ pub(crate) fn define_function_body(
     {
         let func_ir = &mut ctx.func;
         let mut sig = Signature::new(CallConv::Tail);
-        // Se há captures, o primeiro param é box_ptr (I64).
+        // arena_handle: primeiro param implícito, passado pelo caller.
+        sig.params.push(AbiParam::new(I64)); // arena_handle
+        // Se há captures, o segundo param é box_ptr (I64).
         if !captures.is_empty() {
             sig.params.push(AbiParam::new(I64)); // box_ptr
         }
@@ -146,12 +151,18 @@ pub(crate) fn define_function_body(
             closure_captures: HashMap::new(),
         };
 
+        // params[0] = arena_handle (primeiro param implícito da nova ABI).
+        // Setar fiber_arena para que alocações internas (cons, array_alloc,
+        // etc.) usem a arena do caller — sem leak, sem arena efêmera.
+        let arena_handle = params[0];
+        lower.fiber_arena = Some(arena_handle);
+
         // Se há captures, carrega cada capture do box_ptr e define variável.
         // Layout do CaptureBox: offset 0 = fn_ptr, offset 8 = refcount,
         // offset 16 + i*8 = captures[i].
-        // O box_ptr é o primeiro block param (params[0]).
+        // box_ptr é o segundo block param (params[1]).
         let clause_params: Vec<cranelift_codegen::ir::Value> = if !captures.is_empty() {
-            let box_ptr = params[0];
+            let box_ptr = params[1];
             let flags = MemFlagsData::new();
             for (i, cap) in captures.iter().enumerate() {
                 let clif_ty = ty_to_clif(&cap.ty);
@@ -164,9 +175,9 @@ pub(crate) fn define_function_body(
                     .expect("capture var must exist in var_map after new_var");
                 lower.builder.def_var(var, val);
             }
-            params[1..].to_vec()
+            params[2..].to_vec()
         } else {
-            params.clone()
+            params[1..].to_vec()
         };
 
         // Se @log quando Enter, injeta antes do body (prólogo).

@@ -26,7 +26,7 @@ pub(crate) fn lower_filter(
     let coll_val = super::expr::lower_expr(&collection.node, ctx)?;
     let callback_val = super::expr::lower_expr(&callback.node, ctx)?;
 
-    let (cb_params, cb_ret, has_captures) = extract_callback_sig(&callback.node);
+    let (cb_params, cb_ret, cb_captures) = extract_callback_sig(&callback.node);
 
     let arena = arena_handle(ctx);
 
@@ -79,9 +79,9 @@ pub(crate) fn lower_filter(
                 &[head_val],
                 &cb_params,
                 &cb_ret,
-                has_captures,
+                &cb_captures,
                 ctx,
-            );
+            )?;
             let pred_i64 = ensure_i64(ctx, pred);
             let is_true = ctx.builder.ins().icmp_imm(
                 cranelift_codegen::ir::condcodes::IntCC::NotEqual,
@@ -142,9 +142,9 @@ pub(crate) fn lower_filter(
                 &[elem_val],
                 &cb_params,
                 &cb_ret,
-                has_captures,
+                &cb_captures,
                 ctx,
-            );
+            )?;
             let pred_i64 = ensure_i64(ctx, pred);
             let is_true = ctx.builder.ins().icmp_imm(
                 cranelift_codegen::ir::condcodes::IntCC::NotEqual,
@@ -201,9 +201,9 @@ pub(crate) fn lower_filter(
                 &[elem_val],
                 &cb_params,
                 &cb_ret,
-                has_captures,
+                &cb_captures,
                 ctx,
-            );
+            )?;
             let pred_i64 = ensure_i64(ctx, pred);
             let is_true = ctx.builder.ins().icmp_imm(
                 cranelift_codegen::ir::condcodes::IntCC::NotEqual,

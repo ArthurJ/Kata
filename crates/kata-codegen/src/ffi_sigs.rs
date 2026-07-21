@@ -427,3 +427,31 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
 
     sig
 }
+
+/// Retorna `true` se a FFI precisa de `arena_handle` injetado como último
+/// argumento. Estas FFIs têm `arena` como último param na assinatura, mas
+/// o caller (via `Closure` / `+` / `cons` / etc.) não fornece esse arg —
+/// o codegen deve injetá-lo automaticamente.
+///
+/// Lista gerada a partir das assinaturas em `ffi_signature` onde o último
+/// param é `arena` ou `arena_handle`. Se uma FFI nova for adicionada com
+/// arena como último param, adicione-a aqui também.
+pub(crate) fn ffi_needs_arena(sym_name: &str) -> bool {
+    matches!(
+        FfiSymbol::from_name(sym_name),
+        Some(
+            FfiSymbol::ArenaAlloc
+                | FfiSymbol::ArenaDestroy
+                | FfiSymbol::StoreSumResult
+                | FfiSymbol::AllocArc
+                | FfiSymbol::ListCons
+                | FfiSymbol::ArrayAlloc
+                | FfiSymbol::RangeAlloc
+                | FfiSymbol::ListReverse
+                | FfiSymbol::ListConcat
+                | FfiSymbol::ChannelCreate
+                | FfiSymbol::QueueCreate
+                | FfiSymbol::BroadcastCreate
+        )
+    )
+}

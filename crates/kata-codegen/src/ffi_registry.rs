@@ -160,10 +160,7 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
         "kata_rt_list_reverse",
         rt::kata_rt_list_reverse as *const u8,
     );
-    builder.symbol(
-        "kata_rt_list_concat",
-        rt::kata_rt_list_concat as *const u8,
-    );
+    builder.symbol("kata_rt_list_concat", rt::kata_rt_list_concat as *const u8);
     builder.symbol("kata_rt_array_alloc", rt::kata_rt_array_alloc as *const u8);
     builder.symbol("kata_rt_array_len", rt::kata_rt_array_len as *const u8);
     builder.symbol("kata_rt_array_get", rt::kata_rt_array_get as *const u8);
@@ -326,6 +323,7 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         ListContains,
         ArrayContains,
         ListReverse,
+        ListConcat,
         // Canais CSP
         ChannelCreate,
         QueueCreate,

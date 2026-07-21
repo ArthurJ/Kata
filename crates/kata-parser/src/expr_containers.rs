@@ -81,7 +81,9 @@ impl Parser {
             return Ok(Spanned::new(
                 Expr::Apply {
                     callee: Box::new(Spanned::new(
-                        Expr::Ident { name: "cons".into() },
+                        Expr::Ident {
+                            name: "cons".into(),
+                        },
                         start,
                     )),
                     args: vec![first, tail],

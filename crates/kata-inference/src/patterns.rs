@@ -234,6 +234,16 @@ fn check_pattern_inner(
                 tail: Box::new(Spanned::new(typed_tail, tail.span)),
             })
         }
+
+        // ── Nil pattern — match em Ty::List(A), testa val == 0 ──
+        Pattern::Nil => match scrutinee_ty {
+            Ty::List(_) => Ok(TypedPattern::Nil),
+            _ => Err(MiddleError::TypeMismatch {
+                expected: "List(A) para pattern Nil []".into(),
+                found: format!("{scrutinee_ty:?}"),
+                span: (*span).into(),
+            }),
+        },
     }
 }
 
@@ -314,11 +324,27 @@ pub(crate) fn check_exhaustiveness(
                 })
             }
         }
+        Ty::List(_) => {
+            // List tem duas variantes virtuais: Cons e Nil.
+            // Se ambas cobertas → exaustivo. Senão → exige otherwise.
+            let list_variants = ["Cons", "Nil"];
+            let missing: Vec<String> = list_variants
+                .iter()
+                .filter(|v| !covered_variants.iter().any(|c| c == *v))
+                .map(|v| v.to_string())
+                .collect();
+            if missing.is_empty() {
+                Ok(())
+            } else {
+                Err(MiddleError::MissingOtherwise {
+                    span: (*span).into(),
+                })
+            }
+        }
         Ty::Prim(_)
         | Ty::Unit
         | Ty::Struct(_)
         | Ty::Tuple(_)
-        | Ty::List(_)
         | Ty::Array(_)
         | Ty::Range(_)
         | Ty::Sender(_)

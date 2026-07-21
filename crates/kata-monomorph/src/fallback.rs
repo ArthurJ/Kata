@@ -56,12 +56,26 @@ fn fallback_in_expr(expr_span: &mut Spanned<TypedExpr>) {
             }
             if ffi_symbol.is_none()
                 && matches!(&callee.node.kind, TypedExprKind::Ident { name } if name == "show")
-                && args.iter().all(|a| matches!(a.node.ty, Ty::Var(_)))
             {
-                expr.kind = TypedExprKind::TextLit {
-                    text: "?".to_string(),
-                };
-                expr.ty = Ty::text();
+                // Lista vazia com tipo do elemento não-resolvido (InferVar) →
+                // "[]" — caso base da recursão de show de List. O braço Nil
+                // imprime "[]" sem tocar no tipo do elemento.
+                if args.iter().all(|a| {
+                    matches!(&a.node.ty, Ty::List(inner) if matches!(inner.as_ref(), Ty::InferVar(_)))
+                }) {
+                    expr.kind = TypedExprKind::TextLit {
+                        text: "[]".to_string(),
+                    };
+                    expr.ty = Ty::text();
+                } else if args
+                    .iter()
+                    .all(|a| matches!(a.node.ty, Ty::Var(_) | Ty::InferVar(_)))
+                {
+                    expr.kind = TypedExprKind::TextLit {
+                        text: "?".to_string(),
+                    };
+                    expr.ty = Ty::text();
+                }
             }
         }
         TypedExprKind::TypeAscription { expr: inner, .. }

@@ -149,28 +149,17 @@ impl Parser {
         Ok(Spanned::new(Pattern::Tuple(elements), span))
     }
 
-    /// Parse `[h : t]` → Cons pattern, `[]` → Cons Nil (stub ).
+    /// `[h : t]` → Cons pattern, `[]` → Nil pattern.
     fn parse_cons_pattern(
         &mut self,
         start: kata_ast::Span,
     ) -> Result<Spanned<Pattern>, FrontendError> {
         self.expect(&Token::LBracket, "`[`")?;
 
-        // `[]` → Nil pattern (stub)
+        // `[]` → Nil pattern (lista vazia). Codegen testa val == 0.
         if matches!(self.peek(), Token::RBracket) {
             self.advance();
-            // Nil não é um Pattern variant próprio — usamos Cons com Wildcard
-            // como stub. O typeck rejeita com erro "List patterns".
-            // Representação: Cons { head: Wildcard, tail: Wildcard } marcado
-            // como nil. Como não há variant Nil, simplificamos: o typeck
-            // rejeita qualquer Cons pattern.
-            return Ok(Spanned::new(
-                Pattern::Cons {
-                    head: Box::new(Spanned::new(Pattern::Wildcard, start)),
-                    tail: Box::new(Spanned::new(Pattern::Wildcard, start)),
-                },
-                start,
-            ));
+            return Ok(Spanned::new(Pattern::Nil, start));
         }
 
         // `[h : t]` → Cons

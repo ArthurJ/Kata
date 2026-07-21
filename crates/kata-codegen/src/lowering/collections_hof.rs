@@ -16,7 +16,7 @@ use cranelift_codegen::ir::types::I64;
 use cranelift_codegen::ir::{AbiParam, InstBuilder, MemFlagsData, Signature};
 use cranelift_codegen::isa::CallConv;
 use kata_core::ty::Ty;
-use kata_inference::TypedExpr;
+use kata_inference::{CaptureInfo, TypedExpr};
 
 use super::CodegenError;
 use super::LowerCtx;
@@ -59,11 +59,13 @@ pub(crate) fn arena_handle(ctx: &mut LowerCtx) -> cranelift_codegen::ir::Value {
 }
 
 /// Constrói a assinatura Cranelift para um callback com tipos de parâmetros
-/// e retorno conhecidos. Se o callback tem captures, o primeiro param é I64.
+/// e retorno conhecidos. Se o callback tem captures, o segundo param é I64.
+/// O primeiro param é sempre arena_handle (I64) — param implícito.
 fn build_callback_sig(param_types: &[Ty], ret_ty: &Ty, has_captures: bool) -> Signature {
     let mut sig = Signature::new(CallConv::Tail);
+    sig.params.push(AbiParam::new(I64)); // arena_handle
     if has_captures {
-        sig.params.push(AbiParam::new(I64));
+        sig.params.push(AbiParam::new(I64)); // box_ptr
     }
     for pt in param_types {
         sig.params.push(AbiParam::new(ty_to_clif(pt)));
@@ -75,31 +77,53 @@ fn build_callback_sig(param_types: &[Ty], ret_ty: &Ty, has_captures: bool) -> Si
 /// Chama um callback (func_ptr) com os argumentos fornecidos.
 /// `callback_val` é o function pointer (I64).
 /// `param_types` e `ret_ty` definem a assinatura.
-/// `has_captures` indica se o primeiro arg é box_ptr (CaptureBox).
+/// `captures` lista as variáveis capturadas pelo callback. Se não-vazia,
+/// aloca um CaptureBox via `alloc_capture_box` e o prefixa nos args
+/// (após arena_handle, antes dos args do callback).
 /// Retorna o resultado do callback (Value).
 pub(crate) fn call_callback(
     callback_val: cranelift_codegen::ir::Value,
     args: &[cranelift_codegen::ir::Value],
     param_types: &[Ty],
     ret_ty: &Ty,
-    has_captures: bool,
+    captures: &[CaptureInfo],
     ctx: &mut LowerCtx,
-) -> cranelift_codegen::ir::Value {
+) -> Result<cranelift_codegen::ir::Value, CodegenError> {
+    let has_captures = !captures.is_empty();
     let sig = build_callback_sig(param_types, ret_ty, has_captures);
     let sig_ref = ctx.builder.func.import_signature(sig);
-    let call_inst = ctx.builder.ins().call_indirect(sig_ref, callback_val, args);
-    ctx.builder.inst_results(call_inst)[0]
+    // Prefixar arena_handle (primeiro param implícito da nova ABI).
+    let arena = ctx
+        .fiber_arena
+        .or(ctx.caller_arena)
+        .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
+    let mut full_args = vec![arena];
+    // Se há captures, alocar CaptureBox e prefixar box_ptr.
+    if has_captures {
+        let box_ptr = super::closure::alloc_capture_box(callback_val, captures, ctx)?;
+        full_args.push(box_ptr);
+    }
+    full_args.extend_from_slice(args);
+    let call_inst = ctx
+        .builder
+        .ins()
+        .call_indirect(sig_ref, callback_val, &full_args);
+    Ok(ctx.builder.inst_results(call_inst)[0])
 }
 
-/// Extrai tipos do callback (params, ret) a partir do tipo do callback.
-/// O callback é um TypedExpr com ty = Ty::Function(params, ret).
-pub(crate) fn extract_callback_sig(callback: &TypedExpr) -> (Vec<Ty>, Ty, bool) {
-    let has_captures = match &callback.kind {
-        kata_inference::TypedExprKind::Lambda { captures, .. } => !captures.is_empty(),
-        _ => false,
+/// Extrai tipos do callback (params, ret, captures) a partir do tipo do callback.
+pub(crate) fn extract_callback_sig(callback: &TypedExpr) -> (Vec<Ty>, Ty, Vec<CaptureInfo>) {
+    // Desembrulfa Grouping — o callback pode estar envolvido por parênteses.
+    let inner = match &callback.kind {
+        kata_inference::TypedExprKind::Grouping { inner } => &inner.node,
+        _ => callback,
+    };
+    let captures = match &inner.kind {
+        kata_inference::TypedExprKind::Lambda { captures, .. } => captures.clone(),
+        _ => Vec::new(),
     };
     match &callback.ty {
-        Ty::Function(params, ret) => (params.clone(), (**ret).clone(), has_captures),
+        Ty::Function(params, ret) => (params.clone(), (**ret).clone(), captures),
         _ => panic!("callback não é Function: {}", callback.ty),
     }
 }
@@ -120,7 +144,7 @@ pub(crate) fn lower_fold(
     let init_val = super::expr::lower_expr(&initial.node, ctx)?;
     let init_val = ensure_i64(ctx, init_val);
 
-    let (cb_params, cb_ret, has_captures) = extract_callback_sig(&callback.node);
+    let (cb_params, cb_ret, cb_captures) = extract_callback_sig(&callback.node);
 
     // acc = init
     let acc_var = ctx.new_var("__fold_acc", I64);
@@ -160,9 +184,9 @@ pub(crate) fn lower_fold(
                 &[acc, head_val],
                 &cb_params,
                 &cb_ret,
-                has_captures,
+                &cb_captures,
                 ctx,
-            );
+            )?;
             let new_acc = ensure_i64(ctx, new_acc);
             ctx.builder.def_var(acc_var, new_acc);
             ctx.builder.def_var(current_var, tail_val);
@@ -203,9 +227,9 @@ pub(crate) fn lower_fold(
                 &[acc, elem_val],
                 &cb_params,
                 &cb_ret,
-                has_captures,
+                &cb_captures,
                 ctx,
-            );
+            )?;
             let new_acc = ensure_i64(ctx, new_acc);
             ctx.builder.def_var(acc_var, new_acc);
             let next_idx = ctx.builder.ins().iadd_imm(idx, 1);
@@ -244,9 +268,9 @@ pub(crate) fn lower_fold(
                 &[acc, elem_val],
                 &cb_params,
                 &cb_ret,
-                has_captures,
+                &cb_captures,
                 ctx,
-            );
+            )?;
             let new_acc = ensure_i64(ctx, new_acc);
             ctx.builder.def_var(acc_var, new_acc);
             let next_raw = ctx.builder.ins().iadd(current, step_val);

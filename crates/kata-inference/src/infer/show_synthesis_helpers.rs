@@ -29,6 +29,7 @@ pub(crate) fn show_expr(arg: Spanned<TypedExpr>, arg_ty: &Ty) -> Spanned<TypedEx
         Ty::Prim(PrimTy::Text) => arg, // identity
         Ty::Sum(name) => show_call(arg, name.clone(), arg_ty),
         Ty::Struct(name) => show_call(arg, name.clone(), arg_ty),
+        Ty::List(_) => show_call(arg, "List".to_string(), arg_ty),
         Ty::Var(name) => {
             // Ty::Var em enum genérico. Produz `show v` com ffi_symbol: None.
             // O monomorphizador, ao instanciar a função sintetizada, substitui

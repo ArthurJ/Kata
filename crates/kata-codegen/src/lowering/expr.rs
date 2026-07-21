@@ -340,8 +340,10 @@ pub(crate) fn lower_expr(
             };
 
             // Declara a função no module (sem definir o corpo ainda).
-            // Se há captures, o primeiro param é box_ptr (I64).
+            // ABI: arena_handle é o primeiro param implícito; se há captures,
+            // o segundo param é box_ptr (I64).
             let mut sig = Signature::new(CallConv::Tail);
+            sig.params.push(AbiParam::new(I64)); // arena_handle
             if !captures.is_empty() {
                 sig.params.push(AbiParam::new(I64)); // box_ptr
             }

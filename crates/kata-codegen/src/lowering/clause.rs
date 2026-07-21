@@ -106,11 +106,14 @@ pub(crate) fn lower_guards(
             // Lowera o body do guard.
             lower.builder.switch_to_block(body_block);
             lower.builder.seal_block(body_block);
+            lower.emitted_tail_call = false;
             let body_val = lower_expr(&guard.body.node, lower)?;
-            lower
-                .builder
-                .ins()
-                .jump(cont_block, &[BlockArg::Value(body_val)]);
+            if !lower.emitted_tail_call {
+                lower
+                    .builder
+                    .ins()
+                    .jump(cont_block, &[BlockArg::Value(body_val)]);
+            }
 
             next_test_block = next;
         } else {
@@ -120,11 +123,14 @@ pub(crate) fn lower_guards(
 
             lower.builder.switch_to_block(body_block);
             lower.builder.seal_block(body_block);
+            lower.emitted_tail_call = false;
             let body_val = lower_expr(&guard.body.node, lower)?;
-            lower
-                .builder
-                .ins()
-                .jump(cont_block, &[BlockArg::Value(body_val)]);
+            if !lower.emitted_tail_call {
+                lower
+                    .builder
+                    .ins()
+                    .jump(cont_block, &[BlockArg::Value(body_val)]);
+            }
 
             // Não há próximo guard.
             had_otherwise = true;
@@ -137,11 +143,14 @@ pub(crate) fn lower_guards(
     // (Se houve otherwise, o next_test_block final já tem terminador.)
     if !had_otherwise {
         lower.builder.switch_to_block(next_test_block);
+        lower.emitted_tail_call = false;
         let fallback_val = lower_expr(&fallback_body.node, lower)?;
-        lower
-            .builder
-            .ins()
-            .jump(cont_block, &[BlockArg::Value(fallback_val)]);
+        if !lower.emitted_tail_call {
+            lower
+                .builder
+                .ins()
+                .jump(cont_block, &[BlockArg::Value(fallback_val)]);
+        }
     }
     // next_test_block já foi selado dentro do loop (ou é o fallback block).
     lower.builder.seal_block(cont_block);
@@ -172,7 +181,7 @@ pub(crate) fn lower_clause_chain(
         next_clause_block = lower.builder.create_block();
 
         if let Some(cond_val) = matches {
-            // Pattern com teste condicional (Literal/Variant): brif.
+            // Pattern com teste condicional (Literal/Variant/Cons): brif.
             lower
                 .builder
                 .ins()
@@ -189,6 +198,12 @@ pub(crate) fn lower_clause_chain(
 
         // Switch para body_block antes de lowerar (o block atual já tem terminador).
         lower.builder.switch_to_block(body_block);
+
+        // Sub-patterns (ex: Cons { head: pivo, tail: resto }) já foram bindados
+        // por test_clause_patterns → test_single_pattern, que faz def_var para
+        // Ident durante o teste (no block que domina body_block).
+        // Não re-fazer def_var aqui — duplicar def_var cria Variable distintas,
+        // e a segunda (em body_block) não domina blocks de guards/sub-cláusulas.
 
         // Lowera with bindings.
         lower_with_bindings(&clause.with_bindings, lower)?;

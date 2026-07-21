@@ -180,7 +180,9 @@ fn list_shorthand_single_param() {
     let m = parse_src("quicksort :: [Int] => [Int]");
     let item = first_item(&m);
     match item {
-        Item::Sig { name, params, ret, .. } => {
+        Item::Sig {
+            name, params, ret, ..
+        } => {
             assert_eq!(name, "quicksort");
             assert_eq!(params.len(), 1);
             // params[0] = [Int] → List::Int

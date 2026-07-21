@@ -385,7 +385,7 @@ pub(crate) fn infer_expr_hinted(
         }
         // ── Coleções — inferência delegada para collections.rs ──
         Expr::ListLit { elements } => {
-            return super::collections::infer_list_lit(elements, span, env, ctx, tail_pos);
+            return super::collections::infer_list_lit(elements, span, env, ctx, tail_pos, hint);
         }
         Expr::ArrayLit { elements } => {
             return super::collections::infer_array_lit(elements, span, env, ctx, tail_pos);

@@ -57,6 +57,14 @@ pub(crate) fn infer_match(
             if let TypedPattern::Variant { variant, .. } = &typed_pat.node {
                 covered_variants.push(variant.clone());
             }
+            // Cons e Nil são variantes virtuais de List — coletar para
+            // exaustividade (Cons + Nil = exaustivo, sem otherwise).
+            if let TypedPattern::Cons { .. } = &typed_pat.node {
+                covered_variants.push("Cons".to_string());
+            }
+            if let TypedPattern::Nil = &typed_pat.node {
+                covered_variants.push("Nil".to_string());
+            }
             // Ident e Wildcard cobrem qualquer valor — contam como fallback.
             if matches!(
                 &typed_pat.node,
