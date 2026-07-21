@@ -13,6 +13,7 @@ pub(crate) mod infer;
 pub(crate) mod patterns;
 pub(crate) mod redundancy;
 pub(crate) mod typed;
+pub(crate) mod typed_module;
 pub(crate) mod typed_pattern;
 
 pub use infer::generics::{Substitutions, apply_subs, unify};
