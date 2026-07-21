@@ -93,9 +93,9 @@ fn untag_smi(raw: i64) -> i64 {
 #[test]
 fn soma_trma_e2e() {
     let src = r#"soma :: Int => Int
-    lambda n: match n
-        0: 0
-        otherwise: + n (soma (- n 1))
+lambda n: match n
+    0: 0
+    otherwise: + n (soma (- n 1))
 
 soma 1000000"#;
     let (raw, ty) = eval_src(src);
@@ -109,9 +109,9 @@ soma 1000000"#;
 #[test]
 fn fatorial_trma_e2e() {
     let src = r#"fat :: Int => Int
-    lambda n: match n
-        0: 1
-        otherwise: * n (fat (- n 1))
+lambda n: match n
+    0: 1
+    otherwise: * n (fat (- n 1))
 
 fat 20"#;
     let (raw, ty) = eval_src(src);
@@ -125,14 +125,14 @@ fat 20"#;
 #[test]
 fn recursao_mutua_nao_trma() {
     let src = r#"is_even :: Int => Boolean
-    lambda n: match n
-        0: Boolean::True
-        otherwise: is_odd (- n 1)
+lambda n: match n
+    0: Boolean::True
+    otherwise: is_odd (- n 1)
 
 is_odd :: Int => Boolean
-    lambda n: match n
-        0: Boolean::False
-        otherwise: is_even (- n 1)
+lambda n: match n
+    0: Boolean::False
+    otherwise: is_even (- n 1)
 
 is_even 10"#;
     let (raw, ty) = eval_src(src);
@@ -146,9 +146,9 @@ is_even 10"#;
 #[test]
 fn trma_cria_funcao_acc() {
     let src = r#"soma :: Int => Int
-    lambda n: match n
-        0: 0
-        otherwise: + n (soma (- n 1))
+lambda n: match n
+    0: 0
+    otherwise: + n (soma (- n 1))
 
 soma 5"#;
     let typed = infer_src(src);
@@ -195,9 +195,9 @@ soma 5"#;
 fn trma_nao_ativa_sem_associativo() {
     // `-` não é associativo — TRMA não deve ativar
     let src = r#"sub :: Int => Int
-    lambda n: match n
-        0: 0
-        otherwise: - n (sub (- n 1))
+lambda n: match n
+    0: 0
+    otherwise: - n (sub (- n 1))
 
 sub 5"#;
     let typed = infer_src(src);

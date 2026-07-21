@@ -404,8 +404,8 @@ fn match_effect_is_puro() {
 fn redundant_clause_wildcard_then_ident() {
     let src = "\
 fun :: Int => Int\n\
-\x20   lambda _: 1\n\
-\x20   lambda n: n\n\
+lambda _: 1\n\
+lambda n: n\n\
 fun 5";
     let err = infer_src_err(src);
     assert!(
@@ -420,8 +420,8 @@ fun 5";
 fn redundant_clause_ident_then_ident() {
     let src = "\
 fun :: Int => Int\n\
-\x20   lambda x: 1\n\
-\x20   lambda y: 2\n\
+lambda x: 1\n\
+lambda y: 2\n\
 fun 5";
     let err = infer_src_err(src);
     assert!(
@@ -436,8 +436,8 @@ fun 5";
 fn redundant_clause_same_literal() {
     let src = "\
 fun :: Int => Int\n\
-\x20   lambda 0: 1\n\
-\x20   lambda 0: 2\n\
+lambda 0: 1\n\
+lambda 0: 2\n\
 fun 5";
     let err = infer_src_err(src);
     assert!(
@@ -452,8 +452,8 @@ fun 5";
 fn non_redundant_clauses_ok() {
     let src = "\
 fun :: Int => Int\n\
-\x20   lambda 0: 1\n\
-\x20   lambda n: n\n\
+lambda 0: 1\n\
+lambda n: n\n\
 fun 5";
     let tmod = infer_src(src);
     let entry = entry_typed(&tmod);
@@ -467,10 +467,10 @@ fun 5";
 fn redundant_clause_with_guards_not_redundant() {
     let src = "\
 fun :: Int => Int\n\
-\x20   lambda x: 1\n\
-\x20   lambda x:\n\
-\x20\x20\x20\x20\x20   > x 0: 2\n\
-\x20\x20\x20\x20\x20   otherwise: 3\n\
+lambda x: 1\n\
+lambda x:\n\
+\x20   > x 0: 2\n\
+\x20   otherwise: 3\n\
 fun 5";
     // Não deve falhar — a segunda cláusula tem guards.
     let tmod = infer_src(src);
@@ -487,10 +487,10 @@ fun 5";
 fn non_redundant_boolean_variant_clauses() {
     let src = "\
 and :: Boolean Boolean => Boolean\n\
-\x20   lambda True True: True\n\
-\x20   lambda True False: False\n\
-\x20   lambda False True: False\n\
-\x20   lambda False False: False\n\
+lambda True True: True\n\
+lambda True False: False\n\
+lambda False True: False\n\
+lambda False False: False\n\
 and True False";
     let tmod = infer_src(src);
     let entry = entry_typed(&tmod);

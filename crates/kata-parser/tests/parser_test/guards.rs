@@ -87,7 +87,7 @@ fn lambda_anon_guard_single_condition() {
 
 #[test]
 fn sig_clause_with_guards() {
-    let src = "abs :: Int => Int\n    lambda x:\n        > x 0: x\n        otherwise: - 0 x";
+    let src = "abs :: Int => Int\nlambda x:\n    > x 0: x\n    otherwise: - 0 x";
     let m = parse_src(src);
     let item = first_item(&m);
     match item {
@@ -198,7 +198,7 @@ fn lambda_body_direct_with_block_no_guards() {
 #[test]
 fn sig_clause_body_direct_no_guards_with_block() {
     // Cláusula de função nomeada com body direto (sem guards) + with.
-    let src = "quicksort :: [Int] => [Int]\n    lambda []: []\n    lambda [pivo:resto]:\n        + (quicksort menores) [pivo : (quicksort maiores)]\n        with\n            menores := filter (< _ pivo) resto\n            maiores := filter (>= _ pivo) resto";
+    let src = "quicksort :: [Int] => [Int]\nlambda []: []\nlambda [pivo:resto]:\n    + (quicksort menores) [pivo : (quicksort maiores)]\n    with\n        menores := filter (< _ pivo) resto\n        maiores := filter (>= _ pivo) resto";
     let m = parse_src(src);
     let item = first_item(&m);
     match item {

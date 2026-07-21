@@ -1,13 +1,13 @@
 fizzbuzz :: Int => Text
-    lambda x:
-        both: "FizzBuzz"
-        fizz: "Fizz"
-        buzz: "Buzz"
-        otherwise: show x
-        with
-            fizz := = 0 (mod x 3)
-            buzz := = 0 (mod x 5)
-            both := and fizz buzz
+lambda x:
+    both: "FizzBuzz"
+    fizz: "Fizz"
+    buzz: "Buzz"
+    otherwise: show x
+    with
+        fizz := = 0 (mod x 3)
+        buzz := = 0 (mod x 5)
+        both := and fizz buzz
 
 action main
     echo!(fizzbuzz 3)

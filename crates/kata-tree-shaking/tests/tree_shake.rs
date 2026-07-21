@@ -92,9 +92,9 @@ soma!(1, 2)"#;
 fn funcao_morta_removida() {
     // `auxiliar` nunca é referenciada — deve ser removida.
     let src = r#"auxiliar :: Int => Int
-    lambda n: + n 1
+lambda n: + n 1
 principal :: Int => Int
-    lambda n: + n 2
+lambda n: + n 2
 principal 10"#;
     let shaken = shake(src);
     assert!(
@@ -112,11 +112,11 @@ principal 10"#;
 #[test]
 fn funcao_transitiva_mantida() {
     let src = r#"folha :: Int => Int
-    lambda n: + n 1
+lambda n: + n 1
 meio :: Int => Int
-    lambda n: folha n
+lambda n: folha n
 topo :: Int => Int
-    lambda n: meio n
+lambda n: meio n
 topo 10"#;
     let shaken = shake(src);
     assert!(

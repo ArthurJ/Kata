@@ -180,13 +180,13 @@ fn concrete_overload_beats_generic() {
 
 // ── Função genérica com corpo (não-FFI) ────────────────────────────
 
-/// `id :: T => T\n   lambda x: T\nid 42`
+/// `id :: T => T\nlambda x: T\nid 42`
 ///
 /// Função genérica com corpo lambda. O typeck infere T=Int do arg,
 /// aplica substitution no body, retorna Int.
 #[test]
 fn generic_function_with_body() {
-    let src = "id :: T => T\n   lambda x: x\nid 42";
+    let src = "id :: T => T\nlambda x: x\nid 42";
     let tmod = infer_src(src);
     let entry = entry_typed(&tmod);
     assert_eq!(entry.ty, Ty::int());

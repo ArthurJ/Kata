@@ -196,19 +196,14 @@ impl Parser {
         let ret = self.parse_type_expr()?;
 
         // Cláusulas lambda após assinatura (função nomeada com corpo Kata).
-        // Se há INDENT seguido de Lambda, parsear cláusulas.
-        // Se não, body = None (FFI — corpo suprido por @ffi).
-        let body = if matches!(self.peek(), Token::Indent) {
-            // Verifica se o primeiro token após INDENT é `lambda`
-            if let Some(next) = self.tokens.get(self.pos + 1) {
-                if matches!(next.token, Token::Lambda) {
-                    Some(self.parse_sig_clauses()?)
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
+        // Lambda no mesmo nível da assinatura: se o próximo token é `lambda`,
+        // parsear cláusulas. Se não, body = None (FFI — corpo suprido por @ffi).
+        // Consumir StmtSep antes de checar (newline entre assinatura e lambda).
+        while matches!(self.peek(), Token::StmtSep) {
+            self.advance();
+        }
+        let body = if matches!(self.peek(), Token::Lambda) {
+            Some(self.parse_sig_clauses()?)
         } else {
             None
         };
@@ -227,25 +222,30 @@ impl Parser {
         })
     }
 
-    /// Parse cláusulas lambda indentadas após uma assinatura.
+    /// Parse cláusulas lambda no mesmo nível da assinatura.
     ///
     /// ```text
     /// fat :: Int Int => Int
-    ///     lambda 0 acc: acc
-    ///     lambda n acc: fat (- n 1) (* n acc)
+    /// lambda 0 acc: acc
+    /// lambda n acc: fat (- n 1) (* n acc)
     /// ```
+    ///
+    /// Terminação: consome lambdas até encontrar um token que não seja
+    /// `Lambda` nem `StmtSep` (nova assinatura, action, diretiva, EOF, etc.).
     pub(crate) fn parse_sig_clauses(
         &mut self,
     ) -> Result<Vec<Spanned<LambdaClause>>, FrontendError> {
-        self.expect(&Token::Indent, "INDENT (cláusulas lambda)")?;
-
         let mut clauses = Vec::new();
         loop {
             // Skip StmtSep entre cláusulas
             while matches!(self.peek(), Token::StmtSep) {
                 self.advance();
             }
+            // Fim: EOF, Dedent (contexto implements), ou token não-lambda
             if matches!(self.peek(), Token::Dedent | Token::Eof) {
+                break;
+            }
+            if !matches!(self.peek(), Token::Lambda) {
                 break;
             }
 
@@ -255,7 +255,6 @@ impl Parser {
             clauses.push(Spanned::new(clause, span));
         }
 
-        self.expect(&Token::Dedent, "DEDENT (fim das cláusulas lambda)")?;
         Ok(clauses)
     }
 

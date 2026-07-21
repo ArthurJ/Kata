@@ -84,8 +84,8 @@ fn untag_smi(raw: i64) -> i64 {
 fn fatorial_recursivo() {
     let src = "\
 fat :: Int Int => Int\n\
-\x20   lambda 0 acc: acc\n\
-\x20   lambda n acc: fat (- n 1) (* n acc)\n\
+lambda 0 acc: acc\n\
+lambda n acc: fat (- n 1) (* n acc)\n\
 fat 5 1";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
@@ -100,9 +100,9 @@ fat 5 1";
 fn abs_com_guards() {
     let src = "\
 abs :: Int => Int\n\
-\x20   lambda x:\n\
-\x20\x20\x20\x20\x20   > x 0: x\n\
-\x20\x20\x20\x20\x20   otherwise: - 0 x\n\
+lambda x:\n\
+\x20   > x 0: x\n\
+\x20   otherwise: - 0 x\n\
 abs (- 0 5)";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
@@ -176,11 +176,11 @@ fn lambda_como_valor() {
 fn with_block_em_guard() {
     let src = "\
 double_or_zero :: Int => Int\n\
-\x20   lambda x:\n\
-\x20\x20\x20\x20\x20   > doubled 0: doubled\n\
-\x20\x20\x20\x20\x20   otherwise: 0\n\
-\x20\x20\x20\x20\x20   with\n\
-\x20\x20\x20\x20\x20\x20\x20\x20\x20   doubled := * x 2\n\
+lambda x:\n\
+\x20   > doubled 0: doubled\n\
+\x20   otherwise: 0\n\
+\x20   with\n\
+\x20\x20\x20\x20\x20   doubled := * x 2\n\
 double_or_zero 5";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
@@ -195,8 +195,8 @@ double_or_zero 5";
 fn funcao_nomeada_como_valor() {
     let src = "\
 fat :: Int Int => Int\n\
-\x20   lambda 0 acc: acc\n\
-\x20   lambda n acc: fat (- n 1) (* n acc)\n\
+lambda 0 acc: acc\n\
+lambda n acc: fat (- n 1) (* n acc)\n\
 let g := fat\n\
 g 5 1";
     let (raw, ty) = eval_src(src);
@@ -302,8 +302,8 @@ fn match_tuple_pattern_literal_miss() {
 fn fatorial_tco_profundidade_alta() {
     let src = "\
 fat :: Int Int => Int\n\
-\x20   lambda 0 acc: acc\n\
-\x20   lambda n acc: fat (- n 1) (* n acc)\n\
+lambda 0 acc: acc\n\
+lambda n acc: fat (- n 1) (* n acc)\n\
 fat 100000 1";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));

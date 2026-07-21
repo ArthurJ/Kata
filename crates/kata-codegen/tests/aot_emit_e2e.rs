@@ -124,8 +124,8 @@ fn aot_emit_expressão_simples_produz_object_file() {
 fn aot_emit_com_função_nomeada_emite_bytes() {
     let src = "\
 fat :: Int Int => Int
-    lambda 0 acc: acc
-    lambda n acc: fat (- n 1) (* n acc)
+lambda 0 acc: acc
+lambda n acc: fat (- n 1) (* n acc)
 
 fat 5 1";
     let bytes = emit_src(src);

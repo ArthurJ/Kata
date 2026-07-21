@@ -1,9 +1,9 @@
 # with block — bindings prévios visíveis nos guards
 classify :: Int => Text
-    lambda x:
-        > doubled 10: "grande"
-        otherwise: "pequeno"
-        with
-            doubled := * x 2
+lambda x:
+    > doubled 10: "grande"
+    otherwise: "pequeno"
+    with
+        doubled := * x 2
 
 classify 3

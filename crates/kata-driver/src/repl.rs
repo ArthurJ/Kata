@@ -481,8 +481,14 @@ pub(crate) fn cmd_repl() -> miette::Result<()> {
                     buffer.push('\n');
                     buffer.push_str(&line);
                     // Se estávamos em modo multiline_sig e a nova linha
-                    // não é indentada, o bloco terminou.
-                    if multiline_sig && !line.starts_with(' ') && !line.starts_with('\t') {
+                    // não é indentada nem começa com `lambda`/`λ`,
+                    // o bloco terminou.
+                    if multiline_sig
+                        && !line.starts_with(' ')
+                        && !line.starts_with('\t')
+                        && !line.trim_start().starts_with("lambda")
+                        && !line.trim_start().starts_with("λ")
+                    {
                         break;
                     }
                 }

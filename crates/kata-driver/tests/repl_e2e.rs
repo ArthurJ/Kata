@@ -265,7 +265,7 @@ fn write_temp_kata(name: &str, content: &str) -> String {
 fn repl_load_fatorial() {
     let path = write_temp_kata(
         "load_fatorial",
-        "fat :: Int Int => Int\n    lambda 0 acc: acc\n    lambda n acc: fat (- n 1) (* n acc)\n\nfat 5 1\n",
+        "fat :: Int Int => Int\nlambda 0 acc: acc\nlambda n acc: fat (- n 1) (* n acc)\n\nfat 5 1\n",
     );
     let out = run_repl(&[&format!(":load {path}"), ":quit"]);
     let lines = result_lines(&out);
@@ -280,7 +280,7 @@ fn repl_load_fatorial() {
 fn repl_load_makes_function_available() {
     let path = write_temp_kata(
         "load_func",
-        "fat :: Int Int => Int\n    lambda 0 acc: acc\n    lambda n acc: fat (- n 1) (* n acc)\n",
+        "fat :: Int Int => Int\nlambda 0 acc: acc\nlambda n acc: fat (- n 1) (* n acc)\n",
     );
     // Carrega o arquivo (sem entry) e depois chama fat 6 1.
     let out = run_repl(&[&format!(":load {path}"), "fat 6 1", ":quit"]);
@@ -317,11 +317,11 @@ fn repl_load_nonexistent_file_reports_error() {
 
 #[test]
 fn repl_multiline_sig_with_clauses() {
-    // Envia Sig + 2 cláusulas indentadas + linha em branco + chamada.
+    // Envia Sig + 2 cláusulas no mesmo nível + linha em branco + chamada.
     let out = run_repl(&[
         "fat :: Int Int => Int",
-        "    lambda 0 acc: acc",
-        "    lambda n acc: fat (- n 1) (* n acc)",
+        "lambda 0 acc: acc",
+        "lambda n acc: fat (- n 1) (* n acc)",
         "",
         "fat 5 1",
         ":quit",
@@ -339,8 +339,8 @@ fn repl_multiline_sig_decl_only() {
     // Sig + cláusulas sem entry — apenas declara, não executa.
     let out = run_repl(&[
         "fat :: Int Int => Int",
-        "    lambda 0 acc: acc",
-        "    lambda n acc: fat (- n 1) (* n acc)",
+        "lambda 0 acc: acc",
+        "lambda n acc: fat (- n 1) (* n acc)",
         "",
         "fat 3 1",
         ":quit",

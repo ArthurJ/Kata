@@ -118,7 +118,7 @@ Rational implements SHOW
 # Text implementa SHOW: show é identidade (Text já é Text).
 Text implements SHOW
     show :: Text => Text
-        lambda x: x
+    lambda x: x
 
 # ── Coleções: implements (Fio 8 Fase 4) ────────────────────────
 # List/Array/Range são tipos intrínsecos (variants de Ty), não data.
@@ -187,13 +187,13 @@ Text implements CONTAINS::Text
 
 # Int módulo (resto da divisão inteira)
 mod :: Int Int => Int
-    lambda a b: - a (* b (/ a b))
+lambda a b: - a (* b (/ a b))
 
 # AND lógico (Boolean é enum True/False, sem operador nativo)
 and :: Boolean Boolean => Boolean
-    lambda a b:
-        a: b
-        otherwise: False
+lambda a b:
+    a: b
+    otherwise: False
 
 # List head/tail (extrai primeiro elemento / resto da lista)
 @ffi("kata_rt_list_head")

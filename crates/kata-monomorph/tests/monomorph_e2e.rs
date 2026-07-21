@@ -258,7 +258,7 @@ fn same_type_dedup_instance() {
 /// `id :: T => T` com corpo lambda → instância tem o corpo em `mono.functions`.
 #[test]
 fn generic_function_with_body() {
-    let src = "id :: T => T\n    lambda x: x\nid 42";
+    let src = "id :: T => T\nlambda x: x\nid 42";
     let mono = mono_src(src);
 
     // Com corpo, a instância deve existir tanto no DispatchTable quanto em functions.

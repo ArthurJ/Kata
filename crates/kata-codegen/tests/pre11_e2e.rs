@@ -78,7 +78,7 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
 /// nunca destruída). Agora aloca na arena raiz do scheduler.
 #[test]
 fn tupla_em_funcao_pura_nao_vaza() {
-    let src = "soma_tupla :: Int Int => (Int, Int)\n    lambda a b: (a, b)\nsoma_tupla 3 4";
+    let src = "soma_tupla :: Int Int => (Int, Int)\nlambda a b: (a, b)\nsoma_tupla 3 4";
     let (val, ty) = eval_src(src);
     assert!(val != 0, "tupla deve ser alocada (ptr != 0)");
     assert!(matches!(ty, Ty::Tuple(_)));

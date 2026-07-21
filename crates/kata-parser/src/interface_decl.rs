@@ -317,17 +317,13 @@ impl Parser {
             // Diretivas opcionais APÓS o tipo de retorno: @ffi, @commutative
             let method_directives = self.parse_directives()?;
 
-            // Corpo: lambda indentado (Some) ou apenas diretivas @ffi (None)
-            let body = if matches!(self.peek(), Token::Indent) {
-                if let Some(next) = self.tokens.get(self.pos + 1) {
-                    if matches!(next.token, Token::Lambda) {
-                        Some(self.parse_sig_clauses()?)
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
+            // Corpo: lambda no mesmo nível (Some) ou apenas diretivas @ffi (None)
+            // Consumir StmtSep antes de checar (newline entre assinatura e lambda).
+            while matches!(self.peek(), Token::StmtSep) {
+                self.advance();
+            }
+            let body = if matches!(self.peek(), Token::Lambda) {
+                Some(self.parse_sig_clauses()?)
             } else {
                 None
             };

@@ -97,7 +97,7 @@ fn multiple_directives_stacked() {
 #[test]
 fn sig_with_lambda_clauses() {
     let m = parse_src(
-        "fat :: Int Int => Int\n    lambda 0 acc: acc\n    lambda n acc: fat (- n 1) (* n acc)",
+        "fat :: Int Int => Int\nlambda 0 acc: acc\nlambda n acc: fat (- n 1) (* n acc)",
     );
     let item = first_item(&m);
     match item {
@@ -130,7 +130,7 @@ fn sig_with_lambda_clauses() {
 
 #[test]
 fn sig_with_single_clause() {
-    let m = parse_src("inc :: Int => Int\n    lambda x: + x 1");
+    let m = parse_src("inc :: Int => Int\nlambda x: + x 1");
     let item = first_item(&m);
     match item {
         Item::Sig { name, body, .. } => {
@@ -159,7 +159,7 @@ fn sig_without_body_still_works() {
 
 #[test]
 fn sig_with_lambda_unicode_clause() {
-    let m = parse_src("inc :: Int => Int\n    λ x: + x 1");
+    let m = parse_src("inc :: Int => Int\nλ x: + x 1");
     let item = first_item(&m);
     match item {
         Item::Sig { name, body, .. } => {

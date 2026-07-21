@@ -1,10 +1,10 @@
 quicksort :: [Int] => [Int]
-    lambda []: []
-    lambda [pivo:resto]:
-        + (quicksort menores) [pivo : (quicksort maiores)]
-        with
-            menores := filter (< _ pivo) resto
-            maiores := filter (>= _ pivo) resto
+lambda []: []
+lambda [pivo:resto]:
+    + (quicksort menores) [pivo : (quicksort maiores)]
+    with
+        menores := filter (< _ pivo) resto
+        maiores := filter (>= _ pivo) resto
 
 action main
     let nums := [5 2 9 1 5 6]

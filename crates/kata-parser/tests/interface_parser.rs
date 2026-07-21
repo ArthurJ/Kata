@@ -111,7 +111,7 @@ fn implements_with_ffi() {
 
 #[test]
 fn implements_with_lambda_body() {
-    let src = "Complex implements NUM\n    + :: Complex Complex => Complex\n        lambda a b: a";
+    let src = "Complex implements NUM\n    + :: Complex Complex => Complex\n    lambda a b: a";
     let m = parse_src(src);
     match first_item(&m) {
         Item::ImplementsDecl {
