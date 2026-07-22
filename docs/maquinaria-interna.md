@@ -882,7 +882,7 @@ retornam 0/1 cru (Boolean não é SMI-tagged).
 1. `nil = kata_rt_list_nil()` → 0
 2. Para cada elemento (em ordem reversa): `acc = kata_rt_list_cons(head, acc, arena)`
 3. Bitcast F64→I64 se o elemento for Float (Cons cell armazena i64 cru)
-4. Arena é selecionada por `expr.escape` (Local → fiber_arena, Caller/Ancestor → caller_arena)
+4. Arena é selecionada por `expr.escape` (Local → fiber_arena, Caller → caller_arena)
 
 **ArrayLit `{1 2 3}`** — aloca header+data contíguo:
 1. `ptr = kata_rt_array_alloc(len, arena)`

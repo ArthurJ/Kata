@@ -582,8 +582,10 @@ terminaram.
 - Scheduler rastreia árvore de fibers (parent_id, children, completed)
 - Destruição bottom-up (arena do pai sobrevive até filhos terminarem)
 - Arena raiz criada no scheduler_init, destruída no fim do run
-- `EscapeTarget` na TAST (Local / Caller / Ancestor(n)) coexiste com `tail_pos`
-  (`tail_pos` governa TCO, `escape` governa arena selection)
+- `EscapeTarget` na TAST (Local / Caller) coexiste com `tail_pos`
+  (`tail_pos` governa TCO, `escape` governa arena selection).
+  `Ancestor(n)` foi removido — era código morto forward-looking para LCA
+  que nunca foi implementado. Será re-adicionado quando o LCA real existir.
 - ARC pass emitido pelo codegen (`incref`/`decref` nos pontos apropriados)
 - CaptureBox e Sum results alocam na arena do escape target, não hardcoded em handle 0
 
