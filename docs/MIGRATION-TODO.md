@@ -6,16 +6,11 @@ valor didático × esforço.
 
 ## Clusters priorizados
 
-### Cluster 1 — Tipos refinados + `Result` + `?` + `|` (lacuna grave)
-- **Candidatos legacy:** `test_refined.kata`, `test_try.kata`, `test_fallback.kata`, `test_repr_refined.kata`
-- **Destino:** `examples/refined_types.kata` (arquivo único, narrativa didática)
-- **Estrutura revisada (2026-07-22):** 6 blocos — declaração + ascription + echo!, smart constructor + match, `?` em Action que retorna Result, `refines NUM` + aritmética delegada, `|` com Optional + coerção contextual, downcast + caso misto + múltiplos predicados
-- **Status:** EM PROGRESSO — bloqueio original resolvido (PRD-refines ✅), bugs do compilador descobertos durante migração
-- **Bloqueio original (RESOLVIDO):** refined types não interoperavam com operações base. Resolvido pelo PRD-refines (15/15 DoDs): `refines` keyword, SHOW automático universal, downcast via `::`, `T?` açúcar.
-- **Bloqueios descobertos na migração (2026-07-22):**
-  - **BUG: Pattern matching de variantes não-qualificadas com payload.** `Ok v:` em match arm falha no parser com "esperado `:` após pattern do braço". O parser produz `Pattern::Ident("Ok")` e `v` fica órfão. `Result::Ok v:` funciona (qualificado). `Ok` sem payload funciona (typeck resolve `Pattern::Ident` → `TypedPattern::Variant` para variantes unitárias). **Causa:** `parse_pattern` (patterns.rs:33-87) só reconhece variantes qualificadas (`Enum::Variant`); `Ident` sem `::` vira binding, e o sub-pattern nunca é consumido. **Fix:** criar `parse_match_pattern` que trata `Ident` seguido de sub-pattern como variante desqualificada com payload, restrito a match arms (não lambda clauses — lambdas usam `parse_patterns` multi-argumento).
-  - **LIMITAÇÃO: `?` em Action `=> Unit`.** `?` propaga Err via `return` — Action precisa retornar `Result`/`Optional`. Não é bug, é design (fail-fast). Exemplo didático usa Actions que retornam `Result`.
-  - **LIMITAÇÃO: `|` com `Result`.** `|` exige variante cauda unitária (`None`). `Result::Err` tem payload — incompatível. Exemplo usa `|` com `Optional`, não `Result`.
+### Cluster 1 — Tipos refinados + `Result` + `?` + `|` ✅ Concluído
+- **Candidatos legacy:** `test_refined.kata`, `test_try.kata`, `test_fallback.kata`, `test_repr_refined.kata` — **removidos**
+- **Destino:** `examples/refined_types.kata` — **criado** (6 blocos didáticos)
+- **Estrutura:** 6 blocos — declaração + ascription + echo!, smart constructor + match, `?` em Action que retorna Result, `refines NUM` + aritmética delegada, `|` com Optional + coerção contextual, downcast + caso misto + múltiplos predicados
+- **Status:** ✅ Concluído (2026-07-22). 4 scripts legacy removidos. Snapshot adicionado. 996 testes passando.
 
 ### Cluster 2 — `alias`/Newtype + `enum` predicado (lacuna grave)
 - **Candidatos legacy:** `test_alias_bug.kata`, `test_imc.kata`
