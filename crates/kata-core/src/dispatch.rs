@@ -477,6 +477,8 @@ fn extract_type_name(ty: &Ty) -> Option<String> {
         Ty::List(_) => Some("List".into()),
         Ty::Array(_) => Some("Array".into()),
         Ty::Range(_) => Some("Range".into()),
+        Ty::Dict(_, _) => Some("Dict".into()),
+        Ty::Set(_) => Some("Set".into()),
         Ty::Sender(_) => Some("Sender".into()),
         Ty::Receiver(_) => Some("Receiver".into()),
         Ty::ReceiverFactory(_) => Some("ReceiverFactory".into()),

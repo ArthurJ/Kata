@@ -240,6 +240,21 @@ pub(crate) fn desugar_holes(expr: &Spanned<Expr>) -> Spanned<Expr> {
             },
             expr.span,
         ),
+        Expr::DictLit { entries } => Spanned::new(
+            Expr::DictLit {
+                entries: entries
+                    .iter()
+                    .map(|(k, v)| (desugar_holes(k), desugar_holes(v)))
+                    .collect(),
+            },
+            expr.span,
+        ),
+        Expr::SetLit { elements } => Spanned::new(
+            Expr::SetLit {
+                elements: elements.iter().map(desugar_holes).collect(),
+            },
+            expr.span,
+        ),
         Expr::RangeLit {
             start,
             step,

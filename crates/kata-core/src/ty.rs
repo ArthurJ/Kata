@@ -45,6 +45,10 @@ pub enum Ty {
     Array(Box<Ty>),
     /// Range lazy: `[a..s..b]` — start, step, end. Genérico sobre A.
     Range(Box<Ty>),
+    /// Dict persistente: `Dict::(K, V)` — HAMT de pares chave-valor.
+    Dict(Box<Ty>, Box<Ty>),
+    /// Set persistente: `Set::T` — HAMT de chaves (sem values).
+    Set(Box<Ty>),
     /// Sender de canal — `Sender::T`. Pode fazer `!>`.
     /// Funciona para Channel (rendezvous), Queue (buffered), Broadcast.
     Sender(Box<Ty>),
@@ -269,6 +273,8 @@ impl std::fmt::Display for Ty {
             Ty::List(inner) => write!(f, "[{inner}]"),
             Ty::Array(inner) => write!(f, "{{{inner}}}"),
             Ty::Range(inner) => write!(f, "[..{inner}]"),
+            Ty::Dict(k, v) => write!(f, "Dict::({k}, {v})"),
+            Ty::Set(t) => write!(f, "Set::{t}"),
             Ty::Sender(inner) => write!(f, "Sender::{inner}"),
             Ty::Receiver(inner) => write!(f, "Receiver::{inner}"),
             Ty::ReceiverFactory(inner) => write!(f, "ReceiverFactory::{inner}"),

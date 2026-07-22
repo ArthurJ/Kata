@@ -204,6 +204,21 @@ fn desugar_pipes(expr: &Spanned<Expr>) -> Spanned<Expr> {
             },
             expr.span,
         ),
+        Expr::DictLit { entries } => Spanned::new(
+            Expr::DictLit {
+                entries: entries
+                    .iter()
+                    .map(|(k, v)| (desugar_pipes(k), desugar_pipes(v)))
+                    .collect(),
+            },
+            expr.span,
+        ),
+        Expr::SetLit { elements } => Spanned::new(
+            Expr::SetLit {
+                elements: elements.iter().map(desugar_pipes).collect(),
+            },
+            expr.span,
+        ),
         Expr::RangeLit {
             start,
             step,

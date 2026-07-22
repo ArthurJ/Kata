@@ -181,6 +181,15 @@ pub enum Expr {
     /// `{1 2 3}` — array literal (contíguo, imutável).
     ArrayLit { elements: Vec<Spanned<Expr>> },
 
+    /// `{"k": v "k2": v2}` — literal de Dict.
+    DictLit {
+        entries: Vec<(Spanned<Expr>, Spanned<Expr>)>,
+    },
+    /// `{|1 2 3|}` — literal de Set.
+    SetLit {
+        elements: Vec<Spanned<Expr>>,
+    },
+
     /// `[a..s..b]` ou `[a..s..=b]` — range lazy.
     /// Step é sempre explícito na sintaxe.
     RangeLit {

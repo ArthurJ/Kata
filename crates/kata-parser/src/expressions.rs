@@ -166,7 +166,7 @@ impl Parser {
             }
             Token::LParen => self.parse_paren_expr(),
             Token::LBracket => self.parse_list_or_range(),
-            Token::LBrace => self.parse_array_lit(),
+            Token::LBrace => self.parse_brace_lit(),
             Token::Ident(name) => {
                 self.advance();
                 // `_` em posição de expressão → Hole (currying).

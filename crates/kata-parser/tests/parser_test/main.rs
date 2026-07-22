@@ -7,6 +7,7 @@ mod actions;
 mod basics;
 mod collections;
 mod csp;
+mod dict_set;
 mod directive_values;
 mod guards;
 mod helpers;

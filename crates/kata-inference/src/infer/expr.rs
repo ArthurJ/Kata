@@ -514,6 +514,22 @@ pub(crate) fn infer_expr_hinted(
         Expr::ArrayLit { elements } => {
             return super::collections::infer_array_lit(elements, span, env, ctx, tail_pos);
         }
+        Expr::DictLit { entries: _ } => {
+            // TODO: implement Dict inference in a future fio.
+            return Err(MiddleError::TypeMismatch {
+                expected: "Dict literal inference not yet implemented".into(),
+                found: format!("{:?}", expr),
+                span: (*span).into(),
+            });
+        }
+        Expr::SetLit { elements: _ } => {
+            // TODO: implement Set inference in a future fio.
+            return Err(MiddleError::TypeMismatch {
+                expected: "Set literal inference not yet implemented".into(),
+                found: format!("{:?}", expr),
+                span: (*span).into(),
+            });
+        }
         Expr::RangeLit {
             start,
             step,

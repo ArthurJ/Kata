@@ -10,7 +10,7 @@ use kata_ast::{Expr, Spanned, Token};
 use kata_diagnostics::FrontendError;
 
 use crate::Parser;
-use crate::expr_apply::parse_expr;
+use crate::expr_apply::{parse_apply, parse_expr};
 
 impl Parser {
     /// Parse `loop` with indented body — laço infinito (exclusivo de Actions).
@@ -147,8 +147,15 @@ impl Parser {
         ))
     }
 
-    /// Parse `{1 2 3}` (ArrayLit). `{}` = array vazio.
-    pub(crate) fn parse_array_lit(&mut self) -> Result<Spanned<Expr>, FrontendError> {
+    /// Parse `{...}` — disambiguates ArrayLit, DictLit, and SetLit.
+    ///
+    /// After `LBrace`:
+    /// - `}` → ArrayLit empty (existing)
+    /// - `|` → SetLit (`{|1 2 3|}`); `{||}` → empty set
+    /// - `:` → DictLit empty (`{:}`)
+    /// - `<expr> :` → DictLit (`{"k": v ...}`)
+    /// - `<expr>` (no colon) → ArrayLit (existing behavior)
+    pub(crate) fn parse_brace_lit(&mut self) -> Result<Spanned<Expr>, FrontendError> {
         let start = self.peek_span();
         self.expect(&Token::LBrace, "`{`")?;
 
@@ -159,7 +166,46 @@ impl Parser {
             return Ok(Spanned::new(Expr::ArrayLit { elements: vec![] }, span));
         }
 
-        let mut elements = vec![parse_expr(self)?];
+        // `{|...|}` — SetLit
+        if matches!(self.peek(), Token::Pipe) {
+            self.advance(); // consume `|`
+            return self.parse_set_lit(start);
+        }
+
+        // `{:}` — DictLit vazio
+        if matches!(self.peek(), Token::Colon) {
+            self.advance(); // consume `:`
+            self.expect(&Token::RBrace, "`}` para fechar Dict vazio")?;
+            let span = start.cover(self.tokens[self.pos - 1].span);
+            return Ok(Spanned::new(Expr::DictLit { entries: vec![] }, span));
+        }
+
+        // Parseia primeiro elemento
+        let first = parse_expr(self)?;
+
+        // Se o próximo é `:`, é DictLit: `{"k": v ...}`
+        if matches!(self.peek(), Token::Colon) {
+            self.advance(); // consume `:`
+            let value = parse_apply(self)?;
+            let mut entries = vec![(first, value)];
+
+            // Pares subsequentes separados por whitespace
+            while !matches!(self.peek(), Token::RBrace) {
+                if matches!(self.peek(), Token::Eof) {
+                    return Err(self.error("`}` para fechar Dict"));
+                }
+                let key = parse_apply(self)?;
+                self.expect(&Token::Colon, "`:` separando key e value no Dict")?;
+                let val = parse_apply(self)?;
+                entries.push((key, val));
+            }
+            self.expect(&Token::RBrace, "`}`")?;
+            let span = start.cover(self.tokens[self.pos - 1].span);
+            return Ok(Spanned::new(Expr::DictLit { entries }, span));
+        }
+
+        // Caso contrário, é ArrayLit — coleta elementos restantes
+        let mut elements = vec![first];
         while !matches!(self.peek(), Token::RBrace) {
             if matches!(self.peek(), Token::Eof) {
                 return Err(self.error("`}` para fechar array"));
@@ -169,6 +215,43 @@ impl Parser {
         self.expect(&Token::RBrace, "`}`")?;
         let span = start.cover(self.tokens[self.pos - 1].span);
         Ok(Spanned::new(Expr::ArrayLit { elements }, span))
+    }
+
+    /// Parse elements of a SetLit after `{|`.
+    /// Caller has consumed `LBrace` and `Pipe`.
+    /// Elements separated by whitespace until `|}`.
+    /// Empty set is `{||}` (Pipe Pipe RBrace).
+    fn parse_set_lit(&mut self, start: kata_ast::Span) -> Result<Spanned<Expr>, FrontendError> {
+        // `{||}` — set vazio
+        if matches!(self.peek(), Token::Pipe) {
+            self.advance(); // consume second `|`
+            self.expect(&Token::RBrace, "`}` para fechar Set vazio")?;
+            let span = start.cover(self.tokens[self.pos - 1].span);
+            return Ok(Spanned::new(Expr::SetLit { elements: vec![] }, span));
+        }
+
+        // Parseia elementos até `|}`
+        let mut elements = Vec::new();
+        loop {
+            if matches!(self.peek(), Token::Eof) {
+                return Err(self.error("`|}` para fechar Set"));
+            }
+            if matches!(self.peek(), Token::Pipe) {
+                // Verifica se é `|}` (fim do set)
+                if let Some(next) = self.tokens.get(self.pos + 1)
+                    && matches!(next.token, Token::RBrace)
+                {
+                    self.advance(); // consume `|`
+                    self.advance(); // consume `}`
+                    break;
+                }
+                // `|` não seguido de `}` — erro
+                return Err(self.error("`|}` para fechar Set"));
+            }
+            elements.push(parse_apply(self)?);
+        }
+        let span = start.cover(self.tokens[self.pos - 1].span);
+        Ok(Spanned::new(Expr::SetLit { elements }, span))
     }
 
     /// Parse `for x in colecao` com body indentado (exclusivo de Actions).

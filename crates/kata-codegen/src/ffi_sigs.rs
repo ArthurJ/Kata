@@ -30,6 +30,8 @@ pub(crate) fn ty_to_clif(ty: &Ty) -> cranelift_codegen::ir::Type {
         | Ty::List(_)
         | Ty::Array(_)
         | Ty::Range(_)
+        | Ty::Dict(_, _)
+        | Ty::Set(_)
         | Ty::Sender(_)
         | Ty::Receiver(_)
         | Ty::ReceiverFactory(_) => I64,
