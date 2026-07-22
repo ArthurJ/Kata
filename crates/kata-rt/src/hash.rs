@@ -90,7 +90,7 @@ pub extern "C" fn kata_rt_hash_text(str_ptr: i64) -> i64 {
 /// `rat_ptr` deve ser um ponteiro válido para uma struct com layout:
 /// - offset 0: numer (i64)
 /// - offset 8: denom (i64)
-/// Ou 0 (NULL).
+///   Ou 0 (NULL).
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_hash_rational(rat_ptr: i64) -> i64 {
     if rat_ptr == 0 {

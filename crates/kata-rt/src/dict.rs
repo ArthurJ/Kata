@@ -290,6 +290,7 @@ pub(crate) fn hamt_remove(
 
 /// Iterate over the HAMT via `collect_all_kvpairs`. Returns `Optional::(K, V)`
 /// as a Sum box. Used by Set (which needs HAMT-order iteration).
+#[allow(dead_code)]
 pub(crate) fn hamt_next(hamt_root: i64, iter_state: i64, arena_handle: i64) -> i64 {
     if iter_state == 0 {
         let (arr, count) = unsafe { collect_all_kvpairs(hamt_root, arena_handle) };
@@ -488,6 +489,7 @@ unsafe fn insert_recursive(
 ///
 /// Creates a new interior node containing both leaves, potentially
 /// recursing deeper if they share the same 5-bit index at this level.
+#[allow(clippy::too_many_arguments)]
 unsafe fn split_leaves(
     existing_leaf_ptr: i64,
     existing_hash: i64,
@@ -989,7 +991,7 @@ thread_local! {
 
 /// Dict is a 16-byte struct: (hamt_root, insert_log)
 /// offset 0: hamt_root, offset 8: insert_log (Cons list of KVPair ptrs)
-
+///
 /// Allocate an empty Dict (16-byte struct: hamt_root + nil insert_log).
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_dict_empty(arena_handle: i64) -> i64 {
@@ -1367,7 +1369,7 @@ mod tests {
         let key1 = 3i64;
         let val1 = 21i64;
         let hash1 = crate::hash::kata_rt_hash_int(key1);
-        let eq_fn = crate::bigint::kata_rt_bi_eq as i64;
+        let eq_fn = crate::bigint::kata_rt_bi_eq as *const () as i64;
         let dict1 = kata_rt_dict_insert(dict, key1, val1, hash1, eq_fn, arena);
         let len1 = kata_rt_dict_len(dict1);
         assert_eq!(len1, smi(1), "after 1 insert, len should be SMI(1), got {}", len1);
@@ -1400,7 +1402,7 @@ mod tests {
         let hash_a = crate::hash::kata_rt_hash_text(a_ptr);
         let hash_b = crate::hash::kata_rt_hash_text(b_ptr);
 
-        let eq_fn = crate::text::kata_rt_string_eq as i64;
+        let eq_fn = crate::text::kata_rt_string_eq as *const () as i64;
 
         let dict1 = kata_rt_dict_insert(dict, a_ptr, 3, hash_a, eq_fn, arena);
         let dict2 = kata_rt_dict_insert(dict1, b_ptr, 5, hash_b, eq_fn, arena);

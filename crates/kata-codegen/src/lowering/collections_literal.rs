@@ -634,7 +634,7 @@ fn lower_dict_lit(
     entries: &[(kata_ast::Spanned<TypedExpr>, kata_ast::Spanned<TypedExpr>)],
     key_ty: &Ty,
     _value_ty: &Ty,
-    expr: &TypedExpr,
+    _expr: &TypedExpr,
     ctx: &mut LowerCtx,
 ) -> Result<cranelift_codegen::ir::Value, super::CodegenError> {
     let arena_handle = ctx
@@ -700,7 +700,7 @@ fn lower_dict_lit(
 fn lower_set_lit(
     elements: &[kata_ast::Spanned<TypedExpr>],
     elem_ty: &Ty,
-    expr: &TypedExpr,
+    _expr: &TypedExpr,
     ctx: &mut LowerCtx,
 ) -> Result<cranelift_codegen::ir::Value, super::CodegenError> {
     let arena_handle = ctx
