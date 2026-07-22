@@ -112,7 +112,9 @@ pub extern "C" fn kata_rt_set_next(set_ptr: i64, iter_state: i64, arena_handle: 
 pub extern "C" fn kata_rt_set_union(a: i64, b: i64, eq_fn: i64, arena_handle: i64) -> i64 {
     // Start with a copy of a (insert into a builds a new tree sharing structure).
     // We need to iterate b and insert each key into a.
-    let (arr, count) = unsafe { dict::collect_all_kvpairs(b, arena_handle) };
+    // Extract HAMT root from the 16-byte Dict struct.
+    let b_hamt = unsafe { std::ptr::read_unaligned(b as *const i64) };
+    let (arr, count) = unsafe { dict::collect_all_kvpairs(b_hamt, arena_handle) };
 
     let mut result = a;
     for i in 0..count {
@@ -133,7 +135,8 @@ pub extern "C" fn kata_rt_set_union(a: i64, b: i64, eq_fn: i64, arena_handle: i6
 /// in `b` (dict_contains). If yes, insert into result.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_set_intersection(a: i64, b: i64, eq_fn: i64, arena_handle: i64) -> i64 {
-    let (arr, count) = unsafe { dict::collect_all_kvpairs(a, arena_handle) };
+    let a_hamt = unsafe { std::ptr::read_unaligned(a as *const i64) };
+    let (arr, count) = unsafe { dict::collect_all_kvpairs(a_hamt, arena_handle) };
 
     let mut result = dict::kata_rt_dict_empty(arena_handle);
     for i in 0..count {
@@ -157,7 +160,8 @@ pub extern "C" fn kata_rt_set_intersection(a: i64, b: i64, eq_fn: i64, arena_han
 /// NOT in `b`. If not in b, insert into result.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_set_difference(a: i64, b: i64, eq_fn: i64, arena_handle: i64) -> i64 {
-    let (arr, count) = unsafe { dict::collect_all_kvpairs(a, arena_handle) };
+    let a_hamt = unsafe { std::ptr::read_unaligned(a as *const i64) };
+    let (arr, count) = unsafe { dict::collect_all_kvpairs(a_hamt, arena_handle) };
 
     let mut result = dict::kata_rt_dict_empty(arena_handle);
     for i in 0..count {
