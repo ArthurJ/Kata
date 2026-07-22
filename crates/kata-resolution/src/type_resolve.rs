@@ -97,6 +97,23 @@ pub(crate) fn resolve_type_expr(
                         .expect("Range::(A) exige exatamente 1 param");
                     Ty::Range(Box::new(elem))
                 }
+                "Dict" => {
+                    let mut params = resolved_params.into_iter();
+                    let key = params
+                        .next()
+                        .expect("Dict::(K, V) exige exatamente 2 params");
+                    let val = params
+                        .next()
+                        .expect("Dict::(K, V) exige exatamente 2 params");
+                    Ty::Dict(Box::new(key), Box::new(val))
+                }
+                "Set" => {
+                    let elem = resolved_params
+                        .into_iter()
+                        .next()
+                        .expect("Set::(A) exige exatamente 1 param");
+                    Ty::Set(Box::new(elem))
+                }
                 // Tipos intrínsecos de canal.
                 "Sender" => {
                     let elem = resolved_params
@@ -208,8 +225,12 @@ pub fn collect_type_params(param_types: &[Ty], return_type: &Ty) -> Vec<String> 
                 }
             }
             // Coleções intrínsecas: recursar no tipo do elemento.
-            Ty::List(inner) | Ty::Array(inner) | Ty::Range(inner) => {
+            Ty::List(inner) | Ty::Array(inner) | Ty::Range(inner) | Ty::Set(inner) => {
                 collect_into(inner, result);
+            }
+            Ty::Dict(key, val) => {
+                collect_into(key, result);
+                collect_into(val, result);
             }
             // Canais: recursar no tipo do canal.
             Ty::Sender(inner) | Ty::Receiver(inner) | Ty::ReceiverFactory(inner) => {
