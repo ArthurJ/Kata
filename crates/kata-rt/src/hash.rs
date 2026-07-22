@@ -75,8 +75,8 @@ pub extern "C" fn kata_rt_hash_text(str_ptr: i64) -> i64 {
         return FNV_OFFSET as i64;
     }
     // SAFETY: caller (JIT codegen) garante que str_ptr é um ponteiro C string válido.
-    let bytes = unsafe { std::ffi::CStr::from_ptr(str_ptr as *const std::os::raw::c_char) }
-        .to_bytes();
+    let bytes =
+        unsafe { std::ffi::CStr::from_ptr(str_ptr as *const std::os::raw::c_char) }.to_bytes();
     fnv1a_bytes(bytes) as i64
 }
 
@@ -97,12 +97,8 @@ pub extern "C" fn kata_rt_hash_rational(rat_ptr: i64) -> i64 {
         return FNV_OFFSET as i64;
     }
     // SAFETY: caller (JIT codegen) garante que rat_ptr é um ponteiro válido.
-    let numer = unsafe {
-        std::ptr::read_unaligned(rat_ptr as *const i64)
-    };
-    let denom = unsafe {
-        std::ptr::read_unaligned((rat_ptr as *const u8).add(8) as *const i64)
-    };
+    let numer = unsafe { std::ptr::read_unaligned(rat_ptr as *const i64) };
+    let denom = unsafe { std::ptr::read_unaligned((rat_ptr as *const u8).add(8) as *const i64) };
     let h_numer = fnv1a_bytes(&numer.to_le_bytes());
     let h_denom = fnv1a_bytes(&denom.to_le_bytes());
     (h_numer ^ h_denom) as i64

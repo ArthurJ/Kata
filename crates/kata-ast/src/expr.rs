@@ -186,9 +186,7 @@ pub enum Expr {
         entries: Vec<(Spanned<Expr>, Spanned<Expr>)>,
     },
     /// `{|1 2 3|}` — literal de Set.
-    SetLit {
-        elements: Vec<Spanned<Expr>>,
-    },
+    SetLit { elements: Vec<Spanned<Expr>> },
 
     /// `[a..s..b]` ou `[a..s..=b]` — range lazy.
     /// Step é sempre explícito na sintaxe.

@@ -333,6 +333,17 @@ fn rewrite_typed_expr(expr_span: &mut Spanned<TypedExpr>, ctx: &MonoCtx, acc: &m
                 rewrite_typed_expr(el, ctx, acc);
             }
         }
+        TypedExprKind::DictLit { entries, .. } => {
+            for (key, val) in entries.iter_mut() {
+                rewrite_typed_expr(key, ctx, acc);
+                rewrite_typed_expr(val, ctx, acc);
+            }
+        }
+        TypedExprKind::SetLit { elements, .. } => {
+            for el in elements.iter_mut() {
+                rewrite_typed_expr(el, ctx, acc);
+            }
+        }
         TypedExprKind::RangeLit {
             start, step, end, ..
         } => {

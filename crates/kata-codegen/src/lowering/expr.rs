@@ -504,6 +504,11 @@ pub(crate) fn lower_expr(
             )
         }
 
+        // ── DictLit / SetLit — ainda não lowered pelo codegen ──
+        TypedExprKind::DictLit { .. } | TypedExprKind::SetLit { .. } => {
+            todo!("codegen lowering for DictLit/SetLit is not yet implemented")
+        }
+
         // ── Map/filter/fold — lowering ──
         TypedExprKind::Map {
             callback,

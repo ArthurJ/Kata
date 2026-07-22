@@ -158,10 +158,7 @@ fn alloc_node(bitmap: u32, children: &[i64], arena: i64) -> i64 {
     unsafe {
         std::ptr::write_unaligned(ptr as *mut i64, bitmap as i64);
         for (i, &child) in children.iter().enumerate() {
-            std::ptr::write_unaligned(
-                (ptr as *mut u8).add(header_size + i * 8) as *mut i64,
-                child,
-            );
+            std::ptr::write_unaligned((ptr as *mut u8).add(header_size + i * 8) as *mut i64, child);
         }
     }
     ptr
@@ -178,10 +175,7 @@ fn alloc_collision(count: i64, entries: &[i64], arena: i64) -> i64 {
         std::ptr::write_unaligned(ptr as *mut i64, COLLISION_SENTINEL);
         std::ptr::write_unaligned((ptr as *mut u8).add(8) as *mut i64, count);
         for (i, &entry) in entries.iter().enumerate() {
-            std::ptr::write_unaligned(
-                (ptr as *mut u8).add(16 + i * 8) as *mut i64,
-                entry,
-            );
+            std::ptr::write_unaligned((ptr as *mut u8).add(16 + i * 8) as *mut i64, entry);
         }
     }
     ptr
@@ -201,7 +195,9 @@ unsafe fn read_child(node_ptr: i64, compacted_idx: usize) -> i64 {
 
 /// Read all children from an interior node.
 unsafe fn read_all_children(node_ptr: i64, count: usize) -> Vec<i64> {
-    (0..count).map(|i| unsafe { read_child(node_ptr, i) }).collect()
+    (0..count)
+        .map(|i| unsafe { read_child(node_ptr, i) })
+        .collect()
 }
 
 /// Read the count from a collision node.
@@ -294,11 +290,7 @@ pub(crate) fn hamt_remove(
 
 /// Iterate over the HAMT via `collect_all_kvpairs`. Returns `Optional::(K, V)`
 /// as a Sum box. Used by Set (which needs HAMT-order iteration).
-pub(crate) fn hamt_next(
-    hamt_root: i64,
-    iter_state: i64,
-    arena_handle: i64,
-) -> i64 {
+pub(crate) fn hamt_next(hamt_root: i64, iter_state: i64, arena_handle: i64) -> i64 {
     if iter_state == 0 {
         let (arr, count) = unsafe { collect_all_kvpairs(hamt_root, arena_handle) };
         ITER_ARRAY.with(|c| c.set(arr));
@@ -474,9 +466,8 @@ unsafe fn insert_recursive(
             }
         } else {
             // Interior node — recurse.
-            let (new_child, kvpair) = unsafe {
-                insert_recursive(child, key, value, hash, depth + 1, eq_fn, arena)
-            };
+            let (new_child, kvpair) =
+                unsafe { insert_recursive(child, key, value, hash, depth + 1, eq_fn, arena) };
             let children = unsafe { read_all_children(node_ptr, popcount(bitmap)) };
             let mut new_children = children;
             new_children[pos] = new_child;
@@ -701,13 +692,7 @@ unsafe fn get_collision(node_ptr: i64, key: i64, eq_fn: EqFn, arena: i64) -> i64
 }
 
 /// Recursive contains. Returns 1 or 0 (no Result box).
-unsafe fn contains_recursive(
-    node_ptr: i64,
-    key: i64,
-    hash: i64,
-    depth: u32,
-    eq_fn: EqFn,
-) -> i64 {
+unsafe fn contains_recursive(node_ptr: i64, key: i64, hash: i64, depth: u32, eq_fn: EqFn) -> i64 {
     if depth >= HASH_LEVELS {
         // Collision level.
         if is_collision(node_ptr) {
@@ -720,11 +705,7 @@ unsafe fn contains_recursive(
             node_ptr
         };
         let existing_key = unsafe { read_kvpair_key(leaf_ptr) };
-        if eq_fn(existing_key, key) == 1 {
-            1
-        } else {
-            0
-        }
+        if eq_fn(existing_key, key) == 1 { 1 } else { 0 }
     } else {
         let bitmap = unsafe { read_bitmap(node_ptr) };
         let idx = hash_index(hash, depth);
@@ -741,11 +722,7 @@ unsafe fn contains_recursive(
             } else if is_leaf(child) {
                 let leaf_ptr = untag_leaf(child);
                 let existing_key = unsafe { read_kvpair_key(leaf_ptr) };
-                if eq_fn(existing_key, key) == 1 {
-                    1
-                } else {
-                    0
-                }
+                if eq_fn(existing_key, key) == 1 { 1 } else { 0 }
             } else {
                 // Interior node — recurse.
                 unsafe { contains_recursive(child, key, hash, depth + 1, eq_fn) }
@@ -865,8 +842,7 @@ unsafe fn remove_recursive(
             }
         } else {
             // Interior node — recurse.
-            let new_child =
-                unsafe { remove_recursive(child, key, hash, depth + 1, eq_fn, arena) };
+            let new_child = unsafe { remove_recursive(child, key, hash, depth + 1, eq_fn, arena) };
             let children = unsafe { read_all_children(node_ptr, popcount(bitmap)) };
             let mut new_children = children;
             new_children[pos] = new_child;
@@ -877,12 +853,7 @@ unsafe fn remove_recursive(
 
 /// Remove from a collision-level node. Returns a new collision node (untagged).
 /// If the key is not found, returns a copy of the original.
-unsafe fn remove_at_collision_level(
-    node_ptr: i64,
-    key: i64,
-    eq_fn: EqFn,
-    arena: i64,
-) -> i64 {
+unsafe fn remove_at_collision_level(node_ptr: i64, key: i64, eq_fn: EqFn, arena: i64) -> i64 {
     if is_collision(node_ptr) {
         let coll_ptr = untag_collision(node_ptr);
         return unsafe { remove_from_collision(coll_ptr, key, eq_fn, arena) };
@@ -911,12 +882,7 @@ unsafe fn remove_at_collision_level(
 
 /// Remove an entry from a collision node. Returns a new collision node (untagged).
 /// If the key is not found, returns a copy of the original.
-unsafe fn remove_from_collision(
-    coll_ptr: i64,
-    key: i64,
-    eq_fn: EqFn,
-    arena: i64,
-) -> i64 {
+unsafe fn remove_from_collision(coll_ptr: i64, key: i64, eq_fn: EqFn, arena: i64) -> i64 {
     let count = unsafe { read_collision_count(coll_ptr) };
 
     for i in 0..count {
@@ -1055,8 +1021,7 @@ pub extern "C" fn kata_rt_dict_insert(
     arena_handle: i64,
 ) -> i64 {
     let hamt_root = unsafe { std::ptr::read_unaligned(dict_ptr as *const i64) };
-    let old_log =
-        unsafe { std::ptr::read_unaligned((dict_ptr as *const u8).add(8) as *const i64) };
+    let old_log = unsafe { std::ptr::read_unaligned((dict_ptr as *const u8).add(8) as *const i64) };
 
     // 1. HAMT insert — returns (new_root, kvpair_ptr)
     let (new_hamt, kvpair_ptr) = hamt_insert(hamt_root, key, value, hash, eq_fn, arena_handle);
@@ -1129,8 +1094,7 @@ pub extern "C" fn kata_rt_dict_remove(
     arena_handle: i64,
 ) -> i64 {
     let hamt_root = unsafe { std::ptr::read_unaligned(dict_ptr as *const i64) };
-    let old_log =
-        unsafe { std::ptr::read_unaligned((dict_ptr as *const u8).add(8) as *const i64) };
+    let old_log = unsafe { std::ptr::read_unaligned((dict_ptr as *const u8).add(8) as *const i64) };
 
     let new_hamt = hamt_remove(hamt_root, key, hash, eq_fn, arena_handle);
 
@@ -1162,11 +1126,7 @@ pub extern "C" fn kata_rt_dict_remove(
 /// Cons list), only the newest occurrence is kept. Removed keys (not in HAMT)
 /// are skipped via `hamt_contains`.
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_dict_next(
-    dict_ptr: i64,
-    iter_state: i64,
-    arena_handle: i64,
-) -> i64 {
+pub extern "C" fn kata_rt_dict_next(dict_ptr: i64, iter_state: i64, arena_handle: i64) -> i64 {
     if iter_state == 0 {
         // Initialize: walk the Cons list, dedup, collect valid KVPair pointers.
         let hamt_root = unsafe { std::ptr::read_unaligned(dict_ptr as *const i64) };
@@ -1180,8 +1140,7 @@ pub extern "C" fn kata_rt_dict_next(
         let mut seen_keys: std::collections::HashSet<i64> = std::collections::HashSet::new();
         let mut current = insert_log;
         while current != 0 {
-            let kvpair_ptr =
-                unsafe { std::ptr::read_unaligned(current as *const i64) };
+            let kvpair_ptr = unsafe { std::ptr::read_unaligned(current as *const i64) };
             let tail =
                 unsafe { std::ptr::read_unaligned((current as *const u8).add(8) as *const i64) };
 
@@ -1234,9 +1193,7 @@ pub extern "C" fn kata_rt_dict_next(
                     // BEST APPROACH without eq_fn: walk the HAMT to find the
                     // leaf at the given hash, compare the pointer. This works
                     // without eq_fn because we're comparing pointers, not keys.
-                    let in_hamt = unsafe {
-                        hamt_find_kvpair(hamt_root, hash, kvpair_ptr, 0)
-                    };
+                    let in_hamt = unsafe { hamt_find_kvpair(hamt_root, hash, kvpair_ptr, 0) };
 
                     if in_hamt {
                         seen_keys.insert(key);
@@ -1291,12 +1248,7 @@ pub extern "C" fn kata_rt_dict_next(
 /// Walk the HAMT to find the leaf at the given hash and compare the KVPair
 /// pointer. Returns true if the KVPair pointer matches (i.e., the entry is
 /// still current, not replaced or removed). This avoids needing eq_fn.
-unsafe fn hamt_find_kvpair(
-    node_ptr: i64,
-    hash: i64,
-    target_kvpair: i64,
-    depth: u32,
-) -> bool {
+unsafe fn hamt_find_kvpair(node_ptr: i64, hash: i64, target_kvpair: i64, depth: u32) -> bool {
     if depth >= HASH_LEVELS {
         // Collision level.
         if is_collision(node_ptr) {

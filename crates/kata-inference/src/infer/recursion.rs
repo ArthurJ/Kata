@@ -131,6 +131,17 @@ fn collect_action_calls(
                 collect_action_calls(&el.node, &el.span, out);
             }
         }
+        TypedExprKind::DictLit { entries, .. } => {
+            for (key, val) in entries {
+                collect_action_calls(&key.node, &key.span, out);
+                collect_action_calls(&val.node, &val.span, out);
+            }
+        }
+        TypedExprKind::SetLit { elements, .. } => {
+            for el in elements {
+                collect_action_calls(&el.node, &el.span, out);
+            }
+        }
         TypedExprKind::RangeLit {
             start, step, end, ..
         } => {

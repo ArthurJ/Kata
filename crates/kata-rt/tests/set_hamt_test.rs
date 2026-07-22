@@ -6,11 +6,7 @@ use kata_rt::{
 
 /// Simple SMI equality for testing: bit-equal comparison of i64.
 extern "C" fn smi_eq(a: i64, b: i64) -> i64 {
-    if a == b {
-        1
-    } else {
-        0
-    }
+    if a == b { 1 } else { 0 }
 }
 
 /// Cast function pointer to i64 (avoids `function_casts_as_integer` warning).
@@ -93,7 +89,12 @@ fn set_union() {
     for &v in &[1i64, 2, 3, 4, 5] {
         let key = make_smi(v);
         let hash = kata_rt_hash_int(key);
-        assert_eq!(kata_rt_set_contains(u, key, hash, eq), 1, "union should contain {}", v);
+        assert_eq!(
+            kata_rt_set_contains(u, key, hash, eq),
+            1,
+            "union should contain {}",
+            v
+        );
     }
 }
 
@@ -115,7 +116,11 @@ fn set_intersection() {
     // The only element should be 3
     let key = make_smi(3);
     let hash = kata_rt_hash_int(key);
-    assert_eq!(kata_rt_set_contains(i, key, hash, eq), 1, "intersection should contain 3");
+    assert_eq!(
+        kata_rt_set_contains(i, key, hash, eq),
+        1,
+        "intersection should contain 3"
+    );
 }
 
 #[test]
@@ -137,7 +142,12 @@ fn set_difference() {
     for &v in &[1i64, 2] {
         let key = make_smi(v);
         let hash = kata_rt_hash_int(key);
-        assert_eq!(kata_rt_set_contains(d, key, hash, eq), 1, "difference should contain {}", v);
+        assert_eq!(
+            kata_rt_set_contains(d, key, hash, eq),
+            1,
+            "difference should contain {}",
+            v
+        );
     }
     let key3 = make_smi(3);
     let hash3 = kata_rt_hash_int(key3);

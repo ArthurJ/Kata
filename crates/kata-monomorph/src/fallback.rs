@@ -140,6 +140,17 @@ fn fallback_in_expr(expr_span: &mut Spanned<TypedExpr>) {
                 fallback_in_expr(el);
             }
         }
+        TypedExprKind::DictLit { entries, .. } => {
+            for (key, val) in entries.iter_mut() {
+                fallback_in_expr(key);
+                fallback_in_expr(val);
+            }
+        }
+        TypedExprKind::SetLit { elements, .. } => {
+            for el in elements.iter_mut() {
+                fallback_in_expr(el);
+            }
+        }
         TypedExprKind::RangeLit {
             start, step, end, ..
         } => {

@@ -68,6 +68,11 @@ interface INDEXABLE::A
 interface CONTAINS::A
     contains :: Self A => Boolean
 
+# ── Interfaces de hash (Fio 13) ────────────────────────────────
+
+interface HASHABLE
+    hash :: Self => Int
+
 # ── Implementações para Int ───────────────────────────────────
 
 Int implements NUM
@@ -119,6 +124,17 @@ Rational implements SHOW
 Text implements SHOW
     show :: Text => Text
     lambda x: x
+
+# ── Implementações HASHABLE ───────────────────────────────────
+
+Int implements HASHABLE
+    hash :: Int => Int @ffi("kata_rt_hash_int")
+
+Text implements HASHABLE
+    hash :: Text => Int @ffi("kata_rt_hash_text")
+
+Rational implements HASHABLE
+    hash :: Rational => Int @ffi("kata_rt_hash_rational")
 
 # ── Coleções: implements (Fio 8 Fase 4) ────────────────────────
 # List/Array/Range são tipos intrínsecos (variants de Ty), não data.
@@ -174,6 +190,50 @@ Text implements INDEXABLE::Text
 
 Text implements CONTAINS::Text
     contains :: Text Text => Boolean @ffi("kata_rt_string_contains")
+
+# ── Dict (Fio 13) ───────────────────────────────────────────────
+
+Dict::(K, V) implements ITERABLE::(K, V)
+    next :: Dict::(K, V) => Optional::(K, V) @ffi("kata_rt_dict_next")
+
+Dict::(K, V) implements COUNTABLE
+    len :: Dict::(K, V) => Int @ffi("kata_rt_dict_len")
+
+Dict::(K, V) implements INDEXABLE::V
+    at :: Dict::(K, V) K => Result::(V, Err) @ffi("kata_rt_dict_get_checked")
+
+Dict::(K, V) implements CONTAINS::K
+    contains :: Dict::(K, V) K => Boolean @ffi("kata_rt_dict_contains")
+
+# ── Set (Fio 13) ────────────────────────────────────────────────
+
+Set::T implements ITERABLE::T
+    next :: Set::T => Optional::T @ffi("kata_rt_set_next")
+
+Set::T implements COUNTABLE
+    len :: Set::T => Int @ffi("kata_rt_set_len")
+
+Set::T implements CONTAINS::T
+    contains :: Set::T T => Boolean @ffi("kata_rt_set_contains")
+
+# ── Operações de Set (standalone) ───────────────────────────────
+
+@ffi("kata_rt_set_union")
+union :: Set::T Set::T => Set::T
+
+@ffi("kata_rt_set_intersection")
+intersection :: Set::T Set::T => Set::T
+
+@ffi("kata_rt_set_difference")
+difference :: Set::T Set::T => Set::T
+
+# ── Operações de Dict (standalone) ──────────────────────────────
+
+@ffi("kata_rt_dict_insert")
+insert :: Dict::(K, V) K V => Dict::(K, V)
+
+@ffi("kata_rt_dict_remove")
+remove :: Dict::(K, V) K => Dict::(K, V)
 
 # ── Operadores standalone (não-interface) ──────────────────────
 

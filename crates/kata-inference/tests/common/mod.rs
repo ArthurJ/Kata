@@ -72,6 +72,11 @@ pub fn assert_no_holes(expr: &Spanned<Expr>) {
         Expr::ListLit { elements } | Expr::ArrayLit { elements } => {
             elements.iter().for_each(assert_no_holes)
         }
+        Expr::DictLit { entries } => entries.iter().for_each(|(k, v)| {
+            assert_no_holes(k);
+            assert_no_holes(v);
+        }),
+        Expr::SetLit { elements } => elements.iter().for_each(assert_no_holes),
         Expr::RangeLit {
             start, step, end, ..
         } => {
@@ -179,6 +184,11 @@ pub fn assert_no_pipes(expr: &Spanned<Expr>) {
         Expr::ListLit { elements } | Expr::ArrayLit { elements } => {
             elements.iter().for_each(assert_no_pipes)
         }
+        Expr::DictLit { entries } => entries.iter().for_each(|(k, v)| {
+            assert_no_pipes(k);
+            assert_no_pipes(v);
+        }),
+        Expr::SetLit { elements } => elements.iter().for_each(assert_no_pipes),
         Expr::RangeLit {
             start, step, end, ..
         } => {

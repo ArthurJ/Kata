@@ -12,7 +12,6 @@ pub(crate) mod array;
 pub(crate) mod bigint;
 pub(crate) mod channel;
 pub(crate) mod dict;
-pub(crate) mod set;
 pub(crate) mod display;
 pub(crate) mod fiber;
 pub(crate) mod float;
@@ -23,6 +22,7 @@ pub(crate) mod log;
 pub(crate) mod range;
 pub(crate) mod rational;
 pub(crate) mod scheduler;
+pub(crate) mod set;
 pub(crate) mod sum;
 pub(crate) mod text;
 
@@ -42,15 +42,6 @@ pub use rational::rat_from_text;
 // Re-exports de funções C-ABI para o codegen registrar no JIT.
 pub use arc::{kata_rt_alloc_arc, kata_rt_arc_fn_ptr, kata_rt_decref, kata_rt_incref};
 pub use arena::{kata_rt_arena_alloc, kata_rt_arena_create, kata_rt_arena_destroy};
-pub use dict::{
-    kata_rt_dict_contains, kata_rt_dict_empty, kata_rt_dict_get_checked, kata_rt_dict_insert,
-    kata_rt_dict_len, kata_rt_dict_next, kata_rt_dict_remove,
-};
-pub use set::{
-    kata_rt_set_contains, kata_rt_set_difference, kata_rt_set_empty, kata_rt_set_insert,
-    kata_rt_set_intersection, kata_rt_set_len, kata_rt_set_next, kata_rt_set_remove,
-    kata_rt_set_union,
-};
 pub use array::{
     kata_rt_array_alloc, kata_rt_array_contains, kata_rt_array_get, kata_rt_array_get_checked,
     kata_rt_array_len, kata_rt_array_set,
@@ -59,6 +50,10 @@ pub use bigint::{
     kata_rt_bi_add, kata_rt_bi_div, kata_rt_bi_eq, kata_rt_bi_ge, kata_rt_bi_gt, kata_rt_bi_le,
     kata_rt_bi_lt, kata_rt_bi_mul, kata_rt_bi_neq, kata_rt_bi_show, kata_rt_bi_sub,
     kata_rt_bi_to_rational, kata_rt_int_to_text, kata_rt_tag_int, kata_rt_tag_int_from_str,
+};
+pub use dict::{
+    kata_rt_dict_contains, kata_rt_dict_empty, kata_rt_dict_get_checked, kata_rt_dict_insert,
+    kata_rt_dict_len, kata_rt_dict_next, kata_rt_dict_remove,
 };
 pub use float::{
     kata_rt_fadd, kata_rt_fcmp_eq, kata_rt_fcmp_ge, kata_rt_fcmp_gt, kata_rt_fcmp_le,
@@ -77,6 +72,11 @@ pub use rational::{
     kata_rt_rat_from_float, kata_rt_rat_ge, kata_rt_rat_gt, kata_rt_rat_le, kata_rt_rat_literal,
     kata_rt_rat_lt, kata_rt_rat_mul, kata_rt_rat_neq, kata_rt_rat_show, kata_rt_rat_sub,
     kata_rt_rat_to_float,
+};
+pub use set::{
+    kata_rt_set_contains, kata_rt_set_difference, kata_rt_set_empty, kata_rt_set_insert,
+    kata_rt_set_intersection, kata_rt_set_len, kata_rt_set_next, kata_rt_set_remove,
+    kata_rt_set_union,
 };
 // kata_rt_rat_show_raw — rebaixado para pub(crate): zero consumidores cross-crate.
 pub use scheduler::{

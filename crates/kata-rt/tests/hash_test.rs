@@ -46,7 +46,11 @@ fn hash_text_deterministic() {
     // KEY TEST: same content at different addresses must produce same hash.
     let s1 = CString::new("hello").unwrap();
     let s2 = CString::new("hello").unwrap();
-    assert_ne!(s1.as_ptr(), s2.as_ptr(), "precondition: different addresses");
+    assert_ne!(
+        s1.as_ptr(),
+        s2.as_ptr(),
+        "precondition: different addresses"
+    );
 
     let h1 = kata_rt_hash_text(s1.as_ptr() as i64);
     let h2 = kata_rt_hash_text(s2.as_ptr() as i64);
@@ -70,7 +74,10 @@ fn hash_text_different_content_different_hash() {
 fn hash_text_null_returns_offset() {
     let h = kata_rt_hash_text(0);
     // FNV_OFFSET = 0xcbf29ce484222325
-    assert_eq!(h as u64, 0xcbf29ce484222325, "null pointer must return FNV_OFFSET");
+    assert_eq!(
+        h as u64, 0xcbf29ce484222325,
+        "null pointer must return FNV_OFFSET"
+    );
 }
 
 // ── Rational ────────────────────────────────────────────────
@@ -92,5 +99,8 @@ fn hash_rational_deterministic() {
 #[test]
 fn hash_rational_null_returns_offset() {
     let h = kata_rt_hash_rational(0);
-    assert_eq!(h as u64, 0xcbf29ce484222325, "null pointer must return FNV_OFFSET");
+    assert_eq!(
+        h as u64, 0xcbf29ce484222325,
+        "null pointer must return FNV_OFFSET"
+    );
 }

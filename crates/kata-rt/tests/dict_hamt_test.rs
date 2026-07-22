@@ -6,11 +6,7 @@ use kata_rt::{
 
 /// Simple SMI equality for testing: bit-equal comparison of i64.
 extern "C" fn smi_eq(a: i64, b: i64) -> i64 {
-    if a == b {
-        1
-    } else {
-        0
-    }
+    if a == b { 1 } else { 0 }
 }
 
 /// Cast function pointer to i64 (avoids `function_casts_as_integer` warning).
@@ -229,7 +225,8 @@ fn dict_iteration_dedup_on_replace() {
         }
         let tuple_ptr = result_payload(result);
         let key = unsafe { std::ptr::read_unaligned(tuple_ptr as *const i64) };
-        let value = unsafe { std::ptr::read_unaligned((tuple_ptr as *const u8).add(8) as *const i64) };
+        let value =
+            unsafe { std::ptr::read_unaligned((tuple_ptr as *const u8).add(8) as *const i64) };
         assert_eq!(key, make_smi(1));
         assert_eq!(value, make_smi(20), "should see the latest value");
         count += 1;

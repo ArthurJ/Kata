@@ -22,6 +22,7 @@ mod constructors;
 mod constructors_enum_pred;
 mod constructors_refined;
 mod csp;
+mod dict_set;
 mod dot_access;
 mod expr;
 mod format_synthesis;

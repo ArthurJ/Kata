@@ -233,6 +233,17 @@ fn collect_captures_in_expr(
                 collect_captures_in_expr(&mut el.node, outer_env, local_tys, dispatch);
             }
         }
+        TypedExprKind::DictLit { entries, .. } => {
+            for (key, val) in entries {
+                collect_captures_in_expr(&mut key.node, outer_env, local_tys, dispatch);
+                collect_captures_in_expr(&mut val.node, outer_env, local_tys, dispatch);
+            }
+        }
+        TypedExprKind::SetLit { elements, .. } => {
+            for el in elements {
+                collect_captures_in_expr(&mut el.node, outer_env, local_tys, dispatch);
+            }
+        }
         TypedExprKind::RangeLit {
             start, step, end, ..
         } => {

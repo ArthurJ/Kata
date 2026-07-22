@@ -128,6 +128,17 @@ pub(crate) fn collect_free_vars(
                 collect_free_vars(&el.node, local_bindings, dispatch, out);
             }
         }
+        TypedExprKind::DictLit { entries, .. } => {
+            for (key, val) in entries {
+                collect_free_vars(&key.node, local_bindings, dispatch, out);
+                collect_free_vars(&val.node, local_bindings, dispatch, out);
+            }
+        }
+        TypedExprKind::SetLit { elements, .. } => {
+            for el in elements {
+                collect_free_vars(&el.node, local_bindings, dispatch, out);
+            }
+        }
         TypedExprKind::RangeLit {
             start, step, end, ..
         } => {

@@ -234,6 +234,18 @@ pub enum TypedExprKind {
     /// `{1 2 3}` — array literal (contíguo).
     ArrayLit { elements: Vec<Spanned<TypedExpr>> },
 
+    /// `{"k": v ...}` — literal de Dict.
+    DictLit {
+        entries: Vec<(Spanned<TypedExpr>, Spanned<TypedExpr>)>,
+        key_ty: Ty,
+        value_ty: Ty,
+    },
+    /// `{|1 2 3|}` — literal de Set.
+    SetLit {
+        elements: Vec<Spanned<TypedExpr>>,
+        elem_ty: Ty,
+    },
+
     /// `[a..s..b]` ou `[a..s..=b]` — range lazy.
     /// `elem_ty` é o tipo do elemento (start/step/end mesmo tipo A).
     /// `inclusive` = true para `..=`, false para `..`.

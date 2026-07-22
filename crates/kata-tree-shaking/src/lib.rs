@@ -270,6 +270,17 @@ fn collect_refs(
                 collect_refs(&el.node, reached_fns, reached_actions, fn_names);
             }
         }
+        TypedExprKind::SetLit { elements, .. } => {
+            for el in elements {
+                collect_refs(&el.node, reached_fns, reached_actions, fn_names);
+            }
+        }
+        TypedExprKind::DictLit { entries, .. } => {
+            for (key, val) in entries {
+                collect_refs(&key.node, reached_fns, reached_actions, fn_names);
+                collect_refs(&val.node, reached_fns, reached_actions, fn_names);
+            }
+        }
 
         TypedExprKind::FieldAccess { expr, .. } | TypedExprKind::IndexAccess { expr, .. } => {
             collect_refs(&expr.node, reached_fns, reached_actions, fn_names)
