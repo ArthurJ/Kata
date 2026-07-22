@@ -5,11 +5,59 @@
 //! 2. Executa `kata build` para produzir um executável
 //! 3. Executa o executável e verifica o stdout
 //!
-//! Os testes assumem que `libkata_rt.a` já foi buildada (cargo build -p kata-rt)
-//! e que `cc` está disponível no PATH.
+//! `libkata_rt.a` e `libkata_rt.so` são compiladas automaticamente no
+//! setup antes do primeiro teste. `cc` deve estar disponível no PATH.
 
 use std::fs;
 use std::process::Command;
+use std::sync::Once;
+
+static SETUP: Once = Once::new();
+
+/// Setup: garante que `libkata_rt.a` (staticlib) e `libkata_rt.so` (cdylib)
+/// existam em `target/<profile>/`. `cargo test` compila `kata-rt` apenas
+/// como `rlib` para link interno — o `staticlib`/`cdylib` precisa ser
+/// produzido explicitamente. Os testes rodam após o cargo liberar o lock
+/// do workspace, então `cargo build -p kata-rt` não deadlocka.
+fn ensure_kata_rt_built() {
+    SETUP.call_once(|| {
+        let build_root = env!("KATA_BUILD_ROOT");
+        let profile = if cfg!(debug_assertions) {
+            "debug"
+        } else {
+            "release"
+        };
+        let target_dir = std::path::Path::new(build_root)
+            .join("target")
+            .join(profile);
+        let static_lib = target_dir.join("libkata_rt.a");
+        let dynamic_lib = target_dir.join("libkata_rt.so");
+
+        if static_lib.exists() && dynamic_lib.exists() {
+            return;
+        }
+
+        let mut cmd = Command::new("cargo");
+        cmd.current_dir(build_root)
+            .arg("build")
+            .arg("-p")
+            .arg("kata-rt");
+
+        if profile == "release" {
+            cmd.arg("--release");
+        }
+
+        let status = cmd
+            .status()
+            .expect("setup: não foi possível executar `cargo build -p kata-rt`");
+
+        assert!(
+            status.success(),
+            "setup: `cargo build -p kata-rt` falhou — \
+             libkata_rt.a é necessária para AOT"
+        );
+    });
+}
 
 /// Retorna o path do binário `kata` compilado pelo cargo.
 fn kata_bin() -> String {
@@ -29,6 +77,7 @@ fn write_temp_kata(name: &str, content: &str) -> String {
 
 /// Executa `kata build <input> -o <output>` e retorna (stdout, exit_code).
 fn run_kata_build(input: &str, output: &str) -> (String, i32) {
+    ensure_kata_rt_built();
     let output_path = std::env::temp_dir()
         .join("kata-driver-e2e-build")
         .join(output);
@@ -194,6 +243,7 @@ fn build_bigint() {
 /// O resultado deve ser o mesmo do link estático.
 #[test]
 fn build_dynamic() {
+    ensure_kata_rt_built();
     let src =
         "fat :: Int Int => Int\nlambda 0 acc: acc\nlambda n acc: fat (- n 1) (* n acc)\nfat 5 1";
     let path = write_temp_kata("build_dynamic", src);
