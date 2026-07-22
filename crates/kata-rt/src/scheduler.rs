@@ -247,12 +247,10 @@ impl Scheduler {
                 let earliest_deadline = self
                     .blocked
                     .values()
-                    .filter_map(|reason| {
-                        match reason {
-                            BlockReason::WaitingOnSelect(_, Some(dl)) => Some(*dl),
-                            BlockReason::WaitingOnSleep(dl) => Some(*dl),
-                            _ => None,
-                        }
+                    .filter_map(|reason| match reason {
+                        BlockReason::WaitingOnSelect(_, Some(dl)) => Some(*dl),
+                        BlockReason::WaitingOnSleep(dl) => Some(*dl),
+                        _ => None,
                     })
                     .min();
 

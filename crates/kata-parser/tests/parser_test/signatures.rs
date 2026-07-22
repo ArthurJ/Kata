@@ -96,9 +96,8 @@ fn multiple_directives_stacked() {
 
 #[test]
 fn sig_with_lambda_clauses() {
-    let m = parse_src(
-        "fat :: Int Int => Int\nlambda 0 acc: acc\nlambda n acc: fat (- n 1) (* n acc)",
-    );
+    let m =
+        parse_src("fat :: Int Int => Int\nlambda 0 acc: acc\nlambda n acc: fat (- n 1) (* n acc)");
     let item = first_item(&m);
     match item {
         Item::Sig { name, body, .. } => {

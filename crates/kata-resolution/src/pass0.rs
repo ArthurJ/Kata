@@ -196,13 +196,11 @@ pub(crate) fn run_pass0(
                                 name: v.name.clone(),
                                 payload_ty,
                                 predicate,
-                                fixed_value: v.fixed_value.as_ref().map(|fv| {
-                                    match &fv.node {
-                                        kata_ast::Expr::IntLit { text } => text.clone(),
-                                        kata_ast::Expr::FloatLit { text } => text.clone(),
-                                        kata_ast::Expr::TextLit { text } => text.clone(),
-                                        _ => String::new(),
-                                    }
+                                fixed_value: v.fixed_value.as_ref().map(|fv| match &fv.node {
+                                    kata_ast::Expr::IntLit { text } => text.clone(),
+                                    kata_ast::Expr::FloatLit { text } => text.clone(),
+                                    kata_ast::Expr::TextLit { text } => text.clone(),
+                                    _ => String::new(),
                                 }),
                             }
                         })

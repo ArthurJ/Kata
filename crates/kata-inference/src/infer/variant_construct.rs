@@ -45,7 +45,10 @@ pub(crate) fn infer_variant_construct(
     // Variante constante: não aceita argumentos — o valor é fixo.
     if ctx.enum_registry.fixed_value(enum_name, variant).is_some() {
         return Err(MiddleError::TypeMismatch {
-            expected: format!("{}::{} (variante constante — não aceita argumentos)", enum_name, variant),
+            expected: format!(
+                "{}::{} (variante constante — não aceita argumentos)",
+                enum_name, variant
+            ),
             found: format!("{}::{} tem valor fixo — use sem args", enum_name, variant),
             span: (*span).into(),
         });

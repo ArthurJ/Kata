@@ -236,10 +236,7 @@ pub(crate) fn string_concat(
 /// O `arg` é a expressão Ident que referencia a tupla (ex: `h` no body de
 /// `__kata_show__List`). Os `element_tys` são os tipos concretos de cada
 /// elemento — usados para despachar `show` ao tipo correto.
-fn build_tuple_show_inline(
-    arg: Spanned<TypedExpr>,
-    element_tys: &[Ty],
-) -> Spanned<TypedExpr> {
+fn build_tuple_show_inline(arg: Spanned<TypedExpr>, element_tys: &[Ty]) -> Spanned<TypedExpr> {
     // Tupla vazia: "()"
     if element_tys.is_empty() {
         return text_lit("()".to_string());

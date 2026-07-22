@@ -22,7 +22,9 @@ fn build_fixed_payload(text: &str, ty: &Ty, span: Span) -> TypedExpr {
             tail_pos: false,
             escape: kata_core::escape::EscapeTarget::Local,
             effect: Effect::Puro,
-            kind: TypedExprKind::IntLit { text: text.to_string() },
+            kind: TypedExprKind::IntLit {
+                text: text.to_string(),
+            },
         },
         Ty::Prim(PrimTy::Float) => TypedExpr {
             span,
@@ -30,7 +32,9 @@ fn build_fixed_payload(text: &str, ty: &Ty, span: Span) -> TypedExpr {
             tail_pos: false,
             escape: kata_core::escape::EscapeTarget::Local,
             effect: Effect::Puro,
-            kind: TypedExprKind::FloatLit { text: text.to_string() },
+            kind: TypedExprKind::FloatLit {
+                text: text.to_string(),
+            },
         },
         Ty::Prim(PrimTy::Text) => TypedExpr {
             span,
@@ -38,7 +42,9 @@ fn build_fixed_payload(text: &str, ty: &Ty, span: Span) -> TypedExpr {
             tail_pos: false,
             escape: kata_core::escape::EscapeTarget::Local,
             effect: Effect::Puro,
-            kind: TypedExprKind::TextLit { text: text.to_string() },
+            kind: TypedExprKind::TextLit {
+                text: text.to_string(),
+            },
         },
         _ => TypedExpr {
             span,
@@ -46,7 +52,9 @@ fn build_fixed_payload(text: &str, ty: &Ty, span: Span) -> TypedExpr {
             tail_pos: false,
             escape: kata_core::escape::EscapeTarget::Local,
             effect: Effect::Puro,
-            kind: TypedExprKind::IntLit { text: text.to_string() },
+            kind: TypedExprKind::IntLit {
+                text: text.to_string(),
+            },
         },
     }
 }
@@ -82,7 +90,10 @@ pub(crate) fn resolve_unqual_variant(
     let enum_name = candidates[0];
     // Variante constante: OK sem args constrói com valor fixo.
     if let Some(fixed_text) = ctx.enum_registry.fixed_value(enum_name, name) {
-        let tag = ctx.enum_registry.variant_index(enum_name, name).unwrap_or(0);
+        let tag = ctx
+            .enum_registry
+            .variant_index(enum_name, name)
+            .unwrap_or(0);
         let payload_ty = ctx
             .enum_registry
             .payload_ty(enum_name, name)

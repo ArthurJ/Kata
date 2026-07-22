@@ -168,7 +168,10 @@ pub(crate) fn lower_guards(
         let dummy = lower.builder.create_block();
         lower.builder.seal_block(dummy);
         lower.builder.switch_to_block(dummy);
-        lower.builder.ins().trap(cranelift_codegen::ir::TrapCode::user(1).expect("trap code 1"));
+        lower
+            .builder
+            .ins()
+            .trap(cranelift_codegen::ir::TrapCode::user(1).expect("trap code 1"));
         return Ok(result);
     }
 

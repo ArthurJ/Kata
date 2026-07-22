@@ -66,7 +66,8 @@ fn run_built_binary(name: &str) -> (String, i32) {
 /// `fat 5 1` → 120. Testa o caminho básico: SMI untag, Int display.
 #[test]
 fn build_int_fatorial() {
-    let src = "fat :: Int Int => Int\nlambda 0 acc: acc\nlambda n acc: fat (- n 1) (* n acc)\nfat 5 1";
+    let src =
+        "fat :: Int Int => Int\nlambda 0 acc: acc\nlambda n acc: fat (- n 1) (* n acc)\nfat 5 1";
     let path = write_temp_kata("build_int_fatorial", src);
     let (build_out, build_code) = run_kata_build(&path, "build_int_fatorial_bin");
     assert_eq!(
@@ -193,7 +194,8 @@ fn build_bigint() {
 /// O resultado deve ser o mesmo do link estático.
 #[test]
 fn build_dynamic() {
-    let src = "fat :: Int Int => Int\nlambda 0 acc: acc\nlambda n acc: fat (- n 1) (* n acc)\nfat 5 1";
+    let src =
+        "fat :: Int Int => Int\nlambda 0 acc: acc\nlambda n acc: fat (- n 1) (* n acc)\nfat 5 1";
     let path = write_temp_kata("build_dynamic", src);
     let output_path = std::env::temp_dir()
         .join("kata-driver-e2e-build")

@@ -222,9 +222,7 @@ fn capture_nao_deve_incluir_funcao_global_tast() {
 fn capture_nao_deve_incluir_funcao_global_and_tast() {
     // `and` é função global (Boolean Boolean => Boolean) em core.kata.
     // `t` é capturada (variável do escopo outer), `and` não deveria ser.
-    let typed = infer_src(
-        "let t := True\nlet f := lambda x: and x t\nf t",
-    );
+    let typed = infer_src("let t := True\nlet f := lambda x: and x t\nf t");
     let captures = find_last_lambda_captures(&typed).expect("deveria ter um Lambda no pre_entry");
     assert!(
         captures.iter().all(|c| c.name != "and"),

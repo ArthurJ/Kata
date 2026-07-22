@@ -24,7 +24,10 @@ fn run_kata(file: &str) -> String {
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     // Se houve erro (stderr não vazio), incluir para diagnóstico.
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-    if !stderr.is_empty() && !stderr.starts_with("    Finished") && !stderr.starts_with("     Running") {
+    if !stderr.is_empty()
+        && !stderr.starts_with("    Finished")
+        && !stderr.starts_with("     Running")
+    {
         format!("{stdout}--- stderr ---\n{stderr}")
     } else {
         stdout
@@ -34,11 +37,10 @@ fn run_kata(file: &str) -> String {
 /// Lista todos os arquivos `.kata` no diretório examples/.
 fn example_files() -> Vec<String> {
     // CARGO_MANIFEST_DIR aponta para crates/kata-driver/ durante os testes.
-    let examples_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples");
+    let examples_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
     let mut files: Vec<String> = Vec::new();
-    let entries = fs::read_dir(&examples_dir)
-        .unwrap_or_else(|e| panic!("ler {:?}: {e}", examples_dir));
+    let entries =
+        fs::read_dir(&examples_dir).unwrap_or_else(|e| panic!("ler {:?}: {e}", examples_dir));
     for entry in entries {
         let entry = entry.expect("dir entry");
         let path = entry.path();
@@ -53,7 +55,10 @@ fn example_files() -> Vec<String> {
 #[test]
 fn snapshot_exemplos_kata() {
     let files = example_files();
-    assert!(!files.is_empty(), "deve encontrar pelo menos 1 exemplo .kata");
+    assert!(
+        !files.is_empty(),
+        "deve encontrar pelo menos 1 exemplo .kata"
+    );
 
     for file in &files {
         let name = std::path::Path::new(file)

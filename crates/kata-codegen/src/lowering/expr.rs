@@ -316,7 +316,8 @@ pub(crate) fn lower_expr(
             if let TypedExprKind::Lambda { captures, .. } = &value.node.kind
                 && !captures.is_empty()
             {
-                ctx.closure_captures.insert(temp_name.clone(), captures.clone());
+                ctx.closure_captures
+                    .insert(temp_name.clone(), captures.clone());
             }
             let val = lower_expr(&value.node, ctx)?;
             let clif_ty = ty_to_clif(&value.node.ty);

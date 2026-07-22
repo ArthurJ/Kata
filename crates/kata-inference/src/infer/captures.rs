@@ -114,7 +114,9 @@ fn collect_captures_in_expr(
                 collect_captures_in_expr(&mut el.node, outer_env, local_tys, dispatch);
             }
         }
-        TypedExprKind::Let { value, .. } | TypedExprKind::LetDestruct { value, .. } | TypedExprKind::Var { value, .. } => {
+        TypedExprKind::Let { value, .. }
+        | TypedExprKind::LetDestruct { value, .. }
+        | TypedExprKind::Var { value, .. } => {
             collect_captures_in_expr(&mut value.node, outer_env, local_tys, dispatch);
         }
         TypedExprKind::Reassign { value, .. } => {
@@ -152,9 +154,19 @@ fn collect_captures_in_expr(
                 } else {
                     for guard in &clause.guards {
                         if let Some(cond) = &guard.condition {
-                            collect_free_vars(&cond.node, &local_bindings, dispatch, &mut free_vars);
+                            collect_free_vars(
+                                &cond.node,
+                                &local_bindings,
+                                dispatch,
+                                &mut free_vars,
+                            );
                         }
-                        collect_free_vars(&guard.body.node, &local_bindings, dispatch, &mut free_vars);
+                        collect_free_vars(
+                            &guard.body.node,
+                            &local_bindings,
+                            dispatch,
+                            &mut free_vars,
+                        );
                     }
                 }
 

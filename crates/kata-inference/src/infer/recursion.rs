@@ -87,7 +87,9 @@ fn collect_action_calls(
                 collect_action_calls(&el.node, &el.span, out);
             }
         }
-        TypedExprKind::Let { value, .. } | TypedExprKind::LetDestruct { value, .. } | TypedExprKind::Var { value, .. } => {
+        TypedExprKind::Let { value, .. }
+        | TypedExprKind::LetDestruct { value, .. }
+        | TypedExprKind::Var { value, .. } => {
             collect_action_calls(&value.node, &value.span, out);
         }
         TypedExprKind::Reassign { value, .. } => {

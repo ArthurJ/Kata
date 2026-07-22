@@ -44,7 +44,10 @@ fn tast_snapshot(src: &str) -> String {
     if !user_fns.is_empty() {
         out.push_str("\n=== Functions ===\n");
         for f in &user_fns {
-            out.push_str(&format!("  {} :: {:?} => {:?}\n", f.name, f.param_types, f.ret_ty));
+            out.push_str(&format!(
+                "  {} :: {:?} => {:?}\n",
+                f.name, f.param_types, f.ret_ty
+            ));
         }
     }
 
@@ -58,7 +61,10 @@ fn tast_snapshot(src: &str) -> String {
     if !user_actions.is_empty() {
         out.push_str("\n=== Actions ===\n");
         for a in &user_actions {
-            out.push_str(&format!("  {} :: {:?} => {:?}\n", a.name, a.param_types, a.ret_ty));
+            out.push_str(&format!(
+                "  {} :: {:?} => {:?}\n",
+                a.name, a.param_types, a.ret_ty
+            ));
         }
     }
 
