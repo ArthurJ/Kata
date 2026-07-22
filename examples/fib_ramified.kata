@@ -1,0 +1,12 @@
+# Fibonacci ramificado — recursão não-TCO (executa sem otimização)
+fib :: Int => Int
+lambda 0: 0
+lambda 1: 1
+lambda n:
+    + (fib (- n 1)) (fib (- n 2))
+
+action main
+    let res := fib 10
+    echo!(res)
+
+main!()

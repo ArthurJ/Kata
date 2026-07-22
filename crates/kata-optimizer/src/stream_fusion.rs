@@ -52,6 +52,14 @@ enum FusionResult {
     NotFused,
 }
 
+/// Remove wrapper `Grouping` (parênteses) de uma expressão, recursivamente.
+fn unwrap_grouping(expr: &Spanned<TypedExpr>) -> &Spanned<TypedExpr> {
+    match &expr.node.kind {
+        TypedExprKind::Grouping { inner } => unwrap_grouping(inner),
+        _ => expr,
+    }
+}
+
 /// Tenta fundir um nó TAST em um pipeline de stages.
 ///
 /// Se o nó é `Map { collection: <fundível> }`, primeiro funde o collection,
@@ -60,6 +68,8 @@ enum FusionResult {
 /// Se o nó é `Map/Filter { collection: <não-fundível> }`, não funde (a coleção
 /// intermediária já existe por outro motivo).
 fn try_fuse(expr: &Spanned<TypedExpr>) -> FusionResult {
+    // Grouping (parênteses) é transparente — desempacota antes de casar.
+    let expr = unwrap_grouping(expr);
     match &expr.node.kind {
         TypedExprKind::Map {
             callback,
@@ -67,6 +77,8 @@ fn try_fuse(expr: &Spanned<TypedExpr>) -> FusionResult {
             ret_ty,
             ..
         } => {
+            // Desempacota Grouping do collection antes de processar.
+            let collection = unwrap_grouping(collection);
             // Tenta fundir o collection primeiro.
             match try_fuse(collection) {
                 FusionResult::Fused {
@@ -156,6 +168,8 @@ fn try_fuse(expr: &Spanned<TypedExpr>) -> FusionResult {
             ..
         } => {
             // Tenta fundir o collection primeiro.
+            // Desempacota Grouping (parênteses) transparentes.
+            let collection = unwrap_grouping(collection);
             match try_fuse(collection) {
                 FusionResult::Fused {
                     mut stages,

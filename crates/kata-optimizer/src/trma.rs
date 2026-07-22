@@ -90,50 +90,95 @@ fn is_trma_candidate(func: &TypedFunction, table: &DispatchTable) -> Option<Trma
         return None;
     }
 
-    // 2. Tem exatamente 1 cláusula.
-    if func.clauses.len() != 1 {
-        return None;
-    }
+    // 2. Caso A: 1 cláusula com body = Match (forma explícita).
+    //    Caso B: 2 cláusulas (forma sugar — cada cláusula é um braço do match implícito).
+    if func.clauses.len() == 1 {
+        // ── Caso A: 1 cláusula com match explícito ──
+        let clause = &func.clauses[0];
 
-    let clause = &func.clauses[0];
+        // 3. O body é Match.
+        let arms = match &clause.body.node.kind {
+            TypedExprKind::Match { arms, .. } => arms,
+            _ => return None,
+        };
 
-    // 3. O body é Match.
-    let arms = match &clause.body.node.kind {
-        TypedExprKind::Match { arms, .. } => arms,
-        _ => return None,
-    };
+        // 4. Procurar: um arm é caso base (não-recursivo), outro é recursivo com op associativo.
+        let mut base_arm = None;
+        let mut rec_arm = None;
 
-    // 4. Procurar: um arm é caso base (não-recursivo), outro é recursivo com op associativo.
-    let mut base_arm = None;
-    let mut rec_arm = None;
-
-    for arm in arms {
-        if is_recursive_call(&arm.body, &func.name) {
-            // Body inteiro é chamada recursiva — não é TRMA (precisa de op associativo)
-            return None;
+        for arm in arms {
+            if is_recursive_call(&arm.body, &func.name) {
+                // Body inteiro é chamada recursiva — não é TRMA (precisa de op associativo)
+                return None;
+            }
+            // Verifica se o body é `op(arg, self_call(arg))` onde op é associativo
+            if detect_assoc_recursion(&arm.body, &func.name, table).is_some() {
+                rec_arm = Some(arm);
+            } else {
+                base_arm = Some(arm);
+            }
         }
-        // Verifica se o body é `op(arg, self_call(arg))` onde op é associativo
-        if detect_assoc_recursion(&arm.body, &func.name, table).is_some() {
-            rec_arm = Some(arm);
-        } else {
-            base_arm = Some(arm);
+
+        let base_arm = base_arm?;
+        let rec_arm = rec_arm?;
+
+        // 5. Extrair o padrão do arm recursivo.
+        let rec_info = detect_assoc_recursion(&rec_arm.body, &func.name, table)?;
+
+        Some(TrmaPattern {
+            op: rec_info.op_name,
+            op_ffi: rec_info.op_ffi,
+            neutral: rec_info.neutral,
+            non_rec_arg: rec_info.non_rec_arg,
+            rec_arg: rec_info.rec_arg,
+            base_pattern: base_arm.pattern.clone()?,
+        })
+    } else if func.clauses.len() == 2 {
+        // ── Caso B: 2 cláusulas lambda (sugar para match) ──
+        // Uma cláusula é o caso base (body não-recursivo), a outra é recursiva
+        // com operador associativo: `op(arg, self_call(arg))`.
+        // A cláusula base fornece o pattern (ex: `Literal(0)`) e a recursiva
+        // fornece op, non_rec_arg, rec_arg.
+        let mut base_clause = None;
+        let mut rec_clause = None;
+
+        for (i, clause) in func.clauses.iter().enumerate() {
+            // Guard clauses não são suportadas neste caminho.
+            if !clause.guards.is_empty() {
+                return None;
+            }
+            if is_recursive_call(&clause.body, &func.name) {
+                // Body inteiro é chamada recursiva — não é TRMA (precisa de op associativo)
+                return None;
+            }
+            if detect_assoc_recursion(&clause.body, &func.name, table).is_some() {
+                rec_clause = Some((i, clause));
+            } else {
+                base_clause = Some((i, clause));
+            }
         }
+
+        let (_, base_clause) = base_clause?;
+        let (_, rec_clause) = rec_clause?;
+
+        // Extrair o pattern do caso base (primeiro pattern da cláusula base).
+        // Para `lambda 0: 0`, o pattern é `Literal(0)`.
+        let base_pattern = base_clause.patterns.first()?.clone();
+
+        // Extrair info do body recursivo.
+        let rec_info = detect_assoc_recursion(&rec_clause.body, &func.name, table)?;
+
+        Some(TrmaPattern {
+            op: rec_info.op_name,
+            op_ffi: rec_info.op_ffi,
+            neutral: rec_info.neutral,
+            non_rec_arg: rec_info.non_rec_arg,
+            rec_arg: rec_info.rec_arg,
+            base_pattern,
+        })
+    } else {
+        None
     }
-
-    let base_arm = base_arm?;
-    let rec_arm = rec_arm?;
-
-    // 5. Extrair o padrão do arm recursivo.
-    let rec_info = detect_assoc_recursion(&rec_arm.body, &func.name, table)?;
-
-    Some(TrmaPattern {
-        op: rec_info.op_name,
-        op_ffi: rec_info.op_ffi,
-        neutral: rec_info.neutral,
-        non_rec_arg: rec_info.non_rec_arg,
-        rec_arg: rec_info.rec_arg,
-        base_pattern: base_arm.pattern.clone()?,
-    })
 }
 
 struct AssocRecursion {
@@ -254,23 +299,37 @@ fn rewrite_with_accumulator(
     let param_ty = func.param_types[0].clone();
     let ret_ty = func.ret_ty.clone();
 
-    // Extrai o nome do parâmetro original (ex: "n")
-    let orig_param_name = func.clauses[0]
-        .patterns
-        .first()
-        .and_then(|p| match &p.node {
-            TypedPattern::Ident { name, .. } => Some(name.clone()),
-            _ => None,
+    // Extrai o nome do parâmetro original (ex: "n").
+    // Procura em todas as cláusulas — no caso de 2 cláusulas, a cláusula
+    // base pode ter pattern `Literal(0)` (não-Ident), enquanto a recursiva
+    // tem `Ident("n")`.
+    let orig_param_name = func
+        .clauses
+        .iter()
+        .find_map(|clause| {
+            clause.patterns.first().and_then(|p| match &p.node {
+                TypedPattern::Ident { name, .. } => Some(name.clone()),
+                _ => None,
+            })
         })
         .unwrap_or_else(|| "n".to_string());
 
     // ── Função original reescrita: chama _acc com (n, neutral) ──
+    // O pattern da função reescrita deve ser um Ident que captura o parâmetro
+    // (não o pattern da cláusula base, que pode ser `Literal(0)` no caso de
+    // 2 cláusulas lambda).
     let original = TypedFunction {
         name: func.name.clone(),
         param_types: func.param_types.clone(),
         ret_ty: ret_ty.clone(),
         clauses: vec![TypedLambdaClause {
-            patterns: func.clauses[0].patterns.clone(),
+            patterns: vec![Spanned::new(
+                TypedPattern::Ident {
+                    name: orig_param_name.clone(),
+                    ty: param_ty.clone(),
+                },
+                Span::synthetic(),
+            )],
             body: syn_tail_expr(
                 TypedExprKind::Closure {
                     callee: Box::new(syn_expr(

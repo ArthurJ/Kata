@@ -1,0 +1,31 @@
+# TRMA — Tail Recursion Modulo Associativity.
+#
+# soma NÃO é tail-recursiva: a chamada recursiva está dentro de (+),
+# não em posição de cauda. O optimizer (trma_pass) detecta o padrão
+#   op(non_rec_arg, self_call(rec_arg))
+# onde op é associativo (+, *) e reescreve em recursão de cauda com
+# acumulador — sem o programador precisar fazer nada.
+
+soma :: Int => Int
+lambda 0: 0
+lambda n: + n (soma (- n 1))
+
+# Otimizada pelo TRMA, vira equivalente a:
+#
+# soma_acc :: Int Int => Int
+# lambda 0 acc: acc
+# lambda n acc: soma_acc (- n 1) (+ acc n)
+#
+# — agora tail-recursiva, ativa return_call (TCO do Cranelift).
+
+# fatorial com (*) — mesma ideia, neutro = 1
+fatorial :: Int => Int
+lambda 0: 1
+lambda n: * n (fatorial (- n 1))
+
+action main
+    # n grande para provar que TCO está ativo (sem TRMA, stack overflow)
+    echo!(soma 1000000)
+    echo!(fatorial 20)
+
+main!()

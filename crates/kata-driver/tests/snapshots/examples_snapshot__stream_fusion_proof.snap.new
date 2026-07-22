@@ -1,0 +1,6 @@
+---
+source: crates/kata-driver/tests/examples_snapshot.rs
+assertion_line: 70
+expression: output
+---
+[2, 6, 10]

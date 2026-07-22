@@ -208,3 +208,90 @@ sub 5"#;
     assert_eq!(typed.functions.len(), 1);
     assert_eq!(typed.functions[0].name, "sub");
 }
+
+// ── Teste: TRMA com 2 cláusulas lambda (sugar para match) ───────────
+
+/// TRMA deve detectar o padrão `op(arg, self_call(arg))` quando a função
+/// usa 2 cláusulas lambda (`lambda 0: 0` / `lambda n: + n (soma (- n 1))`)
+/// em vez de 1 cláusula com `match` explícito. Antes do fix, `is_trma_candidate`
+/// exigia `clauses.len() == 1`, deixando a forma sugar sem otimização →
+/// stack overflow em `soma 1000000`.
+#[test]
+fn soma_trma_e2e_clausulas_lambda() {
+    let src = r#"soma :: Int => Int
+lambda 0: 0
+lambda n: + n (soma (- n 1))
+
+soma 1000000"#;
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::int());
+    // 1000000 * 1000001 / 2 = 500000500000
+    assert_eq!(untag_smi(raw), 500000500000);
+}
+
+/// TRMA com multiplicação (neutral=1) e 2 cláusulas lambda.
+#[test]
+fn fatorial_trma_e2e_clausulas_lambda() {
+    let src = r#"fat :: Int => Int
+lambda 0: 1
+lambda n: * n (fat (- n 1))
+
+fat 20"#;
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::int());
+    // 20! = 2432902008176640000
+    assert_eq!(untag_smi(raw), 2432902008176640000);
+}
+
+/// TRMA não deve ativar para subtração (não associativa) com 2 cláusulas.
+/// Se ativasse, o resultado seria incorreto.
+#[test]
+fn trma_nao_ativa_sub_clausulas_lambda() {
+    // sub 5 = 5 - (4 - (3 - (2 - (1 - 0)))) = 3
+    let src = r#"sub :: Int => Int
+lambda 0: 0
+lambda n: - n (sub (- n 1))
+
+sub 5"#;
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::int());
+    assert_eq!(untag_smi(raw), 3);
+}
+
+/// TAST inspection: TRMA com 2 cláusulas cria `soma_acc`.
+#[test]
+fn trma_cria_acc_clausulas_lambda() {
+    let src = r#"soma :: Int => Int
+lambda 0: 0
+lambda n: + n (soma (- n 1))
+
+soma 5"#;
+    let typed = infer_src(src);
+    let user_fns: Vec<_> = typed
+        .functions
+        .iter()
+        .filter(|f| f.name == "soma")
+        .collect();
+    assert_eq!(user_fns.len(), 1, "deve ter exatamente 1 função `soma`");
+
+    let typed = monomorphize(typed);
+    let typed = optimize(typed);
+    let typed = typed.inner;
+    let user_fns: Vec<_> = typed
+        .functions
+        .iter()
+        .filter(|f| f.name == "soma" || f.name == "soma_acc")
+        .collect();
+    assert_eq!(user_fns.len(), 2, "deve ter soma e soma_acc");
+    let names: Vec<&str> = user_fns.iter().map(|f| f.name.as_str()).collect();
+    assert!(names.contains(&"soma"));
+    assert!(names.contains(&"soma_acc"));
+
+    // soma_acc deve ter 2 parâmetros (n, acc)
+    let acc_fn = typed
+        .functions
+        .iter()
+        .find(|f| f.name == "soma_acc")
+        .expect("soma_acc deve existir");
+    assert_eq!(acc_fn.param_types.len(), 2);
+}
