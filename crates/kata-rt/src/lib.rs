@@ -11,6 +11,7 @@ pub(crate) mod arena;
 pub(crate) mod array;
 pub(crate) mod bigint;
 pub(crate) mod channel;
+pub(crate) mod dict;
 pub(crate) mod display;
 pub(crate) mod fiber;
 pub(crate) mod float;
@@ -40,6 +41,10 @@ pub use rational::rat_from_text;
 // Re-exports de funções C-ABI para o codegen registrar no JIT.
 pub use arc::{kata_rt_alloc_arc, kata_rt_arc_fn_ptr, kata_rt_decref, kata_rt_incref};
 pub use arena::{kata_rt_arena_alloc, kata_rt_arena_create, kata_rt_arena_destroy};
+pub use dict::{
+    kata_rt_dict_contains, kata_rt_dict_empty, kata_rt_dict_get_checked, kata_rt_dict_insert,
+    kata_rt_dict_len,
+};
 pub use array::{
     kata_rt_array_alloc, kata_rt_array_contains, kata_rt_array_get, kata_rt_array_get_checked,
     kata_rt_array_len, kata_rt_array_set,
