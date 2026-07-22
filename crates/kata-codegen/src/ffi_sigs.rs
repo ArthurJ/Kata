@@ -368,6 +368,151 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
             sig.params.push(AbiParam::new(I64)); // arena
             sig.returns.push(AbiParam::new(I64)); // ptr (concatenated list)
         }
+        // ── Hash (Fio 13) ──
+        // hash_int: (val) -> i64 (hash)
+        FfiSymbol::HashInt => {
+            sig.params.push(AbiParam::new(I64)); // val (SMI-tagged)
+            sig.returns.push(AbiParam::new(I64)); // hash
+        }
+        // hash_text: (str_ptr) -> i64 (hash)
+        FfiSymbol::HashText => {
+            sig.params.push(AbiParam::new(I64)); // str_ptr
+            sig.returns.push(AbiParam::new(I64)); // hash
+        }
+        // hash_rational: (rat_ptr) -> i64 (hash)
+        FfiSymbol::HashRational => {
+            sig.params.push(AbiParam::new(I64)); // rat_ptr
+            sig.returns.push(AbiParam::new(I64)); // hash
+        }
+        // ── Dict (Fio 13) ──
+        // dict_empty: (arena) -> i64 (dict ptr)
+        FfiSymbol::DictEmpty => {
+            sig.params.push(AbiParam::new(I64)); // arena
+            sig.returns.push(AbiParam::new(I64)); // dict ptr
+        }
+        // dict_insert: (dict, key, val, hash, eq_fn, arena) -> i64 (new dict ptr)
+        FfiSymbol::DictInsert => {
+            sig.params.push(AbiParam::new(I64)); // dict
+            sig.params.push(AbiParam::new(I64)); // key
+            sig.params.push(AbiParam::new(I64)); // value
+            sig.params.push(AbiParam::new(I64)); // hash
+            sig.params.push(AbiParam::new(I64)); // eq_fn (function pointer)
+            sig.params.push(AbiParam::new(I64)); // arena
+            sig.returns.push(AbiParam::new(I64)); // new dict ptr
+        }
+        // dict_get_checked: (dict, key, hash, eq_fn, arena) -> i64 (Result box)
+        FfiSymbol::DictGetChecked => {
+            sig.params.push(AbiParam::new(I64)); // dict
+            sig.params.push(AbiParam::new(I64)); // key
+            sig.params.push(AbiParam::new(I64)); // hash
+            sig.params.push(AbiParam::new(I64)); // eq_fn
+            sig.params.push(AbiParam::new(I64)); // arena
+            sig.returns.push(AbiParam::new(I64)); // Result box
+        }
+        // dict_contains: (dict, key, hash, eq_fn) -> i64 (0/1)
+        FfiSymbol::DictContains => {
+            sig.params.push(AbiParam::new(I64)); // dict
+            sig.params.push(AbiParam::new(I64)); // key
+            sig.params.push(AbiParam::new(I64)); // hash
+            sig.params.push(AbiParam::new(I64)); // eq_fn
+            sig.returns.push(AbiParam::new(I64)); // bool (0/1)
+        }
+        // dict_len: (dict) -> i64
+        FfiSymbol::DictLen => {
+            sig.params.push(AbiParam::new(I64)); // dict
+            sig.returns.push(AbiParam::new(I64)); // count
+        }
+        // dict_remove: (dict, key, hash, eq_fn, arena) -> i64 (new dict ptr)
+        FfiSymbol::DictRemove => {
+            sig.params.push(AbiParam::new(I64)); // dict
+            sig.params.push(AbiParam::new(I64)); // key
+            sig.params.push(AbiParam::new(I64)); // hash
+            sig.params.push(AbiParam::new(I64)); // eq_fn
+            sig.params.push(AbiParam::new(I64)); // arena
+            sig.returns.push(AbiParam::new(I64)); // new dict ptr
+        }
+        // dict_next: (dict, iter_state, arena) -> i64 (Optional box)
+        FfiSymbol::DictNext => {
+            sig.params.push(AbiParam::new(I64)); // dict
+            sig.params.push(AbiParam::new(I64)); // iter_state
+            sig.params.push(AbiParam::new(I64)); // arena
+            sig.returns.push(AbiParam::new(I64)); // Optional box
+        }
+        // ── Set (Fio 13) ──
+        // set_empty: (arena) -> i64 (set ptr)
+        FfiSymbol::SetEmpty => {
+            sig.params.push(AbiParam::new(I64)); // arena
+            sig.returns.push(AbiParam::new(I64)); // set ptr
+        }
+        // set_insert: (set, elem, hash, eq_fn, arena) -> i64 (new set ptr)
+        FfiSymbol::SetInsert => {
+            sig.params.push(AbiParam::new(I64)); // set
+            sig.params.push(AbiParam::new(I64)); // elem
+            sig.params.push(AbiParam::new(I64)); // hash
+            sig.params.push(AbiParam::new(I64)); // eq_fn
+            sig.params.push(AbiParam::new(I64)); // arena
+            sig.returns.push(AbiParam::new(I64)); // new set ptr
+        }
+        // set_contains: (set, elem, hash, eq_fn) -> i64 (0/1)
+        FfiSymbol::SetContains => {
+            sig.params.push(AbiParam::new(I64)); // set
+            sig.params.push(AbiParam::new(I64)); // elem
+            sig.params.push(AbiParam::new(I64)); // hash
+            sig.params.push(AbiParam::new(I64)); // eq_fn
+            sig.returns.push(AbiParam::new(I64)); // bool (0/1)
+        }
+        // set_len: (set) -> i64
+        FfiSymbol::SetLen => {
+            sig.params.push(AbiParam::new(I64)); // set
+            sig.returns.push(AbiParam::new(I64)); // count
+        }
+        // set_remove: (set, elem, hash, eq_fn, arena) -> i64 (new set ptr)
+        FfiSymbol::SetRemove => {
+            sig.params.push(AbiParam::new(I64)); // set
+            sig.params.push(AbiParam::new(I64)); // elem
+            sig.params.push(AbiParam::new(I64)); // hash
+            sig.params.push(AbiParam::new(I64)); // eq_fn
+            sig.params.push(AbiParam::new(I64)); // arena
+            sig.returns.push(AbiParam::new(I64)); // new set ptr
+        }
+        // set_next: (set, iter_state, arena) -> i64 (Optional box)
+        FfiSymbol::SetNext => {
+            sig.params.push(AbiParam::new(I64)); // set
+            sig.params.push(AbiParam::new(I64)); // iter_state
+            sig.params.push(AbiParam::new(I64)); // arena
+            sig.returns.push(AbiParam::new(I64)); // Optional box
+        }
+        // set_union: (a, b, eq_fn, arena) -> i64 (new set ptr)
+        FfiSymbol::SetUnion => {
+            sig.params.push(AbiParam::new(I64)); // a
+            sig.params.push(AbiParam::new(I64)); // b
+            sig.params.push(AbiParam::new(I64)); // eq_fn
+            sig.params.push(AbiParam::new(I64)); // arena
+            sig.returns.push(AbiParam::new(I64)); // new set ptr
+        }
+        // set_intersection: (a, b, eq_fn, arena) -> i64 (new set ptr)
+        FfiSymbol::SetIntersection => {
+            sig.params.push(AbiParam::new(I64)); // a
+            sig.params.push(AbiParam::new(I64)); // b
+            sig.params.push(AbiParam::new(I64)); // eq_fn
+            sig.params.push(AbiParam::new(I64)); // arena
+            sig.returns.push(AbiParam::new(I64)); // new set ptr
+        }
+        // set_difference: (a, b, eq_fn, arena) -> i64 (new set ptr)
+        FfiSymbol::SetDifference => {
+            sig.params.push(AbiParam::new(I64)); // a
+            sig.params.push(AbiParam::new(I64)); // b
+            sig.params.push(AbiParam::new(I64)); // eq_fn
+            sig.params.push(AbiParam::new(I64)); // arena
+            sig.returns.push(AbiParam::new(I64)); // new set ptr
+        }
+        // ── String equality (Fio 13) ──
+        // string_eq: (a, b) -> i64 (0/1)
+        FfiSymbol::StringEq => {
+            sig.params.push(AbiParam::new(I64)); // a (str ptr)
+            sig.params.push(AbiParam::new(I64)); // b (str ptr)
+            sig.returns.push(AbiParam::new(I64)); // bool (0/1)
+        }
         // ── Canais CSP ──
         // channel_create: (arena) -> handle
         FfiSymbol::ChannelCreate => {
@@ -458,6 +603,18 @@ pub(crate) fn ffi_needs_arena(sym_name: &str) -> bool {
                 | FfiSymbol::ChannelCreate
                 | FfiSymbol::QueueCreate
                 | FfiSymbol::BroadcastCreate
+                | FfiSymbol::DictEmpty
+                | FfiSymbol::DictInsert
+                | FfiSymbol::DictGetChecked
+                | FfiSymbol::DictRemove
+                | FfiSymbol::DictNext
+                | FfiSymbol::SetEmpty
+                | FfiSymbol::SetInsert
+                | FfiSymbol::SetRemove
+                | FfiSymbol::SetNext
+                | FfiSymbol::SetUnion
+                | FfiSymbol::SetIntersection
+                | FfiSymbol::SetDifference
         )
     )
 }

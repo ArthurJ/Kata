@@ -179,6 +179,30 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
         "kata_rt_array_contains",
         rt::kata_rt_array_contains as *const u8,
     );
+    // Hash (Fio 13)
+    builder.symbol("kata_rt_hash_int", rt::kata_rt_hash_int as *const u8);
+    builder.symbol("kata_rt_hash_text", rt::kata_rt_hash_text as *const u8);
+    builder.symbol("kata_rt_hash_rational", rt::kata_rt_hash_rational as *const u8);
+    // Dict (Fio 13)
+    builder.symbol("kata_rt_dict_empty", rt::kata_rt_dict_empty as *const u8);
+    builder.symbol("kata_rt_dict_insert", rt::kata_rt_dict_insert as *const u8);
+    builder.symbol("kata_rt_dict_get_checked", rt::kata_rt_dict_get_checked as *const u8);
+    builder.symbol("kata_rt_dict_contains", rt::kata_rt_dict_contains as *const u8);
+    builder.symbol("kata_rt_dict_len", rt::kata_rt_dict_len as *const u8);
+    builder.symbol("kata_rt_dict_remove", rt::kata_rt_dict_remove as *const u8);
+    builder.symbol("kata_rt_dict_next", rt::kata_rt_dict_next as *const u8);
+    // Set (Fio 13)
+    builder.symbol("kata_rt_set_empty", rt::kata_rt_set_empty as *const u8);
+    builder.symbol("kata_rt_set_insert", rt::kata_rt_set_insert as *const u8);
+    builder.symbol("kata_rt_set_contains", rt::kata_rt_set_contains as *const u8);
+    builder.symbol("kata_rt_set_len", rt::kata_rt_set_len as *const u8);
+    builder.symbol("kata_rt_set_remove", rt::kata_rt_set_remove as *const u8);
+    builder.symbol("kata_rt_set_next", rt::kata_rt_set_next as *const u8);
+    builder.symbol("kata_rt_set_union", rt::kata_rt_set_union as *const u8);
+    builder.symbol("kata_rt_set_intersection", rt::kata_rt_set_intersection as *const u8);
+    builder.symbol("kata_rt_set_difference", rt::kata_rt_set_difference as *const u8);
+    // String equality (for Text keys in Dict/Set)
+    builder.symbol("kata_rt_string_eq", rt::kata_rt_string_eq as *const u8);
     // Canais CSP
     builder.symbol(
         "kata_rt_channel_create",
@@ -326,6 +350,30 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         ArrayContains,
         ListReverse,
         ListConcat,
+        // Hash (Fio 13)
+        HashInt,
+        HashText,
+        HashRational,
+        // Dict (Fio 13)
+        DictEmpty,
+        DictInsert,
+        DictGetChecked,
+        DictContains,
+        DictLen,
+        DictRemove,
+        DictNext,
+        // Set (Fio 13)
+        SetEmpty,
+        SetInsert,
+        SetContains,
+        SetLen,
+        SetRemove,
+        SetNext,
+        SetUnion,
+        SetIntersection,
+        SetDifference,
+        // String equality (Fio 13)
+        StringEq,
         // Canais CSP
         ChannelCreate,
         QueueCreate,

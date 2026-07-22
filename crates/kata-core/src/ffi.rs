@@ -145,6 +145,54 @@ pub enum FfiSymbol {
     /// `kata_rt_list_concat(first, second, arena) -> ptr` — concatena duas listas.
     ListConcat,
 
+    // ── Hash (Fio 13) ───────────────────────────────────
+    /// `kata_rt_hash_int(val) -> i64` — FNV-1a hash de Int (SMI-tagged).
+    HashInt,
+    /// `kata_rt_hash_text(str_ptr) -> i64` — FNV-1a hash de Text.
+    HashText,
+    /// `kata_rt_hash_rational(rat_ptr) -> i64` — FNV-1a hash de Rational.
+    HashRational,
+
+    // ── Dict (Fio 13) ───────────────────────────────────
+    /// `kata_rt_dict_empty(arena) -> i64` — aloca Dict vazio.
+    DictEmpty,
+    /// `kata_rt_dict_insert(dict, key, val, hash, eq_fn, arena) -> i64` — insere par.
+    DictInsert,
+    /// `kata_rt_dict_get_checked(dict, key, hash, eq_fn, arena) -> i64` — Result box.
+    DictGetChecked,
+    /// `kata_rt_dict_contains(dict, key, hash, eq_fn) -> i64` — 0/1.
+    DictContains,
+    /// `kata_rt_dict_len(dict) -> i64` — contagem.
+    DictLen,
+    /// `kata_rt_dict_remove(dict, key, hash, eq_fn, arena) -> i64` — novo Dict.
+    DictRemove,
+    /// `kata_rt_dict_next(dict, iter_state, arena) -> i64` — Optional box.
+    DictNext,
+
+    // ── Set (Fio 13) ────────────────────────────────────
+    /// `kata_rt_set_empty(arena) -> i64` — delega para dict_empty.
+    SetEmpty,
+    /// `kata_rt_set_insert(set, elem, hash, eq_fn, arena) -> i64` — novo Set.
+    SetInsert,
+    /// `kata_rt_set_contains(set, elem, hash, eq_fn) -> i64` — 0/1.
+    SetContains,
+    /// `kata_rt_set_len(set) -> i64` — contagem.
+    SetLen,
+    /// `kata_rt_set_remove(set, elem, hash, eq_fn, arena) -> i64` — novo Set.
+    SetRemove,
+    /// `kata_rt_set_next(set, iter_state, arena) -> i64` — Optional box.
+    SetNext,
+    /// `kata_rt_set_union(a, b, eq_fn, arena) -> i64` — união.
+    SetUnion,
+    /// `kata_rt_set_intersection(a, b, eq_fn, arena) -> i64` — intersecção.
+    SetIntersection,
+    /// `kata_rt_set_difference(a, b, eq_fn, arena) -> i64` — diferença.
+    SetDifference,
+
+    // ── String equality (for Text keys in Dict/Set) ─────
+    /// `kata_rt_string_eq(a, b) -> i64` — compara C strings por conteúdo.
+    StringEq,
+
     // ── Canais CSP ────────────────────────────
     /// `kata_rt_channel_create(arena) -> i64` — canal rendezvous.
     ChannelCreate,
@@ -254,6 +302,30 @@ impl FfiSymbol {
             FfiSymbol::ArrayContains => "kata_rt_array_contains",
             FfiSymbol::ListReverse => "kata_rt_list_reverse",
             FfiSymbol::ListConcat => "kata_rt_list_concat",
+            // Hash (Fio 13)
+            FfiSymbol::HashInt => "kata_rt_hash_int",
+            FfiSymbol::HashText => "kata_rt_hash_text",
+            FfiSymbol::HashRational => "kata_rt_hash_rational",
+            // Dict (Fio 13)
+            FfiSymbol::DictEmpty => "kata_rt_dict_empty",
+            FfiSymbol::DictInsert => "kata_rt_dict_insert",
+            FfiSymbol::DictGetChecked => "kata_rt_dict_get_checked",
+            FfiSymbol::DictContains => "kata_rt_dict_contains",
+            FfiSymbol::DictLen => "kata_rt_dict_len",
+            FfiSymbol::DictRemove => "kata_rt_dict_remove",
+            FfiSymbol::DictNext => "kata_rt_dict_next",
+            // Set (Fio 13)
+            FfiSymbol::SetEmpty => "kata_rt_set_empty",
+            FfiSymbol::SetInsert => "kata_rt_set_insert",
+            FfiSymbol::SetContains => "kata_rt_set_contains",
+            FfiSymbol::SetLen => "kata_rt_set_len",
+            FfiSymbol::SetRemove => "kata_rt_set_remove",
+            FfiSymbol::SetNext => "kata_rt_set_next",
+            FfiSymbol::SetUnion => "kata_rt_set_union",
+            FfiSymbol::SetIntersection => "kata_rt_set_intersection",
+            FfiSymbol::SetDifference => "kata_rt_set_difference",
+            // String equality (Fio 13)
+            FfiSymbol::StringEq => "kata_rt_string_eq",
             // Canais CSP
             FfiSymbol::ChannelCreate => "kata_rt_channel_create",
             FfiSymbol::QueueCreate => "kata_rt_queue_create",
@@ -349,6 +421,24 @@ impl FfiSymbol {
             FfiSymbol::ArrayContains => Ty::boolean(),
             FfiSymbol::ListReverse => Ty::int(),
             FfiSymbol::ListConcat => Ty::int(),
+            // Hash (Fio 13) — todas retornam i64 (hash)
+            FfiSymbol::HashInt | FfiSymbol::HashText | FfiSymbol::HashRational => Ty::int(),
+            // Dict (Fio 13) — todas retornam i64 (ptr ou bool)
+            FfiSymbol::DictEmpty | FfiSymbol::DictInsert | FfiSymbol::DictRemove => Ty::int(),
+            FfiSymbol::DictGetChecked => Ty::int(),
+            FfiSymbol::DictContains => Ty::boolean(),
+            FfiSymbol::DictLen => Ty::int(),
+            FfiSymbol::DictNext => Ty::int(),
+            // Set (Fio 13)
+            FfiSymbol::SetEmpty | FfiSymbol::SetInsert | FfiSymbol::SetRemove => Ty::int(),
+            FfiSymbol::SetContains => Ty::boolean(),
+            FfiSymbol::SetLen => Ty::int(),
+            FfiSymbol::SetNext => Ty::int(),
+            FfiSymbol::SetUnion | FfiSymbol::SetIntersection | FfiSymbol::SetDifference => {
+                Ty::int()
+            }
+            // String equality (Fio 13) — retorna 0/1
+            FfiSymbol::StringEq => Ty::boolean(),
             // Canais CSP — handles são i64 (ponteiro+tag)
             FfiSymbol::ChannelCreate => Ty::int(),
             FfiSymbol::QueueCreate => Ty::int(),
@@ -449,6 +539,30 @@ impl FfiSymbol {
             FfiSymbol::ArrayContains,
             FfiSymbol::ListReverse,
             FfiSymbol::ListConcat,
+            // Hash (Fio 13)
+            FfiSymbol::HashInt,
+            FfiSymbol::HashText,
+            FfiSymbol::HashRational,
+            // Dict (Fio 13)
+            FfiSymbol::DictEmpty,
+            FfiSymbol::DictInsert,
+            FfiSymbol::DictGetChecked,
+            FfiSymbol::DictContains,
+            FfiSymbol::DictLen,
+            FfiSymbol::DictRemove,
+            FfiSymbol::DictNext,
+            // Set (Fio 13)
+            FfiSymbol::SetEmpty,
+            FfiSymbol::SetInsert,
+            FfiSymbol::SetContains,
+            FfiSymbol::SetLen,
+            FfiSymbol::SetRemove,
+            FfiSymbol::SetNext,
+            FfiSymbol::SetUnion,
+            FfiSymbol::SetIntersection,
+            FfiSymbol::SetDifference,
+            // String equality (Fio 13)
+            FfiSymbol::StringEq,
             // Canais CSP
             FfiSymbol::ChannelCreate,
             FfiSymbol::QueueCreate,

@@ -489,24 +489,22 @@ pub(crate) fn lower_expr(
             unreachable!("lower_control_flow should handle Return/Loop/Break/Continue")
         }
 
-        // ── Coleções literais — ListLit, ArrayLit, RangeLit, ForIn, In ──
+        // ── Coleções literais — ListLit, ArrayLit, RangeLit, ForIn, In,
+        //     DictLit, SetLit ──
         // Delegado para `collections_literal` — arms de coleções literais.
         TypedExprKind::ListLit { .. }
         | TypedExprKind::ArrayLit { .. }
         | TypedExprKind::RangeLit { .. }
         | TypedExprKind::ForIn { .. }
-        | TypedExprKind::In { .. } => {
+        | TypedExprKind::In { .. }
+        | TypedExprKind::DictLit { .. }
+        | TypedExprKind::SetLit { .. } => {
             if let Some(val) = lower_collections_literal(expr, ctx)? {
                 return Ok(val);
             }
             unreachable!(
-                "lower_collections_literal should handle ListLit/ArrayLit/RangeLit/ForIn/In"
+                "lower_collections_literal should handle ListLit/ArrayLit/RangeLit/ForIn/In/DictLit/SetLit"
             )
-        }
-
-        // ── DictLit / SetLit — ainda não lowered pelo codegen ──
-        TypedExprKind::DictLit { .. } | TypedExprKind::SetLit { .. } => {
-            todo!("codegen lowering for DictLit/SetLit is not yet implemented")
         }
 
         // ── Map/filter/fold — lowering ──

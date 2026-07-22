@@ -60,6 +60,31 @@ pub(crate) fn bool_to_text(val: i64) -> String {
     }
 }
 
+/// Compara duas strings C por conteúdo. Retorna 1 se iguais, 0 se diferentes.
+///
+/// Usado como função de igualdade (eq_fn) para chaves Text em Dict/Set.
+///
+/// # Safety
+///
+/// `a` e `b` são ponteiros i64 para C strings (nulo-terminadas) ou 0 (NULL).
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_string_eq(a: i64, b: i64) -> i64 {
+    if a == 0 && b == 0 {
+        return 1;
+    }
+    if a == 0 || b == 0 {
+        return 0;
+    }
+    // SAFETY: caller (JIT codegen) garante ponteiros C string válidos.
+    let a_bytes = unsafe { std::ffi::CStr::from_ptr(a as *const std::os::raw::c_char).to_bytes() };
+    let b_bytes = unsafe { std::ffi::CStr::from_ptr(b as *const std::os::raw::c_char).to_bytes() };
+    if a_bytes == b_bytes {
+        1
+    } else {
+        0
+    }
+}
+
 /// Substitui primeira ocorrência de `{}` por valor (para `format`).
 pub(crate) fn text_replace_first(template: &str, replacement: &str) -> String {
     if let Some(pos) = template.find("{}") {
