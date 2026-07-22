@@ -82,10 +82,13 @@ impl Parser {
                 }
                 _ => {
                     // Could be a signature (name :: Type...), an implements
-                    // decl (Tipo implements IFACE), or an expression.
-                    // Check: Ident [optional (params)] followed by Implements → ImplementsDecl.
+                    // decl (Tipo implements IFACE), a refines decl
+                    // (TipoRefinado refines IFACE), or an expression.
                     if self.is_implements_start() {
                         let item = self.parse_implements_decl(directives)?;
+                        items.push(Spanned::new(item, item_start));
+                    } else if self.is_refines_start() {
+                        let item = self.parse_refines_decl(directives)?;
                         items.push(Spanned::new(item, item_start));
                     } else if self.is_signature_start() {
                         let item = self.parse_sig(directives)?;
@@ -140,6 +143,19 @@ impl Parser {
         self.tokens
             .get(lookahead)
             .map(|t| matches!(t.token, Token::Implements))
+            .unwrap_or(false)
+    }
+
+    /// Check if the current position starts a refines decl:
+    /// `TipoRefinado refines IFACE`.
+    /// Lookahead: Ident followed by `refines`.
+    fn is_refines_start(&self) -> bool {
+        if !matches!(self.peek(), Token::Ident(_)) {
+            return false;
+        }
+        self.tokens
+            .get(self.pos + 1)
+            .map(|t| matches!(t.token, Token::Refines))
             .unwrap_or(false)
     }
 

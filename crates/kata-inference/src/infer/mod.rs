@@ -162,6 +162,7 @@ pub fn infer_module(
             struct_registry: &resolved.struct_registry,
             refined_decls: &resolved.refined_decls,
             interface_registry: &interface_registry,
+            refines_registry: &resolved.refines_registry,
             ret_ty: None,
             in_loop: false,
         };
@@ -187,6 +188,7 @@ pub fn infer_module(
             struct_registry: &resolved.struct_registry,
             refined_decls: &resolved.refined_decls,
             interface_registry: &interface_registry,
+            refines_registry: &resolved.refines_registry,
             ret_ty: Some(&action_def.return_type),
             in_loop: false,
         };
@@ -217,6 +219,7 @@ pub fn infer_module(
                     struct_registry: &resolved.struct_registry,
                     refined_decls: &resolved.refined_decls,
                     interface_registry: &interface_registry,
+            refines_registry: &resolved.refines_registry,
                     ret_ty: None,
                     in_loop: false,
                 };
@@ -239,6 +242,7 @@ pub fn infer_module(
             | Item::AliasDecl { .. }
             | Item::InterfaceDecl { .. }
             | Item::ImplementsDecl { .. }
+            | Item::RefinesDecl { .. }
             | Item::ImportDecl { .. }
             | Item::ExportDecl { .. } => {
                 // Já processado no resolution/inference de funções nomeadas.

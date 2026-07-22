@@ -354,4 +354,125 @@ impl Parser {
             methods,
         })
     }
+
+    /// `TipoRefinado refines Interface` + bloco indentado opcional com
+    /// métodos override. Sem bloco: delegação total ao tipo base.
+    /// Com bloco: métodos com corpo = override; não-listados = delegação.
+    ///
+    /// Sem type_params ou iface_params — refined types não são genéricos
+    /// em 1.0 (D9 do PRD-refines).
+    ///
+    /// ```text
+    /// PositiveInt refines NUM
+    ///     - :: PositiveInt PositiveInt => PositiveInt
+    ///         lambda a b: ...
+    ///     # +, *, <, >, = delegados automaticamente
+    /// ```
+    pub(crate) fn parse_refines_decl(
+        &mut self,
+        _directives: Vec<Directive>,
+    ) -> Result<Item, FrontendError> {
+        // Nome do tipo refined
+        let type_name = match self.peek() {
+            Token::Ident(s) => {
+                let n = s.clone();
+                self.advance();
+                n
+            }
+            _ => return Err(self.error("type name before `refines`")),
+        };
+
+        // `refines`
+        self.expect(&Token::Refines, "`refines`")?;
+
+        // Nome da interface
+        let interface_name = match self.peek() {
+            Token::Ident(s) => {
+                let n = s.clone();
+                self.advance();
+                n
+            }
+            _ => return Err(self.error("interface name after `refines`")),
+        };
+
+        // Bloco indentado de métodos (opcional).
+        // Sem INDENT = delegação total (methods = vec![]).
+        // Consumir StmtSep antes de checar (newline entre decl e bloco).
+        while matches!(self.peek(), Token::StmtSep) {
+            self.advance();
+        }
+
+        let methods = if matches!(self.peek(), Token::Indent) {
+            self.advance(); // consume INDENT
+            let mut methods = Vec::new();
+            loop {
+                while matches!(self.peek(), Token::StmtSep) {
+                    self.advance();
+                }
+                if matches!(self.peek(), Token::Dedent | Token::Eof) {
+                    break;
+                }
+
+                // Assinatura: `name :: Type1 Type2 ... => RetType [@ffi(...)]`
+                let method_name = match self.peek() {
+                    Token::Ident(s) => {
+                        let n = s.clone();
+                        self.advance();
+                        n
+                    }
+                    _ => return Err(self.error("method name in refines")),
+                };
+                self.expect(&Token::DoubleColon, "`::` in method signature")?;
+
+                let mut params = Vec::new();
+                while !matches!(self.peek(), Token::FatArrow | Token::Eof) {
+                    params.push(self.parse_type_expr()?);
+                }
+                self.expect(&Token::FatArrow, "`=>` in method signature")?;
+                let ret = self.parse_type_expr()?;
+
+                // Diretivas opcionais após o tipo de retorno
+                let method_directives = self.parse_directives()?;
+
+                // Corpo: lambda no mesmo nível (override) ou apenas @ffi (None)
+                while matches!(self.peek(), Token::StmtSep) {
+                    self.advance();
+                }
+                let body = if matches!(self.peek(), Token::Lambda) {
+                    Some(self.parse_sig_clauses()?)
+                } else {
+                    None
+                };
+
+                if matches!(self.peek(), Token::StmtSep) {
+                    self.advance();
+                }
+
+                methods.push(ImplMethod {
+                    name: method_name,
+                    params,
+                    ret,
+                    directives: method_directives,
+                    body,
+                });
+            }
+            self.expect(&Token::Dedent, "DEDENT (end of refines)")?;
+            if matches!(self.peek(), Token::StmtSep) {
+                self.advance();
+            }
+            methods
+        } else {
+            // Sem bloco — delegação total.
+            if matches!(self.peek(), Token::StmtSep) {
+                self.advance();
+            }
+            Vec::new()
+        };
+
+        Ok(Item::RefinesDecl {
+            type_name,
+            interface_name,
+            methods,
+        })
+    }
 }

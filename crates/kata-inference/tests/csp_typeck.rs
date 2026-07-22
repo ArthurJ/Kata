@@ -31,6 +31,9 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
     struct_registry.merge(user.struct_registry);
     let mut interface_registry = prelude.interface_registry;
     interface_registry.merge(user.interface_registry);
+
+    let mut refines_registry = prelude.refines_registry;
+    refines_registry.merge(user.refines_registry);
     ResolvedModule {
         type_env,
         signatures,
@@ -39,6 +42,7 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
         refined_decls: Vec::new(),
         enum_pred_decls: Vec::new(),
         interface_registry,
+        refines_registry,
         functions: {
             let mut fns = prelude.functions;
             let user_fn_names: std::collections::HashSet<&str> =

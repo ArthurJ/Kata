@@ -3,4 +3,5 @@ source: crates/kata-driver/tests/examples_snapshot.rs
 assertion_line: 70
 expression: output
 ---
-
+500000500000
+2432902008176640000

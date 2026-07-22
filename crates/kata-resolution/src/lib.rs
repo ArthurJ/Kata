@@ -31,6 +31,7 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
     let mut refined_decls = Vec::new();
     let mut enum_pred_decls = Vec::new();
     let mut interface_registry = kata_core::InterfaceRegistry::new();
+    let mut refines_registry = kata_core::RefinesRegistry::new();
     // Erros de validação de diretivas desconhecidas (coletado durante Pass 1).
     let mut errors: Vec<ResolveError> = Vec::new();
 
@@ -43,6 +44,7 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
         &mut refined_decls,
         &mut enum_pred_decls,
         &mut interface_registry,
+        &mut refines_registry,
         &mut signatures,
         &mut functions,
         &mut errors,
@@ -224,6 +226,7 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
         refined_decls,
         enum_pred_decls,
         interface_registry,
+        refines_registry,
         functions,
         actions,
     })

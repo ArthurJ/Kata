@@ -64,6 +64,9 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
     let mut interface_registry = prelude.interface_registry;
     interface_registry.merge(user.interface_registry);
 
+    let mut refines_registry = prelude.refines_registry;
+    refines_registry.merge(user.refines_registry);
+
     ResolvedModule {
         type_env,
         signatures,
@@ -72,6 +75,7 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
         refined_decls,
         enum_pred_decls,
         interface_registry,
+        refines_registry,
         functions: {
             let mut fns = prelude.functions;
             let user_fn_names: std::collections::HashSet<&str> =

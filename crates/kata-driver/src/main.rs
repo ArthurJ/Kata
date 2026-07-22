@@ -369,6 +369,9 @@ pub(crate) fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> R
     let mut interface_registry = prelude.interface_registry;
     interface_registry.merge(user.interface_registry);
 
+    let mut refines_registry = prelude.refines_registry;
+    refines_registry.merge(user.refines_registry);
+
     // Functions/actions: concatenar prelude + user, removendo duplicatas
     // por nome (user sobrescreve prelude quando redefine). Sem isso,
     // funções Kata da stdlib (mod, and) têm assinatura no DispatchTable mas
@@ -393,6 +396,7 @@ pub(crate) fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> R
         refined_decls,
         enum_pred_decls,
         interface_registry,
+        refines_registry,
         functions,
         actions,
     }

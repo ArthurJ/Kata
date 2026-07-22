@@ -41,6 +41,9 @@ pub(crate) struct InferCtx<'a> {
     /// Catálogo de interfaces e implementações para dispatch
     /// com `iface++` no Score.
     pub interface_registry: &'a InterfaceRegistry,
+    /// Catálogo de delegações `refines` — fallback no dispatch:
+    /// substitui args refined pelo tipo base e retenta.
+    pub refines_registry: &'a kata_core::RefinesRegistry,
     /// Tipo de retorno da Action atual — `Some(ty)` quando inferindo
     /// o body de uma Action, `None` caso contrário. Usado por `infer_return`
     /// para verificar que `return expr` produz o tipo esperado.
@@ -403,6 +406,7 @@ pub(crate) fn infer_expr_hinted(
                 struct_registry: ctx.struct_registry,
                 refined_decls: ctx.refined_decls,
                 interface_registry: ctx.interface_registry,
+                refines_registry: ctx.refines_registry,
                 ret_ty: ctx.ret_ty,
                 in_loop: true,
             };

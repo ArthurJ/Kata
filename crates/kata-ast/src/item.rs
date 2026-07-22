@@ -95,6 +95,20 @@ pub enum Item {
         methods: Vec<ImplMethod>,
     },
 
+    /// `TipoRefinado refines Interface` + bloco indentado opcional com
+    /// métodos override. Sem bloco: delega todos os métodos ao tipo base
+    /// via fallback no dispatch. Com bloco: métodos com corpo = override
+    /// explícito (cria overload real); não-listados = delegação automática.
+    ///
+    /// Sem type_params ou iface_params — refined types não são genéricos
+    /// em 1.0 (D9 do PRD-refines).
+    RefinesDecl {
+        type_name: String,
+        interface_name: String,
+        /// Métodos com corpo (override). Vazio = delegação total.
+        methods: Vec<ImplMethod>,
+    },
+
     /// `import modulo.submodulo` / `import ... as alias` /
     /// `import MOD.(items)`.
     ImportDecl {

@@ -15,6 +15,7 @@ pub mod enum_registry;
 pub mod escape;
 pub mod ffi;
 pub mod interface_registry;
+pub mod refines_registry;
 pub(crate) mod shape; // TypeShape/TypeId — zero consumidores cross-crate
 pub mod struct_registry;
 pub mod ty;
@@ -28,5 +29,6 @@ pub use ffi::FfiSymbol;
 pub use interface_registry::{
     ImplEntry, ImplMethodInfo, InterfaceInfo, InterfaceRegistry, InterfaceSignature,
 };
+pub use refines_registry::{RefinesEntry, RefinesRegistry};
 pub use struct_registry::{FieldInfo, StructInfo, StructRegistry};
 pub use ty::{PrimTy, Ty, TypeEnv};

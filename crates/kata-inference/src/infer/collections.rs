@@ -312,6 +312,7 @@ pub(crate) fn infer_for_in(
         struct_registry: ctx.struct_registry,
         refined_decls: ctx.refined_decls,
         interface_registry: ctx.interface_registry,
+        refines_registry: ctx.refines_registry,
         ret_ty: ctx.ret_ty,
         in_loop: true,
     };

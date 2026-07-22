@@ -11,7 +11,9 @@
 //! - `ResolveError`: erro de resolution
 
 use kata_ast::{ActionStmt, Expr, LambdaClause, Spanned};
-use kata_core::{EnumRegistry, InterfaceRegistry, StructRegistry, Ty, TypeEnv};
+use kata_core::{
+    EnumRegistry, InterfaceRegistry, RefinesRegistry, StructRegistry, Ty, TypeEnv,
+};
 
 /// Resultado da resolution — TypeEnv populado + assinaturas coletadas.
 #[derive(Debug, Clone)]
@@ -30,6 +32,8 @@ pub struct ResolvedModule {
     pub enum_pred_decls: Vec<EnumPredDeclInfo>,
     /// Catálogo de interfaces e implementações.
     pub interface_registry: InterfaceRegistry,
+    /// Catálogo de delegações `refines` — tipo refined → interfaces delegadas.
+    pub refines_registry: RefinesRegistry,
     /// Funções nomeadas com corpo Kata.
     /// Cada entrada preserva as cláusulas lambda para o inference processar.
     pub functions: Vec<FunctionDef>,
@@ -193,5 +197,10 @@ pub enum ResolveError {
         name: String,
         context: &'static str,
         item_name: String,
+    },
+    /// `refines` aplicado a tipo não-refined, ou base não implementa a interface.
+    InvalidRefines {
+        type_name: String,
+        reason: String,
     },
 }

@@ -33,6 +33,11 @@ fn merge_resolved(
             ir.merge(user.interface_registry.clone());
             ir
         },
+        refines_registry: {
+            let mut rr = prelude.refines_registry.clone();
+            rr.merge(user.refines_registry.clone());
+            rr
+        },
         functions: {
             let mut fns = prelude.functions;
             let user_fn_names: std::collections::HashSet<&str> =

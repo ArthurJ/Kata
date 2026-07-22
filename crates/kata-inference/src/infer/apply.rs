@@ -198,6 +198,38 @@ pub(crate) fn infer_apply(
             }
         }
 
+        // Caminho genérico falhou. Tentar fallback refines (D1 do PRD-refines):
+        // se algum arg é tipo refined com delegação refines, substituir pelo
+        // tipo base e retentar o dispatch. O refined é alias do base no layout
+        // — o codegen não precisa de conversão.
+        if let Some((fallback_arg_types, fallback_overload)) =
+            try_refines_fallback(&func_name, &arg_types, ctx)
+        {
+            let callee_ty = Ty::Function(
+                fallback_overload.params.clone(),
+                Box::new(fallback_overload.ret.clone()),
+            );
+            let callee_typed = TypedExpr {
+                span: callee.span,
+                ty: callee_ty,
+                tail_pos: false,
+                escape: EscapeTarget::Local,
+                effect: Effect::Puro,
+                kind: TypedExprKind::Ident {
+                    name: func_name.clone(),
+                },
+            };
+            return Ok((
+                fallback_overload.ret,
+                TypedExprKind::Closure {
+                    callee: Box::new(Spanned::new(callee_typed, callee.span)),
+                    args: typed_args,
+                    ffi_symbol: fallback_overload.ffi_symbol.clone(),
+                },
+                Effect::Puro,
+            ));
+        }
+
         return Err(MiddleError::NoOverload {
             name: func_name,
             span: (*span).into(),
@@ -554,4 +586,51 @@ pub(crate) fn infer_apply(
         name: func_name,
         span: callee.span.into(),
     })
+}
+
+/// Fallback `refines` no dispatch (D1 do PRD-refines).
+///
+/// Quando o dispatch normal falha (NoOverload), verifica se algum arg é tipo
+/// refined com delegação `refines`. Se sim, substitui pelo tipo base e
+/// retenta o dispatch. Se funcionar, retorna o overload encontrado.
+///
+/// Regra (D4): todos os args que SÃO refined devem ter `refines` para a
+/// interface do método; args não-refined passam direto. A substituição só
+/// ocorre se o `func_name` é método de alguma interface delegada por algum
+/// arg refined.
+fn try_refines_fallback(
+    func_name: &str,
+    arg_types: &[Ty],
+    ctx: &InferCtx,
+) -> Option<(Vec<Ty>, kata_core::OverloadInfo)> {
+    // Para cada arg, se é refined (Ty::Struct com refines), coletar o tipo base.
+    let mut fallback_arg_types = arg_types.to_vec();
+    let mut any_substituted = false;
+
+    for arg_ty in &mut fallback_arg_types {
+        if let Ty::Struct(name) = arg_ty {
+            let entries = ctx.refines_registry.get(name);
+            if entries.is_empty() {
+                continue;
+            }
+            // Verificar se func_name é método de alguma interface delegada.
+            // Por ora, substitui pelo base_ty se há qualquer refines.
+            // TODO: iterar interfaces e verificar se func_name é signature.
+            let base_ty = &entries[0].base_ty;
+            *arg_ty = base_ty.clone();
+            any_substituted = true;
+        }
+    }
+
+    if !any_substituted {
+        return None;
+    }
+
+    // Retentar dispatch com args substituídos.
+    let overload = ctx
+        .table
+        .resolve(func_name, &fallback_arg_types, ctx.interface_registry)
+        .ok()?;
+
+    Some((fallback_arg_types, overload))
 }

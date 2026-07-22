@@ -62,6 +62,8 @@ pub enum Token {
     Interface,
     /// `implements` — implementa interface
     Implements,
+    /// `refines` — delega interface ao tipo base (tipos refined)
+    Refines,
     /// `with` — bloco bottom-up ao final de lambda
     With,
     /// `match` — pattern matching
@@ -182,6 +184,7 @@ impl Token {
                 | Token::As
                 | Token::Interface
                 | Token::Implements
+                | Token::Refines
                 | Token::With
                 | Token::Match
                 | Token::Return
@@ -214,6 +217,7 @@ impl std::fmt::Display for Token {
             Token::As => write!(f, "as"),
             Token::Interface => write!(f, "interface"),
             Token::Implements => write!(f, "implements"),
+            Token::Refines => write!(f, "refines"),
             Token::With => write!(f, "with"),
             Token::Match => write!(f, "match"),
             Token::Return => write!(f, "return"),
