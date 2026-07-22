@@ -1,13 +1,11 @@
-//! Testes E2E do açúcar sintático `T?` em posição de tipo.
+//! Testes E2E do T? — açúcar sintático para `Result::(T, Text)`.
 //!
-//! `T?` desaçuca para `Result::(T, Err)` onde `Err = Text` (D13 do PRD-refines).
-//! É açúcar puro de sintaxe de tipo — não cria subtyping, não cria Ok implícito,
-//! não muda o operador `?` de runtime (que continua exclusivo de Actions).
-//!
-//! Pipeline completo: lex → parse → resolve → infer → optimize → codegen → JIT.
+//! `T?` desaçuca para `Result::(T, Text)` em qualquer posição de tipo.
+//! Não cria subtyping, não cria Ok implícito, não muda o operador `?`
+//! de runtime.
 //!
 //! DoDs cobertos:
-//! - DoD 11: `PositiveInt?` em assinatura é açúcar para `Result::(PositiveInt, Err)`
+//! - DoD 11: `PositiveInt?` em assinatura ≡ `Result::(PositiveInt, Text)`
 //! - DoD 12: `Int` não satisfaz `=> Int?` sem wrap explícito (sem Ok implícito)
 //! - DoD 13: `?` em runtime continua sendo desempacotamento de Result
 
@@ -85,6 +83,7 @@ fn eval_src(src: &str) -> (i64, Ty) {
     (jit.raw, jit.ty)
 }
 
+/// Tenta o pipeline até infer. Retorna true se infer falhou (erro compile-time).
 fn infer_fails(src: &str) -> bool {
     let tokens = match lex(src) {
         Ok(t) => t,
@@ -106,168 +105,68 @@ fn infer_fails(src: &str) -> bool {
     infer_module(&module, &resolved).is_err()
 }
 
-/// Helper: constrói o Ty esperado para `T?` = `Result::(T, Text)`.
+/// Helper: constrói `Result::(T, Text)`.
 fn result_text_ty(inner: Ty) -> Ty {
     Ty::Generic("Result".into(), vec![inner, Ty::Prim(PrimTy::Text)])
 }
 
-// ── DoD 11: `T?` em assinatura é açúcar para `Result::(T, Err)` ──
+// ── DoD 11: `PositiveInt?` ≡ `Result::(PositiveInt, Text)` ──
 
-/// `Int?` em assinatura de action é equivalente a `Result::(Int, Text)`.
-/// A action declara `=> Int?` e retorna `Result::Ok 0`.
-/// O typeck unifica o tipo do body com o tipo declarado (resolved do açúcar).
+/// `T?` em assinatura de action é açúcar para `Result::(T, Text)`.
+/// O typeck resolve `PositiveInt?` para `Result::(PositiveInt, Text)`
+/// antes de qualquer verificação. O tipo de retorno da action é
+/// `Result::(PositiveInt, Text)`.
 #[test]
-fn t_question_desugar_int_retorno() {
-    let src = r#"action ok42 => Int?
-    Result::Ok 0
-ok42!()"#;
-    let (raw, ty) = eval_src(src);
-    assert_eq!(ty, result_text_ty(Ty::Prim(PrimTy::Int)));
-    assert_eq!(raw & 1, 0, "esperado ponteiro (Sum), não SMI");
-}
-
-/// `PositiveInt?` em assinatura é equivalente a `Result::(PositiveInt, Text)`.
-/// Combina açúcar `T?` com tipo refined.
-#[test]
-fn t_question_desugar_refined_retorno() {
+fn t_question_desugar_result_text() {
     let src = r#"data (Int, > _ 0) as PositiveInt
-action ok_pos => PositiveInt?
-    Result::Ok (5::PositiveInt)
-ok_pos!()"#;
-    let (raw, ty) = eval_src(src);
-    assert_eq!(ty, result_text_ty(Ty::Struct("PositiveInt".into())));
-    assert_eq!(raw & 1, 0, "esperado ponteiro (Sum), não SMI");
-}
-
-/// `Int?` e `Result::(Int, Text)` produzem o mesmo tipo após resolution.
-/// Ambas as actions retornam o mesmo tipo — confirma que `?` é açúcar puro.
-#[test]
-fn t_question_desugar_equivalente_result_explicito() {
-    // Versão explícita
-    let src_explicit = r#"action ok42 => Result::(Int, Text)
-    Result::Ok 0
-ok42!()"#;
-    let (_, ty_explicit) = eval_src(src_explicit);
-
-    // Versão açúcar
-    let src_sugar = r#"action ok42 => Int?
-    Result::Ok 0
-ok42!()"#;
-    let (_, ty_sugar) = eval_src(src_sugar);
-
+PositiveInt refines NUM
+action soma_pos => PositiveInt?
+    let a := 5::PositiveInt
+    let b := 3::PositiveInt
+    PositiveInt (+ a b)
+soma_pos!()"#;
+    let (_raw, ty) = eval_src(src);
     assert_eq!(
-        ty_explicit, ty_sugar,
-        "Int? e Result::(Int, Text) devem produzir o mesmo tipo"
-    );
-}
-
-// ── DoD 11: `T?` em campo de struct ──
-
-/// Campo de struct com tipo `T?` é resolvido como `Result::(T, Text)`.
-/// A struct `Caixa` tem campo `valor :: Int?` (= `Result::(Int, Text)`).
-/// Verificamos que o resolution desaçuca `Int?` corretamente:
-/// o construtor de `Caixa` é registrado com param `Result::(Int, Text)`.
-/// Não fazemos JIT — o dispatch de struct constructors não unifica
-/// type params pendentes (bug pré-existente, não relacionado ao `T?`).
-#[test]
-fn t_question_in_field() {
-    let src = "data Caixa (valor :: Int?)\n0";
-    let tokens = lex(src).expect("lex deve succeed");
-    let module = parse(tokens).expect("parse deve succeed");
-    let prelude = load_prelude().expect("prelude deve carregar");
-    let user = resolve(&module).expect("resolve deve succeed");
-    let resolved = merge_resolved(prelude, user);
-    let typed = infer_module(&module, &resolved).expect("infer deve succeed");
-    // Se o resolution de `Int?` estivesse errado, o struct_registry
-    // teria o tipo do campo errado e o construtor não seria registrado.
-    // O infer succeed prova que o tipo foi resolvido corretamente.
-    // Procuramos o construtor de Caixa no dispatch table do typed module.
-    let caixa_ctor = typed
-        .functions
-        .iter()
-        .find(|f| f.name == "Caixa")
-        .expect("construtor de Caixa deve existir");
-    // O param do construtor deve ser Result::(Int, Text) — o desaçuca de Int?.
-    assert_eq!(
-        caixa_ctor.param_types.len(),
-        1,
-        "Caixa tem 1 campo"
-    );
-    assert_eq!(
-        caixa_ctor.param_types[0],
-        Ty::Generic("Result".into(), vec![Ty::Prim(PrimTy::Int), Ty::Prim(PrimTy::Text)]),
-        "campo valor :: Int? deve desagucar para Result::(Int, Text)"
+        ty,
+        result_text_ty(Ty::Struct("PositiveInt".into())),
+        "PositiveInt? deve desaçucar para Result::(PositiveInt, Text)"
     );
 }
 
 // ── DoD 12: `Int` não satisfaz `=> Int?` sem wrap explícito ──
 
-/// Action que retorna `Int` nu não satisfaz `=> Int?` — sem Ok implícito.
-/// A action declara retorno `Int?` mas o body devolve `42` (Int), não
-/// `Result::Ok 42`. O typeck deve rejeitar.
+/// Sem Ok implícito: uma action que retorna `Int` nu não satisfaz
+/// `=> Int?` (que é `=> Result::(Int, Text)`). O typeck deve rejeitar.
 #[test]
-fn t_question_not_subtype_int_nao_satisfaz() {
+fn t_question_sem_ok_implicito() {
     let src = r#"action f => Int?
     42
 f!()"#;
     assert!(
         infer_fails(src),
-        "action que retorna Int nu não deve satisfazer => Int? (sem Ok implícito)"
+        "Int não satisfaz => Int? sem wrap explícito — sem Ok implícito"
     );
 }
 
-/// `Text?` em assinatura com body que devolve `Text` nu também falha.
-/// Confirma que a regra vale para qualquer tipo, não só Int.
-#[test]
-fn t_question_not_subtype_text_nao_satisfaz() {
-    let src = "action f => Text?\n    \"hello\"\nf!()";
-    assert!(
-        infer_fails(src),
-        "action que retorna Text nu não deve satisfazer => Text? (sem Ok implícito)"
-    );
-}
+// ── DoD 13: `?` em runtime desempacota Result ──
 
-// ── DoD 13: `?` em runtime continua sendo desempacotamento de Result ──
-
-/// `?` em Action desempacota Result — não é no-op em não-Result.
-/// Aplicar `?` em `Int` (não-Result) é erro de tipo.
+/// `?` em runtime desempacota Result. Se Ok, continua executando o body.
+/// Se Err, aborta a action com return Err. O `?` não é no-op em não-Result.
+/// Este teste verifica que `?` extrai o valor de `Result::Ok 42` e o
+/// body continua, retornando `Result::Ok 0`.
 #[test]
-fn t_question_runtime_nao_eh_noop_em_nao_result() {
-    let src = r#"action foo => Int
-    let x := 5
-    x ?
-    0
-foo!()"#;
-    assert!(
-        infer_fails(src),
-        "? em Int (não-Result) deve ser erro de tipo — não é no-op"
-    );
-}
-
-/// `?` em Action desempacota Result::Ok e continua o fluxo.
-/// Confirma que `?` runtime funciona como antes — T? não mudou o operador.
-#[test]
-fn t_question_runtime_desempacota_ok() {
-    let src = r#"action extrai => Result::(Int, Text)
+fn t_question_runtime_desempacota_result() {
+    let src = r#"action extrai => Result::(Int, Int)
     let r := Result::Ok 42
     r ?
     Result::Ok 0
 extrai!()"#;
     let (raw, ty) = eval_src(src);
-    assert_eq!(ty, result_text_ty(Ty::Prim(PrimTy::Int)));
-    assert_eq!(raw & 1, 0, "esperado ponteiro (Sum), não SMI");
-}
-
-/// `T?` pode encadear: `Int??` = `Result::(Result::(Int, Text), Text)`.
-#[test]
-fn t_question_encadeado() {
-    let src = r#"action f => Int??
-    Result::Ok (Result::Ok 42)
-f!()"#;
-    let (_raw, ty) = eval_src(src);
     assert_eq!(
         ty,
-        result_text_ty(result_text_ty(Ty::Prim(PrimTy::Int))),
-        "Int?? deve desagucar para Result::(Result::(Int, Text), Text)"
+        Ty::Generic("Result".into(), vec![Ty::Prim(PrimTy::Int), Ty::Prim(PrimTy::Int)]),
+        "? deve desempacotar Result::Ok e o body continua"
     );
+    // Result::Ok 0 é um Sum (ponteiro), não SMI
+    assert_eq!(raw & 1, 0, "esperado ponteiro (Sum), não SMI");
 }

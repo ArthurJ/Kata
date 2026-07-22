@@ -125,10 +125,7 @@ fn resolve_fails(src: &str) -> bool {
         Ok(m) => m,
         Err(_) => return true,
     };
-    match resolve(&module) {
-        Ok(_) => false,
-        Err(_) => true,
-    }
+    resolve(&module).is_err()
 }
 
 /// Helper: constrói `Result::(T, Text)`.
@@ -295,5 +292,29 @@ PositiveInt 5"#;
     assert!(
         infer_fails(src),
         "refines em interface que o base não implementa deve falhar em infer"
+    );
+}
+
+// ── DoD 5: Caso misto — override encontrado antes do fallback ──
+
+/// `PositiveInt refines NUM` com bloco override para `-`.
+/// O `-` tem corpo lambda (override) → cria overload real no DispatchTable.
+/// O `+` (não-listado) usa fallback automático.
+/// O override deve ser encontrado antes do fallback.
+#[test]
+fn t_refines_override_encontrado_antes_do_fallback() {
+    let src = r#"data (Int, > _ 0) as PositiveInt
+PositiveInt refines NUM
+    - :: PositiveInt PositiveInt => PositiveInt @ffi("kata_rt_bi_sub")
+action sub_pos => PositiveInt
+    let a := 10::PositiveInt
+    let b := 3::PositiveInt
+    - a b
+sub_pos!()"#;
+    let (_raw, ty) = eval_src(src);
+    assert_eq!(
+        ty,
+        Ty::Struct("PositiveInt".into()),
+        "override de - com @ffi deve criar overload real, encontrado antes do fallback"
     );
 }
