@@ -87,7 +87,9 @@ pub(crate) fn infer_variant_qual(
             }
             // Variante constante: OK sem args constrói com valor fixo.
             if let Some(_fixed) = ctx.enum_registry.fixed_value(name, variant) {
-                let tag = ctx.enum_registry.variant_index(name, variant)
+                let tag = ctx
+                    .enum_registry
+                    .variant_index(name, variant)
                     .ok_or_else(|| MiddleError::UnboundName {
                         name: format!("{}::{}", name, variant),
                         span: (*span).into(),
@@ -95,11 +97,14 @@ pub(crate) fn infer_variant_qual(
                 // TODO: produzir VariantConstruct com payload = literal do fixed_value.
                 // Por ora, VariantQual (sem payload) — o codegen precisaria do valor.
                 // Isso é uma implementação parcial; o caso genérico + fixed_value é raro.
-                let type_params = ctx.enum_registry.type_params_of(name)
+                let type_params = ctx
+                    .enum_registry
+                    .type_params_of(name)
                     .expect("is_generic true");
                 let type_args: Vec<Ty> = type_params.iter().map(|p| Ty::Var(p.clone())).collect();
                 let result_ty = Ty::Generic(name.clone(), type_args);
-                return Ok(Some((result_ty,
+                return Ok(Some((
+                    result_ty,
                     TypedExprKind::VariantQual {
                         enum_name: name.clone(),
                         variant: variant.to_string(),
@@ -163,7 +168,7 @@ pub(crate) fn infer_variant_qual(
                     .payload_ty(name, variant)
                     .expect("fixed_value implica payload_ty inferido");
                 // Constrói TypedExpr do literal a partir do texto bruto.
-                let payload = build_fixed_payload(&fixed_text, &payload_ty, *span);
+                let payload = build_fixed_payload(fixed_text, payload_ty, *span);
                 return Ok(Some((
                     enum_ty.clone(),
                     TypedExprKind::VariantConstruct {

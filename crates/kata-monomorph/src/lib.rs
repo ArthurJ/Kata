@@ -246,14 +246,13 @@ fn rewrite_typed_expr(expr_span: &mut Spanned<TypedExpr>, ctx: &MonoCtx, acc: &m
                 // Se o ffi_symbol ainda é None e o callee é `show` com arg
                 // Ty::Tuple, substitui a Closure inteira pelo body inline
                 // (string_concat de show de cada elemento via FieldAccess).
-                if ffi_symbol.is_none() && name == "show" && args.len() == 1 {
-                    if let Ty::Tuple(_) = &args[0].node.ty {
-                        let replacement = crate::tuple_show::rewrite_show_tuple_call(
-                            &args[0],
-                        );
-                        *expr_span = replacement;
-                        return;
-                    }
+                if ffi_symbol.is_none() && name == "show" && args.len() == 1
+                    && let Ty::Tuple(_) = &args[0].node.ty
+                {
+                    let replacement = crate::tuple_show::rewrite_show_tuple_call(
+                        &args[0],
+                    );
+                    *expr_span = replacement;
                 }
             }
         }
