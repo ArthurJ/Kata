@@ -182,7 +182,10 @@ pub(crate) fn define_function_body(
 
         // Se @log quando Enter, injeta antes do body (prólogo).
         if let Some(TypedLogSpec::Enter { .. }) = log {
-            inject_log(log.as_ref().unwrap(), &mut lower)?;
+            inject_log(
+                log.as_ref().expect("log é Some: guardado pelo match Enter"),
+                &mut lower,
+            )?;
         }
 
         // Cria epilogue_block se @log Exit (para interceptar retornos).
@@ -205,7 +208,9 @@ pub(crate) fn define_function_body(
                 if needs_epilogue {
                     // Jump para epilogue_block em vez de return_ direto.
                     lower.builder.ins().jump(
-                        lower.epilogue_block.unwrap(),
+                        lower
+                            .epilogue_block
+                            .expect("epilogue_block definido quando needs_epilogue"),
                         &[cranelift_codegen::ir::BlockArg::Value(result)],
                     );
                 } else {
@@ -218,14 +223,19 @@ pub(crate) fn define_function_body(
 
         // Define o epilogue_block se criado: injeta log + return_.
         if needs_epilogue {
-            let epi = lower.epilogue_block.unwrap();
+            let epi = lower
+                .epilogue_block
+                .expect("epilogue_block definido quando needs_epilogue");
             lower.builder.switch_to_block(epi);
             lower.builder.seal_block(epi);
             let result = lower.builder.block_params(epi)[0];
 
             // Injeta log no epílogo.
             if let Some(TypedLogSpec::Exit { .. }) = log {
-                inject_log(log.as_ref().unwrap(), &mut lower)?;
+                inject_log(
+                    log.as_ref().expect("log é Some: guardado pelo match Exit"),
+                    &mut lower,
+                )?;
             }
 
             let result = coerce_return(result, ret_ty, &mut lower);

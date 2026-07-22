@@ -87,7 +87,11 @@ thread_local! {
 /// final). Por fim, reseta o resto (scheduler, spawns, contadores).
 pub fn reset_scheduler() {
     // 1. Cancelar e esperar a thread timer anterior terminar.
-    if let Some(handle) = PENDING_TIMER.lock().unwrap().take() {
+    if let Some(handle) = PENDING_TIMER
+        .lock()
+        .expect("PENDING_TIMER não envenenado")
+        .take()
+    {
         handle.thread().unpark();
         let _ = handle.join();
     }
@@ -212,7 +216,11 @@ pub const TIMEOUT_SENTINEL: i64 = i64::MIN + 2;
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_set_test_timeout(millis: i64) {
     // Cancelar thread timer anterior (se houver) antes de iniciar nova.
-    if let Some(handle) = PENDING_TIMER.lock().unwrap().take() {
+    if let Some(handle) = PENDING_TIMER
+        .lock()
+        .expect("PENDING_TIMER não envenenado")
+        .take()
+    {
         handle.thread().unpark();
         let _ = handle.join();
     }
@@ -228,7 +236,7 @@ pub extern "C" fn kata_rt_set_test_timeout(millis: i64) {
         }
         // Unparked antes do deadline = cancelada — não seta a flag.
     });
-    *PENDING_TIMER.lock().unwrap() = Some(handle);
+    *PENDING_TIMER.lock().expect("PENDING_TIMER não envenenado") = Some(handle);
 }
 
 /// Suspende o fiber atual com `YieldReason::Cooperative`.

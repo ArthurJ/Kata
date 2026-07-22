@@ -169,7 +169,13 @@ pub(crate) fn define_kata_action(
 
         // Se @log quando Enter, injeta antes do body (prólogo).
         if let Some(TypedLogSpec::Enter { .. }) = &action.log {
-            inject_log(action.log.as_ref().unwrap(), &mut lower)?;
+            inject_log(
+                action
+                    .log
+                    .as_ref()
+                    .expect("log é Some: guardado pelo match Enter"),
+                &mut lower,
+            )?;
         }
 
         for (i, stmt) in action.body.iter().enumerate() {
@@ -201,7 +207,13 @@ pub(crate) fn define_kata_action(
 
         // Se @log quando Exit, injeta antes do return (epílogo).
         if let Some(TypedLogSpec::Exit { .. }) = &action.log {
-            inject_log(action.log.as_ref().unwrap(), &mut lower)?;
+            inject_log(
+                action
+                    .log
+                    .as_ref()
+                    .expect("log é Some: guardado pelo match Exit"),
+                &mut lower,
+            )?;
         }
 
         // Float bitcast: se ret_ty == Float, o body produziu F64.
