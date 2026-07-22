@@ -9,13 +9,13 @@ valor didático × esforço.
 ### Cluster 1 — Tipos refinados + `Result` + `?` + `|` (lacuna grave)
 - **Candidatos legacy:** `test_refined.kata`, `test_try.kata`, `test_fallback.kata`, `test_repr_refined.kata`
 - **Destino:** `examples/refined_types.kata` (arquivo único, narrativa didática)
-- **Estrutura acordada:** 6 blocos — declaração + ascription, smart constructor + match, `?` em action, `|` com coerção, `|` com Optional refined, múltiplos predicados + demo
-- **Status:** INTERROMPIDO no Bloco 1
-- **Bloqueio descoberto:** refined types (`Ty::Struct("PositiveInt")`) não interoperam com operações base (`+`, `show`, `echo!`). `echo!(a)` onde `a :: PositiveInt` → `type.no_overload` (SHOW não sintetizado para refined). `show a` também falha. `+ a 0` também falha. O manual §4.2.10 diz que refined deveria interoperar com operações base (flexibilidade estrutural), mas o typeck não implementa widening/coerção refined→base. Ver discussão "interoperabilidade refined" com Arthur (2026-07-21).
-- **Pontos de incerteza ainda não validados:**
-  - `?` em Action com `Result` (nenhum teste E2E exercita; só legado `test_try.kata`)
-  - `PositiveInt n` onde `n` é variável (testes E2E só usam literais)
-  - `Optional::Some(n::PositiveInt)` com `n` variável → type error (ascription-refined exige literal, §4.2.8)
+- **Estrutura revisada (2026-07-22):** 6 blocos — declaração + ascription + echo!, smart constructor + match, `?` em Action que retorna Result, `refines NUM` + aritmética delegada, `|` com Optional + coerção contextual, downcast + caso misto + múltiplos predicados
+- **Status:** EM PROGRESSO — bloqueio original resolvido (PRD-refines ✅), bugs do compilador descobertos durante migração
+- **Bloqueio original (RESOLVIDO):** refined types não interoperavam com operações base. Resolvido pelo PRD-refines (15/15 DoDs): `refines` keyword, SHOW automático universal, downcast via `::`, `T?` açúcar.
+- **Bloqueios descobertos na migração (2026-07-22):**
+  - **BUG: Pattern matching de variantes não-qualificadas com payload.** `Ok v:` em match arm falha no parser com "esperado `:` após pattern do braço". O parser produz `Pattern::Ident("Ok")` e `v` fica órfão. `Result::Ok v:` funciona (qualificado). `Ok` sem payload funciona (typeck resolve `Pattern::Ident` → `TypedPattern::Variant` para variantes unitárias). **Causa:** `parse_pattern` (patterns.rs:33-87) só reconhece variantes qualificadas (`Enum::Variant`); `Ident` sem `::` vira binding, e o sub-pattern nunca é consumido. **Fix:** criar `parse_match_pattern` que trata `Ident` seguido de sub-pattern como variante desqualificada com payload, restrito a match arms (não lambda clauses — lambdas usam `parse_patterns` multi-argumento).
+  - **LIMITAÇÃO: `?` em Action `=> Unit`.** `?` propaga Err via `return` — Action precisa retornar `Result`/`Optional`. Não é bug, é design (fail-fast). Exemplo didático usa Actions que retornam `Result`.
+  - **LIMITAÇÃO: `|` com `Result`.** `|` exige variante cauda unitária (`None`). `Result::Err` tem payload — incompatível. Exemplo usa `|` com `Optional`, não `Result`.
 
 ### Cluster 2 — `alias`/Newtype + `enum` predicado (lacuna grave)
 - **Candidatos legacy:** `test_alias_bug.kata`, `test_imc.kata`
