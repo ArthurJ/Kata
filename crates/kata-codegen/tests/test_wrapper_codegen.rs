@@ -219,3 +219,53 @@ ok!()"#;
         "wrapper positivo deve ter func_id válido (não placeholder)"
     );
 }
+
+// ── Teste 7: @test{args: ({"a": 1, "b": 2})} — Dict como arg de diretiva ──
+
+/// `@test{args: (...)}` com DictLit dentro da tupla de args. Verifica que
+/// o parser de diretivas aceita DictLit, o typeck infere Dict::(Text, Int),
+/// e o codegen gera o wrapper sem erros.
+#[test]
+fn test_wrapper_com_dict_como_arg() {
+    let src = r#"@test{desc: "dict como arg", args: ({"a": 1 "b": 2})}
+action conta_d (d :: Dict::(Text, Int)) => Int
+    len d
+conta_d!({"a": 1 "b": 2})"#;
+    let (_module, wrappers) = compile_tests(src);
+    assert_eq!(wrappers.len(), 1, "deve ter 1 wrapper");
+
+    let w = find_wrapper(&wrappers, "conta_d", 0);
+    assert_eq!(w.action_name, "conta_d");
+    assert_eq!(w.spec.desc.as_deref(), Some("dict como arg"));
+    assert!(w.spec.args.is_some(), "args deve ser Some (Dict)");
+    assert_ne!(
+        w.func_id,
+        FuncId::from_u32(0),
+        "wrapper positivo deve ter func_id válido"
+    );
+}
+
+// ── Teste 8: @test{args: ({|1 2 3|})} — Set como arg de diretiva ──
+
+/// `@test{args: (...)}` com SetLit dentro da tupla de args. Verifica que
+/// o parser de diretivas aceita SetLit, o typeck infere Set::Int,
+/// e o codegen gera o wrapper sem erros.
+#[test]
+fn test_wrapper_com_set_como_arg() {
+    let src = r#"@test{desc: "set como arg", args: ({|1 2 3|})}
+action conta_s (s :: Set::Int) => Int
+    len s
+conta_s!({|1 2 3|})"#;
+    let (_module, wrappers) = compile_tests(src);
+    assert_eq!(wrappers.len(), 1, "deve ter 1 wrapper");
+
+    let w = find_wrapper(&wrappers, "conta_s", 0);
+    assert_eq!(w.action_name, "conta_s");
+    assert_eq!(w.spec.desc.as_deref(), Some("set como arg"));
+    assert!(w.spec.args.is_some(), "args deve ser Some (Set)");
+    assert_ne!(
+        w.func_id,
+        FuncId::from_u32(0),
+        "wrapper positivo deve ter func_id válido"
+    );
+}
