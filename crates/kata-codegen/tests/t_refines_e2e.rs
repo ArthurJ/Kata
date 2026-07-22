@@ -320,7 +320,8 @@ action sub_pos => Unit
 sub_pos!()"#;
     let (_raw, ty) = eval_src(src);
     assert_eq!(
-        ty, Ty::Unit,
+        ty,
+        Ty::Unit,
         "override de - com corpo lambda deve despachar para o override, não fallback"
     );
 }

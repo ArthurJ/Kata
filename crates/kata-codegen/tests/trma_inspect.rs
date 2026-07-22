@@ -1,7 +1,7 @@
 //! Inspeção da TAST do examples/trma.kata após optimize.
 //! Imprime as funções soma/soma_acc/fatorial/fatorial_acc para confirmar a reescrita TRMA.
 
-use kata_inference::{infer_module, TypedExprKind};
+use kata_inference::{TypedExprKind, infer_module};
 use kata_lexer::lex;
 use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
@@ -63,11 +63,21 @@ fn dump_expr(expr: &kata_ast::Spanned<kata_inference::TypedExpr>, depth: usize) 
     match &expr.node.kind {
         TypedExprKind::IntLit { text } => format!("{indent}IntLit({text})"),
         TypedExprKind::Ident { name } => format!("{indent}Ident({name})"),
-        TypedExprKind::Closure { callee, args, ffi_symbol } => {
+        TypedExprKind::Closure {
+            callee,
+            args,
+            ffi_symbol,
+        } => {
             let mut s = format!("{indent}Closure(\n");
-            s.push_str(&format!("{indent}  callee: {}\n", dump_expr(callee, depth + 2)));
+            s.push_str(&format!(
+                "{indent}  callee: {}\n",
+                dump_expr(callee, depth + 2)
+            ));
             for (i, arg) in args.iter().enumerate() {
-                s.push_str(&format!("{indent}  arg[{i}]: {}\n", dump_expr(arg, depth + 2)));
+                s.push_str(&format!(
+                    "{indent}  arg[{i}]: {}\n",
+                    dump_expr(arg, depth + 2)
+                ));
             }
             if let Some(ffi) = ffi_symbol {
                 s.push_str(&format!("{indent}  ffi: {ffi}\n"));
@@ -77,13 +87,19 @@ fn dump_expr(expr: &kata_ast::Spanned<kata_inference::TypedExpr>, depth: usize) 
         }
         TypedExprKind::Match { scrutinee, arms } => {
             let mut s = format!("{indent}Match(\n");
-            s.push_str(&format!("{indent}  scrutinee: {}\n", dump_expr(scrutinee, depth + 2)));
+            s.push_str(&format!(
+                "{indent}  scrutinee: {}\n",
+                dump_expr(scrutinee, depth + 2)
+            ));
             for arm in arms {
                 let pat_str = match &arm.pattern {
                     Some(p) => format!("{:?}", p.node),
                     None => "otherwise".to_string(),
                 };
-                s.push_str(&format!("{indent}  arm {pat_str}: {}\n", dump_expr(&arm.body, depth + 2)));
+                s.push_str(&format!(
+                    "{indent}  arm {pat_str}: {}\n",
+                    dump_expr(&arm.body, depth + 2)
+                ));
             }
             s.push_str(&format!("{indent})"));
             s

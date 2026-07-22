@@ -11,9 +11,7 @@
 //! - `ResolveError`: erro de resolution
 
 use kata_ast::{ActionStmt, Expr, LambdaClause, Spanned};
-use kata_core::{
-    EnumRegistry, InterfaceRegistry, RefinesRegistry, StructRegistry, Ty, TypeEnv,
-};
+use kata_core::{EnumRegistry, InterfaceRegistry, RefinesRegistry, StructRegistry, Ty, TypeEnv};
 
 /// Resultado da resolution — TypeEnv populado + assinaturas coletadas.
 #[derive(Debug, Clone)]

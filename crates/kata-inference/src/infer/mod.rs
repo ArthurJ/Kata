@@ -237,7 +237,7 @@ pub fn infer_module(
                     struct_registry: &resolved.struct_registry,
                     refined_decls: &resolved.refined_decls,
                     interface_registry: &interface_registry,
-            refines_registry: &resolved.refines_registry,
+                    refines_registry: &resolved.refines_registry,
                     ret_ty: None,
                     in_loop: false,
                 };

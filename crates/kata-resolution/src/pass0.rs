@@ -446,15 +446,18 @@ pub(crate) fn run_pass0(
                 if !is_refined {
                     errors.push(ResolveError::InvalidRefines {
                         type_name: type_name.clone(),
-                        reason: "refines só se aplica a tipos refined (data (Base, predicados) as Nome)"
-                            .into(),
+                        reason:
+                            "refines só se aplica a tipos refined (data (Base, predicados) as Nome)"
+                                .into(),
                     });
                     // Continua para processar overrides mesmo assim — o erro
                     // já foi reportado.
                 }
 
                 // Resolver tipo base via alias_of no StructRegistry.
-                let base_ty_name = struct_info.and_then(|si| si.alias_of.as_deref()).unwrap_or("");
+                let base_ty_name = struct_info
+                    .and_then(|si| si.alias_of.as_deref())
+                    .unwrap_or("");
                 let base_ty = resolve_base_ty(base_ty_name, type_env, interface_registry);
 
                 // Validar que o base implementa a interface.
@@ -485,8 +488,7 @@ pub(crate) fn run_pass0(
                         .iter()
                         .map(|t| resolve_type_expr(&t.node, type_env, interface_registry))
                         .collect();
-                    let return_type =
-                        resolve_type_expr(&m.ret.node, type_env, interface_registry);
+                    let return_type = resolve_type_expr(&m.ret.node, type_env, interface_registry);
                     let ffi_symbol = m.directives.iter().find_map(|d| {
                         if (d.name == "ffi" || d.name == "builtin")
                             && let Some(kata_ast::DirectiveArg::Expr(e)) = d.args.first()
@@ -529,11 +531,7 @@ pub(crate) fn run_pass0(
 
 /// Resolve um nome de tipo base (ex: "Int") para `Ty`.
 /// Usado pelo processamento de RefinesDecl para obter o tipo base do refined.
-fn resolve_base_ty(
-    base_name: &str,
-    type_env: &TypeEnv,
-    iface_reg: &InterfaceRegistry,
-) -> Ty {
+fn resolve_base_ty(base_name: &str, type_env: &TypeEnv, iface_reg: &InterfaceRegistry) -> Ty {
     if let Some(ty) = type_env.lookup(base_name) {
         return ty.clone();
     }

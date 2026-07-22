@@ -182,7 +182,10 @@ pub(crate) fn lower_expr(
                     let inner_clif = ty_to_clif(&inner.ty);
                     if target_clif != inner_clif {
                         // Bitcast necessário (ex: I64 → F64 para Float)
-                        Ok(ctx.builder.ins().bitcast(target_clif, MemFlagsData::new(), val))
+                        Ok(ctx
+                            .builder
+                            .ins()
+                            .bitcast(target_clif, MemFlagsData::new(), val))
                     } else {
                         Ok(val)
                     }

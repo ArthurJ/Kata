@@ -328,7 +328,11 @@ fn build_refined_show_body(
         "Text" => self_spanned, // identity
         _ => {
             // Base é struct ou outro tipo — chama `__kata_show__{Base}`.
-            show_call(self_spanned, base_name.clone(), &Ty::Struct(base_name.clone()))
+            show_call(
+                self_spanned,
+                base_name.clone(),
+                &Ty::Struct(base_name.clone()),
+            )
         }
     };
 

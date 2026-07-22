@@ -164,7 +164,10 @@ extrai!()"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(
         ty,
-        Ty::Generic("Result".into(), vec![Ty::Prim(PrimTy::Int), Ty::Prim(PrimTy::Int)]),
+        Ty::Generic(
+            "Result".into(),
+            vec![Ty::Prim(PrimTy::Int), Ty::Prim(PrimTy::Int)]
+        ),
         "? deve desempacotar Result::Ok e o body continua"
     );
     // Result::Ok 0 é um Sum (ponteiro), não SMI
