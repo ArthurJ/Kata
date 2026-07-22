@@ -675,3 +675,337 @@ unsafe fn count_recursive(node_ptr: i64) -> i64 {
     }
     count
 }
+
+// ── Remove ───────────────────────────────────────────────
+
+/// Remove `key` from the dict. Returns a NEW root pointer (original unchanged).
+///
+/// Recursive remove with copy-on-write (same pattern as insert).
+/// - If leaf matches key: remove it (clear bitmap bit, remove child from dense array).
+/// - If interior node: recurse, copy node with updated child.
+/// - If node drops to 0 children: return empty node (bitmap=0).
+/// - If node drops to 1 child that is a leaf: keep the 1-child node (don't promote).
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_dict_remove(
+    dict_ptr: i64,
+    key: i64,
+    hash: i64,
+    eq_fn: i64,
+    arena_handle: i64,
+) -> i64 {
+    let eq = unsafe { std::mem::transmute::<i64, EqFn>(eq_fn) };
+    unsafe { remove_recursive(dict_ptr, key, hash, 0, eq, arena_handle) }
+}
+
+/// Recursive remove with copy-on-write.
+///
+/// Returns a new node pointer. If the key was not found, the returned node
+/// is a copy identical to the original (COW still copies). The caller can
+/// detect "not found" by comparing len before/after.
+unsafe fn remove_recursive(
+    node_ptr: i64,
+    key: i64,
+    hash: i64,
+    depth: u32,
+    eq_fn: EqFn,
+    arena: i64,
+) -> i64 {
+    if depth >= HASH_LEVELS {
+        // Collision level — node_ptr is a tagged collision or leaf.
+        return unsafe { remove_at_collision_level(node_ptr, key, eq_fn, arena) };
+    }
+
+    let bitmap = unsafe { read_bitmap(node_ptr) };
+    let idx = hash_index(hash, depth);
+    let bit = 1u32 << idx;
+
+    if bitmap & bit == 0 {
+        // Key not present — return a copy of this node (unchanged).
+        let children = unsafe { read_all_children(node_ptr, popcount(bitmap)) };
+        alloc_node(bitmap, &children, arena)
+    } else {
+        let pos = child_index(bitmap, idx);
+        let child = unsafe { read_child(node_ptr, pos) };
+
+        if is_collision(child) {
+            // Collision node — try to remove from it.
+            let coll_ptr = untag_collision(child);
+            let new_coll = unsafe { remove_from_collision(coll_ptr, key, eq_fn, arena) };
+            let count = unsafe { read_collision_count(coll_ptr) };
+            let new_count = unsafe { read_collision_count(new_coll) };
+
+            let new_child = if new_count == 1 {
+                // Collision shrank to 1 entry — promote it back to a leaf.
+                let entry = unsafe { read_collision_entry(new_coll, 0) };
+                tag_leaf(entry)
+            } else {
+                tag_collision(new_coll)
+            };
+
+            // If nothing changed (new_count == count), still COW copy.
+            let _ = count;
+            let children = unsafe { read_all_children(node_ptr, popcount(bitmap)) };
+            let mut new_children = children;
+            new_children[pos] = new_child;
+            alloc_node(bitmap, &new_children, arena)
+        } else if is_leaf(child) {
+            let leaf_ptr = untag_leaf(child);
+            let existing_key = unsafe { read_kvpair_key(leaf_ptr) };
+
+            if eq_fn(existing_key, key) == 1 {
+                // Found — remove this leaf.
+                let new_bitmap = bitmap & !bit;
+                let children = unsafe { read_all_children(node_ptr, popcount(bitmap)) };
+
+                if popcount(new_bitmap) == 0 {
+                    // Node is now empty — return empty node.
+                    return alloc_node(0, &[], arena);
+                }
+
+                // Remove the child at `pos` from the dense array.
+                let mut new_children: Vec<i64> = Vec::with_capacity(children.len() - 1);
+                for (i, &c) in children.iter().enumerate() {
+                    if i != pos {
+                        new_children.push(c);
+                    }
+                }
+                alloc_node(new_bitmap, &new_children, arena)
+            } else {
+                // Key doesn't match — return a copy unchanged.
+                let children = unsafe { read_all_children(node_ptr, popcount(bitmap)) };
+                alloc_node(bitmap, &children, arena)
+            }
+        } else {
+            // Interior node — recurse.
+            let new_child =
+                unsafe { remove_recursive(child, key, hash, depth + 1, eq_fn, arena) };
+            let children = unsafe { read_all_children(node_ptr, popcount(bitmap)) };
+            let mut new_children = children;
+            new_children[pos] = new_child;
+            alloc_node(bitmap, &new_children, arena)
+        }
+    }
+}
+
+/// Remove from a collision-level node. Returns a new collision node (untagged).
+/// If the key is not found, returns a copy of the original.
+unsafe fn remove_at_collision_level(
+    node_ptr: i64,
+    key: i64,
+    eq_fn: EqFn,
+    arena: i64,
+) -> i64 {
+    if is_collision(node_ptr) {
+        let coll_ptr = untag_collision(node_ptr);
+        return unsafe { remove_from_collision(coll_ptr, key, eq_fn, arena) };
+    }
+
+    // It's a leaf at collision level.
+    let leaf_ptr = if is_leaf(node_ptr) {
+        untag_leaf(node_ptr)
+    } else {
+        node_ptr
+    };
+    let existing_key = unsafe { read_kvpair_key(leaf_ptr) };
+
+    if eq_fn(existing_key, key) == 1 {
+        // Remove the only entry — return empty node.
+        alloc_node(0, &[], arena)
+    } else {
+        // Key doesn't match — return a copy (collision node wrapping this leaf).
+        // Actually, at collision level a single leaf is just a leaf.
+        // Return it as-is (tagged leaf) — but we need to match the caller's expectation.
+        // The caller (remove_recursive at depth >= HASH_LEVELS) gets back a pointer
+        // that is used as the new root. We return the tagged leaf.
+        tag_leaf(leaf_ptr)
+    }
+}
+
+/// Remove an entry from a collision node. Returns a new collision node (untagged).
+/// If the key is not found, returns a copy of the original.
+unsafe fn remove_from_collision(
+    coll_ptr: i64,
+    key: i64,
+    eq_fn: EqFn,
+    arena: i64,
+) -> i64 {
+    let count = unsafe { read_collision_count(coll_ptr) };
+
+    for i in 0..count {
+        let entry_ptr = unsafe { read_collision_entry(coll_ptr, i) };
+        let existing_key = unsafe { read_kvpair_key(entry_ptr) };
+        if eq_fn(existing_key, key) == 1 {
+            // Found — remove this entry.
+            let new_count = count - 1;
+            if new_count == 0 {
+                return alloc_node(0, &[], arena);
+            }
+            let mut entries: Vec<i64> = Vec::with_capacity(new_count as usize);
+            for j in 0..count {
+                if j != i {
+                    entries.push(unsafe { read_collision_entry(coll_ptr, j) });
+                }
+            }
+            return alloc_collision(new_count, &entries, arena);
+        }
+    }
+
+    // Key not found — return a copy.
+    let mut entries: Vec<i64> = Vec::with_capacity(count as usize);
+    for j in 0..count {
+        entries.push(unsafe { read_collision_entry(coll_ptr, j) });
+    }
+    alloc_collision(count, &entries, arena)
+}
+
+// ── Iteration (dict_next) ─────────────────────────────────
+
+/// Collect all KVPair pointers from the HAMT into a flat arena-allocated array.
+///
+/// Returns (array_ptr, count). The array contains `count` KVPair pointers
+/// (untagged), each pointing to a 24-byte KVPair struct.
+///
+/// This is the internal helper used by both `kata_rt_dict_next` and the set
+/// operations (union/intersection/difference) in `set.rs`.
+pub(crate) unsafe fn collect_all_kvpairs(dict_ptr: i64, arena_handle: i64) -> (i64, i64) {
+    // First pass: collect into a Vec.
+    let mut kvpair_ptrs: Vec<i64> = Vec::new();
+    unsafe { collect_recursive(dict_ptr, &mut kvpair_ptrs) };
+
+    let count = kvpair_ptrs.len() as i64;
+    if count == 0 {
+        // Return a dummy empty array (1 entry = 0, count = 0).
+        let arr = crate::arena::kata_rt_arena_alloc(arena_handle, 8);
+        if arr != 0 {
+            unsafe { std::ptr::write_unaligned(arr as *mut i64, 0) };
+        }
+        return (arr, 0);
+    }
+
+    // Allocate array in arena: count * 8 bytes.
+    let arr_size = count * 8;
+    let arr = crate::arena::kata_rt_arena_alloc(arena_handle, arr_size);
+    if arr == 0 {
+        return (0, 0);
+    }
+    for (i, &kvptr) in kvpair_ptrs.iter().enumerate() {
+        unsafe {
+            std::ptr::write_unaligned((arr as *mut u8).add(i * 8) as *mut i64, kvptr);
+        }
+    }
+    (arr, count)
+}
+
+/// Recursive helper for collect_all_kvpairs.
+unsafe fn collect_recursive(node_ptr: i64, out: &mut Vec<i64>) {
+    // Check if this is a tagged child (leaf or collision) — can happen at depth 0
+    // if the root itself is a leaf/collision (shouldn't normally, but be safe).
+    if is_collision(node_ptr) {
+        let coll_ptr = untag_collision(node_ptr);
+        let count = unsafe { read_collision_count(coll_ptr) };
+        for i in 0..count {
+            let entry = unsafe { read_collision_entry(coll_ptr, i) };
+            out.push(entry);
+        }
+        return;
+    }
+    if is_leaf(node_ptr) {
+        out.push(untag_leaf(node_ptr));
+        return;
+    }
+
+    // Interior node.
+    let bitmap = unsafe { read_bitmap(node_ptr) };
+    let n = popcount(bitmap);
+    for i in 0..n {
+        let child = unsafe { read_child(node_ptr, i) };
+        if is_collision(child) {
+            let coll_ptr = untag_collision(child);
+            let count = unsafe { read_collision_count(coll_ptr) };
+            for j in 0..count {
+                let entry = unsafe { read_collision_entry(coll_ptr, j) };
+                out.push(entry);
+            }
+        } else if is_leaf(child) {
+            out.push(untag_leaf(child));
+        } else {
+            unsafe { collect_recursive(child, out) };
+        }
+    }
+}
+
+/// Iterate over the dict. Returns `Optional::(K, V)` as a Sum box:
+/// - tag=0 (Some): payload = pointer to a 16-byte tuple (key at 0, value at 8)
+/// - tag=1 (None): payload = 0
+///
+/// `iter_state` semantics:
+/// - 0: initialize — traverse the HAMT, collect all KVPair pointers into an
+///   arena-allocated array (stored in thread-local), return the first entry
+///   (or None if empty).
+/// - N>0: return the Nth entry (0-indexed) from the pre-collected array.
+/// - When N >= count: return None (tag=1).
+///
+/// The array pointer and count are stored in thread-locals during init.
+/// This works for the Kata model (per-fiber, cooperative, single-threaded).
+
+use std::cell::Cell;
+
+thread_local! {
+    static ITER_ARRAY: Cell<i64> = const { Cell::new(0) };
+    static ITER_COUNT: Cell<i64> = const { Cell::new(0) };
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_dict_next(
+    dict_ptr: i64,
+    iter_state: i64,
+    arena_handle: i64,
+) -> i64 {
+    if iter_state == 0 {
+        // Initialize: collect all KVPair pointers.
+        let (arr, count) = unsafe { collect_all_kvpairs(dict_ptr, arena_handle) };
+        ITER_ARRAY.with(|c| c.set(arr));
+        ITER_COUNT.with(|c| c.set(count));
+
+        if count == 0 {
+            // Empty dict — return None.
+            return crate::sum::kata_rt_store_sum_result(1, 0, arena_handle);
+        }
+
+        // Return first entry (index 0).
+        return unsafe { make_kv_tuple(arr, 0, arena_handle) };
+    }
+
+    // iter_state > 0 — index into array.
+    let arr = ITER_ARRAY.with(|c| c.get());
+    let count = ITER_COUNT.with(|c| c.get());
+
+    if arr == 0 || iter_state >= count {
+        // Exhausted — return None.
+        return crate::sum::kata_rt_store_sum_result(1, 0, arena_handle);
+    }
+
+    unsafe { make_kv_tuple(arr, iter_state, arena_handle) }
+}
+
+/// Allocate a 16-byte tuple (key, value) in the arena from KVPair at
+/// `arr[index]` and return a Some Sum box pointing to it.
+unsafe fn make_kv_tuple(arr: i64, index: i64, arena_handle: i64) -> i64 {
+    let kvptr = unsafe {
+        std::ptr::read_unaligned((arr as *const u8).add((index as usize) * 8) as *const i64)
+    };
+    let key = unsafe { read_kvpair_key(kvptr) };
+    let value = unsafe { read_kvpair_value(kvptr) };
+
+    // Allocate 16-byte tuple: key at 0, value at 8.
+    let tuple = crate::arena::kata_rt_arena_alloc(arena_handle, 16);
+    if tuple == 0 {
+        return crate::sum::kata_rt_store_sum_result(1, 0, arena_handle);
+    }
+    unsafe {
+        std::ptr::write_unaligned(tuple as *mut i64, key);
+        std::ptr::write_unaligned((tuple as *mut u8).add(8) as *mut i64, value);
+    }
+    // Return Some(tuple) — tag=0, payload=tuple pointer.
+    crate::sum::kata_rt_store_sum_result(0, tuple, arena_handle)
+}

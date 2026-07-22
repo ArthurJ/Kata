@@ -12,6 +12,7 @@ pub(crate) mod array;
 pub(crate) mod bigint;
 pub(crate) mod channel;
 pub(crate) mod dict;
+pub(crate) mod set;
 pub(crate) mod display;
 pub(crate) mod fiber;
 pub(crate) mod float;
@@ -43,7 +44,12 @@ pub use arc::{kata_rt_alloc_arc, kata_rt_arc_fn_ptr, kata_rt_decref, kata_rt_inc
 pub use arena::{kata_rt_arena_alloc, kata_rt_arena_create, kata_rt_arena_destroy};
 pub use dict::{
     kata_rt_dict_contains, kata_rt_dict_empty, kata_rt_dict_get_checked, kata_rt_dict_insert,
-    kata_rt_dict_len,
+    kata_rt_dict_len, kata_rt_dict_next, kata_rt_dict_remove,
+};
+pub use set::{
+    kata_rt_set_contains, kata_rt_set_difference, kata_rt_set_empty, kata_rt_set_insert,
+    kata_rt_set_intersection, kata_rt_set_len, kata_rt_set_next, kata_rt_set_remove,
+    kata_rt_set_union,
 };
 pub use array::{
     kata_rt_array_alloc, kata_rt_array_contains, kata_rt_array_get, kata_rt_array_get_checked,
