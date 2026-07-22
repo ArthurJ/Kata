@@ -1,6 +1,6 @@
 # PRD — `refines`: Delegação de Interface para Tipos Refinados + T?
 
-**Status:** 🚧 Rascunho
+**Status:** ✅ Concluído
 **Data:** 2026-07-21
 **Depende de:** Refined types ✅ (data com predicados), DispatchTable ✅, InterfaceRegistry ✅
 **Inclui:** T? — açúcar sintático para `Result::(T, Err)` (Fase 8, mesmo PRD)
