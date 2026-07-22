@@ -113,14 +113,24 @@ impl Parser {
         parse_expr(self)
     }
 
-    /// Disambiguação: o conteúdo de `()` após nome de variante é predicado
-    /// ou payload? Predicado começa com operador de comparação ou `_` (Hole).
+    /// Disambiguação: o conteúdo de `()` após nome de variante é predicado,
+    /// valor fixo, ou payload? Predicado começa com operador de comparação
+    /// ou `_` (Hole). Valor fixo começa com literal (Int, Float, Text).
     /// Payload começa com TypeExpr (Ident CamelCase, `(`, etc).
     pub(crate) fn is_predicate_start(&self) -> bool {
         match self.peek() {
             Token::Ident(s) => matches!(s.as_str(), "<" | ">" | "<=" | ">=" | "=" | "_"),
             _ => false,
         }
+    }
+
+    /// Detecta se o próximo token é um literal (Int, Float, Text) — usado
+    /// para distinguir valor fixo `OK(200)` de payload `OK(Int)`.
+    pub(crate) fn is_literal_start(&self) -> bool {
+        matches!(
+            self.peek(),
+            Token::IntLit(_) | Token::FloatLit(_) | Token::TextLit(_)
+        )
     }
 
     /// `alias Target as NewName` — cria um newtype.
@@ -223,30 +233,37 @@ impl Parser {
                 _ => return Err(self.error("variant name")),
             };
 
-            // Disambiguação payload vs predicado.
-            // `Ok(Int)` → payload = Some(TypeExpr), predicate = None
-            // `Magreza(< _ 18.5)` → payload = None, predicate = Some(Expr)
+            // Disambiguação payload vs predicado vs valor fixo.
+            // `Ok(Int)` → payload = Some(TypeExpr), predicate = None, fixed = None
+            // `Magreza(< _ 18.5)` → payload = None, predicate = Some(Expr), fixed = None
+            // `OK(200)` → payload = None, predicate = None, fixed = Some(Expr)
             // Disambiguação: após `(`, se primeiro token é operador de comparação
-            // (`<`, `>`, `<=`, `>=`, `=`) ou `_` (Hole), é predicado. Senão é payload.
-            let (payload, predicate) = if matches!(self.peek(), Token::LParen) {
+            // ou `_` (Hole), é predicado. Se é literal (Int, Float, Text), é valor fixo.
+            // Senão é payload (type expr).
+            let (payload, predicate, fixed_value) = if matches!(self.peek(), Token::LParen) {
                 self.advance(); // consume (
                 if self.is_predicate_start() {
                     let pred = parse_expr(self)?;
                     self.expect(&Token::RParen, "`)` após predicado")?;
-                    (None, Some(pred))
+                    (None, Some(pred), None)
+                } else if self.is_literal_start() {
+                    let val = parse_expr(self)?;
+                    self.expect(&Token::RParen, "`)` após valor fixo")?;
+                    (None, None, Some(val))
                 } else {
                     let ty = self.parse_type_expr()?;
                     self.expect(&Token::RParen, "`)` após tipo do payload")?;
-                    (Some(ty), None)
+                    (Some(ty), None, None)
                 }
             } else {
-                (None, None)
+                (None, None, None)
             };
 
             variants.push(VariantDecl {
                 name: variant_name,
                 payload,
                 predicate,
+                fixed_value,
             });
         }
 

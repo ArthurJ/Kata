@@ -289,3 +289,25 @@ pub extern "C" fn kata_rt_yield_check() {
         suspend.suspend(YieldReason::Cooperative);
     });
 }
+
+/// Sleep cooperativo — suspende o fiber atual até `ms` milissegundos decorridos.
+///
+/// O argumento `ms` é SMI-tagged (convenção do runtime). A FFI decodifica,
+/// calcula o deadline, e suspende com `YieldReason::Sleep(deadline)`. O
+/// scheduler coloca o fiber em `blocked` com `WaitingOnSleep(deadline)` e o
+/// acorda quando `now >= deadline` (via `wake_pass` ou `earliest_deadline`).
+///
+/// Se chamada fora de um fiber (sem `Suspend` em TLS), é no-op — não há como
+/// suspender.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_sleep(ms: i64) {
+    // Decodificar SMI: (val << 1 | 1) >> 1 = val.
+    let millis = ms >> 1;
+    if millis <= 0 {
+        return;
+    }
+    let deadline = Instant::now() + Duration::from_millis(millis as u64);
+    with_suspend(|suspend| {
+        suspend.suspend(YieldReason::Sleep(deadline));
+    });
+}

@@ -27,7 +27,8 @@ pub(crate) mod ffi;
 // Re-exports da camada FFI — `lib.rs` continua importando os mesmos símbolos.
 pub use ffi::{
     DEADLOCK_SENTINEL, TIMEOUT_SENTINEL, kata_rt_run, kata_rt_scheduler_init,
-    kata_rt_set_test_timeout, kata_rt_spawn, kata_rt_yield, kata_rt_yield_check, reset_scheduler,
+    kata_rt_set_test_timeout, kata_rt_sleep, kata_rt_spawn, kata_rt_yield, kata_rt_yield_check,
+    reset_scheduler,
 };
 
 use std::collections::{HashMap, VecDeque};
@@ -53,6 +54,8 @@ pub(crate) enum BlockReason {
     /// Esperando select. `Vec<i64>` = handles, `Option<Instant>` = deadline
     /// de timeout (None = sem timeout).
     WaitingOnSelect(Vec<i64>, Option<std::time::Instant>),
+    /// Esperando sleep cooperativo expirar. `Instant` = deadline.
+    WaitingOnSleep(std::time::Instant),
     /// Esperando outro fiber terminar.
     WaitingOnFiber(FiberId),
 }
@@ -210,6 +213,10 @@ impl Scheduler {
                         self.blocked
                             .insert(fiber_id, BlockReason::WaitingOnSelect(handles, deadline));
                     }
+                    Err(YieldReason::Sleep(deadline)) => {
+                        self.blocked
+                            .insert(fiber_id, BlockReason::WaitingOnSleep(deadline));
+                    }
                     Err(YieldReason::Timeout) => {
                         // Timeout de teste — drenar fibers sem dropar (pitfall
                         // #43: wasmtime-fiber panica no Drop de fiber não-completado)
@@ -241,10 +248,10 @@ impl Scheduler {
                     .blocked
                     .values()
                     .filter_map(|reason| {
-                        if let BlockReason::WaitingOnSelect(_, Some(dl)) = reason {
-                            Some(*dl)
-                        } else {
-                            None
+                        match reason {
+                            BlockReason::WaitingOnSelect(_, Some(dl)) => Some(*dl),
+                            BlockReason::WaitingOnSleep(dl) => Some(*dl),
+                            _ => None,
                         }
                     })
                     .min();
@@ -349,6 +356,13 @@ impl Scheduler {
                         } else {
                             None
                         }
+                    } else {
+                        None
+                    }
+                }
+                BlockReason::WaitingOnSleep(deadline) => {
+                    if std::time::Instant::now() >= *deadline {
+                        Some(id)
                     } else {
                         None
                     }

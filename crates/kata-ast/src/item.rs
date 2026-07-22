@@ -141,6 +141,11 @@ pub struct VariantDecl {
     /// `Magreza(< _ 18.5)` → predicate = Some(Apply { <, [Hole, 18.5] }).
     /// `Obesidade` → predicate = None (default/fallback).
     pub predicate: Option<Spanned<Expr>>,
+    /// Valor fixo constante. None = não é constante.
+    /// `OK(200)` → fixed_value = Some(IntLit(200)).
+    /// Variante constante: `OK` sem args constrói com este valor.
+    /// Passar args a uma variante constante é erro de tipo.
+    pub fixed_value: Option<Spanned<Expr>>,
 }
 
 /// Diretiva `@nome`, `@nome("arg")`, `@nome{chave: valor}`.

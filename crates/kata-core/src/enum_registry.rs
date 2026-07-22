@@ -22,6 +22,11 @@ pub struct VariantInfo {
     /// `None` = variante sem predicado (normal ou default/fallback).
     /// `Some(name)` = variante predicada (ex: `Magreza(< _ 18.5)`).
     pub predicate: Option<String>,
+    /// Valor fixo constante. `None` = não é constante.
+    /// `Some(text)` = variante constante (`OK(200)`), text é o literal bruto.
+    /// O tipo do payload é inferido do literal e fica em `payload_ty`.
+    /// O codegen usa o `payload_ty` para decodificar; o texto é o valor bruto.
+    pub fixed_value: Option<String>,
 }
 
 /// Catálogo de variantes por enum.
@@ -171,6 +176,15 @@ impl EnumRegistry {
             .and_then(|v| v.payload_ty.as_ref())
     }
 
+    /// Retorna o valor fixo constante de uma variante, se houver.
+    /// `None` se a variante não é constante ou não existe.
+    pub fn fixed_value(&self, enum_name: &str, variant: &str) -> Option<&str> {
+        self.variants
+            .get(enum_name)
+            .and_then(|vs| vs.iter().find(|v| v.name == variant))
+            .and_then(|v| v.fixed_value.as_deref())
+    }
+
     /// Retorna informações completas de uma variante.
     #[allow(dead_code)]
     pub(crate) fn variant_info(&self, enum_name: &str, variant: &str) -> Option<&VariantInfo> {
@@ -215,11 +229,13 @@ mod tests {
                     name: "True".into(),
                     payload_ty: None,
                     predicate: None,
+                    fixed_value: None,
                 },
                 VariantInfo {
                     name: "False".into(),
                     payload_ty: None,
                     predicate: None,
+                    fixed_value: None,
                 },
             ],
         );
@@ -242,11 +258,13 @@ mod tests {
                     name: "True".into(),
                     payload_ty: None,
                     predicate: None,
+                    fixed_value: None,
                 },
                 VariantInfo {
                     name: "False".into(),
                     payload_ty: None,
                     predicate: None,
+                    fixed_value: None,
                 },
             ],
         );
@@ -266,11 +284,13 @@ mod tests {
                     name: "True".into(),
                     payload_ty: None,
                     predicate: None,
+                    fixed_value: None,
                 },
                 VariantInfo {
                     name: "False".into(),
                     payload_ty: None,
                     predicate: None,
+                    fixed_value: None,
                 },
             ],
         );
@@ -281,11 +301,13 @@ mod tests {
                     name: "True".into(),
                     payload_ty: None,
                     predicate: None,
+                    fixed_value: None,
                 },
                 VariantInfo {
                     name: "Off".into(),
                     payload_ty: None,
                     predicate: None,
+                    fixed_value: None,
                 },
             ],
         );
@@ -322,11 +344,13 @@ mod tests {
                     name: "Ok".into(),
                     payload_ty: Some(Ty::int()),
                     predicate: None,
+                    fixed_value: None,
                 },
                 VariantInfo {
                     name: "Err".into(),
                     payload_ty: Some(Ty::text()),
                     predicate: None,
+                    fixed_value: None,
                 },
             ],
         );
@@ -350,11 +374,13 @@ mod tests {
                     name: "Some".into(),
                     payload_ty: Some(Ty::int()),
                     predicate: None,
+                    fixed_value: None,
                 },
                 VariantInfo {
                     name: "None".into(),
                     payload_ty: None,
                     predicate: None,
+                    fixed_value: None,
                 },
             ],
         );

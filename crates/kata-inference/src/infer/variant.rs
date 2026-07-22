@@ -5,13 +5,51 @@
 //! nome corresponde a uma variante unitária de exatamente 1 enum.
 
 use kata_ast::Span;
-use kata_core::ty::Ty;
+use kata_core::ty::{PrimTy, Ty};
 use kata_diagnostics::MiddleError;
 
-use crate::typed::{Effect, TypedExprKind};
+use crate::typed::{Effect, TypedExpr, TypedExprKind};
 
 use super::expr::InferCtx;
 use super::helpers::InferResult;
+
+/// Constrói um TypedExpr literal a partir do texto bruto do valor fixo.
+fn build_fixed_payload(text: &str, ty: &Ty, span: Span) -> TypedExpr {
+    match ty {
+        Ty::Prim(PrimTy::Int) => TypedExpr {
+            span,
+            ty: Ty::int(),
+            tail_pos: false,
+            escape: kata_core::escape::EscapeTarget::Local,
+            effect: Effect::Puro,
+            kind: TypedExprKind::IntLit { text: text.to_string() },
+        },
+        Ty::Prim(PrimTy::Float) => TypedExpr {
+            span,
+            ty: Ty::float(),
+            tail_pos: false,
+            escape: kata_core::escape::EscapeTarget::Local,
+            effect: Effect::Puro,
+            kind: TypedExprKind::FloatLit { text: text.to_string() },
+        },
+        Ty::Prim(PrimTy::Text) => TypedExpr {
+            span,
+            ty: Ty::text(),
+            tail_pos: false,
+            escape: kata_core::escape::EscapeTarget::Local,
+            effect: Effect::Puro,
+            kind: TypedExprKind::TextLit { text: text.to_string() },
+        },
+        _ => TypedExpr {
+            span,
+            ty: ty.clone(),
+            tail_pos: false,
+            escape: kata_core::escape::EscapeTarget::Local,
+            effect: Effect::Puro,
+            kind: TypedExprKind::IntLit { text: text.to_string() },
+        },
+    }
+}
 
 /// Resolve variante desqualificada em posição de expressão.
 ///
@@ -42,6 +80,25 @@ pub(crate) fn resolve_unqual_variant(
         });
     }
     let enum_name = candidates[0];
+    // Variante constante: OK sem args constrói com valor fixo.
+    if let Some(fixed_text) = ctx.enum_registry.fixed_value(enum_name, name) {
+        let tag = ctx.enum_registry.variant_index(enum_name, name).unwrap_or(0);
+        let payload_ty = ctx
+            .enum_registry
+            .payload_ty(enum_name, name)
+            .expect("fixed_value implica payload_ty inferido");
+        let payload = build_fixed_payload(fixed_text, payload_ty, *span);
+        return Ok((
+            Ty::Sum(enum_name.to_string()),
+            TypedExprKind::VariantConstruct {
+                enum_name: enum_name.to_string(),
+                variant: name.to_string(),
+                payload: Box::new(kata_ast::Spanned::new(payload, *span)),
+                tag,
+            },
+            Effect::Puro,
+        ));
+    }
     if ctx.enum_registry.payload_ty(enum_name, name).is_some() {
         return Err(MiddleError::UnboundName {
             name: format!(

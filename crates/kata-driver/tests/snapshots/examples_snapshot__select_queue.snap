@@ -1,0 +1,6 @@
+---
+source: crates/kata-driver/tests/examples_snapshot.rs
+expression: output
+---
+Sucesso! Timeout funcionou antes do produtor enviar
+Sucesso! Recebeu o valor do produtor

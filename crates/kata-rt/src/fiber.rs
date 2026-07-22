@@ -61,6 +61,8 @@ pub(crate) enum YieldReason {
     /// Fiber bloqueou em select. `Vec<i64>` = handles, `Option<Instant>` =
     /// deadline de timeout (None = sem timeout, espera indefinidamente).
     WaitingOnSelect(Vec<i64>, Option<std::time::Instant>),
+    /// Fiber fez sleep cooperativo. `Instant` = deadline para acordar.
+    Sleep(std::time::Instant),
     /// Timeout de teste expirado (`@test(timeout: N)`). O fiber estava em
     /// loop/cooperative yield e a thread OS timer setou `TIMEOUT_EXPIRED`.
     /// O scheduler drena os fibers (sem dropar — pitfall #43) e retorna

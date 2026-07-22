@@ -240,6 +240,10 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
         FfiSymbol::SetTestTimeout => {
             sig.params.push(AbiParam::new(I64)); // millis
         }
+        // sleep: (ms: i64) → void (sleep cooperativo, suspende fiber)
+        FfiSymbol::Sleep => {
+            sig.params.push(AbiParam::new(I64)); // ms (SMI-tagged)
+        }
         // ── Arc<T> / CaptureBox ──
         // alloc_arc: (fn_ptr, captures_ptr, n_captures, arena_handle) -> box_ptr
         // Pré-11: arena_handle adicionado como 4º param.

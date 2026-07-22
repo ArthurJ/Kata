@@ -96,6 +96,8 @@ pub enum FfiSymbol {
     /// `kata_rt_set_test_timeout(millis) -> ()` — configura timeout de teste.
     /// Spawna thread OS timer que seta `TIMEOUT_EXPIRED` ao expirar.
     SetTestTimeout,
+    /// `kata_rt_sleep(ms) -> ()` — sleep cooperativo (suspende fiber até deadline).
+    Sleep,
 
     // ── Arc<T> / CaptureBox ───────────────────────
     /// `kata_rt_alloc_arc(fn_ptr, captures_ptr, n_captures) -> box_ptr`
@@ -229,6 +231,7 @@ impl FfiSymbol {
             FfiSymbol::Yield => "kata_rt_yield",
             FfiSymbol::YieldCheck => "kata_rt_yield_check",
             FfiSymbol::SetTestTimeout => "kata_rt_set_test_timeout",
+            FfiSymbol::Sleep => "kata_rt_sleep",
             FfiSymbol::AllocArc => "kata_rt_alloc_arc",
             FfiSymbol::IncRef => "kata_rt_incref",
             FfiSymbol::DecRef => "kata_rt_decref",
@@ -324,6 +327,7 @@ impl FfiSymbol {
             FfiSymbol::Yield => Ty::Unit,
             FfiSymbol::YieldCheck => Ty::Unit,
             FfiSymbol::SetTestTimeout => Ty::Unit,
+            FfiSymbol::Sleep => Ty::Unit,
             // Arc<T> / CaptureBox
             FfiSymbol::AllocArc | FfiSymbol::ArcFnPtr => Ty::int(),
             FfiSymbol::IncRef | FfiSymbol::DecRef => Ty::int(),
@@ -422,6 +426,7 @@ impl FfiSymbol {
             FfiSymbol::Yield,
             FfiSymbol::YieldCheck,
             FfiSymbol::SetTestTimeout,
+            FfiSymbol::Sleep,
             FfiSymbol::AllocArc,
             FfiSymbol::IncRef,
             FfiSymbol::DecRef,

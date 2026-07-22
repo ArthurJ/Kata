@@ -137,6 +137,7 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
         "kata_rt_set_test_timeout",
         rt::kata_rt_set_test_timeout as *const u8,
     );
+    builder.symbol("kata_rt_sleep", rt::kata_rt_sleep as *const u8);
     // Arc<T> / CaptureBox
     builder.symbol("kata_rt_alloc_arc", rt::kata_rt_alloc_arc as *const u8);
     builder.symbol("kata_rt_incref", rt::kata_rt_incref as *const u8);
@@ -302,6 +303,7 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         Yield,
         YieldCheck,
         SetTestTimeout,
+        Sleep,
         AllocArc,
         IncRef,
         DecRef,

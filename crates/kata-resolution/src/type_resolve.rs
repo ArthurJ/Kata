@@ -156,6 +156,17 @@ pub(crate) fn infer_payload_ty_from_pred(expr: &Expr) -> Option<Ty> {
     None
 }
 
+/// Infere o tipo do payload a partir do literal do valor fixo.
+/// `200` → Int, `3.14` → Float, `"hello"` → Text.
+pub(crate) fn infer_payload_ty_from_literal(expr: &Expr) -> Option<Ty> {
+    match expr {
+        Expr::IntLit { .. } => Some(Ty::Prim(PrimTy::Int)),
+        Expr::FloatLit { .. } => Some(Ty::Prim(PrimTy::Float)),
+        Expr::TextLit { .. } => Some(Ty::Prim(PrimTy::Text)),
+        _ => None,
+    }
+}
+
 /// Verifica se um nome é um type param.
 ///
 /// Convenção: UPPER_CASE (todas as letras maiúsculas, pelo menos 1 char).

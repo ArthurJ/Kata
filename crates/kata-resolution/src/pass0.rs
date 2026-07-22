@@ -14,7 +14,8 @@ use kata_core::{
 };
 
 use crate::type_resolve::{
-    collect_type_params, infer_payload_ty_from_pred, is_type_param_name, resolve_type_expr,
+    collect_type_params, infer_payload_ty_from_literal, infer_payload_ty_from_pred,
+    is_type_param_name, resolve_type_expr,
 };
 use crate::types::{
     EnumPredDeclInfo, EnumPredVariant, FunctionDef, RefinedDeclInfo, ResolveError, Signature,
@@ -180,7 +181,13 @@ pub(crate) fn run_pass0(
                                 })
                                 // Variante default herda payload_ty das variantes predicadas
                                 // (apenas quando o enum tem predicados).
-                                .or_else(|| base_payload_ty.clone());
+                                .or_else(|| base_payload_ty.clone())
+                                // Valor fixo: infere payload_ty do tipo do literal.
+                                .or_else(|| {
+                                    v.fixed_value
+                                        .as_ref()
+                                        .and_then(|fv| infer_payload_ty_from_literal(&fv.node))
+                                });
                             let predicate = v
                                 .predicate
                                 .as_ref()
@@ -189,6 +196,14 @@ pub(crate) fn run_pass0(
                                 name: v.name.clone(),
                                 payload_ty,
                                 predicate,
+                                fixed_value: v.fixed_value.as_ref().map(|fv| {
+                                    match &fv.node {
+                                        kata_ast::Expr::IntLit { text } => text.clone(),
+                                        kata_ast::Expr::FloatLit { text } => text.clone(),
+                                        kata_ast::Expr::TextLit { text } => text.clone(),
+                                        _ => String::new(),
+                                    }
+                                }),
                             }
                         })
                         .collect()

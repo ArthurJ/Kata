@@ -1,0 +1,37 @@
+# Exemplo de enum: variantes unitárias, com payload, constantes, e predicadas.
+
+enum Sinal
+    Verde
+    Amarelo
+    Vermelho
+
+enum StatusHTTP
+    OK(200)
+    NotFound(404)
+    InternalError(500)
+    UnknownStatus
+
+enum IMC
+    Magreza(< _ 18.5)
+    Normal(<= _ 25.0)
+    Obesidade
+
+action main => Unit
+    # Unitária — variante sem payload, disponível sem qualificação
+    let s := Verde
+
+    # Com payload — Optional do prelude, Some carrega Int
+    let opt := Optional::Some(10)
+
+    # Constante — OK carrega 200 fixo, não aceita argumentos
+    let status := StatusHTTP::OK
+
+    # Predicada — smart constructor despacha por guards
+    let imc := IMC(22.5)
+
+    echo!(s)
+    echo!(opt)
+    echo!(status)
+    echo!(imc)
+
+main!()
