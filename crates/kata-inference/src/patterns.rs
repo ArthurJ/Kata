@@ -104,6 +104,30 @@ fn check_pattern_inner(
             variant,
             payload,
         } => {
+            // Variant desqualificada (enum_name vazio, produzido por parse_match_pattern):
+            // resolver o enum_name via EnumRegistry do scrutinee.
+            // `Ok v` em match sobre Result → enum_name="Result".
+            let enum_name: &str = if enum_name.is_empty() {
+                let scrutinee_enum = match scrutinee_ty {
+                    Ty::Sum(s) => Some(s.as_str()),
+                    Ty::Generic(s, _) => Some(s.as_str()),
+                    _ => None,
+                };
+                match scrutinee_enum {
+                    Some(s) if enum_registry.is_variant(s, variant) => s,
+                    _ => {
+                        return Err(MiddleError::UnboundName {
+                            name: format!(
+                                "variante desqualificada `{}` — scrutinee {} não tem essa variante",
+                                variant, scrutinee_ty
+                            ),
+                            span: (*span).into(),
+                        });
+                    }
+                }
+            } else {
+                enum_name
+            };
             // Verifica que o enum existe e tem a variante.
             if !enum_registry.is_variant(enum_name, variant) {
                 return Err(MiddleError::UnboundName {
@@ -174,7 +198,7 @@ fn check_pattern_inner(
                 None
             };
             Ok(TypedPattern::Variant {
-                enum_name: enum_name.clone(),
+                enum_name: enum_name.to_string(),
                 variant: variant.clone(),
                 sub_patterns,
                 tag: enum_registry.variant_index(enum_name, variant).unwrap_or(0),

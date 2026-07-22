@@ -69,7 +69,7 @@ impl Parser {
             self.advance(); // consume `otherwise`
             None
         } else {
-            Some(self.parse_pattern()?)
+            Some(self.parse_match_pattern()?)
         };
 
         // Expect `:`

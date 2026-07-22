@@ -22,6 +22,26 @@ impl Parser {
     /// - `[h : t]` → Cons (stub )
     /// - `[]` → Cons Nil (stub )
     pub(crate) fn parse_pattern(&mut self) -> Result<Spanned<Pattern>, FrontendError> {
+        self.parse_pattern_inner(false)
+    }
+
+    /// Parse um pattern de match arm — difere de `parse_pattern` por tratar
+    /// `Ident` seguido de sub-pattern como variante desqualificada com payload.
+    ///
+    /// Em match arms, cada braço tem exatamente um pattern, então `Ok v` só
+    /// pode significar "variante Ok com payload v" — não há ambiguidade com
+    /// múltiplos argumentos (como em lambda clauses).
+    ///
+    /// `Ident` sozinho (sem sub-pattern) continua como `Pattern::Ident` —
+    /// o typeck resolve variantes unitárias via EnumRegistry.
+    pub(crate) fn parse_match_pattern(&mut self) -> Result<Spanned<Pattern>, FrontendError> {
+        self.parse_pattern_inner(true)
+    }
+
+    fn parse_pattern_inner(
+        &mut self,
+        allow_unqualified_variant: bool,
+    ) -> Result<Spanned<Pattern>, FrontendError> {
         let start = self.peek_span();
         match self.peek().clone() {
             // `_` → Wildcard
@@ -82,8 +102,29 @@ impl Parser {
                         span,
                     ));
                 }
-                // Ident simples — pode ser binding ou variante desqualificada.
-                // O typeck resolve via EnumRegistry.
+                // Ident sem `::` — pode ser binding, variante unitária, ou
+                // variante desqualificada com payload.
+                //
+                // Em match arms (allow_unqualified_variant=true), se o próximo
+                // token pode iniciar um pattern, tratamos como variante
+                // desqualificada com payload: `Ok v` → Variant{enum_name:"", variant:"Ok", payload:[v]}.
+                // O typeck resolve enum_name via EnumRegistry do scrutinee.
+                //
+                // Sem sub-pattern following, continua como Pattern::Ident —
+                // o typeck resolve variantes unitárias (True, False, None) via EnumRegistry.
+                if allow_unqualified_variant && self.can_start_pattern() {
+                    let sub_pat = self.parse_pattern()?;
+                    let end_span = sub_pat.span;
+                    let span = start.cover(end_span);
+                    return Ok(Spanned::new(
+                        Pattern::Variant {
+                            enum_name: String::new(),
+                            variant: name,
+                            payload: Some(vec![sub_pat]),
+                        },
+                        span,
+                    ));
+                }
                 Ok(Spanned::new(Pattern::Ident(name), start))
             }
             // Literais → Literal pattern
