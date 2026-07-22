@@ -786,6 +786,29 @@ echo!(len (difference a b))     # 2
 **DoD:** Cobertura completa. `cargo test` e `cargo test -p kata-codegen`
 passam. Sem regressões em testes existentes.
 
+## Status
+
+**✅ Concluído** — 1056 testes, 0 falhas, 5 ignored. Zero regressões.
+
+- Fase 1 (HAMT runtime): ✅ Commit `fa40e8b`, `675061a`
+- Fase 2 (Cons-list overlay): ✅ Commit `a3e1639`
+- Fase 3 (AST + Parser): ✅ Commit `3be179a`
+- Fase 4 (Typeck + HASHABLE): ✅ Commit `eaf93e2`
+- Fase 5 (Codegen + FFI): ✅ Commit `dbe9b89`
+- Fase 6 (E2E + fixes): ✅ Commits `ab31ad6`, `157299b`
+- Operadores `+`/`-` Set/Dict: ✅ Commit `7fbb95a`
+- Dict/Set/Tuple como args de action: ✅ Commit `77f616c`, `867490e`
+- Dict `+` merge (right-biased): ✅ Commit `867490e`
+- Diretivas com Dict/Set (E2E): ✅ Commit `88a7dbc`
+- Clippy clean: ✅ Commit `c2379f4`
+
+### Débito técnico
+
+- `helpers.rs` em `kata-inference` tem cópia de `resolve_type_expr` que
+  mapeia `ParamApp → Ty::Sum` (sem braços Dict/Set/List/Array/Range). Usada
+  em `partial_dispatch.rs` e `ascription.rs`. Não bloqueia — só afeta
+  ascription de tipo `Dict::(K,V)` em holes, que não é usada atualmente.
+
 ## Dependências de Fios
 
 ```

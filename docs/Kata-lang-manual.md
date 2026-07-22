@@ -1620,6 +1620,15 @@ sintáticos no momento da declaração.
   cabeça e cauda) para imutabilidade de custo zero via partilha estrutural.
 * **Arrays Contíguos (`{T}`):** Sintaxe `{ }`. Bloco contíguo para maximizar
   cache da CPU e iterações imperativas eficientes.
+* **Dicionários (`Dict::(K, V)`):** Sintaxe `{"k": v}`. Mapeamento persistente
+  imutável baseado em Hash Array Mapped Trie (HAMT) com sharing estrutural.
+  Alocado na arena per-fiber. `K` deve implementar `HASHABLE`. `{:}` para vazio.
+  O `:` após a primeira entrada desambigua de Array. Mantém ordem de inserção
+  via Cons-list overlay — `replace = nova inserção` (chave move para o fim).
+* **Conjuntos (`Set::T`):** Sintaxe `{|1 2 3|}`. Conjunto persistente imutável
+  baseado em HAMT (delega para Dict com `Unit` como valor). `T` deve implementar
+  `HASHABLE`. `{||}` para vazio. Não mantém ordem de inserção (iteração via
+  HAMT, não determinística).
 * **Tensores N-Dimensionais (`{T::Int...}`):** Separador de dimensão `;` dentro
   de `{}`. Dimensionalidade processada em compile-time (*Const Generics*).
 * **Ranges (Lazy):** `[0..10]` (0 a 9), `[0..=9]` (0 a 9 incluso),
@@ -1649,20 +1658,68 @@ interface INDEXABLE(A)
     at :: Self Int => Result::(A, Err)
 ```
 
+**`CONTAINS(A)`** — Pertinência:
+```kata
+interface CONTAINS(A)
+    contains :: Self A => Boolean
+```
+
+**`HASHABLE`** — Hash semântico (pré-requisito para Dict/Set):
+```kata
+interface HASHABLE
+    hash :: Self => Int
+```
+
+`HASHABLE` é necessária porque o runtime trata valores como `i64` opaco —
+não tem type info para hashear conteúdo. Valores unboxed (SMI Int, Float
+bitcast) são automaticamente hashable pelo bit pattern; valores boxed (Text,
+Struct, Tuple, Sum) precisam de hash semântico que conhece o tipo. `Int`,
+`Text`, e `Rational` implementam `HASHABLE` na stdlib.
+
 Implementações na stdlib:
 
-| Tipo | ITERABLE | COUNTABLE | INDEXABLE |
-|---|---|---|---|
-| `Array(A)` | ✅ | ✅ (`kata_rt_array_len`) | ✅ (`kata_rt_array_get_checked`) |
-| `List(A)` | ✅ | ✅ (traversal stdlib) | ✅ (traversal stdlib) |
-| `Text` | ✅ | ✅ (`kata_rt_string_len`) | ✅ (`kata_rt_string_get_checked`) |
-| `Range` | ✅ | ✅ (compile-time) | — |
-| `Tuple` | — | special case (síntese) | special case (compile-time) |
+| Tipo | ITERABLE | COUNTABLE | INDEXABLE | CONTAINS | HASHABLE |
+|---|---|---|---|---|---|
+| `Array(A)` | ✅ | ✅ (`kata_rt_array_len`) | ✅ (`kata_rt_array_get_checked`) | ✅ | — |
+| `List(A)` | ✅ | ✅ (traversal stdlib) | ✅ (traversal stdlib) | ✅ | — |
+| `Text` | ✅ | ✅ (`kata_rt_string_len`) | ✅ (`kata_rt_string_get_checked`) | ✅ | ✅ |
+| `Range` | ✅ | ✅ (compile-time) | — | — | — |
+| `Dict::(K, V)` | ✅ | ✅ (`kata_rt_dict_len`) | ✅ (`kata_rt_dict_get_checked`, chave) | ✅ (`kata_rt_dict_contains`) | K deve implementar |
+| `Set::T` | ✅ | ✅ (`kata_rt_set_len`) | — | ✅ (`kata_rt_set_contains`) | T deve implementar |
+| `Tuple` | — | special case (síntese) | special case (compile-time) | — | — |
 
 Tuple não implementa interfaces — é um tipo estrutural, não nominal. `len` e
 `.N` em Tuple são special cases do typeck (ver §14.3).
 
-### 8.3. Polimorfismo e Stream Fusion
+### 8.3. Operadores de Coleção
+
+O operador `+` é sobrecarregado na stdlib para coleções além de `NUM`:
+
+| Assinatura | Operação | FFI |
+|---|---|---|
+| `+ :: List::A List::A => List::A` | Concatenação | `kata_rt_list_concat` |
+| `+ :: Set::T Set::T => Set::T` | União | `kata_rt_set_union` |
+| `+ :: Set::T T => Set::T` | Inserção | `kata_rt_set_insert` |
+| `+ :: Dict::(K, V) Dict::(K, V) => Dict::(K, V)` | Merge (right-biased) | `kata_rt_dict_merge` |
+
+O operador `-` para `Set` e `Dict`:
+
+| Assinatura | Operação | FFI |
+|---|---|---|
+| `- :: Set::T Set::T => Set::T` | Diferença | `kata_rt_set_difference` |
+| `- :: Set::T T => Set::T` | Remoção | `kata_rt_set_remove` |
+| `- :: Dict::(K, V) K => Dict::(K, V)` | Remoção | `kata_rt_dict_remove` |
+
+**Dict `+` merge é right-biased:** `+ d1 d2` insere cada (k, v) de `d2` em
+`d1`. Em conflito de chaves, o valor de `d2` vence. `insert` é a operação
+para adicionar uma única chave — `+` para Dict é merge, não insert.
+
+**Kata é prefix-only:** `+ s t` (aplicação prefix), nunca `s + t` (infix).
+`+` e `-` são `Ident(String)` tokens — o parser trata como nomes de função.
+O dispatch resolve por tipo dos argumentos: `+ set1 set2` é união, `+ set
+elem` é inserção, sem ambiguidade.
+
+### 8.4. Polimorfismo e Stream Fusion
 
 A stdlib usa `@builtin("map")`, `@builtin("filter")`, `@builtin("fold")` para
 gerar nós TAST estruturados que o optimizer pode fusionar (StreamFusion) —

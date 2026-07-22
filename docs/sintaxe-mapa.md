@@ -569,6 +569,8 @@ Setta `LOG_CONFIG` TLS no fiber atual. Filhos spawnados herdam via snapshot no `
 |---|---|---|
 | `[1 2 3]` | Lista persistente | Encadeada (Cons). Pattern: `[h : t]` (cabeça : cauda). `[]` para lista vazia. |
 | `{1 2 3}` | Array contíguo | Bloco contíguo (imutável por padrão). |
+| `{"k": v "k2": v2}` | Dict (HAMT) | Mapeamento persistente imutável. `:` após primeira entrada desambigua de Array. `{:}` para vazio. |
+| `{|1 2 3|}` | Set (HAMT) | Conjunto persistente imutável. `|` após `{` ativa modo Set. `{||}` para vazio. |
 | `{1; 2; 3}` | Tensor N-D | Dimensões separadas por `;` |
 | `(1, 2, 3)` | Tupla | Agrupamento heterogêneo. `(42,)` é tupla de 1 elemento (vírgula obrigatória). `(42)` é agrupamento, não tupla. `()` é `Unit`. |
 
