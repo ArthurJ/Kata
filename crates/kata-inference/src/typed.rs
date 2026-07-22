@@ -42,7 +42,7 @@ pub struct TypedExpr {
     pub tail_pos: bool,
     /// Destino de escape para seleção de arena (Pré-11).
     /// Generaliza `tail_pos` para memória: `Local` = fiber_arena,
-    /// `Caller` = caller_arena, `Ancestor(n)` = arena do LCA.
+    /// `Caller` = caller_arena.
     /// Coexiste com `tail_pos` (que governa TCO, não memória).
     pub escape: EscapeTarget,
     /// Efeito da expressão. `Puro`.

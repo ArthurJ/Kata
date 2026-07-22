@@ -132,7 +132,7 @@ pub(crate) fn synthesize_show_functions(
                 span: Span::synthetic(),
                 ty: Ty::text(),
                 tail_pos: true,
-                escape: EscapeTarget::Ancestor(0),
+                escape: EscapeTarget::Caller,
                 effect: Effect::Puro,
                 kind: text_lit(struct_name.to_string()).node.kind,
             }
@@ -282,7 +282,7 @@ fn build_struct_show_body(
         span: Span::synthetic(),
         ty: Ty::text(),
         tail_pos: true,
-        escape: EscapeTarget::Ancestor(0),
+        escape: EscapeTarget::Caller,
         effect: Effect::Puro,
         kind: body.node.kind,
     }
@@ -340,7 +340,7 @@ fn build_refined_show_body(
         span: Span::synthetic(),
         ty: Ty::text(),
         tail_pos: true,
-        escape: EscapeTarget::Ancestor(0),
+        escape: EscapeTarget::Caller,
         effect: Effect::Puro,
         kind: body.node.kind,
     }
@@ -430,7 +430,7 @@ fn build_enum_show_body(
         span: Span::synthetic(),
         ty: Ty::text(),
         tail_pos: true,
-        escape: EscapeTarget::Ancestor(0),
+        escape: EscapeTarget::Caller,
         effect: Effect::Puro,
         kind: TypedExprKind::Match {
             scrutinee: Box::new(scrutinee),

@@ -152,7 +152,7 @@ pub(crate) fn infer_list_lit(
             EscapeTarget::Local
         }
     } else {
-        EscapeTarget::Ancestor(0)
+        EscapeTarget::Caller
     };
 
     Ok(TypedExpr {
@@ -206,7 +206,7 @@ pub(crate) fn infer_array_lit(
             EscapeTarget::Local
         }
     } else {
-        EscapeTarget::Ancestor(0)
+        EscapeTarget::Caller
     };
 
     Ok(TypedExpr {
@@ -265,7 +265,7 @@ pub(crate) fn infer_range_lit(
             EscapeTarget::Local
         }
     } else {
-        EscapeTarget::Ancestor(0)
+        EscapeTarget::Caller
     };
 
     Ok(TypedExpr {
@@ -326,7 +326,7 @@ pub(crate) fn infer_for_in(
     let escape = if ctx.ret_ty.is_some() {
         EscapeTarget::Local
     } else {
-        EscapeTarget::Ancestor(0)
+        EscapeTarget::Caller
     };
 
     Ok(TypedExpr {
@@ -414,7 +414,7 @@ pub(crate) fn infer_in(
             EscapeTarget::Local
         }
     } else {
-        EscapeTarget::Ancestor(0)
+        EscapeTarget::Caller
     };
 
     Ok(TypedExpr {

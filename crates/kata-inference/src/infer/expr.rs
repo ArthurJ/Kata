@@ -290,7 +290,7 @@ pub(crate) fn infer_expr_hinted(
                         EscapeTarget::Local
                     }
                 } else {
-                    EscapeTarget::Ancestor(0)
+                    EscapeTarget::Caller
                 };
                 return Ok(TypedExpr {
                     span: *span,
@@ -572,7 +572,7 @@ pub(crate) fn infer_expr_hinted(
         }
     } else {
         // Função pura / entry point: sem fiber_arena, tudo vai para a raiz.
-        EscapeTarget::Ancestor(0)
+        EscapeTarget::Caller
     };
 
     Ok(TypedExpr {

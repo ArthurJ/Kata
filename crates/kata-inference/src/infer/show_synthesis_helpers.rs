@@ -62,7 +62,7 @@ pub(crate) fn show_expr(arg: Spanned<TypedExpr>, arg_ty: &Ty) -> Spanned<TypedEx
                     span: Span::synthetic(),
                     ty: Ty::text(),
                     tail_pos: false,
-                    escape: EscapeTarget::Ancestor(0),
+                    escape: EscapeTarget::Caller,
                     effect: Effect::Puro,
                     kind: TypedExprKind::Closure {
                         callee: Box::new(Spanned::new(callee, Span::synthetic())),
@@ -103,7 +103,7 @@ pub(crate) fn show_call(
             span: Span::synthetic(),
             ty: Ty::text(),
             tail_pos: false,
-            escape: EscapeTarget::Ancestor(0),
+            escape: EscapeTarget::Caller,
             effect: Effect::Puro,
             kind: TypedExprKind::Closure {
                 callee: Box::new(Spanned::new(callee, Span::synthetic())),
@@ -213,7 +213,7 @@ pub(crate) fn string_concat(
             span: Span::synthetic(),
             ty: Ty::text(),
             tail_pos: false,
-            escape: EscapeTarget::Ancestor(0),
+            escape: EscapeTarget::Caller,
             effect: Effect::Puro,
             kind: TypedExprKind::Closure {
                 callee: Box::new(Spanned::new(callee, Span::synthetic())),

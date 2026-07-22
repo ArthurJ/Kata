@@ -212,12 +212,12 @@ pub(crate) fn lower_expr(
             // Aloca N * 8 bytes na arena via kata_rt_arena_alloc(handle, size).
             // Escolha de arena baseada em EscapeTarget (Pré-11):
             // - Local → fiber_arena (liberada no epílogo do fiber)
-            // - Caller | Ancestor(_) → caller_arena (sobrevive à destruição da local)
+            // - Caller → caller_arena (sobrevive à destruição da local)
             let handle = match expr.escape {
                 EscapeTarget::Local => ctx
                     .fiber_arena
                     .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
-                EscapeTarget::Caller | EscapeTarget::Ancestor(_) => ctx
+                EscapeTarget::Caller => ctx
                     .caller_arena
                     .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
             };
@@ -256,7 +256,7 @@ pub(crate) fn lower_expr(
                 EscapeTarget::Local => ctx
                     .fiber_arena
                     .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
-                EscapeTarget::Caller | EscapeTarget::Ancestor(_) => ctx
+                EscapeTarget::Caller => ctx
                     .caller_arena
                     .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
             };

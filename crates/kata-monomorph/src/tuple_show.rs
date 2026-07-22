@@ -49,7 +49,7 @@ pub(crate) fn rewrite_show_tuple_call(tuple_expr: &Spanned<TypedExpr>) -> Spanne
                 span: Span::synthetic(),
                 ty: Ty::text(),
                 tail_pos: false,
-                escape: EscapeTarget::Ancestor(0),
+                escape: EscapeTarget::Caller,
                 effect: Effect::Puro,
                 kind: TypedExprKind::TextLit {
                     text: "()".to_string(),
@@ -174,7 +174,7 @@ fn show_call_mangled(arg: Spanned<TypedExpr>, type_name: &str) -> Spanned<TypedE
             span: Span::synthetic(),
             ty: Ty::text(),
             tail_pos: false,
-            escape: EscapeTarget::Ancestor(0),
+            escape: EscapeTarget::Caller,
             effect: Effect::Puro,
             kind: TypedExprKind::Closure {
                 callee: Box::new(Spanned::new(callee, Span::synthetic())),
@@ -202,7 +202,7 @@ fn string_concat(left: Spanned<TypedExpr>, right: Spanned<TypedExpr>) -> Spanned
             span: Span::synthetic(),
             ty: Ty::text(),
             tail_pos: false,
-            escape: EscapeTarget::Ancestor(0),
+            escape: EscapeTarget::Caller,
             effect: Effect::Puro,
             kind: TypedExprKind::Closure {
                 callee: Box::new(Spanned::new(callee, Span::synthetic())),

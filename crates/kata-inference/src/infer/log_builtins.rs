@@ -115,7 +115,7 @@ pub(crate) fn infer_log_builtin(
         span: args.span,
         ty: Ty::int(),
         tail_pos: false,
-        escape: kata_core::escape::EscapeTarget::Ancestor(0),
+        escape: kata_core::escape::EscapeTarget::Caller,
         effect: Effect::Puro,
         kind: TypedExprKind::Closure {
             callee: Box::new(Spanned::new(callee, args.span)),
@@ -181,7 +181,7 @@ pub(crate) fn infer_log_recv_builtin(
         span: args.span,
         ty: Ty::text(),
         tail_pos: false,
-        escape: kata_core::escape::EscapeTarget::Ancestor(0),
+        escape: kata_core::escape::EscapeTarget::Caller,
         effect: Effect::Puro,
         kind: TypedExprKind::Closure {
             callee: Box::new(Spanned::new(callee, args.span)),
@@ -248,7 +248,7 @@ pub(crate) fn infer_log_config_builtin(
         span: args.span,
         ty: Ty::Unit,
         tail_pos: false,
-        escape: kata_core::escape::EscapeTarget::Ancestor(0),
+        escape: kata_core::escape::EscapeTarget::Caller,
         effect: Effect::Puro,
         kind: TypedExprKind::Closure {
             callee: Box::new(Spanned::new(callee, args.span)),

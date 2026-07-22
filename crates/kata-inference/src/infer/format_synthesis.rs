@@ -140,7 +140,7 @@ fn ffi_call1(ffi_name: &str, arg: Spanned<TypedExpr>, ret_ty: Ty) -> Spanned<Typ
             span: Span::synthetic(),
             ty: ret_ty,
             tail_pos: false,
-            escape: EscapeTarget::Ancestor(0),
+            escape: EscapeTarget::Caller,
             effect: Effect::Puro,
             kind: TypedExprKind::Closure {
                 callee: Box::new(Spanned::new(callee, Span::synthetic())),
@@ -173,7 +173,7 @@ fn text_replace_first(
             span: Span::synthetic(),
             ty: Ty::text(),
             tail_pos: false,
-            escape: EscapeTarget::Ancestor(0),
+            escape: EscapeTarget::Caller,
             effect: Effect::Puro,
             kind: TypedExprKind::Closure {
                 callee: Box::new(Spanned::new(callee, Span::synthetic())),
@@ -203,7 +203,7 @@ fn repr_call(field_access: Spanned<TypedExpr>, mangled: String) -> Spanned<Typed
             span: Span::synthetic(),
             ty: Ty::text(),
             tail_pos: false,
-            escape: EscapeTarget::Ancestor(0),
+            escape: EscapeTarget::Caller,
             effect: Effect::Puro,
             kind: TypedExprKind::Closure {
                 callee: Box::new(Spanned::new(callee, Span::synthetic())),

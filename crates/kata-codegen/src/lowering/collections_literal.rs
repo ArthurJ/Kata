@@ -32,7 +32,7 @@ pub(crate) fn lower_collections_literal(
                     .fiber_arena
                     .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
                 kata_core::escape::EscapeTarget::Caller
-                | kata_core::escape::EscapeTarget::Ancestor(_) => ctx
+                 => ctx
                     .caller_arena
                     .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
             };
@@ -77,7 +77,7 @@ pub(crate) fn lower_collections_literal(
                     .fiber_arena
                     .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
                 kata_core::escape::EscapeTarget::Caller
-                | kata_core::escape::EscapeTarget::Ancestor(_) => ctx
+                 => ctx
                     .caller_arena
                     .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
             };
@@ -124,7 +124,7 @@ pub(crate) fn lower_collections_literal(
                     .fiber_arena
                     .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
                 kata_core::escape::EscapeTarget::Caller
-                | kata_core::escape::EscapeTarget::Ancestor(_) => ctx
+                 => ctx
                     .caller_arena
                     .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
             };

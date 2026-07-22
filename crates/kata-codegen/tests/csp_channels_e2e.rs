@@ -365,7 +365,7 @@ main!()"#;
 /// fosse alocado na arena do fiber sender, seria liberado quando o sender
 /// morresse — o consumer acessaria memória inválida.
 ///
-/// O escape analysis (conservador: `Ancestor(0)` = raiz) marca o valor
+/// O escape analysis (conservador: `Caller` = caller_arena) marca o valor
 /// enviado como escapando para a arena raiz, que sobrevive à morte do
 /// sender. O teste verifica que o consumer recebe 42 sem crash.
 ///

@@ -4,7 +4,7 @@ expression: tast_snapshot(src)
 ---
 === Entry ===
   ty: Unit
-  kind: ActionCall { callee: "main", args: Spanned { node: TypedExpr { span: Span { offset: 90, line: 8, col: 6, len: 1 }, ty: Unit, tail_pos: false, escape: Ancestor(0), effect: Puro, kind: Unit }, span: Span { offset: 90, line: 8, col: 6, len: 1 } }, caller_arena: 0, ffi_symbol: None }
+  kind: ActionCall { callee: "main", args: Spanned { node: TypedExpr { span: Span { offset: 90, line: 8, col: 6, len: 1 }, ty: Unit, tail_pos: false, escape: Caller, effect: Puro, kind: Unit }, span: Span { offset: 90, line: 8, col: 6, len: 1 } }, caller_arena: 0, ffi_symbol: None }
 
 === Functions ===
   and :: [Sum("Boolean"), Sum("Boolean")] => Sum("Boolean")

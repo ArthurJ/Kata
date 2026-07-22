@@ -79,14 +79,14 @@ pub(crate) fn lower_variant_construct(
 }
 
 /// Seleciona o handle de arena conforme `EscapeTarget` (Pré-11):
-/// `Local` → fiber_arena, `Caller`/`Ancestor(_)` → caller_arena.
+/// `Local` → fiber_arena, `Caller` → caller_arena.
 /// Fallback para `iconst 0` quando a arena não está disponível (entry point).
 fn arena_handle_for(expr: &TypedExpr, ctx: &mut LowerCtx) -> cranelift_codegen::ir::Value {
     match expr.escape {
         EscapeTarget::Local => ctx
             .fiber_arena
             .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
-        EscapeTarget::Caller | EscapeTarget::Ancestor(_) => ctx
+        EscapeTarget::Caller => ctx
             .caller_arena
             .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
     }

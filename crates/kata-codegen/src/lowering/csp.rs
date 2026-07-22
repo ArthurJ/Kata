@@ -278,7 +278,7 @@ pub(crate) fn lower_fork(
         EscapeTarget::Local => ctx
             .fiber_arena
             .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
-        EscapeTarget::Caller | EscapeTarget::Ancestor(_) => ctx
+        EscapeTarget::Caller => ctx
             .caller_arena
             .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
     };

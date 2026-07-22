@@ -240,7 +240,7 @@ fn build_list_show_body(list_ty: &Ty, elem_ty: &Ty, sep: &str, nil_body: &str) -
         span: Span::synthetic(),
         ty: Ty::text(),
         tail_pos: true,
-        escape: EscapeTarget::Ancestor(0),
+        escape: EscapeTarget::Caller,
         effect: Effect::Puro,
         kind: TypedExprKind::Match {
             scrutinee: Box::new(scrutinee),

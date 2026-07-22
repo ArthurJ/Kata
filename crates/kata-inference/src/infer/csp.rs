@@ -104,7 +104,7 @@ pub(crate) fn infer_channel_recv(
             EscapeTarget::Local
         }
     } else {
-        EscapeTarget::Ancestor(0)
+        EscapeTarget::Caller
     };
 
     Ok(TypedExpr {
@@ -227,7 +227,7 @@ pub(crate) fn infer_select(
             EscapeTarget::Local
         }
     } else {
-        EscapeTarget::Ancestor(0)
+        EscapeTarget::Caller
     };
 
     Ok(TypedExpr {
@@ -255,8 +255,8 @@ fn type_compatible(actual: &Ty, expected: &Ty) -> bool {
 }
 
 /// Escape target para `!>` — valor escapa para outro fiber.
-/// Por ora, conservador: Ancestor(0) (raiz). O LCA real será
+/// Por ora, conservador: Caller (caller_arena). O LCA real será
 /// calculado quando o typeck rastrear a árvore de fibers.
 fn escape_for_channel_send(_tail_pos: bool, _ctx: &InferCtx) -> EscapeTarget {
-    EscapeTarget::Ancestor(0)
+    EscapeTarget::Caller
 }

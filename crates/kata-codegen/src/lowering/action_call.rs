@@ -77,12 +77,12 @@ pub(crate) fn lower_action_call(
 
             // caller_arena decidido por EscapeTarget (Pré-11):
             // - Local → fiber_arena (arena local do fiber)
-            // - Caller | Ancestor(_) → caller_arena (sobrevive à destruição do fiber)
+            // - Caller → caller_arena (sobrevive à destruição do fiber)
             let caller_arena_val = match expr.escape {
                 EscapeTarget::Local => ctx
                     .fiber_arena
                     .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
-                EscapeTarget::Caller | EscapeTarget::Ancestor(_) => ctx
+                EscapeTarget::Caller => ctx
                     .caller_arena
                     .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
             };

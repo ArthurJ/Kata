@@ -127,7 +127,7 @@ pub(crate) fn infer_type_ascription(
                     EscapeTarget::Local
                 }
             } else {
-                EscapeTarget::Ancestor(0)
+                EscapeTarget::Caller
             },
             effect: Effect::Puro,
             kind: TypedExprKind::TypeAscription {
@@ -182,7 +182,7 @@ pub(crate) fn infer_type_ascription(
                         EscapeTarget::Local
                     }
                 } else {
-                    EscapeTarget::Ancestor(0)
+                    EscapeTarget::Caller
                 },
                 effect: Effect::Puro,
                 kind: TypedExprKind::StructConstruct {
@@ -244,7 +244,7 @@ pub(crate) fn infer_type_ascription(
                         EscapeTarget::Local
                     }
                 } else {
-                    EscapeTarget::Ancestor(0)
+                    EscapeTarget::Caller
                 },
                 effect: Effect::Puro,
                 kind: TypedExprKind::TypeAscription {
@@ -285,7 +285,7 @@ pub(crate) fn infer_type_ascription(
                 EscapeTarget::Local
             }
         } else {
-            EscapeTarget::Ancestor(0)
+            EscapeTarget::Caller
         },
         effect: Effect::Puro,
         kind: TypedExprKind::TypeAscription {

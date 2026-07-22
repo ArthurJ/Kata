@@ -93,9 +93,9 @@ pub(crate) fn synthesize_constructors(
             ty: ret_ty.clone(),
             tail_pos: true,
             // Smart constructor é função pura — todos os valores vão para
-            // a arena raiz (Ancestor(0)), igual ao escape derivado em
+            // a caller_arena, igual ao escape derivado em
             // infer_expr_hinted quando ctx.ret_ty = None.
-            escape: EscapeTarget::Ancestor(0),
+            escape: EscapeTarget::Caller,
             effect: crate::typed::Effect::Puro,
             kind: TypedExprKind::StructConstruct {
                 struct_name: struct_name.to_string(),
@@ -168,7 +168,7 @@ pub(crate) fn synthesize_constructors(
                 span: kata_ast::Span::synthetic(),
                 ty: ret_ty,
                 tail_pos: true,
-                escape: EscapeTarget::Ancestor(0),
+                escape: EscapeTarget::Caller,
                 effect: crate::typed::Effect::Puro,
                 kind: TypedExprKind::Ident {
                     name: "__field_0".into(),
@@ -242,7 +242,7 @@ pub(crate) fn synthesize_constructors(
                 span: kata_ast::Span::synthetic(),
                 ty: ret_ty.clone(),
                 tail_pos: true,
-                escape: EscapeTarget::Ancestor(0),
+                escape: EscapeTarget::Caller,
                 effect: crate::typed::Effect::Puro,
                 kind: TypedExprKind::StructConstruct {
                     struct_name: struct_name.to_string(),
