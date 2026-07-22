@@ -248,3 +248,107 @@ fn dict_insert_replaces_value() {
     let (raw, _) = eval_src(src);
     assert_eq!(untag_smi(raw), 99);
 }
+
+// ═══════════════════════════════════════════════════════════════
+// Dict/Set/Tuple como argumentos de Action
+// ═══════════════════════════════════════════════════════════════
+
+/// Dict como arg de action — action recebe Dict e faz lookup com `?`.
+#[test]
+fn dict_como_arg_de_action_at() {
+    let src = "action extrai_d (d :: Dict::(Text, Int)) => Int\n    at d \"a\" ?\nextrai_d!({\"a\": 1 \"b\": 2})";
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::int());
+    assert_eq!(untag_smi(raw), 1);
+}
+
+/// Dict como arg de action — action recebe Dict e retorna len.
+#[test]
+fn dict_como_arg_de_action_len() {
+    let src = "action conta_d (d :: Dict::(Text, Int)) => Int\n    len d\nconta_d!({\"a\": 1 \"b\": 2 \"c\": 3})";
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::int());
+    assert_eq!(untag_smi(raw), 3);
+}
+
+/// Set como arg de action — action recebe Set e verifica contains.
+#[test]
+fn set_como_arg_de_action_contains() {
+    let src = "action tem (s :: Set::Int) => Boolean\n    3 in s\ntem!({|1 2 3|})";
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::boolean());
+    assert_eq!(raw, 1, "3 deve estar no set");
+}
+
+/// Set como arg de action — action recebe Set e retorna len.
+#[test]
+fn set_como_arg_de_action_len() {
+    let src = "action conta_s (s :: Set::Int) => Int\n    len s\nconta_s!({|1 2 3 4 5|})";
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::int());
+    assert_eq!(untag_smi(raw), 5);
+}
+
+/// Tuple como arg de action — action recebe (Int, Int) e soma.
+#[test]
+fn tuple_como_arg_de_action_soma() {
+    let src = "action soma_t (t :: (Int, Int)) => Int\n    + t.0 t.1\nsoma_t!((1, 2))";
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::int());
+    assert_eq!(untag_smi(raw), 3);
+}
+
+/// Dict como arg de action — action recebe Dict, modifica e retorna.
+#[test]
+fn dict_como_arg_de_action_insert_e_retorna() {
+    let src = "action add_d (d :: Dict::(Text, Int)) => Dict::(Text, Int)\n    insert d \"c\" 3\nadd_d!({\"a\": 1 \"b\": 2})";
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Dict(Box::new(Ty::Prim(PrimTy::Text)), Box::new(Ty::int())));
+    assert_ne!(raw, 0, "dict retornado não deve ser null");
+}
+
+/// Dois args: Dict e Int — action recebe ambos.
+#[test]
+fn dict_e_int_como_args_de_action() {
+    let src = "action lookup_d (d :: Dict::(Text, Int), k :: Int) => Int\n    at d \"a\" ?\nlookup_d!({\"a\": 42 \"b\": 7}, 1)";
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::int());
+    assert_eq!(untag_smi(raw), 42);
+}
+/// Set como arg de action — action faz union com outro set dentro.
+#[test]
+fn set_como_arg_de_action_union() {
+    let src =
+        "action union_s (s :: Set::Int) => Set::Int\n    union s {|3 4 5|}\nunion_s!({|1 2 3|})";
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Set(Box::new(Ty::int())));
+    assert_ne!(raw, 0);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Dict + merge (right-biased)
+// ═══════════════════════════════════════════════════════════════
+
+/// Dict `+` Dict = merge right-biased. Chaves de `b` sobrescrevem `a`.
+#[test]
+fn dict_merge_right_biased_len() {
+    let src = "len (+ {\"a\": 1 \"b\": 2} {\"b\": 99 \"c\": 3})";
+    let (raw, _) = eval_src(src);
+    assert_eq!(untag_smi(raw), 3, "merge should have 3 keys");
+}
+
+/// Dict `+` Dict = merge right-biased. Valor de `b` vence em conflito.
+#[test]
+fn dict_merge_right_biased_value() {
+    let src = "action extrai_merge => Int\n    at (+ {\"a\": 1 \"b\": 2} {\"b\": 99 \"c\": 3}) \"b\" ?\nextrai_merge!()";
+    let (raw, _) = eval_src(src);
+    assert_eq!(untag_smi(raw), 99, "b from second dict should win");
+}
+
+/// Dict `+` Dict com chaves disjuntas — ambas sobrevivem.
+#[test]
+fn dict_merge_disjoint_keys() {
+    let src = "action extrai_disjoint => Int\n    at (+ {\"x\": 10} {\"y\": 20}) \"x\" ?\nextrai_disjoint!()";
+    let (raw, _) = eval_src(src);
+    assert_eq!(untag_smi(raw), 10, "x from first dict should survive");
+}

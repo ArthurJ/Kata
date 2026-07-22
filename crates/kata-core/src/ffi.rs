@@ -188,6 +188,8 @@ pub enum FfiSymbol {
     SetIntersection,
     /// `kata_rt_set_difference(a, b, eq_fn, arena) -> i64` — diferença.
     SetDifference,
+    /// `kata_rt_dict_merge(a, b, eq_fn, arena) -> i64` — merge right-biased.
+    DictMerge,
 
     // ── String equality (for Text keys in Dict/Set) ─────
     /// `kata_rt_string_eq(a, b) -> i64` — compara C strings por conteúdo.
@@ -324,6 +326,7 @@ impl FfiSymbol {
             FfiSymbol::SetUnion => "kata_rt_set_union",
             FfiSymbol::SetIntersection => "kata_rt_set_intersection",
             FfiSymbol::SetDifference => "kata_rt_set_difference",
+            FfiSymbol::DictMerge => "kata_rt_dict_merge",
             // String equality (Fio 13)
             FfiSymbol::StringEq => "kata_rt_string_eq",
             // Canais CSP
@@ -437,6 +440,7 @@ impl FfiSymbol {
             FfiSymbol::SetUnion | FfiSymbol::SetIntersection | FfiSymbol::SetDifference => {
                 Ty::int()
             }
+            FfiSymbol::DictMerge => Ty::int(),
             // String equality (Fio 13) — retorna 0/1
             FfiSymbol::StringEq => Ty::boolean(),
             // Canais CSP — handles são i64 (ponteiro+tag)
@@ -561,6 +565,7 @@ impl FfiSymbol {
             FfiSymbol::SetUnion,
             FfiSymbol::SetIntersection,
             FfiSymbol::SetDifference,
+            FfiSymbol::DictMerge,
             // String equality (Fio 13)
             FfiSymbol::StringEq,
             // Canais CSP

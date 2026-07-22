@@ -506,6 +506,14 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
             sig.params.push(AbiParam::new(I64)); // arena
             sig.returns.push(AbiParam::new(I64)); // new set ptr
         }
+        // dict_merge: (a, b, eq_fn, arena) -> i64 (new dict ptr)
+        FfiSymbol::DictMerge => {
+            sig.params.push(AbiParam::new(I64)); // a
+            sig.params.push(AbiParam::new(I64)); // b
+            sig.params.push(AbiParam::new(I64)); // eq_fn
+            sig.params.push(AbiParam::new(I64)); // arena
+            sig.returns.push(AbiParam::new(I64)); // new dict ptr
+        }
         // ── String equality (Fio 13) ──
         // string_eq: (a, b) -> i64 (0/1)
         FfiSymbol::StringEq => {
@@ -615,6 +623,7 @@ pub(crate) fn ffi_needs_arena(sym_name: &str) -> bool {
                 | FfiSymbol::SetUnion
                 | FfiSymbol::SetIntersection
                 | FfiSymbol::SetDifference
+                | FfiSymbol::DictMerge
         )
     )
 }

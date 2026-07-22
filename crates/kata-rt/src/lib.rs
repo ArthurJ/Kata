@@ -78,6 +78,7 @@ pub use set::{
     kata_rt_set_intersection, kata_rt_set_len, kata_rt_set_next, kata_rt_set_remove,
     kata_rt_set_union,
 };
+pub use dict::kata_rt_dict_merge;
 // kata_rt_rat_show_raw — rebaixado para pub(crate): zero consumidores cross-crate.
 pub use scheduler::{
     DEADLOCK_SENTINEL, TIMEOUT_SENTINEL, kata_rt_run, kata_rt_scheduler_init,

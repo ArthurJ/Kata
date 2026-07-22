@@ -1317,6 +1317,40 @@ unsafe fn hamt_find_kvpair(node_ptr: i64, hash: i64, target_kvpair: i64, depth: 
     }
 }
 
+/// Merge two dicts (right-biased union).
+///
+/// `kata_rt_dict_merge(a, b, eq_fn, arena) -> i64`
+///
+/// Iterates `b` and inserts each (key, value) into `a`. When a key exists
+/// in both, the value from `b` overwrites the value from `a` (right-biased).
+/// Returns a new Dict pointer.
+///
+/// `eq_fn` is the function pointer for key equality comparison.
+/// Hash is read from the KVpair (stored at insert time).
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_dict_merge(
+    a: i64,
+    b: i64,
+    eq_fn: i64,
+    arena_handle: i64,
+) -> i64 {
+    // Collect all KVPair pointers from b.
+    let b_hamt = unsafe { std::ptr::read_unaligned(b as *const i64) };
+    let (arr, count) = unsafe { collect_all_kvpairs(b_hamt, arena_handle) };
+
+    let mut result = a;
+    for i in 0..count {
+        let kvptr = unsafe {
+            std::ptr::read_unaligned((arr as *const u8).add((i as usize) * 8) as *const i64)
+        };
+        let key = unsafe { read_kvpair_key(kvptr) };
+        let val = unsafe { read_kvpair_value(kvptr) };
+        let hash = unsafe { read_kvpair_hash(kvptr) };
+        result = kata_rt_dict_insert(result, key, val, hash, eq_fn, arena_handle);
+    }
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

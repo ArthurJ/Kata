@@ -255,6 +255,9 @@ remove :: Dict::(K, V) K => Dict::(K, V)
 @ffi("kata_rt_dict_remove")
 - :: Dict::(K, V) K => Dict::(K, V)
 
+@ffi("kata_rt_dict_merge")
++ :: Dict::(K, V) Dict::(K, V) => Dict::(K, V)
+
 # ── Operadores standalone (não-interface) ──────────────────────
 
 # Int divisão (retorna Int, não Result)

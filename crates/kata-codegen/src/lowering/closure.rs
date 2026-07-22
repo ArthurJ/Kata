@@ -137,6 +137,20 @@ pub(crate) fn lower_closure(
                 call_args.push(eq_fn_ptr);
                 call_args.push(arena_for_dict);
             }
+            "kata_rt_dict_merge" => {
+                // Args: [a, b] → [a, b, eq_fn, arena]
+                // Key type from args[0].node.ty (Dict::(K, V) → K)
+                let key_ty = match &args[0].node.ty {
+                    Ty::Dict(k, _) => k.as_ref().clone(),
+                    other => return Err(super::CodegenError::UnsupportedNode(format!(
+                        "dict_merge on non-Dict type: {other}"
+                    ))),
+                };
+                let eq_name = super::collections_literal::eq_fn_name(&key_ty)?;
+                let eq_fn_ptr = super::collections_literal::get_ffi_fn_ptr(eq_name, ctx)?;
+                call_args.push(eq_fn_ptr);
+                call_args.push(arena_for_dict);
+            }
             _ => {
                 // Default: inject arena if needed (existing behavior)
                 if crate::ffi_sigs::ffi_needs_arena(sym_name) {

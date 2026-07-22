@@ -201,6 +201,7 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
     builder.symbol("kata_rt_set_union", rt::kata_rt_set_union as *const u8);
     builder.symbol("kata_rt_set_intersection", rt::kata_rt_set_intersection as *const u8);
     builder.symbol("kata_rt_set_difference", rt::kata_rt_set_difference as *const u8);
+    builder.symbol("kata_rt_dict_merge", rt::kata_rt_dict_merge as *const u8);
     // String equality (for Text keys in Dict/Set)
     builder.symbol("kata_rt_string_eq", rt::kata_rt_string_eq as *const u8);
     // Canais CSP
@@ -372,6 +373,7 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         SetUnion,
         SetIntersection,
         SetDifference,
+        DictMerge,
         // String equality (Fio 13)
         StringEq,
         // Canais CSP
