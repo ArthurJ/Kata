@@ -171,6 +171,22 @@ pub(crate) fn lower_expr(
                 // é o mesmo do tipo base (alias). Lowerar inner diretamente.
                 (TypedExprKind::IntLit { .. }, Ty::Struct(_))
                 | (TypedExprKind::FloatLit { .. }, Ty::Struct(_)) => lower_expr(inner, ctx),
+                // Downcast refined/alias→base (ex: PositiveInt → Int,
+                // Altura → Float). No-op em runtime — mesmos bits.
+                // O typeck já validou que o Struct é alias do target.
+                // Quando o Cranelift type difere (Struct=I64, Float=F64),
+                // precisa bitcast.
+                _ if matches!(inner.ty, Ty::Struct(_)) && inner.ty != *target_ty => {
+                    let val = lower_expr(inner, ctx)?;
+                    let target_clif = ty_to_clif(target_ty);
+                    let inner_clif = ty_to_clif(&inner.ty);
+                    if target_clif != inner_clif {
+                        // Bitcast necessário (ex: I64 → F64 para Float)
+                        Ok(ctx.builder.ins().bitcast(target_clif, MemFlagsData::new(), val))
+                    } else {
+                        Ok(val)
+                    }
+                }
                 // Demais casos: o typeck já deveria ter rejeitado.
                 _ => Err(super::CodegenError::UnsupportedNode(format!(
                     "ascription não suportada: {:?} → {}",

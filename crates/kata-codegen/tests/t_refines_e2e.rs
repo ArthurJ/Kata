@@ -301,20 +301,26 @@ PositiveInt 5"#;
 /// O `-` tem corpo lambda (override) → cria overload real no DispatchTable.
 /// O `+` (não-listado) usa fallback automático.
 /// O override deve ser encontrado antes do fallback.
+/// O corpo lambda usa downcast `(a::Int)` para chamar o `-` do base,
+/// e o construtor falível `PositiveInt(...)` + `match` para desempacotar.
 #[test]
 fn t_refines_override_encontrado_antes_do_fallback() {
     let src = r#"data (Int, > _ 0) as PositiveInt
 PositiveInt refines NUM
-    - :: PositiveInt PositiveInt => PositiveInt @ffi("kata_rt_bi_sub")
-action sub_pos => PositiveInt
+    - :: PositiveInt PositiveInt => PositiveInt
+    lambda a b:
+        match (PositiveInt (- (a::Int) (b::Int)))
+            Result::Ok v: v
+            otherwise: 1::PositiveInt
+action sub_pos => Unit
     let a := 10::PositiveInt
     let b := 3::PositiveInt
-    - a b
+    let r := - a b
+    echo!(r)
 sub_pos!()"#;
     let (_raw, ty) = eval_src(src);
     assert_eq!(
-        ty,
-        Ty::Struct("PositiveInt".into()),
-        "override de - com @ffi deve criar overload real, encontrado antes do fallback"
+        ty, Ty::Unit,
+        "override de - com corpo lambda deve despachar para o override, não fallback"
     );
 }

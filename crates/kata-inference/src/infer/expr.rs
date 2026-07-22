@@ -4,7 +4,7 @@
 //! `infer_expr_hinted` aceita um type hint opcional (DoD 29) para inferência
 //! bidirecional top-down.
 
-use kata_ast::{Expr, Span, Spanned};
+use kata_ast::{Expr, Span, Spanned, TypeExpr};
 use kata_core::dispatch::DispatchTable;
 use kata_core::enum_registry::EnumRegistry;
 use kata_core::escape::EscapeTarget;
@@ -270,24 +270,67 @@ pub(crate) fn infer_expr_hinted(
         }
 
         // ── Qualificação de variante (sem Apply = unitária) ─────
+        // `Ident :: Ident` é ambíguo no parser: pode ser VariantQual
+        // (Result::Ok) ou TypeAscription (a::Int — downcast refined→base).
+        // Tentar VariantQual primeiro; se falhar (não é enum), retentar
+        // como TypeAscription onde enum_name é a variável e variant é o
+        // tipo alvo.
         Expr::VariantQual { enum_name, variant } => {
-            let enum_ty =
-                env.lookup(enum_name)
-                    .cloned()
-                    .ok_or_else(|| MiddleError::UnboundName {
-                        name: enum_name.clone(),
-                        span: (*span).into(),
-                    })?;
+            let enum_ty = env.lookup(enum_name).cloned();
 
-            match super::variant_qual::infer_variant_qual(enum_name, variant, &enum_ty, span, ctx)?
+            // Caminho 1: é uma variante de enum.
+            if let Some(ref ty) = enum_ty
+                && let Some((vt, vk, ve)) =
+                    super::variant_qual::infer_variant_qual(enum_name, variant, ty, span, ctx)?
             {
-                Some(result) => result,
-                None => Err(MiddleError::TypeMismatch {
-                    expected: "enum".to_string(),
-                    found: format!("{}", enum_ty),
-                    span: (*span).into(),
-                })?,
+                let escape = if ctx.ret_ty.is_some() {
+                    if tail_pos {
+                        EscapeTarget::Caller
+                    } else {
+                        EscapeTarget::Local
+                    }
+                } else {
+                    EscapeTarget::Ancestor(0)
+                };
+                return Ok(TypedExpr {
+                    span: *span,
+                    ty: vt,
+                    tail_pos,
+                    escape,
+                    effect: ve,
+                    kind: vk,
+                });
             }
+
+            // Caminho 2: TypeAscription disfarçada — `var::Type`.
+            // O parser produziu VariantQual porque ambos os lados são Ident.
+            // Se enum_name existe no env como variável e variant é um tipo
+            // conhecido, tratar como TypeAscription.
+            if enum_ty.is_some() {
+                let type_expr = Spanned::new(TypeExpr::Named(variant.clone()), *span);
+                let inner_expr = Spanned::new(
+                    Expr::Ident {
+                        name: enum_name.clone(),
+                    },
+                    *span,
+                );
+                let result = super::ascription::infer_type_ascription(
+                    &inner_expr,
+                    &type_expr,
+                    span,
+                    env,
+                    ctx,
+                    tail_pos,
+                    hint,
+                )?;
+                return Ok(result);
+            }
+
+            // Nem variante nem variável — unbound.
+            Err(MiddleError::UnboundName {
+                name: enum_name.clone(),
+                span: (*span).into(),
+            })?
         }
 
         // ── Desugared antes do typeck ──────────────────

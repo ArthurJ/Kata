@@ -4,7 +4,7 @@
 //! Verifica DoD 4: `alias` cria newtype com rigidez nominal e mesmo ABI.
 
 use kata_codegen::jit_eval;
-use kata_core::ty::Ty;
+use kata_core::ty::{PrimTy, Ty};
 use kata_inference::infer_module;
 use kata_lexer::lex;
 use kata_monomorph::monomorphize;
@@ -100,19 +100,16 @@ fn alias_float_as_altura_com_ascription() {
     assert_eq!(raw, bits);
 }
 
-/// Rigidez nominal: `Altura` ≠ `Float` em typeck.
-/// Passar `Altura` onde se espera `Float` deve falhar na inferência.
-/// Usa infer_module diretamente para capturar o erro.
+/// Downcast alias→base: `x::Float` onde `x` é `Altura` (alias de Float).
+/// Com downcast implementado, isso é válido — o alias é o mesmo tipo no
+/// layout, a ascription é um no-op em runtime (bitcast I64→F64 no codegen).
 #[test]
-fn alias_altura_nao_igual_float_typeck() {
+fn alias_altura_downcast_para_float() {
     let src = "alias Float as Altura\nlet x := Altura 1.75\nx::Float";
-    let tokens = lex(src).expect("lex deve succeed");
-    let module = parse(tokens).expect("parse deve succeed");
-    let prelude = load_prelude().expect("prelude deve carregar");
-    let user = resolve(&module).expect("resolve deve succeed");
-    let resolved = merge_resolved(prelude, user);
-    let result = infer_module(&module, &resolved);
-    assert!(result.is_err(), "x::Float onde x é Altura deve falhar");
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Prim(PrimTy::Float));
+    let bits = f64::to_bits(1.75) as i64;
+    assert_eq!(raw, bits);
 }
 
 /// Alias de struct com campos: `alias Pessoa as Pessoa2`.

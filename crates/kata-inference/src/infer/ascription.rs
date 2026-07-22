@@ -215,6 +215,46 @@ pub(crate) fn infer_type_ascription(
         });
     }
 
+    // Downcast refined/alias→base — `a::Int` onde `a :: PositiveInt`
+    // ou `x::Float` onde `x :: Altura` (alias de Float).
+    // O refined/alias é alias do base no layout (mesmos bits). No-op em runtime.
+    // Válido quando target_ty é exatamente o alias_of do tipo.
+    if let Ty::Struct(ref refined_name) = inner.ty
+        && let Some(struct_info) = ctx.struct_registry.get(refined_name)
+        && struct_info.alias_of.is_some()
+    {
+        let base_name = struct_info.alias_of.as_deref().unwrap_or("");
+        let base_matches = match (&target_ty, base_name) {
+            (Ty::Prim(PrimTy::Int), "Int") => true,
+            (Ty::Prim(PrimTy::Float), "Float") => true,
+            (Ty::Prim(PrimTy::Rational), "Rational") => true,
+            (Ty::Prim(PrimTy::Text), "Text") => true,
+            (Ty::Struct(s), base) if s == base => true,
+            _ => false,
+        };
+        if base_matches {
+            return Ok(TypedExpr {
+                span: *span,
+                ty: target_ty.clone(),
+                tail_pos,
+                escape: if ctx.ret_ty.is_some() {
+                    if tail_pos {
+                        EscapeTarget::Caller
+                    } else {
+                        EscapeTarget::Local
+                    }
+                } else {
+                    EscapeTarget::Ancestor(0)
+                },
+                effect: Effect::Puro,
+                kind: TypedExprKind::TypeAscription {
+                    expr: Box::new(Spanned::new(inner, expr.span)),
+                    target_ty,
+                },
+            });
+        }
+    }
+
     let rebaixa_ok = match (&inner.kind, &target_ty) {
         (TypedExprKind::IntLit { .. }, Ty::Prim(PrimTy::Int)) => true,
         (TypedExprKind::IntLit { .. }, Ty::Prim(PrimTy::Float)) => true,
