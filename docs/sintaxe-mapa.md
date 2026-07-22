@@ -114,6 +114,7 @@ guards e patterns). O `::` unificado com distinção por lookahead de 1 token
 | Parâmetro de tipo (genérico) | `Result::(T, E)`, `Iterable::A` | O tipo genérico `Result` | Seus parâmetros `(T, E)` |
 | Qualificação de variante | `Transacao::Aprovada`, `Result::Ok` | O enum `Transacao` / `Result` | A variante `Aprovada` / `Ok` |
 | Ascription de expressão | `5::PositiveInt`, `x::Int` | A expressão `5` / `x` | O tipo afirmado `PositiveInt` / `Int` |
+| Downcast estrutural | `a::Int` onde `a :: PositiveInt` | O valor `a` (refined/alias) | Seu tipo base `Int` |
 
 - **Relações**:
   - `Result::(T, E)` vs `Result::Ok`: Não são operações distintas — é sempre `Nome :: Algo`. Parâmetros de tipo naturalmente formam tupla `(T, E)`; variantes naturalmente são identificadores `Ok`. O `::` é o mesmo.
@@ -123,6 +124,7 @@ guards e patterns). O `::` unificado com distinção por lookahead de 1 token
   - `::` em assinatura é declaração; `->` é descrição de tipo de função como valor.
   - **Ascription de expressão** é pós-fixada: `expr::Type` etiqueta a expressão à esquerda com o tipo à direita. Para tipos refined com literal (`5::PositiveInt`), o compilador valida predicados em compile-time e entrega o tipo refined direto (sem `Result`). Para tipos base (`x::Int`), verifica e rebaixa ao tipo anotado. É o mesmo `::` dos outros contextos, agora em posição de expressão.
   - **Açúcar `[T]`**: `quicksort :: [Int] => [Int]` é equivalente a `quicksort :: List::Int => List::Int`. O parser desugara `[T]` para `TypeExpr::ParamApp { name: "List", params: [T] }` — o mesmo nó AST que `List::T` produz. Funciona em qualquer posição de tipo: parâmetros, retorno, anotações. Aninhamento: `[[Int]]` → `List::(List::Int)`. Múltiplos: `[A] [B]` → duas `List::` independentes. O desugaring é puramente sintático — typeck, codegen e runtime veem apenas `List::T`.
+  - **Downcast estrutural** (post-refines): `a::Int` onde `a` é refined ou alias sobre `Int` rebaixa ao tipo base. O typeck verifica que `target_ty` é o base (via `alias_of`). No-op em runtime (mesmos bits) — o codegen emite `bitcast` apenas quando o Cranelift type difere (ex: `I64→F64`). Não valida predicado; é a válvula explícita para combinar refineds distintos ou interagir com a base, complementar ao `refines` (que é automático via fallback). Ver manual §4.2.7 modo 4 e §4.4.
 
 ---
 
@@ -574,6 +576,78 @@ Setta `LOG_CONFIG` TLS no fiber atual. Filhos spawnados herdam via snapshot no `
 
 ---
 
+## Keyword `refines` (Delegação de Interface para Refined)
+
+```kata
+data (Int, > _ 0) as PositiveInt
+
+PositiveInt refines NUM
+# bloco opcional com overrides (caso misto)
+```
+
+- **Posição**: top-level, após declaração do tipo refined.
+- **Semântica**: Registra que o tipo refined delega uma interface ao seu tipo
+  base. **Não** cria overloads no `DispatchTable`, **não** registra no
+  `InterfaceRegistry`. O mecanismo é um fallback no dispatch: quando `+ a b`
+  falha porque os args são `PositiveInt`, o typeck substitui pelo base `Int`,
+  retenta, e — se o retorno implementa a interface — passa pelo construtor
+  falível do refined → `Result::(Refined, Err)`.
+- **Sem bloco**: delega todos os métodos da interface ao base.
+- **Com bloco**: métodos com corpo lambda = override (cria overload real,
+  encontrado antes do fallback); métodos não-listados = delegação automática.
+- **Restrições**:
+  - Só se aplica a tipos refined (`alias_of` + `predicates`). Non-refined →
+    erro compile-time.
+  - A interface deve já estar implementada pelo base. Se não → erro.
+  - Sem `type_params`/`iface_params` em 1.0.
+- **Construtor condicional**: o construtor falível é chamado só quando o tipo
+  de retorno implementa a interface. `+` retorna Int (implementa NUM) →
+  `Result::(PositiveInt, Err)`. `<` retorna Boolean (não implementa NUM) →
+  Boolean direto.
+- **Interoperabilidade opt-in**: sem `refines`, `+ a 0` onde `a ::
+  PositiveInt` falha. Com `refines NUM`, o fallback substitui e funciona.
+- **Incompatibilidade nominal**: o fallback só dispara quando todos os args
+  refined são o **mesmo** tipo. `+ a b` onde `a :: PositiveInt` e `b ::
+  NonZeroInt` falha mesmo com ambos `refines NUM`.
+- **Relações**:
+  - Complementar ao downcast via `::` (§`::` modo downcast): `refines` é
+    automático no dispatch; downcast é explícito.
+  - `refines` vs `implements`: `implements` registra no InterfaceRegistry e
+    cria overloads; `refines` não registra e usa fallback. Um tipo pode ter
+    ambos.
+  - Interage com `T?` (abaixo): o tipo de retorno do fallback é
+    `Result::(Refined, Err)` ≡ `Refined?`.
+  - SHOW é automático para todos os tipos, inclusive refined — não precisa de
+    `refines SHOW`. Ver manual §4.2.9.
+
+---
+
+## Açúcar `T?` (Tipo Falível)
+
+```kata
+soma_positiva :: PositiveInt PositiveInt => PositiveInt?
+# equivalente a: PositiveInt PositiveInt => Result::(PositiveInt, Err)
+```
+
+- **Posição**: sufixo de tipo, em qualquer posição onde um tipo aparece
+  (assinaturas, retorno, campos, ascriptions).
+- **Semântica**: `T?` desaçuca para `Result::(T, Err)` onde `Err = Text`.
+  Açúcar puramente sintático — o typeck resolve antes de qualquer verificação.
+- **Não é subtyping**: `Int` não é subtipo de `Int?`. São tipos distintos.
+  Uma função que retorna `Int` não satisfaz `=> Int?` sem wrap explícito.
+- **Não muda o operador `?` de runtime**: `?` em runtime continua sendo
+  desempacotamento de `Result`. `T?` é açúcar de tipo; `?` em expressão é
+  operador de runtime. Coisas diferentes, mesmo símbolo.
+- **Relações**:
+  - Com `refines`: o retorno do fallback no dispatch é `Result::(Refined, Err)`
+    ≡ `Refined?`. O usuário pode escrever `PositiveInt?` em vez de
+    `Result::(PositiveInt, Err)` no tipo de retorno de funções que recebem
+    refined.
+  - Com `?` operador: `?` desempacota `Result` em Actions. `T?` produz
+    `Result`. São complementares — um é tipo, outro é operador.
+
+---
+
 ## Palavras-Chave de Estrutura
 
 | Palavra | Uso |
@@ -585,6 +659,7 @@ Setta `LOG_CONFIG` TLS no fiber atual. Filhos spawnados herdam via snapshot no `
 | `alias` | Cria Newtype |
 | `interface` | Declara contrato de tipo |
 | `implements` | Implementa interface (ex: `T implements IFACE`) |
+| `refines` | Delega interface do tipo base ao refined (ex: `PositiveInt refines NUM`). Não registra no InterfaceRegistry; usa fallback no dispatch |
 | `import` | Importa módulo |
 | `export` | Exporta itens |
 | `as` | Alias de import (`import x as y`) ou de tipo (`data (...) as Nome`, `alias T as Nome`) |

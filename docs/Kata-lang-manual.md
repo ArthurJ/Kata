@@ -1078,6 +1078,32 @@ let z := match (PositiveInt 42)    # em funções puras, match explícito
 **Ascription em expressão não-literal (`f(x)::PositiveInt`):** type
 error. A ascription exige prova compile-time, não fé. Use o construtor.
 
+**4. Downcast estrutural** (post-refines) — rebaixa um tipo refined ou alias
+ao seu tipo base, sem custo em runtime. Os bits são idênticos — refined e
+alias são apenas type tags sobre a base:
+
+```kata
+data (Int, > _ 0) as PositiveInt
+alias Float as Altura
+
+let a := 5::PositiveInt
+let n := a::Int              # PositiveInt → Int (downcast, no-op em runtime)
+
+let h := 1.8::Altura
+let f := h::Float            # Altura → Float (downcast, no-op em runtime)
+```
+
+O typeck verifica que `target_ty` é o tipo base (seguido via `alias_of` no
+`StructRegistry`). O codegen emite `bitcast` quando o Cranelift type difere
+(ex: `I64→F64` para refined sobre `Float`); para `I64→I64` (refined sobre
+`Int`), é literalmente um no-op. Não há validação de predicado — o downcast
+preserva o valor bruto, descartando a etiqueta nominal.
+
+O downcast é a válvula de escape para combinar refineds distintos ou para
+passar um refined onde a base é esperada, sem recorrer ao construtor falível.
+É complementar ao `refines` (§4.4): `refines` habilita interoperabilidade
+automática via fallback no dispatch; downcast é a forma explícita.
+
 #### 4.2.9. `repr` como implementação automática de SHOW
 
 Separado dos smart constructors, o typeck sintetiza automaticamente a função
@@ -1104,16 +1130,42 @@ A síntese de `repr` é por tipo de campo:
 smart constructor sem `repr` (se não implementa `SHOW`), e pode ter `repr` sem
 smart constructor (se o usuário define `show` manualmente).
 
+**SHOW universal (post-refines):** A síntese de `show` é estendida para cobrir
+**todos** os tipos, sem exceção:
+
+- Structs com campos → `repr` sintetizado (caso existente).
+- Enums → sintetizado.
+- Refined (struct sem campos com `alias_of` e `predicates`) → sintetiza
+  `show :: Refined => Text` chamando o show do tipo base (FFI direto, ex:
+  `kata_rt_int_show` para base Int).
+- Struct sem campos não-refined → sintetiza `show :: Struct => Text` com
+  body `TextLit("StructName")` (representação trivial).
+- Primitives (Int, Float, Text, Boolean, Rational) → `implements SHOW`
+  manual na stdlib.
+- Tipos com `implements SHOW` manual → já cobertos (skip na síntese).
+
+`echo!(x)` funciona para qualquer `x` de qualquer tipo, inclusive refined,
+sem `refines SHOW` e sem declaração do usuário. O `show_synthesis.rs`
+verifica `has_manual_show` antes de sintetizar — implementação manual tem
+prioridade.
+
 #### 4.2.10. O Princípio Nominal-Estrutural ("Atrito Sadio")
 
 * **Nas Fronteiras das Funções (Rigidez Nominal):** Se uma função espera
   `IdadeValida`, rejeita `Int` puro ou outro tipo refinado com os mesmos
-  predicados.
-* **Nas Operações Base (Flexibilidade Estrutural):** Um tipo refinado nunca
-  perde a interoperabilidade da sua base matemática. `+` com `IdadeValida`
-  desempacota e computa normalmente.
+  predicados. Dois refineds distintos sobre a mesma base são nominalmente
+  incompatíveis entre si.
+* **Nas Operações Base (Flexibilidade Estrutural via `refines`):** Um tipo
+  refinado pode reutilizar as implementações de interface do seu tipo base
+  mediante declaração explícita de `refines` (§4.4). Sem `refines`, o tipo
+  refinado **não** interoperar com a base — `+ a 0` onde `a :: PositiveInt`
+  falha. Com `PositiveInt refines NUM`, o fallback no dispatch substitui o
+  refined pelo base e retenta. A interoperabilidade é opt-in, não automática.
 * **Ascription é o caminho sem atrito:** prova compile-time para literais, sem
   `Result` e sem desempacotamento.
+* **Downcast é a válvula explícita:** `a::Int` onde `a :: PositiveInt`
+  rebaixa ao base sem custo em runtime (§4.2.7, modo 4). É a forma explícita
+  de extrair a base, complementar ao `refines`.
 
 ### 4.3. Assinaturas e Tipos de Primeira Classe (`=>` vs `->`)
 
@@ -1125,6 +1177,182 @@ smart constructor (se o usuário define `show` manualmente).
 * **`->` (Tipo de Função):** Usado quando a assinatura de um lambda é tratada
   como tipo de dado transitável. Exige parênteses para desambiguar.
   * `map :: (A -> B) Iterable::A => Iterable::B`
+
+### 4.4. `refines` — Delegação de Interface para Tipos Refinados
+
+Tipos refinados (`data (Int, > _ 0) as PositiveInt`) podem reutilizar as
+implementações de interface do seu tipo base mediante declaração explícita
+de `refines`. O mecanismo é um fallback no dispatch — não cria overloads
+sintetizados, não registra o tipo no `InterfaceRegistry`.
+
+#### 4.4.1. Declaração
+
+```kata
+TipoRefinado refines INTERFACE
+```
+
+- `TipoRefinado` é um tipo refined declarado com `data (Base, predicados) as Nome`.
+- `INTERFACE` é uma interface já declarada e já implementada pelo tipo base.
+- Bloco indentado opcional com métodos parciais (caso misto, §4.4.4).
+
+Sem bloco: delega todos os métodos da interface ao tipo base.
+
+```kata
+data (Int, > _ 0) as PositiveInt
+
+PositiveInt refines NUM
+```
+
+Isso registra: "PositiveInt delega NUM, base é Int." Não registra PositiveInt
+no `InterfaceRegistry` e não cria overloads no `DispatchTable`.
+
+#### 4.4.2. Restrições
+
+- `refines` só se aplica a tipos refined (`StructInfo` com `alias_of` e
+  `predicates`). Aplicar a struct não-refined ou alias puro → erro compile-time.
+- A interface deve já estar implementada pelo tipo base no `InterfaceRegistry`.
+  Se o base não implementa → erro compile-time.
+- O tipo base é resolvido seguindo `alias_of` no `StructRegistry`.
+- `refines` não aceita `type_params` ou `iface_params` — refined types não são
+  genéricos em 1.0.
+- Um tipo pode refinar múltiplas interfaces: `PositiveInt refines NUM` e
+  `PositiveInt refines SHOW` (embora SHOW seja automático, §4.2.9).
+
+#### 4.4.3. Fallback no Dispatch
+
+`refines` não cria overloads no `DispatchTable`. O mecanismo é um fallback
+em `apply.rs`, executado quando o dispatch normal falha:
+
+1. Verificar se **todos** os args refined são o **mesmo** tipo refined.
+2. Consultar `refines_registry` para o tipo.
+3. Verificar se `func_name` é método de alguma interface que o refined delega
+   (percorrendo supertraits recursivamente).
+4. Substituir todos os args refined pelo tipo base.
+5. Retentar dispatch com os tipos base.
+6. Se encontrado, examinar o tipo de retorno:
+   - Se o retorno **implementa a interface** → passar pelo construtor falível
+     do refined → `Result::(Refined, Err)`.
+   - Se o retorno **não implementa a interface** → retornar direto, sem
+     construtor.
+
+O construtor é chamado **só** quando o tipo de retorno implementa a interface
+sendo refinada. `PositiveInt refines NUM` (base Int, interface NUM):
+
+| Método | Fallback | Retorno | Implementa NUM? | Resultado |
+|---|---|---|---|---|
+| `+` | `+ :: Int Int => Int` | Int | Sim | `PositiveInt(resultado)` → `Result::(PositiveInt, Err)` |
+| `-` | `- :: Int Int => Int` | Int | Sim | `PositiveInt(resultado)` → `Result::(PositiveInt, Err)` |
+| `<` | `< :: Int Int => Boolean` | Boolean | Não | `Boolean` direto |
+| `=` | `= :: Int Int => Boolean` | Boolean | Não | `Boolean` direto |
+
+O construtor falível avalia os predicados (`> _ 0`). Se o resultado viola o
+predicado (ex: `- 1 5` = -4 para PositiveInt), o construtor retorna `Err`.
+O usuário desempacota com `?` (Action) ou `match` explícito (função pura).
+
+#### 4.4.4. Caso Misto (Partial Delegation)
+
+```kata
+PositiveInt refines NUM
+    - :: PositiveInt PositiveInt => PositiveInt
+        lambda a b:
+            match (PositiveInt (- (a::Int) (b::Int)))
+                Result::Ok(v): v
+                otherwise: 0::PositiveInt
+    # +, *, <, >, = delegados automaticamente
+```
+
+Método com corpo lambda = override explícito do usuário. Cria overload real
+no `DispatchTable` (encontrado antes do fallback). Métodos não-listados usam
+o fallback automático.
+
+**Restrições do corpo lambda:** lambda é função pura — `?` (operador de
+runtime, exclusivo de Actions) e `panic!` (Action builtin) não existem.
+Para desempacotar `Result` em lambda, usar `match` explícito. O tipo de
+retorno pode ser `PositiveInt?` (§4.5) se o override propaga falha, ou
+`PositiveInt` nu se o override resolve o erro internamente (ex: clamp via
+ascription literal `0::PositiveInt`).
+
+O downcast `(a::Int)` (§4.2.7, modo 4) é usado no corpo para chamar a
+implementação do base — `(- (a::Int) (b::Int))` despacha para
+`- :: Int Int => Int`.
+
+#### 4.4.5. Interoperabilidade com Tipos da Interface
+
+Sem `refines`, PositiveInt **não interoperar** com Int. `+ a 0` onde
+`a :: PositiveInt` e `0 :: Int` falha — não há overload e não há fallback.
+
+Com `PositiveInt refines NUM`, o fallback passa a existir:
+
+- `+ a b` onde `a :: PositiveInt, b :: Int`: fallback substitui PositiveInt
+  por Int → `+ :: Int Int => Int` → encontrado. Retorno Int implementa NUM →
+  construtor → `Result::(PositiveInt, Err)`.
+- `+ a b` onde `a :: PositiveInt, b :: Float`: fallback substitui →
+  `+ :: Int Float => ...` → não existe → falha.
+
+A interoperabilidade é **opt-in** — o usuário declara intenção explicitamente.
+
+#### 4.4.6. Incompatibilidade Nominal Entre Refineds Distintos
+
+Dois tipos refined sobre a mesma base, mesmo com os mesmos predicados, são
+**nominalmente incompatíveis**. O fallback só dispara quando **todos** os args
+refined são o **mesmo** tipo.
+
+```kata
+data (Int, > _ 0) as PositiveInt
+data (Int, > _ 0) as NonZeroInt
+
+PositiveInt refines NUM
+NonZeroInt refines NUM
+```
+
+`+ a b` onde `a :: PositiveInt` e `b :: NonZeroInt` → **falha**. Os refineds
+são diferentes. O fallback não dispara. Para combinar refineds distintos, o
+usuário faz downcast explícito: `+ (a::Int) b` ou `+ a (b::Int)`.
+
+#### 4.4.7. Relação com `implements`
+
+| | `implements` | `refines` |
+|---|---|---|
+| Quem usa | Qualquer tipo | Apenas tipos refined |
+| Corpo | Usuário escreve | Fallback no typeck (ou override do usuário) |
+| InterfaceRegistry | Registra | Não registra |
+| Polimorfismo via interface | Sim | Não |
+| DispatchTable | Cria overloads | Não cria (exceto override) |
+| Retorno de métodos que devolvem tipo que implementa a interface | O que o usuário escrever | `Result::(Refined, Err)` via construtor |
+| Retorno de métodos que devolvem tipo que não implementa a interface | O que o usuário escrever | Direto do base |
+
+Um tipo pode ter ambos: `implements` para interfaces que define explicitamente,
+`refines` para interfaces que delega ao base. PositiveInt não é formalmente
+NUM no `InterfaceRegistry` — `soma :: T implements NUM => T T => T` não aceita
+PositiveInt. O polimorfismo via interface fica para pós-1.0.
+
+### 4.5. `T?` — Açúcar Sintático para `Result::(T, Err)`
+
+`T?` é açúcar puro de sintaxe de tipo. Lê-se "T ou falha". Desaçuca para
+`Result::(T, Err)` em todo lugar onde aparece um tipo: assinaturas de função,
+tipos de retorno, tipos de campos, ascriptions.
+
+`PositiveInt?` ≡ `Result::(PositiveInt, Err)`. `Int?` ≡ `Result::(Int, Err)`.
+`Err` é `Text` (mensagens de erro), consistente com o construtor falível de
+`constructors_refined.rs` que já usa `Result::(T, Text)`.
+
+```kata
+soma_positiva :: PositiveInt PositiveInt => PositiveInt?
+lambda a b: PositiveInt (+ a b)
+```
+
+Isso é apenas açúcar — o typeck resolve `PositiveInt?` para
+`Result::(PositiveInt, Err)` antes de qualquer verificação.
+
+#### 4.5.1. O que `T?` não faz
+
+- **Não cria subtyping.** `Int` não é subtipo de `Int?`. São tipos distintos.
+- **Não cria Ok implícito.** Uma função que retorna `Int` não satisfaz
+  `=> Int?` sem wrap explícito.
+- **Não muda o operador `?` de runtime.** `?` em runtime continua sendo
+  desempacotamento de `Result`. Não é no-op em não-Result.
+- **Não habilita polimorfismo via interface.** PositiveInt continua não
+  sendo NUM no `InterfaceRegistry`. `T?` é açúcar de escrita, não de semântica.
 
 ## 5. Os Domínios de Execução (Functions vs. Actions)
 
