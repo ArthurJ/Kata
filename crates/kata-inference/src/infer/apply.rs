@@ -202,7 +202,7 @@ pub(crate) fn infer_apply(
         // se algum arg é tipo refined com delegação refines, substituir pelo
         // tipo base e retentar o dispatch. O refined é alias do base no layout
         // — o codegen não precisa de conversão.
-        if let Some((fallback_arg_types, fallback_overload)) =
+        if let Some((_fallback_arg_types, fallback_overload)) =
             try_refines_fallback(&func_name, &arg_types, ctx)
         {
             let callee_ty = Ty::Function(
@@ -476,7 +476,39 @@ pub(crate) fn infer_apply(
                 //   por tipos inconsistentes → TypeMismatch.
                 // - >1 overloads totais: nenhuma casou (concretas nem genéricas)
                 //   → NoOverload — não há como o usuário pretendesse uma específica.
+                //
+                // ANTES de decidir o erro, tentar fallback refines: se algum arg
+                // é refined com delegação, substituir pelo tipo base e retentar.
                 if arity_matched && unify_failed {
+                    // Tentar fallback refines antes de retornar erro.
+                    if let Some((_fallback_arg_types, fallback_overload)) =
+                        try_refines_fallback(&func_name, &arg_types, ctx)
+                    {
+                        let callee_ty = Ty::Function(
+                            fallback_overload.params.clone(),
+                            Box::new(fallback_overload.ret.clone()),
+                        );
+                        let callee_typed = TypedExpr {
+                            span: callee.span,
+                            ty: callee_ty,
+                            tail_pos: false,
+                            escape: EscapeTarget::Local,
+                            effect: Effect::Puro,
+                            kind: TypedExprKind::Ident {
+                                name: func_name.clone(),
+                            },
+                        };
+                        return Ok((
+                            fallback_overload.ret,
+                            TypedExprKind::Closure {
+                                callee: Box::new(Spanned::new(callee_typed, callee.span)),
+                                args: typed_args,
+                                ffi_symbol: fallback_overload.ffi_symbol,
+                            },
+                            Effect::Puro,
+                        ));
+                    }
+
                     if total_candidates > 1 {
                         return Err(MiddleError::NoOverload {
                             name: func_name.clone(),
@@ -500,6 +532,37 @@ pub(crate) fn infer_apply(
                         found,
                         span: (*span).into(),
                     });
+                }
+
+                // Caminho genérico falhou. Tentar fallback refines antes de
+                // retornar o erro: se algum arg é refined com delegação,
+                // substituir pelo tipo base e retentar o dispatch.
+                if let Some((_fallback_arg_types, fallback_overload)) =
+                    try_refines_fallback(&func_name, &arg_types, ctx)
+                {
+                    let callee_ty = Ty::Function(
+                        fallback_overload.params.clone(),
+                        Box::new(fallback_overload.ret.clone()),
+                    );
+                    let callee_typed = TypedExpr {
+                        span: callee.span,
+                        ty: callee_ty,
+                        tail_pos: false,
+                        escape: EscapeTarget::Local,
+                        effect: Effect::Puro,
+                        kind: TypedExprKind::Ident {
+                            name: func_name.clone(),
+                        },
+                    };
+                    return Ok((
+                        fallback_overload.ret,
+                        TypedExprKind::Closure {
+                            callee: Box::new(Spanned::new(callee_typed, callee.span)),
+                            args: typed_args,
+                            ffi_symbol: fallback_overload.ffi_symbol,
+                        },
+                        Effect::Puro,
+                    ));
                 }
 
                 // Caminho genérico falhou — retorna o erro original do dispatch.
@@ -613,9 +676,17 @@ fn try_refines_fallback(
             if entries.is_empty() {
                 continue;
             }
-            // Verificar se func_name é método de alguma interface delegada.
-            // Por ora, substitui pelo base_ty se há qualquer refines.
-            // TODO: iterar interfaces e verificar se func_name é signature.
+            // Verificar se func_name é método de alguma interface delegada
+            // (incluindo supertraits). Só substitui se pelo menos uma interface
+            // delegada tiver func_name como signature direta ou herdada — evita
+            // fallback cego em funções fora da interface.
+            let delegates_func = entries.iter().any(|entry| {
+                ctx.interface_registry
+                    .interface_has_method(&entry.interface_name, func_name)
+            });
+            if !delegates_func {
+                continue;
+            }
             let base_ty = &entries[0].base_ty;
             *arg_ty = base_ty.clone();
             any_substituted = true;

@@ -458,14 +458,15 @@ pub(crate) fn run_pass0(
                 let base_ty = resolve_base_ty(base_ty_name, type_env, interface_registry);
 
                 // Validar que o base implementa a interface.
+                // Aviso apenas — a validação final acontece em infer_module,
+                // depois do merge com o prelude (que contém `Int implements NUM`).
                 if !base_ty_name.is_empty() {
                     if !interface_registry.type_implements(base_ty_name, interface_name) {
-                        errors.push(ResolveError::InvalidRefines {
-                            type_name: type_name.clone(),
-                            reason: format!(
-                                "tipo base {base_ty_name} não implementa a interface {interface_name}"
-                            ),
-                        });
+                        eprintln!(
+                            "[resolution] warning: tipo base {base_ty_name} pode não implementar \
+                             a interface {interface_name} (PositiveInt refines {interface_name}) — \
+                             validação final em infer_module"
+                        );
                     }
                 }
 

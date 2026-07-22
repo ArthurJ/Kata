@@ -194,6 +194,23 @@ impl InterfaceRegistry {
         false
     }
 
+    /// Verifica se uma interface (ou suas supertraits) contém um método
+    /// com o nome dado. Percorre a hierarquia de supertraits recursivamente.
+    ///
+    /// `interface_has_method("NUM", "<")` → true, pois NUM : ORD e ORD tem `<`.
+    pub fn interface_has_method(&self, iface_name: &str, method_name: &str) -> bool {
+        let Some(info) = self.interfaces.get(iface_name) else {
+            return false;
+        };
+        if info.signatures.iter().any(|sig| sig.name == method_name) {
+            return true;
+        }
+        // Recursão nas supertraits.
+        info.supertraits
+            .iter()
+            .any(|st| self.interface_has_method(st, method_name))
+    }
+
     /// Lista todas as interfaces registradas (para iteração).
     /// Usado pelo dispatch de `Ty::Var` em funções genéricas sintetizadas.
     pub fn all_interfaces(&self) -> impl Iterator<Item = &InterfaceInfo> {

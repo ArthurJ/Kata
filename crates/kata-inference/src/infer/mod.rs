@@ -46,7 +46,7 @@ mod variant_qual;
 use action_infer::infer_action;
 use kata_ast::{GuardClause, Item, Module, Spanned, WithBinding};
 use kata_core::dispatch::OverloadInfo;
-use kata_core::ty::{Ty, TypeEnv};
+use kata_core::ty::{PrimTy, Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 use kata_resolution::ResolvedModule;
 use kata_resolution::collect_type_params;
@@ -76,6 +76,24 @@ pub fn infer_module(
     // impls de SHOW para structs e enums aqui, e o typeck (InferCtx)
     // precisa enxergá-los para despachar `show` corretamente.
     let mut interface_registry = resolved.interface_registry.clone();
+
+    // 0. Validação post-merge de `refines`: verifica que o tipo base implementa
+    //     a interface delegada. Esta validação só pode ser feita aqui porque o
+    //     prelude (com `Int implements NUM`) é mergeado antes de infer_module.
+    for refines_entry in resolved.refines_registry.all_entries() {
+        let base_ty_name = ty_name(&refines_entry.base_ty);
+        if !base_ty_name.is_empty() {
+            if !interface_registry.type_implements(base_ty_name, &refines_entry.interface_name) {
+                return Err(MiddleError::NoOverload {
+                    name: format!(
+                        "refines: tipo base {base_ty_name} não implementa a interface {}",
+                        refines_entry.interface_name
+                    ),
+                    span: kata_ast::Span::synthetic().into(),
+                });
+            }
+        }
+    }
 
     // 1a. Registra Actions definidas pelo usuário no DispatchTable (is_action = true).
     //     Actions não têm ffi_symbol (são compiladas como funções Kata).
@@ -431,4 +449,19 @@ fn infer_named_function(
         clauses: typed_clauses,
         log,
     })
+}
+
+/// Extrai o nome de um `Ty` para validação de `refines`.
+/// `Ty::Prim(PrimTy::Int)` → `"Int"`, `Ty::Struct(name)` → `name`,
+/// `Ty::Sum(name)` → `name`. Outros → `""` (não valida).
+fn ty_name(ty: &Ty) -> &str {
+    match ty {
+        Ty::Prim(PrimTy::Int) => "Int",
+        Ty::Prim(PrimTy::Float) => "Float",
+        Ty::Prim(PrimTy::Rational) => "Rational",
+        Ty::Prim(PrimTy::Text) => "Text",
+        Ty::Struct(name) => name,
+        Ty::Sum(name) => name,
+        _ => "",
+    }
 }

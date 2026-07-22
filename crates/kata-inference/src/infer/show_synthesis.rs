@@ -62,19 +62,17 @@ pub(crate) fn synthesize_show_functions(
             .get(struct_name)
             .expect("struct_name veio de struct_registry.names()");
 
-        // Aliases não ganham show próprio — usam o show do target.
-        if struct_info.alias_of.is_some() {
-            continue;
-        }
-
-        // Structs sem campos não ganham show (não há o que mostrar).
-        if struct_info.fields.is_empty() {
+        // Pure aliases (alias_of sem predicates) não ganham show próprio —
+        // usam o show do target. Refined types (alias_of + predicates) ganham
+        // show que delega ao tipo base (§3.6 do PRD-refines).
+        let is_refined = struct_info.alias_of.is_some() && struct_info.predicates.is_some();
+        if struct_info.alias_of.is_some() && !is_refined {
             continue;
         }
 
         // Se o tipo já tem implementação manual do método `show` (via qualquer
-        // interface, respeitando orphan rule — o impl está no mesmo módulo que
-        // o tipo), não sintetiza. A implementação manual tem prioridade.
+        // interface, respeitando orphan rule — o impl está no mesmo módulo que o
+        // tipo), não sintetiza. A implementação manual tem prioridade.
         if has_manual_show(interface_registry, struct_name) {
             continue;
         }
@@ -122,8 +120,25 @@ pub(crate) fn synthesize_show_functions(
             Span::synthetic(),
         );
 
-        // Constrói o body: string_concat aninhado
-        let body = build_struct_show_body(struct_name, &struct_info.fields, struct_registry);
+        // Constrói o body:
+        // - Refined sem campos → show do tipo base (delega ao FFI do base)
+        // - Struct sem campos não-refined → TextLit("StructName")
+        // - Struct com campos → string_concat aninhado (caso existente)
+        let body = if is_refined && struct_info.fields.is_empty() {
+            build_refined_show_body(struct_name, struct_info, struct_registry)
+        } else if !is_refined && struct_info.fields.is_empty() {
+            // Struct sem campos não-refined: TextLit("StructName")
+            TypedExpr {
+                span: Span::synthetic(),
+                ty: Ty::text(),
+                tail_pos: true,
+                escape: EscapeTarget::Ancestor(0),
+                effect: Effect::Puro,
+                kind: text_lit(struct_name.to_string()).node.kind,
+            }
+        } else {
+            build_struct_show_body(struct_name, &struct_info.fields, struct_registry)
+        };
 
         show_functions.push(TypedFunction {
             name: mangled,
@@ -262,6 +277,60 @@ fn build_struct_show_body(
 
     let result = parts.into_iter().reduce(string_concat);
     let body = result.expect("show body tem pelo menos 2 parts");
+
+    TypedExpr {
+        span: Span::synthetic(),
+        ty: Ty::text(),
+        tail_pos: true,
+        escape: EscapeTarget::Ancestor(0),
+        effect: Effect::Puro,
+        kind: body.node.kind,
+    }
+}
+
+/// Constrói o body de `show` para um tipo refined sem campos (ex: `PositiveInt`).
+///
+/// O refined é um "wrapper" sobre um tipo base (ex: `Int`). O layout em
+/// runtime é idêntico ao base — o refined não tem campos próprios. O show
+/// delega ao show do tipo base: se o base é um primitivo, chama a FFI direto
+/// (ex: `kata_rt_bi_show`); se é um struct, chama `__kata_show__{Base}`.
+fn build_refined_show_body(
+    refined_name: &str,
+    struct_info: &kata_core::struct_registry::StructInfo,
+    _struct_registry: &StructRegistry,
+) -> TypedExpr {
+    let base_name = struct_info
+        .alias_of
+        .as_ref()
+        .expect("refined sem campos deve ter alias_of");
+
+    // `__self` é o valor do refined. Em runtime, é idêntico ao valor do base
+    // (mesmo layout — o refined não adiciona campos). O show do base é chamado
+    // diretamente sobre `__self`.
+    let self_expr = TypedExpr {
+        span: Span::synthetic(),
+        ty: Ty::Struct(refined_name.to_string()),
+        tail_pos: false,
+        escape: EscapeTarget::Local,
+        effect: Effect::Puro,
+        kind: TypedExprKind::Ident {
+            name: "__self".to_string(),
+        },
+    };
+    let self_spanned = Spanned::new(self_expr, Span::synthetic());
+
+    // Despacha para o show do tipo base. Para primitivos, o ffi_call1 usa
+    // a FFI direto. Para structs, show_call usa o mangled `__kata_show__{Base}`.
+    let body = match base_name.as_str() {
+        "Int" => ffi_call1("kata_rt_bi_show", self_spanned, Ty::text()),
+        "Float" => ffi_call1("kata_rt_float_to_text", self_spanned, Ty::text()),
+        "Rational" => ffi_call1("kata_rt_rat_show", self_spanned, Ty::text()),
+        "Text" => self_spanned, // identity
+        _ => {
+            // Base é struct ou outro tipo — chama `__kata_show__{Base}`.
+            show_call(self_spanned, base_name.clone(), &Ty::Struct(base_name.clone()))
+        }
+    };
 
     TypedExpr {
         span: Span::synthetic(),

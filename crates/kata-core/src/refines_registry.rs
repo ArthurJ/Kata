@@ -64,6 +64,12 @@ impl RefinesRegistry {
             .unwrap_or_default()
     }
 
+    /// Itera sobre todas as entradas de todos os tipos. Usado para validação
+    /// post-merge em `infer_module`.
+    pub fn all_entries(&self) -> impl Iterator<Item = &RefinesEntry> {
+        self.entries.values().flat_map(|v| v.iter())
+    }
+
     /// Mescla outro RefinesRegistry neste. Entradas do outro sobrescrevem
     /// para o mesmo tipo. Usado para combinar prelude + user module.
     pub fn merge(&mut self, other: RefinesRegistry) {
