@@ -8,6 +8,15 @@ use crate::Parser;
 impl Parser {
     pub(crate) fn parse_type_expr(&mut self) -> Result<Spanned<TypeExpr>, FrontendError> {
         let ty = self.parse_type_expr_inner()?;
+        // `T?` — açúcar sintático para `Result::(T, Err)`.
+        // Postfix: liga-se ao tipo imediatamente anterior. Pode encadear:
+        // `T??` = `Result::(Result::(T, Err), Err)`.
+        let mut ty = ty;
+        while matches!(self.peek(), Token::Question) {
+            let q_span = self.advance();
+            let span = ty.span.cover(q_span);
+            ty = Spanned::new(TypeExpr::Question(Box::new(ty)), span);
+        }
         // `Type...` → Tuple<Type> (varargs desugar em assinaturas).
         if matches!(self.peek(), Token::Ellipsis) {
             let ellipsis_span = self.advance();

@@ -129,6 +129,14 @@ pub(crate) fn resolve_type_expr(
         // Self é resolvido na resolution de implements.
         // Por ora, mapeia para Ty::Var("Self") como placeholder.
         TypeExpr::SelfRef => Ty::Var("Self".into()),
+
+        // `T?` — açúcar sintático para `Result::(T, Err)`.
+        // Err é Text (mensagens de erro), consistente com o construtor
+        // falível de constructors_refined.rs (D13 do PRD-refines).
+        TypeExpr::Question(inner) => {
+            let inner_ty = resolve_type_expr(&inner.node, env, iface_reg);
+            Ty::Generic("Result".into(), vec![inner_ty, Ty::text()])
+        }
     }
 }
 

@@ -352,6 +352,14 @@ pub enum TypeExpr {
     /// Válido apenas dentro de blocos `interface` e `implements`.
     /// O resolution substitui pelo tipo concreto no impl.
     SelfRef,
+
+    /// `T?` — açúcar sintático para `Result::(T, Err)`.
+    /// O `?` em posição de tipo é parsed como postfix após qualquer
+    /// TypeExpr base. O resolution desaçuca para
+    /// `Ty::Generic("Result", [resolve(T), Ty::Text])`.
+    /// Distinto do `?` em posição de expressão (operador fail-fast,
+    /// exclusivo de Actions — `Expr::Question`).
+    Question(Box<Spanned<TypeExpr>>),
 }
 
 /// Statement do body de uma Action.

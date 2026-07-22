@@ -112,6 +112,12 @@ pub(crate) fn resolve_type_expr(expr: &TypeExpr, env: &TypeEnv) -> Ty {
         TypeExpr::ParamApp { name, .. } => Ty::Sum(name.clone()),
         // Self é resolvido. Placeholder por ora.
         TypeExpr::SelfRef => Ty::Var("Self".into()),
+
+        // `T?` — açúcar para `Result::(T, Err)`. Err = Text (D13).
+        TypeExpr::Question(inner) => {
+            let inner_ty = resolve_type_expr(&inner.node, env);
+            Ty::Generic("Result".into(), vec![inner_ty, Ty::text()])
+        }
     }
 }
 
