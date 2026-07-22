@@ -137,7 +137,14 @@ pub(crate) fn instantiate_generic_closure(
         name: instance_name,
     };
     callee.node.ty = apply_subs(&callee.node.ty, &subs);
-    *ffi_symbol = None;
+    // If the overload is FFI-only (no Kata body), keep the ffi_symbol
+    // so the codegen can emit a direct FFI call. If it has a body,
+    // zero it — the codegen resolves via kata_refs by instance name.
+    if orig_func.is_none() {
+        *ffi_symbol = oi.ffi_symbol.clone();
+    } else {
+        *ffi_symbol = None;
+    }
     true
 }
 

@@ -76,6 +76,13 @@ pub(crate) fn infer_expr(
 pub(crate) fn fits_return(actual: &Ty, declared: &Ty) -> bool {
     match (actual, declared) {
         (Ty::Var(_), _) => true,
+        // `return Err(e)` from `?` desugar: Result with unresolved type param
+        // is a bottom/divergent expression — accept regardless of declared return type.
+        (Ty::Generic(n, args), _) if n == "Result" && args.len() == 2
+            && matches!(args[0], Ty::Var(_)) =>
+        {
+            true
+        }
         (Ty::Generic(n1, a1), Ty::Generic(n2, a2)) if n1 == n2 && a1.len() == a2.len() => {
             a1.iter().zip(a2).all(|(x, y)| fits_return(x, y))
         }

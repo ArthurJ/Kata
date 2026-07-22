@@ -550,7 +550,7 @@ pub(crate) fn lower_collections_literal(
 // ── Helpers for Dict/Set lowering ─────────────────────────────────────────
 
 /// Resolve o hash FFI function name para um dado key type.
-fn hash_fn_name(key_ty: &Ty) -> Result<&'static str, super::CodegenError> {
+pub(crate) fn hash_fn_name(key_ty: &Ty) -> Result<&'static str, super::CodegenError> {
     match key_ty {
         Ty::Prim(PrimTy::Int) => Ok("kata_rt_hash_int"),
         Ty::Prim(PrimTy::Text) => Ok("kata_rt_hash_text"),
@@ -562,7 +562,7 @@ fn hash_fn_name(key_ty: &Ty) -> Result<&'static str, super::CodegenError> {
 }
 
 /// Resolve o eq FFI function name para um dado key type.
-fn eq_fn_name(key_ty: &Ty) -> Result<&'static str, super::CodegenError> {
+pub(crate) fn eq_fn_name(key_ty: &Ty) -> Result<&'static str, super::CodegenError> {
     match key_ty {
         Ty::Prim(PrimTy::Int) => Ok("kata_rt_bi_eq"),
         Ty::Prim(PrimTy::Text) => Ok("kata_rt_string_eq"),
@@ -579,7 +579,7 @@ fn eq_fn_name(key_ty: &Ty) -> Result<&'static str, super::CodegenError> {
 /// 2. `ext_funcs[func_ref].name` → ExternalName
 /// 3. `create_global_value(GlobalValueData::Symbol { name, ... })` → GlobalValue
 /// 4. `global_value(pointer_type, gv)` → Value (fn_ptr)
-fn get_ffi_fn_ptr(
+pub(crate) fn get_ffi_fn_ptr(
     ffi_name: &str,
     ctx: &mut LowerCtx,
 ) -> Result<cranelift_codegen::ir::Value, super::CodegenError> {
@@ -595,7 +595,10 @@ fn get_ffi_fn_ptr(
         .create_global_value(GlobalValueData::Symbol {
             name: ext_func_name,
             offset: 0.into(),
-            colocated: true,
+            // FFI imports are in the host binary, not colocated with JIT code.
+            // colocated: true → PC-relative (PCRel4) → i32 overflow if too far.
+            // colocated: false → absolute (Abs8) → works regardless of distance.
+            colocated: false,
             tls: false,
         });
     Ok(ctx
@@ -605,7 +608,7 @@ fn get_ffi_fn_ptr(
 }
 
 /// Bitcast F64→I64 se necessário (mesmo pattern do ArrayLit/ListLit).
-fn bitcast_to_i64(
+pub(crate) fn bitcast_to_i64(
     val: cranelift_codegen::ir::Value,
     ctx: &mut LowerCtx,
 ) -> cranelift_codegen::ir::Value {
@@ -634,14 +637,10 @@ fn lower_dict_lit(
     expr: &TypedExpr,
     ctx: &mut LowerCtx,
 ) -> Result<cranelift_codegen::ir::Value, super::CodegenError> {
-    let arena_handle = match expr.escape {
-        kata_core::escape::EscapeTarget::Local => ctx
-            .fiber_arena
-            .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
-        kata_core::escape::EscapeTarget::Caller => ctx
-            .caller_arena
-            .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
-    };
+    let arena_handle = ctx
+        .fiber_arena
+        .or(ctx.caller_arena)
+        .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
 
     // dict = kata_rt_dict_empty(arena)
     let empty_ref = ctx
@@ -665,6 +664,10 @@ fn lower_dict_lit(
         .copied()
         .ok_or_else(|| super::CodegenError::FfiSymbolNotFound("kata_rt_dict_insert".into()))?;
 
+    // Resolve eq_fn pointer ONCE (outside loop) — creating multiple GlobalValues
+    // for the same symbol in a single function body can corrupt the pointer.
+    let eq_fn_ptr = get_ffi_fn_ptr(eq_name, ctx)?;
+
     for (key_expr, val_expr) in entries {
         let key_val = lower_expr(&key_expr.node, ctx)?;
         let key_val = bitcast_to_i64(key_val, ctx);
@@ -675,14 +678,11 @@ fn lower_dict_lit(
         let hash_call = ctx.builder.ins().call(hash_ref, &[key_val]);
         let hash_val = ctx.builder.inst_results(hash_call)[0];
 
-        // eq_fn_ptr = get_ffi_fn_ptr(eq_name)
-        let eq_fn_ptr = get_ffi_fn_ptr(eq_name, ctx)?;
-
         // dict = kata_rt_dict_insert(dict, key, val, hash, eq_fn_ptr, arena)
-        let insert_call = ctx
-            .builder
-            .ins()
-            .call(insert_ref, &[dict, key_val, val_val, hash_val, eq_fn_ptr, arena_handle]);
+        let insert_call = ctx.builder.ins().call(
+            insert_ref,
+            &[dict, key_val, val_val, hash_val, eq_fn_ptr, arena_handle],
+        );
         dict = ctx.builder.inst_results(insert_call)[0];
     }
 
@@ -703,14 +703,10 @@ fn lower_set_lit(
     expr: &TypedExpr,
     ctx: &mut LowerCtx,
 ) -> Result<cranelift_codegen::ir::Value, super::CodegenError> {
-    let arena_handle = match expr.escape {
-        kata_core::escape::EscapeTarget::Local => ctx
-            .fiber_arena
-            .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
-        kata_core::escape::EscapeTarget::Caller => ctx
-            .caller_arena
-            .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
-    };
+    let arena_handle = ctx
+        .fiber_arena
+        .or(ctx.caller_arena)
+        .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
 
     // set = kata_rt_set_empty(arena)
     let empty_ref = ctx
@@ -734,6 +730,9 @@ fn lower_set_lit(
         .copied()
         .ok_or_else(|| super::CodegenError::FfiSymbolNotFound("kata_rt_set_insert".into()))?;
 
+    // Resolve eq_fn pointer ONCE (outside loop).
+    let eq_fn_ptr = get_ffi_fn_ptr(eq_name, ctx)?;
+
     for elem in elements {
         let elem_val = lower_expr(&elem.node, ctx)?;
         let elem_val = bitcast_to_i64(elem_val, ctx);
@@ -742,14 +741,11 @@ fn lower_set_lit(
         let hash_call = ctx.builder.ins().call(hash_ref, &[elem_val]);
         let hash_val = ctx.builder.inst_results(hash_call)[0];
 
-        // eq_fn_ptr = get_ffi_fn_ptr(eq_name)
-        let eq_fn_ptr = get_ffi_fn_ptr(eq_name, ctx)?;
-
         // set = kata_rt_set_insert(set, elem, hash, eq_fn_ptr, arena)
-        let insert_call = ctx
-            .builder
-            .ins()
-            .call(insert_ref, &[set, elem_val, hash_val, eq_fn_ptr, arena_handle]);
+        let insert_call = ctx.builder.ins().call(
+            insert_ref,
+            &[set, elem_val, hash_val, eq_fn_ptr, arena_handle],
+        );
         set = ctx.builder.inst_results(insert_call)[0];
     }
 

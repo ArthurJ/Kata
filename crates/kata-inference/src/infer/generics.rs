@@ -106,10 +106,38 @@ fn unify_one(
         (Ty::List(p), Ty::List(a)) => unify_one(p, a, type_params, subs),
         (Ty::Array(p), Ty::Array(a)) => unify_one(p, a, type_params, subs),
         (Ty::Range(p), Ty::Range(a)) => unify_one(p, a, type_params, subs),
+        // Dict — unifica recursivamente K e V.
+        (Ty::Dict(pk, pv), Ty::Dict(ak, av)) => {
+            unify_one(pk, ak, type_params, subs)?;
+            unify_one(pv, av, type_params, subs)
+        }
+        // Set — unifica recursivamente o elem_ty.
+        (Ty::Set(p), Ty::Set(a)) => unify_one(p, a, type_params, subs),
         // Sender/Receiver/ReceiverFactory — unifica o tipo do canal.
         (Ty::Sender(p), Ty::Sender(a)) => unify_one(p, a, type_params, subs),
         (Ty::Receiver(p), Ty::Receiver(a)) => unify_one(p, a, type_params, subs),
         (Ty::ReceiverFactory(p), Ty::ReceiverFactory(a)) => unify_one(p, a, type_params, subs),
+
+        // Generic("Dict", [K, V]) unifica com Ty::Dict(ak, av):
+        // O prelude usa `Dict::(K, V)` que vira Generic("Dict", [Var("K"), Var("V")]).
+        // O typeck produz Ty::Dict(Text, Int). Precisamos casar structuralmente.
+        (Ty::Generic(n, ps), Ty::Dict(ak, av)) if n == "Dict" && ps.len() == 2 => {
+            unify_one(&ps[0], ak, type_params, subs)?;
+            unify_one(&ps[1], av, type_params, subs)
+        }
+        // Generic("Set", [T]) unifica com Ty::Set(a).
+        (Ty::Generic(n, ps), Ty::Set(a)) if n == "Set" && ps.len() == 1 => {
+            unify_one(&ps[0], a, type_params, subs)
+        }
+        // Ty::Dict unifica com Generic("Dict", ...) — caminho reverso.
+        (Ty::Dict(pk, pv), Ty::Generic(n, as_)) if n == "Dict" && as_.len() == 2 => {
+            unify_one(pk, &as_[0], type_params, subs)?;
+            unify_one(pv, &as_[1], type_params, subs)
+        }
+        // Ty::Set unifica com Generic("Set", ...) — caminho reverso.
+        (Ty::Set(p), Ty::Generic(n, as_)) if n == "Set" && as_.len() == 1 => {
+            unify_one(p, &as_[0], type_params, subs)
+        }
 
         // Tuple — unifica recursivamente cada elemento.
         (Ty::Tuple(ps), Ty::Tuple(as_)) if ps.len() == as_.len() => {
@@ -166,6 +194,13 @@ pub fn apply_subs(ty: &Ty, subs: &Substitutions) -> Ty {
         Ty::List(elem) => Ty::List(Box::new(apply_subs(elem, subs))),
         Ty::Array(elem) => Ty::Array(Box::new(apply_subs(elem, subs))),
         Ty::Range(elem) => Ty::Range(Box::new(apply_subs(elem, subs))),
+        // Dict — substitui em K e V.
+        Ty::Dict(k, v) => Ty::Dict(
+            Box::new(apply_subs(k, subs)),
+            Box::new(apply_subs(v, subs)),
+        ),
+        // Set — substitui no elem_ty.
+        Ty::Set(elem) => Ty::Set(Box::new(apply_subs(elem, subs))),
         // Sender/Receiver/ReceiverFactory — substitui no tipo do canal.
         Ty::Sender(elem) => Ty::Sender(Box::new(apply_subs(elem, subs))),
         Ty::Receiver(elem) => Ty::Receiver(Box::new(apply_subs(elem, subs))),

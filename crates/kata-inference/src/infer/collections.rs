@@ -25,6 +25,8 @@ fn concrete_type_name(ty: &Ty) -> Option<String> {
         Ty::List(_) => Some("List".into()),
         Ty::Array(_) => Some("Array".into()),
         Ty::Range(_) => Some("Range".into()),
+        Ty::Dict(_, _) => Some("Dict".into()),
+        Ty::Set(_) => Some("Set".into()),
         Ty::Prim(kata_core::ty::PrimTy::Int) => Some("Int".into()),
         Ty::Prim(kata_core::ty::PrimTy::Float) => Some("Float".into()),
         Ty::Prim(kata_core::ty::PrimTy::Text) => Some("Text".into()),
