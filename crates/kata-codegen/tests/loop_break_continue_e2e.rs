@@ -3,7 +3,6 @@
 //! Pipeline completo: lex → parse → resolve → infer → optimize → codegen → JIT.
 
 use kata_codegen::jit_eval;
-use kata_core::InterfaceRegistry;
 use kata_core::ty::{PrimTy, Ty};
 use kata_inference::infer_module;
 use kata_lexer::lex;

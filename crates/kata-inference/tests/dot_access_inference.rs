@@ -1,6 +1,5 @@
 //! Testes de inference de DotAccess (field access + index access).
 
-use kata_core::InterfaceRegistry;
 use kata_core::ty::Ty;
 use kata_inference::{TypedExprKind, infer_module};
 use kata_lexer::lex;

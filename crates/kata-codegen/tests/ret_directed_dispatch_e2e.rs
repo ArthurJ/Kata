@@ -12,7 +12,6 @@
 //!   - Com hint Text → seleciona Int→Text
 
 use kata_codegen::jit_eval;
-use kata_core::InterfaceRegistry;
 use kata_core::ty::Ty;
 use kata_inference::infer_module;
 use kata_lexer::lex;

@@ -7,7 +7,6 @@
 //! - DoD 12: Grouped ascription `((expr))::Type` — barreira de hint
 
 use kata_codegen::jit_eval;
-use kata_core::InterfaceRegistry;
 use kata_core::ty::Ty;
 use kata_inference::infer_module;
 use kata_lexer::lex;

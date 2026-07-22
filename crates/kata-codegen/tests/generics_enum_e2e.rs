@@ -4,7 +4,6 @@
 //! Valida DoD 19: Result::(T, E) com type params posicionais resolve no typeck.
 
 use kata_codegen::jit_eval;
-use kata_core::InterfaceRegistry;
 use kata_core::ty::{PrimTy, Ty};
 use kata_inference::infer_module;
 use kata_lexer::lex;

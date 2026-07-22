@@ -82,16 +82,16 @@ pub fn infer_module(
     //     prelude (com `Int implements NUM`) é mergeado antes de infer_module.
     for refines_entry in resolved.refines_registry.all_entries() {
         let base_ty_name = ty_name(&refines_entry.base_ty);
-        if !base_ty_name.is_empty() {
-            if !interface_registry.type_implements(base_ty_name, &refines_entry.interface_name) {
-                return Err(MiddleError::NoOverload {
-                    name: format!(
-                        "refines: tipo base {base_ty_name} não implementa a interface {}",
-                        refines_entry.interface_name
-                    ),
-                    span: kata_ast::Span::synthetic().into(),
-                });
-            }
+        if !base_ty_name.is_empty()
+            && !interface_registry.type_implements(base_ty_name, &refines_entry.interface_name)
+        {
+            return Err(MiddleError::NoOverload {
+                name: format!(
+                    "refines: tipo base {base_ty_name} não implementa a interface {}",
+                    refines_entry.interface_name
+                ),
+                span: kata_ast::Span::synthetic().into(),
+            });
         }
     }
 

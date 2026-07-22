@@ -10,7 +10,6 @@
 //! `cargo run --bin kata -- run <file>` e verificar exit code != 0.
 
 use kata_codegen::jit_eval;
-use kata_core::InterfaceRegistry;
 use kata_core::ty::Ty;
 use kata_inference::infer_module;
 use kata_lexer::lex;

@@ -6,7 +6,6 @@
 //! na arena determinada pelo EscapeTarget e destruídos no fim do run.
 
 use kata_codegen::jit_eval;
-use kata_core::InterfaceRegistry;
 use kata_core::ty::Ty;
 use kata_lexer::lex;
 use kata_monomorph::monomorphize;

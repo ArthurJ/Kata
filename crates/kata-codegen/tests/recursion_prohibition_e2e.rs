@@ -4,7 +4,6 @@
 //! (direta ou indiretamente). Testes usam `infer_module` diretamente
 //! porque o erro é capturado no typeck, antes do codegen.
 
-use kata_core::InterfaceRegistry;
 use kata_diagnostics::MiddleError;
 use kata_inference::infer_module;
 use kata_lexer::lex;

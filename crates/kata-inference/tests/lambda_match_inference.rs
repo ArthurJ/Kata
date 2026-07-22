@@ -4,7 +4,6 @@
 //! Estes testes focam no typeck (Pass 2), não no codegen.
 //! O codegen de Lambda/Match é coberto pelos testes E2E de codegen.
 
-use kata_core::InterfaceRegistry;
 use kata_core::ty::Ty;
 use kata_inference::{Effect, TypedExprKind, infer_module};
 use kata_lexer::lex;

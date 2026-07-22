@@ -12,7 +12,6 @@
 //! é unitária). User enums com cauda unitária também são compatíveis.
 
 use kata_codegen::jit_eval;
-use kata_core::InterfaceRegistry;
 use kata_core::ty::{PrimTy, Ty};
 use kata_inference::{TypedExpr, TypedExprKind, infer_module};
 use kata_lexer::lex;

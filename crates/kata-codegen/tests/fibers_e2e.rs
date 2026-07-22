@@ -4,7 +4,6 @@
 //! Cada teste verifica o valor retornado pelo JIT executando em fibers.
 
 use kata_codegen::jit_eval;
-use kata_core::InterfaceRegistry;
 use kata_core::ty::{PrimTy, Ty};
 use kata_inference::infer_module;
 use kata_lexer::lex;

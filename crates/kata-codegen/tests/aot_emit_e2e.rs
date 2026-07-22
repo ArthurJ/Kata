@@ -9,7 +9,6 @@
 //! Cranelift emite um object file parseável.
 
 use kata_codegen::aot_emit;
-use kata_core::InterfaceRegistry;
 use kata_inference::infer_module;
 use kata_lexer::lex;
 use kata_monomorph::monomorphize;

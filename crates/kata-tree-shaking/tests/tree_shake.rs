@@ -5,7 +5,6 @@
 //! não alcançadas e `@test` specs são removidos, e que funções alcançadas
 //! transitivamente são mantidas.
 
-use kata_core::InterfaceRegistry;
 use kata_inference::infer_module;
 use kata_lexer::lex;
 use kata_monomorph::monomorphize;

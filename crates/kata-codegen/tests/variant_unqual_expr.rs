@@ -15,7 +15,6 @@
 //! - Ambiguidade: dois enums com mesma variante → erro
 
 use kata_codegen::jit_eval;
-use kata_core::InterfaceRegistry;
 use kata_core::ty::{PrimTy, Ty};
 use kata_diagnostics::MiddleError;
 use kata_inference::infer_module;

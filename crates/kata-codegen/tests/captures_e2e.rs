@@ -7,7 +7,6 @@
 //! Os testes E2E (execução JIT) só passam após o Passo 11 (codegen passar captures).
 
 use kata_codegen::jit_eval;
-use kata_core::InterfaceRegistry;
 use kata_core::ty::Ty;
 use kata_inference::{TypedExprKind, infer_module};
 use kata_lexer::lex;
