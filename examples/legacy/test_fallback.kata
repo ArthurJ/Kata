@@ -1,7 +1,0 @@
-data (Int, > _ 0) as PositiveInt
-
-action main
-    let a := PositiveInt 15 | 0
-    let b := PositiveInt -5 | 0
-    echo!(a)
-    echo!(b)

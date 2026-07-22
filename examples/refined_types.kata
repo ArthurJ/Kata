@@ -1,0 +1,74 @@
+# Tipos Refinados — declaração, smart constructors, refines, downcast, |
+# Migração de test_refined, test_repr_refined, test_try, test_fallback (legacy)
+
+data (Int, > _ 0) as PositiveInt
+data (Int, > _ 0, < _ 100) as Percentage
+
+PositiveInt refines NUM
+    - :: PositiveInt PositiveInt => PositiveInt
+    lambda a b:
+        match (PositiveInt (- (a::Int) (b::Int)))
+            Ok v: v
+            otherwise: 1::PositiveInt
+
+# Bloco 1 — Ascription literal + SHOW automático
+action bloco1 => Unit
+    let x := 5::PositiveInt
+    echo!(x)
+    let p := 50::Percentage
+    echo!(p)
+
+# Bloco 2 — Smart constructor falível + match desqualificado
+action bloco2 => Unit
+    let r := PositiveInt 42
+    match r
+        Ok v: echo!(v)
+        Err _: echo!("erro")
+        otherwise: echo!("impossivel")
+
+# Bloco 3 — ? em Action que retorna Result (fail-fast)
+action bloco3 => Result::(PositiveInt, Text)
+    let r := PositiveInt 42
+    let v := r ?
+    Result::Ok v
+
+# Bloco 4 — refines NUM: aritmética delegada + comparação direta
+action bloco4 => Unit
+    let a := 5::PositiveInt
+    let b := 3::PositiveInt
+    let soma := PositiveInt (+ a b)
+    match soma
+        Ok v: echo!(v)
+        Err _: echo!("soma invalida")
+    let menor := < a b
+    echo!(menor)
+
+# Bloco 5 — | com Optional + coerção contextual
+action bloco5 => Unit
+    let n := 5::PositiveInt
+    let a := Optional::Some n | 1
+    echo!(a)
+    let b := Optional::None | 1
+    echo!(b)
+
+# Bloco 6 — Downcast + override (corpo lambda) + múltiplos predicados
+action bloco6 => Unit
+    let a := 10::PositiveInt
+    let b := 3::PositiveInt
+    let r := - a b
+    echo!(r)
+    let n := a::Int
+    echo!(n)
+
+action main => Unit
+    bloco1!()
+    bloco2!()
+    match (bloco3!())
+        Ok v: echo!(v)
+        Err _: echo!("bloco3 falhou")
+        otherwise: echo!("impossivel")
+    bloco4!()
+    bloco5!()
+    bloco6!()
+
+main!()

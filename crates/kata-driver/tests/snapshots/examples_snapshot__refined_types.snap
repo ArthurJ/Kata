@@ -1,0 +1,16 @@
+---
+source: crates/kata-driver/tests/examples_snapshot.rs
+expression: output
+---
+5
+50
+42
+42
+8
+False
+5
+1
+7
+10
+--- stderr ---
+[resolution] warning: tipo base Int pode não implementar a interface NUM (PositiveInt refines NUM) — validação final em infer_module

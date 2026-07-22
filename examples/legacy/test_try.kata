@@ -1,6 +1,0 @@
-data (Int, > _ 0) as PositiveInt
-
-action main
-    let tentativa := PositiveInt 15
-    let v := tentativa?
-    echo!("ok")
