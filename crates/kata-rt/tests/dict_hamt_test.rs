@@ -32,7 +32,7 @@ fn result_payload(result: i64) -> i64 {
 fn dict_empty_has_len_zero() {
     let arena = kata_rt_arena_create();
     let d = kata_rt_dict_empty(arena);
-    assert_eq!(kata_rt_dict_len(d), 0);
+    assert_eq!(kata_rt_dict_len(d), make_smi(0));
 }
 
 #[test]
@@ -45,7 +45,7 @@ fn dict_insert_then_get() {
     let eq = fn_ptr_as_i64(smi_eq);
 
     let d2 = kata_rt_dict_insert(d, key, val, hash, eq, arena);
-    assert_eq!(kata_rt_dict_len(d2), 1);
+    assert_eq!(kata_rt_dict_len(d2), make_smi(1));
 
     let result = kata_rt_dict_get_checked(d2, key, hash, eq, arena);
     assert_eq!(result_tag(result), 0, "key should be found");
@@ -64,7 +64,7 @@ fn dict_insert_multiple_keys() {
         let hash = kata_rt_hash_int(key);
         d = kata_rt_dict_insert(d, key, val, hash, eq, arena);
     }
-    assert_eq!(kata_rt_dict_len(d), 100);
+    assert_eq!(kata_rt_dict_len(d), make_smi(100));
 
     // Verify a few
     for i in [1i64, 50, 100, 42, 77] {
@@ -87,8 +87,8 @@ fn dict_original_unchanged_after_insert() {
     let d2 = kata_rt_dict_insert(d, key, make_smi(10), hash, eq, arena);
 
     // Original should still be empty
-    assert_eq!(kata_rt_dict_len(d), 0);
-    assert_eq!(kata_rt_dict_len(d2), 1);
+    assert_eq!(kata_rt_dict_len(d), make_smi(0));
+    assert_eq!(kata_rt_dict_len(d2), make_smi(1));
 }
 
 #[test]
@@ -101,7 +101,7 @@ fn dict_replace_value() {
 
     let d1 = kata_rt_dict_insert(d, key, make_smi(10), hash, eq, arena);
     let d2 = kata_rt_dict_insert(d1, key, make_smi(20), hash, eq, arena);
-    assert_eq!(kata_rt_dict_len(d2), 1);
+    assert_eq!(kata_rt_dict_len(d2), make_smi(1));
 
     let result = kata_rt_dict_get_checked(d2, key, hash, eq, arena);
     assert_eq!(result_tag(result), 0);
@@ -176,7 +176,7 @@ fn dict_iteration_order() {
         d = kata_rt_dict_insert(d, key, val, hash, eq, arena);
     }
 
-    assert_eq!(kata_rt_dict_len(d), 3);
+    assert_eq!(kata_rt_dict_len(d), make_smi(3));
 
     // Iterate via dict_next — should be newest first (3, 2, 1) due to Cons prepend
     let mut keys = Vec::new();
@@ -213,7 +213,7 @@ fn dict_iteration_dedup_on_replace() {
     d = kata_rt_dict_insert(d, key, make_smi(10), hash, eq, arena);
     d = kata_rt_dict_insert(d, key, make_smi(20), hash, eq, arena);
 
-    assert_eq!(kata_rt_dict_len(d), 1, "should have 1 entry after replace");
+    assert_eq!(kata_rt_dict_len(d), make_smi(1), "should have 1 entry after replace");
 
     // Iterate — should only see key=1 once (dedup)
     let mut count = 0i64;
@@ -253,7 +253,7 @@ fn dict_iteration_skips_removed() {
     let hash2 = kata_rt_hash_int(key2);
     d = kata_rt_dict_remove(d, key2, hash2, eq, arena);
 
-    assert_eq!(kata_rt_dict_len(d), 2, "should have 2 entries after remove");
+    assert_eq!(kata_rt_dict_len(d), make_smi(2), "should have 2 entries after remove");
 
     // Iterate — should skip key 2, only see 3 and 1
     let mut keys = Vec::new();

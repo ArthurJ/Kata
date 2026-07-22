@@ -67,7 +67,7 @@ fn set_len() {
     let eq = fn_ptr_as_i64(smi_eq);
 
     let s = build_set(arena, eq, &[1, 2, 3, 5, 8]);
-    assert_eq!(kata_rt_set_len(s), 5);
+    assert_eq!(kata_rt_set_len(s), make_smi(5));
 }
 
 #[test]
@@ -81,7 +81,7 @@ fn set_union() {
     let u = kata_rt_set_union(a, b, eq, arena);
     assert_eq!(
         kata_rt_set_len(u),
-        5,
+        make_smi(5),
         "union of {{1,2,3}} and {{3,4,5}} should have len=5"
     );
 
@@ -109,7 +109,7 @@ fn set_intersection() {
     let i = kata_rt_set_intersection(a, b, eq, arena);
     assert_eq!(
         kata_rt_set_len(i),
-        1,
+        make_smi(1),
         "intersection of {{1,2,3}} and {{3,4,5}} should have len=1"
     );
 
@@ -134,7 +134,7 @@ fn set_difference() {
     let d = kata_rt_set_difference(a, b, eq, arena);
     assert_eq!(
         kata_rt_set_len(d),
-        2,
+        make_smi(2),
         "difference of {{1,2,3}} and {{3,4,5}} should have len=2"
     );
 
@@ -164,16 +164,16 @@ fn set_persistence() {
     let eq = fn_ptr_as_i64(smi_eq);
 
     let s = build_set(arena, eq, &[1, 2, 3]);
-    assert_eq!(kata_rt_set_len(s), 3);
+    assert_eq!(kata_rt_set_len(s), make_smi(3));
 
     let key = make_smi(42);
     let hash = kata_rt_hash_int(key);
     let s2 = kata_rt_set_insert(s, key, hash, eq, arena);
 
     // Original should be unchanged
-    assert_eq!(kata_rt_set_len(s), 3, "original set should be unchanged");
+    assert_eq!(kata_rt_set_len(s), make_smi(3), "original set should be unchanged");
     // New set should have 4 elements
-    assert_eq!(kata_rt_set_len(s2), 4, "new set should have 4 elements");
+    assert_eq!(kata_rt_set_len(s2), make_smi(4), "new set should have 4 elements");
 
     // Original should NOT contain 42
     assert_eq!(kata_rt_set_contains(s, key, hash, eq), 0);
