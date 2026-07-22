@@ -115,8 +115,8 @@ fn prelude_has_multiple_add_overloads() {
         .collect();
     assert_eq!(
         adds.len(),
-        4,
-        "deve ter 4 overloads de + (Int, Float, Rational, List)"
+        6,
+        "deve ter 6 overloads de + (Int, Float, Rational, List, Set+Set, Set+elem)"
     );
 }
 

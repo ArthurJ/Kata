@@ -235,6 +235,26 @@ insert :: Dict::(K, V) K V => Dict::(K, V)
 @ffi("kata_rt_dict_remove")
 remove :: Dict::(K, V) K => Dict::(K, V)
 
+# ── Operadores + e - para Set e Dict ────────────────────────────
+# Sobrecargas: o DispatchTable resolve por tipo do segundo argumento.
+# Set + Set = union, Set + elem = insert, Set - Set = difference, Set - elem = remove
+# Dict - key = remove
+
+@ffi("kata_rt_set_union")
++ :: Set::T Set::T => Set::T
+
+@ffi("kata_rt_set_insert")
++ :: Set::T T => Set::T
+
+@ffi("kata_rt_set_difference")
+- :: Set::T Set::T => Set::T
+
+@ffi("kata_rt_set_remove")
+- :: Set::T T => Set::T
+
+@ffi("kata_rt_dict_remove")
+- :: Dict::(K, V) K => Dict::(K, V)
+
 # ── Operadores standalone (não-interface) ──────────────────────
 
 # Int divisão (retorna Int, não Result)
