@@ -56,6 +56,31 @@ fn lambda_with_unknown_callee_fails() {
     );
 }
 
+/// `lambda x y: + x y` sem contexto — partial dispatch tenta `+` com [?, ?]
+/// mas ambos args são holes. `+` tem overloads [Int, Int] e [Float, Float] —
+/// sem nenhum arg concreto para restringir, múltiplas overloads casam (ambíguo).
+/// Deve produzir LambdaInferenceFail COM detail mencionando `+` e ambiguidade.
+#[test]
+fn lambda_inference_fail_has_detail() {
+    let err = infer_src_err("lambda x y: + x y");
+    match err {
+        MiddleError::LambdaInferenceFail { detail, .. } => {
+            let detail = detail.expect(
+                "lambda com partial dispatch aplicável deve ter detail com contexto de falha"
+            );
+            assert!(
+                detail.contains("+"),
+                "detail deve mencionar a função tentada: {detail}"
+            );
+            assert!(
+                detail.contains("amb") || detail.contains("Amb"),
+                "detail deve mencionar ambiguidade: {detail}"
+            );
+        }
+        other => panic!("esperava LambdaInferenceFail, got {other:?}"),
+    }
+}
+
 /// `(lambda x: + x 1)::(Int -> Int)` — COM hint top-down, deve succeed.
 /// Este teste confirma que o hint previne o LambdaInferenceFail.
 #[test]

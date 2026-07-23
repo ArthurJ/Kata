@@ -7,24 +7,59 @@
 //! demais. Se resolve único, retorna os tipos extraídos.
 
 use kata_ast::{Expr, Pattern, Spanned};
-use kata_core::dispatch::DispatchTable;
+use kata_core::dispatch::{DispatchError, DispatchTable};
 use kata_core::interface_registry::InterfaceRegistry;
 use kata_core::ty::{Ty, TypeEnv};
 
 use super::helpers::peel_grouping_expr;
 use kata_resolution::resolve_type_expr;
 
+/// Resultado do partial dispatch para inferência de lambda.
+///
+/// `Ok` carrega os tipos inferidos para os parâmetros do lambda.
+/// `Err` carrega contexto sobre por que falhou — usado para enriquecer
+/// a mensagem de `LambdaInferenceFail`.
+pub(crate) enum PartialDispatchOutcome {
+    /// Tipos inferidos com sucesso — um por parâmetro do lambda.
+    Inferred(Vec<Ty>),
+    /// Partial dispatch era aplicável (body é Apply com callee conhecido)
+    /// mas falhou ao resolver. Carrega informação para diagnosticar.
+    Failed(PartialDispatchFailure),
+    /// Partial dispatch não era aplicável (body não é Apply, callee não é
+    /// Ident, função não está no DispatchTable, args complexos demais).
+    NotApplicable,
+}
+
+/// Contexto de falha do partial dispatch.
+pub(crate) struct PartialDispatchFailure {
+    /// Nome da função tentada (ex: "+").
+    pub callee: String,
+    /// Tipos parciais dos args — `None` onde o arg era um hole/parâmetro do lambda.
+    pub arg_types: Vec<Option<String>>,
+    /// Razão da falha.
+    pub reason: PartialDispatchReason,
+}
+
+pub(crate) enum PartialDispatchReason {
+    /// Nenhuma overload da função casa com os args fornecidos.
+    /// Carrega a lista de overloads disponíveis para diagnóstico.
+    NoOverload { overloads: Vec<String> },
+    /// Múltiplas overloads casam — ambíguo.
+    Ambiguous,
+}
+
 /// Tenta inferir tipos dos parâmetros do lambda via partial dispatch.
 ///
-/// Retorna `Vec<Ty>` (vazio se não aplicável ou ambíguo). A ordem corresponde
-/// aos `patterns` do lambda.
+/// Retorna `PartialDispatchOutcome` — `Inferred` com os tipos, `Failed` com
+/// contexto de diagnóstico, ou `NotApplicable` quando o body não tem a
+/// estrutura esperada (não é Apply, callee não é Ident, etc).
 pub(crate) fn try_partial_dispatch(
     patterns: &[Spanned<Pattern>],
     body: &Spanned<Expr>,
     env: &TypeEnv,
     table: &DispatchTable,
     iface_reg: &InterfaceRegistry,
-) -> Vec<Ty> {
+) -> PartialDispatchOutcome {
     // Só funciona com 1+ patterns Ident (holes desugared viram lambda com 1 param).
     let param_names: Vec<&str> = patterns
         .iter()
@@ -34,7 +69,7 @@ pub(crate) fn try_partial_dispatch(
         })
         .collect();
     if param_names.is_empty() {
-        return Vec::new();
+        return PartialDispatchOutcome::NotApplicable;
     }
 
     // Extrai o Apply do body (ignora Grouping).
@@ -44,16 +79,16 @@ pub(crate) fn try_partial_dispatch(
         Expr::Apply { callee, args } => {
             let name = match &callee.node {
                 Expr::Ident { name } => name.clone(),
-                _ => return Vec::new(),
+                _ => return PartialDispatchOutcome::NotApplicable,
             };
             (name, args)
         }
-        _ => return Vec::new(),
+        _ => return PartialDispatchOutcome::NotApplicable,
     };
 
     // A função precisa estar no DispatchTable.
     if !table.has_function(&callee_name) {
-        return Vec::new();
+        return PartialDispatchOutcome::NotApplicable;
     }
 
     // Constrói lista de Option<Ty> por posição de arg.
@@ -77,7 +112,7 @@ pub(crate) fn try_partial_dispatch(
                     partial_args.push(Some(ty.clone()));
                 } else {
                     // Ident desconhecido — não podemos inferir
-                    return Vec::new();
+                    return PartialDispatchOutcome::NotApplicable;
                 }
             }
             Expr::TypeAscription { expr: inner, ty } => {
@@ -107,25 +142,50 @@ pub(crate) fn try_partial_dispatch(
             Expr::FloatLit { .. } => partial_args.push(Some(Ty::float())),
             Expr::TextLit { .. } => partial_args.push(Some(Ty::text())),
             Expr::Unit => partial_args.push(Some(Ty::Unit)),
-            _ => return Vec::new(), // tipo complexo — não tenta
+            _ => return PartialDispatchOutcome::NotApplicable, // tipo complexo — não tenta
         }
     }
+
+    // Constrói representação dos tipos parciais para diagnóstico.
+    let arg_types_dbg: Vec<Option<String>> = partial_args
+        .iter()
+        .map(|a| a.as_ref().map(|t| t.to_string()))
+        .collect();
 
     // Tenta resolve_partial.
     let result = match table.resolve_partial(&callee_name, &partial_args, iface_reg) {
         Ok(r) => r,
-        Err(_) => {
+        Err(dispatch_err) => {
             // Se resolve_partial falha, mas há ascription_hints, usa eles diretamente.
-            // Isto cobre o caso `+ _::Int _::Float` onde não há overload [Int, Float]
-            // mas ascription_hints tem os tipos. O typeck do body vai falhar com
-            // NoOverload, o que é o comportamento correto.
             if ascription_hints.iter().all(|h| h.is_some()) {
-                return ascription_hints
-                    .into_iter()
-                    .map(|h| h.expect("checked above"))
-                    .collect();
+                return PartialDispatchOutcome::Inferred(
+                    ascription_hints
+                        .into_iter()
+                        .map(|h| h.expect("checked above"))
+                        .collect(),
+                );
             }
-            return Vec::new();
+
+            // Extrai contexto de falha do DispatchError.
+            let reason = match dispatch_err {
+                DispatchError::TypeMismatch { expected, .. } => {
+                    // "expected" já vem formatado como lista de tipos da primeira overload.
+                    PartialDispatchReason::NoOverload {
+                        overloads: vec![expected],
+                    }
+                }
+                DispatchError::AmbiguousDispatch { .. } => PartialDispatchReason::Ambiguous,
+                DispatchError::FunctionNotFound { .. } => {
+                    // Não deveria acontecer — verificamos has_function acima.
+                    return PartialDispatchOutcome::NotApplicable;
+                }
+            };
+
+            return PartialDispatchOutcome::Failed(PartialDispatchFailure {
+                callee: callee_name,
+                arg_types: arg_types_dbg,
+                reason,
+            });
         }
     };
 
@@ -169,11 +229,21 @@ pub(crate) fn try_partial_dispatch(
 
     // Só retorna se todos os parâmetros receberam tipos
     if hints.iter().all(|h| h.is_some()) {
-        hints
-            .into_iter()
-            .map(|h| h.expect("checked above"))
-            .collect()
+        PartialDispatchOutcome::Inferred(
+            hints
+                .into_iter()
+                .map(|h| h.expect("checked above"))
+                .collect(),
+        )
     } else {
-        Vec::new()
+        // Partial dispatch resolveu alguns params mas não todos — ascription
+        // hints não cobriram o resto.
+        PartialDispatchOutcome::Failed(PartialDispatchFailure {
+            callee: callee_name,
+            arg_types: arg_types_dbg,
+            reason: PartialDispatchReason::NoOverload {
+                overloads: Vec::new(),
+            },
+        })
     }
 }

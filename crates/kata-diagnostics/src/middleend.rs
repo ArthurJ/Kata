@@ -96,6 +96,10 @@ pub enum MiddleError {
     LambdaInferenceFail {
         #[label("lambda sem tipo inferível")]
         span: MietteSpan,
+        /// Contexto sobre por que a inferência falhou (None quando nenhum
+        /// mecanismo era aplicável — body não é Apply, callee desconhecido, etc).
+        #[help]
+        detail: Option<String>,
     },
 
     #[error("ação `{action}` é recursiva: ciclo detectado ({cycle})")]

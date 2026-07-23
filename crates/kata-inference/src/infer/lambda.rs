@@ -14,7 +14,9 @@ use crate::typed::{Effect, TypedExprKind, TypedLambdaClause};
 use super::apply_lambda::infer_lambda_body;
 use super::expr::InferCtx;
 use super::helpers::{InferResult, check_patterns, process_with_bindings};
-use super::partial_dispatch::try_partial_dispatch;
+use super::partial_dispatch::{
+    PartialDispatchOutcome, PartialDispatchReason, try_partial_dispatch,
+};
 
 /// Infere um lambda anônimo ou cláusula lambda.
 ///
@@ -57,21 +59,22 @@ pub(crate) fn infer_lambda(
     // Se o body é um Apply com callee Ident, e alguns args são parâmetros do
     // lambda (Ident com nome = nome do pattern), tenta resolve_partial com
     // None nessas posições e tipos concretos nas demais.
-    let partial = try_partial_dispatch(patterns, body, env, ctx.table, ctx.interface_registry);
+    let partial_outcome =
+        try_partial_dispatch(patterns, body, env, ctx.table, ctx.interface_registry);
 
     // DoD 29: Hint top-down via ascription em lambda.
     // O hint tem PRIORIDADE sobre partial dispatch — a anotação explícita
     // do programador (`(lambda ...)::(Int -> Int)`) vence a inferência
     // bottom-up. Se o body não type-checka com os tipos hinted, isso é
     // um erro legítimo de tipo.
-    let param_type_hints = if let Some(Ty::Function(hint_params, _)) = hint {
+    let (param_type_hints, failure_ctx) = if let Some(Ty::Function(hint_params, _)) = hint {
         if !hint_params.is_empty() {
-            hint_params.clone()
+            (hint_params.clone(), None)
         } else {
-            partial
+            extract_partial(partial_outcome)
         }
     } else {
-        partial
+        extract_partial(partial_outcome)
     };
 
     // DoD 30: LambdaInferenceFail — se nenhum mecanismo resolveu os tipos
@@ -81,6 +84,7 @@ pub(crate) fn infer_lambda(
     if param_type_hints.len() < patterns.len() {
         return Err(MiddleError::LambdaInferenceFail {
             span: (*span).into(),
+            detail: failure_ctx.map(format_failure_detail),
         });
     }
 
@@ -128,4 +132,54 @@ pub(crate) fn infer_lambda(
         },
         Effect::Puro,
     ))
+}
+
+/// Extrai `(Vec<Ty>, Option<PartialDispatchFailure>)` do outcome.
+///
+/// Se `Inferred`, retorna os tipos e None.
+/// Se `Failed`, retorna Vec vazio e Some(failure) — o caller vai produzir
+/// LambdaInferenceFail com o contexto.
+/// Se `NotApplicable`, retorna Vec vazio e None — nenhum contexto disponível.
+fn extract_partial(
+    outcome: PartialDispatchOutcome,
+) -> (Vec<Ty>, Option<super::partial_dispatch::PartialDispatchFailure>) {
+    match outcome {
+        PartialDispatchOutcome::Inferred(tys) => (tys, None),
+        PartialDispatchOutcome::Failed(f) => (Vec::new(), Some(f)),
+        PartialDispatchOutcome::NotApplicable => (Vec::new(), None),
+    }
+}
+
+/// Formata o contexto de falha do partial dispatch como string de diagnóstico.
+fn format_failure_detail(f: super::partial_dispatch::PartialDispatchFailure) -> String {
+    let args_str = f
+        .arg_types
+        .iter()
+        .map(|a| a.clone().unwrap_or_else(|| "?".into()))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    match f.reason {
+        PartialDispatchReason::NoOverload { overloads } => {
+            if overloads.is_empty() {
+                format!(
+                    "partial dispatch tentou `{}` com args [{}] mas não resolveu todos os parâmetros",
+                    f.callee, args_str
+                )
+            } else {
+                format!(
+                    "partial dispatch tentou `{}` com args [{}] — nenhuma overload casa. Overloads: {}",
+                    f.callee,
+                    args_str,
+                    overloads.join(", ")
+                )
+            }
+        }
+        PartialDispatchReason::Ambiguous => {
+            format!(
+                "partial dispatch tentou `{}` com args [{}] — múltiplas overloads casam (ambíguo)",
+                f.callee, args_str
+            )
+        }
+    }
 }
