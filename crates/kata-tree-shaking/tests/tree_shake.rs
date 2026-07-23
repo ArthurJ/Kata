@@ -137,6 +137,38 @@ main!()"#;
     );
 }
 
+/// Action NÃO referenciada (nem como first-class, nem invocada) deve ser
+/// removida pelo tree shaking — DoD 15 do PRD first-class actions.
+#[test]
+fn action_nao_referenciada_removida() {
+    // `unused_worker` nunca é referenciada — nem com `!()`, nem como Ident.
+    // `used_worker` é referenciada via `let f := used_worker`.
+    let src = r#"action used_worker (n :: Int) => Unit
+    echo!(n)
+
+action unused_worker (n :: Int) => Unit
+    echo!(+ n 100)
+
+action main => Unit
+    let f := used_worker
+    f!(42)
+
+main!()"#;
+    let shaken = shake(src);
+    assert!(
+        shaken.actions.iter().any(|a| a.name == "main"),
+        "main deve ser mantida (entry point)"
+    );
+    assert!(
+        shaken.actions.iter().any(|a| a.name == "used_worker"),
+        "used_worker deve ser mantida — referenciada como first-class Action"
+    );
+    assert!(
+        !shaken.actions.iter().any(|a| a.name == "unused_worker"),
+        "unused_worker deve ser removida — nunca referenciada (DoD 15)"
+    );
+}
+
 /// Função alcançada transitivamente (A chama B, B chama C, entry chama A)
 /// deve ser mantida. Tree shaking deve seguir a cadeia de chamadas.
 #[test]

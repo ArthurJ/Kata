@@ -127,3 +127,122 @@ main!()
 ";
     infer_ok(src);
 }
+
+// ── E2E helpers: compile + run via `kata run` ───────────────────────
+
+use std::fs;
+use std::process::Command;
+
+/// Localiza o binário `kata` compilado (target/debug/kata).
+fn kata_bin() -> String {
+    option_env!("CARGO_BIN_EXE_kata")
+        .map(String::from)
+        .unwrap_or_else(|| "target/debug/kata".to_string())
+}
+
+/// Cria um arquivo `.kata` temporário e retorna o path.
+fn write_temp_kata(name: &str, content: &str) -> String {
+    let dir = std::env::temp_dir().join("kata-driver-first-class-actions");
+    fs::create_dir_all(&dir).expect("criar temp dir");
+    let path = dir.join(format!("{name}.kata"));
+    fs::write(&path, content).expect("escrever .kata temporário");
+    path.to_string_lossy().to_string()
+}
+
+/// Executa `kata run <path>` e retorna (stdout, stderr, exit_code).
+fn run_kata(path: &str) -> (String, String, i32) {
+    let output = Command::new(kata_bin())
+        .args(["run", path])
+        .output()
+        .expect("executar kata run");
+    (
+        String::from_utf8_lossy(&output.stdout).to_string(),
+        String::from_utf8_lossy(&output.stderr).to_string(),
+        output.status.code().unwrap_or(-1),
+    )
+}
+
+// ── Test 3: E2E dispatch/strategy — compila, roda, imprime 43 e 44 ──
+
+/// PRD §13.1: dispatch/strategy pattern completo. Compila, executa via
+/// `kata run`, e verifica stdout contém "43" e "44".
+#[test]
+fn e2e_dispatch_strategy_runs() {
+    let src = r#"action dispatcher (job :: Action(Int) => Unit, payload :: Int) => Unit
+    job!(payload)
+
+action worker_a (n :: Int) => Unit
+    echo!(+ n 1)
+
+action worker_b (n :: Int) => Unit
+    echo!(+ n 2)
+
+action main => Unit
+    dispatcher!(worker_a, 42)
+    dispatcher!(worker_b, 42)
+
+main!()"#;
+    let path = write_temp_kata("e2e_dispatch_strategy", src);
+    let (stdout, stderr, code) = run_kata(&path);
+    assert_eq!(code, 0, "exit 0 — stderr: {stderr}");
+    assert!(
+        stdout.contains("43"),
+        "deve imprimir 43 — stdout: {stdout} | stderr: {stderr}"
+    );
+    assert!(
+        stdout.contains("44"),
+        "deve imprimir 44 — stdout: {stdout} | stderr: {stderr}"
+    );
+}
+
+// ── Test 4: E2E match selection — compila, roda, imprime 43 ─────────
+
+/// PRD §13.3: match seleciona Action em runtime. `cond = True` seleciona
+/// `worker_a`, `f!(42)` invoca indiretamente. Deve imprimir 43.
+#[test]
+fn e2e_match_selection_runs() {
+    let src = r#"action worker_a (n :: Int) => Unit
+    echo!(+ n 1)
+
+action worker_b (n :: Int) => Unit
+    echo!(+ n 2)
+
+action main => Unit
+    let cond := True
+    let f := match cond
+        Boolean::True: worker_a
+        Boolean::False: worker_b
+    f!(42)
+
+main!()"#;
+    let path = write_temp_kata("e2e_match_selection", src);
+    let (stdout, stderr, code) = run_kata(&path);
+    assert_eq!(code, 0, "exit 0 — stderr: {stderr}");
+    assert!(
+        stdout.contains("43"),
+        "deve imprimir 43 — stdout: {stdout} | stderr: {stderr}"
+    );
+}
+
+// ── Test 5: DoD 6 — fork!(f, (42,)) where f := worker ──────────────
+
+/// PRD DoD 6: `fork!(f, (42,))` where `f := worker` works (fn_ptr from
+/// variável, não de Ident direto). Compila e roda sem erro.
+#[test]
+fn e2e_fork_with_action_var() {
+    let src = r#"action worker (n :: Int) => Unit
+    echo!(n)
+
+action main => Unit
+    let f := worker
+    fork!(f, (42,))
+
+main!()"#;
+    let path = write_temp_kata("e2e_fork_action_var", src);
+    let (stdout, stderr, code) = run_kata(&path);
+    assert_eq!(code, 0, "exit 0 — stderr: {stderr}");
+    assert!(
+        stdout.contains("42"),
+        "deve imprimir 42 — stdout: {stdout} | stderr: {stderr}"
+    );
+}

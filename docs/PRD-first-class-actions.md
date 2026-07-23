@@ -1,6 +1,6 @@
 # PRD — First-Class Actions
 
-**Status:** 📝 Rascunho
+**Status:** ✅ Concluído
 **Data:** 2026-07-22
 **Depende de:** DispatchTable ✅ (`is_action: bool`), Typeck ✅, Codegen ✅ (ABI de Action), `Fork` ✅, Escape analysis ✅, Recursion check ✅
 **Não depende de:** `type!()` (PRD separado,受益a deste PRD)
@@ -389,7 +389,7 @@ crates/kata-codegen/src/lowering/action_call.rs # call_indirect para invocação
 crates/kata-codegen/src/lowering/csp.rs       # fork! recebe fn_ptr de TypedExpr
 
 # Escape analysis
-crates/kata-inference/src/infer/escape.rs     # fn_ptr de Action é Local (i64 inline)
+crates/kata-core/src/escape.rs                     # fn_ptr de Action é Local (i64 inline)
 
 # Testes
 crates/kata-driver/tests/                      # E2E: dispatch/strategy, fork! com valor

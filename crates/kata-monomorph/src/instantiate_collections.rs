@@ -8,7 +8,7 @@
 //! `apply_subs` nos tipos das coleções.
 
 use kata_ast::Spanned;
-use kata_inference::{FusedStage, Substitutions, TypedExprKind, apply_subs};
+use kata_inference::{apply_subs, FusedStage, Substitutions, TypedExprKind};
 
 use crate::instantiate::instantiate_typed_expr;
 
@@ -198,6 +198,23 @@ pub(crate) fn instantiate_collections(
                 ret_ty: apply_subs(ret_ty, subs),
             })
         }
+
+        // ── Fork: instanciar action_expr + args ──
+        TypedExprKind::Fork {
+            action_name,
+            action_expr,
+            args,
+        } => Some(TypedExprKind::Fork {
+            action_name: action_name.clone(),
+            action_expr: Box::new(Spanned::new(
+                instantiate_typed_expr(&action_expr.node, subs),
+                action_expr.span,
+            )),
+            args: Box::new(Spanned::new(
+                instantiate_typed_expr(&args.node, subs),
+                args.span,
+            )),
+        }),
 
         _ => None,
     }

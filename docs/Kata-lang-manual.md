@@ -1472,6 +1472,128 @@ ao sender e são alocados na heap global com `Arc<T>` nativo (reference counting
 thread-safe). Valores que não escapam por canais vivem na arena local ou na
 caller's arena — zero cópia, zero overhead.
 
+### 5.3. Actions como Valores de Primeira Classe (First-Class Actions)
+
+Actions podem ser **referenciadas sem invocação**, armazenadas em variáveis, e
+passadas como parâmetros para outras Actions. Isto habilita o pattern de
+dispatch/strategy:
+
+```kata
+action dispatcher (job :: Action(Int) => Unit, payload :: Int) => Unit
+    job!(payload)
+
+action worker_a (n :: Int) => Unit
+    echo!(+ n 1)
+
+action worker_b (n :: Int) => Unit
+    echo!(+ n 2)
+
+action main => Unit
+    dispatcher!(worker_a, 42)   # imprime 43
+    dispatcher!(worker_b, 42)   # imprime 44
+
+main!()
+```
+
+#### Referência vs Invocação
+
+```kata
+worker_a           # referência — valor do tipo Action(Int) => Unit
+worker_a!(42)      # invocação — executa a action, retorna Unit
+```
+
+`worker_a` sem `!()` é uma **referência** que carrega o tipo `Ty::Action`. O
+valor em runtime é o `fn_ptr` (i64) da Action — obtido via `GlobalValue::Symbol`
+no codegen. O parser já produz `Expr::Ident` — não há mudança no parser. A
+mudança é no typeck: `Ident` cujo nome está no DispatchTable com `is_action: true`
+recebe `Ty::Action(param_types, ret_ty)`.
+
+#### Sintaxe de Tipo
+
+```
+Action(Param1, Param2, ...) => Ret
+```
+
+Espelha a sintaxe de assinatura de actions, sem os nomes dos params:
+
+```kata
+action dispatcher (job :: Action(Int) => Unit, payload :: Int) => Unit
+```
+
+`Ty::Action` é separada de `Ty::Function` porque as ABIs são semanticamente
+diferentes:
+- `Function`: `(captures_ptr, arg1, ...) -> ret` — pura, sem scheduler
+- `Action`: `(fiber_arena, caller_arena, args_ptr) -> i64` — impura, scheduler M:N
+
+#### Passagem como Parâmetro
+
+Dentro de `dispatcher`, `job` é um parâmetro com `ty: Ty::Action([Int], Unit)`.
+A invocação `job!(payload)` é **indireta** — o fn_ptr vem do parâmetro, não de
+um nome estático. O codegen emite `call_indirect` com a ABI de Action.
+
+#### Seleção por `match`
+
+Actions podem ser selecionadas em runtime via `match`:
+
+```kata
+action main => Unit
+    let cond := True
+    let f := match cond
+        Boolean::True: worker_a
+        Boolean::False: worker_b
+    f!(42)   # invoca worker_a indiretamente
+```
+
+O def-use do recursion checker registra arestas conservativas para ambas as
+actions do `match` (worker_a e worker_b).
+
+#### `fork!` com Action como valor
+
+`fork!` recebe um `TypedExpr` com `ty: Ty::Action`. Se o arg é `Ident` direto,
+o codegen usa `GlobalValue::Symbol`. Se é variável (`let f := worker`), usa
+o fn_ptr da variável:
+
+```kata
+action worker (n :: Int) => Unit
+    echo!(n)
+
+action main => Unit
+    let f := worker
+    fork!(f, (42,))    # fn_ptr vem da variável f
+```
+
+#### Restrições
+
+| Operação | Status | Racional |
+|---|---|---|
+| `let f := worker_a` | ✅ Permitido | Binding direto — nome rastreável |
+| `dispatcher!(worker_a, 42)` | ✅ Permitido | Action como param de Action |
+| `f!(42)` onde `f` é param | ✅ Permitido | Invocação indireta |
+| `fork!(f, (42,))` onde `f := worker` | ✅ Permitido | Fork recebe Action como valor |
+| Action como campo de `data` | ❌ Proibido | `data` é reino de dados, não de comportamento |
+| Action via canal | ❌ Proibido | Canais transportam dados, não comportamento |
+| Action como parâmetro de função pura | ❌ Proibido | Funções puras não podem invocar actions |
+| Interface `CALLABLE` | ❌ Não existe | Functions e Actions são reinos separados |
+
+O typeck rejeita `Ty::Action` em posições de `data`, canal, e função pura.
+Actions são **importáveis** (via `import`), não precisam ser transportadas
+por canais ou armazenadas em structs.
+
+#### Recursion Check — Def-Use Interprocedural
+
+Quando `dispatcher!(worker_a, 42)` passa `worker_a` como param `job` e
+`dispatcher` invoca `job!(payload)`, o recursion checker registra a aresta
+`dispatcher → worker_a`. Se `worker_a` invoca `dispatcher` (direta ou
+indiretamente), o ciclo é detectado. O algoritmo propaga nomes literais dos
+call sites para os params que eles preenchem, transitivamente até fixpoint.
+
+#### Tree Shaking
+
+Uma action referenciada como first-class value (`Ident { ty: Action }`) é
+marcada como alcançável pelo tree shaker — pode ser invocada indiretamente.
+Uma action não referenciada (nem invocada, nem referenciada como valor) é
+removida.
+
 ## 6. Concorrência e Gestão de Memória (Modelo CSP)
 
 O runtime fornece escalonamento **multithread M:N** — M fibers (tasks Kata)
