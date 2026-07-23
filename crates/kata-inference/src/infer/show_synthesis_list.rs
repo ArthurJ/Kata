@@ -59,6 +59,7 @@ pub(crate) fn synthesize_list_show_functions(
         associative_neutral: None,
         type_params: vec![type_param.to_string()],
         substitutions: None,
+        param_names: vec![],
     });
 
     // ── Registra overload `__kata_show__List_rest :: List::A => Text` ──
@@ -76,6 +77,7 @@ pub(crate) fn synthesize_list_show_functions(
         associative_neutral: None,
         type_params: vec![type_param.to_string()],
         substitutions: None,
+        param_names: vec![],
     });
 
     // ── Registra `List implements SHOW` no InterfaceRegistry ──

@@ -57,6 +57,7 @@ pub(crate) fn synthesize_enum_pred(
                     associative_neutral: None,
                     type_params: vec![],
                     substitutions: None,
+                    param_names: vec![],
                 });
             }
         }
@@ -73,6 +74,7 @@ pub(crate) fn synthesize_enum_pred(
             associative_neutral: None,
             type_params: vec![],
             substitutions: None,
+            param_names: vec![],
         });
     }
 

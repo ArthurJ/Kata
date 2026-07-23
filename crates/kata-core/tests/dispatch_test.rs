@@ -13,6 +13,7 @@ fn make_ffi_info(name: &str, params: &[Ty], ret: Ty, ffi: &str) -> OverloadInfo 
         associative_neutral: None,
         type_params: vec![],
         substitutions: None,
+        param_names: vec![],
     }
 }
 

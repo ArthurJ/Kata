@@ -120,6 +120,7 @@ pub(crate) fn instantiate_generic_closure(
             associative_neutral: None,
             type_params: vec![],
             substitutions: Some(subs.clone()),
+            param_names: vec![],
         });
 
         // Gera TypedFunction se a função original tem corpo.
@@ -231,6 +232,7 @@ pub(crate) fn instantiate_generic_action_call(
                 associative_neutral: None,
                 type_params: vec![],
                 substitutions: Some(subs.clone()),
+                param_names: vec![],
             });
 
             // Gera TypedAction se a Action original tem corpo.

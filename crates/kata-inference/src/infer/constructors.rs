@@ -49,6 +49,7 @@ pub(crate) fn synthesize_constructors(
             associative_neutral: None,
             type_params: vec![],
             substitutions: None,
+            param_names: vec![],
         });
 
         // Sintetiza a TypedFunction com uma cláusula:
@@ -155,6 +156,7 @@ pub(crate) fn synthesize_constructors(
                 associative_neutral: None,
                 type_params: vec![],
                 substitutions: None,
+                param_names: vec![],
             });
 
             let pattern = Spanned::new(
@@ -202,6 +204,7 @@ pub(crate) fn synthesize_constructors(
                 associative_neutral: None,
                 type_params: vec![],
                 substitutions: None,
+                param_names: vec![],
             });
 
             let patterns: Vec<Spanned<TypedPattern>> = field_types

@@ -33,6 +33,10 @@ pub struct OverloadInfo {
     /// original e para funções não-genéricas. `Some(map)` para instâncias
     /// monomorfizadas.
     pub substitutions: Option<HashMap<String, Ty>>,
+    /// Nomes dos params da action. `Some(nome)` para params nomeados,
+    /// `None` para posicional legado. Vazio para funções puras e FFI.
+    /// Usado pelo typeck para mapear DictLit args → params nomeados.
+    pub param_names: Vec<Option<String>>,
 }
 
 /// Score de um candidato — 4D + tiebreak genérico.
@@ -135,6 +139,7 @@ impl DispatchTable {
             associative_neutral,
             type_params: vec![],
             substitutions: None,
+            param_names: vec![],
         });
     }
 

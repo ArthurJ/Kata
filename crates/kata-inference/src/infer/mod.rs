@@ -114,6 +114,7 @@ pub fn infer_module(
             associative_neutral: None,
             type_params,
             substitutions: None,
+            param_names: action_def.param_names.clone(),
         });
     }
 

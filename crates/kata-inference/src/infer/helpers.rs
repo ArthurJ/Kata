@@ -37,6 +37,7 @@ pub(crate) fn populate_dispatch_table(signatures: &[Signature]) -> DispatchTable
             associative_neutral,
             type_params: sig.type_params.clone(),
             substitutions: None,
+            param_names: vec![],
         });
 
         // Marca comutativa quando a assinatura tem @commutative.

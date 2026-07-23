@@ -93,6 +93,7 @@ pub(crate) fn synthesize_show_functions(
             associative_neutral: None,
             type_params: vec![],
             substitutions: None,
+            param_names: vec![],
         });
 
         // Registra `Struct implements SHOW` no InterfaceRegistry.
@@ -203,6 +204,7 @@ pub(crate) fn synthesize_show_functions(
             associative_neutral: None,
             type_params: type_params.clone(),
             substitutions: None,
+            param_names: vec![],
         });
 
         // Registra `Enum implements SHOW` no InterfaceRegistry.
