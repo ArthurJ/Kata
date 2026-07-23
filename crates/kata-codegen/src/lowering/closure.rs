@@ -77,10 +77,10 @@ pub(crate) fn lower_closure(
             "kata_rt_dict_get_checked" => {
                 // Args: [dict, key] → [dict, key, hash(key), eq_fn, arena]
                 let key_ty = &args[1].node.ty;
-                let key_val = super::collections_literal::bitcast_to_i64(call_args[1], ctx);
+                let key_val = super::dict_set_lit::bitcast_to_i64(call_args[1], ctx);
                 call_args[1] = key_val;
-                let hash_name = super::collections_literal::hash_fn_name(key_ty)?;
-                let eq_name = super::collections_literal::eq_fn_name(key_ty)?;
+                let hash_name = super::dict_set_lit::hash_fn_name(key_ty)?;
+                let eq_name = super::dict_set_lit::eq_fn_name(key_ty)?;
                 let hash_ref = ctx
                     .ffi_refs
                     .get(hash_name)
@@ -88,7 +88,7 @@ pub(crate) fn lower_closure(
                     .ok_or_else(|| super::CodegenError::FfiSymbolNotFound(hash_name.into()))?;
                 let hash_call = ctx.builder.ins().call(hash_ref, &[key_val]);
                 let hash_val = ctx.builder.inst_results(hash_call)[0];
-                let eq_fn_ptr = super::collections_literal::get_ffi_fn_ptr(eq_name, ctx)?;
+                let eq_fn_ptr = super::dict_set_lit::get_ffi_fn_ptr(eq_name, ctx)?;
                 call_args.push(hash_val);
                 call_args.push(eq_fn_ptr);
                 call_args.push(arena_for_dict);
@@ -97,10 +97,10 @@ pub(crate) fn lower_closure(
                 // Args: [dict, key, val] → [dict, key, val, hash(key), eq_fn, arena]
                 // key is arg_values[1], need its type from args[1].node.ty
                 let key_ty = &args[1].node.ty;
-                let key_val = super::collections_literal::bitcast_to_i64(call_args[1], ctx);
+                let key_val = super::dict_set_lit::bitcast_to_i64(call_args[1], ctx);
                 call_args[1] = key_val;
-                let hash_name = super::collections_literal::hash_fn_name(key_ty)?;
-                let eq_name = super::collections_literal::eq_fn_name(key_ty)?;
+                let hash_name = super::dict_set_lit::hash_fn_name(key_ty)?;
+                let eq_name = super::dict_set_lit::eq_fn_name(key_ty)?;
                 let hash_ref = ctx
                     .ffi_refs
                     .get(hash_name)
@@ -108,7 +108,7 @@ pub(crate) fn lower_closure(
                     .ok_or_else(|| super::CodegenError::FfiSymbolNotFound(hash_name.into()))?;
                 let hash_call = ctx.builder.ins().call(hash_ref, &[key_val]);
                 let hash_val = ctx.builder.inst_results(hash_call)[0];
-                let eq_fn_ptr = super::collections_literal::get_ffi_fn_ptr(eq_name, ctx)?;
+                let eq_fn_ptr = super::dict_set_lit::get_ffi_fn_ptr(eq_name, ctx)?;
                 call_args.push(hash_val);
                 call_args.push(eq_fn_ptr);
                 call_args.push(arena_for_dict);
@@ -116,10 +116,10 @@ pub(crate) fn lower_closure(
             "kata_rt_dict_remove" => {
                 // Args: [dict, key] → [dict, key, hash(key), eq_fn, arena]
                 let key_ty = &args[1].node.ty;
-                let key_val = super::collections_literal::bitcast_to_i64(call_args[1], ctx);
+                let key_val = super::dict_set_lit::bitcast_to_i64(call_args[1], ctx);
                 call_args[1] = key_val;
-                let hash_name = super::collections_literal::hash_fn_name(key_ty)?;
-                let eq_name = super::collections_literal::eq_fn_name(key_ty)?;
+                let hash_name = super::dict_set_lit::hash_fn_name(key_ty)?;
+                let eq_name = super::dict_set_lit::eq_fn_name(key_ty)?;
                 let hash_ref = ctx
                     .ffi_refs
                     .get(hash_name)
@@ -127,7 +127,7 @@ pub(crate) fn lower_closure(
                     .ok_or_else(|| super::CodegenError::FfiSymbolNotFound(hash_name.into()))?;
                 let hash_call = ctx.builder.ins().call(hash_ref, &[key_val]);
                 let hash_val = ctx.builder.inst_results(hash_call)[0];
-                let eq_fn_ptr = super::collections_literal::get_ffi_fn_ptr(eq_name, ctx)?;
+                let eq_fn_ptr = super::dict_set_lit::get_ffi_fn_ptr(eq_name, ctx)?;
                 call_args.push(hash_val);
                 call_args.push(eq_fn_ptr);
                 call_args.push(arena_for_dict);
@@ -143,8 +143,8 @@ pub(crate) fn lower_closure(
                         )));
                     }
                 };
-                let eq_name = super::collections_literal::eq_fn_name(&elem_ty)?;
-                let eq_fn_ptr = super::collections_literal::get_ffi_fn_ptr(eq_name, ctx)?;
+                let eq_name = super::dict_set_lit::eq_fn_name(&elem_ty)?;
+                let eq_fn_ptr = super::dict_set_lit::get_ffi_fn_ptr(eq_name, ctx)?;
                 call_args.push(eq_fn_ptr);
                 call_args.push(arena_for_dict);
             }
@@ -159,8 +159,8 @@ pub(crate) fn lower_closure(
                         )));
                     }
                 };
-                let eq_name = super::collections_literal::eq_fn_name(&key_ty)?;
-                let eq_fn_ptr = super::collections_literal::get_ffi_fn_ptr(eq_name, ctx)?;
+                let eq_name = super::dict_set_lit::eq_fn_name(&key_ty)?;
+                let eq_fn_ptr = super::dict_set_lit::get_ffi_fn_ptr(eq_name, ctx)?;
                 call_args.push(eq_fn_ptr);
                 call_args.push(arena_for_dict);
             }
