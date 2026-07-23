@@ -355,6 +355,13 @@ pub enum TypeExpr {
         ret: Box<Spanned<TypeExpr>>,
     },
 
+    /// `Action(Param1, Param2, ...) => Ret` — tipo de Action first-class.
+    /// Espelha a assinatura de actions, sem nomes dos params.
+    ActionType {
+        params: Vec<Spanned<TypeExpr>>,
+        ret: Box<Spanned<TypeExpr>>,
+    },
+
     /// `Self` — referência ao tipo que implementa a interface.
     /// Válido apenas dentro de blocos `interface` e `implements`.
     /// O resolution substitui pelo tipo concreto no impl.
