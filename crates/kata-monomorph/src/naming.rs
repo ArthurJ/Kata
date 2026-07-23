@@ -42,6 +42,14 @@ fn ty_to_string(ty: &Ty) -> String {
                 .join("_");
             format!("Fn_{p}_{}", ty_to_string(ret))
         }
+        Ty::Action(params, ret) => {
+            let p = params
+                .iter()
+                .map(ty_to_string)
+                .collect::<Vec<_>>()
+                .join("_");
+            format!("Act_{p}_{}", ty_to_string(ret))
+        }
         Ty::Tuple(elems) => {
             let e = elems.iter().map(ty_to_string).collect::<Vec<_>>().join("_");
             format!("Tup_{e}")
