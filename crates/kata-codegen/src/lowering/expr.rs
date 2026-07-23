@@ -599,5 +599,22 @@ pub(crate) fn lower_expr(
             timeout_ms,
             timeout_body,
         } => super::csp::lower_select(expr, arms, timeout_ms, timeout_body, ctx),
+
+        // ── TypeOf — introspecção compile-time ──
+        // Avalia o inner expr (preserva side-effects), descarta o resultado,
+        // e produz a string do tipo via Ty::display().
+        TypedExprKind::TypeOf { expr: inner } => {
+            // 1. Lowerar o inner expr — side-effects acontecem, valor é descartado.
+            let _ = lower_expr(&inner.node, ctx)?;
+            // 2. Produzir a string do tipo a partir do tipo do inner expr.
+            let type_str = inner.node.ty.display();
+            // 3. Alocar como string global (mesmo mecanismo de TextLit).
+            let global = ctx.add_string(&type_str);
+            let ptr = ctx
+                .builder
+                .ins()
+                .global_value(ctx.module.target_config().pointer_type(), global);
+            Ok(ptr)
+        }
     }
 }

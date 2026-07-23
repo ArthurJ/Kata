@@ -123,6 +123,14 @@ pub enum Expr {
         args: Box<Spanned<Expr>>,
     },
 
+    /// `type!(expr)` — introspecção compile-time.
+    /// Retorna o tipo nominal de `expr` como `Text`. O typeck resolve
+    /// o tipo em compile-time; o monomorphizador substitui por `TextLit`.
+    /// `type` é keyword do lexer — o parser reconhece `Type` seguido de `!`.
+    TypeOf {
+        expr: Box<Spanned<Expr>>,
+    },
+
     /// `return expr` — early return em Actions.
     /// Exclusivo de Actions. Não existe em funções puras.
     Return(Box<Spanned<Expr>>),

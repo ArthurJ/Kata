@@ -106,6 +106,9 @@ fn collect_captures_in_expr(
         TypedExprKind::TypeAscription { expr, .. } => {
             collect_captures_in_expr(&mut expr.node, outer_env, local_tys, dispatch);
         }
+        TypedExprKind::TypeOf { expr } => {
+            collect_captures_in_expr(&mut expr.node, outer_env, local_tys, dispatch);
+        }
         TypedExprKind::Grouping { inner } => {
             collect_captures_in_expr(&mut inner.node, outer_env, local_tys, dispatch);
         }

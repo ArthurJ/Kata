@@ -291,6 +291,15 @@ fn desugar_pipes(expr: &Spanned<Expr>) -> Spanned<Expr> {
                 expr.span,
             )
         }
+        // ── TypeOf — pass-through (não precisa desugar) ──
+        // type!(expr) não contém pipes a eliminar; recursão no inner é
+        // feita no typeck, não aqui. Preserva a estrutura.
+        Expr::TypeOf { expr: inner } => Spanned::new(
+            Expr::TypeOf {
+                expr: Box::new(desugar_pipes(inner)),
+            },
+            expr.span,
+        ),
     }
 }
 

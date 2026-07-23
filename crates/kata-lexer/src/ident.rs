@@ -45,6 +45,7 @@ pub(crate) fn lex_ident(lex: &mut Lexer, start: &Pos) -> Result<TokenWithSpan, F
         "in" => Token::In,
         "select" => Token::Select,
         "timeout" => Token::Timeout,
+        "type" => Token::Type,
         _ => Token::Ident(ident.to_string()),
     };
 

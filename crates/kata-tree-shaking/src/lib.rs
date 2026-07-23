@@ -259,7 +259,8 @@ fn collect_refs(
         // ── Sub-expressões — recursão ──
         TypedExprKind::TypeAscription { expr, .. }
         | TypedExprKind::Grouping { inner: expr }
-        | TypedExprKind::Return(expr) => {
+        | TypedExprKind::Return(expr)
+        | TypedExprKind::TypeOf { expr } => {
             collect_refs(&expr.node, reached_fns, reached_actions, fn_names)
         }
 

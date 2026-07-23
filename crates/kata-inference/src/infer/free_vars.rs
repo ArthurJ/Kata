@@ -49,6 +49,9 @@ pub(crate) fn collect_free_vars(
         TypedExprKind::TypeAscription { expr, .. } => {
             collect_free_vars(&expr.node, local_bindings, dispatch, out);
         }
+        TypedExprKind::TypeOf { expr } => {
+            collect_free_vars(&expr.node, local_bindings, dispatch, out);
+        }
         TypedExprKind::Grouping { inner } => {
             collect_free_vars(&inner.node, local_bindings, dispatch, out);
         }

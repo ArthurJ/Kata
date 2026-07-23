@@ -323,6 +323,10 @@ fn rewrite_typed_expr(expr_span: &mut Spanned<TypedExpr>, ctx: &MonoCtx, acc: &m
             }
         }
 
+        TypedExprKind::TypeOf { expr } => {
+            rewrite_typed_expr(expr, ctx, acc);
+        }
+
         TypedExprKind::Loop { body } => {
             for stmt in body.iter_mut() {
                 rewrite_typed_expr(stmt, ctx, acc);

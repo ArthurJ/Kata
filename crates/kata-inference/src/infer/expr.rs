@@ -611,6 +611,21 @@ pub(crate) fn infer_expr_hinted(
                 tail_pos,
             );
         }
+
+        // ── `type!(expr)` — introspecção compile-time ──
+        // ty = Text (sempre), kind = TypeOf { expr: typed_inner },
+        // effect = effect do inner expr (preserva side-effects).
+        Expr::TypeOf { expr: inner } => {
+            let typed_inner = infer_expr(&inner.node, &inner.span, env, ctx, false)?;
+            let inner_effect = typed_inner.effect;
+            (
+                Ty::text(),
+                TypedExprKind::TypeOf {
+                    expr: Box::new(Spanned::new(typed_inner, inner.span)),
+                },
+                inner_effect,
+            )
+        }
     };
 
     // Deriva EscapeTarget de tail_pos + contexto (Action vs função pura/entry).

@@ -117,6 +117,8 @@ pub fn assert_no_holes(expr: &Spanned<Expr>) {
                 assert_no_holes(b);
             }
         }
+        // TypeOf — recursão no inner expr (não contém holes, mas pode ter)
+        Expr::TypeOf { expr: inner } => assert_no_holes(inner),
     }
 }
 
@@ -229,5 +231,7 @@ pub fn assert_no_pipes(expr: &Spanned<Expr>) {
                 assert_no_pipes(b);
             }
         }
+        // TypeOf — recursão no inner expr (não contém pipes, mas pode ter)
+        Expr::TypeOf { expr: inner } => assert_no_pipes(inner),
     }
 }

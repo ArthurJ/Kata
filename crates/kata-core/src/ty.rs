@@ -310,3 +310,62 @@ pub fn ty_list_to_string(tys: &[Ty]) -> String {
         .collect::<Vec<_>>()
         .join(", ")
 }
+
+impl Ty {
+    /// Formata o tipo na **sintaxe da linguagem** — o mesmo formato que o
+    /// usuário escreve em assinaturas. Usado por `type!()` para produzir
+    /// o `Text` que o usuário vê.
+    ///
+    /// Diferente de `Display` (que é para mensagens de erro e usa vírgulas
+    /// em params de função), `display()` usa a sintaxe real da linguagem:
+    /// `(Int Int -> Int)` em vez de `(Int, Int) -> Int`.
+    pub fn display(&self) -> String {
+        match self {
+            Ty::Prim(p) => p.to_string(),
+            Ty::Unit => "Unit".into(),
+            Ty::Struct(name) | Ty::Sum(name) | Ty::Interface(name) => name.clone(),
+            Ty::Var(name) => name.clone(),
+            Ty::Generic(name, params) => {
+                if params.len() == 1 {
+                    format!("{name}::{}", params[0].display())
+                } else {
+                    let params_str = params.iter()
+                        .map(|p| p.display())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    format!("{name}::({params_str})")
+                }
+            }
+            Ty::Function(params, ret) => {
+                let params_str = params.iter()
+                    .map(|p| p.display())
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                format!("({params_str} -> {})", ret.display())
+            }
+            Ty::Action(params, ret) => {
+                let params_str = params.iter()
+                    .map(|p| p.display())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("Action({params_str}) => {}", ret.display())
+            }
+            Ty::Tuple(elements) => {
+                let elems_str = elements.iter()
+                    .map(|e| e.display())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("({elems_str})")
+            }
+            Ty::List(t) => format!("[{}]", t.display()),
+            Ty::Array(t) => format!("{{{}}}", t.display()),
+            Ty::Range(_) => "[a..s..b]".into(),
+            Ty::Dict(k, v) => format!("Dict::({}, {})", k.display(), v.display()),
+            Ty::Set(t) => format!("Set::{}", t.display()),
+            Ty::Sender(t) => format!("Sender::{}", t.display()),
+            Ty::Receiver(t) => format!("Receiver::{}", t.display()),
+            Ty::ReceiverFactory(t) => format!("ReceiverFactory::{}", t.display()),
+            Ty::InferVar(_) => panic!("type!() em tipo não-resolvido — bug do typeck"),
+        }
+    }
+}

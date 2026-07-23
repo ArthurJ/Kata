@@ -196,6 +196,13 @@ pub enum TypedExprKind {
         indirect_callee: Option<Box<Spanned<TypedExpr>>>,
     },
 
+    /// `type!(expr)` — introspecção compile-time.
+    /// O typeck atribui `ty = Text`. O monomorphizador substitui
+    /// por avaliação de `expr` (preserva side-effects) + `TextLit(ty_display(&expr.ty))`.
+    TypeOf {
+        expr: Box<Spanned<TypedExpr>>,
+    },
+
     /// `var nome := expr` — binding mutável.
     /// Semântica igual a `Let` na TAST (o codegen trata a mutabilidade).
     Var {

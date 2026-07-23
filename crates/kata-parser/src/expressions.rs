@@ -148,6 +148,19 @@ impl Parser {
                 }
                 self.parse_select()
             }
+            Token::Type => {
+                self.advance(); // consume `type`
+                // `type!` — introspecção compile-time
+                self.expect(&Token::Bang, "`!` após `type`")?;
+                let inner = self.parse_paren_expr()?;
+                let span = start.cover(inner.span);
+                Ok(Spanned::new(
+                    Expr::TypeOf {
+                        expr: Box::new(inner),
+                    },
+                    span,
+                ))
+            }
             Token::Break => {
                 if !self.in_action_body {
                     return Err(self.error("`break` fora de Action (break só existe em Actions)"));

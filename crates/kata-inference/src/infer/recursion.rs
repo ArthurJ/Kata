@@ -189,6 +189,9 @@ fn traverse_for_invoked_params(
         TypedExprKind::TypeAscription { expr, .. } => {
             traverse_for_invoked_params(&expr.node, callable_params, out);
         }
+        TypedExprKind::TypeOf { expr } => {
+            traverse_for_invoked_params(&expr.node, callable_params, out);
+        }
         TypedExprKind::Grouping { inner } => {
             traverse_for_invoked_params(&inner.node, callable_params, out);
         }
@@ -423,6 +426,9 @@ fn traverse_for_call_sites(
         TypedExprKind::TypeAscription { expr, .. } => {
             traverse_for_call_sites(&expr.node, target_name, action_names, out);
         }
+        TypedExprKind::TypeOf { expr } => {
+            traverse_for_call_sites(&expr.node, target_name, action_names, out);
+        }
         TypedExprKind::Grouping { inner } => {
             traverse_for_call_sites(&inner.node, target_name, action_names, out);
         }
@@ -636,6 +642,9 @@ fn collect_action_calls(
             }
         }
         TypedExprKind::TypeAscription { expr, .. } => {
+            collect_action_calls(&expr.node, &expr.span, out);
+        }
+        TypedExprKind::TypeOf { expr } => {
             collect_action_calls(&expr.node, &expr.span, out);
         }
         TypedExprKind::Grouping { inner } => {

@@ -327,6 +327,14 @@ pub(crate) fn desugar_holes(expr: &Spanned<Expr>) -> Spanned<Expr> {
                 expr.span,
             )
         }
+        // ── TypeOf — pass-through (não precisa desugar) ──
+        // type!(expr) não contém holes a eliminar; preserva a estrutura.
+        Expr::TypeOf { expr: inner } => Spanned::new(
+            Expr::TypeOf {
+                expr: Box::new(desugar_holes(inner)),
+            },
+            expr.span,
+        ),
     }
 }
 

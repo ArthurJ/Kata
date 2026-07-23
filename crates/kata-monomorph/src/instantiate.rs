@@ -408,6 +408,13 @@ fn instantiate_kind(kind: &TypedExprKind, subs: &Substitutions) -> TypedExprKind
                 .map(|ic| Box::new(Spanned::new(instantiate_typed_expr(&ic.node, subs), ic.span))),
         },
 
+        TypedExprKind::TypeOf { expr } => TypedExprKind::TypeOf {
+            expr: Box::new(Spanned::new(
+                instantiate_typed_expr(&expr.node, subs),
+                expr.span,
+            )),
+        },
+
         TypedExprKind::Loop { body } => TypedExprKind::Loop {
             body: body
                 .iter()

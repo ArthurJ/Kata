@@ -127,6 +127,9 @@ fn fallback_in_expr(expr_span: &mut Spanned<TypedExpr>) {
         TypedExprKind::ActionCall { args, .. } => {
             fallback_in_expr(args);
         }
+        TypedExprKind::TypeOf { expr } => {
+            fallback_in_expr(expr);
+        }
         TypedExprKind::Loop { body } => {
             for stmt in body.iter_mut() {
                 fallback_in_expr(stmt);

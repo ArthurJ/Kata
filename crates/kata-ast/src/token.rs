@@ -86,6 +86,8 @@ pub enum Token {
     Select,
     /// `timeout` — cláusula de `select`
     Timeout,
+    /// `type` — introspecção compile-time (`type!(expr)`)
+    Type,
 
     // ── Operadores e pontuação ──────────────────────────
     /// `:=` — operador de binding (exclusivo para `let` e `var`)
@@ -196,6 +198,7 @@ impl Token {
                 | Token::In
                 | Token::Select
                 | Token::Timeout
+                | Token::Type
         )
     }
 }
@@ -229,6 +232,7 @@ impl std::fmt::Display for Token {
             Token::In => write!(f, "in"),
             Token::Select => write!(f, "select"),
             Token::Timeout => write!(f, "timeout"),
+            Token::Type => write!(f, "type"),
             Token::BindAssign => write!(f, ":="),
             Token::DoubleColon => write!(f, "::"),
             Token::FatArrow => write!(f, "=>"),
