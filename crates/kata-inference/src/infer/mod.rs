@@ -123,7 +123,7 @@ pub fn infer_module(
         &resolved.struct_registry,
         &resolved.type_env,
         &mut dispatch_table,
-    );
+    )?;
 
     // 1e. sintetiza funções predicado e smart constructors
     //     falíveis para tipos refinados (`data (Int, > _ 0) as PositiveInt`).

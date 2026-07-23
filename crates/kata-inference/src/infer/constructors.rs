@@ -211,6 +211,23 @@ pub(crate) fn synthesize_constructors(
             // mas com struct_name = new_name.
             let field_types: Vec<Ty> = struct_info.fields.iter().map(|f| f.ty.clone()).collect();
 
+            // Proibe Ty::Action em campos de data — vale para aliases também. (PRD §3.7)
+            if let Some(field) = struct_info
+                .fields
+                .iter()
+                .find(|f| matches!(f.ty, Ty::Action(..)))
+            {
+                return Err(MiddleError::TypeMismatch {
+                    expected: "tipo de dado (não-Action)".into(),
+                    found: format!(
+                        "Action não é permitida em data — Actions são comportamento, não informação. \
+                         Campo `{}` do alias `{}` tem tipo `{}`",
+                        field.name, struct_name, field.ty
+                    ),
+                    span: kata_ast::Span::synthetic().into(),
+                });
+            }
+
             dispatch_table.insert(OverloadInfo {
                 name: struct_name.to_string(),
                 params: field_types.clone(),
@@ -285,5 +302,5 @@ pub(crate) fn synthesize_constructors(
         }
     }
 
-    constructors
+    Ok(constructors)
 }
