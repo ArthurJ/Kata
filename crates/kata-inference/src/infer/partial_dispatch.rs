@@ -11,7 +11,8 @@ use kata_core::dispatch::DispatchTable;
 use kata_core::interface_registry::InterfaceRegistry;
 use kata_core::ty::{Ty, TypeEnv};
 
-use super::helpers::{peel_grouping_expr, resolve_type_expr};
+use super::helpers::peel_grouping_expr;
+use kata_resolution::resolve_type_expr;
 
 /// Tenta inferir tipos dos parâmetros do lambda via partial dispatch.
 ///
@@ -87,7 +88,7 @@ pub(crate) fn try_partial_dispatch(
                     if param_names.contains(&name.as_str()) {
                         // Hole com ascription: None no dispatch + hint direto da ascription
                         partial_args.push(None);
-                        let resolved = resolve_type_expr(&ty.node, env);
+                        let resolved = resolve_type_expr(&ty.node, env, iface_reg);
                         for (pat_idx, pat) in patterns.iter().enumerate() {
                             if let Pattern::Ident(pat_name) = &pat.node {
                                 if pat_name == name {
@@ -99,7 +100,7 @@ pub(crate) fn try_partial_dispatch(
                     }
                 }
                 // Ascription em arg que não é parâmetro do lambda — usa tipo da ascription
-                let resolved = resolve_type_expr(&ty.node, env);
+                let resolved = resolve_type_expr(&ty.node, env, iface_reg);
                 partial_args.push(Some(resolved));
             }
             Expr::IntLit { .. } => partial_args.push(Some(Ty::int())),

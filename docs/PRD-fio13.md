@@ -804,10 +804,12 @@ passam. Sem regressões em testes existentes.
 
 ### Débito técnico
 
-- `helpers.rs` em `kata-inference` tem cópia de `resolve_type_expr` que
-  mapeia `ParamApp → Ty::Sum` (sem braços Dict/Set/List/Array/Range). Usada
-  em `partial_dispatch.rs` e `ascription.rs`. Não bloqueia — só afeta
-  ascription de tipo `Dict::(K,V)` em holes, que não é usada atualmente.
+- ✅ Resolvido: `helpers.rs` em `kata-inference` tinha cópia de
+  `resolve_type_expr` que mapeava `ParamApp → Ty::Sum` (sem braços
+  Dict/Set/List/Array/Range). A cópia foi deletada e os 3 callers
+  (`partial_dispatch.rs`, `ascription.rs`, `apply.rs`) agora usam
+  `kata_resolution::resolve_type_expr` (tornada pública), passando
+  `iface_reg` para resolver `Named` como `Ty::Interface` quando aplicável.
 
 ## Dependências de Fios
 

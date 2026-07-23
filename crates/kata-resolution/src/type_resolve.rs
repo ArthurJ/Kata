@@ -13,7 +13,7 @@ use kata_core::{InterfaceRegistry, PrimTy, Ty, TypeEnv};
 ///
 /// Se `name` é uma interface registrada no `InterfaceRegistry`, produz
 /// `Ty::Interface(name)` em vez de `Ty::Struct(name)`.
-pub(crate) fn resolve_type_expr(
+pub fn resolve_type_expr(
     expr: &TypeExpr,
     env: &TypeEnv,
     iface_reg: &InterfaceRegistry,

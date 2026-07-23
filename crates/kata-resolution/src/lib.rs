@@ -11,12 +11,11 @@ mod prelude_sigs;
 mod type_resolve;
 mod types;
 
-pub use type_resolve::collect_type_params;
+pub use type_resolve::{collect_type_params, resolve_type_expr};
 pub use types::*;
 
 use kata_ast::{Item, Module};
 use kata_core::{Ty, TypeEnv};
-use type_resolve::resolve_type_expr;
 
 /// Resolve um módulo: Pass 0 + Pass 1.
 pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {

@@ -12,7 +12,8 @@ use kata_diagnostics::MiddleError;
 use crate::typed::{Effect, TypedExpr, TypedExprKind};
 
 use super::expr::{InferCtx, infer_expr_hinted};
-use super::helpers::{InferResult, resolve_type_expr};
+use super::helpers::InferResult;
+use kata_resolution::resolve_type_expr;
 
 /// Infere uma `TypeAscription` — `expr::Type`.
 ///
@@ -30,7 +31,7 @@ pub(crate) fn infer_type_ascription(
     tail_pos: bool,
     _hint: Option<&Ty>,
 ) -> InferResult<TypedExpr> {
-    let target_ty = resolve_type_expr(&ty.node, env);
+    let target_ty = resolve_type_expr(&ty.node, env, ctx.interface_registry);
 
     // Grouped ascription `((expr))::Type` — barreira de hint.
     // Se expr é Grouping(Grouping(inner2)), o grouping duplo bloqueia

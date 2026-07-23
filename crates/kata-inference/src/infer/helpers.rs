@@ -1,13 +1,14 @@
 //! Helpers compartilhados entre os submódulos de inferência.
 //!
 //! Funções utilitárias usadas por múltiplos submódulos do `infer/`:
-//! conversão de erros, resolução de TypeExpr, peeling de Grouping,
-//! populate do DispatchTable e span fallback.
+//! conversão de erros, peeling de Grouping, populate do DispatchTable
+//! e span fallback. A resolução de `TypeExpr` → `Ty` usa
+//! [`kata_resolution::resolve_type_expr`].
 
-use kata_ast::{Item, Pattern, Span, Spanned, TypeExpr, WithBinding};
+use kata_ast::{Item, Pattern, Span, Spanned, WithBinding};
 use kata_core::dispatch::{DispatchError, DispatchTable, OverloadInfo};
 use kata_core::enum_registry::EnumRegistry;
-use kata_core::ty::{PrimTy, Ty, TypeEnv};
+use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::{MiddleError, MietteSpan};
 use kata_resolution::Signature;
 
@@ -71,54 +72,6 @@ pub(crate) fn dispatch_to_middle_error(err: DispatchError, span: Span) -> Middle
             name,
             span: span.into(),
         },
-    }
-}
-
-/// Resolve `TypeExpr` → `Ty` usando o TypeEnv. Igual ao `resolve_type_expr`
-/// do resolution, mas replicado aqui para evitar depender de função privada.
-pub(crate) fn resolve_type_expr(expr: &TypeExpr, env: &TypeEnv) -> Ty {
-    match expr {
-        TypeExpr::Named(name) => {
-            if let Some(ty) = env.lookup(name) {
-                ty.clone()
-            } else {
-                match name.as_str() {
-                    "Int" => Ty::Prim(PrimTy::Int),
-                    "Float" => Ty::Prim(PrimTy::Float),
-                    "Text" => Ty::Prim(PrimTy::Text),
-                    "Rational" => Ty::Prim(PrimTy::Rational),
-                    "Boolean" => Ty::Sum("Boolean".into()),
-                    "Unit" => Ty::Unit,
-                    _ => Ty::Struct(name.clone()),
-                }
-            }
-        }
-        TypeExpr::Unit => Ty::Unit,
-        TypeExpr::Grouping(inner) => resolve_type_expr(&inner.node, env),
-        TypeExpr::Tuple(elements) => {
-            let tys: Vec<Ty> = elements
-                .iter()
-                .map(|t| resolve_type_expr(&t.node, env))
-                .collect();
-            Ty::Tuple(tys)
-        }
-        TypeExpr::Func { params, ret } => {
-            let param_types: Vec<Ty> = params
-                .iter()
-                .map(|t| resolve_type_expr(&t.node, env))
-                .collect();
-            let return_type = resolve_type_expr(&ret.node, env);
-            Ty::Function(param_types, Box::new(return_type))
-        }
-        TypeExpr::ParamApp { name, .. } => Ty::Sum(name.clone()),
-        // Self é resolvido. Placeholder por ora.
-        TypeExpr::SelfRef => Ty::Var("Self".into()),
-
-        // `T?` — açúcar para `Result::(T, Err)`. Err = Text (D13).
-        TypeExpr::Question(inner) => {
-            let inner_ty = resolve_type_expr(&inner.node, env);
-            Ty::Generic("Result".into(), vec![inner_ty, Ty::text()])
-        }
     }
 }
 

@@ -18,9 +18,8 @@ use super::apply_lambda::{infer_apply_lambda, infer_apply_lambda_with_hint};
 use super::collections_hof::{infer_filter, infer_fold, infer_map};
 use super::expr::{InferCtx, infer_expr};
 use super::format_synthesis::infer_format;
-use super::helpers::{
-    InferResult, dispatch_to_middle_error, peel_grouping_expr, resolve_type_expr,
-};
+use super::helpers::{InferResult, dispatch_to_middle_error, peel_grouping_expr};
+use kata_resolution::resolve_type_expr;
 use super::variant_construct::{expand_spread, infer_variant_construct};
 
 use super::iface_dispatch::try_iface_method_dispatch;
@@ -68,7 +67,7 @@ pub(crate) fn infer_apply(
                 with_bindings,
             } = inner_core
             {
-                let hint_ty = resolve_type_expr(&ty.node, env);
+                let hint_ty = resolve_type_expr(&ty.node, env, ctx.interface_registry);
                 return infer_apply_lambda_with_hint(
                     patterns,
                     body,
