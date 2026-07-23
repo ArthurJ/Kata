@@ -189,6 +189,10 @@ pub fn apply_subs(ty: &Ty, subs: &Substitutions) -> Ty {
             params.iter().map(|p| apply_subs(p, subs)).collect(),
             Box::new(apply_subs(ret, subs)),
         ),
+        Ty::Action(params, ret) => Ty::Action(
+            params.iter().map(|p| apply_subs(p, subs)).collect(),
+            Box::new(apply_subs(ret, subs)),
+        ),
         Ty::Tuple(elems) => Ty::Tuple(elems.iter().map(|e| apply_subs(e, subs)).collect()),
         // List/Array/Range — substitui no elem_ty.
         Ty::List(elem) => Ty::List(Box::new(apply_subs(elem, subs))),
