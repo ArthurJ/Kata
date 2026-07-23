@@ -451,6 +451,7 @@ pub(crate) fn lower_expr(
             args,
             caller_arena: _,
             ffi_symbol,
+            indirect_callee: _,
         } => lower_action_call(expr, callee, args, ffi_symbol, ctx),
         // ── Var — mesmo codegen que Let ──
         TypedExprKind::Var { name, value } => {

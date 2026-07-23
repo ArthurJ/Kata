@@ -189,8 +189,11 @@ pub enum TypedExprKind {
         /// É o local_arena do caller (que se torna caller_arena do callee).
         caller_arena: i64,
         /// Símbolo FFI se a Action é builtin (ex: "kata_rt_print" para echo).
-        /// None para Actions definidas pelo usuário (despacha via kata_refs).
+        /// None para Actions definadas pelo usuário (despacha via kata_refs).
         ffi_symbol: Option<String>,
+        /// None = call direto (lookup em kata_refs pelo nome).
+        /// Some(expr) = call indireto (fn_ptr vem da expressão — variável/param).
+        indirect_callee: Option<Box<Spanned<TypedExpr>>>,
     },
 
     /// `var nome := expr` — binding mutável.

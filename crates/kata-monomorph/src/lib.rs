@@ -306,9 +306,15 @@ fn rewrite_typed_expr(expr_span: &mut Spanned<TypedExpr>, ctx: &MonoCtx, acc: &m
             args,
             caller_arena: _,
             ffi_symbol,
+            indirect_callee,
         } => {
             // Primeiro recurse nos argumentos (podem ter call sites genéricos aninhados).
             rewrite_typed_expr(args, ctx, acc);
+
+            // Recursão no indirect_callee (se presente — call indireto).
+            if let Some(ic) = indirect_callee {
+                rewrite_typed_expr(ic, ctx, acc);
+            }
 
             // Depois verifica se este ActionCall é genérico.
             // FFI builtins (ffi_symbol = Some) não são instanciados.

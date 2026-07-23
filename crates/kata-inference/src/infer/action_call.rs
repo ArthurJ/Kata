@@ -195,6 +195,7 @@ pub(crate) fn infer_action_call(
             args: Box::new(Spanned::new(typed_args, args.span)),
             caller_arena: 0, // placeholder — preenchido no codegen
             ffi_symbol: overload.ffi_symbol.clone().filter(|_s| overload.is_action),
+            indirect_callee: None,
         },
         Effect::Puro, // Não ativa Effect
     ))
