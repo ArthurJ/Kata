@@ -14,7 +14,7 @@ use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 use kata_resolution::RefinedDeclInfo;
 
-use crate::typed::{Effect, TypedExpr, TypedExprKind};
+use crate::typed::{TypedExpr, TypedExprKind};
 
 use super::_match::infer_match;
 use super::action_call::infer_action_call;
@@ -113,24 +113,21 @@ pub(crate) fn infer_expr_hinted(
     tail_pos: bool,
     hint: Option<&Ty>,
 ) -> InferResult<TypedExpr> {
-    let (ty, kind, effect) = match expr {
+    let (ty, kind) = match expr {
         // ── Literais ─────────────────────────────────────────
         Expr::IntLit { text } => (
             Ty::int(),
             TypedExprKind::IntLit { text: text.clone() },
-            Effect::Puro,
         ),
         Expr::FloatLit { text } => (
             Ty::float(),
             TypedExprKind::FloatLit { text: text.clone() },
-            Effect::Puro,
         ),
         Expr::TextLit { text } => (
             Ty::text(),
             TypedExprKind::TextLit { text: text.clone() },
-            Effect::Puro,
         ),
-        Expr::Unit => (Ty::Unit, TypedExprKind::Unit, Effect::Puro),
+        Expr::Unit => (Ty::Unit, TypedExprKind::Unit),
 
         // ── Identificador ────────────────────────────────────
         Expr::Ident { name } => {
@@ -139,7 +136,6 @@ pub(crate) fn infer_expr_hinted(
                 (
                     ty,
                     TypedExprKind::Ident { name: name.clone() },
-                    Effect::Puro,
                 )
             } else {
                 // Caminho 2: variante unitária desqualificada (ex: `True`,
@@ -164,7 +160,6 @@ pub(crate) fn infer_expr_hinted(
                                         Box::new(overload.ret.clone()),
                                     ),
                                     TypedExprKind::Ident { name: name.clone() },
-                                    Effect::Puro, // referenciar não executa
                                 )
                             } else {
                                 // Caminho 4: realmente unbound.
@@ -205,7 +200,6 @@ pub(crate) fn infer_expr_hinted(
                 TypedExprKind::Grouping {
                     inner: Box::new(Spanned::new(typed_inner, inner.span)),
                 },
-                Effect::Puro,
             )
         }
 
@@ -223,7 +217,6 @@ pub(crate) fn infer_expr_hinted(
                 TypedExprKind::Tuple {
                     elements: typed_elements,
                 },
-                Effect::Puro,
             )
         }
 
@@ -240,7 +233,6 @@ pub(crate) fn infer_expr_hinted(
                     name: name.clone(),
                     value: Box::new(Spanned::new(typed_value, value.span)),
                 },
-                Effect::Puro,
             )
         }
         // ── LetDestruct: let (x, y, ...) := expr ──────────────
@@ -281,7 +273,6 @@ pub(crate) fn infer_expr_hinted(
                     ty: val_ty.clone(),
                     tail_pos: false,
                     escape: EscapeTarget::Local,
-                    effect: Effect::Puro,
                     kind: TypedExprKind::Ident {
                         name: temp_name.to_string(),
                     },
@@ -291,7 +282,6 @@ pub(crate) fn infer_expr_hinted(
                     ty: elem_ty,
                     tail_pos: false,
                     escape: EscapeTarget::Local,
-                    effect: Effect::Puro,
                     kind: TypedExprKind::FieldAccess {
                         expr: Box::new(Spanned::new(temp_expr, Span::synthetic())),
                         struct_name: String::new(),
@@ -309,7 +299,6 @@ pub(crate) fn infer_expr_hinted(
                     value: Box::new(Spanned::new(typed_value, value.span)),
                     bindings: field_bindings,
                 },
-                Effect::Puro,
             )
         }
 
@@ -324,7 +313,7 @@ pub(crate) fn infer_expr_hinted(
 
             // Caminho 1: é uma variante de enum.
             if let Some(ref ty) = enum_ty
-                && let Some((vt, vk, ve)) =
+                && let Some((vt, vk)) =
                     super::variant_qual::infer_variant_qual(enum_name, variant, ty, span, ctx)?
             {
                 let escape = if ctx.ret_ty.is_some() {
@@ -341,7 +330,6 @@ pub(crate) fn infer_expr_hinted(
                     ty: vt,
                     tail_pos,
                     escape,
-                    effect: ve,
                     kind: vk,
                 });
             }
@@ -408,7 +396,7 @@ pub(crate) fn infer_expr_hinted(
         Expr::ActionCall { callee, args } => {
             match infer_action_call(callee, args, span, env, ctx)? {
                 super::action_call::ActionDispatch::Complete(typed) => return Ok(typed),
-                super::action_call::ActionDispatch::Tuple(ty, kind, effect) => (ty, kind, effect),
+                super::action_call::ActionDispatch::Tuple(ty, kind) => (ty, kind),
             }
         }
 
@@ -423,7 +411,6 @@ pub(crate) fn infer_expr_hinted(
                     name: name.clone(),
                     value: Box::new(Spanned::new(typed_value, value.span)),
                 },
-                Effect::Puro,
             )
         }
 
@@ -458,7 +445,6 @@ pub(crate) fn infer_expr_hinted(
                     name: name.clone(),
                     value: Box::new(Spanned::new(typed_value, value.span)),
                 },
-                Effect::Puro,
             )
         }
 
@@ -480,7 +466,6 @@ pub(crate) fn infer_expr_hinted(
             (
                 typed_inner.ty.clone(),
                 TypedExprKind::Return(Box::new(Spanned::new(typed_inner, inner.span))),
-                Effect::Puro,
             )
         }
         Expr::Loop { body } => {
@@ -508,7 +493,6 @@ pub(crate) fn infer_expr_hinted(
             (
                 Ty::Unit,
                 TypedExprKind::Loop { body: typed_body },
-                Effect::Puro,
             )
         }
         Expr::Break => {
@@ -519,7 +503,7 @@ pub(crate) fn infer_expr_hinted(
                     span: (*span).into(),
                 });
             }
-            (Ty::Unit, TypedExprKind::Break, Effect::Puro)
+            (Ty::Unit, TypedExprKind::Break)
         }
         Expr::Continue => {
             if !ctx.in_loop {
@@ -529,7 +513,7 @@ pub(crate) fn infer_expr_hinted(
                     span: (*span).into(),
                 });
             }
-            (Ty::Unit, TypedExprKind::Continue, Effect::Puro)
+            (Ty::Unit, TypedExprKind::Continue)
         }
 
         // ── `?` fail-fast — desugar para Match + Return ──
@@ -612,17 +596,14 @@ pub(crate) fn infer_expr_hinted(
         }
 
         // ── `type!(expr)` — introspecção compile-time ──
-        // ty = Text (sempre), kind = TypeOf { expr: typed_inner },
-        // effect = effect do inner expr (preserva side-effects).
+        // ty = Text (sempre), kind = TypeOf { expr: typed_inner }.
         Expr::TypeOf { expr: inner } => {
             let typed_inner = infer_expr(&inner.node, &inner.span, env, ctx, false)?;
-            let inner_effect = typed_inner.effect;
             (
                 Ty::text(),
                 TypedExprKind::TypeOf {
                     expr: Box::new(Spanned::new(typed_inner, inner.span)),
                 },
-                inner_effect,
             )
         }
     };
@@ -645,7 +626,6 @@ pub(crate) fn infer_expr_hinted(
         ty,
         tail_pos,
         escape,
-        effect,
         kind,
     })
 }

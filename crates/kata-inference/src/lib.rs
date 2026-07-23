@@ -1,7 +1,7 @@
 //! Pass 2: inference.
 //!
 //! Type-check dos corpos, inferência de tipos, dispatch por dominância.
-//! Produz o `TypedModule` (TAST) com `ty`, `tail_pos: bool`, `effect: Effect`
+//! Produz o `TypedModule` (TAST) com `ty`, `tail_pos: bool`
 //! em cada nó.
 //!
 //! Entry point: [`infer_module`] — consome `Module` (AST) + `ResolvedModule`
@@ -19,7 +19,7 @@ pub(crate) mod typed_pattern;
 pub use infer::generics::{Substitutions, apply_subs, unify};
 pub use infer::infer_module;
 pub use typed::{
-    CaptureInfo, ChannelKind, Effect, FusedStage, TypedAction, TypedExpr, TypedExprKind,
+    CaptureInfo, ChannelKind, FusedStage, TypedAction, TypedExpr, TypedExprKind,
     TypedFunction, TypedLogSpec, TypedModule, TypedSelectArm, TypedTestSpec,
 };
 pub use typed_pattern::{

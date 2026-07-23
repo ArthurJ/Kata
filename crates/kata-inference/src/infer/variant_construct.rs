@@ -8,7 +8,7 @@ use kata_ast::{Expr, Span, Spanned};
 use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 
-use crate::typed::{Effect, TypedExprKind};
+use crate::typed::{TypedExprKind};
 
 use super::expr::{InferCtx, infer_expr};
 use super::helpers::InferResult;
@@ -31,7 +31,7 @@ pub(crate) fn infer_variant_construct(
     span: &Span,
     env: &mut TypeEnv,
     ctx: &InferCtx,
-) -> InferResult<(Ty, TypedExprKind, Effect)> {
+) -> InferResult<(Ty, TypedExprKind)> {
     use kata_core::ty::Ty;
 
     // Verifica que o enum e a variante existem.
@@ -124,7 +124,6 @@ pub(crate) fn infer_variant_construct(
                     .variant_index(enum_name, variant)
                     .unwrap_or(0),
             },
-            Effect::Puro,
         ));
     }
 
@@ -148,7 +147,6 @@ pub(crate) fn infer_variant_construct(
                 .variant_index(enum_name, variant)
                 .unwrap_or(0),
         },
-        Effect::Puro,
     ))
 }
 

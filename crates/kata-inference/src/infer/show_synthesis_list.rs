@@ -13,7 +13,7 @@ use kata_core::interface_registry::{ImplEntry, ImplMethodInfo, InterfaceRegistry
 use kata_core::ty::Ty;
 
 use crate::typed::{
-    Effect, TypedExpr, TypedExprKind, TypedFunction, TypedLambdaClause, TypedMatchArm, TypedPattern,
+    TypedExpr, TypedExprKind, TypedFunction, TypedLambdaClause, TypedMatchArm, TypedPattern,
 };
 
 use super::show_synthesis_helpers::{show_call, show_expr, string_concat, text_lit};
@@ -159,7 +159,6 @@ fn build_list_show_body(list_ty: &Ty, elem_ty: &Ty, sep: &str, nil_body: &str) -
         ty: list_ty.clone(),
         tail_pos: false,
         escape: EscapeTarget::Local,
-        effect: Effect::Puro,
         kind: TypedExprKind::Ident {
             name: "__self".to_string(),
         },
@@ -192,7 +191,6 @@ fn build_list_show_body(list_ty: &Ty, elem_ty: &Ty, sep: &str, nil_body: &str) -
         ty: elem_ty.clone(),
         tail_pos: false,
         escape: EscapeTarget::Local,
-        effect: Effect::Puro,
         kind: TypedExprKind::Ident {
             name: "h".to_string(),
         },
@@ -209,7 +207,6 @@ fn build_list_show_body(list_ty: &Ty, elem_ty: &Ty, sep: &str, nil_body: &str) -
         ty: list_ty.clone(),
         tail_pos: false,
         escape: EscapeTarget::Local,
-        effect: Effect::Puro,
         kind: TypedExprKind::Ident {
             name: "t".to_string(),
         },
@@ -243,7 +240,6 @@ fn build_list_show_body(list_ty: &Ty, elem_ty: &Ty, sep: &str, nil_body: &str) -
         ty: Ty::text(),
         tail_pos: true,
         escape: EscapeTarget::Caller,
-        effect: Effect::Puro,
         kind: TypedExprKind::Match {
             scrutinee: Box::new(scrutinee),
             arms: vec![cons_arm, nil_arm],

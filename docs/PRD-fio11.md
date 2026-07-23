@@ -186,8 +186,8 @@ AST, TAST, typeck — nenhum impacto. Yield point é invisível ao type system.
 O scheduler atual é single-threaded. Fibers são criadas e executadas
 sequencialmente — `run()` executa um fiber por vez, sem preempção. `yield_()`
 existe mas é stub. Não há canais, não há `fork!`, não há `select`. O
-`Effect::Spawn` e `Effect::ChannelOp` existem no enum mas nunca são produzidos
-pelo typeck.
+`Effect::Spawn` e `Effect::ChannelOp` existiam no enum mas nunca foram consumidos
+(o enum `Effect` foi posteriormente removido por completo — ver TECH-DEBT.md).
 
 O codegen não sabe como lowerar `!>`, `<!`, `channel!`, `queue!`, `broadcast!`,
 `fork!`, ou `select`. O parser não reconhece esses tokens. O runtime não tem
@@ -491,15 +491,19 @@ fork!(minha_action, (arg1, arg2))
 O typeck verifica que o primeiro argumento é nome de Action declarada e que
 a tupla de argumentos tem os tipos esperados pela Action.
 
-### `Effect` — exercitando variantes existentes
+### ~~`Effect`~~ — removido
+
+> O enum `Effect` foi removido por completo em 2026-07-23 (ver TECH-DEBT.md).
+> Nenhum variant era consumido. A seção abaixo preserva o design histórico
+> para referência.
 
 ```rust
 // Effect::Spawn — fork!()
 // Effect::ChannelOp — !>, <!, channel!, queue!, broadcast!, select
 ```
 
-O typeck marca `Effect::ChannelOp` em toda expressão que usa `!>`, `<!`, ou
-`select`. Marca `Effect::Spawn` em `fork!`. O effect system propaga
+O typeck marcaria `Effect::ChannelOp` em toda expressão que usa `!>`, `<!`, ou
+`select`. Marcaria `Effect::Spawn` em `fork!`. O effect system propagaria
 (`IO | ChannelOp = IO`, pois ChannelOp subsume IO).
 
 ### Escape analysis para canais — LCA
@@ -976,8 +980,8 @@ correta. Snapshots insta dos novos nós. ✅
 - Typeck de `broadcast!()`: cria `(Sender::T0, ReceiverFactory::T0)`
 - Typeck de `rxf!()` (receiver factory call): cria `Receiver::T`
 - Typeck de `fork!(action, args)`: action deve ser nome de Action declarada, args deve matchar params, retorna `Unit`
-- `Effect::ChannelOp` marcado em `!>`, `<!`, `select`
-- `Effect::Spawn` marcado em `fork!`
+- ~~`Effect::ChannelOp` marcado em `!>`, `<!`, `select`~~ (removido)
+- ~~`Effect::Spawn` marcado em `fork!`~~ (removido)
 - Escape analysis: `!>` marca valor como `EscapeTarget::Ancestor(lca_depth)` onde lca_depth é calculado pela árvore de fibers
 
 **DoD Fase 2:** Typeck rejeita `tx <! nome` (tx é Sender, não Receiver). Rejeita

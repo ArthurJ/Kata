@@ -8,7 +8,7 @@ use kata_ast::Span;
 use kata_core::ty::{PrimTy, Ty};
 use kata_diagnostics::MiddleError;
 
-use crate::typed::{Effect, TypedExpr, TypedExprKind};
+use crate::typed::{TypedExpr, TypedExprKind};
 
 use super::expr::InferCtx;
 use super::helpers::InferResult;
@@ -21,7 +21,6 @@ fn build_fixed_payload(text: &str, ty: &Ty, span: Span) -> TypedExpr {
             ty: Ty::int(),
             tail_pos: false,
             escape: kata_core::escape::EscapeTarget::Local,
-            effect: Effect::Puro,
             kind: TypedExprKind::IntLit {
                 text: text.to_string(),
             },
@@ -31,7 +30,6 @@ fn build_fixed_payload(text: &str, ty: &Ty, span: Span) -> TypedExpr {
             ty: Ty::float(),
             tail_pos: false,
             escape: kata_core::escape::EscapeTarget::Local,
-            effect: Effect::Puro,
             kind: TypedExprKind::FloatLit {
                 text: text.to_string(),
             },
@@ -41,7 +39,6 @@ fn build_fixed_payload(text: &str, ty: &Ty, span: Span) -> TypedExpr {
             ty: Ty::text(),
             tail_pos: false,
             escape: kata_core::escape::EscapeTarget::Local,
-            effect: Effect::Puro,
             kind: TypedExprKind::TextLit {
                 text: text.to_string(),
             },
@@ -51,7 +48,6 @@ fn build_fixed_payload(text: &str, ty: &Ty, span: Span) -> TypedExpr {
             ty: ty.clone(),
             tail_pos: false,
             escape: kata_core::escape::EscapeTarget::Local,
-            effect: Effect::Puro,
             kind: TypedExprKind::IntLit {
                 text: text.to_string(),
             },
@@ -69,7 +65,7 @@ pub(crate) fn resolve_unqual_variant(
     name: &str,
     span: &Span,
     ctx: &InferCtx,
-) -> InferResult<(Ty, TypedExprKind, Effect)> {
+) -> InferResult<(Ty, TypedExprKind)> {
     let candidates = ctx.enum_registry.find_enums_with_variant(name);
     if candidates.is_empty() {
         return Err(MiddleError::UnboundName {
@@ -107,7 +103,6 @@ pub(crate) fn resolve_unqual_variant(
                 payload: Box::new(kata_ast::Spanned::new(payload, *span)),
                 tag,
             },
-            Effect::Puro,
         ));
     }
     if ctx.enum_registry.payload_ty(enum_name, name).is_some() {
@@ -135,7 +130,6 @@ pub(crate) fn resolve_unqual_variant(
                 variant: name.to_string(),
                 tag,
             },
-            Effect::Puro,
         ))
     } else {
         Ok((
@@ -145,7 +139,6 @@ pub(crate) fn resolve_unqual_variant(
                 variant: name.to_string(),
                 tag,
             },
-            Effect::Puro,
         ))
     }
 }

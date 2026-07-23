@@ -5,7 +5,7 @@
 //! O codegen de Lambda/Match é coberto pelos testes E2E de codegen.
 
 use kata_core::ty::Ty;
-use kata_inference::{Effect, TypedExprKind, infer_module};
+use kata_inference::{TypedExprKind, infer_module};
 use kata_lexer::lex;
 use kata_parser::parse;
 use kata_resolution::{ResolvedModule, load_prelude, resolve};
@@ -384,21 +384,6 @@ fn lambda_assigned_to_var_has_function_type() {
     assert!(matches!(f_ty, Some(Ty::Function(_, _))));
 }
 
-// ── Effect sempre Puro ───────────────────────────────────
-
-#[test]
-fn lambda_effect_is_puro() {
-    let tmod = infer_src("(lambda x: x)::(Int -> Int)");
-    let entry = entry_typed(&tmod);
-    assert_eq!(entry.effect, Effect::Puro);
-}
-
-#[test]
-fn match_effect_is_puro() {
-    let tmod = infer_src("match Boolean::True\n    True: 1\n    False: 0");
-    let entry = entry_typed(&tmod);
-    assert_eq!(entry.effect, Effect::Puro);
-}
 
 // ── DoD 12: RedundantClause — cláusulas sobrepostas ──────────────
 

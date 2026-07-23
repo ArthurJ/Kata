@@ -4,7 +4,7 @@
 //! Saída final do Pass 2 (inference) no que tange ao agrupamento por módulo:
 //! o entry point tipado, as funções nomeadas e as actions. O codegen e o
 //! tree shaking consomem estes tipos. A TAST em si (nó de expressão
-//! `TypedExpr`/`TypedExprKind`/`Effect` e auxiliares de CSP) vive em
+//! `TypedExpr`/`TypedExprKind` e auxiliares de CSP) vive em
 //! [`crate::typed`].
 
 use kata_ast::Spanned;

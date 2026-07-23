@@ -75,7 +75,7 @@ pub(crate) fn synthesize_log_spec(
     ];
 
     // Chama infer_format para produzir a cadeia de text_replace_first.
-    let (msg_ty, msg_kind, _effect) = infer_format(
+    let (msg_ty, msg_kind) = infer_format(
         &Spanned::new(Expr::Unit, Span::synthetic()),
         &format_args,
         &Span::synthetic(),
@@ -125,7 +125,6 @@ pub(crate) fn synthesize_log_spec(
             ty: msg_ty,
             tail_pos: false,
             escape: kata_core::escape::EscapeTarget::Local,
-            effect: _effect,
             kind: msg_kind,
         },
         Span::synthetic(),

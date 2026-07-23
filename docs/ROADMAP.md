@@ -37,7 +37,6 @@ correta e não retrofitted.
 | Tipo de função como valor (`->`) | Fio 2 | Higher-order functions |
 | Hole `_` (desugar no typeck → `lambda`) | Fio 2 | Currying explícito, predicados |
 | `tail_pos: bool` na TAST | Fio 2 | TCO delegado ao Cranelift |
-| `effect: Effect` na TAST | Fio 2 | Puro/IO/Spawn/ChannelOp |
 | `Ty::Sum` com payload | Fio 4 | `Ok(T)`, `Some(T)`, variantes com dados |
 | `::` em type params (`Result::(T, E)`) | Fio 4 | Enums genéricos (params posicionais, não interfaces) |
 | Smart constructor synthesis (falível) | Fio 6 | Construtores de enum predicado e refined types (reusa Hole de Fio 2 + Result de Fio 4) |
@@ -228,8 +227,6 @@ faz scoring por dominância (mesmo que só tenha 1 candidato). `Boolean` é um
 - Tipo de função como valor (`->`) — `(A -> B)` como tipo transitável
 - Hole `_` — desugar no typeck: `+ 10 _` vira `lambda x: + 10 x` com captures
 - `tail_pos: bool` na TAST — marcado pelo typeck, usado pelo Cranelift para TCO
-- `effect: Effect` na TAST — `Puro` por enquanto (IO/Spawn/ChannelOp vem em
-  fios posteriores)
 - `Boolean` já existe no TypeEnv via prelude (Fio 1) — Fio 2 usa para guards,
   não constrói a maquinaria de enum (já existe em Fio 1 para variantes unitárias)
 - Partial dispatch no DispatchTable: resolve overloads com argumentos
@@ -292,7 +289,6 @@ e árvore hierárquica de arenas). **Fase 16 ✅** (TRMA pass —
 505 testes no workspace).
 
 **Maquinaria de tipos construída:**
-- `effect: Effect` ganha `IO` (Actions têm efeito IO)
 - Verificação de proibição de recursão em Actions (call graph analysis)
 - `?` desugar: injeta `return Err(e)` na TAST
 

@@ -15,7 +15,7 @@ use kata_resolution::EnumPredDeclInfo;
 
 use crate::desugar;
 use crate::typed::{
-    Effect, TypedExpr, TypedExprKind, TypedFunction, TypedGuardClause, TypedLambdaClause,
+    TypedExpr, TypedExprKind, TypedFunction, TypedGuardClause, TypedLambdaClause,
     TypedPattern,
 };
 
@@ -239,7 +239,6 @@ fn build_variant_construct(
         ty: payload_ty.clone(),
         tail_pos: false,
         escape: EscapeTarget::Local,
-        effect: Effect::Puro,
         kind: TypedExprKind::Ident {
             name: var_name.into(),
         },
@@ -250,7 +249,6 @@ fn build_variant_construct(
             ty: Ty::Sum(enum_name.into()),
             tail_pos: true,
             escape: EscapeTarget::Caller,
-            effect: Effect::Puro,
             kind: TypedExprKind::VariantConstruct {
                 enum_name: enum_name.into(),
                 variant: variant.into(),

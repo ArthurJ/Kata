@@ -148,14 +148,13 @@ pub(crate) fn infer_question(
     // Infere o match sintético.
     // Passa o inner (expr original) como scrutinee e os arms construídos.
     // infer_match re-infere o scrutinee, mas isso é seguro — o typeck é idempotente.
-    let (match_ty, match_kind, match_effect) = infer_match(inner, &arms, span, env, ctx, false)?;
+    let (match_ty, match_kind) = infer_match(inner, &arms, span, env, ctx, false)?;
 
     Ok(TypedExpr {
         span: *span,
         ty: match_ty,
         tail_pos: false,
         escape: EscapeTarget::Local,
-        effect: match_effect,
         kind: match_kind,
     })
 }
@@ -344,14 +343,13 @@ pub(crate) fn infer_pipe_fallback(
     }
 
     // Infere o match sintético.
-    let (match_ty, match_kind, match_effect) = infer_match(lhs, &arms, span, env, ctx, false)?;
+    let (match_ty, match_kind) = infer_match(lhs, &arms, span, env, ctx, false)?;
 
     Ok(TypedExpr {
         span: *span,
         ty: match_ty,
         tail_pos: false,
         escape: EscapeTarget::Local,
-        effect: match_effect,
         kind: match_kind,
     })
 }
@@ -460,7 +458,7 @@ pub(crate) fn infer_assert(
     let arms = vec![true_arm, false_arm];
 
     // Infere o match sintético.
-    let (match_ty, match_kind, match_effect) =
+    let (match_ty, match_kind) =
         infer_match(&cond_expr, &arms, span, env, ctx, false)?;
 
     Ok(TypedExpr {
@@ -468,7 +466,6 @@ pub(crate) fn infer_assert(
         ty: match_ty,
         tail_pos: false,
         escape: EscapeTarget::Local,
-        effect: match_effect,
         kind: match_kind,
     })
 }

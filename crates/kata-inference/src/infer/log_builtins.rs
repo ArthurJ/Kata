@@ -9,7 +9,7 @@ use kata_ast::{Expr, Span, Spanned};
 use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 
-use crate::typed::{Effect, TypedExpr, TypedExprKind};
+use crate::typed::{TypedExpr, TypedExprKind};
 
 use super::action_call::ActionDispatch;
 use super::expr::InferCtx;
@@ -69,7 +69,6 @@ pub(crate) fn infer_log_builtin(
             ty: Ty::int(),
             tail_pos: false,
             escape: kata_core::escape::EscapeTarget::Local,
-            effect: Effect::Puro,
             kind: TypedExprKind::Unit,
         }
     };
@@ -91,7 +90,6 @@ pub(crate) fn infer_log_builtin(
             ty: Ty::int(),
             tail_pos: false,
             escape: kata_core::escape::EscapeTarget::Local,
-            effect: Effect::Puro,
             kind: TypedExprKind::Unit,
         }
     };
@@ -105,7 +103,6 @@ pub(crate) fn infer_log_builtin(
         ),
         tail_pos: false,
         escape: kata_core::escape::EscapeTarget::Local,
-        effect: Effect::Puro,
         kind: TypedExprKind::Ident {
             name: "kata_rt_log_publish".into(),
         },
@@ -116,7 +113,6 @@ pub(crate) fn infer_log_builtin(
         ty: Ty::int(),
         tail_pos: false,
         escape: kata_core::escape::EscapeTarget::Caller,
-        effect: Effect::Puro,
         kind: TypedExprKind::Closure {
             callee: Box::new(Spanned::new(callee, args.span)),
             // Ordem dos args coincide com a assinatura da FFI:
@@ -171,7 +167,6 @@ pub(crate) fn infer_log_recv_builtin(
         ty: Ty::Function(vec![Ty::text()], Box::new(Ty::text())),
         tail_pos: false,
         escape: kata_core::escape::EscapeTarget::Local,
-        effect: Effect::Puro,
         kind: TypedExprKind::Ident {
             name: "kata_rt_log_recv".into(),
         },
@@ -182,7 +177,6 @@ pub(crate) fn infer_log_recv_builtin(
         ty: Ty::text(),
         tail_pos: false,
         escape: kata_core::escape::EscapeTarget::Caller,
-        effect: Effect::Puro,
         kind: TypedExprKind::Closure {
             callee: Box::new(Spanned::new(callee, args.span)),
             args: vec![Spanned::new(topic_typed, elements[0].span)],
@@ -238,7 +232,6 @@ pub(crate) fn infer_log_config_builtin(
         ty: Ty::Function(vec![Ty::text(), Ty::text(), Ty::int()], Box::new(Ty::Unit)),
         tail_pos: false,
         escape: kata_core::escape::EscapeTarget::Local,
-        effect: Effect::Puro,
         kind: TypedExprKind::Ident {
             name: "kata_rt_log_config".into(),
         },
@@ -249,7 +242,6 @@ pub(crate) fn infer_log_config_builtin(
         ty: Ty::Unit,
         tail_pos: false,
         escape: kata_core::escape::EscapeTarget::Caller,
-        effect: Effect::Puro,
         kind: TypedExprKind::Closure {
             callee: Box::new(Spanned::new(callee, args.span)),
             args: vec![
@@ -313,7 +305,6 @@ fn resolve_log_level(
             ty: Ty::int(),
             tail_pos: false,
             escape: kata_core::escape::EscapeTarget::Local,
-            effect: Effect::Puro,
             kind: TypedExprKind::IntLit {
                 text: tag.to_string(),
             },
@@ -334,7 +325,6 @@ fn resolve_log_level(
             ty: Ty::int(),
             tail_pos: false,
             escape: kata_core::escape::EscapeTarget::Local,
-            effect: Effect::Puro,
             kind: TypedExprKind::IntLit {
                 text: tag.to_string(),
             },

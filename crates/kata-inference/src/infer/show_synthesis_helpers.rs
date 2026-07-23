@@ -8,7 +8,7 @@ use kata_ast::{Span, Spanned};
 use kata_core::escape::EscapeTarget;
 use kata_core::ty::{PrimTy, Ty};
 
-use crate::typed::{Effect, TypedExpr, TypedExprKind};
+use crate::typed::{TypedExpr, TypedExprKind};
 
 /// Produz uma expressão `show <expr>` que despacha para a implementação
 /// correta de SHOW do tipo. Usado dentro de `show` sintetizado para enums
@@ -52,7 +52,6 @@ pub(crate) fn show_expr(arg: Spanned<TypedExpr>, arg_ty: &Ty) -> Spanned<TypedEx
                 ty: callee_ty,
                 tail_pos: false,
                 escape: EscapeTarget::Local,
-                effect: Effect::Puro,
                 kind: TypedExprKind::Ident {
                     name: "show".to_string(),
                 },
@@ -63,7 +62,6 @@ pub(crate) fn show_expr(arg: Spanned<TypedExpr>, arg_ty: &Ty) -> Spanned<TypedEx
                     ty: Ty::text(),
                     tail_pos: false,
                     escape: EscapeTarget::Caller,
-                    effect: Effect::Puro,
                     kind: TypedExprKind::Closure {
                         callee: Box::new(Spanned::new(callee, Span::synthetic())),
                         args: vec![arg],
@@ -92,7 +90,6 @@ pub(crate) fn show_call(
         ty: Ty::Function(vec![arg_ty.clone()], Box::new(Ty::text())),
         tail_pos: false,
         escape: EscapeTarget::Local,
-        effect: Effect::Puro,
         kind: TypedExprKind::Ident {
             name: mangled.clone(),
         },
@@ -104,7 +101,6 @@ pub(crate) fn show_call(
             ty: Ty::text(),
             tail_pos: false,
             escape: EscapeTarget::Caller,
-            effect: Effect::Puro,
             kind: TypedExprKind::Closure {
                 callee: Box::new(Spanned::new(callee, Span::synthetic())),
                 args: vec![arg],
@@ -122,7 +118,6 @@ pub(crate) fn field_access_expr(field_index: usize, field_ty: &Ty) -> Spanned<Ty
         ty: field_ty.clone(),
         tail_pos: false,
         escape: EscapeTarget::Local,
-        effect: Effect::Puro,
         kind: TypedExprKind::Ident {
             name: "__self".to_string(),
         },
@@ -135,7 +130,6 @@ pub(crate) fn field_access_expr(field_index: usize, field_ty: &Ty) -> Spanned<Ty
             ty: field_ty.clone(),
             tail_pos: false,
             escape: EscapeTarget::Local,
-            effect: Effect::Puro,
             kind: TypedExprKind::FieldAccess {
                 expr: Box::new(self_spanned),
                 struct_name: String::new(),
@@ -155,7 +149,6 @@ pub(crate) fn text_lit(text: String) -> Spanned<TypedExpr> {
             ty: Ty::text(),
             tail_pos: false,
             escape: EscapeTarget::Local,
-            effect: Effect::Puro,
             kind: TypedExprKind::TextLit { text },
         },
         Span::synthetic(),
@@ -169,7 +162,6 @@ pub(crate) fn ffi_call1(ffi_name: &str, arg: Spanned<TypedExpr>, ret_ty: Ty) -> 
         ty: Ty::Function(vec![arg.node.ty.clone()], Box::new(ret_ty.clone())),
         tail_pos: false,
         escape: EscapeTarget::Local,
-        effect: Effect::Puro,
         kind: TypedExprKind::Ident {
             name: ffi_name.to_string(),
         },
@@ -181,7 +173,6 @@ pub(crate) fn ffi_call1(ffi_name: &str, arg: Spanned<TypedExpr>, ret_ty: Ty) -> 
             ty: ret_ty,
             tail_pos: false,
             escape: EscapeTarget::Local,
-            effect: Effect::Puro,
             kind: TypedExprKind::Closure {
                 callee: Box::new(Spanned::new(callee, Span::synthetic())),
                 args: vec![arg],
@@ -202,7 +193,6 @@ pub(crate) fn string_concat(
         ty: Ty::Function(vec![Ty::text(), Ty::text()], Box::new(Ty::text())),
         tail_pos: false,
         escape: EscapeTarget::Local,
-        effect: Effect::Puro,
         kind: TypedExprKind::Ident {
             name: "kata_rt_string_concat".to_string(),
         },
@@ -214,7 +204,6 @@ pub(crate) fn string_concat(
             ty: Ty::text(),
             tail_pos: false,
             escape: EscapeTarget::Caller,
-            effect: Effect::Puro,
             kind: TypedExprKind::Closure {
                 callee: Box::new(Spanned::new(callee, Span::synthetic())),
                 args: vec![left, right],
@@ -255,7 +244,6 @@ fn build_tuple_show_inline(arg: Spanned<TypedExpr>, element_tys: &[Ty]) -> Spann
             ty: elem_ty.clone(),
             tail_pos: false,
             escape: EscapeTarget::Local,
-            effect: Effect::Puro,
             kind: TypedExprKind::FieldAccess {
                 expr: Box::new(arg.clone()),
                 struct_name: String::new(),

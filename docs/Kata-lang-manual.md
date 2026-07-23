@@ -643,7 +643,6 @@ TAST possui:
 | `capture: Vec<CaptureInfo>` | O que esta lambda captura e como |
 | `tail_pos: bool` | Esta expressão está em posição de cauda? |
 | `mono_instance: u64` | Qual versão monomorfizada esta chamada resolve |
-| `effect: Effect` | Puro / IO / Spawn / ChannelOp |
 
 Com isso, o lowering é direto: cada nó da TAST já carrega tudo que o CLIF
 precisa. O optimizer consulta a MetadataTable (snapshot pós-lowering) para

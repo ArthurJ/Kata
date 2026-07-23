@@ -29,7 +29,7 @@ use kata_core::dispatch::DispatchTable;
 use kata_core::escape::EscapeTarget;
 use kata_core::ty::Ty;
 use kata_inference::{
-    Effect, TypedExpr, TypedExprKind, TypedFunction, TypedLambdaClause, TypedMatchArm, TypedModule,
+    TypedExpr, TypedExprKind, TypedFunction, TypedLambdaClause, TypedMatchArm, TypedModule,
     TypedPattern,
 };
 
@@ -264,7 +264,6 @@ fn syn_expr(kind: TypedExprKind, ty: Ty) -> Spanned<TypedExpr> {
             ty,
             tail_pos: false,
             escape: EscapeTarget::Local,
-            effect: Effect::Puro,
             kind,
         },
         Span::synthetic(),
@@ -279,7 +278,6 @@ fn syn_tail_expr(kind: TypedExprKind, ty: Ty) -> Spanned<TypedExpr> {
             ty,
             tail_pos: true,
             escape: EscapeTarget::Caller,
-            effect: Effect::Puro,
             kind,
         },
         Span::synthetic(),

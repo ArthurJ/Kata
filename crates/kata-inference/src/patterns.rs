@@ -13,7 +13,7 @@ use kata_core::escape::EscapeTarget;
 use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 
-use crate::typed::{Effect, TypedExpr, TypedExprKind, TypedPattern};
+use crate::typed::{TypedExpr, TypedExprKind, TypedPattern};
 
 /// Tipo de erro de inferência — alias para `Result<T, MiddleError>`.
 pub(crate) type PatternResult<T> = Result<T, MiddleError>;
@@ -90,7 +90,6 @@ fn check_pattern_inner(
                 ty: literal_ty,
                 tail_pos: false,
                 escape: EscapeTarget::Local,
-                effect: Effect::Puro,
                 kind: literal_to_typed_kind(&expr.node),
             };
             Ok(TypedPattern::Literal {

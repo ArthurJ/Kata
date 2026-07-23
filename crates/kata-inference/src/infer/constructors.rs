@@ -101,7 +101,6 @@ pub(crate) fn synthesize_constructors(
                         ty: ty.clone(),
                         tail_pos: false,
                         escape: EscapeTarget::Local,
-                        effect: crate::typed::Effect::Puro,
                         kind: TypedExprKind::Ident {
                             name: format!("__field_{i}"),
                         },
@@ -119,7 +118,6 @@ pub(crate) fn synthesize_constructors(
             // a caller_arena, igual ao escape derivado em
             // infer_expr_hinted quando ctx.ret_ty = None.
             escape: EscapeTarget::Caller,
-            effect: crate::typed::Effect::Puro,
             kind: TypedExprKind::StructConstruct {
                 struct_name: struct_name.to_string(),
                 values,
@@ -193,7 +191,6 @@ pub(crate) fn synthesize_constructors(
                 ty: ret_ty,
                 tail_pos: true,
                 escape: EscapeTarget::Caller,
-                effect: crate::typed::Effect::Puro,
                 kind: TypedExprKind::Ident {
                     name: "__field_0".into(),
                 },
@@ -270,7 +267,6 @@ pub(crate) fn synthesize_constructors(
                             ty: ty.clone(),
                             tail_pos: false,
                             escape: EscapeTarget::Local,
-                            effect: crate::typed::Effect::Puro,
                             kind: TypedExprKind::Ident {
                                 name: format!("__field_{i}"),
                             },
@@ -285,7 +281,6 @@ pub(crate) fn synthesize_constructors(
                 ty: ret_ty.clone(),
                 tail_pos: true,
                 escape: EscapeTarget::Caller,
-                effect: crate::typed::Effect::Puro,
                 kind: TypedExprKind::StructConstruct {
                     struct_name: struct_name.to_string(),
                     values,

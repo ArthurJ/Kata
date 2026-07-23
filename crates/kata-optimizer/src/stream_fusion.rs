@@ -30,7 +30,7 @@
 use kata_ast::{Span, Spanned};
 use kata_core::escape::EscapeTarget;
 use kata_core::ty::Ty;
-use kata_inference::{Effect, FusedStage, TypedExpr, TypedExprKind, TypedModule};
+use kata_inference::{FusedStage, TypedExpr, TypedExprKind, TypedModule};
 
 /// Resultado da tentativa de fusão de um nó.
 /// `Fused` contém os stages acumulados e a coleção fonte.
@@ -285,7 +285,6 @@ fn syn_expr(kind: TypedExprKind, ty: Ty) -> Spanned<TypedExpr> {
             ty,
             tail_pos: false,
             escape: EscapeTarget::Local,
-            effect: Effect::Puro,
             kind,
         },
         Span::synthetic(),

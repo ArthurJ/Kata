@@ -10,7 +10,7 @@ use kata_core::interface_registry::ImplEntry;
 use kata_core::ty::{Ty, TypeEnv, ty_list_to_string};
 use kata_diagnostics::MiddleError;
 
-use crate::typed::{Effect, TypedExpr, TypedExprKind};
+use crate::typed::{TypedExpr, TypedExprKind};
 
 use super::expr::{InferCtx, infer_expr};
 use super::generics::{apply_subs, unify};
@@ -162,7 +162,6 @@ pub(crate) fn infer_list_lit(
         ty: list_ty,
         tail_pos,
         escape,
-        effect: Effect::Puro,
         kind: TypedExprKind::ListLit {
             elements: typed_elements,
         },
@@ -216,7 +215,6 @@ pub(crate) fn infer_array_lit(
         ty: array_ty,
         tail_pos,
         escape,
-        effect: Effect::Puro,
         kind: TypedExprKind::ArrayLit {
             elements: typed_elements,
         },
@@ -275,7 +273,6 @@ pub(crate) fn infer_range_lit(
         ty: range_ty,
         tail_pos,
         escape,
-        effect: Effect::Puro,
         kind: TypedExprKind::RangeLit {
             start: Box::new(Spanned::new(typed_start, start.span)),
             step: Box::new(Spanned::new(typed_step, step.span)),
@@ -336,7 +333,6 @@ pub(crate) fn infer_for_in(
         ty: Ty::Unit,
         tail_pos: false,
         escape,
-        effect: Effect::Puro,
         kind: TypedExprKind::ForIn {
             var_name: var_name.to_string(),
             var_ty,
@@ -424,7 +420,6 @@ pub(crate) fn infer_in(
         ty: Ty::Sum("Boolean".into()),
         tail_pos,
         escape,
-        effect: Effect::Puro,
         kind: TypedExprKind::In {
             item: Box::new(Spanned::new(typed_item, item.span)),
             collection: Box::new(Spanned::new(typed_collection, collection.span)),

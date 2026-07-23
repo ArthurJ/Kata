@@ -9,7 +9,7 @@ use kata_ast::{Expr, GuardClause, Pattern, Span, Spanned, WithBinding};
 use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 
-use crate::typed::{Effect, TypedExprKind, TypedLambdaClause};
+use crate::typed::{TypedExprKind, TypedLambdaClause};
 
 use super::apply_lambda::infer_lambda_body;
 use super::expr::InferCtx;
@@ -38,7 +38,7 @@ pub(crate) fn infer_lambda(
     env: &mut TypeEnv,
     ctx: &InferCtx,
     hint: Option<&Ty>,
-) -> InferResult<(Ty, TypedExprKind, Effect)> {
+) -> InferResult<(Ty, TypedExprKind)> {
     // Para lambda anônimo, os tipos dos parâmetros são InferVar — não temos
     // inferência de tipos real ainda. O lambda anônimo só funciona
     // quando o tipo é determinado pelo contexto (ex: `let f := lambda x: + x 1`
@@ -130,7 +130,6 @@ pub(crate) fn infer_lambda(
             clauses: vec![clause],
             captures: Vec::new(),
         },
-        Effect::Puro,
     ))
 }
 

@@ -62,7 +62,6 @@ pub(crate) fn infer_dot_access(
                 ty,
                 tail_pos,
                 escape: inner.escape,
-                effect: inner.effect,
                 kind: TypedExprKind::FieldAccess {
                     expr: inner_box,
                     struct_name: struct_name.clone(),
@@ -92,7 +91,6 @@ pub(crate) fn infer_dot_access(
                 ty,
                 tail_pos,
                 escape: inner.escape,
-                effect: inner.effect,
                 kind: TypedExprKind::IndexAccess {
                     expr: inner_box,
                     index: *n,
@@ -147,7 +145,6 @@ pub(crate) fn infer_dot_access(
                 ty: Ty::int(),
                 tail_pos: false,
                 escape: EscapeTarget::Local,
-                effect: crate::typed::Effect::Puro,
                 kind: TypedExprKind::IntLit {
                     text: n.to_string(),
                 },
@@ -160,7 +157,6 @@ pub(crate) fn infer_dot_access(
                 ty: callee_ty,
                 tail_pos: false,
                 escape: EscapeTarget::Local,
-                effect: crate::typed::Effect::Puro,
                 kind: TypedExprKind::Ident { name: "at".into() },
             };
 
@@ -169,7 +165,6 @@ pub(crate) fn infer_dot_access(
                 ty: ret_ty,
                 tail_pos,
                 escape: inner.escape,
-                effect: inner.effect,
                 kind: TypedExprKind::Closure {
                     callee: Box::new(Spanned::new(callee_typed, *span)),
                     args: vec![*inner_box.clone(), index_spanned],

@@ -28,7 +28,7 @@ use kata_resolution::RefinedDeclInfo;
 
 use crate::desugar;
 use crate::typed::{
-    Effect, TypedExpr, TypedExprKind, TypedFunction, TypedLambdaClause, TypedPattern,
+    TypedExpr, TypedExprKind, TypedFunction, TypedLambdaClause, TypedPattern,
 };
 
 use super::expr::{InferCtx, infer_expr};
@@ -259,7 +259,6 @@ pub(crate) fn build_pred_call(pred_name: &str, var_name: &str, base_ty: &Ty) -> 
         ty: Ty::Function(vec![base_ty.clone()], Box::new(Ty::boolean())),
         tail_pos: false,
         escape: EscapeTarget::Local,
-        effect: Effect::Puro,
         kind: TypedExprKind::Ident {
             name: pred_name.into(),
         },
@@ -269,7 +268,6 @@ pub(crate) fn build_pred_call(pred_name: &str, var_name: &str, base_ty: &Ty) -> 
         ty: base_ty.clone(),
         tail_pos: false,
         escape: EscapeTarget::Local,
-        effect: Effect::Puro,
         kind: TypedExprKind::Ident {
             name: var_name.into(),
         },
@@ -280,7 +278,6 @@ pub(crate) fn build_pred_call(pred_name: &str, var_name: &str, base_ty: &Ty) -> 
             ty: Ty::boolean(),
             tail_pos: false,
             escape: EscapeTarget::Local,
-            effect: Effect::Puro,
             kind: TypedExprKind::Closure {
                 callee: Box::new(Spanned::new(callee, Span::synthetic())),
                 args: vec![Spanned::new(arg, Span::synthetic())],

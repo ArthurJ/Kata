@@ -20,7 +20,7 @@ members = [
 version = "0.1.0"
 edition = "2024"
 authors = ["Arthur Juliao"]
-description = "Kata Language Compiler — LTS 1.0"
+description = "Kata Language Compiler — Iteration 5"
 
 [workspace.dependencies]
 # ── Diagnostics ──────────────────────────────────────────

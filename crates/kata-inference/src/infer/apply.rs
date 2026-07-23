@@ -12,7 +12,7 @@ use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 use std::collections::HashMap;
 
-use crate::typed::{Effect, TypedExpr, TypedExprKind};
+use crate::typed::{TypedExpr, TypedExprKind};
 
 use super::apply_lambda::{infer_apply_lambda, infer_apply_lambda_with_hint};
 use super::collections_hof::{infer_filter, infer_fold, infer_map};
@@ -37,7 +37,7 @@ pub(crate) fn infer_apply(
     env: &mut TypeEnv,
     ctx: &InferCtx,
     hint: Option<&Ty>,
-) -> InferResult<(Ty, TypedExprKind, Effect)> {
+) -> InferResult<(Ty, TypedExprKind)> {
     // DoD 31: Apply de lambda inline — se o callee é um lambda (possivelmente
     // envolto em Grouping ou TypeAscription), inferir args primeiro (síntese
     // bottom-up), usar arg_tys como tipos dos parâmetros do lambda, e inferir
@@ -127,7 +127,6 @@ pub(crate) fn infer_apply(
                 TypedExprKind::IntLit {
                     text: elements.len().to_string(),
                 },
-                Effect::Puro,
             ));
         }
         // Não é Tuple — cai para o dispatch normal (COUNTABLE) abaixo.
@@ -146,7 +145,6 @@ pub(crate) fn infer_apply(
                 ty: callee_ty,
                 tail_pos: false,
                 escape: EscapeTarget::Local,
-                effect: Effect::Puro,
                 kind: TypedExprKind::Ident {
                     name: func_name.clone(),
                 },
@@ -158,7 +156,6 @@ pub(crate) fn infer_apply(
                     args: typed_args,
                     ffi_symbol: overload.ffi_symbol,
                 },
-                Effect::Puro,
             ));
         }
 
@@ -179,7 +176,6 @@ pub(crate) fn infer_apply(
                         ty: callee_ty,
                         tail_pos: false,
                         escape: EscapeTarget::Local,
-                        effect: Effect::Puro,
                         kind: TypedExprKind::Ident {
                             name: func_name.clone(),
                         },
@@ -192,7 +188,6 @@ pub(crate) fn infer_apply(
                             args: typed_args,
                             ffi_symbol: oi.ffi_symbol.clone(),
                         },
-                        Effect::Puro,
                     ));
                 }
             }
@@ -214,7 +209,6 @@ pub(crate) fn infer_apply(
                 ty: callee_ty,
                 tail_pos: false,
                 escape: EscapeTarget::Local,
-                effect: Effect::Puro,
                 kind: TypedExprKind::Ident {
                     name: func_name.clone(),
                 },
@@ -226,7 +220,6 @@ pub(crate) fn infer_apply(
                     args: typed_args,
                     ffi_symbol: fallback_overload.ffi_symbol.clone(),
                 },
-                Effect::Puro,
             ));
         }
 
@@ -269,7 +262,6 @@ pub(crate) fn infer_apply(
             ty: callee_ty,
             tail_pos: false,
             escape: EscapeTarget::Local,
-            effect: Effect::Puro,
             kind: TypedExprKind::Ident {
                 name: func_name.clone(),
             },
@@ -281,7 +273,6 @@ pub(crate) fn infer_apply(
                 args: typed_args,
                 ffi_symbol: None,
             },
-            Effect::Puro,
         ));
     }
 
@@ -361,7 +352,6 @@ pub(crate) fn infer_apply(
                     ty: callee_ty,
                     tail_pos: false,
                     escape: EscapeTarget::Local,
-                    effect: Effect::Puro,
                     kind: TypedExprKind::Ident {
                         name: func_name.clone(),
                     },
@@ -373,7 +363,6 @@ pub(crate) fn infer_apply(
                         args: typed_args,
                         ffi_symbol: overload.ffi_symbol,
                     },
-                    Effect::Puro,
                 ));
             } else {
                 // top_count > 1 — ambíguo
@@ -400,7 +389,6 @@ pub(crate) fn infer_apply(
                     ty: callee_ty,
                     tail_pos: false,
                     escape: EscapeTarget::Local,
-                    effect: Effect::Puro,
                     kind: TypedExprKind::Ident {
                         name: func_name.clone(),
                     },
@@ -413,7 +401,6 @@ pub(crate) fn infer_apply(
                         args: typed_args,
                         ffi_symbol: overload.ffi_symbol,
                     },
-                    Effect::Puro,
                 ));
             }
             Err(_) => {
@@ -449,7 +436,6 @@ pub(crate) fn infer_apply(
                                     ty: callee_ty,
                                     tail_pos: false,
                                     escape: EscapeTarget::Local,
-                                    effect: Effect::Puro,
                                     kind: TypedExprKind::Ident {
                                         name: func_name.clone(),
                                     },
@@ -462,7 +448,6 @@ pub(crate) fn infer_apply(
                                         args: typed_args,
                                         ffi_symbol: oi.ffi_symbol.clone(),
                                     },
-                                    Effect::Puro,
                                 ));
                             }
                             Err(_) => {
@@ -496,7 +481,6 @@ pub(crate) fn infer_apply(
                             ty: callee_ty,
                             tail_pos: false,
                             escape: EscapeTarget::Local,
-                            effect: Effect::Puro,
                             kind: TypedExprKind::Ident {
                                 name: func_name.clone(),
                             },
@@ -508,7 +492,6 @@ pub(crate) fn infer_apply(
                                 args: typed_args,
                                 ffi_symbol: fallback_overload.ffi_symbol,
                             },
-                            Effect::Puro,
                         ));
                     }
 
@@ -552,7 +535,6 @@ pub(crate) fn infer_apply(
                         ty: callee_ty,
                         tail_pos: false,
                         escape: EscapeTarget::Local,
-                        effect: Effect::Puro,
                         kind: TypedExprKind::Ident {
                             name: func_name.clone(),
                         },
@@ -564,7 +546,6 @@ pub(crate) fn infer_apply(
                             args: typed_args,
                             ffi_symbol: fallback_overload.ffi_symbol,
                         },
-                        Effect::Puro,
                     ));
                 }
 
@@ -605,7 +586,6 @@ pub(crate) fn infer_apply(
             ty: Ty::Function(param_types.clone(), ret_ty.clone()),
             tail_pos: false,
             escape: EscapeTarget::Local,
-            effect: Effect::Puro,
             kind: TypedExprKind::Ident {
                 name: func_name.clone(),
             },
@@ -618,7 +598,6 @@ pub(crate) fn infer_apply(
                 args: typed_args,
                 ffi_symbol: None, // call_indirect — sem FFI symbol
             },
-            Effect::Puro,
         ));
     }
 

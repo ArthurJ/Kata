@@ -8,7 +8,7 @@ use kata_ast::{Span, Spanned};
 use kata_core::escape::EscapeTarget;
 use kata_core::ty::{PrimTy, Ty};
 
-use crate::typed::{Effect, TypedExpr, TypedExprKind, TypedMatchArm, TypedPattern};
+use crate::typed::{TypedExpr, TypedExprKind, TypedMatchArm, TypedPattern};
 
 /// Constrói `Result::Ok(v)` como `TypedExpr` com tipo `result_ty`.
 pub(crate) fn build_result_ok(
@@ -22,7 +22,6 @@ pub(crate) fn build_result_ok(
         ty: base_ty.clone(),
         tail_pos: false,
         escape: EscapeTarget::Local,
-        effect: Effect::Puro,
         kind: TypedExprKind::Ident {
             name: var_name.into(),
         },
@@ -33,7 +32,6 @@ pub(crate) fn build_result_ok(
             ty: result_ty.clone(),
             tail_pos: true,
             escape: EscapeTarget::Caller,
-            effect: Effect::Puro,
             kind: TypedExprKind::VariantConstruct {
                 enum_name: "Result".into(),
                 variant: "Ok".into(),
@@ -67,7 +65,6 @@ pub(crate) fn build_result_err(
         ty: Ty::text(),
         tail_pos: false,
         escape: EscapeTarget::Local,
-        effect: Effect::Puro,
         kind: TypedExprKind::TextLit { text: suffix },
     };
 
@@ -77,7 +74,6 @@ pub(crate) fn build_result_err(
         ty: Ty::text(),
         tail_pos: false,
         escape: EscapeTarget::Local,
-        effect: Effect::Puro,
         kind: TypedExprKind::Closure {
             callee: Box::new(Spanned::new(
                 TypedExpr {
@@ -85,7 +81,6 @@ pub(crate) fn build_result_err(
                     ty: Ty::Function(vec![Ty::text(), Ty::text()], Box::new(Ty::text())),
                     tail_pos: false,
                     escape: EscapeTarget::Local,
-                    effect: Effect::Puro,
                     kind: TypedExprKind::Ident {
                         name: "kata_rt_string_concat".into(),
                     },
@@ -103,7 +98,6 @@ pub(crate) fn build_result_err(
             ty: result_ty.clone(),
             tail_pos: true,
             escape: EscapeTarget::Caller,
-            effect: Effect::Puro,
             kind: TypedExprKind::VariantConstruct {
                 enum_name: "Result".into(),
                 variant: "Err".into(),
@@ -132,7 +126,6 @@ fn build_show_call(var_name: &str, base_ty: &Ty) -> Spanned<TypedExpr> {
         ty: Ty::Function(vec![base_ty.clone()], Box::new(Ty::text())),
         tail_pos: false,
         escape: EscapeTarget::Local,
-        effect: Effect::Puro,
         kind: TypedExprKind::Ident {
             name: ffi_name.into(),
         },
@@ -142,7 +135,6 @@ fn build_show_call(var_name: &str, base_ty: &Ty) -> Spanned<TypedExpr> {
         ty: base_ty.clone(),
         tail_pos: false,
         escape: EscapeTarget::Local,
-        effect: Effect::Puro,
         kind: TypedExprKind::Ident {
             name: var_name.into(),
         },
@@ -153,7 +145,6 @@ fn build_show_call(var_name: &str, base_ty: &Ty) -> Spanned<TypedExpr> {
             ty: Ty::text(),
             tail_pos: false,
             escape: EscapeTarget::Local,
-            effect: Effect::Puro,
             kind: TypedExprKind::Closure {
                 callee: Box::new(Spanned::new(callee, Span::synthetic())),
                 args: vec![Spanned::new(arg, Span::synthetic())],
@@ -222,7 +213,6 @@ pub(crate) fn build_nested_match(
             ty: result_ty.clone(),
             tail_pos: true,
             escape: EscapeTarget::Caller,
-            effect: Effect::Puro,
             kind: TypedExprKind::Match {
                 scrutinee: Box::new(scrutinee),
                 arms: vec![true_arm, false_arm],

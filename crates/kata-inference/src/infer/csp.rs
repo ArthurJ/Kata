@@ -9,7 +9,7 @@ use kata_core::escape::EscapeTarget;
 use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 
-use crate::typed::{Effect, TypedExpr, TypedExprKind, TypedSelectArm};
+use crate::typed::{TypedExpr, TypedExprKind, TypedSelectArm};
 
 use super::expr::InferCtx;
 use super::expr::infer_expr_hinted;
@@ -73,7 +73,6 @@ pub(crate) fn infer_channel_send(
         ty: Ty::Unit,
         tail_pos,
         escape,
-        effect: Effect::ChannelOp,
         kind: TypedExprKind::ChannelSend {
             channel: Box::new(Spanned::new(typed_channel, channel.span)),
             value: Box::new(Spanned::new(typed_value, value.span)),
@@ -85,7 +84,6 @@ pub(crate) fn infer_channel_send(
 ///
 /// `channel` deve ter tipo `Receiver::T`. Infere `T` e cria binding
 /// `bind_name: T` no `TypeEnv`. Produz `T` (o valor recebido).
-/// Effect = `ChannelOp`.
 pub(crate) fn infer_channel_recv(
     channel: &Spanned<Expr>,
     bind_name: &str,
@@ -126,7 +124,6 @@ pub(crate) fn infer_channel_recv(
         ty: recv_ty.clone(),
         tail_pos,
         escape,
-        effect: Effect::ChannelOp,
         kind: TypedExprKind::ChannelRecv {
             channel: Box::new(Spanned::new(typed_channel, channel.span)),
             recv_ty,
@@ -139,7 +136,6 @@ pub(crate) fn infer_channel_recv(
 ///
 /// Todos os braços devem ter receivers do mesmo tipo `T`. O tipo do
 /// `select` é `T` (o valor recebido pelo braço que disparar).
-/// Effect = `ChannelOp`.
 pub(crate) fn infer_select(
     arms: &[SelectArm],
     timeout_ms: &Option<Box<Spanned<Expr>>>,
@@ -249,7 +245,6 @@ pub(crate) fn infer_select(
         ty: select_ty,
         tail_pos,
         escape,
-        effect: Effect::ChannelOp,
         kind: TypedExprKind::Select {
             arms: typed_arms,
             timeout_ms: typed_timeout_ms,

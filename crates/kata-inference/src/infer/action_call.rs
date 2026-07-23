@@ -5,13 +5,13 @@
 //! mas não chama `infer_expr_hinted` recursivamente.
 //!
 //! Retorna `Result<ExprDispatch, MiddleError>` onde `ExprDispatch` é ou
-//! um `TypedExpr` completo (assert — early return) ou a tríade
-//! `(Ty, TypedExprKind, Effect)` consumida pelo match principal.
+//! um `TypedExpr` completo (assert — early return) ou o par
+//! `(Ty, TypedExprKind)` consumido pelo match principal.
 
 use kata_ast::{Expr, Span, Spanned};
 use kata_core::ty::{Ty, TypeEnv};
 
-use crate::typed::{Effect, TypedExpr, TypedExprKind};
+use crate::typed::{TypedExpr, TypedExprKind};
 
 use super::csp_builtins::{infer_channel_builtin, infer_fork_builtin, infer_queue_builtin};
 use super::expr::{InferCtx, infer_expr};
@@ -22,10 +22,10 @@ use super::sugar::infer_assert;
 /// Resultado da inferência de ActionCall.
 ///
 /// `Complete(TypedExpr)` = early return com TypedExpr pronto (ex: assert).
-/// `Tuple(ty, kind, effect)` = tríade para o match principal montar o TypedExpr.
+/// `Tuple(ty, kind)` = par para o match principal montar o TypedExpr.
 pub(crate) enum ActionDispatch {
     Complete(TypedExpr),
-    Tuple(Ty, TypedExprKind, Effect),
+    Tuple(Ty, TypedExprKind),
 }
 
 /// Infere um `Expr::ActionCall { callee, args }`.
@@ -114,7 +114,6 @@ pub(crate) fn infer_action_call(
             ty: ty.clone(),
             tail_pos: false,
             escape: kata_core::escape::EscapeTarget::Local,
-            effect: Effect::Puro,
             kind: TypedExprKind::Ident {
                 name: callee.to_string(),
             },
@@ -124,7 +123,6 @@ pub(crate) fn infer_action_call(
             ty: Ty::Receiver(Box::new((**inner).clone())),
             tail_pos: false,
             escape: kata_core::escape::EscapeTarget::Local,
-            effect: Effect::ChannelOp,
             kind: TypedExprKind::ReceiverFactoryCall {
                 factory: Box::new(Spanned::new(factory_typed, *span)),
                 elem_ty: (**inner).clone(),
@@ -159,7 +157,6 @@ pub(crate) fn infer_action_call(
                     span: typed_args.span,
                     tail_pos: typed_args.tail_pos,
                     escape: typed_args.escape,
-                    effect: typed_args.effect,
                 }
             }
             TypedExprKind::Tuple { .. } | TypedExprKind::Unit => typed_args,
@@ -173,7 +170,6 @@ pub(crate) fn infer_action_call(
                     span: typed_args.span,
                     tail_pos: typed_args.tail_pos,
                     escape: typed_args.escape,
-                    effect: typed_args.effect,
                 }
             }
         };
@@ -213,7 +209,6 @@ pub(crate) fn infer_action_call(
             ty: Ty::Action(param_types.clone(), ret_ty.clone()),
             tail_pos: false,
             escape: kata_core::escape::EscapeTarget::Local,
-            effect: Effect::Puro,
             kind: TypedExprKind::Ident {
                 name: callee.to_string(),
             },
@@ -224,7 +219,6 @@ pub(crate) fn infer_action_call(
             ty: (*ret_ty).clone(),
             tail_pos: false,
             escape: kata_core::escape::EscapeTarget::Local,
-            effect: Effect::Puro, // Mesmo que ActionCall direto
             kind: TypedExprKind::ActionCall {
                 callee: callee.to_string(),
                 args: Box::new(Spanned::new(typed_args, args.span)),
@@ -261,7 +255,6 @@ pub(crate) fn infer_action_call(
                 span: typed_args.span,
                 tail_pos: typed_args.tail_pos,
                 escape: typed_args.escape,
-                effect: typed_args.effect,
             }
         }
         _ => typed_args,
@@ -298,6 +291,5 @@ pub(crate) fn infer_action_call(
             ffi_symbol: overload.ffi_symbol.clone().filter(|_s| overload.is_action),
             indirect_callee: None,
         },
-        Effect::Puro, // Não ativa Effect
     ))
 }

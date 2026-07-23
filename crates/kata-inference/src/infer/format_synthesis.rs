@@ -14,7 +14,7 @@ use kata_core::escape::EscapeTarget;
 use kata_core::ty::{PrimTy, Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 
-use crate::typed::{Effect, TypedExpr, TypedExprKind};
+use crate::typed::{TypedExpr, TypedExprKind};
 
 use super::expr::{InferCtx, infer_expr};
 use super::helpers::InferResult;
@@ -27,7 +27,7 @@ pub(crate) fn infer_format(
     _span: &Span,
     env: &mut TypeEnv,
     ctx: &InferCtx,
-) -> InferResult<(Ty, TypedExprKind, Effect)> {
+) -> InferResult<(Ty, TypedExprKind)> {
     // Arg 0: template (deve ser Text)
     let template_expr = infer_expr(&args[0].node, &args[0].span, env, ctx, false)?;
     if template_expr.ty != Ty::text() {
@@ -83,7 +83,7 @@ pub(crate) fn infer_format(
         result = text_replace_first(result, part);
     }
 
-    Ok((Ty::text(), result.node.kind, Effect::Puro))
+    Ok((Ty::text(), result.node.kind))
 }
 
 /// Converte um TypedExpr para Text, baseado no tipo.
@@ -129,7 +129,6 @@ fn ffi_call1(ffi_name: &str, arg: Spanned<TypedExpr>, ret_ty: Ty) -> Spanned<Typ
         ty: Ty::Function(vec![arg.node.ty.clone()], Box::new(ret_ty.clone())),
         tail_pos: false,
         escape: EscapeTarget::Local,
-        effect: Effect::Puro,
         kind: TypedExprKind::Ident {
             name: ffi_name.to_string(),
         },
@@ -141,7 +140,6 @@ fn ffi_call1(ffi_name: &str, arg: Spanned<TypedExpr>, ret_ty: Ty) -> Spanned<Typ
             ty: ret_ty,
             tail_pos: false,
             escape: EscapeTarget::Caller,
-            effect: Effect::Puro,
             kind: TypedExprKind::Closure {
                 callee: Box::new(Spanned::new(callee, Span::synthetic())),
                 args: vec![arg],
@@ -162,7 +160,6 @@ fn text_replace_first(
         ty: Ty::Function(vec![Ty::text(), Ty::text()], Box::new(Ty::text())),
         tail_pos: false,
         escape: EscapeTarget::Local,
-        effect: Effect::Puro,
         kind: TypedExprKind::Ident {
             name: "kata_rt_text_replace_first".to_string(),
         },
@@ -174,7 +171,6 @@ fn text_replace_first(
             ty: Ty::text(),
             tail_pos: false,
             escape: EscapeTarget::Caller,
-            effect: Effect::Puro,
             kind: TypedExprKind::Closure {
                 callee: Box::new(Spanned::new(callee, Span::synthetic())),
                 args: vec![template, replacement],
@@ -192,7 +188,6 @@ fn repr_call(field_access: Spanned<TypedExpr>, mangled: String) -> Spanned<Typed
         ty: Ty::Function(vec![field_access.node.ty.clone()], Box::new(Ty::text())),
         tail_pos: false,
         escape: EscapeTarget::Local,
-        effect: Effect::Puro,
         kind: TypedExprKind::Ident {
             name: mangled.clone(),
         },
@@ -204,7 +199,6 @@ fn repr_call(field_access: Spanned<TypedExpr>, mangled: String) -> Spanned<Typed
             ty: Ty::text(),
             tail_pos: false,
             escape: EscapeTarget::Caller,
-            effect: Effect::Puro,
             kind: TypedExprKind::Closure {
                 callee: Box::new(Spanned::new(callee, Span::synthetic())),
                 args: vec![field_access],

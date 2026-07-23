@@ -13,7 +13,7 @@
 use kata_ast::{Span, Spanned};
 use kata_core::escape::EscapeTarget;
 use kata_core::ty::Ty;
-use kata_inference::{Effect, TypedExpr, TypedExprKind};
+use kata_inference::{TypedExpr, TypedExprKind};
 
 /// Substitui `show (tuple_expr)` por:
 /// `string_concat("(", string_concat(show tuple.0, string_concat(", ",
@@ -32,7 +32,6 @@ pub(crate) fn rewrite_show_tuple_call(tuple_expr: &Spanned<TypedExpr>) -> Spanne
                     ty: Ty::text(),
                     tail_pos: false,
                     escape: EscapeTarget::Local,
-                    effect: Effect::Puro,
                     kind: TypedExprKind::TextLit {
                         text: "?".to_string(),
                     },
@@ -50,7 +49,6 @@ pub(crate) fn rewrite_show_tuple_call(tuple_expr: &Spanned<TypedExpr>) -> Spanne
                 ty: Ty::text(),
                 tail_pos: false,
                 escape: EscapeTarget::Caller,
-                effect: Effect::Puro,
                 kind: TypedExprKind::TextLit {
                     text: "()".to_string(),
                 },
@@ -72,7 +70,6 @@ pub(crate) fn rewrite_show_tuple_call(tuple_expr: &Spanned<TypedExpr>) -> Spanne
             ty: elem_ty.clone(),
             tail_pos: false,
             escape: EscapeTarget::Local,
-            effect: Effect::Puro,
             kind: TypedExprKind::FieldAccess {
                 expr: Box::new(tuple_expr.clone()),
                 struct_name: String::new(),
@@ -120,7 +117,6 @@ fn text_lit(text: &str) -> Spanned<TypedExpr> {
             ty: Ty::text(),
             tail_pos: false,
             escape: EscapeTarget::Local,
-            effect: Effect::Puro,
             kind: TypedExprKind::TextLit {
                 text: text.to_string(),
             },
@@ -135,7 +131,6 @@ fn ffi_call1(ffi_name: &str, arg: Spanned<TypedExpr>) -> Spanned<TypedExpr> {
         ty: Ty::Function(vec![arg.node.ty.clone()], Box::new(Ty::text())),
         tail_pos: false,
         escape: EscapeTarget::Local,
-        effect: Effect::Puro,
         kind: TypedExprKind::Ident {
             name: ffi_name.to_string(),
         },
@@ -146,7 +141,6 @@ fn ffi_call1(ffi_name: &str, arg: Spanned<TypedExpr>) -> Spanned<TypedExpr> {
             ty: Ty::text(),
             tail_pos: false,
             escape: EscapeTarget::Local,
-            effect: Effect::Puro,
             kind: TypedExprKind::Closure {
                 callee: Box::new(Spanned::new(callee, Span::synthetic())),
                 args: vec![arg],
@@ -164,7 +158,6 @@ fn show_call_mangled(arg: Spanned<TypedExpr>, type_name: &str) -> Spanned<TypedE
         ty: Ty::Function(vec![arg.node.ty.clone()], Box::new(Ty::text())),
         tail_pos: false,
         escape: EscapeTarget::Local,
-        effect: Effect::Puro,
         kind: TypedExprKind::Ident {
             name: mangled.clone(),
         },
@@ -175,7 +168,6 @@ fn show_call_mangled(arg: Spanned<TypedExpr>, type_name: &str) -> Spanned<TypedE
             ty: Ty::text(),
             tail_pos: false,
             escape: EscapeTarget::Caller,
-            effect: Effect::Puro,
             kind: TypedExprKind::Closure {
                 callee: Box::new(Spanned::new(callee, Span::synthetic())),
                 args: vec![arg],
@@ -192,7 +184,6 @@ fn string_concat(left: Spanned<TypedExpr>, right: Spanned<TypedExpr>) -> Spanned
         ty: Ty::Function(vec![Ty::text(), Ty::text()], Box::new(Ty::text())),
         tail_pos: false,
         escape: EscapeTarget::Local,
-        effect: Effect::Puro,
         kind: TypedExprKind::Ident {
             name: "kata_rt_string_concat".to_string(),
         },
@@ -203,7 +194,6 @@ fn string_concat(left: Spanned<TypedExpr>, right: Spanned<TypedExpr>) -> Spanned
             ty: Ty::text(),
             tail_pos: false,
             escape: EscapeTarget::Caller,
-            effect: Effect::Puro,
             kind: TypedExprKind::Closure {
                 callee: Box::new(Spanned::new(callee, Span::synthetic())),
                 args: vec![left, right],

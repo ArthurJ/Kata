@@ -247,6 +247,5 @@ fn reorder_test_dict_args(
         span: typed_args.span,
         tail_pos: typed_args.tail_pos,
         escape: typed_args.escape,
-        effect: typed_args.effect,
     })
 }

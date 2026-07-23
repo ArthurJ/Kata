@@ -10,7 +10,7 @@ use kata_ast::{Expr, Span, Spanned};
 use kata_core::escape::EscapeTarget;
 use kata_core::ty::{PrimTy, Ty, TypeEnv};
 
-use crate::typed::{Effect, TypedExpr, TypedExprKind};
+use crate::typed::{TypedExpr, TypedExprKind};
 
 use super::expr::{InferCtx, infer_expr};
 use super::helpers::InferResult;
@@ -142,7 +142,6 @@ pub(crate) fn infer_dict_lit(
         ty: dict_ty,
         tail_pos,
         escape,
-        effect: Effect::Puro,
         kind: TypedExprKind::DictLit {
             entries: typed_entries,
             key_ty: final_key_ty,
@@ -209,7 +208,6 @@ pub(crate) fn infer_set_lit(
         ty: set_ty,
         tail_pos,
         escape,
-        effect: Effect::Puro,
         kind: TypedExprKind::SetLit {
             elements: typed_elements,
             elem_ty: final_elem_ty,

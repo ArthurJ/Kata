@@ -1,6 +1,6 @@
 //! `TypedExpr` — TAST enriquecida (saída do typeck, entrada do codegen).
 //!
-//! Cada nó carrega `ty: Ty`, `tail_pos: bool`, `effect: Effect` — os três
+//! Cada nó carrega `ty: Ty`, `tail_pos: bool` — ambos
 //! populados desde o início para evitar retrofit (PRD-fio1 §17, Risco 5).
 //!
 //! `TypedExprKind` espelha `Expr` mas com `Spanned<TypedExpr>` em vez de
@@ -16,20 +16,7 @@ pub use crate::typed_pattern::{
     TypedGuardClause, TypedLambdaClause, TypedMatchArm, TypedPattern, TypedWithBinding,
 };
 
-/// Efeito de uma expressão. só produz `Puro`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Effect {
-    /// Expressão pura — sem efeitos colaterais.
-    Puro,
-    /// Efeito de I/O — `echo`, leitura/escrita.
-    IO,
-    /// Spawn de fiber — `spawn`.
-    Spawn,
-    /// Operação de canal — `send`/`recv`.
-    ChannelOp,
-}
-
-/// Nó da TAST — expressão com tipo, posição de cauda e efeito anotados.
+/// Nó da TAST — expressão com tipo e posição de cauda anotados.
 #[derive(Debug, Clone)]
 pub struct TypedExpr {
     /// Span herdado do nó da AST correspondente.
@@ -45,8 +32,6 @@ pub struct TypedExpr {
     /// `Caller` = caller_arena.
     /// Coexiste com `tail_pos` (que governa TCO, não memória).
     pub escape: EscapeTarget,
-    /// Efeito da expressão. `Puro`.
-    pub effect: Effect,
     /// Variante da TAST — espelha `Expr` com nós filhos já tipados.
     pub kind: TypedExprKind,
 }
@@ -332,13 +317,13 @@ pub enum TypedExprKind {
     },
 
     // ── CSP — canais, select, fork ──────────────────────
-    /// `tx !> valor` — envio por canal (effect = ChannelOp).
+    /// `tx !> valor` — envio por canal.
     ChannelSend {
         channel: Box<Spanned<TypedExpr>>,
         value: Box<Spanned<TypedExpr>>,
     },
 
-    /// `rx <! nome` — recebimento de canal (effect = ChannelOp).
+    /// `rx <! nome` — recebimento de canal.
     /// `recv_ty` é o tipo do valor recebido (inferido do tipo do canal).
     ChannelRecv {
         channel: Box<Spanned<TypedExpr>>,
@@ -346,7 +331,7 @@ pub enum TypedExprKind {
         bind_name: String,
     },
 
-    /// `select` com braços (effect = ChannelOp).
+    /// `select` com braços.
     Select {
         arms: Vec<TypedSelectArm>,
         timeout_ms: Option<Box<Spanned<TypedExpr>>>,
@@ -374,7 +359,7 @@ pub enum TypedExprKind {
         elem_ty: Ty,
     },
 
-    /// `fork!(action, args)` — spawn de fiber (effect = Spawn).
+    /// `fork!(action, args)` — spawn de fiber.
     /// `action_name` é o nome da Action a executar no novo fiber.
     /// `action_expr` é a expressão tipada que avalia para o fn_ptr da Action.
     /// Para Ident direto (worker), é o Ident. Para variável (f), é a variável.

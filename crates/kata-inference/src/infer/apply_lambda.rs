@@ -15,7 +15,7 @@ use kata_core::escape::EscapeTarget;
 use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 
-use crate::typed::{Effect, TypedExpr, TypedExprKind, TypedGuardClause, TypedLambdaClause};
+use crate::typed::{TypedExpr, TypedExprKind, TypedGuardClause, TypedLambdaClause};
 
 use super::expr::{InferCtx, infer_expr};
 use super::helpers::{InferResult, check_patterns, process_with_bindings};
@@ -35,7 +35,7 @@ pub(crate) fn infer_apply_lambda(
     span: &Span,
     env: &mut TypeEnv,
     ctx: &InferCtx,
-) -> InferResult<(Ty, TypedExprKind, Effect)> {
+) -> InferResult<(Ty, TypedExprKind)> {
     // Verifica aridade.
     if args.len() != patterns.len() {
         return Err(MiddleError::ArityMismatch {
@@ -81,7 +81,7 @@ pub(crate) fn infer_apply_lambda_with_hint(
     span: &Span,
     env: &mut TypeEnv,
     ctx: &InferCtx,
-) -> InferResult<(Ty, TypedExprKind, Effect)> {
+) -> InferResult<(Ty, TypedExprKind)> {
     // Verifica aridade.
     if args.len() != patterns.len() {
         return Err(MiddleError::ArityMismatch {
@@ -160,7 +160,7 @@ fn build_lambda_apply(
     span: &Span,
     env: &mut TypeEnv,
     ctx: &InferCtx,
-) -> InferResult<(Ty, TypedExprKind, Effect)> {
+) -> InferResult<(Ty, TypedExprKind)> {
     // Cria escopo filho e define params com tipos conhecidos.
     let mut lambda_env = env.push_scope();
     let typed_patterns = check_patterns(patterns, &param_tys, ctx.enum_registry, &mut lambda_env)?;
@@ -204,7 +204,6 @@ fn build_lambda_apply(
         ty: lambda_ty,
         tail_pos: false,
         escape: EscapeTarget::Local,
-        effect: Effect::Puro,
         kind: lambda_kind,
     };
 
@@ -215,7 +214,6 @@ fn build_lambda_apply(
             args: typed_args,
             ffi_symbol: None,
         },
-        Effect::Puro,
     ))
 }
 
@@ -287,7 +285,6 @@ pub(crate) fn infer_lambda_body(
                 ty: guard_ret_ty.expect("pelo menos um guard"),
                 tail_pos: true,
                 escape: EscapeTarget::Caller,
-                effect: Effect::Puro,
                 kind: TypedExprKind::Unit,
             },
         )

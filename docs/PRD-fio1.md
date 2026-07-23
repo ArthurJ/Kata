@@ -329,7 +329,6 @@ kata-rt → resultado (i64)
    sem parsear arquivo — isso será substituído em Fio 10 por carregamento de
    `stdlib/core.kata` do filesystem.
 
-5. **TAST enriquecida:** adicionar `tail_pos` e `effect` desde o início evita
-   retrofit. Mas o typeck precisa populá-los corretamente — `tail_pos` para
-   toda expressão, `effect = Puro` para todo expressão pura (IO/Spawn/ChannelOp
-   vêm em fios posteriores).
+5. **TAST enriquecida:** adicionar `tail_pos` desde o início evita
+   retrofit. Mas o typeck precisa populá-lo corretamente — `tail_pos` para
+   toda expressão.

@@ -1,7 +1,7 @@
 //! Pass 2 — type-check dos corpos, inferência, dispatch por dominância.
 //!
 //! Consome `ResolvedModule` (TypeEnv + assinaturas + EnumRegistry) + `Module` (AST) e
-//! produz `TypedModule` (TAST com `ty`, `tail_pos`, `effect` em cada nó).
+//! produz `TypedModule` (TAST com `ty`, `tail_pos` em cada nó).
 //!
 //! Algoritmo: `infer_module` popula o DispatchTable a partir das
 //! `signatures`, depois `infer_expr` percorre a AST recursivamente,

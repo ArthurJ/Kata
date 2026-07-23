@@ -182,7 +182,6 @@ pub(crate) fn instantiate_typed_expr(expr: &TypedExpr, subs: &Substitutions) -> 
         ty: new_ty,
         tail_pos: expr.tail_pos,
         escape: expr.escape,
-        effect: expr.effect,
         kind: instantiate_kind(&expr.kind, subs),
     }
 }

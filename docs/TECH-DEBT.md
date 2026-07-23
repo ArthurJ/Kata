@@ -4,32 +4,16 @@ Itens identificados como débito técnico real (não resolvidos, não decisões
 de design). Cada item descreve o problema, o estado atual do código, e o
 impacto.
 
-## 1. `Effect::IO` declarado mas nunca produzido nem consumido
+## 1. ✅ `Effect` enum e campo `effect` removidos — RESOLVIDO 2026-07-23
 
-**Estado:** `Effect` tem 4 variants (`Puro`, `IO`, `Spawn`, `ChannelOp`).
-`Spawn` e `ChannelOp` são produzidos em `action_call.rs` e `csp.rs` (fork!,
-channel!, send, recv, select). `IO` **não é produzido em nenhum lugar** — zero
-ocorrências de `Effect::IO` no workspace.
-
-Além disso, **nenhum variant de `Effect` é consumido**: zero `==`, `!=`, ou
-`matches!` sobre o campo `effect` em qualquer crate. O codegen não consulta
-`effect` para qualquer decisão. O otimizador (TRMA, stream fusion) não
-consulta. O monomorphizer apenas propaga mecanicamente (`expr.effect`).
-
-**Contexto:** O ROADMAP planejava que Actions teriam `Effect::IO` (Fio 3) e
-que o sistema de efeitos seria fonte de verdade para otimização. O caminho
-tomado foi outro: o typeck distingue Actions de funções puras via `ret_ty:
-Some` vs `None`, e o codegen trata `ActionCall` diferente de `Closure`. A
-distinção estrutural substituiu a distinção por efeito.
-
-**Impacto:** Baixo. `Effect::IO` é código morto — pode ser removido do enum
-sem quebrar nada. O campo `effect` em si é carregado sem consumidores, mas
-seu custo é um byte por `TypedExpr`. Se um otimizador futuro precisar
-distinguir pureza sem analisar a AST, `effect` está lá como infraestrutura.
-
-**Decisão pendente:** remover `Effect::IO` do enum (承认 que IO não é um
-conceito usado), ou deixar como hook de extensão para um futuro sistema de
-efeitos real?
+**Resolução:** O enum `Effect` inteiro (todos os 4 variants: `Puro`, `IO`,
+`Spawn`, `ChannelOp`) e o campo `effect` de `TypedExpr` foram completamente
+removidos. Nenhum variant era consumido — zero `==`, `!=`, ou `matches!` sobre
+o campo em qualquer crate. A distinção Action vs função pura é feita
+estruturalmente via `ret_ty: Some` vs `None`, não por efeito. Cerca de 80
+referências em ~30 arquivos foram removidas, incluindo construções de struct
+literals, propagações, tipos de retorno de função (tríade `(ty, kind, effect)`
+→ `(ty, kind)`), imports, testes e snapshots.
 
 ## 2. `@test{expects: "CompileError"}` — parsing ok, execução não implementada
 

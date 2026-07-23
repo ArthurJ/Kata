@@ -229,6 +229,5 @@ pub(crate) fn reorder_dict_args_to_tuple(
         span: typed_args.span,
         tail_pos: typed_args.tail_pos,
         escape: typed_args.escape,
-        effect: typed_args.effect,
     })
 }

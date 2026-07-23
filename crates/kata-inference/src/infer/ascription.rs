@@ -9,7 +9,7 @@ use kata_core::escape::EscapeTarget;
 use kata_core::ty::{PrimTy, Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 
-use crate::typed::{Effect, TypedExpr, TypedExprKind};
+use crate::typed::{TypedExpr, TypedExprKind};
 
 use super::expr::{InferCtx, infer_expr_hinted};
 use super::helpers::InferResult;
@@ -130,7 +130,6 @@ pub(crate) fn infer_type_ascription(
             } else {
                 EscapeTarget::Caller
             },
-            effect: Effect::Puro,
             kind: TypedExprKind::TypeAscription {
                 expr: Box::new(Spanned::new(inner, expr.span)),
                 target_ty,
@@ -185,7 +184,6 @@ pub(crate) fn infer_type_ascription(
                 } else {
                     EscapeTarget::Caller
                 },
-                effect: Effect::Puro,
                 kind: TypedExprKind::StructConstruct {
                     struct_name: struct_name.clone(),
                     values,
@@ -247,7 +245,6 @@ pub(crate) fn infer_type_ascription(
                 } else {
                     EscapeTarget::Caller
                 },
-                effect: Effect::Puro,
                 kind: TypedExprKind::TypeAscription {
                     expr: Box::new(Spanned::new(inner, expr.span)),
                     target_ty,
@@ -288,7 +285,6 @@ pub(crate) fn infer_type_ascription(
         } else {
             EscapeTarget::Caller
         },
-        effect: Effect::Puro,
         kind: TypedExprKind::TypeAscription {
             expr: Box::new(Spanned::new(inner, expr.span)),
             target_ty,

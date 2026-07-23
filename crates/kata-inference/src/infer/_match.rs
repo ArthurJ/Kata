@@ -8,7 +8,7 @@ use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 
 use crate::patterns;
-use crate::typed::{Effect, TypedExprKind, TypedMatchArm, TypedPattern};
+use crate::typed::{TypedExprKind, TypedMatchArm, TypedPattern};
 
 use super::expr::{InferCtx, infer_expr};
 use super::helpers::InferResult;
@@ -35,7 +35,7 @@ pub(crate) fn infer_match(
     env: &mut TypeEnv,
     ctx: &InferCtx,
     tail_pos: bool,
-) -> InferResult<(Ty, TypedExprKind, Effect)> {
+) -> InferResult<(Ty, TypedExprKind)> {
     // Infere o scrutinee.
     let typed_scrutinee = infer_expr(&scrutinee.node, &scrutinee.span, env, ctx, false)?;
     let scrutinee_ty = typed_scrutinee.ty.clone();
@@ -155,6 +155,5 @@ pub(crate) fn infer_match(
             scrutinee: Box::new(Spanned::new(typed_scrutinee, scrutinee.span)),
             arms: typed_arms,
         },
-        Effect::Puro,
     ))
 }

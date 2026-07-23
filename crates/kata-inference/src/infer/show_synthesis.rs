@@ -25,7 +25,7 @@ use kata_core::struct_registry::StructRegistry;
 use kata_core::ty::{PrimTy, Ty};
 
 use crate::typed::{
-    Effect, TypedExpr, TypedExprKind, TypedFunction, TypedLambdaClause, TypedMatchArm, TypedPattern,
+    TypedExpr, TypedExprKind, TypedFunction, TypedLambdaClause, TypedMatchArm, TypedPattern,
 };
 
 use super::show_synthesis_helpers::{
@@ -134,7 +134,6 @@ pub(crate) fn synthesize_show_functions(
                 ty: Ty::text(),
                 tail_pos: true,
                 escape: EscapeTarget::Caller,
-                effect: Effect::Puro,
                 kind: text_lit(struct_name.to_string()).node.kind,
             }
         } else {
@@ -285,7 +284,6 @@ fn build_struct_show_body(
         ty: Ty::text(),
         tail_pos: true,
         escape: EscapeTarget::Caller,
-        effect: Effect::Puro,
         kind: body.node.kind,
     }
 }
@@ -314,7 +312,6 @@ fn build_refined_show_body(
         ty: Ty::Struct(refined_name.to_string()),
         tail_pos: false,
         escape: EscapeTarget::Local,
-        effect: Effect::Puro,
         kind: TypedExprKind::Ident {
             name: "__self".to_string(),
         },
@@ -343,7 +340,6 @@ fn build_refined_show_body(
         ty: Ty::text(),
         tail_pos: true,
         escape: EscapeTarget::Caller,
-        effect: Effect::Puro,
         kind: body.node.kind,
     }
 }
@@ -415,7 +411,6 @@ fn build_enum_show_body(
         ty: Ty::Sum(enum_name.to_string()),
         tail_pos: false,
         escape: EscapeTarget::Local,
-        effect: Effect::Puro,
         kind: TypedExprKind::Ident {
             name: "__self".to_string(),
         },
@@ -433,7 +428,6 @@ fn build_enum_show_body(
         ty: Ty::text(),
         tail_pos: true,
         escape: EscapeTarget::Caller,
-        effect: Effect::Puro,
         kind: TypedExprKind::Match {
             scrutinee: Box::new(scrutinee),
             arms,
@@ -483,7 +477,6 @@ fn build_enum_show_arm(
                 ty: payload_ty.clone(),
                 tail_pos: false,
                 escape: EscapeTarget::Local,
-                effect: Effect::Puro,
                 kind: TypedExprKind::Ident {
                     name: "v".to_string(),
                 },

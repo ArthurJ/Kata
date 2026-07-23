@@ -16,7 +16,7 @@ use kata_ast::{Expr, Pattern, Span, Spanned};
 use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 
-use crate::typed::{Effect, TypedExpr, TypedExprKind};
+use crate::typed::{TypedExpr, TypedExprKind};
 
 use super::expr::{InferCtx, infer_expr_hinted};
 use super::helpers::InferResult;
@@ -105,7 +105,7 @@ pub(crate) fn infer_map(
     span: &Span,
     env: &mut TypeEnv,
     ctx: &InferCtx,
-) -> InferResult<(Ty, TypedExprKind, Effect)> {
+) -> InferResult<(Ty, TypedExprKind)> {
     if args.len() != 2 {
         return Err(MiddleError::ArityMismatch {
             expected: 2,
@@ -158,7 +158,7 @@ pub(crate) fn infer_map(
         ret_ty: map_ret.clone(),
     };
 
-    Ok((map_ret, kind, Effect::Puro))
+    Ok((map_ret, kind))
 }
 
 // ── Filter ───────────────────────────────────────────────────
@@ -172,7 +172,7 @@ pub(crate) fn infer_filter(
     span: &Span,
     env: &mut TypeEnv,
     ctx: &InferCtx,
-) -> InferResult<(Ty, TypedExprKind, Effect)> {
+) -> InferResult<(Ty, TypedExprKind)> {
     if args.len() != 2 {
         return Err(MiddleError::ArityMismatch {
             expected: 2,
@@ -231,7 +231,7 @@ pub(crate) fn infer_filter(
         ret_ty: filter_ret.clone(),
     };
 
-    Ok((filter_ret, kind, Effect::Puro))
+    Ok((filter_ret, kind))
 }
 
 // ── Fold ──────────────────────────────────────────────────────
@@ -246,7 +246,7 @@ pub(crate) fn infer_fold(
     span: &Span,
     env: &mut TypeEnv,
     ctx: &InferCtx,
-) -> InferResult<(Ty, TypedExprKind, Effect)> {
+) -> InferResult<(Ty, TypedExprKind)> {
     if args.len() != 3 {
         return Err(MiddleError::ArityMismatch {
             expected: 3,
@@ -311,5 +311,5 @@ pub(crate) fn infer_fold(
         ret_ty: fold_ret.clone(),
     };
 
-    Ok((fold_ret, kind, Effect::Puro))
+    Ok((fold_ret, kind))
 }

@@ -9,7 +9,7 @@ use kata_ast::Span;
 use kata_core::ty::{PrimTy, Ty};
 use kata_diagnostics::MiddleError;
 
-use crate::typed::{Effect, TypedExpr, TypedExprKind};
+use crate::typed::{TypedExpr, TypedExprKind};
 
 use super::expr::InferCtx;
 
@@ -22,7 +22,6 @@ fn build_fixed_payload(text: &str, ty: &Ty, span: Span) -> TypedExpr {
             ty: Ty::int(),
             tail_pos: false,
             escape: kata_core::escape::EscapeTarget::Local,
-            effect: Effect::Puro,
             kind: TypedExprKind::IntLit {
                 text: text.to_string(),
             },
@@ -32,7 +31,6 @@ fn build_fixed_payload(text: &str, ty: &Ty, span: Span) -> TypedExpr {
             ty: Ty::float(),
             tail_pos: false,
             escape: kata_core::escape::EscapeTarget::Local,
-            effect: Effect::Puro,
             kind: TypedExprKind::FloatLit {
                 text: text.to_string(),
             },
@@ -42,7 +40,6 @@ fn build_fixed_payload(text: &str, ty: &Ty, span: Span) -> TypedExpr {
             ty: Ty::text(),
             tail_pos: false,
             escape: kata_core::escape::EscapeTarget::Local,
-            effect: Effect::Puro,
             kind: TypedExprKind::TextLit {
                 text: text.to_string(),
             },
@@ -52,7 +49,6 @@ fn build_fixed_payload(text: &str, ty: &Ty, span: Span) -> TypedExpr {
             ty: ty.clone(),
             tail_pos: false,
             escape: kata_core::escape::EscapeTarget::Local,
-            effect: Effect::Puro,
             kind: TypedExprKind::IntLit {
                 text: text.to_string(),
             },
@@ -62,7 +58,7 @@ fn build_fixed_payload(text: &str, ty: &Ty, span: Span) -> TypedExpr {
 
 /// Infere o tipo de `Enum::Variant` (variante unitária sem Apply).
 ///
-/// Retorna `Ok(Some((ty, kind, effect)))` quando o braço foi tratado,
+/// Retorna `Ok(Some((ty, kind)))` quando o braço foi tratado,
 /// `Ok(None)` quando o enum não é `Ty::Sum` (fallback para o caller).
 ///
 /// O caller deve passar o `enum_ty` já resolvido do `TypeEnv`.
@@ -73,7 +69,7 @@ pub(crate) fn infer_variant_qual(
     enum_ty: &Ty,
     span: &Span,
     ctx: &InferCtx,
-) -> Result<Option<(Ty, TypedExprKind, Effect)>, MiddleError> {
+) -> Result<Option<(Ty, TypedExprKind)>, MiddleError> {
     match enum_ty {
         // Enum genérico no TypeEnv como Ty::Sum, mas o EnumRegistry
         // marca como genérico. Para variantes unitárias (Optional::None),
@@ -110,7 +106,6 @@ pub(crate) fn infer_variant_qual(
                         variant: variant.to_string(),
                         tag,
                     },
-                    Effect::Puro,
                 )));
             }
             if ctx.enum_registry.payload_ty(name, variant).is_some() {
@@ -143,7 +138,6 @@ pub(crate) fn infer_variant_qual(
                     variant: variant.to_string(),
                     tag,
                 },
-                Effect::Puro,
             )))
         }
         Ty::Sum(name) => {
@@ -177,7 +171,6 @@ pub(crate) fn infer_variant_qual(
                         payload: Box::new(kata_ast::Spanned::new(payload, *span)),
                         tag,
                     },
-                    Effect::Puro,
                 )));
             }
             // VariantQual sem Apply só é válido para variantes unitárias.
@@ -203,7 +196,6 @@ pub(crate) fn infer_variant_qual(
                     variant: variant.to_string(),
                     tag,
                 },
-                Effect::Puro,
             )))
         }
         _ => Ok(None),

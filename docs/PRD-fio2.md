@@ -24,8 +24,8 @@ O Fio 1 já deixou infraestrutura pronta para este fio:
 - **`TypedExpr.tail_pos: bool`** e **`TypedExpr.effect: Effect`** — já em cada nó
   da TAST desde Fio 1. `tail_pos` é `true` por padrão; Fio 2 propaga
   corretamente para sub-expressões.
-- **`Effect::Puro`** é o único efeito existente. Fio 2 não adiciona efeitos
-  novos — todas as construções deste fio são puras.
+- ~~**`Effect::Puro`**~~ — o enum `Effect` foi removido em 2026-07-23. Fio 2
+  não adiciona efeitos — todas as construções deste fio são puras.
 - **Lexer `λ`**: o caractere unicode `λ` já produz `Token::Lambda`.
 
 ## Escopo

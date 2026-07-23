@@ -9,7 +9,7 @@
 use kata_ast::{Expr, Span, Spanned};
 use kata_core::ty::{Ty, TypeEnv};
 
-use crate::typed::{ChannelKind, Effect, TypedExpr, TypedExprKind};
+use crate::typed::{ChannelKind, TypedExpr, TypedExprKind};
 
 use super::action_call::ActionDispatch;
 use super::expr::InferCtx;
@@ -52,7 +52,6 @@ pub(crate) fn infer_channel_builtin(
         ty: ret_ty,
         tail_pos: false,
         escape: kata_core::escape::EscapeTarget::Local,
-        effect: Effect::ChannelOp,
         kind: TypedExprKind::ChannelCreate { kind, elem_ty },
     })
 }
@@ -103,7 +102,6 @@ pub(crate) fn infer_queue_builtin(
         ty: ret_ty,
         tail_pos: false,
         escape: kata_core::escape::EscapeTarget::Local,
-        effect: Effect::ChannelOp,
         kind: TypedExprKind::ChannelCreate {
             kind: ChannelKind::Buffered(capacity),
             elem_ty,
@@ -219,7 +217,6 @@ pub(crate) fn infer_fork_builtin(
                 span: typed_args.span,
                 tail_pos: typed_args.tail_pos,
                 escape: typed_args.escape,
-                effect: typed_args.effect,
             }
         }
         _ => typed_args,
@@ -230,7 +227,6 @@ pub(crate) fn infer_fork_builtin(
         ty: Ty::Unit,
         tail_pos: false,
         escape: kata_core::escape::EscapeTarget::Local,
-        effect: Effect::Spawn,
         kind: TypedExprKind::Fork {
             action_name,
             action_expr: Box::new(Spanned::new(action_expr_typed, elements[0].span)),

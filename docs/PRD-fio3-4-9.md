@@ -41,9 +41,8 @@ O Fio 2 já deixou infraestrutura pronta para estes fios:
   Fio 3+4+9 não ativa `Effect` — campo continua `Puro` em todos os nós. Pureza
   é garantida por regra de tipo (função pura não pode conter `ActionCall`).
   `Effect` será revisitado em Fio 11 quando o scheduler precisar rastrear
-  `Spawn`/`ChannelOp`.
-- **`Effect::Spawn`** e **`Effect::ChannelOp`** já existem no enum. Não são
-  usados neste PRD — ficam para Fio 11.
+  `Spawn`/`ChannelOp`. (Nota: o enum `Effect` foi posteriormente removido
+  por completo — ver TECH-DEBT.md.)
 - **Arena**: `kata_rt_arena_create/alloc/destroy` já existem como C-ABI. A arena
   é thread-local (`thread_local! { ARENA }`). Fio 3 estende para caller's arena.
 - **`FfiSymbol`** tem `ArenaCreate`, `ArenaAlloc`, `ArenaDestroy`. Fio 3 adiciona

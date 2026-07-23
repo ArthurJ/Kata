@@ -5,7 +5,7 @@
 //! dispatch de overloads, ascription, let, variant qual, erros.
 
 use kata_core::ty::Ty;
-use kata_inference::{Effect, TypedExprKind, infer_module};
+use kata_inference::{TypedExprKind, infer_module};
 use kata_lexer::lex;
 use kata_parser::parse;
 use kata_resolution::load_prelude;
@@ -38,7 +38,6 @@ fn infer_int_literal() {
     let entry = entry_typed(&tmod);
     assert_eq!(entry.ty, Ty::int());
     assert!(matches!(entry.kind, TypedExprKind::IntLit { .. }));
-    assert_eq!(entry.effect, Effect::Puro);
     assert!(entry.tail_pos);
 }
 
@@ -386,14 +385,7 @@ fn infer_unknown_function_error() {
     ));
 }
 
-// ── TAST enriquecida (tail_pos + effect) ──────────────────────────
-
-#[test]
-fn tast_enriched_effect_puro() {
-    let tmod = infer_src("+ 1 2");
-    let entry = entry_typed(&tmod);
-    assert_eq!(entry.effect, Effect::Puro);
-}
+// ── TAST enriquecida (tail_pos) ──────────────────────────────────
 
 #[test]
 fn tast_enriched_tail_pos_true_for_entry() {
