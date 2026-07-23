@@ -269,3 +269,27 @@ conta_s!({|1 2 3|})"#;
         "wrapper positivo deve ter func_id válido"
     );
 }
+
+// ── Teste 9: @test{args: {"b": 4 "a": 3}} — Dict nomeado como args de @test ──
+
+/// `@test{args: {...}}` com DictLit onde chaves são nomes de params.
+/// O typeck mapeia chaves→params e reordena para Tuple posicional.
+#[test]
+fn test_wrapper_com_dict_nomeado_args() {
+    let src = r#"@test{desc: "args nomeados", args: {"b": 4 "a": 3}}
+action soma (a::Int, b::Int) => Int
+    + a b
+soma!(1, 2)"#;
+    let (_module, wrappers) = compile_tests(src);
+    assert_eq!(wrappers.len(), 1, "deve ter 1 wrapper");
+
+    let w = find_wrapper(&wrappers, "soma", 0);
+    assert_eq!(w.action_name, "soma");
+    assert_eq!(w.spec.desc.as_deref(), Some("args nomeados"));
+    assert!(w.spec.args.is_some(), "args deve ser Some (Dict→Tuple)");
+    assert_ne!(
+        w.func_id,
+        FuncId::from_u32(0),
+        "wrapper positivo deve ter func_id válido"
+    );
+}

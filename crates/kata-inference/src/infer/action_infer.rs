@@ -111,6 +111,13 @@ pub(crate) fn infer_action(
                 ctx,
                 false,
             )?;
+            // Se args é DictLit, mapeia chaves → nomes de params e reordena para Tuple.
+            let typed = match &typed.kind {
+                crate::typed::TypedExprKind::DictLit { entries, .. } => {
+                    reorder_test_dict_args(&action_def.name, &action_def.param_names, entries, &typed)?
+                }
+                _ => typed,
+            };
             Some(Spanned::new(typed, args_expr.span))
         } else {
             None
@@ -151,5 +158,89 @@ pub(crate) fn infer_action(
         body: typed_body,
         tests: typed_tests,
         log,
+    })
+}
+
+/// Mapeia chaves de DictLit → nomes de params da action e reordena para Tuple.
+///
+/// Igual a `reorder_dict_args_to_tuple` em `action_call.rs`, mas usa
+/// `action_def.param_names` diretamente (não precisa de DispatchTable).
+fn reorder_test_dict_args(
+    action_name: &str,
+    param_names: &[Option<String>],
+    entries: &[(Spanned<crate::typed::TypedExpr>, Spanned<crate::typed::TypedExpr>)],
+    typed_args: &crate::typed::TypedExpr,
+) -> InferResult<crate::typed::TypedExpr> {
+    use crate::typed::{TypedExpr, TypedExprKind};
+
+    // Action sem params nomeados → erro.
+    if param_names.iter().all(|n| n.is_none()) {
+        return Err(MiddleError::TypeMismatch {
+            expected: format!("Action `{action_name}` com params nomeados para args via Dict"),
+            found: format!("`{action_name}` não tem params nomeados — use args posicionais"),
+            span: typed_args.span.into(),
+        });
+    }
+
+    let name_to_idx: std::collections::HashMap<&str, usize> = param_names
+        .iter()
+        .enumerate()
+        .filter_map(|(i, name)| name.as_ref().map(|n| (n.as_str(), i)))
+        .collect();
+
+    let mut reordered: Vec<Option<Spanned<TypedExpr>>> = vec![None; param_names.len()];
+
+    for (key_expr, val_expr) in entries {
+        let key_name = match &key_expr.node.kind {
+            TypedExprKind::TextLit { text } => text.clone(),
+            _ => {
+                return Err(MiddleError::TypeMismatch {
+                    expected: "chave literal de Text".into(),
+                    found: "expressão como chave".into(),
+                    span: key_expr.span.into(),
+                });
+            }
+        };
+
+        let idx = *name_to_idx.get(key_name.as_str()).ok_or_else(|| {
+            MiddleError::TypeMismatch {
+                expected: format!("parâmetro de `{action_name}`"),
+                found: format!("`{key_name}` não é parâmetro de `{action_name}`"),
+                span: key_expr.span.into(),
+            }
+        })?;
+
+        if reordered[idx].is_some() {
+            return Err(MiddleError::TypeMismatch {
+                expected: format!("parâmetro `{key_name}` fornecido uma vez"),
+                found: format!("parâmetro `{key_name}` duplicado"),
+                span: key_expr.span.into(),
+            });
+        }
+
+        reordered[idx] = Some(val_expr.clone());
+    }
+
+    for (i, slot) in reordered.iter().enumerate() {
+        if slot.is_none() {
+            let name = param_names[i].as_deref().unwrap_or("?");
+            return Err(MiddleError::TypeMismatch {
+                expected: format!("parâmetro `{name}` de `{action_name}`"),
+                found: "parâmetro não fornecido".into(),
+                span: typed_args.span.into(),
+            });
+        }
+    }
+
+    let elements: Vec<Spanned<TypedExpr>> = reordered.into_iter().map(|s| s.unwrap()).collect();
+    let tys: Vec<Ty> = elements.iter().map(|e| e.node.ty.clone()).collect();
+
+    Ok(TypedExpr {
+        ty: Ty::Tuple(tys),
+        kind: TypedExprKind::Tuple { elements },
+        span: typed_args.span,
+        tail_pos: typed_args.tail_pos,
+        escape: typed_args.escape,
+        effect: typed_args.effect,
     })
 }
