@@ -111,6 +111,32 @@ principal 10"#;
     );
 }
 
+/// Action referenciada como first-class value (Ident com ty: Ty::Action)
+/// deve ser preservada pelo tree shaking — pode ser invocada indiretamente.
+#[test]
+fn action_referenciada_como_valor_mantida() {
+    // `worker` é referenciada via `let f := worker` (Ident com ty: Ty::Action),
+    // mas nunca chamada diretamente com `worker!()`. Tree shaking deve
+    // preservar `worker` porque `f!(42)` pode invocá-la indiretamente.
+    let src = r#"action worker (n :: Int) => Unit
+    echo!(n)
+
+action main => Unit
+    let f := worker
+    f!(42)
+
+main!()"#;
+    let shaken = shake(src);
+    assert!(
+        shaken.actions.iter().any(|a| a.name == "main"),
+        "main deve ser mantida (entry point)"
+    );
+    assert!(
+        shaken.actions.iter().any(|a| a.name == "worker"),
+        "worker deve ser mantida — referenciada como first-class Action (Ident com Ty::Action)"
+    );
+}
+
 /// Função alcançada transitivamente (A chama B, B chama C, entry chama A)
 /// deve ser mantida. Tree shaking deve seguir a cadeia de chamadas.
 #[test]

@@ -191,6 +191,13 @@ fn collect_refs(
             if matches!(&expr.ty, Ty::Function(..)) {
                 reached_fns.insert(name.clone());
             }
+            // Ident com ty: Ty::Action(..) é uma referência first-class a
+            // uma Action (ex: `let f := worker`). A Action referenciada é
+            // alcançável — pode ser invocada indiretamente via `f!()` ou
+            // `fork!(f, ...)`.
+            if matches!(&expr.ty, Ty::Action(..)) {
+                reached_actions.insert(name.clone());
+            }
         }
 
         TypedExprKind::Closure {
@@ -239,10 +246,13 @@ fn collect_refs(
         }
 
         TypedExprKind::Fork {
-            action_name, args, ..
+            action_name, action_expr, args, ..
         } => {
             // Aresta dinâmica — string match em action_name.
-            reached_actions.insert(action_name.clone());
+            if action_name != "__indirect_fork" {
+                reached_actions.insert(action_name.clone());
+            }
+            collect_refs(&action_expr.node, reached_fns, reached_actions, fn_names);
             collect_refs(&args.node, reached_fns, reached_actions, fn_names);
         }
 

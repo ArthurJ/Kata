@@ -196,71 +196,83 @@ pub(crate) fn lower_channel_recv(
     Ok(val)
 }
 
-/// Lowera `TypedExprKind::Fork` (`fork!(action, args)`).
+/// `fork!(action, args)` — spawn de fiber.
 ///
-/// Obtém o function pointer da Action via `GlobalValue::Symbol` (mesmo
-/// mecanismo de `lower_action_call` em scheduler_mode), lowera os args
-/// (tupla → args_ptr), e chama `kata_rt_spawn(fn_ptr, caller_arena, args_ptr)`.
+/// Para fork direto (`action_name` != "__indirect_fork"), obtém o function
+/// pointer da Action via `GlobalValue::Symbol` (mesmo mecanismo de
+/// `lower_action_call` em scheduler_mode).
+///
+/// Para fork indireto (`action_name` == "__indirect_fork"), lowera
+/// `action_expr` para obter o fn_ptr em runtime — a expressão avalia para
+/// o fn_ptr da Action (via Ident com Ty::Action no codegen).
+///
+/// Lowera os args (tupla → args_ptr), e chama
+/// `kata_rt_spawn(fn_ptr, caller_arena, args_ptr)`.
 ///
 /// Retorna Unit — fork é fire-and-forget (structured concurrency garante
 /// que o parent espera os filhos).
 pub(crate) fn lower_fork(
     expr: &TypedExpr,
     action_name: &str,
+    action_expr: &kata_ast::Spanned<TypedExpr>,
     args: &kata_ast::Spanned<TypedExpr>,
     ctx: &mut LowerCtx,
 ) -> Result<cranelift_codegen::ir::Value, super::CodegenError> {
     // 1. Lowerar args (tupla) → args_ptr.
     let args_ptr = super::expr::lower_expr(&args.node, ctx)?;
 
-    // 2. Extrair param_types do args (tupla tipada) para lookup no kata_ids.
-    let param_types: Vec<Ty> = match &args.node.kind {
-        TypedExprKind::Unit => Vec::new(),
-        TypedExprKind::Tuple { elements } => elements.iter().map(|e| e.node.ty.clone()).collect(),
-        _ => vec![args.node.ty.clone()],
-    };
+    // 2. Obter fn_ptr:
+    //    - Fork direto: lookup em kata_ids por action_name, GlobalValue::Symbol.
+    //    - Fork indireto: lower action_expr → runtime fn_ptr value.
+    let fn_ptr = if action_name == "__indirect_fork" {
+        // Indirect fork — lower action_expr to get fn_ptr at runtime.
+        super::expr::lower_expr(&action_expr.node, ctx)?
+    } else {
+        // Direct fork — lookup by action_name in kata_ids.
+        // Extrair param_types do args (tupla tipada) para lookup no kata_ids.
+        let param_types: Vec<Ty> = match &args.node.kind {
+            TypedExprKind::Unit => Vec::new(),
+            TypedExprKind::Tuple { elements } => {
+                elements.iter().map(|e| e.node.ty.clone()).collect()
+            }
+            _ => vec![args.node.ty.clone()],
+        };
 
-    // 3. Procurar a Action em kata_ids por (name, param_types).
-    //    A inference do fork! não faz dispatch — só verifica que a Action
-    //    existe. Iteramos kata_ids buscando key.0 == action_name e
-    //    key.1 == param_types. Se múltiplas matcham (overloads), pegamos
-    //    a primeira — a inference já validou que é uma Action válida.
-    let mut found_key: Option<super::module::FuncKey> = None;
-    for key in ctx.kata_ids.keys() {
-        if key.0 == action_name && key.1 == param_types {
-            found_key = Some(key.clone());
-            break;
-        }
-    }
-    // Fallback: se não encontrou com param_types exatos, procurar só por nome.
-    // Pode acontecer se a Action tem params genéricos que foram monomorfizados.
-    if found_key.is_none() {
+        // Procurar a Action em kata_ids por (name, param_types).
+        let mut found_key: Option<super::module::FuncKey> = None;
         for key in ctx.kata_ids.keys() {
-            if key.0 == action_name {
+            if key.0 == action_name && key.1 == param_types {
                 found_key = Some(key.clone());
                 break;
             }
         }
-    }
+        // Fallback: se não encontrou com param_types exatos, procurar só por nome.
+        if found_key.is_none() {
+            for key in ctx.kata_ids.keys() {
+                if key.0 == action_name {
+                    found_key = Some(key.clone());
+                    break;
+                }
+            }
+        }
 
-    let key = found_key.ok_or_else(|| {
-        super::CodegenError::UnsupportedNode(format!(
-            "fork!: Action `{action_name}` não encontrada em kata_ids"
-        ))
-    })?;
+        let key = found_key.ok_or_else(|| {
+            super::CodegenError::UnsupportedNode(format!(
+                "fork!: Action `{action_name}` não encontrada em kata_ids"
+            ))
+        })?;
 
-    // 4. Obter fn_ptr via GlobalValue::Symbol (igual lower_action_call scheduler_mode).
-    let callee_fid = ctx.kata_ids.get(&key).copied().ok_or_else(|| {
-        super::CodegenError::UnsupportedNode(format!(
-            "fork!: FuncId para Action `{action_name}` não encontrado"
-        ))
-    })?;
-    let func_ref = ctx
-        .module
-        .declare_func_in_func(callee_fid, ctx.builder.func);
-    let ext_func_name = ctx.builder.func.dfg.ext_funcs[func_ref].name.clone();
-    let func_gv =
-        ctx.builder
+        let callee_fid = ctx.kata_ids.get(&key).copied().ok_or_else(|| {
+            super::CodegenError::UnsupportedNode(format!(
+                "fork!: FuncId para Action `{action_name}` não encontrado"
+            ))
+        })?;
+        let func_ref = ctx
+            .module
+            .declare_func_in_func(callee_fid, ctx.builder.func);
+        let ext_func_name = ctx.builder.func.dfg.ext_funcs[func_ref].name.clone();
+        let func_gv = ctx
+            .builder
             .func
             .create_global_value(cranelift_codegen::ir::GlobalValueData::Symbol {
                 name: ext_func_name,
@@ -268,10 +280,10 @@ pub(crate) fn lower_fork(
                 colocated: true,
                 tls: false,
             });
-    let fn_ptr = ctx
-        .builder
-        .ins()
-        .global_value(ctx.module.target_config().pointer_type(), func_gv);
+        ctx.builder
+            .ins()
+            .global_value(ctx.module.target_config().pointer_type(), func_gv)
+    };
 
     // 5. Determinar caller_arena (onde os args vivem — EscapeTarget do expr).
     let caller_arena_val = match expr.escape {

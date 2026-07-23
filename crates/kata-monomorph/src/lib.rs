@@ -440,7 +440,8 @@ fn rewrite_typed_expr(expr_span: &mut Spanned<TypedExpr>, ctx: &MonoCtx, acc: &m
                 rewrite_typed_expr(tb, ctx, acc);
             }
         }
-        TypedExprKind::Fork { args, .. } => {
+        TypedExprKind::Fork { action_expr, args, .. } => {
+            rewrite_typed_expr(action_expr, ctx, acc);
             rewrite_typed_expr(args, ctx, acc);
         }
     }

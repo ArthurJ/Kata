@@ -391,41 +391,65 @@ fn infer_fork_builtin(
         });
     }
 
-    // Primeiro elemento: nome da Action (Ident).
-    let action_name = match &elements[0].node {
-        Expr::Ident { name } => name.clone(),
-        other => {
-            return Err(kata_diagnostics::MiddleError::TypeMismatch {
-                expected: "Ident (nome da Action) como primeiro arg de fork!".into(),
-                found: format!("{other:?}"),
-                span: elements[0].span.into(),
-            });
+    // Primeiro elemento: nome da Action (Ident) ou variável do tipo Action.
+    // Inference: infer the expression to get a TypedExpr for action_expr.
+    let action_expr_typed =
+        super::expr::infer_expr(&elements[0].node, &elements[0].span, env, ctx, false)?;
+
+    // Determine action_name and whether this is a direct or indirect fork.
+    // Direct: `fork!(worker, ...)` — worker is an Action in the DispatchTable.
+    // Indirect: `fork!(f, ...)` — f is a variable holding Ty::Action.
+    let (action_name, is_direct) = match &elements[0].node {
+        Expr::Ident { name } => {
+            // Check if it's a variable in env (indirect) or a DispatchTable action (direct).
+            if env.lookup(name).is_some() {
+                // Variable — indirect fork via action_expr.
+                ("__indirect_fork".to_string(), false)
+            } else {
+                // DispatchTable action — direct fork.
+                (name.clone(), true)
+            }
+        }
+        _ => {
+            // Non-Ident expression — always indirect.
+            ("__indirect_fork".to_string(), false)
         }
     };
 
-    // Verifica que action_name é uma Action declarada.
-    if !ctx.table.has_function(&action_name) {
-        return Err(kata_diagnostics::MiddleError::UnboundName {
-            name: format!("Action `{action_name}` não declarada (fork!)"),
-            span: elements[0].span.into(),
-        });
-    }
-
-    // Verifica que é uma Action (is_action = true).
-    let overloads = ctx.table.get_overloads(&action_name).ok_or_else(|| {
-        kata_diagnostics::MiddleError::UnboundName {
-            name: format!("Action `{action_name}` não tem overloads"),
-            span: elements[0].span.into(),
+    if is_direct {
+        // Verifica que action_name é uma Action declarada.
+        if !ctx.table.has_function(&action_name) {
+            return Err(kata_diagnostics::MiddleError::UnboundName {
+                name: format!("Action `{action_name}` não declarada (fork!)"),
+                span: elements[0].span.into(),
+            });
         }
-    })?;
 
-    let any_action = overloads.iter().any(|o| o.is_action);
-    if !any_action {
-        return Err(kata_diagnostics::MiddleError::TypeMismatch {
-            expected: format!("Action `{action_name}` (is_action=true)"),
-            found: format!("`{action_name}` é função pura, não Action"),
-            span: elements[0].span.into(),
-        });
+        // Verifica que é uma Action (is_action = true).
+        let overloads = ctx.table.get_overloads(&action_name).ok_or_else(|| {
+            kata_diagnostics::MiddleError::UnboundName {
+                name: format!("Action `{action_name}` não tem overloads"),
+                span: elements[0].span.into(),
+            }
+        })?;
+
+        let any_action = overloads.iter().any(|o| o.is_action);
+        if !any_action {
+            return Err(kata_diagnostics::MiddleError::TypeMismatch {
+                expected: format!("Action `{action_name}` (is_action=true)"),
+                found: format!("`{action_name}` é função pura, não Action"),
+                span: elements[0].span.into(),
+            });
+        }
+    } else {
+        // Indirect fork: verify action_expr_typed has Ty::Action.
+        if !matches!(&action_expr_typed.ty, Ty::Action(_, _)) {
+            return Err(kata_diagnostics::MiddleError::TypeMismatch {
+                expected: "Action (fn_ptr) como primeiro arg de fork!".into(),
+                found: format!("{:?}", action_expr_typed.ty),
+                span: elements[0].span.into(),
+            });
+        }
     }
 
     // Segundo elemento: tupla de argumentos para a Action.
@@ -459,6 +483,7 @@ fn infer_fork_builtin(
         effect: Effect::Spawn,
         kind: TypedExprKind::Fork {
             action_name,
+            action_expr: Box::new(Spanned::new(action_expr_typed, elements[0].span)),
             args: Box::new(Spanned::new(typed_args, elements[1].span)),
         },
     }))

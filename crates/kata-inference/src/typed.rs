@@ -371,9 +371,14 @@ pub enum TypedExprKind {
 
     /// `fork!(action, args)` — spawn de fiber (effect = Spawn).
     /// `action_name` é o nome da Action a executar no novo fiber.
+    /// `action_expr` é a expressão tipada que avalia para o fn_ptr da Action.
+    /// Para Ident direto (worker), é o Ident. Para variável (f), é a variável.
     /// `args` é a tupla de argumentos tipados.
     Fork {
         action_name: String,
+        /// Expressão que avalia para o fn_ptr da Action.
+        /// Para Ident direto (worker), é o Ident. Para variável (f), é a variável.
+        action_expr: Box<Spanned<TypedExpr>>,
         args: Box<Spanned<TypedExpr>>,
     },
 }

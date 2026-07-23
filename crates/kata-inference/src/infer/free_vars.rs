@@ -221,7 +221,8 @@ pub(crate) fn collect_free_vars(
         TypedExprKind::ReceiverFactoryCall { factory, .. } => {
             collect_free_vars(&factory.node, local_bindings, dispatch, out);
         }
-        TypedExprKind::Fork { args, .. } => {
+        TypedExprKind::Fork { action_expr, args, .. } => {
+            collect_free_vars(&action_expr.node, local_bindings, dispatch, out);
             collect_free_vars(&args.node, local_bindings, dispatch, out);
         }
         // Folhas sem sub-expressões

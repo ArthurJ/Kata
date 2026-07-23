@@ -326,7 +326,8 @@ fn collect_captures_in_expr(
         TypedExprKind::ReceiverFactoryCall { factory, .. } => {
             collect_captures_in_expr(&mut factory.node, outer_env, local_tys, dispatch);
         }
-        TypedExprKind::Fork { args, .. } => {
+        TypedExprKind::Fork { action_expr, args, .. } => {
+            collect_captures_in_expr(&mut action_expr.node, outer_env, local_tys, dispatch);
             collect_captures_in_expr(&mut args.node, outer_env, local_tys, dispatch);
         }
         // Folhas sem sub-expressões
