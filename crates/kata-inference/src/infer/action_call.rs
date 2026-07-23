@@ -142,6 +142,41 @@ pub(crate) fn infer_action_call(
         // Lowera a tupla de argumentos.
         let typed_args = infer_expr(&args.node, &args.span, env, ctx, false)?;
 
+        // Normaliza Grouping → Tuple de 1 elemento, e args não-tupla → Tuple
+        // de 1 elemento. O codegen precisa de Tuple (ponteiro para array na
+        // arena) para passar args_ptr corretamente ao call_indirect.
+        // Sem isso, `job!(payload)` passa o valor bruto (ex: 42) como args_ptr,
+        // e o callee tenta load de endereço inválido → SIGSEGV.
+        let typed_args = match &typed_args.kind {
+            TypedExprKind::Grouping { inner } => {
+                let inner = inner.clone();
+                TypedExpr {
+                    ty: Ty::Tuple(vec![inner.node.ty.clone()]),
+                    kind: TypedExprKind::Tuple {
+                        elements: vec![*inner],
+                    },
+                    span: typed_args.span,
+                    tail_pos: typed_args.tail_pos,
+                    escape: typed_args.escape,
+                    effect: typed_args.effect,
+                }
+            }
+            TypedExprKind::Tuple { .. } | TypedExprKind::Unit => typed_args,
+            _ => {
+                // Args não-tupla (ex: Ident solo, Int literal) → Tuple de 1.
+                TypedExpr {
+                    ty: Ty::Tuple(vec![typed_args.ty.clone()]),
+                    kind: TypedExprKind::Tuple {
+                        elements: vec![Spanned::new(typed_args.clone(), args.span)],
+                    },
+                    span: typed_args.span,
+                    tail_pos: typed_args.tail_pos,
+                    escape: typed_args.escape,
+                    effect: typed_args.effect,
+                }
+            }
+        };
+
         // Valida que args matcham param_types.
         let arg_tys: Vec<Ty> = match &typed_args.kind {
             TypedExprKind::Tuple { elements } => {
