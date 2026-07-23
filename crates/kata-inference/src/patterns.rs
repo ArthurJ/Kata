@@ -386,6 +386,11 @@ pub(crate) fn check_exhaustiveness(
             found: "função".into(),
             span: (*span).into(),
         }),
+        Ty::Action(_, _) => Err(MiddleError::TypeMismatch {
+            expected: "tipo não-action para match".into(),
+            found: "action".into(),
+            span: (*span).into(),
+        }),
         Ty::InferVar(_) => Err(MiddleError::TypeMismatch {
             expected: "tipo concreto para match".into(),
             found: "variável de inferência".into(),
