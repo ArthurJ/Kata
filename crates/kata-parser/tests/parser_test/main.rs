@@ -4,6 +4,7 @@
 //! lexing source strings and verifying the resulting AST structure.
 
 mod actions;
+mod action_type_syntax;
 mod basics;
 mod collections;
 mod csp;
