@@ -77,6 +77,10 @@ impl Ty {
                 params: params.iter().map(|t| t.to_shape()).collect(),
                 ret: Box::new(ret.to_shape()),
             },
+            Ty::Action(params, ret) => TypeShape::Func {
+                params: params.iter().map(|t| t.to_shape()).collect(),
+                ret: Box::new(ret.to_shape()),
+            },
             Ty::Tuple(elements) => TypeShape::Tuple {
                 elements: elements.iter().map(|t| t.to_shape()).collect(),
             },
