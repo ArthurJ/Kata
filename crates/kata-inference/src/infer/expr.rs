@@ -146,7 +146,10 @@ pub(crate) fn infer_expr_hinted(
                 // `None`, `Vermelho`). Busca no EnumRegistry.
                 match resolve_unqual_variant(name, span, ctx) {
                     Ok(result) => result,
-                    Err(_) => {
+                    Err(MiddleError::UnboundName { name: ref err_name, .. })
+                        if !err_name.contains("ambí")
+                            && !err_name.contains("payload") =>
+                    {
                         // Caminho 3: Action no DispatchTable (first-class reference).
                         // `worker` sem `!` referencia a Action como valor.
                         if let Some(overloads) = ctx.table.get_overloads(name) {
@@ -178,6 +181,7 @@ pub(crate) fn infer_expr_hinted(
                             });
                         }
                     }
+                    Err(other) => return Err(other),
                 }
             }
         }

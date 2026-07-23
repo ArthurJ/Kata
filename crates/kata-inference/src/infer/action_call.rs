@@ -132,6 +132,73 @@ pub(crate) fn infer_action_call(
         return Ok(ActionDispatch::Complete(typed));
     }
 
+    // ── Indirect Action invocation ──
+    // `f!(args)` onde `f` é variável local com `ty: Ty::Action(params, ret)`.
+    // O callee não está no DispatchTable — é o nome de uma variável.
+    if !ctx.table.has_function(callee)
+        && let Some(ty) = env.lookup(callee).cloned()
+        && let Ty::Action(param_types, ret_ty) = ty
+    {
+        // Lowera a tupla de argumentos.
+        let typed_args = infer_expr(&args.node, &args.span, env, ctx, false)?;
+
+        // Valida que args matcham param_types.
+        let arg_tys: Vec<Ty> = match &typed_args.kind {
+            TypedExprKind::Tuple { elements } => {
+                elements.iter().map(|e| e.node.ty.clone()).collect()
+            }
+            TypedExprKind::Unit => Vec::new(),
+            _ => vec![typed_args.ty.clone()],
+        };
+        if arg_tys.len() != param_types.len() {
+            return Err(kata_diagnostics::MiddleError::TypeMismatch {
+                expected: format!(
+                    "{} args para Action com {} params",
+                    param_types.len(),
+                    param_types.len()
+                ),
+                found: format!("{} args", arg_tys.len()),
+                span: (*span).into(),
+            });
+        }
+        for (actual, expected) in arg_tys.iter().zip(param_types.iter()) {
+            if actual != expected {
+                return Err(kata_diagnostics::MiddleError::TypeMismatch {
+                    expected: format!("{expected}"),
+                    found: format!("{actual}"),
+                    span: (*span).into(),
+                });
+            }
+        }
+
+        // Constrói a expressão do callee (Ident com ty: Ty::Action).
+        let callee_expr = TypedExpr {
+            span: *span,
+            ty: Ty::Action(param_types.clone(), ret_ty.clone()),
+            tail_pos: false,
+            escape: kata_core::escape::EscapeTarget::Local,
+            effect: Effect::Puro,
+            kind: TypedExprKind::Ident {
+                name: callee.to_string(),
+            },
+        };
+
+        return Ok(ActionDispatch::Complete(TypedExpr {
+            span: *span,
+            ty: (*ret_ty).clone(),
+            tail_pos: false,
+            escape: kata_core::escape::EscapeTarget::Local,
+            effect: Effect::Puro, // Mesmo que ActionCall direto
+            kind: TypedExprKind::ActionCall {
+                callee: callee.to_string(),
+                args: Box::new(Spanned::new(typed_args, args.span)),
+                caller_arena: 0,
+                ffi_symbol: None,
+                indirect_callee: Some(Box::new(Spanned::new(callee_expr, *span))),
+            },
+        }));
+    }
+
     // Lowera a tupla de argumentos.
     let typed_args = infer_expr(&args.node, &args.span, env, ctx, false)?;
 
