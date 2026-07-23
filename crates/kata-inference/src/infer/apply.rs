@@ -184,6 +184,7 @@ pub(crate) fn infer_apply(
                             name: func_name.clone(),
                         },
                     };
+                    reject_action_arg_for_pure_fn(oi, &typed_args, span)?;
                     return Ok((
                         concrete_ret,
                         TypedExprKind::Closure {
@@ -352,6 +353,7 @@ pub(crate) fn infer_apply(
                 && let Some(oi) = best_overload
             {
                 let overload = oi.clone();
+                reject_action_arg_for_pure_fn(&overload, &typed_args, span)?;
                 let callee_ty =
                     Ty::Function(overload.params.clone(), Box::new(overload.ret.clone()));
                 let callee_typed = TypedExpr {
@@ -390,6 +392,7 @@ pub(crate) fn infer_apply(
             .resolve(&func_name, &arg_types, ctx.interface_registry);
         match generic_result {
             Ok(overload) => {
+                reject_action_arg_for_pure_fn(&overload, &typed_args, span)?;
                 let callee_ty =
                     Ty::Function(overload.params.clone(), Box::new(overload.ret.clone()));
                 let callee_typed = TypedExpr {
@@ -438,6 +441,7 @@ pub(crate) fn infer_apply(
                             Ok(_) => {
                                 // Aplica substitutions no tipo de retorno.
                                 let concrete_ret = super::generics::apply_subs(&oi.ret, &subs);
+                                reject_action_arg_for_pure_fn(oi, &typed_args, span)?;
                                 let callee_ty =
                                     Ty::Function(oi.params.clone(), Box::new(concrete_ret.clone()));
                                 let callee_typed = TypedExpr {
@@ -648,6 +652,33 @@ pub(crate) fn infer_apply(
         name: func_name,
         span: callee.span.into(),
     })
+}
+
+/// Verifica se algum argumento é `Ty::Action(..)` quando o overload alvo é
+/// uma função pura (`is_action: false`). Actions são comportamento e não
+/// podem ser passadas como argumento para funções puras. (PRD §3.7)
+fn reject_action_arg_for_pure_fn(
+    overload: &OverloadInfo,
+    typed_args: &[Spanned<TypedExpr>],
+    _span: &Span,
+) -> Result<(), MiddleError> {
+    if overload.is_action {
+        return Ok(()); // Actions podem receber Actions como args.
+    }
+    for arg in typed_args {
+        if let Ty::Action(..) = &arg.node.ty {
+            return Err(MiddleError::TypeMismatch {
+                expected: "argumento de função pura (não-Action)".into(),
+                found: format!(
+                    "Action não é permitida como argumento de função pura — \
+                     Actions são comportamento, não informação. Tipo do argumento: `{}`",
+                    arg.node.ty
+                ),
+                span: arg.span.into(),
+            });
+        }
+    }
+    Ok(())
 }
 
 /// Fallback `refines` no dispatch (D1 do PRD-refines).
