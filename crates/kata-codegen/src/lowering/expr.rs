@@ -115,6 +115,28 @@ pub(crate) fn lower_expr(
                         .global_value(ctx.module.target_config().pointer_type(), func_gv));
                 }
             }
+            // Caminho 3: Action first-class reference (Ty::Action).
+            // Mesmo mecanismo que Ty::Function — obtém fn_ptr via GlobalValue::Symbol.
+            if let Ty::Action(params, ret) = &expr.ty {
+                let key = (name.clone(), params.clone(), (**ret).clone());
+                if let Some(&func_id) = ctx.kata_ids.get(&key) {
+                    let func_ref = ctx.module.declare_func_in_func(func_id, ctx.builder.func);
+                    let ext_func_name = ctx.builder.func.dfg.ext_funcs[func_ref].name.clone();
+                    let func_gv = ctx
+                        .builder
+                        .func
+                        .create_global_value(GlobalValueData::Symbol {
+                            name: ext_func_name,
+                            offset: 0.into(),
+                            colocated: true,
+                            tls: false,
+                        });
+                    return Ok(ctx
+                        .builder
+                        .ins()
+                        .global_value(ctx.module.target_config().pointer_type(), func_gv));
+                }
+            }
             Err(super::CodegenError::UnsupportedNode(format!(
                 "unbound ident: {name}"
             )))
@@ -451,8 +473,8 @@ pub(crate) fn lower_expr(
             args,
             caller_arena: _,
             ffi_symbol,
-            indirect_callee: _,
-        } => lower_action_call(expr, callee, args, ffi_symbol, ctx),
+            indirect_callee,
+        } => lower_action_call(expr, callee, args, ffi_symbol, indirect_callee, ctx),
         // ── Var — mesmo codegen que Let ──
         TypedExprKind::Var { name, value } => {
             let val = lower_expr(&value.node, ctx)?;
