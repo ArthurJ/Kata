@@ -134,7 +134,7 @@ pub(crate) fn infer_expr_hinted(
 
         // ── Identificador ────────────────────────────────────
         Expr::Ident { name } => {
-            // Caminho normal: é uma binding no type_env.
+            // Caminho 1: variável local no TypeEnv.
             if let Some(ty) = env.lookup(name).cloned() {
                 (
                     ty,
@@ -142,9 +142,43 @@ pub(crate) fn infer_expr_hinted(
                     Effect::Puro,
                 )
             } else {
-                // Fallback: variante unitária desqualificada (ex: `True`,
+                // Caminho 2: variante unitária desqualificada (ex: `True`,
                 // `None`, `Vermelho`). Busca no EnumRegistry.
-                resolve_unqual_variant(name, span, ctx)?
+                match resolve_unqual_variant(name, span, ctx) {
+                    Ok(result) => result,
+                    Err(_) => {
+                        // Caminho 3: Action no DispatchTable (first-class reference).
+                        // `worker` sem `!` referencia a Action como valor.
+                        if let Some(overloads) = ctx.table.get_overloads(name) {
+                            let action_overloads: Vec<_> =
+                                overloads.iter().filter(|o| o.is_action).collect();
+                            if !action_overloads.is_empty() {
+                                // Primeira versão: usa o primeiro overload.
+                                // TODO: overloading de Actions — resolution por tipo esperado.
+                                let overload = action_overloads[0];
+                                (
+                                    Ty::Action(
+                                        overload.params.clone(),
+                                        Box::new(overload.ret.clone()),
+                                    ),
+                                    TypedExprKind::Ident { name: name.clone() },
+                                    Effect::Puro, // referenciar não executa
+                                )
+                            } else {
+                                // Caminho 4: realmente unbound.
+                                return Err(MiddleError::UnboundName {
+                                    name: name.clone(),
+                                    span: (*span).into(),
+                                });
+                            }
+                        } else {
+                            return Err(MiddleError::UnboundName {
+                                name: name.clone(),
+                                span: (*span).into(),
+                            });
+                        }
+                    }
+                }
             }
         }
 
