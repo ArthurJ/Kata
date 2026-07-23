@@ -5,7 +5,8 @@
 //! e FFI builtin dispatch.
 
 use cranelift_codegen::ir::types::{F64, I64};
-use cranelift_codegen::ir::{InstBuilder, MemFlagsData};
+use cranelift_codegen::ir::{AbiParam, InstBuilder, MemFlagsData, Signature};
+use cranelift_codegen::isa::CallConv;
 use cranelift_module::Module;
 use kata_core::escape::EscapeTarget;
 use kata_core::ty::Ty;
@@ -24,6 +25,7 @@ pub(crate) fn lower_action_call(
     callee: &str,
     args: &kata_ast::Spanned<TypedExpr>,
     ffi_symbol: &Option<String>,
+    indirect_callee: &Option<Box<kata_ast::Spanned<TypedExpr>>>,
     ctx: &mut LowerCtx,
 ) -> Result<cranelift_codegen::ir::Value, super::CodegenError> {
     // Lowera os argumentos (tupla) → args_ptr (ponteiro para a tupla na arena).
@@ -57,6 +59,40 @@ pub(crate) fn lower_action_call(
             Ok(*ret)
         } else {
             Ok(ctx.builder.ins().iconst(I64, 0))
+        }
+    } else if let Some(callee_expr) = indirect_callee {
+        // NOVO: invocação indireta — fn_ptr vem da expressão (variável/param).
+        // 1. Lowerar a expressão do callee → fn_ptr (i64)
+        let fn_ptr = super::expr::lower_expr(&callee_expr.node, ctx)?;
+        // 2. Preparar args: [fiber_arena, caller_arena, args_ptr]
+        //    Mesma ABI que ActionCall direto: (fiber_arena, caller_arena, args_ptr) -> i64
+        let fiber_arena_val = ctx
+            .fiber_arena
+            .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
+        let caller_arena_val = match expr.escape {
+            EscapeTarget::Local => fiber_arena_val,
+            EscapeTarget::Caller => ctx
+                .caller_arena
+                .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
+        };
+        let arg_values = [fiber_arena_val, caller_arena_val, args_ptr];
+        // 3. call_indirect — assinatura Action ABI: (I64, I64, I64) -> I64
+        let mut sig = Signature::new(CallConv::Tail);
+        sig.params.push(AbiParam::new(I64)); // fiber_arena
+        sig.params.push(AbiParam::new(I64)); // caller_arena
+        sig.params.push(AbiParam::new(I64)); // args_ptr
+        sig.returns.push(AbiParam::new(I64)); // sempre I64
+        let sig_ref = ctx.builder.func.import_signature(sig);
+        let call_inst = ctx
+            .builder
+            .ins()
+            .call_indirect(sig_ref, fn_ptr, &arg_values);
+        let result = ctx.builder.inst_results(call_inst)[0];
+        // Se ret_ty == Float: bitcast(F64 ← I64)
+        if expr.ty == Ty::float() {
+            Ok(ctx.builder.ins().bitcast(F64, MemFlagsData::new(), result))
+        } else {
+            Ok(result)
         }
     } else {
         // Action definida pelo usuário — lookup por chave composta.

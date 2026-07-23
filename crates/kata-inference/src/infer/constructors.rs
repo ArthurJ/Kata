@@ -9,16 +9,20 @@ use kata_core::dispatch::{DispatchTable, OverloadInfo};
 use kata_core::escape::EscapeTarget;
 use kata_core::struct_registry::StructRegistry;
 use kata_core::ty::{Ty, TypeEnv};
+use kata_diagnostics::MiddleError;
 
 use crate::typed::{TypedExpr, TypedExprKind, TypedFunction, TypedLambdaClause, TypedPattern};
 
 /// Sintetiza smart constructors para structs com campos e aliases.
 /// Registra overloads no `dispatch_table` e retorna as TypedFunctions sintetizadas.
+///
+/// Retorna erro se algum campo do struct tem tipo `Ty::Action(..)` —
+/// Actions são comportamento, não informação, e não podem viver em `data`.
 pub(crate) fn synthesize_constructors(
     struct_registry: &StructRegistry,
     type_env: &TypeEnv,
     dispatch_table: &mut DispatchTable,
-) -> Vec<TypedFunction> {
+) -> Result<Vec<TypedFunction>, MiddleError> {
     let mut constructors = Vec::new();
 
     // 1a. Smart constructors para structs com campos (não-alias).
@@ -36,6 +40,20 @@ pub(crate) fn synthesize_constructors(
 
         let field_types: Vec<Ty> = struct_info.fields.iter().map(|f| f.ty.clone()).collect();
         let ret_ty = Ty::Struct(struct_name.to_string());
+
+        // Proibe Ty::Action em campos de data — Actions são comportamento,
+        // não informação. (PRD §3.7)
+        if let Some(field) = struct_info.fields.iter().find(|f| matches!(f.ty, Ty::Action(..))) {
+            return Err(MiddleError::TypeMismatch {
+                expected: "tipo de dado (não-Action)".into(),
+                found: format!(
+                    "Action não é permitida em data — Actions são comportamento, não informação. \
+                     Campo `{}` do struct `{}` tem tipo `{}`",
+                    field.name, struct_name, field.ty
+                ),
+                span: kata_ast::Span::synthetic().into(),
+            });
+        }
 
         // Registra overload no DispatchTable.
         dispatch_table.insert(OverloadInfo {
