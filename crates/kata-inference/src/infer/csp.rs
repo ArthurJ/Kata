@@ -44,6 +44,20 @@ pub(crate) fn infer_channel_send(
     // value deve ser do tipo T (o tipo do canal).
     let typed_value = infer_expr_hinted(&value.node, &value.span, env, ctx, false, Some(&elem_ty))?;
 
+    // Proibe Ty::Action em canal — Actions são comportamento, não informação
+    // que possa viajar por um canal. (PRD §3.7)
+    if let Ty::Action(..) = &typed_value.ty {
+        return Err(MiddleError::TypeMismatch {
+            expected: "valor serializável (não-Action)".into(),
+            found: format!(
+                "Action não é permitida em canal — Actions são comportamento, não informação. \
+                 Tipo do valor: `{}`",
+                typed_value.ty
+            ),
+            span: value.span.into(),
+        });
+    }
+
     if !type_compatible(&typed_value.ty, &elem_ty) {
         return Err(MiddleError::TypeMismatch {
             expected: format!("{elem_ty:?}"),
