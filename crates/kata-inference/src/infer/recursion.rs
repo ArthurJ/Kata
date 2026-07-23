@@ -139,18 +139,16 @@ fn collect_invoked_callable_params(
     callable_params: &[&str],
     out: &mut Vec<String>,
 ) {
-    match &expr.kind {
-        TypedExprKind::ActionCall {
-            callee,
-            indirect_callee: Some(_),
-            ffi_symbol: None,
-            ..
-        } => {
-            if callable_params.contains(&callee.as_str()) && !out.iter().any(|p| p == callee) {
-                out.push(callee.clone());
-            }
-        }
-        _ => {}
+    if let TypedExprKind::ActionCall {
+        callee,
+        indirect_callee: Some(_),
+        ffi_symbol: None,
+        ..
+    } = &expr.kind
+        && callable_params.contains(&callee.as_str())
+        && !out.iter().any(|p| p == callee)
+    {
+        out.push(callee.clone());
     }
     // Recursão nos sub-nós para encontrar mais invocações.
     traverse_for_invoked_params(expr, callable_params, out);
@@ -404,6 +402,7 @@ fn find_call_sites_of(
 }
 
 /// Traversal genérico para achar call sites em sub-nós.
+#[allow(clippy::only_used_in_recursion)]
 fn traverse_for_call_sites(
     expr: &TypedExpr,
     target_name: &str,
@@ -640,10 +639,10 @@ fn extract_action_idents(
     action_names: &std::collections::HashSet<&str>,
     out: &mut Vec<String>,
 ) {
-    if let TypedExprKind::Ident { name } = &expr.kind {
-        if action_names.contains(name.as_str()) {
-            out.push(name.clone());
-        }
+    if let TypedExprKind::Ident { name } = &expr.kind
+        && action_names.contains(name.as_str())
+    {
+        out.push(name.clone());
     }
 }
 
