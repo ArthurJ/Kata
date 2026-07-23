@@ -63,6 +63,14 @@ pub fn resolve_type_expr(
             let return_type = resolve_type_expr(&ret.node, env, iface_reg);
             Ty::Function(param_types, Box::new(return_type))
         }
+        TypeExpr::ActionType { params, ret } => {
+            let param_types: Vec<Ty> = params
+                .iter()
+                .map(|t| resolve_type_expr(&t.node, env, iface_reg))
+                .collect();
+            let return_type = resolve_type_expr(&ret.node, env, iface_reg);
+            Ty::Action(param_types, Box::new(return_type))
+        }
         TypeExpr::ParamApp { name, params } => {
             // Result::(Int, Text) → resolve params → Ty::Generic("Result", [Int, Text]).
             // Se o enum é genérico no EnumRegistry, produz Ty::Generic.
