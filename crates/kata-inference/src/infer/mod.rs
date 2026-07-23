@@ -22,6 +22,7 @@ mod constructors;
 mod constructors_enum_pred;
 mod constructors_refined;
 mod csp;
+mod cycle;
 mod csp_builtins;
 mod dict_set;
 mod dot_access;
@@ -44,6 +45,7 @@ mod sugar;
 mod variant;
 mod variant_construct;
 mod variant_qual;
+mod walk;
 
 use action_infer::infer_action;
 use kata_ast::{GuardClause, Item, Module, Spanned, WithBinding};
