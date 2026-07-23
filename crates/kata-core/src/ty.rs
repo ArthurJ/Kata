@@ -22,6 +22,13 @@ pub enum Ty {
     Sum(String),
     /// Tipo função — `(A B -> C)`.
     Function(Vec<Ty>, Box<Ty>),
+    /// Action como valor first-class.
+    /// params: tipos dos parâmetros (sem nomes).
+    /// ret: tipo de retorno.
+    /// Separada de Ty::Function porque as ABIs são semanticamente diferentes:
+    /// Function: (captures_ptr, args) -> ret — pura, sem scheduler
+    /// Action: (fiber_arena, caller_arena, args_ptr) -> i64 — impura, scheduler M:N
+    Action(Vec<Ty>, Box<Ty>),
     /// Antecipado. Sem field access, sem .N — só tipo estrutural
     /// para suportar tuple patterns em match/lambda.
     Tuple(Vec<Ty>),
@@ -261,6 +268,17 @@ impl std::fmt::Display for Ty {
             }
             Ty::Function(params, ret) => {
                 f.write_str("(")?;
+                for (i, p) in params.iter().enumerate() {
+                    if i > 0 {
+                        f.write_str(", ")?;
+                    }
+                    write!(f, "{p}")?;
+                }
+                f.write_str(") -> ")?;
+                write!(f, "{ret}")
+            }
+            Ty::Action(params, ret) => {
+                f.write_str("Action(")?;
                 for (i, p) in params.iter().enumerate() {
                     if i > 0 {
                         f.write_str(", ")?;
