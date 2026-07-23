@@ -209,12 +209,17 @@ impl Parser {
                         span,
                     ));
                 }
-                // Check for ActionCall: Ident ! (tuple)
+                // Check for ActionCall: Ident ! (tuple) or Ident ! {dict}
                 // `echo!("msg")` → ActionCall { callee: "echo", args: Tuple }
+                // `g!{"b": 2 "a": 1}` → ActionCall { callee: "g", args: DictLit }
                 if matches!(self.peek(), Token::Bang) {
                     self.advance(); // consume !
-                    // `!` deve ser seguido de `(` para a tupla de argumentos.
-                    let args = self.parse_paren_expr()?;
+                    // `!` pode ser seguido de `(` (tupla posicional) ou `{` (Dict nomeado).
+                    let args = if matches!(self.peek(), Token::LBrace) {
+                        self.parse_brace_lit()?
+                    } else {
+                        self.parse_paren_expr()?
+                    };
                     let span = start.cover(args.span);
                     return Ok(Spanned::new(
                         Expr::ActionCall {

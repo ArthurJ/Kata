@@ -104,6 +104,46 @@ fn bang_call_multi_args() {
     }
 }
 
+#[test]
+fn bang_call_dict_args() {
+    // `g!{"b": 2 "a": 1}` — Dict literal como args nomeados.
+    let m = parse_src("g!{\"b\": 2 \"a\": 1}");
+    let item = first_item(&m);
+    match item {
+        Item::EntryExpr(e) => match &e.node {
+            Expr::ActionCall { callee, args } => {
+                assert_eq!(callee, "g");
+                match &args.node {
+                    Expr::DictLit { entries } => {
+                        assert_eq!(entries.len(), 2);
+                        // Primeira entrada: "b" → 2
+                        match &entries[0].0.node {
+                            Expr::TextLit { text } => assert_eq!(text, "b"),
+                            other => panic!("expected TextLit key, got {other:?}"),
+                        }
+                        match &entries[0].1.node {
+                            Expr::IntLit { text } => assert_eq!(text, "2"),
+                            other => panic!("expected IntLit value, got {other:?}"),
+                        }
+                        // Segunda entrada: "a" → 1
+                        match &entries[1].0.node {
+                            Expr::TextLit { text } => assert_eq!(text, "a"),
+                            other => panic!("expected TextLit key, got {other:?}"),
+                        }
+                        match &entries[1].1.node {
+                            Expr::IntLit { text } => assert_eq!(text, "1"),
+                            other => panic!("expected IntLit value, got {other:?}"),
+                        }
+                    }
+                    other => panic!("expected DictLit args, got {other:?}"),
+                }
+            }
+            other => panic!("expected ActionCall, got {other:?}"),
+        },
+        other => panic!("expected EntryExpr, got {other:?}"),
+    }
+}
+
 // ── ActionDecl ─────────────────────────────────────────────────────
 
 #[test]
