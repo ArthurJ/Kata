@@ -352,3 +352,40 @@ fn dict_merge_disjoint_keys() {
     let (raw, _) = eval_src(src);
     assert_eq!(untag_smi(raw), 10, "x from first dict should survive");
 }
+
+// ═══════════════════════════════════════════════════════════════
+// Args nomeados via Dict — g!{"b": 2 "a": 1}
+// ═══════════════════════════════════════════════════════════════
+
+/// `g!{"b": 2 "a": 1}` deve retornar o mesmo que `g!(1, 2)`.
+/// Action soma(a, b) = + a b. Orem das chaves no Dict não importa.
+#[test]
+fn action_call_com_dict_args_ordem_inversa() {
+    let src = "action soma (a::Int, b::Int) => Int\n    + a b\nsoma!{\"b\": 2 \"a\": 1}";
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::int());
+    assert_eq!(untag_smi(raw), 3, "soma!{{\"b\": 2 \"a\": 1}} deve ser 3");
+}
+
+/// `g!{"a": 1 "b": 2}` — ordem direta também funciona.
+#[test]
+fn action_call_com_dict_args_ordem_direta() {
+    let src = "action soma2 (a::Int, b::Int) => Int\n    + a b\nsoma2!{\"a\": 1 \"b\": 2}";
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::int());
+    assert_eq!(untag_smi(raw), 3, "soma2!{{\"a\": 1 \"b\": 2}} deve ser 3");
+}
+
+/// `g!(1, 2)` posicional e `g!{"b": 2 "a": 1}` nomeado devem dar o mesmo resultado.
+#[test]
+fn action_call_dict_e_posicional_equivalentes() {
+    let src_pos = "action eq_soma (a::Int, b::Int) => Int\n    + a b\neq_soma!(1, 2)";
+    let src_dict = "action eq_soma (a::Int, b::Int) => Int\n    + a b\neq_soma!{\"b\": 2 \"a\": 1}";
+    let (raw_pos, _) = eval_src(src_pos);
+    let (raw_dict, _) = eval_src(src_dict);
+    assert_eq!(
+        untag_smi(raw_pos),
+        untag_smi(raw_dict),
+        "posicional e nomeado devem dar o mesmo resultado"
+    );
+}
