@@ -241,9 +241,7 @@ pub(crate) fn infer_action_call(
     // `g!{"b": 2 "a": 1}` → Tuple [1, 2] na ordem posicional dos params de g.
     let typed_args = match &typed_args.kind {
         TypedExprKind::DictLit { entries, .. } => {
-            reorder_dict_args_to_tuple(
-                callee, entries, &typed_args, ctx, *span,
-            )?
+            reorder_dict_args_to_tuple(callee, entries, &typed_args, ctx, *span)?
         }
         _ => typed_args,
     };
@@ -555,16 +553,12 @@ fn reorder_dict_args_to_tuple(
         .iter()
         .find(|o| o.is_action && !o.param_names.is_empty())
         .map(|o| o.param_names.as_slice())
-        .ok_or_else(|| {
-            kata_diagnostics::MiddleError::TypeMismatch {
-                expected: format!(
-                    "Action `{callee}` com params nomeados para chamada via Dict"
-                ),
-                found: format!(
-                    "`{callee}` não tem params nomeados — use chamada posicional {callee}!(...)"
-                ),
-                span: span.into(),
-            }
+        .ok_or_else(|| kata_diagnostics::MiddleError::TypeMismatch {
+            expected: format!("Action `{callee}` com params nomeados para chamada via Dict"),
+            found: format!(
+                "`{callee}` não tem params nomeados — use chamada posicional {callee}!(...)"
+            ),
+            span: span.into(),
         })?;
 
     // Constrói mapa nome → índice posicional.
@@ -575,7 +569,7 @@ fn reorder_dict_args_to_tuple(
         .collect();
 
     // Valida e mapeia cada entrada do Dict.
-    let mut reordered: Vec<Option<Spanned<TypedExpr>>>= vec![None; param_names.len()];
+    let mut reordered: Vec<Option<Spanned<TypedExpr>>> = vec![None; param_names.len()];
 
     for (key_expr, val_expr) in entries {
         // Chave deve ser TextLit.

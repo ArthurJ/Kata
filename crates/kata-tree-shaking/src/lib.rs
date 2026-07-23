@@ -246,7 +246,10 @@ fn collect_refs(
         }
 
         TypedExprKind::Fork {
-            action_name, action_expr, args, ..
+            action_name,
+            action_expr,
+            args,
+            ..
         } => {
             // Aresta dinâmica — string match em action_name.
             if action_name != "__indirect_fork" {

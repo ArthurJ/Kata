@@ -8,7 +8,7 @@
 //! `apply_subs` nos tipos das coleções.
 
 use kata_ast::Spanned;
-use kata_inference::{apply_subs, FusedStage, Substitutions, TypedExprKind};
+use kata_inference::{FusedStage, Substitutions, TypedExprKind, apply_subs};
 
 use crate::instantiate::instantiate_typed_expr;
 

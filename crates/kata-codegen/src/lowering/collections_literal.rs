@@ -466,11 +466,8 @@ pub(crate) fn lower_collections_literal(
                     let item_i64 = bitcast_to_i64(item_val, ctx);
                     let hash_name = hash_fn_name(k)?;
                     let eq_name = eq_fn_name(k)?;
-                    let hash_ref = ctx
-                        .ffi_refs
-                        .get(hash_name)
-                        .copied()
-                        .ok_or_else(|| {
+                    let hash_ref =
+                        ctx.ffi_refs.get(hash_name).copied().ok_or_else(|| {
                             super::CodegenError::FfiSymbolNotFound(hash_name.into())
                         })?;
                     let contains_ref = ctx
@@ -478,9 +475,7 @@ pub(crate) fn lower_collections_literal(
                         .get("kata_rt_dict_contains")
                         .copied()
                         .ok_or_else(|| {
-                            super::CodegenError::FfiSymbolNotFound(
-                                "kata_rt_dict_contains".into(),
-                            )
+                            super::CodegenError::FfiSymbolNotFound("kata_rt_dict_contains".into())
                         })?;
                     let hash_call = ctx.builder.ins().call(hash_ref, &[item_i64]);
                     let hash_val = ctx.builder.inst_results(hash_call)[0];
@@ -496,11 +491,8 @@ pub(crate) fn lower_collections_literal(
                     let item_i64 = bitcast_to_i64(item_val, ctx);
                     let hash_name = hash_fn_name(t)?;
                     let eq_name = eq_fn_name(t)?;
-                    let hash_ref = ctx
-                        .ffi_refs
-                        .get(hash_name)
-                        .copied()
-                        .ok_or_else(|| {
+                    let hash_ref =
+                        ctx.ffi_refs.get(hash_name).copied().ok_or_else(|| {
                             super::CodegenError::FfiSymbolNotFound(hash_name.into())
                         })?;
                     let contains_ref = ctx
@@ -508,9 +500,7 @@ pub(crate) fn lower_collections_literal(
                         .get("kata_rt_set_contains")
                         .copied()
                         .ok_or_else(|| {
-                            super::CodegenError::FfiSymbolNotFound(
-                                "kata_rt_set_contains".into(),
-                            )
+                            super::CodegenError::FfiSymbolNotFound("kata_rt_set_contains".into())
                         })?;
                     let hash_call = ctx.builder.ins().call(hash_ref, &[item_i64]);
                     let hash_val = ctx.builder.inst_results(hash_call)[0];
@@ -614,9 +604,7 @@ pub(crate) fn bitcast_to_i64(
 ) -> cranelift_codegen::ir::Value {
     let ty = ctx.builder.func.dfg.value_type(val);
     if ty == cranelift_codegen::ir::types::F64 {
-        ctx.builder
-            .ins()
-            .bitcast(I64, MemFlagsData::new(), val)
+        ctx.builder.ins().bitcast(I64, MemFlagsData::new(), val)
     } else {
         val
     }

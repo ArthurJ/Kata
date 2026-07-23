@@ -589,9 +589,11 @@ pub(crate) fn lower_expr(
         TypedExprKind::ReceiverFactoryCall { factory, elem_ty } => {
             super::csp::lower_receiver_factory_call(expr, factory, elem_ty, ctx)
         }
-        TypedExprKind::Fork { action_name, action_expr, args } => {
-            super::csp::lower_fork(expr, action_name, action_expr, args, ctx)
-        }
+        TypedExprKind::Fork {
+            action_name,
+            action_expr,
+            args,
+        } => super::csp::lower_fork(expr, action_name, action_expr, args, ctx),
 
         // ── Select — multiplexação de canais com timeout ──
         TypedExprKind::Select {

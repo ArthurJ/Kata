@@ -111,11 +111,7 @@ fn build_and_get_first_line(name: &str, src: &str) -> String {
     let (stdout, code) = run_built_binary(&format!("{name}_bin"));
     assert_eq!(code, 0, "binário AOT deve exit 0 — stdout: {stdout}");
 
-    stdout
-        .lines()
-        .next()
-        .unwrap_or("")
-        .to_string()
+    stdout.lines().next().unwrap_or("").to_string()
 }
 
 // ── DoD 1/5: type!(42) retorna "Int" ──────────────────────────────
@@ -159,7 +155,10 @@ fn type_of_boolean() {
         "type_of_boolean",
         "action main => Unit\n    echo!(type!(Boolean::True))\nmain!()",
     );
-    assert_eq!(first, "Boolean", "type!(Boolean::True) deve imprimir \"Boolean\"");
+    assert_eq!(
+        first, "Boolean",
+        "type!(Boolean::True) deve imprimir \"Boolean\""
+    );
 }
 
 // ── DoD 9: type!(Optional::Some 42) retorna "Optional::Int" ────────
@@ -199,10 +198,7 @@ fn type_of_list() {
         "type_of_list",
         "action main => Unit\n    echo!(type!([1 2 3]))\nmain!()",
     );
-    assert_eq!(
-        first, "[Int]",
-        "type!([1 2 3]) deve imprimir \"[Int]\""
-    );
+    assert_eq!(first, "[Int]", "type!([1 2 3]) deve imprimir \"[Int]\"");
 }
 
 // ── DoD 12: type!(soma) retorna "(Int Int -> Int)" ─────────────────
@@ -265,12 +261,11 @@ fn type_of_side_effect() {
     // echo!(type!(...)) imprime "Unit",
     // main!() retorna Unit → imprime "()"
     let lines: Vec<&str> = stdout.lines().collect();
+    assert_eq!(lines.len(), 3, "deve imprimir 3 linhas — stdout: {stdout}");
     assert_eq!(
-        lines.len(),
-        3,
-        "deve imprimir 3 linhas — stdout: {stdout}"
+        lines[0], "side effect",
+        "primeira linha deve ser o side-effect"
     );
-    assert_eq!(lines[0], "side effect", "primeira linha deve ser o side-effect");
     assert_eq!(lines[1], "Unit", "segunda linha deve ser \"Unit\"");
 }
 

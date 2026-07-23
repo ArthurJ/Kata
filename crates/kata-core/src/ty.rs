@@ -329,7 +329,8 @@ impl Ty {
                 if params.len() == 1 {
                     format!("{name}::{}", params[0].display())
                 } else {
-                    let params_str = params.iter()
+                    let params_str = params
+                        .iter()
                         .map(|p| p.display())
                         .collect::<Vec<_>>()
                         .join(", ");
@@ -337,21 +338,24 @@ impl Ty {
                 }
             }
             Ty::Function(params, ret) => {
-                let params_str = params.iter()
+                let params_str = params
+                    .iter()
                     .map(|p| p.display())
                     .collect::<Vec<_>>()
                     .join(" ");
                 format!("({params_str} -> {})", ret.display())
             }
             Ty::Action(params, ret) => {
-                let params_str = params.iter()
+                let params_str = params
+                    .iter()
                     .map(|p| p.display())
                     .collect::<Vec<_>>()
                     .join(", ");
                 format!("Action({params_str}) => {}", ret.display())
             }
             Ty::Tuple(elements) => {
-                let elems_str = elements.iter()
+                let elems_str = elements
+                    .iter()
                     .map(|e| e.display())
                     .collect::<Vec<_>>()
                     .join(", ");

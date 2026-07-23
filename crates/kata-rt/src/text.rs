@@ -78,11 +78,7 @@ pub extern "C" fn kata_rt_string_eq(a: i64, b: i64) -> i64 {
     // SAFETY: caller (JIT codegen) garante ponteiros C string válidos.
     let a_bytes = unsafe { std::ffi::CStr::from_ptr(a as *const std::os::raw::c_char).to_bytes() };
     let b_bytes = unsafe { std::ffi::CStr::from_ptr(b as *const std::os::raw::c_char).to_bytes() };
-    if a_bytes == b_bytes {
-        1
-    } else {
-        0
-    }
+    if a_bytes == b_bytes { 1 } else { 0 }
 }
 
 /// Substitui primeira ocorrência de `{}` por valor (para `format`).

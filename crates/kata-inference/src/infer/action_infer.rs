@@ -113,9 +113,12 @@ pub(crate) fn infer_action(
             )?;
             // Se args é DictLit, mapeia chaves → nomes de params e reordena para Tuple.
             let typed = match &typed.kind {
-                crate::typed::TypedExprKind::DictLit { entries, .. } => {
-                    reorder_test_dict_args(&action_def.name, &action_def.param_names, entries, &typed)?
-                }
+                crate::typed::TypedExprKind::DictLit { entries, .. } => reorder_test_dict_args(
+                    &action_def.name,
+                    &action_def.param_names,
+                    entries,
+                    &typed,
+                )?,
                 _ => typed,
             };
             Some(Spanned::new(typed, args_expr.span))
@@ -168,7 +171,10 @@ pub(crate) fn infer_action(
 fn reorder_test_dict_args(
     action_name: &str,
     param_names: &[Option<String>],
-    entries: &[(Spanned<crate::typed::TypedExpr>, Spanned<crate::typed::TypedExpr>)],
+    entries: &[(
+        Spanned<crate::typed::TypedExpr>,
+        Spanned<crate::typed::TypedExpr>,
+    )],
     typed_args: &crate::typed::TypedExpr,
 ) -> InferResult<crate::typed::TypedExpr> {
     use crate::typed::{TypedExpr, TypedExprKind};
@@ -202,13 +208,13 @@ fn reorder_test_dict_args(
             }
         };
 
-        let idx = *name_to_idx.get(key_name.as_str()).ok_or_else(|| {
-            MiddleError::TypeMismatch {
+        let idx = *name_to_idx
+            .get(key_name.as_str())
+            .ok_or_else(|| MiddleError::TypeMismatch {
                 expected: format!("parâmetro de `{action_name}`"),
                 found: format!("`{key_name}` não é parâmetro de `{action_name}`"),
                 span: key_expr.span.into(),
-            }
-        })?;
+            })?;
 
         if reordered[idx].is_some() {
             return Err(MiddleError::TypeMismatch {

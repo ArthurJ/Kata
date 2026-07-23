@@ -51,6 +51,7 @@ pub use bigint::{
     kata_rt_bi_lt, kata_rt_bi_mul, kata_rt_bi_neq, kata_rt_bi_show, kata_rt_bi_sub,
     kata_rt_bi_to_rational, kata_rt_int_to_text, kata_rt_tag_int, kata_rt_tag_int_from_str,
 };
+pub use dict::kata_rt_dict_merge;
 pub use dict::{
     kata_rt_dict_contains, kata_rt_dict_empty, kata_rt_dict_get_checked, kata_rt_dict_insert,
     kata_rt_dict_len, kata_rt_dict_next, kata_rt_dict_remove,
@@ -78,7 +79,6 @@ pub use set::{
     kata_rt_set_intersection, kata_rt_set_len, kata_rt_set_next, kata_rt_set_remove,
     kata_rt_set_union,
 };
-pub use dict::kata_rt_dict_merge;
 // kata_rt_rat_show_raw — rebaixado para pub(crate): zero consumidores cross-crate.
 pub use scheduler::{
     DEADLOCK_SENTINEL, TIMEOUT_SENTINEL, kata_rt_run, kata_rt_scheduler_init,

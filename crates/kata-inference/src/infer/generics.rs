@@ -199,10 +199,7 @@ pub fn apply_subs(ty: &Ty, subs: &Substitutions) -> Ty {
         Ty::Array(elem) => Ty::Array(Box::new(apply_subs(elem, subs))),
         Ty::Range(elem) => Ty::Range(Box::new(apply_subs(elem, subs))),
         // Dict — substitui em K e V.
-        Ty::Dict(k, v) => Ty::Dict(
-            Box::new(apply_subs(k, subs)),
-            Box::new(apply_subs(v, subs)),
-        ),
+        Ty::Dict(k, v) => Ty::Dict(Box::new(apply_subs(k, subs)), Box::new(apply_subs(v, subs))),
         // Set — substitui no elem_ty.
         Ty::Set(elem) => Ty::Set(Box::new(apply_subs(elem, subs))),
         // Sender/Receiver/ReceiverFactory — substitui no tipo do canal.

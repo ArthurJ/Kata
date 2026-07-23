@@ -146,9 +146,7 @@ fn collect_invoked_callable_params(
             ffi_symbol: None,
             ..
         } => {
-            if callable_params.contains(&callee.as_str())
-                && !out.iter().any(|p| p == callee)
-            {
+            if callable_params.contains(&callee.as_str()) && !out.iter().any(|p| p == callee) {
                 out.push(callee.clone());
             }
         }
@@ -159,11 +157,7 @@ fn collect_invoked_callable_params(
 }
 
 /// Traversal genérico para achar ActionCall indirect-callee nos sub-nós.
-fn traverse_for_invoked_params(
-    expr: &TypedExpr,
-    callable_params: &[&str],
-    out: &mut Vec<String>,
-) {
+fn traverse_for_invoked_params(expr: &TypedExpr, callable_params: &[&str], out: &mut Vec<String>) {
     match &expr.kind {
         TypedExprKind::ActionCall {
             args,
@@ -268,7 +262,9 @@ fn traverse_for_invoked_params(
                 traverse_for_invoked_params(&el.node, callable_params, out);
             }
         }
-        TypedExprKind::RangeLit { start, step, end, .. } => {
+        TypedExprKind::RangeLit {
+            start, step, end, ..
+        } => {
             traverse_for_invoked_params(&start.node, callable_params, out);
             traverse_for_invoked_params(&step.node, callable_params, out);
             traverse_for_invoked_params(&end.node, callable_params, out);
@@ -283,12 +279,25 @@ fn traverse_for_invoked_params(
             traverse_for_invoked_params(&item.node, callable_params, out);
             traverse_for_invoked_params(&collection.node, callable_params, out);
         }
-        TypedExprKind::Map { callback, collection, .. }
-        | TypedExprKind::Filter { callback, collection, .. } => {
+        TypedExprKind::Map {
+            callback,
+            collection,
+            ..
+        }
+        | TypedExprKind::Filter {
+            callback,
+            collection,
+            ..
+        } => {
             traverse_for_invoked_params(&callback.node, callable_params, out);
             traverse_for_invoked_params(&collection.node, callable_params, out);
         }
-        TypedExprKind::Fold { callback, initial, collection, .. } => {
+        TypedExprKind::Fold {
+            callback,
+            initial,
+            collection,
+            ..
+        } => {
             traverse_for_invoked_params(&callback.node, callable_params, out);
             traverse_for_invoked_params(&initial.node, callable_params, out);
             traverse_for_invoked_params(&collection.node, callable_params, out);
@@ -311,7 +320,12 @@ fn traverse_for_invoked_params(
         TypedExprKind::ChannelRecv { channel, .. } => {
             traverse_for_invoked_params(&channel.node, callable_params, out);
         }
-        TypedExprKind::Select { arms, timeout_ms, timeout_body, .. } => {
+        TypedExprKind::Select {
+            arms,
+            timeout_ms,
+            timeout_body,
+            ..
+        } => {
             for arm in arms {
                 traverse_for_invoked_params(&arm.channel.node, callable_params, out);
                 traverse_for_invoked_params(&arm.body.node, callable_params, out);
@@ -375,7 +389,9 @@ fn find_call_sites_of(
                 out.push((*span, arg_actions));
             }
         }
-        TypedExprKind::Fork { action_name, args, .. } if action_name == target_name => {
+        TypedExprKind::Fork {
+            action_name, args, ..
+        } if action_name == target_name => {
             let arg_actions = extract_action_idents_from_args(&args.node, action_names);
             if !arg_actions.is_empty() {
                 out.push((expr.span, arg_actions));
@@ -505,7 +521,9 @@ fn traverse_for_call_sites(
                 traverse_for_call_sites(&el.node, target_name, action_names, out);
             }
         }
-        TypedExprKind::RangeLit { start, step, end, .. } => {
+        TypedExprKind::RangeLit {
+            start, step, end, ..
+        } => {
             traverse_for_call_sites(&start.node, target_name, action_names, out);
             traverse_for_call_sites(&step.node, target_name, action_names, out);
             traverse_for_call_sites(&end.node, target_name, action_names, out);
@@ -520,12 +538,25 @@ fn traverse_for_call_sites(
             traverse_for_call_sites(&item.node, target_name, action_names, out);
             traverse_for_call_sites(&collection.node, target_name, action_names, out);
         }
-        TypedExprKind::Map { callback, collection, .. }
-        | TypedExprKind::Filter { callback, collection, .. } => {
+        TypedExprKind::Map {
+            callback,
+            collection,
+            ..
+        }
+        | TypedExprKind::Filter {
+            callback,
+            collection,
+            ..
+        } => {
             traverse_for_call_sites(&callback.node, target_name, action_names, out);
             traverse_for_call_sites(&collection.node, target_name, action_names, out);
         }
-        TypedExprKind::Fold { callback, initial, collection, .. } => {
+        TypedExprKind::Fold {
+            callback,
+            initial,
+            collection,
+            ..
+        } => {
             traverse_for_call_sites(&callback.node, target_name, action_names, out);
             traverse_for_call_sites(&initial.node, target_name, action_names, out);
             traverse_for_call_sites(&collection.node, target_name, action_names, out);
@@ -548,7 +579,12 @@ fn traverse_for_call_sites(
         TypedExprKind::ChannelRecv { channel, .. } => {
             traverse_for_call_sites(&channel.node, target_name, action_names, out);
         }
-        TypedExprKind::Select { arms, timeout_ms, timeout_body, .. } => {
+        TypedExprKind::Select {
+            arms,
+            timeout_ms,
+            timeout_body,
+            ..
+        } => {
             for arm in arms {
                 traverse_for_call_sites(&arm.channel.node, target_name, action_names, out);
                 traverse_for_call_sites(&arm.body.node, target_name, action_names, out);
@@ -794,7 +830,11 @@ fn collect_action_calls(
             collect_action_calls(&factory.node, &factory.span, out);
         }
         // Fork spawna uma Action — registra no call graph.
-        TypedExprKind::Fork { action_name, action_expr, args } => {
+        TypedExprKind::Fork {
+            action_name,
+            action_expr,
+            args,
+        } => {
             if action_name != "__indirect_fork" {
                 out.push((action_name.clone(), expr.span));
             }

@@ -171,9 +171,17 @@ fn set_persistence() {
     let s2 = kata_rt_set_insert(s, key, hash, eq, arena);
 
     // Original should be unchanged
-    assert_eq!(kata_rt_set_len(s), make_smi(3), "original set should be unchanged");
+    assert_eq!(
+        kata_rt_set_len(s),
+        make_smi(3),
+        "original set should be unchanged"
+    );
     // New set should have 4 elements
-    assert_eq!(kata_rt_set_len(s2), make_smi(4), "new set should have 4 elements");
+    assert_eq!(
+        kata_rt_set_len(s2),
+        make_smi(4),
+        "new set should have 4 elements"
+    );
 
     // Original should NOT contain 42
     assert_eq!(kata_rt_set_contains(s, key, hash, eq), 0);

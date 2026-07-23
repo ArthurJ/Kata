@@ -78,8 +78,8 @@ pub(crate) fn fits_return(actual: &Ty, declared: &Ty) -> bool {
         (Ty::Var(_), _) => true,
         // `return Err(e)` from `?` desugar: Result with unresolved type param
         // is a bottom/divergent expression — accept regardless of declared return type.
-        (Ty::Generic(n, args), _) if n == "Result" && args.len() == 2
-            && matches!(args[0], Ty::Var(_)) =>
+        (Ty::Generic(n, args), _)
+            if n == "Result" && args.len() == 2 && matches!(args[0], Ty::Var(_)) =>
         {
             true
         }
@@ -146,10 +146,9 @@ pub(crate) fn infer_expr_hinted(
                 // `None`, `Vermelho`). Busca no EnumRegistry.
                 match resolve_unqual_variant(name, span, ctx) {
                     Ok(result) => result,
-                    Err(MiddleError::UnboundName { name: ref err_name, .. })
-                        if !err_name.contains("ambí")
-                            && !err_name.contains("payload") =>
-                    {
+                    Err(MiddleError::UnboundName {
+                        name: ref err_name, ..
+                    }) if !err_name.contains("ambí") && !err_name.contains("payload") => {
                         // Caminho 3: Action no DispatchTable (first-class reference).
                         // `worker` sem `!` referencia a Action como valor.
                         if let Some(overloads) = ctx.table.get_overloads(name) {

@@ -142,7 +142,10 @@ pub(crate) fn infer_lambda(
 /// Se `NotApplicable`, retorna Vec vazio e None — nenhum contexto disponível.
 fn extract_partial(
     outcome: PartialDispatchOutcome,
-) -> (Vec<Ty>, Option<super::partial_dispatch::PartialDispatchFailure>) {
+) -> (
+    Vec<Ty>,
+    Option<super::partial_dispatch::PartialDispatchFailure>,
+) {
     match outcome {
         PartialDispatchOutcome::Inferred(tys) => (tys, None),
         PartialDispatchOutcome::Failed(f) => (Vec::new(), Some(f)),

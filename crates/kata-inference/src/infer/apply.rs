@@ -19,8 +19,8 @@ use super::collections_hof::{infer_filter, infer_fold, infer_map};
 use super::expr::{InferCtx, infer_expr};
 use super::format_synthesis::infer_format;
 use super::helpers::{InferResult, dispatch_to_middle_error, peel_grouping_expr};
-use kata_resolution::resolve_type_expr;
 use super::variant_construct::{expand_spread, infer_variant_construct};
+use kata_resolution::resolve_type_expr;
 
 use super::iface_dispatch::try_iface_method_dispatch;
 

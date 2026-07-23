@@ -81,7 +81,10 @@ pub(crate) fn lower_closure(
                 call_args[1] = key_val;
                 let hash_name = super::collections_literal::hash_fn_name(key_ty)?;
                 let eq_name = super::collections_literal::eq_fn_name(key_ty)?;
-                let hash_ref = ctx.ffi_refs.get(hash_name).copied()
+                let hash_ref = ctx
+                    .ffi_refs
+                    .get(hash_name)
+                    .copied()
                     .ok_or_else(|| super::CodegenError::FfiSymbolNotFound(hash_name.into()))?;
                 let hash_call = ctx.builder.ins().call(hash_ref, &[key_val]);
                 let hash_val = ctx.builder.inst_results(hash_call)[0];
@@ -98,7 +101,10 @@ pub(crate) fn lower_closure(
                 call_args[1] = key_val;
                 let hash_name = super::collections_literal::hash_fn_name(key_ty)?;
                 let eq_name = super::collections_literal::eq_fn_name(key_ty)?;
-                let hash_ref = ctx.ffi_refs.get(hash_name).copied()
+                let hash_ref = ctx
+                    .ffi_refs
+                    .get(hash_name)
+                    .copied()
                     .ok_or_else(|| super::CodegenError::FfiSymbolNotFound(hash_name.into()))?;
                 let hash_call = ctx.builder.ins().call(hash_ref, &[key_val]);
                 let hash_val = ctx.builder.inst_results(hash_call)[0];
@@ -114,7 +120,10 @@ pub(crate) fn lower_closure(
                 call_args[1] = key_val;
                 let hash_name = super::collections_literal::hash_fn_name(key_ty)?;
                 let eq_name = super::collections_literal::eq_fn_name(key_ty)?;
-                let hash_ref = ctx.ffi_refs.get(hash_name).copied()
+                let hash_ref = ctx
+                    .ffi_refs
+                    .get(hash_name)
+                    .copied()
                     .ok_or_else(|| super::CodegenError::FfiSymbolNotFound(hash_name.into()))?;
                 let hash_call = ctx.builder.ins().call(hash_ref, &[key_val]);
                 let hash_val = ctx.builder.inst_results(hash_call)[0];
@@ -128,9 +137,11 @@ pub(crate) fn lower_closure(
                 // Element type from args[0].node.ty (Set::T → T)
                 let elem_ty = match &args[0].node.ty {
                     Ty::Set(inner) => inner.as_ref().clone(),
-                    other => return Err(super::CodegenError::UnsupportedNode(format!(
-                        "set op on non-Set type: {other}"
-                    ))),
+                    other => {
+                        return Err(super::CodegenError::UnsupportedNode(format!(
+                            "set op on non-Set type: {other}"
+                        )));
+                    }
                 };
                 let eq_name = super::collections_literal::eq_fn_name(&elem_ty)?;
                 let eq_fn_ptr = super::collections_literal::get_ffi_fn_ptr(eq_name, ctx)?;
@@ -142,9 +153,11 @@ pub(crate) fn lower_closure(
                 // Key type from args[0].node.ty (Dict::(K, V) → K)
                 let key_ty = match &args[0].node.ty {
                     Ty::Dict(k, _) => k.as_ref().clone(),
-                    other => return Err(super::CodegenError::UnsupportedNode(format!(
-                        "dict_merge on non-Dict type: {other}"
-                    ))),
+                    other => {
+                        return Err(super::CodegenError::UnsupportedNode(format!(
+                            "dict_merge on non-Dict type: {other}"
+                        )));
+                    }
                 };
                 let eq_name = super::collections_literal::eq_fn_name(&key_ty)?;
                 let eq_fn_ptr = super::collections_literal::get_ffi_fn_ptr(eq_name, ctx)?;

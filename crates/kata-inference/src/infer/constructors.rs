@@ -43,7 +43,11 @@ pub(crate) fn synthesize_constructors(
 
         // Proibe Ty::Action em campos de data — Actions são comportamento,
         // não informação. (PRD §3.7)
-        if let Some(field) = struct_info.fields.iter().find(|f| matches!(f.ty, Ty::Action(..))) {
+        if let Some(field) = struct_info
+            .fields
+            .iter()
+            .find(|f| matches!(f.ty, Ty::Action(..)))
+        {
             return Err(MiddleError::TypeMismatch {
                 expected: "tipo de dado (não-Action)".into(),
                 found: format!(

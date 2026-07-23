@@ -105,7 +105,10 @@ fn read_text(raw: i64) -> String {
 fn dict_literal_produces_dict_type() {
     let src = "{\"a\": 1 \"b\": 2}";
     let (raw, ty) = eval_src(src);
-    assert_eq!(ty, Ty::Dict(Box::new(Ty::Prim(PrimTy::Text)), Box::new(Ty::int())));
+    assert_eq!(
+        ty,
+        Ty::Dict(Box::new(Ty::Prim(PrimTy::Text)), Box::new(Ty::int()))
+    );
     assert_ne!(raw, 0, "dict should be non-null pointer");
 }
 
@@ -214,21 +217,33 @@ fn set_contains_false() {
 fn set_union_size() {
     let src = "len (union {|1 2 3|} {|3 4 5|})";
     let (raw, _) = eval_src(src);
-    assert_eq!(untag_smi(raw), 5, "union of {{1,2,3}} and {{3,4,5}} should have 5 elements");
+    assert_eq!(
+        untag_smi(raw),
+        5,
+        "union of {{1,2,3}} and {{3,4,5}} should have 5 elements"
+    );
 }
 
 #[test]
 fn set_intersection_size() {
     let src = "len (intersection {|1 2 3|} {|3 4 5|})";
     let (raw, _) = eval_src(src);
-    assert_eq!(untag_smi(raw), 1, "intersection of {{1,2,3}} and {{3,4,5}} should have 1 element");
+    assert_eq!(
+        untag_smi(raw),
+        1,
+        "intersection of {{1,2,3}} and {{3,4,5}} should have 1 element"
+    );
 }
 
 #[test]
 fn set_difference_size() {
     let src = "len (difference {|1 2 3|} {|3 4 5|})";
     let (raw, _) = eval_src(src);
-    assert_eq!(untag_smi(raw), 2, "difference of {{1,2,3}} and {{3,4,5}} should have 2 elements");
+    assert_eq!(
+        untag_smi(raw),
+        2,
+        "difference of {{1,2,3}} and {{3,4,5}} should have 2 elements"
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -303,7 +318,10 @@ fn tuple_como_arg_de_action_soma() {
 fn dict_como_arg_de_action_insert_e_retorna() {
     let src = "action add_d (d :: Dict::(Text, Int)) => Dict::(Text, Int)\n    insert d \"c\" 3\nadd_d!({\"a\": 1 \"b\": 2})";
     let (raw, ty) = eval_src(src);
-    assert_eq!(ty, Ty::Dict(Box::new(Ty::Prim(PrimTy::Text)), Box::new(Ty::int())));
+    assert_eq!(
+        ty,
+        Ty::Dict(Box::new(Ty::Prim(PrimTy::Text)), Box::new(Ty::int()))
+    );
     assert_ne!(raw, 0, "dict retornado não deve ser null");
 }
 

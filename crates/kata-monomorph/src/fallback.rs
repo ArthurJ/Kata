@@ -228,7 +228,9 @@ fn fallback_in_expr(expr_span: &mut Spanned<TypedExpr>) {
                 fallback_in_expr(tb);
             }
         }
-        TypedExprKind::Fork { action_expr, args, .. } => {
+        TypedExprKind::Fork {
+            action_expr, args, ..
+        } => {
             fallback_in_expr(action_expr);
             fallback_in_expr(args);
         }

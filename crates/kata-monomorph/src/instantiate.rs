@@ -403,9 +403,12 @@ fn instantiate_kind(kind: &TypedExprKind, subs: &Substitutions) -> TypedExprKind
             )),
             caller_arena: *caller_arena,
             ffi_symbol: ffi_symbol.clone(),
-            indirect_callee: indirect_callee
-                .as_ref()
-                .map(|ic| Box::new(Spanned::new(instantiate_typed_expr(&ic.node, subs), ic.span))),
+            indirect_callee: indirect_callee.as_ref().map(|ic| {
+                Box::new(Spanned::new(
+                    instantiate_typed_expr(&ic.node, subs),
+                    ic.span,
+                ))
+            }),
         },
 
         TypedExprKind::TypeOf { expr } => TypedExprKind::TypeOf {

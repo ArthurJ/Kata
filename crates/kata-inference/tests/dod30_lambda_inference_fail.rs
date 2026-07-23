@@ -66,7 +66,7 @@ fn lambda_inference_fail_has_detail() {
     match err {
         MiddleError::LambdaInferenceFail { detail, .. } => {
             let detail = detail.expect(
-                "lambda com partial dispatch aplicável deve ter detail com contexto de falha"
+                "lambda com partial dispatch aplicável deve ter detail com contexto de falha",
             );
             assert!(
                 detail.contains("+"),

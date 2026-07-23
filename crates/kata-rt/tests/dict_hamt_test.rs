@@ -213,7 +213,11 @@ fn dict_iteration_dedup_on_replace() {
     d = kata_rt_dict_insert(d, key, make_smi(10), hash, eq, arena);
     d = kata_rt_dict_insert(d, key, make_smi(20), hash, eq, arena);
 
-    assert_eq!(kata_rt_dict_len(d), make_smi(1), "should have 1 entry after replace");
+    assert_eq!(
+        kata_rt_dict_len(d),
+        make_smi(1),
+        "should have 1 entry after replace"
+    );
 
     // Iterate — should only see key=1 once (dedup)
     let mut count = 0i64;
@@ -253,7 +257,11 @@ fn dict_iteration_skips_removed() {
     let hash2 = kata_rt_hash_int(key2);
     d = kata_rt_dict_remove(d, key2, hash2, eq, arena);
 
-    assert_eq!(kata_rt_dict_len(d), make_smi(2), "should have 2 entries after remove");
+    assert_eq!(
+        kata_rt_dict_len(d),
+        make_smi(2),
+        "should have 2 entries after remove"
+    );
 
     // Iterate — should skip key 2, only see 3 and 1
     let mut keys = Vec::new();
