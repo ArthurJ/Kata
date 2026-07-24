@@ -230,17 +230,12 @@ pub(crate) fn lower_expr(
                 return Ok(ctx.builder.ins().iconst(I64, 0));
             }
 
-            // Aloca N * 8 bytes na arena via kata_rt_arena_alloc(handle, size).
-            // Escolha de arena baseada em EscapeTarget (Pré-11):
-            // - Local → fiber_arena (liberada no epílogo do fiber)
-            // - Caller → caller_arena (sobrevive à destruição da local)
-            let handle = crate::lowering::escape_arena::arena_handle_for_escape(expr.escape, ctx);
-            let size = ctx.builder.ins().iconst(I64, (n * 8) as i64);
-            let func_ref = ctx.ffi_refs.get("kata_rt_arena_alloc").ok_or_else(|| {
-                super::CodegenError::FfiSymbolNotFound("kata_rt_arena_alloc".into())
-            })?;
-            let call_inst = ctx.builder.ins().call(*func_ref, &[handle, size]);
-            let ptr = ctx.builder.inst_results(call_inst)[0];
+            // Aloca N * 8 bytes. Para Heap, usa alloc_tracked com header ARC.
+            let ptr = crate::lowering::escape_arena::alloc_for_escape(
+                expr.escape,
+                (n * 8) as i64,
+                ctx,
+            )?;
 
             // Store de cada elemento no offset i * 8.
             let flags = MemFlagsData::new();
@@ -265,14 +260,12 @@ pub(crate) fn lower_expr(
                 return Ok(ctx.builder.ins().iconst(I64, 0));
             }
 
-            // Arena baseada em EscapeTarget (igual a Tuple).
-            let handle = crate::lowering::escape_arena::arena_handle_for_escape(expr.escape, ctx);
-            let size = ctx.builder.ins().iconst(I64, (n * 8) as i64);
-            let func_ref = ctx.ffi_refs.get("kata_rt_arena_alloc").ok_or_else(|| {
-                super::CodegenError::FfiSymbolNotFound("kata_rt_arena_alloc".into())
-            })?;
-            let call_inst = ctx.builder.ins().call(*func_ref, &[handle, size]);
-            let ptr = ctx.builder.inst_results(call_inst)[0];
+            // Aloca N * 8 bytes. Para Heap, usa alloc_tracked com header ARC.
+            let ptr = crate::lowering::escape_arena::alloc_for_escape(
+                expr.escape,
+                (n * 8) as i64,
+                ctx,
+            )?;
 
             // Store de cada campo no offset i * 8.
             let flags = MemFlagsData::new();

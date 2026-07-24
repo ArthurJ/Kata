@@ -131,6 +131,18 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
         "kata_rt_get_root_arena_handle",
         rt::kata_rt_get_root_arena_handle as *const u8,
     );
+    builder.symbol(
+        "kata_rt_alloc_tracked",
+        rt::kata_rt_alloc_tracked as *const u8,
+    );
+    builder.symbol(
+        "kata_rt_incref_tracked",
+        rt::kata_rt_incref_tracked as *const u8,
+    );
+    builder.symbol(
+        "kata_rt_decref_tracked",
+        rt::kata_rt_decref_tracked as *const u8,
+    );
     // Sum
     builder.symbol(
         "kata_rt_store_sum_result",
@@ -353,6 +365,9 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         ArenaCreateTracked,
         ArenaDealloc,
         GetRootArenaHandle,
+        AllocTracked,
+        IncRefTracked,
+        DecRefTracked,
         StoreSumResult,
         SumTagInt,
         Panic,

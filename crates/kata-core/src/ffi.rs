@@ -77,6 +77,12 @@ pub enum FfiSymbol {
     ArenaDealloc,
     /// `kata_rt_get_root_arena_handle() -> handle` — lê TLS root arena (Fio 16).
     GetRootArenaHandle,
+    /// `kata_rt_alloc_tracked(root_arena, data_size, destructor) -> data_ptr` — aloca com header ARC (Fio 16).
+    AllocTracked,
+    /// `kata_rt_incref_tracked(data_ptr) -> 0` — incrementa refcount de valor tracked.
+    IncRefTracked,
+    /// `kata_rt_decref_tracked(data_ptr) -> 0` — decrementa refcount, desaloca se 0.
+    DecRefTracked,
 
     // ── Sum ──────────────────────────────────────
     /// `kata_rt_store_sum_result(tag, payload) -> ptr` — aloca box Sum.
@@ -281,6 +287,9 @@ impl FfiSymbol {
             FfiSymbol::ArenaCreateTracked => "kata_rt_arena_create_tracked",
             FfiSymbol::ArenaDealloc => "kata_rt_arena_dealloc",
             FfiSymbol::GetRootArenaHandle => "kata_rt_get_root_arena_handle",
+            FfiSymbol::AllocTracked => "kata_rt_alloc_tracked",
+            FfiSymbol::IncRefTracked => "kata_rt_incref_tracked",
+            FfiSymbol::DecRefTracked => "kata_rt_decref_tracked",
             FfiSymbol::StoreSumResult => "kata_rt_store_sum_result",
             FfiSymbol::SumTagInt => "kata_rt_sum_tag_int",
             FfiSymbol::Panic => "kata_rt_panic",
@@ -403,6 +412,9 @@ impl FfiSymbol {
             }
             FfiSymbol::ArenaDestroy | FfiSymbol::ArenaDealloc => Ty::Unit,
             FfiSymbol::GetRootArenaHandle => Ty::int(),
+            FfiSymbol::AllocTracked | FfiSymbol::IncRefTracked | FfiSymbol::DecRefTracked => {
+                Ty::int()
+            }
             // Sum
             FfiSymbol::StoreSumResult | FfiSymbol::SumTagInt => Ty::int(),
             // Control flow — panic retorna Unit (aborta antes, mas o tipo é Unit)
@@ -526,6 +538,9 @@ impl FfiSymbol {
             FfiSymbol::ArenaCreateTracked,
             FfiSymbol::ArenaDealloc,
             FfiSymbol::GetRootArenaHandle,
+            FfiSymbol::AllocTracked,
+            FfiSymbol::IncRefTracked,
+            FfiSymbol::DecRefTracked,
             FfiSymbol::StoreSumResult,
             FfiSymbol::SumTagInt,
             FfiSymbol::Panic,

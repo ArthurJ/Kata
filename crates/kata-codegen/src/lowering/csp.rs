@@ -156,6 +156,12 @@ pub(crate) fn lower_channel_send(
     let handle = super::expr::lower_expr(&channel.node, ctx)?;
     let val = super::expr::lower_expr(&value.node, ctx)?;
 
+    // incref antes de enviar: se o valor é Heap (ARC-managed na root_arena),
+    // o receiver compartilha ownership. O sender mantém sua ref; o receiver
+    // ganha uma adicional. Quando ambos decrementam, refcount → 0 e o
+    // bloco inteiro (header + dados) é desalocado da root_arena.
+    crate::lowering::escape_arena::incref_if_heap(value.node.escape, val, ctx)?;
+
     let fref = ctx
         .ffi_refs
         .get("kata_rt_channel_send")

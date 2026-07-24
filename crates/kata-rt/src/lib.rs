@@ -25,6 +25,7 @@ pub(crate) mod scheduler;
 pub(crate) mod set;
 pub(crate) mod sum;
 pub(crate) mod text;
+pub(crate) mod tracked;
 
 // Re-exports convenientes para uso interno (não C-ABI).
 // Símbolos não consumidos cross-crate foram removidos (to_rational, float_to_rat,
@@ -45,6 +46,7 @@ pub use arena::{
     kata_rt_arena_alloc, kata_rt_arena_create, kata_rt_arena_create_tracked,
     kata_rt_arena_dealloc, kata_rt_arena_destroy, kata_rt_get_root_arena_handle,
 };
+pub use tracked::{kata_rt_alloc_tracked, kata_rt_decref_tracked, kata_rt_incref_tracked};
 pub use array::{
     kata_rt_array_alloc, kata_rt_array_contains, kata_rt_array_get, kata_rt_array_get_checked,
     kata_rt_array_len, kata_rt_array_set,
