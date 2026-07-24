@@ -88,22 +88,29 @@ Driver::run_pipeline(source)
   lex → parse → Module { items: [ImportDecl, ..., ExportDecl, ...] }
     │
     ▼
+  inject_implicit_core_import(&mut module)
+    │  Insere ImportDecl { path: ["core"] } virtual no topo
+    │  (entrypoints e sub-módulos — mesmo mecanismo)
+    │
+    ▼
   ModuleLoader::load_imports(&module, search_paths)
-    │  Para cada ImportDecl:
+    │  Para cada ImportDecl (incluindo o implícito de core):
     │    1. resolve_path → filesystem path
-    │    2. load_path → lex → parse → resolve() → ResolvedModule (cacheado)
+    │    2. load_path → lex → parse → inject_implicit_core →
+    │       load_imports (recursivo) → resolve() → ResolvedModule
     │    3. Filtra por export: só itens em ExportDecl são visíveis
-    │    4. Retorna Vec<(import_decl, ResolvedModule)>
+    │    4. Retorna Vec<ImportedModule>
     │
     ▼
   resolve(&module) → ResolvedModule (user)
     │
     ▼
-  merge_resolved(prelude, user, imports)
-    │  merge: prelude + user + cada módulo importado (filtrado por export)
-    │  Import seletivo: só itens nomeados em `MOD.(items)` são mergeados
-    │  Import de módulo inteiro: todos os exported são mergeados
-    │  Alias: itens mergeados sob prefixo `alias.`
+  merge_resolved(user, &imports)
+    │  merge: imports (incluindo prelude) + user
+    │  Prelude (core) importado como Selective com todos os exported
+    │  → itens no escopo direto (echo!, Int, +, etc.)
+    │  Import seletivo explícito: só itens nomeados em `MOD.(items)`
+    │  Import de módulo inteiro: itens exportados sob prefixo `mod.`
     │
     ▼
   infer_module → TypedModule
@@ -117,9 +124,12 @@ Driver::run_pipeline(source)
 // kata-driver/src/main.rs — run_pipeline
 
 // 2. Parse
-let module = parse(tokens)?;
+let mut module = parse(tokens)?;
 
-// 2a. Carregar módulos importados
+// 2a. Import implícito de core (prelude)
+inject_implicit_core_import(&mut module);
+
+// 2b. Carregar módulos importados (incluindo core)
 let entry_dir = Path::new(file).parent().unwrap_or(Path::new("."));
 let search_paths = vec![
     entry_dir.to_path_buf(),           // diretório do arquivo atual
@@ -127,12 +137,11 @@ let search_paths = vec![
 ];
 let mut loader = ModuleLoader::new(search_paths);
 let imports = loader.load_imports(&module)?;
-// imports: Vec<ImportedModule> — ver §3.3
+// imports: Vec<ImportedModule> — primeiro é core (prelude)
 
-// 3. Resolve (prelude + user + imports)
-let prelude = load_prelude()?;
+// 3. Resolve (user + imports, sem prelude especial)
 let user = resolve(&module)?;
-let resolved = merge_resolved(prelude, user, &imports);
+let resolved = merge_resolved(user, &imports);
 ```
 
 **Search paths:**
@@ -323,18 +332,19 @@ interfaces. O exportador não precisa listar cada método individualmente
 
 ### 3.5. Fase 3: `merge_resolved` com imports
 
-A função `merge_resolved` ganha um terceiro parâmetro: `&[ImportedModule]`.
+A função `merge_resolved` ganha uma nova assinatura: `(user, imports)`
+onde `imports` inclui o prelude como primeiro elemento (import
+implícito da Fase 7). O parâmetro especial `prelude` desaparece.
 
 ```rust
 pub(crate) fn merge_resolved(
-    prelude: ResolvedModule,
     user: ResolvedModule,
     imports: &[ImportedModule],
 ) -> ResolvedModule {
-    // Merge base: prelude + user (como hoje)
-    let mut merged = merge_two(prelude, user);
+    // Começa com um ResolvedModule vazio (apenas Unit no TypeEnv).
+    let mut merged = ResolvedModule::empty();
 
-    // Merge de cada módulo importado
+    // Merge de cada módulo importado (incluindo prelude como primeiro)
     for imported in imports {
         match &imported.import_kind {
             ImportKind::Selective { items } => {
@@ -374,9 +384,23 @@ pub(crate) fn merge_resolved(
         }
     }
 
+    // Merge do módulo do usuário por último (sobrescreve imports)
+    merge_in(&mut merged, user);
+
     merged
 }
 ```
+
+**Nota:** O prelude (import implícito de `core`) é o primeiro elemento
+em `imports`. Como é `WholeModule { prefix: "core" }`, seus itens
+exportados ficam acessíveis via `core.echo!` etc. Mas o manual §3.3
+diz que itens do prelude devem ser acessíveis sem prefixo. Solução:
+o import implícito de `core` é tratado como `Selective` com todos os
+itens exportados (efeito prático: tudo no escopo direto). Alternativa:
+tratar `core` como caso especial onde `WholeModule` também registra
+itens no escopo direto. **Decisão: import implícito de core como
+Selective com todos os exported.** É o comportamento atual do
+`merge_resolved(prelude, user)` — itens do prelude no escopo direto.
 
 ### 3.6. Fase 4: Module access no inference
 
@@ -440,23 +464,28 @@ Hoje `ModuleLoader::load_path` chama `resolve()` que cria um `TypeEnv`
 vazio (só com `Unit`). O sub-módulo não tem acesso a `Int`, `Float`,
 `Text`, `Boolean`, etc. — vai falhar na inferência.
 
-**Decisão: injetar prelude no ModuleLoader.** `load_path` faz
-`load_prelude()` e `merge_resolved(prelude, resolved)` antes de
-retornar. O sub-módulo resolve tipos contra o prelude, como o
-entrypoint faz. Isso é consistente com o manual: o prelude é
-carregado pelo `kata-module-loader` (§3.3), não pelo typeck.
+**Decisão: import implícito de `core` em sub-módulos.** O
+`ModuleLoader::load_path` insere um `ImportDecl { path: ["core"],
+alias: None, items: None }` virtual no topo do módulo antes de
+processar imports. O `core.kata` é carregado do filesystem (search
+path `stdlib/`) pelo mesmo código path que qualquer outro import.
+O sub-módulo resolve tipos contra o prelude, como o entrypoint faz.
+
+Isso é o mesmo mecanismo da Fase 7 (import implícito do prelude em
+entrypoints) — aplicado a sub-módulos. Não há `load_prelude()` nem
+`merge_resolved(prelude, ...)` — o prelude é o primeiro
+`ImportedModule` na lista de imports do sub-módulo.
 
 ```rust
-// ModuleLoader::load_path — após resolve()
-let prelude = load_prelude()?;
-let merged = merge_two(prelude, resolved);
-// Agora filter_exports sobre o merged
-let filtered = filter_exports(merged, &module);
+// ModuleLoader::load_path — após parse, antes de resolve
+let mut module = parsed_module;
+inject_implicit_core_import(&mut module);
+let imports = self.load_imports(&module)?;
+let user = resolve(&module)?;
+let resolved = merge_resolved(user, &imports);
+// Agora filter_exports sobre o resolved
+let filtered = filter_exports(resolved, &module);
 ```
-
-**Nota:** `merge_two` é a função atual `merge_resolved` renomeada
-(merge de dois módulos sem imports). O `merge_resolved` público vira
-`merge_two` e o novo `merge_resolved` com 3 args o chama internamente.
 
 ### 3.8. Sintaxe legada nos exemplos
 
@@ -492,10 +521,11 @@ let filtered = filter_exports(merged, &module);
   export de tipo leva impls + interfaces + métodos
 
 ### Fase 3: merge_resolved com imports
-- `merge_resolved(prelude, user, imports)` — 3 args
-- `merge_two` extraído do `merge_resolved` atual
+- `merge_resolved(user, imports)` — nova assinatura (sem prelude especial)
+- Prelude é o primeiro `ImportedModule` (Selective com todos os exported)
 - Import seletivo: itens no escopo direto
 - Import de módulo inteiro: registrar no ModuleRegistry
+- `merge_in(&mut merged, user)` — merge do user por último (sobrescreve)
 - Testes: import seletivo traz item para escopo direto
 
 ### Fase 4: ModuleAccess no inference
@@ -507,8 +537,10 @@ let filtered = filter_exports(merged, &module);
 - Testes: `mod.fn arg` infere e executa corretamente
 
 ### Fase 5: Prelude em sub-módulos
-- `ModuleLoader::load_path` injeta prelude antes de filter_exports
-- `load_prelude()` acessível do ModuleLoader
+- Sub-módulos importam `core` implicitamente (mesmo mecanismo da Fase 7)
+- `ModuleLoader::load_path` insere `ImportDecl { path: ["core"] }` virtual
+  antes de processar imports do sub-módulo
+- O `core.kata` é carregado do filesystem (search path `stdlib/`)
 - Testes: sub-módulo com `Int => Int` funciona (type env tem Int)
 
 ### Fase 6: Migrar exemplos
@@ -518,6 +550,75 @@ let filtered = filter_exports(merged, &module);
 - Snapshot test: `imports.kata` executa e produz output esperado
 - Atualizar `examples_snapshot.rs` para suportar subdiretório em
   `examples/` (hoje só lista top-level `.kata`)
+
+### Fase 7: Importação implícita do prelude (substituir `load_prelude`)
+
+**Objetivo:** eliminar o caso especial do prelude. Hoje o prelude é
+injetado por `load_prelude()` + `merge_resolved(prelude, user)` em 4
+call sites distintos no driver. Com o sistema de import/export
+funcionando, o prelude passa a ser simplesmente o primeiro módulo
+importado implicitamente por todo entrypoint.
+
+**Mudança:**
+
+1. O driver insere um `ImportDecl { path: ["core"], alias: None,
+   items: None }` virtual no topo da lista de items do módulo
+   (antes dos imports explícitos do usuário). Isso é feito no
+   `run_pipeline` (e equivalentes em `cmd_test`, `cmd_build`, REPL)
+   logo após o parse.
+
+2. O `ModuleLoader` carrega `stdlib/core.kata` como qualquer outro
+   módulo — `resolve_path(["core"])` encontra `core.kata` no search
+   path `stdlib/`. O `filter_exports` aplica-se normalmente (core.kata
+   não tem `export` → módulo aberto → tudo exportado).
+
+3. `merge_resolved` perde o parâmetro especial `prelude`. Passa a ser
+   `merge_resolved(user, imports)` onde `imports` inclui o prelude
+   como primeiro elemento (import implícito).
+
+4. `load_prelude()` é removido. O `prelude_sigs.rs` é deletado. O
+   `include_str!("../../../stdlib/core.kata")` deixa de ser necessário
+   — o ModuleLoader lê o arquivo do filesystem.
+
+5. Sub-módulos (Fase 5) também importam `core` implicitamente — o
+   ModuleLoader insere o mesmo `ImportDecl` virtual ao carregar
+   qualquer módulo.
+
+**Call sites afetados (4):**
+- `main.rs:314` — `run_pipeline` (comando `run`)
+- `main.rs:158` — `cmd_test` (comando `test`)
+- `aot.rs:46` — `cmd_build` (comando `build`)
+- `repl.rs:45,57` — REPL (init + reset)
+
+**Antes:**
+```rust
+let prelude = load_prelude()?;
+let user = resolve(&module)?;
+let resolved = merge_resolved(prelude, user);
+```
+
+**Depois:**
+```rust
+// Insere import implícito de core no topo do módulo
+inject_implicit_core_import(&mut module);
+let imports = loader.load_imports(&module)?;
+let user = resolve(&module)?;
+let resolved = merge_resolved(user, &imports);
+```
+
+**Decisão: import implícito, não injecção especial.** O prelude é
+tratado pelo mesmo código path que qualquer outro import. Sem casos
+especiais no `merge_resolved`, sem `load_prelude()`, sem
+`prelude_sigs.rs`. O manual §3.3 diz: "O prelude é carregado
+automaticamente em todos os ficheiros executados como entrypoint" —
+import implícito cumpre isso sem mecanismo dedicado.
+
+**Nota sobre `include_str!`:** Hoje `prelude_sigs.rs` embute o prelude
+no binário via `include_str!("../../../stdlib/core.kata")`. Com a
+mudança, o ModuleLoader lê do filesystem. Em builds de release/AOT
+onde o filesystem pode não estar disponível, o `core.kata` pode ser
+procurado em search paths que incluem um diretório de assets embutido.
+Isso é um detalhe de empacotamento, não de design da linguagem.
 
 ## 5. Decisões de Design
 
@@ -531,6 +632,7 @@ let filtered = filter_exports(merged, &module);
 | Prelude em sub-módulos | Injetado pelo ModuleLoader | Manual §3.3: "carregamento do prelude é responsabilidade do kata-module-loader" |
 | Export de tipo é transitivo | ImplEntry + interfaces + métodos + supertraits | Tipo sem impls é inútil no importador; fechamento automático |
 | Sintaxe `$()` | Removida (legado) | Não existe no Kata5; funções puras chamadas diretamente |
+| Prelude como import implícito | `inject_implicit_core_import` + ModuleLoader | Elimina caso especial; prelude é módulo como qualquer outro |
 | `format` | Não adicionado ao prelude | Não está no prelude atual; exemplos usam `show` + `string_concat` |
 | Estrutura de exemplos | `examples/modules/` subdiretório | mock_math não é entrypoint; precisa de diretório separado |
 
@@ -540,7 +642,8 @@ let filtered = filter_exports(merged, &module);
 - **AST:** `ImportDecl` e `ExportDecl` já definidos. Sem mudanças.
 - **ModuleLoader (estrutura):** cache, cycle detection, path resolution
   já implementados. Só falta chamar `load_imports` e injetar prelude.
-- **Prelude:** `load_prelude()` e `stdlib/core.kata` inalterados.
+- **`stdlib/core.kata`:** conteúdo inalterado. Só muda como é carregado
+  (filesystem via ModuleLoader em vez de `include_str!`).
 - **Pipeline pós-resolution:** inference, monomorph, codegen, etc.
   não mudam estruturalmente — só ganham `ModuleAccess` como nova
   variante de TypedExprKind (tratada como Ident qualificado).
@@ -549,7 +652,7 @@ let filtered = filter_exports(merged, &module);
 
 | Risco | Impacto | Mitigação |
 |---|---|---|
-| `merge_resolved` com 3 args quebra callers existentes | Compile error em aot.rs, repl.rs | Extrair `merge_two` e usá-lo onde não há imports |
+| `merge_resolved` muda assinatura | Compile error em aot.rs, repl.rs | Fase 7 atualiza todos os 4 call sites; `load_prelude` removido |
 | ModuleAccess não tratado pelo codegen | ICE em `lower_expr` | Fase 4 inclui codegen; testar com exemplo simples |
 | ModuleAccess não tratado pelo monomorphizador | ICE em monomorph | Fase 4 inclui monomorph; name mangling trivial |
 | `DotAccess` ambíguo: struct field vs module access | Type error se ordem errada | ModuleRegistry check ANTES do match em (Ty, DotIndex) |
@@ -571,8 +674,11 @@ let filtered = filter_exports(merged, &module);
 - **Path resolution com `mod.kata`:** O manual menciona
   `utilidades/matematica/mod.kata` como fallback. O `resolve_path`
   atual só procura `file.kata`. Adicionar o fallback é trivial.
-- **Import de prelude explícito:** `import core` em sub-módulos
-  (embora o prelude seja injetado automaticamente pelo ModuleLoader).
+- **Import de prelude explícito:** `import core` em sub-módulos —
+  a Fase 7 faz o import implícito. O import explícito funciona
+  naturalmente após a Fase 7 (o ModuleLoader já sabe carregar `core`).
+  Pode ser usado para evitar o import implícito em módulos que não
+  precisam do prelude (otimização de tree shaking).
 - **Refined types importados:** Refined types trazem predicados e
   smart constructors. O fechamento transitivo precisa incluir
   `refined_decls` e `enum_pred_decls` quando um tipo refined é exportado.
@@ -591,3 +697,7 @@ let filtered = filter_exports(merged, &module);
 9. Importador pode usar operadores (`+`, `show`, `=`) sobre valores de
    tipo importado (dispatch funciona pois ImplEntry + signatures foram
    mergeados)
+10. `load_prelude()` e `prelude_sigs.rs` removidos — prelude é import
+    implícito via ModuleLoader (Fase 7)
+11. `echo!`, `Int`, `+` etc. continuam acessíveis sem prefixo em
+    entrypoints (import implícito de core como Selective)
