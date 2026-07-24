@@ -213,7 +213,7 @@ pub(crate) fn infer_expr_hinted(
             let typed_value = infer_expr(&value.node, &value.span, env, ctx, false)?;
             let val_ty = typed_value.ty.clone();
 
-            env.define(name, val_ty);
+            env.define(name, val_ty, "__local__");
 
             (
                 Ty::Unit,
@@ -234,7 +234,7 @@ pub(crate) fn infer_expr_hinted(
             let temp_name = "__let_destruct";
 
             // Define o temporário no escopo.
-            env.define(temp_name, val_ty.clone());
+            env.define(temp_name, val_ty.clone(), "__local__");
 
             // Para cada nome (pulando `_`), define no escopo via FieldAccess.
             let mut field_bindings: Vec<(String, Spanned<TypedExpr>)> = Vec::new();
@@ -253,7 +253,7 @@ pub(crate) fn infer_expr_hinted(
                         });
                     }
                 };
-                env.define(name, elem_ty.clone());
+                env.define(name, elem_ty.clone(), "__local__");
 
                 // Constrói FieldAccess: __let_destruct.i
                 let temp_expr = TypedExpr {
@@ -392,7 +392,7 @@ pub(crate) fn infer_expr_hinted(
         Expr::Var { name, value } => {
             let typed_value = infer_expr(&value.node, &value.span, env, ctx, false)?;
             let val_ty = typed_value.ty.clone();
-            env.define_mutable(name, val_ty);
+            env.define_mutable(name, val_ty, "__local__");
             (
                 Ty::Unit,
                 TypedExprKind::Var {

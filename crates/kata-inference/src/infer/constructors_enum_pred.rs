@@ -108,7 +108,7 @@ pub(crate) fn synthesize_enum_pred(
 
                 // Cria TypeEnv com x: payload_ty
                 let mut pred_env = type_env.clone();
-                pred_env.define("x", decl.payload_ty.clone());
+                pred_env.define("x", decl.payload_ty.clone(), "__local__");
 
                 // Infere o body do predicado
                 let typed_body = infer_expr(

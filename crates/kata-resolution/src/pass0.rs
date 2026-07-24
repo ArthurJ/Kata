@@ -38,6 +38,7 @@ pub(crate) fn run_pass0(
     signatures: &mut Vec<Signature>,
     functions: &mut Vec<FunctionDef>,
     errors: &mut Vec<ResolveError>,
+    origin: &str,
 ) {
     for item in items {
         match &item.node {
@@ -79,7 +80,7 @@ pub(crate) fn run_pass0(
                         .map(|i| format!("__pred_{name}_{i}"))
                         .collect();
                     struct_registry.register_refined(name, &base_ty_name, pred_names);
-                    type_env.define(name, Ty::Struct(name.clone()));
+                    type_env.define(name, Ty::Struct(name.clone()), origin);
 
                     // Guarda para o inference sintetizar as funções predicado.
                     let base_ty =
@@ -111,7 +112,7 @@ pub(crate) fn run_pass0(
                     Some("kata_rt_rat") => Ty::Prim(PrimTy::Rational),
                     _ => Ty::Struct(name.clone()),
                 };
-                type_env.define(name, ty);
+                type_env.define(name, ty, origin);
 
                 // Se o DataDecl tem campos não-vazios, registra no StructRegistry.
                 // Offset de cada campo = field_index * 8 (todos os campos são words de 8 bytes).
@@ -131,7 +132,7 @@ pub(crate) fn run_pass0(
             Item::AliasDecl { target, new_name } => {
                 // alias Target as NewName — cria tipo nominal distinto.
                 // O alias é Ty::Struct(new_name) independentemente do target.
-                type_env.define(new_name, Ty::Struct(new_name.clone()));
+                type_env.define(new_name, Ty::Struct(new_name.clone()), origin);
 
                 // Registra no StructRegistry com alias_of = Some(target).
                 // Se o target é um struct com campos, herda os campos (para field access).
@@ -144,7 +145,7 @@ pub(crate) fn run_pass0(
                 struct_registry.register_with_alias(new_name, fields, Some(target.clone()));
             }
             Item::EnumDecl { name, variants, .. } => {
-                type_env.define(name, Ty::Sum(name.clone()));
+                type_env.define(name, Ty::Sum(name.clone()), origin);
                 // Cataloga variantes no EnumRegistry.
                 // Resolve payload types das variantes.
                 // Processa predicados das variantes.

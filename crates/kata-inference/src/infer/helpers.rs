@@ -116,7 +116,7 @@ pub(crate) fn process_with_bindings(
     for wb in wbs {
         let typed_value = infer_expr(&wb.value.node, &wb.value.span, env, ctx, false)?;
         let val_ty = typed_value.ty.clone();
-        env.define(&wb.name, val_ty);
+        env.define(&wb.name, val_ty, "__local__");
         typed_with_bindings.push(TypedWithBinding {
             name: wb.name.clone(),
             value: Spanned::new(typed_value, wb.value.span),

@@ -197,6 +197,7 @@ pub fn infer_module(
                 typed_func.param_types.clone(),
                 Box::new(typed_func.ret_ty.clone()),
             ),
+            "__local__",
         );
         typed_functions.push(typed_func);
     }
@@ -429,12 +430,12 @@ fn infer_named_function(
         // Cria escopo com bindings dos params para inferir o template.
         let mut log_env = TypeEnv::with_parent(module_type_env.clone());
         for (i, ty) in param_types.iter().enumerate() {
-            log_env.define(&format!("__param_{i}"), ty.clone());
+            log_env.define(&format!("__param_{i}"), ty.clone(), "__local__");
         }
         // Se há nomes de params, define-os também (associados por posição).
         for (i, name) in param_names.iter().enumerate() {
             if let Some(ty) = param_types.get(i) {
-                log_env.define(name, ty.clone());
+                log_env.define(name, ty.clone(), "__local__");
             }
         }
         Some(log_synthesis::synthesize_log_spec(

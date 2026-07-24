@@ -126,7 +126,7 @@ pub(crate) fn synthesize_refined(
 
             // Cria TypeEnv com x: base_ty
             let mut pred_env = type_env.clone();
-            pred_env.define("x", decl.base_ty.clone());
+            pred_env.define("x", decl.base_ty.clone(), "__local__");
 
             // Infere o body do predicado (despacha operadores via prelude)
             let typed_body = infer_expr(

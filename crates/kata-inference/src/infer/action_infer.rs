@@ -39,7 +39,7 @@ pub(crate) fn infer_action(
     // `__param_N` é o nome interno usado pelo codegen (def_var __param_N).
     // O nome nomeado (`x`) é um alias apontando para o mesmo tipo.
     for (i, ty) in param_types.iter().enumerate() {
-        action_env.define(&format!("__param_{i}"), ty.clone());
+        action_env.define(&format!("__param_{i}"), ty.clone(), "__local__");
     }
     // Define nomes nomeados dos params (forma nomeada `x::Tipo`) no escopo,
     // além de `__param_N`. O codegen mapeia `x` → `__param_N` via o typeck.
@@ -47,7 +47,7 @@ pub(crate) fn infer_action(
         if let Some(name) = opt_name
             && let Some(ty) = param_types.get(i)
         {
-            action_env.define(name, ty.clone());
+            action_env.define(name, ty.clone(), "__local__");
         }
     }
 

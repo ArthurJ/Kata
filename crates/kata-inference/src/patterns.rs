@@ -62,7 +62,7 @@ fn check_pattern_inner(
                 });
             }
             // Caso contrário, é binding. Define no escopo.
-            env.define(name, scrutinee_ty.clone());
+            env.define(name, scrutinee_ty.clone(), "__local__");
             Ok(TypedPattern::Ident {
                 name: name.clone(),
                 ty: scrutinee_ty.clone(),

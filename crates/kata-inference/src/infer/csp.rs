@@ -107,7 +107,7 @@ pub(crate) fn infer_channel_recv(
     };
 
     // Cria binding no TypeEnv: nome := recv_ty.
-    env.define(bind_name, recv_ty.clone());
+    env.define(bind_name, recv_ty.clone(), "__local__");
 
     let escape = if ctx.ret_ty.is_some() {
         if tail_pos {
@@ -179,7 +179,7 @@ pub(crate) fn infer_select(
 
         // Cria binding do braço num escopo filho.
         let mut arm_env = env.push_scope();
-        arm_env.define(&arm.bind_name, recv_ty.clone());
+        arm_env.define(&arm.bind_name, recv_ty.clone(), "__local__");
 
         let typed_body = infer_expr_hinted(
             &arm.body.node,

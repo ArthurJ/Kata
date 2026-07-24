@@ -45,7 +45,7 @@ fn primty_from_ffi() {
 #[test]
 fn typeenv_define_and_lookup() {
     let mut env = TypeEnv::new();
-    env.define("x", Ty::int());
+    env.define("x", Ty::int(), "test");
     assert_eq!(env.lookup("x"), Some(&Ty::int()));
 }
 
@@ -58,7 +58,7 @@ fn typeenv_lookup_missing_returns_none() {
 #[test]
 fn typeenv_push_scope_inherits_parent() {
     let mut parent = TypeEnv::new();
-    parent.define("x", Ty::int());
+    parent.define("x", Ty::int(), "test");
     let child = parent.push_scope();
     assert_eq!(child.lookup("x"), Some(&Ty::int()));
 }
@@ -66,16 +66,16 @@ fn typeenv_push_scope_inherits_parent() {
 #[test]
 fn typeenv_push_scope_can_shadow() {
     let mut parent = TypeEnv::new();
-    parent.define("x", Ty::int());
+    parent.define("x", Ty::int(), "test");
     let mut child = parent.push_scope();
-    child.define("x", Ty::float());
+    child.define("x", Ty::float(), "test");
     assert_eq!(child.lookup("x"), Some(&Ty::float()));
 }
 
 #[test]
 fn typeenv_grandchild_sees_grandparent() {
     let mut parent = TypeEnv::new();
-    parent.define("z", Ty::text());
+    parent.define("z", Ty::text(), "test");
     let child = parent.push_scope();
     let grandchild = child.push_scope();
     assert_eq!(grandchild.lookup("z"), Some(&Ty::text()));

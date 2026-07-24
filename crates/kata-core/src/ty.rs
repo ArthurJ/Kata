@@ -131,18 +131,32 @@ impl Ty {
     }
 }
 
+/// Binding de tipo com origem (módulo onde foi definido).
+///
+/// `origin` identifica de qual módulo o binding veio ("core", "mock_math",
+/// "my_module" para definido localmente). Todo `TypeBinding` tem um "dono".
+/// Tipos locais usam o nome do próprio módulo como `origin`.
+#[derive(Debug, Clone)]
+pub struct TypeBinding {
+    pub ty: Ty,
+    pub origin: String,
+}
+
 /// Árvore de escopos para name resolution.
 ///
 /// Populada no resolution (Pass 0+1) e consumida no inference (Pass 2).
 /// Não sobrevive além do typeck — a TAST já carrega os tipos resolvidos.
 #[derive(Debug, Clone)]
 pub struct TypeEnv {
-    bindings: HashMap<String, Ty>,
+    bindings: HashMap<String, TypeBinding>,
     parent: Option<Box<TypeEnv>>,
     /// Nomes declarados como mutáveis (`var`) neste escopo.
     /// Necessário para validar reatribuição (`x := 42` só é válido se `x`
     /// foi declarado com `var`, não `let`).
     mutables: HashSet<String>,
+    /// Nomes com conflito de origin entre imports (ambiguidade).
+    /// `resolve_type_expr` deve erroar ao usar estes sem qualificar.
+    ambiguous: HashSet<String>,
 }
 
 impl TypeEnv {
@@ -151,6 +165,7 @@ impl TypeEnv {
             bindings: HashMap::new(),
             parent: None,
             mutables: HashSet::new(),
+            ambiguous: HashSet::new(),
         }
     }
 
@@ -159,18 +174,31 @@ impl TypeEnv {
             bindings: HashMap::new(),
             parent: Some(Box::new(parent)),
             mutables: HashSet::new(),
+            ambiguous: HashSet::new(),
         }
     }
 
     /// Define um nome no escopo atual (binding imutável por default).
-    pub fn define(&mut self, name: &str, ty: Ty) {
-        self.bindings.insert(name.to_string(), ty);
+    pub fn define(&mut self, name: &str, ty: Ty, origin: &str) {
+        self.bindings.insert(
+            name.to_string(),
+            TypeBinding {
+                ty,
+                origin: origin.to_string(),
+            },
+        );
     }
 
     /// Define um nome mutável no escopo atual (`var`).
     /// Marca o nome como mutável para validação de reatribuição.
-    pub fn define_mutable(&mut self, name: &str, ty: Ty) {
-        self.bindings.insert(name.to_string(), ty);
+    pub fn define_mutable(&mut self, name: &str, ty: Ty, origin: &str) {
+        self.bindings.insert(
+            name.to_string(),
+            TypeBinding {
+                ty,
+                origin: origin.to_string(),
+            },
+        );
         self.mutables.insert(name.to_string());
     }
 
@@ -184,11 +212,36 @@ impl TypeEnv {
     }
 
     /// Procura um nome na cadeia de escopos.
+    /// Retorna apenas o `Ty` — sem `origin`.
     pub fn lookup(&self, name: &str) -> Option<&Ty> {
-        if let Some(ty) = self.bindings.get(name) {
-            return Some(ty);
+        if let Some(binding) = self.bindings.get(name) {
+            return Some(&binding.ty);
         }
         self.parent.as_deref().and_then(|p| p.lookup(name))
+    }
+
+    /// Procura um nome na cadeia de escopos, retornando o `TypeBinding`
+    /// completo (com `origin`). Usado por `resolve_type_expr` para
+    /// desambiguar tipos de módulos diferentes.
+    pub fn lookup_binding(&self, name: &str) -> Option<&TypeBinding> {
+        if let Some(binding) = self.bindings.get(name) {
+            return Some(binding);
+        }
+        self.parent.as_deref().and_then(|p| p.lookup_binding(name))
+    }
+
+    /// Verifica se um nome está marcado como ambíguo (conflito de origin
+    /// entre imports). Percorre a cadeia de escopos.
+    pub fn is_ambiguous(&self, name: &str) -> bool {
+        if self.ambiguous.contains(name) {
+            return true;
+        }
+        self.parent.as_deref().is_some_and(|p| p.is_ambiguous(name))
+    }
+
+    /// Marca um nome como ambíguo neste escopo.
+    pub fn mark_ambiguous(&mut self, name: &str) {
+        self.ambiguous.insert(name.to_string());
     }
 
     /// Cria um escopo filho.
@@ -200,12 +253,22 @@ impl TypeEnv {
     ///
     /// Usado em `merge_resolved` para combinar o `type_env` do user module
     /// com o escopo filho do prelude. `other` fica vazio após a chamada.
+    /// Conflitos de origin (mesmo nome, origins diferentes) são marcados
+    /// como ambíguos.
     pub fn merge_bindings_from(&mut self, other: &mut TypeEnv) {
-        for (name, ty) in other.bindings.drain() {
-            self.bindings.insert(name, ty);
+        for (name, binding) in other.bindings.drain() {
+            if let Some(existing) = self.bindings.get(&name) {
+                if existing.origin != binding.origin {
+                    self.ambiguous.insert(name.clone());
+                }
+            }
+            self.bindings.insert(name, binding);
         }
         for name in other.mutables.drain() {
             self.mutables.insert(name);
+        }
+        for name in other.ambiguous.drain() {
+            self.ambiguous.insert(name);
         }
     }
 
@@ -213,7 +276,7 @@ impl TypeEnv {
     /// Retorna `(name, ty)` pares — usado pelo REPL `:env`.
     #[allow(dead_code)]
     pub(crate) fn local_bindings(&self) -> impl Iterator<Item = (&str, &Ty)> {
-        self.bindings.iter().map(|(k, v)| (k.as_str(), v))
+        self.bindings.iter().map(|(k, v)| (k.as_str(), &v.ty))
     }
 }
 

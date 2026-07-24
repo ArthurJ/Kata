@@ -302,7 +302,7 @@ pub(crate) fn infer_for_in(
 
     // Cria escopo filho para o body, define x: A.
     let mut body_env = env.push_scope();
-    body_env.define(var_name, var_ty.clone());
+    body_env.define(var_name, var_ty.clone(), "__local__");
 
     // ForIn é como loop — in_loop = true para break/continue.
     let loop_ctx = InferCtx {

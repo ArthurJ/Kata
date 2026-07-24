@@ -20,10 +20,25 @@ use kata_ast::{Item, Module};
 use kata_core::{Ty, TypeEnv};
 
 /// Resolve um módulo: Pass 0 + Pass 1.
+///
+/// Usa `"__local__"` como origin para tipos definidos no módulo.
+/// Para especificar o nome do módulo (importação), usar `resolve_with_origin`.
 pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
+    resolve_with_origin(module, "__local__")
+}
+
+/// Resolve um módulo com origin explícita (nome do módulo).
+///
+/// `origin` é usado como `origin` em `TypeBinding`s para tipos definidos
+/// neste módulo, permitindo desambiguação quando múltiplos módulos
+/// definem tipos com o mesmo nome.
+pub fn resolve_with_origin(
+    module: &Module,
+    origin: &str,
+) -> Result<ResolvedModule, Vec<ResolveError>> {
     let mut type_env = TypeEnv::new();
     // Unit é tipo primitivo da linguagem — sempre disponível no TypeEnv.
-    type_env.define("Unit", Ty::Unit);
+    type_env.define("Unit", Ty::Unit, origin);
     let mut signatures: Vec<Signature> = Vec::new();
     let mut functions: Vec<FunctionDef> = Vec::new();
     let mut actions: Vec<ActionDef> = Vec::new();
@@ -49,6 +64,7 @@ pub fn resolve(module: &Module) -> Result<ResolvedModule, Vec<ResolveError>> {
         &mut signatures,
         &mut functions,
         &mut errors,
+        origin,
     );
 
     // Pass 1: coleta assinaturas de funções
