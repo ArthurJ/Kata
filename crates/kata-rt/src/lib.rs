@@ -44,7 +44,8 @@ pub use rational::rat_from_text;
 pub use arc::{kata_rt_alloc_arc, kata_rt_arc_fn_ptr, kata_rt_decref, kata_rt_incref};
 pub use arena::{
     kata_rt_arena_alloc, kata_rt_arena_create, kata_rt_arena_create_tracked,
-    kata_rt_arena_dealloc, kata_rt_arena_destroy, kata_rt_get_root_arena_handle,
+    kata_rt_arena_dealloc, kata_rt_arena_destroy, kata_rt_arena_stats,
+    kata_rt_get_root_arena_handle,
 };
 pub use tracked::{kata_rt_alloc_tracked, kata_rt_decref_tracked, kata_rt_incref_tracked};
 pub use array::{

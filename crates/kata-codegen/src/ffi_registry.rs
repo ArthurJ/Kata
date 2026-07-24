@@ -368,6 +368,7 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         AllocTracked,
         IncRefTracked,
         DecRefTracked,
+        ArenaStats,
         StoreSumResult,
         SumTagInt,
         Panic,

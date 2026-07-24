@@ -90,11 +90,20 @@ impl Default for Arena {
 pub(crate) struct TrackedArena {
     /// Blocos alocados e ainda vivos. Usado para dealloc individual e teardown.
     blocks: Vec<(*mut u8, Layout)>,
+    /// Contador de alocações (para testes de leak counting).
+    pub(crate) alloc_count: u64,
+    /// Contador de dealocações individuais (para testes de leak counting).
+    /// Não inclui `destroy()` (bulk dealloc da arena inteira).
+    pub(crate) dealloc_count: u64,
 }
 
 impl TrackedArena {
     pub(crate) fn new() -> Self {
-        TrackedArena { blocks: Vec::new() }
+        TrackedArena {
+            blocks: Vec::new(),
+            alloc_count: 0,
+            dealloc_count: 0,
+        }
     }
 
     /// Aloca `layout` bytes via `std::alloc`. Retorna ponteiro bruto.
@@ -103,6 +112,7 @@ impl TrackedArena {
         let ptr = unsafe { std::alloc::alloc(layout) };
         if !ptr.is_null() {
             self.blocks.push((ptr, layout));
+            self.alloc_count += 1;
         }
         ptr
     }
@@ -114,6 +124,7 @@ impl TrackedArena {
         if let Some(idx) = self.blocks.iter().position(|(p, _)| *p == ptr) {
             self.blocks.swap_remove(idx);
             unsafe { std::alloc::dealloc(ptr, layout) };
+            self.dealloc_count += 1;
         }
     }
 
@@ -292,6 +303,39 @@ pub extern "C" fn kata_rt_arena_destroy(handle: i64) {
                 ArenaKind::Bump(b) => b.reset(),
                 ArenaKind::Tracked(t) => t.destroy(),
             }
+        }
+    })
+}
+
+/// Retorna (alloc_count, dealloc_count) da arena Tracked do handle.
+///
+/// Para arenas Bump, retorna (0, 0) (não rastreia individualmente).
+/// Usado por testes de leak counting para verificar que allocs e deallocs
+/// individuais fecham no fim da execução.
+///
+/// `dealloc_count` inclui só dealocações individuais (`kata_rt_arena_dealloc`),
+/// não `arena_destroy` (bulk). Após `destroy()`, ambos voltam a 0.
+///
+/// # Safety
+/// `handle` deve ser válido.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_arena_stats(handle: i64) -> i64 {
+    if handle < 0 {
+        return 0;
+    }
+    ARENAS.with(|arenas| {
+        let arenas = arenas.borrow();
+        let idx = handle as usize;
+        if idx >= arenas.len() {
+            return 0;
+        }
+        match &arenas[idx] {
+            ArenaKind::Tracked(t) => {
+                // Codifica os dois contadores em um único i64:
+                // bits 0-31: alloc_count, bits 32-63: dealloc_count
+                ((t.dealloc_count as i64) << 32) | (t.alloc_count as i64 & 0xFFFF_FFFF)
+            }
+            _ => 0,
         }
     })
 }

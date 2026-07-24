@@ -83,6 +83,8 @@ pub enum FfiSymbol {
     IncRefTracked,
     /// `kata_rt_decref_tracked(data_ptr) -> 0` — decrementa refcount, desaloca se 0.
     DecRefTracked,
+    /// `kata_rt_arena_stats(handle) -> i64` — (alloc_count, dealloc_count) packed (Fio 16).
+    ArenaStats,
 
     // ── Sum ──────────────────────────────────────
     /// `kata_rt_store_sum_result(tag, payload) -> ptr` — aloca box Sum.
@@ -288,6 +290,7 @@ impl FfiSymbol {
             FfiSymbol::ArenaDealloc => "kata_rt_arena_dealloc",
             FfiSymbol::GetRootArenaHandle => "kata_rt_get_root_arena_handle",
             FfiSymbol::AllocTracked => "kata_rt_alloc_tracked",
+            FfiSymbol::ArenaStats => "kata_rt_arena_stats",
             FfiSymbol::IncRefTracked => "kata_rt_incref_tracked",
             FfiSymbol::DecRefTracked => "kata_rt_decref_tracked",
             FfiSymbol::StoreSumResult => "kata_rt_store_sum_result",
@@ -412,7 +415,8 @@ impl FfiSymbol {
             }
             FfiSymbol::ArenaDestroy | FfiSymbol::ArenaDealloc => Ty::Unit,
             FfiSymbol::GetRootArenaHandle => Ty::int(),
-            FfiSymbol::AllocTracked | FfiSymbol::IncRefTracked | FfiSymbol::DecRefTracked => {
+            FfiSymbol::AllocTracked | FfiSymbol::IncRefTracked | FfiSymbol::DecRefTracked
+            | FfiSymbol::ArenaStats => {
                 Ty::int()
             }
             // Sum
@@ -541,6 +545,7 @@ impl FfiSymbol {
             FfiSymbol::AllocTracked,
             FfiSymbol::IncRefTracked,
             FfiSymbol::DecRefTracked,
+            FfiSymbol::ArenaStats,
             FfiSymbol::StoreSumResult,
             FfiSymbol::SumTagInt,
             FfiSymbol::Panic,

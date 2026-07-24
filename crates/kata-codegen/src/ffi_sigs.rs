@@ -225,6 +225,10 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
         FfiSymbol::DecRefTracked => {
             sig.params.push(AbiParam::new(I64)); // data_ptr
         }
+        FfiSymbol::ArenaStats => {
+            sig.params.push(AbiParam::new(I64)); // handle
+            sig.returns.push(AbiParam::new(I64)); // packed (alloc_count, dealloc_count)
+        }
         // ── Sum (i64, i64, i64) → i64, (i64) → i64 ──
         // Pré-11: store_sum_result recebe arena_handle como 3º param.
         FfiSymbol::StoreSumResult => {
