@@ -8,7 +8,6 @@ use cranelift_codegen::ir::types::I64;
 use cranelift_codegen::ir::{AbiParam, GlobalValueData, InstBuilder, MemFlagsData, Signature};
 use cranelift_codegen::isa::CallConv;
 use cranelift_module::{Linkage, Module};
-use kata_core::escape::EscapeTarget;
 use kata_core::ty::{PrimTy, Ty};
 use kata_inference::{TypedExpr, TypedExprKind};
 
@@ -235,14 +234,7 @@ pub(crate) fn lower_expr(
             // Escolha de arena baseada em EscapeTarget (Pré-11):
             // - Local → fiber_arena (liberada no epílogo do fiber)
             // - Caller → caller_arena (sobrevive à destruição da local)
-            let handle = match expr.escape {
-                EscapeTarget::Local => ctx
-                    .fiber_arena
-                    .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
-                EscapeTarget::Caller => ctx
-                    .caller_arena
-                    .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
-            };
+            let handle = crate::lowering::escape_arena::arena_handle_for_escape(expr.escape, ctx);
             let size = ctx.builder.ins().iconst(I64, (n * 8) as i64);
             let func_ref = ctx.ffi_refs.get("kata_rt_arena_alloc").ok_or_else(|| {
                 super::CodegenError::FfiSymbolNotFound("kata_rt_arena_alloc".into())
@@ -274,14 +266,7 @@ pub(crate) fn lower_expr(
             }
 
             // Arena baseada em EscapeTarget (igual a Tuple).
-            let handle = match expr.escape {
-                EscapeTarget::Local => ctx
-                    .fiber_arena
-                    .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
-                EscapeTarget::Caller => ctx
-                    .caller_arena
-                    .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
-            };
+            let handle = crate::lowering::escape_arena::arena_handle_for_escape(expr.escape, ctx);
             let size = ctx.builder.ins().iconst(I64, (n * 8) as i64);
             let func_ref = ctx.ffi_refs.get("kata_rt_arena_alloc").ok_or_else(|| {
                 super::CodegenError::FfiSymbolNotFound("kata_rt_arena_alloc".into())

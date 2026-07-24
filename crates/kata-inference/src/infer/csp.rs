@@ -264,8 +264,8 @@ fn type_compatible(actual: &Ty, expected: &Ty) -> bool {
 }
 
 /// Escape target para `!>` — valor escapa para outro fiber.
-/// Por ora, conservador: Caller (caller_arena). O LCA real será
-/// calculado quando o typeck rastrear a árvore de fibers.
+/// Valores enviados por canal sobrevivem ao fiber sender, então vão
+/// para a root_arena (TrackedArena) com deallocation individual via ARC.
 fn escape_for_channel_send(_tail_pos: bool, _ctx: &InferCtx) -> EscapeTarget {
-    EscapeTarget::Caller
+    EscapeTarget::Heap
 }

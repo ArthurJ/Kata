@@ -26,6 +26,7 @@ mod collections_literal;
 mod control_flow;
 mod csp;
 mod dict_set_lit;
+mod escape_arena;
 mod expr;
 mod filter;
 mod for_in;

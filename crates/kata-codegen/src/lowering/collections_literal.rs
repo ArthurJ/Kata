@@ -31,14 +31,7 @@ pub(crate) fn lower_collections_literal(
     match &expr.kind {
         // ── ListLit — constrói Cons chain de trás para frente ──
         TypedExprKind::ListLit { elements } => {
-            let arena_handle = match expr.escape {
-                kata_core::escape::EscapeTarget::Local => ctx
-                    .fiber_arena
-                    .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
-                kata_core::escape::EscapeTarget::Caller => ctx
-                    .caller_arena
-                    .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
-            };
+            let arena_handle = crate::lowering::escape_arena::arena_handle_for_escape(expr.escape, ctx);
 
             // Começa com nil (0).
             let nil_ref = ctx
@@ -75,14 +68,7 @@ pub(crate) fn lower_collections_literal(
         // ── ArrayLit — aloca header+data, set cada elemento ──
         TypedExprKind::ArrayLit { elements } => {
             let n = elements.len() as i64;
-            let arena_handle = match expr.escape {
-                kata_core::escape::EscapeTarget::Local => ctx
-                    .fiber_arena
-                    .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
-                kata_core::escape::EscapeTarget::Caller => ctx
-                    .caller_arena
-                    .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
-            };
+            let arena_handle = crate::lowering::escape_arena::arena_handle_for_escape(expr.escape, ctx);
 
             // Aloca array: kata_rt_array_alloc(len, arena) → ptr
             let alloc_ref = ctx.ffi_refs.get("kata_rt_array_alloc").ok_or_else(|| {
@@ -121,14 +107,7 @@ pub(crate) fn lower_collections_literal(
             inclusive: _,
             elem_ty: _,
         } => {
-            let arena_handle = match expr.escape {
-                kata_core::escape::EscapeTarget::Local => ctx
-                    .fiber_arena
-                    .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
-                kata_core::escape::EscapeTarget::Caller => ctx
-                    .caller_arena
-                    .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
-            };
+            let arena_handle = crate::lowering::escape_arena::arena_handle_for_escape(expr.escape, ctx);
 
             // Aloca 24 bytes: kata_rt_range_alloc(arena) → ptr
             let alloc_ref = ctx.ffi_refs.get("kata_rt_range_alloc").ok_or_else(|| {

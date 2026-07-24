@@ -12,7 +12,6 @@
 use cranelift_codegen::ir::types::I64;
 use cranelift_codegen::ir::{InstBuilder, MemFlagsData};
 use cranelift_module::Module;
-use kata_core::escape::EscapeTarget;
 use kata_core::ty::Ty;
 use kata_inference::{ChannelKind, TypedExpr, TypedExprKind, TypedSelectArm};
 
@@ -286,14 +285,7 @@ pub(crate) fn lower_fork(
     };
 
     // 5. Determinar caller_arena (onde os args vivem — EscapeTarget do expr).
-    let caller_arena_val = match expr.escape {
-        EscapeTarget::Local => ctx
-            .fiber_arena
-            .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
-        EscapeTarget::Caller => ctx
-            .caller_arena
-            .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
-    };
+    let caller_arena_val = crate::lowering::escape_arena::arena_handle_for_escape(expr.escape, ctx);
 
     // 6. kata_rt_spawn(fn_ptr, caller_arena, args_ptr) → fiber_id
     let spawn_ref = ctx

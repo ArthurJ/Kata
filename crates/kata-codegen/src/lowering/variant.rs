@@ -7,7 +7,6 @@
 
 use cranelift_codegen::ir::types::I64;
 use cranelift_codegen::ir::{InstBuilder, MemFlagsData};
-use kata_core::escape::EscapeTarget;
 use kata_inference::TypedExpr;
 
 use super::LowerCtx;
@@ -78,16 +77,9 @@ pub(crate) fn lower_variant_construct(
     Ok(ctx.builder.inst_results(call_inst)[0])
 }
 
-/// Seleciona o handle de arena conforme `EscapeTarget` (Pré-11):
-/// `Local` → fiber_arena, `Caller` → caller_arena.
+/// Seleciona o handle de arena conforme `EscapeTarget`:
+/// `Local` → fiber_arena, `Caller` → caller_arena, `Heap` → root_arena.
 /// Fallback para `iconst 0` quando a arena não está disponível (entry point).
 fn arena_handle_for(expr: &TypedExpr, ctx: &mut LowerCtx) -> cranelift_codegen::ir::Value {
-    match expr.escape {
-        EscapeTarget::Local => ctx
-            .fiber_arena
-            .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
-        EscapeTarget::Caller => ctx
-            .caller_arena
-            .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
-    }
+    crate::lowering::escape_arena::arena_handle_for_escape(expr.escape, ctx)
 }

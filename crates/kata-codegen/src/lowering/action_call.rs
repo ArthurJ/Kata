@@ -74,6 +74,20 @@ pub(crate) fn lower_action_call(
             EscapeTarget::Caller => ctx
                 .caller_arena
                 .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
+            EscapeTarget::Heap => {
+                // Heap escape: args devem sobreviver ao fiber — usar root_arena.
+                let get_root = ctx
+                    .ffi_refs
+                    .get("kata_rt_get_root_arena_handle")
+                    .copied()
+                    .ok_or_else(|| {
+                        super::CodegenError::FfiSymbolNotFound(
+                            "kata_rt_get_root_arena_handle".into(),
+                        )
+                    })?;
+                let root_inst = ctx.builder.ins().call(get_root, &[]);
+                ctx.builder.inst_results(root_inst)[0]
+            }
         };
         let arg_values = [fiber_arena_val, caller_arena_val, args_ptr];
         // 3. call_indirect — assinatura Action ABI: (I64, I64, I64) -> I64
@@ -114,14 +128,7 @@ pub(crate) fn lower_action_call(
             // caller_arena decidido por EscapeTarget (Pré-11):
             // - Local → fiber_arena (arena local do fiber)
             // - Caller → caller_arena (sobrevive à destruição do fiber)
-            let caller_arena_val = match expr.escape {
-                EscapeTarget::Local => ctx
-                    .fiber_arena
-                    .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
-                EscapeTarget::Caller => ctx
-                    .caller_arena
-                    .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0)),
-            };
+            let caller_arena_val = crate::lowering::escape_arena::arena_handle_for_escape(expr.escape, ctx);
 
             if ctx.scheduler_mode {
                 // Entry point: spawn + run (scheduler cria fiber + arena).
