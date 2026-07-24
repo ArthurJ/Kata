@@ -485,3 +485,59 @@ fn extract_log_spec(
 }
 
 pub use prelude_sigs::load_prelude;
+
+/// Combina dois ResolvedModules (prelude + módulo) em um único.
+///
+/// Usado pelo ModuleLoader para injetar o prelude em sub-módulos.
+/// O driver tem sua própria versão (`merge_resolved`) que faz o mesmo
+/// mas com acesso a imports; esta é a versão simples sem imports.
+pub fn merge_two(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModule {
+    let mut signatures = prelude.signatures;
+    signatures.extend(user.signatures);
+
+    let mut type_env = kata_core::ty::TypeEnv::with_parent(prelude.type_env);
+    let mut user_type_env = user.type_env;
+    type_env.merge_bindings_from(&mut user_type_env);
+
+    let mut enum_registry = prelude.enum_registry;
+    enum_registry.merge(user.enum_registry);
+    let mut struct_registry = prelude.struct_registry;
+    struct_registry.merge(user.struct_registry);
+
+    let mut refined_decls = prelude.refined_decls;
+    refined_decls.extend(user.refined_decls);
+
+    let mut enum_pred_decls = prelude.enum_pred_decls;
+    enum_pred_decls.extend(user.enum_pred_decls);
+
+    let mut interface_registry = prelude.interface_registry;
+    interface_registry.merge(user.interface_registry);
+
+    let mut refines_registry = prelude.refines_registry;
+    refines_registry.merge(user.refines_registry);
+
+    let mut functions = prelude.functions;
+    let user_fn_names: std::collections::HashSet<&str> =
+        user.functions.iter().map(|f| f.name.as_str()).collect();
+    functions.retain(|f| !user_fn_names.contains(f.name.as_str()));
+    functions.extend(user.functions);
+
+    let mut actions = prelude.actions;
+    let user_action_names: std::collections::HashSet<&str> =
+        user.actions.iter().map(|a| a.name.as_str()).collect();
+    actions.retain(|a| !user_action_names.contains(a.name.as_str()));
+    actions.extend(user.actions);
+
+    ResolvedModule {
+        type_env,
+        signatures,
+        enum_registry,
+        struct_registry,
+        refined_decls,
+        enum_pred_decls,
+        interface_registry,
+        refines_registry,
+        functions,
+        actions,
+    }
+}

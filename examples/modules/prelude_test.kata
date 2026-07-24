@@ -1,0 +1,9 @@
+# Testa que sub-módulos importados têm acesso ao prelude (Int, +).
+
+import prelude_user
+
+action main
+    let resultado := prelude_user.somar 10 32
+    echo!(resultado)
+
+main!()

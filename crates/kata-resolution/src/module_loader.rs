@@ -12,7 +12,7 @@ use kata_ast::{Item, Module};
 use kata_lexer::lex;
 use kata_parser::parse;
 
-use crate::{ResolvedModule, resolve};
+use crate::{merge_two, resolve, ResolvedModule};
 
 /// Erro de carregamento de módulo.
 #[derive(Debug, Clone)]
@@ -157,8 +157,17 @@ impl ModuleLoader {
             LoadError::ResolveError(format!("{e:?}"))
         })?;
 
+        // Sub-módulos precisam do prelude: Int, Float, +, etc.
+        // Sem isso, o TypeEnv do sub-módulo só tem Unit, e qualquer
+        // tipo do prelude falha com UnboundName.
+        let prelude = crate::prelude_sigs::load_prelude().map_err(|e| {
+            self.loading.remove(path);
+            LoadError::ResolveError(format!("erro ao carregar prelude para sub-módulo: {e:?}"))
+        })?;
+        let merged = merge_two(prelude, resolved);
+
         // Filtrar por exports: só itens exportados são visíveis para importadores.
-        let filtered = filter_exports(resolved, &module);
+        let filtered = filter_exports(merged, &module);
 
         self.loading.remove(path);
 
@@ -330,8 +339,9 @@ mod tests {
         let mut loader = ModuleLoader::new(vec![tmp.path().to_path_buf()]);
         let resolved = loader.load(&["simple".into()]).unwrap();
 
-        // 42 é a entry expr — não há assinaturas, mas o módulo resolve.
-        assert!(resolved.signatures.is_empty());
+        // 42 é a entry expr — não há assinaturas do usuário, mas o prelude
+        // é injetado, então signatures contém as do prelude (ex: +, -, *).
+        assert!(!resolved.signatures.is_empty());
     }
 
     #[test]
@@ -345,7 +355,8 @@ mod tests {
 
         let mut loader = ModuleLoader::new(vec![tmp.path().to_path_buf()]);
         let resolved = loader.load(&["util".into(), "math".into()]).unwrap();
-        assert_eq!(resolved.signatures.len(), 1);
+        // A assinatura do usuário (+) está entre as signatures (junto com prelude).
+        assert!(resolved.signatures.iter().any(|s| s.name == "+"));
     }
 
     #[test]
@@ -395,7 +406,8 @@ mod tests {
         let mut loader =
             ModuleLoader::new(vec![tmp1.path().to_path_buf(), tmp2.path().to_path_buf()]);
         let resolved = loader.load(&["found".into()]).unwrap();
-        assert!(resolved.signatures.is_empty());
+        // Prelude injetado — signatures não está vazio.
+        assert!(!resolved.signatures.is_empty());
     }
 
     #[test]
@@ -455,8 +467,9 @@ mod tests {
 
         let mut loader = ModuleLoader::new(vec![tmp.path().to_path_buf()]);
         let resolved = loader.load(&["open".into()]).unwrap();
-        // Sem export decl → ambas signatures visíveis
-        assert_eq!(resolved.signatures.len(), 2);
+        // Sem export decl → ambas signatures visíveis (junto com prelude).
+        assert!(resolved.signatures.iter().any(|s| s.name == "foo"));
+        assert!(resolved.signatures.iter().any(|s| s.name == "bar"));
     }
 
     #[test]
@@ -471,8 +484,9 @@ mod tests {
 
         let mut loader = ModuleLoader::new(vec![tmp.path().to_path_buf()]);
         let resolved = loader.load(&["filtered".into()]).unwrap();
-        // Só public_fn visível
-        assert_eq!(resolved.signatures.len(), 1);
-        assert_eq!(resolved.signatures[0].name, "public_fn");
+        // Só public_fn visível (private_fn filtrada pelo export).
+        // Prelude também está presente mas não tem public_fn/private_fn.
+        assert!(resolved.signatures.iter().any(|s| s.name == "public_fn"));
+        assert!(!resolved.signatures.iter().any(|s| s.name == "private_fn"));
     }
 }

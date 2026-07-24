@@ -1,0 +1,7 @@
+# Sub-módulo que usa tipos do prelude (Int, +).
+# Sem a Fase 5, o TypeEnv do sub-módulo só tem Unit — falha com UnboundName.
+
+somar :: Int Int => Int
+lambda x y: + x y
+
+export somar
