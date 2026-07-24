@@ -662,12 +662,11 @@ Isso é um detalhe de empacotamento, não de design da linguagem.
 
 ## 8. Evolução Futura (Não Escopo)
 
-- **Tipos qualificados (`mod.MyType`):** Hoje o `DotAccess` em
-  contexto de tipo (ex: `mod.MyType` em assinatura) não é tratado.
-  O `resolve_type_expr` não procura tipos em módulos importados.
-  Os tipos importados entram no `TypeEnv` sem prefixo (merge direto).
-  Tipos qualificados exigiriam mudanças no `resolve_type_expr` e no
-  parser de tipos.
+- **Tipos qualificados (`mod.MyType`):** ✅ Implementado.
+  `TypeExpr::Qualified { module, name }` no parser, `resolve_type_expr`
+  resolve por `origin` no `TypeEnv`, `merge_imports` copia `type_env` +
+  registries com `origin` preenchido. Detecção de ambiguidade quando dois
+  imports definem o mesmo tipo (usuário qualifica com `module.Type`).
 - **Reexportação:** `export MOD.(items)` — parser já suporta, mas
   semântica não implementada. Requer que o módulo importe `MOD` e
   reexporte itens específicos.
