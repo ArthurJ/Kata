@@ -178,6 +178,11 @@ pub fn resolve_type_expr(expr: &TypeExpr, env: &TypeEnv, iface_reg: &InterfaceRe
                         .expect("Set::(A) exige exatamente 1 param");
                     Ty::Set(Box::new(elem))
                 }
+                // Tuple::(Int, Text) → Ty::Tuple([Int, Text]).
+                // Permite anotar tuplas em posições de tipo (ex: Sender::Tuple::(Int, Int)).
+                "Tuple" => {
+                    Ty::Tuple(resolved_params)
+                }
                 // Tipos intrínsecos de canal.
                 "Sender" => {
                     let elem = resolved_params
