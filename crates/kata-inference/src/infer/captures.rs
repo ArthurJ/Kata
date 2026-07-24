@@ -107,13 +107,7 @@ fn collect_captures_in_expr(
             let mut all_captures: Vec<CaptureInfo> = Vec::new();
 
             for clause in clauses.iter() {
-                collect_clause_free_vars(
-                    clause,
-                    outer_env,
-                    local_tys,
-                    dispatch,
-                    &mut all_captures,
-                );
+                collect_clause_free_vars(clause, outer_env, local_tys, dispatch, &mut all_captures);
             }
 
             all_captures.sort_by(|a, b| a.name.cmp(&b.name));
@@ -121,12 +115,7 @@ fn collect_captures_in_expr(
 
             // Segunda passada: percorre bodies para Closures aninhadas (mut).
             for clause in clauses.iter_mut() {
-                collect_captures_in_lambda_clause(
-                    clause,
-                    outer_env,
-                    local_tys,
-                    dispatch,
-                );
+                collect_captures_in_lambda_clause(clause, outer_env, local_tys, dispatch);
             }
 
             return false; // já processamos — não deixa o visitor descer

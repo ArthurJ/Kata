@@ -8,7 +8,7 @@ use kata_ast::{Expr, Span, Spanned};
 use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 
-use crate::typed::{TypedExprKind};
+use crate::typed::TypedExprKind;
 
 use super::expr::{InferCtx, infer_expr};
 use super::helpers::InferResult;

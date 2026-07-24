@@ -15,8 +15,7 @@ use kata_resolution::EnumPredDeclInfo;
 
 use crate::desugar;
 use crate::typed::{
-    TypedExpr, TypedExprKind, TypedFunction, TypedGuardClause, TypedLambdaClause,
-    TypedPattern,
+    TypedExpr, TypedExprKind, TypedFunction, TypedGuardClause, TypedLambdaClause, TypedPattern,
 };
 
 use super::constructors_refined::{build_pred_call, substitute_hole};

@@ -458,8 +458,7 @@ pub(crate) fn infer_assert(
     let arms = vec![true_arm, false_arm];
 
     // Infere o match sintético.
-    let (match_ty, match_kind) =
-        infer_match(&cond_expr, &arms, span, env, ctx, false)?;
+    let (match_ty, match_kind) = infer_match(&cond_expr, &arms, span, env, ctx, false)?;
 
     Ok(TypedExpr {
         span: *span,

@@ -27,9 +27,7 @@ use kata_core::ty::{Ty, TypeEnv};
 use kata_resolution::RefinedDeclInfo;
 
 use crate::desugar;
-use crate::typed::{
-    TypedExpr, TypedExprKind, TypedFunction, TypedLambdaClause, TypedPattern,
-};
+use crate::typed::{TypedExpr, TypedExprKind, TypedFunction, TypedLambdaClause, TypedPattern};
 
 use super::expr::{InferCtx, infer_expr};
 use super::helpers::InferResult;

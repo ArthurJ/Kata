@@ -115,28 +115,16 @@ pub(crate) fn infer_expr_hinted(
 ) -> InferResult<TypedExpr> {
     let (ty, kind) = match expr {
         // ── Literais ─────────────────────────────────────────
-        Expr::IntLit { text } => (
-            Ty::int(),
-            TypedExprKind::IntLit { text: text.clone() },
-        ),
-        Expr::FloatLit { text } => (
-            Ty::float(),
-            TypedExprKind::FloatLit { text: text.clone() },
-        ),
-        Expr::TextLit { text } => (
-            Ty::text(),
-            TypedExprKind::TextLit { text: text.clone() },
-        ),
+        Expr::IntLit { text } => (Ty::int(), TypedExprKind::IntLit { text: text.clone() }),
+        Expr::FloatLit { text } => (Ty::float(), TypedExprKind::FloatLit { text: text.clone() }),
+        Expr::TextLit { text } => (Ty::text(), TypedExprKind::TextLit { text: text.clone() }),
         Expr::Unit => (Ty::Unit, TypedExprKind::Unit),
 
         // ── Identificador ────────────────────────────────────
         Expr::Ident { name } => {
             // Caminho 1: variável local no TypeEnv.
             if let Some(ty) = env.lookup(name).cloned() {
-                (
-                    ty,
-                    TypedExprKind::Ident { name: name.clone() },
-                )
+                (ty, TypedExprKind::Ident { name: name.clone() })
             } else {
                 // Caminho 2: variante unitária desqualificada (ex: `True`,
                 // `None`, `Vermelho`). Busca no EnumRegistry.
@@ -490,10 +478,7 @@ pub(crate) fn infer_expr_hinted(
                 )?;
                 typed_body.push(Spanned::new(typed, expr.span));
             }
-            (
-                Ty::Unit,
-                TypedExprKind::Loop { body: typed_body },
-            )
+            (Ty::Unit, TypedExprKind::Loop { body: typed_body })
         }
         Expr::Break => {
             if !ctx.in_loop {

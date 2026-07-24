@@ -384,7 +384,6 @@ fn lambda_assigned_to_var_has_function_type() {
     assert!(matches!(f_ty, Some(Ty::Function(_, _))));
 }
 
-
 // ── DoD 12: RedundantClause — cláusulas sobrepostas ──────────────
 
 /// Cláusula wildcard seguida de cláusula ident → redundante.

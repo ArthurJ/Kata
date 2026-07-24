@@ -238,7 +238,10 @@ fn reorder_test_dict_args(
         }
     }
 
-    let elements: Vec<Spanned<TypedExpr>> = reordered.into_iter().map(|s| s.unwrap()).collect();
+    let elements: Vec<Spanned<TypedExpr>> = reordered
+        .into_iter()
+        .map(|s| s.expect("todos elementos reordenados são Some"))
+        .collect();
     let tys: Vec<Ty> = elements.iter().map(|e| e.node.ty.clone()).collect();
 
     Ok(TypedExpr {

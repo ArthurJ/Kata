@@ -201,7 +201,12 @@ pub extern "C" fn kata_rt_broadcast_receiver_create(arena: i64, factory_handle: 
     // SAFETY: factory_handle veio de kata_rt_broadcast_create. O ponteiro
     // é válido enquanto a arena do criador viver. O criador é always-last
     // (bottom-up destruction), então o ponteiro é válido.
-    let last_seen = unsafe { *(*inner_ptr).version.lock().unwrap() };
+    let last_seen = unsafe {
+        *(*inner_ptr)
+            .version
+            .lock()
+            .expect("version mutex não envenenado")
+    };
     let rx = BroadcastReceiver {
         inner: inner_ptr,
         last_seen_version: last_seen,

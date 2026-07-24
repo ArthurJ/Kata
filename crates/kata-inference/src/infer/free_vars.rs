@@ -53,12 +53,7 @@ pub(crate) fn collect_free_vars(
                 // locais ao corpo, não propagam para fora. Assumimos o
                 // controle da descida.
                 for clause in clauses {
-                    collect_free_vars_lambda_clause(
-                        clause,
-                        local_bindings,
-                        dispatch,
-                        out,
-                    );
+                    collect_free_vars_lambda_clause(clause, local_bindings, dispatch, out);
                 }
                 return false; // não deixa o visitor descer — já fizemos
             }

@@ -63,12 +63,8 @@ fn collect_action_calls(expr: &TypedExpr, out: &mut Vec<(String, Span)>) {
             } => {
                 out.push((callee.clone(), e.span));
             }
-            TypedExprKind::Fork {
-                action_name, ..
-            } => {
-                if action_name != "__indirect_fork" {
-                    out.push((action_name.clone(), e.span));
-                }
+            TypedExprKind::Fork { action_name, .. } if action_name != "__indirect_fork" => {
+                out.push((action_name.clone(), e.span));
             }
             _ => {}
         }
@@ -168,12 +164,10 @@ fn collect_invoked_callable_params(
                 ffi_symbol: None,
                 ..
             } = &e.kind
+                && param_set.contains(callee.as_str())
+                && !invoked.iter().any(|p: &String| p == callee)
             {
-                if param_set.contains(callee.as_str())
-                    && !invoked.iter().any(|p: &String| p == callee)
-                {
-                    invoked.push(callee.clone());
-                }
+                invoked.push(callee.clone());
             }
             true
         });
@@ -206,9 +200,7 @@ fn find_call_sites_of(
                 }
             }
             TypedExprKind::Fork {
-                action_name,
-                args,
-                ..
+                action_name, args, ..
             } if action_name == target_name => {
                 let arg_actions = extract_action_idents_from_args(&args.node, action_names);
                 if !arg_actions.is_empty() {
@@ -246,14 +238,10 @@ fn extract_action_idents_from_args(
 }
 
 /// Verifica se expr é Ident { name } onde name é Action definida.
-fn extract_action_idents(
-    expr: &TypedExpr,
-    action_names: &HashSet<&str>,
-    out: &mut Vec<String>,
-) {
-    if let TypedExprKind::Ident { name } = &expr.kind {
-        if action_names.contains(name.as_str()) {
-            out.push(name.clone());
-        }
+fn extract_action_idents(expr: &TypedExpr, action_names: &HashSet<&str>, out: &mut Vec<String>) {
+    if let TypedExprKind::Ident { name } = &expr.kind
+        && action_names.contains(name.as_str())
+    {
+        out.push(name.clone());
     }
 }
