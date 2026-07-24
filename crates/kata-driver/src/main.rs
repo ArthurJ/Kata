@@ -490,6 +490,13 @@ pub(crate) fn merge_imports(
 }
 
 /// Registra itens de um módulo importado com nome qualificado `prefix.item`.
+///
+/// Renomeia signatures, functions e actions com o prefixo qualificado.
+/// Isso garante consistência em todos os passes:
+/// - DispatchTable: signature.name = "mod.fn"
+/// - TypedFunction: func.name = "mod.fn" (infer_module usa func_def.name)
+/// - symbol_table/kata_ids: chave = ("mod.fn", params, ret)
+/// - tree_shaking: fn_names e reached_fns usam "mod.fn"
 fn register_qualified(
     merged: &mut ResolvedModule,
     prefix: &str,
