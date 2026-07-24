@@ -374,7 +374,7 @@ handle da root arena em vez da fiber arena. Quando um canal é destruído
 | Tracking de blocos | `Vec` com `swap_remove` | O(1) remove, ordem não importa |
 | Root arena handle | TLS `ROOT_ARENA_HANDLE` | Consistente com padrão existente |
 | n_captures no header | Offset 16, 8 bytes | `decref` precisa saber o size para dealloc |
-| Canais na root arena | `kata_rt_channel_create(root_arena)` | Canais sobrevivem a fibers, natural que vivam na root |
+| Canais na root arena | `kata_rt_channel_create(root_arena)` | Canais sobrevivem a fibers, natural que vivam na root. Canal em si não é ARC-managed (handles são i64, sem header) — só precisa sobrevivência além do fiber, não deallocation individual. Leak em programas longos com muitos canais efêmeros é aceitável por enquanto (48-72 bytes por canal, ver §8) |
 | Alocação de escaping values | No site de criação, não no site de send | Evita cópia; escape analysis já marcou no TAST |
 
 ## 6. O Que Não Muda
@@ -404,6 +404,14 @@ handle da root arena em vez da fiber arena. Quando um canal é destruído
   recebem `Layout`).
 - **Compaction**: Mover valores vivos para blocos contíguos durante idle do
   scheduler.
+- **Lifecycle de canais**: Canais vivem na root_arena e não são
+  individualmente dealocados (não são ARC-managed). Footprint por canal:
+  Rendezvous 48 bytes, Queue 72 bytes, Broadcast 64 bytes (struct + tupla
+  de handles). Aceitável enquanto canais são de longa duração. Se surgir
+  uso com milhares de canais efêmeros, investigar mecanismo de cleanup
+  (drop no scheduler, arena intermediária, ou Box::new direto com
+  last-one-closes). Deixado em aberto — situação considerada pouco
+  provável no uso atual.
 - **ARC pass no AOT**: Hoje o ARC pass roda no JIT path. Garantir que o AOT
   path também emita incref/decref corretamente.
 
