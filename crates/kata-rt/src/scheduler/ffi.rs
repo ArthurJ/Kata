@@ -113,6 +113,10 @@ pub fn reset_scheduler() {
     crate::fiber::clear_suspend_tls();
     // Limpar TLS de log — LOG_CONFIG e registry de tópicos entre testes.
     crate::log::reset_log();
+    // Limpar TLS da root arena — entre testes, o handle anterior é invalidado.
+    crate::arena::ROOT_ARENA_HANDLE.with(|h| h.set(0));
+    // Limpar pool de arenas — entre testes, arenas anteriores são invalidadas.
+    crate::arena::reset_all_arenas();
 }
 
 /// Inicializa o scheduler thread-local e cria a arena raiz.

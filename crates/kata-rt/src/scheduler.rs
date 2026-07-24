@@ -33,7 +33,10 @@ pub use ffi::{
 
 use std::collections::{HashMap, VecDeque};
 
-use crate::arena::{kata_rt_arena_create, kata_rt_arena_destroy};
+use crate::arena::{
+    kata_rt_arena_create, kata_rt_arena_create_tracked, kata_rt_arena_destroy,
+    set_root_arena_handle,
+};
 use crate::channel::{can_recv, can_send};
 use crate::fiber::{KataFiber, SpawnArgs, YieldReason};
 
@@ -102,8 +105,12 @@ pub(crate) struct Scheduler {
 
 impl Scheduler {
     /// Cria um scheduler vazio com a arena raiz alocada.
+    ///
+    /// A arena raiz é Tracked (std::alloc + tracking) para suportar
+    /// dealloc individual de valores ARC-managed (Fio 16).
     pub(crate) fn new() -> Self {
-        let root_arena = kata_rt_arena_create();
+        let root_arena = kata_rt_arena_create_tracked();
+        set_root_arena_handle(root_arena);
         Scheduler {
             run_queue: VecDeque::new(),
             blocked: HashMap::new(),
@@ -272,8 +279,9 @@ impl Scheduler {
             }
 
             // 3. run_queue vazia, blocked vazia — todos terminaram.
-            // Destruir arena raiz.
-            kata_rt_arena_destroy(self.root_arena);
+            // NÃO destruir a root arena aqui — o resultado (root_result)
+            // pode ser um ponteiro para dados na root arena. A root arena
+            // é destruída em `reset_scheduler` ou no `Drop` do Scheduler.
             return Ok(self.root_result);
         }
     }
@@ -436,8 +444,9 @@ impl Scheduler {
             // Propagar: se o pai também está completado e sem filhos, destruir.
             self.try_destroy(pid);
         }
-        // Não destruir root_arena aqui — só quando todos os fibers terminaram.
-        // O run loop chama `kata_rt_arena_destroy(self.root_arena)` no fim.
+        // Não destruir root_arena aqui — o cleanup é feito por `reset_scheduler`
+        // ou `reset_all_arenas` entre testes. O `Drop` do Scheduler não pode
+        // acessar o pool de arenas (TLS pode estar sendo destruído).
     }
 }
 

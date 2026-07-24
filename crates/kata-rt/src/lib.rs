@@ -41,7 +41,10 @@ pub use rational::rat_from_text;
 
 // Re-exports de funções C-ABI para o codegen registrar no JIT.
 pub use arc::{kata_rt_alloc_arc, kata_rt_arc_fn_ptr, kata_rt_decref, kata_rt_incref};
-pub use arena::{kata_rt_arena_alloc, kata_rt_arena_create, kata_rt_arena_destroy};
+pub use arena::{
+    kata_rt_arena_alloc, kata_rt_arena_create, kata_rt_arena_create_tracked,
+    kata_rt_arena_dealloc, kata_rt_arena_destroy, kata_rt_get_root_arena_handle,
+};
 pub use array::{
     kata_rt_array_alloc, kata_rt_array_contains, kata_rt_array_get, kata_rt_array_get_checked,
     kata_rt_array_len, kata_rt_array_set,
