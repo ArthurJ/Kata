@@ -160,11 +160,19 @@ impl ModuleLoader {
         // Sub-módulos precisam do prelude: Int, Float, +, etc.
         // Sem isso, o TypeEnv do sub-módulo só tem Unit, e qualquer
         // tipo do prelude falha com UnboundName.
-        let prelude = crate::prelude_sigs::load_prelude().map_err(|e| {
-            self.loading.remove(path);
-            LoadError::ResolveError(format!("erro ao carregar prelude para sub-módulo: {e:?}"))
-        })?;
-        let merged = merge_two(prelude, resolved);
+        // Exceção: core.kata É o prelude — não injeta em si mesmo.
+        let is_core = path.file_stem().is_some_and(|s| s == "core");
+        let merged = if is_core {
+            resolved
+        } else {
+            let prelude = crate::prelude_sigs::load_prelude().map_err(|e| {
+                self.loading.remove(path);
+                LoadError::ResolveError(format!(
+                    "erro ao carregar prelude para sub-módulo: {e:?}"
+                ))
+            })?;
+            merge_two(prelude, resolved)
+        };
 
         // Filtrar por exports: só itens exportados são visíveis para importadores.
         let filtered = filter_exports(merged, &module);

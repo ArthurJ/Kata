@@ -313,6 +313,10 @@ fn run_pipeline(source: &str) -> miette::Result<ExecResult> {
 }
 
 /// Executa o pipeline completo com caminho do arquivo (para resolver imports).
+///
+/// Quando `file_path` é `Some`, o prelude (core.kata) é carregado como import
+/// implícito via ModuleLoader — não há `load_prelude()` separado.
+/// Quando `file_path` é `None` (eval), o prelude é injetado via `load_prelude()`.
 fn run_pipeline_with_file(source: &str, file_path: Option<&str>) -> miette::Result<ExecResult> {
     // 1. Lex
     let tokens = lex(source).map_err(IntoReport::into_report)?;
@@ -320,7 +324,7 @@ fn run_pipeline_with_file(source: &str, file_path: Option<&str>) -> miette::Resu
     // 2. Parse
     let module = parse(tokens).map_err(IntoReport::into_report)?;
 
-    // 2a. Carregar módulos importados (se houver)
+    // 2a. Carregar módulos importados (incluindo prelude como import implícito)
     let imports = if let Some(file) = file_path {
         load_module_imports(file, &module)?
     } else {
@@ -489,6 +493,7 @@ fn register_qualified(
 ///
 /// Cria um `ModuleLoader` com search paths = diretório do arquivo + stdlib.
 /// Retorna a lista de `ImportedModule` (vazia se não há imports).
+/// O prelude (core) é injetado separadamente pelo caller via load_prelude.
 pub(crate) fn load_module_imports(
     file: &str,
     module: &kata_ast::Module,
@@ -500,8 +505,6 @@ pub(crate) fn load_module_imports(
         .unwrap_or(Path::new("."))
         .to_path_buf();
 
-    // stdlib dir: relativo ao CARGO_MANIFEST_DIR do kata-driver.
-    // O kata-driver está em crates/kata-driver/, stdlib em stdlib/.
     let stdlib_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../stdlib")
         .canonicalize()
