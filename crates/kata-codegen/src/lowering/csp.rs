@@ -17,6 +17,23 @@ use kata_inference::{ChannelKind, TypedExpr, TypedExprKind, TypedSelectArm};
 
 use super::LowerCtx;
 
+/// Verifica se um tipo é ARC-managed (composto, alocado na arena).
+/// Primitivos (Int, Float, Boolean, Unit) são inline e não precisam de ARC.
+/// Text e Rational são ponteiros mas vivem na fiber/caller arena (não na root).
+/// Para canal, apenas tipos compostos estruturais (Tuple, Struct, List, etc.)
+/// são ARC-managed na root_arena.
+fn is_arc_type(ty: &Ty) -> bool {
+    match ty {
+        Ty::Prim(_) | Ty::Unit | Ty::Var(_) | Ty::InferVar(_) | Ty::Action(..) => false,
+        // Text/Rational são ponteiros mas não têm header ARC.
+        // Sender/Receiver são handles (i64), não ponteiros ARC.
+        // Function é fn_ptr, não ponteiro ARC.
+        Ty::Sender(_) | Ty::Receiver(_) | Ty::Function(..) => false,
+        // Compostos estruturais — alocados na arena, ARC-managed.
+        _ => true,
+    }
+}
+
 /// Lowera `TypedExprKind::ChannelCreate`.
 ///
 /// Chama a FFI de criação apropriada para o `ChannelKind`, depois constrói
@@ -156,10 +173,13 @@ pub(crate) fn lower_channel_send(
     let handle = super::expr::lower_expr(&channel.node, ctx)?;
     let val = super::expr::lower_expr(&value.node, ctx)?;
 
-    // incref antes de enviar: se o valor é Heap (ARC-managed na root_arena),
-    // o receiver compartilha ownership. O sender mantém sua ref; o receiver
-    // ganha uma adicional. Quando ambos decrementam, refcount → 0 e o
-    // bloco inteiro (header + dados) é desalocado da root_arena.
+    // incref + decref no channel send formam um par:
+    // - alloc cria com refcount=1 (referência do sender)
+    // - incref → refcount=2 (referência do receiver via canal)
+    // - send entrega o ponteiro ao canal
+    // - decref → refcount=1 (sender libera sua referência temporária)
+    // O receiver recebe com refcount=1. Quando consome e decrementa,
+    // refcount → 0 e o bloco inteiro (header + dados) é desalocado.
     crate::lowering::escape_arena::incref_if_heap(value.node.escape, val, ctx)?;
 
     let fref = ctx
@@ -168,6 +188,9 @@ pub(crate) fn lower_channel_send(
         .copied()
         .ok_or_else(|| super::CodegenError::FfiSymbolNotFound("kata_rt_channel_send".into()))?;
     ctx.builder.ins().call(fref, &[handle, val]);
+
+    // decref da referência temporária do sender.
+    crate::lowering::escape_arena::decref_if_heap(value.node.escape, val, ctx)?;
 
     // ChannelSend retorna Unit.
     Ok(ctx.builder.ins().iconst(I64, 0))
@@ -197,6 +220,11 @@ pub(crate) fn lower_channel_recv(
     let clif_ty = crate::ffi_sigs::ty_to_clif(recv_ty);
     let var = ctx.new_var(bind_name, clif_ty);
     ctx.builder.def_var(var, val);
+    // Valor recebido via canal: se o tipo é composto, é ARC-managed (Heap).
+    // Registrar para decref no epílogo da action.
+    if is_arc_type(recv_ty) {
+        ctx.arc_vars.push(var);
+    }
 
     Ok(val)
 }

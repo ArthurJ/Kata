@@ -205,6 +205,7 @@ pub(crate) fn lower_module(
             loop_break_block: None,
             loop_continue_block: None,
             closure_captures: HashMap::new(),
+            arc_vars: Vec::new(),
         };
 
         // Prólogo do entry point: inicializa scheduler (cria arena raiz internamente).

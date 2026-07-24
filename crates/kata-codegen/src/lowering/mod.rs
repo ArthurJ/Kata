@@ -129,6 +129,10 @@ pub(crate) struct LowerCtx<'a, 'b> {
     /// Populado quando `let f := lambda...` é lowerado. Usado no call site
     /// para alocar o CaptureBox e passar `box_ptr` como primeiro arg.
     pub closure_captures: HashMap<String, Vec<CaptureInfo>>,
+    /// Valores ARC-managed (Heap) que precisam decref no epílogo da action.
+    /// Cada entrada é uma Variable (global no Cranelift) que segura um data_ptr
+    /// retornado por alloc_tracked ou channel_recv.
+    pub arc_vars: Vec<cranelift_frontend::Variable>,
 }
 
 impl<'a, 'b> LowerCtx<'a, 'b> {

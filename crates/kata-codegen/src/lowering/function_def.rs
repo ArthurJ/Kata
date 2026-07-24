@@ -149,6 +149,7 @@ pub(crate) fn define_function_body(
             loop_break_block: None,
             loop_continue_block: None,
             closure_captures: HashMap::new(),
+            arc_vars: Vec::new(),
         };
 
         // params[0] = arena_handle (primeiro param implícito da nova ABI).

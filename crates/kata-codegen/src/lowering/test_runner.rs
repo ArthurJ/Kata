@@ -195,6 +195,7 @@ fn define_test_wrapper(
             loop_break_block: None,
             loop_continue_block: None,
             closure_captures: HashMap::new(),
+            arc_vars: Vec::new(),
         };
 
         // 1. scheduler_init → root_arena (igual ao entry point).

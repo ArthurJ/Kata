@@ -66,7 +66,7 @@ pub(crate) fn infer_channel_send(
         });
     }
 
-    let escape = escape_for_channel_send(tail_pos, ctx);
+    let escape = escape_for_channel_send(&typed_value.ty, tail_pos, ctx);
 
     Ok(TypedExpr {
         span: *span,
@@ -264,8 +264,24 @@ fn type_compatible(actual: &Ty, expected: &Ty) -> bool {
 }
 
 /// Escape target para `!>` — valor escapa para outro fiber.
-/// Valores enviados por canal sobrevivem ao fiber sender, então vão
-/// para a root_arena (TrackedArena) com deallocation individual via ARC.
-fn escape_for_channel_send(_tail_pos: bool, _ctx: &InferCtx) -> EscapeTarget {
-    EscapeTarget::Heap
+///
+/// Tipos compostos (Tuple, Struct, List, Array, Dict, Set, Text, etc.)
+/// são alocados na arena e precisam sobreviver ao sender → Heap.
+/// Tipos primitivos (Int/SMI, Float, Boolean, Unit) são inline (i64)
+/// e não precisam de ARC → Local (sem overhead).
+fn escape_for_channel_send(ty: &Ty, _tail_pos: bool, _ctx: &InferCtx) -> EscapeTarget {
+    match ty {
+        // Primitivos inline — sem alocação, sem ARC.
+        Ty::Prim(_) | Ty::Unit => EscapeTarget::Local,
+        // Action não pode viajar por canal (validado em infer_channel_send).
+        Ty::Action(..) => EscapeTarget::Local,
+        // Var/InferVar — conservador: Local (não sabemos o tipo concreto).
+        Ty::Var(_) | Ty::InferVar(_) => EscapeTarget::Local,
+        // Sender/Receiver são handles (i64), não ponteiros ARC.
+        Ty::Sender(_) | Ty::Receiver(_) => EscapeTarget::Local,
+        // Function é fn_ptr, não ponteiro ARC.
+        Ty::Function(..) => EscapeTarget::Local,
+        // Compostos — alocados na arena, precisam de ARC.
+        _ => EscapeTarget::Heap,
+    }
 }

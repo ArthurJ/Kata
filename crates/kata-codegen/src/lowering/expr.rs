@@ -320,6 +320,10 @@ pub(crate) fn lower_expr(
             let clif_ty = ty_to_clif(&value.node.ty);
             let var = ctx.new_var(name, clif_ty);
             ctx.builder.def_var(var, val);
+            // Se o valor é Heap (ARC-managed), registrar para decref no epílogo.
+            if value.node.escape == kata_core::escape::EscapeTarget::Heap {
+                ctx.arc_vars.push(var);
+            }
             // Let retorna Unit.
             Ok(ctx.builder.ins().iconst(I64, 0))
         }

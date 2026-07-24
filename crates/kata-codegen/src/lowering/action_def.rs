@@ -127,6 +127,7 @@ pub(crate) fn define_kata_action(
             loop_break_block: None,
             loop_continue_block: None,
             closure_captures: HashMap::new(),
+            arc_vars: Vec::new(),
         };
 
         // Cria epilogue_block com 1 block param (result).
@@ -200,10 +201,24 @@ pub(crate) fn define_kata_action(
             );
         }
 
-        // Define o epilogue_block: return_ (sem arena_destroy — scheduler destrói).
+        // Define o epilogue_block: decref de ARC vars + return_.
         lower.builder.switch_to_block(epilogue_block);
         lower.builder.seal_block(epilogue_block);
         let result = lower.builder.block_params(epilogue_block)[0];
+
+        // Decref de variáveis ARC-managed (Heap) no epílogo.
+        // Cada variável segura um data_ptr na root_arena com refcount ≥1.
+        // O decref libera a referência local; se refcount → 0, o bloco
+        // inteiro (header + dados) é desalocado da root_arena.
+        let decref_ref = lower
+            .ffi_refs
+            .get("kata_rt_decref_tracked")
+            .copied()
+            .ok_or_else(|| CodegenError::FfiSymbolNotFound("kata_rt_decref_tracked".into()))?;
+        for &var in &lower.arc_vars {
+            let val = lower.builder.use_var(var);
+            lower.builder.ins().call(decref_ref, &[val]);
+        }
 
         // Se @log quando Exit, injeta antes do return (epílogo).
         if let Some(TypedLogSpec::Exit { .. }) = &action.log {
