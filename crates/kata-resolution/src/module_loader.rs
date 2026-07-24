@@ -12,7 +12,7 @@ use kata_ast::{Item, Module};
 use kata_lexer::lex;
 use kata_parser::parse;
 
-use crate::{merge_two, resolve, ResolvedModule};
+use crate::{merge_two, resolve_with_origin, ResolvedModule};
 
 /// Erro de carregamento de módulo.
 #[derive(Debug, Clone)]
@@ -51,6 +51,10 @@ pub struct ImportedModule {
     pub resolved: Arc<ResolvedModule>,
     /// Como foi importado.
     pub import_kind: ImportKind,
+    /// Nome do módulo (último componente do path — ex: "matematica"
+    /// para `import utilidades.matematica`). Usado como `origin`
+    /// ao copiar tipos para o módulo importador.
+    pub module_name: String,
 }
 
 /// Carregador de módulos com cache e cycle detection.
@@ -99,6 +103,7 @@ impl ModuleLoader {
             } = &item.node
             {
                 let resolved = self.load(path)?;
+                let module_name = path.last().cloned().unwrap_or_default();
                 let import_kind = match (alias, items) {
                     (Some(alias_name), _) => ImportKind::WholeModuleAliased {
                         alias: alias_name.clone(),
@@ -115,6 +120,7 @@ impl ModuleLoader {
                 imports.push(ImportedModule {
                     resolved,
                     import_kind,
+                    module_name,
                 });
             }
         }
@@ -152,7 +158,8 @@ impl ModuleLoader {
             self.loading.remove(path);
             LoadError::ParseError(format!("{e:?}"))
         })?;
-        let resolved = resolve(&module).map_err(|e| {
+        let module_name = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+        let resolved = resolve_with_origin(&module, &module_name).map_err(|e| {
             self.loading.remove(path);
             LoadError::ResolveError(format!("{e:?}"))
         })?;

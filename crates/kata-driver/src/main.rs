@@ -387,6 +387,7 @@ pub(crate) fn merge_imports(
     imports: &[kata_resolution::ImportedModule],
 ) {
     for imported in imports {
+        let origin = &imported.module_name;
         match &imported.import_kind {
             kata_resolution::ImportKind::Selective { items } => {
                 // Import seletivo: trazer itens nomeados para o escopo direto.
@@ -432,7 +433,19 @@ pub(crate) fn merge_imports(
                             merged.actions.push(renamed);
                         }
                     }
+                    // TypeEnv: copiar binding do tipo importado
+                    if let Some(binding) = imported.resolved.type_env.lookup_binding(&imp_item.name)
+                    {
+                        merged.type_env.define(
+                            target_name,
+                            binding.ty.clone(),
+                            origin,
+                        );
+                    }
                 }
+                // Copiar registries do módulo importado (transitivo para
+                // interfaces/structs/enums referenciados pelos itens).
+                merge_registries(merged, &imported.resolved);
             }
             kata_resolution::ImportKind::WholeModule { prefix } => {
                 // Módulo inteiro: registrar cada item exportado com nome
@@ -440,12 +453,37 @@ pub(crate) fn merge_imports(
                 // { Ident("mod"), Field("fn") } procurando `mod.fn` no
                 // DispatchTable.
                 register_qualified(merged, prefix, &imported.resolved);
+                // Copiar tipos com nome qualificado `prefix.Type`
+                for (name, binding) in imported.resolved.type_env.local_bindings_full() {
+                    let qual_name = format!("{prefix}.{name}");
+                    merged.type_env.define(&qual_name, binding.ty.clone(), origin);
+                }
+                merge_registries(merged, &imported.resolved);
             }
             kata_resolution::ImportKind::WholeModuleAliased { alias } => {
                 register_qualified(merged, alias, &imported.resolved);
+                // Copiar tipos com nome qualificado `alias.Type`
+                for (name, binding) in imported.resolved.type_env.local_bindings_full() {
+                    let qual_name = format!("{alias}.{name}");
+                    merged.type_env.define(&qual_name, binding.ty.clone(), origin);
+                }
+                merge_registries(merged, &imported.resolved);
             }
         }
     }
+}
+
+/// Mergeia registries (enum, struct, interface, refines) do módulo
+/// importado para o módulo merged. Não sobrescreve entradas existentes
+/// (tipos locais têm prioridade).
+fn merge_registries(
+    merged: &mut ResolvedModule,
+    imported: &kata_resolution::ResolvedModule,
+) {
+    merged.enum_registry.merge(imported.enum_registry.clone());
+    merged.struct_registry.merge(imported.struct_registry.clone());
+    merged.interface_registry.merge(imported.interface_registry.clone());
+    merged.refines_registry.merge(imported.refines_registry.clone());
 }
 
 /// Registra itens de um módulo importado com nome qualificado `prefix.item`.

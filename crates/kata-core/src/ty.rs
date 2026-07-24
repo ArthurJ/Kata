@@ -278,6 +278,13 @@ impl TypeEnv {
     pub(crate) fn local_bindings(&self) -> impl Iterator<Item = (&str, &Ty)> {
         self.bindings.iter().map(|(k, v)| (k.as_str(), &v.ty))
     }
+
+    /// Itera sobre os bindings deste escopo (não do parent),
+    /// retornando o `TypeBinding` completo (com `origin`).
+    /// Usado por `merge_imports` para copiar tipos de módulos importados.
+    pub fn local_bindings_full(&self) -> impl Iterator<Item = (&str, &TypeBinding)> {
+        self.bindings.iter().map(|(k, v)| (k.as_str(), v))
+    }
 }
 
 impl Default for TypeEnv {
