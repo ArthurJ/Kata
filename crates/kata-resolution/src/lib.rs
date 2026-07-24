@@ -14,6 +14,8 @@ mod types;
 pub use type_resolve::{collect_type_params, resolve_type_expr};
 pub use types::*;
 
+pub use module_loader::{ImportKind, ImportedModule, ModuleLoader, filter_exports};
+
 use kata_ast::{Item, Module};
 use kata_core::{Ty, TypeEnv};
 

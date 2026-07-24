@@ -114,7 +114,7 @@ fn cmd_eval(expr: &str) -> miette::Result<()> {
 
 fn cmd_run(file: &str) -> miette::Result<()> {
     let source = read_source(file)?;
-    let result = run_pipeline(&source)?;
+    let result = run_pipeline_with_file(&source, Some(file))?;
     // Unit de retorno de `main` não carrega informação — o output do
     // programa já foi produzido via echo!/_print!. Suprimir o `()`.
     if !matches!(result.ty, Ty::Unit) {
@@ -155,11 +155,16 @@ fn cmd_test(path: &str, filter: Option<&str>) -> miette::Result<()> {
         // Pipeline até jit_compile_tests.
         let tokens = lex(&source).map_err(IntoReport::into_report)?;
         let module = parse(tokens).map_err(IntoReport::into_report)?;
+
+        // Carregar módulos importados (se houver)
+        let imports = load_module_imports(&file.to_string_lossy(), &module)?;
+
         let prelude = load_prelude()
             .map_err(|e| miette::Report::msg(format!("erro ao carregar prelude: {e:?}")))?;
         let user = resolve(&module)
             .map_err(|e| miette::Report::msg(format!("erro de resolução: {e:?}")))?;
-        let resolved = merge_resolved(prelude, user);
+        let mut resolved = merge_resolved(prelude, user);
+        merge_imports(&mut resolved, &imports);
         let typed = infer_module(&module, &resolved).map_err(IntoReport::into_report)?;
         let typed = monomorphize(typed);
         let typed = optimize(typed);
@@ -304,18 +309,33 @@ pub(crate) struct ExecResult {
 
 /// Executa o pipeline completo: lex → parse → resolve → infer → optimize → codegen → JIT.
 fn run_pipeline(source: &str) -> miette::Result<ExecResult> {
+    run_pipeline_with_file(source, None)
+}
+
+/// Executa o pipeline completo com caminho do arquivo (para resolver imports).
+fn run_pipeline_with_file(source: &str, file_path: Option<&str>) -> miette::Result<ExecResult> {
     // 1. Lex
     let tokens = lex(source).map_err(IntoReport::into_report)?;
 
     // 2. Parse
     let module = parse(tokens).map_err(IntoReport::into_report)?;
 
+    // 2a. Carregar módulos importados (se houver)
+    let imports = if let Some(file) = file_path {
+        load_module_imports(file, &module)?
+    } else {
+        Vec::new()
+    };
+
     // 3. Resolve (prelude + módulo do usuário)
     let prelude = load_prelude()
         .map_err(|e| miette::Report::msg(format!("erro ao carregar prelude: {e:?}")))?;
     let user =
         resolve(&module).map_err(|e| miette::Report::msg(format!("erro de resolução: {e:?}")))?;
-    let resolved = merge_resolved(prelude, user);
+    let mut resolved = merge_resolved(prelude, user);
+
+    // 3a. Merge imports (itens seletivos no escopo direto)
+    merge_imports(&mut resolved, &imports);
 
     // 4. Infer (typeck + dispatch)
     let typed = infer_module(&module, &resolved).map_err(IntoReport::into_report)?;
@@ -402,7 +422,103 @@ pub(crate) fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> R
     }
 }
 
+/// Mergeia módulos importados no ResolvedModule (prelude + user já mergeados).
+///
+/// Para cada `ImportedModule`:
+/// - `Selective { items }`: traz itens nomeados para o escopo direto (sem prefixo).
+/// - `WholeModule { prefix }`: registra no ModuleRegistry para acesso via `mod.fn`.
+/// - `WholeModuleAliased { alias }`: registra no ModuleRegistry para acesso via `alias.fn`.
+///
+/// O ModuleRegistry é armazenado no `ResolvedModule` (futuro). Por ora, os itens
+/// seletivos são mergeados diretamente. O acesso qualificado (`mod.fn`) será
+/// implementado na Fase 4 (ModuleAccess no inference).
+pub(crate) fn merge_imports(
+    merged: &mut ResolvedModule,
+    imports: &[kata_resolution::ImportedModule],
+) {
+    for imported in imports {
+        match &imported.import_kind {
+            kata_resolution::ImportKind::Selective { items } => {
+                // Import seletivo: trazer itens nomeados para o escopo direto.
+                for item_name in items {
+                    // Signatures
+                    if let Some(sig) = imported
+                        .resolved
+                        .signatures
+                        .iter()
+                        .find(|s| &s.name == item_name)
+                    {
+                        // Evitar duplicata: se já existe com mesmo nome, pular.
+                        if !merged.signatures.iter().any(|s| s.name == sig.name) {
+                            merged.signatures.push(sig.clone());
+                        }
+                    }
+                    // Functions
+                    if let Some(func) = imported
+                        .resolved
+                        .functions
+                        .iter()
+                        .find(|f| &f.name == item_name)
+                    {
+                        if !merged.functions.iter().any(|f| f.name == func.name) {
+                            merged.functions.push(func.clone());
+                        }
+                    }
+                    // Actions
+                    if let Some(action) = imported
+                        .resolved
+                        .actions
+                        .iter()
+                        .find(|a| &a.name == item_name)
+                    {
+                        if !merged.actions.iter().any(|a| a.name == action.name) {
+                            merged.actions.push(action.clone());
+                        }
+                    }
+                }
+            }
+            kata_resolution::ImportKind::WholeModule { prefix: _ } => {
+                // Fase 4: registrar no ModuleRegistry para acesso via `mod.fn`.
+                // Por ora, não faz nada — o acesso qualificado será implementado
+                // quando o ModuleAccess no inference estiver pronto.
+            }
+            kata_resolution::ImportKind::WholeModuleAliased { alias: _ } => {
+                // Fase 4: registrar no ModuleRegistry para acesso via `alias.fn`.
+            }
+        }
+    }
+}
+
 // ── Helpers ────────────────────────────────────────────────
+
+/// Carrega módulos importados por um arquivo.
+///
+/// Cria um `ModuleLoader` com search paths = diretório do arquivo + stdlib.
+/// Retorna a lista de `ImportedModule` (vazia se não há imports).
+pub(crate) fn load_module_imports(
+    file: &str,
+    module: &kata_ast::Module,
+) -> miette::Result<Vec<kata_resolution::ImportedModule>> {
+    use kata_resolution::ModuleLoader;
+
+    let entry_dir = Path::new(file)
+        .parent()
+        .unwrap_or(Path::new("."))
+        .to_path_buf();
+
+    // stdlib dir: relativo ao CARGO_MANIFEST_DIR do kata-driver.
+    // O kata-driver está em crates/kata-driver/, stdlib em stdlib/.
+    let stdlib_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../stdlib")
+        .canonicalize()
+        .unwrap_or_else(|_| Path::new("../../stdlib").to_path_buf());
+
+    let search_paths = vec![entry_dir, stdlib_dir];
+    let mut loader = ModuleLoader::new(search_paths);
+    loader
+        .load_imports(module)
+        .map_err(|e| miette::Report::msg(format!("erro ao carregar imports: {e:?}")))
+}
 
 /// Lê o conteúdo de um arquivo.
 pub(crate) fn read_source(path: &str) -> miette::Result<String> {

@@ -145,6 +145,13 @@ impl InterfaceRegistry {
             .collect()
     }
 
+    /// Itera sobre todas as implementações (read-only).
+    /// Usado pelo `filter_exports` para computar o fechamento transitivo
+    /// do export de tipos.
+    pub fn impls_view(&self) -> &[ImplEntry] {
+        &self.impls
+    }
+
     /// Lista todas as implementações de uma interface.
     pub fn get_impls_for_interface(&self, iface_name: &str) -> Vec<&ImplEntry> {
         self.impls
