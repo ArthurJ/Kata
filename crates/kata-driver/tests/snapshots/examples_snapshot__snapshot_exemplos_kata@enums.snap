@@ -1,0 +1,8 @@
+---
+source: crates/kata-driver/tests/examples_snapshot.rs
+expression: output
+---
+Verde
+Some(10)
+OK(200)
+Normal(22.5)

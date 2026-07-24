@@ -1,0 +1,8 @@
+---
+source: crates/kata-driver/tests/examples_snapshot.rs
+expression: output
+---
+--- stderr ---
+Error: parse.unexpected_token
+
+  × token inesperado: esperado ``::` após nome do parâmetro`, encontrado `)`

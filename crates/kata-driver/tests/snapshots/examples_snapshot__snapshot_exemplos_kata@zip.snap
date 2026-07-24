@@ -1,0 +1,6 @@
+---
+source: crates/kata-driver/tests/examples_snapshot.rs
+expression: output
+---
+Zip Concluido
+[(1, 10), (2, 20), (3, 30)]

@@ -1,0 +1,14 @@
+# Teste do sistema de import/export.
+# Importa mock_math como módulo inteiro (acesso via mod.fn)
+# e seletivamente (triplicar no escopo direto).
+
+import mock_math
+import mock_math.(triplicar)
+
+action main
+    let dobro := mock_math.dobrar 21
+    let triplo := triplicar 21
+    echo!(dobro)
+    echo!(triplo)
+
+main!()

@@ -1,0 +1,9 @@
+---
+source: crates/kata-driver/tests/examples_snapshot.rs
+expression: output
+---
+--- stderr ---
+Error: type.mismatch
+
+  × tipo incompatível: esperado `Struct("Bool") (hint de retorno)`, encontrado
+  │ `nenhuma overload de > retorna tipo compatível com Struct("Bool")`

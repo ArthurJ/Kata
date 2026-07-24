@@ -1,0 +1,9 @@
+---
+source: crates/kata-driver/tests/examples_snapshot.rs
+expression: output
+---
+--- stderr ---
+Error: type.mismatch
+
+  × tipo incompatível: esperado `ultima variante de Result unitaria (cauda do
+  │ fallback)`, encontrado `Result::Err com payload`

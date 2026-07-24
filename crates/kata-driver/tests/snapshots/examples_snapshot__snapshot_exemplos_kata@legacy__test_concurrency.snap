@@ -1,0 +1,11 @@
+---
+source: crates/kata-driver/tests/examples_snapshot.rs
+expression: output
+---
+--- stderr ---
+Error: type.mismatch
+
+  × tipo incompatível: esperado `tupla (action_name, args) para fork!`,
+  │ encontrado `Grouping { inner: Spanned { node: Ident { name:
+  │ "tarefa_pesada" }, span: Span { offset: 223, line: 9, col: 11, len:
+  │ 13 } } }`

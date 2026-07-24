@@ -88,6 +88,46 @@ pub(crate) fn infer_apply(
 
     let func_name = match callee_core {
         Expr::Ident { name } => name.clone(),
+        Expr::DotAccess { expr: inner, index } => {
+            // Module access: `mod.fn args` — o callee é `DotAccess`.
+            // Tenta resolver como module access primeiro. Se `mod` não é
+            // variável local e `mod.fn` está no DispatchTable, usa o nome
+            // qualificado. Caso contrário, cai para o erro de non-ident callee.
+            if let Expr::Ident { name: mod_name } = &inner.node {
+                if let kata_ast::DotIndex::Field(field_name) = index {
+                    if env.lookup(mod_name).is_none() {
+                        let qual_name = format!("{mod_name}.{field_name}");
+                        if ctx.table.get_overloads(&qual_name).is_some() {
+                            qual_name
+                        } else {
+                            return Err(MiddleError::UnboundName {
+                                name: format!(
+                                    "`{mod_name}.{field_name}` não encontrado no DispatchTable"
+                                ),
+                                span: callee.span.into(),
+                            });
+                        }
+                    } else {
+                        // `mod` é variável local — DotAccess é field access em
+                        // struct, não module access. Não é um callee válido.
+                        return Err(MiddleError::UnboundName {
+                            name: "<non-ident callee>".into(),
+                            span: callee.span.into(),
+                        });
+                    }
+                } else {
+                    return Err(MiddleError::UnboundName {
+                        name: "<non-ident callee>".into(),
+                        span: callee.span.into(),
+                    });
+                }
+            } else {
+                return Err(MiddleError::UnboundName {
+                    name: "<non-ident callee>".into(),
+                    span: callee.span.into(),
+                });
+            }
+        }
         _ => {
             return Err(MiddleError::UnboundName {
                 name: "<non-ident callee>".into(),

@@ -1,0 +1,13 @@
+# Módulo de exemplo — funções matemáticas simples.
+# Exporta dobrar e triplicar. Oculta `quadruplar` (não exportada).
+
+dobrar :: Int => Int
+lambda x: + x x
+
+triplicar :: Int => Int
+lambda x: * x 3
+
+quadruplar :: Int => Int
+lambda x: * x 4
+
+export dobrar triplicar

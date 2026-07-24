@@ -426,12 +426,11 @@ pub(crate) fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> R
 ///
 /// Para cada `ImportedModule`:
 /// - `Selective { items }`: traz itens nomeados para o escopo direto (sem prefixo).
-/// - `WholeModule { prefix }`: registra no ModuleRegistry para acesso via `mod.fn`.
-/// - `WholeModuleAliased { alias }`: registra no ModuleRegistry para acesso via `alias.fn`.
-///
-/// O ModuleRegistry é armazenado no `ResolvedModule` (futuro). Por ora, os itens
-/// seletivos são mergeados diretamente. O acesso qualificado (`mod.fn`) será
-/// implementado na Fase 4 (ModuleAccess no inference).
+/// - `WholeModule { prefix }`: registra cada item exportado com nome qualificado
+///   `prefix.item` nas signatures/functions/actions. O inference resolve
+///   `mod.fn` como `DotAccess { Ident("mod"), Field("fn") }` procurando
+///   `mod.fn` no DispatchTable.
+/// - `WholeModuleAliased { alias }`: mesmo que WholeModule mas com prefixo alias.
 pub(crate) fn merge_imports(
     merged: &mut ResolvedModule,
     imports: &[kata_resolution::ImportedModule],
@@ -448,7 +447,6 @@ pub(crate) fn merge_imports(
                         .iter()
                         .find(|s| &s.name == item_name)
                     {
-                        // Evitar duplicata: se já existe com mesmo nome, pular.
                         if !merged.signatures.iter().any(|s| s.name == sig.name) {
                             merged.signatures.push(sig.clone());
                         }
@@ -477,14 +475,48 @@ pub(crate) fn merge_imports(
                     }
                 }
             }
-            kata_resolution::ImportKind::WholeModule { prefix: _ } => {
-                // Fase 4: registrar no ModuleRegistry para acesso via `mod.fn`.
-                // Por ora, não faz nada — o acesso qualificado será implementado
-                // quando o ModuleAccess no inference estiver pronto.
+            kata_resolution::ImportKind::WholeModule { prefix } => {
+                // Módulo inteiro: registrar cada item exportado com nome
+                // qualificado `prefix.item`. O inference resolve DotAccess
+                // { Ident("mod"), Field("fn") } procurando `mod.fn` no
+                // DispatchTable.
+                register_qualified(merged, prefix, &imported.resolved);
             }
-            kata_resolution::ImportKind::WholeModuleAliased { alias: _ } => {
-                // Fase 4: registrar no ModuleRegistry para acesso via `alias.fn`.
+            kata_resolution::ImportKind::WholeModuleAliased { alias } => {
+                register_qualified(merged, alias, &imported.resolved);
             }
+        }
+    }
+}
+
+/// Registra itens de um módulo importado com nome qualificado `prefix.item`.
+fn register_qualified(
+    merged: &mut ResolvedModule,
+    prefix: &str,
+    resolved: &kata_resolution::ResolvedModule,
+) {
+    for sig in &resolved.signatures {
+        let qual_name = format!("{prefix}.{}", sig.name);
+        if !merged.signatures.iter().any(|s| s.name == qual_name) {
+            let mut qual_sig = sig.clone();
+            qual_sig.name = qual_name;
+            merged.signatures.push(qual_sig);
+        }
+    }
+    for func in &resolved.functions {
+        let qual_name = format!("{prefix}.{}", func.name);
+        if !merged.functions.iter().any(|f| f.name == qual_name) {
+            let mut qual_func = func.clone();
+            qual_func.name = qual_name;
+            merged.functions.push(qual_func);
+        }
+    }
+    for action in &resolved.actions {
+        let qual_name = format!("{prefix}.{}", action.name);
+        if !merged.actions.iter().any(|a| a.name == qual_name) {
+            let mut qual_action = action.clone();
+            qual_action.name = qual_name;
+            merged.actions.push(qual_action);
         }
     }
 }

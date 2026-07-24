@@ -1,0 +1,5 @@
+---
+source: crates/kata-driver/tests/examples_snapshot.rs
+expression: output
+---
+pequeno

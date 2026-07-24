@@ -1,0 +1,7 @@
+---
+source: crates/kata-driver/tests/examples_snapshot.rs
+expression: output
+---
+--- stderr ---
+Error:   × erro de resolução: [UnknownDirective { name: "parallel", context:
+  │ "action", item_name: "cpu_infinita" }]

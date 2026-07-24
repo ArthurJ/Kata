@@ -1,0 +1,8 @@
+---
+source: crates/kata-driver/tests/examples_snapshot.rs
+expression: output
+---
+--- stderr ---
+Error: type.ambiguous_dispatch
+
+  × dispatch ambíguo: múltiplas sobrecargas compatíveis para `*`

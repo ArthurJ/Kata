@@ -1,0 +1,20 @@
+---
+source: crates/kata-driver/tests/examples_snapshot.rs
+expression: output
+---
+--- map: multiplicar por 2 ---
+2
+4
+6
+8
+10
+--- filter: elementos pares ---
+2
+4
+--- fold: soma acumulada ---
+15
+--- map com lista ---
+3
+6
+9
+fim

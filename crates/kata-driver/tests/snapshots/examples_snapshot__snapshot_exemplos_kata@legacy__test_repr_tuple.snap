@@ -1,0 +1,8 @@
+---
+source: crates/kata-driver/tests/examples_snapshot.rs
+expression: output
+---
+--- stderr ---
+Error: type.no_overload
+
+  × nenhuma sobrecarga compatível para `echo` com os argumentos fornecidos

@@ -1,0 +1,6 @@
+---
+source: crates/kata-driver/tests/examples_snapshot.rs
+expression: output
+---
+500000500000
+2432902008176640000

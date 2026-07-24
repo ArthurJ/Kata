@@ -1,0 +1,9 @@
+---
+source: crates/kata-driver/tests/examples_snapshot.rs
+expression: output
+---
+--- stderr ---
+Error:   × erro de resolução: [UnknownDirective { name: "log", context: "action",
+  │ item_name: "test_log: when é obrigatório em @log" }, UnknownDirective
+  │ { name: "log", context: "action", item_name: "test_log: when deve ser
+  │ \"enter\" ou \"exit\", got \"\"" }]

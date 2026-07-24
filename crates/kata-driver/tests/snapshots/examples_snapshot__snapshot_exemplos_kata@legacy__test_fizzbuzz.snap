@@ -1,0 +1,12 @@
+---
+source: crates/kata-driver/tests/examples_snapshot.rs
+expression: output
+---
+--- stderr ---
+Error: type.mismatch
+
+  × tipo incompatível: esperado `Tuple`, encontrado `Apply { callee: Spanned
+  │ { node: Ident { name: "mod" }, span: Span { offset: 141, line: 8, col: 23,
+  │ len: 3 } }, args: [Spanned { node: Ident { name: "x" }, span: Span
+  │ { offset: 145, line: 8, col: 27, len: 1 } }, Spanned { node: IntLit
+  │ { text: "3" }, span: Span { offset: 147, line: 8, col: 29, len: 1 } }] }`
