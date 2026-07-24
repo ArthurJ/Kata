@@ -119,6 +119,24 @@ impl Parser {
                         ));
                     }
                 }
+                // `module.Type` — tipo qualificado de módulo importado.
+                // Após consumir o Ident, se há `.` segue outro Ident.
+                if matches!(self.peek(), Token::Dot) {
+                    self.advance(); // consome .
+                    if let Token::Ident(type_name) = self.peek().clone() {
+                        let dot_end = self.advance();
+                        let span = start.cover(dot_end);
+                        return Ok(Spanned::new(
+                            TypeExpr::Qualified {
+                                module: name,
+                                name: type_name,
+                            },
+                            span,
+                        ));
+                    } else {
+                        return Err(self.error("type name after `.`"));
+                    }
+                }
                 Ok(Spanned::new(TypeExpr::Named(name), start))
             }
             Token::LBracket => {

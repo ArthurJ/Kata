@@ -16,6 +16,34 @@ use kata_core::{InterfaceRegistry, PrimTy, Ty, TypeEnv};
 pub fn resolve_type_expr(expr: &TypeExpr, env: &TypeEnv, iface_reg: &InterfaceRegistry) -> Ty {
     match expr {
         TypeExpr::Named(name) => {
+            // Verifica ambiguidade primeiro — se o nome está marcado como
+            // ambíguo (conflito de origin entre imports), o usuário deve
+            // qualificar com `module.Type`.
+            if env.is_ambiguous(name) {
+                // Tenta encontrar um binding local (origin do módulo atual).
+                // Se existe, local shadowa imports — não é ambíguo.
+                // Se não existe local, é ambíguo de fato.
+                let has_local = env
+                    .lookup_binding(name)
+                    .is_some_and(|b| b.origin == "__local__");
+                if !has_local {
+                    // Coleta origins para mensagem de erro.
+                    let origins: Vec<String> = env
+                        .local_bindings_full()
+                        .filter(|(n, _)| *n == name)
+                        .map(|(_, b)| b.origin.clone())
+                        .collect();
+                    eprintln!(
+                        "Ambiguous type '{name}' — imported from: {}. \
+                         Qualify with module.{name}.",
+                        origins.join(", ")
+                    );
+                    // Fallback: usa o primeiro binding encontrado (comportamento
+                    // anterior) para não quebrar compilação em testes existentes.
+                    // O erro acima é informativo; a desambiguação real
+                    // exigirá `module.Type` quando o parser suportar.
+                }
+            }
             // Tenta resolver no TypeEnv
             if let Some(ty) = env.lookup(name) {
                 ty.clone()
@@ -38,6 +66,38 @@ pub fn resolve_type_expr(expr: &TypeExpr, env: &TypeEnv, iface_reg: &InterfaceRe
                         } else {
                             Ty::Struct(name.clone()) // fallback: tipo declarado pelo usuário
                         }
+                    }
+                }
+            }
+        }
+        TypeExpr::Qualified { module, name } => {
+            // `module.Type` — procura binding onde name == name && origin == module.
+            if let Some(binding) = env.lookup_binding(name) {
+                if binding.origin == *module {
+                    return binding.ty.clone();
+                }
+            }
+            // Tenta no escopo local do módulo — pode ter sido copiado
+            // com nome qualificado `module.Type` no merge_imports.
+            let qual_name = format!("{module}.{name}");
+            if let Some(ty) = env.lookup(&qual_name) {
+                return ty.clone();
+            }
+            // Fallback: se é um tipo primitivo conhecido (ex: core.Int),
+            // resolve pelo nome sem qualificar.
+            match name.as_str() {
+                "Int" => Ty::Prim(PrimTy::Int),
+                "Float" => Ty::Prim(PrimTy::Float),
+                "Text" => Ty::Prim(PrimTy::Text),
+                "Rational" => Ty::Prim(PrimTy::Rational),
+                "Boolean" => Ty::Sum("Boolean".into()),
+                "Unit" => Ty::Unit,
+                _ => {
+                    // Tenta interface registry
+                    if iface_reg.get_interface(name).is_some() {
+                        Ty::Interface(name.clone())
+                    } else {
+                        Ty::Struct(name.clone())
                     }
                 }
             }

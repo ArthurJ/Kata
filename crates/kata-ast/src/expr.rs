@@ -380,6 +380,11 @@ pub enum TypeExpr {
     /// Distinto do `?` em posição de expressão (operador fail-fast,
     /// exclusivo de Actions — `Expr::Question`).
     Question(Box<Spanned<TypeExpr>>),
+
+    /// `module.Type` — tipo qualificado de módulo importado.
+    /// O resolution procura no TypeEnv por um binding onde
+    /// `name == name && origin == module`.
+    Qualified { module: String, name: String },
 }
 
 /// Statement do body de uma Action.
