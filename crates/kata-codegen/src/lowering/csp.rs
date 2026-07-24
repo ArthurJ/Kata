@@ -48,12 +48,14 @@ pub(crate) fn lower_channel_create(
     _elem_ty: &Ty,
     ctx: &mut LowerCtx,
 ) -> Result<cranelift_codegen::ir::Value, super::CodegenError> {
-    // Arena onde o canal é alocado. Canais fluem descendente na árvore
-    // de fibers — o fiber criador é always-last. Usar caller_arena se
-    // disponível (canal sobrevive à destruição do fiber), senão fiber_arena.
-    let arena = ctx
-        .caller_arena
-        .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
+    // Arena onde o canal é alocado. Canais sobrevivem a fibers — alocados
+    // na root_arena (TrackedArena) para que não sejam liberados quando o
+    // fiber criador termina. Valores ARC-managed enviados pelo canal também
+    // estão na root_arena, garantindo que o receiver os acesse com segurança.
+    let arena = crate::lowering::escape_arena::arena_handle_for_escape(
+        kata_core::escape::EscapeTarget::Heap,
+        ctx,
+    );
 
     // 1. Chamar a FFI de criação conforme o kind.
     let handle = match kind {
@@ -137,10 +139,12 @@ pub(crate) fn lower_receiver_factory_call(
     _elem_ty: &Ty,
     ctx: &mut LowerCtx,
 ) -> Result<cranelift_codegen::ir::Value, super::CodegenError> {
-    // Arena onde o BroadcastReceiver é alocado.
-    let arena = ctx
-        .caller_arena
-        .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
+    // Arena onde o BroadcastReceiver é alocado — root_arena (mesmo motivo
+    // do channel_create: canais sobrevivem a fibers).
+    let arena = crate::lowering::escape_arena::arena_handle_for_escape(
+        kata_core::escape::EscapeTarget::Heap,
+        ctx,
+    );
 
     // Lowera o factory (Ident do rxf) → handle i64 (tag 0b10).
     let factory_handle = super::expr::lower_expr(&factory.node, ctx)?;
@@ -359,10 +363,12 @@ pub(crate) fn lower_select(
     let n_arms = arms.len() as i64;
     let ret_clif = crate::ffi_sigs::ty_to_clif(&expr.ty);
 
-    // Arena para alocar o array de handles.
-    let arena = ctx
-        .caller_arena
-        .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
+    // Arena para alocar o array de handles — root_arena (consistente com
+    // channel_create: canais e estruturas de canal vivem na root_arena).
+    let arena = crate::lowering::escape_arena::arena_handle_for_escape(
+        kata_core::escape::EscapeTarget::Heap,
+        ctx,
+    );
 
     // 1. Alocar array de N handles na arena (N * 8 bytes).
     let array_size = ctx.builder.ins().iconst(I64, n_arms * 8);
