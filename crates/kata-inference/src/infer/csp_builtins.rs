@@ -6,6 +6,8 @@
 //! - `queue!(N)` → `ChannelCreate { Buffered(N), T0 }`
 //! - `fork!(action, args)` → `Fork { action_name, args }`
 
+use std::collections::HashMap;
+
 use kata_ast::{Expr, Span, Spanned};
 use kata_core::ty::{Ty, TypeEnv};
 
@@ -107,6 +109,48 @@ pub(crate) fn infer_queue_builtin(
             elem_ty,
         },
     }))
+}
+
+/// Extrai substituições de `Ty::Var` no `arg_ty` a partir do `param_ty`
+/// (concreto). Direção inversa do `unify` em `generics.rs`: aqui o `param`
+/// tem o tipo concreto e o `arg` contém `Var` a ser resolvida.
+///
+/// Ex: `param = Sender(List(Int))`, `arg = Sender(Var("T0"))` → subs["T0"] = List(Int).
+fn extract_var_subs(param: &Ty, arg: &Ty, subs: &mut super::generics::Substitutions) {
+    match (param, arg) {
+        // Var no arg → ligar ao param concreto.
+        (_, Ty::Var(name)) => {
+            subs.entry(name.clone()).or_insert_with(|| param.clone());
+        }
+        // Sender/Receiver/ReceiverFactory — recursão no tipo interno.
+        (Ty::Sender(p), Ty::Sender(a)) => extract_var_subs(p, a, subs),
+        (Ty::Receiver(p), Ty::Receiver(a)) => extract_var_subs(p, a, subs),
+        (Ty::ReceiverFactory(p), Ty::ReceiverFactory(a)) => extract_var_subs(p, a, subs),
+        // List/Array/Range — recursão no elem.
+        (Ty::List(p), Ty::List(a)) => extract_var_subs(p, a, subs),
+        (Ty::Array(p), Ty::Array(a)) => extract_var_subs(p, a, subs),
+        (Ty::Range(p), Ty::Range(a)) => extract_var_subs(p, a, subs),
+        // Dict — recursão em K e V.
+        (Ty::Dict(pk, pv), Ty::Dict(ak, av)) => {
+            extract_var_subs(pk, ak, subs);
+            extract_var_subs(pv, av, subs);
+        }
+        // Set — recursão no elem.
+        (Ty::Set(p), Ty::Set(a)) => extract_var_subs(p, a, subs),
+        // Tuple — recursão posicional.
+        (Ty::Tuple(ps), Ty::Tuple(as_)) if ps.len() == as_.len() => {
+            for (p, a) in ps.iter().zip(as_) {
+                extract_var_subs(p, a, subs);
+            }
+        }
+        // Generic — recursão nos args de tipo.
+        (Ty::Generic(pn, ps), Ty::Generic(an, as_)) if pn == an && ps.len() == as_.len() => {
+            for (p, a) in ps.iter().zip(as_) {
+                extract_var_subs(p, a, subs);
+            }
+        }
+        _ => {}
+    }
 }
 
 /// `fork!(action_name, (arg1, arg2, ...))` — spawn de fiber.
@@ -221,6 +265,36 @@ pub(crate) fn infer_fork_builtin(
         }
         _ => typed_args,
     };
+
+    // Unifica tipos dos args com tipos dos params da action.
+    // Quando o arg contém Ty::Var (ex: Sender::T0 do channel!()) e o
+    // param é concreto (ex: Sender::List::Int), extrai a substituição
+    // T0 → List::Int e propaga para todos os bindings do env.
+    // Isto resolve T0 para que rx <! lst produza lst: List::Int (não Var).
+    if is_direct {
+        if let Some(overloads) = ctx.table.get_overloads(&action_name) {
+            // Extrai tipos dos args.
+            let arg_tys: Vec<Ty> = match &typed_args.kind {
+                TypedExprKind::Tuple { elements } => {
+                    elements.iter().map(|e| e.node.ty.clone()).collect()
+                }
+                TypedExprKind::Unit => Vec::new(),
+                _ => vec![typed_args.ty.clone()],
+            };
+            // Procura o overload com aridade correspondente.
+            for oi in overloads.iter().filter(|o| o.is_action && o.params.len() == arg_tys.len()) {
+                let mut subs: super::generics::Substitutions = HashMap::new();
+                for (param, arg) in oi.params.iter().zip(&arg_tys) {
+                    extract_var_subs(param, arg, &mut subs);
+                }
+                if !subs.is_empty() {
+                    // Propaga substituições para todos os bindings do env.
+                    env.apply_substitutions(&subs);
+                    break;
+                }
+            }
+        }
+    }
 
     Ok(ActionDispatch::Complete(TypedExpr {
         span: *span,

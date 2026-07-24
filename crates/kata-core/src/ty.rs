@@ -285,6 +285,59 @@ impl TypeEnv {
     pub fn local_bindings_full(&self) -> impl Iterator<Item = (&str, &TypeBinding)> {
         self.bindings.iter().map(|(k, v)| (k.as_str(), v))
     }
+
+    /// Aplica substituições de type vars (ex: `T0 → List::Int`) a todos
+    /// os bindings deste escopo E da cadeia de parents. Usado pelo `fork!`
+    /// para propagar a unificação do tipo do canal quando o arg do fork
+    /// contém `Ty::Var` e o param da action é concreto.
+    pub fn apply_substitutions(&mut self, subs: &HashMap<String, Ty>) {
+        for binding in self.bindings.values_mut() {
+            binding.ty = apply_subs_to_ty(&binding.ty, subs);
+        }
+        if let Some(parent) = self.parent.as_mut() {
+            parent.apply_substitutions(subs);
+        }
+    }
+}
+
+/// Aplica substituições de `Ty::Var(name)` → tipo concreto recursivamente.
+/// Usado por `TypeEnv::apply_substitutions` para propagar unificação
+/// de type vars do canal (ex: `T0 → List::Int`) nos bindings.
+fn apply_subs_to_ty(ty: &Ty, subs: &HashMap<String, Ty>) -> Ty {
+    match ty {
+        Ty::Var(name) => {
+            subs.get(name).cloned().unwrap_or_else(|| ty.clone())
+        }
+        Ty::List(elem) => Ty::List(Box::new(apply_subs_to_ty(elem, subs))),
+        Ty::Array(elem) => Ty::Array(Box::new(apply_subs_to_ty(elem, subs))),
+        Ty::Range(elem) => Ty::Range(Box::new(apply_subs_to_ty(elem, subs))),
+        Ty::Sender(elem) => Ty::Sender(Box::new(apply_subs_to_ty(elem, subs))),
+        Ty::Receiver(elem) => Ty::Receiver(Box::new(apply_subs_to_ty(elem, subs))),
+        Ty::ReceiverFactory(elem) => {
+            Ty::ReceiverFactory(Box::new(apply_subs_to_ty(elem, subs)))
+        }
+        Ty::Dict(k, v) => Ty::Dict(
+            Box::new(apply_subs_to_ty(k, subs)),
+            Box::new(apply_subs_to_ty(v, subs)),
+        ),
+        Ty::Set(elem) => Ty::Set(Box::new(apply_subs_to_ty(elem, subs))),
+        Ty::Tuple(elems) => {
+            Ty::Tuple(elems.iter().map(|e| apply_subs_to_ty(e, subs)).collect())
+        }
+        Ty::Generic(name, args) => Ty::Generic(
+            name.clone(),
+            args.iter().map(|a| apply_subs_to_ty(a, subs)).collect(),
+        ),
+        Ty::Function(params, ret) => Ty::Function(
+            params.iter().map(|p| apply_subs_to_ty(p, subs)).collect(),
+            Box::new(apply_subs_to_ty(ret, subs)),
+        ),
+        Ty::Action(params, ret) => Ty::Action(
+            params.iter().map(|p| apply_subs_to_ty(p, subs)).collect(),
+            Box::new(apply_subs_to_ty(ret, subs)),
+        ),
+        _ => ty.clone(),
+    }
 }
 
 impl Default for TypeEnv {
