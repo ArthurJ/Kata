@@ -158,15 +158,15 @@ pub(crate) fn define_function_body(
         lower.fiber_arena = Some(arena_handle);
 
         // Se há captures, carrega cada capture do box_ptr e define variável.
-        // Layout do CaptureBox: offset 0 = fn_ptr, offset 8 = refcount,
-        // offset 16 + i*8 = captures[i].
+        // Layout do CaptureBox (Fio 16): offset 0 = fn_ptr, offset 8 = refcount,
+        // offset 16 = n_captures, offset 24 + i*8 = captures[i].
         // box_ptr é o segundo block param (params[1]).
         let clause_params: Vec<cranelift_codegen::ir::Value> = if !captures.is_empty() {
             let box_ptr = params[1];
             let flags = MemFlagsData::new();
             for (i, cap) in captures.iter().enumerate() {
                 let clif_ty = ty_to_clif(&cap.ty);
-                let offset = (16 + i * 8) as i32;
+                let offset = (24 + i * 8) as i32;
                 let val = lower.builder.ins().load(clif_ty, flags, box_ptr, offset);
                 lower.new_var(&cap.name, clif_ty);
                 let var = *lower

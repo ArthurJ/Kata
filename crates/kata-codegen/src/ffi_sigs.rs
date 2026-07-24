@@ -202,6 +202,17 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
         FfiSymbol::ArenaDestroy => {
             sig.params.push(AbiParam::new(I64)); // arena
         }
+        FfiSymbol::ArenaCreateTracked => {
+            sig.returns.push(AbiParam::new(I64)); // handle
+        }
+        FfiSymbol::ArenaDealloc => {
+            sig.params.push(AbiParam::new(I64)); // handle
+            sig.params.push(AbiParam::new(I64)); // ptr
+            sig.params.push(AbiParam::new(I64)); // size
+        }
+        FfiSymbol::GetRootArenaHandle => {
+            sig.returns.push(AbiParam::new(I64)); // root_arena handle
+        }
         // ── Sum (i64, i64, i64) → i64, (i64) → i64 ──
         // Pré-11: store_sum_result recebe arena_handle como 3º param.
         FfiSymbol::StoreSumResult => {

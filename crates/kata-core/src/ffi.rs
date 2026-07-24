@@ -71,6 +71,12 @@ pub enum FfiSymbol {
     ArenaCreate,
     ArenaAlloc,
     ArenaDestroy,
+    /// `kata_rt_arena_create_tracked() -> handle` — cria arena Tracked (Fio 16).
+    ArenaCreateTracked,
+    /// `kata_rt_arena_dealloc(handle, ptr, size) -> void` — dealloc individual (Fio 16).
+    ArenaDealloc,
+    /// `kata_rt_get_root_arena_handle() -> handle` — lê TLS root arena (Fio 16).
+    GetRootArenaHandle,
 
     // ── Sum ──────────────────────────────────────
     /// `kata_rt_store_sum_result(tag, payload) -> ptr` — aloca box Sum.
@@ -272,6 +278,9 @@ impl FfiSymbol {
             FfiSymbol::ArenaCreate => "kata_rt_arena_create",
             FfiSymbol::ArenaAlloc => "kata_rt_arena_alloc",
             FfiSymbol::ArenaDestroy => "kata_rt_arena_destroy",
+            FfiSymbol::ArenaCreateTracked => "kata_rt_arena_create_tracked",
+            FfiSymbol::ArenaDealloc => "kata_rt_arena_dealloc",
+            FfiSymbol::GetRootArenaHandle => "kata_rt_get_root_arena_handle",
             FfiSymbol::StoreSumResult => "kata_rt_store_sum_result",
             FfiSymbol::SumTagInt => "kata_rt_sum_tag_int",
             FfiSymbol::Panic => "kata_rt_panic",
@@ -389,8 +398,11 @@ impl FfiSymbol {
             // I/O
             FfiSymbol::Print | FfiSymbol::Println => Ty::Unit,
             // Arena
-            FfiSymbol::ArenaCreate | FfiSymbol::ArenaAlloc => Ty::int(),
-            FfiSymbol::ArenaDestroy => Ty::Unit,
+            FfiSymbol::ArenaCreate | FfiSymbol::ArenaAlloc | FfiSymbol::ArenaCreateTracked => {
+                Ty::int()
+            }
+            FfiSymbol::ArenaDestroy | FfiSymbol::ArenaDealloc => Ty::Unit,
+            FfiSymbol::GetRootArenaHandle => Ty::int(),
             // Sum
             FfiSymbol::StoreSumResult | FfiSymbol::SumTagInt => Ty::int(),
             // Control flow — panic retorna Unit (aborta antes, mas o tipo é Unit)
@@ -511,6 +523,9 @@ impl FfiSymbol {
             FfiSymbol::ArenaCreate,
             FfiSymbol::ArenaAlloc,
             FfiSymbol::ArenaDestroy,
+            FfiSymbol::ArenaCreateTracked,
+            FfiSymbol::ArenaDealloc,
+            FfiSymbol::GetRootArenaHandle,
             FfiSymbol::StoreSumResult,
             FfiSymbol::SumTagInt,
             FfiSymbol::Panic,

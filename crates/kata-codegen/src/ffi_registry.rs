@@ -118,6 +118,19 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
         "kata_rt_arena_destroy",
         rt::kata_rt_arena_destroy as *const u8,
     );
+    // Arena Tracked — root arena para valores ARC-managed (Fio 16)
+    builder.symbol(
+        "kata_rt_arena_create_tracked",
+        rt::kata_rt_arena_create_tracked as *const u8,
+    );
+    builder.symbol(
+        "kata_rt_arena_dealloc",
+        rt::kata_rt_arena_dealloc as *const u8,
+    );
+    builder.symbol(
+        "kata_rt_get_root_arena_handle",
+        rt::kata_rt_get_root_arena_handle as *const u8,
+    );
     // Sum
     builder.symbol(
         "kata_rt_store_sum_result",
@@ -337,6 +350,9 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         ArenaCreate,
         ArenaAlloc,
         ArenaDestroy,
+        ArenaCreateTracked,
+        ArenaDealloc,
+        GetRootArenaHandle,
         StoreSumResult,
         SumTagInt,
         Panic,
