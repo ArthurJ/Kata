@@ -168,12 +168,33 @@ fn import_simple() {
 
 #[test]
 fn import_with_alias() {
+    // `import utilidades.matematica as mat` — açúcar para
+    // `import utilidades.(matematica as mat)` (import seletivo com alias).
     let src = "import utilidades.matematica as mat";
     let m = parse_src(src);
     match first_item(&m) {
         Item::ImportDecl { path, alias, items } => {
-            assert_eq!(path, &["utilidades".to_string(), "matematica".to_string()]);
-            assert_eq!(alias.as_deref(), Some("mat"));
+            // O açúcar transforma em path=["utilidades"], items=[ImportItem{matematica, Some(mat)}]
+            assert_eq!(path, &["utilidades".to_string()]);
+            assert!(alias.is_none());
+            let items = items.clone().expect("deve ter items (seletivo)");
+            assert_eq!(items.len(), 1);
+            assert_eq!(items[0].name, "matematica");
+            assert_eq!(items[0].alias.as_deref(), Some("mat"));
+        }
+        other => panic!("expected ImportDecl, got {other:?}"),
+    }
+}
+
+#[test]
+fn import_module_with_alias() {
+    // `import utilidades as util` — alias do módulo inteiro (não açúcar).
+    let src = "import utilidades as util";
+    let m = parse_src(src);
+    match first_item(&m) {
+        Item::ImportDecl { path, alias, items } => {
+            assert_eq!(path, &["utilidades".to_string()]);
+            assert_eq!(alias.as_deref(), Some("util"));
             assert!(items.is_none());
         }
         other => panic!("expected ImportDecl, got {other:?}"),
@@ -188,7 +209,11 @@ fn import_selective() {
         Item::ImportDecl { path, items, .. } => {
             assert_eq!(path, &["utilidades".to_string()]);
             let items = items.as_ref().expect("selective import");
-            assert_eq!(items, &vec!["matematica", "TipoX"]);
+            assert_eq!(items.len(), 2);
+            assert_eq!(items[0].name, "matematica");
+            assert!(items[0].alias.is_none());
+            assert_eq!(items[1].name, "TipoX");
+            assert!(items[1].alias.is_none());
         }
         other => panic!("expected ImportDecl, got {other:?}"),
     }

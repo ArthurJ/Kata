@@ -110,11 +110,11 @@ pub enum Item {
     },
 
     /// `import modulo.submodulo` / `import ... as alias` /
-    /// `import MOD.(items)`.
+    /// `import MOD.(items)` / `import MOD.(item as alias)`.
     ImportDecl {
         path: Vec<String>,
         alias: Option<String>,
-        items: Option<Vec<String>>, // None = tudo, Some = seletivo
+        items: Option<Vec<ImportItem>>, // None = tudo, Some = seletivo
     },
 
     /// `export item1 item2 ...` / `export MOD.(itens)`.
@@ -207,6 +207,19 @@ pub struct ImplMethod {
     pub directives: Vec<Directive>,
     /// None = FFI (precisa @ffi); Some = corpo Kata (cláusulas lambda).
     pub body: Option<Vec<Spanned<LambdaClause>>>,
+}
+
+/// Item de import seletivo: nome e alias opcional.
+///
+/// `dobrar` → ImportItem { name: "dobrar", alias: None }
+/// `dobrar as d` → ImportItem { name: "dobrar", alias: Some("d") }
+#[derive(Debug, Clone, PartialEq)]
+pub struct ImportItem {
+    /// Nome do item no módulo exportador.
+    pub name: String,
+    /// Alias opcional — nome sob o qual o item fica acessível no importador.
+    /// None = usa o nome original.
+    pub alias: Option<String>,
 }
 
 /// Item de export: nome simples ou reexportação de submódulo.

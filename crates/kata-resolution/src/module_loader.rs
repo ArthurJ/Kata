@@ -39,8 +39,9 @@ pub enum ImportKind {
     WholeModule { prefix: String },
     /// `import mod as alias` — módulo inteiro, acesso via `alias.fn`.
     WholeModuleAliased { alias: String },
-    /// `import MOD.(item1 item2)` — seletivo, itens no escopo direto.
-    Selective { items: Vec<String> },
+    /// `import MOD.(item1 item2)` ou `import MOD.(item1 as alias1 item2)`
+    /// — seletivo, itens no escopo direto (com alias opcional).
+    Selective { items: Vec<kata_ast::ImportItem> },
 }
 
 /// Um módulo importado + como foi importado.
@@ -428,10 +429,10 @@ mod tests {
             ImportKind::WholeModule { prefix } if prefix == "math_utils"
         ));
 
-        // Segundo: Selective { items: ["triplicar"] }
+        // Segundo: Selective { items: [ImportItem { name: "triplicar", alias: None }] }
         assert!(matches!(
             &imports[1].import_kind,
-            ImportKind::Selective { items } if items == &["triplicar".to_string()]
+            ImportKind::Selective { items } if items.len() == 1 && items[0].name == "triplicar" && items[0].alias.is_none()
         ));
 
         // O módulo exportador tem export → só dobrar e triplicar visíveis.

@@ -439,16 +439,20 @@ pub(crate) fn merge_imports(
         match &imported.import_kind {
             kata_resolution::ImportKind::Selective { items } => {
                 // Import seletivo: trazer itens nomeados para o escopo direto.
-                for item_name in items {
+                // Cada item pode ter alias: `dobrar as d` → registra como `d`.
+                for imp_item in items {
+                    let target_name = imp_item.alias.as_ref().unwrap_or(&imp_item.name);
                     // Signatures
                     if let Some(sig) = imported
                         .resolved
                         .signatures
                         .iter()
-                        .find(|s| &s.name == item_name)
+                        .find(|s| s.name == imp_item.name)
                     {
-                        if !merged.signatures.iter().any(|s| s.name == sig.name) {
-                            merged.signatures.push(sig.clone());
+                        if !merged.signatures.iter().any(|s| s.name == *target_name) {
+                            let mut renamed = sig.clone();
+                            renamed.name = target_name.clone();
+                            merged.signatures.push(renamed);
                         }
                     }
                     // Functions
@@ -456,10 +460,12 @@ pub(crate) fn merge_imports(
                         .resolved
                         .functions
                         .iter()
-                        .find(|f| &f.name == item_name)
+                        .find(|f| f.name == imp_item.name)
                     {
-                        if !merged.functions.iter().any(|f| f.name == func.name) {
-                            merged.functions.push(func.clone());
+                        if !merged.functions.iter().any(|f| f.name == *target_name) {
+                            let mut renamed = func.clone();
+                            renamed.name = target_name.clone();
+                            merged.functions.push(renamed);
                         }
                     }
                     // Actions
@@ -467,10 +473,12 @@ pub(crate) fn merge_imports(
                         .resolved
                         .actions
                         .iter()
-                        .find(|a| &a.name == item_name)
+                        .find(|a| a.name == imp_item.name)
                     {
-                        if !merged.actions.iter().any(|a| a.name == action.name) {
-                            merged.actions.push(action.clone());
+                        if !merged.actions.iter().any(|a| a.name == *target_name) {
+                            let mut renamed = action.clone();
+                            renamed.name = target_name.clone();
+                            merged.actions.push(renamed);
                         }
                     }
                 }

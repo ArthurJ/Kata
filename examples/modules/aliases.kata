@@ -1,0 +1,14 @@
+# Teste dos dois formulários de import com alias.
+
+import mock_math.(dobrar as d, triplicar as t)
+import mock_math.dobrar as d2
+
+action main
+    let dobro := d 21
+    let triplo := t 21
+    let dobro2 := d2 21
+    echo!(dobro)
+    echo!(triplo)
+    echo!(dobro2)
+
+main!()
