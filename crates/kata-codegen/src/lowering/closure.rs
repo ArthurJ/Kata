@@ -295,12 +295,12 @@ pub(crate) fn lower_closure(
 
 /// Aloca um CaptureBox na arena global e retorna o ponteiro.
 ///
-/// 1. Aloca um array temporário de `n_captures * 8` bytes na arena global.
+/// 1. Aloca um array temporário de `n_captures * 8` bytes na arena disponível.
 /// 2. Preenche o array com os valores das captures (lidos do var_map).
-/// 3. Chama `kata_rt_alloc_arc(fn_ptr, array_ptr, n_captures)` → `box_ptr`.
+/// 3. Chama `kata_rt_alloc_arc(fn_ptr, array_ptr, n_captures, arena)` → `box_ptr`.
 ///
 /// O CaptureBox contém: fn_ptr (offset 0), refcount=1 (offset 8),
-/// captures[0..n] (offset 16+).
+/// n_captures (offset 16), captures[0..n] (offset 24+).
 pub(crate) fn alloc_capture_box(
     func_ptr: cranelift_codegen::ir::Value,
     captures: &[CaptureInfo],
@@ -316,10 +316,15 @@ pub(crate) fn alloc_capture_box(
         .ffi_refs
         .get("kata_rt_arena_alloc")
         .ok_or_else(|| super::CodegenError::FfiSymbolNotFound("kata_rt_arena_alloc".into()))?;
-    let capture_arena = ctx
-        .fiber_arena
-        .or(ctx.caller_arena)
-        .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
+    let get_root_ref = ctx
+        .ffi_refs
+        .get("kata_rt_get_root_arena_handle")
+        .copied()
+        .ok_or_else(|| {
+            super::CodegenError::FfiSymbolNotFound("kata_rt_get_root_arena_handle".into())
+        })?;
+    let root_inst = ctx.builder.ins().call(get_root_ref, &[]);
+    let capture_arena = ctx.builder.inst_results(root_inst)[0];
     let array_size = ctx.builder.ins().iconst(I64, n * 8);
     let alloc_inst = ctx
         .builder
