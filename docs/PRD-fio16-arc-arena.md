@@ -374,7 +374,7 @@ handle da root arena em vez da fiber arena. Quando um canal é destruído
 | Tracking de blocos | `Vec` com `swap_remove` | O(1) remove, ordem não importa |
 | Root arena handle | TLS `ROOT_ARENA_HANDLE` | Consistente com padrão existente |
 | n_captures no header | Offset 16, 8 bytes | `decref` precisa saber o size para dealloc |
-| Canais na root arena | `kata_rt_channel_create(root_arena)` | Canais sobrevivem a fibers, natural que vivam na root. Canal em si não é ARC-managed (handles são i64, sem header) — só precisa sobrevivência além do fiber, não deallocation individual. Leak em programas longos com muitos canais efêmeros é aceitável por enquanto (48-72 bytes por canal, ver §8) |
+| Canais na fiber_arena | `kata_rt_channel_create(fiber_arena)` | Canais fluem descendente (fork!), criador é always-last (structured concurrency). `bump.reset()` libera no epílogo — O(1), sem leak. Invariante: `Sender`/`Receiver`/`ReceiverFactory` proibidos em retorno de Actions (Fio 16b) |
 | Alocação de escaping values | No site de criação, não no site de send | Evita cópia; escape analysis já marcou no TAST |
 
 ## 6. O Que Não Muda
@@ -404,14 +404,11 @@ handle da root arena em vez da fiber arena. Quando um canal é destruído
   recebem `Layout`).
 - **Compaction**: Mover valores vivos para blocos contíguos durante idle do
   scheduler.
-- **Lifecycle de canais**: Canais vivem na root_arena e não são
-  individualmente dealocados (não são ARC-managed). Footprint por canal:
-  Rendezvous 48 bytes, Queue 72 bytes, Broadcast 64 bytes (struct + tupla
-  de handles). Aceitável enquanto canais são de longa duração. Se surgir
-  uso com milhares de canais efêmeros, investigar mecanismo de cleanup
-  (drop no scheduler, arena intermediária, ou Box::new direto com
-  last-one-closes). Deixado em aberto — situação considerada pouco
-  provável no uso atual.
+- **Lifecycle de canais**: ✅ Resolvido (Fio 16b). Canais voltam para a
+  fiber_arena do criador (revertendo a Fase 6). Structured concurrency
+  garante que o criador é always-last — `bump.reset()` no epílogo libera
+  o canal. Invariante enforced em compile-time: `Sender`, `Receiver`,
+  `ReceiverFactory` proibidos em tipo de retorno de Actions.
 - **ARC pass no AOT**: Hoje o ARC pass roda no JIT path. Garantir que o AOT
   path também emita incref/decref corretamente.
 

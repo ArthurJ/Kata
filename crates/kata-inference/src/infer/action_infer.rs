@@ -7,7 +7,7 @@
 
 use kata_ast::Spanned;
 use kata_core::ty::{Ty, TypeEnv};
-use kata_diagnostics::MiddleError;
+use kata_diagnostics::{MiddleError, MietteSpan};
 
 use crate::desugar;
 use crate::typed::{TypedAction, TypedExpr, TypedExprKind, TypedTestSpec};
@@ -74,6 +74,19 @@ pub(crate) fn infer_action(
         if is_return {
             break; // statements após return são unreachable
         }
+    }
+
+    // Invariante: canais não podem ser retornados de Actions. Canais fluem
+    // apenas descendente (pai → filho via fork!) e vivem na fiber_arena do
+    // criador. Retornar um canal faria o handle sobreviver ao fiber criador,
+    // que destruiria a arena (e o canal) sob os pés de quem recebeu.
+    // Ver PRD-fio16b §2.2. Check antes de fits_return para dar erro
+    // específico (ChannelInReturn) em vez de TypeMismatch genérico.
+    if contains_channel_type(ret_ty) {
+        return Err(MiddleError::ChannelInReturn {
+            ty: format!("{ret_ty:?}"),
+            span: MietteSpan(kata_ast::Span::synthetic()),
+        });
     }
 
     // Verifica que o último statement produz o tipo esperado.
@@ -251,4 +264,35 @@ fn reorder_test_dict_args(
         tail_pos: typed_args.tail_pos,
         escape: typed_args.escape,
     })
+}
+
+/// Verifica se `ty` contém `Sender`, `Receiver`, ou `ReceiverFactory`
+/// em qualquer profundidade. Usado para proibir canais no tipo de retorno
+/// de Actions — canais vivem na fiber_arena do criador e não podem
+/// sobreviver ao fiber que os criou.
+///
+/// Recursa em: Tuple, Struct (via TypeEnv lookup), Generic, List, Array,
+/// Range, Dict, Set, Function, Action, Sender, Receiver, ReceiverFactory.
+fn contains_channel_type(ty: &Ty) -> bool {
+    match ty {
+        Ty::Sender(_) | Ty::Receiver(_) | Ty::ReceiverFactory(_) => true,
+        Ty::Tuple(elems) => elems.iter().any(contains_channel_type),
+        Ty::List(inner) | Ty::Array(inner) | Ty::Range(inner) | Ty::Set(inner) => {
+            contains_channel_type(inner)
+        }
+        Ty::Dict(k, v) => contains_channel_type(k) || contains_channel_type(v),
+        Ty::Function(params, ret) => {
+            params.iter().any(contains_channel_type) || contains_channel_type(ret)
+        }
+        Ty::Action(params, ret) => {
+            params.iter().any(contains_channel_type) || contains_channel_type(ret)
+        }
+        Ty::Generic(_, args) => args.iter().any(contains_channel_type),
+        // Struct/Sum são nominais — os campos não carregam tipos de canal
+        // diretamente no Ty. Se um struct tem um campo Sender, isso aparece
+        // como Ty::Sender no type_env, não dentro de Ty::Struct("Nome").
+        // Var/InferVar não podem ser resolvidas aqui — conservador: false.
+        Ty::Prim(_) | Ty::Unit | Ty::Var(_) | Ty::InferVar(_) | Ty::Interface(_)
+        | Ty::Struct(_) | Ty::Sum(_) => false,
+    }
 }

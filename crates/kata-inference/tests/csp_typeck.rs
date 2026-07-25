@@ -235,3 +235,54 @@ fn queue_non_literal_capacity() {
         "esperado TypeMismatch, encontrado {err:?}"
     );
 }
+
+// ── Teste 12: Action que retorna Sender → ChannelInReturn ──────────
+//
+// Canais vivem na fiber_arena do criador e fluem apenas descendente.
+// Retornar um Sender de uma Action faria o handle sobreviver ao fiber
+// criador, causando use-after-free. O typeck deve rejeitar.
+#[test]
+fn action_retorna_sender_rejeitado() {
+    let src = "action make_channel => Sender::Int\n  let (tx, rx) := channel!()\n  tx\nmake_channel!()";
+    let err = infer_src_err(src);
+    assert!(
+        matches!(err, kata_diagnostics::MiddleError::ChannelInReturn { .. }),
+        "esperado ChannelInReturn, encontrado {err:?}"
+    );
+}
+
+// ── Teste 13: Action que retorna Receiver → ChannelInReturn ────────
+#[test]
+fn action_retorna_receiver_rejeitado() {
+    let src = "action make_channel => Receiver::Int\n  let (tx, rx) := channel!()\n  rx\nmake_channel!()";
+    let err = infer_src_err(src);
+    assert!(
+        matches!(err, kata_diagnostics::MiddleError::ChannelInReturn { .. }),
+        "esperado ChannelInReturn, encontrado {err:?}"
+    );
+}
+
+// ── Teste 14: Action que retorna ReceiverFactory → ChannelInReturn ─
+#[test]
+fn action_retorna_receiver_factory_rejeitado() {
+    let src = "action make_broadcast => ReceiverFactory::Int\n  let (tx, f) := broadcast!()\n  f\nmake_broadcast!()";
+    let err = infer_src_err(src);
+    assert!(
+        matches!(err, kata_diagnostics::MiddleError::ChannelInReturn { .. }),
+        "esperado ChannelInReturn, encontrado {err:?}"
+    );
+}
+
+// ── Teste 15: Action que retorna tupla com Sender → ChannelInReturn ─
+//
+// Canal aninhado em tupla também deve ser rejeitado — recursão em
+// contains_channel_type.
+#[test]
+fn action_retorna_tupla_com_sender_rejeitado() {
+    let src = "action make_channel => (Int, Sender::Int)\n  let (tx, rx) := channel!()\n  (42, tx)\nmake_channel!()";
+    let err = infer_src_err(src);
+    assert!(
+        matches!(err, kata_diagnostics::MiddleError::ChannelInReturn { .. }),
+        "esperado ChannelInReturn, encontrado {err:?}"
+    );
+}
