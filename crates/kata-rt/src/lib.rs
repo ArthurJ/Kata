@@ -43,11 +43,9 @@ pub use rational::rat_from_text;
 // Re-exports de funções C-ABI para o codegen registrar no JIT.
 pub use arc::{kata_rt_alloc_arc, kata_rt_arc_fn_ptr, kata_rt_decref, kata_rt_incref};
 pub use arena::{
-    kata_rt_arena_alloc, kata_rt_arena_create, kata_rt_arena_create_tracked,
-    kata_rt_arena_dealloc, kata_rt_arena_destroy, kata_rt_arena_stats,
-    kata_rt_get_root_arena_handle,
+    kata_rt_arena_alloc, kata_rt_arena_create, kata_rt_arena_create_tracked, kata_rt_arena_dealloc,
+    kata_rt_arena_destroy, kata_rt_arena_stats, kata_rt_get_root_arena_handle,
 };
-pub use tracked::{kata_rt_alloc_tracked, kata_rt_decref_tracked, kata_rt_incref_tracked};
 pub use array::{
     kata_rt_array_alloc, kata_rt_array_contains, kata_rt_array_get, kata_rt_array_get_checked,
     kata_rt_array_len, kata_rt_array_set,
@@ -85,6 +83,7 @@ pub use set::{
     kata_rt_set_intersection, kata_rt_set_len, kata_rt_set_next, kata_rt_set_remove,
     kata_rt_set_union,
 };
+pub use tracked::{kata_rt_alloc_tracked, kata_rt_decref_tracked, kata_rt_incref_tracked};
 // kata_rt_rat_show_raw — rebaixado para pub(crate): zero consumidores cross-crate.
 pub use scheduler::{
     DEADLOCK_SENTINEL, TIMEOUT_SENTINEL, kata_rt_run, kata_rt_scheduler_init,
@@ -102,9 +101,9 @@ pub use channel::{
     kata_rt_channel_recv, kata_rt_channel_send, kata_rt_queue_create, kata_rt_select,
 };
 // Telemetria (@log)
-pub use log::{
-    kata_rt_log_config, kata_rt_log_publish, kata_rt_log_recv, reset_log, snapshot_log_config,
-};
+// reset_log e snapshot_log_config — rebaixados para pub(crate): zero
+// consumidores cross-crate (apenas scheduler.rs intra-crate os chama).
+pub use log::{kata_rt_log_config, kata_rt_log_publish, kata_rt_log_recv};
 // Display de resultados — ponto único de display para
 // driver JIT e shim AOT.
 pub use display::{

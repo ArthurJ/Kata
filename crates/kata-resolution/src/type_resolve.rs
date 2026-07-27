@@ -72,10 +72,10 @@ pub fn resolve_type_expr(expr: &TypeExpr, env: &TypeEnv, iface_reg: &InterfaceRe
         }
         TypeExpr::Qualified { module, name } => {
             // `module.Type` — procura binding onde name == name && origin == module.
-            if let Some(binding) = env.lookup_binding(name) {
-                if binding.origin == *module {
-                    return binding.ty.clone();
-                }
+            if let Some(binding) = env.lookup_binding(name)
+                && binding.origin == *module
+            {
+                return binding.ty.clone();
             }
             // Tenta no escopo local do módulo — pode ter sido copiado
             // com nome qualificado `module.Type` no merge_imports.
@@ -180,9 +180,7 @@ pub fn resolve_type_expr(expr: &TypeExpr, env: &TypeEnv, iface_reg: &InterfaceRe
                 }
                 // Tuple::(Int, Text) → Ty::Tuple([Int, Text]).
                 // Permite anotar tuplas em posições de tipo (ex: Sender::Tuple::(Int, Int)).
-                "Tuple" => {
-                    Ty::Tuple(resolved_params)
-                }
+                "Tuple" => Ty::Tuple(resolved_params),
                 // Tipos intrínsecos de canal.
                 "Sender" => {
                     let elem = resolved_params

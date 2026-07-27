@@ -415,10 +415,10 @@ impl FfiSymbol {
             }
             FfiSymbol::ArenaDestroy | FfiSymbol::ArenaDealloc => Ty::Unit,
             FfiSymbol::GetRootArenaHandle => Ty::int(),
-            FfiSymbol::AllocTracked | FfiSymbol::IncRefTracked | FfiSymbol::DecRefTracked
-            | FfiSymbol::ArenaStats => {
-                Ty::int()
-            }
+            FfiSymbol::AllocTracked
+            | FfiSymbol::IncRefTracked
+            | FfiSymbol::DecRefTracked
+            | FfiSymbol::ArenaStats => Ty::int(),
             // Sum
             FfiSymbol::StoreSumResult | FfiSymbol::SumTagInt => Ty::int(),
             // Control flow — panic retorna Unit (aborta antes, mas o tipo é Unit)

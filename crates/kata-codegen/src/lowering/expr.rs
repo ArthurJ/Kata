@@ -231,11 +231,8 @@ pub(crate) fn lower_expr(
             }
 
             // Aloca N * 8 bytes. Para Heap, usa alloc_tracked com header ARC.
-            let ptr = crate::lowering::escape_arena::alloc_for_escape(
-                expr.escape,
-                (n * 8) as i64,
-                ctx,
-            )?;
+            let ptr =
+                crate::lowering::escape_arena::alloc_for_escape(expr.escape, (n * 8) as i64, ctx)?;
 
             // Store de cada elemento no offset i * 8.
             let flags = MemFlagsData::new();
@@ -261,11 +258,8 @@ pub(crate) fn lower_expr(
             }
 
             // Aloca N * 8 bytes. Para Heap, usa alloc_tracked com header ARC.
-            let ptr = crate::lowering::escape_arena::alloc_for_escape(
-                expr.escape,
-                (n * 8) as i64,
-                ctx,
-            )?;
+            let ptr =
+                crate::lowering::escape_arena::alloc_for_escape(expr.escape, (n * 8) as i64, ctx)?;
 
             // Store de cada campo no offset i * 8.
             let flags = MemFlagsData::new();

@@ -70,11 +70,10 @@ fn collect_kata_recursive(
             collect_kata_recursive(base, &path, out);
         } else if path.extension().is_some_and(|ext| ext == "kata") {
             // Nome do snapshot: caminho relativo a examples/ sem extensão.
-            let rel = path
-                .strip_prefix(base)
-                .unwrap_or(&path)
-                .with_extension("");
-            let snap_name = rel.to_string_lossy().replace(std::path::MAIN_SEPARATOR, "__");
+            let rel = path.strip_prefix(base).unwrap_or(&path).with_extension("");
+            let snap_name = rel
+                .to_string_lossy()
+                .replace(std::path::MAIN_SEPARATOR, "__");
             out.push((snap_name, path.to_string_lossy().to_string()));
         }
     }

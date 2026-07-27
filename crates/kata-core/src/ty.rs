@@ -257,10 +257,10 @@ impl TypeEnv {
     /// como ambíguos.
     pub fn merge_bindings_from(&mut self, other: &mut TypeEnv) {
         for (name, binding) in other.bindings.drain() {
-            if let Some(existing) = self.bindings.get(&name) {
-                if existing.origin != binding.origin {
-                    self.ambiguous.insert(name.clone());
-                }
+            if let Some(existing) = self.bindings.get(&name)
+                && existing.origin != binding.origin
+            {
+                self.ambiguous.insert(name.clone());
             }
             self.bindings.insert(name, binding);
         }
@@ -305,25 +305,19 @@ impl TypeEnv {
 /// de type vars do canal (ex: `T0 → List::Int`) nos bindings.
 fn apply_subs_to_ty(ty: &Ty, subs: &HashMap<String, Ty>) -> Ty {
     match ty {
-        Ty::Var(name) => {
-            subs.get(name).cloned().unwrap_or_else(|| ty.clone())
-        }
+        Ty::Var(name) => subs.get(name).cloned().unwrap_or_else(|| ty.clone()),
         Ty::List(elem) => Ty::List(Box::new(apply_subs_to_ty(elem, subs))),
         Ty::Array(elem) => Ty::Array(Box::new(apply_subs_to_ty(elem, subs))),
         Ty::Range(elem) => Ty::Range(Box::new(apply_subs_to_ty(elem, subs))),
         Ty::Sender(elem) => Ty::Sender(Box::new(apply_subs_to_ty(elem, subs))),
         Ty::Receiver(elem) => Ty::Receiver(Box::new(apply_subs_to_ty(elem, subs))),
-        Ty::ReceiverFactory(elem) => {
-            Ty::ReceiverFactory(Box::new(apply_subs_to_ty(elem, subs)))
-        }
+        Ty::ReceiverFactory(elem) => Ty::ReceiverFactory(Box::new(apply_subs_to_ty(elem, subs))),
         Ty::Dict(k, v) => Ty::Dict(
             Box::new(apply_subs_to_ty(k, subs)),
             Box::new(apply_subs_to_ty(v, subs)),
         ),
         Ty::Set(elem) => Ty::Set(Box::new(apply_subs_to_ty(elem, subs))),
-        Ty::Tuple(elems) => {
-            Ty::Tuple(elems.iter().map(|e| apply_subs_to_ty(e, subs)).collect())
-        }
+        Ty::Tuple(elems) => Ty::Tuple(elems.iter().map(|e| apply_subs_to_ty(e, subs)).collect()),
         Ty::Generic(name, args) => Ty::Generic(
             name.clone(),
             args.iter().map(|a| apply_subs_to_ty(a, subs)).collect(),

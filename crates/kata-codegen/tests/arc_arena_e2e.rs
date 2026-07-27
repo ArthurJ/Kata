@@ -227,11 +227,7 @@ action main => Int
 main!()"#;
     let (raw, _ty) = eval_src(src);
     assert_ne!(raw, DEADLOCK_SENTINEL, "não deve deadlockar");
-    assert_eq!(
-        untag_smi(raw),
-        5,
-        "len da lista recebida deve ser 5"
-    );
+    assert_eq!(untag_smi(raw), 5, "len da lista recebida deve ser 5");
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -257,9 +253,5 @@ action main => Int
 main!()"#;
     let (raw, _ty) = eval_src(src);
     assert_ne!(raw, DEADLOCK_SENTINEL, "não deve deadlockar");
-    assert_eq!(
-        untag_smi(raw),
-        100,
-        "head da lista do worker deve ser 100"
-    );
+    assert_eq!(untag_smi(raw), 100, "head da lista do worker deve ser 100");
 }

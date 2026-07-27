@@ -28,10 +28,10 @@ use crate::channel::{
 
 /// Config de logging de um fiber.
 #[derive(Clone, Default)]
-pub struct LogConfig {
-    pub topic: Option<String>,
-    pub policy: Option<String>,
-    pub level: Option<i64>,
+pub(crate) struct LogConfig {
+    pub(crate) topic: Option<String>,
+    pub(crate) policy: Option<String>,
+    pub(crate) level: Option<i64>,
 }
 
 thread_local! {
@@ -62,7 +62,7 @@ thread_local! {
 }
 
 /// Reseta o estado de log entre execuções. Chamado por `reset_scheduler`.
-pub fn reset_log() {
+pub(crate) fn reset_log() {
     LOG_CONFIG.with(|c| {
         c.borrow_mut().take();
     });
@@ -76,13 +76,13 @@ pub fn reset_log() {
 
 /// Copia `LOG_CONFIG` do fiber pai para o filho (snapshot β).
 /// Chamada por `kata_rt_spawn`.
-pub fn snapshot_log_config() -> Option<LogConfig> {
+pub(crate) fn snapshot_log_config() -> Option<LogConfig> {
     LOG_CONFIG.with(|c| c.borrow().clone())
 }
 
 /// Restaura `LOG_CONFIG` a partir do snapshot do fiber.
 /// Chamada pelo scheduler antes de resumir um fiber.
-pub fn restore_log_config(cfg: Option<LogConfig>) {
+pub(crate) fn restore_log_config(cfg: Option<LogConfig>) {
     LOG_CONFIG.with(|c| {
         *c.borrow_mut() = cfg;
     });

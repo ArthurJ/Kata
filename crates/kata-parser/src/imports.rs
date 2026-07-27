@@ -70,9 +70,7 @@ impl Parser {
                                         self.advance();
                                         Some(a)
                                     }
-                                    _ => {
-                                        return Err(self.error("alias name after `as`"))
-                                    }
+                                    _ => return Err(self.error("alias name after `as`")),
                                 }
                             } else {
                                 None
@@ -138,10 +136,13 @@ impl Parser {
         // - Se path tem 2+ componentes e alias é Some, é açúcar para
         //   `import mod.(item as alias)` — import seletivo de um item.
         // - Se path tem 1 componente e alias é Some, é alias do módulo.
-        if path.len() >= 2 && alias.is_some() {
+        if path.len() >= 2
+            && let Some(alias_name) = alias
+        {
             // Açúcar: `import mod.item as alias` → `import mod.(item as alias)`
-            let item_name = path.pop().unwrap();
-            let alias_name = alias.unwrap();
+            let item_name = path
+                .pop()
+                .expect("path tem >=2 componentes, pop é infalível");
             return Ok(Item::ImportDecl {
                 path,
                 alias: None,

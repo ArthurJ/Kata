@@ -44,26 +44,22 @@ pub(crate) fn infer_dot_access(
     // Isso permite `mock_math.dobrar 21` onde `mock_math` é um módulo
     // importado via `import mock_math` (WholeModule). O merge_imports
     // registra cada item exportado com nome qualificado `mock_math.dobrar`.
-    if let Expr::Ident { name } = &expr.node {
-        if let DotIndex::Field(field_name) = index {
-            if env.lookup(name).is_none() {
-                // `name` não é variável local — pode ser módulo.
-                let qual_name = format!("{name}.{field_name}");
-                if let Some(overloads) = ctx.table.get_overloads(&qual_name) {
-                    // Encontrou `mod.fn` no DispatchTable — é module access.
-                    let overload = &overloads[0];
-                    return Ok(TypedExpr {
-                        span: *span,
-                        ty: Ty::Function(
-                            overload.params.clone(),
-                            Box::new(overload.ret.clone()),
-                        ),
-                        tail_pos,
-                        escape: EscapeTarget::Local,
-                        kind: TypedExprKind::Ident { name: qual_name },
-                    });
-                }
-            }
+    if let Expr::Ident { name } = &expr.node
+        && let DotIndex::Field(field_name) = index
+        && env.lookup(name).is_none()
+    {
+        // `name` não é variável local — pode ser módulo.
+        let qual_name = format!("{name}.{field_name}");
+        if let Some(overloads) = ctx.table.get_overloads(&qual_name) {
+            // Encontrou `mod.fn` no DispatchTable — é module access.
+            let overload = &overloads[0];
+            return Ok(TypedExpr {
+                span: *span,
+                ty: Ty::Function(overload.params.clone(), Box::new(overload.ret.clone())),
+                tail_pos,
+                escape: EscapeTarget::Local,
+                kind: TypedExprKind::Ident { name: qual_name },
+            });
         }
     }
 

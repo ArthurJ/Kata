@@ -7,7 +7,7 @@
 //! 4. Local shadowa imports sem ambiguidade
 
 use kata_core::{Ty, TypeEnv};
-use kata_resolution::{merge_two, resolve_with_origin, ResolvedModule};
+use kata_resolution::{ResolvedModule, merge_two, resolve_with_origin};
 
 // Helper: cria um ResolvedModule mínimo com um tipo definido.
 fn make_module_with_type(name: &str, ty: Ty, origin: &str) -> ResolvedModule {
@@ -158,9 +158,6 @@ fn merge_two_preserva_origins() {
     assert_eq!(int_binding.origin, "core");
 
     // Pessoa veio do my_module
-    let pessoa_binding = merged
-        .type_env
-        .lookup_binding("Pessoa")
-        .expect("Pessoa");
+    let pessoa_binding = merged.type_env.lookup_binding("Pessoa").expect("Pessoa");
     assert_eq!(pessoa_binding.origin, "my_module");
 }

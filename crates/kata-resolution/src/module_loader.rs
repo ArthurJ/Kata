@@ -12,7 +12,7 @@ use kata_ast::{Item, Module};
 use kata_lexer::lex;
 use kata_parser::parse;
 
-use crate::{merge_two, resolve_with_origin, ResolvedModule};
+use crate::{ResolvedModule, merge_two, resolve_with_origin};
 
 /// Erro de carregamento de módulo.
 #[derive(Debug, Clone)]
@@ -96,12 +96,7 @@ impl ModuleLoader {
     pub fn load_imports(&mut self, module: &Module) -> Result<Vec<ImportedModule>, LoadError> {
         let mut imports = Vec::new();
         for item in &module.items {
-            if let Item::ImportDecl {
-                path,
-                alias,
-                items,
-            } = &item.node
-            {
+            if let Item::ImportDecl { path, alias, items } = &item.node {
                 let resolved = self.load(path)?;
                 let module_name = path.last().cloned().unwrap_or_default();
                 let import_kind = match (alias, items) {
@@ -158,7 +153,10 @@ impl ModuleLoader {
             self.loading.remove(path);
             LoadError::ParseError(format!("{e:?}"))
         })?;
-        let module_name = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+        let module_name = path
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_default();
         let resolved = resolve_with_origin(&module, &module_name).map_err(|e| {
             self.loading.remove(path);
             LoadError::ResolveError(format!("{e:?}"))
@@ -174,9 +172,7 @@ impl ModuleLoader {
         } else {
             let prelude = crate::prelude_sigs::load_prelude().map_err(|e| {
                 self.loading.remove(path);
-                LoadError::ResolveError(format!(
-                    "erro ao carregar prelude para sub-módulo: {e:?}"
-                ))
+                LoadError::ResolveError(format!("erro ao carregar prelude para sub-módulo: {e:?}"))
             })?;
             merge_two(prelude, resolved)
         };
@@ -465,7 +461,11 @@ mod tests {
         // O módulo exportador tem export → só dobrar e triplicar visíveis.
         // Ambas são signatures (sigs com corpo Kata = functions também).
         let resolved = &imports[0].resolved;
-        let sig_names: Vec<&str> = resolved.signatures.iter().map(|s| s.name.as_str()).collect();
+        let sig_names: Vec<&str> = resolved
+            .signatures
+            .iter()
+            .map(|s| s.name.as_str())
+            .collect();
         assert!(sig_names.contains(&"dobrar"));
         assert!(sig_names.contains(&"triplicar"));
     }

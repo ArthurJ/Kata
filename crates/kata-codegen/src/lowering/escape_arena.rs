@@ -7,8 +7,8 @@
 //! ARC {refcount, size, destructor} antes dos dados. O caller recebe
 //! `data_ptr` (ponteiro para os dados, pulando o header).
 
-use cranelift_codegen::ir::types::I64;
 use cranelift_codegen::ir::InstBuilder;
+use cranelift_codegen::ir::types::I64;
 use kata_core::escape::EscapeTarget;
 
 use super::LowerCtx;

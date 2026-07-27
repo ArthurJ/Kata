@@ -271,27 +271,28 @@ pub(crate) fn infer_fork_builtin(
     // param é concreto (ex: Sender::List::Int), extrai a substituição
     // T0 → List::Int e propaga para todos os bindings do env.
     // Isto resolve T0 para que rx <! lst produza lst: List::Int (não Var).
-    if is_direct {
-        if let Some(overloads) = ctx.table.get_overloads(&action_name) {
-            // Extrai tipos dos args.
-            let arg_tys: Vec<Ty> = match &typed_args.kind {
-                TypedExprKind::Tuple { elements } => {
-                    elements.iter().map(|e| e.node.ty.clone()).collect()
-                }
-                TypedExprKind::Unit => Vec::new(),
-                _ => vec![typed_args.ty.clone()],
-            };
-            // Procura o overload com aridade correspondente.
-            for oi in overloads.iter().filter(|o| o.is_action && o.params.len() == arg_tys.len()) {
-                let mut subs: super::generics::Substitutions = HashMap::new();
-                for (param, arg) in oi.params.iter().zip(&arg_tys) {
-                    extract_var_subs(param, arg, &mut subs);
-                }
-                if !subs.is_empty() {
-                    // Propaga substituições para todos os bindings do env.
-                    env.apply_substitutions(&subs);
-                    break;
-                }
+    if is_direct && let Some(overloads) = ctx.table.get_overloads(&action_name) {
+        // Extrai tipos dos args.
+        let arg_tys: Vec<Ty> = match &typed_args.kind {
+            TypedExprKind::Tuple { elements } => {
+                elements.iter().map(|e| e.node.ty.clone()).collect()
+            }
+            TypedExprKind::Unit => Vec::new(),
+            _ => vec![typed_args.ty.clone()],
+        };
+        // Procura o overload com aridade correspondente.
+        for oi in overloads
+            .iter()
+            .filter(|o| o.is_action && o.params.len() == arg_tys.len())
+        {
+            let mut subs: super::generics::Substitutions = HashMap::new();
+            for (param, arg) in oi.params.iter().zip(&arg_tys) {
+                extract_var_subs(param, arg, &mut subs);
+            }
+            if !subs.is_empty() {
+                // Propaga substituições para todos os bindings do env.
+                env.apply_substitutions(&subs);
+                break;
             }
         }
     }

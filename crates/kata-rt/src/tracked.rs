@@ -112,8 +112,7 @@ pub extern "C" fn kata_rt_decref_tracked(data_ptr: i64) -> i64 {
 
                 // 1. Se tem destructor, chama para decref de children
                 if destructor != 0 {
-                    let dtor: extern "C" fn(i64) =
-                        std::mem::transmute(destructor as *const u8);
+                    let dtor: extern "C" fn(i64) = std::mem::transmute(destructor as *const u8);
                     dtor(data_ptr);
                 }
 

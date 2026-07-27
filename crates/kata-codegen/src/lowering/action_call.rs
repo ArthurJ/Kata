@@ -128,7 +128,8 @@ pub(crate) fn lower_action_call(
             // caller_arena decidido por EscapeTarget (Pré-11):
             // - Local → fiber_arena (arena local do fiber)
             // - Caller → caller_arena (sobrevive à destruição do fiber)
-            let caller_arena_val = crate::lowering::escape_arena::arena_handle_for_escape(expr.escape, ctx);
+            let caller_arena_val =
+                crate::lowering::escape_arena::arena_handle_for_escape(expr.escape, ctx);
 
             if ctx.scheduler_mode {
                 // Entry point: spawn + run (scheduler cria fiber + arena).
