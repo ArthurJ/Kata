@@ -1325,15 +1325,18 @@ Um tipo pode ter ambos: `implements` para interfaces que define explicitamente,
 NUM no `InterfaceRegistry` — `soma :: T implements NUM => T T => T` não aceita
 PositiveInt. O polimorfismo via interface fica para pós-1.0.
 
-### 4.5. `T?` — Açúcar Sintático para `Result::(T, Err)`
+### 4.5. `T?` — Açúcar Sintático para `Result::(T)`
 
 `T?` é açúcar puro de sintaxe de tipo. Lê-se "T ou falha". Desaçuca para
-`Result::(T, Err)` em todo lugar onde aparece um tipo: assinaturas de função,
+`Result::(T)` em todo lugar onde aparece um tipo: assinaturas de função,
 tipos de retorno, tipos de campos, ascriptions.
 
-`PositiveInt?` ≡ `Result::(PositiveInt, Err)`. `Int?` ≡ `Result::(Int, Err)`.
-`Err` é `Text` (mensagens de erro), consistente com o construtor falível de
-`constructors_refined.rs` que já usa `Result::(T, Text)`.
+`PositiveInt?` ≡ `Result::(PositiveInt)`. `Int?` ≡ `Result::(Int)`.
+
+O tipo `Err` do `Result` tem um **default type param** declarado no prelude:
+`Err(E=Text)`. Quando `Result` é instanciado com apenas 1 arg (como acontece
+com `T?`), o default preenche `E=Text` automaticamente. Assim, o tipo final
+efetivo é `Result::(T, Text)` — `Text` é o default, não hardcoded no açúcar.
 
 ```kata
 soma_positiva :: PositiveInt PositiveInt => PositiveInt?
@@ -1341,9 +1344,26 @@ lambda a b: PositiveInt (+ a b)
 ```
 
 Isso é apenas açúcar — o typeck resolve `PositiveInt?` para
-`Result::(PositiveInt, Err)` antes de qualquer verificação.
+`Result::(PositiveInt)` (1 arg), e o default `Err(E=Text)` do prelude
+preenche `E=Text` antes de qualquer verificação.
 
-#### 4.5.1. O que `T?` não faz
+#### 4.5.1. Default Type Params
+
+A sintaxe `Err(E=Text)` no prelude declara que o type param `E` tem default
+`Text`. Isto é **geral para qualquer enum com defaults**, não específico de
+`Result`. O usuário pode declarar defaults em seus próprios enums:
+
+```kata
+enum Config
+    Port(P=Int)
+    Host(H=Text)
+```
+
+`Config::(Int)` resolve para `Config::(Int, Text)` via default. O usuário pode
+instanciar com tipo customizado para não usar o default:
+`Result::(Int, MyError)` funciona sem usar o default `E=Text`.
+
+#### 4.5.2. O que `T?` não faz
 
 - **Não cria subtyping.** `Int` não é subtipo de `Int?`. São tipos distintos.
 - **Não cria Ok implícito.** Uma função que retorna `Int` não satisfaz

@@ -173,11 +173,19 @@ não tem assinatura. Se for aplicado a um contexto que espera
 
 ## Definições de done
 
-- [ ] `infer_variant_construct` aceita `expected_ty: Option<&Ty>`
-- [ ] Type params não-inferidos pelo payload são preenchidos pelo expected_ty
-- [ ] `infer_apply` propaga `hint` para `infer_variant_construct`
-- [ ] Caminho de Ident→variant em `apply.rs` propaga hint
-- [ ] Teste 1 (Ok em função nomeada) passa
-- [ ] Teste 2 (Err em função nomeada) passa
-- [ ] Teste 3 (match com scrutinee tipado) passa
-- [ ] `cargo test --workspace` passa (0 failures)
+- [x] `infer_variant_construct` aceita `expected_ty: Option<&Ty>`
+- [x] Type params não-inferidos pelo payload são preenchidos pelo expected_ty
+- [x] `infer_apply` propaga `hint` para `infer_variant_construct`
+- [x] Caminho de Ident→variant em `apply.rs` propaga hint
+- [x] Teste 1 (Ok em função nomeada) passa
+- [x] Teste 2 (Err em função nomeada) passa
+- [x] Teste 3 (match com scrutinee tipado) passa
+- [x] `cargo test --workspace` passa (0 failures)
+
+## Conclusão
+
+Implementado em 3 commits (`50c78ef`, `0686787`, `bfca94f`) + default type params
+(`d160232`). A inferência bidirecional preenche type params não-inferidos pelo
+payload usando o tipo esperado do contexto (assinatura, hint de retorno).
+O default type params (`Err(E=Text)`) coopera com a inferência bidirecional:
+quando nem o contexto fornece o param, o default preenche.
