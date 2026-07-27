@@ -18,7 +18,8 @@ use kata_resolution::{load_prelude, resolve};
 use kata_rt as rt;
 use kata_tree_shaking::tree_shake;
 
-use crate::{IntoReport, merge_imports, merge_resolved, read_source};
+use crate::imports::{load_module_imports, merge_imports};
+use crate::{IntoReport, merge_resolved, read_source};
 
 /// Executa o subcomando `kata build`.
 ///
@@ -45,7 +46,7 @@ pub(crate) fn cmd_build(file: &str, output: Option<&str>, dynamic: bool) -> miet
     let module = parse(tokens).map_err(IntoReport::into_report)?;
 
     // Carregar módulos importados (se houver)
-    let imports = crate::load_module_imports(file, &module)?;
+    let imports = load_module_imports(file, &module)?;
 
     let prelude = load_prelude()
         .map_err(|e| miette::Report::msg(format!("erro ao carregar prelude: {e:?}")))?;
