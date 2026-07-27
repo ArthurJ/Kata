@@ -17,13 +17,144 @@ use super::helpers::InferResult;
 /// Se um é Ty::Var e o outro é concreto, retorna o concreto.
 /// Se ambos são Ty::Var com o mesmo nome, retorna um deles.
 /// Caso contrário, retorna None (incompatíveis).
+///
+/// Recursiva em Generic, Tuple, List, Array, Range, Dict, Set, Function,
+/// e tipos de canal (Sender/Receiver/ReceiverFactory): cada type arg é
+/// unificado independentemente, permitindo que arms complementares
+/// resolvam type params distintos (ex: arm Ok infere T, arm Err infere E).
 fn unify_arm_types(a: &Ty, b: &Ty) -> Option<Ty> {
     match (a, b) {
+        // Var unifica com qualquer coisa — retorna o outro.
         (Ty::Var(_), Ty::Var(_)) if a == b => Some(a.clone()),
         (Ty::Var(_), _) => Some(b.clone()),
         (_, Ty::Var(_)) => Some(a.clone()),
+
+        // Generic: mesma base, mesma aridade → unifica cada type arg.
+        (Ty::Generic(n1, a1), Ty::Generic(n2, a2)) if n1 == n2 && a1.len() == a2.len() => {
+            let mut unified = Vec::with_capacity(a1.len());
+            for (x, y) in a1.iter().zip(a2.iter()) {
+                unified.push(unify_arm_types(x, y)?);
+            }
+            Some(Ty::Generic(n1.clone(), unified))
+        }
+
+        // Tuple: mesma aridade → unifica cada elemento.
+        (Ty::Tuple(a1), Ty::Tuple(a2)) if a1.len() == a2.len() => {
+            let mut unified = Vec::with_capacity(a1.len());
+            for (x, y) in a1.iter().zip(a2.iter()) {
+                unified.push(unify_arm_types(x, y)?);
+            }
+            Some(Ty::Tuple(unified))
+        }
+
+        // Function: unifica params e retorno.
+        (Ty::Function(p1, r1), Ty::Function(p2, r2))
+            if p1.len() == p2.len() =>
+        {
+            let mut unified_params = Vec::with_capacity(p1.len());
+            for (x, y) in p1.iter().zip(p2.iter()) {
+                unified_params.push(unify_arm_types(x, y)?);
+            }
+            let unified_ret = unify_arm_types(r1, r2)?;
+            Some(Ty::Function(unified_params, Box::new(unified_ret)))
+        }
+
+        // Tipos unários: List, Array, Range, Sender, Receiver, ReceiverFactory.
+        (Ty::List(a), Ty::List(b)) => {
+            Some(Ty::List(Box::new(unify_arm_types(a, b)?)))
+        }
+        (Ty::Array(a), Ty::Array(b)) => {
+            Some(Ty::Array(Box::new(unify_arm_types(a, b)?)))
+        }
+        (Ty::Range(a), Ty::Range(b)) => {
+            Some(Ty::Range(Box::new(unify_arm_types(a, b)?)))
+        }
+        (Ty::Sender(a), Ty::Sender(b)) => {
+            Some(Ty::Sender(Box::new(unify_arm_types(a, b)?)))
+        }
+        (Ty::Receiver(a), Ty::Receiver(b)) => {
+            Some(Ty::Receiver(Box::new(unify_arm_types(a, b)?)))
+        }
+        (Ty::ReceiverFactory(a), Ty::ReceiverFactory(b)) => {
+            Some(Ty::ReceiverFactory(Box::new(unify_arm_types(a, b)?)))
+        }
+
+        // Dict: dois type args (K, V).
+        (Ty::Dict(k1, v1), Ty::Dict(k2, v2)) => Some(Ty::Dict(
+            Box::new(unify_arm_types(k1, k2)?),
+            Box::new(unify_arm_types(v1, v2)?),
+        )),
+
+        // Set: um type arg.
+        (Ty::Set(a), Ty::Set(b)) => {
+            Some(Ty::Set(Box::new(unify_arm_types(a, b)?)))
+        }
+
+        // Igualdade estrutural para tipos sem aninhamento.
         _ if a == b => Some(a.clone()),
         _ => None,
+    }
+}
+
+/// Substitui Ty::Var pelos tipos concretos correspondentes em `resolved`.
+///
+/// Percorre `ty` e `resolved` em paralelo. Onde `ty` tem Ty::Var e `resolved`
+/// tem um tipo concreto na mesma posição, substitui. Retorna `resolved`
+/// onde `ty == resolved` (não há Var a substituir).
+///
+/// Isto é a retropropagação: depois que `unify_arm_types` descobre o tipo
+/// completo do match (ex: `Result::(Int, Text)`), aplica-o aos arm bodies
+/// que foram inferidos com Vars não-resolvidos (ex: `Result::(Int, Var("E"))`).
+fn propagate_resolved(ty: &Ty, resolved: &Ty) -> Ty {
+    match (ty, resolved) {
+        // Var no arm → usa o concreto do resolved.
+        (Ty::Var(_), other) => other.clone(),
+
+        // Generic: mesma base, mesma aridade → recursa em cada arg.
+        (Ty::Generic(n1, a1), Ty::Generic(n2, a2))
+            if n1 == n2 && a1.len() == a2.len() =>
+        {
+            let args = a1
+                .iter()
+                .zip(a2.iter())
+                .map(|(x, y)| propagate_resolved(x, y))
+                .collect();
+            Ty::Generic(n1.clone(), args)
+        }
+
+        // Tuple: mesma aridade → recursa.
+        (Ty::Tuple(a1), Ty::Tuple(a2)) if a1.len() == a2.len() => {
+            Ty::Tuple(a1.iter().zip(a2.iter()).map(|(x, y)| propagate_resolved(x, y)).collect())
+        }
+
+        // Function: recursa em params e retorno.
+        (Ty::Function(p1, r1), Ty::Function(p2, r2)) if p1.len() == p2.len() => {
+            let params = p1.iter().zip(p2.iter()).map(|(x, y)| propagate_resolved(x, y)).collect();
+            let ret = Box::new(propagate_resolved(r1, r2));
+            Ty::Function(params, ret)
+        }
+
+        // Tipos unários.
+        (Ty::List(a), Ty::List(b)) => Ty::List(Box::new(propagate_resolved(a, b))),
+        (Ty::Array(a), Ty::Array(b)) => Ty::Array(Box::new(propagate_resolved(a, b))),
+        (Ty::Range(a), Ty::Range(b)) => Ty::Range(Box::new(propagate_resolved(a, b))),
+        (Ty::Sender(a), Ty::Sender(b)) => Ty::Sender(Box::new(propagate_resolved(a, b))),
+        (Ty::Receiver(a), Ty::Receiver(b)) => Ty::Receiver(Box::new(propagate_resolved(a, b))),
+        (Ty::ReceiverFactory(a), Ty::ReceiverFactory(b)) => {
+            Ty::ReceiverFactory(Box::new(propagate_resolved(a, b)))
+        }
+
+        // Dict: dois type args.
+        (Ty::Dict(k1, v1), Ty::Dict(k2, v2)) => Ty::Dict(
+            Box::new(propagate_resolved(k1, k2)),
+            Box::new(propagate_resolved(v1, v2)),
+        ),
+
+        // Set: um type arg.
+        (Ty::Set(a), Ty::Set(b)) => Ty::Set(Box::new(propagate_resolved(a, b))),
+
+        // Sem Var para substituir — mantém o tipo original.
+        _ => ty.clone(),
     }
 }
 
@@ -154,6 +285,16 @@ pub(crate) fn infer_match(
         found: "nenhum braço".into(),
         span: (*span).into(),
     })?;
+
+    // Retropropagação: aplica o tipo resolvido do match aos arm bodies
+    // que foram inferidos com Ty::Var não-resolvidos. Isto garante que
+    // arms individuais carreguem o tipo completo (ex: Result::(Int, Text))
+    // em vez de Result::(Int, Var("E")), mantendo consistência entre o
+    // tipo do match e o tipo de cada arm.
+    for arm in &mut typed_arms {
+        let new_ty = propagate_resolved(&arm.body.node.ty, &ret_ty);
+        arm.body.node.ty = new_ty;
+    }
 
     // Verifica exaustividade.
     patterns::check_exhaustiveness(

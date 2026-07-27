@@ -173,3 +173,70 @@ fn ok_sem_hint_deixa_e_como_var() {
         entry.ty
     );
 }
+
+// ── Bidirecionalidade entre arms: arms complementares sem hint ─────
+
+/// Match top-level (sem assinatura) onde arms têm informação complementar
+/// sobre type params DIFERENTES.
+///
+/// Scrutinee: `Result::Ok 42` → `Generic("Result", [Int, Var("E")])`.
+/// Arm `Ok v`: constrói `Result::Ok v` → `Generic("Result", [Int, Var("E")])`.
+/// Arm `Err e`: `e` tem tipo `Var("E")` (do scrutinee), constrói
+/// `Result::Err e` → `Generic("Result", [Var("T"), Var("E")])`.
+///
+/// Unificação recursiva: posição 0 Int vs Var("T") → Int.
+/// Posição 1 Var("E") vs Var("E") → Var("E").
+/// Resultado: `Generic("Result", [Int, Var("E")])`.
+///
+/// O `E` continua `Var("E")` porque Ninguém na expressão fornece `E=Text`.
+/// Isto é correto — sem assinatura, o tipo do erro é genuinamente desconhecido.
+#[test]
+fn match_arms_complementares_unificam_t_mas_e_fica_var() {
+    let src = "match (Result::Ok 42)\n    Result::Ok v: Result::Ok v\n    Result::Err e: Result::Err e";
+    let tmod = infer_src(src);
+    let entry = &tmod.entry.node;
+    // T é resolvido (Int) pela unificação entre arms.
+    // E permanece Var porque nenhum arm fornece o tipo concreto de E.
+    assert_eq!(
+        entry.ty,
+        Ty::Generic("Result".into(), vec![Ty::int(), Ty::Var("E".into())])
+    );
+}
+
+/// Match onde ambos os arms constroem Ok com tipos diferentes para T.
+/// O arm `Ok v` (v=42, Int) constrói `Result::Ok v` → T=Int.
+/// O arm `Err e` constrói `Result::Ok e` → T=tipo de e (Var("E") do scrutinee).
+/// Unificação: T=Int vs T=Var("E") → Int (Var aceita concreto).
+/// Não deve falhar — o Var do scrutinee é compatível com Int.
+#[test]
+fn match_arms_complementares_com_text_no_err() {
+    // Scrutinee: Result::Err "erro" → Generic("Result", [Var("T"), Text])
+    // Arm Ok v: v tem tipo Var("T"), constrói Result::Ok v → [Var("T"), Var("E")]
+    // Arm Err e: e tem tipo Text, constrói Result::Err e → [Var("T"), Text]
+    // Unificação: T: Var vs Var → Var; E: Var vs Text → Text
+    // Resultado: Generic("Result", [Var("T"), Text])
+    let src = "match (Result::Err \"erro\")\n    Result::Ok v: Result::Ok v\n    Result::Err e: Result::Err e";
+    let tmod = infer_src(src);
+    let entry = &tmod.entry.node;
+    assert_eq!(
+        entry.ty,
+        Ty::Generic("Result".into(), vec![Ty::Var("T".into()), Ty::text()])
+    );
+}
+
+/// Match com arms que produzem tipos completamente incompatíveis.
+/// Arm 1 retorna Result, arm 2 retorna Int. Deve falhar.
+#[test]
+fn match_arms_incompatíveis_deve_falhar() {
+    let src = "match (Result::Ok 42)\n    Result::Ok v: Result::Ok v\n    Result::Err _: 0";
+    let tokens = lex(src).unwrap();
+    let module = parse(tokens).unwrap();
+    let prelude = load_prelude().unwrap();
+    let user = resolve(&module).unwrap();
+    let resolved = merge_resolved(prelude, user);
+    let result = infer_module(&module, &resolved);
+    assert!(
+        result.is_err(),
+        "match com arm retornando Result e arm retornando Int deve falhar"
+    );
+}
