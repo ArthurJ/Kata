@@ -31,6 +31,7 @@ pub(crate) fn infer_variant_construct(
     span: &Span,
     env: &mut TypeEnv,
     ctx: &InferCtx,
+    expected_ty: Option<&Ty>,
 ) -> InferResult<(Ty, TypedExprKind)> {
     use kata_core::ty::Ty;
 
@@ -110,6 +111,21 @@ pub(crate) fn infer_variant_construct(
                 found: format!("{}", typed_arg.ty),
                 span: args[0].span.into(),
             });
+        }
+
+        // Preenche type params não-inferidos pelo payload usando expected_ty.
+        // Inferência bidirecional top-down: se o contexto (assinatura da função,
+        // hint de retorno) conhece o tipo completo, os params que a variante não
+        // menciona são preenchidos pelo expected.
+        if let Some(Ty::Generic(exp_name, exp_args)) = expected_ty
+            && exp_name == enum_name
+            && exp_args.len() == type_args.len()
+        {
+            for (i, arg) in type_args.iter_mut().enumerate() {
+                if matches!(arg, Ty::Var(_)) {
+                    *arg = exp_args[i].clone();
+                }
+            }
         }
 
         let result_ty = Ty::Generic(enum_name.to_string(), type_args);
