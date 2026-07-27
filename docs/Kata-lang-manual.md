@@ -385,10 +385,10 @@ semântica via uma MetadataTable sidecar.
   nativamente.
 
 - **Runtime (`kata-rt`):** Biblioteca nativa isolada, linkada via symbol map.
-  Scheduler M:N multithread (struct explícita, não TLS global), channels
-  lock-free, arena per-fiber, `Arc<T>` nativo para heap. `@parallel` multiprocess
-  via fork + IPC. Desconhece as regras internas da linguagem — comunicando-se
-  apenas via C-ABI.
+  Scheduler cooperativo single-threaded (struct explícita, não TLS global),
+  channels com Mutex/Condvar, arena per-fiber, `Arc<T>` nativo para heap.
+  `@parallel` multiprocess via fork + IPC. Desconhece as regras internas da
+  linguagem — comunicando-se apenas via C-ABI.
 
 - **Diagnostics (`kata-diagnostics`):** Catálogo central de erros estruturados
   com `miette` para spans coloridos. Organizado em 3 submódulos (frontend,
@@ -560,14 +560,14 @@ em `kata-rt`, desacoplada do compilador.
 - **Coleções — Arrays:** `kata_rt_array_alloc`, `kata_rt_array_len`, `kata_rt_array_get`,
   `kata_rt_array_set`
 - **Sum:** `kata_rt_store_sum_result`, `kata_rt_tag_int`
-- **CSP (multithread):** `kata_rt_channel_create`, `kata_rt_channel_send`,
+- **CSP:** `kata_rt_channel_create`, `kata_rt_channel_send`,
   `kata_rt_channel_recv`, `kata_rt_queue_create`, `kata_rt_broadcast_create`,
-  `kata_rt_select` (com timeout), `kata_rt_fork` (scheduler M:N)
+  `kata_rt_select` (com timeout), `kata_rt_fork` (scheduler cooperativo)
 - **ARC (Arc<T> nativo):** `kata_rt_alloc_arc`, `kata_rt_incref`, `kata_rt_decref`
 - **Type Table (reflexão estrutural):** `kata_rt_register_type`,
   `kata_rt_register_type_arena`, `kata_rt_typeof`, `kata_rt_repr_to_text`
 - **Pretty Printing:** `kata_rt::pretty_print(ptr, type_id, max_depth)`
-- **Logging (`@log`):** `kata_rt_log_publish`, `kata_rt_log_recv`
+- **Logging (`@log`):** `kata_rt_log_publish`, `kata_rt_log_recv`, `kata_rt_log_config`
 - **Comptime/Snapshots:** `kata_rt_struct_to_bump`, `kata_rt_load_snapshot`,
   `kata_rt_get_snapshot_root`, `kata_rt_register_fn`
 - **Fuel:** `kata_rt_fuel_decrement`, `kata_rt_fuel_exhausted`
@@ -1466,10 +1466,10 @@ compilador sabe que a expressão é um retorno e aloca na arena do caller. Com
 **`fork!` retorna `Unit`:** Actions submetidas via `fork!` comunicam
 exclusivamente via canais. O fork não produz um valor de retorno síncrono.
 
-**ARC heap apenas para canais:** Valores que circulam por canais (`!>`) sobrevivem
-ao sender e são alocados na heap global com `Arc<T>` nativo (reference counting
-thread-safe). Valores que não escapam por canais vivem na arena local ou na
-caller's arena — zero cópia, zero overhead.
+**ARC na root arena para canais:** Valores que circulam por canais (`!>`)
+sobrevivem ao sender e são alocados na root arena (TrackedArena) com ARC manual
+(CaptureBox com refcount). Valores que não escapam por canais vivem na arena
+local ou na caller's arena — zero cópia, zero overhead.
 
 ### 5.3. Actions como Valores de Primeira Classe (First-Class Actions)
 
@@ -1522,7 +1522,7 @@ action dispatcher (job :: Action(Int) => Unit, payload :: Int) => Unit
 `Ty::Action` é separada de `Ty::Function` porque as ABIs são semanticamente
 diferentes:
 - `Function`: `(captures_ptr, arg1, ...) -> ret` — pura, sem scheduler
-- `Action`: `(fiber_arena, caller_arena, args_ptr) -> i64` — impura, scheduler M:N
+- `Action`: `(fiber_arena, caller_arena, args_ptr) -> i64` — impura, scheduler cooperativo
 
 #### Passagem como Parâmetro
 
@@ -1595,8 +1595,9 @@ removida.
 
 ## 6. Concorrência e Gestão de Memória (Modelo CSP)
 
-O runtime fornece escalonamento **multithread M:N** — M fibers (tasks Kata)
-distribuídas em N threads OS (worker pool com work-stealing).
+O runtime fornece escalonamento **cooperativo single-threaded** — M fibers
+(tasks Kata) em 1 thread OS, com round-robin e yield cooperativo. Multithread
+M:N (worker pool com work-stealing) é aspiracional, planejado para post-1.0.
 
 ### 6.1. Scheduler como Struct Explícita
 
@@ -1614,7 +1615,7 @@ pub struct Scheduler {
 
 TLS é usado apenas para o `yield` (acesso implícito de dentro de FFI). O
 scheduler em si é parâmetro explícito. Isso torna testes isolados triviais e
-desbloqueia multi-thread sem refatoração.
+desbloqueia multithread sem refatoração (post-1.0).
 
 ### 6.2. Fibers e Yielding Cooperativo
 
@@ -1631,8 +1632,9 @@ O *fork!* submete processos sequenciais isolados que comunicam por três vias:
 2.  `queue!(N)`: Fila com buffer de `N` espaços (Backpressure).
 3.  `broadcast!`: Difusão 1-para-N (Publish-Subscribe).
 
-Canais são **lock-free MPSC/MPMC** (multi-producer multi-consumer), thread-safe
-para o scheduler multithread.
+Canais usam `Mutex`/`Condvar` (futex no Linux) para blocking cooperativo.
+O scheduler é single-threaded — os locks garantem consistência para o
+wake pass do scheduler, não para concorrência entre threads.
 
 Para orquestrar múltiplas vias, utiliza-se a estrutura `select` com casos de
 `timeout`, que multiplexa eventos sem inanição (*starvation*).
@@ -1659,11 +1661,12 @@ Como não há Garbage Collector, a posse da memória é regida em tempo de compi
   sharing entre threads — cada fiber tem sua arena.
 * **Caller's Arena:** Valores de retorno de Actions são alocados na arena do
   caller (zero cópia, persiste até o caller terminar).
-* **Heap Global + `Arc<T>`:** Dados que escapam por canais são alocados na heap
-  global com `Arc<T>` nativo do Rust (atomic reference counting, thread-safe). O
-  compilador injeta `incref`/`decref` via FFI quando necessário, mas a
-  corretude do refcount é garantida pelo Rust — não há ARC pass manual
-  suscetível a bugs de double-free ou leak.
+* **Heap (Root Arena) + ARC manual:** Dados que escapam por canais são
+  alocados na root arena (TrackedArena) com ARC manual — um CaptureBox com
+  header próprio (`fn_ptr`, `refcount`, `n_captures`). O compilador injeta
+  `incref`/`decref` via FFI. Quando o refcount chega a 0, `kata_rt_decref`
+  libera o bloco individualmente da root arena. O refcount é não-atomic
+  (adequado ao scheduler single-threaded).
 
 ## 7. Diretivas de Compilador (@)
 
@@ -1697,9 +1700,12 @@ módulo), sempre precedendo imediatamente o item que modificam.
 * **`@test("descrição")`**: Marca um bloco para o *Test Runner*. A forma braced
   `@test{desc: "...", expects: "CompileError"}` marca um **teste negativo** —
   verifica que o código **não compila**.
-* **`@log{level: "info", msg: "...", topic: "audit", policy: "block"}`**: Injeta
-  telemetria assíncrona via tópicos *Publish-Subscribe*. Política `"drop"` descarta
-  silenciosamente; `"block"` força auditoria bloqueando a fiber até confirmação.
+* **`@log{msg: "...", when: "enter"|"exit", level: LogLevel::Info, topic: "audit", policy: "block"}`**: Injeta
+  telemetria via canais CSP. `msg` é template compile-time com interpolação
+  `{expr}`. `when` obrigatório: `"enter"` loga no prólogo, `"exit"` no epílogo.
+  Política `"drop"` = Broadcast fire-and-forget; `"block"` = Queue com
+  backpressure. Independente de `log!()` (action nativa para publicação
+  explícita no corpo). Ver §20.
 * **`@associative(0)`**: Anota que a função é associativa, informando o elemento
   neutro. Permite que o otimizador TRMA converta recursões bloqueadas em
   recursão de cauda perfeita.
@@ -2329,9 +2335,113 @@ TAST especializados antes do lowering.
 
 ## 20. Observabilidade, Logging e Pureza (`@log`)
 
-`@log` injeta telemetria assíncrona via canais CSP sem contaminar a assinatura
-matemática da função. Tópicos roteiam para canais Broadcast distintos. Políticas:
-`"drop"` (descarta se sobrecarregado) ou `"block"` (bloqueia até confirmação).
+O sistema de log do Kata é telemetria via canais CSP. Mensagens são publicadas
+em **tópicos** (canais nomeados via registry thread_local) e consumidas via
+`log_recv!()`. Não é um logger convencional com appenders e formatadores — é
+pub/sub sobre a infraestrutura de canais existente.
+
+### 20.1. Diretiva `@log`
+
+Anotação em actions e funções nomeadas que injeta `kata_rt_log_publish` no
+prólogo (`when: "enter"`) ou epílogo (`when: "exit"`) da definição. Permite
+emitir telemetria estruturada sem contaminar a assinatura matemática — a pureza
+nominal da função não muda.
+
+```kata
+@log{msg: "processando {x}, resultado: {r}", when: "exit", level: LogLevel::Info, topic: "audit", policy: "block"}
+action processar (x::Int) -> Int
+  let r := * x 2
+  r
+```
+
+**Campos:**
+
+| Campo | Tipo | Obrigatório | Descrição |
+|---|---|---|---|
+| `msg` | `Text` | sim | Template compile-time. `{expr}` interpola expressão do escopo (Ident ou `Ident.field`). `{{` escapa `{` literal; `}}` escapa `}`. Desugara para `format "template" (expr1, ...)` via `infer_format`. |
+| `when` | `Text` | sim | `"enter"` = loga no prólogo. `"exit"` = loga no epílogo. |
+| `level` | `LogLevel` | não | Variante do enum `LogLevel` (`Debug`/`Info`/`Warn`/`Error`). Default: `Info`. |
+| `topic` | `Text` | não | Nome do canal. Default: herdado do fiber ancestral (ou `"default"`). |
+| `policy` | `Text` | não | `"drop"` (Broadcast, fire-and-forget) ou `"block"` (Queue cap=1, backpressure). Default: herdado (ou `"drop"`). |
+
+**Restrições de `when`:**
+- `when: "enter"` → placeholders do `msg` só podem referenciar **parâmetros**
+  da função. Referenciar variável do corpo é erro compile-time.
+- `when: "exit"` → placeholders podem referenciar params e variáveis do corpo.
+  O codegen injeta a publicação no epílogo (antes do retorno).
+
+### 20.2. Action nativa `log!()`
+
+Publicação explícita no corpo de actions. Dispara na execução da linha (não no
+wrapping como `@log`). A mensagem é **dinâmica** (construída em runtime) — não
+há interpolação de template como no `@log`.
+
+```kata
+log!(LogLevel::Info, "mensagem", "audit", "drop")
+```
+
+| Pos | Tipo | Descrição |
+|---|---|---|
+| 0 | `LogLevel` | Level da mensagem. |
+| 1 | `Text` | Mensagem dinâmica (sem interpolação `{expr}`). |
+| 2 | `Text` | Tópico. Opcional — default herdado ou `"default"`. |
+| 3 | `Text` | Policy. Opcional — default herdado ou `"drop"`. |
+
+Typeck aceita 2, 3 ou 4 args.
+
+### 20.3. Action nativa `log_recv!()`
+
+Recebe a próxima mensagem de telemetria do tópico. Bloqueia (yield point via
+`BlockedOnRecv`) até chegar mensagem. Retorna `Text` (payload) ou `Unit` se o
+canal fechou. Precisa estar em fiber context.
+
+```kata
+let msg := log_recv!("audit")
+```
+
+Para tópicos Broadcast (policy `"drop"`), o receiver é criado eagerly no
+`get_or_create_topic` e cached em `RECEIVER_REGISTRY` (thread_local).
+
+### 20.4. Action nativa `log_config!()`
+
+Configura defaults de `topic`/`policy`/`level` para o fiber atual e
+descendentes. Herdado via snapshot no `kata_rt_spawn` (copia `LOG_CONFIG` TLS
+do pai para o filho).
+
+```kata
+log_config!("audit", "block", LogLevel::Info)
+```
+
+### 20.5. Canais e policies
+
+Tópicos são canais nomeados, resolvidos sob demanda num registry
+`HashMap<String, i64>` (nome → handle).
+
+- **`"drop"`** → canal Broadcast. Fire-and-forget — não bloqueia o publisher.
+  Cada receiver mantém seu próprio `last_seen_version`; receivers lentos perdem
+  mensagens intermediárias (o `BroadcastInner` guarda só a última versão).
+- **`"block"`** → Queue bounded (cap=1). Backpressure — bloqueia o publisher
+  via `WaitingOnChannelSend` até o consumidor liberar o slot com `channel_recv`.
+
+### 20.6. Enum `LogLevel`
+
+```kata
+enum LogLevel
+  Debug
+  Info
+  Warn
+  Error
+```
+
+Fixo no `stdlib/core.kata`. Tags: `Debug=0, Info=1, Warn=2, Error=3`. Validado
+em compile-time. **O runtime atualmente ignora o level** — o parâmetro é
+passado na FFI mas não há filtragem. Reservado para filtragem futura.
+
+### 20.7. Pureza
+
+`@log` não muda a assinatura. O codegen insere o efeito colateral
+invisivelmente — na semântica da linguagem, a pureza não muda; no máximo a
+resposta é adiada (com `policy: "block"`).
 
 ## 21. Interoperabilidade e Baixo Nível (FFI)
 
@@ -2376,21 +2486,24 @@ registrando o rastro no escalonador.
 ## 23. Orquestração Não-Determinística (`select`)
 
 `select` multiplexa operações de canais. A Action cede ao scheduler e é
-acordada quando um evento se concretiza. Justiça pseudoaleatória impede
-starvation. `timeout N` (ms) como válvula de escape.
+acordada quando um evento se concretiza. Os canais são verificados **em ordem**
+(primeiro pronto é selecionado) — não há aleatoriedade. `timeout N` (ms) como
+válvula de escape.
 
 ## 24. Anatomia do Runtime (`kata-rt`) e a Ponte C-ABI
 
 O binário final encapsula código de máquina (Cranelift) acoplado ao runtime
 (`kata-rt`).
 
-* **Scheduler M:N multithread:** M fibers (tasks Kata) em N threads OS (worker
-  pool com work-stealing). O scheduler é uma struct explícita — TLS apenas para
-  yield.
+* **Scheduler single-threaded cooperativo:** M fibers (tasks Kata) em 1 thread
+  OS, com round-robin e yield cooperativo. TLS para suspend/resume. O scheduler
+  é uma struct explícita. Multithread (M:N com work-stealing) é aspiracional.
 * **Corrotinas Stackful (wasmtime-fiber):** Cada Action é encapsulada numa
   corrotina nativa. `<!` bloqueante faz yield da fiber, não da thread OS.
-* **`Arc<T>` nativo:** Reference counting thread-safe garantido pelo Rust.
-  Elimina a classe de bugs de memory management do ARC pass manual.
+* **ARC manual (CaptureBox):** Reference counting gerenciado pelo codegen via
+  FFI (`kata_rt_incref`/`kata_rt_decref`). CaptureBox alocado na root arena
+  (TrackedArena); quando refcount chega a 0, o bloco é liberado individualmente.
+  Refcount não-atomic (single-threaded).
 * **`@parallel` multiprocess:** Fork de processo OS com IPC. Isolamento total
   para CPU-bound pesado.
 

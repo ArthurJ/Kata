@@ -155,7 +155,7 @@ action dispatcher (job :: Action(Int) => Unit, payload :: Int) => Unit
 - **Posição**: qualquer posição onde um tipo aparece (assinaturas de Action,
   tipos de param, annotations).
 - **Semântica**: `Ty::Action(Vec<Ty>, Box<Ty>)` — separada de `Ty::Function`
-  porque as ABIs são semanticamente diferentes (Actions usam scheduler M:N,
+  porque as ABIs são semanticamente diferentes (Actions usam scheduler cooperativo,
   funções puras não).
 - **Referência sem `!()`**: `worker_a` (sem `!()`) é uma referência que carrega
   o tipo `Action(Int) => Unit`. O valor em runtime é o `fn_ptr` (i64) da Action.
@@ -290,7 +290,7 @@ assert!(cond, "msg custom")     # 2 args: panic!(msg) se False
 | `<!` | Recebimento | `canal <! variavel` |
 
 - `channel!`, `queue!(N)`, `broadcast!` são actions que criam canais.
-- **Relações**: `fork!` submete Action a corrotina no scheduler M:N. `select` multiplexa canais. Escape Analysis rastreia dados enviados por `!>` para alocação heap/`Arc<T>`.
+- **Relações**: `fork!` submete Action a corrotina no scheduler cooperativo single-threaded. `select` multiplexa canais. Escape Analysis rastreia dados enviados por `!>` para alocação heap/`Arc<T>`.
 
 ---
 
@@ -484,7 +484,7 @@ action processar (x::Int) => Int
 | `when` | `Text` | **sim** (Decisão D1) | `"enter"` = loga no prólogo. `"exit"` = loga no epílogo. Ausente = erro compile-time (`when é obrigatório em @log`). Outro valor = erro. |
 | `level` | `LogLevel` | não | Variante do enum `LogLevel` do prelude (`Debug`/`Info`/`Warn`/`Error`). Default: `Info`. |
 | `topic` | `Text` | não | Nome do canal onde publicar. Default: herdado do fiber ancestral (ou `"default"` se nenhuma config). |
-| `policy` | `Text` | não | `"drop"` (fire-and-forget via Broadcast) ou `"block"` (Queue bounded cap=1 com ack, bloqueia se cheio). Default: herdado (ou `"drop"`). |
+| `policy` | `Text` | não | `"drop"` (fire-and-forget via Broadcast) ou `"block"` (Queue bounded cap=1 com backpressure, bloqueia se cheio). Default: herdado (ou `"drop"`). |
 
 ### Restrições de `when`
 
@@ -495,8 +495,8 @@ action processar (x::Int) => Int
 
 Tópicos são canais nomeados, resolvidos sob demanda num registry `HashMap<String, i64>` (nome → handle). Primeira referência a `"audit"` cria o canal; subsequentes reusam.
 
-- **`"drop"`** → canal Broadcast single-slot (sobrescreve valor anterior — se FIFO necessário, use `"block"`). Não bloqueia. Reusa `kata_rt_broadcast_create` + `kata_rt_broadcast_send`.
-- **`"block"`** → Queue bounded (cap=1) com ack. Bloqueia o publisher via `YieldReason::BlockedOnSend` até o consumidor confirmar. Reusa `kata_rt_channel_create` + `kata_rt_channel_send`.
+- **`"drop"`** → canal Broadcast (fire-and-forget). Não bloqueia o publisher. Cada receiver mantém seu próprio `last_seen_version`; receivers lentos perdem mensagens intermediárias (o `BroadcastInner` guarda só a última versão). Reusa `kata_rt_broadcast_create` + `kata_rt_channel_send`.
+- **`"block"`** → Queue bounded (cap=1) com backpressure. Bloqueia o publisher via `WaitingOnChannelSend` até o consumidor liberar o slot com `channel_recv`. Reusa `kata_rt_queue_create` + `kata_rt_channel_send`.
 
 ### Enum `LogLevel` no prelude
 
@@ -543,8 +543,12 @@ Três actions interceptadas no typeck (como `format`, `map`, `filter`, `len`) �
 ### `log!()` — publicação explícita
 
 ```kata
-log!(LogLevel::Info, "mensagem dinâmica: {valor}", "audit", "drop")
+log!(LogLevel::Info, "mensagem dinâmica", "audit", "drop")
 ```
+
+A mensagem (pos 1) é **dinâmica** — construída em runtime, sem interpolação
+de template. `{valor}` na string é texto literal, não é substituído. Para
+interpolação compile-time com `{expr}`, use a diretiva `@log`.
 
 Sintaxe posicional (action call existente: `Ident ! (tuple)`):
 

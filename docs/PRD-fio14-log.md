@@ -47,6 +47,12 @@ Campos da diretiva:
 
 ### 2.2. Comportamento automático do `when`
 
+> **NOTA DE DIVERGÊNCIA (2026-07-26):** Esta seção descreve comportamento
+> aspiracional que **não foi implementado**. Na implementação real, `when` é
+> **obrigatório** — sem `when` explícito, o typeck retorna erro. A automação
+> descrita abaixo foi revertida por decisão de design. O texto é mantido como
+> referência histórica.
+
 Sem `when` explícito, o codegen decide:
 
 - Se **todos** os placeholders `{expr}` referenciam apenas params da função →
@@ -159,10 +165,11 @@ Tópicos são canais nomeados. O runtime mantém um registry de tópicos:
 
 - **`"drop"`** → canal Broadcast (fire-and-forget). Reusa
   `kata_rt_broadcast_create` + `kata_rt_broadcast_send`. Não bloqueia.
-- **`"block"`** → canal Queue bounded (capacidade 1) com ack. Reusa
-  `kata_rt_channel_create` + `kata_rt_channel_send` (bloqueia se cheio,
-  `YieldReason::BlockedOnSend`). O consumidor envia ack de volta via um canal
-  de ack dedicado.
+- **`"block"`** → canal Queue bounded (capacidade 1) com backpressure. Reusa
+  `kata_rt_queue_create` + `kata_rt_channel_send` (bloqueia se cheio,
+  `WaitingOnChannelSend`). O consumidor libera o slot ao chamar `channel_recv`
+  via `log_recv!()`. **Não há canal de ack dedicado** — a backpressure é
+  implícita no Queue bounded.
 
 O registry de tópicos é criado sob demanda: primeira referência a `"audit"`
 cria o canal; referências subsequentes reusam o mesmo handle.
