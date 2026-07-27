@@ -10,7 +10,7 @@ use kata_diagnostics::MiddleError;
 use crate::patterns;
 use crate::typed::{TypedExprKind, TypedMatchArm, TypedPattern};
 
-use super::expr::{InferCtx, infer_expr};
+use super::expr::{InferCtx, infer_expr, infer_expr_hinted};
 use super::helpers::InferResult;
 
 /// Unificação limitada para tipos de braços de match.
@@ -28,6 +28,11 @@ fn unify_arm_types(a: &Ty, b: &Ty) -> Option<Ty> {
 }
 
 /// Infere um `match` — pattern matching com verificação de exaustividade.
+///
+/// `hint` é o tipo esperado do match no contexto (ex: tipo de retorno da
+/// função nomeada). É propagado para a inferência do body de cada arm,
+/// permitindo que construções de variant dentro dos arms recebam o tipo
+/// esperado e resolvam type params não-inferidos pelo payload.
 pub(crate) fn infer_match(
     scrutinee: &Spanned<Expr>,
     arms: &[MatchArm],
@@ -35,6 +40,7 @@ pub(crate) fn infer_match(
     env: &mut TypeEnv,
     ctx: &InferCtx,
     tail_pos: bool,
+    hint: Option<&Ty>,
 ) -> InferResult<(Ty, TypedExprKind)> {
     // Infere o scrutinee.
     let typed_scrutinee = infer_expr(&scrutinee.node, &scrutinee.span, env, ctx, false)?;
@@ -95,8 +101,17 @@ pub(crate) fn infer_match(
             None
         };
 
-        // Infere body do braço.
-        let typed_body = infer_expr(&arm.body.node, &arm.body.span, &mut arm_env, ctx, tail_pos)?;
+        // Infere body do braço — propaga hint do contexto (ex: tipo de
+        // retorno da função nomeada) para permitir que construções de
+        // variant dentro do arm resolvam type params não-inferidos.
+        let typed_body = infer_expr_hinted(
+            &arm.body.node,
+            &arm.body.span,
+            &mut arm_env,
+            ctx,
+            tail_pos,
+            hint,
+        )?;
 
         // Verifica que todos os braços retornam o mesmo tipo.
         // Unificação limitada — Ty::Var unifica com qualquer tipo concreto.

@@ -378,7 +378,9 @@ pub(crate) fn infer_expr_hinted(
         } => infer_lambda(patterns, body, guards, with_bindings, span, env, ctx, hint)?,
 
         // ── Match ───────────────────────────────
-        Expr::Match { scrutinee, arms } => infer_match(scrutinee, arms, span, env, ctx, tail_pos)?,
+        Expr::Match { scrutinee, arms } => {
+            infer_match(scrutinee, arms, span, env, ctx, tail_pos, hint)?
+        }
 
         // ── ActionCall — dispatch para Action builtin ou definida ──
         Expr::ActionCall { callee, args } => {

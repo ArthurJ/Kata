@@ -134,7 +134,25 @@ fn match_com_scrutinee_tipado_resolve_type_args() {
     assert_eq!(func.ret_ty, Ty::int());
 }
 
-// ── Construção sem hint: E fica Var (lambda anônimo) ──────────────
+// ── Match com hint: arm body constrói variant com type param não-inferido ──
+
+/// `re_wrap :: Result::(Int, Text) => Result::(Int, Text)` com match
+/// onde cada arm constrói um variant do Result.
+///
+/// O arm `Ok v` constrói `Result::Ok v` — `Ok` menciona `T` mas não `E`.
+/// Sem propagação de hint para o match, `E` ficaria `Var("E")` dentro do arm.
+/// Com a correção, o hint `Result::(Int, Text)` é propagado para o body
+/// do arm e `E=Text` é preenchido.
+#[test]
+fn match_arm_construction_recebe_hint_do_contexto() {
+    let src = "re_wrap :: Result::(Int, Text) => Result::(Int, Text)\nlambda r: match r\n        Result::Ok v: Result::Ok v\n        Result::Err e: Result::Err e\nre_wrap ((Result::Ok 42)::Result::(Int, Text))";
+    let tmod = infer_src(src);
+    let func = find_function(&tmod, "re_wrap");
+    assert_eq!(
+        func.ret_ty,
+        Ty::Generic("Result".into(), vec![Ty::int(), Ty::text()])
+    );
+}
 
 /// `lambda x: Result::Ok x` sem assinatura.
 ///
