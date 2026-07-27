@@ -151,6 +151,11 @@ pub struct VariantDecl {
     /// Payload da variante. None = unitária (`True`).
     /// Some(ty) = carrega tipo (`Ok(T)`).
     pub payload: Option<Spanned<TypeExpr>>,
+    /// Default do type param do payload. None = sem default.
+    /// `Err(E=Text)` → payload = Some(Var("E")), default = Some(Text).
+    /// Quando o enum é instanciado com menos type args que o esperado,
+    /// os params com default são preenchidos automaticamente.
+    pub default: Option<Spanned<TypeExpr>>,
     /// Predicado da variante. None = sem predicado.
     /// `Magreza(< _ 18.5)` → predicate = Some(Apply { <, [Hole, 18.5] }).
     /// `Obesidade` → predicate = None (default/fallback).

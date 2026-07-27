@@ -122,22 +122,23 @@ fn count_match_in_module(typed: &kata_inference::TypedModule) -> usize {
 // ── DoD 20: `?` desempacota Result::Ok e continua ──────────────────
 
 /// DoD 20: `?` em `Result::Ok 42` desempacota o valor (42) e continua.
-/// A action retorna `Result::(Int, Int)` — o `?` desempacota, e o body
+/// A action retorna `Result::(Int, Text)` — o `?` desempacota, e o body
 /// continua com `Result::Ok 0`. O resultado final é `Ok(0)`.
+/// E=Text é o default do prelude (`Err(E=Text)`).
 #[test]
 fn question_desempacota_result_ok() {
-    let src = r#"action extrai => Result::(Int, Int)
+    let src = r#"action extrai => Result::(Int, Text)
     let r := Result::Ok 42
     r ?
     Result::Ok 0
 extrai!()"#;
     let (raw, ty) = eval_src(src);
-    // O tipo de retorno é Result::(Int, Int) = Generic
+    // O tipo de retorno é Result::(Int, Text) = Generic
     assert_eq!(
         ty,
         Ty::Generic(
             "Result".into(),
-            vec![Ty::Prim(PrimTy::Int), Ty::Prim(PrimTy::Int)]
+            vec![Ty::Prim(PrimTy::Int), Ty::Prim(PrimTy::Text)]
         )
     );
     // O valor é um Sum (ponteiro) — verificamos que não é SMI
@@ -146,11 +147,12 @@ extrai!()"#;
 }
 
 /// DoD 20: `?` em `Result::Err 99` aborta com `return Err(99)`.
-/// A action retorna `Result::(Int, Int)` — o `?` aborta, o body
+/// A action retorna `Result::(Int, Text)` — o `?` aborta, o body
 /// não continua. O resultado final é `Err(99)`.
+/// E=Text é o default do prelude (`Err(E=Text)`).
 #[test]
 fn question_aborta_result_err() {
-    let src = r#"action extrai => Result::(Int, Int)
+    let src = r#"action extrai => Result::(Int, Text)
     let r := Result::Err 99
     r ?
     Result::Ok 0
@@ -160,7 +162,7 @@ extrai!()"#;
         ty,
         Ty::Generic(
             "Result".into(),
-            vec![Ty::Prim(PrimTy::Int), Ty::Prim(PrimTy::Int)]
+            vec![Ty::Prim(PrimTy::Int), Ty::Prim(PrimTy::Text)]
         )
     );
     assert_eq!(raw & 1, 0, "esperado ponteiro (Sum), não SMI");
@@ -206,7 +208,7 @@ extrai!()"#;
 /// A TAST nunca contém `Question` — sempre `Match`.
 #[test]
 fn question_desugared_para_match_na_tast() {
-    let src = r#"action extrai => Result::(Int, Int)
+    let src = r#"action extrai => Result::(Int, Text)
     let r := Result::Ok 42
     r ?
     Result::Ok 0

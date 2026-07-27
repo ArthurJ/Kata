@@ -37,6 +37,10 @@ pub struct EnumRegistry {
     /// enum_name → parâmetros de tipo (ex: `Result` → `["T", "E"]`).
     /// Vazio para enums não-genéricos.
     type_params: HashMap<String, Vec<String>>,
+    /// enum_name → defaults dos type params (ex: `Result` → `[None, Some(Text)]`).
+    /// Paralelo a `type_params`: `defaults[i]` é o default de `type_params[i]`.
+    /// `None` = sem default (param obrigatório).
+    defaults: HashMap<String, Vec<Option<Ty>>>,
 }
 
 impl EnumRegistry {
@@ -62,9 +66,110 @@ impl EnumRegistry {
         self.variants.insert(enum_name.to_string(), variants);
     }
 
+    /// Registra um enum genérico com type params, defaults e variantes.
+    /// `defaults` é paralelo a `type_params`: `defaults[i]` é o default de
+    /// `type_params[i]`, ou `None` se o param é obrigatório.
+    pub fn register_generic_with_defaults(
+        &mut self,
+        enum_name: &str,
+        type_params: Vec<String>,
+        defaults: Vec<Option<Ty>>,
+        variants: Vec<VariantInfo>,
+    ) {
+        self.type_params.insert(enum_name.to_string(), type_params);
+        self.defaults.insert(enum_name.to_string(), defaults);
+        self.variants.insert(enum_name.to_string(), variants);
+    }
+
+    /// Retorna os defaults dos type params de um enum, se houver.
+    pub fn defaults_of(&self, enum_name: &str) -> Option<&[Option<Ty>]> {
+        self.defaults.get(enum_name).map(|v| v.as_slice())
+    }
+
+    /// Preenche type args faltantes com defaults.
+    ///
+    /// Se `type_args` tem menos elementos que `type_params`, os params
+    /// faltantes são preenchidos com seus defaults (se houver).
+    /// Se um param faltante não tem default, retorna `None` (erro: param
+    /// obrigatório não fornecido).
+    ///
+    /// Ex: `Result` com `type_params=["T","E"]`, `defaults=[None, Some(Text)]`.
+    /// `apply_defaults("Result", [Int])` → `Some([Int, Text])`.
+    /// `apply_defaults("Result", [])` → `None` (T é obrigatório).
+    pub fn apply_defaults(&self, enum_name: &str, type_args: &[Ty]) -> Option<Vec<Ty>> {
+        let type_params = self.type_params_of(enum_name)?;
+        let defaults = self.defaults_of(enum_name);
+
+        if type_args.len() == type_params.len() {
+            return Some(type_args.to_vec());
+        }
+        if type_args.len() > type_params.len() {
+            return None; // args demais
+        }
+
+        let mut result = type_args.to_vec();
+        for i in type_args.len()..type_params.len() {
+            let default = defaults.and_then(|d| d.get(i).cloned().flatten());
+            if let Some(default_ty) = default {
+                result.push(default_ty);
+            } else {
+                return None; // param obrigatório sem valor
+            }
+        }
+        Some(result)
+    }
+
     /// Retorna os type params de um enum, se for genérico.
     pub fn type_params_of(&self, enum_name: &str) -> Option<&[String]> {
         self.type_params.get(enum_name).map(|v| v.as_slice())
+    }
+
+    /// Percorre um `Ty` recursivamente e aplica defaults em qualquer
+    /// `Ty::Generic` que tenha menos args que type params.
+    ///
+    /// Ex: `Result::(Int)` → `Result::(Int, Text)` se o enum tem default
+    /// `E=Text`. Recursa nos args do Generic, em Function, Tuple, List, etc.
+    /// Se o enum não tem defaults ou já tem arity completo, retorna o tipo
+    /// inalterado (apenas recursa nos filhos).
+    pub fn expand_defaults(&self, ty: &Ty) -> Ty {
+        match ty {
+            Ty::Generic(name, args) => {
+                // Recursa nos args primeiro.
+                let expanded_args: Vec<Ty> =
+                    args.iter().map(|a| self.expand_defaults(a)).collect();
+                // Aplica defaults se o enum tem defaults registrados.
+                match self.apply_defaults(name, &expanded_args) {
+                    Some(full_args) => Ty::Generic(name.clone(), full_args),
+                    None => Ty::Generic(name.clone(), expanded_args),
+                }
+            }
+            Ty::Function(params, ret) => Ty::Function(
+                params.iter().map(|p| self.expand_defaults(p)).collect(),
+                Box::new(self.expand_defaults(ret)),
+            ),
+            Ty::Action(params, ret) => Ty::Action(
+                params.iter().map(|p| self.expand_defaults(p)).collect(),
+                Box::new(self.expand_defaults(ret)),
+            ),
+            Ty::Tuple(elements) => {
+                Ty::Tuple(elements.iter().map(|e| self.expand_defaults(e)).collect())
+            }
+            Ty::List(inner) => Ty::List(Box::new(self.expand_defaults(inner))),
+            Ty::Array(inner) => Ty::Array(Box::new(self.expand_defaults(inner))),
+            Ty::Range(inner) => Ty::Range(Box::new(self.expand_defaults(inner))),
+            Ty::Set(inner) => Ty::Set(Box::new(self.expand_defaults(inner))),
+            Ty::Dict(k, v) => Ty::Dict(
+                Box::new(self.expand_defaults(k)),
+                Box::new(self.expand_defaults(v)),
+            ),
+            Ty::Sender(inner) => Ty::Sender(Box::new(self.expand_defaults(inner))),
+            Ty::Receiver(inner) => Ty::Receiver(Box::new(self.expand_defaults(inner))),
+            Ty::ReceiverFactory(inner) => {
+                Ty::ReceiverFactory(Box::new(self.expand_defaults(inner)))
+            }
+            // Tipos atômicos — sem filhos para recursar.
+            _ => ty.clone(),
+        }
     }
 
     /// Verifica se um enum é genérico (tem type params).
@@ -211,6 +316,9 @@ impl EnumRegistry {
         }
         for (name, params) in other.type_params {
             self.type_params.insert(name, params);
+        }
+        for (name, defaults) in other.defaults {
+            self.defaults.insert(name, defaults);
         }
     }
 }

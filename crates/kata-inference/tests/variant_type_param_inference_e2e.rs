@@ -179,27 +179,25 @@ fn ok_sem_hint_deixa_e_como_var() {
 /// Match top-level (sem assinatura) onde arms têm informação complementar
 /// sobre type params DIFERENTES.
 ///
-/// Scrutinee: `Result::Ok 42` → `Generic("Result", [Int, Var("E")])`.
-/// Arm `Ok v`: constrói `Result::Ok v` → `Generic("Result", [Int, Var("E")])`.
-/// Arm `Err e`: `e` tem tipo `Var("E")` (do scrutinee), constrói
-/// `Result::Err e` → `Generic("Result", [Var("T"), Var("E")])`.
+/// Scrutinee: `Result::Ok 42` → `Generic("Result", [Int, Text])`.
+/// O default `Err(E=Text)` do prelude preenche E=Text automaticamente.
+/// Arm `Ok v`: constrói `Result::Ok v` → `Generic("Result", [Int, Text])`.
+/// Arm `Err e`: `e` tem tipo `Text` (do default), constrói
+/// `Result::Err e` → `Generic("Result", [Var("T"), Text])`.
 ///
 /// Unificação recursiva: posição 0 Int vs Var("T") → Int.
-/// Posição 1 Var("E") vs Var("E") → Var("E").
-/// Resultado: `Generic("Result", [Int, Var("E")])`.
-///
-/// O `E` continua `Var("E")` porque Ninguém na expressão fornece `E=Text`.
-/// Isto é correto — sem assinatura, o tipo do erro é genuinamente desconhecido.
+/// Posição 1 Text vs Text → Text.
+/// Resultado: `Generic("Result", [Int, Text])`.
 #[test]
 fn match_arms_complementares_unificam_t_mas_e_fica_var() {
     let src = "match (Result::Ok 42)\n    Result::Ok v: Result::Ok v\n    Result::Err e: Result::Err e";
     let tmod = infer_src(src);
     let entry = &tmod.entry.node;
     // T é resolvido (Int) pela unificação entre arms.
-    // E permanece Var porque nenhum arm fornece o tipo concreto de E.
+    // E é Text (default do prelude `Err(E=Text)`).
     assert_eq!(
         entry.ty,
-        Ty::Generic("Result".into(), vec![Ty::int(), Ty::Var("E".into())])
+        Ty::Generic("Result".into(), vec![Ty::int(), Ty::text()])
     );
 }
 

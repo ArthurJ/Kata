@@ -235,33 +235,43 @@ impl Parser {
 
             // Disambiguação payload vs predicado vs valor fixo.
             // `Ok(Int)` → payload = Some(TypeExpr), predicate = None, fixed = None
+            // `Err(E=Text)` → payload = Some(Var("E")), default = Some(Text)
             // `Magreza(< _ 18.5)` → payload = None, predicate = Some(Expr), fixed = None
             // `OK(200)` → payload = None, predicate = None, fixed = Some(Expr)
             // Disambiguação: após `(`, se primeiro token é operador de comparação
             // ou `_` (Hole), é predicado. Se é literal (Int, Float, Text), é valor fixo.
-            // Senão é payload (type expr).
-            let (payload, predicate, fixed_value) = if matches!(self.peek(), Token::LParen) {
+            // Senão é payload (type expr). Após o payload, se ver `=`, parsear default.
+            let (payload, default, predicate, fixed_value) = if matches!(self.peek(), Token::LParen) {
                 self.advance(); // consume (
                 if self.is_predicate_start() {
                     let pred = parse_expr(self)?;
                     self.expect(&Token::RParen, "`)` após predicado")?;
-                    (None, Some(pred), None)
+                    (None, None, Some(pred), None)
                 } else if self.is_literal_start() {
                     let val = parse_expr(self)?;
                     self.expect(&Token::RParen, "`)` após valor fixo")?;
-                    (None, None, Some(val))
+                    (None, None, None, Some(val))
                 } else {
                     let ty = self.parse_type_expr()?;
+                    // `Err(E=Text)` — após o payload, se ver `=`, parsear default.
+                    let default = if matches!(self.peek(), Token::Ident(s) if s == "=") {
+                        self.advance(); // consume =
+                        let default_ty = self.parse_type_expr()?;
+                        Some(default_ty)
+                    } else {
+                        None
+                    };
                     self.expect(&Token::RParen, "`)` após tipo do payload")?;
-                    (Some(ty), None, None)
+                    (Some(ty), default, None, None)
                 }
             } else {
-                (None, None, None)
+                (None, None, None, None)
             };
 
             variants.push(VariantDecl {
                 name: variant_name,
                 payload,
+                default,
                 predicate,
                 fixed_value,
             });

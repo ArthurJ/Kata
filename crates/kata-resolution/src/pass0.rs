@@ -212,22 +212,36 @@ pub(crate) fn run_pass0(
 
                 // Se variantes têm payloads Ty::Var (type params),
                 // registrar como enum genérico. Coleta type params dos payloads.
-                let type_params: Vec<String> = variant_infos
-                    .iter()
-                    .filter_map(|v| {
-                        if let Some(Ty::Var(n)) = &v.payload_ty {
-                            if is_type_param_name(n) {
-                                Some(n.clone())
-                            } else {
-                                None
+                // Também coleta defaults: se um variant tem `default` (ex: `Err(E=Text)`),
+                // o type param do payload tem aquele default.
+                let mut type_params: Vec<String> = Vec::new();
+                let mut defaults: Vec<Option<Ty>> = Vec::new();
+                for v in variants.iter() {
+                    if let Some(payload) = &v.payload {
+                        let payload_ty =
+                            resolve_type_expr(&payload.node, type_env, interface_registry);
+                        if let Ty::Var(n) = &payload_ty
+                            && is_type_param_name(n)
+                        {
+                            // type param name ainda não registrado
+                            if !type_params.contains(n) {
+                                type_params.push(n.clone());
+                                // Se o variant tem default, resolve e registra.
+                                let default_ty = v.default.as_ref().map(|d| {
+                                    resolve_type_expr(&d.node, type_env, interface_registry)
+                                });
+                                defaults.push(default_ty);
                             }
-                        } else {
-                            None
                         }
-                    })
-                    .collect();
+                    }
+                }
                 if !type_params.is_empty() {
-                    enum_registry.register_generic(name, type_params, variant_infos);
+                    enum_registry.register_generic_with_defaults(
+                        name,
+                        type_params,
+                        defaults,
+                        variant_infos,
+                    );
                 }
 
                 // Se tem variantes predicadas, guarda para o inference sintetizar

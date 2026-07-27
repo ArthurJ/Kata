@@ -179,7 +179,8 @@ pub(crate) fn infer_apply(
             .table
             .resolve(&func_name, &arg_types, ctx.interface_registry)
         {
-            let callee_ty = Ty::Function(overload.params.clone(), Box::new(overload.ret.clone()));
+            let expanded_ret = expand_ret(&overload.ret, ctx);
+            let callee_ty = Ty::Function(overload.params.clone(), Box::new(expanded_ret.clone()));
             let callee_typed = TypedExpr {
                 span: callee.span,
                 ty: callee_ty,
@@ -190,7 +191,7 @@ pub(crate) fn infer_apply(
                 },
             };
             return Ok((
-                overload.ret,
+                expanded_ret,
                 TypedExprKind::Closure {
                     callee: Box::new(Spanned::new(callee_typed, callee.span)),
                     args: typed_args,
@@ -210,7 +211,8 @@ pub(crate) fn infer_apply(
                     .is_ok()
                 {
                     let concrete_ret = super::generics::apply_subs(&oi.ret, &subs);
-                    let callee_ty = Ty::Function(oi.params.clone(), Box::new(concrete_ret.clone()));
+                    let expanded_ret = expand_ret(&concrete_ret, ctx);
+                    let callee_ty = Ty::Function(oi.params.clone(), Box::new(expanded_ret.clone()));
                     let callee_typed = TypedExpr {
                         span: callee.span,
                         ty: callee_ty,
@@ -222,7 +224,7 @@ pub(crate) fn infer_apply(
                     };
                     reject_action_arg_for_pure_fn(oi, &typed_args, span)?;
                     return Ok((
-                        concrete_ret,
+                        expanded_ret,
                         TypedExprKind::Closure {
                             callee: Box::new(Spanned::new(callee_typed, callee.span)),
                             args: typed_args,
@@ -242,7 +244,7 @@ pub(crate) fn infer_apply(
         {
             let callee_ty = Ty::Function(
                 fallback_overload.params.clone(),
-                Box::new(fallback_overload.ret.clone()),
+                Box::new(expand_ret(&fallback_overload.ret, ctx)),
             );
             let callee_typed = TypedExpr {
                 span: callee.span,
@@ -254,11 +256,11 @@ pub(crate) fn infer_apply(
                 },
             };
             return Ok((
-                fallback_overload.ret,
+                expand_ret(&fallback_overload.ret, ctx),
                 TypedExprKind::Closure {
                     callee: Box::new(Spanned::new(callee_typed, callee.span)),
                     args: typed_args,
-                    ffi_symbol: fallback_overload.ffi_symbol.clone(),
+                    ffi_symbol: fallback_overload.ffi_symbol,
                 },
             ));
         }
@@ -296,7 +298,8 @@ pub(crate) fn infer_apply(
     if let Some(iface_method_ret) =
         try_iface_method_dispatch(&func_name, &arg_types, ctx.interface_registry)
     {
-        let callee_ty = Ty::Function(arg_types.clone(), Box::new(iface_method_ret.clone()));
+        let expanded_ret = expand_ret(&iface_method_ret, ctx);
+        let callee_ty = Ty::Function(arg_types.clone(), Box::new(expanded_ret.clone()));
         let callee_typed = TypedExpr {
             span: callee.span,
             ty: callee_ty,
@@ -307,7 +310,7 @@ pub(crate) fn infer_apply(
             },
         };
         return Ok((
-            iface_method_ret,
+            expanded_ret,
             TypedExprKind::Closure {
                 callee: Box::new(Spanned::new(callee_typed, callee.span)),
                 args: typed_args,
@@ -385,8 +388,9 @@ pub(crate) fn infer_apply(
             {
                 let overload = oi.clone();
                 reject_action_arg_for_pure_fn(&overload, &typed_args, span)?;
+                let expanded_ret = expand_ret(&overload.ret, ctx);
                 let callee_ty =
-                    Ty::Function(overload.params.clone(), Box::new(overload.ret.clone()));
+                    Ty::Function(overload.params.clone(), Box::new(expanded_ret.clone()));
                 let callee_typed = TypedExpr {
                     span: callee.span,
                     ty: callee_ty,
@@ -397,7 +401,7 @@ pub(crate) fn infer_apply(
                     },
                 };
                 return Ok((
-                    overload.ret,
+                    expanded_ret,
                     TypedExprKind::Closure {
                         callee: Box::new(Spanned::new(callee_typed, callee.span)),
                         args: typed_args,
@@ -422,8 +426,9 @@ pub(crate) fn infer_apply(
         match generic_result {
             Ok(overload) => {
                 reject_action_arg_for_pure_fn(&overload, &typed_args, span)?;
+                let expanded_ret = expand_ret(&overload.ret, ctx);
                 let callee_ty =
-                    Ty::Function(overload.params.clone(), Box::new(overload.ret.clone()));
+                    Ty::Function(overload.params.clone(), Box::new(expanded_ret.clone()));
                 let callee_typed = TypedExpr {
                     span: callee.span,
                     ty: callee_ty,
@@ -435,7 +440,7 @@ pub(crate) fn infer_apply(
                 };
 
                 return Ok((
-                    overload.ret,
+                    expanded_ret,
                     TypedExprKind::Closure {
                         callee: Box::new(Spanned::new(callee_typed, callee.span)),
                         args: typed_args,
@@ -468,9 +473,10 @@ pub(crate) fn infer_apply(
                             Ok(_) => {
                                 // Aplica substitutions no tipo de retorno.
                                 let concrete_ret = super::generics::apply_subs(&oi.ret, &subs);
+                                let expanded_ret = expand_ret(&concrete_ret, ctx);
                                 reject_action_arg_for_pure_fn(oi, &typed_args, span)?;
                                 let callee_ty =
-                                    Ty::Function(oi.params.clone(), Box::new(concrete_ret.clone()));
+                                    Ty::Function(oi.params.clone(), Box::new(expanded_ret.clone()));
                                 let callee_typed = TypedExpr {
                                     span: callee.span,
                                     ty: callee_ty,
@@ -482,7 +488,7 @@ pub(crate) fn infer_apply(
                                 };
 
                                 return Ok((
-                                    concrete_ret,
+                                    expanded_ret,
                                     TypedExprKind::Closure {
                                         callee: Box::new(Spanned::new(callee_typed, callee.span)),
                                         args: typed_args,
@@ -512,9 +518,10 @@ pub(crate) fn infer_apply(
                     if let Some((_fallback_arg_types, fallback_overload)) =
                         try_refines_fallback(&func_name, &arg_types, ctx)
                     {
+                        let expanded_ret = expand_ret(&fallback_overload.ret, ctx);
                         let callee_ty = Ty::Function(
                             fallback_overload.params.clone(),
-                            Box::new(fallback_overload.ret.clone()),
+                            Box::new(expanded_ret.clone()),
                         );
                         let callee_typed = TypedExpr {
                             span: callee.span,
@@ -526,7 +533,7 @@ pub(crate) fn infer_apply(
                             },
                         };
                         return Ok((
-                            fallback_overload.ret,
+                            expanded_ret,
                             TypedExprKind::Closure {
                                 callee: Box::new(Spanned::new(callee_typed, callee.span)),
                                 args: typed_args,
@@ -566,9 +573,10 @@ pub(crate) fn infer_apply(
                 if let Some((_fallback_arg_types, fallback_overload)) =
                     try_refines_fallback(&func_name, &arg_types, ctx)
                 {
+                    let expanded_ret = expand_ret(&fallback_overload.ret, ctx);
                     let callee_ty = Ty::Function(
                         fallback_overload.params.clone(),
-                        Box::new(fallback_overload.ret.clone()),
+                        Box::new(expanded_ret.clone()),
                     );
                     let callee_typed = TypedExpr {
                         span: callee.span,
@@ -580,7 +588,7 @@ pub(crate) fn infer_apply(
                         },
                     };
                     return Ok((
-                        fallback_overload.ret,
+                        expanded_ret,
                         TypedExprKind::Closure {
                             callee: Box::new(Spanned::new(callee_typed, callee.span)),
                             args: typed_args,
@@ -671,6 +679,13 @@ pub(crate) fn infer_apply(
         name: func_name,
         span: callee.span.into(),
     })
+}
+
+/// Aplica defaults do EnumRegistry no tipo de retorno do dispatch.
+/// Expande `Result::(Int)` → `Result::(Int, Text)` quando o enum tem
+/// defaults registrados e o tipo retornado tem arity incompleto.
+fn expand_ret(ty: &Ty, ctx: &InferCtx) -> Ty {
+    ctx.enum_registry.expand_defaults(ty)
 }
 
 /// Verifica se algum argumento é `Ty::Action(..)` quando o overload alvo é

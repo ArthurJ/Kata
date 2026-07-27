@@ -214,12 +214,13 @@ pub fn resolve_type_expr(expr: &TypeExpr, env: &TypeEnv, iface_reg: &InterfaceRe
         // Por ora, mapeia para Ty::Var("Self") como placeholder.
         TypeExpr::SelfRef => Ty::Var("Self".into()),
 
-        // `T?` — açúcar sintático para `Result::(T, Err)`.
-        // Err é Text (mensagens de erro), consistente com o construtor
-        // falível de constructors_refined.rs (D13 do PRD-refines).
+        // `T?` — açúcar sintático para `Result::(T)`.
+        // O default do type param E (declarado como `Err(E=Text)` no prelude)
+        // preenche E=Text automaticamente. A expansão acontece no inference
+        // (variant_construct, sugar, dispatch) via `expand_defaults`.
         TypeExpr::Question(inner) => {
             let inner_ty = resolve_type_expr(&inner.node, env, iface_reg);
-            Ty::Generic("Result".into(), vec![inner_ty, Ty::text()])
+            Ty::Generic("Result".into(), vec![inner_ty])
         }
     }
 }

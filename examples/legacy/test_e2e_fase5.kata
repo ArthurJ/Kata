@@ -9,7 +9,7 @@ action main
     loop
         cont := + cont 1
         match cont
-            == _ 3: continue
+            = _ 3: continue
             > _ 5: break
             otherwise: echo!(cont)
 

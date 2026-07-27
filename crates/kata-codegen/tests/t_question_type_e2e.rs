@@ -156,7 +156,7 @@ f!()"#;
 /// body continua, retornando `Result::Ok 0`.
 #[test]
 fn t_question_runtime_desempacota_result() {
-    let src = r#"action extrai => Result::(Int, Int)
+    let src = r#"action extrai => Result::(Int, Text)
     let r := Result::Ok 42
     r ?
     Result::Ok 0
@@ -166,7 +166,7 @@ extrai!()"#;
         ty,
         Ty::Generic(
             "Result".into(),
-            vec![Ty::Prim(PrimTy::Int), Ty::Prim(PrimTy::Int)]
+            vec![Ty::Prim(PrimTy::Int), Ty::Prim(PrimTy::Text)]
         ),
         "? deve desempacotar Result::Ok e o body continua"
     );

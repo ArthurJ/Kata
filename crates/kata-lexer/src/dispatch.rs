@@ -56,9 +56,17 @@ pub(crate) fn lex_token(lex: &mut Lexer) -> Result<TokenWithSpan, FrontendError>
                 lex.advance();
                 lex.advance();
                 Token::FatArrow
-            } else {
-                // `=` não seguido de `>` → identificador
+            } else if lex.peek() == Some('=') {
+                // `==` — operador de igualdade. Lexar via lex_ident
+                // (identificador simbólico, is_alpha=false, `=` não é break).
                 return lex_ident(lex, &start);
+            } else {
+                // `=` sozinho — operador de default em type params (`E=Text`).
+                // Não chama lex_ident porque `=` é break char em lex_ident
+                // para identificadores alfanuméricos, e para simbólicos
+                // consumiria chars seguintes indesejados (ex: `=Text`).
+                lex.advance();
+                Token::Ident("=".into())
             }
         }
         '-' => {

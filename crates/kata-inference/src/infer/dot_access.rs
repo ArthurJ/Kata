@@ -137,7 +137,11 @@ pub(crate) fn infer_dot_access(
             // Tenta caminho não-genérico primeiro.
             let overload = ctx.table.resolve("at", &arg_types, ctx.interface_registry);
             let (ret_ty, ffi_symbol, params) = match overload {
-                Ok(oi) => (oi.ret, oi.ffi_symbol, oi.params),
+                Ok(oi) => (
+                    ctx.enum_registry.expand_defaults(&oi.ret),
+                    oi.ffi_symbol,
+                    oi.params,
+                ),
                 Err(_) => {
                     // Caminho genérico: procura overload com type_params e faz unify.
                     let overloads =
@@ -154,7 +158,9 @@ pub(crate) fn infer_dot_access(
                         let mut subs = std::collections::HashMap::new();
                         if unify(&oi.params, &arg_types, &oi.type_params, &mut subs).is_ok() {
                             let concrete_ret = apply_subs(&oi.ret, &subs);
-                            found = Some((concrete_ret, oi.ffi_symbol.clone(), oi.params.clone()));
+                            let expanded_ret = ctx.enum_registry.expand_defaults(&concrete_ret);
+                            found =
+                                Some((expanded_ret, oi.ffi_symbol.clone(), oi.params.clone()));
                             break;
                         }
                     }

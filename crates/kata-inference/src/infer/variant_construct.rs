@@ -128,6 +128,19 @@ pub(crate) fn infer_variant_construct(
             }
         }
 
+        // Preenche type params não-inferidos com defaults do EnumRegistry.
+        // Ex: Result com default E=Text. Se E ainda é Var("E") após hint,
+        // e o enum tem default para E, usa o default.
+        if let Some(defaults) = ctx.enum_registry.defaults_of(enum_name) {
+            for (i, arg) in type_args.iter_mut().enumerate() {
+                if matches!(arg, Ty::Var(_)) {
+                    if let Some(Some(default_ty)) = defaults.get(i) {
+                        *arg = default_ty.clone();
+                    }
+                }
+            }
+        }
+
         let result_ty = Ty::Generic(enum_name.to_string(), type_args);
         return Ok((
             result_ty,

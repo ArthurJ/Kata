@@ -29,7 +29,7 @@ enum Boolean
 
 enum Result
     Ok(T)
-    Err(E)
+    Err(E=Text)
 
 enum Optional
     Some(T)
@@ -63,7 +63,7 @@ interface COUNTABLE
     len :: Self => Int
 
 interface INDEXABLE::A
-    at :: Self Int => Result::(A, Err)
+    at :: Self Int => Result::A
 
 interface CONTAINS::A
     contains :: Self A => Boolean
@@ -149,7 +149,7 @@ Array::A implements COUNTABLE
     len :: Array::A => Int @ffi("kata_rt_array_len")
 
 Array::A implements INDEXABLE::A
-    at :: Array::A Int => Result::(A, Err) @ffi("kata_rt_array_get_checked")
+    at :: Array::A Int => Result::A @ffi("kata_rt_array_get_checked")
 
 Array::A implements CONTAINS::A
     contains :: Array::A A => Boolean @ffi("kata_rt_array_contains")
@@ -162,7 +162,7 @@ List::A implements COUNTABLE
     len :: List::A => Int @ffi("kata_rt_list_len")
 
 List::A implements INDEXABLE::A
-    at :: List::A Int => Result::(A, Err) @ffi("kata_rt_list_get_checked")
+    at :: List::A Int => Result::A @ffi("kata_rt_list_get_checked")
 
 List::A implements CONTAINS::A
     contains :: List::A A => Boolean @ffi("kata_rt_list_contains")
@@ -186,7 +186,7 @@ Text implements COUNTABLE
     len :: Text => Int @ffi("kata_rt_string_len")
 
 Text implements INDEXABLE::Text
-    at :: Text Int => Result::(Text, Err) @ffi("kata_rt_string_get_checked")
+    at :: Text Int => Result::Text @ffi("kata_rt_string_get_checked")
 
 Text implements CONTAINS::Text
     contains :: Text Text => Boolean @ffi("kata_rt_string_contains")
@@ -200,7 +200,7 @@ Dict::(K, V) implements COUNTABLE
     len :: Dict::(K, V) => Int @ffi("kata_rt_dict_len")
 
 Dict::(K, V) implements INDEXABLE::V
-    at :: Dict::(K, V) K => Result::(V, Err) @ffi("kata_rt_dict_get_checked")
+    at :: Dict::(K, V) K => Result::V @ffi("kata_rt_dict_get_checked")
 
 Dict::(K, V) implements CONTAINS::K
     contains :: Dict::(K, V) K => Boolean @ffi("kata_rt_dict_contains")

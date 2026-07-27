@@ -42,7 +42,17 @@ pub(crate) fn infer_question(
     let typed_scrutinee = infer_expr(&inner.node, &inner.span, env, ctx, false)?;
 
     // Determina o enum e constrói os braços do match sintético.
-    let (enum_name, ok_variant, err_variant, _ok_payload, err_payload) = match &typed_scrutinee.ty {
+    // Aplica defaults do EnumRegistry: `Result::(T)` → `Result::(T, Text)`.
+    let scrutinee_ty = if let Ty::Generic(name, args) = &typed_scrutinee.ty {
+        if let Some(expanded) = ctx.enum_registry.apply_defaults(name, args) {
+            Ty::Generic(name.clone(), expanded)
+        } else {
+            typed_scrutinee.ty.clone()
+        }
+    } else {
+        typed_scrutinee.ty.clone()
+    };
+    let (enum_name, ok_variant, err_variant, _ok_payload, err_payload) = match &scrutinee_ty {
         Ty::Generic(name, args) if name == "Result" && args.len() == 2 => (
             "Result",
             "Ok",
@@ -56,7 +66,7 @@ pub(crate) fn infer_question(
         _ => {
             return Err(MiddleError::TypeMismatch {
                 expected: "Result<T, E> ou Optional<T>".into(),
-                found: format!("{}", typed_scrutinee.ty),
+                found: format!("{}", scrutinee_ty),
                 span: inner.span.into(),
             });
         }

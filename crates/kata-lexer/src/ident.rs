@@ -6,6 +6,13 @@ use kata_diagnostics::FrontendError;
 use crate::{Lexer, Pos};
 
 pub(crate) fn lex_ident(lex: &mut Lexer, start: &Pos) -> Result<TokenWithSpan, FrontendError> {
+    // Determina se o identificador é alfanumérico (começa com letra ou _)
+    // ou simbólico (começa com operador como <, >, +, -, *, /, =).
+    // Para identificadores alfanuméricos, `=` é break char (para suportar
+    // `E=Text` em defaults de type params). Para simbólicos, `=` não é
+    // break (para suportar `<=`, `>=`, `!=`).
+    let is_alpha = lex.ch.is_some_and(|c| c.is_alphabetic() || c == '_');
+
     loop {
         match lex.ch {
             None => break,
@@ -14,6 +21,7 @@ pub(crate) fn lex_ident(lex: &mut Lexer, start: &Pos) -> Result<TokenWithSpan, F
             | Some(';') | Some('.') => break,
             Some('#') => break,
             Some(':') | Some('|') | Some('?') | Some('!') | Some('@') => break,
+            Some('=') if is_alpha => break,
             _ => lex.advance(),
         }
     }

@@ -282,19 +282,18 @@ fn range_float_produz_range_float() {
 /// (desugara para `at arr 0` → `kata_rt_array_get_checked` → Result::Ok(1)),
 /// `?` desempacota o Ok(1) e retorna 1.
 ///
-/// O tipo de retorno da action deve ser `Result::(Int, Err)` — o mesmo tipo
-/// que `at` retorna. O `?` desempacota o `Ok(1)` (produz `Int`), e o fallback
-/// final `Result::Ok 0` produz o `Result::(Int, Err)` de retorno.
-/// O `Err` arm do `?` faz `return Err(__q_err)` que produz
-/// `Result::(Var("T"), Err)` — `fits_return` aceita porque `Var` unifica.
+/// O tipo de retorno da action deve ser `Result::(Int, Text)` — o `at`
+/// retorna `Result::A` (arity 1) e o default `Err(E=Text)` preenche E=Text.
+/// O `?` desempacota o `Ok(1)` (produz `Int`), e o fallback
+/// final `Result::Ok 0` produz o `Result::(Int, Text)` de retorno.
 #[test]
 fn index_unwrap_em_array_retorna_1() {
-    let src = "action extrai => Result::(Int, Err)\n    let arr := {1 2 3}\n    arr.0 ?\n    Result::Ok 0\nextrai!()";
+    let src = "action extrai => Result::(Int, Text)\n    let arr := {1 2 3}\n    arr.0 ?\n    Result::Ok 0\nextrai!()";
     let (raw, ty) = eval_src(src);
     assert_eq!(
         ty,
-        Ty::Generic("Result".into(), vec![Ty::int(), Ty::Struct("Err".into())]),
-        "action extrai deve retornar Result::(Int, Err)"
+        Ty::Generic("Result".into(), vec![Ty::int(), Ty::text()]),
+        "action extrai deve retornar Result::(Int, Text)"
     );
     // O JIT retorna o ponteiro do Sum box (Result::Ok 0 → valor 0 no payload).
     // Não podemos prever o valor exato sem saber o layout do Sum, mas

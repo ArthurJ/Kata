@@ -81,18 +81,20 @@ fn untag_smi(raw: i64) -> i64 {
 }
 
 /// DoD 19: `Result::Ok 42` com Result do prelude (não definido pelo usuário).
-/// O typeck infere T=Int do argumento e produz Ty::Generic("Result", [Int, Var(E)]).
+/// O typeck infere T=Int do argumento e o default preenche E=Text.
+/// O arm Err precisa retornar Int (não e:Text) para unificar com Ok.
 #[test]
 fn result_ok_do_prelude() {
     let src = r#"match Result::Ok 42
     Result::Ok v: v
-    Result::Err e: e"#;
+    Result::Err e: 0"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
     assert_eq!(untag_smi(raw), 42);
 }
 
 /// DoD 19: `Result::Err 99` com Result do prelude.
+/// E=Int do argumento, T=Int do arm Ok.
 #[test]
 fn result_err_do_prelude() {
     let src = r#"match Result::Err 99
@@ -138,12 +140,13 @@ fn result_com_tipos_diferentes() {
 }
 
 /// DoD 19: Match em Result dentro de uma Action.
+/// E=Text (default), arm Err retorna Int para unificar.
 #[test]
 fn result_dentro_de_action() {
     let src = r#"action extrai_ok => Int
     match Result::Ok 42
         Result::Ok v: v
-        Result::Err e: e
+        Result::Err e: 0
 extrai_ok!()"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));

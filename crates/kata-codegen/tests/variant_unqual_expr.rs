@@ -182,14 +182,15 @@ fn some_desqualificado_com_apply() {
 #[test]
 fn ok_desqualificado_com_apply() {
     // `Ok 42` desqualificado → Result::Ok(42)
+    // O default `Err(E=Text)` preenche E=Text.
     let (_, ty) = eval_src("Ok 42");
     assert_eq!(
         ty,
         Ty::Generic(
             "Result".into(),
-            vec![Ty::Prim(PrimTy::Int), Ty::Var("E".into())]
+            vec![Ty::Prim(PrimTy::Int), Ty::Prim(PrimTy::Text)]
         ),
-        "Ok 42 desqualificado deve resolver para Result::(Int, E)"
+        "Ok 42 desqualificado deve resolver para Result::(Int, Text) via default"
     );
 }
 

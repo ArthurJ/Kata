@@ -30,6 +30,7 @@ pub(crate) fn infer_action(
 ) -> InferResult<TypedAction> {
     let param_types = &action_def.param_types;
     let ret_ty = &action_def.return_type;
+    let expanded_ret = ctx.enum_registry.expand_defaults(ret_ty);
 
     // Cria escopo para a Action com o type_env do módulo como parent.
     // Isso permite que o body da Action acesse tipos do prelude (Result, Optional, etc).
@@ -100,7 +101,7 @@ pub(crate) fn infer_action(
         let expected_ty = if action_def.body.last().is_some_and(|s| s.has_semicolon) {
             &Ty::Unit
         } else {
-            ret_ty
+            &expanded_ret
         };
         if !fits_return(actual_ty, expected_ty) {
             return Err(MiddleError::TypeMismatch {
@@ -170,7 +171,7 @@ pub(crate) fn infer_action(
         name: action_def.name.clone(),
         param_types: param_types.clone(),
         param_names: action_def.param_names.clone(),
-        ret_ty: ret_ty.clone(),
+        ret_ty: expanded_ret.clone(),
         body: typed_body,
         tests: typed_tests,
         log,

@@ -311,11 +311,11 @@ fn dod30_dot_n_array_desugars_to_at() {
         }
         other => panic!("entry deve ser Closure (dispatch `at`), encontrado {other:?}"),
     }
-    // O tipo deve ser Result::(Int, Err)
-    let expected = Ty::Generic("Result".into(), vec![Ty::int(), Ty::Struct("Err".into())]);
+    // O tipo deve ser Result::(Int, Text) — default do prelude preenche E=Text
+    let expected = Ty::Generic("Result".into(), vec![Ty::int(), Ty::text()]);
     assert_eq!(
         e.ty, expected,
-        "tipo deve ser Result::(Int, Err), encontrado {:?}",
+        "tipo deve ser Result::(Int, Text), encontrado {:?}",
         e.ty
     );
 }

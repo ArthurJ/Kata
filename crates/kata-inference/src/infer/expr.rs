@@ -445,8 +445,9 @@ pub(crate) fn infer_expr_hinted(
                 found: "return fora de Action".into(),
                 span: (*span).into(),
             })?;
+            let expanded_ret = ctx.enum_registry.expand_defaults(ret_ty);
             let typed_inner = infer_expr(&inner.node, &inner.span, env, ctx, false)?;
-            if !fits_return(&typed_inner.ty, ret_ty) {
+            if !fits_return(&typed_inner.ty, &expanded_ret) {
                 return Err(MiddleError::TypeMismatch {
                     expected: format!("{ret_ty:?}"),
                     found: format!("{}", typed_inner.ty),
