@@ -14,6 +14,7 @@ members = [
     "crates/kata-tree-shaking",
     "crates/kata-rt",
     "crates/kata-driver",
+    "crates/kata-lsp",
 ]
 
 [workspace.package]
@@ -69,3 +70,4 @@ kata-optimizer = { path = "crates/kata-optimizer" }
 kata-monomorph = { path = "crates/kata-monomorph" }
 kata-tree-shaking = { path = "crates/kata-tree-shaking" }
 kata-rt = { path = "crates/kata-rt" }
+kata-lsp = { path = "crates/kata-lsp" }

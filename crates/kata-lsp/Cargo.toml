@@ -1,0 +1,24 @@
+[package]
+name = "kata-lsp"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "LSP server for Kata Language — diagnostics + hover de tipos"
+
+[[bin]]
+name = "kata-lsp"
+path = "src/main.rs"
+
+[dependencies]
+tower-lsp = "0.20"
+tokio = { version = "1", features = ["full"] }
+miette.workspace = true
+kata-core.workspace = true
+kata-ast.workspace = true
+kata-diagnostics.workspace = true
+kata-lexer.workspace = true
+kata-parser.workspace = true
+kata-resolution.workspace = true
+kata-inference.workspace = true
+
+[dev-dependencies]

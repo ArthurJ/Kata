@@ -12,6 +12,7 @@
 
 use kata_ast::{ActionStmt, Expr, LambdaClause, Spanned};
 use kata_core::{EnumRegistry, InterfaceRegistry, RefinesRegistry, StructRegistry, Ty, TypeEnv};
+use thiserror::Error;
 
 /// Resultado da resolution — TypeEnv populado + assinaturas coletadas.
 #[derive(Debug, Clone)]
@@ -176,29 +177,34 @@ pub struct EnumPredVariant {
 }
 
 /// Erro de resolution (wrapped FrontendError/MiddleError).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Error, miette::Diagnostic)]
 pub enum ResolveError {
-    UnknownType {
-        name: String,
-    },
-    UnknownFfi {
-        name: String,
-    },
-    DuplicateSignature {
-        name: String,
-    },
+    #[error("tipo desconhecido: `{name}`")]
+    #[diagnostic(code = "resolve.unknown_type")]
+    UnknownType { name: String },
+
+    #[error("símbolo FFI desconhecido: `{name}`")]
+    #[diagnostic(code = "resolve.unknown_ffi")]
+    UnknownFfi { name: String },
+
+    #[error("assinatura duplicada: `{name}`")]
+    #[diagnostic(code = "resolve.duplicate_signature")]
+    DuplicateSignature { name: String },
+
     /// Diretiva não reconhecida no contexto (Sig, Action, ou Implements method).
     /// `name` é o nome da diretiva (ex: "tset"), `context` é onde apareceu
     /// (ex: "action", "sig", "implements method"), `item_name` é o nome do
     /// item onde a diretiva foi usada (ex: nome da action ou sig).
+    #[error("diretiva `{name}` não reconhecida em {context} `{item_name}`")]
+    #[diagnostic(code = "resolve.unknown_directive")]
     UnknownDirective {
         name: String,
         context: &'static str,
         item_name: String,
     },
+
     /// `refines` aplicado a tipo não-refined, ou base não implementa a interface.
-    InvalidRefines {
-        type_name: String,
-        reason: String,
-    },
+    #[error("refines inválido para `{type_name}`: {reason}")]
+    #[diagnostic(code = "resolve.invalid_refines")]
+    InvalidRefines { type_name: String, reason: String },
 }

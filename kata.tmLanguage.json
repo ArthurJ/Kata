@@ -1,0 +1,253 @@
+{
+  "scopeName": "source.kata",
+  "name": "Kata",
+  "fileTypes": ["kata"],
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#string-triple" },
+    { "include": "#string-double" },
+    { "include": "#string-single" },
+    { "include": "#number-float" },
+    { "include": "#number-hex" },
+    { "include": "#number-octal" },
+    { "include": "#number-binary" },
+    { "include": "#number-decimal-explicit" },
+    { "include": "#number-decimal" },
+    { "include": "#directive" },
+    { "include": "#keyword-declaration" },
+    { "include": "#keyword-control" },
+    { "include": "#keyword-module" },
+    { "include": "#keyword-type" },
+    { "include": "#keyword-other" },
+    { "include": "#function-symbolic" },
+    { "include": "#syntax-operator" },
+    { "include": "#punctuation" },
+    { "include": "#type-name" }
+  ],
+  "repository": {
+    "comment": {
+      "name": "comment.line.number-sign.kata",
+      "match": "#.*"
+    },
+
+    "string-triple": {
+      "name": "string.quoted.triple.raw.kata",
+      "begin": "\"\"\"",
+      "end": "\"\"\"",
+      "patterns": []
+    },
+
+    "string-double": {
+      "name": "string.quoted.double.kata",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.kata",
+          "match": "\\\\."
+        }
+      ]
+    },
+
+    "string-single": {
+      "name": "string.quoted.single.kata",
+      "begin": "'",
+      "end": "'",
+      "patterns": [
+        {
+          "name": "constant.character.escape.kata",
+          "match": "\\\\."
+        }
+      ]
+    },
+
+    "number-float": {
+      "comment": "Floats: 3.14, 1.5e10, 1.5E-10, 1e10",
+      "patterns": [
+        {
+          "name": "constant.numeric.float.kata",
+          "match": "\\b\\d[\\d_]*\\.\\d[\\d_]*([eE][+-]?\\d+)?\\b"
+        },
+        {
+          "name": "constant.numeric.float.kata",
+          "match": "\\b\\d[\\d_]*[eE][+-]?\\d+\\b"
+        }
+      ]
+    },
+
+    "number-hex": {
+      "name": "constant.numeric.integer.hexadecimal.kata",
+      "match": "\\b0[xX][0-9a-fA-F_]+\\b"
+    },
+
+    "number-octal": {
+      "name": "constant.numeric.integer.octal.kata",
+      "match": "\\b0[oO][0-7_]+\\b"
+    },
+
+    "number-binary": {
+      "name": "constant.numeric.integer.binary.kata",
+      "match": "\\b0[bB][01_]+\\b"
+    },
+
+    "number-decimal-explicit": {
+      "name": "constant.numeric.integer.decimal.kata",
+      "match": "\\b0[dD]\\d[\\d_]*\\b"
+    },
+
+    "number-decimal": {
+      "name": "constant.numeric.integer.decimal.kata",
+      "match": "\\b\\d[\\d_]*\\b"
+    },
+
+    "directive": {
+      "comment": "@ffi, @builtin, @associative, @commutative, @log, etc.",
+      "match": "(@)([a-zA-Z_]\\w*)",
+      "captures": {
+        "1": { "name": "punctuation.definition.annotation.kata" },
+        "2": { "name": "entity.name.function.directive.kata" }
+      }
+    },
+
+    "keyword-declaration": {
+      "comment": "Declarations: let, var, data, enum, alias, action",
+      "match": "\\b(let|var|data|enum|alias|action)\\b",
+      "name": "storage.type.kata"
+    },
+
+    "keyword-control": {
+      "comment": "Control flow: match, return, loop, break, continue, for, in, select, timeout, otherwise",
+      "match": "\\b(match|return|loop|break|continue|for|in|select|timeout|otherwise)\\b",
+      "name": "keyword.control.kata"
+    },
+
+    "keyword-module": {
+      "comment": "Module system: import, export, as",
+      "match": "\\b(import|export|as)\\b",
+      "name": "keyword.control.import.kata"
+    },
+
+    "keyword-type": {
+      "comment": "Type system: interface, implements, refines, with",
+      "match": "\\b(interface|implements|refines|with)\\b",
+      "name": "keyword.control.type.kata"
+    },
+
+    "keyword-other": {
+      "comment": "lambda/λ, type",
+      "match": "\\b(lambda|type)\\b|λ",
+      "name": "keyword.other.kata"
+    },
+
+    "function-symbolic": {
+      "comment": "Symbolic function names defined in stdlib/core.kata with '::' signatures. In Kata5, operators like +, -, <=, != are ordinary identifiers — not special syntax. Sorted longest-first to avoid partial matches (<= before <, != before !).",
+      "patterns": [
+        {
+          "match": "!=",
+          "name": "entity.name.function.symbolic.kata"
+        },
+        {
+          "match": "<=",
+          "name": "entity.name.function.symbolic.kata"
+        },
+        {
+          "match": ">=",
+          "name": "entity.name.function.symbolic.kata"
+        },
+        {
+          "match": "[+\\-*/<>=]",
+          "name": "entity.name.function.symbolic.kata"
+        }
+      ]
+    },
+
+    "syntax-operator": {
+      "comment": "Syntactic operators of the language — punctuation with structural meaning, not function names",
+      "patterns": [
+        {
+          "match": ":=",
+          "name": "keyword.operator.assignment.kata"
+        },
+        {
+          "match": "::",
+          "name": "punctuation.separator.type-sigil.kata"
+        },
+        {
+          "match": "=>",
+          "name": "keyword.operator.arrow.fat.kata"
+        },
+        {
+          "match": "->",
+          "name": "keyword.operator.arrow.thin.kata"
+        },
+        {
+          "match": "\\|>",
+          "name": "keyword.operator.pipeline.kata"
+        },
+        {
+          "match": "!>",
+          "name": "keyword.operator.channel.send.kata"
+        },
+        {
+          "match": "<!",
+          "name": "keyword.operator.channel.recv.kata"
+        },
+        {
+          "match": "\\.\\.\\.",
+          "name": "keyword.operator.ellipsis.kata"
+        },
+        {
+          "match": "\\.\\.=",
+          "name": "keyword.operator.range-inclusive.kata"
+        },
+        {
+          "match": "\\.\\.",
+          "name": "keyword.operator.range.kata"
+        },
+        {
+          "comment": "! — action call suffix (must come after !> send arrow)",
+          "match": "!(?!>)",
+          "name": "keyword.operator.action-call.kata"
+        },
+        {
+          "comment": "? — fail-fast / delegation (Actions only)",
+          "match": "\\?",
+          "name": "keyword.operator.fail-fast.kata"
+        },
+        {
+          "comment": "| — fallback / error coalescing (must come after |>)",
+          "match": "\\|",
+          "name": "keyword.operator.fallback.kata"
+        },
+        {
+          "comment": "$ — spread / explicit application",
+          "match": "\\$",
+          "name": "keyword.operator.spread.kata"
+        }
+      ]
+    },
+
+    "punctuation": {
+      "patterns": [
+        {
+          "match": "[()\\[\\]{}]",
+          "name": "punctuation.section.kata"
+        },
+        {
+          "match": "[,;:]",
+          "name": "punctuation.separator.kata"
+        },
+        {
+          "match": "\\.",
+          "name": "punctuation.accessor.dot.kata"
+        }
+      ]
+    },
+
+    "type-name": {
+      "comment": "PascalCase identifiers are type/constructor names by convention",
+      "match": "\\b[A-Z][a-zA-Z0-9_]*\\b",
+      "name": "entity.name.type.kata"
+    }
+  }
+}

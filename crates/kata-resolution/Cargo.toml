@@ -11,6 +11,8 @@ kata-ast.workspace = true
 kata-diagnostics.workspace = true
 kata-lexer.workspace = true
 kata-parser.workspace = true
+miette.workspace = true
+thiserror.workspace = true
 
 [dev-dependencies]
 insta.workspace = true
