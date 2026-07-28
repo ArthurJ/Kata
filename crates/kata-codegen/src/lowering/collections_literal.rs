@@ -106,7 +106,7 @@ pub(crate) fn lower_collections_literal(
             start,
             step,
             end,
-            inclusive: _,
+            inclusive,
             elem_ty: _,
         } => {
             let arena_handle =
@@ -158,6 +158,9 @@ pub(crate) fn lower_collections_literal(
             ctx.builder.ins().store(flags, start_val, ptr, 0);
             ctx.builder.ins().store(flags, step_val, ptr, 8);
             ctx.builder.ins().store(flags, end_val, ptr, 16);
+            // Store inclusive flag (offset 24) como SMI: 1 = inclusive, 0 = exclusive.
+            let incl_val = ctx.builder.ins().iconst(I64, if *inclusive { 3 } else { 1 });
+            ctx.builder.ins().store(flags, incl_val, ptr, 24);
             Ok(Some(ptr))
         }
 
@@ -219,25 +222,64 @@ pub(crate) fn lower_collections_literal(
                 }
                 Ty::Range(_) => {
                     // Range: O(1) aritmético.
-                    // Apenas checa start <= item < end (sem verificar step).
+                    // Detecta step negativo e flag inclusive para decidir direção.
                     let flags = MemFlagsData::new();
                     let start = ctx.builder.ins().load(I64, flags, coll_val, 0);
+                    let step = ctx.builder.ins().load(I64, flags, coll_val, 8);
                     let end = ctx.builder.ins().load(I64, flags, coll_val, 16);
+                    let incl_raw = ctx.builder.ins().load(I64, flags, coll_val, 24);
+                    let incl_val = ctx.builder.ins().ushr_imm(incl_raw, 1);
 
-                    // item >= start AND item < end
+                    // step < 0?
+                    let zero_smi = ctx.builder.ins().iconst(I64, 1);
+                    let step_neg = ctx.builder.ins().icmp(
+                        cranelift_codegen::ir::condcodes::IntCC::SignedLessThan,
+                        step,
+                        zero_smi,
+                    );
+                    // inclusive?
+                    let is_inclusive = ctx.builder.ins().icmp_imm(
+                        cranelift_codegen::ir::condcodes::IntCC::NotEqual,
+                        incl_val,
+                        0,
+                    );
+
+                    // step >= 0: item >= start AND (item < end OR (inclusive AND item == end))
                     let ge_start = ctx.builder.ins().icmp(
                         cranelift_codegen::ir::condcodes::IntCC::SignedGreaterThanOrEqual,
                         item_val,
                         start,
                     );
-                    // item < end (exclusive)
                     let lt_end = ctx.builder.ins().icmp(
                         cranelift_codegen::ir::condcodes::IntCC::SignedLessThan,
                         item_val,
                         end,
                     );
-                    // Cranelift I8 band → extend to I64.
-                    let result_i8 = ctx.builder.ins().band(ge_start, lt_end);
+                    let eq_end = ctx.builder.ins().icmp(
+                        cranelift_codegen::ir::condcodes::IntCC::Equal,
+                        item_val,
+                        end,
+                    );
+                    let incl_ok = ctx.builder.ins().band(is_inclusive, eq_end);
+                    let in_pos = ctx.builder.ins().bor(lt_end, incl_ok);
+                    let result_pos = ctx.builder.ins().band(ge_start, in_pos);
+
+                    // step < 0: item <= start AND (item > end OR (inclusive AND item == end))
+                    let le_start = ctx.builder.ins().icmp(
+                        cranelift_codegen::ir::condcodes::IntCC::SignedLessThanOrEqual,
+                        item_val,
+                        start,
+                    );
+                    let gt_end = ctx.builder.ins().icmp(
+                        cranelift_codegen::ir::condcodes::IntCC::SignedGreaterThan,
+                        item_val,
+                        end,
+                    );
+                    let in_neg = ctx.builder.ins().bor(gt_end, incl_ok);
+                    let result_neg = ctx.builder.ins().band(le_start, in_neg);
+
+                    // Seleciona baseado no sinal do step
+                    let result_i8 = ctx.builder.ins().select(step_neg, result_neg, result_pos);
                     Ok(Some(ctx.builder.ins().uextend(I64, result_i8)))
                 }
                 Ty::Dict(k, _) => {

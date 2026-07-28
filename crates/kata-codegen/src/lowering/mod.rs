@@ -37,6 +37,7 @@ mod log;
 mod map;
 mod module;
 mod pattern;
+mod range_iter;
 mod test_runner;
 mod variant;
 

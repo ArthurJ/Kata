@@ -158,11 +158,9 @@ pub(crate) fn lower_for_in(
         }
         Ty::Range(_) => {
             // Range: percorre current = start, current += step,
-            // condição: inclusive ? current > end : current >= end.
+            // condição detecta step negativo e flag inclusive (offset 24).
             let flags = MemFlagsData::new();
             let start_val = ctx.builder.ins().load(I64, flags, coll_val, 0);
-            let step_val = ctx.builder.ins().load(I64, flags, coll_val, 8);
-            let end_val = ctx.builder.ins().load(I64, flags, coll_val, 16);
             let current_var = ctx.new_var("__for_current", I64);
             ctx.builder.def_var(current_var, start_val);
 
@@ -178,15 +176,7 @@ pub(crate) fn lower_for_in(
                 })?;
             ctx.builder.ins().call(yc, &[]);
             let current = ctx.builder.use_var(current_var);
-            // Para inclusive: current > end → break
-            // Para exclusive: current >= end → break
-            // (detectado pelo campo `inclusive` na TAST, mas não temos
-            // acesso aqui — usar inclusive do match pattern)
-            let done = ctx.builder.ins().icmp(
-                cranelift_codegen::ir::condcodes::IntCC::SignedGreaterThanOrEqual,
-                current,
-                end_val,
-            );
+            let done = super::range_iter::range_done(coll_val, current, ctx);
             ctx.builder
                 .ins()
                 .brif(done, break_block, &[], continue_block, &[]);
@@ -205,6 +195,7 @@ pub(crate) fn lower_for_in(
             ctx.builder.def_var(elem_var, elem_val);
 
             // current += step
+            let step_val = ctx.builder.ins().load(I64, flags, coll_val, 8);
             let next_raw = ctx.builder.ins().iadd(current, step_val);
             // SMI fix: (a<<1|1) + (b<<1|1) = (a+b)<<1 | 2. Subtrair 1 restaura tag.
             let next = ctx.builder.ins().iadd_imm(next_raw, -1);

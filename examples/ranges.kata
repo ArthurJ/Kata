@@ -1,0 +1,26 @@
+# Ranges — sintaxe [start..step..end] (exclusive) e [start..step..=end] (inclusive).
+# Range decrescente: step negativo com end <= start.
+
+action main
+    echo!("--- range simples [1..1..5] ---")
+    for x in [1..1..5]
+        echo!(x)
+
+    echo!("--- range com step [0..2..10] ---")
+    for x in [0..2..10]
+        echo!(x)
+
+    echo!("--- range inclusivo [0..3..=10] ---")
+    for x in [0..3..=10]
+        echo!(x)
+
+    echo!("--- range decrescente [10..-1..=0] ---")
+    for x in [10..-1..=0]
+        echo!(x)
+
+    echo!("--- contains: 5 in [0..2..10] ---")
+    echo!(5 in [0..2..10])
+
+    echo!("fim")
+
+main!()

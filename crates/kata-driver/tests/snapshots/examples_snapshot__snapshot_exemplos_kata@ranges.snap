@@ -1,0 +1,35 @@
+---
+source: crates/kata-driver/tests/examples_snapshot.rs
+expression: output
+---
+--- range simples [1..1..5] ---
+1
+2
+3
+4
+--- range com step [0..2..10] ---
+0
+2
+4
+6
+8
+--- range inclusivo [0..3..=10] ---
+0
+3
+6
+9
+--- range decrescente [10..-1..=0] ---
+10
+9
+8
+7
+6
+5
+4
+3
+2
+1
+0
+--- contains: 5 in [0..2..10] ---
+True
+fim
