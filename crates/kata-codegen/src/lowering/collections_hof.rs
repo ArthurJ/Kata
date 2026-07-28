@@ -64,14 +64,12 @@ pub(crate) fn arena_handle(ctx: &mut LowerCtx) -> cranelift_codegen::ir::Value {
 fn build_callback_sig(
     param_types: &[Ty],
     ret_ty: &Ty,
-    has_captures: bool,
+    _has_captures: bool,
     struct_registry: &kata_core::StructRegistry,
 ) -> Signature {
     let mut sig = Signature::new(CallConv::Tail);
     sig.params.push(AbiParam::new(I64)); // arena_handle
-    if has_captures {
-        sig.params.push(AbiParam::new(I64)); // box_ptr
-    }
+    sig.params.push(AbiParam::new(I64)); // box_ptr (sempre presente na ABI uniformizada)
     for pt in param_types {
         sig.params.push(AbiParam::new(super::resolve_clif_ty(pt, struct_registry)));
     }
@@ -91,28 +89,26 @@ pub(crate) fn call_callback(
     args: &[cranelift_codegen::ir::Value],
     param_types: &[Ty],
     ret_ty: &Ty,
-    captures: &[CaptureInfo],
+    _captures: &[CaptureInfo],
     ctx: &mut LowerCtx,
 ) -> Result<cranelift_codegen::ir::Value, CodegenError> {
-    let has_captures = !captures.is_empty();
-    let sig = build_callback_sig(param_types, ret_ty, has_captures, ctx.struct_registry);
+    // ABI uniformizada: callback_val é box_ptr (CaptureBox).
+    // Carrega fn_ptr do offset 0 e passa box_ptr como 2º param.
+    let flags = MemFlagsData::new();
+    let func_ptr = ctx.builder.ins().load(I64, flags, callback_val, 0);
+
+    let sig = build_callback_sig(param_types, ret_ty, true, ctx.struct_registry);
     let sig_ref = ctx.builder.func.import_signature(sig);
-    // Prefixar arena_handle (primeiro param implícito da nova ABI).
     let arena = ctx
         .fiber_arena
         .or(ctx.caller_arena)
         .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
-    let mut full_args = vec![arena];
-    // Se há captures, alocar CaptureBox e prefixar box_ptr.
-    if has_captures {
-        let box_ptr = super::closure::alloc_capture_box(callback_val, captures, ctx)?;
-        full_args.push(box_ptr);
-    }
+    let mut full_args = vec![arena, callback_val]; // arena_handle, box_ptr
     full_args.extend_from_slice(args);
     let call_inst = ctx
         .builder
         .ins()
-        .call_indirect(sig_ref, callback_val, &full_args);
+        .call_indirect(sig_ref, func_ptr, &full_args);
     Ok(ctx.builder.inst_results(call_inst)[0])
 }
 

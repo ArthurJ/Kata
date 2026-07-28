@@ -107,10 +107,14 @@ pub(crate) fn lower_expr(
                             colocated: true,
                             tls: false,
                         });
-                    return Ok(ctx
+                    let func_ptr = ctx
                         .builder
                         .ins()
-                        .global_value(ctx.module.target_config().pointer_type(), func_gv));
+                        .global_value(ctx.module.target_config().pointer_type(), func_gv);
+                    // ABI uniformizada: função nomeada como valor também é
+                    // box_ptr (sem captures — n_captures=0).
+                    let box_ptr = super::closure::alloc_capture_box(func_ptr, &[], ctx)?;
+                    return Ok(box_ptr);
                 }
             }
             // Caminho 3: Action first-class reference (Ty::Action).
@@ -300,15 +304,11 @@ pub(crate) fn lower_expr(
             Ok(ctx.builder.ins().load(clif_ty, flags, ptr, offset))
         }
 
-        // ── Let: define variável ──
+        // ── Let: definir variável ──
         TypedExprKind::Let { name, value } => {
-            // Se o value é um Lambda com captures, registrar no closure_captures
-            // para o call site poder alocar o CaptureBox.
-            if let TypedExprKind::Lambda { captures, .. } = &value.node.kind
-                && !captures.is_empty()
-            {
-                ctx.closure_captures.insert(name.clone(), captures.clone());
-            }
+            // ABI uniformizada: se o value é um Lambda, alloc_capture_box
+            // já foi chamado no arm Lambda — o valor é box_ptr.
+            // closure_captures não é mais necessário.
             let val = lower_expr(&value.node, ctx)?;
             let clif_ty = super::resolve_clif_ty(&value.node.ty, ctx.struct_registry);
             let var = ctx.new_var(name, clif_ty);
@@ -328,13 +328,7 @@ pub(crate) fn lower_expr(
             value,
             bindings,
         } => {
-            // Se o value é um Lambda com captures, registrar.
-            if let TypedExprKind::Lambda { captures, .. } = &value.node.kind
-                && !captures.is_empty()
-            {
-                ctx.closure_captures
-                    .insert(temp_name.clone(), captures.clone());
-            }
+            // ABI uniformizada: captures já são alocadas no arm Lambda.
             let val = lower_expr(&value.node, ctx)?;
             let clif_ty = super::resolve_clif_ty(&value.node.ty, ctx.struct_registry);
             let temp_var = ctx.new_var(temp_name, clif_ty);
@@ -388,13 +382,10 @@ pub(crate) fn lower_expr(
             };
 
             // Declara a função no module (sem definir o corpo ainda).
-            // ABI: arena_handle é o primeiro param implícito; se há captures,
-            // o segundo param é box_ptr (I64).
+            // ABI uniformizada: arena_handle + box_ptr sempre presentes.
             let mut sig = Signature::new(CallConv::Tail);
             sig.params.push(AbiParam::new(I64)); // arena_handle
-            if !captures.is_empty() {
-                sig.params.push(AbiParam::new(I64)); // box_ptr
-            }
+            sig.params.push(AbiParam::new(I64)); // box_ptr
             for pt in param_types {
                 sig.params.push(AbiParam::new(super::resolve_clif_ty(pt, ctx.struct_registry)));
             }
@@ -420,10 +411,7 @@ pub(crate) fn lower_expr(
                 ctx.struct_registry,
             )?;
 
-            // Retorna o function pointer como valor.
-            // declare_func_in_func retorna FuncRef (para call direto);
-            // para call_indirect precisamos de um GlobalValue apontando
-            // para o símbolo da função.
+            // Obtém o function pointer via GlobalValue.
             let func_ref = ctx.module.declare_func_in_func(func_id, ctx.builder.func);
             let ext_func_name = ctx.builder.func.dfg.ext_funcs[func_ref].name.clone();
             let func_gv = ctx
@@ -439,7 +427,14 @@ pub(crate) fn lower_expr(
                 .builder
                 .ins()
                 .global_value(ctx.module.target_config().pointer_type(), func_gv);
-            Ok(func_ptr)
+
+            // ABI uniformizada: todo lambda retorna box_ptr (CaptureBox).
+            // As captures são alocadas no escopo onde o lambda aparece —
+            // onde as variáveis capturadas existem no var_map. Isto resolve
+            // o bug de closure escape via return: o box_ptr carrega fn_ptr
+            // + captures, independente de quem chama depois.
+            let box_ptr = super::closure::alloc_capture_box(func_ptr, captures, ctx)?;
+            Ok(box_ptr)
         }
 
         // ── Match: pattern matching com branch chain ──

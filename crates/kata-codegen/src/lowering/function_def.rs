@@ -61,6 +61,9 @@ pub(crate) fn declare_kata_function(
     // arena_handle é o primeiro param implícito — passado pelo caller
     // (fiber_arena ou caller_arena do contexto de chamada).
     sig.params.push(AbiParam::new(I64));
+    // box_ptr: segundo param implícito (ABI uniformizada).
+    // Funções nomeadas não têm captures — recebem dummy (iconst 0).
+    sig.params.push(AbiParam::new(I64));
     for pt in &func.param_types {
         sig.params.push(AbiParam::new(super::resolve_clif_ty(pt, struct_registry)));
     }
@@ -97,10 +100,11 @@ pub(crate) fn define_function_body(
         let mut sig = Signature::new(CallConv::Tail);
         // arena_handle: primeiro param implícito, passado pelo caller.
         sig.params.push(AbiParam::new(I64)); // arena_handle
-        // Se há captures, o segundo param é box_ptr (I64).
-        if !captures.is_empty() {
-            sig.params.push(AbiParam::new(I64)); // box_ptr
-        }
+        // box_ptr: segundo param implícito. Sempre presente na ABI uniformizada
+        // — lambdas sem captures recebem box com n_captures=0, funções
+        // nomeadas recebem dummy (iconst 0). Isto elimina a necessidade de
+        // distinguir box_ptr de fn_ptr no call site.
+        sig.params.push(AbiParam::new(I64)); // box_ptr
         for pt in param_types {
             sig.params.push(AbiParam::new(super::resolve_clif_ty(pt, struct_registry)));
         }
@@ -159,12 +163,13 @@ pub(crate) fn define_function_body(
         let arena_handle = params[0];
         lower.fiber_arena = Some(arena_handle);
 
-        // Se há captures, carrega cada capture do box_ptr e define variável.
-        // Layout do CaptureBox (Fio 16): offset 0 = fn_ptr, offset 8 = refcount,
+        // Sempre há box_ptr (ABI uniformizada). Se há captures, carrega cada
+        // capture do box_ptr. Se não, box_ptr é dummy (0) e ignorado.
+        // Layout do CaptureBox: offset 0 = fn_ptr, offset 8 = refcount,
         // offset 16 = n_captures, offset 24 + i*8 = captures[i].
         // box_ptr é o segundo block param (params[1]).
+        let box_ptr = params[1];
         let clause_params: Vec<cranelift_codegen::ir::Value> = if !captures.is_empty() {
-            let box_ptr = params[1];
             let flags = MemFlagsData::new();
             for (i, cap) in captures.iter().enumerate() {
                 let clif_ty = super::resolve_clif_ty(&cap.ty, struct_registry);
@@ -179,7 +184,7 @@ pub(crate) fn define_function_body(
             }
             params[2..].to_vec()
         } else {
-            params[1..].to_vec()
+            params[2..].to_vec()
         };
 
         // Se @log quando Enter, injeta antes do body (prólogo).
