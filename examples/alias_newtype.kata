@@ -1,0 +1,40 @@
+# Alias / Newtype — alias de primitivo, construtor identity, downcast
+# Migração de test_alias_bug.kata (legacy)
+
+alias Float as Altura
+
+# Alias preserva a semântica do target:
+# - Target infalível (primitivo) → alias infalível (identity)
+# - Target falível (refined) → alias falível (delega construtor)
+# Alias não herda implementações de interface (Orphan Rule).
+# Para usar SHOW, ORD, etc., faça downcast ao base.
+
+foo :: Altura => Float
+lambda a:
+    a::Float
+
+# Bloco 1 — Construtor identity (alias de primitivo)
+action bloco1 => Unit
+    # Altura 70.0 — construtor identity, retorna Altura direto (não Result)
+    let h := Altura 70.0
+    # Downcast ao base para usar SHOW (alias não herda implementations)
+    echo!(show (h::Float))
+
+# Bloco 2 — Downcast alias→base
+action bloco2 => Unit
+    let h := Altura 70.0
+    let f := h::Float
+    echo!(f)
+
+# Bloco 3 — Função que recebe alias, retorna base
+action bloco3 => Unit
+    let h := Altura 1.75
+    let f := foo h
+    echo!(f)
+
+action main => Unit
+    bloco1!()
+    bloco2!()
+    bloco3!()
+
+main!()

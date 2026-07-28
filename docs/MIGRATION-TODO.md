@@ -12,10 +12,17 @@ valor didático × esforço.
 - **Estrutura:** 6 blocos — declaração + ascription + echo!, smart constructor + match, `?` em Action que retorna Result, `refines NUM` + aritmética delegada, `|` com Optional + coerção contextual, downcast + caso misto + múltiplos predicados
 - **Status:** ✅ Concluído (2026-07-22). 4 scripts legacy removidos. Snapshot adicionado. 996 testes passando.
 
-### Cluster 2 — `alias`/Newtype + `enum` predicado (lacuna grave)
-- **Candidatos legacy:** `test_alias_bug.kata`, `test_imc.kata`
-- **Destino:** `alias_newtype.kata`, `enum_refined_alias.kata`
-- **Problemas:** `test_imc.kata` usa `|` na declaração de enum (sintaxe removida), `| 1` como fallback de divisão esconde que `/` exige `NonZero` (§22.1), `typed_input!` comentado
+### Cluster 2 — `alias`/Newtype + `enum` predicado ✅ Concluído
+- **Candidatos legacy:** `test_alias_bug.kata`, `test_imc.kata` — **removidos**
+- **Destino:** `examples/alias_newtype.kata`, `examples/enum_refined_alias.kata` — **criados**
+- **Estrutura:**
+  - `alias_newtype.kata`: alias de primitivo (identity), construtor infalível, downcast alias→base
+  - `enum_refined_alias.kata`: refined sobre Float, alias de refined (construtor falível delegante), enum predicado (IMC), `?` em Action, downcast encadeado alias→base
+- **Bug fixes:**
+  - `pass0.rs`: alias de refined não delegava ao construtor falível do target — gerava identity. Corrigido: copia predicados, `base_ty` e `RefinedDeclInfo` do target.
+  - `ascription.rs`: downcast só olhava um nível de `alias_of`. Corrigido: percorre a cadeia de `alias_of` recursivamente (`Peso → PositiveFloat → Float`).
+  - `apply.rs`: `try_refines_fallback` não seguia cadeia de `alias_of` para encontrar entradas de `refines`. Corrigido: segue alias_of quando `refines_registry.get(name)` retorna vazio.
+- **Status:** ✅ Concluído (2026-07-27). 2 scripts legacy removidos. Snapshots adicionados. 1121 testes passando.
 
 ### Cluster 3 — Ranges + Tensor + `@ffi` (lacuna de coleções)
 - **Candidatos legacy:** `test_range_step.kata`, `test_tensor_math.kata`

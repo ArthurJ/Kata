@@ -238,10 +238,37 @@ pub(crate) fn infer_apply(
         // Caminho genérico falhou. Tentar fallback refines (D1 do PRD-refines):
         // se algum arg é tipo refined com delegação refines, substituir pelo
         // tipo base e retentar o dispatch. O refined é alias do base no layout
-        // — o codegen não precisa de conversão.
-        if let Some((_fallback_arg_types, fallback_overload)) =
+        // — o codegen não precisa de conversão de bits, mas precisa do tipo
+        // base correto para mapear F64/I64 no Cranelift.
+        if let Some((fallback_arg_types, fallback_overload)) =
             try_refines_fallback(&func_name, &arg_types, ctx)
         {
+            // Converter typed_args para o tipo base onde o fallback substituiu.
+            // Isto é um no-op em runtime (mesmos bits), mas garante que o codegen
+            // use o Cranelift type correto (F64 para Float, I64 para Int).
+            let converted_args: Vec<Spanned<TypedExpr>> = typed_args
+                .iter()
+                .zip(fallback_arg_types.iter())
+                .map(|(arg, fallback_ty)| {
+                    if arg.node.ty != *fallback_ty {
+                        Spanned::new(
+                            TypedExpr {
+                                span: arg.span,
+                                ty: fallback_ty.clone(),
+                                tail_pos: arg.node.tail_pos,
+                                escape: arg.node.escape,
+                                kind: TypedExprKind::TypeAscription {
+                                    expr: Box::new(arg.clone()),
+                                    target_ty: fallback_ty.clone(),
+                                },
+                            },
+                            arg.span,
+                        )
+                    } else {
+                        arg.clone()
+                    }
+                })
+                .collect();
             let callee_ty = Ty::Function(
                 fallback_overload.params.clone(),
                 Box::new(expand_ret(&fallback_overload.ret, ctx)),
@@ -259,7 +286,7 @@ pub(crate) fn infer_apply(
                 expand_ret(&fallback_overload.ret, ctx),
                 TypedExprKind::Closure {
                     callee: Box::new(Spanned::new(callee_typed, callee.span)),
-                    args: typed_args,
+                    args: converted_args,
                     ffi_symbol: fallback_overload.ffi_symbol,
                 },
             ));
@@ -736,7 +763,22 @@ fn try_refines_fallback(
 
     for arg_ty in &mut fallback_arg_types {
         if let Ty::Struct(name) = arg_ty {
-            let entries = ctx.refines_registry.get(name);
+            // Segue a cadeia de alias_of se o tipo não tem refines direto.
+            // Ex: Peso é alias de PositiveFloat que tem refines NUM.
+            let mut current = name.clone();
+            let entries = loop {
+                let e = ctx.refines_registry.get(&current);
+                if !e.is_empty() {
+                    break e;
+                }
+                // Tenta seguir alias_of
+                match ctx.struct_registry.get(&current) {
+                    Some(info) if info.alias_of.is_some() => {
+                        current = info.alias_of.clone().unwrap();
+                    }
+                    _ => break &[][..],
+                }
+            };
             if entries.is_empty() {
                 continue;
             }

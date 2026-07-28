@@ -58,6 +58,62 @@ pub(crate) fn infer_type_ascription(
         }
     };
 
+    // Downcast refined/alias→base — `a::Int` onde `a :: PositiveInt`
+    // ou `x::Float` onde `x :: Altura` (alias de Float) ou
+    // `p::Float` onde `p :: Peso` (alias de PositiveFloat que é refined de Float).
+    // O refined/alias é alias do base no layout (mesmos bits). No-op em runtime.
+    // Válido quando target_ty aparece em algum ponto da cadeia de alias_of.
+    // Deve vir ANTES do ascription-refined, senão `p::Float` entra no path
+    // de refined-validation que exige literal e falha para variáveis.
+    if let Ty::Struct(ref inner_name) = inner.ty {
+        if let Some(struct_info) = ctx.struct_registry.get(inner_name) {
+            if struct_info.alias_of.is_some() || struct_info.predicates.is_some() {
+                // Percorre a cadeia de alias_of recursivamente.
+                let mut current = inner_name.clone();
+                let mut found_match = false;
+                while let Some(info) = ctx.struct_registry.get(&current) {
+                    let base_name = match &info.alias_of {
+                        Some(b) => b.clone(),
+                        None => break,
+                    };
+                    let base_matches = match (&target_ty, base_name.as_str()) {
+                        (Ty::Prim(PrimTy::Int), "Int") => true,
+                        (Ty::Prim(PrimTy::Float), "Float") => true,
+                        (Ty::Prim(PrimTy::Rational), "Rational") => true,
+                        (Ty::Prim(PrimTy::Text), "Text") => true,
+                        (Ty::Struct(s), b) if s == b => true,
+                        _ => false,
+                    };
+                    if base_matches {
+                        found_match = true;
+                        break;
+                    }
+                    current = base_name;
+                }
+                if found_match {
+                    return Ok(TypedExpr {
+                        span: *span,
+                        ty: target_ty.clone(),
+                        tail_pos,
+                        escape: if ctx.ret_ty.is_some() {
+                            if tail_pos {
+                                EscapeTarget::Caller
+                            } else {
+                                EscapeTarget::Local
+                            }
+                        } else {
+                            EscapeTarget::Caller
+                        },
+                        kind: TypedExprKind::TypeAscription {
+                            expr: Box::new(Spanned::new(inner, expr.span)),
+                            target_ty,
+                        },
+                    });
+                }
+            }
+        }
+    }
+
     // Ascription-refined — `5::PositiveInt` valida predicados
     // em compile-time. Se target é um tipo refined (StructInfo com
     // predicates) e expr é literal, avalia cada predicado via
@@ -212,45 +268,6 @@ pub(crate) fn infer_type_ascription(
             ),
             span: expr.span.into(),
         });
-    }
-
-    // Downcast refined/alias→base — `a::Int` onde `a :: PositiveInt`
-    // ou `x::Float` onde `x :: Altura` (alias de Float).
-    // O refined/alias é alias do base no layout (mesmos bits). No-op em runtime.
-    // Válido quando target_ty é exatamente o alias_of do tipo.
-    if let Ty::Struct(ref refined_name) = inner.ty
-        && let Some(struct_info) = ctx.struct_registry.get(refined_name)
-        && struct_info.alias_of.is_some()
-    {
-        let base_name = struct_info.alias_of.as_deref().unwrap_or("");
-        let base_matches = match (&target_ty, base_name) {
-            (Ty::Prim(PrimTy::Int), "Int") => true,
-            (Ty::Prim(PrimTy::Float), "Float") => true,
-            (Ty::Prim(PrimTy::Rational), "Rational") => true,
-            (Ty::Prim(PrimTy::Text), "Text") => true,
-            (Ty::Struct(s), base) if s == base => true,
-            _ => false,
-        };
-        if base_matches {
-            return Ok(TypedExpr {
-                span: *span,
-                ty: target_ty.clone(),
-                tail_pos,
-                escape: if ctx.ret_ty.is_some() {
-                    if tail_pos {
-                        EscapeTarget::Caller
-                    } else {
-                        EscapeTarget::Local
-                    }
-                } else {
-                    EscapeTarget::Caller
-                },
-                kind: TypedExprKind::TypeAscription {
-                    expr: Box::new(Spanned::new(inner, expr.span)),
-                    target_ty,
-                },
-            });
-        }
     }
 
     let rebaixa_ok = match (&inner.kind, &target_ty) {

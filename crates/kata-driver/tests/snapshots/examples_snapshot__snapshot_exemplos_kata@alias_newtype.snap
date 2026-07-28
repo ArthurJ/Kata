@@ -1,0 +1,8 @@
+---
+source: crates/kata-driver/tests/examples_snapshot.rs
+assertion_line: 100
+expression: output
+---
+70.0
+70.0
+1.75

@@ -134,15 +134,40 @@ pub(crate) fn run_pass0(
                 // O alias é Ty::Struct(new_name) independentemente do target.
                 type_env.define(new_name, Ty::Struct(new_name.clone()), origin);
 
-                // Registra no StructRegistry com alias_of = Some(target).
-                // Se o target é um struct com campos, herda os campos (para field access).
-                // Se o target é primitivo/opaco, campos = vazio.
-                let fields = if let Some(target_info) = struct_registry.get(target) {
-                    target_info.fields.clone()
+                // Se o target é refined (tem predicates no StructRegistry),
+                // o alias herda os predicados e torna-se refined também.
+                // alias_of aponta para o target imediato (não para a base),
+                // para preservar a cadeia Peso → PositiveFloat → Float.
+                let target_is_refined = struct_registry
+                    .get(target)
+                    .map(|info| info.predicates.is_some())
+                    .unwrap_or(false);
+
+                if target_is_refined {
+                    let predicates = struct_registry
+                        .get(target)
+                        .and_then(|info| info.predicates.clone())
+                        .unwrap_or_default();
+                    struct_registry.register_refined(new_name, target, predicates);
+
+                    // Copia RefinedDeclInfo do target para o alias,
+                    // para que o inference sintetize o construtor falível.
+                    if let Some(rd) = refined_decls.iter().find(|rd| rd.name == *target) {
+                        refined_decls.push(RefinedDeclInfo {
+                            name: new_name.clone(),
+                            base_ty: rd.base_ty.clone(),
+                            predicates: rd.predicates.clone(),
+                        });
+                    }
                 } else {
-                    Vec::new()
-                };
-                struct_registry.register_with_alias(new_name, fields, Some(target.clone()));
+                    // Alias normal (target não-refined): herda campos se houver.
+                    let fields = if let Some(target_info) = struct_registry.get(target) {
+                        target_info.fields.clone()
+                    } else {
+                        Vec::new()
+                    };
+                    struct_registry.register_with_alias(new_name, fields, Some(target.clone()));
+                }
             }
             Item::EnumDecl { name, variants, .. } => {
                 type_env.define(name, Ty::Sum(name.clone()), origin);

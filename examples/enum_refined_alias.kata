@@ -1,0 +1,50 @@
+# Enum Predicado + Alias de Refined + ? + downcast
+# Migração de test_imc.kata (legacy)
+
+data (Float, > _ 0.0) as PositiveFloat
+
+alias PositiveFloat as Peso
+alias PositiveFloat as Altura
+
+# Enum predicado — smart constructor despacha por guards
+enum IMC
+    Magreza(< _ 18.5)
+    Normal(<= _ 25.0)
+    Sobrepeso(<= _ 30.0)
+    Obesidade
+
+# classificador_imc — recebe Peso e Altura (aliases de PositiveFloat).
+# Downcast explícito ao base para operações aritméticas.
+# Alias não herda implementações de interface (Orphan Rule).
+classificador_imc :: Peso Altura => IMC
+lambda p a:
+    IMC (/ (p::Float) (* (a::Float) (a::Float)))
+
+# Bloco 1 — Construtores falíveis (alias de refined) + enum predicado
+action bloco1 => Unit
+    let p := Peso 70.0?
+    let a := Altura 1.75?
+    let imc := classificador_imc p a
+    echo!(imc)
+
+# Bloco 2 — ? em Action que pode falhar
+action bloco2 => Result::(IMC, Text)
+    let p := Peso 70.0?
+    let a := Altura 1.75?
+    Result::Ok (classificador_imc p a)
+
+# Bloco 3 — Downcast encadeado alias→base (Peso → PositiveFloat → Float)
+action bloco3 => Unit
+    let p := Peso 70.0?
+    let f := p::Float
+    echo!(f)
+
+action main => Unit
+    bloco1!()
+    match (bloco2!())
+        Ok v: echo!(v)
+        Err _: echo!("erro")
+        otherwise: echo!("impossivel")
+    bloco3!()
+
+main!()
