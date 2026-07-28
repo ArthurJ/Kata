@@ -25,7 +25,7 @@ mod types;
 use kata_ast::{Module, Span, Token, TokenWithSpan};
 use kata_diagnostics::{FrontendError, MietteSpan};
 
-pub use casing::{validate_casing, CasingPattern};
+pub(crate) use casing::{CasingPattern, validate_casing};
 
 // ────────────────────────────────────────────────────────────────
 // Parser state

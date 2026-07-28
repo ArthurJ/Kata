@@ -319,7 +319,7 @@ pub extern "C" fn kata_rt_arena_destroy(handle: i64) {
 /// # Safety
 /// `handle` deve ser válido.
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_arena_stats(handle: i64) -> i64 {
+pub(crate) extern "C" fn kata_rt_arena_stats(handle: i64) -> i64 {
     if handle < 0 {
         return 0;
     }
