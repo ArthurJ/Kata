@@ -36,6 +36,9 @@ pub struct TypedModule {
     /// Actions tipadas. Cada Action vira uma função Cranelift
     /// com ABI estendido (caller_arena handle como primeiro param).
     pub actions: Vec<TypedAction>,
+    /// Catálogo de structs com alias_of/predicates — para o codegen
+    /// resolver o Cranelift type correto de refined/alias de primitivos.
+    pub struct_registry: kata_core::StructRegistry,
 }
 
 /// Função nomeada tipada — pronta para o codegen.

@@ -21,7 +21,6 @@ use super::control_flow::lower_control_flow;
 use super::filter::lower_filter;
 use super::fused_stream::lower_fused_stream;
 use super::map::lower_map;
-use crate::ffi_sigs::ty_to_clif;
 use crate::smi::{encode_smi, fits_smi, parse_int_literal};
 
 /// Lowera uma expressão TAST → valor CLIF.
@@ -199,8 +198,8 @@ pub(crate) fn lower_expr(
                 // precisa bitcast.
                 _ if matches!(inner.ty, Ty::Struct(_)) && inner.ty != *target_ty => {
                     let val = lower_expr(inner, ctx)?;
-                    let target_clif = ty_to_clif(target_ty);
-                    let inner_clif = ty_to_clif(&inner.ty);
+                    let target_clif = super::resolve_clif_ty(target_ty, ctx.struct_registry);
+                    let inner_clif = super::resolve_clif_ty(&inner.ty, ctx.struct_registry);
                     if target_clif != inner_clif {
                         // Bitcast necessário (ex: I64 → F64 para Float)
                         Ok(ctx
@@ -284,7 +283,7 @@ pub(crate) fn lower_expr(
             // Carrega com o tipo CLIF correto do campo (expr.ty).
             // Float mapeia para F64; sem isso, carrega como I64 e quebra
             // a verificação de tipos do Cranelift em chamadas FFI.
-            let clif_ty = ty_to_clif(&expr.ty);
+            let clif_ty = super::resolve_clif_ty(&expr.ty, ctx.struct_registry);
             Ok(ctx.builder.ins().load(clif_ty, flags, ptr, offset))
         }
 
@@ -297,7 +296,7 @@ pub(crate) fn lower_expr(
             let ptr = lower_expr(&inner.node, ctx)?;
             let flags = MemFlagsData::new();
             let offset = (*element_index as i32) * 8;
-            let clif_ty = ty_to_clif(&expr.ty);
+            let clif_ty = super::resolve_clif_ty(&expr.ty, ctx.struct_registry);
             Ok(ctx.builder.ins().load(clif_ty, flags, ptr, offset))
         }
 
@@ -311,7 +310,7 @@ pub(crate) fn lower_expr(
                 ctx.closure_captures.insert(name.clone(), captures.clone());
             }
             let val = lower_expr(&value.node, ctx)?;
-            let clif_ty = ty_to_clif(&value.node.ty);
+            let clif_ty = super::resolve_clif_ty(&value.node.ty, ctx.struct_registry);
             let var = ctx.new_var(name, clif_ty);
             ctx.builder.def_var(var, val);
             // Se o valor é Heap (ARC-managed), registrar para decref no epílogo.
@@ -337,14 +336,14 @@ pub(crate) fn lower_expr(
                     .insert(temp_name.clone(), captures.clone());
             }
             let val = lower_expr(&value.node, ctx)?;
-            let clif_ty = ty_to_clif(&value.node.ty);
+            let clif_ty = super::resolve_clif_ty(&value.node.ty, ctx.struct_registry);
             let temp_var = ctx.new_var(temp_name, clif_ty);
             ctx.builder.def_var(temp_var, val);
 
             // Para cada binding, carrega o elemento via FieldAccess.
             for (name, access_expr) in bindings {
                 let elem_val = lower_expr(&access_expr.node, ctx)?;
-                let elem_clif_ty = ty_to_clif(&access_expr.node.ty);
+                let elem_clif_ty = super::resolve_clif_ty(&access_expr.node.ty, ctx.struct_registry);
                 let elem_var = ctx.new_var(name, elem_clif_ty);
                 ctx.builder.def_var(elem_var, elem_val);
             }
@@ -395,9 +394,9 @@ pub(crate) fn lower_expr(
                 sig.params.push(AbiParam::new(I64)); // box_ptr
             }
             for pt in param_types {
-                sig.params.push(AbiParam::new(ty_to_clif(pt)));
+                sig.params.push(AbiParam::new(super::resolve_clif_ty(pt, ctx.struct_registry)));
             }
-            sig.returns.push(AbiParam::new(ty_to_clif(ret_ty)));
+            sig.returns.push(AbiParam::new(super::resolve_clif_ty(ret_ty, ctx.struct_registry)));
             let func_id = ctx
                 .module
                 .declare_function(&name, Linkage::Export, &sig)
@@ -416,6 +415,7 @@ pub(crate) fn lower_expr(
                 ctx.ffi_ids,
                 ctx.kata_ids,
                 ctx.string_table,
+                ctx.struct_registry,
             )?;
 
             // Retorna o function pointer como valor.
@@ -454,7 +454,7 @@ pub(crate) fn lower_expr(
         // ── Var — mesmo codegen que Let ──
         TypedExprKind::Var { name, value } => {
             let val = lower_expr(&value.node, ctx)?;
-            let clif_ty = ty_to_clif(&value.node.ty);
+            let clif_ty = super::resolve_clif_ty(&value.node.ty, ctx.struct_registry);
             let var = ctx.new_var(name, clif_ty);
             ctx.builder.def_var(var, val);
             // Var retorna Unit (como Let).

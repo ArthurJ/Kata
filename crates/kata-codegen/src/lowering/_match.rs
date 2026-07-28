@@ -6,7 +6,7 @@ use kata_inference::{TypedExpr, TypedMatchArm};
 use super::LowerCtx;
 use super::expr::lower_expr;
 use super::pattern::test_single_pattern;
-use crate::ffi_sigs::ty_to_clif;
+
 
 /// Lowera um match: branch chain com brif para cada arm.
 pub(crate) fn lower_match(
@@ -18,7 +18,7 @@ pub(crate) fn lower_match(
     // O tipo de retorno do match é o tipo do body de cada arm.
     // Todos os arms têm o mesmo tipo (verificado pelo typeck).
     let match_ty = &arms[0].body.node.ty;
-    let ret_clif = ty_to_clif(match_ty);
+    let ret_clif = super::resolve_clif_ty(match_ty, ctx.struct_registry);
 
     let cont_block = ctx.builder.create_block();
     ctx.builder.append_block_param(cont_block, ret_clif);

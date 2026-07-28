@@ -51,6 +51,7 @@ fn tree_shake_impl(typed: TypedModule, preserve_tests: bool) -> TypedModule {
         type_env,
         functions,
         actions,
+        struct_registry,
     } = typed;
 
     // ── Coleta nomes alcançados a partir do entry + pre_entry ──
@@ -166,6 +167,7 @@ fn tree_shake_impl(typed: TypedModule, preserve_tests: bool) -> TypedModule {
         type_env,
         functions: kept_functions,
         actions: kept_actions,
+        struct_registry,
     }
 }
 

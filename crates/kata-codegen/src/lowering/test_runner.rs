@@ -56,6 +56,7 @@ pub(crate) fn generate_test_wrappers(
     symbol_table: &HashMap<FuncKey, cranelift_module::FuncId>,
     string_table: &mut StringTable,
     fn_counter: &mut u64,
+    struct_registry: &kata_core::StructRegistry,
 ) -> Result<Vec<TestWrapper>, CodegenError> {
     let mut wrappers = Vec::new();
 
@@ -103,6 +104,7 @@ pub(crate) fn generate_test_wrappers(
                 ffi_ids,
                 symbol_table,
                 &mut *string_table,
+                struct_registry,
             )?;
 
             wrappers.push(TestWrapper {
@@ -146,6 +148,7 @@ fn define_test_wrapper(
     ffi_ids: &HashMap<String, cranelift_module::FuncId>,
     symbol_table: &HashMap<FuncKey, cranelift_module::FuncId>,
     string_table: &mut StringTable,
+    struct_registry: &kata_core::StructRegistry,
 ) -> Result<(), CodegenError> {
     let mut ctx = module.make_context();
     let mut metadata = MetadataTable::new();
@@ -196,6 +199,7 @@ fn define_test_wrapper(
             loop_continue_block: None,
             closure_captures: HashMap::new(),
             arc_vars: Vec::new(),
+            struct_registry,
         };
 
         // 1. scheduler_init → root_arena (igual ao entry point).

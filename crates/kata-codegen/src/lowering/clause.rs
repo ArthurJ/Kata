@@ -17,7 +17,7 @@ use kata_inference::{
 use super::LowerCtx;
 use super::expr::lower_expr;
 use super::pattern::test_clause_patterns;
-use crate::ffi_sigs::ty_to_clif;
+
 
 /// Verifica se todos os patterns são `Ident` (binding simples).
 pub(crate) fn all_patterns_are_ident(patterns: &[Spanned<TypedPattern>]) -> bool {
@@ -34,7 +34,7 @@ pub(crate) fn bind_patterns_to_params(
 ) {
     for (pat, val) in patterns.iter().zip(params.iter()) {
         if let TypedPattern::Ident { name, ty } = &pat.node {
-            let clif_ty = ty_to_clif(ty);
+            let clif_ty = super::resolve_clif_ty(ty, lower.struct_registry);
             let var = lower.new_var(name, clif_ty);
             lower.builder.def_var(var, *val);
         }
@@ -59,7 +59,7 @@ pub(crate) fn lower_guards(
     fallback_body: &Spanned<TypedExpr>,
     lower: &mut LowerCtx,
 ) -> Result<cranelift_codegen::ir::Value, super::CodegenError> {
-    let ret_clif = ty_to_clif(&fallback_body.node.ty);
+    let ret_clif = super::resolve_clif_ty(&fallback_body.node.ty, lower.struct_registry);
 
     let cont_block = lower.builder.create_block();
     lower.builder.append_block_param(cont_block, ret_clif);
@@ -265,7 +265,7 @@ pub(crate) fn lower_with_bindings(
 ) -> Result<(), super::CodegenError> {
     for wb in with_bindings {
         let val = lower_expr(&wb.value.node, lower)?;
-        let clif_ty = ty_to_clif(&wb.value.node.ty);
+        let clif_ty = super::resolve_clif_ty(&wb.value.node.ty, lower.struct_registry);
         let var = lower.new_var(&wb.name, clif_ty);
         lower.builder.def_var(var, val);
     }

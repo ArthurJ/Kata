@@ -18,7 +18,6 @@ use super::LowerCtx;
 use super::action_def::{declare_kata_action, define_kata_action};
 use super::expr::lower_expr;
 use super::function_def::{declare_kata_function, define_kata_function};
-use crate::ffi_sigs::ty_to_clif;
 use crate::metadata::MetadataTable;
 
 use super::backend::ModuleBackend;
@@ -63,6 +62,7 @@ pub(crate) fn lower_module(
     typed: &TypedModule,
     module: &mut dyn ModuleBackend,
     ffi_ids: &HashMap<String, cranelift_module::FuncId>,
+    struct_registry: &kata_core::StructRegistry,
 ) -> Result<
     (
         MetadataTable,
@@ -81,7 +81,7 @@ pub(crate) fn lower_module(
     for func in &typed.functions {
         let cranelift_name = format!("__kata_fn_{fn_counter}");
         fn_counter += 1;
-        let func_id = declare_kata_function(func, &cranelift_name, module)?;
+        let func_id = declare_kata_function(func, &cranelift_name, module, struct_registry)?;
         symbol_table.insert(
             (
                 func.name.clone(),
@@ -101,6 +101,7 @@ pub(crate) fn lower_module(
             ffi_ids,
             &symbol_table,
             &mut string_table,
+            struct_registry,
         )?;
     }
 
@@ -129,6 +130,7 @@ pub(crate) fn lower_module(
             ffi_ids,
             &symbol_table,
             &mut string_table,
+            struct_registry,
         )?;
     }
 
@@ -141,11 +143,12 @@ pub(crate) fn lower_module(
         &symbol_table,
         &mut string_table,
         &mut fn_counter,
+        struct_registry,
     )?;
 
     // Determina o tipo de retorno do entry point.
     let ret_ty = &typed.entry.node.ty;
-    let ret_clif = ty_to_clif(ret_ty);
+    let ret_clif = crate::ffi_sigs::ty_to_clif(ret_ty);
 
     // Assinatura do __kata_entry: () → ret_clif
     let mut sig = Signature::new(CallConv::SystemV);
@@ -206,6 +209,7 @@ pub(crate) fn lower_module(
             loop_continue_block: None,
             closure_captures: HashMap::new(),
             arc_vars: Vec::new(),
+            struct_registry,
         };
 
         // Prólogo do entry point: inicializa scheduler (cria arena raiz internamente).

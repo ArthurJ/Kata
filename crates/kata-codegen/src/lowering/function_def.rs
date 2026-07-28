@@ -17,13 +17,11 @@ use super::clause::{
     all_patterns_are_ident, bind_patterns_to_params, lower_clause_body, lower_clause_chain,
     lower_with_bindings,
 };
-use crate::ffi_sigs::ty_to_clif;
-use crate::metadata::MetadataTable;
-
 use super::LowerCtx;
 use super::backend::ModuleBackend;
 use super::log::inject_log;
 use super::module::{CodegenError, FuncKey, StringTable};
+use crate::metadata::MetadataTable;
 
 /// Bitcast na borda de retorno.
 ///
@@ -36,7 +34,7 @@ fn coerce_return(
     ret_ty: &Ty,
     lower: &mut LowerCtx,
 ) -> cranelift_codegen::ir::Value {
-    let expected = ty_to_clif(ret_ty);
+    let expected = super::resolve_clif_ty(ret_ty, lower.struct_registry);
     let actual = lower.builder.func.dfg.value_type(result);
     if expected != actual {
         lower
@@ -57,15 +55,16 @@ pub(crate) fn declare_kata_function(
     func: &TypedFunction,
     cranelift_name: &str,
     module: &mut dyn ModuleBackend,
+    struct_registry: &kata_core::StructRegistry,
 ) -> Result<cranelift_module::FuncId, CodegenError> {
     let mut sig = Signature::new(CallConv::Tail);
     // arena_handle é o primeiro param implícito — passado pelo caller
     // (fiber_arena ou caller_arena do contexto de chamada).
     sig.params.push(AbiParam::new(I64));
     for pt in &func.param_types {
-        sig.params.push(AbiParam::new(ty_to_clif(pt)));
+        sig.params.push(AbiParam::new(super::resolve_clif_ty(pt, struct_registry)));
     }
-    sig.returns.push(AbiParam::new(ty_to_clif(&func.ret_ty)));
+    sig.returns.push(AbiParam::new(super::resolve_clif_ty(&func.ret_ty, struct_registry)));
     module
         .declare_function(cranelift_name, Linkage::Export, &sig)
         .map_err(|e| CodegenError::Cranelift(format!("declare kata fn {}: {e}", func.name)))
@@ -88,6 +87,7 @@ pub(crate) fn define_function_body(
     ffi_ids: &HashMap<String, cranelift_module::FuncId>,
     kata_ids: &HashMap<FuncKey, cranelift_module::FuncId>,
     string_table: &mut StringTable,
+    struct_registry: &kata_core::StructRegistry,
 ) -> Result<(), CodegenError> {
     let mut ctx = module.make_context();
     let mut metadata = MetadataTable::new();
@@ -102,9 +102,9 @@ pub(crate) fn define_function_body(
             sig.params.push(AbiParam::new(I64)); // box_ptr
         }
         for pt in param_types {
-            sig.params.push(AbiParam::new(ty_to_clif(pt)));
+            sig.params.push(AbiParam::new(super::resolve_clif_ty(pt, struct_registry)));
         }
-        sig.returns.push(AbiParam::new(ty_to_clif(ret_ty)));
+        sig.returns.push(AbiParam::new(super::resolve_clif_ty(ret_ty, struct_registry)));
         func_ir.signature = sig;
 
         // Declara FFI e funções Kata no Function.
@@ -150,6 +150,7 @@ pub(crate) fn define_function_body(
             loop_continue_block: None,
             closure_captures: HashMap::new(),
             arc_vars: Vec::new(),
+            struct_registry,
         };
 
         // params[0] = arena_handle (primeiro param implícito da nova ABI).
@@ -166,7 +167,7 @@ pub(crate) fn define_function_body(
             let box_ptr = params[1];
             let flags = MemFlagsData::new();
             for (i, cap) in captures.iter().enumerate() {
-                let clif_ty = ty_to_clif(&cap.ty);
+                let clif_ty = super::resolve_clif_ty(&cap.ty, struct_registry);
                 let offset = (24 + i * 8) as i32;
                 let val = lower.builder.ins().load(clif_ty, flags, box_ptr, offset);
                 lower.new_var(&cap.name, clif_ty);
@@ -192,7 +193,7 @@ pub(crate) fn define_function_body(
         // Cria epilogue_block se @log Exit (para interceptar retornos).
         let needs_epilogue = matches!(log, Some(TypedLogSpec::Exit { .. }));
         if needs_epilogue {
-            let ret_clif_ty = ty_to_clif(ret_ty);
+            let ret_clif_ty = super::resolve_clif_ty(ret_ty, struct_registry);
             let epi = lower.builder.create_block();
             lower.builder.append_block_param(epi, ret_clif_ty);
             lower.epilogue_block = Some(epi);
@@ -262,6 +263,7 @@ pub(crate) fn define_kata_function(
     ffi_ids: &HashMap<String, cranelift_module::FuncId>,
     symbol_table: &HashMap<FuncKey, cranelift_module::FuncId>,
     string_table: &mut StringTable,
+    struct_registry: &kata_core::StructRegistry,
 ) -> Result<(), CodegenError> {
     define_function_body(
         &func.name,
@@ -275,5 +277,6 @@ pub(crate) fn define_kata_function(
         ffi_ids,
         symbol_table,
         string_table,
+        struct_registry,
     )
 }

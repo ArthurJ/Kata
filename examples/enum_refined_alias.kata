@@ -1,7 +1,9 @@
-# Enum Predicado + Alias de Refined + ? + downcast
+# Enum Predicado + Alias de Refined + refines + ? + downcast
 # Migração de test_imc.kata (legacy)
 
 data (Float, > _ 0.0) as PositiveFloat
+
+PositiveFloat refines NUM
 
 alias PositiveFloat as Peso
 alias PositiveFloat as Altura
@@ -14,11 +16,11 @@ enum IMC
     Obesidade
 
 # classificador_imc — recebe Peso e Altura (aliases de PositiveFloat).
-# Downcast explícito ao base para operações aritméticas.
-# Alias não herda implementações de interface (Orphan Rule).
+# * é método de NUM → refines fallback despacha sem downcast (Peso→Float).
+# / não é método de NUM (só div é) → downcast explícito necessário.
 classificador_imc :: Peso Altura => IMC
 lambda p a:
-    IMC (/ (p::Float) (* (a::Float) (a::Float)))
+    IMC (/ (p::Float) (* a a))
 
 # Bloco 1 — Construtores falíveis (alias de refined) + enum predicado
 action bloco1 => Unit
@@ -39,6 +41,12 @@ action bloco3 => Unit
     let f := p::Float
     echo!(f)
 
+# Bloco 4 — refines fallback: * despacha sem downcast
+action bloco4 => Unit
+    let a := Altura 1.75?
+    let r := * a a
+    echo!(r)
+
 action main => Unit
     bloco1!()
     match (bloco2!())
@@ -46,5 +54,6 @@ action main => Unit
         Err _: echo!("erro")
         otherwise: echo!("impossivel")
     bloco3!()
+    bloco4!()
 
 main!()

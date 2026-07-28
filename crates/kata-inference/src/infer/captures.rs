@@ -33,6 +33,7 @@ pub(crate) fn run(typed_module: &mut TypedModule) {
         type_env,
         functions,
         actions,
+        struct_registry: _,
     } = typed_module;
 
     let dispatch = &*dispatch_table;

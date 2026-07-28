@@ -15,7 +15,6 @@ use kata_inference::TypedAction;
 use kata_inference::TypedLogSpec;
 
 use super::expr::lower_expr;
-use crate::ffi_sigs::ty_to_clif;
 use crate::metadata::MetadataTable;
 
 use super::backend::ModuleBackend;
@@ -66,6 +65,7 @@ pub(crate) fn define_kata_action(
     ffi_ids: &HashMap<String, cranelift_module::FuncId>,
     symbol_table: &HashMap<FuncKey, cranelift_module::FuncId>,
     string_table: &mut StringTable,
+    struct_registry: &kata_core::StructRegistry,
 ) -> Result<(), CodegenError> {
     let mut ctx = module.make_context();
     let mut metadata = MetadataTable::new();
@@ -128,13 +128,14 @@ pub(crate) fn define_kata_action(
             loop_continue_block: None,
             closure_captures: HashMap::new(),
             arc_vars: Vec::new(),
+            struct_registry,
         };
 
         // Cria epilogue_block com 1 block param (result).
         // O tipo do param é o tipo NATURAL do retorno (F64 para Float, I64 para resto).
         // O bitcast F64→I64 acontece no epilogue, após ler o block param.
         // Se o param fosse I64 mas o body produz F64, o jump falha no verifier.
-        let ret_clif_ty = ty_to_clif(&action.ret_ty);
+        let ret_clif_ty = super::resolve_clif_ty(&action.ret_ty, struct_registry);
         let epilogue_block = lower.builder.create_block();
         lower
             .builder
@@ -150,7 +151,7 @@ pub(crate) fn define_kata_action(
         // args_ptr é um ponteiro para a tupla na arena (ou 0 se Unit).
         let flags = MemFlagsData::new();
         for (i, pt) in action.param_types.iter().enumerate() {
-            let clif_ty = ty_to_clif(pt);
+            let clif_ty = super::resolve_clif_ty(pt, struct_registry);
             let var = lower.new_var(&format!("__param_{i}"), clif_ty);
             let offset = (i * 8) as i32;
             let val = lower.builder.ins().load(clif_ty, flags, args_ptr, offset);

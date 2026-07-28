@@ -48,6 +48,7 @@ pub use module::CodegenError;
 use module::StringTable;
 pub use test_runner::TestWrapper;
 
+use cranelift_codegen::ir::types::{F64, I64};
 use cranelift_codegen::ir::{Block, GlobalValue, Value};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
@@ -133,6 +134,37 @@ pub(crate) struct LowerCtx<'a, 'b> {
     /// Cada entrada é uma Variable (global no Cranelift) que segura um data_ptr
     /// retornado por alloc_tracked ou channel_recv.
     pub arc_vars: Vec<cranelift_frontend::Variable>,
+    /// Catálogo de structs com alias_of/predicates — para resolver o
+    /// Cranelift type correto de refined/alias de primitivos.
+    pub struct_registry: &'a kata_core::StructRegistry,
+}
+
+/// Resolve o Cranelift type de um `Ty`, percorrendo a cadeia de `alias_of`
+/// para refined/alias de primitivos. `Ty::Struct("PositiveFloat")` → F64,
+/// `Ty::Struct("Peso")` → F64 (Peso → PositiveFloat → Float).
+pub(crate) fn resolve_clif_ty(
+    ty: &Ty,
+    struct_registry: &kata_core::StructRegistry,
+) -> cranelift_codegen::ir::Type {
+    if let Ty::Struct(name) = ty {
+        let mut current = name.clone();
+        while let Some(info) = struct_registry.get(&current) {
+            if let Some(base) = &info.alias_of {
+                // Se o base é um primitivo conhecido, retorna o Cranelift type.
+                match base.as_str() {
+                    "Int" => return I64,
+                    "Float" => return F64,
+                    "Text" | "Rational" => return I64,
+                    _ => {
+                        current = base.clone();
+                        continue;
+                    }
+                }
+            }
+            break;
+        }
+    }
+    crate::ffi_sigs::ty_to_clif(ty)
 }
 
 impl<'a, 'b> LowerCtx<'a, 'b> {

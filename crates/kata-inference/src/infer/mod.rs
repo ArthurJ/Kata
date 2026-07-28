@@ -298,6 +298,7 @@ pub fn infer_module(
             all_funcs
         },
         actions: typed_actions,
+        struct_registry: resolved.struct_registry.clone(),
     };
 
     // Coleta captures (free variables) de cada Closure.

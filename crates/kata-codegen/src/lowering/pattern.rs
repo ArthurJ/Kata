@@ -44,7 +44,7 @@ pub(crate) fn test_single_pattern(
 ) -> Result<Option<cranelift_codegen::ir::Value>, super::CodegenError> {
     match &pat.node {
         TypedPattern::Ident { name, ty } => {
-            let clif_ty = crate::ffi_sigs::ty_to_clif(ty);
+            let clif_ty = super::resolve_clif_ty(ty, lower.struct_registry);
             // Se o valor recebido é I64 mas a var é F64 (ex: payload de Sum
             // extraído como I64, mas o binding é Float), bitcast I64→F64.
             let val = {

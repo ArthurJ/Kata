@@ -20,7 +20,7 @@ use kata_inference::{CaptureInfo, TypedExpr};
 
 use super::CodegenError;
 use super::LowerCtx;
-use crate::ffi_sigs::ty_to_clif;
+
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -61,16 +61,21 @@ pub(crate) fn arena_handle(ctx: &mut LowerCtx) -> cranelift_codegen::ir::Value {
 /// Constrói a assinatura Cranelift para um callback com tipos de parâmetros
 /// e retorno conhecidos. Se o callback tem captures, o segundo param é I64.
 /// O primeiro param é sempre arena_handle (I64) — param implícito.
-fn build_callback_sig(param_types: &[Ty], ret_ty: &Ty, has_captures: bool) -> Signature {
+fn build_callback_sig(
+    param_types: &[Ty],
+    ret_ty: &Ty,
+    has_captures: bool,
+    struct_registry: &kata_core::StructRegistry,
+) -> Signature {
     let mut sig = Signature::new(CallConv::Tail);
     sig.params.push(AbiParam::new(I64)); // arena_handle
     if has_captures {
         sig.params.push(AbiParam::new(I64)); // box_ptr
     }
     for pt in param_types {
-        sig.params.push(AbiParam::new(ty_to_clif(pt)));
+        sig.params.push(AbiParam::new(super::resolve_clif_ty(pt, struct_registry)));
     }
-    sig.returns.push(AbiParam::new(ty_to_clif(ret_ty)));
+    sig.returns.push(AbiParam::new(super::resolve_clif_ty(ret_ty, struct_registry)));
     sig
 }
 
@@ -90,7 +95,7 @@ pub(crate) fn call_callback(
     ctx: &mut LowerCtx,
 ) -> Result<cranelift_codegen::ir::Value, CodegenError> {
     let has_captures = !captures.is_empty();
-    let sig = build_callback_sig(param_types, ret_ty, has_captures);
+    let sig = build_callback_sig(param_types, ret_ty, has_captures, ctx.struct_registry);
     let sig_ref = ctx.builder.func.import_signature(sig);
     // Prefixar arena_handle (primeiro param implícito da nova ABI).
     let arena = ctx

@@ -220,7 +220,7 @@ pub(crate) fn lower_channel_recv(
     let val = ctx.builder.inst_results(inst)[0];
 
     // Criar binding no var_map (igual ao Let lowering).
-    let clif_ty = crate::ffi_sigs::ty_to_clif(recv_ty);
+    let clif_ty = super::resolve_clif_ty(recv_ty, ctx.struct_registry);
     let var = ctx.new_var(bind_name, clif_ty);
     ctx.builder.def_var(var, val);
     // Valor recebido via canal: se o tipo é composto, é ARC-managed (Heap).
@@ -360,7 +360,7 @@ pub(crate) fn lower_select(
     ctx: &mut LowerCtx,
 ) -> Result<cranelift_codegen::ir::Value, super::CodegenError> {
     let n_arms = arms.len() as i64;
-    let ret_clif = crate::ffi_sigs::ty_to_clif(&expr.ty);
+    let ret_clif = super::resolve_clif_ty(&expr.ty, ctx.struct_registry);
 
     // Arena para alocar o array de handles — fiber_arena (consistente com
     // channel_create: o array é efêmero, vive apenas durante o select).
@@ -455,7 +455,7 @@ pub(crate) fn lower_select(
         let recv_val = ctx.builder.inst_results(recv_inst)[0];
 
         // Criar binding do braço (igual lower_channel_recv).
-        let clif_ty = crate::ffi_sigs::ty_to_clif(&arm.recv_ty);
+        let clif_ty = super::resolve_clif_ty(&arm.recv_ty, ctx.struct_registry);
         let var = ctx.new_var(&arm.bind_name, clif_ty);
         ctx.builder.def_var(var, recv_val);
 

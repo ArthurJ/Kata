@@ -9,7 +9,7 @@ use kata_core::ty::Ty;
 use kata_inference::{CaptureInfo, TypedExpr, TypedExprKind};
 
 use super::LowerCtx;
-use crate::ffi_sigs::ty_to_clif;
+
 
 /// Arena handle a ser passada como primeiro param implícito para funções Kata
 /// e lambdas. Prefere fiber_arena (arena local do fiber), fallback caller_arena.
@@ -249,9 +249,9 @@ pub(crate) fn lower_closure(
                         sig.params.push(AbiParam::new(I64)); // box_ptr
                     }
                     for pt in param_types {
-                        sig.params.push(AbiParam::new(ty_to_clif(pt)));
+                        sig.params.push(AbiParam::new(super::resolve_clif_ty(pt, ctx.struct_registry)));
                     }
-                    sig.returns.push(AbiParam::new(ty_to_clif(ret_ty)));
+                    sig.returns.push(AbiParam::new(super::resolve_clif_ty(ret_ty, ctx.struct_registry)));
                     let sig_ref = ctx.builder.func.import_signature(sig);
                     if expr.tail_pos && !ctx.no_tail_calls {
                         // Tail call indireto: return_call_indirect.
