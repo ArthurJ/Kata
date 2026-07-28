@@ -302,6 +302,18 @@ lambda a b:
     = b 0: core.Result::Err "divisão por zero"
     otherwise: core.Result::Ok (/ a b)
 
+# Float divisão com verificação — retorna Result
+div :: Float Float => Result::(Float, Text)
+lambda a b:
+    = b 0.0: core.Result::Err "divisão por zero"
+    otherwise: core.Result::Ok (/ a b)
+
+# Rational divisão com verificação — retorna Result
+div :: Rational Rational => Result::(Rational, Text)
+lambda a b:
+    = b (from_int 0): core.Result::Err "divisão por zero"
+    otherwise: core.Result::Ok (/ a b)
+
 # Float divisão
 @ffi("kata_rt_fdiv")
 / :: Float Float => Float
