@@ -1,0 +1,7 @@
+---
+source: crates/kata-driver/tests/examples_snapshot.rs
+expression: output
+---
+8
+17
+0

@@ -44,3 +44,38 @@ desapercebido.
 **Dependência:** O design C1 não tem fase atribuída no ROADMAP. A
 infraestrutura de parsing e placeholder existe desde Fio 14, mas a lógica de
 execução nunca foi implementada.
+
+## 3. Closure escape via return de função nomeada — SIGSEGV
+
+**Estado:** Quando uma função nomeada retorna um lambda (ou hole) que captura
+um parâmetro da função, o codegen não propaga as captures através do return.
+O `alloc_capture_box` é chamado no call site da closure retornada, mas as
+captures (parâmetros da função nomeada) não existem no escopo do caller.
+
+**Cadeia de falha:**
+1. `make_adder :: Int => (Int -> Int)` com `lambda n: + _ n` — o lambda
+   captura `n` (parâmetro de `make_adder`)
+2. `let add5 := make_adder 5` — o codegen vê `Closure` (chamada de função),
+   não `Lambda` direto, então não registra captures em `closure_captures`
+3. `add5 3` é chamado via `call_indirect` sem `box_ptr` — a função lambda
+   compilada espera `box_ptr` como segundo param, recebe lixo → SIGSEGV
+
+**Localização:** `crates/kata-codegen/src/lowering/expr.rs`, arm `Let`
+(linhas 304-322) — só propaga captures quando o value é diretamente um
+`Lambda`. Não propaga quando o value é uma `Closure` (chamada de função que
+retorna lambda com captures).
+
+**Também afeta:** Closures criadas com hole syntax (`+ _ n`) dentro de
+actions. O `alloc_capture_box` não encontra as captures no `var_map` da
+action.
+
+**Impacto:** Alto. Qualquer closure que escapa via return de função nomeada
+ou que é criada dentro de action e captura variável local crasha em runtime.
+O exemplo `examples/closure_escape.kata` usa entry point direto (sem action
+nem função nomeada) como workaround.
+
+**Solução necessária:** A ABI de closures com captures precisa carregar o
+`box_ptr` junto com o `fn_ptr` quando a closure escapa via return. Hoje o
+`box_ptr` é alocado no call site, mas as captures só existem no escopo onde
+a closure foi criada. Isto exige mudança na representação de closures em
+runtime (par `(fn_ptr, box_ptr)` em vez de apenas `fn_ptr`).

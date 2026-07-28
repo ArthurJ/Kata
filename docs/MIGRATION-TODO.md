@@ -57,10 +57,18 @@ valor didático × esforço.
   - Actions com `@test` precisam ser alcançadas pelo entry point — tree shaking remove as não alcançadas mesmo com `preserve_tests`.
 - **Status:** ✅ Concluído (2026-07-28). 1146 testes passando.
 
-### Cluster 7 — Closure escape + tipo função `->`
-- **Candidato legacy:** `test_make_adder_typed.kata`
+### Cluster 7 — Closure escape + tipo função `->` ✅ Concluído
+- **Candidato legacy:** `test_make_adder_typed.kata` — mantido em legacy como referência
 - **Destino:** `closure_escape.kata`
-- **Problemas:** `lambda n :: Int:` (sintaxe legada de tipo em param lambda), `echo! a` (sem parênteses). Migração simples.
+- **`closure_escape.kata`:** ✅ Criado (2026-07-28). Demonstra closure escape via hole syntax (`+ _ n`) criando closure que captura variável local e é chamada depois. Tipo de função como valor `(Int -> Int)`. Duas closures com captures distintas (`add5` captura `n=5`, `add10` captura `m=10`). Entry point direto (sem action nem função nomeada). Snapshot adicionado.
+- **Decisões:**
+  - Legacy usa `lambda n :: Int: lambda x :: Int: + x n` (função nomeada com lambda aninhado capturando param). Traduzido para hole syntax `+ _ n` em entry point direto.
+  - `lambda n: lambda x: + x n` (função nomeada com lambda aninhado) causa SIGSEGV — bug no codegen (ver TECH-DEBT #3). Closures que escapan via return de função nomeada não propagam captures.
+  - Closures com hole syntax dentro de actions também crasham — `alloc_capture_box` não encontra captures no `var_map` da action.
+  - Entry point direto funciona porque o `alloc_capture_box` é chamado no mesmo escopo onde as captures existem.
+  - `lambda x::Int` não suportado pelo parser de patterns — `::` em patterns é interpretado como `Enum::Variant`. Tipos em lambdas são inferidos da assinatura ou contexto.
+- **Bug documentado:** TECH-DEBT #3 — closure escape via return de função nomeada. A ABI de closures precisa carregar `box_ptr` junto com `fn_ptr` quando a closure escapa via return.
+- **Status:** ✅ Concluído (2026-07-28). 1146 testes passando.
 
 ## Prioridade de migração (ordem por valor × esforço)
 
