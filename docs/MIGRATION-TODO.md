@@ -24,10 +24,12 @@ valor didático × esforço.
   - `apply.rs`: `try_refines_fallback` não seguia cadeia de `alias_of` para encontrar entradas de `refines`. Corrigido: segue alias_of quando `refines_registry.get(name)` retorna vazio.
 - **Status:** ✅ Concluído (2026-07-27). 2 scripts legacy removidos. Snapshots adicionados. 1121 testes passando.
 
-### Cluster 3 — Ranges + Tensor + `@ffi` (lacuna de coleções)
-- **Candidatos legacy:** `test_range_step.kata`, `test_tensor_math.kata`
-- **Destino:** `ranges.kata`, `tensor.kata`
-- **Problemas:** `test_tensor_math.kata` tem bug intencional (dot com shapes incompatíveis → Type Mismatch) — precisa decidir: remover o mismatch ou converter em teste negativo `expects: "CompileError"`
+### Cluster 3 — Ranges + Tensor + `@ffi` (lacuna de coleções) ✅ Concluído
+- **Candidatos legacy:** `test_range_step.kata`, `test_range_simple.kata` — mantidos em legacy como referência
+- **Destino:** `examples/ranges.kata` — **criado** (4 blocos: simples, com step, inclusivo, decrescente + contains)
+- **Bug fix do codegen:** `for_in`/`map`/`filter`/`fold`/`fused_stream`/`contains` assumiam step positivo e ignoravam `inclusive`. Range decrescente `[10..-1..=0]` não iterava; range inclusivo `[0..3..=10]` tratava como exclusive. Corrigido com helper `range_iter::range_done` que detecta step < 0 e flag inclusive. Runtime agora aloca 32 bytes (4ª word = flag inclusive como SMI).
+- **Tensor:** `test_tensor_math.kata` ainda não migrado (bug intencional de dot com shapes incompatíveis — decisão de design pendente)
+- **Status:** ✅ Concluído (2026-07-28). `ranges.kata` criado, bug de codegen corrigido, snapshot adicionado. 1146 testes passando.
 
 ### Cluster 4 — CSP expandido (lacuna parcial)
 - **Candidatos legacy:** `test_broadcast.kata`, `test_parallel.kata`
