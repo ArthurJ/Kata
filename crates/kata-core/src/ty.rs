@@ -238,10 +238,10 @@ impl TypeEnv {
     /// para o mais externo, retornando o primeiro binding que casa a
     /// origin. Se nenhum binding casa a origin, retorna `None`.
     pub fn lookup_with_origin(&self, name: &str, origin: &str) -> Option<&Ty> {
-        if let Some(binding) = self.bindings.get(name) {
-            if binding.origin == origin {
-                return Some(&binding.ty);
-            }
+        if let Some(binding) = self.bindings.get(name)
+            && binding.origin == origin
+        {
+            return Some(&binding.ty);
         }
         self.parent
             .as_deref()

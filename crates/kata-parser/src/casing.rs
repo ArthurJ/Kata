@@ -10,7 +10,7 @@ use kata_diagnostics::{FrontendError, MietteSpan};
 
 /// Padrão de casing esperado para um nome.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CasingPattern {
+pub(crate) enum CasingPattern {
     /// Primeiro char uppercase, sem `_` — ex: `Pessoa`, `Boolean`, `True`.
     PascalCase,
     /// Primeiro char lowercase, sem `_` no início — ex: `soma`, `minha_var`.
@@ -35,9 +35,7 @@ fn detect_casing(name: &str) -> &'static str {
         return "vazio";
     }
     let first = name.chars().next().unwrap();
-    if first == '_' {
-        "snake_case"
-    } else if first.is_lowercase() {
+    if first == '_' || first.is_lowercase() {
         "snake_case"
     } else if first.is_uppercase() {
         if name.contains('_') {
@@ -83,7 +81,7 @@ fn is_all_caps(name: &str) -> bool {
 
 /// Valida `name` contra `expected`. Retorna `Ok(())` se conforme,
 /// `Err(FrontendError::InvalidCasing)` caso contrário.
-pub fn validate_casing(
+pub(crate) fn validate_casing(
     name: &str,
     expected: CasingPattern,
     span: Span,

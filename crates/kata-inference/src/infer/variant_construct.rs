@@ -13,6 +13,18 @@ use crate::typed::TypedExprKind;
 use super::expr::{InferCtx, infer_expr};
 use super::helpers::InferResult;
 
+/// Dados de uma chamada de construção de variante — o callee e argumentos.
+///
+/// Agrupa os 5 parâmetros que descrevem a chamada (`Enum::Variant(args)`),
+/// reduzindo a aridade de `infer_variant_construct` de 8 para 4.
+pub(crate) struct VariantCall<'a> {
+    pub enum_name: &'a str,
+    pub variant: &'a str,
+    pub module_path: Option<&'a [String]>,
+    pub args: &'a [Spanned<Expr>],
+    pub span: &'a Span,
+}
+
 /// Infere `Apply(VariantQual("Enum", "Variant"), [arg])` —
 /// construção de Sum com payload.
 ///
@@ -25,16 +37,18 @@ use super::helpers::InferResult;
 /// Produz `Ty::Generic(enum_name, type_args)` onde type_args são os
 /// type params instanciados (não-inferidos ficam como `Ty::Var`).
 pub(crate) fn infer_variant_construct(
-    enum_name: &str,
-    variant: &str,
-    module_path: Option<&[String]>,
-    args: &[Spanned<Expr>],
-    span: &Span,
+    call: &VariantCall,
     env: &mut TypeEnv,
     ctx: &InferCtx,
     expected_ty: Option<&Ty>,
 ) -> InferResult<(Ty, TypedExprKind)> {
     use kata_core::ty::Ty;
+
+    let enum_name = call.enum_name;
+    let variant = call.variant;
+    let module_path = call.module_path;
+    let args = call.args;
+    let span = call.span;
 
     // Resolve origin from module_path for qualified lookups.
     let origin: Option<&str> = if let Some(path) = module_path
@@ -170,10 +184,10 @@ pub(crate) fn infer_variant_construct(
         };
         if let Some(defaults) = defaults {
             for (i, arg) in type_args.iter_mut().enumerate() {
-                if matches!(arg, Ty::Var(_)) {
-                    if let Some(Some(default_ty)) = defaults.get(i) {
-                        *arg = default_ty.clone();
-                    }
+                if matches!(arg, Ty::Var(_))
+                    && let Some(Some(default_ty)) = defaults.get(i)
+                {
+                    *arg = default_ty.clone();
                 }
             }
         }

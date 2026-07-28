@@ -124,7 +124,7 @@ impl InterfaceRegistry {
             if self.origins.get(&name).is_some_and(|s| s.is_empty()) {
                 self.origins.remove(&name);
             }
-            if !self.origins.get(&name).is_some_and(|s| s.len() > 1) {
+            if self.origins.get(&name).is_none_or(|s| s.len() <= 1) {
                 self.ambiguous.remove(&name);
             }
         }

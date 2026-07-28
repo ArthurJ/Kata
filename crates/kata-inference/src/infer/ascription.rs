@@ -65,52 +65,51 @@ pub(crate) fn infer_type_ascription(
     // Válido quando target_ty aparece em algum ponto da cadeia de alias_of.
     // Deve vir ANTES do ascription-refined, senão `p::Float` entra no path
     // de refined-validation que exige literal e falha para variáveis.
-    if let Ty::Struct(ref inner_name) = inner.ty {
-        if let Some(struct_info) = ctx.struct_registry.get(inner_name) {
-            if struct_info.alias_of.is_some() || struct_info.predicates.is_some() {
-                // Percorre a cadeia de alias_of recursivamente.
-                let mut current = inner_name.clone();
-                let mut found_match = false;
-                while let Some(info) = ctx.struct_registry.get(&current) {
-                    let base_name = match &info.alias_of {
-                        Some(b) => b.clone(),
-                        None => break,
-                    };
-                    let base_matches = match (&target_ty, base_name.as_str()) {
-                        (Ty::Prim(PrimTy::Int), "Int") => true,
-                        (Ty::Prim(PrimTy::Float), "Float") => true,
-                        (Ty::Prim(PrimTy::Rational), "Rational") => true,
-                        (Ty::Prim(PrimTy::Text), "Text") => true,
-                        (Ty::Struct(s), b) if s == b => true,
-                        _ => false,
-                    };
-                    if base_matches {
-                        found_match = true;
-                        break;
-                    }
-                    current = base_name;
-                }
-                if found_match {
-                    return Ok(TypedExpr {
-                        span: *span,
-                        ty: target_ty.clone(),
-                        tail_pos,
-                        escape: if ctx.ret_ty.is_some() {
-                            if tail_pos {
-                                EscapeTarget::Caller
-                            } else {
-                                EscapeTarget::Local
-                            }
-                        } else {
-                            EscapeTarget::Caller
-                        },
-                        kind: TypedExprKind::TypeAscription {
-                            expr: Box::new(Spanned::new(inner, expr.span)),
-                            target_ty,
-                        },
-                    });
-                }
+    if let Ty::Struct(ref inner_name) = inner.ty
+        && let Some(struct_info) = ctx.struct_registry.get(inner_name)
+        && (struct_info.alias_of.is_some() || struct_info.predicates.is_some())
+    {
+        // Percorre a cadeia de alias_of recursivamente.
+        let mut current = inner_name.clone();
+        let mut found_match = false;
+        while let Some(info) = ctx.struct_registry.get(&current) {
+            let base_name = match &info.alias_of {
+                Some(b) => b.clone(),
+                None => break,
+            };
+            let base_matches = match (&target_ty, base_name.as_str()) {
+                (Ty::Prim(PrimTy::Int), "Int") => true,
+                (Ty::Prim(PrimTy::Float), "Float") => true,
+                (Ty::Prim(PrimTy::Rational), "Rational") => true,
+                (Ty::Prim(PrimTy::Text), "Text") => true,
+                (Ty::Struct(s), b) if s == b => true,
+                _ => false,
+            };
+            if base_matches {
+                found_match = true;
+                break;
             }
+            current = base_name;
+        }
+        if found_match {
+            return Ok(TypedExpr {
+                span: *span,
+                ty: target_ty.clone(),
+                tail_pos,
+                escape: if ctx.ret_ty.is_some() {
+                    if tail_pos {
+                        EscapeTarget::Caller
+                    } else {
+                        EscapeTarget::Local
+                    }
+                } else {
+                    EscapeTarget::Caller
+                },
+                kind: TypedExprKind::TypeAscription {
+                    expr: Box::new(Spanned::new(inner, expr.span)),
+                    target_ty,
+                },
+            });
         }
     }
 

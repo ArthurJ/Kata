@@ -130,9 +130,9 @@ pub(crate) fn infer_lambda(
     // representa o valor de retorno do lambda. O tail_pos do contexto onde
     // o lambda aparece é irrelevante para a posição de cauda do corpo.
     // Extrai o tipo de retorno do hint se for Ty::Function.
-    let ret_hint = hint.and_then(|h| match h {
-        Ty::Function(_, ret) => Some(ret.as_ref()),
-        _ => Some(h),
+    let ret_hint = hint.map(|h| match h {
+        Ty::Function(_, ret) => ret.as_ref(),
+        _ => h,
     });
     let (ret_ty, typed_body, typed_guards) =
         infer_lambda_body(body, guards, &mut lambda_env, ctx, ret_hint)?;
