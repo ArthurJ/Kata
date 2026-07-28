@@ -258,6 +258,7 @@ fn tast_true_desqualificado_gera_variantqual() {
             enum_name,
             variant,
             tag,
+            ..
         } => {
             assert_eq!(enum_name, "Boolean");
             assert_eq!(variant, "True");

@@ -357,6 +357,7 @@ pub(crate) fn lower_expr(
             enum_name,
             variant,
             tag,
+            ..
         } => super::variant::lower_variant_qual(expr, enum_name, variant, tag, ctx),
 
         // ── VariantConstruct: Sum com payload ──
@@ -366,6 +367,7 @@ pub(crate) fn lower_expr(
             variant: _,
             payload,
             tag,
+            ..
         } => super::variant::lower_variant_construct(expr, payload, tag, ctx),
 
         // ── Lambda: função Cranelift separada (anon) ou referência (nomeado) ──

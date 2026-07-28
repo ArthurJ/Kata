@@ -1,19 +1,27 @@
-//! Catálogo de delegações `refines` — mapeia tipo refined → interfaces delegadas.
+//! Catálogo de delegações `refines` — mapeia tipo refined → interfaces delegadas,
+//! com rastreio de origem (origin).
 //!
 //! Populado no resolution (Pass 0) a partir de `RefinesDecl`.
 //! Consumido no inference (fallback no dispatch) para substituir args refined
 //! pelo tipo base e retentar dispatch.
 //!
+//! Cada delegação é registrada com `origin` (módulo de origem). Lookups
+//! não-qualificados resolvem a origin automaticamente quando há apenas uma;
+//! quando há múltiplas origins (nome ambíguo), o caller deve usar
+//! `*_with_origin` para desambiguar.
+//!
 //! `refines` não registra no InterfaceRegistry e não cria overloads no
 //! DispatchTable. O mecanismo é fallback em `apply.rs` (D1 do PRD-refines).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::ty::Ty;
 
 /// Uma delegação `refines`: tipo refined delega uma interface ao seu tipo base.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RefinesEntry {
+    /// Origem da delegação (módulo onde foi declarada).
+    pub origin: String,
     /// Nome do tipo refined (ex: `PositiveInt`).
     pub type_name: String,
     /// Tipo base resolvido (ex: `Ty::Prim(PrimTy::Int)`).
@@ -22,11 +30,15 @@ pub struct RefinesEntry {
     pub interface_name: String,
 }
 
-/// Catálogo de delegações `refines` por tipo.
+/// Catálogo de delegações `refines` por tipo, com rastreio de origem.
 #[derive(Debug, Clone, Default)]
 pub struct RefinesRegistry {
-    /// type_name → lista de delegações (um tipo pode refinar múltiplas interfaces).
-    entries: HashMap<String, Vec<RefinesEntry>>,
+    /// (origin, type_name) → lista de delegações.
+    entries: HashMap<(String, String), Vec<RefinesEntry>>,
+    /// type_name → conjunto de origins que definem refines para este tipo.
+    origins: HashMap<String, HashSet<String>>,
+    /// Nomes ambíguos (definidos em múltiplas origins).
+    ambiguous: HashSet<String>,
 }
 
 impl RefinesRegistry {
@@ -34,34 +46,86 @@ impl RefinesRegistry {
         Self::default()
     }
 
-    /// Registra uma delegação `refines`.
+    // ── Registro ──────────────────────────────────────────
+
+    /// Registra uma delegação `refines` com origin.
     pub fn register(&mut self, entry: RefinesEntry) {
-        self.entries
-            .entry(entry.type_name.clone())
-            .or_default()
-            .push(entry);
+        let origin = entry.origin.clone();
+        let type_name = entry.type_name.clone();
+        let key = (origin.clone(), type_name.clone());
+        self.entries.entry(key).or_default().push(entry);
+        self.track_origin(&type_name, &origin);
     }
 
-    /// Busca todas as delegações de um tipo refined.
-    /// Retorna slice vazio se o tipo não tem `refines`.
+    /// Rastreia a origin e marca ambíguo se >1 origin.
+    fn track_origin(&mut self, type_name: &str, origin: &str) {
+        let origins = self.origins.entry(type_name.to_string()).or_default();
+        origins.insert(origin.to_string());
+        if origins.len() > 1 {
+            self.ambiguous.insert(type_name.to_string());
+        }
+    }
+
+    // ── Resolução de origin ───────────────────────────────
+
+    /// Retorna true se o type_name é ambíguo.
+    pub fn is_ambiguous(&self, type_name: &str) -> bool {
+        self.ambiguous.contains(type_name)
+    }
+
+    /// Resolve a origin de um tipo não-qualificado.
+    ///
+    /// Prefere `"__local__"` quando há múltiplas origins (shadowing do
+    /// usuário sobre o prelude). Retorna `None` se ambíguo sem
+    /// `"__local__"` ou não existe.
+    pub fn resolve_origin(&self, type_name: &str) -> Option<&str> {
+        self.origins.get(type_name).and_then(|origins| {
+            if origins.len() == 1 {
+                origins.iter().next().map(|s| s.as_str())
+            } else if origins.contains("__local__") {
+                Some("__local__")
+            } else {
+                None
+            }
+        })
+    }
+
+    // ── Consulta ──────────────────────────────────────────
+
+    /// Busca todas as delegações de um tipo refined (não-qualificado).
+    /// Retorna slice vazio se o tipo não tem `refines` ou é ambíguo.
     pub fn get(&self, type_name: &str) -> &[RefinesEntry] {
+        let origin = match self.resolve_origin(type_name) {
+            Some(o) => o,
+            None => return &[],
+        };
+        let key = (origin.to_string(), type_name.to_string());
         self.entries
-            .get(type_name)
+            .get(&key)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
+    }
+
+    /// `get` com origin explícita.
+    pub fn get_with_origin(&self, origin: &str, type_name: &str) -> &[RefinesEntry] {
+        let key = (origin.to_string(), type_name.to_string());
+        self.entries
+            .get(&key)
             .map(|v| v.as_slice())
             .unwrap_or(&[])
     }
 
     /// Verifica se um tipo tem delegações `refines`.
     pub fn has_refines(&self, type_name: &str) -> bool {
-        self.entries.contains_key(type_name)
+        !self.get(type_name).is_empty()
     }
 
     /// Lista os nomes das interfaces que um tipo refined delega.
     pub fn interfaces_of(&self, type_name: &str) -> Vec<&str> {
-        self.entries
-            .get(type_name)
-            .map(|v| v.iter().map(|e| e.interface_name.as_str()).collect())
-            .unwrap_or_default()
+        self.get(type_name)
+            .iter()
+            .map(|e| e.interface_name.as_str())
+            .collect()
     }
 
     /// Itera sobre todas as entradas de todos os tipos. Usado para validação
@@ -70,11 +134,107 @@ impl RefinesRegistry {
         self.entries.values().flat_map(|v| v.iter())
     }
 
-    /// Mescla outro RefinesRegistry neste. Entradas do outro sobrescrevem
-    /// para o mesmo tipo. Usado para combinar prelude + user module.
+    // ── Merge ─────────────────────────────────────────────
+
+    /// Mescla outro RefinesRegistry neste.
+    /// Entradas de origins diferentes coexistem; nomes com múltiplas
+    /// origins são marcados como ambíguos.
     pub fn merge(&mut self, other: RefinesRegistry) {
-        for (name, entries) in other.entries {
-            self.entries.insert(name, entries);
+        for ((origin, type_name), entries) in other.entries {
+            let key = (origin.clone(), type_name.clone());
+            self.entries.insert(key, entries);
+            self.track_origin(&type_name, &origin);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn entry(origin: &str, type_name: &str, iface: &str) -> RefinesEntry {
+        RefinesEntry {
+            origin: origin.into(),
+            type_name: type_name.into(),
+            base_ty: Ty::int(),
+            interface_name: iface.into(),
+        }
+    }
+
+    #[test]
+    fn register_and_query() {
+        let mut reg = RefinesRegistry::new();
+        reg.register(entry("user", "PositiveInt", "NUM"));
+
+        assert!(reg.has_refines("PositiveInt"));
+        let delegations = reg.get("PositiveInt");
+        assert_eq!(delegations.len(), 1);
+        assert_eq!(delegations[0].interface_name, "NUM");
+    }
+
+    #[test]
+    fn no_refines_returns_empty() {
+        let reg = RefinesRegistry::new();
+        assert!(!reg.has_refines("Unknown"));
+        assert!(reg.get("Unknown").is_empty());
+    }
+
+    #[test]
+    fn interfaces_of() {
+        let mut reg = RefinesRegistry::new();
+        reg.register(entry("user", "PositiveInt", "NUM"));
+        reg.register(entry("user", "PositiveInt", "SHOW"));
+
+        let ifaces = reg.interfaces_of("PositiveInt");
+        assert_eq!(ifaces, vec!["NUM", "SHOW"]);
+    }
+
+    #[test]
+    fn merge_different_origins_marks_ambiguous() {
+        let mut a = RefinesRegistry::new();
+        a.register(entry("core", "PositiveInt", "NUM"));
+
+        let mut b = RefinesRegistry::new();
+        b.register(entry("user", "PositiveInt", "SHOW"));
+
+        a.merge(b);
+        assert!(a.is_ambiguous("PositiveInt"));
+        assert!(a.resolve_origin("PositiveInt").is_none());
+        assert!(a.get("PositiveInt").is_empty()); // ambíguo → vazio
+    }
+
+    #[test]
+    fn merge_same_origin_overwrites() {
+        let mut a = RefinesRegistry::new();
+        a.register(entry("core", "PositiveInt", "NUM"));
+
+        let mut b = RefinesRegistry::new();
+        b.register(entry("core", "PositiveInt", "SHOW"));
+
+        a.merge(b);
+        assert!(!a.is_ambiguous("PositiveInt"));
+        // Mesma origin → insert sobrescreve, delegações de b substituem a
+        let delegations = a.get("PositiveInt");
+        assert_eq!(delegations.len(), 1);
+        assert_eq!(delegations[0].interface_name, "SHOW");
+    }
+
+    #[test]
+    fn get_with_origin_disambiguates() {
+        let mut a = RefinesRegistry::new();
+        a.register(entry("core", "PositiveInt", "NUM"));
+
+        let mut b = RefinesRegistry::new();
+        b.register(entry("user", "PositiveInt", "SHOW"));
+
+        a.merge(b);
+
+        let core = a.get_with_origin("core", "PositiveInt");
+        assert_eq!(core.len(), 1);
+        assert_eq!(core[0].interface_name, "NUM");
+
+        let user = a.get_with_origin("user", "PositiveInt");
+        assert_eq!(user.len(), 1);
+        assert_eq!(user[0].interface_name, "SHOW");
     }
 }

@@ -99,6 +99,7 @@ pub(crate) fn synthesize_show_functions(
         // Registra `Struct implements SHOW` no InterfaceRegistry.
         interface_registry
             .register_impl(ImplEntry {
+                origin: "__synthesis".to_string(),
                 type_name: struct_name.to_string(),
                 type_params: vec![],
                 interface_name: "SHOW".to_string(),
@@ -209,6 +210,7 @@ pub(crate) fn synthesize_show_functions(
         // Registra `Enum implements SHOW` no InterfaceRegistry.
         interface_registry
             .register_impl(ImplEntry {
+                origin: "__synthesis".to_string(),
                 type_name: enum_name.to_string(),
                 type_params: type_params.clone(),
                 interface_name: "SHOW".to_string(),

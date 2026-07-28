@@ -101,7 +101,7 @@ fn test_directive_dict_with_variant_value_no_args() {
             assert_eq!(key, "args");
             match &value.node {
                 Expr::Grouping { inner } => match &inner.node {
-                    Expr::VariantQual { enum_name, variant } => {
+                    Expr::VariantQual { enum_name, variant, .. } => {
                         assert_eq!(enum_name, "Result");
                         assert_eq!(variant, "Ok");
                     }
@@ -129,7 +129,7 @@ fn test_directive_dict_with_variant_apply_args() {
                 Expr::Grouping { inner } => match &inner.node {
                     Expr::Apply { callee, args } => {
                         match &callee.node {
-                            Expr::VariantQual { enum_name, variant } => {
+                            Expr::VariantQual { enum_name, variant, .. } => {
                                 assert_eq!(enum_name, "Result");
                                 assert_eq!(variant, "Ok");
                             }

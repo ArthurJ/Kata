@@ -230,6 +230,24 @@ impl TypeEnv {
         self.parent.as_deref().and_then(|p| p.lookup_binding(name))
     }
 
+    /// Procura um nome na cadeia de escopos, filtrando por origin.
+    ///
+    /// Quando `module_path = Some(["core"])` qualifica um tipo (ex:
+    /// `core.Result::Err`), este lookup retorna apenas o binding cuja
+    /// `origin` corresponde. Percorre a cadeia de escopos do mais interno
+    /// para o mais externo, retornando o primeiro binding que casa a
+    /// origin. Se nenhum binding casa a origin, retorna `None`.
+    pub fn lookup_with_origin(&self, name: &str, origin: &str) -> Option<&Ty> {
+        if let Some(binding) = self.bindings.get(name) {
+            if binding.origin == origin {
+                return Some(&binding.ty);
+            }
+        }
+        self.parent
+            .as_deref()
+            .and_then(|p| p.lookup_with_origin(name, origin))
+    }
+
     /// Verifica se um nome está marcado como ambíguo (conflito de origin
     /// entre imports). Percorre a cadeia de escopos.
     pub fn is_ambiguous(&self, name: &str) -> bool {

@@ -296,13 +296,21 @@ pub(crate) fn infer_expr_hinted(
         // Tentar VariantQual primeiro; se falhar (não é enum), retentar
         // como TypeAscription onde enum_name é a variável e variant é o
         // tipo alvo.
-        Expr::VariantQual { enum_name, variant } => {
-            let enum_ty = env.lookup(enum_name).cloned();
+        Expr::VariantQual { enum_name, variant, module_path, .. } => {
+            // Quando module_path qualifica (ex: core.Result::Err), resolve o
+            // enum_ty do módulo de origem, não o do escopo mais próximo.
+            let enum_ty = if let Some(path) = module_path.as_ref()
+                && let Some(first) = path.first()
+            {
+                env.lookup_with_origin(enum_name, first).cloned()
+            } else {
+                env.lookup(enum_name).cloned()
+            };
 
             // Caminho 1: é uma variante de enum.
             if let Some(ref ty) = enum_ty
                 && let Some((vt, vk)) =
-                    super::variant_qual::infer_variant_qual(enum_name, variant, ty, span, ctx)?
+                    super::variant_qual::infer_variant_qual(enum_name, variant, module_path.as_deref(), ty, span, ctx)?
             {
                 let escape = if ctx.ret_ty.is_some() {
                     if tail_pos {

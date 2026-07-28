@@ -296,6 +296,12 @@ remove :: Dict::(K, V) K => Dict::(K, V)
 @ffi("kata_rt_bi_div")
 / :: Int Int => Int
 
+# Int divisão com verificação — retorna Result
+div :: Int Int => Result::(Int, Text)
+lambda a b:
+    = b 0: core.Result::Err "divisão por zero"
+    otherwise: core.Result::Ok (/ a b)
+
 # Float divisão
 @ffi("kata_rt_fdiv")
 / :: Float Float => Float

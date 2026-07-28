@@ -15,5 +15,6 @@ mod helpers;
 mod lambdas;
 mod match_tests;
 mod pipe;
+mod qualified_variant;
 mod refined_decls;
 mod signatures;

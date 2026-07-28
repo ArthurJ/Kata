@@ -124,7 +124,7 @@ fn variant_qual() {
     let item = first_item(&m);
     match item {
         Item::EntryExpr(e) => match &e.node {
-            Expr::VariantQual { enum_name, variant } => {
+            Expr::VariantQual { enum_name, variant, .. } => {
                 assert_eq!(enum_name, "Boolean");
                 assert_eq!(variant, "True");
             }

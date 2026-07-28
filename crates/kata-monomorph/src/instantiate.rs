@@ -346,10 +346,12 @@ fn instantiate_kind(kind: &TypedExprKind, subs: &Substitutions) -> TypedExprKind
             enum_name,
             variant,
             tag,
+            module_path,
         } => TypedExprKind::VariantQual {
             enum_name: enum_name.clone(),
             variant: variant.clone(),
             tag: *tag,
+            module_path: module_path.clone(),
         },
 
         TypedExprKind::VariantConstruct {
@@ -357,6 +359,7 @@ fn instantiate_kind(kind: &TypedExprKind, subs: &Substitutions) -> TypedExprKind
             variant,
             payload,
             tag,
+            module_path,
         } => TypedExprKind::VariantConstruct {
             enum_name: enum_name.clone(),
             variant: variant.clone(),
@@ -365,6 +368,7 @@ fn instantiate_kind(kind: &TypedExprKind, subs: &Substitutions) -> TypedExprKind
                 payload.span,
             )),
             tag: *tag,
+            module_path: module_path.clone(),
         },
 
         TypedExprKind::Var { name, value } => TypedExprKind::Var {

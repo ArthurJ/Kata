@@ -120,20 +120,24 @@ pub enum TypedExprKind {
     /// `Boolean::True` → `Ty::Sum("Boolean")`.
     /// Só usado para variantes sem payload.
     /// `tag` é o índice da variante no enum (para codegen de Sum não-Boolean).
+    /// `module_path` é `Some` quando qualificado por módulo (`core.Result::Err`).
     VariantQual {
         enum_name: String,
         variant: String,
         tag: usize,
+        module_path: Option<Vec<String>>,
     },
     /// `Enum::Variante payload` — construção de variante com payload.
     /// `Result::Ok 42` → `Ty::Sum("Result")` com payload = 42.
     /// Sum com payload.
     /// `tag` é o índice da variante no enum (para codegen).
+    /// `module_path` é `Some` quando qualificado por módulo (`core.Result::Ok`).
     VariantConstruct {
         enum_name: String,
         variant: String,
         payload: Box<Spanned<TypedExpr>>,
         tag: usize,
+        module_path: Option<Vec<String>>,
     },
 
     // ── Lambda, Match ──────────────────────────────────────

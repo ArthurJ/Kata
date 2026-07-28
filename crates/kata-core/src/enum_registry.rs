@@ -1,11 +1,16 @@
-//! Catálogo de variantes por enum.
+//! Catálogo de variantes por enum, com rastreio de origem (origin).
 //!
 //! Populado no resolution (Pass 0) a partir de `EnumDecl`.
 //! Consumido no inference para resolver patterns desqualificados
 //! (`True` → `Variant { enum_name: "Boolean", variant: "True" }`)
 //! e verificar exaustividade de match em `Sum`.
+//!
+//! Cada enum é registrado com `origin` (módulo de origem: "core", "my_module", etc).
+//! Lookups não-qualificados resolvem a origin automaticamente quando há apenas uma;
+//! quando há múltiplas origins (nome ambíguo), `is_ambiguous` retorna true e
+//! o caller deve usar `*_with_origin` para desambiguar.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::ty::Ty;
 
@@ -29,18 +34,22 @@ pub struct VariantInfo {
     pub fixed_value: Option<String>,
 }
 
-/// Catálogo de variantes por enum.
+/// Catálogo de variantes por enum, com rastreio de origem.
 #[derive(Debug, Clone, Default)]
 pub struct EnumRegistry {
-    /// enum_name → lista de variantes (em ordem de declaração).
-    variants: HashMap<String, Vec<VariantInfo>>,
-    /// enum_name → parâmetros de tipo (ex: `Result` → `["T", "E"]`).
+    /// (origin, enum_name) → lista de variantes (em ordem de declaração).
+    variants: HashMap<(String, String), Vec<VariantInfo>>,
+    /// (origin, enum_name) → parâmetros de tipo (ex: `Result` → `["T", "E"]`).
     /// Vazio para enums não-genéricos.
-    type_params: HashMap<String, Vec<String>>,
-    /// enum_name → defaults dos type params (ex: `Result` → `[None, Some(Text)]`).
+    type_params: HashMap<(String, String), Vec<String>>,
+    /// (origin, enum_name) → defaults dos type params.
     /// Paralelo a `type_params`: `defaults[i]` é o default de `type_params[i]`.
     /// `None` = sem default (param obrigatório).
-    defaults: HashMap<String, Vec<Option<Ty>>>,
+    defaults: HashMap<(String, String), Vec<Option<Ty>>>,
+    /// enum_name → conjunto de origins que definem este enum.
+    origins: HashMap<String, HashSet<String>>,
+    /// Nomes ambíguos (definidos em múltiplas origins).
+    ambiguous: HashSet<String>,
 }
 
 impl EnumRegistry {
@@ -48,96 +57,173 @@ impl EnumRegistry {
         Self::default()
     }
 
+    // ── Registro ──────────────────────────────────────────
+
     /// Registra um enum com suas variantes (payloads opcionais).
-    pub fn register(&mut self, enum_name: &str, variants: Vec<VariantInfo>) {
-        self.variants.insert(enum_name.to_string(), variants);
+    pub fn register(&mut self, origin: &str, enum_name: &str, variants: Vec<VariantInfo>) {
+        let key = (origin.to_string(), enum_name.to_string());
+        self.variants.insert(key, variants);
+        self.track_origin(enum_name, origin);
     }
 
     /// Registra um enum genérico com type params e variantes.
-    /// `type_params` é a lista de nomes de parâmetros de tipo (ex: `["T", "E"]`).
-    /// As variantes podem ter `payload_ty` com `Ty::Var("T")` etc.
     pub fn register_generic(
         &mut self,
+        origin: &str,
         enum_name: &str,
         type_params: Vec<String>,
         variants: Vec<VariantInfo>,
     ) {
-        self.type_params.insert(enum_name.to_string(), type_params);
-        self.variants.insert(enum_name.to_string(), variants);
+        let key = (origin.to_string(), enum_name.to_string());
+        self.type_params.insert(key.clone(), type_params);
+        self.variants.insert(key, variants);
+        self.track_origin(enum_name, origin);
     }
 
     /// Registra um enum genérico com type params, defaults e variantes.
-    /// `defaults` é paralelo a `type_params`: `defaults[i]` é o default de
-    /// `type_params[i]`, ou `None` se o param é obrigatório.
     pub fn register_generic_with_defaults(
         &mut self,
+        origin: &str,
         enum_name: &str,
         type_params: Vec<String>,
         defaults: Vec<Option<Ty>>,
         variants: Vec<VariantInfo>,
     ) {
-        self.type_params.insert(enum_name.to_string(), type_params);
-        self.defaults.insert(enum_name.to_string(), defaults);
-        self.variants.insert(enum_name.to_string(), variants);
+        let key = (origin.to_string(), enum_name.to_string());
+        self.type_params.insert(key.clone(), type_params);
+        self.defaults.insert(key.clone(), defaults);
+        self.variants.insert(key, variants);
+        self.track_origin(enum_name, origin);
     }
 
+    /// Rastreia a origin de um enum e marca ambíguo se >1 origin.
+    fn track_origin(&mut self, enum_name: &str, origin: &str) {
+        let origins = self.origins.entry(enum_name.to_string()).or_default();
+        origins.insert(origin.to_string());
+        if origins.len() > 1 {
+            self.ambiguous.insert(enum_name.to_string());
+        }
+    }
+
+    // ── Resolução de origin ───────────────────────────────
+
+    /// Retorna true se o enum_name é ambíguo (definido em múltiplas origins).
+    pub fn is_ambiguous(&self, enum_name: &str) -> bool {
+        self.ambiguous.contains(enum_name)
+    }
+
+    /// Retorna as origins que definem este enum.
+    pub fn origins_of(&self, enum_name: &str) -> Vec<&str> {
+        self.origins
+            .get(enum_name)
+            .map(|s| s.iter().map(|o| o.as_str()).collect())
+            .unwrap_or_default()
+    }
+
+    /// Resolve a origin de um enum não-qualificado.
+    ///
+    /// Retorna `Some(origin)` se há exatamente uma origin, ou se há
+    /// múltiplas mas uma delas é `"__local__"` (preferindo o escopo do
+    /// usuário sobre o prelude). Retorna `None` se ambíguo (múltiplas
+    /// origins, nenhuma é `"__local__"`) ou não existe.
+    ///
+    /// Isto implementa shadowing: o usuário pode redefinir `Result` e
+    /// usar `Result::Ok 42` sem qualificar (resolve o do usuário), enquanto
+    /// o prelude usa `core.Result::Err` qualificado (resolve o do prelude).
+    pub fn resolve_origin(&self, enum_name: &str) -> Option<&str> {
+        self.origins.get(enum_name).and_then(|origins| {
+            if origins.len() == 1 {
+                origins.iter().next().map(|s| s.as_str())
+            } else if origins.contains("__local__") {
+                // Shadowing: usuário define localmente, prelude coexiste.
+                // Preferir o do usuário para lookups não-qualificados.
+                Some("__local__")
+            } else {
+                None
+            }
+        })
+    }
+
+    // ── Defaults ──────────────────────────────────────────
+
     /// Retorna os defaults dos type params de um enum, se houver.
+    /// Usa `resolve_origin` para encontrar a origin.
     pub fn defaults_of(&self, enum_name: &str) -> Option<&[Option<Ty>]> {
-        self.defaults.get(enum_name).map(|v| v.as_slice())
+        let origin = self.resolve_origin(enum_name)?;
+        let key = (origin.to_string(), enum_name.to_string());
+        self.defaults.get(&key).map(|v| v.as_slice())
+    }
+
+    /// Retorna os defaults com origin explícita.
+    pub fn defaults_of_with_origin(&self, origin: &str, enum_name: &str) -> Option<&[Option<Ty>]> {
+        let key = (origin.to_string(), enum_name.to_string());
+        self.defaults.get(&key).map(|v| v.as_slice())
     }
 
     /// Preenche type args faltantes com defaults.
-    ///
-    /// Se `type_args` tem menos elementos que `type_params`, os params
-    /// faltantes são preenchidos com seus defaults (se houver).
-    /// Se um param faltante não tem default, retorna `None` (erro: param
-    /// obrigatório não fornecido).
-    ///
-    /// Ex: `Result` com `type_params=["T","E"]`, `defaults=[None, Some(Text)]`.
-    /// `apply_defaults("Result", [Int])` → `Some([Int, Text])`.
-    /// `apply_defaults("Result", [])` → `None` (T é obrigatório).
     pub fn apply_defaults(&self, enum_name: &str, type_args: &[Ty]) -> Option<Vec<Ty>> {
         let type_params = self.type_params_of(enum_name)?;
         let defaults = self.defaults_of(enum_name);
+        Self::do_apply_defaults(type_params, defaults, type_args)
+    }
 
+    /// `apply_defaults` com origin explícita.
+    pub fn apply_defaults_with_origin(
+        &self,
+        origin: &str,
+        enum_name: &str,
+        type_args: &[Ty],
+    ) -> Option<Vec<Ty>> {
+        let type_params = self.type_params_of_with_origin(origin, enum_name)?;
+        let defaults = self.defaults_of_with_origin(origin, enum_name);
+        Self::do_apply_defaults(type_params, defaults, type_args)
+    }
+
+    fn do_apply_defaults(
+        type_params: &[String],
+        defaults: Option<&[Option<Ty>]>,
+        type_args: &[Ty],
+    ) -> Option<Vec<Ty>> {
         if type_args.len() == type_params.len() {
             return Some(type_args.to_vec());
         }
         if type_args.len() > type_params.len() {
-            return None; // args demais
+            return None;
         }
-
         let mut result = type_args.to_vec();
         for i in type_args.len()..type_params.len() {
-            let default = defaults.and_then(|d| d.get(i).cloned().flatten());
+            let default = defaults.and_then(|d| d.get(i).and_then(|opt| opt.clone()));
             if let Some(default_ty) = default {
                 result.push(default_ty);
             } else {
-                return None; // param obrigatório sem valor
+                return None;
             }
         }
         Some(result)
     }
 
+    // ── Type params ───────────────────────────────────────
+
     /// Retorna os type params de um enum, se for genérico.
     pub fn type_params_of(&self, enum_name: &str) -> Option<&[String]> {
-        self.type_params.get(enum_name).map(|v| v.as_slice())
+        let origin = self.resolve_origin(enum_name)?;
+        let key = (origin.to_string(), enum_name.to_string());
+        self.type_params.get(&key).map(|v| v.as_slice())
+    }
+
+    /// `type_params_of` com origin explícita.
+    pub fn type_params_of_with_origin(&self, origin: &str, enum_name: &str) -> Option<&[String]> {
+        let key = (origin.to_string(), enum_name.to_string());
+        self.type_params.get(&key).map(|v| v.as_slice())
     }
 
     /// Percorre um `Ty` recursivamente e aplica defaults em qualquer
     /// `Ty::Generic` que tenha menos args que type params.
-    ///
-    /// Ex: `Result::(Int)` → `Result::(Int, Text)` se o enum tem default
-    /// `E=Text`. Recursa nos args do Generic, em Function, Tuple, List, etc.
-    /// Se o enum não tem defaults ou já tem arity completo, retorna o tipo
-    /// inalterado (apenas recursa nos filhos).
     pub fn expand_defaults(&self, ty: &Ty) -> Ty {
         match ty {
             Ty::Generic(name, args) => {
-                // Recursa nos args primeiro.
                 let expanded_args: Vec<Ty> =
                     args.iter().map(|a| self.expand_defaults(a)).collect();
-                // Aplica defaults se o enum tem defaults registrados.
                 match self.apply_defaults(name, &expanded_args) {
                     Some(full_args) => Ty::Generic(name.clone(), full_args),
                     None => Ty::Generic(name.clone(), expanded_args),
@@ -167,19 +253,23 @@ impl EnumRegistry {
             Ty::ReceiverFactory(inner) => {
                 Ty::ReceiverFactory(Box::new(self.expand_defaults(inner)))
             }
-            // Tipos atômicos — sem filhos para recursar.
             _ => ty.clone(),
         }
     }
 
+    // ── Genérico ──────────────────────────────────────────
+
     /// Verifica se um enum é genérico (tem type params).
     pub fn is_generic(&self, enum_name: &str) -> bool {
-        self.type_params.contains_key(enum_name)
+        self.type_params_of(enum_name).is_some()
+    }
+
+    /// `is_generic` com origin explícita.
+    pub fn is_generic_with_origin(&self, origin: &str, enum_name: &str) -> bool {
+        self.type_params_of_with_origin(origin, enum_name).is_some()
     }
 
     /// Substitui `Ty::Var(name)` por `type_args[i]` correspondente.
-    /// Se `name` não está nos type_params, retorna o `Ty::Var` original
-    /// (não deveria acontecer se o typeck está correto).
     fn substitute_vars(ty: &Ty, type_params: &[String], type_args: &[Ty]) -> Ty {
         match ty {
             Ty::Var(name) => {
@@ -213,9 +303,6 @@ impl EnumRegistry {
     }
 
     /// Instancia o payload de uma variante com type_args concretos.
-    /// Ex: `instantiate_variant("Result", "Ok", [Int, Text])` → `Some(Ty::Prim(Int))`
-    /// (substitui `Ty::Var("T")` por `Ty::Prim(Int)`).
-    /// Retorna `None` se o enum/variante não existe ou não é genérico.
     pub fn instantiate_variant(
         &self,
         enum_name: &str,
@@ -227,65 +314,120 @@ impl EnumRegistry {
         Some(Self::substitute_vars(payload_ty, type_params, type_args))
     }
 
+    // ── Consulta de variantes ─────────────────────────────
+
     /// Verifica se um nome é variante de um enum.
     pub fn is_variant(&self, enum_name: &str, variant: &str) -> bool {
+        let origin = match self.resolve_origin(enum_name) {
+            Some(o) => o,
+            None => return false,
+        };
+        let key = (origin.to_string(), enum_name.to_string());
         self.variants
-            .get(enum_name)
+            .get(&key)
             .is_some_and(|vs| vs.iter().any(|v| v.name == variant))
     }
 
-    /// Lista os nomes das variantes de um enum (para verificação de exaustividade).
-    pub fn variants_of(&self, enum_name: &str) -> Vec<&str> {
+    /// `is_variant` com origin explícita.
+    pub fn is_variant_with_origin(&self, origin: &str, enum_name: &str, variant: &str) -> bool {
+        let key = (origin.to_string(), enum_name.to_string());
         self.variants
-            .get(enum_name)
+            .get(&key)
+            .is_some_and(|vs| vs.iter().any(|v| v.name == variant))
+    }
+
+    /// Lista os nomes das variantes de um enum.
+    pub fn variants_of(&self, enum_name: &str) -> Vec<&str> {
+        let origin = match self.resolve_origin(enum_name) {
+            Some(o) => o,
+            None => return Vec::new(),
+        };
+        let key = (origin.to_string(), enum_name.to_string());
+        self.variants
+            .get(&key)
             .map(|vs| vs.iter().map(|v| v.name.as_str()).collect())
             .unwrap_or_default()
     }
 
-    /// Busca o enum ao qual uma variante pertence.
-    /// Retorna o nome do enum se `variant_name` for uma variante conhecida
-    /// de algum enum. Usado para resolver patterns desqualificados.
-    #[allow(dead_code)] // usado apenas em testes inline #[cfg(test)]
+    /// Busca o enum ao qual uma variante pertence (não-qualificado).
+    #[allow(dead_code)]
     pub(crate) fn find_enum_of_variant(&self, variant_name: &str) -> Option<&str> {
         self.variants
             .iter()
-            .find(|(_, vs)| vs.iter().any(|v| v.name == variant_name))
-            .map(|(enum_name, _)| enum_name.as_str())
+            .filter(|(_, vs)| vs.iter().any(|v| v.name == variant_name))
+            .map(|((_, name), _)| name.as_str())
+            .next()
     }
 
     /// Busca TODOS os enums que têm uma variante com o nome dado.
-    /// Usado para resolver variantes desqualificadas em posição de expressão:
-    /// se exatamente 1 enum tem a variante, resolve; se múltiplos, ambíguo.
     pub fn find_enums_with_variant(&self, variant_name: &str) -> Vec<&str> {
-        self.variants
+        let mut result: Vec<&str> = self
+            .variants
             .iter()
             .filter(|(_, vs)| vs.iter().any(|v| v.name == variant_name))
-            .map(|(enum_name, _)| enum_name.as_str())
-            .collect()
+            .map(|((_, name), _)| name.as_str())
+            .collect();
+        result.sort();
+        result.dedup();
+        result
     }
 
     /// Retorna o índice de uma variante no enum (tag do Sum).
-    /// `None` se o enum não existe ou a variante não pertence ao enum.
     pub fn variant_index(&self, enum_name: &str, variant: &str) -> Option<usize> {
+        let origin = self.resolve_origin(enum_name)?;
+        let key = (origin.to_string(), enum_name.to_string());
         self.variants
-            .get(enum_name)
+            .get(&key)
+            .and_then(|vs| vs.iter().position(|v| v.name == variant))
+    }
+
+    /// `variant_index` com origin explícita.
+    pub fn variant_index_with_origin(&self, origin: &str, enum_name: &str, variant: &str) -> Option<usize> {
+        let key = (origin.to_string(), enum_name.to_string());
+        self.variants
+            .get(&key)
             .and_then(|vs| vs.iter().position(|v| v.name == variant))
     }
 
     /// Retorna o tipo de payload de uma variante.
-    /// `None` se a variante é unitária ou não existe.
     pub fn payload_ty(&self, enum_name: &str, variant: &str) -> Option<&Ty> {
+        let origin = self.resolve_origin(enum_name)?;
+        let key = (origin.to_string(), enum_name.to_string());
         self.variants
-            .get(enum_name)
+            .get(&key)
             .and_then(|vs| vs.iter().find(|v| v.name == variant))
             .and_then(|v| v.payload_ty.as_ref())
     }
 
-    /// Retorna o valor fixo constante de uma variante, se houver.
-    /// `None` se a variante não é constante ou não existe.
-    pub fn fixed_value(&self, enum_name: &str, variant: &str) -> Option<&str> {
+    /// `payload_ty` com origin explícita.
+    pub fn payload_ty_with_origin(&self, origin: &str, enum_name: &str, variant: &str) -> Option<&Ty> {
+        let key = (origin.to_string(), enum_name.to_string());
         self.variants
-            .get(enum_name)
+            .get(&key)
+            .and_then(|vs| vs.iter().find(|v| v.name == variant))
+            .and_then(|v| v.payload_ty.as_ref())
+    }
+
+    /// Retorna o valor fixo constante de uma variante.
+    pub fn fixed_value(&self, enum_name: &str, variant: &str) -> Option<&str> {
+        let origin = self.resolve_origin(enum_name)?;
+        let key = (origin.to_string(), enum_name.to_string());
+        self.variants
+            .get(&key)
+            .and_then(|vs| vs.iter().find(|v| v.name == variant))
+            .and_then(|v| v.fixed_value.as_deref())
+    }
+
+    /// `fixed_value` com origin explícita.
+    pub fn fixed_value_with_origin(
+        &self,
+        origin: &str,
+        enum_name: &str,
+        variant: &str,
+    ) -> Option<&str> {
+        let key = (origin.to_string(), enum_name.to_string());
+        self.variants
+            .get(&key)
             .and_then(|vs| vs.iter().find(|v| v.name == variant))
             .and_then(|v| v.fixed_value.as_deref())
     }
@@ -293,32 +435,50 @@ impl EnumRegistry {
     /// Retorna informações completas de uma variante.
     #[allow(dead_code)]
     pub(crate) fn variant_info(&self, enum_name: &str, variant: &str) -> Option<&VariantInfo> {
+        let origin = self.resolve_origin(enum_name)?;
+        let key = (origin.to_string(), enum_name.to_string());
         self.variants
-            .get(enum_name)
+            .get(&key)
             .and_then(|vs| vs.iter().find(|v| v.name == variant))
     }
 
-    /// Lista os nomes de todos os enums registrados.
+    /// Lista os nomes de todos os enums registrados (não-ambíguos).
     pub fn names(&self) -> impl Iterator<Item = &str> {
-        self.variants.keys().map(|s| s.as_str())
+        self.origins.keys().map(|s| s.as_str())
     }
 
-    /// Retorna todas as variantes de um enum com suas infos completas.
+    /// Retorna todas as variantes de um enum.
     pub fn all_variants(&self, enum_name: &str) -> Option<&[VariantInfo]> {
-        self.variants.get(enum_name).map(|v| v.as_slice())
+        let origin = self.resolve_origin(enum_name)?;
+        let key = (origin.to_string(), enum_name.to_string());
+        self.variants.get(&key).map(|v| v.as_slice())
     }
 
-    /// Mescla outro EnumRegistry neste. Enums do outro sobrescrevem
-    /// enums com o mesmo nome. Usado para combinar prelude + user module.
+    /// `all_variants` com origin explícita.
+    pub fn all_variants_with_origin(&self, origin: &str, enum_name: &str) -> Option<&[VariantInfo]> {
+        let key = (origin.to_string(), enum_name.to_string());
+        self.variants.get(&key).map(|v| v.as_slice())
+    }
+
+    // ── Merge ─────────────────────────────────────────────
+
+    /// Mescla outro EnumRegistry neste.
+    /// Enums de origins diferentes coexistem; nomes com múltiplas origins
+    /// são marcados como ambíguos. Enums da mesma origin são sobrescritos
+    /// (re-registro no mesmo módulo).
     pub fn merge(&mut self, other: EnumRegistry) {
-        for (name, variants) in other.variants {
-            self.variants.insert(name, variants);
+        for ((origin, name), variants) in other.variants {
+            let key = (origin.clone(), name.clone());
+            self.variants.insert(key, variants);
+            self.track_origin(&name, &origin);
         }
-        for (name, params) in other.type_params {
-            self.type_params.insert(name, params);
+        for ((origin, name), params) in other.type_params {
+            let key = (origin, name);
+            self.type_params.insert(key, params);
         }
-        for (name, defaults) in other.defaults {
-            self.defaults.insert(name, defaults);
+        for ((origin, name), defaults) in other.defaults {
+            let key = (origin, name);
+            self.defaults.insert(key, defaults);
         }
     }
 }
@@ -327,26 +487,28 @@ impl EnumRegistry {
 mod tests {
     use super::*;
 
+    fn v(name: &str) -> VariantInfo {
+        VariantInfo {
+            name: name.into(),
+            payload_ty: None,
+            predicate: None,
+            fixed_value: None,
+        }
+    }
+
+    fn v_with_payload(name: &str, ty: Ty) -> VariantInfo {
+        VariantInfo {
+            name: name.into(),
+            payload_ty: Some(ty),
+            predicate: None,
+            fixed_value: None,
+        }
+    }
+
     #[test]
     fn register_and_query() {
         let mut registry = EnumRegistry::new();
-        registry.register(
-            "Boolean",
-            vec![
-                VariantInfo {
-                    name: "True".into(),
-                    payload_ty: None,
-                    predicate: None,
-                    fixed_value: None,
-                },
-                VariantInfo {
-                    name: "False".into(),
-                    payload_ty: None,
-                    predicate: None,
-                    fixed_value: None,
-                },
-            ],
-        );
+        registry.register("core", "Boolean", vec![v("True"), v("False")]);
 
         assert!(registry.is_variant("Boolean", "True"));
         assert!(registry.is_variant("Boolean", "False"));
@@ -359,23 +521,7 @@ mod tests {
     #[test]
     fn find_enum_of_variant() {
         let mut registry = EnumRegistry::new();
-        registry.register(
-            "Boolean",
-            vec![
-                VariantInfo {
-                    name: "True".into(),
-                    payload_ty: None,
-                    predicate: None,
-                    fixed_value: None,
-                },
-                VariantInfo {
-                    name: "False".into(),
-                    payload_ty: None,
-                    predicate: None,
-                    fixed_value: None,
-                },
-            ],
-        );
+        registry.register("core", "Boolean", vec![v("True"), v("False")]);
 
         assert_eq!(registry.find_enum_of_variant("True"), Some("Boolean"));
         assert_eq!(registry.find_enum_of_variant("False"), Some("Boolean"));
@@ -385,53 +531,15 @@ mod tests {
     #[test]
     fn find_enums_with_variant() {
         let mut registry = EnumRegistry::new();
-        registry.register(
-            "Boolean",
-            vec![
-                VariantInfo {
-                    name: "True".into(),
-                    payload_ty: None,
-                    predicate: None,
-                    fixed_value: None,
-                },
-                VariantInfo {
-                    name: "False".into(),
-                    payload_ty: None,
-                    predicate: None,
-                    fixed_value: None,
-                },
-            ],
-        );
-        registry.register(
-            "Flag",
-            vec![
-                VariantInfo {
-                    name: "True".into(),
-                    payload_ty: None,
-                    predicate: None,
-                    fixed_value: None,
-                },
-                VariantInfo {
-                    name: "Off".into(),
-                    payload_ty: None,
-                    predicate: None,
-                    fixed_value: None,
-                },
-            ],
-        );
+        registry.register("core", "Boolean", vec![v("True"), v("False")]);
+        registry.register("user", "Flag", vec![v("True"), v("Off")]);
 
-        // "True" existe em Boolean e Flag → ambíguo
         let mut enums = registry.find_enums_with_variant("True");
         enums.sort();
         assert_eq!(enums, vec!["Boolean", "Flag"]);
 
-        // "False" só em Boolean
         assert_eq!(registry.find_enums_with_variant("False"), vec!["Boolean"]);
-
-        // "Off" só em Flag
         assert_eq!(registry.find_enums_with_variant("Off"), vec!["Flag"]);
-
-        // "Maybe" em nenhum
         assert!(registry.find_enums_with_variant("Maybe").is_empty());
     }
 
@@ -446,21 +554,9 @@ mod tests {
     fn variant_index_and_payload() {
         let mut registry = EnumRegistry::new();
         registry.register(
+            "core",
             "Result",
-            vec![
-                VariantInfo {
-                    name: "Ok".into(),
-                    payload_ty: Some(Ty::int()),
-                    predicate: None,
-                    fixed_value: None,
-                },
-                VariantInfo {
-                    name: "Err".into(),
-                    payload_ty: Some(Ty::text()),
-                    predicate: None,
-                    fixed_value: None,
-                },
-            ],
+            vec![v_with_payload("Ok", Ty::int()), v_with_payload("Err", Ty::text())],
         );
 
         assert_eq!(registry.variant_index("Result", "Ok"), Some(0));
@@ -476,24 +572,91 @@ mod tests {
     fn unit_variant_has_no_payload() {
         let mut registry = EnumRegistry::new();
         registry.register(
+            "core",
             "Optional",
-            vec![
-                VariantInfo {
-                    name: "Some".into(),
-                    payload_ty: Some(Ty::int()),
-                    predicate: None,
-                    fixed_value: None,
-                },
-                VariantInfo {
-                    name: "None".into(),
-                    payload_ty: None,
-                    predicate: None,
-                    fixed_value: None,
-                },
-            ],
+            vec![v_with_payload("Some", Ty::int()), v("None")],
         );
 
         assert_eq!(registry.payload_ty("Optional", "Some"), Some(&Ty::int()));
         assert_eq!(registry.payload_ty("Optional", "None"), None);
+    }
+
+    // ── Testes de origin + ambiguous ──────────────────────
+
+    #[test]
+    fn merge_different_origins_marks_ambiguous() {
+        let mut prelude = EnumRegistry::new();
+        prelude.register_generic_with_defaults(
+            "core",
+            "Result",
+            vec!["T".into(), "E".into()],
+            vec![None, Some(Ty::text())],
+            vec![v_with_payload("Ok", Ty::Var("T".into())), v_with_payload("Err", Ty::Var("E".into()))],
+        );
+
+        let mut user = EnumRegistry::new();
+        user.register(
+            "user",
+            "Result",
+            vec![v_with_payload("Ok", Ty::int()), v_with_payload("Err", Ty::int())],
+        );
+
+        prelude.merge(user);
+
+        // Result é ambíguo (definido em core + user)
+        assert!(prelude.is_ambiguous("Result"));
+        assert_eq!(prelude.origins_of("Result").len(), 2);
+
+        // Unqualified lookup falha (ambíguo)
+        assert!(!prelude.is_variant("Result", "Ok"));
+        assert_eq!(prelude.payload_ty("Result", "Ok"), None);
+
+        // Qualified lookup funciona
+        assert!(prelude.is_variant_with_origin("core", "Result", "Ok"));
+        assert!(prelude.is_variant_with_origin("user", "Result", "Ok"));
+        assert_eq!(
+            prelude.payload_ty_with_origin("core", "Result", "Err"),
+            Some(&Ty::Var("E".into()))
+        );
+        assert_eq!(
+            prelude.payload_ty_with_origin("user", "Result", "Err"),
+            Some(&Ty::int())
+        );
+    }
+
+    #[test]
+    fn merge_same_origin_overwrites() {
+        let mut registry = EnumRegistry::new();
+        registry.register("core", "Result", vec![v("Ok"), v("Err")]);
+
+        let mut update = EnumRegistry::new();
+        update.register("core", "Result", vec![v("Success"), v("Failure")]);
+
+        registry.merge(update);
+
+        // Same origin — overwritten, not ambiguous
+        assert!(!registry.is_ambiguous("Result"));
+        assert!(registry.is_variant("Result", "Success"));
+        assert!(!registry.is_variant("Result", "Ok"));
+    }
+
+    #[test]
+    fn resolve_origin_single() {
+        let mut registry = EnumRegistry::new();
+        registry.register("core", "Boolean", vec![v("True")]);
+
+        assert_eq!(registry.resolve_origin("Boolean"), Some("core"));
+        assert_eq!(registry.resolve_origin("NonExistent"), None);
+    }
+
+    #[test]
+    fn resolve_origin_ambiguous() {
+        let mut registry = EnumRegistry::new();
+        registry.register("core", "Result", vec![v("Ok")]);
+        registry.register("user", "Result", vec![v("Err")]);
+
+        // Ambiguous — resolve_origin returns None
+        assert_eq!(registry.resolve_origin("Result"), None);
+        assert!(registry.is_ambiguous("Result"));
     }
 }

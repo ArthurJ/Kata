@@ -79,7 +79,7 @@ pub(crate) fn run_pass0(
                     let pred_names: Vec<String> = (0..refined_decl.predicates.len())
                         .map(|i| format!("__pred_{name}_{i}"))
                         .collect();
-                    struct_registry.register_refined(name, &base_ty_name, pred_names);
+                    struct_registry.register_refined(origin, name, &base_ty_name, pred_names);
                     type_env.define(name, Ty::Struct(name.clone()), origin);
 
                     // Guarda para o inference sintetizar as funções predicado.
@@ -126,7 +126,7 @@ pub(crate) fn run_pass0(
                             offset: (i as u32) * 8,
                         })
                         .collect();
-                    struct_registry.register(name, field_infos);
+                    struct_registry.register(origin, name, field_infos);
                 }
             }
             Item::AliasDecl { target, new_name } => {
@@ -148,7 +148,7 @@ pub(crate) fn run_pass0(
                         .get(target)
                         .and_then(|info| info.predicates.clone())
                         .unwrap_or_default();
-                    struct_registry.register_refined(new_name, target, predicates);
+                    struct_registry.register_refined(origin, new_name, target, predicates);
 
                     // Copia RefinedDeclInfo do target para o alias,
                     // para que o inference sintetize o construtor falível.
@@ -166,7 +166,7 @@ pub(crate) fn run_pass0(
                     } else {
                         Vec::new()
                     };
-                    struct_registry.register_with_alias(new_name, fields, Some(target.clone()));
+                    struct_registry.register_with_alias(origin, new_name, fields, Some(target.clone()));
                 }
             }
             Item::EnumDecl { name, variants, .. } => {
@@ -233,7 +233,7 @@ pub(crate) fn run_pass0(
                         })
                         .collect()
                 };
-                enum_registry.register(name, variant_infos.clone());
+                enum_registry.register(origin, name, variant_infos.clone());
 
                 // Se variantes têm payloads Ty::Var (type params),
                 // registrar como enum genérico. Coleta type params dos payloads.
@@ -262,6 +262,7 @@ pub(crate) fn run_pass0(
                 }
                 if !type_params.is_empty() {
                     enum_registry.register_generic_with_defaults(
+                        origin,
                         name,
                         type_params,
                         defaults,
@@ -336,7 +337,7 @@ pub(crate) fn run_pass0(
                     type_params: type_params.clone(),
                     signatures: iface_sigs,
                 };
-                if let Err(e) = interface_registry.register_interface(info) {
+                if let Err(e) = interface_registry.register_interface(origin, info) {
                     eprintln!("[resolution] warning: {e}");
                 }
             }
@@ -394,6 +395,7 @@ pub(crate) fn run_pass0(
                     })
                     .collect();
                 let entry = ImplEntry {
+                    origin: origin.to_string(),
                     type_name: type_name.clone(),
                     type_params: type_params.clone(),
                     interface_name: interface_name.clone(),
@@ -515,6 +517,7 @@ pub(crate) fn run_pass0(
 
                 // Registrar delegação no RefinesRegistry.
                 refines_registry.register(RefinesEntry {
+                    origin: origin.to_string(),
                     type_name: type_name.clone(),
                     base_ty,
                     interface_name: interface_name.clone(),

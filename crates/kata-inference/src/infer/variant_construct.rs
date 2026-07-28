@@ -27,6 +27,7 @@ use super::helpers::InferResult;
 pub(crate) fn infer_variant_construct(
     enum_name: &str,
     variant: &str,
+    module_path: Option<&[String]>,
     args: &[Spanned<Expr>],
     span: &Span,
     env: &mut TypeEnv,
@@ -35,8 +36,22 @@ pub(crate) fn infer_variant_construct(
 ) -> InferResult<(Ty, TypedExprKind)> {
     use kata_core::ty::Ty;
 
+    // Resolve origin from module_path for qualified lookups.
+    let origin: Option<&str> = if let Some(path) = module_path
+        && let Some(first) = path.first()
+    {
+        Some(first.as_str())
+    } else {
+        None
+    };
+
     // Verifica que o enum e a variante existem.
-    if !ctx.enum_registry.is_variant(enum_name, variant) {
+    let variant_exists = if let Some(o) = origin {
+        ctx.enum_registry.is_variant_with_origin(o, enum_name, variant)
+    } else {
+        ctx.enum_registry.is_variant(enum_name, variant)
+    };
+    if !variant_exists {
         return Err(MiddleError::UnboundName {
             name: format!("{}::{}", enum_name, variant),
             span: (*span).into(),
@@ -44,7 +59,12 @@ pub(crate) fn infer_variant_construct(
     }
 
     // Variante constante: não aceita argumentos — o valor é fixo.
-    if ctx.enum_registry.fixed_value(enum_name, variant).is_some() {
+    let fixed = if let Some(o) = origin {
+        ctx.enum_registry.fixed_value_with_origin(o, enum_name, variant)
+    } else {
+        ctx.enum_registry.fixed_value(enum_name, variant)
+    };
+    if fixed.is_some() {
         return Err(MiddleError::TypeMismatch {
             expected: format!(
                 "{}::{} (variante constante — não aceita argumentos)",
@@ -56,14 +76,16 @@ pub(crate) fn infer_variant_construct(
     }
 
     // Verifica que a variante tem payload.
-    let payload_ty = ctx
-        .enum_registry
-        .payload_ty(enum_name, variant)
-        .ok_or_else(|| MiddleError::TypeMismatch {
-            expected: "variante com payload".into(),
-            found: format!("{}::{} é unitária", enum_name, variant),
-            span: (*span).into(),
-        })?;
+    let payload_ty = if let Some(o) = origin {
+        ctx.enum_registry.payload_ty_with_origin(o, enum_name, variant)
+    } else {
+        ctx.enum_registry.payload_ty(enum_name, variant)
+    }
+    .ok_or_else(|| MiddleError::TypeMismatch {
+        expected: "variante com payload".into(),
+        found: format!("{}::{} é unitária", enum_name, variant),
+        span: (*span).into(),
+    })?;
 
     // Exatamente 1 argumento.
     if args.len() != 1 {
@@ -78,11 +100,18 @@ pub(crate) fn infer_variant_construct(
     let typed_arg = infer_expr(&args[0].node, &args[0].span, env, ctx, false)?;
 
     // Unificação com Ty::Var.
-    if ctx.enum_registry.is_generic(enum_name) {
-        let type_params = ctx
-            .enum_registry
-            .type_params_of(enum_name)
-            .expect("is_generic true implica type_params_of Some");
+    let is_generic = if let Some(o) = origin {
+        ctx.enum_registry.is_generic_with_origin(o, enum_name)
+    } else {
+        ctx.enum_registry.is_generic(enum_name)
+    };
+    if is_generic {
+        let type_params = if let Some(o) = origin {
+            ctx.enum_registry.type_params_of_with_origin(o, enum_name)
+        } else {
+            ctx.enum_registry.type_params_of(enum_name)
+        }
+        .expect("is_generic true implica type_params_of Some");
 
         // Unifica payload_ty (que pode ser Ty::Var) com typed_arg.ty.
         let arg_ty = &typed_arg.ty;
@@ -131,7 +160,12 @@ pub(crate) fn infer_variant_construct(
         // Preenche type params não-inferidos com defaults do EnumRegistry.
         // Ex: Result com default E=Text. Se E ainda é Var("E") após hint,
         // e o enum tem default para E, usa o default.
-        if let Some(defaults) = ctx.enum_registry.defaults_of(enum_name) {
+        let defaults = if let Some(o) = origin {
+            ctx.enum_registry.defaults_of_with_origin(o, enum_name)
+        } else {
+            ctx.enum_registry.defaults_of(enum_name)
+        };
+        if let Some(defaults) = defaults {
             for (i, arg) in type_args.iter_mut().enumerate() {
                 if matches!(arg, Ty::Var(_)) {
                     if let Some(Some(default_ty)) = defaults.get(i) {
@@ -142,16 +176,20 @@ pub(crate) fn infer_variant_construct(
         }
 
         let result_ty = Ty::Generic(enum_name.to_string(), type_args);
+        let tag = if let Some(o) = origin {
+            ctx.enum_registry.variant_index_with_origin(o, enum_name, variant)
+        } else {
+            ctx.enum_registry.variant_index(enum_name, variant)
+        }
+        .unwrap_or(0);
         return Ok((
             result_ty,
             TypedExprKind::VariantConstruct {
                 enum_name: enum_name.to_string(),
                 variant: variant.to_string(),
                 payload: Box::new(Spanned::new(typed_arg, args[0].span)),
-                tag: ctx
-                    .enum_registry
-                    .variant_index(enum_name, variant)
-                    .unwrap_or(0),
+                tag,
+                module_path: module_path.map(|p| p.to_vec()),
             },
         ));
     }
@@ -165,16 +203,20 @@ pub(crate) fn infer_variant_construct(
         });
     }
 
+    let tag = if let Some(o) = origin {
+        ctx.enum_registry.variant_index_with_origin(o, enum_name, variant)
+    } else {
+        ctx.enum_registry.variant_index(enum_name, variant)
+    }
+    .unwrap_or(0);
     Ok((
         Ty::Sum(enum_name.to_string()),
         TypedExprKind::VariantConstruct {
             enum_name: enum_name.to_string(),
             variant: variant.to_string(),
             payload: Box::new(Spanned::new(typed_arg, args[0].span)),
-            tag: ctx
-                .enum_registry
-                .variant_index(enum_name, variant)
-                .unwrap_or(0),
+            tag,
+            module_path: module_path.map(|p| p.to_vec()),
         },
     ))
 }

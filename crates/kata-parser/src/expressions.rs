@@ -218,9 +218,58 @@ impl Parser {
                         Expr::VariantQual {
                             enum_name: name,
                             variant,
+                            module_path: None,
                         },
                         span,
                     ));
+                }
+                // Check for qualified VariantQual: Ident (. Ident)+ :: Ident
+                // e.g. `core.Result::Err` → module_path = ["core"], enum_name = "Result"
+                // Lookahead não-destrutivo: se não encontrar `::` no final,
+                // restaura a posição e deixa DotAccess (post_ascription) lidar.
+                if matches!(self.peek(), Token::Dot) {
+                    let saved_pos = self.pos;
+                    let mut path = vec![name.clone()];
+                    loop {
+                        if !matches!(self.peek(), Token::Dot) {
+                            break;
+                        }
+                        self.advance(); // consume .
+                        match self.peek() {
+                            Token::Ident(s) => {
+                                path.push(s.clone());
+                                self.advance(); // consume Ident
+                            }
+                            _ => break, // not Ident after . — not VariantQual
+                        }
+                        // Check for :: Ident after each path component
+                        if matches!(self.peek(), Token::DoubleColon)
+                            && let Some(next) = self.tokens.get(self.pos + 1)
+                            && let Token::Ident(variant) = &next.token
+                        {
+                            let variant = variant.clone();
+                            self.advance(); // consume ::
+                            self.advance(); // consume variant Ident
+                            // Last element of path is enum_name, rest is module_path
+                            let enum_name = path.pop().expect("path tem >=2 elementos");
+                            let module_path = if path.is_empty() {
+                                None
+                            } else {
+                                Some(path)
+                            };
+                            let span = start.cover(self.tokens[self.pos - 1].span);
+                            return Ok(Spanned::new(
+                                Expr::VariantQual {
+                                    enum_name,
+                                    variant,
+                                    module_path,
+                                },
+                                span,
+                            ));
+                        }
+                    }
+                    // Not a qualified VariantQual — restore position for DotAccess
+                    self.pos = saved_pos;
                 }
                 // Check for ActionCall: Ident ! (tuple) or Ident ! {dict}
                 // `echo!("msg")` → ActionCall { callee: "echo", args: Tuple }

@@ -70,7 +70,16 @@ pub enum Expr {
     /// `Boolean::True`, `Result::Ok`, etc.
     /// O parser não sabe se `Boolean` é tipo ou módulo — produz
     /// `VariantQual` e o typeck resolve.
-    VariantQual { enum_name: String, variant: String },
+    ///
+    /// `module_path` é `Some` quando a sintaxe é qualificada por módulo:
+    /// `core.Result::Err` → `module_path = Some(["core"])`,
+    /// `enum_name = "Result"`, `variant = "Err"`.
+    /// Quando `None`, é a forma não-qualificada `Result::Err`.
+    VariantQual {
+        enum_name: String,
+        variant: String,
+        module_path: Option<Vec<String>>,
+    },
 
     // ── Funções, Lambdas, Match, Hole, Pipe ─────────────
     /// `lambda <padrões>: <corpo>` — lambda anônimo (cláusula única).

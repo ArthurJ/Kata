@@ -253,6 +253,7 @@ fn build_variant_construct(
                 variant: variant.into(),
                 payload: Box::new(Spanned::new(payload, Span::synthetic())),
                 tag,
+                module_path: None,
             },
         },
         Span::synthetic(),

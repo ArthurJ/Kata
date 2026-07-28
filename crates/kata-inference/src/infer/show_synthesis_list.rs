@@ -83,6 +83,7 @@ pub(crate) fn synthesize_list_show_functions(
     // ── Registra `List implements SHOW` no InterfaceRegistry ──
     interface_registry
         .register_impl(ImplEntry {
+            origin: "__synthesis".to_string(),
             type_name: "List".to_string(),
             type_params: vec![type_param.to_string()],
             interface_name: "SHOW".to_string(),

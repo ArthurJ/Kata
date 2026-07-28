@@ -119,6 +119,7 @@ pub(crate) fn infer_question(
                     Expr::VariantQual {
                         enum_name: enum_name.to_string(),
                         variant: err_variant.to_string(),
+                        module_path: None,
                     },
                     inner.span,
                 )),
@@ -135,6 +136,7 @@ pub(crate) fn infer_question(
             Expr::VariantQual {
                 enum_name: enum_name.to_string(),
                 variant: err_variant.to_string(),
+                module_path: None,
             },
             inner.span,
         ))),

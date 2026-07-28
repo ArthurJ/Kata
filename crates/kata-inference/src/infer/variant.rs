@@ -102,6 +102,7 @@ pub(crate) fn resolve_unqual_variant(
                 variant: name.to_string(),
                 payload: Box::new(kata_ast::Spanned::new(payload, *span)),
                 tag,
+                module_path: None,
             },
         ));
     }
@@ -129,6 +130,7 @@ pub(crate) fn resolve_unqual_variant(
                 enum_name: enum_name.to_string(),
                 variant: name.to_string(),
                 tag,
+                module_path: None,
             },
         ))
     } else {
@@ -138,6 +140,7 @@ pub(crate) fn resolve_unqual_variant(
                 enum_name: enum_name.to_string(),
                 variant: name.to_string(),
                 tag,
+                module_path: None,
             },
         ))
     }

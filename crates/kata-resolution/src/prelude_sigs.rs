@@ -8,7 +8,7 @@
 use kata_lexer::lex;
 use kata_parser::parse;
 
-use crate::resolve;
+use crate::resolve_with_origin;
 
 /// Código fonte do prelude, embutido no binário em tempo de compilação.
 const PRELUDE_SOURCE: &str = include_str!("../../../stdlib/core.kata");
@@ -21,6 +21,12 @@ const PRELUDE_SOURCE: &str = include_str!("../../../stdlib/core.kata");
 /// - EnumRegistry com Boolean, Result, Optional
 /// - InterfaceRegistry com EQ, ORD, NUM, SHOW + implementações
 /// - Signatures com todos os operadores e funções FFI
+///
+/// O prelude é carregado com origin `"core"` para que tipos do prelude
+/// (ex: `Result`) coexistam no EnumRegistry com tipos do usuário de mesmo
+/// nome (origin `"__local__"`). A qualificação `core.Result::Err` resolve
+/// o enum do prelude; `Result::Err` sem qualificar é ambíguo quando o
+/// usuário faz shadowing.
 pub fn load_prelude() -> Result<crate::ResolvedModule, Vec<crate::ResolveError>> {
     let tokens = lex(PRELUDE_SOURCE).map_err(|e| {
         vec![crate::ResolveError::UnknownFfi {
@@ -32,5 +38,5 @@ pub fn load_prelude() -> Result<crate::ResolvedModule, Vec<crate::ResolveError>>
             name: format!("prelude parse error: {e:?}"),
         }]
     })?;
-    resolve(&module)
+    resolve_with_origin(&module, "core")
 }
