@@ -3,6 +3,6 @@ source: crates/kata-driver/tests/examples_snapshot.rs
 expression: output
 ---
 --- stderr ---
-Error: type.no_overload
+Error: type.ambiguous_dispatch
 
-  × nenhuma sobrecarga compatível para `-` com os argumentos fornecidos
+  × dispatch ambíguo: múltiplas sobrecargas compatíveis para `-`
