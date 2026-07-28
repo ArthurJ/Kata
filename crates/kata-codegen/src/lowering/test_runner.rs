@@ -96,16 +96,14 @@ pub(crate) fn generate_test_wrappers(
             *fn_counter += 1;
 
             let func_id = declare_test_wrapper(&cranelift_name, module)?;
-            define_test_wrapper(
-                action,
-                spec,
-                func_id,
+            let mut tctx = TestLowerCtx {
                 module,
                 ffi_ids,
                 symbol_table,
-                &mut *string_table,
+                string_table: &mut *string_table,
                 struct_registry,
-            )?;
+            };
+            define_test_wrapper(action, spec, func_id, &mut tctx)?;
 
             wrappers.push(TestWrapper {
                 action_name: action.name.clone(),
@@ -131,6 +129,18 @@ fn declare_test_wrapper(
         .map_err(|e| CodegenError::Cranelift(format!("declare test wrapper: {e}")))
 }
 
+/// Contexto de lowering compartilhado entre wrappers de teste.
+///
+/// Agrupa as tabelas e backend que `define_test_wrapper` precisa acessar.
+/// Evita passar 5 parâmetros isolados — clippy::too_many_arguments.
+pub(crate) struct TestLowerCtx<'a> {
+    pub module: &'a mut dyn ModuleBackend,
+    pub ffi_ids: &'a HashMap<String, cranelift_module::FuncId>,
+    pub symbol_table: &'a HashMap<FuncKey, cranelift_module::FuncId>,
+    pub string_table: &'a mut StringTable,
+    pub struct_registry: &'a kata_core::StructRegistry,
+}
+
 /// Define (compila) o corpo de um wrapper de teste.
 ///
 /// Corpo:
@@ -144,13 +154,9 @@ fn define_test_wrapper(
     action: &TypedAction,
     spec: &TypedTestSpec,
     func_id: cranelift_module::FuncId,
-    module: &mut dyn ModuleBackend,
-    ffi_ids: &HashMap<String, cranelift_module::FuncId>,
-    symbol_table: &HashMap<FuncKey, cranelift_module::FuncId>,
-    string_table: &mut StringTable,
-    struct_registry: &kata_core::StructRegistry,
+    tctx: &mut TestLowerCtx,
 ) -> Result<(), CodegenError> {
-    let mut ctx = module.make_context();
+    let mut ctx = tctx.module.make_context();
     let mut metadata = MetadataTable::new();
 
     {
@@ -161,13 +167,13 @@ fn define_test_wrapper(
 
         // Declara FFI e funções Kata no Function.
         let mut ffi_refs: HashMap<String, cranelift_codegen::ir::FuncRef> = HashMap::new();
-        for (fname, &fid) in ffi_ids {
-            let func_ref = module.declare_func_in_func(fid, func_ir);
+        for (fname, &fid) in tctx.ffi_ids {
+            let func_ref = tctx.module.declare_func_in_func(fid, func_ir);
             ffi_refs.insert(fname.clone(), func_ref);
         }
         let mut kata_refs: HashMap<FuncKey, cranelift_codegen::ir::FuncRef> = HashMap::new();
-        for (key, &fid) in symbol_table {
-            let func_ref = module.declare_func_in_func(fid, func_ir);
+        for (key, &fid) in tctx.symbol_table {
+            let func_ref = tctx.module.declare_func_in_func(fid, func_ir);
             kata_refs.insert(key.clone(), func_ref);
         }
 
@@ -180,13 +186,13 @@ fn define_test_wrapper(
 
         let mut lower = LowerCtx {
             builder: &mut builder,
-            module,
+            module: tctx.module,
             ffi_refs: &ffi_refs,
             kata_refs: &kata_refs,
-            ffi_ids,
-            kata_ids: symbol_table,
+            ffi_ids: tctx.ffi_ids,
+            kata_ids: tctx.symbol_table,
             metadata: &mut metadata,
-            string_table,
+            string_table: tctx.string_table,
             var_map: HashMap::new(),
             anon_counter: 0,
             emitted_tail_call: false,
@@ -198,7 +204,7 @@ fn define_test_wrapper(
             loop_break_block: None,
             loop_continue_block: None,
             arc_vars: Vec::new(),
-            struct_registry,
+            struct_registry: tctx.struct_registry,
         };
 
         // 1. scheduler_init → root_arena (igual ao entry point).
@@ -284,9 +290,9 @@ fn define_test_wrapper(
         builder.finalize();
     }
 
-    module
+    tctx.module
         .define_function(func_id, &mut ctx)
         .map_err(|e| CodegenError::Cranelift(format!("define test wrapper: {e}")))?;
-    module.clear_context(&mut ctx);
+    tctx.module.clear_context(&mut ctx);
     Ok(())
 }

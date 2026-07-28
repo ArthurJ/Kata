@@ -19,7 +19,7 @@ use super::collections_hof::{infer_filter, infer_fold, infer_map};
 use super::expr::{InferCtx, infer_expr};
 use super::format_synthesis::infer_format;
 use super::helpers::{InferResult, dispatch_to_middle_error, peel_grouping_expr};
-use super::variant_construct::{expand_spread, infer_variant_construct};
+use super::variant_construct::{VariantCall, expand_spread, infer_variant_construct};
 use kata_resolution::resolve_type_expr;
 
 use super::iface_dispatch::try_iface_method_dispatch;
@@ -60,11 +60,13 @@ pub(crate) fn infer_apply(
             ..
         } => {
             return infer_variant_construct(
-                enum_name,
-                variant,
-                module_path.as_deref(),
-                args,
-                span,
+                &VariantCall {
+                    enum_name,
+                    variant,
+                    module_path: module_path.as_deref(),
+                    args,
+                    span,
+                },
                 env,
                 ctx,
                 hint,
@@ -702,7 +704,16 @@ pub(crate) fn infer_apply(
             .is_some()
         {
             return infer_variant_construct(
-                enum_name, &func_name, None, args, span, env, ctx, hint,
+                &VariantCall {
+                    enum_name,
+                    variant: &func_name,
+                    module_path: None,
+                    args,
+                    span,
+                },
+                env,
+                ctx,
+                hint,
             );
         }
     }
