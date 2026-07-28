@@ -1,6 +1,5 @@
 ---
 source: crates/kata-driver/tests/examples_snapshot.rs
-assertion_line: 100
 expression: output
 ---
 Normal(22.857142857142858)

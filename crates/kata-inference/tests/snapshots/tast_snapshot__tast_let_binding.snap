@@ -7,6 +7,9 @@ expression: tast_snapshot(src)
   kind: Ident { name: "x" }
 
 === Functions ===
+  abs :: [Prim(Int)] => Prim(Int)
+  abs :: [Prim(Float)] => Prim(Float)
+  abs :: [Prim(Rational)] => Prim(Rational)
   and :: [Sum("Boolean"), Sum("Boolean")] => Sum("Boolean")
   mod :: [Prim(Int), Prim(Int)] => Prim(Int)
   show :: [Prim(Text)] => Prim(Text)

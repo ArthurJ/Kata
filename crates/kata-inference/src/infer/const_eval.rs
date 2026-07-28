@@ -65,6 +65,7 @@ fn eval_bool_expr(expr: &Spanned<Expr>) -> Option<bool> {
 
             match op {
                 "=" => Some(left == right),
+                "!=" => Some(left != right),
                 "<" => Some(left < right),
                 ">" => Some(left > right),
                 "<=" => Some(left <= right),

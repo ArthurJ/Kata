@@ -97,6 +97,11 @@ pub(crate) fn lex_token(lex: &mut Lexer) -> Result<TokenWithSpan, FrontendError>
             if lex.ch == Some('>') {
                 lex.advance();
                 Token::SendArrow
+            } else if lex.ch == Some('=') {
+                // `!=` — operador de desigualdade. Lexar via lex_ident
+                // (identificador simbólico, mesmo mecanismo de `<`, `>`, `=`).
+                lex.advance();
+                return lex_ident(lex, &start);
             } else {
                 Token::Bang
             }

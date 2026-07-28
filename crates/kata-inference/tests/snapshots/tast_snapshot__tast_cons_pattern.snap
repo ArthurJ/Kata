@@ -7,6 +7,9 @@ expression: tast_snapshot(src)
   kind: ActionCall { callee: "main", args: Spanned { node: TypedExpr { span: Span { offset: 98, line: 8, col: 6, len: 1 }, ty: Unit, tail_pos: false, escape: Caller, kind: Unit }, span: Span { offset: 98, line: 8, col: 6, len: 1 } }, caller_arena: 0, ffi_symbol: None, indirect_callee: None }
 
 === Functions ===
+  abs :: [Prim(Int)] => Prim(Int)
+  abs :: [Prim(Float)] => Prim(Float)
+  abs :: [Prim(Rational)] => Prim(Rational)
   and :: [Sum("Boolean"), Sum("Boolean")] => Sum("Boolean")
   head :: [List(Prim(Int))] => Prim(Int)
   mod :: [Prim(Int), Prim(Int)] => Prim(Int)
