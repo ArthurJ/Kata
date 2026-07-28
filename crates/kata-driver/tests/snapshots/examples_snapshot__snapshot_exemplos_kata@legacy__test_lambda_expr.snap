@@ -3,7 +3,9 @@ source: crates/kata-driver/tests/examples_snapshot.rs
 expression: output
 ---
 --- stderr ---
-Error: type.mismatch
+Error: type.lambda_inference_fail
 
-  × tipo incompatível: esperado `Tuple`, encontrado `Ident { name:
-  │ "resultado" }`
+  × não foi possível inferir os tipos dos parâmetros do lambda — forneça uma
+  │ anotação de tipo (ex: ::(Int -> Int))
+  help: partial dispatch tentou `+` com args [?, ?] — múltiplas overloads
+        casam (ambíguo)

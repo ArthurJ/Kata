@@ -41,29 +41,22 @@ pub(crate) fn infer_format(
 
     // Arg 1: tupla de valores a interpolar
     let tuple_core = &args[1].node;
-    let elements = match tuple_core {
-        Expr::Tuple { elements } => elements,
-        Expr::Unit => &[][..], // tupla vazia `()` = sem args
+    let elements: Vec<Spanned<Expr>> = match tuple_core {
+        Expr::Tuple { elements } => elements.clone(),
+        Expr::Unit => Vec::new(), // tupla vazia `()` = sem args
         Expr::Grouping { inner } => {
             // Grouping de uma tupla: (a, b) dentro de parênteses extras
             match &inner.node {
-                Expr::Tuple { elements } => elements,
+                Expr::Tuple { elements } => elements.clone(),
                 _ => {
-                    return Err(MiddleError::TypeMismatch {
-                        expected: "Tuple".into(),
-                        found: format!("{:?}", inner.node),
-                        span: args[1].span.into(),
-                    });
+                    // Grouping de uma expressão única: auto-wrap como tupla de 1
+                    vec![Spanned::new(inner.node.clone(), inner.span)]
                 }
             }
         }
-        _ => {
-            return Err(MiddleError::TypeMismatch {
-                expected: "Tuple".into(),
-                found: format!("{:?}", tuple_core),
-                span: args[1].span.into(),
-            });
-        }
+        // Expressão única sem grouping — auto-wrap como tupla de 1 elemento.
+        // Ex: `format "Dobro: {}" 42` — `42` é IntLit, não Tuple.
+        other => vec![Spanned::new(other.clone(), args[1].span)],
     };
 
     // Infere cada elemento da tupla e converte para Text

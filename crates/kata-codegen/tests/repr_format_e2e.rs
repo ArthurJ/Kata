@@ -202,6 +202,15 @@ fn format_sem_args() {
     let _ = raw;
 }
 
+/// `format "Dobro: {}" 42` — arg único sem tupla (auto-wrap como tupla de 1).
+#[test]
+fn format_arg_unico_sem_tupla() {
+    let src = "format \"Dobro: {}\" 42";
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::text());
+    let _ = raw;
+}
+
 // ═══════════════════════════════════════════════════════════════
 // varargs (...) — Type... desugara para Tuple<Type>
 // ═══════════════════════════════════════════════════════════════
