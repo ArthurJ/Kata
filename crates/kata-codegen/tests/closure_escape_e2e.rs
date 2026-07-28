@@ -140,3 +140,30 @@ let b := add10 3
     assert_eq!(untag_smi(raw), 21); // (3+5) + (3+10) = 8 + 13
     assert_eq!(ty, Ty::int());
 }
+
+#[test]
+fn lambda_com_type_annotation_no_param() {
+    // `lambda x::Int: + x 4` — parser deve produzir Pattern::TypedIdent,
+    // typeck resolve Int, codegen binda como Ident normal.
+    let src = r#"
+let f := lambda x::Int: + x 4
+let result := f 4
+result
+"#;
+    let (raw, ty) = eval_src(src);
+    assert_eq!(untag_smi(raw), 8);
+    assert_eq!(ty, Ty::int());
+}
+
+#[test]
+fn lambda_com_type_annotation_multiplos_params() {
+    // Múltiplos params com type annotation.
+    let src = r#"
+let f := lambda x::Int y::Int: + x y
+let result := f 3 4
+result
+"#;
+    let (raw, ty) = eval_src(src);
+    assert_eq!(untag_smi(raw), 7);
+    assert_eq!(ty, Ty::int());
+}

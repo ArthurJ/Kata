@@ -81,26 +81,34 @@ pub(crate) fn infer_lambda(
     // dos parâmetros (partial dispatch vazio, sem hint), produzir erro
     // distinto em vez de criar InferVar e deixar o dispatch falhar com
     // NoOverload opaco.
-    if param_type_hints.len() < patterns.len() {
+    // Exceção: se o pattern tem type annotation explícita (TypedIdent),
+    // o tipo anotado conta como mecanismo de inferência.
+    let has_typed_idents = patterns.iter().any(|p| matches!(p.node, Pattern::TypedIdent { .. }));
+    if !has_typed_idents && param_type_hints.len() < patterns.len() {
         return Err(MiddleError::LambdaInferenceFail {
             span: (*span).into(),
             detail: failure_ctx.map(format_failure_detail),
         });
     }
 
-    // Processa padrões — usa hint do partial dispatch se disponível, senão InferVar.
+    // Processa padrões — usa hint do partial dispatch se disponível, senão
+    // extrai tipo de TypedIdent annotations, senão InferVar.
     let param_types: Vec<Ty> = patterns
         .iter()
         .enumerate()
-        .map(|(i, _)| {
-            param_type_hints
-                .get(i)
-                .cloned()
-                .unwrap_or(Ty::InferVar(i as u32))
+        .map(|(i, pat)| {
+            if let Some(hint_ty) = param_type_hints.get(i) {
+                return hint_ty.clone();
+            }
+            // Se o pattern tem type annotation (TypedIdent), usar o tipo anotado.
+            if let Pattern::TypedIdent { ty, .. } = &pat.node {
+                return kata_resolution::resolve_type_expr(&ty.node, &lambda_env, ctx.interface_registry);
+            }
+            Ty::InferVar(i as u32)
         })
         .collect();
     let typed_patterns =
-        check_patterns(patterns, &param_types, ctx.enum_registry, &mut lambda_env)?;
+        check_patterns(patterns, &param_types, ctx.enum_registry, &mut lambda_env, ctx.interface_registry)?;
 
     // Processa with bindings (açúcar → let chain no escopo do lambda).
     // with bindings são pré-avaliados antes dos guards.

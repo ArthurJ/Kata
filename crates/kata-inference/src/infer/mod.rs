@@ -359,6 +359,7 @@ fn infer_named_function(
             param_types,
             ctx.enum_registry,
             &mut clause_env,
+            ctx.interface_registry,
         )?;
 
         // Processa with bindings (açúcar → let chain).

@@ -50,12 +50,28 @@ impl Parser {
                 Ok(Spanned::new(Pattern::Wildcard, start))
             }
             // `Enum::Variant` → Variant qualificado (possivelmente com sub-pattern)
+            // `snake_case::Type` → TypedIdent (type annotation em lambda params)
             Token::Ident(name) => {
                 self.advance();
                 if matches!(self.peek(), Token::DoubleColon)
                     && let Some(next) = self.tokens.get(self.pos + 1)
                     && let Token::Ident(variant) = &next.token
                 {
+                    // Disambiguação por casing:
+                    // - name é snake_case (primeiro char lowercase) → type annotation
+                    //   (`x::Int`, `n::Float`). Parsear como TypedIdent.
+                    // - name é PascalCase → Enum::Variant (ex: `Result::Ok`).
+                    if name.chars().next().is_some_and(|c| c.is_lowercase()) {
+                        // snake_case::PascalCase → TypedIdent (type annotation)
+                        self.advance(); // consume ::
+                        let ty = self.parse_type_expr()?;
+                        let span = start.cover(ty.span);
+                        return Ok(Spanned::new(
+                            Pattern::TypedIdent { name, ty },
+                            span,
+                        ));
+                    }
+
                     let variant = variant.clone();
                     self.advance(); // consume ::
                     self.advance(); // consume variant

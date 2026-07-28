@@ -163,7 +163,7 @@ fn build_lambda_apply(
 ) -> InferResult<(Ty, TypedExprKind)> {
     // Cria escopo filho e define params com tipos conhecidos.
     let mut lambda_env = env.push_scope();
-    let typed_patterns = check_patterns(patterns, &param_tys, ctx.enum_registry, &mut lambda_env)?;
+    let typed_patterns = check_patterns(patterns, &param_tys, ctx.enum_registry, &mut lambda_env, ctx.interface_registry)?;
 
     // Processa with bindings.
     let typed_with_bindings = process_with_bindings(with_bindings, &mut lambda_env, ctx)?;

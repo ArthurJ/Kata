@@ -93,10 +93,11 @@ pub(crate) fn check_patterns(
     param_tys: &[Ty],
     enum_registry: &EnumRegistry,
     env: &mut TypeEnv,
+    iface_registry: &kata_core::InterfaceRegistry,
 ) -> InferResult<Vec<Spanned<TypedPattern>>> {
     let mut typed_patterns: Vec<Spanned<TypedPattern>> = Vec::with_capacity(patterns.len());
     for (i, pat) in patterns.iter().enumerate() {
-        let typed_pat = patterns::check_pattern(pat, &param_tys[i], enum_registry, env)?;
+        let typed_pat = patterns::check_pattern(pat, &param_tys[i], enum_registry, env, iface_registry)?;
         typed_patterns.push(typed_pat);
     }
     Ok(typed_patterns)

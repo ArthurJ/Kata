@@ -189,7 +189,7 @@ pub(crate) fn infer_match(
 
         let typed_pattern = if let Some(pat) = &arm.pattern {
             let typed_pat =
-                patterns::check_pattern(pat, &scrutinee_ty, ctx.enum_registry, &mut arm_env)?;
+                patterns::check_pattern(pat, &scrutinee_ty, ctx.enum_registry, &mut arm_env, ctx.interface_registry)?;
             // Coleta variantes cobertas para exaustividade.
             if let TypedPattern::Variant { variant, .. } = &typed_pat.node {
                 covered_variants.push(variant.clone());

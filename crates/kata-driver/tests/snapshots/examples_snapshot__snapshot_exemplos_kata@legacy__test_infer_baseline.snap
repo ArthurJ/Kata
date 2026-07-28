@@ -3,7 +3,6 @@ source: crates/kata-driver/tests/examples_snapshot.rs
 expression: output
 ---
 --- stderr ---
-Error: type.lambda_inference_fail
+Error: type.unbound_name
 
-  × não foi possível inferir os tipos dos parâmetros do lambda — forneça uma
-  │ anotação de tipo (ex: ::(Int -> Int))
+  × nome `repr` não está no escopo

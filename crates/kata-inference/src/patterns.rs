@@ -12,6 +12,7 @@ use kata_core::enum_registry::EnumRegistry;
 use kata_core::escape::EscapeTarget;
 use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
+use kata_resolution::resolve_type_expr;
 
 use crate::typed::{TypedExpr, TypedExprKind, TypedPattern};
 
@@ -30,8 +31,10 @@ pub(crate) fn check_pattern(
     scrutinee_ty: &Ty,
     enum_registry: &EnumRegistry,
     env: &mut TypeEnv,
+    iface_registry: &kata_core::InterfaceRegistry,
 ) -> PatternResult<Spanned<TypedPattern>> {
-    let typed = check_pattern_inner(&pat.node, scrutinee_ty, enum_registry, env, &pat.span)?;
+    let typed =
+        check_pattern_inner(&pat.node, scrutinee_ty, enum_registry, env, &pat.span, iface_registry)?;
     Ok(Spanned::new(typed, pat.span))
 }
 
@@ -41,6 +44,7 @@ fn check_pattern_inner(
     enum_registry: &EnumRegistry,
     env: &mut TypeEnv,
     span: &Span,
+    iface_registry: &kata_core::InterfaceRegistry,
 ) -> PatternResult<TypedPattern> {
     match pat {
         // ── Ident: pode ser binding ou variante sem qualificação ──
@@ -66,6 +70,38 @@ fn check_pattern_inner(
             Ok(TypedPattern::Ident {
                 name: name.clone(),
                 ty: scrutinee_ty.clone(),
+            })
+        }
+
+        // ── TypedIdent: `x::Type` — binding com type annotation ──
+        // O parser produziu TypedIdent porque `snake_case::PascalCase` foi
+        // disambiguado como type annotation (não Enum::Variant).
+        // O typeck resolve o TypeExpr → Ty e define o binding com o tipo
+        // anotado. Se o scrutinee tem tipo conhecido e difere do anotado,
+        // é erro. Se o scrutinee é InferVar, o tipo anotado ajuda a inferir.
+        Pattern::TypedIdent { name, ty } => {
+            let annotated_ty = resolve_type_expr(&ty.node, env, iface_registry);
+            // Valida compatibilidade com o scrutinee.
+            match scrutinee_ty {
+                Ty::InferVar(_) => {
+                    // Scrutinee não tem tipo ainda — o annotation define.
+                    // TODO: unificar InferVar com annotated_ty quando
+                    // tivermos constraint solving. Por ora, aceitar.
+                }
+                _ => {
+                    if !pattern_type_compatible(&annotated_ty, scrutinee_ty) {
+                        return Err(MiddleError::TypeMismatch {
+                            expected: format!("{}", annotated_ty),
+                            found: format!("{}", scrutinee_ty),
+                            span: (*span).into(),
+                        });
+                    }
+                }
+            }
+            env.define(name, annotated_ty.clone(), "__local__");
+            Ok(TypedPattern::Ident {
+                name: name.clone(),
+                ty: annotated_ty,
             })
         }
 
@@ -181,6 +217,7 @@ fn check_pattern_inner(
                         enum_registry,
                         env,
                         &sub_pat.span,
+                        iface_registry,
                     )?;
                     typed_subs.push(Spanned::new(typed, sub_pat.span));
                 }
@@ -225,7 +262,7 @@ fn check_pattern_inner(
             }
             let mut typed_elements = Vec::with_capacity(elements.len());
             for (pat, ty) in elements.iter().zip(element_tys.iter()) {
-                let typed = check_pattern_inner(&pat.node, ty, enum_registry, env, &pat.span)?;
+                let typed = check_pattern_inner(&pat.node, ty, enum_registry, env, &pat.span, iface_registry)?;
                 typed_elements.push(Spanned::new(typed, pat.span));
             }
             Ok(TypedPattern::Tuple {
@@ -248,10 +285,10 @@ fn check_pattern_inner(
             };
             // head: A, tail: List(A)
             let typed_head =
-                check_pattern_inner(&head.node, &elem_ty, enum_registry, env, &head.span)?;
+                check_pattern_inner(&head.node, &elem_ty, enum_registry, env, &head.span, iface_registry)?;
             let tail_ty = Ty::List(Box::new(elem_ty));
             let typed_tail =
-                check_pattern_inner(&tail.node, &tail_ty, enum_registry, env, &tail.span)?;
+                check_pattern_inner(&tail.node, &tail_ty, enum_registry, env, &tail.span, iface_registry)?;
             Ok(TypedPattern::Cons {
                 head: Box::new(Spanned::new(typed_head, head.span)),
                 tail: Box::new(Spanned::new(typed_tail, tail.span)),
