@@ -3,9 +3,9 @@
 use kata_ast::{Directive, Expr, Item, LambdaClause, Module, Spanned, Token};
 use kata_diagnostics::FrontendError;
 
+use crate::CasingPattern;
 use crate::Parser;
 use crate::expressions::parse_expr;
-use crate::CasingPattern;
 
 impl Parser {
     pub(crate) fn parse_module(&mut self) -> Result<Module, FrontendError> {

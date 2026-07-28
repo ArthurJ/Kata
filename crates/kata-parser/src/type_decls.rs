@@ -7,9 +7,9 @@
 use kata_ast::{Directive, Expr, FieldDecl, Item, RefinedDecl, Spanned, VariantDecl};
 use kata_diagnostics::FrontendError;
 
+use crate::CasingPattern;
 use crate::Parser;
 use crate::expressions::parse_expr;
-use crate::CasingPattern;
 
 impl Parser {
     pub(crate) fn parse_data_decl(

@@ -15,9 +15,9 @@
 use kata_ast::{ActionStmt, Directive, Item, Spanned, Token, TypeExpr};
 use kata_diagnostics::FrontendError;
 
+use crate::CasingPattern;
 use crate::Parser;
 use crate::expressions::parse_expr;
-use crate::CasingPattern;
 
 impl Parser {
     /// Parse `action nome (p::T, ...) => Ret` com body indentado.

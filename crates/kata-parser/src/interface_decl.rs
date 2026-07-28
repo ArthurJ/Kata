@@ -3,8 +3,8 @@
 use kata_ast::{Directive, ImplMethod, InterfaceSig, Item, Token};
 use kata_diagnostics::FrontendError;
 
-use crate::Parser;
 use crate::CasingPattern;
+use crate::Parser;
 
 impl Parser {
     /// `interface NOME implements SUPER1 SUPER2 ...` + bloco indentado
