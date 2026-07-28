@@ -197,7 +197,6 @@ fn define_test_wrapper(
             scheduler_mode: true, // wrapper usa spawn+run como o entry point
             loop_break_block: None,
             loop_continue_block: None,
-            closure_captures: HashMap::new(),
             arc_vars: Vec::new(),
             struct_registry,
         };

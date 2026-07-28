@@ -57,7 +57,7 @@ use std::collections::HashMap;
 
 use crate::metadata::MetadataTable;
 use kata_core::ty::Ty;
-use kata_inference::{CaptureInfo, TypedExpr, TypedExprKind};
+use kata_inference::{TypedExpr, TypedExprKind};
 pub(crate) use module::FuncKey;
 
 /// Extrai a chave composta `(name, param_types, ret_ty)` de um callee tipado.
@@ -127,10 +127,6 @@ pub(crate) struct LowerCtx<'a, 'b> {
     /// Block de continuação do loop atual — `continue` faz `jump` para este block.
     /// `None` fora de um loop.
     pub loop_continue_block: Option<Block>,
-    /// Captures de closures let-bound: mapeia nome → lista de captures.
-    /// Populado quando `let f := lambda...` é lowerado. Usado no call site
-    /// para alocar o CaptureBox e passar `box_ptr` como primeiro arg.
-    pub closure_captures: HashMap<String, Vec<CaptureInfo>>,
     /// Valores ARC-managed (Heap) que precisam decref no epílogo da action.
     /// Cada entrada é uma Variable (global no Cranelift) que segura um data_ptr
     /// retornado por alloc_tracked ou channel_recv.

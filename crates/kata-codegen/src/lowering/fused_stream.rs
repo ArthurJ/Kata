@@ -8,7 +8,7 @@
 use cranelift_codegen::ir::types::I64;
 use cranelift_codegen::ir::{InstBuilder, MemFlagsData};
 use kata_core::ty::Ty;
-use kata_inference::{CaptureInfo, FusedStage, TypedExpr};
+use kata_inference::{FusedStage, TypedExpr};
 
 use super::CodegenError;
 use super::LowerCtx;
@@ -31,17 +31,15 @@ pub(crate) fn lower_fused_stream(
     let mut stage_callbacks: Vec<cranelift_codegen::ir::Value> = Vec::new();
     let mut stage_params: Vec<Vec<Ty>> = Vec::new();
     let mut stage_rets: Vec<Ty> = Vec::new();
-    let mut stage_captures: Vec<Vec<CaptureInfo>> = Vec::new();
     for stage in stages {
         let cb_expr = match stage {
             FusedStage::Filter { callback, .. } | FusedStage::Map { callback, .. } => callback,
         };
         let cb_val = super::expr::lower_expr(&cb_expr.node, ctx)?;
-        let (cb_params, cb_ret, cb_captures) = extract_callback_sig(&cb_expr.node);
+        let (cb_params, cb_ret) = extract_callback_sig(&cb_expr.node);
         stage_callbacks.push(cb_val);
         stage_params.push(cb_params);
         stage_rets.push(cb_ret);
-        stage_captures.push(cb_captures);
     }
 
     let arena = arena_handle(ctx);
@@ -94,7 +92,7 @@ pub(crate) fn lower_fused_stream(
                 &stage_callbacks,
                 &stage_params,
                 &stage_rets,
-                &stage_captures,
+
                 ctx,
             )?;
 
@@ -167,7 +165,7 @@ pub(crate) fn lower_fused_stream(
                 &stage_callbacks,
                 &stage_params,
                 &stage_rets,
-                &stage_captures,
+
                 ctx,
             )?;
 
@@ -229,7 +227,7 @@ pub(crate) fn lower_fused_stream(
                 &stage_callbacks,
                 &stage_params,
                 &stage_rets,
-                &stage_captures,
+
                 ctx,
             )?;
 
@@ -305,7 +303,6 @@ fn apply_stages(
     stage_callbacks: &[cranelift_codegen::ir::Value],
     stage_params: &[Vec<Ty>],
     stage_rets: &[Ty],
-    stage_captures: &[Vec<CaptureInfo>],
     ctx: &mut LowerCtx,
 ) -> Result<(cranelift_codegen::ir::Value, cranelift_codegen::ir::Value), CodegenError> {
     // keep_flag comeca em 1 (keep).
@@ -324,7 +321,6 @@ fn apply_stages(
                     &[val],
                     &stage_params[i],
                     &stage_rets[i],
-                    &stage_captures[i],
                     ctx,
                 )?;
                 // Boolean: 0 = false, 1 = true (cru, sem SMI tag).
@@ -345,7 +341,6 @@ fn apply_stages(
                     &[val],
                     &stage_params[i],
                     &stage_rets[i],
-                    &stage_captures[i],
                     ctx,
                 )?;
                 val = ensure_i64(ctx, result);

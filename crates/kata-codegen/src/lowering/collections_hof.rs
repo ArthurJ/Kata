@@ -16,7 +16,7 @@ use cranelift_codegen::ir::types::I64;
 use cranelift_codegen::ir::{AbiParam, InstBuilder, MemFlagsData, Signature};
 use cranelift_codegen::isa::CallConv;
 use kata_core::ty::Ty;
-use kata_inference::{CaptureInfo, TypedExpr};
+use kata_inference::TypedExpr;
 
 use super::CodegenError;
 use super::LowerCtx;
@@ -80,16 +80,12 @@ fn build_callback_sig(
 /// Chama um callback (func_ptr) com os argumentos fornecidos.
 /// `callback_val` é o function pointer (I64).
 /// `param_types` e `ret_ty` definem a assinatura.
-/// `captures` lista as variáveis capturadas pelo callback. Se não-vazia,
-/// aloca um CaptureBox via `alloc_capture_box` e o prefixa nos args
-/// (após arena_handle, antes dos args do callback).
 /// Retorna o resultado do callback (Value).
 pub(crate) fn call_callback(
     callback_val: cranelift_codegen::ir::Value,
     args: &[cranelift_codegen::ir::Value],
     param_types: &[Ty],
     ret_ty: &Ty,
-    _captures: &[CaptureInfo],
     ctx: &mut LowerCtx,
 ) -> Result<cranelift_codegen::ir::Value, CodegenError> {
     // ABI uniformizada: callback_val é box_ptr (CaptureBox).
@@ -112,19 +108,10 @@ pub(crate) fn call_callback(
     Ok(ctx.builder.inst_results(call_inst)[0])
 }
 
-/// Extrai tipos do callback (params, ret, captures) a partir do tipo do callback.
-pub(crate) fn extract_callback_sig(callback: &TypedExpr) -> (Vec<Ty>, Ty, Vec<CaptureInfo>) {
-    // Desembrulfa Grouping — o callback pode estar envolvido por parênteses.
-    let inner = match &callback.kind {
-        kata_inference::TypedExprKind::Grouping { inner } => &inner.node,
-        _ => callback,
-    };
-    let captures = match &inner.kind {
-        kata_inference::TypedExprKind::Lambda { captures, .. } => captures.clone(),
-        _ => Vec::new(),
-    };
+/// Extrai tipos do callback (params, ret) a partir do tipo do callback.
+pub(crate) fn extract_callback_sig(callback: &TypedExpr) -> (Vec<Ty>, Ty) {
     match &callback.ty {
-        Ty::Function(params, ret) => (params.clone(), (**ret).clone(), captures),
+        Ty::Function(params, ret) => (params.clone(), (**ret).clone()),
         _ => panic!("callback não é Function: {}", callback.ty),
     }
 }
@@ -145,7 +132,7 @@ pub(crate) fn lower_fold(
     let init_val = super::expr::lower_expr(&initial.node, ctx)?;
     let init_val = ensure_i64(ctx, init_val);
 
-    let (cb_params, cb_ret, cb_captures) = extract_callback_sig(&callback.node);
+    let (cb_params, cb_ret) = extract_callback_sig(&callback.node);
 
     // acc = init
     let acc_var = ctx.new_var("__fold_acc", I64);
@@ -185,7 +172,7 @@ pub(crate) fn lower_fold(
                 &[acc, head_val],
                 &cb_params,
                 &cb_ret,
-                &cb_captures,
+
                 ctx,
             )?;
             let new_acc = ensure_i64(ctx, new_acc);
@@ -228,7 +215,7 @@ pub(crate) fn lower_fold(
                 &[acc, elem_val],
                 &cb_params,
                 &cb_ret,
-                &cb_captures,
+
                 ctx,
             )?;
             let new_acc = ensure_i64(ctx, new_acc);
@@ -263,7 +250,7 @@ pub(crate) fn lower_fold(
                 &[acc, elem_val],
                 &cb_params,
                 &cb_ret,
-                &cb_captures,
+
                 ctx,
             )?;
             let new_acc = ensure_i64(ctx, new_acc);

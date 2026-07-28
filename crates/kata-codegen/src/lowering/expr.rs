@@ -308,7 +308,6 @@ pub(crate) fn lower_expr(
         TypedExprKind::Let { name, value } => {
             // ABI uniformizada: se o value é um Lambda, alloc_capture_box
             // já foi chamado no arm Lambda — o valor é box_ptr.
-            // closure_captures não é mais necessário.
             let val = lower_expr(&value.node, ctx)?;
             let clif_ty = super::resolve_clif_ty(&value.node.ty, ctx.struct_registry);
             let var = ctx.new_var(name, clif_ty);

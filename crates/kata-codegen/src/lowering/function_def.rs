@@ -152,7 +152,6 @@ pub(crate) fn define_function_body(
             scheduler_mode: false, // funções puras não chamam Actions
             loop_break_block: None,
             loop_continue_block: None,
-            closure_captures: HashMap::new(),
             arc_vars: Vec::new(),
             struct_registry,
         };

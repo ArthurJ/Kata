@@ -207,7 +207,6 @@ pub(crate) fn lower_module(
             scheduler_mode: true, // entry point: ActionCalls via spawn+run
             loop_break_block: None,
             loop_continue_block: None,
-            closure_captures: HashMap::new(),
             arc_vars: Vec::new(),
             struct_registry,
         };

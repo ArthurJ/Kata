@@ -126,7 +126,6 @@ pub(crate) fn define_kata_action(
             scheduler_mode: false, // dentro de Action: ActionCalls são call diretos
             loop_break_block: None,
             loop_continue_block: None,
-            closure_captures: HashMap::new(),
             arc_vars: Vec::new(),
             struct_registry,
         };
