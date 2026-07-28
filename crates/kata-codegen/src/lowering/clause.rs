@@ -18,7 +18,6 @@ use super::LowerCtx;
 use super::expr::lower_expr;
 use super::pattern::test_clause_patterns;
 
-
 /// Verifica se todos os patterns são `Ident` (binding simples).
 pub(crate) fn all_patterns_are_ident(patterns: &[Spanned<TypedPattern>]) -> bool {
     patterns

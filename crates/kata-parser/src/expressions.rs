@@ -252,11 +252,7 @@ impl Parser {
                             self.advance(); // consume variant Ident
                             // Last element of path is enum_name, rest is module_path
                             let enum_name = path.pop().expect("path tem >=2 elementos");
-                            let module_path = if path.is_empty() {
-                                None
-                            } else {
-                                Some(path)
-                            };
+                            let module_path = if path.is_empty() { None } else { Some(path) };
                             let span = start.cover(self.tokens[self.pos - 1].span);
                             return Ok(Spanned::new(
                                 Expr::VariantQual {

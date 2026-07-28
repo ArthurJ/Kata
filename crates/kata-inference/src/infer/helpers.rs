@@ -97,7 +97,8 @@ pub(crate) fn check_patterns(
 ) -> InferResult<Vec<Spanned<TypedPattern>>> {
     let mut typed_patterns: Vec<Spanned<TypedPattern>> = Vec::with_capacity(patterns.len());
     for (i, pat) in patterns.iter().enumerate() {
-        let typed_pat = patterns::check_pattern(pat, &param_tys[i], enum_registry, env, iface_registry)?;
+        let typed_pat =
+            patterns::check_pattern(pat, &param_tys[i], enum_registry, env, iface_registry)?;
         typed_patterns.push(typed_pat);
     }
     Ok(typed_patterns)

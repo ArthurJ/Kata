@@ -10,7 +10,6 @@ use kata_inference::{CaptureInfo, TypedExpr, TypedExprKind};
 
 use super::LowerCtx;
 
-
 /// Arena handle a ser passada como primeiro param implícito para funções Kata
 /// e lambdas. Prefere fiber_arena (arena local do fiber), fallback caller_arena.
 fn caller_arena_handle(ctx: &mut LowerCtx) -> cranelift_codegen::ir::Value {
@@ -235,9 +234,15 @@ pub(crate) fn lower_closure(
                     sig.params.push(AbiParam::new(I64)); // arena_handle
                     sig.params.push(AbiParam::new(I64)); // box_ptr
                     for pt in param_types {
-                        sig.params.push(AbiParam::new(super::resolve_clif_ty(pt, ctx.struct_registry)));
+                        sig.params.push(AbiParam::new(super::resolve_clif_ty(
+                            pt,
+                            ctx.struct_registry,
+                        )));
                     }
-                    sig.returns.push(AbiParam::new(super::resolve_clif_ty(ret_ty, ctx.struct_registry)));
+                    sig.returns.push(AbiParam::new(super::resolve_clif_ty(
+                        ret_ty,
+                        ctx.struct_registry,
+                    )));
                     let sig_ref = ctx.builder.func.import_signature(sig);
                     if expr.tail_pos && !ctx.no_tail_calls {
                         ctx.builder
@@ -301,10 +306,10 @@ pub(crate) fn alloc_capture_box(
         // Sem captures: cria box com fn_ptr e n_captures=0, sem alocar array.
         let null_array = ctx.builder.ins().iconst(I64, 0);
         let n_val = ctx.builder.ins().iconst(I64, 0);
-        let arc_inst = ctx
-            .builder
-            .ins()
-            .call(*alloc_arc_ref, &[func_ptr, null_array, n_val, capture_arena]);
+        let arc_inst = ctx.builder.ins().call(
+            *alloc_arc_ref,
+            &[func_ptr, null_array, n_val, capture_arena],
+        );
         return Ok(ctx.builder.inst_results(arc_inst)[0]);
     }
 

@@ -48,9 +48,7 @@ fn unify_arm_types(a: &Ty, b: &Ty) -> Option<Ty> {
         }
 
         // Function: unifica params e retorno.
-        (Ty::Function(p1, r1), Ty::Function(p2, r2))
-            if p1.len() == p2.len() =>
-        {
+        (Ty::Function(p1, r1), Ty::Function(p2, r2)) if p1.len() == p2.len() => {
             let mut unified_params = Vec::with_capacity(p1.len());
             for (x, y) in p1.iter().zip(p2.iter()) {
                 unified_params.push(unify_arm_types(x, y)?);
@@ -60,21 +58,11 @@ fn unify_arm_types(a: &Ty, b: &Ty) -> Option<Ty> {
         }
 
         // Tipos unários: List, Array, Range, Sender, Receiver, ReceiverFactory.
-        (Ty::List(a), Ty::List(b)) => {
-            Some(Ty::List(Box::new(unify_arm_types(a, b)?)))
-        }
-        (Ty::Array(a), Ty::Array(b)) => {
-            Some(Ty::Array(Box::new(unify_arm_types(a, b)?)))
-        }
-        (Ty::Range(a), Ty::Range(b)) => {
-            Some(Ty::Range(Box::new(unify_arm_types(a, b)?)))
-        }
-        (Ty::Sender(a), Ty::Sender(b)) => {
-            Some(Ty::Sender(Box::new(unify_arm_types(a, b)?)))
-        }
-        (Ty::Receiver(a), Ty::Receiver(b)) => {
-            Some(Ty::Receiver(Box::new(unify_arm_types(a, b)?)))
-        }
+        (Ty::List(a), Ty::List(b)) => Some(Ty::List(Box::new(unify_arm_types(a, b)?))),
+        (Ty::Array(a), Ty::Array(b)) => Some(Ty::Array(Box::new(unify_arm_types(a, b)?))),
+        (Ty::Range(a), Ty::Range(b)) => Some(Ty::Range(Box::new(unify_arm_types(a, b)?))),
+        (Ty::Sender(a), Ty::Sender(b)) => Some(Ty::Sender(Box::new(unify_arm_types(a, b)?))),
+        (Ty::Receiver(a), Ty::Receiver(b)) => Some(Ty::Receiver(Box::new(unify_arm_types(a, b)?))),
         (Ty::ReceiverFactory(a), Ty::ReceiverFactory(b)) => {
             Some(Ty::ReceiverFactory(Box::new(unify_arm_types(a, b)?)))
         }
@@ -86,9 +74,7 @@ fn unify_arm_types(a: &Ty, b: &Ty) -> Option<Ty> {
         )),
 
         // Set: um type arg.
-        (Ty::Set(a), Ty::Set(b)) => {
-            Some(Ty::Set(Box::new(unify_arm_types(a, b)?)))
-        }
+        (Ty::Set(a), Ty::Set(b)) => Some(Ty::Set(Box::new(unify_arm_types(a, b)?))),
 
         // Igualdade estrutural para tipos sem aninhamento.
         _ if a == b => Some(a.clone()),
@@ -111,9 +97,7 @@ fn propagate_resolved(ty: &Ty, resolved: &Ty) -> Ty {
         (Ty::Var(_), other) => other.clone(),
 
         // Generic: mesma base, mesma aridade → recursa em cada arg.
-        (Ty::Generic(n1, a1), Ty::Generic(n2, a2))
-            if n1 == n2 && a1.len() == a2.len() =>
-        {
+        (Ty::Generic(n1, a1), Ty::Generic(n2, a2)) if n1 == n2 && a1.len() == a2.len() => {
             let args = a1
                 .iter()
                 .zip(a2.iter())
@@ -123,13 +107,20 @@ fn propagate_resolved(ty: &Ty, resolved: &Ty) -> Ty {
         }
 
         // Tuple: mesma aridade → recursa.
-        (Ty::Tuple(a1), Ty::Tuple(a2)) if a1.len() == a2.len() => {
-            Ty::Tuple(a1.iter().zip(a2.iter()).map(|(x, y)| propagate_resolved(x, y)).collect())
-        }
+        (Ty::Tuple(a1), Ty::Tuple(a2)) if a1.len() == a2.len() => Ty::Tuple(
+            a1.iter()
+                .zip(a2.iter())
+                .map(|(x, y)| propagate_resolved(x, y))
+                .collect(),
+        ),
 
         // Function: recursa em params e retorno.
         (Ty::Function(p1, r1), Ty::Function(p2, r2)) if p1.len() == p2.len() => {
-            let params = p1.iter().zip(p2.iter()).map(|(x, y)| propagate_resolved(x, y)).collect();
+            let params = p1
+                .iter()
+                .zip(p2.iter())
+                .map(|(x, y)| propagate_resolved(x, y))
+                .collect();
             let ret = Box::new(propagate_resolved(r1, r2));
             Ty::Function(params, ret)
         }
@@ -188,8 +179,13 @@ pub(crate) fn infer_match(
         let mut arm_env = env.push_scope();
 
         let typed_pattern = if let Some(pat) = &arm.pattern {
-            let typed_pat =
-                patterns::check_pattern(pat, &scrutinee_ty, ctx.enum_registry, &mut arm_env, ctx.interface_registry)?;
+            let typed_pat = patterns::check_pattern(
+                pat,
+                &scrutinee_ty,
+                ctx.enum_registry,
+                &mut arm_env,
+                ctx.interface_registry,
+            )?;
             // Coleta variantes cobertas para exaustividade.
             if let TypedPattern::Variant { variant, .. } = &typed_pat.node {
                 covered_variants.push(variant.clone());

@@ -336,7 +336,8 @@ pub(crate) fn lower_expr(
             // Para cada binding, carrega o elemento via FieldAccess.
             for (name, access_expr) in bindings {
                 let elem_val = lower_expr(&access_expr.node, ctx)?;
-                let elem_clif_ty = super::resolve_clif_ty(&access_expr.node.ty, ctx.struct_registry);
+                let elem_clif_ty =
+                    super::resolve_clif_ty(&access_expr.node.ty, ctx.struct_registry);
                 let elem_var = ctx.new_var(name, elem_clif_ty);
                 ctx.builder.def_var(elem_var, elem_val);
             }
@@ -386,9 +387,15 @@ pub(crate) fn lower_expr(
             sig.params.push(AbiParam::new(I64)); // arena_handle
             sig.params.push(AbiParam::new(I64)); // box_ptr
             for pt in param_types {
-                sig.params.push(AbiParam::new(super::resolve_clif_ty(pt, ctx.struct_registry)));
+                sig.params.push(AbiParam::new(super::resolve_clif_ty(
+                    pt,
+                    ctx.struct_registry,
+                )));
             }
-            sig.returns.push(AbiParam::new(super::resolve_clif_ty(ret_ty, ctx.struct_registry)));
+            sig.returns.push(AbiParam::new(super::resolve_clif_ty(
+                ret_ty,
+                ctx.struct_registry,
+            )));
             let func_id = ctx
                 .module
                 .declare_function(&name, Linkage::Export, &sig)

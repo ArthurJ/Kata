@@ -166,7 +166,12 @@ pub(crate) fn run_pass0(
                     } else {
                         Vec::new()
                     };
-                    struct_registry.register_with_alias(origin, new_name, fields, Some(target.clone()));
+                    struct_registry.register_with_alias(
+                        origin,
+                        new_name,
+                        fields,
+                        Some(target.clone()),
+                    );
                 }
             }
             Item::EnumDecl { name, variants, .. } => {

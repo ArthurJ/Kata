@@ -151,7 +151,9 @@ pub enum MiddleError {
         span: MietteSpan,
     },
 
-    #[error("canais não podem ser retornados de Actions — `{ty}` contém `Sender`, `Receiver`, ou `ReceiverFactory`")]
+    #[error(
+        "canais não podem ser retornados de Actions — `{ty}` contém `Sender`, `Receiver`, ou `ReceiverFactory`"
+    )]
     #[diagnostic(code = "type.channel_in_return")]
     ChannelInReturn {
         ty: String,

@@ -21,7 +21,6 @@ use kata_inference::TypedExpr;
 use super::CodegenError;
 use super::LowerCtx;
 
-
 // ── Helpers ──────────────────────────────────────────────────
 
 /// Bitcast F64→I64 se necessário (elementos Float são armazenados como I64).
@@ -71,9 +70,13 @@ fn build_callback_sig(
     sig.params.push(AbiParam::new(I64)); // arena_handle
     sig.params.push(AbiParam::new(I64)); // box_ptr (sempre presente na ABI uniformizada)
     for pt in param_types {
-        sig.params.push(AbiParam::new(super::resolve_clif_ty(pt, struct_registry)));
+        sig.params
+            .push(AbiParam::new(super::resolve_clif_ty(pt, struct_registry)));
     }
-    sig.returns.push(AbiParam::new(super::resolve_clif_ty(ret_ty, struct_registry)));
+    sig.returns.push(AbiParam::new(super::resolve_clif_ty(
+        ret_ty,
+        struct_registry,
+    )));
     sig
 }
 
@@ -167,14 +170,7 @@ pub(crate) fn lower_fold(
 
             // acc = callback(acc, elem)
             let acc = ctx.builder.use_var(acc_var);
-            let new_acc = call_callback(
-                callback_val,
-                &[acc, head_val],
-                &cb_params,
-                &cb_ret,
-
-                ctx,
-            )?;
+            let new_acc = call_callback(callback_val, &[acc, head_val], &cb_params, &cb_ret, ctx)?;
             let new_acc = ensure_i64(ctx, new_acc);
             ctx.builder.def_var(acc_var, new_acc);
             ctx.builder.def_var(current_var, tail_val);
@@ -210,14 +206,7 @@ pub(crate) fn lower_fold(
             let elem_val = ensure_f64_if(ctx, elem_val, elem_ty);
 
             let acc = ctx.builder.use_var(acc_var);
-            let new_acc = call_callback(
-                callback_val,
-                &[acc, elem_val],
-                &cb_params,
-                &cb_ret,
-
-                ctx,
-            )?;
+            let new_acc = call_callback(callback_val, &[acc, elem_val], &cb_params, &cb_ret, ctx)?;
             let new_acc = ensure_i64(ctx, new_acc);
             ctx.builder.def_var(acc_var, new_acc);
             let next_idx = ctx.builder.ins().iadd_imm(idx, 1);
@@ -245,14 +234,7 @@ pub(crate) fn lower_fold(
             let elem_val = ensure_f64_if(ctx, current, elem_ty);
 
             let acc = ctx.builder.use_var(acc_var);
-            let new_acc = call_callback(
-                callback_val,
-                &[acc, elem_val],
-                &cb_params,
-                &cb_ret,
-
-                ctx,
-            )?;
+            let new_acc = call_callback(callback_val, &[acc, elem_val], &cb_params, &cb_ret, ctx)?;
             let new_acc = ensure_i64(ctx, new_acc);
             ctx.builder.def_var(acc_var, new_acc);
             let step_val = ctx.builder.ins().load(I64, flags, coll_val, 8);

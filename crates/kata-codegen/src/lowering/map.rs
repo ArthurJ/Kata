@@ -78,14 +78,7 @@ pub(crate) fn lower_map(
             let tail_val = ctx.builder.ins().load(I64, flags, current, 8);
 
             // Chama callback(head) → result
-            let result = call_callback(
-                callback_val,
-                &[head_val],
-                &cb_params,
-                &cb_ret,
-
-                ctx,
-            )?;
+            let result = call_callback(callback_val, &[head_val], &cb_params, &cb_ret, ctx)?;
             let result_i64 = ensure_i64(ctx, result);
 
             // acc = cons(result, acc, arena)
@@ -126,14 +119,7 @@ pub(crate) fn lower_map(
             let elem_val = ctx.builder.ins().load(I64, flags, elem_ptr, 0);
             let elem_val = ensure_f64_if(ctx, elem_val, elem_ty);
 
-            let result = call_callback(
-                callback_val,
-                &[elem_val],
-                &cb_params,
-                &cb_ret,
-
-                ctx,
-            )?;
+            let result = call_callback(callback_val, &[elem_val], &cb_params, &cb_ret, ctx)?;
             let result_i64 = ensure_i64(ctx, result);
 
             let acc = ctx.builder.use_var(acc_var);
@@ -165,14 +151,7 @@ pub(crate) fn lower_map(
             ctx.builder.switch_to_block(continue_block);
             let elem_val = ensure_f64_if(ctx, current, elem_ty);
 
-            let result = call_callback(
-                callback_val,
-                &[elem_val],
-                &cb_params,
-                &cb_ret,
-
-                ctx,
-            )?;
+            let result = call_callback(callback_val, &[elem_val], &cb_params, &cb_ret, ctx)?;
             let result_i64 = ensure_i64(ctx, result);
 
             let acc = ctx.builder.use_var(acc_var);

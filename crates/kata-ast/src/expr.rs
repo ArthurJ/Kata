@@ -270,10 +270,7 @@ pub enum Pattern {
     /// O parser produz este variant quando `snake_case::PascalCase` aparece
     /// em posição de pattern (lambda params). O typeck resolve `ty` e
     /// produz `TypedPattern::Ident { name, ty }` (mesmo resultado de `Ident`).
-    TypedIdent {
-        name: String,
-        ty: Spanned<TypeExpr>,
-    },
+    TypedIdent { name: String, ty: Spanned<TypeExpr> },
     /// `_` — wildcard, aceita qualquer valor sem ligar nome.
     Wildcard,
     /// `42`, `"texto"`, `3.14` — literal exato.

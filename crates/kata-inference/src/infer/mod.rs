@@ -386,8 +386,13 @@ fn infer_named_function(
             }
             (typed_body, Vec::new())
         } else {
-            let (guard_ret, typed_body, guards) =
-                infer_lambda_body(&desugared_body, &desugared_guards, &mut clause_env, ctx, Some(ret_ty))?;
+            let (guard_ret, typed_body, guards) = infer_lambda_body(
+                &desugared_body,
+                &desugared_guards,
+                &mut clause_env,
+                ctx,
+                Some(ret_ty),
+            )?;
             if guard_ret != *ret_ty {
                 return Err(MiddleError::TypeMismatch {
                     expected: format!("{}", ret_ty),

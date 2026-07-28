@@ -96,11 +96,7 @@ impl InterfaceRegistry {
     /// Registra uma interface com origin. Valida supertraits e detecta ciclos.
     /// Retorna `Err(msg)` se a interface já existe na mesma origin ou se há
     /// ciclo de supertraits.
-    pub fn register_interface(
-        &mut self,
-        origin: &str,
-        info: InterfaceInfo,
-    ) -> Result<(), String> {
+    pub fn register_interface(&mut self, origin: &str, info: InterfaceInfo) -> Result<(), String> {
         let name = info.name.clone();
         let key = (origin.to_string(), name.clone());
 
@@ -120,8 +116,7 @@ impl InterfaceRegistry {
         let result = self.check_cycle(origin, &name, &mut visiting);
         if result.is_err() {
             // Remove a interface recém-inserida em caso de ciclo.
-            self.interfaces
-                .remove(&(origin.to_string(), name.clone()));
+            self.interfaces.remove(&(origin.to_string(), name.clone()));
             if let Some(origins) = self.origins.get_mut(&name) {
                 origins.remove(origin);
             }
@@ -223,11 +218,7 @@ impl InterfaceRegistry {
     }
 
     /// `get_interface` com origin explícita.
-    pub fn get_interface_with_origin(
-        &self,
-        origin: &str,
-        name: &str,
-    ) -> Option<&InterfaceInfo> {
+    pub fn get_interface_with_origin(&self, origin: &str, name: &str) -> Option<&InterfaceInfo> {
         let key = (origin.to_string(), name.to_string());
         self.interfaces.get(&key)
     }
@@ -321,10 +312,7 @@ impl InterfaceRegistry {
         visiting: &mut HashSet<String>,
     ) -> Result<(), String> {
         if visiting.contains(iface) {
-            return Err(format!(
-                "ciclo de supertraits detectado: '{}'",
-                iface
-            ));
+            return Err(format!("ciclo de supertraits detectado: '{}'", iface));
         }
         // Tenta lookup com a origin específica primeiro, depois resolve_origin.
         let info = self
@@ -427,8 +415,7 @@ mod tests {
         let mut reg = InterfaceRegistry::new();
         reg.register_interface("core", iface("NUM", &["ORD"]))
             .unwrap();
-        reg.register_impl(impl_entry("user", "Int", "NUM"))
-            .unwrap();
+        reg.register_impl(impl_entry("user", "Int", "NUM")).unwrap();
 
         let result = reg.register_impl(impl_entry("user", "Int", "SHOW"));
         assert!(result.is_ok());
@@ -438,10 +425,8 @@ mod tests {
     #[test]
     fn register_impl_rejects_duplicate_same_origin() {
         let mut reg = InterfaceRegistry::new();
-        reg.register_interface("core", iface("NUM", &[]))
-            .unwrap();
-        reg.register_impl(impl_entry("user", "Int", "NUM"))
-            .unwrap();
+        reg.register_interface("core", iface("NUM", &[])).unwrap();
+        reg.register_impl(impl_entry("user", "Int", "NUM")).unwrap();
         let err = reg.register_impl(impl_entry("user", "Int", "NUM"));
         assert!(err.is_err());
     }
@@ -449,10 +434,8 @@ mod tests {
     #[test]
     fn register_impl_allows_same_impl_different_origin() {
         let mut reg = InterfaceRegistry::new();
-        reg.register_interface("core", iface("NUM", &[]))
-            .unwrap();
-        reg.register_impl(impl_entry("core", "Int", "NUM"))
-            .unwrap();
+        reg.register_interface("core", iface("NUM", &[])).unwrap();
+        reg.register_impl(impl_entry("core", "Int", "NUM")).unwrap();
         let result = reg.register_impl(impl_entry("user", "Int", "NUM"));
         assert!(result.is_ok());
     }
@@ -465,8 +448,7 @@ mod tests {
         reg.register_interface("core", iface("ORD", &["EQ"]))
             .unwrap();
         reg.register_interface("core", iface("EQ", &[])).unwrap();
-        reg.register_impl(impl_entry("user", "Int", "NUM"))
-            .unwrap();
+        reg.register_impl(impl_entry("user", "Int", "NUM")).unwrap();
 
         assert!(reg.type_implements("Int", "NUM"));
         assert!(reg.type_implements("Int", "ORD"));
@@ -478,12 +460,9 @@ mod tests {
     #[test]
     fn get_impls_for_type_and_interface() {
         let mut reg = InterfaceRegistry::new();
-        reg.register_interface("core", iface("NUM", &[]))
-            .unwrap();
-        reg.register_interface("core", iface("SHOW", &[]))
-            .unwrap();
-        reg.register_impl(impl_entry("user", "Int", "NUM"))
-            .unwrap();
+        reg.register_interface("core", iface("NUM", &[])).unwrap();
+        reg.register_interface("core", iface("SHOW", &[])).unwrap();
+        reg.register_impl(impl_entry("user", "Int", "NUM")).unwrap();
         reg.register_impl(impl_entry("user", "Int", "SHOW"))
             .unwrap();
         reg.register_impl(impl_entry("user", "Float", "NUM"))
@@ -503,8 +482,7 @@ mod tests {
         let mut b = InterfaceRegistry::new();
         b.register_interface("core", iface("NUM", &["ORD"]))
             .unwrap();
-        b.register_impl(impl_entry("user", "Int", "NUM"))
-            .unwrap();
+        b.register_impl(impl_entry("user", "Int", "NUM")).unwrap();
 
         a.merge(b);
         assert!(a.get_interface("EQ").is_some());

@@ -222,8 +222,7 @@ impl EnumRegistry {
     pub fn expand_defaults(&self, ty: &Ty) -> Ty {
         match ty {
             Ty::Generic(name, args) => {
-                let expanded_args: Vec<Ty> =
-                    args.iter().map(|a| self.expand_defaults(a)).collect();
+                let expanded_args: Vec<Ty> = args.iter().map(|a| self.expand_defaults(a)).collect();
                 match self.apply_defaults(name, &expanded_args) {
                     Some(full_args) => Ty::Generic(name.clone(), full_args),
                     None => Ty::Generic(name.clone(), expanded_args),
@@ -382,7 +381,12 @@ impl EnumRegistry {
     }
 
     /// `variant_index` com origin explícita.
-    pub fn variant_index_with_origin(&self, origin: &str, enum_name: &str, variant: &str) -> Option<usize> {
+    pub fn variant_index_with_origin(
+        &self,
+        origin: &str,
+        enum_name: &str,
+        variant: &str,
+    ) -> Option<usize> {
         let key = (origin.to_string(), enum_name.to_string());
         self.variants
             .get(&key)
@@ -400,7 +404,12 @@ impl EnumRegistry {
     }
 
     /// `payload_ty` com origin explícita.
-    pub fn payload_ty_with_origin(&self, origin: &str, enum_name: &str, variant: &str) -> Option<&Ty> {
+    pub fn payload_ty_with_origin(
+        &self,
+        origin: &str,
+        enum_name: &str,
+        variant: &str,
+    ) -> Option<&Ty> {
         let key = (origin.to_string(), enum_name.to_string());
         self.variants
             .get(&key)
@@ -455,7 +464,11 @@ impl EnumRegistry {
     }
 
     /// `all_variants` com origin explícita.
-    pub fn all_variants_with_origin(&self, origin: &str, enum_name: &str) -> Option<&[VariantInfo]> {
+    pub fn all_variants_with_origin(
+        &self,
+        origin: &str,
+        enum_name: &str,
+    ) -> Option<&[VariantInfo]> {
         let key = (origin.to_string(), enum_name.to_string());
         self.variants.get(&key).map(|v| v.as_slice())
     }
@@ -556,7 +569,10 @@ mod tests {
         registry.register(
             "core",
             "Result",
-            vec![v_with_payload("Ok", Ty::int()), v_with_payload("Err", Ty::text())],
+            vec![
+                v_with_payload("Ok", Ty::int()),
+                v_with_payload("Err", Ty::text()),
+            ],
         );
 
         assert_eq!(registry.variant_index("Result", "Ok"), Some(0));
@@ -591,14 +607,20 @@ mod tests {
             "Result",
             vec!["T".into(), "E".into()],
             vec![None, Some(Ty::text())],
-            vec![v_with_payload("Ok", Ty::Var("T".into())), v_with_payload("Err", Ty::Var("E".into()))],
+            vec![
+                v_with_payload("Ok", Ty::Var("T".into())),
+                v_with_payload("Err", Ty::Var("E".into())),
+            ],
         );
 
         let mut user = EnumRegistry::new();
         user.register(
             "user",
             "Result",
-            vec![v_with_payload("Ok", Ty::int()), v_with_payload("Err", Ty::int())],
+            vec![
+                v_with_payload("Ok", Ty::int()),
+                v_with_payload("Err", Ty::int()),
+            ],
         );
 
         prelude.merge(user);

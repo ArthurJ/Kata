@@ -17,10 +17,17 @@ fn parse_unqual_variant_keeps_module_path_none() {
     let item = first_item(&m);
     match item {
         Item::EntryExpr(e) => match &e.node {
-            Expr::VariantQual { enum_name, variant, module_path } => {
+            Expr::VariantQual {
+                enum_name,
+                variant,
+                module_path,
+            } => {
                 assert_eq!(enum_name, "Result");
                 assert_eq!(variant, "Err");
-                assert_eq!(module_path, &None, "module_path deve ser None para `Result::Err`");
+                assert_eq!(
+                    module_path, &None,
+                    "module_path deve ser None para `Result::Err`"
+                );
             }
             other => panic!("expected VariantQual, got {other:?}"),
         },
@@ -36,7 +43,11 @@ fn parse_qualified_variant_one_level() {
     let item = first_item(&m);
     match item {
         Item::EntryExpr(e) => match &e.node {
-            Expr::VariantQual { enum_name, variant, module_path } => {
+            Expr::VariantQual {
+                enum_name,
+                variant,
+                module_path,
+            } => {
                 assert_eq!(enum_name, "Result");
                 assert_eq!(variant, "Err");
                 assert_eq!(
@@ -59,7 +70,11 @@ fn parse_qualified_variant_two_levels() {
     let item = first_item(&m);
     match item {
         Item::EntryExpr(e) => match &e.node {
-            Expr::VariantQual { enum_name, variant, module_path } => {
+            Expr::VariantQual {
+                enum_name,
+                variant,
+                module_path,
+            } => {
                 assert_eq!(enum_name, "Result");
                 assert_eq!(variant, "Ok");
                 assert_eq!(
@@ -84,7 +99,11 @@ fn parse_qualified_variant_with_apply() {
     match item {
         Item::EntryExpr(e) => match &e.node {
             Expr::Apply { callee, .. } => match &callee.node {
-                Expr::VariantQual { enum_name, variant, module_path } => {
+                Expr::VariantQual {
+                    enum_name,
+                    variant,
+                    module_path,
+                } => {
                     assert_eq!(enum_name, "Result");
                     assert_eq!(variant, "Ok");
                     assert_eq!(

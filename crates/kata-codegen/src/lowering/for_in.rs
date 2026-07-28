@@ -12,7 +12,6 @@ use kata_inference::TypedExpr;
 use super::LowerCtx;
 use super::expr::lower_expr;
 
-
 /// Lowera `ForIn { var_name, var_ty, iterable, body }`:
 ///
 /// Loop inlined por tipo concreto do iterable:
@@ -83,7 +82,10 @@ pub(crate) fn lower_for_in(
             };
             let tail_val = ctx.builder.ins().load(I64, flags, current, 8);
 
-            let elem_var = ctx.new_var(var_name, super::resolve_clif_ty(var_ty, ctx.struct_registry));
+            let elem_var = ctx.new_var(
+                var_name,
+                super::resolve_clif_ty(var_ty, ctx.struct_registry),
+            );
             ctx.builder.def_var(elem_var, head_val);
             ctx.builder.def_var(current_var, tail_val);
 
@@ -141,7 +143,10 @@ pub(crate) fn lower_for_in(
             } else {
                 elem_val
             };
-            let elem_var = ctx.new_var(var_name, super::resolve_clif_ty(var_ty, ctx.struct_registry));
+            let elem_var = ctx.new_var(
+                var_name,
+                super::resolve_clif_ty(var_ty, ctx.struct_registry),
+            );
             ctx.builder.def_var(elem_var, elem_val);
 
             // idx += 1
@@ -182,7 +187,10 @@ pub(crate) fn lower_for_in(
                 .brif(done, break_block, &[], continue_block, &[]);
 
             ctx.builder.switch_to_block(continue_block);
-            let elem_var = ctx.new_var(var_name, super::resolve_clif_ty(var_ty, ctx.struct_registry));
+            let elem_var = ctx.new_var(
+                var_name,
+                super::resolve_clif_ty(var_ty, ctx.struct_registry),
+            );
             let elem_val = if *var_ty == Ty::float() {
                 ctx.builder.ins().bitcast(
                     cranelift_codegen::ir::types::F64,

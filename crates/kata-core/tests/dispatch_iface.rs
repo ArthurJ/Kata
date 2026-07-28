@@ -52,7 +52,8 @@ fn iface_dispatch_int_implements_num() {
         .unwrap();
     reg.register_interface("test", make_iface_info("ORD", &["EQ"]))
         .unwrap();
-    reg.register_interface("test", make_iface_info("EQ", &[])).unwrap();
+    reg.register_interface("test", make_iface_info("EQ", &[]))
+        .unwrap();
     reg.register_impl(make_impl_entry("Int", "NUM")).unwrap();
 
     let mut table = DispatchTable::new();
@@ -82,7 +83,8 @@ fn iface_dispatch_via_supertrait() {
         .unwrap();
     reg.register_interface("test", make_iface_info("ORD", &["EQ"]))
         .unwrap();
-    reg.register_interface("test", make_iface_info("EQ", &[])).unwrap();
+    reg.register_interface("test", make_iface_info("EQ", &[]))
+        .unwrap();
     reg.register_impl(make_impl_entry("Int", "NUM")).unwrap();
 
     let mut table = DispatchTable::new();
@@ -108,7 +110,8 @@ fn iface_dispatch_via_supertrait() {
 #[test]
 fn exact_beats_iface() {
     let mut reg = InterfaceRegistry::new();
-    reg.register_interface("test", make_iface_info("NUM", &[])).unwrap();
+    reg.register_interface("test", make_iface_info("NUM", &[]))
+        .unwrap();
     reg.register_impl(make_impl_entry("Int", "NUM")).unwrap();
 
     let mut table = DispatchTable::new();
@@ -143,7 +146,8 @@ fn exact_beats_iface() {
 #[test]
 fn iface_beats_incompatible() {
     let mut reg = InterfaceRegistry::new();
-    reg.register_interface("test", make_iface_info("NUM", &[])).unwrap();
+    reg.register_interface("test", make_iface_info("NUM", &[]))
+        .unwrap();
     reg.register_impl(make_impl_entry("Int", "NUM")).unwrap();
 
     let mut table = DispatchTable::new();
@@ -176,7 +180,8 @@ fn iface_beats_incompatible() {
 #[test]
 fn iface_dispatch_fails_when_not_implemented() {
     let mut reg = InterfaceRegistry::new();
-    reg.register_interface("test", make_iface_info("NUM", &[])).unwrap();
+    reg.register_interface("test", make_iface_info("NUM", &[]))
+        .unwrap();
     reg.register_impl(make_impl_entry("Int", "NUM")).unwrap();
     // Float NÃO implementa NUM
 
@@ -201,7 +206,8 @@ fn iface_dispatch_fails_when_not_implemented() {
 #[test]
 fn iface_dispatch_user_type() {
     let mut reg = InterfaceRegistry::new();
-    reg.register_interface("test", make_iface_info("NUM", &[])).unwrap();
+    reg.register_interface("test", make_iface_info("NUM", &[]))
+        .unwrap();
     reg.register_impl(make_impl_entry("Complex", "NUM"))
         .unwrap();
 
@@ -229,7 +235,8 @@ fn match_score_iface_basic() {
     use kata_core::dispatch::match_score;
 
     let mut reg = InterfaceRegistry::new();
-    reg.register_interface("test", make_iface_info("NUM", &[])).unwrap();
+    reg.register_interface("test", make_iface_info("NUM", &[]))
+        .unwrap();
     reg.register_impl(make_impl_entry("Int", "NUM")).unwrap();
 
     let score = match_score(
@@ -249,7 +256,8 @@ fn match_score_mixed_exact_iface() {
     use kata_core::dispatch::match_score;
 
     let mut reg = InterfaceRegistry::new();
-    reg.register_interface("test", make_iface_info("NUM", &[])).unwrap();
+    reg.register_interface("test", make_iface_info("NUM", &[]))
+        .unwrap();
     reg.register_impl(make_impl_entry("Int", "NUM")).unwrap();
     reg.register_impl(make_impl_entry("Float", "NUM")).unwrap();
 

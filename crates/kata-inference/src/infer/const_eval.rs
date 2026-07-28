@@ -74,13 +74,13 @@ fn eval_bool_expr(expr: &Spanned<Expr>) -> Option<bool> {
             }
         }
         // Boolean::True / Boolean::False como VariantQual
-        Expr::VariantQual { enum_name, variant, .. } if enum_name == "Boolean" => {
-            match variant.as_str() {
-                "True" => Some(true),
-                "False" => Some(false),
-                _ => None,
-            }
-        }
+        Expr::VariantQual {
+            enum_name, variant, ..
+        } if enum_name == "Boolean" => match variant.as_str() {
+            "True" => Some(true),
+            "False" => Some(false),
+            _ => None,
+        },
         _ => None,
     }
 }

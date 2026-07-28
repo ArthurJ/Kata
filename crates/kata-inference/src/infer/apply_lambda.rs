@@ -163,13 +163,20 @@ fn build_lambda_apply(
 ) -> InferResult<(Ty, TypedExprKind)> {
     // Cria escopo filho e define params com tipos conhecidos.
     let mut lambda_env = env.push_scope();
-    let typed_patterns = check_patterns(patterns, &param_tys, ctx.enum_registry, &mut lambda_env, ctx.interface_registry)?;
+    let typed_patterns = check_patterns(
+        patterns,
+        &param_tys,
+        ctx.enum_registry,
+        &mut lambda_env,
+        ctx.interface_registry,
+    )?;
 
     // Processa with bindings.
     let typed_with_bindings = process_with_bindings(with_bindings, &mut lambda_env, ctx)?;
 
     // Infere o body.
-    let (ret_ty, typed_body, typed_guards) = infer_lambda_body(body, guards, &mut lambda_env, ctx, ret_check)?;
+    let (ret_ty, typed_body, typed_guards) =
+        infer_lambda_body(body, guards, &mut lambda_env, ctx, ret_check)?;
 
     // Verifica o tipo de retorno se um esperado foi fornecido (caminho com hint).
     if let Some(expected_ret) = ret_check
@@ -230,7 +237,8 @@ pub(crate) fn infer_lambda_body(
     let ret_hint = ret_hint.filter(|ty| !matches!(ty, Ty::InferVar(_)));
     let mut typed_guards: Vec<TypedGuardClause> = Vec::new();
     let (ret_ty, typed_body) = if guards.is_empty() {
-        let typed_body = infer_expr_hinted(&body.node, &body.span, lambda_env, ctx, true, ret_hint)?;
+        let typed_body =
+            infer_expr_hinted(&body.node, &body.span, lambda_env, ctx, true, ret_hint)?;
         (typed_body.ty.clone(), typed_body)
     } else {
         let mut guard_ret_ty: Option<Ty> = None;
@@ -244,8 +252,14 @@ pub(crate) fn infer_lambda_body(
                         span: cond.span.into(),
                     });
                 }
-                let body_typed =
-                    infer_expr_hinted(&guard.body.node, &guard.body.span, lambda_env, ctx, true, ret_hint)?;
+                let body_typed = infer_expr_hinted(
+                    &guard.body.node,
+                    &guard.body.span,
+                    lambda_env,
+                    ctx,
+                    true,
+                    ret_hint,
+                )?;
                 if let Some(ref existing) = guard_ret_ty {
                     if *existing != body_typed.ty {
                         return Err(MiddleError::TypeMismatch {
@@ -263,7 +277,14 @@ pub(crate) fn infer_lambda_body(
                 });
                 continue;
             }
-            let body_typed = infer_expr_hinted(&guard.body.node, &guard.body.span, lambda_env, ctx, true, ret_hint)?;
+            let body_typed = infer_expr_hinted(
+                &guard.body.node,
+                &guard.body.span,
+                lambda_env,
+                ctx,
+                true,
+                ret_hint,
+            )?;
             if let Some(ref existing) = guard_ret_ty {
                 if *existing != body_typed.ty {
                     return Err(MiddleError::TypeMismatch {

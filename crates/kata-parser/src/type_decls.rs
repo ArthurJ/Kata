@@ -241,7 +241,8 @@ impl Parser {
             // Disambiguação: após `(`, se primeiro token é operador de comparação
             // ou `_` (Hole), é predicado. Se é literal (Int, Float, Text), é valor fixo.
             // Senão é payload (type expr). Após o payload, se ver `=`, parsear default.
-            let (payload, default, predicate, fixed_value) = if matches!(self.peek(), Token::LParen) {
+            let (payload, default, predicate, fixed_value) = if matches!(self.peek(), Token::LParen)
+            {
                 self.advance(); // consume (
                 if self.is_predicate_start() {
                     let pred = parse_expr(self)?;

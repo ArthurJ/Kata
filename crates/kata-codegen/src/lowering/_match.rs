@@ -7,7 +7,6 @@ use super::LowerCtx;
 use super::expr::lower_expr;
 use super::pattern::test_single_pattern;
 
-
 /// Lowera um match: branch chain com brif para cada arm.
 pub(crate) fn lower_match(
     scrutinee: &kata_ast::Spanned<TypedExpr>,

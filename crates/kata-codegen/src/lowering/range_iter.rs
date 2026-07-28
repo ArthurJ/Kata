@@ -24,11 +24,7 @@ use super::LowerCtx;
 /// Recebe `coll_val` (ponteiro para o struct Range) e `current` (valor
 /// atual do iterador). Retorna `done: Value` — quando true, o loop deve
 /// parar.
-pub(crate) fn range_done(
-    coll_val: Value,
-    current: Value,
-    ctx: &mut LowerCtx,
-) -> Value {
+pub(crate) fn range_done(coll_val: Value, current: Value, ctx: &mut LowerCtx) -> Value {
     let flags = MemFlagsData::new();
     let step_val = ctx.builder.ins().load(I64, flags, coll_val, 8);
     let end_val = ctx.builder.ins().load(I64, flags, coll_val, 16);
@@ -39,20 +35,41 @@ pub(crate) fn range_done(
 
     // Detecta step < 0 (signed)
     let zero_smi = ctx.builder.ins().iconst(I64, 1);
-    let step_neg = ctx.builder.ins().icmp(IntCC::SignedLessThan, step_val, zero_smi);
+    let step_neg = ctx
+        .builder
+        .ins()
+        .icmp(IntCC::SignedLessThan, step_val, zero_smi);
 
     // Detecta inclusive (incl_val != 0)
     let is_inclusive = ctx.builder.ins().icmp_imm(IntCC::NotEqual, incl_val, 0);
 
     // Comparações para step >= 0
-    let done_pos_excl = ctx.builder.ins().icmp(IntCC::SignedGreaterThanOrEqual, current, end_val);
-    let done_pos_incl = ctx.builder.ins().icmp(IntCC::SignedGreaterThan, current, end_val);
-    let done_pos = ctx.builder.ins().select(is_inclusive, done_pos_incl, done_pos_excl);
+    let done_pos_excl = ctx
+        .builder
+        .ins()
+        .icmp(IntCC::SignedGreaterThanOrEqual, current, end_val);
+    let done_pos_incl = ctx
+        .builder
+        .ins()
+        .icmp(IntCC::SignedGreaterThan, current, end_val);
+    let done_pos = ctx
+        .builder
+        .ins()
+        .select(is_inclusive, done_pos_incl, done_pos_excl);
 
     // Comparações para step < 0
-    let done_neg_excl = ctx.builder.ins().icmp(IntCC::SignedLessThanOrEqual, current, end_val);
-    let done_neg_incl = ctx.builder.ins().icmp(IntCC::SignedLessThan, current, end_val);
-    let done_neg = ctx.builder.ins().select(is_inclusive, done_neg_incl, done_neg_excl);
+    let done_neg_excl = ctx
+        .builder
+        .ins()
+        .icmp(IntCC::SignedLessThanOrEqual, current, end_val);
+    let done_neg_incl = ctx
+        .builder
+        .ins()
+        .icmp(IntCC::SignedLessThan, current, end_val);
+    let done_neg = ctx
+        .builder
+        .ins()
+        .select(is_inclusive, done_neg_incl, done_neg_excl);
 
     // Seleciona baseado no sinal do step
     ctx.builder.ins().select(step_neg, done_neg, done_pos)

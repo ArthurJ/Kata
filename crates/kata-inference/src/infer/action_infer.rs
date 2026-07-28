@@ -293,7 +293,12 @@ fn contains_channel_type(ty: &Ty) -> bool {
         // diretamente no Ty. Se um struct tem um campo Sender, isso aparece
         // como Ty::Sender no type_env, não dentro de Ty::Struct("Nome").
         // Var/InferVar não podem ser resolvidas aqui — conservador: false.
-        Ty::Prim(_) | Ty::Unit | Ty::Var(_) | Ty::InferVar(_) | Ty::Interface(_)
-        | Ty::Struct(_) | Ty::Sum(_) => false,
+        Ty::Prim(_)
+        | Ty::Unit
+        | Ty::Var(_)
+        | Ty::InferVar(_)
+        | Ty::Interface(_)
+        | Ty::Struct(_)
+        | Ty::Sum(_) => false,
     }
 }

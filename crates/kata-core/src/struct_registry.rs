@@ -244,10 +244,7 @@ mod tests {
         registry.register(
             "user",
             "Pessoa",
-            vec![
-                field("nome", Ty::text(), 0),
-                field("idade", Ty::int(), 8),
-            ],
+            vec![field("nome", Ty::text(), 0), field("idade", Ty::int(), 8)],
         );
 
         assert!(registry.contains("Pessoa"));
@@ -264,10 +261,7 @@ mod tests {
         registry.register(
             "user",
             "Pessoa",
-            vec![
-                field("nome", Ty::text(), 0),
-                field("idade", Ty::int(), 8),
-            ],
+            vec![field("nome", Ty::text(), 0), field("idade", Ty::int(), 8)],
         );
 
         let info = registry.get("Pessoa").unwrap();
@@ -292,10 +286,7 @@ mod tests {
         registry.register(
             "user",
             "Pessoa",
-            vec![
-                field("nome", Ty::text(), 0),
-                field("idade", Ty::int(), 8),
-            ],
+            vec![field("nome", Ty::text(), 0), field("idade", Ty::int(), 8)],
         );
 
         let info = registry.get("Pessoa").unwrap();

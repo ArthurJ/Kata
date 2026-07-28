@@ -53,8 +53,22 @@ pub(crate) fn infer_apply(
             return infer_apply_lambda(patterns, body, guards, with_bindings, args, span, env, ctx);
         }
         // Apply(VariantQual, [arg]) → construção de Sum com payload.
-        Expr::VariantQual { enum_name, variant, module_path, .. } => {
-            return infer_variant_construct(enum_name, variant, module_path.as_deref(), args, span, env, ctx, hint);
+        Expr::VariantQual {
+            enum_name,
+            variant,
+            module_path,
+            ..
+        } => {
+            return infer_variant_construct(
+                enum_name,
+                variant,
+                module_path.as_deref(),
+                args,
+                span,
+                env,
+                ctx,
+                hint,
+            );
         }
         Expr::TypeAscription { expr: inner, ty } => {
             // Ascription em lambda: `((lambda ...)::(Int -> Int)) 42`.
@@ -687,7 +701,9 @@ pub(crate) fn infer_apply(
             .payload_ty(enum_name, &func_name)
             .is_some()
         {
-            return infer_variant_construct(enum_name, &func_name, None, args, span, env, ctx, hint);
+            return infer_variant_construct(
+                enum_name, &func_name, None, args, span, env, ctx, hint,
+            );
         }
     }
     if candidates.len() > 1 {

@@ -83,7 +83,9 @@ pub(crate) fn infer_lambda(
     // NoOverload opaco.
     // Exceção: se o pattern tem type annotation explícita (TypedIdent),
     // o tipo anotado conta como mecanismo de inferência.
-    let has_typed_idents = patterns.iter().any(|p| matches!(p.node, Pattern::TypedIdent { .. }));
+    let has_typed_idents = patterns
+        .iter()
+        .any(|p| matches!(p.node, Pattern::TypedIdent { .. }));
     if !has_typed_idents && param_type_hints.len() < patterns.len() {
         return Err(MiddleError::LambdaInferenceFail {
             span: (*span).into(),
@@ -102,13 +104,22 @@ pub(crate) fn infer_lambda(
             }
             // Se o pattern tem type annotation (TypedIdent), usar o tipo anotado.
             if let Pattern::TypedIdent { ty, .. } = &pat.node {
-                return kata_resolution::resolve_type_expr(&ty.node, &lambda_env, ctx.interface_registry);
+                return kata_resolution::resolve_type_expr(
+                    &ty.node,
+                    &lambda_env,
+                    ctx.interface_registry,
+                );
             }
             Ty::InferVar(i as u32)
         })
         .collect();
-    let typed_patterns =
-        check_patterns(patterns, &param_types, ctx.enum_registry, &mut lambda_env, ctx.interface_registry)?;
+    let typed_patterns = check_patterns(
+        patterns,
+        &param_types,
+        ctx.enum_registry,
+        &mut lambda_env,
+        ctx.interface_registry,
+    )?;
 
     // Processa with bindings (açúcar → let chain no escopo do lambda).
     // with bindings são pré-avaliados antes dos guards.
@@ -123,7 +134,8 @@ pub(crate) fn infer_lambda(
         Ty::Function(_, ret) => Some(ret.as_ref()),
         _ => Some(h),
     });
-    let (ret_ty, typed_body, typed_guards) = infer_lambda_body(body, guards, &mut lambda_env, ctx, ret_hint)?;
+    let (ret_ty, typed_body, typed_guards) =
+        infer_lambda_body(body, guards, &mut lambda_env, ctx, ret_hint)?;
 
     let lambda_ty = Ty::Function(param_types.clone(), Box::new(ret_ty.clone()));
 

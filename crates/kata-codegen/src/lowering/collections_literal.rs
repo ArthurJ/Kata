@@ -159,7 +159,10 @@ pub(crate) fn lower_collections_literal(
             ctx.builder.ins().store(flags, step_val, ptr, 8);
             ctx.builder.ins().store(flags, end_val, ptr, 16);
             // Store inclusive flag (offset 24) como SMI: 1 = inclusive, 0 = exclusive.
-            let incl_val = ctx.builder.ins().iconst(I64, if *inclusive { 3 } else { 1 });
+            let incl_val = ctx
+                .builder
+                .ins()
+                .iconst(I64, if *inclusive { 3 } else { 1 });
             ctx.builder.ins().store(flags, incl_val, ptr, 24);
             Ok(Some(ptr))
         }

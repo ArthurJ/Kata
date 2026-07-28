@@ -243,7 +243,8 @@ fn queue_non_literal_capacity() {
 // criador, causando use-after-free. O typeck deve rejeitar.
 #[test]
 fn action_retorna_sender_rejeitado() {
-    let src = "action make_channel => Sender::Int\n  let (tx, rx) := channel!()\n  tx\nmake_channel!()";
+    let src =
+        "action make_channel => Sender::Int\n  let (tx, rx) := channel!()\n  tx\nmake_channel!()";
     let err = infer_src_err(src);
     assert!(
         matches!(err, kata_diagnostics::MiddleError::ChannelInReturn { .. }),
@@ -254,7 +255,8 @@ fn action_retorna_sender_rejeitado() {
 // ── Teste 13: Action que retorna Receiver → ChannelInReturn ────────
 #[test]
 fn action_retorna_receiver_rejeitado() {
-    let src = "action make_channel => Receiver::Int\n  let (tx, rx) := channel!()\n  rx\nmake_channel!()";
+    let src =
+        "action make_channel => Receiver::Int\n  let (tx, rx) := channel!()\n  rx\nmake_channel!()";
     let err = infer_src_err(src);
     assert!(
         matches!(err, kata_diagnostics::MiddleError::ChannelInReturn { .. }),

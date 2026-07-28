@@ -159,8 +159,7 @@ pub(crate) fn infer_dot_access(
                         if unify(&oi.params, &arg_types, &oi.type_params, &mut subs).is_ok() {
                             let concrete_ret = apply_subs(&oi.ret, &subs);
                             let expanded_ret = ctx.enum_registry.expand_defaults(&concrete_ret);
-                            found =
-                                Some((expanded_ret, oi.ffi_symbol.clone(), oi.params.clone()));
+                            found = Some((expanded_ret, oi.ffi_symbol.clone(), oi.params.clone()));
                             break;
                         }
                     }

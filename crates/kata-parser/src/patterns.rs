@@ -66,10 +66,7 @@ impl Parser {
                         self.advance(); // consume ::
                         let ty = self.parse_type_expr()?;
                         let span = start.cover(ty.span);
-                        return Ok(Spanned::new(
-                            Pattern::TypedIdent { name, ty },
-                            span,
-                        ));
+                        return Ok(Spanned::new(Pattern::TypedIdent { name, ty }, span));
                     }
 
                     let variant = variant.clone();

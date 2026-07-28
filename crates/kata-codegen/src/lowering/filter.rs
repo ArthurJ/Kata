@@ -74,14 +74,7 @@ pub(crate) fn lower_filter(
             let tail_val = ctx.builder.ins().load(I64, flags, current, 8);
 
             // Chama callback(head) → bool (0/1)
-            let pred = call_callback(
-                callback_val,
-                &[head_val],
-                &cb_params,
-                &cb_ret,
-
-                ctx,
-            )?;
+            let pred = call_callback(callback_val, &[head_val], &cb_params, &cb_ret, ctx)?;
             let pred_i64 = ensure_i64(ctx, pred);
             let is_true = ctx.builder.ins().icmp_imm(
                 cranelift_codegen::ir::condcodes::IntCC::NotEqual,
@@ -137,14 +130,7 @@ pub(crate) fn lower_filter(
             let elem_val = ctx.builder.ins().load(I64, flags, elem_ptr, 0);
             let elem_val = ensure_f64_if(ctx, elem_val, elem_ty);
 
-            let pred = call_callback(
-                callback_val,
-                &[elem_val],
-                &cb_params,
-                &cb_ret,
-
-                ctx,
-            )?;
+            let pred = call_callback(callback_val, &[elem_val], &cb_params, &cb_ret, ctx)?;
             let pred_i64 = ensure_i64(ctx, pred);
             let is_true = ctx.builder.ins().icmp_imm(
                 cranelift_codegen::ir::condcodes::IntCC::NotEqual,
@@ -190,14 +176,7 @@ pub(crate) fn lower_filter(
             ctx.builder.switch_to_block(continue_block);
             let elem_val = ensure_f64_if(ctx, current, elem_ty);
 
-            let pred = call_callback(
-                callback_val,
-                &[elem_val],
-                &cb_params,
-                &cb_ret,
-
-                ctx,
-            )?;
+            let pred = call_callback(callback_val, &[elem_val], &cb_params, &cb_ret, ctx)?;
             let pred_i64 = ensure_i64(ctx, pred);
             let is_true = ctx.builder.ins().icmp_imm(
                 cranelift_codegen::ir::condcodes::IntCC::NotEqual,

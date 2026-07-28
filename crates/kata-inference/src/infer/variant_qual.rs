@@ -123,7 +123,8 @@ fn variant_index_qual(
     variant: &str,
 ) -> Option<usize> {
     if let Some(o) = origin {
-        ctx.enum_registry.variant_index_with_origin(o, name, variant)
+        ctx.enum_registry
+            .variant_index_with_origin(o, name, variant)
     } else {
         ctx.enum_registry.variant_index(name, variant)
     }
@@ -175,8 +176,7 @@ pub(crate) fn infer_variant_qual(
                 // TODO: produzir VariantConstruct com payload = literal do fixed_value.
                 // Por ora, VariantQual (sem payload) — o codegen precisaria do valor.
                 // Isso é uma implementação parcial; o caso genérico + fixed_value é raro.
-                let type_params =
-                    type_params_of_qual(ctx, origin, name).expect("is_generic true");
+                let type_params = type_params_of_qual(ctx, origin, name).expect("is_generic true");
                 let type_args: Vec<Ty> = type_params.iter().map(|p| Ty::Var(p.clone())).collect();
                 let result_ty = Ty::Generic(name.clone(), type_args);
                 return Ok(Some((
@@ -205,8 +205,7 @@ pub(crate) fn infer_variant_qual(
             // Para variantes unitárias de enum genérico (Optional::None),
             // não há arg para inferir os type params. Produz Ty::Generic
             // com type_args como Ty::Var (não-inferido).
-            let type_params =
-                type_params_of_qual(ctx, origin, name).expect("is_generic true");
+            let type_params = type_params_of_qual(ctx, origin, name).expect("is_generic true");
             let type_args: Vec<Ty> = type_params.iter().map(|p| Ty::Var(p.clone())).collect();
             let result_ty = Ty::Generic(name.clone(), type_args);
             Ok(Some((
@@ -235,9 +234,8 @@ pub(crate) fn infer_variant_qual(
                         span: (*span).into(),
                     }
                 })?;
-                let payload_ty =
-                    payload_ty_qual(ctx, origin, name, variant)
-                        .expect("fixed_value implica payload_ty inferido");
+                let payload_ty = payload_ty_qual(ctx, origin, name, variant)
+                    .expect("fixed_value implica payload_ty inferido");
                 // Constrói TypedExpr do literal a partir do texto bruto.
                 let payload = build_fixed_payload(fixed_text, payload_ty, *span);
                 return Ok(Some((

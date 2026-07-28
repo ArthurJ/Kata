@@ -13,12 +13,12 @@ use cranelift_module::{Linkage, Module};
 use kata_core::ty::Ty;
 use kata_inference::{CaptureInfo, TypedFunction, TypedLambdaClause, TypedLogSpec};
 
+use super::LowerCtx;
+use super::backend::ModuleBackend;
 use super::clause::{
     all_patterns_are_ident, bind_patterns_to_params, lower_clause_body, lower_clause_chain,
     lower_with_bindings,
 };
-use super::LowerCtx;
-use super::backend::ModuleBackend;
 use super::log::inject_log;
 use super::module::{CodegenError, FuncKey, StringTable};
 use crate::metadata::MetadataTable;
@@ -65,9 +65,13 @@ pub(crate) fn declare_kata_function(
     // Funções nomeadas não têm captures — recebem dummy (iconst 0).
     sig.params.push(AbiParam::new(I64));
     for pt in &func.param_types {
-        sig.params.push(AbiParam::new(super::resolve_clif_ty(pt, struct_registry)));
+        sig.params
+            .push(AbiParam::new(super::resolve_clif_ty(pt, struct_registry)));
     }
-    sig.returns.push(AbiParam::new(super::resolve_clif_ty(&func.ret_ty, struct_registry)));
+    sig.returns.push(AbiParam::new(super::resolve_clif_ty(
+        &func.ret_ty,
+        struct_registry,
+    )));
     module
         .declare_function(cranelift_name, Linkage::Export, &sig)
         .map_err(|e| CodegenError::Cranelift(format!("declare kata fn {}: {e}", func.name)))
@@ -106,9 +110,13 @@ pub(crate) fn define_function_body(
         // distinguir box_ptr de fn_ptr no call site.
         sig.params.push(AbiParam::new(I64)); // box_ptr
         for pt in param_types {
-            sig.params.push(AbiParam::new(super::resolve_clif_ty(pt, struct_registry)));
+            sig.params
+                .push(AbiParam::new(super::resolve_clif_ty(pt, struct_registry)));
         }
-        sig.returns.push(AbiParam::new(super::resolve_clif_ty(ret_ty, struct_registry)));
+        sig.returns.push(AbiParam::new(super::resolve_clif_ty(
+            ret_ty,
+            struct_registry,
+        )));
         func_ir.signature = sig;
 
         // Declara FFI e funções Kata no Function.

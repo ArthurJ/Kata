@@ -92,7 +92,6 @@ pub(crate) fn lower_fused_stream(
                 &stage_callbacks,
                 &stage_params,
                 &stage_rets,
-
                 ctx,
             )?;
 
@@ -165,7 +164,6 @@ pub(crate) fn lower_fused_stream(
                 &stage_callbacks,
                 &stage_params,
                 &stage_rets,
-
                 ctx,
             )?;
 
@@ -227,7 +225,6 @@ pub(crate) fn lower_fused_stream(
                 &stage_callbacks,
                 &stage_params,
                 &stage_rets,
-
                 ctx,
             )?;
 

@@ -47,7 +47,8 @@ pub(crate) fn infer_variant_construct(
 
     // Verifica que o enum e a variante existem.
     let variant_exists = if let Some(o) = origin {
-        ctx.enum_registry.is_variant_with_origin(o, enum_name, variant)
+        ctx.enum_registry
+            .is_variant_with_origin(o, enum_name, variant)
     } else {
         ctx.enum_registry.is_variant(enum_name, variant)
     };
@@ -60,7 +61,8 @@ pub(crate) fn infer_variant_construct(
 
     // Variante constante: não aceita argumentos — o valor é fixo.
     let fixed = if let Some(o) = origin {
-        ctx.enum_registry.fixed_value_with_origin(o, enum_name, variant)
+        ctx.enum_registry
+            .fixed_value_with_origin(o, enum_name, variant)
     } else {
         ctx.enum_registry.fixed_value(enum_name, variant)
     };
@@ -77,7 +79,8 @@ pub(crate) fn infer_variant_construct(
 
     // Verifica que a variante tem payload.
     let payload_ty = if let Some(o) = origin {
-        ctx.enum_registry.payload_ty_with_origin(o, enum_name, variant)
+        ctx.enum_registry
+            .payload_ty_with_origin(o, enum_name, variant)
     } else {
         ctx.enum_registry.payload_ty(enum_name, variant)
     }
@@ -177,7 +180,8 @@ pub(crate) fn infer_variant_construct(
 
         let result_ty = Ty::Generic(enum_name.to_string(), type_args);
         let tag = if let Some(o) = origin {
-            ctx.enum_registry.variant_index_with_origin(o, enum_name, variant)
+            ctx.enum_registry
+                .variant_index_with_origin(o, enum_name, variant)
         } else {
             ctx.enum_registry.variant_index(enum_name, variant)
         }
@@ -204,7 +208,8 @@ pub(crate) fn infer_variant_construct(
     }
 
     let tag = if let Some(o) = origin {
-        ctx.enum_registry.variant_index_with_origin(o, enum_name, variant)
+        ctx.enum_registry
+            .variant_index_with_origin(o, enum_name, variant)
     } else {
         ctx.enum_registry.variant_index(enum_name, variant)
     }

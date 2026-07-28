@@ -100,19 +100,13 @@ impl RefinesRegistry {
             None => return &[],
         };
         let key = (origin.to_string(), type_name.to_string());
-        self.entries
-            .get(&key)
-            .map(|v| v.as_slice())
-            .unwrap_or(&[])
+        self.entries.get(&key).map(|v| v.as_slice()).unwrap_or(&[])
     }
 
     /// `get` com origin explícita.
     pub fn get_with_origin(&self, origin: &str, type_name: &str) -> &[RefinesEntry] {
         let key = (origin.to_string(), type_name.to_string());
-        self.entries
-            .get(&key)
-            .map(|v| v.as_slice())
-            .unwrap_or(&[])
+        self.entries.get(&key).map(|v| v.as_slice()).unwrap_or(&[])
     }
 
     /// Verifica se um tipo tem delegações `refines`.

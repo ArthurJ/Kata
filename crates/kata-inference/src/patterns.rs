@@ -33,8 +33,14 @@ pub(crate) fn check_pattern(
     env: &mut TypeEnv,
     iface_registry: &kata_core::InterfaceRegistry,
 ) -> PatternResult<Spanned<TypedPattern>> {
-    let typed =
-        check_pattern_inner(&pat.node, scrutinee_ty, enum_registry, env, &pat.span, iface_registry)?;
+    let typed = check_pattern_inner(
+        &pat.node,
+        scrutinee_ty,
+        enum_registry,
+        env,
+        &pat.span,
+        iface_registry,
+    )?;
     Ok(Spanned::new(typed, pat.span))
 }
 
@@ -262,7 +268,14 @@ fn check_pattern_inner(
             }
             let mut typed_elements = Vec::with_capacity(elements.len());
             for (pat, ty) in elements.iter().zip(element_tys.iter()) {
-                let typed = check_pattern_inner(&pat.node, ty, enum_registry, env, &pat.span, iface_registry)?;
+                let typed = check_pattern_inner(
+                    &pat.node,
+                    ty,
+                    enum_registry,
+                    env,
+                    &pat.span,
+                    iface_registry,
+                )?;
                 typed_elements.push(Spanned::new(typed, pat.span));
             }
             Ok(TypedPattern::Tuple {
@@ -284,11 +297,23 @@ fn check_pattern_inner(
                 }
             };
             // head: A, tail: List(A)
-            let typed_head =
-                check_pattern_inner(&head.node, &elem_ty, enum_registry, env, &head.span, iface_registry)?;
+            let typed_head = check_pattern_inner(
+                &head.node,
+                &elem_ty,
+                enum_registry,
+                env,
+                &head.span,
+                iface_registry,
+            )?;
             let tail_ty = Ty::List(Box::new(elem_ty));
-            let typed_tail =
-                check_pattern_inner(&tail.node, &tail_ty, enum_registry, env, &tail.span, iface_registry)?;
+            let typed_tail = check_pattern_inner(
+                &tail.node,
+                &tail_ty,
+                enum_registry,
+                env,
+                &tail.span,
+                iface_registry,
+            )?;
             Ok(TypedPattern::Cons {
                 head: Box::new(Spanned::new(typed_head, head.span)),
                 tail: Box::new(Spanned::new(typed_tail, tail.span)),
