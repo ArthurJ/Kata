@@ -284,7 +284,7 @@ pub(crate) fn infer_action_call(
 
     // Aplica defaults do EnumRegistry no tipo de retorno.
     // O DispatchTable guarda o ret da assinatura (ex: Result::A com arity 1);
-    // expand_defaults preenche E=Text para que a chave do codegen
+    // expand_defaults preenche E|Text para que a chave do codegen
     // (name, params, ret) bata com a action registrada.
     let expanded_ret = ctx.enum_registry.expand_defaults(&overload.ret);
 

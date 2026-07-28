@@ -7,9 +7,9 @@
 //!
 //! Cenário canônico: `Ok(T)` não menciona `E`. Sem inferência bidirecional,
 //! `E` fica como `Ty::Var("E")` não-resolvido. Com a correção, a assinatura
-//! `=> Result::(Int, Text)` propaga `E=Text` para a construção.
+//! `=> Result::(Int, Text)` propaga `E|Text` para a construção.
 
-use kata_core::ty::{PrimTy, Ty};
+use kata_core::ty::Ty;
 use kata_inference::infer_module;
 use kata_lexer::lex;
 use kata_parser::parse;
@@ -86,7 +86,7 @@ fn find_function<'a>(
 /// `Ty::Var("E")`. O typeck rejeitaria porque `Result::(Int, Var("E"))`
 /// ≠ `Result::(Int, Text)`.
 ///
-/// Com a correção, o hint `Some(Result::(Int, Text))` propaga `E=Text`
+/// Com a correção, o hint `Some(Result::(Int, Text))` propaga `E|Text`
 /// para a construção.
 #[test]
 fn ok_em_funcao_nomeada_preenche_e_do_hint() {
@@ -104,7 +104,7 @@ fn ok_em_funcao_nomeada_preenche_e_do_hint() {
 
 /// `err_str :: Text => Result::(Int, Text)` com body `Result::Err msg`.
 ///
-/// `Err msg` infere `E=Text` mas `T` fica `Ty::Var("T")`.
+/// `Err msg` infere `E|Text` mas `T` fica `Ty::Var("T")`.
 /// O hint propaga `T=Int`.
 #[test]
 fn err_em_funcao_nomeada_preenche_t_do_hint() {
@@ -143,7 +143,7 @@ fn match_com_scrutinee_tipado_resolve_type_args() {
 /// O arm `Ok v` constrói `Result::Ok v` — `Ok` menciona `T` mas não `E`.
 /// Sem propagação de hint para o match, `E` ficaria `Var("E")` dentro do arm.
 /// Com a correção, o hint `Result::(Int, Text)` é propagado para o body
-/// do arm e `E=Text` é preenchido.
+/// do arm e `E|Text` é preenchido.
 #[test]
 fn match_arm_construction_recebe_hint_do_contexto() {
     let src = "re_wrap :: Result::(Int, Text) => Result::(Int, Text)\nlambda r: match r\n        Result::Ok v: Result::Ok v\n        Result::Err e: Result::Err e\nre_wrap ((Result::Ok 42)::Result::(Int, Text))";
@@ -181,7 +181,7 @@ fn ok_sem_hint_deixa_e_como_var() {
 /// sobre type params DIFERENTES.
 ///
 /// Scrutinee: `Result::Ok 42` → `Generic("Result", [Int, Text])`.
-/// O default `Err(E=Text)` do prelude preenche E=Text automaticamente.
+/// O default `Err(E|Text)` do prelude preenche E|Text automaticamente.
 /// Arm `Ok v`: constrói `Result::Ok v` → `Generic("Result", [Int, Text])`.
 /// Arm `Err e`: `e` tem tipo `Text` (do default), constrói
 /// `Result::Err e` → `Generic("Result", [Var("T"), Text])`.
@@ -196,7 +196,7 @@ fn match_arms_complementares_unificam_t_mas_e_fica_var() {
     let tmod = infer_src(src);
     let entry = &tmod.entry.node;
     // T é resolvido (Int) pela unificação entre arms.
-    // E é Text (default do prelude `Err(E=Text)`).
+    // E é Text (default do prelude `Err(E|Text)`).
     assert_eq!(
         entry.ty,
         Ty::Generic("Result".into(), vec![Ty::int(), Ty::text()])

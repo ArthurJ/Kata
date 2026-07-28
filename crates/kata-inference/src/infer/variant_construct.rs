@@ -175,7 +175,7 @@ pub(crate) fn infer_variant_construct(
         }
 
         // Preenche type params não-inferidos com defaults do EnumRegistry.
-        // Ex: Result com default E=Text. Se E ainda é Var("E") após hint,
+        // Ex: Result com default E|Text. Se E ainda é Var("E") após hint,
         // e o enum tem default para E, usa o default.
         let defaults = if let Some(o) = origin {
             ctx.enum_registry.defaults_of_with_origin(o, enum_name)

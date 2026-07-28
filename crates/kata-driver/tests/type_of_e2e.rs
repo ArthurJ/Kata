@@ -178,14 +178,14 @@ fn type_of_generic_one_param() {
 // ── DoD 10: type!(Result::Ok 42) retorna "Result::(Int, Text)" ────
 
 /// `type!(r)` onde `r := Result::Ok 42` → "Result::(Int, Text)".
-/// O default `Err(E=Text)` do prelude preenche E=Text automaticamente.
+/// O default `Err(E|Text)` do prelude preenche E|Text automaticamente.
 #[test]
 fn type_of_generic_two_params() {
     let src = "action main => Unit\n    let r := Result::Ok 42\n    echo!(type!(r))\nmain!()";
     let first = build_and_get_first_line("type_of_generic_two", src);
     assert_eq!(
         first, "Result::(Int, Text)",
-        "type!(r) deve imprimir \"Result::(Int, Text)\" — E=Text via default"
+        "type!(r) deve imprimir \"Result::(Int, Text)\" — E|Text via default"
     );
 }
 

@@ -182,7 +182,7 @@ fn some_desqualificado_com_apply() {
 #[test]
 fn ok_desqualificado_com_apply() {
     // `Ok 42` desqualificado → Result::Ok(42)
-    // O default `Err(E=Text)` preenche E=Text.
+    // O default `Err(E|Text)` preenche E|Text.
     let (_, ty) = eval_src("Ok 42");
     assert_eq!(
         ty,

@@ -9,7 +9,7 @@ use kata_inference::Substitutions;
 
 /// Gera uma string canônica para um mapa de substitutions.
 ///
-/// Ordena por nome do type param para que `T=Int, E=Text` e `E=Text, T=Int`
+/// Ordena por nome do type param para que `T=Int, E|Text` e `E|Text, T=Int`
 /// produzam a mesma chave.
 pub(crate) fn canonicalize_subs(type_params: &[String], subs: &Substitutions) -> String {
     let mut parts: Vec<String> = Vec::new();

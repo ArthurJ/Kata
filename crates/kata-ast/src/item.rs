@@ -152,7 +152,7 @@ pub struct VariantDecl {
     /// Some(ty) = carrega tipo (`Ok(T)`).
     pub payload: Option<Spanned<TypeExpr>>,
     /// Default do type param do payload. None = sem default.
-    /// `Err(E=Text)` → payload = Some(Var("E")), default = Some(Text).
+    /// `Err(E|Text)` → payload = Some(Var("E")), default = Some(Text).
     /// Quando o enum é instanciado com menos type args que o esperado,
     /// os params com default são preenchidos automaticamente.
     pub default: Option<Spanned<TypeExpr>>,

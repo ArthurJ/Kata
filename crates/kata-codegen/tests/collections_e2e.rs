@@ -283,7 +283,7 @@ fn range_float_produz_range_float() {
 /// `?` desempacota o Ok(1) e retorna 1.
 ///
 /// O tipo de retorno da action deve ser `Result::(Int, Text)` — o `at`
-/// retorna `Result::A` (arity 1) e o default `Err(E=Text)` preenche E=Text.
+/// retorna `Result::A` (arity 1) e o default `Err(E|Text)` preenche E|Text.
 /// O `?` desempacota o `Ok(1)` (produz `Int`), e o fallback
 /// final `Result::Ok 0` produz o `Result::(Int, Text)` de retorno.
 #[test]

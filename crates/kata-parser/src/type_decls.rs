@@ -250,12 +250,12 @@ impl Parser {
 
             // Disambiguação payload vs predicado vs valor fixo.
             // `Ok(Int)` → payload = Some(TypeExpr), predicate = None, fixed = None
-            // `Err(E=Text)` → payload = Some(Var("E")), default = Some(Text)
+            // `Err(E|Text)` → payload = Some(Var("E")), default = Some(Text)
             // `Magreza(< _ 18.5)` → payload = None, predicate = Some(Expr), fixed = None
             // `OK(200)` → payload = None, predicate = None, fixed = Some(Expr)
             // Disambiguação: após `(`, se primeiro token é operador de comparação
             // ou `_` (Hole), é predicado. Se é literal (Int, Float, Text), é valor fixo.
-            // Senão é payload (type expr). Após o payload, se ver `=`, parsear default.
+            // Senão é payload (type expr). Após o payload, se ver `|`, parsear default.
             let (payload, default, predicate, fixed_value) = if matches!(self.peek(), Token::LParen)
             {
                 self.advance(); // consume (
@@ -269,9 +269,9 @@ impl Parser {
                     (None, None, None, Some(val))
                 } else {
                     let ty = self.parse_type_expr()?;
-                    // `Err(E=Text)` — após o payload, se ver `=`, parsear default.
-                    let default = if matches!(self.peek(), Token::Ident(s) if s == "=") {
-                        self.advance(); // consume =
+                    // `Err(E|Text)` — após o payload, se ver `|`, parsear default.
+                    let default = if matches!(self.peek(), Token::Pipe) {
+                        self.advance(); // consume |
                         let default_ty = self.parse_type_expr()?;
                         Some(default_ty)
                     } else {

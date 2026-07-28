@@ -124,7 +124,7 @@ fn count_match_in_module(typed: &kata_inference::TypedModule) -> usize {
 /// DoD 20: `?` em `Result::Ok 42` desempacota o valor (42) e continua.
 /// A action retorna `Result::(Int, Text)` — o `?` desempacota, e o body
 /// continua com `Result::Ok 0`. O resultado final é `Ok(0)`.
-/// E=Text é o default do prelude (`Err(E=Text)`).
+/// E|Text é o default do prelude (`Err(E|Text)`).
 #[test]
 fn question_desempacota_result_ok() {
     let src = r#"action extrai => Result::(Int, Text)
@@ -149,7 +149,7 @@ extrai!()"#;
 /// DoD 20: `?` em `Result::Err 99` aborta com `return Err(99)`.
 /// A action retorna `Result::(Int, Text)` — o `?` aborta, o body
 /// não continua. O resultado final é `Err(99)`.
-/// E=Text é o default do prelude (`Err(E=Text)`).
+/// E|Text é o default do prelude (`Err(E|Text)`).
 #[test]
 fn question_aborta_result_err() {
     let src = r#"action extrai => Result::(Int, Text)

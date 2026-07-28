@@ -81,7 +81,7 @@ fn untag_smi(raw: i64) -> i64 {
 }
 
 /// DoD 19: `Result::Ok 42` com Result do prelude (não definido pelo usuário).
-/// O typeck infere T=Int do argumento e o default preenche E=Text.
+/// O typeck infere T=Int do argumento e o default preenche E|Text.
 /// O arm Err precisa retornar Int (não e:Text) para unificar com Ok.
 #[test]
 fn result_ok_do_prelude() {
@@ -140,7 +140,7 @@ fn result_com_tipos_diferentes() {
 }
 
 /// DoD 19: Match em Result dentro de uma Action.
-/// E=Text (default), arm Err retorna Int para unificar.
+/// E|Text (default), arm Err retorna Int para unificar.
 #[test]
 fn result_dentro_de_action() {
     let src = r#"action extrai_ok => Int

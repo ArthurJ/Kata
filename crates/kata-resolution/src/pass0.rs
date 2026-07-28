@@ -242,7 +242,7 @@ pub(crate) fn run_pass0(
 
                 // Se variantes têm payloads Ty::Var (type params),
                 // registrar como enum genérico. Coleta type params dos payloads.
-                // Também coleta defaults: se um variant tem `default` (ex: `Err(E=Text)`),
+                // Também coleta defaults: se um variant tem `default` (ex: `Err(E|Text)`),
                 // o type param do payload tem aquele default.
                 let mut type_params: Vec<String> = Vec::new();
                 let mut defaults: Vec<Option<Ty>> = Vec::new();

@@ -1,13 +1,13 @@
-//! Testes E2E de default type params — `Err(E=Text)`.
+//! Testes E2E de default type params — `Err(E|Text)`.
 //!
 //! Pipeline completo: lex → parse → resolve → infer → optimize → codegen → JIT.
 //! Valida que:
 //! - `Result::(Int)` resolve para `Result::(Int, Text)` via default
 //! - `Result::(Int, MyError)` funciona com tipo customizado (não usa default)
-//! - `T?` desaçucar para `Result::(T)` e o default preenche `E=Text`
+//! - `T?` desaçucar para `Result::(T)` e o default preenche `E|Text`
 //! - Construção `Result::Ok 42` sem hint produz `Result::(Int, Text)` via default
-//! - Enum customizado do usuário com defaults (ex: `enum Config { Port(P=Int) }`)
-//! - `at` em Array/List/Text/Dict retorna `Result::A` — default preenche `E=Text`
+//! - Enum customizado do usuário com defaults (ex: `enum Config { Port(P|Int) }`)
+//! - `at` em Array/List/Text/Dict retorna `Result::A` — default preenche `E|Text`
 
 use kata_codegen::jit_eval;
 use kata_core::ty::{PrimTy, Ty};
@@ -86,7 +86,7 @@ fn untag_smi(raw: i64) -> i64 {
     raw >> 1
 }
 
-// ── Result::(Int) na assinatura — default preenche E=Text ────────────
+// ── Result::(Int) na assinatura — default preenche E|Text ────────────
 
 /// `Result::(Int)` na assinatura de action deve resolver para `Result::(Int, Text)`
 /// via default. A action retorna `Result::Ok 42` e o match desempacota.
@@ -128,7 +128,7 @@ main!()"#;
     assert_eq!(untag_smi(raw), 99);
 }
 
-// ── T? desaçucara para Result::(T) — default preenche E=Text ──────────
+// ── T? desaçucara para Result::(T) — default preenche E|Text ──────────
 
 /// `T?` dentro de Action que retorna `Result::(Int, Text)`.
 /// O `?` desempacota `Ok(v)` ou aborta com `return Err(e)`.
@@ -149,7 +149,7 @@ main!()"#;
     );
 }
 
-/// `T?` em action que retorna `Result::(Int)` (1 arg, default E=Text).
+/// `T?` em action que retorna `Result::(Int)` (1 arg, default E|Text).
 #[test]
 fn question_mark_com_result_1_arg_default() {
     let src = r#"action faz_ok => Result::(Int)
@@ -170,7 +170,7 @@ main!()"#;
 // ── Construção sem hint — default preenche na construção do variant ──
 
 /// `Result::Ok 42` sem hint em match top-level.
-/// O default `Err(E=Text)` preenche E=Text automaticamente.
+/// O default `Err(E|Text)` preenche E|Text automaticamente.
 #[test]
 fn result_ok_sem_hint_preenche_default() {
     let src = r#"match (Result::Ok 42)
@@ -183,11 +183,11 @@ fn result_ok_sem_hint_preenche_default() {
 
 // ── Enum customizado do usuário com defaults ────────────────────────
 
-/// `enum Config { Port(P=Int) }` — o usuário declara default em seus próprios enums.
+/// `enum Config { Port(P|Int) }` — o usuário declara default em seus próprios enums.
 #[test]
 fn enum_customizado_com_default() {
     let src = r#"enum Config
-    Port(P=Int)
+    Port(P|Int)
 
 action make_config => Config::(Int)
     Config::Port 8080
@@ -202,9 +202,9 @@ main!()"#;
     assert_eq!(untag_smi(raw), 8080);
 }
 
-// ── at em Array — default preenche E=Text ───────────────────────────
+// ── at em Array — default preenche E|Text ───────────────────────────
 
-/// `at` em Array retorna `Result::A` (1 arg) — default preenche E=Text.
+/// `at` em Array retorna `Result::A` (1 arg) — default preenche E|Text.
 #[test]
 fn at_em_array_retorna_result_com_default() {
     let src = r#"action main => Int
