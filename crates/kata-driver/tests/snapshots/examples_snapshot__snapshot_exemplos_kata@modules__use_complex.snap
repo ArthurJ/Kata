@@ -1,0 +1,11 @@
+---
+source: crates/kata-driver/tests/examples_snapshot.rs
+assertion_line: 100
+expression: output
+---
+(4.0 + 6.0i)
+(-5.0 + 10.0i)
+0
+--- stderr ---
+[resolution] warning: interface 'NUM' não declarada neste módulo (em implements para Complex) — pode estar no prelude
+[resolution] warning: interface 'SHOW' não declarada neste módulo (em implements para Complex) — pode estar no prelude

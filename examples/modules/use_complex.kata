@@ -1,0 +1,16 @@
+# Testa import de tipo exportado (Complex) com interfaces (NUM, SHOW).
+# Complex está em stdlib/complex.kata, implementa NUM e SHOW.
+# O fechamento transitivo do export deve trazer: tipo, impls, interfaces, métodos.
+
+import complex
+
+action main => Int
+    let z := Complex 3.0 4.0
+    let w := Complex 1.0 2.0
+    let soma := + z w
+    echo!(show soma)
+    let produto := * z w
+    echo!(show produto)
+    0
+
+main!()

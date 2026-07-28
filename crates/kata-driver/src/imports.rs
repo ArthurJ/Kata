@@ -122,7 +122,8 @@ fn merge_registries(merged: &mut ResolvedModule, imported: &ResolvedModule) {
         .merge(imported.refines_registry.clone());
 }
 
-/// Registra itens de um módulo importado com nome qualificado `prefix.item`.
+/// Registra itens de um módulo importado com nome qualificado `prefix.item`
+/// e também no escopo direto (não-qualificado).
 ///
 /// Renomeia signatures, functions e actions com o prefixo qualificado.
 /// Isso garante consistência em todos os passes:
@@ -130,13 +131,36 @@ fn merge_registries(merged: &mut ResolvedModule, imported: &ResolvedModule) {
 /// - TypedFunction: func.name = "mod.fn" (infer_module usa func_def.name)
 /// - symbol_table/kata_ids: chave = ("mod.fn", params, ret)
 /// - tree_shaking: fn_names e reached_fns usam "mod.fn"
+///
+/// Além da forma qualificada, traz signatures e functions para o escopo
+/// direto (não-qualificado) para que operadores e métodos de interface
+/// importados sejam encontrados pelo dispatch. Por exemplo, `import complex`
+/// traz `+ :: Complex Complex => Complex` como `+` (escopo direto) além de
+/// `complex.+` (acesso qualificado). O dispatch por tipos escolhe o overload
+/// correto entre prelude e importados.
+///
+/// Colisões: se já existe uma signature com mesmo nome E mesmos tipos
+/// (params + return) no merged, não duplica. Se existe com tipos diferentes,
+/// é um overload legítimo — ambos coexistem.
 fn register_qualified(merged: &mut ResolvedModule, prefix: &str, resolved: &ResolvedModule) {
     for sig in &resolved.signatures {
+        // Forma qualificada: prefix.sig
         let qual_name = format!("{prefix}.{}", sig.name);
         if !merged.signatures.iter().any(|s| s.name == qual_name) {
             let mut qual_sig = sig.clone();
             qual_sig.name = qual_name;
             merged.signatures.push(qual_sig);
+        }
+        // Forma não-qualificada: sig (escopo direto)
+        // Só insere se não existe signature idêntica (nome + tipos).
+        // Overloads de mesmo nome com tipos diferentes coexistem.
+        let dup = merged.signatures.iter().any(|s| {
+            s.name == sig.name
+                && s.param_types == sig.param_types
+                && s.return_type == sig.return_type
+        });
+        if !dup {
+            merged.signatures.push(sig.clone());
         }
     }
     for func in &resolved.functions {
@@ -146,6 +170,15 @@ fn register_qualified(merged: &mut ResolvedModule, prefix: &str, resolved: &Reso
             qual_func.name = qual_name;
             merged.functions.push(qual_func);
         }
+        // Forma não-qualificada — mesmo critério de duplicata.
+        let dup = merged.functions.iter().any(|f| {
+            f.name == func.name
+                && f.param_types == func.param_types
+                && f.return_type == func.return_type
+        });
+        if !dup {
+            merged.functions.push(func.clone());
+        }
     }
     for action in &resolved.actions {
         let qual_name = format!("{prefix}.{}", action.name);
@@ -153,6 +186,10 @@ fn register_qualified(merged: &mut ResolvedModule, prefix: &str, resolved: &Reso
             let mut qual_action = action.clone();
             qual_action.name = qual_name;
             merged.actions.push(qual_action);
+        }
+        // Forma não-qualificada — actions não têm overloads, checa só nome.
+        if !merged.actions.iter().any(|a| a.name == action.name) {
+            merged.actions.push(action.clone());
         }
     }
 }
