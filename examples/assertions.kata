@@ -1,0 +1,20 @@
+# Asserts — @test (diretiva de teste) + assert! (builtin de abort).
+# @test anota actions para o runner `kata test`. assert!(cond) aborta se False.
+# Actions com @test precisam ser alcançadas pelo entry point (tree shaking).
+
+@test("soma correta")
+action testar_soma => Int
+    let soma := + 10 20
+    assert!(= soma 30, "Soma deveria ser 30")
+    let is_maior := > soma 15
+    assert!(is_maior, "A soma deveria ser maior que 15")
+    0
+
+@test("igualdade de valores puros")
+action testar_igualdade => Boolean
+    = 10 10
+
+# Entry point — chama as actions para que o tree shaking as preserve.
+# kata run executa o entry point; kata test descobre e executa os @test.
+testar_soma!()
+testar_igualdade!()

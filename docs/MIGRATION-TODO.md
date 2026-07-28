@@ -46,9 +46,16 @@ valor didático × esforço.
 - **Diferenças do legacy:** `@log` usa `msg` (não `format`), `when` obrigatório, `{expr}` interpola expressão do escopo (não placeholders mágicos). `log_recv!("topic")` substitui `log_subscribe!()` + `<! rx`. `$()` removido — chamadas diretas. `mock_math` em `examples/modules/` (não legacy).
 - **Status:** ✅ Concluído (2026-07-28). 1146 testes passando.
 
-### Cluster 6 — `@test` + `assert!`
-- **Candidato legacy:** `test_assert.kata`
-- **Problemas:** `assert_eq!` não existe no manual moderno (só `assert!` 1 ou 2 args); `test_pure_equality` usa `() => Bool` em assinatura (legado). Migração direta impossível sem decisão de design.
+### Cluster 6 — `@test` + `assert!` ✅ Concluído
+- **Candidato legacy:** `test_assert.kata` — mantido em legacy como referência
+- **Destino:** `assertions.kata`
+- **`assertions.kata`:** ✅ Criado (2026-07-28). Demonstra `@test("desc")` em actions (runner `kata test`), `assert!(cond)` com 1 arg, `assert!(cond, "msg")` com 2 args. Duas actions de teste: `testar_soma` (asserts em soma e comparação), `testar_igualdade` (retorno de `=`). Entry point chama ambas para preservá-las no tree shaking. Snapshot adicionado.
+- **Decisões:**
+  - `assert_eq!` não implementado — traduzido para `assert!(= a b, "msg")` (opção A: zero mudança no compilador).
+  - `@test` em função pura não suportado pelo PRD-fio14 (limitação deliberada: "apenas actions"). `test_pure_equality :: () => Bool` traduzido para `action testar_igualdade => Boolean`.
+  - `Bool` do legacy → `Boolean` do Kata5 (enum do prelude).
+  - Actions com `@test` precisam ser alcançadas pelo entry point — tree shaking remove as não alcançadas mesmo com `preserve_tests`.
+- **Status:** ✅ Concluído (2026-07-28). 1146 testes passando.
 
 ### Cluster 7 — Closure escape + tipo função `->`
 - **Candidato legacy:** `test_make_adder_typed.kata`
