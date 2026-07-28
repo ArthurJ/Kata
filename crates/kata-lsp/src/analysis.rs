@@ -39,8 +39,14 @@ pub(crate) fn run_frontend(
     // 1. Lex
     let tokens = kata_lexer::lex(source).map_err(|e| vec![FrontendError::Lex(e)])?;
 
-    // 2. Parse
-    let module = kata_parser::parse(tokens).map_err(|e| vec![FrontendError::Parse(e)])?;
+    // 2. Parse (com recovery — acumula erros de top-level items)
+    let (module, parse_errors) = kata_parser::parse_with_recovery(tokens);
+    if !parse_errors.is_empty() {
+        // Há erros de parse — publica diagnósticos de parse sem continuar
+        // para resolve/infer. Os items válidos no module não são suficientes
+        // para um resolve confiável (símbolos referenciados podem faltar).
+        return Err(parse_errors.into_iter().map(FrontendError::Parse).collect());
+    }
 
     // 3. Resolve (prelude + módulo do usuário)
     let prelude = kata_resolution::load_prelude().map_err(|e| vec![FrontendError::Resolve(e)])?;

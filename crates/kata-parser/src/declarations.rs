@@ -110,6 +110,169 @@ impl Parser {
         Ok(Module { items })
     }
 
+    /// Parse module com error recovery de top-level items.
+    ///
+    /// Igual ao `parse_module`, mas quando um item falha, registra o erro
+    /// em `errors` e skipa tokens até o próximo `StmtSep` ou `Eof`, então
+    /// continua. Retorna `Ok(Module)` com os items parseados com sucesso
+    /// (pode ser vazio se tudo falhou) e `Vec<FrontendError>` com os erros.
+    pub(crate) fn parse_module_with_recovery(&mut self) -> (Module, Vec<FrontendError>) {
+        let mut items: Vec<Spanned<Item>> = Vec::new();
+        let mut errors: Vec<FrontendError> = Vec::new();
+
+        while !self.at_eof() {
+            // Skip leading statement separators
+            if matches!(self.peek(), Token::StmtSep) {
+                self.advance();
+                continue;
+            }
+
+            // Collect directives (zero or more @name ... prefixes)
+            let directives = match self.parse_directives() {
+                Ok(d) => d,
+                Err(e) => {
+                    errors.push(e);
+                    self.sync_to_stmt_sep();
+                    continue;
+                }
+            };
+
+            // Skip statement separators that may appear after directives
+            while matches!(self.peek(), Token::StmtSep) {
+                self.advance();
+            }
+
+            if matches!(self.peek(), Token::Eof) {
+                break;
+            }
+
+            let item_start = self.peek_span();
+
+            match self.peek() {
+                Token::Data => match self.parse_data_decl(directives) {
+                    Ok(item) => items.push(Spanned::new(item, item_start)),
+                    Err(e) => {
+                        errors.push(e);
+                        self.sync_to_stmt_sep();
+                    }
+                },
+                Token::Enum => match self.parse_enum_decl(directives) {
+                    Ok(item) => items.push(Spanned::new(item, item_start)),
+                    Err(e) => {
+                        errors.push(e);
+                        self.sync_to_stmt_sep();
+                    }
+                },
+                Token::Alias => match self.parse_alias_decl(directives) {
+                    Ok(item) => items.push(Spanned::new(item, item_start)),
+                    Err(e) => {
+                        errors.push(e);
+                        self.sync_to_stmt_sep();
+                    }
+                },
+                Token::Action => match self.parse_action_decl(directives) {
+                    Ok(item) => items.push(Spanned::new(item, item_start)),
+                    Err(e) => {
+                        errors.push(e);
+                        self.sync_to_stmt_sep();
+                    }
+                },
+                Token::Interface => match self.parse_interface_decl(directives) {
+                    Ok(item) => items.push(Spanned::new(item, item_start)),
+                    Err(e) => {
+                        errors.push(e);
+                        self.sync_to_stmt_sep();
+                    }
+                },
+                Token::Implements => {
+                    errors.push(self.error("expected type name before `implements`"));
+                    self.sync_to_stmt_sep();
+                }
+                Token::Import => match self.parse_import_decl() {
+                    Ok(item) => items.push(Spanned::new(item, item_start)),
+                    Err(e) => {
+                        errors.push(e);
+                        self.sync_to_stmt_sep();
+                    }
+                },
+                Token::Export => match self.parse_export_decl() {
+                    Ok(item) => items.push(Spanned::new(item, item_start)),
+                    Err(e) => {
+                        errors.push(e);
+                        self.sync_to_stmt_sep();
+                    }
+                },
+                Token::Let => match self.parse_let() {
+                    Ok(expr) => {
+                        items.push(Spanned::new(Item::EntryExpr(expr.clone()), expr.span));
+                    }
+                    Err(e) => {
+                        errors.push(e);
+                        self.sync_to_stmt_sep();
+                    }
+                },
+                _ => {
+                    // Signature, implements, refines, ou expression
+                    if self.is_implements_start() {
+                        match self.parse_implements_decl(directives) {
+                            Ok(item) => items.push(Spanned::new(item, item_start)),
+                            Err(e) => {
+                                errors.push(e);
+                                self.sync_to_stmt_sep();
+                            }
+                        }
+                    } else if self.is_refines_start() {
+                        match self.parse_refines_decl(directives) {
+                            Ok(item) => items.push(Spanned::new(item, item_start)),
+                            Err(e) => {
+                                errors.push(e);
+                                self.sync_to_stmt_sep();
+                            }
+                        }
+                    } else if self.is_signature_start() {
+                        match self.parse_sig(directives) {
+                            Ok(item) => items.push(Spanned::new(item, item_start)),
+                            Err(e) => {
+                                errors.push(e);
+                                self.sync_to_stmt_sep();
+                            }
+                        }
+                    } else {
+                        match parse_expr(self) {
+                            Ok(expr) => {
+                                while matches!(self.peek(), Token::StmtSep) {
+                                    self.advance();
+                                }
+                                items.push(Spanned::new(Item::EntryExpr(expr.clone()), expr.span));
+                            }
+                            Err(e) => {
+                                errors.push(e);
+                                self.sync_to_stmt_sep();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        (Module { items }, errors)
+    }
+
+    /// Sincroniza: avança tokens até o próximo `StmtSep` ou `Eof`.
+    fn sync_to_stmt_sep(&mut self) {
+        while !self.at_eof() {
+            match self.peek() {
+                Token::StmtSep => {
+                    self.advance();
+                    break;
+                }
+                _ => {
+                    self.advance();
+                }
+            }
+        }
+    }
+
     /// Check if the current position starts an implements decl:
     /// `Tipo implements IFACE` or `Tipo::(params) implements IFACE`.
     /// Looks ahead past optional `::(params)` to find `implements`.

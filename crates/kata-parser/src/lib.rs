@@ -113,6 +113,21 @@ pub fn parse(tokens: Vec<TokenWithSpan>) -> Result<Module, FrontendError> {
     parser.parse_module()
 }
 
+/// Parse with error recovery — acumula erros de top-level items.
+///
+/// Diferente de `parse`, não aborta no primeiro erro. Quando um item falha,
+/// registra o erro e skipa tokens até o próximo `StmtSep` ou `Eof`, então
+/// continua parseando o próximo item. Retorna sempre `Ok` com:
+/// - `Module` contendo os items parseados com sucesso (pode ser vazio)
+/// - `Vec<FrontendError>` com os erros encontrados (vazio se tudo ok)
+///
+/// Usado pelo LSP para dar múltiplos diagnósticos em um único pass,
+/// mantendo os items válidos para hover mesmo quando há erros.
+pub fn parse_with_recovery(tokens: Vec<TokenWithSpan>) -> (Module, Vec<FrontendError>) {
+    let mut parser = Parser::new(tokens);
+    parser.parse_module_with_recovery()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
