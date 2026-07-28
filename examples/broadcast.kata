@@ -1,0 +1,23 @@
+# Broadcast — pub-sub via broadcast!() e subscribe!().
+# Múltiplos receivers veem apenas o valor mais recente (latest-only).
+# Late subscribers não recebem histórico (future-only).
+
+action main => Int
+    # broadcast!() retorna (sender, receiver-factory)
+    let (tx, subscribe) := broadcast!()
+
+    # criar 2 receivers independentes — cada um com seu próprio last_seen_version
+    let rx1 := subscribe!()
+    let rx2 := subscribe!()
+
+    # enviar 42 — fire-and-forget (não bloqueia)
+    tx !> 42
+
+    # ambos receivers recebem 42 (latest-only)
+    rx1 <! a
+    rx2 <! b
+
+    # retornar o valor recebido por rx2
+    b
+
+main!()
