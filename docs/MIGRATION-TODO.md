@@ -38,10 +38,13 @@ valor didático × esforço.
 - **`broadcast.kata`:** ✅ Criado (2026-07-28). Sintaxe idiomática: `let (tx, subscribe) := broadcast!()` + `subscribe!()` + `tx !> 42` + `rx <! a`. Snapshot adicionado. 1146 testes passando.
 - **`parallel.kata`:** ❌ **Não implementado.** `@parallel` está documentado no sintaxe-mapa (linha 457) e no manual (§6.4), mas **não existe no resolver**. A string "parallel" não aparece em nenhum `.rs` do projeto. O resolver rejeita `@parallel` em actions com `UnknownDirective`. Necessita implementação no resolver antes de ter exemplo.
 
-### Cluster 5 — `@log` + imports (lacuna de diretivas)
-- **Candidatos legacy:** `test_log.kata`, `test_imports.kata`
-- **Destino:** `log_telemetry.kata`, `imports.kata`
-- **Problemas:** `test_log.kata` usa API legada (`log_subscribe!` → `log_recv!` moderno, campos `@log` divergentes: `format` vs `msg`, placeholders `name`/`elapsed` não documentados); `test_imports.kata` depende de `mock_math` módulo legado
+### Cluster 5 — `@log` + imports ✅ Concluído
+- **Candidatos legacy:** `test_log.kata`, `test_imports.kata` — mantidos em legacy como referência
+- **Destino:** `log_telemetry.kata` ✅, `imports.kata` ✅
+- **`log_telemetry.kata`:** ✅ Criado (2026-07-28). Demonstra `@log` (diretiva: `when: "enter"` no prólogo, `when: "exit"` no epílogo, com `topic` e `policy` explícitos), `log!()` (action nativa de publicação explícita), e `log_recv!()` (consumo de três tópicos distintos). Três produtores em fibers separadas via `fork!()`, um consumidor que recebe de "default", "metrics", e "events". Snapshot adicionado.
+- **`imports.kata`:** ✅ Criado (2026-07-28). Demonstra `import modules.mock_math` (WholeModule — acesso via `mock_math.dobrar`) e `import modules.mock_math.(triplicar)` (Selective — `triplicar` no escopo direto). Usa `examples/modules/mock_math.kata` já migrado. Snapshot adicionado.
+- **Diferenças do legacy:** `@log` usa `msg` (não `format`), `when` obrigatório, `{expr}` interpola expressão do escopo (não placeholders mágicos). `log_recv!("topic")` substitui `log_subscribe!()` + `<! rx`. `$()` removido — chamadas diretas. `mock_math` em `examples/modules/` (não legacy).
+- **Status:** ✅ Concluído (2026-07-28). 1146 testes passando.
 
 ### Cluster 6 — `@test` + `assert!`
 - **Candidato legacy:** `test_assert.kata`

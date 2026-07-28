@@ -1,0 +1,40 @@
+# Telemetria — @log (diretiva) + log!() (action nativa) + log_recv!() (consumo).
+# @log injeta publicação no wrapping (prólogo se when: "enter", epílogo se when: "exit").
+# log!() dispara na linha. log_recv!("topic") bloqueia até chegar mensagem.
+
+# @log no prólogo: loga params na entrada (topic default, policy drop)
+@log{msg: "entrada x={x}", when: "enter"}
+action processar (x::Int) => Int
+    + x 1
+
+# @log no epílogo: loga variável do corpo na saída (topic metrics, policy block)
+@log{msg: "resultado r={r}", when: "exit", topic: "metrics", policy: "block"}
+action dobrar (x::Int) => Int
+    let r := * x 2
+    r
+
+# log!() — publicação explícita no corpo (mensagem dinâmica, sem template)
+action anunciar => Unit
+    log!(LogLevel::Warn, "evento-manual", "events")
+    ()
+
+# Consumidor: log_recv!() bloqueia até chegar mensagem de cada tópico
+action consumir => Int
+    let m1 := log_recv!("default")
+    echo!(m1)
+    let m2 := log_recv!("metrics")
+    echo!(m2)
+    let m3 := log_recv!("events")
+    echo!(m3)
+    0
+
+action main => Int
+    # Fork produtores e consumidor em fibers separadas
+    fork!(processar, (41))
+    fork!(dobrar, (21))
+    fork!(anunciar, ())
+    fork!(consumir, ())
+    sleep!(50)
+    0
+
+main!()
