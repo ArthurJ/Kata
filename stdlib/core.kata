@@ -51,6 +51,7 @@ interface NUM implements ORD EQ
     + :: NUM NUM => NUM
     - :: NUM NUM => NUM
     * :: NUM NUM => NUM
+    div :: NUM NUM => Result::NUM
     abs :: NUM => NUM
 
 interface SHOW
@@ -87,6 +88,10 @@ Int implements NUM
     + :: Int Int => Int @ffi("kata_rt_bi_add") @associative(0) @commutative
     - :: Int Int => Int @ffi("kata_rt_bi_sub")
     * :: Int Int => Int @ffi("kata_rt_bi_mul") @associative(1) @commutative
+    div :: Int Int => Result::(Int, Text)
+    lambda a b:
+        = b 0: core.Result::Err "divisão por zero"
+        otherwise: core.Result::Ok (/ a b)
     abs :: Int => Int
     lambda a:
         < a 0: - 0 a
@@ -107,6 +112,10 @@ Float implements NUM
     + :: Float Float => Float @ffi("kata_rt_fadd") @commutative
     - :: Float Float => Float @ffi("kata_rt_fsub")
     * :: Float Float => Float @ffi("kata_rt_fmul") @commutative
+    div :: Float Float => Result::(Float, Text)
+    lambda a b:
+        = b 0.0: core.Result::Err "divisão por zero"
+        otherwise: core.Result::Ok (/ a b)
     abs :: Float => Float
     lambda a:
         < a 0.0: - 0.0 a
@@ -128,6 +137,10 @@ Rational implements NUM
     - :: Rational Rational => Rational @ffi("kata_rt_rat_sub")
     * :: Rational Rational => Rational @ffi("kata_rt_rat_mul") @associative(1) @commutative
     / :: Rational Rational => Rational @ffi("kata_rt_rat_div")
+    div :: Rational Rational => Result::(Rational, Text)
+    lambda a b:
+        = b (from_int 0): core.Result::Err "divisão por zero"
+        otherwise: core.Result::Ok (/ a b)
     abs :: Rational => Rational
     lambda a:
         < a (from_int 0): - (from_int 0) a
@@ -297,22 +310,7 @@ remove :: Dict::(K, V) K => Dict::(K, V)
 / :: Int Int => Int
 
 # Int divisão com verificação — retorna Result
-div :: Int Int => Result::(Int, Text)
-lambda a b:
-    = b 0: core.Result::Err "divisão por zero"
-    otherwise: core.Result::Ok (/ a b)
-
-# Float divisão com verificação — retorna Result
-div :: Float Float => Result::(Float, Text)
-lambda a b:
-    = b 0.0: core.Result::Err "divisão por zero"
-    otherwise: core.Result::Ok (/ a b)
-
-# Rational divisão com verificação — retorna Result
-div :: Rational Rational => Result::(Rational, Text)
-lambda a b:
-    = b (from_int 0): core.Result::Err "divisão por zero"
-    otherwise: core.Result::Ok (/ a b)
+# Agora método da interface NUM: ver implementações acima.
 
 # Float divisão
 @ffi("kata_rt_fdiv")
@@ -320,6 +318,10 @@ lambda a b:
 
 # Int módulo (resto da divisão inteira)
 mod :: Int Int => Int
+lambda a b: - a (* b (/ a b))
+
+# Int módulo seguro — exige NonZero (não pânica em zero)
+mod :: Int NonZero => Int
 lambda a b: - a (* b (/ a b))
 
 # AND lógico (Boolean é enum True/False, sem operador nativo)
