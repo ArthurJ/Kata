@@ -87,4 +87,14 @@ pub enum FrontendError {
         #[label]
         span: MietteSpan,
     },
+
+    #[error("nome `{name}` deve ser {expected_casing}, mas está em {found_casing}")]
+    #[diagnostic(code = "parse.invalid_casing")]
+    InvalidCasing {
+        name: String,
+        expected_casing: String,
+        found_casing: String,
+        #[label]
+        span: MietteSpan,
+    },
 }

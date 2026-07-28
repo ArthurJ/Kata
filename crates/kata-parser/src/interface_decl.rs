@@ -4,6 +4,7 @@ use kata_ast::{Directive, ImplMethod, InterfaceSig, Item, Token};
 use kata_diagnostics::FrontendError;
 
 use crate::Parser;
+use crate::CasingPattern;
 
 impl Parser {
     /// `interface NOME implements SUPER1 SUPER2 ...` + bloco indentado
@@ -26,8 +27,10 @@ impl Parser {
 
         let name = match self.peek() {
             Token::Ident(s) => {
+                let span = self.peek_span();
                 let n = s.clone();
                 self.advance();
+                self.validate_name(&n, CasingPattern::AllCaps, span)?;
                 n
             }
             _ => return Err(self.error("interface name after `interface`")),
@@ -48,8 +51,10 @@ impl Parser {
                     loop {
                         let pname = match self.peek() {
                             Token::Ident(s) => {
+                                let span = self.peek_span();
                                 let n = s.clone();
                                 self.advance();
+                                self.validate_name(&n, CasingPattern::PascalCase, span)?;
                                 n
                             }
                             _ => return Err(self.error("type param name")),
@@ -71,8 +76,10 @@ impl Parser {
                 // `ITERABLE::A` — single param sem parênteses.
                 let pname = match self.peek() {
                     Token::Ident(s) => {
+                        let span = self.peek_span();
                         let n = s.clone();
                         self.advance();
+                        self.validate_name(&n, CasingPattern::PascalCase, span)?;
                         n
                     }
                     _ => return Err(self.error("type param name after `::`")),
@@ -91,7 +98,10 @@ impl Parser {
             while !matches!(self.peek(), Token::Indent | Token::Eof | Token::StmtSep) {
                 match self.peek() {
                     Token::Ident(s) => {
-                        supertraits.push(s.clone());
+                        let span = self.peek_span();
+                        let n = s.clone();
+                        self.validate_name(&n, CasingPattern::AllCaps, span)?;
+                        supertraits.push(n);
                         self.advance();
                     }
                     _ => break,
@@ -113,8 +123,13 @@ impl Parser {
             // Assinatura: `name :: Type1 Type2 ... => RetType`
             let sig_name = match self.peek() {
                 Token::Ident(s) => {
+                    let span = self.peek_span();
                     let n = s.clone();
                     self.advance();
+                    // Validar casing apenas para nomes alfabéticos (não símbolos como +, -, *)
+                    if n.chars().next().is_some_and(|c| c.is_alphabetic()) {
+                        self.validate_name(&n, CasingPattern::SnakeCase, span)?;
+                    }
                     n
                 }
                 _ => return Err(self.error("method name in interface")),
@@ -169,8 +184,10 @@ impl Parser {
         // Nome do tipo (primeiro token)
         let type_name = match self.peek() {
             Token::Ident(s) => {
+                let span = self.peek_span();
                 let n = s.clone();
                 self.advance();
+                self.validate_name(&n, CasingPattern::PascalCase, span)?;
                 n
             }
             _ => return Err(self.error("type name before `implements`")),
@@ -189,8 +206,10 @@ impl Parser {
                     loop {
                         let pname = match self.peek() {
                             Token::Ident(s) => {
+                                let span = self.peek_span();
                                 let n = s.clone();
                                 self.advance();
+                                self.validate_name(&n, CasingPattern::PascalCase, span)?;
                                 n
                             }
                             _ => return Err(self.error("type param name")),
@@ -212,8 +231,10 @@ impl Parser {
                 // `List::A` — single param sem parênteses.
                 let pname = match self.peek() {
                     Token::Ident(s) => {
+                        let span = self.peek_span();
                         let n = s.clone();
                         self.advance();
+                        self.validate_name(&n, CasingPattern::PascalCase, span)?;
                         n
                     }
                     _ => return Err(self.error("type param name after `::`")),
@@ -230,8 +251,10 @@ impl Parser {
         // Nome da interface
         let interface_name = match self.peek() {
             Token::Ident(s) => {
+                let span = self.peek_span();
                 let n = s.clone();
                 self.advance();
+                self.validate_name(&n, CasingPattern::AllCaps, span)?;
                 n
             }
             _ => return Err(self.error("interface name after `implements`")),
@@ -250,8 +273,10 @@ impl Parser {
                     loop {
                         let pname = match self.peek() {
                             Token::Ident(s) => {
+                                let span = self.peek_span();
                                 let n = s.clone();
                                 self.advance();
+                                self.validate_name(&n, CasingPattern::PascalCase, span)?;
                                 n
                             }
                             _ => return Err(self.error("iface param name")),
@@ -273,8 +298,10 @@ impl Parser {
                 // `ITERABLE::A` — single param sem parênteses.
                 let pname = match self.peek() {
                     Token::Ident(s) => {
+                        let span = self.peek_span();
                         let n = s.clone();
                         self.advance();
+                        self.validate_name(&n, CasingPattern::PascalCase, span)?;
                         n
                     }
                     _ => return Err(self.error("iface param name after `::`")),
@@ -299,8 +326,12 @@ impl Parser {
             // Assinatura: `name :: Type1 Type2 ... => RetType [@ffi(...)]`
             let method_name = match self.peek() {
                 Token::Ident(s) => {
+                    let span = self.peek_span();
                     let n = s.clone();
                     self.advance();
+                    if n.chars().next().is_some_and(|c| c.is_alphabetic()) {
+                        self.validate_name(&n, CasingPattern::SnakeCase, span)?;
+                    }
                     n
                 }
                 _ => return Err(self.error("method name in implements")),
@@ -375,8 +406,10 @@ impl Parser {
         // Nome do tipo refined
         let type_name = match self.peek() {
             Token::Ident(s) => {
+                let span = self.peek_span();
                 let n = s.clone();
                 self.advance();
+                self.validate_name(&n, CasingPattern::PascalCase, span)?;
                 n
             }
             _ => return Err(self.error("type name before `refines`")),
@@ -388,8 +421,10 @@ impl Parser {
         // Nome da interface
         let interface_name = match self.peek() {
             Token::Ident(s) => {
+                let span = self.peek_span();
                 let n = s.clone();
                 self.advance();
+                self.validate_name(&n, CasingPattern::AllCaps, span)?;
                 n
             }
             _ => return Err(self.error("interface name after `refines`")),
@@ -416,8 +451,12 @@ impl Parser {
                 // Assinatura: `name :: Type1 Type2 ... => RetType [@ffi(...)]`
                 let method_name = match self.peek() {
                     Token::Ident(s) => {
+                        let span = self.peek_span();
                         let n = s.clone();
                         self.advance();
+                        if n.chars().next().is_some_and(|c| c.is_alphabetic()) {
+                            self.validate_name(&n, CasingPattern::SnakeCase, span)?;
+                        }
                         n
                     }
                     _ => return Err(self.error("method name in refines")),

@@ -731,7 +731,27 @@ export + - TipoX                              # itens separados por espaço, ví
 export tipos.(Int Float Boolean)              # reexportação: MOD.(itens) — parênteses só para o grupo
 ```
 
-Sem `()` externo — itens são separados por espaço. `()` só é usado para reexportar itens de um submódulo (`export MOD.(itens)`).
+Sem `()` externo — itens são separados por espaço. `()` só é usado para reexportar itens de um sub-módulo (`export MOD.(itens)`).
+
+---
+
+## Convenções de Casing (Enforced)
+
+O parser valida a capitalização de todos os nomes no momento do parse. A violação constitui erro fatal de compilação (`parse.invalid_casing`).
+
+| Padrão | Categoria | Exemplos |
+|---|---|---|
+| **PascalCase** | Tipos (`data`), Enums, Enum variants, Refined types, Alias targets, Type params de struct/enum/interface | `Pessoa`, `Boolean`, `True`, `PositiveInt`, `Text`, `A` |
+| **snake_case** | Funções (`sig`), Actions, Variáveis (`let`, lambda params), Campos de struct, Parâmetros de action, Nomes de método em interface/implements/refines | `soma_valores`, `main`, `nome`, `x`, `_print` |
+| **ALL_CAPS** | Interfaces, Supertraits | `NUM`, `ORD`, `SHOW`, `HASH` |
+
+### Regras
+
+1. **Nomes simbólicos** (`+`, `-`, `*`, `<`, `>`, `=`) não são validados — são operadores, não identificadores alfabéticos.
+2. **Prefixo `_`** é aceito em snake_case (convenção para internals/builtins: `_print`, `_println`).
+3. **Prelude** não é isento — todo código Kata5 segue as mesmas regras.
+4. **Type params de interface** seguem PascalCase (aceitam tanto single-letter `A`, `K` quanto nomes de tipos concretos `Text`).
+5. **Mensagens de erro** em Português: `nome "X" deve be PascalCase, mas está em snake_case`.
 
 ---
 

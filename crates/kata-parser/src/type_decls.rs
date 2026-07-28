@@ -9,6 +9,7 @@ use kata_diagnostics::FrontendError;
 
 use crate::Parser;
 use crate::expressions::parse_expr;
+use crate::CasingPattern;
 
 impl Parser {
     pub(crate) fn parse_data_decl(
@@ -26,8 +27,10 @@ impl Parser {
 
         let name = match self.peek() {
             Token::Ident(s) => {
+                let span = self.peek_span();
                 let n = s.clone();
                 self.advance();
+                self.validate_name(&n, CasingPattern::PascalCase, span)?;
                 n
             }
             _ => return Err(self.error("type name after `data`")),
@@ -83,8 +86,10 @@ impl Parser {
         self.expect(&Token::As, "`as` in refined declaration")?;
         let name = match self.peek() {
             Token::Ident(s) => {
+                let span = self.peek_span();
                 let n = s.clone();
                 self.advance();
+                self.validate_name(&n, CasingPattern::PascalCase, span)?;
                 n
             }
             _ => return Err(self.error("type name after `as`")),
@@ -141,8 +146,10 @@ impl Parser {
         self.expect(&Token::Alias, "`alias`")?;
         let target = match self.peek() {
             Token::Ident(s) => {
+                let span = self.peek_span();
                 let n = s.clone();
                 self.advance();
+                self.validate_name(&n, CasingPattern::PascalCase, span)?;
                 n
             }
             _ => return Err(self.error("target type name after `alias`")),
@@ -150,8 +157,10 @@ impl Parser {
         self.expect(&Token::As, "`as`")?;
         let new_name = match self.peek() {
             Token::Ident(s) => {
+                let span = self.peek_span();
                 let n = s.clone();
                 self.advance();
+                self.validate_name(&n, CasingPattern::PascalCase, span)?;
                 n
             }
             _ => return Err(self.error("new name after `as`")),
@@ -176,8 +185,10 @@ impl Parser {
         loop {
             let name = match self.peek() {
                 Token::Ident(s) => {
+                    let span = self.peek_span();
                     let n = s.clone();
                     self.advance();
+                    self.validate_name(&n, CasingPattern::SnakeCase, span)?;
                     n
                 }
                 _ => return Err(self.error("field name")),
@@ -202,8 +213,10 @@ impl Parser {
         self.expect(&Token::Enum, "`enum`")?;
         let name = match self.peek() {
             Token::Ident(s) => {
+                let span = self.peek_span();
                 let n = s.clone();
                 self.advance();
+                self.validate_name(&n, CasingPattern::PascalCase, span)?;
                 n
             }
             _ => return Err(self.error("enum name after `enum`")),
@@ -226,8 +239,10 @@ impl Parser {
 
             let variant_name = match self.peek() {
                 Token::Ident(s) => {
+                    let span = self.peek_span();
                     let n = s.clone();
                     self.advance();
+                    self.validate_name(&n, CasingPattern::PascalCase, span)?;
                     n
                 }
                 _ => return Err(self.error("variant name")),

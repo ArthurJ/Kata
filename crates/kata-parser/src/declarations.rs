@@ -5,6 +5,7 @@ use kata_diagnostics::FrontendError;
 
 use crate::Parser;
 use crate::expressions::parse_expr;
+use crate::CasingPattern;
 
 impl Parser {
     pub(crate) fn parse_module(&mut self) -> Result<Module, FrontendError> {
@@ -194,8 +195,13 @@ impl Parser {
         // name :: T1 T2 ... => TRet
         let name = match self.peek() {
             Token::Ident(s) => {
+                let span = self.peek_span();
                 let n = s.clone();
                 self.advance();
+                // Validar casing apenas para nomes alfabéticos (não símbolos como +, -, *)
+                if n.chars().next().is_some_and(|c| c.is_alphabetic()) {
+                    self.validate_name(&n, CasingPattern::SnakeCase, span)?;
+                }
                 n
             }
             _ => return Err(self.error("signature name")),

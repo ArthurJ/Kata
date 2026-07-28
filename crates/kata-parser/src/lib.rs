@@ -9,6 +9,7 @@
 mod _match;
 mod _select;
 mod action_decl;
+mod casing;
 mod declarations;
 mod directives;
 mod expr_apply;
@@ -23,6 +24,8 @@ mod types;
 
 use kata_ast::{Module, Span, Token, TokenWithSpan};
 use kata_diagnostics::{FrontendError, MietteSpan};
+
+pub use casing::{validate_casing, CasingPattern};
 
 // ────────────────────────────────────────────────────────────────
 // Parser state
@@ -83,6 +86,17 @@ impl Parser {
         } else {
             Err(self.error(label))
         }
+    }
+
+    /// Valida casing de `name` contra `expected`. Se inválido, retorna
+    /// `FrontendError::InvalidCasing` com o span do nome.
+    pub(crate) fn validate_name(
+        &self,
+        name: &str,
+        expected: CasingPattern,
+        span: Span,
+    ) -> Result<(), FrontendError> {
+        validate_casing(name, expected, span)
     }
 }
 

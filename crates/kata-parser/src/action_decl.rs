@@ -17,6 +17,7 @@ use kata_diagnostics::FrontendError;
 
 use crate::Parser;
 use crate::expressions::parse_expr;
+use crate::CasingPattern;
 
 impl Parser {
     /// Parse `action nome (p::T, ...) => Ret` com body indentado.
@@ -27,8 +28,10 @@ impl Parser {
         self.expect(&Token::Action, "`action`")?;
         let name = match self.peek() {
             Token::Ident(s) => {
+                let span = self.peek_span();
                 let n = s.clone();
                 self.advance();
+                self.validate_name(&n, CasingPattern::SnakeCase, span)?;
                 n
             }
             _ => return Err(self.error("action name")),
@@ -57,8 +60,10 @@ impl Parser {
                 // Espera: Ident :: Tipo
                 let pname = match self.peek() {
                     Token::Ident(s) => {
+                        let span = self.peek_span();
                         let n = s.clone();
                         self.advance();
+                        self.validate_name(&n, CasingPattern::SnakeCase, span)?;
                         n
                     }
                     _ => return Err(self.error("nome do parâmetro")),
