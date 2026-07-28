@@ -31,10 +31,12 @@ valor didático × esforço.
 - **Tensor:** `test_tensor_math.kata` ainda não migrado (bug intencional de dot com shapes incompatíveis — decisão de design pendente)
 - **Status:** ✅ Concluído (2026-07-28). `ranges.kata` criado, bug de codegen corrigido, snapshot adicionado. 1146 testes passando.
 
-### Cluster 4 — CSP expandido (lacuna parcial)
+### Cluster 4 — CSP expandido (parcial) ⚠️ Parcial
 - **Candidatos legacy:** `test_broadcast.kata`, `test_parallel.kata`
-- **Destino:** `broadcast.kata`, `parallel.kata`
+- **Destino:** `broadcast.kata` ✅, `parallel.kata` ❌
 - **Problemas:** `test_broadcast.kata` depende de `subscribe!` (não no manual moderno; `broadcast!` retorna `(Sender, ReceiverFactory)`); `test_parallel.kata` usa sintaxe legada de param (`n :: Int` em vez de `n::Int`)
+- **`broadcast.kata`:** ✅ Criado (2026-07-28). Sintaxe idiomática: `let (tx, subscribe) := broadcast!()` + `subscribe!()` + `tx !> 42` + `rx <! a`. Snapshot adicionado. 1146 testes passando.
+- **`parallel.kata`:** ❌ **Não implementado.** `@parallel` está documentado no sintaxe-mapa (linha 457) e no manual (§6.4), mas **não existe no resolver**. A string "parallel" não aparece em nenhum `.rs` do projeto. O resolver rejeita `@parallel` em actions com `UnknownDirective`. Necessita implementação no resolver antes de ter exemplo.
 
 ### Cluster 5 — `@log` + imports (lacuna de diretivas)
 - **Candidatos legacy:** `test_log.kata`, `test_imports.kata`
