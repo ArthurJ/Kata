@@ -100,9 +100,12 @@ pub fn run_comptime_pass(
         std::mem::take(&mut current.snapshots);
 
     // Bindings comptime-available — construído incrementalmente durante o
-    // fixpoint. Após substituir @comptime let x := ..., x é adicionado aqui.
-    // Um @comptime posterior que referencia x verá Ident(x) no set.
-    let mut comptime_bindings: std::collections::HashSet<String> = std::collections::HashSet::new();
+    // fixpoint. Após substituir @comptime let x := ..., x → literal é
+    // adicionado aqui. Um @comptime posterior que referencia x vê o binding
+    // no mapa. O mapa também é injetado no mini TypedModule para o JIT
+    // resolver Idents comptime-available.
+    let mut comptime_bindings: std::collections::HashMap<String, TypedExpr> =
+        std::collections::HashMap::new();
 
     // Fixpoint: substituir Comptime pode revelar novos Comptime em inner exprs.
     loop {
@@ -178,7 +181,7 @@ fn replace_comptime_in_place(
     ctx: &ModuleCtx<'_>,
     changed: &mut bool,
     snapshots: &mut Vec<kata_core::snapshot::HeapSnapshotData>,
-    comptime_bindings: &mut std::collections::HashSet<String>,
+    comptime_bindings: &mut std::collections::HashMap<String, TypedExpr>,
 ) -> Result<(), ComptimeError> {
     if !matches!(expr.kind, TypedExprKind::Comptime { .. }) {
         // Recursão nos filhos.
@@ -220,7 +223,7 @@ fn replace_comptime_in_place(
         }
 
         // 3. JIT-executar o value.
-        let result = match jit_execute_expr(&value.node, ctx) {
+        let result = match jit_execute_expr(&value.node, ctx, comptime_bindings) {
             Ok(r) => r,
             Err(e) => {
                 expr.kind = TypedExprKind::Comptime {
@@ -248,13 +251,14 @@ fn replace_comptime_in_place(
         };
 
         // 5. Reconstruir o Let com o value substituído pelo literal.
+        let literal_expr = Spanned::new(literal.clone(), value.span);
         expr.kind = TypedExprKind::Let {
             name: name.clone(),
-            value: Box::new(Spanned::new(literal, value.span)),
+            value: Box::new(literal_expr),
         };
         expr.ty = inner.ty.clone();
         // 6. Registrar o binding como comptime-available para dataflow.
-        comptime_bindings.insert(name.clone());
+        comptime_bindings.insert(name.clone(), literal);
         *changed = true;
         return Ok(());
     }
@@ -279,7 +283,7 @@ fn replace_comptime_in_place(
     }
 
     // 3. JIT-executar o inner expr.
-    let result = match jit_execute_expr(inner, ctx) {
+    let result = match jit_execute_expr(inner, ctx, comptime_bindings) {
         Ok(r) => r,
         Err(e) => {
             expr.kind = TypedExprKind::Comptime {
@@ -557,13 +561,38 @@ fn result_to_literal(
 ///
 /// Cria um `TypedModule` mínimo com a expressão como entry point,
 /// chama `jit_eval`, e retorna o resultado bruto.
+///
+/// `comptime_bindings` é injetado como pre_entry (Let bindings) no mini
+/// TypedModule para que o JIT resolva Idents comptime-available.
 fn jit_execute_expr(
     expr: &TypedExpr,
     ctx: &ModuleCtx<'_>,
+    comptime_bindings: &std::collections::HashMap<String, TypedExpr>,
 ) -> Result<ComptimeResult, ComptimeError> {
-    // Criar um mini TypedModule com apenas a expressão como entry.
+    // Construir pre_entry com os bindings comptime-available.
+    // Cada binding vira um `Let { name, value: literal }` em pre_entry.
+    let mut pre_entry = Vec::new();
+    for (name, value) in comptime_bindings {
+        let span = value.span;
+        pre_entry.push(Spanned::new(
+            TypedExpr {
+                span,
+                ty: value.ty.clone(),
+                tail_pos: false,
+                escape: value.escape.clone(),
+                kind: TypedExprKind::Let {
+                    name: name.clone(),
+                    value: Box::new(Spanned::new(value.clone(), span)),
+                },
+            },
+            span,
+        ));
+    }
+
+    // Criar um mini TypedModule com os bindings em pre_entry e a
+    // expressão como entry.
     let mini = TypedModule {
-        pre_entry: Vec::new(),
+        pre_entry,
         entry: Spanned::new(expr.clone(), expr.span),
         dispatch_table: ctx.dispatch_table.clone(),
         type_env: ctx.type_env.clone(),

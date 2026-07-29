@@ -17,21 +17,24 @@
 //! - `let` bindings cujo initializer não é comptime-available
 //! - Qualquer valor que depende de runtime I/O
 
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 use kata_core::ty::Ty;
 use kata_inference::{TypedExpr, TypedExprKind};
 
 /// Verifica se uma expressão é comptime-available.
 ///
-/// `comptime_bindings` é o conjunto de nomes de bindings locais que foram
-/// avaliados em compile-time (via @comptime let). Um Ident que referencia
-/// um binding neste conjunto é comptime-available.
-pub fn is_comptime_available(expr: &TypedExpr, comptime_bindings: &HashSet<String>) -> bool {
+/// `comptime_bindings` é o mapa de nomes de bindings locais para seus
+/// valores literais, avaliados em compile-time (via @comptime let).
+/// Um Ident que referencia um binding neste mapa é comptime-available.
+pub fn is_comptime_available(
+    expr: &TypedExpr,
+    comptime_bindings: &HashMap<String, TypedExpr>,
+) -> bool {
     check(expr, comptime_bindings)
 }
 
-fn check(expr: &TypedExpr, comptime_bindings: &HashSet<String>) -> bool {
+fn check(expr: &TypedExpr, comptime_bindings: &HashMap<String, TypedExpr>) -> bool {
     match &expr.kind {
         // Literais — sempre comptime-available.
         TypedExprKind::IntLit { .. }
@@ -56,7 +59,7 @@ fn check(expr: &TypedExpr, comptime_bindings: &HashSet<String>) -> bool {
             }
             // Dataflow: se o binding está no conjunto de bindings
             // comptime-available, é comptime.
-            if comptime_bindings.contains(name) {
+            if comptime_bindings.contains_key(name) {
                 return true;
             }
             false

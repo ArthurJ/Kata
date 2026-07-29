@@ -333,3 +333,110 @@ fn comptime_sum_text_match_len() {
         "len e de @comptime Result::Err \"fail\" deve ser 4 — stdout: {stdout}"
     );
 }
+
+// ── Fase 3: @comptime em call-site (bodies de actions) ───────────
+
+/// `@comptime + 1 2` dentro de body de action → 3.
+/// O @comptime é avaliado em compile-time e substituído por literal 3.
+#[test]
+fn comptime_callsite_expr_in_body() {
+    let src = "action main => Int\n    @comptime + 1 2\nmain!()";
+    let (stdout, stderr, code) = run_kata_run(src);
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    let first = stdout.lines().next().unwrap_or("");
+    assert_eq!(
+        first, "3",
+        "@comptime + 1 2 em body deve produzir 3 — stdout: {stdout}"
+    );
+}
+
+/// `@comptime let x := + 1 2` dentro de body → binding com literal 3.
+/// Depois `echo!(x)` imprime 3.
+#[test]
+fn comptime_callsite_let_in_body() {
+    let src = "action main\n    @comptime let x := + 1 2\n    echo!(x)\nmain!()";
+    let (stdout, stderr, code) = run_kata_run(src);
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    let first = stdout.lines().next().unwrap_or("");
+    assert_eq!(
+        first, "3",
+        "@comptime let x := + 1 2 em body deve produzir 3 — stdout: {stdout}"
+    );
+}
+
+/// `@comptime let x := 10` seguido de `@comptime + x 5` em body → 15.
+/// Exercita dataflow: o binding `x` é comptime-available após o primeiro
+/// @comptime let, e o segundo @comptime o referencia.
+#[test]
+fn comptime_callsite_dataflow_binding() {
+    let src = "action main\n    @comptime let x := 10\n    @comptime let y := + x 5\n    echo!(y)\nmain!()";
+    let (stdout, stderr, code) = run_kata_run(src);
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    let first = stdout.lines().next().unwrap_or("");
+    assert_eq!(
+        first, "15",
+        "@comptime dataflow + x 5 deve produzir 15 — stdout: {stdout}"
+    );
+}
+
+/// `@comptime + x 5` onde `x` é param de action → erro de compilação.
+/// Parâmetros não são comptime-available.
+#[test]
+fn comptime_callsite_param_not_comptime() {
+    let src = "action foo (x::Int) => Int\n    @comptime + x 5\nfoo!(10)";
+    let (_stdout, stderr, code) = run_kata_run(src);
+    assert_ne!(
+        code, 0,
+        "kata run deve falhar (param não é comptime) — stderr: {stderr}"
+    );
+}
+
+/// `@comptime echo!(\"msg\")` — chamada de action é impura → erro.
+#[test]
+fn comptime_callsite_impure_action_call() {
+    let src = "action main\n    @comptime echo!(\"msg\")\nmain!()";
+    let (_stdout, stderr, code) = run_kata_run(src);
+    assert_ne!(
+        code, 0,
+        "kata run deve falhar (action call é impuro) — stderr: {stderr}"
+    );
+}
+
+/// `@comptime fib 10` dentro de body → 55.
+/// Exercita chamada de função pura com literal em call-site.
+#[test]
+fn comptime_callsite_fib_in_body() {
+    let src = "\
+fib :: Int => Int
+lambda 0: 0
+lambda 1: 1
+lambda n:
+    + (fib (- n 1)) (fib (- n 2))
+
+action main
+    @comptime let r := fib 10
+    echo!(r)
+
+main!()";
+    let (stdout, stderr, code) = run_kata_run(src);
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    let first = stdout.lines().next().unwrap_or("");
+    assert_eq!(
+        first, "55",
+        "@comptime fib 10 em body deve produzir 55 — stdout: {stdout}"
+    );
+}
+
+/// `@comptime 5 |> (+ 1 _)` — pipe é runtime, não comptime.
+/// `@comptime 5` avalia para 5, depois `|> (+ 1 _)` é runtime: 5 + 1 = 6.
+#[test]
+fn comptime_callsite_pipe_is_runtime() {
+    let src = "action main => Int\n    @comptime 5 |> + 1 _\nmain!()";
+    let (stdout, stderr, code) = run_kata_run(src);
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    let first = stdout.lines().next().unwrap_or("");
+    assert_eq!(
+        first, "6",
+        "@comptime 5 |> + 1 _ deve imprimir 6 (pipe é runtime) — stdout: {stdout}"
+    );
+}
