@@ -1709,11 +1709,17 @@ módulo), sempre precedendo imediatamente o item que modificam.
 * **`@comptime`**: Avalia uma expressão durante a compilação via JIT-and-execute
   (compila a expressão usando o pipeline normal e executa no `kata-rt` real),
   substituindo o resultado por um literal na TAST. Tem duas formas de uso:
-  - **Definition-site (hint):** `@comptime` marca a definição da função. Calls
-    com argumentos constantes são avaliadas em compile-time. Calls com
-    argumentos não-constantes executam normalmente em runtime.
-  - **Call-site (guarantee):** `@comptime` antes de uma call força avaliação em
-    compile-time. Se não consegue avaliar: erro de compilação.
+  - **Top-level (Fase 1-2 ✅):** `@comptime` antes de um `let` top-level ou
+    expressão top-level. O comptime pass avalia a expressão e substitui o
+    resultado por um literal (escalares: Int, Float, Boolean, Unit) ou por
+    um `HeapSnapshot` (tipos complexos: List, Tuple, Struct, Text, Sum com
+    payload). O snapshot é serializado de forma type-aware, embutido como
+    data symbol no binário JIT, e carregado na root_arena em load-time via
+    `kata_rt_load_snapshot` com rebasing de ponteiros. Exemplo:
+    `@comptime let x := [1 2 3]` gera `x` como snapshot navegável em runtime.
+  - **Definition-site (hint) e Call-site (guarantee) — Fase 3, pendente:**
+    `@comptime` marca a definição da função ou força avaliação em call-site
+    dentro de body. Ainda não implementado.
 * **`@cache_strategy{strategy: "LRU"}`**: Interceta invocações puras repetidas e
   injeta pesquisas em Hash Table nativa (ex: `LRU` cache), efetuando
   *memoização* automática.
