@@ -297,7 +297,7 @@ impl TypeEnv {
         self.bindings.iter().map(|(k, v)| (k.as_str(), &v.ty))
     }
 
-    /// Itera sobre os bindings deste escopo (não do parent), 
+    /// Itera sobre os bindings deste escopo (não do parent),
     /// retornando o `TypeBinding` completo (com `origin`).
     /// Usado por `merge_imports` para copiar tipos de módulos importados.
     pub fn local_bindings_full(&self) -> impl Iterator<Item = (&str, &TypeBinding)> {
@@ -308,9 +308,8 @@ impl TypeEnv {
     /// aqueles cujo nome está no `closure` ou cuja origin é `core` (prelude).
     /// Usado por `filter_exports` para esconder tipos não exportados.
     pub fn retain_by_closure(&mut self, closure: &std::collections::HashSet<String>) {
-        self.bindings.retain(|name, binding| {
-            closure.contains(name) || binding.origin == "core"
-        });
+        self.bindings
+            .retain(|name, binding| closure.contains(name) || binding.origin == "core");
     }
 
     /// Aplica substituições de type vars (ex: `T0 → List::Int`) a todos

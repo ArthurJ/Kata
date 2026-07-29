@@ -371,7 +371,8 @@ impl InterfaceRegistry {
             }
         });
         // Filtrar impls: manter se type_name no closure ou origin é core
-        self.impls.retain(|e| closure.contains(&e.type_name) || e.origin == "core");
+        self.impls
+            .retain(|e| closure.contains(&e.type_name) || e.origin == "core");
         // Reconstruir origins e ambiguous
         self.origins.clear();
         self.ambiguous.clear();

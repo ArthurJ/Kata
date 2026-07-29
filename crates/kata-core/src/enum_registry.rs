@@ -498,24 +498,28 @@ impl EnumRegistry {
     /// Filtra enums mantendo apenas aqueles cujo nome está no `closure`
     /// ou cuja origin é `core` (prelude). Usado por `filter_exports`.
     pub fn retain_by_closure(&mut self, closure: &std::collections::HashSet<String>) {
-        self.variants.retain(|(_, name), _| closure.contains(name) || {
-            // Manter se qualquer origin for core
-            self.origins
-                .get(name)
-                .is_some_and(|origins| origins.contains("core"))
+        self.variants.retain(|(_, name), _| {
+            closure.contains(name) || {
+                // Manter se qualquer origin for core
+                self.origins
+                    .get(name)
+                    .is_some_and(|origins| origins.contains("core"))
+            }
         });
-        self.type_params
-            .retain(|(_, name), _| closure.contains(name) || {
+        self.type_params.retain(|(_, name), _| {
+            closure.contains(name) || {
                 self.origins
                     .get(name)
                     .is_some_and(|origins| origins.contains("core"))
-            });
-        self.defaults
-            .retain(|(_, name), _| closure.contains(name) || {
+            }
+        });
+        self.defaults.retain(|(_, name), _| {
+            closure.contains(name) || {
                 self.origins
                     .get(name)
                     .is_some_and(|origins| origins.contains("core"))
-            });
+            }
+        });
         // Reconstruir origins e ambiguous com base nos sobreviventes
         self.origins.clear();
         self.ambiguous.clear();
