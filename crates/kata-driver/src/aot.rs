@@ -8,6 +8,7 @@
 use std::path::{Path, PathBuf};
 
 use kata_codegen::aot_emit;
+use kata_comptime::run_comptime_pass;
 use kata_core::ty::Ty;
 use kata_inference::infer_module;
 use kata_lexer::lex;
@@ -62,6 +63,11 @@ pub(crate) fn cmd_build(file: &str, output: Option<&str>, dynamic: bool) -> miet
 
     // Tree shaking — remove @test e funções não alcançadas (só AOT).
     let shaken = tree_shake(mono.inner);
+
+    // Comptime pass — avalia expressões @comptime em compile-time e
+    // substitui por literais/snapshots antes do codegen AOT.
+    let shaken = run_comptime_pass(shaken, &resolved.enum_registry)
+        .map_err(|e| miette::Report::msg(format!("erro de comptime: {e}")))?;
 
     // AOT emit — produz object file (.o) bytes.
     let object_bytes = aot_emit(&shaken)
