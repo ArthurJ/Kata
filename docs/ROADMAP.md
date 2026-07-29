@@ -125,7 +125,7 @@ Fio 1: Fundação + Aritmética + CLI
 │       │    COUNTABLE, `for x in` iteration)
 │       │   Fases 1-9 ✅ (DoDs 1-60, 788 testes). Fio 8 Concluído.
 │       │
-│       └── Fio 13: Dict, Set (HAMT)
+│       └── Fio 13: Dict, Set (HAMT) ✅ Concluído
 │
 ├── Fio 5: Data, Structs, Tuples, alias ✅ Concluído
 │   │   (data, field access, Tuple, .N em tupla, alias/newtype)
@@ -154,10 +154,10 @@ Fio 1: Fundação + Aritmética + CLI
 │    yield cooperativo, structured concurrency, scheduler com fibers)
 │   (@parallel — multiprocess via fork+IPC — congelado, não implementado)
 │
-├── Fio 12: Comptime, @cache — PRD: docs/PRD-fio12-comptime.md
+├── Fio 12: Comptime, @cache ✅ Concluído — PRD: docs/PRD-fio12-comptime.md
 │   (@comptime call-site explícito, JIT-and-execute, HeapSnapshot com arenas,
 │    @cache{strategy: "LRU"} em caller_arena, ascription refined delega ao comptime)
-│   Fase 1 ✅, Fase 2 ✅, Fase 3 ✅, Fase 4 ✅ — Fases 5-6 pendentes
+│   Fases 1-6 ✅ + constant folding de funções com args literais (Ponto 7)
 │
 └── Fio 15: AOT, REPL
     (kata build — Cranelift object + linker, kata repl — TypeEnv persistente)
@@ -650,7 +650,12 @@ previnem head-of-line blocking. Structured concurrency garante lifecycle.
 
 ---
 
-### Fio 12: Comptime, `@cache`
+### Fio 12: Comptime, `@cache` ✅ Concluído
+
+**Status:** Fases 1-6 ✅ + constant folding de funções com args literais (Ponto 7).
+1239 testes no workspace, 0 falhas. Commits: `8c3d299` (Fase 1), `b7f7485`/`b75f867`
+(Fase 2), `718f74e`/`138af02`/`d2dc096`/`377c7b3` (Fase 3), `08d0c8f` (Fase 4),
+`519a539` (Fase 5), `e5c89b5` (Fase 6), `2289ed6` (Ponto 7 — constant folding).
 
 **PRD:** `docs/PRD-fio12-comptime.md`
 
@@ -676,6 +681,11 @@ previnem head-of-line blocking. Structured concurrency garante lifecycle.
   prólogo (antes da primeira cláusula, antes do primeiro lambda) e insert no
   epílogo. Cache lazy-allocated em `caller_arena`. Sem reescrita de TAST.
 - Pureza verification (walk TAST: se contém ActionCall, é impura → erro)
+- Constant folding de funções com args literais (Ponto 7): o comptime pass
+  percorre a TAST procurando `Closure` com callee `Ident` (função pura nomeada)
+  e todos os args literais. JIT-executa e substitui por literal/snapshot.
+  Bottom-up com fixpoint — folds em cascade. Não dobra construtores falíveis
+  (Result) nem funções FFI.
 
 **Runtime:**
 - `kata_rt_load_snapshots(root_arena, snapshot_table, n)` — load-time, memcpy + rebasing
@@ -686,15 +696,20 @@ previnem head-of-line blocking. Structured concurrency garante lifecycle.
 **Depende de:** Fio 1-10 ✅ (pipeline completo, módulos, arenas hierárquicas),
 Fio 11 ✅ (TypeShape para serialização de args em `@cache`)
 
-**DoD:** `@comptime fatorial 10` substitui por literal `3628800`.
+**DoD:** ✅ `@comptime fatorial 10` substitui por literal `3628800`.
 `@comptime range 1 100` substitui por HeapSnapshot. `@comptime` com arg
 não-constante → erro. `5::Prime` com predicado complexo valida em compile-time.
 `dobro :: Int => Int @cache{strategy: "LRU"}` memoiza função pura repetida.
-`kata build` produz executável com snapshots embedados.
+`kata build` produz executável com snapshots embedados. Constant folding
+dobra `dobro 5` → `10` literal sem `@comptime` explícito.
 
 ---
 
-### Fio 13: Dict, Set (HAMT)
+### Fio 13: Dict, Set (HAMT) ✅ Concluído
+
+**Status:** Implementado. HAMT no runtime (`kata-rt/src/dict/hamt.rs`,
+`kata-rt/src/set.rs`), parser, codegen (`dict_set_lit.rs`), inference
+(`dict_set.rs`). 16 testes E2E (10 Dict + 6 Set), todos passando.
 
 **Features:**
 - `Dict::(K, V)` — dicionário persistente imutável (HAMT)
@@ -706,12 +721,12 @@ não-constante → erro. `5::Prime` com predicado complexo valida em compile-tim
 
 **Runtime:**
 - HAMT implementation (hash, trie nodes, bitmap, persistent sharing)
-- `kata_rt_dict_insert/get/len/iter`
-- `kata_rt_set_insert/contains/len/iter`
+- `kata_rt_dict_empty/insert/get_checked/contains/len/remove/next/merge`
+- `kata_rt_set_empty/insert/contains/len/remove/next/union/intersection/difference`
 
-**Depende de:** Fio 7 (interfaces), Fio 8 (ITERABLE/COUNTABLE/INDEXABLE)
+**Depende de:** Fio 7 ✅ (interfaces), Fio 8 ✅ (ITERABLE/COUNTABLE/INDEXABLE)
 
-**DoD:** `Dict::(Text, Int)` com insert/get funciona. `Set::Int` com
+**DoD:** ✅ `Dict::(Text, Int)` com insert/get funciona. `Set::Int` com
 contains/union/intersection funciona. Iteração via ITERABLE produz pares.
 
 ---
@@ -782,15 +797,15 @@ Fio 1  ────────────────────────�
   │       assinaturas, ->, Hole, tail_pos             escape, capture, Arc, TRMA
   ├── Fio 3 ── Pré-11 ── Fio 11 ✅ ── Fio 14 ✅ (@log, @test)
   │       Actions, return, ;, ?   Memória hierárquica  CSP, yield points
-  ├── Fio 4 ── Fio 8 ✅ ── Fio 13 (Dict/Set)
+  ├── Fio 4 ── Fio 8 ✅ ── Fio 13 ✅ (Dict/Set HAMT)
   │       Ty::Sum payload, :: params          ITERABLE, .N, len, stream fusion
   ├── Fio 5 ✅ ── Fio 6 ✅ (refined)
   │       Ty::Struct/Tuple, :: campos         :: ascription, avaliação constante
   ├── Fio 7 ✅ ── Fio 8 ✅ (dependência)
   │       Ty::Generic/Interface, monomorph    (desbloqueia coleções)
   ├── Fio 10 ✅ (módulos)
-  ├── Fio 12 (Comptime, @cache)
-  │       @comptime call-site, HeapSnapshot, @cache LRU
+  ├── Fio 12 ✅ (Comptime, @cache)
+  │       @comptime call-site, HeapSnapshot, @cache LRU, constant folding
   └── Fio 15 (AOT ✅, REPL ⏳)
 
 Zeladorias removidas — manutenção diária via skill `zeladoria-kata5` substitui zeladorias planejadas.
