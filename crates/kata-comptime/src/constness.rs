@@ -82,6 +82,9 @@ fn check(expr: &TypedExpr) -> bool {
         // Comptime wrapper — sempre comptime-available (será avaliado).
         TypedExprKind::Comptime { expr } => check(&expr.node),
 
+        // HeapSnapshot — sempre comptime-available (já avaliado).
+        TypedExprKind::HeapSnapshot { .. } => true,
+
         // ListLit, ArrayLit — comptime se todos elementos são.
         TypedExprKind::ListLit { elements } | TypedExprKind::ArrayLit { elements } => {
             elements.iter().all(|e| check(&e.node))

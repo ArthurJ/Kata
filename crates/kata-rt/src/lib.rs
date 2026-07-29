@@ -23,6 +23,7 @@ pub(crate) mod range;
 pub(crate) mod rational;
 pub(crate) mod scheduler;
 pub(crate) mod set;
+pub(crate) mod snapshot;
 pub(crate) mod sum;
 pub(crate) mod text;
 pub(crate) mod tracked;
@@ -91,6 +92,8 @@ pub use scheduler::{
     reset_scheduler,
 };
 pub use sum::{kata_rt_store_sum_result, kata_rt_sum_tag_int};
+// Snapshots comptime — carregados em load-time na root_arena
+pub use snapshot::{kata_rt_get_snapshot, kata_rt_load_snapshot};
 pub use text::{
     kata_rt_bool_to_text, kata_rt_string_concat, kata_rt_string_eq, kata_rt_string_len,
     kata_rt_text_literal, kata_rt_text_replace_first,

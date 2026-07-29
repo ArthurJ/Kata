@@ -248,5 +248,7 @@ fn fallback_in_expr(expr_span: &mut Spanned<TypedExpr>) {
         | TypedExprKind::Continue
         | TypedExprKind::ChannelCreate { .. } => {}
         TypedExprKind::Comptime { expr } => fallback_in_expr(expr),
+        // HeapSnapshot — folha.
+        TypedExprKind::HeapSnapshot { .. } => {}
     }
 }

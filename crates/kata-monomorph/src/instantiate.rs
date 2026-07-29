@@ -437,6 +437,12 @@ fn instantiate_kind(kind: &TypedExprKind, subs: &Substitutions) -> TypedExprKind
         TypedExprKind::Break => TypedExprKind::Break,
         TypedExprKind::Continue => TypedExprKind::Continue,
 
+        // HeapSnapshot — folha, preserva snapshot_id e ty (com substituição de Ty::Var).
+        TypedExprKind::HeapSnapshot { snapshot_id, ty } => TypedExprKind::HeapSnapshot {
+            snapshot_id: *snapshot_id,
+            ty: apply_subs(ty, subs),
+        },
+
         // ── Coleções + HOFs/FusedStream ──
         // Delegado para `instantiate_collections` — arms de collections.
         _ => {

@@ -16,6 +16,7 @@
 
 mod constness;
 mod pureza;
+mod snapshot;
 
 use kata_ast::Spanned;
 use kata_core::StructRegistry;
@@ -88,6 +89,10 @@ impl std::error::Error for ComptimeError {}
 /// Repete até fixpoint (sem novos nós `Comptime`).
 pub fn run_comptime_pass(typed: TypedModule) -> Result<TypedModule, ComptimeError> {
     let mut current = typed;
+    // Acumulador de snapshots — populado por replace_comptime_in_place.
+    // No fim, atribuído a current.snapshots.
+    let mut snapshots: Vec<kata_core::snapshot::HeapSnapshotData> =
+        std::mem::take(&mut current.snapshots);
 
     // Fixpoint: substituir Comptime pode revelar novos Comptime em inner exprs.
     loop {
@@ -107,20 +112,21 @@ pub fn run_comptime_pass(typed: TypedModule) -> Result<TypedModule, ComptimeErro
         // Processar pre_entry
         for expr in &mut current.pre_entry {
             let was_comptime = contains_comptime(&expr.node);
-            replace_comptime_in_place(&mut expr.node, &ctx, &mut changed)?;
+            replace_comptime_in_place(&mut expr.node, &ctx, &mut changed, &mut snapshots)?;
             if was_comptime && !contains_comptime(&expr.node) {
                 // Já substituído — ok
             }
         }
 
         // Processar entry
-        replace_comptime_in_place(&mut current.entry.node, &ctx, &mut changed)?;
+        replace_comptime_in_place(&mut current.entry.node, &ctx, &mut changed, &mut snapshots)?;
 
         if !changed {
             break;
         }
     }
 
+    current.snapshots = snapshots;
     Ok(current)
 }
 
@@ -129,11 +135,12 @@ fn replace_comptime_in_place(
     expr: &mut TypedExpr,
     ctx: &ModuleCtx<'_>,
     changed: &mut bool,
+    snapshots: &mut Vec<kata_core::snapshot::HeapSnapshotData>,
 ) -> Result<(), ComptimeError> {
     if !matches!(expr.kind, TypedExprKind::Comptime { .. }) {
         // Recursão nos filhos.
         walk_mut(expr, &mut |child| {
-            replace_comptime_in_place(child, ctx, changed)
+            replace_comptime_in_place(child, ctx, changed, snapshots)
         })?;
         return Ok(());
     }
@@ -180,8 +187,9 @@ fn replace_comptime_in_place(
             }
         };
 
-        // 4. Substituir por literal.
-        let literal = match result_to_literal(&result, &value.node) {
+        // 4. Substituir por literal ou HeapSnapshot.
+        let literal = match result_to_literal(&result, &value.node, snapshots, ctx.struct_registry)
+        {
             Ok(l) => l,
             Err(e) => {
                 expr.kind = TypedExprKind::Comptime {
@@ -231,8 +239,8 @@ fn replace_comptime_in_place(
         }
     };
 
-    // 4. Substituir por literal (escalar) ou erro (complexo — Fase 2).
-    let replacement = match result_to_literal(&result, inner) {
+    // 4. Substituir por literal (escalar) ou HeapSnapshot (complexo).
+    let replacement = match result_to_literal(&result, inner, snapshots, ctx.struct_registry) {
         Ok(r) => r,
         Err(e) => {
             expr.kind = TypedExprKind::Comptime {
@@ -338,6 +346,8 @@ where
                 f(&mut stmt.node)?;
             }
         }
+        // HeapSnapshot — folha.
+        TypedExprKind::HeapSnapshot { .. } => {}
         // Outros variants não têm filhos TypedExpr ou não aparecem em top-level.
         _ => {}
     }
@@ -375,18 +385,24 @@ fn walk_ref<F: FnMut(&TypedExpr)>(expr: &TypedExpr, f: &mut F) {
                 walk_ref(&el.node, f);
             }
         }
+        TypedExprKind::HeapSnapshot { .. } => {}
         _ => {}
     }
 }
 
 /// Converte um `ComptimeResult` (i64 bruto + Ty) num `TypedExpr` literal.
 ///
-/// Fase 1: apenas escalares.
+/// Fase 1: escalares (Int SMI, Float, Boolean, Unit) → literais directo na TAST.
+/// Fase 2: tipos complexos (List, Tuple, Struct, Text, Sum com payload) →
+/// `HeapSnapshot` via `serialize_snapshot`.
 fn result_to_literal(
     result: &ComptimeResult,
     original: &TypedExpr,
+    snapshots: &mut Vec<kata_core::snapshot::HeapSnapshotData>,
+    struct_registry: &StructRegistry,
 ) -> Result<TypedExpr, ComptimeError> {
     match &result.ty {
+        // ── Escalares: literais directo na TAST ──
         Ty::Prim(PrimTy::Int) => {
             // O valor raw é o valor Kata bruto (SMI-tagged se Int).
             // SMI: LSB=1 → value = (val - 1) >> 1. BigInt: LSB=0 → ponteiro.
@@ -447,6 +463,25 @@ fn result_to_literal(
                 },
             })
         }
+        // ── Tipos complexos: serializar em HeapSnapshot ──
+        Ty::List(_) | Ty::Tuple(_) | Ty::Struct(_) | Ty::Prim(PrimTy::Text) | Ty::Sum(_) => {
+            let snapshot = snapshot::serialize_snapshot(result.raw, &result.ty, struct_registry)
+                .map_err(|e| ComptimeError::JitError {
+                    reason: format!("serialização de snapshot: {e}"),
+                })?;
+            let snapshot_id = snapshots.len() as u32;
+            snapshots.push(snapshot);
+            Ok(TypedExpr {
+                span: original.span,
+                ty: result.ty.clone(),
+                tail_pos: original.tail_pos,
+                escape: original.escape.clone(),
+                kind: TypedExprKind::HeapSnapshot {
+                    snapshot_id,
+                    ty: result.ty.clone(),
+                },
+            })
+        }
         other => Err(ComptimeError::UnsupportedType { ty: other.clone() }),
     }
 }
@@ -468,6 +503,7 @@ fn jit_execute_expr(
         functions: ctx.functions.to_vec(),
         actions: ctx.actions.to_vec(),
         struct_registry: ctx.struct_registry.clone(),
+        snapshots: Vec::new(),
     };
 
     let result = kata_codegen::jit_eval(&mini).map_err(|e| ComptimeError::JitError {

@@ -610,6 +610,21 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
             sig.params.push(AbiParam::new(I64)); // level (tag do enum LogLevel)
             // sem returns — Unit
         }
+        // ── Comptime snapshots (Fio 12) ──
+        // load_snapshot: (root_arena, bytes_ptr, bytes_len, rebase_offsets_ptr, rebase_count, snapshot_id) -> ()
+        FfiSymbol::LoadSnapshot => {
+            sig.params.push(AbiParam::new(I64)); // root_arena
+            sig.params.push(AbiParam::new(I64)); // bytes_ptr
+            sig.params.push(AbiParam::new(I64)); // bytes_len
+            sig.params.push(AbiParam::new(I64)); // rebase_offsets_ptr
+            sig.params.push(AbiParam::new(I64)); // rebase_count
+            sig.params.push(AbiParam::new(I64)); // snapshot_id
+        }
+        // get_snapshot: (snapshot_id) -> ptr
+        FfiSymbol::GetSnapshot => {
+            sig.params.push(AbiParam::new(I64)); // snapshot_id
+            sig.returns.push(AbiParam::new(I64)); // ptr
+        }
     }
 
     sig

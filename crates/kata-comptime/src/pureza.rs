@@ -175,6 +175,8 @@ fn check_purity_inner(expr: &TypedExpr) -> Result<(), ComptimeError> {
             Ok(())
         }
         TypedExprKind::Comptime { expr } => check_purity_inner(&expr.node),
+        // HeapSnapshot — puro (já avaliado, é um literal).
+        TypedExprKind::HeapSnapshot { .. } => Ok(()),
         TypedExprKind::ListLit { elements } | TypedExprKind::ArrayLit { elements } => {
             for el in elements {
                 check_purity_inner(&el.node)?;

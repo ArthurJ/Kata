@@ -1,10 +1,14 @@
-//! Testes E2E — `@comptime` (Fio 12, Fase 1).
+//! Testes E2E — `@comptime` (Fio 12, Fases 1 e 2).
 //!
 //! PRD-fio12-comptime.md: `@comptime` avalia expressões em compile-time
 //! via JIT-and-execute, substituindo o nó `Comptime` por um literal na TAST.
 //!
 //! Fase 1 DoD: `@comptime let x := + 1 2` gera `x = 3` — a expressão
 //! `+ 1 2` é avaliada em compile-time e substituída por `IntLit "3"`.
+//!
+//! Fase 2 DoD: `@comptime [1 2 3]` serializa a lista como HeapSnapshot,
+//! carrega na root_arena em load-time, e o ponteiro é navegável em
+//! runtime (`len`, `head`, `tail` funcionam sobre o snapshot).
 
 use std::process::Command;
 
@@ -21,6 +25,30 @@ fn run_kata_eval(expr: &str) -> (String, String, i32) {
         .args(["eval", expr])
         .output()
         .expect("executar kata eval");
+    (
+        String::from_utf8_lossy(&output.stdout).to_string(),
+        String::from_utf8_lossy(&output.stderr).to_string(),
+        output.status.code().unwrap_or(-1),
+    )
+}
+
+/// Executa `kata run <file>` com o conteúdo dado e retorna (stdout, stderr, exit_code).
+/// Escreve o conteúdo num arquivo temporário e chama `kata run`.
+fn run_kata_run(source: &str) -> (String, String, i32) {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let id = COUNTER.fetch_add(1, Ordering::SeqCst);
+    let dir = std::env::temp_dir();
+    let path = dir.join(format!(
+        "kata_comptime_e2e_{id}_{pid}.kata",
+        pid = std::process::id()
+    ));
+    std::fs::write(&path, source).expect("escrever arquivo temporário");
+    let output = Command::new(kata_bin())
+        .args(["run", &path.to_string_lossy()])
+        .output()
+        .expect("executar kata run");
+    let _ = std::fs::remove_file(&path);
     (
         String::from_utf8_lossy(&output.stdout).to_string(),
         String::from_utf8_lossy(&output.stderr).to_string(),
@@ -90,4 +118,75 @@ fn comptime_same_as_runtime() {
     let a = with_comptime.lines().next().unwrap_or("");
     let b = without_comptime.lines().next().unwrap_or("");
     assert_eq!(a, b, "comptime e runtime devem produzir o mesmo valor");
+}
+
+// ── Fase 2: HeapSnapshot para tipos complexos ───────────────────
+
+/// `@comptime [1 2 3]` deve serializar a lista como HeapSnapshot,
+/// carregar na root_arena em load-time, e `len` deve retornar 3.
+///
+/// Este é o DoD da Fase 2: o ponteiro retornado por `kata_rt_get_snapshot`
+/// é um Cons cell válido, navegável por `len`, `head`, `tail`.
+#[test]
+fn comptime_list_len_via_snapshot() {
+    let (stdout, stderr, code) = run_kata_run("@comptime let x := [1 2 3]\nlen x");
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    let first = stdout.lines().next().unwrap_or("");
+    assert_eq!(
+        first, "3",
+        "len de @comptime [1 2 3] deve ser 3 — stdout: {stdout}"
+    );
+}
+
+/// `head` sobre `@comptime [1 2 3]` deve retornar 1 (primeiro elemento).
+#[test]
+fn comptime_list_head_via_snapshot() {
+    let (stdout, stderr, code) = run_kata_run("@comptime let x := [1 2 3]\nhead x");
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    let first = stdout.lines().next().unwrap_or("");
+    assert_eq!(
+        first, "1",
+        "head de @comptime [1 2 3] deve ser 1 — stdout: {stdout}"
+    );
+}
+
+/// `head (tail x)` sobre `@comptime [1 2 3]` deve retornar 2.
+#[test]
+fn comptime_list_head_tail_via_snapshot() {
+    let (stdout, stderr, code) = run_kata_run("@comptime let x := [1 2 3]\nhead (tail x)");
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    let first = stdout.lines().next().unwrap_or("");
+    assert_eq!(
+        first, "2",
+        "head (tail x) de @comptime [1 2 3] deve ser 2 — stdout: {stdout}"
+    );
+}
+
+/// `len (tail (tail x))` sobre `@comptime [1 2 3]` deve retornar 1.
+/// Exercita dois `tail` consecutivos — cada um desreferencia um
+/// ponteiro no snapshot carregado.
+#[test]
+fn comptime_list_double_tail_len_via_snapshot() {
+    let (stdout, stderr, code) = run_kata_run("@comptime let x := [1 2 3]\nlen (tail (tail x))");
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    let first = stdout.lines().next().unwrap_or("");
+    assert_eq!(
+        first, "1",
+        "len (tail (tail x)) de @comptime [1 2 3] deve ser 1 — stdout: {stdout}"
+    );
+}
+
+/// `@comptime [1 2 3]` como expressão top-level (sem `let`) retorna
+/// um ponteiro. `kata eval` imprime o ponteiro cru (não há display
+/// de List). Verifica que não crasha — o snapshot é carregado.
+#[test]
+fn comptime_list_top_level_no_crash() {
+    let (stdout, stderr, code) = run_kata_eval("@comptime [1 2 3]");
+    assert_eq!(code, 0, "kata eval deve exit 0 — stderr: {stderr}");
+    let first = stdout.lines().next().unwrap_or("");
+    // Ponteiro cru — um número grande (endereço na root_arena).
+    assert!(
+        first.parse::<i64>().is_ok(),
+        "@comptime [1 2 3] deve retornar um ponteiro (i64), não crashar — stdout: {stdout}"
+    );
 }

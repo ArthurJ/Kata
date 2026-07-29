@@ -424,6 +424,8 @@ fn rewrite_typed_expr(expr_span: &mut Spanned<TypedExpr>, ctx: &MonoCtx, acc: &m
         TypedExprKind::Comptime { expr } => {
             rewrite_typed_expr(expr, ctx, acc);
         }
+        // HeapSnapshot — folha.
+        TypedExprKind::HeapSnapshot { .. } => {}
         // ReceiverFactoryCall: o factory é sub-expr (Ident do rxf).
         TypedExprKind::ReceiverFactoryCall { factory, .. } => {
             rewrite_typed_expr(factory, ctx, acc);

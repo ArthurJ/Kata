@@ -1,30 +1,23 @@
-//! Traversal genérico da TAST — visitor pré-ordem sobre todas as
-//! sub-expressões de um `TypedExpr`.
+//! Walkers da TAST — percorrem sub-expressões de um `TypedExpr`.
 //!
-//! Substitui os match gigantes em `recursion.rs`, `free_vars.rs` e
-//! `captures.rs` por um único ponto de verdade. Quando `TypedExprKind`
-//! ganha uma nova variante, só este arquivo precisa ser atualizado.
+//! `for_each_subexpr` (imutável) e `for_each_subexpr_mut` (mutável) descem
+//! recursivamente nos filhos de cada nó, chamando `f` em pré-ordem.
+//! Se `f` retorna `false`, a descida nos filhos desse nó é abortada.
 //!
-//! O visitador desce em patterns (literal patterns contêm `TypedExpr`),
-//! guards de match/lambda, with bindings, cláusulas lambda e braços de
-//! select. O callback recebe cada nó exatamente uma vez, em pré-ordem
-//! (pai antes dos filhos).
-//!
-//! Duas variantes: imutável (`for_each_subexpr`) e mutável
-//! (`for_each_subexpr_mut`). Em ambas, o callback pode abortar a descida
-//! nos filhos retornando `false` — útil para nós que são boundaries de
-//! escopo (Lambda) onde o consumidor quer assumir o controle da descida.
+//! Extraído de `infer/expr.rs` para reutilização em captures, tree shaking,
+//! monomorph, comptime, etc.
 
-use crate::typed::{FusedStage, TypedExpr, TypedExprKind, TypedMatchArm};
-use crate::typed_pattern::{TypedLambdaClause, TypedPattern};
+use crate::typed::FusedStage;
+use crate::typed::{TypedExpr, TypedExprKind};
+use crate::typed_pattern::{
+    TypedGuardClause, TypedLambdaClause, TypedMatchArm, TypedPattern, TypedWithBinding,
+};
 
-// ── Imutável ─────────────────────────────────────────────────────────
+// ── Imutável ──────────────────────────────────────────────────────────
 
-/// Percorre todas as sub-expressões de `expr` em pré-ordem, chamando
-/// `f` para cada nó (incluindo o próprio `expr`).
+/// Percorre todas as sub-expressões de `expr` em pré-ordem.
 ///
-/// Se `f` retorna `false`, a descida nos filhos desse nó é abortada
-/// (o callback assume o controle — ex: Lambda como boundary de escopo).
+/// Se `f` retorna `false`, a descida nos filhos desse nó é abortada.
 /// Se retorna `true`, a descida continua normalmente.
 pub(crate) fn for_each_subexpr<F>(expr: &TypedExpr, f: &mut F)
 where
@@ -77,7 +70,9 @@ where
         | TypedExprKind::Var { value, .. } => for_each_subexpr(&value.node, f),
         TypedExprKind::Reassign { value, .. } => for_each_subexpr(&value.node, f),
         TypedExprKind::Return(inner) => for_each_subexpr(&inner.node, f),
-        TypedExprKind::VariantConstruct { payload, .. } => for_each_subexpr(&payload.node, f),
+        TypedExprKind::VariantConstruct { payload, .. } => {
+            for_each_subexpr(&payload.node, f);
+        }
         TypedExprKind::Match { scrutinee, arms } => {
             for_each_subexpr(&scrutinee.node, f);
             for arm in arms {
@@ -195,7 +190,8 @@ where
         TypedExprKind::Comptime { expr } => {
             for_each_subexpr(&expr.node, f);
         }
-        TypedExprKind::ChannelCreate { .. }
+        TypedExprKind::HeapSnapshot { .. }
+        | TypedExprKind::ChannelCreate { .. }
         | TypedExprKind::IntLit { .. }
         | TypedExprKind::FloatLit { .. }
         | TypedExprKind::TextLit { .. }
@@ -447,7 +443,8 @@ where
         TypedExprKind::Comptime { expr } => {
             for_each_subexpr_mut(&mut expr.node, f);
         }
-        TypedExprKind::ChannelCreate { .. }
+        TypedExprKind::HeapSnapshot { .. }
+        | TypedExprKind::ChannelCreate { .. }
         | TypedExprKind::IntLit { .. }
         | TypedExprKind::FloatLit { .. }
         | TypedExprKind::TextLit { .. }

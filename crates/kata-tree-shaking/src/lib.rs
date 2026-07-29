@@ -52,6 +52,7 @@ fn tree_shake_impl(typed: TypedModule, preserve_tests: bool) -> TypedModule {
         functions,
         actions,
         struct_registry,
+        snapshots,
     } = typed;
 
     // ── Coleta nomes alcançados a partir do entry + pre_entry ──
@@ -168,6 +169,7 @@ fn tree_shake_impl(typed: TypedModule, preserve_tests: bool) -> TypedModule {
         functions: kept_functions,
         actions: kept_actions,
         struct_registry,
+        snapshots,
     }
 }
 
@@ -434,5 +436,7 @@ fn collect_refs(
         TypedExprKind::Comptime { expr } => {
             collect_refs(&expr.node, reached_fns, reached_actions, fn_names);
         }
+        // HeapSnapshot — folha (não contém sub-exprs).
+        TypedExprKind::HeapSnapshot { .. } => {}
     }
 }

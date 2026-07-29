@@ -9,6 +9,7 @@
 
 use kata_ast::Spanned;
 use kata_core::dispatch::DispatchTable;
+use kata_core::snapshot::HeapSnapshotData;
 use kata_core::ty::{Ty, TypeEnv};
 
 use crate::typed::TypedExpr;
@@ -39,6 +40,10 @@ pub struct TypedModule {
     /// Catálogo de structs com alias_of/predicates — para o codegen
     /// resolver o Cranelift type correto de refined/alias de primitivos.
     pub struct_registry: kata_core::StructRegistry,
+    /// Snapshots de valores comptime — bytes serializados para embed no binário.
+    /// O comptime pass popula esta tabela; o codegen emite como dados estáticos;
+    /// o runtime faz `kata_rt_load_snapshots` em load-time.
+    pub snapshots: Vec<HeapSnapshotData>,
 }
 
 /// Função nomeada tipada — pronta para o codegen.

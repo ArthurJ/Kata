@@ -606,5 +606,18 @@ pub(crate) fn lower_expr(
             // o resultado avaliado), mas evita panic se o pass não correu.
             lower_expr(&expr.node, ctx)
         }
+
+        // ── HeapSnapshot — load de snapshot_ptrs[snapshot_id] ──
+        // O runtime carrega snapshots em load-time via kata_rt_load_snapshots.
+        // O codegen emite um call para kata_rt_get_snapshot(snapshot_id) que
+        // retorna o ponteiro válido na root_arena.
+        TypedExprKind::HeapSnapshot { snapshot_id, .. } => {
+            let func_ref = ctx.ffi_refs.get("kata_rt_get_snapshot").ok_or_else(|| {
+                super::CodegenError::FfiSymbolNotFound("kata_rt_get_snapshot".into())
+            })?;
+            let id_val = ctx.builder.ins().iconst(I64, *snapshot_id as i64);
+            let call = ctx.builder.ins().call(*func_ref, &[id_val]);
+            Ok(ctx.builder.inst_results(call)[0])
+        }
     }
 }

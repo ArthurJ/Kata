@@ -161,6 +161,26 @@ pub(crate) fn lower_module(
     // Cria um Context do Cranelift (não FunctionBuilderContext).
     let mut ctx = module.make_context();
 
+    // ── Declarar data symbols para snapshots comptime ──
+    // Cada snapshot precisa de dois data symbols: bytes e rebase_offsets.
+    // São declarados antes do entry point para serem referenciados no prólogo,
+    // e definidos após define_function.
+    let snapshot_count = typed.snapshots.len();
+    let mut snapshot_data_ids: Vec<cranelift_module::DataId> = Vec::new();
+    let mut snapshot_rebase_ids: Vec<cranelift_module::DataId> = Vec::new();
+    for i in 0..snapshot_count {
+        let bytes_sym = format!("__kata_snap_bytes_{i}");
+        let rebase_sym = format!("__kata_snap_rebase_{i}");
+        let bytes_id = module
+            .declare_data(&bytes_sym, Linkage::Local, false, false)
+            .map_err(|e| CodegenError::Cranelift(format!("declare_data {bytes_sym}: {e}")))?;
+        let rebase_id = module
+            .declare_data(&rebase_sym, Linkage::Local, false, false)
+            .map_err(|e| CodegenError::Cranelift(format!("declare_data {rebase_sym}: {e}")))?;
+        snapshot_data_ids.push(bytes_id);
+        snapshot_rebase_ids.push(rebase_id);
+    }
+
     // Constrói a função IR dentro do Context.
     {
         let func = &mut ctx.func;
@@ -223,6 +243,48 @@ pub(crate) fn lower_module(
         let root_arena = lower.builder.inst_results(init_inst)[0];
         lower.caller_arena = Some(root_arena);
 
+        // ── Carregar snapshots comptime na root_arena ──
+        // Para cada snapshot, chama kata_rt_load_snapshot(root_arena, bytes_ptr,
+        // bytes_len, rebase_offsets_ptr, rebase_count, snapshot_id).
+        if !typed.snapshots.is_empty() {
+            let load_snap_ref = lower
+                .ffi_refs
+                .get("kata_rt_load_snapshot")
+                .copied()
+                .ok_or_else(|| CodegenError::FfiSymbolNotFound("kata_rt_load_snapshot".into()))?;
+            let ptr_ty = lower.module.target_config().pointer_type();
+            for (i, snap) in typed.snapshots.iter().enumerate() {
+                // Obter GlobalValues para os data symbols.
+                let bytes_gv = lower
+                    .module
+                    .declare_data_in_func(snapshot_data_ids[i], lower.builder.func);
+                let bytes_ptr = lower.builder.ins().global_value(ptr_ty, bytes_gv);
+                let rebase_gv = lower
+                    .module
+                    .declare_data_in_func(snapshot_rebase_ids[i], lower.builder.func);
+                let rebase_ptr = lower.builder.ins().global_value(ptr_ty, rebase_gv);
+
+                let bytes_len = lower.builder.ins().iconst(I64, snap.bytes.len() as i64);
+                let rebase_count = lower
+                    .builder
+                    .ins()
+                    .iconst(I64, snap.rebase_offsets.len() as i64);
+                let snapshot_id = lower.builder.ins().iconst(I64, i as i64);
+
+                lower.builder.ins().call(
+                    load_snap_ref,
+                    &[
+                        root_arena,
+                        bytes_ptr,
+                        bytes_len,
+                        rebase_ptr,
+                        rebase_count,
+                        snapshot_id,
+                    ],
+                );
+            }
+        }
+
         // Lowera pre_entry (let bindings e outras expressões top-level anteriores).
         // Estas são loweradas em sequência, compartilhando o var_map —
         // um `let` define uma variável que o entry pode usar.
@@ -271,6 +333,30 @@ pub(crate) fn lower_module(
         module
             .define_data(did, &data_desc)
             .map_err(|e| CodegenError::Cranelift(format!("define_data {sym}: {e}")))?;
+    }
+
+    // Define os data symbols para snapshots comptime.
+    for (i, snap) in typed.snapshots.iter().enumerate() {
+        // Bytes do snapshot.
+        let bytes_sym = format!("__kata_snap_bytes_{i}");
+        let mut data_desc = cranelift_module::DataDescription::new();
+        data_desc.define(snap.bytes.clone().into());
+        module
+            .define_data(snapshot_data_ids[i], &data_desc)
+            .map_err(|e| CodegenError::Cranelift(format!("define_data {bytes_sym}: {e}")))?;
+
+        // rebase_offsets — array de i64 (usize → i64 para ABI).
+        let rebase_sym = format!("__kata_snap_rebase_{i}");
+        let rebase_bytes: Vec<u8> = snap
+            .rebase_offsets
+            .iter()
+            .flat_map(|off| (*off as i64).to_le_bytes())
+            .collect();
+        let mut rebase_desc = cranelift_module::DataDescription::new();
+        rebase_desc.define(rebase_bytes.into());
+        module
+            .define_data(snapshot_rebase_ids[i], &rebase_desc)
+            .map_err(|e| CodegenError::Cranelift(format!("define_data {rebase_sym}: {e}")))?;
     }
 
     Ok((metadata, string_table, _test_wrappers))

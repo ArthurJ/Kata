@@ -230,6 +230,13 @@ pub enum FfiSymbol {
     LogRecv,
     /// `kata_rt_log_config(topic_ptr, policy_ptr, level) -> ()` — setta defaults de logging.
     LogConfig,
+
+    // ── Comptime snapshots (Fio 12) ──────────────────────
+    /// `kata_rt_load_snapshot(root_arena, bytes_ptr, bytes_len, rebase_offsets_ptr, rebase_count, snapshot_id) -> ()`
+    /// — carrega um snapshot na root_arena e armazena na tabela TLS.
+    LoadSnapshot,
+    /// `kata_rt_get_snapshot(snapshot_id) -> ptr` — retorna ponteiro do snapshot da tabela TLS.
+    GetSnapshot,
 }
 
 impl FfiSymbol {
@@ -362,6 +369,9 @@ impl FfiSymbol {
             FfiSymbol::LogPublish => "kata_rt_log_publish",
             FfiSymbol::LogRecv => "kata_rt_log_recv",
             FfiSymbol::LogConfig => "kata_rt_log_config",
+            // Comptime snapshots
+            FfiSymbol::LoadSnapshot => "kata_rt_load_snapshot",
+            FfiSymbol::GetSnapshot => "kata_rt_get_snapshot",
         }
     }
 
@@ -483,6 +493,9 @@ impl FfiSymbol {
             FfiSymbol::LogPublish => Ty::int(),
             FfiSymbol::LogRecv => Ty::int(),
             FfiSymbol::LogConfig => Ty::Unit,
+            // Comptime snapshots
+            FfiSymbol::LoadSnapshot => Ty::Unit,
+            FfiSymbol::GetSnapshot => Ty::int(),
         }
     }
 
@@ -615,6 +628,9 @@ impl FfiSymbol {
             FfiSymbol::LogPublish,
             FfiSymbol::LogRecv,
             FfiSymbol::LogConfig,
+            // Comptime snapshots
+            FfiSymbol::LoadSnapshot,
+            FfiSymbol::GetSnapshot,
         ];
         all.iter().copied().find(|s| s.symbol_name() == name)
     }

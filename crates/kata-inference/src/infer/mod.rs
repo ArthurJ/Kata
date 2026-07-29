@@ -299,6 +299,7 @@ pub fn infer_module(
         },
         actions: typed_actions,
         struct_registry: resolved.struct_registry.clone(),
+        snapshots: Vec::new(),
     };
 
     // Coleta captures (free variables) de cada Closure.
