@@ -166,6 +166,39 @@ pub fn run_comptime_pass(
             }
         }
 
+        // ── Ponto 7: Constant folding de chamadas com args literais ──
+        // Após replace_comptime_in_place, percorre a TAST procurando
+        // Closures com ffi_symbol: None e todos args literais. JIT-executa
+        // e substitui por literal. O fixpoint garante que folds em cascade
+        // (o resultado de um fold pode ser arg literal de outro).
+        for expr in &mut current.pre_entry {
+            fold_literal_calls(
+                &mut expr.node,
+                &ctx,
+                &mut changed,
+                &mut snapshots,
+                &comptime_bindings,
+            )?;
+        }
+        fold_literal_calls(
+            &mut current.entry.node,
+            &ctx,
+            &mut changed,
+            &mut snapshots,
+            &comptime_bindings,
+        )?;
+        for action in &mut current.actions {
+            for stmt in &mut action.body {
+                fold_literal_calls(
+                    &mut stmt.node,
+                    &ctx,
+                    &mut changed,
+                    &mut snapshots,
+                    &comptime_bindings,
+                )?;
+            }
+        }
+
         if !changed {
             break;
         }
@@ -478,6 +511,30 @@ fn walk_ref<F: FnMut(&TypedExpr)>(expr: &TypedExpr, f: &mut F) {
 /// Fase 1: escalares (Int SMI, Float, Boolean, Unit) → literais directo na TAST.
 /// Fase 2: tipos complexos (List, Tuple, Struct, Text, Sum com payload) →
 /// `HeapSnapshot` via `serialize_snapshot`.
+/// Resolve um `Ty::Struct` que é alias de primitivo até o tipo base.
+/// Se `ty` é `Ty::Struct("Altura")` e `Altura` tem `alias_of: "Float"`,
+/// retorna `Ty::Prim(Float)`. Para structs não-alias, retorna `None`.
+fn resolve_alias_base(ty: &Ty, struct_registry: &StructRegistry) -> Option<Ty> {
+    if let Ty::Struct(name) = ty {
+        let mut current = name.clone();
+        loop {
+            let info = struct_registry.get(&current)?;
+            let base = info.alias_of.as_ref()?;
+            match base.as_str() {
+                "Int" => return Some(Ty::Prim(PrimTy::Int)),
+                "Float" => return Some(Ty::Prim(PrimTy::Float)),
+                "Text" => return Some(Ty::Prim(PrimTy::Text)),
+                "Rational" => return Some(Ty::Prim(PrimTy::Rational)),
+                _ => {
+                    // Alias de outro struct — seguir a cadeia.
+                    current = base.clone();
+                }
+            }
+        }
+    }
+    None
+}
+
 fn result_to_literal(
     result: &ComptimeResult,
     original: &TypedExpr,
@@ -485,7 +542,13 @@ fn result_to_literal(
     struct_registry: &StructRegistry,
     enum_registry: &EnumRegistry,
 ) -> Result<TypedExpr, ComptimeError> {
-    match &result.ty {
+    // Se result.ty é alias de primitivo (ex: Altura → Float), resolver
+    // para o tipo base e produzir o literal correspondente. O alias é
+    // transparente em runtime — o valor bruto é o mesmo do tipo base.
+    let effective_ty = resolve_alias_base(&result.ty, struct_registry)
+        .unwrap_or_else(|| result.ty.clone());
+
+    match &effective_ty {
         // ── Escalares: literais directo na TAST ──
         Ty::Prim(PrimTy::Int) => {
             // O valor raw é o valor Kata bruto (SMI-tagged se Int).
@@ -505,7 +568,7 @@ fn result_to_literal(
             let text = format!("{}", decoded);
             Ok(TypedExpr {
                 span: original.span,
-                ty: result.ty.clone(),
+                ty: effective_ty.clone(),
                 tail_pos: original.tail_pos,
                 escape: original.escape.clone(),
                 kind: TypedExprKind::IntLit { text },
@@ -517,7 +580,7 @@ fn result_to_literal(
             let text = format!("{}", f);
             Ok(TypedExpr {
                 span: original.span,
-                ty: result.ty.clone(),
+                ty: effective_ty.clone(),
                 tail_pos: original.tail_pos,
                 escape: original.escape.clone(),
                 kind: TypedExprKind::FloatLit { text },
@@ -674,4 +737,114 @@ fn jit_execute_expr(
         raw: result.raw,
         ty: result.ty,
     })
+}
+
+// ── Ponto 7: Constant folding de chamadas com args literais ──
+
+/// Verifica se um `TypedExpr` é um literal "puro" — literal que não
+/// depende de execução e pode ser usado como argumento de fold.
+///
+/// Aceitos: IntLit, FloatLit, TextLit, Unit, HeapSnapshot, VariantQual
+/// (variant sem payload — Boolean::True, Result::Err sem payload, etc.).
+/// Não aceitos: VariantConstruct (tem payload — precisa avaliar o payload),
+/// Closure, Ident, etc.
+fn is_literal_expr(expr: &TypedExpr) -> bool {
+    matches!(
+        &expr.kind,
+        TypedExprKind::IntLit { .. }
+            | TypedExprKind::FloatLit { .. }
+            | TypedExprKind::TextLit { .. }
+            | TypedExprKind::Unit
+            | TypedExprKind::HeapSnapshot { .. }
+            | TypedExprKind::VariantQual { .. }
+    )
+}
+
+/// Percorre a TAST procurando `Closure` com `ffi_symbol: None` e todos
+/// args literais. JIT-executa a Closure e substitui por literal.
+///
+/// Usa `walk_mut` para recursão nos filhos primeiro (bottom-up): os filhos
+/// podem conter Closures foldable que, ao serem dobradas, transformam um
+/// Closure pai (cujo arg era uma Closure) numa Closure com args literais
+/// na próxima iteração do fixpoint.
+fn fold_literal_calls(
+    expr: &mut TypedExpr,
+    ctx: &ModuleCtx<'_>,
+    changed: &mut bool,
+    snapshots: &mut Vec<kata_core::snapshot::HeapSnapshotData>,
+    comptime_bindings: &std::collections::HashMap<String, TypedExpr>,
+) -> Result<(), ComptimeError> {
+    // Recursão bottom-up nos filhos primeiro.
+    walk_mut(expr, &mut |child| {
+        fold_literal_calls(child, ctx, changed, snapshots, comptime_bindings)
+    })?;
+
+    // Após recursão, verificar se o próprio nó é uma Closure foldable.
+    if let TypedExprKind::Closure {
+        callee,
+        args,
+        ffi_symbol: None,
+    } = &expr.kind
+    {
+        // Callee deve ser Ident (função Kata pura nomeada) cujo nome
+        // existe na lista de TypedFunction do módulo. Isto exclui alias
+        // constructors, builtins, e outros constructs que podem ter
+        // ffi_symbol: None mas não são funções puras comuns.
+        let is_pure_callee = match &callee.node.kind {
+            TypedExprKind::Ident { name } => {
+                matches!(&callee.node.ty, Ty::Function(..))
+                    && ctx.functions.iter().any(|f| f.name == *name)
+            }
+            // Lambdas anônimas também são puras por design, mas só
+            // fazemos fold de lambdas com corpo direto (não recursivo).
+            // O JIT executa o lambda como entry point do mini módulo.
+            TypedExprKind::Lambda { .. } => true,
+            _ => false,
+        };
+
+        if is_pure_callee && args.iter().all(|a| is_literal_expr(&a.node)) {
+            // Não dobrar construtores falíveis — Closure que retorna
+            // Result (ex: Peso 70.0? com predicado refined). O fold via
+            // JIT não preserva a semântica do predicado e produz um literal
+            // com tipo errado (HeapSnapshot para Result em vez do valor).
+            if matches!(&expr.ty, Ty::Generic(name, _) if name == "Result") {
+                return Ok(());
+            }
+            // JIT-executar a Closure inteira.
+            // Usar catch_unwind porque o Cranelift pode panicar em vez de
+            // retornar Err (ex: type mismatch, alias edge cases). Um panic
+            // não deve quebrar a compilação — apenas não faz fold.
+            let closure_expr = expr.clone();
+            let result = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                jit_execute_expr(&closure_expr, ctx, comptime_bindings)
+            })) {
+                Ok(Ok(r)) => r,
+                // JIT retornou Err ou panic — não faz fold.
+                Ok(Err(_)) | Err(_) => return Ok(()),
+            };
+
+            // Substituir por literal ou HeapSnapshot.
+            let replacement = match result_to_literal(
+                &result,
+                &closure_expr,
+                snapshots,
+                ctx.struct_registry,
+                ctx.enum_registry,
+            ) {
+                Ok(r) => r,
+                Err(_) => return Ok(()),
+            };
+
+            // Preservar o tipo original da expressão. O JIT vê aliases
+            // como seus tipos base (alias é transparente no runtime),
+            // mas a TAST precisa manter o tipo original (ex: Altura, não
+            // Float) para o codegen não quebrar com type mismatch.
+            let original_ty = expr.ty.clone();
+            expr.kind = replacement.kind;
+            expr.ty = original_ty;
+            *changed = true;
+        }
+    }
+
+    Ok(())
 }

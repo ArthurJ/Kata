@@ -440,3 +440,119 @@ fn comptime_callsite_pipe_is_runtime() {
         "@comptime 5 |> + 1 _ deve imprimir 6 (pipe é runtime) — stdout: {stdout}"
     );
 }
+
+// ── Ponto 7: Constant folding de chamadas com args literais ───────────
+
+/// `dobro 5` (função pura com arg literal) deve ser dobrado para `10`
+/// em compile-time, sem `@comptime` explícito.
+#[test]
+fn fold_literal_call_int() {
+    let src = "\
+dobro :: Int => Int
+lambda x: + x x
+
+action main
+    echo!(dobro 5)
+
+main!()";
+    let (stdout, stderr, code) = run_kata_run(src);
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    let first = stdout.lines().next().unwrap_or("");
+    assert_eq!(
+        first, "10",
+        "dobro 5 deve ser dobrado para 10 em compile-time — stdout: {stdout}"
+    );
+}
+
+/// `square 3.14` (função pura com arg Float literal) deve ser dobrada
+/// para `9.8596` em compile-time.
+#[test]
+fn fold_literal_call_float() {
+    let src = "\
+square :: Float => Float
+lambda x: * x x
+
+action main
+    echo!(square 3.14)
+
+main!()";
+    let (stdout, stderr, code) = run_kata_run(src);
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    let first = stdout.lines().next().unwrap_or("");
+    assert_eq!(
+        first, "9.8596",
+        "square 3.14 deve ser dobrado para 9.8596 em compile-time — stdout: {stdout}"
+    );
+}
+
+/// `quad 3` chama `dobro (dobro 3)` — encadeamento via fixpoint.
+/// Primeiro fold: `dobro 3` → `6`. Segundo fold: `dobro 6` → `12`.
+#[test]
+fn fold_literal_call_nested() {
+    let src = "\
+dobro :: Int => Int
+lambda x: + x x
+
+quad :: Int => Int
+lambda x: dobro (dobro x)
+
+action main
+    echo!(quad 3)
+
+main!()";
+    let (stdout, stderr, code) = run_kata_run(src);
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    let first = stdout.lines().next().unwrap_or("");
+    assert_eq!(
+        first, "12",
+        "quad 3 deve ser dobrado para 12 via fixpoint — stdout: {stdout}"
+    );
+}
+
+/// `+ 1 (dobro 5)` — o arg `dobro 5` é uma Closure (não literal),
+/// então o `+` não pode ser dobrado na primeira iteração.
+/// Mas `dobro 5` → `10` na primeira iteração, e na segunda iteração
+/// `+ 1 10` → `11` (FFI builtin, não foldable, mas o arg virou literal).
+/// O `+` tem `ffi_symbol: Some(...)` então não é foldable. O teste
+/// confirma que o fold de `dobro 5` não quebra o `+` que usa o resultado.
+#[test]
+fn fold_literal_call_in_argument_of_ffi_call() {
+    let src = "\
+dobro :: Int => Int
+lambda x: + x x
+
+action main
+    echo!(+ 1 (dobro 5))
+
+main!()";
+    let (stdout, stderr, code) = run_kata_run(src);
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    let first = stdout.lines().next().unwrap_or("");
+    assert_eq!(
+        first, "11",
+        "+ 1 (dobro 5) deve produzir 11 — stdout: {stdout}"
+    );
+}
+
+/// Função com múltiplas cláusulas e arg literal — o pattern matching
+/// é resolvido em compile-time via JIT, produzindo o literal.
+#[test]
+fn fold_literal_call_multi_clause() {
+    let src = "\
+fib :: Int => Int
+lambda 0: 0
+lambda 1: 1
+lambda n: + (fib (- n 1)) (fib (- n 2))
+
+action main
+    echo!(fib 10)
+
+main!()";
+    let (stdout, stderr, code) = run_kata_run(src);
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    let first = stdout.lines().next().unwrap_or("");
+    assert_eq!(
+        first, "55",
+        "fib 10 deve ser dobrado para 55 em compile-time — stdout: {stdout}"
+    );
+}
