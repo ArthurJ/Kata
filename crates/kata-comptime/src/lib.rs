@@ -99,6 +99,11 @@ pub fn run_comptime_pass(
     let mut snapshots: Vec<kata_core::snapshot::HeapSnapshotData> =
         std::mem::take(&mut current.snapshots);
 
+    // Bindings comptime-available — construído incrementalmente durante o
+    // fixpoint. Após substituir @comptime let x := ..., x é adicionado aqui.
+    // Um @comptime posterior que referencia x verá Ident(x) no set.
+    let mut comptime_bindings: std::collections::HashSet<String> = std::collections::HashSet::new();
+
     // Fixpoint: substituir Comptime pode revelar novos Comptime em inner exprs.
     loop {
         let mut changed = false;
@@ -124,19 +129,37 @@ pub fn run_comptime_pass(
         // Processar pre_entry
         for expr in &mut current.pre_entry {
             let was_comptime = contains_comptime(&expr.node);
-            replace_comptime_in_place(&mut expr.node, &ctx, &mut changed, &mut snapshots)?;
+            replace_comptime_in_place(
+                &mut expr.node,
+                &ctx,
+                &mut changed,
+                &mut snapshots,
+                &mut comptime_bindings,
+            )?;
             if was_comptime && !contains_comptime(&expr.node) {
                 // Já substituído — ok
             }
         }
 
         // Processar entry
-        replace_comptime_in_place(&mut current.entry.node, &ctx, &mut changed, &mut snapshots)?;
+        replace_comptime_in_place(
+            &mut current.entry.node,
+            &ctx,
+            &mut changed,
+            &mut snapshots,
+            &mut comptime_bindings,
+        )?;
 
         // Processar bodies de actions (Fase 3b)
         for action in &mut current.actions {
             for stmt in &mut action.body {
-                replace_comptime_in_place(&mut stmt.node, &ctx, &mut changed, &mut snapshots)?;
+                replace_comptime_in_place(
+                    &mut stmt.node,
+                    &ctx,
+                    &mut changed,
+                    &mut snapshots,
+                    &mut comptime_bindings,
+                )?;
             }
         }
 
@@ -155,11 +178,12 @@ fn replace_comptime_in_place(
     ctx: &ModuleCtx<'_>,
     changed: &mut bool,
     snapshots: &mut Vec<kata_core::snapshot::HeapSnapshotData>,
+    comptime_bindings: &mut std::collections::HashSet<String>,
 ) -> Result<(), ComptimeError> {
     if !matches!(expr.kind, TypedExprKind::Comptime { .. }) {
         // Recursão nos filhos.
         walk_mut(expr, &mut |child| {
-            replace_comptime_in_place(child, ctx, changed, snapshots)
+            replace_comptime_in_place(child, ctx, changed, snapshots, comptime_bindings)
         })?;
         return Ok(());
     }
@@ -177,7 +201,7 @@ fn replace_comptime_in_place(
     // inteiro por `Let { name, value: <literal> }`.
     if let TypedExprKind::Let { name, value } = &inner.kind {
         // 1. Verificar constness do value (não do let inteiro).
-        if !is_comptime_available(&value.node) {
+        if !is_comptime_available(&value.node, comptime_bindings) {
             // Restaurar antes de propagar erro.
             expr.kind = TypedExprKind::Comptime {
                 expr: Box::new(inner_owned),
@@ -229,13 +253,15 @@ fn replace_comptime_in_place(
             value: Box::new(Spanned::new(literal, value.span)),
         };
         expr.ty = inner.ty.clone();
+        // 6. Registrar o binding como comptime-available para dataflow.
+        comptime_bindings.insert(name.clone());
         *changed = true;
         return Ok(());
     }
 
     // Caso geral: @comptime envolve uma expressão qualquer.
     // 1. Verificar constness do inner expr.
-    if !is_comptime_available(inner) {
+    if !is_comptime_available(inner, comptime_bindings) {
         expr.kind = TypedExprKind::Comptime {
             expr: Box::new(inner_owned),
         };
