@@ -1,6 +1,6 @@
 # PRD — Fio 12: Comptime, `@cache`
 
-**Status:** Fase 1 ✅, Fase 2 ✅, Fase 3 ✅ (Fases 4-6 pendentes)
+**Status:** Fase 1 ✅, Fase 2 ✅, Fase 3 ✅, Fase 4 ✅, Fase 6 ✅ (Fase 5 pendente)
 **Data:** 2026-07-28
 **Depende de:** Fio 1-10 ✅ (pipeline completo, módulos, arenas hierárquicas), Fio 11 ✅ (TypeShape para serialização de args em `@cache`)
 **Não depende de:** `@parallel` (congelado), Fio 13 (Dict/Set), Fio 15 (REPL)
@@ -379,7 +379,7 @@ secção. O linker resolve os ponteiros absolutos.
 - **DoD:** `dobro :: Int => Int @cache{strategy: "LRU"}` com 100 chamadas a
   `dobro 5` executa o body 1 vez. Cache hit retorna resultado sem re-executar.
 
-### Fase 6: AOT embedding
+### Fase 6: AOT embedding ✅
 
 - Tabela de snapshots emitida como secção de dados no `.o`
 - Shim C chama `kata_rt_load_snapshots` antes de `__kata_entry`
@@ -389,7 +389,12 @@ secção. O linker resolve os ponteiros absolutos.
   memória do JITModule, que seria desmapeada em AOT. O fix torna o snapshot
   auto-contido (strings e payloads copiados para o snapshot).
 - **DoD:** `kata build examples/comptime.kata` produz executável que executa
-  sem o compilador e usa snapshots em load-time.
+  sem o compilador e usa snapshots em load-time. ✅
+- **Commit:** `e5c89b5`
+- **Implementação:** `cmd_build` em `aot.rs` agora chama `run_comptime_pass`
+  entre `tree_shake` e `aot_emit`. O codegen AOT já lowera `HeapSnapshot` para
+  `kata_rt_get_snapshot(id)` e emite snapshots como data symbols no `.o`. O
+  linker resolve os símbolos contra `libkata_rt.a`.
 
 ## 9. Não depende de
 
