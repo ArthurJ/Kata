@@ -23,6 +23,7 @@
 //! na appended). O codegen precisa fazer `load(ptr + 0)` para obter o
 //! ponteiro da string, ou o lowering precisa somar o offset do header.
 
+use kata_core::EnumRegistry;
 use kata_core::StructRegistry;
 use kata_core::snapshot::HeapSnapshotData;
 use kata_core::ty::{PrimTy, Ty};
@@ -39,9 +40,10 @@ pub fn serialize_snapshot(
     raw: i64,
     ty: &Ty,
     struct_registry: &StructRegistry,
+    enum_registry: &EnumRegistry,
 ) -> Result<HeapSnapshotData, String> {
     let mut ser = Serializer::new();
-    serialize_value(&mut ser, raw, ty, struct_registry)?;
+    serialize_value(&mut ser, raw, ty, struct_registry, enum_registry)?;
     // finish() consome ser e ajusta os appended_rebase_offsets somando
     // main_len, depois mescla com rebase_offsets. Retorna o buffer final.
     let bytes = ser.finish();
@@ -191,16 +193,17 @@ fn serialize_value(
     raw: i64,
     ty: &Ty,
     struct_registry: &StructRegistry,
+    enum_registry: &EnumRegistry,
 ) -> Result<(), String> {
     match ty {
         Ty::List(elem_ty) => {
-            serialize_list(ser, raw, elem_ty, struct_registry)?;
+            serialize_list(ser, raw, elem_ty, struct_registry, enum_registry)?;
         }
         Ty::Tuple(elements) => {
             let ptr = raw as *const u8;
             for (i, elem_ty) in elements.iter().enumerate() {
                 let word = unsafe { read_i64_at(ptr, i * 8) };
-                serialize_value(ser, word, elem_ty, struct_registry)?;
+                serialize_value(ser, word, elem_ty, struct_registry, enum_registry)?;
             }
         }
         Ty::Struct(name) => {
@@ -208,7 +211,7 @@ fn serialize_value(
                 let ptr = raw as *const u8;
                 for (i, field) in info.fields.iter().enumerate() {
                     let word = unsafe { read_i64_at(ptr, i * 8) };
-                    serialize_value(ser, word, &field.ty, struct_registry)?;
+                    serialize_value(ser, word, &field.ty, struct_registry, enum_registry)?;
                 }
             } else {
                 ser.write_i64(raw);
@@ -223,7 +226,20 @@ fn serialize_value(
                 let tag = unsafe { read_i64_at(ptr, 0) };
                 let payload = unsafe { read_i64_at(ptr, 8) };
                 ser.write_i64(tag);
-                ser.write_i64(payload);
+                // Serializar o payload recursivamente. Precisamos mapear
+                // tag → variant → payload_ty. Para Sum não-genérico, o
+                // payload_ty é fixo por variant (sem type_args).
+                let payload_ty = resolve_payload_ty(enum_registry, name, tag as usize);
+                match payload_ty {
+                    Some(pty) => {
+                        serialize_value(ser, payload, &pty, struct_registry, enum_registry)?;
+                    }
+                    None => {
+                        // Variante sem payload ou enum não registrado —
+                        // copia o i64 cru (ex: Boolean já tratado acima).
+                        ser.write_i64(payload);
+                    }
+                }
             }
         }
         Ty::Generic(name, type_args) => {
@@ -235,15 +251,20 @@ fn serialize_value(
                 let ptr = raw as *const u8;
                 let tag = unsafe { read_i64_at(ptr, 0) };
                 let payload = unsafe { read_i64_at(ptr, 8) };
-                // O payload pode ser um tipo complexo dependendo do variant.
-                // Para Result::Ok(T), o payload é T. Para Result::Err(E),
-                // o payload é E. Sem saber qual variant pelo tag, serializamos
-                // o payload como i64 cru. Se for um ponteiro para tipo complexo,
-                // o consumidor precisa fazer o deref.
-                // TODO: se o payload for Text ou tipo complexo, serializar
-                // recursivamente. Por ora, escrever cru.
                 ser.write_i64(tag);
-                ser.write_i64(payload);
+                // Serializar o payload recursivamente, instanciando o
+                // payload_ty com os type_args concretos.
+                let payload_ty =
+                    resolve_generic_payload_ty(enum_registry, name, tag as usize, type_args);
+                match payload_ty {
+                    Some(pty) => {
+                        serialize_value(ser, payload, &pty, struct_registry, enum_registry)?;
+                    }
+                    None => {
+                        // Variante sem payload ou enum não registrado.
+                        ser.write_i64(payload);
+                    }
+                }
             }
         }
         Ty::Prim(PrimTy::Text) => {
@@ -292,6 +313,7 @@ fn serialize_list(
     ptr: i64,
     elem_ty: &Ty,
     struct_registry: &StructRegistry,
+    enum_registry: &EnumRegistry,
 ) -> Result<(), String> {
     let mut current = ptr;
     while current != 0 {
@@ -300,7 +322,7 @@ fn serialize_list(
         let tail = unsafe { read_i64_at(raw_ptr, 8) };
 
         // Escreve head (8 bytes — valor escalar ou ponteiro para appended).
-        serialize_value(ser, head, elem_ty, struct_registry)?;
+        serialize_value(ser, head, elem_ty, struct_registry, enum_registry)?;
 
         // Escreve tail como offset relativo ou 0.
         if tail == 0 {
@@ -316,4 +338,39 @@ fn serialize_list(
         current = tail;
     }
     Ok(())
+}
+
+/// Resolve o tipo do payload de uma variante de Sum não-genérico.
+///
+/// Mapeia tag (índice da variante) → nome da variante → payload_ty.
+/// Retorna `None` se a variante não tem payload ou o enum não está registrado.
+fn resolve_payload_ty(enum_registry: &EnumRegistry, enum_name: &str, tag: usize) -> Option<Ty> {
+    let variants = enum_registry.all_variants(enum_name)?;
+    let variant = variants.get(tag)?;
+    variant.payload_ty.clone()
+}
+
+/// Resolve o tipo do payload de uma variante de Sum genérico, instanciando
+/// com os type_args concretos.
+///
+/// Ex: `Result::Err "fail"` tem tag=1 (Err), type_args=[Int, Text].
+/// O payload_ty de Err é `Ty::Var("E")`. Substituindo E→Text, obtemos
+/// `Ty::Prim(PrimTy::Text)`.
+fn resolve_generic_payload_ty(
+    enum_registry: &EnumRegistry,
+    enum_name: &str,
+    tag: usize,
+    type_args: &[Ty],
+) -> Option<Ty> {
+    let variants = enum_registry.all_variants(enum_name)?;
+    let variant = variants.get(tag)?;
+    let payload_ty = variant.payload_ty.as_ref()?;
+    // Se o enum é genérico, precisamos instanciar o payload_ty com os
+    // type_args concretos. instantiate_variant faz a substituição de
+    // Ty::Var("T") → type_args[0], etc.
+    if enum_registry.is_generic(enum_name) {
+        enum_registry.instantiate_variant(enum_name, &variant.name, type_args)
+    } else {
+        Some(payload_ty.clone())
+    }
 }

@@ -181,7 +181,7 @@ fn cmd_test(path: &str, filter: Option<&str>) -> miette::Result<()> {
 
         // Comptime pass — avalia @comptime antes de compilar os testes.
         let typed = kata_monomorph::MonoModule::from(
-            run_comptime_pass(typed.inner)
+            run_comptime_pass(typed.inner, &resolved.enum_registry)
                 .map_err(|e| miette::Report::msg(format!("erro de comptime: {e}")))?,
         );
 
@@ -368,7 +368,7 @@ fn run_pipeline_with_file(source: &str, file_path: Option<&str>) -> miette::Resu
     // 6b. Comptime pass — avalia expressões @comptime em compile-time e
     //     substitui por literais antes do codegen.
     let mono = kata_monomorph::MonoModule::from(
-        run_comptime_pass(mono.inner)
+        run_comptime_pass(mono.inner, &resolved.enum_registry)
             .map_err(|e| miette::Report::msg(format!("erro de comptime: {e}")))?,
     );
 

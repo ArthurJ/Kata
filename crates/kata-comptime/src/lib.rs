@@ -19,6 +19,7 @@ mod pureza;
 mod snapshot;
 
 use kata_ast::Spanned;
+use kata_core::EnumRegistry;
 use kata_core::StructRegistry;
 use kata_core::dispatch::DispatchTable;
 use kata_core::ty::{PrimTy, Ty, TypeEnv};
@@ -39,6 +40,7 @@ struct ModuleCtx<'a> {
     functions: &'a [TypedFunction],
     actions: &'a [TypedAction],
     struct_registry: &'a StructRegistry,
+    enum_registry: &'a EnumRegistry,
 }
 
 /// Resultado da execução comptime — valor bruto + tipo.
@@ -87,7 +89,10 @@ impl std::error::Error for ComptimeError {}
 /// por literais (escalares) ou snapshots (complexos — Fase 2).
 ///
 /// Repete até fixpoint (sem novos nós `Comptime`).
-pub fn run_comptime_pass(typed: TypedModule) -> Result<TypedModule, ComptimeError> {
+pub fn run_comptime_pass(
+    typed: TypedModule,
+    enum_registry: &EnumRegistry,
+) -> Result<TypedModule, ComptimeError> {
     let mut current = typed;
     // Acumulador de snapshots — populado por replace_comptime_in_place.
     // No fim, atribuído a current.snapshots.
@@ -107,6 +112,7 @@ pub fn run_comptime_pass(typed: TypedModule) -> Result<TypedModule, ComptimeErro
             functions: &current.functions,
             actions: &current.actions,
             struct_registry: &current.struct_registry,
+            enum_registry,
         };
 
         // Processar pre_entry
@@ -188,8 +194,13 @@ fn replace_comptime_in_place(
         };
 
         // 4. Substituir por literal ou HeapSnapshot.
-        let literal = match result_to_literal(&result, &value.node, snapshots, ctx.struct_registry)
-        {
+        let literal = match result_to_literal(
+            &result,
+            &value.node,
+            snapshots,
+            ctx.struct_registry,
+            ctx.enum_registry,
+        ) {
             Ok(l) => l,
             Err(e) => {
                 expr.kind = TypedExprKind::Comptime {
@@ -240,7 +251,13 @@ fn replace_comptime_in_place(
     };
 
     // 4. Substituir por literal (escalar) ou HeapSnapshot (complexo).
-    let replacement = match result_to_literal(&result, inner, snapshots, ctx.struct_registry) {
+    let replacement = match result_to_literal(
+        &result,
+        inner,
+        snapshots,
+        ctx.struct_registry,
+        ctx.enum_registry,
+    ) {
         Ok(r) => r,
         Err(e) => {
             expr.kind = TypedExprKind::Comptime {
@@ -400,6 +417,7 @@ fn result_to_literal(
     original: &TypedExpr,
     snapshots: &mut Vec<kata_core::snapshot::HeapSnapshotData>,
     struct_registry: &StructRegistry,
+    enum_registry: &EnumRegistry,
 ) -> Result<TypedExpr, ComptimeError> {
     match &result.ty {
         // ── Escalares: literais directo na TAST ──
@@ -470,10 +488,15 @@ fn result_to_literal(
         | Ty::Prim(PrimTy::Text)
         | Ty::Sum(_)
         | Ty::Generic(_, _) => {
-            let snapshot = snapshot::serialize_snapshot(result.raw, &result.ty, struct_registry)
-                .map_err(|e| ComptimeError::JitError {
-                    reason: format!("serialização de snapshot: {e}"),
-                })?;
+            let snapshot = snapshot::serialize_snapshot(
+                result.raw,
+                &result.ty,
+                struct_registry,
+                enum_registry,
+            )
+            .map_err(|e| ComptimeError::JitError {
+                reason: format!("serialização de snapshot: {e}"),
+            })?;
             let snapshot_id = snapshots.len() as u32;
             snapshots.push(snapshot);
             Ok(TypedExpr {
