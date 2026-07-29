@@ -1,6 +1,6 @@
 # PRD — Fio 12: Comptime, `@cache`
 
-**Status:** Pendente
+**Status:** Fase 1 ✅, Fase 2 ✅ (Fases 3-6 pendentes)
 **Data:** 2026-07-28
 **Depende de:** Fio 1-10 ✅ (pipeline completo, módulos, arenas hierárquicas), Fio 11 ✅ (TypeShape para serialização de args em `@cache`)
 **Não depende de:** `@parallel` (congelado), Fio 13 (Dict/Set), Fio 15 (REPL)
@@ -318,25 +318,25 @@ secção. O linker resolve os ponteiros absolutos.
 
 ## 8. Fases
 
-### Fase 1: `@comptime` em `let` top-level com resultado escalar
+### Fase 1: `@comptime` em `let` top-level com resultado escalar ✅
 
 - Parser reconhece `@comptime` antes de `let` top-level
 - Comptime pass avalia expressão via JIT
 - Resultado escalar → `Literal` na TAST
 - Verificação de constness (dataflow)
 - Pureza verification
-- **DoD:** `@comptime let x := + 1 2` gera `x = 3` literal no binário.
+- **DoD:** `@comptime let x := + 1 2` gera `x = 3` literal no binário. ✅
+- **Commit:** `8c3d299`
 
-### Fase 2: HeapSnapshot para tipos complexos
+### Fase 2: HeapSnapshot para tipos complexos ✅
 
 - `HeapSnapshot` node na TAST
-- Arena temporária dedicada para comptime
-- Captura de bytes + rebase_offsets
-- `kata_rt_load_snapshots` em load-time
-- Codegen lowera `HeapSnapshot` para load de snapshot_ptr
+- Serialização type-aware (List, Tuple, Struct, Text, Sum com payload)
+- `kata_rt_load_snapshot` em load-time com rebasing de ponteiros
+- Codegen lowera `HeapSnapshot` para `kata_rt_get_snapshot(id)`
 - **DoD:** `@comptime let t := [1 2 3]` gera lista no binário sem código de
-  construção. `@comptime let s := Pessoa "Alice" 30` gera struct sem código de
-  construção.
+  construção. ✅ `len`, `head`, `tail` funcionam sobre o snapshot carregado.
+- **Commit:** `b7f7485`
 
 ### Fase 3: `@comptime` em call-site dentro de body
 

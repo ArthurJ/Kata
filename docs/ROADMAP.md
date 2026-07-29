@@ -154,6 +154,7 @@ Fio 1: Fundação + Aritmética + CLI
 ├── Fio 12: Comptime, @cache — PRD: docs/PRD-fio12-comptime.md
 │   (@comptime call-site explícito, JIT-and-execute, HeapSnapshot com arenas,
 │    @cache{strategy: "LRU"} em caller_arena, ascription refined delega ao comptime)
+│   Fase 1 ✅, Fase 2 ✅ — Fases 3-6 pendentes
 │
 └── Fio 15: AOT, REPL
     (kata build — Cranelift object + linker, kata repl — TypeEnv persistente)
