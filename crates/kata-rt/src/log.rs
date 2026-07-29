@@ -180,6 +180,18 @@ pub extern "C" fn kata_rt_log_publish(
         })
     };
 
+    // Tópicos especiais: stdout/stderr escrevem diretamente nas saídas padrão.
+    // Não passam pelo canal CSP — útil para debug e telemetria de desenvolvimento.
+    if topic == "stdout" || topic == "stderr" {
+        let msg_text = read_text(msg);
+        if topic == "stdout" {
+            println!("{msg_text}");
+        } else {
+            eprintln!("{msg_text}");
+        }
+        return 0;
+    }
+
     let handle = get_or_create_topic(&topic, &policy);
     // Envia a mensagem no canal. Para "block", channel_send suspende se cheio.
     // Para "drop" (Broadcast), channel_send é fire-and-forget.
