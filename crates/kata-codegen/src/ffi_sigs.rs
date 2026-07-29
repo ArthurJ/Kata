@@ -647,6 +647,15 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
             sig.params.push(AbiParam::new(I64)); // key_len
             sig.params.push(AbiParam::new(I64)); // value
         }
+        // cache_serialize_key: (value, desc_ptr, desc_len, out_ptr, out_cap) -> i64
+        FfiSymbol::CacheSerializeKey => {
+            sig.params.push(AbiParam::new(I64)); // value
+            sig.params.push(AbiParam::new(I64)); // desc_ptr
+            sig.params.push(AbiParam::new(I64)); // desc_len
+            sig.params.push(AbiParam::new(I64)); // out_ptr
+            sig.params.push(AbiParam::new(I64)); // out_cap
+            sig.returns.push(AbiParam::new(I64)); // bytes_written (-1 = error)
+        }
     }
 
     sig

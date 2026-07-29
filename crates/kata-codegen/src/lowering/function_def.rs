@@ -12,7 +12,7 @@ use cranelift_codegen::ir::{
 use cranelift_codegen::isa::CallConv;
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_module::{Linkage, Module};
-use kata_core::ty::Ty;
+use kata_core::ty::{PrimTy, Ty};
 use kata_inference::CacheSpec;
 use kata_inference::{
     CaptureInfo, TypedExpr, TypedExprKind, TypedFunction, TypedLambdaClause, TypedLogSpec,
@@ -159,7 +159,7 @@ pub(crate) fn define_function_body(
             var_map: HashMap::new(),
             anon_counter: 0,
             emitted_tail_call: false,
-            no_tail_calls: false,
+            no_tail_calls: cache_spec.is_some(),
             epilogue_block: None,
             fiber_arena: None,
             caller_arena: None,
@@ -245,22 +245,81 @@ pub(crate) fn define_function_body(
                 .call(*get_fn, &[arena_handle, fn_id_val, cap_val]);
             let handle_val = builder.inst_results(handle)[0];
 
-            // Serializa args: para Int (I64), a key é o próprio valor (8 bytes).
-            // Aloca stack space para a key.
-            let key_len = (clause_params.len() * 8) as i64;
-            let key_len_val = builder.ins().iconst(I64, key_len);
+            // ── Serializa args via type descriptor ──
+            // Para cada param, chama kata_rt_serialize_key que caminha o valor
+            // segundo o type descriptor e escreve bytes de conteúdo (não ponteiros).
+            // O type descriptor é construído em compile-time e escrito na stack.
+
+            // 1. Construir type descriptors para cada param (compile-time).
+            let descriptors: Vec<Vec<u8>> = param_types
+                .iter()
+                .map(|ty| build_type_descriptor(ty, struct_registry))
+                .collect();
+
+            // 2. Alocar stack space para a key buffer (generoso: 4096 bytes).
+            let key_cap = 4096i64;
             let key_sslot = builder.func.create_sized_stack_slot(StackSlotData::new(
                 StackSlotKind::ExplicitSlot,
-                key_len as u32,
+                key_cap as u32,
                 8,
             ));
             let key_slot = builder.ins().stack_addr(I64, key_sslot, 0);
+
+            // 3. Serializar cada param na key buffer.
+            let serialize_fn = lower
+                .ffi_refs
+                .get("kata_rt_serialize_key")
+                .expect("kata_rt_serialize_key registrado");
+
+            let mut key_offset_val = builder.ins().iconst(I64, 0);
+
             for (i, param) in clause_params.iter().enumerate() {
-                let offset = (i as i32) * 8;
-                builder
+                let desc = &descriptors[i];
+
+                // Escrever descriptor na stack (para passar ponteiro ao runtime).
+                let desc_sslot = builder.func.create_sized_stack_slot(StackSlotData::new(
+                    StackSlotKind::ExplicitSlot,
+                    desc.len() as u32,
+                    8,
+                ));
+                let desc_slot = builder.ins().stack_addr(I64, desc_sslot, 0);
+                for (j, &byte) in desc.iter().enumerate() {
+                    let byte_val = builder.ins().iconst(I64, byte as i64);
+                    builder
+                        .ins()
+                        .store(MemFlagsData::new(), byte_val, desc_slot, j as i32);
+                }
+
+                let desc_len_val = builder.ins().iconst(I64, desc.len() as i64);
+                let buf_ptr = builder.ins().iadd(key_slot, key_offset_val);
+                let cap_const = builder.ins().iconst(I64, key_cap);
+                let remaining = builder.ins().isub(cap_const, key_offset_val);
+
+                // Bitcast do param para I64 se necessário (Float é F64).
+                let param_ty = builder.func.dfg.value_type(*param);
+                let param_i64 = if param_ty != I64 {
+                    builder.ins().bitcast(I64, MemFlagsData::new(), *param)
+                } else {
+                    *param
+                };
+
+                let written = builder
                     .ins()
-                    .store(MemFlagsData::new(), *param, key_slot, offset);
+                    .call(*serialize_fn, &[
+                        param_i64,
+                        desc_slot,
+                        desc_len_val,
+                        buf_ptr,
+                        remaining,
+                    ]);
+                let written_val = builder.inst_results(written)[0];
+
+                // Avançar offset. Se written < 0 (erro), a key fica incompleta
+                // — o lookup não vai encontrar nada, e o insert usa o len real.
+                key_offset_val = builder.ins().iadd(key_offset_val, written_val);
             }
+
+            let key_len_val = key_offset_val;
 
             // cache_lookup(handle, key_ptr, key_len) → 0=miss, ptr=hit
             let lookup_fn = lower
@@ -289,7 +348,14 @@ pub(crate) fn define_function_body(
             // O valor retornado é o ponteiro do cache — para tipos escalares
             // (Int), é o próprio valor. Para tipos complexos, seria um ponteiro
             // para arena (precisaria de deref, mas para 1.0 só suportamos escalares).
-            builder.ins().return_(&[lookup_result]);
+            // Bitcast I64→ret_ty se necessário (Float é F64).
+            let ret_clif_ty = super::resolve_clif_ty(ret_ty, struct_registry);
+            let cached_val = if ret_clif_ty != I64 {
+                builder.ins().bitcast(ret_clif_ty, MemFlagsData::new(), lookup_result)
+            } else {
+                lookup_result
+            };
+            builder.ins().return_(&[cached_val]);
 
             // Miss block: continua para o body.
             builder.switch_to_block(miss_block);
@@ -357,10 +423,17 @@ pub(crate) fn define_function_body(
                     .ffi_refs
                     .get("kata_rt_cache_insert")
                     .expect("kata_rt_cache_insert registrado");
+                // Bitcast result→I64 se necessário (Float é F64).
+                let result_ty = lower.builder.func.dfg.value_type(result);
+                let result_i64 = if result_ty != I64 {
+                    lower.builder.ins().bitcast(I64, MemFlagsData::new(), result)
+                } else {
+                    result
+                };
                 lower
                     .builder
                     .ins()
-                    .call(*insert_fn, &[*handle_val, *key_slot, *key_len_val, result]);
+                    .call(*insert_fn, &[*handle_val, *key_slot, *key_len_val, result_i64]);
             }
 
             let result = coerce_return(result, ret_ty, &mut lower);
@@ -654,5 +727,78 @@ fn canonical_expr(expr: &TypedExpr, buf: &mut String) {
         // (Int => Int): coleções, CSP, loops, type introspection, etc.
         // Estes nós não aparecem em funções puras Int => Int.
         _ => buf.push_str("Other"),
+    }
+}
+
+// ── Type descriptor para cache key serialização ──────────────────────
+//
+// Construído em compile-time pelo codegen. Byte array C-ABI estável que
+// descreve o layout do tipo para o runtime serializar o valor por conteúdo.
+//
+// Tags:
+//   0x00 Unit     — 0 bytes
+//   0x01 Int      — 8 bytes valor imediato
+//   0x02 Float    — 8 bytes valor (f64 bits)
+//   0x03 Text     — C string: len (4 bytes LE) + bytes
+//   0x04 List(T)  — percorre cons cells, serializa cada head com T
+//   0x05 Struct   — n_fields (u8) + field descriptors
+//   0x06 Tuple    — n_elems (u8) + elem descriptors
+//   0x07 Sum      — tag (8 bytes) + payload (8 bytes crus)
+//                  Limitação: payload não serializado recursivamente sem
+//                  enum_registry. Dois Sums com mesmo payload em endereços
+//                  diferentes terão keys diferentes.
+
+const TD_UNIT: u8 = 0x00;
+const TD_INT: u8 = 0x01;
+const TD_FLOAT: u8 = 0x02;
+const TD_TEXT: u8 = 0x03;
+const TD_LIST: u8 = 0x04;
+const TD_STRUCT: u8 = 0x05;
+const TD_TUPLE: u8 = 0x06;
+const TD_SUM: u8 = 0x07;
+
+/// Constrói um type descriptor (byte array) para um `Ty`.
+fn build_type_descriptor(ty: &Ty, struct_registry: &kata_core::StructRegistry) -> Vec<u8> {
+    let mut buf = Vec::new();
+    write_descriptor(&mut buf, ty, struct_registry);
+    buf
+}
+
+fn write_descriptor(buf: &mut Vec<u8>, ty: &Ty, struct_registry: &kata_core::StructRegistry) {
+    match ty {
+        Ty::Unit => buf.push(TD_UNIT),
+        Ty::Prim(PrimTy::Int) => buf.push(TD_INT),
+        Ty::Prim(PrimTy::Float) => buf.push(TD_FLOAT),
+        Ty::Prim(PrimTy::Text) => buf.push(TD_TEXT),
+        Ty::Prim(_) => buf.push(TD_INT),
+        Ty::List(elem) => {
+            buf.push(TD_LIST);
+            write_descriptor(buf, elem, struct_registry);
+        }
+        Ty::Tuple(elements) => {
+            buf.push(TD_TUPLE);
+            buf.push(elements.len() as u8);
+            for elem in elements {
+                write_descriptor(buf, elem, struct_registry);
+            }
+        }
+        Ty::Struct(name) => {
+            buf.push(TD_STRUCT);
+            if let Some(info) = struct_registry.get(name) {
+                buf.push(info.fields.len() as u8);
+                for field in &info.fields {
+                    write_descriptor(buf, &field.ty, struct_registry);
+                }
+            } else {
+                buf.push(1);
+                buf.push(TD_INT);
+            }
+        }
+        Ty::Sum(_) | Ty::Generic(_, _) => {
+            buf.push(TD_SUM);
+        }
+        _ => {
+            buf.push(TD_INT);
+        }
     }
 }

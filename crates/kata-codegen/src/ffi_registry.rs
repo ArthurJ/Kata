@@ -299,6 +299,10 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
         "kata_rt_cache_insert",
         rt::kata_rt_cache_insert as *const u8,
     );
+    builder.symbol(
+        "kata_rt_serialize_key",
+        rt::kata_rt_serialize_key as *const u8,
+    );
 }
 
 /// Declara todos os símbolos FFI no module e retorna o mapa nome → FuncId.
@@ -467,5 +471,6 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         CacheGetOrCreate,
         CacheLookup,
         CacheInsert,
+        CacheSerializeKey,
     ]
 }

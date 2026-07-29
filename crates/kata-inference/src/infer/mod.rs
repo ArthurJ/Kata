@@ -457,32 +457,11 @@ fn infer_named_function(
         None
     };
 
-    // Validação de @cache: só suporta Int => Int (limitação 1.0).
-    if func_def.cache_strategy.is_some() {
-        let all_int = param_types
-            .iter()
-            .all(|t| matches!(t, Ty::Prim(PrimTy::Int)))
-            && matches!(ret_ty, Ty::Prim(PrimTy::Int));
-        if !all_int {
-            let found = format!(
-                "{} => {}",
-                param_types
-                    .iter()
-                    .map(|t| format!("{t}"))
-                    .collect::<Vec<_>>()
-                    .join(" "),
-                ret_ty
-            );
-            let span = typed_clauses
-                .first()
-                .map(|c| c.body.span)
-                .unwrap_or_else(kata_ast::Span::synthetic);
-            return Err(MiddleError::CacheTypeConstraint {
-                found,
-                span: span.into(),
-            });
-        }
-    }
+    // Validação de @cache: suporta qualquer tipo — a serialização da cache
+    // key é feita via type descriptor (function_def.rs::build_type_descriptor)
+    // que cobre Int, Float, Text, List, Struct, Tuple. Sum/Generic serializa
+    // tag + payload cru (limitação documentada — payload complexo não
+    // serializado recursivamente sem enum_registry no codegen).
 
     Ok(TypedFunction {
         name: func_def.name.clone(),

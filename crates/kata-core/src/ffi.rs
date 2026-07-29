@@ -245,6 +245,8 @@ pub enum FfiSymbol {
     CacheLookup,
     /// `kata_rt_cache_insert(handle, key_ptr, key_len, value) -> ()`
     CacheInsert,
+    /// `kata_rt_serialize_key(value, desc_ptr, desc_len, out_ptr, out_cap) -> i64`
+    CacheSerializeKey,
 }
 
 impl FfiSymbol {
@@ -384,6 +386,7 @@ impl FfiSymbol {
             FfiSymbol::CacheGetOrCreate => "kata_rt_cache_get_or_create",
             FfiSymbol::CacheLookup => "kata_rt_cache_lookup",
             FfiSymbol::CacheInsert => "kata_rt_cache_insert",
+            FfiSymbol::CacheSerializeKey => "kata_rt_serialize_key",
         }
     }
 
@@ -512,6 +515,7 @@ impl FfiSymbol {
             FfiSymbol::CacheGetOrCreate => Ty::int(),
             FfiSymbol::CacheLookup => Ty::int(),
             FfiSymbol::CacheInsert => Ty::Unit,
+            FfiSymbol::CacheSerializeKey => Ty::int(),
         }
     }
 
@@ -651,6 +655,7 @@ impl FfiSymbol {
             FfiSymbol::CacheGetOrCreate,
             FfiSymbol::CacheLookup,
             FfiSymbol::CacheInsert,
+            FfiSymbol::CacheSerializeKey,
         ];
         all.iter().copied().find(|s| s.symbol_name() == name)
     }
