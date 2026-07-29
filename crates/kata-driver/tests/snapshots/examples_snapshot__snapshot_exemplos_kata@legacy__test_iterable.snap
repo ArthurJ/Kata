@@ -1,10 +1,10 @@
 ---
 source: crates/kata-driver/tests/examples_snapshot.rs
+assertion_line: 100
 expression: output
 ---
 --- stderr ---
-[resolution] warning: interface 'ITERABLE' não declarada neste módulo (em implements para CustomIter) — pode estar no prelude
-[resolution] warning: interface 'ITERATOR' não declarada neste módulo (em implements para CustomIter) — pode estar no prelude
+[resolution] warning: interface 'ITERATOR' não declarada (em implements para CustomIter) — pode ser um typo ou falta de import
 Error: type.mismatch
 
   × tipo incompatível: esperado `Optional`, encontrado `Optional::(T)`

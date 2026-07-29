@@ -315,14 +315,29 @@ pub fn filter_exports(resolved: ResolvedModule, module: &Module) -> ResolvedModu
         .filter(|a| closure.contains(&a.name))
         .collect();
 
+    // Filtrar registries pelo closure: tipos não exportados pelo módulo
+    // ficam invisíveis para importadores. Tipos do prelude (origin "core")
+    // sempre passam.
+    let mut type_env = resolved.type_env;
+    type_env.retain_by_closure(&closure);
+
+    let mut enum_registry = resolved.enum_registry;
+    enum_registry.retain_by_closure(&closure);
+
+    let mut struct_registry = resolved.struct_registry;
+    struct_registry.retain_by_closure(&closure);
+
+    let mut interface_registry = resolved.interface_registry;
+    interface_registry.retain_by_closure(&closure);
+
     ResolvedModule {
         signatures,
         functions,
         actions,
-        // type_env, enum_registry, struct_registry, interface_registry,
-        // refined_decls, enum_pred_decls, refines_registry — mantidos
-        // sem filtro por ora. Tipos são sempre exportados quando o tipo
-        // está no closure; o filtro fino de registries é evolução futura.
+        type_env,
+        enum_registry,
+        struct_registry,
+        interface_registry,
         ..resolved
     }
 }

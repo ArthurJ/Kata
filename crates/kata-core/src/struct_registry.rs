@@ -224,6 +224,28 @@ impl StructRegistry {
             self.track_origin(&name, &origin);
         }
     }
+
+    /// Filtra structs mantendo apenas aqueles cujo nome está no `closure`
+    /// ou cuja origin é `core` (prelude). Usado por `filter_exports`.
+    pub fn retain_by_closure(&mut self, closure: &std::collections::HashSet<String>) {
+        self.structs.retain(|(_, name), _| {
+            closure.contains(name) || {
+                self.origins
+                    .get(name)
+                    .is_some_and(|origins| origins.contains("core"))
+            }
+        });
+        // Reconstruir origins e ambiguous
+        self.origins.clear();
+        self.ambiguous.clear();
+        for (origin, name) in self.structs.keys() {
+            let origins = self.origins.entry(name.clone()).or_default();
+            origins.insert(origin.clone());
+            if origins.len() > 1 {
+                self.ambiguous.insert(name.clone());
+            }
+        }
+    }
 }
 
 #[cfg(test)]

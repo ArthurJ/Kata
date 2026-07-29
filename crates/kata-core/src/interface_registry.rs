@@ -153,13 +153,9 @@ impl InterfaceRegistry {
             ));
         }
 
-        if self.get_interface(&entry.interface_name).is_none() {
-            // Não é erro — a interface pode estar no prelude.
-            eprintln!(
-                "[resolution] warning: interface '{}' não declarada neste módulo (em implements para {}) — pode estar no prelude",
-                entry.interface_name, entry.type_name
-            );
-        }
+        // Não validar se a interface existe aqui — o prelude (com as
+        // interfaces) é mergeado depois do resolve. A validação acontece
+        // em `validate_impls_after_merge`, chamada após o merge.
         self.impls.push(entry);
         Ok(())
     }
@@ -342,6 +338,50 @@ impl InterfaceRegistry {
             self.track_origin(&name, &origin);
         }
         self.impls.extend(other.impls);
+    }
+
+    /// Valida que todo `ImplEntry` referencia uma interface que existe no
+    /// registry. Deve ser chamado **após** o merge do prelude — antes disso,
+    /// interfaces do prelude (NUM, SHOW, etc.) ainda não estão visíveis.
+    ///
+    /// Retorna a lista de warnings (interface não encontrada). Erros reais
+    /// (typo, interface esquecida) aparecem aqui em vez de no `register_impl`.
+    pub fn validate_impls_after_merge(&self) -> Vec<String> {
+        self.impls
+            .iter()
+            .filter(|e| self.get_interface(&e.interface_name).is_none())
+            .map(|e| {
+                format!(
+                    "interface '{}' não declarada (em implements para {}) — pode ser um typo ou falta de import",
+                    e.interface_name, e.type_name
+                )
+            })
+            .collect()
+    }
+
+    /// Filtra interfaces e impls mantendo apenas aqueles cujo nome está no
+    /// `closure` ou cuja origin é `core` (prelude). Usado por `filter_exports`.
+    pub fn retain_by_closure(&mut self, closure: &std::collections::HashSet<String>) {
+        // Filtrar interfaces: manter se nome no closure ou origin é core
+        self.interfaces.retain(|(_, name), _| {
+            closure.contains(name) || {
+                self.origins
+                    .get(name)
+                    .is_some_and(|origins| origins.contains("core"))
+            }
+        });
+        // Filtrar impls: manter se type_name no closure ou origin é core
+        self.impls.retain(|e| closure.contains(&e.type_name) || e.origin == "core");
+        // Reconstruir origins e ambiguous
+        self.origins.clear();
+        self.ambiguous.clear();
+        for (origin, name) in self.interfaces.keys() {
+            let origins = self.origins.entry(name.clone()).or_default();
+            origins.insert(origin.clone());
+            if origins.len() > 1 {
+                self.ambiguous.insert(name.clone());
+            }
+        }
     }
 }
 

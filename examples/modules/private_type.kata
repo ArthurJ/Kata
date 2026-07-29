@@ -1,0 +1,14 @@
+# Módulo com tipo interno não exportado — teste de filter exports.
+# Internal existe no módulo mas não está no export. Importadores não
+# devem conseguir acessar Internal.
+
+data Internal (val::Int)
+
+Internal implements NUM
+    + :: Internal Internal => Internal
+    lambda a b: Internal (+ a.val b.val)
+
+public_fn :: Int => Int
+lambda x: + x 1
+
+export public_fn

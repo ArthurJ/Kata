@@ -296,6 +296,12 @@ pub fn merge_two(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModul
     actions.retain(|a| !user_action_names.contains(a.name.as_str()));
     actions.extend(user.actions);
 
+    // Validar impls após merge do prelude — antes disso, interfaces do
+    // prelude (NUM, SHOW, etc.) não estavam visíveis no resolve do módulo.
+    for warning in interface_registry.validate_impls_after_merge() {
+        eprintln!("[resolution] warning: {warning}");
+    }
+
     ResolvedModule {
         type_env,
         signatures,
