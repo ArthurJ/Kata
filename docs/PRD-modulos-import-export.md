@@ -553,6 +553,13 @@ let filtered = filter_exports(resolved, &module);
 
 ### Fase 7: Importação implícita do prelude (substituir `load_prelude`)
 
+> **⚠ PAUSADA — until further notice.** A Fase 7 é uma refatoração arquitetural
+> que elimina `load_prelude()` + `prelude_sigs.rs`, mas não entrega valor
+> imediato ao usuário e toca 4 call sites críticos (run, test, build, REPL).
+> Pausada em 2026-07-28 após conclusão dos Passos 1-2 do handoff imports+AOT.
+> Reabrir quando houver motivo concreto (ex: empacotamento de release,
+> necessidade de múltiplos preludes, ou removeção de `include_str!`).
+
 **Objetivo:** eliminar o caso especial do prelude. Hoje o prelude é
 injetado por `load_prelude()` + `merge_resolved(prelude, user)` em 4
 call sites distintos no driver. Com o sistema de import/export
