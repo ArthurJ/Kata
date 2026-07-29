@@ -335,6 +335,13 @@ pub(crate) fn desugar_holes(expr: &Spanned<Expr>) -> Spanned<Expr> {
             },
             expr.span,
         ),
+        // ── Comptime — pass-through, desugar holes no inner ──
+        Expr::Comptime { expr: inner } => Spanned::new(
+            Expr::Comptime {
+                expr: Box::new(desugar_holes(inner)),
+            },
+            expr.span,
+        ),
     }
 }
 

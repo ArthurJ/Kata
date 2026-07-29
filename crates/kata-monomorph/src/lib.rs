@@ -420,6 +420,10 @@ fn rewrite_typed_expr(expr_span: &mut Spanned<TypedExpr>, ctx: &MonoCtx, acc: &m
         | TypedExprKind::Continue
         // ChannelCreate não tem sub-exprs (args consumidos pelo typeck).
         | TypedExprKind::ChannelCreate { .. } => {}
+        // Comptime — recursão no inner expr.
+        TypedExprKind::Comptime { expr } => {
+            rewrite_typed_expr(expr, ctx, acc);
+        }
         // ReceiverFactoryCall: o factory é sub-expr (Ident do rxf).
         TypedExprKind::ReceiverFactoryCall { factory, .. } => {
             rewrite_typed_expr(factory, ctx, acc);

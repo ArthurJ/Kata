@@ -613,6 +613,22 @@ pub(crate) fn infer_expr_hinted(
                 },
             )
         }
+
+        // ── `@comptime expr` — marca para avaliação em compile-time ──
+        // O typeck tipa o inner expr normalmente. O comptime pass (que corre
+        // depois do tree shaking) identifica estes nós, verifica constness +
+        // pureza, JIT-executa, e substitui por Literal/HeapSnapshot.
+        // O tipo é o mesmo do inner expr — comptime não muda o tipo.
+        Expr::Comptime { expr: inner } => {
+            let typed_inner = infer_expr(&inner.node, &inner.span, env, ctx, tail_pos)?;
+            let inner_ty = typed_inner.ty.clone();
+            (
+                inner_ty,
+                TypedExprKind::Comptime {
+                    expr: Box::new(Spanned::new(typed_inner, inner.span)),
+                },
+            )
+        }
     };
 
     // Deriva EscapeTarget de tail_pos + contexto (Action vs função pura/entry).

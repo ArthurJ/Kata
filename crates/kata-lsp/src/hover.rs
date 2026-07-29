@@ -102,6 +102,7 @@ fn children<'a>(
         | Continue
         | VariantQual { .. }
         | ChannelCreate { .. } => Box::new(std::iter::empty()),
+        Comptime { expr } => Box::new(std::iter::once(expr.as_ref())),
 
         // Um filho Box<Spanned<TypedExpr>>
         Grouping { inner } => Box::new(std::iter::once(inner.as_ref())),

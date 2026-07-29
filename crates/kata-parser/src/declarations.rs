@@ -73,13 +73,21 @@ impl Parser {
                 Token::Let => {
                     // Top-level let: produce a Let item
                     let expr = self.parse_let()?;
-                    items.push(Spanned::new(Item::EntryExpr(expr.clone()), expr.span));
-                    // Hmm, actually `let` at top-level should be an Item but
-                    // the AST has no Let variant in Item. We wrap it as EntryExpr(Let(...)).
-                    // The task says "let ... can appear at top-level too (becomes a Let
-                    // binding in the item list)". Since Item has no Let variant, we use
-                    // EntryExpr(Let). This is a design limitation of the current AST.
-                    // Actually, let's keep it as is — EntryExpr wrapping the Let expr.
+                    // Se há diretiva @comptime, envolver o let em Expr::Comptime.
+                    let final_expr = if directives.iter().any(|d| d.name == "comptime") {
+                        Spanned::new(
+                            Expr::Comptime {
+                                expr: Box::new(expr.clone()),
+                            },
+                            expr.span,
+                        )
+                    } else {
+                        expr.clone()
+                    };
+                    items.push(Spanned::new(
+                        Item::EntryExpr(final_expr.clone()),
+                        final_expr.span,
+                    ));
                 }
                 _ => {
                     // Could be a signature (name :: Type...), an implements
@@ -101,7 +109,21 @@ impl Parser {
                         while matches!(self.peek(), Token::StmtSep) {
                             self.advance();
                         }
-                        items.push(Spanned::new(Item::EntryExpr(expr.clone()), expr.span));
+                        // Se há diretiva @comptime, envolver em Expr::Comptime.
+                        let final_expr = if directives.iter().any(|d| d.name == "comptime") {
+                            Spanned::new(
+                                Expr::Comptime {
+                                    expr: Box::new(expr.clone()),
+                                },
+                                expr.span,
+                            )
+                        } else {
+                            expr.clone()
+                        };
+                        items.push(Spanned::new(
+                            Item::EntryExpr(final_expr.clone()),
+                            final_expr.span,
+                        ));
                     }
                 }
             }
@@ -204,7 +226,21 @@ impl Parser {
                 },
                 Token::Let => match self.parse_let() {
                     Ok(expr) => {
-                        items.push(Spanned::new(Item::EntryExpr(expr.clone()), expr.span));
+                        // Se há diretiva @comptime, envolver em Expr::Comptime.
+                        let final_expr = if directives.iter().any(|d| d.name == "comptime") {
+                            Spanned::new(
+                                Expr::Comptime {
+                                    expr: Box::new(expr.clone()),
+                                },
+                                expr.span,
+                            )
+                        } else {
+                            expr.clone()
+                        };
+                        items.push(Spanned::new(
+                            Item::EntryExpr(final_expr.clone()),
+                            final_expr.span,
+                        ));
                     }
                     Err(e) => {
                         errors.push(e);
@@ -243,7 +279,22 @@ impl Parser {
                                 while matches!(self.peek(), Token::StmtSep) {
                                     self.advance();
                                 }
-                                items.push(Spanned::new(Item::EntryExpr(expr.clone()), expr.span));
+                                // Se há diretiva @comptime, envolver em Expr::Comptime.
+                                let final_expr = if directives.iter().any(|d| d.name == "comptime")
+                                {
+                                    Spanned::new(
+                                        Expr::Comptime {
+                                            expr: Box::new(expr.clone()),
+                                        },
+                                        expr.span,
+                                    )
+                                } else {
+                                    expr.clone()
+                                };
+                                items.push(Spanned::new(
+                                    Item::EntryExpr(final_expr.clone()),
+                                    final_expr.span,
+                                ));
                             }
                             Err(e) => {
                                 errors.push(e);

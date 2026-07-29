@@ -597,5 +597,14 @@ pub(crate) fn lower_expr(
                 .global_value(ctx.module.target_config().pointer_type(), global);
             Ok(ptr)
         }
+
+        // ── Comptime — não deve chegar ao codegen ──
+        // O comptime pass substitui Comptime por Literal/HeapSnapshot antes
+        // do lowering. Se chegar aqui, o pass não correu — erro.
+        TypedExprKind::Comptime { expr } => {
+            // Fallback: lowera o inner expr. Não é correto (deveria ser
+            // o resultado avaliado), mas evita panic se o pass não correu.
+            lower_expr(&expr.node, ctx)
+        }
     }
 }

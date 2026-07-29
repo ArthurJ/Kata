@@ -245,6 +245,12 @@ pub enum Expr {
         timeout_ms: Option<Box<Spanned<Expr>>>,
         timeout_body: Option<Box<Spanned<Expr>>>,
     },
+
+    // ── Comptime ─────────────────────────────────────────
+    /// `@comptime expr` — marca uma expressão para avaliação em compile-time.
+    /// O comptime pass JIT-executa a expressão e substitui por Literal ou
+    /// HeapSnapshot. Na TAST, vira `TypedExprKind::Comptime`.
+    Comptime { expr: Box<Spanned<Expr>> },
 }
 
 /// Índice de DotAccess — field nomeado ou inteiro.

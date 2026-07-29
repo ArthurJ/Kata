@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use clap::Parser;
 use kata_codegen::{TestWrapper, jit_compile_tests, jit_eval};
+use kata_comptime::run_comptime_pass;
 use kata_core::ty::Ty;
 use kata_inference::infer_module;
 use kata_lexer::lex;
@@ -177,6 +178,12 @@ fn cmd_test(path: &str, filter: Option<&str>) -> miette::Result<()> {
         let typed = kata_monomorph::MonoModule::from(kata_tree_shaking::tree_shake_preserve_tests(
             typed.inner,
         ));
+
+        // Comptime pass — avalia @comptime antes de compilar os testes.
+        let typed = kata_monomorph::MonoModule::from(
+            run_comptime_pass(typed.inner)
+                .map_err(|e| miette::Report::msg(format!("erro de comptime: {e}")))?,
+        );
 
         let (jit_module, wrappers) = jit_compile_tests(&typed)
             .map_err(|e| miette::Report::msg(format!("erro de codegen: {e:?}")))?;
@@ -357,6 +364,13 @@ fn run_pipeline_with_file(source: &str, file_path: Option<&str>) -> miette::Resu
     //     versões concretas (ex: `echo_SHOW_Int`). Sem isso, o codegen
     //     tenta compilar o body type-erased e falha.
     let mono = kata_monomorph::MonoModule::from(tree_shake(mono.inner));
+
+    // 6b. Comptime pass — avalia expressões @comptime em compile-time e
+    //     substitui por literais antes do codegen.
+    let mono = kata_monomorph::MonoModule::from(
+        run_comptime_pass(mono.inner)
+            .map_err(|e| miette::Report::msg(format!("erro de comptime: {e}")))?,
+    );
 
     // 7. Codegen + JIT + executar
     let jit =

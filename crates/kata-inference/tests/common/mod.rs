@@ -119,6 +119,8 @@ pub fn assert_no_holes(expr: &Spanned<Expr>) {
         }
         // TypeOf — recursão no inner expr (não contém holes, mas pode ter)
         Expr::TypeOf { expr: inner } => assert_no_holes(inner),
+        // Comptime — recursão no inner expr
+        Expr::Comptime { expr: inner } => assert_no_holes(inner),
     }
 }
 
@@ -233,5 +235,7 @@ pub fn assert_no_pipes(expr: &Spanned<Expr>) {
         }
         // TypeOf — recursão no inner expr (não contém pipes, mas pode ter)
         Expr::TypeOf { expr: inner } => assert_no_pipes(inner),
+        // Comptime — recursão no inner expr
+        Expr::Comptime { expr: inner } => assert_no_pipes(inner),
     }
 }

@@ -430,5 +430,9 @@ fn collect_refs(
         | TypedExprKind::Break
         | TypedExprKind::Continue
         | TypedExprKind::ChannelCreate { .. } => {}
+        // Comptime — recursão no inner expr (pode conter refs).
+        TypedExprKind::Comptime { expr } => {
+            collect_refs(&expr.node, reached_fns, reached_actions, fn_names);
+        }
     }
 }

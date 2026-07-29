@@ -375,6 +375,14 @@ pub enum TypedExprKind {
         action_expr: Box<Spanned<TypedExpr>>,
         args: Box<Spanned<TypedExpr>>,
     },
+
+    // ── Comptime ──────────────────────────────────────────
+    /// `@comptime expr` — expressão marcada para avaliação em compile-time.
+    /// O comptime pass identifica estes nós, verifica constness + pureza,
+    /// JIT-executa, e substitui por `IntLit`/`FloatLit`/`TextLit`/`Unit`
+    /// (escalares) ou `HeapSnapshot` (tipos complexos — Fase 2).
+    /// O tipo é o mesmo do inner expr.
+    Comptime { expr: Box<Spanned<TypedExpr>> },
 }
 
 /// Tipo de canal criado por `channel!()`, `queue!(N)`, `broadcast!()`.

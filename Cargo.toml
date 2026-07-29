@@ -13,6 +13,7 @@ members = [
     "crates/kata-monomorph",
     "crates/kata-tree-shaking",
     "crates/kata-rt",
+    "crates/kata-comptime",
     "crates/kata-driver",
     "crates/kata-lsp",
 ]
@@ -70,4 +71,5 @@ kata-optimizer = { path = "crates/kata-optimizer" }
 kata-monomorph = { path = "crates/kata-monomorph" }
 kata-tree-shaking = { path = "crates/kata-tree-shaking" }
 kata-rt = { path = "crates/kata-rt" }
+kata-comptime = { path = "crates/kata-comptime" }
 kata-lsp = { path = "crates/kata-lsp" }
