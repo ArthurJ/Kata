@@ -1,0 +1,9 @@
+# @cache{strategy: "LRU"} — memoização em funções puras.
+# A segunda chamada com o mesmo argumento retorna o valor cacheado
+# sem reexecutar o body.
+
+@cache{strategy: "LRU"}
+dobro :: Int => Int
+lambda n: * n 2
+
+dobro 5

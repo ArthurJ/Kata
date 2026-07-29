@@ -286,6 +286,19 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
         "kata_rt_get_snapshot",
         rt::kata_rt_get_snapshot as *const u8,
     );
+    // Cache @cache{strategy: "LRU"} (Fio 12, Fase 5)
+    builder.symbol(
+        "kata_rt_cache_get_or_create",
+        rt::kata_rt_cache_get_or_create as *const u8,
+    );
+    builder.symbol(
+        "kata_rt_cache_lookup",
+        rt::kata_rt_cache_lookup as *const u8,
+    );
+    builder.symbol(
+        "kata_rt_cache_insert",
+        rt::kata_rt_cache_insert as *const u8,
+    );
 }
 
 /// Declara todos os símbolos FFI no module e retorna o mapa nome → FuncId.
@@ -450,5 +463,9 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         // Comptime snapshots (Fio 12)
         LoadSnapshot,
         GetSnapshot,
+        // Cache @cache{strategy: "LRU"} (Fio 12, Fase 5)
+        CacheGetOrCreate,
+        CacheLookup,
+        CacheInsert,
     ]
 }

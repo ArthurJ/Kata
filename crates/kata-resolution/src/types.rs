@@ -95,6 +95,9 @@ pub struct FunctionDef {
     pub clauses: Vec<Spanned<LambdaClause>>,
     /// Especificação de logging `@log`. None se a função não tem `@log`.
     pub log: Option<LogSpec>,
+    /// Especificação de cache `@cache{strategy: "LRU"}`. None se a função
+    /// não tem `@cache`.
+    pub cache_strategy: Option<String>,
 }
 
 /// Definição de Action com body Kata.

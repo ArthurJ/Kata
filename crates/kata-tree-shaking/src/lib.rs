@@ -266,13 +266,17 @@ fn collect_refs(
         }
 
         // ── Sub-expressões — recursão ──
-        TypedExprKind::TypeAscription { expr, pending_predicates, .. } => {
+        TypedExprKind::TypeAscription {
+            expr,
+            pending_predicates,
+            ..
+        } => {
             collect_refs(&expr.node, reached_fns, reached_actions, fn_names);
             for pred in pending_predicates {
                 collect_refs(&pred.node, reached_fns, reached_actions, fn_names);
             }
         }
-        | TypedExprKind::Grouping { inner: expr }
+        TypedExprKind::Grouping { inner: expr }
         | TypedExprKind::Return(expr)
         | TypedExprKind::TypeOf { expr } => {
             collect_refs(&expr.node, reached_fns, reached_actions, fn_names)

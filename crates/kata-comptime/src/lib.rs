@@ -595,8 +595,7 @@ fn validate_pending_predicates(
 
     // Depois processar o próprio nó se for TypeAscription com pending.
     if let TypedExprKind::TypeAscription {
-        pending_predicates,
-        ..
+        pending_predicates, ..
     } = &mut expr.kind
     {
         if !pending_predicates.is_empty() {

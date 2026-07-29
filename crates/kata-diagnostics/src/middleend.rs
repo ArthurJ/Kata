@@ -160,4 +160,12 @@ pub enum MiddleError {
         #[label]
         span: MietteSpan,
     },
+
+    #[error("@cache só suporta funções Int => Int (encontrado {found})")]
+    #[diagnostic(code = "type.cache_type_constraint")]
+    CacheTypeConstraint {
+        found: String,
+        #[label]
+        span: MietteSpan,
+    },
 }

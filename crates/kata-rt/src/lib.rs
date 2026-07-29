@@ -10,6 +10,7 @@ pub(crate) mod arc;
 pub(crate) mod arena;
 pub(crate) mod array;
 pub(crate) mod bigint;
+pub(crate) mod cache;
 pub(crate) mod channel;
 pub(crate) mod dict;
 pub(crate) mod display;
@@ -94,6 +95,8 @@ pub use scheduler::{
 pub use sum::{kata_rt_store_sum_result, kata_rt_sum_tag_int};
 // Snapshots comptime — carregados em load-time na root_arena
 pub use snapshot::{kata_rt_get_snapshot, kata_rt_load_snapshot};
+// Cache @cache{strategy: "LRU"}
+pub use cache::{kata_rt_cache_get_or_create, kata_rt_cache_insert, kata_rt_cache_lookup};
 pub use text::{
     kata_rt_bool_to_text, kata_rt_string_concat, kata_rt_string_eq, kata_rt_string_len,
     kata_rt_text_literal, kata_rt_text_replace_first,

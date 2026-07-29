@@ -457,12 +457,45 @@ fn infer_named_function(
         None
     };
 
+    // Validação de @cache: só suporta Int => Int (limitação 1.0).
+    if func_def.cache_strategy.is_some() {
+        let all_int = param_types
+            .iter()
+            .all(|t| matches!(t, Ty::Prim(PrimTy::Int)))
+            && matches!(ret_ty, Ty::Prim(PrimTy::Int));
+        if !all_int {
+            let found = format!(
+                "{} => {}",
+                param_types
+                    .iter()
+                    .map(|t| format!("{t}"))
+                    .collect::<Vec<_>>()
+                    .join(" "),
+                ret_ty
+            );
+            let span = typed_clauses
+                .first()
+                .map(|c| c.body.span)
+                .unwrap_or_else(kata_ast::Span::synthetic);
+            return Err(MiddleError::CacheTypeConstraint {
+                found,
+                span: span.into(),
+            });
+        }
+    }
+
     Ok(TypedFunction {
         name: func_def.name.clone(),
         param_types: param_types.clone(),
         ret_ty: ret_ty.clone(),
         clauses: typed_clauses,
         log,
+        cache_spec: func_def
+            .cache_strategy
+            .as_ref()
+            .map(|s| crate::typed_module::CacheSpec {
+                strategy: s.clone(),
+            }),
     })
 }
 

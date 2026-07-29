@@ -142,6 +142,7 @@ fn build_list_show_func(
             with_bindings: Vec::new(),
         }],
         log: None,
+        cache_spec: None,
     }
 }
 

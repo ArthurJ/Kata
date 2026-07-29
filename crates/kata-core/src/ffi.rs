@@ -237,6 +237,14 @@ pub enum FfiSymbol {
     LoadSnapshot,
     /// `kata_rt_get_snapshot(snapshot_id) -> ptr` — retorna ponteiro do snapshot da tabela TLS.
     GetSnapshot,
+
+    // ── Cache @cache{strategy: "LRU"} (Fio 12, Fase 5) ──
+    /// `kata_rt_cache_get_or_create(arena, fn_id, capacity) -> handle`
+    CacheGetOrCreate,
+    /// `kata_rt_cache_lookup(handle, key_ptr, key_len) -> i64` (0=miss, ptr=hit)
+    CacheLookup,
+    /// `kata_rt_cache_insert(handle, key_ptr, key_len, value) -> ()`
+    CacheInsert,
 }
 
 impl FfiSymbol {
@@ -372,6 +380,10 @@ impl FfiSymbol {
             // Comptime snapshots
             FfiSymbol::LoadSnapshot => "kata_rt_load_snapshot",
             FfiSymbol::GetSnapshot => "kata_rt_get_snapshot",
+            // Cache
+            FfiSymbol::CacheGetOrCreate => "kata_rt_cache_get_or_create",
+            FfiSymbol::CacheLookup => "kata_rt_cache_lookup",
+            FfiSymbol::CacheInsert => "kata_rt_cache_insert",
         }
     }
 
@@ -496,6 +508,10 @@ impl FfiSymbol {
             // Comptime snapshots
             FfiSymbol::LoadSnapshot => Ty::Unit,
             FfiSymbol::GetSnapshot => Ty::int(),
+            // Cache
+            FfiSymbol::CacheGetOrCreate => Ty::int(),
+            FfiSymbol::CacheLookup => Ty::int(),
+            FfiSymbol::CacheInsert => Ty::Unit,
         }
     }
 
@@ -631,6 +647,10 @@ impl FfiSymbol {
             // Comptime snapshots
             FfiSymbol::LoadSnapshot,
             FfiSymbol::GetSnapshot,
+            // Cache
+            FfiSymbol::CacheGetOrCreate,
+            FfiSymbol::CacheLookup,
+            FfiSymbol::CacheInsert,
         ];
         all.iter().copied().find(|s| s.symbol_name() == name)
     }

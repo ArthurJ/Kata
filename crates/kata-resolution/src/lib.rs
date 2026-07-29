@@ -92,6 +92,7 @@ pub fn resolve_with_origin(
                 let mut is_associative = false;
                 let mut associative_neutral = None;
                 let mut is_commutative = false;
+                let mut cache_strategy = None;
 
                 for d in directives {
                     match d.name.as_str() {
@@ -113,6 +114,17 @@ pub fn resolve_with_origin(
                         }
                         "commutative" => {
                             is_commutative = true;
+                        }
+                        "cache" => {
+                            // @cache{strategy: "LRU"} — extrai a estratégia.
+                            for arg in &d.args {
+                                if let kata_ast::DirectiveArg::Named { key, value } = arg
+                                    && key == "strategy"
+                                    && let kata_ast::Expr::TextLit { text } = &value.node
+                                {
+                                    cache_strategy = Some(text.clone());
+                                }
+                            }
                         }
                         // Diretivas válidas em Sig mas sem processamento aqui.
                         "builtin" | "log" => {}
@@ -138,6 +150,7 @@ pub fn resolve_with_origin(
                         return_type: return_type.clone(),
                         clauses: clauses.clone(),
                         log,
+                        cache_strategy,
                     });
                 }
 

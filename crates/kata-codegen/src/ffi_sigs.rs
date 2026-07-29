@@ -625,6 +625,28 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
             sig.params.push(AbiParam::new(I64)); // snapshot_id
             sig.returns.push(AbiParam::new(I64)); // ptr
         }
+        // ── Cache @cache{strategy: "LRU"} (Fio 12, Fase 5) ──
+        // cache_get_or_create: (arena, fn_id, capacity) -> handle
+        FfiSymbol::CacheGetOrCreate => {
+            sig.params.push(AbiParam::new(I64)); // arena
+            sig.params.push(AbiParam::new(I64)); // fn_id
+            sig.params.push(AbiParam::new(I64)); // capacity
+            sig.returns.push(AbiParam::new(I64)); // handle
+        }
+        // cache_lookup: (handle, key_ptr, key_len) -> i64 (0=miss, ptr=hit)
+        FfiSymbol::CacheLookup => {
+            sig.params.push(AbiParam::new(I64)); // handle
+            sig.params.push(AbiParam::new(I64)); // key_ptr
+            sig.params.push(AbiParam::new(I64)); // key_len
+            sig.returns.push(AbiParam::new(I64)); // value (0=miss, ptr=hit)
+        }
+        // cache_insert: (handle, key_ptr, key_len, value) -> ()
+        FfiSymbol::CacheInsert => {
+            sig.params.push(AbiParam::new(I64)); // handle
+            sig.params.push(AbiParam::new(I64)); // key_ptr
+            sig.params.push(AbiParam::new(I64)); // key_len
+            sig.params.push(AbiParam::new(I64)); // value
+        }
     }
 
     sig

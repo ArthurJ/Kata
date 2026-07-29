@@ -52,6 +52,16 @@ pub struct TypedModule {
     pub refined_decls: Vec<RefinedDeclInfo>,
 }
 
+/// Especificação de cache `@cache{strategy: "LRU"}`.
+///
+/// Anota uma função para memoização. O codegen emite cache lookup no prólogo
+/// e insert no epílogo. Cache lazy-allocated em `caller_arena`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CacheSpec {
+    /// Estratégia de eviction. Atualmente só `"LRU"`.
+    pub strategy: String,
+}
+
 /// Função nomeada tipada — pronta para o codegen.
 ///
 /// Produzida pelo inference quando `FunctionDef` (do resolution) tem cláusulas.
@@ -69,6 +79,8 @@ pub struct TypedFunction {
     pub clauses: Vec<TypedLambdaClause>,
     /// Especificação de logging `@log`. None se a função não tem `@log`.
     pub log: Option<TypedLogSpec>,
+    /// Especificação de cache `@cache`. None se a função não tem `@cache`.
+    pub cache_spec: Option<CacheSpec>,
 }
 
 /// Action tipada — pronta para o codegen.

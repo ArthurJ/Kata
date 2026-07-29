@@ -152,7 +152,9 @@ pub(crate) fn lower_expr(
         } => lower_closure(expr, callee, args, ffi_symbol, ctx),
 
         // ── TypeAscription: inspeciona (inner.kind, target_ty) ──
-        TypedExprKind::TypeAscription { expr, target_ty, .. } => {
+        TypedExprKind::TypeAscription {
+            expr, target_ty, ..
+        } => {
             let inner = &expr.node;
             match (&inner.kind, target_ty) {
                 // IntLit → Float: reinterpretar como f64 const.
@@ -409,6 +411,7 @@ pub(crate) fn lower_expr(
                 clauses,
                 captures,
                 &None, // lambdas anônimas não têm @log
+                &None, // lambdas anônimas não têm @cache
                 func_id,
                 ctx.module,
                 ctx.ffi_ids,

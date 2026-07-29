@@ -451,5 +451,5 @@ pub struct CaptureInfo {
 // TypedAction, TypedTestSpec, TypedLogSpec) foram extraídos para
 // `typed_module.rs` — ver [`crate::typed_module`].
 pub use crate::typed_module::{
-    TypedAction, TypedFunction, TypedLogSpec, TypedModule, TypedTestSpec,
+    CacheSpec, TypedAction, TypedFunction, TypedLogSpec, TypedModule, TypedTestSpec,
 };

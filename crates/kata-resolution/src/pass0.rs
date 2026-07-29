@@ -466,6 +466,7 @@ pub(crate) fn run_pass0(
                             return_type,
                             clauses: clauses.clone(),
                             log: None,
+                            cache_strategy: None,
                         });
                     }
                 }
@@ -568,6 +569,7 @@ pub(crate) fn run_pass0(
                             return_type,
                             clauses: clauses.clone(),
                             log: None,
+                            cache_strategy: None,
                         });
                     }
                 }
