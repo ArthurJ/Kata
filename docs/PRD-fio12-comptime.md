@@ -1,7 +1,7 @@
 # PRD — Fio 12: Comptime, `@cache`
 
-**Status:** Fase 1 ✅, Fase 2 ✅, Fase 3 ✅, Fase 4 ✅, Fase 6 ✅ (Fase 5 pendente)
-**Data:** 2026-07-28
+**Status:** Fase 1 ✅, Fase 2 ✅, Fase 3 ✅, Fase 4 ✅, Fase 5 ✅, Fase 6 ✅
+**Data:** 2026-07-29
 **Depende de:** Fio 1-10 ✅ (pipeline completo, módulos, arenas hierárquicas), Fio 11 ✅ (TypeShape para serialização de args em `@cache`)
 **Não depende de:** `@parallel` (congelado), Fio 13 (Dict/Set), Fio 15 (REPL)
 
@@ -367,17 +367,22 @@ secção. O linker resolve os ponteiros absolutos.
   Tree_shake coleta referências em pending_predicates para não remover
   funções predicado como mortas.
 
-### Fase 5: `@cache{strategy: "LRU"}`
+### Fase 5: `@cache{strategy: "LRU"}` ✅
 
-- Parser reconhece `@cache{strategy: "LRU"}` em definição de função
+- Parser reconhece `@cache{strategy: "LRU"}` como diretiva antes da assinatura
 - Codegen emite cache lookup no prólogo, insert no epílogo
-- Runtime: `kata_rt_cache_get_or_create/lookup/insert`
-- Hash table open-addressing com LRU
-- Key via TypeShape (reuso do Fio 11)
-- Cache lazy-allocated em `caller_arena`
-- Pureza verification (função `@cache` deve ser pura)
+- Runtime: `kata_rt_cache_get_or_create/lookup/insert` (TLS HashMap, LRU, 256 entradas)
+- fn_id canônico: FNV-1a de nome + param_types + body serializado (diferencia bodies diferentes com mesma assinatura — REPL iter)
+- Validação: `@cache` só suporta funções `Int => Int` (erro `CacheTypeConstraint` caso contrário)
+- Fix: `@log` em Sigs agora funciona (bind_patterns_to_params antes de inject_log)
+- Tópicos especiais: `@log{topic: "stdout"}` e `@log{topic: "stderr"}` escrevem diretamente nas saídas padrão
+- **Limitações 1.0:**
+  - Só cláusula única sem tail call executa `cache_insert` (múltiplas cláusulas e tail call pulam o epílogo)
+  - Cache key só funciona para Int (I64) — 8 bytes por arg
+  - `@log` Exit não dispara em cache hit (hit block faz `return_` direto)
 - **DoD:** `dobro :: Int => Int @cache{strategy: "LRU"}` com 100 chamadas a
-  `dobro 5` executa o body 1 vez. Cache hit retorna resultado sem re-executar.
+  `dobro 5` executa o body 1 vez. Cache hit retorna resultado sem re-executar. ✅
+- **Commit:** `519a539`
 
 ### Fase 6: AOT embedding ✅
 
