@@ -1,6 +1,6 @@
 # PRD — Fio 12: Comptime, `@cache`
 
-**Status:** Fase 1 ✅, Fase 2 ✅ (Fases 3-6 pendentes)
+**Status:** Fase 1 ✅, Fase 2 ✅, Fase 3 ✅ (Fases 4-6 pendentes)
 **Data:** 2026-07-28
 **Depende de:** Fio 1-10 ✅ (pipeline completo, módulos, arenas hierárquicas), Fio 11 ✅ (TypeShape para serialização de args em `@cache`)
 **Não depende de:** `@parallel` (congelado), Fio 13 (Dict/Set), Fio 15 (REPL)
@@ -340,12 +340,14 @@ secção. O linker resolve os ponteiros absolutos.
   recursivamente (string copiada para o snapshot, não ponteiro cru).
 - **Commit:** `b7f7485` (Fase 2), `b75f867` (fix Sum payload UAF)
 
-### Fase 3: `@comptime` em call-site dentro de body
+### Fase 3: `@comptime` em call-site dentro de body ✅
 
 - Parser reconhece `@comptime` antes de expressão em posição de call
 - Comptime pass avalia no contexto do body (verifica constness dos bindings locais)
 - Substitui por snapshot/literal na TAST
-- **DoD:** `let x := @comptime fibonacci 20 in ...` substitui por literal no binário.
+- Dataflow: bindings comptime-available propagam via `HashMap<String, TypedExpr>`
+- **DoD:** `let x := @comptime fibonacci 20 in ...` substitui por literal no binário. ✅
+- **Commits:** `718f74e` (parser), `138af02` (comptime pass), `d2dc096` (dataflow), `377c7b3` (testes E2E)
 
 ### Fase 4: Ascription refined delega predicados complexos ao comptime
 

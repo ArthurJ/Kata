@@ -1719,12 +1719,16 @@ módulo), sempre precedendo imediatamente o item que modificam.
     data symbol no binário JIT, e carregado na root_arena em load-time via
     `kata_rt_load_snapshot` com rebasing de ponteiros. Exemplo:
     `@comptime let x := [1 2 3]` gera `x` como snapshot navegável em runtime.
-  - **Call-site (guarantee) — Fase 3, pendente:** `@comptime` antes de uma
+  - **Call-site (guarantee) — implementado:** `@comptime` antes de uma
     expressão dentro de um body força avaliação em compile-time. Se
     consegue, substitui por snapshot; se não consegue, erro de compilação.
-    Ainda não implementado. (Definition-site `@comptime` foi removido do
-    escopo — a decisão de avaliar pertence ao call-site, onde os args são
-    visíveis.)
+    `@comptime` envolve apenas a aplicação greedy (callee + args) —
+    pipe (`|>`), fallback (`|`), e canais (`!>`, `<!`) ficam fora do
+    escopo. Para incluí-los, use parênteses: `@comptime (x |> f)`.
+    Bindings locais avaliados via `@comptime let` são comptime-available
+    para `@comptime` posterior no mesmo body.
+    (Definition-site `@comptime` foi removido do escopo — a decisão de
+    avaliar pertence ao call-site, onde os args são visíveis.)
 * **`@cache_strategy{strategy: "LRU"}`**: Interceta invocações puras repetidas e
   injeta pesquisas em Hash Table nativa (ex: `LRU` cache), efetuando
   *memoização* automática.
