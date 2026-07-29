@@ -611,13 +611,27 @@ pub(crate) fn lower_expr(
         // O runtime carrega snapshots em load-time via kata_rt_load_snapshots.
         // O codegen emite um call para kata_rt_get_snapshot(snapshot_id) que
         // retorna o ponteiro válido na root_arena.
-        TypedExprKind::HeapSnapshot { snapshot_id, .. } => {
+        //
+        // Para Text, o snapshot tem layout [i64 offset_para_string] na main.
+        // O consumidor (kata_rt_string_len, etc.) espera um ponteiro direto
+        // para C string, não o base_ptr. Fazemos load(base_ptr + 0) para obter
+        // o ponteiro da string (após rebasing, aponta para a appended).
+        TypedExprKind::HeapSnapshot { snapshot_id, ty } => {
             let func_ref = ctx.ffi_refs.get("kata_rt_get_snapshot").ok_or_else(|| {
                 super::CodegenError::FfiSymbolNotFound("kata_rt_get_snapshot".into())
             })?;
             let id_val = ctx.builder.ins().iconst(I64, *snapshot_id as i64);
             let call = ctx.builder.ins().call(*func_ref, &[id_val]);
-            Ok(ctx.builder.inst_results(call)[0])
+            let base_ptr = ctx.builder.inst_results(call)[0];
+
+            // Para Text, o base_ptr aponta para um i64 que é o ponteiro
+            // para a C string. Precisamos dereferenciar.
+            if matches!(ty, Ty::Prim(PrimTy::Text)) {
+                let flags = MemFlagsData::new();
+                Ok(ctx.builder.ins().load(I64, flags, base_ptr, 0))
+            } else {
+                Ok(base_ptr)
+            }
         }
     }
 }

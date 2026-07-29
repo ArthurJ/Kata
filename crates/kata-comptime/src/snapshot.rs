@@ -1,12 +1,27 @@
 //! Serialização de valores comptime para `HeapSnapshotData`.
 //!
-//! O comptime pass JIT-executa expressões `@comptime` que produzem tipos
+//! Comptime pass JIT-executa expressões `@comptime` que produzem tipos
 //! complexos (List, Struct, Tuple, Text, Sum com payload). O resultado é
 //! um ponteiro i64 para dados na arena temporária do comptime. Este módulo
 //! serializa esses dados em bytes contíguos + rebase_offsets, permitindo
 //! que o runtime os recrie em load-time na root_arena.
 //!
 //! `HeapSnapshotData` é definido em `kata-core` para evitar dependência circular.
+//!
+//! ## Layout (Opção C — tudo ocupa 8 bytes)
+//!
+//! O buffer tem duas regiões:
+//! - **main:** campos/cells de 8 bytes cada. O `FieldAccess`/`IndexAccess`
+//!   faz `load(ptr + i*8)` e sempre acerta o campo.
+//! - **appended:** strings (C strings nulo-terminadas) e dados variáveis.
+//!
+//! Cada i64 na main que é ponteiro (Text, List, nested Struct) é um offset
+//! relativo para dados na appended. Esses offsets são registrados em
+//! `rebase_offsets` para rebasing (soma `base_ptr` no load-time).
+//!
+//! Para Text standalone, o snapshot é um único i64 (offset para a string
+//! na appended). O codegen precisa fazer `load(ptr + 0)` para obter o
+//! ponteiro da string, ou o lowering precisa somar o offset do header.
 
 use kata_core::StructRegistry;
 use kata_core::snapshot::HeapSnapshotData;
@@ -15,7 +30,7 @@ use kata_core::ty::{PrimTy, Ty};
 /// Serializa um valor JIT-executado em `HeapSnapshotData`.
 ///
 /// `raw` é o valor i64 retornado pelo JIT (ponteiro para tipos complexos).
-/// `ty` é o tipo canónico do valor.
+/// `ty` é o tipo canônico do valor.
 ///
 /// Para tipos complexos, `raw` é um ponteiro absoluto para dados na arena
 /// temporária do comptime. A serialização caminha a estrutura, copiando
@@ -27,64 +42,133 @@ pub fn serialize_snapshot(
 ) -> Result<HeapSnapshotData, String> {
     let mut ser = Serializer::new();
     serialize_value(&mut ser, raw, ty, struct_registry)?;
+    // finish() consome ser e ajusta os appended_rebase_offsets somando
+    // main_len, depois mescla com rebase_offsets. Retorna o buffer final.
+    let bytes = ser.finish();
+    // Após finish(), ser.rebase_offsets foi atualizado com os appended offsets.
+    // Mas ser foi consumido — precisamos reorganizar.
     Ok(HeapSnapshotData {
-        bytes: ser.bytes,
-        rebase_offsets: ser.rebase_offsets,
+        bytes: bytes.0,
+        rebase_offsets: bytes.1,
         ty: ty.clone(),
     })
 }
 
-/// Serializador — acumula bytes e rebase_offsets.
+/// Serializador — acumula bytes em duas regiões (main + appended).
+///
+/// main: campos/cells de 8 bytes. Ponteiros são offsets relativos para
+///   dados na appended.
+/// appended: strings e dados variáveis. Offset absoluto dentro do buffer
+///   final (main ++ appended) é calculado no `finish()`.
 struct Serializer {
-    bytes: Vec<u8>,
+    /// Região principal — campos/cells de 8 bytes cada.
+    main: Vec<u8>,
+    /// Região appended — strings e dados variáveis.
+    appended: Vec<u8>,
+    /// Offsets na main onde há ponteiros relativos para a main (List tail).
+    /// O i64 armazena o offset dentro da main. Rebasing: +base_ptr.
     rebase_offsets: Vec<usize>,
+    /// Offsets na main onde há ponteiros para a appended (Text, etc.).
+    /// O i64 armazena o offset dentro da appended. Rebasing: +base_ptr+main_len.
+    /// Precisamos ajustar no finish() somando main_len ao i64.
+    appended_rebase_offsets: Vec<usize>,
 }
 
 impl Serializer {
     fn new() -> Self {
         Serializer {
-            bytes: Vec::new(),
+            main: Vec::new(),
+            appended: Vec::new(),
             rebase_offsets: Vec::new(),
+            appended_rebase_offsets: Vec::new(),
         }
     }
 
-    /// Alinha para 8 bytes.
-    fn align8(&mut self) {
-        while self.bytes.len() % 8 != 0 {
-            self.bytes.push(0);
+    /// Alinha a região main para 8 bytes.
+    fn align_main(&mut self) {
+        while self.main.len() % 8 != 0 {
+            self.main.push(0);
         }
     }
 
-    /// Escreve um i64 no buffer (alinhado a 8).
+    /// Escreve um i64 na região main (alinhado a 8).
     fn write_i64(&mut self, val: i64) {
-        self.align8();
-        self.bytes.extend_from_slice(&val.to_le_bytes());
+        self.align_main();
+        self.main.extend_from_slice(&val.to_le_bytes());
     }
 
-    /// Escreve um ponteiro como offset relativo + regista para rebasing.
-    /// `relative_offset` é o offset dentro do buffer que o ponteiro aponta.
-    /// Se `relative_offset` == 0, é Nil/null — não precisa rebasing.
-    fn write_ptr_offset(&mut self, relative_offset: i64) {
-        self.align8();
-        let pos = self.bytes.len();
-        self.bytes.extend_from_slice(&relative_offset.to_le_bytes());
-        if relative_offset != 0 {
+    /// Escreve um ponteiro para a main (offset relativo na própria main).
+    /// Usado para List tail → próxima cell.
+    /// `main_offset` é o offset dentro da main. Se 0, é Nil/null.
+    fn write_main_ptr(&mut self, main_offset: i64) {
+        self.align_main();
+        let pos = self.main.len();
+        self.main.extend_from_slice(&main_offset.to_le_bytes());
+        if main_offset != 0 {
             self.rebase_offsets.push(pos);
         }
     }
 
-    fn write_bytes(&mut self, bytes: &[u8]) {
-        self.bytes.extend_from_slice(bytes);
+    /// Escreve um ponteiro para a appended (offset relativo para a appended).
+    /// Usado para Text → string na appended.
+    /// `appended_offset` é o offset dentro da appended.
+    fn write_appended_ptr(&mut self, appended_offset: usize) {
+        self.align_main();
+        let pos = self.main.len();
+        // O i64 armazena o offset dentro da appended. No finish(),
+        // somamos main_len para obter o offset absoluto no buffer.
+        self.main
+            .extend_from_slice(&(appended_offset as i64).to_le_bytes());
+        self.appended_rebase_offsets.push(pos);
     }
 
-    /// Posição actual alinhada a 8 bytes (onde o próximo write_i64 iria).
-    fn aligned_len(&self) -> usize {
-        let len = self.bytes.len();
+    /// Escreve nil (0) na main.
+    fn write_nil(&mut self) {
+        self.align_main();
+        self.main.extend_from_slice(&0i64.to_le_bytes());
+    }
+
+    /// Escreve bytes na appended (strings, dados variáveis).
+    /// Retorna o offset dentro da appended onde os bytes foram escritos.
+    fn write_appended(&mut self, bytes: &[u8]) -> usize {
+        let offset = self.appended.len();
+        self.appended.extend_from_slice(bytes);
+        offset
+    }
+
+    /// Posição atual alinhada na main (onde o próximo write_i64 iria).
+    fn main_aligned_len(&self) -> usize {
+        let len = self.main.len();
         if len % 8 == 0 {
             len
         } else {
             len + (8 - len % 8)
         }
+    }
+
+    /// Concatena main ++ appended num único buffer.
+    /// Ajusta os appended_rebase_offsets somando main_len ao i64.
+    /// Retorna (bytes, rebase_offsets) — todos os offsets que precisam rebasing.
+    fn finish(mut self) -> (Vec<u8>, Vec<usize>) {
+        let main_len = self.main.len() as i64;
+        // Para cada offset que aponta para a appended, somar main_len
+        // ao i64 armazenado, convertendo-o de offset-da-appended para
+        // offset-absoluto-no-buffer.
+        for &pos in &self.appended_rebase_offsets {
+            let ptr = self.main.as_mut_ptr() as *mut u8;
+            unsafe {
+                let val_ptr = ptr.add(pos) as *mut i64;
+                let val = std::ptr::read_unaligned(val_ptr);
+                std::ptr::write_unaligned(val_ptr, val + main_len);
+            }
+        }
+        // Mescla os offsets da appended com os da main.
+        let mut all_offsets = self.rebase_offsets;
+        all_offsets.extend_from_slice(&self.appended_rebase_offsets);
+
+        let mut bytes = self.main;
+        bytes.extend_from_slice(&self.appended);
+        (bytes, all_offsets)
     }
 }
 
@@ -99,6 +183,9 @@ unsafe fn read_i64_at(ptr: *const u8, offset: usize) -> i64 {
 /// - Para escalares (Int SMI, Float, Boolean, Unit): valor imediato.
 /// - Para tipos complexos (List, Struct, Tuple, Text, Sum): ponteiro absoluto
 ///   para dados na arena temporária.
+///
+/// Cada valor ocupa exatamente 8 bytes na main. Text e dados variáveis
+/// vão para a appended, com um ponteiro (offset relativo) na main.
 fn serialize_value(
     ser: &mut Serializer,
     raw: i64,
@@ -139,24 +226,43 @@ fn serialize_value(
                 ser.write_i64(payload);
             }
         }
+        Ty::Generic(name, type_args) => {
+            // Generic Sum (ex: Result<Int, Text>) — mesmo layout que Sum:
+            // tag (offset 0) + payload (offset 8).
+            if name == "Boolean" {
+                ser.write_i64(raw);
+            } else {
+                let ptr = raw as *const u8;
+                let tag = unsafe { read_i64_at(ptr, 0) };
+                let payload = unsafe { read_i64_at(ptr, 8) };
+                // O payload pode ser um tipo complexo dependendo do variant.
+                // Para Result::Ok(T), o payload é T. Para Result::Err(E),
+                // o payload é E. Sem saber qual variant pelo tag, serializamos
+                // o payload como i64 cru. Se for um ponteiro para tipo complexo,
+                // o consumidor precisa fazer o deref.
+                // TODO: se o payload for Text ou tipo complexo, serializar
+                // recursivamente. Por ora, escrever cru.
+                ser.write_i64(tag);
+                ser.write_i64(payload);
+            }
+        }
         Ty::Prim(PrimTy::Text) => {
             if raw == 0 {
-                ser.write_i64(0);
+                ser.write_nil();
             } else {
-                // Text é C string (nulo-terminada).
+                // Text é C string (nulo-terminada). Escreve a string na appended
+                // e um ponteiro (offset relativo) na main.
                 let ptr = raw as *const std::os::raw::c_char;
                 let str_bytes = unsafe { std::ffi::CStr::from_ptr(ptr).to_bytes() };
-                // Layout: i64 offset (relativo) + bytes da string + nul.
-                // O offset aponta para os bytes da string (após o i64).
-                let str_start = ser.aligned_len() + 8;
-                ser.write_ptr_offset(str_start as i64);
-                ser.write_bytes(str_bytes);
-                ser.write_bytes(&[0u8]); // nul terminator
+                let mut bytes_with_nul = Vec::with_capacity(str_bytes.len() + 1);
+                bytes_with_nul.extend_from_slice(str_bytes);
+                bytes_with_nul.push(0u8); // nul terminator
+                let appended_offset = ser.write_appended(&bytes_with_nul);
+                ser.write_appended_ptr(appended_offset);
             }
         }
         Ty::Prim(PrimTy::Int) => {
             // SMI (LSB=1) é valor imediato. BigInt (LSB=0) é ponteiro.
-            // BigInt serialização fica para depois — por ora escreve o raw.
             ser.write_i64(raw);
         }
         Ty::Prim(PrimTy::Float) => {
@@ -174,14 +280,13 @@ fn serialize_value(
 
 /// Serializa uma lista Cons (head: i64, tail: ptr|0).
 ///
-/// Cada Cons cell é 16 bytes: head (i64) + tail (i64).
-/// Percorre a lista, escrevendo cada cell no buffer. O `tail` de cada
+/// Cada Cons cell é 16 bytes na main: head (i64) + tail (i64).
+/// Percorre a lista, escrevendo cada cell. O `tail` de cada
 /// cell é convertido para offset relativo da próxima cell (ou 0 se Nil).
 ///
-/// Para elementos escalares (Int, Float, Boolean), cada cell ocupa
-/// exactamente 16 bytes. Para elementos complexos (Text, nested List),
-/// o head pode ter tamanho variável — o offset do tail é calculado
-/// dinamicamente.
+/// Para elementos escalares (Int, Float, Boolean), cada head ocupa
+/// exactamente 8 bytes. Para Text, o head é um ponteiro (offset relativo)
+/// para a string na appended.
 fn serialize_list(
     ser: &mut Serializer,
     ptr: i64,
@@ -194,18 +299,18 @@ fn serialize_list(
         let head = unsafe { read_i64_at(raw_ptr, 0) };
         let tail = unsafe { read_i64_at(raw_ptr, 8) };
 
-        // Escreve head.
+        // Escreve head (8 bytes — valor escalar ou ponteiro para appended).
         serialize_value(ser, head, elem_ty, struct_registry)?;
 
         // Escreve tail como offset relativo ou 0.
         if tail == 0 {
-            ser.write_i64(0);
+            ser.write_nil();
         } else {
             // O tail aponta para a próxima cell, que será escrita a seguir.
-            // O offset relativo é a posição actual do buffer (alinhada)
+            // O offset relativo é a posição actual da main (alinhada)
             // após escrever este i64.
-            let next_cell_offset = ser.aligned_len() + 8; // +8 por este i64
-            ser.write_ptr_offset(next_cell_offset as i64);
+            let next_cell_offset = ser.main_aligned_len() + 8; // +8 por este i64
+            ser.write_main_ptr(next_cell_offset as i64);
         }
 
         current = tail;

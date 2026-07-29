@@ -190,3 +190,146 @@ fn comptime_list_top_level_no_crash() {
         "@comptime [1 2 3] deve retornar um ponteiro (i64), não crashar — stdout: {stdout}"
     );
 }
+
+// ── Fase 2: Text, Struct, Tuple, Sum via snapshot ────────────────
+
+/// `@comptime "hello"` top-level deve imprimir `hello` — a string
+/// é serializada para a appended section e o codegen faz `load(ptr+0)`
+/// para obter o ponteiro da C string.
+#[test]
+fn comptime_text_top_level() {
+    let (stdout, stderr, code) = run_kata_eval("@comptime \"hello\"");
+    assert_eq!(code, 0, "kata eval deve exit 0 — stderr: {stderr}");
+    let first = stdout.lines().next().unwrap_or("");
+    assert_eq!(
+        first, "hello",
+        "@comptime \"hello\" deve imprimir hello — stdout: {stdout}"
+    );
+}
+
+/// `@comptime let x := "hello"` + `len x` → 5. Exercita Text no
+/// snapshot + `kata_rt_string_len` (SMI-tagged).
+#[test]
+fn comptime_text_len() {
+    let (stdout, stderr, code) = run_kata_run("@comptime let x := \"hello\"\nlen x");
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    let first = stdout.lines().next().unwrap_or("");
+    assert_eq!(
+        first, "5",
+        "len de @comptime \"hello\" deve ser 5 — stdout: {stdout}"
+    );
+}
+
+/// `@comptime ["a" "b" "c"]` + `len x` → 3. Lista de Text onde cada
+/// head é um ponteiro para a appended section.
+#[test]
+fn comptime_list_of_text_len() {
+    let (stdout, stderr, code) = run_kata_run("@comptime let x := [\"a\" \"b\" \"c\"]\nlen x");
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    let first = stdout.lines().next().unwrap_or("");
+    assert_eq!(
+        first, "3",
+        "len de @comptime [\"a\" \"b\" \"c\"] deve ser 3 — stdout: {stdout}"
+    );
+}
+
+/// `len (head x)` onde `x := @comptime ["hello" "world"]` → 5.
+/// Exercita navegação de List de Text: head é um ponteiro para a
+/// appended, `len` desreferencia e conta a string.
+#[test]
+fn comptime_list_of_text_head_len() {
+    let (stdout, stderr, code) =
+        run_kata_run("@comptime let x := [\"hello\" \"world\"]\nlen (head x)");
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    let first = stdout.lines().next().unwrap_or("");
+    assert_eq!(
+        first, "5",
+        "len (head x) de [\"hello\" \"world\"] deve ser 5 — stdout: {stdout}"
+    );
+}
+
+/// `@comptime let p := Pessoa "Alice" 30` + `p.idade` → 30.
+/// Struct com campo Text serializada via snapshot, acesso por campo.
+#[test]
+fn comptime_struct_field_access() {
+    let src =
+        "data Pessoa (nome::Text idade::Int)\n@comptime let p := Pessoa \"Alice\" 30\np.idade";
+    let (stdout, stderr, code) = run_kata_run(src);
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    let first = stdout.lines().next().unwrap_or("");
+    assert_eq!(
+        first, "30",
+        "p.idade de @comptime Pessoa deve ser 30 — stdout: {stdout}"
+    );
+}
+
+/// `len p.nome` onde `p := @comptime Pessoa "Alice" 30` → 5.
+/// Campo Text em Struct acessado e navegado (len desreferencia a string).
+#[test]
+fn comptime_struct_text_field_len() {
+    let src =
+        "data Pessoa (nome::Text idade::Int)\n@comptime let p := Pessoa \"Alice\" 30\nlen p.nome";
+    let (stdout, stderr, code) = run_kata_run(src);
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    let first = stdout.lines().next().unwrap_or("");
+    assert_eq!(
+        first, "5",
+        "len p.nome de @comptime Pessoa deve ser 5 — stdout: {stdout}"
+    );
+}
+
+/// `@comptime (1, 2, 3)` + `x.0` → 1. Tuple sem regressão.
+#[test]
+fn comptime_tuple_index_access() {
+    let (stdout, stderr, code) = run_kata_run("@comptime let x := (1, 2, 3)\nx.0");
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    let first = stdout.lines().next().unwrap_or("");
+    assert_eq!(
+        first, "1",
+        "x.0 de @comptime (1, 2, 3) deve ser 1 — stdout: {stdout}"
+    );
+}
+
+/// `@comptime Result::Ok 42` + match → 42. Sum com payload Int
+/// (SMI) serializado via snapshot, desempacotado por match.
+#[test]
+fn comptime_sum_int_match() {
+    let src =
+        "@comptime let r := Result::Ok 42\nmatch r\n    Result::Ok v: v\n    Result::Err e: 0";
+    let (stdout, stderr, code) = run_kata_run(src);
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    let first = stdout.lines().next().unwrap_or("");
+    assert_eq!(
+        first, "42",
+        "match @comptime Result::Ok 42 deve produzir 42 — stdout: {stdout}"
+    );
+}
+
+/// `@comptime Result::Err "fail"` + match → `fail`. Sum com payload
+/// Text. O payload é copiado como ponteiro cru no serializer atual;
+/// funciona porque a arena comptime sobrevive até o fim do processo.
+#[test]
+fn comptime_sum_text_match() {
+    let src = "@comptime let r := Result::Err \"fail\"\nmatch r\n    Result::Ok v: v\n    Result::Err e: e";
+    let (stdout, stderr, code) = run_kata_run(src);
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    let first = stdout.lines().next().unwrap_or("");
+    assert_eq!(
+        first, "fail",
+        "match @comptime Result::Err \"fail\" deve imprimir fail — stdout: {stdout}"
+    );
+}
+
+/// `len e` no match de `@comptime Result::Err "fail"` → 4.
+/// Exercita Text como payload de Sum acessado por `len`.
+#[test]
+fn comptime_sum_text_match_len() {
+    let src = "@comptime let r := Result::Err \"fail\"\nmatch r\n    Result::Ok v: v\n    Result::Err e: len e";
+    let (stdout, stderr, code) = run_kata_run(src);
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    let first = stdout.lines().next().unwrap_or("");
+    assert_eq!(
+        first, "4",
+        "len e de @comptime Result::Err \"fail\" deve ser 4 — stdout: {stdout}"
+    );
+}

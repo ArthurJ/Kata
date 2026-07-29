@@ -35,7 +35,9 @@ pub unsafe extern "C" fn kata_rt_string_len(s: *const std::os::raw::c_char) -> i
         return 0;
     }
     // SAFETY: caller (JIT codegen) garante ponteiro C string válido ou NULL.
-    unsafe { std::ffi::CStr::from_ptr(s).to_bytes().len() as i64 }
+    let len = unsafe { std::ffi::CStr::from_ptr(s).to_bytes().len() as i64 };
+    // SMI tag: (val << 1) | 1 — consistente com kata_rt_list_len e todo Int.
+    (len << 1) | 1
 }
 
 /// Cria string literal a partir de texto (para codegen de TextLit).

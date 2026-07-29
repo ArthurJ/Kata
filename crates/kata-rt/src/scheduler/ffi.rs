@@ -117,6 +117,9 @@ pub fn reset_scheduler() {
     crate::arena::ROOT_ARENA_HANDLE.with(|h| h.set(0));
     // Limpar pool de arenas — entre testes, arenas anteriores são invalidadas.
     crate::arena::reset_all_arenas();
+    // Limpar tabela de snapshots — entre testes, IDs de sessões anteriores
+    // podem poluir a tabela TLS.
+    crate::snapshot::reset_snapshot_table();
 }
 
 /// Inicializa o scheduler thread-local e cria a arena raiz.

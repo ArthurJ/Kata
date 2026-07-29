@@ -464,7 +464,12 @@ fn result_to_literal(
             })
         }
         // ── Tipos complexos: serializar em HeapSnapshot ──
-        Ty::List(_) | Ty::Tuple(_) | Ty::Struct(_) | Ty::Prim(PrimTy::Text) | Ty::Sum(_) => {
+        Ty::List(_)
+        | Ty::Tuple(_)
+        | Ty::Struct(_)
+        | Ty::Prim(PrimTy::Text)
+        | Ty::Sum(_)
+        | Ty::Generic(_, _) => {
             let snapshot = snapshot::serialize_snapshot(result.raw, &result.ty, struct_registry)
                 .map_err(|e| ComptimeError::JitError {
                     reason: format!("serialização de snapshot: {e}"),
