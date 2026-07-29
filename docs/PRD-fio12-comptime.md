@@ -349,7 +349,7 @@ secção. O linker resolve os ponteiros absolutos.
 - **DoD:** `let x := @comptime fibonacci 20 in ...` substitui por literal no binário. ✅
 - **Commits:** `718f74e` (parser), `138af02` (comptime pass), `d2dc096` (dataflow), `377c7b3` (testes E2E)
 
-### Fase 4: Ascription refined delega predicados complexos ao comptime
+### Fase 4: Ascription refined delega predicados complexos ao comptime ✅
 
 - Typeck detecta predicado complexo (`is_prime _`) em ascription refined
 - Valor é comptime-available → delega ao comptime pass
@@ -359,6 +359,13 @@ secção. O linker resolve os ponteiros absolutos.
 - **DoD:** `5::Prime` com `is_prime` definido no módulo valida em compile-time.
   `4::Prime` produz type error. `n::PositiveInt` onde `n` é runtime → validação
   em runtime (sem mudança).
+- **Commit:** `08d0c8f`
+- **Abordagem (C-2):** refined_decls viajam no TypedModule. Predicados complexos
+  são tipados no typeck (via infer_expr_hinted) e armazenados como
+  `pending_predicates: Vec<Spanned<TypedExpr>>` em TypeAscription. O comptime
+  pass faz walk da TAST, JIT-executa cada predicado, e emite erro se False.
+  Tree_shake coleta referências em pending_predicates para não remover
+  funções predicado como mortas.
 
 ### Fase 5: `@cache{strategy: "LRU"}`
 

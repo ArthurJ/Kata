@@ -54,13 +54,16 @@ correta e não retrofitted.
 | `capture: Vec<CaptureInfo>` na TAST | Fio 9 | Closures com captura |
 | `CaptureStorage` Stack/Heap | Fio 9 | Escape analysis promoção |
 
-### Nota: ascription refined NÃO é comptime
+### Nota: ascription refined — predicados triviais vs complexos
 
-A validação compile-time de predicados em ascription (`5::PositiveInt` avalia
-`> _ 0` substituindo `_` por `5`) é **avaliação constante local ao typeck** —
-não usa JIT-and-execute (Fio 12). O typeck reduz a expressão booleana com o
-literal substituído e verifica `True`/`False`. Não criar dependência Fio 6 →
-Fio 12.
+Predicados triviais (`> _ 0`, `= _ 0`) são **avaliação constante local ao
+typeck** — não usam JIT-and-execute. O typeck reduz a expressão booleana com o
+literal substituído e verifica `True`/`False`.
+
+Predicados complexos (`is_prime _`) envolvem chamada de função e não podem
+ser avaliados localmente. A partir da Fase 4 do Fio 12, o typeck delega
+predicados complexos ao comptime pass, que JIT-executa a função predicado.
+Não criar dependência Fio 6 → Fio 12 para predicados triviais.
 
 ### Nota: `::` é um operador, contextos são typeck
 
@@ -154,7 +157,7 @@ Fio 1: Fundação + Aritmética + CLI
 ├── Fio 12: Comptime, @cache — PRD: docs/PRD-fio12-comptime.md
 │   (@comptime call-site explícito, JIT-and-execute, HeapSnapshot com arenas,
 │    @cache{strategy: "LRU"} em caller_arena, ascription refined delega ao comptime)
-│   Fase 1 ✅, Fase 2 ✅, Fase 3 ✅ — Fases 4-6 pendentes
+│   Fase 1 ✅, Fase 2 ✅, Fase 3 ✅, Fase 4 ✅ — Fases 5-6 pendentes
 │
 └── Fio 15: AOT, REPL
     (kata build — Cranelift object + linker, kata repl — TypeEnv persistente)
@@ -421,8 +424,9 @@ error. `PositiveInt 25 | 0` desempacota com fallback validado. `(/ 1 3)::Int`
 seleciona idiv por ret-directed dispatch. Enum predicado `IMC(17.0)` despacha
 para `Magreza`.
 
-**Nota:** A validação compile-time de predicados é avaliação constante local ao
-typeck — não usa JIT-and-execute (Fio 12). Não criar dependência Fio 6 → Fio 12.
+**Nota:** Predicados triviais são avaliação constante local ao typeck.
+Predicados complexos (desde Fase 4 Fio 12) são delegados ao comptime pass
+(JIT-and-execute).
 
 ---
 
@@ -816,8 +820,9 @@ Zeladorias removidas — manutenção diária via skill `zeladoria-kata5` substi
     com 1 overload. Não retrofit em Fio 7.
 12. **Hole nasce em Fio 2:** currying explícito desde funções/lambdas. Não
     adiar para Fio 9.
-13. **Ascription refined NÃO é comptime:** avaliação constante local ao typeck.
-    Não criar dependência Fio 6 → Fio 12.
+13. **Ascription refined — triviais vs complexos:** predicados triviais são
+    avaliação constante local ao typeck. Predicados complexos (Fase 4 Fio 12)
+    são delegados ao comptime pass (JIT-and-execute).
 14. **`::` é um operador, contextos são typeck:** parser reconhece `::` desde
     Fio 1. Contextos (assinatura, campo, type param, variante, ascription) são
     interpretados progressivamente pelo typeck.

@@ -1055,8 +1055,11 @@ diferentes.
 **Refinamento:** a ascription é onde o predicado do tipo refined é
 avaliado — é o ato de atribuir tipo, e o refinamento é parte do tipo.
 O construtor tem que importar o check de fora (guard chain no corpo
-sintetizado). A ascription valida em compile-time (avaliação constante
-local ao typeck, não comptime); o construtor valida em runtime.
+sintetizado). A ascription valida em compile-time: predicados triviais
+(`> _ 0`) são avaliados localmente pelo typeck (avaliação constante,
+sem JIT); predicados complexos (`is_prime _`) são delegados ao comptime
+pass, que JIT-executa a função predicado e verifica o resultado.
+O construtor valida em runtime.
 
 **Falha:** ambos podem falhar com `TypeMismatch`. Ascription additionally
 falha com **refinamento não atendido** — o predicado é avaliado em
