@@ -146,9 +146,14 @@ Fio 1: Fundação + Aritmética + CLI
 │   (import, export, as, module loader, filesystem, cycle detection,
 │    prelude de stdlib/core.kata substituindo prelude hardcoded)
 │
-├── Fio 12: Comptime, @cache_strategy
-│   (@comptime definition/call-site, JIT-and-execute, HeapSnapshot,
-│    @cache_strategy LRU)
+├── Fio 11: CSP, Concorrência, Paralelismo ✅ Concluído (exceto @parallel)
+│   (channel!, queue!, broadcast!, fork!, !>, <!, select com timeout,
+│    yield cooperativo, structured concurrency, scheduler com fibers)
+│   (@parallel — multiprocess via fork+IPC — congelado, não implementado)
+│
+├── Fio 12: Comptime, @cache — PRD: docs/PRD-fio12-comptime.md
+│   (@comptime call-site explícito, JIT-and-execute, HeapSnapshot com arenas,
+│    @cache{strategy: "LRU"} em caller_arena, ascription refined delega ao comptime)
 │
 └── Fio 15: AOT, REPL
     (kata build — Cranelift object + linker, kata repl — TypeEnv persistente)
@@ -593,35 +598,36 @@ pelo codegen. ARC pass emitido.
 
 ---
 
-### Fio 11: CSP, Concorrência, Paralelismo
+### Fio 11: CSP, Concorrência, Paralelismo ✅ Concluído (exceto @parallel)
 
-**PRD:** `docs/PRD-fio11.md`
+**Status:** Fases 1-14 implementadas (Fases 1-14 do Fio 3, que incluem CSP).
+`channel!`, `queue!(N)`, `broadcast!()`, `fork!`, `!>`, `<!`, `select` com
+`timeout`, yield cooperativo, structured concurrency, scheduler com fibers.
+Testes E2E: `csp_channels_e2e.rs` (11 testes), `csp_broadcast_e2e.rs` (4 testes),
+`select_timeout_e2e.rs`, `scheduler_test.rs`. Exemplos: `broadcast.kata`,
+`select_queue.kata`.
+
+**Não implementado:** `@parallel` (multiprocess via fork+IPC). O resolver rejeita
+com `UnknownDirective`. A string "parallel" não aparece em nenhum `.rs` do
+projeto. Congelado — necessário apenas para paralelismo cross-process.
 
 **Maquinaria de tipos construída:**
-- `effect: Effect` ganha `Spawn` e `ChannelOp` (fork!, !>, <!)
 - `Ty::Sender(Box<Ty>)`, `Ty::Receiver(Box<Ty>)`, `Ty::ReceiverFactory(Box<Ty>)`
+- `TypedExprKind::ChannelSend`, `ChannelRecv`, `Fork`, `ChannelCreate`
+- `ChannelKind`: Rendezvous, Buffered(N), Broadcast
 - Escape analysis para LCA entre fibers que compartilham canais
+- `EscapeTarget::Heap` para valores enviados via canal (root_arena)
 
 **Features:**
-- `channel!` (rendezvous), `queue!(N)` (buffered), `broadcast!` (pub-sub)
+- `channel!()` (rendezvous), `queue!(N)` (buffered), `broadcast!()` (pub-sub)
 - Criação retorna tupla `(Sender::T, Receiver::T)` ou `(Sender::T, ReceiverFactory::T)`
-- `fork!` (submete Action ao scheduler com args)
+- `fork!()` (submete Action ao scheduler com args)
 - `select` com `timeout` (multiplexação de canais)
 - `!>` (envio), `<!` (recebimento) — operadores infixos
 - Yield cooperativo via `wasmtime-fiber::Suspend` com `YieldReason`
 - Yield points no codegen (back-edge checks em `Loop` e `ForIn`)
 - Structured concurrency (Action espera forks completarem)
 - Deadlock detection trivial no run loop
-- `@parallel` (paralelismo via multiprocess — fork+IPC com serialização TypeShape)
-
-**Três camadas:**
-- **Concorrência:** fibers + yield + canais (single-threaded, determinístico)
-- **Preempção cooperativa:** yield points no codegen (resolve head-of-line blocking)
-- **Paralelismo:** `@parallel` (processo OS separado, isolamento total)
-
-**M:N multithread é post-1.0.** A estrutura do scheduler é independente do
-número de threads. Se workloads reais demonstrarem que yield points +
-`@parallel` não chegam, M:N é adição incremental.
 
 **Runtime:**
 - `kata_rt_channel_create/send/recv`, `kata_rt_queue_*`, `kata_rt_broadcast_*`
@@ -629,32 +635,57 @@ número de threads. Se workloads reais demonstrarem que yield points +
 - `kata_rt_broadcast_receiver_create` (receiver factory)
 - Scheduler: run_queue, blocked, pending_wakes, timers, árvore de fibers
 
-**Depende de:** Pré-11 (árvore de arenas, escape analysis para LCA),
-Fio 3 (Actions, arena), Fio 9 (escape analysis para dados em canais → Arc<T>)
+**Depende de:** Pré-11 ✅ (árvore de arenas, escape analysis para LCA),
+Fio 3 ✅ (Actions, arena), Fio 9 ✅ (escape analysis para dados em canais → Arc<T>)
 
-**DoD:** `fork!` submete Action em fiber separada com args. Channel rendezvous
+**DoD:** ✅ `fork!` submete Action em fiber separada com args. Channel rendezvous
 sincroniza sender/receiver. `select` multiplexa 2+ receivers. Yield points
 previnem head-of-line blocking. Structured concurrency garante lifecycle.
-`@parallel` spawn processo OS separado com serialização TypeShape.
+`@parallel` não implementado (congelado).
 
 ---
 
-### Fio 12: Comptime, @cache_strategy
+### Fio 12: Comptime, `@cache`
+
+**PRD:** `docs/PRD-fio12-comptime.md`
+
+**Maquinaria de tipos construída:**
+- `TypedExprKind::HeapSnapshot { snapshot_id, ty }` — resultado de comptime
+  embedado na TAST
+- `HeapSnapshotData { bytes, rebase_offsets, ty }` — tabela de snapshots por módulo
+- Comptime pass: dataflow de constness, pureza verification, JIT-and-execute
+  em arena temporária dedicada
+- `@cache{strategy: "LRU"}` — cache hashmap em `caller_arena`, key via TypeShape
 
 **Features:**
-- `@comptime` definition-site (hint — avalia se consegue, senão runtime)
-- `@comptime` call-site (guarantee — se não consegue, erro de compilação)
-- JIT-and-execute (compila via pipeline normal, executa no kata-rt real)
-- HeapSnapshot (bytes + fixups para tipos complexos)
-- Pureza verification (walk TAST: se não contém ActionCall, é pura)
-- `@cache_strategy{strategy: "LRU"}` (memoização automática)
+- `@comptime` em `let` top-level, expressão top-level, e call-site dentro de body
+- JIT-and-execute (compila via pipeline normal, executa no `kata-rt` real)
+- HeapSnapshot (bytes + rebasing na arena contígua — Pré-11 torna trivial)
+- Constness binário: literal, resultado `@comptime`, `let` comptime-available,
+  definição de função do módulo. O resto não. Sem propagação automática.
+- `@comptime` é explícito e opt-in (estilo Zig, não D). Sem definition-site hint.
+- Tipos preservados exactamente — snapshot tem o mesmo `ty` que a expressão
+- Ascription refined delega predicados complexos ao comptime pass (quando valor
+  é comptime-available). Comportamento do Fio 6 preservado para predicados triviais
+- `@cache{strategy: "LRU"}` anota a definição. Codegen emite cache lookup no
+  prólogo (antes da primeira cláusula, antes do primeiro lambda) e insert no
+  epílogo. Cache lazy-allocated em `caller_arena`. Sem reescrita de TAST.
+- Pureza verification (walk TAST: se contém ActionCall, é impura → erro)
 
-**Depende de:** Fio 10 (módulos para organizar comptime), Fio 1-9 (pipeline
-completo para JIT-and-execute)
+**Runtime:**
+- `kata_rt_load_snapshots(root_arena, snapshot_table, n)` — load-time, memcpy + rebasing
+- `kata_rt_cache_get_or_create(arena, fn_id, capacity) -> handle`
+- `kata_rt_cache_lookup(handle, key_bytes, key_len) -> i64` (0=miss, ptr=hit)
+- `kata_rt_cache_insert(handle, key_bytes, key_len, value_ptr)`
 
-**DoD:** `@comptime dobro 21` substitui por literal `42`. `@comptime aux input`
-é erro (args não-constantes). `@cache_strategy{strategy: "LRU"}` memoiza
-função pura repetida.
+**Depende de:** Fio 1-10 ✅ (pipeline completo, módulos, arenas hierárquicas),
+Fio 11 ✅ (TypeShape para serialização de args em `@cache`)
+
+**DoD:** `@comptime fatorial 10` substitui por literal `3628800`.
+`@comptime range 1 100` substitui por HeapSnapshot. `@comptime` com arg
+não-constante → erro. `5::Prime` com predicado complexo valida em compile-time.
+`dobro :: Int => Int @cache{strategy: "LRU"}` memoiza função pura repetida.
+`kata build` produz executável com snapshots embedados.
 
 ---
 
@@ -743,18 +774,19 @@ Fio 1  ────────────────────────�
   │       TypeEnv, Ty, PrimTy (FFI), DispatchTable com scoring, FfiSymbol,
   │       ::, data opaco, enum unitário (Boolean), Int/BigInt/SMI, Rational
   ├── Fio 2 ── Fio 9 (closures, escape)
-  │       assinaturas, ->, Hole, tail_pos, effect      escape, capture, Arc, TRMA
-  ├── Fio 3 ── Pré-11 ── Fio 11 ── Fio 14 (@log, @test)
-  │       Actions, return, ;, ?    Memória hierárquica  CSP, yield points, @parallel
-  ├── Fio 4 ── Fio 8 ── Fio 13 (Dict/Set)
-  │       Ty::Sum com payload, :: type params           ITERABLE, .N, len, stream fusion
-  ├── Fio 5 ── Fio 6 (refined)
-  │       Ty::Struct/Tuple, :: campos                  :: ascription, avaliação constante
-  ├── Fio 7 ── Fio 8 (dependência)
-  │       Ty::Generic/Interface, monomorph             (desbloqueia coleções)
-  ├── Fio 10 (módulos)
-  ├── Fio 12 (comptime)
-  └── Fio 15 (AOT, REPL)
+  │       assinaturas, ->, Hole, tail_pos             escape, capture, Arc, TRMA
+  ├── Fio 3 ── Pré-11 ── Fio 11 ✅ ── Fio 14 ✅ (@log, @test)
+  │       Actions, return, ;, ?   Memória hierárquica  CSP, yield points
+  ├── Fio 4 ── Fio 8 ✅ ── Fio 13 (Dict/Set)
+  │       Ty::Sum payload, :: params          ITERABLE, .N, len, stream fusion
+  ├── Fio 5 ✅ ── Fio 6 ✅ (refined)
+  │       Ty::Struct/Tuple, :: campos         :: ascription, avaliação constante
+  ├── Fio 7 ✅ ── Fio 8 ✅ (dependência)
+  │       Ty::Generic/Interface, monomorph    (desbloqueia coleções)
+  ├── Fio 10 ✅ (módulos)
+  ├── Fio 12 (Comptime, @cache)
+  │       @comptime call-site, HeapSnapshot, @cache LRU
+  └── Fio 15 (AOT ✅, REPL ⏳)
 
 Zeladorias removidas — manutenção diária via skill `zeladoria-kata5` substitui zeladorias planejadas.
 ```
