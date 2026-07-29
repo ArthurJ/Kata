@@ -25,3 +25,4 @@ pub use typed::{
 pub use typed_pattern::{
     TypedGuardClause, TypedLambdaClause, TypedMatchArm, TypedPattern, TypedWithBinding,
 };
+pub use kata_resolution::RefinedDeclInfo;

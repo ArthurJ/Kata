@@ -208,12 +208,14 @@ fn instantiate_kind(kind: &TypedExprKind, subs: &Substitutions) -> TypedExprKind
         TypedExprKind::TypeAscription {
             expr: inner,
             target_ty,
+            pending_predicates,
         } => TypedExprKind::TypeAscription {
             expr: Box::new(Spanned::new(
                 instantiate_typed_expr(&inner.node, subs),
                 inner.span,
             )),
             target_ty: apply_subs(target_ty, subs),
+            pending_predicates: pending_predicates.clone(),
         },
 
         TypedExprKind::Grouping { inner } => TypedExprKind::Grouping {

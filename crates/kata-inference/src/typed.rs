@@ -69,6 +69,13 @@ pub enum TypedExprKind {
         expr: Box<Spanned<TypedExpr>>,
         /// Tipo alvo da ascription (já resolvido de TypeExpr → Ty).
         target_ty: Ty,
+        /// Predicados complexos pendentes de validação pelo comptime pass.
+        /// Populado quando `const_eval_predicate` retorna `None` (predicado
+        /// que envolve chamada de função, ex: `is_prime _`). Cada predicado
+        /// já tem `Hole` substituído pelo literal e já é um `TypedExpr` pronto
+        /// para JIT execution. O comptime pass avalia via `jit_execute_expr`
+        /// e emite erro se o resultado for `False`.
+        pending_predicates: Vec<Spanned<TypedExpr>>,
     },
     /// `(expr)` — agrupamento (transparente ao codegen).
     Grouping { inner: Box<Spanned<TypedExpr>> },

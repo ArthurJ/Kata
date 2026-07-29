@@ -276,6 +276,7 @@ pub(crate) fn infer_apply(
                                 kind: TypedExprKind::TypeAscription {
                                     expr: Box::new(arg.clone()),
                                     target_ty: fallback_ty.clone(),
+                                    pending_predicates: Vec::new(),
                                 },
                             },
                             arg.span,

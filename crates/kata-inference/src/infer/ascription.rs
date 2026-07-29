@@ -108,6 +108,7 @@ pub(crate) fn infer_type_ascription(
                 kind: TypedExprKind::TypeAscription {
                     expr: Box::new(Spanned::new(inner, expr.span)),
                     target_ty,
+                    pending_predicates: Vec::new(),
                 },
             });
         }
@@ -149,6 +150,7 @@ pub(crate) fn infer_type_ascription(
             })?;
 
         // Avalia cada predicado sobre o literal.
+        let mut pending: Vec<Spanned<TypedExpr>> = Vec::new();
         for (i, pred) in refined_decl.predicates.iter().enumerate() {
             match super::const_eval::const_eval_predicate(pred, expr) {
                 Some(true) => {} // predicado satisfeito
@@ -160,18 +162,25 @@ pub(crate) fn infer_type_ascription(
                     });
                 }
                 None => {
-                    return Err(MiddleError::TypeMismatch {
-                        expected: format!(
-                            "predicado {i} de {struct_name} avaliável em compile-time"
-                        ),
-                        found: "predicado muito complexo — use construtor falível".into(),
-                        span: expr.span.into(),
-                    });
+                    // Predicado complexo — não avaliável localmente pelo
+                    // const_eval. Substitui Hole pelo literal, tipa via
+                    // infer_expr_hinted, e armazena como pending para o
+                    // comptime pass validar via jit_eval.
+                    let substituted = super::const_eval::substitute_hole(pred, expr);
+                    let typed_pred = infer_expr_hinted(
+                        &substituted.node,
+                        &substituted.span,
+                        env,
+                        ctx,
+                        false,
+                        Some(&Ty::Sum("Boolean".to_string())),
+                    )?;
+                    pending.push(Spanned::new(typed_pred, substituted.span));
                 }
             }
         }
 
-        // Todos os predicados passaram — produz TypeAscription.
+        // Todos os predicados passaram (ou são pending) — produz TypeAscription.
         return Ok(TypedExpr {
             span: *span,
             ty: target_ty.clone(),
@@ -188,6 +197,7 @@ pub(crate) fn infer_type_ascription(
             kind: TypedExprKind::TypeAscription {
                 expr: Box::new(Spanned::new(inner, expr.span)),
                 target_ty,
+                pending_predicates: pending,
             },
         });
     }
@@ -304,6 +314,7 @@ pub(crate) fn infer_type_ascription(
         kind: TypedExprKind::TypeAscription {
             expr: Box::new(Spanned::new(inner, expr.span)),
             target_ty,
+            pending_predicates: Vec::new(),
         },
     })
 }

@@ -172,6 +172,29 @@ pub fn run_comptime_pass(
     }
 
     current.snapshots = snapshots;
+
+    // ── Fase 4: Validar predicados complexos pendentes ──
+    // TypeAscription com pending_predicates foi produzida pelo typeck quando
+    // const_eval não conseguiu avaliar (predicado complexo, ex: is_prime).
+    // Aqui, JIT-executamos cada predicado e verificamos se retorna Boolean::True.
+    let actions_clone = current.actions.clone();
+    let ctx = ModuleCtx {
+        dispatch_table: &current.dispatch_table,
+        type_env: &current.type_env,
+        functions: &current.functions,
+        actions: &actions_clone,
+        struct_registry: &current.struct_registry,
+        enum_registry,
+    };
+    for expr in &mut current.pre_entry {
+        validate_pending_predicates(&mut expr.node, &ctx, &comptime_bindings)?;
+    }
+    validate_pending_predicates(&mut current.entry.node, &ctx, &comptime_bindings)?;
+    for action in &mut current.actions {
+        for stmt in &mut action.body {
+            validate_pending_predicates(&mut stmt.node, &ctx, &comptime_bindings)?;
+        }
+    }
     Ok(current)
 }
 
@@ -557,6 +580,47 @@ fn result_to_literal(
     }
 }
 
+/// Walk recursivo nos filhos de `expr` chamando `validate_pending_predicates`.
+/// Quando encontra `TypeAscription` com `pending_predicates` não-vazio,
+/// JIT-executa cada predicado e verifica se retorna `Boolean::True`.
+fn validate_pending_predicates(
+    expr: &mut TypedExpr,
+    ctx: &ModuleCtx<'_>,
+    comptime_bindings: &std::collections::HashMap<String, TypedExpr>,
+) -> Result<(), ComptimeError> {
+    // Primeiro recursar nos filhos.
+    walk_mut(expr, &mut |child| {
+        validate_pending_predicates(child, ctx, comptime_bindings)
+    })?;
+
+    // Depois processar o próprio nó se for TypeAscription com pending.
+    if let TypedExprKind::TypeAscription {
+        pending_predicates,
+        ..
+    } = &mut expr.kind
+    {
+        if !pending_predicates.is_empty() {
+            for pred in pending_predicates.iter() {
+                let result = jit_execute_expr(&pred.node, ctx, comptime_bindings)?;
+                // Resultado deve ser Boolean::True (tag 1) ou Boolean::False (tag 0).
+                // O runtime representa Boolean como Sum com tag 0 (False) ou 1 (True).
+                if result.raw != 1 {
+                    return Err(ComptimeError::JitError {
+                        reason: format!(
+                            "predicado de ascription refined falhou: \
+                             esperava Boolean::True, obteve tag {}",
+                            result.raw
+                        ),
+                    });
+                }
+            }
+            // Todos os predicados passaram — limpa pending.
+            pending_predicates.clear();
+        }
+    }
+    Ok(())
+}
+
 /// JIT-executa uma expressão TAST.
 ///
 /// Cria um `TypedModule` mínimo com a expressão como entry point,
@@ -600,6 +664,7 @@ fn jit_execute_expr(
         actions: ctx.actions.to_vec(),
         struct_registry: ctx.struct_registry.clone(),
         snapshots: Vec::new(),
+        refined_decls: Vec::new(),
     };
 
     let result = kata_codegen::jit_eval(&mini).map_err(|e| ComptimeError::JitError {

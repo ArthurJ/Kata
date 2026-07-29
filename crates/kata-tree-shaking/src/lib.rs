@@ -53,6 +53,7 @@ fn tree_shake_impl(typed: TypedModule, preserve_tests: bool) -> TypedModule {
         actions,
         struct_registry,
         snapshots,
+        refined_decls,
     } = typed;
 
     // ── Coleta nomes alcançados a partir do entry + pre_entry ──
@@ -170,6 +171,7 @@ fn tree_shake_impl(typed: TypedModule, preserve_tests: bool) -> TypedModule {
         actions: kept_actions,
         struct_registry,
         snapshots,
+        refined_decls,
     }
 }
 
@@ -264,7 +266,12 @@ fn collect_refs(
         }
 
         // ── Sub-expressões — recursão ──
-        TypedExprKind::TypeAscription { expr, .. }
+        TypedExprKind::TypeAscription { expr, pending_predicates, .. } => {
+            collect_refs(&expr.node, reached_fns, reached_actions, fn_names);
+            for pred in pending_predicates {
+                collect_refs(&pred.node, reached_fns, reached_actions, fn_names);
+            }
+        }
         | TypedExprKind::Grouping { inner: expr }
         | TypedExprKind::Return(expr)
         | TypedExprKind::TypeOf { expr } => {

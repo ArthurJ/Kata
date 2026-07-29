@@ -35,6 +35,7 @@ pub(crate) fn run(typed_module: &mut TypedModule) {
         actions,
         struct_registry: _,
         snapshots: _,
+        refined_decls: _,
     } = typed_module;
 
     let dispatch = &*dispatch_table;

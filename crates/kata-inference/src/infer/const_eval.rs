@@ -25,7 +25,7 @@ pub(crate) fn const_eval_predicate(pred: &Spanned<Expr>, value: &Spanned<Expr>) 
 }
 
 /// Substitui `Expr::Hole` por `value` recursivamente.
-fn substitute_hole(expr: &Spanned<Expr>, value: &Spanned<Expr>) -> Spanned<Expr> {
+pub(crate) fn substitute_hole(expr: &Spanned<Expr>, value: &Spanned<Expr>) -> Spanned<Expr> {
     let new_node = match &expr.node {
         Expr::Hole => value.node.clone(),
         Expr::Apply { callee, args } => Expr::Apply {

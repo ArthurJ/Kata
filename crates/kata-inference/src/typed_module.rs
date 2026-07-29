@@ -11,6 +11,7 @@ use kata_ast::Spanned;
 use kata_core::dispatch::DispatchTable;
 use kata_core::snapshot::HeapSnapshotData;
 use kata_core::ty::{Ty, TypeEnv};
+use kata_resolution::RefinedDeclInfo;
 
 use crate::typed::TypedExpr;
 use crate::typed_pattern::TypedLambdaClause;
@@ -44,6 +45,11 @@ pub struct TypedModule {
     /// O comptime pass popula esta tabela; o codegen emite como dados estáticos;
     /// o runtime faz `kata_rt_load_snapshots` em load-time.
     pub snapshots: Vec<HeapSnapshotData>,
+    /// Declarações de tipos refinados — predicados para validação deferred.
+    /// O typeck valida predicados triviais localmente; predicados complexos
+    /// (que envolvem chamada de função) são delegados ao comptime pass, que
+    /// tem acesso a `jit_eval`. Populado por `infer_module`.
+    pub refined_decls: Vec<RefinedDeclInfo>,
 }
 
 /// Função nomeada tipada — pronta para o codegen.
