@@ -4,6 +4,7 @@ use kata_ast::{DotIndex, Expr, Spanned, Token};
 use kata_diagnostics::FrontendError;
 
 use crate::Parser;
+use crate::expr_apply::parse_apply;
 
 impl Parser {
     /// Determine if the current token can start an expression.
@@ -27,6 +28,7 @@ impl Parser {
                 | Token::Continue
                 | Token::For
                 | Token::Select
+                | Token::At
         )
     }
 
@@ -302,6 +304,26 @@ impl Parser {
                     ));
                 }
                 Ok(Spanned::new(Expr::Ident { name }, start))
+            }
+            Token::At => {
+                // `@comptime` em call-site — envolve apenas `parse_apply`
+                // (aplicação greedy). Pipe (`|>`), fallback (`|`), canais
+                // (`!>`, `<!`) ficam fora do escopo do `@comptime`.
+                self.advance(); // consume `@`
+                match self.peek() {
+                    Token::Ident(s) if s == "comptime" => {
+                        self.advance(); // consume `comptime`
+                        let inner = parse_apply(self)?;
+                        let span = start.cover(inner.span);
+                        Ok(Spanned::new(
+                            Expr::Comptime {
+                                expr: Box::new(inner),
+                            },
+                            span,
+                        ))
+                    }
+                    _ => Err(self.error("`comptime` após `@`")),
+                }
             }
             _ => Err(self.error("expression")),
         }
