@@ -122,6 +122,15 @@ fn is_trma_candidate(func: &TypedFunction, table: &DispatchTable) -> Option<Trma
         let base_arm = base_arm?;
         let rec_arm = rec_arm?;
 
+        // Guard: o pattern do arm recursivo deve ser Ident (ou None = otherwise).
+        // Para List recursion com match explícito, o arm recursivo pode ter
+        // pattern Cons (`[h : t]`) — os bindings não existem na função reescrita.
+        if let Some(ref pat) = rec_arm.pattern {
+            if !matches!(pat.node, TypedPattern::Ident { .. }) {
+                return None;
+            }
+        }
+
         // 5. Extrair o padrão do arm recursivo.
         let rec_info = detect_assoc_recursion(&rec_arm.body, &func.name, table)?;
 
@@ -160,6 +169,17 @@ fn is_trma_candidate(func: &TypedFunction, table: &DispatchTable) -> Option<Trma
 
         let (_, base_clause) = base_clause?;
         let (_, rec_clause) = rec_clause?;
+
+        // Guard: o pattern da cláusula recursiva deve ser Ident.
+        // Para List recursion (`lambda [h : t]: + h (soma_lista t)`),
+        // os bindings `h` e `t` são do pattern Cons — não existem na
+        // função reescrita `_acc(n, acc)`. O TRMA só é válido quando
+        // a recursão referencia o param original (Ident), como em
+        // `lambda n: + n (soma (- n 1))`.
+        let rec_pattern = rec_clause.patterns.first()?;
+        if !matches!(&rec_pattern.node, TypedPattern::Ident { .. }) {
+            return None;
+        }
 
         // Extrair o pattern do caso base (primeiro pattern da cláusula base).
         // Para `lambda 0: 0`, o pattern é `Literal(0)`.
