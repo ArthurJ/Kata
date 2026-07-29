@@ -336,7 +336,9 @@ secção. O linker resolve os ponteiros absolutos.
 - Codegen lowera `HeapSnapshot` para `kata_rt_get_snapshot(id)`
 - **DoD:** `@comptime let t := [1 2 3]` gera lista no binário sem código de
   construção. ✅ `len`, `head`, `tail` funcionam sobre o snapshot carregado.
-- **Commit:** `b7f7485`
+  Sum/Result com payload Text também funciona: o payload é serializado
+  recursivamente (string copiada para o snapshot, não ponteiro cru).
+- **Commit:** `b7f7485` (Fase 2), `b75f867` (fix Sum payload UAF)
 
 ### Fase 3: `@comptime` em call-site dentro de body
 
@@ -373,6 +375,10 @@ secção. O linker resolve os ponteiros absolutos.
 - Tabela de snapshots emitida como secção de dados no `.o`
 - Shim C chama `kata_rt_load_snapshots` antes de `__kata_entry`
 - `kata build` produz executável com snapshots embedados
+- **Pré-requisito:** serialização recursiva de Sum/Generic payload (commit
+  `b75f867`) — sem este fix, o snapshot continha ponteiros crus para a
+  memória do JITModule, que seria desmapeada em AOT. O fix torna o snapshot
+  auto-contido (strings e payloads copiados para o snapshot).
 - **DoD:** `kata build examples/comptime.kata` produz executável que executa
   sem o compilador e usa snapshots em load-time.
 

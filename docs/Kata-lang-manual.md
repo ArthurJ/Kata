@@ -1713,13 +1713,18 @@ módulo), sempre precedendo imediatamente o item que modificam.
     expressão top-level. O comptime pass avalia a expressão e substitui o
     resultado por um literal (escalares: Int, Float, Boolean, Unit) ou por
     um `HeapSnapshot` (tipos complexos: List, Tuple, Struct, Text, Sum com
-    payload). O snapshot é serializado de forma type-aware, embutido como
+    payload). O snapshot é serializado de forma type-aware (incluindo
+    Sum/Result com payload Text — strings e payloads são copiados
+    recursivamente para o snapshot, não ponteiros crus), embutido como
     data symbol no binário JIT, e carregado na root_arena em load-time via
     `kata_rt_load_snapshot` com rebasing de ponteiros. Exemplo:
     `@comptime let x := [1 2 3]` gera `x` como snapshot navegável em runtime.
-  - **Definition-site (hint) e Call-site (guarantee) — Fase 3, pendente:**
-    `@comptime` marca a definição da função ou força avaliação em call-site
-    dentro de body. Ainda não implementado.
+  - **Call-site (guarantee) — Fase 3, pendente:** `@comptime` antes de uma
+    expressão dentro de um body força avaliação em compile-time. Se
+    consegue, substitui por snapshot; se não consegue, erro de compilação.
+    Ainda não implementado. (Definition-site `@comptime` foi removido do
+    escopo — a decisão de avaliar pertence ao call-site, onde os args são
+    visíveis.)
 * **`@cache_strategy{strategy: "LRU"}`**: Interceta invocações puras repetidas e
   injeta pesquisas em Hash Table nativa (ex: `LRU` cache), efetuando
   *memoização* automática.
