@@ -103,6 +103,12 @@ pub fn run_comptime_pass(
     loop {
         let mut changed = false;
 
+        // Clonar actions antes do loop para evitar conflito de borrow:
+        // o ctx precisa de &actions (imutável) para jit_execute_expr, mas
+        // precisamos mutar current.actions[i].body. Clonar resolve
+        // (consistente com jit_execute_expr que já clona tudo).
+        let actions_clone = current.actions.clone();
+
         // Partial borrow: empresta campos imutáveis individuais de `current`.
         // Não conflita com `&mut current.pre_entry` / `&mut current.entry`
         // porque são campos diferentes do mesmo struct.
@@ -110,7 +116,7 @@ pub fn run_comptime_pass(
             dispatch_table: &current.dispatch_table,
             type_env: &current.type_env,
             functions: &current.functions,
-            actions: &current.actions,
+            actions: &actions_clone,
             struct_registry: &current.struct_registry,
             enum_registry,
         };
@@ -126,6 +132,13 @@ pub fn run_comptime_pass(
 
         // Processar entry
         replace_comptime_in_place(&mut current.entry.node, &ctx, &mut changed, &mut snapshots)?;
+
+        // Processar bodies de actions (Fase 3b)
+        for action in &mut current.actions {
+            for stmt in &mut action.body {
+                replace_comptime_in_place(&mut stmt.node, &ctx, &mut changed, &mut snapshots)?;
+            }
+        }
 
         if !changed {
             break;
