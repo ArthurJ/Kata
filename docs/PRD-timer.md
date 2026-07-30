@@ -215,19 +215,30 @@ Esta FFI é exposta ao usuário via `now!()` (seção 8). O codegen do
 
 ### 5.2. Canal interno
 
-O canal interno buffer-1 com drop policy pode ser implementado como:
-- Um slot no fiber struct do scheduler (per-fiber, evita race entre
-  fibers que chamam a mesma função)
-- Ou reusando a TLS HashMap do `@cache` indexada por `fn_id`
+O canal interno é um canal Kata nativo (`kata_rt_queue_create` com
+capacity=1) com política de drop (first-write-wins). Usa o mesmo
+tipo de canal bufferizado já existente no runtime — `QueueInner` com
+`Mutex`/`Condvar`, que é thread-safe por construction.
 
-Requisito: `start_time` sobrevive à destruição de frame do TCO e não é
-compartilhado entre fibers concorrentes.
+Key = `fn_id` (hash FNV-1a canônico, já existente do `@cache`). O
+canal é alocado na arena do fiber criador e indexado numa `thread_local!`
+`HashMap<i64, i64>` (`fn_id` → handle), igual ao `@cache`.
+
+Requisitos:
+- `start_time` sobrevive à destruição de frame do TCO (canal vive na
+  heap, não no stack).
+- Não é compartilhado entre threads concorrentes (TLS indexa por
+  `fn_id`, cada thread tem seu próprio handle).
+- Política drop: `send` em canal cheio descarta o valor novo e mantém
+  o existente (first-write-wins). Isto pode precisar de um modo novo
+  de send ou um wrapper no runtime — o `kata_rt_channel_send`
+  atual bloqueia quando o buffer está cheio, não descarta.
 
 ### 5.3. Buffer de stats
 
 Quando `stats: true`, um buffer de `repeat` amostras é mantido por
-função. Pode reusar a mesma TLS HashMap do `@cache`, indexada por
-`fn_id`, ou viver no fiber struct.
+função. Reusa a mesma `thread_local!` `HashMap` do `@cache`, indexada
+por `fn_id`. Cada thread tem seu próprio buffer — sem race.
 
 ## 6. Codegen
 
@@ -295,10 +306,10 @@ Senão → estratégia stack slot.
   pelo epilogue. Mesma limitação do `@log Exit` com multi-clause.
 - `@timer` + `@cache` hit: delta é ~0 (tempo de lookup). O usuário vê
   que o cache funcionou.
-- Canal interno per-fiber: se o scheduler não tiver slot para
-  `start_time`, fallback para TLS (aceitando race entre fibers que
-  chamam a mesma função — função pura não faz yield, então o race é
-  improvável na prática).
+- Canal interno: `kata_rt_channel_send` atual bloqueia quando o
+  buffer está cheio. A política drop (first-write-wins) precisa de
+  um novo modo de send não-bloqueante ou um wrapper no runtime que
+  descarta o valor se o slot estiver ocupado.
 
 ## 8. `now!()` — action builtin de timestamp
 
@@ -430,29 +441,22 @@ Novo arquivo `crates/kata-rt/src/timer.rs`:
 ```rust
 //! Timer — clock monotônico para medição de tempo.
 
+use std::sync::OnceLock;
 use std::time::Instant;
 
-/// Epoch do clock monotônico — inicializado na primeira chamada.
-static mut TIMER_EPOCH: Option<Instant> = None;
+/// Epoch do clock monotônico — inicializado uma vez, thread-safe.
+static TIMER_EPOCH: OnceLock<Instant> = OnceLock::new();
 
 /// Clock monotônico em nanossegundos desde a primeira chamada.
 ///
 /// Usa `Instant::elapsed()` a partir de um epoch preguiçoso para garantir
 /// monoticidade sem depender de epoch absoluto (que pode ser não-mono-
-/// tônico em algumas plataformas).
-///
-/// # Safety
-/// Sem argumentos. Thread-safe via `std::sync::OnceLock` se necessário.
+/// tônico em algumas plataformas). `OnceLock` é thread-safe — seguro
+/// para o plano de multithreading.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn kata_rt_timer_now() -> i64 {
-    // SAFETY: acesso à static mut é seguro neste contexto — single-threaded
-    // JIT runtime. Se futuramene multithreaded, trocar por OnceLock<Instant>.
-    unsafe {
-        if TIMER_EPOCH.is_none() {
-            TIMER_EPOCH = Some(Instant::now());
-        }
-        TIMER_EPOCH.unwrap().elapsed().as_nanos() as i64
-    }
+pub extern "C" fn kata_rt_timer_now() -> i64 {
+    let epoch = TIMER_EPOCH.get_or_init(Instant::now);
+    epoch.elapsed().as_nanos() as i64
 }
 ```
 
