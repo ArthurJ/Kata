@@ -65,11 +65,7 @@ pub unsafe extern "C" fn kata_rt_bytes_from_ptr(src: i64, len: i64, arena_handle
     }
     // Copia os bytes de src para o blob (offset 8).
     unsafe {
-        std::ptr::copy_nonoverlapping(
-            src as *const u8,
-            (ptr as *mut u8).add(8),
-            len as usize,
-        );
+        std::ptr::copy_nonoverlapping(src as *const u8, (ptr as *mut u8).add(8), len as usize);
     }
     ptr
 }
@@ -157,8 +153,7 @@ pub extern "C" fn kata_rt_bytes_get_checked(ptr: i64, idx: i64) -> i64 {
     if real_idx < 0 || real_idx >= len {
         return crate::sum::kata_rt_store_sum_result(1, 0, 0);
     }
-    let byte =
-        unsafe { std::ptr::read_unaligned((ptr as *const u8).add(8 + real_idx as usize)) };
+    let byte = unsafe { std::ptr::read_unaligned((ptr as *const u8).add(8 + real_idx as usize)) };
     crate::sum::kata_rt_store_sum_result(0, tag_smi(byte as i64), 0)
 }
 
@@ -226,11 +221,7 @@ pub unsafe extern "C" fn kata_rt_bytes_eq(a: i64, b: i64) -> i64 {
     }
     let bytes_a = unsafe { std::slice::from_raw_parts((a as *const u8).add(8), len_a as usize) };
     let bytes_b = unsafe { std::slice::from_raw_parts((b as *const u8).add(8), len_b as usize) };
-    if bytes_a == bytes_b {
-        1
-    } else {
-        0
-    }
+    if bytes_a == bytes_b { 1 } else { 0 }
 }
 
 /// Representação hex do blob como C string. Retorna ponteiro (ownership transferida).
@@ -242,7 +233,9 @@ pub unsafe extern "C" fn kata_rt_bytes_eq(a: i64, b: i64) -> i64 {
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_bytes_show(ptr: i64) -> *mut std::os::raw::c_char {
     if ptr == 0 {
-        return CString::new("").expect("CString vazia sempre válida").into_raw();
+        return CString::new("")
+            .expect("CString vazia sempre válida")
+            .into_raw();
     }
     let len = unsafe { std::ptr::read_unaligned(ptr as *const i64) };
     let bytes = if len <= 0 {
@@ -497,13 +490,18 @@ pub unsafe extern "C" fn kata_rt_text_to_bytes(text_ptr: i64, arena_handle: i64)
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn kata_rt_bytes_to_text(bytes_ptr: i64) -> *mut std::os::raw::c_char {
     if bytes_ptr == 0 {
-        return CString::new("").expect("CString vazia sempre válida").into_raw();
+        return CString::new("")
+            .expect("CString vazia sempre válida")
+            .into_raw();
     }
     let len = unsafe { std::ptr::read_unaligned(bytes_ptr as *const i64) };
     if len <= 0 {
-        return CString::new("").expect("CString vazia sempre válida").into_raw();
+        return CString::new("")
+            .expect("CString vazia sempre válida")
+            .into_raw();
     }
-    let bytes = unsafe { std::slice::from_raw_parts((bytes_ptr as *const u8).add(8), len as usize) };
+    let bytes =
+        unsafe { std::slice::from_raw_parts((bytes_ptr as *const u8).add(8), len as usize) };
     let text = std::str::from_utf8(bytes).unwrap_or("");
     CString::new(text)
         .unwrap_or_else(|_| CString::new("").expect("CString vazia sempre válida"))
@@ -520,11 +518,7 @@ pub unsafe extern "C" fn kata_rt_bytes_to_text(bytes_ptr: i64) -> *mut std::os::
 /// `text_ptr` deve ser uma C string válida (nulo-terminada) ou 0.
 /// `arena_handle` deve ser válido (para alocar a C string do codepoint).
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn kata_rt_text_at(
-    text_ptr: i64,
-    idx: i64,
-    arena_handle: i64,
-) -> i64 {
+pub unsafe extern "C" fn kata_rt_text_at(text_ptr: i64, idx: i64, arena_handle: i64) -> i64 {
     if text_ptr == 0 {
         return crate::sum::kata_rt_store_sum_result(1, 0, arena_handle);
     }
@@ -572,7 +566,9 @@ pub unsafe extern "C" fn kata_rt_text_slice(
     end: i64,
 ) -> *mut std::os::raw::c_char {
     if text_ptr == 0 {
-        return CString::new("").expect("CString vazia sempre válida").into_raw();
+        return CString::new("")
+            .expect("CString vazia sempre válida")
+            .into_raw();
     }
     let cstr = unsafe { std::ffi::CStr::from_ptr(text_ptr as *const std::os::raw::c_char) };
     let s = cstr.to_str().unwrap_or("");
@@ -585,7 +581,9 @@ pub unsafe extern "C" fn kata_rt_text_slice(
     let start = start.clamp(0, len);
     let end = end.clamp(0, len);
     if start >= end {
-        return CString::new("").expect("CString vazia sempre válida").into_raw();
+        return CString::new("")
+            .expect("CString vazia sempre válida")
+            .into_raw();
     }
     let sub: String = codepoints[start as usize..end as usize].iter().collect();
     CString::new(sub)
@@ -626,7 +624,9 @@ pub unsafe extern "C" fn kata_rt_array_slice(
     }
     for i in 0..sub_len {
         let val = unsafe {
-            std::ptr::read_unaligned((ptr as *const u8).add((8 + (start + i) * 8) as usize) as *const i64)
+            std::ptr::read_unaligned(
+                (ptr as *const u8).add((8 + (start + i) * 8) as usize) as *const i64
+            )
         };
         crate::array::kata_rt_array_set(new_ptr, i, val);
     }
@@ -722,7 +722,8 @@ mod tests {
         kata_rt_bytes_set(ptr, 0, tag_smi(0xFF));
         let result = kata_rt_bytes_get_checked(ptr, 0);
         let tag = unsafe { std::ptr::read_unaligned(result as *const i64) };
-        let payload = unsafe { std::ptr::read_unaligned((result as *const u8).add(8) as *const i64) };
+        let payload =
+            unsafe { std::ptr::read_unaligned((result as *const u8).add(8) as *const i64) };
         assert_eq!(tag, 0); // Ok
         assert_eq!(untag_smi(payload), 0xFF);
     }
@@ -743,7 +744,8 @@ mod tests {
         kata_rt_bytes_set(ptr, 2, tag_smi(0x5A));
         let result = kata_rt_bytes_get_checked(ptr, -1);
         let tag = unsafe { std::ptr::read_unaligned(result as *const i64) };
-        let payload = unsafe { std::ptr::read_unaligned((result as *const u8).add(8) as *const i64) };
+        let payload =
+            unsafe { std::ptr::read_unaligned((result as *const u8).add(8) as *const i64) };
         assert_eq!(tag, 0); // Ok
         assert_eq!(untag_smi(payload), 0x5A);
     }
@@ -752,9 +754,7 @@ mod tests {
     fn from_ptr() {
         let arena = make_arena();
         let data = [0x48u8, 0x65, 0x6C, 0x6C, 0x6F]; // "Hello"
-        let ptr = unsafe {
-            kata_rt_bytes_from_ptr(data.as_ptr() as i64, 5, arena)
-        };
+        let ptr = unsafe { kata_rt_bytes_from_ptr(data.as_ptr() as i64, 5, arena) };
         assert_eq!(untag_smi(kata_rt_bytes_len(ptr)), 5);
         assert_eq!(untag_smi(kata_rt_bytes_get(ptr, 0)), 0x48); // 'H'
         assert_eq!(untag_smi(kata_rt_bytes_get(ptr, 4)), 0x6F); // 'o'
@@ -764,9 +764,7 @@ mod tests {
     fn from_ints() {
         let arena = make_arena();
         let ints = [tag_smi(0x41), tag_smi(0x42), tag_smi(0x43)];
-        let ptr = unsafe {
-            kata_rt_bytes_from_ints(ints.as_ptr() as i64, 3, arena)
-        };
+        let ptr = unsafe { kata_rt_bytes_from_ints(ints.as_ptr() as i64, 3, arena) };
         assert_eq!(untag_smi(kata_rt_bytes_len(ptr)), 3);
         assert_eq!(untag_smi(kata_rt_bytes_get(ptr, 0)), 0x41);
         assert_eq!(untag_smi(kata_rt_bytes_get(ptr, 2)), 0x43);
@@ -809,9 +807,7 @@ mod tests {
     fn show_hex() {
         let arena = make_arena();
         let data = [0x48u8, 0x65, 0x6C, 0x6C, 0x6F]; // "Hello"
-        let ptr = unsafe {
-            kata_rt_bytes_from_ptr(data.as_ptr() as i64, 5, arena)
-        };
+        let ptr = unsafe { kata_rt_bytes_from_ptr(data.as_ptr() as i64, 5, arena) };
         let result = kata_rt_bytes_show(ptr);
         let s = unsafe { std::ffi::CStr::from_ptr(result).to_str().unwrap() };
         assert_eq!(s, "48656c6c6f");
@@ -891,17 +887,26 @@ mod tests {
 
     #[test]
     fn byte_and_scalar() {
-        assert_eq!(untag_smi(kata_rt_byte_and(tag_smi(0xF0), tag_smi(0x3C))), 0x30);
+        assert_eq!(
+            untag_smi(kata_rt_byte_and(tag_smi(0xF0), tag_smi(0x3C))),
+            0x30
+        );
     }
 
     #[test]
     fn byte_or_scalar() {
-        assert_eq!(untag_smi(kata_rt_byte_or(tag_smi(0xF0), tag_smi(0x0F))), 0xFF);
+        assert_eq!(
+            untag_smi(kata_rt_byte_or(tag_smi(0xF0), tag_smi(0x0F))),
+            0xFF
+        );
     }
 
     #[test]
     fn byte_xor_scalar() {
-        assert_eq!(untag_smi(kata_rt_byte_xor(tag_smi(0xFF), tag_smi(0x0F))), 0xF0);
+        assert_eq!(
+            untag_smi(kata_rt_byte_xor(tag_smi(0xFF), tag_smi(0x0F))),
+            0xF0
+        );
     }
 
     #[test]
@@ -975,9 +980,14 @@ mod tests {
         let text = CString::new("ABC").unwrap();
         let result = unsafe { kata_rt_text_at(text.as_ptr() as i64, 0, arena) };
         let tag = unsafe { std::ptr::read_unaligned(result as *const i64) };
-        let payload = unsafe { std::ptr::read_unaligned((result as *const u8).add(8) as *const i64) };
+        let payload =
+            unsafe { std::ptr::read_unaligned((result as *const u8).add(8) as *const i64) };
         assert_eq!(tag, 0); // Ok
-        let s = unsafe { std::ffi::CStr::from_ptr(payload as *const std::os::raw::c_char).to_str().unwrap() };
+        let s = unsafe {
+            std::ffi::CStr::from_ptr(payload as *const std::os::raw::c_char)
+                .to_str()
+                .unwrap()
+        };
         assert_eq!(s, "A");
     }
 
@@ -987,9 +997,14 @@ mod tests {
         let text = CString::new("Olá").unwrap();
         let result = unsafe { kata_rt_text_at(text.as_ptr() as i64, 2, arena) };
         let tag = unsafe { std::ptr::read_unaligned(result as *const i64) };
-        let payload = unsafe { std::ptr::read_unaligned((result as *const u8).add(8) as *const i64) };
+        let payload =
+            unsafe { std::ptr::read_unaligned((result as *const u8).add(8) as *const i64) };
         assert_eq!(tag, 0); // Ok
-        let s = unsafe { std::ffi::CStr::from_ptr(payload as *const std::os::raw::c_char).to_str().unwrap() };
+        let s = unsafe {
+            std::ffi::CStr::from_ptr(payload as *const std::os::raw::c_char)
+                .to_str()
+                .unwrap()
+        };
         assert_eq!(s, "á");
     }
 

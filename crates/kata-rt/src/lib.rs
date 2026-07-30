@@ -53,6 +53,11 @@ pub use array::{
     kata_rt_array_alloc, kata_rt_array_contains, kata_rt_array_get, kata_rt_array_get_checked,
     kata_rt_array_len, kata_rt_array_set,
 };
+pub use bigint::{
+    kata_rt_bi_add, kata_rt_bi_div, kata_rt_bi_eq, kata_rt_bi_ge, kata_rt_bi_gt, kata_rt_bi_le,
+    kata_rt_bi_lt, kata_rt_bi_mul, kata_rt_bi_neq, kata_rt_bi_show, kata_rt_bi_sub,
+    kata_rt_bi_to_rational, kata_rt_int_to_text, kata_rt_tag_int, kata_rt_tag_int_from_str,
+};
 pub use bytes::{
     kata_rt_array_slice, kata_rt_byte_and, kata_rt_byte_not, kata_rt_byte_or, kata_rt_byte_shl,
     kata_rt_byte_shr, kata_rt_byte_to_int, kata_rt_byte_xor, kata_rt_bytes_alloc,
@@ -62,11 +67,6 @@ pub use bytes::{
     kata_rt_bytes_slice, kata_rt_bytes_to_text, kata_rt_bytes_xor, kata_rt_int_to_byte,
     kata_rt_int_to_bytes, kata_rt_list_slice, kata_rt_text_at, kata_rt_text_len,
     kata_rt_text_slice, kata_rt_text_to_bytes,
-};
-pub use bigint::{
-    kata_rt_bi_add, kata_rt_bi_div, kata_rt_bi_eq, kata_rt_bi_ge, kata_rt_bi_gt, kata_rt_bi_le,
-    kata_rt_bi_lt, kata_rt_bi_mul, kata_rt_bi_neq, kata_rt_bi_show, kata_rt_bi_sub,
-    kata_rt_bi_to_rational, kata_rt_int_to_text, kata_rt_tag_int, kata_rt_tag_int_from_str,
 };
 pub use dict::kata_rt_dict_merge;
 pub use dict::{

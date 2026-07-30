@@ -471,10 +471,7 @@ pub(crate) fn cmd_repl() -> miette::Result<()> {
             && !first_trimmed.contains("@ffi");
         let multiline_action = first_trimmed.ends_with("=>");
         let first_token = first_trimmed.split_whitespace().next().unwrap_or("");
-        let multiline_indent = matches!(
-            first_token,
-            "match" | "enum" | "implements" | "interface"
-        );
+        let multiline_indent = matches!(first_token, "match" | "enum" | "implements" | "interface");
 
         let mut buffer = first.clone();
         let in_multiline = multiline_sig || multiline_action || multiline_indent;
