@@ -25,6 +25,7 @@ pub(crate) mod range;
 pub(crate) mod rational;
 pub(crate) mod scheduler;
 pub(crate) mod set;
+pub(crate) mod slice;
 pub(crate) mod snapshot;
 pub(crate) mod sum;
 pub(crate) mod text;
@@ -59,14 +60,13 @@ pub use bigint::{
     kata_rt_bi_to_rational, kata_rt_int_to_text, kata_rt_tag_int, kata_rt_tag_int_from_str,
 };
 pub use bytes::{
-    kata_rt_array_slice, kata_rt_byte_and, kata_rt_byte_not, kata_rt_byte_or, kata_rt_byte_shl,
-    kata_rt_byte_shr, kata_rt_byte_to_int, kata_rt_byte_xor, kata_rt_bytes_alloc,
-    kata_rt_bytes_and, kata_rt_bytes_concat, kata_rt_bytes_eq, kata_rt_bytes_from_ints,
-    kata_rt_bytes_from_ptr, kata_rt_bytes_get, kata_rt_bytes_get_checked, kata_rt_bytes_len,
-    kata_rt_bytes_neq, kata_rt_bytes_not, kata_rt_bytes_or, kata_rt_bytes_set, kata_rt_bytes_show,
+    kata_rt_byte_and, kata_rt_byte_not, kata_rt_byte_or, kata_rt_byte_shl, kata_rt_byte_shr,
+    kata_rt_byte_to_int, kata_rt_byte_xor, kata_rt_bytes_alloc, kata_rt_bytes_and,
+    kata_rt_bytes_concat, kata_rt_bytes_eq, kata_rt_bytes_from_ints, kata_rt_bytes_from_ptr,
+    kata_rt_bytes_get, kata_rt_bytes_get_checked, kata_rt_bytes_len, kata_rt_bytes_neq,
+    kata_rt_bytes_not, kata_rt_bytes_or, kata_rt_bytes_set, kata_rt_bytes_show,
     kata_rt_bytes_slice, kata_rt_bytes_to_text, kata_rt_bytes_xor, kata_rt_int_to_byte,
-    kata_rt_int_to_bytes, kata_rt_list_slice, kata_rt_text_at, kata_rt_text_len,
-    kata_rt_text_slice, kata_rt_text_to_bytes,
+    kata_rt_int_to_bytes, kata_rt_text_to_bytes,
 };
 pub use dict::kata_rt_dict_merge;
 pub use dict::{
@@ -95,6 +95,9 @@ pub use set::{
     kata_rt_set_contains, kata_rt_set_difference, kata_rt_set_empty, kata_rt_set_insert,
     kata_rt_set_intersection, kata_rt_set_len, kata_rt_set_next, kata_rt_set_remove,
     kata_rt_set_union,
+};
+pub use slice::{
+    kata_rt_array_slice, kata_rt_list_slice, kata_rt_text_at, kata_rt_text_len, kata_rt_text_slice,
 };
 pub use tracked::{kata_rt_alloc_tracked, kata_rt_decref_tracked, kata_rt_incref_tracked};
 // kata_rt_rat_show_raw — rebaixado para pub(crate): zero consumidores cross-crate.
