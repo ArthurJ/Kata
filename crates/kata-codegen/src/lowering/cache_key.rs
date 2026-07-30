@@ -296,6 +296,8 @@ const TD_LIST: u8 = 0x04;
 const TD_STRUCT: u8 = 0x05;
 const TD_TUPLE: u8 = 0x06;
 const TD_SUM: u8 = 0x07;
+const TD_BYTE: u8 = 0x08;
+const TD_BYTES: u8 = 0x09;
 
 /// Constrói um type descriptor (byte array) para um `Ty`.
 pub(super) fn build_type_descriptor(
@@ -339,6 +341,12 @@ fn write_descriptor(buf: &mut Vec<u8>, ty: &Ty, struct_registry: &kata_core::Str
         }
         Ty::Sum(_) | Ty::Generic(_, _) => {
             buf.push(TD_SUM);
+        }
+        Ty::Byte => {
+            buf.push(TD_BYTE);
+        }
+        Ty::Bytes => {
+            buf.push(TD_BYTES);
         }
         _ => {
             buf.push(TD_INT);

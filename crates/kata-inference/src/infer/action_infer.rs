@@ -299,6 +299,8 @@ fn contains_channel_type(ty: &Ty) -> bool {
         | Ty::InferVar(_)
         | Ty::Interface(_)
         | Ty::Struct(_)
-        | Ty::Sum(_) => false,
+        | Ty::Sum(_)
+        | Ty::Byte
+        | Ty::Bytes => false,
     }
 }

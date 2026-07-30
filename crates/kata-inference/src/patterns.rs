@@ -467,5 +467,10 @@ pub(crate) fn check_exhaustiveness(
             found: "interface".into(),
             span: (*span).into(),
         }),
+        // Byte e Bytes: tipos finitos mas infinitos em valores (0-255 / sequências).
+        // Match em Byte ou Bytes exige otherwise/wildcard — como Int, Float, Text.
+        Ty::Byte | Ty::Bytes => Err(MiddleError::MissingOtherwise {
+            span: (*span).into(),
+        }),
     }
 }

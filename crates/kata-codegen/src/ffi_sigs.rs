@@ -34,7 +34,9 @@ pub(crate) fn ty_to_clif(ty: &Ty) -> cranelift_codegen::ir::Type {
         | Ty::Set(_)
         | Ty::Sender(_)
         | Ty::Receiver(_)
-        | Ty::ReceiverFactory(_) => I64,
+        | Ty::ReceiverFactory(_)
+        | Ty::Bytes => I64,
+        Ty::Byte => I64,
         Ty::Function(_, _) => I64,
         Ty::Action(_, _) => I64,
         Ty::InferVar(_) => I64,

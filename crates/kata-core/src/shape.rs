@@ -131,6 +131,13 @@ impl Ty {
                 name: "ReceiverFactory".into(),
                 fields: Vec::new(),
             },
+            // Byte: SMI-tagged no runtime (como Int). Não é heap type.
+            Ty::Byte => TypeShape::Prim,
+            // Bytes: blob contíguo — ponteiro na arena (como Array).
+            Ty::Bytes => TypeShape::Struct {
+                name: "Bytes".into(),
+                fields: Vec::new(),
+            },
         }
     }
 }

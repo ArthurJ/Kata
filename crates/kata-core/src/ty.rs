@@ -65,6 +65,12 @@ pub enum Ty {
     /// Fábrica de receivers para broadcast — `ReceiverFactory::T`.
     /// Chamada como action produz `Receiver::T`.
     ReceiverFactory(Box<Ty>),
+    /// Byte — unidade de 8 bits (0x00-0xFF). Distinto de Int.
+    /// SMI-tagged no runtime (como Int). Conversão explícita via `int()` / `byte()`.
+    Byte,
+    /// Bytes — sequência contígua de u8. Blob opaco para I/O e marshalling.
+    /// Ponteiro na ABI (como Array, Text, Struct). Imutável.
+    Bytes,
 }
 
 /// Mapeamento de representação FFI.
@@ -440,6 +446,8 @@ impl std::fmt::Display for Ty {
             Ty::Receiver(inner) => write!(f, "Receiver::{inner}"),
             Ty::ReceiverFactory(inner) => write!(f, "ReceiverFactory::{inner}"),
             Ty::InferVar(_) => f.write_str("?"),
+            Ty::Byte => f.write_str("Byte"),
+            Ty::Bytes => f.write_str("Bytes"),
         }
     }
 }
@@ -513,6 +521,8 @@ impl Ty {
             Ty::Receiver(t) => format!("Receiver::{}", t.display()),
             Ty::ReceiverFactory(t) => format!("ReceiverFactory::{}", t.display()),
             Ty::InferVar(_) => panic!("type!() em tipo não-resolvido — bug do typeck"),
+            Ty::Byte => "Byte".into(),
+            Ty::Bytes => "Bytes".into(),
         }
     }
 }
