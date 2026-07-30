@@ -224,6 +224,15 @@ pub unsafe extern "C" fn kata_rt_bytes_eq(a: i64, b: i64) -> i64 {
     if bytes_a == bytes_b { 1 } else { 0 }
 }
 
+/// Negação de igualdade entre dois blobs. Retorna 1 se diferentes, 0 se iguais.
+///
+/// # Safety
+/// `a` e `b` devem ser ponteiros válidos (ou 0 para blob vazio).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn kata_rt_bytes_neq(a: i64, b: i64) -> i64 {
+    1 - unsafe { kata_rt_bytes_eq(a, b) }
+}
+
 /// Representação hex do blob como C string. Retorna ponteiro (ownership transferida).
 ///
 /// Exemplo: `b"Hello"` → `"48656c6c6f"`

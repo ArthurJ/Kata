@@ -438,25 +438,24 @@ impl Parser {
                 Token::LBracket => {
                     self.advance(); // consume `[`
                     let start = parse_expr(self)?;
-                    // `..` separa start e end. `..=` seria inclusive (mas
-                    // para slice de bytes/texto, exclusive é o padrão).
-                    match self.peek() {
+                    // `..` separa start e end (exclusive). `..=` é inclusivo.
+                    let inclusive = match self.peek() {
                         Token::DotDot => {
                             self.advance(); // consume `..`
+                            false
                         }
                         Token::DotDotEq => {
                             self.advance(); // consume `..=`
-                            // Para slice, inclusive = end + 1. Por ora,
-                            // tratamos `..=` como `..` (exclusive) — o
-                            // runtime ajusta. TODO: semântica de inclusive.
+                            true
                         }
                         _ => return Err(self.error("`..` ou `..=` após start do slice")),
-                    }
+                    };
                     let end = parse_expr(self)?;
                     self.expect(&Token::RBracket, "`]`")?;
                     DotIndex::Range {
                         start: Box::new(start),
                         end: Box::new(end),
+                        inclusive,
                     }
                 }
                 _ => return Err(self.error("identificador, inteiro, `(` ou `[` após `.`")),

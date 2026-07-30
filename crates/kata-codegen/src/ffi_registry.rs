@@ -303,6 +303,60 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
         "kata_rt_serialize_key",
         rt::kata_rt_serialize_key as *const u8,
     );
+    // Bytes / Byte (PRD-bytes)
+    builder.symbol("kata_rt_bytes_alloc", rt::kata_rt_bytes_alloc as *const u8);
+    builder.symbol(
+        "kata_rt_bytes_from_ptr",
+        rt::kata_rt_bytes_from_ptr as *const u8,
+    );
+    builder.symbol(
+        "kata_rt_bytes_from_ints",
+        rt::kata_rt_bytes_from_ints as *const u8,
+    );
+    builder.symbol("kata_rt_bytes_len", rt::kata_rt_bytes_len as *const u8);
+    builder.symbol("kata_rt_bytes_get", rt::kata_rt_bytes_get as *const u8);
+    builder.symbol("kata_rt_bytes_set", rt::kata_rt_bytes_set as *const u8);
+    builder.symbol(
+        "kata_rt_bytes_get_checked",
+        rt::kata_rt_bytes_get_checked as *const u8,
+    );
+    builder.symbol(
+        "kata_rt_bytes_concat",
+        rt::kata_rt_bytes_concat as *const u8,
+    );
+    builder.symbol("kata_rt_bytes_eq", rt::kata_rt_bytes_eq as *const u8);
+    builder.symbol("kata_rt_bytes_neq", rt::kata_rt_bytes_neq as *const u8);
+    builder.symbol("kata_rt_bytes_show", rt::kata_rt_bytes_show as *const u8);
+    builder.symbol("kata_rt_bytes_slice", rt::kata_rt_bytes_slice as *const u8);
+    builder.symbol("kata_rt_bytes_and", rt::kata_rt_bytes_and as *const u8);
+    builder.symbol("kata_rt_bytes_or", rt::kata_rt_bytes_or as *const u8);
+    builder.symbol("kata_rt_bytes_xor", rt::kata_rt_bytes_xor as *const u8);
+    builder.symbol("kata_rt_bytes_not", rt::kata_rt_bytes_not as *const u8);
+    builder.symbol("kata_rt_byte_and", rt::kata_rt_byte_and as *const u8);
+    builder.symbol("kata_rt_byte_or", rt::kata_rt_byte_or as *const u8);
+    builder.symbol("kata_rt_byte_xor", rt::kata_rt_byte_xor as *const u8);
+    builder.symbol("kata_rt_byte_not", rt::kata_rt_byte_not as *const u8);
+    builder.symbol("kata_rt_byte_shr", rt::kata_rt_byte_shr as *const u8);
+    builder.symbol("kata_rt_byte_shl", rt::kata_rt_byte_shl as *const u8);
+    builder.symbol("kata_rt_byte_to_int", rt::kata_rt_byte_to_int as *const u8);
+    builder.symbol("kata_rt_int_to_byte", rt::kata_rt_int_to_byte as *const u8);
+    builder.symbol(
+        "kata_rt_int_to_bytes",
+        rt::kata_rt_int_to_bytes as *const u8,
+    );
+    builder.symbol(
+        "kata_rt_text_to_bytes",
+        rt::kata_rt_text_to_bytes as *const u8,
+    );
+    builder.symbol(
+        "kata_rt_bytes_to_text",
+        rt::kata_rt_bytes_to_text as *const u8,
+    );
+    builder.symbol("kata_rt_text_at", rt::kata_rt_text_at as *const u8);
+    builder.symbol("kata_rt_text_len", rt::kata_rt_text_len as *const u8);
+    builder.symbol("kata_rt_text_slice", rt::kata_rt_text_slice as *const u8);
+    builder.symbol("kata_rt_array_slice", rt::kata_rt_array_slice as *const u8);
+    builder.symbol("kata_rt_list_slice", rt::kata_rt_list_slice as *const u8);
 }
 
 /// Declara todos os símbolos FFI no module e retorna o mapa nome → FuncId.
@@ -472,5 +526,38 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         CacheLookup,
         CacheInsert,
         CacheSerializeKey,
+        // Bytes / Byte (PRD-bytes)
+        BytesAlloc,
+        BytesFromPtr,
+        BytesFromInts,
+        BytesLen,
+        BytesGet,
+        BytesSet,
+        BytesGetChecked,
+        BytesConcat,
+        BytesEq,
+        BytesNeq,
+        BytesShow,
+        BytesSlice,
+        BytesAnd,
+        BytesOr,
+        BytesXor,
+        BytesNot,
+        ByteAnd,
+        ByteOr,
+        ByteXor,
+        ByteNot,
+        ByteShr,
+        ByteShl,
+        ByteToInt,
+        IntToByte,
+        IntToBytes,
+        TextToBytes,
+        BytesToText,
+        TextAt,
+        TextLen,
+        TextSlice,
+        ArraySlice,
+        ListSlice,
     ]
 }

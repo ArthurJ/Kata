@@ -173,9 +173,11 @@ pub(crate) fn infer_question(
 
 /// Desugar `lhs | rhs` para `match lhs { Ok(v) => v, Err(_) => rhs }`.
 ///
-/// `|` é coalescência de erro: desempacota `Ok(v)`/`Some(v)`, avalia `rhs`
-/// se `Err`/`None`. Diferença crucial do `?`: o braço de erro é `rhs` (uma
-/// expressão), não `return Err(e)`. Não aborta — é pura.
+/// `|` é coalescência de erro: desempacota a variante não-cauda (Ok/Some),
+/// avalia `rhs` se a variante é a cauda (Err/None). O payload da cauda é
+/// descartado — o programador escolheu `|` em vez de `match`, indicando que
+/// não precisa do erro. Diferença crucial do `?`: o braço de erro é `rhs`
+/// (uma expressão), não `return Err(e)`. Não aborta — é pura.
 ///
 /// Funciona em qualquer contexto (funções puras e Actions). Não precisa
 /// de `ctx.ret_ty`.
@@ -222,36 +224,21 @@ pub(crate) fn infer_pipe_fallback(
     }
 
     // Valida a invariante do `|`: todas as variantes exceto a última carregam
-    // payload, e a última é unitária (cauda). Enums que não seguem esta
-    // estrutura (ex: Result onde Err tem payload, Boolean com todas unitárias)
-    // não são compatíveis com `|` — type error.
-    // O tipo do payload de variantes genéricas pode conter Ty::Var, mas isso
-    // não importa aqui — só precisamos distinguir Some(payload) vs None.
+    // payload. A última (cauda) pode ter payload (ex: Result::Err(E)) — nesse
+    // caso, o payload é descartado e o fallback (rhs) é avaliado. Enums onde
+    // uma variante não-cauda não tem payload não são compatíveis com `|`.
     let last_idx = variants.len() - 1;
     for (i, v) in variants.iter().enumerate() {
         let is_last = i == last_idx;
-        match (is_last, &v.payload_ty) {
-            (false, None) => {
-                return Err(MiddleError::TypeMismatch {
-                    expected: format!(
-                        "variante {} com payload (apenas a ultima pode ser unitaria)",
-                        v.name
-                    ),
-                    found: format!("{}::{} sem payload", enum_name, v.name),
-                    span: lhs.span.into(),
-                });
-            }
-            (true, Some(_)) => {
-                return Err(MiddleError::TypeMismatch {
-                    expected: format!(
-                        "ultima variante de {} unitaria (cauda do fallback)",
-                        enum_name
-                    ),
-                    found: format!("{}::{} com payload", enum_name, v.name),
-                    span: lhs.span.into(),
-                });
-            }
-            _ => {}
+        if !is_last && v.payload_ty.is_none() {
+            return Err(MiddleError::TypeMismatch {
+                expected: format!(
+                    "variante {} com payload (apenas a ultima pode ser cauda)",
+                    v.name
+                ),
+                found: format!("{}::{} sem payload", enum_name, v.name),
+                span: lhs.span.into(),
+            });
         }
     }
 
@@ -304,11 +291,14 @@ pub(crate) fn infer_pipe_fallback(
         let is_last = i == last_idx;
 
         let pattern = if is_last {
-            // Cauda unitária: Variant sem payload.
+            // Cauda: a variante que ativa o fallback. Pode ter payload ou não.
+            // Se tem payload, usamos Wildcard no sub-pattern para descartá-lo.
             Pattern::Variant {
                 enum_name: enum_name.clone(),
                 variant: v.name.clone(),
-                payload: None,
+                payload: v.payload_ty.as_ref().map(|_| {
+                    vec![Spanned::new(Pattern::Wildcard, lhs.span)]
+                }),
             }
         } else {
             // Variante com payload: Variant(v) — liga o payload.

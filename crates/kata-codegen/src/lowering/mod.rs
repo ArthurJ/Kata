@@ -98,6 +98,7 @@ pub(crate) struct LowerCtx<'a, 'b> {
     #[allow(dead_code)]
     pub metadata: &'a mut MetadataTable,
     pub string_table: &'a mut StringTable,
+    pub bytes_table: &'a mut Vec<Vec<u8>>,
     pub var_map: HashMap<String, cranelift_frontend::Variable>,
     pub anon_counter: u32,
     /// Flag: se `true`, o último `lower_expr` emitiu um `return_call` (tail call).
@@ -187,6 +188,19 @@ impl<'a, 'b> LowerCtx<'a, 'b> {
             .module
             .declare_data(&sym, cranelift_module::Linkage::Local, false, false)
             .expect("declare_data falhou para string literal");
+        self.module.declare_data_in_func(did, self.builder.func)
+    }
+
+    /// Adiciona bytes crus à bytes table e retorna o GlobalValue.
+    /// Os bytes são definidos como data symbol no module (sem null terminator).
+    pub(crate) fn add_bytes(&mut self, bytes: &[u8]) -> GlobalValue {
+        let idx = self.bytes_table.len();
+        self.bytes_table.push(bytes.to_vec());
+        let sym = format!("__kata_bytes_{idx}");
+        let did = self
+            .module
+            .declare_data(&sym, cranelift_module::Linkage::Local, false, false)
+            .expect("declare_data falhou para bytes literal");
         self.module.declare_data_in_func(did, self.builder.func)
     }
 

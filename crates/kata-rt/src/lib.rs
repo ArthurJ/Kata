@@ -63,7 +63,7 @@ pub use bytes::{
     kata_rt_byte_shr, kata_rt_byte_to_int, kata_rt_byte_xor, kata_rt_bytes_alloc,
     kata_rt_bytes_and, kata_rt_bytes_concat, kata_rt_bytes_eq, kata_rt_bytes_from_ints,
     kata_rt_bytes_from_ptr, kata_rt_bytes_get, kata_rt_bytes_get_checked, kata_rt_bytes_len,
-    kata_rt_bytes_not, kata_rt_bytes_or, kata_rt_bytes_set, kata_rt_bytes_show,
+    kata_rt_bytes_neq, kata_rt_bytes_not, kata_rt_bytes_or, kata_rt_bytes_set, kata_rt_bytes_show,
     kata_rt_bytes_slice, kata_rt_bytes_to_text, kata_rt_bytes_xor, kata_rt_int_to_byte,
     kata_rt_int_to_bytes, kata_rt_list_slice, kata_rt_text_at, kata_rt_text_len,
     kata_rt_text_slice, kata_rt_text_to_bytes,

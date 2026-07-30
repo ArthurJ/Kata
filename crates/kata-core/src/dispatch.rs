@@ -484,6 +484,8 @@ fn extract_type_name(ty: &Ty) -> Option<String> {
         Ty::Range(_) => Some("Range".into()),
         Ty::Dict(_, _) => Some("Dict".into()),
         Ty::Set(_) => Some("Set".into()),
+        Ty::Bytes => Some("Bytes".into()),
+        Ty::Byte => Some("Byte".into()),
         Ty::Sender(_) => Some("Sender".into()),
         Ty::Receiver(_) => Some("Receiver".into()),
         Ty::ReceiverFactory(_) => Some("ReceiverFactory".into()),

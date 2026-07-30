@@ -266,9 +266,11 @@ pub enum DotIndex {
     Int(i64),
     /// `expr.[start..end]` — slice access.
     /// Usado em `Bytes`, `Text`, `Array`, `List` via interface SLICEABLE.
+    /// `inclusive = true` quando a sintaxe é `..=` (end inclusivo).
     Range {
         start: Box<Spanned<Expr>>,
         end: Box<Spanned<Expr>>,
+        inclusive: bool,
     },
 }
 

@@ -100,7 +100,11 @@ fn array_implements_iterable_countable_indexable_contains() {
 
     // Verifica que os métodos têm ffi_symbol (kata_rt_array_*)
     let impls = resolved.interface_registry.get_impls_for_type("Array");
-    assert_eq!(impls.len(), 4, "Array deve ter 4 implements entries");
+    assert_eq!(
+        impls.len(),
+        5,
+        "Array deve ter 5 implements entries (ITERABLE, COUNTABLE, INDEXABLE, CONTAINS, SLICEABLE)"
+    );
 
     let iter_impl = impls
         .iter()
@@ -146,7 +150,11 @@ fn list_implements_iterable_countable_indexable_contains() {
     );
 
     let impls = resolved.interface_registry.get_impls_for_type("List");
-    assert_eq!(impls.len(), 4, "List deve ter 4 implements entries");
+    assert_eq!(
+        impls.len(),
+        5,
+        "List deve ter 5 implements entries (ITERABLE, COUNTABLE, INDEXABLE, CONTAINS, SLICEABLE)"
+    );
 
     let iter_impl = impls
         .iter()
@@ -247,8 +255,8 @@ fn text_implements_iterable_countable_indexable_contains() {
     let impls = resolved.interface_registry.get_impls_for_type("Text");
     assert_eq!(
         impls.len(),
-        6,
-        "Text deve ter 6 implements entries (ITERABLE, COUNTABLE, INDEXABLE, CONTAINS, SHOW, HASHABLE)"
+        7,
+        "Text deve ter 7 implements entries (ITERABLE, COUNTABLE, INDEXABLE, CONTAINS, SHOW, HASHABLE, SLICEABLE)"
     );
 
     let contains_impl = impls

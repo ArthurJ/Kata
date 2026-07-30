@@ -73,6 +73,7 @@ pub(crate) fn lower_module(
 > {
     let mut metadata = MetadataTable::new();
     let mut string_table = StringTable::new();
+    let mut bytes_table: Vec<Vec<u8>> = Vec::new();
     let mut symbol_table: SymbolTable = HashMap::new();
     let mut fn_counter = 0u64;
 
@@ -101,6 +102,7 @@ pub(crate) fn lower_module(
             ffi_ids,
             &symbol_table,
             &mut string_table,
+            &mut bytes_table,
             struct_registry,
         )?;
     }
@@ -130,6 +132,7 @@ pub(crate) fn lower_module(
             ffi_ids,
             &symbol_table,
             &mut string_table,
+            &mut bytes_table,
             struct_registry,
         )?;
     }
@@ -142,6 +145,7 @@ pub(crate) fn lower_module(
         ffi_ids,
         &symbol_table,
         &mut string_table,
+        &mut bytes_table,
         &mut fn_counter,
         struct_registry,
     )?;
@@ -217,6 +221,7 @@ pub(crate) fn lower_module(
             kata_ids: &symbol_table,
             metadata: &mut metadata,
             string_table: &mut string_table,
+            bytes_table: &mut bytes_table,
             var_map: HashMap::new(),
             anon_counter: 0,
             emitted_tail_call: false,
@@ -330,6 +335,20 @@ pub(crate) fn lower_module(
         // Null-terminated C string: o runtime usa CStr::from_ptr.
         let bytes = format!("{s}\0").into_bytes();
         data_desc.define(bytes.into());
+        module
+            .define_data(did, &data_desc)
+            .map_err(|e| CodegenError::Cranelift(format!("define_data {sym}: {e}")))?;
+    }
+
+    // Define os data symbols para bytes literais.
+    for (i, b) in bytes_table.iter().enumerate() {
+        let sym = format!("__kata_bytes_{i}");
+        let did = module
+            .declare_data(&sym, Linkage::Local, false, false)
+            .map_err(|e| CodegenError::Cranelift(format!("declare_data {sym}: {e}")))?;
+        let mut data_desc = cranelift_module::DataDescription::new();
+        // Bytes crus, sem null terminator. O runtime lê `len` bytes a partir do ptr.
+        data_desc.define(b.clone().into());
         module
             .define_data(did, &data_desc)
             .map_err(|e| CodegenError::Cranelift(format!("define_data {sym}: {e}")))?;

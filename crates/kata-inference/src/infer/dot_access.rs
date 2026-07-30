@@ -3,10 +3,16 @@
 //! Extraído de `expr.rs` — `infer_dot_access` é self-contained: chama
 //! `infer_expr` mas não `infer_expr_hinted`, e tem seu próprio match
 //! independente sobre `(Ty, DotIndex)`.
+//!
+//! Desugaring de DotIndex::Int em coleções: `b.0` vira `at b 0` via
+//! INDEXABLE dispatch (retorna `Result::(A, Err)`).
+//! Desugaring de DotIndex::Range: `b.[1..3]` vira `slice b 1 3` via
+//! SLICEABLE dispatch. Se `inclusive=true` (`..=`), o typeck envolve
+//! `end` em `end + 1` antes de despachar (runtime espera exclusive).
 
 use kata_ast::{DotIndex, Expr, Span, Spanned};
 use kata_core::escape::EscapeTarget;
-use kata_core::ty::{Ty, TypeEnv};
+use kata_core::ty::{PrimTy, Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 
 use crate::typed::{TypedExpr, TypedExprKind};
@@ -23,8 +29,12 @@ use super::helpers::InferResult;
 /// - `Ty::Tuple(elements)` + `DotIndex::Int(n)` → `IndexAccess` (negativos
 ///   normalizados, bounds check compile-time)
 /// - `Ty::Tuple(elements)` + `DotIndex::Field` → erro `FieldAccessOnTuple`
-/// - `Ty::List(A)` / `Ty::Array(A)` + `DotIndex::Int(n)` → desugar para
-///   `at receptor n` via INDEXABLE dispatch (retorna `Result::(A, Err)`)
+/// - `Ty::List(A)` / `Ty::Array(A)` / `Ty::Bytes` / `Ty::Text` +
+///   `DotIndex::Int(n)` → desugar para `at receptor n` via INDEXABLE
+///   dispatch (retorna `Result::(A, Err)`)
+/// - `Ty::List(A)` / `Ty::Array(A)` / `Ty::Bytes` / `Ty::Text` +
+///   `DotIndex::Range` → desugar para `slice receptor start end` via
+///   SLICEABLE dispatch
 /// - `Ty::Range(_)` + `DotIndex::Int(_)` → erro (Range não implementa INDEXABLE)
 /// - Coleção + `DotIndex::Field` → erro `FieldAccessOnCollection`
 /// - Outro → erro `NotIndexable`
@@ -128,11 +138,11 @@ pub(crate) fn infer_dot_access(
         (Ty::Tuple(_), DotIndex::Field(_)) => Err(MiddleError::FieldAccessOnTuple {
             span: (*span).into(),
         }),
-        // .N em List/Array → desugar para `at receptor N` via INDEXABLE.
+        // .N em List/Array/Bytes/Text → desugar para `at receptor N` via INDEXABLE.
         // O dispatch retorna Result::(A, Err) — access checked.
         // `at` tem type_params (A é genérico), então precisa do caminho
         // genérico: percorrer overloads e fazer unify.
-        (Ty::List(_) | Ty::Array(_), DotIndex::Int(n)) => {
+        (Ty::List(_) | Ty::Array(_) | Ty::Bytes | Ty::Prim(PrimTy::Text), DotIndex::Int(n)) => {
             let arg_types = vec![inner.ty.clone(), Ty::int()];
             // Tenta caminho não-genérico primeiro.
             let overload = ctx.table.resolve("at", &arg_types, ctx.interface_registry);
@@ -204,17 +214,170 @@ pub(crate) fn infer_dot_access(
                 },
             })
         }
+        // .[start..end] em List/Array/Bytes/Text → desugar para
+        // `slice receptor start end` via SLICEABLE.
+        // Se `inclusive=true` (`..=`), envolve `end` em `end + 1` antes de
+        // despachar (runtime espera end exclusive).
+        (
+            Ty::List(_) | Ty::Array(_) | Ty::Bytes | Ty::Prim(PrimTy::Text),
+            DotIndex::Range {
+                start,
+                end,
+                inclusive,
+            },
+        ) => {
+            // Infer start e end como Int.
+            let start_typed = infer_expr(&start.node, &start.span, env, ctx, false)?;
+            // Verifica que start é Int (ou unificável).
+            let start_typed = if start_typed.ty == Ty::int() {
+                start_typed
+            } else {
+                // Tenta unify com Int.
+                let mut subs = std::collections::HashMap::new();
+                if unify(&[start_typed.ty.clone()], &[Ty::int()], &[], &mut subs).is_ok() {
+                    start_typed
+                } else {
+                    return Err(MiddleError::TypeMismatch {
+                        expected: "Int".into(),
+                        found: format!("{}", start_typed.ty),
+                        span: start.span.into(),
+                    });
+                }
+            };
+
+            let end_typed = infer_expr(&end.node, &end.span, env, ctx, false)?;
+            let end_typed = if end_typed.ty == Ty::int() {
+                end_typed
+            } else {
+                let mut subs = std::collections::HashMap::new();
+                if unify(&[end_typed.ty.clone()], &[Ty::int()], &[], &mut subs).is_ok() {
+                    end_typed
+                } else {
+                    return Err(MiddleError::TypeMismatch {
+                        expected: "Int".into(),
+                        found: format!("{}", end_typed.ty),
+                        span: end.span.into(),
+                    });
+                }
+            };
+
+            // Se inclusive (`..=`), envolve end em `end + 1`.
+            // Cria um TypedExpr que soma 1 ao end.
+            let end_final = if *inclusive {
+                TypedExpr {
+                    span: end.span,
+                    ty: Ty::int(),
+                    tail_pos: false,
+                    escape: EscapeTarget::Local,
+                    kind: TypedExprKind::Closure {
+                        callee: Box::new(Spanned::new(
+                            TypedExpr {
+                                span: end.span,
+                                ty: Ty::Function(vec![Ty::int(), Ty::int()], Box::new(Ty::int())),
+                                tail_pos: false,
+                                escape: EscapeTarget::Local,
+                                kind: TypedExprKind::Ident { name: "+".into() },
+                            },
+                            end.span,
+                        )),
+                        args: vec![
+                            Spanned::new(end_typed, end.span),
+                            Spanned::new(
+                                TypedExpr {
+                                    span: end.span,
+                                    ty: Ty::int(),
+                                    tail_pos: false,
+                                    escape: EscapeTarget::Local,
+                                    kind: TypedExprKind::IntLit { text: "1".into() },
+                                },
+                                end.span,
+                            ),
+                        ],
+                        ffi_symbol: Some("kata_rt_bi_add".into()),
+                    },
+                }
+            } else {
+                end_typed
+            };
+
+            // Despacha `slice receptor start end` via SLICEABLE.
+            let arg_types = vec![inner.ty.clone(), Ty::int(), Ty::int()];
+            let overload = ctx
+                .table
+                .resolve("slice", &arg_types, ctx.interface_registry);
+            let (ret_ty, ffi_symbol, params) = match overload {
+                Ok(oi) => (
+                    ctx.enum_registry.expand_defaults(&oi.ret),
+                    oi.ffi_symbol,
+                    oi.params,
+                ),
+                Err(_) => {
+                    // Caminho genérico: procura overload com type_params e faz unify.
+                    let overloads = ctx.table.get_overloads("slice").ok_or_else(|| {
+                        MiddleError::UnboundName {
+                            name: "slice".into(),
+                            span: (*span).into(),
+                        }
+                    })?;
+                    let mut found = None;
+                    for oi in overloads.iter().filter(|oi| {
+                        oi.params.len() == arg_types.len() && !oi.type_params.is_empty()
+                    }) {
+                        let mut subs = std::collections::HashMap::new();
+                        if unify(&oi.params, &arg_types, &oi.type_params, &mut subs).is_ok() {
+                            let concrete_ret = apply_subs(&oi.ret, &subs);
+                            let expanded_ret = ctx.enum_registry.expand_defaults(&concrete_ret);
+                            found = Some((expanded_ret, oi.ffi_symbol.clone(), oi.params.clone()));
+                            break;
+                        }
+                    }
+                    found.ok_or_else(|| MiddleError::TypeMismatch {
+                        expected: format!("`slice` dispatch via SLICEABLE para {}", inner.ty),
+                        found: "nenhuma overload genérica de `slice` unifica".into(),
+                        span: (*span).into(),
+                    })?
+                }
+            };
+
+            let callee_ty = Ty::Function(params, Box::new(ret_ty.clone()));
+            let callee_typed = TypedExpr {
+                span: *span,
+                ty: callee_ty,
+                tail_pos: false,
+                escape: EscapeTarget::Local,
+                kind: TypedExprKind::Ident {
+                    name: "slice".into(),
+                },
+            };
+
+            Ok(TypedExpr {
+                span: *span,
+                ty: ret_ty,
+                tail_pos,
+                escape: inner.escape,
+                kind: TypedExprKind::Closure {
+                    callee: Box::new(Spanned::new(callee_typed, *span)),
+                    args: vec![
+                        *inner_box.clone(),
+                        Spanned::new(start_typed, start.span),
+                        Spanned::new(end_final, end.span),
+                    ],
+                    ffi_symbol,
+                },
+            })
+        }
         // Range não implementa INDEXABLE — .N é type error.
         (Ty::Range(_), DotIndex::Int(_)) => Err(MiddleError::NotIndexable {
             ty: format!("{}", inner.ty),
             span: (*span).into(),
         }),
         // Field access em coleção não faz sentido.
-        (Ty::List(_) | Ty::Array(_) | Ty::Range(_), DotIndex::Field(_)) => {
-            Err(MiddleError::FieldAccessOnTuple {
-                span: (*span).into(),
-            })
-        }
+        (
+            Ty::List(_) | Ty::Array(_) | Ty::Range(_) | Ty::Bytes | Ty::Prim(PrimTy::Text),
+            DotIndex::Field(_),
+        ) => Err(MiddleError::FieldAccessOnTuple {
+            span: (*span).into(),
+        }),
         (other_ty, _) => Err(MiddleError::NotIndexable {
             ty: format!("{other_ty:?}"),
             span: (*span).into(),

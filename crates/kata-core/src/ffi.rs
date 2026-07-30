@@ -247,6 +247,72 @@ pub enum FfiSymbol {
     CacheInsert,
     /// `kata_rt_serialize_key(value, desc_ptr, desc_len, out_ptr, out_cap) -> i64`
     CacheSerializeKey,
+
+    // ── Bytes / Byte (PRD-bytes) ────────────────────────
+    /// `kata_rt_bytes_alloc(len, arena) -> ptr`
+    BytesAlloc,
+    /// `kata_rt_bytes_from_ptr(src, len, arena) -> ptr`
+    BytesFromPtr,
+    /// `kata_rt_bytes_from_ints(ptrs, count, arena) -> ptr`
+    BytesFromInts,
+    /// `kata_rt_bytes_len(ptr) -> i64`
+    BytesLen,
+    /// `kata_rt_bytes_get(ptr, idx) -> i64`
+    BytesGet,
+    /// `kata_rt_bytes_set(ptr, idx, val) -> void`
+    BytesSet,
+    /// `kata_rt_bytes_get_checked(ptr, idx) -> i64 (Result box)`
+    BytesGetChecked,
+    /// `kata_rt_bytes_concat(a, b, arena) -> ptr`
+    BytesConcat,
+    /// `kata_rt_bytes_eq(a, b) -> i64 (0/1)`
+    BytesEq,
+    /// `kata_rt_bytes_neq(a, b) -> i64 (0/1)`
+    BytesNeq,
+    /// `kata_rt_bytes_show(ptr) -> *mut c_char`
+    BytesShow,
+    /// `kata_rt_bytes_slice(ptr, start, end, arena) -> ptr`
+    BytesSlice,
+    /// `kata_rt_bytes_and(a, b, arena) -> ptr`
+    BytesAnd,
+    /// `kata_rt_bytes_or(a, b, arena) -> ptr`
+    BytesOr,
+    /// `kata_rt_bytes_xor(a, b, arena) -> ptr`
+    BytesXor,
+    /// `kata_rt_bytes_not(ptr, arena) -> ptr`
+    BytesNot,
+    /// `kata_rt_byte_and(a, b) -> i64`
+    ByteAnd,
+    /// `kata_rt_byte_or(a, b) -> i64`
+    ByteOr,
+    /// `kata_rt_byte_xor(a, b) -> i64`
+    ByteXor,
+    /// `kata_rt_byte_not(a) -> i64`
+    ByteNot,
+    /// `kata_rt_byte_shr(a, n) -> i64`
+    ByteShr,
+    /// `kata_rt_byte_shl(a, n) -> i64`
+    ByteShl,
+    /// `kata_rt_byte_to_int(b) -> i64`
+    ByteToInt,
+    /// `kata_rt_int_to_byte(n) -> i64`
+    IntToByte,
+    /// `kata_rt_int_to_bytes(n, arena) -> ptr`
+    IntToBytes,
+    /// `kata_rt_text_to_bytes(text_ptr, arena) -> ptr`
+    TextToBytes,
+    /// `kata_rt_bytes_to_text(bytes_ptr) -> *mut c_char`
+    BytesToText,
+    /// `kata_rt_text_at(text_ptr, idx, arena) -> i64 (Result box)`
+    TextAt,
+    /// `kata_rt_text_len(text_ptr) -> i64`
+    TextLen,
+    /// `kata_rt_text_slice(text_ptr, start, end) -> *mut c_char`
+    TextSlice,
+    /// `kata_rt_array_slice(ptr, start, end, arena) -> ptr`
+    ArraySlice,
+    /// `kata_rt_list_slice(ptr, start, end, arena) -> ptr`
+    ListSlice,
 }
 
 impl FfiSymbol {
@@ -387,6 +453,39 @@ impl FfiSymbol {
             FfiSymbol::CacheLookup => "kata_rt_cache_lookup",
             FfiSymbol::CacheInsert => "kata_rt_cache_insert",
             FfiSymbol::CacheSerializeKey => "kata_rt_serialize_key",
+            // Bytes / Byte (PRD-bytes)
+            FfiSymbol::BytesAlloc => "kata_rt_bytes_alloc",
+            FfiSymbol::BytesFromPtr => "kata_rt_bytes_from_ptr",
+            FfiSymbol::BytesFromInts => "kata_rt_bytes_from_ints",
+            FfiSymbol::BytesLen => "kata_rt_bytes_len",
+            FfiSymbol::BytesGet => "kata_rt_bytes_get",
+            FfiSymbol::BytesSet => "kata_rt_bytes_set",
+            FfiSymbol::BytesGetChecked => "kata_rt_bytes_get_checked",
+            FfiSymbol::BytesConcat => "kata_rt_bytes_concat",
+            FfiSymbol::BytesEq => "kata_rt_bytes_eq",
+            FfiSymbol::BytesNeq => "kata_rt_bytes_neq",
+            FfiSymbol::BytesShow => "kata_rt_bytes_show",
+            FfiSymbol::BytesSlice => "kata_rt_bytes_slice",
+            FfiSymbol::BytesAnd => "kata_rt_bytes_and",
+            FfiSymbol::BytesOr => "kata_rt_bytes_or",
+            FfiSymbol::BytesXor => "kata_rt_bytes_xor",
+            FfiSymbol::BytesNot => "kata_rt_bytes_not",
+            FfiSymbol::ByteAnd => "kata_rt_byte_and",
+            FfiSymbol::ByteOr => "kata_rt_byte_or",
+            FfiSymbol::ByteXor => "kata_rt_byte_xor",
+            FfiSymbol::ByteNot => "kata_rt_byte_not",
+            FfiSymbol::ByteShr => "kata_rt_byte_shr",
+            FfiSymbol::ByteShl => "kata_rt_byte_shl",
+            FfiSymbol::ByteToInt => "kata_rt_byte_to_int",
+            FfiSymbol::IntToByte => "kata_rt_int_to_byte",
+            FfiSymbol::IntToBytes => "kata_rt_int_to_bytes",
+            FfiSymbol::TextToBytes => "kata_rt_text_to_bytes",
+            FfiSymbol::BytesToText => "kata_rt_bytes_to_text",
+            FfiSymbol::TextAt => "kata_rt_text_at",
+            FfiSymbol::TextLen => "kata_rt_text_len",
+            FfiSymbol::TextSlice => "kata_rt_text_slice",
+            FfiSymbol::ArraySlice => "kata_rt_array_slice",
+            FfiSymbol::ListSlice => "kata_rt_list_slice",
         }
     }
 
@@ -516,6 +615,35 @@ impl FfiSymbol {
             FfiSymbol::CacheLookup => Ty::int(),
             FfiSymbol::CacheInsert => Ty::Unit,
             FfiSymbol::CacheSerializeKey => Ty::int(),
+            // Bytes / Byte (PRD-bytes)
+            FfiSymbol::BytesAlloc
+            | FfiSymbol::BytesFromPtr
+            | FfiSymbol::BytesFromInts
+            | FfiSymbol::BytesConcat
+            | FfiSymbol::BytesSlice
+            | FfiSymbol::BytesAnd
+            | FfiSymbol::BytesOr
+            | FfiSymbol::BytesXor
+            | FfiSymbol::BytesNot
+            | FfiSymbol::IntToBytes
+            | FfiSymbol::TextToBytes => Ty::Bytes,
+            FfiSymbol::BytesLen => Ty::int(),
+            FfiSymbol::BytesGet => Ty::Byte,
+            FfiSymbol::BytesSet => Ty::Unit,
+            FfiSymbol::BytesGetChecked => Ty::int(),
+            FfiSymbol::BytesEq | FfiSymbol::BytesNeq => Ty::boolean(),
+            FfiSymbol::BytesShow | FfiSymbol::BytesToText | FfiSymbol::TextSlice => Ty::text(),
+            FfiSymbol::ByteAnd
+            | FfiSymbol::ByteOr
+            | FfiSymbol::ByteXor
+            | FfiSymbol::ByteNot
+            | FfiSymbol::ByteShr
+            | FfiSymbol::ByteShl
+            | FfiSymbol::ByteToInt
+            | FfiSymbol::IntToByte => Ty::int(),
+            FfiSymbol::TextAt => Ty::int(),
+            FfiSymbol::TextLen => Ty::int(),
+            FfiSymbol::ArraySlice | FfiSymbol::ListSlice => Ty::int(),
         }
     }
 
@@ -656,6 +784,39 @@ impl FfiSymbol {
             FfiSymbol::CacheLookup,
             FfiSymbol::CacheInsert,
             FfiSymbol::CacheSerializeKey,
+            // Bytes / Byte (PRD-bytes)
+            FfiSymbol::BytesAlloc,
+            FfiSymbol::BytesFromPtr,
+            FfiSymbol::BytesFromInts,
+            FfiSymbol::BytesLen,
+            FfiSymbol::BytesGet,
+            FfiSymbol::BytesSet,
+            FfiSymbol::BytesGetChecked,
+            FfiSymbol::BytesConcat,
+            FfiSymbol::BytesEq,
+            FfiSymbol::BytesNeq,
+            FfiSymbol::BytesShow,
+            FfiSymbol::BytesSlice,
+            FfiSymbol::BytesAnd,
+            FfiSymbol::BytesOr,
+            FfiSymbol::BytesXor,
+            FfiSymbol::BytesNot,
+            FfiSymbol::ByteAnd,
+            FfiSymbol::ByteOr,
+            FfiSymbol::ByteXor,
+            FfiSymbol::ByteNot,
+            FfiSymbol::ByteShr,
+            FfiSymbol::ByteShl,
+            FfiSymbol::ByteToInt,
+            FfiSymbol::IntToByte,
+            FfiSymbol::IntToBytes,
+            FfiSymbol::TextToBytes,
+            FfiSymbol::BytesToText,
+            FfiSymbol::TextAt,
+            FfiSymbol::TextLen,
+            FfiSymbol::TextSlice,
+            FfiSymbol::ArraySlice,
+            FfiSymbol::ListSlice,
         ];
         all.iter().copied().find(|s| s.symbol_name() == name)
     }

@@ -224,13 +224,30 @@ Text implements ITERABLE::Text
     next :: Text => Optional::Text @ffi("kata_rt_string_next")
 
 Text implements COUNTABLE
-    len :: Text => Int @ffi("kata_rt_string_len")
+    len :: Text => Int @ffi("kata_rt_text_len")
 
 Text implements INDEXABLE::Text
-    at :: Text Int => Result::Text @ffi("kata_rt_string_get_checked")
+    at :: Text Int => Result::Text @ffi("kata_rt_text_at")
 
 Text implements CONTAINS::Text
     contains :: Text Text => Boolean @ffi("kata_rt_string_contains")
+
+# ── SLICEABLE (Fio 11 / PRD-bytes Fase 3) ────────────────────────
+
+interface SLICEABLE::A
+    slice :: Self Int Int => A
+
+# Text implementa SLICEABLE (codepoints)
+Text implements SLICEABLE::Text
+    slice :: Text Int Int => Text @ffi("kata_rt_text_slice")
+
+# Array implementa SLICEABLE
+Array::A implements SLICEABLE::A
+    slice :: (Array::A) Int Int => (Array::A) @ffi("kata_rt_array_slice")
+
+# List implementa SLICEABLE
+List::A implements SLICEABLE::A
+    slice :: (List::A) Int Int => (List::A) @ffi("kata_rt_list_slice")
 
 # ── Dict (Fio 13) ───────────────────────────────────────────────
 
@@ -407,7 +424,97 @@ filter :: (A -> Boolean) List::A => List::A
 @builtin("fold")
 fold :: (A B -> A) A List::B => A
 
-# ── LogLevel (Fio 14 @log) ────────────────────────────────────
+# ── Bytes (PRD-bytes Fase 3) ──────────────────────────────────────
+
+# Bytes implementa INDEXABLE (acesso por índice → Result::(Byte, Text))
+Bytes implements INDEXABLE::Byte
+    at :: Bytes Int => Result::Byte @ffi("kata_rt_bytes_get_checked")
+
+# Bytes implementa COUNTABLE
+Bytes implements COUNTABLE
+    len :: Bytes => Int @ffi("kata_rt_bytes_len")
+
+# Bytes implementa SLICEABLE
+Bytes implements SLICEABLE::Bytes
+    slice :: Bytes Int Int => Bytes @ffi("kata_rt_bytes_slice")
+
+# Bytes implementa EQ
+Bytes implements EQ
+    = :: Bytes Bytes => Boolean @ffi("kata_rt_bytes_eq")
+    != :: Bytes Bytes => Boolean @ffi("kata_rt_bytes_neq")
+
+# Bytes implementa SHOW (hex)
+Bytes implements SHOW
+    show :: Bytes => Text @ffi("kata_rt_bytes_show")
+
+# Concatenação de Bytes (+)
+@ffi("kata_rt_bytes_concat")
++ :: Bytes Bytes => Bytes
+
+# ── Bitwise para Byte ─────────────────────────────────────────────
+
+@ffi("kata_rt_byte_and")
+and :: Byte Byte => Byte
+
+@ffi("kata_rt_byte_or")
+or :: Byte Byte => Byte
+
+@ffi("kata_rt_byte_xor")
+xor :: Byte Byte => Byte
+
+@ffi("kata_rt_byte_not")
+not :: Byte => Byte
+
+@ffi("kata_rt_byte_shr")
+>> :: Byte Int => Byte
+
+@ffi("kata_rt_byte_shl")
+<< :: Byte Int => Byte
+
+# ── Bitwise para Bytes (elemento-a-elemento) ──────────────────────
+
+@ffi("kata_rt_bytes_and")
+and :: Bytes Bytes => Bytes
+
+@ffi("kata_rt_bytes_or")
+or :: Bytes Bytes => Bytes
+
+@ffi("kata_rt_bytes_xor")
+xor :: Bytes Bytes => Bytes
+
+@ffi("kata_rt_bytes_not")
+not :: Bytes => Bytes
+
+# ── Conversões Byte ↔ Int ────────────────────────────────────────
+
+@ffi("kata_rt_byte_to_int")
+int :: Byte => Int
+
+@ffi("kata_rt_int_to_byte")
+byte :: Int => Byte
+
+# ── Conversões Int → Bytes (4 bytes little-endian) ───────────────
+
+@ffi("kata_rt_int_to_bytes")
+bytes :: Int => Bytes
+
+# ── Conversões Text ↔ Bytes ──────────────────────────────────────
+
+@ffi("kata_rt_text_to_bytes")
+bytes :: Text => Bytes
+
+@ffi("kata_rt_bytes_to_text")
+text :: Bytes => Result::(Text, Text)
+
+# ── Encoding ─────────────────────────────────────────────────────
+
+enum Encoding
+    Utf8
+    Utf16
+    Latin1
+    Ascii
+
+# ── LogLevel (Fio 14 @log) ────────────────────────────────────────
 # Enum fixo para níveis de telemetria. Variantes unitárias.
 
 enum LogLevel

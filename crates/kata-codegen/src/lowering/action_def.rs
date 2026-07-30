@@ -65,6 +65,7 @@ pub(crate) fn define_kata_action(
     ffi_ids: &HashMap<String, cranelift_module::FuncId>,
     symbol_table: &HashMap<FuncKey, cranelift_module::FuncId>,
     string_table: &mut StringTable,
+    bytes_table: &mut Vec<Vec<u8>>,
     struct_registry: &kata_core::StructRegistry,
 ) -> Result<(), CodegenError> {
     let mut ctx = module.make_context();
@@ -116,6 +117,7 @@ pub(crate) fn define_kata_action(
             kata_ids: symbol_table,
             metadata: &mut metadata,
             string_table,
+            bytes_table,
             var_map: HashMap::new(),
             anon_counter: 0,
             emitted_tail_call: false,

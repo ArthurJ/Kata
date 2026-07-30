@@ -2,14 +2,14 @@
 //!
 //! Pipeline completo: lex → parse → resolve → infer → optimize → codegen → JIT.
 //! Valida DoD 22-25: `|` desempacota variantes com payload, avalia direita se
-//! a cauda (última variante, unitária). Funciona em funções puras e Actions,
-//! é desugared para Match no typeck (TAST nunca contém PipeFallback), e
-//! effect = Puro.
+//! a variante é a cauda (última). O payload da cauda é descartado — o
+//! programador escolheu `|` em vez de `match`, indicando que não precisa do erro.
+//! Funciona em funções puras e Actions, é desugared para Match no typeck
+//! (TAST nunca contém PipeFallback), e effect = Puro.
 //!
 //! `|` é generalizado para qualquer enum cujas variantes (exceto a última)
-//! carreguem payload e a última seja unitária. Result NÃO é compatível com
-//! `|` (Err tem payload) — use `?` para Result. Optional é compatível (None
-//! é unitária). User enums com cauda unitária também são compatíveis.
+//! carreguem payload. A última (cauda) pode ter payload (ex: Result::Err(E))
+//! — o payload é descartado e o fallback é avaliado.
 
 use kata_codegen::jit_eval;
 use kata_core::ty::{PrimTy, Ty};
@@ -220,20 +220,23 @@ fn pipe_fallback_effect_puro_optional() {
     assert_eq!(untag_smi(raw), 99);
 }
 
-// ── Result NÃO é compatível com `|` (Err tem payload, não é cauda unitária) ──
+// ── Result com `|` (cauda com payload — descartada) ──
 
-/// `Result::Ok 42 | 0` deve ser type error — Result não tem cauda unitária.
+/// `Result::Ok 42 | 0` desempacota Ok(42) → 42. Se fosse Err, descartaria o
+/// payload e retornaria 0. O programador escolheu `|` — não precisa do erro.
 #[test]
-fn pipe_fallback_result_nao_compativel() {
+fn pipe_fallback_result_ok_desempacota() {
     let src = "Result::Ok 42 | 0";
-    let tokens = lex(src).expect("lex deve succeed");
-    let module = parse(tokens).expect("parse deve succeed");
-    let prelude = load_prelude().expect("prelude deve carregar");
-    let user = resolve(&module).expect("resolve deve succeed");
-    let resolved = merge_resolved(prelude, user);
-    let result = infer_module(&module, &resolved);
-    assert!(
-        result.is_err(),
-        "Result::Ok 42 | 0 deve ser type error — Err tem payload, nao e cauda unitaria"
-    );
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Prim(PrimTy::Int), "Result::Ok 42 | 0 deve ser Int");
+    assert_eq!(untag_smi(raw), 42);
+}
+
+/// `Result::Err \"err\" | 99` — cauda (Err) tem payload, descarta, avalia fallback.
+#[test]
+fn pipe_fallback_result_err_descarta_payload() {
+    let src = "Result::Err \"err\" | 99";
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Prim(PrimTy::Int), "fallback deve ser Int");
+    assert_eq!(untag_smi(raw), 99);
 }

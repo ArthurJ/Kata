@@ -55,6 +55,7 @@ pub(crate) fn generate_test_wrappers(
     ffi_ids: &HashMap<String, cranelift_module::FuncId>,
     symbol_table: &HashMap<FuncKey, cranelift_module::FuncId>,
     string_table: &mut StringTable,
+    bytes_table: &mut Vec<Vec<u8>>,
     fn_counter: &mut u64,
     struct_registry: &kata_core::StructRegistry,
 ) -> Result<Vec<TestWrapper>, CodegenError> {
@@ -101,6 +102,7 @@ pub(crate) fn generate_test_wrappers(
                 ffi_ids,
                 symbol_table,
                 string_table: &mut *string_table,
+                bytes_table: &mut *bytes_table,
                 struct_registry,
             };
             define_test_wrapper(action, spec, func_id, &mut tctx)?;
@@ -138,6 +140,7 @@ pub(crate) struct TestLowerCtx<'a> {
     pub ffi_ids: &'a HashMap<String, cranelift_module::FuncId>,
     pub symbol_table: &'a HashMap<FuncKey, cranelift_module::FuncId>,
     pub string_table: &'a mut StringTable,
+    pub bytes_table: &'a mut Vec<Vec<u8>>,
     pub struct_registry: &'a kata_core::StructRegistry,
 }
 
@@ -193,6 +196,7 @@ fn define_test_wrapper(
             kata_ids: tctx.symbol_table,
             metadata: &mut metadata,
             string_table: tctx.string_table,
+            bytes_table: tctx.bytes_table,
             var_map: HashMap::new(),
             anon_counter: 0,
             emitted_tail_call: false,

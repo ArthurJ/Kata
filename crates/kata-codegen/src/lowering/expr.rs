@@ -80,19 +80,28 @@ pub(crate) fn lower_expr(
             Ok(ptr)
         }
 
-        // ── BytesLit: bytes alocados como data symbol + kata_rt_bytes_from_ptr ──
-        // TODO(Fase 4): implementar embedding de bytes como global data symbol
-        // e chamada a kata_rt_bytes_from_ptr. Por ora, retorna null pointer.
+        // ── BytesLit: bytes crus como data symbol + kata_rt_bytes_from_ptr ──
         TypedExprKind::BytesLit { bytes } => {
-            // Embed bytes as a global data symbol and call kata_rt_bytes_from_ptr.
-            // For now, create a string from the bytes and use add_string.
-            let text = String::from_utf8_lossy(bytes).into_owned();
-            let global = ctx.add_string(&text);
-            let ptr = ctx
+            // Embed bytes crus como global data symbol.
+            let global = ctx.add_bytes(bytes);
+            let data_ptr = ctx
                 .builder
                 .ins()
                 .global_value(ctx.module.target_config().pointer_type(), global);
-            Ok(ptr)
+            // Chama kata_rt_bytes_from_ptr(data_ptr, len, arena) -> bytes_ptr.
+            let len_val = ctx.builder.ins().iconst(I64, bytes.len() as i64);
+            let arena = ctx
+                .fiber_arena
+                .or(ctx.caller_arena)
+                .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
+            let from_ptr_ref = ctx.ffi_refs.get("kata_rt_bytes_from_ptr").ok_or_else(|| {
+                super::CodegenError::FfiSymbolNotFound("kata_rt_bytes_from_ptr".into())
+            })?;
+            let call_inst = ctx
+                .builder
+                .ins()
+                .call(*from_ptr_ref, &[data_ptr, len_val, arena]);
+            Ok(ctx.builder.inst_results(call_inst)[0])
         }
 
         // ── Unit: i64 zero ──
@@ -432,6 +441,7 @@ pub(crate) fn lower_expr(
                 ctx.ffi_ids,
                 ctx.kata_ids,
                 ctx.string_table,
+                ctx.bytes_table,
                 ctx.struct_registry,
             )?;
 

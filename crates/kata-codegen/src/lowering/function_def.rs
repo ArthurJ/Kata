@@ -98,6 +98,7 @@ pub(crate) fn define_function_body(
     ffi_ids: &HashMap<String, cranelift_module::FuncId>,
     kata_ids: &HashMap<FuncKey, cranelift_module::FuncId>,
     string_table: &mut StringTable,
+    bytes_table: &mut Vec<Vec<u8>>,
     struct_registry: &kata_core::StructRegistry,
 ) -> Result<(), CodegenError> {
     let mut ctx = module.make_context();
@@ -154,6 +155,7 @@ pub(crate) fn define_function_body(
             kata_ids,
             metadata: &mut metadata,
             string_table,
+            bytes_table,
             var_map: HashMap::new(),
             anon_counter: 0,
             emitted_tail_call: false,
@@ -457,6 +459,7 @@ pub(crate) fn define_kata_function(
     ffi_ids: &HashMap<String, cranelift_module::FuncId>,
     symbol_table: &HashMap<FuncKey, cranelift_module::FuncId>,
     string_table: &mut StringTable,
+    bytes_table: &mut Vec<Vec<u8>>,
     struct_registry: &kata_core::StructRegistry,
 ) -> Result<(), CodegenError> {
     define_function_body(
@@ -472,6 +475,7 @@ pub(crate) fn define_kata_function(
         ffi_ids,
         symbol_table,
         string_table,
+        bytes_table,
         struct_registry,
     )
 }
