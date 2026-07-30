@@ -460,7 +460,7 @@ len "hello"              # 5 — text (COUNTABLE dispatch, kata_rt_string_len)
   - `@associative` + `@commutative` → habilitam TRMA.
   - `@ffi` → informa linker de símbolo externo.
   - `@builtin` → marca função para síntese de nó TAST especializado (map/filter/fold).
-  - `spawn!` → special form que spawn processo OS separado (multiprocess). Aceita tupla (serializa implicitamente) ou dict com `raw:`/`serialized:`. Não é diretiva — é operação ao lado de `fork!`.
+  - `spawn!` → special form que spawn processo OS separado (multiprocess). Aceita tupla (converte implicitamente) ou dict com `raw:`/`serialized:`. Não é diretiva — é operação ao lado de `fork!`.
   - `@log` → veja seção dedicada abaixo.
 
 ---

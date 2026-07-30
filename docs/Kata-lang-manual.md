@@ -1686,7 +1686,7 @@ spawn!{callee: tarefa, serialized: payload}      # dict — bytes pré-serializa
 ```
 
 A forma posicional é açúcar para `spawn!{callee: tarefa, raw: args}`. A chave
-`serialized:` aceita um blob produzido por `serialize()` (FFI do runtime) e
+`serialized:` aceita um blob produzido por `to_bytes()` (FFI do runtime) e
 envia os bytes direto, sem re-serialização.
 
 **Marshalling:** entre processos, valores são sempre by-value (serializados).

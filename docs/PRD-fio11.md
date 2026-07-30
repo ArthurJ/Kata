@@ -283,12 +283,12 @@ spawn!{callee: tarefa, serialized: payload}         # bytes pré-serializados
 A forma posicional `spawn!(callee, args)` é açúcar para
 `spawn!{callee: tarefa, raw: args}`. A chave `raw` indica que os argumentos
 serão serializados pelo runtime antes de cruzar a fronteira de processo. A
-chave `serialized` indica que os bytes já foram serializados via `serialize()`
+chave `serialized` indica que os bytes já foram convertidos via `to_bytes()`
 e serão enviados direto — sem re-serialização.
 
-**`serialize()`** é uma função FFI do runtime que aceita qualquer valor e
+**`to_bytes()`** é uma função FFI do runtime que aceita qualquer valor e
 produz um blob opaco (bytes contíguos + rebase_offsets + tipo), reaproveitando
-a mecânica de `HeapSnapshotData` do comptime (Fio 12). O valor serializado
+a mecânica de `HeapSnapshotData` do comptime (Fio 12). O valor convertido
 pode ser armazenado, reusado, e alimentado de volta para `spawn!` via
 `serialized:`.
 
@@ -964,18 +964,18 @@ desserializados de volta para a estrutura, usando o mesmo `TypeShape`.
 Isto permite `spawn!` funcionar com qualquer tipo, não apenas `Int`/`Unit`,
 sem depender do Fio 12.
 
-**`serialize()` FFI:** o runtime expõe `serialize(value, type_shape_ptr) -> ptr`
+**`to_bytes()` FFI:** o runtime expõe `to_bytes(value, type_shape_ptr) -> ptr`
 que produz um blob opaco (bytes + rebase_offsets + tipo). O complementar
-`deserialize(blob_ptr, arena_handle) -> value` reconstrói o valor na arena
+`from_bytes(blob_ptr, arena_handle) -> value` reconstrói o valor na arena
 destino. Ambos reaproveitam a mecânica de `HeapSnapshotData` (Fio 12):
-serialização percorre a estrutura, copia bytes, registra offsets de ponteiros;
-desserialização aloca na arena destino e faz rebasing (soma base_ptr nos
+`to_bytes` percorre a estrutura, copia bytes, registra offsets de ponteiros;
+`from_bytes` aloca na arena destino e faz rebasing (soma base_ptr nos
 offsets registrados).
 
 **Forma posicional vs dict no codegen:**
 - `spawn!(tarefa, (42, arr))` ou `spawn!{callee: tarefa, raw: (42, arr)}`
-  → codegen chama `serialize(args)` antes do fork.
-- `spawn!{callee: tarefa, serialized: payload}` → codegen pula serialização,
+  → codegen chama `to_bytes(args)` antes do fork.
+- `spawn!{callee: tarefa, serialized: payload}` → codegen pula conversão,
   usa os bytes de `payload` direto no pipe.
 
 **Bloqueio do parent:** o parent (fiber) bloqueia em `read(pipe)` esperando o
@@ -1125,13 +1125,13 @@ destruída).
   recursivamente, como o decref walk do Fio 9)
 - Desserialização no filho usando o mesmo `TypeShape`
 - Funciona com qualquer tipo, não apenas `Int`/`Unit`
-- `serialize()` FFI: produz blob opaco (bytes + rebase_offsets + tipo)
-- `serialized:` no dict form pula serialização, envia bytes direto
+- `to_bytes()` FFI: produz blob opaco (bytes + rebase_offsets + tipo)
+- `serialized:` no dict form pula conversão, envia bytes direto
 - Parent faz yield antes de `read(pipe)` para não bloquear outras fibers
 
 **DoD Fase 9:** `spawn!(tarefa, (42))` executa em processo OS separado. Resultado
 volta via IPC. Serialização de tuplas, structs, listas funciona. Forma dict
-com `serialized:` envia bytes pré-serializados sem re-serialização. Teste E2E
+com `serialized:` envia bytes pré-convertidos sem re-conversão. Teste E2E
 com `spawn!` passa.
 
 ## DoD (Definition of Done)
@@ -1157,7 +1157,7 @@ com `spawn!` passa.
     detectados e abortados.
 11. **`spawn!` spawn processo OS.** Action executa em processo isolado.
     Serialização via `Box` + `TypeShape` funciona com qualquer tipo.
-    `serialize()` FFI permite pré-serialização explícita.
+    `to_bytes()` FFI permite pré-conversão explícita.
 12. **Zero vazamentos.** Arena raiz destruída após scheduler run completar.
 13. **Testes E2E.** Mínimo 15 testes cobrindo todas as features acima.
 

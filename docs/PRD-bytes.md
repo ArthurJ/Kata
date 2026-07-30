@@ -11,7 +11,7 @@
 
 Introduzir o tipo `Bytes` na linguagem: uma sequência contígua de bytes (u8)
 com acesso indexado, concatenação, operadores bitwise, e conversão explícita
-de/para `Int`. `Bytes` é o tipo de retorno de `serialize()` e o formato aceito
+de/para `Int`. `Bytes` é o tipo de retorno de `to_bytes()` e o formato aceito
 por `spawn!{serialized: ...}`, mas também é um tipo útil por si só — I/O cru,
 buffers binários, manipulação de dados de baixo nível.
 
@@ -19,7 +19,7 @@ buffers binários, manipulação de dados de baixo nível.
 
 ### 2.1. Marshalling de `spawn!`
 
-`serialize()` precisa retornar um tipo. O blob serializado (bytes contíguos +
+`to_bytes()` precisa retornar um tipo. O blob convertido (bytes contíguos +
 rebase_offsets) precisa ser armazenável, passável, e reusável. Hoje a Kata5
 não tem um tipo para dados binários crus — `Text` é string (bytes + encoding),
 `Array<Int>` é 8x o tamanho (cada byte vira i64).
@@ -328,8 +328,8 @@ ajustada ou uma nova FFI `kata_rt_text_len` conta codepoints.
 | `int` | `int :: Byte => Int` | Byte → Int (0-255) |
 | `byte` | `byte :: Int => Byte` | Int → Byte (trunca para 0-255, mod 256) |
 | `bytes` | `bytes :: Int => Bytes` | Int → 4 bytes (little-endian) |
-| `serialize` | `serialize :: A => Bytes` | Valor qualquer → blob serializado (spawn!) |
-| `deserialize` | `deserialize :: Bytes => A` | Blob serializado → valor (usado no spawn!) |
+| `to_bytes` | `to_bytes :: A => Bytes` | Valor qualquer → blob convertido (spawn!) |
+| `from_bytes` | `from_bytes :: Bytes => A` | Blob convertido → valor (usado no spawn!) |
 
 ### 6.2. Conversões Text ↔ Bytes com encoding
 
@@ -539,14 +539,14 @@ Sobrecargas de `and/or/xor/not` resolvem por tipo. `t.0` retorna
 echo!(show(b.0 | byte(0)))` imprime `0x48`. `+ b b` produz 10 bytes.
 `t.0 | "?"` retorna primeiro codepoint. `len("Hello")` retorna `5`.
 
-### Fase 5: serialize() / deserialize()
+### Fase 5: to_bytes() / from_bytes()
 
 **kata-rt:**
-- `kata_rt_serialize(value_ptr, type_shape_ptr) -> bytes_ptr`
-- `kata_rt_deserialize(bytes_ptr, arena_handle) -> value_ptr`
+- `kata_rt_to_bytes(value_ptr, type_shape_ptr) -> bytes_ptr`
+- `kata_rt_from_bytes(bytes_ptr, arena_handle) -> value_ptr`
 - Reaproveita mecânica de `HeapSnapshotData` (bytes + rebase_offsets)
 
-**DoD Fase 5:** `serialize((42, "oi"))` produz `Bytes`. Desserialização
+**DoD Fase 5:** `to_bytes((42, "oi"))` produz `Bytes`. `from_bytes`
 reconstrói o valor na arena destino.
 
 ### Fase 6: Testes E2E
@@ -558,7 +558,7 @@ reconstrói o valor na arena destino.
 - Conversões: `int(b.0 | byte(0))`, `byte(72)`, `bytes(42)`
 - Text ↔ Bytes: `bytes("oi")`, `text(b"Hello")`, `text(b"Hello", Encoding::Ascii)`
 - Encodings: UTF-8 (padrão), UTF-16, Latin-1, ASCII (rejeita > 0x7F)
-- Serialize/deserialize roundtrip
+- to_bytes/from_bytes roundtrip
 - Show: `show(b)` produz hex
 - EQ: `== b1 b2`
 - len: `len(b)` (bytes), `len(t)` (codepoints)
@@ -578,20 +578,20 @@ reconstrói o valor na arena destino.
 
 | Fio | Status | Relação |
 |---|---|---|
-| Fio 11 (CSP) | ✅ exceto spawn! | `spawn!` consome `Bytes` via `serialized:`. `serialize()` retorna `Bytes` |
+| Fio 11 (CSP) | ✅ exceto spawn! | `spawn!` consome `Bytes` via `serialized:`. `to_bytes()` retorna `Bytes` |
 | Fio 8 (coleções) | ✅ | `Bytes` segue modelo de `Array`/`Text`. `SLICEABLE` estende coleções existentes |
 | Fio 9 (closures/escape) | ✅ | `TypeShape` para `Bytes` — blob é leaf, sem ponteiros internos |
-| Fio 12 (comptime) | ✅ | `HeapSnapshotData` mecânica reusada por serialize/deserialize |
+| Fio 12 (comptime) | ✅ | `HeapSnapshotData` mecânica reusada por to_bytes/from_bytes |
 
 ## 12. Relação com spawn!
 
 Este PRD é **pré-requisito** para `spawn!` (Fase 9 do PRD-fio11):
 
-- `serialize(value) -> Bytes` — produz o blob serializado
+- `to_bytes(value) -> Bytes` — produz o blob convertido
 - `spawn!{callee: tarefa, serialized: payload}` — `payload :: Bytes`
-- `deserialize(bytes) -> value` — reconstrói na arena destino
+- `from_bytes(bytes) -> value` — reconstrói na arena destino
 
-Sem `Bytes`, `serialize()` não tem tipo de retorno. Sem `serialize()`, `spawn!`
+Sem `Bytes`, `to_bytes()` não tem tipo de retorno. Sem `to_bytes()`, `spawn!`
 não tem forma explícita de pré-serializar. O PRD-fio11 define a semântica de
 `spawn!`; este PRD define o tipo que o transporte usa.
 
