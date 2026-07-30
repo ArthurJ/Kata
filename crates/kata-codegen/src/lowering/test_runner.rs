@@ -49,6 +49,7 @@ pub struct TestWrapper {
 ///
 /// Retorna a lista de wrappers gerados. Chamado por `lower_module` após
 /// declarar e definir Actions (para que `symbol_table` tenha os FuncIds).
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn generate_test_wrappers(
     typed: &kata_inference::TypedModule,
     module: &mut dyn ModuleBackend,

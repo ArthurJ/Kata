@@ -452,6 +452,7 @@ pub(crate) fn define_function_body(
 }
 
 /// Define (compila o corpo de) uma função Kata nomeada.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn define_kata_function(
     func: &TypedFunction,
     func_id: cranelift_module::FuncId,

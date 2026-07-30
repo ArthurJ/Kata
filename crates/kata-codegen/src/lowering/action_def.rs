@@ -58,6 +58,7 @@ pub(crate) fn declare_kata_action(
 /// Body: extrai elementos da tupla de args_ptr, liga a variáveis, lowera statements.
 /// Epílogo: sem `arena_destroy` — o scheduler destrói a arena após o fiber retornar.
 /// Se `ret_ty == Float`, faz `bitcast(I64 ← F64)` antes do `return_`.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn define_kata_action(
     action: &TypedAction,
     func_id: cranelift_module::FuncId,
