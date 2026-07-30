@@ -569,7 +569,7 @@ echo!(show(b.0 | byte(0)))` imprime `0x48`. `+ b b` produz 10 bytes.
 **DoD Fase 5:** ✅ `to_bytes` serializa Int, Text, Tuple, List. `from_bytes`
 reconstrói na arena destino. Testes unitários passam.
 
-### Fase 6: Testes E2E
+### Fase 6: Testes E2E ✅ Concluído
 
 - Acesso indexado: `b.0`, `b.(-1)` (retorna Result, usa `|` fallback)
 - Text indexado: `t.0`, `t.(-1)` (retorna Result, codepoint como Text)
@@ -584,7 +584,16 @@ reconstrói na arena destino. Testes unitários passam.
 - len: `len(b)` (bytes), `len(t)` (codepoints)
 - Slice: `b.[1..3]`, `t.[0..4]`
 
-**DoD Fase 6:** Todos os testes E2E passam. Zero vazamentos.
+**DoD Fase 6:** ✅ 45 testes E2E passando. Cobertura: BytesLit, indexação
+(positiva/negativa/out-of-bounds), concatenação, len, slice, show (hex),
+eq (`=`), bitwise Byte (and/or/xor/not), bitwise Bytes (elemento-a-elemento),
+conversões (int/byte/bytes), Text ↔ Bytes, Text indexável (at/len/slice),
+roundtrips (text→bytes→index, int→bytes→index→int, byte→int→byte→int).
+
+Bug crítico descoberto e corrigido: SMI tagging em funções de indexação.
+O codegen passa índices como SMI-tagged `(val << 1) | 1`, mas as funções de
+runtime tratavam `idx` como valor bruto. Corrigido com `untag_smi()` em
+todas as funções de indexação/slice de Bytes, Text, Array, e List.
 
 ## 10. Não faz parte deste PRD
 

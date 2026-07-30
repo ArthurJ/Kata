@@ -619,6 +619,10 @@ special form ao lado de `fork!` (não diretiva em ActionDecl). Aceita tupla
 (controle explícito). `to_bytes()`/`from_bytes()` FFI implementada (Fase 5 do
 PRD-bytes, commit `bfcf1a4`) — serializa valores em blob `Bytes` com header
 estendido (type_id + rebase_offsets). Type table Rust-to-Rust em `kata-rt`.
+Fase 6 ✅ (commits `bf02cab` + `c1824a2`) — 45 testes E2E de Bytes/Byte
+cobrindo indexação, concatenação, len, slice, show, eq, bitwise,
+conversões, Text ↔ Bytes, Text indexável, roundtrips. Bug de SMI tagging
+em funções de indexação corrigido (untag_smi em bytes/text/list/array).
 Falta: codegen de `spawn!` (Fase 9), driver registrar type table antes do JIT.
 Veja PRD-fio11.md, Fase 9.
 
