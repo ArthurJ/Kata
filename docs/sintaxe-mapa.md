@@ -454,13 +454,13 @@ len "hello"              # 5 — text (COUNTABLE dispatch, kata_rt_string_len)
 ```
 
 - Posição: precedem item de topo (action, lambda, data). Podem ser empilhadas no mesmo item; a ordem importa (avaliação sequencial).
-- Catálogo: `@parallel`, `@comptime`, `@cache_strategy`, `@test`, `@log`, `@associative`, `@commutative`, `@ffi`, `@builtin`.
+- Catálogo: `@comptime`, `@cache_strategy`, `@test`, `@log`, `@associative`, `@commutative`, `@ffi`, `@builtin`. (`spawn!` é special form, não diretiva — veja abaixo.)
 - **Relações**:
   - `@test` → tree shaking remove em produção.
   - `@associative` + `@commutative` → habilitam TRMA.
   - `@ffi` → informa linker de símbolo externo.
   - `@builtin` → marca função para síntese de nó TAST especializado (map/filter/fold).
-  - `@parallel` → spawn de processo OS separado (multiprocess).
+  - `spawn!` → special form que spawn processo OS separado (multiprocess). Aceita tupla (serializa implicitamente) ou dict com `raw:`/`serialized:`. Não é diretiva — é operação ao lado de `fork!`.
   - `@log` → veja seção dedicada abaixo.
 
 ---

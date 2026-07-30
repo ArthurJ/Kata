@@ -217,8 +217,8 @@ analysis opera sobre captures).
 `queue!(N)` (buffer), `broadcast!` (pub-sub). `!>` / `<!`
 (send/receive). `select` (multiplexação, timeout).
 
-Diretivas: `@parallel` (thread pesada), `@log` (telemetria via canais
-CSP).
+Diretivas: `@log` (telemetria via canais CSP). Special forms: `spawn!`
+(multiprocess — processo OS isolado via fork+IPC).
 
 Dependencies: 3 (concorrência só no domínio impuro), 14 (escape analysis
 — dados em canais escapam → ARC), 10 (FFI — channels são runtime).

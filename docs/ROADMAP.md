@@ -108,7 +108,7 @@ Fio 1: Fundação + Aritmética + CLI
 │       │
 │       └── Fio 11: CSP, Concorrência, Paralelismo
 │       │   (channel!, queue!, broadcast!, fork!, select, !>, <!,
-│       │    yield points, structured concurrency, @parallel)
+│       │    yield points, structured concurrency, spawn!)
 │       │
 │       └── Fio 14: @log, @test, Test Runner
 │           (@log telemetria via CSP, @test positivo/negativo, kata test)
@@ -149,10 +149,11 @@ Fio 1: Fundação + Aritmética + CLI
 │   (import, export, as, module loader, filesystem, cycle detection,
 │    prelude de stdlib/core.kata substituindo prelude hardcoded)
 │
-├── Fio 11: CSP, Concorrência, Paralelismo ✅ Concluído (exceto @parallel)
+├── Fio 11: CSP, Concorrência, Paralelismo ✅ Concluído (exceto spawn!)
 │   (channel!, queue!, broadcast!, fork!, !>, <!, select com timeout,
 │    yield cooperativo, structured concurrency, scheduler com fibers)
-│   (@parallel — multiprocess via fork+IPC — congelado, não implementado)
+│   (spawn! — multiprocess via fork+IPC — redesign: special form ao lado de fork!,
+│    aceita tupla ou dict com raw:/serialized:, serialize() FFI — não implementado)
 │
 ├── Fio 12: Comptime, @cache ✅ Concluído — PRD: docs/PRD-fio12-comptime.md
 │   (@comptime call-site explícito, JIT-and-execute, HeapSnapshot com arenas,
@@ -603,7 +604,7 @@ pelo codegen. ARC pass emitido.
 
 ---
 
-### Fio 11: CSP, Concorrência, Paralelismo ✅ Concluído (exceto @parallel)
+### Fio 11: CSP, Concorrência, Paralelismo ✅ Concluído (exceto spawn!)
 
 **Status:** Fases 1-14 implementadas (Fases 1-14 do Fio 3, que incluem CSP).
 `channel!`, `queue!(N)`, `broadcast!()`, `fork!`, `!>`, `<!`, `select` com
@@ -612,9 +613,11 @@ Testes E2E: `csp_channels_e2e.rs` (11 testes), `csp_broadcast_e2e.rs` (4 testes)
 `select_timeout_e2e.rs`, `scheduler_test.rs`. Exemplos: `broadcast.kata`,
 `select_queue.kata`.
 
-**Não implementado:** `@parallel` (multiprocess via fork+IPC). O resolver rejeita
-com `UnknownDirective`. A string "parallel" não aparece em nenhum `.rs` do
-projeto. Congelado — necessário apenas para paralelismo cross-process.
+**Não implementado:** `spawn!` (multiprocess via fork+IPC). Redesign aprovado:
+special form ao lado de `fork!` (não diretiva em ActionDecl). Aceita tupla
+(posicional — runtime serializa implicitamente) ou dict com `raw:`/`serialized:`
+(controle explícito). `serialize()` FFI reaproveita mecânica de `HeapSnapshotData`.
+Veja PRD-fio11.md, Fase 9.
 
 **Maquinaria de tipos construída:**
 - `Ty::Sender(Box<Ty>)`, `Ty::Receiver(Box<Ty>)`, `Ty::ReceiverFactory(Box<Ty>)`
@@ -646,7 +649,7 @@ Fio 3 ✅ (Actions, arena), Fio 9 ✅ (escape analysis para dados em canais → 
 **DoD:** ✅ `fork!` submete Action em fiber separada com args. Channel rendezvous
 sincroniza sender/receiver. `select` multiplexa 2+ receivers. Yield points
 previnem head-of-line blocking. Structured concurrency garante lifecycle.
-`@parallel` não implementado (congelado).
+`spawn!` não implementado (redesign aprovado, Fase 9 do PRD-fio11).
 
 ---
 

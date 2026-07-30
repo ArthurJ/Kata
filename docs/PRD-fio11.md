@@ -6,7 +6,7 @@ Implementar concorrência CSP (Communicating Sequential Processes) end-to-end:
 canais (rendezvous, buffered, broadcast) com ends separados (sender/receiver),
 `fork!` (spawn de fiber com args), `select` (multiplexação com timeout),
 operadores `!>` (envio) e `<!` (recebimento), yield points cooperativos no
-codegen, e `@parallel` (paralelismo via multiprocess com fork+IPC).
+codegen, e `spawn!` (paralelismo via multiprocess com fork+IPC).
 
 O Pré-11 entregou a árvore hierárquica de arenas, `EscapeTarget`, destruição
 bottom-up, e ARC pass emitido. O Fio 11 constrói sobre essa infraestrutura para
@@ -18,12 +18,12 @@ fazer fibers comunicarem-se de forma segura.
 |---|---|---|---|
 | **Concorrência** | Fibers + yield cooperativo + canais | Memória compartilhada (árvore de arenas) | Fases 1-6 |
 | **Preempção cooperativa** | Yield points no codegen (back-edge checks) | Mesma thread, cede periodicamente | Fase 7 |
-| **Paralelismo** | `@parallel`, fork+IPC, processo OS separado | Memória isolada (processo OS) | Fase 9 |
+| **Paralelismo** | `spawn!`, fork+IPC, processo OS separado | Memória isolada (processo OS) | Fase 9 |
 
 **Multithreading (M:N scheduler) é post-1.0.** A estrutura do scheduler
 (`thread_local!` como hoje) não impede a adição futura de worker pool — o run
 loop, yield, e structured concurrency são independentes do número de threads.
-Se workloads reais demonstrarem que yield points + `@parallel` não chegam,
+Se workloads reais demonstrarem que yield points + `spawn!` não chegam,
 M:N é adição incremental (não refactor).
 
 ## Depende de
@@ -99,8 +99,8 @@ Só verifica quando a run_queue esvazia. Custo zero em runtime normal.
 
 `select` para recebimento (`<!`) está no escopo. `select` para envio
 (escolher qual canal enviar) é útil em roteamento, mas pode não ser compatível
-com as três topologias. Discutir após a implementação de `@parallel`, com
-experiência real dos padrões de uso.
+com as três topologias. Discutir após a implementação de `spawn!`, com
+experiência real dos padrões de uso com `spawn!`.
 
 ### E. Structured concurrency: Action espera forks completarem
 
@@ -262,17 +262,45 @@ action exemplo
 scheduler e é acordada quando um caso se concretiza. `timeout N` (ms) é
 válvula de escape.
 
-### `@parallel`
+### `spawn!` (paralelismo / multiprocess)
+
+`spawn!` é um special form ao lado de `fork!`. Enquanto `fork!` spawna um fiber
+(no mesmo processo, memória compartilhada), `spawn!` spawn um **processo OS
+separado** via fork + IPC. O scheduler de fibers não gerencia o processo filho —
+é uma ponte diferente. O resultado volta via IPC channel.
+
+**Sintaxe — duas formas:**
 
 ```kata
-@parallel
-action cpu_intensivo
-    ...
+# Forma posicional (açúcar) — runtime serializa implicitamente
+spawn!(tarefa, (42, arr))
+
+# Forma dict (completa) — args nomeados
+spawn!{callee: tarefa, raw: (42, arr)}              # runtime serializa
+spawn!{callee: tarefa, serialized: payload}         # bytes pré-serializados
 ```
 
-Força a Action a executar num **processo OS separado** via fork + IPC. O
-scheduler de fibers não gerencia isto — é uma ponte diferente. O resultado
-volta via IPC channel.
+A forma posicional `spawn!(callee, args)` é açúcar para
+`spawn!{callee: tarefa, raw: args}`. A chave `raw` indica que os argumentos
+serão serializados pelo runtime antes de cruzar a fronteira de processo. A
+chave `serialized` indica que os bytes já foram serializados via `serialize()`
+e serão enviados direto — sem re-serialização.
+
+**`serialize()`** é uma função FFI do runtime que aceita qualquer valor e
+produz um blob opaco (bytes contíguos + rebase_offsets + tipo), reaproveitando
+a mecânica de `HeapSnapshotData` do comptime (Fio 12). O valor serializado
+pode ser armazenado, reusado, e alimentado de volta para `spawn!` via
+`serialized:`.
+
+**Extensibilidade:** a forma dict acomoda parâmetros futuros sem mudança de
+sintaxe — `spawn!{callee: tarefa, raw: (42), timeout: 5000}`.
+
+**Qualquer tipo de valor:** `spawn!` aceita qualquer tipo como argumento. Tipos
+primitivos (SMI, Float) são copiados direto (8 bytes). Tipos heap-allocated
+(Text, BigInt, Array, Dict, tuplas, structs, enums) são serializados
+recursivamente via `TypeShape` walk — a mesma estrutura que o decref walk do
+Fio 9 percorre. O custo é proporcional ao tamanho dos dados, não ao número de
+valores.
 
 ## Sintaxe — mudanças no lexer
 
@@ -908,7 +936,7 @@ block0:                                    ; loop header
 Isto é uma mudança localizada no lowering — não afeta typeck, AST, parser,
 ou qualquer outra camada. É puramente codegen + runtime.
 
-### `@parallel`
+### `spawn!`
 
 ```rust
 // Codegen:
@@ -933,8 +961,22 @@ O `Box<T>` é alocado para conter os bytes serializados. O pipe transmite os
 bytes crus. No filho, `Box<T>` é alocado novamente e os bytes são
 desserializados de volta para a estrutura, usando o mesmo `TypeShape`.
 
-Isto permite `@parallel` funcionar com qualquer tipo, não apenas `Int`/`Unit`,
+Isto permite `spawn!` funcionar com qualquer tipo, não apenas `Int`/`Unit`,
 sem depender do Fio 12.
+
+**`serialize()` FFI:** o runtime expõe `serialize(value, type_shape_ptr) -> ptr`
+que produz um blob opaco (bytes + rebase_offsets + tipo). O complementar
+`deserialize(blob_ptr, arena_handle) -> value` reconstrói o valor na arena
+destino. Ambos reaproveitam a mecânica de `HeapSnapshotData` (Fio 12):
+serialização percorre a estrutura, copia bytes, registra offsets de ponteiros;
+desserialização aloca na arena destino e faz rebasing (soma base_ptr nos
+offsets registrados).
+
+**Forma posicional vs dict no codegen:**
+- `spawn!(tarefa, (42, arr))` ou `spawn!{callee: tarefa, raw: (42, arr)}`
+  → codegen chama `serialize(args)` antes do fork.
+- `spawn!{callee: tarefa, serialized: payload}` → codegen pula serialização,
+  usa os bytes de `payload` direto no pipe.
 
 **Bloqueio do parent:** o parent (fiber) bloqueia em `read(pipe)` esperando o
 child. Como o parent é um fiber, o `read()` é uma syscall blocking — ocupa a
@@ -1070,10 +1112,12 @@ executam durante o loop. Sem yield points, loop pesado bloqueia outras fibers
 **DoD Fase 8:** Todos os testes E2E passam. Zero vazamentos (arena raiz
 destruída).
 
-### Fase 9: `@parallel` (paralelismo / multiprocess)
+### Fase 9: `spawn!` (paralelismo / multiprocess)
 
 **kata-codegen:**
-- `@parallel` directive em `ActionDecl`
+- `spawn!` special form (paralelo a `fork!` no lowering)
+- Parser: `spawn!(callee, args)` (posicional) e `spawn!{callee: ..., raw/serialized: ...}` (dict)
+- Typeck: `TypedExprKind::Spawn` — aceita qualquer tipo de args; tipo de retorno = tipo de retorno da Action
 - Codegen: `fork()` syscall, pipe entre pai e filho
 - No filho: executar Action em runtime isolado
 - No pai: receber resultado via pipe
@@ -1081,11 +1125,14 @@ destruída).
   recursivamente, como o decref walk do Fio 9)
 - Desserialização no filho usando o mesmo `TypeShape`
 - Funciona com qualquer tipo, não apenas `Int`/`Unit`
+- `serialize()` FFI: produz blob opaco (bytes + rebase_offsets + tipo)
+- `serialized:` no dict form pula serialização, envia bytes direto
 - Parent faz yield antes de `read(pipe)` para não bloquear outras fibers
 
-**DoD Fase 9:** `@parallel action` executa em processo OS separado. Resultado
-volta via IPC. Serialização de tuplas, structs, listas funciona. Teste E2E
-com `@parallel` passa.
+**DoD Fase 9:** `spawn!(tarefa, (42))` executa em processo OS separado. Resultado
+volta via IPC. Serialização de tuplas, structs, listas funciona. Forma dict
+com `serialized:` envia bytes pré-serializados sem re-serialização. Teste E2E
+com `spawn!` passa.
 
 ## DoD (Definition of Done)
 
@@ -1108,8 +1155,9 @@ com `@parallel` passa.
    sender, alocados na arena do LCA (não necessariamente raiz).
 10. **Deadlock detection.** Fibers bloqueados sem progresso possível são
     detectados e abortados.
-11. **`@parallel` spawn processo OS.** Action executa em processo isolado.
+11. **`spawn!` spawn processo OS.** Action executa em processo isolado.
     Serialização via `Box` + `TypeShape` funciona com qualquer tipo.
+    `serialize()` FFI permite pré-serialização explícita.
 12. **Zero vazamentos.** Arena raiz destruída após scheduler run completar.
 13. **Testes E2E.** Mínimo 15 testes cobrindo todas as features acima.
 
@@ -1118,7 +1166,7 @@ com `@parallel` passa.
 - **M:N multithread (scheduler com worker pool).** Post-1.0. A estrutura do
   scheduler (run loop, yield, blocked/wake, structured concurrency) é
   independente do número de threads. Se workloads reais demonstrarem que
-  yield points + `@parallel` não chegam, M:N é adição incremental.
+  yield points + `spawn!` não chegam, M:N é adição incremental.
 - GC para fibers long-lived (ver nota no ROADMAP.md)
 - `@log` via CSP (Fio 14)
 - `@test` (Fio 14)

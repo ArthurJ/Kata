@@ -3,7 +3,7 @@
 **Status:** ✅ Concluído (Fases 1-7 — `@test` e `@log` concluídos).
 **Data:** 2026-07-18
 **Depende de:** Fio 4 ✅ (Result), Fio 11 ✅ (Actions, scheduler, JIT)
-**Não depende de:** `@parallel` (congelado), `@log` (segunda parte deste fio, adiada para sub-PRD)
+**Não depende de:** `spawn!` (não implementado), `@log` (segunda parte deste fio, adiada para sub-PRD)
 
 ## 1. Objetivo
 
@@ -218,7 +218,7 @@ descobre via `directives` no `ActionDecl`.
 Cada `@test` vira um wrapper `__kata_test_<name>_<idx>` que chama a action com
 args literais. Justificativa: reusa o lowering de `ActionCall` existente; sem
 serialização de args (que seria o caminho (b) — mais flexível mas mais complexo,
-associado ao `@parallel` congelado).
+associado ao `spawn!` não implementado).
 
 ### D3: JITModule compartilhado entre testes positivos, negativos em arquivo isolado
 
@@ -397,7 +397,7 @@ memória do scheduler permanece single-threaded.
 injeta em `Loop`/`ForIn`). Recursão pura e I/O sem loop não cobertos. Inerente
 a qualquer solução cooperativa sem preempção OS. A thread OS poderia servir de
 base para preempção real no futuro (via signal), mas isso é especulação sobre
-`@parallel` (congelado).
+`spawn!` (não implementado).
 
 **Distinção semântica deadlock vs timeout:** deadlock é deadlock, timeout é
 hang. O runner reporta `DEADLOCK_SENTINEL` para deadlock real (mais

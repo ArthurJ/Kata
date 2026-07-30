@@ -316,7 +316,7 @@ no ROADMAP.md.
 ### Paralelismo verdadeiro (multithread)
 
 O modelo hierárquico é seguro para single-thread com fibers cooperativos.
-Para multithread real (Fio 11 com `@parallel`), cada thread precisa de sua
+Para multithread real (Fio 11 com `spawn!`), cada thread precisa de sua
 própria árvore de arenas, e o compartilhamento entre threads exige cópia
 (não há como compartilhar uma arena entre threads sem sincronização no
 allocator). Isto é tratado no Fio 11.
@@ -469,7 +469,7 @@ O typeck seta ambos.
 
 ## Não faz parte deste PRD
 
-- Canais, `fork!`, `select`, `@parallel` (Fio 11)
+- Canais, `fork!`, `select`, `spawn!` (Fio 11)
 - GC para fibers long-lived (ver nota no ROADMAP.md)
 - Multithread real (Fio 11)
 - Free individual de blocos na arena (bumpalo não suporta)

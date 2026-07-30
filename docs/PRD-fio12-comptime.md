@@ -3,7 +3,7 @@
 **Status:** Fase 1 ✅, Fase 2 ✅, Fase 3 ✅, Fase 4 ✅, Fase 5 ✅, Fase 6 ✅
 **Data:** 2026-07-29
 **Depende de:** Fio 1-10 ✅ (pipeline completo, módulos, arenas hierárquicas), Fio 11 ✅ (TypeShape para serialização de args em `@cache`)
-**Não depende de:** `@parallel` (congelado), Fio 13 (Dict/Set), Fio 15 (REPL)
+**Não depende de:** `spawn!` (não implementado), Fio 13 (Dict/Set), Fio 15 (REPL)
 
 ## 1. Objetivo
 
@@ -169,7 +169,7 @@ Fibers diferentes não partilham cache. Para memoização, o caso de uso típico
 #### Key via TypeShape
 
 A key é o hash dos bytes dos argumentos serializados segundo o TypeShape. O Fio 11
-introduziu TypeShape para `@parallel` (IPC entre processos). O cache reusa a mesma
+introduziu TypeShape para `spawn!` (IPC entre processos). O cache reusa a mesma
 infraestrutura de serialização. Zero trabalho novo de serialização.
 
 #### Transparência
@@ -403,7 +403,7 @@ secção. O linker resolve os ponteiros absolutos.
 
 ## 9. Não depende de
 
-- `@parallel` (congelado — não afeta comptime ou cache)
+- `spawn!` (não implementado — não afeta comptime ou cache)
 - Fio 13 (Dict/Set — não necessário para cache; hash table é runtime nativo)
 - Fio 15 (REPL — comptime funciona em JIT e AOT; REPL herda JIT)
 

@@ -391,7 +391,7 @@ semântica via uma MetadataTable sidecar.
 - **Runtime (`kata-rt`):** Biblioteca nativa isolada, linkada via symbol map.
   Scheduler cooperativo single-threaded (struct explícita, não TLS global),
   channels com Mutex/Condvar, arena per-fiber, `Arc<T>` nativo para heap.
-  `@parallel` multiprocess via fork + IPC. Desconhece as regras internas da
+  `spawn!` multiprocess via fork + IPC. Desconhece as regras internas da
   linguagem — comunicando-se apenas via C-ABI.
 
 - **Diagnostics (`kata-diagnostics`):** Catálogo central de erros estruturados
@@ -1666,15 +1666,34 @@ wake pass do scheduler, não para concorrência entre threads.
 Para orquestrar múltiplas vias, utiliza-se a estrutura `select` com casos de
 `timeout`, que multiplexa eventos sem inanição (*starvation*).
 
-### 6.4. `@parallel` (Multiprocess)
+### 6.4. `spawn!` (Multiprocess)
 
-`@parallel` força uma *Action* a ser executada num **processo OS separado** via
-fork + IPC. Isso oferece isolamento total e paralelismo real para CPU-bound
-pesado — o scheduler de fibers não gerencia isso; é uma ponte diferente:
+`spawn!` é um special form ao lado de `fork!` que executa uma Action num
+**processo OS separado** via fork + IPC. Isso oferece isolamento total e
+paralelismo real para CPU-bound pesado — o scheduler de fibers não gerencia
+isso; é uma ponte diferente:
 
 ```
-@parallel action → spawn processo → IPC channel → resultado
+spawn!(action, args) → fork processo → IPC channel → resultado
 ```
+
+**Sintaxe — duas formas:**
+
+```
+spawn!(tarefa, (42, arr))                        # posicional — runtime serializa
+spawn!{callee: tarefa, raw: (42, arr)}            # dict — runtime serializa
+spawn!{callee: tarefa, serialized: payload}      # dict — bytes pré-serializados
+```
+
+A forma posicional é açúcar para `spawn!{callee: tarefa, raw: args}`. A chave
+`serialized:` aceita um blob produzido por `serialize()` (FFI do runtime) e
+envia os bytes direto, sem re-serialização.
+
+**Marshalling:** entre processos, valores são sempre by-value (serializados).
+Tipos primitivos (SMI, Float) são copiados direto (8 bytes). Tipos heap-allocated
+(Text, Array, Dict, tuplas, structs, enums) são serializados recursivamente via
+`TypeShape` walk — a mesma estrutura que o decref walk percorre. O custo é
+proporcional ao tamanho dos dados.
 
 O modelo é análogo ao de Erlang/BEAM: processos leves (fibers) para concorrência
 (CSP), processos OS para isolamento/paralelismo pesado.
@@ -1711,8 +1730,10 @@ módulo), sempre precedendo imediatamente o item que modificam.
 
 ### 7.2. Catálogo de Diretivas
 
-* **`@parallel`**: Força uma *Action* a ser executada num **processo OS separado**
-  via fork + IPC. Ideal para uso massivo de CPU com isolamento total.
+* **`spawn!`**: Executa uma *Action* num **processo OS separado** via fork + IPC.
+  Ideal para uso massivo de CPU com isolamento total. Aceita tupla (serializa
+  implicitamente) ou dict com `raw:`/`serialized:` (controle explícito).
+  Veja seção 6.4.
 * **`@comptime`**: Avalia uma expressão durante a compilação via JIT-and-execute
   (compila a expressão usando o pipeline normal e executa no `kata-rt` real),
   substituindo o resultado por um literal na TAST. Tem duas formas de uso:
@@ -2546,8 +2567,8 @@ O binário final encapsula código de máquina (Cranelift) acoplado ao runtime
   FFI (`kata_rt_incref`/`kata_rt_decref`). CaptureBox alocado na root arena
   (TrackedArena); quando refcount chega a 0, o bloco é liberado individualmente.
   Refcount não-atomic (single-threaded).
-* **`@parallel` multiprocess:** Fork de processo OS com IPC. Isolamento total
-  para CPU-bound pesado.
+* **`spawn!` multiprocess:** Fork de processo OS com IPC. Isolamento total
+  para CPU-bound pesado. Valores são serializados por marshalling (by-value).
 
 ## 25. Diagnostics
 

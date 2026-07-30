@@ -1270,7 +1270,7 @@ não por fio. Cada fase depende apenas das anteriores.
 - @log/@test/Test Runner (Fio 14)
 - AOT/REPL (Fio 15)
 - CSP/canais/fork!/select/timeout (Fio 11) — fibers existem mas sem canais
-- @parallel (multiprocess — Fio 11)
+- spawn! (multiprocess — Fio 11)
 - Interfaces/generics/monomorph (Fio 7)
 - Coleções List/Array/Range como tipos (Fio 8)
 - Stream fusion map/filter/fold (Fio 8)

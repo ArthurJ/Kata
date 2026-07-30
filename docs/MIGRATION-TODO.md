@@ -36,7 +36,7 @@ valor didático × esforço.
 - **Destino:** `broadcast.kata` ✅, `parallel.kata` ❌
 - **Problemas:** `test_broadcast.kata` depende de `subscribe!` (não no manual moderno; `broadcast!` retorna `(Sender, ReceiverFactory)`); `test_parallel.kata` usa sintaxe legada de param (`n :: Int` em vez de `n::Int`)
 - **`broadcast.kata`:** ✅ Criado (2026-07-28). Sintaxe idiomática: `let (tx, subscribe) := broadcast!()` + `subscribe!()` + `tx !> 42` + `rx <! a`. Snapshot adicionado. 1146 testes passando.
-- **`parallel.kata`:** ❌ **Não implementado.** `@parallel` está documentado no sintaxe-mapa (linha 457) e no manual (§6.4), mas **não existe no resolver**. A string "parallel" não aparece em nenhum `.rs` do projeto. O resolver rejeita `@parallel` em actions com `UnknownDirective`. Necessita implementação no resolver antes de ter exemplo.
+- **`parallel.kata`:** ❌ **Não implementado.** `spawn!` está documentado no PRD-fio11 (Fase 9) e no manual (§6.4), mas **não existe no resolver**. Redesign aprovado: special form `spawn!` ao lado de `fork!`, aceita tupla ou dict com `raw:`/`serialized:`. Necessita implementação no parser, typeck, codegen, e runtime antes de ter exemplo.
 
 ### Cluster 5 — `@log` + imports ✅ Concluído
 - **Candidatos legacy:** `test_log.kata`, `test_imports.kata` — mantidos em legacy como referência
@@ -78,7 +78,7 @@ valor didático × esforço.
 4. `test_make_adder_typed.kata` → `closure_escape.kata` — preenche lacuna de `->` + escape, retrabalho mínimo
 5. `test_range_step.kata` → `ranges.kata` — preenche lacuna de ranges, retrabalho de `format` só
 6. `test_imc.kata` → `enum_refined_alias.kata` — mais rico, mais retrabalho (decisão sobre `/` e `|`)
-7. `test_parallel.kata` → `parallel.kata` — preenche `@parallel`, retrabalho de assinatura
+7. `test_parallel.kata` → `parallel.kata` — preenche `spawn!`, retrabalho de assinatura
 8. `test_log.kata` → `log_telemetry.kata` — único candidato a `@log`, mas é reescrita
 
 ## Bloqueios conhecidos (não tentar até resolver)

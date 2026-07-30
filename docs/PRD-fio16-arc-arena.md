@@ -3,7 +3,7 @@
 **Status:** 📄 Rascunho
 **Data:** 2026-07-24
 **Depende de:** Fio 11 ✅ (CSP, scheduler, fibers, arenas), Fio 13 ✅ (Closure Unification, CaptureBox)
-**Não depende de:** `@parallel` (congelado)
+**Não depende de:** `spawn!` (não implementado)
 
 ## 1. Problema
 

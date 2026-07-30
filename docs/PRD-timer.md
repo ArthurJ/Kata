@@ -3,7 +3,7 @@
 **Status:** Não implementado
 **Data:** 2026-07-29
 **Depende de:** Fio 14 ✅ (`@log` infra — publish/subscribe, tópicos), Fio 12 ✅ (`fn_id` canônico)
-**Não depende de:** `@parallel`, Fio 13, Fio 15
+**Não depende de:** `spawn!` (Fio 11), Fio 13, Fio 15
 **`now!()` não depende de:** `@timer` — pode ser implementado isoladamente
 
 ## 1. Objetivo
