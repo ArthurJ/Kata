@@ -50,6 +50,7 @@ pub fn assert_no_holes(expr: &Spanned<Expr>) {
         Expr::IntLit { .. }
         | Expr::FloatLit { .. }
         | Expr::TextLit { .. }
+        | Expr::BytesLit { .. }
         | Expr::Ident { .. }
         | Expr::Unit
         | Expr::VariantQual { .. }
@@ -166,6 +167,7 @@ pub fn assert_no_pipes(expr: &Spanned<Expr>) {
         | Expr::IntLit { .. }
         | Expr::FloatLit { .. }
         | Expr::TextLit { .. }
+        | Expr::BytesLit { .. }
         | Expr::Ident { .. }
         | Expr::Unit
         | Expr::VariantQual { .. }

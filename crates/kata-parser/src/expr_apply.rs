@@ -166,6 +166,7 @@ pub(crate) fn parse_apply(parser: &mut Parser) -> Result<Spanned<Expr>, Frontend
         Expr::IntLit { .. }
             | Expr::FloatLit { .. }
             | Expr::TextLit { .. }
+            | Expr::BytesLit { .. }
             | Expr::Unit
             | Expr::Let { .. }
             | Expr::Var { .. }

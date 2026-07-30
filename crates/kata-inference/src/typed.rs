@@ -46,6 +46,8 @@ pub enum TypedExprKind {
     FloatLit { text: String },
     /// Literal string. Conteúdo já unescaped.
     TextLit { text: String },
+    /// Literal byte string — `b"..."`. Bytes crus.
+    BytesLit { bytes: Vec<u8> },
     /// `()` — unit literal.
     Unit,
     /// Identificador — referência a nome no escopo. O tipo vem do TypeEnv.

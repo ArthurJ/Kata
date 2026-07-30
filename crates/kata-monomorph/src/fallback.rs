@@ -241,6 +241,7 @@ fn fallback_in_expr(expr_span: &mut Spanned<TypedExpr>) {
         TypedExprKind::IntLit { .. }
         | TypedExprKind::FloatLit { .. }
         | TypedExprKind::TextLit { .. }
+        | TypedExprKind::BytesLit { .. }
         | TypedExprKind::Unit
         | TypedExprKind::Ident { .. }
         | TypedExprKind::VariantQual { .. }

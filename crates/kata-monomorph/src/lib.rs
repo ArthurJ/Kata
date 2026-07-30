@@ -413,6 +413,7 @@ fn rewrite_typed_expr(expr_span: &mut Spanned<TypedExpr>, ctx: &MonoCtx, acc: &m
         TypedExprKind::IntLit { .. }
         | TypedExprKind::FloatLit { .. }
         | TypedExprKind::TextLit { .. }
+        | TypedExprKind::BytesLit { .. }
         | TypedExprKind::Unit
         | TypedExprKind::Ident { .. }
         | TypedExprKind::VariantQual { .. }

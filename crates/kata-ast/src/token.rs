@@ -26,6 +26,10 @@ pub enum Token {
     /// String de aspas duplas, simples, ou tripla crua.
     /// O conteúdo já unescaped (as aspas foram consumidas pelo lexer).
     TextLit(String),
+    /// Byte string literal — `b"Hello"`, `b"\x00\xFF"`.
+    /// Conteúdo já unescaped (bytes crus).
+    BytesLit(Vec<u8>),
+
     /// Texto bruto de um literal que será interpretado como Rational
     /// (ex: `3.14` em `3.14::Rational`). O lexer não sabe de Rational —
     /// produz FloatLit e o parser reinterpreta via ascription.
@@ -166,7 +170,7 @@ impl Token {
     pub fn is_literal(&self) -> bool {
         matches!(
             self,
-            Token::IntLit(_) | Token::FloatLit(_) | Token::TextLit(_)
+            Token::IntLit(_) | Token::FloatLit(_) | Token::TextLit(_) | Token::BytesLit(_)
         )
     }
 
@@ -207,6 +211,14 @@ impl std::fmt::Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Token::IntLit(s) | Token::FloatLit(s) | Token::TextLit(s) => write!(f, "{s}"),
+            Token::BytesLit(bytes) => write!(
+                f,
+                "b\"{}\"",
+                bytes
+                    .iter()
+                    .map(|b| format!("{:02x}", b))
+                    .collect::<String>()
+            ),
             Token::Ident(s) => write!(f, "{s}"),
             Token::Let => write!(f, "let"),
             Token::Var => write!(f, "var"),

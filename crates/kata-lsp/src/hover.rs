@@ -96,6 +96,7 @@ fn children<'a>(
         IntLit { .. }
         | FloatLit { .. }
         | TextLit { .. }
+        | BytesLit { .. }
         | Unit
         | Ident { .. }
         | Break

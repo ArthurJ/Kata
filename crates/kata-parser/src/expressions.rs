@@ -14,6 +14,7 @@ impl Parser {
             Token::IntLit(_)
                 | Token::FloatLit(_)
                 | Token::TextLit(_)
+                | Token::BytesLit(_)
                 | Token::Ident(_)
                 | Token::LParen
                 | Token::LBracket
@@ -116,6 +117,10 @@ impl Parser {
             Token::TextLit(s) => {
                 self.advance();
                 Ok(Spanned::new(Expr::TextLit { text: s }, start))
+            }
+            Token::BytesLit(bytes) => {
+                self.advance();
+                Ok(Spanned::new(Expr::BytesLit { bytes }, start))
             }
             Token::Let => self.parse_let(),
             Token::Var => {
@@ -428,7 +433,33 @@ impl Parser {
                     self.expect(&Token::RParen, "`)`")?;
                     DotIndex::Int(n)
                 }
-                _ => return Err(self.error("identificador, inteiro ou `(` após `.`")),
+                // `expr.[start..end]` — slice access (DotIndex::Range).
+                // `[` após `.` abre um range slice.
+                Token::LBracket => {
+                    self.advance(); // consume `[`
+                    let start = parse_expr(self)?;
+                    // `..` separa start e end. `..=` seria inclusive (mas
+                    // para slice de bytes/texto, exclusive é o padrão).
+                    match self.peek() {
+                        Token::DotDot => {
+                            self.advance(); // consume `..`
+                        }
+                        Token::DotDotEq => {
+                            self.advance(); // consume `..=`
+                            // Para slice, inclusive = end + 1. Por ora,
+                            // tratamos `..=` como `..` (exclusive) — o
+                            // runtime ajusta. TODO: semântica de inclusive.
+                        }
+                        _ => return Err(self.error("`..` ou `..=` após start do slice")),
+                    }
+                    let end = parse_expr(self)?;
+                    self.expect(&Token::RBracket, "`]`")?;
+                    DotIndex::Range {
+                        start: Box::new(start),
+                        end: Box::new(end),
+                    }
+                }
+                _ => return Err(self.error("identificador, inteiro, `(` ou `[` após `.`")),
             };
 
             let span = atom.span.cover(self.tokens[self.pos - 1].span);

@@ -193,6 +193,7 @@ where
         | TypedExprKind::IntLit { .. }
         | TypedExprKind::FloatLit { .. }
         | TypedExprKind::TextLit { .. }
+        | TypedExprKind::BytesLit { .. }
         | TypedExprKind::Unit
         | TypedExprKind::Ident { .. }
         | TypedExprKind::VariantQual { .. }
@@ -446,6 +447,7 @@ where
         | TypedExprKind::IntLit { .. }
         | TypedExprKind::FloatLit { .. }
         | TypedExprKind::TextLit { .. }
+        | TypedExprKind::BytesLit { .. }
         | TypedExprKind::Unit
         | TypedExprKind::Ident { .. }
         | TypedExprKind::VariantQual { .. }

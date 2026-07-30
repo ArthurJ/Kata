@@ -8,6 +8,7 @@
 //! são identificadores como qualquer outro — o lexer não precisa de
 //! contexto para decidir.
 
+mod bytes;
 mod dispatch;
 mod ident;
 mod indent;

@@ -80,6 +80,21 @@ pub(crate) fn lower_expr(
             Ok(ptr)
         }
 
+        // ── BytesLit: bytes alocados como data symbol + kata_rt_bytes_from_ptr ──
+        // TODO(Fase 4): implementar embedding de bytes como global data symbol
+        // e chamada a kata_rt_bytes_from_ptr. Por ora, retorna null pointer.
+        TypedExprKind::BytesLit { bytes } => {
+            // Embed bytes as a global data symbol and call kata_rt_bytes_from_ptr.
+            // For now, create a string from the bytes and use add_string.
+            let text = String::from_utf8_lossy(bytes).into_owned();
+            let global = ctx.add_string(&text);
+            let ptr = ctx
+                .builder
+                .ins()
+                .global_value(ctx.module.target_config().pointer_type(), global);
+            Ok(ptr)
+        }
+
         // ── Unit: i64 zero ──
         TypedExprKind::Unit => Ok(ctx.builder.ins().iconst(I64, 0)),
 

@@ -80,6 +80,7 @@ fn check_purity_inner(expr: &TypedExpr) -> Result<(), ComptimeError> {
         TypedExprKind::IntLit { .. }
         | TypedExprKind::FloatLit { .. }
         | TypedExprKind::TextLit { .. }
+        | TypedExprKind::BytesLit { .. }
         | TypedExprKind::Unit
         | TypedExprKind::Ident { .. }
         | TypedExprKind::VariantQual { .. } => Ok(()),

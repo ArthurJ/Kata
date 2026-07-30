@@ -24,13 +24,13 @@ use std::borrow::Cow::{self, Borrowed, Owned};
 
 use kata_ast::Token;
 use kata_lexer::lex;
+use rustyline::CompletionType;
+use rustyline::Context;
+use rustyline::Result as RlResult;
 use rustyline::completion::Completer;
 use rustyline::highlight::Highlighter;
 use rustyline::hint::Hinter;
 use rustyline::validate::Validator;
-use rustyline::CompletionType;
-use rustyline::Context;
-use rustyline::Result as RlResult;
 
 // ── Códigos ANSI ────────────────────────────────────────────
 const RESET: &str = "\x1b[0m";
@@ -77,7 +77,9 @@ fn token_color(token: &Token) -> Option<&'static str> {
         Token::Lambda | Token::Type => Some(BOLD_GREEN),
 
         // ── Literais ──────────────────────────────────────
-        Token::IntLit(_) | Token::FloatLit(_) | Token::TextLit(_) => Some(GREEN),
+        Token::IntLit(_) | Token::FloatLit(_) | Token::TextLit(_) | Token::BytesLit(_) => {
+            Some(GREEN)
+        }
 
         // ── Diretivas (@nome) ─────────────────────────────
         Token::At => Some(BRIGHT_MAGENTA),

@@ -438,6 +438,7 @@ fn collect_refs(
         TypedExprKind::IntLit { .. }
         | TypedExprKind::FloatLit { .. }
         | TypedExprKind::TextLit { .. }
+        | TypedExprKind::BytesLit { .. }
         | TypedExprKind::Unit
         | TypedExprKind::VariantQual { .. }
         | TypedExprKind::Break

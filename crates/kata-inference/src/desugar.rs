@@ -126,6 +126,7 @@ fn desugar_pipes(expr: &Spanned<Expr>) -> Spanned<Expr> {
         Expr::IntLit { .. }
         | Expr::FloatLit { .. }
         | Expr::TextLit { .. }
+        | Expr::BytesLit { .. }
         | Expr::Ident { .. }
         | Expr::Unit
         | Expr::Hole

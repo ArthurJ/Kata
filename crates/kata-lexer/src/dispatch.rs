@@ -4,6 +4,7 @@ use kata_ast::{Token, TokenWithSpan};
 use kata_diagnostics::FrontendError;
 
 use crate::Lexer;
+use crate::bytes::lex_bytes_string;
 use crate::ident::lex_ident;
 use crate::number::lex_number;
 use crate::text::lex_string;
@@ -157,6 +158,11 @@ pub(crate) fn lex_token(lex: &mut Lexer) -> Result<TokenWithSpan, FrontendError>
             lex.advance(); // consumir <
             lex.advance(); // consumir !
             Token::RecvArrow
+        }
+        'b' if lex.peek() == Some('"') => {
+            // `b"` — byte string literal.
+            lex.advance(); // consome `b`, agora `"` é o char atual.
+            return lex_bytes_string(lex, &start);
         }
         _ => return lex_ident(lex, &start),
     };

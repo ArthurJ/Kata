@@ -19,6 +19,9 @@ pub enum Expr {
     /// Literal string. Conteúdo já unescaped.
     TextLit { text: String },
 
+    /// Literal byte string — `b"Hello"`, `b"\x00\xFF"`.
+    BytesLit { bytes: Vec<u8> },
+
     /// `()` — unit literal.
     Unit,
 
@@ -253,7 +256,7 @@ pub enum Expr {
     Comptime { expr: Box<Spanned<Expr>> },
 }
 
-/// Índice de DotAccess — field nomeado ou inteiro.
+/// Índice de DotAccess — field nomeado, inteiro, ou range (slice).
 #[derive(Debug, Clone, PartialEq)]
 pub enum DotIndex {
     /// `expr.nome` — field access em struct.
@@ -261,6 +264,12 @@ pub enum DotIndex {
     /// `expr.0`, `expr.(-1)` — index access em tupla.
     /// Negativos são resolvidos em compile-time (`-1` = `len-1`).
     Int(i64),
+    /// `expr.[start..end]` — slice access.
+    /// Usado em `Bytes`, `Text`, `Array`, `List` via interface SLICEABLE.
+    Range {
+        start: Box<Spanned<Expr>>,
+        end: Box<Spanned<Expr>>,
+    },
 }
 
 /// Pattern — usado em match arms e cláusulas lambda.

@@ -118,6 +118,12 @@ pub(crate) fn infer_expr_hinted(
         Expr::IntLit { text } => (Ty::int(), TypedExprKind::IntLit { text: text.clone() }),
         Expr::FloatLit { text } => (Ty::float(), TypedExprKind::FloatLit { text: text.clone() }),
         Expr::TextLit { text } => (Ty::text(), TypedExprKind::TextLit { text: text.clone() }),
+        Expr::BytesLit { bytes } => (
+            Ty::Bytes,
+            TypedExprKind::BytesLit {
+                bytes: bytes.clone(),
+            },
+        ),
         Expr::Unit => (Ty::Unit, TypedExprKind::Unit),
 
         // ── Identificador ────────────────────────────────────
