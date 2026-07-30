@@ -545,8 +545,8 @@ fn result_to_literal(
     // Se result.ty é alias de primitivo (ex: Altura → Float), resolver
     // para o tipo base e produzir o literal correspondente. O alias é
     // transparente em runtime — o valor bruto é o mesmo do tipo base.
-    let effective_ty = resolve_alias_base(&result.ty, struct_registry)
-        .unwrap_or_else(|| result.ty.clone());
+    let effective_ty =
+        resolve_alias_base(&result.ty, struct_registry).unwrap_or_else(|| result.ty.clone());
 
     match &effective_ty {
         // ── Escalares: literais directo na TAST ──
@@ -570,7 +570,7 @@ fn result_to_literal(
                 span: original.span,
                 ty: effective_ty.clone(),
                 tail_pos: original.tail_pos,
-                escape: original.escape.clone(),
+                escape: original.escape,
                 kind: TypedExprKind::IntLit { text },
             })
         }
@@ -582,7 +582,7 @@ fn result_to_literal(
                 span: original.span,
                 ty: effective_ty.clone(),
                 tail_pos: original.tail_pos,
-                escape: original.escape.clone(),
+                escape: original.escape,
                 kind: TypedExprKind::FloatLit { text },
             })
         }
@@ -590,7 +590,7 @@ fn result_to_literal(
             span: original.span,
             ty: Ty::Unit,
             tail_pos: original.tail_pos,
-            escape: original.escape.clone(),
+            escape: original.escape,
             kind: TypedExprKind::Unit,
         }),
         Ty::Sum(name) if name == "Boolean" => {
@@ -601,7 +601,7 @@ fn result_to_literal(
                 span: original.span,
                 ty: result.ty.clone(),
                 tail_pos: original.tail_pos,
-                escape: original.escape.clone(),
+                escape: original.escape,
                 kind: TypedExprKind::VariantQual {
                     enum_name: "Boolean".into(),
                     variant: if is_true { "True" } else { "False" }.into(),
@@ -632,7 +632,7 @@ fn result_to_literal(
                 span: original.span,
                 ty: result.ty.clone(),
                 tail_pos: original.tail_pos,
-                escape: original.escape.clone(),
+                escape: original.escape,
                 kind: TypedExprKind::HeapSnapshot {
                     snapshot_id,
                     ty: result.ty.clone(),
@@ -660,25 +660,24 @@ fn validate_pending_predicates(
     if let TypedExprKind::TypeAscription {
         pending_predicates, ..
     } = &mut expr.kind
+        && !pending_predicates.is_empty()
     {
-        if !pending_predicates.is_empty() {
-            for pred in pending_predicates.iter() {
-                let result = jit_execute_expr(&pred.node, ctx, comptime_bindings)?;
-                // Resultado deve ser Boolean::True (tag 1) ou Boolean::False (tag 0).
-                // O runtime representa Boolean como Sum com tag 0 (False) ou 1 (True).
-                if result.raw != 1 {
-                    return Err(ComptimeError::JitError {
-                        reason: format!(
-                            "predicado de ascription refined falhou: \
-                             esperava Boolean::True, obteve tag {}",
-                            result.raw
-                        ),
-                    });
-                }
+        for pred in pending_predicates.iter() {
+            let result = jit_execute_expr(&pred.node, ctx, comptime_bindings)?;
+            // Resultado deve ser Boolean::True (tag 1) ou Boolean::False (tag 0).
+            // O runtime representa Boolean como Sum com tag 0 (False) ou 1 (True).
+            if result.raw != 1 {
+                return Err(ComptimeError::JitError {
+                    reason: format!(
+                        "predicado de ascription refined falhou: \
+                         esperava Boolean::True, obteve tag {}",
+                        result.raw
+                    ),
+                });
             }
-            // Todos os predicados passaram — limpa pending.
-            pending_predicates.clear();
         }
+        // Todos os predicados passaram — limpa pending.
+        pending_predicates.clear();
     }
     Ok(())
 }
@@ -705,7 +704,7 @@ fn jit_execute_expr(
                 span,
                 ty: value.ty.clone(),
                 tail_pos: false,
-                escape: value.escape.clone(),
+                escape: value.escape,
                 kind: TypedExprKind::Let {
                     name: name.clone(),
                     value: Box::new(Spanned::new(value.clone(), span)),

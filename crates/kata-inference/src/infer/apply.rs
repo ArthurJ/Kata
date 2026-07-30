@@ -802,7 +802,10 @@ fn try_refines_fallback(
                 // Tenta seguir alias_of
                 match ctx.struct_registry.get(&current) {
                     Some(info) if info.alias_of.is_some() => {
-                        current = info.alias_of.clone().unwrap();
+                        current = info
+                            .alias_of
+                            .clone()
+                            .expect("alias_of verificado por is_some na guarda");
                     }
                     _ => break &[][..],
                 }

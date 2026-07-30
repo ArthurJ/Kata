@@ -88,7 +88,7 @@ impl Serializer {
 
     /// Alinha a região main para 8 bytes.
     fn align_main(&mut self) {
-        while self.main.len() % 8 != 0 {
+        while !self.main.len().is_multiple_of(8) {
             self.main.push(0);
         }
     }
@@ -141,7 +141,7 @@ impl Serializer {
     /// Posição atual alinhada na main (onde o próximo write_i64 iria).
     fn main_aligned_len(&self) -> usize {
         let len = self.main.len();
-        if len % 8 == 0 {
+        if len.is_multiple_of(8) {
             len
         } else {
             len + (8 - len % 8)
@@ -157,7 +157,7 @@ impl Serializer {
         // ao i64 armazenado, convertendo-o de offset-da-appended para
         // offset-absoluto-no-buffer.
         for &pos in &self.appended_rebase_offsets {
-            let ptr = self.main.as_mut_ptr() as *mut u8;
+            let ptr = self.main.as_mut_ptr();
             unsafe {
                 let val_ptr = ptr.add(pos) as *mut i64;
                 let val = std::ptr::read_unaligned(val_ptr);

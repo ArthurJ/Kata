@@ -81,10 +81,7 @@ main!()";
     let lines: Vec<&str> = stdout.lines().collect();
     assert_eq!(lines.len(), 3, "deve imprimir 3 linhas — stdout: {stdout}");
     for (i, line) in lines.iter().enumerate() {
-        assert_eq!(
-            *line, "10",
-            "linha {i} deve ser 10 — stdout: {stdout}"
-        );
+        assert_eq!(*line, "10", "linha {i} deve ser 10 — stdout: {stdout}");
     }
 }
 
@@ -232,7 +229,10 @@ greet \"world\"";
     let (stdout, stderr, code) = run_kata_run(src);
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     let first = stdout.lines().next().unwrap_or("");
-    assert_eq!(first, "world", "greet world deve ser world — stdout: {stdout}");
+    assert_eq!(
+        first, "world",
+        "greet world deve ser world — stdout: {stdout}"
+    );
 }
 
 /// `idade_pessoa p` com `@cache` → 30.
@@ -256,8 +256,14 @@ main!()";
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     let lines: Vec<&str> = stdout.lines().collect();
     assert_eq!(lines.len(), 2, "deve imprimir 2 linhas — stdout: {stdout}");
-    assert_eq!(lines[0], "30", "primeira chamada deve ser 30 — stdout: {stdout}");
-    assert_eq!(lines[1], "30", "segunda chamada (cache hit) deve ser 30 — stdout: {stdout}");
+    assert_eq!(
+        lines[0], "30",
+        "primeira chamada deve ser 30 — stdout: {stdout}"
+    );
+    assert_eq!(
+        lines[1], "30",
+        "segunda chamada (cache hit) deve ser 30 — stdout: {stdout}"
+    );
 }
 
 /// `head_or_zero [42 1 2]` com `@cache` → 42.
@@ -279,6 +285,12 @@ main!()";
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     let lines: Vec<&str> = stdout.lines().collect();
     assert_eq!(lines.len(), 2, "deve imprimir 2 linhas — stdout: {stdout}");
-    assert_eq!(lines[0], "42", "primeira chamada deve ser 42 — stdout: {stdout}");
-    assert_eq!(lines[1], "42", "segunda chamada (cache hit) deve ser 42 — stdout: {stdout}");
+    assert_eq!(
+        lines[0], "42",
+        "primeira chamada deve ser 42 — stdout: {stdout}"
+    );
+    assert_eq!(
+        lines[1], "42",
+        "segunda chamada (cache hit) deve ser 42 — stdout: {stdout}"
+    );
 }

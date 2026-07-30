@@ -97,8 +97,7 @@ pub use sum::{kata_rt_store_sum_result, kata_rt_sum_tag_int};
 pub use snapshot::{kata_rt_get_snapshot, kata_rt_load_snapshot};
 // Cache @cache{strategy: "LRU"}
 pub use cache::{
-    kata_rt_cache_get_or_create, kata_rt_cache_insert, kata_rt_cache_lookup,
-    kata_rt_serialize_key,
+    kata_rt_cache_get_or_create, kata_rt_cache_insert, kata_rt_cache_lookup, kata_rt_serialize_key,
 };
 pub use text::{
     kata_rt_bool_to_text, kata_rt_string_concat, kata_rt_string_eq, kata_rt_string_len,

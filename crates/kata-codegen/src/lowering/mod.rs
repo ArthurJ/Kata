@@ -19,6 +19,7 @@ mod action_call;
 mod action_def;
 mod aot;
 mod backend;
+mod cache_key;
 mod clause;
 mod closure;
 mod collections_hof;

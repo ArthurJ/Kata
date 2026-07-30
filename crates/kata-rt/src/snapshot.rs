@@ -14,7 +14,7 @@ use std::cell::RefCell;
 
 thread_local! {
     /// Tabela de ponteiros de snapshots carregados — indexada por snapshot_id.
-    static SNAPSHOT_PTRS: RefCell<Vec<i64>> = RefCell::new(Vec::new());
+    static SNAPSHOT_PTRS: RefCell<Vec<i64>> = const { RefCell::new(Vec::new()) };
 }
 
 /// Carrega um snapshot na root_arena e armazena o ponteiro na tabela TLS.

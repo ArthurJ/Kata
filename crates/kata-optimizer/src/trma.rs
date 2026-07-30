@@ -125,10 +125,10 @@ fn is_trma_candidate(func: &TypedFunction, table: &DispatchTable) -> Option<Trma
         // Guard: o pattern do arm recursivo deve ser Ident (ou None = otherwise).
         // Para List recursion com match explícito, o arm recursivo pode ter
         // pattern Cons (`[h : t]`) — os bindings não existem na função reescrita.
-        if let Some(ref pat) = rec_arm.pattern {
-            if !matches!(pat.node, TypedPattern::Ident { .. }) {
-                return None;
-            }
+        if let Some(ref pat) = rec_arm.pattern
+            && !matches!(pat.node, TypedPattern::Ident { .. })
+        {
+            return None;
         }
 
         // 5. Extrair o padrão do arm recursivo.

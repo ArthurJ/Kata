@@ -40,18 +40,15 @@ pub extern "C" fn kata_rt_cache_get_or_create(
 ) -> i64 {
     CACHES.with(|caches| {
         let mut caches = caches.borrow_mut();
-        if !caches.contains_key(&fn_id) {
+        caches.entry(fn_id).or_insert_with(|| {
             let cap = if capacity > 0 { capacity as usize } else { 256 };
-            caches.insert(
-                fn_id,
-                CacheTable {
-                    entries: HashMap::new(),
-                    capacity: cap,
-                    access_counter: 0,
-                    last_access: HashMap::new(),
-                },
-            );
-        }
+            CacheTable {
+                entries: HashMap::new(),
+                capacity: cap,
+                access_counter: 0,
+                last_access: HashMap::new(),
+            }
+        });
     });
     fn_id
 }
@@ -66,12 +63,12 @@ pub extern "C" fn kata_rt_cache_lookup(handle: i64, key_ptr: i64, key_len: i64) 
         unsafe { std::slice::from_raw_parts(key_ptr as *const u8, key_len as usize) }.to_vec();
     CACHES.with(|caches| {
         let mut caches = caches.borrow_mut();
-        if let Some(table) = caches.get_mut(&handle) {
-            if let Some(&val) = table.entries.get(&key) {
-                table.access_counter += 1;
-                table.last_access.insert(key, table.access_counter);
-                return val;
-            }
+        if let Some(table) = caches.get_mut(&handle)
+            && let Some(&val) = table.entries.get(&key)
+        {
+            table.access_counter += 1;
+            table.last_access.insert(key, table.access_counter);
+            return val;
         }
         0
     })
@@ -89,16 +86,16 @@ pub extern "C" fn kata_rt_cache_insert(handle: i64, key_ptr: i64, key_len: i64, 
         let mut caches = caches.borrow_mut();
         if let Some(table) = caches.get_mut(&handle) {
             // LRU eviction se cache cheio e key é nova.
-            if !table.entries.contains_key(&key) && table.entries.len() >= table.capacity {
-                if let Some(lru_key) = table
+            if !table.entries.contains_key(&key)
+                && table.entries.len() >= table.capacity
+                && let Some(lru_key) = table
                     .last_access
                     .iter()
                     .min_by_key(|(_, ts)| *ts)
                     .map(|(k, _)| k.clone())
-                {
-                    table.entries.remove(&lru_key);
-                    table.last_access.remove(&lru_key);
-                }
+            {
+                table.entries.remove(&lru_key);
+                table.last_access.remove(&lru_key);
             }
             table.access_counter += 1;
             table.entries.insert(key.clone(), value);
@@ -153,10 +150,8 @@ pub extern "C" fn kata_rt_serialize_key(
     if desc_ptr == 0 || desc_len <= 0 || out_ptr == 0 || out_cap <= 0 {
         return -1;
     }
-    let desc =
-        unsafe { std::slice::from_raw_parts(desc_ptr as *const u8, desc_len as usize) };
-    let out =
-        unsafe { std::slice::from_raw_parts_mut(out_ptr as *mut u8, out_cap as usize) };
+    let desc = unsafe { std::slice::from_raw_parts(desc_ptr as *const u8, desc_len as usize) };
+    let out = unsafe { std::slice::from_raw_parts_mut(out_ptr as *mut u8, out_cap as usize) };
     let mut pos = 0usize;
     match serialize_value(value, desc, &mut 0, out, &mut pos) {
         Ok(()) => pos as i64,
@@ -199,8 +194,7 @@ fn serialize_value(
                 *out_pos += 1;
             } else {
                 let s = unsafe {
-                    std::ffi::CStr::from_ptr(value as *const std::os::raw::c_char)
-                        .to_bytes()
+                    std::ffi::CStr::from_ptr(value as *const std::os::raw::c_char).to_bytes()
                 };
                 let len = s.len();
                 // Escrever len (4 bytes LE) + bytes da string.
@@ -278,7 +272,8 @@ fn serialize_value(
             out[*out_pos..*out_pos + 8].copy_from_slice(&tag.to_le_bytes());
             *out_pos += 8;
             // Avançar o descriptor para o payload da variant correta.
-            let payload_desc_start = advance_to_variant_payload(desc, desc_pos, tag as usize, n_variants);
+            let payload_desc_start =
+                advance_to_variant_payload(desc, desc_pos, tag as usize, n_variants);
             let payload = unsafe { std::ptr::read_unaligned(ptr.add(8) as *const i64) };
             if payload_desc_start < desc.len() {
                 *desc_pos = payload_desc_start;
@@ -303,7 +298,12 @@ fn serialize_value(
 /// Avança o descriptor para o início do payload da variant `tag`.
 /// O descriptor após TD_SUM tem: n_variants (u8) + [variant_desc...] onde
 /// cada variant_desc é um sub-descriptor completo. Percorre `tag` variants.
-fn advance_to_variant_payload(desc: &[u8], pos: &mut usize, tag: usize, n_variants: usize) -> usize {
+fn advance_to_variant_payload(
+    desc: &[u8],
+    pos: &mut usize,
+    tag: usize,
+    n_variants: usize,
+) -> usize {
     let start = *pos;
     for i in 0..n_variants {
         if i == tag {

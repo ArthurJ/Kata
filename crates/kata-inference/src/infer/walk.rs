@@ -9,9 +9,7 @@
 
 use crate::typed::FusedStage;
 use crate::typed::{TypedExpr, TypedExprKind};
-use crate::typed_pattern::{
-    TypedGuardClause, TypedLambdaClause, TypedMatchArm, TypedPattern, TypedWithBinding,
-};
+use crate::typed_pattern::{TypedLambdaClause, TypedMatchArm, TypedPattern};
 
 // ── Imutável ──────────────────────────────────────────────────────────
 

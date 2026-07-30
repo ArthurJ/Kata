@@ -33,76 +33,48 @@ pub fn check_purity(expr: &TypedExpr) -> Result<(), ComptimeError> {
 fn check_purity_inner(expr: &TypedExpr) -> Result<(), ComptimeError> {
     match &expr.kind {
         // Nós impuros — falham imediatamente.
-        TypedExprKind::ActionCall { callee, .. } => {
-            return Err(ComptimeError::Impure {
-                reason: format!("contém ActionCall `{callee}`"),
-            });
-        }
-        TypedExprKind::Fork { action_name, .. } => {
-            return Err(ComptimeError::Impure {
-                reason: format!("contém Fork `{action_name}`"),
-            });
-        }
-        TypedExprKind::ChannelSend { .. } => {
-            return Err(ComptimeError::Impure {
-                reason: "contém ChannelSend".into(),
-            });
-        }
-        TypedExprKind::ChannelRecv { .. } => {
-            return Err(ComptimeError::Impure {
-                reason: "contém ChannelRecv".into(),
-            });
-        }
-        TypedExprKind::Select { .. } => {
-            return Err(ComptimeError::Impure {
-                reason: "contém Select".into(),
-            });
-        }
-        TypedExprKind::ChannelCreate { .. } => {
-            return Err(ComptimeError::Impure {
-                reason: "contém ChannelCreate".into(),
-            });
-        }
-        TypedExprKind::ReceiverFactoryCall { .. } => {
-            return Err(ComptimeError::Impure {
-                reason: "contém ReceiverFactoryCall".into(),
-            });
-        }
-        TypedExprKind::Var { .. } => {
-            return Err(ComptimeError::Impure {
-                reason: "contém Var (binding mutável)".into(),
-            });
-        }
-        TypedExprKind::Reassign { .. } => {
-            return Err(ComptimeError::Impure {
-                reason: "contém Reassign".into(),
-            });
-        }
-        TypedExprKind::Return(_) => {
-            return Err(ComptimeError::Impure {
-                reason: "contém Return".into(),
-            });
-        }
-        TypedExprKind::Loop { .. } => {
-            return Err(ComptimeError::Impure {
-                reason: "contém Loop".into(),
-            });
-        }
-        TypedExprKind::Break => {
-            return Err(ComptimeError::Impure {
-                reason: "contém Break".into(),
-            });
-        }
-        TypedExprKind::Continue => {
-            return Err(ComptimeError::Impure {
-                reason: "contém Continue".into(),
-            });
-        }
-        TypedExprKind::ForIn { .. } => {
-            return Err(ComptimeError::Impure {
-                reason: "contém ForIn".into(),
-            });
-        }
+        TypedExprKind::ActionCall { callee, .. } => Err(ComptimeError::Impure {
+            reason: format!("contém ActionCall `{callee}`"),
+        }),
+        TypedExprKind::Fork { action_name, .. } => Err(ComptimeError::Impure {
+            reason: format!("contém Fork `{action_name}`"),
+        }),
+        TypedExprKind::ChannelSend { .. } => Err(ComptimeError::Impure {
+            reason: "contém ChannelSend".into(),
+        }),
+        TypedExprKind::ChannelRecv { .. } => Err(ComptimeError::Impure {
+            reason: "contém ChannelRecv".into(),
+        }),
+        TypedExprKind::Select { .. } => Err(ComptimeError::Impure {
+            reason: "contém Select".into(),
+        }),
+        TypedExprKind::ChannelCreate { .. } => Err(ComptimeError::Impure {
+            reason: "contém ChannelCreate".into(),
+        }),
+        TypedExprKind::ReceiverFactoryCall { .. } => Err(ComptimeError::Impure {
+            reason: "contém ReceiverFactoryCall".into(),
+        }),
+        TypedExprKind::Var { .. } => Err(ComptimeError::Impure {
+            reason: "contém Var (binding mutável)".into(),
+        }),
+        TypedExprKind::Reassign { .. } => Err(ComptimeError::Impure {
+            reason: "contém Reassign".into(),
+        }),
+        TypedExprKind::Return(_) => Err(ComptimeError::Impure {
+            reason: "contém Return".into(),
+        }),
+        TypedExprKind::Loop { .. } => Err(ComptimeError::Impure {
+            reason: "contém Loop".into(),
+        }),
+        TypedExprKind::Break => Err(ComptimeError::Impure {
+            reason: "contém Break".into(),
+        }),
+        TypedExprKind::Continue => Err(ComptimeError::Impure {
+            reason: "contém Continue".into(),
+        }),
+        TypedExprKind::ForIn { .. } => Err(ComptimeError::Impure {
+            reason: "contém ForIn".into(),
+        }),
 
         // Nós puros — recursão nos filhos.
         TypedExprKind::IntLit { .. }
