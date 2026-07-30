@@ -1,9 +1,10 @@
-# PRD — `@timer` diretiva
+# PRD — `@timer` diretiva + `now!()` action
 
 **Status:** Não implementado
 **Data:** 2026-07-29
 **Depende de:** Fio 14 ✅ (`@log` infra — publish/subscribe, tópicos), Fio 12 ✅ (`fn_id` canônico)
 **Não depende de:** `@parallel`, Fio 13, Fio 15
+**`now!()` não depende de:** `@timer` — pode ser implementado isoladamente
 
 ## 1. Objetivo
 
@@ -209,6 +210,9 @@ Ordem no codegen de Sig:
 i64 kata_rt_timer_now(void);
 ```
 
+Esta FFI é exposta ao usuário via `now!()` (seção 8). O codegen do
+`@timer` e o builtin `now!()` consomem a mesma FFI.
+
 ### 5.2. Canal interno
 
 O canal interno buffer-1 com drop policy pode ser implementado como:
@@ -296,7 +300,187 @@ Senão → estratégia stack slot.
   chamam a mesma função — função pura não faz yield, então o race é
   improvável na prática).
 
-## 8. DoD
+## 8. `now!()` — action builtin de timestamp
+
+`kata_rt_timer_now` não é privada ao codegen do `@timer`. O usuário pode
+chamar a mesma FFI diretamente via `now!()` — medição manual, composável,
+sem a diretiva `@timer`.
+
+### 8.1. Sintaxe
+
+```kata
+let t0 = now!()
+expensive_computation()
+let t1 = now!()
+log!(LogLevel::Info, "levou \{t1 - t0}ns")
+```
+
+### 8.2. Assinatura
+
+| Aspecto | Valor |
+|---------|-------|
+| Aridade | 0 (`now!()` não recebe argumentos) |
+| Retorno | `Int` — nanossegundos do clock monotônico |
+| Categoria | Action (usa `!` — tem efeito observável) |
+| Determinismo | Não-determinístico (clock externo), como `log!` |
+
+### 8.3. Por que action e não função pura?
+
+`now!()` lê estado externo (clock do SO). O `!` comunica que há efeito
+observável — igual a `log!`, `log_recv!`, `fork!`. Funções puras em Kata
+não têm side-effects; `now!()` tem (leitura de clock).
+
+### 8.4. Unidade
+
+Nanosegundos (`i64`), igual à FFI `kata_rt_timer_now`. O `@timer` converte
+para ms internamente no codegen (`delta_ns / 1_000_000`). O usuário de
+`now!()` faz sua própria conversão se precisar de ms:
+
+```kata
+let t0 = now!()
+work()
+let delta_ms = (now!() - t0) / 1_000_000
+```
+
+### 8.5. Inferência
+
+Novo módulo `crates/kata-inference/src/infer/timer_builtins.rs`:
+
+```rust
+/// `now!()` — desugara para `kata_rt_timer_now`.
+pub(crate) fn infer_now_builtin(
+    args: &Spanned<Expr>,
+    span: &Span,
+) -> InferResult<ActionDispatch> {
+    // Valida arity 0.
+    if !matches!(args.node, Expr::Unit) {
+        return Err(MiddleError::ArityMismatch {
+            expected: 0,
+            found: extract_tuple_elements(args)?.len(),
+            span: args.span.into(),
+        });
+    }
+
+    let callee = TypedExpr {
+        span: *span,
+        ty: Ty::Function(vec![], Box::new(Ty::int())),
+        tail_pos: false,
+        escape: kata_core::escape::EscapeTarget::Local,
+        kind: TypedExprKind::Ident { name: "kata_rt_timer_now".into() },
+    };
+
+    let typed = TypedExpr {
+        span: *span,
+        ty: Ty::int(),
+        tail_pos: false,
+        escape: kata_core::escape::EscapeTarget::Caller,
+        kind: TypedExprKind::Closure {
+            callee: Box::new(Spanned::new(callee, *span)),
+            args: vec![],
+            ffi_symbol: Some("kata_rt_timer_now".into()),
+        },
+    };
+
+    Ok(ActionDispatch::Complete(typed))
+}
+```
+
+Dispatch em `action_call.rs`:
+
+```rust
+if callee == "now" {
+    return infer_now_builtin(args, span);
+}
+```
+
+### 8.6. Codegen
+
+`FfiSymbol::TimerNow` em `kata-core/src/ffi.rs`:
+
+```rust
+/// `kata_rt_timer_now() -> i64` — clock monotônico em nanossegundos.
+TimerNow,
+```
+
+`symbol_name`:
+
+```rust
+FfiSymbol::TimerNow => "kata_rt_timer_now",
+```
+
+Sig em `ffi_sigs.rs`:
+
+```rust
+// timer_now: () -> i64 (nanossegundos do clock monotônico)
+FfiSymbol::TimerNow => {
+    sig.returns.push(AbiParam::new(I64)); // nanossegundos
+}
+```
+
+Registro em `ffi_registry.rs`:
+
+```rust
+builder.symbol("kata_rt_timer_now", rt::kata_rt_timer_now as *const u8);
+```
+
+### 8.7. Runtime
+
+Novo arquivo `crates/kata-rt/src/timer.rs`:
+
+```rust
+//! Timer — clock monotônico para medição de tempo.
+
+use std::time::Instant;
+
+/// Epoch do clock monotônico — inicializado na primeira chamada.
+static mut TIMER_EPOCH: Option<Instant> = None;
+
+/// Clock monotônico em nanossegundos desde a primeira chamada.
+///
+/// Usa `Instant::elapsed()` a partir de um epoch preguiçoso para garantir
+/// monoticidade sem depender de epoch absoluto (que pode ser não-mono-
+/// tônico em algumas plataformas).
+///
+/// # Safety
+/// Sem argumentos. Thread-safe via `std::sync::OnceLock` se necessário.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn kata_rt_timer_now() -> i64 {
+    // SAFETY: acesso à static mut é seguro neste contexto — single-threaded
+    // JIT runtime. Se futuramene multithreaded, trocar por OnceLock<Instant>.
+    unsafe {
+        if TIMER_EPOCH.is_none() {
+            TIMER_EPOCH = Some(Instant::now());
+        }
+        TIMER_EPOCH.unwrap().elapsed().as_nanos() as i64
+    }
+}
+```
+
+### 8.8. Relação com `@timer`
+
+| Aspecto | `@timer` | `now!()` |
+|---------|----------|----------|
+| Uso | Declarativo (anota função) | Manual (chamada explícita) |
+| Codegen | Injeta prólogo/epílogo | Chamada direta |
+| TCO | Preserva (canal interno) | N/A (não afeta frames) |
+| Stats | Agrega `repeat` amostras | Não — uma chamada, um valor |
+| FFI | `kata_rt_timer_now` | `kata_rt_timer_now` (mesma) |
+| Conversão ms | Codegen faz | Usuário faz |
+
+`now!()` é o subset funcional que pode shippar antes do `@timer` —
+não depende de canais internos, seleção de estratégia, nem interação
+com `@cache`. É a base que `@timer` usa internamente.
+
+### 8.9. DoD `now!()`
+
+- `now!()` retorna um `Int` maior que zero.
+- Duas chamadas seguidas: `now!() <= now!()` (monotônico).
+- `now!() - now!()` ≈ 0 (delta entre chamadas adjacentes é negligenciável).
+- `now!()` pode ser usado em expressões aritméticas: `let d = now!() - t0`.
+- `now!()` funciona em action e em função pura (apesar de ser action —
+  o `!` é a chamada, não o contexto).
+
+## 9. DoD
 
 - `@timer` em `fatorial` recursivo de cauda mede a cadeia inteira
   (delta = N chamadas), não cada chamada individual. TCO preservado.
