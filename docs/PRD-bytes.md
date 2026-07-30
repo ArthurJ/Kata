@@ -539,15 +539,35 @@ Sobrecargas de `and/or/xor/not` resolvem por tipo. `t.0` retorna
 echo!(show(b.0 | byte(0)))` imprime `0x48`. `+ b b` produz 10 bytes.
 `t.0 | "?"` retorna primeiro codepoint. `len("Hello")` retorna `5`.
 
-### Fase 5: to_bytes() / from_bytes()
+### Fase 5: to_bytes() / from_bytes() ✅ Concluído
 
 **kata-rt:**
-- `kata_rt_to_bytes(value_ptr, type_shape_ptr) -> bytes_ptr`
-- `kata_rt_from_bytes(bytes_ptr, arena_handle) -> value_ptr`
-- Reaproveita mecânica de `HeapSnapshotData` (bytes + rebase_offsets)
+- `kata_rt_to_bytes(value_ptr, type_id, arena_handle) -> bytes_ptr` — serializa
+  valor em blob `Bytes` com header estendido (data_len + type_id + rebase_count +
+  rebase_offsets + data). Reaproveita mecânica de `HeapSnapshotData` (main +
+  appended, rebasing de ponteiros relativos).
+- `kata_rt_from_bytes(bytes_ptr, arena_handle) -> value_ptr` — reconstrói o
+  valor na arena destino lendo type_id e rebase_offsets do header do blob.
+- `TypeShape` (em `kata-rt`, não `kata-core`) — projeção runtime de `Ty` com
+  fields/variants completos. Type table TLS indexada por `type_id`, registrada
+  Rust-to-Rust pelo driver via `kata_rt::register_type_table()`.
+- 2 FFIs registradas nos 7 pontos de toque do codegen (FfiSymbol::ToBytes /
+  FromBytes).
+- 4 testes unitários: roundtrip Int, Text, Tuple(Int,Text), List<Int>.
 
-**DoD Fase 5:** `to_bytes((42, "oi"))` produz `Bytes`. `from_bytes`
-reconstrói o valor na arena destino.
+**Design decisions:**
+- `TypeShape` vive em `kata-rt` (não `kata-core`) para manter o isolamento do
+  runtime. O driver converte `kata_core::Ty` → `kata_rt::TypeShape` (preenchendo
+  dos registries) antes do JIT.
+- O blob carrega `type_id` e `rebase_offsets` no header — `from_bytes` não
+  precisa de informação externa para reconstruir.
+- `to_bytes` recebe `type_id` (não `type_shape_ptr`) porque `TypeShape` tem
+  `String`/`Vec`/`Box` — sem layout C-ABI estável.
+
+**Commit:** `bfcf1a4`
+
+**DoD Fase 5:** ✅ `to_bytes` serializa Int, Text, Tuple, List. `from_bytes`
+reconstrói na arena destino. Testes unitários passam.
 
 ### Fase 6: Testes E2E
 

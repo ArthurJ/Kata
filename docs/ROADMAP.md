@@ -153,7 +153,7 @@ Fio 1: Fundação + Aritmética + CLI
 │   (channel!, queue!, broadcast!, fork!, !>, <!, select com timeout,
 │    yield cooperativo, structured concurrency, scheduler com fibers)
 │   (spawn! — multiprocess via fork+IPC — redesign: special form ao lado de fork!,
-│    aceita tupla ou dict com raw:/serialized:, to_bytes() FFI — não implementado)
+│    aceita tupla ou dict com raw:/serialized:, to_bytes() FFI — Fase 5 ✅, spawn! Fase 9 pendente)
 │
 ├── Fio 12: Comptime, @cache ✅ Concluído — PRD: docs/PRD-fio12-comptime.md
 │   (@comptime call-site explícito, JIT-and-execute, HeapSnapshot com arenas,
@@ -616,7 +616,10 @@ Testes E2E: `csp_channels_e2e.rs` (11 testes), `csp_broadcast_e2e.rs` (4 testes)
 **Não implementado:** `spawn!` (multiprocess via fork+IPC). Redesign aprovado:
 special form ao lado de `fork!` (não diretiva em ActionDecl). Aceita tupla
 (posicional — runtime serializa implicitamente) ou dict com `raw:`/`serialized:`
-(controle explícito). `to_bytes()` FFI reaproveita mecânica de `HeapSnapshotData`.
+(controle explícito). `to_bytes()`/`from_bytes()` FFI implementada (Fase 5 do
+PRD-bytes, commit `bfcf1a4`) — serializa valores em blob `Bytes` com header
+estendido (type_id + rebase_offsets). Type table Rust-to-Rust em `kata-rt`.
+Falta: codegen de `spawn!` (Fase 9), driver registrar type table antes do JIT.
 Veja PRD-fio11.md, Fase 9.
 
 **Maquinaria de tipos construída:**
