@@ -313,6 +313,10 @@ pub enum FfiSymbol {
     ArraySlice,
     /// `kata_rt_list_slice(ptr, start, end, arena) -> ptr`
     ListSlice,
+    /// `kata_rt_to_bytes(value_ptr, type_id, arena) -> bytes_ptr`
+    ToBytes,
+    /// `kata_rt_from_bytes(bytes_ptr, arena) -> value_ptr`
+    FromBytes,
 }
 
 impl FfiSymbol {
@@ -486,6 +490,8 @@ impl FfiSymbol {
             FfiSymbol::TextSlice => "kata_rt_text_slice",
             FfiSymbol::ArraySlice => "kata_rt_array_slice",
             FfiSymbol::ListSlice => "kata_rt_list_slice",
+            FfiSymbol::ToBytes => "kata_rt_to_bytes",
+            FfiSymbol::FromBytes => "kata_rt_from_bytes",
         }
     }
 
@@ -644,6 +650,8 @@ impl FfiSymbol {
             FfiSymbol::TextAt => Ty::int(),
             FfiSymbol::TextLen => Ty::int(),
             FfiSymbol::ArraySlice | FfiSymbol::ListSlice => Ty::int(),
+            FfiSymbol::ToBytes => Ty::Bytes,
+            FfiSymbol::FromBytes => Ty::int(), // ponteiro genérico (tipo depende do contexto)
         }
     }
 
@@ -817,6 +825,8 @@ impl FfiSymbol {
             FfiSymbol::TextSlice,
             FfiSymbol::ArraySlice,
             FfiSymbol::ListSlice,
+            FfiSymbol::ToBytes,
+            FfiSymbol::FromBytes,
         ];
         all.iter().copied().find(|s| s.symbol_name() == name)
     }

@@ -357,6 +357,9 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
     builder.symbol("kata_rt_text_slice", rt::kata_rt_text_slice as *const u8);
     builder.symbol("kata_rt_array_slice", rt::kata_rt_array_slice as *const u8);
     builder.symbol("kata_rt_list_slice", rt::kata_rt_list_slice as *const u8);
+    // Marshalling (to_bytes/from_bytes)
+    builder.symbol("kata_rt_to_bytes", rt::kata_rt_to_bytes as *const u8);
+    builder.symbol("kata_rt_from_bytes", rt::kata_rt_from_bytes as *const u8);
 }
 
 /// Declara todos os símbolos FFI no module e retorna o mapa nome → FuncId.
@@ -559,5 +562,7 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         TextSlice,
         ArraySlice,
         ListSlice,
+        ToBytes,
+        FromBytes,
     ]
 }

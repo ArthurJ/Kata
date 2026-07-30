@@ -23,6 +23,7 @@ pub(crate) mod hash;
 pub(crate) mod io;
 pub(crate) mod list;
 pub(crate) mod log;
+pub(crate) mod marshal;
 pub(crate) mod range;
 pub(crate) mod rational;
 pub(crate) mod scheduler;
@@ -130,6 +131,8 @@ pub use channel::{
 // reset_log e snapshot_log_config — rebaixados para pub(crate): zero
 // consumidores cross-crate (apenas scheduler.rs intra-crate os chama).
 pub use log::{kata_rt_log_config, kata_rt_log_publish, kata_rt_log_recv};
+// Marshalling (to_bytes/from_bytes para spawn!)
+pub use marshal::{TypeShape, kata_rt_from_bytes, kata_rt_to_bytes, register_type_table};
 // Display de resultados — ponto único de display para
 // driver JIT e shim AOT.
 pub use display::{

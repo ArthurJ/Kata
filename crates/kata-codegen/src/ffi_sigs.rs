@@ -858,6 +858,19 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
             sig.params.push(AbiParam::new(I64)); // arena
             sig.returns.push(AbiParam::new(I64)); // ptr
         }
+        // to_bytes: (value_ptr, type_id, arena) -> bytes_ptr
+        FfiSymbol::ToBytes => {
+            sig.params.push(AbiParam::new(I64)); // value_ptr
+            sig.params.push(AbiParam::new(I64)); // type_id
+            sig.params.push(AbiParam::new(I64)); // arena
+            sig.returns.push(AbiParam::new(I64)); // bytes_ptr
+        }
+        // from_bytes: (bytes_ptr, arena) -> value_ptr
+        FfiSymbol::FromBytes => {
+            sig.params.push(AbiParam::new(I64)); // bytes_ptr
+            sig.params.push(AbiParam::new(I64)); // arena
+            sig.returns.push(AbiParam::new(I64)); // value_ptr
+        }
     }
 
     sig
