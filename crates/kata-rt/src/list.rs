@@ -8,6 +8,8 @@
 //!
 //! Nil = null pointer (0). `kata_rt_list_nil` retorna 0.
 
+use crate::bytes::untag_smi;
+
 /// Retorna 0 (null = Nil). Existe para simetria com o FfiSymbol.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_list_nil() -> i64 {
@@ -82,6 +84,8 @@ pub extern "C" fn kata_rt_list_len(ptr: i64) -> i64 {
 /// Layout do Result box (igual a store_sum_result): 16 bytes, tag no offset 0, payload no offset 8.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_list_get_checked(ptr: i64, idx: i64) -> i64 {
+    // idx é SMI-tagged (vindo do codegen). Untag antes de usar.
+    let idx = untag_smi(idx);
     let mut current = ptr;
     let mut i = 0i64;
     while current != 0 && i < idx {

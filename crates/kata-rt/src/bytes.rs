@@ -148,6 +148,8 @@ pub extern "C" fn kata_rt_bytes_get_checked(ptr: i64, idx: i64) -> i64 {
         return crate::sum::kata_rt_store_sum_result(1, 0, 0);
     }
     let len = unsafe { std::ptr::read_unaligned(ptr as *const i64) };
+    // idx é SMI-tagged (vindo do codegen). Untag antes de usar.
+    let idx = untag_smi(idx);
     // Suporte a índice negativo (do final).
     let real_idx = if idx < 0 { len + idx } else { idx };
     if real_idx < 0 || real_idx >= len {
@@ -275,6 +277,9 @@ pub unsafe extern "C" fn kata_rt_bytes_slice(
         return kata_rt_bytes_alloc(0, arena_handle);
     }
     let len = unsafe { std::ptr::read_unaligned(ptr as *const i64) };
+    // start e end são SMI-tagged (vindo do codegen). Untag antes de usar.
+    let start = untag_smi(start);
+    let end = untag_smi(end);
     // Normaliza índices negativos.
     let start = if start < 0 { len + start } else { start };
     let end = if end < 0 { len + end } else { end };
@@ -532,7 +537,7 @@ mod tests {
         let arena = make_arena();
         let data = [0x41u8, 0x42, 0x43, 0x44, 0x45];
         let ptr = unsafe { kata_rt_bytes_from_ptr(data.as_ptr() as i64, 5, arena) };
-        let sub = unsafe { kata_rt_bytes_slice(ptr, 1, 3, arena) };
+        let sub = unsafe { kata_rt_bytes_slice(ptr, tag_smi(1), tag_smi(3), arena) };
         assert_eq!(untag_smi(kata_rt_bytes_len(sub)), 2);
         assert_eq!(untag_smi(kata_rt_bytes_get(sub, 0)), 0x42);
         assert_eq!(untag_smi(kata_rt_bytes_get(sub, 1)), 0x43);
@@ -543,7 +548,7 @@ mod tests {
         let arena = make_arena();
         let data = [0x41u8, 0x42, 0x43, 0x44, 0x45];
         let ptr = unsafe { kata_rt_bytes_from_ptr(data.as_ptr() as i64, 5, arena) };
-        let sub = unsafe { kata_rt_bytes_slice(ptr, -2, 5, arena) };
+        let sub = unsafe { kata_rt_bytes_slice(ptr, tag_smi(-2), tag_smi(5), arena) };
         assert_eq!(untag_smi(kata_rt_bytes_len(sub)), 2);
         assert_eq!(untag_smi(kata_rt_bytes_get(sub, 0)), 0x44);
         assert_eq!(untag_smi(kata_rt_bytes_get(sub, 1)), 0x45);

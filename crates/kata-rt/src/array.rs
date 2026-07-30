@@ -6,6 +6,8 @@
 //! offset 8+i*8:    element[i] (i64) — i-ésimo elemento
 //! ```
 
+use crate::bytes::untag_smi;
+
 /// Aloca um array com `len` elementos na arena especificada.
 /// O array é zerado (todos elementos = 0). Use `kata_rt_array_set` para preencher.
 ///
@@ -74,6 +76,8 @@ pub extern "C" fn kata_rt_array_set(ptr: i64, idx: i64, val: i64) {
 /// Layout do Result box: igual a store_sum_result (16 bytes).
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_array_get_checked(ptr: i64, idx: i64) -> i64 {
+    // idx é SMI-tagged (vindo do codegen). Untag antes de usar.
+    let idx = untag_smi(idx);
     if ptr == 0 {
         return crate::sum::kata_rt_store_sum_result(1, 0, 0);
     }
