@@ -234,7 +234,14 @@ pub(crate) fn infer_dot_access(
             } else {
                 // Tenta unify com Int.
                 let mut subs = std::collections::HashMap::new();
-                if unify(&[start_typed.ty.clone()], &[Ty::int()], &[], &mut subs).is_ok() {
+                if unify(
+                    std::slice::from_ref(&start_typed.ty),
+                    &[Ty::int()],
+                    &[],
+                    &mut subs,
+                )
+                .is_ok()
+                {
                     start_typed
                 } else {
                     return Err(MiddleError::TypeMismatch {
@@ -250,7 +257,14 @@ pub(crate) fn infer_dot_access(
                 end_typed
             } else {
                 let mut subs = std::collections::HashMap::new();
-                if unify(&[end_typed.ty.clone()], &[Ty::int()], &[], &mut subs).is_ok() {
+                if unify(
+                    std::slice::from_ref(&end_typed.ty),
+                    &[Ty::int()],
+                    &[],
+                    &mut subs,
+                )
+                .is_ok()
+                {
                     end_typed
                 } else {
                     return Err(MiddleError::TypeMismatch {

@@ -296,9 +296,10 @@ pub(crate) fn infer_pipe_fallback(
             Pattern::Variant {
                 enum_name: enum_name.clone(),
                 variant: v.name.clone(),
-                payload: v.payload_ty.as_ref().map(|_| {
-                    vec![Spanned::new(Pattern::Wildcard, lhs.span)]
-                }),
+                payload: v
+                    .payload_ty
+                    .as_ref()
+                    .map(|_| vec![Spanned::new(Pattern::Wildcard, lhs.span)]),
             }
         } else {
             // Variante com payload: Variant(v) — liga o payload.
