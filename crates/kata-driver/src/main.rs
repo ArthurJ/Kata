@@ -15,6 +15,7 @@ use kata_tree_shaking::tree_shake;
 
 mod aot;
 mod display;
+mod highlight;
 mod imports;
 mod repl;
 

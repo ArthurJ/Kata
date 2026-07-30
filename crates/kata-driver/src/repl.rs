@@ -27,6 +27,7 @@ use rustyline::error::ReadlineError;
 use rustyline::history::DefaultHistory;
 
 use crate::display;
+use crate::highlight::KataHelper;
 use crate::merge_resolved;
 
 /// Sessão REPL — acumula items do usuário entre expressões.
@@ -415,8 +416,15 @@ fn dirs() -> PathBuf {
 pub(crate) fn cmd_repl() -> miette::Result<()> {
     let mut session = ReplSession::new().map_err(miette::Report::msg)?;
 
-    let mut rl = Editor::<(), DefaultHistory>::new()
+    // Configurar rustyline com cores forçadas — o highlighter só funciona
+    // se ColorMode != Disabled. Forçamos para garantir colorização mesmo
+    // em terminais que não reportam capacidade de cor.
+    let config = rustyline::config::Builder::new()
+        .color_mode(rustyline::config::ColorMode::Forced)
+        .build();
+    let mut rl = Editor::<KataHelper, DefaultHistory>::with_config(config)
         .map_err(|e| miette::Report::msg(format!("erro ao iniciar rustyline: {e}")))?;
+    rl.set_helper(Some(KataHelper::default()));
 
     // Carregar histórico.
     let _ = rl.load_history(&session.history_path);
