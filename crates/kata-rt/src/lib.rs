@@ -10,9 +10,11 @@ pub(crate) mod arc;
 pub(crate) mod arena;
 pub(crate) mod array;
 pub(crate) mod bigint;
+pub(crate) mod byte;
 pub(crate) mod bytes;
 pub(crate) mod cache;
 pub(crate) mod channel;
+pub(crate) mod convert;
 pub(crate) mod dict;
 pub(crate) mod display;
 pub(crate) mod fiber;
@@ -59,15 +61,17 @@ pub use bigint::{
     kata_rt_bi_lt, kata_rt_bi_mul, kata_rt_bi_neq, kata_rt_bi_show, kata_rt_bi_sub,
     kata_rt_bi_to_rational, kata_rt_int_to_text, kata_rt_tag_int, kata_rt_tag_int_from_str,
 };
-pub use bytes::{
+pub use byte::{
     kata_rt_byte_and, kata_rt_byte_not, kata_rt_byte_or, kata_rt_byte_shl, kata_rt_byte_shr,
-    kata_rt_byte_to_int, kata_rt_byte_xor, kata_rt_bytes_alloc, kata_rt_bytes_and,
-    kata_rt_bytes_concat, kata_rt_bytes_eq, kata_rt_bytes_from_ints, kata_rt_bytes_from_ptr,
-    kata_rt_bytes_get, kata_rt_bytes_get_checked, kata_rt_bytes_len, kata_rt_bytes_neq,
-    kata_rt_bytes_not, kata_rt_bytes_or, kata_rt_bytes_set, kata_rt_bytes_show,
-    kata_rt_bytes_slice, kata_rt_bytes_to_text, kata_rt_bytes_xor, kata_rt_int_to_byte,
-    kata_rt_int_to_bytes, kata_rt_text_to_bytes,
+    kata_rt_byte_to_int, kata_rt_byte_xor, kata_rt_int_to_byte,
 };
+pub use bytes::{
+    kata_rt_bytes_alloc, kata_rt_bytes_and, kata_rt_bytes_concat, kata_rt_bytes_eq,
+    kata_rt_bytes_from_ints, kata_rt_bytes_from_ptr, kata_rt_bytes_get, kata_rt_bytes_get_checked,
+    kata_rt_bytes_len, kata_rt_bytes_neq, kata_rt_bytes_not, kata_rt_bytes_or, kata_rt_bytes_set,
+    kata_rt_bytes_show, kata_rt_bytes_slice, kata_rt_bytes_xor,
+};
+pub use convert::{kata_rt_bytes_to_text, kata_rt_int_to_bytes, kata_rt_text_to_bytes};
 pub use dict::kata_rt_dict_merge;
 pub use dict::{
     kata_rt_dict_contains, kata_rt_dict_empty, kata_rt_dict_get_checked, kata_rt_dict_insert,
