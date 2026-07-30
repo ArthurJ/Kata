@@ -274,11 +274,15 @@ código:
   ```bash
   kata test examples/test_assert.kata
   ```
-* **`repl`**: Inicia o REPL interativo com histórico persistente. Suporta
-  comandos especiais `:help`, `:type <expr>`, `:env`, `:quit`.
+* **`repl`**: Inicia o REPL interativo com `TypeEnv` persistente e histórico
+  persistente (`~/.kata_repl_history`). Suporta comandos especiais `:help`,
+  `:type <expr>`, `:env`, `:load <file>`, `:reset`, `:quit`. Multiline para
+  `match`, `enum`, `interface`, `implements`, assinaturas de função (`Sig` +
+  `lambda`), e `action`. Erros não abortam a sessão (rollback automático).
   ```bash
   kata repl
   ```
+  Ver §26 para detalhes.
 * **`eval <expressão>`**: Avalia uma expressão via JIT de forma não-interativa,
   retornando o resultado no stdout. Útil para scripts e one-liners. Aceita a
   flag `--emit-ir`.
@@ -2588,3 +2592,204 @@ manter sincronizada. Quando você adiciona um erro novo, precisa decidir se é
 Códigos namespaced (`type.mismatch`, `parse.unexpected_token`, `codegen.internal`)
 são auto-documentáveis e estáveis. Adicionar `type.generic_conflict` não exige
 renumerar nada — o namespace já determina.
+
+## 26. REPL Interativo (`kata repl`)
+
+O REPL permite exploração incremental da linguagem com estado persistente entre
+expressões. O design combina um `TypeEnv` que acumula bindings com um `JITModule`
+fresco por avaliação — o Cranelift não suporta extensão após `finalize_definitions`,
+então cada expressão recompila tudo (prelude + items acumulados + nova expressão).
+
+O custo é aceitável: o compile-time de uma expressão via Cranelift JIT é
+milissegundos, sem percepção de latência para uso interativo.
+
+### 26.1. Arquitetura
+
+```
+┌─────────────────────────────────────────────────┐
+│ REPL Session                                     │
+│                                                  │
+│  items: Vec<Spanned<Item>> (persistente)         │
+│  ├── let bindings, sigs, data, enum, implements  │
+│  ├── cada item é re-processado a cada expressão  │
+│  └── persistência estrutural, não mutação de env │
+│                                                  │
+│  prelude: ResolvedModule (recarregado em :reset) │
+│                                                  │
+│  Loop:                                           │
+│    1. Ler input (rustyline)                      │
+│    2. Se comando (:), executar                   │
+│    3. Se expressão:                               │
+│       a. lex → parse                              │
+│       b. merge items acumulados + novo input      │
+│       c. resolve → infer_module                   │
+│       d. monomorphize → optimize → tree_shake     │
+│       e. comptime pass                            │
+│       f. JITModule fresco → jit_eval → display    │
+│       g. Sucesso: item fica na lista             │
+│       h. Erro: rollback (item removido)           │
+└─────────────────────────────────────────────────┘
+```
+
+A persistência é estrutural: items top-level (`let`, `Sig`, `data`, `enum`,
+`implements`, `interface`) são acumulados numa `Vec<Spanned<Item>>` e
+re-processados a cada nova expressão. O `TypeEnv` não é mutado diretamente —
+a próxima avaliação vê todos os items anteriores porque eles estão na lista.
+
+### 26.2. Comandos
+
+| Comando | Descrição |
+|---|---|
+| `:help` | Lista comandos disponíveis |
+| `:type <expr>` | Infere e mostra o tipo de `<expr>` sem executar |
+| `:env` | Mostra bindings e tipos atuais |
+| `:load <file>` | Carrega arquivo `.kata` — items entram na sessão |
+| `:reset` | Limpa bindings, recarrega prelude |
+| `:quit` | Sai do REPL (`:exit` também funciona) |
+
+### 26.3. Multiline
+
+O REPL detecta automaticamente quando uma expressão precisa de múltiplas
+linhas. A heurística combina três estratégias:
+
+**1. Assinatura de função (`Sig` + `lambda`):** Se a primeira linha contém `::`
+e `=>` (sem `@ffi`), o modo multiline ativa. Cláusulas `lambda` seguintes
+podem estar no mesmo nível (não-indentadas). Uma linha em branco encerra o bloco.
+
+```
+kata> fat :: Int Int => Int
+   ... lambda 0 acc: acc
+   ... lambda n acc: fat (- n 1) (* n acc)
+   ...
+kata> fat 5 1
+120
+```
+
+**2. Action:** Se a primeira linha termina com `=>`, o body indentado segue.
+
+```
+kata> action ola => Text
+   ...     "hello"
+   ...
+kata> ola!()
+hello
+```
+
+**3. Blocos indentados (`match`, `enum`, `interface`, `implements`):** Se a
+primeira linha começa com uma destas palavras-chave, o modo multiline ativa.
+Linhas indentadas (começam com espaço ou tab) são acumuladas. Uma linha
+não-indentada encerra o bloco.
+
+```
+kata> match = 1 1
+   ...     True: "igual"
+   ...     False: "diferente"
+   ...
+kata>
+igual
+```
+
+```
+kata> enum Cor
+   ...     Vermelho
+   ...     Verde
+   ...     Azul
+   ...
+kata> let c := Cor::Verde
+()
+kata> :type c
+Cor
+```
+
+**Fallback:** Se nenhuma heurística dispara, o REPL tenta parsear o input. Se
+o parser falha com `<EOF>` (input incompleto), continua lendo linhas.
+
+### 26.4. `:load <file>`
+
+Carrega um arquivo `.kata` e processa todos os items como se fossem digitados
+no REPL. `let` bindings, `data`, `enum`, `Sig`+`lambda`, `implements` entram
+na sessão. Se o arquivo contém `EntryExpr`, executa e mostra o resultado.
+
+```
+kata> :load examples/fatorial.kata
+120
+kata> fat 6 1
+720
+```
+
+Se o arquivo só tem declarações (sem `EntryExpr`), os items são adicionados sem
+execução:
+
+```
+kata> :load examples/modules/mock_math.kata
+carregado: examples/modules/mock_math.kata
+kata> mock_math.dobrar 21
+42
+```
+
+### 26.5. `:type <expr>`
+
+Executa o pipeline até `infer_module` e imprime o tipo do entry point sem
+fazer codegen. Útil para inspecionar tipos sem side-effects.
+
+```
+kata> :type + 1 2
+Int
+kata> :type (1, 2)
+(Int, Int)
+kata> let f := + 10 _
+kata> :type f
+Int -> Int
+```
+
+### 26.6. `:env`
+
+Mostra todos os bindings atuais com seus tipos. Roda o pipeline até
+`TypedModule` para obter os tipos inferidos.
+
+```
+kata> let x := 10
+kata> let y := 20.0
+kata> :env
+  x: Int
+  y: Float
+```
+
+### 26.7. `:reset`
+
+Limpa todos os bindings do usuário e recarrega o prelude. Equivalente a sair
+e reentrar no REPL.
+
+```
+kata> let x := 42
+kata> :env
+  x: Int
+kata> :reset
+sessão resetada — prelude recarregado
+kata> :env
+(nenhum binding)
+kata> + 1 2
+3
+```
+
+### 26.8. Tratamento de Erros
+
+Erros de parse, tipo, ou runtime **não abortam a sessão**. O item que falhou é
+removido da lista (rollback) e o usuário pode corrigir e reintentar. O estado
+anterior é preservado.
+
+```
+kata> let x := 10
+kata> undefined_name
+erro de tipo: UnboundName { name: "undefined_name", ... }
+kata> :env
+  x: Int
+kata> + x 5
+15
+```
+
+### 26.9. Histórico
+
+O histórico de inputs é persistido em `~/.kata_repl_history` via rustyline.
+Setas ↑/↓ navegam o histórico. O histórico é salvo ao sair do REPL (`:quit`
+ou Ctrl-D).

@@ -757,7 +757,7 @@ telemetria sem contaminar pureza.
 
 ### Fio 15: AOT, REPL
 
-**Status:** Em andamento (Fases 1-5 ✅, Fases 6-7 ✅, Fase 8 pendente)
+**Status:** Concluído (Fases 1-8 ✅)
 
 **Features:**
 - `kata build` (AOT: Cranelift object file + linker → executável) ✅
@@ -786,7 +786,7 @@ executa sem o compilador. `kata repl` mantém bindings entre expressões.
 - Fase 5 ✅ — `kata build` subcomando + pipeline completo + 8 testes E2E
 - Fase 6 ✅ — REPL: TypeEnv persistente + `:type` + `:env` + `:load` + `:reset`
 - Fase 7 ✅ — Multiline (match, enum, interface, implements, Sig+lambda, action)
-- Fase 8 ⏳ — Documentação
+- Fase 8 ✅ — Documentação (Manual §26: arquitetura, comandos, multiline, :load, :type, :env, :reset, erros, histórico)
 
 ---
 
@@ -809,7 +809,7 @@ Fio 1  ────────────────────────�
   ├── Fio 10 ✅ (módulos)
   ├── Fio 12 ✅ (Comptime, @cache)
   │       @comptime call-site, HeapSnapshot, @cache LRU, constant folding
-  └── Fio 15 (AOT ✅, REPL ⏳)
+  └── Fio 15 ✅ (AOT, REPL)
 
 Zeladorias removidas — manutenção diária via skill `zeladoria-kata5` substitui zeladorias planejadas.
 ```
