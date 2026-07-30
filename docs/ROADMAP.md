@@ -757,32 +757,35 @@ telemetria sem contaminar pureza.
 
 ### Fio 15: AOT, REPL
 
-**Status:** Em andamento (Fases 1-5 ✅, Fases 6-8 pendentes)
+**Status:** Em andamento (Fases 1-5 ✅, Fases 6-7 ✅, Fase 8 pendente)
 
 **Features:**
-- `kata build` (AOT: Cranelift object file + linker → executável)
+- `kata build` (AOT: Cranelift object file + linker → executável) ✅
   - `cranelift-object` para emissão de `.o`
   - Link com `kata-rt` estático (`libkata_rt.a`) ou dinâmico (`--dynamic`, `libkata_rt.so`)
   - Tree shaking incondicional (sem `--release`)
   - Shim C trivial que chama `__kata_entry` + `kata_rt_print_result` (display no runtime)
-- `kata repl` (REPL interativo) — pendente (Fases 6-7)
-  - Persistência de `TypeEnv` entre expressões
-  - Histórico persistente (rustyline)
-  - Comandos: `:help`, `:type <expr>`, `:env`, `:quit`
+- `kata repl` (REPL interativo) ✅
+  - Persistência de `TypeEnv` entre expressões (via items acumulados)
+  - Histórico persistente (rustyline, `~/.kata_repl_history`)
+  - Comandos: `:help`, `:type <expr>`, `:env`, `:load <file>`, `:reset`, `:quit`
+  - Multiline: Sig+lambda, action, match, enum, interface, implements
+  - Rollback em caso de erro (item removido, sessão continua)
+  - 31 testes E2E
 
 **Depende de:** Fio 1-14 (todas as features precisam funcionar em AOT)
 
 **DoD:** `kata build examples/fatorial.kata` produz executável nativo que
 executa sem o compilador. `kata repl` mantém bindings entre expressões.
 
-**Progresso (2026-07-19):**
+**Progresso (2026-07-30):**
 - Fase 1 ✅ — `ModuleBackend` trait + `JitBackend`
 - Fase 2 ✅ — `AotBackend` + `aot_emit`
 - Fase 3 ✅ — `kata-tree-shaking` crate
 - Fase 4 ✅ — `kata-rt` staticlib/cdylib + linker (shim C + `cc`)
 - Fase 5 ✅ — `kata build` subcomando + pipeline completo + 8 testes E2E
-- Fase 6 ⏳ — REPL: TypeEnv persistente + `:type`
-- Fase 7 ⏳ — `:load` + multiline + E2E
+- Fase 6 ✅ — REPL: TypeEnv persistente + `:type` + `:env` + `:load` + `:reset`
+- Fase 7 ✅ — Multiline (match, enum, interface, implements, Sig+lambda, action)
 - Fase 8 ⏳ — Documentação
 
 ---

@@ -454,14 +454,22 @@ pub(crate) fn cmd_repl() -> miette::Result<()> {
         //      branco (cláusulas lambda indentadas seguem).
         //   3. Se a primeira linha termina com `=>` (action sem tipo de
         //      retorno), body indentado pode seguir.
+        //   4. Se a primeira linha inicia um bloco indentado — `match`,
+        //      `enum`, `implements` — ativar modo multiline (break on
+        //      non-indented line), igual à Sig.
         let first_trimmed = first.trim_end();
         let multiline_sig = first_trimmed.contains("::")
             && first_trimmed.contains("=>")
             && !first_trimmed.contains("@ffi");
         let multiline_action = first_trimmed.ends_with("=>");
+        let first_token = first_trimmed.split_whitespace().next().unwrap_or("");
+        let multiline_indent = matches!(
+            first_token,
+            "match" | "enum" | "implements" | "interface"
+        );
 
         let mut buffer = first.clone();
-        let in_multiline = multiline_sig || multiline_action;
+        let in_multiline = multiline_sig || multiline_action || multiline_indent;
 
         loop {
             if !in_multiline {
@@ -480,10 +488,10 @@ pub(crate) fn cmd_repl() -> miette::Result<()> {
                     }
                     buffer.push('\n');
                     buffer.push_str(&line);
-                    // Se estávamos em modo multiline_sig e a nova linha
-                    // não é indentada nem começa com `lambda`/`λ`,
-                    // o bloco terminou.
-                    if multiline_sig
+                    // Se estávamos em modo multiline_sig ou multiline_indent
+                    // e a nova linha não é indentada nem começa com
+                    // `lambda`/`λ`, o bloco terminou.
+                    if (multiline_sig || multiline_indent)
                         && !line.starts_with(' ')
                         && !line.starts_with('\t')
                         && !line.trim_start().starts_with("lambda")

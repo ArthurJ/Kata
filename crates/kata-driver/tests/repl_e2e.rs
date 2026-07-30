@@ -313,6 +313,144 @@ fn repl_load_nonexistent_file_reports_error() {
     );
 }
 
+// ── Multiline: match ───────────────────────────────────────
+
+#[test]
+fn repl_multiline_match_boolean() {
+    let out = run_repl(&[
+        "match = 1 1",
+        "    True: \"igual\"",
+        "    False: \"diferente\"",
+        "",
+        ":quit",
+    ]);
+    let lines = result_lines(&out);
+    assert!(
+        lines.iter().any(|l| l.contains("igual")),
+        "esperava 'igual' em multiline match, got: {out}"
+    );
+}
+
+#[test]
+fn repl_multiline_match_then_expr() {
+    // Match seguido de expressão — ambos devem funcionar.
+    let out = run_repl(&[
+        "match = 1 1",
+        "    True: \"igual\"",
+        "    False: \"diferente\"",
+        "",
+        "+ 1 2",
+        ":quit",
+    ]);
+    let lines = result_lines(&out);
+    assert!(
+        lines.iter().any(|l| l.contains("igual")),
+        "esperava 'igual', got: {out}"
+    );
+    assert!(
+        lines.iter().any(|l| l.trim() == "3"),
+        "esperava 3 após match, got: {out}"
+    );
+}
+
+#[test]
+fn repl_multiline_match_user_enum() {
+    // Declara enum, depois match nele.
+    let out = run_repl(&[
+        "enum Cor",
+        "    Vermelho",
+        "    Verde",
+        "    Azul",
+        "",
+        "match Cor::Verde",
+        "    Cor::Vermelho: \"red\"",
+        "    Cor::Verde: \"green\"",
+        "    Cor::Azul: \"blue\"",
+        "",
+        ":quit",
+    ]);
+    let lines = result_lines(&out);
+    assert!(
+        lines.iter().any(|l| l.contains("green")),
+        "esperava 'green' em match enum, got: {out}"
+    );
+}
+
+// ── Multiline: enum ────────────────────────────────────────
+
+#[test]
+fn repl_multiline_enum_decl() {
+    let out = run_repl(&[
+        "enum Cor",
+        "    Vermelho",
+        "    Verde",
+        "    Azul",
+        "",
+        ":env",
+        ":quit",
+    ]);
+    let lines = result_lines(&out);
+    // :env deve mostrar o binding se houver, mas pelo menos
+    // não deve haver erro de parse.
+    assert!(
+        !lines.iter().any(|l| l.contains("erro de parse")),
+        "não esperava erro de parse em enum, got: {out}"
+    );
+}
+
+#[test]
+fn repl_multiline_enum_then_use() {
+    let out = run_repl(&[
+        "enum Cor",
+        "    Vermelho",
+        "    Verde",
+        "    Azul",
+        "",
+        "let c := Cor::Verde",
+        ":type c",
+        ":quit",
+    ]);
+    let lines = result_lines(&out);
+    assert!(
+        lines.iter().any(|l| l.contains("Cor")),
+        "esperava tipo Cor em :type c, got: {out}"
+    );
+}
+
+// ── Multiline: interface ───────────────────────────────────
+
+#[test]
+fn repl_multiline_interface_two_methods() {
+    let out = run_repl(&[
+        "interface CUSTOM_IFACE",
+        "    foo :: Int => Int",
+        "    bar :: Int => Int",
+        "",
+        ":quit",
+    ]);
+    let lines = result_lines(&out);
+    assert!(
+        !lines.iter().any(|l| l.contains("erro de parse")),
+        "não esperava erro de parse em interface, got: {out}"
+    );
+}
+
+#[test]
+fn repl_multiline_implements() {
+    // implements também é um bloco indentado.
+    let out = run_repl(&[
+        "Int implements SHOW",
+        "    show :: Int => Text @ffi(\"kata_rt_bi_show\")",
+        "",
+        ":quit",
+    ]);
+    let lines = result_lines(&out);
+    assert!(
+        !lines.iter().any(|l| l.contains("erro de parse")),
+        "não esperava erro de parse em implements, got: {out}"
+    );
+}
+
 // ── Multiline ──────────────────────────────────────────────
 
 #[test]
