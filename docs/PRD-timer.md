@@ -42,7 +42,7 @@ fatorial :: Int => Int
 @timer{stats: true, repeat: 100}
 fatorial :: Int => Int
 
-@timer{topic: "perfil", stats: true, repeat: 50, msg: "{name}: min={min}ms"}
+@timer{topic: "perfil", stats: true, repeat: 50, msg: "{name}: min={min}ns"}
 fatorial :: Int => Int
 ```
 
@@ -57,18 +57,18 @@ fatorial :: Int => Int
 
 ### 3.1. Defaults de `msg`
 
-- **Sem stats** (`stats: false`): `"{name}: {delta}ms"`
-- **Com stats** (`stats: true`): `"{name}: min:{min}ms, mean:{mean}ms, max:{max}ms"`
+- **Sem stats** (`stats: false`): `"{name}: {delta}ns"`
+- **Com stats** (`stats: true`): `"{name}: min:{min}ns, mean:{mean}ns, max:{max}ns"`
 
 ### 3.2. Variáveis interpoladas
 
 | Variável | Disponível | Descrição |
 |----------|------------|-----------|
 | `{name}` | sempre | Nome da função/action |
-| `{delta}` | sem stats | Delta de tempo da chamada (milissegundos) |
-| `{min}` | com stats | Mínimo da janela de amostras (milissegundos) |
-| `{mean}` | com stats | Média da janela de amostras (milissegundos) |
-| `{max}` | com stats | Máximo da janela de amostras (milissegundos) |
+| `{delta}` | sem stats | Delta de tempo da chamada (nanossegundos) |
+| `{min}` | com stats | Mínimo da janela de amostras (nanossegundos) |
+| `{mean}` | com stats | Média da janela de amostras (nanossegundos) |
+| `{max}` | com stats | Máximo da janela de amostras (nanossegundos) |
 
 A interpolação usa o mesmo mecanismo do `@log` — o codegen resolve
 `{name}`, `{delta}`, `{min}`, `{mean}`, `{max}` no `var_map`.
@@ -332,9 +332,9 @@ não têm side-effects; `now!()` tem (leitura de clock).
 
 ### 8.4. Unidade
 
-Nanosegundos (`i64`), igual à FFI `kata_rt_timer_now`. O `@timer` converte
-para ms internamente no codegen (`delta_ns / 1_000_000`). O usuário de
-`now!()` faz sua própria conversão se precisar de ms:
+Nanosegundos (`i64`), igual à FFI `kata_rt_timer_now`. Tanto `@timer`
+quanto `now!()` operam em nanossegundos — nenhuma conversão interna.
+O usuário converte para ms se precisar:
 
 ```kata
 let t0 = now!()
@@ -465,7 +465,7 @@ pub unsafe extern "C" fn kata_rt_timer_now() -> i64 {
 | TCO | Preserva (canal interno) | N/A (não afeta frames) |
 | Stats | Agrega `repeat` amostras | Não — uma chamada, um valor |
 | FFI | `kata_rt_timer_now` | `kata_rt_timer_now` (mesma) |
-| Conversão ms | Codegen faz | Usuário faz |
+| Unidade | Nanossegundos | Nanossegundos (mesma) |
 
 `now!()` é o subset funcional que pode shippar antes do `@timer` —
 não depende de canais internos, seleção de estratégia, nem interação
@@ -487,9 +487,9 @@ com `@cache`. É a base que `@timer` usa internamente.
 - `@timer{topic: "perfil"}` publica no tópico "perfil". Consumidor
   faz `log_recv!("perfil")` e recebe eventos de timing.
 - `@timer{stats: true, repeat: 100}` acumula 100 amostras, publica
-  `"{name}: min:{min}ms, mean:{mean}ms, max:{max}ms"`, zera, repete.
+  `"{name}: min:{min}ns, mean:{mean}ns, max:{max}ns"`, zera, repete.
 - `@timer` + `@cache`: hit reporta delta ~0, miss reporta delta real.
 - `@timer` em função sem TCO: mede cada chamada individualmente via
   stack slot.
-- `msg` custom: `@timer{msg: "{name}: {delta}ms"}` produz saída
+- `msg` custom: `@timer{msg: "{name}: {delta}ns"}` produz saída
   formatada conforme template.
