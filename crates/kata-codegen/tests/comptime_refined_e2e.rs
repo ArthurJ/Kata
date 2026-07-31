@@ -84,7 +84,7 @@ fn eval_with_comptime(src: &str) -> Result<(i64, Ty), String> {
     let typed = run_comptime_pass(typed.inner, &resolved.enum_registry)
         .map_err(|e| format!("comptime: {e:?}"))?;
     let typed = kata_monomorph::MonoModule::from(typed);
-    let jit = jit_eval(&typed).map_err(|e| format!("codegen: {e:?}"))?;
+    let jit = jit_eval(&typed, &Default::default()).map_err(|e| format!("codegen: {e:?}"))?;
     Ok((jit.raw, jit.ty))
 }
 
@@ -163,7 +163,7 @@ fn predicado_trivial_continua_local() {
     let typed = optimize(typed);
     let typed = kata_monomorph::MonoModule::from(tree_shake(typed.inner));
     // Sem comptime pass — predicado trivial já foi validado no typeck.
-    let jit = jit_eval(&typed).expect("codegen");
+    let jit = jit_eval(&typed, &Default::default()).expect("codegen");
     assert_eq!(jit.ty, Ty::Struct("PositiveInt".into()));
     assert_eq!(untag_smi(jit.raw), 5);
 }

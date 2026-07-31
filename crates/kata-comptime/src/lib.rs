@@ -728,7 +728,7 @@ fn jit_execute_expr(
         refined_decls: Vec::new(),
     };
 
-    let result = kata_codegen::jit_eval(&mini).map_err(|e| ComptimeError::JitError {
+    let result = kata_codegen::jit_eval(&mini, &Default::default()).map_err(|e| ComptimeError::JitError {
         reason: format!("{e}"),
     })?;
 

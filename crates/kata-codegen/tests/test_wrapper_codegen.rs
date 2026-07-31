@@ -81,7 +81,7 @@ fn compile_tests(src: &str) -> (cranelift_jit::JITModule, Vec<TestWrapper>) {
     let typed = monomorphize(typed);
     let typed = optimize(typed);
     let typed = kata_monomorph::MonoModule::from(tree_shake_preserve_tests(typed.inner));
-    jit_compile_tests(&typed).expect("codegen+JIT deve succeed")
+    jit_compile_tests(&typed, &Default::default()).expect("codegen+JIT deve succeed")
 }
 
 /// Encontra um wrapper por action_name e test_index.

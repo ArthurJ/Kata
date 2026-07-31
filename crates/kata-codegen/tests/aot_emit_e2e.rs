@@ -75,7 +75,7 @@ fn emit_src(src: &str) -> Vec<u8> {
     let typed = monomorphize(typed);
     let typed = optimize(typed);
     let typed = kata_monomorph::MonoModule::from(tree_shake(typed.inner));
-    aot_emit(&typed).expect("aot_emit deve succeed")
+    aot_emit(&typed, &Default::default()).expect("aot_emit deve succeed")
 }
 
 /// Detecta o magic number esperado para o host.

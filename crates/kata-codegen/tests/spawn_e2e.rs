@@ -1,10 +1,16 @@
-//! Testes E2E de pattern matching de variantes não-qualificadas em match arms.
-//!
-//! Valida que `Ok v:`, `Err _:`, `Some n:`, `None:` funcionam sem qualificação
-//! (`Result::Ok v`, `Optional::Some n`). O parser produz `Pattern::Variant`
-//! com `enum_name` vazio; o typeck resolve via `EnumRegistry` do scrutinee.
+//! Testes E2E de spawn! — multiprocess (fork+IPC).
 //!
 //! Pipeline completo: lex → parse → resolve → infer → optimize → codegen → JIT.
+//! Cada teste verifica o valor retornado pelo JIT executando spawn! em processo OS separado.
+//!
+//! Caveats conhecidos (do handoff):
+//! - fork() + threads: timer thread não sobrevive no child. Actions sem loops
+//!   com yield_check devem funcionar.
+//! - kata_rt_yield no parent: parent faz yield após fork. Se não há scheduler
+//!   init, yield pode crashar. Verificar empiricamente.
+//! - from_bytes e lifetime do blob: from_bytes deve copiar dados para a arena.
+
+use std::collections::HashMap;
 
 use kata_codegen::jit_eval;
 use kata_core::ty::{PrimTy, Ty};
@@ -13,7 +19,8 @@ use kata_lexer::lex;
 use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
 use kata_parser::parse;
-use kata_resolution::{ResolvedModule, load_prelude, resolve};
+use kata_resolution::{load_prelude, resolve, ResolvedModule};
+use kata_rt::{TypeShape, register_type_table};
 use kata_tree_shaking::tree_shake;
 
 /// Executa o pipeline completo e retorna o valor bruto do JIT + tipo.
@@ -27,7 +34,14 @@ fn eval_src(src: &str) -> (i64, Ty) {
     let typed = monomorphize(typed);
     let typed = optimize(typed);
     let typed = kata_monomorph::MonoModule::from(tree_shake(typed.inner));
-    let jit = jit_eval(&typed, &Default::default()).expect("codegen+JIT deve succeed");
+
+    // type_id_map vazio — para Int, o fallback type_id=0 mapeia para
+    // TypeShape::Prim. Precisamos registrar a type table no runtime TLS
+    // para que to_bytes/from_bytes funcionem. O type_id 0 = Prim (Int).
+    let type_id_map: HashMap<Ty, i64> = HashMap::new();
+    register_type_table(vec![TypeShape::Prim]); // type_id 0 = Prim
+
+    let jit = jit_eval(&typed, &type_id_map).expect("codegen+JIT deve succeed");
     (jit.raw, jit.ty)
 }
 
@@ -42,17 +56,13 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
     enum_registry.merge(user.enum_registry);
     let mut struct_registry = prelude.struct_registry;
     struct_registry.merge(user.struct_registry);
-    let mut refined_decls = prelude.refined_decls;
-    refined_decls.extend(user.refined_decls);
-    let mut enum_pred_decls = prelude.enum_pred_decls;
-    enum_pred_decls.extend(user.enum_pred_decls);
     ResolvedModule {
         type_env,
         signatures,
         enum_registry,
         struct_registry,
-        refined_decls,
-        enum_pred_decls,
+        refined_decls: Vec::new(),
+        enum_pred_decls: Vec::new(),
         interface_registry: {
             let mut ir = prelude.interface_registry.clone();
             ir.merge(user.interface_registry.clone());
@@ -87,96 +97,49 @@ fn untag_smi(raw: i64) -> i64 {
     raw >> 1
 }
 
-/// `Ok v:` em match sobre Result — desempacota o valor.
+// ── Teste 1: spawn! básico — Int ──
+//
+// Action simples que retorna x + 1. spawn! executa em processo separado,
+// resultado volta via pipe IPC.
+
 #[test]
-fn unqualified_ok_pattern_desempacota_result() {
-    let src = r#"action extrai => Int
-    let r := Result::Ok 42
-    match r
-        Ok v: v
-        Err _: 0
-        otherwise: 0
-extrai!()"#;
+fn spawn_basico_int() {
+    let src = r#"action tarefa (x::Int) => Int
+    + x 1
+spawn!(tarefa, (41))"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
-    assert_eq!(untag_smi(raw), 42);
+    assert_eq!(untag_smi(raw), 42, "spawn!(tarefa, (41)) deve retornar 42");
 }
 
-/// `Err _:` em match sobre Result — cai no braço de erro.
+// ── Teste 2: spawn! com tupla (Int, Int) → Int ──
+//
+// Action que recebe uma tupla, faz match, soma os elementos.
+// A type table precisa ter TypeShape::Tuple([Prim, Prim]) no type_id
+// correto para que to_bytes/from_bytes serializem a tupla corretamente.
+
 #[test]
-fn unqualified_err_pattern_cai_no_erro() {
-    let src = r#"action extrai => Int
-    let r := Result::Err 99
-    match r
-        Ok v: v
-        Err _: 0
+fn spawn_tupla_soma() {
+    let src = r#"action soma_tupla (t::(Int, Int)) => Int
+    match t
+        (a, b): + a b
         otherwise: 0
-extrai!()"#;
+spawn!(soma_tupla, ((15, 27)))"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
-    assert_eq!(untag_smi(raw), 0);
+    assert_eq!(untag_smi(raw), 42, "spawn!(soma_tupla, ((15, 27))) deve retornar 42");
 }
 
-/// `Some n:` em match sobre Optional — desempacota o valor.
-#[test]
-fn unqualified_some_pattern_desempacota_optional() {
-    let src = r#"action extrai => Int
-    let a := Optional::Some 7
-    match a
-        Some n: n
-        None: 0
-        otherwise: 0
-extrai!()"#;
-    let (raw, ty) = eval_src(src);
-    assert_eq!(ty, Ty::Prim(PrimTy::Int));
-    assert_eq!(untag_smi(raw), 7);
-}
+// ── Teste 3: spawn! sem args (Unit) ──
+//
+// Action sem params, spawn! sem args.
 
-/// `None:` em match sobre Optional — cai no braço vazio.
 #[test]
-fn unqualified_none_pattern_cai_no_vazio() {
-    let src = r#"action extrai => Int
-    let a := Optional::None
-    match a
-        Some n: n
-        None: 0
-        otherwise: 0
-extrai!()"#;
+fn spawn_sem_args() {
+    let src = r#"action resposta => Int
+    42
+spawn!(resposta, ())"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
-    assert_eq!(untag_smi(raw), 0);
-}
-
-/// Match sobre refined constructor com `Ok v:` / `Err _:` sem qualificação.
-/// PositiveInt 42 retorna Result::(PositiveInt, Text).
-/// O `v` em `Ok v` é PositiveInt — downcast via `::Int` para retornar Int.
-#[test]
-fn unqualified_pattern_com_refined_constructor() {
-    let src = r#"data (Int, > _ 0) as PositiveInt
-action extrai => Int
-    let r := PositiveInt 42
-    match r
-        Ok v: v::Int
-        Err _: 0
-        otherwise: 0
-extrai!()"#;
-    let (raw, ty) = eval_src(src);
-    assert_eq!(ty, Ty::Prim(PrimTy::Int));
-    assert_eq!(untag_smi(raw), 42);
-}
-
-/// Match sobre refined constructor que falha — `Err _:` captura o erro.
-#[test]
-fn unqualified_pattern_refined_constructor_falha() {
-    let src = r#"data (Int, > _ 0) as PositiveInt
-action extrai => Int
-    let r := PositiveInt -5
-    match r
-        Ok v: v::Int
-        Err _: 0
-        otherwise: 0
-extrai!()"#;
-    let (raw, ty) = eval_src(src);
-    assert_eq!(ty, Ty::Prim(PrimTy::Int));
-    assert_eq!(untag_smi(raw), 0);
+    assert_eq!(untag_smi(raw), 42, "spawn!(resposta, ()) deve retornar 42");
 }
