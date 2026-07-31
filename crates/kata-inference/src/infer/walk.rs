@@ -185,6 +185,12 @@ where
             for_each_subexpr(&action_expr.node, f);
             for_each_subexpr(&args.node, f);
         }
+        TypedExprKind::Spawn {
+            action_expr, args, ..
+        } => {
+            for_each_subexpr(&action_expr.node, f);
+            for_each_subexpr(&args.node, f);
+        }
         TypedExprKind::Comptime { expr } => {
             for_each_subexpr(&expr.node, f);
         }
@@ -434,6 +440,12 @@ where
             for_each_subexpr_mut(&mut factory.node, f);
         }
         TypedExprKind::Fork {
+            action_expr, args, ..
+        } => {
+            for_each_subexpr_mut(&mut action_expr.node, f);
+            for_each_subexpr_mut(&mut args.node, f);
+        }
+        TypedExprKind::Spawn {
             action_expr, args, ..
         } => {
             for_each_subexpr_mut(&mut action_expr.node, f);

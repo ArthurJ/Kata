@@ -384,8 +384,17 @@ pub enum TypedExprKind {
         action_expr: Box<Spanned<TypedExpr>>,
         args: Box<Spanned<TypedExpr>>,
     },
-
-    // ── Comptime ──────────────────────────────────────────
+    /// `spawn!(action, args)` ou `spawn!{callee: action, raw: args}` —
+    /// spawn de processo OS separado via fork+pipe.
+    /// `action_name` é o nome da Action a executar no processo filho.
+    /// `action_expr` é a expressão tipada que avalia para o fn_ptr da Action.
+    /// `args` é a tupla de argumentos tipados (herdada via COW no fork).
+    /// O tipo de retorno é o tipo de retorno da Action (result volta via pipe).
+    Spawn {
+        action_name: String,
+        action_expr: Box<Spanned<TypedExpr>>,
+        args: Box<Spanned<TypedExpr>>,
+    },
     /// `@comptime expr` — expressão marcada para avaliação em compile-time.
     /// O comptime pass identifica estes nós, verifica constness + pureza,
     /// JIT-executa, e substitui por `IntLit`/`FloatLit`/`TextLit`/`Unit`
