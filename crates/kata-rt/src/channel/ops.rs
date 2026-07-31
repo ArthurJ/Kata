@@ -12,7 +12,20 @@
 //! - `TAG_BROADCAST` (0b10) — pub/sub fire-and-forget (sender/factory).
 //! - `TAG_BROADCAST_RX` (0b11) — receiver de broadcast.
 
-use super::{BroadcastInner, BroadcastReceiver, ChannelInner, QueueInner, ptr_of, tag_of};
+use super::{
+    ptr_of, tag_of, BroadcastInner, BroadcastReceiver, ChannelInner, QueueInner, TAG_IPC_CHANNEL,
+};
+
+/// Verifica se um handle é de canal IPC (tag TAG_IPC_CHANNEL).
+pub(crate) fn is_ipc_handle(handle: i64) -> bool {
+    tag_of(handle) == TAG_IPC_CHANNEL
+}
+
+/// Bloqueia (poll blocking) até o canal IPC ter dados legíveis.
+/// Usado pelo scheduler quando todos os fibers estão blocked em IPC.
+pub(crate) unsafe fn block_ipc_until_readable(handle: i64) {
+    super::ipc::block_until_readable(handle)
+}
 
 // ── Sentinel ─────────────────────────────────────────────────────────
 //
@@ -118,6 +131,10 @@ fn try_send(handle: i64, value: i64) -> i64 {
                 inner.new_msg.notify_all();
                 OK
             }
+            TAG_IPC_CHANNEL => {
+                // SAFETY: handle veio de kata_rt_ipc_channel_create.
+                super::ipc::try_ipc_send(handle, value)
+            }
             _ => WOULD_BLOCK, // tag inválida ou broadcast receiver (não envia)
         }
     }
@@ -148,7 +165,15 @@ pub extern "C" fn kata_rt_channel_recv(handle: i64) -> i64 {
             suspend.suspend(crate::fiber::YieldReason::WaitingOnChannel(handle));
         });
         if suspended.is_none() {
-            // Fora de fiber (teste unitário) — retorna WOULD_BLOCK.
+            // Fora de fiber — pode ser o child após spawn! (processo OS sem
+            // scheduler). Se for canal IPC, bloqueia até dados chegarem via
+            // poll blocking. Se não for IPC, retorna WOULD_BLOCK.
+            if tag_of(handle) == TAG_IPC_CHANNEL {
+                unsafe {
+                    super::ipc::block_until_readable(handle);
+                }
+                continue;
+            }
             return WOULD_BLOCK;
         }
         // Fiber foi resumido — scheduler acredita que há dado. Tentar novamente.
@@ -223,6 +248,12 @@ fn try_recv(handle: i64) -> i64 {
                     WOULD_BLOCK
                 }
             }
+            TAG_IPC_CHANNEL => {
+                // Usa a root_arena (TLS) para alocar o valor desserializado.
+                let arena = crate::arena::kata_rt_get_root_arena_handle();
+                // SAFETY: handle veio de kata_rt_ipc_channel_create.
+                super::ipc::try_ipc_recv(handle, arena)
+            }
             _ => WOULD_BLOCK, // tag inválida ou broadcast sender (não recebe)
         }
     }
@@ -270,6 +301,10 @@ pub(crate) fn can_recv(handle: i64) -> bool {
                     .expect("mutex never poisoned: single-threaded cooperative runtime")
                     > rx.last_seen_version
             }
+            TAG_IPC_CHANNEL => {
+                // SAFETY: handle veio de kata_rt_ipc_channel_create.
+                super::ipc::can_ipc_recv(handle)
+            }
             _ => false,
         }
     }
@@ -311,6 +346,10 @@ pub(crate) fn can_send(handle: i64) -> bool {
                     < inner.capacity
             }
             super::TAG_BROADCAST => true, // broadcast sempre pode enviar
+            TAG_IPC_CHANNEL => {
+                // SAFETY: handle veio de kata_rt_ipc_channel_create.
+                super::ipc::can_ipc_send(handle)
+            }
             _ => false,
         }
     }

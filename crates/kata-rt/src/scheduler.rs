@@ -37,7 +37,7 @@ use crate::arena::{
     kata_rt_arena_create, kata_rt_arena_create_tracked, kata_rt_arena_destroy,
     set_root_arena_handle,
 };
-use crate::channel::{can_recv, can_send};
+use crate::channel::{block_ipc_until_readable, can_recv, can_send, is_ipc_handle};
 use crate::fiber::{KataFiber, SpawnArgs, YieldReason};
 
 use ffi::{HAS_READY_FIBER, PENDING_SPAWNS, YIELD_COUNTER, YIELD_INTERVAL};
@@ -272,7 +272,30 @@ impl Scheduler {
                     continue;
                 }
 
-                // Sem deadlines — deadlock real.
+                // Sem deadlines — verificar se algum fiber está bloqueado
+                // em canal IPC. Se sim, o child OS process pode ainda estar
+                // escrevendo. Fazer poll blocking no primeiro handle IPC
+                // e tentar novamente.
+                let ipc_handle = self.blocked.values().find_map(|reason| match reason {
+                    BlockReason::WaitingOnChannel(handle) if is_ipc_handle(*handle) => Some(*handle),
+                    BlockReason::WaitingOnSelect(handles, _) => {
+                        handles.iter().find(|h| is_ipc_handle(**h)).copied()
+                    }
+                    _ => None,
+                });
+
+                if let Some(handle) = ipc_handle {
+                    // Bloqueia até o child OS process escrever no pipe.
+                    // SAFETY: handle veio de um fiber blocked em canal IPC.
+                    unsafe {
+                        block_ipc_until_readable(handle);
+                    }
+                    // Após dados chegarem, fazer wake_pass e continuar.
+                    self.wake_pass();
+                    continue;
+                }
+
+                // Sem deadlines e sem IPC — deadlock real.
                 let n = self.blocked.len();
                 self.fibers.drain();
                 return Err(format!("deadlock: {n} fibers bloqueados sem progresso"));

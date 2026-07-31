@@ -591,9 +591,11 @@ pub(crate) fn lower_expr(
             recv_ty,
             bind_name,
         } => super::csp::lower_channel_recv(channel, bind_name, recv_ty, ctx),
-        TypedExprKind::ChannelCreate { kind, elem_ty } => {
-            super::csp::lower_channel_create(expr, kind, elem_ty, ctx)
-        }
+        TypedExprKind::ChannelCreate {
+            kind,
+            elem_ty,
+            cross_process,
+        } => super::csp::lower_channel_create(expr, kind, elem_ty, *cross_process, ctx),
         TypedExprKind::ReceiverFactoryCall { factory, elem_ty } => {
             super::csp::lower_receiver_factory_call(expr, factory, elem_ty, ctx)
         }

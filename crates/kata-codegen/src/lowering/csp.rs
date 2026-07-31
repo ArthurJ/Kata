@@ -34,6 +34,27 @@ fn is_arc_type(ty: &Ty) -> bool {
     }
 }
 
+/// Extrai o `type_id` do tipo de elemento do canal a partir do tipo do
+/// `ChannelCreate` (`Tuple([Sender(T), Receiver(T)])`). O `elem_ty` no
+/// `ChannelCreate` pode ser `Var("T0")` não-resolvido; o tipo concreto
+/// está em `expr.ty`.
+fn lookup_type_id(expr: &TypedExpr, ctx: &LowerCtx) -> i64 {
+    // Tenta extrair o tipo de elemento do Sender no tipo do expr.
+    let elem_ty = match &expr.ty {
+        Ty::Tuple(elems) if elems.len() == 2 => {
+            if let Ty::Sender(inner) = &elems[0] {
+                inner.as_ref().clone()
+            } else {
+                Ty::Prim(kata_core::ty::PrimTy::Int)
+            }
+        }
+        _ => Ty::Prim(kata_core::ty::PrimTy::Int),
+    };
+
+    // Procura no type_id_map. Se não encontra, usa 0 (Prim).
+    ctx.type_id_map.get(&elem_ty).copied().unwrap_or(0)
+}
+
 /// Lowera `TypedExprKind::ChannelCreate`.
 ///
 /// Chama a FFI de criação apropriada para o `ChannelKind`, depois constrói
@@ -46,10 +67,11 @@ pub(crate) fn lower_channel_create(
     _expr: &TypedExpr,
     kind: &ChannelKind,
     _elem_ty: &Ty,
+    cross_process: bool,
     ctx: &mut LowerCtx,
 ) -> Result<cranelift_codegen::ir::Value, super::CodegenError> {
     // Arena onde o canal é alocado — fiber_arena do criador. Canais fluem
-    // apenas descendente (pai → filho via fork!) e structured concurrency
+    // apenas descendente (pai → filho via fork!/spawn!) e structured concurrency
     // garante que o criador é always-last. bump.reset() no epílogo libera
     // o canal — O(1), sem leak. Valores ARC-managed enviados pelo canal
     // continuam na root_arena (escape analysis marca Heap no channel_send).
@@ -57,20 +79,36 @@ pub(crate) fn lower_channel_create(
         .fiber_arena
         .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
 
-    // 1. Chamar a FFI de criação conforme o kind.
+    // 1. Chamar a FFI de criação conforme o kind e backend (in-process vs IPC).
     let handle = match kind {
         ChannelKind::Rendezvous => {
+            let ffi_name = if cross_process {
+                "kata_rt_ipc_channel_create"
+            } else {
+                "kata_rt_channel_create"
+            };
             let fref = ctx
                 .ffi_refs
-                .get("kata_rt_channel_create")
+                .get(ffi_name)
                 .copied()
                 .ok_or_else(|| {
-                    super::CodegenError::FfiSymbolNotFound("kata_rt_channel_create".into())
+                    super::CodegenError::FfiSymbolNotFound(ffi_name.into())
                 })?;
-            let inst = ctx.builder.ins().call(fref, &[arena]);
-            ctx.builder.inst_results(inst)[0]
+            if cross_process {
+                // IPC: (arena, type_id) -> handle
+                let type_id = lookup_type_id(_expr, ctx);
+                let type_id_val = ctx.builder.ins().iconst(I64, type_id);
+                let inst = ctx.builder.ins().call(fref, &[arena, type_id_val]);
+                ctx.builder.inst_results(inst)[0]
+            } else {
+                // In-process: (arena) -> handle
+                let inst = ctx.builder.ins().call(fref, &[arena]);
+                ctx.builder.inst_results(inst)[0]
+            }
         }
         ChannelKind::Buffered(cap) => {
+            // Buffered IPC não suportado em v1 — usa in-process.
+            // Se cross_process for true com Buffered, fallback para in-process.
             let fref = ctx
                 .ffi_refs
                 .get("kata_rt_queue_create")
@@ -83,6 +121,7 @@ pub(crate) fn lower_channel_create(
             ctx.builder.inst_results(inst)[0]
         }
         ChannelKind::Broadcast => {
+            // Broadcast IPC não suportado em v1 — usa in-process.
             let fref = ctx
                 .ffi_refs
                 .get("kata_rt_broadcast_create")

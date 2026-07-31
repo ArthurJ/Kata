@@ -21,6 +21,7 @@ mod const_eval;
 mod constructors;
 mod constructors_enum_pred;
 mod constructors_refined;
+mod cross_process;
 mod csp;
 mod csp_builtins;
 mod cycle;
@@ -306,6 +307,9 @@ pub fn infer_module(
     // Coleta captures (free variables) de cada Closure.
     // Percorre a TAST já construída e muta in-place os campos `captures`.
     captures::run(&mut typed_module);
+
+    // Marca canais que fluem para spawn! como cross_process.
+    cross_process::run(&mut typed_module);
 
     Ok(typed_module)
 }

@@ -359,6 +359,10 @@ pub enum TypedExprKind {
         kind: ChannelKind,
         /// Tipo do valor transportado (`T` em `Sender::T`).
         elem_ty: Ty,
+        /// `true` se o canal flui para `spawn!` (cross-process).
+        /// O codegen emite `kata_rt_ipc_channel_create` em vez de
+        /// `kata_rt_channel_create`. Marcado por um pass pós-inferência.
+        cross_process: bool,
     },
 
     /// `rxf!()` — pedido de receiver a uma ReceiverFactory existente.

@@ -54,7 +54,11 @@ pub(crate) fn infer_channel_builtin(
         ty: ret_ty,
         tail_pos: false,
         escape: kata_core::escape::EscapeTarget::Local,
-        kind: TypedExprKind::ChannelCreate { kind, elem_ty },
+        kind: TypedExprKind::ChannelCreate {
+            kind,
+            elem_ty,
+            cross_process: false,
+        },
     })
 }
 
@@ -107,6 +111,7 @@ pub(crate) fn infer_queue_builtin(
         kind: TypedExprKind::ChannelCreate {
             kind: ChannelKind::Buffered(capacity),
             elem_ty,
+            cross_process: false,
         },
     }))
 }

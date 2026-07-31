@@ -126,7 +126,8 @@ pub use text::{
 // Canais CSP
 pub use channel::{
     kata_rt_broadcast_create, kata_rt_broadcast_receiver_create, kata_rt_channel_create,
-    kata_rt_channel_recv, kata_rt_channel_send, kata_rt_queue_create, kata_rt_select,
+    kata_rt_channel_recv, kata_rt_channel_send, kata_rt_ipc_channel_create, kata_rt_queue_create,
+    kata_rt_select,
 };
 // Telemetria (@log)
 // reset_log e snapshot_log_config — rebaixados para pub(crate): zero

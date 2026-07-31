@@ -224,9 +224,9 @@ pub extern "C" fn kata_rt_log_recv(topic_ptr: i64) -> i64 {
 
     match handle {
         Some(h) => {
-            // Verifica se é Broadcast (tag 0b10). Se sim, precisa de receiver.
-            let tag = h & 0b11;
-            if tag == 0b10 {
+            // Verifica se é Broadcast (tag 0b010). Se sim, precisa de receiver.
+            let tag = h & 0b111;
+            if tag == 0b010 {
                 // Broadcast — obter ou criar receiver cached.
                 let rx_handle = RECEIVER_REGISTRY.with(|r| {
                     if let Some(&rx) = r.borrow().get(&topic) {

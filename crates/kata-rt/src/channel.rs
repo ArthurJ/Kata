@@ -22,6 +22,7 @@
 //! alocação na arena. As operações de send/recv/can_recv/can_send
 //! estão em [`ops`] e a FFI de select em [`select`].
 
+pub(crate) mod ipc;
 pub(crate) mod ops;
 pub(crate) mod select;
 
@@ -31,6 +32,12 @@ pub use ops::{kata_rt_channel_recv, kata_rt_channel_send};
 pub use select::kata_rt_select;
 // `can_recv`/`can_send` são usadas pelo scheduler (pub(crate) no ops).
 pub(crate) use ops::{can_recv, can_send};
+/// Verifica se um handle é de canal IPC (tag TAG_IPC_CHANNEL).
+pub(crate) use ops::is_ipc_handle;
+/// Bloqueia (poll blocking) até o canal IPC ter dados. Usado pelo
+/// scheduler quando todos os fibers estão blocked em IPC e não há
+/// outros fibers para executar — o child OS process ainda pode escrever.
+pub(crate) use ops::block_ipc_until_readable;
 
 use std::collections::VecDeque;
 use std::sync::{Condvar, Mutex};
@@ -40,13 +47,14 @@ use std::sync::{Condvar, Mutex};
 // Ponteiros de heap são 8-byte aligned → bits 0-1 são sempre 0.
 // Usamos esses 2 bits para identificar a topologia.
 
-pub(super) const TAG_CHANNEL: i64 = 0b00; // rendezvous
-pub(super) const TAG_QUEUE: i64 = 0b01; // buffered
-pub(super) const TAG_BROADCAST: i64 = 0b10; // sender/factory
-pub(super) const TAG_BROADCAST_RX: i64 = 0b11; // receiver
+pub(super) const TAG_CHANNEL: i64 = 0b000; // rendezvous
+pub(super) const TAG_QUEUE: i64 = 0b001; // buffered
+pub(super) const TAG_BROADCAST: i64 = 0b010; // sender/factory
+pub(super) const TAG_BROADCAST_RX: i64 = 0b011; // receiver
+pub(super) const TAG_IPC_CHANNEL: i64 = 0b100; // cross-process pipe
 
-const TAG_MASK: i64 = 0b11;
-const PTR_MASK: i64 = !0b11;
+const TAG_MASK: i64 = 0b111;
+const PTR_MASK: i64 = !0b111;
 
 /// Extrai a tag (2 bits baixos) do handle.
 pub(super) fn tag_of(handle: i64) -> i64 {
@@ -59,8 +67,12 @@ pub(super) fn ptr_of(handle: i64) -> *mut u8 {
 }
 
 /// Combina ponteiro + tag num handle i64.
-fn make_handle(ptr: *mut u8, tag: i64) -> i64 {
+pub(super) fn make_handle_pub(ptr: *mut u8, tag: i64) -> i64 {
     (ptr as i64) | tag
+}
+
+fn make_handle(ptr: *mut u8, tag: i64) -> i64 {
+    make_handle_pub(ptr, tag)
 }
 
 // ── Structs ──────────────────────────────────────────────────────────
@@ -97,6 +109,22 @@ pub(crate) struct BroadcastReceiver {
     last_seen_version: u64,
 }
 
+/// Canal cross-process — pipe Unix com FDs de leitura e escrita.
+///
+/// `type_id` é o índice na type table do tipo de elemento do canal.
+/// Usado por `to_bytes`/`from_bytes` para serializar/desserializar
+/// valores no trânsito cross-process.
+///
+/// Após fork, o parent fecha `read_fd` (só envia) e o child fecha
+/// `write_fd` (só recebe) — ou vice-versa, conforme o fluxo. O kernel
+/// rastreia referências por FD: quando o último FD de uma ponta do
+/// pipe é fechado, o pipe é destruído.
+pub(crate) struct IpcChannelInner {
+    pub(crate) write_fd: i32,
+    pub(crate) read_fd: i32,
+    pub(crate) type_id: i64,
+}
+
 // ── Funções auxiliares de alocação na arena ──────────────────────────
 
 /// Aloca `size` bytes na arena e escreve `value` no espaço alocado.
@@ -104,7 +132,7 @@ pub(crate) struct BroadcastReceiver {
 ///
 /// # Safety
 /// `arena_handle` deve ser válido. `size` deve ser `size_of::<T>()`.
-unsafe fn arena_alloc_and_init<T>(arena_handle: i64, value: T) -> *mut u8 {
+pub(super) unsafe fn arena_alloc_and_init<T>(arena_handle: i64, value: T) -> *mut u8 {
     let size = std::mem::size_of::<T>() as i64;
     let ptr = crate::arena::kata_rt_arena_alloc(arena_handle, size);
     if ptr == 0 {
@@ -217,4 +245,19 @@ pub extern "C" fn kata_rt_broadcast_receiver_create(arena: i64, factory_handle: 
         return 0;
     }
     make_handle(ptr, TAG_BROADCAST_RX)
+}
+
+/// Cria canal cross-process via pipe Unix. Aloca `IpcChannelInner`
+/// na arena do caller. Retorna handle com tag `0b100` (TAG_IPC_CHANNEL).
+///
+/// O `type_id` é o índice na type table do tipo de elemento do canal.
+/// Usado por `to_bytes`/`from_bytes` para serializar valores.
+///
+/// # Safety
+/// `arena` deve ser válido. `type_id` deve ser um índice válido na
+/// type table registrada.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_ipc_channel_create(arena: i64, type_id: i64) -> i64 {
+    // SAFETY: arena é válido (contrato FFI).
+    unsafe { ipc::create_ipc_channel(arena, type_id) }
 }
