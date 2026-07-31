@@ -61,8 +61,13 @@ pub fn aot_emit(
     let ffi_ids = crate::ffi_registry::declare_ffi_symbols(&mut backend)?;
 
     // Lowering — reusa 100% do pipeline do JIT via &mut dyn ModuleBackend.
-    let (_metadata, _string_table, _test_wrappers) =
-        lower_module(typed, &mut backend, &ffi_ids, &typed.struct_registry, type_id_map)?;
+    let (_metadata, _string_table, _test_wrappers) = lower_module(
+        typed,
+        &mut backend,
+        &ffi_ids,
+        &typed.struct_registry,
+        type_id_map,
+    )?;
 
     // Finaliza: ObjectModule::finish() consome o module e produz ObjectProduct.
     backend.finalize()?;

@@ -383,12 +383,15 @@ fn run_pipeline_with_file(source: &str, file_path: Option<&str>) -> miette::Resu
 
     // 6c. Type table — registra TypeShapes no runtime para to_bytes/from_bytes.
     //     O driver é o único que conhece Ty (kata-core) e TypeShape (kata-rt).
-    let _type_id_map =
-        type_table::build_and_register_type_table(&mono, &mono.struct_registry, &resolved.enum_registry);
+    let _type_id_map = type_table::build_and_register_type_table(
+        &mono,
+        &mono.struct_registry,
+        &resolved.enum_registry,
+    );
 
     // 7. Codegen + JIT + executar
-    let jit =
-        jit_eval(&mono, &_type_id_map).map_err(|e| miette::Report::msg(format!("erro de codegen: {e:?}")))?;
+    let jit = jit_eval(&mono, &_type_id_map)
+        .map_err(|e| miette::Report::msg(format!("erro de codegen: {e:?}")))?;
 
     Ok(ExecResult {
         raw: jit.raw,

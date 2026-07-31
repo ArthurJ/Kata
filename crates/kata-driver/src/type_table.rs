@@ -97,9 +97,7 @@ pub(crate) fn ty_to_marshal_shape(
                             .map(|v| {
                                 v.payload_ty.as_ref().map(|ty| {
                                     let resolved = apply_subst(ty, &subst);
-                                    Box::new(ty_to_marshal_shape(
-                                        &resolved, structs, enums,
-                                    ))
+                                    Box::new(ty_to_marshal_shape(&resolved, structs, enums))
                                 })
                             })
                             .collect(),
@@ -157,9 +155,7 @@ fn apply_subst(ty: &Ty, subst: &HashMap<String, Ty>) -> Ty {
             Box::new(apply_subst(k, subst)),
             Box::new(apply_subst(v, subst)),
         ),
-        Ty::Tuple(elements) => {
-            Ty::Tuple(elements.iter().map(|t| apply_subst(t, subst)).collect())
-        }
+        Ty::Tuple(elements) => Ty::Tuple(elements.iter().map(|t| apply_subst(t, subst)).collect()),
         Ty::Function(params, ret) => Ty::Function(
             params.iter().map(|t| apply_subst(t, subst)).collect(),
             Box::new(apply_subst(ret, subst)),
@@ -168,14 +164,13 @@ fn apply_subst(ty: &Ty, subst: &HashMap<String, Ty>) -> Ty {
             params.iter().map(|t| apply_subst(t, subst)).collect(),
             Box::new(apply_subst(ret, subst)),
         ),
-        Ty::Generic(name, args) => {
-            Ty::Generic(name.clone(), args.iter().map(|t| apply_subst(t, subst)).collect())
-        }
+        Ty::Generic(name, args) => Ty::Generic(
+            name.clone(),
+            args.iter().map(|t| apply_subst(t, subst)).collect(),
+        ),
         Ty::Sender(elem) => Ty::Sender(Box::new(apply_subst(elem, subst))),
         Ty::Receiver(elem) => Ty::Receiver(Box::new(apply_subst(elem, subst))),
-        Ty::ReceiverFactory(elem) => {
-            Ty::ReceiverFactory(Box::new(apply_subst(elem, subst)))
-        }
+        Ty::ReceiverFactory(elem) => Ty::ReceiverFactory(Box::new(apply_subst(elem, subst))),
         // Tipos sem Var — clone direto.
         _ => ty.clone(),
     }
@@ -184,9 +179,7 @@ fn apply_subst(ty: &Ty, subst: &HashMap<String, Ty>) -> Ty {
 /// Coleta todos os `Ty` únicos que aparecem nos params e retornos das
 /// functions e actions do módulo. Retorna vec na ordem de descoberta
 /// (que vira a ordem dos type_ids).
-pub(crate) fn collect_module_types(
-    mono: &kata_monomorph::MonoModule,
-) -> Vec<Ty> {
+pub(crate) fn collect_module_types(mono: &kata_monomorph::MonoModule) -> Vec<Ty> {
     let mut seen: Vec<Ty> = Vec::new();
 
     let mut insert = |ty: &Ty| {

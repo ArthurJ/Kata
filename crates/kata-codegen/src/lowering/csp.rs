@@ -399,15 +399,15 @@ pub(crate) fn lower_spawn(
             .module
             .declare_func_in_func(callee_fid, ctx.builder.func);
         let ext_func_name = ctx.builder.func.dfg.ext_funcs[func_ref].name.clone();
-        let func_gv = ctx
-            .builder
-            .func
-            .create_global_value(cranelift_codegen::ir::GlobalValueData::Symbol {
-                name: ext_func_name,
-                offset: 0.into(),
-                colocated: true,
-                tls: false,
-            });
+        let func_gv =
+            ctx.builder
+                .func
+                .create_global_value(cranelift_codegen::ir::GlobalValueData::Symbol {
+                    name: ext_func_name,
+                    offset: 0.into(),
+                    colocated: true,
+                    tls: false,
+                });
         ctx.builder
             .ins()
             .global_value(ctx.module.target_config().pointer_type(), func_gv)

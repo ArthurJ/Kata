@@ -46,12 +46,7 @@ pub extern "C" fn kata_rt_spawn_process(
     spawn_process_inner(fn_ptr, args_ptr, result_type_id, arena_handle)
 }
 
-fn spawn_process_inner(
-    fn_ptr: i64,
-    args_ptr: i64,
-    result_type_id: i64,
-    arena_handle: i64,
-) -> i64 {
+fn spawn_process_inner(fn_ptr: i64, args_ptr: i64, result_type_id: i64, arena_handle: i64) -> i64 {
     // 1. Criar pipe: child→parent para o resultado.
     let mut result_pipe: [i32; 2] = [0; 2];
     let rc = unsafe { libc::pipe(result_pipe.as_mut_ptr()) };
@@ -75,7 +70,9 @@ fn spawn_process_inner(
         0 => {
             // ── CHILD ──────────────────────────────────────
             // Fecha o lado de leitura do pipe de resultado.
-            unsafe { libc::close(read_fd); }
+            unsafe {
+                libc::close(read_fd);
+            }
 
             // O child herda a arena via COW. Chama a Action diretamente.
             // A Action tem ABI: (fiber_arena, caller_arena, args_ptr) -> i64.
@@ -93,9 +90,7 @@ fn spawn_process_inner(
             let blob_ptr = blob as *const u8;
             let total_len = unsafe { std::ptr::read_unaligned(blob_ptr as *const i64) };
             let rebase_count = unsafe { std::ptr::read_unaligned(blob_ptr.add(16) as *const i64) };
-            let total_size = BLOB_HEADER_SIZE
-                + (rebase_count as usize) * 8
-                + (total_len as usize);
+            let total_size = BLOB_HEADER_SIZE + (rebase_count as usize) * 8 + (total_len as usize);
 
             // Escreve status OK + tamanho total + blob.
             let status = SPAWN_OK;
@@ -112,26 +107,34 @@ fn spawn_process_inner(
             }
 
             // Fecha o pipe de escrita e termina.
-            unsafe { libc::close(write_fd); }
-            unsafe { libc::_exit(0); }
+            unsafe {
+                libc::close(write_fd);
+            }
+            unsafe {
+                libc::_exit(0);
+            }
         }
         pid => {
             // ── PARENT ─────────────────────────────────────
             // Fecha o lado de escrita do pipe de resultado.
-            unsafe { libc::close(write_fd); }
+            unsafe {
+                libc::close(write_fd);
+            }
 
             // Yield — cede a outras fibers enquanto o child executa.
             crate::scheduler::kata_rt_yield();
 
             // Lê o status do child.
             let mut status = [0u8; 1];
-            let n = unsafe {
-                libc::read(read_fd, status.as_mut_ptr() as *mut libc::c_void, 1)
-            };
+            let n = unsafe { libc::read(read_fd, status.as_mut_ptr() as *mut libc::c_void, 1) };
             if n != 1 || status[0] != SPAWN_OK {
-                unsafe { libc::close(read_fd); }
+                unsafe {
+                    libc::close(read_fd);
+                }
                 // Reap zombie.
-                unsafe { libc::waitpid(pid, std::ptr::null_mut(), 0); }
+                unsafe {
+                    libc::waitpid(pid, std::ptr::null_mut(), 0);
+                }
                 return 0;
             }
 
@@ -145,8 +148,12 @@ fn spawn_process_inner(
                 )
             };
             if n != 8 {
-                unsafe { libc::close(read_fd); }
-                unsafe { libc::waitpid(pid, std::ptr::null_mut(), 0); }
+                unsafe {
+                    libc::close(read_fd);
+                }
+                unsafe {
+                    libc::waitpid(pid, std::ptr::null_mut(), 0);
+                }
                 return 0;
             }
             let total_size = i64::from_le_bytes(total_size_bytes) as usize;
@@ -167,10 +174,14 @@ fn spawn_process_inner(
                 }
                 read_total += n as usize;
             }
-            unsafe { libc::close(read_fd); }
+            unsafe {
+                libc::close(read_fd);
+            }
 
             // Reap zombie.
-            unsafe { libc::waitpid(pid, std::ptr::null_mut(), 0); }
+            unsafe {
+                libc::waitpid(pid, std::ptr::null_mut(), 0);
+            }
 
             if read_total != total_size {
                 return 0;

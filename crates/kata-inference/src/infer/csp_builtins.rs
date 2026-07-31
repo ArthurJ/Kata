@@ -325,122 +325,106 @@ pub(crate) fn infer_spawn_builtin(
     ctx: &InferCtx,
 ) -> InferResult<ActionDispatch> {
     // Extrai (action_expr, typed_args) de forma posicional ou dict.
-    let (action_name, action_expr_typed, typed_args, args_span) =
-        match &args.node {
-            // Forma posicional: spawn!(action, (arg1, arg2, ...))
-            Expr::Tuple { elements } => {
-                if elements.len() != 2 {
-                    return Err(kata_diagnostics::MiddleError::TypeMismatch {
-                        expected: "tupla de 2 elementos: (action_name, args)".into(),
-                        found: format!("{} elementos", elements.len()),
-                        span: args.span.into(),
-                    });
-                }
-                let action_expr_typed =
-                    super::expr::infer_expr(&elements[0].node, &elements[0].span, env, ctx, false)?;
-                let (action_name, is_direct) = match &elements[0].node {
-                    Expr::Ident { name } => {
-                        if env.lookup(name).is_some() {
-                            ("__indirect_spawn".to_string(), false)
-                        } else {
-                            (name.clone(), true)
-                        }
-                    }
-                    _ => ("__indirect_spawn".to_string(), false),
-                };
-
-                if is_direct && !ctx.table.has_function(&action_name) {
-                    return Err(kata_diagnostics::MiddleError::UnboundName {
-                        name: format!("Action `{action_name}` não declarada (spawn!)"),
-                        span: elements[0].span.into(),
-                    });
-                }
-
-                let typed_args =
-                    super::expr::infer_expr(&elements[1].node, &elements[1].span, env, ctx, false)?;
-                let typed_args = normalize_grouping(typed_args);
-                (
-                    action_name,
-                    action_expr_typed,
-                    typed_args,
-                    elements[1].span,
-                )
-            }
-            // Forma dict: spawn!{callee: action, raw: args}
-            Expr::DictLit { entries } => {
-                let mut callee_expr = None;
-                let mut raw_expr = None;
-                for (key, val) in entries {
-                    let key_name = match &key.node {
-                        Expr::Ident { name } => name.clone(),
-                        Expr::TextLit { text } => text.clone(),
-                        _ => continue,
-                    };
-                    match key_name.as_str() {
-                        "callee" => callee_expr = Some(val),
-                        "raw" => raw_expr = Some(val),
-                        "serialized" => {
-                            // serialized: payload pré-serializado.
-                            // Por ora, trata igual a raw (codegem decide).
-                            raw_expr = Some(val);
-                        }
-                        _ => {}
-                    }
-                }
-                let callee = callee_expr.ok_or_else(|| {
-                    kata_diagnostics::MiddleError::TypeMismatch {
-                        expected: "chave `callee` em spawn!{...}".into(),
-                        found: "dict sem chave `callee`".into(),
-                        span: (*span).into(),
-                    }
-                })?;
-                let raw = raw_expr.ok_or_else(|| {
-                    kata_diagnostics::MiddleError::TypeMismatch {
-                        expected: "chave `raw` ou `serialized` em spawn!{...}".into(),
-                        found: "dict sem chave `raw`/`serialized`".into(),
-                        span: (*span).into(),
-                    }
-                })?;
-
-                let action_expr_typed =
-                    super::expr::infer_expr(&callee.node, &callee.span, env, ctx, false)?;
-                let (action_name, is_direct) = match &callee.node {
-                    Expr::Ident { name } => {
-                        if env.lookup(name).is_some() {
-                            ("__indirect_spawn".to_string(), false)
-                        } else {
-                            (name.clone(), true)
-                        }
-                    }
-                    _ => ("__indirect_spawn".to_string(), false),
-                };
-
-                if is_direct && !ctx.table.has_function(&action_name) {
-                    return Err(kata_diagnostics::MiddleError::UnboundName {
-                        name: format!("Action `{action_name}` não declarada (spawn!)"),
-                        span: callee.span.into(),
-                    });
-                }
-
-                let typed_args =
-                    super::expr::infer_expr(&raw.node, &raw.span, env, ctx, false)?;
-                let typed_args = normalize_grouping(typed_args);
-                (
-                    action_name,
-                    action_expr_typed,
-                    typed_args,
-                    raw.span,
-                )
-            }
-            other => {
+    let (action_name, action_expr_typed, typed_args, args_span) = match &args.node {
+        // Forma posicional: spawn!(action, (arg1, arg2, ...))
+        Expr::Tuple { elements } => {
+            if elements.len() != 2 {
                 return Err(kata_diagnostics::MiddleError::TypeMismatch {
-                    expected: "tupla (action, args) ou dict {callee: ..., raw: ...} para spawn!"
-                        .into(),
-                    found: format!("{other:?}"),
+                    expected: "tupla de 2 elementos: (action_name, args)".into(),
+                    found: format!("{} elementos", elements.len()),
                     span: args.span.into(),
                 });
             }
-        };
+            let action_expr_typed =
+                super::expr::infer_expr(&elements[0].node, &elements[0].span, env, ctx, false)?;
+            let (action_name, is_direct) = match &elements[0].node {
+                Expr::Ident { name } => {
+                    if env.lookup(name).is_some() {
+                        ("__indirect_spawn".to_string(), false)
+                    } else {
+                        (name.clone(), true)
+                    }
+                }
+                _ => ("__indirect_spawn".to_string(), false),
+            };
+
+            if is_direct && !ctx.table.has_function(&action_name) {
+                return Err(kata_diagnostics::MiddleError::UnboundName {
+                    name: format!("Action `{action_name}` não declarada (spawn!)"),
+                    span: elements[0].span.into(),
+                });
+            }
+
+            let typed_args =
+                super::expr::infer_expr(&elements[1].node, &elements[1].span, env, ctx, false)?;
+            let typed_args = normalize_grouping(typed_args);
+            (action_name, action_expr_typed, typed_args, elements[1].span)
+        }
+        // Forma dict: spawn!{callee: action, raw: args}
+        Expr::DictLit { entries } => {
+            let mut callee_expr = None;
+            let mut raw_expr = None;
+            for (key, val) in entries {
+                let key_name = match &key.node {
+                    Expr::Ident { name } => name.clone(),
+                    Expr::TextLit { text } => text.clone(),
+                    _ => continue,
+                };
+                match key_name.as_str() {
+                    "callee" => callee_expr = Some(val),
+                    "raw" => raw_expr = Some(val),
+                    "serialized" => {
+                        // serialized: payload pré-serializado.
+                        // Por ora, trata igual a raw (codegem decide).
+                        raw_expr = Some(val);
+                    }
+                    _ => {}
+                }
+            }
+            let callee =
+                callee_expr.ok_or_else(|| kata_diagnostics::MiddleError::TypeMismatch {
+                    expected: "chave `callee` em spawn!{...}".into(),
+                    found: "dict sem chave `callee`".into(),
+                    span: (*span).into(),
+                })?;
+            let raw = raw_expr.ok_or_else(|| kata_diagnostics::MiddleError::TypeMismatch {
+                expected: "chave `raw` ou `serialized` em spawn!{...}".into(),
+                found: "dict sem chave `raw`/`serialized`".into(),
+                span: (*span).into(),
+            })?;
+
+            let action_expr_typed =
+                super::expr::infer_expr(&callee.node, &callee.span, env, ctx, false)?;
+            let (action_name, is_direct) = match &callee.node {
+                Expr::Ident { name } => {
+                    if env.lookup(name).is_some() {
+                        ("__indirect_spawn".to_string(), false)
+                    } else {
+                        (name.clone(), true)
+                    }
+                }
+                _ => ("__indirect_spawn".to_string(), false),
+            };
+
+            if is_direct && !ctx.table.has_function(&action_name) {
+                return Err(kata_diagnostics::MiddleError::UnboundName {
+                    name: format!("Action `{action_name}` não declarada (spawn!)"),
+                    span: callee.span.into(),
+                });
+            }
+
+            let typed_args = super::expr::infer_expr(&raw.node, &raw.span, env, ctx, false)?;
+            let typed_args = normalize_grouping(typed_args);
+            (action_name, action_expr_typed, typed_args, raw.span)
+        }
+        other => {
+            return Err(kata_diagnostics::MiddleError::TypeMismatch {
+                expected: "tupla (action, args) ou dict {callee: ..., raw: ...} para spawn!".into(),
+                found: format!("{other:?}"),
+                span: args.span.into(),
+            });
+        }
+    };
 
     // Verifica que é uma Action (is_action = true) se direto.
     if !action_name.starts_with("__indirect") {

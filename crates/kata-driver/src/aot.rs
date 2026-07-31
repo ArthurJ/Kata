@@ -74,8 +74,11 @@ pub(crate) fn cmd_build(file: &str, output: Option<&str>, dynamic: bool) -> miet
 
     // Type table — registra TypeShapes no runtime para to_bytes/from_bytes.
     let mono = kata_monomorph::MonoModule::from(shaken);
-    let type_id_map: HashMap<Ty, i64> =
-        type_table::build_and_register_type_table(&mono, &mono.struct_registry, &resolved.enum_registry);
+    let type_id_map: HashMap<Ty, i64> = type_table::build_and_register_type_table(
+        &mono,
+        &mono.struct_registry,
+        &resolved.enum_registry,
+    );
 
     // AOT emit — produz object file (.o) bytes.
     let object_bytes = aot_emit(&mono, &type_id_map)
