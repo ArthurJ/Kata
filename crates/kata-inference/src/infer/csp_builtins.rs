@@ -6,6 +6,7 @@
 //! - `queue!(N)` → `ChannelCreate { Buffered(N), T0 }`
 //! - `fork!(action, args)` → `Fork { action_name, args }`
 
+use std::cell::Cell;
 use std::collections::HashMap;
 
 use kata_ast::{Expr, Span, Spanned};
@@ -16,6 +17,27 @@ use crate::typed::{ChannelKind, TypedExpr, TypedExprKind};
 use super::action_call::ActionDispatch;
 use super::expr::InferCtx;
 use super::helpers::InferResult;
+
+// Contador global de type vars para channel!()/queue!()/broadcast!().
+// Cada chamada cria um Var com nome único (T0, T1, T2, ...) para que
+// a unificação de tipos no spawn!/fork! não colida entre canais diferentes.
+thread_local! {
+    static CHANNEL_TYPE_VAR_COUNTER: Cell<u32> = const { Cell::new(0) };
+}
+
+/// Gera um nome único para o type var de um canal.
+fn next_channel_type_var() -> String {
+    CHANNEL_TYPE_VAR_COUNTER.with(|c| {
+        let n = c.get();
+        c.set(n + 1);
+        format!("T{n}")
+    })
+}
+
+/// Reseta o contador de type vars de canal. Chamado no início de `infer_module`.
+pub(crate) fn reset_channel_type_var_counter() {
+    CHANNEL_TYPE_VAR_COUNTER.with(|c| c.set(0));
+}
 
 /// `channel!()` e `broadcast!()` — sem argumentos além de `()`.
 ///
@@ -37,7 +59,7 @@ pub(crate) fn infer_channel_builtin(
         });
     }
 
-    let elem_ty = Ty::Var("T0".into());
+    let elem_ty = Ty::Var(next_channel_type_var());
     let ret_ty = match kind {
         ChannelKind::Rendezvous | ChannelKind::Buffered(_) => Ty::Tuple(vec![
             Ty::Sender(Box::new(elem_ty.clone())),
@@ -97,7 +119,7 @@ pub(crate) fn infer_queue_builtin(
         });
     }
 
-    let elem_ty = Ty::Var("T0".into());
+    let elem_ty = Ty::Var(next_channel_type_var());
     let ret_ty = Ty::Tuple(vec![
         Ty::Sender(Box::new(elem_ty.clone())),
         Ty::Receiver(Box::new(elem_ty.clone())),
@@ -463,6 +485,37 @@ pub(crate) fn infer_spawn_builtin(
                 found: format!("{:?}", action_expr_typed.ty),
                 span: (*span).into(),
             });
+        }
+    }
+
+    // Unifica tipos dos args com tipos dos params da action.
+    // Mesmo mecanismo do fork!: quando o arg contém Ty::Var (ex:
+    // Sender::T0 do channel!()) e o param é concreto (ex:
+    // Sender::(Int, Int)), extrai a substituição T0 → (Int, Int) e
+    // propaga para todos os bindings do env. Isto resolve T0 para que
+    // o codegen veja o tipo concreto no ChannelCreate.
+    if !action_name.starts_with("__indirect") {
+        if let Some(overloads) = ctx.table.get_overloads(&action_name) {
+            let arg_tys: Vec<Ty> = match &typed_args.kind {
+                TypedExprKind::Tuple { elements } => {
+                    elements.iter().map(|e| e.node.ty.clone()).collect()
+                }
+                TypedExprKind::Unit => Vec::new(),
+                _ => vec![typed_args.ty.clone()],
+            };
+            for oi in overloads
+                .iter()
+                .filter(|o| o.is_action && o.params.len() == arg_tys.len())
+            {
+                let mut subs: super::generics::Substitutions = HashMap::new();
+                for (param, arg) in oi.params.iter().zip(&arg_tys) {
+                    extract_var_subs(param, arg, &mut subs);
+                }
+                if !subs.is_empty() {
+                    env.apply_substitutions(&subs);
+                    break;
+                }
+            }
         }
     }
 

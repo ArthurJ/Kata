@@ -335,7 +335,7 @@ impl TypeEnv {
 /// Aplica substituições de `Ty::Var(name)` → tipo concreto recursivamente.
 /// Usado por `TypeEnv::apply_substitutions` para propagar unificação
 /// de type vars do canal (ex: `T0 → List::Int`) nos bindings.
-fn apply_subs_to_ty(ty: &Ty, subs: &HashMap<String, Ty>) -> Ty {
+pub fn apply_subs_to_ty(ty: &Ty, subs: &HashMap<String, Ty>) -> Ty {
     match ty {
         Ty::Var(name) => subs.get(name).cloned().unwrap_or_else(|| ty.clone()),
         Ty::List(elem) => Ty::List(Box::new(apply_subs_to_ty(elem, subs))),

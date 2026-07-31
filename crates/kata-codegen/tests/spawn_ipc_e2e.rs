@@ -179,20 +179,20 @@ result"#;
 // elementos, envia 30 de volta. Parent recebe 30 e retorna.
 // Verifica que serialização/desserialização de tuplas funciona no pipe.
 //
-// NOTA: Ignorado porque channel!() cria Var("T0") que não é unificado com
-// (Int, Int) na inferência. O type_id do canal fica 0 (Prim), e a
-// serialização da tupla não funciona. Para habilitar, é necessário
-// unificar T0 com o tipo concreto do primeiro !> ou <!. Ver ROADMAP.
+// NOTA: Ignorado — o type_id é resolvido corretamente (a inferência
+// passa), mas o to_bytes/from_bytes não serializa a tupla corretamente.
+// O valor retornado é lixo (ponteiro não desserializado). Bug no
+// marshal.rs — a serialização de Tuple precisa ser investigada.
 
 #[serial]
 #[test]
-#[ignore = "channel!() não unifica T0 com tipo concreto — precisa de unificação na inferência"]
+#[ignore = "serialização de tupla no marshal.rs produz lixo — to_bytes/from_bytes bug"]
 fn spawn_ipc_tupla_round_trip() {
-    let src = r#"action worker (rx1::Receiver::(Int, Int), tx2::Sender::Int) => Int
+    let src = r#"action worker (rx1::Receiver::((Int, Int)), tx2::Sender::Int) => Int
     rx1 <! t
     match t
         (a, b): tx2 !> + a b
-        otherwise: 0
+        otherwise: ()
     0
 let ch1 := channel!()
 let tx1 := ch1.0
@@ -219,11 +219,13 @@ result"#;
 // calcula x*y, envia 12 de volta. Parent recebe 12 e retorna.
 // Verifica que serialização/desserialização de structs funciona no pipe.
 //
-// NOTA: Ignorado — mesmo motivo do teste de tupla. Ver ROADMAP.
+// NOTA: Ignorado — misaligned pointer no runtime durante desserialização
+// de struct. O type_id é resolvido corretamente, mas o from_bytes não
+// consegue reconstruir o struct. Bug de serialização a investigar.
 
 #[serial]
 #[test]
-#[ignore = "channel!() não unifica T0 com tipo concreto — precisa de unificação na inferência"]
+#[ignore = "crash no runtime: misaligned pointer na desserialização de struct"]
 fn spawn_ipc_struct_round_trip() {
     let src = r#"data Ponto (x::Int y::Int)
 action worker (rx1::Receiver::Ponto, tx2::Sender::Int) => Int
@@ -255,15 +257,18 @@ result"#;
 // para somar os elementos, envia 6 de volta. Parent recebe 6 e retorna.
 // Verifica que serialização/desserialização de listas funciona no pipe.
 //
-// NOTA: Ignorado — mesmo motivo do teste de tupla. Ver ROADMAP.
+// NOTA: Ignorado — deadlock no runtime. O child recebe a lista e faz
+// fold, mas o parent trava esperando a resposta. Pode ser que o fold
+// não funcione no child após fork (sem scheduler), ou que a
+// serialização de List não funcione corretamente. A investigar.
 
 #[serial]
 #[test]
-#[ignore = "channel!() não unifica T0 com tipo concreto — precisa de unificação na inferência"]
+#[ignore = "deadlock no runtime — fold no child após fork pode não funcionar"]
 fn spawn_ipc_lista_round_trip() {
     let src = r#"action worker (rx1::Receiver::List::Int, tx2::Sender::Int) => Int
     rx1 <! lst
-    total := fold + 0 lst
+    let total := fold + 0 lst
     tx2 !> total
     0
 let ch1 := channel!()
@@ -273,7 +278,7 @@ let ch2 := channel!()
 let tx2 := ch2.0
 let rx2 := ch2.1
 spawn!(worker, (rx1, tx2))
-tx1 !> [1, 2, 3]
+tx1 !> [1 2 3]
 rx2 <! result
 result"#;
     let (raw, _ty) = eval_src(src);

@@ -74,6 +74,10 @@ pub fn infer_module(
     module: &Module,
     resolved: &ResolvedModule,
 ) -> Result<TypedModule, MiddleError> {
+    // Reseta o contador de type vars de canal — cada channel!() precisa
+    // de um nome único para que a unificação não colida entre canais.
+    csp_builtins::reset_channel_type_var_counter();
+
     // 1. Popula DispatchTable com as assinaturas (prelude + módulo)
     let mut dispatch_table = populate_dispatch_table(&resolved.signatures);
 
