@@ -31,13 +31,13 @@ pub(crate) mod select;
 pub use ops::{kata_rt_channel_recv, kata_rt_channel_send};
 pub use select::kata_rt_select;
 // `can_recv`/`can_send` são usadas pelo scheduler (pub(crate) no ops).
-pub(crate) use ops::{can_recv, can_send};
-/// Verifica se um handle é de canal IPC (tag TAG_IPC_CHANNEL).
-pub(crate) use ops::is_ipc_handle;
 /// Bloqueia (poll blocking) até o canal IPC ter dados. Usado pelo
 /// scheduler quando todos os fibers estão blocked em IPC e não há
 /// outros fibers para executar — o child OS process ainda pode escrever.
 pub(crate) use ops::block_ipc_until_readable;
+/// Verifica se um handle é de canal IPC (tag TAG_IPC_CHANNEL).
+pub(crate) use ops::is_ipc_handle;
+pub(crate) use ops::{can_recv, can_send};
 
 use std::collections::VecDeque;
 use std::sync::{Condvar, Mutex};

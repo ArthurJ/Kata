@@ -551,3 +551,19 @@ typeck para viabilizar stream fusion. Aceita como pragmatismo: sem a
 interceptação, seriam chamadas de função opacas que o optimizer não
 consegue fundir. A generalização futura seria um `@fusion_eligible` que
 o typeck respeita para qualquer função — pós-1.0.
+
+### L6. `channel!()` cria `Var("T0")` que nunca é unificada
+
+`channel!()` cria `Ty::Var("T0")` como tipo de elemento. O `type_compatible`
+em `csp.rs` aceita `Var` como coringa (retorna `true` para qualquer tipo),
+mas nunca unifica `T0` com o tipo concreto. Para `fork!`, isso é
+mascaredo pela Action ter parâmetros tipados (`tx::Sender::Int`) — dentro
+da Action, o tipo é concreto. Para `spawn!` com canais IPC, o `type_id`
+do canal fica 0 (Prim) porque o tipo é `Var("T0")`, e a serialização de
+tipos complexos não funciona. Tipos primitivos (Int, Unit) funcionam
+porque SMI é inline (8 bytes, sem serialização recursiva).
+
+A correção seria unificar `T0` com o tipo do primeiro `!>` ou `<!` na
+inferência — uma unificação bidirecional como a que existe para generics.
+A lição: `type_compatible` com `Var` como coringa é um atalho que
+funciona para dispatch mas não para codegen que precisa do tipo concreto.

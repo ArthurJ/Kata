@@ -615,13 +615,22 @@ Testes E2E: `csp_channels_e2e.rs` (11 testes), `csp_broadcast_e2e.rs` (4 testes)
 
 **spawn! (Fase 9) ✅:** Multiprocess via fork+IPC. `spawn!(action, (args))`
 executa a Action em processo OS separado via `fork()`. O child herda a arena
-via copy-on-write, executa a Action, serializa o resultado via `to_bytes()`,
-e envia pelo pipe. O parent faz `yield`, lê o pipe, e desserializa via
-`from_bytes()`. `TypedExprKind::Spawn` na inference, `lower_spawn` no codegen,
+via copy-on-write, executa a Action, e termina. Fire-and-forget — não há
+retorno de valor. `TypedExprKind::Spawn` na inference, `lower_spawn` no codegen,
 `kata_rt_spawn_process` no runtime. Type table registrada pelo driver antes
 do JIT (`build_and_register_type_table` → `type_id_map: HashMap<Ty, i64>`
-propagado via `LowerCtx`). 3 testes E2E em `spawn_e2e.rs`: básico (Int),
-tupla (args compostos), sem args (Unit).
+propagado via `LowerCtx`). 4 testes E2E em `spawn_e2e.rs`: básico (Int),
+tupla (args compostos), sem args (Unit), dentro de Action.
+
+**Canais IPC (Fase 9b) ✅:** Canais cross-process via Unix pipe para comunicação
+entre parent e child após `spawn!`. Pass `cross_process.rs` na inferência marca
+`ChannelCreate` como `cross_process: true` quando o canal flui para `spawn!`
+(rastreia `let` bindings e `IndexAccess` de tupla → args do spawn até fixpoint).
+Codegen emite `kata_rt_ipc_channel_create` em vez de `kata_rt_channel_create`.
+Tag scheme expandido de 2→3 bits (TAG_IPC_CHANNEL = 0b100). Scheduler faz poll
+blocking no FD quando todos fibers estão blocked em IPC. 5 testes E2E em
+`spawn_ipc_e2e.rs`: fire-and-forget, round-trip Int, tupla/struct/lista
+(ignorados — exigem unificação de T0 na inferência de canais).
 
 **Maquinaria de tipos construída:**
 - `Ty::Sender(Box<Ty>)`, `Ty::Receiver(Box<Ty>)`, `Ty::ReceiverFactory(Box<Ty>)`

@@ -1117,22 +1117,44 @@ destruída).
 **kata-codegen:**
 - `spawn!` special form (paralelo a `fork!` no lowering)
 - Parser: `spawn!(callee, args)` (posicional) e `spawn!{callee: ..., raw/serialized: ...}` (dict)
-- Typeck: `TypedExprKind::Spawn` — aceita qualquer tipo de args; tipo de retorno = tipo de retorno da Action
+- Typeck: `TypedExprKind::Spawn` — aceita qualquer tipo de args; tipo de retorno = `Unit` (fire-and-forget)
 - Codegen: `fork()` syscall, pipe entre pai e filho
-- No filho: executar Action em runtime isolado
+- No filho: executar Action em runtime isolado (sem scheduler, sem fibers)
 - No pai: receber resultado via pipe
-- Serialização via `Box` + `TypeShape` walk (caminha a estrutura
-  recursivamente, como o decref walk do Fio 9)
+- Serialização via `to_bytes()`/`from_bytes()` com `TypeShape` walk
 - Desserialização no filho usando o mesmo `TypeShape`
-- Funciona com qualquer tipo, não apenas `Int`/`Unit`
+- Funciona com tipos primitivos (Int, Unit) — tipos complexos exigem unificação de `T0` (ver Limitações)
 - `to_bytes()` FFI: produz blob opaco (bytes + rebase_offsets + tipo)
 - `serialized:` no dict form pula conversão, envia bytes direto
 - Parent faz yield antes de `read(pipe)` para não bloquear outras fibers
 
+**Canais IPC (Fase 9b):**
+- `kata_rt_ipc_channel_create(arena, type_id) -> handle` — cria pipe Unix
+- Tag scheme expandido de 2→3 bits (TAG_IPC_CHANNEL = 0b100)
+- `IpcChannelInner { write_fd, read_fd, type_id }` na arena
+- `try_ipc_send`: serializa com `to_bytes(value, type_id, arena)`, escreve no pipe
+- `try_ipc_recv`: poll non-blocking, lê blob, desserializa com `from_bytes`
+- `block_until_readable`: poll blocking (timeout=-1) para child sem scheduler
+- Pass `cross_process.rs` na inferência: marca `ChannelCreate` como `cross_process: true`
+  quando o canal flui para `spawn!` (rastreia `let` bindings → args do spawn)
+- Codegen emite `kata_rt_ipc_channel_create` em vez de `kata_rt_channel_create` quando
+  `cross_process` é true
+- Scheduler faz poll blocking no FD quando todos fibers estão blocked em IPC
+
+**Limitações da Fase 9:**
+- `channel!()` cria `Ty::Var("T0")` que não é unificado com o tipo concreto do
+  primeiro `!>`/`<!`. Para `fork!`, a unificação acontece via parâmetro tipado da
+  Action (`tx::Sender::Int`). Para `spawn!`, o `type_id` do canal fica 0 (Prim),
+  e serialização de tipos complexos (tupla, struct, lista) não funciona. Tipos
+  primitivos (Int, Unit) funcionam porque SMI é inline (8 bytes, sem serialização
+  recursiva). A unificação de `T0` é uma melhoria futura.
+- `spawn!` é fire-and-forget — não retorna valor. A comunicação é exclusivamente
+  por canais IPC passados como args.
+- Buffered e Broadcast IPC não suportados em v1 (fallback para in-process).
+
 **DoD Fase 9:** `spawn!(tarefa, (42))` executa em processo OS separado. Resultado
-volta via IPC. Serialização de tuplas, structs, listas funciona. Forma dict
-com `serialized:` envia bytes pré-convertidos sem re-conversão. Teste E2E
-com `spawn!` passa.
+volta via IPC. Serialização de Int funciona. Forma dict com `serialized:` envia bytes
+pré-convertidos sem re-conversão. Teste E2E com `spawn!` passa.
 
 ## DoD (Definition of Done)
 

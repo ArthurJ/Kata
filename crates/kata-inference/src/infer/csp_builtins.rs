@@ -317,9 +317,17 @@ pub(crate) fn infer_fork_builtin(
 
 /// `spawn!(action_name, (arg1, arg2, ...))` — spawn de processo OS.
 ///
-/// Diferença de fork!: o tipo de retorno é o tipo de retorno da Action
-/// (o resultado volta via pipe, não via canal). O codegen usa fork()+COW
-/// para passar args e to_bytes/from_bytes para o resultado.
+/// Diferença de fork!: `spawn!` cria um **processo OS separado** via
+/// `fork()`. O child herda a arena via copy-on-write, executa a Action,
+/// e termina com `_exit(0)`. Fire-and-forget — retorna `Unit`, não há
+/// pipe de resultado. A comunicação entre parent e child é exclusivamente
+/// por canais IPC (passados como args da Action).
+///
+/// O codegen chama `kata_rt_spawn_process(fn_ptr, args_ptr, arena_handle)`.
+/// O child executa a Action diretamente (sem scheduler, sem fibers). Canais
+/// IPC passados como args usam `kata_rt_ipc_channel_create` (pipe Unix) em
+/// vez de `kata_rt_channel_create` (Mutex/Condvar) — marcado pelo pass
+/// `cross_process.rs` na inferência.
 ///
 /// Suporta forma posicional `spawn!(action, args)` e forma dict
 /// `spawn!{callee: action, raw: args}`.

@@ -9,8 +9,9 @@
 //!
 //! 1. Coleta mapeamentos `var_name → span` de todos os `Let`/`Var`/`LetDestruct`
 //!    onde o valor é um `ChannelCreate`, rastreando também acessos via
-//!    `FieldAccess` (`let tx := ch.0`). Itera até fixpoint para rastrear
-//!    cadeias de bindings.
+//!    `IndexAccess` (`let tx := ch.0` — o typeck lowered `.0` para IndexAccess
+//!    compile-time em tuplas). Itera até fixpoint para rastrear cadeias de
+//!    bindings.
 //! 2. Percorre a TAST procurando `Spawn` cujos args contêm `Ident` com nome
 //!    no mapeamento. Para cada match, coleta o span do `ChannelCreate`.
 //! 3. Marca os `ChannelCreate` correspondentes em todo o módulo (pre_entry,
@@ -35,7 +36,6 @@
 
 use std::collections::HashMap;
 
-use kata_ast::Spanned;
 use crate::typed::{TypedExpr, TypedExprKind, TypedModule};
 
 use super::walk;
@@ -63,7 +63,11 @@ pub(crate) fn run(typed_module: &mut TypedModule) {
         for expr in &typed_module.pre_entry {
             collect_spawn_spans(&expr.node, &channel_bindings, &mut spans_to_mark);
         }
-        collect_spawn_spans(&typed_module.entry.node, &channel_bindings, &mut spans_to_mark);
+        collect_spawn_spans(
+            &typed_module.entry.node,
+            &channel_bindings,
+            &mut spans_to_mark,
+        );
 
         // Marca os ChannelCreate correspondentes em todo o módulo (pre_entry + entry).
         for expr in &mut typed_module.pre_entry {
@@ -106,8 +110,11 @@ pub(crate) fn run(typed_module: &mut TypedModule) {
 /// ao mapa `channel_bindings`. Rastreia:
 /// - `let ch := channel!()` → `ch → span`
 /// - `let (tx, rx) := channel!()` (LetDestruct) → `tx, rx → span`
-/// - `let tx := ch.0` (FieldAccess de binding de canal) → `tx → span`
+/// - `let tx := ch.0` (IndexAccess de binding de canal) → `tx → span`
 /// - `var ch := channel!()` → `ch → span`
+///
+/// Nota: `ch.0` em tupla é lowered pelo typeck para `IndexAccess` (não
+/// `FieldAccess`), porque tuplas usam indexação compile-time com bounds check.
 fn collect_channel_bindings(
     expr: &TypedExpr,
     channel_bindings: &mut HashMap<String, kata_ast::Span>,
@@ -119,7 +126,8 @@ fn collect_channel_bindings(
                 channel_bindings.insert(name.clone(), value.span);
             }
             // let tx := ch.0  (ch já está no mapa)
-            if let TypedExprKind::FieldAccess { expr: inner, .. } = &value.node.kind {
+            // O typeck lowered `.0` para IndexAccess em tuplas.
+            if let TypedExprKind::IndexAccess { expr: inner, .. } = &value.node.kind {
                 if let TypedExprKind::Ident { name: inner_name } = &inner.node.kind {
                     if let Some(span) = channel_bindings.get(inner_name) {
                         channel_bindings.insert(name.clone(), *span);

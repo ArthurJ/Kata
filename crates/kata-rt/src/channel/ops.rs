@@ -13,7 +13,7 @@
 //! - `TAG_BROADCAST_RX` (0b11) — receiver de broadcast.
 
 use super::{
-    ptr_of, tag_of, BroadcastInner, BroadcastReceiver, ChannelInner, QueueInner, TAG_IPC_CHANNEL,
+    BroadcastInner, BroadcastReceiver, ChannelInner, QueueInner, TAG_IPC_CHANNEL, ptr_of, tag_of,
 };
 
 /// Verifica se um handle é de canal IPC (tag TAG_IPC_CHANNEL).
@@ -24,7 +24,8 @@ pub(crate) fn is_ipc_handle(handle: i64) -> bool {
 /// Bloqueia (poll blocking) até o canal IPC ter dados legíveis.
 /// Usado pelo scheduler quando todos os fibers estão blocked em IPC.
 pub(crate) unsafe fn block_ipc_until_readable(handle: i64) {
-    super::ipc::block_until_readable(handle)
+    // SAFETY: handle veio de um fiber blocked em canal IPC.
+    unsafe { super::ipc::block_until_readable(handle) }
 }
 
 // ── Sentinel ─────────────────────────────────────────────────────────

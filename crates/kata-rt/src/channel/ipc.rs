@@ -18,8 +18,8 @@
 //! (64KB no Linux) acomoda a maioria dos blobs. Se o buffer enche, `send`
 //! bloqueia no `write` (limitação v1 — futuro: non-blocking write + yield).
 
-use super::{IpcChannelInner, TAG_IPC_CHANNEL, arena_alloc_and_init, make_handle_pub, ptr_of};
 use super::ops::{OK, WOULD_BLOCK};
+use super::{IpcChannelInner, TAG_IPC_CHANNEL, arena_alloc_and_init, make_handle_pub, ptr_of};
 
 /// Cria um canal cross-process: aloca um pipe Unix, guarda os FDs no
 /// `IpcChannelInner` alocado na arena. Retorna handle com tag

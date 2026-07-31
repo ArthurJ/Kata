@@ -277,7 +277,9 @@ impl Scheduler {
                 // escrevendo. Fazer poll blocking no primeiro handle IPC
                 // e tentar novamente.
                 let ipc_handle = self.blocked.values().find_map(|reason| match reason {
-                    BlockReason::WaitingOnChannel(handle) if is_ipc_handle(*handle) => Some(*handle),
+                    BlockReason::WaitingOnChannel(handle) if is_ipc_handle(*handle) => {
+                        Some(*handle)
+                    }
                     BlockReason::WaitingOnSelect(handles, _) => {
                         handles.iter().find(|h| is_ipc_handle(**h)).copied()
                     }

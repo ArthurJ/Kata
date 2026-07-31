@@ -91,9 +91,7 @@ pub(crate) fn lower_channel_create(
                 .ffi_refs
                 .get(ffi_name)
                 .copied()
-                .ok_or_else(|| {
-                    super::CodegenError::FfiSymbolNotFound(ffi_name.into())
-                })?;
+                .ok_or_else(|| super::CodegenError::FfiSymbolNotFound(ffi_name.into()))?;
             if cross_process {
                 // IPC: (arena, type_id) -> handle
                 let type_id = lookup_type_id(_expr, ctx);
