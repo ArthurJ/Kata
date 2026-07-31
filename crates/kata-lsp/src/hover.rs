@@ -235,6 +235,11 @@ fn children<'a>(
             action_expr, args, ..
         } => Box::new([action_expr.as_ref(), args.as_ref()].into_iter()),
 
+        // Spawn: action_expr + args (mesma estrutura que Fork)
+        Spawn {
+            action_expr, args, ..
+        } => Box::new([action_expr.as_ref(), args.as_ref()].into_iter()),
+
         // Lambda: cláusulas — body de cada cláusula
         Lambda { clauses, .. } => Box::new(clauses.iter().map(|c| &c.body)),
     }

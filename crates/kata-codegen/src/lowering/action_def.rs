@@ -68,6 +68,7 @@ pub(crate) fn define_kata_action(
     string_table: &mut StringTable,
     bytes_table: &mut Vec<Vec<u8>>,
     struct_registry: &kata_core::StructRegistry,
+    type_id_map: &HashMap<Ty, i64>,
 ) -> Result<(), CodegenError> {
     let mut ctx = module.make_context();
     let mut metadata = MetadataTable::new();
@@ -131,6 +132,7 @@ pub(crate) fn define_kata_action(
             loop_continue_block: None,
             arc_vars: Vec::new(),
             struct_registry,
+            type_id_map,
         };
 
         // Cria epilogue_block com 1 block param (result).

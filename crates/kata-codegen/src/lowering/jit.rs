@@ -1,5 +1,7 @@
 //! Pipeline JIT completo — compila e executa um `TypedModule`.
 
+use std::collections::HashMap;
+
 use cranelift_codegen::settings::Configurable;
 use cranelift_module::Module;
 use kata_core::ty::{PrimTy, Ty};
@@ -23,7 +25,10 @@ pub struct JitResult {
 /// Pipeline: criar JITBuilder → registrar símbolos FFI → declarar FFI →
 /// lower_module → finalize → get_finalized_function →
 /// transmutar → executar.
-pub fn jit_eval(typed: &TypedModule) -> Result<JitResult, CodegenError> {
+pub fn jit_eval(
+    typed: &TypedModule,
+    type_id_map: &HashMap<Ty, i64>,
+) -> Result<JitResult, CodegenError> {
     // Configura preserve_frame_pointers = true (necessário para CallConv::Tail / return_call).
     let mut flags_builder = cranelift_codegen::settings::builder();
     flags_builder
@@ -50,7 +55,7 @@ pub fn jit_eval(typed: &TypedModule) -> Result<JitResult, CodegenError> {
     // Declara __kata_entry e faz o lowering.
     let ret_ty = typed.entry.node.ty.clone();
     let (_metadata, _string_table, _test_wrappers) =
-        lower_module(typed, &mut backend, &ffi_ids, &typed.struct_registry)?;
+        lower_module(typed, &mut backend, &ffi_ids, &typed.struct_registry, type_id_map)?;
 
     // Finaliza todas as definições — resolve relocations, compila machine code.
     backend.finalize()?;
@@ -112,6 +117,7 @@ pub fn jit_eval(typed: &TypedModule) -> Result<JitResult, CodegenError> {
 /// wrappers permaneçam válidos durante a execução dos testes.
 pub fn jit_compile_tests(
     typed: &TypedModule,
+    type_id_map: &HashMap<Ty, i64>,
 ) -> Result<(cranelift_jit::JITModule, Vec<TestWrapper>), CodegenError> {
     let mut flags_builder = cranelift_codegen::settings::builder();
     flags_builder
@@ -136,7 +142,7 @@ pub fn jit_compile_tests(
     let ffi_ids = crate::ffi_registry::declare_ffi_symbols(&mut backend)?;
 
     let (_metadata, _string_table, test_wrappers) =
-        lower_module(typed, &mut backend, &ffi_ids, &typed.struct_registry)?;
+        lower_module(typed, &mut backend, &ffi_ids, &typed.struct_registry, type_id_map)?;
 
     backend.finalize()?;
 

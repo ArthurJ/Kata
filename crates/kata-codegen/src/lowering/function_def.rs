@@ -100,6 +100,7 @@ pub(crate) fn define_function_body(
     string_table: &mut StringTable,
     bytes_table: &mut Vec<Vec<u8>>,
     struct_registry: &kata_core::StructRegistry,
+    type_id_map: &HashMap<Ty, i64>,
 ) -> Result<(), CodegenError> {
     let mut ctx = module.make_context();
     let mut metadata = MetadataTable::new();
@@ -168,6 +169,7 @@ pub(crate) fn define_function_body(
             loop_continue_block: None,
             arc_vars: Vec::new(),
             struct_registry,
+            type_id_map,
         };
 
         // params[0] = arena_handle (primeiro param implícito da nova ABI).
@@ -462,6 +464,7 @@ pub(crate) fn define_kata_function(
     string_table: &mut StringTable,
     bytes_table: &mut Vec<Vec<u8>>,
     struct_registry: &kata_core::StructRegistry,
+    type_id_map: &HashMap<Ty, i64>,
 ) -> Result<(), CodegenError> {
     define_function_body(
         &func.name,
@@ -478,5 +481,6 @@ pub(crate) fn define_kata_function(
         string_table,
         bytes_table,
         struct_registry,
+        type_id_map,
     )
 }

@@ -443,6 +443,7 @@ pub(crate) fn lower_expr(
                 ctx.string_table,
                 ctx.bytes_table,
                 ctx.struct_registry,
+                ctx.type_id_map,
             )?;
 
             // Obtém o function pointer via GlobalValue.
@@ -601,6 +602,11 @@ pub(crate) fn lower_expr(
             action_expr,
             args,
         } => super::csp::lower_fork(expr, action_name, action_expr, args, ctx),
+        TypedExprKind::Spawn {
+            action_name,
+            action_expr,
+            args,
+        } => super::csp::lower_spawn(expr, action_name, action_expr, args, ctx),
 
         // ── Select — multiplexação de canais com timeout ──
         TypedExprKind::Select {

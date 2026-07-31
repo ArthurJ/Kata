@@ -264,6 +264,19 @@ fn collect_refs(
             collect_refs(&action_expr.node, reached_fns, reached_actions, fn_names);
             collect_refs(&args.node, reached_fns, reached_actions, fn_names);
         }
+        TypedExprKind::Spawn {
+            action_name,
+            action_expr,
+            args,
+            ..
+        } => {
+            // Aresta dinâmica — string match em action_name (igual Fork).
+            if !action_name.starts_with("__indirect") {
+                reached_actions.insert(action_name.clone());
+            }
+            collect_refs(&action_expr.node, reached_fns, reached_actions, fn_names);
+            collect_refs(&args.node, reached_fns, reached_actions, fn_names);
+        }
 
         // ── Sub-expressões — recursão ──
         TypedExprKind::TypeAscription {

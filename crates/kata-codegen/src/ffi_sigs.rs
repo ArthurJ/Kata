@@ -871,6 +871,14 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
             sig.params.push(AbiParam::new(I64)); // arena
             sig.returns.push(AbiParam::new(I64)); // value_ptr
         }
+        // spawn_process: (fn_ptr, args_ptr, result_type_id, arena) -> value_ptr
+        FfiSymbol::SpawnProcess => {
+            sig.params.push(AbiParam::new(I64)); // fn_ptr
+            sig.params.push(AbiParam::new(I64)); // args_ptr
+            sig.params.push(AbiParam::new(I64)); // result_type_id
+            sig.params.push(AbiParam::new(I64)); // arena
+            sig.returns.push(AbiParam::new(I64)); // value_ptr (result)
+        }
     }
 
     sig

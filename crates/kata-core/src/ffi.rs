@@ -317,6 +317,11 @@ pub enum FfiSymbol {
     ToBytes,
     /// `kata_rt_from_bytes(bytes_ptr, arena) -> value_ptr`
     FromBytes,
+    /// `kata_rt_spawn_process(fn_ptr, args_ptr, result_type_id, arena) -> value_ptr`
+    /// Spawn um processo OS separado via fork+pipe. O child herda a
+    /// arena via COW, executa a Action, serializa o resultado via
+    /// to_bytes, e envia pelo pipe. O parent desserializa via from_bytes.
+    SpawnProcess,
 }
 
 impl FfiSymbol {
@@ -385,6 +390,7 @@ impl FfiSymbol {
             FfiSymbol::Panic => "kata_rt_panic",
             FfiSymbol::SchedulerInit => "kata_rt_scheduler_init",
             FfiSymbol::Spawn => "kata_rt_spawn",
+            FfiSymbol::SpawnProcess => "kata_rt_spawn_process",
             FfiSymbol::Run => "kata_rt_run",
             FfiSymbol::Yield => "kata_rt_yield",
             FfiSymbol::YieldCheck => "kata_rt_yield_check",
@@ -556,6 +562,7 @@ impl FfiSymbol {
             // Scheduler/Fiber
             FfiSymbol::SchedulerInit => Ty::int(),
             FfiSymbol::Spawn => Ty::int(),
+            FfiSymbol::SpawnProcess => Ty::int(), // value_ptr do resultado desserializado
             FfiSymbol::Run => Ty::int(),
             FfiSymbol::Yield => Ty::Unit,
             FfiSymbol::YieldCheck => Ty::Unit,
@@ -720,6 +727,7 @@ impl FfiSymbol {
             FfiSymbol::Panic,
             FfiSymbol::SchedulerInit,
             FfiSymbol::Spawn,
+            FfiSymbol::SpawnProcess,
             FfiSymbol::Run,
             FfiSymbol::Yield,
             FfiSymbol::YieldCheck,

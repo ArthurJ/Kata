@@ -7,7 +7,10 @@
 //! obter os bytes do object file. O linker do sistema resolve
 //! os imports FFI contra `libkata_rt.a`/`.so`.
 
+use std::collections::HashMap;
+
 use cranelift_codegen::settings::Configurable;
+use kata_core::ty::Ty;
 use kata_inference::TypedModule;
 
 use super::backend::{AotBackend, ModuleBackend};
@@ -24,7 +27,10 @@ use super::module::{CodegenError, lower_module};
 /// Diferença vs JIT: FFI são `Linkage::Import` sem registro de ponteiros
 /// no builder. O `ObjectBuilder` não tem API de `symbol()` — os imports
 /// são resolvidos em link-time pelo linker do sistema.
-pub fn aot_emit(typed: &TypedModule) -> Result<Vec<u8>, CodegenError> {
+pub fn aot_emit(
+    typed: &TypedModule,
+    type_id_map: &HashMap<Ty, i64>,
+) -> Result<Vec<u8>, CodegenError> {
     // Mesmas flags do JIT — preserve_frame_pointers é necessário para
     // CallConv::Tail / return_call (usado em tail calls de Actions).
     let mut flags_builder = cranelift_codegen::settings::builder();
@@ -56,7 +62,7 @@ pub fn aot_emit(typed: &TypedModule) -> Result<Vec<u8>, CodegenError> {
 
     // Lowering — reusa 100% do pipeline do JIT via &mut dyn ModuleBackend.
     let (_metadata, _string_table, _test_wrappers) =
-        lower_module(typed, &mut backend, &ffi_ids, &typed.struct_registry)?;
+        lower_module(typed, &mut backend, &ffi_ids, &typed.struct_registry, type_id_map)?;
 
     // Finaliza: ObjectModule::finish() consome o module e produz ObjectProduct.
     backend.finalize()?;

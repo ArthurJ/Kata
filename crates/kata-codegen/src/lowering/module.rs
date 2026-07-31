@@ -63,6 +63,7 @@ pub(crate) fn lower_module(
     module: &mut dyn ModuleBackend,
     ffi_ids: &HashMap<String, cranelift_module::FuncId>,
     struct_registry: &kata_core::StructRegistry,
+    type_id_map: &HashMap<Ty, i64>,
 ) -> Result<
     (
         MetadataTable,
@@ -104,6 +105,7 @@ pub(crate) fn lower_module(
             &mut string_table,
             &mut bytes_table,
             struct_registry,
+            type_id_map,
         )?;
     }
 
@@ -134,6 +136,7 @@ pub(crate) fn lower_module(
             &mut string_table,
             &mut bytes_table,
             struct_registry,
+            type_id_map,
         )?;
     }
 
@@ -148,6 +151,7 @@ pub(crate) fn lower_module(
         &mut bytes_table,
         &mut fn_counter,
         struct_registry,
+        type_id_map,
     )?;
 
     // Determina o tipo de retorno do entry point.
@@ -234,6 +238,7 @@ pub(crate) fn lower_module(
             loop_continue_block: None,
             arc_vars: Vec::new(),
             struct_registry,
+            type_id_map,
         };
 
         // Prólogo do entry point: inicializa scheduler (cria arena raiz internamente).

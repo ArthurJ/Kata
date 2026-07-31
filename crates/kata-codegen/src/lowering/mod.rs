@@ -136,6 +136,9 @@ pub(crate) struct LowerCtx<'a, 'b> {
     /// Catálogo de structs com alias_of/predicates — para resolver o
     /// Cranelift type correto de refined/alias de primitivos.
     pub struct_registry: &'a kata_core::StructRegistry,
+    /// Mapa Ty → type_id para marshalling (spawn! to_bytes/from_bytes).
+    /// Populado pelo driver via `build_and_register_type_table`.
+    pub type_id_map: &'a HashMap<Ty, i64>,
 }
 
 /// Resolve o Cranelift type de um `Ty`, percorrendo a cadeia de `alias_of`

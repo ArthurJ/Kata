@@ -234,6 +234,12 @@ fn fallback_in_expr(expr_span: &mut Spanned<TypedExpr>) {
             fallback_in_expr(action_expr);
             fallback_in_expr(args);
         }
+        TypedExprKind::Spawn {
+            action_expr, args, ..
+        } => {
+            fallback_in_expr(action_expr);
+            fallback_in_expr(args);
+        }
         TypedExprKind::ReceiverFactoryCall { factory, .. } => {
             fallback_in_expr(factory);
         }

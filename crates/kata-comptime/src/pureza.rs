@@ -39,6 +39,9 @@ fn check_purity_inner(expr: &TypedExpr) -> Result<(), ComptimeError> {
         TypedExprKind::Fork { action_name, .. } => Err(ComptimeError::Impure {
             reason: format!("contém Fork `{action_name}`"),
         }),
+        TypedExprKind::Spawn { action_name, .. } => Err(ComptimeError::Impure {
+            reason: format!("contém Spawn `{action_name}`"),
+        }),
         TypedExprKind::ChannelSend { .. } => Err(ComptimeError::Impure {
             reason: "contém ChannelSend".into(),
         }),

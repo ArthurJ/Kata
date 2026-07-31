@@ -338,6 +338,117 @@ pub(crate) fn lower_fork(
     Ok(ctx.builder.ins().iconst(I64, 0))
 }
 
+/// Lowera `TypedExprKind::Spawn` — spawn de processo OS via fork+pipe.
+///
+/// Diferença de fork!: chama `kata_rt_spawn_process(fn_ptr, args_ptr,
+/// result_type_id, arena)` que faz fork()+pipe. O child herda a arena
+/// via COW, executa a Action, serializa o resultado via to_bytes, e
+/// envia pelo pipe. O parent desserializa via from_bytes.
+///
+/// Retorna o value_ptr do resultado (não Unit).
+pub(crate) fn lower_spawn(
+    expr: &TypedExpr,
+    action_name: &str,
+    action_expr: &kata_ast::Spanned<TypedExpr>,
+    args: &kata_ast::Spanned<TypedExpr>,
+    ctx: &mut LowerCtx,
+) -> Result<cranelift_codegen::ir::Value, super::CodegenError> {
+    // 1. Lowerar args (tupla) → args_ptr.
+    let args_ptr = super::expr::lower_expr(&args.node, ctx)?;
+
+    // 2. Obter fn_ptr (mesma lógica de lower_fork).
+    let fn_ptr = if action_name.starts_with("__indirect") {
+        super::expr::lower_expr(&action_expr.node, ctx)?
+    } else {
+        let param_types: Vec<Ty> = match &args.node.kind {
+            TypedExprKind::Unit => Vec::new(),
+            TypedExprKind::Tuple { elements } => {
+                elements.iter().map(|e| e.node.ty.clone()).collect()
+            }
+            _ => vec![args.node.ty.clone()],
+        };
+
+        let mut found_key: Option<super::module::FuncKey> = None;
+        for key in ctx.kata_ids.keys() {
+            if key.0 == action_name && key.1 == param_types {
+                found_key = Some(key.clone());
+                break;
+            }
+        }
+        if found_key.is_none() {
+            for key in ctx.kata_ids.keys() {
+                if key.0 == action_name {
+                    found_key = Some(key.clone());
+                    break;
+                }
+            }
+        }
+
+        let key = found_key.ok_or_else(|| {
+            super::CodegenError::UnsupportedNode(format!(
+                "spawn!: Action `{action_name}` não encontrada em kata_ids"
+            ))
+        })?;
+
+        let callee_fid = ctx.kata_ids.get(&key).copied().ok_or_else(|| {
+            super::CodegenError::UnsupportedNode(format!(
+                "spawn!: FuncId para Action `{action_name}` não encontrado"
+            ))
+        })?;
+        let func_ref = ctx
+            .module
+            .declare_func_in_func(callee_fid, ctx.builder.func);
+        let ext_func_name = ctx.builder.func.dfg.ext_funcs[func_ref].name.clone();
+        let func_gv = ctx
+            .builder
+            .func
+            .create_global_value(cranelift_codegen::ir::GlobalValueData::Symbol {
+                name: ext_func_name,
+                offset: 0.into(),
+                colocated: true,
+                tls: false,
+            });
+        ctx.builder
+            .ins()
+            .global_value(ctx.module.target_config().pointer_type(), func_gv)
+    };
+
+    // 3. Determinar arena — usar caller_arena (root_arena no entry point).
+    //    O fork() faz COW da arena do caller, e o child executa com essa arena.
+    //    O resultado volta via pipe e é desserializado na mesma arena.
+    let arena_val = ctx
+        .caller_arena
+        .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
+
+    // 4. result_type_id — lookup do tipo de retorno no type_id_map.
+    //    O driver popula o mapa (Ty → type_id) antes do JIT. Se o tipo
+    //    não está no mapa, fallback para 0 (Prim) — ocorre quando o tipo
+    //    não aparece em params/retornos coletados pelo driver.
+    let result_type_id = match ctx.type_id_map.get(&expr.ty) {
+        Some(&id) => ctx.builder.ins().iconst(I64, id),
+        None => {
+            // Tipo não coletado pelo driver — usar 0 (Prim) como fallback.
+            // Isto pode produzir marshalling incorreto para tipos complexos
+            // não presentes em assinaturas de functions/actions.
+            ctx.builder.ins().iconst(I64, 0)
+        }
+    };
+
+    // 5. kata_rt_spawn_process(fn_ptr, args_ptr, result_type_id, arena) → value_ptr
+    let spawn_ref = ctx
+        .ffi_refs
+        .get("kata_rt_spawn_process")
+        .copied()
+        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound("kata_rt_spawn_process".into()))?;
+    let spawn_inst = ctx
+        .builder
+        .ins()
+        .call(spawn_ref, &[fn_ptr, args_ptr, result_type_id, arena_val]);
+
+    // 6. Retorna o value_ptr do resultado desserializado.
+    Ok(ctx.builder.inst_results(spawn_inst)[0])
+}
+
 /// Lowera `TypedExprKind::Select` — multiplexação de recebimento de canais
 /// com timeout opcional.
 ///

@@ -59,6 +59,7 @@ pub(crate) fn generate_test_wrappers(
     bytes_table: &mut Vec<Vec<u8>>,
     fn_counter: &mut u64,
     struct_registry: &kata_core::StructRegistry,
+    type_id_map: &HashMap<Ty, i64>,
 ) -> Result<Vec<TestWrapper>, CodegenError> {
     let mut wrappers = Vec::new();
 
@@ -105,6 +106,7 @@ pub(crate) fn generate_test_wrappers(
                 string_table: &mut *string_table,
                 bytes_table: &mut *bytes_table,
                 struct_registry,
+                type_id_map,
             };
             define_test_wrapper(action, spec, func_id, &mut tctx)?;
 
@@ -143,6 +145,7 @@ pub(crate) struct TestLowerCtx<'a> {
     pub string_table: &'a mut StringTable,
     pub bytes_table: &'a mut Vec<Vec<u8>>,
     pub struct_registry: &'a kata_core::StructRegistry,
+    pub type_id_map: &'a HashMap<Ty, i64>,
 }
 
 /// Define (compila) o corpo de um wrapper de teste.
@@ -210,6 +213,7 @@ fn define_test_wrapper(
             loop_continue_block: None,
             arc_vars: Vec::new(),
             struct_registry: tctx.struct_registry,
+            type_id_map: tctx.type_id_map,
         };
 
         // 1. scheduler_init → root_arena (igual ao entry point).
