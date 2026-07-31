@@ -19,7 +19,7 @@ use kata_lexer::lex;
 use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
 use kata_parser::parse;
-use kata_resolution::{load_prelude, resolve, ResolvedModule};
+use kata_resolution::{ResolvedModule, load_prelude, resolve};
 use kata_rt::{TypeShape, register_type_table};
 use kata_tree_shaking::tree_shake;
 
@@ -127,7 +127,11 @@ fn spawn_tupla_soma() {
 spawn!(soma_tupla, ((15, 27)))"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
-    assert_eq!(untag_smi(raw), 42, "spawn!(soma_tupla, ((15, 27))) deve retornar 42");
+    assert_eq!(
+        untag_smi(raw),
+        42,
+        "spawn!(soma_tupla, ((15, 27))) deve retornar 42"
+    );
 }
 
 // ── Teste 3: spawn! sem args (Unit) ──
@@ -142,4 +146,53 @@ spawn!(resposta, ())"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
     assert_eq!(untag_smi(raw), 42, "spawn!(resposta, ()) deve retornar 42");
+}
+
+// ── Teste 4: spawn! dentro de Action (Ponto 3 do handoff) ──
+//
+// Action externa recebe x, faz spawn! da action interna passando x.
+// Isto exercita lower_spawn com caller_arena = arena do chamador da
+// Action externa (não root_arena como no entry point). Se os args
+// estão na fiber_arena (EscapeTarget::Local), passar caller_arena
+// para o fork pode significar que o child não enxerga os args.
+
+#[test]
+fn spawn_dentro_de_action() {
+    let src = r#"action interna (x::Int) => Int
+    + x 1
+action externa (x::Int) => Int
+    spawn!(interna, (x))
+spawn!(externa, (41))"#;
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Prim(PrimTy::Int));
+    assert_eq!(
+        untag_smi(raw),
+        42,
+        "spawn! dentro de Action deve retornar 42"
+    );
+}
+
+// ── Teste 5: spawn! dentro de Action com tupla (Ponto 3 — stress) ──
+//
+// Igual ao teste 4, mas passa uma tupla (x, y) como arg. A tupla é
+// alocada na arena (não SMI), então o args_ptr é um ponteiro real.
+// Se lower_spawn passa a arena errada para o fork, o child não
+// enxerga os dados da tupla.
+
+#[test]
+fn spawn_dentro_de_action_tupla() {
+    let src = r#"action interna (t::(Int, Int)) => Int
+    match t
+        (a, b): + a b
+        otherwise: 0
+action externa (x::Int) => Int
+    spawn!(interna, ((x, 1)))
+spawn!(externa, (41))"#;
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Prim(PrimTy::Int));
+    assert_eq!(
+        untag_smi(raw),
+        42,
+        "spawn! com tupla dentro de Action deve retornar 42"
+    );
 }

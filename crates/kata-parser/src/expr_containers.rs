@@ -189,7 +189,12 @@ impl Parser {
             let value = parse_apply(self)?;
             let mut entries = vec![(first, value)];
 
-            // Pares subsequentes separados por whitespace
+            // Vírgula opcional após o primeiro par
+            if matches!(self.peek(), Token::Comma) {
+                self.advance();
+            }
+
+            // Pares subsequentes separados por whitespace (vírgula opcional)
             while !matches!(self.peek(), Token::RBrace) {
                 if matches!(self.peek(), Token::Eof) {
                     return Err(self.error("`}` para fechar Dict"));
@@ -198,6 +203,10 @@ impl Parser {
                 self.expect(&Token::Colon, "`:` separando key e value no Dict")?;
                 let val = parse_apply(self)?;
                 entries.push((key, val));
+                // Vírgula opcional após cada par (inclusive trailing)
+                if matches!(self.peek(), Token::Comma) {
+                    self.advance();
+                }
             }
             self.expect(&Token::RBrace, "`}`")?;
             let span = start.cover(self.tokens[self.pos - 1].span);
