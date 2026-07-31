@@ -18,7 +18,6 @@ mod display;
 mod highlight;
 mod imports;
 mod repl;
-mod type_table;
 
 /// CLI do compilador Kata.
 #[derive(Parser)]
@@ -188,7 +187,7 @@ fn cmd_test(path: &str, filter: Option<&str>) -> miette::Result<()> {
         );
 
         // Type table — registra TypeShapes no runtime para to_bytes/from_bytes.
-        let _type_id_map = type_table::build_and_register_type_table(
+        let _type_id_map = kata_codegen::type_table::build_and_register_type_table(
             &typed,
             &typed.struct_registry,
             &resolved.enum_registry,
@@ -383,7 +382,7 @@ fn run_pipeline_with_file(source: &str, file_path: Option<&str>) -> miette::Resu
 
     // 6c. Type table — registra TypeShapes no runtime para to_bytes/from_bytes.
     //     O driver é o único que conhece Ty (kata-core) e TypeShape (kata-rt).
-    let _type_id_map = type_table::build_and_register_type_table(
+    let _type_id_map = kata_codegen::type_table::build_and_register_type_table(
         &mono,
         &mono.struct_registry,
         &resolved.enum_registry,

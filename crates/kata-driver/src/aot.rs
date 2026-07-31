@@ -20,7 +20,7 @@ use kata_resolution::{load_prelude, resolve};
 use kata_rt as rt;
 use kata_tree_shaking::tree_shake;
 
-use crate::type_table;
+use kata_codegen::type_table;
 
 use crate::imports::{load_module_imports, merge_imports};
 use crate::{IntoReport, merge_resolved, read_source};

@@ -9,5 +9,6 @@ pub(crate) mod ffi_sigs;
 pub(crate) mod lowering;
 pub(crate) mod metadata;
 pub(crate) mod smi;
+pub mod type_table;
 
 pub use lowering::{CodegenError, JitResult, TestWrapper, aot_emit, jit_compile_tests, jit_eval};

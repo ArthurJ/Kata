@@ -7,9 +7,8 @@
 //! Estes testes verificam que o fork+exec acontece sem crashar o parent.
 //! O child executa a Action e termina. O parent continua executando.
 
-use std::collections::HashMap;
-
 use kata_codegen::jit_eval;
+use kata_codegen::type_table::build_and_register_type_table;
 use kata_core::ty::{PrimTy, Ty};
 use kata_inference::infer_module;
 use kata_lexer::lex;
@@ -17,7 +16,6 @@ use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
 use kata_parser::parse;
 use kata_resolution::{ResolvedModule, load_prelude, resolve};
-use kata_rt::{TypeShape, register_type_table};
 use kata_tree_shaking::tree_shake;
 
 /// Executa o pipeline completo e retorna o valor bruto do JIT + tipo.
@@ -32,11 +30,10 @@ fn eval_src(src: &str) -> (i64, Ty) {
     let typed = optimize(typed);
     let typed = kata_monomorph::MonoModule::from(tree_shake(typed.inner));
 
-    // type_id_map vazio — para Int, o fallback type_id=0 mapeia para
-    // TypeShape::Prim. Precisamos registrar a type table no runtime TLS
-    // para que to_bytes/from_bytes funcionem. O type_id 0 = Prim (Int).
-    let type_id_map: HashMap<Ty, i64> = HashMap::new();
-    register_type_table(vec![TypeShape::Prim]); // type_id 0 = Prim
+    // Constrói e registra a type table completa — coleta todos os tipos
+    // do módulo (params, retornos) e mapeia para TypeShape.
+    let type_id_map =
+        build_and_register_type_table(&typed, &typed.struct_registry, &resolved.enum_registry);
 
     let jit = jit_eval(&typed, &type_id_map).expect("codegen+JIT deve succeed");
     (jit.raw, jit.ty)

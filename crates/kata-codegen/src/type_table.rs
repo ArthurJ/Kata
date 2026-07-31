@@ -4,14 +4,15 @@
 //! `type_id` (usize). `to_bytes`/`from_bytes` consultam essa tabela para
 //! saber como caminhar a estrutura de um valor em runtime.
 //!
-//! O driver é o único componente que conhece tanto `kata_core::Ty` (tipos do
-//! compilador) quanto `kata_rt::TypeShape` (formato do runtime). Esta module
-//! faz a ponte: coleta todos os `Ty` que aparecem no módulo, converte cada um
-//! para `TypeShape`(marshal), e registra a tabela antes do JIT.
+//! Este módulo faz a ponte: coleta todos os `Ty` que aparecem no módulo,
+//! converte cada um para `TypeShape` (marshal), e registra a tabela antes
+//! do JIT. É `pub` para que testes E2E em `kata-codegen/tests/` possam
+//! importá-lo — `kata-driver` é crate binária e não pode ser importada.
 
 use kata_core::enum_registry::EnumRegistry;
 use kata_core::struct_registry::StructRegistry;
 use kata_core::ty::{PrimTy, Ty};
+use kata_monomorph::MonoModule;
 use kata_rt::TypeShape;
 use std::collections::HashMap;
 
@@ -20,11 +21,7 @@ use std::collections::HashMap;
 /// Usa `StructRegistry` e `EnumRegistry` para resolver campos de structs
 /// e variants de enums. Tipos que não têm representação em marshal
 /// (InferVar, Var, Interface) mapeiam para `Unit` graceful.
-pub(crate) fn ty_to_marshal_shape(
-    ty: &Ty,
-    structs: &StructRegistry,
-    enums: &EnumRegistry,
-) -> TypeShape {
+pub fn ty_to_marshal_shape(ty: &Ty, structs: &StructRegistry, enums: &EnumRegistry) -> TypeShape {
     match ty {
         // Primitivos inline: Int, Float, Byte — 8 bytes.
         Ty::Prim(PrimTy::Int) | Ty::Prim(PrimTy::Float) | Ty::Byte => TypeShape::Prim,
@@ -179,7 +176,7 @@ fn apply_subst(ty: &Ty, subst: &HashMap<String, Ty>) -> Ty {
 /// Coleta todos os `Ty` únicos que aparecem nos params e retornos das
 /// functions e actions do módulo. Retorna vec na ordem de descoberta
 /// (que vira a ordem dos type_ids).
-pub(crate) fn collect_module_types(mono: &kata_monomorph::MonoModule) -> Vec<Ty> {
+pub fn collect_module_types(mono: &MonoModule) -> Vec<Ty> {
     let mut seen: Vec<Ty> = Vec::new();
 
     let mut insert = |ty: &Ty| {
@@ -215,8 +212,8 @@ pub(crate) fn collect_module_types(mono: &kata_monomorph::MonoModule) -> Vec<Ty>
 /// `to_bytes`.
 ///
 /// Retorna o mapa `Ty` → `type_id` para o codegen.
-pub(crate) fn build_and_register_type_table(
-    mono: &kata_monomorph::MonoModule,
+pub fn build_and_register_type_table(
+    mono: &MonoModule,
     structs: &StructRegistry,
     enums: &EnumRegistry,
 ) -> HashMap<Ty, i64> {

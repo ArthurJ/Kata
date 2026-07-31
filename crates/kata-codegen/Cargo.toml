@@ -16,6 +16,7 @@ kata-core.workspace = true
 kata-ast.workspace = true
 kata-inference.workspace = true
 kata-rt.workspace = true
+kata-monomorph.workspace = true
 
 [dev-dependencies]
 insta.workspace = true
@@ -25,7 +26,6 @@ kata-lexer.workspace = true
 kata-parser.workspace = true
 kata-resolution.workspace = true
 kata-optimizer.workspace = true
-kata-monomorph.workspace = true
 kata-tree-shaking.workspace = true
 kata-comptime.workspace = true
 kata-diagnostics.workspace = true
