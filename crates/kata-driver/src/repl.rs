@@ -380,7 +380,7 @@ impl ReplSession {
         let mono = monomorphize(typed);
         let mono = optimize(mono);
         let mono = kata_monomorph::MonoModule::from(tree_shake(mono.inner));
-        let jit = jit_eval(&mono).map_err(|e| format!("erro de codegen: {e:?}"))?;
+        let jit = jit_eval(&mono, &Default::default()).map_err(|e| format!("erro de codegen: {e:?}"))?;
         Ok(crate::ExecResult {
             raw: jit.raw,
             ty: jit.ty,

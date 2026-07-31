@@ -5,6 +5,7 @@
 //! (`link` + `find_linker`). O restante do driver (CLI dispatch, pipeline
 //! JIT, test runner) vive em `main.rs`.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use kata_codegen::aot_emit;
@@ -18,6 +19,8 @@ use kata_parser::parse;
 use kata_resolution::{load_prelude, resolve};
 use kata_rt as rt;
 use kata_tree_shaking::tree_shake;
+
+use crate::type_table;
 
 use crate::imports::{load_module_imports, merge_imports};
 use crate::{IntoReport, merge_resolved, read_source};
@@ -69,12 +72,17 @@ pub(crate) fn cmd_build(file: &str, output: Option<&str>, dynamic: bool) -> miet
     let shaken = run_comptime_pass(shaken, &resolved.enum_registry)
         .map_err(|e| miette::Report::msg(format!("erro de comptime: {e}")))?;
 
+    // Type table — registra TypeShapes no runtime para to_bytes/from_bytes.
+    let mono = kata_monomorph::MonoModule::from(shaken);
+    let type_id_map: HashMap<Ty, i64> =
+        type_table::build_and_register_type_table(&mono, &mono.struct_registry, &resolved.enum_registry);
+
     // AOT emit — produz object file (.o) bytes.
-    let object_bytes = aot_emit(&shaken)
+    let object_bytes = aot_emit(&mono, &type_id_map)
         .map_err(|e| miette::Report::msg(format!("erro de codegen AOT: {e:?}")))?;
 
     // Determinar o tipo de retorno do entry point para o tag de display.
-    let ret_ty = shaken.entry.node.ty.clone();
+    let ret_ty = mono.entry.node.ty.clone();
     let type_tag = ty_to_type_tag(&ret_ty);
 
     // Link — produz executável.

@@ -18,6 +18,7 @@ mod display;
 mod highlight;
 mod imports;
 mod repl;
+mod type_table;
 
 /// CLI do compilador Kata.
 #[derive(Parser)]
@@ -186,7 +187,14 @@ fn cmd_test(path: &str, filter: Option<&str>) -> miette::Result<()> {
                 .map_err(|e| miette::Report::msg(format!("erro de comptime: {e}")))?,
         );
 
-        let (jit_module, wrappers) = jit_compile_tests(&typed)
+        // Type table — registra TypeShapes no runtime para to_bytes/from_bytes.
+        let _type_id_map = type_table::build_and_register_type_table(
+            &typed,
+            &typed.struct_registry,
+            &resolved.enum_registry,
+        );
+
+        let (jit_module, wrappers) = jit_compile_tests(&typed, &_type_id_map)
             .map_err(|e| miette::Report::msg(format!("erro de codegen: {e:?}")))?;
 
         for w in &wrappers {
@@ -373,9 +381,14 @@ fn run_pipeline_with_file(source: &str, file_path: Option<&str>) -> miette::Resu
             .map_err(|e| miette::Report::msg(format!("erro de comptime: {e}")))?,
     );
 
+    // 6c. Type table — registra TypeShapes no runtime para to_bytes/from_bytes.
+    //     O driver é o único que conhece Ty (kata-core) e TypeShape (kata-rt).
+    let _type_id_map =
+        type_table::build_and_register_type_table(&mono, &mono.struct_registry, &resolved.enum_registry);
+
     // 7. Codegen + JIT + executar
     let jit =
-        jit_eval(&mono).map_err(|e| miette::Report::msg(format!("erro de codegen: {e:?}")))?;
+        jit_eval(&mono, &_type_id_map).map_err(|e| miette::Report::msg(format!("erro de codegen: {e:?}")))?;
 
     Ok(ExecResult {
         raw: jit.raw,
