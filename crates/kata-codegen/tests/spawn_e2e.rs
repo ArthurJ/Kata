@@ -1,14 +1,11 @@
-//! Testes E2E de spawn! — multiprocess (fork+IPC).
+//! Testes E2E de spawn! — multiprocess (fork).
 //!
 //! Pipeline completo: lex → parse → resolve → infer → optimize → codegen → JIT.
-//! Cada teste verifica o valor retornado pelo JIT executando spawn! em processo OS separado.
+//! spawn! é fire-and-forget — fork + exec da Action em processo OS separado.
+//! Não há retorno de valor. A comunicação entre parent e child é por canais.
 //!
-//! Caveats conhecidos (do handoff):
-//! - fork() + threads: timer thread não sobrevive no child. Actions sem loops
-//!   com yield_check devem funcionar.
-//! - kata_rt_yield no parent: parent faz yield após fork. Se não há scheduler
-//!   init, yield pode crashar. Verificar empiricamente.
-//! - from_bytes e lifetime do blob: from_bytes deve copiar dados para a arena.
+//! Estes testes verificam que o fork+exec acontece sem crashar o parent.
+//! O child executa a Action e termina. O parent continua executando.
 
 use std::collections::HashMap;
 
@@ -97,64 +94,43 @@ fn untag_smi(raw: i64) -> i64 {
     raw >> 1
 }
 
-// ── Teste 1: spawn! básico — Int ──
+// ── Teste 1: spawn! básico — fire-and-forget ──
 //
-// Action simples que retorna x + 1. spawn! executa em processo separado,
-// resultado volta via pipe IPC.
+// Action simples que retorna x + 1. spawn! executa em processo separado.
+// O parent não espera o child e não recebe retorno.
+// O entry point retorna 42 (SMI) diretamente — o spawn! é side-effect only.
 
 #[test]
-fn spawn_basico_int() {
+fn spawn_basico_fire_and_forget() {
     let src = r#"action tarefa (x::Int) => Int
     + x 1
-spawn!(tarefa, (41))"#;
+spawn!(tarefa, (41))
+42"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
-    assert_eq!(untag_smi(raw), 42, "spawn!(tarefa, (41)) deve retornar 42");
+    assert_eq!(untag_smi(raw), 42, "entry point deve retornar 42");
 }
 
-// ── Teste 2: spawn! com tupla (Int, Int) → Int ──
+// ── Teste 2: spawn! sem args (Unit) ──
 //
-// Action que recebe uma tupla, faz match, soma os elementos.
-// A type table precisa ter TypeShape::Tuple([Prim, Prim]) no type_id
-// correto para que to_bytes/from_bytes serializem a tupla corretamente.
-
-#[test]
-fn spawn_tupla_soma() {
-    let src = r#"action soma_tupla (t::(Int, Int)) => Int
-    match t
-        (a, b): + a b
-        otherwise: 0
-spawn!(soma_tupla, ((15, 27)))"#;
-    let (raw, ty) = eval_src(src);
-    assert_eq!(ty, Ty::Prim(PrimTy::Int));
-    assert_eq!(
-        untag_smi(raw),
-        42,
-        "spawn!(soma_tupla, ((15, 27))) deve retornar 42"
-    );
-}
-
-// ── Teste 3: spawn! sem args (Unit) ──
-//
-// Action sem params, spawn! sem args.
+// Action sem params, spawn! sem args. Fire-and-forget.
 
 #[test]
 fn spawn_sem_args() {
     let src = r#"action resposta => Int
     42
-spawn!(resposta, ())"#;
+spawn!(resposta, ())
+42"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
-    assert_eq!(untag_smi(raw), 42, "spawn!(resposta, ()) deve retornar 42");
+    assert_eq!(untag_smi(raw), 42, "entry point deve retornar 42");
 }
 
-// ── Teste 4: spawn! dentro de Action (Ponto 3 do handoff) ──
+// ── Teste 3: spawn! dentro de Action ──
 //
-// Action externa recebe x, faz spawn! da action interna passando x.
-// Isto exercita lower_spawn com caller_arena = arena do chamador da
-// Action externa (não root_arena como no entry point). Se os args
-// estão na fiber_arena (EscapeTarget::Local), passar caller_arena
-// para o fork pode significar que o child não enxerga os args.
+// Action externa recebe x, faz spawn! da action interna.
+// Exercita lower_spawn com caller_arena = arena do chamador da
+// Action externa (não root_arena como no entry point).
 
 #[test]
 fn spawn_dentro_de_action() {
@@ -162,22 +138,18 @@ fn spawn_dentro_de_action() {
     + x 1
 action externa (x::Int) => Int
     spawn!(interna, (x))
-spawn!(externa, (41))"#;
+    0
+spawn!(externa, (41))
+42"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
-    assert_eq!(
-        untag_smi(raw),
-        42,
-        "spawn! dentro de Action deve retornar 42"
-    );
+    assert_eq!(untag_smi(raw), 42, "entry point deve retornar 42");
 }
 
-// ── Teste 5: spawn! dentro de Action com tupla (Ponto 3 — stress) ──
+// ── Teste 4: spawn! com tupla dentro de Action ──
 //
-// Igual ao teste 4, mas passa uma tupla (x, y) como arg. A tupla é
+// Igual ao teste 3, mas passa uma tupla (x, y) como arg. A tupla é
 // alocada na arena (não SMI), então o args_ptr é um ponteiro real.
-// Se lower_spawn passa a arena errada para o fork, o child não
-// enxerga os dados da tupla.
 
 #[test]
 fn spawn_dentro_de_action_tupla() {
@@ -187,12 +159,10 @@ fn spawn_dentro_de_action_tupla() {
         otherwise: 0
 action externa (x::Int) => Int
     spawn!(interna, ((x, 1)))
-spawn!(externa, (41))"#;
+    0
+spawn!(externa, (41))
+42"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
-    assert_eq!(
-        untag_smi(raw),
-        42,
-        "spawn! com tupla dentro de Action deve retornar 42"
-    );
+    assert_eq!(untag_smi(raw), 42, "entry point deve retornar 42");
 }

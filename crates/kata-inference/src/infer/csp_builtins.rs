@@ -453,31 +453,9 @@ pub(crate) fn infer_spawn_builtin(
         }
     }
 
-    // Determina o tipo de retorno da Action.
-    let ret_ty = if action_name.starts_with("__indirect") {
-        // Indirect: extrai ret_ty do Ty::Action.
-        match &action_expr_typed.ty {
-            Ty::Action(_, ret) => (**ret).clone(),
-            _ => Ty::Unit,
-        }
-    } else {
-        // Direct: extrai ret_ty do overload com aridade correspondente.
-        let arg_tys: Vec<Ty> = match &typed_args.kind {
-            TypedExprKind::Tuple { elements } => {
-                elements.iter().map(|e| e.node.ty.clone()).collect()
-            }
-            TypedExprKind::Unit => Vec::new(),
-            _ => vec![typed_args.ty.clone()],
-        };
-        let overloads = ctx.table.get_overloads(&action_name);
-        overloads
-            .and_then(|ols| {
-                ols.iter()
-                    .find(|o| o.is_action && o.params.len() == arg_tys.len())
-                    .map(|o| o.ret.clone())
-            })
-            .unwrap_or(Ty::Unit)
-    };
+    // spawn! é fire-and-forget como fork! — não retorna valor.
+    // A comunicação entre parent e child é exclusivamente por canais.
+    let ret_ty = Ty::Unit;
 
     Ok(ActionDispatch::Complete(TypedExpr {
         span: *span,

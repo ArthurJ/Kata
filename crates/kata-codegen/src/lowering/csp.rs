@@ -338,16 +338,17 @@ pub(crate) fn lower_fork(
     Ok(ctx.builder.ins().iconst(I64, 0))
 }
 
-/// Lowera `TypedExprKind::Spawn` — spawn de processo OS via fork+pipe.
+/// Lowera `TypedExprKind::Spawn` — spawn de processo OS via fork.
 ///
-/// Diferença de fork!: chama `kata_rt_spawn_process(fn_ptr, args_ptr,
-/// result_type_id, arena)` que faz fork()+pipe. O child herda a arena
-/// via COW, executa a Action, serializa o resultado via to_bytes, e
-/// envia pelo pipe. O parent desserializa via from_bytes.
+/// Fire-and-forget como `fork!` — não retorna valor (Unit). O child herda
+/// a arena via COW, executa a Action, e termina. A comunicação entre
+/// parent e child é exclusivamente por canais (passados como args).
 ///
-/// Retorna o value_ptr do resultado (não Unit).
+/// Diferença de fork!: `fork!` cria fiber no mesmo processo (via
+/// `kata_rt_spawn`), `spawn!` cria processo OS separado (via
+/// `kata_rt_spawn_process` que faz fork).
 pub(crate) fn lower_spawn(
-    expr: &TypedExpr,
+    _expr: &TypedExpr,
     action_name: &str,
     action_expr: &kata_ast::Spanned<TypedExpr>,
     args: &kata_ast::Spanned<TypedExpr>,
@@ -415,38 +416,23 @@ pub(crate) fn lower_spawn(
 
     // 3. Determinar arena — usar caller_arena (root_arena no entry point).
     //    O fork() faz COW da arena do caller, e o child executa com essa arena.
-    //    O resultado volta via pipe e é desserializado na mesma arena.
     let arena_val = ctx
         .caller_arena
         .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
 
-    // 4. result_type_id — lookup do tipo de retorno no type_id_map.
-    //    O driver popula o mapa (Ty → type_id) antes do JIT. Se o tipo
-    //    não está no mapa, fallback para 0 (Prim) — ocorre quando o tipo
-    //    não aparece em params/retornos coletados pelo driver.
-    let result_type_id = match ctx.type_id_map.get(&expr.ty) {
-        Some(&id) => ctx.builder.ins().iconst(I64, id),
-        None => {
-            // Tipo não coletado pelo driver — usar 0 (Prim) como fallback.
-            // Isto pode produzir marshalling incorreto para tipos complexos
-            // não presentes em assinaturas de functions/actions.
-            ctx.builder.ins().iconst(I64, 0)
-        }
-    };
-
-    // 5. kata_rt_spawn_process(fn_ptr, args_ptr, result_type_id, arena) → value_ptr
+    // 4. kata_rt_spawn_process(fn_ptr, args_ptr, arena) — fork e exec.
+    //    Fire-and-forget: não há pipe de resultado, não há return.
     let spawn_ref = ctx
         .ffi_refs
         .get("kata_rt_spawn_process")
         .copied()
         .ok_or_else(|| super::CodegenError::FfiSymbolNotFound("kata_rt_spawn_process".into()))?;
-    let spawn_inst = ctx
-        .builder
+    ctx.builder
         .ins()
-        .call(spawn_ref, &[fn_ptr, args_ptr, result_type_id, arena_val]);
+        .call(spawn_ref, &[fn_ptr, args_ptr, arena_val]);
 
-    // 6. Retorna o value_ptr do resultado desserializado.
-    Ok(ctx.builder.inst_results(spawn_inst)[0])
+    // 5. Retorna Unit (fire-and-forget como fork!).
+    Ok(ctx.builder.ins().iconst(I64, 0))
 }
 
 /// Lowera `TypedExprKind::Select` — multiplexação de recebimento de canais
