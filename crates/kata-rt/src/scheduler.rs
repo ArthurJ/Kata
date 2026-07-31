@@ -28,8 +28,9 @@ pub(crate) mod ffi;
 pub use ffi::{
     DEADLOCK_SENTINEL, TIMEOUT_SENTINEL, kata_rt_run, kata_rt_scheduler_init,
     kata_rt_set_test_timeout, kata_rt_sleep, kata_rt_spawn, kata_rt_yield, kata_rt_yield_check,
-    reset_scheduler, reset_scheduler_tls, reset_yield_tls,
+    reset_scheduler,
 };
+pub(crate) use ffi::{reset_scheduler_tls, reset_yield_tls};
 
 use std::collections::{HashMap, VecDeque};
 

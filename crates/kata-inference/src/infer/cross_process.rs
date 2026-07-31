@@ -175,12 +175,11 @@ fn collect_channel_bindings(
             }
             // let tx := ch.0  (ch já está no mapa)
             // O typeck lowered `.0` para IndexAccess em tuplas.
-            if let TypedExprKind::IndexAccess { expr: inner, .. } = &value.node.kind {
-                if let TypedExprKind::Ident { name: inner_name } = &inner.node.kind {
-                    if let Some(span) = channel_bindings.get(inner_name) {
-                        channel_bindings.insert(name.clone(), *span);
-                    }
-                }
+            if let TypedExprKind::IndexAccess { expr: inner, .. } = &value.node.kind
+                && let TypedExprKind::Ident { name: inner_name } = &inner.node.kind
+                && let Some(span) = channel_bindings.get(inner_name)
+            {
+                channel_bindings.insert(name.clone(), *span);
             }
         }
         // let (tx, rx) := channel!()
@@ -189,19 +188,18 @@ fn collect_channel_bindings(
             value,
             bindings,
         } = &e.kind
+            && matches!(value.node.kind, TypedExprKind::ChannelCreate { .. })
         {
-            if matches!(value.node.kind, TypedExprKind::ChannelCreate { .. }) {
-                channel_bindings.insert(temp_name.clone(), value.span);
-                for (name, _) in bindings {
-                    channel_bindings.insert(name.clone(), value.span);
-                }
+            channel_bindings.insert(temp_name.clone(), value.span);
+            for (name, _) in bindings {
+                channel_bindings.insert(name.clone(), value.span);
             }
         }
         // var ch := channel!()
-        if let TypedExprKind::Var { name, value, .. } = &e.kind {
-            if matches!(value.node.kind, TypedExprKind::ChannelCreate { .. }) {
-                channel_bindings.insert(name.clone(), value.span);
-            }
+        if let TypedExprKind::Var { name, value, .. } = &e.kind
+            && matches!(value.node.kind, TypedExprKind::ChannelCreate { .. })
+        {
+            channel_bindings.insert(name.clone(), value.span);
         }
         true // continuar descida
     });
@@ -231,11 +229,11 @@ fn collect_channel_spans(
     spans: &mut Vec<kata_ast::Span>,
 ) {
     walk::for_each_subexpr(expr, &mut |e| {
-        if let TypedExprKind::Ident { name } = &e.kind {
-            if let Some(span) = bindings.get(name) {
-                spans.push(*span);
-                return false; // não desce (Ident não tem filhos)
-            }
+        if let TypedExprKind::Ident { name } = &e.kind
+            && let Some(span) = bindings.get(name)
+        {
+            spans.push(*span);
+            return false; // não desce (Ident não tem filhos)
         }
         true
     });
@@ -244,11 +242,11 @@ fn collect_channel_spans(
 /// Marca um `ChannelCreate` na TAST (por span) como `cross_process: true`.
 fn mark_channel_create_by_span(expr: &mut TypedExpr, target_span: kata_ast::Span) {
     walk::for_each_subexpr_mut(expr, &mut |e| {
-        if let TypedExprKind::ChannelCreate { cross_process, .. } = &mut e.kind {
-            if e.span == target_span {
-                *cross_process = true;
-                return false; // não desce mais
-            }
+        if let TypedExprKind::ChannelCreate { cross_process, .. } = &mut e.kind
+            && e.span == target_span
+        {
+            *cross_process = true;
+            return false; // não desce mais
         }
         true
     });
@@ -269,27 +267,24 @@ fn collect_concrete_channel_types(
     walk::for_each_subexpr(expr, &mut |e| {
         match &e.kind {
             TypedExprKind::ChannelSend { channel, .. } => {
-                if let TypedExprKind::Ident { name } = &channel.node.kind {
-                    if let Some(span) = channel_bindings.get(name) {
-                        if let Ty::Sender(inner) = &channel.node.ty {
-                            if !matches!(inner.as_ref(), Ty::Var(_)) {
-                                create_types
-                                    .entry(*span)
-                                    .or_insert_with(|| inner.as_ref().clone());
-                            }
-                        }
-                    }
+                if let TypedExprKind::Ident { name } = &channel.node.kind
+                    && let Some(span) = channel_bindings.get(name)
+                    && let Ty::Sender(inner) = &channel.node.ty
+                    && !matches!(inner.as_ref(), Ty::Var(_))
+                {
+                    create_types
+                        .entry(*span)
+                        .or_insert_with(|| inner.as_ref().clone());
                 }
             }
             TypedExprKind::ChannelRecv {
                 channel, recv_ty, ..
             } => {
-                if let TypedExprKind::Ident { name } = &channel.node.kind {
-                    if let Some(span) = channel_bindings.get(name) {
-                        if !matches!(recv_ty, Ty::Var(_)) {
-                            create_types.entry(*span).or_insert_with(|| recv_ty.clone());
-                        }
-                    }
+                if let TypedExprKind::Ident { name } = &channel.node.kind
+                    && let Some(span) = channel_bindings.get(name)
+                    && !matches!(recv_ty, Ty::Var(_))
+                {
+                    create_types.entry(*span).or_insert_with(|| recv_ty.clone());
                 }
             }
             _ => {}
@@ -302,23 +297,23 @@ fn collect_concrete_channel_types(
 /// substituindo `elem_ty` e `expr.ty` pelo tipo concreto.
 fn resolve_channel_create(expr: &mut TypedExpr, create_types: &HashMap<kata_ast::Span, Ty>) {
     walk::for_each_subexpr_mut(expr, &mut |e| {
-        if let TypedExprKind::ChannelCreate { elem_ty, kind, .. } = &mut e.kind {
-            if let Some(concrete_ty) = create_types.get(&e.span) {
-                *elem_ty = concrete_ty.clone();
-                // Atualiza expr.ty para Tuple([Sender(concrete), Receiver(concrete)])
-                // ou Tuple([Sender(concrete), ReceiverFactory(concrete)]) para broadcast.
-                e.ty = match kind {
-                    crate::typed::ChannelKind::Broadcast => Ty::Tuple(vec![
-                        Ty::Sender(Box::new(concrete_ty.clone())),
-                        Ty::ReceiverFactory(Box::new(concrete_ty.clone())),
-                    ]),
-                    _ => Ty::Tuple(vec![
-                        Ty::Sender(Box::new(concrete_ty.clone())),
-                        Ty::Receiver(Box::new(concrete_ty.clone())),
-                    ]),
-                };
-                return false; // não desce mais
-            }
+        if let TypedExprKind::ChannelCreate { elem_ty, kind, .. } = &mut e.kind
+            && let Some(concrete_ty) = create_types.get(&e.span)
+        {
+            *elem_ty = concrete_ty.clone();
+            // Atualiza expr.ty para Tuple([Sender(concrete), Receiver(concrete)])
+            // ou Tuple([Sender(concrete), ReceiverFactory(concrete)]) para broadcast.
+            e.ty = match kind {
+                crate::typed::ChannelKind::Broadcast => Ty::Tuple(vec![
+                    Ty::Sender(Box::new(concrete_ty.clone())),
+                    Ty::ReceiverFactory(Box::new(concrete_ty.clone())),
+                ]),
+                _ => Ty::Tuple(vec![
+                    Ty::Sender(Box::new(concrete_ty.clone())),
+                    Ty::Receiver(Box::new(concrete_ty.clone())),
+                ]),
+            };
+            return false; // não desce mais
         }
         true
     });

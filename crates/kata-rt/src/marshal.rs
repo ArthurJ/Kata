@@ -65,6 +65,7 @@ pub fn register_type_table(types: Vec<TypeShape>) {
 }
 
 /// Reseta a type table — chamado entre execuções de teste.
+#[allow(dead_code)] // reservada para futura uso na infra IPC
 pub(crate) fn reset_type_table() {
     TYPE_TABLE.with(|table| {
         table.borrow_mut().clear();
@@ -351,6 +352,7 @@ impl<'a> Deserializer<'a> {
     }
 
     /// Lê um i64 que pode ser um ponteiro relativo. Faz rebasing se necessário.
+    #[allow(dead_code)] // reservado para futura deserialização IPC
     fn read_ptr(&mut self, base_ptr: i64) -> i64 {
         self.align();
         let offset_pos = self.pos;
@@ -396,7 +398,7 @@ fn deserialize_value(de: &mut Deserializer, ty: &TypeShape, base_ptr: i64) -> i6
         }
         TypeShape::Text => {
             de.align();
-            let offset_pos = de.pos;
+            let _offset_pos = de.pos;
             let raw = de.read_i64();
             if raw == 0 {
                 return 0;
@@ -413,11 +415,7 @@ fn deserialize_value(de: &mut Deserializer, ty: &TypeShape, base_ptr: i64) -> i6
             // O offset da string dentro de data é raw (após finish()).
             // Se rebase_offset contém offset_pos, raw é offset relativo
             // que foi somado com main_len. Logo raw já é offset absoluto em data.
-            let str_offset = if de.rebase_offsets.contains(&offset_pos) {
-                raw as usize
-            } else {
-                raw as usize
-            };
+            let str_offset = raw as usize;
             let str_bytes = de.read_cstr_at(str_offset);
             let ptr =
                 crate::arena::kata_rt_arena_alloc(de.arena_handle, (str_bytes.len() + 1) as i64);

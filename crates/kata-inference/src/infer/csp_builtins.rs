@@ -494,27 +494,27 @@ pub(crate) fn infer_spawn_builtin(
     // Sender::(Int, Int)), extrai a substituição T0 → (Int, Int) e
     // propaga para todos os bindings do env. Isto resolve T0 para que
     // o codegen veja o tipo concreto no ChannelCreate.
-    if !action_name.starts_with("__indirect") {
-        if let Some(overloads) = ctx.table.get_overloads(&action_name) {
-            let arg_tys: Vec<Ty> = match &typed_args.kind {
-                TypedExprKind::Tuple { elements } => {
-                    elements.iter().map(|e| e.node.ty.clone()).collect()
-                }
-                TypedExprKind::Unit => Vec::new(),
-                _ => vec![typed_args.ty.clone()],
-            };
-            for oi in overloads
-                .iter()
-                .filter(|o| o.is_action && o.params.len() == arg_tys.len())
-            {
-                let mut subs: super::generics::Substitutions = HashMap::new();
-                for (param, arg) in oi.params.iter().zip(&arg_tys) {
-                    extract_var_subs(param, arg, &mut subs);
-                }
-                if !subs.is_empty() {
-                    env.apply_substitutions(&subs);
-                    break;
-                }
+    if !action_name.starts_with("__indirect")
+        && let Some(overloads) = ctx.table.get_overloads(&action_name)
+    {
+        let arg_tys: Vec<Ty> = match &typed_args.kind {
+            TypedExprKind::Tuple { elements } => {
+                elements.iter().map(|e| e.node.ty.clone()).collect()
+            }
+            TypedExprKind::Unit => Vec::new(),
+            _ => vec![typed_args.ty.clone()],
+        };
+        for oi in overloads
+            .iter()
+            .filter(|o| o.is_action && o.params.len() == arg_tys.len())
+        {
+            let mut subs: super::generics::Substitutions = HashMap::new();
+            for (param, arg) in oi.params.iter().zip(&arg_tys) {
+                extract_var_subs(param, arg, &mut subs);
+            }
+            if !subs.is_empty() {
+                env.apply_substitutions(&subs);
+                break;
             }
         }
     }

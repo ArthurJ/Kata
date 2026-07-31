@@ -782,9 +782,9 @@ const BROKER_TIMEOUT_MS: i64 = 30_000;
 /// 3. Loop:
 ///    a. `kata_rt_select(handles_ptr, 2, BROKER_TIMEOUT_MS)` → idx
 ///    b. idx == 0 (queue_rx pronto): `channel_recv(queue_rx)` → val;
-///       `channel_send(ipc_data_tx, val)`; continua loop
+///    `channel_send(ipc_data_tx, val)`; continua loop
 ///    c. idx == 1 (ack_rx pronto): `channel_recv(ack_rx)` → descarta;
-///       continua loop
+///    continua loop
 ///    d. idx == -2 (SELECT_TIMEOUT): `return 0` (broker termina)
 ///    e. idx == -1 (WOULD_BLOCK): continua loop
 /// 4. `return 0`

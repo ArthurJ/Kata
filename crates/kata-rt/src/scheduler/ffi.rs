@@ -131,7 +131,7 @@ pub fn reset_scheduler() {
 /// As TLS do parent apontam para o scheduler do parent (em mid-execução) e
 /// para `Suspend` ptrs dangling — resetar apenas as TLS de runtime dá ao
 /// child um estado limpo sem destruir os dados herdados (arenas, type table).
-pub fn reset_scheduler_tls() {
+pub(crate) fn reset_scheduler_tls() {
     // Após fork(), o child herda o RefCell do parent em estado "borrowed"
     // (o parent está em mid-resume() com borrow_mut ativo). Usar borrow_mut()
     // novamente causaria panic ("RefCell already borrowed"). Bypassar o
@@ -151,7 +151,7 @@ pub fn reset_scheduler_tls() {
 /// Usado por `kata_rt_spawn_process` no child: o parent pode ter deixado
 /// estes em estado arbitrário (mid-yield-check). O child precisa de contadores
 /// zerados para que o primeiro yield check do scheduler funcione corretamente.
-pub fn reset_yield_tls() {
+pub(crate) fn reset_yield_tls() {
     YIELD_COUNTER.with(|c| c.set(YIELD_INTERVAL));
     HAS_READY_FIBER.with(|h| h.set(false));
 }

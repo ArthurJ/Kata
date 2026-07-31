@@ -84,7 +84,7 @@ pub extern "C" fn kata_rt_spawn_process(fn_ptr: i64, args_ptr: i64, arena_handle
                 libc::_exit(0);
             }
         }
-        pid => {
+        _pid => {
             // ── PARENT ─────────────────────────────────────
             // Fire-and-forget — não espera o child, não lê pipe.
             // Reap zombie assincronamente (SIGCHLD ou waitpid posterior).
