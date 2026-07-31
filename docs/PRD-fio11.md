@@ -1142,15 +1142,10 @@ destruída).
 - Scheduler faz poll blocking no FD quando todos fibers estão blocked em IPC
 
 **Limitações da Fase 9:**
-- `channel!()` cria `Ty::Var("T0")` que não é unificado com o tipo concreto do
-  primeiro `!>`/`<!`. Para `fork!`, a unificação acontece via parâmetro tipado da
-  Action (`tx::Sender::Int`). Para `spawn!`, o `type_id` do canal fica 0 (Prim),
-  e serialização de tipos complexos (tupla, struct, lista) não funciona. Tipos
-  primitivos (Int, Unit) funcionam porque SMI é inline (8 bytes, sem serialização
-  recursiva). A unificação de `T0` é uma melhoria futura.
 - `spawn!` é fire-and-forget — não retorna valor. A comunicação é exclusivamente
   por canais IPC passados como args.
 - Buffered e Broadcast IPC não suportados em v1 (fallback para in-process).
+  `channel!()` (Rendezvous) com IPC funciona para Int, tupla, struct e lista.
 
 **DoD Fase 9:** `spawn!(tarefa, (42))` executa em processo OS separado. Resultado
 volta via IPC. Serialização de Int funciona. Forma dict com `serialized:` envia bytes

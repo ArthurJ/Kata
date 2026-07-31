@@ -630,7 +630,7 @@ Codegen emite `kata_rt_ipc_channel_create` em vez de `kata_rt_channel_create`.
 Tag scheme expandido de 2→3 bits (TAG_IPC_CHANNEL = 0b100). Scheduler faz poll
 blocking no FD quando todos fibers estão blocked em IPC. 5 testes E2E em
 `spawn_ipc_e2e.rs`: fire-and-forget, round-trip Int, tupla/struct/lista
-(ignorados — exigem unificação de T0 na inferência de canais).
+(5 testes E2E, todos passando).
 
 **Maquinaria de tipos construída:**
 - `Ty::Sender(Box<Ty>)`, `Ty::Receiver(Box<Ty>)`, `Ty::ReceiverFactory(Box<Ty>)`

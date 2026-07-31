@@ -552,18 +552,26 @@ interceptação, seriam chamadas de função opacas que o optimizer não
 consegue fundir. A generalização futura seria um `@fusion_eligible` que
 o typeck respeita para qualquer função — pós-1.0.
 
-### L6. `channel!()` cria `Var("T0")` que nunca é unificada
+### L6. `channel!()` cria `Var("T0")` — resolvido via pass `cross_process.rs`
 
 `channel!()` cria `Ty::Var("T0")` como tipo de elemento. O `type_compatible`
 em `csp.rs` aceita `Var` como coringa (retorna `true` para qualquer tipo),
 mas nunca unifica `T0` com o tipo concreto. Para `fork!`, isso é
-mascaredo pela Action ter parâmetros tipados (`tx::Sender::Int`) — dentro
+mascarado pela Action ter parâmetros tipados (`tx::Sender::Int`) — dentro
 da Action, o tipo é concreto. Para `spawn!` com canais IPC, o `type_id`
-do canal fica 0 (Prim) porque o tipo é `Var("T0")`, e a serialização de
-tipos complexos não funciona. Tipos primitivos (Int, Unit) funcionam
+do canal ficava 0 (Prim) porque o tipo era `Var("T0")`, e a serialização de
+tipos complexos não funcionava. Tipos primitivos (Int, Unit) funcionavam
 porque SMI é inline (8 bytes, sem serialização recursiva).
 
-A correção seria unificar `T0` com o tipo do primeiro `!>` ou `<!` na
-inferência — uma unificação bidirecional como a que existe para generics.
-A lição: `type_compatible` com `Var` como coringa é um atalho que
-funciona para dispatch mas não para codegen que precisa do tipo concreto.
+**Solução implementada:** o pass `cross_process.rs` (pós-inferência) resolve
+`ChannelCreate` na TAST substituindo `Var("T0")` pelo tipo concreto do
+primeiro `!>`/`<!` via `resolve_channel_create`. O `spawn!` também unifica
+`Var("T0")` no `TypeEnv` (mesmo mecanismo do `fork!`). `collect_module_types`
+recursiva em `type_table.rs` garante que o codegen encontre o `type_id`
+correto para serialização. Resultado: Int, tupla, struct e lista funcionam
+com IPC.
+
+A lição permanece válida: `type_compatible` com `Var` como coringa é um
+atalho que funciona para dispatch mas não para codegen que precisa do
+tipo concreto. A solução não é mudar `type_compatible`, mas adicionar um
+pass separado que resolve `Var` para tipo concreto na TAST antes do codegen.
