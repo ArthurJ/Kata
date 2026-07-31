@@ -174,31 +174,64 @@ fn apply_subst(ty: &Ty, subst: &HashMap<String, Ty>) -> Ty {
 }
 
 /// Coleta todos os `Ty` únicos que aparecem nos params e retornos das
-/// functions e actions do módulo. Retorna vec na ordem de descoberta
-/// (que vira a ordem dos type_ids).
+/// functions e actions do módulo, incluindo sub-tipos de canais
+/// (Sender/Receiver elem types) e tipos compostos (Tuple, List, etc).
+/// Retorna vec na ordem de descoberta (que vira a ordem dos type_ids).
 pub fn collect_module_types(mono: &MonoModule) -> Vec<Ty> {
     let mut seen: Vec<Ty> = Vec::new();
 
-    let mut insert = |ty: &Ty| {
+    fn insert_recursive(seen: &mut Vec<Ty>, ty: &Ty) {
         if !seen.contains(ty) {
             seen.push(ty.clone());
         }
-    };
+        // Recursivamente coleta sub-tipos para que o type_id do
+        // elemento do canal (ex: Tuple([Int, Int])) esteja disponível
+        // no type_id_map, mesmo que só apareça dentro de Sender/Receiver.
+        match ty {
+            Ty::Sender(inner) | Ty::Receiver(inner) | Ty::ReceiverFactory(inner) => {
+                insert_recursive(seen, inner);
+            }
+            Ty::List(elem) | Ty::Array(elem) | Ty::Range(elem) | Ty::Set(elem) => {
+                insert_recursive(seen, elem);
+            }
+            Ty::Tuple(elems) => {
+                for e in elems {
+                    insert_recursive(seen, e);
+                }
+            }
+            Ty::Dict(k, v) => {
+                insert_recursive(seen, k);
+                insert_recursive(seen, v);
+            }
+            Ty::Generic(_, args) => {
+                for a in args {
+                    insert_recursive(seen, a);
+                }
+            }
+            Ty::Function(params, ret) | Ty::Action(params, ret) => {
+                for p in params {
+                    insert_recursive(seen, p);
+                }
+                insert_recursive(seen, ret);
+            }
+            _ => {}
+        }
+    }
 
     // Params e retornos de functions.
     for f in &mono.functions {
         for p in &f.param_types {
-            insert(p);
+            insert_recursive(&mut seen, p);
         }
-        insert(&f.ret_ty);
+        insert_recursive(&mut seen, &f.ret_ty);
     }
 
     // Params e retornos de actions.
     for a in &mono.actions {
         for p in &a.param_types {
-            insert(p);
+            insert_recursive(&mut seen, p);
         }
-        insert(&a.ret_ty);
+        insert_recursive(&mut seen, &a.ret_ty);
     }
 
     seen

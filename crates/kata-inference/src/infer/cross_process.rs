@@ -51,7 +51,7 @@
 use std::collections::HashMap;
 
 use crate::typed::{TypedExpr, TypedExprKind, TypedModule};
-use kata_core::ty::{Ty, apply_subs_to_ty};
+use kata_core::ty::Ty;
 
 use super::walk;
 
@@ -122,29 +122,34 @@ pub(crate) fn run(typed_module: &mut TypedModule) {
     }
 
     // ── Resolução de Var("T0") na TAST ──
-    // Coleta substituições de ChannelSend/ChannelRecv onde o tipo do canal
-    // é Var e o tipo do valor é concreto. Depois aplica na TAST inteira.
-    let mut subs: HashMap<String, Ty> = HashMap::new();
+    // O spawn!/fork! aplica env.apply_substitutions durante a inferência,
+    // que resolve Var nos bindings do TypeEnv. Mas o ChannelCreate já foi
+    // construído antes do spawn! e ainda tem Var no elem_ty e no expr.ty.
+    // ── Resolução de Var("T0") na TAST ──
+    // O spawn!/fork! aplica env.apply_substitutions durante a inferência,
+    // que resolve Var nos bindings do TypeEnv. Mas o ChannelCreate já foi
+    // construído antes do spawn! e ainda tem Var no elem_ty e no expr.ty.
+    // Coletamos os tipos concretos dos ChannelSend (onde o tipo já foi
+    // resolvido pelo spawn!) e mutamos os ChannelCreate correspondentes
+    // diretamente pelo span.
+    if !channel_bindings.is_empty() {
+        // Mapa: span_do_ChannelCreate -> tipo_concreto_do_elemento
+        let mut create_types: HashMap<kata_ast::Span, Ty> = HashMap::new();
 
-    for expr in &typed_module.pre_entry {
-        collect_var_subs(&expr.node, &mut subs);
-    }
-    collect_var_subs(&typed_module.entry.node, &mut subs);
-    for action in &typed_module.actions {
-        for stmt in &action.body {
-            collect_var_subs(&stmt.node, &mut subs);
+        for expr in &typed_module.pre_entry {
+            collect_concrete_channel_types(&expr.node, &channel_bindings, &mut create_types);
         }
-    }
+        collect_concrete_channel_types(
+            &typed_module.entry.node,
+            &channel_bindings,
+            &mut create_types,
+        );
 
-    if !subs.is_empty() {
-        for expr in &mut typed_module.pre_entry {
-            apply_subs_to_tast(&mut expr.node, &subs);
-        }
-        apply_subs_to_tast(&mut typed_module.entry.node, &subs);
-        for action in &mut typed_module.actions {
-            for stmt in &mut action.body {
-                apply_subs_to_tast(&mut stmt.node, &subs);
+        if !create_types.is_empty() {
+            for expr in &mut typed_module.pre_entry {
+                resolve_channel_create(&mut expr.node, &create_types);
             }
+            resolve_channel_create(&mut typed_module.entry.node, &create_types);
         }
     }
 }
@@ -249,23 +254,29 @@ fn mark_channel_create_by_span(expr: &mut TypedExpr, target_span: kata_ast::Span
     });
 }
 
-/// Coleta substituições `Var(name) → tipo_concreto` a partir de
-/// `ChannelSend` e `ChannelRecv` onde o tipo do canal contém `Var` e o
-/// tipo do valor é concreto.
+/// Coleta tipos concretos de canais a partir de `ChannelSend` onde o
+/// `channel` é um `Ident` cujo nome está em `channel_bindings`. Extrai
+/// o tipo do elemento do `Sender(inner)` e mapeia `span_do_ChannelCreate
+/// → inner`.
 ///
-/// - `ChannelSend { channel: Sender(Var("T0")), value: (Int, Int) }`
-///   → subs["T0"] = (Int, Int)
-/// - `ChannelRecv { channel: Receiver(Var("T0")), recv_ty: (Int, Int) }`
-///   → subs["T0"] = (Int, Int)
-fn collect_var_subs(expr: &TypedExpr, subs: &mut HashMap<String, Ty>) {
+/// Também coleta de `ChannelRecv` onde o `channel` é `Ident` em
+/// `channel_bindings` e o `recv_ty` é concreto.
+fn collect_concrete_channel_types(
+    expr: &TypedExpr,
+    channel_bindings: &HashMap<String, kata_ast::Span>,
+    create_types: &mut HashMap<kata_ast::Span, Ty>,
+) {
     walk::for_each_subexpr(expr, &mut |e| {
         match &e.kind {
-            TypedExprKind::ChannelSend { channel, value } => {
-                if let Ty::Sender(inner) = &channel.node.ty {
-                    if let Ty::Var(name) = inner.as_ref() {
-                        let val_ty = &value.node.ty;
-                        if !matches!(val_ty, Ty::Var(_)) {
-                            subs.entry(name.clone()).or_insert_with(|| val_ty.clone());
+            TypedExprKind::ChannelSend { channel, .. } => {
+                if let TypedExprKind::Ident { name } = &channel.node.kind {
+                    if let Some(span) = channel_bindings.get(name) {
+                        if let Ty::Sender(inner) = &channel.node.ty {
+                            if !matches!(inner.as_ref(), Ty::Var(_)) {
+                                create_types
+                                    .entry(*span)
+                                    .or_insert_with(|| inner.as_ref().clone());
+                            }
                         }
                     }
                 }
@@ -273,10 +284,10 @@ fn collect_var_subs(expr: &TypedExpr, subs: &mut HashMap<String, Ty>) {
             TypedExprKind::ChannelRecv {
                 channel, recv_ty, ..
             } => {
-                if let Ty::Receiver(inner) = &channel.node.ty {
-                    if let Ty::Var(name) = inner.as_ref() {
+                if let TypedExprKind::Ident { name } = &channel.node.kind {
+                    if let Some(span) = channel_bindings.get(name) {
                         if !matches!(recv_ty, Ty::Var(_)) {
-                            subs.entry(name.clone()).or_insert_with(|| recv_ty.clone());
+                            create_types.entry(*span).or_insert_with(|| recv_ty.clone());
                         }
                     }
                 }
@@ -287,21 +298,27 @@ fn collect_var_subs(expr: &TypedExpr, subs: &mut HashMap<String, Ty>) {
     });
 }
 
-/// Aplica substituições de `Var(name) → tipo_concreto` em todos os `Ty`
-/// da TAST. Usa `apply_subs_to_ty` de `kata-core::ty` para reescrever
-/// recursivamente.
-fn apply_subs_to_tast(expr: &mut TypedExpr, subs: &HashMap<String, Ty>) {
+/// Muta `ChannelCreate` na TAST cujo span está em `create_types`,
+/// substituindo `elem_ty` e `expr.ty` pelo tipo concreto.
+fn resolve_channel_create(expr: &mut TypedExpr, create_types: &HashMap<kata_ast::Span, Ty>) {
     walk::for_each_subexpr_mut(expr, &mut |e| {
-        e.ty = apply_subs_to_ty(&e.ty, subs);
-        // Também resolve elem_ty e recv_ty dentro de ChannelCreate/ChannelRecv
-        match &mut e.kind {
-            TypedExprKind::ChannelCreate { elem_ty, .. } => {
-                *elem_ty = apply_subs_to_ty(elem_ty, subs);
+        if let TypedExprKind::ChannelCreate { elem_ty, kind, .. } = &mut e.kind {
+            if let Some(concrete_ty) = create_types.get(&e.span) {
+                *elem_ty = concrete_ty.clone();
+                // Atualiza expr.ty para Tuple([Sender(concrete), Receiver(concrete)])
+                // ou Tuple([Sender(concrete), ReceiverFactory(concrete)]) para broadcast.
+                e.ty = match kind {
+                    crate::typed::ChannelKind::Broadcast => Ty::Tuple(vec![
+                        Ty::Sender(Box::new(concrete_ty.clone())),
+                        Ty::ReceiverFactory(Box::new(concrete_ty.clone())),
+                    ]),
+                    _ => Ty::Tuple(vec![
+                        Ty::Sender(Box::new(concrete_ty.clone())),
+                        Ty::Receiver(Box::new(concrete_ty.clone())),
+                    ]),
+                };
+                return false; // não desce mais
             }
-            TypedExprKind::ChannelRecv { recv_ty, .. } => {
-                *recv_ty = apply_subs_to_ty(recv_ty, subs);
-            }
-            _ => {}
         }
         true
     });
