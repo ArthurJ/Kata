@@ -1112,7 +1112,7 @@ executam durante o loop. Sem yield points, loop pesado bloqueia outras fibers
 **DoD Fase 8:** Todos os testes E2E passam. Zero vazamentos (arena raiz
 destruída).
 
-### Fase 9: `spawn!` (paralelismo / multiprocess)
+### Fase 9: `spawn!` (paralelismo / multiprocess) ✅
 
 **kata-codegen:**
 - `spawn!` special form (paralelo a `fork!` no lowering)

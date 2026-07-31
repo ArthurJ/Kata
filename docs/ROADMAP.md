@@ -149,11 +149,11 @@ Fio 1: Fundação + Aritmética + CLI
 │   (import, export, as, module loader, filesystem, cycle detection,
 │    prelude de stdlib/core.kata substituindo prelude hardcoded)
 │
-├── Fio 11: CSP, Concorrência, Paralelismo ✅ Concluído (exceto spawn!)
+├── Fio 11: CSP, Concorrência, Paralelismo ✅ Concluído
 │   (channel!, queue!, broadcast!, fork!, !>, <!, select com timeout,
 │    yield cooperativo, structured concurrency, scheduler com fibers)
 │   (spawn! — multiprocess via fork+IPC — redesign: special form ao lado de fork!,
-│    aceita tupla ou dict com raw:/serialized:, to_bytes() FFI — Fase 5 ✅, spawn! Fase 9 pendente)
+│    aceita tupla ou dict com raw:/serialized:, to_bytes() FFI — Fase 5 ✅, spawn! Fase 9 ✅)
 │
 ├── Fio 12: Comptime, @cache ✅ Concluído — PRD: docs/PRD-fio12-comptime.md
 │   (@comptime call-site explícito, JIT-and-execute, HeapSnapshot com arenas,
@@ -604,7 +604,7 @@ pelo codegen. ARC pass emitido.
 
 ---
 
-### Fio 11: CSP, Concorrência, Paralelismo ✅ Concluído (exceto spawn!)
+### Fio 11: CSP, Concorrência, Paralelismo ✅ Concluído
 
 **Status:** Fases 1-14 implementadas (Fases 1-14 do Fio 3, que incluem CSP).
 `channel!`, `queue!(N)`, `broadcast!()`, `fork!`, `!>`, `<!`, `select` com
@@ -613,18 +613,15 @@ Testes E2E: `csp_channels_e2e.rs` (11 testes), `csp_broadcast_e2e.rs` (4 testes)
 `select_timeout_e2e.rs`, `scheduler_test.rs`. Exemplos: `broadcast.kata`,
 `select_queue.kata`.
 
-**Não implementado:** `spawn!` (multiprocess via fork+IPC). Redesign aprovado:
-special form ao lado de `fork!` (não diretiva em ActionDecl). Aceita tupla
-(posicional — runtime serializa implicitamente) ou dict com `raw:`/`serialized:`
-(controle explícito). `to_bytes()`/`from_bytes()` FFI implementada (Fase 5 do
-PRD-bytes, commit `bfcf1a4`) — serializa valores em blob `Bytes` com header
-estendido (type_id + rebase_offsets). Type table Rust-to-Rust em `kata-rt`.
-Fase 6 ✅ (commits `bf02cab` + `c1824a2`) — 45 testes E2E de Bytes/Byte
-cobrindo indexação, concatenação, len, slice, show, eq, bitwise,
-conversões, Text ↔ Bytes, Text indexável, roundtrips. Bug de SMI tagging
-em funções de indexação corrigido (untag_smi em bytes/text/list/array).
-Falta: codegen de `spawn!` (Fase 9), driver registrar type table antes do JIT.
-Veja PRD-fio11.md, Fase 9.
+**spawn! (Fase 9) ✅:** Multiprocess via fork+IPC. `spawn!(action, (args))`
+executa a Action em processo OS separado via `fork()`. O child herda a arena
+via copy-on-write, executa a Action, serializa o resultado via `to_bytes()`,
+e envia pelo pipe. O parent faz `yield`, lê o pipe, e desserializa via
+`from_bytes()`. `TypedExprKind::Spawn` na inference, `lower_spawn` no codegen,
+`kata_rt_spawn_process` no runtime. Type table registrada pelo driver antes
+do JIT (`build_and_register_type_table` → `type_id_map: HashMap<Ty, i64>`
+propagado via `LowerCtx`). 3 testes E2E em `spawn_e2e.rs`: básico (Int),
+tupla (args compostos), sem args (Unit).
 
 **Maquinaria de tipos construída:**
 - `Ty::Sender(Box<Ty>)`, `Ty::Receiver(Box<Ty>)`, `Ty::ReceiverFactory(Box<Ty>)`
