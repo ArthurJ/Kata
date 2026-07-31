@@ -21,6 +21,7 @@ pub(crate) mod fiber;
 pub(crate) mod float;
 pub(crate) mod hash;
 pub(crate) mod io;
+pub(crate) mod ipc;
 pub(crate) mod list;
 pub(crate) mod log;
 pub(crate) mod marshal;
@@ -133,6 +134,8 @@ pub use channel::{
 pub use log::{kata_rt_log_config, kata_rt_log_publish, kata_rt_log_recv};
 // Marshalling (to_bytes/from_bytes para spawn!)
 pub use marshal::{TypeShape, kata_rt_from_bytes, kata_rt_to_bytes, register_type_table};
+// IPC (fork + pipe para spawn!)
+pub use ipc::kata_rt_spawn_process;
 // Display de resultados — ponto único de display para
 // driver JIT e shim AOT.
 pub use display::{
