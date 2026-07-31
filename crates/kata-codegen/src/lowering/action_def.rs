@@ -133,6 +133,7 @@ pub(crate) fn define_kata_action(
             arc_vars: Vec::new(),
             struct_registry,
             type_id_map,
+            ipc_broker_fid: None,
         };
 
         // Cria epilogue_block com 1 block param (result).

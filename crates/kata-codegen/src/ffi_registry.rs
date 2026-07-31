@@ -274,6 +274,10 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
         rt::kata_rt_ipc_channel_create as *const u8,
     );
     builder.symbol(
+        "kata_rt_ipc_queue_create",
+        rt::kata_rt_ipc_queue_create as *const u8,
+    );
+    builder.symbol(
         "kata_rt_channel_send",
         rt::kata_rt_channel_send as *const u8,
     );
@@ -524,6 +528,7 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         BroadcastCreate,
         BroadcastReceiverCreate,
         IpcChannelCreate,
+        IpcQueueCreate,
         ChannelSend,
         ChannelRecv,
         ChannelSelect,

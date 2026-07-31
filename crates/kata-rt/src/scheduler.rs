@@ -28,7 +28,7 @@ pub(crate) mod ffi;
 pub use ffi::{
     DEADLOCK_SENTINEL, TIMEOUT_SENTINEL, kata_rt_run, kata_rt_scheduler_init,
     kata_rt_set_test_timeout, kata_rt_sleep, kata_rt_spawn, kata_rt_yield, kata_rt_yield_check,
-    reset_scheduler,
+    reset_scheduler, reset_scheduler_tls, reset_yield_tls,
 };
 
 use std::collections::{HashMap, VecDeque};
@@ -208,11 +208,13 @@ impl Scheduler {
                     }
                     Err(YieldReason::WaitingOnChannel(handle)) => {
                         // Bloqueia em recv.
+
                         self.blocked
                             .insert(fiber_id, BlockReason::WaitingOnChannel(handle));
                     }
                     Err(YieldReason::WaitingOnChannelSend(handle)) => {
                         // Bloqueia em send.
+
                         self.blocked
                             .insert(fiber_id, BlockReason::WaitingOnChannelSend(handle));
                     }
@@ -261,21 +263,7 @@ impl Scheduler {
                     })
                     .min();
 
-                if let Some(deadline) = earliest_deadline {
-                    let now = std::time::Instant::now();
-                    if deadline > now {
-                        std::thread::sleep(deadline - now);
-                    }
-                    // Após dormir, fazer wake_pass para acordar fibers cujo
-                    // deadline expirou ou cujo canal recebeu dado.
-                    self.wake_pass();
-                    continue;
-                }
-
-                // Sem deadlines — verificar se algum fiber está bloqueado
-                // em canal IPC. Se sim, o child OS process pode ainda estar
-                // escrevendo. Fazer poll blocking no primeiro handle IPC
-                // e tentar novamente.
+                // Coletar handles IPC de fibers blocked (para poll com timeout).
                 let ipc_handle = self.blocked.values().find_map(|reason| match reason {
                     BlockReason::WaitingOnChannel(handle) if is_ipc_handle(*handle) => {
                         Some(*handle)
@@ -286,6 +274,37 @@ impl Scheduler {
                     _ => None,
                 });
 
+                if let Some(deadline) = earliest_deadline {
+                    let now = std::time::Instant::now();
+                    let remaining = if deadline > now {
+                        Some(deadline - now)
+                    } else {
+                        None
+                    };
+
+                    if let Some(remaining) = remaining {
+                        // Se há IPC handles blocked, fazer poll com timeout = remaining
+                        // em vez de sleep. Isto permite que dados do child acordem
+                        // o scheduler antes do deadline expirar.
+                        if let Some(handle) = ipc_handle {
+                            let timeout_ms = remaining.as_millis() as i32;
+                            unsafe {
+                                super::channel::ipc::poll_ipc_with_timeout(handle, timeout_ms);
+                            }
+                        } else {
+                            std::thread::sleep(remaining);
+                        }
+                    }
+                    // Após dormir (ou poll), fazer wake_pass para acordar fibers cujo
+                    // deadline expirou ou cujo canal recebeu dado.
+                    self.wake_pass();
+                    continue;
+                }
+
+                // Sem deadlines — verificar se algum fiber está bloqueado
+                // em canal IPC. Se sim, o child OS process pode ainda estar
+                // escrevendo. Fazer poll blocking no primeiro handle IPC
+                // e tentar novamente.
                 if let Some(handle) = ipc_handle {
                     // Bloqueia até o child OS process escrever no pipe.
                     // SAFETY: handle veio de um fiber blocked em canal IPC.
@@ -358,6 +377,7 @@ impl Scheduler {
         if self.blocked.is_empty() {
             return;
         }
+
         // Coletar fibers para acordar.
         let to_wake: Vec<FiberId> = self
             .blocked
@@ -415,8 +435,12 @@ impl Scheduler {
     /// enfileirados. O `parent_id` é o fiber que acabou de executar
     /// (que chamou `kata_rt_spawn`).
     fn drain_pending_spawns(&mut self, parent_id: FiberId) {
-        let pending: Vec<(i64, i64, i64)> =
-            PENDING_SPAWNS.with(|p| p.borrow_mut().drain(..).collect());
+        // Após fork(), o RefCell de PENDING_SPAWNS pode estar "borrowed"
+        // herdado do parent. Usar as_ptr() para bypassar o borrow check.
+        let pending: Vec<(i64, i64, i64)> = PENDING_SPAWNS.with(|p| unsafe {
+            let ptr = p.as_ptr();
+            (*ptr).drain(..).collect()
+        });
         for (fn_ptr, caller_arena, args_ptr) in pending {
             // Usar parent_id como pai, não current_fiber (que é None
             // neste ponto).

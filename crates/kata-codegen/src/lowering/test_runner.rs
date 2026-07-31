@@ -214,6 +214,7 @@ fn define_test_wrapper(
             arc_vars: Vec::new(),
             struct_registry: tctx.struct_registry,
             type_id_map: tctx.type_id_map,
+            ipc_broker_fid: None,
         };
 
         // 1. scheduler_init → root_arena (igual ao entry point).

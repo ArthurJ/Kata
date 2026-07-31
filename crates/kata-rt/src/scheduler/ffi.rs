@@ -122,16 +122,53 @@ pub fn reset_scheduler() {
     crate::snapshot::reset_snapshot_table();
 }
 
+/// Reseta apenas as TLS de runtime do scheduler (SCHEDULER + PENDING_SPAWNS),
+/// **sem** tocar estado global (TIMEOUT_EXPIRED, PENDING_TIMER) e **sem**
+/// resetar arenas, snapshots, log, ou root arena handle.
+///
+/// Usado por `kata_rt_spawn_process` no child após `fork()`: o child herda
+/// o address space do parent via COW, mas precisa de um scheduler limpo.
+/// As TLS do parent apontam para o scheduler do parent (em mid-execução) e
+/// para `Suspend` ptrs dangling — resetar apenas as TLS de runtime dá ao
+/// child um estado limpo sem destruir os dados herdados (arenas, type table).
+pub fn reset_scheduler_tls() {
+    // Após fork(), o child herda o RefCell do parent em estado "borrowed"
+    // (o parent está em mid-resume() com borrow_mut ativo). Usar borrow_mut()
+    // novamente causaria panic ("RefCell already borrowed"). Bypassar o
+    // borrow check escrevendo diretamente via as_ptr().
+    SCHEDULER.with(|s| unsafe {
+        let ptr = s.as_ptr();
+        (*ptr) = None;
+    });
+    PENDING_SPAWNS.with(|p| unsafe {
+        let ptr = p.as_ptr();
+        (*ptr).clear();
+    });
+}
+
+/// Reseta apenas as TLS de yield (YIELD_COUNTER + HAS_READY_FIBER).
+///
+/// Usado por `kata_rt_spawn_process` no child: o parent pode ter deixado
+/// estes em estado arbitrário (mid-yield-check). O child precisa de contadores
+/// zerados para que o primeiro yield check do scheduler funcione corretamente.
+pub fn reset_yield_tls() {
+    YIELD_COUNTER.with(|c| c.set(YIELD_INTERVAL));
+    HAS_READY_FIBER.with(|h| h.set(false));
+}
+
 /// Inicializa o scheduler thread-local e cria a arena raiz.
 ///
 /// Retorna o handle da arena raiz para o codegen usar como `caller_arena`
 /// no entry point.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_scheduler_init() -> i64 {
-    SCHEDULER.with(|s| {
+    // Após fork(), o RefCell pode estar em estado "borrowed" herdado do
+    // parent. Usar as_ptr() para bypassar o borrow check.
+    SCHEDULER.with(|s| unsafe {
         let scheduler = Scheduler::new();
         let root_arena = scheduler.root_arena;
-        *s.borrow_mut() = Some(scheduler);
+        let ptr = s.as_ptr();
+        (*ptr) = Some(scheduler);
         root_arena
     })
 }
@@ -156,9 +193,12 @@ pub extern "C" fn kata_rt_spawn(fn_ptr: i64, caller_arena: i64, args_ptr: i64) -
         });
         0
     } else {
-        SCHEDULER.with(|s| {
-            let mut s = s.borrow_mut();
-            let scheduler = s.as_mut().expect("scheduler não inicializado");
+        // Fora de fiber — acessar scheduler diretamente.
+        // Após fork(), o RefCell pode estar "borrowed" herdado do parent.
+        // Usar as_ptr() para bypassar o borrow check.
+        SCHEDULER.with(|s| unsafe {
+            let ptr = s.as_ptr();
+            let scheduler = (*ptr).as_mut().expect("scheduler não inicializado");
             match scheduler.spawn(fn_ptr, caller_arena, args_ptr) {
                 Ok(id) => id as i64,
                 Err(_e) => {
@@ -181,9 +221,11 @@ pub extern "C" fn kata_rt_spawn(fn_ptr: i64, caller_arena: i64, args_ptr: i64) -
 /// verifica o valor de retorno.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_run() -> i64 {
-    let result = SCHEDULER.with(|s| {
-        let mut s = s.borrow_mut();
-        let scheduler = s.as_mut().expect("scheduler não inicializado");
+    // Após fork(), o RefCell pode estar "borrowed" herdado do parent.
+    // Usar as_ptr() para bypassar o borrow check.
+    let result = SCHEDULER.with(|s| unsafe {
+        let ptr = s.as_ptr();
+        let scheduler = (*ptr).as_mut().expect("scheduler não inicializado");
         scheduler.run()
     });
     match result {

@@ -139,6 +139,9 @@ pub(crate) struct LowerCtx<'a, 'b> {
     /// Mapa Ty → type_id para marshalling (spawn! to_bytes/from_bytes).
     /// Populado pelo driver via `build_and_register_type_table`.
     pub type_id_map: &'a HashMap<Ty, i64>,
+    /// FuncId do broker IPC sintetizado (uma vez por compilação).
+    /// `None` até a primeira `queue!(N)` cross-process solicitar a síntese.
+    pub ipc_broker_fid: Option<cranelift_module::FuncId>,
 }
 
 /// Resolve o Cranelift type de um `Ty`, percorrendo a cadeia de `alias_of`

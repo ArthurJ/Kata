@@ -170,6 +170,7 @@ pub(crate) fn define_function_body(
             arc_vars: Vec::new(),
             struct_registry,
             type_id_map,
+            ipc_broker_fid: None,
         };
 
         // params[0] = arena_handle (primeiro param implícito da nova ABI).

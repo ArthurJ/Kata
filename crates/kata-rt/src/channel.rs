@@ -123,6 +123,11 @@ pub(crate) struct IpcChannelInner {
     pub(crate) write_fd: i32,
     pub(crate) read_fd: i32,
     pub(crate) type_id: i64,
+    /// Handle do canal IPC de ack (TAG_IPC_CHANNEL). 0 = sem auto-ack
+    /// (canal rendezvous simples). Quando != 0, `try_ipc_recv` envia um
+    /// ack automático após desserializar — usado pelo queue!(N) IPC onde
+    /// o broker precisa saber que o child consumiu o item.
+    pub(crate) ack_tx_handle: i64,
 }
 
 // ── Funções auxiliares de alocação na arena ──────────────────────────
@@ -253,11 +258,83 @@ pub extern "C" fn kata_rt_broadcast_receiver_create(arena: i64, factory_handle: 
 /// O `type_id` é o índice na type table do tipo de elemento do canal.
 /// Usado por `to_bytes`/`from_bytes` para serializar valores.
 ///
+/// `ack_tx_handle`: handle de outro canal IPC para auto-ack em `try_ipc_recv`.
+/// 0 = sem auto-ack (rendezvous simples).
+///
 /// # Safety
 /// `arena` deve ser válido. `type_id` deve ser um índice válido na
 /// type table registrada.
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_ipc_channel_create(arena: i64, type_id: i64) -> i64 {
+pub extern "C" fn kata_rt_ipc_channel_create(arena: i64, type_id: i64, ack_tx_handle: i64) -> i64 {
     // SAFETY: arena é válido (contrato FFI).
-    unsafe { ipc::create_ipc_channel(arena, type_id) }
+    unsafe { ipc::create_ipc_channel(arena, type_id, ack_tx_handle) }
+}
+
+/// Cria queue IPC cross-process: in-process queue + IPC data channel + IPC ack channel.
+///
+/// Retorna ponteiro para tupla de 6 handles na arena (48 bytes):
+/// `(queue_tx, queue_rx, ipc_data_tx, ipc_data_rx, ack_tx, ack_rx)`
+///
+/// - `queue_tx` (TAG_QUEUE): sender do usuário faz `!>` aqui
+/// - `queue_rx` (TAG_QUEUE): broker drena daqui
+/// - `ipc_data_tx` (TAG_IPC_CHANNEL): broker envia para o child
+/// - `ipc_data_rx` (TAG_IPC_CHANNEL): child recebe (herdado via fork)
+/// - `ack_tx` (TAG_IPC_CHANNEL): child envia ack (herdado via fork, auto-ack)
+/// - `ack_rx` (TAG_IPC_CHANNEL): broker recebe ack
+///
+/// O `ipc_data_rx` tem `ack_tx_handle = ack_tx` para auto-ack em `try_ipc_recv`.
+/// Os outros canais têm `ack_tx_handle = 0` (sem auto-ack).
+///
+/// # Safety
+/// `arena` deve ser válido. `cap` deve ser > 0. `type_id` deve ser índice válido.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_ipc_queue_create(arena: i64, cap: i64, type_id: i64) -> i64 {
+    if cap <= 0 {
+        return 0;
+    }
+
+    // 1. Criar ack channel primeiro (sem auto-ack nele mesmo).
+    // SAFETY: arena é válido (contrato FFI).
+    let ack_rx = unsafe { ipc::create_ipc_channel(arena, 0, 0) }; // type_id=0 (Int)
+    if ack_rx == 0 {
+        return 0;
+    }
+
+    // 2. Criar IPC data channel com auto-ack apontando para ack_tx.
+    // O ack_tx é o mesmo handle que ack_rx (mesmo pipe, direção oposta).
+    // O child vai usar ack_tx (write_fd) para enviar acks; o broker usa
+    // ack_rx (read_fd) para receber. O ipc_data_rx tem ack_tx_handle = ack_rx
+    // (mesmo handle, pois TAG_IPC_CHANNEL é simétrico).
+    // SAFETY: arena é válido.
+    let ipc_data_tx = unsafe { ipc::create_ipc_channel(arena, type_id, ack_rx) };
+    if ipc_data_tx == 0 {
+        return 0;
+    }
+
+    // 3. Criar in-process queue.
+    let queue_handle = kata_rt_queue_create(arena, cap);
+    if queue_handle == 0 {
+        return 0;
+    }
+
+    // 4. Empacotar 6 handles na arena (48 bytes).
+    // Layout: [queue_tx, queue_rx, ipc_data_tx, ipc_data_rx, ack_tx, ack_rx]
+    // queue_tx = queue_rx = queue_handle (mesmo handle para in-process queue)
+    // ipc_data_rx = ipc_data_tx (mesmo handle — simétrico, child usa read_fd)
+    // ack_tx = ack_rx (mesmo handle — simétrico, child usa write_fd)
+    let size = 48i64;
+    let ptr = crate::arena::kata_rt_arena_alloc(arena, size);
+    if ptr == 0 {
+        return 0;
+    }
+    unsafe {
+        let p = ptr as *mut i64;
+        std::ptr::write_unaligned(p, queue_handle); // queue_tx
+        std::ptr::write_unaligned(p.add(1), queue_handle); // queue_rx
+        std::ptr::write_unaligned(p.add(2), ipc_data_tx); // ipc_data_tx
+        std::ptr::write_unaligned(p.add(3), ipc_data_tx); // ipc_data_rx (mesmo handle)
+        std::ptr::write_unaligned(p.add(4), ack_rx); // ack_tx (mesmo handle)
+        std::ptr::write_unaligned(p.add(5), ack_rx); // ack_rx
+    }
+    ptr
 }

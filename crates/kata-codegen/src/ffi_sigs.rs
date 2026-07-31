@@ -574,11 +574,19 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
             sig.params.push(AbiParam::new(I64)); // factory_handle
             sig.returns.push(AbiParam::new(I64)); // handle
         }
-        // ipc_channel_create: (arena, type_id) -> handle
+        // ipc_channel_create: (arena, type_id, ack_tx_handle) -> handle
         FfiSymbol::IpcChannelCreate => {
             sig.params.push(AbiParam::new(I64)); // arena
             sig.params.push(AbiParam::new(I64)); // type_id
+            sig.params.push(AbiParam::new(I64)); // ack_tx_handle
             sig.returns.push(AbiParam::new(I64)); // handle
+        }
+        // ipc_queue_create: (arena, cap, type_id) -> ptr (6 handles na arena)
+        FfiSymbol::IpcQueueCreate => {
+            sig.params.push(AbiParam::new(I64)); // arena
+            sig.params.push(AbiParam::new(I64)); // cap
+            sig.params.push(AbiParam::new(I64)); // type_id
+            sig.returns.push(AbiParam::new(I64)); // ptr to 6-handle tuple
         }
         // channel_send: (handle, value) -> i64 (0=OK, -1=block)
         FfiSymbol::ChannelSend => {

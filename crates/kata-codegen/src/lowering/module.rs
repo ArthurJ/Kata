@@ -239,6 +239,7 @@ pub(crate) fn lower_module(
             arc_vars: Vec::new(),
             struct_registry,
             type_id_map,
+            ipc_broker_fid: None,
         };
 
         // Prólogo do entry point: inicializa scheduler (cria arena raiz internamente).

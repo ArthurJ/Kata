@@ -218,8 +218,12 @@ pub enum FfiSymbol {
     BroadcastCreate,
     /// `kata_rt_broadcast_receiver_create(arena, factory) -> i64` — receiver.
     BroadcastReceiverCreate,
-    /// `kata_rt_ipc_channel_create(arena, type_id) -> i64` — canal cross-process (pipe).
+    /// `kata_rt_ipc_channel_create(arena, type_id, ack_tx_handle) -> i64` — canal cross-process (pipe).
     IpcChannelCreate,
+    /// `kata_rt_ipc_queue_create(arena, cap, type_id) -> ptr` — queue IPC cross-process.
+    /// Cria in-process queue + IPC data channel + IPC ack channel. Retorna
+    /// ponteiro para tupla de 6 handles na arena.
+    IpcQueueCreate,
     /// `kata_rt_channel_send(handle, value) -> i64` — envia (0=OK, -1=block).
     ChannelSend,
     /// `kata_rt_channel_recv(handle) -> i64` — recebe (valor ou -1=block).
@@ -451,6 +455,7 @@ impl FfiSymbol {
             FfiSymbol::BroadcastCreate => "kata_rt_broadcast_create",
             FfiSymbol::BroadcastReceiverCreate => "kata_rt_broadcast_receiver_create",
             FfiSymbol::IpcChannelCreate => "kata_rt_ipc_channel_create",
+            FfiSymbol::IpcQueueCreate => "kata_rt_ipc_queue_create",
             FfiSymbol::ChannelSend => "kata_rt_channel_send",
             FfiSymbol::ChannelRecv => "kata_rt_channel_recv",
             FfiSymbol::ChannelSelect => "kata_rt_select",
@@ -617,6 +622,7 @@ impl FfiSymbol {
             FfiSymbol::BroadcastCreate => Ty::int(),
             FfiSymbol::BroadcastReceiverCreate => Ty::int(),
             FfiSymbol::IpcChannelCreate => Ty::int(),
+            FfiSymbol::IpcQueueCreate => Ty::int(),
             FfiSymbol::ChannelSend => Ty::int(),
             FfiSymbol::ChannelRecv => Ty::int(),
             FfiSymbol::ChannelSelect => Ty::int(),
@@ -789,6 +795,8 @@ impl FfiSymbol {
             FfiSymbol::QueueCreate,
             FfiSymbol::BroadcastCreate,
             FfiSymbol::BroadcastReceiverCreate,
+            FfiSymbol::IpcChannelCreate,
+            FfiSymbol::IpcQueueCreate,
             FfiSymbol::ChannelSend,
             FfiSymbol::ChannelRecv,
             FfiSymbol::ChannelSelect,

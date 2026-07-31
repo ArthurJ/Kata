@@ -272,3 +272,53 @@ result"#;
         "round-trip lista: child deve receber [1,2,3], somar, enviar 6"
     );
 }
+
+// ── Teste 6: queue!(N) cross-process — múltiplos itens via broker ──
+//
+// Parent cria queue!(5) cross-process (via spawn!), envia 3 valores (10, 20, 30).
+// O broker drena a queue e envia via pipe IPC para o child. O child recebe
+// os 3 valores, soma, envia o total (60) de volta via canal rendezvous.
+// Parent recebe 60 e retorna.
+//
+// Verifica que o broker sintetizado funciona: drena queue, envia via IPC,
+// auto-ack funciona, child recebe múltiplos itens.
+
+#[serial]
+#[test]
+fn spawn_ipc_queue_multi_items() {
+    let src = r#"action worker (rx::Receiver::Int, tx2::Sender::Int) => Int
+    var total := 0
+    var n := 0
+    loop
+      rx <! val
+      total := + total val
+      n := + n 1
+      match >= n 3
+        True: break
+        False: continue
+    tx2 !> total
+    0
+
+action main => Int
+    let q := queue!(5)
+    let tx := q.0
+    let rx := q.1
+    let ch2 := channel!()
+    let tx2 := ch2.0
+    let rx2 := ch2.1
+    spawn!(worker, (rx, tx2))
+    tx !> 10
+    tx !> 20
+    tx !> 30
+    rx2 <! result
+    result
+
+main!()"#;
+    let (raw, _ty) = eval_src(src);
+    assert_ne!(raw, DEADLOCK_SENTINEL, "não deve deadlockar");
+    let val = untag_smi(raw);
+    assert_eq!(
+        val, 60,
+        "queue IPC: child deve receber 10+20+30=60 via broker"
+    );
+}
