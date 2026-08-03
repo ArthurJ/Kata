@@ -294,6 +294,21 @@ para file handles. Ver `Kata-lang-manual.md` §5.2.2 para detalhes.
 
 ### Fase 5: Streaming — PENDENTE
 
+Decisões de design (sessão 2026-08-03):
+
+1. **Overload por aridade:** `read!(f)` (whole file) e `read!(f, n)` (chunk) coexistem,
+   mesmo nome, aridade diferente. Monomorphizador resolve por nome+aridade.
+2. **EOF como `Err("EOF")`:** consistente com `readline` atual. Err para EOF, Ok para
+   dados (mesmo bytes vazios). Padrão uniforme com readline.
+3. **BufReader persistente em `FileInner`:** todos os reads (read, read_chunk,
+   readline) passam pelo mesmo BufReader. Resolve bug latente de readline (BufReader
+   recreado perde bytes bufferizados em arquivos > 8KB) e previne state corruption
+   entre read_chunk e readline intercalados.
+4. **Ambos read (whole file) e read (chunk n) coexistem:** read_to_end para
+   arquivos pequenos, chunks para streaming.
+
+Implementação:
+
 - `read(handle, n)` — nova FFI `kata_rt_file_read_chunk(handle, n) -> i64`
 - Nova action no prelude: `@ffi("kata_rt_file_read_chunk") action read (f::File, n::Int) => Result::(Bytes, Text)`
 - Overload de `read` com 2 params (dispatch por aridade — monomorphizador já suporta)
@@ -302,8 +317,10 @@ para file handles. Ver `Kata-lang-manual.md` §5.2.2 para detalhes.
 
 ### Fase 6: Otimizações — PENDENTE
 
-- `BufReader` dentro de `FileInner` — `readline` recria BufReader a cada chamada
-- Para produção, mover BufReader para dentro de FileInner
+- `BufReader` dentro de `FileInner` — readline recria BufReader a cada chamada
+- **Decisão:** BufReader persistente em FileInner, todos os reads passam por ele
+- Resolve bug latente (bytes bufferizados perdidos em arquivos > 8KB)
+- Previne state corruption entre read_chunk e readline intercalados
 
 ## 8. Decisões fechadas
 
