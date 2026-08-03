@@ -337,3 +337,133 @@ main!()"#;
         "abrir arquivo inexistente deve retornar Err"
     );
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// read_chunk — streaming de arquivo em chunks
+// ═══════════════════════════════════════════════════════════════════
+
+/// Lê um arquivo de 10000 bytes em chunks de 4096.
+/// Espera-se: chunk1=4096, chunk2=4096, chunk3=1808, chunk4=EOF.
+/// Retorna a soma dos tamanhos (10000) para validar.
+#[test]
+#[serial]
+fn file_read_chunk_streaming() {
+    // 10000 bytes de conteúdo
+    let content = "A".repeat(10000);
+    let path = make_temp_file(&content);
+    let src = format!(
+        r#"action sum3 (a::Int, b::Int, c::Int) => Int
+  + (+ a b) c
+
+action read_all_chunks (h::File) => Int
+  let c1 := read!(h, 4096)
+  match c1
+    Result::Ok b1: match (read!(h, 4096))
+      Result::Ok b2: match (read!(h, 4096))
+        Result::Ok b3: match (read!(h, 4096))
+          Result::Ok _: -10
+          Result::Err _: sum3!(len b1, len b2, len b3)
+        Result::Err _: -9
+      Result::Err _: -8
+    Result::Err _: -7
+
+action main => Int
+  let f := open!("{path}", FileMode::Read)
+  match f
+    Result::Ok handle: read_all_chunks!(handle)
+    Result::Err _: -3
+main!()"#
+    );
+    let (raw, ty) = eval_src(&src);
+    assert_eq!(ty, Ty::int(), "deve retornar Int");
+    assert_eq!(
+        untag_smi(raw),
+        10000,
+        "soma dos chunks deve ser 10000 (4096+4096+1808)"
+    );
+    let _ = std::fs::remove_file(&path);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// read_chunk + readline intercalados — BufReader persistente
+// ═══════════════════════════════════════════════════════════════════
+
+/// Intercala read_chunk e readline no mesmo arquivo para verificar
+/// que o BufReader persistente preserva o estado de leitura.
+///
+/// Arquivo: "AAAAABBBBB\nCCCCC" (12 bytes)
+/// 1. read_chunk(5) → "AAAAA" (5 bytes)
+/// 2. readline() → "BBBBB" (5 chars, \n consumido)
+/// 3. read_chunk(5) → "CCCCC" (5 bytes)
+/// 4. read_chunk(1) → EOF
+///
+/// Se o BufReader não fosse persistente, o readline recriaria o buffer
+/// e perderia os bytes após "AAAAABBBBB\n" que já foram bufferizados
+/// pelo read_chunk anterior. Ou o read_chunk ignoraria bytes que o
+/// readline bufferizou.
+#[test]
+#[serial]
+fn file_read_chunk_readline_intercalados() {
+    let path = make_temp_file("AAAAABBBBB\nCCCCC");
+    let src = format!(
+        r#"action sum3 (a::Int, b::Int, c::Int) => Int
+  + (+ a b) c
+
+action interleave (h::File) => Int
+  let c1 := read!(h, 5)
+  match c1
+    Result::Ok b1: match (readline!(h))
+      Result::Ok l1: match (read!(h, 5))
+        Result::Ok b2: match (read!(h, 1))
+          Result::Ok _: -10
+          Result::Err _: sum3!(len b1, len l1, len b2)
+        Result::Err _: -9
+      Result::Err _: -8
+    Result::Err _: -7
+
+action main => Int
+  let f := open!("{path}", FileMode::Read)
+  match f
+    Result::Ok handle: interleave!(handle)
+    Result::Err _: -3
+main!()"#
+    );
+    let (raw, ty) = eval_src(&src);
+    assert_eq!(ty, Ty::int(), "deve retornar Int");
+    // 5 (chunk "AAAAA") + 5 (readline "BBBBB") + 5 (chunk "CCCCC") = 15
+    assert_eq!(
+        untag_smi(raw),
+        15,
+        "intercalação read_chunk+readline deve preservar estado do BufReader"
+    );
+    let _ = std::fs::remove_file(&path);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// read_chunk EOF imediato — arquivo vazio
+// ═══════════════════════════════════════════════════════════════════
+
+/// read_chunk num arquivo vazio retorna EOF imediatamente.
+#[test]
+#[serial]
+fn file_read_chunk_eof_imediato() {
+    let path = make_temp_file("");
+    let src = format!(
+        r#"action main => Int
+  let f := open!("{path}", FileMode::Read)
+  match f
+    Result::Ok handle: match (read!(handle, 100))
+      Result::Ok _: 0
+      Result::Err _: -1
+    Result::Err _: -3
+main!()"#
+    );
+    let (raw, ty) = eval_src(&src);
+    assert_eq!(ty, Ty::int(), "deve retornar Int");
+    assert_eq!(
+        untag_smi(raw),
+        -1,
+        "read_chunk em arquivo vazio deve retornar EOF"
+    );
+    let _ = std::fs::remove_file(&path);
+}

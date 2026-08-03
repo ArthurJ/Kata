@@ -892,6 +892,12 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
             sig.params.push(AbiParam::new(I64)); // handle
             sig.returns.push(AbiParam::new(I64)); // Result box ptr
         }
+        // file_read_chunk: (handle, n) -> i64 (Result box)
+        FfiSymbol::FileReadChunk => {
+            sig.params.push(AbiParam::new(I64)); // handle
+            sig.params.push(AbiParam::new(I64)); // n (SMI-tagged)
+            sig.returns.push(AbiParam::new(I64)); // Result box ptr
+        }
         // file_readline: (handle) -> i64 (Result box ARC)
         FfiSymbol::FileReadline => {
             sig.params.push(AbiParam::new(I64)); // handle

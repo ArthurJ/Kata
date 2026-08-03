@@ -328,6 +328,8 @@ pub enum FfiSymbol {
     FileOpen,
     /// `kata_rt_file_read(handle) -> i64` — lê todo o conteúdo, retorna Result box ARC.
     FileRead,
+    /// `kata_rt_file_read_chunk(handle, n) -> i64` — lê até n bytes, retorna Result box.
+    FileReadChunk,
     /// `kata_rt_file_readline(handle) -> i64` — lê uma linha, retorna Result box ARC.
     FileReadline,
     /// `kata_rt_file_write_text(handle, data_ptr) -> i64` — escreve Text (C string), retorna Result box ARC.
@@ -514,6 +516,7 @@ impl FfiSymbol {
             // File I/O
             FfiSymbol::FileOpen => "kata_rt_file_open",
             FfiSymbol::FileRead => "kata_rt_file_read",
+            FfiSymbol::FileReadChunk => "kata_rt_file_read_chunk",
             FfiSymbol::FileReadline => "kata_rt_file_readline",
             FfiSymbol::FileWriteText => "kata_rt_file_write_text",
             FfiSymbol::FileWriteBytes => "kata_rt_file_write_bytes",
@@ -679,9 +682,10 @@ impl FfiSymbol {
             FfiSymbol::ToBytes => Ty::Bytes,
             FfiSymbol::FromBytes => Ty::int(), // ponteiro genérico (tipo depende do contexto)
             // File I/O — retornam i64 (Result box ARC tracked)
-            FfiSymbol::FileOpen => Ty::int(),    // Result box ptr
-            FfiSymbol::FileRead => Ty::int(),    // Result box ptr
-            FfiSymbol::FileReadline => Ty::int(), // Result box ptr
+            FfiSymbol::FileOpen => Ty::int(),      // Result box ptr
+            FfiSymbol::FileRead => Ty::int(),      // Result box ptr
+            FfiSymbol::FileReadChunk => Ty::int(), // Result box ptr
+            FfiSymbol::FileReadline => Ty::int(),  // Result box ptr
             FfiSymbol::FileWriteText => Ty::int(), // Result box ptr
             FfiSymbol::FileWriteBytes => Ty::int(), // Result box ptr
             FfiSymbol::FileClose => Ty::Unit,
@@ -863,6 +867,7 @@ impl FfiSymbol {
             // File I/O
             FfiSymbol::FileOpen,
             FfiSymbol::FileRead,
+            FfiSymbol::FileReadChunk,
             FfiSymbol::FileReadline,
             FfiSymbol::FileWriteText,
             FfiSymbol::FileWriteBytes,

@@ -5,14 +5,20 @@
 //!   Handle = ponteiro puro para FileInner. O close faz `drop_in_place`
 //!   (fecha o FD). O campo `closed` no FileInner garante idempotência —
 //!   o epílogo pode chamar close num handle já fechado sem double-free.
+//! - `BufReader<File>` persistente dentro de `FileInner` — todos os reads
+//!   (read, read_chunk, readline) passam pelo mesmo BufReader. Isto resolve
+//!   o bug de readline (recriar BufReader perde bytes bufferizados em
+//!   arquivos > 8KB) e previne state corruption entre read_chunk e
+//!   readline intercalados.
 //! - Result boxes alocados via `kata_rt_arena_alloc` na root_arena (sem
 //!   header ARC, sem destructor encadeado).
-//! - Bytes de `read` alocados via `kata_rt_arena_alloc` na root_arena.
+//! - Bytes de `read`/`read_chunk` alocados via `kata_rt_arena_alloc` na root_arena.
 //! - Text de `readline` alocado via `kata_rt_arena_alloc` na root_arena.
 //!
 //! FFI:
 //! - `kata_rt_file_open(path_ptr, mode_tag) -> result_box` — Result::(File, Text)
 //! - `kata_rt_file_read(handle) -> result_box` — Result::(Bytes, Text)
+//! - `kata_rt_file_read_chunk(handle, n) -> result_box` — Result::(Bytes, Text)
 //! - `kata_rt_file_readline(handle) -> result_box` — Result::(Text, Text)
 //! - `kata_rt_file_write_text(handle, data_ptr) -> result_box` — Result::(Unit, Text)
 //! - `kata_rt_file_write_bytes(handle, data_ptr) -> result_box` — Result::(Unit, Text)
@@ -26,10 +32,9 @@ use std::os::raw::c_char;
 // ── IoHandle — camada comum para File e futuro Socket ──────────────
 
 /// Handle de I/O genérico — base para File e Socket.
-/// `file` é o descritor de arquivo OS (via `File` do std).
 /// `mode` indica quais operações são permitidas.
+/// O `File` (descritor OS) vive dentro do `BufReader` em `FileInner`.
 pub(crate) struct IoHandle {
-    pub file: File,
     pub mode: IoMode,
 }
 
@@ -54,12 +59,20 @@ fn mode_from_tag(tag: i64) -> Option<IoMode> {
     }
 }
 
-/// FileInner — arquivo aberto com path e IoHandle.
+/// FileInner — arquivo aberto com path, BufReader persistente e modo.
 /// Alocado via `arena_alloc` na root_arena. O campo `closed` garante
 /// que `kata_rt_file_close` é idempotente — múltiplas chamadas de close
 /// (explícita + epílogo) não causam double-free.
+///
+/// O `BufReader<File>` persistente garante que todos os reads (read,
+/// read_chunk, readline) compartilham o mesmo buffer interno. Isto resolve:
+/// 1. Bug de readline que recriava BufReader a cada chamada (perdia bytes
+///    bufferizados em arquivos > 8KB).
+/// 2. State corruption entre read_chunk e readline intercalados (cursos
+///    de leitura divergentes).
 pub(crate) struct FileInner {
     pub closed: bool,
+    pub buf_reader: BufReader<File>,
     pub io: IoHandle,
     pub path: String,
 }
@@ -209,7 +222,8 @@ pub unsafe extern "C" fn kata_rt_file_open(path_ptr: *const c_char, mode_box: i6
 
     let inner = FileInner {
         closed: false,
-        io: IoHandle { file, mode },
+        buf_reader: BufReader::new(file),
+        io: IoHandle { mode },
         path,
     };
     let handle = alloc_file_inner(inner);
@@ -241,11 +255,66 @@ pub unsafe extern "C" fn kata_rt_file_read(handle: i64) -> i64 {
     }
 
     let mut data = Vec::new();
-    if inner.io.file.read_to_end(&mut data).is_err() {
+    if inner.buf_reader.read_to_end(&mut data).is_err() {
         return alloc_result_box(1, error_text("erro de leitura"));
     }
 
     let bytes_ptr = alloc_bytes(&data);
+    if bytes_ptr == 0 {
+        return alloc_result_box(1, error_text("falha na alocação"));
+    }
+
+    alloc_result_box(0, bytes_ptr)
+}
+
+/// Lê até `n` bytes do arquivo como Bytes.
+///
+/// `n` é um valor Int SMI-tagged (payload = n >> 1).
+///
+/// Retorna:
+/// - Result box Ok(bytes_ptr) — bytes lidos (0 a n bytes).
+/// - Result box Err("EOF") — quando 0 bytes lidos (fim do arquivo).
+///
+/// EOF como Err é consistente com `readline` — Err para EOF, Ok para dados.
+///
+/// # Safety
+/// `handle` deve ser um handle válido (criado por `kata_rt_file_open`).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn kata_rt_file_read_chunk(handle: i64, n: i64) -> i64 {
+    let inner = match file_from_handle(handle) {
+        Some(f) => f,
+        None => return alloc_result_box(1, error_text("handle inválido")),
+    };
+
+    // Verifica que o modo permite leitura.
+    match inner.io.mode {
+        IoMode::Read | IoMode::ReadWrite => {}
+        _ => return alloc_result_box(1, error_text("modo não permite leitura")),
+    }
+
+    // Decodifica SMI: n >> 1.
+    let max_bytes = (n >> 1) as usize;
+
+    let mut buf = vec![0u8; max_bytes];
+    let mut total_read = 0usize;
+
+    // read_buf pode retornar menos bytes que solicitado (especialmente
+    // com BufReader). Loop até preencher buf ou atingir EOF.
+    while total_read < max_bytes {
+        match inner.buf_reader.read(&mut buf[total_read..]) {
+            Ok(0) => break, // EOF
+            Ok(n) => total_read += n,
+            Err(_) => return alloc_result_box(1, error_text("erro de leitura")),
+        }
+    }
+
+    if total_read == 0 {
+        // EOF — consistente com readline.
+        return alloc_result_box(1, error_text("EOF"));
+    }
+
+    buf.truncate(total_read);
+    let bytes_ptr = alloc_bytes(&buf);
     if bytes_ptr == 0 {
         return alloc_result_box(1, error_text("falha na alocação"));
     }
@@ -272,14 +341,10 @@ pub unsafe extern "C" fn kata_rt_file_readline(handle: i64) -> i64 {
         _ => return alloc_result_box(1, error_text("modo não permite leitura")),
     }
 
-    // Usa BufReader para ler uma linha.
-    // NOTA: isso cria um BufReader temporário a cada chamada, o que é
-    // ineficiente para leitura linha-a-linha em loop. Para produção,
-    // o BufReader deveria viver dentro de FileInner. Por ora, correto
-    // mas não otimizado.
-    let mut reader = BufReader::new(&inner.io.file);
+    // Usa o BufReader persistente — bytes bufferizados de read_chunk
+    // ou readline anterior são preservados entre chamadas.
     let mut line = String::new();
-    match reader.read_line(&mut line) {
+    match inner.buf_reader.read_line(&mut line) {
         Ok(0) => return alloc_result_box(1, error_text("EOF")), // EOF → Err
         Ok(_) => {}
         Err(_) => return alloc_result_box(1, error_text("erro de leitura")),
@@ -332,7 +397,9 @@ pub unsafe extern "C" fn kata_rt_file_write_text(handle: i64, data_ptr: i64) -> 
     let data = unsafe { CStr::from_ptr(data_ptr as *const c_char) };
     let bytes = data.to_bytes();
 
-    match inner.io.file.write_all(bytes) {
+    // BufReader::get_mut() dá acesso ao File subjacente para escrita.
+    let file = inner.buf_reader.get_mut();
+    match file.write_all(bytes) {
         Ok(_) => alloc_result_box(0, 0), // Ok(Unit)
         Err(e) => alloc_result_box(1, error_text(&format!("erro de escrita: {e}"))),
     }
@@ -374,7 +441,9 @@ pub unsafe extern "C" fn kata_rt_file_write_bytes(handle: i64, data_ptr: i64) ->
     let data_slice =
         unsafe { std::slice::from_raw_parts((data_ptr as *const u8).add(8), len as usize) };
 
-    match inner.io.file.write_all(data_slice) {
+    // BufReader::get_mut() dá acesso ao File subjacente para escrita.
+    let file = inner.buf_reader.get_mut();
+    match file.write_all(data_slice) {
         Ok(_) => alloc_result_box(0, 0), // Ok(Unit)
         Err(e) => alloc_result_box(1, error_text(&format!("erro de escrita: {e}"))),
     }
@@ -384,9 +453,9 @@ pub unsafe extern "C" fn kata_rt_file_write_bytes(handle: i64, data_ptr: i64) ->
 ///
 /// Idempotente: se chamado múltiplas vezes (ex: close explícito + epílogo),
 /// o campo `closed` no FileInner garante que o FD só é fechado uma vez.
-/// O `drop_in_place` roda o Drop do FileInner (fecha FD via drop de File,
-/// libera String do path) sem chamar dealloc — a memória permanece na
-/// root_arena até o teardown do processo.
+/// O `drop_in_place` roda o Drop do FileInner (fecha FD via drop de
+/// BufReader→File, libera String do path) sem chamar dealloc — a memória
+/// permanece na root_arena até o teardown do processo.
 ///
 /// # Safety
 /// `handle` deve ser um handle válido (ou 0 — no-op).
@@ -401,7 +470,7 @@ pub unsafe extern "C" fn kata_rt_file_close(handle: i64) {
         return;
     }
     inner.closed = true;
-    // drop_in_place roda o Drop de FileInner (fecha FD, libera String)
+    // drop_in_place roda o Drop de FileInner (fecha BufReader→FD, libera String)
     // sem chamar dealloc — a memória será liberada quando a root_arena
     // for destruída no fim do processo.
     unsafe {

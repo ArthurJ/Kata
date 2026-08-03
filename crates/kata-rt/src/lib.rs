@@ -137,8 +137,8 @@ pub use marshal::{TypeShape, kata_rt_from_bytes, kata_rt_to_bytes, register_type
 pub use ipc::kata_rt_spawn_process;
 // File I/O
 pub use file::{
-    kata_rt_file_close, kata_rt_file_open, kata_rt_file_read, kata_rt_file_readline,
-    kata_rt_file_write_bytes, kata_rt_file_write_text,
+    kata_rt_file_close, kata_rt_file_open, kata_rt_file_read, kata_rt_file_read_chunk,
+    kata_rt_file_readline, kata_rt_file_write_bytes, kata_rt_file_write_text,
 };
 // Display de resultados — ponto único de display para
 // driver JIT e shim AOT.

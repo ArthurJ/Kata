@@ -540,6 +540,9 @@ action open (path::Text, mode::FileMode) => Result::(File, Text)
 @ffi("kata_rt_file_read")
 action read (f::File) => Result::(Bytes, Text)
 
+@ffi("kata_rt_file_read_chunk")
+action read (f::File, n::Int) => Result::(Bytes, Text)
+
 @ffi("kata_rt_file_readline")
 action readline (f::File) => Result::(Text, Text)
 

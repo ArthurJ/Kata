@@ -365,6 +365,10 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
     builder.symbol("kata_rt_file_open", rt::kata_rt_file_open as *const u8);
     builder.symbol("kata_rt_file_read", rt::kata_rt_file_read as *const u8);
     builder.symbol(
+        "kata_rt_file_read_chunk",
+        rt::kata_rt_file_read_chunk as *const u8,
+    );
+    builder.symbol(
         "kata_rt_file_readline",
         rt::kata_rt_file_readline as *const u8,
     );
@@ -584,6 +588,7 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         // File I/O
         FileOpen,
         FileRead,
+        FileReadChunk,
         FileReadline,
         FileWriteText,
         FileWriteBytes,
