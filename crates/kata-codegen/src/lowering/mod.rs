@@ -129,10 +129,11 @@ pub(crate) struct LowerCtx<'a, 'b> {
     /// Block de continuação do loop atual — `continue` faz `jump` para este block.
     /// `None` fora de um loop.
     pub loop_continue_block: Option<Block>,
-    /// Valores ARC-managed (Heap) que precisam decref no epílogo da action.
-    /// Cada entrada é uma Variable (global no Cranelift) que segura um data_ptr
-    /// retornado por alloc_tracked ou channel_recv.
-    pub arc_vars: Vec<cranelift_frontend::Variable>,
+    /// File handles abertos que precisam de close no epílogo da action.
+    /// Cada entrada é uma Variable (global no Cranelift) que segura um
+    /// handle (ponteiro para FileInner na arena). O epílogo chama
+    /// `kata_rt_file_close` em cada um que não foi fechado explicitamente.
+    pub file_handle_vars: Vec<cranelift_frontend::Variable>,
     /// Catálogo de structs com alias_of/predicates — para resolver o
     /// Cranelift type correto de refined/alias de primitivos.
     pub struct_registry: &'a kata_core::StructRegistry,

@@ -21,4 +21,5 @@ expression: tast_snapshot(src)
 
 === Actions ===
   echo :: [Interface("SHOW")] => Unit
+  echo :: [Interface("SHOW"), File] => Unit
   main :: [] => Unit

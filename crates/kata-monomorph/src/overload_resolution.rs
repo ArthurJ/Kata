@@ -236,7 +236,13 @@ pub(crate) fn instantiate_generic_action_call(
             });
 
             // Gera TypedAction se a Action original tem corpo.
-            if let Some(orig_action) = ctx.actions.iter().find(|a| a.name == *callee) {
+            // Casa por nome + aridade: sobrecargas com o mesmo nome (ex: `echo`
+            // com 1 vs 2 params) fazem o `find` simples retornar a errada.
+            // O `oi` (OverloadInfo selecionado por find_generic_overload) já
+            // tem a aridade correta — usar oi.params.len() como filtro.
+            if let Some(orig_action) = ctx.actions.iter().find(|a| {
+                a.name == *callee && a.param_types.len() == oi.params.len()
+            }) {
                 let mono_action = instantiate_action(orig_action, &subs, &instance_name);
                 acc.new_actions.push(mono_action);
             }

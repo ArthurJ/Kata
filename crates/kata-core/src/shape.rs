@@ -138,6 +138,8 @@ impl Ty {
                 name: "Bytes".into(),
                 fields: Vec::new(),
             },
+            // File: handle opaco — não é heap type (i64 com tag).
+            Ty::File => TypeShape::Prim,
         }
     }
 }

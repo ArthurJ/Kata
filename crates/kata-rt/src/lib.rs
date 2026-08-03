@@ -18,6 +18,7 @@ pub(crate) mod convert;
 pub(crate) mod dict;
 pub(crate) mod display;
 pub(crate) mod fiber;
+pub(crate) mod file;
 pub(crate) mod float;
 pub(crate) mod hash;
 pub(crate) mod io;
@@ -33,7 +34,6 @@ pub(crate) mod slice;
 pub(crate) mod snapshot;
 pub(crate) mod sum;
 pub(crate) mod text;
-pub(crate) mod tracked;
 
 // Re-exports convenientes para uso interno (não C-ABI).
 // Símbolos não consumidos cross-crate foram removidos (to_rational, float_to_rat,
@@ -105,8 +105,6 @@ pub use set::{
 pub use slice::{
     kata_rt_array_slice, kata_rt_list_slice, kata_rt_text_at, kata_rt_text_len, kata_rt_text_slice,
 };
-pub use tracked::{kata_rt_alloc_tracked, kata_rt_decref_tracked, kata_rt_incref_tracked};
-// kata_rt_rat_show_raw — rebaixado para pub(crate): zero consumidores cross-crate.
 pub use scheduler::{
     DEADLOCK_SENTINEL, TIMEOUT_SENTINEL, kata_rt_run, kata_rt_scheduler_init,
     kata_rt_set_test_timeout, kata_rt_sleep, kata_rt_spawn, kata_rt_yield, kata_rt_yield_check,
@@ -137,6 +135,11 @@ pub use log::{kata_rt_log_config, kata_rt_log_publish, kata_rt_log_recv};
 pub use marshal::{TypeShape, kata_rt_from_bytes, kata_rt_to_bytes, register_type_table};
 // IPC (fork + pipe para spawn!)
 pub use ipc::kata_rt_spawn_process;
+// File I/O
+pub use file::{
+    kata_rt_file_close, kata_rt_file_open, kata_rt_file_read, kata_rt_file_readline,
+    kata_rt_file_write_bytes, kata_rt_file_write_text,
+};
 // Display de resultados — ponto único de display para
 // driver JIT e shim AOT.
 pub use display::{

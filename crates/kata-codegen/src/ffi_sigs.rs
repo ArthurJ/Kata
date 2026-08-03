@@ -35,7 +35,8 @@ pub(crate) fn ty_to_clif(ty: &Ty) -> cranelift_codegen::ir::Type {
         | Ty::Sender(_)
         | Ty::Receiver(_)
         | Ty::ReceiverFactory(_)
-        | Ty::Bytes => I64,
+        | Ty::Bytes
+        | Ty::File => I64,
         Ty::Byte => I64,
         Ty::Function(_, _) => I64,
         Ty::Action(_, _) => I64,
@@ -214,18 +215,6 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
         }
         FfiSymbol::GetRootArenaHandle => {
             sig.returns.push(AbiParam::new(I64)); // root_arena handle
-        }
-        FfiSymbol::AllocTracked => {
-            sig.params.push(AbiParam::new(I64)); // root_arena_handle
-            sig.params.push(AbiParam::new(I64)); // data_size
-            sig.params.push(AbiParam::new(I64)); // destructor_fn_ptr
-            sig.returns.push(AbiParam::new(I64)); // data_ptr
-        }
-        FfiSymbol::IncRefTracked => {
-            sig.params.push(AbiParam::new(I64)); // data_ptr
-        }
-        FfiSymbol::DecRefTracked => {
-            sig.params.push(AbiParam::new(I64)); // data_ptr
         }
         FfiSymbol::ArenaStats => {
             sig.params.push(AbiParam::new(I64)); // handle
@@ -890,6 +879,39 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
             sig.params.push(AbiParam::new(I64)); // fn_ptr
             sig.params.push(AbiParam::new(I64)); // args_ptr
             sig.params.push(AbiParam::new(I64)); // arena
+        }
+        // ── File I/O ──
+        // file_open: (path_ptr, mode_tag) -> i64 (Result box ARC)
+        FfiSymbol::FileOpen => {
+            sig.params.push(AbiParam::new(I64)); // path_ptr (Text)
+            sig.params.push(AbiParam::new(I64)); // mode_tag (FileMode variant tag)
+            sig.returns.push(AbiParam::new(I64)); // Result box ptr
+        }
+        // file_read: (handle) -> i64 (Result box ARC)
+        FfiSymbol::FileRead => {
+            sig.params.push(AbiParam::new(I64)); // handle
+            sig.returns.push(AbiParam::new(I64)); // Result box ptr
+        }
+        // file_readline: (handle) -> i64 (Result box ARC)
+        FfiSymbol::FileReadline => {
+            sig.params.push(AbiParam::new(I64)); // handle
+            sig.returns.push(AbiParam::new(I64)); // Result box ptr
+        }
+        // file_write_text: (handle, data_ptr) -> i64 (Result box ARC)
+        FfiSymbol::FileWriteText => {
+            sig.params.push(AbiParam::new(I64)); // handle
+            sig.params.push(AbiParam::new(I64)); // data_ptr (Text — C string)
+            sig.returns.push(AbiParam::new(I64)); // Result box ptr
+        }
+        // file_write_bytes: (handle, data_ptr) -> i64 (Result box ARC)
+        FfiSymbol::FileWriteBytes => {
+            sig.params.push(AbiParam::new(I64)); // handle
+            sig.params.push(AbiParam::new(I64)); // data_ptr (Bytes — blob with len header)
+            sig.returns.push(AbiParam::new(I64)); // Result box ptr
+        }
+        // file_close: (handle) -> void
+        FfiSymbol::FileClose => {
+            sig.params.push(AbiParam::new(I64)); // handle
         }
     }
 

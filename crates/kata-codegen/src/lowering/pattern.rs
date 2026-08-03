@@ -7,6 +7,7 @@
 use cranelift_codegen::ir::types::{F64, I64};
 use cranelift_codegen::ir::{InstBuilder, MemFlagsData, StackSlotData, StackSlotKind};
 use kata_ast::Spanned;
+use kata_core::ty::Ty;
 use kata_inference::TypedPattern;
 
 use super::LowerCtx;
@@ -59,6 +60,12 @@ pub(crate) fn test_single_pattern(
             };
             let var = lower.new_var(name, clif_ty);
             lower.builder.def_var(var, val);
+            // Se o binding é um File handle, registrar para close no epílogo.
+            // O close explícito (close!) remove da lista; o epílogo fecha
+            // o que sobrou (file handles não fechados pelo programador).
+            if matches!(ty, Ty::File) {
+                lower.file_handle_vars.push(var);
+            }
             Ok(None)
         }
         TypedPattern::Wildcard => Ok(None),

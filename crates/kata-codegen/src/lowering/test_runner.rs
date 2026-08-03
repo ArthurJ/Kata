@@ -211,7 +211,7 @@ fn define_test_wrapper(
             scheduler_mode: true, // wrapper usa spawn+run como o entry point
             loop_break_block: None,
             loop_continue_block: None,
-            arc_vars: Vec::new(),
+            file_handle_vars: Vec::new(),
             struct_registry: tctx.struct_registry,
             type_id_map: tctx.type_id_map,
             ipc_broker_fid: None,

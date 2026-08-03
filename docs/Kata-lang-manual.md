@@ -1493,10 +1493,123 @@ compilador sabe que a expressão é um retorno e aloca na arena do caller. Com
 **`fork!` retorna `Unit`:** Actions submetidas via `fork!` comunicam
 exclusivamente via canais. O fork não produz um valor de retorno síncrono.
 
-**ARC na root arena para canais:** Valores que circulam por canais (`!>`)
-sobrevivem ao sender e são alocados na root arena (TrackedArena) com ARC manual
-(CaptureBox com refcount). Valores que não escapam por canais vivem na arena
-local ou na caller's arena — zero cópia, zero overhead.
+### 5.2.2. Modelo de Memória
+
+O Kata5 usa **arenas bump per-fiber** para toda alocação. Não há garbage
+collector, não há reference counting, não há free individual. O modelo
+funciona porque três restrições se combinam para garantir que todo
+valor vive na arena certa e é liberado no momento certo.
+
+#### As três arenas
+
+| Arena | Tipo | Lifetime | O que vai aqui |
+|---|---|---|---|
+| **fiber_arena** | Bump (bumpalo) | Resetada quando o fiber morre | Valores locais que não escapam |
+| **caller_arena** | Bump (bumpalo) | Resetada quando o caller morre | Valores que escapam via return ou canal |
+| **root_arena** | Tracked (std::alloc) | Destruída no fim do processo | File handles, Result boxes de FFIs |
+
+A **root_arena** é uma arena Tracked, mas não usa ARC — a função
+`arena_alloc` aloca blocos individualmente rastreados (para permitir
+`arena_dealloc` se necessário no futuro), mas não há incref/decref.
+O cleanup é bulk no fim do processo.
+
+#### A invariante que faz tudo funcionar: structured concurrency
+
+O scheduler é **structured concurrency**: um fiber só é destruído quando
+completa **E** todos os seus filhos completaram. Isto tem três
+consequências que tornam as arenas bump suficientes:
+
+1. **Valores que escapam via return ficam na caller_arena.** A action
+   filha aloca o valor de retorno na arena do pai (caller_arena). O pai
+   está vivo quando a filha retorna — o valor é válido.
+
+2. **Valores que escapam via canal ficam na caller_arena.** A filha
+   que envia aloca o valor na caller_arena (arena do pai). O pai está
+   vivo enquanto houver filhas interessadas — o valor é válido quando
+   o receptor o consome.
+
+3. **Irmãos compartilham a caller_arena do pai.** Duas filhas do mesmo
+   pai têm a mesma caller_arena (arena do pai). Valores trocados entre
+   irmãos via canal são válidos porque o pai sobrevive a ambos.
+
+Sem structured concurrency, este modelo quebra: se uma filha morresse
+antes do pai, a arena dela seria resetada e valores enviados via canal
+seriam use-after-free. A garantia de que o pai só morre depois das
+filhas é o que fecha o sistema.
+
+#### EscapeTarget — como o inference decide a arena
+
+O inference atribui `EscapeTarget` a cada expressão:
+
+- **`Local`** → `fiber_arena` (valor não escapa, morre com o fiber)
+- **`Caller`** → `caller_arena` (valor escapa via return ou canal)
+- **`Heap`** → `root_arena` (valor precisa de cleanup determinístico)
+
+`Local` é atribuído quando o valor está em non-tail-position (não é
+retorno). `Caller` quando está em tail-position (é retorno) ou quando
+viaja por canal. `Heap` é reservado para recursos do SO (file handles).
+
+O codegen usa `alloc_for_escape(escape, size, ctx)` que despacha para
+a arena correta. O programador não vê nada disso — é totalmente
+implícito.
+
+#### File handles — a única exceção
+
+File handles são recursos do SO (FDs) que precisam de close
+determinístico — não podem esperar o fim do processo. O modelo:
+
+- `open!` aloca `FileInner` na root_arena via `arena_alloc`.
+- `close!` faz `drop_in_place` do `FileInner` (fecha o FD).
+- O epílogo da action fecha automaticamente handles não fechados
+  explicitamente (rastreados via `file_handle_vars` no codegen).
+- O close é **idempotente** — o campo `closed` em `FileInner` garante
+  que double-close (explícito + epílogo) é no-op, não double-free.
+
+Todos os outros valores (Bytes, Text, Result boxes, listas, structs,
+tuplas) são arena-allocated sem cleanup individual. A arena é
+resetada em O(1) quando o fiber morre.
+
+#### Por que não ARC
+
+O Kata5 teve ARC (`alloc_tracked`/`incref_tracked`/`decref_tracked`)
+entre as sessões 2-7. Foi removido na sessão 8 porque:
+
+1. **Structured concurrency torna ARC desnecessário para canais.**
+   A caller_arena cobre o lifetime de todos os valores que trafegam
+   por canal. ARC era um mecanismo de segurança para um problema que
+   não existe.
+
+2. **`is_arc_type` era a pergunta errada.** ARC-ness é propriedade do
+   local de alocação, não do tipo. O mesmo `Ty::List(Int)` pode ter
+   sido alocado em arenas diferentes. Decidir incref/decref só pelo
+   tipo causou SIGSEGV em `Byte` (SMI-tagged), UB silencioso em
+   aliases de refined, e bugs latentes em vários tipos compostos.
+
+3. **Bumpalo cresce dinamicamente.** Não há risco de estourar a
+   arena. O risco é acumulação em fibers long-running, que se resolve
+   com streaming (readline em loop) em vez de slurp.
+
+4. **File handles só precisam de close, não de ARC.** O FD é um
+   recurso do SO que precisa ser fechado. Close explícito + epílogo
+   resolve sem o overhead e complexidade de ARC.
+
+#### Implicações para o programador
+
+- **Não há leak de memória em programas que terminam.** As arenas
+  são resetadas quando os fibers morrem e a root_arena é destruída no
+  fim do processo.
+
+- **Fibers long-running (servidores) acumulam.** Valores alocados na
+  fiber_arena de um servidor que nunca termina não são liberados. A
+  resposta é usar streaming (readline, read_chunk) em vez de slurp,
+  e structured concurrency para garantir que fibers auxiliares morram.
+
+- **Close explícito é boa prática.** Embora o epílogo feche handles
+  não fechados, chamar `close!` explicitamente libera o FD cedo —
+  importante em servidores que abrem muitos arquivos.
+
+- **Não há cópia na fronteira de return/canal.** O valor é alocado
+  na arena certa desde o início (escape analysis). Sem memcpy.
 
 ### 5.3. Actions como Valores de Primeira Classe (First-Class Actions)
 

@@ -522,3 +522,38 @@ enum LogLevel
   Info
   Warn
   Error
+
+# ── File I/O ──────────────────────────────────────────────────────
+# File é um tipo intrínseco (Ty::File) — handle opaco para arquivo aberto.
+# Encoding é determinado pela operação: read → Bytes, readline → Text.
+
+enum FileMode
+    Read
+    Write
+    Append
+    ReadWrite
+    Create
+
+@ffi("kata_rt_file_open")
+action open (path::Text, mode::FileMode) => Result::(File, Text)
+
+@ffi("kata_rt_file_read")
+action read (f::File) => Result::(Bytes, Text)
+
+@ffi("kata_rt_file_readline")
+action readline (f::File) => Result::(Text, Text)
+
+@ffi("kata_rt_file_write_text")
+action write (f::File, content::Text) => Result::(Unit, Text)
+
+@ffi("kata_rt_file_write_bytes")
+action write (f::File, content::Bytes) => Result::(Unit, Text)
+
+@ffi("kata_rt_file_close")
+action close (f::File) => Unit
+
+# echo para file — escreve show(msg) + newline
+action echo (msg::SHOW, f::File) => Unit
+    let s := show msg
+    let _ := write!(f, s)
+    let _ := write!(f, "\n")

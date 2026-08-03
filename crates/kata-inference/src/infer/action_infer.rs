@@ -301,6 +301,7 @@ fn contains_channel_type(ty: &Ty) -> bool {
         | Ty::Struct(_)
         | Ty::Sum(_)
         | Ty::Byte
-        | Ty::Bytes => false,
+        | Ty::Bytes
+        | Ty::File => false,
     }
 }

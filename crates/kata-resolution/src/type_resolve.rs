@@ -58,6 +58,7 @@ pub fn resolve_type_expr(expr: &TypeExpr, env: &TypeEnv, iface_reg: &InterfaceRe
                     "Unit" => Ty::Unit,
                     "Bytes" => Ty::Bytes,
                     "Byte" => Ty::Byte,
+                    "File" => Ty::File,
                     _ => {
                         // Se é uma interface registrada, produz Ty::Interface.
                         if iface_reg.get_interface(name).is_some() {
@@ -94,6 +95,7 @@ pub fn resolve_type_expr(expr: &TypeExpr, env: &TypeEnv, iface_reg: &InterfaceRe
                 "Rational" => Ty::Prim(PrimTy::Rational),
                 "Bytes" => Ty::Bytes,
                 "Byte" => Ty::Byte,
+                "File" => Ty::File,
                 "Boolean" => Ty::Sum("Boolean".into()),
                 "Unit" => Ty::Unit,
                 _ => {

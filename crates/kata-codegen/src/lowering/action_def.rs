@@ -130,7 +130,7 @@ pub(crate) fn define_kata_action(
             scheduler_mode: false, // dentro de Action: ActionCalls são call diretos
             loop_break_block: None,
             loop_continue_block: None,
-            arc_vars: Vec::new(),
+            file_handle_vars: Vec::new(),
             struct_registry,
             type_id_map,
             ipc_broker_fid: None,
@@ -212,18 +212,18 @@ pub(crate) fn define_kata_action(
         lower.builder.seal_block(epilogue_block);
         let result = lower.builder.block_params(epilogue_block)[0];
 
-        // Decref de variáveis ARC-managed (Heap) no epílogo.
-        // Cada variável segura um data_ptr na root_arena com refcount ≥1.
-        // O decref libera a referência local; se refcount → 0, o bloco
-        // inteiro (header + dados) é desalocado da root_arena.
-        let decref_ref = lower
+        // Close de file handles abertos que não foram fechados explicitamente.
+        // Cada variável segura um handle (ponteiro para FileInner na arena).
+        // O close faz drop_in_place do FileInner (fecha o FD) — a memória
+        // é liberada quando a arena for resetada.
+        let close_ref = lower
             .ffi_refs
-            .get("kata_rt_decref_tracked")
+            .get("kata_rt_file_close")
             .copied()
-            .ok_or_else(|| CodegenError::FfiSymbolNotFound("kata_rt_decref_tracked".into()))?;
-        for &var in &lower.arc_vars {
+            .ok_or_else(|| CodegenError::FfiSymbolNotFound("kata_rt_file_close".into()))?;
+        for &var in &lower.file_handle_vars {
             let val = lower.builder.use_var(var);
-            lower.builder.ins().call(decref_ref, &[val]);
+            lower.builder.ins().call(close_ref, &[val]);
         }
 
         // Se @log quando Exit, injeta antes do return (epílogo).

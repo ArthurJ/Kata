@@ -68,6 +68,19 @@ pub(crate) fn infer_channel_send(
 
     let escape = escape_for_channel_send(&typed_value.ty, tail_pos, ctx);
 
+    // Override o escape do typed_value: se o valor é composto, precisa ser
+    // alocado na caller_arena (arena do pai) para sobreviver ao fiber
+    // que o envia. O inference do typed_value usou tail_pos=false → Local,
+    // mas o channel send exige que o valor sobreviva além do sender.
+    let typed_value = if escape != typed_value.escape {
+        TypedExpr {
+            escape,
+            ..typed_value
+        }
+    } else {
+        typed_value
+    };
+
     Ok(TypedExpr {
         span: *span,
         ty: Ty::Unit,
@@ -271,17 +284,20 @@ fn type_compatible(actual: &Ty, expected: &Ty) -> bool {
 /// e não precisam de ARC → Local (sem overhead).
 fn escape_for_channel_send(ty: &Ty, _tail_pos: bool, _ctx: &InferCtx) -> EscapeTarget {
     match ty {
-        // Primitivos inline — sem alocação, sem ARC.
+        // Primitivos inline — sem alocação.
         Ty::Prim(_) | Ty::Unit => EscapeTarget::Local,
         // Action não pode viajar por canal (validado em infer_channel_send).
         Ty::Action(..) => EscapeTarget::Local,
         // Var/InferVar — conservador: Local (não sabemos o tipo concreto).
         Ty::Var(_) | Ty::InferVar(_) => EscapeTarget::Local,
-        // Sender/Receiver são handles (i64), não ponteiros ARC.
+        // Sender/Receiver são handles (i64), não ponteiros.
         Ty::Sender(_) | Ty::Receiver(_) => EscapeTarget::Local,
-        // Function é fn_ptr, não ponteiro ARC.
+        // Function é fn_ptr, não ponteiro.
         Ty::Function(..) => EscapeTarget::Local,
-        // Compostos — alocados na arena, precisam de ARC.
-        _ => EscapeTarget::Heap,
+        // Compostos — alocados na caller_arena, que sobrevive ao fiber
+        // que os envia. O scheduler é structured concurrency: o pai só
+        // morre depois de todas as filhas, então a caller_arena (arena
+        // do pai) cobre o lifetime de todos os interessados no valor.
+        _ => EscapeTarget::Caller,
     }
 }

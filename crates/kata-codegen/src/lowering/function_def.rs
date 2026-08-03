@@ -167,7 +167,7 @@ pub(crate) fn define_function_body(
             scheduler_mode: false, // funções puras não chamam Actions
             loop_break_block: None,
             loop_continue_block: None,
-            arc_vars: Vec::new(),
+            file_handle_vars: Vec::new(),
             struct_registry,
             type_id_map,
             ipc_broker_fid: None,
@@ -393,6 +393,8 @@ pub(crate) fn define_function_body(
                         &[cranelift_codegen::ir::BlockArg::Value(result)],
                     );
                 } else {
+                    // Decref de variáveis ARC-managed antes do return.
+                    emit_close_file_handles(&mut lower);
                     lower.builder.ins().return_(&[result]);
                 }
             }
@@ -416,6 +418,9 @@ pub(crate) fn define_function_body(
                     &mut lower,
                 )?;
             }
+
+            // Decref de variáveis ARC-managed antes do return.
+            emit_close_file_handles(&mut lower);
 
             // @cache: insert no epílogo.
             if let Some((handle_val, key_slot, key_len_val)) = &cache_handle_val {
@@ -484,4 +489,24 @@ pub(crate) fn define_kata_function(
         struct_registry,
         type_id_map,
     )
+}
+
+/// Emite `kata_rt_file_close` para cada variável em `file_handle_vars`
+/// no epílogo de uma função. File handles não fechados explicitamente
+/// pelo programador são fechados automaticamente antes do return.
+fn emit_close_file_handles(lower: &mut LowerCtx) {
+    if lower.file_handle_vars.is_empty() {
+        return;
+    }
+    let close_ref = lower
+        .ffi_refs
+        .get("kata_rt_file_close")
+        .copied()
+        .unwrap_or_else(|| {
+            panic!("kata_rt_file_close não encontrado em ffi_refs")
+        });
+    for &var in &lower.file_handle_vars {
+        let val = lower.builder.use_var(var);
+        lower.builder.ins().call(close_ref, &[val]);
+    }
 }

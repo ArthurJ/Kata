@@ -131,18 +131,6 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
         "kata_rt_get_root_arena_handle",
         rt::kata_rt_get_root_arena_handle as *const u8,
     );
-    builder.symbol(
-        "kata_rt_alloc_tracked",
-        rt::kata_rt_alloc_tracked as *const u8,
-    );
-    builder.symbol(
-        "kata_rt_incref_tracked",
-        rt::kata_rt_incref_tracked as *const u8,
-    );
-    builder.symbol(
-        "kata_rt_decref_tracked",
-        rt::kata_rt_decref_tracked as *const u8,
-    );
     // Sum
     builder.symbol(
         "kata_rt_store_sum_result",
@@ -373,6 +361,22 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
     // Marshalling (to_bytes/from_bytes)
     builder.symbol("kata_rt_to_bytes", rt::kata_rt_to_bytes as *const u8);
     builder.symbol("kata_rt_from_bytes", rt::kata_rt_from_bytes as *const u8);
+    // File I/O
+    builder.symbol("kata_rt_file_open", rt::kata_rt_file_open as *const u8);
+    builder.symbol("kata_rt_file_read", rt::kata_rt_file_read as *const u8);
+    builder.symbol(
+        "kata_rt_file_readline",
+        rt::kata_rt_file_readline as *const u8,
+    );
+    builder.symbol(
+        "kata_rt_file_write_text",
+        rt::kata_rt_file_write_text as *const u8,
+    );
+    builder.symbol(
+        "kata_rt_file_write_bytes",
+        rt::kata_rt_file_write_bytes as *const u8,
+    );
+    builder.symbol("kata_rt_file_close", rt::kata_rt_file_close as *const u8);
 }
 
 /// Declara todos os símbolos FFI no module e retorna o mapa nome → FuncId.
@@ -461,9 +465,6 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         ArenaCreateTracked,
         ArenaDealloc,
         GetRootArenaHandle,
-        AllocTracked,
-        IncRefTracked,
-        DecRefTracked,
         ArenaStats,
         StoreSumResult,
         SumTagInt,
@@ -580,5 +581,12 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         ToBytes,
         FromBytes,
         SpawnProcess,
+        // File I/O
+        FileOpen,
+        FileRead,
+        FileReadline,
+        FileWriteText,
+        FileWriteBytes,
+        FileClose,
     ]
 }

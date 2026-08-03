@@ -236,7 +236,7 @@ pub(crate) fn lower_module(
             scheduler_mode: true, // entry point: ActionCalls via spawn+run
             loop_break_block: None,
             loop_continue_block: None,
-            arc_vars: Vec::new(),
+            file_handle_vars: Vec::new(),
             struct_registry,
             type_id_map,
             ipc_broker_fid: None,

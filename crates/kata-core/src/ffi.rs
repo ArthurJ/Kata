@@ -77,12 +77,6 @@ pub enum FfiSymbol {
     ArenaDealloc,
     /// `kata_rt_get_root_arena_handle() -> handle` — lê TLS root arena (Fio 16).
     GetRootArenaHandle,
-    /// `kata_rt_alloc_tracked(root_arena, data_size, destructor) -> data_ptr` — aloca com header ARC (Fio 16).
-    AllocTracked,
-    /// `kata_rt_incref_tracked(data_ptr) -> 0` — incrementa refcount de valor tracked.
-    IncRefTracked,
-    /// `kata_rt_decref_tracked(data_ptr) -> 0` — decrementa refcount, desaloca se 0.
-    DecRefTracked,
     /// `kata_rt_arena_stats(handle) -> i64` — (alloc_count, dealloc_count) packed (Fio 16).
     ArenaStats,
 
@@ -328,6 +322,20 @@ pub enum FfiSymbol {
     /// arena via COW, executa a Action, serializa o resultado via
     /// to_bytes, e envia pelo pipe. O parent desserializa via from_bytes.
     SpawnProcess,
+
+    // ── File I/O ─────────────────────────────────────────
+    /// `kata_rt_file_open(path_ptr, mode_tag) -> i64` — abre arquivo, retorna Result box ARC.
+    FileOpen,
+    /// `kata_rt_file_read(handle) -> i64` — lê todo o conteúdo, retorna Result box ARC.
+    FileRead,
+    /// `kata_rt_file_readline(handle) -> i64` — lê uma linha, retorna Result box ARC.
+    FileReadline,
+    /// `kata_rt_file_write_text(handle, data_ptr) -> i64` — escreve Text (C string), retorna Result box ARC.
+    FileWriteText,
+    /// `kata_rt_file_write_bytes(handle, data_ptr) -> i64` — escreve Bytes (blob com header de len), retorna Result box ARC.
+    FileWriteBytes,
+    /// `kata_rt_file_close(handle) -> ()` — fecha arquivo (decref ARC).
+    FileClose,
 }
 
 impl FfiSymbol {
@@ -387,10 +395,7 @@ impl FfiSymbol {
             FfiSymbol::ArenaCreateTracked => "kata_rt_arena_create_tracked",
             FfiSymbol::ArenaDealloc => "kata_rt_arena_dealloc",
             FfiSymbol::GetRootArenaHandle => "kata_rt_get_root_arena_handle",
-            FfiSymbol::AllocTracked => "kata_rt_alloc_tracked",
             FfiSymbol::ArenaStats => "kata_rt_arena_stats",
-            FfiSymbol::IncRefTracked => "kata_rt_incref_tracked",
-            FfiSymbol::DecRefTracked => "kata_rt_decref_tracked",
             FfiSymbol::StoreSumResult => "kata_rt_store_sum_result",
             FfiSymbol::SumTagInt => "kata_rt_sum_tag_int",
             FfiSymbol::Panic => "kata_rt_panic",
@@ -506,6 +511,13 @@ impl FfiSymbol {
             FfiSymbol::ListSlice => "kata_rt_list_slice",
             FfiSymbol::ToBytes => "kata_rt_to_bytes",
             FfiSymbol::FromBytes => "kata_rt_from_bytes",
+            // File I/O
+            FfiSymbol::FileOpen => "kata_rt_file_open",
+            FfiSymbol::FileRead => "kata_rt_file_read",
+            FfiSymbol::FileReadline => "kata_rt_file_readline",
+            FfiSymbol::FileWriteText => "kata_rt_file_write_text",
+            FfiSymbol::FileWriteBytes => "kata_rt_file_write_bytes",
+            FfiSymbol::FileClose => "kata_rt_file_close",
         }
     }
 
@@ -559,10 +571,7 @@ impl FfiSymbol {
             }
             FfiSymbol::ArenaDestroy | FfiSymbol::ArenaDealloc => Ty::Unit,
             FfiSymbol::GetRootArenaHandle => Ty::int(),
-            FfiSymbol::AllocTracked
-            | FfiSymbol::IncRefTracked
-            | FfiSymbol::DecRefTracked
-            | FfiSymbol::ArenaStats => Ty::int(),
+            FfiSymbol::ArenaStats => Ty::int(),
             // Sum
             FfiSymbol::StoreSumResult | FfiSymbol::SumTagInt => Ty::int(),
             // Control flow — panic retorna Unit (aborta antes, mas o tipo é Unit)
@@ -669,6 +678,13 @@ impl FfiSymbol {
             FfiSymbol::ArraySlice | FfiSymbol::ListSlice => Ty::int(),
             FfiSymbol::ToBytes => Ty::Bytes,
             FfiSymbol::FromBytes => Ty::int(), // ponteiro genérico (tipo depende do contexto)
+            // File I/O — retornam i64 (Result box ARC tracked)
+            FfiSymbol::FileOpen => Ty::int(),    // Result box ptr
+            FfiSymbol::FileRead => Ty::int(),    // Result box ptr
+            FfiSymbol::FileReadline => Ty::int(), // Result box ptr
+            FfiSymbol::FileWriteText => Ty::int(), // Result box ptr
+            FfiSymbol::FileWriteBytes => Ty::int(), // Result box ptr
+            FfiSymbol::FileClose => Ty::Unit,
         }
     }
 
@@ -728,9 +744,6 @@ impl FfiSymbol {
             FfiSymbol::ArenaCreateTracked,
             FfiSymbol::ArenaDealloc,
             FfiSymbol::GetRootArenaHandle,
-            FfiSymbol::AllocTracked,
-            FfiSymbol::IncRefTracked,
-            FfiSymbol::DecRefTracked,
             FfiSymbol::ArenaStats,
             FfiSymbol::StoreSumResult,
             FfiSymbol::SumTagInt,
@@ -847,6 +860,13 @@ impl FfiSymbol {
             FfiSymbol::ListSlice,
             FfiSymbol::ToBytes,
             FfiSymbol::FromBytes,
+            // File I/O
+            FfiSymbol::FileOpen,
+            FfiSymbol::FileRead,
+            FfiSymbol::FileReadline,
+            FfiSymbol::FileWriteText,
+            FfiSymbol::FileWriteBytes,
+            FfiSymbol::FileClose,
         ];
         all.iter().copied().find(|s| s.symbol_name() == name)
     }

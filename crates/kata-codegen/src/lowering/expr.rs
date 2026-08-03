@@ -259,7 +259,7 @@ pub(crate) fn lower_expr(
                 return Ok(ctx.builder.ins().iconst(I64, 0));
             }
 
-            // Aloca N * 8 bytes. Para Heap, usa alloc_tracked com header ARC.
+            // Aloca N * 8 bytes na arena apropriada.
             let ptr =
                 crate::lowering::escape_arena::alloc_for_escape(expr.escape, (n * 8) as i64, ctx)?;
 
@@ -286,7 +286,7 @@ pub(crate) fn lower_expr(
                 return Ok(ctx.builder.ins().iconst(I64, 0));
             }
 
-            // Aloca N * 8 bytes. Para Heap, usa alloc_tracked com header ARC.
+            // Aloca N * 8 bytes na arena apropriada.
             let ptr =
                 crate::lowering::escape_arena::alloc_for_escape(expr.escape, (n * 8) as i64, ctx)?;
 
@@ -338,9 +338,11 @@ pub(crate) fn lower_expr(
             let clif_ty = super::resolve_clif_ty(&value.node.ty, ctx.struct_registry);
             let var = ctx.new_var(name, clif_ty);
             ctx.builder.def_var(var, val);
-            // Se o valor é Heap (ARC-managed), registrar para decref no epílogo.
-            if value.node.escape == kata_core::escape::EscapeTarget::Heap {
-                ctx.arc_vars.push(var);
+            // Se o valor é um File handle, registrar para close no epílogo.
+            // O close explícito (close!) remove da lista; o epílogo fecha
+            // o que sobrou (file handles não fechados pelo programador).
+            if value.node.ty == Ty::File {
+                ctx.file_handle_vars.push(var);
             }
             // Let retorna Unit.
             Ok(ctx.builder.ins().iconst(I64, 0))

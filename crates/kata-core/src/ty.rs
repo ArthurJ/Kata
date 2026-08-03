@@ -71,6 +71,11 @@ pub enum Ty {
     /// Bytes — sequência contígua de u8. Blob opaco para I/O e marshalling.
     /// Ponteiro na ABI (como Array, Text, Struct). Imutável.
     Bytes,
+    /// File — handle opaco para arquivo aberto. Sem parametrização de tipo
+    /// (encoding é determinado pela operação: read → Bytes, readline → Text).
+    /// Ponteiro na ABI (i64 com tag). Generaliza para Socket no futuro via
+    /// camada IoHandle comum no runtime.
+    File,
 }
 
 /// Mapeamento de representação FFI.
@@ -448,6 +453,7 @@ impl std::fmt::Display for Ty {
             Ty::InferVar(_) => f.write_str("?"),
             Ty::Byte => f.write_str("Byte"),
             Ty::Bytes => f.write_str("Bytes"),
+            Ty::File => f.write_str("File"),
         }
     }
 }
@@ -523,6 +529,7 @@ impl Ty {
             Ty::InferVar(_) => panic!("type!() em tipo não-resolvido — bug do typeck"),
             Ty::Byte => "Byte".into(),
             Ty::Bytes => "Bytes".into(),
+            Ty::File => "File".into(),
         }
     }
 }
