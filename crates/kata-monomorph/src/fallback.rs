@@ -9,7 +9,7 @@
 
 use kata_ast::Spanned;
 use kata_core::ty::Ty;
-use kata_inference::{FusedStage, TypedExpr, TypedExprKind, TypedSelectArm};
+use kata_inference::{FusedStage, TypedExpr, TypedExprKind, TypedReadMode, TypedSelectArm};
 
 use crate::MonoModule;
 
@@ -225,12 +225,14 @@ fn fallback_in_expr(expr_span: &mut Spanned<TypedExpr>) {
                     }
                     TypedSelectArm::IoRead {
                         handle_expr,
-                        chunk_size_expr,
+                        read_mode,
                         body,
                         ..
                     } => {
                         fallback_in_expr(handle_expr);
-                        fallback_in_expr(chunk_size_expr);
+                        if let TypedReadMode::Chunk(chunk_size_expr) = read_mode {
+                            fallback_in_expr(chunk_size_expr);
+                        }
                         fallback_in_expr(body);
                     }
                 }

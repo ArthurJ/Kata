@@ -20,7 +20,7 @@
 //! compilador. Cada Lambda cria escopo próprio, então nomes重复 entre
 //! Lambdas aninhadas não conflitam (shadowing lexical normal).
 
-use kata_ast::{Expr, GuardClause, MatchArm, SelectArm, Span, Spanned, WithBinding};
+use kata_ast::{Expr, GuardClause, MatchArm, ReadMode, SelectArm, Span, Spanned, WithBinding};
 
 use crate::desugar_holes::desugar_holes;
 
@@ -289,12 +289,15 @@ fn desugar_pipes(expr: &Spanned<Expr>) -> Spanned<Expr> {
                     },
                     SelectArm::IoRead {
                         handle_expr,
-                        chunk_size_expr,
+                        read_mode,
                         bind_name,
                         body,
                     } => SelectArm::IoRead {
                         handle_expr: desugar_pipes(handle_expr),
-                        chunk_size_expr: desugar_pipes(chunk_size_expr),
+                        read_mode: match read_mode {
+                            ReadMode::Chunk(chunk) => ReadMode::Chunk(desugar_pipes(chunk)),
+                            ReadMode::Line => ReadMode::Line,
+                        },
                         bind_name: bind_name.clone(),
                         body: desugar_pipes(body),
                     },

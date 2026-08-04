@@ -353,6 +353,8 @@ pub enum FfiSymbol {
     SocketRead,
     /// `kata_rt_socket_read_chunk(handle, n) -> i64` — lê até n bytes, retorna Result box.
     SocketReadChunk,
+    /// `kata_rt_socket_readline(handle) -> i64` — lê uma linha (Text), retorna Result box.
+    SocketReadline,
     /// `kata_rt_socket_write_text(handle, data_ptr) -> i64` — escreve Text, retorna Result box.
     SocketWriteText,
     /// `kata_rt_socket_write_bytes(handle, data_ptr) -> i64` — escreve Bytes, retorna Result box.
@@ -549,6 +551,7 @@ impl FfiSymbol {
             FfiSymbol::SocketListen => "kata_rt_socket_listen",
             FfiSymbol::SocketRead => "kata_rt_socket_read",
             FfiSymbol::SocketReadChunk => "kata_rt_socket_read_chunk",
+            FfiSymbol::SocketReadline => "kata_rt_socket_readline",
             FfiSymbol::SocketWriteText => "kata_rt_socket_write_text",
             FfiSymbol::SocketWriteBytes => "kata_rt_socket_write_bytes",
             FfiSymbol::SocketClose => "kata_rt_socket_close",
@@ -727,6 +730,7 @@ impl FfiSymbol {
             FfiSymbol::SocketListen => Ty::int(),
             FfiSymbol::SocketRead => Ty::int(),
             FfiSymbol::SocketReadChunk => Ty::int(),
+            FfiSymbol::SocketReadline => Ty::int(),
             FfiSymbol::SocketWriteText => Ty::int(),
             FfiSymbol::SocketWriteBytes => Ty::int(),
             FfiSymbol::SocketClose => Ty::Unit,
@@ -920,6 +924,7 @@ impl FfiSymbol {
             FfiSymbol::SocketListen,
             FfiSymbol::SocketRead,
             FfiSymbol::SocketReadChunk,
+            FfiSymbol::SocketReadline,
             FfiSymbol::SocketWriteText,
             FfiSymbol::SocketWriteBytes,
             FfiSymbol::SocketClose,

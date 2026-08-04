@@ -21,7 +21,7 @@ pub use infer::infer_module;
 pub use kata_resolution::RefinedDeclInfo;
 pub use typed::{
     CacheSpec, CaptureInfo, ChannelKind, FusedStage, TypedAction, TypedExpr, TypedExprKind,
-    TypedFunction, TypedLogSpec, TypedModule, TypedSelectArm, TypedTestSpec,
+    TypedFunction, TypedLogSpec, TypedModule, TypedReadMode, TypedSelectArm, TypedTestSpec,
 };
 pub use typed_pattern::{
     TypedGuardClause, TypedLambdaClause, TypedMatchArm, TypedPattern, TypedWithBinding,

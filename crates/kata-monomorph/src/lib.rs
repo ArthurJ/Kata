@@ -40,7 +40,7 @@ use kata_core::dispatch::DispatchTable;
 use kata_core::ty::Ty;
 use kata_inference::{
     FusedStage, TypedAction, TypedExpr, TypedExprKind, TypedFunction, TypedLambdaClause,
-    TypedModule, TypedSelectArm,
+    TypedModule, TypedReadMode, TypedSelectArm,
 };
 
 use overload_resolution::{
@@ -448,12 +448,14 @@ fn rewrite_typed_expr(expr_span: &mut Spanned<TypedExpr>, ctx: &MonoCtx, acc: &m
                     }
                     TypedSelectArm::IoRead {
                         handle_expr,
-                        chunk_size_expr,
+                        read_mode,
                         body,
                         ..
                     } => {
                         rewrite_typed_expr(handle_expr, ctx, acc);
-                        rewrite_typed_expr(chunk_size_expr, ctx, acc);
+                        if let TypedReadMode::Chunk(chunk_size_expr) = read_mode {
+                            rewrite_typed_expr(chunk_size_expr, ctx, acc);
+                        }
                         rewrite_typed_expr(body, ctx, acc);
                     }
                 }

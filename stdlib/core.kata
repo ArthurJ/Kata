@@ -585,6 +585,9 @@ action read (s::Socket) => Result::(Bytes, Text)
 @ffi("kata_rt_socket_read_chunk")
 action read (s::Socket, n::Int) => Result::(Bytes, Text)
 
+@ffi("kata_rt_socket_readline")
+action readline (s::Socket) => Result::(Text, Text)
+
 @ffi("kata_rt_socket_write_text")
 action write (s::Socket, content::Text) => Result::(Unit, Text)
 

@@ -115,12 +115,14 @@ pub fn assert_no_holes(expr: &Spanned<Expr>) {
                     }
                     kata_ast::SelectArm::IoRead {
                         handle_expr,
-                        chunk_size_expr,
+                        read_mode,
                         body,
                         ..
                     } => {
                         assert_no_holes(handle_expr);
-                        assert_no_holes(chunk_size_expr);
+                        if let kata_ast::ReadMode::Chunk(chunk_size_expr) = read_mode {
+                            assert_no_holes(chunk_size_expr);
+                        }
                         assert_no_holes(body);
                     }
                 }
@@ -248,12 +250,14 @@ pub fn assert_no_pipes(expr: &Spanned<Expr>) {
                     }
                     kata_ast::SelectArm::IoRead {
                         handle_expr,
-                        chunk_size_expr,
+                        read_mode,
                         body,
                         ..
                     } => {
                         assert_no_pipes(handle_expr);
-                        assert_no_pipes(chunk_size_expr);
+                        if let kata_ast::ReadMode::Chunk(chunk_size_expr) = read_mode {
+                            assert_no_pipes(chunk_size_expr);
+                        }
                         assert_no_pipes(body);
                     }
                 }

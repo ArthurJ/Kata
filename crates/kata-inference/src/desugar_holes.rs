@@ -9,7 +9,7 @@
 //! Lambdas aninhadas não conflitam (shadowing lexical normal).
 
 use kata_ast::{
-    Expr, GuardClause, MatchArm, Pattern, SelectArm, Span, Spanned, TypeExpr, WithBinding,
+    Expr, GuardClause, MatchArm, Pattern, ReadMode, SelectArm, Span, Spanned, TypeExpr, WithBinding,
 };
 
 /// Desugar holes — elimina todos `Expr::Hole` da AST.
@@ -325,12 +325,15 @@ pub(crate) fn desugar_holes(expr: &Spanned<Expr>) -> Spanned<Expr> {
                     },
                     SelectArm::IoRead {
                         handle_expr,
-                        chunk_size_expr,
+                        read_mode,
                         bind_name,
                         body,
                     } => SelectArm::IoRead {
                         handle_expr: desugar_holes(handle_expr),
-                        chunk_size_expr: desugar_holes(chunk_size_expr),
+                        read_mode: match read_mode {
+                            ReadMode::Chunk(chunk) => ReadMode::Chunk(desugar_holes(chunk)),
+                            ReadMode::Line => ReadMode::Line,
+                        },
                         bind_name: bind_name.clone(),
                         body: desugar_holes(body),
                     },

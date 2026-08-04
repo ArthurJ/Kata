@@ -348,10 +348,20 @@ pub struct MatchArm {
     pub body: Spanned<Expr>,
 }
 
+/// Modo de leitura num braço de `select` I/O.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ReadMode {
+    /// `read!(handle, n)` — lê até n bytes. Binding é `Result::(Bytes, Text)`.
+    Chunk(Spanned<Expr>),
+    /// `readline!(handle)` — lê até `\n`. Binding é `Result::(Text, Text)`.
+    Line,
+}
+
 /// Um braço de `select`.
 ///
 /// Pode ser um braço de canal (`rx <! nome: body`) ou um braço de
-/// leitura de I/O (`read!(handle, n) <! nome: body`).
+/// leitura de I/O (`read!(handle, n) <! nome: body` ou
+/// `readline!(handle) <! nome: body`).
 #[derive(Debug, Clone, PartialEq)]
 pub enum SelectArm {
     /// `rx <! nome: body` — braço de canal (receiver).
@@ -363,15 +373,15 @@ pub enum SelectArm {
         /// Corpo do braço.
         body: Spanned<Expr>,
     },
-    /// `read!(handle, n) <! nome: body` — braço de leitura de I/O.
-    /// `handle_expr` avalia para File (futuramente Socket).
-    /// `chunk_size_expr` avalia para Int (n bytes por chunk).
+    /// `read!(handle, n) <! nome: body` ou `readline!(handle) <! nome: body`.
+    /// `handle_expr` avalia para File ou Socket.
+    /// `read_mode` determina se lê n bytes (Chunk) ou até `\n` (Line).
     IoRead {
         /// Expressão do handle (File/Socket).
         handle_expr: Spanned<Expr>,
-        /// Expressão do tamanho do chunk (Int).
-        chunk_size_expr: Spanned<Expr>,
-        /// Nome do binding para o Result::(Bytes, Text) lido.
+        /// Modo de leitura: Chunk(n) ou Line.
+        read_mode: ReadMode,
+        /// Nome do binding para o Result lido.
         bind_name: String,
         /// Corpo do braço.
         body: Spanned<Expr>,

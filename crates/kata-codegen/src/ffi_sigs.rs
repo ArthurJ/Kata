@@ -963,6 +963,11 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
             sig.params.push(AbiParam::new(I64)); // n (SMI-tagged)
             sig.returns.push(AbiParam::new(I64)); // Result box ptr
         }
+        // socket_readline: (handle) -> i64 (Result box)
+        FfiSymbol::SocketReadline => {
+            sig.params.push(AbiParam::new(I64)); // handle
+            sig.returns.push(AbiParam::new(I64)); // Result box ptr
+        }
         // socket_write_text: (handle, data_ptr) -> i64 (Result box)
         FfiSymbol::SocketWriteText => {
             sig.params.push(AbiParam::new(I64)); // handle

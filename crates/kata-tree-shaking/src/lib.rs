@@ -24,7 +24,8 @@ use std::collections::HashSet;
 use kata_ast::Spanned;
 use kata_core::ty::Ty;
 use kata_inference::{
-    FusedStage, TypedAction, TypedExpr, TypedExprKind, TypedFunction, TypedModule, TypedSelectArm,
+    FusedStage, TypedAction, TypedExpr, TypedExprKind, TypedFunction, TypedModule, TypedReadMode,
+    TypedSelectArm,
 };
 
 /// Ponto de entrada — aplica tree shaking ao `TypedModule`.
@@ -440,17 +441,19 @@ fn collect_refs(
                     }
                     TypedSelectArm::IoRead {
                         handle_expr,
-                        chunk_size_expr,
+                        read_mode,
                         body,
                         ..
                     } => {
                         collect_refs(&handle_expr.node, reached_fns, reached_actions, fn_names);
-                        collect_refs(
-                            &chunk_size_expr.node,
-                            reached_fns,
-                            reached_actions,
-                            fn_names,
-                        );
+                        if let TypedReadMode::Chunk(chunk_size_expr) = read_mode {
+                            collect_refs(
+                                &chunk_size_expr.node,
+                                reached_fns,
+                                reached_actions,
+                                fn_names,
+                            );
+                        }
                         collect_refs(&body.node, reached_fns, reached_actions, fn_names);
                     }
                 }

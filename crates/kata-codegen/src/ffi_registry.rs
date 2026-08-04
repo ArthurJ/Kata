@@ -401,6 +401,10 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
         rt::kata_rt_socket_read_chunk as *const u8,
     );
     builder.symbol(
+        "kata_rt_socket_readline",
+        rt::kata_rt_socket_readline as *const u8,
+    );
+    builder.symbol(
         "kata_rt_socket_write_text",
         rt::kata_rt_socket_write_text as *const u8,
     );
@@ -631,6 +635,7 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         SocketListen,
         SocketRead,
         SocketReadChunk,
+        SocketReadline,
         SocketWriteText,
         SocketWriteBytes,
         SocketClose,

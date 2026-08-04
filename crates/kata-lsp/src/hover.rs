@@ -224,7 +224,7 @@ fn children<'a>(
             timeout_body,
             ..
         } => {
-            use kata_inference::TypedSelectArm;
+            use kata_inference::{TypedReadMode, TypedSelectArm};
             let mut kids: Vec<&'a kata_ast::Spanned<kata_inference::TypedExpr>> = Vec::new();
             for a in arms {
                 match a {
@@ -234,12 +234,14 @@ fn children<'a>(
                     }
                     TypedSelectArm::IoRead {
                         handle_expr,
-                        chunk_size_expr,
+                        read_mode,
                         body,
                         ..
                     } => {
                         kids.push(handle_expr);
-                        kids.push(chunk_size_expr);
+                        if let TypedReadMode::Chunk(chunk_size_expr) = read_mode {
+                            kids.push(chunk_size_expr);
+                        }
                         kids.push(body);
                     }
                 }

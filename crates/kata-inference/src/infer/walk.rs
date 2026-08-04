@@ -8,7 +8,7 @@
 //! monomorph, comptime, etc.
 
 use crate::typed::FusedStage;
-use crate::typed::{TypedExpr, TypedExprKind, TypedSelectArm};
+use crate::typed::{TypedExpr, TypedExprKind, TypedReadMode, TypedSelectArm};
 use crate::typed_pattern::{TypedLambdaClause, TypedMatchArm, TypedPattern};
 
 // ── Imutável ──────────────────────────────────────────────────────────
@@ -173,12 +173,14 @@ where
                     }
                     TypedSelectArm::IoRead {
                         handle_expr,
-                        chunk_size_expr,
+                        read_mode,
                         body,
                         ..
                     } => {
                         for_each_subexpr(&handle_expr.node, f);
-                        for_each_subexpr(&chunk_size_expr.node, f);
+                        if let TypedReadMode::Chunk(chunk_size_expr) = read_mode {
+                            for_each_subexpr(&chunk_size_expr.node, f);
+                        }
                         for_each_subexpr(&body.node, f);
                     }
                 }
@@ -452,12 +454,14 @@ where
                     }
                     TypedSelectArm::IoRead {
                         handle_expr,
-                        chunk_size_expr,
+                        read_mode,
                         body,
                         ..
                     } => {
                         for_each_subexpr_mut(&mut handle_expr.node, f);
-                        for_each_subexpr_mut(&mut chunk_size_expr.node, f);
+                        if let TypedReadMode::Chunk(chunk_size_expr) = read_mode {
+                            for_each_subexpr_mut(&mut chunk_size_expr.node, f);
+                        }
                         for_each_subexpr_mut(&mut body.node, f);
                     }
                 }

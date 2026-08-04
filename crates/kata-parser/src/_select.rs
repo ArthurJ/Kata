@@ -20,7 +20,7 @@
 //! o `channel` dentro do `ChannelRecv`: se for `ActionCall { callee: "read", ... }`,
 //! é um braço `IoRead`; caso contrário, é um braço `Channel`.
 
-use kata_ast::{Expr, SelectArm, Spanned, Token};
+use kata_ast::{Expr, ReadMode, SelectArm, Spanned, Token};
 use kata_diagnostics::FrontendError;
 
 use crate::Parser;
@@ -77,7 +77,9 @@ impl Parser {
 
                 // Distingue braço de canal de braço de I/O.
                 // Se o channel é ActionCall { callee: "read", args: (handle, n) },
-                // é um braço IoRead. Caso contrário, é um braço Channel.
+                // é um braço IoRead com ReadMode::Chunk.
+                // Se o channel é ActionCall { callee: "readline", args: handle },
+                // é um braço IoRead com ReadMode::Line.
                 let arm = match &channel.node {
                     Expr::ActionCall { callee, args } if callee == "read" => {
                         // Extrai handle_expr e chunk_size_expr dos args.
@@ -86,7 +88,17 @@ impl Parser {
                         let (handle_expr, chunk_size_expr) = extract_read_args(args);
                         SelectArm::IoRead {
                             handle_expr,
-                            chunk_size_expr,
+                            read_mode: ReadMode::Chunk(chunk_size_expr),
+                            bind_name,
+                            body,
+                        }
+                    }
+                    Expr::ActionCall { callee, args } if callee == "readline" => {
+                        // readline!(handle) — sem chunk_size.
+                        let handle_expr = extract_readline_arg(args);
+                        SelectArm::IoRead {
+                            handle_expr,
+                            read_mode: ReadMode::Line,
                             bind_name,
                             body,
                         }
@@ -123,6 +135,18 @@ impl Parser {
             },
             span,
         ))
+    }
+}
+
+/// Extrai `handle_expr` dos args de `readline!(handle)`.
+///
+/// `args` é a expressão de argumentos do `ActionCall`. Para `readline!(h)`,
+/// o parser produz `ActionCall { callee: "readline", args: h }`.
+/// Se vier como tupla `(h,)`, extrai o primeiro elemento.
+fn extract_readline_arg(args: &Spanned<Expr>) -> Spanned<Expr> {
+    match &args.node {
+        Expr::Tuple { elements } if elements.len() == 1 => elements[0].clone(),
+        _ => args.clone(),
     }
 }
 

@@ -4,12 +4,12 @@
 //! `channel!()`, `queue!()`, `broadcast!()`, `rxf!()`, `fork!()` são
 //! interceptados em `infer_apply` (não despacham para DispatchTable).
 
-use kata_ast::{Expr, SelectArm, Span, Spanned};
+use kata_ast::{Expr, ReadMode, SelectArm, Span, Spanned};
 use kata_core::escape::EscapeTarget;
 use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 
-use crate::typed::{TypedExpr, TypedExprKind, TypedSelectArm};
+use crate::typed::{TypedExpr, TypedExprKind, TypedReadMode, TypedSelectArm};
 
 use super::expr::InferCtx;
 use super::expr::infer_expr_hinted;
@@ -213,11 +213,11 @@ pub(crate) fn infer_select(
             }
             SelectArm::IoRead {
                 handle_expr,
-                chunk_size_expr,
+                read_mode,
                 bind_name,
                 body,
             } => {
-                // Typecheck handle_expr — deve ser Ty::File.
+                // Typecheck handle_expr — deve ser Ty::File ou Ty::Socket.
                 let typed_handle =
                     infer_expr_hinted(&handle_expr.node, &handle_expr.span, env, ctx, false, None)?;
                 if !matches!(typed_handle.ty, Ty::File | Ty::Socket) {
@@ -228,25 +228,40 @@ pub(crate) fn infer_select(
                     });
                 }
 
-                // Typecheck chunk_size_expr — deve ser Ty::Int.
-                let typed_chunk = infer_expr_hinted(
-                    &chunk_size_expr.node,
-                    &chunk_size_expr.span,
-                    env,
-                    ctx,
-                    false,
-                    None,
-                )?;
-                if !type_compatible(&typed_chunk.ty, &Ty::int()) {
-                    return Err(MiddleError::TypeMismatch {
-                        expected: "Int (tamanho do chunk)".into(),
-                        found: format!("{}", typed_chunk.ty),
-                        span: chunk_size_expr.span.into(),
-                    });
-                }
-
-                // Binding recebe Result::(Bytes, Text) — mesmo tipo de read!(handle, n).
-                let result_ty = Ty::Generic("Result".to_string(), vec![Ty::Bytes, Ty::text()]);
+                // Typecheck conforme o modo de leitura.
+                let (typed_read_mode, result_ty) = match read_mode {
+                    ReadMode::Chunk(chunk_size_expr) => {
+                        // read!(handle, n) — chunk_size_expr deve ser Int.
+                        let typed_chunk = infer_expr_hinted(
+                            &chunk_size_expr.node,
+                            &chunk_size_expr.span,
+                            env,
+                            ctx,
+                            false,
+                            None,
+                        )?;
+                        if !type_compatible(&typed_chunk.ty, &Ty::int()) {
+                            return Err(MiddleError::TypeMismatch {
+                                expected: "Int (tamanho do chunk)".into(),
+                                found: format!("{}", typed_chunk.ty),
+                                span: chunk_size_expr.span.into(),
+                            });
+                        }
+                        let result_ty =
+                            Ty::Generic("Result".to_string(), vec![Ty::Bytes, Ty::text()]);
+                        (
+                            TypedReadMode::Chunk(Spanned::new(typed_chunk, chunk_size_expr.span)),
+                            result_ty,
+                        )
+                    }
+                    ReadMode::Line => {
+                        // readline!(handle) — sem chunk_size.
+                        // Binding recebe Result::(Text, Text).
+                        let result_ty =
+                            Ty::Generic("Result".to_string(), vec![Ty::text(), Ty::text()]);
+                        (TypedReadMode::Line, result_ty)
+                    }
+                };
 
                 // Cria binding do braço num escopo filho.
                 let mut arm_env = env.push_scope();
@@ -270,7 +285,7 @@ pub(crate) fn infer_select(
 
                 typed_arms.push(TypedSelectArm::IoRead {
                     handle_expr: Spanned::new(typed_handle, handle_expr.span),
-                    chunk_size_expr: Spanned::new(typed_chunk, chunk_size_expr.span),
+                    read_mode: typed_read_mode,
                     bind_ty: result_ty.clone(),
                     bind_name: bind_name.clone(),
                     body: Spanned::new(typed_body, body.span),

@@ -14,6 +14,7 @@
 //! - `kata_rt_socket_listen(listener_handle) -> result_box` — Result::(Socket, Text)
 //! - `kata_rt_socket_read(handle) -> result_box` — Result::(Bytes, Text)
 //! - `kata_rt_socket_read_chunk(handle, n) -> result_box` — Result::(Bytes, Text)
+//! - `kata_rt_socket_readline(handle) -> result_box` — Result::(Text, Text)
 //! - `kata_rt_socket_write_text(handle, data_ptr) -> result_box` — Result::(Unit, Text)
 //! - `kata_rt_socket_write_bytes(handle, data_ptr) -> result_box` — Result::(Unit, Text)
 //! - `kata_rt_socket_close(handle) -> ()` — fecha socket (idempotente)
@@ -54,6 +55,11 @@ pub(crate) struct SocketInner {
     pub state: SocketState,
     pub kind: SocketKindRust,
     pub addr: String,
+    /// Buffer parcial para readline — acumula bytes até encontrar \n.
+    /// Usado apenas por `kata_rt_socket_readline`; `read`/`read_chunk`
+    /// lêem do FD diretamente. Não misturar readline com read/read_chunk
+    /// no mesmo socket (mesma limitação de Go bufio / Rust BufReader).
+    pub line_buf: Vec<u8>,
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -236,6 +242,7 @@ fn create_tcp_listener(addr: &str) -> i64 {
         state: SocketState::Listener,
         kind: SocketKindRust::Tcp,
         addr: sock_addr.to_string(),
+        line_buf: Vec::new(),
     };
     let handle = alloc_socket_inner(inner);
     if handle == 0 {
@@ -279,6 +286,7 @@ fn create_tcp_connected(addr: &str) -> i64 {
                     state: SocketState::Connected,
                     kind: SocketKindRust::Tcp,
                     addr: sock_addr.to_string(),
+                    line_buf: Vec::new(),
                 };
                 let handle = alloc_socket_inner(inner);
                 if handle == 0 {
@@ -329,6 +337,7 @@ fn create_unix_listener(path: &str) -> i64 {
         state: SocketState::Listener,
         kind: SocketKindRust::Unix,
         addr: path.to_string(),
+        line_buf: Vec::new(),
     };
     let handle = alloc_socket_inner(inner);
     if handle == 0 {
@@ -360,6 +369,7 @@ fn create_unix_connected(path: &str) -> i64 {
                     state: SocketState::Connected,
                     kind: SocketKindRust::Unix,
                     addr: path.to_string(),
+                    line_buf: Vec::new(),
                 };
                 let handle = alloc_socket_inner(inner);
                 if handle == 0 {
@@ -428,6 +438,7 @@ pub unsafe extern "C" fn kata_rt_socket_listen(listener_handle: i64) -> i64 {
                 state: SocketState::Connected,
                 kind: inner.kind,
                 addr: String::new(), // peer addr — não necessário para operação
+                line_buf: Vec::new(),
             };
             let handle = alloc_socket_inner(client_inner);
             if handle == 0 {
@@ -579,6 +590,107 @@ pub unsafe extern "C" fn kata_rt_socket_read_chunk(handle: i64, n: i64) -> i64 {
         if err == libc::EAGAIN || err == libc::EWOULDBLOCK {
             // Sem dados — suspender fiber com o handle em socket_handles
             // para o scheduler fazer poll(POLLIN) no FD do socket.
+            let suspended = crate::fiber::with_suspend(|suspend| {
+                suspend.suspend(crate::fiber::YieldReason::WaitingOnSelect {
+                    channel_handles: Vec::new(),
+                    file_handles: Vec::new(),
+                    socket_handles: vec![handle],
+                    deadline: None,
+                });
+            });
+            if suspended.is_none() {
+                return alloc_result_box(1, error_text("WOULDBLOCK sem fiber"));
+            }
+            // Fiber resumido — tentar novamente.
+            continue;
+        }
+
+        // Erro real.
+        return alloc_result_box(1, error_text(&format!("erro de leitura: {err}")));
+    }
+}
+
+/// Lê uma linha do socket como Text (até `\n`).
+///
+/// Usa `line_buf` persistente em `SocketInner` para acumular bytes parciais
+/// entre chamadas — TCP não preserva fronteiras de mensagem, então uma linha
+/// pode chegar em múltiplos chunks. O buffer sobrevive entre chamadas.
+///
+/// Non-blocking: se não há dados (EAGAIN) e o buffer não tem `\n`, suspende
+/// o fiber. EOF (read retorna 0): se o buffer tem dados, retorna como linha
+/// parcial (sem `\n`); se vazio, retorna `Err("EOF")`.
+///
+/// Não misturar com `read`/`read_chunk` no mesmo socket — estas lêem do FD
+/// diretamente, ignorando `line_buf`, e consomem bytes que readline esperava.
+///
+/// Retorna Result box Ok(text_ptr) ou Err(text_ptr).
+///
+/// # Safety
+/// `handle` deve ser um handle válido.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn kata_rt_socket_readline(handle: i64) -> i64 {
+    let inner = match socket_from_handle(handle) {
+        Some(s) => s,
+        None => return alloc_result_box(1, error_text("handle inválido")),
+    };
+
+    if inner.state != SocketState::Connected {
+        return alloc_result_box(1, error_text("socket listener não suporta readline"));
+    }
+
+    let mut buf = [0u8; 8192];
+
+    loop {
+        // Verifica se já temos uma linha completa no buffer.
+        if let Some(pos) = inner.line_buf.iter().position(|&b| b == b'\n') {
+            // Extrai a linha (sem o \n).
+            let line: Vec<u8> = inner.line_buf.drain(..=pos).collect();
+            let line = &line[..line.len() - 1]; // remove \n
+            // Remove \r final se presente (CRLF → LF).
+            let line = if line.ends_with(b"\r") {
+                &line[..line.len() - 1]
+            } else {
+                line
+            };
+            let text_ptr = alloc_text(std::str::from_utf8(line).unwrap_or(""));
+            if text_ptr == 0 {
+                return alloc_result_box(1, error_text("falha na alocação"));
+            }
+            return alloc_result_box(0, text_ptr);
+        }
+
+        // Tenta ler mais dados do socket.
+        let n_read =
+            unsafe { libc::read(inner.fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len()) };
+
+        if n_read > 0 {
+            inner.line_buf.extend_from_slice(&buf[..n_read as usize]);
+            continue; // Re-check buffer para \n.
+        }
+
+        if n_read == 0 {
+            // EOF — peer fechou. Se buffer tem dados, retorna como linha parcial.
+            if !inner.line_buf.is_empty() {
+                let line = std::mem::take(&mut inner.line_buf);
+                // Remove \r final se presente.
+                let line = if line.ends_with(b"\r") {
+                    &line[..line.len() - 1]
+                } else {
+                    &line
+                };
+                let text_ptr = alloc_text(std::str::from_utf8(line).unwrap_or(""));
+                if text_ptr == 0 {
+                    return alloc_result_box(1, error_text("falha na alocação"));
+                }
+                return alloc_result_box(0, text_ptr);
+            }
+            return alloc_result_box(1, error_text("EOF"));
+        }
+
+        // n_read < 0 — erro.
+        let err = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
+        if err == libc::EAGAIN || err == libc::EWOULDBLOCK {
+            // Sem dados e sem linha completa — suspender fiber.
             let suspended = crate::fiber::with_suspend(|suspend| {
                 suspend.suspend(crate::fiber::YieldReason::WaitingOnSelect {
                     channel_handles: Vec::new(),

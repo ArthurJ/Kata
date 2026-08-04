@@ -144,7 +144,8 @@ pub use file::{
 // Socket I/O
 pub use socket::{
     kata_rt_socket_close, kata_rt_socket_listen, kata_rt_socket_open, kata_rt_socket_read,
-    kata_rt_socket_read_chunk, kata_rt_socket_write_bytes, kata_rt_socket_write_text,
+    kata_rt_socket_read_chunk, kata_rt_socket_readline, kata_rt_socket_write_bytes,
+    kata_rt_socket_write_text,
 };
 // Display de resultados — ponto único de display para
 // driver JIT e shim AOT.

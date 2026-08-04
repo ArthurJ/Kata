@@ -18,7 +18,7 @@ use cranelift_codegen::isa::CallConv;
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_module::{Linkage, Module};
 use kata_core::ty::Ty;
-use kata_inference::{ChannelKind, TypedExpr, TypedExprKind, TypedSelectArm};
+use kata_inference::{ChannelKind, TypedExpr, TypedExprKind, TypedReadMode, TypedSelectArm};
 
 use super::LowerCtx;
 
@@ -590,7 +590,7 @@ pub(crate) fn lower_select(
     let mut file_arms: Vec<(
         usize,
         &kata_ast::Spanned<TypedExpr>,
-        &kata_ast::Spanned<TypedExpr>,
+        &TypedReadMode,
         &Ty,
         &String,
         &kata_ast::Spanned<TypedExpr>,
@@ -598,7 +598,7 @@ pub(crate) fn lower_select(
     let mut socket_arms: Vec<(
         usize,
         &kata_ast::Spanned<TypedExpr>,
-        &kata_ast::Spanned<TypedExpr>,
+        &TypedReadMode,
         &Ty,
         &String,
         &kata_ast::Spanned<TypedExpr>,
@@ -615,15 +615,15 @@ pub(crate) fn lower_select(
             }
             TypedSelectArm::IoRead {
                 handle_expr,
-                chunk_size_expr,
+                read_mode,
                 bind_ty,
                 bind_name,
                 body,
             } => {
                 if handle_expr.node.ty == Ty::Socket {
-                    socket_arms.push((i, handle_expr, chunk_size_expr, bind_ty, bind_name, body));
+                    socket_arms.push((i, handle_expr, read_mode, bind_ty, bind_name, body));
                 } else {
-                    file_arms.push((i, handle_expr, chunk_size_expr, bind_ty, bind_name, body));
+                    file_arms.push((i, handle_expr, read_mode, bind_ty, bind_name, body));
                 }
             }
         }
@@ -638,12 +638,12 @@ pub(crate) fn lower_select(
     let mut channel_handle_values: Vec<cranelift_codegen::ir::Value> = Vec::new();
     // file_handle_values[j]  = valor CLIF do handle do j-ésimo file arm.
     let mut file_handle_values: Vec<cranelift_codegen::ir::Value> = Vec::new();
-    // file_chunk_values[j]   = valor CLIF SMI-tagged do chunk_size do j-ésimo file arm.
-    let mut file_chunk_values: Vec<cranelift_codegen::ir::Value> = Vec::new();
+    // file_chunk_values[j]   = Some(SMI-tagged chunk_size) se Chunk, None se Line.
+    let mut file_chunk_values: Vec<Option<cranelift_codegen::ir::Value>> = Vec::new();
     // socket_handle_values[j]  = valor CLIF do handle do j-ésimo socket arm.
     let mut socket_handle_values: Vec<cranelift_codegen::ir::Value> = Vec::new();
-    // socket_chunk_values[j]   = valor CLIF SMI-tagged do chunk_size do j-ésimo socket arm.
-    let mut socket_chunk_values: Vec<cranelift_codegen::ir::Value> = Vec::new();
+    // socket_chunk_values[j]   = Some(SMI-tagged chunk_size) se Chunk, None se Line.
+    let mut socket_chunk_values: Vec<Option<cranelift_codegen::ir::Value>> = Vec::new();
 
     // Alocar array de channel handles (se houver channel arms).
     let chan_ptr = if !channel_arms.is_empty() {
@@ -668,7 +668,7 @@ pub(crate) fn lower_select(
         let alloc_inst = ctx.builder.ins().call(alloc_fref, &[arena, array_size]);
         let ptr = ctx.builder.inst_results(alloc_inst)[0];
 
-        for (j, (_orig, handle_expr, chunk_size_expr, _bind_ty, _bind_name, _body)) in
+        for (j, (_orig, handle_expr, read_mode, _bind_ty, _bind_name, _body)) in
             file_arms.iter().enumerate()
         {
             let handle = super::expr::lower_expr(&handle_expr.node, ctx)?;
@@ -676,8 +676,13 @@ pub(crate) fn lower_select(
             let offset = (j as i32) * 8;
             ctx.builder.ins().store(flags, handle, ptr, offset);
 
-            // chunk_size_expr: lowerar e guardar (SMI-tagged).
-            let chunk_smi = super::expr::lower_expr(&chunk_size_expr.node, ctx)?;
+            // chunk_size_expr: lowerar se Chunk, None se Line.
+            let chunk_smi = match read_mode {
+                TypedReadMode::Chunk(chunk_size_expr) => {
+                    Some(super::expr::lower_expr(&chunk_size_expr.node, ctx)?)
+                }
+                TypedReadMode::Line => None,
+            };
             file_chunk_values.push(chunk_smi);
         }
         ptr
@@ -691,7 +696,7 @@ pub(crate) fn lower_select(
         let alloc_inst = ctx.builder.ins().call(alloc_fref, &[arena, array_size]);
         let ptr = ctx.builder.inst_results(alloc_inst)[0];
 
-        for (j, (_orig, handle_expr, chunk_size_expr, _bind_ty, _bind_name, _body)) in
+        for (j, (_orig, handle_expr, read_mode, _bind_ty, _bind_name, _body)) in
             socket_arms.iter().enumerate()
         {
             let handle = super::expr::lower_expr(&handle_expr.node, ctx)?;
@@ -699,8 +704,13 @@ pub(crate) fn lower_select(
             let offset = (j as i32) * 8;
             ctx.builder.ins().store(flags, handle, ptr, offset);
 
-            // chunk_size_expr: lowerar e guardar (SMI-tagged).
-            let chunk_smi = super::expr::lower_expr(&chunk_size_expr.node, ctx)?;
+            // chunk_size_expr: lowerar se Chunk, None se Line.
+            let chunk_smi = match read_mode {
+                TypedReadMode::Chunk(chunk_size_expr) => {
+                    Some(super::expr::lower_expr(&chunk_size_expr.node, ctx)?)
+                }
+                TypedReadMode::Line => None,
+            };
             socket_chunk_values.push(chunk_smi);
         }
         ptr
@@ -827,7 +837,7 @@ pub(crate) fn lower_select(
             }
             TypedSelectArm::IoRead {
                 handle_expr,
-                chunk_size_expr: _,
+                read_mode,
                 bind_ty,
                 bind_name,
                 body,
@@ -838,23 +848,25 @@ pub(crate) fn lower_select(
                 let (j, base_offset, handle_values, chunk_values, read_ffi_name) = if is_socket {
                     let j = socket_seen;
                     socket_seen += 1;
+                    let ffi_name = match read_mode {
+                        TypedReadMode::Chunk(_) => "kata_rt_socket_read_chunk",
+                        TypedReadMode::Line => "kata_rt_socket_readline",
+                    };
                     (
                         j,
                         n_c + n_f,
                         &socket_handle_values,
                         &socket_chunk_values,
-                        "kata_rt_socket_read_chunk",
+                        ffi_name,
                     )
                 } else {
                     let j = file_seen;
                     file_seen += 1;
-                    (
-                        j,
-                        n_c,
-                        &file_handle_values,
-                        &file_chunk_values,
-                        "kata_rt_file_read_chunk",
-                    )
+                    let ffi_name = match read_mode {
+                        TypedReadMode::Chunk(_) => "kata_rt_file_read_chunk",
+                        TypedReadMode::Line => "kata_rt_file_readline",
+                    };
+                    (j, n_c, &file_handle_values, &file_chunk_values, ffi_name)
                 };
 
                 // Comparar global_idx == base_offset + j.
@@ -870,24 +882,35 @@ pub(crate) fn lower_select(
                 ctx.builder.seal_block(next_test_block);
                 ctx.builder.seal_block(body_block);
 
-                // body_block: read_chunk(handle, chunk_size_untagged),
-                // binding (Result), lowerar body.
+                // body_block: chamar FFI conforme read_mode.
+                // - Chunk: read_chunk(handle, chunk_size_untagged)
+                // - Line:  readline(handle)
                 ctx.builder.switch_to_block(body_block);
                 ctx.emitted_tail_call = false;
-
-                // Untag SMI do chunk_size: val >> 1.
-                let chunk_smi = chunk_values[j];
-                let chunk_untagged = ctx.builder.ins().ushr_imm(chunk_smi, 1);
 
                 let read_fref =
                     ctx.ffi_refs.get(read_ffi_name).copied().ok_or_else(|| {
                         super::CodegenError::FfiSymbolNotFound(read_ffi_name.into())
                     })?;
-                let read_inst = ctx
-                    .builder
-                    .ins()
-                    .call(read_fref, &[handle_values[j], chunk_untagged]);
-                let result_box_ptr = ctx.builder.inst_results(read_inst)[0];
+
+                let result_box_ptr = match read_mode {
+                    TypedReadMode::Chunk(_) => {
+                        // Untag SMI do chunk_size: val >> 1.
+                        let chunk_smi =
+                            chunk_values[j].expect("Chunk arm deve ter chunk_size value");
+                        let chunk_untagged = ctx.builder.ins().ushr_imm(chunk_smi, 1);
+                        let read_inst = ctx
+                            .builder
+                            .ins()
+                            .call(read_fref, &[handle_values[j], chunk_untagged]);
+                        ctx.builder.inst_results(read_inst)[0]
+                    }
+                    TypedReadMode::Line => {
+                        // readline(handle) — sem chunk_size.
+                        let read_inst = ctx.builder.ins().call(read_fref, &[handle_values[j]]);
+                        ctx.builder.inst_results(read_inst)[0]
+                    }
+                };
 
                 // Binding do braço: bind_ty é o tipo Result.
                 let clif_ty = super::resolve_clif_ty(bind_ty, ctx.struct_registry);

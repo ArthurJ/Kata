@@ -430,6 +430,15 @@ pub enum ChannelKind {
     Broadcast,
 }
 
+/// Modo de leitura num braço de `select` I/O (TAST).
+#[derive(Debug, Clone)]
+pub enum TypedReadMode {
+    /// `read!(handle, n)` — lê até n bytes. Binding é `Result::(Bytes, Text)`.
+    Chunk(Spanned<TypedExpr>),
+    /// `readline!(handle)` — lê até `\n`. Binding é `Result::(Text, Text)`.
+    Line,
+}
+
 /// Braço de `select` na TAST.
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
@@ -441,11 +450,13 @@ pub enum TypedSelectArm {
         bind_name: String,
         body: Spanned<TypedExpr>,
     },
-    /// `read!(handle, n) <! nome: body` — braço de leitura de I/O.
+    /// `read!(handle, n) <! nome: body` ou `readline!(handle) <! nome: body`.
     IoRead {
         handle_expr: Spanned<TypedExpr>,
-        chunk_size_expr: Spanned<TypedExpr>,
-        /// Tipo do binding: Result::(Bytes, Text).
+        /// Modo de leitura: Chunk(n) ou Line.
+        read_mode: TypedReadMode,
+        /// Tipo do binding: Result::(Bytes, Text) para Chunk,
+        /// Result::(Text, Text) para Line.
         bind_ty: Ty,
         bind_name: String,
         body: Spanned<TypedExpr>,
