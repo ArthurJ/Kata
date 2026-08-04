@@ -606,6 +606,7 @@ pub extern "C" fn kata_rt_select_files(handles: *const i64, n_handles: i64) -> i
             suspend.suspend(crate::fiber::YieldReason::WaitingOnSelect {
                 channel_handles: Vec::new(),
                 file_handles: file_handles_vec.clone(),
+                socket_handles: Vec::new(),
                 deadline: None,
             });
         });

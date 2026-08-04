@@ -63,6 +63,7 @@ pub(crate) enum YieldReason {
     WaitingOnSelect {
         channel_handles: Vec<i64>,
         file_handles: Vec<i64>,
+        socket_handles: Vec<i64>,
         deadline: Option<std::time::Instant>,
     },
     /// Fiber fez sleep cooperativo. `Instant` = deadline para acordar.

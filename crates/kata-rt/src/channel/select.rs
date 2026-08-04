@@ -86,6 +86,7 @@ pub extern "C" fn kata_rt_select(handles: *const i64, n_handles: i64, timeout_ms
             suspend.suspend(crate::fiber::YieldReason::WaitingOnSelect {
                 channel_handles: handles_vec.clone(),
                 file_handles: Vec::new(),
+                socket_handles: Vec::new(),
                 deadline,
             });
         });
@@ -186,6 +187,7 @@ pub extern "C" fn kata_rt_select_combined(
             suspend.suspend(crate::fiber::YieldReason::WaitingOnSelect {
                 channel_handles: chan_vec.clone(),
                 file_handles: file_vec.clone(),
+                socket_handles: Vec::new(),
                 deadline,
             });
         });

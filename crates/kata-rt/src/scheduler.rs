@@ -41,6 +41,7 @@ use crate::arena::{
 use crate::channel::{block_ipc_until_readable, can_recv, can_send, ipc_read_fd, is_ipc_handle};
 use crate::fiber::{KataFiber, SpawnArgs, YieldReason};
 use crate::file::{FILE_WOULD_BLOCK, collect_file_fds, try_select_files};
+use crate::socket::{SOCKET_WOULD_BLOCK, collect_socket_fds, try_select_sockets};
 
 use ffi::{HAS_READY_FIBER, PENDING_SPAWNS, YIELD_COUNTER, YIELD_INTERVAL};
 
@@ -61,6 +62,7 @@ pub(crate) enum BlockReason {
     WaitingOnSelect {
         channel_handles: Vec<i64>,
         file_handles: Vec<i64>,
+        socket_handles: Vec<i64>,
         deadline: Option<std::time::Instant>,
     },
     /// Esperando sleep cooperativo expirar. `Instant` = deadline.
@@ -227,6 +229,7 @@ impl Scheduler {
                     Err(YieldReason::WaitingOnSelect {
                         channel_handles,
                         file_handles,
+                        socket_handles,
                         deadline,
                     }) => {
                         self.blocked.insert(
@@ -234,6 +237,7 @@ impl Scheduler {
                             BlockReason::WaitingOnSelect {
                                 channel_handles,
                                 file_handles,
+                                socket_handles,
                                 deadline,
                             },
                         );
@@ -292,11 +296,17 @@ impl Scheduler {
                     _ => None,
                 });
 
-                // Coletar FDs de file handles de fibers blocked em WaitingOnSelect.
+                // Coletar FDs de file e socket handles de fibers blocked em WaitingOnSelect.
                 let mut file_fds: Vec<libc::pollfd> = Vec::new();
                 for reason in self.blocked.values() {
-                    if let BlockReason::WaitingOnSelect { file_handles, .. } = reason {
+                    if let BlockReason::WaitingOnSelect {
+                        file_handles,
+                        socket_handles,
+                        ..
+                    } = reason
+                    {
                         file_fds.extend(collect_file_fds(file_handles));
+                        file_fds.extend(collect_socket_fds(socket_handles));
                     }
                 }
 
@@ -457,16 +467,23 @@ impl Scheduler {
                 BlockReason::WaitingOnSelect {
                     channel_handles,
                     file_handles,
+                    socket_handles,
                     deadline,
                 } => {
-                    // Select: algum canal tem dado, algum file tem dado, OU deadline expirou.
+                    // Select: algum canal tem dado, algum file tem dado, algum socket
+                    // tem dado, OU deadline expirou.
                     let channel_ready = channel_handles.iter().any(|h| can_recv(*h));
                     let file_ready = if file_handles.is_empty() {
                         false
                     } else {
                         try_select_files(file_handles) != FILE_WOULD_BLOCK
                     };
-                    if channel_ready || file_ready {
+                    let socket_ready = if socket_handles.is_empty() {
+                        false
+                    } else {
+                        try_select_sockets(socket_handles) != SOCKET_WOULD_BLOCK
+                    };
+                    if channel_ready || file_ready || socket_ready {
                         Some(id)
                     } else if let Some(dl) = deadline {
                         if std::time::Instant::now() >= *dl {
