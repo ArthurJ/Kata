@@ -576,9 +576,10 @@ pub(crate) fn lower_select(
 
     let flags = MemFlagsData::new();
 
-    // ── 1. Separar arms em channel_arms e io_arms (com índice original). ──
+    // ── 1. Separar arms em channel_arms, file_arms e socket_arms. ──
     // channel_arms[j] = (orig_idx, &Channel{...})
-    // io_arms[j]      = (orig_idx, &IoRead{...})
+    // file_arms[j]    = (orig_idx, &IoRead{...}) onde handle_expr.ty == Ty::File
+    // socket_arms[j]  = (orig_idx, &IoRead{...}) onde handle_expr.ty == Ty::Socket
     let mut channel_arms: Vec<(
         usize,
         &kata_ast::Spanned<TypedExpr>,
@@ -586,7 +587,15 @@ pub(crate) fn lower_select(
         &String,
         &kata_ast::Spanned<TypedExpr>,
     )> = Vec::new();
-    let mut io_arms: Vec<(
+    let mut file_arms: Vec<(
+        usize,
+        &kata_ast::Spanned<TypedExpr>,
+        &kata_ast::Spanned<TypedExpr>,
+        &Ty,
+        &String,
+        &kata_ast::Spanned<TypedExpr>,
+    )> = Vec::new();
+    let mut socket_arms: Vec<(
         usize,
         &kata_ast::Spanned<TypedExpr>,
         &kata_ast::Spanned<TypedExpr>,
@@ -611,21 +620,30 @@ pub(crate) fn lower_select(
                 bind_name,
                 body,
             } => {
-                io_arms.push((i, handle_expr, chunk_size_expr, bind_ty, bind_name, body));
+                if handle_expr.node.ty == Ty::Socket {
+                    socket_arms.push((i, handle_expr, chunk_size_expr, bind_ty, bind_name, body));
+                } else {
+                    file_arms.push((i, handle_expr, chunk_size_expr, bind_ty, bind_name, body));
+                }
             }
         }
     }
 
     let n_c = channel_arms.len() as i64;
-    let n_f = io_arms.len() as i64;
+    let n_f = file_arms.len() as i64;
+    let n_s = socket_arms.len() as i64;
 
-    // ── 2. Alocar arrays de handles para channels e files. ──
+    // ── 2. Alocar arrays de handles para channels, files e sockets. ──
     // channel_handle_values[j] = valor CLIF do handle do j-ésimo channel arm.
     let mut channel_handle_values: Vec<cranelift_codegen::ir::Value> = Vec::new();
-    // io_handle_values[j]  = valor CLIF do handle do j-ésimo io arm.
-    let mut io_handle_values: Vec<cranelift_codegen::ir::Value> = Vec::new();
-    // io_chunk_values[j]   = valor CLIF SMI-tagged do chunk_size do j-ésimo io arm.
-    let mut io_chunk_values: Vec<cranelift_codegen::ir::Value> = Vec::new();
+    // file_handle_values[j]  = valor CLIF do handle do j-ésimo file arm.
+    let mut file_handle_values: Vec<cranelift_codegen::ir::Value> = Vec::new();
+    // file_chunk_values[j]   = valor CLIF SMI-tagged do chunk_size do j-ésimo file arm.
+    let mut file_chunk_values: Vec<cranelift_codegen::ir::Value> = Vec::new();
+    // socket_handle_values[j]  = valor CLIF do handle do j-ésimo socket arm.
+    let mut socket_handle_values: Vec<cranelift_codegen::ir::Value> = Vec::new();
+    // socket_chunk_values[j]   = valor CLIF SMI-tagged do chunk_size do j-ésimo socket arm.
+    let mut socket_chunk_values: Vec<cranelift_codegen::ir::Value> = Vec::new();
 
     // Alocar array de channel handles (se houver channel arms).
     let chan_ptr = if !channel_arms.is_empty() {
@@ -644,23 +662,46 @@ pub(crate) fn lower_select(
         ctx.builder.ins().iconst(I64, 0) // null ptr
     };
 
-    // Alocar array de file handles (se houver io arms).
-    let file_ptr = if !io_arms.is_empty() {
+    // Alocar array de file handles (se houver file arms).
+    let file_ptr = if !file_arms.is_empty() {
         let array_size = ctx.builder.ins().iconst(I64, n_f * 8);
         let alloc_inst = ctx.builder.ins().call(alloc_fref, &[arena, array_size]);
         let ptr = ctx.builder.inst_results(alloc_inst)[0];
 
         for (j, (_orig, handle_expr, chunk_size_expr, _bind_ty, _bind_name, _body)) in
-            io_arms.iter().enumerate()
+            file_arms.iter().enumerate()
         {
             let handle = super::expr::lower_expr(&handle_expr.node, ctx)?;
-            io_handle_values.push(handle);
+            file_handle_values.push(handle);
             let offset = (j as i32) * 8;
             ctx.builder.ins().store(flags, handle, ptr, offset);
 
             // chunk_size_expr: lowerar e guardar (SMI-tagged).
             let chunk_smi = super::expr::lower_expr(&chunk_size_expr.node, ctx)?;
-            io_chunk_values.push(chunk_smi);
+            file_chunk_values.push(chunk_smi);
+        }
+        ptr
+    } else {
+        ctx.builder.ins().iconst(I64, 0) // null ptr
+    };
+
+    // Alocar array de socket handles (se houver socket arms).
+    let socket_ptr = if !socket_arms.is_empty() {
+        let array_size = ctx.builder.ins().iconst(I64, n_s * 8);
+        let alloc_inst = ctx.builder.ins().call(alloc_fref, &[arena, array_size]);
+        let ptr = ctx.builder.inst_results(alloc_inst)[0];
+
+        for (j, (_orig, handle_expr, chunk_size_expr, _bind_ty, _bind_name, _body)) in
+            socket_arms.iter().enumerate()
+        {
+            let handle = super::expr::lower_expr(&handle_expr.node, ctx)?;
+            socket_handle_values.push(handle);
+            let offset = (j as i32) * 8;
+            ctx.builder.ins().store(flags, handle, ptr, offset);
+
+            // chunk_size_expr: lowerar e guardar (SMI-tagged).
+            let chunk_smi = super::expr::lower_expr(&chunk_size_expr.node, ctx)?;
+            socket_chunk_values.push(chunk_smi);
         }
         ptr
     } else {
@@ -679,9 +720,9 @@ pub(crate) fn lower_select(
         ctx.builder.ins().iconst(I64, -1)
     };
 
-    // ── 4. Chamar kata_rt_select_combined(chan_ptr, n_c, file_ptr, n_f, timeout_ms). ──
-    // Retorna índice global: 0..n_c-1 = channel j, n_c..n_c+n_f-1 = file j.
-    // -1 = WOULD_BLOCK, -2 = SELECT_TIMEOUT.
+    // ── 4. Chamar kata_rt_select_combined(chan_ptr, n_c, file_ptr, n_f, socket_ptr, n_s, timeout_ms). ──
+    // Retorna índice global: 0..n_c-1 = channel, n_c..n_c+n_f-1 = file,
+    // n_c+n_f..n_c+n_f+n_s-1 = socket. -1 = WOULD_BLOCK, -2 = SELECT_TIMEOUT.
     let select_fref = ctx
         .ffi_refs
         .get("kata_rt_select_combined")
@@ -689,9 +730,18 @@ pub(crate) fn lower_select(
         .ok_or_else(|| super::CodegenError::FfiSymbolNotFound("kata_rt_select_combined".into()))?;
     let n_c_val = ctx.builder.ins().iconst(I64, n_c);
     let n_f_val = ctx.builder.ins().iconst(I64, n_f);
+    let n_s_val = ctx.builder.ins().iconst(I64, n_s);
     let select_inst = ctx.builder.ins().call(
         select_fref,
-        &[chan_ptr, n_c_val, file_ptr, n_f_val, timeout_val],
+        &[
+            chan_ptr,
+            n_c_val,
+            file_ptr,
+            n_f_val,
+            socket_ptr,
+            n_s_val,
+            timeout_val,
+        ],
     );
     let global_idx = ctx.builder.inst_results(select_inst)[0];
 
@@ -707,7 +757,8 @@ pub(crate) fn lower_select(
     // Índices relativos dentro de cada sub-lista, rastreados enquanto
     // percorremos os arms na ordem original.
     let mut chan_seen = 0usize;
-    let mut io_seen = 0usize;
+    let mut file_seen = 0usize;
+    let mut socket_seen = 0usize;
 
     for arm in arms.iter() {
         ctx.builder.switch_to_block(next_test_block);
@@ -775,17 +826,39 @@ pub(crate) fn lower_select(
                 }
             }
             TypedSelectArm::IoRead {
-                handle_expr: _,
+                handle_expr,
                 chunk_size_expr: _,
                 bind_ty,
                 bind_name,
                 body,
             } => {
-                let j = io_seen;
-                io_seen += 1;
+                // Determinar se este braço é File ou Socket pelo tipo do handle.
+                let is_socket = handle_expr.node.ty == Ty::Socket;
 
-                // Comparar global_idx == n_c + j (io arms são n_c..n_c+n_f-1).
-                let expected = ctx.builder.ins().iconst(I64, n_c + j as i64);
+                let (j, base_offset, handle_values, chunk_values, read_ffi_name) = if is_socket {
+                    let j = socket_seen;
+                    socket_seen += 1;
+                    (
+                        j,
+                        n_c + n_f,
+                        &socket_handle_values,
+                        &socket_chunk_values,
+                        "kata_rt_socket_read_chunk",
+                    )
+                } else {
+                    let j = file_seen;
+                    file_seen += 1;
+                    (
+                        j,
+                        n_c,
+                        &file_handle_values,
+                        &file_chunk_values,
+                        "kata_rt_file_read_chunk",
+                    )
+                };
+
+                // Comparar global_idx == base_offset + j.
+                let expected = ctx.builder.ins().iconst(I64, base_offset + j as i64);
                 let is_this = ctx.builder.ins().icmp(
                     cranelift_codegen::ir::condcodes::IntCC::Equal,
                     global_idx,
@@ -797,26 +870,23 @@ pub(crate) fn lower_select(
                 ctx.builder.seal_block(next_test_block);
                 ctx.builder.seal_block(body_block);
 
-                // body_block: file_read_chunk(handle, chunk_size_untagged),
+                // body_block: read_chunk(handle, chunk_size_untagged),
                 // binding (Result), lowerar body.
                 ctx.builder.switch_to_block(body_block);
                 ctx.emitted_tail_call = false;
 
                 // Untag SMI do chunk_size: val >> 1.
-                let chunk_smi = io_chunk_values[j];
+                let chunk_smi = chunk_values[j];
                 let chunk_untagged = ctx.builder.ins().ushr_imm(chunk_smi, 1);
 
-                let read_fref = ctx
-                    .ffi_refs
-                    .get("kata_rt_file_read_chunk")
-                    .copied()
-                    .ok_or_else(|| {
-                        super::CodegenError::FfiSymbolNotFound("kata_rt_file_read_chunk".into())
+                let read_fref =
+                    ctx.ffi_refs.get(read_ffi_name).copied().ok_or_else(|| {
+                        super::CodegenError::FfiSymbolNotFound(read_ffi_name.into())
                     })?;
                 let read_inst = ctx
                     .builder
                     .ins()
-                    .call(read_fref, &[io_handle_values[j], chunk_untagged]);
+                    .call(read_fref, &[handle_values[j], chunk_untagged]);
                 let result_box_ptr = ctx.builder.inst_results(read_inst)[0];
 
                 // Binding do braço: bind_ty é o tipo Result.

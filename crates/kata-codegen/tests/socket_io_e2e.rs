@@ -580,3 +580,149 @@ main!()"#
     );
     let _ = std::fs::remove_file(&path);
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// TCP — select com socket (multiplexação socket + channel)
+// ═══════════════════════════════════════════════════════════════════
+
+/// Servidor TCP abre listener, aceita conexão, e faz `select` entre:
+///   - read!(conn, 100) do socket
+///   - rx do canal IPC (nunca recebe)
+///
+/// O cliente conecta e escreve "select!" no socket. O braço do socket
+/// dispara. O servidor lê os bytes, conta o tamanho, envia via canal.
+///
+/// O body de cada braço do select deve estar na mesma linha do `:`
+/// (limitação do parser). Match aninhado vai em action auxiliar.
+#[serial]
+#[test]
+fn socket_select_with_socket() {
+    let port = random_port();
+    let addr = format!("127.0.0.1:{port}");
+
+    let src = format!(
+        r#"action extrair_n (r::Result::(Bytes, Text)) => Int
+  match r
+    Result::Ok bytes: len bytes
+    Result::Err _: -1
+
+action fazer_select (conn::Socket, tx::Sender::Int) => Unit
+  select
+    read!(conn, 100) <! dados: tx !> extrair_n!(dados)
+
+action servidor (addr::Text, tx::Sender::Int) => Unit
+  let result := open!(SocketKind::TCP(addr), SocketMode::Listener)
+  match result
+    Result::Ok listener:
+      let client := listen!(listener)
+      match client
+        Result::Ok conn: fazer_select!(conn, tx)
+        Result::Err _: tx !> -2
+    Result::Err _: tx !> -3
+
+action cliente (addr::Text) => Int
+  let result := open!(SocketKind::TCP(addr), SocketMode::Connected)
+  match result
+    Result::Ok sock:
+      let _ := write!(sock, "select!")
+      close!(sock)
+      1
+    Result::Err _: -4
+
+action main => Int
+  let ch := channel!()
+  let tx := ch.0
+  let rx := ch.1
+  fork!(servidor, ("{addr}", tx))
+  let _ := cliente!("{addr}")
+  rx <! result
+  result
+main!()"#
+    );
+
+    let (raw, _ty) = eval_src(&src);
+    assert_ne!(raw, DEADLOCK_SENTINEL, "não deve deadlockar");
+    let val = untag_smi(raw);
+    assert_eq!(
+        val, 7,
+        "select com socket deve disparar braço de read e receber 7 bytes (\"select!\")"
+    );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// TCP — select misto (channel + socket)
+// ═══════════════════════════════════════════════════════════════════
+
+/// Servidor TCP aceita conexão e faz `select` entre:
+///   - rx do canal IPC (produtor envia 42)
+///   - read!(conn, 100) do socket
+///
+/// Ambos estão prontos. O braço do canal aparece primeiro na ordem
+/// e deve disparar (channel arms são testados antes de socket arms
+/// no runtime). O servidor envia 42 via tx_result para o main.
+///
+/// O body de cada braço do select deve estar na mesma linha do `:`
+/// (limitação do parser).
+#[serial]
+#[test]
+fn socket_select_misto_channel_socket() {
+    let port = random_port();
+    let addr = format!("127.0.0.1:{port}");
+
+    let src = format!(
+        r#"action extrair_n (r::Result::(Bytes, Text)) => Int
+  match r
+    Result::Ok bytes: len bytes
+    Result::Err _: -1
+
+action fazer_select (conn::Socket, rx::Receiver::Int, tx_result::Sender::Int) => Unit
+  select
+    rx <! msg: tx_result !> msg
+    read!(conn, 100) <! dados: tx_result !> extrair_n!(dados)
+
+action prod (tx::Sender::Int) => Unit
+  tx !> 42
+  ()
+
+action servidor (addr::Text, rx::Receiver::Int, tx_result::Sender::Int) => Unit
+  let result := open!(SocketKind::TCP(addr), SocketMode::Listener)
+  match result
+    Result::Ok listener:
+      let client := listen!(listener)
+      match client
+        Result::Ok conn: fazer_select!(conn, rx, tx_result)
+        Result::Err _: tx_result !> -2
+    Result::Err _: tx_result !> -3
+
+action cliente (addr::Text) => Int
+  let result := open!(SocketKind::TCP(addr), SocketMode::Connected)
+  match result
+    Result::Ok sock:
+      let _ := write!(sock, "data")
+      close!(sock)
+      1
+    Result::Err _: -4
+
+action main => Int
+  let ch := channel!()
+  let tx := ch.0
+  let rx := ch.1
+  let ch2 := channel!()
+  let tx2 := ch2.0
+  let rx2 := ch2.1
+  fork!(servidor, ("{addr}", rx, tx2))
+  fork!(prod, (tx))
+  let _ := cliente!("{addr}")
+  rx2 <! result
+  result
+main!()"#
+    );
+
+    let (raw, _ty) = eval_src(&src);
+    assert_ne!(raw, DEADLOCK_SENTINEL, "não deve deadlockar");
+    let val = untag_smi(raw);
+    assert_eq!(
+        val, 42,
+        "select misto channel+socket deve disparar braço do channel (42)"
+    );
+}

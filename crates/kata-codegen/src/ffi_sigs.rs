@@ -602,14 +602,17 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
             sig.params.push(AbiParam::new(I64)); // n_handles
             sig.returns.push(AbiParam::new(I64)); // index or sentinel
         }
-        // select_combined: (chan_ptr, n_c, file_ptr, n_f, timeout_ms) -> i64
-        // Retorna índice global: 0..n_c-1 = channel, n_c..n_c+n_f-1 = file.
+        // select_combined: (chan_ptr, n_c, file_ptr, n_f, socket_ptr, n_s, timeout_ms) -> i64
+        // Retorna índice global: 0..n_c-1 = channel, n_c..n_c+n_f-1 = file,
+        // n_c+n_f..n_c+n_f+n_s-1 = socket.
         // -1 = WOULD_BLOCK, -2 = SELECT_TIMEOUT.
         FfiSymbol::SelectCombined => {
             sig.params.push(AbiParam::new(I64)); // chan_handles ptr
             sig.params.push(AbiParam::new(I64)); // n_c
             sig.params.push(AbiParam::new(I64)); // file_handles ptr
             sig.params.push(AbiParam::new(I64)); // n_f
+            sig.params.push(AbiParam::new(I64)); // socket_handles ptr
+            sig.params.push(AbiParam::new(I64)); // n_s
             sig.params.push(AbiParam::new(I64)); // timeout_ms (<=0 = sem timeout)
             sig.returns.push(AbiParam::new(I64)); // global index or sentinel
         }

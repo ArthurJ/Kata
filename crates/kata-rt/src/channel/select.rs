@@ -134,6 +134,8 @@ pub extern "C" fn kata_rt_select_combined(
     n_c: i64,
     file_handles: *const i64,
     n_f: i64,
+    socket_handles: *const i64,
+    n_s: i64,
     timeout_ms: i64,
 ) -> i64 {
     let chan_slice: &[i64] = if !chan_handles.is_null() && n_c > 0 {
@@ -148,13 +150,20 @@ pub extern "C" fn kata_rt_select_combined(
     } else {
         &[]
     };
+    let socket_slice: &[i64] = if !socket_handles.is_null() && n_s > 0 {
+        // SAFETY: contrato FFI — socket_handles aponta para n_s i64s válidos.
+        unsafe { std::slice::from_raw_parts(socket_handles, n_s as usize) }
+    } else {
+        &[]
+    };
 
-    if chan_slice.is_empty() && file_slice.is_empty() {
+    if chan_slice.is_empty() && file_slice.is_empty() && socket_slice.is_empty() {
         return WOULD_BLOCK;
     }
 
     let chan_vec: Vec<i64> = chan_slice.to_vec();
     let file_vec: Vec<i64> = file_slice.to_vec();
+    let socket_vec: Vec<i64> = socket_slice.to_vec();
 
     let deadline = if timeout_ms > 0 {
         Some(std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms as u64))
@@ -175,19 +184,25 @@ pub extern "C" fn kata_rt_select_combined(
             return n_c + file_result; // n_c..n_c+n_f-1
         }
 
-        // 3. Verificar timeout.
+        // 3. Tentar sockets (poll POLLIN|POLLOUT non-blocking).
+        let socket_result = crate::socket::try_select_sockets(socket_slice);
+        if socket_result != crate::socket::SOCKET_WOULD_BLOCK {
+            return n_c + n_f + socket_result; // n_c+n_f..n_c+n_f+n_s-1
+        }
+
+        // 4. Verificar timeout.
         if let Some(dl) = deadline
             && std::time::Instant::now() >= dl
         {
             return SELECT_TIMEOUT;
         }
 
-        // 4. Suspender com ambos os conjuntos de handles.
+        // 5. Suspender com todos os conjuntos de handles.
         let suspended = crate::fiber::with_suspend(|suspend| {
             suspend.suspend(crate::fiber::YieldReason::WaitingOnSelect {
                 channel_handles: chan_vec.clone(),
                 file_handles: file_vec.clone(),
-                socket_handles: Vec::new(),
+                socket_handles: socket_vec.clone(),
                 deadline,
             });
         });
