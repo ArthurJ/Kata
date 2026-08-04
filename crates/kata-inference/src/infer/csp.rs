@@ -250,7 +250,10 @@ pub(crate) fn infer_select(
                         let result_ty =
                             Ty::Generic("Result".to_string(), vec![Ty::Bytes, Ty::text()]);
                         (
-                            TypedReadMode::Chunk(Box::new(Spanned::new(typed_chunk, chunk_size_expr.span))),
+                            TypedReadMode::Chunk(Box::new(Spanned::new(
+                                typed_chunk,
+                                chunk_size_expr.span,
+                            ))),
                             result_ty,
                         )
                     }
