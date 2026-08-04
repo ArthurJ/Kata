@@ -54,6 +54,9 @@ pub(crate) struct SocketInner {
     pub fd: i32,
     pub state: SocketState,
     pub kind: SocketKindRust,
+    /// Endereço do socket — guardado para diagnóstico/debug. Não lido em
+    /// operações de I/O, mas útil para logging futuro.
+    #[allow(dead_code)]
     pub addr: String,
     /// Buffer parcial para readline — acumula bytes até encontrar \n.
     /// Usado apenas por `kata_rt_socket_readline`; `read`/`read_chunk`

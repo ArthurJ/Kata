@@ -103,8 +103,7 @@ fn random_port() -> u16 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_nanos() as u64;
-    let port = 30000 + ((pid ^ ts) % 30000) as u16;
-    port
+    30000 + ((pid ^ ts) % 30000) as u16
 }
 
 // ═══════════════════════════════════════════════════════════════════

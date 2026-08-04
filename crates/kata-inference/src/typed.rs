@@ -434,7 +434,7 @@ pub enum ChannelKind {
 #[derive(Debug, Clone)]
 pub enum TypedReadMode {
     /// `read!(handle, n)` — lê até n bytes. Binding é `Result::(Bytes, Text)`.
-    Chunk(Spanned<TypedExpr>),
+    Chunk(Box<Spanned<TypedExpr>>),
     /// `readline!(handle)` — lê até `\n`. Binding é `Result::(Text, Text)`.
     Line,
 }
