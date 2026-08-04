@@ -806,6 +806,24 @@ executa sem o compilador. `kata repl` mantém bindings entre expressões.
 
 ---
 
+### Pós-Fio 15: Select I/O Combinado
+
+**Status:** Concluído (commit `6601e51`)
+
+**Features:**
+- `select` generalizado para multiplexar canais CSP + file handles simultaneamente
+- FFI única `kata_rt_select_combined` — loop try/suspend/retry com ambos os conjuntos
+- Scheduler com poll unificado (IPC + file FDs) no sleep path
+- `Expr::Block` — suporta `let` intermediário em match arm body indentado
+- Parser do match arm: body same-line + indentado (caso misto)
+- 6 testes E2E (4 select_io + 2 let_in_match)
+
+**Depende de:** Fio 11 (CSP), PRD-file-io (read_chunk + BufReader)
+
+**DoD:** `select` com braços mistos (canal + arquivo) executa sem deadlock. 1361 testes passando.
+
+---
+
 ## Resumo Visual
 
 ```

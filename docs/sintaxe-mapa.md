@@ -292,6 +292,26 @@ assert!(cond, "msg custom")     # 2 args: panic!(msg) se False
 - `channel!`, `queue!(N)`, `broadcast!` são actions que criam canais.
 - **Relações**: `fork!` submete Action a corrotina no scheduler cooperativo single-threaded. `select` multiplexa canais. Escape Analysis rastreia dados enviados por `!>` para alocação heap/`Arc<T>`.
 
+### `select` combinado (Channels + Files)
+
+```kata
+select
+  rx <! msg: echo!(msg)
+  read(file, 4096) <! result:
+    match result
+      Result::Ok chunk: processa!(chunk)
+      Result::Err _: return
+  timeout 5000: echo!(\"timeout\")
+```
+
+- **Braço de canal**: `receiver <! binding: body` — sintaxe existente.
+- **Braço de I/O**: `read(handle, n) <! binding: body` — `handle` é `Ty::File`, `n` é `Int` (bytes por chunk). Binding recebe `Result::(Bytes, Text)`.
+- **`<!` sobrecarregado**: mesmo conceito em ambos — \"dado flui para binding\".
+- **Sem polimorfismo de tipo**: codegen separa braços por tipo em compile-time (arrays de channel handles e file handles separados).
+- **FFI única**: `kata_rt_select_combined(chan_ptr, n_c, file_ptr, n_f, timeout_ms) -> i64`. Retorna índice global: `0..n_c-1` = channel arm, `n_c..n_c+n_f-1` = file arm, `-1` = WOULD_BLOCK, `-2` = SELECT_TIMEOUT.
+- **Inferência**: `infer_select` unifica tipos dos **bodies** dos braços (não tipos dos bindings), permitindo select misto (channel binding `Int` + IoRead binding `Result::(Bytes, Text)`, ambos bodies retornam `Int`).
+- **Relações**: `select` só de files funciona (sem canais). `select` só de canais funciona (sem files). Arquivos regulares nunca bloqueiam (`poll(POLLIN)` retorna pronto imediatamente).
+
 ---
 
 ## Operador `|>` (Pipeline / Composição)
@@ -697,7 +717,7 @@ soma_positiva :: PositiveInt PositiveInt => PositiveInt?
 | `export` | Exporta itens |
 | `as` | Alias de import (`import x as y`) ou de tipo (`data (...) as Nome`, `alias T as Nome`) |
 | `with` | Bloco bottom-up ao final de lambda: computações prévias nomeadas para Guards, e restrições de genéricos |
-| `match` | Pattern matching disponível em ambos os domínios (funções puras e Actions). `otherwise` é obrigatório quando há guards na cláusula e o compilador não consegue provar estaticamente que os braços cobrem todas as variantes possíveis do tipo inspecionado. Sem guards, o body direto dispensa `otherwise`. Em funções puras, cada braço deve retornar um valor (expressão); em Actions, braços podem ser statements. |
+| `match` | Pattern matching disponível em ambos os domínios (funções puras e Actions). `otherwise` é obrigatório quando há guards na cláusula e o compilador não consegue provar estaticamente que os braços cobrem todas as variantes possíveis do tipo inspecionado. Sem guards, o body direto dispensa `otherwise`. Em funções puras, cada braço deve retornar um valor (expressão); em Actions, braços podem ser statements. O body do braço pode ser: (a) uma expressão na mesma linha do `:` (`Pattern: expr`); (b) um bloco indentado com múltiplas statements separadas por StmtSep, onde a última é o valor retornado (`Pattern:\n  stmt1\n  stmt2\n  final_expr`); (c) caso misto — expressão na mesma linha que continua em linhas indentadas (`Pattern: stmt1\n  stmt2\n  final_expr`). Múltiplas statements produzem `Expr::Block`. |
 | `return` | Early return em Actions. Não existe em funções puras. |
 | `if` | **Não existe — invariante absoluta.** Lógica condicional é expressa via pattern matching (que garante exaustividade) e guards (que garantem fallback via `otherwise`). |
 

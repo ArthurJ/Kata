@@ -2,10 +2,11 @@
 
 ## Status
 
-**Status:** 📋 Planejamento (não iniciado)
+**Status:** ✅ Concluído (Fases 1-6)
 **Data:** 2026-08-03
+**Commit:** `6601e51` — `feat(rt,codegen,inference,parser): select combinado (channels + files) com FFI única + Expr::Block`
 **Depende de:** PRD-file-io (File I/O — `read(handle, n)` streaming), Fio 11 (CSP — canais, `select` atual)
-**Pré-requisito:** `read(handle, n)` / `kata_rt_file_read_chunk` implementado (Fase 5 do PRD-file-io)
+**Pré-requisito:** `read(handle, n)` / `kata_rt_file_read_chunk` implementado (Fase 5 do PRD-file-io) ✅
 **Habilita:** Sockets/Pipes como handles de I/O no `select` (futuro)
 
 ## 1. Objetivo
@@ -42,6 +43,23 @@ mais um FD para fazer `poll(POLLIN)`. A generalização de `select` para files
 estabelece o padrão que sockets seguirão.
 
 ## 3. Design
+
+### 3.0. Decisão de Design: Opção A (FFI Única Combinada)
+
+**Decisão fechada:** Uma FFI única `kata_rt_select_combined(chan_ptr, n_c, file_ptr, n_f, timeout_ms) -> i64`
+que tenta channels + files num loop, suspende uma vez com ambos os conjuntos.
+
+Escolhida sobre duas alternativas (B: duas FFIs separadas com codegen combinando; C: módulo
+runtime separado para files) porque:
+- O loop try/suspend/retry é preocupação de runtime, não de codegen
+- Mantém codegen simples (1 chamada + branch chain)
+- Reusa padrão existente de `kata_rt_select`
+- Menos FFIs e menos registro
+- A "modularidade" de C é falsa — channels e files precisam ser tentados/suspensos/resumidos juntos
+
+**Assinatura:** `kata_rt_select_combined(chan_ptr, n_c, file_ptr, n_f, timeout_ms) -> i64`
+- Retorna índice global: `0..n_c-1` = channel arm, `n_c..n_c+n_f-1` = file arm
+- `-1` = WOULD_BLOCK, `-2` = SELECT_TIMEOUT
 
 ### 3.1. Sintaxe — braços mistos de canal e I/O
 
@@ -274,61 +292,58 @@ Funciona — `channel_arms` é vazio, `kata_rt_select` não é chamado, só
 
 ## 5. Fases de implementação
 
-### Fase 0: Pré-requisitos — PENDENTE
+### Fase 0: Pré-requisitos — ✅ Concluído
 
-- `read(handle, n)` / `kata_rt_file_read_chunk` implementado (PRD-file-io Fase 5)
-- `BufReader` persistente em `FileInner` (PRD-file-io Fase 6)
-- Garantir que `FileInner` expõe o FD bruto para `poll` (`as_raw_fd()`)
+- `read(handle, n)` / `kata_rt_file_read_chunk` implementado (PRD-file-io Fase 5) ✅
+- `BufReader` persistente em `FileInner` (PRD-file-io Fase 6) ✅
+- `FileInner` expõe o FD bruto para `poll` via `collect_file_fds` ✅
 
-### Fase 1: AST e parser — PENDENTE
+### Fase 1: AST e parser — ✅ Concluído
 
-- `SelectArm` vira enum com variants `Channel` e `IoRead`
-- Parser: distinguir `read(...) <!` de `expr <!` no braço do select
-- `IoRead` arm: `handle_expr`, `chunk_size_expr`, `bind_name`, `body`
-- Manter compatibilidade: braços só de canal continuam funcionando
+- `SelectArm` vira enum com variants `Channel` e `IoRead` ✅
+- Parser: distinguir `read(...) <!` de `expr <!` no braço do select ✅
+- `IoRead` arm: `handle_expr`, `chunk_size_expr`, `bind_name`, `body` ✅
+- Compatibilidade: braços só de canal continuam funcionando ✅
 
-### Fase 2: Runtime — PENDENTE
+### Fase 2: Runtime — ✅ Concluído
 
-- `kata_rt_select_files(handles, n)` — poll non-blocking nos FDs
-- Extrair FD de `FileInner`: `file_from_handle(h).io.file.as_raw_fd()`
-- Retornar índice do primeiro handle pronto, ou WOULD_BLOCK
-- `YieldReason::WaitingOnSelect` generalizado com `channel_handles` + `file_handles`
-- Scheduler: wake_pass faz `can_recv` (channels) + `poll(POLLIN, 0)` (files)
-- Scheduler: sleep path faz poll unificado (IPC + files) com timeout
+- `kata_rt_select_combined(chan_ptr, n_c, file_ptr, n_f, timeout_ms)` — FFI única combinada ✅
+- `collect_file_fds` em `file.rs` — coleta FDs brutos de file handles ✅
+- `ipc_read_fd` em `channel/ipc.rs` — retorna read_fd bruto de canal IPC ✅
+- Scheduler: sleep path com poll unificado (IPC + file FDs) com timeout ✅
+- Scheduler: poll blocking para file FDs sem deadline ✅
 
-### Fase 3: Codegen — PENDENTE
+### Fase 3: Codegen — ✅ Concluído
 
-- `lower_select` generalizado: separar braços por tipo
-- Alocar dois arrays (channel_handles, file_handles) na arena
-- Chamar `kata_rt_select` e `kata_rt_select_files` separadamente
-- Combinar resultados, mapear índices de volta aos braços originais
-- Branch chain: channel → `channel_recv` + body; io → `file_read_chunk` + body
-- `FfiSymbol::SelectFiles` em `ffi.rs`, assinatura em `ffi_sigs.rs`, registro em `ffi_registry.rs`
+- `lower_select` reescrito: FFI única `kata_rt_select_combined` ✅
+- Branch chain compara `global_idx` (channels: `idx < n_c`; files: `idx >= n_c`) ✅
+- `FfiSymbol::SelectCombined` em `ffi.rs`, assinatura em `ffi_sigs.rs`, registro em `ffi_registry.rs` ✅
+- Cache key para `Block` em `cache_key.rs` ✅
 
-### Fase 4: Inferência — PENDENTE
+### Fase 4: Inferência — ✅ Concluído
 
-- Typecheck de `IoRead` arm: `handle_expr` deve ser `Ty::File`, `chunk_size_expr` deve ser `Ty::Int`
-- Binding recebe `Ty::Result(Box(Bytes), Box(Text))` — mesmo tipo de retorno de `read(handle, n)`
-- Tipo de retorno do `select` é a unificação de todos os braços + timeout_body (já existe)
+- `infer_select` unifica tipos dos **bodies** dos braços (não tipos dos bindings) ✅
+- Permite selects mistos (channel binding `Int` + IoRead binding `Result::(Bytes, Text)`, ambos bodies retornam `Int`) ✅
+- Typecheck de `IoRead` arm: `handle_expr` deve ser `Ty::File`, `chunk_size_expr` deve ser `Ty::Int` ✅
+- Binding recebe `Result::(Bytes, Text)` ✅
 
-### Fase 5: Testes E2E — PENDENTE
+### Fase 5: Testes E2E — ✅ Concluído
 
-- Select misto: canal + arquivo, verificar que ambos braços dispararam
-- Select só de files: dois arquivos, verificar que pelo menos um braço disparou
-- Select com timeout: nenhum handle pronto, timeout expira
-- Select com EOF: arquivo no fim, braço dispara com Err no binding
-- Select com arquivo grande: ler em chunks, verificar streaming
+- `select_io_e2e.rs` — 4 testes: select só-files ✅, select misto ✅, select EOF ✅, select timeout ✅
+- `let_in_match_e2e.rs` — 2 testes: let em match arm indentado ✅, let em match arm same-line + indentado ✅
+- Total: 1361 passed, 0 failed, 5 ignored
 
-### Fase 6: Documentação — PENDENTE
+### Fase 6: Documentação — ✅ Concluído
 
-- `Kata-lang-manual.md` — seção de `select` atualizada com braços de I/O
-- `sintaxe-mapa.md` — adicionar sintaxe `read(handle, n) <! binding`
-- `ROADMAP.md` — adicionar feature select-io
+- `sintaxe-mapa.md` — seção `select` atualizada com braços de I/O ✅
+- `PRD-select-io.md` — status e fases atualizados ✅
+- `ROADMAP.md` — feature select-io adicionada ✅
 
 ## 6. Decisões fechadas
 
 | Decisão | Valor | Justificativa |
 |---|---|---|
+| FFI única combinada | `kata_rt_select_combined` (Opção A) | Loop try/suspend/retry é de runtime; codegen simples com 1 chamada |
 | Sintaxe do braço de I/O | `read(handle, n) <! binding: body` | Explícito, controle de n bytes |
 | `<!` sobrecarregado | Canal e I/O usam `<!` | Mesmo conceito: "dado flui para binding" |
 | Binding de I/O recebe `Result` | `Result::(Bytes, Text)` | Consistente com `read!(handle, n)` fora de select |
@@ -339,6 +354,7 @@ Funciona — `channel_arms` é vazio, `kata_rt_select` não é chamado, só
 | Scheduler generalizado | `WaitingOnSelect` carrega channels + files | Poll unificado no sleep path |
 | `SelectArm` vira enum | Variants `Channel` e `IoRead` | Tipos diferentes de braço |
 | Pré-requisito | `read(handle, n)` implementado | Select I/O precisa de read_chunk |
+| `infer_select` unifica bodies | Tipos dos bodies, não dos bindings | Permite select misto (channel `Int` + IoRead `Result`, bodies `Int`) |
 
 ## 7. Decisões em aberto
 
