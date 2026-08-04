@@ -720,3 +720,200 @@ main!()"#
         "select misto channel+socket deve disparar braço do channel (42)"
     );
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// TCP — readline: linha única
+// ═══════════════════════════════════════════════════════════════════
+
+/// Servidor TCP: aceita conexão, usa `readline!` para ler uma linha,
+/// envia o tamanho da linha de volta via canal IPC. Cliente: conecta,
+/// escreve "hello\n", fecha.
+///
+/// Testa o caso base: uma linha completa enviada em um único write.
+#[serial]
+#[test]
+fn socket_readline_single_line() {
+    let port = random_port();
+    let addr = format!("127.0.0.1:{port}");
+
+    let src = format!(
+        r#"action servidor (addr::Text, tx::Sender::Int) => Unit
+    let result := open!(SocketKind::TCP(addr), SocketMode::Listener)
+    match result
+      Result::Ok listener:
+        let client := listen!(listener)
+        match client
+          Result::Ok conn:
+            let line := readline!(conn)
+            match line
+              Result::Ok text:
+                let n := len text
+                close!(conn)
+                tx !> n
+              Result::Err msg:
+                close!(conn)
+                tx !> -1
+          Result::Err msg: tx !> -2
+      Result::Err msg: tx !> -3
+
+action cliente (addr::Text) => Int
+    let result := open!(SocketKind::TCP(addr), SocketMode::Connected)
+    match result
+      Result::Ok sock:
+        let _ := write!(sock, "hello\n")
+        close!(sock)
+        1
+      Result::Err _: -4
+
+action main => Int
+    let ch := channel!()
+    let tx := ch.0
+    let rx := ch.1
+    fork!(servidor, ("{addr}", tx))
+    let _ := cliente!("{addr}")
+    rx <! result
+    result
+main!()"#
+    );
+
+    let (raw, _ty) = eval_src(&src);
+    assert_ne!(raw, DEADLOCK_SENTINEL, "não deve deadlockar");
+    let val = untag_smi(raw);
+    assert_eq!(
+        val, 5,
+        "readline! deve retornar \"hello\" (5 chars) sem o \\n"
+    );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// TCP — readline: múltiplas linhas
+// ═══════════════════════════════════════════════════════════════════
+
+/// Servidor TCP: aceita conexão, lê duas linhas com `readline!`,
+/// envia o tamanho da segunda linha via canal. Cliente: conecta,
+/// escreve "foo\nbar\n", fecha.
+///
+/// Testa que o buffer parcial persiste entre chamadas de readline!
+/// — a segunda chamada não relê do FD se os bytes já estão no buffer.
+#[serial]
+#[test]
+fn socket_readline_multiple_lines() {
+    let port = random_port();
+    let addr = format!("127.0.0.1:{port}");
+
+    let src = format!(
+        r#"action servidor (addr::Text, tx::Sender::Int) => Unit
+    let result := open!(SocketKind::TCP(addr), SocketMode::Listener)
+    match result
+      Result::Ok listener:
+        let client := listen!(listener)
+        match client
+          Result::Ok conn:
+            let line1 := readline!(conn)
+            match line1
+              Result::Ok t1:
+                let line2 := readline!(conn)
+                match line2
+                  Result::Ok t2:
+                    let n2 := len t2
+                    close!(conn)
+                    tx !> n2
+                  Result::Err msg:
+                    close!(conn)
+                    tx !> -1
+              Result::Err msg:
+                close!(conn)
+                tx !> -2
+          Result::Err msg: tx !> -3
+      Result::Err msg: tx !> -4
+
+action cliente (addr::Text) => Int
+    let result := open!(SocketKind::TCP(addr), SocketMode::Connected)
+    match result
+      Result::Ok sock:
+        let _ := write!(sock, "foo\nbar\n")
+        close!(sock)
+        1
+      Result::Err _: -5
+
+action main => Int
+    let ch := channel!()
+    let tx := ch.0
+    let rx := ch.1
+    fork!(servidor, ("{addr}", tx))
+    let _ := cliente!("{addr}")
+    rx <! result
+    result
+main!()"#
+    );
+
+    let (raw, _ty) = eval_src(&src);
+    assert_ne!(raw, DEADLOCK_SENTINEL, "não deve deadlockar");
+    let val = untag_smi(raw);
+    assert_eq!(
+        val, 3,
+        "segunda readline! deve retornar \"bar\" (3 chars) — buffer parcial persiste"
+    );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// TCP — readline: EOF em linha parcial (sem \n)
+// ═══════════════════════════════════════════════════════════════════
+
+/// Servidor TCP: aceita conexão, faz readline! — o cliente envia
+/// "partial" sem \n e fecha. O servidor deve receber a linha parcial
+/// como Ok("partial") (EOF com dados no buffer).
+#[serial]
+#[test]
+fn socket_readline_eof_partial() {
+    let port = random_port();
+    let addr = format!("127.0.0.1:{port}");
+
+    let src = format!(
+        r#"action servidor (addr::Text, tx::Sender::Int) => Unit
+    let result := open!(SocketKind::TCP(addr), SocketMode::Listener)
+    match result
+      Result::Ok listener:
+        let client := listen!(listener)
+        match client
+          Result::Ok conn:
+            let line := readline!(conn)
+            match line
+              Result::Ok text:
+                let n := len text
+                close!(conn)
+                tx !> n
+              Result::Err msg:
+                close!(conn)
+                tx !> -1
+          Result::Err msg: tx !> -2
+      Result::Err msg: tx !> -3
+
+action cliente (addr::Text) => Int
+    let result := open!(SocketKind::TCP(addr), SocketMode::Connected)
+    match result
+      Result::Ok sock:
+        let _ := write!(sock, "partial")
+        close!(sock)
+        1
+      Result::Err _: -4
+
+action main => Int
+    let ch := channel!()
+    let tx := ch.0
+    let rx := ch.1
+    fork!(servidor, ("{addr}", tx))
+    let _ := cliente!("{addr}")
+    rx <! result
+    result
+main!()"#
+    );
+
+    let (raw, _ty) = eval_src(&src);
+    assert_ne!(raw, DEADLOCK_SENTINEL, "não deve deadlockar");
+    let val = untag_smi(raw);
+    assert_eq!(
+        val, 7,
+        "readline! com EOF deve retornar linha parcial \"partial\" (7 chars)"
+    );
+}
