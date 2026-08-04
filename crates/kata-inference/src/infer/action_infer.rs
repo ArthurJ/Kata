@@ -302,6 +302,7 @@ fn contains_channel_type(ty: &Ty) -> bool {
         | Ty::Sum(_)
         | Ty::Byte
         | Ty::Bytes
-        | Ty::File => false,
+        | Ty::File
+        | Ty::Socket => false,
     }
 }

@@ -220,9 +220,9 @@ pub(crate) fn infer_select(
                 // Typecheck handle_expr — deve ser Ty::File.
                 let typed_handle =
                     infer_expr_hinted(&handle_expr.node, &handle_expr.span, env, ctx, false, None)?;
-                if !matches!(typed_handle.ty, Ty::File) {
+                if !matches!(typed_handle.ty, Ty::File | Ty::Socket) {
                     return Err(MiddleError::TypeMismatch {
-                        expected: "File (handle de I/O)".into(),
+                        expected: "File or Socket (handle de I/O)".into(),
                         found: format!("{}", typed_handle.ty),
                         span: handle_expr.span.into(),
                     });
