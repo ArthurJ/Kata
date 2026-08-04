@@ -560,3 +560,42 @@ action echo (msg::SHOW, f::File) => Unit
     let s := show msg
     let _ := write!(f, s)
     let _ := write!(f, "\n")
+
+# ── Socket I/O ────────────────────────────────────────────────────
+# Socket é um tipo intrínseco (Ty::Socket) — handle opaco para socket
+# TCP ou Unix aberto. Pode ser Listener (passivo) ou Connected (ativo).
+
+enum SocketKind
+    TCP(Text)
+    Unix(Text)
+
+enum SocketMode
+    Listener
+    Connected
+
+@ffi("kata_rt_socket_open")
+action open (kind::SocketKind, mode::SocketMode) => Result::(Socket, Text)
+
+@ffi("kata_rt_socket_listen")
+action listen (listener::Socket) => Result::(Socket, Text)
+
+@ffi("kata_rt_socket_read")
+action read (s::Socket) => Result::(Bytes, Text)
+
+@ffi("kata_rt_socket_read_chunk")
+action read (s::Socket, n::Int) => Result::(Bytes, Text)
+
+@ffi("kata_rt_socket_write_text")
+action write (s::Socket, content::Text) => Result::(Unit, Text)
+
+@ffi("kata_rt_socket_write_bytes")
+action write (s::Socket, content::Bytes) => Result::(Unit, Text)
+
+@ffi("kata_rt_socket_close")
+action close (s::Socket) => Unit
+
+# echo para socket — escreve show(msg) + newline
+action echo (msg::SHOW, s::Socket) => Unit
+    let s_val := show msg
+    let _ := write!(s, s_val)
+    let _ := write!(s, "\n")
