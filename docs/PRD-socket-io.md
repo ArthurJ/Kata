@@ -100,7 +100,7 @@ enum SocketMode
 | Variante | Semântica | Syscalls | Operações válidas |
 |---|---|---|---|
 | `Listener` | Cria listener: binda no endereço e espera conexões | `socket() + bind() + listen()` | `listen!` apenas |
-| `Connected` | Conecta a um endereço remoto | `socket() + connect()` | `read!`, `write!`, `close!` |
+| `Connected` | Conecta a um endereço remoto | `socket() + connect()` | `read!`, `readline!`, `write!`, `close!` |
 
 Não há `Read`/`Write`/`ReadWrite` como em `FileMode` porque:
 
@@ -188,6 +188,7 @@ O runtime valida o modo antes de cada operação:
 |---|---|---|
 | `listen!` (aceitar) | ✅ | ❌ `Err("socket conectado não aceita conexões")` |
 | `read!` | ❌ `Err("socket listener não suporta read")` | ✅ |
+| `readline!` | ❌ `Err("socket listener não suporta readline")` | ✅ |
 | `write!` | ❌ `Err("socket listener não suporta write")` | ✅ |
 
 Isto é análogo a `FileInner` checar `IoMode` antes de `read`/`write`.
@@ -762,7 +763,8 @@ Total: 1372 passed, 0 failed, 5 ignored.
 | Result box: arena bump | root_arena via `arena_alloc` | Sem overhead de ARC |
 | Handle: ponteiro puro | Sem tag scheme | Type system valida |
 | write: FFI separada | `write_text` + `write_bytes` | Text para no null; Bytes tem len |
-| `read` + `read_chunk` | Ambas APIs | Conveniência + streaming |
+| `read` + `read_chunk` + `readline` | Três APIs | Conveniência + streaming + line-based |
+| `readline` em socket | Buffer parcial em `SocketInner.line_buf` | Mesma separação que Go `bufio` / Rust `BufReader` — não misturar com `read`/`read_chunk` |
 | Close no epílogo | `io_handle_vars` generalizado | FD leak se programador esquece close |
 | Close idempotente | Campo `closed` em `SocketInner` | Double-close = no-op |
 | `select` com sockets | Arrays separados (file_arms/socket_arms) | `try_select_files` cast para `FileInner` — array unificado produziria FD lixo |
@@ -780,6 +782,7 @@ Total: 1372 passed, 0 failed, 5 ignored.
 | `socket_connected_listen_fails` | ✅ Corrigido | Teste reescrito sem `channel!()` — main é o servidor, `fork!` do cliente, `listen!(conn)` retorna Err diretamente. Commit `5fbe32f` |
 | `write` em `select` (POLLOUT) | ✅ Verificado — não é bug | Scheduler já usa `POLLIN \| POLLOUT` em `collect_socket_fds`, `try_select_sockets` e `wake_pass`. Comentário stale corrigido. Commit `5fbe32f` |
 | `SO_REUSEADDR` | ✅ Hardcoded em listeners TCP | Decisão 12.2 fechada |
+| `readline` em socket | ✅ Implementado | `readline!(s::Socket) => Result::(Text, Text)` — buffer parcial persistente em `SocketInner.line_buf`. 3 testes E2E |
 | `accept` em `select` | Adiado | Médio — novo tipo de braço no `select` |
 | Pipes anônimos | Adiado | `spawn!` + canais IPC cobrem o caso |
 | `spawn_process!` com pipes | Adiado | — |

@@ -831,16 +831,17 @@ executa sem o compilador. `kata repl` mantém bindings entre expressões.
 **Features:**
 - `Ty::Socket` — tipo opaco intrínseco para sockets TCP e Unix domain
 - `SocketInner` no runtime com FD bruto (non-blocking obrigatório via `O_NONBLOCK`)
-- 7 FFIs: `open`, `listen`, `read`, `read_chunk`, `write_text`, `write_bytes`, `close`
+- 8 FFIs: `open`, `listen`, `read`, `read_chunk`, `readline`, `write_text`, `write_bytes`, `close`
 - `SocketKind` (TCP/Unix) e `SocketMode` (Listener/Connected) enums no prelude
-- 8 actions de socket no prelude (`open`, `listen`, `read`×2, `write`×2, `close`, `echo`)
+- 9 actions de socket no prelude (`open`, `listen`, `read`×2, `readline`, `write`×2, `close`, `echo`)
 - `io_handle_vars` generalizado com `IoHandleKind` (File/Socket) — close automático no epílogo
 - Scheduler cooperativo com `socket_handles` no poll unificado (IPC + files + sockets)
 - `select` com sockets: `lower_select` separa `file_arms`/`socket_arms` por tipo em compile-time
 - `kata_rt_select_combined` estendida com `socket_ptr` + `n_s` params (7 args)
 - `SO_REUSEADDR` hardcoded em listeners TCP
+- `readline` em socket com buffer parcial persistente (`SocketInner.line_buf`)
 - EOF em sockets → `Err("EOF")` (consistente com File)
-- 10 testes E2E (8 passing + 1 `#[ignore]` com race condition documentada + 2 de select com socket)
+- 13 testes E2E (10 passing + 3 de readline + 2 de select com socket)
 
 **Depende de:** Fio 11 (CSP, scheduler cooperativo), PRD-file-io (IoHandle, epílogo), PRD-select-io (select combinado)
 

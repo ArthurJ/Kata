@@ -2685,6 +2685,7 @@ open (kind::SocketKind, mode::SocketMode) => Result::(Socket, Text)
 listen (listener::Socket) => Result::(Socket, Text)
 read (s::Socket) => Result::(Bytes, Text)
 read (s::Socket, n::Int) => Result::(Bytes, Text)
+readline (s::Socket) => Result::(Text, Text)
 write (s::Socket, content::Text) => Result::(Unit, Text)
 write (s::Socket, content::Bytes) => Result::(Unit, Text)
 close (s::Socket) => Unit
@@ -2696,6 +2697,11 @@ close (s::Socket) => Unit
   cliente aceito. O listener continua passivo.
 - **`read!` tem 2 overloads por aridade** — `read(s)` (slurp) e
   `read(s, n)` (chunk de até n bytes). Mesma convenção de File.
+- **`readline!` lê uma linha (até `\n`)** — usa buffer parcial persistente
+  em `SocketInner.line_buf`. TCP não preserva fronteiras de mensagem, então
+  uma linha pode chegar em múltiplos chunks. Não misturar `readline!` com
+  `read!`/`read!(s, n)` no mesmo socket — estas lêem do FD diretamente,
+  ignorando o buffer. Mesma separação que Go `bufio` / Rust `BufReader`.
 - **`write!` tem 2 overloads por tipo** — `Text` (C string) e `Bytes`
   (suporta null bytes). FFIs separadas.
 - **Non-blocking obrigatório** — todo socket é `O_NONBLOCK`. O scheduler
