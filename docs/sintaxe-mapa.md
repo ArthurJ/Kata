@@ -261,6 +261,7 @@ conectar_servidor!()
 - **Argumentos**: Toda Action recebe exatamente uma tupla como argumento (parênteses obrigatórios na chamada). Pode ser tupla vazia (`!()`) para Actions sem parâmetros, ou tupla de N elementos para variadismo.
 - **Relações**:
   - Algumas Actions são builtins do compilador (`fork!`, `panic!`, `assert!`), outras são stdlib (`echo!`), mas todas seguem a mesma sintaxe `!`.
+  - Actions de I/O no prelude: `open!`, `listen!`, `read!`, `write!`, `close!` para File e Socket (ver seção 22.4).
   - Interage com `?` e `|` no tratamento de erro.
   - **First-class**: `worker_a` sem `!()` é uma referência (valor do tipo `Action(Int) => Unit`). `worker_a!(42)` é invocação. Ver secção `Action(Params) => Ret` acima.
 
@@ -292,7 +293,7 @@ assert!(cond, "msg custom")     # 2 args: panic!(msg) se False
 - `channel!`, `queue!(N)`, `broadcast!` são actions que criam canais.
 - **Relações**: `fork!` submete Action a corrotina no scheduler cooperativo single-threaded. `select` multiplexa canais. Escape Analysis rastreia dados enviados por `!>` para alocação heap/`Arc<T>`.
 
-### `select` combinado (Channels + Files)
+### `select` combinado (Channels + Files + Sockets)
 
 ```kata
 select
@@ -301,16 +302,21 @@ select
     match result
       Result::Ok chunk: processa!(chunk)
       Result::Err _: return
+  read(sock, 4096) <! result:
+    match result
+      Result::Ok chunk: handle!(chunk)
+      Result::Err _: return
   timeout 5000: echo!(\"timeout\")
 ```
 
 - **Braço de canal**: `receiver <! binding: body` — sintaxe existente.
-- **Braço de I/O**: `read(handle, n) <! binding: body` — `handle` é `Ty::File`, `n` é `Int` (bytes por chunk). Binding recebe `Result::(Bytes, Text)`.
-- **`<!` sobrecarregado**: mesmo conceito em ambos — \"dado flui para binding\".
-- **Sem polimorfismo de tipo**: codegen separa braços por tipo em compile-time (arrays de channel handles e file handles separados).
-- **FFI única**: `kata_rt_select_combined(chan_ptr, n_c, file_ptr, n_f, timeout_ms) -> i64`. Retorna índice global: `0..n_c-1` = channel arm, `n_c..n_c+n_f-1` = file arm, `-1` = WOULD_BLOCK, `-2` = SELECT_TIMEOUT.
+- **Braço de I/O**: `read(handle, n) <! binding: body` — `handle` é `Ty::File` ou `Ty::Socket`, `n` é `Int` (bytes por chunk). Binding recebe `Result::(Bytes, Text)`.
+- **`<!` sobrecarregado**: mesmo conceito em todos — \"dado flui para binding\".
+- **Sem polimorfismo de tipo**: codegen separa braços por tipo em compile-time em três arrays: `channel_arms`, `file_arms`, `socket_arms`.
+- **FFI única**: `kata_rt_select_combined(chan_ptr, n_c, file_ptr, n_f, socket_ptr, n_s, timeout_ms) -> i64` (7 args). Retorna índice global: `0..n_c-1` = channel arm, `n_c..n_c+n_f-1` = file arm, `n_c+n_f..n_c+n_f+n_s-1` = socket arm, `-1` = WOULD_BLOCK, `-2` = SELECT_TIMEOUT.
+- **Arrays separados**: `try_select_files` faz cast para `FileInner` e `try_select_sockets` para `SocketInner` — layouts de memória diferentes exigem arrays separados (não unificados).
 - **Inferência**: `infer_select` unifica tipos dos **bodies** dos braços (não tipos dos bindings), permitindo select misto (channel binding `Int` + IoRead binding `Result::(Bytes, Text)`, ambos bodies retornam `Int`).
-- **Relações**: `select` só de files funciona (sem canais). `select` só de canais funciona (sem files). Arquivos regulares nunca bloqueiam (`poll(POLLIN)` retorna pronto imediatamente).
+- **Relações**: `select` só de files funciona (sem canais). `select` só de canais funciona (sem files). `select` só de sockets funciona. Arquivos regulares nunca bloqueiam (`poll(POLLIN)` retorna pronto imediatamente). Sockets bloqueiam cooperativamente (scheduler suspende fiber via `poll`).
 
 ---
 

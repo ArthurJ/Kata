@@ -7,7 +7,7 @@
 **Commit:** `6601e51` — `feat(rt,codegen,inference,parser): select combinado (channels + files) com FFI única + Expr::Block`
 **Depende de:** PRD-file-io (File I/O — `read(handle, n)` streaming), Fio 11 (CSP — canais, `select` atual)
 **Pré-requisito:** `read(handle, n)` / `kata_rt_file_read_chunk` implementado (Fase 5 do PRD-file-io) ✅
-**Habilita:** Sockets/Pipes como handles de I/O no `select` (futuro)
+**Habilita:** Sockets/Pipes como handles de I/O no `select` ✅ Implementado (PRD-socket-io)
 
 ## 1. Objetivo
 
@@ -368,13 +368,19 @@ Hoje só `read(handle, n)` é suportado em braços de I/O. Futuramente:
 Por ora, apenas `read(handle, n)`. As outras seguem o mesmo padrão quando
 existirem.
 
-### 7.2. Sockets no select
+### 7.2. Sockets no select — ✅ Implementado
 
-Sockets serão adicionados como `Ty::Socket` no futuro. Quando existirem,
-`select` com `read(socket, n) <! data: body` funcionará naturalmente —
-o codegen trata Socket igual a File (ambos têm FD para poll). A única
-diferença é que `poll(POLLIN)` em socket bloqueia cooperativamente (não
-retorna "pronto" instantaneamente como arquivos regulares).
+Sockets foram adicionados como `Ty::Socket` (PRD-socket-io). O `select` com
+`read(socket, n) <! data: body` funciona — o codegen separa `file_arms` e
+`socket_arms` por tipo em compile-time e passa arrays separados para
+`kata_rt_select_combined` (estendida com `socket_ptr` + `n_s` params, 7 args
+no total). O runtime chama `try_select_sockets` para socket handles (não
+pode usar `try_select_files` — cast para `FileInner` sobre `SocketInner`
+produziria FD lixo por layout de memória diferente).
+
+`poll(POLLIN)` em socket bloqueia cooperativamente (não retorna "pronto"
+instantaneamente como arquivos regulares). 2 testes E2E de select com
+socket passam: `socket_select_with_socket` e `socket_select_misto_channel_socket`.
 
 ### 7.3. Ordem de prioridade entre channels e files
 

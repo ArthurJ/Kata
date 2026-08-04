@@ -824,6 +824,30 @@ executa sem o compilador. `kata repl` mantém bindings entre expressões.
 
 ---
 
+### Pós-Fio 15: Socket I/O
+
+**Status:** ✅ Concluído (commit `14a1d46`)
+
+**Features:**
+- `Ty::Socket` — tipo opaco intrínseco para sockets TCP e Unix domain
+- `SocketInner` no runtime com FD bruto (non-blocking obrigatório via `O_NONBLOCK`)
+- 7 FFIs: `open`, `listen`, `read`, `read_chunk`, `write_text`, `write_bytes`, `close`
+- `SocketKind` (TCP/Unix) e `SocketMode` (Listener/Connected) enums no prelude
+- 8 actions de socket no prelude (`open`, `listen`, `read`×2, `write`×2, `close`, `echo`)
+- `io_handle_vars` generalizado com `IoHandleKind` (File/Socket) — close automático no epílogo
+- Scheduler cooperativo com `socket_handles` no poll unificado (IPC + files + sockets)
+- `select` com sockets: `lower_select` separa `file_arms`/`socket_arms` por tipo em compile-time
+- `kata_rt_select_combined` estendida com `socket_ptr` + `n_s` params (7 args)
+- `SO_REUSEADDR` hardcoded em listeners TCP
+- EOF em sockets → `Err("EOF")` (consistente com File)
+- 10 testes E2E (8 passing + 1 `#[ignore]` com race condition documentada + 2 de select com socket)
+
+**Depende de:** Fio 11 (CSP, scheduler cooperativo), PRD-file-io (IoHandle, epílogo), PRD-select-io (select combinado)
+
+**DoD:** Servidor TCP echo com `fork!` por conexão executa. Unix domain socket roundtrip funciona. `select` misto (canal + socket) executa sem deadlock. 1371 testes passando, 0 falhas, 6 ignored.
+
+---
+
 ## Resumo Visual
 
 ```
@@ -844,6 +868,9 @@ Fio 1  ────────────────────────�
   ├── Fio 12 ✅ (Comptime, @cache)
   │       @comptime call-site, HeapSnapshot, @cache LRU, constant folding
   └── Fio 15 ✅ (AOT, REPL)
+
+Pós-Fio 15: Select I/O ✅ | Socket I/O ✅
+  select canais+files     Ty::Socket, 7 FFIs, select com sockets
 
 Zeladorias removidas — manutenção diária via skill `zeladoria-kata5` substitui zeladorias planejadas.
 ```

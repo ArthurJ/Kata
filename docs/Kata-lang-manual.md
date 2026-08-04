@@ -1553,17 +1553,18 @@ O codegen usa `alloc_for_escape(escape, size, ctx)` que despacha para
 a arena correta. O programador não vê nada disso — é totalmente
 implícito.
 
-#### File handles — a única exceção
+#### I/O handles — a única exceção
 
-File handles são recursos do SO (FDs) que precisam de close
+File e Socket handles são recursos do SO (FDs) que precisam de close
 determinístico — não podem esperar o fim do processo. O modelo:
 
-- `open!` aloca `FileInner` na root_arena via `arena_alloc`.
-- `close!` faz `drop_in_place` do `FileInner` (fecha o FD).
+- `open!` aloca `FileInner` ou `SocketInner` na root_arena via `arena_alloc`.
+- `close!` faz `drop_in_place` (fecha o FD).
 - O epílogo da action fecha automaticamente handles não fechados
-  explicitamente (rastreados via `file_handle_vars` no codegen).
-- O close é **idempotente** — o campo `closed` em `FileInner` garante
-  que double-close (explícito + epílogo) é no-op, não double-free.
+  explicitamente (rastreados via `io_handle_vars` no codegen, generalização
+  de `file_handle_vars` com `IoHandleKind::File`/`IoHandleKind::Socket`).
+- O close é **idempotente** — o campo `closed` em `FileInner`/`SocketInner`
+  garante que double-close (explícito + epílogo) é no-op, não double-free.
 
 Todos os outros valores (Bytes, Text, Result boxes, listas, structs,
 tuplas) são arena-allocated sem cleanup individual. A arena é
@@ -2659,12 +2660,72 @@ No domínio impuro das Actions, o compilador fornece `unwrap_or_panic!(Result
 "Mensagem")`. Desempacota o valor em caso de sucesso ou aciona `panic!`,
 registrando o rastro no escalonador.
 
+### 22.4. Socket I/O
+
+`Socket` é um tipo opaco intrínseco (`Ty::Socket`) — handle para socket
+TCP ou Unix domain aberto. O usuário não enxerga fields nem constrói
+`Socket` diretamente; o único modo de obter um é via `open!` ou `listen!`.
+
+**Enums do prelude:**
+
+```kata
+enum SocketKind
+    TCP(Text)      # payload = endereço "host:port"
+    Unix(Text)     # payload = path do socket file
+
+enum SocketMode
+    Listener       # open! → bind + listen → socket passivo
+    Connected      # open! → connect → socket ativo (full-duplex)
+```
+
+**Actions de socket no prelude:**
+
+```kata
+open (kind::SocketKind, mode::SocketMode) => Result::(Socket, Text)
+listen (listener::Socket) => Result::(Socket, Text)
+read (s::Socket) => Result::(Bytes, Text)
+read (s::Socket, n::Int) => Result::(Bytes, Text)
+write (s::Socket, content::Text) => Result::(Unit, Text)
+write (s::Socket, content::Bytes) => Result::(Unit, Text)
+close (s::Socket) => Unit
+```
+
+- **`open!` despacha por kind × mode** (4 paths: TCP listener, TCP
+  connected, Unix listener, Unix connected).
+- **`listen!` opera sobre listener** — retorna socket `Connected` do
+  cliente aceito. O listener continua passivo.
+- **`read!` tem 2 overloads por aridade** — `read(s)` (slurp) e
+  `read(s, n)` (chunk de até n bytes). Mesma convenção de File.
+- **`write!` tem 2 overloads por tipo** — `Text` (C string) e `Bytes`
+  (suporta null bytes). FFIs separadas.
+- **Non-blocking obrigatório** — todo socket é `O_NONBLOCK`. O scheduler
+  cooperativo gerencia o bloqueio via `poll` + suspensão de fiber.
+- **`SO_REUSEADDR` hardcoded** em listeners TCP.
+- **EOF em sockets → `Err("EOF")`** — consistente com File.
+- **Close no epílogo** — `io_handle_vars` rastreia sockets abertos;
+  o epílogo despacha `kata_rt_socket_close` por `IoHandleKind::Socket`.
+
+**Distinção Listener vs Connected:**
+
+| Operação | `Listener` | `Connected` |
+|---|---|---|
+| `listen!` (aceitar) | ✅ | ❌ `Err` |
+| `read!` | ❌ `Err` | ✅ |
+| `write!` | ❌ `Err` | ✅ |
+
 ## 23. Orquestração Não-Determinística (`select`)
 
-`select` multiplexa operações de canais. A Action cede ao scheduler e é
-acordada quando um evento se concretiza. Os canais são verificados **em ordem**
-(primeiro pronto é selecionado) — não há aleatoriedade. `timeout N` (ms) como
-válvula de escape.
+`select` multiplexa operações de canais, files e sockets. A Action cede ao
+scheduler e é acordada quando um evento se concretiza. Os canais são
+verificados **em ordem** (primeiro pronto é selecionado) — não há
+aleatoriedade. `timeout N` (ms) como válvula de escape.
+
+Braços de I/O (`read(handle, n) <! binding: body`) aceitam `File` ou
+`Socket` como handle. O codegen separa braços por tipo em compile-time
+(`channel_arms`, `file_arms`, `socket_arms`) e passa arrays separados
+para `kata_rt_select_combined` (7 args: chan_ptr, n_c, file_ptr, n_f,
+socket_ptr, n_s, timeout_ms). Sockets bloqueiam cooperativamente via
+`poll(POLLIN)` — diferente de arquivos regulares (sempre prontos).
 
 ## 24. Anatomia do Runtime (`kata-rt`) e a Ponte C-ABI
 
