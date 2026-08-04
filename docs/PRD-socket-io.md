@@ -726,11 +726,11 @@ momento. Serão revisitados quando houver caso de uso real.
 - `socket_listener_read_fails` ✅
 - `socket_open_invalid_addr_fails` ✅
 - `socket_connect_refused_fails` ✅
-- `socket_connected_listen_fails` ⏸️ `#[ignore]` — race condition documentada
+- `socket_connected_listen_fails` ✅ (corrigido — main é servidor, fork! cliente, sem canal)
 - `socket_select_with_socket` ✅ (NOVO)
 - `socket_select_misto_channel_socket` ✅ (NOVO)
 
-Total: 1371 passed, 0 failed, 6 ignored.
+Total: 1372 passed, 0 failed, 5 ignored.
 
 ### Fase 6: Documentação — ✅ Concluído
 
@@ -777,7 +777,8 @@ Total: 1371 passed, 0 failed, 6 ignored.
 | `io_handle_vars` generalizado | ✅ Implementado | Commit `6784b24` |
 | Scheduler com socket FDs no poll unificado | ✅ Implementado | Commit `d10b338` |
 | `select` com sockets (arrays separados) | ✅ Implementado | Commit `14a1d46` |
-| `socket_connected_listen_fails` | ⏸️ `#[ignore]` | Race condition documentada — tx !> -1 bloqueia antes do main chegar em rx <! result |
+| `socket_connected_listen_fails` | ✅ Corrigido | Teste reescrito sem `channel!()` — main é o servidor, `fork!` do cliente, `listen!(conn)` retorna Err diretamente. Commit `5fbe32f` |
+| `write` em `select` (POLLOUT) | ✅ Verificado — não é bug | Scheduler já usa `POLLIN \| POLLOUT` em `collect_socket_fds`, `try_select_sockets` e `wake_pass`. Comentário stale corrigido. Commit `5fbe32f` |
 | `SO_REUSEADDR` | ✅ Hardcoded em listeners TCP | Decisão 12.2 fechada |
 | `accept` em `select` | Adiado | Médio — novo tipo de braço no `select` |
 | Pipes anônimos | Adiado | `spawn!` + canais IPC cobrem o caso |
