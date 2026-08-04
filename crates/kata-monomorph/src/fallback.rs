@@ -9,7 +9,7 @@
 
 use kata_ast::Spanned;
 use kata_core::ty::Ty;
-use kata_inference::{FusedStage, TypedExpr, TypedExprKind};
+use kata_inference::{FusedStage, TypedExpr, TypedExprKind, TypedSelectArm};
 
 use crate::MonoModule;
 
@@ -218,8 +218,22 @@ fn fallback_in_expr(expr_span: &mut Spanned<TypedExpr>) {
             timeout_body,
         } => {
             for arm in arms {
-                fallback_in_expr(&mut arm.channel);
-                fallback_in_expr(&mut arm.body);
+                match arm {
+                    TypedSelectArm::Channel { channel, body, .. } => {
+                        fallback_in_expr(channel);
+                        fallback_in_expr(body);
+                    }
+                    TypedSelectArm::IoRead {
+                        handle_expr,
+                        chunk_size_expr,
+                        body,
+                        ..
+                    } => {
+                        fallback_in_expr(handle_expr);
+                        fallback_in_expr(chunk_size_expr);
+                        fallback_in_expr(body);
+                    }
+                }
             }
             if let Some(tm) = timeout_ms {
                 fallback_in_expr(tm);
@@ -257,5 +271,11 @@ fn fallback_in_expr(expr_span: &mut Spanned<TypedExpr>) {
         TypedExprKind::Comptime { expr } => fallback_in_expr(expr),
         // HeapSnapshot — folha.
         TypedExprKind::HeapSnapshot { .. } => {}
+        // Block — recursão em cada stmt.
+        TypedExprKind::Block { stmts } => {
+            for stmt in stmts {
+                fallback_in_expr(stmt);
+            }
+        }
     }
 }

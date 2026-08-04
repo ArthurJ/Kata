@@ -671,5 +671,18 @@ pub(crate) fn lower_expr(
                 Ok(base_ptr)
             }
         }
+        // ── Block: sequência de expressões ──
+        // Lowera cada statement em sequência. O resultado é o valor
+        // da última expressão. Statements intermediárias (let, etc.)
+        // produzem side-effects (def_var) que ficam disponíveis para
+        // as seguintes.
+        TypedExprKind::Block { stmts } => {
+            let mut last_val = ctx.builder.ins().iconst(I64, 0); // Unit fallback
+            for stmt in stmts {
+                ctx.emitted_tail_call = false;
+                last_val = lower_expr(&stmt.node, ctx)?;
+            }
+            Ok(last_val)
+        }
     }
 }

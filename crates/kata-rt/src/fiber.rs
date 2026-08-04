@@ -58,9 +58,13 @@ pub(crate) enum YieldReason {
     WaitingOnChannel(i64),
     /// Fiber bloqueou esperando espaço em canal (send). `i64` = handle do canal.
     WaitingOnChannelSend(i64),
-    /// Fiber bloqueou em select. `Vec<i64>` = handles, `Option<Instant>` =
-    /// deadline de timeout (None = sem timeout, espera indefinidamente).
-    WaitingOnSelect(Vec<i64>, Option<std::time::Instant>),
+    /// Fiber bloqueou em select. Carrega handles de canal e file separados.
+    /// `deadline` de timeout (None = sem timeout, espera indefinidamente).
+    WaitingOnSelect {
+        channel_handles: Vec<i64>,
+        file_handles: Vec<i64>,
+        deadline: Option<std::time::Instant>,
+    },
     /// Fiber fez sleep cooperativo. `Instant` = deadline para acordar.
     Sleep(std::time::Instant),
     /// Timeout de teste expirado (`@test(timeout: N)`). O fiber estava em

@@ -274,6 +274,14 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
         rt::kata_rt_channel_recv as *const u8,
     );
     builder.symbol("kata_rt_select", rt::kata_rt_select as *const u8);
+    builder.symbol(
+        "kata_rt_select_files",
+        rt::kata_rt_select_files as *const u8,
+    );
+    builder.symbol(
+        "kata_rt_select_combined",
+        rt::kata_rt_select_combined as *const u8,
+    );
     // Log
     builder.symbol("kata_rt_log_publish", rt::kata_rt_log_publish as *const u8);
     builder.symbol("kata_rt_log_recv", rt::kata_rt_log_recv as *const u8);
@@ -537,6 +545,8 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         ChannelSend,
         ChannelRecv,
         ChannelSelect,
+        SelectFiles,
+        SelectCombined,
         // Log
         LogPublish,
         LogRecv,

@@ -528,19 +528,29 @@ pub(crate) fn lower_spawn(
 }
 
 /// Lowera `TypedExprKind::Select` — multiplexação de recebimento de canais
-/// com timeout opcional.
+/// e leitura de I/O, com timeout opcional.
 ///
 /// Estrutura do lowering:
 ///
-/// 1. Lowerar cada `arm.channel` → array de handles na arena (N * 8 bytes)
-/// 2. Lowerar `timeout_ms` se presente (iconst -1 se ausente)
-/// 3. Chamar `kata_rt_select(handles_ptr, N, timeout_ms)` → idx (i64)
-/// 4. Branch chain: `if idx == 0 { arm_0 } else if idx == 1 { arm_1 } ...`
-///    - Cada braço: `kata_rt_channel_recv(handles[i])` → binding → body
-///    - Se `idx == -2` (SELECT_TIMEOUT): lowerar `timeout_body` (se presente)
-/// 5. cont_block junta o resultado de todos os braços
+/// 1. Separar arms em channel_arms e io_arms (preservando o índice original).
+/// 2. Se há channel arms: alocar array de N_c handles na arena, lowerar cada
+///    `arm.channel`, store no array, chamar `kata_rt_select(handles_ptr,
+///    N_c, timeout_ms)` → `channel_idx` (i64).
+/// 3. Se há io arms: alocar array de N_f handles na arena, lowerar cada
+///    `arm.handle_expr`, store no array, chamar
+///    `kata_rt_select_files(handles_ptr, N_f)` → `file_idx` (i64).
+/// 4. Branch chain na ordem original (de cima para baixo):
+///    - Para cada braço i:
+///      - Se Channel na posição j de channel_arms: `channel_idx == j` →
+///        `kata_rt_channel_recv(handle)` → binding → body.
+///      - Se IoRead na posição j de io_arms: `file_idx == j` →
+///        `kata_rt_file_read_chunk(handle, chunk_size_untagged)` → binding
+///        (Result) → body.
+///    - Se `channel_idx == -2` (SELECT_TIMEOUT): lowerar `timeout_body`.
+/// 5. `cont_block` junta o resultado de todos os braços.
 ///
 /// O tipo de retorno é o tipo unificado de todos os braços e do timeout_body.
+#[allow(clippy::type_complexity)]
 pub(crate) fn lower_select(
     expr: &TypedExpr,
     arms: &[TypedSelectArm],
@@ -548,62 +558,145 @@ pub(crate) fn lower_select(
     timeout_body: &Option<Box<kata_ast::Spanned<TypedExpr>>>,
     ctx: &mut LowerCtx,
 ) -> Result<cranelift_codegen::ir::Value, super::CodegenError> {
-    let n_arms = arms.len() as i64;
+    use kata_inference::TypedSelectArm;
+
     let ret_clif = super::resolve_clif_ty(&expr.ty, ctx.struct_registry);
 
-    // Arena para alocar o array de handles — fiber_arena (consistente com
-    // channel_create: o array é efêmero, vive apenas durante o select).
+    // Arena para alocar os arrays de handles — fiber_arena (consistente com
+    // channel_create: os arrays são efêmeros, vivem apenas durante o select).
     let arena = ctx
         .fiber_arena
         .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
 
-    // 1. Alocar array de N handles na arena (N * 8 bytes).
-    let array_size = ctx.builder.ins().iconst(I64, n_arms * 8);
     let alloc_fref = ctx
         .ffi_refs
         .get("kata_rt_arena_alloc")
         .copied()
         .ok_or_else(|| super::CodegenError::FfiSymbolNotFound("kata_rt_arena_alloc".into()))?;
-    let alloc_inst = ctx.builder.ins().call(alloc_fref, &[arena, array_size]);
-    let handles_ptr = ctx.builder.inst_results(alloc_inst)[0];
 
-    // 2. Lowerar cada arm.channel e store no array.
     let flags = MemFlagsData::new();
-    let mut handle_values: Vec<cranelift_codegen::ir::Value> = Vec::with_capacity(arms.len());
+
+    // ── 1. Separar arms em channel_arms e io_arms (com índice original). ──
+    // channel_arms[j] = (orig_idx, &Channel{...})
+    // io_arms[j]      = (orig_idx, &IoRead{...})
+    let mut channel_arms: Vec<(
+        usize,
+        &kata_ast::Spanned<TypedExpr>,
+        &Ty,
+        &String,
+        &kata_ast::Spanned<TypedExpr>,
+    )> = Vec::new();
+    let mut io_arms: Vec<(
+        usize,
+        &kata_ast::Spanned<TypedExpr>,
+        &kata_ast::Spanned<TypedExpr>,
+        &Ty,
+        &String,
+        &kata_ast::Spanned<TypedExpr>,
+    )> = Vec::new();
     for (i, arm) in arms.iter().enumerate() {
-        let handle = super::expr::lower_expr(&arm.channel.node, ctx)?;
-        handle_values.push(handle);
-        let offset = (i as i32) * 8;
-        ctx.builder.ins().store(flags, handle, handles_ptr, offset);
+        match arm {
+            TypedSelectArm::Channel {
+                channel,
+                recv_ty,
+                bind_name,
+                body,
+            } => {
+                channel_arms.push((i, channel, recv_ty, bind_name, body));
+            }
+            TypedSelectArm::IoRead {
+                handle_expr,
+                chunk_size_expr,
+                bind_ty,
+                bind_name,
+                body,
+            } => {
+                io_arms.push((i, handle_expr, chunk_size_expr, bind_ty, bind_name, body));
+            }
+        }
     }
 
-    // 3. Lowerar timeout_ms (se presente) ou -1 (sem timeout).
-    //    O timeout_ms é uma TypedExpr Int — lower_expr retorna SMI-tagged.
-    //    A FFI espera o valor cru em ms, então fazemos untag: val >> 1.
+    let n_c = channel_arms.len() as i64;
+    let n_f = io_arms.len() as i64;
+
+    // ── 2. Alocar arrays de handles para channels e files. ──
+    // channel_handle_values[j] = valor CLIF do handle do j-ésimo channel arm.
+    let mut channel_handle_values: Vec<cranelift_codegen::ir::Value> = Vec::new();
+    // io_handle_values[j]  = valor CLIF do handle do j-ésimo io arm.
+    let mut io_handle_values: Vec<cranelift_codegen::ir::Value> = Vec::new();
+    // io_chunk_values[j]   = valor CLIF SMI-tagged do chunk_size do j-ésimo io arm.
+    let mut io_chunk_values: Vec<cranelift_codegen::ir::Value> = Vec::new();
+
+    // Alocar array de channel handles (se houver channel arms).
+    let chan_ptr = if !channel_arms.is_empty() {
+        let array_size = ctx.builder.ins().iconst(I64, n_c * 8);
+        let alloc_inst = ctx.builder.ins().call(alloc_fref, &[arena, array_size]);
+        let ptr = ctx.builder.inst_results(alloc_inst)[0];
+
+        for (j, (_orig, channel, _recv_ty, _bind_name, _body)) in channel_arms.iter().enumerate() {
+            let handle = super::expr::lower_expr(&channel.node, ctx)?;
+            channel_handle_values.push(handle);
+            let offset = (j as i32) * 8;
+            ctx.builder.ins().store(flags, handle, ptr, offset);
+        }
+        ptr
+    } else {
+        ctx.builder.ins().iconst(I64, 0) // null ptr
+    };
+
+    // Alocar array de file handles (se houver io arms).
+    let file_ptr = if !io_arms.is_empty() {
+        let array_size = ctx.builder.ins().iconst(I64, n_f * 8);
+        let alloc_inst = ctx.builder.ins().call(alloc_fref, &[arena, array_size]);
+        let ptr = ctx.builder.inst_results(alloc_inst)[0];
+
+        for (j, (_orig, handle_expr, chunk_size_expr, _bind_ty, _bind_name, _body)) in
+            io_arms.iter().enumerate()
+        {
+            let handle = super::expr::lower_expr(&handle_expr.node, ctx)?;
+            io_handle_values.push(handle);
+            let offset = (j as i32) * 8;
+            ctx.builder.ins().store(flags, handle, ptr, offset);
+
+            // chunk_size_expr: lowerar e guardar (SMI-tagged).
+            let chunk_smi = super::expr::lower_expr(&chunk_size_expr.node, ctx)?;
+            io_chunk_values.push(chunk_smi);
+        }
+        ptr
+    } else {
+        ctx.builder.ins().iconst(I64, 0) // null ptr
+    };
+
+    // ── 3. Lowerar timeout_ms (se presente) ou -1 (sem timeout). ──
+    // O timeout_ms é uma TypedExpr Int — lower_expr retorna SMI-tagged.
+    // A FFI espera o valor cru em ms, então fazemos untag: val >> 1.
     let timeout_val = if let Some(tm) = timeout_ms {
         let smi_val = super::expr::lower_expr(&tm.node, ctx)?;
-        // Untag SMI: (val << 1 | 1) >> 1 = val. Para SMIs positivos (timeout
-        // sempre positivo), ushr_imm é seguro.
+        // Untag SMI: ushr_imm por 1. Para SMIs positivos (timeout sempre
+        // positivo), é seguro.
         ctx.builder.ins().ushr_imm(smi_val, 1)
     } else {
         ctx.builder.ins().iconst(I64, -1)
     };
 
-    // 4. Chamar kata_rt_select(handles_ptr, N, timeout_ms) → idx.
+    // ── 4. Chamar kata_rt_select_combined(chan_ptr, n_c, file_ptr, n_f, timeout_ms). ──
+    // Retorna índice global: 0..n_c-1 = channel j, n_c..n_c+n_f-1 = file j.
+    // -1 = WOULD_BLOCK, -2 = SELECT_TIMEOUT.
     let select_fref = ctx
         .ffi_refs
-        .get("kata_rt_select")
+        .get("kata_rt_select_combined")
         .copied()
-        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound("kata_rt_select".into()))?;
-    let n_val = ctx.builder.ins().iconst(I64, n_arms);
-    let select_inst = ctx
-        .builder
-        .ins()
-        .call(select_fref, &[handles_ptr, n_val, timeout_val]);
-    let idx = ctx.builder.inst_results(select_inst)[0];
+        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound("kata_rt_select_combined".into()))?;
+    let n_c_val = ctx.builder.ins().iconst(I64, n_c);
+    let n_f_val = ctx.builder.ins().iconst(I64, n_f);
+    let select_inst = ctx.builder.ins().call(
+        select_fref,
+        &[chan_ptr, n_c_val, file_ptr, n_f_val, timeout_val],
+    );
+    let global_idx = ctx.builder.inst_results(select_inst)[0];
 
-    // 5. Branch chain: dispatch por índice.
-    //    cont_block recebe o resultado de qualquer braço.
+    // ── 4. Branch chain na ordem original (de cima para baixo). ──
+    // cont_block recebe o resultado de qualquer braço.
     let cont_block = ctx.builder.create_block();
     ctx.builder.append_block_param(cont_block, ret_clif);
 
@@ -611,71 +704,157 @@ pub(crate) fn lower_select(
     ctx.builder.ins().jump(next_test_block, &[]);
     ctx.builder.seal_block(next_test_block);
 
-    // Braços de canal: idx == 0, idx == 1, ...
-    for (i, arm) in arms.iter().enumerate() {
+    // Índices relativos dentro de cada sub-lista, rastreados enquanto
+    // percorremos os arms na ordem original.
+    let mut chan_seen = 0usize;
+    let mut io_seen = 0usize;
+
+    for arm in arms.iter() {
         ctx.builder.switch_to_block(next_test_block);
 
         let body_block = ctx.builder.create_block();
         next_test_block = ctx.builder.create_block();
 
-        // Comparar idx == i.
-        let expected = ctx.builder.ins().iconst(I64, i as i64);
-        let is_this = ctx.builder.ins().icmp(
-            cranelift_codegen::ir::condcodes::IntCC::Equal,
-            idx,
-            expected,
-        );
-        ctx.builder
-            .ins()
-            .brif(is_this, body_block, &[], next_test_block, &[]);
-        ctx.builder.seal_block(next_test_block);
-        ctx.builder.seal_block(body_block);
+        match arm {
+            TypedSelectArm::Channel {
+                channel: _,
+                recv_ty,
+                bind_name,
+                body,
+            } => {
+                let j = chan_seen;
+                chan_seen += 1;
 
-        // No body_block: recv do canal i, criar binding, lowerar body.
-        ctx.builder.switch_to_block(body_block);
-        ctx.emitted_tail_call = false;
+                // Comparar global_idx == j (channel arms são 0..n_c-1).
+                let expected = ctx.builder.ins().iconst(I64, j as i64);
+                let is_this = ctx.builder.ins().icmp(
+                    cranelift_codegen::ir::condcodes::IntCC::Equal,
+                    global_idx,
+                    expected,
+                );
+                ctx.builder
+                    .ins()
+                    .brif(is_this, body_block, &[], next_test_block, &[]);
+                ctx.builder.seal_block(next_test_block);
+                ctx.builder.seal_block(body_block);
 
-        let recv_fref = ctx
-            .ffi_refs
-            .get("kata_rt_channel_recv")
-            .copied()
-            .ok_or_else(|| super::CodegenError::FfiSymbolNotFound("kata_rt_channel_recv".into()))?;
-        let recv_inst = ctx.builder.ins().call(recv_fref, &[handle_values[i]]);
-        let recv_val = ctx.builder.inst_results(recv_inst)[0];
+                // body_block: recv do canal j, binding, lowerar body.
+                ctx.builder.switch_to_block(body_block);
+                ctx.emitted_tail_call = false;
 
-        // Criar binding do braço (igual lower_channel_recv).
-        let clif_ty = super::resolve_clif_ty(&arm.recv_ty, ctx.struct_registry);
-        let var = ctx.new_var(&arm.bind_name, clif_ty);
-        ctx.builder.def_var(var, recv_val);
+                let recv_fref = ctx
+                    .ffi_refs
+                    .get("kata_rt_channel_recv")
+                    .copied()
+                    .ok_or_else(|| {
+                        super::CodegenError::FfiSymbolNotFound("kata_rt_channel_recv".into())
+                    })?;
+                let recv_inst = ctx
+                    .builder
+                    .ins()
+                    .call(recv_fref, &[channel_handle_values[j]]);
+                let recv_val = ctx.builder.inst_results(recv_inst)[0];
 
-        // Lowerar body do braço.
-        let body_val = super::expr::lower_expr(&arm.body.node, ctx)?;
+                // Binding do braço (igual lower_channel_recv).
+                let clif_ty = super::resolve_clif_ty(recv_ty, ctx.struct_registry);
+                let var = ctx.new_var(bind_name, clif_ty);
+                ctx.builder.def_var(var, recv_val);
 
-        let is_terminator = matches!(
-            arm.body.node.kind,
-            TypedExprKind::Break | TypedExprKind::Continue | TypedExprKind::Return(_)
-        );
-        if !is_terminator && !ctx.emitted_tail_call {
-            ctx.builder.ins().jump(
-                cont_block,
-                &[cranelift_codegen::ir::BlockArg::Value(body_val)],
-            );
+                // Lowerar body.
+                let body_val = super::expr::lower_expr(&body.node, ctx)?;
+
+                let is_terminator = matches!(
+                    body.node.kind,
+                    TypedExprKind::Break | TypedExprKind::Continue | TypedExprKind::Return(_)
+                );
+                if !is_terminator && !ctx.emitted_tail_call {
+                    ctx.builder.ins().jump(
+                        cont_block,
+                        &[cranelift_codegen::ir::BlockArg::Value(body_val)],
+                    );
+                }
+            }
+            TypedSelectArm::IoRead {
+                handle_expr: _,
+                chunk_size_expr: _,
+                bind_ty,
+                bind_name,
+                body,
+            } => {
+                let j = io_seen;
+                io_seen += 1;
+
+                // Comparar global_idx == n_c + j (io arms são n_c..n_c+n_f-1).
+                let expected = ctx.builder.ins().iconst(I64, n_c + j as i64);
+                let is_this = ctx.builder.ins().icmp(
+                    cranelift_codegen::ir::condcodes::IntCC::Equal,
+                    global_idx,
+                    expected,
+                );
+                ctx.builder
+                    .ins()
+                    .brif(is_this, body_block, &[], next_test_block, &[]);
+                ctx.builder.seal_block(next_test_block);
+                ctx.builder.seal_block(body_block);
+
+                // body_block: file_read_chunk(handle, chunk_size_untagged),
+                // binding (Result), lowerar body.
+                ctx.builder.switch_to_block(body_block);
+                ctx.emitted_tail_call = false;
+
+                // Untag SMI do chunk_size: val >> 1.
+                let chunk_smi = io_chunk_values[j];
+                let chunk_untagged = ctx.builder.ins().ushr_imm(chunk_smi, 1);
+
+                let read_fref = ctx
+                    .ffi_refs
+                    .get("kata_rt_file_read_chunk")
+                    .copied()
+                    .ok_or_else(|| {
+                        super::CodegenError::FfiSymbolNotFound("kata_rt_file_read_chunk".into())
+                    })?;
+                let read_inst = ctx
+                    .builder
+                    .ins()
+                    .call(read_fref, &[io_handle_values[j], chunk_untagged]);
+                let result_box_ptr = ctx.builder.inst_results(read_inst)[0];
+
+                // Binding do braço: bind_ty é o tipo Result.
+                let clif_ty = super::resolve_clif_ty(bind_ty, ctx.struct_registry);
+                let var = ctx.new_var(bind_name, clif_ty);
+                ctx.builder.def_var(var, result_box_ptr);
+
+                // Lowerar body.
+                let body_val = super::expr::lower_expr(&body.node, ctx)?;
+
+                let is_terminator = matches!(
+                    body.node.kind,
+                    TypedExprKind::Break | TypedExprKind::Continue | TypedExprKind::Return(_)
+                );
+                if !is_terminator && !ctx.emitted_tail_call {
+                    ctx.builder.ins().jump(
+                        cont_block,
+                        &[cranelift_codegen::ir::BlockArg::Value(body_val)],
+                    );
+                }
+            }
         }
     }
 
-    // Último braço: timeout (idx == -2) se timeout_body presente,
-    // ou trap se não tem timeout (não deveria acontecer em código válido).
+    // ── 5. Timeout / trap no final do branch chain. ──
+    // global_idx == -2 (SELECT_TIMEOUT) → timeout_body.
+    // Se nenhum braço match e não é timeout → trap (impossível em código válido).
     ctx.builder.switch_to_block(next_test_block);
 
     if let Some(tb) = timeout_body {
         let timeout_block = ctx.builder.create_block();
         let trap_block = ctx.builder.create_block();
 
-        // idx == -2 (SELECT_TIMEOUT).
+        // global_idx == -2 (SELECT_TIMEOUT).
         let timeout_sentinel = ctx.builder.ins().iconst(I64, -2);
         let is_timeout = ctx.builder.ins().icmp(
             cranelift_codegen::ir::condcodes::IntCC::Equal,
-            idx,
+            global_idx,
             timeout_sentinel,
         );
         ctx.builder
@@ -706,8 +885,7 @@ pub(crate) fn lower_select(
             .ins()
             .trap(cranelift_codegen::ir::TrapCode::user(1).expect("trap code 1 é sempre válido"));
     } else {
-        // Sem timeout_body: idx == -2 não deveria acontecer (select sem
-        // timeout não retorna -2). Trap por segurança.
+        // Sem timeout_body: idx == -2 não deveria acontecer. Trap por segurança.
         ctx.builder
             .ins()
             .trap(cranelift_codegen::ir::TrapCode::user(1).expect("trap code 1 é sempre válido"));

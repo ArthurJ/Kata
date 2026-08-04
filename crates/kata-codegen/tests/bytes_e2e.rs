@@ -5,6 +5,8 @@
 //! bitwise (and/or/xor/not), conversões (int/byte/bytes),
 //! Text indexável (at/len/slice), Text ↔ Bytes.
 
+#![allow(non_snake_case)]
+
 use kata_codegen::jit_eval;
 use kata_core::ty::Ty;
 use kata_inference::infer_module;

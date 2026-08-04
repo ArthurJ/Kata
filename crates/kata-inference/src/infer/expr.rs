@@ -635,6 +635,20 @@ pub(crate) fn infer_expr_hinted(
                 },
             )
         }
+        // ── Block: sequência de expressões —──────────────────
+        // Usado em match arm body indentado com múltiplas statements.
+        // Cada statement é inferida em sequência no mesmo escopo.
+        // O resultado é a última expressão.
+        Expr::Block { stmts } => {
+            let mut typed_stmts: Vec<Spanned<TypedExpr>> = Vec::new();
+            let mut last_ty = Ty::Unit;
+            for stmt in stmts {
+                let typed_stmt = infer_expr(&stmt.node, &stmt.span, env, ctx, tail_pos)?;
+                last_ty = typed_stmt.ty.clone();
+                typed_stmts.push(Spanned::new(typed_stmt, stmt.span));
+            }
+            (last_ty, TypedExprKind::Block { stmts: typed_stmts })
+        }
     };
 
     // Deriva EscapeTarget de tail_pos + contexto (Action vs função pura/entry).

@@ -38,8 +38,9 @@ use crate::arena::{
     kata_rt_arena_create, kata_rt_arena_create_tracked, kata_rt_arena_destroy,
     set_root_arena_handle,
 };
-use crate::channel::{block_ipc_until_readable, can_recv, can_send, is_ipc_handle};
+use crate::channel::{block_ipc_until_readable, can_recv, can_send, ipc_read_fd, is_ipc_handle};
 use crate::fiber::{KataFiber, SpawnArgs, YieldReason};
+use crate::file::{FILE_WOULD_BLOCK, collect_file_fds, try_select_files};
 
 use ffi::{HAS_READY_FIBER, PENDING_SPAWNS, YIELD_COUNTER, YIELD_INTERVAL};
 
@@ -55,9 +56,13 @@ pub(crate) enum BlockReason {
     WaitingOnChannel(i64),
     /// Esperando espaço em canal (send). `i64` = handle do canal.
     WaitingOnChannelSend(i64),
-    /// Esperando select. `Vec<i64>` = handles, `Option<Instant>` = deadline
-    /// de timeout (None = sem timeout).
-    WaitingOnSelect(Vec<i64>, Option<std::time::Instant>),
+    /// Esperando select. Handles de canal e file separados.
+    /// `deadline` de timeout (None = sem timeout).
+    WaitingOnSelect {
+        channel_handles: Vec<i64>,
+        file_handles: Vec<i64>,
+        deadline: Option<std::time::Instant>,
+    },
     /// Esperando sleep cooperativo expirar. `Instant` = deadline.
     WaitingOnSleep(std::time::Instant),
     /// Esperando outro fiber terminar.
@@ -219,9 +224,19 @@ impl Scheduler {
                         self.blocked
                             .insert(fiber_id, BlockReason::WaitingOnChannelSend(handle));
                     }
-                    Err(YieldReason::WaitingOnSelect(handles, deadline)) => {
-                        self.blocked
-                            .insert(fiber_id, BlockReason::WaitingOnSelect(handles, deadline));
+                    Err(YieldReason::WaitingOnSelect {
+                        channel_handles,
+                        file_handles,
+                        deadline,
+                    }) => {
+                        self.blocked.insert(
+                            fiber_id,
+                            BlockReason::WaitingOnSelect {
+                                channel_handles,
+                                file_handles,
+                                deadline,
+                            },
+                        );
                     }
                     Err(YieldReason::Sleep(deadline)) => {
                         self.blocked
@@ -258,7 +273,9 @@ impl Scheduler {
                     .blocked
                     .values()
                     .filter_map(|reason| match reason {
-                        BlockReason::WaitingOnSelect(_, Some(dl)) => Some(*dl),
+                        BlockReason::WaitingOnSelect {
+                            deadline: Some(dl), ..
+                        } => Some(*dl),
                         BlockReason::WaitingOnSleep(dl) => Some(*dl),
                         _ => None,
                     })
@@ -269,11 +286,19 @@ impl Scheduler {
                     BlockReason::WaitingOnChannel(handle) if is_ipc_handle(*handle) => {
                         Some(*handle)
                     }
-                    BlockReason::WaitingOnSelect(handles, _) => {
-                        handles.iter().find(|h| is_ipc_handle(**h)).copied()
-                    }
+                    BlockReason::WaitingOnSelect {
+                        channel_handles, ..
+                    } => channel_handles.iter().find(|h| is_ipc_handle(**h)).copied(),
                     _ => None,
                 });
+
+                // Coletar FDs de file handles de fibers blocked em WaitingOnSelect.
+                let mut file_fds: Vec<libc::pollfd> = Vec::new();
+                for reason in self.blocked.values() {
+                    if let BlockReason::WaitingOnSelect { file_handles, .. } = reason {
+                        file_fds.extend(collect_file_fds(file_handles));
+                    }
+                }
 
                 if let Some(deadline) = earliest_deadline {
                     let now = std::time::Instant::now();
@@ -284,11 +309,33 @@ impl Scheduler {
                     };
 
                     if let Some(remaining) = remaining {
-                        // Se há IPC handles blocked, fazer poll com timeout = remaining
-                        // em vez de sleep. Isto permite que dados do child acordem
-                        // o scheduler antes do deadline expirar.
-                        if let Some(handle) = ipc_handle {
-                            let timeout_ms = remaining.as_millis() as i32;
+                        let timeout_ms = remaining.as_millis() as i32;
+
+                        // Poll unificado: IPC + file FDs.
+                        if !file_fds.is_empty() {
+                            // Adiciona o FD IPC ao poll set, se houver.
+                            if let Some(handle) = ipc_handle {
+                                // SAFETY: handle veio de um fiber blocked em canal IPC.
+                                let fd = unsafe { ipc_read_fd(handle) };
+                                if fd >= 0 {
+                                    file_fds.push(libc::pollfd {
+                                        fd,
+                                        events: libc::POLLIN,
+                                        revents: 0,
+                                    });
+                                }
+                            }
+                            // SAFETY: poll com timeout específico. Acorda quando
+                            // qualquer FD (IPC ou file) tem dados ou timeout expira.
+                            unsafe {
+                                libc::poll(
+                                    file_fds.as_mut_ptr(),
+                                    file_fds.len() as libc::nfds_t,
+                                    timeout_ms,
+                                );
+                            }
+                        } else if let Some(handle) = ipc_handle {
+                            // Sem file FDs, mas há IPC — poll IPC com timeout.
                             unsafe {
                                 super::channel::ipc::poll_ipc_with_timeout(handle, timeout_ms);
                             }
@@ -297,15 +344,13 @@ impl Scheduler {
                         }
                     }
                     // Após dormir (ou poll), fazer wake_pass para acordar fibers cujo
-                    // deadline expirou ou cujo canal recebeu dado.
+                    // deadline expirou ou cujo canal/arquivo recebeu dado.
                     self.wake_pass();
                     continue;
                 }
 
                 // Sem deadlines — verificar se algum fiber está bloqueado
-                // em canal IPC. Se sim, o child OS process pode ainda estar
-                // escrevendo. Fazer poll blocking no primeiro handle IPC
-                // e tentar novamente.
+                // em canal IPC ou file handle. Se sim, bloquear até ter dados.
                 if let Some(handle) = ipc_handle {
                     // Bloqueia até o child OS process escrever no pipe.
                     // SAFETY: handle veio de um fiber blocked em canal IPC.
@@ -317,7 +362,18 @@ impl Scheduler {
                     continue;
                 }
 
-                // Sem deadlines e sem IPC — deadlock real.
+                // Sem IPC, mas há file FDs bloqueados — poll blocking.
+                if !file_fds.is_empty() {
+                    // SAFETY: poll com timeout -1 (infinite). Acorda quando
+                    // qualquer file FD tem dados.
+                    unsafe {
+                        libc::poll(file_fds.as_mut_ptr(), file_fds.len() as libc::nfds_t, -1);
+                    }
+                    self.wake_pass();
+                    continue;
+                }
+
+                // Sem deadlines, sem IPC, sem file FDs — deadlock real.
                 let n = self.blocked.len();
                 self.fibers.drain();
                 return Err(format!("deadlock: {n} fibers bloqueados sem progresso"));
@@ -398,9 +454,19 @@ impl Scheduler {
                         None
                     }
                 }
-                BlockReason::WaitingOnSelect(handles, deadline) => {
-                    // Select: algum canal tem dado OU deadline expirou.
-                    if handles.iter().any(|h| can_recv(*h)) {
+                BlockReason::WaitingOnSelect {
+                    channel_handles,
+                    file_handles,
+                    deadline,
+                } => {
+                    // Select: algum canal tem dado, algum file tem dado, OU deadline expirou.
+                    let channel_ready = channel_handles.iter().any(|h| can_recv(*h));
+                    let file_ready = if file_handles.is_empty() {
+                        false
+                    } else {
+                        try_select_files(file_handles) != FILE_WOULD_BLOCK
+                    };
+                    if channel_ready || file_ready {
                         Some(id)
                     } else if let Some(dl) = deadline {
                         if std::time::Instant::now() >= *dl {

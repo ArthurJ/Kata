@@ -30,7 +30,10 @@ pub(crate) mod select;
 // mesmos símbolos C-ABI.
 pub use ops::{kata_rt_channel_recv, kata_rt_channel_send};
 pub use select::kata_rt_select;
+pub use select::kata_rt_select_combined;
 // `can_recv`/`can_send` são usadas pelo scheduler (pub(crate) no ops).
+/// Retorna o read_fd bruto de um handle IPC para poll unificado.
+pub(crate) use ipc::ipc_read_fd;
 /// Bloqueia (poll blocking) até o canal IPC ter dados. Usado pelo
 /// scheduler quando todos os fibers estão blocked em IPC e não há
 /// outros fibers para executar — o child OS process ainda pode escrever.

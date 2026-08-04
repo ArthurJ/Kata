@@ -277,10 +277,27 @@ fn desugar_pipes(expr: &Spanned<Expr>) -> Spanned<Expr> {
         } => {
             let arms: Vec<SelectArm> = arms
                 .iter()
-                .map(|arm| SelectArm {
-                    channel: desugar_pipes(&arm.channel),
-                    bind_name: arm.bind_name.clone(),
-                    body: desugar_pipes(&arm.body),
+                .map(|arm| match arm {
+                    SelectArm::Channel {
+                        channel,
+                        bind_name,
+                        body,
+                    } => SelectArm::Channel {
+                        channel: desugar_pipes(channel),
+                        bind_name: bind_name.clone(),
+                        body: desugar_pipes(body),
+                    },
+                    SelectArm::IoRead {
+                        handle_expr,
+                        chunk_size_expr,
+                        bind_name,
+                        body,
+                    } => SelectArm::IoRead {
+                        handle_expr: desugar_pipes(handle_expr),
+                        chunk_size_expr: desugar_pipes(chunk_size_expr),
+                        bind_name: bind_name.clone(),
+                        body: desugar_pipes(body),
+                    },
                 })
                 .collect();
             Spanned::new(
@@ -305,6 +322,12 @@ fn desugar_pipes(expr: &Spanned<Expr>) -> Spanned<Expr> {
         Expr::Comptime { expr: inner } => Spanned::new(
             Expr::Comptime {
                 expr: Box::new(desugar_pipes(inner)),
+            },
+            expr.span,
+        ),
+        Expr::Block { stmts } => Spanned::new(
+            Expr::Block {
+                stmts: stmts.iter().map(desugar_pipes).collect(),
             },
             expr.span,
         ),

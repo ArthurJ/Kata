@@ -60,9 +60,7 @@ pub(crate) fn alloc_for_escape(
         .ffi_refs
         .get("kata_rt_arena_alloc")
         .copied()
-        .ok_or_else(|| {
-            super::CodegenError::FfiSymbolNotFound("kata_rt_arena_alloc".into())
-        })?;
+        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound("kata_rt_arena_alloc".into()))?;
     let inst = ctx.builder.ins().call(alloc_ref, &[handle, size_val]);
     Ok(ctx.builder.inst_results(inst)[0])
 }

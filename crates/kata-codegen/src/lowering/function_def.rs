@@ -502,9 +502,7 @@ fn emit_close_file_handles(lower: &mut LowerCtx) {
         .ffi_refs
         .get("kata_rt_file_close")
         .copied()
-        .unwrap_or_else(|| {
-            panic!("kata_rt_file_close não encontrado em ffi_refs")
-        });
+        .unwrap_or_else(|| panic!("kata_rt_file_close não encontrado em ffi_refs"));
     for &var in &lower.file_handle_vars {
         let val = lower.builder.use_var(var);
         lower.builder.ins().call(close_ref, &[val]);

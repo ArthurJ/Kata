@@ -263,6 +263,14 @@ fn canonical_expr(expr: &TypedExpr, buf: &mut String) {
             canonical_expr(&expr.node, buf);
             buf.push(')');
         }
+        TypedExprKind::Block { stmts } => {
+            buf.push_str("Block(");
+            for stmt in stmts {
+                canonical_expr(&stmt.node, buf);
+                buf.push(',');
+            }
+            buf.push(')');
+        }
         // Catch-all para variants que não afetam o fn_id de funções @cache
         // (Int => Int): coleções, CSP, loops, type introspection, etc.
         // Estes nós não aparecem em funções puras Int => Int.

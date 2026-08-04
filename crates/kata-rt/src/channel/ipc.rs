@@ -314,6 +314,20 @@ pub(crate) unsafe fn poll_ipc_with_timeout(handle: i64, timeout_ms: i32) {
     }
 }
 
+/// Retorna o read_fd (FD bruto) de um canal IPC, para inclusão num poll set
+/// unificado no scheduler. Retorna -1 se o handle é inválido.
+///
+/// # Safety
+/// `handle` deve ser um handle IPC válido.
+pub(crate) unsafe fn ipc_read_fd(handle: i64) -> i32 {
+    let ptr = ptr_of(handle);
+    if ptr.is_null() {
+        return -1;
+    }
+    let inner = unsafe { &*(ptr as *const IpcChannelInner) };
+    inner.read_fd
+}
+
 /// Fecha um FD de escrita do canal IPC. Chamado pelo parent após
 /// fork para sinalizar que não vai enviar mais dados pelo canal.
 ///

@@ -75,13 +75,100 @@ impl Parser {
         // Expect `:`
         self.expect(&Token::Colon, "`:` após pattern do braço")?;
 
-        // Parse body (expressão)
-        let body = parse_expr(self)?;
+        // Se o body está indentado (INDENT antes da expressão), consumir
+        // o INDENT e parsear um bloco de statements separados por StmtSep.
+        // Isto permite braços com match/let/select aninhados em linha
+        // separada, com múltiplas statements antes da expressão final:
+        //   match x
+        //     Result::Ok h:
+        //       let f2 := open!(...)
+        //       match f2
+        //         Result::Ok h2: ...
+        // O INDENT é emitido pelo lexer quando o body está mais indentado
+        // que o pattern. Sem isto, parse_expr vê INDENT e falha.
+        let has_indent = matches!(self.peek(), Token::Indent);
+        let body = if has_indent {
+            self.advance(); // consome INDENT
 
-        // Consome StmtSep se presente
-        if matches!(self.peek(), Token::StmtSep) {
-            self.advance();
-        }
+            // Parsear statements separados por StmtSep.
+            // Se há apenas uma statement, retorná-la diretamente.
+            // Se há múltiplas, produzir Expr::Block.
+            let mut stmts: Vec<Spanned<Expr>> = Vec::new();
+
+            loop {
+                // Consome StmtSep iniciais
+                while matches!(self.peek(), Token::StmtSep) {
+                    self.advance();
+                }
+                if matches!(self.peek(), Token::Dedent | Token::Eof) {
+                    break;
+                }
+                let stmt = parse_expr(self)?;
+                stmts.push(stmt);
+                // Consome StmtSep após statement
+                while matches!(self.peek(), Token::StmtSep) {
+                    self.advance();
+                }
+            }
+
+            // Consome o DEDENT do bloco indentado.
+            if matches!(self.peek(), Token::Dedent) {
+                self.advance();
+            }
+
+            // Se há apenas uma statement, retorná-la diretamente (sem Block).
+            // Se há múltiplas, envolver em Block.
+            if stmts.len() == 1 {
+                stmts.into_iter().next().unwrap()
+            } else {
+                Spanned::new(Expr::Block { stmts }, arm_start)
+            }
+        } else {
+            // Body começa na mesma linha do pattern.
+            let first_stmt = parse_expr(self)?;
+
+            // Caso misto: o body começou na mesma linha mas continua em
+            // linhas indentadas. Ex:
+            //   Result::Ok h: let x := 10
+            //     + x h
+            // O lexer emite INDENT antes de `+ x h` porque a indentação
+            // aumentou. Sem este tratamento, o INDENT seria interpretado
+            // como início do próximo braço pelo loop externo do parse_match.
+            if matches!(self.peek(), Token::Indent) {
+                self.advance(); // consome INDENT
+
+                let mut stmts = vec![first_stmt];
+                loop {
+                    while matches!(self.peek(), Token::StmtSep) {
+                        self.advance();
+                    }
+                    if matches!(self.peek(), Token::Dedent | Token::Eof) {
+                        break;
+                    }
+                    let stmt = parse_expr(self)?;
+                    stmts.push(stmt);
+                    while matches!(self.peek(), Token::StmtSep) {
+                        self.advance();
+                    }
+                }
+
+                if matches!(self.peek(), Token::Dedent) {
+                    self.advance();
+                }
+
+                if stmts.len() == 1 {
+                    stmts.into_iter().next().unwrap()
+                } else {
+                    Spanned::new(Expr::Block { stmts }, arm_start)
+                }
+            } else {
+                // Body de expressão única na mesma linha.
+                if matches!(self.peek(), Token::StmtSep) {
+                    self.advance();
+                }
+                first_stmt
+            }
+        };
 
         let _ = arm_start; // span do braço não é armazenado em MatchArm
         Ok(MatchArm {

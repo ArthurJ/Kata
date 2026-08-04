@@ -223,12 +223,35 @@ fn children<'a>(
             timeout_ms,
             timeout_body,
             ..
-        } => Box::new(
-            arms.iter()
-                .map(|a| &a.body)
-                .chain(timeout_ms.iter().map(|e| e.as_ref()))
-                .chain(timeout_body.iter().map(|e| e.as_ref())),
-        ),
+        } => {
+            use kata_inference::TypedSelectArm;
+            let mut kids: Vec<&'a kata_ast::Spanned<kata_inference::TypedExpr>> = Vec::new();
+            for a in arms {
+                match a {
+                    TypedSelectArm::Channel { channel, body, .. } => {
+                        kids.push(channel);
+                        kids.push(body);
+                    }
+                    TypedSelectArm::IoRead {
+                        handle_expr,
+                        chunk_size_expr,
+                        body,
+                        ..
+                    } => {
+                        kids.push(handle_expr);
+                        kids.push(chunk_size_expr);
+                        kids.push(body);
+                    }
+                }
+            }
+            for e in timeout_ms.iter() {
+                kids.push(e.as_ref());
+            }
+            for e in timeout_body.iter() {
+                kids.push(e.as_ref());
+            }
+            Box::new(kids.into_iter())
+        }
 
         // Fork: action_expr + args
         Fork {
@@ -242,6 +265,9 @@ fn children<'a>(
 
         // Lambda: cláusulas — body de cada cláusula
         Lambda { clauses, .. } => Box::new(clauses.iter().map(|c| &c.body)),
+
+        // Block: stmts sequenciais
+        Block { stmts } => Box::new(stmts.iter()),
     }
 }
 

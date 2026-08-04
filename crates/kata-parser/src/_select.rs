@@ -1,19 +1,24 @@
-//! Select — parse_select com braços de canal e timeout.
+//! Select — parse_select com braços de canal, I/O e timeout.
 //!
 //! Sintaxe:
 //! ```text
 //! select
 //!     rx <! msg: echo!(msg)
-//!     rx2 <! item: handle!(item)
+//!     read!(file, 4096) <! data: processa!(data)
 //!     timeout 5000: echo!("timeout")
 //! ```
 //!
-//! Cada braço é `receiver <! binding_name: body`.
+//! Cada braço é `receiver <! binding_name: body` ou
+//! `read!(handle, n) <! binding_name: body`.
 //! O braço `timeout N: body` é opcional e sempre o último.
 //!
 //! Como `<!` é um operador infixo em `parse_expr`, o parser de select
 //! chama `parse_expr` que produz `Expr::ChannelRecv { channel, bind_name }`
 //! para cada braço. O `: body` é então parseado separadamente.
+//!
+//! Para distinguir braços de canal de braços de I/O, o parser inspeciona
+//! o `channel` dentro do `ChannelRecv`: se for `ActionCall { callee: "read", ... }`,
+//! é um braço `IoRead`; caso contrário, é um braço `Channel`.
 
 use kata_ast::{Expr, SelectArm, Spanned, Token};
 use kata_diagnostics::FrontendError;
@@ -24,7 +29,8 @@ use crate::expressions::parse_expr;
 impl Parser {
     /// Parse `select` com braços indentados.
     ///
-    /// Cada braço: `receiver <! nome: body` ou `timeout N: body`.
+    /// Cada braço: `receiver <! nome: body` ou `read!(handle, n) <! nome: body`
+    /// ou `timeout N: body`.
     pub(crate) fn parse_select(&mut self) -> Result<Spanned<Expr>, FrontendError> {
         let start = self.peek_span();
         self.expect(&Token::Select, "`select`")?;
@@ -54,8 +60,8 @@ impl Parser {
                 timeout_ms = Some(Box::new(ms));
                 timeout_body = Some(Box::new(body));
             } else {
-                // `receiver <! nome: body`
-                // parse_expr consome `rx <! nome` como Expr::ChannelRecv.
+                // `receiver <! nome: body` ou `read!(handle, n) <! nome: body`
+                // parse_expr consome `expr <! nome` como Expr::ChannelRecv.
                 let recv_expr = parse_expr(self)?;
 
                 // Extrai channel e bind_name do ChannelRecv
@@ -69,11 +75,30 @@ impl Parser {
                 self.expect(&Token::Colon, "`:` após binding do select")?;
                 let body = parse_expr(self)?;
 
-                arms.push(SelectArm {
-                    channel,
-                    bind_name,
-                    body,
-                });
+                // Distingue braço de canal de braço de I/O.
+                // Se o channel é ActionCall { callee: "read", args: (handle, n) },
+                // é um braço IoRead. Caso contrário, é um braço Channel.
+                let arm = match &channel.node {
+                    Expr::ActionCall { callee, args } if callee == "read" => {
+                        // Extrai handle_expr e chunk_size_expr dos args.
+                        // args é uma tupla: (handle, n) ou um valor único.
+                        // Para read!(handle, n), args é Tuple([handle, n]).
+                        let (handle_expr, chunk_size_expr) = extract_read_args(args);
+                        SelectArm::IoRead {
+                            handle_expr,
+                            chunk_size_expr,
+                            bind_name,
+                            body,
+                        }
+                    }
+                    _ => SelectArm::Channel {
+                        channel,
+                        bind_name,
+                        body,
+                    },
+                };
+
+                arms.push(arm);
             }
 
             // Consome StmtSep se presente
@@ -98,5 +123,34 @@ impl Parser {
             },
             span,
         ))
+    }
+}
+
+/// Extrai `handle_expr` e `chunk_size_expr` dos args de `read!(handle, n)`.
+///
+/// `args` é a expressão de argumentos do `ActionCall`. Para `read!(h, 4096)`,
+/// o parser produz `ActionCall { callee: "read", args: Tuple([h, 4096]) }`.
+/// Para `read!(h)` (1 arg), args é apenas `h` (sem tupla).
+fn extract_read_args(args: &Spanned<Expr>) -> (Spanned<Expr>, Spanned<Expr>) {
+    match &args.node {
+        Expr::Tuple { elements } if elements.len() == 2 => {
+            // (handle, n) — tuple de 2 elementos.
+            let handle = elements[0].clone();
+            let chunk_size = elements[1].clone();
+            (handle, chunk_size)
+        }
+        _ => {
+            // Fallback: não deveria acontecer em código válido.
+            // Usa o args inteiro como handle e 0 como chunk_size.
+            (
+                args.clone(),
+                Spanned::new(
+                    Expr::IntLit {
+                        text: "0".to_string(),
+                    },
+                    args.span,
+                ),
+            )
+        }
     }
 }

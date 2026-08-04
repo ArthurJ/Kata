@@ -108,8 +108,22 @@ pub fn assert_no_holes(expr: &Spanned<Expr>) {
             timeout_body,
         } => {
             for arm in arms {
-                assert_no_holes(&arm.channel);
-                assert_no_holes(&arm.body);
+                match arm {
+                    kata_ast::SelectArm::Channel { channel, body, .. } => {
+                        assert_no_holes(channel);
+                        assert_no_holes(body);
+                    }
+                    kata_ast::SelectArm::IoRead {
+                        handle_expr,
+                        chunk_size_expr,
+                        body,
+                        ..
+                    } => {
+                        assert_no_holes(handle_expr);
+                        assert_no_holes(chunk_size_expr);
+                        assert_no_holes(body);
+                    }
+                }
             }
             if let Some(ms) = timeout_ms {
                 assert_no_holes(ms);
@@ -122,6 +136,8 @@ pub fn assert_no_holes(expr: &Spanned<Expr>) {
         Expr::TypeOf { expr: inner } => assert_no_holes(inner),
         // Comptime — recursão no inner expr
         Expr::Comptime { expr: inner } => assert_no_holes(inner),
+        // Block — recursão em cada stmt
+        Expr::Block { stmts } => stmts.iter().for_each(assert_no_holes),
     }
 }
 
@@ -225,8 +241,22 @@ pub fn assert_no_pipes(expr: &Spanned<Expr>) {
             timeout_body,
         } => {
             for arm in arms {
-                assert_no_pipes(&arm.channel);
-                assert_no_pipes(&arm.body);
+                match arm {
+                    kata_ast::SelectArm::Channel { channel, body, .. } => {
+                        assert_no_pipes(channel);
+                        assert_no_pipes(body);
+                    }
+                    kata_ast::SelectArm::IoRead {
+                        handle_expr,
+                        chunk_size_expr,
+                        body,
+                        ..
+                    } => {
+                        assert_no_pipes(handle_expr);
+                        assert_no_pipes(chunk_size_expr);
+                        assert_no_pipes(body);
+                    }
+                }
             }
             if let Some(ms) = timeout_ms {
                 assert_no_pipes(ms);
@@ -239,5 +269,7 @@ pub fn assert_no_pipes(expr: &Spanned<Expr>) {
         Expr::TypeOf { expr: inner } => assert_no_pipes(inner),
         // Comptime — recursão no inner expr
         Expr::Comptime { expr: inner } => assert_no_pipes(inner),
+        // Block — recursão em cada stmt
+        Expr::Block { stmts } => stmts.iter().for_each(assert_no_pipes),
     }
 }

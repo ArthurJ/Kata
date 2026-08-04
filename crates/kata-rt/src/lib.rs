@@ -97,6 +97,11 @@ pub use rational::{
     kata_rt_rat_lt, kata_rt_rat_mul, kata_rt_rat_neq, kata_rt_rat_show, kata_rt_rat_sub,
     kata_rt_rat_to_float,
 };
+pub use scheduler::{
+    DEADLOCK_SENTINEL, TIMEOUT_SENTINEL, kata_rt_run, kata_rt_scheduler_init,
+    kata_rt_set_test_timeout, kata_rt_sleep, kata_rt_spawn, kata_rt_yield, kata_rt_yield_check,
+    reset_scheduler,
+};
 pub use set::{
     kata_rt_set_contains, kata_rt_set_difference, kata_rt_set_empty, kata_rt_set_insert,
     kata_rt_set_intersection, kata_rt_set_len, kata_rt_set_next, kata_rt_set_remove,
@@ -104,11 +109,6 @@ pub use set::{
 };
 pub use slice::{
     kata_rt_array_slice, kata_rt_list_slice, kata_rt_text_at, kata_rt_text_len, kata_rt_text_slice,
-};
-pub use scheduler::{
-    DEADLOCK_SENTINEL, TIMEOUT_SENTINEL, kata_rt_run, kata_rt_scheduler_init,
-    kata_rt_set_test_timeout, kata_rt_sleep, kata_rt_spawn, kata_rt_yield, kata_rt_yield_check,
-    reset_scheduler,
 };
 pub use sum::{kata_rt_store_sum_result, kata_rt_sum_tag_int};
 // Snapshots comptime — carregados em load-time na root_arena
@@ -125,7 +125,7 @@ pub use text::{
 pub use channel::{
     kata_rt_broadcast_create, kata_rt_broadcast_receiver_create, kata_rt_channel_create,
     kata_rt_channel_recv, kata_rt_channel_send, kata_rt_ipc_channel_create,
-    kata_rt_ipc_queue_create, kata_rt_queue_create, kata_rt_select,
+    kata_rt_ipc_queue_create, kata_rt_queue_create, kata_rt_select, kata_rt_select_combined,
 };
 // Telemetria (@log)
 // reset_log e snapshot_log_config — rebaixados para pub(crate): zero
@@ -138,7 +138,7 @@ pub use ipc::kata_rt_spawn_process;
 // File I/O
 pub use file::{
     kata_rt_file_close, kata_rt_file_open, kata_rt_file_read, kata_rt_file_read_chunk,
-    kata_rt_file_readline, kata_rt_file_write_bytes, kata_rt_file_write_text,
+    kata_rt_file_readline, kata_rt_file_write_bytes, kata_rt_file_write_text, kata_rt_select_files,
 };
 // Display de resultados — ponto único de display para
 // driver JIT e shim AOT.

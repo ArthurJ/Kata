@@ -254,6 +254,12 @@ pub enum Expr {
     /// O comptime pass JIT-executa a expressão e substitui por Literal ou
     /// HeapSnapshot. Na TAST, vira `TypedExprKind::Comptime`.
     Comptime { expr: Box<Spanned<Expr>> },
+
+    /// Bloco de expressões sequenciais — usado em match arm body indentado
+    /// com múltiplas statements (ex: `let` seguido de expressão).
+    /// O resultado é a última expressão; as anteriores são computações
+    /// intermediárias (bindings `let`, etc.).
+    Block { stmts: Vec<Spanned<Expr>> },
 }
 
 /// Índice de DotAccess — field nomeado, inteiro, ou range (slice).
@@ -342,15 +348,34 @@ pub struct MatchArm {
     pub body: Spanned<Expr>,
 }
 
-/// Um braço de `select`: `rx <! nome: body`.
+/// Um braço de `select`.
+///
+/// Pode ser um braço de canal (`rx <! nome: body`) ou um braço de
+/// leitura de I/O (`read!(handle, n) <! nome: body`).
 #[derive(Debug, Clone, PartialEq)]
-pub struct SelectArm {
-    /// Receiver de onde receber (expressão que avalia para Receiver::T).
-    pub channel: Spanned<Expr>,
-    /// Nome do binding para o valor recebido.
-    pub bind_name: String,
-    /// Corpo do braço.
-    pub body: Spanned<Expr>,
+pub enum SelectArm {
+    /// `rx <! nome: body` — braço de canal (receiver).
+    Channel {
+        /// Receiver de onde receber (expressão que avalia para Receiver::T).
+        channel: Spanned<Expr>,
+        /// Nome do binding para o valor recebido.
+        bind_name: String,
+        /// Corpo do braço.
+        body: Spanned<Expr>,
+    },
+    /// `read!(handle, n) <! nome: body` — braço de leitura de I/O.
+    /// `handle_expr` avalia para File (futuramente Socket).
+    /// `chunk_size_expr` avalia para Int (n bytes por chunk).
+    IoRead {
+        /// Expressão do handle (File/Socket).
+        handle_expr: Spanned<Expr>,
+        /// Expressão do tamanho do chunk (Int).
+        chunk_size_expr: Spanned<Expr>,
+        /// Nome do binding para o Result::(Bytes, Text) lido.
+        bind_name: String,
+        /// Corpo do braço.
+        body: Spanned<Expr>,
+    },
 }
 
 /// Binding de `with` block: `nome := expr` (sem keyword `let`).
@@ -419,9 +444,6 @@ pub enum TypeExpr {
 }
 
 /// Statement do body de uma Action.
-///
-/// Cada statement é uma expressão com uma marca de `;` — `has_semicolon = true`
-/// significa computação local (valor descartado); `has_semicolon = false` no
 /// último statement significa retorno implícito (valor é retornado).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ActionStmt {

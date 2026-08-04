@@ -83,10 +83,11 @@ pub extern "C" fn kata_rt_select(handles: *const i64, n_handles: i64, timeout_ms
 
         // 3. Suspende o fiber com WaitingOnSelect.
         let suspended = crate::fiber::with_suspend(|suspend| {
-            suspend.suspend(crate::fiber::YieldReason::WaitingOnSelect(
-                handles_vec.clone(),
+            suspend.suspend(crate::fiber::YieldReason::WaitingOnSelect {
+                channel_handles: handles_vec.clone(),
+                file_handles: Vec::new(),
                 deadline,
-            ));
+            });
         });
         if suspended.is_none() {
             // Fora de fiber (teste unitário) — retorna WOULD_BLOCK.
@@ -104,3 +105,95 @@ pub extern "C" fn kata_rt_select(handles: *const i64, n_handles: i64, timeout_ms
 // futuro; `#[allow(dead_code)]` pois atualmente nenhum caller o lê.
 #[allow(dead_code)] // usado apenas em testes inline (quando houver)
 pub(crate) const SELECT_TIMEOUT_SENTINEL: i64 = SELECT_TIMEOUT;
+
+/// Select combinado — multiplexa channels e file handles numa única chamada.
+///
+/// Retorna índice global:
+/// - `0..n_c-1`: channel arm `j` pronto (j = índice relativo dentro de channels)
+/// - `n_c..n_c+n_f-1`: file arm `j` pronto (índice global = n_c + j)
+/// - `WOULD_BLOCK` (-1): nenhum handle pronto (fora de fiber)
+/// - `SELECT_TIMEOUT` (-2): timeout expirou
+///
+/// Tenta channels (`can_recv`) e files (`poll(POLLIN, 0)`) num único loop.
+/// Se nenhum pronto, suspende o fiber **uma vez** com `WaitingOnSelect`
+/// carregando ambos os conjuntos de handles. Após resume, tenta novamente.
+///
+/// Isto resolve o gatekeeper de suspensão combinada: o fiber suspende
+/// esperando AMBOS os conjuntos simultaneamente, em vez de duas FFIs
+/// que cada uma suspende independentemente.
+///
+/// # Safety
+/// `chan_handles` deve apontar para `n_c` handles de canal válidos (ou ser
+/// null se `n_c <= 0`). `file_handles` deve apontar para `n_f` handles de
+/// File válidos (ou ser null se `n_f <= 0`).
+#[unsafe(no_mangle)]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn kata_rt_select_combined(
+    chan_handles: *const i64,
+    n_c: i64,
+    file_handles: *const i64,
+    n_f: i64,
+    timeout_ms: i64,
+) -> i64 {
+    let chan_slice: &[i64] = if !chan_handles.is_null() && n_c > 0 {
+        // SAFETY: contrato FFI — chan_handles aponta para n_c i64s válidos.
+        unsafe { std::slice::from_raw_parts(chan_handles, n_c as usize) }
+    } else {
+        &[]
+    };
+    let file_slice: &[i64] = if !file_handles.is_null() && n_f > 0 {
+        // SAFETY: contrato FFI — file_handles aponta para n_f i64s válidos.
+        unsafe { std::slice::from_raw_parts(file_handles, n_f as usize) }
+    } else {
+        &[]
+    };
+
+    if chan_slice.is_empty() && file_slice.is_empty() {
+        return WOULD_BLOCK;
+    }
+
+    let chan_vec: Vec<i64> = chan_slice.to_vec();
+    let file_vec: Vec<i64> = file_slice.to_vec();
+
+    let deadline = if timeout_ms > 0 {
+        Some(std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms as u64))
+    } else {
+        None
+    };
+
+    loop {
+        // 1. Tentar channels (can_recv — não consome).
+        let chan_result = try_select(chan_slice);
+        if chan_result != WOULD_BLOCK {
+            return chan_result; // 0..n_c-1
+        }
+
+        // 2. Tentar files (poll POLLIN non-blocking).
+        let file_result = crate::file::try_select_files(file_slice);
+        if file_result != crate::file::FILE_WOULD_BLOCK {
+            return n_c + file_result; // n_c..n_c+n_f-1
+        }
+
+        // 3. Verificar timeout.
+        if let Some(dl) = deadline
+            && std::time::Instant::now() >= dl
+        {
+            return SELECT_TIMEOUT;
+        }
+
+        // 4. Suspender com ambos os conjuntos de handles.
+        let suspended = crate::fiber::with_suspend(|suspend| {
+            suspend.suspend(crate::fiber::YieldReason::WaitingOnSelect {
+                channel_handles: chan_vec.clone(),
+                file_handles: file_vec.clone(),
+                deadline,
+            });
+        });
+        if suspended.is_none() {
+            // Fora de fiber (teste unitário) — retorna WOULD_BLOCK.
+            return WOULD_BLOCK;
+        }
+        // Fiber resumido — scheduler acorda quando algum handle ficou pronto
+        // ou o deadline expirou. Loop tenta novamente.
+    }
+}

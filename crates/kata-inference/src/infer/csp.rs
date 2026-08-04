@@ -145,10 +145,11 @@ pub(crate) fn infer_channel_recv(
     })
 }
 
-/// `select` com braços de canal e timeout opcional.
+/// `select` com braços de canal, I/O e timeout opcional.
 ///
-/// Todos os braços devem ter receivers do mesmo tipo `T`. O tipo do
-/// `select` é `T` (o valor recebido pelo braço que disparar).
+/// Braços de canal: todos devem ter receivers do mesmo tipo `T`.
+/// Braços de I/O: binding recebe `Result::(Bytes, Text)`.
+/// O tipo do `select` é a unificação de todos os braços + timeout_body.
 pub(crate) fn infer_select(
     arms: &[SelectArm],
     timeout_ms: &Option<Box<Spanned<Expr>>>,
@@ -162,53 +163,120 @@ pub(crate) fn infer_select(
     let mut unified_ty: Option<Ty> = None;
 
     for arm in arms {
-        let typed_channel =
-            infer_expr_hinted(&arm.channel.node, &arm.channel.span, env, ctx, false, None)?;
+        match arm {
+            SelectArm::Channel {
+                channel,
+                bind_name,
+                body,
+            } => {
+                let typed_channel =
+                    infer_expr_hinted(&channel.node, &channel.span, env, ctx, false, None)?;
 
-        // Verifica que channel é Receiver::T.
-        let recv_ty = match &typed_channel.ty {
-            Ty::Receiver(inner) => (**inner).clone(),
-            other => {
-                return Err(MiddleError::TypeMismatch {
-                    expected: "Receiver::T (canal receiver)".into(),
-                    found: format!("{other:?}"),
-                    span: arm.channel.span.into(),
+                // Verifica que channel é Receiver::T.
+                let recv_ty = match &typed_channel.ty {
+                    Ty::Receiver(inner) => (**inner).clone(),
+                    other => {
+                        return Err(MiddleError::TypeMismatch {
+                            expected: "Receiver::T (canal receiver)".into(),
+                            found: format!("{other:?}"),
+                            span: channel.span.into(),
+                        });
+                    }
+                };
+
+                // Cria binding do braço num escopo filho.
+                let mut arm_env = env.push_scope();
+                arm_env.define(bind_name, recv_ty.clone(), "__local__");
+
+                let typed_body =
+                    infer_expr_hinted(&body.node, &body.span, &mut arm_env, ctx, tail_pos, None)?;
+
+                // Unifica tipo do BODY entre braços (não do binding).
+                if let Some(ref existing) = unified_ty {
+                    if !type_compatible(&typed_body.ty, existing) {
+                        return Err(MiddleError::TypeMismatch {
+                            expected: format!("{existing:?} (tipo do primeiro braço do select)"),
+                            found: format!("{}", typed_body.ty),
+                            span: body.span.into(),
+                        });
+                    }
+                } else {
+                    unified_ty = Some(typed_body.ty.clone());
+                }
+
+                typed_arms.push(TypedSelectArm::Channel {
+                    channel: Spanned::new(typed_channel, channel.span),
+                    recv_ty: recv_ty.clone(),
+                    bind_name: bind_name.clone(),
+                    body: Spanned::new(typed_body, body.span),
                 });
             }
-        };
+            SelectArm::IoRead {
+                handle_expr,
+                chunk_size_expr,
+                bind_name,
+                body,
+            } => {
+                // Typecheck handle_expr — deve ser Ty::File.
+                let typed_handle =
+                    infer_expr_hinted(&handle_expr.node, &handle_expr.span, env, ctx, false, None)?;
+                if !matches!(typed_handle.ty, Ty::File) {
+                    return Err(MiddleError::TypeMismatch {
+                        expected: "File (handle de I/O)".into(),
+                        found: format!("{}", typed_handle.ty),
+                        span: handle_expr.span.into(),
+                    });
+                }
 
-        // Unifica tipo entre braços.
-        if let Some(ref existing) = unified_ty {
-            if !type_compatible(&recv_ty, existing) {
-                return Err(MiddleError::TypeMismatch {
-                    expected: format!("{existing:?} (tipo do primeiro braço do select)"),
-                    found: format!("{recv_ty:?}"),
-                    span: arm.channel.span.into(),
+                // Typecheck chunk_size_expr — deve ser Ty::Int.
+                let typed_chunk = infer_expr_hinted(
+                    &chunk_size_expr.node,
+                    &chunk_size_expr.span,
+                    env,
+                    ctx,
+                    false,
+                    None,
+                )?;
+                if !type_compatible(&typed_chunk.ty, &Ty::int()) {
+                    return Err(MiddleError::TypeMismatch {
+                        expected: "Int (tamanho do chunk)".into(),
+                        found: format!("{}", typed_chunk.ty),
+                        span: chunk_size_expr.span.into(),
+                    });
+                }
+
+                // Binding recebe Result::(Bytes, Text) — mesmo tipo de read!(handle, n).
+                let result_ty = Ty::Generic("Result".to_string(), vec![Ty::Bytes, Ty::text()]);
+
+                // Cria binding do braço num escopo filho.
+                let mut arm_env = env.push_scope();
+                arm_env.define(bind_name, result_ty.clone(), "__local__");
+
+                let typed_body =
+                    infer_expr_hinted(&body.node, &body.span, &mut arm_env, ctx, tail_pos, None)?;
+
+                // Unifica tipo do BODY entre braços (não do binding).
+                if let Some(ref existing) = unified_ty {
+                    if !type_compatible(&typed_body.ty, existing) {
+                        return Err(MiddleError::TypeMismatch {
+                            expected: format!("{existing:?} (tipo do primeiro braço do select)"),
+                            found: format!("{}", typed_body.ty),
+                            span: body.span.into(),
+                        });
+                    }
+                } else {
+                    unified_ty = Some(typed_body.ty.clone());
+                }
+
+                typed_arms.push(TypedSelectArm::IoRead {
+                    handle_expr: Spanned::new(typed_handle, handle_expr.span),
+                    chunk_size_expr: Spanned::new(typed_chunk, chunk_size_expr.span),
+                    bind_ty: result_ty.clone(),
+                    bind_name: bind_name.clone(),
+                    body: Spanned::new(typed_body, body.span),
                 });
             }
-        } else {
-            unified_ty = Some(recv_ty.clone());
         }
-
-        // Cria binding do braço num escopo filho.
-        let mut arm_env = env.push_scope();
-        arm_env.define(&arm.bind_name, recv_ty.clone(), "__local__");
-
-        let typed_body = infer_expr_hinted(
-            &arm.body.node,
-            &arm.body.span,
-            &mut arm_env,
-            ctx,
-            tail_pos,
-            None,
-        )?;
-
-        typed_arms.push(TypedSelectArm {
-            channel: Spanned::new(typed_channel, arm.channel.span),
-            recv_ty: recv_ty.clone(),
-            bind_name: arm.bind_name.clone(),
-            body: Spanned::new(typed_body, arm.body.span),
-        });
     }
 
     let select_ty = unified_ty.unwrap_or(Ty::Unit);

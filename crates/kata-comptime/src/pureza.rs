@@ -221,5 +221,11 @@ fn check_purity_inner(expr: &TypedExpr) -> Result<(), ComptimeError> {
             check_purity_inner(&collection.node)?;
             Ok(())
         }
+        TypedExprKind::Block { stmts } => {
+            for stmt in stmts {
+                check_purity_inner(&stmt.node)?;
+            }
+            Ok(())
+        }
     }
 }

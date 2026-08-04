@@ -24,7 +24,7 @@ use std::collections::HashSet;
 use kata_ast::Spanned;
 use kata_core::ty::Ty;
 use kata_inference::{
-    FusedStage, TypedAction, TypedExpr, TypedExprKind, TypedFunction, TypedModule,
+    FusedStage, TypedAction, TypedExpr, TypedExprKind, TypedFunction, TypedModule, TypedSelectArm,
 };
 
 /// Ponto de entrada — aplica tree shaking ao `TypedModule`.
@@ -433,8 +433,27 @@ fn collect_refs(
             timeout_body,
         } => {
             for arm in arms {
-                collect_refs(&arm.channel.node, reached_fns, reached_actions, fn_names);
-                collect_refs(&arm.body.node, reached_fns, reached_actions, fn_names);
+                match arm {
+                    TypedSelectArm::Channel { channel, body, .. } => {
+                        collect_refs(&channel.node, reached_fns, reached_actions, fn_names);
+                        collect_refs(&body.node, reached_fns, reached_actions, fn_names);
+                    }
+                    TypedSelectArm::IoRead {
+                        handle_expr,
+                        chunk_size_expr,
+                        body,
+                        ..
+                    } => {
+                        collect_refs(&handle_expr.node, reached_fns, reached_actions, fn_names);
+                        collect_refs(
+                            &chunk_size_expr.node,
+                            reached_fns,
+                            reached_actions,
+                            fn_names,
+                        );
+                        collect_refs(&body.node, reached_fns, reached_actions, fn_names);
+                    }
+                }
             }
             if let Some(tm) = timeout_ms {
                 collect_refs(&tm.node, reached_fns, reached_actions, fn_names);
@@ -463,5 +482,11 @@ fn collect_refs(
         }
         // HeapSnapshot — folha (não contém sub-exprs).
         TypedExprKind::HeapSnapshot { .. } => {}
+        // Block — recursão em cada stmt.
+        TypedExprKind::Block { stmts } => {
+            for stmt in stmts {
+                collect_refs(&stmt.node, reached_fns, reached_actions, fn_names);
+            }
+        }
     }
 }

@@ -208,18 +208,27 @@ fn check_select_arm(
     expected_bind: &str,
     expected_callee: &str,
 ) {
-    assert_eq!(
-        arm.channel.node,
-        Expr::Ident {
-            name: expected_channel.into()
+    match arm {
+        SelectArm::Channel {
+            channel,
+            bind_name,
+            body,
+        } => {
+            assert_eq!(
+                channel.node,
+                Expr::Ident {
+                    name: expected_channel.into()
+                }
+            );
+            assert_eq!(*bind_name, expected_bind);
+            match &body.node {
+                Expr::ActionCall { callee, .. } => {
+                    assert_eq!(callee, expected_callee);
+                }
+                other => panic!("expected ActionCall body, got {other:?}"),
+            }
         }
-    );
-    assert_eq!(arm.bind_name, expected_bind);
-    match &arm.body.node {
-        Expr::ActionCall { callee, .. } => {
-            assert_eq!(callee, expected_callee);
-        }
-        other => panic!("expected ActionCall body, got {other:?}"),
+        other => panic!("expected SelectArm::Channel, got {other:?}"),
     }
 }
 

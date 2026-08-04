@@ -224,6 +224,11 @@ pub enum FfiSymbol {
     ChannelRecv,
     /// `kata_rt_select(handles, n) -> i64` — select multiplex.
     ChannelSelect,
+    /// `kata_rt_select_files(handles, n) -> i64` — select multiplex para file handles.
+    SelectFiles,
+    /// `kata_rt_select_combined(chan_ptr, n_c, file_ptr, n_f, timeout_ms) -> i64` —
+    /// select combinado de channels e files com suspensão atômica.
+    SelectCombined,
     /// `kata_rt_log_publish(topic_ptr, level, msg, policy_ptr) -> i64` — publica msg no tópico.
     LogPublish,
     /// `kata_rt_log_recv(topic_ptr) -> i64` — recebe próxima mensagem do tópico.
@@ -466,6 +471,8 @@ impl FfiSymbol {
             FfiSymbol::ChannelSend => "kata_rt_channel_send",
             FfiSymbol::ChannelRecv => "kata_rt_channel_recv",
             FfiSymbol::ChannelSelect => "kata_rt_select",
+            FfiSymbol::SelectFiles => "kata_rt_select_files",
+            FfiSymbol::SelectCombined => "kata_rt_select_combined",
             // Log
             FfiSymbol::LogPublish => "kata_rt_log_publish",
             FfiSymbol::LogRecv => "kata_rt_log_recv",
@@ -638,6 +645,8 @@ impl FfiSymbol {
             FfiSymbol::ChannelSend => Ty::int(),
             FfiSymbol::ChannelRecv => Ty::int(),
             FfiSymbol::ChannelSelect => Ty::int(),
+            FfiSymbol::SelectFiles => Ty::int(),
+            FfiSymbol::SelectCombined => Ty::int(),
             // Log — LogPublish/LogRecv retornam i64 (status/valor), LogConfig retorna Unit
             FfiSymbol::LogPublish => Ty::int(),
             FfiSymbol::LogRecv => Ty::int(),
@@ -817,6 +826,8 @@ impl FfiSymbol {
             FfiSymbol::ChannelSend,
             FfiSymbol::ChannelRecv,
             FfiSymbol::ChannelSelect,
+            FfiSymbol::SelectFiles,
+            FfiSymbol::SelectCombined,
             // Log
             FfiSymbol::LogPublish,
             FfiSymbol::LogRecv,

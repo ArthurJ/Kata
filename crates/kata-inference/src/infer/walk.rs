@@ -8,7 +8,7 @@
 //! monomorph, comptime, etc.
 
 use crate::typed::FusedStage;
-use crate::typed::{TypedExpr, TypedExprKind};
+use crate::typed::{TypedExpr, TypedExprKind, TypedSelectArm};
 use crate::typed_pattern::{TypedLambdaClause, TypedMatchArm, TypedPattern};
 
 // ── Imutável ──────────────────────────────────────────────────────────
@@ -166,8 +166,22 @@ where
             ..
         } => {
             for arm in arms {
-                for_each_subexpr(&arm.channel.node, f);
-                for_each_subexpr(&arm.body.node, f);
+                match arm {
+                    TypedSelectArm::Channel { channel, body, .. } => {
+                        for_each_subexpr(&channel.node, f);
+                        for_each_subexpr(&body.node, f);
+                    }
+                    TypedSelectArm::IoRead {
+                        handle_expr,
+                        chunk_size_expr,
+                        body,
+                        ..
+                    } => {
+                        for_each_subexpr(&handle_expr.node, f);
+                        for_each_subexpr(&chunk_size_expr.node, f);
+                        for_each_subexpr(&body.node, f);
+                    }
+                }
             }
             if let Some(tm) = timeout_ms {
                 for_each_subexpr(&tm.node, f);
@@ -193,6 +207,11 @@ where
         }
         TypedExprKind::Comptime { expr } => {
             for_each_subexpr(&expr.node, f);
+        }
+        TypedExprKind::Block { stmts } => {
+            for stmt in stmts {
+                for_each_subexpr(&stmt.node, f);
+            }
         }
         TypedExprKind::HeapSnapshot { .. }
         | TypedExprKind::ChannelCreate { .. }
@@ -426,8 +445,22 @@ where
             ..
         } => {
             for arm in arms {
-                for_each_subexpr_mut(&mut arm.channel.node, f);
-                for_each_subexpr_mut(&mut arm.body.node, f);
+                match arm {
+                    TypedSelectArm::Channel { channel, body, .. } => {
+                        for_each_subexpr_mut(&mut channel.node, f);
+                        for_each_subexpr_mut(&mut body.node, f);
+                    }
+                    TypedSelectArm::IoRead {
+                        handle_expr,
+                        chunk_size_expr,
+                        body,
+                        ..
+                    } => {
+                        for_each_subexpr_mut(&mut handle_expr.node, f);
+                        for_each_subexpr_mut(&mut chunk_size_expr.node, f);
+                        for_each_subexpr_mut(&mut body.node, f);
+                    }
+                }
             }
             if let Some(tm) = timeout_ms {
                 for_each_subexpr_mut(&mut tm.node, f);
@@ -453,6 +486,11 @@ where
         }
         TypedExprKind::Comptime { expr } => {
             for_each_subexpr_mut(&mut expr.node, f);
+        }
+        TypedExprKind::Block { stmts } => {
+            for stmt in stmts {
+                for_each_subexpr_mut(&mut stmt.node, f);
+            }
         }
         TypedExprKind::HeapSnapshot { .. }
         | TypedExprKind::ChannelCreate { .. }

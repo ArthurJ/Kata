@@ -414,6 +414,9 @@ pub enum TypedExprKind {
     /// que retorna um ponteiro válido na root_arena (carregado em load-time).
     /// `ty` é o mesmo tipo da expressão original — preservado exactamente.
     HeapSnapshot { snapshot_id: u32, ty: Ty },
+    /// Bloco de expressões sequenciais — usado em match arm body indentado
+    /// com múltiplas statements. O resultado é a última expressão.
+    Block { stmts: Vec<Spanned<TypedExpr>> },
 }
 
 /// Tipo de canal criado por `channel!()`, `queue!(N)`, `broadcast!()`.
@@ -428,12 +431,25 @@ pub enum ChannelKind {
 }
 
 /// Braço de `select` na TAST.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
-pub struct TypedSelectArm {
-    pub channel: Spanned<TypedExpr>,
-    pub recv_ty: Ty,
-    pub bind_name: String,
-    pub body: Spanned<TypedExpr>,
+pub enum TypedSelectArm {
+    /// `rx <! nome: body` — braço de canal.
+    Channel {
+        channel: Spanned<TypedExpr>,
+        recv_ty: Ty,
+        bind_name: String,
+        body: Spanned<TypedExpr>,
+    },
+    /// `read!(handle, n) <! nome: body` — braço de leitura de I/O.
+    IoRead {
+        handle_expr: Spanned<TypedExpr>,
+        chunk_size_expr: Spanned<TypedExpr>,
+        /// Tipo do binding: Result::(Bytes, Text).
+        bind_ty: Ty,
+        bind_name: String,
+        body: Spanned<TypedExpr>,
+    },
 }
 
 /// Um estágio de um `FusedStream` — transformação individual na cadeia.

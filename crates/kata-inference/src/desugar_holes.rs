@@ -313,10 +313,27 @@ pub(crate) fn desugar_holes(expr: &Spanned<Expr>) -> Spanned<Expr> {
         } => {
             let arms: Vec<SelectArm> = arms
                 .iter()
-                .map(|arm| SelectArm {
-                    channel: desugar_holes(&arm.channel),
-                    bind_name: arm.bind_name.clone(),
-                    body: desugar_holes(&arm.body),
+                .map(|arm| match arm {
+                    SelectArm::Channel {
+                        channel,
+                        bind_name,
+                        body,
+                    } => SelectArm::Channel {
+                        channel: desugar_holes(channel),
+                        bind_name: bind_name.clone(),
+                        body: desugar_holes(body),
+                    },
+                    SelectArm::IoRead {
+                        handle_expr,
+                        chunk_size_expr,
+                        bind_name,
+                        body,
+                    } => SelectArm::IoRead {
+                        handle_expr: desugar_holes(handle_expr),
+                        chunk_size_expr: desugar_holes(chunk_size_expr),
+                        bind_name: bind_name.clone(),
+                        body: desugar_holes(body),
+                    },
                 })
                 .collect();
             Spanned::new(
@@ -340,6 +357,12 @@ pub(crate) fn desugar_holes(expr: &Spanned<Expr>) -> Spanned<Expr> {
         Expr::Comptime { expr: inner } => Spanned::new(
             Expr::Comptime {
                 expr: Box::new(desugar_holes(inner)),
+            },
+            expr.span,
+        ),
+        Expr::Block { stmts } => Spanned::new(
+            Expr::Block {
+                stmts: stmts.iter().map(desugar_holes).collect(),
             },
             expr.span,
         ),
