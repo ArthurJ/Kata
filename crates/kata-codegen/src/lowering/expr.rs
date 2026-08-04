@@ -342,7 +342,9 @@ pub(crate) fn lower_expr(
             // O close explícito (close!) remove da lista; o epílogo fecha
             // o que sobrou (file handles não fechados pelo programador).
             if value.node.ty == Ty::File {
-                ctx.file_handle_vars.push(var);
+                ctx.io_handle_vars.push((var, super::IoHandleKind::File));
+            } else if value.node.ty == Ty::Socket {
+                ctx.io_handle_vars.push((var, super::IoHandleKind::Socket));
             }
             // Let retorna Unit.
             Ok(ctx.builder.ins().iconst(I64, 0))

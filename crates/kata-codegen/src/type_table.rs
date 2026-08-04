@@ -127,6 +127,8 @@ pub fn ty_to_marshal_shape(ty: &Ty, structs: &StructRegistry, enums: &EnumRegist
         Ty::Sender(_) | Ty::Receiver(_) | Ty::ReceiverFactory(_) => TypeShape::Prim,
         // File — handle opaco (8 bytes). Marshal como Prim.
         Ty::File => TypeShape::Prim,
+        // Socket — handle opaco (8 bytes). Marshal como Prim.
+        Ty::Socket => TypeShape::Prim,
         // InferVar/Var/Interface — não deveriam aparecer em runtime.
         // Mapeia para Unit graceful (não deve ser marshal'd em produção).
         Ty::InferVar(_) | Ty::Var(_) | Ty::Interface(_) => TypeShape::Unit,

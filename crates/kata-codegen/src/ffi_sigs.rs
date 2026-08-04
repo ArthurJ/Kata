@@ -36,7 +36,8 @@ pub(crate) fn ty_to_clif(ty: &Ty) -> cranelift_codegen::ir::Type {
         | Ty::Receiver(_)
         | Ty::ReceiverFactory(_)
         | Ty::Bytes
-        | Ty::File => I64,
+        | Ty::File
+        | Ty::Socket => I64,
         Ty::Byte => I64,
         Ty::Function(_, _) => I64,
         Ty::Action(_, _) => I64,
@@ -934,6 +935,45 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
         }
         // file_close: (handle) -> void
         FfiSymbol::FileClose => {
+            sig.params.push(AbiParam::new(I64)); // handle
+        }
+        // ── Socket I/O ──
+        // socket_open: (kind_box, mode_box) -> i64 (Result box)
+        FfiSymbol::SocketOpen => {
+            sig.params.push(AbiParam::new(I64)); // kind_box (SocketKind Sum box)
+            sig.params.push(AbiParam::new(I64)); // mode_box (SocketMode Sum box)
+            sig.returns.push(AbiParam::new(I64)); // Result box ptr
+        }
+        // socket_listen: (listener_handle) -> i64 (Result box)
+        FfiSymbol::SocketListen => {
+            sig.params.push(AbiParam::new(I64)); // listener_handle
+            sig.returns.push(AbiParam::new(I64)); // Result box ptr
+        }
+        // socket_read: (handle) -> i64 (Result box)
+        FfiSymbol::SocketRead => {
+            sig.params.push(AbiParam::new(I64)); // handle
+            sig.returns.push(AbiParam::new(I64)); // Result box ptr
+        }
+        // socket_read_chunk: (handle, n) -> i64 (Result box)
+        FfiSymbol::SocketReadChunk => {
+            sig.params.push(AbiParam::new(I64)); // handle
+            sig.params.push(AbiParam::new(I64)); // n (SMI-tagged)
+            sig.returns.push(AbiParam::new(I64)); // Result box ptr
+        }
+        // socket_write_text: (handle, data_ptr) -> i64 (Result box)
+        FfiSymbol::SocketWriteText => {
+            sig.params.push(AbiParam::new(I64)); // handle
+            sig.params.push(AbiParam::new(I64)); // data_ptr (Text — C string)
+            sig.returns.push(AbiParam::new(I64)); // Result box ptr
+        }
+        // socket_write_bytes: (handle, data_ptr) -> i64 (Result box)
+        FfiSymbol::SocketWriteBytes => {
+            sig.params.push(AbiParam::new(I64)); // handle
+            sig.params.push(AbiParam::new(I64)); // data_ptr (Bytes — blob)
+            sig.returns.push(AbiParam::new(I64)); // Result box ptr
+        }
+        // socket_close: (handle) -> void
+        FfiSymbol::SocketClose => {
             sig.params.push(AbiParam::new(I64)); // handle
         }
     }

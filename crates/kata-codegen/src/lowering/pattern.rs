@@ -64,7 +64,11 @@ pub(crate) fn test_single_pattern(
             // O close explícito (close!) remove da lista; o epílogo fecha
             // o que sobrou (file handles não fechados pelo programador).
             if matches!(ty, Ty::File) {
-                lower.file_handle_vars.push(var);
+                lower.io_handle_vars.push((var, super::IoHandleKind::File));
+            } else if matches!(ty, Ty::Socket) {
+                lower
+                    .io_handle_vars
+                    .push((var, super::IoHandleKind::Socket));
             }
             Ok(None)
         }

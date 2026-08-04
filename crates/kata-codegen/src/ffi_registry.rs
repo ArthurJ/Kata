@@ -389,6 +389,29 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
         rt::kata_rt_file_write_bytes as *const u8,
     );
     builder.symbol("kata_rt_file_close", rt::kata_rt_file_close as *const u8);
+    // Socket I/O
+    builder.symbol("kata_rt_socket_open", rt::kata_rt_socket_open as *const u8);
+    builder.symbol(
+        "kata_rt_socket_listen",
+        rt::kata_rt_socket_listen as *const u8,
+    );
+    builder.symbol("kata_rt_socket_read", rt::kata_rt_socket_read as *const u8);
+    builder.symbol(
+        "kata_rt_socket_read_chunk",
+        rt::kata_rt_socket_read_chunk as *const u8,
+    );
+    builder.symbol(
+        "kata_rt_socket_write_text",
+        rt::kata_rt_socket_write_text as *const u8,
+    );
+    builder.symbol(
+        "kata_rt_socket_write_bytes",
+        rt::kata_rt_socket_write_bytes as *const u8,
+    );
+    builder.symbol(
+        "kata_rt_socket_close",
+        rt::kata_rt_socket_close as *const u8,
+    );
 }
 
 /// Declara todos os símbolos FFI no module e retorna o mapa nome → FuncId.
@@ -603,5 +626,13 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         FileWriteText,
         FileWriteBytes,
         FileClose,
+        // Socket I/O
+        SocketOpen,
+        SocketListen,
+        SocketRead,
+        SocketReadChunk,
+        SocketWriteText,
+        SocketWriteBytes,
+        SocketClose,
     ]
 }

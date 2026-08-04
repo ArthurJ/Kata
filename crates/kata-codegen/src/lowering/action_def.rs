@@ -130,7 +130,7 @@ pub(crate) fn define_kata_action(
             scheduler_mode: false, // dentro de Action: ActionCalls são call diretos
             loop_break_block: None,
             loop_continue_block: None,
-            file_handle_vars: Vec::new(),
+            io_handle_vars: Vec::new(),
             struct_registry,
             type_id_map,
             ipc_broker_fid: None,
@@ -212,18 +212,29 @@ pub(crate) fn define_kata_action(
         lower.builder.seal_block(epilogue_block);
         let result = lower.builder.block_params(epilogue_block)[0];
 
-        // Close de file handles abertos que não foram fechados explicitamente.
-        // Cada variável segura um handle (ponteiro para FileInner na arena).
-        // O close faz drop_in_place do FileInner (fecha o FD) — a memória
-        // é liberada quando a arena for resetada.
-        let close_ref = lower
+        // Close de I/O handles abertos que não foram fechados explicitamente.
+        // Cada variável segura um handle (ponteiro para FileInner/SocketInner).
+        // O close é idempotente — o epílogo despacha por IoHandleKind.
+        let file_close_ref = lower
             .ffi_refs
             .get("kata_rt_file_close")
             .copied()
             .ok_or_else(|| CodegenError::FfiSymbolNotFound("kata_rt_file_close".into()))?;
-        for &var in &lower.file_handle_vars {
-            let val = lower.builder.use_var(var);
-            lower.builder.ins().call(close_ref, &[val]);
+        let socket_close_ref = lower
+            .ffi_refs
+            .get("kata_rt_socket_close")
+            .copied()
+            .ok_or_else(|| CodegenError::FfiSymbolNotFound("kata_rt_socket_close".into()))?;
+        for (var, kind) in &lower.io_handle_vars {
+            let val = lower.builder.use_var(*var);
+            match kind {
+                super::IoHandleKind::File => {
+                    lower.builder.ins().call(file_close_ref, &[val]);
+                }
+                super::IoHandleKind::Socket => {
+                    lower.builder.ins().call(socket_close_ref, &[val]);
+                }
+            }
         }
 
         // Se @log quando Exit, injeta antes do return (epílogo).

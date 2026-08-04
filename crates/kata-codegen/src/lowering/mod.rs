@@ -54,6 +54,13 @@ use cranelift_codegen::ir::types::{F64, I64};
 use cranelift_codegen::ir::{Block, GlobalValue, Value};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
+
+/// Kind de I/O handle — determina qual FFI de close chamar no epílogo.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum IoHandleKind {
+    File,
+    Socket,
+}
 use std::collections::HashMap;
 
 use crate::metadata::MetadataTable;
@@ -129,11 +136,11 @@ pub(crate) struct LowerCtx<'a, 'b> {
     /// Block de continuação do loop atual — `continue` faz `jump` para este block.
     /// `None` fora de um loop.
     pub loop_continue_block: Option<Block>,
-    /// File handles abertos que precisam de close no epílogo da action.
-    /// Cada entrada é uma Variable (global no Cranelift) que segura um
-    /// handle (ponteiro para FileInner na arena). O epílogo chama
-    /// `kata_rt_file_close` em cada um que não foi fechado explicitamente.
-    pub file_handle_vars: Vec<cranelift_frontend::Variable>,
+    /// I/O handles abertos que precisam de close no epílogo da action.
+    /// Cada entrada é `(Variable, IoHandleKind)` — a Variable segura o
+    /// handle (ponteiro para FileInner/SocketInner na arena) e o kind
+    /// determina qual FFI de close chamar no epílogo.
+    pub io_handle_vars: Vec<(cranelift_frontend::Variable, IoHandleKind)>,
     /// Catálogo de structs com alias_of/predicates — para resolver o
     /// Cranelift type correto de refined/alias de primitivos.
     pub struct_registry: &'a kata_core::StructRegistry,
