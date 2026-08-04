@@ -215,36 +215,20 @@ main!()"#
 // ═══════════════════════════════════════════════════════════════════
 
 /// `listen!` em um socket Connected deve retornar Err (não aceita conexões).
-/// TODO: este teste deadlocka — o servidor faz `listen!(conn)` após accept,
-/// mas o `tx !> -1` (send rendezvous) pode bloquear se o main ainda não
-/// chegou em `rx <! result`. Investigar race condition.
+///
+/// O main abre um listener, fork um cliente que conecta e fecha, o main
+/// aceita a conexão (produzindo um socket Connected) e tenta `listen!(conn)`
+/// — deve retornar Err imediatamente. Sem canal: o main retorna o resultado
+/// diretamente, evitando o deadlock do `channel!()` (rendezvous) onde
+/// `tx !> -1` bloqueia se o main ainda não chegou em `rx <! result`.
 #[serial]
 #[test]
-#[ignore = "race condition: tx !> -1 bloqueia antes do main chegar em rx <! result"]
 fn socket_connected_listen_fails() {
     let port = random_port();
     let addr = format!("127.0.0.1:{port}");
 
     let src = format!(
-        r#"action servidor (addr::Text, tx::Sender::Int) => Unit
-    let result := open!(SocketKind::TCP(addr), SocketMode::Listener)
-    match result
-      Result::Ok listener:
-        let client := listen!(listener)
-        match client
-          Result::Ok conn:
-            let bad := listen!(conn)
-            match bad
-              Result::Ok _:
-                close!(conn)
-                tx !> 0
-              Result::Err _:
-                close!(conn)
-                tx !> -1
-          Result::Err _: tx !> -2
-      Result::Err _: tx !> -3
-
-action cliente (addr::Text) => Int
+        r#"action cliente (addr::Text) => Int
     let result := open!(SocketKind::TCP(addr), SocketMode::Connected)
     match result
       Result::Ok sock:
@@ -254,13 +238,23 @@ action cliente (addr::Text) => Int
       Result::Err _: -4
 
 action main => Int
-    let ch := channel!()
-    let tx := ch.0
-    let rx := ch.1
-    fork!(servidor, ("{addr}", tx))
-    let _ := cliente!("{addr}")
-    rx <! result
-    result
+    let result := open!(SocketKind::TCP("{addr}"), SocketMode::Listener)
+    match result
+      Result::Ok listener:
+        fork!(cliente, ("{addr}"))
+        let client := listen!(listener)
+        match client
+          Result::Ok conn:
+            let bad := listen!(conn)
+            match bad
+              Result::Ok _:
+                close!(conn)
+                0
+              Result::Err _:
+                close!(conn)
+                -1
+          Result::Err _: -2
+      Result::Err _: -3
 main!()"#
     );
 

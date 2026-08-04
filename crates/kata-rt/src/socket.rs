@@ -693,7 +693,9 @@ fn write_all(inner: &mut SocketInner, handle: i64, data: &[u8]) -> i64 {
         let err = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
         if err == libc::EAGAIN || err == libc::EWOULDBLOCK {
             // Buffer cheio — suspender fiber com o handle em socket_handles
-            // para o scheduler fazer poll(POLLIN) no FD do socket.
+            // para o scheduler fazer poll(POLLIN | POLLOUT) no FD do socket.
+            // POLLOUT é essencial: sem ele, o fiber nunca seria acordado quando
+            // o socket ficasse gravável novamente.
             let suspended = crate::fiber::with_suspend(|suspend| {
                 suspend.suspend(crate::fiber::YieldReason::WaitingOnSelect {
                     channel_handles: Vec::new(),
