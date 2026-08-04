@@ -391,3 +391,64 @@ main!()"#;
         "escape analysis: valor deve sobreviver ao sender (arena raiz/LCA)"
     );
 }
+
+// ── Teste 12: Channel sentinel — enviar -1 (colide com WOULD_BLOCK) ──
+
+/// Antes do out-parameter, enviar `-1` por um canal rendezvous deadlockava:
+/// `try_recv` retornava `-1` (o valor real), mas `kata_rt_channel_recv`
+/// interpretava como WOULD_BLOCK e suspendia o fiber indefinidamente.
+///
+/// Este teste verifica que o bug está corrigido: o producer envia `-1` e
+/// o consumer recebe `-1` sem deadlock.
+#[serial]
+#[test]
+fn channel_recv_negativo_um() {
+    let src = r#"action prod (tx::Sender::Int) => Unit
+  tx !> -1
+  ()
+action main => Int
+  let (tx, rx) := channel!()
+  fork!(prod, (tx))
+  rx <! val
+  val
+main!()"#;
+    let (raw, _ty) = eval_src(src);
+    assert_ne!(
+        raw, DEADLOCK_SENTINEL,
+        "enviar -1 por canal não deve deadlockar"
+    );
+    assert_eq!(
+        untag_smi(raw),
+        -1,
+        "consumer deve receber -1 (valor real, não sentinel)"
+    );
+}
+
+// ── Teste 13: Queue sentinel — enviar -1 via queue!(N) ──
+
+/// Mesmo bug do teste 12, mas com queue bufferizada. O valor `-1` é
+/// enfileirado e depois desenfileirado. Antes do fix, `try_recv` na queue
+/// também colidia com WOULD_BLOCK.
+#[serial]
+#[test]
+fn queue_recv_negativo_um() {
+    let src = r#"action prod (tx::Sender::Int) => Unit
+  tx !> -1
+  ()
+action main => Int
+  let (tx, rx) := queue!(1)
+  fork!(prod, (tx))
+  rx <! val
+  val
+main!()"#;
+    let (raw, _ty) = eval_src(src);
+    assert_ne!(
+        raw, DEADLOCK_SENTINEL,
+        "enviar -1 por queue não deve deadlockar"
+    );
+    assert_eq!(
+        untag_smi(raw),
+        -1,
+        "consumer deve receber -1 da queue (valor real, não sentinel)"
+    );
+}

@@ -138,18 +138,22 @@ unsafe fn send_auto_ack(ack_tx_handle: i64) {
 /// Tenta receber um valor do canal IPC.
 ///
 /// Lê o blob do pipe (len prefix + bytes), desserializa com `from_bytes`
-/// na arena fornecida. Retorna o valor desserializado ou `WOULD_BLOCK`
-/// se não há dados disponíveis.
+/// na arena fornecida. Retorna `true` e escreve o valor em `out` se há
+/// dados disponíveis; retorna `false` se não há dados.
 ///
 /// Após desserializar com sucesso, se `ack_tx_handle != 0`, envia um ack
 /// automático (SMI(1)) no ack channel. Transparente para a Action do usuário.
 ///
+/// Usa out-parameter em vez de sentinel para evitar colisão entre
+/// valores de usuário (e.g. `-1`) e o sinal de "canal vazio".
+///
 /// # Safety
 /// `handle` deve ser um handle IPC válido. `arena` deve ser válido.
-pub(super) unsafe fn try_ipc_recv(handle: i64, arena: i64) -> i64 {
+/// `out` deve apontar para i64 válido.
+pub(super) unsafe fn try_ipc_recv(handle: i64, arena: i64, out: *mut i64) -> bool {
     let ptr = ptr_of(handle);
     if ptr.is_null() {
-        return WOULD_BLOCK;
+        return false;
     }
     // SAFETY: handle veio de create_ipc_channel.
     let inner = unsafe { &*(ptr as *const IpcChannelInner) };
@@ -164,7 +168,7 @@ pub(super) unsafe fn try_ipc_recv(handle: i64, arena: i64) -> i64 {
     let rc = unsafe { libc::poll(&mut pfd as *mut libc::pollfd, 1, 0) };
     if rc <= 0 || (pfd.revents & libc::POLLIN) == 0 {
         // Sem dados disponíveis.
-        return WOULD_BLOCK;
+        return false;
     }
 
     // Há dados — lê o content_len (8 bytes) em modo blocking.
@@ -179,13 +183,13 @@ pub(super) unsafe fn try_ipc_recv(handle: i64, arena: i64) -> i64 {
             )
         };
         if n <= 0 {
-            return WOULD_BLOCK;
+            return false;
         }
         read_total += n as usize;
     }
     let content_len = i64::from_le_bytes(len_buf);
     if content_len <= 0 {
-        return WOULD_BLOCK;
+        return false;
     }
 
     // Lê o restante do blob (content_len bytes).
@@ -201,7 +205,7 @@ pub(super) unsafe fn try_ipc_recv(handle: i64, arena: i64) -> i64 {
             )
         };
         if n <= 0 {
-            return WOULD_BLOCK;
+            return false;
         }
         read_total += n as usize;
     }
@@ -211,7 +215,7 @@ pub(super) unsafe fn try_ipc_recv(handle: i64, arena: i64) -> i64 {
     let blob_size = 8 + total;
     let blob_ptr = crate::arena::kata_rt_arena_alloc(arena, blob_size as i64);
     if blob_ptr == 0 {
-        return WOULD_BLOCK;
+        return false;
     }
     unsafe {
         let p = blob_ptr as *mut u8;
@@ -221,13 +225,19 @@ pub(super) unsafe fn try_ipc_recv(handle: i64, arena: i64) -> i64 {
 
     let result = crate::marshal::kata_rt_from_bytes(blob_ptr, arena);
 
-    // Auto-ack: se ack_tx_handle != 0, enviar ack de consumo no ack channel.
-    // Transparente para a Action do usuário no child.
-    if result != WOULD_BLOCK {
-        unsafe { send_auto_ack(inner.ack_tx_handle) };
+    // from_bytes retorna 0 em falha. 0 nunca é um valor de usuário válido
+    // (SMI(0) = 1, ponteiros são non-zero).
+    if result == 0 {
+        return false;
     }
 
-    result
+    // Auto-ack: se ack_tx_handle != 0, enviar ack de consumo no ack channel.
+    // Transparente para a Action do usuário no child.
+    unsafe { send_auto_ack(inner.ack_tx_handle) };
+
+    // SAFETY: out é um ponteiro válido fornecido pelo caller (ops.rs).
+    unsafe { *out = result };
+    true
 }
 
 /// Verifica se `kata_rt_channel_recv` retornaria um valor (não WOULD_BLOCK)

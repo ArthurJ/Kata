@@ -2,8 +2,9 @@
 
 ## Status
 
-**Status:** ⏸️ Pendente (não iniciado)
+**Status:** ✅ Concluído
 **Data:** 2026-08-04
+**Implementado em:** commit (esta sessão)
 **Depende de:** PRD-csp-channels (canais rendezvous, queue, broadcast), PRD-socket-io (teste `socket_connected_listen_fails` que expôs o bug)
 **Habilita:** Enviar qualquer `Int` (incluindo `-1`) por canal sem deadlock
 
@@ -315,16 +316,17 @@ quantidade de canais sem benefício.
 
 ## 7. Critérios de aceite
 
-- [ ] `try_recv(handle, &mut out)` retorna `bool` (true = valor em `out`,
+- [x] `try_recv(handle, &mut out)` retorna `bool` (true = valor em `out`,
       false = vazio)
-- [ ] `kata_rt_channel_recv` continua `(handle: i64) -> i64` — assinatura FFI
+- [x] `kata_rt_channel_recv` continua `(handle: i64) -> i64` — assinatura FFI
       inalterada
-- [ ] Enviar `-1` via `channel!()` e receber funciona (não deadlocka)
-- [ ] Enviar `-1` via `queue!(1)` e receber funciona
-- [ ] Teste `socket_connected_listen_fails` com `channel!()` passa
-- [ ] `cargo test --workspace --no-fail-fast` — ≥ 1372 passed, 0 failed
-- [ ] `WOULD_BLOCK` permanece `-1` para `try_send`, file, socket
-- [ ] Codegen não é modificado
+- [x] Enviar `-1` via `channel!()` e receber funciona (não deadlocka)
+- [x] Enviar `-1` via `queue!(1)` e receber funciona
+- [x] Teste `socket_connected_listen_fails` com `channel!()` passa
+- [x] `cargo test --workspace --no-fail-fast` — 1374 passed, 0 failed
+      (1372 base + 2 testes novos)
+- [x] `WOULD_BLOCK` permanece `-1` para `try_send`, file, socket
+- [x] Codegen não é modificado
 
 ## 8. Riscos
 

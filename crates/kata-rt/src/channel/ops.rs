@@ -157,11 +157,12 @@ fn try_send(handle: i64, value: i64) -> i64 {
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_channel_recv(handle: i64) -> i64 {
     loop {
-        let result = try_recv(handle);
-        if result != WOULD_BLOCK {
-            return result;
+        let mut out: i64 = 0;
+        let has_value = try_recv(handle, &mut out);
+        if has_value {
+            return out; // valor de usuário — pode ser qualquer i64
         }
-        // Não pode receber agora. Se há fiber em execução, suspende.
+        // Não há dado. Se há fiber em execução, suspende.
         let suspended = crate::fiber::with_suspend(|suspend| {
             suspend.suspend(crate::fiber::YieldReason::WaitingOnChannel(handle));
         });
@@ -181,15 +182,18 @@ pub extern "C" fn kata_rt_channel_recv(handle: i64) -> i64 {
     }
 }
 
-/// Tenta receber sem bloquear. Retorna o valor se disponível, `WOULD_BLOCK`
-/// se não há dado, `WOULD_BLOCK` para tag inválida.
+/// Tenta receber sem bloquear. Retorna `true` se há valor (escrito em
+/// `out`), `false` se não há dado ou tag inválida.
+///
+/// Usa out-parameter em vez de sentinel para evitar colisão entre
+/// valores de usuário (e.g. `-1`) e o sinal de "canal vazio".
 ///
 /// Função interna extraída para permitir re-tentativa após resume.
-fn try_recv(handle: i64) -> i64 {
+fn try_recv(handle: i64, out: *mut i64) -> bool {
     let tag = tag_of(handle);
     let ptr = ptr_of(handle);
     if ptr.is_null() {
-        return WOULD_BLOCK;
+        return false;
     }
     // SAFETY: handle veio da FFI de criação correspondente.
     unsafe {
@@ -202,9 +206,10 @@ fn try_recv(handle: i64) -> i64 {
                     .expect("mutex never poisoned: single-threaded cooperative runtime");
                 if let Some(v) = slot.take() {
                     inner.sender_ready.notify_one();
-                    v
+                    *out = v;
+                    true
                 } else {
-                    WOULD_BLOCK
+                    false
                 }
             }
             super::TAG_QUEUE => {
@@ -215,9 +220,10 @@ fn try_recv(handle: i64) -> i64 {
                     .expect("mutex never poisoned: single-threaded cooperative runtime");
                 if let Some(v) = buffer.pop_front() {
                     inner.not_full.notify_one();
-                    v
+                    *out = v;
+                    true
                 } else {
-                    WOULD_BLOCK
+                    false
                 }
             }
             super::TAG_BROADCAST_RX => {
@@ -234,7 +240,7 @@ fn try_recv(handle: i64) -> i64 {
                         .value
                         .lock()
                         .expect("mutex never poisoned: single-threaded cooperative runtime");
-                    let result = val.unwrap_or(WOULD_BLOCK);
+                    *out = val.unwrap_or(0);
                     // Atualiza last_seen. Preciso soltar os locks primeiro.
                     drop(val);
                     drop(ver);
@@ -244,18 +250,18 @@ fn try_recv(handle: i64) -> i64 {
                         .version
                         .lock()
                         .expect("mutex never poisoned: single-threaded cooperative runtime");
-                    result
+                    true
                 } else {
-                    WOULD_BLOCK
+                    false
                 }
             }
             TAG_IPC_CHANNEL => {
                 // Usa a root_arena (TLS) para alocar o valor desserializado.
                 let arena = crate::arena::kata_rt_get_root_arena_handle();
                 // SAFETY: handle veio de kata_rt_ipc_channel_create.
-                super::ipc::try_ipc_recv(handle, arena)
+                super::ipc::try_ipc_recv(handle, arena, out)
             }
-            _ => WOULD_BLOCK, // tag inválida ou broadcast sender (não recebe)
+            _ => false, // tag inválida ou broadcast sender (não recebe)
         }
     }
 }
