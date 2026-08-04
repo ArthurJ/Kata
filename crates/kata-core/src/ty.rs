@@ -76,6 +76,11 @@ pub enum Ty {
     /// Ponteiro na ABI (i64 com tag). Generaliza para Socket no futuro via
     /// camada IoHandle comum no runtime.
     File,
+    /// Socket — handle opaco para socket TCP/Unix aberto. Sem parametrização
+    /// de tipo (encoding determinado pela operação: read → Bytes, write aceita
+    /// Text ou Bytes). Ponteiro na ABI (i64). Pode ser Listener (passivo) ou
+    /// Connected (ativo, full-duplex).
+    Socket,
 }
 
 /// Mapeamento de representação FFI.
@@ -454,6 +459,7 @@ impl std::fmt::Display for Ty {
             Ty::Byte => f.write_str("Byte"),
             Ty::Bytes => f.write_str("Bytes"),
             Ty::File => f.write_str("File"),
+            Ty::Socket => f.write_str("Socket"),
         }
     }
 }
@@ -530,6 +536,7 @@ impl Ty {
             Ty::Byte => "Byte".into(),
             Ty::Bytes => "Bytes".into(),
             Ty::File => "File".into(),
+            Ty::Socket => "Socket".into(),
         }
     }
 }

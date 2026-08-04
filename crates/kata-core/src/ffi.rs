@@ -343,6 +343,22 @@ pub enum FfiSymbol {
     FileWriteBytes,
     /// `kata_rt_file_close(handle) -> ()` — fecha arquivo (decref ARC).
     FileClose,
+
+    // ── Socket I/O ─────────────────────────────────────────────────
+    /// `kata_rt_socket_open(kind_box, mode_box) -> i64` — cria socket, retorna Result box.
+    SocketOpen,
+    /// `kata_rt_socket_listen(listener_handle) -> i64` — accept, retorna Result box.
+    SocketListen,
+    /// `kata_rt_socket_read(handle) -> i64` — lê todo o disponível, retorna Result box.
+    SocketRead,
+    /// `kata_rt_socket_read_chunk(handle, n) -> i64` — lê até n bytes, retorna Result box.
+    SocketReadChunk,
+    /// `kata_rt_socket_write_text(handle, data_ptr) -> i64` — escreve Text, retorna Result box.
+    SocketWriteText,
+    /// `kata_rt_socket_write_bytes(handle, data_ptr) -> i64` — escreve Bytes, retorna Result box.
+    SocketWriteBytes,
+    /// `kata_rt_socket_close(handle) -> ()` — fecha socket (idempotente).
+    SocketClose,
 }
 
 impl FfiSymbol {
@@ -528,6 +544,14 @@ impl FfiSymbol {
             FfiSymbol::FileWriteText => "kata_rt_file_write_text",
             FfiSymbol::FileWriteBytes => "kata_rt_file_write_bytes",
             FfiSymbol::FileClose => "kata_rt_file_close",
+            // Socket I/O
+            FfiSymbol::SocketOpen => "kata_rt_socket_open",
+            FfiSymbol::SocketListen => "kata_rt_socket_listen",
+            FfiSymbol::SocketRead => "kata_rt_socket_read",
+            FfiSymbol::SocketReadChunk => "kata_rt_socket_read_chunk",
+            FfiSymbol::SocketWriteText => "kata_rt_socket_write_text",
+            FfiSymbol::SocketWriteBytes => "kata_rt_socket_write_bytes",
+            FfiSymbol::SocketClose => "kata_rt_socket_close",
         }
     }
 
@@ -698,6 +722,14 @@ impl FfiSymbol {
             FfiSymbol::FileWriteText => Ty::int(), // Result box ptr
             FfiSymbol::FileWriteBytes => Ty::int(), // Result box ptr
             FfiSymbol::FileClose => Ty::Unit,
+            // Socket I/O — retornam i64 (Result box ptr) ou Unit (close)
+            FfiSymbol::SocketOpen => Ty::int(),
+            FfiSymbol::SocketListen => Ty::int(),
+            FfiSymbol::SocketRead => Ty::int(),
+            FfiSymbol::SocketReadChunk => Ty::int(),
+            FfiSymbol::SocketWriteText => Ty::int(),
+            FfiSymbol::SocketWriteBytes => Ty::int(),
+            FfiSymbol::SocketClose => Ty::Unit,
         }
     }
 
@@ -883,6 +915,14 @@ impl FfiSymbol {
             FfiSymbol::FileWriteText,
             FfiSymbol::FileWriteBytes,
             FfiSymbol::FileClose,
+            // Socket I/O
+            FfiSymbol::SocketOpen,
+            FfiSymbol::SocketListen,
+            FfiSymbol::SocketRead,
+            FfiSymbol::SocketReadChunk,
+            FfiSymbol::SocketWriteText,
+            FfiSymbol::SocketWriteBytes,
+            FfiSymbol::SocketClose,
         ];
         all.iter().copied().find(|s| s.symbol_name() == name)
     }

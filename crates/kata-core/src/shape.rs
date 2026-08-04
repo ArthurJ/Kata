@@ -140,6 +140,8 @@ impl Ty {
             },
             // File: handle opaco — não é heap type (i64 com tag).
             Ty::File => TypeShape::Prim,
+            // Socket: handle opaco — não é heap type (i64).
+            Ty::Socket => TypeShape::Prim,
         }
     }
 }
