@@ -21,6 +21,98 @@ use super::expr::{InferCtx, infer_expr};
 use super::generics::{apply_subs, unify};
 use super::helpers::InferResult;
 
+// ── Reflection fields ──────────────────────────────────────────
+/// Fields de reflexão disponíveis em functions e actions via DotAccess.
+const REFLECTION_FIELDS: &[&str] = &["name", "arity", "param_types", "return_type", "is_action"];
+
+/// Retorna `true` se o field name é um field de reflexão de função/action.
+fn is_reflection_field(field: &str) -> bool {
+    REFLECTION_FIELDS.contains(&field)
+}
+
+/// Resolve um field de reflexão para uma `TypedExpr` constante em compile-time.
+///
+/// Usado no caso estático (Ident direto para função nomeada no TypeEnv ou
+/// action no DispatchTable). Produz `TextLit`, `IntLit`, `ListLit`, ou
+/// `VariantQual` — zero overhead de runtime.
+fn resolve_reflection_field(
+    field: &str,
+    name: &str,
+    params: &[Ty],
+    ret: &Ty,
+    is_action: bool,
+    span: &Span,
+) -> TypedExpr {
+    let (ty, kind) = match field {
+        "name" => (
+            Ty::text(),
+            TypedExprKind::TextLit {
+                text: name.to_string(),
+            },
+        ),
+        "arity" => (
+            Ty::int(),
+            TypedExprKind::IntLit {
+                text: params.len().to_string(),
+            },
+        ),
+        "param_types" => {
+            let elements: Vec<Spanned<TypedExpr>> = params
+                .iter()
+                .map(|p| {
+                    Spanned::new(
+                        TypedExpr {
+                            span: *span,
+                            ty: Ty::text(),
+                            tail_pos: false,
+                            escape: EscapeTarget::Local,
+                            kind: TypedExprKind::TextLit { text: p.to_text() },
+                        },
+                        *span,
+                    )
+                })
+                .collect();
+            (
+                Ty::List(Box::new(Ty::text())),
+                TypedExprKind::ListLit { elements },
+            )
+        }
+        "return_type" => (
+            Ty::text(),
+            TypedExprKind::TextLit {
+                text: ret.to_text(),
+            },
+        ),
+        "is_action" => {
+            // Boolean::True (tag 0) ou Boolean::False (tag 1)
+            // O enum Boolean é definido no prelude: True=0, False=1
+            let (variant, tag) = if is_action {
+                ("True".to_string(), 0)
+            } else {
+                ("False".to_string(), 1)
+            };
+            (
+                Ty::boolean(),
+                TypedExprKind::VariantQual {
+                    enum_name: "Boolean".into(),
+                    variant,
+                    tag,
+                    module_path: None,
+                },
+            )
+        }
+        _ => unreachable!("is_reflection_field deve ser chamado antes"),
+    };
+
+    TypedExpr {
+        span: *span,
+        ty,
+        tail_pos: false,
+        escape: EscapeTarget::Local,
+        kind,
+    }
+}
+
 /// Infere `expr.nome` (field access) ou `expr.N` (index access).
 ///
 /// Desambiguação pelo tipo do receptor:
@@ -70,6 +162,26 @@ pub(crate) fn infer_dot_access(
                 escape: EscapeTarget::Local,
                 kind: TypedExprKind::Ident { name: qual_name },
             });
+        }
+
+        // ── Action reflection (caso 4a) ──
+        // Se `name` não está no TypeEnv, module access falhou, e o field é
+        // um field de reflexão, tentar buscar `name` no DispatchTable como action.
+        // Actions não são first-class — reflexão de actions é sempre estática.
+        if is_reflection_field(field_name) {
+            if let Some(overloads) = ctx.table.get_overloads(name) {
+                let overload = &overloads[0];
+                if overload.is_action {
+                    return Ok(resolve_reflection_field(
+                        field_name,
+                        name,
+                        &overload.params,
+                        &overload.ret,
+                        true,
+                        span,
+                    ));
+                }
+            }
         }
     }
 
@@ -385,6 +497,77 @@ pub(crate) fn infer_dot_access(
             ty: format!("{}", inner.ty),
             span: (*span).into(),
         }),
+        // ── Function reflection (caso 4b) ──────────────────────
+        // `f.name` onde `f` é `Ident` direto para função nomeada no TypeEnv.
+        // Resolve em compile-time para constante — zero overhead.
+        // O caso dinâmico (variável com Ty::Function) é tratado na Fase 5.
+        (Ty::Function(params, ret), DotIndex::Field(field_name))
+            if is_reflection_field(field_name)
+                && matches!(&expr.node, Expr::Ident { name } if env.lookup(name).is_some()) =>
+        {
+            // O receptor é Ident que resolve para função nomeada no TypeEnv.
+            // Extrair o nome do Ident para usar como `f.name`.
+            if let Expr::Ident { name } = &expr.node {
+                return Ok(resolve_reflection_field(
+                    field_name, name, params, ret, false, span,
+                ));
+            }
+            unreachable!("guard garante que expr é Ident");
+        }
+        // ── Function reflection (caso 5 — dinâmico) ────────────
+        // `g.name` onde `g` é variável/expressão com `Ty::Function`.
+        // O typeck não tem provenance — emite chamada FFI para binary search
+        // na sidecar table em runtime.
+        (Ty::Function(_, _), DotIndex::Field(field_name)) if is_reflection_field(field_name) => {
+            let field_id = match field_name.as_str() {
+                "name" => 0i64,
+                "arity" => 1,
+                "param_types" => 2,
+                "return_type" => 3,
+                "is_action" => 4,
+                _ => unreachable!("is_reflection_field garante field válido"),
+            };
+            // Tipo de retorno depende do field
+            let ret_ty = match field_name.as_str() {
+                "name" | "return_type" => Ty::text(),
+                "arity" => Ty::int(),
+                "param_types" => Ty::List(Box::new(Ty::text())),
+                "is_action" => Ty::boolean(),
+                _ => unreachable!(),
+            };
+            // Constrói: kata_rt_fn_meta_lookup(fn_ptr, field_id)
+            // O fn_ptr é o valor do receptor (inner), que já foi inferido
+            // como Ty::Function → I64 na ABI.
+            let field_id_typed = TypedExpr {
+                span: *span,
+                ty: Ty::int(),
+                tail_pos: false,
+                escape: EscapeTarget::Local,
+                kind: TypedExprKind::IntLit {
+                    text: field_id.to_string(),
+                },
+            };
+            let callee_typed = TypedExpr {
+                span: *span,
+                ty: Ty::Function(vec![Ty::int(), Ty::int()], Box::new(Ty::int())),
+                tail_pos: false,
+                escape: EscapeTarget::Local,
+                kind: TypedExprKind::Ident {
+                    name: "kata_rt_fn_meta_lookup".into(),
+                },
+            };
+            Ok(TypedExpr {
+                span: *span,
+                ty: ret_ty,
+                tail_pos,
+                escape: EscapeTarget::Local,
+                kind: TypedExprKind::Closure {
+                    callee: Box::new(Spanned::new(callee_typed, *span)),
+                    args: vec![*inner_box.clone(), Spanned::new(field_id_typed, *span)],
+                    ffi_symbol: Some("kata_rt_fn_meta_lookup".into()),
+                },
+            })
+        }
         // Field access em coleção não faz sentido.
         (
             Ty::List(_) | Ty::Array(_) | Ty::Range(_) | Ty::Bytes | Ty::Prim(PrimTy::Text),

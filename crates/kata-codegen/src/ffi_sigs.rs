@@ -984,6 +984,18 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
         FfiSymbol::SocketClose => {
             sig.params.push(AbiParam::new(I64)); // handle
         }
+        // ── Reflection (fn-reflection) ──
+        // register_fn_meta_table: (ptr, count) -> void
+        FfiSymbol::FnMetaRegister => {
+            sig.params.push(AbiParam::new(I64)); // ptr to table
+            sig.params.push(AbiParam::new(I64)); // count
+        }
+        // fn_meta_lookup: (fn_ptr, field) -> i64
+        FfiSymbol::FnMetaLookup => {
+            sig.params.push(AbiParam::new(I64)); // fn_ptr
+            sig.params.push(AbiParam::new(I64)); // field (0=name, 1=arity, ...)
+            sig.returns.push(AbiParam::new(I64)); // value
+        }
     }
 
     sig

@@ -223,7 +223,7 @@ pub fn infer_module(
             ret_ty: Some(&action_def.return_type),
             in_loop: false,
         };
-        let typed_action = infer_action(action_def, &ctx, &resolved.type_env)?;
+        let typed_action = infer_action(action_def, &ctx, &type_env)?;
         typed_actions.push(typed_action);
     }
 

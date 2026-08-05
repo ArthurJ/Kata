@@ -28,6 +28,7 @@ pub(crate) mod log;
 pub(crate) mod marshal;
 pub(crate) mod range;
 pub(crate) mod rational;
+pub(crate) mod reflection;
 pub(crate) mod scheduler;
 pub(crate) mod set;
 pub(crate) mod slice;
@@ -155,3 +156,5 @@ pub use display::{
 };
 // Hash — FNV-1a para Int, Text, Rational
 pub use hash::{kata_rt_hash_int, kata_rt_hash_rational, kata_rt_hash_text};
+// Reflection — sidecar table para fn_meta_lookup
+pub use reflection::{kata_rt_fn_meta_lookup, kata_rt_register_fn_meta_table};
