@@ -225,6 +225,17 @@ impl ReplSession {
             match self.run_pipeline_eval(&full_module) {
                 Ok(result) => {
                     display::print_result(result.raw, &result.ty);
+                    // Remove EntryExpr que não são bindings — expressões
+                    // puras (ex: `5`, `echo!(5)`, `g 5`) são "avaliar e
+                    // esquecer". Apenas `Let`/`LetDestruct` persistem.
+                    self.items.retain(|item| {
+                        match &item.node {
+                            Item::EntryExpr(expr) => {
+                                matches!(expr.node, Expr::Let { .. } | Expr::LetDestruct { .. })
+                            }
+                            _ => true,
+                        }
+                    });
                     Ok(())
                 }
                 Err(e) => {
@@ -417,9 +428,12 @@ fn dirs() -> PathBuf {
 pub(crate) fn cmd_repl() -> miette::Result<()> {
     let mut session = ReplSession::new().map_err(miette::Report::msg)?;
 
-    // Configurar rustyline com cores forçadas — o highlighter só funciona
-    // se ColorMode != Disabled. Forçamos para garantir colorização mesmo
-    // em terminais que não reportam capacidade de cor.
+    // Configurar rustyline com cores forçadas.
+    //
+    // ColorMode::Forced garante colorização mesmo em terminais que não
+    // reportam capacidade de cor. O eco duplo que víamos antes era
+    // causado pelo HistoryHinter (sugestões inline com ANSI), não pelo
+    // ColorMode — agora o hinter retorna None.
     let config = rustyline::config::Builder::new()
         .color_mode(rustyline::config::ColorMode::Forced)
         .build();

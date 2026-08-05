@@ -26,6 +26,7 @@ use kata_ast::Token;
 use kata_lexer::lex;
 use rustyline::CompletionType;
 use rustyline::Context;
+use rustyline::highlight::CmdKind;
 use rustyline::Result as RlResult;
 use rustyline::completion::Completer;
 use rustyline::highlight::Highlighter;
@@ -222,8 +223,11 @@ impl Completer for KataHelper {
 impl Hinter for KataHelper {
     type Hint = String;
 
-    fn hint(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<Self::Hint> {
-        rustyline::hint::Hinter::hint(&self.hinter, line, pos, ctx)
+    fn hint(&self, _line: &str, _pos: usize, _ctx: &Context<'_>) -> Option<Self::Hint> {
+        // Sem sugestões de histórico — o rustyline 14 exibe a sugestão
+        // inline com cor ANSI, o que confunde o cálculo de largura e
+        // causa eco duplo em alguns terminais.
+        None
     }
 }
 
@@ -270,9 +274,15 @@ impl Highlighter for KataHelper {
         Owned(format!("{BRIGHT_BLUE}{candidate}{RESET}"))
     }
 
-    fn highlight_char(&self, _line: &str, _pos: usize, _forced: bool) -> bool {
-        // Sempre re-highlight — o lexer é rápido e garante consistência.
-        true
+    fn highlight_char(&self, _line: &str, _pos: usize, kind: CmdKind) -> bool {
+        // Re-highlight em edições (Other) e refresh forçado (ForcedRefresh).
+        // Não re-highlight em movimento de cursor (MoveCursor).
+        //
+        // O rustyline 15 mudou a API de highlight_char para distinguir
+        // edição de movimento de cursor (PR #812, issue #332). Isto
+        // resolve o eco duplo: o refresh só acontece quando o texto muda,
+        // e o clear_old_rows limpa corretamente antes de re-renderizar.
+        matches!(kind, CmdKind::Other | CmdKind::ForcedRefresh)
     }
 }
 

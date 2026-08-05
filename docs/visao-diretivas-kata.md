@@ -59,12 +59,15 @@ migrá-las.
 enum Hook
     Enter       # injeta no prólogo (antes do corpo)
     Exit        # injeta no epílogo (após o corpo, antes do retorno)
-    Around      # envolve o corpo com possibilidade de short-circuit
+    Intercept   # intercepta: short-circuit ou transforma (só Target::Action)
 
 enum Target
     Action      # só decora actions
     Function    # só decora funções puras
     Any         # decora ambos
+
+# Intercept exige Target::Action. O compilador rejeita
+# Hook::Intercept com Target::Function ou Target::Any.
 ```
 
 ### 2.2. Campos de `@directive`
@@ -102,8 +105,8 @@ decorada. O compilador traduz cada item:
 | `f.param_types` | `List` literal de `TextLit` | idem | sempre |
 | `f.return_type` | `TextLit` constante | idem | sempre |
 | `f.is_action` | `Boolean::True`/`False` | idem | sempre |
-| `args` | tupla runtime dos argumentos | novo (sintetizado dos params) | `Enter`, `Exit`, `Around` |
-| `result` | valor de retorno runtime | novo (capturado do corpo) | `Exit`, `Around` apenas |
+| `args` | tupla runtime dos argumentos | novo (sintetizado dos params) | `Enter`, `Exit`, `Intercept` |
+| `result` | valor de retorno runtime | novo (capturado do corpo) | `Exit`, `Intercept` apenas |
 
 **Estáticos** (`f.*`) são resolvidos em compile-time — o compilador conhece
 a função decorada e extrai as constantes da assinatura. Zero overhead.
@@ -111,6 +114,12 @@ a função decorada e extrai as constantes da assinatura. Zero overhead.
 **Dinâmicos** (`args`, `result`) são valores de runtime — o compilador
 sintetiza `let args := (x,)` a partir dos parâmetros e `let result := <corpo>`
 a partir do valor de retorno.
+
+`result` representa o **valor de retorno observável** da função, não
+necessariamente o valor que o corpo produziu. Se uma diretiva `Intercept`
+interna short-circuita, Exit externo recebe o valor short-circuitado —
+não o valor do corpo (que não executou). Ver seção 5 para a semântica
+de propagação em stacking.
 
 ---
 
@@ -179,39 +188,89 @@ action buscar(x :: Int) => Int
             return __result
 ```
 
-### 4.3. Around
+### 4.3. Intercept
 
-Around é o modo mais complexo. Diferente de Enter/Exit (que são
-observação pura), around pode **short-circuit**: a diretiva decide se
-chama a função original ou retorna um valor cacheado.
+Intercept é o modo de **interceptação** — short-circuit (pular o corpo) ou
+transformação (modificar o resultado). Não há modo observacional de
+intercept: observar antes e depois sem interceptar é exatamente Enter +
+Exit, sem ganho adicional. Intercept existe para quando a diretiva precisa
+decidir se o corpo executa ou modificar o que ele retorna.
 
-**Restrição de pureza estrutural:**
+**Restrição estrutural: `Intercept` só decora actions (`Target::Action`).**
 
-1. Pode short-circuit (ex: cache pula a execução).
-2. O resultado não pode diferir do que a função produziria.
-3. Erro de runtime da diretiva não impede o retorno da função.
+Esta restrição não é pragmática — é estrutural. Funções puras têm a
+garantia de que nenhuma diretiva customizada pode interceptar sua
+execução. A garantia vale por impossibilidade (o compilador rejeita
+`Hook::Intercept` com `Target::Function` ou `Target::Any`), não por
+convenção. O leitor de código Kata5 nunca precisa auditar uma diretiva
+de interceptação para saber se uma função pura é segura — a
+impossibilidade é verificada uma vez, na declaração da diretiva.
 
-Isso faz as diretivas around serem **semanticamente transparentes** —
-adicionar ou remover a diretiva não muda o comportamento observável da
-função.
+Em actions, intercept é explicitamente **não-transparente**: a diretiva
+pode mudar o comportamento observável (short-circuit, substituição de
+resultado, negação de acesso). O autor da diretiva assume essa
+responsabilidade. `panic!` na diretiva aborta o processo, como em
+qualquer action — não há isolamento de fiber nem regra de fallback.
 
-Implicações:
+**Por que `@cache` fica intrínseca:** `@cache` é intercept transparente
+em função pura — short-circuit onde o valor cacheado é idêntico ao que
+a função produziria. É exatamente a categoria que customizadas não
+suportam, por design. Se intercept customizada fosse permitida em
+funções, ou exigiria um campo `transparent` que o leitor precisa checar
+(garantia por convenção, sujeita a degradação), ou quebraria a garantia
+de pureza das funções globalmente. A restrição a `Target::Action`
+preserva a garantia por impossibilidade estrutural.
 
-- `Around` só faz sentido em **funções puras**. Se a função tem efeito
-  colateral, short-circuit pula o efeito e muda o comportamento. A
-  diretiva deve declarar `on: Target::Function`.
-- `@cache` (intrínseca existente) é o caso canônico: o valor cacheado é
-  idêntico ao que a função produziria porque a função é pura e
-  determinística.
-- A regra de "erro não impede retorno" levanta a questão de como o codegen
-  protege a chamada da diretiva. `panic!` em Kata5 aborta com `exit(1)` —
-  capturar aborto exige isolamento de fiber, que tem overhead. Possível
-  interpretação: a regra cobre erros "suaves" (blocking, IO timeout) e
-  `panic!` na diretiva é bug do autor e aborta normalmente. Isso precisa
-  ser decidido quando a reflexão existir.
+**Escape hatch para funções:** se for necessário interceptar uma função
+pura, o caminho é embrulhar a função numa action que apenas a chama e
+aplicar a diretiva na action. O custo é visível no ponto de uso (uma
+action extra), não espalhado no type system. Isto cobre casos raros
+como profiling — que tipicamente é instrumentação de plataforma, não
+diretiva de linguagem.
+
+**Protocolo de short-circuit:**
+
+```kata
+@directive{when: Hook::Intercept, on: Target::Action, pass: [args]}
+action auth_intercept(args :: Request) => Optional::Response
+    ...
+```
+
+Desugaring de `@auth_intercept` em `handler`:
+
+```kata
+action handler(req :: Request) => Response
+    let __decision := auth_intercept!(req)
+    match __decision
+        Optional::Some(r): r          # short-circuit — retorna r
+        Optional::None:               # prossegue
+            let __result := process(req)
+            __result
+```
+
+A diretiva retorna `Optional::Some(value)` para short-circuit ou
+`Optional::None` para prosseguir. Protocolo simples, sem continuation,
+sem lambda — cabe no sistema de tipos atual de Kata5.
+
+**Transformação de resultado (enter+exit):** se a diretiva também
+precisa transformar o resultado, inclui `result` em `pass`. O desugaring
+passa a ter dois pontos de interceptação:
+
+```kata
+action handler(req :: Request) => Response
+    let __decision := auth_intercept_enter!(req)
+    match __decision
+        Optional::Some(r): r
+        Optional::None:
+            let __result := process(req)
+            auth_intercept_exit!(req, __result)   # retorna valor final
+```
+
+Se `pass` inclui `result`, a diretiva é enter+exit (short-circuit +
+transform). Se não, é enter-only (short-circuit puro).
 
 Desugaring conceitual de `@cache` (intrínseca, não migrada — só para
-ilustrar o modelo around):
+ilustrar o modelo intercept transparente que customizadas não suportam):
 
 ```kata
 # diretiva cache (intrínseca) em função pura
@@ -238,28 +297,71 @@ fib :: Int => Int
 
 ## 5. Stacking de diretivas
 
-Modelo cebola (onion), como Python decorators:
+Modelo cebola (onion), como Python decorators. Diretivas intrínsecas e
+customizadas coexistem no mesmo stack — cada uma é aplicada na sua fase
+(intrínsecas na codegen/lowering, customizadas no desugaring pré-typeck),
+mas o modelo de composição é o mesmo:
 
 ```kata
 @trace
 @cache
-action processar(x :: Int) => Int
-    ...
+fib :: Int => Int
+    lambda n: ...
 ```
 
 Expande para:
 
 ```
-trace.before
-    cache.before
+trace.before           # customizada — injeta chamada no prólogo
+    cache.before       # intrínseca — cache lookup
         <body → __result>
-    cache.after
-trace.after
+    cache.after        # intrínseca — cache store
+trace.after            # customizada — injeta chamada no epílogo
 ```
 
 Primeira diretiva = camada mais externa. `Enter` executa de cima para
-baixo, `Exit` de baixo para cima. Com `Around`, a diretiva mais externa
-envolve a mais interna.
+baixo, `Exit` de baixo para cima. Com `Intercept`, a diretiva mais
+externa envolve a mais interna.
+
+A interação entre intrínsecas e customizadas é bem-definida: o
+desugaring de customizadas acontece antes do typeck, produzindo o
+código que as intrínsecas então transformam. Cada camada é
+independente — não há ordem de aplicação ambígua.
+
+### 5.1. Propagação de short-circuit
+
+Quando uma diretiva `Intercept` short-circuita (retorna um valor sem
+executar o corpo), a propagação segue o modelo middleware:
+
+- **Tudo interno ao Intercept é pulado** — o corpo não executa, nem
+  diretivas Enter/Exit internas ao Intercept.
+- **Exit externo ao Intercept dispara** com o valor short-circuitado.
+- **Enter externo já disparou** (Enter é top-down, anterior ao Intercept).
+
+Exemplo:
+
+```kata
+@trace_exit                          # Exit — camada externa
+@auth_intercept                      # Intercept — camada interna
+action handler(req :: Request) => Response
+    process(req)
+```
+
+Se `auth_intercept` short-circuita (retorna `Optional::Some(deny)`):
+
+1. `trace_exit` (externo) **dispara** com `result = deny`.
+2. `auth_intercept` executou e decidiu short-circuit.
+3. O corpo (`process(req)`) **não executa**.
+
+Se `auth_intercept` prossegue (retorna `Optional::None`):
+
+1. O corpo executa normalmente.
+2. `trace_exit` (externo) dispara com `result = <valor do corpo>`.
+
+Isto significa que `result` em Exit é o **valor de retorno observável**
+— pode vir do corpo ou de uma diretiva Intercept interna que
+short-circuitou. O autor da diretiva Exit não precisa distinguir os
+dois casos.
 
 ---
 
@@ -273,7 +375,7 @@ As diretivas intrínsecas continuam chumbadas no compilador:
 | `@builtin` | anotação | marca função para síntese de nó TAST — codegen, não hook |
 | `@commutative` | anotação | habilita TRMA — transformação algébrica, não hook |
 | `@associative` | anotação | idem |
-| `@cache` | around | short-circuit em funções puras — intrínseca, não migrada |
+| `@cache` | intercept | intercept transparente em função pura — customizadas não suportam intercept em funções por design (ver 4.3) |
 | `@test` | anotação | tree shaking em produção — compilação condicional |
 | `@log` | enter/exit | **candidata a migração** — mas já implementada com poder compile-time (template interpolation, policies de canal) |
 
@@ -332,20 +434,18 @@ só decora funções com essa assinatura exata. Alternativas:
 
 Mesma questão. `pass: [result]` com `result :: Int` só decora funções que
 retornam `Int`. Para `@log` isso não é problema porque `{result}` vira
-`format` que é polimórfico. Para diretivas customizadas com around, a
+`format` que é polimórfico. Para diretivas customizadas com intercept, a
 solução natural seria receber o valor tipado — mas aí a diretiva é
 monomórfica por tipo de retorno.
 
-### A3. `Around` e mecanismo de fallback
+### A3. Intercept e mecanismo de fallback
 
-A regra "erro de runtime da diretiva não impede retorno" exige que o
-codegen envolva a chamada da diretiva around num bloco protegido. Em
-Kata5, `panic!` aborta o processo. Capturar aborto exige isolamento de
-fiber, que tem overhead. Precisa decidir:
-
-- A regra cobre todo erro de runtime, ou só erros "suaves"?
-- `panic!` na diretiva é bug do autor e aborta, ou precisa ser capturado?
-- O overhead de isolamento é aceitável para around?
+**Resolvido pelo design atual.** Intercept é `Target::Action` only e
+explicitamente não-transparente. `panic!` na diretiva aborta o processo,
+como em qualquer action — não há isolamento de fiber nem regra de
+fallback. A regra de "erro não impede retorno" foi removida: intercept
+pode mudar o comportamento observável por design, e o autor da diretiva
+assume a responsabilidade.
 
 ### A4. Desugaring no AST vs. fase de resolução
 
@@ -358,6 +458,21 @@ validar o código expandido). Isso significa:
 
 Precisa verificar a arquitetura atual do pipeline para decidir onde
 encaixar.
+
+### A4b. Nomes gerados e colisão com identificadores de usuário
+
+O desugaring gera variáveis internas (`__result`, `__decision`,
+`__cached`). Se o usuário puder declarar variáveis com esses nomes,
+há colisão.
+
+**Decisão:** identificadores começando com `_` são reservados para o
+compilador. O usuário não pode declarar `let __result` nem `let _temp`.
+O `_` simples continua válido como hole (`+ 10 _`), wildcard em
+pattern matching (`Result::Err(_)`), e predicados em tipos refinados
+(`> _ 0`) — esses são símbolos sintáticos, não identificadores.
+
+Esta regra precisa ser implementada no lexer ou no typeck (ver A4
+para onde o desugaring encaixa no pipeline).
 
 ### A5. `return` explícito e injeção de Exit
 
@@ -406,7 +521,7 @@ diretivas customizadas não terão?
    de diretivas entre resolution e typeck.
 4. **Verificar mecanismo de early return** (A5) — como o codegen lida
    com `return` hoje e como a injeção de `Exit` cobre todos os caminhos.
-5. **Decidir sobre around e fallback** (A3) — se a regra de pureza
-   estrutural cobre `panic!` ou só erros suaves.
+5. **Intercept e fallback** (A3) — resolvido: intercept é
+   `Target::Action` only, não-transparente, `panic!` aborta.
 6. **Escrever o PRD** — depois de validar as hipóteses acima, converter
    este documento num PRD com fases, DoD, e comandos de verificação.
