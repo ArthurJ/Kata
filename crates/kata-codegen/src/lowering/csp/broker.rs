@@ -62,7 +62,9 @@ pub(crate) fn synthesize_ipc_broker(
     let func_id = ctx
         .module
         .declare_function(BROKER_NAME, Linkage::Local, &sig)
-        .map_err(|e| super::super::CodegenError::Cranelift(format!("declare {BROKER_NAME}: {e}")))?;
+        .map_err(|e| {
+            super::super::CodegenError::Cranelift(format!("declare {BROKER_NAME}: {e}"))
+        })?;
 
     // Cria Context + FunctionBuilder para construir o corpo do broker.
     let mut fn_ctx = ctx.module.make_context();
@@ -185,8 +187,7 @@ pub(crate) fn synthesize_ipc_broker(
     }
 
     // Define a função no module.
-    ctx
-        .module
+    ctx.module
         .define_function(func_id, &mut fn_ctx)
         .map_err(|e| super::super::CodegenError::Cranelift(format!("define {BROKER_NAME}: {e}")))?;
     ctx.module.clear_context(&mut fn_ctx);

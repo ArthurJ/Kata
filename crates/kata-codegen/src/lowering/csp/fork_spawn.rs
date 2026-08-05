@@ -21,9 +21,7 @@ fn lookup_action_fn_ptr(
 ) -> Result<Value, super::super::CodegenError> {
     let param_types: Vec<Ty> = match &args.node.kind {
         TypedExprKind::Unit => Vec::new(),
-        TypedExprKind::Tuple { elements } => {
-            elements.iter().map(|e| e.node.ty.clone()).collect()
-        }
+        TypedExprKind::Tuple { elements } => elements.iter().map(|e| e.node.ty.clone()).collect(),
         _ => vec![args.node.ty.clone()],
     };
 
@@ -122,8 +120,7 @@ pub(crate) fn lower_fork(
     };
 
     // 5. Determinar caller_arena (onde os args vivem — EscapeTarget do expr).
-    let caller_arena_val =
-        crate::lowering::escape_arena::arena_handle_for_escape(expr.escape, ctx);
+    let caller_arena_val = crate::lowering::escape_arena::arena_handle_for_escape(expr.escape, ctx);
 
     // 6. kata_rt_spawn(fn_ptr, caller_arena, args_ptr) → fiber_id
     let spawn_ref = get_ffi(ctx, "kata_rt_spawn")?;

@@ -26,10 +26,7 @@ use super::LowerCtx;
 
 /// Busca um `FuncRef` pelo nome da FFI no `ctx.ffi_refs`, retornando
 /// `CodegenError::FfiSymbolNotFound` se ausente.
-pub(crate) fn get_ffi(
-    ctx: &LowerCtx,
-    name: &str,
-) -> Result<FuncRef, super::CodegenError> {
+pub(crate) fn get_ffi(ctx: &LowerCtx, name: &str) -> Result<FuncRef, super::CodegenError> {
     ctx.ffi_refs
         .get(name)
         .copied()

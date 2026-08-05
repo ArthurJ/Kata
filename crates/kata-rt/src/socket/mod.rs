@@ -32,8 +32,8 @@ pub(crate) mod select;
 // símbolos C-ABI.
 pub use create::{kata_rt_socket_listen, kata_rt_socket_open};
 pub use io::{
-    kata_rt_socket_close, kata_rt_socket_read, kata_rt_socket_read_chunk,
-    kata_rt_socket_readline, kata_rt_socket_write_bytes, kata_rt_socket_write_text,
+    kata_rt_socket_close, kata_rt_socket_read, kata_rt_socket_read_chunk, kata_rt_socket_readline,
+    kata_rt_socket_write_bytes, kata_rt_socket_write_text,
 };
 // Re-exports pub(crate) para scheduler e channel::select.
 pub(crate) use select::{SOCKET_WOULD_BLOCK, collect_socket_fds, try_select_sockets};

@@ -263,10 +263,7 @@ pub(crate) fn lower_select(
 
                 // Comparar global_idx == j (channel arms são 0..n_c-1).
                 let expected = ctx.builder.ins().iconst(I64, j as i64);
-                let is_this =
-                    ctx.builder
-                        .ins()
-                        .icmp(IntCC::Equal, global_idx, expected);
+                let is_this = ctx.builder.ins().icmp(IntCC::Equal, global_idx, expected);
                 ctx.builder
                     .ins()
                     .brif(is_this, body_block, &[], next_test_block, &[]);
@@ -338,10 +335,7 @@ pub(crate) fn lower_select(
 
                 // Comparar global_idx == base_offset + j.
                 let expected = ctx.builder.ins().iconst(I64, base_offset + j as i64);
-                let is_this =
-                    ctx.builder
-                        .ins()
-                        .icmp(IntCC::Equal, global_idx, expected);
+                let is_this = ctx.builder.ins().icmp(IntCC::Equal, global_idx, expected);
                 ctx.builder
                     .ins()
                     .brif(is_this, body_block, &[], next_test_block, &[]);
@@ -407,10 +401,10 @@ pub(crate) fn lower_select(
 
         // global_idx == -2 (SELECT_TIMEOUT).
         let timeout_sentinel = ctx.builder.ins().iconst(I64, -2);
-        let is_timeout =
-            ctx.builder
-                .ins()
-                .icmp(IntCC::Equal, global_idx, timeout_sentinel);
+        let is_timeout = ctx
+            .builder
+            .ins()
+            .icmp(IntCC::Equal, global_idx, timeout_sentinel);
         ctx.builder
             .ins()
             .brif(is_timeout, timeout_block, &[], trap_block, &[]);

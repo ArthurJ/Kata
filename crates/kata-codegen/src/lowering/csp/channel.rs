@@ -1,8 +1,8 @@
 //! Lowering de operações de canal — create, send, recv, receiver factory.
 
+use cranelift_codegen::ir::Value;
 use cranelift_codegen::ir::types::I64;
 use cranelift_codegen::ir::{InstBuilder, MemFlagsData};
-use cranelift_codegen::ir::Value;
 use kata_core::ty::Ty;
 use kata_inference::{ChannelKind, TypedExpr};
 
@@ -128,9 +128,10 @@ pub(crate) fn lower_channel_create(
                     .caller_arena
                     .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
                 let spawn_ref = get_ffi(ctx, "kata_rt_spawn")?;
-                ctx.builder
-                    .ins()
-                    .call(spawn_ref, &[broker_fn_ptr, caller_arena_val, broker_args_ptr]);
+                ctx.builder.ins().call(
+                    spawn_ref,
+                    &[broker_fn_ptr, caller_arena_val, broker_args_ptr],
+                );
 
                 // A tupla que o usuário vê é (queue_tx, ipc_data_rx).
                 // Alocar tupla de 2 handles na arena (16 bytes).
