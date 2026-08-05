@@ -307,14 +307,13 @@ o lowering é direto TAST → CLIF (Cranelift IR).
 A semântica que o backend precisa é preservada de duas formas:
 
 1. **TAST enriquecida** (§2.5): cada nó carrega `ty`, `escape`, `capture`,
-   `tail_pos`, `mono_instance`, `effect`. O lowering lê estes campos diretamente.
+   `tail_pos`. O lowering lê estes campos diretamente.
 2. **MetadataTable sidecar** (§2.6): snapshot read-only do estado semântico
-   pós-lowering, indexado por `Inst`/`Block` do Cranelift. O ARC pass consulta
-   esta tabela.
+   pós-lowering, indexado por `Inst`/`Block` do Cranelift.
 
 O Cranelift faz o que sabe fazer bem (register allocation, instruction selection,
 const folding, DCE, inlining, TCO). O kata-optimizer faz o que precisa de
-semântica (TRMA, StreamFusion, ARC pass). Não há duplicação de análise.
+semântica (TRMA, StreamFusion). Não há duplicação de análise.
 
 ### 2.2. Visão Geral das Camadas
 
@@ -335,7 +334,7 @@ semântica via uma MetadataTable sidecar.
   parser é recursive-descent, prefix-only (sem Pratt). O AST é um crate separado
   (`kata-ast`) de dados puros, sem lógica.
 
-- **Módulos (`kata-module-loader`):** Carregamento de módulos do filesystem com
+- **Módulos (`kata-resolution`):** Carregamento de módulos do filesystem com
   cache e detecção de ciclos. `load_prelude` injeta a stdlib (`core`)
   automaticamente, produzindo `TypeEnv` + `DispatchTable` + `InterfaceRegistry`
   iniciais. O typeck não sabe da existência de arquivos.
@@ -351,10 +350,6 @@ semântica via uma MetadataTable sidecar.
 
 - **Monomorphization (`kata-monomorph`):** Especializa call sites genéricos,
   resolve impls concretos. Produz o `MonoModule` (TAST com tipos concretos).
-
-- **Escape Analysis (`kata-escape`):** 4 passes sobre a TAST, marca
-  `CaptureStorage` Stack/Heap. Produz o `AnnotatedModule` (TAST + anotações de
-  escape).
 
 - **Tree Shaking (`kata-tree-shaking`):** Dead code elimination. Worklist
   iterativa a partir das Actions, mark & filter. Produz o `ReachableModule`
@@ -384,9 +379,8 @@ semântica via uma MetadataTable sidecar.
   Produz `cranelift::Function` + `MetadataTable` sidecar (read-only).
 
 - **Optimizer (`kata-optimizer`):** Passes no TAST (TRMA, StreamFusion de
-  map/filter/fold). Passes pós-lowering (ARC pass via metadata). Constant
-  folding, DCE, inlining e TCO são delegados ao Cranelift, que os executa
-  nativamente.
+  map/filter/fold). Constant folding, DCE, inlining e TCO são delegados ao
+  Cranelift, que os executa nativamente.
 
 - **Runtime (`kata-rt`):** Biblioteca nativa isolada, linkada via symbol map.
   Scheduler cooperativo single-threaded (struct explícita, não TLS global),
@@ -400,7 +394,7 @@ semântica via uma MetadataTable sidecar.
   (ex: `type.mismatch`, `parse.unexpected_token`). Usado por todas as fases.
 
 - **Driver (`kata-driver`):** Crate do binário `kata`. Orquestra o pipeline:
-  lex → parse → module load → resolution → inference → monomorph → escape →
+  lex → parse → module load → resolution → inference → monomorph →
   tree shaking → comptime → lowering → optimize → emit → JIT/AOT → execução.
 
 ### 2.2. Diagrama do Pipeline
@@ -428,7 +422,7 @@ semântica via uma MetadataTable sidecar.
       │
       ▼
 ┌─────────────────────────────────────────────────────┐
-│  kata-module-loader                                 │
+│  kata-resolution (module loader)                    │
 │  load + cache + cycle detection                     │
 │  load_prelude → TypeEnv + DispatchTable +           │
 │                  InterfaceRegistry                  │
@@ -454,9 +448,8 @@ semântica via uma MetadataTable sidecar.
 │  saída: TypedModule (TAST)                          │
 │                                                     │
 │  TAST enriquecida:                                  │
-│    ty: Ty, escape: EscapeKind,                      │
-│    capture: Vec<CaptureInfo>, tail_pos: bool,       │
-│    mono_instance: u64, effect: Effect               │
+│    ty: Ty, escape: EscapeTarget,                    │
+│    capture: Vec<CaptureInfo>, tail_pos: bool        │
 └─────────────────────────────────────────────────────┘
       │
       ▼
@@ -465,17 +458,6 @@ semântica via uma MetadataTable sidecar.
 │  Especializa call sites genéricos                   │
 │  Resolve impls concretos                            │
 │  saída: MonoModule                                  │
-└─────────────────────────────────────────────────────┘
-      │
-      ▼
-┌─────────────────────────────────────────────────────┐
-│  kata-escape                                        │
-│  4 passes: marca CaptureStorage Stack/Heap          │
-│  Pass 0: closures em retorno de funções puras       │
-│  Pass 1: inspeção sintática (Send/Fork/ListLit/...) │
-│  Pass 2: propagação de aliases                      │
-│  Pass 3: promoção Stack → Heap                      │
-│  saída: AnnotatedModule                             │
 └─────────────────────────────────────────────────────┘
       │
       ▼
@@ -505,7 +487,7 @@ semântica via uma MetadataTable sidecar.
 │  Block arguments nativos (sem stack slots)          │
 │  + MetadataTable sidecar (read-only):               │
 │    inst_origins, block_origins, value_types,        │
-│    closure_info, escape_flags                       │
+│    closure_info, escape_flags (preparatório)        │
 │                                                     │
 │  saída: cranelift::Function + MetadataTable         │
 └─────────────────────────────────────────────────────┘
@@ -517,9 +499,6 @@ semântica via uma MetadataTable sidecar.
 │  Passes no TAST (já executados em inference):       │
 │    ✓ TRMA — mantido (precisa semântica)             │
 │    ✓ StreamFusion — map/filter/fold fusion          │
-│                                                     │
-│  Passes pós-lowering (consultam metadata):          │
-│    ✓ ARC pass — incref/decref via Arc<T> nativo     │
 │                                                     │
 │  Delegados ao Cranelift 0.133:                      │
 │    ✗ TCO, const fold, DCE, inlining — nativos       │
@@ -643,10 +622,9 @@ TAST possui:
 | Campo | Descrição |
 |---|---|
 | `ty: Ty` | Tipo canônico |
-| `escape: EscapeKind` | NãoEscapa / EscapaParaHeap / EscapaParaClosure |
+| `escape: EscapeTarget` | Local / Caller / Heap — destino de escape para seleção de arena |
 | `capture: Vec<CaptureInfo>` | O que esta lambda captura e como |
 | `tail_pos: bool` | Esta expressão está em posição de cauda? |
-| `mono_instance: u64` | Qual versão monomorfizada esta chamada resolve |
 
 Com isso, o lowering é direto: cada nó da TAST já carrega tudo que o CLIF
 precisa. O optimizer consulta a MetadataTable (snapshot pós-lowering) para
@@ -662,13 +640,15 @@ struct MetadataTable {
     inst_origins:   HashMap<cranelift::Inst, TastNodeId>,
     block_origins:  HashMap<cranelift::Block, TastNodeId>,
     value_types:    HashMap<cranelift::Value, Ty>,
-    closure_info:   HashMap<cranelift::FuncId, ClosureMeta>,
-    escape_flags:   HashMap<cranelift::Value, EscapeKind>,
+    closure_info:   HashMap<cranelift::FuncId, ClosureMeta>,  // preparatório
+    escape_flags:   HashMap<cranelift::Value, EscapeTarget>,   // preparatório
 }
 ```
 
-Read-only após lowering. Consultada pelo ARC pass. Não modificada por ninguém.
-O Cranelift não sabe que existe — é um snapshot do estado semântico pós-lowering.
+Read-only após lowering. `inst_origins`, `block_origins` e `value_types` são
+populados durante o lowering. `closure_info` e `escape_flags` existem para evitar
+retrofit futuro, mas atualmente não são populados. O Cranelift não sabe que a
+tabela existe — é um snapshot do estado semântico pós-lowering.
 
 ## 3. Sistema de Módulos e Resolução
 
@@ -707,7 +687,7 @@ como *entrypoint*, disponibilizando os seus itens exported globalmente sem
 necessidade de prefixo (ex: `echo!` direto, não `core.echo!`). Módulos
 secundários não importam o `core` magicamente — cada módulo resolve seus tipos
 independentemente. O carregamento do prelude é responsabilidade do
-`kata-module-loader`, não do typeck.
+`kata-resolution` (module loader), não do typeck.
 
 ### 3.4. Resolução de Caminhos (Path Resolution)
 
@@ -1821,12 +1801,14 @@ Como não há Garbage Collector, a posse da memória é regida em tempo de compi
   sharing entre threads — cada fiber tem sua arena.
 * **Caller's Arena:** Valores de retorno de Actions são alocados na arena do
   caller (zero cópia, persiste até o caller terminar).
-* **Heap (Root Arena) + ARC manual:** Dados que escapam por canais são
-  alocados na root arena (TrackedArena) com ARC manual — um CaptureBox com
-  header próprio (`fn_ptr`, `refcount`, `n_captures`). O compilador injeta
-  `incref`/`decref` via FFI. Quando o refcount chega a 0, `kata_rt_decref`
-  libera o bloco individualmente da root arena. O refcount é não-atomic
-  (adequado ao scheduler single-threaded).
+* **Heap (Root Arena):** A root arena (TrackedArena) armazena recursos do SO
+  (file/socket handles) e CaptureBoxes de closures com captura. CaptureBoxes
+  têm header próprio (`fn_ptr`, `refcount`, `n_captures`) com ARC manual — o
+  codegen injeta `incref`/`decref` via FFI. Quando o refcount chega a 0,
+  `kata_rt_decref` libera o bloco individualmente. O refcount é não-atomic
+  (adequado ao scheduler single-threaded). Valores que trafegam por canais
+  **não** usam ARC — são alocados na caller_arena (ver §5.2.2, "Por que não
+  ARC").
 
 ## 7. Diretivas de Compilador (@)
 
@@ -1871,7 +1853,7 @@ módulo), sempre precedendo imediatamente o item que modificam.
     para `@comptime` posterior no mesmo body.
     (Definition-site `@comptime` foi removido do escopo — a decisão de
     avaliar pertence ao call-site, onde os args são visíveis.)
-* **`@cache_strategy{strategy: "LRU"}`**: Interceta invocações puras repetidas e
+* **`@cache{strategy: "LRU"}`**: Interceta invocações puras repetidas e
   injeta pesquisas em Hash Table nativa (ex: `LRU` cache), efetuando
   *memoização* automática.
 * **`@test("descrição")`**: Marca um bloco para o *Test Runner*. A forma braced
@@ -2409,25 +2391,19 @@ let soma := + _ _            # Int Int => Int
 
 ### Closures com Captura Léxica
 
-Na TAST, toda chamada de função é `TExpr::Closure`:
+Na TAST, toda chamada de função é `TypedExprKind::Closure`:
 
 | Campo | Descrição |
 |---|---|
-| `name` | Nome da função para lookup do fn_ptr |
-| `args` | Argumentos fornecidos (concretos + holes) |
-| `holes` | Número de holes ainda não preenchidos |
-| `captures` | Variáveis capturadas do escopo externo |
-| `escapes` | Se a closure escapa → alocação heap/Arc |
+| `callee` | Expressão que resolve para a função (Ident, Lambda, etc.) |
+| `args` | Argumentos fornecidos (concretos) |
+| `ffi_symbol` | Símbolo FFI resolvido pelo DispatchTable (`None` para funções Kata puras) |
 
-### Modelo Stack/Arc e Escape Analysis
-
-- **Stack (`CaptureStorage::Stack`):** Padrão. Captures na arena local, libertadas
-  em O(1).
-- **Heap / `Arc<T>` (`CaptureStorage::Heap`):** Se a closure escapa (retornada,
-  enviada por canal, passada para `fork!`, armazenada em lista) — captures
-  promovidas para heap global com `Arc<T>` nativo.
-
-Escape Analysis em 4 passes (ver §2.2 pipeline).
+As variáveis capturadas por uma closure são lidas de `Lambda.captures` (single
+source of truth). O call site aloca um CaptureBox via `kata_rt_alloc_arc` e passa
+`box_ptr` como primeiro argumento. A seleção de arena (Local/Caller/Heap) é
+determinada pelo campo `escape: EscapeTarget` do nó, atribuído durante o
+inference (ver §5.2.2, EscapeTarget).
 
 ### Chamada a Closures Escapadas (`FnValueCall`)
 
