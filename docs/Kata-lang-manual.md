@@ -2994,3 +2994,198 @@ kata> + x 5
 O histórico de inputs é persistido em `~/.kata_repl_history` via rustyline.
 Setas ↑/↓ navegam o histórico. O histórico é salvo ao sair do REPL (`:quit`
 ou Ctrl-D).
+
+---
+
+## 27. Reflexão de Funções
+
+Kata5 permite inspecionar metadata de funções e actions em tempo de execução
+ou compilação através de acesso de campo (`.`) sobre valores funcionais. Isto
+é **reflexão estruturada** — não é introspecção arbitrária de runtime, mas
+um conjunto fixo de fields com semântica definida pelo typeck.
+
+A reflexão é o pré-requisito para o sistema de diretivas definidas pelo
+usuário (decorators), onde `f.name` e `f.arity` são passados como metadata
+para hooks de before/after.
+
+### 27.1. Fields Disponíveis
+
+| Field | Tipo (estático, elemento de lista) | Tipo (dinâmico/desambiguado) | Descrição |
+|---|---|---|---|
+| `name` | `Text` | `Text` | Nome no DispatchTable (ou nome do binding para lambdas) |
+| `arity` | `Int` | `Int` | Número de parâmetros |
+| `param_types` | `List::Text` | `List::Text` | Tipos dos parâmetros como texto |
+| `return_type` | `Text` | `Text` | Tipo de retorno como texto |
+| `is_action` | `Boolean` | `Boolean` | `True` se Action, `False` se função pura |
+
+Field desconhecido (`f.foo`) → erro de compilação. Receptor não-funcional
+(`42.name`) → erro de compilação.
+
+### 27.2. Os Quatro Casos de Dispatch
+
+O typeck distingue quatro casos baseado no receptor e no tipo do index. A
+distinção é **estática** — resolvida em compile-time, sem dispatch em
+runtime sobre o tipo do receptor.
+
+#### Caso 1: Estático sem desambiguação — sempre lista
+
+```kata
+soma :: Int Int => Int
+lambda a b: + a b
+
+soma.name          # → ["soma"]
+soma.arity         # → [2]
+soma.param_types   # → [["Int", "Int"]]
+soma.return_type   # → ["Int"]
+soma.is_action     # → [False]
+```
+
+Quando o receptor é `Ident` direto para uma função nomeada no
+`DispatchTable`, o typeck consulta todas as overloads e produz `ListLit` —
+um elemento por overload. O tipo do elemento **não muda** quando overloads
+são adicionadas: `soma.arity` sempre é `List::Int`, nunca `Int`.
+
+Actions também seguem este caso (4a). Como actions não são first-class, a
+reflexão de actions é sempre estática via DispatchTable — sempre lista.
+
+#### Caso 2: Estático desambiguado — escalar
+
+```kata
+soma.(Int Int).arity   # → 2
+soma.(Int Int).name    # → "soma"
+```
+
+A sintaxe `f.(T1 T2 ...)` seleciona uma overload específica por tipos de
+parâmetros (ver §27.3). A partir daí, `.field` é escalar — um único valor,
+não lista.
+
+#### Caso 3: Dinâmico — escalar via sidecar table
+
+```kata
+let g := soma
+g.name    # → "soma"   (escalar)
+g.arity   # → 2        (escalar)
+```
+
+Quando o receptor é uma variável local (`let g := soma`) com `fn_alias`
+rastreando a função original, o typeck não sabe em compile-time qual overload
+está em `g` (pode haver múltiplas). Emite chamada FFI para
+`kata_rt_fn_meta_lookup(fn_ptr, field_id)`, que faz binary search O(log N)
+na sidecar table (`__kata_fn_meta_table`) em runtime.
+
+#### Caso 4: Lambda com binding — lista de length 1
+
+```kata
+let h := lambda x: + x 1
+h.name    # → ["h"]   (lista, length 1)
+```
+
+Quando o receptor é uma variável local com `Ty::Function` mas **sem**
+`fn_alias` (não é alias para função nomeada) e não está no DispatchTable, é
+uma lambda anônima. O typeck produz `ListLit` com 1 elemento usando o nome
+do binding.
+
+### 27.3. Desambiguação por Tipos: `f.(Int Int)`
+
+```kata
+soma :: Int Int => Int
+lambda a b: + a b
+soma :: Text Text => Text
+lambda a b: a
+
+soma.(Int Int).arity        # → 2 (escalar — overload Int Int)
+soma.(Text Text).name       # → "soma" (escalar — overload Text Text)
+soma.(Float Float).arity    # → erro: nenhuma overload compatível
+```
+
+**Sintaxe.** `f.(T1 T2 ...)` onde cada `Ti` é um `TypeExpr` resolvido pelo
+typeck para `Ty`. Tipos separados por espaço. Parênteses obrigatórios.
+
+**Parser.** No loop de DotAccess, `.(...)` pode conter `IntLit` (→
+`DotIndex::Int`, indexação de tupla) ou `TypeExpr` (→ `DotIndex::Type`,
+desambiguação). O lexer distingue naturalmente: `Token::IntLit` produz
+inteiros; `Token::Ident("Int")` produz tipos. O parser lê TypeExprs
+separados por espaço até encontrar `)`.
+
+**Typeck.** Filtra overloads (não-actions) por `params == requested`.
+- 1 match → `TypedExprKind::Ident` com `Ty::Function(params, ret)`
+  específica. A partir daí, `.field` usa a overload selecionada (escalar).
+- 0 matches → erro `TypeMismatch` ("nenhuma overload compatível").
+- 2+ matches (mesmos params, ret diferente) → erro ("múltiplas overloads com
+  mesmos params — ambígua").
+
+**Codegen.** Não precisa de mudança. O typeck produz um `Ident` com
+`Ty::Function` concreta, e o codegen já resolve via `symbol_table.get((name,
+params, ret))` → `FuncId` exata.
+
+### 27.4. Provenance Tracking (`fn_alias`)
+
+A distinção entre caso 3 (dinâmico, escalar) e caso 4 (lambda, lista) exige
+saber se um binding `let g := ...` é alias para função nomeada ou lambda
+anônima. Isto é rastreado via `fn_alias: Option<String>` em `TypeBinding`.
+
+No `Expr::Let`, se o value é `Expr::Ident` apontando para função nomeada no
+`DispatchTable`, o binding recebe `fn_alias = Some("nome_original")`.
+Lambdas (`let g := lambda...`) recebem `fn_alias = None`.
+
+A regra de dispatch no `dot_access`:
+
+| Condição | Caso | Retorno |
+|---|---|---|
+| Nome no DispatchTable (Ident direto) | 1 — estático | Lista |
+| `fn_alias = Some`, nome no DispatchTable | 3 — dinâmico | Escalar (sidecar table) |
+| `fn_alias = None`, não no DispatchTable | 4 — lambda | Lista (length 1) |
+
+### 27.5. Sidecar Table e ABI do Caso Dinâmico
+
+O caso dinâmico não consulta o DispatchTable em runtime (ele é destruído após
+o typeck). Em vez disso, o codegen emite um data symbol
+`__kata_fn_meta_table` com entries de 56 bytes cada:
+
+```
+offset  0: fn_ptr           (i64 — relocation resolvida pelo JIT)
+offset  8: name_ptr         (i64 — ponteiro para string estática)
+offset 16: arity            (i64 — número de parâmetros)
+offset 24: param_types_ptr  (i64 — ponteiro para array de string ptrs)
+offset 32: param_types_len  (i64 — número de param types)
+offset 40: return_type_ptr  (i64 — ponteiro para string estática)
+offset 48: is_action        (i64 — 0 = Function, 1 = Action)
+```
+
+O runtime registra esta tabela no prólogo do entry point (antes da execução
+do código do usuário) e consulta via binary search ordenado por `fn_ptr`.
+
+**ABI do lookup.** `kata_rt_fn_meta_lookup(fn_ptr, field_id)` retorna:
+- `arity`: SMI-tagged `(val << 1) | 1` via `kata_rt_tag_int`
+- `param_types`: List Cons na root arena via `kata_rt_list_cons`
+- `name`/`return_type`: C string ptr
+- `is_action`: inline 0/1
+
+**CaptureBox.** `let g := soma` produz um `CaptureBox` (box_ptr), não
+`fn_ptr` direto. O codegen intercepta `kata_rt_fn_meta_lookup` em
+`closure.rs` e faz `load(call_args[0], 0)` para extrair `fn_ptr` do
+CaptureBox antes de passar para a FFI.
+
+**SMI untag.** O `field_id` produzido pelo typeck como `IntLit` sofre SMI
+tagging no codegen (`encode_smi(0) = 1`). A interceptação faz untag
+(`(smi - 1) >> 1`) antes de passar para a FFI.
+
+### 27.6. Regras e Edge Cases
+
+1. **Actions não são first-class.** Reflexão de actions é sempre estática
+   via DispatchTable (caso 1 — sempre lista). `let g := action_name` não
+   existe.
+2. **Sempre lista no caso estático sem desambiguação.** `f.arity` →
+   `List::Int`. `f.(Int Int).arity` → `Int` escalar (desambiguado).
+3. **Caso dinâmico sempre escalar.** `fn_ptr` identifica overload exata na
+   sidecar table.
+4. **ABI não muda.** Função continua `I64` na ABI. `ty_to_clif` não muda.
+5. **`display()` de `Ty::Function`** produz `Lambda(Int Int -> Int)` —
+   renomeado de `Function` para `Lambda` na linguagem para evitar confusão
+   com `Ty::Action`.
+6. **Overloads com mesmos params, ret diferente.** `soma.(Int Int)` com duas
+   overloads `Int Int => Int` e `Int Int => Text` → erro de ambiguidade.
+7. **Field desconhecido** (`f.foo`) → erro de compilação
+   (`is_reflection_field` retorna `false`).
+8. **Receptor não-funcional** (`42.name`) → erro de compilação
+   (`NotIndexable`).
