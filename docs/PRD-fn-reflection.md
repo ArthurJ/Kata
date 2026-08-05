@@ -1,7 +1,7 @@
 # PRD — Reflexão de Funções via DotAccess: `f.name`, `f.arity`, `f.param_types`, `f.return_type`
 
-**Status:** 📋 Proposto
-**Data:** 2026-08-04
+**Status:** 📋 Proposto (revisto — overloads + desambiguação)
+**Data:** 2026-08-04 (revisto 2026-08-04)
 **Depende de:** DotAccess em structs ✅ (`infer_dot_access`), string table ✅ (`__kata_str_N`), data symbols ✅ (`declare_data`/`define_data`), `kata_rt_register_type_table` ✅ (padrão de registro), DispatchTable ✅ (`OverloadInfo.is_action`)
 **Não depende de:** Diretivas Kata (decorators) — este PRD é pré-requisito para diretivas que acessam metadata da função decorada.
 **Restrição preservada:** Actions não são first-class. `let g := processar` (action) continua ilegal. Reflexão de actions é sempre estática (compile-time).
@@ -9,35 +9,38 @@
 ## 1. Objetivo
 
 Permitir que funções e actions Kata sejam introspectáveis via DotAccess (`.`),
-expondo metadata estatica (nome, arity, tipos dos parâmetros, tipo de retorno) em
+expondo metadata estática (nome, arity, tipos dos parâmetros, tipo de retorno) em
 qualquer contexto — não apenas dentro de diretivas.
 
-A representação de função em runtime **nao muda**: continua sendo `I64` (fn ptr ou
+A representação de função em runtime **não muda**: continua sendo `I64` (fn ptr ou
 box ptr). A metadata fica numa **sidecar table** — array estático no binário,
 indexado por fn ptr, consultado via binary search em O(log N) quando `f.name` (ou
-outro field) é acessado em contexto dinamico. No contexto estatico (`f` é `Ident`
+outro field) é acessado em contexto dinâmico. No contexto estático (`f` é `Ident`
 direto para função nomeada), o typeck resolve para constante em compile-time —
 zero overhead de runtime.
 
-### Principios de design
+### Princípios de design
 
-- **Zero overhead quando nao usado.** Código que nao acessa `f.name` nao paga
-  nenhum custo — a sidecar table é data estática, nunca carregada se nao
+- **Zero overhead quando não usado.** Código que não acessa `f.name` não paga
+  nenhum custo — a sidecar table é data estática, nunca carregada se não
   referenciada.
-- **Zero mudança de ABI.** Função continua `I64`. `ty_to_clif` nao muda.
+- **Zero mudança de ABI.** Função continua `I64`. `ty_to_clif` não muda.
   CaptureBox, call_indirect, spawn, channel send — nada muda.
-- **Resolucao em compile-time quando possivel.** `f.name` onde `f` é `Ident`
-  direto resolve para `TextLit` em compile-time. O codegen nem emite o lookup.
-- **Fallback dinamico quando necessario.** `g := f; g.name` onde `g` é variável
+- **Resolução em compile-time quando possível.** `f.name` onde `f` é `Ident`
+  direto resolve para `ListLit` em compile-time. O codegen nem emite o lookup.
+- **Fallback dinâmico quando necessário.** `g := f; g.name` onde `g` é variável
   emite um binary search na sidecar table em runtime. O(7 comparações para 100
   funções).
-- **Sem novo TypedExprKind.** O caso estatico produz `TextLit`/`IntLit`. O caso
-  dinamico produz um `Closure` chamando `kata_rt_fn_meta_lookup` — reusa
+- **Sempre lista no caso estático.** `f.arity` retorna `List::Int` — um elemento
+  por overload. Honesto sobre ambiguidade: o tipo não muda quando overloads são
+  adicionadas. `f.(Int Int).arity` desambigua e retorna `Int` escalar.
+- **Sem novo TypedExprKind.** O caso estático produz `ListLit` de `TextLit`/`IntLit`.
+  O caso dinâmico produz um `Closure` chamando `kata_rt_fn_meta_lookup` — reusa
   infra existente.
 
-### Inspiracao
+### Inspiração
 
-O modelo é analogo a como Python expõe `__name__`, `__qualname__`, `__module__`
+O modelo é análogo a como Python expõe `__name__`, `__qualname__`, `__module__`
 em function objects. Em Python, a metadata vive no objeto função (overhead por
 função). Em Kata, a metadata vive numa sidecar table (overhead zero por
 função, lookup O(log N) por acesso).
@@ -47,101 +50,156 @@ função, lookup O(log N) por acesso).
 ### 2.1. Fields disponíveis
 
 ```kata
-f.name           # Text — "processar"
-f.arity          # Int — número de parâmetros (ex: 2)
-f.param_types    # List::Text — tipos dos parâmetros como texto (ex: ["Int", "Int"])
-f.return_type    # Text — tipo de retorno como texto (ex: "Int")
+f.name           # List::Text — ["processar"] (um por overload)
+f.arity          # List::Int — [2] (um por overload)
+f.param_types    # List::List::Text — [["Int", "Int"]] (um por overload)
+f.return_type    # List::Text — ["Int"] (um por overload)
+f.is_action      # List::Boolean — [False] (um por overload)
 ```
 
-### 2.2. Uso em contexto estático (Ident direto)
+**Sempre lista.** Mesmo com uma única overload, o tipo é `List`. Isto garante
+que código que compila com 1 overload continue compilando quando uma segunda
+overload é adicionada. O tipo não muda com a quantidade de overloads.
+
+### 2.2. Desambiguação por tipo — `f.(Type1 Type2 ...)`
+
+Quando o usuário quer uma overload específica, usa `.(Tipos)` para selecioná-la:
+
+```kata
+soma :: Int Int => Int
+    lambda a b: + a b
+
+soma :: Text Text => Text
+    lambda a b: + a b
+
+echo!(soma.(Int Int).arity)       # 2 — Int escalar, overload específica
+echo!(soma.(Text Text).arity)     # 2 — Int escalar, outra overload
+echo!(soma.(Int Int).return_type) # "Int" — Text escalar
+echo!(soma.arity)                 # [2, 2] — List::Int, todas as overloads
+```
+
+`f.(Int Int)` resolve para `Ty::Function([Int, Int], Int)` — a overload específica
+como valor. A partir daí, `.arity` é escalar porque o valor não é ambíguo.
+
+Desambiguação também funciona para atribuição:
+
+```kata
+let g := soma.(Int Int)   # g tem Ty::Function([Int, Int], Int)
+echo!(g.arity)            # 2 — Int escalar (via sidecar table, fn_ptr específico)
+```
+
+### 2.3. Uso em contexto estático (Ident direto, sem desambiguação)
 
 ```kata
 processar :: Int Int => Int
     lambda a b: + a b
 
-echo!(processar.name)           # "processar" — resolve em compile-time
-echo!(processar.arity)          # 2 — resolve em compile-time
-echo!(processar.param_types)    # ["Int", "Int"] — resolve em compile-time
-echo!(processar.return_type)    # "Int" — resolve em compile-time
+echo!(processar.name)           # ["processar"] — List::Text
+echo!(processar.arity)          # [2] — List::Int
+echo!(processar.param_types)    # [["Int", "Int"]] — List::List::Text
+echo!(processar.return_type)    # ["Int"] — List::Text
 ```
 
-O typeck reconhece que `processar` é `Ident` que resolve para função nomeada no
-`TypeEnv`. Os fields sao extraídos diretamente da assinatura e produzidos como
-constantes (`TextLit`, `IntLit`, `List` literal).
+O typeck reconhece que `processar` é `Ident` que resolve para função nomeada. Coleta
+**todas as overloads** deste nome e produz um `ListLit` com um elemento por overload.
 
-### 2.3. Uso em contexto dinâmico (variável)
+### 2.4. Uso em contexto estático desambiguado
 
 ```kata
-g := processar
-echo!(g.name)      # "processar" — binary search na sidecar table em runtime
-
-fns := [processar, fatorial, dobrar]
-picked := fns.(0)
-echo!(picked.name)  # binary search em runtime
+echo!(processar.(Int Int).name)           # "processar" — Text escalar
+echo!(processar.(Int Int).arity)          # 2 — Int escalar
+echo!(processar.(Int Int).param_types)    # ["Int", "Int"] — List::Text
+echo!(processar.(Int Int).return_type)    # "Int" — Text escalar
 ```
 
-O typeck nao consegue rastrear provenance de `g` até `processar` (dataflow
-breaks em reatribuição, match arms, coleções). Em vez de erro, emite um lookup
-na sidecar table: carrega fn_ptr da variável → binary search → carrega field
-do entry encontrado.
+`processar.(Int Int)` resolve para uma única `Ty::Function`. Os fields são extraídos
+dessa assinatura única e produzidos como escalares (`TextLit`, `IntLit`, `ListLit`).
 
-### 2.4. Aplicação em lambdas
+### 2.5. Uso em contexto dinâmico (variável)
+
+```kata
+g := soma.(Int Int)          # g tem Ty::Function([Int, Int], Int) — overload específica
+echo!(g.name)                # "soma" — Text escalar, binary search na sidecar table
+echo!(g.arity)               # 2 — Int escalar
+```
+
+O caso dinâmico é **sempre escalar** porque o `fn_ptr` identifica uma overload
+específica. O binary search na sidecar table encontra a entry exata.
+
+```kata
+fns := [soma.(Int Int), fatorial, dobrar]
+picked := fns.(0)
+echo!(picked.name)           # "soma" — binary search em runtime
+```
+
+### 2.6. Aplicação em lambdas
 
 Lambdas anônimas recebem nomes sintéticos na sidecar table:
 
 ```kata
 f := lambda x: + x 1
-echo!(f.name)      # "f" — nome do binding usado como nome na tabela
+echo!(f.name)      # ["f"] — List::Text (uma overload, sempre lista)
 ```
 
 Lambdas passadas diretamente (sem binding) recebem `__lambda_N`:
 
 ```kata
-echo!((lambda x: + x 1).name)  # "__lambda_0"
+echo!((lambda x: + x 1).name)  # ["__lambda_0"] — List::Text
 ```
 
-### 2.5. Aplicação em actions — sempre estático
+Lambdas sempre têm uma única "overload" (não podem ser sobrecarregadas), então
+a lista tem sempre length 1.
+
+### 2.7. Aplicação em actions — sempre estático, sempre lista
 
 Actions **não são first-class** em Kata. `let g := processar` (onde `processar`
-é action) é ilegal — actions não sao registradas no `TypeEnv` como valores.
+é action) é ilegal — actions não são registradas no `TypeEnv` como valores.
 Esta restrição é preservada.
 
 Como consequência, reflexão de actions é **sempre estática** — o caso dinâmico
 nunca existe. O typeck resolve `processar.name` consultando a `DispatchTable`
-(nao o `TypeEnv`), que já contém `OverloadInfo { name, params, ret, is_action }`
-para cada action.
+(não o `TypeEnv`), que contém `OverloadInfo { name, params, ret, is_action }`
+para cada action. Como no caso de funções, retorna **sempre lista** — uma
+overload por elemento.
 
 ```kata
-action processar(x::Int) -> Int
-    x + 1
+action processar(x::Int) => Int
+    + x 1
 
-echo!(processar.name)         # "processar" — resolve em compile-time
-echo!(processar.arity)        # 1 — resolve em compile-time
-echo!(processar.param_types)  # ["Int"] — resolve em compile-time
-echo!(processar.return_type)  # "Int" — resolve em compile-time
-echo!(processar.is_action)    # Boolean::True — resolve em compile-time
+echo!(processar.name)         # ["processar"] — List::Text
+echo!(processar.arity)        # [1] — List::Int
+echo!(processar.param_types)  # [["Int"]] — List::List::Text
+echo!(processar.return_type)  # ["Int"] — List::Text
+echo!(processar.is_action)    # [True] — List::Boolean
 ```
 
-`processar` é `Ident` que nao está no `TypeEnv`. Hoje, este caminho tenta
-module access (`mod.fn` no `DispatchTable`). O novo código, se o field é
-`name`/`arity`/`param_types`/`return_type`/`is_action` e o `DispatchTable`
-tem um overload com `is_action: true` para este nome, resolve para constante.
+Desambiguação funciona igual a funções:
 
-O que **não funciona** com actions (e continua nao funcionando):
 ```kata
-g := processar        # ERRO — action nao é first-class
-[g, fatorial]         # ERRO — action nao é valor
-f(processar)          # ERRO — action nao é argumento
+echo!(processar.(Int).arity)  # 1 — Int escalar, overload específica
 ```
 
-### 2.6. O que NÃO funciona
+### 2.8. O que NÃO funciona
 
 ```kata
-42.name          # ERRO — Int nao é Function/Action
+42.name          # ERRO — Int não é Function/Action
 pessoa.name      # OK — field access em struct (comportamento existente)
 processar.foo    # ERRO — field desconhecido em função/action
-g := processar   # ERRO — action nao é first-class (restrição existente)
+g := processar   # ERRO — action não é first-class (restrição existente)
+soma.(Int).foo   # ERRO — field desconhecido após desambiguação
 ```
+
+### 2.9. Pipeline — parser de `.(Type1 Type2 ...)`
+
+O parser precisa reconhecer `.(Int Int)` como `DotIndex::Type(Vec<Ty>)`.
+A gramática atual de `.(...)` suporta `.(Int)` (indexing em tupla/lista) e
+.`(field_name)` (field access em struct). A nova forma é `.(Type1 Type2 ...)`
+onde os tipos são separados por espaço (mesma sintaxe de assinaturas Kata).
+
+**Desambiguação no parser:** `.(42)` é `DotIndex::Int(42)` (indexing numérico
+em coleção). `.(Int)` é `DotIndex::Type([Int])` (seleção de overload por tipo).
+O parser distingue pela forma: se o conteúdo é um literal inteiro → `Int`;
+se é um TypeExpr → `Type`. O lexer já distingue inteiros de identificadores.
 
 ## 3. Semântica
 
@@ -233,74 +291,99 @@ e usar `FuncId` como chave de lookup em vez de fn_ptr. Isto exige propagar
 `FuncId` junto com o fn_ptr (volta ao problema B-register). **Rejeitado** — o
 binary search por fn_ptr é O(log N) e nao requer mudança de ABI.
 
-### 3.4. Typeck — caso estático (functions via TypeEnv)
+### 3.3a. Desambiguação — `DotIndex::Type(Vec<Ty>)`
 
-Em `infer_dot_access` (`dot_access.rs`), novo case:
+Nova variante de `DotIndex`: `Type(Vec<Ty>)` — seleciona overload por tipos
+de parâmetros. Quando o typeck encontra `Ident("soma") . (Int Int)`:
+
+1. Resolve `soma` no DispatchTable/TypeEnv → coleta todas as overloads
+2. Filtra por `params == [Int, Int]`
+3. Se exatamente 1 match: retorna `TypedExprKind::Ident { name: "soma" }`
+   com `ty: Ty::Function([Int, Int], Int)` — a overload específica como valor
+4. Se 0 matches: erro `NoOverloadForTypes`
+5. Se 2+ matches (mesmos params, ret diferente): erro `AmbiguousOverload`
+
+O `Ident` resultante com `Ty::Function` concreta é o ponto de entrada para
+reflexão escalar: `soma.(Int Int).arity` encadeia `DotIndex::Type` depois
+`DotIndex::Field`. O typeck resolve `.(Int Int)` → `Ty::Function`, depois
+`.arity` no resultado — que é um valor não-ambíguo, portanto escalar.
+
+O codegen não muda: `Ident("soma")` com `Ty::Function([Int, Int], Int)`
+resolve via `symbol_table.get(("soma", [Int, Int], Int))` → `FuncId` exata.
+
+### 3.3b. TypeEnv — registro de todas as overloads
+
+Hoje o `TypeEnv` usa `HashMap<String, TypeBinding>` — `define` sobrescreve.
+Com overloads, a última função registrada vence e as anteriores são perdidas.
+
+**Mudança:** `HashMap<String, Vec<TypeBinding>>` — `define` faz `push`.
+`lookup` retorna `&[TypeBinding]` (todas as overloads). `lookup_single`
+retorna `Option<&TypeBinding>` (a última, para compatibilidade com código
+que não precisa disambiguar — ex: `infer_apply` que usa DispatchTable).
+
+Isto permite `let g := soma.(Int Int)` resolver para a overload correta,
+não a última registrada.
+
+### 3.4. Typeck — caso estático sem desambiguação (sempre lista)
+
+Em `infer_dot_access` (`dot_access.rs`), quando o receptor é `Ident` direto
+para função nomeada (no TypeEnv ou DispatchTable) e o index é `Field`:
 
 ```rust
-(Ty::Function(params, ret), DotIndex::Field(field))
-    if receptor é Expr::Ident que resolve para função nomeada no TypeEnv =>
-{
-    // Resolver em compile-time para constante
-    match field.as_str() {
-        "name" => TypedExprKind::TextLit { text: function_name.clone() },
-        "arity" => TypedExprKind::IntLit { text: params.len().to_string() },
-        "param_types" => TypedExprKind::List { elements: params.iter().map(|p| {
-            TypedExprKind::TextLit { text: ty_to_text(p) }
-        }).collect() },
-        "return_type" => TypedExprKind::TextLit { text: ty_to_text(ret) },
-        "is_action" => VariantQual { Boolean::False },
-        _ => erro UnknownField,
-    }
+// Coletar TODAS as overloads do nome
+let overloads = collect_all_overloads(name, env, ctx.table);
+// overloads: Vec<(params: Vec<Ty>, ret: Ty, is_action: bool)>
+
+// Para cada overload, resolver o field
+let elements: Vec<Spanned<TypedExpr>> = overloads.iter().map(|(params, ret, is_action)| {
+    resolve_reflection_field_scalar(field, name, params, ret, *is_action, span)
+}).collect();
+
+// Produzir ListLit
+TypedExpr {
+    ty: Ty::List(Box::new(field_type(field))),
+    kind: TypedExprKind::ListLit { elements },
 }
 ```
 
-**Critério "receptor é Ident direto para função nomeada":** o `expr.node`
-(interior do DotAccess) é `Expr::Ident { name }` e `env.lookup(name)` retorna
-`Some(Ty::Function(...))`. Se o `Ident` resolve para variável local (`let g :=
-f`), o typeck nao tem provenance e cai no caso dinâmico.
+`resolve_reflection_field_scalar` produz um escalar por overload:
+- `"name"` → `TextLit { text: name }`
+- `"arity"` → `IntLit { text: params.len().to_string() }`
+- `"param_types"` → `ListLit` de `TextLit` (tipos dos params desta overload)
+- `"return_type"` → `TextLit { text: ty_to_text(ret) }`
+- `"is_action"` → `VariantQual { Boolean::True/False }`
 
-### 3.4a. Typeck — caso estático (actions via DispatchTable)
+O `ListLit` externo tem um elemento por overload. Para `param_types`, o
+resultado é `List::List::Text` — uma lista de listas de textos.
 
-Actions nao sao registradas no `TypeEnv`. Quando o receptor é `Expr::Ident` que
-**nao** está no `TypeEnv`, o code já tenta module access (linhas 49-73 de
-`dot_access.rs`). O novo código estende este caminho:
+### 3.4a. Typeck — caso estático com desambiguação (escalar)
+
+Quando o receptor é `Ident.(Types).field` — o `.(Types)` resolve primeiro
+para `Ty::Function` específica, e `.field` é aplicado ao resultado:
 
 ```rust
-// Se Ident nao está no TypeEnv e module access falhou:
-// Tentar action lookup no DispatchTable.
-if let Expr::Ident { name } = &expr.node
-    && let DotIndex::Field(field_name) = index
-    && env.lookup(name).is_none()
-{
-    // 1. Tentar module access (existente)
-    let qual_name = format!("{name}.{field_name}");
-    if let Some(overloads) = ctx.table.get_overloads(&qual_name) {
-        // module access — comportamento existente
-        ...
-    }
+// Passo 1: Ident . (Int Int) → Ty::Function([Int, Int], Int)
+// (resolved pela seção 3.3a)
 
-    // 2. NOVO: Tentar action reflection
-    if is_reflection_field(field_name) {
-        if let Some(overloads) = ctx.table.get_overloads(name) {
-            let overload = &overloads[0];
-            if overload.is_action {
-                // Action estática — resolver field para constante
-                return Ok(resolve_reflection_field(
-                    field_name, name, &overload.params, &overload.ret, true
-                ));
-            }
-        }
-    }
-}
+// Passo 2: .arity na Ty::Function específica → escalar
+resolve_reflection_field_scalar(field, name, &params, &ret, is_action, span)
+// → IntLit { text: "2" }
 ```
 
-Como actions nao sao first-class, o caso dinâmico nao existe para `Ty::Action`.
-Se o `Ident` nao está no `TypeEnv` e o `DispatchTable` tem um overload com
-`is_action: true`, o typeck resolve estaticamente. Se o `DispatchTable` nao
-tem overload, é erro `UnboundName` (como hoje).
+O resultado é escalar porque a overload foi selecionada — não há ambiguidade.
 
-### 3.5. Typeck — caso dinâmico (functions apenas)
+### 3.4b. Typeck — caso estático (actions via DispatchTable)
+
+Actions não são registradas no `TypeEnv`. Quando o receptor é `Expr::Ident` que
+**não** está no `TypeEnv`, o code já tenta module access. O novo código, após
+module access falhar:
+
+1. Se `DotIndex::Field` e `is_reflection_field`: coletar todas as overloads
+   de action com este nome no DispatchTable → produzir `ListLit` (sempre lista)
+2. Se `DotIndex::Type`: filtrar overloads por params → retornar `Ty::Function`
+   específica (desambiguação)
+
+### 3.5. Typeck — caso dinâmico (functions apenas, sempre escalar)
 
 Quando o receptor é uma variável (`let g := f`) ou expressão complexa com
 `Ty::Function`:
@@ -338,8 +421,14 @@ Quando o receptor é uma variável (`let g := f`) ou expressão complexa com
 }
 ```
 
+O caso dinâmico é **sempre escalar** porque o `fn_ptr` identifica uma overload
+específica. O binary search na sidecar table encontra a entry exata — não há
+ambiguidade. O tipo de retorno é `Text` (name/return_type), `Int` (arity),
+`List::Text` (param_types), ou `Boolean` (is_action) — nunca `List` desses.
+
 O typeck sempre tenta o caso estático primeiro. Só recorre ao dinâmico quando
-o receptor nao é `Ident` direto para função nomeada.
+o receptor não é `Ident` direto para função nomeada (é variável, match result,
+coleção, etc.).
 
 ### 3.6. `ty_to_text` — serialização de tipos
 
@@ -725,32 +814,33 @@ nanossegundos. Nao vale otimizar com perfect hash.
 
 - **Diretivas Kata (decorators):** Este PRD habilita reflexão de funções.
   Diretivas que usam `f.name` em before/after blocks dependerão deste PRD
-  mas sao especificadas separadamente.
-- **Inspeção de body/AST:** Nao expõe o corpo da função. Isto exigiria
+  mas são especificadas separadamente.
+- **Inspeção de body/AST:** Não expõe o corpo da função. Isto exigiria
   quotation/splicing (sistema de macros). Fora de escopo.
 - **Reflexão de structs/enums:** `Pessoa.field_names` ou `Boolean.variants`
-  nao sao cobertos. Mesmo mecanismo (sidecar table) poderia ser estendido,
+  não são cobertos. Mesmo mecanismo (sidecar table) poderia ser estendido,
   mas é um PRD separado.
-- **Mudança de ABI:** Nenhuma. Função continua `I64`. Nao há B-register
+- **Mudança de ABI:** Nenhuma. Função continua `I64`. Não há B-register
   nem fat ptr.
-- **`f.call(args)`:** Nao adiciona invocação via DotAccess. `f(args)` ja
+- **`f.call(args)`:** Não adiciona invocação via DotAccess. `f(args)` já
   funciona (call syntax existente).
 
 ## 7. Critérios de aceite (DoD)
 
-1. `f.name` retorna o nome da função como `Text` em qualquer contexto
-   (estático ou dinâmico).
-2. `f.arity`, `f.param_types`, `f.return_type`, `f.is_action` funcionam
-   analogamente.
-3. No caso estático (function via TypeEnv ou action via DispatchTable), o
-   codegen emite constante (zero lookup em runtime).
-4. No caso dinâmico (function via variável), o binary search executa em
-   O(log N).
-5. Código que nao usa reflexão nao tem overhead de runtime.
-6. Lambdas atribuídas via `let` usam o nome do binding.
-7. Actions suportam os mesmos fields que functions, sempre estático.
-8. `let g := processar` (action) continua sendo erro de tipo (restrição
-   preservada — actions nao sao first-class).
-9. Monomorfização gera entries com nomes qualificados (functions).
-10. Todos os testes E2E passam.
-11. `cargo build --workspace` sem warnings novos.
+1. `f.name` retorna `List::Text` com o nome de cada overload no caso estático.
+2. `f.arity`, `f.param_types`, `f.return_type`, `f.is_action` retornam
+   `List::*` correspondentes no caso estático (sempre lista).
+3. `f.(Int Int).arity` desambigua e retorna `Int` escalar (overload específica).
+4. `f.(Int Int)` resolve para `Ty::Function([Int, Int], Int)` como valor.
+5. No caso dinâmico (`g := f.(Int Int); g.arity`), o binary search executa
+   em O(log N) e retorna escalar.
+6. Código que não usa reflexão não tem overhead de runtime.
+7. Lambdas atribuídas via `let` usam o nome do binding (lista de length 1).
+8. Actions suportam os mesmos fields que functions, sempre estático, sempre
+   lista.
+9. `let g := processar` (action) continua sendo erro de tipo (restrição
+   preservada — actions não são first-class).
+10. TypeEnv registra todas as overloads (não sobrescreve).
+11. Monomorfização gera entries com nomes qualificados (functions).
+12. Todos os testes E2E passam.
+13. `cargo build --workspace` sem warnings novos.
