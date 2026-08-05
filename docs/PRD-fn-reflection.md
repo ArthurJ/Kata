@@ -78,13 +78,13 @@ echo!(soma.(Int Int).return_type) # "Int" — Text escalar
 echo!(soma.arity)                 # [2, 2] — List::Int, todas as overloads
 ```
 
-`f.(Int Int)` resolve para `Ty::Function([Int, Int], Int)` — a overload específica
+`f.(Int Int)` resolve para `Lambda(Int Int -> Int)` — a overload específica
 como valor. A partir daí, `.arity` é escalar porque o valor não é ambíguo.
 
 Desambiguação também funciona para atribuição:
 
 ```kata
-let g := soma.(Int Int)   # g tem Ty::Function([Int, Int], Int)
+let g := soma.(Int Int)   # g tem tipo Lambda(Int Int -> Int)
 echo!(g.arity)            # 2 — Int escalar (via sidecar table, fn_ptr específico)
 ```
 
@@ -112,13 +112,13 @@ echo!(processar.(Int Int).param_types)    # ["Int", "Int"] — List::Text
 echo!(processar.(Int Int).return_type)    # "Int" — Text escalar
 ```
 
-`processar.(Int Int)` resolve para uma única `Ty::Function`. Os fields são extraídos
+`processar.(Int Int)` resolve para um único `Lambda(Int Int -> Int)`. Os fields são extraídos
 dessa assinatura única e produzidos como escalares (`TextLit`, `IntLit`, `ListLit`).
 
 ### 2.5. Uso em contexto dinâmico (variável)
 
 ```kata
-g := soma.(Int Int)          # g tem Ty::Function([Int, Int], Int) — overload específica
+g := soma.(Int Int)          # g tem tipo Lambda(Int Int -> Int) — overload específica
 echo!(g.name)                # "soma" — Text escalar, binary search na sidecar table
 echo!(g.arity)               # 2 — Int escalar
 ```
@@ -299,7 +299,8 @@ de parâmetros. Quando o typeck encontra `Ident("soma") . (Int Int)`:
 1. Resolve `soma` no DispatchTable/TypeEnv → coleta todas as overloads
 2. Filtra por `params == [Int, Int]`
 3. Se exatamente 1 match: retorna `TypedExprKind::Ident { name: "soma" }`
-   com `ty: Ty::Function([Int, Int], Int)` — a overload específica como valor
+   com `ty: Ty::Function([Int, Int], Int)` (internamente) — o tipo na
+   linguagem é `Lambda(Int Int -> Int)`
 4. Se 0 matches: erro `NoOverloadForTypes`
 5. Se 2+ matches (mesmos params, ret diferente): erro `AmbiguousOverload`
 
@@ -831,7 +832,7 @@ nanossegundos. Nao vale otimizar com perfect hash.
 2. `f.arity`, `f.param_types`, `f.return_type`, `f.is_action` retornam
    `List::*` correspondentes no caso estático (sempre lista).
 3. `f.(Int Int).arity` desambigua e retorna `Int` escalar (overload específica).
-4. `f.(Int Int)` resolve para `Ty::Function([Int, Int], Int)` como valor.
+4. `f.(Int Int)` resolve para `Lambda(Int Int -> Int)` como valor.
 5. No caso dinâmico (`g := f.(Int Int); g.arity`), o binary search executa
    em O(log N) e retorna escalar.
 6. Código que não usa reflexão não tem overhead de runtime.

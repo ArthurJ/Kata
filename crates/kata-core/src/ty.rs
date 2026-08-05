@@ -502,14 +502,14 @@ impl Ty {
             }
             Ty::Function(params, ret) => {
                 if params.is_empty() {
-                    format!("(-> {})", ret.display())
+                    format!("Lambda(-> {})", ret.display())
                 } else {
                     let params_str = params
                         .iter()
                         .map(|p| p.display())
                         .collect::<Vec<_>>()
                         .join(" ");
-                    format!("({params_str} -> {})", ret.display())
+                    format!("Lambda({params_str} -> {})", ret.display())
                 }
             }
             Ty::Action(params, ret) => {
@@ -623,7 +623,7 @@ mod display_tests {
     fn display_function() {
         assert_eq!(
             Ty::Function(vec![Ty::int(), Ty::int()], Box::new(Ty::int())).display(),
-            "(Int Int -> Int)"
+            "Lambda(Int Int -> Int)"
         );
     }
 
@@ -631,7 +631,7 @@ mod display_tests {
     fn display_function_no_params() {
         assert_eq!(
             Ty::Function(vec![], Box::new(Ty::int())).display(),
-            "(-> Int)"
+            "Lambda(-> Int)"
         );
     }
 
@@ -733,7 +733,7 @@ mod display_tests {
         assert_eq!(Ty::int().to_text(), "Int");
         assert_eq!(
             Ty::Function(vec![Ty::int()], Box::new(Ty::text())).to_text(),
-            "(Int -> Text)"
+            "Lambda(Int -> Text)"
         );
     }
 }

@@ -72,7 +72,7 @@ action worker (n :: Int) => Unit
     echo!(n)
 
 action mostrar_tipos => Unit
-    echo!(type!(soma))      # "(Int Int -> Int)"   — função pura
+    echo!(type!(soma))      # "Lambda(Int Int -> Int)"   — função pura
     echo!(type!(worker))    # "Action(Int) => Unit" — action
 ```
 
@@ -132,7 +132,7 @@ mesmo formato que o usuário escreve em assinaturas. Uma função
 | `Sum("Boolean")` | `"Boolean"` | `Boolean` |
 | `Generic("Optional", [Int])` | `"Optional::Int"` | `Optional::Int` |
 | `Generic("Result", [Int, Text])` | `"Result::(Int, Text)"` | `Result::(Int, Text)` |
-| `Function([Int, Int], Int)` | `"(Int Int -> Int)"` | `(Int Int -> Int)` |
+| `Function([Int, Int], Int)` | `"Lambda(Int Int -> Int)"` | `Lambda(Int Int -> Int)` |
 | `Action([Int], Unit)` | `"Action(Int) => Unit"` | `Action(Int) => Unit` |
 | `Tuple([Int, Text])` | `"(Int, Text)"` | `(Int, Text)` |
 | `List(Int)` | `"[Int]"` | `[Int]` (açúcar para `List::Int`) |
@@ -170,11 +170,12 @@ a distinção semântica da linguagem:
 
 | Tipo | `type!()` retorna | Exemplo |
 |---|---|---|
-| `Function([Int, Int], Int)` | `"(Int Int -> Int)"` | Função pura — `->` |
+| `Function([Int, Int], Int)` | `"Lambda(Int Int -> Int)"` | Função pura — `Lambda(...)` com `->` |
 | `Action([Int], Unit)` | `"Action(Int) => Unit"` | Action — `Action(...)` com `=>` |
 
-Isto espelha a sintaxe de declaração: funções usam `->` em tipo de valor,
-actions usam `Action(...)` com `=>` como type annotation.
+Isto espelha a sintaxe de declaração: funções puras são `Lambda` (tipo puro),
+actions são `Action` (tipo impuro). Ambos prefixam a representação com o nome
+do tipo, distinguindo-os de tuplas `(Int, Text)`.
 
 ### 3.6. Interação com tree-shaking
 
@@ -324,7 +325,7 @@ A função é recursiva — `Optional<List<Int>>` formata como
 9. `type!(x)` onde `x :: Optional<Int>` retorna `"Optional::Int"`.
 10. `type!(x)` onde `x :: Result<Int, Text>` retorna `"Result::(Int, Text)"`.
 11. `type!(x)` onde `x :: [Int]` retorna `"[Int]"`.
-12. `type!(f)` onde `f` é função pura `Int Int => Int` retorna `"(Int Int -> Int)"`.
+12. `type!(f)` onde `f` é função pura `Int Int => Int` retorna `"Lambda(Int Int -> Int)"`.
 13. `type!(a)` onde `a` é referência de action `Action(Int) => Unit` retorna
     `"Action(Int) => Unit"`.
 14. `type!(f!())` executa `f!()` — side-effects acontecem.
@@ -381,7 +382,7 @@ docs/sintaxe-mapa.md                        # adicionar type!() na tabela de sin
 | D7 | Parâmetros de tipo são incluídos | `type!(x)` retorna `"Optional::Int"`, não `"Optional"`. Usa a própria sintaxe de tipo da linguagem (`::` para params, `::(...)` para múltiplos, `[]` para List, `{}` para Array). `Ty::display` percorre `Ty` recursivamente. |
 | D8 | `type!()` não viola a proibição de reflexão | A spec antiga proíbe reflexão e invocação dinâmica para garantir tree-shaking determinístico. `type!()` é compile-time: não cria aresta no call graph, não invoca por string, não consulta runtime. É equivalente a `@comptime` — informação resolvida antes do codegen. |
 | D9 | Modo runtime fica fora do escopo | Em Kata, todo valor tem tipo estaticamente conhecido. O type system é nominal e estático: não há `Any`, type erasure, tipagem gradual, loading dinâmico, nem coleções heterogêneas sem parâmetro de tipo. Canais são tipados (`Sender<T>`), `Fork` não retorna valor com tipo dinâmico, `Optional<T>` carrega `T` na variante. Runtime `typeof` sempre retornaria o mesmo que compile-time `type!()`. A type table documentada no manual (`SHARED_ARC` / `SHARED_ARENA` / `PER_FIBER_ARENA`) tem propósito primário de ARC decref walk (liberação type-directed de filhos), não introspecção do usuário — e nem ela está implementada (scaffolding morto, `#![allow(dead_code)]`). Implementar 3 tabelas + `kata_rt_typeof` + codegen emitindo `register_type` é trabalho real para zero benefício observável dado o type system atual. Quando `spawn!` (serialização TypeShape) ou debugger interativo existirem, o modo runtime se justifica — PRD separado. |
-| D10 | `Function` e `Action` têm formatos distintos | `Function` usa `->` (sintaxe de tipo de função como valor). `Action` usa `Action(...)` com `=>` (sintaxe de type annotation de action). Reflete a distinção semântica: funções são puras, actions são impuras com scheduler. |
+| D10 | `Lambda` e `Action` têm formatos distintos | `Lambda` (função pura) usa `Lambda(...)` com `->`. `Action` (impura) usa `Action(...)` com `=>`. Ambos prefixam com o nome do tipo, distinguindo de tuplas `(Int, Text)`. O enum interno `Ty::Function` mapeia para `Lambda` na linguagem. |
 | D11 | Depende de first-class actions | `type!(worker)` onde `worker` é action só funciona se actions são valores com `Ty::Action`. Sem first-class actions, `worker` sem `!()` não é uma expressão válida. O PRD de first-class actions deve ser implementado primeiro. |
 
 ## 9. Riscos
@@ -426,7 +427,7 @@ soma :: Int Int => Int
     + _ _
 
 action mostrar_tipo => Unit
-    echo!(type!(soma))     # "(Int Int -> Int)"
+    echo!(type!(soma))     # "Lambda(Int Int -> Int)"
 ```
 
 ### 10.4. Referência de action (primeira versão — requer first-class actions)

@@ -200,10 +200,10 @@ fn type_of_list() {
     assert_eq!(first, "[Int]", "type!([1 2 3]) deve imprimir \"[Int]\"");
 }
 
-// ── DoD 12: type!(soma) retorna "(Int Int -> Int)" ─────────────────
+// ── DoD 12: type!(soma) retorna "Lambda(Int Int -> Int)" ─────────
 
 /// `type!(fat)` na entry expression (não dentro de Action) →
-/// "(Int Int -> Int)". Funções puras são acessíveis na entry expression.
+/// "Lambda(Int Int -> Int)". Funções puras são acessíveis na entry expression.
 #[test]
 fn type_of_function() {
     let src = "fat :: Int Int => Int\nlambda 0 acc: acc\nlambda n acc: fat (- n 1) (* n acc)\n\necho!(type!(fat))";
@@ -218,8 +218,8 @@ fn type_of_function() {
     assert_eq!(code, 0, "binário AOT deve exit 0 — stdout: {stdout}");
     let first = stdout.lines().next().unwrap_or("").to_string();
     assert_eq!(
-        first, "(Int Int -> Int)",
-        "type!(fat) deve imprimir \"(Int Int -> Int)\""
+        first, "Lambda(Int Int -> Int)",
+        "type!(fat) deve imprimir \"Lambda(Int Int -> Int)\""
     );
 }
 
