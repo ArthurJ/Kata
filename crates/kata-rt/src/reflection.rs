@@ -88,7 +88,8 @@ pub extern "C" fn kata_rt_register_fn_meta_table(ptr: i64, count: i64) {
     let n = count as usize;
     let mut entries = Vec::with_capacity(n);
     for i in 0..n {
-        let offset = i * ENTRY_SIZE;
+        // Entries começam após o header (count: i64 = 8 bytes).
+        let offset = 8 + i * ENTRY_SIZE;
         let entry_ptr = unsafe { base.add(offset) as *const FnMetaEntry };
         let entry = unsafe { entry_ptr.read_unaligned() };
         entries.push(entry);
@@ -121,8 +122,23 @@ pub extern "C" fn kata_rt_fn_meta_lookup(fn_ptr: i64, field: i64) -> i64 {
             None => 0,
             Some(entry) => match field {
                 FIELD_NAME => entry.name_ptr,
-                FIELD_ARITY => entry.arity,
-                FIELD_PARAM_TYPES => entry.param_types_ptr,
+                FIELD_ARITY => crate::bigint::kata_rt_tag_int(entry.arity),
+                FIELD_PARAM_TYPES => {
+                    // Constrói List Cons na root arena a partir do array de
+                    // string ptrs em param_types_ptr (com param_types_len elementos).
+                    // Cada elemento é um Text ptr (C string). Constrói da cauda
+                    // para a cabeça (fold right): Nil=0, depois cons(ptr[n-1], 0),
+                    // cons(ptr[n-2], ...), etc.
+                    let arena = crate::arena::kata_rt_get_root_arena_handle();
+                    let n = entry.param_types_len as usize;
+                    let base = entry.param_types_ptr as *const i64;
+                    let mut list = 0i64; // Nil
+                    for i in (0..n).rev() {
+                        let text_ptr = unsafe { base.add(i).read_unaligned() };
+                        list = crate::list::kata_rt_list_cons(text_ptr, list, arena);
+                    }
+                    list
+                }
                 FIELD_RETURN_TYPE => entry.return_type_ptr,
                 FIELD_IS_ACTION => entry.is_action,
                 _ => 0,

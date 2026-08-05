@@ -20,6 +20,7 @@ use crate::typed::{TypedExpr, TypedExprKind};
 use super::expr::{InferCtx, infer_expr};
 use super::generics::{apply_subs, unify};
 use super::helpers::InferResult;
+use kata_resolution::resolve_type_expr;
 
 // ── Reflection fields ──────────────────────────────────────────
 /// Fields de reflexão disponíveis em functions e actions via DotAccess.
@@ -30,11 +31,11 @@ fn is_reflection_field(field: &str) -> bool {
     REFLECTION_FIELDS.contains(&field)
 }
 
-/// Resolve um field de reflexão para uma `TypedExpr` constante em compile-time.
+/// Resolve um field de reflexão para uma `TypedExpr` escalar constante
+/// em compile-time — uma única overload.
 ///
-/// Usado no caso estático (Ident direto para função nomeada no TypeEnv ou
-/// action no DispatchTable). Produz `TextLit`, `IntLit`, `ListLit`, ou
-/// `VariantQual` — zero overhead de runtime.
+/// Usado no caso estático desambiguado (`f.(Int Int).arity`) e como
+/// elemento do `ListLit` no caso estático sem desambiguação.
 fn resolve_reflection_field(
     field: &str,
     name: &str,
@@ -113,6 +114,58 @@ fn resolve_reflection_field(
     }
 }
 
+/// Tipo do elemento escalar para cada field de reflexão.
+fn reflection_field_elem_ty(field: &str) -> Ty {
+    match field {
+        "name" | "return_type" => Ty::text(),
+        "arity" => Ty::int(),
+        "param_types" => Ty::List(Box::new(Ty::text())),
+        "is_action" => Ty::boolean(),
+        _ => unreachable!("is_reflection_field deve ser chamado antes"),
+    }
+}
+
+/// Resolve um field de reflexão para `ListLit` — um elemento por overload.
+///
+/// Usado no caso estático sem desambiguação (`f.name`, `f.arity`, etc.).
+/// Consulta o DispatchTable para coletar todas as overloads do nome.
+/// Sempre produz lista, mesmo com uma única overload — o tipo não muda
+/// quando overloads são adicionadas.
+fn resolve_reflection_field_list(
+    field: &str,
+    name: &str,
+    overloads: &[kata_core::dispatch::OverloadInfo],
+    span: &Span,
+) -> TypedExpr {
+    let elem_ty = reflection_field_elem_ty(field);
+    let list_ty = Ty::List(Box::new(elem_ty));
+
+    let elements: Vec<Spanned<TypedExpr>> = overloads
+        .iter()
+        .map(|oi| {
+            Spanned::new(
+                resolve_reflection_field(
+                    field,
+                    name,
+                    &oi.params,
+                    &oi.ret,
+                    oi.is_action,
+                    span,
+                ),
+                *span,
+            )
+        })
+        .collect();
+
+    TypedExpr {
+        span: *span,
+        ty: list_ty,
+        tail_pos: false,
+        escape: EscapeTarget::Local,
+        kind: TypedExprKind::ListLit { elements },
+    }
+}
+
 /// Infere `expr.nome` (field access) ou `expr.N` (index access).
 ///
 /// Desambiguação pelo tipo do receptor:
@@ -166,18 +219,24 @@ pub(crate) fn infer_dot_access(
 
         // ── Action reflection (caso 4a) ──
         // Se `name` não está no TypeEnv, module access falhou, e o field é
-        // um field de reflexão, tentar buscar `name` no DispatchTable como action.
+        // um field de reflexão, tentar buscar `name` no DispatchTable.
         // Actions não são first-class — reflexão de actions é sempre estática.
+        // Sempre lista: um elemento por overload (DoD 1-2).
         if is_reflection_field(field_name) {
             if let Some(overloads) = ctx.table.get_overloads(name) {
-                let overload = &overloads[0];
-                if overload.is_action {
-                    return Ok(resolve_reflection_field(
+                // Só resolver se há overloads que são actions.
+                // (O nome pode existir no DispatchTable como function, não action.)
+                let has_action = overloads.iter().any(|oi| oi.is_action);
+                if has_action {
+                    let action_overloads: Vec<_> = overloads
+                        .iter()
+                        .filter(|oi| oi.is_action)
+                        .cloned()
+                        .collect();
+                    return Ok(resolve_reflection_field_list(
                         field_name,
                         name,
-                        &overload.params,
-                        &overload.ret,
-                        true,
+                        &action_overloads,
                         span,
                     ));
                 }
@@ -498,18 +557,101 @@ pub(crate) fn infer_dot_access(
             span: (*span).into(),
         }),
         // ── Function reflection (caso 4b) ──────────────────────
-        // `f.name` onde `f` é `Ident` direto para função nomeada no TypeEnv.
-        // Resolve em compile-time para constante — zero overhead.
-        // O caso dinâmico (variável com Ty::Function) é tratado na Fase 5.
+        // `f.name` onde `f` é `Ident` direto para função nomeada.
+        // Resolve em compile-time para ListLit — um elemento por overload.
+        // Consulta o DispatchTable (não o TypeEnv) para coletar todas as
+        // overloads do nome. Sempre lista (DoD 1-2).
+        //
+        // Distinção estático vs dinâmico: o Ident é estático quando seu
+        // nome existe no DispatchTable como function (é a função nomeada
+        // original). Se o nome só existe no TypeEnv (é uma variável local
+        // que aponta para uma função), cai no caso dinâmico (Fase 5).
         (Ty::Function(params, ret), DotIndex::Field(field_name))
             if is_reflection_field(field_name)
-                && matches!(&expr.node, Expr::Ident { name } if env.lookup(name).is_some()) =>
+                && matches!(
+                    &expr.node,
+                    Expr::Ident { name }
+                    if env.lookup(name).is_some()
+                    && ctx.table.get_overloads(name).is_some_and(|ols| ols.iter().any(|oi| !oi.is_action))
+                ) =>
         {
-            // O receptor é Ident que resolve para função nomeada no TypeEnv.
-            // Extrair o nome do Ident para usar como `f.name`.
             if let Expr::Ident { name } = &expr.node {
-                return Ok(resolve_reflection_field(
-                    field_name, name, params, ret, false, span,
+                // Coletar todas as overloads do nome no DispatchTable.
+                // Só overloads que são functions (não actions).
+                if let Some(overloads) = ctx.table.get_overloads(name) {
+                    let func_overloads: Vec<_> = overloads
+                        .iter()
+                        .filter(|oi| !oi.is_action)
+                        .cloned()
+                        .collect();
+                    if !func_overloads.is_empty() {
+                        return Ok(resolve_reflection_field_list(
+                            field_name,
+                            name,
+                            &func_overloads,
+                            span,
+                        ));
+                    }
+                }
+                // Fallback: TypeEnv tem a função mas DispatchTable não.
+                // Usa o params/ret do Ty::Function como única overload.
+                let single = kata_core::dispatch::OverloadInfo {
+                    name: name.to_string(),
+                    params: params.clone(),
+                    ret: (**ret).clone(),
+                    ffi_symbol: None,
+                    is_action: false,
+                    is_generic: false,
+                    is_constructor: false,
+                    associative_neutral: None,
+                    type_params: vec![],
+                    substitutions: None,
+                    param_names: vec![],
+                };
+                return Ok(resolve_reflection_field_list(
+                    field_name,
+                    name,
+                    std::slice::from_ref(&single),
+                    span,
+                ));
+            }
+            unreachable!("guard garante que expr é Ident");
+        }
+        // ── Function reflection (caso 4b-lambda) ───────────────
+        // `g.name` onde `g` é variável local (let binding) com Ty::Function,
+        // NÃO está no DispatchTable, e NÃO tem `fn_alias` (não é alias para
+        // função nomeada). É uma lambda anônima atribuída via
+        // `let g := lambda...`. Resolve em compile-time para ListLit com 1
+        // elemento usando o nome do binding (DoD 7).
+        (Ty::Function(params, ret), DotIndex::Field(field_name))
+            if is_reflection_field(field_name)
+                && matches!(
+                    &expr.node,
+                    Expr::Ident { name }
+                    if env.lookup(name).is_some()
+                    && ctx.table.get_overloads(name).is_none()
+                    && env.fn_alias_of(name).is_none()
+                ) =>
+        {
+            if let Expr::Ident { name } = &expr.node {
+                let single = kata_core::dispatch::OverloadInfo {
+                    name: name.to_string(),
+                    params: params.clone(),
+                    ret: (**ret).clone(),
+                    ffi_symbol: None,
+                    is_action: false,
+                    is_generic: false,
+                    is_constructor: false,
+                    associative_neutral: None,
+                    type_params: vec![],
+                    substitutions: None,
+                    param_names: vec![],
+                };
+                return Ok(resolve_reflection_field_list(
+                    field_name,
+                    name,
+                    std::slice::from_ref(&single),
+                    span,
                 ));
             }
             unreachable!("guard garante que expr é Ident");
@@ -566,6 +708,69 @@ pub(crate) fn infer_dot_access(
                     args: vec![*inner_box.clone(), Spanned::new(field_id_typed, *span)],
                     ffi_symbol: Some("kata_rt_fn_meta_lookup".into()),
                 },
+            })
+        }
+        // ── Desambiguação de overload: `f.(Int Int)` ─────────
+        // `f.(Type1 Type2 ...)` seleciona uma overload específica do
+        // DispatchTable por tipos de parâmetros. Retorna um `Ident` com
+        // `Ty::Function` concreta (a overload selecionada). A partir daí,
+        // `.arity` é escalar (não lista).
+        //
+        // Só funciona para `Expr::Ident` cujo nome está no DispatchTable.
+        // Se 0 matches: erro NoOverloadForTypes. Se 2+ matches (mesmos
+        // params, ret diferente): erro AmbiguousOverload.
+        (inner_ty, DotIndex::Type(type_exprs)) => {
+            // Resolver TypeExprs → Ty.
+            let requested: Vec<Ty> = type_exprs
+                .iter()
+                .map(|te| resolve_type_expr(&te.node, env, ctx.interface_registry))
+                .collect();
+
+            // Só funciona para Ident direto de função nomeada.
+            if let Expr::Ident { name } = &expr.node {
+                if let Some(overloads) = ctx.table.get_overloads(name) {
+                    // Filtrar overloads (não-actions) por params == requested.
+                    let matching: Vec<_> = overloads
+                        .iter()
+                        .filter(|oi| !oi.is_action && oi.params == requested)
+                        .collect();
+
+                    return match matching.len() {
+                        0 => Err(MiddleError::TypeMismatch {
+                            expected: format!(
+                                "overload de `{name}` com params {:?}",
+                                requested
+                            ),
+                            found: "nenhuma overload compatível".into(),
+                            span: (*span).into(),
+                        }),
+                        1 => {
+                            let oi = matching[0];
+                            Ok(TypedExpr {
+                                span: *span,
+                                ty: Ty::Function(
+                                    oi.params.clone(),
+                                    Box::new(oi.ret.clone()),
+                                ),
+                                tail_pos,
+                                escape: EscapeTarget::Local,
+                                kind: TypedExprKind::Ident {
+                                    name: name.clone(),
+                                },
+                            })
+                        }
+                        _ => Err(MiddleError::TypeMismatch {
+                            expected: format!("overload única de `{name}` com params {:?}", requested),
+                            found: "múltiplas overloads com mesmos params — ambígua".into(),
+                            span: (*span).into(),
+                        }),
+                    };
+                }
+            }
+            // Não é Ident ou não está no DispatchTable — erro.
+            Err(MiddleError::NotIndexable {
+                ty: format!("{inner_ty}"),
+                span: (*span).into(),
             })
         }
         // Field access em coleção não faz sentido.

@@ -156,6 +156,11 @@ impl Ty {
 pub struct TypeBinding {
     pub ty: Ty,
     pub origin: String,
+    /// Se o binding é `let g := soma` (Ident apontando para função nomeada no
+    /// DispatchTable), guarda o nome da função original (`"soma"`). Usado pela
+    /// reflexão para distinguir alias de função nomeada (caso dinâmico escalar)
+    /// de lambda com binding (caso estático lista).
+    pub fn_alias: Option<String>,
 }
 
 /// Árvore de escopos para name resolution.
@@ -201,6 +206,20 @@ impl TypeEnv {
             TypeBinding {
                 ty,
                 origin: origin.to_string(),
+                fn_alias: None,
+            },
+        );
+    }
+
+    /// Define um nome com `fn_alias` — usado por `let g := soma` para
+    /// rastrear que `g` é um alias para a função nomeada `soma`.
+    pub fn define_with_alias(&mut self, name: &str, ty: Ty, origin: &str, alias: Option<String>) {
+        self.bindings.insert(
+            name.to_string(),
+            TypeBinding {
+                ty,
+                origin: origin.to_string(),
+                fn_alias: alias,
             },
         );
     }
@@ -213,9 +232,24 @@ impl TypeEnv {
             TypeBinding {
                 ty,
                 origin: origin.to_string(),
+                fn_alias: None,
             },
         );
         self.mutables.insert(name.to_string());
+    }
+
+    /// Retorna o `fn_alias` de um binding, se houver. Percorre a cadeia
+    /// de escopos.
+    pub fn fn_alias_of(&self, name: &str) -> Option<&str> {
+        if let Some(binding) = self.bindings.get(name)
+            && let Some(ref alias) = binding.fn_alias
+        {
+            return Some(alias);
+        }
+        if let Some(ref parent) = self.parent {
+            return parent.fn_alias_of(name);
+        }
+        None
     }
 
     /// Verifica se um nome foi declarado como mutável (`var`).

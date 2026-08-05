@@ -219,7 +219,22 @@ pub(crate) fn infer_expr_hinted(
             let typed_value = infer_expr(&value.node, &value.span, env, ctx, false)?;
             let val_ty = typed_value.ty.clone();
 
-            env.define(name, val_ty, "__local__");
+            // Rastrear provenance: se `let g := soma` onde `soma` é Ident
+            // apontando para função nomeada no DispatchTable, marcar o
+            // binding com `fn_alias = Some("soma")`. Isto permite que a
+            // reflexão distinga alias (caso dinâmico, escalar via sidecar
+            // table) de lambda com binding (caso estático, lista).
+            let fn_alias = match (&value.node, &typed_value.kind) {
+                (Expr::Ident { name: src_name }, _)
+                    if matches!(val_ty, Ty::Function(_, _))
+                        && ctx.table.get_overloads(src_name).is_some_and(|ols| ols.iter().any(|oi| !oi.is_action)) =>
+                {
+                    Some(src_name.clone())
+                }
+                _ => None,
+            };
+
+            env.define_with_alias(name, val_ty, "__local__", fn_alias);
 
             (
                 Ty::Unit,

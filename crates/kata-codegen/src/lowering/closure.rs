@@ -164,6 +164,22 @@ pub(crate) fn lower_closure(
                 call_args.push(eq_fn_ptr);
                 call_args.push(arena_for_dict);
             }
+            "kata_rt_fn_meta_lookup" => {
+                // Args: [box_ptr, field_id_smi] → [fn_ptr, field_id_raw]
+                // O receptor dinâmico é um CaptureBox (box_ptr). O fn_ptr
+                // está no offset 0 do CaptureBox. Extrair antes de passar
+                // para o binary search na sidecar table.
+                let flags = MemFlagsData::new();
+                let fn_ptr = ctx.builder.ins().load(I64, flags, call_args[0], 0);
+                call_args[0] = fn_ptr;
+                // O field_id é IntLit, que o codegen lowered como SMI-tagged:
+                // (val << 1) | 1. Untag: (smi - 1) >> 1.
+                let smi = call_args[1];
+                let one = ctx.builder.ins().iconst(I64, 1);
+                let without_tag = ctx.builder.ins().isub(smi, one);
+                let raw = ctx.builder.ins().ushr_imm(without_tag, 1);
+                call_args[1] = raw;
+            }
             _ => {
                 // Default: inject arena if needed (existing behavior)
                 if crate::ffi_sigs::ffi_needs_arena(sym_name) {

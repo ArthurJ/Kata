@@ -278,6 +278,10 @@ pub enum DotIndex {
         end: Box<Spanned<Expr>>,
         inclusive: bool,
     },
+    /// `f.(Int Int)` — desambiguação de overload por tipos de parâmetros.
+    /// Cada elemento é um `TypeExpr` que o typeck resolve para `Ty`.
+    /// Seleciona uma overload específica no DispatchTable.
+    Type(Vec<Spanned<TypeExpr>>),
 }
 
 /// Pattern — usado em match arms e cláusulas lambda.
