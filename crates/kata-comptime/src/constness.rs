@@ -27,7 +27,7 @@ use kata_inference::{TypedExpr, TypedExprKind};
 /// `comptime_bindings` é o mapa de nomes de bindings locais para seus
 /// valores literais, avaliados em compile-time (via @comptime let).
 /// Um Ident que referencia um binding neste mapa é comptime-available.
-pub fn is_comptime_available(
+pub(crate) fn is_comptime_available(
     expr: &TypedExpr,
     comptime_bindings: &HashMap<String, TypedExpr>,
 ) -> bool {

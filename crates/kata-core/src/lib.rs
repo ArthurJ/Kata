@@ -20,6 +20,7 @@ pub(crate) mod shape; // TypeShape/TypeId — zero consumidores cross-crate
 pub mod snapshot;
 pub mod struct_registry;
 pub mod ty;
+pub mod type_env;
 
 pub use dispatch::{
     DispatchError, DispatchTable, OverloadInfo, PartialDispatchResult, Score, match_score,

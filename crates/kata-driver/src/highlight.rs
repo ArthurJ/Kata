@@ -26,9 +26,9 @@ use kata_ast::Token;
 use kata_lexer::lex;
 use rustyline::CompletionType;
 use rustyline::Context;
-use rustyline::highlight::CmdKind;
 use rustyline::Result as RlResult;
 use rustyline::completion::Completer;
+use rustyline::highlight::CmdKind;
 use rustyline::highlight::Highlighter;
 use rustyline::hint::Hinter;
 use rustyline::validate::Validator;
@@ -196,6 +196,8 @@ fn highlight_line(line: &str) -> Cow<'_, str> {
 /// três usam implementações padrão do rustyline.
 pub struct KataHelper {
     completer: rustyline::completion::FilenameCompleter,
+    #[allow(dead_code)]
+    // HistoryHinter mantida como hook de integração rustyline; o impl Hinter retorna None (ver doc em `hint`).
     hinter: rustyline::hint::HistoryHinter,
 }
 

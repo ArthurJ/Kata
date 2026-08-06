@@ -144,14 +144,7 @@ fn resolve_reflection_field_list(
         .iter()
         .map(|oi| {
             Spanned::new(
-                resolve_reflection_field(
-                    field,
-                    name,
-                    &oi.params,
-                    &oi.ret,
-                    oi.is_action,
-                    span,
-                ),
+                resolve_reflection_field(field, name, &oi.params, &oi.ret, oi.is_action, span),
                 *span,
             )
         })
@@ -222,24 +215,24 @@ pub(crate) fn infer_dot_access(
         // um field de reflexão, tentar buscar `name` no DispatchTable.
         // Actions não são first-class — reflexão de actions é sempre estática.
         // Sempre lista: um elemento por overload (DoD 1-2).
-        if is_reflection_field(field_name) {
-            if let Some(overloads) = ctx.table.get_overloads(name) {
-                // Só resolver se há overloads que são actions.
-                // (O nome pode existir no DispatchTable como function, não action.)
-                let has_action = overloads.iter().any(|oi| oi.is_action);
-                if has_action {
-                    let action_overloads: Vec<_> = overloads
-                        .iter()
-                        .filter(|oi| oi.is_action)
-                        .cloned()
-                        .collect();
-                    return Ok(resolve_reflection_field_list(
-                        field_name,
-                        name,
-                        &action_overloads,
-                        span,
-                    ));
-                }
+        if is_reflection_field(field_name)
+            && let Some(overloads) = ctx.table.get_overloads(name)
+        {
+            // Só resolver se há overloads que são actions.
+            // (O nome pode existir no DispatchTable como function, não action.)
+            let has_action = overloads.iter().any(|oi| oi.is_action);
+            if has_action {
+                let action_overloads: Vec<_> = overloads
+                    .iter()
+                    .filter(|oi| oi.is_action)
+                    .cloned()
+                    .collect();
+                return Ok(resolve_reflection_field_list(
+                    field_name,
+                    name,
+                    &action_overloads,
+                    span,
+                ));
             }
         }
     }
@@ -727,45 +720,37 @@ pub(crate) fn infer_dot_access(
                 .collect();
 
             // Só funciona para Ident direto de função nomeada.
-            if let Expr::Ident { name } = &expr.node {
-                if let Some(overloads) = ctx.table.get_overloads(name) {
-                    // Filtrar overloads (não-actions) por params == requested.
-                    let matching: Vec<_> = overloads
-                        .iter()
-                        .filter(|oi| !oi.is_action && oi.params == requested)
-                        .collect();
+            if let Expr::Ident { name } = &expr.node
+                && let Some(overloads) = ctx.table.get_overloads(name)
+            {
+                // Filtrar overloads (não-actions) por params == requested.
+                let matching: Vec<_> = overloads
+                    .iter()
+                    .filter(|oi| !oi.is_action && oi.params == requested)
+                    .collect();
 
-                    return match matching.len() {
-                        0 => Err(MiddleError::TypeMismatch {
-                            expected: format!(
-                                "overload de `{name}` com params {:?}",
-                                requested
-                            ),
-                            found: "nenhuma overload compatível".into(),
-                            span: (*span).into(),
-                        }),
-                        1 => {
-                            let oi = matching[0];
-                            Ok(TypedExpr {
-                                span: *span,
-                                ty: Ty::Function(
-                                    oi.params.clone(),
-                                    Box::new(oi.ret.clone()),
-                                ),
-                                tail_pos,
-                                escape: EscapeTarget::Local,
-                                kind: TypedExprKind::Ident {
-                                    name: name.clone(),
-                                },
-                            })
-                        }
-                        _ => Err(MiddleError::TypeMismatch {
-                            expected: format!("overload única de `{name}` com params {:?}", requested),
-                            found: "múltiplas overloads com mesmos params — ambígua".into(),
-                            span: (*span).into(),
-                        }),
-                    };
-                }
+                return match matching.len() {
+                    0 => Err(MiddleError::TypeMismatch {
+                        expected: format!("overload de `{name}` com params {:?}", requested),
+                        found: "nenhuma overload compatível".into(),
+                        span: (*span).into(),
+                    }),
+                    1 => {
+                        let oi = matching[0];
+                        Ok(TypedExpr {
+                            span: *span,
+                            ty: Ty::Function(oi.params.clone(), Box::new(oi.ret.clone())),
+                            tail_pos,
+                            escape: EscapeTarget::Local,
+                            kind: TypedExprKind::Ident { name: name.clone() },
+                        })
+                    }
+                    _ => Err(MiddleError::TypeMismatch {
+                        expected: format!("overload única de `{name}` com params {:?}", requested),
+                        found: "múltiplas overloads com mesmos params — ambígua".into(),
+                        span: (*span).into(),
+                    }),
+                };
             }
             // Não é Ident ou não está no DispatchTable — erro.
             Err(MiddleError::NotIndexable {

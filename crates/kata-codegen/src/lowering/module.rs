@@ -423,13 +423,13 @@ pub(crate) fn lower_module(
             string_table.push(ret.to_text());
         }
         // Definir as novas strings como data symbols.
-        for i in strings_before..string_table.len() {
+        for (i, text) in string_table.iter().enumerate().skip(strings_before) {
             let sym = format!("__kata_str_{i}");
             let did = module
                 .declare_data(&sym, Linkage::Local, false, false)
                 .map_err(|e| CodegenError::Cranelift(format!("declare_data {sym}: {e}")))?;
             let mut data_desc = cranelift_module::DataDescription::new();
-            let bytes = format!("{}\0", string_table[i]).into_bytes();
+            let bytes = format!("{text}\0").into_bytes();
             data_desc.define(bytes.into());
             module
                 .define_data(did, &data_desc)
@@ -535,11 +535,11 @@ pub(crate) fn lower_module(
             let gv = module.declare_data_in_data(*name_did, &mut data_desc);
             data_desc.write_data_addr((base + 8) as u32, gv, 0);
             // param_types_ptr
-            if !params.is_empty() {
-                if let Some(pa_did) = param_array_ids[i] {
-                    let gv = module.declare_data_in_data(pa_did, &mut data_desc);
-                    data_desc.write_data_addr((base + 24) as u32, gv, 0);
-                }
+            if !params.is_empty()
+                && let Some(pa_did) = param_array_ids[i]
+            {
+                let gv = module.declare_data_in_data(pa_did, &mut data_desc);
+                data_desc.write_data_addr((base + 24) as u32, gv, 0);
             }
             // return_type_ptr
             let (_, _, ret_did) = &fn_meta_data_ids[i];

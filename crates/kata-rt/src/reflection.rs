@@ -17,11 +17,11 @@
 use std::cell::RefCell;
 
 /// Field IDs para `kata_rt_fn_meta_lookup`.
-pub const FIELD_NAME: i64 = 0;
-pub const FIELD_ARITY: i64 = 1;
-pub const FIELD_PARAM_TYPES: i64 = 2;
-pub const FIELD_RETURN_TYPE: i64 = 3;
-pub const FIELD_IS_ACTION: i64 = 4;
+pub(crate) const FIELD_NAME: i64 = 0;
+pub(crate) const FIELD_ARITY: i64 = 1;
+pub(crate) const FIELD_PARAM_TYPES: i64 = 2;
+pub(crate) const FIELD_RETURN_TYPE: i64 = 3;
+pub(crate) const FIELD_IS_ACTION: i64 = 4;
 
 /// Entry na sidecar table — lida do binário via ponteiro raw.
 #[repr(C)]

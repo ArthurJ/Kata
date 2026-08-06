@@ -149,7 +149,10 @@ fn fn_reflection_static_name() {
         "fn_reflection_static_name",
         "soma :: Int Int => Int\nlambda a b: + a b\naction main => Unit\n    echo!(soma.name)\nmain!()",
     );
-    assert_eq!(first, "[soma]", "soma.name deve imprimir \"[soma]\" (lista)");
+    assert_eq!(
+        first, "[soma]",
+        "soma.name deve imprimir \"[soma]\" (lista)"
+    );
 }
 
 // ── DoD 2: f.arity em função pura (estático, sempre lista) ──────
@@ -241,7 +244,10 @@ fn fn_reflection_action_arity() {
         "fn_reflection_action_arity",
         "action processar(x::Int) => Int\n    + x 1\naction main => Unit\n    echo!(processar.arity)\nmain!()",
     );
-    assert_eq!(first, "[1]", "processar.arity deve imprimir \"[1]\" (lista)");
+    assert_eq!(
+        first, "[1]",
+        "processar.arity deve imprimir \"[1]\" (lista)"
+    );
 }
 
 // ── DoD 11: Action return_type (estático, sempre lista) ─────────

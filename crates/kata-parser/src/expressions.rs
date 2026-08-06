@@ -414,7 +414,8 @@ impl Parser {
                     match self.peek().clone() {
                         Token::IntLit(text) => {
                             self.advance();
-                            let n: i64 = text.parse()
+                            let n: i64 = text
+                                .parse()
                                 .map_err(|_| self.error("inteiro dentro de `.()`"))?;
                             self.expect(&Token::RParen, "`)`")?;
                             DotIndex::Int(n)

@@ -228,13 +228,11 @@ impl ReplSession {
                     // Remove EntryExpr que não são bindings — expressões
                     // puras (ex: `5`, `echo!(5)`, `g 5`) são "avaliar e
                     // esquecer". Apenas `Let`/`LetDestruct` persistem.
-                    self.items.retain(|item| {
-                        match &item.node {
-                            Item::EntryExpr(expr) => {
-                                matches!(expr.node, Expr::Let { .. } | Expr::LetDestruct { .. })
-                            }
-                            _ => true,
+                    self.items.retain(|item| match &item.node {
+                        Item::EntryExpr(expr) => {
+                            matches!(expr.node, Expr::Let { .. } | Expr::LetDestruct { .. })
                         }
+                        _ => true,
                     });
                     Ok(())
                 }

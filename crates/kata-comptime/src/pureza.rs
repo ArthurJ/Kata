@@ -26,7 +26,7 @@ use crate::ComptimeError;
 /// - `Return` — early return (impuro em Action)
 /// - `Loop`/`Break`/`Continue` — controle de fluxo de Action
 /// - `ForIn` — iteração (impuro em Action)
-pub fn check_purity(expr: &TypedExpr) -> Result<(), ComptimeError> {
+pub(crate) fn check_purity(expr: &TypedExpr) -> Result<(), ComptimeError> {
     check_purity_inner(expr)
 }
 

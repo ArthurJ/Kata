@@ -227,7 +227,10 @@ pub(crate) fn infer_expr_hinted(
             let fn_alias = match (&value.node, &typed_value.kind) {
                 (Expr::Ident { name: src_name }, _)
                     if matches!(val_ty, Ty::Function(_, _))
-                        && ctx.table.get_overloads(src_name).is_some_and(|ols| ols.iter().any(|oi| !oi.is_action)) =>
+                        && ctx
+                            .table
+                            .get_overloads(src_name)
+                            .is_some_and(|ols| ols.iter().any(|oi| !oi.is_action)) =>
                 {
                     Some(src_name.clone())
                 }

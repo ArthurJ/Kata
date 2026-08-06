@@ -18,7 +18,6 @@ pub(crate) mod typed_pattern;
 
 pub use infer::generics::{Substitutions, apply_subs, unify};
 pub use infer::infer_module;
-pub use kata_resolution::RefinedDeclInfo;
 pub use typed::{
     CacheSpec, CaptureInfo, ChannelKind, FusedStage, TypedAction, TypedExpr, TypedExprKind,
     TypedFunction, TypedLogSpec, TypedModule, TypedReadMode, TypedSelectArm, TypedTestSpec,

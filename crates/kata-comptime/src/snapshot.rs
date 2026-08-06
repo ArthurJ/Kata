@@ -36,7 +36,7 @@ use kata_core::ty::{PrimTy, Ty};
 /// Para tipos complexos, `raw` é um ponteiro absoluto para dados na arena
 /// temporária do comptime. A serialização caminha a estrutura, copiando
 /// valores e convertendo ponteiros em offsets relativos dentro do buffer.
-pub fn serialize_snapshot(
+pub(crate) fn serialize_snapshot(
     raw: i64,
     ty: &Ty,
     struct_registry: &StructRegistry,
