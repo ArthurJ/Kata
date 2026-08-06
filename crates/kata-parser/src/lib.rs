@@ -147,6 +147,19 @@ pub fn parse_with_arity(
     parser.parse_module()
 }
 
+/// Parse apenas declarações (Sigs, implements, data, enum, action defs,
+/// imports, exports, alias, interface). Entry exprs são **skipadas** —
+/// os tokens são consumidos até o próximo `StmtSep` ou `Eof` sem produzir
+/// AST.
+///
+/// Usado pelo Pass 1 do ciclo de dois passes (Fase 4): extrai assinaturas
+/// sem precisar de aridades (declarações não dependem de arity-aware
+/// parsing).
+pub fn parse_decls_only(tokens: Vec<TokenWithSpan>) -> Result<Module, FrontendError> {
+    let mut parser = Parser::new(tokens);
+    parser.parse_module_decls_only()
+}
+
 /// Parse with error recovery — acumula erros de top-level items.
 ///
 /// Diferente de `parse`, não aborta no primeiro erro. Quando um item falha,

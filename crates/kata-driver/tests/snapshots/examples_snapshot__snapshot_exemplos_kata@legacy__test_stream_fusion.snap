@@ -3,7 +3,7 @@ source: crates/kata-driver/tests/examples_snapshot.rs
 expression: output
 ---
 --- stderr ---
-Error: type.mismatch
+Error: parse.unexpected_token
 
-  × tipo incompatível: esperado `Struct("Bool") (hint de retorno)`, encontrado
-  │ `nenhuma overload de > retorna tipo compatível com Struct("Bool")`
+  × token inesperado: esperado `argumento #2 para `map` (aridade padrão 2)`,
+  │ encontrado `)`

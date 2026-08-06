@@ -8,8 +8,8 @@ use kata_inference::infer_module;
 use kata_lexer::lex;
 use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
-use kata_parser::parse;
-use kata_resolution::{ResolvedModule, load_prelude, resolve};
+use kata_parser::{parse, parse_decls_only, parse_with_arity};
+use kata_resolution::{ResolvedModule, extract_arities, load_prelude, resolve};
 use kata_rt as rt;
 use kata_tree_shaking::tree_shake;
 
@@ -333,62 +333,72 @@ fn run_pipeline(source: &str) -> miette::Result<ExecResult> {
 /// Quando `file_path` é `Some`, o prelude (core.kata) é carregado como import
 /// implícito via ModuleLoader — não há `load_prelude()` separado.
 /// Quando `file_path` é `None` (eval), o prelude é injetado via `load_prelude()`.
+///
+/// Ciclo de dois passes (Fase 4 — arity-uniformization):
+/// 1. Pass 1: `parse_decls_only` → resolve → `extract_arities`
+/// 2. Pass 2: `parse_with_arity` (completo) → resolve → infer → codegen
 fn run_pipeline_with_file(source: &str, file_path: Option<&str>) -> miette::Result<ExecResult> {
     // 1. Lex
     let tokens = lex(source).map_err(IntoReport::into_report)?;
 
-    // 2. Parse
-    let module = parse(tokens).map_err(IntoReport::into_report)?;
+    // 2a. Pass 1: parse_decls_only → resolve → extract_arities
+    let prelude = load_prelude()
+        .map_err(|e| miette::Report::msg(format!("erro ao carregar prelude: {e:?}")))?;
 
-    // 2a. Carregar módulos importados (incluindo prelude como import implícito)
+    let decls_tokens = tokens.clone();
+    let decls_module = parse_decls_only(decls_tokens).map_err(IntoReport::into_report)?;
+    let decls_user = resolve(&decls_module)
+        .map_err(|e| miette::Report::msg(format!("erro de resolução (Pass 1): {e:?}")))?;
+    let decls_resolved = merge_resolved(prelude.clone(), decls_user);
+
+    // Coletar aridades do prelude + declarações do usuário
+    let arities = extract_arities(&decls_resolved.signatures);
+
+    // 2b. Pass 2: parse_with_arity (completo) → resolve → infer → codegen
+    let module = parse_with_arity(tokens, arities).map_err(IntoReport::into_report)?;
+
+    // 3. Carregar módulos importados (incluindo prelude como import implícito)
     let imports = if let Some(file) = file_path {
         imports::load_module_imports(file, &module)?
     } else {
         Vec::new()
     };
 
-    // 3. Resolve (prelude + módulo do usuário)
-    let prelude = load_prelude()
-        .map_err(|e| miette::Report::msg(format!("erro ao carregar prelude: {e:?}")))?;
+    // 4. Resolve (prelude + módulo do usuário)
     let user =
         resolve(&module).map_err(|e| miette::Report::msg(format!("erro de resolução: {e:?}")))?;
     let mut resolved = merge_resolved(prelude, user);
 
-    // 3a. Merge imports (itens seletivos no escopo direto)
+    // 4a. Merge imports (itens seletivos no escopo direto)
     imports::merge_imports(&mut resolved, &imports);
 
-    // 4. Infer (typeck + dispatch)
+    // 5. Infer (typeck + dispatch)
     let typed = infer_module(&module, &resolved).map_err(IntoReport::into_report)?;
 
-    // 5. Monomorph (especializa call sites genéricos)
+    // 6. Monomorph (especializa call sites genéricos)
     let mono = monomorphize(typed);
 
-    // 6. Optimize (TRMA + futuros passes)
+    // 7. Optimize (TRMA + futuros passes)
     let mono = optimize(mono);
 
-    // 6a. Tree shaking — remove funções/actions não alcançados.
-    //     Necessário para descartar Actions polimórficas originais
-    //     (ex: `echo :: SHOW`) após o monomorphizador instanciar
-    //     versões concretas (ex: `echo_SHOW_Int`). Sem isso, o codegen
-    //     tenta compilar o body type-erased e falha.
+    // 7a. Tree shaking — remove funções/actions não alcançados.
     let mono = kata_monomorph::MonoModule::from(tree_shake(mono.inner));
 
-    // 6b. Comptime pass — avalia expressões @comptime em compile-time e
+    // 7b. Comptime pass — avalia expressões @comptime em compile-time e
     //     substitui por literais antes do codegen.
     let mono = kata_monomorph::MonoModule::from(
         run_comptime_pass(mono.inner, &resolved.enum_registry)
             .map_err(|e| miette::Report::msg(format!("erro de comptime: {e}")))?,
     );
 
-    // 6c. Type table — registra TypeShapes no runtime para to_bytes/from_bytes.
-    //     O driver é o único que conhece Ty (kata-core) e TypeShape (kata-rt).
+    // 7c. Type table — registra TypeShapes no runtime para to_bytes/from_bytes.
     let _type_id_map = kata_codegen::type_table::build_and_register_type_table(
         &mono,
         &mono.struct_registry,
         &resolved.enum_registry,
     );
 
-    // 7. Codegen + JIT + executar
+    // 8. Codegen + JIT + executar
     let jit = jit_eval(&mono, &_type_id_map)
         .map_err(|e| miette::Report::msg(format!("erro de codegen: {e:?}")))?;
 

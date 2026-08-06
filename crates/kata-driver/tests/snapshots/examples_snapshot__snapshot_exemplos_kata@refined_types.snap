@@ -14,3 +14,4 @@ False
 10
 --- stderr ---
 [resolution] warning: tipo base Int pode não implementar a interface NUM (PositiveInt refines NUM) — validação final em infer_module
+[resolution] warning: tipo base Int pode não implementar a interface NUM (PositiveInt refines NUM) — validação final em infer_module

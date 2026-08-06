@@ -3,5 +3,5 @@ source: crates/kata-driver/tests/examples_snapshot.rs
 expression: output
 ---
 --- stderr ---
-Error:   × erro de resolução: [UnknownDirective { name: "heapstack", context: "sig",
-  │ item_name: "fib" }]
+Error:   × erro de resolução (Pass 1): [UnknownDirective { name: "heapstack",
+  │ context: "sig", item_name: "fib" }]

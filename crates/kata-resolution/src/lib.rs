@@ -22,6 +22,23 @@ use directives::{extract_log_spec, extract_test_specs};
 use kata_ast::{Item, Module};
 use kata_core::{Ty, TypeEnv};
 
+/// Extrai a aridade padrão de cada nome de função a partir das assinaturas
+/// resolvidas.
+///
+/// A aridade padrão é a aridade da **primeira** overload declarada para
+/// cada nome. Usado pelo ciclo de dois passes (Fase 4) para alimentar
+/// `parse_with_arity` no Pass 2.
+pub fn extract_arities(signatures: &[Signature]) -> std::collections::HashMap<String, usize> {
+    let mut arities = std::collections::HashMap::new();
+    for sig in signatures {
+        // insert_only: a primeira overload vence (ordem de declaração).
+        arities
+            .entry(sig.name.clone())
+            .or_insert(sig.param_types.len());
+    }
+    arities
+}
+
 /// Resolve um módulo: Pass 0 + Pass 1.
 ///
 /// Usa `"__local__"` como origin para tipos definidos no módulo.

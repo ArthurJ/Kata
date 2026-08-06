@@ -19,8 +19,8 @@ use kata_inference::infer_module;
 use kata_lexer::lex;
 use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
-use kata_parser::parse;
-use kata_resolution::{ResolvedModule, load_prelude, resolve};
+use kata_parser::{parse, parse_decls_only, parse_with_arity};
+use kata_resolution::{ResolvedModule, extract_arities, load_prelude, resolve};
 use kata_tree_shaking::tree_shake;
 use rustyline::Editor;
 use rustyline::error::ReadlineError;
@@ -185,9 +185,18 @@ impl ReplSession {
     /// sem EntryExpr, apenas adiciona à lista — não executa. Se contém
     /// EntryExpr, executa o pipeline completo.
     fn eval_expr(&mut self, input: &str) -> Result<(), String> {
-        // Parse para descobrir o(s) item(s).
+        // Lex
         let tokens = lex(input).map_err(|e| format!("erro léxico: {e:?}"))?;
-        let module = parse(tokens).map_err(|e| format!("erro de parse: {e:?}"))?;
+
+        // Pass 1: parse_decls_only → resolve → extract_arities
+        let decls_module = parse_decls_only(tokens.clone())
+            .map_err(|e| format!("erro de parse (Pass 1): {e:?}"))?;
+        let decls_user = resolve(&decls_module).map_err(|e| format!("erro de resolução (Pass 1): {e:?}"))?;
+        let decls_resolved = merge_resolved(self.prelude.clone(), decls_user);
+        let arities = extract_arities(&decls_resolved.signatures);
+
+        // Pass 2: parse_with_arity (completo)
+        let module = parse_with_arity(tokens, arities).map_err(|e| format!("erro de parse: {e:?}"))?;
 
         if module.items.is_empty() {
             return Ok(());
@@ -255,7 +264,16 @@ impl ReplSession {
             .map_err(|e| format!("não foi possível ler `{path}`: {e}"))?;
 
         let tokens = lex(&source).map_err(|e| format!("erro léxico: {e:?}"))?;
-        let module = parse(tokens).map_err(|e| format!("erro de parse: {e:?}"))?;
+
+        // Pass 1: parse_decls_only → resolve → extract_arities
+        let decls_module = parse_decls_only(tokens.clone())
+            .map_err(|e| format!("erro de parse (Pass 1): {e:?}"))?;
+        let decls_user = resolve(&decls_module).map_err(|e| format!("erro de resolução (Pass 1): {e:?}"))?;
+        let decls_resolved = merge_resolved(self.prelude.clone(), decls_user);
+        let arities = extract_arities(&decls_resolved.signatures);
+
+        // Pass 2: parse_with_arity (completo)
+        let module = parse_with_arity(tokens, arities).map_err(|e| format!("erro de parse: {e:?}"))?;
 
         if module.items.is_empty() {
             eprintln!("arquivo `{path}` não contém items");

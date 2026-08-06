@@ -1,5 +1,6 @@
 ---
 source: crates/kata-driver/tests/examples_snapshot.rs
+assertion_line: 100
 expression: output
 ---
 Normal(22.857142857142858)
@@ -7,4 +8,5 @@ Normal(22.857142857142858)
 70.0
 3.0625
 --- stderr ---
+[resolution] warning: tipo base Float pode não implementar a interface NUM (PositiveInt refines NUM) — validação final em infer_module
 [resolution] warning: tipo base Float pode não implementar a interface NUM (PositiveInt refines NUM) — validação final em infer_module

@@ -1,9 +1,9 @@
 ---
 source: crates/kata-driver/tests/examples_snapshot.rs
-assertion_line: 100
 expression: output
 ---
 --- stderr ---
+[resolution] warning: interface 'ITERATOR' não declarada (em implements para CustomIter) — pode ser um typo ou falta de import
 [resolution] warning: interface 'ITERATOR' não declarada (em implements para CustomIter) — pode ser um typo ou falta de import
 Error: type.mismatch
 

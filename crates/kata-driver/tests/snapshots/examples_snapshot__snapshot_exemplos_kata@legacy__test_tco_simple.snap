@@ -3,10 +3,8 @@ source: crates/kata-driver/tests/examples_snapshot.rs
 expression: output
 ---
 --- stderr ---
-Error: type.mismatch
+Error: parse.unexpected_token
 
-  × tipo incompatível: esperado `Tuple`, encontrado `Apply { callee: Spanned
-  │ { node: Ident { name: "-" }, span: Span { offset: 145, line: 6, col: 26,
-  │ len: 1 } }, args: [Spanned { node: Ident { name: "n" }, span: Span
-  │ { offset: 147, line: 6, col: 28, len: 1 } }, Spanned { node: IntLit
-  │ { text: "1" }, span: Span { offset: 149, line: 6, col: 30, len: 1 } }] }`
+  × token inesperado: esperado ``fat_tail` tem aridade padrão 2 — excesso de
+  │ argumentos posicionais. Use `fat_tail{...}` para aridade diferente ou
+  │ separe com quebra de linha.`, encontrado `$`

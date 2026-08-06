@@ -133,6 +133,93 @@ impl Parser {
         Ok(Module { items })
     }
 
+    /// Parse apenas declarações — skipa entry exprs e top-level lets.
+    ///
+    /// Usado pelo Pass 1 do ciclo de dois passes (Fase 4). Reconhece
+    /// declarações pelos mesmos tokens iniciais que `parse_module`:
+    /// `data`, `enum`, `alias`, `action`, `interface`, `implements`,
+    /// `refines`, `sig` (Ident ::), `import`, `export`. Tudo else é
+    /// skipado até o próximo `StmtSep` ou `Eof`.
+    pub(crate) fn parse_module_decls_only(&mut self) -> Result<Module, FrontendError> {
+        let mut items: Vec<Spanned<Item>> = Vec::new();
+
+        while !self.at_eof() {
+            // Skip leading statement separators
+            if matches!(self.peek(), Token::StmtSep) {
+                self.advance();
+                continue;
+            }
+
+            // Collect directives (zero or more @name ... prefixes)
+            let directives = self.parse_directives()?;
+
+            // Skip statement separators that may appear after directives
+            while matches!(self.peek(), Token::StmtSep) {
+                self.advance();
+            }
+
+            if matches!(self.peek(), Token::Eof) {
+                break;
+            }
+
+            let item_start = self.peek_span();
+
+            match self.peek() {
+                Token::Data => {
+                    let item = self.parse_data_decl(directives)?;
+                    items.push(Spanned::new(item, item_start));
+                }
+                Token::Enum => {
+                    let item = self.parse_enum_decl(directives)?;
+                    items.push(Spanned::new(item, item_start));
+                }
+                Token::Alias => {
+                    let item = self.parse_alias_decl(directives)?;
+                    items.push(Spanned::new(item, item_start));
+                }
+                Token::Action => {
+                    let item = self.parse_action_decl(directives)?;
+                    items.push(Spanned::new(item, item_start));
+                }
+                Token::Interface => {
+                    let item = self.parse_interface_decl(directives)?;
+                    items.push(Spanned::new(item, item_start));
+                }
+                Token::Import => {
+                    let item = self.parse_import_decl()?;
+                    items.push(Spanned::new(item, item_start));
+                }
+                Token::Export => {
+                    let item = self.parse_export_decl()?;
+                    items.push(Spanned::new(item, item_start));
+                }
+                Token::Implements => {
+                    return Err(self.error("expected type name before `implements`"));
+                }
+                _ => {
+                    if self.is_implements_start() {
+                        let item = self.parse_implements_decl(directives)?;
+                        items.push(Spanned::new(item, item_start));
+                    } else if self.is_refines_start() {
+                        let item = self.parse_refines_decl(directives)?;
+                        items.push(Spanned::new(item, item_start));
+                    } else if self.is_signature_start() {
+                        let item = self.parse_sig(directives)?;
+                        items.push(Spanned::new(item, item_start));
+                    } else {
+                        // Entry expr ou top-level let — skipar tokens
+                        // até o próximo StmtSep ou Eof.
+                        while !self.at_eof() && !matches!(self.peek(), Token::StmtSep) {
+                            self.advance();
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(Module { items })
+    }
+
     /// Parse module com error recovery de top-level items.
     ///
     /// Igual ao `parse_module`, mas quando um item falha, registra o erro

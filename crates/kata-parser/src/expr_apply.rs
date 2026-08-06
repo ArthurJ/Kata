@@ -256,11 +256,12 @@ fn parse_apply_impl(
     // ── Greedy mode (fallback) ──────────────────────────────────
     // Greedy atoms ativo quando:
     // - arities é None (modo original), ou
-    // - callee não é Ident (VariantQual, etc. — construtores sem aridade)
-    // Quando arities é Some e callee é Ident sem entrada, o Ident é
-    // valor (referência) — não coleta args. Isso evita que `+ a b`
-    // dentro de um lambda trate `a` como callee greedy e consuma `b`.
-    if parser.arities.is_some() && matches!(callee.node, Expr::Ident { .. }) {
+    // - as_arg é false (top-level: construtores, funções sem aridade
+    //   conhecida, etc. — coletam args greedy como antes)
+    // Quando as_arg é true e arities é Some, o átomo é valor — não coleta
+    // args. Isso evita que `+ a b` dentro de um lambda trate `a` como
+    // callee greedy e consuma `b`, ou que `+ _ n` trate `_` como callee.
+    if parser.arities.is_some() && as_arg {
         return Ok(callee);
     }
 
