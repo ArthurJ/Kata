@@ -160,6 +160,135 @@ pub fn parse_decls_only(tokens: Vec<TokenWithSpan>) -> Result<Module, FrontendEr
     parser.parse_module_decls_only()
 }
 
+/// Scan de tokens para extrair aridades de lambdas em bindings `let` do top level.
+///
+/// Procura o padrão `let IDENT := lambda <params> :` e conta os params
+/// para produzir um mapa de aridades. Não constrói AST — é um scan linear
+/// O(n) sobre os tokens. Casos não-lambda (`let f := compose g h`,
+/// `let f := if ...`) são skipados silenciosamente.
+///
+/// Usado entre o Pass 1 (signatures) e o Pass 2 (arity-aware) para que
+/// funções definidas via `let f := lambda x: ...` também tenham
+/// arity-aware parsing.
+///
+/// Só extrai o caso direto: `let IDENT := lambda ...`. Lambdas indiretas
+/// (dentro de `if`, `match`, composição, etc.) não são extraíveis sem
+/// inferência de tipos e ficam em greedy (fallback seguro).
+pub fn scan_lambdas(tokens: &[TokenWithSpan]) -> std::collections::HashMap<String, usize> {
+    let mut arities = std::collections::HashMap::new();
+    let mut i = 0;
+
+    while i < tokens.len() {
+        // Procura `let` no top level. Como entry exprs são planas no top
+        // level e `let` é keyword, qualquer `Token::Let` é um binding.
+        if tokens[i].token != Token::Let {
+            i += 1;
+            continue;
+        }
+        i += 1;
+
+        // `let IDENT := lambda ...`
+        // Verifica o padrão sem let-chains (requer Rust 2024).
+        if i + 3 >= tokens.len() {
+            // Não há tokens suficientes — skipa até StmtSep/Eof
+            while i < tokens.len()
+                && tokens[i].token != Token::StmtSep
+                && tokens[i].token != Token::Eof
+            {
+                i += 1;
+            }
+            continue;
+        }
+
+        // Extrai nome e verifica se é `IDENT := lambda`
+        let name = match &tokens[i].token {
+            Token::Ident(n) => n.clone(),
+            _ => {
+                // `let` sem Ident — skipa até StmtSep/Eof
+                while i < tokens.len()
+                    && tokens[i].token != Token::StmtSep
+                    && tokens[i].token != Token::Eof
+                {
+                    i += 1;
+                }
+                continue;
+            }
+        };
+
+        if tokens[i + 1].token != Token::BindAssign || tokens[i + 2].token != Token::Lambda {
+            // `let IDENT := <não-lambda>` — skipa até StmtSep/Eof
+            while i < tokens.len()
+                && tokens[i].token != Token::StmtSep
+                && tokens[i].token != Token::Eof
+            {
+                i += 1;
+            }
+            continue;
+        }
+
+        // Contar params: tokens entre `lambda` e `:` (Colon).
+        // Params podem ser:
+        //   - Ident (pattern simples): `x`, `y`
+        //   - Ident :: Type (TypedIdent): `x::Int` → DoubleColon + type tokens
+        //   - (p1, p2) (Tuple pattern): LParen ... RParen
+        //   - [h : t] (Cons pattern): LBracket ... RBracket
+        //   - _ (Wildcard): Ident("_")
+        //
+        // Em vez de parsear patterns propriamente, contamos
+        // "inícios de pattern" entre `lambda` e `:`. Um início de
+        // pattern é: Ident, IntLit, FloatLit, TextLit, LParen, LBracket.
+        // Mas precisamos ignorar Idents que são parte de type annotations
+        // (após DoubleColon). A estratégia: contar tokens que
+        // can_start_pattern quando estamos "no nível zero" (depth=0
+        // em parênteses/colchetes) e não estamos dentro de uma
+        // type annotation.
+        i += 3; // pula Ident, BindAssign, Lambda
+        let mut count = 0usize;
+        let mut depth = 0i32;
+        let mut in_type_ann = false;
+
+        while i < tokens.len() {
+            match &tokens[i].token {
+                Token::Colon => break,
+                Token::LParen | Token::LBracket | Token::LBrace => {
+                    depth += 1;
+                    in_type_ann = false;
+                }
+                Token::RParen | Token::RBracket | Token::RBrace => {
+                    depth -= 1;
+                    in_type_ann = false;
+                }
+                Token::DoubleColon if depth == 0 => {
+                    in_type_ann = true;
+                }
+                Token::StmtSep | Token::Eof | Token::Indent => break,
+                Token::Comma | Token::Dot | Token::DotDot | Token::DotDotEq => {
+                    // Separadores dentro de patterns — ignorar
+                }
+                Token::Ident(_) | Token::IntLit(_) | Token::FloatLit(_) | Token::TextLit(_) => {
+                    if depth == 0 && !in_type_ann {
+                        count += 1;
+                    }
+                    in_type_ann = false;
+                }
+                _ => {
+                    // Outros tokens (FatArrow, ThinArrow, etc.) —
+                    // resetam in_type_ann mas não contam como pattern
+                    in_type_ann = false;
+                }
+            }
+            i += 1;
+        }
+
+        if count > 0 {
+            arities.insert(name, count);
+        }
+        // Continua o scan — i já está no `:` ou beyond
+    }
+
+    arities
+}
+
 /// Parse with error recovery — acumula erros de top-level items.
 ///
 /// Diferente de `parse`, não aborta no primeiro erro. Quando um item falha,

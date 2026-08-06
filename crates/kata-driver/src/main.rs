@@ -8,7 +8,7 @@ use kata_inference::infer_module;
 use kata_lexer::lex;
 use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
-use kata_parser::{parse, parse_decls_only, parse_with_arity};
+use kata_parser::{parse, parse_decls_only, parse_with_arity, scan_lambdas};
 use kata_resolution::{ResolvedModule, extract_arities, load_prelude, resolve};
 use kata_rt as rt;
 use kata_tree_shaking::tree_shake;
@@ -352,7 +352,11 @@ fn run_pipeline_with_file(source: &str, file_path: Option<&str>) -> miette::Resu
     let decls_resolved = merge_resolved(prelude.clone(), decls_user);
 
     // Coletar aridades do prelude + declarações do usuário
-    let arities = extract_arities(&decls_resolved.signatures);
+    let mut arities = extract_arities(&decls_resolved.signatures);
+
+    // Pass 1.5: scan_lambdas — aridades de `let f := lambda ...` no top level
+    let lambda_arities = scan_lambdas(&tokens);
+    arities.extend(lambda_arities);
 
     // 2b. Pass 2: parse_with_arity (completo) → resolve → infer → codegen
     let module = parse_with_arity(tokens, arities).map_err(IntoReport::into_report)?;

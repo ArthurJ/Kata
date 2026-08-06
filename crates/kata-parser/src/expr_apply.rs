@@ -229,6 +229,13 @@ fn parse_apply_impl(
                 let mut args = Vec::with_capacity(arity);
                 for i in 0..arity {
                     if !parser.can_start_expr() {
+                        // Se coletamos 0 args e o próximo token não inicia
+                        // expr, o Ident é valor (referência), não aplicação.
+                        // Ex: `(f)` em `map (f) [1 2 3]` — f tem aridade 1
+                        // mas `)` não inicia expr → f é valor.
+                        if i == 0 {
+                            return Ok(callee);
+                        }
                         return Err(FrontendError::UnexpectedToken {
                             expected: format!(
                                 "argumento #{} para `{}` (aridade padrão {})",

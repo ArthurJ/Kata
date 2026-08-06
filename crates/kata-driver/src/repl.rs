@@ -19,7 +19,7 @@ use kata_inference::infer_module;
 use kata_lexer::lex;
 use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
-use kata_parser::{parse, parse_decls_only, parse_with_arity};
+use kata_parser::{parse, parse_decls_only, parse_with_arity, scan_lambdas};
 use kata_resolution::{ResolvedModule, extract_arities, load_prelude, resolve};
 use kata_tree_shaking::tree_shake;
 use rustyline::Editor;
@@ -193,7 +193,10 @@ impl ReplSession {
             .map_err(|e| format!("erro de parse (Pass 1): {e:?}"))?;
         let decls_user = resolve(&decls_module).map_err(|e| format!("erro de resolução (Pass 1): {e:?}"))?;
         let decls_resolved = merge_resolved(self.prelude.clone(), decls_user);
-        let arities = extract_arities(&decls_resolved.signatures);
+        let mut arities = extract_arities(&decls_resolved.signatures);
+
+        // Pass 1.5: scan_lambdas — aridades de `let f := lambda ...`
+        arities.extend(scan_lambdas(&tokens));
 
         // Pass 2: parse_with_arity (completo)
         let module = parse_with_arity(tokens, arities).map_err(|e| format!("erro de parse: {e:?}"))?;
@@ -270,7 +273,10 @@ impl ReplSession {
             .map_err(|e| format!("erro de parse (Pass 1): {e:?}"))?;
         let decls_user = resolve(&decls_module).map_err(|e| format!("erro de resolução (Pass 1): {e:?}"))?;
         let decls_resolved = merge_resolved(self.prelude.clone(), decls_user);
-        let arities = extract_arities(&decls_resolved.signatures);
+        let mut arities = extract_arities(&decls_resolved.signatures);
+
+        // Pass 1.5: scan_lambdas — aridades de `let f := lambda ...`
+        arities.extend(scan_lambdas(&tokens));
 
         // Pass 2: parse_with_arity (completo)
         let module = parse_with_arity(tokens, arities).map_err(|e| format!("erro de parse: {e:?}"))?;

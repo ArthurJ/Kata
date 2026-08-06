@@ -242,3 +242,74 @@ fn erro_param_faltante_no_dict() {
         "erro deve mencionar param faltante, got: {stderr}"
     );
 }
+
+// ── scan_lambdas — arity-aware para let-bound lambdas ───────────
+
+/// `let f := lambda x: + x 1` + `f (* 2 2)` → f(4) = 5
+/// Com aridade 1, f coleta 1 arg. O grouping `(* 2 2)` é o argumento.
+#[test]
+fn let_lambda_sub_aplicacao_com_grouping() {
+    let src = "let f := lambda x: + x 1\nf (* 2 2)";
+    let path = write_temp_kata("let_lambda_sub_group", src);
+    let (stdout, stderr, code) = run_kata_file(&path);
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    assert_eq!(stdout.trim(), "5", "f (* 2 2) deve imprimir 5 (f(4))");
+}
+
+/// `let f := lambda x: + x 1` + `f 5` → f(5) = 6
+/// Aridade 1, chamada simples.
+#[test]
+fn let_lambda_chamada_simples() {
+    let src = "let f := lambda x: + x 1\nf 5";
+    let path = write_temp_kata("let_lambda_simples", src);
+    let (stdout, stderr, code) = run_kata_file(&path);
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    assert_eq!(stdout.trim(), "6", "f 5 deve imprimir 6");
+}
+
+/// `let f := lambda x: + x 1` + `f 1 2 3` → erro de excesso posicional
+/// (f tem aridade 1, recebeu 3)
+#[test]
+fn let_lambda_excesso_posicional() {
+    let src = "let f := lambda x: + x 1\nf 1 2 3";
+    let path = write_temp_kata("let_lambda_excesso", src);
+    let (_stdout, stderr, code) = run_kata_file(&path);
+    assert_ne!(code, 0, "deve falhar — f tem aridade 1, recebeu 3");
+    assert!(
+        stderr.contains("aridade padrão 1") || stderr.contains("excesso"),
+        "erro deve mencionar aridade padrão 1 ou excesso, got: {stderr}"
+    );
+}
+
+/// `let f := lambda x: + x 1` seguido de `+ 5 * 2 2` — função prelude
+/// ainda funciona (não só lambdas).
+#[test]
+fn let_lambda_e_prelude_ambos_funcionam() {
+    let src = "let f := lambda x: + x 1\n+ 5 * 2 2";
+    let path = write_temp_kata("let_lambda_e_prelude", src);
+    let (stdout, stderr, code) = run_kata_file(&path);
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    assert_eq!(stdout.trim(), "9", "+ 5 * 2 2 deve imprimir 9");
+}
+
+/// `let n := 42` (não-lambda) não deve quebrar — scan_lambdas skipa.
+#[test]
+fn let_nao_lambda_nao_quebra() {
+    let src = "let n := 42\nn";
+    let path = write_temp_kata("let_nao_lambda", src);
+    let (stdout, stderr, code) = run_kata_file(&path);
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    assert_eq!(stdout.trim(), "42", "n deve imprimir 42");
+}
+
+/// Lambda com 1 param: `let g := lambda x: - x 1`
+/// A aridade 1 é extraída pelo scan. `- x 1` constrain x to Int.
+/// `g (* 4 5)` → g(20) = 19
+#[test]
+fn let_lambda_1param_aridade_extraida() {
+    let src = "let g := lambda x: - x 1\ng (* 4 5)";
+    let path = write_temp_kata("let_lambda_1param", src);
+    let (stdout, stderr, code) = run_kata_file(&path);
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    assert_eq!(stdout.trim(), "19", "g (* 4 5) = g(20) = 20 - 1 = 19");
+}
