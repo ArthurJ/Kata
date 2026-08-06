@@ -127,16 +127,20 @@ pub(crate) fn process_with_bindings(
     Ok(typed_with_bindings)
 }
 
-/// Mapeia chaves de DictLit → nomes de params da action e reordena para Tuple.
+/// Mapeia chaves de DictLit → nomes de params da função/action e reordena para Tuple.
 ///
-/// Extrai os nomes dos params da action do DispatchTable (OverloadInfo.param_names).
+/// Extrai os nomes dos params do DispatchTable (OverloadInfo.param_names).
 /// Cada chave do Dict deve ser `TextLit` cujo valor corresponde a um nome de param.
 /// Reordena os valores na ordem posicional dos params e produz `TypedExprKind::Tuple`.
 ///
+/// Funciona para funções puras e actions — qualquer função com `param_names`
+/// não-vazios. O caller (infer_apply ou infer_action_call) identifica se o
+/// DictLit é o único arg de um Apply/ActionCall e chama esta função.
+///
 /// Erros:
-/// - Action sem params nomeados → "use chamada posicional"
+/// - Função/action sem params nomeados → "use chamada posicional"
 /// - Chave que não é TextLit → "args nomeados exigem chaves literais de Text"
-/// - Chave não corresponde a nenhum param → "parâmetro `X` não existe na action `f`"
+/// - Chave não corresponde a nenhum param → "parâmetro `X` não existe na função `f`"
 /// - Param faltante → "parâmetro `X` não foi fornecido"
 pub(crate) fn reorder_dict_args_to_tuple(
     callee: &str,
@@ -145,23 +149,24 @@ pub(crate) fn reorder_dict_args_to_tuple(
     ctx: &InferCtx,
     span: Span,
 ) -> InferResult<TypedExpr> {
-    // Busca a action no DispatchTable para obter os nomes dos params.
+    // Busca a função/action no DispatchTable para obter os nomes dos params.
     let overloads = ctx.table.get_overloads(callee).ok_or_else(|| {
         kata_diagnostics::MiddleError::UnboundName {
-            name: format!("Action `{callee}` não declarada"),
+            name: format!("Função `{callee}` não declarada"),
             span: span.into(),
         }
     })?;
 
-    // Encontra o overload que é uma action com param_names.
+    // Encontra o overload com param_names não-vazios. Pode ser função pura
+    // ou action — o critério é ter nomes, não o flag is_action.
     let param_names: &[Option<String>] = overloads
         .iter()
-        .find(|o| o.is_action && !o.param_names.is_empty())
+        .find(|o| !o.param_names.is_empty())
         .map(|o| o.param_names.as_slice())
         .ok_or_else(|| kata_diagnostics::MiddleError::TypeMismatch {
-            expected: format!("Action `{callee}` com params nomeados para chamada via Dict"),
+            expected: format!("`{callee}` com params nomeados para chamada via Dict"),
             found: format!(
-                "`{callee}` não tem params nomeados — use chamada posicional {callee}!(...)"
+                "`{callee}` não tem params nomeados — use chamada posicional {callee} ...)"
             ),
             span: span.into(),
         })?;

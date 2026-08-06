@@ -58,7 +58,7 @@ fn is_pascal_case(name: &str) -> bool {
 }
 
 /// Verifica se `name` é snake_case: primeiro char lowercase ou `_`.
-fn is_snake_case(name: &str) -> bool {
+pub(crate) fn is_snake_case(name: &str) -> bool {
     if name.is_empty() {
         return false;
     }

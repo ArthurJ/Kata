@@ -19,7 +19,7 @@ use super::apply_len_tuple::try_len_tuple;
 use super::collections_hof::{infer_filter, infer_fold, infer_map};
 use super::expr::{InferCtx, infer_expr};
 use super::format_synthesis::infer_format;
-use super::helpers::{InferResult, peel_grouping_expr};
+use super::helpers::{InferResult, peel_grouping_expr, reorder_dict_args_to_tuple};
 use super::iface_dispatch::try_iface_method_dispatch;
 use super::variant_construct::{VariantCall, expand_spread, infer_variant_construct};
 use kata_resolution::resolve_type_expr;
@@ -183,6 +183,73 @@ pub(crate) fn infer_apply(
     // Se um arg é `Ident("$")`, o próximo arg deve ser `Tuple` — substitui
     // ambos pelos elementos individuais da tupla.
     let expanded_args = expand_spread(args, span)?;
+
+    // ── Dict dispatch para funções puras (Fase 2) ──
+    // Se há exatamente 1 arg e ele é `Expr::DictLit`, e a função tem
+    // overloads com `param_names` não-vazios, mapeia chaves → params e
+    // reordena para Tuple. Depois faz dispatch normal com a Tuple.
+    // `f{a: 1, b: 2}` → `f(1, 2)` via reorder_dict_args_to_tuple.
+    if expanded_args.len() == 1 {
+        if let Expr::DictLit { .. } = &expanded_args[0].node {
+            if ctx.table.has_function(&func_name) {
+                let overloads = ctx
+                    .table
+                    .get_overloads(&func_name)
+                    .expect("has_function retornou true");
+                let has_named = overloads.iter().any(|o| !o.param_names.is_empty());
+                if has_named {
+                    // Infere o DictLit (chaves como TextLit, valores tipados).
+                    let typed_dict = infer_expr(
+                        &expanded_args[0].node,
+                        &expanded_args[0].span,
+                        env,
+                        ctx,
+                        false,
+                    )?;
+                    // Extrai entries do TypedExpr.
+                    let typed_entries = match &typed_dict.kind {
+                        TypedExprKind::DictLit { entries, .. } => entries.clone(),
+                        _ => {
+                            return Err(MiddleError::TypeMismatch {
+                                expected: "DictLit como argumento".into(),
+                                found: format!("{:?}", typed_dict.kind),
+                                span: expanded_args[0].span.into(),
+                            });
+                        }
+                    };
+                    // Reordena chaves → params, produz Tuple.
+                    let typed_tuple = reorder_dict_args_to_tuple(
+                        &func_name,
+                        &typed_entries,
+                        &typed_dict,
+                        ctx,
+                        *span,
+                    )?;
+                    // Extrai tipos dos elementos da tupla para dispatch.
+                    let tuple_elements: Vec<Spanned<TypedExpr>> = match &typed_tuple.kind {
+                        TypedExprKind::Tuple { elements } => elements.clone(),
+                        _ => unreachable!("reorder_dict_args_to_tuple sempre produz Tuple"),
+                    };
+                    let tuple_arg_tys: Vec<Ty> =
+                        tuple_elements.iter().map(|e| e.node.ty.clone()).collect();
+
+                    // Dispatch normal com os elementos da tupla como args
+                    // individuais (não a tupla como um único arg).
+                    if let Some(result) = try_dispatch_table(
+                        &func_name,
+                        &tuple_elements,
+                        &tuple_arg_tys,
+                        callee,
+                        span,
+                        ctx,
+                        hint,
+                    ) {
+                        return result;
+                    }
+                }
+            }
+        }
+    }
 
     // Infere tipos dos argumentos recursivamente (tail_pos = false para args).
     let mut typed_args: Vec<Spanned<TypedExpr>> = Vec::with_capacity(expanded_args.len());

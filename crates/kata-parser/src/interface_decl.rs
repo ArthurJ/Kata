@@ -341,8 +341,13 @@ impl Parser {
             let mut params = Vec::new();
             let mut param_names = Vec::new();
             while !matches!(self.peek(), Token::FatArrow | Token::Eof) {
-                params.push(self.parse_type_expr()?);
-                param_names.push(None);
+                if let Some((pname, ty)) = self.try_parse_named_type_param() {
+                    params.push(ty);
+                    param_names.push(Some(pname));
+                } else {
+                    params.push(self.parse_type_expr()?);
+                    param_names.push(None);
+                }
             }
             self.expect(&Token::FatArrow, "`=>` in method signature")?;
             let ret = self.parse_type_expr()?;
@@ -469,8 +474,13 @@ impl Parser {
                 let mut params = Vec::new();
                 let mut param_names = Vec::new();
                 while !matches!(self.peek(), Token::FatArrow | Token::Eof) {
-                    params.push(self.parse_type_expr()?);
-                    param_names.push(None);
+                    if let Some((pname, ty)) = self.try_parse_named_type_param() {
+                        params.push(ty);
+                        param_names.push(Some(pname));
+                    } else {
+                        params.push(self.parse_type_expr()?);
+                        param_names.push(None);
+                    }
                 }
                 self.expect(&Token::FatArrow, "`=>` in method signature")?;
                 let ret = self.parse_type_expr()?;
