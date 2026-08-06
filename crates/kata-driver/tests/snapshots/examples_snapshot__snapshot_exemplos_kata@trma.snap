@@ -4,3 +4,6 @@ expression: output
 ---
 500000500000
 2432902008176640000
+--- stderr ---
+[resolution] warning: `read` tem overloads com aridades diferentes (1 vs 2) — aridade padrão = 1 (primeira declaração)
+[resolution] warning: `read` tem overloads com aridades diferentes (1 vs 2) — aridade padrão = 1 (primeira declaração)
