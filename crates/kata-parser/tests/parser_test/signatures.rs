@@ -15,6 +15,7 @@ fn sig_simple() {
             ret,
             directives,
             body,
+            ..
         } => {
             assert_eq!(name, "+");
             assert_eq!(params.len(), 2);

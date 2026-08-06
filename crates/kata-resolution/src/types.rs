@@ -60,6 +60,10 @@ pub struct Signature {
     /// Vazio para funções não-genéricas. Coletado examinando os `Ty::Var` em
     /// param_types e return_type cujo nome é UPPER_CASE e não está no TypeEnv.
     pub type_params: Vec<String>,
+    /// Nomes dos params. `Some(nome)` para params nomeados (`x::Tipo`),
+    /// `None` para posicional. Vazio para funções puras/FFI sem nomes.
+    /// Usado pelo typeck para mapear DictLit args → params nomeados.
+    pub param_names: Vec<Option<String>>,
 }
 
 /// Especificação de logging `@log` anotada em Action ou função nomeada.

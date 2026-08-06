@@ -18,6 +18,9 @@ pub enum Item {
     Sig {
         name: String,
         params: Vec<Spanned<TypeExpr>>,
+        /// Nomes dos params. `Some(nome)` se o param é nomeado (`x::Tipo`),
+        /// `None` se posicional. Vazio se nenhum param tem nome.
+        param_names: Vec<Option<String>>,
         ret: Spanned<TypeExpr>,
         directives: Vec<Directive>,
         // Sempre None (FFI — corpo suprido por @ffi).
@@ -208,6 +211,9 @@ pub struct InterfaceSig {
 pub struct ImplMethod {
     pub name: String,
     pub params: Vec<Spanned<TypeExpr>>,
+    /// Nomes dos params. `Some(nome)` se o param é nomeado (`x::Tipo`),
+    /// `None` se posicional. Vazio se nenhum param tem nome.
+    pub param_names: Vec<Option<String>>,
     pub ret: Spanned<TypeExpr>,
     pub directives: Vec<Directive>,
     /// None = FFI (precisa @ffi); Some = corpo Kata (cláusulas lambda).

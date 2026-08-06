@@ -76,6 +76,7 @@ pub fn resolve_with_origin(
             Item::Sig {
                 name,
                 params,
+                param_names,
                 ret,
                 directives,
                 body,
@@ -164,6 +165,7 @@ pub fn resolve_with_origin(
                     is_action: false,
                     is_commutative,
                     type_params,
+                    param_names: param_names.clone(),
                 });
             }
             Item::ActionDecl {
@@ -228,6 +230,7 @@ pub fn resolve_with_origin(
                         is_action: true,
                         is_commutative: false,
                         type_params: vec![],
+                        param_names: param_names.clone(),
                     });
                 } else {
                     // Action com corpo Kata — produz ActionDef para o inference.

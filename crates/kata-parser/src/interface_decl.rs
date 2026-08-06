@@ -339,8 +339,10 @@ impl Parser {
             self.expect(&Token::DoubleColon, "`::` in method signature")?;
 
             let mut params = Vec::new();
+            let mut param_names = Vec::new();
             while !matches!(self.peek(), Token::FatArrow | Token::Eof) {
                 params.push(self.parse_type_expr()?);
+                param_names.push(None);
             }
             self.expect(&Token::FatArrow, "`=>` in method signature")?;
             let ret = self.parse_type_expr()?;
@@ -366,6 +368,7 @@ impl Parser {
             methods.push(ImplMethod {
                 name: method_name,
                 params,
+                param_names,
                 ret,
                 directives: method_directives,
                 body,
@@ -464,8 +467,10 @@ impl Parser {
                 self.expect(&Token::DoubleColon, "`::` in method signature")?;
 
                 let mut params = Vec::new();
+                let mut param_names = Vec::new();
                 while !matches!(self.peek(), Token::FatArrow | Token::Eof) {
                     params.push(self.parse_type_expr()?);
+                    param_names.push(None);
                 }
                 self.expect(&Token::FatArrow, "`=>` in method signature")?;
                 let ret = self.parse_type_expr()?;
@@ -490,6 +495,7 @@ impl Parser {
                 methods.push(ImplMethod {
                     name: method_name,
                     params,
+                    param_names,
                     ret,
                     directives: method_directives,
                     body,

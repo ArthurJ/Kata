@@ -424,8 +424,10 @@ impl Parser {
 
         // Parse type params until `=>`
         let mut params = Vec::new();
+        let mut param_names = Vec::new();
         while !matches!(self.peek(), Token::FatArrow | Token::Eof) {
             params.push(self.parse_type_expr()?);
+            param_names.push(None);
         }
 
         self.expect(&Token::FatArrow, "`=>`")?;
@@ -452,6 +454,7 @@ impl Parser {
         Ok(Item::Sig {
             name,
             params,
+            param_names,
             ret,
             directives,
             body,

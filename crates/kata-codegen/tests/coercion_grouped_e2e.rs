@@ -245,6 +245,7 @@ fn custom_overloads() -> Vec<Signature> {
             is_action: false,
             is_commutative: false,
             type_params: vec![],
+            param_names: vec![],
         },
         Signature {
             name: "custom".into(),
@@ -256,6 +257,7 @@ fn custom_overloads() -> Vec<Signature> {
             is_action: false,
             is_commutative: false,
             type_params: vec![],
+            param_names: vec![],
         },
     ]
 }

@@ -155,6 +155,13 @@ fn highlight_line(line: &str) -> Cow<'_, str> {
     let mut last_end = 0usize;
 
     for tok in &tokens {
+        // Tokens sintéticos (Eof, Indent, Dedent, StmtSep) têm span zero
+        // (offset e len = 0). Processá-los regrediria `last_end` e faria
+        // o "resto da linha" reimprimir todo o input sem cor — eco duplo.
+        if tok.span.len == 0 {
+            continue;
+        }
+
         let tok_start = tok.span.offset;
         let tok_end = tok_start + tok.span.len;
 
