@@ -32,9 +32,22 @@ pub fn extract_arities(signatures: &[Signature]) -> std::collections::HashMap<St
     let mut arities = std::collections::HashMap::new();
     for sig in signatures {
         // insert_only: a primeira overload vence (ordem de declaração).
-        arities
-            .entry(sig.name.clone())
-            .or_insert(sig.param_types.len());
+        match arities.entry(sig.name.clone()) {
+            std::collections::hash_map::Entry::Occupied(e) => {
+                let existing = *e.get();
+                let new_arity = sig.param_types.len();
+                if existing != new_arity {
+                    eprintln!(
+                        "[resolution] warning: `{}` tem overloads com aridades diferentes \
+                         ({existing} vs {new_arity}) — aridade padrão = {existing} (primeira declaração)",
+                        sig.name
+                    );
+                }
+            }
+            std::collections::hash_map::Entry::Vacant(e) => {
+                e.insert(sig.param_types.len());
+            }
+        }
     }
     arities
 }

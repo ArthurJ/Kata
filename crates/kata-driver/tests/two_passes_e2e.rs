@@ -121,3 +121,124 @@ fn kata_eval_aridade_simples() {
     assert_eq!(code, 0, "kata eval deve exit 0 — stderr: {stderr}");
     assert_eq!(stdout.trim(), "3", "+ 1 2 deve imprimir 3");
 }
+
+// ── Dict dispatch sem `!` (Fase 5) ───────────────────────────────
+
+/// `soma{"a": 3, "b": 4}` deve funcionar como dict dispatch de função pura
+/// via `kata run` — sem `!`, usando o ciclo de dois passes.
+#[test]
+fn kata_run_dict_dispatch_sem_bang() {
+    let src = "soma :: (a::Int) (b::Int) => Int\nlambda a b: + a b\nsoma{\"a\": 3 \"b\": 4}";
+    let path = write_temp_kata("dict_sem_bang", src);
+    let (stdout, stderr, code) = run_kata_file(&path);
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    assert_eq!(stdout.trim(), "7", "soma com dict sem bang deve imprimir 7");
+}
+
+/// Ordem invertida das chaves também funciona via `kata run`.
+#[test]
+fn kata_run_dict_dispatch_ordem_invertida() {
+    let src = "soma :: (a::Int) (b::Int) => Int\nlambda a b: + a b\nsoma{\"b\": 4 \"a\": 3}";
+    let path = write_temp_kata("dict_invertido", src);
+    let (stdout, stderr, code) = run_kata_file(&path);
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    assert_eq!(stdout.trim(), "7", "soma com dict ordem invertida deve imprimir 7");
+}
+
+/// Função pura com 1 param nomeado via `kata eval`.
+/// `dobro :: (x::Int) => Int` + `dobro{"x": 21}` → 42
+#[test]
+fn kata_eval_dict_dispatch_um_param() {
+    let src = "dobro :: (x::Int) => Int\nlambda x: * x 2\ndobro{\"x\": 21}";
+    let path = write_temp_kata("dict_um_param", src);
+    let (stdout, stderr, code) = run_kata_file(&path);
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    assert_eq!(stdout.trim(), "42", "dobro com dict deve imprimir 42");
+}
+
+/// Whitespace não distingue: `soma {\"a\": 1 \"b\": 2}` é o mesmo dict dispatch.
+#[test]
+fn kata_run_dict_dispatch_whitespace_nao_distingue() {
+    let src = "soma :: (a::Int) (b::Int) => Int\nlambda a b: + a b\nsoma {\"a\": 1 \"b\": 2}";
+    let path = write_temp_kata("dict_whitespace", src);
+    let (stdout, stderr, code) = run_kata_file(&path);
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    assert_eq!(stdout.trim(), "3", "soma com dict e whitespace deve imprimir 3");
+}
+
+/// Função com 3 params nomeados e ordem embaralhada.
+/// `sub :: (x::Int) (y::Int) (z::Int) => Int` + `sub{"z": 1 "x": 10 "y": 3}` → 6
+#[test]
+fn kata_run_dict_dispatch_tres_params_embaralhados() {
+    let src = "sub :: (x::Int) (y::Int) (z::Int) => Int\nlambda x y z: - (- x y) z\nsub{\"z\": 1 \"x\": 10 \"y\": 3}";
+    let path = write_temp_kata("dict_3params", src);
+    let (stdout, stderr, code) = run_kata_file(&path);
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    assert_eq!(stdout.trim(), "6", "sub com 3 params embaralhados deve imprimir 6");
+}
+
+// ── Validação e mensagens de erro (Fase 6) ───────────────────────
+
+/// `+ 1 2 3` deve dar erro claro mencionando aridade padrão 2 e excesso.
+#[test]
+fn erro_excesso_posicional_mensagem_clara() {
+    let path = write_temp_kata("erro_excesso", "+ 1 2 3");
+    let (_stdout, stderr, code) = run_kata_file(&path);
+    assert_ne!(code, 0, "deve falhar");
+    assert!(
+        stderr.contains("aridade padrão 2") && stderr.contains("excesso"),
+        "erro deve mencionar aridade padrão 2 e excesso, got: {stderr}"
+    );
+}
+
+/// `+{"a": 1}` deve dar erro — `+` não tem params nomeados.
+#[test]
+fn erro_dict_sem_params_nomeados() {
+    let src = "+{\"a\": 1 \"b\": 2}";
+    let path = write_temp_kata("dict_sem_params", src);
+    let (_stdout, stderr, code) = run_kata_file(&path);
+    assert_ne!(code, 0, "deve falhar — + não tem params nomeados");
+    assert!(
+        stderr.contains("não é parâmetro") || stderr.contains("parâmetro"),
+        "erro deve mencionar parâmetro inexistente, got: {stderr}"
+    );
+}
+
+/// Função sem params nomeados chamada com dict deve dar erro.
+#[test]
+fn erro_funcao_sem_params_nomeados_com_dict() {
+    let src = "soma :: Int Int => Int\nlambda a b: + a b\nsoma{\"a\": 1 \"b\": 2}";
+    let path = write_temp_kata("fn_sem_named", src);
+    let (_stdout, stderr, code) = run_kata_file(&path);
+    assert_ne!(code, 0, "deve falhar — soma não tem params nomeados");
+    assert!(
+        stderr.contains("não é parâmetro") || stderr.contains("parâmetro"),
+        "erro deve mencionar parâmetro inexistente, got: {stderr}"
+    );
+}
+
+/// Chave inexistente no dict deve dar erro mencionando o param.
+#[test]
+fn erro_chave_inexistente_no_dict() {
+    let src = "soma :: (a::Int) (b::Int) => Int\nlambda a b: + a b\nsoma{\"a\": 1 \"x\": 2}";
+    let path = write_temp_kata("dict_chave_errada", src);
+    let (_stdout, stderr, code) = run_kata_file(&path);
+    assert_ne!(code, 0, "deve falhar — chave 'x' não existe");
+    assert!(
+        stderr.contains("não existe") || stderr.contains("não é parâmetro") || stderr.contains("parâmetro"),
+        "erro deve mencionar param inexistente, got: {stderr}"
+    );
+}
+
+/// Param faltante no dict deve dar erro.
+#[test]
+fn erro_param_faltante_no_dict() {
+    let src = "soma :: (a::Int) (b::Int) => Int\nlambda a b: + a b\nsoma{\"a\": 1}";
+    let path = write_temp_kata("dict_param_faltante", src);
+    let (_stdout, stderr, code) = run_kata_file(&path);
+    assert_ne!(code, 0, "deve falhar — param 'b' faltante");
+    assert!(
+        stderr.contains("não foi fornecido") || stderr.contains("faltando") || stderr.contains("parâmetro"),
+        "erro deve mencionar param faltante, got: {stderr}"
+    );
+}

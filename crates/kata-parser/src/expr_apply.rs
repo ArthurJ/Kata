@@ -208,6 +208,24 @@ fn parse_apply_impl(
     if let Some(ref arities) = parser.arities {
         if let Expr::Ident { ref name } = callee.node {
             if let Some(&arity) = arities.get(name) {
+                // ── Dict dispatch `f{...}` em modo arity-aware ──
+                // `soma{"a": 3 "b": 4}` → Apply com DictLit como único arg.
+                // A inferência (Fase 2) detecta e faz reorder_dict_args_to_tuple.
+                // Não coleta N args posicionais — o DictLit carrega todos os params.
+                // Só em top-level (as_arg=false): em posição de argumento,
+                // `Ident {` é um valor Ident seguido de um DictLit como
+                // próximo argumento posicional, não dict dispatch.
+                if !as_arg && matches!(parser.peek(), Token::LBrace) {
+                    let dict = parser.parse_brace_lit()?;
+                    let span = callee.span.cover(dict.span);
+                    return Ok(Spanned::new(
+                        Expr::Apply {
+                            callee: Box::new(callee),
+                            args: vec![dict],
+                        },
+                        span,
+                    ));
+                }
                 let mut args = Vec::with_capacity(arity);
                 for i in 0..arity {
                     if !parser.can_start_expr() {
