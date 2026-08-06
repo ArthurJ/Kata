@@ -18,8 +18,10 @@ Saída: AST plana (crate de dados puros, sem lógica).
 
 ### 1 — Expressões mínimas
 
-Literal (Int, Float, Text). Apply (greedy: `f arg1 arg2`). Grouping
-(parênteses sem vírgula — transparente). Tuple (parênteses com vírgula).
+Literal (Int, Float, Text). Apply (arity-aware: `f arg1 arg2` coleta exatamente
+a aridade padrão do callee). Grouping (parênteses sem vírgula — transparente).
+Tuple (parênteses com vírgula). Dict dispatch (`f{"k": v}` — args nomeados via
+DictLit, sem `!` para funções puras).
 
 Dependencies: 0.
 
@@ -45,6 +47,12 @@ Dependencies: 1.
 injeta `return Err` na TAST).
 
 A barreira é sintática — o typeck bifurca por domínio desde o início.
+
+Uniformização de aplicação: funções e actions aceitam args posicionais
+(`f a b` / `f!(a, b)`) e nomeados (`f{"k": v}` / `f!{"k": v}`). O parser é
+arity-aware (ciclo de dois passes: Pass 1 extrai aridades, Pass 2 parseia
+com aridades). `!` marca side-effect — funções puras não usam `!`, mesmo
+em dict dispatch.
 
 Dependencies: 2.
 

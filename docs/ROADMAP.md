@@ -849,6 +849,31 @@ executa sem o compilador. `kata repl` mantém bindings entre expressões.
 
 ---
 
+### Pós-Fio 15: Uniformização de Aplicação ✅
+
+**Status:** Concluído (branch `arity-uniformization`)
+
+**PRD:** `docs/PRD-arity-uniformization.md`
+
+**Features:**
+- Parser arity-aware: ciclo de dois passes (Pass 1 extract_arities, Pass 2
+  parse_with_arity) — coleta exatamente N args por callee, elimina ambiguidade
+  de `+ 5 * 2 2` e descarte silencioso de `5 + 2 2`
+- Dict dispatch para funções puras: `f{"a": x, "b": y}` sem `!` — chaves
+  mapeiam para params nomeados, reordena para tupla posicional
+- Dict dispatch para actions: `f!{"a": x, "b": y}` com `!` (já existente)
+- `param_names: Vec<Option<String>>` propagado do AST até `OverloadInfo`
+- Warning quando nome tem overloads com aridades diferentes
+- Erros claros: excesso posicional, dict sem params nomeados, chave inexistente,
+  param faltante
+
+**Depende de:** Fio 2 (assinaturas, lambda), Fio 10 (módulos, prelude)
+
+**DoD:** `+ 5 * 2 2` retorna 9. `soma{"a": 3, "b": 4}` retorna 7. Erro de
+excesso posicional em `+ 1 2 3`. 1459 testes passando.
+
+---
+
 ## Resumo Visual
 
 ```
@@ -870,8 +895,8 @@ Fio 1  ────────────────────────�
   │       @comptime call-site, HeapSnapshot, @cache LRU, constant folding
   └── Fio 15 ✅ (AOT, REPL)
 
-Pós-Fio 15: Select I/O ✅ | Socket I/O ✅
-  select canais+files     Ty::Socket, 7 FFIs, select com sockets
+Pós-Fio 15: Select I/O ✅ | Socket I/O ✅ | Uniformização de Aplicação ✅
+  select canais+files     Ty::Socket, 7 FFIs     arity-aware, dict dispatch
 
 Zeladorias removidas — manutenção diária via skill `zeladoria-kata5` substitui zeladorias planejadas.
 ```

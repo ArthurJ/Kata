@@ -1376,6 +1376,59 @@ Funções recebem dados, avaliam de forma estrita (eager) e devolvem dados.
 * **Retorno:** Implícito — a última expressão do corpo é o retorno. Não existe
   `return` keyword nem `;` no domínio puro.
 
+#### 5.1.1. Aplicação de Funções — Açúcar Posicional e Dict Dispatch
+
+Funções puras aceitam duas formas de passagem de argumentos:
+
+**1. Açúcar posicional (notação prefixa):**
+
+```kata
+soma :: Int Int => Int
+lambda a b: + a b
+
+soma 3 4          # aplicação prefixa — args posicionais
++ 5 * 2 2         # sub-aplicação: + 5 (* 2 2) = 9
+```
+
+O parser é **arity-aware**: no ciclo de dois passes, o Pass 1 extrai a aridade
+padrão de cada nome (primeira overload declarada), e o Pass 2 coleta exatamente N
+argumentos posicionais por callee. Isto elimina a ambiguidade de `+ 5 * 2 2`
+(o `*` consome 2 args, depois `+` consome 2) e o descarte silencioso de `5 + 2 2`
+(erro de excesso posicional, não `5 + 2` seguido de `2` ignorado).
+
+**2. Dict dispatch (args nomeados):**
+
+```kata
+soma :: (a::Int) (b::Int) => Int
+lambda a b: + a b
+
+soma{"a": 3, "b": 4}     # dict dispatch — chaves mapeiam para params nomeados
+soma{"b": 4, "a": 3}     # ordem não importa — reordena para params
+```
+
+Funções com params nomeados (declarados via `(nome::Tipo)`) aceitam `f{...}` —
+um DictLit onde as chaves são `TextLit` com aspas mapeando para os nomes dos
+parâmetros. O type checker reordena as entradas do dict para a ordem posicional
+dos params e faz dispatch normal. Whitespace não distingue: `soma{"a": 1}` e
+`soma {"a": 1}` são ambos dict dispatch.
+
+**Distinção funções vs actions:**
+
+| | Funções puras | Actions |
+|---|---|---|
+| Sintaxe de chamada posicional | `f a b` | `f!(a, b)` |
+| Sintaxe de chamada nomeada | `f{"a": x, "b": y}` | `f!{"a": x, "b": y}` |
+| Marcador de side-effect | sem `!` | `!` obrigatório |
+| Dict dispatch | `f{...}` (sem `!`) | `f!{...}` (com `!`) |
+
+**Passagem de função como valor exige grouping:** `map (+) [1 2]` é função como
+valor (grouping transparente); `map + [1 2]` é erro de parse — o parser trata
+`+` como callee e tenta coletar args.
+
+**Tuplas e dicts sempre nomeados:** para passar uma tupla ou dict como valor
+posicional, é obrigatório usar param nomeado. `{...}` após um callee é sempre
+dict dispatch (args nomeados), independente de whitespace.
+
 ### 5.2. Domínio Imperativo (Actions)
 
 As *Actions* interagem com o sistema operativo, o escalonador e a memória
@@ -1399,12 +1452,13 @@ action conectar_servidor
   Sem `=>` = retorno `Unit` (padrão).
 
 **Chamada:** Toda chamada a *Action* exige obrigatoriamente o sufixo `!` e uma
-tupla como argumento:
+tupla posicional ou um dict nomeado como argumento:
 
 ```kata
-echo!("mensagem")
-conectar_servidor!()
-fork!(minha_action)
+echo!("mensagem")               # tupla posicional
+conectar_servidor!()            # sem args (tupla vazia)
+fork!(minha_action)             # arg posicional
+read!{"f": h, "n": 5}           # dict dispatch — args nomeados com `!`
 ```
 
 * **Proibição de Recursão:** O compilador aciona um Erro Fatal se detetar
