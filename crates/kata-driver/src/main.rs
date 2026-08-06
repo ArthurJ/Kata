@@ -347,8 +347,9 @@ fn run_pipeline_with_file(source: &str, file_path: Option<&str>) -> miette::Resu
     let mut arities = scan_lambdas(&tokens);
 
     // 2b. Pass 1: parse_decls_only → resolve → extract_arities
-    // Signatures sobrescrevem lambdas — signatures são declarativas e
-    // autoritativas. `let f := lambda ...` preenche lacunas, não sobrescreve.
+    // Signatures definem a aridade padrão. Lambdas com mesmo nome são
+    // overloads non-default (só acessíveis via dict dispatch) — a aridade
+    // do mapa é sempre a da signature.
     let prelude = load_prelude()
         .map_err(|e| miette::Report::msg(format!("erro ao carregar prelude: {e:?}")))?;
 
@@ -358,7 +359,7 @@ fn run_pipeline_with_file(source: &str, file_path: Option<&str>) -> miette::Resu
         .map_err(|e| miette::Report::msg(format!("erro de resolução (Pass 1): {e:?}")))?;
     let decls_resolved = merge_resolved(prelude.clone(), decls_user);
 
-    // Coletar aridades do prelude + declarações do usuário (sobrescrevem lambdas)
+    // Signatures sobrescrevem lambdas no mapa de aridades (default arity).
     arities.extend(extract_arities(&decls_resolved.signatures));
 
     // 2c. Pass 2: parse_with_arity (completo) → resolve → infer → codegen

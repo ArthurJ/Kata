@@ -192,7 +192,8 @@ impl ReplSession {
         let mut arities = scan_lambdas(&tokens);
 
         // Pass 1: parse_decls_only → resolve → extract_arities
-        // Signatures sobrescrevem lambdas.
+        // Signatures definem a aridade padrão; lambdas com mesmo nome são
+        // overloads non-default.
         let decls_module = parse_decls_only(tokens.clone())
             .map_err(|e| format!("erro de parse (Pass 1): {e:?}"))?;
         let decls_user = resolve(&decls_module).map_err(|e| format!("erro de resolução (Pass 1): {e:?}"))?;
@@ -273,7 +274,8 @@ impl ReplSession {
         let mut arities = scan_lambdas(&tokens);
 
         // Pass 1: parse_decls_only → resolve → extract_arities
-        // Signatures sobrescrevem lambdas.
+        // Signatures definem a aridade padrão; lambdas com mesmo nome são
+        // overloads non-default.
         let decls_module = parse_decls_only(tokens.clone())
             .map_err(|e| format!("erro de parse (Pass 1): {e:?}"))?;
         let decls_user = resolve(&decls_module).map_err(|e| format!("erro de resolução (Pass 1): {e:?}"))?;

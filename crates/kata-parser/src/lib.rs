@@ -169,8 +169,9 @@ pub fn parse_decls_only(tokens: Vec<TokenWithSpan>) -> Result<Module, FrontendEr
 ///
 /// Usado no Pass 0 (antes do Pass 1 de parse_decls_only) para que funções
 /// definidas via `let f := lambda x: ...` também tenham arity-aware parsing.
-/// Signatures do Pass 1 sobrescrevem — `let f := lambda ...` preenche lacunas,
-/// não sobrescreve signatures declarativas.
+/// Signatures do Pass 1 sobrescrevem — a aridade padrão vem sempre da
+/// signature declarada no top level. Lambdas com mesmo nome são overloads
+/// non-default (só acessíveis via dict dispatch).
 ///
 /// Só extrai o caso direto: `let IDENT := lambda ...`. Lambdas indiretas
 /// (dentro de `if`, `match`, composição, etc.) não são extraíveis sem
