@@ -237,19 +237,27 @@ nomeado (dict).
 ### 3.5. Ciclo de dois passes no pipeline
 
 O parser precisa da aridade padrão antes de parsear. Como a aridade só está
-disponível após `resolve`, introduzimos um ciclo:
+disponível após `resolve`, introduzimos um ciclo. O Pass 1 parseia **apenas
+declarações** (Sigs, implements, data, enum, action defs) — não entry exprs.
+As aridades vêm exclusivamente de signatures, que são definidas em declarações,
+não em expressões. Entry exprs consomem funções, não as definem.
 
 ```
-Pass 1:  lex → parse (greedy atoms, comportamento atual) → resolve → extrair aridades
-Pass 2:  lex → parse (arity-aware, com aridades do Pass 1) → resolve → infer → ...
+Pass 1:  lex → parse_decls_only → resolve_decls → extrair aridades
+Pass 2:  lex → parse (arity-aware, completo) → resolve → infer → ...
 ```
 
 `extrair_aridades` produz `HashMap<String, usize>` — um valor por nome (a
 aridade da primeira overload declarada).
 
-O Pass 1 usa o comportamento atual (greedy atoms) para que o `resolve` possa
-extrair signatures mesmo de funções que seriam parseadas diferentemente no
-Pass 2. O custo é um parse extra — trivial (microssegundos).
+`parse_decls_only` reconhece declarações pelos tokens iniciais:
+- `Ident ::` → Sig
+- `action` / `implements` / `data` / `enum` → keywords
+- Tudo else → entry expr: skipar tokens até próximo `StmtSep` ou EOF
+
+O custo é um parse parcial (declarações apenas) + parse completo arity-aware.
+Tipicamente ~1.1x, não 2x. E não produz AST inválido, porque entry exprs não
+são parseadas.
 
 ### 3.6. REPL
 
@@ -293,9 +301,11 @@ Para cada input:
 ### 4.4. `kata-driver`
 
 - `run` e `repl` passam pelo ciclo de dois passes:
-  1. Parse greedy → resolve → extrair aridades
-  2. Parse arity-aware → resolve → infer → codegen
+  1. Pass 1: `parse_decls_only` → resolve_decls → extract_arities
+  2. Pass 2: parse arity-aware (completo) → resolve → infer → codegen
 - `extract_arities(signatures: &[Signature]) -> HashMap<String, usize>`.
+- `parse_decls_only`: novo entry point no parser que skipa entry exprs,
+  parseando apenas Sigs, implements, data, enum, action defs.
 
 ## 5. Decisões de design
 
@@ -399,9 +409,10 @@ parser. `parse(tokens)` (sem aridade) mantém comportamento atual.
 ### Fase 4: Ciclo de dois passes no driver
 
 - `extract_arities(signatures) -> HashMap<String, usize>`
+- `parse_decls_only`: novo entry point no parser que skipa entry exprs
 - Modificar pipeline de `run` e `repl`:
-  1. Pass 1: parse greedy → resolve → extract_arities
-  2. Pass 2: parse arity-aware → resolve → infer → codegen
+  1. Pass 1: `parse_decls_only` → resolve_decls → extract_arities
+  2. Pass 2: parse arity-aware (completo) → resolve → infer → codegen
 - Testes E2E: `+ 5 * 2 2` → `9` via `kata run` e REPL
 - Testes E2E: `+ 1 2 3` → erro claro via `kata run` e REPL
 
@@ -653,24 +664,20 @@ verificado ainda), o açúcar posicional pode quebrar para essas funções.
 **Mitigação:** Verificar todas as 58 funções do prelude antes da Fase 3.
 Se houver, refatorar para aridade única ou documentar como exceção.
 
-### R3: Pass 1 produz AST inválido
+### R3: ~~Pass 1 produz AST inválido~~ (eliminado)
 
-O Pass 1 usa greedy atoms, que pode produzir `Apply(+, [5, *, 2, 2])` —
-4 args para `+`. O `resolve` pode falhar com `UnboundName("*")` antes de
-extrair signatures.
-
-**Mitigação:** O Pass 1 só precisa das signatures do prelude + funções do
-usuário (Sigs, implements), não das expressões de entry. O `resolve`
-extrai signatures antes de processar entry exprs. Mesmo que o entry falhe,
-as signatures já estão disponíveis.
+O Pass 1 agora parseia apenas declarações (`parse_decls_only`), não entry
+exprs. Declarações são estruturalmente válidas independentemente de
+arity-aware parsing — Sigs, implements, data, enum não dependem de aridade
+para serem parseadas. Entry exprs, que poderiam produzir AST inválido em
+modo greedy, não são parseadas no Pass 1. R3 deixou de existir.
 
 ### R4: Performance do ciclo de dois passes
 
-Dobra o custo de parse. Para arquivos grandes, pode ser perceptível.
-
-**Mitigação:** O Pass 1 pode pular o parsing de entry exprs — só precisa
-das declarações (Sigs, implements, data, enum). Implementar um modo
-"declarations-only" no parser que skipa entry exprs.
+O Pass 1 parseia apenas declarações — tipicamente uma fração pequena do
+arquivo. O custo total é ~1.1x (parse parcial + parse completo arity-aware),
+não 2x. Para arquivos grandes, o overhead é dominado pelo Pass 2, que é o
+parse completo que aconteceria de qualquer forma.
 
 ### R5: `Ident { dict }` sem `!` — parsing de `{` após Ident
 
