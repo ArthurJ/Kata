@@ -38,6 +38,11 @@ pub(crate) struct Parser {
     /// `var` e `return` só são aceitos quando esta flag é true.
     /// Fora de Action, produzem erro de parser.
     pub(crate) in_action_body: bool,
+    /// Tabela de aridades para parsing arity-aware.
+    /// `None` = modo greedy (comportamento atual).
+    /// `Some(map)` = o parser coleta exatamente `map[name]` args posicionais
+    /// para `Apply` onde o callee é `Ident(name)`.
+    pub(crate) arities: Option<std::collections::HashMap<String, usize>>,
 }
 
 impl Parser {
@@ -46,6 +51,20 @@ impl Parser {
             tokens,
             pos: 0,
             in_action_body: false,
+            arities: None,
+        }
+    }
+
+    /// Constrói um Parser em modo arity-aware.
+    pub(crate) fn new_with_arities(
+        tokens: Vec<TokenWithSpan>,
+        arities: std::collections::HashMap<String, usize>,
+    ) -> Self {
+        Parser {
+            tokens,
+            pos: 0,
+            in_action_body: false,
+            arities: Some(arities),
         }
     }
 
@@ -110,6 +129,21 @@ impl Parser {
 /// and produces a `Module` (list of `Spanned<Item>`).
 pub fn parse(tokens: Vec<TokenWithSpan>) -> Result<Module, FrontendError> {
     let mut parser = Parser::new(tokens);
+    parser.parse_module()
+}
+
+/// Parse a token stream with arity-aware application parsing.
+///
+/// When the parser encounters `Apply` where the callee is `Ident(name)` and
+/// `arities[name]` exists, it collects exactly N positional arguments (each
+/// parsed via `parse_apply` for sub-application), then errors if excess tokens
+/// follow without a `StmtSep`. When `arities` has no entry for a name, falls
+/// back to greedy atom collection (current behavior).
+pub fn parse_with_arity(
+    tokens: Vec<TokenWithSpan>,
+    arities: std::collections::HashMap<String, usize>,
+) -> Result<Module, FrontendError> {
+    let mut parser = Parser::new_with_arities(tokens, arities);
     parser.parse_module()
 }
 

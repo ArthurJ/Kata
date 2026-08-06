@@ -153,14 +153,24 @@ pub(crate) fn parse_expr(parser: &mut Parser) -> Result<Spanned<Expr>, FrontendE
 /// `Apply(5, [in, +, x, 1])` em vez de parar em `5` e reportar `in` como
 /// token inesperado.
 pub(crate) fn parse_apply(parser: &mut Parser) -> Result<Spanned<Expr>, FrontendError> {
+    parse_apply_impl(parser, false)
+}
+
+/// Parse um argumento posicional em modo arity-aware.
+/// Igual a `parse_apply` mas Grouping/paren NUNCA coleta args — é sempre valor.
+/// `(+ 1 2)` como argumento é valor, não callee que consome mais args.
+pub(crate) fn parse_arg(parser: &mut Parser) -> Result<Spanned<Expr>, FrontendError> {
+    parse_apply_impl(parser, true)
+}
+
+fn parse_apply_impl(
+    parser: &mut Parser,
+    as_arg: bool,
+) -> Result<Spanned<Expr>, FrontendError> {
     let callee = parser.parse_expr_post_ascription()?;
 
     // Literais, construções de statement e keywords de controle de fluxo
     // não são callee — não consomem argumentos.
-    // Liturais: IntLit, FloatLit, TextLit, Unit
-    // Statements: Let, Var, Reassign (bindings auto-delimitados)
-    // Blocos: Match, Loop (consomem INDENT/DEDENT)
-    // Keywords: Break, Continue, Return (controle de fluxo)
     if matches!(
         &callee.node,
         Expr::IntLit { .. }
@@ -179,6 +189,78 @@ pub(crate) fn parse_apply(parser: &mut Parser) -> Result<Spanned<Expr>, Frontend
             | Expr::Continue
             | Expr::Return(..)
     ) {
+        return Ok(callee);
+    }
+
+    // Grouping como argumento é sempre valor — nunca coleta args.
+    // `(+ 1 2) 3` — o Grouping `(+ 1 2)` é o 1º arg de algo externo, `3` pertence
+    // ao callee externo, não ao Grouping.
+    if as_arg && matches!(callee.node, Expr::Grouping { .. }) {
+        return Ok(callee);
+    }
+
+    // ── Arity-aware branch ──────────────────────────────────────
+    // Se o parser tem tabela de aridades e o callee é `Ident(name)` com
+    // aridade conhecida, coleta exatamente N argumentos posicionais — cada
+    // um via `parse_arg` recursivo (permite sub-aplicações como
+    // `+ 5 * 2 2` → arg2 = `Apply(*, [2, 2])`). Após coletar N args, se o
+    // próximo token `can_start_expr()` e não é `StmtSep`/`Eof` → erro.
+    if let Some(ref arities) = parser.arities {
+        if let Expr::Ident { ref name } = callee.node {
+            if let Some(&arity) = arities.get(name) {
+                let mut args = Vec::with_capacity(arity);
+                for i in 0..arity {
+                    if !parser.can_start_expr() {
+                        return Err(FrontendError::UnexpectedToken {
+                            expected: format!(
+                                "argumento #{} para `{}` (aridade padrão {})",
+                                i + 1,
+                                name,
+                                arity
+                            ),
+                            found: parser.peek().to_string(),
+                            span: kata_diagnostics::MietteSpan(parser.peek_span()),
+                        });
+                    }
+                    args.push(parse_arg(parser)?);
+                }
+                // Após coletar N args, verificar excesso posicional.
+                if parser.can_start_expr() && !matches!(parser.peek(), Token::StmtSep | Token::Eof)
+                {
+                    let span = callee.span.cover(parser.peek_span());
+                    return Err(FrontendError::UnexpectedToken {
+                        expected: format!(
+                            "`{}` tem aridade padrão {} — excesso de argumentos posicionais. \
+                             Use `{}{{...}}` para aridade diferente ou separe com quebra de linha.",
+                            name, arity, name
+                        ),
+                        found: parser.peek().to_string(),
+                        span: kata_diagnostics::MietteSpan(span),
+                    });
+                }
+                if args.is_empty() {
+                    return Ok(callee);
+                }
+                let span = callee.span.cover(args.last().expect("non-empty args").span);
+                return Ok(Spanned::new(
+                    Expr::Apply {
+                        callee: Box::new(callee),
+                        args,
+                    },
+                    span,
+                ));
+            }
+        }
+    }
+
+    // ── Greedy mode (fallback) ──────────────────────────────────
+    // Greedy atoms ativo quando:
+    // - arities é None (modo original), ou
+    // - callee não é Ident (VariantQual, etc. — construtores sem aridade)
+    // Quando arities é Some e callee é Ident sem entrada, o Ident é
+    // valor (referência) — não coleta args. Isso evita que `+ a b`
+    // dentro de um lambda trate `a` como callee greedy e consuma `b`.
+    if parser.arities.is_some() && matches!(callee.node, Expr::Ident { .. }) {
         return Ok(callee);
     }
 
