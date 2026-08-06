@@ -167,9 +167,10 @@ pub fn parse_decls_only(tokens: Vec<TokenWithSpan>) -> Result<Module, FrontendEr
 /// O(n) sobre os tokens. Casos não-lambda (`let f := compose g h`,
 /// `let f := if ...`) são skipados silenciosamente.
 ///
-/// Usado entre o Pass 1 (signatures) e o Pass 2 (arity-aware) para que
-/// funções definidas via `let f := lambda x: ...` também tenham
-/// arity-aware parsing.
+/// Usado no Pass 0 (antes do Pass 1 de parse_decls_only) para que funções
+/// definidas via `let f := lambda x: ...` também tenham arity-aware parsing.
+/// Signatures do Pass 1 sobrescrevem — `let f := lambda ...` preenche lacunas,
+/// não sobrescreve signatures declarativas.
 ///
 /// Só extrai o caso direto: `let IDENT := lambda ...`. Lambdas indiretas
 /// (dentro de `if`, `match`, composição, etc.) não são extraíveis sem

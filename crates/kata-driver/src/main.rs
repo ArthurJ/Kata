@@ -334,14 +334,21 @@ fn run_pipeline(source: &str) -> miette::Result<ExecResult> {
 /// implícito via ModuleLoader — não há `load_prelude()` separado.
 /// Quando `file_path` é `None` (eval), o prelude é injetado via `load_prelude()`.
 ///
-/// Ciclo de dois passes (Fase 4 — arity-uniformization):
-/// 1. Pass 1: `parse_decls_only` → resolve → `extract_arities`
+/// Ciclo de dois passes (Fase 4 — arity-uniformization) + Pass 0 (scan_lambdas):
+/// 0. Pass 0: `scan_lambdas` (tokens) → aridades de `let f := lambda ...`
+/// 1. Pass 1: `parse_decls_only` → resolve → `extract_arities` (sobrescrevem lambdas)
 /// 2. Pass 2: `parse_with_arity` (completo) → resolve → infer → codegen
 fn run_pipeline_with_file(source: &str, file_path: Option<&str>) -> miette::Result<ExecResult> {
     // 1. Lex
     let tokens = lex(source).map_err(IntoReport::into_report)?;
 
-    // 2a. Pass 1: parse_decls_only → resolve → extract_arities
+    // 2a. Pass 0: scan_lambdas — aridades de `let f := lambda ...` no top level
+    // Scan linear de tokens, não depende de resolve nem de parse_decls_only.
+    let mut arities = scan_lambdas(&tokens);
+
+    // 2b. Pass 1: parse_decls_only → resolve → extract_arities
+    // Signatures sobrescrevem lambdas — signatures são declarativas e
+    // autoritativas. `let f := lambda ...` preenche lacunas, não sobrescreve.
     let prelude = load_prelude()
         .map_err(|e| miette::Report::msg(format!("erro ao carregar prelude: {e:?}")))?;
 
@@ -351,14 +358,10 @@ fn run_pipeline_with_file(source: &str, file_path: Option<&str>) -> miette::Resu
         .map_err(|e| miette::Report::msg(format!("erro de resolução (Pass 1): {e:?}")))?;
     let decls_resolved = merge_resolved(prelude.clone(), decls_user);
 
-    // Coletar aridades do prelude + declarações do usuário
-    let mut arities = extract_arities(&decls_resolved.signatures);
+    // Coletar aridades do prelude + declarações do usuário (sobrescrevem lambdas)
+    arities.extend(extract_arities(&decls_resolved.signatures));
 
-    // Pass 1.5: scan_lambdas — aridades de `let f := lambda ...` no top level
-    let lambda_arities = scan_lambdas(&tokens);
-    arities.extend(lambda_arities);
-
-    // 2b. Pass 2: parse_with_arity (completo) → resolve → infer → codegen
+    // 2c. Pass 2: parse_with_arity (completo) → resolve → infer → codegen
     let module = parse_with_arity(tokens, arities).map_err(IntoReport::into_report)?;
 
     // 3. Carregar módulos importados (incluindo prelude como import implícito)
