@@ -314,6 +314,7 @@ pub(crate) fn infer_for_in(
         refines_registry: ctx.refines_registry,
         ret_ty: ctx.ret_ty,
         in_loop: true,
+        deferred_lambdas: ctx.deferred_lambdas,
     };
 
     let mut typed_body = Vec::new();

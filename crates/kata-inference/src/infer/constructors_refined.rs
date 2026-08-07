@@ -97,6 +97,7 @@ pub(crate) fn synthesize_refined(
     // Construtores refined não usam interfaces — registry vazio.
     let empty_iface_reg = kata_core::interface_registry::InterfaceRegistry::new();
     let empty_refines_reg = kata_core::RefinesRegistry::new();
+    let deferred = super::expr::DeferredLambdaTable::default();
     let ctx = InferCtx {
         table: &*dispatch_table,
         enum_registry,
@@ -106,6 +107,7 @@ pub(crate) fn synthesize_refined(
         refines_registry: &empty_refines_reg,
         ret_ty: None,
         in_loop: false,
+        deferred_lambdas: &deferred,
     };
 
     let mut functions = Vec::new();

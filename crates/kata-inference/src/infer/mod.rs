@@ -80,6 +80,12 @@ pub fn infer_module(
     // de um nome único para que a unificação não colida entre canais.
     csp_builtins::reset_channel_type_var_counter();
 
+    // Side table para use-site inference de lambdas deferidos.
+    // Quando `let f := lambda a b: - a b` falha (partial dispatch ambíguo),
+    // o lambda é guardado aqui. Quando `f 5 3` é aplicado, infer_apply
+    // consulta esta table e re-inere o lambda com os arg types reais.
+    let deferred_lambdas = expr::DeferredLambdaTable::default();
+
     // 1. Popula DispatchTable com as assinaturas (prelude + módulo)
     let mut dispatch_table = populate_dispatch_table(&resolved.signatures);
 
@@ -195,6 +201,7 @@ pub fn infer_module(
             refines_registry: &resolved.refines_registry,
             ret_ty: None,
             in_loop: false,
+            deferred_lambdas: &deferred_lambdas,
         };
         let typed_func = infer_named_function(func_def, &ctx, &resolved.type_env)?;
         // Registra no TypeEnv para permitir uso como valor (call_indirect).
@@ -222,6 +229,7 @@ pub fn infer_module(
             refines_registry: &resolved.refines_registry,
             ret_ty: Some(&action_def.return_type),
             in_loop: false,
+            deferred_lambdas: &deferred_lambdas,
         };
         let typed_action = infer_action(action_def, &ctx, &type_env)?;
         typed_actions.push(typed_action);
@@ -253,6 +261,7 @@ pub fn infer_module(
                     refines_registry: &resolved.refines_registry,
                     ret_ty: None,
                     in_loop: false,
+                    deferred_lambdas: &deferred_lambdas,
                 };
                 let typed = infer_expr(
                     &desugared.node,

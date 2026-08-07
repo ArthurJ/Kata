@@ -404,7 +404,38 @@ pub(crate) fn infer_apply(
     }
 
     // Caminho 2: TypeEnv (call_indirect para lambda como valor).
+    // Sub-caminho 2a: lambda deferido (use-site inference). Se o binding
+    // tem InferVar nos param_types e está na side table de deferred lambdas,
+    // re-inere o lambda com os arg types reais via infer_apply_lambda.
     if let Some(Ty::Function(param_types, ret_ty)) = env.lookup(&func_name).cloned() {
+        // Verifica se é um lambda deferido (param_types contêm InferVar).
+        let has_infer_vars = param_types.iter().any(|t| matches!(t, Ty::InferVar(_)));
+        if has_infer_vars {
+            if let Some(deferred) = ctx.deferred_lambdas.borrow().get(&func_name).cloned() {
+                // Re-inere o lambda com os arg types reais (síntese bottom-up).
+                // infer_apply_lambda já faz arity check, arg inference, e
+                // build_lambda_apply com os param types corretos.
+                return infer_apply_lambda(
+                    &deferred.patterns,
+                    &deferred.body,
+                    &deferred.guards,
+                    &deferred.with_bindings,
+                    &expanded_args,
+                    span,
+                    env,
+                    ctx,
+                );
+            }
+            // Lambda deferido sem entry na side table — não há como resolver.
+            return Err(MiddleError::LambdaInferenceFail {
+                span: (*span).into(),
+                detail: Some(format!(
+                    "lambda `{func_name}` tem tipos não-resolvidos e não foi aplicada com args suficientes para inferi-los"
+                )),
+            });
+        }
+
+        // Sub-caminho 2b: lambda com tipos conhecidos (caminho normal).
         // Verifica aridade.
         if arg_types.len() != param_types.len() {
             return Err(MiddleError::ArityMismatch {

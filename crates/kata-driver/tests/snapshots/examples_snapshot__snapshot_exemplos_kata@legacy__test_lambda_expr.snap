@@ -1,13 +1,10 @@
 ---
 source: crates/kata-driver/tests/examples_snapshot.rs
+assertion_line: 100
 expression: output
 ---
+resultado: 6
+soma: 13
 --- stderr ---
 [resolution] warning: `read` tem overloads com aridades diferentes (1 vs 2) — aridade padrão = 1 (primeira declaração)
 [resolution] warning: `read` tem overloads com aridades diferentes (1 vs 2) — aridade padrão = 1 (primeira declaração)
-Error: type.lambda_inference_fail
-
-  × não foi possível inferir os tipos dos parâmetros do lambda — forneça uma
-  │ anotação de tipo (ex: ::(Int -> Int))
-  help: partial dispatch tentou `+` com args [?, ?] — múltiplas overloads
-        casam (ambíguo)

@@ -402,6 +402,17 @@ pub(crate) fn lower_expr(
             clauses,
             captures,
         } => {
+            // Skeleton de lambda deferido (use-site inference): se os
+            // param_types contêm InferVar, o lambda foi deferido e será
+            // compilado no site de uso. Retorna um placeholder (iconst 0).
+            // O codegen do site de uso (Closure com callee Lambda) compila
+            // o lambda real com os tipos resolvidos.
+            let has_infer_vars = param_types.iter().any(|t| matches!(t, Ty::InferVar(_)))
+                || matches!(ret_ty, Ty::InferVar(_));
+            if has_infer_vars {
+                return Ok(ctx.builder.ins().iconst(I64, 0));
+            }
+
             // Para lambda anônimo (func_name = None): declarar e definir
             // uma função separada no JITModule.
             // Para função nomeada (func_name = Some): já foi definida em

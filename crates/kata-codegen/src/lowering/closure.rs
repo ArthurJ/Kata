@@ -200,6 +200,62 @@ pub(crate) fn lower_closure(
         }
     } else {
         // ffi_symbol = None: função Kata nomeada ou lambda como valor.
+        // Sub-caminho A: callee é Lambda inline (use-site inference).
+        // O lambda foi deferido e re-inferido no site de uso. Compila
+        // o lambda JIT, extrai fn_ptr do box_ptr, e faz call_indirect.
+        if let TypedExprKind::Lambda { .. } = &callee.node.kind {
+            // Lowera o lambda — compila a função JIT e retorna box_ptr.
+            let box_ptr = super::expr::lower_expr(&callee.node, ctx)?;
+            // Carrega fn_ptr do box_ptr (offset 0 do CaptureBox).
+            let flags = MemFlagsData::new();
+            let func_ptr = ctx.builder.ins().load(I64, flags, box_ptr, 0);
+            // Primeiros params implícitos: arena_handle + box_ptr.
+            let arena = caller_arena_handle(ctx);
+            let mut call_args = vec![arena, box_ptr];
+            call_args.extend(arg_values.iter().copied());
+            // Constrói a assinatura para call_indirect.
+            let callee_ty = &callee.node.ty;
+            if let Ty::Function(param_types, ret_ty) = callee_ty {
+                let mut sig = Signature::new(CallConv::Tail);
+                sig.params.push(AbiParam::new(I64)); // arena_handle
+                sig.params.push(AbiParam::new(I64)); // box_ptr
+                for pt in param_types {
+                    sig.params.push(AbiParam::new(super::resolve_clif_ty(
+                        pt,
+                        ctx.struct_registry,
+                    )));
+                }
+                sig.returns.push(AbiParam::new(super::resolve_clif_ty(
+                    ret_ty,
+                    ctx.struct_registry,
+                )));
+                let sig_ref = ctx.builder.func.import_signature(sig);
+                if expr.tail_pos && !ctx.no_tail_calls {
+                    ctx.builder
+                        .ins()
+                        .return_call_indirect(sig_ref, func_ptr, &call_args);
+                    ctx.emitted_tail_call = true;
+                    let dummy = ctx.builder.create_block();
+                    ctx.builder.switch_to_block(dummy);
+                    ctx.builder.seal_block(dummy);
+                    let val = ctx.builder.ins().iconst(I64, 0);
+                    ctx.builder.ins().return_(&[val]);
+                    return Ok(val);
+                }
+                let call_inst = ctx
+                    .builder
+                    .ins()
+                    .call_indirect(sig_ref, func_ptr, &call_args);
+                let result = ctx.builder.inst_results(call_inst)[0];
+                return Ok(result);
+            }
+            // Se o callee não é Function, não há como despachar.
+            return Err(super::CodegenError::UnsupportedNode(format!(
+                "Closure com callee Lambda não-Function: {:?}",
+                callee.node.ty
+            )));
+        }
+        // Sub-caminho B: callee é Ident — função Kata nomeada ou variável.
         // Tenta Kata function call direto primeiro.
         if let TypedExprKind::Ident { name } = &callee.node.kind {
             // Lookup por chave composta (name, param_types, ret_ty) extraída do callee.

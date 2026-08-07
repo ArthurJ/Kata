@@ -4,7 +4,10 @@
 //! `infer_expr_hinted` aceita um type hint opcional (DoD 29) para inferência
 //! bidirecional top-down.
 
-use kata_ast::{Expr, Span, Spanned, TypeExpr};
+use std::cell::RefCell;
+use std::collections::HashMap;
+
+use kata_ast::{Expr, GuardClause, Pattern, Span, Spanned, TypeExpr, WithBinding};
 use kata_core::dispatch::DispatchTable;
 use kata_core::enum_registry::EnumRegistry;
 use kata_core::escape::EscapeTarget;
@@ -24,6 +27,25 @@ use super::helpers::InferResult;
 use super::lambda::infer_lambda;
 use super::sugar::{infer_pipe_fallback, infer_question};
 use super::variant::resolve_unqual_variant;
+
+/// Lambda deferido para use-site inference.
+///
+/// Quando `infer_lambda` não consegue resolver os tipos dos params
+/// (partial dispatch ambíguo, sem hint), o lambda é guardado aqui
+/// com `InferVar` nos param types. Quando a função é aplicada
+/// (`f 5 3`), `infer_apply` consulta esta table e re-inere o lambda
+/// com os arg types reais via `infer_apply_lambda`.
+#[derive(Debug, Clone)]
+pub(crate) struct DeferredLambda {
+    pub patterns: Vec<Spanned<Pattern>>,
+    pub body: Box<Spanned<Expr>>,
+    pub guards: Vec<GuardClause>,
+    pub with_bindings: Vec<WithBinding>,
+    pub span: Span,
+}
+
+/// Type alias para a side table de lambdas deferidos.
+pub(crate) type DeferredLambdaTable = RefCell<HashMap<String, DeferredLambda>>;
 
 /// Contexto de inferência — carrega dependências compartilhadas entre
 /// todas as funções de inferência. Substitui parâmetros individuais
@@ -51,6 +73,11 @@ pub(crate) struct InferCtx<'a> {
     /// `true` quando inferindo dentro de um `loop`. Usado por `infer_break`
     /// e `infer_continue` para validar que só aparecem dentro de loop.
     pub in_loop: bool,
+    /// Side table de lambdas deferidos para use-site inference.
+    /// Quando `let f := lambda a b: - a b` falha (partial dispatch ambíguo),
+    /// o lambda é guardado aqui. Quando `f 5 3` é aplicado, `infer_apply`
+    /// consulta esta table e re-inere o lambda com os arg types reais.
+    pub deferred_lambdas: &'a DeferredLambdaTable,
 }
 
 /// Infere o tipo de uma expressão, produzindo um `TypedExpr`.
@@ -216,7 +243,109 @@ pub(crate) fn infer_expr_hinted(
 
         // ── Let binding ──────────────────────────────────────
         Expr::Let { name, value } => {
-            let typed_value = infer_expr(&value.node, &value.span, env, ctx, false)?;
+            // Tenta inferir o valor. Se falha com LambdaInferenceFail e o
+            // value é um lambda, deferre para use-site inference: guarda o
+            // AST do lambda na side table e define o binding com InferVars.
+            // Quando `f 5 3` for aplicado, infer_apply resgata o lambda e
+            // re-inere com os arg types reais.
+            let typed_value = match infer_expr(&value.node, &value.span, env, ctx, false) {
+                Ok(tv) => tv,
+                Err(MiddleError::LambdaInferenceFail { .. }) if matches!(value.node, Expr::Lambda { .. }) => {
+                    // Deferre o lambda para use-site inference.
+                    if let Expr::Lambda { patterns, body, guards, with_bindings } = &value.node {
+                        let n_params = patterns.len();
+                        let param_types: Vec<Ty> = (0..n_params)
+                            .map(|i| Ty::InferVar(i as u32))
+                            .collect();
+                        let ret_ty = Ty::InferVar(n_params as u32);
+                        let lambda_ty = Ty::Function(
+                            param_types.clone(),
+                            Box::new(ret_ty.clone()),
+                        );
+
+                        // Guarda o AST do lambda na side table.
+                        ctx.deferred_lambdas.borrow_mut().insert(
+                            name.clone(),
+                            DeferredLambda {
+                                patterns: patterns.clone(),
+                                body: body.clone(),
+                                guards: guards.clone(),
+                                with_bindings: with_bindings.clone(),
+                                span: value.span,
+                            },
+                        );
+
+                        // Constrói um TypedExpr skeleton para o lambda deferido.
+                        // O codegen verá InferVar nos param_types e tratará
+                        // como placeholder — o tipo real será resolvido no uso.
+                        let typed_patterns = patterns
+                            .iter()
+                            .enumerate()
+                            .map(|(i, _)| Spanned::new(
+                                crate::typed::TypedPattern::Ident {
+                                    name: if let kata_ast::Pattern::Ident(n) = &patterns[i].node {
+                                        n.clone()
+                                    } else {
+                                        format!("__param_{i}")
+                                    },
+                                    ty: Ty::InferVar(i as u32),
+                                },
+                                patterns[i].span,
+                            ))
+                            .collect();
+                        let skeleton_kind = TypedExprKind::Lambda {
+                            func_name: None,
+                            param_types: param_types.clone(),
+                            ret_ty: ret_ty.clone(),
+                            clauses: vec![crate::typed::TypedLambdaClause {
+                                patterns: typed_patterns,
+                                body: Spanned::new(TypedExpr {
+                                    span: body.span,
+                                    ty: ret_ty.clone(),
+                                    tail_pos: true,
+                                    escape: EscapeTarget::Local,
+                                    kind: TypedExprKind::Unit,
+                                }, body.span),
+                                guards: Vec::new(),
+                                with_bindings: Vec::new(),
+                            }],
+                            captures: Vec::new(),
+                        };
+                        let skeleton = TypedExpr {
+                            span: value.span,
+                            ty: lambda_ty.clone(),
+                            tail_pos: false,
+                            escape: EscapeTarget::Local,
+                            kind: skeleton_kind,
+                        };
+
+                        // Define no TypeEnv com InferVars.
+                        let param_names = extract_lambda_param_names(&value.node);
+                        if let Some(pnames) = param_names {
+                            env.define_with_param_names(name, lambda_ty, "__local__", pnames);
+                        } else {
+                            env.define(name, lambda_ty, "__local__");
+                        }
+
+                        return Ok(TypedExpr {
+                            span: *span,
+                            ty: Ty::Unit,
+                            tail_pos,
+                            escape: EscapeTarget::Local,
+                            kind: TypedExprKind::Let {
+                                name: name.clone(),
+                                value: Box::new(Spanned::new(skeleton, value.span)),
+                            },
+                        });
+                    }
+                    // Inalcançável — o guard do match garante que é Lambda.
+                    return Err(MiddleError::LambdaInferenceFail {
+                        span: (*span).into(),
+                        detail: None,
+                    });
+                }
+                Err(e) => return Err(e),
+            };
             let val_ty = typed_value.ty.clone();
 
             // Rastrear provenance: se `let g := soma` onde `soma` é Ident
@@ -526,6 +655,7 @@ pub(crate) fn infer_expr_hinted(
                 refines_registry: ctx.refines_registry,
                 ret_ty: ctx.ret_ty,
                 in_loop: true,
+                deferred_lambdas: ctx.deferred_lambdas,
             };
             let mut typed_body = Vec::new();
             for expr in body {
