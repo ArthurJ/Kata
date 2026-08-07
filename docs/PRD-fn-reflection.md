@@ -1,6 +1,6 @@
 # PRD — Reflexão de Funções via DotAccess: `f.name`, `f.arity`, `f.param_types`, `f.return_type`
 
-**Status:** 📋 Proposto (revisto — overloads + desambiguação)
+**Status:** ✅ Implementado
 **Data:** 2026-08-04 (revisto 2026-08-04)
 **Depende de:** DotAccess em structs ✅ (`infer_dot_access`), string table ✅ (`__kata_str_N`), data symbols ✅ (`declare_data`/`define_data`), `kata_rt_register_type_table` ✅ (padrão de registro), DispatchTable ✅ (`OverloadInfo.is_action`)
 **Não depende de:** Diretivas Kata (decorators) — este PRD é pré-requisito para diretivas que acessam metadata da função decorada.
