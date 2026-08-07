@@ -81,7 +81,97 @@ enum Target
 `pass` referencia bindings especiais que o compilador sintetiza no momento
 da injeção (ver seção 3).
 
-### 2.3. Resolução
+### 2.3. Múltiplas actions por diretiva (overloading por Hook e Target)
+
+> **Nota de design (2026-08-07).** Em vez de uma action única com `@directive`
+> que cobre todos os modos, uma diretiva pode ser formada por **múltiplas
+> actions com o mesmo nome**, cada uma anotada com `when` (Hook) e/ou `on`
+> (Target) diferentes. O nome agrupa; `when` e `on` distinguem. Ao aplicar
+> `@trace` num item, o compilador injeta **todas** as definições aplicáveis
+> ao Hook e ao Target daquele item — simultaneamente.
+>
+> ```kata
+> @directive{when: Hook::Enter, on: Target::Action, pass: [f.name]}
+> action trace(name :: Text) => Unit
+>     log!(LogLevel::Info, "enter action: " + name)
+>
+> @directive{when: Hook::Enter, on: Target::Function, pass: [f.name]}
+> action trace(name :: Text) => Unit
+>     log!(LogLevel::Info, "enter function: " + name)
+>
+> @directive{when: Hook::Exit, on: Target::Any, pass: [f.name, result]}
+> action trace(name :: Text, result) => Unit
+>     log!(LogLevel::Info, "exit: " + name)
+> ```
+>
+> Uso — uma anotação dispara todos os hooks cujo `when` e `on` casam:
+>
+> ```kata
+> @trace
+> action processar(x :: Int) => Int
+>     x + 1
+> ```
+>
+> Desugaring (Target::Action casa com Enter::Action e Exit::Any):
+>
+> ```kata
+> action processar(x :: Int) => Int
+>     trace!("processar")              # Enter on Action
+>     let __result := x + 1
+>     trace!("processar", __result)     # Exit on Any
+>     __result
+> ```
+>
+> Se `processar` fosse função pura, casaria com Enter::Function e
+> Exit::Any — action e function disparam hooks diferentes para o mesmo
+> nome de diretiva.
+>
+> O **nome da diretiva é o nome da action** — não há campo de agrupamento
+> nem constructo sintático de bloco (`directive trace { ... }` foi
+> descartado: a premissa central do documento é não introduzir constructo
+> sintático novo). Múltiplas actions com o mesmo nome coexistem quando
+> diferem por `when` e/ou `on` em `@directive` — overloading por Hook e
+> Target.
+>
+> Vantagens:
+>
+> - **Type-checking limpo:** cada action tem sua própria assinatura, que
+>   corresponde exatamente ao seu call site. O Exit que recebe `result`
+>   tem assinatura diferente do Enter que recebe só `f.name` — e cada um
+>   type-checka independentemente. Resolve o problema de dual-call no
+>   Intercept enter+exit (seção 4.3).
+> - **Separação de responsabilidades:** cada combinação de Hook e Target
+>   é uma action distinta, mais simples e auditável.
+> - **Composicionalidade natural:** o usuário declara só os Hooks que
+>   precisa. Uma diretiva que só faz tracing de entrada declara só a
+>   action de Enter. Não há Exit injetado se nenhuma action de Exit existe
+>   para aquele nome.
+> - **Especialização por Target:** actions e funções podem ter
+>   comportamentos diferentes para a mesma diretiva — útil quando a
+>   semântica de instrumentação difere entre os dois.
+>
+> Regras de validação:
+>
+> - Duas actions com o mesmo nome e o **mesmo** par `(when, on)` é
+>   conflito — erro.
+> - O compilador precisa permitir múltiplas definições de action com o
+>   mesmo nome no mesmo escopo quando diferem pelo par `(when, on)` de
+>   `@directive`. Isso é overloading por Hook e Target, análogo a
+>   overloading por tipo em outras linguagens, mas discriminado pelos
+>   campos `when`/`on` em compile-time.
+> - `on` e `pass` podem diferir entre as actions da mesma diretiva — cada
+>   Hook/Target tem necessidades diferentes (Enter não tem `result`, Exit
+>   tem; Intercept exige `Target::Action`).
+> - `Target::Any` só pode coexistir com outras definições da mesma
+>   diretiva se for a única definição para aquele `when` — ou seja, para
+>   um dado `(nome, when)`, ou você tem `on: Any` ou `on: Action`/`on:
+>   Function`, mas não mistura `Any` com específico. O compilador rejeita
+>   a mistura na declaração, eliminando ambiguidade de resolução. Any
+>   existe para o caso comum onde o comportamento é idêntico para
+>   actions e funções (tracing, logging) e duplicar a definição seria
+>   pura burocracia.
+
+### 2.4. Resolução
 
 Quando o compilador encontra `@nome` num item:
 
