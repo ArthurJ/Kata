@@ -1,8 +1,6 @@
 ---
 source: crates/kata-driver/tests/examples_snapshot.rs
-assertion_line: 100
 expression: output
 ---
 --- stderr ---
-Error:   × erro de resolução (Pass 1): [UnknownDirective { name: "test", context:
-  │ "sig", item_name: "fib" }]
+Error:   × erro de resolução (Pass 1): diretiva `test` não reconhecida em sig `fib`

@@ -4,6 +4,3 @@ expression: output
 ---
 Sucesso! Timeout funcionou antes do produtor enviar
 Sucesso! Recebeu o valor do produtor
---- stderr ---
-[resolution] warning: `read` tem overloads com aridades diferentes (1 vs 2) — aridade padrão = 1 (primeira declaração)
-[resolution] warning: `read` tem overloads com aridades diferentes (1 vs 2) — aridade padrão = 1 (primeira declaração)

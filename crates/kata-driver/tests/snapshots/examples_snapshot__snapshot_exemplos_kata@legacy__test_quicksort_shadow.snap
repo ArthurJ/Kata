@@ -3,5 +3,5 @@ source: crates/kata-driver/tests/examples_snapshot.rs
 expression: output
 ---
 --- stderr ---
-Error:   × erro de resolução (Pass 1): [UnknownDirective { name: "heapstack",
-  │ context: "sig", item_name: "quicksort" }]
+Error:   × erro de resolução (Pass 1): diretiva `heapstack` não reconhecida em sig
+  │ `quicksort`

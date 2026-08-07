@@ -217,5 +217,5 @@ pub(crate) fn load_module_imports(
     let mut loader = ModuleLoader::new(search_paths);
     loader
         .load_imports(module)
-        .map_err(|e| miette::Report::msg(format!("erro ao carregar imports: {e:?}")))
+        .map_err(|e| miette::Report::msg(format!("erro ao carregar imports: {e}")))
 }

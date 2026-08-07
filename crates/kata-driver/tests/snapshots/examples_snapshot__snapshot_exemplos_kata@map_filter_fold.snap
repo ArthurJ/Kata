@@ -18,6 +18,3 @@ expression: output
 6
 9
 fim
---- stderr ---
-[resolution] warning: `read` tem overloads com aridades diferentes (1 vs 2) — aridade padrão = 1 (primeira declaração)
-[resolution] warning: `read` tem overloads com aridades diferentes (1 vs 2) — aridade padrão = 1 (primeira declaração)

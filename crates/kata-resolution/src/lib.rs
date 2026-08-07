@@ -15,7 +15,7 @@ mod types;
 pub use type_resolve::{collect_type_params, resolve_type_expr};
 pub use types::*;
 
-pub use module_loader::{ImportKind, ImportedModule, ModuleLoader, filter_exports};
+pub use module_loader::{ImportKind, ImportedModule, LoadError, ModuleLoader, filter_exports};
 
 use directives::{extract_log_spec, extract_test_specs};
 
@@ -33,16 +33,10 @@ pub fn extract_arities(signatures: &[Signature]) -> std::collections::HashMap<St
     for sig in signatures {
         // insert_only: a primeira overload vence (ordem de declaração).
         match arities.entry(sig.name.clone()) {
-            std::collections::hash_map::Entry::Occupied(e) => {
-                let existing = *e.get();
-                let new_arity = sig.param_types.len();
-                if existing != new_arity {
-                    eprintln!(
-                        "[resolution] warning: `{}` tem overloads com aridades diferentes \
-                         ({existing} vs {new_arity}) — aridade padrão = {existing} (primeira declaração)",
-                        sig.name
-                    );
-                }
+            std::collections::hash_map::Entry::Occupied(_) => {
+                // insert_only: a primeira overload vence (ordem de declaração).
+                // Overloads com aridades diferentes são legítimas (dict dispatch);
+                // a aridade padrão é a da primeira declaração, silenciosamente.
             }
             std::collections::hash_map::Entry::Vacant(e) => {
                 e.insert(sig.param_types.len());

@@ -3,11 +3,10 @@ source: crates/kata-driver/tests/examples_snapshot.rs
 expression: output
 ---
 --- stderr ---
-Error:   × erro de resolução (Pass 1): [UnknownDirective { name: "log", context:
-  │ "action", item_name: "process_default_log: level deve ser Text ou variante
-  │ de LogLevel" }, UnknownDirective { name: "log", context: "action",
-  │ item_name: "process_default_log: chave desconhecida: format" },
-  │ UnknownDirective { name: "log", context: "action", item_name:
-  │ "process_default_log: when é obrigatório em @log" }, UnknownDirective
-  │ { name: "log", context: "action", item_name: "process_default_log: when
-  │ deve ser \"enter\" ou \"exit\", got \"\"" }]
+Error:   × erro de resolução (Pass 1): diretiva `log` não reconhecida em action
+  │ `process_default_log: level deve ser Text ou variante de LogLevel`;
+  │ diretiva `log` não reconhecida em action `process_default_log: chave
+  │ desconhecida: format`; diretiva `log` não reconhecida em action
+  │ `process_default_log: when é obrigatório em @log`; diretiva `log` não
+  │ reconhecida em action `process_default_log: when deve ser "enter" ou
+  │ "exit", got ""`

@@ -14,6 +14,4 @@ False
 10
 --- stderr ---
 [resolution] warning: tipo base Int pode não implementar a interface NUM (PositiveInt refines NUM) — validação final em infer_module
-[resolution] warning: `read` tem overloads com aridades diferentes (1 vs 2) — aridade padrão = 1 (primeira declaração)
-[resolution] warning: `read` tem overloads com aridades diferentes (1 vs 2) — aridade padrão = 1 (primeira declaração)
 [resolution] warning: tipo base Int pode não implementar a interface NUM (PositiveInt refines NUM) — validação final em infer_module

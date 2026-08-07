@@ -31,6 +31,25 @@ pub enum LoadError {
     IoError(String),
 }
 
+impl std::fmt::Display for LoadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LoadError::NotFound { path } => write!(f, "módulo não encontrado: `{path}`"),
+            LoadError::LexError(msg) => write!(f, "erro léxico ao carregar módulo: {msg}"),
+            LoadError::ParseError(msg) => write!(f, "erro de parse ao carregar módulo: {msg}"),
+            LoadError::ResolveError(msg) => {
+                write!(f, "erro de resolução ao carregar módulo: {msg}")
+            }
+            LoadError::CircularImport { path } => {
+                write!(f, "ciclo de import detectado: `{path}`")
+            }
+            LoadError::IoError(msg) => write!(f, "erro de I/O ao carregar módulo: {msg}"),
+        }
+    }
+}
+
+impl std::error::Error for LoadError {}
+
 /// Como um módulo foi importado.
 #[derive(Debug, Clone)]
 pub enum ImportKind {
@@ -147,11 +166,11 @@ impl ModuleLoader {
         // Lex → Parse → Resolve
         let tokens = lex(&source).map_err(|e| {
             self.loading.remove(path);
-            LoadError::LexError(format!("{e:?}"))
+            LoadError::LexError(format!("{e}"))
         })?;
         let module = parse(tokens).map_err(|e| {
             self.loading.remove(path);
-            LoadError::ParseError(format!("{e:?}"))
+            LoadError::ParseError(format!("{e}"))
         })?;
         let module_name = path
             .file_stem()
@@ -159,7 +178,7 @@ impl ModuleLoader {
             .unwrap_or_default();
         let resolved = resolve_with_origin(&module, &module_name).map_err(|e| {
             self.loading.remove(path);
-            LoadError::ResolveError(format!("{e:?}"))
+            LoadError::ResolveError(format!("{}", crate::format_resolve_errors(&e)))
         })?;
 
         // Sub-módulos precisam do prelude: Int, Float, +, etc.
@@ -172,7 +191,10 @@ impl ModuleLoader {
         } else {
             let prelude = crate::prelude_sigs::load_prelude().map_err(|e| {
                 self.loading.remove(path);
-                LoadError::ResolveError(format!("erro ao carregar prelude para sub-módulo: {e:?}"))
+                LoadError::ResolveError(format!(
+                    "erro ao carregar prelude para sub-módulo: {}",
+                    crate::format_resolve_errors(&e)
+                ))
             })?;
             merge_two(prelude, resolved)
         };

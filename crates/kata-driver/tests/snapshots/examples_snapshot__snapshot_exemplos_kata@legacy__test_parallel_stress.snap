@@ -3,5 +3,5 @@ source: crates/kata-driver/tests/examples_snapshot.rs
 expression: output
 ---
 --- stderr ---
-Error:   × erro de resolução (Pass 1): [UnknownDirective { name: "parallel", context:
-  │ "action", item_name: "cpu_infinita" }]
+Error:   × erro de resolução (Pass 1): diretiva `parallel` não reconhecida em action
+  │ `cpu_infinita`

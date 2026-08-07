@@ -52,10 +52,18 @@ pub(crate) fn cmd_build(file: &str, output: Option<&str>, dynamic: bool) -> miet
     // Carregar módulos importados (se houver)
     let imports = load_module_imports(file, &module)?;
 
-    let prelude = load_prelude()
-        .map_err(|e| miette::Report::msg(format!("erro ao carregar prelude: {e:?}")))?;
-    let user =
-        resolve(&module).map_err(|e| miette::Report::msg(format!("erro de resolução: {e:?}")))?;
+    let prelude = load_prelude().map_err(|e| {
+        miette::Report::msg(format!(
+            "erro ao carregar prelude: {}",
+            crate::format_error_vec(&e)
+        ))
+    })?;
+    let user = resolve(&module).map_err(|e| {
+        miette::Report::msg(format!(
+            "erro de resolução: {}",
+            crate::format_error_vec(&e)
+        ))
+    })?;
     let mut resolved = merge_resolved(prelude, user);
     merge_imports(&mut resolved, &imports);
     let typed = infer_module(&module, &resolved).map_err(IntoReport::into_report)?;
@@ -82,7 +90,7 @@ pub(crate) fn cmd_build(file: &str, output: Option<&str>, dynamic: bool) -> miet
 
     // AOT emit — produz object file (.o) bytes.
     let object_bytes = aot_emit(&mono, &type_id_map)
-        .map_err(|e| miette::Report::msg(format!("erro de codegen AOT: {e:?}")))?;
+        .map_err(|e| miette::Report::msg(format!("erro de codegen AOT: {e}")))?;
 
     // Determinar o tipo de retorno do entry point para o tag de display.
     let ret_ty = mono.entry.node.ty.clone();

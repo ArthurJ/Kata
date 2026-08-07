@@ -30,12 +30,12 @@ const PRELUDE_SOURCE: &str = include_str!("../../../stdlib/core.kata");
 pub fn load_prelude() -> Result<crate::ResolvedModule, Vec<crate::ResolveError>> {
     let tokens = lex(PRELUDE_SOURCE).map_err(|e| {
         vec![crate::ResolveError::UnknownFfi {
-            name: format!("prelude lex error: {e:?}"),
+            name: format!("prelude lex error: {e}"),
         }]
     })?;
     let module = parse(tokens).map_err(|e| {
         vec![crate::ResolveError::UnknownFfi {
-            name: format!("prelude parse error: {e:?}"),
+            name: format!("prelude parse error: {e}"),
         }]
     })?;
     resolve_with_origin(&module, "core")

@@ -90,6 +90,18 @@ impl<E: miette::Diagnostic + Send + Sync + 'static> IntoReport for E {
     }
 }
 
+/// Formata um `Vec` de erros como string legível (um por linha).
+/// `Vec<ResolveError>` não implementa `Display`, então `{e:?}` mostraria
+/// `Debug` — incluindo spans brutos. Este helper usa `Display` de cada
+/// erro individual, que delega para `thiserror::Error::fmt`.
+pub(crate) fn format_error_vec<E: std::fmt::Display>(errors: &[E]) -> String {
+    errors
+        .iter()
+        .map(|e| e.to_string())
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
 // ── Comandos ───────────────────────────────────────────────
 
 fn cmd_lex(file: &str) -> miette::Result<()> {
@@ -162,10 +174,15 @@ fn cmd_test(path: &str, filter: Option<&str>) -> miette::Result<()> {
         // Carregar módulos importados (se houver)
         let imports = imports::load_module_imports(&file.to_string_lossy(), &module)?;
 
-        let prelude = load_prelude()
-            .map_err(|e| miette::Report::msg(format!("erro ao carregar prelude: {e:?}")))?;
-        let user = resolve(&module)
-            .map_err(|e| miette::Report::msg(format!("erro de resolução: {e:?}")))?;
+        let prelude = load_prelude().map_err(|e| {
+            miette::Report::msg(format!(
+                "erro ao carregar prelude: {}",
+                format_error_vec(&e)
+            ))
+        })?;
+        let user = resolve(&module).map_err(|e| {
+            miette::Report::msg(format!("erro de resolução: {}", format_error_vec(&e)))
+        })?;
         let mut resolved = merge_resolved(prelude, user);
         imports::merge_imports(&mut resolved, &imports);
         let typed = infer_module(&module, &resolved).map_err(IntoReport::into_report)?;
@@ -194,7 +211,7 @@ fn cmd_test(path: &str, filter: Option<&str>) -> miette::Result<()> {
         );
 
         let (jit_module, wrappers) = jit_compile_tests(&typed, &_type_id_map)
-            .map_err(|e| miette::Report::msg(format!("erro de codegen: {e:?}")))?;
+            .map_err(|e| miette::Report::msg(format!("erro de codegen: {e}")))?;
 
         for w in &wrappers {
             let desc = w.spec.desc.as_deref().unwrap_or("(sem desc)");
@@ -350,13 +367,21 @@ fn run_pipeline_with_file(source: &str, file_path: Option<&str>) -> miette::Resu
     // Signatures definem a aridade padrão. Lambdas com mesmo nome são
     // overloads non-default (só acessíveis via dict dispatch) — a aridade
     // do mapa é sempre a da signature.
-    let prelude = load_prelude()
-        .map_err(|e| miette::Report::msg(format!("erro ao carregar prelude: {e:?}")))?;
+    let prelude = load_prelude().map_err(|e| {
+        miette::Report::msg(format!(
+            "erro ao carregar prelude: {}",
+            format_error_vec(&e)
+        ))
+    })?;
 
     let decls_tokens = tokens.clone();
     let decls_module = parse_decls_only(decls_tokens).map_err(IntoReport::into_report)?;
-    let decls_user = resolve(&decls_module)
-        .map_err(|e| miette::Report::msg(format!("erro de resolução (Pass 1): {e:?}")))?;
+    let decls_user = resolve(&decls_module).map_err(|e| {
+        miette::Report::msg(format!(
+            "erro de resolução (Pass 1): {}",
+            format_error_vec(&e)
+        ))
+    })?;
     let decls_resolved = merge_resolved(prelude.clone(), decls_user);
 
     // Signatures sobrescrevem lambdas no mapa de aridades (default arity).
@@ -373,8 +398,8 @@ fn run_pipeline_with_file(source: &str, file_path: Option<&str>) -> miette::Resu
     };
 
     // 4. Resolve (prelude + módulo do usuário)
-    let user =
-        resolve(&module).map_err(|e| miette::Report::msg(format!("erro de resolução: {e:?}")))?;
+    let user = resolve(&module)
+        .map_err(|e| miette::Report::msg(format!("erro de resolução: {}", format_error_vec(&e))))?;
     let mut resolved = merge_resolved(prelude, user);
 
     // 4a. Merge imports (itens seletivos no escopo direto)
@@ -408,7 +433,7 @@ fn run_pipeline_with_file(source: &str, file_path: Option<&str>) -> miette::Resu
 
     // 8. Codegen + JIT + executar
     let jit = jit_eval(&mono, &_type_id_map)
-        .map_err(|e| miette::Report::msg(format!("erro de codegen: {e:?}")))?;
+        .map_err(|e| miette::Report::msg(format!("erro de codegen: {e}")))?;
 
     Ok(ExecResult {
         raw: jit.raw,

@@ -43,7 +43,8 @@ pub(crate) struct ReplSession {
 impl ReplSession {
     /// Cria nova sessão carregando o prelude.
     pub fn new() -> Result<Self, String> {
-        let prelude = load_prelude().map_err(|e| format!("erro ao carregar prelude: {e:?}"))?;
+        let prelude = load_prelude()
+            .map_err(|e| format!("erro ao carregar prelude: {}", crate::format_error_vec(&e)))?;
         let history_path = dirs();
         Ok(Self {
             items: Vec::new(),
@@ -55,7 +56,8 @@ impl ReplSession {
     /// Reseta a sessão — limpa items e recarrega prelude.
     pub fn reset(&mut self) -> Result<(), String> {
         self.items.clear();
-        self.prelude = load_prelude().map_err(|e| format!("erro ao carregar prelude: {e:?}"))?;
+        self.prelude = load_prelude()
+            .map_err(|e| format!("erro ao carregar prelude: {}", crate::format_error_vec(&e)))?;
         Ok(())
     }
 
@@ -186,7 +188,7 @@ impl ReplSession {
     /// EntryExpr, executa o pipeline completo.
     fn eval_expr(&mut self, input: &str) -> Result<(), String> {
         // Lex
-        let tokens = lex(input).map_err(|e| format!("erro léxico: {e:?}"))?;
+        let tokens = lex(input).map_err(|e| format!("erro léxico: {e}"))?;
 
         // Pass 0: scan_lambdas — aridades de `let f := lambda ...`
         let mut arities = scan_lambdas(&tokens);
@@ -194,14 +196,20 @@ impl ReplSession {
         // Pass 1: parse_decls_only → resolve → extract_arities
         // Signatures definem a aridade padrão; lambdas com mesmo nome são
         // overloads non-default.
-        let decls_module = parse_decls_only(tokens.clone())
-            .map_err(|e| format!("erro de parse (Pass 1): {e:?}"))?;
-        let decls_user = resolve(&decls_module).map_err(|e| format!("erro de resolução (Pass 1): {e:?}"))?;
+        let decls_module =
+            parse_decls_only(tokens.clone()).map_err(|e| format!("erro de parse (Pass 1): {e}"))?;
+        let decls_user = resolve(&decls_module).map_err(|e| {
+            format!(
+                "erro de resolução (Pass 1): {}",
+                crate::format_error_vec(&e)
+            )
+        })?;
         let decls_resolved = merge_resolved(self.prelude.clone(), decls_user);
         arities.extend(extract_arities(&decls_resolved.signatures));
 
         // Pass 2: parse_with_arity (completo)
-        let module = parse_with_arity(tokens, arities).map_err(|e| format!("erro de parse: {e:?}"))?;
+        let module =
+            parse_with_arity(tokens, arities).map_err(|e| format!("erro de parse: {e}"))?;
 
         if module.items.is_empty() {
             return Ok(());
@@ -268,7 +276,7 @@ impl ReplSession {
         let source = std::fs::read_to_string(path)
             .map_err(|e| format!("não foi possível ler `{path}`: {e}"))?;
 
-        let tokens = lex(&source).map_err(|e| format!("erro léxico: {e:?}"))?;
+        let tokens = lex(&source).map_err(|e| format!("erro léxico: {e}"))?;
 
         // Pass 0: scan_lambdas — aridades de `let f := lambda ...`
         let mut arities = scan_lambdas(&tokens);
@@ -276,14 +284,20 @@ impl ReplSession {
         // Pass 1: parse_decls_only → resolve → extract_arities
         // Signatures definem a aridade padrão; lambdas com mesmo nome são
         // overloads non-default.
-        let decls_module = parse_decls_only(tokens.clone())
-            .map_err(|e| format!("erro de parse (Pass 1): {e:?}"))?;
-        let decls_user = resolve(&decls_module).map_err(|e| format!("erro de resolução (Pass 1): {e:?}"))?;
+        let decls_module =
+            parse_decls_only(tokens.clone()).map_err(|e| format!("erro de parse (Pass 1): {e}"))?;
+        let decls_user = resolve(&decls_module).map_err(|e| {
+            format!(
+                "erro de resolução (Pass 1): {}",
+                crate::format_error_vec(&e)
+            )
+        })?;
         let decls_resolved = merge_resolved(self.prelude.clone(), decls_user);
         arities.extend(extract_arities(&decls_resolved.signatures));
 
         // Pass 2: parse_with_arity (completo)
-        let module = parse_with_arity(tokens, arities).map_err(|e| format!("erro de parse: {e:?}"))?;
+        let module =
+            parse_with_arity(tokens, arities).map_err(|e| format!("erro de parse: {e}"))?;
 
         if module.items.is_empty() {
             eprintln!("arquivo `{path}` não contém items");
@@ -376,9 +390,10 @@ impl ReplSession {
 
     /// Roda o pipeline até TypedModule (para `:type`).
     fn run_pipeline_typed(&self, module: &Module) -> Result<kata_inference::TypedModule, String> {
-        let user = resolve(module).map_err(|e| format!("erro de resolução: {e:?}"))?;
+        let user = resolve(module)
+            .map_err(|e| format!("erro de resolução: {}", crate::format_error_vec(&e)))?;
         let resolved = merge_resolved(self.prelude.clone(), user);
-        let typed = infer_module(module, &resolved).map_err(|e| format!("erro de tipo: {e:?}"))?;
+        let typed = infer_module(module, &resolved).map_err(|e| format!("erro de tipo: {e}"))?;
         Ok(typed)
     }
 
@@ -411,14 +426,15 @@ impl ReplSession {
 
     /// Roda o pipeline completo até execução JIT.
     fn run_pipeline_eval(&self, module: &Module) -> Result<crate::ExecResult, String> {
-        let user = resolve(module).map_err(|e| format!("erro de resolução: {e:?}"))?;
+        let user = resolve(module)
+            .map_err(|e| format!("erro de resolução: {}", crate::format_error_vec(&e)))?;
         let resolved = merge_resolved(self.prelude.clone(), user);
-        let typed = infer_module(module, &resolved).map_err(|e| format!("erro de tipo: {e:?}"))?;
+        let typed = infer_module(module, &resolved).map_err(|e| format!("erro de tipo: {e}"))?;
         let mono = monomorphize(typed);
         let mono = optimize(mono);
         let mono = kata_monomorph::MonoModule::from(tree_shake(mono.inner));
         let jit =
-            jit_eval(&mono, &Default::default()).map_err(|e| format!("erro de codegen: {e:?}"))?;
+            jit_eval(&mono, &Default::default()).map_err(|e| format!("erro de codegen: {e}"))?;
         Ok(crate::ExecResult {
             raw: jit.raw,
             ty: jit.ty,
@@ -439,7 +455,7 @@ impl ReplSession {
         };
         match parse(tokens) {
             Ok(_) => false,
-            Err(e) => format!("{e:?}").contains("<EOF>"),
+            Err(e) => format!("{e}").contains("<EOF>"),
         }
     }
 }
