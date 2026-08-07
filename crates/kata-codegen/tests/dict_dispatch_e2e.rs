@@ -99,7 +99,11 @@ fn dict_dispatch_ordem_invertida() {
     let src = "soma :: (a::Int) (b::Int) => Int\nlambda a b: + a b\nsoma{\"b\": 4 \"a\": 3}";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
-    assert_eq!(untag_smi(raw), 7, "soma com dict ordem invertida deve ser 7");
+    assert_eq!(
+        untag_smi(raw),
+        7,
+        "soma com dict ordem invertida deve ser 7"
+    );
 }
 
 /// Função com 3 params nomeados.

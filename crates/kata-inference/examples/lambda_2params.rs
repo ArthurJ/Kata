@@ -13,11 +13,23 @@ fn infer_src(src: &str) -> Result<kata_inference::TypedModule, kata_diagnostics:
 fn main() {
     let cases = [
         ("lambda 1 param (funciona)", "let f := lambda x: - x 1\nf 5"),
-        ("lambda 2 params (- a b)", "let f := lambda a b: - a b\nf 5 3"),
-        ("lambda 2 params (+ a b)", "let f := lambda a b: + a b\nf 5 3"),
-        ("lambda 2 params hint", "let f := (lambda a b: - a b)::(Int Int -> Int)\nf 5 3"),
+        (
+            "lambda 2 params (- a b)",
+            "let f := lambda a b: - a b\nf 5 3",
+        ),
+        (
+            "lambda 2 params (+ a b)",
+            "let f := lambda a b: + a b\nf 5 3",
+        ),
+        (
+            "lambda 2 params hint",
+            "let f := (lambda a b: - a b)::(Int Int -> Int)\nf 5 3",
+        ),
         ("lambda 2 params inline apply", "(lambda a b: - a b) 5 3"),
-        ("lambda 2 params 1 literal", "let f := lambda a b: - a 1\nf 5 3"),
+        (
+            "lambda 2 params 1 literal",
+            "let f := lambda a b: - a 1\nf 5 3",
+        ),
     ];
     for (label, src) in cases {
         print!("\n=== {label} ===\n  src: {src}\n  ");

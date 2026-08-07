@@ -321,7 +321,8 @@ pub(crate) fn infer_apply(
                             span: (*span).into(),
                         });
                     }
-                    for (i, (arg_ty, param_ty)) in arg_tys.iter().zip(param_types.iter()).enumerate()
+                    for (i, (arg_ty, param_ty)) in
+                        arg_tys.iter().zip(param_types.iter()).enumerate()
                     {
                         if arg_ty != param_ty {
                             return Err(MiddleError::TypeMismatch {

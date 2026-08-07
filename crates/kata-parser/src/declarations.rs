@@ -506,9 +506,7 @@ impl Parser {
     /// é snake_case (primeiro char lowercase). Tipos são PascalCase ou
     /// ALL_CAPS — `Array`, `List`, `Int`, `A`, `K` — nunca snake_case.
     /// Isto elimina a ambiguidade com `(Array::A)` sem lookahead extra.
-    pub(crate) fn try_parse_named_type_param(
-        &mut self,
-    ) -> Option<(String, Spanned<TypeExpr>)> {
+    pub(crate) fn try_parse_named_type_param(&mut self) -> Option<(String, Spanned<TypeExpr>)> {
         // Precisa de pelo menos: ( Ident :: ... )
         if !matches!(self.peek(), Token::LParen) {
             return None;

@@ -163,10 +163,7 @@ pub(crate) fn parse_arg(parser: &mut Parser) -> Result<Spanned<Expr>, FrontendEr
     parse_apply_impl(parser, true)
 }
 
-fn parse_apply_impl(
-    parser: &mut Parser,
-    as_arg: bool,
-) -> Result<Spanned<Expr>, FrontendError> {
+fn parse_apply_impl(parser: &mut Parser, as_arg: bool) -> Result<Spanned<Expr>, FrontendError> {
     let callee = parser.parse_expr_post_ascription()?;
 
     // Literais, construções de statement e keywords de controle de fluxo

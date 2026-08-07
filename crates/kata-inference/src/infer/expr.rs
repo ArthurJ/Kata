@@ -250,18 +250,22 @@ pub(crate) fn infer_expr_hinted(
             // re-inere com os arg types reais.
             let typed_value = match infer_expr(&value.node, &value.span, env, ctx, false) {
                 Ok(tv) => tv,
-                Err(MiddleError::LambdaInferenceFail { .. }) if matches!(value.node, Expr::Lambda { .. }) => {
+                Err(MiddleError::LambdaInferenceFail { .. })
+                    if matches!(value.node, Expr::Lambda { .. }) =>
+                {
                     // Deferre o lambda para use-site inference.
-                    if let Expr::Lambda { patterns, body, guards, with_bindings } = &value.node {
+                    if let Expr::Lambda {
+                        patterns,
+                        body,
+                        guards,
+                        with_bindings,
+                    } = &value.node
+                    {
                         let n_params = patterns.len();
-                        let param_types: Vec<Ty> = (0..n_params)
-                            .map(|i| Ty::InferVar(i as u32))
-                            .collect();
+                        let param_types: Vec<Ty> =
+                            (0..n_params).map(|i| Ty::InferVar(i as u32)).collect();
                         let ret_ty = Ty::InferVar(n_params as u32);
-                        let lambda_ty = Ty::Function(
-                            param_types.clone(),
-                            Box::new(ret_ty.clone()),
-                        );
+                        let lambda_ty = Ty::Function(param_types.clone(), Box::new(ret_ty.clone()));
 
                         // Guarda o AST do lambda na side table.
                         ctx.deferred_lambdas.borrow_mut().insert(
@@ -281,17 +285,20 @@ pub(crate) fn infer_expr_hinted(
                         let typed_patterns = patterns
                             .iter()
                             .enumerate()
-                            .map(|(i, _)| Spanned::new(
-                                crate::typed::TypedPattern::Ident {
-                                    name: if let kata_ast::Pattern::Ident(n) = &patterns[i].node {
-                                        n.clone()
-                                    } else {
-                                        format!("__param_{i}")
+                            .map(|(i, _)| {
+                                Spanned::new(
+                                    crate::typed::TypedPattern::Ident {
+                                        name: if let kata_ast::Pattern::Ident(n) = &patterns[i].node
+                                        {
+                                            n.clone()
+                                        } else {
+                                            format!("__param_{i}")
+                                        },
+                                        ty: Ty::InferVar(i as u32),
                                     },
-                                    ty: Ty::InferVar(i as u32),
-                                },
-                                patterns[i].span,
-                            ))
+                                    patterns[i].span,
+                                )
+                            })
                             .collect();
                         let skeleton_kind = TypedExprKind::Lambda {
                             func_name: None,
@@ -299,13 +306,16 @@ pub(crate) fn infer_expr_hinted(
                             ret_ty: ret_ty.clone(),
                             clauses: vec![crate::typed::TypedLambdaClause {
                                 patterns: typed_patterns,
-                                body: Spanned::new(TypedExpr {
-                                    span: body.span,
-                                    ty: ret_ty.clone(),
-                                    tail_pos: true,
-                                    escape: EscapeTarget::Local,
-                                    kind: TypedExprKind::Unit,
-                                }, body.span),
+                                body: Spanned::new(
+                                    TypedExpr {
+                                        span: body.span,
+                                        ty: ret_ty.clone(),
+                                        tail_pos: true,
+                                        escape: EscapeTarget::Local,
+                                        kind: TypedExprKind::Unit,
+                                    },
+                                    body.span,
+                                ),
                                 guards: Vec::new(),
                                 with_bindings: Vec::new(),
                             }],

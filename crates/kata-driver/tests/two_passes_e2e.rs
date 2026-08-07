@@ -142,7 +142,11 @@ fn kata_run_dict_dispatch_ordem_invertida() {
     let path = write_temp_kata("dict_invertido", src);
     let (stdout, stderr, code) = run_kata_file(&path);
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
-    assert_eq!(stdout.trim(), "7", "soma com dict ordem invertida deve imprimir 7");
+    assert_eq!(
+        stdout.trim(),
+        "7",
+        "soma com dict ordem invertida deve imprimir 7"
+    );
 }
 
 /// Função pura com 1 param nomeado via `kata eval`.
@@ -163,7 +167,11 @@ fn kata_run_dict_dispatch_whitespace_nao_distingue() {
     let path = write_temp_kata("dict_whitespace", src);
     let (stdout, stderr, code) = run_kata_file(&path);
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
-    assert_eq!(stdout.trim(), "3", "soma com dict e whitespace deve imprimir 3");
+    assert_eq!(
+        stdout.trim(),
+        "3",
+        "soma com dict e whitespace deve imprimir 3"
+    );
 }
 
 /// Função com 3 params nomeados e ordem embaralhada.
@@ -174,7 +182,11 @@ fn kata_run_dict_dispatch_tres_params_embaralhados() {
     let path = write_temp_kata("dict_3params", src);
     let (stdout, stderr, code) = run_kata_file(&path);
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
-    assert_eq!(stdout.trim(), "6", "sub com 3 params embaralhados deve imprimir 6");
+    assert_eq!(
+        stdout.trim(),
+        "6",
+        "sub com 3 params embaralhados deve imprimir 6"
+    );
 }
 
 // ── Validação e mensagens de erro (Fase 6) ───────────────────────
@@ -225,7 +237,9 @@ fn erro_chave_inexistente_no_dict() {
     let (_stdout, stderr, code) = run_kata_file(&path);
     assert_ne!(code, 0, "deve falhar — chave 'x' não existe");
     assert!(
-        stderr.contains("não existe") || stderr.contains("não é parâmetro") || stderr.contains("parâmetro"),
+        stderr.contains("não existe")
+            || stderr.contains("não é parâmetro")
+            || stderr.contains("parâmetro"),
         "erro deve mencionar param inexistente, got: {stderr}"
     );
 }
@@ -238,7 +252,9 @@ fn erro_param_faltante_no_dict() {
     let (_stdout, stderr, code) = run_kata_file(&path);
     assert_ne!(code, 0, "deve falhar — param 'b' faltante");
     assert!(
-        stderr.contains("não foi fornecido") || stderr.contains("faltando") || stderr.contains("parâmetro"),
+        stderr.contains("não foi fornecido")
+            || stderr.contains("faltando")
+            || stderr.contains("parâmetro"),
         "erro deve mencionar param faltante, got: {stderr}"
     );
 }
