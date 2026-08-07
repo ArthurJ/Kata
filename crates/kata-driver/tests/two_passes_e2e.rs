@@ -313,3 +313,15 @@ fn let_lambda_1param_aridade_extraida() {
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     assert_eq!(stdout.trim(), "19", "g (* 4 5) = g(20) = 20 - 1 = 19");
 }
+
+/// Let-lambda com params nomeados acessível via dict dispatch.
+/// `let f := lambda x: - x 1` — f tem aridade 1, params nomeados ["x"].
+/// `f{"x": 5}` despacha via TypeEnv fallback (não está na DispatchTable).
+#[test]
+fn let_lambda_dict_dispatch_via_typeenv() {
+    let src = "let f := lambda x: - x 1\nf{\"x\": 5}";
+    let path = write_temp_kata("let_lambda_dict", src);
+    let (stdout, stderr, code) = run_kata_file(&path);
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    assert_eq!(stdout.trim(), "4", "f{{x: 5}} deve imprimir 4");
+}

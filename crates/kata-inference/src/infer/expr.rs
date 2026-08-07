@@ -237,7 +237,18 @@ pub(crate) fn infer_expr_hinted(
                 _ => None,
             };
 
-            env.define_with_alias(name, val_ty, "__local__", fn_alias);
+            // Extrair param_names se o valor é uma lambda com params nomeados.
+            // Permite que o dict dispatch fallback consulte o TypeEnv quando
+            // a DispatchTable não tem overloads com param_names.
+            let param_names = extract_lambda_param_names(&value.node);
+
+            if fn_alias.is_some() {
+                env.define_with_alias(name, val_ty, "__local__", fn_alias);
+            } else if let Some(pnames) = param_names {
+                env.define_with_param_names(name, val_ty, "__local__", pnames);
+            } else {
+                env.define(name, val_ty, "__local__");
+            }
 
             (
                 Ty::Unit,
@@ -689,4 +700,23 @@ pub(crate) fn infer_expr_hinted(
         escape,
         kind,
     })
+}
+
+/// Extrai nomes dos parâmetros de uma lambda, se todos são nomeados (Ident ou TypedIdent).
+/// Retorna `None` se a expressão não é lambda ou se algum pattern não tem nome
+/// (Wildcard, Tuple, Cons, etc.).
+fn extract_lambda_param_names(expr: &Expr) -> Option<Vec<String>> {
+    if let Expr::Lambda { patterns, .. } = expr {
+        let mut names = Vec::with_capacity(patterns.len());
+        for p in patterns {
+            match &p.node {
+                kata_ast::Pattern::Ident(name) => names.push(name.clone()),
+                kata_ast::Pattern::TypedIdent { name, .. } => names.push(name.clone()),
+                _ => return None, // Wildcard, Tuple, Cons, etc. — não nomeado
+            }
+        }
+        Some(names)
+    } else {
+        None
+    }
 }

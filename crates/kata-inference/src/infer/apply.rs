@@ -189,63 +189,165 @@ pub(crate) fn infer_apply(
     // overloads com `param_names` não-vazios, mapeia chaves → params e
     // reordena para Tuple. Depois faz dispatch normal com a Tuple.
     // `f{a: 1, b: 2}` → `f(1, 2)` via reorder_dict_args_to_tuple.
+    //
+    // Fallback: se a DispatchTable não tem overloads com param_names,
+    // consulta o TypeEnv (let-bound lambdas com params nomeados).
     if expanded_args.len() == 1 {
         if let Expr::DictLit { .. } = &expanded_args[0].node {
-            if ctx.table.has_function(&func_name) {
+            // Caminho A: DispatchTable tem overloads com param_names.
+            let has_named_in_table = ctx.table.has_function(&func_name)
+                && ctx
+                    .table
+                    .get_overloads(&func_name)
+                    .expect("has_function retornou true")
+                    .iter()
+                    .any(|o| !o.param_names.is_empty());
+
+            // Caminho B: TypeEnv tem param_names (let-bound lambda).
+            let has_named_in_env = env.lookup_param_names(&func_name).is_some();
+
+            if has_named_in_table {
+                // ... dispatch via DispatchTable (caminho existente) ...
                 let overloads = ctx
                     .table
                     .get_overloads(&func_name)
                     .expect("has_function retornou true");
-                let has_named = overloads.iter().any(|o| !o.param_names.is_empty());
-                if has_named {
-                    // Infere o DictLit (chaves como TextLit, valores tipados).
-                    let typed_dict = infer_expr(
-                        &expanded_args[0].node,
-                        &expanded_args[0].span,
-                        env,
-                        ctx,
-                        false,
-                    )?;
-                    // Extrai entries do TypedExpr.
-                    let typed_entries = match &typed_dict.kind {
-                        TypedExprKind::DictLit { entries, .. } => entries.clone(),
-                        _ => {
+                let _ = overloads; // já verificado acima
+                // Infere o DictLit (chaves como TextLit, valores tipados).
+                let typed_dict = infer_expr(
+                    &expanded_args[0].node,
+                    &expanded_args[0].span,
+                    env,
+                    ctx,
+                    false,
+                )?;
+                // Extrai entries do TypedExpr.
+                let typed_entries = match &typed_dict.kind {
+                    TypedExprKind::DictLit { entries, .. } => entries.clone(),
+                    _ => {
+                        return Err(MiddleError::TypeMismatch {
+                            expected: "DictLit como argumento".into(),
+                            found: format!("{:?}", typed_dict.kind),
+                            span: expanded_args[0].span.into(),
+                        });
+                    }
+                };
+                // Reordena chaves → params, produz Tuple.
+                let typed_tuple = reorder_dict_args_to_tuple(
+                    &func_name,
+                    &typed_entries,
+                    &typed_dict,
+                    ctx,
+                    *span,
+                )?;
+                // Extrai tipos dos elementos da tupla para dispatch.
+                let tuple_elements: Vec<Spanned<TypedExpr>> = match &typed_tuple.kind {
+                    TypedExprKind::Tuple { elements } => elements.clone(),
+                    _ => unreachable!("reorder_dict_args_to_tuple sempre produz Tuple"),
+                };
+                let tuple_arg_tys: Vec<Ty> =
+                    tuple_elements.iter().map(|e| e.node.ty.clone()).collect();
+
+                // Dispatch normal com os elementos da tupla como args
+                // individuais (não a tupla como um único arg).
+                if let Some(result) = try_dispatch_table(
+                    &func_name,
+                    &tuple_elements,
+                    &tuple_arg_tys,
+                    callee,
+                    span,
+                    ctx,
+                    hint,
+                ) {
+                    return result;
+                }
+            } else if has_named_in_env {
+                // Fallback: TypeEnv tem param_names (let-bound lambda).
+                // Reordena o dict usando os param_names do TypeEnv e despacha
+                // via Caminho 2 (call_indirect).
+                let param_names = env
+                    .lookup_param_names(&func_name)
+                    .expect("has_named_in_env verificado")
+                    .to_vec();
+
+                // Infere o DictLit.
+                let typed_dict = infer_expr(
+                    &expanded_args[0].node,
+                    &expanded_args[0].span,
+                    env,
+                    ctx,
+                    false,
+                )?;
+                let typed_entries = match &typed_dict.kind {
+                    TypedExprKind::DictLit { entries, .. } => entries.clone(),
+                    _ => {
+                        return Err(MiddleError::TypeMismatch {
+                            expected: "DictLit como argumento".into(),
+                            found: format!("{:?}", typed_dict.kind),
+                            span: expanded_args[0].span.into(),
+                        });
+                    }
+                };
+
+                // Reordena chaves → params manualmente usando param_names do env.
+                let mut reordered: Vec<Spanned<TypedExpr>> = Vec::with_capacity(param_names.len());
+                for pname in param_names {
+                    let found = typed_entries.iter().find_map(|(key, value)| {
+                        if let TypedExprKind::TextLit { text: k } = &key.node.kind {
+                            if k == &pname {
+                                return Some(value.clone());
+                            }
+                        }
+                        None
+                    });
+                    let val = found.ok_or_else(|| MiddleError::TypeMismatch {
+                        expected: format!("parâmetro `{pname}` para `{func_name}`"),
+                        found: "parâmetro não fornecido no dict".into(),
+                        span: expanded_args[0].span.into(),
+                    })?;
+                    reordered.push(val);
+                }
+
+                let arg_tys: Vec<Ty> = reordered.iter().map(|e| e.node.ty.clone()).collect();
+
+                // Despacha via Caminho 2 (TypeEnv — call_indirect).
+                // O codegen vê ffi_symbol=None + Ident, procura em var_map,
+                // faz call_indirect.
+                if let Some(Ty::Function(param_types, ret_ty)) = env.lookup(&func_name).cloned() {
+                    if arg_tys.len() != param_types.len() {
+                        return Err(MiddleError::ArityMismatch {
+                            expected: param_types.len(),
+                            found: arg_tys.len(),
+                            span: (*span).into(),
+                        });
+                    }
+                    for (i, (arg_ty, param_ty)) in arg_tys.iter().zip(param_types.iter()).enumerate()
+                    {
+                        if arg_ty != param_ty {
                             return Err(MiddleError::TypeMismatch {
-                                expected: "DictLit como argumento".into(),
-                                found: format!("{:?}", typed_dict.kind),
-                                span: expanded_args[0].span.into(),
+                                expected: format!("{}", param_ty),
+                                found: format!("{}", arg_ty),
+                                span: reordered[i].span.into(),
                             });
                         }
-                    };
-                    // Reordena chaves → params, produz Tuple.
-                    let typed_tuple = reorder_dict_args_to_tuple(
-                        &func_name,
-                        &typed_entries,
-                        &typed_dict,
-                        ctx,
-                        *span,
-                    )?;
-                    // Extrai tipos dos elementos da tupla para dispatch.
-                    let tuple_elements: Vec<Spanned<TypedExpr>> = match &typed_tuple.kind {
-                        TypedExprKind::Tuple { elements } => elements.clone(),
-                        _ => unreachable!("reorder_dict_args_to_tuple sempre produz Tuple"),
-                    };
-                    let tuple_arg_tys: Vec<Ty> =
-                        tuple_elements.iter().map(|e| e.node.ty.clone()).collect();
-
-                    // Dispatch normal com os elementos da tupla como args
-                    // individuais (não a tupla como um único arg).
-                    if let Some(result) = try_dispatch_table(
-                        &func_name,
-                        &tuple_elements,
-                        &tuple_arg_tys,
-                        callee,
-                        span,
-                        ctx,
-                        hint,
-                    ) {
-                        return result;
                     }
+                    let callee_typed = TypedExpr {
+                        span: callee.span,
+                        ty: Ty::Function(param_types.clone(), ret_ty.clone()),
+                        tail_pos: false,
+                        escape: EscapeTarget::Local,
+                        kind: TypedExprKind::Ident {
+                            name: func_name.clone(),
+                        },
+                    };
+                    return Ok((
+                        ret_ty.as_ref().clone(),
+                        TypedExprKind::Closure {
+                            callee: Box::new(Spanned::new(callee_typed, callee.span)),
+                            args: reordered,
+                            ffi_symbol: None,
+                        },
+                    ));
                 }
             }
         }
