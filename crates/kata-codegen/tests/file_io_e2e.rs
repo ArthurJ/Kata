@@ -64,6 +64,7 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
             acts.extend(user.actions);
             acts
         },
+        directive_registry: kata_resolution::DirectiveRegistry::new(),
     }
 }
 

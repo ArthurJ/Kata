@@ -155,4 +155,3 @@ pub use display::{
 };
 // Hash — FNV-1a para Int, Text, Rational
 pub use hash::{kata_rt_hash_int, kata_rt_hash_rational, kata_rt_hash_text};
-

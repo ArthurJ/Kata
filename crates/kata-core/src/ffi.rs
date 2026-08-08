@@ -361,8 +361,6 @@ pub enum FfiSymbol {
     SocketWriteBytes,
     /// `kata_rt_socket_close(handle) -> ()` — fecha socket (idempotente).
     SocketClose,
-
-
 }
 
 impl FfiSymbol {

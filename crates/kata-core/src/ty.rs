@@ -308,7 +308,6 @@ impl Ty {
             Ty::Socket => "Socket".into(),
         }
     }
-
 }
 
 #[cfg(test)]
@@ -484,5 +483,4 @@ mod display_tests {
             "Optional::[Int]"
         );
     }
-
 }

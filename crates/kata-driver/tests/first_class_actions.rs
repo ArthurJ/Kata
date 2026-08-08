@@ -9,7 +9,7 @@ use kata_diagnostics::MiddleError;
 use kata_inference::infer_module;
 use kata_lexer::lex;
 use kata_parser::parse;
-use kata_resolution::{ResolvedModule, load_prelude, resolve};
+use kata_resolution::{DirectiveRegistry, ResolvedModule, load_prelude, resolve};
 
 /// Combina prelude + módulo do usuário (replica do driver).
 fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModule {
@@ -55,6 +55,7 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
             acts.extend(user.actions);
             acts
         },
+        directive_registry: DirectiveRegistry::new(),
     }
 }
 

@@ -54,6 +54,7 @@ fn merge_resolved(
             acts.extend(user.actions);
             acts
         },
+        directive_registry: kata_resolution::DirectiveRegistry::new(),
     }
 }
 

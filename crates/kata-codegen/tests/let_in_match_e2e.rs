@@ -47,6 +47,7 @@ fn eval_src(src: &str) -> (i64, Ty) {
             acts.extend(user.actions);
             acts
         },
+        directive_registry: kata_resolution::DirectiveRegistry::new(),
     };
     let typed = infer_module(&module, &resolved).expect("infer deve succeed");
     let typed = monomorphize(typed);
