@@ -48,20 +48,6 @@ Os docs `TODO-*.md` foram removidos (obsoletos ou resolvidos). Pendências vivem
 
 ---
 
-## Features Não Implementadas
-
-### `@timer`
-
-**Estado:** Implementado. Caso não-TCO (stack slot) e caso TCO (canal buffer-1 com policy Drop) funcionando. 5 testes E2E passando. PRD completo em `docs/PRD-timer.md`.
-
-**Resumo:** Diretiva que mede tempo de execução e publica via `@log`. Runtime precisa `kata_rt_timer_now()` (monotonic clock), codegen com `iconst` no prólogo e subtração no epílogo. Interação com `@cache` (cache hit → timer não dispara no epílogo) e `@log` (publica delta). Estratégia de TCO via canal buffer-1 drop para não bloquear fiber.
-
-### `invoke!()` — dispatch dinâmico por string
-
-**Estado:** Mencionado no `PRD-introspection.md` como PRD separado. Não escrito.
-
----
-
 ## Fora do Escopo 1.0
 
 Mantidos no ROADMAP. Não mover para cá sem decisão explícita.
