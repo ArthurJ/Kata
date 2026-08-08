@@ -14,6 +14,7 @@
 //!  2. timer_com_topic       — @timer{topic: "..."} publica no tópico
 //!  3. timer_msg_custom      — @timer{msg: "..."} com template custom
 //!  4. now_builtin           — now!() retorna valor monotônico
+//!  5. timer_tco             — @timer em função tail-recursiva (canal buffer-1)
 
 use std::fs;
 use std::process::Command;
@@ -175,4 +176,61 @@ consumir!()"#,
         stdout.contains("delta-manual"),
         "deve imprimir 'delta-manual' — stdout: {stdout} | stderr: {stderr}"
     );
+}
+
+// ── 5. timer_tco — @timer em função tail-recursiva (canal buffer-1) ──
+
+/// `@timer` em função tail-recursiva: o `return_call` destrói frames
+/// intermediários, mas o canal buffer-1 com policy Drop preserva o
+/// start da primeira chamada (first-write-wins). O delta deve ser
+/// significativo (cadeia de 5 chamadas), não ~0.
+#[test]
+fn timer_tco() {
+    let path = write_temp_kata(
+        "timer_tco",
+        r#"@timer
+fatorial :: Int => Int
+lambda 0: 1
+lambda n: fatorial (- n 1)
+
+action chamar => Int
+    let r := fatorial 5
+    r
+
+action consumir => Int
+    let msg := log_recv!("fatorial")
+    echo!(msg)
+    0
+
+fork!(chamar, ())
+consumir!()"#,
+    );
+
+    let (stdout, stderr, code) = run_kata(&path);
+    assert_eq!(code, 0, "exit 0 — stderr: {stderr}");
+    assert!(
+        stdout.contains("fatorial:") && stdout.contains("ns"),
+        "deve imprimir 'fatorial: ...ns' — stdout: {stdout} | stderr: {stderr}"
+    );
+    // O delta NÃO deve ser ~0 — o canal preserva o start da primeira chamada.
+    // Se fosse stack slot, o delta seria ~0 (última chamada, não primeira).
+    // Extraímos o número do delta da mensagem "fatorial: {delta}ns".
+    let delta_str = stdout
+        .lines()
+        .find(|l| l.contains("fatorial:") && l.contains("ns"))
+        .and_then(|l| {
+            let start = l.find(':').map(|i| i + 1)?;
+            let end = l.rfind("ns").filter(|&e| e > start)?;
+            l[start..end].trim().parse::<i64>().ok()
+        });
+    if let Some(delta) = delta_str {
+        // SMI-tagged: o valor real é delta >> 1. Comparamos o valor bruto.
+        // Para uma cadeia de 5 chamadas, o delta deve ser > 0 (não ~0).
+        // Se fosse stack slot, o delta seria 0 ou 1 (última chamada).
+        assert!(
+            delta > 1,
+            "delta deve ser significativo (canal preserva start da primeira chamada) \
+             — delta bruto: {delta}, stdout: {stdout}"
+        );
+    }
 }

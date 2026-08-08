@@ -14,8 +14,8 @@ use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_module::{Linkage, Module};
 use kata_core::ty::Ty;
 use kata_inference::CacheSpec;
-use kata_inference::{CaptureInfo, TypedFunction, TypedLambdaClause, TypedLogSpec};
 use kata_inference::TimerSpec;
+use kata_inference::{CaptureInfo, TypedFunction, TypedLambdaClause, TypedLogSpec};
 
 use super::LowerCtx;
 use super::backend::ModuleBackend;
@@ -25,7 +25,10 @@ use super::clause::{
 };
 use super::log::inject_log;
 use super::module::{CodegenError, FuncKey, StringTable};
-use super::timer::{inject_timer_start, inject_timer_stop};
+use super::timer::{
+    has_tail_pos_call, inject_timer_start, inject_timer_start_channel, inject_timer_stop,
+    inject_timer_stop_channel,
+};
 use crate::metadata::MetadataTable;
 
 /// Bitcast na borda de retorno.
@@ -215,9 +218,18 @@ pub(crate) fn define_function_body(
         }
 
         // @timer start: injeta antes de tudo (PRD §4.7 ordem).
-        // O start é armazenado num stack slot do frame (caso não-TCO).
+        // Estratégia: se a função faz tail call (return_call) e não tem
+        // @cache, usa canal buffer-1 com policy Drop (first-write-wins)
+        // — o start vive na heap e sobrevive à destruição de frames do TCO.
+        // Caso contrário, usa stack slot (mais simples, sem overhead de canal).
+        let timer_use_channel =
+            timer_spec.is_some() && cache_spec.is_none() && has_tail_pos_call(clauses);
         let timer_start_val = if timer_spec.is_some() {
-            Some(inject_timer_start(&mut lower)?)
+            if timer_use_channel {
+                Some(inject_timer_start_channel(&mut lower)?)
+            } else {
+                Some(inject_timer_start(&mut lower)?)
+            }
         } else {
             None
         };
@@ -459,7 +471,11 @@ pub(crate) fn define_function_body(
             // @timer: stop + publish no epílogo (PRD §4.7 — após @cache insert).
             if let Some(ts) = timer_spec {
                 if let Some(start) = timer_start_val {
-                    inject_timer_stop(ts, name, start, &mut lower)?;
+                    if timer_use_channel {
+                        inject_timer_stop_channel(ts, name, start, &mut lower)?;
+                    } else {
+                        inject_timer_stop(ts, name, start, &mut lower)?;
+                    }
                 }
             }
 
