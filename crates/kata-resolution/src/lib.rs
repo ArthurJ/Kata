@@ -17,7 +17,7 @@ pub use types::*;
 
 pub use module_loader::{ImportKind, ImportedModule, LoadError, ModuleLoader, filter_exports};
 
-use directives::{extract_log_spec, extract_test_specs};
+use directives::{extract_log_spec, extract_test_specs, extract_timer_spec};
 
 use kata_ast::{Item, Module};
 use kata_core::{Ty, TypeEnv};
@@ -189,7 +189,7 @@ pub fn resolve_with_imports(
                             }
                         }
                         // Diretivas válidas em Sig mas sem processamento aqui.
-                        "builtin" | "log" => {}
+                        "builtin" | "log" | "timer" => {}
                         // Diretiva customizada — validar contra o registry.
                         other if directive_registry.contains_name(other) => {}
                         other => {
@@ -226,6 +226,7 @@ pub fn resolve_with_imports(
                 // Se tem corpo Kata (cláusulas lambda), preserva para o inference.
                 if let Some(clauses) = body {
                     let log = extract_log_spec(directives, name, "sig", &mut errors);
+                    let timer = extract_timer_spec(directives, name, "sig", &mut errors);
                     functions.push(FunctionDef {
                         name: name.clone(),
                         param_types: param_types.clone(),
@@ -233,6 +234,7 @@ pub fn resolve_with_imports(
                         clauses: clauses.clone(),
                         log,
                         cache_strategy,
+                        timer,
                         custom_directives: custom_dirs,
                     });
                 }

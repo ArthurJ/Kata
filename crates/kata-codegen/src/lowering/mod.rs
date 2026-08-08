@@ -40,6 +40,7 @@ mod module;
 mod pattern;
 mod range_iter;
 mod test_runner;
+mod timer;
 mod variant;
 
 pub(crate) use backend::ModuleBackend;

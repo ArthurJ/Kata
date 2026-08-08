@@ -45,6 +45,7 @@ mod show_synthesis;
 mod show_synthesis_helpers;
 mod show_synthesis_list;
 mod sugar;
+mod timer_builtins;
 mod variant;
 mod variant_construct;
 mod variant_qual;
@@ -497,6 +498,7 @@ fn infer_named_function(
             .map(|s| crate::typed_module::CacheSpec {
                 strategy: s.clone(),
             }),
+        timer_spec: func_def.timer.clone(),
     })
 }
 

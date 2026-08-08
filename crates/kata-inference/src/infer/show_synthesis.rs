@@ -153,6 +153,7 @@ pub(crate) fn synthesize_show_functions(
             }],
             log: None,
             cache_spec: None,
+            timer_spec: None,
         });
     }
 
@@ -249,6 +250,7 @@ pub(crate) fn synthesize_show_functions(
             }],
             log: None,
             cache_spec: None,
+            timer_spec: None,
         });
     }
 

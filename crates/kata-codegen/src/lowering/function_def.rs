@@ -15,6 +15,7 @@ use cranelift_module::{Linkage, Module};
 use kata_core::ty::Ty;
 use kata_inference::CacheSpec;
 use kata_inference::{CaptureInfo, TypedFunction, TypedLambdaClause, TypedLogSpec};
+use kata_inference::TimerSpec;
 
 use super::LowerCtx;
 use super::backend::ModuleBackend;
@@ -24,6 +25,7 @@ use super::clause::{
 };
 use super::log::inject_log;
 use super::module::{CodegenError, FuncKey, StringTable};
+use super::timer::{inject_timer_start, inject_timer_stop};
 use crate::metadata::MetadataTable;
 
 /// Bitcast na borda de retorno.
@@ -93,6 +95,7 @@ pub(crate) fn define_function_body(
     captures: &[CaptureInfo],
     log: &Option<TypedLogSpec>,
     cache_spec: &Option<CacheSpec>,
+    timer_spec: &Option<TimerSpec>,
     func_id: cranelift_module::FuncId,
     module: &mut dyn ModuleBackend,
     ffi_ids: &HashMap<String, cranelift_module::FuncId>,
@@ -211,6 +214,14 @@ pub(crate) fn define_function_body(
             bind_patterns_to_params(&clauses[0].patterns, &clause_params, &mut lower);
         }
 
+        // @timer start: injeta antes de tudo (PRD §4.7 ordem).
+        // O start é armazenado num stack slot do frame (caso não-TCO).
+        let timer_start_val = if timer_spec.is_some() {
+            Some(inject_timer_start(&mut lower)?)
+        } else {
+            None
+        };
+
         // Se @log quando Enter, injeta antes do body (prólogo).
         if let Some(TypedLogSpec::Enter { .. }) = log {
             inject_log(
@@ -219,8 +230,9 @@ pub(crate) fn define_function_body(
             )?;
         }
 
-        // Cria epilogue_block se @log Exit (para interceptar retornos).
-        let mut needs_epilogue = matches!(log, Some(TypedLogSpec::Exit { .. }));
+        // Cria epilogue_block se @log Exit ou @timer (para interceptar retornos).
+        let mut needs_epilogue =
+            matches!(log, Some(TypedLogSpec::Exit { .. })) || timer_spec.is_some();
 
         // ── @cache: cache lookup no prólogo ──
         // Para funções anotadas com @cache{strategy: "LRU"}, serializa
@@ -444,6 +456,13 @@ pub(crate) fn define_function_body(
                 );
             }
 
+            // @timer: stop + publish no epílogo (PRD §4.7 — após @cache insert).
+            if let Some(ts) = timer_spec {
+                if let Some(start) = timer_start_val {
+                    inject_timer_stop(ts, name, start, &mut lower)?;
+                }
+            }
+
             let result = coerce_return(result, ret_ty, &mut lower);
             lower.builder.ins().return_(&[result]);
         }
@@ -480,6 +499,7 @@ pub(crate) fn define_kata_function(
         &[], // funções nomeadas não têm capture
         &func.log,
         &func.cache_spec,
+        &func.timer_spec,
         func_id,
         module,
         ffi_ids,

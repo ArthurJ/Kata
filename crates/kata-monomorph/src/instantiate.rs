@@ -44,6 +44,7 @@ pub(crate) fn instantiate_function(
         clauses,
         log: orig.log.clone(),
         cache_spec: orig.cache_spec.clone(),
+        timer_spec: orig.timer_spec.clone(),
     }
 }
 

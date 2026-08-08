@@ -141,6 +141,7 @@ pub(crate) fn synthesize_enum_pred(
                     }],
                     log: None,
                     cache_spec: None,
+            timer_spec: None,
                 });
             }
         }
@@ -223,6 +224,7 @@ pub(crate) fn synthesize_enum_pred(
             }],
             log: None,
             cache_spec: None,
+            timer_spec: None,
         });
     }
 

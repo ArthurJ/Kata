@@ -89,6 +89,25 @@ pub struct LogSpec {
     pub level: Option<String>,
 }
 
+/// Especificação de timer `@timer` anotada em função nomeada.
+///
+/// Produzida no resolution a partir da diretiva `@timer`.
+/// O inference consome e propaga em `TypedFunction.timer_spec`.
+/// O codegen injeta `kata_rt_timer_now()` no prólogo (start) e
+/// `kata_rt_timer_now() - start` no epílogo (delta), publicando via
+/// `kata_rt_log_publish`.
+#[derive(Debug, Clone)]
+pub struct TimerSpec {
+    /// Tópico (canal de output). None = nome da função.
+    pub topic: Option<String>,
+    /// Se `true`, agrega min/max/mean sobre `repeat` amostras.
+    pub stats: bool,
+    /// Janela de amostras antes de publicar.
+    pub repeat: u32,
+    /// Template da mensagem. None = default conforme `stats`.
+    pub msg: Option<String>,
+}
+
 /// Definição de função nomeada com corpo Kata (não-FFI).
 ///
 /// Produzida no resolution quando `Item::Sig` tem `body = Some(clauses)`.
@@ -105,6 +124,8 @@ pub struct FunctionDef {
     /// Especificação de cache `@cache{strategy: "LRU"}`. None se a função
     /// não tem `@cache`.
     pub cache_strategy: Option<String>,
+    /// Especificação de timer `@timer`. None se a função não tem `@timer`.
+    pub timer: Option<TimerSpec>,
     /// Nomes das diretivas customizadas aplicadas a esta função (em ordem).
     /// Preenchido pelo resolution, consumido pelo `desugar_directives`.
     pub custom_directives: Vec<String>,

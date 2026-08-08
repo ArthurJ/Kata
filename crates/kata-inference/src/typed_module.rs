@@ -12,6 +12,7 @@ use kata_core::dispatch::DispatchTable;
 use kata_core::snapshot::HeapSnapshotData;
 use kata_core::ty::{Ty, TypeEnv};
 use kata_resolution::RefinedDeclInfo;
+pub use kata_resolution::TimerSpec;
 
 use crate::typed::TypedExpr;
 use crate::typed_pattern::TypedLambdaClause;
@@ -81,6 +82,8 @@ pub struct TypedFunction {
     pub log: Option<TypedLogSpec>,
     /// Especificação de cache `@cache`. None se a função não tem `@cache`.
     pub cache_spec: Option<CacheSpec>,
+    /// Especificação de timer `@timer`. None se a função não tem `@timer`.
+    pub timer_spec: Option<TimerSpec>,
 }
 
 /// Action tipada — pronta para o codegen.

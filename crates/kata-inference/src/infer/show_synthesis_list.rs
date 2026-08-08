@@ -143,6 +143,7 @@ fn build_list_show_func(
         }],
         log: None,
         cache_spec: None,
+        timer_spec: None,
     }
 }
 

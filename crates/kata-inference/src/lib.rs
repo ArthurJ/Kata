@@ -23,6 +23,7 @@ pub use typed::{
     CacheSpec, CaptureInfo, ChannelKind, FusedStage, TypedAction, TypedExpr, TypedExprKind,
     TypedFunction, TypedLogSpec, TypedModule, TypedReadMode, TypedSelectArm, TypedTestSpec,
 };
+pub use typed_module::TimerSpec;
 pub use typed_pattern::{
     TypedGuardClause, TypedLambdaClause, TypedMatchArm, TypedPattern, TypedWithBinding,
 };

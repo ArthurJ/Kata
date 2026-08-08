@@ -5,7 +5,7 @@
 
 use kata_ast::{Directive, DirectiveArg, Expr};
 
-use super::types::{DirectiveDef, DirectiveKey, Hook, LogSpec, ResolveError, Target, TestSpec};
+use super::types::{DirectiveDef, DirectiveKey, Hook, LogSpec, ResolveError, Target, TestSpec, TimerSpec};
 
 /// Extrai `TestSpec` das diretivas `@test` de uma `ActionDecl`.
 ///
@@ -252,6 +252,103 @@ pub(crate) fn extract_log_spec(
         topic,
         policy,
         level,
+    })
+}
+
+/// Extrai `TimerSpec` da diretiva `@timer` se presente.
+///
+/// `@timer{topic: "...", stats: true/false, repeat: N, msg: "..."}`
+///
+/// Todos os argumentos são opcionais. Retorna `None` se não há diretiva `@timer`.
+pub(crate) fn extract_timer_spec(
+    directives: &[Directive],
+    item_name: &str,
+    context: &'static str,
+    errors: &mut Vec<ResolveError>,
+) -> Option<TimerSpec> {
+    let timer_dir = directives.iter().find(|d| d.name == "timer")?;
+    let mut topic = None;
+    let mut stats = None;
+    let mut repeat = None;
+    let mut msg = None;
+
+    for arg in &timer_dir.args {
+        if let DirectiveArg::Named { key, value } = arg {
+            match key.as_str() {
+                "topic" => {
+                    if let Expr::TextLit { text } = &value.node {
+                        topic = Some(text.clone());
+                    } else {
+                        errors.push(ResolveError::UnknownDirective {
+                            name: "timer".into(),
+                            context,
+                            item_name: format!("{item_name}: topic deve ser Text"),
+                        });
+                    }
+                }
+                "stats" => {
+                    if let Expr::IntLit { text } = &value.node {
+                        // Bool true/false parseado como IntLit 1/0 em Kata.
+                        stats = Some(text == "1");
+                    } else if let Expr::TextLit { text } = &value.node {
+                        stats = Some(text == "true");
+                    } else {
+                        errors.push(ResolveError::UnknownDirective {
+                            name: "timer".into(),
+                            context,
+                            item_name: format!("{item_name}: stats deve ser Bool"),
+                        });
+                    }
+                }
+                "repeat" => {
+                    if let Expr::IntLit { text } = &value.node {
+                        if let Ok(n) = text.parse::<u32>() {
+                            repeat = Some(n);
+                        } else {
+                            errors.push(ResolveError::UnknownDirective {
+                                name: "timer".into(),
+                                context,
+                                item_name: format!("{item_name}: repeat inválido: {text}"),
+                            });
+                        }
+                    } else {
+                        errors.push(ResolveError::UnknownDirective {
+                            name: "timer".into(),
+                            context,
+                            item_name: format!("{item_name}: repeat deve ser Int"),
+                        });
+                    }
+                }
+                "msg" => {
+                    if let Expr::TextLit { text } = &value.node {
+                        msg = Some(text.clone());
+                    } else {
+                        errors.push(ResolveError::UnknownDirective {
+                            name: "timer".into(),
+                            context,
+                            item_name: format!("{item_name}: msg deve ser Text"),
+                        });
+                    }
+                }
+                other => {
+                    errors.push(ResolveError::UnknownDirective {
+                        name: "timer".into(),
+                        context,
+                        item_name: format!("{item_name}: chave desconhecida: {other}"),
+                    });
+                }
+            }
+        }
+    }
+
+    let stats = stats.unwrap_or(false);
+    let repeat = repeat.unwrap_or(if stats { 10 } else { 1 });
+
+    Some(TimerSpec {
+        topic,
+        stats,
+        repeat,
+        msg,
     })
 }
 
