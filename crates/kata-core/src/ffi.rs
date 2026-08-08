@@ -362,11 +362,7 @@ pub enum FfiSymbol {
     /// `kata_rt_socket_close(handle) -> ()` — fecha socket (idempotente).
     SocketClose,
 
-    // ── Reflection (fn-reflection) ─────────────────────────
-    /// `kata_rt_register_fn_meta_table(ptr, count) -> ()` — registra sidecar table.
-    FnMetaRegister,
-    /// `kata_rt_fn_meta_lookup(fn_ptr, field) -> i64` — binary search na sidecar table.
-    FnMetaLookup,
+
 }
 
 impl FfiSymbol {
@@ -561,9 +557,6 @@ impl FfiSymbol {
             FfiSymbol::SocketWriteText => "kata_rt_socket_write_text",
             FfiSymbol::SocketWriteBytes => "kata_rt_socket_write_bytes",
             FfiSymbol::SocketClose => "kata_rt_socket_close",
-            // Reflection
-            FfiSymbol::FnMetaRegister => "kata_rt_register_fn_meta_table",
-            FfiSymbol::FnMetaLookup => "kata_rt_fn_meta_lookup",
         }
     }
 
@@ -743,9 +736,6 @@ impl FfiSymbol {
             FfiSymbol::SocketWriteText => Ty::int(),
             FfiSymbol::SocketWriteBytes => Ty::int(),
             FfiSymbol::SocketClose => Ty::Unit,
-            // Reflection — FnMetaRegister retorna Unit, FnMetaLookup retorna i64
-            FfiSymbol::FnMetaRegister => Ty::Unit,
-            FfiSymbol::FnMetaLookup => Ty::int(),
         }
     }
 
@@ -940,9 +930,6 @@ impl FfiSymbol {
             FfiSymbol::SocketWriteText,
             FfiSymbol::SocketWriteBytes,
             FfiSymbol::SocketClose,
-            // Reflection
-            FfiSymbol::FnMetaRegister,
-            FfiSymbol::FnMetaLookup,
         ];
         all.iter().copied().find(|s| s.symbol_name() == name)
     }

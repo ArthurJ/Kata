@@ -408,7 +408,6 @@ impl Parser {
                 // `t.(-1)` — índice negativo entre parênteses.
                 // `(` após `.` pode conter:
                 //   - `[-] IntLit` → DotIndex::Int (indexing numérico)
-                //   - `Type1 Type2 ...` → DotIndex::Type (desambiguação de overload)
                 Token::LParen => {
                     self.advance(); // consume `(`
                     match self.peek().clone() {
@@ -434,22 +433,7 @@ impl Parser {
                                 _ => return Err(self.error("inteiro após `-`")),
                             }
                         }
-                        // `.(Int Int)` — desambiguação de overload por tipos.
-                        // O primeiro token é um Ident que não é "-" → é um tipo.
-                        Token::Ident(_) => {
-                            let mut types = Vec::new();
-                            // Ler TypeExprs separados por espaço até `)`.
-                            loop {
-                                let ty = self.parse_type_expr()?;
-                                types.push(ty);
-                                if matches!(self.peek(), Token::RParen) {
-                                    break;
-                                }
-                            }
-                            self.expect(&Token::RParen, "`)`")?;
-                            DotIndex::Type(types)
-                        }
-                        _ => return Err(self.error("inteiro, `-inteiro` ou tipos dentro de `.()`")),
+                        _ => return Err(self.error("inteiro ou `-inteiro` dentro de `.()`")),
                     }
                 }
                 // `expr.[start..end]` — slice access (DotIndex::Range).

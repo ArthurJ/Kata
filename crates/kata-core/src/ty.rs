@@ -309,14 +309,6 @@ impl Ty {
         }
     }
 
-    /// Serializa `Ty` para texto — alias de `display()`.
-    ///
-    /// Usado pelo PRD de reflexão (`f.param_types`, `f.return_type`) para
-    /// produzir a representação textual dos tipos na sidecar table e nos
-    /// casos estáticos do typeck.
-    pub fn to_text(&self) -> String {
-        self.display()
-    }
 }
 
 #[cfg(test)]
@@ -493,12 +485,4 @@ mod display_tests {
         );
     }
 
-    #[test]
-    fn display_to_text_alias() {
-        assert_eq!(Ty::int().to_text(), "Int");
-        assert_eq!(
-            Ty::Function(vec![Ty::int()], Box::new(Ty::text())).to_text(),
-            "Lambda(Int -> Text)"
-        );
-    }
 }
