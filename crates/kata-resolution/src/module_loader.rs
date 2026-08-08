@@ -178,7 +178,7 @@ impl ModuleLoader {
             .unwrap_or_default();
         let resolved = resolve_with_origin(&module, &module_name).map_err(|e| {
             self.loading.remove(path);
-            LoadError::ResolveError(format!("{}", crate::format_resolve_errors(&e)))
+            LoadError::ResolveError(crate::format_resolve_errors(&e).to_string())
         })?;
 
         // Sub-módulos precisam do prelude: Int, Float, +, etc.

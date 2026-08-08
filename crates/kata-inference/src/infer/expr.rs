@@ -41,6 +41,7 @@ pub(crate) struct DeferredLambda {
     pub body: Box<Spanned<Expr>>,
     pub guards: Vec<GuardClause>,
     pub with_bindings: Vec<WithBinding>,
+    #[allow(dead_code)]
     pub span: Span,
 }
 

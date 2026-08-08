@@ -202,77 +202,75 @@ fn parse_apply_impl(parser: &mut Parser, as_arg: bool) -> Result<Spanned<Expr>, 
     // um via `parse_arg` recursivo (permite sub-aplicações como
     // `+ 5 * 2 2` → arg2 = `Apply(*, [2, 2])`). Após coletar N args, se o
     // próximo token `can_start_expr()` e não é `StmtSep`/`Eof` → erro.
-    if let Some(ref arities) = parser.arities {
-        if let Expr::Ident { ref name } = callee.node {
-            if let Some(&arity) = arities.get(name) {
-                // ── Dict dispatch `f{...}` em modo arity-aware ──
-                // `soma{"a": 3 "b": 4}` → Apply com DictLit como único arg.
-                // A inferência (Fase 2) detecta e faz reorder_dict_args_to_tuple.
-                // Não coleta N args posicionais — o DictLit carrega todos os params.
-                // Só em top-level (as_arg=false): em posição de argumento,
-                // `Ident {` é um valor Ident seguido de um DictLit como
-                // próximo argumento posicional, não dict dispatch.
-                if !as_arg && matches!(parser.peek(), Token::LBrace) {
-                    let dict = parser.parse_brace_lit()?;
-                    let span = callee.span.cover(dict.span);
-                    return Ok(Spanned::new(
-                        Expr::Apply {
-                            callee: Box::new(callee),
-                            args: vec![dict],
-                        },
-                        span,
-                    ));
-                }
-                let mut args = Vec::with_capacity(arity);
-                for i in 0..arity {
-                    if !parser.can_start_expr() {
-                        // Se coletamos 0 args e o próximo token não inicia
-                        // expr, o Ident é valor (referência), não aplicação.
-                        // Ex: `(f)` em `map (f) [1 2 3]` — f tem aridade 1
-                        // mas `)` não inicia expr → f é valor.
-                        if i == 0 {
-                            return Ok(callee);
-                        }
-                        return Err(FrontendError::UnexpectedToken {
-                            expected: format!(
-                                "argumento #{} para `{}` (aridade padrão {})",
-                                i + 1,
-                                name,
-                                arity
-                            ),
-                            found: parser.peek().to_string(),
-                            span: kata_diagnostics::MietteSpan(parser.peek_span()),
-                        });
-                    }
-                    args.push(parse_arg(parser)?);
-                }
-                // Após coletar N args, verificar excesso posicional.
-                if parser.can_start_expr() && !matches!(parser.peek(), Token::StmtSep | Token::Eof)
-                {
-                    let span = callee.span.cover(parser.peek_span());
-                    return Err(FrontendError::UnexpectedToken {
-                        expected: format!(
-                            "`{}` tem aridade padrão {} — excesso de argumentos posicionais. \
-                             Use `{}{{...}}` para aridade diferente ou separe com quebra de linha.",
-                            name, arity, name
-                        ),
-                        found: parser.peek().to_string(),
-                        span: kata_diagnostics::MietteSpan(span),
-                    });
-                }
-                if args.is_empty() {
+    if let Some(ref arities) = parser.arities
+        && let Expr::Ident { ref name } = callee.node
+        && let Some(&arity) = arities.get(name)
+    {
+        // ── Dict dispatch `f{...}` em modo arity-aware ──
+        // `soma{"a": 3 "b": 4}` → Apply com DictLit como único arg.
+        // A inferência (Fase 2) detecta e faz reorder_dict_args_to_tuple.
+        // Não coleta N args posicionais — o DictLit carrega todos os params.
+        // Só em top-level (as_arg=false): em posição de argumento,
+        // `Ident {` é um valor Ident seguido de um DictLit como
+        // próximo argumento posicional, não dict dispatch.
+        if !as_arg && matches!(parser.peek(), Token::LBrace) {
+            let dict = parser.parse_brace_lit()?;
+            let span = callee.span.cover(dict.span);
+            return Ok(Spanned::new(
+                Expr::Apply {
+                    callee: Box::new(callee),
+                    args: vec![dict],
+                },
+                span,
+            ));
+        }
+        let mut args = Vec::with_capacity(arity);
+        for i in 0..arity {
+            if !parser.can_start_expr() {
+                // Se coletamos 0 args e o próximo token não inicia
+                // expr, o Ident é valor (referência), não aplicação.
+                // Ex: `(f)` em `map (f) [1 2 3]` — f tem aridade 1
+                // mas `)` não inicia expr → f é valor.
+                if i == 0 {
                     return Ok(callee);
                 }
-                let span = callee.span.cover(args.last().expect("non-empty args").span);
-                return Ok(Spanned::new(
-                    Expr::Apply {
-                        callee: Box::new(callee),
-                        args,
-                    },
-                    span,
-                ));
+                return Err(FrontendError::UnexpectedToken {
+                    expected: format!(
+                        "argumento #{} para `{}` (aridade padrão {})",
+                        i + 1,
+                        name,
+                        arity
+                    ),
+                    found: parser.peek().to_string(),
+                    span: kata_diagnostics::MietteSpan(parser.peek_span()),
+                });
             }
+            args.push(parse_arg(parser)?);
         }
+        // Após coletar N args, verificar excesso posicional.
+        if parser.can_start_expr() && !matches!(parser.peek(), Token::StmtSep | Token::Eof) {
+            let span = callee.span.cover(parser.peek_span());
+            return Err(FrontendError::UnexpectedToken {
+                expected: format!(
+                    "`{}` tem aridade padrão {} — excesso de argumentos posicionais. \
+                         Use `{}{{...}}` para aridade diferente ou separe com quebra de linha.",
+                    name, arity, name
+                ),
+                found: parser.peek().to_string(),
+                span: kata_diagnostics::MietteSpan(span),
+            });
+        }
+        if args.is_empty() {
+            return Ok(callee);
+        }
+        let span = callee.span.cover(args.last().expect("non-empty args").span);
+        return Ok(Spanned::new(
+            Expr::Apply {
+                callee: Box::new(callee),
+                args,
+            },
+            span,
+        ));
     }
 
     // ── Greedy mode (fallback) ──────────────────────────────────
