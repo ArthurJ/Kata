@@ -35,6 +35,7 @@ pub(crate) mod snapshot;
 pub(crate) mod socket;
 pub(crate) mod sum;
 pub(crate) mod text;
+pub(crate) mod timer;
 
 // Re-exports convenientes para uso interno (não C-ABI).
 // Símbolos não consumidos cross-crate foram removidos (to_rational, float_to_rat,
@@ -132,6 +133,7 @@ pub use channel::{
 // reset_log e snapshot_log_config — rebaixados para pub(crate): zero
 // consumidores cross-crate (apenas scheduler.rs intra-crate os chama).
 pub use log::{kata_rt_log_config, kata_rt_log_publish, kata_rt_log_recv};
+pub use timer::kata_rt_timer_now;
 // Marshalling (to_bytes/from_bytes para spawn!)
 pub use marshal::{TypeShape, kata_rt_from_bytes, kata_rt_to_bytes, register_type_table};
 // IPC (fork + pipe para spawn!)

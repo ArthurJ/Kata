@@ -13,7 +13,8 @@
 //! - `TAG_BROADCAST_RX` (0b11) — receiver de broadcast.
 
 use super::{
-    BroadcastInner, BroadcastReceiver, ChannelInner, QueueInner, TAG_IPC_CHANNEL, ptr_of, tag_of,
+    BroadcastInner, BroadcastReceiver, ChannelInner, Policy, QueueInner, TAG_IPC_CHANNEL, ptr_of,
+    tag_of,
 };
 
 /// Verifica se um handle é de canal IPC (tag TAG_IPC_CHANNEL).
@@ -105,8 +106,15 @@ fn try_send(handle: i64, value: i64) -> i64 {
                     .lock()
                     .expect("mutex never poisoned: single-threaded cooperative runtime");
                 if buffer.len() >= inner.capacity {
-                    // Buffer cheio.
-                    WOULD_BLOCK
+                    // Buffer cheio — despacha por policy.
+                    match inner.policy {
+                        Policy::Block => WOULD_BLOCK,
+                        Policy::Drop => {
+                            // First-write-wins: descarta o valor novo,
+                            // mantém o existente. Não bloqueia.
+                            OK
+                        }
+                    }
                 } else {
                     buffer.push_back(value);
                     inner.not_empty.notify_one();

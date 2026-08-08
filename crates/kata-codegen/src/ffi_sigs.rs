@@ -547,10 +547,11 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
             sig.params.push(AbiParam::new(I64)); // arena
             sig.returns.push(AbiParam::new(I64)); // handle
         }
-        // queue_create: (arena, capacity) -> handle
+        // queue_create: (arena, capacity, policy) -> handle
         FfiSymbol::QueueCreate => {
             sig.params.push(AbiParam::new(I64)); // arena
             sig.params.push(AbiParam::new(I64)); // capacity
+            sig.params.push(AbiParam::new(I64)); // policy (0=Block, 1=Drop)
             sig.returns.push(AbiParam::new(I64)); // handle
         }
         // broadcast_create: (arena) -> handle
@@ -983,6 +984,11 @@ pub(crate) fn ffi_signature(sym: FfiSymbol) -> Signature {
         // socket_close: (handle) -> void
         FfiSymbol::SocketClose => {
             sig.params.push(AbiParam::new(I64)); // handle
+        }
+        // ── Timer ──
+        // timer_now: () -> i64 (nanossegundos do clock monotônico)
+        FfiSymbol::TimerNow => {
+            sig.returns.push(AbiParam::new(I64)); // nanossegundos
         }
     }
 

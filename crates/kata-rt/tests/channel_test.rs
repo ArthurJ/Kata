@@ -70,7 +70,7 @@ fn channel_send_full_returns_would_block() {
 #[test]
 fn queue_create_returns_valid_handle() {
     let arena = kata_rt_arena_create();
-    let handle = kata_rt_queue_create(arena, 3);
+    let handle = kata_rt_queue_create(arena, 3, 0);
     assert_ne!(handle, 0, "handle não deve ser 0");
     assert_eq!(handle & 0b11, 0b01, "tag deve ser 0b01 (queue)");
     kata_rt_arena_destroy(arena);
@@ -79,7 +79,7 @@ fn queue_create_returns_valid_handle() {
 #[test]
 fn queue_send_recv_buffered() {
     let arena = kata_rt_arena_create();
-    let handle = kata_rt_queue_create(arena, 3);
+    let handle = kata_rt_queue_create(arena, 3, 0);
     // Múltiplos sends cabem no buffer sem bloquear.
     assert_eq!(kata_rt_channel_send(handle, 1), OK);
     assert_eq!(kata_rt_channel_send(handle, 2), OK);
@@ -94,7 +94,7 @@ fn queue_send_recv_buffered() {
 #[test]
 fn queue_full_returns_would_block() {
     let arena = kata_rt_arena_create();
-    let handle = kata_rt_queue_create(arena, 2);
+    let handle = kata_rt_queue_create(arena, 2, 0);
     assert_eq!(kata_rt_channel_send(handle, 1), OK);
     assert_eq!(kata_rt_channel_send(handle, 2), OK);
     assert_eq!(
@@ -108,7 +108,7 @@ fn queue_full_returns_would_block() {
 #[test]
 fn queue_empty_returns_would_block() {
     let arena = kata_rt_arena_create();
-    let handle = kata_rt_queue_create(arena, 2);
+    let handle = kata_rt_queue_create(arena, 2, 0);
     assert_eq!(
         kata_rt_channel_recv(handle),
         WOULD_BLOCK,
@@ -120,7 +120,7 @@ fn queue_empty_returns_would_block() {
 #[test]
 fn queue_recv_makes_space_for_send() {
     let arena = kata_rt_arena_create();
-    let handle = kata_rt_queue_create(arena, 1);
+    let handle = kata_rt_queue_create(arena, 1, 0);
     assert_eq!(kata_rt_channel_send(handle, 1), OK);
     assert_eq!(kata_rt_channel_send(handle, 2), WOULD_BLOCK);
     // Após recv, há espaço.

@@ -90,10 +90,27 @@ pub(crate) struct ChannelInner {
     receiver_ready: Condvar,
 }
 
-/// Fila bufferizada — bloqueia se buffer cheio.
+/// Política de envio quando o buffer está cheio.
+///
+/// `Block` — bloqueia o fiber até o consumidor liberar espaço (semântica
+/// original de queue bounded). `Drop` — descarta o valor e retorna OK sem
+/// bloquear (first-write-wins: o valor existente no buffer é mantido).
+///
+/// Usado pelo `@timer` TCO: o canal interno buffer-1 com policy Drop
+/// preserva o timestamp da chamada mais externa através da destruição
+/// de frames do `return_call`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Policy {
+    Block,
+    Drop,
+}
+
+/// Fila bufferizada — bloqueia se buffer cheio (policy Block) ou descarta
+/// (policy Drop).
 pub(crate) struct QueueInner {
     buffer: Mutex<VecDeque<i64>>,
     capacity: usize,
+    policy: Policy,
     not_full: Condvar,
     not_empty: Condvar,
 }
@@ -177,16 +194,22 @@ pub extern "C" fn kata_rt_channel_create(arena: i64) -> i64 {
 /// Cria fila bufferizada com capacidade `capacity`. Aloca `QueueInner`
 /// na arena do caller. Retorna handle com tag `0b01`.
 ///
+/// `policy` controla o comportamento quando o buffer está cheio:
+/// - `0` = Block (bloqueia o fiber até o consumidor liberar espaço)
+/// - `1` = Drop (descarta o valor novo, mantém o existente — first-write-wins)
+///
 /// # Safety
 /// `arena` deve ser válido. `capacity` deve ser > 0.
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_queue_create(arena: i64, capacity: i64) -> i64 {
+pub extern "C" fn kata_rt_queue_create(arena: i64, capacity: i64, policy: i64) -> i64 {
     if capacity <= 0 {
         return 0;
     }
+    let policy = if policy == 1 { Policy::Drop } else { Policy::Block };
     let inner = QueueInner {
         buffer: Mutex::new(VecDeque::new()),
         capacity: capacity as usize,
+        policy,
         not_full: Condvar::new(),
         not_empty: Condvar::new(),
     };
@@ -315,7 +338,7 @@ pub extern "C" fn kata_rt_ipc_queue_create(arena: i64, cap: i64, type_id: i64) -
     }
 
     // 3. Criar in-process queue.
-    let queue_handle = kata_rt_queue_create(arena, cap);
+    let queue_handle = kata_rt_queue_create(arena, cap, 0);
     if queue_handle == 0 {
         return 0;
     }

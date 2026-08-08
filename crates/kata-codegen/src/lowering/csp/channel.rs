@@ -145,7 +145,8 @@ pub(crate) fn lower_channel_create(
             }
             // In-process buffered (não cross_process).
             let fref = get_ffi(ctx, "kata_rt_queue_create")?;
-            let inst = ctx.builder.ins().call(fref, &[arena, cap_val]);
+            let policy_val = ctx.builder.ins().iconst(I64, 0); // Block (default)
+            let inst = ctx.builder.ins().call(fref, &[arena, cap_val, policy_val]);
             ctx.builder.inst_results(inst)[0]
         }
         ChannelKind::Broadcast => {

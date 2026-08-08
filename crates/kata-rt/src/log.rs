@@ -15,22 +15,31 @@ use std::os::raw::c_char;
 
 use crate::arena::kata_rt_arena_create;
 use crate::channel::{
-    kata_rt_broadcast_create, kata_rt_broadcast_receiver_create, kata_rt_channel_recv,
+    Policy, kata_rt_broadcast_create, kata_rt_broadcast_receiver_create, kata_rt_channel_recv,
     kata_rt_channel_send, kata_rt_queue_create,
 };
 
 // ── LogConfig TLS ───────────────────────────────────────────
 //
 // Defaults de logging para o fiber atual. Herdado via snapshot no
-// `kata_rt_spawn` (copia do pai para o filho). `topic` e `policy` são String
-// owned (clone no spawn — aceitável pois não é hot path). `level` é i64 (tag
-// do enum LogLevel: 0=Debug, 1=Info, 2=Warn, 3=Error).
+// `kata_rt_spawn` (copia do pai para o filho). `topic` é String owned
+// (clone no spawn — aceitável pois não é hot path). `policy` é enum
+// `Policy` (Block ou Drop). `level` é i64 (tag do enum LogLevel:
+// 0=Debug, 1=Info, 2=Warn, 3=Error).
+
+/// Parse policy de string ("block" | "drop"). Default: Drop.
+fn parse_policy(s: &str) -> Policy {
+    match s {
+        "block" => Policy::Block,
+        _ => Policy::Drop,
+    }
+}
 
 /// Config de logging de um fiber.
 #[derive(Clone, Default)]
 pub(crate) struct LogConfig {
     pub(crate) topic: Option<String>,
-    pub(crate) policy: Option<String>,
+    pub(crate) policy: Option<Policy>,
     pub(crate) level: Option<i64>,
 }
 
@@ -107,7 +116,7 @@ fn read_text(ptr: i64) -> String {
 ///
 /// O canal é alocado na arena raiz do scheduler (obtida via
 /// `kata_rt_arena_create`). O registry guarda o handle.
-fn get_or_create_topic(topic: &str, policy: &str) -> i64 {
+fn get_or_create_topic(topic: &str, policy: Policy) -> i64 {
     TOPIC_REGISTRY.with(|r| {
         let registry = r.borrow();
         if let Some(&handle) = registry.get(topic) {
@@ -116,22 +125,23 @@ fn get_or_create_topic(topic: &str, policy: &str) -> i64 {
         drop(registry);
         // Cria o canal na arena raiz.
         let arena = kata_rt_arena_create();
-        let handle = if policy == "block" {
-            kata_rt_queue_create(arena, 1)
-        } else {
-            // "drop" ou default → Broadcast
-            let bh = kata_rt_broadcast_create(arena);
-            // Eagerly cria um receiver para o tópico Broadcast, garantindo
-            // que mensagens publicadas antes de qualquer log_recv! sejam
-            // visíveis. O receiver começa com last_seen_version = 0 (version
-            // atual = 0), então vê todas as mensagens futuras.
-            if bh != 0 {
-                let rx = kata_rt_broadcast_receiver_create(arena, bh);
-                RECEIVER_REGISTRY.with(|rr| {
-                    rr.borrow_mut().insert(topic.to_string(), rx);
-                });
+        let handle = match policy {
+            Policy::Block => kata_rt_queue_create(arena, 1, 0),
+            Policy::Drop => {
+                // Broadcast (fire-and-forget)
+                let bh = kata_rt_broadcast_create(arena);
+                // Eagerly cria um receiver para o tópico Broadcast, garantindo
+                // que mensagens publicadas antes de qualquer log_recv! sejam
+                // visíveis. O receiver começa com last_seen_version = 0 (version
+                // atual = 0), então vê todas as mensagens futuras.
+                if bh != 0 {
+                    let rx = kata_rt_broadcast_receiver_create(arena, bh);
+                    RECEIVER_REGISTRY.with(|rr| {
+                        rr.borrow_mut().insert(topic.to_string(), rx);
+                    });
+                }
+                bh
             }
-            bh
         };
         r.borrow_mut().insert(topic.to_string(), handle);
         handle
@@ -170,13 +180,13 @@ pub extern "C" fn kata_rt_log_publish(
     };
 
     let policy = if policy_ptr != 0 {
-        read_text(policy_ptr)
+        parse_policy(&read_text(policy_ptr))
     } else {
         LOG_CONFIG.with(|c| {
             c.borrow()
                 .as_ref()
-                .and_then(|cfg| cfg.policy.clone())
-                .unwrap_or_else(|| "drop".to_string())
+                .and_then(|cfg| cfg.policy)
+                .unwrap_or(Policy::Drop)
         })
     };
 
@@ -192,7 +202,7 @@ pub extern "C" fn kata_rt_log_publish(
         return 0;
     }
 
-    let handle = get_or_create_topic(&topic, &policy);
+    let handle = get_or_create_topic(&topic, policy);
     // Envia a mensagem no canal. Para "block", channel_send suspende se cheio.
     // Para "drop" (Broadcast), channel_send é fire-and-forget.
     let _ = kata_rt_channel_send(handle, msg);
@@ -266,7 +276,7 @@ pub extern "C" fn kata_rt_log_config(topic_ptr: i64, policy_ptr: i64, level: i64
             cfg.topic = Some(read_text(topic_ptr));
         }
         if policy_ptr != 0 {
-            cfg.policy = Some(read_text(policy_ptr));
+            cfg.policy = Some(parse_policy(&read_text(policy_ptr)));
         }
         cfg.level = Some(level);
         *c.borrow_mut() = Some(cfg);
