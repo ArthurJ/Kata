@@ -22,6 +22,44 @@ Os docs `TODO-*.md` foram removidos (obsoletos ou resolvidos). Pendências vivem
 
 **Impacto:** Médio. Testes negativos são silenciosamente pulados — o programador escreve o teste, o runner diz `[PENDENTE]`, mas a validação nunca acontece.
 
+### 2. SIGCHLD handler — reap automático de processos filhos de `spawn!` ✅
+
+**Resolvido.** Instalado `sigaction(SIGCHLD, SIG_IGN, SA_RESTART)` antes do
+`fork()` via `std::sync::Once` em `kata_rt_spawn_process`. O kernel descarta
+o status do child automaticamente — nenhum zombie é criado. `SIG_IGN` para
+SIGPIPE consolidado no mesmo `Once` (antes era instalado após o fork em cada
+`spawn!`); o child herda ambos via `fork()`.
+
+`spawn!` é fire-and-forget por design — toda comunicação entre actions é por
+canais, nunca por join/waitpid. `SIG_IGN` é a solução definitiva.
+
+**Arquivos:** `crates/kata-rt/src/ipc.rs:18-47` (handler), `ipc.rs:73-77` (call site)
+
+### 3. First-class Action reference ambígua — resolution por tipo esperado
+
+**Estado:** Actions são first-class (PRD-first-class-actions ✅), mas
+quando uma Action com múltiplos overloads é referenciada como valor (sem
+`!`), o typeck pega silenciosamente o primeiro overload em vez de usar o
+hint de tipo esperado para desambiguar. O PRD §12 (Riscos) prevê este
+caso: "Primeira versão: erro se ambíguo. Depois: resolution por tipo
+esperado do param." A implementação atual não faz nem uma coisa nem a
+outra — pega `action_overloads[0]` sem verificar ambiguidade.
+
+**O que falta:** Em `expr.rs` (caminho 3 — Ident como first-class Action
+ref), quando `action_overloads.len() > 1`:
+1. Tentar desambiguar pelo `hint: Option<&Ty>` — se o hint é
+   `Ty::Action(params, ret)`, selecionar o overload compatível
+2. Se não há hint ou há múltiplos compatíveis, emitir erro de ambiguidade
+   (não pegar o primeiro silenciosamente)
+
+**Arquivos:** `crates/kata-inference/src/infer/expr.rs:170-185`
+
+**Impacto:** Baixo. O caso só surge com Actions overloadadas (como `read`
+e `write` do prelude) referenciadas como valor first-class — algo raro na
+prática. Actions de assinatura única (o caso comum em `fork!`) funcionam
+corretamente. Overloading de Actions na chamada (com `!`) já funciona
+via DispatchTable.
+
 ---
 
 ## Migração de Exemplos

@@ -15,8 +15,40 @@
 //! (com cooperação, yield, select) em vez de chamadas diretas de função.
 //! O child preserva os dados herdados via COW (arenas, type table, código JIT).
 
+use std::sync::Once;
+
 use crate::fiber::clear_suspend_tls;
 use crate::scheduler::{reset_scheduler_tls, reset_yield_tls};
+
+/// Instala `SIG_IGN` para SIGCHLD e SIGPIPE uma única vez, antes do primeiro
+/// `fork()`.
+///
+/// **SIGCHLD:** o kernel descarta o status do child automaticamente — nenhum
+/// zombie é criado. Sem handler, sem thread, sem loop de `waitpid`. Compatível
+/// com o scheduler single-threaded (o kernel descarta sem invocar handler,
+/// eliminando risco de reentrância).
+///
+/// `spawn!` é fire-and-forget por design — toda comunicação entre actions é
+/// por canais, nunca por join/waitpid. Portanto `SIG_IGN` é a solução
+/// definitiva, não provisória.
+///
+/// **SIGPIPE:** write em pipe cujo reader morreu retorna `EPIPE` em vez de
+/// matar o processo. Instalado antes do `fork()` para que o child herde
+/// ambos os dispositions — o child faz IPC via pipes e precisa do mesmo
+/// comportamento.
+///
+/// `SA_RESTART` evita `EINTR` em syscalls bloqueantes do parent.
+static INSTALL_SIGNAL_HANDLERS: Once = Once::new();
+
+fn ensure_signal_handlers() {
+    INSTALL_SIGNAL_HANDLERS.call_once(|| unsafe {
+        let mut sa: libc::sigaction = std::mem::zeroed();
+        sa.sa_sigaction = libc::SIG_IGN;
+        sa.sa_flags = libc::SA_RESTART;
+        libc::sigaction(libc::SIGCHLD, &sa, std::ptr::null_mut());
+        libc::sigaction(libc::SIGPIPE, &sa, std::ptr::null_mut());
+    });
+}
 
 /// Spawn um processo OS separado para executar uma Action.
 ///
@@ -39,6 +71,11 @@ use crate::scheduler::{reset_scheduler_tls, reset_yield_tls};
 /// - `arena_handle` deve ser um handle de arena válido.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_spawn_process(fn_ptr: i64, args_ptr: i64, arena_handle: i64) -> i64 {
+    // Instalar SIG_IGN para SIGCHLD e SIGPIPE antes do fork(). Idempotente
+    // via Once — programas que nunca fazem spawn! não são afetados.
+    // O child herda ambos os dispositions via fork().
+    ensure_signal_handlers();
+
     // 1. fork()
     let pid = unsafe { libc::fork() };
 
@@ -87,19 +124,9 @@ pub extern "C" fn kata_rt_spawn_process(fn_ptr: i64, args_ptr: i64, arena_handle
         _pid => {
             // ── PARENT ─────────────────────────────────────
             // Fire-and-forget — não espera o child, não lê pipe.
-            // Reap zombie assincronamente (SIGCHLD ou waitpid posterior).
-            // Por ora, não reap aqui — o processo child é short-lived
-            // e o parent pode continuar executando.
-            // TODO: instalar handler SIGCHLD para reap automático.
-
-            // Ignorar SIGPIPE no parent: se o child morrer antes de ler
-            // todos os dados do pipe, um write subsequente gera SIGPIPE e
-            // mataria o parent. SIG_IGN faz o write retornar EPIPE em vez
-            // de matar o processo — o runtime trata EPIPE como erro
-            // recuperável (WOULD_BLOCK ou valor sentinela).
-            unsafe {
-                libc::signal(libc::SIGPIPE, libc::SIG_IGN);
-            }
+            // SIGCHLD e SIGPIPE já estão em SIG_IGN (instalados antes do
+            // fork via ensure_signal_handlers). O kernel descarta o status
+            // do child automaticamente — nenhum zombie acumula.
             0
         }
     }
