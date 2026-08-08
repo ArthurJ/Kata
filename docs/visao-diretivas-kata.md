@@ -1,11 +1,11 @@
 # Diretivas Kata — Visão de Design
 
-**Status:** 🧭 Exploração
-**Data:** 2026-08-04
-**Pré-requisito:** PRD de Reflexão de Funções (`docs/PRD-fn-reflection.md`) — não implementado
-**Não é um PRD:** Este documento captura a ideia atual e as arestas em aberto.
-Muitos pontos não podem ser definidos até que a reflexão de funções exista
-no compilador e possamos validar as hipóteses contra código real.
+**Status:** 📦 Substituído — ideias refinadas em `docs/PRD-diretivas.md`
+**Data:** 2026-08-04 (exploração), 2026-08-07 (PRD escrito)
+**Substituído por:** `docs/PRD-diretivas.md` — especificação ativa com fases, DoDs e comandos de verificação.
+**Pré-requisito original:** PRD de Reflexão de Funções (`docs/PRD-fn-reflection.md`) — **obsoleto**. As variáveis de reflexão `_name`, `_arity`, etc. substituem a sidecar table e o `kata_rt_fn_meta_lookup`.
+**Não é um PRD:** Este documento captura a ideia original e as arestas em aberto.
+As decisões fechadas estão marcadas inline com ✅ e referenciam o PRD.
 
 ---
 
@@ -521,134 +521,125 @@ compilador real.
 
 ### A1. `_args`/`_return` e polimorfismo
 
-Sem `pass`, o tipo de `_args` e `_return` não é declarado na assinatura da
-diretiva — é inferido do uso no corpo. Se o corpo faz `format("{}", _return)`,
+✅ **Parcialmente resolvido no PRD (§3.1, §10).** Sem `pass`, o tipo de `_args`
+e `_return` é inferido do uso no corpo. Se o corpo faz `format("{}", _return)`,
 `_return` é polimórfico (funciona com qualquer tipo que tenha `Format`). Se
 faz `_return + 1`, é monomórfico em `Int`. A inferência bidirecional do Kata5
 faz esse trabalho.
 
-O limite é do corpo, não da declaração: a diretiva é tão polimórfica quanto
-o uso de `_args`/`_return` permitir. Se o corpo é monomórfico, a diretiva só
-decora funções com o tipo compatível. Falta verificar se Kata5 suporta
-actions genéricas para casos onde o polimorfismo do corpo não é suficiente.
+O limite é do corpo, não da declaração: a diretiva é tão polimórfica quanto o
+uso de `_args`/`_return` permitir. Se o corpo é monomórfico, a diretiva só
+decora funções com o tipo compatível. **Aresta remanescente:** verificar se
+Kata5 suporta actions genéricas para casos onde o polimorfismo do corpo não
+é suficiente. A implementação de actions genéricas (se necessária) é um PRD
+separado.
 
 ### A2. `_return` e o tipo de retorno
 
-Mesma questão de A1, aplicada ao valor de retorno. Sem `pass`, `_return`
-não tem tipo declarado — é inferido do uso no corpo. Para `@log` isso não
-é problema porque `format("{}", _return)` é polimórfico. Para diretivas
-customizadas com intercept que precisam do valor tipado, a diretiva é
-monomórfica por tipo de retorno — limitada pelo uso no corpo.
+✅ **Resolvido no PRD (§3.1).** Mesma resposta de A1, aplicada ao valor de
+retorno. Sem `pass`, `_return` não tem tipo declarado — é inferido do uso no
+corpo. Para `@log` isso não é problema porque `format("{}", _return)` é
+polimórfico. Para diretivas customizadas com transform que precisam do valor
+tipado, a diretiva é monomórfica por tipo de retorno — limitada pelo uso no
+corpo.
 
 ### A3. Intercept e mecanismo de fallback
 
-**Resolvido pelo design atual.** Intercept é `Target::Action` only e
-explicitamente não-transparente. `panic!` na diretiva aborta o processo,
-como em qualquer action — não há isolamento de fiber nem regra de
-fallback. A regra de "erro não impede retorno" foi removida: intercept
-pode mudar o comportamento observável por design, e o autor da diretiva
-assume a responsabilidade.
+✅ **Resolvido no PRD (§4.3, §4.4, D1).** `Intercept` foi substituído por dois
+Hooks distintos: `ShortCircuit` (decide execução, retorna `Optional`) e
+`Transform` (modifica resultado, retorna valor). Ambos são `Target::Action`
+only e explicitamente não-transparentes. `panic!` na diretiva aborta o
+processo, como em qualquer action — não há isolamento de fiber nem regra de
+fallback.
 
 ### A4. Desugaring no AST vs. fase de resolução
 
-O desugaring precisa acontecer **depois** da resolução de módulos (para
-saber qual diretiva `@trace` se refere) mas **antes** do typeck (para
-validar o código expandido). Isso significa:
-
-- Uma nova passada entre resolution e typeck, ou
-- Um hook no início do typeck.
-
-Precisa verificar a arquitetura atual do pipeline para decidir onde
-encaixar.
+✅ **Resolvido no PRD (§7.1, D5).** O desugaring encaixa como terceira fase
+em `kata-inference/src/desugar.rs` (após `desugar_pipes` e `desugar_holes`):
+`desugar(expr) = desugar_pipes → desugar_holes → desugar_directives`.
+`desugar_directives` opera em `Item` (nível de declaração, não de expressão)
+com acesso ao `ResolvedModule` via `infer_module`. O pipeline atual já tem
+o padrão: desugar transforma AST antes do typeck, e o typeck consome a AST
+expandida normalmente.
 
 ### A4b. Nomes gerados e colisão com identificadores de usuário
 
-O desugaring gera variáveis internas (`__result`, `__decision`,
-`__cached`) e as variáveis de reflexão (`_name`, `_arity`, `_return`,
-etc.). Se o usuário puder declarar variáveis com esses nomes, há colisão.
-
-**Decisão:** identificadores começando com `_` são reservados para o
-compilador. O usuário não pode declarar `let __result` nem `let _temp`
-nem `let _name`. O `_` simples continua válido como hole (`+ 10 _`),
-wildcard em pattern matching (`Result::Err(_)`), e predicados em tipos
-refinados (`> _ 0`) — esses são símbolos sintáticos, não identificadores.
-
-As variáveis de reflexão (`_name`, `_arity`, `_types`, `_return_type`,
-`_is_action`, `_args`, `_return`) são disponibilizadas pelo compilador
-no corpo de actions anotadas com `@directive` (ver seção 3). Fora desse
-contexto, referenciar essas variáveis é erro — elas não existem no
-escopo global nem em actions comuns.
-
-Esta regra precisa ser implementada no lexer ou no typeck (ver A4
-para onde o desugaring encaixa no pipeline).
+✅ **Resolvido no PRD (§3.2, D9).** Identificadores começando com `_` são
+reservados para o compilador. O usuário não pode declarar `let __result`
+nem `let _temp` nem `let _name`. O `_` simples continua válido como hole
+(`+ 10 _`), wildcard em pattern matching (`Result::Err(_)`), e predicados em
+tipos refinados (`> _ 0`) — esses são símbolos sintáticos, não identificadores.
+O prefixo `__` (dois underscores) também é reservado para variáveis geradas
+pelo desugaring (`__result`, `__decision`, `__body`). O prefixo `__hole_` já
+é usado pelo desugaring de holes existente (`desugar_holes.rs`).
 
 ### A5. `return` explícito e injeção de Exit
 
-Kata5 tem `return` explícito em actions. O desugaring de `Exit` precisa
-cobrir todos os pontos de saída. Precisa verificar:
-
-- Todos os caminhos de `return` são explícitos no AST (não há retorno
-  implícito escondido em algum constructo)?
-- `match` com braços que fazem `return` — o desugaring precisa envolver
-  cada braço?
-- Como o codegen lida com early return hoje — há um mecanismo de
-  "wrapped block" que a injeção pode reusar?
+✅ **Resolvido no PRD (§7.4).** A investigação do codegen revelou: `return` é
+`Expr::Return(Box<Spanned<Expr>>)` no AST, lowerado com `jump` para
+`epilogue_block` (`control_flow.rs:23`). O desugaring percorre a AST
+recursivamente, encontrando todos os `Expr::Return` e pontos de saída
+implícitos (última expressão de bloco, braços de match), e envolve cada um
+com a injeção de Exit/Transform. O codegen hoje já tem o padrão de
+`epilogue_block` para centralizar o retorno — o desugaring produz código
+que usa `return` normalmente, e o codegen continua centralizando.
 
 ### A6. Validação de contrato
 
-A diretiva declara `on: Target::Action`. Aplicar `@trace` numa função
-pura é erro. Mas quem valida — o compilador no momento da aplicação de
-`@trace`, ou o typeck no momento da injeção? Provavelmente os dois:
-a aplicação de `@nome` verifica que `nome` é uma diretiva válida e que
-o alvo é compatível com `on`.
+✅ **Resolvido no PRD (§7.5).** A validação acontece em dois pontos: (1) na
+declaração da diretiva — o compilador valida que `ShortCircuit`/`Transform`
+têm `on: Target::Action`; (2) na aplicação da diretiva — ao aplicar `@trace`
+num item, o compilador verifica que o Target da diretiva é compatível com o
+tipo do item. `@trace` com `on: Target::Action` aplicada em função pura é
+erro. Ambas as validações acontecem no desugaring, antes do typeck.
 
 ### A7. Importação de diretivas
 
-Diretivas são actions. Actions são importadas normalmente (`import
-mod.trace`). A diretiva `@trace` resolve pelo nome da action no escopo.
-Isso deveria funcionar sem mecanismo extra, mas precisa ser validado.
+✅ **Resolvido no PRD (§7.6).** Diretivas são actions. Actions são importadas
+normalmente (`import mod.trace`). A diretiva `@trace` resolve pelo nome da
+action no escopo. O `ModuleLoader` já carrega actions importadas no
+`ResolvedModule`. A resolução de `@nome` no desugaring consulta o
+`ResolvedModule.actions` para encontrar a action com `@directive`. Sem
+mecanismo extra.
 
 ### A8. Interação com `@log` existente
 
-`@log` já injeta `kata_rt_log_publish` no prólogo/epílogo com template
-interpolation e policies de canal. Se o sistema de diretivas
-customizadas não cobre esse poder, `@log` continua intrínseca. Precisa
-decidir: `@log` migra quando as diretivas customizadas atingirem paridade,
-ou `@log` é sempre intrínseca porque tem poder compile-time que
-diretivas customizadas não terão?
+✅ **Resolvido no PRD (§6, §10, D8).** `@log` continua intrínseca. A migração
+é uma decisão separada que depende de o sistema de diretivas customizadas
+atingir paridade com o poder compile-time de `@log` (interpolação de
+template, policies de canal, herança de config). A interação no mesmo item
+é bem-definida: desugar customizadas primeiro (pré-typeck), `@log` age
+depois (codegen). Cada um em sua fase — sem conflito.
 
 ### A9. Intercept enter+exit: qualificação por uso de `_return`
 
-No design sem `pass`, a distinção entre Intercept enter-only (short-circuit
-puro) e enter+exit (short-circuit + transform) é inferida do corpo: se o
-corpo referencia `_return`, o compilador gera o ponto de transformação
-após o corpo. Precisa validar:
-
-- O compilador consegue detectar confiavelmente se `_return` é referenciado
-  no corpo antes do typeck (no desugaring)?
-- O enter call retorna `Optional` (a decisão); o exit call retorna o valor
-  final (possivelmente transformado). A mesma action tem dois call sites
-  com tipos de retorno diferentes — o typeck aceita isso?
-- Alternativa: usar overloading — Intercept para short-circuit, Exit para
-  transform. Mas Exit hoje é observational (retorna `Unit`, não muda o
-  resultado). Permitir Exit transformador exige mudar a semântica de Exit.
+✅ **Resolvido no PRD (§4.3, §4.4, D1).** `Intercept` foi substituído por dois
+Hooks distintos: `ShortCircuit` (decide execução, retorna `Optional`) e
+`Transform` (modifica resultado, retorna valor). A distinção entre
+short-circuit puro e short-circuit + transform não é mais inferida do uso
+de `_return` no corpo — é declarada pelo Hook. Cada action tem tipo de
+retorno consistente e type-checka independentemente. A detecção sintática
+de `_return` no corpo (que era frágil em condicionais) é eliminada.
 
 ---
 
 ## 9. Próximos passos
 
-1. **Implementar o PRD de reflexão** (`docs/PRD-fn-reflection.md`) — sem
-   ele, não há `_name` em compile-time e as diretivas não têm metadata.
-2. **Verificar polimorfismo de action** (A1) — determinar se Kata5
-   suporta actions genéricas e se isso resolve o problema de `_args`.
-3. **Verificar pipeline de compilação** (A4) — onde encaixar o desugaring
-   de diretivas entre resolution e typeck.
-4. **Verificar mecanismo de early return** (A5) — como o codegen lida
-   com `return` hoje e como a injeção de Exit cobre todos os caminhos.
-5. **Intercept e fallback** (A3) — resolvido: intercept é
-   `Target::Action` only, não-transparente, `panic!` aborta.
-6. **Intercept enter+exit** (A9) — validar se a detecção de `_return`
-   no corpo é viável no desugaring, ou se é necessário overloading
-   Intercept + Exit.
-7. **Escrever o PRD** — depois de validar as hipóteses acima, converter
-   este documento num PRD com fases, DoD, e comandos de verificação.
+✅ **PRD escrito:** `docs/PRD-diretivas.md`. As arestas A1-A9 foram resolvidas
+ou marcadas como remanescentes (A1 — actions genéricas, se necessário).
+
+1. ~~**Implementar o PRD de reflexão**~~ — **Obsoleto.** As variáveis de
+   reflexão `_name`, `_arity`, etc. substituem DotAccess e sidecar table.
+2. **Verificar polimorfismo de action** (A1) — determinar se Kata5 suporta
+   actions genéricas e se isso resolve o problema de `_args` quando o
+   polimorfismo do corpo não é suficiente. PRD separado, se necessário.
+3. ~~**Verificar pipeline de compilação** (A4)~~ — **Resolvido.** Desugaring
+   encaixa como terceira fase em `desugar.rs` (§7.1 do PRD).
+4. ~~**Verificar mecanismo de early return** (A5)~~ — **Resolvido.** Return
+   é `Expr::Return` no AST, codegen usa `epilogue_block` (§7.4 do PRD).
+5. ~~**Intercept e fallback** (A3)~~ — **Resolvido.** ShortCircuit +
+   Transform, ambos `Target::Action` only (§4.3, §4.4 do PRD).
+6. ~~**Intercept enter+exit** (A9)~~ — **Resolvido.** ShortCircuit e Transform
+   são Hooks separados (D1 do PRD).
+7. ~~**Escrever o PRD**~~ — **Concluído.** `docs/PRD-diretivas.md`.
+8. **Implementar o PRD** — seguir as fases 1-6 definidas no PRD (§12).

@@ -450,136 +450,6 @@ lst.2 ?                  # indexação em lista (O(n) traversal, retorna Result)
 
 ---
 
-## Reflexão de Funções (`f.name`, `f.arity`, `f.param_types`, `f.return_type`, `f.is_action`)
-
-```kata
-soma :: Int Int => Int
-lambda a b: + a b
-
-soma.name              # → ["soma"]      (lista — caso estático)
-soma.arity             # → [2]           (lista)
-soma.param_types       # → [["Int", "Int"]] (lista de listas)
-soma.return_type       # → ["Int"]       (lista)
-soma.is_action         # → [False]       (lista)
-
-# Caso dinâmico — let binding de função nomeada
-let g := soma
-g.name                 # → "soma"        (escalar — sidecar table em runtime)
-g.arity               # → 2             (escalar)
-
-# Lambda anônima com binding
-let h := lambda x: + x 1
-h.name                 # → ["h"]         (lista — length 1, nome do binding)
-
-# Desambiguação de overload por tipos
-soma.(Int Int).arity   # → 2             (escalar — overload específica)
-soma.(Int Int).name    # → "soma"        (escalar)
-```
-
-### Fields disponíveis
-
-| Field | Tipo (estático, elemento de lista) | Tipo (dinâmico/desambiguado) | Descrição |
-|---|---|---|---|
-| `name` | `Text` | `Text` | Nome da função no DispatchTable (ou nome do binding para lambdas) |
-| `arity` | `Int` | `Int` | Número de parâmetros |
-| `param_types` | `List::Text` | `List::Text` | Tipos dos parâmetros como texto |
-| `return_type` | `Text` | `Text` | Tipo de retorno como texto |
-| `is_action` | `Boolean` | `Boolean` | `True` se Action, `False` se função pura |
-
-### Casos de dispatch
-
-O typeck distingue **três casos** baseado no receptor e no tipo do index:
-
-**1. Estático sem desambiguação (`f.name`)** — sempre lista, um elemento por
-overload. Consulta o `DispatchTable` (não o `TypeEnv`) para coletar todas as
-overloads do nome. O tipo do elemento não muda quando overloads são
-adicionadas — `f.arity` sempre é `List::Int`, nunca `Int`. Actions também
-sempre são lista (caso 4a — via DispatchTable, actions não são first-class).
-
-**2. Estático desambiguado (`f.(Int Int).name`)** — escalar. `DotIndex::Type`
-seleciona uma overload específica por tipos de parâmetros. Se 0 matches:
-erro `NoOverloadForTypes`. Se 2+ matches (mesmos params, ret diferente): erro
-`AmbiguousOverload`. A partir daí, `.arity` é `Int` (não `List::Int`).
-
-**3. Dinâmico (`g.name` onde `g` é variável local com `fn_alias`)** — escalar.
-O typeck emite chamada FFI para `kata_rt_fn_meta_lookup(fn_ptr, field_id)`,
-que faz binary search O(log N) na sidecar table (`__kata_fn_meta_table`).
-O `fn_ptr` é extraído do `CaptureBox` no codegen (`load offset 0`).
-
-**4. Lambda com binding (`h.name` onde `h` é `let h := lambda...`)** — lista
-de length 1. O nome usado é o do binding (não há nome original no
-DispatchTable). Distinção: `fn_alias = None` e nome não está no DispatchTable.
-
-### Provenance tracking (`fn_alias`)
-
-`TypeBinding` tem campo `fn_alias: Option<String>`. No `Expr::Let`, se o
-value é `Expr::Ident` apontando para função nomeada no DispatchTable, o
-binding recebe `fn_alias = Some("nome_original")`. Lambdas recebem
-`fn_alias = None`. Isto distingue:
-- `fn_alias = Some` → caso 3 dinâmico (escalar via sidecar table)
-- `fn_alias = None`, não no DispatchTable → caso 4 lambda (lista)
-- No DispatchTable → caso 1 estático (lista, via DispatchTable)
-
-### Desambiguação `f.(Int Int)` — `DotIndex::Type`
-
-```kata
-soma :: Int Int => Int
-lambda a b: + a b
-soma :: Text Text => Text
-lambda a b: a
-
-soma.(Int Int).arity        # → 2 (escalar — overload Int Int)
-soma.(Text Text).name       # → "soma" (escalar — overload Text Text)
-soma.(Float Float).arity    # → erro: nenhuma overload compatível
-```
-
-- **Sintaxe**: `f.(T1 T2 ...)` onde cada `Ti` é um `TypeExpr` resolvido pelo
-  typeck para `Ty`. Tipos separados por espaço. Parênteses obrigatórios.
-- **Parser**: no loop de DotAccess, `.(...)` pode conter `IntLit` (→
-  `DotIndex::Int`, indexação de tupla) ou `TypeExpr` (→ `DotIndex::Type`,
-  desambiguação). O lexer distingue: `Token::IntLit` vs `Token::Ident("Int")`.
-- **Typeck**: filtra overloads (não-actions) por `params == requested`. 1
-  match → `TypedExprKind::Ident` com `Ty::Function(params, ret)` específica. A
-  partir daí, `.field` usa a overload selecionada (escalar, não lista).
-- **Codegen**: não precisa de mudança — o typeck produz um `Ident` com
-  `Ty::Function` concreta, e o codegen já resolve via
-  `symbol_table.get((name, params, ret))` → `FuncId` exata.
-
-### Sidecar table (runtime)
-
-O codegen emite um data symbol `__kata_fn_meta_table` com entries de 56 bytes
-cada (fn_ptr, name_ptr, arity, param_types_ptr, param_types_len,
-return_type_ptr, is_action). O runtime registra esta tabela no prólogo do
-entry point e consulta via binary search. O `arity` retornado é SMI-tagged
-(`(val << 1) | 1`). `param_types` é List Cons na root arena.
-
-### ABI do caso dinâmico
-
-`let g := soma` produz um `CaptureBox` (box_ptr), não `fn_ptr` direto. O
-codegen intercepta `kata_rt_fn_meta_lookup` e faz `load(call_args[0], 0)` para
-extrair `fn_ptr` do CaptureBox. O `field_id` produzido pelo typeck como
-`IntLit` sofre SMI tagging no codegen — a interceptação também faz untag
-(`(smi - 1) >> 1`) antes de passar para a FFI.
-
-### Regras
-
-1. **Actions não são first-class.** Reflexão de actions é sempre estática via
-   DispatchTable (caso 1 — sempre lista). `let g := action_name` não existe.
-2. **Sempre lista no caso estático sem desambiguação.** `f.arity` → `List::Int`.
-   `f.(Int Int).arity` → `Int` escalar (desambiguado).
-3. **Caso dinâmico sempre escalar.** `fn_ptr` identifica overload exata na
-   sidecar table.
-4. **Field desconhecido** (`f.foo`) → erro de compilação.
-5. **Receptor não-função** (`42.name`) → erro de compilação.
-6. **ABI não muda.** Função continua `I64` na ABI. `ty_to_clif` não muda.
-
-- **Relações**: O `display()` de `Ty::Function` produz `Lambda(Int Int -> Int)`
-  (renomeado de `Function` para `Lambda` na linguagem — commit `229ab6a`).
-  Pré-requisito para diretivas Kata (decorators) — `f.name` em before/after
-  hooks.
-
----
-
 ## Função `len` (Tamanho)
 
 ```kata
@@ -620,6 +490,60 @@ len "hello"              # 5 — text (COUNTABLE dispatch, kata_rt_string_len)
   - `@builtin` → marca função para síntese de nó TAST especializado (map/filter/fold).
   - `spawn!` → special form que spawn processo OS separado (multiprocess). Aceita tupla (converte implicitamente) ou dict com `raw:`/`serialized:`. Não é diretiva — é operação ao lado de `fork!`.
   - `@log` → veja seção dedicada abaixo.
+
+---
+
+## Constructo `directive` (Diretivas Customizadas)
+
+```kata
+directive trace{when: Hook::Enter, on: Target::Action}
+    log!(LogLevel::Info, "enter: " + _name)
+```
+
+- **Posição**: declaração de top-level, como `action`, `enum`, `data`.
+- **Sintaxe**: `directive nome{when: Hook::..., on: Target::...}` seguido de body
+  (sequência de `ActionStmt`, idêntico ao body de uma action).
+- **O dict `{when: ..., on: ...}`** é parseado pelo mesmo mecanismo que
+  `parse_directive_args` (ramo `{}`). Campos: `when` (`Hook` — obrigatório) e
+  `on` (`Target` — obrigatório).
+- **Semântica**: o compilador **inlinea** o body da diretiva no ponto de injeção
+  conforme o `when` e `on` declarados. Diretivas **não são actions** — não estão
+  no `dispatch_table`, não são chamáveis diretamente.
+- **Aplicação**: `@nome` em actions ou funções. Múltiplas diretivas podem ser
+  empilhadas no mesmo item (primeira = camada mais externa).
+- **Overloading**: múltiplas declarations com mesmo nome e `(when, on)` diferentes
+  coexistem. Mesmo nome + mesmo `(when, on)` = erro de conflito.
+- **Importação**: `export trace` exporta a diretiva. `import mod.(trace)` importa.
+  O `merge_two` mescla `DirectiveRegistry` preservando overloads por `(when, on)`.
+- **Variáveis de reflexão**: o body da diretiva tem acesso a `_name`, `_arity`,
+  `_types`, `_return_type`, `_is_action`, `_args`, `_return` — sintetizadas
+  como `let` bindings no escopo do body inlined.
+- **Restrições estruturais**:
+  - `ShortCircuit`/`Transform` exigem `on: Target::Action` (garantia de pureza
+    das funções por impossibilidade).
+  - `Target::Any` não coexiste com específico para o mesmo `(nome, when)`.
+  - `directive` e `action` com mesmo nome no mesmo escopo = erro (namespace disjunto).
+- **Enums de configuração no prelude** (`stdlib/core.kata`):
+
+```kata
+enum Hook
+    Enter           # injeta no prólogo
+    Exit            # injeta no epílogo (observacional)
+    ShortCircuit    # decide se o corpo executa (retorna Optional)
+    Transform       # modifica o resultado após o corpo
+
+enum Target
+    Action          # só decora actions
+    Function        # só decora funções puras
+    Any             # decora ambos
+```
+
+- **Relações**:
+  - Diretivas intrínsecas (`@ffi`, `@cache`, `@log`, etc.) não migram — continuam
+    chumbadas no compilador. `directive` introduz apenas diretivas customizadas.
+  - Desugaring acontece entre `resolve` e `infer` no pipeline, produzindo AST
+    expandida que o typeck valida normalmente.
+  - Ver `docs/PRD-diretivas.md` para o design completo.
 
 ---
 
@@ -851,6 +775,7 @@ soma_positiva :: PositiveInt PositiveInt => PositiveInt?
 | `interface` | Declara contrato de tipo |
 | `implements` | Implementa interface (ex: `T implements IFACE`) |
 | `refines` | Delega interface do tipo base ao refined (ex: `PositiveInt refines NUM`). Não registra no InterfaceRegistry; usa fallback no dispatch |
+| `directive` | Declara diretiva customizada: `directive nome{when: Hook::..., on: Target::...}`. Body é inlined no ponto de aplicação `@nome` |
 | `import` | Importa módulo |
 | `export` | Exporta itens |
 | `as` | Alias de import (`import x as y`) ou de tipo (`data (...) as Nome`, `alias T as Nome`) |

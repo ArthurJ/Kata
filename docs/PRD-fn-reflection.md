@@ -1,7 +1,7 @@
 # PRD — Reflexão de Funções via DotAccess: `f.name`, `f.arity`, `f.param_types`, `f.return_type`
 
-**Status:** 🗑️ Obsoleto — remoção planejada
-**Data:** 2026-08-04 (implementado), 2026-08-07 (obsoleto)
+**Status:** 🗑️ Obsoleto — remoção COMPLETA
+**Data:** 2026-08-04 (implementado), 2026-08-07 (obsoleto), 2026-08-08 (remoção completada — commit `b04ddc2`)
 **Substituído por:** Variáveis de reflexão em diretivas (`docs/visao-diretivas-kata.md`, seção 3) — bindings `_name`, `_arity`, etc. sintetizados no desugaring, sem DotAccess nem sidecar table.
 
 ## 0. Por que este PRD está obsoleto
@@ -22,10 +22,9 @@ registro em TLS, ordenação pós-finalize, branch dinâmico no typeck,
 desambiguação `f.(Int Int)` — é desproporcional ao valor. A remoção elimina
 tudo isso.
 
-O documento a seguir preserva o histórico do que foi implementado e descreve
-o escopo da remoção. As seções 1-8 não são mais especificação ativa — são
-registro do que existe no código e precisa ser removido. Ver handoff
-`/tmp/kata5-remove-reflection-handoff.md` para os passos de implementação.
+O documento a seguir preserva o histórico do que foi implementado e do que
+foi removido. As seções 1-8 são registro histórico — a reflexão foi
+completamente removida do código no commit `b04ddc2` (2026-08-08).
 
 ---
 
