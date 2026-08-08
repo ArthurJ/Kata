@@ -53,6 +53,10 @@ num-rational = "0.4"
 num-traits = "0.2"
 libc = "0.2"
 
+# ── LSP ───────────────────────────────────────────────────
+tower-lsp = "0.20"
+tokio = { version = "1", features = ["full"] }
+
 # ── Dev / Testing ────────────────────────────────────────
 proptest = "1"
 insta = "1"

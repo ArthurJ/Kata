@@ -58,6 +58,8 @@ enum Command {
     },
     /// REPL interativo — TypeEnv persistente + JIT fresco por expressão
     Repl,
+    /// Inicia o servidor LSP (Language Server Protocol) em stdio
+    Lsp,
 }
 
 fn main() -> miette::Result<()> {
@@ -74,7 +76,16 @@ fn main() -> miette::Result<()> {
             dynamic,
         } => aot::cmd_build(&file, output.as_deref(), dynamic),
         Command::Repl => repl::cmd_repl(),
+        Command::Lsp => cmd_lsp(),
     }
+}
+
+// ── LSP ────────────────────────────────────────────────────
+
+/// Inicia o servidor LSP em stdio. Delega para `kata_lsp::run_stdio`.
+fn cmd_lsp() -> miette::Result<()> {
+    kata_lsp::run_stdio();
+    Ok(())
 }
 
 // ── Conversão de erros para miette::Report ──────────────────

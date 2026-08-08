@@ -15,7 +15,7 @@ use kata_inference::TypedModule;
 use kata_resolution::{ImportKind, ImportedModule, ModuleLoader, ResolvedModule};
 
 /// Resultado do front-end — tudo que o LSP precisa.
-pub(crate) struct FrontendResult {
+pub struct FrontendResult {
     #[allow(dead_code, reason = "usado por go-to-def futuro")]
     pub module: Module,
     #[allow(dead_code, reason = "usado por go-to-def futuro")]
@@ -24,7 +24,7 @@ pub(crate) struct FrontendResult {
 }
 
 /// Erros do front-end coletados em um único enum.
-pub(crate) enum FrontendError {
+pub enum FrontendError {
     Lex(kata_diagnostics::FrontendError),
     Parse(kata_diagnostics::FrontendError),
     Resolve(Vec<kata_resolution::ResolveError>),
@@ -32,7 +32,7 @@ pub(crate) enum FrontendError {
 }
 
 /// Roda lex → parse → resolve(+imports) → infer (sem codegen).
-pub(crate) fn run_frontend(
+pub fn run_frontend(
     source: &str,
     file_path: Option<&str>,
 ) -> Result<FrontendResult, Vec<FrontendError>> {

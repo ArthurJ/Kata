@@ -29,6 +29,9 @@ kata-rt.workspace = true
 cranelift-jit.workspace = true
 cranelift-module.workspace = true
 rustyline.workspace = true
+kata-lsp.workspace = true
+tower-lsp.workspace = true
+tokio = { workspace = true, features = ["full"] }
 
 [dev-dependencies]
 insta.workspace = true
