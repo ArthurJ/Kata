@@ -1,6 +1,6 @@
 # PRD — `@timer` diretiva + `now!()` action
 
-**Status:** Não implementado
+**Status:** Implementado (caso não-TCO stack slot + caso TCO canal buffer-1 Drop)
 **Data:** 2026-07-29
 **Depende de:** Fio 14 ✅ (`@log` infra — publish/subscribe, tópicos), Fio 12 ✅ (`fn_id` canônico)
 **Não depende de:** `spawn!` (Fio 11), Fio 13, Fio 15
