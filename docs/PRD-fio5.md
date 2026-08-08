@@ -327,11 +327,10 @@ Validação de shape: para cada elemento `i` da tupla, verifica que
 - Codegen: mesmo layout do target (transparente)
 - Verificação: testes E2E — `alias Float as Altura`, `Altura 1.75`
 
-### Fase 6: `format` + `repr` + `...` varargs ✅
+### Fase 6: `format` + `repr` ✅
 
 - `repr` auto-sintetizado para `data` com campos — TypedFunction com nome mangled `__kata_repr__{name}`, body com árvore de `string_concat` + `int_to_text`/`bool_to_text`/`repr` recursivo
 - `format` builtin: typeck intercepta `Ident("format")` em `infer_apply`, sintetiza cadeia de `text_replace_first` inline
-- `...` varargs: `Token::Ellipsis` no lexer, parser desugara `Type...` → `Tuple<Type>` em assinaturas
 - Runtime: `kata_rt_text_replace_first`, `kata_rt_string_concat`, `kata_rt_int_to_text`, `kata_rt_bool_to_text` já existiam
 - Verificação: 13 testes E2E ✅
 

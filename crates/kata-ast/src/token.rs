@@ -140,8 +140,6 @@ pub enum Token {
     DotDot,
     /// `..=` — separador de end inclusivo em Range: `[a..s..=b]`
     DotDotEq,
-    /// `...` — varargs em assinaturas (desugara para Tuple<Type>)
-    Ellipsis,
     /// `;` — terminador de statement (Actions) ou separador de dimensão (tensores)
     Semicolon,
     /// `:` — separa guard/pattern do corpo
@@ -265,7 +263,6 @@ impl std::fmt::Display for Token {
             Token::Dot => write!(f, "."),
             Token::DotDot => write!(f, ".."),
             Token::DotDotEq => write!(f, "..="),
-            Token::Ellipsis => write!(f, "..."),
             Token::Semicolon => write!(f, ";"),
             Token::Colon => write!(f, ":"),
             Token::At => write!(f, "@"),

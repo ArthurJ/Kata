@@ -1,4 +1,4 @@
-//! Testes E2E de codegen de repr, format, varargs (...).
+//! Testes E2E de codegen de repr, format.
 //!
 //! Pipeline completo: lex → parse → resolve → infer → optimize → codegen → JIT.
 
@@ -25,16 +25,6 @@ fn eval_src(src: &str) -> (i64, Ty) {
     let typed = kata_monomorph::MonoModule::from(tree_shake(typed.inner));
     let jit = jit_eval(&typed, &Default::default()).expect("codegen+JIT deve succeed");
     (jit.raw, jit.ty)
-}
-
-/// Infere sem JIT — para verificar erros de typeck.
-fn infer_src(src: &str) -> Result<kata_inference::TypedModule, kata_diagnostics::MiddleError> {
-    let tokens = lex(src).expect("lex deve succeed");
-    let module = parse(tokens).expect("parse deve succeed");
-    let prelude = load_prelude().expect("prelude deve carregar");
-    let user = resolve(&module).expect("resolve deve succeed");
-    let resolved = merge_resolved(prelude, user);
-    infer_module(&module, &resolved)
 }
 
 /// Combina prelude + módulo do usuário (replica do driver).
@@ -209,41 +199,4 @@ fn format_arg_unico_sem_tupla() {
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::text());
     let _ = raw;
-}
-
-// ═══════════════════════════════════════════════════════════════
-// varargs (...) — Type... desugara para Tuple<Type>
-// ═══════════════════════════════════════════════════════════════
-
-/// `...` em assinatura de Action desugara para Tuple<Int>.
-/// O caller passa a tupla explicitamente: `soma_tupla!((1, 2, 3))`.
-/// Nota: ActionCall envolve args em tupla externa. O typeck precisa
-/// empacotar args em tupla interna quando o param é varargs. Por enquanto,
-/// o teste só verifica que a assinatura desugara corretamente.
-#[test]
-fn varargs_em_action_desugara_para_tupla() {
-    // A assinatura (Int...) deve desugarar para Tuple<Int>. O body da
-    // Action é trivial (42). O erro de dispatch no call site é esperado
-    // — a feature de empacotamento no call site ainda não está implementada.
-    let src = "action soma_tupla (args::Int...) => Int\n    42\n42";
-    let result = infer_src(src);
-    assert!(
-        result.is_ok(),
-        "varargs deve desugarar na assinatura: {:?}",
-        result.err()
-    );
-}
-
-/// `...` em assinatura de Sig (função pura).
-/// `echo_all :: Text... => Text` desugara para `echo_all :: (Tuple<Text>) => Text`.
-/// O caller passa a tupla: `echo_all ("a",)` (tupla de 1 elemento com trailing comma).
-#[test]
-fn varargs_em_sig_desugara_para_tupla() {
-    let src = "echo_all :: Text... => Text\n@ffi(\"kata_rt_string_concat\")\necho_all (\"a\",)";
-    let result = infer_src(src);
-    assert!(
-        result.is_ok(),
-        "varargs em sig deve desugarar: {:?}",
-        result.err()
-    );
 }

@@ -193,10 +193,6 @@
           "name": "keyword.operator.channel.recv.kata"
         },
         {
-          "match": "\\.\\.\\.",
-          "name": "keyword.operator.ellipsis.kata"
-        },
-        {
           "match": "\\.\\.=",
           "name": "keyword.operator.range-inclusive.kata"
         },

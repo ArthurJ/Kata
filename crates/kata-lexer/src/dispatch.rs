@@ -106,14 +106,11 @@ pub(crate) fn lex_token(lex: &mut Lexer) -> Result<TokenWithSpan, FrontendError>
         '.' => {
             lex.advance();
             if lex.ch == Some('.') {
-                // `..` — pode ser `..=`, `...`, ou `..`
+                // `..` — pode ser `..=` ou `..`
                 lex.advance();
                 if lex.ch == Some('=') {
                     lex.advance();
                     Token::DotDotEq
-                } else if lex.ch == Some('.') {
-                    lex.advance();
-                    Token::Ellipsis
                 } else {
                     Token::DotDot
                 }

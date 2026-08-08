@@ -108,8 +108,7 @@ fn token_color(token: &Token) -> Option<&'static str> {
         | Token::Bang
         | Token::Pipe
         | Token::DotDot
-        | Token::DotDotEq
-        | Token::Ellipsis => Some(BRIGHT_BLACK),
+        | Token::DotDotEq => Some(BRIGHT_BLACK),
 
         // ── Pontuação ──────────────────────────────────────
         Token::LParen

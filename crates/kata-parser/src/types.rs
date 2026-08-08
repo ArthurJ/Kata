@@ -17,12 +17,6 @@ impl Parser {
             let span = ty.span.cover(q_span);
             ty = Spanned::new(TypeExpr::Question(Box::new(ty)), span);
         }
-        // `Type...` → Tuple<Type> (varargs desugar em assinaturas).
-        if matches!(self.peek(), Token::Ellipsis) {
-            let ellipsis_span = self.advance();
-            let span = ty.span.cover(ellipsis_span);
-            return Ok(Spanned::new(TypeExpr::Tuple(vec![ty]), span));
-        }
         Ok(ty)
     }
 
