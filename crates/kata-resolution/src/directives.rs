@@ -5,7 +5,7 @@
 
 use kata_ast::{Directive, DirectiveArg, Expr};
 
-use super::types::{LogSpec, ResolveError, TestSpec};
+use super::types::{DirectiveDef, DirectiveKey, Hook, LogSpec, ResolveError, Target, TestSpec};
 
 /// Extrai `TestSpec` das diretivas `@test` de uma `ActionDecl`.
 ///
@@ -253,4 +253,122 @@ pub(crate) fn extract_log_spec(
         policy,
         level,
     })
+}
+
+/// Extrai `DirectiveDef` dos args de um `Item::DirectiveDecl`.
+///
+/// Args esperados: `{when: Hook::Enter, on: Target::Action}`.
+/// `when` e `on` são obrigatórios e devem ser `Expr::VariantQual`
+/// referenciando `enum Hook` e `enum Target` do prelude.
+/// Retorna `Err` se os args são inválidos.
+pub(crate) fn extract_directive_spec(
+    name: &str,
+    args: &[kata_ast::DirectiveArg],
+    body: Vec<kata_ast::ActionStmt>,
+) -> Result<DirectiveDef, ResolveError> {
+    let mut when: Option<Hook> = None;
+    let mut on: Option<Target> = None;
+
+    for arg in args {
+        let DirectiveArg::Named { key, value } = arg else {
+            return Err(ResolveError::UnknownDirective {
+                name: name.into(),
+                context: "directive",
+                item_name: "args devem ser nomeados".into(),
+            });
+        };
+        match key.as_str() {
+            "when" => {
+                if let Expr::VariantQual {
+                    enum_name, variant, ..
+                } = &value.node
+                {
+                    when = parse_hook(enum_name, variant);
+                }
+                if when.is_none() {
+                    return Err(ResolveError::UnknownDirective {
+                        name: name.into(),
+                        context: "directive",
+                        item_name: "when deve ser Hook::Enter|Exit|ShortCircuit|Transform".into(),
+                    });
+                }
+            }
+            "on" => {
+                if let Expr::VariantQual {
+                    enum_name, variant, ..
+                } = &value.node
+                {
+                    on = parse_target(enum_name, variant);
+                }
+                if on.is_none() {
+                    return Err(ResolveError::UnknownDirective {
+                        name: name.into(),
+                        context: "directive",
+                        item_name: "on deve ser Target::Action|Function|Any".into(),
+                    });
+                }
+            }
+            other => {
+                return Err(ResolveError::UnknownDirective {
+                    name: name.into(),
+                    context: "directive",
+                    item_name: format!("chave desconhecida: {other}"),
+                });
+            }
+        }
+    }
+
+    let when = when.ok_or_else(|| ResolveError::UnknownDirective {
+        name: name.into(),
+        context: "directive",
+        item_name: "when é obrigatório".into(),
+    })?;
+    let on = on.ok_or_else(|| ResolveError::UnknownDirective {
+        name: name.into(),
+        context: "directive",
+        item_name: "on é obrigatório".into(),
+    })?;
+
+    // Validação estrutural: ShortCircuit e Transform exigem Target::Action.
+    if matches!(when, Hook::ShortCircuit | Hook::Transform) && !matches!(on, Target::Action) {
+        return Err(ResolveError::UnknownDirective {
+            name: name.into(),
+            context: "directive",
+            item_name: format!("{when:?} exige Target::Action, got {on:?}"),
+        });
+    }
+
+    Ok(DirectiveDef {
+        key: DirectiveKey {
+            name: name.into(),
+            when,
+            on,
+        },
+        body,
+    })
+}
+
+fn parse_hook(enum_name: &str, variant: &str) -> Option<Hook> {
+    if enum_name != "Hook" {
+        return None;
+    }
+    match variant {
+        "Enter" => Some(Hook::Enter),
+        "Exit" => Some(Hook::Exit),
+        "ShortCircuit" => Some(Hook::ShortCircuit),
+        "Transform" => Some(Hook::Transform),
+        _ => None,
+    }
+}
+
+fn parse_target(enum_name: &str, variant: &str) -> Option<Target> {
+    if enum_name != "Target" {
+        return None;
+    }
+    match variant {
+        "Action" => Some(Target::Action),
+        "Function" => Some(Target::Function),
+        "Any" => Some(Target::Any),
+        _ => None,
+    }
 }

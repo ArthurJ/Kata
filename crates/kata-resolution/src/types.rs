@@ -12,6 +12,7 @@
 
 use kata_ast::{ActionStmt, Expr, LambdaClause, Spanned};
 use kata_core::{EnumRegistry, InterfaceRegistry, RefinesRegistry, StructRegistry, Ty, TypeEnv};
+use std::collections::HashMap;
 use thiserror::Error;
 
 /// Resultado da resolution — TypeEnv populado + assinaturas coletadas.
@@ -38,6 +39,8 @@ pub struct ResolvedModule {
     pub functions: Vec<FunctionDef>,
     /// Actions definidas no módulo.
     pub actions: Vec<ActionDef>,
+    /// Registro de diretivas customizadas declaradas no módulo.
+    pub directive_registry: DirectiveRegistry,
 }
 
 /// Assinatura de função coletada no Pass 1.
@@ -102,6 +105,9 @@ pub struct FunctionDef {
     /// Especificação de cache `@cache{strategy: "LRU"}`. None se a função
     /// não tem `@cache`.
     pub cache_strategy: Option<String>,
+    /// Nomes das diretivas customizadas aplicadas a esta função (em ordem).
+    /// Preenchido pelo resolution, consumido pelo `desugar_directives`.
+    pub custom_directives: Vec<String>,
 }
 
 /// Definição de Action com body Kata.
@@ -123,6 +129,9 @@ pub struct ActionDef {
     pub tests: Vec<TestSpec>,
     /// Especificação de logging `@log`. None se a action não tem `@log`.
     pub log: Option<LogSpec>,
+    /// Nomes das diretivas customizadas aplicadas a esta action (em ordem).
+    /// Preenchido pelo resolution, consumido pelo `desugar_directives`.
+    pub custom_directives: Vec<String>,
 }
 
 /// Especificação de um caso de teste `@test` anotado em uma action.
@@ -214,6 +223,36 @@ pub enum ResolveError {
     #[error("refines inválido para `{type_name}`: {reason}")]
     #[diagnostic(code = "resolve.invalid_refines")]
     InvalidRefines { type_name: String, reason: String },
+
+    /// Diretiva customizada com (nome, when, on) duplicado.
+    #[error("diretiva `{name}` duplicada: when={when}, on={on}")]
+    #[diagnostic(code = "resolve.duplicate_directive")]
+    DuplicateDirective {
+        name: String,
+        when: String,
+        on: String,
+    },
+
+    /// Diretiva customizada declarada mas não aplicável ao tipo do item.
+    #[error("diretiva `{name}` não pode decorar {item_kind} (on={on})")]
+    #[diagnostic(code = "resolve.directive_target_mismatch")]
+    DirectiveTargetMismatch {
+        name: String,
+        item_kind: String,
+        on: String,
+    },
+
+    /// `Target::Any` coexiste com `Target::Action` ou `Target::Function`
+    /// para o mesmo `(nome, when)` — a regra do PRD proíbe a mistura.
+    #[error("diretiva `{name}` mistura Target::Any com específico para when={when}")]
+    #[diagnostic(code = "resolve.directive_any_conflict")]
+    DirectiveAnyConflict { name: String, when: String },
+
+    /// `directive` e `action` com o mesmo nome no mesmo escopo —
+    /// namespaces disjuntos (PRD D12).
+    #[error("diretiva `{name}` e action com mesmo nome no mesmo escopo — namespace disjunto")]
+    #[diagnostic(code = "resolve.directive_action_name_conflict")]
+    DirectiveActionNameConflict { name: String },
 }
 
 /// Formata um `Vec<ResolveError>` como string legível (erros separados por `; `).
@@ -225,4 +264,148 @@ pub fn format_resolve_errors(errors: &[ResolveError]) -> String {
         .map(|e| e.to_string())
         .collect::<Vec<_>>()
         .join("; ")
+}
+
+// ── Diretivas customizadas ──────────────────────────────────────────
+
+/// Hook — ponto do ciclo de vida onde a diretiva injeta.
+/// Resolvido de `Expr::VariantQual { enum_name: "Hook", variant: "..." }`
+/// contra `enum Hook` no prelude.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Hook {
+    Enter,
+    Exit,
+    ShortCircuit,
+    Transform,
+}
+
+/// Target — tipo de item que a diretiva pode decorar.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Target {
+    Action,
+    Function,
+    Any,
+}
+
+/// Chave do DirectiveRegistry: (nome, when, on).
+/// Diretivas com mesmo nome coexistem se tiverem (when, on) diferentes.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct DirectiveKey {
+    pub name: String,
+    pub when: Hook,
+    pub on: Target,
+}
+
+/// Definição de uma diretiva customizada — body que será inlined.
+#[derive(Debug, Clone)]
+pub struct DirectiveDef {
+    pub key: DirectiveKey,
+    /// Body da diretiva — statements copiados para o item decorado.
+    pub body: Vec<ActionStmt>,
+}
+
+/// Registro de diretivas customizadas.
+/// Chave: (nome, when, on). Diretivas com mesmo nome coexistem
+/// se tiverem (when, on) diferentes — overloading por Hook e Target.
+#[derive(Debug, Clone, Default)]
+pub struct DirectiveRegistry {
+    pub entries: HashMap<DirectiveKey, DirectiveDef>,
+}
+
+impl DirectiveRegistry {
+    pub fn new() -> Self {
+        Self {
+            entries: HashMap::new(),
+        }
+    }
+
+    /// Insere uma diretiva. Retorna erro se (nome, when, on) já existe.
+    pub fn insert(&mut self, def: DirectiveDef) -> Result<(), ResolveError> {
+        if self.entries.contains_key(&def.key) {
+            return Err(ResolveError::DuplicateDirective {
+                name: def.key.name,
+                when: format!("{:?}", def.key.when),
+                on: format!("{:?}", def.key.on),
+            });
+        }
+        self.entries.insert(def.key.clone(), def);
+        Ok(())
+    }
+
+    /// Busca todas as diretivas com o nome dado (para qualquer when/on).
+    pub fn lookup_by_name(&self, name: &str) -> Vec<&DirectiveDef> {
+        self.entries
+            .iter()
+            .filter(|(k, _)| k.name == name)
+            .map(|(_, v)| v)
+            .collect()
+    }
+
+    /// Verifica se existe alguma diretiva com o nome dado.
+    pub fn contains_name(&self, name: &str) -> bool {
+        self.entries.keys().any(|k| k.name == name)
+    }
+
+    /// Verifica se o nome tem pelo menos uma def com Target compatível
+    /// com o kind do item decorado (Function ou Action).
+    /// `item_target` é `Target::Function` para Sig, `Target::Action` para ActionDecl.
+    pub fn has_compatible_target(&self, name: &str, item_target: Target) -> bool {
+        self.entries
+            .iter()
+            .filter(|(k, _)| k.name == name)
+            .any(|(k, _)| k.on == item_target || k.on == Target::Any)
+    }
+
+    /// Mescla outro registry neste, preservando overloads por `(when, on)`.
+    /// Diretivas com mesma chave `(nome, when, on)` → conflito (erro).
+    /// Diretivas com mesmo nome mas `(when, on)` diferente coexistem.
+    pub fn merge(&mut self, other: DirectiveRegistry) -> Vec<ResolveError> {
+        let mut errors = Vec::new();
+        for (key, def) in other.entries {
+            match self.entries.entry(key) {
+                std::collections::hash_map::Entry::Occupied(entry) => {
+                    errors.push(ResolveError::DuplicateDirective {
+                        name: entry.key().name.clone(),
+                        when: format!("{:?}", entry.key().when),
+                        on: format!("{:?}", entry.key().on),
+                    });
+                }
+                std::collections::hash_map::Entry::Vacant(entry) => {
+                    entry.insert(def);
+                }
+            }
+        }
+        errors
+    }
+
+    /// Valida que `Target::Any` não coexiste com `Target::Action` ou
+    /// `Target::Function` para o mesmo `(nome, when)` (PRD regra 2.5.4).
+    ///
+    /// Deve ser chamado após todas as inserções (Pass 0.5 completo).
+    /// Retorna erros para cada conflito encontrado.
+    pub fn validate_any_conflicts(&self) -> Vec<ResolveError> {
+        use std::collections::HashMap;
+        // Agrupa por (nome, when) → set de Targets encontrados.
+        let mut groups: HashMap<(&str, Hook), Vec<Target>> = HashMap::new();
+        for k in self.entries.keys() {
+            groups
+                .entry((k.name.as_str(), k.when))
+                .or_default()
+                .push(k.on);
+        }
+        let mut errors = Vec::new();
+        for ((name, when), targets) in &groups {
+            let has_any = targets.iter().any(|t| matches!(t, Target::Any));
+            let has_specific = targets
+                .iter()
+                .any(|t| matches!(t, Target::Action | Target::Function));
+            if has_any && has_specific {
+                errors.push(ResolveError::DirectiveAnyConflict {
+                    name: name.to_string(),
+                    when: format!("{when:?}"),
+                });
+            }
+        }
+        errors
+    }
 }

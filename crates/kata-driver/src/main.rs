@@ -9,7 +9,7 @@ use kata_lexer::lex;
 use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
 use kata_parser::{parse, parse_decls_only, parse_with_arity, scan_lambdas};
-use kata_resolution::{ResolvedModule, extract_arities, load_prelude, resolve};
+use kata_resolution::{ResolvedModule, extract_arities, load_prelude, resolve_with_imports};
 use kata_rt as rt;
 use kata_tree_shaking::tree_shake;
 
@@ -174,17 +174,21 @@ fn cmd_test(path: &str, filter: Option<&str>) -> miette::Result<()> {
         // Carregar módulos importados (se houver)
         let imports = imports::load_module_imports(&file.to_string_lossy(), &module)?;
 
+        let imported_directives = imports::collect_imported_directives(&imports);
+
         let prelude = load_prelude().map_err(|e| {
             miette::Report::msg(format!(
                 "erro ao carregar prelude: {}",
                 format_error_vec(&e)
             ))
         })?;
-        let user = resolve(&module).map_err(|e| {
-            miette::Report::msg(format!("erro de resolução: {}", format_error_vec(&e)))
-        })?;
+        let user =
+            resolve_with_imports(&module, "__local__", imported_directives).map_err(|e| {
+                miette::Report::msg(format!("erro de resolução: {}", format_error_vec(&e)))
+            })?;
         let mut resolved = merge_resolved(prelude, user);
         imports::merge_imports(&mut resolved, &imports);
+        kata_inference::desugar_directives::desugar_directives(&mut resolved);
         let typed = infer_module(&module, &resolved).map_err(IntoReport::into_report)?;
         let typed = monomorphize(typed);
         let typed = optimize(typed);
@@ -374,14 +378,23 @@ fn run_pipeline_with_file(source: &str, file_path: Option<&str>) -> miette::Resu
         ))
     })?;
 
+    // Carregar imports antes do pass de decls — diretivas importadas
+    // precisam estar no registry quando o resolve valida @nome.
     let decls_tokens = tokens.clone();
     let decls_module = parse_decls_only(decls_tokens).map_err(IntoReport::into_report)?;
-    let decls_user = resolve(&decls_module).map_err(|e| {
-        miette::Report::msg(format!(
-            "erro de resolução (Pass 1): {}",
-            format_error_vec(&e)
-        ))
-    })?;
+    let decls_imports = if let Some(file) = file_path {
+        imports::load_module_imports(file, &decls_module)?
+    } else {
+        Vec::new()
+    };
+    let decls_imported_directives = imports::collect_imported_directives(&decls_imports);
+    let decls_user = resolve_with_imports(&decls_module, "__local__", decls_imported_directives)
+        .map_err(|e| {
+            miette::Report::msg(format!(
+                "erro de resolução (Pass 1): {}",
+                format_error_vec(&e)
+            ))
+        })?;
     let decls_resolved = merge_resolved(prelude.clone(), decls_user);
 
     // Signatures sobrescrevem lambdas no mapa de aridades (default arity).
@@ -397,13 +410,20 @@ fn run_pipeline_with_file(source: &str, file_path: Option<&str>) -> miette::Resu
         Vec::new()
     };
 
-    // 4. Resolve (prelude + módulo do usuário)
-    let user = resolve(&module)
+    // 3a. Coletar diretivas importadas para pré-carregar no resolve.
+    let imported_directives = imports::collect_imported_directives(&imports);
+
+    // 4. Resolve (prelude + módulo do usuário + diretivas importadas)
+    let user = resolve_with_imports(&module, "__local__", imported_directives)
         .map_err(|e| miette::Report::msg(format!("erro de resolução: {}", format_error_vec(&e))))?;
     let mut resolved = merge_resolved(prelude, user);
 
     // 4a. Merge imports (itens seletivos no escopo direto)
     imports::merge_imports(&mut resolved, &imports);
+
+    // 4b. Desugar directives — inline bodies de diretivas customizadas
+    //     antes do typeck, produzindo AST expandida.
+    kata_inference::desugar_directives::desugar_directives(&mut resolved);
 
     // 5. Infer (typeck + dispatch)
     let typed = infer_module(&module, &resolved).map_err(IntoReport::into_report)?;

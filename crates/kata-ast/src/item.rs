@@ -127,6 +127,19 @@ pub enum Item {
     /// Última expressão top-level — entry point implícito (I5).
     /// `+ 1 2` num arquivo é EntryExpr.
     EntryExpr(Spanned<Expr>),
+
+    // ── Diretivas customizadas ──────────────────────────
+    /// `directive nome{when: Hook::Enter, on: Target::Action}` + body.
+    /// Declara uma diretiva customizada que pode ser aplicada via `@nome`
+    /// em actions ou funções. O body é inlined no item decorado.
+    DirectiveDecl {
+        name: String,
+        /// Argumentos da diretiva: `{when: ..., on: ...}`.
+        /// Reusa o mesmo tipo que `Directive` — `parse_directive_args`.
+        args: Vec<DirectiveArg>,
+        /// Body da diretiva — statements como `ActionDecl`.
+        body: Vec<crate::expr::ActionStmt>,
+    },
 }
 
 /// Campo de struct: `nome::Tipo`.

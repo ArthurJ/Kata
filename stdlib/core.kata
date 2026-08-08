@@ -602,3 +602,19 @@ action echo (msg::SHOW, s::Socket) => Unit
     let s_val := show msg
     let _ := write!(s, s_val)
     let _ := write!(s, "\n")
+
+# ── Hook / Target (Diretivas Customizadas) ──────────────────────────
+# Enums de configuração para diretivas customizadas.
+# Hook define em qual ponto do ciclo de vida a diretiva injeta.
+# Target define qual tipo de item a diretiva pode decorar.
+
+enum Hook
+    Enter
+    Exit
+    ShortCircuit
+    Transform
+
+enum Target
+    Action
+    Function
+    Any

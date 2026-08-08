@@ -284,10 +284,13 @@ pub fn infer_module(
             | Item::ImplementsDecl { .. }
             | Item::RefinesDecl { .. }
             | Item::ImportDecl { .. }
-            | Item::ExportDecl { .. } => {
+            | Item::ExportDecl { .. }
+            | Item::DirectiveDecl { .. } => {
                 // Já processado no resolution/inference de funções nomeadas.
                 // Interfaces/implements/import/export são processados
                 // (resolution) — o inference não os processa.
+                // DirectiveDecl é processado no resolution (DirectiveRegistry)
+                // e consumido pelo desugar_directives antes do inference.
             }
             Item::ActionDecl { .. } => {
                 // Já processado no inference de Actions (abaixo).

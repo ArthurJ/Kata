@@ -40,7 +40,7 @@ impl Parser {
         Ok(directives)
     }
 
-    fn parse_directive_args(&mut self) -> Result<Vec<DirectiveArg>, FrontendError> {
+    pub(crate) fn parse_directive_args(&mut self) -> Result<Vec<DirectiveArg>, FrontendError> {
         let mut args = Vec::new();
         // @name("arg") — parenthesized positional args
         // @name{key: value} — braced named args

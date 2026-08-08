@@ -120,6 +120,11 @@ fn merge_registries(merged: &mut ResolvedModule, imported: &ResolvedModule) {
     merged
         .refines_registry
         .merge(imported.refines_registry.clone());
+    // Mescla DirectiveRegistry — diretivas importadas ficam disponíveis
+    // para o módulo importador. Overloads por (when, on) coexistem.
+    let _merge_errors = merged
+        .directive_registry
+        .merge(imported.directive_registry.clone());
 }
 
 /// Registra itens de um módulo importado com nome qualificado `prefix.item`
@@ -218,4 +223,23 @@ pub(crate) fn load_module_imports(
     loader
         .load_imports(module)
         .map_err(|e| miette::Report::msg(format!("erro ao carregar imports: {e}")))
+}
+
+/// Extrai o `DirectiveRegistry` dos módulos importados, para ser usado
+/// como base no `resolve_with_imports` do módulo do usuário.
+///
+/// Isto permite que `@trace_enter` referencie uma diretiva definida num
+/// módulo importado — o registry já contém a diretiva quando a validação
+/// de `@nome` roda no Pass 1 do resolve.
+pub(crate) fn collect_imported_directives(
+    imports: &[ImportedModule],
+) -> kata_resolution::DirectiveRegistry {
+    let mut registry = kata_resolution::DirectiveRegistry::new();
+    for imported in imports {
+        let errors = registry.merge(imported.resolved.directive_registry.clone());
+        // Erros de merge (diretivas duplicadas entre módulos importados)
+        // são silenciados aqui — serão detectados no merge final.
+        let _ = errors;
+    }
+    registry
 }

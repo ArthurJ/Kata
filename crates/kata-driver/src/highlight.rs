@@ -52,9 +52,13 @@ const BRIGHT_BLUE: &str = "\x1b[94m";
 fn token_color(token: &Token) -> Option<&'static str> {
     match token {
         // ── Palavras-chave de declaração ──────────────────
-        Token::Let | Token::Var | Token::Data | Token::Enum | Token::Alias | Token::Action => {
-            Some(BOLD_CYAN)
-        }
+        Token::Let
+        | Token::Var
+        | Token::Data
+        | Token::Enum
+        | Token::Alias
+        | Token::Action
+        | Token::Directive => Some(BOLD_CYAN),
 
         // ── Palavras-chave de controle ────────────────────
         Token::Match

@@ -52,6 +52,10 @@ impl Parser {
                     let item = self.parse_action_decl(directives)?;
                     items.push(Spanned::new(item, item_start));
                 }
+                Token::Directive => {
+                    let item = self.parse_directive_decl()?;
+                    items.push(Spanned::new(item, item_start));
+                }
                 Token::Interface => {
                     let item = self.parse_interface_decl(directives)?;
                     items.push(Spanned::new(item, item_start));
@@ -181,6 +185,10 @@ impl Parser {
                     let item = self.parse_action_decl(directives)?;
                     items.push(Spanned::new(item, item_start));
                 }
+                Token::Directive => {
+                    let item = self.parse_directive_decl()?;
+                    items.push(Spanned::new(item, item_start));
+                }
                 Token::Interface => {
                     let item = self.parse_interface_decl(directives)?;
                     items.push(Spanned::new(item, item_start));
@@ -281,6 +289,13 @@ impl Parser {
                     }
                 },
                 Token::Action => match self.parse_action_decl(directives) {
+                    Ok(item) => items.push(Spanned::new(item, item_start)),
+                    Err(e) => {
+                        errors.push(e);
+                        self.sync_to_stmt_sep();
+                    }
+                },
+                Token::Directive => match self.parse_directive_decl() {
                     Ok(item) => items.push(Spanned::new(item, item_start)),
                     Err(e) => {
                         errors.push(e);

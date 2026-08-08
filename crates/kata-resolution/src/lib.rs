@@ -63,6 +63,22 @@ pub fn resolve_with_origin(
     module: &Module,
     origin: &str,
 ) -> Result<ResolvedModule, Vec<ResolveError>> {
+    resolve_with_imports(module, origin, DirectiveRegistry::new())
+}
+
+/// Resolve um módulo com diretivas importadas pré-carregadas.
+///
+/// `imported_directives` contém diretivas de módulos importados que já foram
+/// carregados e resolvidos. Estas diretivas são mescladas no `directive_registry`
+/// antes da validação de `@nome` em Sig/ActionDecl, permitindo que o módulo
+/// use `@trace_enter` quando `trace_enter` vem de um import.
+///
+/// Se `imported_directives` está vazio, comporta-se como `resolve_with_origin`.
+pub fn resolve_with_imports(
+    module: &Module,
+    origin: &str,
+    imported_directives: DirectiveRegistry,
+) -> Result<ResolvedModule, Vec<ResolveError>> {
     let mut type_env = TypeEnv::new();
     // Unit é tipo primitivo da linguagem — sempre disponível no TypeEnv.
     type_env.define("Unit", Ty::Unit, origin);
@@ -93,6 +109,27 @@ pub fn resolve_with_origin(
         &mut errors,
         origin,
     );
+
+    // Pass 0.5: coleta diretivas customizadas (DirectiveDecl) no registry.
+    // Antes do Pass 1 para que a validação de @nome em Sig/ActionDecl
+    // possa consultar o registry.
+    // Começa com diretivas importadas (se houver) e adiciona as locais.
+    let mut directive_registry = imported_directives;
+    for item in &module.items {
+        if let Item::DirectiveDecl { name, args, body } = &item.node {
+            match directives::extract_directive_spec(name, args, body.clone()) {
+                Ok(def) => {
+                    if let Err(e) = directive_registry.insert(def) {
+                        errors.push(e);
+                    }
+                }
+                Err(e) => errors.push(e),
+            }
+        }
+    }
+
+    // Validação 2.5.4: Target::Any não coexiste com específico para (nome, when).
+    errors.extend(directive_registry.validate_any_conflicts());
 
     // Pass 1: coleta assinaturas de funções
     for item in &module.items {
@@ -153,6 +190,8 @@ pub fn resolve_with_origin(
                         }
                         // Diretivas válidas em Sig mas sem processamento aqui.
                         "builtin" | "log" => {}
+                        // Diretiva customizada — validar contra o registry.
+                        other if directive_registry.contains_name(other) => {}
                         other => {
                             errors.push(ResolveError::UnknownDirective {
                                 name: other.to_string(),
@@ -166,6 +205,24 @@ pub fn resolve_with_origin(
                 // Coleta type params (Ty::Var UPPER_CASE em params/ret).
                 let type_params = collect_type_params(&param_types, &return_type);
 
+                // Coleta nomes das diretivas customizadas (no registry) em ordem.
+                // Valida Target: Sig é Function — diretiva com on: Target::Action
+                // aplicada em Sig é erro.
+                let custom_dirs: Vec<String> = directives
+                    .iter()
+                    .filter(|d| directive_registry.contains_name(&d.name))
+                    .map(|d| d.name.clone())
+                    .collect();
+                for d in &custom_dirs {
+                    if !directive_registry.has_compatible_target(d, Target::Function) {
+                        errors.push(ResolveError::DirectiveTargetMismatch {
+                            name: d.clone(),
+                            item_kind: "function".into(),
+                            on: "Action".into(),
+                        });
+                    }
+                }
+
                 // Se tem corpo Kata (cláusulas lambda), preserva para o inference.
                 if let Some(clauses) = body {
                     let log = extract_log_spec(directives, name, "sig", &mut errors);
@@ -176,6 +233,7 @@ pub fn resolve_with_origin(
                         clauses: clauses.clone(),
                         log,
                         cache_strategy,
+                        custom_directives: custom_dirs,
                     });
                 }
 
@@ -224,6 +282,8 @@ pub fn resolve_with_origin(
                 for d in action_dirs {
                     match d.name.as_str() {
                         "ffi" | "test" | "log" => {}
+                        // Diretiva customizada — validar contra o registry.
+                        other if directive_registry.contains_name(other) => {}
                         other => {
                             errors.push(ResolveError::UnknownDirective {
                                 name: other.to_string(),
@@ -231,6 +291,24 @@ pub fn resolve_with_origin(
                                 item_name: name.clone(),
                             });
                         }
+                    }
+                }
+
+                // Coleta nomes das diretivas customizadas (no registry) em ordem.
+                // Valida Target: ActionDecl é Action — diretiva com on: Target::Function
+                // aplicada em Action é erro.
+                let custom_dirs: Vec<String> = action_dirs
+                    .iter()
+                    .filter(|d| directive_registry.contains_name(&d.name))
+                    .map(|d| d.name.clone())
+                    .collect();
+                for d in &custom_dirs {
+                    if !directive_registry.has_compatible_target(d, Target::Action) {
+                        errors.push(ResolveError::DirectiveTargetMismatch {
+                            name: d.clone(),
+                            item_kind: "action".into(),
+                            on: "Function".into(),
+                        });
                     }
                 }
 
@@ -267,10 +345,26 @@ pub fn resolve_with_origin(
                         body: body.clone(),
                         tests,
                         log,
+                        custom_directives: custom_dirs,
                     });
                 }
             }
             _ => {}
+        }
+    }
+
+    // Validação D12: directive e action com mesmo nome no mesmo escopo → erro.
+    // Namespace disjunto — diretivas não são actions.
+    let directive_names: std::collections::HashSet<&str> = directive_registry
+        .entries
+        .keys()
+        .map(|k| k.name.as_str())
+        .collect();
+    for action in &actions {
+        if directive_names.contains(action.name.as_str()) {
+            errors.push(ResolveError::DirectiveActionNameConflict {
+                name: action.name.clone(),
+            });
         }
     }
 
@@ -289,6 +383,7 @@ pub fn resolve_with_origin(
         refines_registry,
         functions,
         actions,
+        directive_registry,
     })
 }
 
@@ -342,6 +437,15 @@ pub fn merge_two(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModul
         eprintln!("[resolution] warning: {warning}");
     }
 
+    // Diretivas: mescla preservando overloads por (when, on).
+    // Diferente de actions (nomes se substituem), diretivas com mesmo nome
+    // coexistem quando (when, on) diferem.
+    let mut directive_registry = prelude.directive_registry;
+    let merge_errors = directive_registry.merge(user.directive_registry);
+    for e in merge_errors {
+        eprintln!("[resolution] warning: {e}");
+    }
+
     ResolvedModule {
         type_env,
         signatures,
@@ -353,5 +457,6 @@ pub fn merge_two(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModul
         refines_registry,
         functions,
         actions,
+        directive_registry,
     }
 }

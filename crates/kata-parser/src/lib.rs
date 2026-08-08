@@ -11,6 +11,7 @@ mod _select;
 mod action_decl;
 mod casing;
 mod declarations;
+mod directive_decl;
 mod directives;
 mod expr_apply;
 mod expr_containers;

@@ -92,6 +92,8 @@ pub enum Token {
     Timeout,
     /// `type` — introspecção compile-time (`type!(expr)`)
     Type,
+    /// `directive` — declara diretiva customizada
+    Directive,
 
     // ── Operadores e pontuação ──────────────────────────
     /// `:=` — operador de binding (exclusivo para `let` e `var`)
@@ -201,6 +203,7 @@ impl Token {
                 | Token::Select
                 | Token::Timeout
                 | Token::Type
+                | Token::Directive
         )
     }
 }
@@ -243,6 +246,7 @@ impl std::fmt::Display for Token {
             Token::Select => write!(f, "select"),
             Token::Timeout => write!(f, "timeout"),
             Token::Type => write!(f, "type"),
+            Token::Directive => write!(f, "directive"),
             Token::BindAssign => write!(f, ":="),
             Token::DoubleColon => write!(f, "::"),
             Token::FatArrow => write!(f, "=>"),
