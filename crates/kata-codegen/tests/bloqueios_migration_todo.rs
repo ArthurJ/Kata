@@ -127,7 +127,11 @@ let a := 5::PositiveInt
 echo!(a)"#;
     let (_raw, ty) = eval_src(src);
     // echo! retorna Unit
-    assert_eq!(ty, Ty::Unit, "echo! com PositiveInt sem refines deve funcionar");
+    assert_eq!(
+        ty,
+        Ty::Unit,
+        "echo! com PositiveInt sem refines deve funcionar"
+    );
 }
 
 /// show com PositiveInt SEM `refines` — mesmo princípio.
@@ -137,7 +141,11 @@ fn b1_show_positiveint_sem_refines() {
 let a := 5::PositiveInt
 show a"#;
     let (_raw, ty) = eval_src(src);
-    assert_eq!(ty, Ty::text(), "show com PositiveInt sem refines deve funcionar");
+    assert_eq!(
+        ty,
+        Ty::text(),
+        "show com PositiveInt sem refines deve funcionar"
+    );
 }
 
 /// + com PositiveInt COM `refines NUM` — fallback substitui por Int e
@@ -152,7 +160,10 @@ PositiveInt (+ a b)"#;
     let (_raw, ty) = eval_src(src);
     assert_eq!(
         ty,
-        Ty::Generic("Result".into(), vec![Ty::Struct("PositiveInt".into()), Ty::text()]),
+        Ty::Generic(
+            "Result".into(),
+            vec![Ty::Struct("PositiveInt".into()), Ty::text()]
+        ),
         "+ com PositiveInt + refines NUM deve retornar Result::(PositiveInt, Text)"
     );
 }

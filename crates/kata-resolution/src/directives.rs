@@ -5,7 +5,9 @@
 
 use kata_ast::{Directive, DirectiveArg, Expr};
 
-use super::types::{DirectiveDef, DirectiveKey, Hook, LogSpec, ResolveError, Target, TestSpec, TimerSpec};
+use super::types::{
+    DirectiveDef, DirectiveKey, Hook, LogSpec, ResolveError, Target, TestSpec, TimerSpec,
+};
 
 /// Extrai `TestSpec` das diretivas `@test` de uma `ActionDecl`.
 ///

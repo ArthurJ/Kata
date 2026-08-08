@@ -19,10 +19,7 @@ use super::helpers::InferResult;
 ///
 /// Valida arity 0: `now!()` não recebe argumentos.
 /// Retorna `Int` (nanossegundos do clock monotônico).
-pub(crate) fn infer_now_builtin(
-    args: &Spanned<Expr>,
-    span: &Span,
-) -> InferResult<ActionDispatch> {
+pub(crate) fn infer_now_builtin(args: &Spanned<Expr>, span: &Span) -> InferResult<ActionDispatch> {
     // Valida arity 0 — args deve ser Unit (`now!()` não recebe argumentos).
     if !matches!(args.node, Expr::Unit) {
         // Tenta extrair elementos para reportar o arity encontrado.

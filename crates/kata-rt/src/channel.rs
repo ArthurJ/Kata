@@ -205,7 +205,11 @@ pub extern "C" fn kata_rt_queue_create(arena: i64, capacity: i64, policy: i64) -
     if capacity <= 0 {
         return 0;
     }
-    let policy = if policy == 1 { Policy::Drop } else { Policy::Block };
+    let policy = if policy == 1 {
+        Policy::Drop
+    } else {
+        Policy::Block
+    };
     let inner = QueueInner {
         buffer: Mutex::new(VecDeque::new()),
         capacity: capacity as usize,

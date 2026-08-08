@@ -209,7 +209,7 @@ pub(crate) fn synthesize_constructors(
                 }],
                 log: None,
                 cache_spec: None,
-            timer_spec: None,
+                timer_spec: None,
             });
         } else {
             // Alias de struct com campos — mesmo construtor do struct nativo,
@@ -302,7 +302,7 @@ pub(crate) fn synthesize_constructors(
                 }],
                 log: None,
                 cache_spec: None,
-            timer_spec: None,
+                timer_spec: None,
             });
         }
     }

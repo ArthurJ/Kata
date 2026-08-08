@@ -160,7 +160,7 @@ pub(crate) fn synthesize_refined(
                 }],
                 log: None,
                 cache_spec: None,
-            timer_spec: None,
+                timer_spec: None,
             });
         }
 
