@@ -1,12 +1,35 @@
 # PRD — Reflexão de Funções via DotAccess: `f.name`, `f.arity`, `f.param_types`, `f.return_type`
 
-**Status:** ✅ Implementado
-**Data:** 2026-08-04 (revisto 2026-08-04)
-**Depende de:** DotAccess em structs ✅ (`infer_dot_access`), string table ✅ (`__kata_str_N`), data symbols ✅ (`declare_data`/`define_data`), `kata_rt_register_type_table` ✅ (padrão de registro), DispatchTable ✅ (`OverloadInfo.is_action`)
-**Não depende de:** Diretivas Kata (decorators) — este PRD é pré-requisito para diretivas que acessam metadata da função decorada.
-**Restrição preservada:** Actions não são first-class. `let g := processar` (action) continua ilegal. Reflexão de actions é sempre estática (compile-time).
+**Status:** 🗑️ Obsoleto — remoção planejada
+**Data:** 2026-08-04 (implementado), 2026-08-07 (obsoleto)
+**Substituído por:** Variáveis de reflexão em diretivas (`docs/visao-diretivas-kata.md`, seção 3) — bindings `_name`, `_arity`, etc. sintetizados no desugaring, sem DotAccess nem sidecar table.
 
-## 1. Objetivo
+## 0. Por que este PRD está obsoleto
+
+A reflexão de funções (`f.name`, `f.arity`, etc. via DotAccess) foi implementada
+como infraestrutura para o sistema de diretivas Kata. O design de diretivas
+evoluiu: em vez de o usuário escrever `f.name` no corpo da diretiva, o
+compilador sintetiza variáveis de reflexão (`_name`, `_arity`, `_types`,
+`_return_type`, `_is_action`) no escopo da action anotada com `@directive`.
+Esses bindings são resolvidos no desugaring (pré-typeck) por substituição direta
+de AST — o compilador conhece a função decorada e produz `TextLit("processar")`
+sem passar por DotAccess, sidecar table, ou `kata_rt_fn_meta_lookup`.
+
+A reflexão como feature de linguagem (sintaxe `f.name` acessível ao usuário)
+não tem outros casos de uso além das diretivas. A complexidade que ela
+introduz — sidecar table em runtime, binary search, relocations de fn_ptr,
+registro em TLS, ordenação pós-finalize, branch dinâmico no typeck,
+desambiguação `f.(Int Int)` — é desproporcional ao valor. A remoção elimina
+tudo isso.
+
+O documento a seguir preserva o histórico do que foi implementado e descreve
+o escopo da remoção. As seções 1-8 não são mais especificação ativa — são
+registro do que existe no código e precisa ser removido. Ver handoff
+`/tmp/kata5-remove-reflection-handoff.md` para os passos de implementação.
+
+---
+
+## 1. Objetivo (histórico — implementado, agora marcado para remoção)
 
 Permitir que funções e actions Kata sejam introspectáveis via DotAccess (`.`),
 expondo metadata estática (nome, arity, tipos dos parâmetros, tipo de retorno) em

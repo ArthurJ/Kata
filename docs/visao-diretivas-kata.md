@@ -17,9 +17,9 @@ anota com `@directive` (a meta-diretiva que a promove a hook). Depois aplica
 `@nome_da_action` em outras actions/funções para injetar a chamada.
 
 ```kata
-@directive{when: Hook::Enter, on: Target::Action, pass: [f.name]}
-action trace(name :: Text) => Unit
-    log!(LogLevel::Info, "enter: " + name)
+@directive{when: Hook::Enter, on: Target::Action}
+action trace() => Unit
+    log!(LogLevel::Info, "enter: " + _name)
 ```
 
 Uso:
@@ -34,14 +34,17 @@ Desugaring (no nível do AST, antes do typeck):
 
 ```kata
 action processar(x :: Int) => Int
-    trace!("processar")
+    trace!()
     x + 1
 ```
 
-`f.name` vira `TextLit("processar")` em compile-time — o caso estático do
-PRD de reflexão. Zero overhead de runtime. A sidecar table e o lookup
-dinâmico não se aplicam aqui porque o compilador sempre sabe qual função
-está decorada.
+No corpo de `trace`, a variável de reflexão `_name` resolve para
+`TextLit("processar")` em compile-time — o caso estático do PRD de reflexão.
+O compilador sintetiza as variáveis de reflexão (`_name`, `_arity`, etc.)
+no escopo da diretiva no momento da injeção. Zero overhead de runtime para
+bindings estáticos. A sidecar table e o lookup dinâmico do PRD de reflexão
+não se aplicam aqui porque o compilador sempre sabe qual função está
+decorada.
 
 ---
 
@@ -76,10 +79,12 @@ enum Target
 |---|---|---|---|
 | `when` | `Hook` | **sim** | Ponto de injeção |
 | `on` | `Target` | **sim** | Que tipo de item pode decorar |
-| `pass` | tupla de expressões | não | O que passar como args para a diretiva |
 
-`pass` referencia bindings especiais que o compilador sintetiza no momento
-da injeção (ver seção 3).
+`@directive` não tem campo de configuração de argumentos. Em vez disso, o
+compilador disponibiliza **variáveis de reflexão** (`_name`, `_arity`,
+`_return`, etc.) no escopo do corpo da action anotada com `@directive`.
+Essas variáveis são sintetizadas no momento da injeção e referenciam a
+entidade decorada (ver seção 3).
 
 ### 2.3. Múltiplas actions por diretiva (overloading por Hook e Target)
 
@@ -91,17 +96,17 @@ da injeção (ver seção 3).
 > ao Hook e ao Target daquele item — simultaneamente.
 >
 > ```kata
-> @directive{when: Hook::Enter, on: Target::Action, pass: [f.name]}
-> action trace(name :: Text) => Unit
->     log!(LogLevel::Info, "enter action: " + name)
+> @directive{when: Hook::Enter, on: Target::Action}
+> action trace() => Unit
+>     log!(LogLevel::Info, "enter action: " + _name)
 >
-> @directive{when: Hook::Enter, on: Target::Function, pass: [f.name]}
-> action trace(name :: Text) => Unit
->     log!(LogLevel::Info, "enter function: " + name)
+> @directive{when: Hook::Enter, on: Target::Function}
+> action trace() => Unit
+>     log!(LogLevel::Info, "enter function: " + _name)
 >
-> @directive{when: Hook::Exit, on: Target::Any, pass: [f.name, result]}
-> action trace(name :: Text, result) => Unit
->     log!(LogLevel::Info, "exit: " + name)
+> @directive{when: Hook::Exit, on: Target::Any}
+> action trace() => Unit
+>     log!(LogLevel::Info, "exit: " + _name + " => " + format("{}", _return))
 > ```
 >
 > Uso — uma anotação dispara todos os hooks cujo `when` e `on` casam:
@@ -116,9 +121,9 @@ da injeção (ver seção 3).
 >
 > ```kata
 > action processar(x :: Int) => Int
->     trace!("processar")              # Enter on Action
+>     trace!()                           # Enter on Action — _name = "processar"
 >     let __result := x + 1
->     trace!("processar", __result)     # Exit on Any
+>     trace!()                           # Exit on Any — _name = "processar", _return = __result
 >     __result
 > ```
 >
@@ -136,10 +141,10 @@ da injeção (ver seção 3).
 > Vantagens:
 >
 > - **Type-checking limpo:** cada action tem sua própria assinatura, que
->   corresponde exatamente ao seu call site. O Exit que recebe `result`
->   tem assinatura diferente do Enter que recebe só `f.name` — e cada um
->   type-checka independentemente. Resolve o problema de dual-call no
->   Intercept enter+exit (seção 4.3).
+>   corresponde exatamente ao seu call site. O Exit que usa `_return` tem
+>   contexto diferente do Enter que usa só `_name` — e cada um type-checka
+>   independentemente. Resolve o problema de dual-call no Intercept
+>   enter+exit (seção 4.3).
 > - **Separação de responsabilidades:** cada combinação de Hook e Target
 >   é uma action distinta, mais simples e auditável.
 > - **Composicionalidade natural:** o usuário declara só os Hooks que
@@ -159,8 +164,8 @@ da injeção (ver seção 3).
 >   `@directive`. Isso é overloading por Hook e Target, análogo a
 >   overloading por tipo em outras linguagens, mas discriminado pelos
 >   campos `when`/`on` em compile-time.
-> - `on` e `pass` podem diferir entre as actions da mesma diretiva — cada
->   Hook/Target tem necessidades diferentes (Enter não tem `result`, Exit
+> - `on` pode diferir entre as actions da mesma diretiva — cada
+>   Hook/Target tem necessidades diferentes (Enter não tem `_return`, Exit
 >   tem; Intercept exige `Target::Action`).
 > - `Target::Any` só pode coexistir com outras definições da mesma
 >   diretiva se for a única definição para aquele `when` — ou seja, para
@@ -183,29 +188,33 @@ Quando o compilador encontra `@nome` num item:
 
 ---
 
-## 3. Bindings disponíveis em `pass`
+## 3. Variáveis de reflexão em diretivas
 
-O `pass` é uma lista de expressões avaliadas no contexto da função
-decorada. O compilador traduz cada item:
+Actions anotadas com `@directive` têm acesso a **variáveis de reflexão** no
+corpo — bindings prefixados com `_` que o compilador sintetiza no momento
+da injeção, referenciando a entidade decorada. Identificadores começando
+com `_` são reservados para o compilador (ver A4b), de modo que essas
+variáveis nunca colidem com código de usuário.
 
-| Expressão | Resolução | Origem | Quando |
+| Variável | Tipo | Origem | Disponível em |
 |---|---|---|---|
-| `f.name` | `TextLit` constante | PRD de reflexão (caso estático) | sempre |
-| `f.arity` | `IntLit` constante | idem | sempre |
-| `f.param_types` | `List` literal de `TextLit` | idem | sempre |
-| `f.return_type` | `TextLit` constante | idem | sempre |
-| `f.is_action` | `Boolean::True`/`False` | idem | sempre |
-| `args` | tupla runtime dos argumentos | novo (sintetizado dos params) | `Enter`, `Exit`, `Intercept` |
-| `result` | valor de retorno runtime | novo (capturado do corpo) | `Exit`, `Intercept` apenas |
+| `_name` | `Text` | estático (compile-time) | sempre |
+| `_arity` | `Int` | estático | sempre |
+| `_types` | `List[Text]` | estático | sempre |
+| `_return_type` | `Text` | estático | sempre |
+| `_is_action` | `Bool` | estático | sempre |
+| `_args` | tupla runtime | sintetizado dos params | Enter, Exit, Intercept |
+| `_return` | valor de retorno runtime | capturado do corpo | Exit, Intercept |
 
-**Estáticos** (`f.*`) são resolvidos em compile-time — o compilador conhece
-a função decorada e extrai as constantes da assinatura. Zero overhead.
+**Estáticos** (`_name`, `_arity`, `_types`, `_return_type`, `_is_action`) são
+resolvidos em compile-time — o compilador conhece a função decorada e extrai
+as constantes da assinatura. Zero overhead.
 
-**Dinâmicos** (`args`, `result`) são valores de runtime — o compilador
-sintetiza `let args := (x,)` a partir dos parâmetros e `let result := <corpo>`
-a partir do valor de retorno.
+**Dinâmicos** (`_args`, `_return`) são valores de runtime — o compilador
+sintetiza `_args` a partir dos parâmetros e captura `_return` do valor de
+retorno.
 
-`result` representa o **valor de retorno observável** da função, não
+`_return` representa o **valor de retorno observável** da função, não
 necessariamente o valor que o corpo produziu. Se uma diretiva `Intercept`
 interna short-circuita, Exit externo recebe o valor short-circuitado —
 não o valor do corpo (que não executou). Ver seção 5 para a semântica
@@ -220,16 +229,16 @@ de propagação em stacking.
 Injeta a chamada da diretiva **antes** do corpo da função decorada.
 
 ```kata
-@directive{when: Hook::Enter, on: Target::Action, pass: [f.name]}
-action trace(name :: Text) => Unit
-    log!(LogLevel::Info, "enter: " + name)
+@directive{when: Hook::Enter, on: Target::Action}
+action trace() => Unit
+    log!(LogLevel::Info, "enter: " + _name)
 ```
 
 Desugaring de `@trace` em `processar`:
 
 ```kata
 action processar(x :: Int) => Int
-    trace!("processar")
+    trace!()
     x + 1
 ```
 
@@ -240,9 +249,9 @@ todos os pontos de saída: `return` explícito, retorno implícito (última
 expr), e braços de `match`.
 
 ```kata
-@directive{when: Hook::Exit, on: Target::Any, pass: [f.name, result]}
-action trace_exit(name :: Text, result) => Unit
-    log!(LogLevel::Info, "exit: " + name)
+@directive{when: Hook::Exit, on: Target::Any}
+action trace_exit() => Unit
+    log!(LogLevel::Info, "exit: " + _name + " => " + format("{}", _return))
 ```
 
 Desugaring de `@trace_exit` em `processar`:
@@ -250,7 +259,7 @@ Desugaring de `@trace_exit` em `processar`:
 ```kata
 action processar(x :: Int) => Int
     let __result := x + 1
-    trace_exit!("processar", __result)
+    trace_exit!()
     __result
 ```
 
@@ -270,11 +279,11 @@ action buscar(x :: Int) => Int
     match x
         Optional::Some(v):
             let __result := v
-            trace_exit!("buscar", __result)
+            trace_exit!()
             return __result
         Optional::None:
             let __result := 0
-            trace_exit!("buscar", __result)
+            trace_exit!()
             return __result
 ```
 
@@ -321,8 +330,9 @@ diretiva de linguagem.
 **Protocolo de short-circuit:**
 
 ```kata
-@directive{when: Hook::Intercept, on: Target::Action, pass: [args]}
-action auth_intercept(args :: Request) => Optional::Response
+@directive{when: Hook::Intercept, on: Target::Action}
+action auth_intercept() => Optional::Response
+    # _args disponível, tipado pelos parâmetros da função decorada
     ...
 ```
 
@@ -330,7 +340,7 @@ Desugaring de `@auth_intercept` em `handler`:
 
 ```kata
 action handler(req :: Request) => Response
-    let __decision := auth_intercept!(req)
+    let __decision := auth_intercept!()    # Intercept — _args = req
     match __decision
         Optional::Some(r): r          # short-circuit — retorna r
         Optional::None:               # prossegue
@@ -342,22 +352,25 @@ A diretiva retorna `Optional::Some(value)` para short-circuit ou
 `Optional::None` para prosseguir. Protocolo simples, sem continuation,
 sem lambda — cabe no sistema de tipos atual de Kata5.
 
-**Transformação de resultado (enter+exit):** se a diretiva também
-precisa transformar o resultado, inclui `result` em `pass`. O desugaring
-passa a ter dois pontos de interceptação:
+**Transformação de resultado (enter+exit):** se o corpo da diretiva
+Intercept referencia `_return`, o compilador gera também um ponto de
+transformação após o corpo. O desugaring passa a ter dois pontos de
+interceptação:
 
 ```kata
 action handler(req :: Request) => Response
-    let __decision := auth_intercept_enter!(req)
+    let __decision := auth_intercept!()    # Intercept enter — _args = req
     match __decision
         Optional::Some(r): r
         Optional::None:
-            let __result := process(req)
-            auth_intercept_exit!(req, __result)   # retorna valor final
+            let __body := process(req)
+            auth_intercept!()              # Intercept exit — _return = __body
+            __body                         # (ou valor transformado pela diretiva)
 ```
 
-Se `pass` inclui `result`, a diretiva é enter+exit (short-circuit +
-transform). Se não, é enter-only (short-circuit puro).
+Se o corpo referencia `_return`, a diretiva é enter+exit (short-circuit +
+transform). Se não, é enter-only (short-circuit puro). A distinção é
+inferida do uso no corpo — não há campo declarativo.
 
 Desugaring conceitual de `@cache` (intrínseca, não migrada — só para
 ilustrar o modelo intercept transparente que customizadas não suportam):
@@ -439,16 +452,16 @@ action handler(req :: Request) => Response
 
 Se `auth_intercept` short-circuita (retorna `Optional::Some(deny)`):
 
-1. `trace_exit` (externo) **dispara** com `result = deny`.
+1. `trace_exit` (externo) **dispara** com `_return = deny`.
 2. `auth_intercept` executou e decidiu short-circuit.
 3. O corpo (`process(req)`) **não executa**.
 
 Se `auth_intercept` prossegue (retorna `Optional::None`):
 
 1. O corpo executa normalmente.
-2. `trace_exit` (externo) dispara com `result = <valor do corpo>`.
+2. `trace_exit` (externo) dispara com `_return = <valor do corpo>`.
 
-Isto significa que `result` em Exit é o **valor de retorno observável**
+Isto significa que `_return` em Exit é o **valor de retorno observável**
 — pode vir do corpo ou de uma diretiva Intercept interna que
 short-circuitou. O autor da diretiva Exit não precisa distinguir os
 dois casos.
@@ -481,23 +494,22 @@ atingir esse nível.
 ## 7. O que a reflexão de funções habilita
 
 O PRD de reflexão (`docs/PRD-fn-reflection.md`) é pré-requisito porque as
-diretivas dependem de `f.name`, `f.arity`, etc. em compile-time.
+diretivas dependem de `_name`, `_arity`, etc. em compile-time.
 
 O que o PRD de reflexão fornece:
 
-- `f.name` → `TextLit` constante (caso estático)
-- `f.arity` → `IntLit` constante
-- `f.param_types` → `List` literal de `TextLit`
-- `f.return_type` → `TextLit` constante
-- `f.is_action` → `Boolean::True`/`False`
+- `_name` → `TextLit` constante (caso estático)
+- `_arity` → `IntLit` constante
+- `_types` → `List` literal de `TextLit`
+- `_return_type` → `TextLit` constante
+- `_is_action` → `Boolean::True`/`False`
 
-Tudo resolvido em compile-time quando `f` é `Ident` direto — que é
-exatamente o caso das diretivas (o compilador sempre sabe qual função está
-decorada). A sidecar table e o lookup dinâmico do PRD de reflexão **não se
-aplicam** aqui.
+Tudo resolvido em compile-time — o compilador sempre sabe qual função está
+decorada e sintetiza os bindings `_` no escopo da diretiva. A sidecar table
+e o lookup dinâmico do PRD de reflexão **não se aplicam** aqui.
 
 Sem a reflexão implementada, não há como o compilador sintetizar
-`TextLit("processar")` a partir de `f.name` — a infraestrutura não existe.
+`TextLit("processar")` a partir de `_name` — a infraestrutura não existe.
 
 ---
 
@@ -507,26 +519,26 @@ Estas são as questões que não podemos definir agora, seja porque dependem
 da implementação da reflexão, seja porque precisamos validar contra o
 compilador real.
 
-### A1. `args` e polimorfismo
+### A1. `_args`/`_return` e polimorfismo
 
-Se `pass: [f.name, args]` e a diretiva declara `args :: (Int, Text)`, ela
-só decora funções com essa assinatura exata. Alternativas:
+Sem `pass`, o tipo de `_args` e `_return` não é declarado na assinatura da
+diretiva — é inferido do uso no corpo. Se o corpo faz `format("{}", _return)`,
+`_return` é polimórfico (funciona com qualquer tipo que tenha `Format`). Se
+faz `_return + 1`, é monomórfico em `Int`. A inferência bidirecional do Kata5
+faz esse trabalho.
 
-- **Monomórfica:** cada diretiva serve uma assinatura fixa. Simples, mas
-  pouco reutilizável.
-- **Polimórfica:** a diretiva é genérica em `args`. Precisa de polimorfismo
-  de action no Kata5 — precisa verificar se isso existe.
-- **Textual:** `args` é serializado como `Text` (via `ty_to_text` do PRD
-  de reflexão). Perde o valor real, ganha universalidade. Bom para
-  `@log`, inútil para `@cache`.
+O limite é do corpo, não da declaração: a diretiva é tão polimórfica quanto
+o uso de `_args`/`_return` permitir. Se o corpo é monomórfico, a diretiva só
+decora funções com o tipo compatível. Falta verificar se Kata5 suporta
+actions genéricas para casos onde o polimorfismo do corpo não é suficiente.
 
-### A2. `result` e o tipo de retorno
+### A2. `_return` e o tipo de retorno
 
-Mesma questão. `pass: [result]` com `result :: Int` só decora funções que
-retornam `Int`. Para `@log` isso não é problema porque `{result}` vira
-`format` que é polimórfico. Para diretivas customizadas com intercept, a
-solução natural seria receber o valor tipado — mas aí a diretiva é
-monomórfica por tipo de retorno.
+Mesma questão de A1, aplicada ao valor de retorno. Sem `pass`, `_return`
+não tem tipo declarado — é inferido do uso no corpo. Para `@log` isso não
+é problema porque `format("{}", _return)` é polimórfico. Para diretivas
+customizadas com intercept que precisam do valor tipado, a diretiva é
+monomórfica por tipo de retorno — limitada pelo uso no corpo.
 
 ### A3. Intercept e mecanismo de fallback
 
@@ -552,14 +564,20 @@ encaixar.
 ### A4b. Nomes gerados e colisão com identificadores de usuário
 
 O desugaring gera variáveis internas (`__result`, `__decision`,
-`__cached`). Se o usuário puder declarar variáveis com esses nomes,
-há colisão.
+`__cached`) e as variáveis de reflexão (`_name`, `_arity`, `_return`,
+etc.). Se o usuário puder declarar variáveis com esses nomes, há colisão.
 
 **Decisão:** identificadores começando com `_` são reservados para o
-compilador. O usuário não pode declarar `let __result` nem `let _temp`.
-O `_` simples continua válido como hole (`+ 10 _`), wildcard em
-pattern matching (`Result::Err(_)`), e predicados em tipos refinados
-(`> _ 0`) — esses são símbolos sintáticos, não identificadores.
+compilador. O usuário não pode declarar `let __result` nem `let _temp`
+nem `let _name`. O `_` simples continua válido como hole (`+ 10 _`),
+wildcard em pattern matching (`Result::Err(_)`), e predicados em tipos
+refinados (`> _ 0`) — esses são símbolos sintáticos, não identificadores.
+
+As variáveis de reflexão (`_name`, `_arity`, `_types`, `_return_type`,
+`_is_action`, `_args`, `_return`) são disponibilizadas pelo compilador
+no corpo de actions anotadas com `@directive` (ver seção 3). Fora desse
+contexto, referenciar essas variáveis é erro — elas não existem no
+escopo global nem em actions comuns.
 
 Esta regra precisa ser implementada no lexer ou no typeck (ver A4
 para onde o desugaring encaixa no pipeline).
@@ -599,19 +617,38 @@ decidir: `@log` migra quando as diretivas customizadas atingirem paridade,
 ou `@log` é sempre intrínseca porque tem poder compile-time que
 diretivas customizadas não terão?
 
+### A9. Intercept enter+exit: qualificação por uso de `_return`
+
+No design sem `pass`, a distinção entre Intercept enter-only (short-circuit
+puro) e enter+exit (short-circuit + transform) é inferida do corpo: se o
+corpo referencia `_return`, o compilador gera o ponto de transformação
+após o corpo. Precisa validar:
+
+- O compilador consegue detectar confiavelmente se `_return` é referenciado
+  no corpo antes do typeck (no desugaring)?
+- O enter call retorna `Optional` (a decisão); o exit call retorna o valor
+  final (possivelmente transformado). A mesma action tem dois call sites
+  com tipos de retorno diferentes — o typeck aceita isso?
+- Alternativa: usar overloading — Intercept para short-circuit, Exit para
+  transform. Mas Exit hoje é observational (retorna `Unit`, não muda o
+  resultado). Permitir Exit transformador exige mudar a semântica de Exit.
+
 ---
 
 ## 9. Próximos passos
 
 1. **Implementar o PRD de reflexão** (`docs/PRD-fn-reflection.md`) — sem
-   ele, não há `f.name` em compile-time e as diretivas não têm metadata.
+   ele, não há `_name` em compile-time e as diretivas não têm metadata.
 2. **Verificar polimorfismo de action** (A1) — determinar se Kata5
-   suporta actions genéricas e se isso resolve o problema de `args`.
+   suporta actions genéricas e se isso resolve o problema de `_args`.
 3. **Verificar pipeline de compilação** (A4) — onde encaixar o desugaring
    de diretivas entre resolution e typeck.
 4. **Verificar mecanismo de early return** (A5) — como o codegen lida
-   com `return` hoje e como a injeção de `Exit` cobre todos os caminhos.
+   com `return` hoje e como a injeção de Exit cobre todos os caminhos.
 5. **Intercept e fallback** (A3) — resolvido: intercept é
    `Target::Action` only, não-transparente, `panic!` aborta.
-6. **Escrever o PRD** — depois de validar as hipóteses acima, converter
+6. **Intercept enter+exit** (A9) — validar se a detecção de `_return`
+   no corpo é viável no desugaring, ou se é necessário overloading
+   Intercept + Exit.
+7. **Escrever o PRD** — depois de validar as hipóteses acima, converter
    este documento num PRD com fases, DoD, e comandos de verificação.
