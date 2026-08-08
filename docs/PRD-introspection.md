@@ -1,8 +1,9 @@
 # PRD — Introspecção: `type!()`
 
-**Status:** 📝 Rascunho
+**Status:** ✅ Concluído
 **Data:** 2026-07-22
-**Depende de:** Typeck ✅ (Ty em cada TypedExpr), Monomorphização ✅, SHOW ✅, Refined types ✅, First-class actions 📝 (PRD separado — `Ty::Action` precisa existir)
+**Implementação:** `Token::Type` no lexer, `Expr::TypeOf` no AST, `Ty::display()` em `kata-core/src/ty.rs`, lowering em `kata-codegen/src/lowering/expr.rs`. ~15 testes E2E em `kata-driver/tests/type_of_e2e.rs`.
+**Depende de:** Typeck ✅, Monomorphização ✅, SHOW ✅, Refined types ✅, First-class actions ✅
 **Não depende de:** Type table runtime (não implementada), `kata_rt_typeof` (não implementado), `invoke!()` (PRD separado, não escrito)
 
 ## 1. Objetivo

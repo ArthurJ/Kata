@@ -20,6 +20,7 @@ use super::expr::{InferCtx, infer_expr};
 use super::helpers::{InferResult, reorder_dict_args_to_tuple};
 use super::log_builtins::{infer_log_builtin, infer_log_config_builtin, infer_log_recv_builtin};
 use super::sugar::infer_assert;
+use super::timer_builtins::infer_now_builtin;
 
 /// Resultado da inferência de ActionCall.
 ///
@@ -90,6 +91,11 @@ pub(crate) fn infer_action_call(
     }
     if callee == "log_config" {
         return infer_log_config_builtin(args, span, env, ctx);
+    }
+
+    // ── Builtins Timer ──
+    if callee == "now" {
+        return infer_now_builtin(args, span);
     }
 
     // ── Receiver factory call ──

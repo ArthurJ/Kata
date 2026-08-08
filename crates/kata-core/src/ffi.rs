@@ -361,6 +361,8 @@ pub enum FfiSymbol {
     SocketWriteBytes,
     /// `kata_rt_socket_close(handle) -> ()` — fecha socket (idempotente).
     SocketClose,
+    /// `kata_rt_timer_now() -> i64` — clock monotônico em nanossegundos.
+    TimerNow,
 }
 
 impl FfiSymbol {
@@ -555,6 +557,8 @@ impl FfiSymbol {
             FfiSymbol::SocketWriteText => "kata_rt_socket_write_text",
             FfiSymbol::SocketWriteBytes => "kata_rt_socket_write_bytes",
             FfiSymbol::SocketClose => "kata_rt_socket_close",
+            // Timer
+            FfiSymbol::TimerNow => "kata_rt_timer_now",
         }
     }
 
@@ -734,6 +738,8 @@ impl FfiSymbol {
             FfiSymbol::SocketWriteText => Ty::int(),
             FfiSymbol::SocketWriteBytes => Ty::int(),
             FfiSymbol::SocketClose => Ty::Unit,
+            // Timer
+            FfiSymbol::TimerNow => Ty::int(),
         }
     }
 
@@ -928,6 +934,8 @@ impl FfiSymbol {
             FfiSymbol::SocketWriteText,
             FfiSymbol::SocketWriteBytes,
             FfiSymbol::SocketClose,
+            // Timer
+            FfiSymbol::TimerNow,
         ];
         all.iter().copied().find(|s| s.symbol_name() == name)
     }

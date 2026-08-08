@@ -31,12 +31,11 @@ valor didático × esforço.
 - **Tensor:** `test_tensor_math.kata` ainda não migrado (bug intencional de dot com shapes incompatíveis — decisão de design pendente)
 - **Status:** ✅ Concluído (2026-07-28). `ranges.kata` criado, bug de codegen corrigido, snapshot adicionado. 1146 testes passando.
 
-### Cluster 4 — CSP expandido (parcial) ⚠️ Parcial
+### Cluster 4 — CSP expandido ⚠️ Parcial
 - **Candidatos legacy:** `test_broadcast.kata`, `test_parallel.kata`
 - **Destino:** `broadcast.kata` ✅, `parallel.kata` ❌
-- **Problemas:** `test_broadcast.kata` depende de `subscribe!` (não no manual moderno; `broadcast!` retorna `(Sender, ReceiverFactory)`); `test_parallel.kata` usa sintaxe legada de param (`n :: Int` em vez de `n::Int`)
-- **`broadcast.kata`:** ✅ Criado (2026-07-28). Sintaxe idiomática: `let (tx, subscribe) := broadcast!()` + `subscribe!()` + `tx !> 42` + `rx <! a`. Snapshot adicionado. 1146 testes passando.
-- **`parallel.kata`:** ❌ **Não implementado.** `spawn!` está documentado no PRD-fio11 (Fase 9) e no manual (§6.4), mas **não existe no resolver**. Redesign aprovado: special form `spawn!` ao lado de `fork!`, aceita tupla ou dict com `raw:`/`serialized:`. Necessita implementação no parser, typeck, codegen, e runtime antes de ter exemplo.
+- **`broadcast.kata`:** ✅ Criado (2026-07-28). Sintaxe idiomática: `let (tx, subscribe) := broadcast!()` + `subscribe!()` + `tx !> 42` + `rx <! a`. Snapshot adicionado.
+- **`parallel.kata`:** ❌ **Não criado.** `spawn!` está **totalmente implementado** (parser, inference `infer_spawn_builtin` em `csp_builtins.rs:356`, codegen `lower_spawn` em `fork_spawn.rs:144`, runtime `kata_rt_spawn_process` em `ipc.rs:41`). 10 testes E2E passando em `spawn_e2e.rs` + `spawn_ipc_e2e.rs`. Falta apenas criar o exemplo migrando `test_parallel.kata` (ajustar sintaxe legada `n :: Int` → `n::Int`).
 
 ### Cluster 5 — `@log` + imports ✅ Concluído
 - **Candidatos legacy:** `test_log.kata`, `test_imports.kata` — mantidos em legacy como referência
@@ -81,9 +80,18 @@ valor didático × esforço.
 7. `test_parallel.kata` → `parallel.kata` — preenche `spawn!`, retrabalho de assinatura
 8. `test_log.kata` → `log_telemetry.kata` — único candidato a `@log`, mas é reescrita
 
-## Bloqueios conhecidos (não tentar até resolver)
+## Bloqueios conhecidos (atualizado 2026-08-08)
 
-- **Interoperabilidade refined→base:** `echo!`, `show`, `+` rejeitam `PositiveInt`. O typeck não implementa widening de refined para tipo base. Arthur decidiu discutir o design disso antes de continuar o Cluster 1.
-- **`failure_test_*.kata`:** `@test{expects: "CompileError"}` não implementado (C1). NÃO migrar.
-- **`mod`/`and` em lambdas:** bug de codegen (`collect_free_vars` marca DispatchTable functions como free vars). Usar só FFI primitives em HOF callbacks até o fix.
-- **TRMA multi-clause:** `trma.rs:94` exige 1 clause; multi-clause não otimiza. Usar `match` explicit form para TRMA-eligible.
+### Resolvidos (removidos da lista)
+
+- **Interoperabilidade refined→base:** ✅ Resolvido via `PRD-refines.md`. `try_refines_fallback` em `apply_dispatch.rs` substitui refined por base e retenta dispatch. `show_synthesis.rs` cobre refined (mostra valor base). `echo!(x)` funciona para qualquer tipo.
+- **`mod`/`and` em lambdas (collect_free_vars bug):** ✅ Resolvido. `free_vars.rs:33` exclui funções do DispatchTable das free vars: `!dispatch.has_function(name)`. HOF callbacks com FFI primitives funcionam.
+- **TRMA multi-clause:** ✅ Resolvido. `trma.rs` suporta Caso A (1 clause com match explícito) e Caso B (2 clauses — sugar form).
+- **TODO-reflection-dispatch-extract.md:** ✅ Obsoleto. Reflexão via DotAccess removida completamente (commit `b04ddc2`). `dot_access.rs` encolheu de 788→400 linhas. Doc deletado.
+- **TODO-timer.md:** ✅ Obsoleto. Substituído por `PRD-timer.md` (design completo). Doc deletado.
+- **TODO-repl-echo-duplo.md:** ✅ Resolvido (2026-08-06). Doc deletado.
+
+### Pendentes
+
+- **`failure_test_*.kata`:** `@test{expects: "CompileError"}` não implementado (C1 — sub-módulos isolados). NÃO migrar. Ver `TECH-DEBT.md` item #2.
+- **Tensor:** `test_tensor_math.kata` não migrado (bug intencional de dot com shapes incompatíveis — decisão de design pendente).

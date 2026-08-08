@@ -416,6 +416,8 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
         "kata_rt_socket_close",
         rt::kata_rt_socket_close as *const u8,
     );
+    // Timer
+    builder.symbol("kata_rt_timer_now", rt::kata_rt_timer_now as *const u8);
 }
 
 /// Declara todos os símbolos FFI no module e retorna o mapa nome → FuncId.
@@ -639,5 +641,7 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         SocketWriteText,
         SocketWriteBytes,
         SocketClose,
+        // Timer
+        TimerNow,
     ]
 }

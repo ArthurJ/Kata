@@ -1,6 +1,6 @@
 # PRD — LSP para Kata Language
 
-**Status:** 🔨 Implementação (Fases 1-3 ✅, Fase 4 pendente)
+**Status:** 🔨 Implementação (Fases 1-3 ✅, Fase 4 parcial — error recovery ✅, benchmark/subcomando pendente)
 **Data:** 2026-07-28
 **Depende de:** Fio 1 ✅ (lexer, parser, inference), Fio 10 ✅ (módulos, imports)
 

@@ -255,9 +255,8 @@ fn match_tuple_pattern_third() {
 /// é trabalho de inferência de tuplas.
 ///
 /// O codegen de `TypedPattern::Tuple` em lambda ESTÁ implementado (via
-/// `test_single_pattern`). O bloqueio é upstream (parser + inferência).
+/// `test_single_pattern`). A inferência de `TypeExpr::Tuple` já funciona.
 #[test]
-#[ignore = "bloqueado pela inferência: TypeExpr::Tuple é inferência de tuplas"]
 fn lambda_tuple_pattern() {
     let src = "let fst := lambda (a, b): a\nfst (10, 20)";
     let (raw, ty) = eval_src(src);

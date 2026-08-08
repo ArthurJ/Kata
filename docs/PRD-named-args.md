@@ -1,5 +1,9 @@
 # PRD — Args Nomeados em Actions via Dict
 
+**Status:** ✅ Concluído
+**Data:** 2026-08-08
+**Implementação:** Parser aceita `g!{"k": v}` via `parse_brace_lit`, inference mapeia chaves→params e reordena para tupla posicional em `action_call.rs`. Funciona em `fork!` e `@test{args: ...}`.
+
 ## Visão
 
 Permitir que chamadas de action usem Dict literal como alternativa à tupla
