@@ -1,6 +1,6 @@
 # PRD — LSP para Kata Language
 
-**Status:** 🔨 Implementação (Fases 1-3 ✅, Fase 4 parcial — error recovery ✅, benchmark/subcomando pendente)
+**Status:** ✅ Implementação completa (Fases 1-4 ✅, critérios 3-10 ⬜ — testes E2E com editor pendentes)
 **Data:** 2026-07-28
 **Depende de:** Fio 1 ✅ (lexer, parser, inference), Fio 10 ✅ (módulos, imports)
 
@@ -428,14 +428,18 @@ importados abertos no editor) é uma extensão futura.
 - **DoD:** Arquivo com `import foo` recebe diagnósticos que referenciam tipos
   de `foo.kata` corretamente. Erro se `foo.kata` não existe é reportado.
 
-### Fase 4: Polimento
-- Error recovery: se parse falha, ainda tentar dar diagnósticos parciais
-  (lexer sempre produz tokens; parser pode produzir AST parcial)
-- Performance: medir latência do analysis pass em arquivos de exemplo
-- Adicionar `kata-lsp` ao `kata` CLI como subcomando `kata lsp` (opcional — pode
-  ser binário separado)
-- **DoD:** Latência < 100ms para arquivos < 500 linhas. Parser error não derruba
-  o servidor.
+### Fase 4: Polimento ✅
+- Error recovery ✅: `parse_with_recovery` produz AST parcial + erros acumulados;
+  o LSP publica diagnósticos de parse sem crashar (sem resolve/infer quando há erros de parse)
+- Performance ✅: benchmark criterion em `crates/kata-lsp/benches/frontend.rs`
+  - Arquivos reais: `stdlib/core.kata` (619 linhas), `examples/refined_types.kata` (73 linhas)
+  - Arquivos sintéticos: 50, 200, 500, 1000 linhas
+  - Resultado: pior caso real 1.97ms (73 linhas); 500 linhas sintético = 0.83ms
+  - DoD < 100ms amplamente satisfeito (50x de margem no pior caso real)
+- Subcomando `kata lsp` ✅: Opção A — dep direta de `kata-lsp` no `kata-driver`;
+  `run_stdio()` exposto em `kata-lsp::lib`; binário standalone `kata-lsp` mantido
+- **DoD:** Latência < 100ms para arquivos < 500 linhas ✅. Parser error não derruba
+  o servidor ✅.
 
 ## 7. Decisões de Design
 
@@ -447,7 +451,7 @@ importados abertos no editor) é uma extensão futura.
 | Localização do front-end | `kata-lsp/src/analysis.rs` | Único consumidor hoje; evitar premature abstraction |
 | Multi-arquivo (MVP) | Usa versão do disco | Determinístico; dirty buffers é extensão futura |
 | Codegen | Excluído do LSP | LSP não precisa de execução; pipeline puro |
-| Binário | Separado (`kata-lsp`) | LSP é processo de longa duração, diferente do CLI |
+| Binário | Integrado (`kata lsp`) + standalone (`kata-lsp`) | UX unificada via subcomando; binário standalone mantido para editores que preferem |
 | Unicode em spans | Byte→UTF-16 code unit | LSP spec é UTF-16; Span é bytes; conversão O(n) por linha |
 | `positionEncoding` | UTF-16 (default spec) | Compatibilidade máxima; negociar UTF-8 é futuro |
 
@@ -459,7 +463,7 @@ importados abertos no editor) é uma extensão futura.
 - **Inference** (`kata-inference`): reusado as-is
 - **Diagnostics** (`kata-diagnostics`): reusado as-is (FrontendError, MiddleError)
 - **AST** (`kata-ast`): reusado as-is (Span, Token, Expr, Module)
-- **Driver** (`kata-driver`): sem mudança (LSP é crate separado)
+- **Driver** (`kata-driver`): adicionado subcomando `Lsp` que delega para `kata_lsp::run_stdio()`
 - **Codegen/RT/Optimizer**: não referenciados pelo LSP
 
 ## 9. Riscos e Mitigações
@@ -500,7 +504,7 @@ importados abertos no editor) é uma extensão futura.
 ## 11. Critérios de Aceitação
 
 1. ✅ `cargo build --workspace` passa com o novo crate incluído
-2. ✅ `cargo test --workspace` passa sem regressões (1192 passed, 0 failed, 5 ignored)
+2. ✅ `cargo test --workspace` passa sem regressões (1469 passed, 0 failed, 4 ignored)
 3. ⬜ Conectando o LSP no editor (Neovim/VSCode), abrir um `.kata` com erro de
    sintaxe mostra o erro sublinhado com a mensagem correta
 4. ⬜ Editar o arquivo e corrigir o erro remove o diagnóstico (após debounce)
@@ -513,7 +517,11 @@ importados abertos no editor) é uma extensão futura.
    hover funcionam na posição correta
 10. ⬜ Arquivo com emoji em string literal (` 🚀`): hover funciona na posição
     correta (supplementary plane — surrogate pair em UTF-16)
+11. ✅ Latência < 100ms para arquivos < 500 linhas (benchmark criterion: pior
+    caso real 1.97ms, 500 linhas sintético 0.83ms)
+12. ✅ Parser error não derruba o servidor (`parse_with_recovery` + tratamento
+    de erros parciais em `analysis.rs`)
+13. ✅ Subcomando `kata lsp` disponível no CLI (Opção A — dep direta)
 
-> **Itens 1-2 ✅** (verificação automatizada). **Itens 3-10 ⬜** (testes E2E
-> com editor — pendentes para a próxima sessão, ver handoff
-> `/tmp/kata5-lsp-handoff.md`).
+> **Itens 1-2, 11-13 ✅** (verificação automatizada + benchmark). **Itens 3-10 ⬜**
+> (testes E2E com editor — pendentes).
