@@ -75,10 +75,18 @@ pub enum Ty {
     /// camada IoHandle comum no runtime.
     File,
     /// Socket — handle opaco para socket TCP/Unix aberto. Sem parametrização
-    /// de tipo (encoding determinado pela operação: read → Bytes, write aceita
+    /// de tipo (encoding determinada pela operação: read → Bytes, write aceita
     /// Text ou Bytes). Ponteiro na ABI (i64). Pode ser Listener (passivo) ou
     /// Connected (ativo, full-duplex).
     Socket,
+    /// Conjunto de overloads de uma Action referenciada como valor first-class
+    /// sem hint de tipo esperado. Interno ao compilador — não exposto na sintaxe.
+    /// Resolvido para `Ty::Action` concreto no call site (dispatch por args) ou
+    /// quando um hint de tipo esperado desambigua.
+    OverloadSet {
+        name: String,
+        overloads: Vec<(Vec<Ty>, Ty)>,
+    },
 }
 
 /// Mapeamento de representação FFI.
@@ -225,6 +233,7 @@ impl std::fmt::Display for Ty {
             Ty::Bytes => f.write_str("Bytes"),
             Ty::File => f.write_str("File"),
             Ty::Socket => f.write_str("Socket"),
+            Ty::OverloadSet { name, .. } => write!(f, "OverloadSet({name})"),
         }
     }
 }
@@ -306,6 +315,7 @@ impl Ty {
             Ty::Bytes => "Bytes".into(),
             Ty::File => "File".into(),
             Ty::Socket => "Socket".into(),
+            Ty::OverloadSet { name, .. } => format!("OverloadSet({name})"),
         }
     }
 }

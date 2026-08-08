@@ -8,7 +8,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 use kata_ast::{Expr, GuardClause, Pattern, Span, Spanned, TypeExpr, WithBinding};
-use kata_core::dispatch::DispatchTable;
+use kata_core::dispatch::{DispatchTable, match_score};
 use kata_core::enum_registry::EnumRegistry;
 use kata_core::escape::EscapeTarget;
 use kata_core::interface_registry::InterfaceRegistry;
@@ -173,16 +173,32 @@ pub(crate) fn infer_expr_hinted(
                             let action_overloads: Vec<_> =
                                 overloads.iter().filter(|o| o.is_action).collect();
                             if !action_overloads.is_empty() {
-                                // Primeira versão: usa o primeiro overload.
-                                // TODO: overloading de Actions — resolution por tipo esperado.
-                                let overload = action_overloads[0];
-                                (
-                                    Ty::Action(
-                                        overload.params.clone(),
-                                        Box::new(overload.ret.clone()),
-                                    ),
-                                    TypedExprKind::Ident { name: name.clone() },
-                                )
+                                // Desambiguação por hint (segunda versão do PRD §12).
+                                // Se há múltiplos overloads, usa o hint de tipo esperado
+                                // para selecionar o compatível. Sem hint, produz
+                                // Ty::OverloadSet para resolver no call site (dispatch por args).
+                                if let Some(overload) = select_action_overload(
+                                    &action_overloads, hint, ctx,
+                                ) {
+                                    // hint resolveu — Ty::Action concreto
+                                    (
+                                        Ty::Action(
+                                            overload.params.clone(),
+                                            Box::new(overload.ret.clone()),
+                                        ),
+                                        TypedExprKind::Ident { name: name.clone() },
+                                    )
+                                } else {
+                                    // Sem hint ou múltiplos compatíveis — Ty::OverloadSet
+                                    let overloads: Vec<(Vec<Ty>, Ty)> = action_overloads
+                                        .iter()
+                                        .map(|o| (o.params.clone(), o.ret.clone()))
+                                        .collect();
+                                    (
+                                        Ty::OverloadSet { name: name.clone(), overloads },
+                                        TypedExprKind::Ident { name: name.clone() },
+                                    )
+                                }
                             } else {
                                 // Caminho 4: realmente unbound.
                                 return Err(MiddleError::UnboundName {
@@ -859,5 +875,54 @@ fn extract_lambda_param_names(expr: &Expr) -> Option<Vec<String>> {
         Some(names)
     } else {
         None
+    }
+}
+
+/// Seleciona um overload de Action compatível com o hint de tipo esperado.
+///
+/// Segunda versão do PRD §12 (resolution por tipo esperado).
+///
+/// - Overload único: retorna-o diretamente (comportamento original).
+/// - Múltiplos overloads + hint `Ty::Action(hint_params, hint_ret)`:
+///   filtra por `match_score(hint_params, params)` compatível + `hint_ret == ret`.
+///   Se exatamente um casa, retorna-o; senão, `None` (AmbiguousDispatch).
+/// - Múltiplos overloads sem hint: `None` (AmbiguousDispatch).
+fn select_action_overload<'a>(
+    action_overloads: &[&'a kata_core::dispatch::OverloadInfo],
+    hint: Option<&Ty>,
+    ctx: &InferCtx,
+) -> Option<&'a kata_core::dispatch::OverloadInfo> {
+    // Overload único — sem ambiguidade.
+    if action_overloads.len() == 1 {
+        return Some(action_overloads[0]);
+    }
+
+    // Múltiplos overloads: tenta desambiguar pelo hint.
+    let (hint_params, hint_ret) = match hint {
+        Some(Ty::Action(params, ret)) => (params.as_slice(), ret.as_ref()),
+        _ => return None, // Sem hint de Action → ambíguo.
+    };
+
+    let compatibles: Vec<_> = action_overloads
+        .iter()
+        .filter(|o| {
+            // Aridade deve bater.
+            if o.params.len() != hint_params.len() {
+                return false;
+            }
+            // match_score compara params do hint (como "args") vs params do overload.
+            let score = match_score(hint_params, &o.params, ctx.interface_registry);
+            if !score.is_compatible(hint_params.len()) {
+                return false;
+            }
+            // Retorno deve ser igual.
+            &o.ret == hint_ret
+        })
+        .copied()
+        .collect();
+
+    match compatibles.len() {
+        1 => Some(compatibles[0]),
+        _ => None, // 0 ou >1 → ambíguo.
     }
 }

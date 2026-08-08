@@ -142,6 +142,103 @@ pub(crate) fn infer_action_call(
         return Ok(ActionDispatch::Complete(typed));
     }
 
+    // ── Indirect Action invocation via OverloadSet ──
+    // `f!(args)` onde `f` é variável local com `ty: Ty::OverloadSet`.
+    // O callee não está no DispatchTable — é o nome de uma variável.
+    // Faz dispatch por args: usa match_score para selecionar o overload
+    // compatível entre os overloads do OverloadSet.
+    if !ctx.table.has_function(callee)
+        && let Some(ty) = env.lookup(callee).cloned()
+        && let Ty::OverloadSet { name: action_name, overloads } = &ty
+    {
+        // Lowera a tupla de argumentos.
+        let typed_args = infer_expr(&args.node, &args.span, env, ctx, false)?;
+
+        // Normaliza Grouping → Tuple de 1 elemento, e args não-tupla → Tuple.
+        let typed_args = match &typed_args.kind {
+            TypedExprKind::Grouping { inner } => {
+                let inner = inner.clone();
+                TypedExpr {
+                    ty: Ty::Tuple(vec![inner.node.ty.clone()]),
+                    kind: TypedExprKind::Tuple {
+                        elements: vec![*inner],
+                    },
+                    span: typed_args.span,
+                    tail_pos: typed_args.tail_pos,
+                    escape: typed_args.escape,
+                }
+            }
+            TypedExprKind::Tuple { .. } | TypedExprKind::Unit => typed_args,
+            _ => {
+                TypedExpr {
+                    ty: Ty::Tuple(vec![typed_args.ty.clone()]),
+                    kind: TypedExprKind::Tuple {
+                        elements: vec![Spanned::new(typed_args.clone(), args.span)],
+                    },
+                    span: typed_args.span,
+                    tail_pos: typed_args.tail_pos,
+                    escape: typed_args.escape,
+                }
+            }
+        };
+
+        // Extrai tipos dos args.
+        let arg_tys: Vec<Ty> = match &typed_args.kind {
+            TypedExprKind::Tuple { elements } => {
+                elements.iter().map(|e| e.node.ty.clone()).collect()
+            }
+            TypedExprKind::Unit => Vec::new(),
+            _ => vec![typed_args.ty.clone()],
+        };
+
+        // Dispatch por args: filtra overloads compatíveis por match_score.
+        use kata_core::dispatch::match_score;
+        let compatibles: Vec<&(Vec<Ty>, Ty)> = overloads
+            .iter()
+            .filter(|(params, _)| {
+                if params.len() != arg_tys.len() {
+                    return false;
+                }
+                let score = match_score(&arg_tys, params, ctx.interface_registry);
+                score.is_compatible(arg_tys.len())
+            })
+            .collect();
+
+        if compatibles.is_empty() {
+            return Err(kata_diagnostics::MiddleError::TypeMismatch {
+                expected: format!("args compatíveis com algum overload de `{action_name}`"),
+                found: format!("nenhum overload casa com args de tipos [{}]",
+                    arg_tys.iter().map(|t| t.to_string()).collect::<Vec<_>>().join(", ")),
+                span: (*span).into(),
+            });
+        }
+        if compatibles.len() > 1 {
+            return Err(kata_diagnostics::MiddleError::AmbiguousDispatch {
+                name: action_name.clone(),
+                span: (*span).into(),
+            });
+        }
+
+        // overload único compatível — resolve para Ty::Action concreto.
+        let (_, ret) = compatibles[0];
+
+        // Constrói ActionCall com callee = action_name (do OverloadSet, não da variável).
+        // O codegen faz lookup por action_name + args no DispatchTable/kata_refs.
+        return Ok(ActionDispatch::Complete(TypedExpr {
+            span: *span,
+            ty: ret.clone(),
+            tail_pos: false,
+            escape: kata_core::escape::EscapeTarget::Local,
+            kind: TypedExprKind::ActionCall {
+                callee: action_name.clone(),
+                args: Box::new(Spanned::new(typed_args, args.span)),
+                caller_arena: 0,
+                ffi_symbol: None,
+                indirect_callee: None,
+            },
+        }));
+    }
+
     // ── Indirect Action invocation ──
     // `f!(args)` onde `f` é variável local com `ty: Ty::Action(params, ret)`.
     // O callee não está no DispatchTable — é o nome de uma variável.

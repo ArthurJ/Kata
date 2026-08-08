@@ -211,10 +211,7 @@ pub(crate) fn infer_fork_builtin(
     }
 
     // Primeiro elemento: nome da Action (Ident) ou variável do tipo Action.
-    // Inference: infer the expression to get a TypedExpr for action_expr.
-    let action_expr_typed =
-        super::expr::infer_expr(&elements[0].node, &elements[0].span, env, ctx, false)?;
-
+    //
     // Determine action_name and whether this is a direct or indirect fork.
     // Direct: `fork!(worker, ...)` — worker is an Action in the DispatchTable.
     // Indirect: `fork!(f, ...)` — f is a variable holding Ty::Action.
@@ -233,6 +230,16 @@ pub(crate) fn infer_fork_builtin(
             // Non-Ident expression — always indirect.
             ("__indirect_fork".to_string(), false)
         }
+    };
+
+    // Inference do primeiro elemento só é necessária no caminho indirect
+    // (para verificar que a variável tem Ty::Action). No caminho direct,
+    // o fork faz seu próprio dispatch pelos args — inferir o Ident como
+    // first-class ref falharia com AmbiguousDispatch para Actions overloadadas.
+    let action_expr_typed: Option<TypedExpr> = if !is_direct {
+        Some(super::expr::infer_expr(&elements[0].node, &elements[0].span, env, ctx, false)?)
+    } else {
+        None
     };
 
     if is_direct {
@@ -262,10 +269,13 @@ pub(crate) fn infer_fork_builtin(
         }
     } else {
         // Indirect fork: verify action_expr_typed has Ty::Action.
-        if !matches!(&action_expr_typed.ty, Ty::Action(_, _)) {
+        let action_expr = action_expr_typed
+            .as_ref()
+            .expect("indirect fork tem action_expr_typed");
+        if !matches!(&action_expr.ty, Ty::Action(_, _)) {
             return Err(kata_diagnostics::MiddleError::TypeMismatch {
                 expected: "Action (fn_ptr) como primeiro arg de fork!".into(),
-                found: format!("{:?}", action_expr_typed.ty),
+                found: format!("{:?}", action_expr.ty),
                 span: elements[0].span.into(),
             });
         }
@@ -324,6 +334,18 @@ pub(crate) fn infer_fork_builtin(
         }
     }
 
+    // Para o Fork TAST node: no caso direct, o codegen não usa action_expr
+    // (faz lookup por action_name em kata_ids). No caso indirect, lowera
+    // action_expr para obter fn_ptr. Criamos um placeholder para direct.
+    let placeholder_expr = TypedExpr {
+        span: elements[0].span,
+        ty: Ty::Unit,
+        tail_pos: false,
+        escape: kata_core::escape::EscapeTarget::Local,
+        kind: TypedExprKind::Unit,
+    };
+    let action_expr_for_tast = action_expr_typed.unwrap_or(placeholder_expr);
+
     Ok(ActionDispatch::Complete(TypedExpr {
         span: *span,
         ty: Ty::Unit,
@@ -331,7 +353,7 @@ pub(crate) fn infer_fork_builtin(
         escape: kata_core::escape::EscapeTarget::Local,
         kind: TypedExprKind::Fork {
             action_name,
-            action_expr: Box::new(Spanned::new(action_expr_typed, elements[0].span)),
+            action_expr: Box::new(Spanned::new(action_expr_for_tast, elements[0].span)),
             args: Box::new(Spanned::new(typed_args, elements[1].span)),
         },
     }))

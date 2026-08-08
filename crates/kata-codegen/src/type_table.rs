@@ -132,6 +132,8 @@ pub fn ty_to_marshal_shape(ty: &Ty, structs: &StructRegistry, enums: &EnumRegist
         // InferVar/Var/Interface — não deveriam aparecer em runtime.
         // Mapeia para Unit graceful (não deve ser marshal'd em produção).
         Ty::InferVar(_) | Ty::Var(_) | Ty::Interface(_) => TypeShape::Unit,
+        // OverloadSet: tipo interno do compilador, não tem representação runtime.
+        Ty::OverloadSet { .. } => TypeShape::Unit,
     }
 }
 

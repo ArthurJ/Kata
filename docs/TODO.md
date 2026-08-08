@@ -35,30 +35,32 @@ canais, nunca por join/waitpid. `SIG_IGN` é a solução definitiva.
 
 **Arquivos:** `crates/kata-rt/src/ipc.rs:18-47` (handler), `ipc.rs:73-77` (call site)
 
-### 3. First-class Action reference ambígua — resolution por tipo esperado
+### 3. First-class Action reference ambígua — OverloadSet ✅ Resolvido
 
-**Estado:** Actions são first-class (PRD-first-class-actions ✅), mas
-quando uma Action com múltiplos overloads é referenciada como valor (sem
-`!`), o typeck pega silenciosamente o primeiro overload em vez de usar o
-hint de tipo esperado para desambiguar. O PRD §12 (Riscos) prevê este
-caso: "Primeira versão: erro se ambíguo. Depois: resolution por tipo
-esperado do param." A implementação atual não faz nem uma coisa nem a
-outra — pega `action_overloads[0]` sem verificar ambiguidade.
+**Resolvido.** Implementado em duas camadas:
 
-**O que falta:** Em `expr.rs` (caminho 3 — Ident como first-class Action
-ref), quando `action_overloads.len() > 1`:
-1. Tentar desambiguar pelo `hint: Option<&Ty>` — se o hint é
-   `Ty::Action(params, ret)`, selecionar o overload compatível
-2. Se não há hint ou há múltiplos compatíveis, emitir erro de ambiguidade
-   (não pegar o primeiro silenciosamente)
+1. **Hint-based (segunda versão do PRD §12):** `select_action_overload` em
+   `expr.rs` usa o hint de tipo esperado (`Ty::Action(params, ret)`) para
+   selecionar o overload compatível via `match_score` quando há múltiplos
+   overloads. Se o hint resolve para um único overload, produz `Ty::Action`
+   concreto.
 
-**Arquivos:** `crates/kata-inference/src/infer/expr.rs:170-185`
+2. **OverloadSet (Fase 1):** Quando não há hint ou há múltiplos compatíveis,
+   o typeck produz `Ty::OverloadSet { name, overloads }` — tipo interno que
+   carrega os overloads adiante. No call site (`f!(args)`), o dispatch por
+   args usa `match_score` para selecionar o overload compatível e resolve
+   para `ActionCall` direto com `callee = action_name`.
 
-**Impacto:** Baixo. O caso só surge com Actions overloadadas (como `read`
-e `write` do prelude) referenciadas como valor first-class — algo raro na
-prática. Actions de assinatura única (o caso comum em `fork!`) funcionam
-corretamente. Overloading de Actions na chamada (com `!`) já funciona
-via DispatchTable.
+**Arquivos:**
+- `crates/kata-core/src/ty.rs` — `Ty::OverloadSet`
+- `crates/kata-inference/src/infer/expr.rs` — `select_action_overload`, caminho 3
+- `crates/kata-inference/src/infer/action_call.rs` — dispatch por args para OverloadSet
+- `crates/kata-codegen/src/lowering/expr.rs` — placeholder para Ident com OverloadSet
+- `crates/kata-codegen/tests/overloadset_actions.rs` — 5 testes E2E
+
+**Cobertura:** `let f := echo` sem uso, `f!("hello")` (dispatch por args),
+`f!(42)` (Int implementa SHOW), dispatch por arity. Actions em módulos
+diferentes (monomorfização) fica para Fase 2.
 
 ---
 

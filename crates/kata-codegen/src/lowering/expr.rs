@@ -163,6 +163,14 @@ pub(crate) fn lower_expr(
                         .global_value(ctx.module.target_config().pointer_type(), func_gv));
                 }
             }
+            // Caminho 4: OverloadSet — tipo interno, não produz um valor
+            // de função única. O valor da variável nunca é usado pelo codegen:
+            // quando f!(args) é chamado, o dispatch produz ActionCall direto
+            // com callee = action_name, que não referencia a variável.
+            // Produz 0 (I64) como placeholder.
+            if let Ty::OverloadSet { .. } = &expr.ty {
+                return Ok(ctx.builder.ins().iconst(I64, 0));
+            }
             Err(super::CodegenError::UnsupportedNode(format!(
                 "unbound ident: {name}"
             )))

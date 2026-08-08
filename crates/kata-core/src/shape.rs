@@ -142,6 +142,9 @@ impl Ty {
             Ty::File => TypeShape::Prim,
             // Socket: handle opaco — não é heap type (i64).
             Ty::Socket => TypeShape::Prim,
+            // OverloadSet: tipo interno do compilador, não tem representação runtime.
+            // Mapeia para Unit graceful — nunca chega ao codegen como tipo de valor.
+            Ty::OverloadSet { .. } => TypeShape::Unit,
         }
     }
 }

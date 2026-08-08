@@ -303,6 +303,7 @@ fn contains_channel_type(ty: &Ty) -> bool {
         | Ty::Byte
         | Ty::Bytes
         | Ty::File
-        | Ty::Socket => false,
+        | Ty::Socket
+        | Ty::OverloadSet { .. } => false,
     }
 }

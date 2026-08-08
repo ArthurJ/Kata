@@ -48,6 +48,9 @@ pub(crate) fn ty_to_clif(ty: &Ty) -> cranelift_codegen::ir::Type {
         // Interface: não é tipo concreto — não deveria chegar ao codegen.
         // Mapeia para I64 como fallback graceful.
         Ty::Interface(_) => I64,
+        // OverloadSet: tipo interno, não deveria chegar ao codegen como valor.
+        // Mapeia para I64 como fallback graceful.
+        Ty::OverloadSet { .. } => I64,
     }
 }
 
