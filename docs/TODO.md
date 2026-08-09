@@ -1,6 +1,6 @@
 # TODO — Kata-Lang
 
-Único arquivo de pendências. Atualizado 2026-08-08 após auditoria completa do código.
+Único arquivo de pendências. Atualizado 2026-08-09.
 
 Os docs `TODO-*.md` foram removidos (obsoletos ou resolvidos). Pendências vivem aqui.
 
@@ -8,7 +8,7 @@ Os docs `TODO-*.md` foram removidos (obsoletos ou resolvidos). Pendências vivem
 
 ## Débito Técnico
 
-### 1. `@test{expects: "CompileError"}` — execução não implementada
+### 1. `@test{expects: \"CompileError\"}` — execução não implementada
 
 **Estado:** Parser aceita, codegen cria placeholder, driver imprime `[PENDENTE]` e pula.
 
@@ -21,90 +21,6 @@ Os docs `TODO-*.md` foram removidos (obsoletos ou resolvidos). Pendências vivem
 **Arquivos:** `crates/kata-driver/src/main.rs:234-242`, `crates/kata-codegen/src/lowering/test_runner.rs:68-72`, `crates/kata-driver/tests/test_runner_e2e.rs` (teste `#[ignore]`)
 
 **Impacto:** Médio. Testes negativos são silenciosamente pulados — o programador escreve o teste, o runner diz `[PENDENTE]`, mas a validação nunca acontece.
-
-### 2. SIGCHLD handler — reap automático de processos filhos de `spawn!` ✅
-
-**Resolvido.** Instalado `sigaction(SIGCHLD, SIG_IGN, SA_RESTART)` antes do
-`fork()` via `std::sync::Once` em `kata_rt_spawn_process`. O kernel descarta
-o status do child automaticamente — nenhum zombie é criado. `SIG_IGN` para
-SIGPIPE consolidado no mesmo `Once` (antes era instalado após o fork em cada
-`spawn!`); o child herda ambos via `fork()`.
-
-`spawn!` é fire-and-forget por design — toda comunicação entre actions é por
-canais, nunca por join/waitpid. `SIG_IGN` é a solução definitiva.
-
-**Arquivos:** `crates/kata-rt/src/ipc.rs:18-47` (handler), `ipc.rs:73-77` (call site)
-
-### 3. First-class Action reference ambígua — OverloadSet ✅ Resolvido
-
-**Resolvido.** Implementado em duas camadas:
-
-1. **Hint-based (segunda versão do PRD §12):** `select_action_overload` em
-   `expr.rs` usa o hint de tipo esperado (`Ty::Action(params, ret)`) para
-   selecionar o overload compatível via `match_score` quando há múltiplos
-   overloads. Se o hint resolve para um único overload, produz `Ty::Action`
-   concreto.
-
-2. **OverloadSet (Fase 1 + Fase 2):** Quando não há hint ou há múltiplos
-   compatíveis, o typeck produz `Ty::OverloadSet { name, overloads }` —
-   tipo interno que carrega os overloads adiante. No call site (`f!(args)`),
-   o dispatch por args usa `match_score` para selecionar o overload
-   compatível e resolve para `ActionCall` direto com `callee = action_name`.
-
-   **Fase 2 (monomorfização):** `let f := worker` onde `worker` é uma action
-   genérica (`msg :: SHOW`) produz `Ty::Action([Interface("SHOW")], ())`.
-   O monomorfizador instancia `worker_SHOW_Text` e `echo_SHOW_Text`,
-   remove as templates genéricas de `typed.actions`, e remove
-   `indirect_callee` do `ActionCall` para que a chamada seja direta.
-
-**Arquivos:**
-- `crates/kata-core/src/ty.rs` — `Ty::OverloadSet`
-- `crates/kata-inference/src/infer/expr.rs` — `select_action_overload`, caminho 3,
-  `fn_alias` estendido para Actions
-- `crates/kata-inference/src/infer/action_call.rs` — dispatch por args para OverloadSet,
-  `match_score` no caminho indirect, `callee = fn_alias_of(callee)`
-- `crates/kata-resolution/src/lib.rs` — `resolve_with_prelude`
-- `crates/kata-monomorph/src/lib.rs` — remoção de templates genéricas,
-  remoção de `indirect_callee` ao instanciar
-- `crates/kata-monomorph/src/overload_resolution.rs` — guard `Ty::Interface`
-  em `instantiate_generic_action_call`, `resolve_erased_ffi_symbol` reescreve callee
-- `crates/kata-codegen/src/lowering/expr.rs` — placeholder para Ident com OverloadSet
-  e `Ty::Action` com `Interface(_)` nos params
-- `crates/kata-codegen/tests/overloadset_actions.rs` — 10 testes E2E
-
-   **Fase 3 (passar OverloadSet como argumento):** `dispatcher!(echo)` passa
-   uma action como argumento para outra action. O `match_score` (braço
-   OverloadSet vs Action) aceita na inference. O monomorphizer instancia
-   `echo_SHOW_Text` na posição de argumento (`instantiate_overloadset_arg`)
-   e rewrites o arg de `Ident("echo")` + `OverloadSet` para
-   `Ident("echo_SHOW_Text")` + `Action([Text], Unit)`. O codegen encontra a
-   instância em `kata_ids` e produz fn_ptr válido — sem segfault.
-
-   A concretização acontece na monomorphization (estágio correto do pipeline),
-   não na inference. Sem `convert_overloadset_args` ou `dispatch_params`.
-
-**Arquivos:**
-- `crates/kata-core/src/ty.rs` — `Ty::OverloadSet`
-- `crates/kata-core/src/dispatch.rs` — braço OverloadSet vs Action no `match_score`
-- `crates/kata-inference/src/infer/expr.rs` — `select_action_overload`, caminho 3,
-  `fn_alias` estendido para Actions
-- `crates/kata-inference/src/infer/action_call.rs` — dispatch por args para OverloadSet,
-  `match_score` no caminho indirect, `callee = fn_alias_of(callee)`
-- `crates/kata-resolution/src/lib.rs` — `resolve_with_prelude`
-- `crates/kata-monomorph/src/lib.rs` — remoção de templates genéricas,
-  remoção de `indirect_callee` ao instanciar, call site de `instantiate_overloadset_arg`
-  no braço ActionCall de `rewrite_typed_expr`
-- `crates/kata-monomorph/src/overload_resolution.rs` — guard `Ty::Interface`
-  em `instantiate_generic_action_call`, `resolve_erased_ffi_symbol` reescreve callee,
-  `instantiate_overloadset_arg` instancia action genérica na posição de argumento
-- `crates/kata-codegen/src/lowering/expr.rs` — placeholder para Ident com OverloadSet
-  e `Ty::Action` com `Interface(_)` nos params
-- `crates/kata-codegen/tests/overloadset_actions.rs` — 10 testes E2E
-
-**Cobertura:** `let f := echo` sem uso, `f!("hello")` (dispatch por args),
-`f!(42)` (Int implementa SHOW), dispatch por arity, action genérica com SHOW
-via `let f := worker` (Text e Int), chamada direta `worker!("hello")`,
-`dispatcher!(echo)` (OverloadSet como arg), `let f := echo; dispatcher!(f)` (via variável).
 
 ---
 
@@ -137,27 +53,6 @@ via `let f := worker` (Text e Int), chamada direta `worker!("hello")`,
 Itens identificados na análise arquitetural de 2026-08-09. Cada item descreve
 o problema, a proposta, e o status (analisar / decidir / executar).
 
-### A1. Orquestração do pipeline como composição de passos ✅ Resolvido
-
-**Resolvido.** Implementado `pipeline.rs` no `kata-driver` com um `Pipeline`
-struct composicional. Cada passo (lex, parse, resolve, desugar, infer,
-monomorph, optimize, tree_shake, comptime, build_type_table) existe uma
-única vez como método que consome `self` e produz o próximo estado. Os três
-backends (JIT, test, AOT) escolhem os modos (`ParseMode::TwoPass` vs `Single`,
-`ShakeMode::Default` vs `PreserveTests`) e terminam com `.jit_eval()`,
-`.jit_tests()` ou `.aot_emit()` sobre o `CompiledModule`.
-
-**Bônus:** A unificação corrigiu 3 divergências do AOT que eram bugs por
-omissão — AOT agora faz 2-pass parse, `desugar_directives`, e
-`resolve_with_imports` (diretivas importadas), como JIT e test.
-
-**Arquivos:**
-- `crates/kata-driver/src/pipeline.rs` — novo, `Pipeline` + `CompiledModule`
-- `crates/kata-driver/src/main.rs` — `run_pipeline_with_file` e `cmd_test`
-  reescritos como chamadas ao Pipeline (~90 linhas removidas)
-- `crates/kata-driver/src/aot.rs` — `cmd_build` reescrito (~40 linhas
-  removidas), imports limpos
-
 ### A2. Runtime reentrante — eliminar globals e TLS
 
 **Problema:** `TYPE_TABLE: LazyLock<Mutex<...>>`, `SHARED_ARC`, `SHARED_ARENA`,
@@ -180,7 +75,7 @@ impacto no codegen e na ABI das FFIs.
 **Problema:** `LowerCtx` tem 30+ campos misturando 5 concerns: bindings,
 closures, escape/ARC, type IDs, function-level state, arena management,
 I/O handles, loop/continue blocks, epílogo de Action. O doc
-`maquinaria-interna.md` chama de "a struct mais complexa".
+`maquinaria-interna.md` chama de \"a struct mais complexa\".
 
 **Proposta:** Decompor em contextos estratificados:
 - `ScopeCtx` — bindings e var_map
@@ -259,6 +154,6 @@ Mantidos no ROADMAP. Não mover para cá sem decisão explícita.
 - Tensor/SIMD
 - `@heapstack` (otimização heurística de arena em loops)
 - `@restart` (retry policy para Actions)
-- Doc comments (`///`, `"""doc"""`)
+- Doc comments (`///`, `\"\"\"doc\"\"\"`)
 - Tuplas variádicas (`T...`)
 - GC/reclamation granular para fibers long-lived
