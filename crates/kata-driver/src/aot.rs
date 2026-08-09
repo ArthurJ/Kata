@@ -5,25 +5,12 @@
 //! (`link` + `find_linker`). O restante do driver (CLI dispatch, pipeline
 //! JIT, test runner) vive em `main.rs`.
 
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use kata_codegen::aot_emit;
-use kata_comptime::run_comptime_pass;
 use kata_core::ty::Ty;
-use kata_inference::infer_module;
-use kata_lexer::lex;
-use kata_monomorph::monomorphize;
-use kata_optimizer::optimize;
-use kata_parser::parse;
-use kata_resolution::{load_prelude, resolve};
 use kata_rt as rt;
-use kata_tree_shaking::tree_shake;
 
-use kata_codegen::type_table;
-
-use crate::imports::{load_module_imports, merge_imports};
-use crate::{IntoReport, merge_resolved, read_source};
+use crate::read_source;
 
 /// Executa o subcomando `kata build`.
 ///
@@ -44,57 +31,26 @@ pub(crate) fn cmd_build(file: &str, output: Option<&str>, dynamic: bool) -> miet
         }
     };
 
-    // Pipeline até TypedModule.
+    // Pipeline até CompiledModule.
     let source = read_source(file)?;
-    let tokens = lex(&source).map_err(IntoReport::into_report)?;
-    let module = parse(tokens).map_err(IntoReport::into_report)?;
-
-    // Carregar módulos importados (se houver)
-    let imports = load_module_imports(file, &module)?;
-
-    let prelude = load_prelude().map_err(|e| {
-        miette::Report::msg(format!(
-            "erro ao carregar prelude: {}",
-            crate::format_error_vec(&e)
-        ))
-    })?;
-    let user = resolve(&module).map_err(|e| {
-        miette::Report::msg(format!(
-            "erro de resolução: {}",
-            crate::format_error_vec(&e)
-        ))
-    })?;
-    let mut resolved = merge_resolved(prelude, user);
-    merge_imports(&mut resolved, &imports);
-    let typed = infer_module(&module, &resolved).map_err(IntoReport::into_report)?;
-
-    // Monomorph + optimize.
-    let mono = monomorphize(typed);
-    let mono = optimize(mono);
-
-    // Tree shaking — remove @test e funções não alcançadas (só AOT).
-    let shaken = tree_shake(mono.inner);
-
-    // Comptime pass — avalia expressões @comptime em compile-time e
-    // substitui por literais/snapshots antes do codegen AOT.
-    let shaken = run_comptime_pass(shaken, &resolved.enum_registry)
-        .map_err(|e| miette::Report::msg(format!("erro de comptime: {e}")))?;
-
-    // Type table — registra TypeShapes no runtime para to_bytes/from_bytes.
-    let mono = kata_monomorph::MonoModule::from(shaken);
-    let type_id_map: HashMap<Ty, i64> = type_table::build_and_register_type_table(
-        &mono,
-        &mono.struct_registry,
-        &resolved.enum_registry,
-    );
+    let compiled = crate::pipeline::Pipeline::new(&source)
+        .lex()?
+        .parse(crate::pipeline::ParseMode::TwoPass, Some(file))?
+        .resolve(Some(file))?
+        .desugar()
+        .infer()?
+        .monomorph()
+        .optimize()
+        .tree_shake(crate::pipeline::ShakeMode::Default)?
+        .comptime()?
+        .build_type_table()?;
 
     // AOT emit — produz object file (.o) bytes.
-    let object_bytes = aot_emit(&mono, &type_id_map)
-        .map_err(|e| miette::Report::msg(format!("erro de codegen AOT: {e}")))?;
-
-    // Determinar o tipo de retorno do entry point para o tag de display.
-    let ret_ty = mono.entry.node.ty.clone();
+    // Determinar o tipo de retorno do entry point antes de consumir
+    // o CompiledModule no aot_emit.
+    let ret_ty = compiled.entry_ty();
     let type_tag = ty_to_type_tag(&ret_ty);
+    let object_bytes = compiled.aot_emit()?;
 
     // Link — produz executável.
     link(&object_bytes, &output_path, dynamic, type_tag)

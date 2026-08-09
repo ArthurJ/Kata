@@ -1,22 +1,18 @@
 use std::path::{Path, PathBuf};
 
 use clap::Parser;
-use kata_codegen::{TestWrapper, jit_compile_tests, jit_eval};
-use kata_comptime::run_comptime_pass;
+use kata_codegen::TestWrapper;
 use kata_core::ty::Ty;
-use kata_inference::infer_module;
 use kata_lexer::lex;
-use kata_monomorph::monomorphize;
-use kata_optimizer::optimize;
-use kata_parser::{parse, parse_decls_only, parse_with_arity, scan_lambdas};
-use kata_resolution::{ResolvedModule, extract_arities, load_prelude, resolve_with_imports};
+use kata_parser::parse;
+use kata_resolution::ResolvedModule;
 use kata_rt as rt;
-use kata_tree_shaking::tree_shake;
 
 mod aot;
 mod display;
 mod highlight;
 mod imports;
+mod pipeline;
 mod repl;
 
 /// CLI do compilador Kata.
@@ -179,54 +175,19 @@ fn cmd_test(path: &str, filter: Option<&str>) -> miette::Result<()> {
         let label = file.display();
 
         // Pipeline até jit_compile_tests.
-        let tokens = lex(&source).map_err(IntoReport::into_report)?;
-        let module = parse(tokens).map_err(IntoReport::into_report)?;
+        let compiled = pipeline::Pipeline::new(&source)
+            .lex()?
+            .parse(pipeline::ParseMode::Single, Some(&file.to_string_lossy()))?
+            .resolve(Some(&file.to_string_lossy()))?
+            .desugar()
+            .infer()?
+            .monomorph()
+            .optimize()
+            .tree_shake(pipeline::ShakeMode::PreserveTests)?
+            .comptime()?
+            .build_type_table()?;
 
-        // Carregar módulos importados (se houver)
-        let imports = imports::load_module_imports(&file.to_string_lossy(), &module)?;
-
-        let imported_directives = imports::collect_imported_directives(&imports);
-
-        let prelude = load_prelude().map_err(|e| {
-            miette::Report::msg(format!(
-                "erro ao carregar prelude: {}",
-                format_error_vec(&e)
-            ))
-        })?;
-        let user =
-            resolve_with_imports(&module, "__local__", imported_directives).map_err(|e| {
-                miette::Report::msg(format!("erro de resolução: {}", format_error_vec(&e)))
-            })?;
-        let mut resolved = merge_resolved(prelude, user);
-        imports::merge_imports(&mut resolved, &imports);
-        kata_inference::desugar_directives::desugar_directives(&mut resolved);
-        let typed = infer_module(&module, &resolved).map_err(IntoReport::into_report)?;
-        let typed = monomorphize(typed);
-        let typed = optimize(typed);
-
-        // Tree shaking preservando testes — remove actions não alcançadas
-        // (ex: `echo` original type-erased após monomorfização) mas mantém
-        // TypedTestSpec nas actions alcançadas para que jit_compile_tests
-        // gere os wrappers `__kata_test_*`.
-        let typed = kata_monomorph::MonoModule::from(kata_tree_shaking::tree_shake_preserve_tests(
-            typed.inner,
-        ));
-
-        // Comptime pass — avalia @comptime antes de compilar os testes.
-        let typed = kata_monomorph::MonoModule::from(
-            run_comptime_pass(typed.inner, &resolved.enum_registry)
-                .map_err(|e| miette::Report::msg(format!("erro de comptime: {e}")))?,
-        );
-
-        // Type table — registra TypeShapes no runtime para to_bytes/from_bytes.
-        let _type_id_map = kata_codegen::type_table::build_and_register_type_table(
-            &typed,
-            &typed.struct_registry,
-            &resolved.enum_registry,
-        );
-
-        let (jit_module, wrappers) = jit_compile_tests(&typed, &_type_id_map)
-            .map_err(|e| miette::Report::msg(format!("erro de codegen: {e}")))?;
+        let (jit_module, wrappers) = compiled.jit_tests()?;
 
         for w in &wrappers {
             let desc = w.spec.desc.as_deref().unwrap_or("(sem desc)");
@@ -355,121 +316,35 @@ pub(crate) struct ExecResult {
     pub ty: Ty,
 }
 
-/// Executa o pipeline completo: lex → parse → resolve → infer → optimize → codegen → JIT.
+/// Executa o pipeline completo (JIT): lex → parse (two-pass) → resolve →
+/// infer → monomorph → optimize → tree-shake → comptime → type-table →
+/// codegen + execução.
 fn run_pipeline(source: &str) -> miette::Result<ExecResult> {
     run_pipeline_with_file(source, None)
 }
 
 /// Executa o pipeline completo com caminho do arquivo (para resolver imports).
 ///
-/// Quando `file_path` é `Some`, o prelude (core.kata) é carregado como import
-/// implícito via ModuleLoader — não há `load_prelude()` separado.
-/// Quando `file_path` é `None` (eval), o prelude é injetado via `load_prelude()`.
-///
-/// Ciclo de dois passes (Fase 4 — arity-uniformization) + Pass 0 (scan_lambdas):
-/// 0. Pass 0: `scan_lambdas` (tokens) → aridades de `let f := lambda ...`
-/// 1. Pass 1: `parse_decls_only` → resolve → `extract_arities` (sobrescrevem lambdas)
-/// 2. Pass 2: `parse_with_arity` (completo) → resolve → infer → codegen
+/// Delega a sequência de compilação ao `Pipeline` composicional (A1).
+/// Cada passo existe uma vez — este wrapper só escolhe os modos (two-pass,
+/// tree-shake default) e termina com `jit_eval`.
 fn run_pipeline_with_file(source: &str, file_path: Option<&str>) -> miette::Result<ExecResult> {
-    // 1. Lex
-    let tokens = lex(source).map_err(IntoReport::into_report)?;
+    let compiled = pipeline::Pipeline::new(source)
+        .lex()?
+        .parse(pipeline::ParseMode::TwoPass, file_path)?
+        .resolve(file_path)?
+        .desugar()
+        .infer()?
+        .monomorph()
+        .optimize()
+        .tree_shake(pipeline::ShakeMode::Default)?
+        .comptime()?
+        .build_type_table()?;
 
-    // 2a. Pass 0: scan_lambdas — aridades de `let f := lambda ...` no top level
-    // Scan linear de tokens, não depende de resolve nem de parse_decls_only.
-    let mut arities = scan_lambdas(&tokens);
+    let ty = compiled.entry_ty();
+    let raw = compiled.jit_eval()?;
 
-    // 2b. Pass 1: parse_decls_only → resolve → extract_arities
-    // Signatures definem a aridade padrão. Lambdas com mesmo nome são
-    // overloads non-default (só acessíveis via dict dispatch) — a aridade
-    // do mapa é sempre a da signature.
-    let prelude = load_prelude().map_err(|e| {
-        miette::Report::msg(format!(
-            "erro ao carregar prelude: {}",
-            format_error_vec(&e)
-        ))
-    })?;
-
-    // Carregar imports antes do pass de decls — diretivas importadas
-    // precisam estar no registry quando o resolve valida @nome.
-    let decls_tokens = tokens.clone();
-    let decls_module = parse_decls_only(decls_tokens).map_err(IntoReport::into_report)?;
-    let decls_imports = if let Some(file) = file_path {
-        imports::load_module_imports(file, &decls_module)?
-    } else {
-        Vec::new()
-    };
-    let decls_imported_directives = imports::collect_imported_directives(&decls_imports);
-    let decls_user = resolve_with_imports(&decls_module, "__local__", decls_imported_directives)
-        .map_err(|e| {
-            miette::Report::msg(format!(
-                "erro de resolução (Pass 1): {}",
-                format_error_vec(&e)
-            ))
-        })?;
-    let decls_resolved = merge_resolved(prelude.clone(), decls_user);
-
-    // Signatures sobrescrevem lambdas no mapa de aridades (default arity).
-    arities.extend(extract_arities(&decls_resolved.signatures));
-
-    // 2c. Pass 2: parse_with_arity (completo) → resolve → infer → codegen
-    let module = parse_with_arity(tokens, arities).map_err(IntoReport::into_report)?;
-
-    // 3. Carregar módulos importados (incluindo prelude como import implícito)
-    let imports = if let Some(file) = file_path {
-        imports::load_module_imports(file, &module)?
-    } else {
-        Vec::new()
-    };
-
-    // 3a. Coletar diretivas importadas para pré-carregar no resolve.
-    let imported_directives = imports::collect_imported_directives(&imports);
-
-    // 4. Resolve (prelude + módulo do usuário + diretivas importadas)
-    let user = resolve_with_imports(&module, "__local__", imported_directives)
-        .map_err(|e| miette::Report::msg(format!("erro de resolução: {}", format_error_vec(&e))))?;
-    let mut resolved = merge_resolved(prelude, user);
-
-    // 4a. Merge imports (itens seletivos no escopo direto)
-    imports::merge_imports(&mut resolved, &imports);
-
-    // 4b. Desugar directives — inline bodies de diretivas customizadas
-    //     antes do typeck, produzindo AST expandida.
-    kata_inference::desugar_directives::desugar_directives(&mut resolved);
-
-    // 5. Infer (typeck + dispatch)
-    let typed = infer_module(&module, &resolved).map_err(IntoReport::into_report)?;
-
-    // 6. Monomorph (especializa call sites genéricos)
-    let mono = monomorphize(typed);
-
-    // 7. Optimize (TRMA + futuros passes)
-    let mono = optimize(mono);
-
-    // 7a. Tree shaking — remove funções/actions não alcançados.
-    let mono = kata_monomorph::MonoModule::from(tree_shake(mono.inner));
-
-    // 7b. Comptime pass — avalia expressões @comptime em compile-time e
-    //     substitui por literais antes do codegen.
-    let mono = kata_monomorph::MonoModule::from(
-        run_comptime_pass(mono.inner, &resolved.enum_registry)
-            .map_err(|e| miette::Report::msg(format!("erro de comptime: {e}")))?,
-    );
-
-    // 7c. Type table — registra TypeShapes no runtime para to_bytes/from_bytes.
-    let _type_id_map = kata_codegen::type_table::build_and_register_type_table(
-        &mono,
-        &mono.struct_registry,
-        &resolved.enum_registry,
-    );
-
-    // 8. Codegen + JIT + executar
-    let jit = jit_eval(&mono, &_type_id_map)
-        .map_err(|e| miette::Report::msg(format!("erro de codegen: {e}")))?;
-
-    Ok(ExecResult {
-        raw: jit.raw,
-        ty: jit.ty,
-    })
+    Ok(ExecResult { raw, ty })
 }
 
 /// Combina prelude + módulo do usuário em um ResolvedModule único.
