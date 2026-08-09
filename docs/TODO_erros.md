@@ -513,27 +513,33 @@ retornar `Result<_, Vec<Report>>` e o driver imprime cada um.
 
 ---
 
-## 7. Múltiplos erros por passada
+## 7. Múltiplos erros por passada ✅ (curto prazo)
 
 ### Problema
 
-O pipeline usa `?` em cada passo — aborta no primeiro erro. Se o
+O pipeline usava `?` em cada passo — aborta no primeiro erro. Se o
 usuário tem 3 erros de parse e 2 erros de tipo, vê só o primeiro.
-
-`resolve()` já acumula `Vec<ResolveError>`, mas `parse()` e `infer()`
-retornam `Result<_, E>` (um erro).
 
 ### Solução
 
-**Curto prazo (baixo esforço):**
+**Curto prazo (baixo esforço) — ✅ Concluído:**
 
-`parse_with_recovery` já existe e é usado pelo LSP (`analysis.rs:43`):
-retorna `(Module, Vec<parse_errors>)`. O pipeline do driver não o usa
-— usa `parse()` que aborta no primeiro. Mudar o driver para usar
-`parse_with_recovery` quando possível já melhora DX sem mudar a
-arquitetura.
+- **Parse recovery:** `parse_with_recovery` / `parse_with_arity_recovery`
+  retornam `(Module, Vec<FrontendError>)`. O pipeline usa esses, retorna
+  `Err(Vec<Report>)` se há erros. O driver imprime todos via
+  `print_pipeline_errors` (1 erro → formato direto; múltiplos → cada
+  um + resumo).
+- **Lex recovery:** `lex_with_recovery` retorna
+  `(Vec<TokenWithSpan>, Vec<FrontendError>)`. Recovery skipa até `\n`
+  ou `;` (pontos de sincronização). `process_indent` refactorizado para
+  pre-check (não muta pilha antes de validar). `lex()` é wrapper sobre
+  `lex_with_recovery` — callers existentes (LSP, REPL, testes) sem
+  mudança.
+- **Pipeline:** `PipelineResult<T> = Result<T, Vec<Report>>`. Cada
+  fase é all-or-nothing: se lex ou parse tem erros, aborta com todos
+  os erros da fase. Não continua parcialmente entre fases.
 
-**Médio prazo:**
+**Médio prazo (não implementado):**
 
 Inferência poderia acumular erros de tipo (em vez de abortar no
 primeiro). `infer_module` retorna `Result<TypedModule, MiddleError>`
@@ -546,23 +552,7 @@ início pode causar erros em cascata. Estratégias:
 - **Error recovery**: após um erro de tipo, usar `Ty::Unknown` e
   continuar. Erros que decorrem do `Unknown` são suprimidos.
 
-**Longo prazo:**
-
-Pipeline retorna `Result<_, Vec<Report>>` e o driver imprime todos.
-
-### Prioridade
-
-Este é o item mais complexo. A retorno de `parse_with_recovery` no
-driver é o ganho fácil. Acumulação em inferência é trabalho de fio
-(não zeladoria).
-
-### Mudanças necessárias (curto prazo)
-
-1. `pipeline.rs`: `ParseMode::TwoPass` e `ParseMode::Single` passam a
-   usar `parse_with_recovery` e coletar erros. Se há erros, retorna
-   `Err(Vec<Report>)` (ou o primeiro como `Report` e o resto como
-   notes).
-2. O driver imprime todos os erros de parse antes de abortar.
+Isto é trabalho de fio, não zeladoria — fora do escopo deste TODO.
 
 ---
 
@@ -576,7 +566,7 @@ driver é o ganho fácil. Acumulação em inferência é trabalho de fio
 | 4 | #5 `#[help]` nos erros prioritários | Médio | Baixo | Alto | ✅ Concluído |
 | 5 | #2 Preservar spans em LoadError | Médio | Médio | Médio | ✅ Concluído |
 | 6 | #3 Unificar FrontendBatch | Baixo | Baixo | Baixo | ✅ Concluído |
-| 7 | #7 Múltiplos erros | Alto | Alto | Alto | Pendente |
+| 7 | #7 Múltiplos erros | Alto | Alto | Alto | ✅ Concluído (curto prazo) |
 
 Itens 1-3 podem ser feitos em paralelo (toucham arquivos diferentes).
 Item 6 depende de 2 (precisa da dep `kata-resolution →
