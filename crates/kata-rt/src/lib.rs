@@ -38,8 +38,6 @@ pub(crate) mod text;
 pub(crate) mod timer;
 
 // Re-exports convenientes para uso interno (não C-ABI).
-// Símbolos não consumidos cross-crate foram removidos (to_rational, float_to_rat,
-// rat_from_int, rat_to_float, rat_to_string, reset_all_arenas, reset_scheduler).
 pub use bigint::{
     bigint_to_string, decode_smi_pub, encode_smi_pub, fits_smi_pub, is_smi_pub, show,
     tag_int_from_str, tag_int_pub,
