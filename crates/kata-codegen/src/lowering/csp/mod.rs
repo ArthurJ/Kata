@@ -30,5 +30,5 @@ pub(crate) fn get_ffi(ctx: &LowerCtx, name: &str) -> Result<FuncRef, super::Code
     ctx.ffi_refs
         .get(name)
         .copied()
-        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound(name.into()))
+        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound { symbol: name.into() })
 }

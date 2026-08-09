@@ -59,7 +59,7 @@ pub(crate) fn lower_closure(
         let func_ref = ctx
             .ffi_refs
             .get(sym_name)
-            .ok_or_else(|| super::CodegenError::FfiSymbolNotFound(sym_name.clone()))?;
+            .ok_or_else(|| super::CodegenError::FfiSymbolNotFound { symbol: sym_name.clone() })?;
         // FFIs que alocam na arena (cons, concat, reverse, array_alloc, etc.)
         // esperam arena_handle como último param, mas o caller não fornece.
         // Injetar automaticamente.
@@ -85,7 +85,7 @@ pub(crate) fn lower_closure(
                     .ffi_refs
                     .get(hash_name)
                     .copied()
-                    .ok_or_else(|| super::CodegenError::FfiSymbolNotFound(hash_name.into()))?;
+                    .ok_or_else(|| super::CodegenError::FfiSymbolNotFound { symbol: hash_name.into() })?;
                 let hash_call = ctx.builder.ins().call(hash_ref, &[key_val]);
                 let hash_val = ctx.builder.inst_results(hash_call)[0];
                 let eq_fn_ptr = super::dict_set_lit::get_ffi_fn_ptr(eq_name, ctx)?;
@@ -105,7 +105,7 @@ pub(crate) fn lower_closure(
                     .ffi_refs
                     .get(hash_name)
                     .copied()
-                    .ok_or_else(|| super::CodegenError::FfiSymbolNotFound(hash_name.into()))?;
+                    .ok_or_else(|| super::CodegenError::FfiSymbolNotFound { symbol: hash_name.into() })?;
                 let hash_call = ctx.builder.ins().call(hash_ref, &[key_val]);
                 let hash_val = ctx.builder.inst_results(hash_call)[0];
                 let eq_fn_ptr = super::dict_set_lit::get_ffi_fn_ptr(eq_name, ctx)?;
@@ -124,7 +124,7 @@ pub(crate) fn lower_closure(
                     .ffi_refs
                     .get(hash_name)
                     .copied()
-                    .ok_or_else(|| super::CodegenError::FfiSymbolNotFound(hash_name.into()))?;
+                    .ok_or_else(|| super::CodegenError::FfiSymbolNotFound { symbol: hash_name.into() })?;
                 let hash_call = ctx.builder.ins().call(hash_ref, &[key_val]);
                 let hash_val = ctx.builder.inst_results(hash_call)[0];
                 let eq_fn_ptr = super::dict_set_lit::get_ffi_fn_ptr(eq_name, ctx)?;
@@ -138,9 +138,9 @@ pub(crate) fn lower_closure(
                 let elem_ty = match &args[0].node.ty {
                     Ty::Set(inner) => inner.as_ref().clone(),
                     other => {
-                        return Err(super::CodegenError::UnsupportedNode(format!(
+                        return Err(super::CodegenError::UnsupportedNode { node: format!(
                             "set op on non-Set type: {other}"
-                        )));
+                        ) });
                     }
                 };
                 let eq_name = super::dict_set_lit::eq_fn_name(&elem_ty)?;
@@ -154,9 +154,9 @@ pub(crate) fn lower_closure(
                 let key_ty = match &args[0].node.ty {
                     Ty::Dict(k, _) => k.as_ref().clone(),
                     other => {
-                        return Err(super::CodegenError::UnsupportedNode(format!(
+                        return Err(super::CodegenError::UnsupportedNode { node: format!(
                             "dict_merge on non-Dict type: {other}"
-                        )));
+                        ) });
                     }
                 };
                 let eq_name = super::dict_set_lit::eq_fn_name(&key_ty)?;
@@ -234,10 +234,10 @@ pub(crate) fn lower_closure(
                 return Ok(result);
             }
             // Se o callee não é Function, não há como despachar.
-            return Err(super::CodegenError::UnsupportedNode(format!(
+            return Err(super::CodegenError::UnsupportedNode { node: format!(
                 "Closure com callee Lambda não-Function: {:?}",
                 callee.node.ty
-            )));
+            ) });
         }
         // Sub-caminho B: callee é Ident — função Kata nomeada ou variável.
         // Tenta Kata function call direto primeiro.
@@ -321,10 +321,10 @@ pub(crate) fn lower_closure(
                 }
             }
         }
-        Err(super::CodegenError::UnsupportedNode(format!(
+        Err(super::CodegenError::UnsupportedNode { node: format!(
             "Closure sem ffi_symbol e callee não-Ident: {:?}",
             callee.node.kind
-        )))
+        ) })
     }
 }
 
@@ -348,7 +348,7 @@ pub(crate) fn alloc_capture_box(
         .get("kata_rt_get_root_arena_handle")
         .copied()
         .ok_or_else(|| {
-            super::CodegenError::FfiSymbolNotFound("kata_rt_get_root_arena_handle".into())
+            super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_get_root_arena_handle".into() }
         })?;
     let root_inst = ctx.builder.ins().call(get_root_ref, &[]);
     let capture_arena = ctx.builder.inst_results(root_inst)[0];
@@ -356,7 +356,7 @@ pub(crate) fn alloc_capture_box(
     let alloc_arc_ref = ctx
         .ffi_refs
         .get("kata_rt_alloc_arc")
-        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound("kata_rt_alloc_arc".into()))?;
+        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_alloc_arc".into() })?;
 
     if captures.is_empty() {
         // Sem captures: cria box com fn_ptr e n_captures=0, sem alocar array.
@@ -374,7 +374,7 @@ pub(crate) fn alloc_capture_box(
     let arena_alloc_ref = ctx
         .ffi_refs
         .get("kata_rt_arena_alloc")
-        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound("kata_rt_arena_alloc".into()))?;
+        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_arena_alloc".into() })?;
     let array_size = ctx.builder.ins().iconst(I64, n * 8);
     let alloc_inst = ctx
         .builder
@@ -384,10 +384,10 @@ pub(crate) fn alloc_capture_box(
 
     for (i, cap) in captures.iter().enumerate() {
         let cap_var = ctx.var_map.get(&cap.name).ok_or_else(|| {
-            super::CodegenError::UnsupportedNode(format!(
+            super::CodegenError::UnsupportedNode { node: format!(
                 "capture '{}' não encontrada no var_map",
                 cap.name
-            ))
+            ) }
         })?;
         let cap_val = ctx.builder.use_var(*cap_var);
         let offset = (i * 8) as i32;

@@ -147,7 +147,7 @@ impl ModuleBackend for JitBackend {
     fn finalize(&mut self) -> Result<(), CodegenError> {
         self.inner
             .finalize_definitions()
-            .map_err(|e| CodegenError::Cranelift(format!("finalize_definitions: {e}")))
+            .map_err(|e| CodegenError::Cranelift { reason: format!("finalize_definitions: {e}") })
     }
 }
 
@@ -182,10 +182,10 @@ impl AotBackend {
         let product = self
             .product
             .take()
-            .ok_or_else(|| CodegenError::Cranelift("emit() chamado antes de finalize()".into()))?;
+            .ok_or_else(|| CodegenError::Cranelift { reason: "emit() chamado antes de finalize()".into() })?;
         product
             .emit()
-            .map_err(|e| CodegenError::Cranelift(format!("object emit: {e}")))
+            .map_err(|e| CodegenError::Cranelift { reason: format!("object emit: {e}") })
     }
 }
 
@@ -293,7 +293,7 @@ impl ModuleBackend for AotBackend {
         let inner = self
             .inner
             .take()
-            .ok_or_else(|| CodegenError::Cranelift("finalize() chamado duas vezes".into()))?;
+            .ok_or_else(|| CodegenError::Cranelift { reason: "finalize() chamado duas vezes".into() })?;
         self.product = Some(inner.finish());
         Ok(())
     }

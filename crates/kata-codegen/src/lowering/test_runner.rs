@@ -88,11 +88,11 @@ pub(crate) fn generate_test_wrappers(
                     .map(|t| t.to_string())
                     .collect::<Vec<_>>()
                     .join(", ");
-                return Err(CodegenError::UnsupportedNode(format!(
+                return Err(CodegenError::UnsupportedNode { node: format!(
                     "@test sem args em action `{}` que recebe ({}) — \
                      forneça args: (..) no @test",
                     action.name, params
-                )));
+                ) });
             }
 
             let cranelift_name = format!("__kata_fn_{}", *fn_counter);
@@ -131,7 +131,7 @@ fn declare_test_wrapper(
     sig.returns.push(AbiParam::new(I64));
     module
         .declare_function(cranelift_name, Linkage::Export, &sig)
-        .map_err(|e| CodegenError::Cranelift(format!("declare test wrapper: {e}")))
+        .map_err(|e| CodegenError::Cranelift { reason: format!("declare test wrapper: {e}") })
 }
 
 /// Contexto de lowering compartilhado entre wrappers de teste.
@@ -222,7 +222,7 @@ fn define_test_wrapper(
             .ffi_refs
             .get("kata_rt_scheduler_init")
             .copied()
-            .ok_or_else(|| CodegenError::FfiSymbolNotFound("kata_rt_scheduler_init".into()))?;
+            .ok_or_else(|| CodegenError::FfiSymbolNotFound { symbol: "kata_rt_scheduler_init".into() })?;
         let init_inst = lower.builder.ins().call(scheduler_init_ref, &[]);
         let root_arena = lower.builder.inst_results(init_inst)[0];
         lower.caller_arena = Some(root_arena);
@@ -243,10 +243,10 @@ fn define_test_wrapper(
             action.ret_ty.clone(),
         );
         let callee_fid = *lower.kata_ids.get(&action_key).ok_or_else(|| {
-            CodegenError::UnsupportedNode(format!(
+            CodegenError::UnsupportedNode { node: format!(
                 "test wrapper: Action `{}` não encontrada em symbol_table",
                 action.name
-            ))
+            ) }
         })?;
         let func_ref = lower
             .module
@@ -271,7 +271,7 @@ fn define_test_wrapper(
             .ffi_refs
             .get("kata_rt_spawn")
             .copied()
-            .ok_or_else(|| CodegenError::FfiSymbolNotFound("kata_rt_spawn".into()))?;
+            .ok_or_else(|| CodegenError::FfiSymbolNotFound { symbol: "kata_rt_spawn".into() })?;
         lower
             .builder
             .ins()
@@ -282,7 +282,7 @@ fn define_test_wrapper(
             .ffi_refs
             .get("kata_rt_run")
             .copied()
-            .ok_or_else(|| CodegenError::FfiSymbolNotFound("kata_rt_run".into()))?;
+            .ok_or_else(|| CodegenError::FfiSymbolNotFound { symbol: "kata_rt_run".into() })?;
         let run_inst = lower.builder.ins().call(run_ref, &[]);
         let result = lower.builder.inst_results(run_inst)[0];
 
@@ -302,7 +302,7 @@ fn define_test_wrapper(
 
     tctx.module
         .define_function(func_id, &mut ctx)
-        .map_err(|e| CodegenError::Cranelift(format!("define test wrapper: {e}")))?;
+        .map_err(|e| CodegenError::Cranelift { reason: format!("define test wrapper: {e}") })?;
     tctx.module.clear_context(&mut ctx);
     Ok(())
 }

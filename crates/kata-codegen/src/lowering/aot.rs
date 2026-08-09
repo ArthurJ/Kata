@@ -36,14 +36,14 @@ pub fn aot_emit(
     let mut flags_builder = cranelift_codegen::settings::builder();
     flags_builder
         .set("preserve_frame_pointers", "true")
-        .map_err(|e| CodegenError::Cranelift(format!("set preserve_frame_pointers: {e}")))?;
+        .map_err(|e| CodegenError::Cranelift { reason: format!("set preserve_frame_pointers: {e}") })?;
     let flags = cranelift_codegen::settings::Flags::new(flags_builder);
 
     let isa_builder = cranelift_native::builder()
-        .map_err(|e| CodegenError::Cranelift(format!("native isa builder: {e}")))?;
+        .map_err(|e| CodegenError::Cranelift { reason: format!("native isa builder: {e}") })?;
     let isa = isa_builder
         .finish(flags)
-        .map_err(|e| CodegenError::Cranelift(format!("isa finish: {e}")))?;
+        .map_err(|e| CodegenError::Cranelift { reason: format!("isa finish: {e}") })?;
 
     // ObjectBuilder precisa de um nome de arquivo (vai no símbolo de file).
     // O nome não afeta o resultado do link — é apenas metadata do object.
@@ -52,7 +52,7 @@ pub fn aot_emit(
         "kata_module",
         cranelift_module::default_libcall_names(),
     )
-    .map_err(|e| CodegenError::Cranelift(format!("ObjectBuilder::new: {e}")))?;
+    .map_err(|e| CodegenError::Cranelift { reason: format!("ObjectBuilder::new: {e}") })?;
     let inner = cranelift_object::ObjectModule::new(builder);
     let mut backend = AotBackend::new(inner);
 

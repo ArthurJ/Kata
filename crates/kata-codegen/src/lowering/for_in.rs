@@ -53,7 +53,7 @@ pub(crate) fn lower_for_in(
                 .get("kata_rt_yield_check")
                 .copied()
                 .ok_or_else(|| {
-                    super::CodegenError::FfiSymbolNotFound("kata_rt_yield_check".into())
+                    super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_yield_check".into() }
                 })?;
             ctx.builder.ins().call(yc, &[]);
             let current = ctx.builder.use_var(current_var);
@@ -115,7 +115,7 @@ pub(crate) fn lower_for_in(
                 .get("kata_rt_yield_check")
                 .copied()
                 .ok_or_else(|| {
-                    super::CodegenError::FfiSymbolNotFound("kata_rt_yield_check".into())
+                    super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_yield_check".into() }
                 })?;
             ctx.builder.ins().call(yc, &[]);
             let idx = ctx.builder.use_var(idx_var);
@@ -177,7 +177,7 @@ pub(crate) fn lower_for_in(
                 .get("kata_rt_yield_check")
                 .copied()
                 .ok_or_else(|| {
-                    super::CodegenError::FfiSymbolNotFound("kata_rt_yield_check".into())
+                    super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_yield_check".into() }
                 })?;
             ctx.builder.ins().call(yc, &[]);
             let current = ctx.builder.use_var(current_var);
@@ -218,9 +218,9 @@ pub(crate) fn lower_for_in(
             ctx.builder.seal_block(continue_block);
         }
         _ => {
-            return Err(super::CodegenError::UnsupportedNode(format!(
+            return Err(super::CodegenError::UnsupportedNode { node: format!(
                 "ForIn sobre tipo não-iterável: {coll_ty:?}"
-            )));
+            ) });
         }
     }
 

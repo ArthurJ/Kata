@@ -38,13 +38,13 @@ pub(crate) fn lower_collections_literal(
             let nil_ref = ctx
                 .ffi_refs
                 .get("kata_rt_list_nil")
-                .ok_or_else(|| super::CodegenError::FfiSymbolNotFound("kata_rt_list_nil".into()))?;
+                .ok_or_else(|| super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_list_nil".into() })?;
             let nil_call = ctx.builder.ins().call(*nil_ref, &[]);
             let mut acc = ctx.builder.inst_results(nil_call)[0];
 
             // Cons para cada elemento, de trás para frente.
             let cons_ref = ctx.ffi_refs.get("kata_rt_list_cons").ok_or_else(|| {
-                super::CodegenError::FfiSymbolNotFound("kata_rt_list_cons".into())
+                super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_list_cons".into() }
             })?;
             for elem in elements.iter().rev() {
                 let head = lower_expr(&elem.node, ctx)?;
@@ -74,7 +74,7 @@ pub(crate) fn lower_collections_literal(
 
             // Aloca array: kata_rt_array_alloc(len, arena) → ptr
             let alloc_ref = ctx.ffi_refs.get("kata_rt_array_alloc").ok_or_else(|| {
-                super::CodegenError::FfiSymbolNotFound("kata_rt_array_alloc".into())
+                super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_array_alloc".into() }
             })?;
             let len_val = ctx.builder.ins().iconst(I64, n);
             let call = ctx.builder.ins().call(*alloc_ref, &[len_val, arena_handle]);
@@ -82,7 +82,7 @@ pub(crate) fn lower_collections_literal(
 
             // Set cada elemento: kata_rt_array_set(ptr, idx, val)
             let set_ref = ctx.ffi_refs.get("kata_rt_array_set").ok_or_else(|| {
-                super::CodegenError::FfiSymbolNotFound("kata_rt_array_set".into())
+                super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_array_set".into() }
             })?;
             for (i, elem) in elements.iter().enumerate() {
                 let val = lower_expr(&elem.node, ctx)?;
@@ -114,7 +114,7 @@ pub(crate) fn lower_collections_literal(
 
             // Aloca 24 bytes: kata_rt_range_alloc(arena) → ptr
             let alloc_ref = ctx.ffi_refs.get("kata_rt_range_alloc").ok_or_else(|| {
-                super::CodegenError::FfiSymbolNotFound("kata_rt_range_alloc".into())
+                super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_range_alloc".into() }
             })?;
             let call = ctx.builder.ins().call(*alloc_ref, &[arena_handle]);
             let ptr = ctx.builder.inst_results(call)[0];
@@ -188,7 +188,7 @@ pub(crate) fn lower_collections_literal(
                 Ty::List(_) => {
                     // List: chama kata_rt_list_contains(ptr, item) → 0/1
                     let func_ref = ctx.ffi_refs.get("kata_rt_list_contains").ok_or_else(|| {
-                        super::CodegenError::FfiSymbolNotFound("kata_rt_list_contains".into())
+                        super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_list_contains".into() }
                     })?;
                     // Bitcast F64→I64 se o item for Float.
                     let item_i64 = {
@@ -207,7 +207,7 @@ pub(crate) fn lower_collections_literal(
                 Ty::Array(_) => {
                     // Array: chama kata_rt_array_contains(ptr, item) → 0/1
                     let func_ref = ctx.ffi_refs.get("kata_rt_array_contains").ok_or_else(|| {
-                        super::CodegenError::FfiSymbolNotFound("kata_rt_array_contains".into())
+                        super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_array_contains".into() }
                     })?;
                     // Bitcast F64→I64 se o item for Float.
                     let item_i64 = {
@@ -292,14 +292,14 @@ pub(crate) fn lower_collections_literal(
                     let eq_name = eq_fn_name(k)?;
                     let hash_ref =
                         ctx.ffi_refs.get(hash_name).copied().ok_or_else(|| {
-                            super::CodegenError::FfiSymbolNotFound(hash_name.into())
+                            super::CodegenError::FfiSymbolNotFound { symbol: hash_name.into() }
                         })?;
                     let contains_ref = ctx
                         .ffi_refs
                         .get("kata_rt_dict_contains")
                         .copied()
                         .ok_or_else(|| {
-                            super::CodegenError::FfiSymbolNotFound("kata_rt_dict_contains".into())
+                            super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_dict_contains".into() }
                         })?;
                     let hash_call = ctx.builder.ins().call(hash_ref, &[item_i64]);
                     let hash_val = ctx.builder.inst_results(hash_call)[0];
@@ -317,14 +317,14 @@ pub(crate) fn lower_collections_literal(
                     let eq_name = eq_fn_name(t)?;
                     let hash_ref =
                         ctx.ffi_refs.get(hash_name).copied().ok_or_else(|| {
-                            super::CodegenError::FfiSymbolNotFound(hash_name.into())
+                            super::CodegenError::FfiSymbolNotFound { symbol: hash_name.into() }
                         })?;
                     let contains_ref = ctx
                         .ffi_refs
                         .get("kata_rt_set_contains")
                         .copied()
                         .ok_or_else(|| {
-                            super::CodegenError::FfiSymbolNotFound("kata_rt_set_contains".into())
+                            super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_set_contains".into() }
                         })?;
                     let hash_call = ctx.builder.ins().call(hash_ref, &[item_i64]);
                     let hash_val = ctx.builder.inst_results(hash_call)[0];
@@ -335,9 +335,9 @@ pub(crate) fn lower_collections_literal(
                         .call(contains_ref, &[coll_val, item_i64, hash_val, eq_fn_ptr]);
                     Ok(Some(ctx.builder.inst_results(call)[0]))
                 }
-                _ => Err(super::CodegenError::UnsupportedNode(format!(
+                _ => Err(super::CodegenError::UnsupportedNode { node: format!(
                     "In sobre tipo não-coleção: {coll_ty:?}"
-                ))),
+                ) }),
             }
         }
 

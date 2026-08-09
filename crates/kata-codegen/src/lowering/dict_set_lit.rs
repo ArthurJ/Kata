@@ -20,9 +20,9 @@ pub(crate) fn hash_fn_name(key_ty: &Ty) -> Result<&'static str, super::CodegenEr
         Ty::Prim(PrimTy::Int) => Ok("kata_rt_hash_int"),
         Ty::Prim(PrimTy::Text) => Ok("kata_rt_hash_text"),
         Ty::Prim(PrimTy::Rational) => Ok("kata_rt_hash_rational"),
-        _ => Err(super::CodegenError::UnsupportedNode(format!(
+        _ => Err(super::CodegenError::UnsupportedNode { node: format!(
             "DictLit/SetLit: tipo de chave não-hashable: {key_ty}"
-        ))),
+        ) }),
     }
 }
 
@@ -31,9 +31,9 @@ pub(crate) fn eq_fn_name(key_ty: &Ty) -> Result<&'static str, super::CodegenErro
     match key_ty {
         Ty::Prim(PrimTy::Int) => Ok("kata_rt_bi_eq"),
         Ty::Prim(PrimTy::Text) => Ok("kata_rt_string_eq"),
-        _ => Err(super::CodegenError::UnsupportedNode(format!(
+        _ => Err(super::CodegenError::UnsupportedNode { node: format!(
             "DictLit/SetLit: tipo de chave sem eq_fn: {key_ty}"
-        ))),
+        ) }),
     }
 }
 
@@ -51,7 +51,7 @@ pub(crate) fn get_ffi_fn_ptr(
     let fid = ctx
         .ffi_ids
         .get(ffi_name)
-        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound(ffi_name.to_string()))?;
+        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound { symbol: ffi_name.to_string() })?;
     let func_ref = ctx.module.declare_func_in_func(*fid, ctx.builder.func);
     let ext_func_name = ctx.builder.func.dfg.ext_funcs[func_ref].name.clone();
     let func_gv = ctx
@@ -109,7 +109,7 @@ pub(crate) fn lower_dict_lit(
     let empty_ref = ctx
         .ffi_refs
         .get("kata_rt_dict_empty")
-        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound("kata_rt_dict_empty".into()))?;
+        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_dict_empty".into() })?;
     let call = ctx.builder.ins().call(*empty_ref, &[arena_handle]);
     let mut dict = ctx.builder.inst_results(call)[0];
 
@@ -120,12 +120,12 @@ pub(crate) fn lower_dict_lit(
         .ffi_refs
         .get(hash_name)
         .copied()
-        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound(hash_name.into()))?;
+        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound { symbol: hash_name.into() })?;
     let insert_ref = ctx
         .ffi_refs
         .get("kata_rt_dict_insert")
         .copied()
-        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound("kata_rt_dict_insert".into()))?;
+        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_dict_insert".into() })?;
 
     // Resolve eq_fn pointer ONCE (outside loop) — creating multiple GlobalValues
     // for the same symbol in a single function body can corrupt the pointer.
@@ -175,7 +175,7 @@ pub(crate) fn lower_set_lit(
     let empty_ref = ctx
         .ffi_refs
         .get("kata_rt_set_empty")
-        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound("kata_rt_set_empty".into()))?;
+        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_set_empty".into() })?;
     let call = ctx.builder.ins().call(*empty_ref, &[arena_handle]);
     let mut set = ctx.builder.inst_results(call)[0];
 
@@ -186,12 +186,12 @@ pub(crate) fn lower_set_lit(
         .ffi_refs
         .get(hash_name)
         .copied()
-        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound(hash_name.into()))?;
+        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound { symbol: hash_name.into() })?;
     let insert_ref = ctx
         .ffi_refs
         .get("kata_rt_set_insert")
         .copied()
-        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound("kata_rt_set_insert".into()))?;
+        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_set_insert".into() })?;
 
     // Resolve eq_fn pointer ONCE (outside loop).
     let eq_fn_ptr = get_ffi_fn_ptr(eq_name, ctx)?;

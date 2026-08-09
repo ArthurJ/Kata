@@ -11,15 +11,15 @@ de `kata-diagnostics`, `kata-resolution`, `kata-comptime`, `kata-codegen`,
 | Arquitetura de tipos (Frontend/Middle/Backend) | Correta |
 | Códigos namespaced (`type.mismatch`, `parse.unexpected_token`) | Bom |
 | miette no frontend/middleend | Funciona — com source context |
-| miette em ComptimeError | Não implementado |
-| miette em CodegenError | Não implementado |
+| miette em ComptimeError | Não implementado → ✅ Implementado |
+| miette em CodegenError | Não implementado → ✅ Implementado |
 | miette em LoadError | Tipos estruturados preservados |
-| `BackendError` em kata-diagnostics | Dead code — não usado |
+| `BackendError` em kata-diagnostics | Dead code — removido ✅ |
 | Acumulação de erros (resolve) | Vec, mas join em string |
 | Múltiplos erros no pipeline | Aborta no primeiro `?` |
 | Spans preservados end-to-end | LoadError preserva span |
 | `#[help]` em erros que precisam | 4 de ~35 (UnboundName, NonExhaustive, ArityMismatch, LambdaInference) |
-| Prefixos string no pipeline | Mascaram estrutura |
+| Prefixos string no pipeline | Mascaram estrutura → ✅ Eliminados |
 | Source context (linha + indicador) | Implementado via `NamedSource` |
 | `FrontendBatch` (wrapper LSP) | Renomeado, documentado |
 
@@ -266,7 +266,7 @@ existam em um lugar só.
 
 ---
 
-## 4. Separar erro do compilador de erro do desenvolvedor Kata
+## 4. Separar erro do compilador de erro do desenvolvedor Kata ✅
 
 ### Problema
 
@@ -451,7 +451,7 @@ Error: type.unbound_name
 
 ---
 
-## 6. Eliminar prefixos string no pipeline
+## 6. Eliminar prefixos string no pipeline ✅
 
 ### Problema
 
@@ -561,8 +561,8 @@ Isto é trabalho de fio, não zeladoria — fora do escopo deste TODO.
 | Ordem | Item | Esforço | Risco | Impacto no DX | Status |
 |---|---|---|---|---|---|
 | 1 | #1 Source context | Médio | Baixo | Alto | ✅ Concluído |
-| 2 | #4 Separar compilador/usuário | Médio | Baixo | Médio | Pendente |
-| 3 | #6 Eliminar prefixos string | Baixo | Baixo | Médio | Pendente |
+| 2 | #4 Separar compilador/usuário | Médio | Baixo | Médio | ✅ Concluído |
+| 3 | #6 Eliminar prefixos string | Baixo | Baixo | Médio | ✅ Concluído |
 | 4 | #5 `#[help]` nos erros prioritários | Médio | Baixo | Alto | ✅ Concluído |
 | 5 | #2 Preservar spans em LoadError | Médio | Médio | Médio | ✅ Concluído |
 | 6 | #3 Unificar FrontendBatch | Baixo | Baixo | Baixo | ✅ Concluído |

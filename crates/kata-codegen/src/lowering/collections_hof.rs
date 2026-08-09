@@ -248,9 +248,9 @@ pub(crate) fn lower_fold(
             ctx.builder.seal_block(continue_block);
         }
         _ => {
-            return Err(CodegenError::UnsupportedNode(format!(
+            return Err(CodegenError::UnsupportedNode { node: format!(
                 "Fold sobre tipo não-coleção: {coll_ty:?}"
-            )));
+            ) });
         }
     }
 
@@ -315,7 +315,7 @@ pub(crate) fn list_to_array(
     let alloc_ref = ctx
         .ffi_refs
         .get("kata_rt_array_alloc")
-        .ok_or_else(|| CodegenError::FfiSymbolNotFound("kata_rt_array_alloc".into()))?;
+        .ok_or_else(|| CodegenError::FfiSymbolNotFound { symbol: "kata_rt_array_alloc".into() })?;
     let alloc_call = ctx.builder.ins().call(*alloc_ref, &[count, arena]);
     let arr_ptr = ctx.builder.inst_results(alloc_call)[0];
 
@@ -323,7 +323,7 @@ pub(crate) fn list_to_array(
     let set_ref = ctx
         .ffi_refs
         .get("kata_rt_array_set")
-        .ok_or_else(|| CodegenError::FfiSymbolNotFound("kata_rt_array_set".into()))?;
+        .ok_or_else(|| CodegenError::FfiSymbolNotFound { symbol: "kata_rt_array_set".into() })?;
 
     let idx_var = ctx.new_var("__l2a_idx", I64);
     let zero = ctx.builder.ins().iconst(I64, 0);

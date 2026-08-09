@@ -48,7 +48,7 @@ pub(crate) fn lower_fused_stream(
     let nil_ref = ctx
         .ffi_refs
         .get("kata_rt_list_nil")
-        .ok_or_else(|| CodegenError::FfiSymbolNotFound("kata_rt_list_nil".into()))?;
+        .ok_or_else(|| CodegenError::FfiSymbolNotFound { symbol: "kata_rt_list_nil".into() })?;
     let nil_call = ctx.builder.ins().call(*nil_ref, &[]);
     let acc_var = ctx.new_var("__fused_acc", I64);
     ctx.builder
@@ -57,7 +57,7 @@ pub(crate) fn lower_fused_stream(
     let cons_ref = ctx
         .ffi_refs
         .get("kata_rt_list_cons")
-        .ok_or_else(|| CodegenError::FfiSymbolNotFound("kata_rt_list_cons".into()))?;
+        .ok_or_else(|| CodegenError::FfiSymbolNotFound { symbol: "kata_rt_list_cons".into() })?;
 
     let loop_block = ctx.builder.create_block();
     let continue_block = ctx.builder.create_block();
@@ -266,9 +266,9 @@ pub(crate) fn lower_fused_stream(
             ctx.builder.seal_block(continue_block);
         }
         _ => {
-            return Err(CodegenError::UnsupportedNode(format!(
+            return Err(CodegenError::UnsupportedNode { node: format!(
                 "FusedStream sobre tipo nao-colecao: {coll_ty:?}"
-            )));
+            ) });
         }
     }
 
@@ -279,7 +279,7 @@ pub(crate) fn lower_fused_stream(
     let reverse_ref = ctx
         .ffi_refs
         .get("kata_rt_list_reverse")
-        .ok_or_else(|| CodegenError::FfiSymbolNotFound("kata_rt_list_reverse".into()))?;
+        .ok_or_else(|| CodegenError::FfiSymbolNotFound { symbol: "kata_rt_list_reverse".into() })?;
     let call = ctx.builder.ins().call(*reverse_ref, &[acc, arena]);
     let reversed = ctx.builder.inst_results(call)[0];
 

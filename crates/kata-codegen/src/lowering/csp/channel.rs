@@ -151,9 +151,9 @@ pub(crate) fn lower_channel_create(
         }
         ChannelKind::Broadcast => {
             if cross_process {
-                return Err(super::super::CodegenError::UnsupportedNode(
+                return Err(super::super::CodegenError::UnsupportedNode { node: 
                     "broadcast!() cross-process não suportado — o child não vê writes do parent após fork (COW copy)".into(),
-                ));
+                 });
             }
             // Broadcast in-process.
             let fref = get_ffi(ctx, "kata_rt_broadcast_create")?;

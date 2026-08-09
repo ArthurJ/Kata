@@ -82,7 +82,7 @@ pub(crate) fn declare_kata_function(
     )));
     module
         .declare_function(cranelift_name, Linkage::Export, &sig)
-        .map_err(|e| CodegenError::Cranelift(format!("declare kata fn {}: {e}", func.name)))
+        .map_err(|e| CodegenError::Cranelift { reason: format!("declare kata fn {}: {e}", func.name) })
 }
 
 /// Pipeline compartilhado: compila o corpo de uma função Kata (nomeada ou anônima).
@@ -489,7 +489,7 @@ pub(crate) fn define_function_body(
     // Define a função no module — func_id passado diretamente (sem lookup por nome).
     module
         .define_function(func_id, &mut ctx)
-        .map_err(|e| CodegenError::Cranelift(format!("define fn {name}: {e}")))?;
+        .map_err(|e| CodegenError::Cranelift { reason: format!("define fn {name}: {e}") })?;
     module.clear_context(&mut ctx);
     Ok(())
 }

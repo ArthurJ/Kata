@@ -84,13 +84,15 @@ pub enum ShakeMode {
 pub struct CompiledModule {
     pub mono: MonoModule,
     pub type_id_map: HashMap<Ty, i64>,
+    source: String,
+    file_path: Option<String>,
 }
 
 impl CompiledModule {
     /// Codegen JIT — compila e executa o entry point, retornando o valor bruto.
     pub fn jit_eval(self) -> miette::Result<i64> {
         let result = kata_codegen::jit_eval(&self.mono, &self.type_id_map)
-            .map_err(|e| miette::Report::msg(format!("erro de codegen: {e}")))?;
+            .map_err(|e| e.into_report_with_source(&self.source, self.file_path.as_deref()))?;
         Ok(result.raw)
     }
 
@@ -99,13 +101,13 @@ impl CompiledModule {
         self,
     ) -> miette::Result<(cranelift_jit::JITModule, Vec<kata_codegen::TestWrapper>)> {
         kata_codegen::jit_compile_tests(&self.mono, &self.type_id_map)
-            .map_err(|e| miette::Report::msg(format!("erro de codegen: {e}")))
+            .map_err(|e| e.into_report_with_source(&self.source, self.file_path.as_deref()))
     }
 
     /// Codegen AOT — emite object file (.o) bytes.
     pub fn aot_emit(self) -> miette::Result<Vec<u8>> {
         kata_codegen::aot_emit(&self.mono, &self.type_id_map)
-            .map_err(|e| miette::Report::msg(format!("erro de codegen AOT: {e}")))
+            .map_err(|e| e.into_report_with_source(&self.source, self.file_path.as_deref()))
     }
 
     /// Tipo canônico do entry point (para display e AOT type tag).
@@ -362,7 +364,7 @@ impl Pipeline {
             .clone();
 
         let shaken = run_comptime_pass(mono.inner, &enum_registry)
-            .map_err(|e| one_err(miette::Report::msg(format!("erro de comptime: {e}"))))?;
+            .map_err(|e| one_err(e.into_report_with_source(&self.source, self.file_path.as_deref())))?;
         self.mono = Some(MonoModule::from(shaken));
         Ok(self)
     }
@@ -385,7 +387,12 @@ impl Pipeline {
         let type_id_map =
             type_table::build_and_register_type_table(&mono, &mono.struct_registry, &enum_registry);
 
-        Ok(CompiledModule { mono, type_id_map })
+        Ok(CompiledModule {
+            mono,
+            type_id_map,
+            source: self.source,
+            file_path: self.file_path,
+        })
     }
 }
 

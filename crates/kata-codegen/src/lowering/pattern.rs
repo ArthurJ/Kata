@@ -99,7 +99,7 @@ pub(crate) fn test_single_pattern(
             } else {
                 // Sum com payload — extrair tag e comparar.
                 let tag_func = lower.ffi_refs.get("kata_rt_sum_tag_int").ok_or_else(|| {
-                    super::CodegenError::FfiSymbolNotFound("kata_rt_sum_tag_int".into())
+                    super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_sum_tag_int".into() }
                 })?;
                 let tag_call = lower.builder.ins().call(*tag_func, &[val]);
                 let actual_tag = lower.builder.inst_results(tag_call)[0];

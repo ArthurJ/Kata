@@ -22,28 +22,26 @@ use crate::metadata::MetadataTable;
 
 use super::backend::ModuleBackend;
 
-/// Erro de codegen.
-#[derive(Debug)]
+use thiserror::Error;
+
+/// Erro interno do codegen — bug ou limitação do compilador, nunca do usuário.
+#[derive(Debug, Clone, Error, miette::Diagnostic)]
 pub enum CodegenError {
+    /// Construção da TAST não suportada neste lowering (limitação do compilador).
+    #[error("construção não suportada no codegen: {node}\nisto é uma limitação do compilador, não um erro no seu código")]
+    #[diagnostic(code = "codegen.unsupported", help = "abra uma issue descrevendo o que você estava tentando fazer")]
+    UnsupportedNode { node: String },
+
+    /// Erro interno do Cranelift (bug do compilador).
+    #[error("erro interno do Cranelift: {reason}\nisto é um bug do compilador, não um erro no seu código")]
+    #[diagnostic(code = "codegen.cranelift", help = "abra uma issue com o código que causou este erro")]
+    Cranelift { reason: String },
+
     /// Símbolo FFI não encontrado no runtime.
-    FfiSymbolNotFound(String),
-    /// Erro interno do Cranelift.
-    Cranelift(String),
-    /// Nó da TAST não suportado neste lowering.
-    UnsupportedNode(String),
+    #[error("símbolo FFI não encontrado: {symbol}")]
+    #[diagnostic(code = "codegen.ffi_not_found", help = "verifique se o runtime foi linkado corretamente")]
+    FfiSymbolNotFound { symbol: String },
 }
-
-impl std::fmt::Display for CodegenError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            CodegenError::FfiSymbolNotFound(s) => write!(f, "símbolo FFI não encontrado: {s}"),
-            CodegenError::Cranelift(s) => write!(f, "erro Cranelift: {s}"),
-            CodegenError::UnsupportedNode(s) => write!(f, "nó TAST não suportado: {s}"),
-        }
-    }
-}
-
-impl std::error::Error for CodegenError {}
 
 /// Tabela de strings literais — indexada por índice.
 pub(crate) type StringTable = Vec<String>;
@@ -164,7 +162,7 @@ pub(crate) fn lower_module(
 
     let entry_id = module
         .declare_function("__kata_entry", Linkage::Export, &sig)
-        .map_err(|e| CodegenError::Cranelift(format!("declare __kata_entry: {e}")))?;
+        .map_err(|e| CodegenError::Cranelift { reason: format!("declare __kata_entry: {e}") })?;
 
     // Cria um Context do Cranelift (não FunctionBuilderContext).
     let mut ctx = module.make_context();
@@ -181,10 +179,10 @@ pub(crate) fn lower_module(
         let rebase_sym = format!("__kata_snap_rebase_{i}");
         let bytes_id = module
             .declare_data(&bytes_sym, Linkage::Local, false, false)
-            .map_err(|e| CodegenError::Cranelift(format!("declare_data {bytes_sym}: {e}")))?;
+            .map_err(|e| CodegenError::Cranelift { reason: format!("declare_data {bytes_sym}: {e}") })?;
         let rebase_id = module
             .declare_data(&rebase_sym, Linkage::Local, false, false)
-            .map_err(|e| CodegenError::Cranelift(format!("declare_data {rebase_sym}: {e}")))?;
+            .map_err(|e| CodegenError::Cranelift { reason: format!("declare_data {rebase_sym}: {e}") })?;
         snapshot_data_ids.push(bytes_id);
         snapshot_rebase_ids.push(rebase_id);
     }
@@ -249,7 +247,7 @@ pub(crate) fn lower_module(
             .ffi_refs
             .get("kata_rt_scheduler_init")
             .copied()
-            .ok_or_else(|| CodegenError::FfiSymbolNotFound("kata_rt_scheduler_init".into()))?;
+            .ok_or_else(|| CodegenError::FfiSymbolNotFound { symbol: "kata_rt_scheduler_init".into() })?;
         let init_inst = lower.builder.ins().call(scheduler_init_ref, &[]);
         let root_arena = lower.builder.inst_results(init_inst)[0];
         lower.caller_arena = Some(root_arena);
@@ -262,7 +260,7 @@ pub(crate) fn lower_module(
                 .ffi_refs
                 .get("kata_rt_load_snapshot")
                 .copied()
-                .ok_or_else(|| CodegenError::FfiSymbolNotFound("kata_rt_load_snapshot".into()))?;
+                .ok_or_else(|| CodegenError::FfiSymbolNotFound { symbol: "kata_rt_load_snapshot".into() })?;
             let ptr_ty = lower.module.target_config().pointer_type();
             for (i, snap) in typed.snapshots.iter().enumerate() {
                 // Obter GlobalValues para os data symbols.
@@ -328,7 +326,7 @@ pub(crate) fn lower_module(
     // Define a função no module usando o Context.
     module
         .define_function(entry_id, &mut ctx)
-        .map_err(|e| CodegenError::Cranelift(format!("define __kata_entry: {e}")))?;
+        .map_err(|e| CodegenError::Cranelift { reason: format!("define __kata_entry: {e}") })?;
     module.clear_context(&mut ctx);
 
     // Define os data symbols para strings literais.
@@ -336,14 +334,14 @@ pub(crate) fn lower_module(
         let sym = format!("__kata_str_{i}");
         let did = module
             .declare_data(&sym, Linkage::Local, false, false)
-            .map_err(|e| CodegenError::Cranelift(format!("declare_data {sym}: {e}")))?;
+            .map_err(|e| CodegenError::Cranelift { reason: format!("declare_data {sym}: {e}") })?;
         let mut data_desc = cranelift_module::DataDescription::new();
         // Null-terminated C string: o runtime usa CStr::from_ptr.
         let bytes = format!("{s}\0").into_bytes();
         data_desc.define(bytes.into());
         module
             .define_data(did, &data_desc)
-            .map_err(|e| CodegenError::Cranelift(format!("define_data {sym}: {e}")))?;
+            .map_err(|e| CodegenError::Cranelift { reason: format!("define_data {sym}: {e}") })?;
     }
 
     // Define os data symbols para bytes literais.
@@ -351,12 +349,12 @@ pub(crate) fn lower_module(
         let sym = format!("__kata_bytes_{i}");
         let did = module
             .declare_data(&sym, Linkage::Local, false, false)
-            .map_err(|e| CodegenError::Cranelift(format!("declare_data {sym}: {e}")))?;
+            .map_err(|e| CodegenError::Cranelift { reason: format!("declare_data {sym}: {e}") })?;
         let mut data_desc = cranelift_module::DataDescription::new();
         data_desc.define(b.clone().into());
         module
             .define_data(did, &data_desc)
-            .map_err(|e| CodegenError::Cranelift(format!("define_data {sym}: {e}")))?;
+            .map_err(|e| CodegenError::Cranelift { reason: format!("define_data {sym}: {e}") })?;
     }
 
     // Define os data symbols para snapshots comptime.
@@ -367,7 +365,7 @@ pub(crate) fn lower_module(
         data_desc.define(snap.bytes.clone().into());
         module
             .define_data(snapshot_data_ids[i], &data_desc)
-            .map_err(|e| CodegenError::Cranelift(format!("define_data {bytes_sym}: {e}")))?;
+            .map_err(|e| CodegenError::Cranelift { reason: format!("define_data {bytes_sym}: {e}") })?;
 
         // rebase_offsets — array de i64 (usize → i64 para ABI).
         let rebase_sym = format!("__kata_snap_rebase_{i}");
@@ -380,7 +378,7 @@ pub(crate) fn lower_module(
         rebase_desc.define(rebase_bytes.into());
         module
             .define_data(snapshot_rebase_ids[i], &rebase_desc)
-            .map_err(|e| CodegenError::Cranelift(format!("define_data {rebase_sym}: {e}")))?;
+            .map_err(|e| CodegenError::Cranelift { reason: format!("define_data {rebase_sym}: {e}") })?;
     }
 
     Ok((metadata, string_table, _test_wrappers))

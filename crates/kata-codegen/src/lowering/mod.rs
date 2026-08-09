@@ -80,18 +80,18 @@ pub(crate) fn func_key_from_callee(
     let name = match &callee.node.kind {
         TypedExprKind::Ident { name } => name.clone(),
         _ => {
-            return Err(module::CodegenError::UnsupportedNode(format!(
+            return Err(module::CodegenError::UnsupportedNode { node: format!(
                 "callee não-Ident em func_key_from_callee: {:?}",
                 callee.node.kind
-            )));
+            ) });
         }
     };
     match &callee.node.ty {
         Ty::Function(params, ret) => Ok((name, params.clone(), (**ret).clone())),
-        _ => Err(module::CodegenError::UnsupportedNode(format!(
+        _ => Err(module::CodegenError::UnsupportedNode { node: format!(
             "callee.ty não é Function em func_key_from_callee: {}",
             callee.node.ty
-        ))),
+        ) }),
     }
 }
 
