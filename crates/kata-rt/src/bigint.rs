@@ -97,7 +97,7 @@ unsafe fn deref_bigint<'a>(val: i64) -> &'a BigInt {
 /// # Safety
 /// `val` deve ser um ponteiro válido de `alloc_bigint` e não ter sido
 /// liberado antes. Após isto, `val` é inválido.
-#[allow(dead_code)] // Chamado pelo codegen via FFI em fios posteriores
+#[allow(dead_code)]
 unsafe fn free_bigint(val: i64) {
     unsafe {
         let _ = Box::from_raw(val as *mut BigInt);
@@ -425,7 +425,6 @@ pub fn show(val: i64) -> String {
 }
 
 /// Converte Int para Rational (para interoperabilidade).
-#[allow(dead_code)]
 pub(crate) fn to_rational(val: i64) -> num_rational::BigRational {
     let n = if is_smi(val) {
         BigInt::from(decode_smi(val))

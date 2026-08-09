@@ -94,7 +94,6 @@ pub extern "C" fn kata_rt_get_snapshot(snapshot_id: i64) -> i64 {
 }
 
 /// Reseta a tabela de snapshots — chamado entre execuções de teste.
-#[allow(dead_code)]
 pub(crate) fn reset_snapshot_table() {
     SNAPSHOT_PTRS.with(|table| {
         table.borrow_mut().clear();

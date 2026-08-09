@@ -50,7 +50,6 @@ pub(crate) struct SpawnArgs {
 /// o que fazer: `Cooperative` → volta para run_queue; channel/select →
 /// vai para blocked.
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // Done é para exaustividade do enum
 pub(crate) enum YieldReason {
     /// Fiber fez yield cooperativo (back-edge check). Volta para run_queue.
     Cooperative,

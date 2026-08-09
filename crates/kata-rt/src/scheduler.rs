@@ -50,7 +50,6 @@ pub(crate) type FiberId = u64;
 
 /// Razão pela qual um fiber está bloqueado.
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // WaitingOnFiber é para fases futuras
 #[allow(clippy::enum_variant_names)] // Prefixo WaitingOn é intencional
 pub(crate) enum BlockReason {
     /// Esperando mensagem em canal (recv). `i64` = handle do canal.

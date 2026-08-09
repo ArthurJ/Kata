@@ -169,7 +169,6 @@ thread_local! {
 
 /// Reseta todas as arenas do pool thread-local. Chamado entre execuções
 /// de teste para evitar poluição de estado global.
-#[allow(dead_code)]
 pub(crate) fn reset_all_arenas() {
     ARENAS.with(|arenas| {
         arenas.borrow_mut().clear();

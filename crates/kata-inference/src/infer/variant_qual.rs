@@ -136,7 +136,6 @@ fn variant_index_qual(
 /// `Ok(None)` quando o enum não é `Ty::Sum` (fallback para o caller).
 ///
 /// O caller deve passar o `enum_ty` já resolvido do `TypeEnv`.
-#[allow(dead_code)]
 pub(crate) fn infer_variant_qual(
     _enum_name: &str,
     variant: &str,

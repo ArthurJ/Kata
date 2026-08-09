@@ -172,7 +172,6 @@ pub unsafe extern "C" fn kata_rt_rat_ge(a: *const BigRational, b: *const BigRati
 
 /// show de Rational. Imprime decimal quando denominador é 2^a · 5^b,
 /// caso contrário imprime como fração.
-#[allow(dead_code)]
 pub(crate) fn rat_to_string(r: &BigRational) -> String {
     // Se denominador é 1, é inteiro
     if r.denom() == &BigInt::one() {
@@ -257,7 +256,6 @@ fn try_decimal(r: &BigRational) -> Option<String> {
 }
 
 /// Converte Rational para Float.
-#[allow(dead_code)]
 pub(crate) fn rat_to_float(r: &BigRational) -> f64 {
     r.to_f64().unwrap_or(f64::NAN)
 }
