@@ -301,14 +301,18 @@ pub(crate) fn infer_action_call(
                 span: (*span).into(),
             });
         }
-        for (actual, expected) in arg_tys.iter().zip(param_types.iter()) {
-            if actual != expected {
-                return Err(kata_diagnostics::MiddleError::TypeMismatch {
-                    expected: format!("{expected}"),
-                    found: format!("{actual}"),
-                    span: (*span).into(),
-                });
-            }
+        // Valida args contra param_types via match_score (interface dispatch).
+        // Antes usava == estrito, que falhava quando param é Interface("SHOW")
+        // e arg é Text (Text implementa SHOW). match_score verifica compatibilidade
+        // via InterfaceRegistry, permitindo dispatch por interface no caminho indirect.
+        use kata_core::dispatch::match_score;
+        let score = match_score(&arg_tys, &param_types, ctx.interface_registry);
+        if !score.is_compatible(arg_tys.len()) {
+            return Err(kata_diagnostics::MiddleError::TypeMismatch {
+                expected: param_types.iter().map(|t| t.to_string()).collect::<Vec<_>>().join(", "),
+                found: arg_tys.iter().map(|t| t.to_string()).collect::<Vec<_>>().join(", "),
+                span: (*span).into(),
+            });
         }
 
         // Constrói a expressão do callee (Ident com ty: Ty::Action).
@@ -328,7 +332,12 @@ pub(crate) fn infer_action_call(
             tail_pos: false,
             escape: kata_core::escape::EscapeTarget::Local,
             kind: TypedExprKind::ActionCall {
-                callee: callee.to_string(),
+                // callee = nome da action original (via fn_alias), não o nome
+                // da variável. O monomorphizador precisa do nome da action
+                // para encontrar overloads no DispatchTable e instanciar a
+                // versão genérica. Se não há alias (variável não vem de
+                // `let f := action`), fallback para o próprio callee.
+                callee: env.fn_alias_of(callee).unwrap_or(callee).to_string(),
                 args: Box::new(Spanned::new(typed_args, args.span)),
                 caller_arena: 0,
                 ffi_symbol: None,

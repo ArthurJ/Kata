@@ -79,6 +79,30 @@ pub fn resolve_with_imports(
     origin: &str,
     imported_directives: DirectiveRegistry,
 ) -> Result<ResolvedModule, Vec<ResolveError>> {
+    resolve_inner(module, origin, imported_directives, kata_core::InterfaceRegistry::new())
+}
+
+/// Resolve um módulo com diretivas importadas e interfaces do prelude.
+///
+/// Igual a `resolve_with_imports`, mas pré-popula o `interface_registry`
+/// com as interfaces do prelude. Isto é necessário para que tipos como
+/// `msg :: SHOW` sejam resolvidos como `Ty::Interface("SHOW")` em vez de
+/// `Ty::Var("SHOW")` quando o módulo do usuário não define a interface.
+pub fn resolve_with_prelude(
+    module: &Module,
+    origin: &str,
+    imported_directives: DirectiveRegistry,
+    prelude_iface_reg: &kata_core::InterfaceRegistry,
+) -> Result<ResolvedModule, Vec<ResolveError>> {
+    resolve_inner(module, origin, imported_directives, prelude_iface_reg.clone())
+}
+
+fn resolve_inner(
+    module: &Module,
+    origin: &str,
+    imported_directives: DirectiveRegistry,
+    prelude_iface_reg: kata_core::InterfaceRegistry,
+) -> Result<ResolvedModule, Vec<ResolveError>> {
     let mut type_env = TypeEnv::new();
     // Unit é tipo primitivo da linguagem — sempre disponível no TypeEnv.
     type_env.define("Unit", Ty::Unit, origin);
@@ -89,7 +113,9 @@ pub fn resolve_with_imports(
     let mut struct_registry = kata_core::StructRegistry::new();
     let mut refined_decls = Vec::new();
     let mut enum_pred_decls = Vec::new();
-    let mut interface_registry = kata_core::InterfaceRegistry::new();
+    // Pré-popula com interfaces do prelude para que `resolve_type_expr`
+    // resolva `SHOW` como `Ty::Interface("SHOW")` em vez de `Ty::Var("SHOW")`.
+    let mut interface_registry = prelude_iface_reg;
     let mut refines_registry = kata_core::RefinesRegistry::new();
     // Erros de validação de diretivas desconhecidas (coletado durante Pass 1).
     let mut errors: Vec<ResolveError> = Vec::new();

@@ -6,13 +6,13 @@
 //! Pipeline completo: lex → parse → resolve → infer → optimize → codegen → JIT.
 
 use kata_codegen::jit_eval;
-use kata_core::ty::{PrimTy, Ty};
+use kata_core::ty::Ty;
 use kata_inference::infer_module;
 use kata_lexer::lex;
 use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
 use kata_parser::parse;
-use kata_resolution::{load_prelude, resolve, ResolvedModule};
+use kata_resolution::{load_prelude, resolve_with_prelude, ResolvedModule};
 use kata_tree_shaking::tree_shake;
 use serial_test::serial;
 
@@ -21,7 +21,13 @@ fn eval_src(src: &str) -> (i64, Ty) {
     let tokens = lex(src).expect("lex deve succeed");
     let module = parse(tokens).expect("parse deve succeed");
     let prelude = load_prelude().expect("prelude deve carregar");
-    let user = resolve(&module).expect("resolve deve succeed");
+    let user = resolve_with_prelude(
+        &module,
+        "__local__",
+        kata_resolution::DirectiveRegistry::new(),
+        &prelude.interface_registry,
+    )
+    .expect("resolve deve succeed");
     let resolved = merge_resolved(prelude, user);
     let typed = infer_module(&module, &resolved).expect("infer deve succeed");
     let typed = monomorphize(typed);
@@ -77,16 +83,6 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
         },
         directive_registry: kata_resolution::DirectiveRegistry::new(),
     }
-}
-
-/// Roda o pipeline até infer_module e retorna o erro.
-fn infer_err(src: &str) -> kata_diagnostics::MiddleError {
-    let tokens = lex(src).expect("lex deve succeed");
-    let module = parse(tokens).expect("parse deve succeed");
-    let prelude = load_prelude().expect("prelude deve carregar");
-    let user = resolve(&module).expect("resolve deve succeed");
-    let resolved = merge_resolved(prelude, user);
-    infer_module(&module, &resolved).expect_err("deve produzir erro")
 }
 
 // ── Test 1: let f := echo; f!("hello") — dispatch por args resolve ──
@@ -180,3 +176,63 @@ main!()"#;
     assert_eq!(ty, Ty::Unit);
     assert_eq!(raw, 0);
 }
+
+// ── Fase 2: Test 6 — Action genérica (SHOW) via OverloadSet + monomorfização ──
+//
+// `worker` é uma action genérica com param `msg :: SHOW`. `let f := worker`
+// produz Ty::OverloadSet. `f!("hello")` faz dispatch por args: Text implementa
+// SHOW → seleciona overload (SHOW) => Unit → ActionCall direto.
+// O monomorphizador deve instanciar `worker_SHOW_Text` via unify.
+
+#[test]
+#[serial]
+fn overloadset_action_generica_show_monomorfiza() {
+    let src = r#"action worker (msg :: SHOW) => Unit
+    echo!(msg)
+action main => Unit
+    let f := worker
+    f!("hello")
+main!()"#;
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Unit);
+    assert_eq!(raw, 0);
+}
+
+// ── Fase 2: Test 6b — Action genérica (SHOW) chamada direta (sem OverloadSet) ──
+//
+// `worker!("hello")` chama worker diretamente (não via `let f := worker`).
+// Isto testa se echo!(msg) funciona dentro de uma action genérica com
+// param Interface("SHOW") — o caso base sem OverloadSet.
+
+#[test]
+#[serial]
+fn action_generica_show_chamada_direta() {
+    let src = r#"action worker (msg :: SHOW) => Unit
+    echo!(msg)
+action main => Unit
+    worker!("hello")
+main!()"#;
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Unit);
+    assert_eq!(raw, 0);
+}
+
+// ── Fase 2: Test 9 — Action genérica com Int (Int implementa SHOW) ──
+//
+// Variante do Test 6 com Int em vez de Text. `let f := worker; f!(42)`
+// deve instanciar `worker_SHOW_Int` (Int implementa SHOW).
+
+#[test]
+#[serial]
+fn action_generica_show_com_int_monomorfiza() {
+    let src = r#"action worker (msg :: SHOW) => Unit
+    echo!(msg)
+action main => Unit
+    let f := worker
+    f!(42)
+main!()"#;
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Unit);
+    assert_eq!(raw, 0);
+}
+

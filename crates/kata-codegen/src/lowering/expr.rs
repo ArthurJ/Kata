@@ -144,6 +144,14 @@ pub(crate) fn lower_expr(
             // Caminho 3: Action first-class reference (Ty::Action).
             // Mesmo mecanismo que Ty::Function — obtém fn_ptr via GlobalValue::Symbol.
             if let Ty::Action(params, ret) = &expr.ty {
+                // Se params contém Interface(_), a action é uma template
+                // genérica que foi instanciada em versões concretas. A
+                // template foi removida do codegen — o valor do Ident é
+                // nunca usado em runtime (f!(args) vira ActionCall direto
+                // com a instância concreta). Produz placeholder.
+                if params.iter().any(|p| matches!(p, Ty::Interface(_))) {
+                    return Ok(ctx.builder.ins().iconst(I64, 0));
+                }
                 let key = (name.clone(), params.clone(), (**ret).clone());
                 if let Some(&func_id) = ctx.kata_ids.get(&key) {
                     let func_ref = ctx.module.declare_func_in_func(func_id, ctx.builder.func);

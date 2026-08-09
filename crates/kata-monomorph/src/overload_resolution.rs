@@ -167,7 +167,7 @@ pub(crate) fn instantiate_generic_closure(
 /// codegen precisa de um nó válido. Substituímos a Closure por `TextLit("?")`
 /// após o match (ver `fallback::fallback_unresolved_show`).
 pub(crate) fn resolve_erased_ffi_symbol(
-    name: &str,
+    callee: &mut Spanned<TypedExpr>,
     args: &[Spanned<TypedExpr>],
     ffi_symbol: &mut Option<String>,
     ctx: &MonoCtx,
@@ -175,15 +175,28 @@ pub(crate) fn resolve_erased_ffi_symbol(
     if ffi_symbol.is_some() {
         return;
     }
+    let name = match &callee.node.kind {
+        TypedExprKind::Ident { name } => name.clone(),
+        _ => return,
+    };
     let arg_types: Vec<Ty> = args.iter().map(|a| a.node.ty.clone()).collect();
-    if let Some(overloads) = ctx.dispatch_table.get_overloads(name) {
+    if let Some(overloads) = ctx.dispatch_table.get_overloads(&name) {
         let concrete = overloads.iter().find(|oi| {
             oi.type_params.is_empty()
                 && oi.params.len() == arg_types.len()
                 && oi.params == arg_types
         });
         if let Some(oi) = concrete {
-            *ffi_symbol = oi.ffi_symbol.clone();
+            if oi.ffi_symbol.is_some() {
+                *ffi_symbol = oi.ffi_symbol.clone();
+            } else {
+                // Overload concreto com ffi_symbol=None — é uma função Kata
+                // com corpo (não FFI pura). Reescreve o callee para o nome
+                // da instância (ex: `show_SHOW_Text`) para que o codegen
+                // resolva via `kata_refs` pelo nome mangled.
+                callee.node.kind = TypedExprKind::Ident { name: oi.name.clone() };
+                callee.node.ty = Ty::Function(oi.params.clone(), Box::new(oi.ret.clone()));
+            }
         }
     }
 }
@@ -205,13 +218,27 @@ pub(crate) fn instantiate_generic_action_call(
 
     // Procura overload genérico com mesma aridade dos args.
     let arg_types: Vec<Ty> = match &args.node.kind {
-        TypedExprKind::Tuple { elements } => elements.iter().map(|e| e.node.ty.clone()).collect(),
+        TypedExprKind::Tuple { elements } => {
+            elements.iter().map(|e| e.node.ty.clone()).collect()
+        }
         TypedExprKind::Unit => Vec::new(),
         _ => vec![args.node.ty.clone()],
     };
     let generic_overload = find_generic_overload(overloads, &arg_types);
 
     if let Some((oi, subs)) = generic_overload {
+        // Guarda: se algum type_param mapeia para Ty::Var(_) ou Ty::Interface(_),
+        // a instanciação é trivial (não-concreta). Isto acontece quando uma
+        // action genérica template (ex: `worker` com `msg :: SHOW`) está sendo
+        // percorrida pelo monomorphizador e contém chamadas a outras actions
+        // genéricas com args ainda não-resolvidos (ex: `echo!(msg)` onde
+        // `msg: Interface("SHOW")`). Neste caso, não instanciar — a
+        // instanciação ocorrerá quando a action template for instanciada para
+        // um tipo concreto e o body for reescrito com tipos resolvidos.
+        if subs.values().any(|ty| matches!(ty, Ty::Var(_) | Ty::Interface(_))) {
+            return;
+        }
+
         // Gera nome canônico da instância.
         let subs_key = canonicalize_subs(&oi.type_params, &subs);
         let instance_name = format!("{callee}_{subs_key}");

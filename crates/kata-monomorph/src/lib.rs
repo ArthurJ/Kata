@@ -104,6 +104,16 @@ pub fn monomorphize(typed: TypedModule) -> MonoModule {
         }
     }
 
+    // ── Remove templates genéricas após monomorfização ──
+    // Actions com Interface(_) nos param_types são templates que foram
+    // instanciadas em versões concretas (ex: echo_SHOW_Text). As instâncias
+    // já estão em mono.actions com tipos concretos. As templates não devem
+    // chegar ao codegen — seus corpos contêm tipos não-concretos
+    // (Interface("SHOW")) que o codegen não sabe compilar.
+    mono.actions.retain(|a| {
+        !a.param_types.iter().any(|ty| matches!(ty, Ty::Interface(_)))
+    });
+
     // Passada final: aplica fallback gracioso a Closures com ffi_symbol: None
     // cujo arg_type é Ty::Var(_) não resolvido (ex: braço Err de show_Result
     // quando só Result::Ok aparece). O braço nunca executa em runtime, mas o
@@ -239,7 +249,7 @@ fn rewrite_typed_expr(expr_span: &mut Spanned<TypedExpr>, ctx: &MonoCtx, acc: &m
                 let instantiated =
                     instantiate_generic_closure(callee, args, ffi_symbol, &name, ctx, acc);
                 if !instantiated {
-                    resolve_erased_ffi_symbol(&name, args, ffi_symbol, ctx);
+                    resolve_erased_ffi_symbol(callee, args, ffi_symbol, ctx);
                 }
 
                 // Layer 6: show de Tuple sem overload concreto.
@@ -319,7 +329,16 @@ fn rewrite_typed_expr(expr_span: &mut Spanned<TypedExpr>, ctx: &MonoCtx, acc: &m
             // Depois verifica se este ActionCall é genérico.
             // FFI builtins (ffi_symbol = Some) não são instanciados.
             if ffi_symbol.is_none() {
+                let callee_before = callee.clone();
                 instantiate_generic_action_call(callee, args, ctx, acc);
+                // Se o callee foi reescrito (instância concreta), a chamada
+                // agora é direta — remover indirect_callee. O codegen usa
+                // indirect_callee para call_indirect via var_map, mas a
+                // instância concreta deve ser chamada diretamente (spawn+run
+                // no entry point, ou call direto dentro de Action).
+                if *callee != callee_before {
+                    *indirect_callee = None;
+                }
             }
         }
 

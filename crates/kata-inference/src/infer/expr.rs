@@ -380,6 +380,13 @@ pub(crate) fn infer_expr_hinted(
             // binding com `fn_alias = Some("soma")`. Isto permite que a
             // reflexão distinga alias (caso dinâmico, escalar via sidecar
             // table) de lambda com binding (caso estático, lista).
+            //
+            // Também rastreia Actions: `let f := worker` onde `worker` é
+            // Action no DispatchTable. O fn_alias guarda "worker" para que o
+            // caminho indirect de ActionCall produza callee = "worker"
+            // (nome da action) em vez de "f" (nome da variável). Sem isto,
+            // o monomorphizador não encontra a action no DispatchTable e
+            // não instancia a versão genérica.
             let fn_alias = match (&value.node, &typed_value.kind) {
                 (Expr::Ident { name: src_name }, _)
                     if matches!(val_ty, Ty::Function(_, _))
@@ -387,6 +394,17 @@ pub(crate) fn infer_expr_hinted(
                             .table
                             .get_overloads(src_name)
                             .is_some_and(|ols| ols.iter().any(|oi| !oi.is_action)) =>
+                {
+                    Some(src_name.clone())
+                }
+                (Expr::Ident { name: src_name }, _)
+                    if matches!(
+                        val_ty,
+                        Ty::Action(_, _) | Ty::OverloadSet { .. }
+                    ) && ctx
+                        .table
+                        .get_overloads(src_name)
+                        .is_some_and(|ols| ols.iter().any(|oi| oi.is_action)) =>
                 {
                     Some(src_name.clone())
                 }
