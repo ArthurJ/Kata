@@ -115,21 +115,6 @@ mas a síntese de `show` depende de descobrir structs/enums no módulo, que
 por sua vez pode depender de inferência parcial de imports. Avaliar se a
 separação é possível sem resolver imports durante a síntese.
 
-### A5. Eliminar dead code — ModuleLoader não usado pelo driver ✅ Resolvido
-
-**Resolvido (premissa incorreta).** O TODO original afirmava que
-`ModuleLoader` era dead code não chamado pelo driver. Inspeção do código
-mostra o oposto: `ModuleLoader` é usado ativamente em dois call sites:
-
-1. `crates/kata-driver/src/imports.rs:222` — `load_module_imports` cria um
-   `ModuleLoader` e chama `load_imports`. É o único caminho de import do
-   driver (JIT, test, AOT).
-2. `crates/kata-lsp/src/analysis.rs:90` — o LSP usa `ModuleLoader` para
-   resolver imports multi-arquivo.
-
-Não há dois sistemas de import concorrentes. `ModuleLoader` é o único.
-Nada a deletar.
-
 ### A6. Unificação estrutural AST ↔ TAST
 
 **Problema:** `Expr` (40+ variants) e `TypedExprKind` (espelha quase todos
