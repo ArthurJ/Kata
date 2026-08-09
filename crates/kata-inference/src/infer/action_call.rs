@@ -149,7 +149,10 @@ pub(crate) fn infer_action_call(
     // compatível entre os overloads do OverloadSet.
     if !ctx.table.has_function(callee)
         && let Some(ty) = env.lookup(callee).cloned()
-        && let Ty::OverloadSet { name: action_name, overloads } = &ty
+        && let Ty::OverloadSet {
+            name: action_name,
+            overloads,
+        } = &ty
     {
         // Lowera a tupla de argumentos.
         let typed_args = infer_expr(&args.node, &args.span, env, ctx, false)?;
@@ -169,17 +172,15 @@ pub(crate) fn infer_action_call(
                 }
             }
             TypedExprKind::Tuple { .. } | TypedExprKind::Unit => typed_args,
-            _ => {
-                TypedExpr {
-                    ty: Ty::Tuple(vec![typed_args.ty.clone()]),
-                    kind: TypedExprKind::Tuple {
-                        elements: vec![Spanned::new(typed_args.clone(), args.span)],
-                    },
-                    span: typed_args.span,
-                    tail_pos: typed_args.tail_pos,
-                    escape: typed_args.escape,
-                }
-            }
+            _ => TypedExpr {
+                ty: Ty::Tuple(vec![typed_args.ty.clone()]),
+                kind: TypedExprKind::Tuple {
+                    elements: vec![Spanned::new(typed_args.clone(), args.span)],
+                },
+                span: typed_args.span,
+                tail_pos: typed_args.tail_pos,
+                escape: typed_args.escape,
+            },
         };
 
         // Extrai tipos dos args.
@@ -207,8 +208,14 @@ pub(crate) fn infer_action_call(
         if compatibles.is_empty() {
             return Err(kata_diagnostics::MiddleError::TypeMismatch {
                 expected: format!("args compatíveis com algum overload de `{action_name}`"),
-                found: format!("nenhum overload casa com args de tipos [{}]",
-                    arg_tys.iter().map(|t| t.to_string()).collect::<Vec<_>>().join(", ")),
+                found: format!(
+                    "nenhum overload casa com args de tipos [{}]",
+                    arg_tys
+                        .iter()
+                        .map(|t| t.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
                 span: (*span).into(),
             });
         }
@@ -309,8 +316,16 @@ pub(crate) fn infer_action_call(
         let score = match_score(&arg_tys, &param_types, ctx.interface_registry);
         if !score.is_compatible(arg_tys.len()) {
             return Err(kata_diagnostics::MiddleError::TypeMismatch {
-                expected: param_types.iter().map(|t| t.to_string()).collect::<Vec<_>>().join(", "),
-                found: arg_tys.iter().map(|t| t.to_string()).collect::<Vec<_>>().join(", "),
+                expected: param_types
+                    .iter()
+                    .map(|t| t.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                found: arg_tys
+                    .iter()
+                    .map(|t| t.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", "),
                 span: (*span).into(),
             });
         }

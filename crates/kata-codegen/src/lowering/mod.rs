@@ -39,6 +39,7 @@ mod map;
 mod module;
 mod pattern;
 mod range_iter;
+mod tail_call;
 mod test_runner;
 mod timer;
 mod variant;

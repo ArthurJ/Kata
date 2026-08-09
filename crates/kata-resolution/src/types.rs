@@ -279,7 +279,7 @@ pub enum ResolveError {
 /// Formata um `Vec<ResolveError>` como string legível (erros separados por `; `).
 /// `Vec` não implementa `Display`, então sem este helper o caller teria que
 /// usar `{e:?}` (Debug), que mostraria spans brutos.
-pub fn format_resolve_errors(errors: &[ResolveError]) -> String {
+pub(crate) fn format_resolve_errors(errors: &[ResolveError]) -> String {
     errors
         .iter()
         .map(|e| e.to_string())

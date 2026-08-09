@@ -204,7 +204,7 @@ fn highlight_line(line: &str) -> Cow<'_, str> {
 /// O trait `Helper` exige `Completer + Hinter + Highlighter + Validator`.
 /// Implementamos `Highlighter` com colorização baseada no lexer; os outros
 /// três usam implementações padrão do rustyline.
-pub struct KataHelper {
+pub(crate) struct KataHelper {
     completer: rustyline::completion::FilenameCompleter,
     #[allow(dead_code)]
     // HistoryHinter mantida como hook de integração rustyline; o impl Hinter retorna None (ver doc em `hint`).

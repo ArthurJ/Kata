@@ -469,8 +469,10 @@ pub(crate) fn check_exhaustiveness(
         }),
         // Byte e Bytes: tipos finitos mas infinitos em valores (0-255 / sequências).
         // Match em Byte ou Bytes exige otherwise/wildcard — como Int, Float, Text.
-        Ty::Byte | Ty::Bytes | Ty::File | Ty::Socket | Ty::OverloadSet { .. } => Err(MiddleError::MissingOtherwise {
-            span: (*span).into(),
-        }),
+        Ty::Byte | Ty::Bytes | Ty::File | Ty::Socket | Ty::OverloadSet { .. } => {
+            Err(MiddleError::MissingOtherwise {
+                span: (*span).into(),
+            })
+        }
     }
 }

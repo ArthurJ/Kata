@@ -9,7 +9,7 @@ g :: Int => Int
 lambda n: * n 2
 
 processar :: [Int] => Int
-lambda arr: fold (+ _ _) 0 (filter f (map g arr))
+lambda arr: fold (+ _ _) 0 (filter (f) (map (g) arr))
 
 action main
     let res := processar [1 -2 3 -4 5]

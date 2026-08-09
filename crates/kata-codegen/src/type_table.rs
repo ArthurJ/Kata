@@ -21,7 +21,11 @@ use std::collections::HashMap;
 /// Usa `StructRegistry` e `EnumRegistry` para resolver campos de structs
 /// e variants de enums. Tipos que não têm representação em marshal
 /// (InferVar, Var, Interface) mapeiam para `Unit` graceful.
-pub fn ty_to_marshal_shape(ty: &Ty, structs: &StructRegistry, enums: &EnumRegistry) -> TypeShape {
+pub(crate) fn ty_to_marshal_shape(
+    ty: &Ty,
+    structs: &StructRegistry,
+    enums: &EnumRegistry,
+) -> TypeShape {
     match ty {
         // Primitivos inline: Int, Float, Byte — 8 bytes.
         Ty::Prim(PrimTy::Int) | Ty::Prim(PrimTy::Float) | Ty::Byte => TypeShape::Prim,
@@ -183,7 +187,7 @@ fn apply_subst(ty: &Ty, subst: &HashMap<String, Ty>) -> Ty {
 /// functions e actions do módulo, incluindo sub-tipos de canais
 /// (Sender/Receiver elem types) e tipos compostos (Tuple, List, etc).
 /// Retorna vec na ordem de descoberta (que vira a ordem dos type_ids).
-pub fn collect_module_types(mono: &MonoModule) -> Vec<Ty> {
+pub(crate) fn collect_module_types(mono: &MonoModule) -> Vec<Ty> {
     let mut seen: Vec<Ty> = Vec::new();
 
     fn insert_recursive(seen: &mut Vec<Ty>, ty: &Ty) {

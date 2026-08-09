@@ -25,9 +25,9 @@ use super::clause::{
 };
 use super::log::inject_log;
 use super::module::{CodegenError, FuncKey, StringTable};
+use super::tail_call::has_tail_pos_call;
 use super::timer::{
-    has_tail_pos_call, inject_timer_start, inject_timer_start_channel, inject_timer_stop,
-    inject_timer_stop_channel,
+    inject_timer_start, inject_timer_start_channel, inject_timer_stop, inject_timer_stop_channel,
 };
 use crate::metadata::MetadataTable;
 
@@ -469,13 +469,13 @@ pub(crate) fn define_function_body(
             }
 
             // @timer: stop + publish no epílogo (PRD §4.7 — após @cache insert).
-            if let Some(ts) = timer_spec {
-                if let Some(start) = timer_start_val {
-                    if timer_use_channel {
-                        inject_timer_stop_channel(ts, name, start, &mut lower)?;
-                    } else {
-                        inject_timer_stop(ts, name, start, &mut lower)?;
-                    }
+            if let Some(ts) = timer_spec
+                && let Some(start) = timer_start_val
+            {
+                if timer_use_channel {
+                    inject_timer_stop_channel(ts, name, start, &mut lower)?;
+                } else {
+                    inject_timer_stop(ts, name, start, &mut lower)?;
                 }
             }
 

@@ -79,7 +79,12 @@ pub fn resolve_with_imports(
     origin: &str,
     imported_directives: DirectiveRegistry,
 ) -> Result<ResolvedModule, Vec<ResolveError>> {
-    resolve_inner(module, origin, imported_directives, kata_core::InterfaceRegistry::new())
+    resolve_inner(
+        module,
+        origin,
+        imported_directives,
+        kata_core::InterfaceRegistry::new(),
+    )
 }
 
 /// Resolve um módulo com diretivas importadas e interfaces do prelude.
@@ -94,7 +99,12 @@ pub fn resolve_with_prelude(
     imported_directives: DirectiveRegistry,
     prelude_iface_reg: &kata_core::InterfaceRegistry,
 ) -> Result<ResolvedModule, Vec<ResolveError>> {
-    resolve_inner(module, origin, imported_directives, prelude_iface_reg.clone())
+    resolve_inner(
+        module,
+        origin,
+        imported_directives,
+        prelude_iface_reg.clone(),
+    )
 }
 
 fn resolve_inner(

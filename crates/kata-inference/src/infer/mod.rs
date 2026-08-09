@@ -204,7 +204,7 @@ pub fn infer_module(
             in_loop: false,
             deferred_lambdas: &deferred_lambdas,
         };
-        let typed_func = infer_named_function(func_def, &ctx, &resolved.type_env)?;
+        let typed_func = infer_named_function(func_def, &ctx, &type_env)?;
         // Registra no TypeEnv para permitir uso como valor (call_indirect).
         type_env.define(
             &typed_func.name,

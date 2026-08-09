@@ -2,8 +2,4 @@
 source: crates/kata-driver/tests/examples_snapshot.rs
 expression: output
 ---
---- stderr ---
-Error: parse.unexpected_token
-
-  × token inesperado: esperado `argumento #2 para `map` (aridade padrão 2)`,
-  │ encontrado `)`
+stream_fusion: pipeline processar executado com sucesso

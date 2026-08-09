@@ -112,7 +112,9 @@ pub fn monomorphize(typed: TypedModule) -> MonoModule {
     // chegar ao codegen — seus corpos contêm tipos não-concretos
     // (Interface("SHOW")) que o codegen não sabe compilar.
     mono.actions.retain(|a| {
-        !a.param_types.iter().any(|ty| matches!(ty, Ty::Interface(_)))
+        !a.param_types
+            .iter()
+            .any(|ty| matches!(ty, Ty::Interface(_)))
     });
 
     // Passada final: aplica fallback gracioso a Closures com ffi_symbol: None
@@ -330,32 +332,30 @@ fn rewrite_typed_expr(expr_span: &mut Spanned<TypedExpr>, ctx: &MonoCtx, acc: &m
             // Instancia args OverloadSet usando os params do callee.
             // Ex: dispatcher!(echo) — echo é OverloadSet, dispatcher espera
             // Action(Text) => Unit. Instancia echo_SHOW_Text e rewrites o arg.
-            if ffi_symbol.is_none() {
-                if let Some(overloads) = ctx.dispatch_table.get_overloads(callee) {
-                    let arg_types: Vec<Ty> = match &args.node.kind {
-                        TypedExprKind::Tuple { elements } => {
-                            elements.iter().map(|e| e.node.ty.clone()).collect()
-                        }
-                        TypedExprKind::Unit => Vec::new(),
-                        _ => vec![args.node.ty.clone()],
-                    };
-                    // Encontra o overload do callee que casa com os arg types.
-                    if let Some(callee_oi) = overloads.iter().find(|o| {
-                        o.params.len() == arg_types.len()
-                            && o.params.iter().zip(&arg_types).all(|(p, a)| {
-                                p == a || matches!(a, Ty::OverloadSet { .. })
-                            })
-                    }) {
-                        if let TypedExprKind::Tuple { elements } = &mut args.node.kind {
-                            for (i, elem) in elements.iter_mut().enumerate() {
-                                if matches!(elem.node.ty, Ty::OverloadSet { .. }) {
-                                    if let Some(Ty::Action(p, r)) = callee_oi.params.get(i) {
-                                        instantiate_overloadset_arg(
-                                            elem, p, r, ctx, acc,
-                                        );
-                                    }
-                                }
-                            }
+            if ffi_symbol.is_none()
+                && let Some(overloads) = ctx.dispatch_table.get_overloads(callee)
+            {
+                let arg_types: Vec<Ty> = match &args.node.kind {
+                    TypedExprKind::Tuple { elements } => {
+                        elements.iter().map(|e| e.node.ty.clone()).collect()
+                    }
+                    TypedExprKind::Unit => Vec::new(),
+                    _ => vec![args.node.ty.clone()],
+                };
+                // Encontra o overload do callee que casa com os arg types.
+                if let Some(callee_oi) = overloads.iter().find(|o| {
+                    o.params.len() == arg_types.len()
+                        && o.params.iter().zip(&arg_types).all(|(p, a)| {
+                            p == a || matches!(a, Ty::OverloadSet { .. })
+                        })
+                })
+                    && let TypedExprKind::Tuple { elements } = &mut args.node.kind
+                {
+                    for (i, elem) in elements.iter_mut().enumerate() {
+                        if matches!(elem.node.ty, Ty::OverloadSet { .. })
+                            && let Some(Ty::Action(p, r)) = callee_oi.params.get(i)
+                        {
+                            instantiate_overloadset_arg(elem, p, r, ctx, acc);
                         }
                     }
                 }

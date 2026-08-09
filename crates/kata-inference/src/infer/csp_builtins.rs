@@ -237,7 +237,13 @@ pub(crate) fn infer_fork_builtin(
     // o fork faz seu próprio dispatch pelos args — inferir o Ident como
     // first-class ref falharia com AmbiguousDispatch para Actions overloadadas.
     let action_expr_typed: Option<TypedExpr> = if !is_direct {
-        Some(super::expr::infer_expr(&elements[0].node, &elements[0].span, env, ctx, false)?)
+        Some(super::expr::infer_expr(
+            &elements[0].node,
+            &elements[0].span,
+            env,
+            ctx,
+            false,
+        )?)
     } else {
         None
     };

@@ -194,7 +194,9 @@ pub(crate) fn resolve_erased_ffi_symbol(
                 // com corpo (não FFI pura). Reescreve o callee para o nome
                 // da instância (ex: `show_SHOW_Text`) para que o codegen
                 // resolva via `kata_refs` pelo nome mangled.
-                callee.node.kind = TypedExprKind::Ident { name: oi.name.clone() };
+                callee.node.kind = TypedExprKind::Ident {
+                    name: oi.name.clone(),
+                };
                 callee.node.ty = Ty::Function(oi.params.clone(), Box::new(oi.ret.clone()));
             }
         }
@@ -218,9 +220,7 @@ pub(crate) fn instantiate_generic_action_call(
 
     // Procura overload genérico com mesma aridade dos args.
     let arg_types: Vec<Ty> = match &args.node.kind {
-        TypedExprKind::Tuple { elements } => {
-            elements.iter().map(|e| e.node.ty.clone()).collect()
-        }
+        TypedExprKind::Tuple { elements } => elements.iter().map(|e| e.node.ty.clone()).collect(),
         TypedExprKind::Unit => Vec::new(),
         _ => vec![args.node.ty.clone()],
     };
@@ -235,7 +235,10 @@ pub(crate) fn instantiate_generic_action_call(
         // `msg: Interface("SHOW")`). Neste caso, não instanciar — a
         // instanciação ocorrerá quando a action template for instanciada para
         // um tipo concreto e o body for reescrito com tipos resolvidos.
-        if subs.values().any(|ty| matches!(ty, Ty::Var(_) | Ty::Interface(_))) {
+        if subs
+            .values()
+            .any(|ty| matches!(ty, Ty::Var(_) | Ty::Interface(_)))
+        {
             return;
         }
 
@@ -325,7 +328,10 @@ pub(crate) fn instantiate_overloadset_arg(
     };
 
     // Guarda: subs não-concretas → não instanciar agora.
-    if subs.values().any(|ty| matches!(ty, Ty::Var(_) | Ty::Interface(_))) {
+    if subs
+        .values()
+        .any(|ty| matches!(ty, Ty::Var(_) | Ty::Interface(_)))
+    {
         return;
     }
 

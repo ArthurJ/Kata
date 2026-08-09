@@ -177,9 +177,9 @@ pub(crate) fn infer_expr_hinted(
                                 // Se há múltiplos overloads, usa o hint de tipo esperado
                                 // para selecionar o compatível. Sem hint, produz
                                 // Ty::OverloadSet para resolver no call site (dispatch por args).
-                                if let Some(overload) = select_action_overload(
-                                    &action_overloads, hint, ctx,
-                                ) {
+                                if let Some(overload) =
+                                    select_action_overload(&action_overloads, hint, ctx)
+                                {
                                     // hint resolveu — Ty::Action concreto
                                     (
                                         Ty::Action(
@@ -195,7 +195,10 @@ pub(crate) fn infer_expr_hinted(
                                         .map(|o| (o.params.clone(), o.ret.clone()))
                                         .collect();
                                     (
-                                        Ty::OverloadSet { name: name.clone(), overloads },
+                                        Ty::OverloadSet {
+                                            name: name.clone(),
+                                            overloads,
+                                        },
                                         TypedExprKind::Ident { name: name.clone() },
                                     )
                                 }
@@ -398,13 +401,11 @@ pub(crate) fn infer_expr_hinted(
                     Some(src_name.clone())
                 }
                 (Expr::Ident { name: src_name }, _)
-                    if matches!(
-                        val_ty,
-                        Ty::Action(_, _) | Ty::OverloadSet { .. }
-                    ) && ctx
-                        .table
-                        .get_overloads(src_name)
-                        .is_some_and(|ols| ols.iter().any(|oi| oi.is_action)) =>
+                    if matches!(val_ty, Ty::Action(_, _) | Ty::OverloadSet { .. })
+                        && ctx
+                            .table
+                            .get_overloads(src_name)
+                            .is_some_and(|ols| ols.iter().any(|oi| oi.is_action)) =>
                 {
                     Some(src_name.clone())
                 }
