@@ -36,16 +36,6 @@ Os docs `TODO-*.md` foram removidos (obsoletos ou resolvidos). Pendências vivem
 
 ---
 
-## LSP — Fase 4 (parcial)
-
-**Estado:** Fases 1-3 ✅. Fase 4 parcial: error recovery implementado (`parse_with_recovery` no parser + LSP).
-
-**Faltam:**
-- Benchmark de latência (DoD: < 100ms para arquivos < 500 linhas)
-- Subcomando `kata lsp` no CLI (opcional — binário `kata-lsp` já existe como processo separado)
-
-**PRD:** `docs/PRD-lsp.md`
-
 ---
 
 ## Arquitetura — Análise de Refatoração (do zero)
