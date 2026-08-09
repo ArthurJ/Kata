@@ -90,6 +90,27 @@ impl<'a> Lexer<'a> {
     }
 }
 
+// ── Recovery helper ───────────────────────────────────────────
+
+/// Consome caracteres até o próximo ponto de sincronização: `\n`, `;`, ou EOF.
+///
+/// Usado por `lex_with_recovery` para recuperar de erros léxicos.
+/// Para no `\n` (deixa o newline como char atual para o loop principal
+/// processar) ou no `;` (consome o `;` para não gerar token lixo).
+fn skip_to_sync(lex: &mut Lexer) {
+    while let Some(ch) = lex.ch {
+        if ch == '\n' {
+            // Não consome o \n — deixa o loop principal processá-lo
+            return;
+        }
+        if ch == ';' {
+            lex.advance(); // consome o ; para não virar token
+            return;
+        }
+        lex.advance();
+    }
+}
+
 // ── API pública ───────────────────────────────────────────────
 
 /// Lexa o texto fonte e retorna `Vec<TokenWithSpan>`.
@@ -97,23 +118,54 @@ impl<'a> Lexer<'a> {
 /// Emite tokens sintéticos INDENT/DEDENT/StmtSep para delimitar blocos
 /// por indentação. Newlines dentro de parênteses/colchetes/chaves são
 /// suprimidos (não geram StmtSep nem afetam indentação).
+///
+/// Aborta no primeiro erro léxico. Para múltiplos erros em uma única
+/// passada, use [`lex_with_recovery`].
 pub fn lex(source: &str) -> Result<Vec<TokenWithSpan>, FrontendError> {
+    let (tokens, errors) = lex_with_recovery(source);
+    if let Some(first) = errors.into_iter().next() {
+        return Err(first);
+    }
+    Ok(tokens)
+}
+
+/// Lexa o texto fonte com recovery de erros léxicos.
+///
+/// Análoga a [`lex`], mas não aborta no primeiro erro. Quando um erro
+/// léxico é encontrado (`UnterminatedString`, `InvalidNumber`,
+/// `InconsistentIndent`), o erro é registrado e o lexer skipa caracteres
+/// até o próximo ponto de sincronização (`\n` ou `;`), então continua
+/// tokenizando o resto do fonte.
+///
+/// Retorna sempre `(tokens, errors)`:
+/// - `tokens`: tokens válidos (pode ser vazio se houver erros graves)
+/// - `errors`: erros léxicos encontrados (vazio se tudo ok)
+///
+/// Se há erros, os tokens são parciais — linhas com erro são descartadas.
+/// O caller deve decidir se continua para parse (all-or-nothing por fase)
+/// ou aborta.
+pub fn lex_with_recovery(source: &str) -> (Vec<TokenWithSpan>, Vec<FrontendError>) {
     let mut lex = Lexer::new(source);
     let mut tokens: Vec<TokenWithSpan> = Vec::new();
+    let mut errors: Vec<FrontendError> = Vec::new();
     let mut indent_stack: Vec<usize> = vec![0];
     let mut bracket_depth: usize = 0;
     let mut line_has_content = false;
 
     // Processa indentação inicial (pula linhas vazias/comentários)
-    match process_indent(&mut lex, &mut indent_stack, &mut tokens)? {
-        IndentResult::Eof => {
+    match process_indent(&mut lex, &mut indent_stack, &mut tokens) {
+        Ok(IndentResult::Eof) => {
             tokens.push(TokenWithSpan {
                 token: Token::Eof,
                 span: Span::zero(),
             });
-            return Ok(tokens);
+            return (tokens, errors);
         }
-        IndentResult::Content => {}
+        Ok(IndentResult::Content) => {}
+        Err(e) => {
+            errors.push(e);
+            skip_to_sync(&mut lex);
+        }
     }
 
     loop {
@@ -127,7 +179,7 @@ pub fn lex(source: &str) -> Result<Vec<TokenWithSpan>, FrontendError> {
             while lex.ch.is_some() && lex.ch != Some('\n') {
                 lex.advance();
             }
-            continue; // volta ao topo — vai cair no \n ou EOF
+            continue;
         }
 
         // Newline
@@ -135,8 +187,8 @@ pub fn lex(source: &str) -> Result<Vec<TokenWithSpan>, FrontendError> {
             lex.advance();
             if bracket_depth == 0 {
                 let tokens_before = tokens.len();
-                match process_indent(&mut lex, &mut indent_stack, &mut tokens)? {
-                    IndentResult::Content => {
+                match process_indent(&mut lex, &mut indent_stack, &mut tokens) {
+                    Ok(IndentResult::Content) => {
                         let indent_changed = tokens.len() > tokens_before;
                         if !indent_changed && line_has_content {
                             tokens.push(TokenWithSpan {
@@ -146,10 +198,14 @@ pub fn lex(source: &str) -> Result<Vec<TokenWithSpan>, FrontendError> {
                         }
                         line_has_content = false;
                     }
-                    IndentResult::Eof => break,
+                    Ok(IndentResult::Eof) => break,
+                    Err(e) => {
+                        errors.push(e);
+                        skip_to_sync(&mut lex);
+                        line_has_content = false;
+                    }
                 }
             }
-            // Se bracket_depth > 0: newline suprimido, continua
             continue;
         }
 
@@ -159,19 +215,24 @@ pub fn lex(source: &str) -> Result<Vec<TokenWithSpan>, FrontendError> {
         }
 
         // Lexa um token real
-        let token = dispatch::lex_token(&mut lex)?;
-        line_has_content = true;
-
-        // Atualiza profundidade de brackets
-        match &token.token {
-            Token::LParen | Token::LBracket | Token::LBrace => bracket_depth += 1,
-            Token::RParen | Token::RBracket | Token::RBrace => {
-                bracket_depth = bracket_depth.saturating_sub(1)
+        match dispatch::lex_token(&mut lex) {
+            Ok(token) => {
+                line_has_content = true;
+                // Atualiza profundidade de brackets
+                match &token.token {
+                    Token::LParen | Token::LBracket | Token::LBrace => bracket_depth += 1,
+                    Token::RParen | Token::RBracket | Token::RBrace => {
+                        bracket_depth = bracket_depth.saturating_sub(1)
+                    }
+                    _ => {}
+                }
+                tokens.push(token);
             }
-            _ => {}
+            Err(e) => {
+                errors.push(e);
+                skip_to_sync(&mut lex);
+            }
         }
-
-        tokens.push(token);
     }
 
     // Esvazia pilha de indentação — emite DEDENTs restantes
@@ -188,5 +249,5 @@ pub fn lex(source: &str) -> Result<Vec<TokenWithSpan>, FrontendError> {
         span: Span::zero(),
     });
 
-    Ok(tokens)
+    (tokens, errors)
 }

@@ -60,19 +60,25 @@ pub(crate) fn process_indent(
             span: Span::synthetic(),
         });
     } else if indent < current {
-        while indent < *indent_stack.last().expect("indent_stack não vazia") {
+        // Pre-check: encontra o nível da pilha que casaria com indent,
+        // sem mutar a pilha. Se nenhum casa, é inconsistente.
+        let mut target_idx = indent_stack.len() - 1;
+        while target_idx > 0 && indent < indent_stack[target_idx] {
+            target_idx -= 1;
+        }
+        if indent != indent_stack[target_idx] {
+            return Err(FrontendError::InconsistentIndent {
+                expected: indent_stack[target_idx],
+                found: indent,
+                span: MietteSpan(Span::new(lex.pos, lex.line, lex.col, 1)),
+            });
+        }
+        // Commit: emite DEDENTs para cada nível removido
+        while indent_stack.len() - 1 > target_idx {
             indent_stack.pop();
             tokens.push(TokenWithSpan {
                 token: Token::Dedent,
                 span: Span::synthetic(),
-            });
-        }
-        let new_current = *indent_stack.last().expect("indent_stack não vazia");
-        if indent != new_current {
-            return Err(FrontendError::InconsistentIndent {
-                expected: new_current,
-                found: indent,
-                span: MietteSpan(Span::new(lex.pos, lex.line, lex.col, 1)),
             });
         }
     }

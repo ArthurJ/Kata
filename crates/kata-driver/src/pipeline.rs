@@ -8,6 +8,15 @@
 //! Cada passo existe uma vez. Os backends (JIT, test, AOT) só diferem no
 //! codegen final — chamam `.jit_eval()`, `.jit_tests()` ou `.aot_emit()`
 //! sobre o `CompiledModule` produzido pelo pipeline.
+//!
+//! ## Erros múltiplos
+//!
+//! O pipeline retorna `Result<T, Vec<Report>>` — `Vec` permite reportar
+//! múltiplos erros de uma mesma fase (ex: parse com recovery) em vez de
+//! abortar no primeiro. Cada fase é all-or-nothing: se parse tem erros,
+//! o pipeline para e o driver imprime todos os erros de parse antes de
+//! abortar. Não há continuação parcial entre fases — um module parcialmente
+//! parseado produziria erros em cascata em resolve/infer.
 
 use std::collections::HashMap;
 
@@ -15,10 +24,12 @@ use kata_codegen::type_table;
 use kata_comptime::run_comptime_pass;
 use kata_core::ty::Ty;
 use kata_inference::infer_module;
-use kata_lexer::lex;
+use kata_lexer::lex_with_recovery;
 use kata_monomorph::{monomorphize, MonoModule};
 use kata_optimizer::optimize;
-use kata_parser::{parse, parse_decls_only, parse_with_arity, scan_lambdas};
+use kata_parser::{
+    parse_decls_only, parse_with_arity_recovery, parse_with_recovery, scan_lambdas,
+};
 use kata_resolution::{extract_arities, load_prelude, resolve_with_imports, ResolvedModule};
 use kata_tree_shaking::{tree_shake, tree_shake_preserve_tests};
 
@@ -27,10 +38,18 @@ use crate::{merge_resolved, IntoReport};
 
 // ── Erros ─────────────────────────────────────────────────
 
-type PipelineResult<T> = miette::Result<T>;
+/// Resultado de cada passo do pipeline. O erro é `Vec<Report>` para
+/// permitir múltiplos erros por fase (principalmente parse com recovery).
+type PipelineResult<T> = Result<T, Vec<miette::Report>>;
 
-fn err(msg: impl std::fmt::Display) -> miette::Report {
-    miette::Report::msg(msg.to_string())
+/// Cria um `Vec<Report>` com um único erro.
+fn one_err(report: miette::Report) -> Vec<miette::Report> {
+    vec![report]
+}
+
+/// Cria um `Vec<Report>` a partir de uma mensagem simples.
+fn err(msg: impl std::fmt::Display) -> Vec<miette::Report> {
+    one_err(miette::Report::msg(msg.to_string()))
 }
 
 // ── Modos configuráveis ────────────────────────────────────
@@ -38,8 +57,8 @@ fn err(msg: impl std::fmt::Display) -> miette::Report {
 /// Modo de parsing.
 ///
 /// `TwoPass` realiza o ciclo arity-uniformization (scan_lambdas →
-/// parse_decls_only → extract_arities → parse_with_arity). `Single`
-/// chama `parse` diretamente.
+/// parse_decls_only → extract_arities → parse_with_arity_recovery). `Single`
+/// chama `parse_with_recovery` diretamente.
 #[derive(Clone, Copy)]
 pub enum ParseMode {
     TwoPass,
@@ -71,7 +90,7 @@ impl CompiledModule {
     /// Codegen JIT — compila e executa o entry point, retornando o valor bruto.
     pub fn jit_eval(self) -> miette::Result<i64> {
         let result = kata_codegen::jit_eval(&self.mono, &self.type_id_map)
-            .map_err(|e| err(format!("erro de codegen: {e}")))?;
+            .map_err(|e| miette::Report::msg(format!("erro de codegen: {e}")))?;
         Ok(result.raw)
     }
 
@@ -80,13 +99,13 @@ impl CompiledModule {
         self,
     ) -> miette::Result<(cranelift_jit::JITModule, Vec<kata_codegen::TestWrapper>)> {
         kata_codegen::jit_compile_tests(&self.mono, &self.type_id_map)
-            .map_err(|e| err(format!("erro de codegen: {e}")))
+            .map_err(|e| miette::Report::msg(format!("erro de codegen: {e}")))
     }
 
     /// Codegen AOT — emite object file (.o) bytes.
     pub fn aot_emit(self) -> miette::Result<Vec<u8>> {
         kata_codegen::aot_emit(&self.mono, &self.type_id_map)
-            .map_err(|e| err(format!("erro de codegen AOT: {e}")))
+            .map_err(|e| miette::Report::msg(format!("erro de codegen AOT: {e}")))
     }
 
     /// Tipo canônico do entry point (para display e AOT type tag).
@@ -155,24 +174,40 @@ impl Pipeline {
 
     // ── Lex ─────────────────────────────────────────────
 
-    /// Análise léxica.
+    /// Análise léxica com error recovery.
+    ///
+    /// Usa [`lex_with_recovery`] para reportar múltiplos erros léxicos
+    /// em uma única passada. Se há erros, retorna `Err(Vec<Report>)`
+    /// com todos os erros — o pipeline para e o driver imprime todos
+    /// antes de abortar (all-or-nothing por fase).
     pub fn lex(mut self) -> PipelineResult<Self> {
-        let tokens = lex(&self.source)
-            .map_err(|e| e.into_report_with_source(&self.source, self.file_path.as_deref()))?;
+        let (tokens, lex_errors) = lex_with_recovery(&self.source);
+        if !lex_errors.is_empty() {
+            return Err(lex_errors
+                .into_iter()
+                .map(|e| e.into_report_with_source(&self.source, self.file_path.as_deref()))
+                .collect());
+        }
         self.tokens = Some(tokens);
         Ok(self)
     }
 
     // ── Parse ───────────────────────────────────────────
 
-    /// Análise sintática.
+    /// Análise sintática com error recovery.
     ///
     /// `TwoPass` realiza o ciclo arity-uniformization:
     ///   1. `scan_lambdas` (tokens) → aridades de `let f := lambda`
     ///   2. `parse_decls_only` → resolve → `extract_arities` (sobrescreve)
-    ///   3. `parse_with_arity` (parse completo)
+    ///   3. `parse_with_arity_recovery` (parse completo com recovery)
     ///
-    /// `Single` chama `parse` diretamente.
+    /// `Single` chama `parse_with_recovery` diretamente.
+    ///
+    /// Ambos os modos usam error recovery: quando um top-level item falha,
+    /// o erro é registrado e o parser skipa tokens até o próximo `StmtSep`
+    /// ou `Eof`, então continua. Se houver erros, retorna `Err(Vec<Report>)`
+    /// com todos os erros encontrados — o pipeline para e o driver imprime
+    /// todos antes de abortar.
     pub fn parse(mut self, mode: ParseMode, file_path: Option<&str>) -> PipelineResult<Self> {
         // Armazenar file_path para source context em passos posteriores.
         self.file_path = file_path.map(|s| s.to_string());
@@ -181,20 +216,28 @@ impl Pipeline {
             .take()
             .ok_or_else(|| err("parse chamado antes de lex"))?;
 
-        let module = match mode {
-            ParseMode::Single => {
-                parse(tokens).map_err(|e| e.into_report_with_source(&self.source, file_path))?
-            }
+        let (module, parse_errors) = match mode {
+            ParseMode::Single => parse_with_recovery(tokens),
             ParseMode::TwoPass => {
                 let mut arities = scan_lambdas(&tokens);
+                // Pass 1: parse_decls_only (sem recovery — só extrai assinaturas).
+                // Se falhar, aborta com o erro (não há benefício em recovery aqui,
+                // pois o Pass 2 precisa das aridades que o Pass 1 produz).
                 let decls_module = parse_decls_only(tokens.clone())
-                    .map_err(|e| e.into_report_with_source(&self.source, file_path))?;
+                    .map_err(|e| one_err(e.into_report_with_source(&self.source, file_path)))?;
                 let decls_resolved = quick_resolve(&decls_module, file_path)?;
                 arities.extend(extract_arities(&decls_resolved.signatures));
-                parse_with_arity(tokens, arities)
-                    .map_err(|e| e.into_report_with_source(&self.source, file_path))?
+                // Pass 2: parse completo com recovery.
+                parse_with_arity_recovery(tokens, arities)
             }
         };
+
+        if !parse_errors.is_empty() {
+            return Err(parse_errors
+                .into_iter()
+                .map(|e| e.into_report_with_source(&self.source, file_path))
+                .collect());
+        }
 
         self.module = Some(module);
         Ok(self)
@@ -212,16 +255,20 @@ impl Pipeline {
             .as_ref()
             .ok_or_else(|| err("resolve chamado antes de parse"))?;
 
-        let prelude = load_prelude()
-            .map_err(|e| err(format!("erro ao carregar prelude: {}", format_err_vec(&e))))?;
+        let prelude = load_prelude().map_err(|e| {
+            resolve_errors_to_reports(&e, "", None)
+        })?;
 
         let imports = match file_path {
-            Some(file) => imports::load_module_imports(file, module)?,
+            Some(file) => imports::load_module_imports(file, module).map_err(one_err)?,
             None => Vec::new(),
         };
         let imported_directives = imports::collect_imported_directives(&imports);
-        let user = resolve_with_imports(module, "__local__", imported_directives)
-            .map_err(|e| err(format!("erro de resolução: {}", format_err_vec(&e))))?;
+        let user = resolve_with_imports(module, "__local__", imported_directives).map_err(|e| {
+            e.into_iter()
+                .map(|re| re.into_report_with_source(&self.source, self.file_path.as_deref()))
+                .collect::<Vec<_>>()
+        })?;
         let mut resolved = merge_resolved(prelude, user);
         imports::merge_imports(&mut resolved, &imports);
 
@@ -254,7 +301,7 @@ impl Pipeline {
             .ok_or_else(|| err("infer chamado antes de resolve"))?;
 
         let typed = infer_module(module, resolved)
-            .map_err(|e| e.into_report_with_source(&self.source, self.file_path.as_deref()))?;
+            .map_err(|e| one_err(e.into_report_with_source(&self.source, self.file_path.as_deref())))?;
         self.typed = Some(typed);
         Ok(self)
     }
@@ -315,7 +362,7 @@ impl Pipeline {
             .clone();
 
         let shaken = run_comptime_pass(mono.inner, &enum_registry)
-            .map_err(|e| err(format!("erro de comptime: {e}")))?;
+            .map_err(|e| one_err(miette::Report::msg(format!("erro de comptime: {e}"))))?;
         self.mono = Some(MonoModule::from(shaken));
         Ok(self)
     }
@@ -344,12 +391,19 @@ impl Pipeline {
 
 // ── Helpers ────────────────────────────────────────────────
 
-fn format_err_vec<E: std::fmt::Display>(errors: &[E]) -> String {
+/// Converte `Vec<ResolveError>` (de `load_prelude` ou `resolve_with_imports`)
+/// em `Vec<Report>`. `source` e `file` são do módulo onde o erro ocorreu
+/// (prelude não tem file_path; o módulo do usuário usa `self.source`).
+fn resolve_errors_to_reports(
+    errors: &[kata_resolution::ResolveError],
+    source: &str,
+    file: Option<&str>,
+) -> Vec<miette::Report> {
     errors
         .iter()
-        .map(|e| e.to_string())
-        .collect::<Vec<_>>()
-        .join("; ")
+        .cloned()
+        .map(|e| e.into_report_with_source(source, file))
+        .collect()
 }
 
 /// Resolve rápido para o Pass 1 do TwoPass (sem desugar).
@@ -360,20 +414,18 @@ fn quick_resolve(
     module: &kata_ast::Module,
     file_path: Option<&str>,
 ) -> PipelineResult<ResolvedModule> {
-    let prelude = load_prelude()
-        .map_err(|e| err(format!("erro ao carregar prelude: {}", format_err_vec(&e))))?;
+    let prelude = load_prelude().map_err(|e| resolve_errors_to_reports(&e, "", None))?;
 
     let imports = match file_path {
-        Some(file) => imports::load_module_imports(file, module)?,
+        Some(file) => imports::load_module_imports(file, module).map_err(one_err)?,
         None => Vec::new(),
     };
     let imported_directives = imports::collect_imported_directives(&imports);
 
     let user = resolve_with_imports(module, "__local__", imported_directives).map_err(|e| {
-        err(format!(
-            "erro de resolução (Pass 1): {}",
-            format_err_vec(&e)
-        ))
+        e.into_iter()
+            .map(|re| re.into_report_with_source("", file_path))
+            .collect::<Vec<_>>()
     })?;
     let resolved = merge_resolved(prelude, user);
     Ok(resolved)
