@@ -45,22 +45,36 @@ canais, nunca por join/waitpid. `SIG_IGN` é a solução definitiva.
    overloads. Se o hint resolve para um único overload, produz `Ty::Action`
    concreto.
 
-2. **OverloadSet (Fase 1):** Quando não há hint ou há múltiplos compatíveis,
-   o typeck produz `Ty::OverloadSet { name, overloads }` — tipo interno que
-   carrega os overloads adiante. No call site (`f!(args)`), o dispatch por
-   args usa `match_score` para selecionar o overload compatível e resolve
-   para `ActionCall` direto com `callee = action_name`.
+2. **OverloadSet (Fase 1 + Fase 2):** Quando não há hint ou há múltiplos
+   compatíveis, o typeck produz `Ty::OverloadSet { name, overloads }` —
+   tipo interno que carrega os overloads adiante. No call site (`f!(args)`),
+   o dispatch por args usa `match_score` para selecionar o overload
+   compatível e resolve para `ActionCall` direto com `callee = action_name`.
+
+   **Fase 2 (monomorfização):** `let f := worker` onde `worker` é uma action
+   genérica (`msg :: SHOW`) produz `Ty::Action([Interface("SHOW")], ())`.
+   O monomorfizador instancia `worker_SHOW_Text` e `echo_SHOW_Text`,
+   remove as templates genéricas de `typed.actions`, e remove
+   `indirect_callee` do `ActionCall` para que a chamada seja direta.
 
 **Arquivos:**
 - `crates/kata-core/src/ty.rs` — `Ty::OverloadSet`
-- `crates/kata-inference/src/infer/expr.rs` — `select_action_overload`, caminho 3
-- `crates/kata-inference/src/infer/action_call.rs` — dispatch por args para OverloadSet
+- `crates/kata-inference/src/infer/expr.rs` — `select_action_overload`, caminho 3,
+  `fn_alias` estendido para Actions
+- `crates/kata-inference/src/infer/action_call.rs` — dispatch por args para OverloadSet,
+  `match_score` no caminho indirect, `callee = fn_alias_of(callee)`
+- `crates/kata-resolution/src/lib.rs` — `resolve_with_prelude`
+- `crates/kata-monomorph/src/lib.rs` — remoção de templates genéricas,
+  remoção de `indirect_callee` ao instanciar
+- `crates/kata-monomorph/src/overload_resolution.rs` — guard `Ty::Interface`
+  em `instantiate_generic_action_call`, `resolve_erased_ffi_symbol` reescreve callee
 - `crates/kata-codegen/src/lowering/expr.rs` — placeholder para Ident com OverloadSet
-- `crates/kata-codegen/tests/overloadset_actions.rs` — 5 testes E2E
+  e `Ty::Action` com `Interface(_)` nos params
+- `crates/kata-codegen/tests/overloadset_actions.rs` — 8 testes E2E
 
 **Cobertura:** `let f := echo` sem uso, `f!("hello")` (dispatch por args),
-`f!(42)` (Int implementa SHOW), dispatch por arity. Actions em módulos
-diferentes (monomorfização) fica para Fase 2.
+`f!(42)` (Int implementa SHOW), dispatch por arity, action genérica com SHOW
+via `let f := worker` (Text e Int), chamada direta `worker!("hello")`.
 
 ---
 
