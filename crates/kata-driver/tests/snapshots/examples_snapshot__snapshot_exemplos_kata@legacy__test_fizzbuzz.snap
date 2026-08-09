@@ -3,7 +3,7 @@ source: crates/kata-driver/tests/examples_snapshot.rs
 expression: output
 ---
 --- stderr ---
-Error: parse.unexpected_token
+parse.unexpected_token
 
   × token inesperado: esperado ``=` tem aridade padrão 2 — excesso de
   │ argumentos posicionais. Use `={...}` para aridade diferente ou separe com
@@ -14,3 +14,23 @@ Error: parse.unexpected_token
    ·                 ──────
  9 │         buzz := = 0 mod x 5
    ╰────
+
+parse.unexpected_token
+
+  × token inesperado: esperado `expression`, encontrado `<DEDENT>`
+   ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_fizzbuzz.kata:1:1]
+ 1 │ fizzbuzz :: Int => Text
+   · ▲
+ 2 │ lambda x:
+   ╰────
+
+parse.unexpected_token
+
+  × token inesperado: esperado `expression`, encontrado `<DEDENT>`
+   ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_fizzbuzz.kata:1:1]
+ 1 │ fizzbuzz :: Int => Text
+   · ▲
+ 2 │ lambda x:
+   ╰────
+
+Error:   × 3 erro(s) encontrado(s)

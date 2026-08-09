@@ -116,6 +116,25 @@ pub(crate) fn format_error_vec<E: std::fmt::Display>(errors: &[E]) -> String {
         .join("; ")
 }
 
+/// Converte `Vec<Report>` (erros de uma fase do pipeline) em um único
+/// `miette::Report` para propagar em `miette::Result`.
+///
+/// - Se há exatamente 1 erro, retorna-o diretamente — o miette imprime
+///   com o formato padrão (preservando snapshots existentes).
+/// - Se há múltiplos erros, imprime cada um via `eprintln!` (sem o
+///   prefixo `Error: ` que o `main` adicionaria) e retorna um `Report`
+///   de resumo ("N erros encontrados").
+pub(crate) fn print_pipeline_errors(errors: Vec<miette::Report>) -> miette::Report {
+    if errors.len() == 1 {
+        return errors.into_iter().next().unwrap();
+    }
+    let n = errors.len();
+    for report in &errors {
+        eprintln!("{report:?}");
+    }
+    miette::Report::msg(format!("{n} erro(s) encontrado(s)"))
+}
+
 // ── Comandos ───────────────────────────────────────────────
 
 fn cmd_lex(file: &str) -> miette::Result<()> {
@@ -182,18 +201,21 @@ fn cmd_test(path: &str, filter: Option<&str>) -> miette::Result<()> {
         let label = file.display();
 
         // Pipeline até jit_compile_tests.
-        let compiled = pipeline::Pipeline::new(&source)
-            .with_file_path(&file.to_string_lossy())
-            .lex()?
-            .parse(pipeline::ParseMode::Single, Some(&file.to_string_lossy()))?
-            .resolve(Some(&file.to_string_lossy()))?
-            .desugar()
-            .infer()?
-            .monomorph()
-            .optimize()
-            .tree_shake(pipeline::ShakeMode::PreserveTests)?
-            .comptime()?
-            .build_type_table()?;
+        let compiled = (|| -> Result<_, Vec<miette::Report>> {
+            pipeline::Pipeline::new(&source)
+                .with_file_path(&file.to_string_lossy())
+                .lex()?
+                .parse(pipeline::ParseMode::Single, Some(&file.to_string_lossy()))?
+                .resolve(Some(&file.to_string_lossy()))?
+                .desugar()
+                .infer()?
+                .monomorph()
+                .optimize()
+                .tree_shake(pipeline::ShakeMode::PreserveTests)?
+                .comptime()?
+                .build_type_table()
+        })()
+        .map_err(crate::print_pipeline_errors)?;
 
         let (jit_module, wrappers) = compiled.jit_tests()?;
 
@@ -337,18 +359,21 @@ fn run_pipeline(source: &str) -> miette::Result<ExecResult> {
 /// Cada passo existe uma vez — este wrapper só escolhe os modos (two-pass,
 /// tree-shake default) e termina com `jit_eval`.
 fn run_pipeline_with_file(source: &str, file_path: Option<&str>) -> miette::Result<ExecResult> {
-    let compiled = pipeline::Pipeline::new(source)
-        .with_file_path(file_path.unwrap_or("<eval>"))
-        .lex()?
-        .parse(pipeline::ParseMode::TwoPass, file_path)?
-        .resolve(file_path)?
-        .desugar()
-        .infer()?
-        .monomorph()
-        .optimize()
-        .tree_shake(pipeline::ShakeMode::Default)?
-        .comptime()?
-        .build_type_table()?;
+    let compiled = (|| -> Result<_, Vec<miette::Report>> {
+        pipeline::Pipeline::new(source)
+            .with_file_path(file_path.unwrap_or("<eval>"))
+            .lex()?
+            .parse(pipeline::ParseMode::TwoPass, file_path)?
+            .resolve(file_path)?
+            .desugar()
+            .infer()?
+            .monomorph()
+            .optimize()
+            .tree_shake(pipeline::ShakeMode::Default)?
+            .comptime()?
+            .build_type_table()
+    })()
+    .map_err(crate::print_pipeline_errors)?;
 
     let ty = compiled.entry_ty();
     let raw = compiled.jit_eval()?;

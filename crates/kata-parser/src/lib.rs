@@ -148,6 +148,25 @@ pub fn parse_with_arity(
     parser.parse_module()
 }
 
+/// Parse with arity-aware application **and** error recovery.
+///
+/// Combina `parse_with_arity` (arity-aware) com `parse_with_recovery`
+/// (error recovery de top-level items). Quando um item falha, registra
+/// o erro e skipa tokens até o próximo `StmtSep` ou `Eof`, então continua
+/// parseando o próximo item. Retorna sempre `Ok` com:
+/// - `Module` contendo os items parseados com sucesso (pode ser vazio)
+/// - `Vec<FrontendError>` com os erros encontrados (vazio se tudo ok)
+///
+/// Usado pelo pipeline do driver para reportar múltiplos erros de parse
+/// em uma única passada, em vez de abortar no primeiro.
+pub fn parse_with_arity_recovery(
+    tokens: Vec<TokenWithSpan>,
+    arities: std::collections::HashMap<String, usize>,
+) -> (Module, Vec<FrontendError>) {
+    let mut parser = Parser::new_with_arities(tokens, arities);
+    parser.parse_module_with_recovery()
+}
+
 /// Parse apenas declarações (Sigs, implements, data, enum, action defs,
 /// imports, exports, alias, interface). Entry exprs são **skipadas** —
 /// os tokens são consumidos até o próximo `StmtSep` ou `Eof` sem produzir

@@ -3,5 +3,6 @@ source: crates/kata-driver/tests/examples_snapshot.rs
 expression: output
 ---
 --- stderr ---
-Error:   × erro de resolução (Pass 1): diretiva `parallel` não reconhecida em action
-  │ `tarefa_cpu`
+Error: resolve.unknown_directive
+
+  × diretiva `parallel` não reconhecida em action `tarefa_cpu`

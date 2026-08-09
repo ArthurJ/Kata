@@ -33,18 +33,21 @@ pub(crate) fn cmd_build(file: &str, output: Option<&str>, dynamic: bool) -> miet
 
     // Pipeline até CompiledModule.
     let source = read_source(file)?;
-    let compiled = crate::pipeline::Pipeline::new(&source)
-        .with_file_path(file)
-        .lex()?
-        .parse(crate::pipeline::ParseMode::TwoPass, Some(file))?
-        .resolve(Some(file))?
-        .desugar()
-        .infer()?
-        .monomorph()
-        .optimize()
-        .tree_shake(crate::pipeline::ShakeMode::Default)?
-        .comptime()?
-        .build_type_table()?;
+    let compiled = (|| -> Result<_, Vec<miette::Report>> {
+        crate::pipeline::Pipeline::new(&source)
+            .with_file_path(file)
+            .lex()?
+            .parse(crate::pipeline::ParseMode::TwoPass, Some(file))?
+            .resolve(Some(file))?
+            .desugar()
+            .infer()?
+            .monomorph()
+            .optimize()
+            .tree_shake(crate::pipeline::ShakeMode::Default)?
+            .comptime()?
+            .build_type_table()
+    })()
+    .map_err(crate::print_pipeline_errors)?;
 
     // AOT emit — produz object file (.o) bytes.
     // Determinar o tipo de retorno do entry point antes de consumir
