@@ -248,10 +248,4 @@ impl KataFiber {
     pub(crate) fn resume(&self, args: SpawnArgs) -> Result<i64, YieldReason> {
         self.fiber.resume(args)
     }
-
-    /// Retorna `true` se o fiber já completou.
-    #[allow(dead_code)] // Usado em fases futuras
-    pub(crate) fn done(&self) -> bool {
-        self.fiber.done()
-    }
 }

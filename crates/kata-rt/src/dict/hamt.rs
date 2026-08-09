@@ -241,31 +241,6 @@ pub(super) fn hamt_remove(
     unsafe { remove_recursive(hamt_root, key, hash, 0, eq, arena_handle) }
 }
 
-/// Iterate over the HAMT via `collect_all_kvpairs`. Returns `Optional::(K, V)`
-/// as a Sum box. Used by Set (which needs HAMT-order iteration).
-#[allow(dead_code)]
-pub(super) fn hamt_next(hamt_root: i64, iter_state: i64, arena_handle: i64) -> i64 {
-    if iter_state == 0 {
-        let (arr, count) = unsafe { collect_all_kvpairs(hamt_root, arena_handle) };
-        ITER_ARRAY.with(|c| c.set(arr));
-        ITER_COUNT.with(|c| c.set(count));
-
-        if count == 0 {
-            return crate::sum::kata_rt_store_sum_result(1, 0, arena_handle);
-        }
-        return unsafe { make_kv_tuple(arr, 0, arena_handle) };
-    }
-
-    let arr = ITER_ARRAY.with(|c| c.get());
-    let count = ITER_COUNT.with(|c| c.get());
-
-    if arr == 0 || iter_state >= count {
-        return crate::sum::kata_rt_store_sum_result(1, 0, arena_handle);
-    }
-
-    unsafe { make_kv_tuple(arr, iter_state, arena_handle) }
-}
-
 /// Collect all KVPair pointers from the HAMT into a flat arena-allocated array.
 ///
 /// Returns (array_ptr, count). The array contains `count` KVPair pointers

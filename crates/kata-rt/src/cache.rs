@@ -104,14 +104,6 @@ pub extern "C" fn kata_rt_cache_insert(handle: i64, key_ptr: i64, key_len: i64, 
     });
 }
 
-/// Reseta todos os caches — chamado entre execuções de teste.
-#[allow(dead_code)]
-pub(crate) fn reset_caches() {
-    CACHES.with(|caches| {
-        caches.borrow_mut().clear();
-    });
-}
-
 // ── Serialização de cache key por conteúdo ─────────────────────────
 //
 // Type descriptor tags (C-ABI estável, bytes):

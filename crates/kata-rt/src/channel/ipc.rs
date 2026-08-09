@@ -338,36 +338,4 @@ pub(crate) unsafe fn ipc_read_fd(handle: i64) -> i32 {
     inner.read_fd
 }
 
-/// Fecha um FD de escrita do canal IPC. Chamado pelo parent após
-/// fork para sinalizar que não vai enviar mais dados pelo canal.
-///
-/// # Safety
-/// `handle` deve ser um handle IPC válido.
-#[allow(dead_code)] // usado na integração spawn! + IPC
-pub(super) unsafe fn ipc_close_write(handle: i64) {
-    let ptr = ptr_of(handle);
-    if ptr.is_null() {
-        return;
-    }
-    let inner = unsafe { &*(ptr as *const IpcChannelInner) };
-    unsafe {
-        libc::close(inner.write_fd);
-    }
-}
 
-/// Fecha um FD de leitura do canal IPC. Chamado pelo child após
-/// fork para sinalizar que não vai receber dados pelo canal.
-///
-/// # Safety
-/// `handle` deve ser um handle IPC válido.
-#[allow(dead_code)] // usado na integração spawn! + IPC
-pub(super) unsafe fn ipc_close_read(handle: i64) {
-    let ptr = ptr_of(handle);
-    if ptr.is_null() {
-        return;
-    }
-    let inner = unsafe { &*(ptr as *const IpcChannelInner) };
-    unsafe {
-        libc::close(inner.read_fd);
-    }
-}

@@ -41,8 +41,6 @@ pub(crate) struct DeferredLambda {
     pub body: Box<Spanned<Expr>>,
     pub guards: Vec<GuardClause>,
     pub with_bindings: Vec<WithBinding>,
-    #[allow(dead_code)]
-    pub span: Span,
 }
 
 /// Type alias para a side table de lambdas deferidos.
@@ -295,7 +293,6 @@ pub(crate) fn infer_expr_hinted(
                                 body: body.clone(),
                                 guards: guards.clone(),
                                 with_bindings: with_bindings.clone(),
-                                span: value.span,
                             },
                         );
 

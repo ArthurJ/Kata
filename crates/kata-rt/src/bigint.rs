@@ -92,18 +92,6 @@ unsafe fn deref_bigint<'a>(val: i64) -> &'a BigInt {
     unsafe { &*(val as *const BigInt) }
 }
 
-/// Libera um BigInt heap (LSB = 0).
-///
-/// # Safety
-/// `val` deve ser um ponteiro válido de `alloc_bigint` e não ter sido
-/// liberado antes. Após isto, `val` é inválido.
-#[allow(dead_code)]
-unsafe fn free_bigint(val: i64) {
-    unsafe {
-        let _ = Box::from_raw(val as *mut BigInt);
-    }
-}
-
 // ── API pública C-ABI ─────────────────────────────────────
 
 /// Cria um Int a partir de string decimal. Usado para literais.

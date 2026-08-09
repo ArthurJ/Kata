@@ -40,19 +40,6 @@ pub unsafe extern "C" fn kata_rt_string_len(s: *const std::os::raw::c_char) -> i
     (len << 1) | 1
 }
 
-/// Cria string literal a partir de texto (para codegen de TextLit).
-#[allow(dead_code)] // usado apenas em testes inline
-pub(crate) fn text_literal(s: &str) -> CString {
-    CString::new(s)
-        .unwrap_or_else(|_| CString::new("").expect("empty string never contains nul bytes"))
-}
-
-/// Converte Int (i64 tagged) para String.
-#[allow(dead_code)] // usado apenas em testes inline
-pub(crate) fn int_to_text(val: i64) -> String {
-    crate::bigint::bigint_to_string(val)
-}
-
 /// Converte Boolean (0/1) para String "True"/"False".
 pub(crate) fn bool_to_text(val: i64) -> String {
     if val == 1 {

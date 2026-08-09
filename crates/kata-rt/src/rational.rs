@@ -261,7 +261,6 @@ pub(crate) fn rat_to_float(r: &BigRational) -> f64 {
 }
 
 /// Converte Float para Rational (mais próximo).
-#[allow(dead_code)]
 pub(crate) fn float_to_rat(f: f64) -> BigRational {
     BigRational::from_float(f).unwrap_or_else(BigRational::zero)
 }
