@@ -70,11 +70,41 @@ canais, nunca por join/waitpid. `SIG_IGN` é a solução definitiva.
   em `instantiate_generic_action_call`, `resolve_erased_ffi_symbol` reescreve callee
 - `crates/kata-codegen/src/lowering/expr.rs` — placeholder para Ident com OverloadSet
   e `Ty::Action` com `Interface(_)` nos params
-- `crates/kata-codegen/tests/overloadset_actions.rs` — 8 testes E2E
+- `crates/kata-codegen/tests/overloadset_actions.rs` — 10 testes E2E
+
+   **Fase 3 (passar OverloadSet como argumento):** `dispatcher!(echo)` passa
+   uma action como argumento para outra action. O `match_score` (braço
+   OverloadSet vs Action) aceita na inference. O monomorphizer instancia
+   `echo_SHOW_Text` na posição de argumento (`instantiate_overloadset_arg`)
+   e rewrites o arg de `Ident("echo")` + `OverloadSet` para
+   `Ident("echo_SHOW_Text")` + `Action([Text], Unit)`. O codegen encontra a
+   instância em `kata_ids` e produz fn_ptr válido — sem segfault.
+
+   A concretização acontece na monomorphization (estágio correto do pipeline),
+   não na inference. Sem `convert_overloadset_args` ou `dispatch_params`.
+
+**Arquivos:**
+- `crates/kata-core/src/ty.rs` — `Ty::OverloadSet`
+- `crates/kata-core/src/dispatch.rs` — braço OverloadSet vs Action no `match_score`
+- `crates/kata-inference/src/infer/expr.rs` — `select_action_overload`, caminho 3,
+  `fn_alias` estendido para Actions
+- `crates/kata-inference/src/infer/action_call.rs` — dispatch por args para OverloadSet,
+  `match_score` no caminho indirect, `callee = fn_alias_of(callee)`
+- `crates/kata-resolution/src/lib.rs` — `resolve_with_prelude`
+- `crates/kata-monomorph/src/lib.rs` — remoção de templates genéricas,
+  remoção de `indirect_callee` ao instanciar, call site de `instantiate_overloadset_arg`
+  no braço ActionCall de `rewrite_typed_expr`
+- `crates/kata-monomorph/src/overload_resolution.rs` — guard `Ty::Interface`
+  em `instantiate_generic_action_call`, `resolve_erased_ffi_symbol` reescreve callee,
+  `instantiate_overloadset_arg` instancia action genérica na posição de argumento
+- `crates/kata-codegen/src/lowering/expr.rs` — placeholder para Ident com OverloadSet
+  e `Ty::Action` com `Interface(_)` nos params
+- `crates/kata-codegen/tests/overloadset_actions.rs` — 10 testes E2E
 
 **Cobertura:** `let f := echo` sem uso, `f!("hello")` (dispatch por args),
 `f!(42)` (Int implementa SHOW), dispatch por arity, action genérica com SHOW
-via `let f := worker` (Text e Int), chamada direta `worker!("hello")`.
+via `let f := worker` (Text e Int), chamada direta `worker!("hello")`,
+`dispatcher!(echo)` (OverloadSet como arg), `let f := echo; dispatcher!(f)` (via variável).
 
 ---
 

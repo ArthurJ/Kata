@@ -236,3 +236,45 @@ main!()"#;
     assert_eq!(raw, 0);
 }
 
+// ── Fase 3: Test 7 — dispatcher!(echo) — OverloadSet como arg direto ──
+//
+// Passar uma action como argumento para outra action. `echo` é
+// referenciado sem hint → Ty::OverloadSet. `dispatcher` espera
+// `g :: Action(Text) => Unit`. O match_score (braço OverloadSet
+// vs Action) aceita na inference. O monomorphizer instancia
+// echo_SHOW_Text e rewrites o arg para Ident("echo_SHOW_Text")
+// com ty: Action([Text], Unit). O codegen produz fn_ptr válido.
+
+#[test]
+#[serial]
+fn dispatcher_recebe_action_concreta() {
+    let src = r#"action dispatcher (g :: Action(Text) => Unit) => Unit
+    g!("hello")
+action main => Unit
+    dispatcher!(echo)
+main!()"#;
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Unit);
+    assert_eq!(raw, 0);
+}
+
+// ── Fase 3: Test 8 — let f := echo; dispatcher!(f) — via variável ──
+//
+// Mesmo cenário do Test 7, mas o OverloadSet chega via variável
+// (`let f := echo`). O monomorphizer vê o arg Ident("f") com
+// ty: OverloadSet { name: "echo" } e instancia echo_SHOW_Text.
+
+#[test]
+#[serial]
+fn overloadset_via_variavel_passa_para_dispatcher() {
+    let src = r#"action dispatcher (g :: Action(Text) => Unit) => Unit
+    g!("hello")
+action main => Unit
+    let f := echo
+    dispatcher!(f)
+main!()"#;
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Unit);
+    assert_eq!(raw, 0);
+}
+

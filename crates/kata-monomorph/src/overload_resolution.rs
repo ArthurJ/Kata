@@ -281,3 +281,92 @@ pub(crate) fn instantiate_generic_action_call(
         *callee = instance_name;
     }
 }
+
+/// Instancia um arg `Ty::OverloadSet` para `Ty::Action` concreto.
+///
+/// Quando uma action é passada como argumento para outra action
+/// (ex: `dispatcher!(echo)`), o arg chega ao monomorphizer como
+/// `Ident("echo")` com `ty: Ty::OverloadSet`. O callee (`dispatcher`)
+/// espera um param `Ty::Action(Text, Unit)`. Esta função:
+///
+/// 1. Encontra o overload genérico da action arg que unifica com os
+///    param types concretos esperados pelo callee.
+/// 2. Gera a instância concreta (OverloadInfo + TypedAction) — igual
+///    `instantiate_generic_action_call`, mas para a posição de argumento.
+/// 3. Rewrite o arg: `Ident("echo")` → `Ident("echo_SHOW_Text")`,
+///    `ty: OverloadSet` → `ty: Action([Text], Unit)`.
+///
+/// Isto permite que o codegen (caminho 3 do lower_expr Ident) encontre
+/// `(echo_SHOW_Text, [Text], Unit)` em `kata_ids` e produza um fn_ptr válido.
+pub(crate) fn instantiate_overloadset_arg(
+    arg: &mut Spanned<TypedExpr>,
+    expected_params: &[Ty],
+    _expected_ret: &Ty,
+    ctx: &MonoCtx,
+    acc: &mut RewriteAcc,
+) {
+    // Extrai nome da action do OverloadSet.
+    let action_name = match &arg.node.ty {
+        Ty::OverloadSet { name, .. } => name.clone(),
+        _ => return,
+    };
+
+    let Some(overloads) = ctx.dispatch_table.get_overloads(&action_name) else {
+        return;
+    };
+
+    // Constrói os tipos concretos esperados: os params do Ty::Action esperado
+    // pelo callee. Ex: dispatcher espera Action(Text) => Unit → [Text].
+    let expected_action_params: Vec<Ty> = expected_params.to_vec();
+
+    // Encontra o overload genérico que unifica com os tipos concretos.
+    let Some((oi, subs)) = find_generic_overload(overloads, &expected_action_params) else {
+        return;
+    };
+
+    // Guarda: subs não-concretas → não instanciar agora.
+    if subs.values().any(|ty| matches!(ty, Ty::Var(_) | Ty::Interface(_))) {
+        return;
+    }
+
+    // Gera nome canônico da instância.
+    let subs_key = canonicalize_subs(&oi.type_params, &subs);
+    let instance_name = format!("{action_name}_{subs_key}");
+
+    // Registra a instância se ainda não existe.
+    if !ctx.existing.contains(&instance_name)
+        && !acc.new_overloads.iter().any(|o| o.name == instance_name)
+    {
+        acc.new_overloads.push(kata_core::dispatch::OverloadInfo {
+            name: instance_name.clone(),
+            params: oi.params.iter().map(|t| apply_subs(t, &subs)).collect(),
+            ret: apply_subs(&oi.ret, &subs),
+            ffi_symbol: None,
+            is_action: true,
+            is_generic: false,
+            is_constructor: false,
+            associative_neutral: None,
+            type_params: vec![],
+            substitutions: Some(subs.clone()),
+            param_names: vec![],
+        });
+
+        // Gera TypedAction se a action original tem corpo.
+        if let Some(orig_action) = ctx
+            .actions
+            .iter()
+            .find(|a| a.name == action_name && a.param_types.len() == oi.params.len())
+        {
+            let mono_action = instantiate_action(orig_action, &subs, &instance_name);
+            acc.new_actions.push(mono_action);
+        }
+    }
+
+    // Rewrite o arg: Ident com nome da instância e ty concreto.
+    let concrete_params: Vec<Ty> = oi.params.iter().map(|t| apply_subs(t, &subs)).collect();
+    let concrete_ret = apply_subs(&oi.ret, &subs);
+    arg.node.kind = TypedExprKind::Ident {
+        name: instance_name,
+    };
+    arg.node.ty = Ty::Action(concrete_params, Box::new(concrete_ret));
+}

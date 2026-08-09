@@ -435,6 +435,23 @@ pub fn match_score(args: &[Ty], params: &[Ty], iface_reg: &InterfaceRegistry) ->
             && iface_reg.type_implements(&type_name, &iface_name)
         {
             iface += 1;
+        } else if let Ty::OverloadSet { overloads, .. } = arg
+            && let Ty::Action(param_params, param_ret) = param
+        {
+            // OverloadSet vs Action: algum overload do OverloadSet é compatível
+            // com o tipo Action(params, ret) esperado pelo parâmetro?
+            let matched = overloads.iter().any(|(ov_params, ov_ret)| {
+                if ov_params.len() != param_params.len() {
+                    return false;
+                }
+                let score = match_score(param_params, ov_params, iface_reg);
+                score.is_compatible(param_params.len()) && *ov_ret == **param_ret
+            });
+            if matched {
+                iface += 1;
+            } else {
+                return Score::incompatible();
+            }
         } else {
             // Não é exato, não é alias, não é refined, não é iface → incompatível.
             return Score::incompatible();

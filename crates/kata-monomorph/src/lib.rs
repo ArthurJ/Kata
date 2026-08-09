@@ -44,7 +44,8 @@ use kata_inference::{
 };
 
 use overload_resolution::{
-    instantiate_generic_action_call, instantiate_generic_closure, resolve_erased_ffi_symbol,
+    instantiate_generic_action_call, instantiate_generic_closure, instantiate_overloadset_arg,
+    resolve_erased_ffi_symbol,
 };
 
 /// Módulo monomorfizado — TAST com todos os tipos concretos.
@@ -324,6 +325,40 @@ fn rewrite_typed_expr(expr_span: &mut Spanned<TypedExpr>, ctx: &MonoCtx, acc: &m
             // Recursão no indirect_callee (se presente — call indireto).
             if let Some(ic) = indirect_callee {
                 rewrite_typed_expr(ic, ctx, acc);
+            }
+
+            // Instancia args OverloadSet usando os params do callee.
+            // Ex: dispatcher!(echo) — echo é OverloadSet, dispatcher espera
+            // Action(Text) => Unit. Instancia echo_SHOW_Text e rewrites o arg.
+            if ffi_symbol.is_none() {
+                if let Some(overloads) = ctx.dispatch_table.get_overloads(callee) {
+                    let arg_types: Vec<Ty> = match &args.node.kind {
+                        TypedExprKind::Tuple { elements } => {
+                            elements.iter().map(|e| e.node.ty.clone()).collect()
+                        }
+                        TypedExprKind::Unit => Vec::new(),
+                        _ => vec![args.node.ty.clone()],
+                    };
+                    // Encontra o overload do callee que casa com os arg types.
+                    if let Some(callee_oi) = overloads.iter().find(|o| {
+                        o.params.len() == arg_types.len()
+                            && o.params.iter().zip(&arg_types).all(|(p, a)| {
+                                p == a || matches!(a, Ty::OverloadSet { .. })
+                            })
+                    }) {
+                        if let TypedExprKind::Tuple { elements } = &mut args.node.kind {
+                            for (i, elem) in elements.iter_mut().enumerate() {
+                                if matches!(elem.node.ty, Ty::OverloadSet { .. }) {
+                                    if let Some(Ty::Action(p, r)) = callee_oi.params.get(i) {
+                                        instantiate_overloadset_arg(
+                                            elem, p, r, ctx, acc,
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             // Depois verifica se este ActionCall é genérico.
