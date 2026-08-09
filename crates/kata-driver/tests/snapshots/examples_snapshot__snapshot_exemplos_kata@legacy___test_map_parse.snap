@@ -6,3 +6,9 @@ expression: output
 Error: type.mismatch
 
   × tipo incompatível: esperado `Unit`, encontrado `List(Prim(Int))`
+   ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/_test_map_parse.kata:2:5]
+ 1 │ action main
+ 2 │     map (lambda x: + x 1) [1 2]
+   ·     ─────────────┬─────────────
+   ·                  ╰── tipos incompatíveis
+   ╰────

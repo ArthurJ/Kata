@@ -6,3 +6,9 @@ expression: output
 Error: parse.unexpected_token
 
   × token inesperado: esperado ``)``, encontrado `factory`
+   ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_broadcast.kata:3:13]
+ 2 │     match broadcast!()
+ 3 │         (tx factory):
+   ·             ───────
+ 4 │             echo!("broadcast criado")
+   ╰────

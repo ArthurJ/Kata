@@ -6,3 +6,8 @@ expression: output
 Error: type.unbound_name
 
   × nome `False` não está no escopo
+   ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_fail.kata:2:13]
+ 1 │ @test("Teste") action main()
+ 2 │     assert!(False "Forçando erro")
+   ·             ─────
+   ╰────

@@ -9,3 +9,10 @@ Error: type.mismatch
   │ encontrado `Grouping { inner: Spanned { node: Ident { name:
   │ "tarefa_pesada" }, span: Span { offset: 223, line: 9, col: 11, len:
   │ 13 } } }`
+    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_concurrency.kata:9:10]
+  8 │     echo!("Iniciando Main Thread")
+  9 │     fork!(tarefa_pesada)
+    ·          ───────┬──────
+    ·                 ╰── tipos incompatíveis
+ 10 │     echo!("Fim da Main Thread")
+    ╰────

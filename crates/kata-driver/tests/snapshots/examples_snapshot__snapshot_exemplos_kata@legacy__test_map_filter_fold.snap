@@ -6,3 +6,10 @@ expression: output
 Error: type.unbound_name
 
   × nome `==` não está no escopo
+    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_map_filter_fold.kata:10:26]
+  9 │     echo!("--- filter: elementos pares ---")
+ 10 │     let pares := filter (== 0 (mod _ 2)) numeros
+    ·                          ──
+ 11 │     for x in pares
+    ╰────
+  help: você quis dizer `!=`, `<=`, `=`?

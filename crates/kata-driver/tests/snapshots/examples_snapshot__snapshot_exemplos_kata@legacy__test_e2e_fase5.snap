@@ -6,3 +6,9 @@ expression: output
 Error: parse.unexpected_token
 
   × token inesperado: esperado ``:` após pattern do braço`, encontrado `3`
+    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_e2e_fase5.kata:12:17]
+ 11 │         match cont
+ 12 │             = _ 3: continue
+    ·                 ─
+ 13 │             > _ 5: break
+    ╰────

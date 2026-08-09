@@ -6,3 +6,9 @@ expression: output
 Error: parse.unexpected_token
 
   × token inesperado: esperado `expression`, encontrado `;`
+   ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_debug.kata:5:27]
+ 4 │ action main
+ 5 │     let v_linha := {1 2 3 ;}
+   ·                           ─
+ 6 │     let v_coluna := {4 ; 5 ; 6}
+   ╰────

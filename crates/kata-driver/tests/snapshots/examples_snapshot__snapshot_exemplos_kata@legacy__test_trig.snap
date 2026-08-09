@@ -6,3 +6,10 @@ expression: output
 Error: type.unbound_name
 
   × nome `sin` não está no escopo
+   ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_trig.kata:3:14]
+ 2 │     let angulo := 3.14159
+ 3 │     let s := sin angulo
+   ·              ───
+ 4 │     let c := cos 0.0
+   ╰────
+  help: você quis dizer `div`, `int`, `len`?

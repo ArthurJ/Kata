@@ -12,6 +12,7 @@ use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 
 use crate::typed::{TypedExpr, TypedExprKind};
+use super::expr::suggest_similar;
 
 use super::apply_dispatch::try_dispatch_table;
 use super::apply_lambda::{infer_apply_lambda, infer_apply_lambda_with_hint};
@@ -117,6 +118,7 @@ pub(crate) fn infer_apply(
                             qual_name
                         } else {
                             return Err(MiddleError::UnboundName {
+                                        suggestion: None,
                                 name: format!(
                                     "`{mod_name}.{field_name}` não encontrado no DispatchTable"
                                 ),
@@ -129,18 +131,21 @@ pub(crate) fn infer_apply(
                         return Err(MiddleError::UnboundName {
                             name: "<non-ident callee>".into(),
                             span: callee.span.into(),
+        suggestion: None,
                         });
                     }
                 } else {
                     return Err(MiddleError::UnboundName {
                         name: "<non-ident callee>".into(),
                         span: callee.span.into(),
+        suggestion: None,
                     });
                 }
             } else {
                 return Err(MiddleError::UnboundName {
                     name: "<non-ident callee>".into(),
                     span: callee.span.into(),
+        suggestion: None,
                 });
             }
         }
@@ -148,6 +153,7 @@ pub(crate) fn infer_apply(
             return Err(MiddleError::UnboundName {
                 name: "<non-ident callee>".into(),
                 span: callee.span.into(),
+        suggestion: None,
             });
         }
     };
@@ -314,6 +320,7 @@ pub(crate) fn infer_apply(
                         expected: param_types.len(),
                         found: arg_tys.len(),
                         span: (*span).into(),
+        hint: None,
                     });
                 }
                 for (i, (arg_ty, param_ty)) in arg_tys.iter().zip(param_types.iter()).enumerate() {
@@ -435,6 +442,7 @@ pub(crate) fn infer_apply(
                 expected: param_types.len(),
                 found: arg_types.len(),
                 span: (*span).into(),
+        hint: None,
             });
         }
         // Verifica tipos dos argumentos.
@@ -495,6 +503,7 @@ pub(crate) fn infer_apply(
     }
     if candidates.len() > 1 {
         return Err(MiddleError::UnboundName {
+                    suggestion: None,
             name: format!(
                 "variante '{}' é ambígua — existe em: {}. Qualifique (ex: {}::{})",
                 func_name,
@@ -506,8 +515,9 @@ pub(crate) fn infer_apply(
         });
     }
     Err(MiddleError::UnboundName {
-        name: func_name,
+        name: func_name.clone(),
         span: callee.span.into(),
+        suggestion: suggest_similar(&func_name, ctx.table.all_names()),
     })
 }
 

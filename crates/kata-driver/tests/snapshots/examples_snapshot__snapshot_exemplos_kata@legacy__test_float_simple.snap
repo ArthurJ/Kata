@@ -7,3 +7,10 @@ Error: type.mismatch
 
   × tipo incompatível: esperado `Struct("Bool") (hint de retorno)`, encontrado
   │ `nenhuma overload de > retorna tipo compatível com Struct("Bool")`
+    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_float_simple.kata:13:5]
+ 12 │ lambda a b:
+ 13 │     > a b
+    ·     ──┬──
+    ·       ╰── tipos incompatíveis
+ 14 │ 
+    ╰────

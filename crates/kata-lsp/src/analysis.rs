@@ -23,8 +23,20 @@ pub struct FrontendResult {
     pub typed: TypedModule,
 }
 
-/// Erros do front-end coletados em um único enum.
-pub enum FrontendError {
+/// Batch de erros do front-end coletados em um único enum.
+///
+/// Chamado `FrontendBatch` (não `FrontendError`) para evitar colisão
+/// conceitual com `kata_diagnostics::FrontendError` (que cobre apenas
+/// lex/parse). Este wrapper agrega erros de 4 fontes:
+/// - `Lex`/`Parse`: `kata_diagnostics::FrontendError` (com Span)
+/// - `Resolve`: `Vec<ResolveError>` (sem Span, mas com código miette)
+/// - `Infer`: `kata_diagnostics::MiddleError` (com Span)
+///
+/// Vive no LSP (não em `kata-diagnostics`) porque carrega `ResolveError`
+/// de `kata-resolution`, e `kata-diagnostics` não pode depender de
+/// `kata-resolution` (seria ciclo: `kata-diagnostics → kata-resolution
+/// → kata-diagnostics`).
+pub enum FrontendBatch {
     Lex(kata_diagnostics::FrontendError),
     Parse(kata_diagnostics::FrontendError),
     Resolve(Vec<kata_resolution::ResolveError>),
@@ -35,9 +47,9 @@ pub enum FrontendError {
 pub fn run_frontend(
     source: &str,
     file_path: Option<&str>,
-) -> Result<FrontendResult, Vec<FrontendError>> {
+) -> Result<FrontendResult, Vec<FrontendBatch>> {
     // 1. Lex
-    let tokens = kata_lexer::lex(source).map_err(|e| vec![FrontendError::Lex(e)])?;
+    let tokens = kata_lexer::lex(source).map_err(|e| vec![FrontendBatch::Lex(e)])?;
 
     // 2. Parse (com recovery — acumula erros de top-level items)
     let (module, parse_errors) = kata_parser::parse_with_recovery(tokens);
@@ -45,12 +57,12 @@ pub fn run_frontend(
         // Há erros de parse — publica diagnósticos de parse sem continuar
         // para resolve/infer. Os items válidos no module não são suficientes
         // para um resolve confiável (símbolos referenciados podem faltar).
-        return Err(parse_errors.into_iter().map(FrontendError::Parse).collect());
+        return Err(parse_errors.into_iter().map(FrontendBatch::Parse).collect());
     }
 
     // 3. Resolve (prelude + módulo do usuário)
-    let prelude = kata_resolution::load_prelude().map_err(|e| vec![FrontendError::Resolve(e)])?;
-    let user = kata_resolution::resolve(&module).map_err(|e| vec![FrontendError::Resolve(e)])?;
+    let prelude = kata_resolution::load_prelude().map_err(|e| vec![FrontendBatch::Resolve(e)])?;
+    let user = kata_resolution::resolve(&module).map_err(|e| vec![FrontendBatch::Resolve(e)])?;
     let mut resolved = kata_resolution::merge_two(prelude, user);
 
     // 3a. Imports multi-arquivo (se file_path disponível)
@@ -61,7 +73,7 @@ pub fn run_frontend(
 
     // 4. Infer (typeck + dispatch)
     let typed = kata_inference::infer_module(&module, &resolved)
-        .map_err(|e| vec![FrontendError::Infer(e)])?;
+        .map_err(|e| vec![FrontendBatch::Infer(e)])?;
 
     Ok(FrontendResult {
         module,

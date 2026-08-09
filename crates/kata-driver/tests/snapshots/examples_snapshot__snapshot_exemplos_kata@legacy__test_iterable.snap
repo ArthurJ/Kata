@@ -8,3 +8,10 @@ expression: output
 Error: type.mismatch
 
   × tipo incompatível: esperado `Optional`, encontrado `Optional::(T)`
+   ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_iterable.kata:8:15]
+ 7 │     next :: CustomIter => Optional
+ 8 │     lambda i: None
+   ·               ──┬─
+   ·                 ╰── tipos incompatíveis
+ 9 │ 
+   ╰────

@@ -6,3 +6,10 @@ expression: output
 Error: type.unbound_name
 
   × nome `$` não está no escopo
+    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_maxmin.kata:16:14]
+ 15 │ action main
+ 16 │     let m := $(max 10 20)
+    ·              ─
+ 17 │     echo!($(str m))
+    ╰────
+  help: você quis dizer `*`, `+`, `-`?

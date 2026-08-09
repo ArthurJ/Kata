@@ -8,3 +8,9 @@ Error: parse.unexpected_token
   × token inesperado: esperado ``fat_tail` tem aridade padrão 2 — excesso de
   │ argumentos posicionais. Use `fat_tail{...}` para aridade diferente ou
   │ separe com quebra de linha.`, encontrado `$`
+   ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_tco_simple.kata:6:15]
+ 5 │ lambda 0 acc: acc
+ 6 │ lambda n acc: fat_tail $(- n 1) $(* n acc)
+   ·               ───────────────────
+ 7 │ 
+   ╰────

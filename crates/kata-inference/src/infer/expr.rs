@@ -205,12 +205,14 @@ pub(crate) fn infer_expr_hinted(
                                 return Err(MiddleError::UnboundName {
                                     name: name.clone(),
                                     span: (*span).into(),
+        suggestion: None,
                                 });
                             }
                         } else {
                             return Err(MiddleError::UnboundName {
                                 name: name.clone(),
                                 span: (*span).into(),
+        suggestion: None,
                             });
                         }
                     }
@@ -576,6 +578,7 @@ pub(crate) fn infer_expr_hinted(
             Err(MiddleError::UnboundName {
                 name: enum_name.clone(),
                 span: (*span).into(),
+                suggestion: suggest_similar(&enum_name, ctx.table.all_names()),
             })?
         }
 
@@ -639,6 +642,7 @@ pub(crate) fn infer_expr_hinted(
                     .ok_or_else(|| MiddleError::UnboundName {
                         name: name.clone(),
                         span: (*span).into(),
+        suggestion: None,
                     })?;
             if !env.is_mutable(name) {
                 return Err(MiddleError::TypeMismatch {
@@ -748,6 +752,7 @@ pub(crate) fn infer_expr_hinted(
             return Err(MiddleError::UnboundName {
                 name: "Spread ($) em posição inesperada — typeck deveria ter expandido".into(),
                 span: (*span).into(),
+        suggestion: None,
             });
         }
         // ── Coleções — inferência delegada para collections.rs ──
@@ -940,5 +945,58 @@ fn select_action_overload<'a>(
     match compatibles.len() {
         1 => Some(compatibles[0]),
         _ => None, // 0 ou >1 → ambíguo.
+    }
+}
+
+/// Gera sugestões "você quis dizer X?" para um nome não-vinculado.
+///
+/// Usa distância de Levenshtein simples (conta edições) para encontrar
+/// nomes no escopo que são parecidos com o nome digitado. Retorna
+/// `None` se nenhuma sugestão for boa o suficiente.
+pub(super) fn suggest_similar<'a>(name: &str, candidates: impl Iterator<Item = &'a str>) -> Option<String> {
+    /// Distância de Levenshtein — número mínimo de edições
+    /// (inserção, deleção, substituição) para transformar a em b.
+    fn levenshtein(a: &str, b: &str) -> usize {
+        let a: Vec<char> = a.chars().collect();
+        let b: Vec<char> = b.chars().collect();
+        let (m, n) = (a.len(), b.len());
+        if m == 0 {
+            return n;
+        }
+        if n == 0 {
+            return m;
+        }
+        let mut prev: Vec<usize> = (0..=n).collect();
+        let mut curr: Vec<usize> = vec![0; n + 1];
+        for i in 1..=m {
+            curr[0] = i;
+            for j in 1..=n {
+                let cost = if a[i - 1] == b[j - 1] { 0 } else { 1 };
+                curr[j] = (prev[j] + 1).min(curr[j - 1] + 1).min(prev[j - 1] + cost);
+            }
+            std::mem::swap(&mut prev, &mut curr);
+        }
+        prev[n]
+    }
+
+    let max_dist = (name.len() / 3).max(2); // tolerância proporcional ao tamanho
+    let mut best: Vec<(usize, &str)> = Vec::new();
+    for candidate in candidates {
+        let dist = levenshtein(name, candidate);
+        if dist <= max_dist && dist > 0 {
+            best.push((dist, candidate));
+        }
+    }
+    if best.is_empty() {
+        None
+    } else {
+        // Ordenar por (distância, nome) para output determinístico
+        // (estável entre runs — importante para snapshots).
+        best.sort_by(|(d1, n1), (d2, n2)| d1.cmp(d2).then(n1.cmp(n2)));
+        best.truncate(3);
+        Some(format!(
+            "você quis dizer {}?",
+            best.iter().map(|(_, s)| format!("`{s}`")).collect::<Vec<_>>().join(", ")
+        ))
     }
 }

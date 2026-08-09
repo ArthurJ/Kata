@@ -119,6 +119,9 @@ impl CompiledModule {
 /// ```
 pub struct Pipeline {
     source: String,
+    /// Path do arquivo (para NamedSource no source context dos erros).
+    /// `None` para eval/REPL.
+    file_path: Option<String>,
     // Artefatos acumulados (preenchidos conforme avança):
     tokens: Option<Vec<kata_ast::TokenWithSpan>>,
     module: Option<kata_ast::Module>,
@@ -132,6 +135,7 @@ impl Pipeline {
     pub fn new(source: impl Into<String>) -> Self {
         Pipeline {
             source: source.into(),
+            file_path: None,
             tokens: None,
             module: None,
             resolved: None,
@@ -140,11 +144,21 @@ impl Pipeline {
         }
     }
 
+    /// Define o path do arquivo para source context nos erros.
+    ///
+    /// Deve ser chamado antes de `lex()` para que erros léxicos também
+    /// tenham o nome do arquivo. Se omitido, usa `<eval>`.
+    pub fn with_file_path(mut self, file: &str) -> Self {
+        self.file_path = Some(file.to_string());
+        self
+    }
+
     // ── Lex ─────────────────────────────────────────────
 
     /// Análise léxica.
     pub fn lex(mut self) -> PipelineResult<Self> {
-        let tokens = lex(&self.source).map_err(IntoReport::into_report)?;
+        let tokens = lex(&self.source)
+            .map_err(|e| e.into_report_with_source(&self.source, self.file_path.as_deref()))?;
         self.tokens = Some(tokens);
         Ok(self)
     }
@@ -160,20 +174,25 @@ impl Pipeline {
     ///
     /// `Single` chama `parse` diretamente.
     pub fn parse(mut self, mode: ParseMode, file_path: Option<&str>) -> PipelineResult<Self> {
+        // Armazenar file_path para source context em passos posteriores.
+        self.file_path = file_path.map(|s| s.to_string());
         let tokens = self
             .tokens
             .take()
             .ok_or_else(|| err("parse chamado antes de lex"))?;
 
         let module = match mode {
-            ParseMode::Single => parse(tokens).map_err(IntoReport::into_report)?,
+            ParseMode::Single => {
+                parse(tokens).map_err(|e| e.into_report_with_source(&self.source, file_path))?
+            }
             ParseMode::TwoPass => {
                 let mut arities = scan_lambdas(&tokens);
-                let decls_module =
-                    parse_decls_only(tokens.clone()).map_err(IntoReport::into_report)?;
+                let decls_module = parse_decls_only(tokens.clone())
+                    .map_err(|e| e.into_report_with_source(&self.source, file_path))?;
                 let decls_resolved = quick_resolve(&decls_module, file_path)?;
                 arities.extend(extract_arities(&decls_resolved.signatures));
-                parse_with_arity(tokens, arities).map_err(IntoReport::into_report)?
+                parse_with_arity(tokens, arities)
+                    .map_err(|e| e.into_report_with_source(&self.source, file_path))?
             }
         };
 
@@ -234,7 +253,8 @@ impl Pipeline {
             .as_ref()
             .ok_or_else(|| err("infer chamado antes de resolve"))?;
 
-        let typed = infer_module(module, resolved).map_err(IntoReport::into_report)?;
+        let typed = infer_module(module, resolved)
+            .map_err(|e| e.into_report_with_source(&self.source, self.file_path.as_deref()))?;
         self.typed = Some(typed);
         Ok(self)
     }

@@ -392,6 +392,12 @@ impl DispatchTable {
     pub(crate) fn iter_entries(&self) -> impl Iterator<Item = (&String, &Vec<OverloadInfo>)> {
         self.entries.iter()
     }
+
+    /// Retorna todos os nomes de funções/actions registradas.
+    /// Usado para gerar sugestões "você quis dizer X?" em erros `UnboundName`.
+    pub fn all_names(&self) -> impl Iterator<Item = &str> {
+        self.entries.keys().map(|s| s.as_str())
+    }
 }
 
 /// Erro de dispatch.

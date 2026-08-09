@@ -111,6 +111,7 @@ pub(crate) fn infer_map(
             expected: 2,
             found: args.len(),
             span: (*span).into(),
+        hint: None,
         });
     }
 
@@ -178,6 +179,7 @@ pub(crate) fn infer_filter(
             expected: 2,
             found: args.len(),
             span: (*span).into(),
+        hint: None,
         });
     }
 
@@ -252,6 +254,7 @@ pub(crate) fn infer_fold(
             expected: 3,
             found: args.len(),
             span: (*span).into(),
+        hint: None,
         });
     }
 

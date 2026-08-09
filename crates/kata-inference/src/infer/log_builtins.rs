@@ -34,6 +34,7 @@ pub(crate) fn infer_log_builtin(
             expected: 4, // aceita 2-4, mas informamos max
             found: elements.len(),
             span: args.span.into(),
+        hint: None,
         });
     }
 
@@ -149,6 +150,7 @@ pub(crate) fn infer_log_recv_builtin(
             expected: 1,
             found: elements.len(),
             span: args.span.into(),
+        hint: None,
         });
     }
 
@@ -200,6 +202,7 @@ pub(crate) fn infer_log_config_builtin(
             expected: 3,
             found: elements.len(),
             span: args.span.into(),
+        hint: None,
         });
     }
 

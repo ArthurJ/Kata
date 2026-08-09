@@ -6,3 +6,8 @@ expression: output
 Error: parse.unexpected_token
 
   × token inesperado: esperado ``(``, encontrado `a`
+   ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_make_adder_typed.kata:8:11]
+ 7 │     let a := add5 3
+ 8 │     echo! a
+   ·           ─
+   ╰────

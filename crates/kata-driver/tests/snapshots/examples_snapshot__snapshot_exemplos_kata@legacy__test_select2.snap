@@ -6,3 +6,8 @@ expression: output
 Error: parse.unexpected_token
 
   × token inesperado: esperado ``::` após nome do parâmetro`, encontrado `)`
+   ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_select2.kata:1:19]
+ 1 │ action produtor(tx)
+   ·                   ─
+ 2 │     sleep!(100)
+   ╰────

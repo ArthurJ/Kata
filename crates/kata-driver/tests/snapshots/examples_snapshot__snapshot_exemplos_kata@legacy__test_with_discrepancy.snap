@@ -6,3 +6,9 @@ expression: output
 Error: parse.unexpected_token
 
   × token inesperado: esperado ``:=` in with binding`, encontrado `implements`
+    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_with_discrepancy.kata:17:11]
+ 16 │     with
+ 17 │         T implements ORD EQ
+    ·           ──────────
+ 18 │         maior :: T T => Bool
+    ╰────

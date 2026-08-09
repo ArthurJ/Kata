@@ -49,6 +49,7 @@ fn middle_error_unbound_name_display() {
     let err = MiddleError::UnboundName {
         name: "foo".into(),
         span: Span::new(0, 1, 1, 3).into(),
+        suggestion: None,
     };
     assert_eq!(err.to_string(), "nome `foo` não está no escopo");
 }

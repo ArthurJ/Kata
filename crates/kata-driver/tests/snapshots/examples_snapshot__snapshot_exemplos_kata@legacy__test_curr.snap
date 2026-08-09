@@ -6,3 +6,10 @@ expression: output
 Error: type.unbound_name
 
   × nome `$` não está no escopo
+   ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_curr.kata:5:14]
+ 4 │     # 1. Aplicação explícita para desambiguar tuplas
+ 5 │     let a := $(+ 10 20)
+   ·              ─
+ 6 │     
+   ╰────
+  help: você quis dizer `*`, `+`, `-`?

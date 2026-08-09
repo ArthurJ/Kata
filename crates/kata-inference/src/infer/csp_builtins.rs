@@ -252,6 +252,7 @@ pub(crate) fn infer_fork_builtin(
         // Verifica que action_name é uma Action declarada.
         if !ctx.table.has_function(&action_name) {
             return Err(kata_diagnostics::MiddleError::UnboundName {
+                        suggestion: None,
                 name: format!("Action `{action_name}` não declarada (fork!)"),
                 span: elements[0].span.into(),
             });
@@ -260,6 +261,7 @@ pub(crate) fn infer_fork_builtin(
         // Verifica que é uma Action (is_action = true).
         let overloads = ctx.table.get_overloads(&action_name).ok_or_else(|| {
             kata_diagnostics::MiddleError::UnboundName {
+                        suggestion: None,
                 name: format!("Action `{action_name}` não tem overloads"),
                 span: elements[0].span.into(),
             }
@@ -413,6 +415,7 @@ pub(crate) fn infer_spawn_builtin(
 
             if is_direct && !ctx.table.has_function(&action_name) {
                 return Err(kata_diagnostics::MiddleError::UnboundName {
+                            suggestion: None,
                     name: format!("Action `{action_name}` não declarada (spawn!)"),
                     span: elements[0].span.into(),
                 });
@@ -471,6 +474,7 @@ pub(crate) fn infer_spawn_builtin(
 
             if is_direct && !ctx.table.has_function(&action_name) {
                 return Err(kata_diagnostics::MiddleError::UnboundName {
+                            suggestion: None,
                     name: format!("Action `{action_name}` não declarada (spawn!)"),
                     span: callee.span.into(),
                 });
@@ -493,6 +497,7 @@ pub(crate) fn infer_spawn_builtin(
     if !action_name.starts_with("__indirect") {
         let overloads = ctx.table.get_overloads(&action_name).ok_or_else(|| {
             kata_diagnostics::MiddleError::UnboundName {
+                        suggestion: None,
                 name: format!("Action `{action_name}` não tem overloads"),
                 span: (*span).into(),
             }

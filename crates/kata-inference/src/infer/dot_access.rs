@@ -83,6 +83,7 @@ pub(crate) fn infer_dot_access(
                 ctx.struct_registry
                     .get(struct_name)
                     .ok_or_else(|| MiddleError::UnboundName {
+                                suggestion: None,
                         name: format!("struct `{struct_name}` não registrado no StructRegistry"),
                         span: (*span).into(),
                     })?;
@@ -160,6 +161,7 @@ pub(crate) fn infer_dot_access(
                             .ok_or_else(|| MiddleError::UnboundName {
                                 name: "at".into(),
                                 span: (*span).into(),
+        suggestion: None,
                             })?;
                     let mut found = None;
                     for oi in overloads.iter().filter(|oi| {
@@ -331,6 +333,7 @@ pub(crate) fn infer_dot_access(
                         MiddleError::UnboundName {
                             name: "slice".into(),
                             span: (*span).into(),
+        suggestion: None,
                         }
                     })?;
                     let mut found = None;

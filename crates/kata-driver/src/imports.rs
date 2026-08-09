@@ -10,6 +10,8 @@ use std::path::Path;
 
 use kata_resolution::{ImportKind, ImportedModule, ModuleLoader, ResolvedModule};
 
+use crate::IntoReport;
+
 /// Mergeia módulos importados no ResolvedModule (prelude + user já mergeados).
 ///
 /// Para cada `ImportedModule`:
@@ -220,9 +222,27 @@ pub(crate) fn load_module_imports(
 
     let search_paths = vec![entry_dir, stdlib_dir];
     let mut loader = ModuleLoader::new(search_paths);
-    loader
-        .load_imports(module)
-        .map_err(|e| miette::Report::msg(format!("erro ao carregar imports: {e}")))
+    loader.load_imports(module).map_err(|e| {
+        // LoadError carrega tipos estruturados (FrontendError, Vec<ResolveError>).
+        // Para source context completo, precisaríamos do source code do
+        // módulo importado — o ModuleLoader não o expõe. Por ora, extrai
+        // o erro interno para ter código miette + span (sem linha de código).
+        match e {
+            kata_resolution::LoadError::Lex(inner) | kata_resolution::LoadError::Parse(inner) => {
+                inner.into_report_with_source("", None)
+            }
+            kata_resolution::LoadError::Resolve(errors) => {
+                // ResolveError não tem #[label]/span — apenas código + mensagem.
+                // Reporta o primeiro erro como Report principal.
+                if let Some(first) = errors.first() {
+                    first.clone().into_report_with_source("", None)
+                } else {
+                    miette::Report::msg("erro de resolução ao carregar módulo (sem detalhes)")
+                }
+            }
+            other => miette::Report::msg(format!("erro ao carregar imports: {other}")),
+        }
+    })
 }
 
 /// Extrai o `DirectiveRegistry` dos módulos importados, para ser usado

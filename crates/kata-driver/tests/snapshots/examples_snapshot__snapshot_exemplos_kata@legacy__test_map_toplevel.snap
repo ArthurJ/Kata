@@ -7,3 +7,8 @@ Error: parse.unexpected_token
 
   × token inesperado: esperado `argumento #2 para `map` (aridade padrão 2)`,
   │ encontrado `<STMT_SEP>`
+   ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_map_toplevel.kata:1:1]
+ 1 │ # Testa map simple sem captures nem parenteses
+   · ▲
+ 2 │ f :: Int => Int
+   ╰────

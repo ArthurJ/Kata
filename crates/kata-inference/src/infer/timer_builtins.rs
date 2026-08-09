@@ -35,6 +35,7 @@ pub(crate) fn infer_now_builtin(args: &Spanned<Expr>, span: &Span) -> InferResul
             expected: 0,
             found,
             span: args.span.into(),
+        hint: None,
         });
     }
 

@@ -19,31 +19,31 @@ use crate::{ResolvedModule, merge_two, resolve_with_origin};
 pub enum LoadError {
     /// Arquivo não encontrado em nenhum search path.
     NotFound { path: String },
-    /// Erro de lex.
-    LexError(String),
-    /// Erro de parse.
-    ParseError(String),
-    /// Erro de resolution.
-    ResolveError(String),
+    /// Erro de lex (preserva FrontendError estruturado com Span).
+    Lex(kata_diagnostics::FrontendError),
+    /// Erro de parse (preserva FrontendError estruturado com Span).
+    Parse(kata_diagnostics::FrontendError),
+    /// Erro de resolution (preserva Vec<ResolveError> estruturado).
+    Resolve(Vec<crate::ResolveError>),
     /// Ciclo de import detectado.
     CircularImport { path: String },
     /// Erro de I/O.
-    IoError(String),
+    Io(String),
 }
 
 impl std::fmt::Display for LoadError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             LoadError::NotFound { path } => write!(f, "módulo não encontrado: `{path}`"),
-            LoadError::LexError(msg) => write!(f, "erro léxico ao carregar módulo: {msg}"),
-            LoadError::ParseError(msg) => write!(f, "erro de parse ao carregar módulo: {msg}"),
-            LoadError::ResolveError(msg) => {
-                write!(f, "erro de resolução ao carregar módulo: {msg}")
+            LoadError::Lex(e) => write!(f, "erro léxico ao carregar módulo: {e}"),
+            LoadError::Parse(e) => write!(f, "erro de parse ao carregar módulo: {e}"),
+            LoadError::Resolve(errors) => {
+                write!(f, "erro de resolução ao carregar módulo: {}", crate::format_resolve_errors(errors))
             }
             LoadError::CircularImport { path } => {
                 write!(f, "ciclo de import detectado: `{path}`")
             }
-            LoadError::IoError(msg) => write!(f, "erro de I/O ao carregar módulo: {msg}"),
+            LoadError::Io(msg) => write!(f, "erro de I/O ao carregar módulo: {msg}"),
         }
     }
 }
@@ -160,17 +160,17 @@ impl ModuleLoader {
         // Lê o arquivo
         let source = std::fs::read_to_string(path).map_err(|e| {
             self.loading.remove(path);
-            LoadError::IoError(e.to_string())
+            LoadError::Io(e.to_string())
         })?;
 
         // Lex → Parse → Resolve
         let tokens = lex(&source).map_err(|e| {
             self.loading.remove(path);
-            LoadError::LexError(format!("{e}"))
+            LoadError::Lex(e)
         })?;
         let module = parse(tokens).map_err(|e| {
             self.loading.remove(path);
-            LoadError::ParseError(format!("{e}"))
+            LoadError::Parse(e)
         })?;
         let module_name = path
             .file_stem()
@@ -178,7 +178,7 @@ impl ModuleLoader {
             .unwrap_or_default();
         let resolved = resolve_with_origin(&module, &module_name).map_err(|e| {
             self.loading.remove(path);
-            LoadError::ResolveError(crate::format_resolve_errors(&e).to_string())
+            LoadError::Resolve(e)
         })?;
 
         // Sub-módulos precisam do prelude: Int, Float, +, etc.
@@ -191,10 +191,7 @@ impl ModuleLoader {
         } else {
             let prelude = crate::prelude_sigs::load_prelude().map_err(|e| {
                 self.loading.remove(path);
-                LoadError::ResolveError(format!(
-                    "erro ao carregar prelude para sub-módulo: {}",
-                    crate::format_resolve_errors(&e)
-                ))
+                LoadError::Resolve(e)
             })?;
             merge_two(prelude, resolved)
         };

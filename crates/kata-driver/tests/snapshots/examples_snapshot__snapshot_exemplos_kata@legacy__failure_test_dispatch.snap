@@ -7,3 +7,8 @@ Error: parse.unexpected_token
 
   × token inesperado: esperado `INDENT (interface signatures)`, encontrado
   │ `<STMT_SEP>`
+   ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/failure_test_dispatch.kata:1:1]
+ 1 │ # Múltiplo Despacho Customizado que funciona no Parser atual
+   · ▲
+ 2 │ interface NUM
+   ╰────

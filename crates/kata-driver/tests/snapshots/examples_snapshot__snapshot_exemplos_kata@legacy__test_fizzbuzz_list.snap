@@ -7,3 +7,9 @@ Error: parse.unexpected_token
 
   × token inesperado: esperado ``..` ou `..=` após step do range`, encontrado
   │ `]`
+   ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_fizzbuzz_list.kata:6:23]
+ 5 │ action main
+ 6 │     let nums := [1..15]
+   ·                       ─
+ 7 │     let result := $(fizzbuzz_list nums)
+   ╰────

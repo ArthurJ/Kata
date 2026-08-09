@@ -158,6 +158,7 @@ fn check_pattern_inner(
                     Some(s) if enum_registry.is_variant(s, variant) => s,
                     _ => {
                         return Err(MiddleError::UnboundName {
+                                    suggestion: None,
                             name: format!(
                                 "variante desqualificada `{}` — scrutinee {} não tem essa variante",
                                 variant, scrutinee_ty
@@ -172,6 +173,7 @@ fn check_pattern_inner(
             // Verifica que o enum existe e tem a variante.
             if !enum_registry.is_variant(enum_name, variant) {
                 return Err(MiddleError::UnboundName {
+                            suggestion: None,
                     name: format!("{}::{}", enum_name, variant),
                     span: (*span).into(),
                 });
@@ -213,6 +215,9 @@ fn check_pattern_inner(
                         expected: 1,
                         found: sub_pats.len(),
                         span: (*span).into(),
+                        hint: Some(
+                            "variantes de enum carregam exatamente 1 valor associado — use (valor) ou remova os parênteses extras".into(),
+                        ),
                     });
                 }
                 let mut typed_subs = Vec::with_capacity(sub_pats.len());
@@ -264,6 +269,10 @@ fn check_pattern_inner(
                     expected: element_tys.len(),
                     found: elements.len(),
                     span: (*span).into(),
+                    hint: Some(format!(
+                        "a tupla tem {expected} elemento(s) — forneça {expected} valor(es) no padrão",
+                        expected = element_tys.len()
+                    )),
                 });
             }
             let mut typed_elements = Vec::with_capacity(elements.len());
@@ -404,8 +413,12 @@ pub(crate) fn check_exhaustiveness(
                 Ok(()) // exaustivo
             } else {
                 Err(MiddleError::NonExhaustiveMatch {
-                    missing,
+                    missing: missing.clone(),
                     span: (*span).into(),
+                    hint: Some(format!(
+                        "variantes faltantes: {}. Adicione um caso para cada uma ou use `otherwise:` como fallback",
+                        missing.join(", ")
+                    )),
                 })
             }
         }

@@ -86,16 +86,23 @@ fn cmd_lsp() -> miette::Result<()> {
 
 // ── Conversão de erros para miette::Report ──────────────────
 
-/// Converte um erro que implementa `miette::Diagnostic` em `miette::Report`.
-pub(crate) trait IntoReport {
-    fn into_report(self) -> miette::Report;
-}
-
-impl<E: miette::Diagnostic + Send + Sync + 'static> IntoReport for E {
-    fn into_report(self) -> miette::Report {
-        miette::Report::new_boxed(Box::new(self))
+/// Converte um erro que implementa `miette::Diagnostic` em `miette::Report`
+/// com `NamedSource` anexado, habilitando source context no miette
+/// (linha de código + indicador de posição).
+pub(crate) trait IntoReport: miette::Diagnostic + Send + Sync + Sized + 'static {
+    /// Cria um `Report` com `NamedSource` anexado, habilitando source
+    /// context no miette (linha de código + indicador de posição).
+    ///
+    /// - `source`: código-fonte completo do arquivo onde o erro ocorreu.
+    /// - `file`: path do arquivo (ou `None` para eval/REPL → `<eval>`).
+    fn into_report_with_source(self, source: &str, file: Option<&str>) -> miette::Report {
+        let name = file.unwrap_or("<eval>");
+        let named = miette::NamedSource::new(name, source.to_string());
+        miette::Report::new_boxed(Box::new(self)).with_source_code(named)
     }
 }
+
+impl<E: miette::Diagnostic + Send + Sync + 'static> IntoReport for E {}
 
 /// Formata um `Vec` de erros como string legível (um por linha).
 /// `Vec<ResolveError>` não implementa `Display`, então `{e:?}` mostraria
@@ -113,7 +120,7 @@ pub(crate) fn format_error_vec<E: std::fmt::Display>(errors: &[E]) -> String {
 
 fn cmd_lex(file: &str) -> miette::Result<()> {
     let source = read_source(file)?;
-    let tokens = lex(&source).map_err(IntoReport::into_report)?;
+    let tokens = lex(&source).map_err(|e| e.into_report_with_source(&source, Some(file)))?;
     for tok in &tokens {
         println!("{tok:?}");
     }
@@ -122,8 +129,8 @@ fn cmd_lex(file: &str) -> miette::Result<()> {
 
 fn cmd_parse(file: &str) -> miette::Result<()> {
     let source = read_source(file)?;
-    let tokens = lex(&source).map_err(IntoReport::into_report)?;
-    let module = parse(tokens).map_err(IntoReport::into_report)?;
+    let tokens = lex(&source).map_err(|e| e.into_report_with_source(&source, Some(file)))?;
+    let module = parse(tokens).map_err(|e| e.into_report_with_source(&source, Some(file)))?;
     println!("{module:#?}");
     Ok(())
 }
@@ -176,6 +183,7 @@ fn cmd_test(path: &str, filter: Option<&str>) -> miette::Result<()> {
 
         // Pipeline até jit_compile_tests.
         let compiled = pipeline::Pipeline::new(&source)
+            .with_file_path(&file.to_string_lossy())
             .lex()?
             .parse(pipeline::ParseMode::Single, Some(&file.to_string_lossy()))?
             .resolve(Some(&file.to_string_lossy()))?
@@ -330,6 +338,7 @@ fn run_pipeline(source: &str) -> miette::Result<ExecResult> {
 /// tree-shake default) e termina com `jit_eval`.
 fn run_pipeline_with_file(source: &str, file_path: Option<&str>) -> miette::Result<ExecResult> {
     let compiled = pipeline::Pipeline::new(source)
+        .with_file_path(file_path.unwrap_or("<eval>"))
         .lex()?
         .parse(pipeline::ParseMode::TwoPass, file_path)?
         .resolve(file_path)?

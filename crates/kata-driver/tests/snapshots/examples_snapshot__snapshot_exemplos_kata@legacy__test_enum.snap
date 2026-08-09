@@ -6,3 +6,9 @@ expression: output
 Error: parse.unexpected_token
 
   × token inesperado: esperado `variant name`, encontrado `|`
+   ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_enum.kata:3:5]
+ 2 │ enum Sinal
+ 3 │     | Verde
+   ·     ─
+ 4 │     | Amarelo
+   ╰────

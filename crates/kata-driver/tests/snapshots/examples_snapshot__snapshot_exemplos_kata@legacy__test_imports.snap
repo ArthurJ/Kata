@@ -6,3 +6,10 @@ expression: output
 Error: type.unbound_name
 
   × nome `$` não está no escopo
+   ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_imports.kata:8:22]
+ 7 │ action main
+ 8 │     let resultado := $(mock_math.dobrar 21)
+   ·                      ─
+ 9 │     let triplo := $(triplicar 21)
+   ╰────
+  help: você quis dizer `*`, `+`, `-`?

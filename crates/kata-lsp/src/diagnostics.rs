@@ -1,4 +1,4 @@
-//! Conversão de FrontendError/MiddleError → LSP Diagnostic.
+//! Conversão de FrontendBatch/MiddleError → LSP Diagnostic.
 //!
 //! Todos os erros do front-end são ERROR (não há warnings no front-end atual).
 //! O `Span` (byte offsets) é extraído via `miette::Diagnostic::labels()`,
@@ -9,25 +9,25 @@
 
 use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, Position, Range};
 
-use crate::analysis::FrontendError;
+use crate::analysis::FrontendBatch;
 use crate::unicode::byte_offset_to_lsp_position;
 
 /// Converte um erro do front-end em `Diagnostic` do LSP.
-pub(crate) fn to_diagnostic(error: &FrontendError, text: &str) -> Diagnostic {
+pub(crate) fn to_diagnostic(error: &FrontendBatch, text: &str) -> Diagnostic {
     let (code, message, span) = match error {
-        FrontendError::Lex(e) | FrontendError::Parse(e) => {
+        FrontendBatch::Lex(e) | FrontendBatch::Parse(e) => {
             let code = miette::Diagnostic::code(e).map(|c| c.to_string());
             let message = e.to_string();
             let span = extract_span(e);
             (code, message, span)
         }
-        FrontendError::Infer(e) => {
+        FrontendBatch::Infer(e) => {
             let code = miette::Diagnostic::code(e).map(|c| c.to_string());
             let message = e.to_string();
             let span = extract_span(e);
             (code, message, span)
         }
-        FrontendError::Resolve(errors) => {
+        FrontendBatch::Resolve(errors) => {
             // ResolveError implementa miette::Diagnostic (códigos resolve.*).
             // Sem #[label] — span 0:0 (sem info de span).
             if let Some(first) = errors.first() {
@@ -53,7 +53,7 @@ pub(crate) fn to_diagnostic(error: &FrontendError, text: &str) -> Diagnostic {
 }
 
 /// Converte uma lista de erros do front-end em uma lista de Diagnostics.
-pub(crate) fn to_diagnostics(errors: &[FrontendError], text: &str) -> Vec<Diagnostic> {
+pub(crate) fn to_diagnostics(errors: &[FrontendBatch], text: &str) -> Vec<Diagnostic> {
     errors.iter().map(|e| to_diagnostic(e, text)).collect()
 }
 

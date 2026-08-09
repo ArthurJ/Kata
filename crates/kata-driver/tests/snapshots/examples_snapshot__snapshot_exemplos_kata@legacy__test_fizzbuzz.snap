@@ -8,3 +8,9 @@ Error: parse.unexpected_token
   × token inesperado: esperado ``=` tem aridade padrão 2 — excesso de
   │ argumentos posicionais. Use `={...}` para aridade diferente ou separe com
   │ quebra de linha.`, encontrado `(`
+   ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_fizzbuzz.kata:8:17]
+ 7 │     with
+ 8 │         fizz := = 0 $(mod x 3)
+   ·                 ──────
+ 9 │         buzz := = 0 mod x 5
+   ╰────

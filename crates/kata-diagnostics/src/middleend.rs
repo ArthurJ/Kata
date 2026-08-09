@@ -14,6 +14,8 @@ pub enum MiddleError {
         name: String,
         #[label]
         span: MietteSpan,
+        #[help]
+        suggestion: Option<String>,
     },
 
     #[error("tipo incompatível: esperado `{expected}`, encontrado `{found}`")]
@@ -56,6 +58,8 @@ pub enum MiddleError {
         found: usize,
         #[label]
         span: MietteSpan,
+        #[help]
+        hint: Option<String>,
     },
 
     #[error("símbolo FFI desconhecido: `{name}`")]
@@ -73,6 +77,8 @@ pub enum MiddleError {
         missing: Vec<String>,
         #[label]
         span: MietteSpan,
+        #[help]
+        hint: Option<String>,
     },
 
     #[error("guard sem `otherwise` em tipo infinito")]

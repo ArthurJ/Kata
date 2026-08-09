@@ -6,3 +6,8 @@ expression: output
 Error: parse.unexpected_token
 
   × token inesperado: esperado ``(``, encontrado `result`
+   ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_map_nocap_echo.kata:4:11]
+ 3 │     let result := map (lambda x: + x 1) dados
+ 4 │     echo! result
+   ·           ──────
+   ╰────

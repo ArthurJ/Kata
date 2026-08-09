@@ -34,6 +34,7 @@ pub(crate) fn cmd_build(file: &str, output: Option<&str>, dynamic: bool) -> miet
     // Pipeline até CompiledModule.
     let source = read_source(file)?;
     let compiled = crate::pipeline::Pipeline::new(&source)
+        .with_file_path(file)
         .lex()?
         .parse(crate::pipeline::ParseMode::TwoPass, Some(file))?
         .resolve(Some(file))?

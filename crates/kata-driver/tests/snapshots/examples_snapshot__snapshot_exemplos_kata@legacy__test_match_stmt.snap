@@ -6,3 +6,9 @@ expression: output
 Error: parse.unexpected_token
 
   × token inesperado: esperado ``:` após pattern do braço`, encontrado `100`
+   ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_match_stmt.kata:6:13]
+ 5 │     match x
+ 6 │         > _ 100: echo!("alto")
+   ·             ───
+ 7 │         > _ 50: echo!("medio")
+   ╰────

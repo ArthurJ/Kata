@@ -302,6 +302,7 @@ pub fn infer_module(
     let entry = entry_expr.ok_or_else(|| MiddleError::UnboundName {
         name: "<entry point>".into(),
         span: item_span_or_synthetic(&module.items),
+        suggestion: None,
     })?;
 
     let mut typed_module = TypedModule {
