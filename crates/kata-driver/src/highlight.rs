@@ -2,7 +2,7 @@
 //!
 //! Usa o lexer do próprio Kata5 para tokenizar a linha e mapeia cada `Token`
 //! para uma cor ANSI. O mapeamento segue a mesma categorização do
-//! `kata.tmLanguage.json`:
+//! `Kata.tmbundle/Syntaxes/Kata.tmLanguage.json`:
 //!
 //! - Palavras-chave de declaração (`let`, `data`, `enum`, `action`, ...): bold cyan
 //! - Palavras-chave de controle (`match`, `return`, `loop`, ...): bold yellow
