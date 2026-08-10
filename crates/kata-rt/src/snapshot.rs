@@ -41,6 +41,18 @@ pub extern "C" fn kata_rt_load_snapshot(
         return;
     }
 
+    // Skip se já carregado — REPL reusa snapshots entre linhas.
+    // No fluxo comptime normal, a tabela é limpa entre compilações,
+    // então este skip nunca ativa. No REPL, a tabela persiste.
+    let already_loaded = SNAPSHOT_PTRS.with(|table| {
+        let table = table.borrow();
+        let id = snapshot_id as usize;
+        id < table.len() && table[id] != 0
+    });
+    if already_loaded {
+        return;
+    }
+
     // 1. Alocar na root_arena.
     let base_ptr = crate::arena::kata_rt_arena_alloc(crate::arena::rt_ptr(), root_arena, bytes_len);
     if base_ptr == 0 {

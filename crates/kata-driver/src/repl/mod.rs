@@ -4,19 +4,22 @@
 //! lex → parse → adiciona item à lista → resolve + merge + infer_module →
 //! monomorphize → optimize → jit_eval → display.
 //!
-//! Se a expressão é um `let`, o binding persiste porque o item fica na lista
-//! e é re-processado na próxima iteração. O `TypeEnv` não é mutado diretamente
-//! — a persistência é estrutural (items acumulados).
+//! Bindings `let` escalares (Int, Float, Boolean, Unit) são congelados após
+//! a primeira avaliação: o valor é guardado como literal e injetado nas
+//! próximas linhas como `let x := <literal>` em vez de reavaliar a expressão
+//! original. Isto evita reexecução de computação cara em cada linha.
 //!
 //! Erros não abortam a sessão: o item adicionado é removido (rollback) e o
 //! usuário pode corrigir e reintentar.
 
 mod commands;
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 
-use kata_ast::{Expr, Item, Module, Spanned};
+use kata_ast::{Expr, Item, Module, Span, Spanned};
 use kata_codegen::jit_eval;
+use kata_core::ty::{PrimTy, Ty};
 use kata_inference::infer_module;
 use kata_lexer::lex;
 use kata_monomorph::monomorphize;
@@ -36,6 +39,11 @@ use crate::merge_resolved;
 pub(crate) struct ReplSession {
     /// Items top-level acumulados (let bindings, sigs, data, enum, etc.).
     pub(crate) items: Vec<Spanned<Item>>,
+    /// Bindings `let` congelados — mapa nome → literal AST.
+    /// Após avaliar `let x := <expr>` e obter um valor escalar, o valor
+    /// é guardado aqui como literal. Nas próximas linhas, o item `let`
+    /// nos items acumulados é substituído pelo literal antes do pipeline.
+    pub(crate) frozen_bindings: HashMap<String, Expr>,
     /// Prelude resolvido (recarregado em `:reset`).
     pub(crate) prelude: ResolvedModule,
     /// Runtime persistente — vive entre avaliações para preservar valores
@@ -57,6 +65,7 @@ impl ReplSession {
         let rt_ptr = Box::into_raw(rt) as i64;
         Ok(Self {
             items: Vec::new(),
+            frozen_bindings: HashMap::new(),
             prelude,
             rt_ptr,
             history_path,
@@ -66,6 +75,7 @@ impl ReplSession {
     /// Reseta a sessão — limpa items e recarrega prelude.
     pub fn reset(&mut self) -> Result<(), String> {
         self.items.clear();
+        self.frozen_bindings.clear();
         self.prelude = load_prelude()
             .map_err(|e| format!("erro ao carregar prelude: {}", crate::format_error_vec(&e)))?;
         // Recriar Runtime — descarta o antigo e cria um novo limpo.
@@ -133,6 +143,10 @@ impl ReplSession {
             .iter()
             .any(|i| matches!(i.node, Item::EntryExpr(_)));
 
+        // Guarda os items do input antes de movê-los para self.items.
+        // Necessário para congelar bindings após avaliação.
+        let input_items = module.items.clone();
+
         // Snapshot para rollback em caso de erro.
         let snapshot_len = self.items.len();
         self.items.extend(module.items);
@@ -151,13 +165,41 @@ impl ReplSession {
                 }
             }
         } else {
-            // Constrói Module com todos os items acumulados.
-            let full_module = Module {
-                items: self.items.clone(),
-            };
+            // Constrói Module com todos os items acumulados, substituindo
+            // bindings congelados por literais.
+            let full_module = self.build_eval_module(&self.items);
 
             match self.run_pipeline_eval(&full_module) {
                 Ok(result) => {
+                    // Congelar bindings escalares: se a entrada é um
+                    // `let x := <expr>` isolado (único EntryExpr do input),
+                    // avaliar o valor do binding separadamente para obter
+                    // seu tipo e valor, e guardar como literal.
+                    if input_items.len() == 1 {
+                        if let Item::EntryExpr(ref expr) = input_items[0].node {
+                            if let Expr::Let { ref name, ref value } = expr.node {
+                                // Avaliar só o valor do let para obter tipo
+                                // e valor corretos (o entry retorna Unit).
+                                // Inclui items acumulados (bindings anteriores)
+                                // para que o valor possa referenciá-los.
+                                let mut val_items = self.items.clone();
+                                // Substitui bindings congelados por literais.
+                                val_items = self.build_eval_items(&val_items);
+                                val_items.push(Spanned::new(
+                                    Item::EntryExpr(*value.clone()),
+                                    Span::synthetic(),
+                                ));
+                                let val_module = Module { items: val_items };
+                                if let Ok(val_result) = self.run_pipeline_eval(&val_module) {
+                                    if let Some(literal) =
+                                        Self::decode_to_literal(val_result.raw, &val_result.ty)
+                                    {
+                                        self.frozen_bindings.insert(name.clone(), literal);
+                                    }
+                                }
+                            }
+                        }
+                    }
                     display::print_result(result.raw, &result.ty);
                     // Remove EntryExpr que não são bindings — expressões
                     // puras (ex: `5`, `echo!(5)`, `g 5`) são "avaliar e
@@ -198,21 +240,19 @@ impl ReplSession {
     /// Injetamos `0` (IntLit) como entry para satisfazer o pipeline.
     /// O tipo do entry não importa — só queremos os `pre_entry`.
     fn build_module_for_env(&self) -> Module {
-        let mut items = self.items.clone();
-        // Sempre adiciona entry sintético `0` se o último item é EntryExpr
-        // (para que lets virem pre_entry, não entry) ou se não há entry.
+        let mut items = self.build_eval_items(&self.items);
         let needs_entry = match items.last() {
             None => true,
             Some(item) => matches!(&item.node, Item::EntryExpr(_)),
         };
         if needs_entry {
-            let zero = kata_ast::Expr::IntLit {
+            let zero = Expr::IntLit {
                 text: "0".to_string(),
             };
-            let spanned = Spanned::new(zero, kata_ast::Span::synthetic());
+            let spanned = Spanned::new(zero, Span::synthetic());
             items.push(Spanned::new(
                 Item::EntryExpr(spanned),
-                kata_ast::Span::synthetic(),
+                Span::synthetic(),
             ));
         }
         Module { items }
@@ -236,20 +276,21 @@ impl ReplSession {
             .items
             .iter()
             .any(|i| matches!(i.node, Item::EntryExpr(_)));
-        let module = if has_entry {
-            module.clone()
+        let items = if has_entry {
+            self.build_eval_items(&module.items)
         } else {
-            let mut items = module.items.clone();
+            let mut items = self.build_eval_items(&module.items);
             let zero = kata_ast::Expr::IntLit {
                 text: "0".to_string(),
             };
-            let spanned = Spanned::new(zero, kata_ast::Span::synthetic());
+            let spanned = Spanned::new(zero, Span::synthetic());
             items.push(Spanned::new(
                 Item::EntryExpr(spanned),
-                kata_ast::Span::synthetic(),
+                Span::synthetic(),
             ));
-            Module { items }
+            items
         };
+        let module = Module { items };
         self.run_pipeline_typed(&module)?;
         Ok(())
     }
@@ -269,6 +310,74 @@ impl ReplSession {
             raw: jit.raw,
             ty: jit.ty,
         })
+    }
+
+    /// Constrói a lista de items substituindo bindings congelados por literais.
+    fn build_eval_items(&self, items: &[Spanned<Item>]) -> Vec<Spanned<Item>> {
+        if self.frozen_bindings.is_empty() {
+            return items.to_vec();
+        }
+        items
+            .iter()
+            .map(|item| {
+                if let Item::EntryExpr(ref expr) = item.node {
+                    if let Expr::Let { ref name, .. } = expr.node {
+                        if let Some(literal) = self.frozen_bindings.get(name) {
+                            let new_expr = Expr::Let {
+                                name: name.clone(),
+                                value: Box::new(Spanned::new(literal.clone(), Span::synthetic())),
+                            };
+                            return Spanned::new(
+                                Item::EntryExpr(Spanned::new(new_expr, Span::synthetic())),
+                                Span::synthetic(),
+                            );
+                        }
+                    }
+                }
+                item.clone()
+            })
+            .collect()
+    }
+
+    /// Constrói o Module para avaliação, substituindo bindings congelados
+    /// por literais.
+    fn build_eval_module(&self, items: &[Spanned<Item>]) -> Module {
+        Module { items: self.build_eval_items(items) }
+    }
+
+    /// Decodifica um JitResult (valor bruto + tipo) em um literal AST.
+    /// Apenas para escalares: Int (SMI), Float, Boolean, Unit.
+    /// Retorna None para tipos complexos (List, Struct, Text, etc.) —
+    /// estes não podem ser expressos como literais na AST.
+    fn decode_to_literal(raw: i64, ty: &Ty) -> Option<Expr> {
+        match ty {
+            // Int SMI: LSB=1 → value = (raw - 1) >> 1
+            Ty::Prim(PrimTy::Int) => {
+                if (raw as u64) & 1 == 1 {
+                    let value = (raw - 1) >> 1;
+                    Some(Expr::IntLit { text: format!("{value}") })
+                } else {
+                    // BigInt — LSB=0, ponteiro. Não suportado nesta fase.
+                    None
+                }
+            }
+            // Float: raw é f64 reinterpretado como i64
+            Ty::Prim(PrimTy::Float) => {
+                let f = f64::from_bits(raw as u64);
+                Some(Expr::FloatLit { text: format!("{f}") })
+            }
+            // Boolean: True = SMI 1, False = SMI 0
+            Ty::Sum(name) if name == "Boolean" => {
+                let variant = if raw != 0 { "True" } else { "False" };
+                Some(Expr::VariantQual {
+                    enum_name: "Boolean".to_string(),
+                    variant: variant.to_string(),
+                    module_path: None,
+                })
+            }
+            Ty::Unit => Some(Expr::Unit),
+            _ => None,
+        }
     }
 }
 
