@@ -1,8 +1,22 @@
-use kata_rt::{
-    kata_rt_arena_create, kata_rt_dict_contains, kata_rt_dict_empty, kata_rt_dict_get_checked,
+use kata_rt::{Runtime, kata_rt_arena_create, kata_rt_dict_contains, kata_rt_dict_empty, kata_rt_dict_get_checked,
     kata_rt_dict_insert, kata_rt_dict_len, kata_rt_dict_next, kata_rt_dict_remove,
     kata_rt_hash_int,
 };
+
+/// Cria um Runtime para o teste e retorna o ponteiro `i64` a ser passado
+/// como primeiro argumento (`rt`) às FFIs migradas para a A2.
+fn make_rt() -> i64 {
+    let rt = Box::new(Runtime::new());
+    let ptr = Box::into_raw(rt) as i64;
+    // FFIs periféricas (dict) usam o cache TLS RT_PTR.
+    kata_rt::set_rt_ptr(ptr);
+    ptr
+}
+
+/// Descarta o Runtime criado por `make_rt`.
+fn drop_rt(rt_ptr: i64) {
+    unsafe { drop(Box::from_raw(rt_ptr as *mut Runtime)) };
+}
 
 /// Simple SMI equality for testing: bit-equal comparison of i64.
 extern "C" fn smi_eq(a: i64, b: i64) -> i64 {
@@ -30,14 +44,17 @@ fn result_payload(result: i64) -> i64 {
 
 #[test]
 fn dict_empty_has_len_zero() {
-    let arena = kata_rt_arena_create();
+    let rt = make_rt();
+    let arena = kata_rt_arena_create(rt);
     let d = kata_rt_dict_empty(arena);
     assert_eq!(kata_rt_dict_len(d), make_smi(0));
+    drop_rt(rt);
 }
 
 #[test]
 fn dict_insert_then_get() {
-    let arena = kata_rt_arena_create();
+    let rt = make_rt();
+    let arena = kata_rt_arena_create(rt);
     let d = kata_rt_dict_empty(arena);
     let key = make_smi(42);
     let val = make_smi(100);
@@ -50,11 +67,13 @@ fn dict_insert_then_get() {
     let result = kata_rt_dict_get_checked(d2, key, hash, eq, arena);
     assert_eq!(result_tag(result), 0, "key should be found");
     assert_eq!(result_payload(result), val);
+    drop_rt(rt);
 }
 
 #[test]
 fn dict_insert_multiple_keys() {
-    let arena = kata_rt_arena_create();
+    let rt = make_rt();
+    let arena = kata_rt_arena_create(rt);
     let mut d = kata_rt_dict_empty(arena);
     let eq = fn_ptr_as_i64(smi_eq);
 
@@ -74,11 +93,13 @@ fn dict_insert_multiple_keys() {
         assert_eq!(result_tag(result), 0, "key {} should be found", i);
         assert_eq!(result_payload(result), make_smi(i * 10));
     }
+    drop_rt(rt);
 }
 
 #[test]
 fn dict_original_unchanged_after_insert() {
-    let arena = kata_rt_arena_create();
+    let rt = make_rt();
+    let arena = kata_rt_arena_create(rt);
     let d = kata_rt_dict_empty(arena);
     let key = make_smi(1);
     let hash = kata_rt_hash_int(key);
@@ -89,11 +110,13 @@ fn dict_original_unchanged_after_insert() {
     // Original should still be empty
     assert_eq!(kata_rt_dict_len(d), make_smi(0));
     assert_eq!(kata_rt_dict_len(d2), make_smi(1));
+    drop_rt(rt);
 }
 
 #[test]
 fn dict_replace_value() {
-    let arena = kata_rt_arena_create();
+    let rt = make_rt();
+    let arena = kata_rt_arena_create(rt);
     let d = kata_rt_dict_empty(arena);
     let key = make_smi(1);
     let hash = kata_rt_hash_int(key);
@@ -110,11 +133,13 @@ fn dict_replace_value() {
         make_smi(20),
         "value should be replaced"
     );
+    drop_rt(rt);
 }
 
 #[test]
 fn dict_contains() {
-    let arena = kata_rt_arena_create();
+    let rt = make_rt();
+    let arena = kata_rt_arena_create(rt);
     let mut d = kata_rt_dict_empty(arena);
     let eq = fn_ptr_as_i64(smi_eq);
 
@@ -148,11 +173,13 @@ fn dict_contains() {
             i
         );
     }
+    drop_rt(rt);
 }
 
 #[test]
 fn dict_get_missing_key_returns_err() {
-    let arena = kata_rt_arena_create();
+    let rt = make_rt();
+    let arena = kata_rt_arena_create(rt);
     let d = kata_rt_dict_empty(arena);
     let key = make_smi(999);
     let hash = kata_rt_hash_int(key);
@@ -160,11 +187,13 @@ fn dict_get_missing_key_returns_err() {
 
     let result = kata_rt_dict_get_checked(d, key, hash, eq, arena);
     assert_eq!(result_tag(result), 1, "missing key should return Err");
+    drop_rt(rt);
 }
 
 #[test]
 fn dict_iteration_order() {
-    let arena = kata_rt_arena_create();
+    let rt = make_rt();
+    let arena = kata_rt_arena_create(rt);
     let mut d = kata_rt_dict_empty(arena);
     let eq = fn_ptr_as_i64(smi_eq);
 
@@ -198,11 +227,13 @@ fn dict_iteration_order() {
     assert_eq!(keys[0], make_smi(3), "first should be key 3 (newest)");
     assert_eq!(keys[1], make_smi(2), "second should be key 2");
     assert_eq!(keys[2], make_smi(1), "third should be key 1 (oldest)");
+    drop_rt(rt);
 }
 
 #[test]
 fn dict_iteration_dedup_on_replace() {
-    let arena = kata_rt_arena_create();
+    let rt = make_rt();
+    let arena = kata_rt_arena_create(rt);
     let mut d = kata_rt_dict_empty(arena);
     let eq = fn_ptr_as_i64(smi_eq);
 
@@ -237,11 +268,13 @@ fn dict_iteration_dedup_on_replace() {
         state += 1;
     }
     assert_eq!(count, 1, "should only see key=1 once (dedup)");
+    drop_rt(rt);
 }
 
 #[test]
 fn dict_iteration_skips_removed() {
-    let arena = kata_rt_arena_create();
+    let rt = make_rt();
+    let arena = kata_rt_arena_create(rt);
     let mut d = kata_rt_dict_empty(arena);
     let eq = fn_ptr_as_i64(smi_eq);
 
@@ -284,4 +317,5 @@ fn dict_iteration_skips_removed() {
     for k in &keys {
         assert_ne!(*k, make_smi(2), "key 2 should not appear in iteration");
     }
+    drop_rt(rt);
 }

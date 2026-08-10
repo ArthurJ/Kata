@@ -1,8 +1,22 @@
-use kata_rt::{
-    kata_rt_arena_create, kata_rt_hash_int, kata_rt_set_contains, kata_rt_set_difference,
+use kata_rt::{Runtime, kata_rt_arena_create, kata_rt_hash_int, kata_rt_set_contains, kata_rt_set_difference,
     kata_rt_set_empty, kata_rt_set_insert, kata_rt_set_intersection, kata_rt_set_len,
     kata_rt_set_union,
 };
+
+/// Cria um Runtime para o teste e retorna o ponteiro `i64` a ser passado
+/// como primeiro argumento (`rt`) às FFIs migradas para a A2.
+fn make_rt() -> i64 {
+    let rt = Box::new(Runtime::new());
+    let ptr = Box::into_raw(rt) as i64;
+    // FFIs periféricas (set) usam o cache TLS RT_PTR.
+    kata_rt::set_rt_ptr(ptr);
+    ptr
+}
+
+/// Descarta o Runtime criado por `make_rt`.
+fn drop_rt(rt_ptr: i64) {
+    unsafe { drop(Box::from_raw(rt_ptr as *mut Runtime)) };
+}
 
 /// Simple SMI equality for testing: bit-equal comparison of i64.
 extern "C" fn smi_eq(a: i64, b: i64) -> i64 {
@@ -31,7 +45,8 @@ fn build_set(arena: i64, eq: i64, vals: &[i64]) -> i64 {
 
 #[test]
 fn set_basic_insert_contains() {
-    let arena = kata_rt_arena_create();
+    let rt = make_rt();
+    let arena = kata_rt_arena_create(rt);
     let eq = fn_ptr_as_i64(smi_eq);
 
     let s = build_set(arena, eq, &[1, 2, 3, 5, 8]);
@@ -59,20 +74,24 @@ fn set_basic_insert_contains() {
             v
         );
     }
+    drop_rt(rt);
 }
 
 #[test]
 fn set_len() {
-    let arena = kata_rt_arena_create();
+    let rt = make_rt();
+    let arena = kata_rt_arena_create(rt);
     let eq = fn_ptr_as_i64(smi_eq);
 
     let s = build_set(arena, eq, &[1, 2, 3, 5, 8]);
     assert_eq!(kata_rt_set_len(s), make_smi(5));
+    drop_rt(rt);
 }
 
 #[test]
 fn set_union() {
-    let arena = kata_rt_arena_create();
+    let rt = make_rt();
+    let arena = kata_rt_arena_create(rt);
     let eq = fn_ptr_as_i64(smi_eq);
 
     let a = build_set(arena, eq, &[1, 2, 3]);
@@ -96,11 +115,13 @@ fn set_union() {
             v
         );
     }
+    drop_rt(rt);
 }
 
 #[test]
 fn set_intersection() {
-    let arena = kata_rt_arena_create();
+    let rt = make_rt();
+    let arena = kata_rt_arena_create(rt);
     let eq = fn_ptr_as_i64(smi_eq);
 
     let a = build_set(arena, eq, &[1, 2, 3]);
@@ -121,11 +142,13 @@ fn set_intersection() {
         1,
         "intersection should contain 3"
     );
+    drop_rt(rt);
 }
 
 #[test]
 fn set_difference() {
-    let arena = kata_rt_arena_create();
+    let rt = make_rt();
+    let arena = kata_rt_arena_create(rt);
     let eq = fn_ptr_as_i64(smi_eq);
 
     let a = build_set(arena, eq, &[1, 2, 3]);
@@ -156,11 +179,13 @@ fn set_difference() {
         0,
         "difference should NOT contain 3"
     );
+    drop_rt(rt);
 }
 
 #[test]
 fn set_persistence() {
-    let arena = kata_rt_arena_create();
+    let rt = make_rt();
+    let arena = kata_rt_arena_create(rt);
     let eq = fn_ptr_as_i64(smi_eq);
 
     let s = build_set(arena, eq, &[1, 2, 3]);
@@ -187,4 +212,5 @@ fn set_persistence() {
     assert_eq!(kata_rt_set_contains(s, key, hash, eq), 0);
     // New set should contain 42
     assert_eq!(kata_rt_set_contains(s2, key, hash, eq), 1);
+    drop_rt(rt);
 }
