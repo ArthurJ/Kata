@@ -259,34 +259,45 @@ há `LambdaInferenceFail`.
 **DoD:** `f 10` onde `f := + _ 2` type-checka e retorna `Int`. `f 3.14`
 retorna `Float`.
 
-### Fase 4: HOFs com OverloadSet de aplicação parcial
+### Fase 4 ✅: HOFs com OverloadSet de aplicação parcial
 
-- Garantir que `infer_map`/`infer_fold` tratam `OverloadSet` do TypeEnv
-  (não só do DispatchTable).
-- Testar `map f [1 2 3]` onde `f := + _ 2`.
+- `infer_map`/`infer_fold`/`infer_filter` tratam `Ty::OverloadSet` no callback:
+  selecionam a overload cujos params casam com `elem_ty` (map/filter) ou
+  `(acc_ty, elem_ty)` (fold) via `match_score`.
+- `extract_callback_sig` no codegen trata OverloadSet sem panicar.
+- Testes: `overloadset_hof_inference.rs` (5 testes inference),
+  `overloadset_e2e.rs` (6 testes E2E incluindo map e fold).
 
-**DoD:** `map (+ _ 2) [1 2 3]` type-checka e executa, retornando `[3 4 5]`.
+**DoD:** `map f [1 2 3]` onde `f := + _ 2` type-checka e executa, retornando `[3 4 5]`. ✅
 
-### Fase 5: Codegen + JIT
+### Fase 5 ✅: Codegen + JIT via re-inferência
 
-- Monomorphizador instancia o lambda deferido com tipos concretos.
-- Codegen gera código para cada versão monomorfizada.
-- JIT executa corretamente.
+- Quando `infer_map`/`infer_fold` detecta `Ident` com `OverloadSet` no TypeEnv
+  e lambda deferido na side table, re-infere o lambda com hint concreto
+  (`Function([elem_ty], ?)` para map, `Function([acc_ty, elem_ty], acc_ty)`
+  para fold). O `hint_has_params` check em `infer_lambda` faz o hint ter
+  prioridade sobre o caminho Ambiguous — desambigua as overloads e produz
+  `Function([concreto], ret_ty)`. O codegen recebe um Lambda normal que
+  sabe resolver via `kata_ids`.
+- `fold f 0 [1 2 3]` com `f := + _ _` (OverloadSet verdadeiro) executa sem
+  SIGSEGV e retorna 6.
 
-**DoD:** E2E test: `let f := + _ 2` seguido de `f 10` executa e retorna 12.
-`f 3.14` executa e retorna 5.14.
+**DoD:** E2E test: `let f := + _ 2` seguido de `f 10` executa e retorna 12. ✅
+`f 3.14` executa e retorna 5.14. ✅
+`fold f 0 [1 2 3]` com `f := + _ _` retorna 6. ✅
 
-### Fase 6: Atualizar testes
+### Fase 6 ✅: Atualizar testes
 
-- Testes de partial dispatch que esperavam `LambdaInferenceFail` para
-  casos agora ambíguos: atualizar para esperar sucesso (OverloadSet deferido).
-- `partial_dispatch_both_holes_ambiguous` (`+ _ _`): agora produz OverloadSet
-  com todas as overloads de arity 2. Deferido. Se chamado com `f 10 20`,
-  resolve para Int Int → Int.
-- `hole_ascription_mixed_types_no_overload` (`+ _::Int _::Float`): agora
-  succeed (despacha para Int Float → Float). Atualizar.
-- `infer_no_overload_for_mixed_types` (`+ 1 3.14`): agora succeed. Mudar
-  para função sem overload cross-type ou apagar.
+- Snapshots TAST (5): `cargo insta accept` — overloads cross-type mudaram
+  o dispatch table visível nos snapshots.
+- Partial dispatch (8): `+ 10 _` agora produz `OverloadSet` (literal primeiro
+  casa com `Int Int`, `Int Float`, `Int Rational`). `+ _ _` agora succeed
+  com OverloadSet. Testes atualizados para esperar OverloadSet.
+- Semântica mudada (4): `+ 1 3.14` e `+ _::Int _::Float` agora succeed.
+  `lambda x y: + x y` agora succeed com OverloadSet.
+- Contagens (2): dispatch_table e prelude atualizadas para 12 overloads de `+`.
+- Tree-shaker (1): functions.len() atualizado.
+- REPL (1): contagem atualizada.
 - Snapshots TAST: `cargo insta accept --all`.
 - Contagens de overloads: atualizar.
 
