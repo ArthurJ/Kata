@@ -54,6 +54,7 @@ pub enum FfiSymbol {
     RatFromFloat,
     RatLiteral,
     IntToRational,
+    IntToFloat,
 
     // ── Text ─────────────────────────────────────────────
     StringConcat,
@@ -408,6 +409,7 @@ impl FfiSymbol {
             FfiSymbol::RatFromFloat => "kata_rt_rat_from_float",
             FfiSymbol::RatLiteral => "kata_rt_rat_literal",
             FfiSymbol::IntToRational => "kata_rt_int_to_rational",
+            FfiSymbol::IntToFloat => "kata_rt_int_to_float",
             FfiSymbol::StringConcat => "kata_rt_string_concat",
             FfiSymbol::StringLen => "kata_rt_string_len",
             FfiSymbol::TextLiteral => "kata_rt_text_literal",
@@ -598,6 +600,7 @@ impl FfiSymbol {
             FfiSymbol::RatShow | FfiSymbol::RatToFloat => Ty::text(),
             FfiSymbol::RatFromFloat | FfiSymbol::RatLiteral => Ty::rational(),
             FfiSymbol::IntToRational => Ty::rational(),
+            FfiSymbol::IntToFloat => Ty::float(),
             // Text
             FfiSymbol::StringConcat => Ty::text(),
             FfiSymbol::StringLen => Ty::int(),
@@ -785,6 +788,7 @@ impl FfiSymbol {
             FfiSymbol::RatFromFloat,
             FfiSymbol::RatLiteral,
             FfiSymbol::IntToRational,
+            FfiSymbol::IntToFloat,
             FfiSymbol::StringConcat,
             FfiSymbol::StringLen,
             FfiSymbol::TextLiteral,

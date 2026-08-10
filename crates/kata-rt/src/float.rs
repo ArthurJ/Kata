@@ -50,6 +50,19 @@ pub extern "C" fn kata_rt_fcmp_ge(a: f64, b: f64) -> i64 {
     if a >= b { 1 } else { 0 }
 }
 
+/// Converte Int (SMI-tagged ou BigInt ponteiro) para Float.
+/// Recebe o valor cru do codegen (SMI-tagged) e retorna f64.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_int_to_float(val: i64) -> f64 {
+    use crate::bigint::{bigint_to_string, is_smi_pub, decode_smi_pub};
+    let n = if is_smi_pub(val) {
+        decode_smi_pub(val) as f64
+    } else {
+        bigint_to_string(val).parse::<f64>().unwrap_or(f64::NAN)
+    };
+    n
+}
+
 /// Converte Float para String.
 pub fn float_to_string(val: f64) -> String {
     // Remove trailing zeros para output limpo: 5.85 não 5.850000000001

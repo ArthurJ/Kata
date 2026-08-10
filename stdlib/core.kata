@@ -373,6 +373,66 @@ from_float :: Float => Rational
 @ffi("kata_rt_int_to_rational")
 from_int :: Int => Rational
 
+@ffi("kata_rt_int_to_float")
+to_float :: Int => Float
+
+# ── Interoperabilidade numérica cross-type ──────────────────────
+# Overloads explícitos para operações entre tipos numéricos diferentes.
+# @commutative cobre a direção inversa — só precisamos declarar uma
+# direção por par. Tipo da saída = tipo do primeiro argumento.
+
+# Int × Float → Float
+@commutative
++ :: Int Float => Float
+lambda i f: + (to_float i) f
+
+@commutative
+- :: Int Float => Float
+lambda i f: - (to_float i) f
+
+@commutative
+* :: Int Float => Float
+lambda i f: * (to_float i) f
+
+# Int × Rational → Rational
+@commutative
++ :: Int Rational => Rational
+lambda i r: + (from_int i) r
+
+@commutative
+- :: Int Rational => Rational
+lambda i r: - (from_int i) r
+
+@commutative
+* :: Int Rational => Rational
+lambda i r: * (from_int i) r
+
+# Float × Rational → Float (converte Rational→Float, opera Float)
+@commutative
++ :: Float Rational => Float
+lambda f r: + f (to_float r)
+
+@commutative
+- :: Float Rational => Float
+lambda f r: - f (to_float r)
+
+@commutative
+* :: Float Rational => Float
+lambda f r: * f (to_float r)
+
+# Rational × Float → Rational (converte Float→Rational, opera Rational)
+@commutative
++ :: Rational Float => Rational
+lambda r f: + r (from_float f)
+
+@commutative
+- :: Rational Float => Rational
+lambda r f: - r (from_float f)
+
+@commutative
+* :: Rational Float => Rational
+lambda r f: * r (from_float f)
+
 # ── I/O (Actions FFI builtin) ──────────────────────────────────
 
 @ffi("kata_rt_print")

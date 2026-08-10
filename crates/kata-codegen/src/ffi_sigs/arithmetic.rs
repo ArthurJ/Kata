@@ -110,6 +110,11 @@ pub(crate) fn sig_for(sym: FfiSymbol) -> Option<Signature> {
             sig.params.push(AbiParam::new(I64));
             sig.returns.push(AbiParam::new(I64));
         }
+        // ── Int → Float (i64 tagged) → f64 ──
+        FfiSymbol::IntToFloat => {
+            sig.params.push(AbiParam::new(I64));
+            sig.returns.push(AbiParam::new(F64));
+        }
         // ── Text concat (ptr, ptr) → ptr ──
         FfiSymbol::StringConcat => {
             sig.params.push(AbiParam::new(I64));
