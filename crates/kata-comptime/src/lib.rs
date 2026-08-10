@@ -40,6 +40,20 @@ use walk::contains_comptime;
 // Re-export da API pública.
 pub use error::ComptimeError;
 
+/// Serializa um valor JIT-executado em `HeapSnapshotData`.
+///
+/// Wrapper público sobre `snapshot::serialize_snapshot` (que é `pub(crate)`).
+/// Usado pelo REPL para congelar bindings complexos (List, Struct, Tuple,
+/// Text, Sum) como snapshots persistidos na root_arena.
+pub fn serialize_value(
+    raw: i64,
+    ty: &kata_core::ty::Ty,
+    struct_registry: &kata_core::StructRegistry,
+    enum_registry: &kata_core::EnumRegistry,
+) -> Result<kata_core::snapshot::HeapSnapshotData, String> {
+    snapshot::serialize_snapshot(raw, ty, struct_registry, enum_registry)
+}
+
 /// Executa o comptime pass num `TypedModule`.
 ///
 /// Percorre `pre_entry` e `entry` substituindo nós `TypedExprKind::Comptime`

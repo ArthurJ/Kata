@@ -19,6 +19,7 @@ use std::path::PathBuf;
 
 use kata_ast::{Expr, Item, Module, Span, Spanned};
 use kata_codegen::jit_eval;
+use kata_comptime::serialize_value;
 use kata_core::ty::{PrimTy, Ty};
 use kata_inference::infer_module;
 use kata_lexer::lex;
@@ -39,11 +40,18 @@ use crate::merge_resolved;
 pub(crate) struct ReplSession {
     /// Items top-level acumulados (let bindings, sigs, data, enum, etc.).
     pub(crate) items: Vec<Spanned<Item>>,
-    /// Bindings `let` congelados — mapa nome → literal AST.
+    /// Bindings `let` escalares congelados — mapa nome → literal AST.
     /// Após avaliar `let x := <expr>` e obter um valor escalar, o valor
     /// é guardado aqui como literal. Nas próximas linhas, o item `let`
     /// nos items acumulados é substituído pelo literal antes do pipeline.
     pub(crate) frozen_bindings: HashMap<String, Expr>,
+    /// Bindings `let` complexos congelados — mapa nome → (snapshot_id, Ty).
+    /// Para tipos que não podem ser expressos como literais AST (List,
+    /// Struct, Tuple, Text, Sum), o valor é serializado como snapshot
+    /// e persistido na root_arena. O snapshot_id é global na sessão.
+    pub(crate) snapshot_bindings: HashMap<String, (u32, Ty)>,
+    /// Snapshots acumulados — indexados por snapshot_id global.
+    pub(crate) snapshots: Vec<kata_core::snapshot::HeapSnapshotData>,
     /// Prelude resolvido (recarregado em `:reset`).
     pub(crate) prelude: ResolvedModule,
     /// Runtime persistente — vive entre avaliações para preservar valores
@@ -66,6 +74,8 @@ impl ReplSession {
         Ok(Self {
             items: Vec::new(),
             frozen_bindings: HashMap::new(),
+            snapshot_bindings: HashMap::new(),
+            snapshots: Vec::new(),
             prelude,
             rt_ptr,
             history_path,
@@ -76,6 +86,8 @@ impl ReplSession {
     pub fn reset(&mut self) -> Result<(), String> {
         self.items.clear();
         self.frozen_bindings.clear();
+        self.snapshot_bindings.clear();
+        self.snapshots.clear();
         self.prelude = load_prelude()
             .map_err(|e| format!("erro ao carregar prelude: {}", crate::format_error_vec(&e)))?;
         // Recriar Runtime — descarta o antigo e cria um novo limpo.
@@ -191,10 +203,35 @@ impl ReplSession {
                                 ));
                                 let val_module = Module { items: val_items };
                                 if let Ok(val_result) = self.run_pipeline_eval(&val_module) {
+                                    // Tentar congelar como literal escalar.
                                     if let Some(literal) =
                                         Self::decode_to_literal(val_result.raw, &val_result.ty)
                                     {
                                         self.frozen_bindings.insert(name.clone(), literal);
+                                    } else {
+                                        // Tipo complexo — serializar como snapshot.
+                                        // Obter registries do resolved da avaliação.
+                                        let val_user = resolve(&val_module)
+                                            .map_err(|e| format!("erro de resolução: {}", crate::format_error_vec(&e)))?;
+                                        let val_resolved = merge_resolved(self.prelude.clone(), val_user);
+                                        match kata_comptime::serialize_value(
+                                            val_result.raw,
+                                            &val_result.ty,
+                                            &val_resolved.struct_registry,
+                                            &val_resolved.enum_registry,
+                                        ) {
+                                            Ok(snap) => {
+                                                let snapshot_id = self.snapshots.len() as u32;
+                                                self.snapshots.push(snap);
+                                                self.snapshot_bindings
+                                                    .insert(name.clone(), (snapshot_id, val_result.ty));
+                                            }
+                                            Err(e) => {
+                                                // Não consegue serializar — deixar como item
+                                                // acumulado (reprocessa a cada linha).
+                                                eprintln!("aviso: não foi possível congelar binding '{name}': {e}");
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -296,11 +333,21 @@ impl ReplSession {
     }
 
     /// Roda o pipeline completo até execução JIT.
+    ///
+    /// Após infer_module, injeta bindings complexos congelados como
+    /// HeapSnapshot no pre_entry da TAST, e inclui os snapshots no
+    /// TypedModule.snapshots para que o codegen emita load_snapshot.
     fn run_pipeline_eval(&self, module: &Module) -> Result<crate::ExecResult, String> {
         let user = resolve(module)
             .map_err(|e| format!("erro de resolução: {}", crate::format_error_vec(&e)))?;
         let resolved = merge_resolved(self.prelude.clone(), user);
-        let typed = infer_module(module, &resolved).map_err(|e| format!("erro de tipo: {e}"))?;
+        let mut typed = infer_module(module, &resolved).map_err(|e| format!("erro de tipo: {e}"))?;
+
+        // Injetar bindings complexos congelados como HeapSnapshot no pre_entry.
+        if !self.snapshot_bindings.is_empty() {
+            self.inject_snapshot_bindings(&mut typed, &resolved.struct_registry, &resolved.enum_registry);
+        }
+
         let mono = monomorphize(typed);
         let mono = optimize(mono);
         let mono = kata_monomorph::MonoModule::from(tree_shake(mono.inner));
@@ -310,6 +357,71 @@ impl ReplSession {
             raw: jit.raw,
             ty: jit.ty,
         })
+    }
+
+    /// Substitui valores de bindings complexos no pre_entry da TAST por
+    /// HeapSnapshot. Para cada `Let { name, value }` no pre_entry onde
+    /// `name` está em `snapshot_bindings`, substitui `value` por um
+    /// TypedExpr com `kind: HeapSnapshot { snapshot_id, ty }`.
+    ///
+    /// Também inclui os snapshots correspondentes em `typed.snapshots`
+    /// para que o codegen emita `kata_rt_load_snapshot` no prólogo.
+    fn inject_snapshot_bindings(
+        &self,
+        typed: &mut kata_inference::TypedModule,
+        _struct_registry: &kata_core::StructRegistry,
+        _enum_registry: &kata_core::EnumRegistry,
+    ) {
+        use kata_inference::{TypedExpr, TypedExprKind};
+        use kata_core::escape::EscapeTarget;
+
+        // Para o REPL, typed.snapshots começa vazio (sem comptime pass).
+        // Incluímos TODOS os snapshots da sessão em typed.snapshots, na
+        // ordem global. O snapshot_id no HeapSnapshot (TAST) e no
+        // load_snapshot (codegen) é o índice em typed.snapshots, que
+        // corresponde ao global_id.
+        let existing_count = typed.snapshots.len() as u32;
+
+        // Adicionar todos os snapshots da sessão que ainda não estão
+        // em typed.snapshots.
+        for (i, snap) in self.snapshots.iter().enumerate() {
+            let global_id = i as u32;
+            if global_id >= existing_count {
+                typed.snapshots.push(snap.clone());
+            }
+        }
+
+        // Substituir o value do Let no pre_entry por HeapSnapshot.
+        // Para shadowing: o último Let com um nome dado usa o snapshot
+        // mais recente (snapshot_bindings[name] = (global_id, ty)).
+        for (name, (global_id, ty)) in &self.snapshot_bindings {
+            let snap_expr = TypedExpr {
+                span: Span::synthetic(),
+                ty: ty.clone(),
+                tail_pos: false,
+                escape: EscapeTarget::Caller,
+                kind: TypedExprKind::HeapSnapshot {
+                    snapshot_id: *global_id,
+                    ty: ty.clone(),
+                },
+            };
+
+            // Substituir apenas o último Let com este nome (shadowing).
+            // O último Let no pre_entry com este nome é o ativo.
+            let mut last_idx: Option<usize> = None;
+            for (i, pre) in typed.pre_entry.iter().enumerate() {
+                if let TypedExprKind::Let { name: n, .. } = &pre.node.kind {
+                    if n == name {
+                        last_idx = Some(i);
+                    }
+                }
+            }
+            if let Some(i) = last_idx {
+                if let TypedExprKind::Let { value, .. } = &mut typed.pre_entry[i].node.kind {
+                    *value = Box::new(Spanned::new(snap_expr, Span::synthetic()));
+                }
+            }
+        }
     }
 
     /// Constrói a lista de items substituindo bindings congelados por literais.
