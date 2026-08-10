@@ -403,6 +403,62 @@ pub(crate) fn infer_apply(
         return result;
     }
 
+    // Caminho 2c: OverloadSet no TypeEnv (PRD OverloadSet — aplicação parcial
+    // ambígua). O binding tem tipo OverloadSet — múltiplas overloads casam
+    // com o partial dispatch. Seleciona a overload correta pelo tipo concreto
+    // dos args e re-infere o lambda com os tipos selecionados.
+    if let Some(Ty::OverloadSet { name: ov_name, overloads }) = env.lookup(&func_name).cloned() {
+        if let Some(deferred) = ctx.deferred_lambdas.borrow().get(&func_name).cloned() {
+            // Seleciona a overload cujos param types casam com os arg types.
+            let mut matched: Vec<(Vec<Ty>, Ty)> = Vec::new();
+            for (ov_params, ov_ret) in &overloads {
+                if ov_params.len() != arg_types.len() {
+                    continue;
+                }
+                let score = kata_core::dispatch::match_score(
+                    &arg_types,
+                    ov_params,
+                    ctx.interface_registry,
+                );
+                if score.is_compatible(arg_types.len()) {
+                    matched.push((ov_params.clone(), ov_ret.clone()));
+                }
+            }
+
+            if matched.len() == 1 {
+                // Única overload casou — re-infere o lambda com os tipos concretos.
+                // infer_apply_lambda infere os arg types e os usa como param types.
+                return infer_apply_lambda(
+                    &deferred.patterns,
+                    &deferred.body,
+                    &deferred.guards,
+                    &deferred.with_bindings,
+                    &expanded_args,
+                    span,
+                    env,
+                    ctx,
+                );
+            }
+
+            if matched.is_empty() {
+                return Err(MiddleError::TypeMismatch {
+                    expected: format!(
+                        "uma overload de `{ov_name}` compatível com [{}]",
+                        arg_types.iter().map(|t| t.to_string()).collect::<Vec<_>>().join(", ")
+                    ),
+                    found: "nenhuma overload compatível".into(),
+                    span: (*span).into(),
+                });
+            }
+
+            // Múltiplas overloads casam mesmo no call site — ambíguo.
+            return Err(MiddleError::AmbiguousDispatch {
+                name: ov_name,
+                span: (*span).into(),
+            });
+        }
+    }
+
     // Caminho 2: TypeEnv (call_indirect para lambda como valor).
     // Sub-caminho 2a: lambda deferido (use-site inference). Se o binding
     // tem InferVar nos param_types e está na side table de deferred lambdas,

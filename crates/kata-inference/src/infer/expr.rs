@@ -406,6 +406,32 @@ pub(crate) fn infer_expr_hinted(
                 }
                 Err(e) => return Err(e),
             };
+
+            // Fase 2 (PRD OverloadSet): se o lambda retornou OverloadSet
+            // (partial dispatch ambíguo), registra o AST do lambda na side
+            // table de deferred. O infer_apply caminho 2c consulta a side
+            // table quando vê OverloadSet no TypeEnv e re-infere com tipos
+            // concretos dos args.
+            if let Ty::OverloadSet { .. } = &typed_value.ty {
+                if let Expr::Lambda {
+                    patterns,
+                    body,
+                    guards,
+                    with_bindings,
+                } = &value.node
+                {
+                    ctx.deferred_lambdas.borrow_mut().insert(
+                        name.clone(),
+                        DeferredLambda {
+                            patterns: patterns.clone(),
+                            body: body.clone(),
+                            guards: guards.clone(),
+                            with_bindings: with_bindings.clone(),
+                        },
+                    );
+                }
+            }
+
             let val_ty = typed_value.ty.clone();
 
             // Rastrear provenance: se `let g := soma` onde `soma` é Ident

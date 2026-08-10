@@ -6,14 +6,15 @@
 //! 3. Erro LambdaInferenceFail (DoD 30) se nenhum mecanismo resolve
 
 use kata_ast::{Expr, GuardClause, Pattern, Span, Spanned, WithBinding};
+use kata_core::escape::EscapeTarget;
 use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 
-use crate::typed::{TypedExprKind, TypedLambdaClause};
+use crate::typed::{TypedExpr, TypedExprKind, TypedLambdaClause};
 
 use super::apply_lambda::infer_lambda_body;
 use super::expr::InferCtx;
-use super::helpers::{InferResult, check_patterns, process_with_bindings};
+use super::helpers::{peel_grouping_expr, InferResult, check_patterns, process_with_bindings};
 use super::partial_dispatch::{
     PartialDispatchOutcome, PartialDispatchReason, try_partial_dispatch,
 };
@@ -61,6 +62,82 @@ pub(crate) fn infer_lambda(
     // None nessas posições e tipos concretos nas demais.
     let partial_outcome =
         try_partial_dispatch(patterns, body, env, ctx.table, ctx.interface_registry);
+
+    // DoD 29: Hint top-down via ascription em lambda.
+    // O hint tem PRIORIDADE sobre partial dispatch — a anotação explícita
+    // do programador (`(lambda ...)::(Int -> Int)`) vence a inferência
+    // bottom-up. Se o body não type-checka com os tipos hinted, isso é
+    // um erro legítimo de tipo.
+    //
+    // O hint também desambigua overloads cross-type: `map (+ 10 _) [1 2 3]`
+    // fornece hint `Function([Int], ?)` que seleciona `Int Int → Int` entre
+    // as múltiplas overloads de `+`.
+    let hint_has_params = matches!(hint, Some(Ty::Function(hp, _)) if !hp.is_empty());
+
+    // Fase 2 (PRD OverloadSet): se partial dispatch é ambíguo (múltiplas
+    // overloads casam) E não há hint útil, constrói Ty::OverloadSet com as
+    // projeções e defere o lambda. O tipo do lambda é OverloadSet, não
+    // Function([InferVar], ...). O call site seleciona a overload correta
+    // pelo tipo concreto dos args.
+    if !hint_has_params {
+        if let PartialDispatchOutcome::Ambiguous(projections) = &partial_outcome {
+            // Extrai o nome do callee do body (ex: "+" em `+ __hole_0 2`).
+            let callee_name = extract_callee_name(body).unwrap_or_else(|| "__unknown".to_string());
+
+            let overload_set_ty = Ty::OverloadSet {
+                name: callee_name.clone(),
+                overloads: projections.clone(),
+            };
+
+            // Constrói skeleton do lambda com InferVar nos params.
+            let n_params = patterns.len();
+            let param_types: Vec<Ty> = (0..n_params).map(|i| Ty::InferVar(i as u32)).collect();
+            let ret_ty = Ty::InferVar(n_params as u32);
+
+            let typed_patterns = patterns
+                .iter()
+                .enumerate()
+                .map(|(i, pat)| {
+                    let name = if let Pattern::Ident(n) = &pat.node {
+                        n.clone()
+                    } else {
+                        format!("__param_{i}")
+                    };
+                    Spanned::new(
+                        crate::typed::TypedPattern::Ident {
+                            name,
+                            ty: Ty::InferVar(i as u32),
+                        },
+                        patterns[i].span,
+                    )
+                })
+                .collect();
+
+            let skeleton_kind = TypedExprKind::Lambda {
+                func_name: None,
+                param_types: param_types.clone(),
+                ret_ty: ret_ty.clone(),
+                clauses: vec![TypedLambdaClause {
+                    patterns: typed_patterns,
+                    body: Spanned::new(
+                        TypedExpr {
+                            span: body.span,
+                            ty: ret_ty.clone(),
+                            tail_pos: true,
+                            escape: EscapeTarget::Local,
+                            kind: TypedExprKind::Unit,
+                        },
+                        body.span,
+                    ),
+                    guards: Vec::new(),
+                    with_bindings: Vec::new(),
+                }],
+                captures: Vec::new(),
+            };
+
+            return Ok((overload_set_ty, skeleton_kind));
+        }
+    }
 
     // DoD 29: Hint top-down via ascription em lambda.
     // O hint tem PRIORIDADE sobre partial dispatch — a anotação explícita
@@ -161,6 +238,9 @@ pub(crate) fn infer_lambda(
 /// Extrai `(Vec<Ty>, Option<PartialDispatchFailure>)` do outcome.
 ///
 /// Se `Inferred`, retorna os tipos e None.
+/// Se `Ambiguous`, retorna Vec vazio e None — o caller (`infer_lambda`)
+/// verifica o outcome diretamente antes de chamar `extract_partial` para
+/// construir o `Ty::OverloadSet`.
 /// Se `Failed`, retorna Vec vazio e Some(failure) — o caller vai produzir
 /// LambdaInferenceFail com o contexto.
 /// Se `NotApplicable`, retorna Vec vazio e None — nenhum contexto disponível.
@@ -172,6 +252,7 @@ fn extract_partial(
 ) {
     match outcome {
         PartialDispatchOutcome::Inferred(tys) => (tys, None),
+        PartialDispatchOutcome::Ambiguous(_) => (Vec::new(), None),
         PartialDispatchOutcome::Failed(f) => (Vec::new(), Some(f)),
         PartialDispatchOutcome::NotApplicable => (Vec::new(), None),
     }
@@ -209,4 +290,17 @@ fn format_failure_detail(f: super::partial_dispatch::PartialDispatchFailure) -> 
             )
         }
     }
+}
+
+/// Extrai o nome do callee de um body que é `Apply(Ident(name), ...)`.
+/// Usado para nomear o `Ty::OverloadSet` quando partial dispatch é ambíguo.
+fn extract_callee_name(body: &Spanned<Expr>) -> Option<String> {
+    let body_core = peel_grouping_expr(&body.node);
+    if let Expr::Apply { callee, .. } = body_core {
+        let callee_core = peel_grouping_expr(&callee.node);
+        if let Expr::Ident { name } = callee_core {
+            return Some(name.clone());
+        }
+    }
+    None
 }

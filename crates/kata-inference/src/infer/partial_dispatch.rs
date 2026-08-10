@@ -7,7 +7,7 @@
 //! demais. Se resolve único, retorna os tipos extraídos.
 
 use kata_ast::{Expr, Pattern, Spanned};
-use kata_core::dispatch::{DispatchError, DispatchTable};
+use kata_core::dispatch::{DispatchError, DispatchTable, PartialResolveOutcome};
 use kata_core::interface_registry::InterfaceRegistry;
 use kata_core::ty::{Ty, TypeEnv};
 
@@ -22,6 +22,9 @@ use kata_resolution::resolve_type_expr;
 pub(crate) enum PartialDispatchOutcome {
     /// Tipos inferidos com sucesso — um por parâmetro do lambda.
     Inferred(Vec<Ty>),
+    /// Múltiplas overloads casam — carrega projeções para construir
+    /// `Ty::OverloadSet`. O lambda é deferido e o dispatch resolve no call site.
+    Ambiguous(Vec<(Vec<Ty>, Ty)>),
     /// Partial dispatch era aplicável (body é Apply com callee conhecido)
     /// mas falhou ao resolver. Carrega informação para diagnosticar.
     Failed(PartialDispatchFailure),
@@ -154,7 +157,23 @@ pub(crate) fn try_partial_dispatch(
 
     // Tenta resolve_partial.
     let result = match table.resolve_partial(&callee_name, &partial_args, iface_reg) {
-        Ok(r) => r,
+        Ok(PartialResolveOutcome::Unique(r)) => r,
+        Ok(PartialResolveOutcome::Ambiguous(projections)) => {
+            // Múltiplas overloads casam — retorna Ambiguous com as projeções.
+            // O caller (infer_lambda) constrói Ty::OverloadSet e defere o lambda.
+            //
+            // Exceção: se há ascription_hints que cobrem todos os parâmetros,
+            // usa os hints diretamente (o usuário forneceu tipos explícitos).
+            if ascription_hints.iter().all(|h| h.is_some()) {
+                return PartialDispatchOutcome::Inferred(
+                    ascription_hints
+                        .into_iter()
+                        .map(|h| h.expect("checked above"))
+                        .collect(),
+                );
+            }
+            return PartialDispatchOutcome::Ambiguous(projections.projections);
+        }
         Err(dispatch_err) => {
             // Se resolve_partial falha, mas há ascription_hints, usa eles diretamente.
             if ascription_hints.iter().all(|h| h.is_some()) {

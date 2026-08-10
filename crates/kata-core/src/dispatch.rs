@@ -89,6 +89,28 @@ pub struct PartialDispatchResult {
     pub hole_types: Vec<Option<Ty>>,
 }
 
+/// Outcome de dispatch parcial quando múltiplas overloads casam.
+///
+/// Cada projeção é `(param_types, ret_ty)` — os tipos das posições ausentes
+/// (holes) extraídos de uma overload compatível, e o tipo de retorno dessa
+/// overload. O call site seleciona a projeção correta pelo tipo concreto dos
+/// argumentos.
+#[derive(Debug, Clone)]
+pub struct PartialProjections {
+    /// Projeções: uma por overload compatível.
+    /// `(Vec<Ty>, Ty)` = (tipos dos params do lambda, tipo de retorno).
+    pub projections: Vec<(Vec<Ty>, Ty)>,
+}
+
+/// Resultado de `resolve_partial` — único ou ambíguo com projeções.
+#[derive(Debug, Clone)]
+pub enum PartialResolveOutcome {
+    /// Uma única overload casou — caminho existente.
+    Unique(PartialDispatchResult),
+    /// Múltiplas overloads casam — carrega projeções para OverloadSet.
+    Ambiguous(PartialProjections),
+}
+
 /// Resultado de dispatch com flag de swap comutativo.
 ///
 /// `swapped = true` quando o dispatch resolveu via commutative swap (args
@@ -206,13 +228,14 @@ impl DispatchTable {
     ///
     /// Holes (`None`) não participam do scoring — não somam nem excluem.
     /// Se exatamente um overload casa com os args presentes, retorna os tipos
-    /// esperados nas posições ausentes. Se múltiplos casam, é ambíguo.
+    /// esperados nas posições ausentes. Se múltiplos overloads distintos casam,
+    /// retorna `Ambiguous` com as projeções (uma por overload compatível).
     pub fn resolve_partial(
         &self,
         name: &str,
         args: &[Option<Ty>],
         iface_reg: &InterfaceRegistry,
-    ) -> Result<PartialDispatchResult, DispatchError> {
+    ) -> Result<PartialResolveOutcome, DispatchError> {
         self.resolve_partial_inner(name, args, false, iface_reg)
     }
 
@@ -222,7 +245,7 @@ impl DispatchTable {
         args: &[Option<Ty>],
         tried_commutative: bool,
         iface_reg: &InterfaceRegistry,
-    ) -> Result<PartialDispatchResult, DispatchError> {
+    ) -> Result<PartialResolveOutcome, DispatchError> {
         let overloads = self
             .entries
             .get(name)
@@ -323,17 +346,34 @@ impl DispatchTable {
 
         if all_same {
             // Todos casam com o mesmo overload (ex: comutatividade duplicou) — retorna o primeiro
-            return Ok(PartialDispatchResult {
+            return Ok(PartialResolveOutcome::Unique(PartialDispatchResult {
                 overload: candidates[0].0.clone(),
                 hole_types: candidates[0].1.clone(),
-            });
+            }));
         }
 
-        // Múltiplos overloads distintos casam → ambíguo
-        Err(DispatchError::AmbiguousDispatch {
-            name: name.to_string(),
-            arg_count: args.len(),
-        })
+        // Múltiplos overloads distintos casam → ambíguo com projeções.
+        // Cada projeção: (tipos das posições None, ret_ty da overload).
+        // Deduplica por (param_types nas posições None, ret_ty) — swap comutativo
+        // pode gerar a mesma projeção duas vezes.
+        let mut seen = HashSet::new();
+        let mut projections: Vec<(Vec<Ty>, Ty)> = Vec::new();
+        for (info, hole_types) in &candidates {
+            // Extrai os tipos das posições None (holes) como os params do lambda.
+            let proj_params: Vec<Ty> = hole_types
+                .iter()
+                .filter_map(|h| h.clone())
+                .collect();
+            let proj = (proj_params, info.ret.clone());
+            let proj_key = (proj.0.clone(), proj.1.clone());
+            if seen.insert(proj_key) {
+                projections.push(proj);
+            }
+        }
+
+        Ok(PartialResolveOutcome::Ambiguous(PartialProjections {
+            projections,
+        }))
     }
 
     fn resolve_inner(
