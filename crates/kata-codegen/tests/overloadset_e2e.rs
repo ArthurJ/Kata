@@ -141,15 +141,12 @@ fn overloadset_map_com_both_holes() {
     }
 }
 
-// ── HOF com OverloadSet verdadeiro (ambos holes) ────────────
-// TODO: fold f 0 [1 2 3] com f := + _ _ produz SIGSEGV no codegen.
-// O callback Ident("f") tem tipo OverloadSet e o codegen não sabe
-// resolver o function pointer. Fase 5 precisa instanciar o lambda
-// deferido com tipos concretos no codegen.
-//
-// #[test]
-// fn overloadset_fold_com_ident() {
-//     let (raw, ty) = eval_src("let f := + _ _\nfold f 0 [1 2 3]");
-//     assert_eq!(ty, Ty::int());
-//     assert_eq!(raw >> 1, 6);
-// }
+#[test]
+fn overloadset_fold_com_ident() {
+    // + _ _ → OverloadSet (ambos holes)
+    // fold f 0 [1 2 3] → infer_fold re-infere lambda com hint Function([Int, Int], Int)
+    // → callback vira Lambda normal → codegen resolve → 6
+    let (raw, ty) = eval_src("let f := + _ _\nfold f 0 [1 2 3]");
+    assert_eq!(ty, Ty::int());
+    assert_eq!(raw >> 1, 6);
+}

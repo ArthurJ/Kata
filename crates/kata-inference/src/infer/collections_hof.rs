@@ -18,8 +18,9 @@ use kata_diagnostics::MiddleError;
 
 use crate::typed::{TypedExpr, TypedExprKind};
 
-use super::expr::{infer_expr_hinted, InferCtx};
+use super::expr::{infer_expr_hinted, DeferredLambda, InferCtx};
 use super::helpers::{peel_grouping_expr, InferResult};
+use super::lambda::infer_lambda;
 
 /// Resolve um callback que é `Expr::Ident` referenciando uma função do
 /// DispatchTable (ex: `+`, `*`, `<` usado como callback standalone).
@@ -133,10 +134,75 @@ pub(crate) fn infer_map(
     //    O hint faz o lambda inferir seus params a partir do tipo do elemento.
     //    Se o callback é um operador standalone (Expr::Ident no DispatchTable),
     //    desugar para lambda sintético antes de inferir.
+    //
+    //    Fase 5: se o callback é Ident("f") com tipo OverloadSet no TypeEnv e
+    //    tem lambda deferido na side table, re-infere o lambda com hint concreto
+    //    Function([elem_ty], InferVar). O hint desambigua as overloads e produz
+    //    Function([elem_ty], ret_ty) em vez de OverloadSet. O codegen então
+    //    recebe um Lambda normal que sabe resolver.
     let hint = Ty::Function(vec![elem_ty.clone()], Box::new(Ty::InferVar(999)));
+
+    // Tentar resolver OverloadSet via lambda deferido antes de infer_expr_hinted.
     let callback_typed = match resolve_operator_callback(&args[0], 1, env, ctx, &hint) {
         Some(result) => result?,
-        None => infer_expr_hinted(&args[0].node, &args[0].span, env, ctx, false, Some(&hint))?,
+        None => {
+            // Verificar se é Ident com OverloadSet e lambda deferido.
+            let core = peel_grouping_expr(&args[0].node);
+            if let Expr::Ident { name } = core {
+                if env
+                    .lookup(name)
+                    .is_some_and(|ty| matches!(ty, Ty::OverloadSet { .. })) {
+                    if let Some(deferred) = ctx.deferred_lambdas.borrow().get(name).cloned() {
+                        let (cb_ty, cb_kind) = infer_lambda(
+                            &deferred.patterns,
+                            &deferred.body,
+                            &deferred.guards,
+                            &deferred.with_bindings,
+                            &args[0].span,
+                            env,
+                            ctx,
+                            Some(&hint),
+                        )?;
+                        // infer_lambda com hint concreto produz Function, não OverloadSet.
+                        // Se ainda produziu OverloadSet, o hint não desambiguou —
+                        // cai para o caminho de seleção no passo 4.
+                        let mut cb_typed = TypedExpr {
+                            span: args[0].span,
+                            ty: cb_ty,
+                            tail_pos: false,
+                            escape: kata_core::escape::EscapeTarget::Caller,
+                            kind: cb_kind,
+                        };
+                        // Se infer_lambda com hint ainda retornou OverloadSet,
+                        // usar o caminho 4 (seleção manual).
+                        if !matches!(cb_typed.ty, Ty::OverloadSet { .. }) {
+                            // Hint resolveu — callback é Function normal.
+                            let cb_ret = match &cb_typed.ty {
+                                Ty::Function(_, ret) => (**ret).clone(),
+                                _ => unreachable!("infer_lambda com hint deve produzir Function"),
+                            };
+                            let map_ret = Ty::List(Box::new(cb_ret.clone()));
+                            let kind = TypedExprKind::Map {
+                                callback: Box::new(Spanned::new(cb_typed, args[0].span)),
+                                collection: Box::new(Spanned::new(coll_typed, args[1].span)),
+                                coll_ty,
+                                elem_ty,
+                                ret_ty: map_ret.clone(),
+                            };
+                            return Ok((map_ret, kind));
+                        }
+                        // OverloadSet ainda — cai para passo 4 com cb_typed
+                        cb_typed
+                    } else {
+                        infer_expr_hinted(&args[0].node, &args[0].span, env, ctx, false, Some(&hint))?
+                    }
+                } else {
+                    infer_expr_hinted(&args[0].node, &args[0].span, env, ctx, false, Some(&hint))?
+                }
+            } else {
+                infer_expr_hinted(&args[0].node, &args[0].span, env, ctx, false, Some(&hint))?
+            }
+        }
     };
 
     // 4. Extrair ret_ty do callback (B).
@@ -349,13 +415,64 @@ pub(crate) fn infer_fold(
     // 3. Inferir o callback (args[0]) com hint = Function([acc_ty, elem_ty], acc_ty).
     //    O callback recebe (acumulador, elemento) e retorna o novo acumulador.
     //    Se o callback é um operador standalone, desugar para lambda.
+    //
+    //    Fase 5: se o callback é Ident com OverloadSet e lambda deferido,
+    //    re-infere o lambda com hint concreto. O hint desambigua as overloads.
     let hint = Ty::Function(
         vec![acc_ty.clone(), elem_ty.clone()],
         Box::new(acc_ty.clone()),
     );
     let callback_typed = match resolve_operator_callback(&args[0], 2, env, ctx, &hint) {
         Some(result) => result?,
-        None => infer_expr_hinted(&args[0].node, &args[0].span, env, ctx, false, Some(&hint))?,
+        None => {
+            let core = peel_grouping_expr(&args[0].node);
+            if let Expr::Ident { name } = core {
+                if env
+                    .lookup(name)
+                    .is_some_and(|ty| matches!(ty, Ty::OverloadSet { .. }))
+                {
+                    if let Some(deferred) = ctx.deferred_lambdas.borrow().get(name).cloned() {
+                        let (cb_ty, cb_kind) = infer_lambda(
+                            &deferred.patterns,
+                            &deferred.body,
+                            &deferred.guards,
+                            &deferred.with_bindings,
+                            &args[0].span,
+                            env,
+                            ctx,
+                            Some(&hint),
+                        )?;
+                        let cb_typed = TypedExpr {
+                            span: args[0].span,
+                            ty: cb_ty,
+                            tail_pos: false,
+                            escape: kata_core::escape::EscapeTarget::Caller,
+                            kind: cb_kind,
+                        };
+                        if !matches!(cb_typed.ty, Ty::OverloadSet { .. }) {
+                            // Hint resolveu — callback é Function normal.
+                            let fold_ret = acc_ty.clone();
+                            let kind = TypedExprKind::Fold {
+                                callback: Box::new(Spanned::new(cb_typed, args[0].span)),
+                                initial: Box::new(Spanned::new(init_typed, args[1].span)),
+                                collection: Box::new(Spanned::new(coll_typed, args[2].span)),
+                                coll_ty,
+                                elem_ty,
+                                ret_ty: fold_ret.clone(),
+                            };
+                            return Ok((fold_ret, kind));
+                        }
+                        cb_typed
+                    } else {
+                        infer_expr_hinted(&args[0].node, &args[0].span, env, ctx, false, Some(&hint))?
+                    }
+                } else {
+                    infer_expr_hinted(&args[0].node, &args[0].span, env, ctx, false, Some(&hint))?
+                }
+            } else {
+                infer_expr_hinted(&args[0].node, &args[0].span, env, ctx, false, Some(&hint))?
+            }
+        }
     };
 
     // 4. Verificar que o callback retorna o tipo do acumulador.
