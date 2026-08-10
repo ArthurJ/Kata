@@ -18,5 +18,5 @@
 /// `arena_handle` é um handle válido.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_range_alloc(arena_handle: i64) -> i64 {
-    crate::arena::kata_rt_arena_alloc(arena_handle, 32)
+    crate::arena::kata_rt_arena_alloc(crate::arena::rt_ptr(), arena_handle, 32)
 }

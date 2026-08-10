@@ -18,7 +18,7 @@
 use std::sync::Once;
 
 use crate::fiber::clear_suspend_tls;
-use crate::scheduler::{reset_scheduler_tls, reset_yield_tls};
+use crate::runtime::Runtime;
 
 /// Instala `SIG_IGN` para SIGCHLD e SIGPIPE uma única vez, antes do primeiro
 /// `fork()`.
@@ -70,7 +70,7 @@ fn ensure_signal_handlers() {
 /// - `args_ptr` deve ser um ponteiro válido na arena do parent.
 /// - `arena_handle` deve ser um handle de arena válido.
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_spawn_process(fn_ptr: i64, args_ptr: i64, arena_handle: i64) -> i64 {
+pub extern "C" fn kata_rt_spawn_process(rt: i64, fn_ptr: i64, args_ptr: i64, arena_handle: i64) -> i64 {
     // Instalar SIG_IGN para SIGCHLD e SIGPIPE antes do fork(). Idempotente
     // via Once — programas que nunca fazem spawn! não são afetados.
     // O child herda ambos os dispositions via fork().
@@ -86,37 +86,23 @@ pub extern "C" fn kata_rt_spawn_process(fn_ptr: i64, args_ptr: i64, arena_handle
         }
         0 => {
             // ── CHILD ──────────────────────────────────────
-            // O child herda o address space do parent via COW, mas as TLS de
-            // runtime apontam para o scheduler/suspend do parent (em mid-execução).
-            // Resetar as TLS de runtime para ter um scheduler limpo.
-            //
-            // Ordem: clear_suspend_tls (dangling Suspend ptrs) →
-            //        reset_scheduler_tls (SCHEDULER + PENDING_SPAWNS) →
-            //        reset_yield_tls (YIELD_COUNTER + HAS_READY_FIBER).
-            //
-            // NÃO resetar: arenas (child precisa dos args via COW), type table
-            // (child precisa para marshalling), snapshots, log config.
+            // O child herda o address space do parent via COW, mas o
+            // Runtime do parent (scheduler, arenas) está em mid-execução.
+            // Limpar TLS de Suspend (dangling) e criar um novo Runtime.
             clear_suspend_tls();
-            reset_scheduler_tls();
-            reset_yield_tls();
 
-            // Inicializar scheduler próprio do child. Cria uma nova root arena.
-            // A arena herdada do parent (arena_handle) é usada como caller_arena
-            // — o child lê os args dela via COW.
-            let child_root_arena = crate::scheduler::kata_rt_scheduler_init();
+            // Alocar um novo Runtime para o child.
+            let child_rt = Box::new(Runtime::new());
+            let rt_ptr = Box::into_raw(child_rt) as i64;
 
             // Spawn da Action como fiber. Usa a arena herdada como caller_arena
             // (args estão lá via COW) e a nova root arena do child como fiber_arena.
-            // kata_rt_spawn registra no scheduler diretamente (is_in_fiber() == false
-            // após clear_suspend_tls).
-            crate::scheduler::kata_rt_spawn(fn_ptr, arena_handle, args_ptr);
+            crate::scheduler::kata_rt_spawn(rt_ptr, fn_ptr, arena_handle, args_ptr);
 
             // Executar o scheduler até todos os fibers completarem.
-            let _ = crate::scheduler::kata_rt_run();
+            let _ = crate::scheduler::kata_rt_run(rt_ptr);
 
-            // Child termina. Não há pipe, não há resultado para enviar.
-            // Suprimir warning de unused — child_root_arena é valida durante o run.
-            let _ = child_root_arena;
+            // Child termina.
             unsafe {
                 libc::_exit(0);
             }

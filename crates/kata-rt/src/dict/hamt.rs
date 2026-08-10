@@ -72,7 +72,7 @@ fn tag_collision(ptr: i64) -> i64 {
 
 /// Allocate a KVPair (24 bytes: key, value, hash).
 fn alloc_kvpair(key: i64, value: i64, hash: i64, arena: i64) -> i64 {
-    let ptr = crate::arena::kata_rt_arena_alloc(arena, 24);
+    let ptr = crate::arena::kata_rt_arena_alloc(crate::arena::rt_ptr(), arena, 24);
     if ptr == 0 {
         return 0;
     }
@@ -104,7 +104,7 @@ fn alloc_node(bitmap: u32, children: &[i64], arena: i64) -> i64 {
     let header_size = 8; // bitmap as i64
     let children_size = children.len() * 8;
     let total = header_size + children_size;
-    let ptr = crate::arena::kata_rt_arena_alloc(arena, total as i64);
+    let ptr = crate::arena::kata_rt_arena_alloc(crate::arena::rt_ptr(), arena, total as i64);
     if ptr == 0 {
         return 0;
     }
@@ -120,7 +120,7 @@ fn alloc_node(bitmap: u32, children: &[i64], arena: i64) -> i64 {
 /// Allocate a collision node with the given entries (KVPair pointers).
 fn alloc_collision(count: i64, entries: &[i64], arena: i64) -> i64 {
     let total = 16 + entries.len() * 8;
-    let ptr = crate::arena::kata_rt_arena_alloc(arena, total as i64);
+    let ptr = crate::arena::kata_rt_arena_alloc(crate::arena::rt_ptr(), arena, total as i64);
     if ptr == 0 {
         return 0;
     }
@@ -174,7 +174,7 @@ unsafe fn read_collision_entry(node_ptr: i64, i: i64) -> i64 {
 /// Returns a pointer to the root node.
 pub(super) fn hamt_empty(arena_handle: i64) -> i64 {
     // Root node: 8 bytes (bitmap=0 as i64). No children.
-    let ptr = crate::arena::kata_rt_arena_alloc(arena_handle, 8);
+    let ptr = crate::arena::kata_rt_arena_alloc(crate::arena::rt_ptr(), arena_handle, 8);
     if ptr == 0 {
         return 0;
     }
@@ -256,7 +256,7 @@ pub(crate) unsafe fn collect_all_kvpairs(hamt_root: i64, arena_handle: i64) -> (
     let count = kvpair_ptrs.len() as i64;
     if count == 0 {
         // Return a dummy empty array (1 entry = 0, count = 0).
-        let arr = crate::arena::kata_rt_arena_alloc(arena_handle, 8);
+        let arr = crate::arena::kata_rt_arena_alloc(crate::arena::rt_ptr(), arena_handle, 8);
         if arr != 0 {
             unsafe { std::ptr::write_unaligned(arr as *mut i64, 0) };
         }
@@ -265,7 +265,7 @@ pub(crate) unsafe fn collect_all_kvpairs(hamt_root: i64, arena_handle: i64) -> (
 
     // Allocate array in arena: count * 8 bytes.
     let arr_size = count * 8;
-    let arr = crate::arena::kata_rt_arena_alloc(arena_handle, arr_size);
+    let arr = crate::arena::kata_rt_arena_alloc(crate::arena::rt_ptr(), arena_handle, arr_size);
     if arr == 0 {
         return (0, 0);
     }
@@ -892,7 +892,7 @@ pub(super) unsafe fn make_kv_tuple(arr: i64, index: i64, arena_handle: i64) -> i
     let value = unsafe { read_kvpair_value(kvptr) };
 
     // Allocate 16-byte tuple: key at 0, value at 8.
-    let tuple = crate::arena::kata_rt_arena_alloc(arena_handle, 16);
+    let tuple = crate::arena::kata_rt_arena_alloc(crate::arena::rt_ptr(), arena_handle, 16);
     if tuple == 0 {
         return crate::sum::kata_rt_store_sum_result(1, 0, arena_handle);
     }

@@ -42,7 +42,7 @@ pub extern "C" fn kata_rt_load_snapshot(
     }
 
     // 1. Alocar na root_arena.
-    let base_ptr = crate::arena::kata_rt_arena_alloc(root_arena, bytes_len);
+    let base_ptr = crate::arena::kata_rt_arena_alloc(crate::arena::rt_ptr(), root_arena, bytes_len);
     if base_ptr == 0 {
         return;
     }

@@ -41,7 +41,6 @@ mod serialize;
 pub use deserialize::kata_rt_from_bytes;
 pub use serialize::kata_rt_to_bytes;
 
-use std::cell::RefCell;
 
 /// Projeção runtime de `Ty` para marshalling — informação estrutural mínima
 /// para caminhar um valor em runtime.
@@ -68,30 +67,15 @@ pub enum TypeShape {
     Array(Box<TypeShape>),
 }
 
-thread_local! {
-    static TYPE_TABLE: RefCell<Vec<TypeShape>> = const { RefCell::new(Vec::new()) };
+/// Registra a type table no Runtime. Chamado pelo driver antes do JIT.
+pub fn register_type_table(rt: i64, types: Vec<TypeShape>) {
+    let runtime = unsafe { &mut *(rt as *mut crate::runtime::Runtime) };
+    runtime.type_table = types;
 }
 
-/// Registra a type table Rust-to-Rust. Chamado pelo driver antes do JIT.
-pub fn register_type_table(types: Vec<TypeShape>) {
-    TYPE_TABLE.with(|table| {
-        *table.borrow_mut() = types;
-    });
-}
-
-/// Reseta a type table — chamado entre execuções de teste.
-#[allow(dead_code)] // reservada para futura uso na infra IPC
-pub(crate) fn reset_type_table() {
-    TYPE_TABLE.with(|table| {
-        table.borrow_mut().clear();
-    });
-}
-
-fn get_type_shape(type_id: i64) -> Option<TypeShape> {
-    TYPE_TABLE.with(|table| {
-        let table = table.borrow();
-        table.get(type_id as usize).cloned()
-    })
+fn get_type_shape(rt: i64, type_id: i64) -> Option<TypeShape> {
+    let runtime = unsafe { &*(rt as *const crate::runtime::Runtime) };
+    runtime.type_table.get(type_id as usize).cloned()
 }
 
 /// Lê um i64 não-alinhado em `ptr + offset`. Usado por serialize e deserialize.
@@ -108,73 +92,101 @@ mod tests {
     use super::*;
     use crate::arena::{kata_rt_arena_alloc, kata_rt_arena_create, kata_rt_arena_destroy};
 
-    fn make_arena() -> i64 {
-        kata_rt_arena_create()
+    struct TestRt {
+        rt_ptr: i64,
+    }
+    impl TestRt {
+        fn new() -> Self {
+            let rt = Box::new(crate::runtime::Runtime::new());
+            let ptr = Box::into_raw(rt) as i64;
+            crate::arena::set_rt_ptr(ptr);
+            TestRt { rt_ptr: ptr }
+        }
+    }
+    impl Drop for TestRt {
+        fn drop(&mut self) {
+            unsafe {
+                drop(Box::from_raw(self.rt_ptr as *mut crate::runtime::Runtime));
+            }
+        }
     }
 
-    fn register_types() {
-        register_type_table(vec![
-            TypeShape::Prim, // 0: Int
-            TypeShape::Text, // 1: Text
-            TypeShape::Tuple(vec![
-                // 2: (Int, Text)
-                TypeShape::Prim,
-                TypeShape::Text,
-            ]),
-            TypeShape::List(Box::new(TypeShape::Prim)), // 3: List<Int>
-        ]);
+    fn make_arena(rt: i64) -> i64 {
+        kata_rt_arena_create(rt)
+    }
+
+    fn register_types(rt: i64) {
+        register_type_table(
+            rt,
+            vec![
+                TypeShape::Prim, // 0: Int
+                TypeShape::Text, // 1: Text
+                TypeShape::Tuple(vec![
+                    // 2: (Int, Text)
+                    TypeShape::Prim,
+                    TypeShape::Text,
+                ]),
+                TypeShape::List(Box::new(TypeShape::Prim)), // 3: List<Int>
+            ],
+        );
     }
 
     #[test]
     fn to_bytes_from_bytes_int() {
-        register_types();
-        let arena = make_arena();
+        let _rt = TestRt::new();
+        let rt = _rt.rt_ptr;
+        register_types(rt);
+        let arena = make_arena(rt);
         // Int 42 como SMI: (42 << 1) | 1 = 85
         let val = (42i64 << 1) | 1;
-        let blob = kata_rt_to_bytes(val, 0, arena); // type_id=0 (Prim)
+        let blob = kata_rt_to_bytes(rt, val, 0, arena); // type_id=0 (Prim)
         assert!(blob != 0, "to_bytes produziu blob válido");
-        let recovered = kata_rt_from_bytes(blob, arena);
+        let recovered = kata_rt_from_bytes(rt, blob, arena);
         assert_eq!(recovered, val, "roundtrip Int SMI");
-        kata_rt_arena_destroy(arena);
+        kata_rt_arena_destroy(rt, arena);
     }
 
     #[test]
     fn to_bytes_from_bytes_text() {
-        register_types();
-        let arena = make_arena();
+        let _rt = TestRt::new();
+        let rt = _rt.rt_ptr;
+        register_types(rt);
+        let arena = make_arena(rt);
         // Aloca "hello" como C string na arena.
         let s = b"hello\0";
-        let text_ptr = kata_rt_arena_alloc(arena, s.len() as i64);
+        let text_ptr = kata_rt_arena_alloc(rt, arena, s.len() as i64);
         unsafe {
             std::ptr::copy_nonoverlapping(s.as_ptr(), text_ptr as *mut u8, s.len());
         }
-        let blob = kata_rt_to_bytes(text_ptr, 1, arena); // type_id=1 (Text)
+        let blob = kata_rt_to_bytes(rt, text_ptr, 1, arena); // type_id=1 (Text)
         assert!(blob != 0, "to_bytes produziu blob válido");
-        let recovered = kata_rt_from_bytes(blob, arena);
+        let recovered = kata_rt_from_bytes(rt, blob, arena);
         assert!(recovered != 0, "from_bytes produziu ponteiro válido");
         // Verifica conteúdo.
         let cstr = unsafe { std::ffi::CStr::from_ptr(recovered as *const std::os::raw::c_char) };
         assert_eq!(cstr.to_bytes(), b"hello", "roundtrip Text");
-        kata_rt_arena_destroy(arena);
+        kata_rt_arena_destroy(rt, arena);
     }
 
     #[test]
     fn to_bytes_from_bytes_tuple() {
-        register_types();
-        let arena = make_arena();
+        let _rt = TestRt::new();
+        let rt = _rt.rt_ptr;
+        register_types(rt);
+        let arena = make_arena(rt);
         // Tupla (42, "oi"):
-        let tuple_ptr = kata_rt_arena_alloc(arena, 16);
+        let tuple_ptr = kata_rt_arena_alloc(rt, arena, 16);
         let s = b"oi\0";
-        let text_ptr = kata_rt_arena_alloc(arena, s.len() as i64);
+        let text_ptr = kata_rt_arena_alloc(rt, arena, s.len() as i64);
         unsafe {
             std::ptr::copy_nonoverlapping(s.as_ptr(), text_ptr as *mut u8, s.len());
             let smi = (42i64 << 1) | 1;
             std::ptr::write_unaligned(tuple_ptr as *mut i64, smi);
             std::ptr::write_unaligned((tuple_ptr as *mut u8).add(8) as *mut i64, text_ptr);
         }
-        let blob = kata_rt_to_bytes(tuple_ptr, 2, arena); // type_id=2 (Tuple)
+        let blob = kata_rt_to_bytes(rt, tuple_ptr, 2, arena); // type_id=2 (Tuple)
         assert!(blob != 0);
-        let recovered = kata_rt_from_bytes(blob, arena);
+        let recovered = kata_rt_from_bytes(rt, blob, arena);
         assert!(recovered != 0);
         // Lê campo 0 (Int SMI) e campo 1 (Text ptr).
         let field0 = unsafe { read_i64_at(recovered as *const u8, 0) };
@@ -183,22 +195,24 @@ mod tests {
         assert!(field1 != 0, "campo 1 = Text ptr válido");
         let cstr = unsafe { std::ffi::CStr::from_ptr(field1 as *const std::os::raw::c_char) };
         assert_eq!(cstr.to_bytes(), b"oi", "campo 1 = \"oi\"");
-        kata_rt_arena_destroy(arena);
+        kata_rt_arena_destroy(rt, arena);
     }
 
     #[test]
     fn to_bytes_from_bytes_list_int() {
-        register_types();
-        let arena = make_arena();
+        let _rt = TestRt::new();
+        let rt = _rt.rt_ptr;
+        register_types(rt);
+        let arena = make_arena(rt);
         // Lista [1, 2, 3] de Ints SMI.
         let mut list = 0i64;
         for &v in &[3i64, 2, 1] {
             let smi = (v << 1) | 1;
             list = crate::list::kata_rt_list_cons(smi, list, arena);
         }
-        let blob = kata_rt_to_bytes(list, 3, arena); // type_id=3 (List<Int>)
+        let blob = kata_rt_to_bytes(rt, list, 3, arena); // type_id=3 (List<Int>)
         assert!(blob != 0);
-        let recovered = kata_rt_from_bytes(blob, arena);
+        let recovered = kata_rt_from_bytes(rt, blob, arena);
         assert!(recovered != 0);
         // Verifica: head=1, tail.head=2, tail.tail.head=3
         let h1 = crate::list::kata_rt_list_head(recovered);
@@ -209,6 +223,6 @@ mod tests {
         assert_eq!(h1 >> 1, 1, "head = 1");
         assert_eq!(h2 >> 1, 2, "second = 2");
         assert_eq!(h3 >> 1, 3, "third = 3");
-        kata_rt_arena_destroy(arena);
+        kata_rt_arena_destroy(rt, arena);
     }
 }

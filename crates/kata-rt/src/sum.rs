@@ -18,7 +18,7 @@
 /// `tag` e `payload` são valores i64 válidos.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_store_sum_result(tag: i64, payload: i64, arena_handle: i64) -> i64 {
-    let ptr = crate::arena::kata_rt_arena_alloc(arena_handle, 16);
+    let ptr = crate::arena::kata_rt_arena_alloc(crate::arena::rt_ptr(), arena_handle, 16);
     if ptr == 0 {
         return 0; // falha na alocação
     }

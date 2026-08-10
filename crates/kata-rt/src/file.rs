@@ -94,11 +94,9 @@ pub(crate) struct FileInner {
 /// (fim do processo). Para FileInner, o close faz `drop_in_place` para
 /// fechar o FD; a memória permanece na arena até o teardown.
 fn arena_alloc(size: i64) -> i64 {
-    let root_arena = crate::arena::kata_rt_get_root_arena_handle();
-    if root_arena < 0 {
-        return 0;
-    }
-    crate::arena::kata_rt_arena_alloc(root_arena, size)
+    let rt = crate::arena::rt_ptr();
+    let root_arena = crate::arena::kata_rt_get_root_arena_handle(rt);
+    crate::arena::kata_rt_arena_alloc(rt, root_arena, size)
 }
 
 /// Aloca um Result box com tag e payload.

@@ -10,41 +10,39 @@
 //! sua própria arena e a destrói no epílogo. Valores na caller's arena
 //! sobrevivem à destruição da arena local.
 //!
-//! `kata_rt_arena_create` cria uma nova arena Bump no pool e retorna um handle
-//! opaco (índice no Vec). `kata_rt_arena_create_tracked` cria uma arena Tracked.
-//! `kata_rt_arena_alloc(handle, size)` aloca `size` bytes alinhados a 8 na
-//! arena do handle. `kata_rt_arena_destroy(handle)` reseta SÓ a arena do
-//! handle (não o pool inteiro).
-//!
-//! TLS `ROOT_ARENA_HANDLE` — setada por `kata_rt_scheduler_init`, lida pelo
-//! codegen e por `kata_rt_decref` (Fio 16) para acessar a root arena.
+//! A2 — Runtime reentrante: o pool de arenas e o handle da root arena
+//! agora vivem na struct `Runtime` (ver `runtime.rs`). As FFIs recebem
+//! `rt: i64` (ponteiro para `*mut Runtime`) como primeiro parâmetro.
 
 use bumpalo::Bump;
 use std::alloc::Layout;
-use std::cell::{Cell, RefCell};
 
-// ── TLS: handle da root arena ─────────────────────────────────────────
+use crate::runtime::Runtime;
+
+// ── TLS cache do ponteiro Runtime ativo ─────────────────────────────────
 //
-// Setada por `kata_rt_scheduler_init` (ffi.rs). Lida pelo codegen
-// (LowerCtx.root_arena) e por `kata_rt_decref` (arc.rs) para liberar
-// blocos ARC-managed individualmente.
-
+// A2 (transitório): As FFIs centrais (scheduler, arena, arc, marshal) recebem
+// `rt: i64` explicitamente. As FFIs periféricas (array, list, dict, bytes, etc.)
+// leem `rt` deste cache TLS. Isto evita mudar a ABI de ~50 FFIs numa única
+// passada. O cache é setado por `kata_rt_scheduler_init` (ou o driver) antes
+// de cada execução.
+//
+// Reentrância: cada execução seta seu próprio `RT_PTR` antes de rodar. REPL
+// (sequencial) e LSP (request a request) funcionam. Concorrência real na
+// mesma thread não ocorre na prática.
 thread_local! {
-    pub(crate) static ROOT_ARENA_HANDLE: Cell<i64> = const { Cell::new(0) };
+    static RT_PTR: std::cell::Cell<i64> = const { std::cell::Cell::new(0) };
 }
 
-/// Define o handle da root arena em TLS. Chamado por `kata_rt_scheduler_init`.
-pub(crate) fn set_root_arena_handle(handle: i64) {
-    ROOT_ARENA_HANDLE.with(|h| h.set(handle));
+/// Define o ponteiro do Runtime ativo em TLS. Chamado pelo driver/entry point
+/// antes de cada execução. As FFIs periféricas leem via `rt_ptr()`.
+pub fn set_rt_ptr(rt: i64) {
+    RT_PTR.with(|c| c.set(rt));
 }
 
-/// Lê o handle da root arena de TLS. Retorna 0 se não inicializado.
-///
-/// FFI C-ABI exposta ao codegen — o `alloc_capture_box` chama esta função
-/// para obter o handle da root arena onde CaptureBoxes são alocados (Fio 16).
-#[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_get_root_arena_handle() -> i64 {
-    ROOT_ARENA_HANDLE.with(|h| h.get())
+/// Lê o ponteiro do Runtime ativo de TLS. Usado por FFIs periféricas.
+pub(crate) fn rt_ptr() -> i64 {
+    RT_PTR.with(|c| c.get())
 }
 
 // ── Fiber arena (bumpalo) ─────────────────────────────────────────────
@@ -83,10 +81,6 @@ impl Default for Arena {
 /// Usada pela root arena para valores ARC-managed que precisam sobreviver
 /// à destruição de fibers individuais e ser liberados individualmente
 /// quando o refcount chega a 0.
-///
-/// - `alloc`: `std::alloc::alloc(layout)` + `blocks.push((ptr, layout))` [O(1)+push]
-/// - `dealloc`: encontra ptr em `blocks`, `swap_remove`, `std::alloc::dealloc` [O(n) busca, O(1) remove]
-/// - `destroy`: percorre `blocks`, `dealloc` cada um [O(n)]
 pub(crate) struct TrackedArena {
     /// Blocos alocados e ainda vivos. Usado para dealloc individual e teardown.
     blocks: Vec<(*mut u8, Layout)>,
@@ -118,8 +112,7 @@ impl TrackedArena {
     }
 
     /// Libera um bloco individualmente. `ptr` e `layout` devem corresponder
-    /// a uma alocação anterior. Se `ptr` não está em `blocks`, é no-op
-    /// (defensivo — evita panic em double-dealloc).
+    /// a uma alocação anterior. Se `ptr` não está em `blocks`, é no-op.
     pub(crate) fn dealloc(&mut self, ptr: *mut u8, layout: Layout) {
         if let Some(idx) = self.blocks.iter().position(|(p, _)| *p == ptr) {
             self.blocks.swap_remove(idx);
@@ -144,9 +137,6 @@ impl Default for TrackedArena {
 
 impl Drop for TrackedArena {
     fn drop(&mut self) {
-        // Safety: todos os blocos em `self.blocks` foram alocados com
-        // `std::alloc::alloc` com o Layout registrado. Liberar no drop
-        // evita leak se a TrackedArena for dropada sem `destroy()` explícito.
         self.destroy();
     }
 }
@@ -161,180 +151,61 @@ pub(crate) enum ArenaKind {
     Tracked(TrackedArena),
 }
 
-// ── Pool de arenas thread-local para FFI ─────────────────────────────
-
-thread_local! {
-    static ARENAS: RefCell<Vec<ArenaKind>> = const { RefCell::new(Vec::new()) };
-}
-
-/// Reseta todas as arenas do pool thread-local. Chamado entre execuções
-/// de teste para evitar poluição de estado global.
-pub(crate) fn reset_all_arenas() {
-    ARENAS.with(|arenas| {
-        arenas.borrow_mut().clear();
-    });
-    ROOT_ARENA_HANDLE.with(|h| h.set(0));
-}
-
 // ── Funções C-ABI para o codegen ─────────────────────────────────────
+//
+// A2: Todas as FFIs agora recebem `rt: i64` (ponteiro para `*mut Runtime`)
+// como primeiro parâmetro. O pool de arenas vive em `Runtime.arenas`.
 
 /// Cria uma nova arena Bump no pool e retorna um handle opaco (índice no Vec).
-///
-/// O handle é válido até `kata_rt_arena_destroy(handle)` ser chamado.
-/// Handles não são reusados — cada `arena_create` produz um handle novo.
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_arena_create() -> i64 {
-    ARENAS.with(|arenas| {
-        let mut arenas = arenas.borrow_mut();
-        let id = arenas.len() as i64;
-        arenas.push(ArenaKind::Bump(Arena::new()));
-        id
-    })
+pub extern "C" fn kata_rt_arena_create(rt: i64) -> i64 {
+    let runtime = unsafe { &mut *(rt as *mut Runtime) };
+    runtime.arena_create()
 }
 
 /// Cria uma nova arena Tracked no pool e retorna um handle opaco.
-///
-/// Arena Tracked usa `std::alloc` + tracking para dealloc individual.
-/// Usada para a root arena (valores ARC-managed).
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_arena_create_tracked() -> i64 {
-    ARENAS.with(|arenas| {
-        let mut arenas = arenas.borrow_mut();
-        let id = arenas.len() as i64;
-        arenas.push(ArenaKind::Tracked(TrackedArena::new()));
-        id
-    })
+pub extern "C" fn kata_rt_arena_create_tracked(rt: i64) -> i64 {
+    let runtime = unsafe { &mut *(rt as *mut Runtime) };
+    runtime.arena_create_tracked()
 }
 
 /// Aloca `size` bytes alinhados a 8 na arena do handle.
 /// Retorna o ponteiro para o bloco alocado, ou 0 se falhar.
-///
-/// Dispatcha por tipo de arena:
-/// - `Bump` → `bump.alloc_layout(layout)` (inalterado)
-/// - `Tracked` → `std::alloc::alloc(layout)` + tracking
-///
-/// # Safety
-/// `handle` deve ser um valor retornado por `kata_rt_arena_create` ou
-/// `kata_rt_arena_create_tracked`. `size` deve ser > 0.
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_arena_alloc(handle: i64, size: i64) -> i64 {
-    if size <= 0 {
-        return 0;
-    }
-    let layout = match Layout::from_size_align(size as usize, 8) {
-        Ok(l) => l,
-        Err(_) => return 0,
-    };
-    ARENAS.with(|arenas| {
-        let mut arenas = arenas.borrow_mut();
-        let idx = handle as usize;
-        if idx >= arenas.len() {
-            return 0;
-        }
-        let ptr = match &mut arenas[idx] {
-            ArenaKind::Bump(a) => a.alloc(layout),
-            ArenaKind::Tracked(t) => t.alloc(layout),
-        };
-        if ptr.is_null() {
-            0
-        } else {
-            // Zera o bloco para evitar garbage de alocações anteriores.
-            unsafe {
-                std::ptr::write_bytes(ptr, 0, size as usize);
-            }
-            ptr as i64
-        }
-    })
+pub extern "C" fn kata_rt_arena_alloc(rt: i64, handle: i64, size: i64) -> i64 {
+    let runtime = unsafe { &mut *(rt as *mut Runtime) };
+    runtime.arena_alloc(handle, size)
 }
 
 /// Libera um bloco individualmente da arena Tracked do handle.
-///
-/// Para arenas Bump, é no-op (bumpalo não suporta dealloc individual).
-/// Para arenas Tracked, chama `std::alloc::dealloc` e remove do tracking.
-///
-/// `size` deve corresponder ao `size` passado em `kata_rt_arena_alloc`.
-///
-/// # Safety
-/// `handle` deve ser válido. `ptr` deve ser um ponteiro retornado por
-/// `kata_rt_arena_alloc` na arena do handle. `size` deve ser o mesmo
-/// usado na alocação.
+/// No-op para arenas Bump.
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_arena_dealloc(handle: i64, ptr: i64, size: i64) {
-    if handle < 0 || ptr == 0 || size <= 0 {
-        return;
-    }
-    let layout = match Layout::from_size_align(size as usize, 8) {
-        Ok(l) => l,
-        Err(_) => return,
-    };
-    ARENAS.with(|arenas| {
-        let mut arenas = arenas.borrow_mut();
-        let idx = handle as usize;
-        if idx >= arenas.len() {
-            return;
-        }
-        if let ArenaKind::Tracked(t) = &mut arenas[idx] {
-            t.dealloc(ptr as *mut u8, layout);
-        }
-        // Bump: no-op — bumpalo não suporta dealloc individual.
-    })
+pub extern "C" fn kata_rt_arena_dealloc(rt: i64, handle: i64, ptr: i64, size: i64) {
+    let runtime = unsafe { &mut *(rt as *mut Runtime) };
+    runtime.arena_dealloc(handle, ptr, size);
 }
 
 /// Reseta SÓ a arena do handle (libera a memória daquela arena).
-/// Outras arenas no pool não são afetadas.
-///
-/// Para arenas Bump: `bump.reset()` (O(1), libera tudo).
-/// Para arenas Tracked: percorre `blocks` e `dealloc` cada um (O(n)).
-///
-/// # Safety
-/// `handle` deve ser um valor retornado por `kata_rt_arena_create` ou
-/// `kata_rt_arena_create_tracked`.
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_arena_destroy(handle: i64) {
-    if handle < 0 {
-        return;
-    }
-    ARENAS.with(|arenas| {
-        let mut arenas = arenas.borrow_mut();
-        let idx = handle as usize;
-        if let Some(a) = arenas.get_mut(idx) {
-            match a {
-                ArenaKind::Bump(b) => b.reset(),
-                ArenaKind::Tracked(t) => t.destroy(),
-            }
-        }
-    })
+pub extern "C" fn kata_rt_arena_destroy(rt: i64, handle: i64) {
+    let runtime = unsafe { &mut *(rt as *mut Runtime) };
+    runtime.arena_destroy(handle);
 }
 
 /// Retorna (alloc_count, dealloc_count) da arena Tracked do handle.
-///
-/// Para arenas Bump, retorna (0, 0) (não rastreia individualmente).
-/// Usado por testes de leak counting para verificar que allocs e deallocs
-/// individuais fecham no fim da execução.
-///
-/// `dealloc_count` inclui só dealocações individuais (`kata_rt_arena_dealloc`),
-/// não `arena_destroy` (bulk). Após `destroy()`, ambos voltam a 0.
-///
-/// # Safety
-/// `handle` deve ser válido.
 #[unsafe(no_mangle)]
-pub(crate) extern "C" fn kata_rt_arena_stats(handle: i64) -> i64 {
-    if handle < 0 {
-        return 0;
-    }
-    ARENAS.with(|arenas| {
-        let arenas = arenas.borrow();
-        let idx = handle as usize;
-        if idx >= arenas.len() {
-            return 0;
-        }
-        match &arenas[idx] {
-            ArenaKind::Tracked(t) => {
-                // Codifica os dois contadores em um único i64:
-                // bits 0-31: alloc_count, bits 32-63: dealloc_count
-                ((t.dealloc_count as i64) << 32) | (t.alloc_count as i64 & 0xFFFF_FFFF)
-            }
-            _ => 0,
-        }
-    })
+pub(crate) extern "C" fn kata_rt_arena_stats(rt: i64, handle: i64) -> i64 {
+    let runtime = unsafe { &mut *(rt as *mut Runtime) };
+    runtime.arena_stats(handle)
+}
+
+/// Lê o handle da root arena do Runtime.
+///
+/// FFI C-ABI exposta ao codegen — o `alloc_capture_box` chama esta função
+/// para obter o handle da root arena onde CaptureBoxes são alocados (Fio 16).
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_get_root_arena_handle(rt: i64) -> i64 {
+    let runtime = unsafe { &mut *(rt as *mut Runtime) };
+    runtime.root_arena_handle
 }

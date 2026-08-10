@@ -1,6 +1,6 @@
 //! Arc<T> — CaptureBox para closures com captura.
 //!
-//! `kata_rt_alloc_arc(fn_ptr, captures_ptr, n_captures, arena_handle)` aloca
+//! `kata_rt_alloc_arc(rt, fn_ptr, captures_ptr, n_captures, arena_handle)` aloca
 //! um CaptureBox na arena especificada. O box contém:
 //!
 //! ```text
@@ -14,15 +14,14 @@
 //! ```
 //!
 //! `kata_rt_incref(box_ptr)` incrementa o refcount.
-//! `kata_rt_decref(box_ptr)` decrementa o refcount. Quando chega a 0,
+//! `kata_rt_decref(rt, box_ptr)` decrementa o refcount. Quando chega a 0,
 //! o box é liberado individualmente da root arena via
-//! `kata_rt_arena_dealloc(root_arena_handle, box_ptr, size)`.
+//! `kata_rt_arena_dealloc(rt, root_arena_handle, box_ptr, size)`.
 //!
-//! Layout: 24 bytes de header + n_captures * 8 bytes de captures data.
-//! O `n_captures` no header permite que `decref` calcule o size para
-//! `std::alloc::dealloc` (que requer o `Layout` exato).
+//! A2: `kata_rt_alloc_arc` e `kata_rt_decref` agora recebem `rt` porque
+//! acessam o pool de arenas via `Runtime`.
 
-use crate::arena::kata_rt_get_root_arena_handle;
+use crate::runtime::Runtime;
 
 /// Offset do `n_captures` no header do CaptureBox.
 const N_CAPTURES_OFFSET: usize = 16;
@@ -33,16 +32,14 @@ const HEADER_SIZE: usize = 24;
 
 /// Aloca um CaptureBox na arena especificada e retorna o ponteiro.
 ///
+/// `rt` é o ponteiro para `Runtime` (necessário para acessar o pool de arenas).
 /// `fn_ptr` é o ponteiro da função JIT (para `call_indirect`).
 /// `captures_ptr` é um ponteiro para um array de i64 com os valores capturados.
 /// `n_captures` é o número de valores capturados.
 /// `arena_handle` é o handle da arena onde o box é alocado.
-///
-/// # Safety
-/// `captures_ptr` deve ser um ponteiro válido para `n_captures` i64s,
-/// ou 0/null se `n_captures == 0`.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_alloc_arc(
+    rt: i64,
     fn_ptr: i64,
     captures_ptr: i64,
     n_captures: i64,
@@ -52,24 +49,18 @@ pub extern "C" fn kata_rt_alloc_arc(
         return 0;
     }
 
-    // Tamanho: 24 bytes header + n_captures * 8 bytes
     let total_size = HEADER_SIZE as i64 + n_captures * 8;
-
-    let box_ptr = crate::arena::kata_rt_arena_alloc(arena_handle, total_size);
+    let box_ptr = crate::arena::kata_rt_arena_alloc(rt, arena_handle, total_size);
     if box_ptr == 0 {
-        return 0; // falha na alocação
+        return 0;
     }
 
     unsafe {
         let ptr = box_ptr as *mut u8;
-        // Header: fn_ptr no offset 0
         std::ptr::write_unaligned(ptr as *mut i64, fn_ptr);
-        // Header: refcount = 1 no offset 8
         std::ptr::write_unaligned(ptr.add(8) as *mut i64, 1);
-        // Header: n_captures no offset 16 (Fio 16 — para dealloc)
         std::ptr::write_unaligned(ptr.add(N_CAPTURES_OFFSET) as *mut i64, n_captures);
 
-        // Captures: copia do array de origem para o box (offset 24)
         if n_captures > 0 && captures_ptr != 0 {
             let src = captures_ptr as *const i64;
             let dst = ptr.add(CAPTURES_OFFSET) as *mut i64;
@@ -83,10 +74,7 @@ pub extern "C" fn kata_rt_alloc_arc(
     box_ptr
 }
 
-/// Incrementa o refcount de um CaptureBox.
-///
-/// # Safety
-/// `box_ptr` deve ser um ponteiro válido retornado por `kata_rt_alloc_arc`.
+/// Incrementa o refcount de um CaptureBox. Não precisa de `rt`.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_incref(box_ptr: i64) -> i64 {
     if box_ptr == 0 {
@@ -103,16 +91,9 @@ pub extern "C" fn kata_rt_incref(box_ptr: i64) -> i64 {
 /// Decrementa o refcount de um CaptureBox.
 ///
 /// Quando o refcount chega a 0, o box é liberado individualmente da root
-/// arena via `kata_rt_arena_dealloc`. O `n_captures` no header (offset 16)
-/// permite calcular o `size` para o `dealloc`.
-///
-/// Se o box não está na root arena (arena Bump), `kata_rt_arena_dealloc`
-/// é no-op — o lifetime é gerenciado pela arena.
-///
-/// # Safety
-/// `box_ptr` deve ser um ponteiro válido retornado por `kata_rt_alloc_arc`.
+/// arena. Precisa de `rt` para acessar `root_arena_handle` e `arena_dealloc`.
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_decref(box_ptr: i64) -> i64 {
+pub extern "C" fn kata_rt_decref(rt: i64, box_ptr: i64) -> i64 {
     if box_ptr == 0 {
         return 0;
     }
@@ -124,13 +105,11 @@ pub extern "C" fn kata_rt_decref(box_ptr: i64) -> i64 {
             let new_count = count - 1;
             std::ptr::write_unaligned(refcount_ptr, new_count);
             if new_count == 0 {
-                // ARC chegou a 0 — liberar o bloco da root arena.
-                // Lê n_captures do header (offset 16) para calcular o size.
                 let n_captures = std::ptr::read_unaligned(ptr.add(N_CAPTURES_OFFSET) as *mut i64);
                 let size = HEADER_SIZE as i64 + n_captures * 8;
-                let root_arena = kata_rt_get_root_arena_handle();
+                let root_arena = crate::arena::kata_rt_get_root_arena_handle(rt);
                 if root_arena != 0 {
-                    crate::arena::kata_rt_arena_dealloc(root_arena, box_ptr, size);
+                    crate::arena::kata_rt_arena_dealloc(rt, root_arena, box_ptr, size);
                 }
             }
         }
@@ -138,10 +117,7 @@ pub extern "C" fn kata_rt_decref(box_ptr: i64) -> i64 {
     0
 }
 
-/// Extrai o fn_ptr de um CaptureBox (lê os primeiros 8 bytes).
-///
-/// # Safety
-/// `box_ptr` deve ser um ponteiro válido retornado por `kata_rt_alloc_arc`.
+/// Extrai o fn_ptr de um CaptureBox (lê os primeiros 8 bytes). Não precisa de `rt`.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_arc_fn_ptr(box_ptr: i64) -> i64 {
     if box_ptr == 0 {

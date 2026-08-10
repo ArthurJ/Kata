@@ -265,7 +265,7 @@ fn try_recv(handle: i64, out: *mut i64) -> bool {
             }
             TAG_IPC_CHANNEL => {
                 // Usa a root_arena (TLS) para alocar o valor desserializado.
-                let arena = crate::arena::kata_rt_get_root_arena_handle();
+                let arena = crate::arena::kata_rt_get_root_arena_handle(crate::arena::rt_ptr());
                 // SAFETY: handle veio de kata_rt_ipc_channel_create.
                 super::ipc::try_ipc_recv(handle, arena, out)
             }

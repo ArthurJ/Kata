@@ -159,7 +159,7 @@ pub(crate) struct IpcChannelInner {
 /// `arena_handle` deve ser válido. `size` deve ser `size_of::<T>()`.
 pub(super) unsafe fn arena_alloc_and_init<T>(arena_handle: i64, value: T) -> *mut u8 {
     let size = std::mem::size_of::<T>() as i64;
-    let ptr = crate::arena::kata_rt_arena_alloc(arena_handle, size);
+    let ptr = crate::arena::kata_rt_arena_alloc(crate::arena::rt_ptr(), arena_handle, size);
     if ptr == 0 {
         return std::ptr::null_mut();
     }
@@ -353,7 +353,7 @@ pub extern "C" fn kata_rt_ipc_queue_create(arena: i64, cap: i64, type_id: i64) -
     // ipc_data_rx = ipc_data_tx (mesmo handle — simétrico, child usa read_fd)
     // ack_tx = ack_rx (mesmo handle — simétrico, child usa write_fd)
     let size = 48i64;
-    let ptr = crate::arena::kata_rt_arena_alloc(arena, size);
+    let ptr = crate::arena::kata_rt_arena_alloc(crate::arena::rt_ptr(), arena, size);
     if ptr == 0 {
         return 0;
     }

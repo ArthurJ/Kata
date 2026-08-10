@@ -86,7 +86,7 @@ thread_local! {
 pub extern "C" fn kata_rt_dict_empty(arena_handle: i64) -> i64 {
     let hamt = hamt_empty(arena_handle);
     // Allocate 16-byte Dict struct
-    let ptr = crate::arena::kata_rt_arena_alloc(arena_handle, 16);
+    let ptr = crate::arena::kata_rt_arena_alloc(crate::arena::rt_ptr(), arena_handle, 16);
     if ptr == 0 {
         return 0;
     }
@@ -118,7 +118,7 @@ pub extern "C" fn kata_rt_dict_insert(
     let (new_hamt, kvpair_ptr) = hamt_insert(hamt_root, key, value, hash, eq_fn, arena_handle);
 
     // 2. Cons prepend: new_log = Cons(kvpair_ptr, old_log)
-    let cons_cell = crate::arena::kata_rt_arena_alloc(arena_handle, 16);
+    let cons_cell = crate::arena::kata_rt_arena_alloc(crate::arena::rt_ptr(), arena_handle, 16);
     if cons_cell == 0 {
         return 0;
     }
@@ -129,7 +129,7 @@ pub extern "C" fn kata_rt_dict_insert(
     let new_log = cons_cell;
 
     // 3. Allocate new Dict struct (16 bytes) with (new_hamt, new_log)
-    let new_dict = crate::arena::kata_rt_arena_alloc(arena_handle, 16);
+    let new_dict = crate::arena::kata_rt_arena_alloc(crate::arena::rt_ptr(), arena_handle, 16);
     if new_dict == 0 {
         return 0;
     }
@@ -192,7 +192,7 @@ pub extern "C" fn kata_rt_dict_remove(
     let new_hamt = hamt_remove(hamt_root, key, hash, eq_fn, arena_handle);
 
     // Allocate new Dict struct with (new_hamt, old_log) — Cons list unchanged
-    let new_dict = crate::arena::kata_rt_arena_alloc(arena_handle, 16);
+    let new_dict = crate::arena::kata_rt_arena_alloc(crate::arena::rt_ptr(), arena_handle, 16);
     if new_dict == 0 {
         return 0;
     }
@@ -309,7 +309,7 @@ pub extern "C" fn kata_rt_dict_next(dict_ptr: i64, iter_state: i64, arena_handle
 
         // Allocate array in arena: count * 8 bytes.
         let arr_size = count * 8;
-        let arr = crate::arena::kata_rt_arena_alloc(arena_handle, arr_size);
+        let arr = crate::arena::kata_rt_arena_alloc(crate::arena::rt_ptr(), arena_handle, arr_size);
         if arr == 0 {
             return crate::sum::kata_rt_store_sum_result(1, 0, arena_handle);
         }
@@ -371,13 +371,33 @@ pub extern "C" fn kata_rt_dict_merge(a: i64, b: i64, eq_fn: i64, arena_handle: i
 mod tests {
     use super::*;
 
+    struct TestRt {
+        rt_ptr: i64,
+    }
+    impl TestRt {
+        fn new() -> Self {
+            let rt = Box::new(crate::runtime::Runtime::new());
+            let ptr = Box::into_raw(rt) as i64;
+            crate::arena::set_rt_ptr(ptr);
+            TestRt { rt_ptr: ptr }
+        }
+    }
+    impl Drop for TestRt {
+        fn drop(&mut self) {
+            unsafe {
+                drop(Box::from_raw(self.rt_ptr as *mut crate::runtime::Runtime));
+            }
+        }
+    }
+
     fn smi(n: i64) -> i64 {
         (n << 1) | 1
     }
 
     #[test]
     fn test_hamt_two_int_inserts() {
-        let arena = crate::arena::kata_rt_arena_create();
+        let _rt = TestRt::new();
+        let arena = crate::arena::kata_rt_arena_create(_rt.rt_ptr);
         let dict = kata_rt_dict_empty(arena);
         let len0 = kata_rt_dict_len(dict);
         assert_eq!(
@@ -427,7 +447,8 @@ mod tests {
 
     #[test]
     fn test_hamt_text_keys() {
-        let arena = crate::arena::kata_rt_arena_create();
+        let _rt = TestRt::new();
+        let arena = crate::arena::kata_rt_arena_create(_rt.rt_ptr);
         let dict = kata_rt_dict_empty(arena);
 
         let a = std::ffi::CString::new("a").unwrap();

@@ -8,6 +8,7 @@
 
 pub(crate) mod arc;
 pub(crate) mod arena;
+pub mod runtime;
 pub(crate) mod array;
 pub(crate) mod bigint;
 pub(crate) mod byte;
@@ -52,7 +53,7 @@ pub use rational::rat_from_text;
 pub use arc::{kata_rt_alloc_arc, kata_rt_arc_fn_ptr, kata_rt_decref, kata_rt_incref};
 pub use arena::{
     kata_rt_arena_alloc, kata_rt_arena_create, kata_rt_arena_create_tracked, kata_rt_arena_dealloc,
-    kata_rt_arena_destroy, kata_rt_get_root_arena_handle,
+    kata_rt_arena_destroy, kata_rt_get_root_arena_handle, set_rt_ptr,
 };
 pub use array::{
     kata_rt_array_alloc, kata_rt_array_contains, kata_rt_array_get, kata_rt_array_get_checked,
@@ -134,6 +135,8 @@ pub use log::{kata_rt_log_config, kata_rt_log_publish, kata_rt_log_recv};
 pub use timer::kata_rt_timer_now;
 // Marshalling (to_bytes/from_bytes para spawn!)
 pub use marshal::{TypeShape, kata_rt_from_bytes, kata_rt_to_bytes, register_type_table};
+
+pub use runtime::Runtime;
 // IPC (fork + pipe para spawn!)
 pub use ipc::kata_rt_spawn_process;
 // File I/O

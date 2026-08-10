@@ -124,7 +124,7 @@ fn get_or_create_topic(topic: &str, policy: Policy) -> i64 {
         }
         drop(registry);
         // Cria o canal na arena raiz.
-        let arena = kata_rt_arena_create();
+        let arena = kata_rt_arena_create(crate::arena::rt_ptr());
         let handle = match policy {
             Policy::Block => kata_rt_queue_create(arena, 1, 0),
             Policy::Drop => {
@@ -243,7 +243,7 @@ pub extern "C" fn kata_rt_log_recv(topic_ptr: i64) -> i64 {
                         return rx;
                     }
                     // Criar receiver na arena raiz.
-                    let arena = kata_rt_arena_create();
+                    let arena = kata_rt_arena_create(crate::arena::rt_ptr());
                     let rx = kata_rt_broadcast_receiver_create(arena, h);
                     r.borrow_mut().insert(topic.clone(), rx);
                     rx

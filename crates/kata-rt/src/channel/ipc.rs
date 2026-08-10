@@ -79,8 +79,9 @@ pub(super) unsafe fn try_ipc_send(handle: i64, value: i64) -> i64 {
 
     // Serializa o valor em um blob Bytes. Usa root_arena (TLS) — canais
     // são criados dentro de Actions onde root_arena já está inicializada.
-    let arena = crate::arena::kata_rt_get_root_arena_handle();
-    let blob = crate::marshal::kata_rt_to_bytes(value, inner.type_id, arena);
+    let rt = crate::arena::rt_ptr();
+    let arena = crate::arena::kata_rt_get_root_arena_handle(rt);
+    let blob = crate::marshal::kata_rt_to_bytes(rt, value, inner.type_id, arena);
     if blob == 0 {
         return WOULD_BLOCK;
     }
@@ -213,7 +214,7 @@ pub(super) unsafe fn try_ipc_recv(handle: i64, arena: i64, out: *mut i64) -> boo
     // Reconstrói o blob completo (8 bytes header + content) em uma
     // alocação e chama from_bytes.
     let blob_size = 8 + total;
-    let blob_ptr = crate::arena::kata_rt_arena_alloc(arena, blob_size as i64);
+    let blob_ptr = crate::arena::kata_rt_arena_alloc(crate::arena::rt_ptr(), arena, blob_size as i64);
     if blob_ptr == 0 {
         return false;
     }
@@ -223,7 +224,7 @@ pub(super) unsafe fn try_ipc_recv(handle: i64, arena: i64, out: *mut i64) -> boo
         std::ptr::copy_nonoverlapping(content.as_ptr(), p.add(8), total);
     }
 
-    let result = crate::marshal::kata_rt_from_bytes(blob_ptr, arena);
+    let result = crate::marshal::kata_rt_from_bytes(crate::arena::rt_ptr(), blob_ptr, arena);
 
     // from_bytes retorna 0 em falha. 0 nunca é um valor de usuário válido
     // (SMI(0) = 1, ponteiros são non-zero).

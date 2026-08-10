@@ -30,20 +30,16 @@ pub use ffi::{
     kata_rt_set_test_timeout, kata_rt_sleep, kata_rt_spawn, kata_rt_yield, kata_rt_yield_check,
     reset_scheduler,
 };
-pub(crate) use ffi::{reset_scheduler_tls, reset_yield_tls};
 
 use std::collections::{HashMap, VecDeque};
 
-use crate::arena::{
-    kata_rt_arena_create, kata_rt_arena_create_tracked, kata_rt_arena_destroy,
-    set_root_arena_handle,
-};
+use crate::arena::{Arena, ArenaKind, kata_rt_arena_destroy};
 use crate::channel::{block_ipc_until_readable, can_recv, can_send, ipc_read_fd, is_ipc_handle};
 use crate::fiber::{KataFiber, SpawnArgs, YieldReason};
 use crate::file::{FILE_WOULD_BLOCK, collect_file_fds, try_select_files};
 use crate::socket::{SOCKET_WOULD_BLOCK, collect_socket_fds, try_select_sockets};
 
-use ffi::{HAS_READY_FIBER, PENDING_SPAWNS, YIELD_COUNTER, YIELD_INTERVAL};
+
 
 /// Identificador de fiber no scheduler.
 pub(crate) type FiberId = u64;
@@ -103,29 +99,43 @@ pub(crate) struct Scheduler {
     current_fiber: Option<FiberId>,
     fibers: HashMap<FiberId, FiberEntry>,
     next_id: u64,
-    /// Arena raiz — criada em `new()`, destruída quando o fiber raiz
-    /// (sem pai) é destruído.
+    /// Arena raiz — criada pelo `Runtime::new()`, passada como parâmetro.
     root_arena: i64,
     /// Resultado do fiber raiz — guardado quando o fiber raiz completa.
     root_result: i64,
+    /// Yield cooperativo — contador decrementado no hot path de loops.
+    /// Antes em `YIELD_COUNTER` TLS.
+    pub(crate) yield_counter: i64,
+    /// Snapshot booleano: há outra fiber pronta na run_queue.
+    /// Antes em `HAS_READY_FIBER` TLS.
+    pub(crate) has_ready_fiber: bool,
+    /// Spawns pendentes — enfileirados por `kata_rt_spawn` quando chamado
+    /// de dentro de um fiber. Antes em `PENDING_SPAWNS` TLS.
+    /// Com o Runtime explícito, `kata_rt_spawn` pode acessar o scheduler
+    /// diretamente via ponteiro, mas mantemos o campo para o caso de
+    /// o fiber estar em resume() (borrow do scheduler via run()).
+    pub(crate) pending_spawns: Vec<(i64, i64, i64, i64)>,
 }
 
+/// Intervalo de yield cooperativo — a cada N iterações, checar se há
+/// outra fiber pronta.
+pub(crate) const YIELD_INTERVAL: i64 = 1000;
+
 impl Scheduler {
-    /// Cria um scheduler vazio com a arena raiz alocada.
-    ///
-    /// A arena raiz é Tracked (std::alloc + tracking) para suportar
-    /// dealloc individual de valores ARC-managed (Fio 16).
-    pub(crate) fn new() -> Self {
-        let root_arena = kata_rt_arena_create_tracked();
-        set_root_arena_handle(root_arena);
+    /// Cria um scheduler vazio. A root arena é criada pelo `Runtime::new()`
+    /// e passada como `root_arena_handle`.
+    pub(crate) fn new(root_arena_handle: i64) -> Self {
         Scheduler {
             run_queue: VecDeque::new(),
             blocked: HashMap::new(),
             current_fiber: None,
             fibers: HashMap::new(),
             next_id: 0,
-            root_arena,
+            root_arena: root_arena_handle,
             root_result: 0,
+            yield_counter: YIELD_INTERVAL,
+            has_ready_fiber: false,
+            pending_spawns: Vec::new(),
         }
     }
 
@@ -140,11 +150,17 @@ impl Scheduler {
     /// Retorna o `FiberId` do fiber criado.
     pub(crate) fn spawn(
         &mut self,
+        arenas: &mut Vec<ArenaKind>,
         fn_ptr: i64,
+        rt: i64,
         caller_arena: i64,
         args_ptr: i64,
     ) -> Result<FiberId, String> {
-        let fiber_arena = kata_rt_arena_create();
+        let fiber_arena = {
+            let id = arenas.len() as i64;
+            arenas.push(ArenaKind::Bump(Arena::new()));
+            id
+        };
         let parent_id = self.current_fiber;
         // Snapshot do LOG_CONFIG do pai (herança β). Copia a config atual
         // do TLS para o fiber filho. Mudanças no pai após o spawn não
@@ -159,6 +175,7 @@ impl Scheduler {
                 fiber: std::mem::ManuallyDrop::new(fiber),
                 spawn_args: SpawnArgs {
                     fn_ptr,
+                    rt,
                     caller_arena,
                     args_ptr,
                     fiber_arena,
@@ -186,7 +203,7 @@ impl Scheduler {
     /// 2. run_queue vazia — wake pass (verificar blocked)
     /// 3. run_queue vazia + blocked não vazio = deadlock (Err)
     /// 4. run_queue vazia + blocked vazio = todos terminaram (Ok)
-    pub(crate) fn run(&mut self) -> Result<i64, String> {
+    pub(crate) fn run(&mut self, arenas: &mut Vec<ArenaKind>) -> Result<i64, String> {
         loop {
             // 1. Tentar executar próximo fiber pronto.
             if let Some(fiber_id) = self.run_queue.pop_front() {
@@ -207,7 +224,7 @@ impl Scheduler {
                             self.root_result = ret;
                         }
                         // try_destroy (só destrói se completed && children.is_empty)
-                        self.try_destroy(fiber_id);
+                        self.try_destroy(arenas, fiber_id);
                     }
                     Err(YieldReason::Cooperative) => {
                         // Yield point — volta para run_queue.
@@ -263,7 +280,7 @@ impl Scheduler {
                 // Drenar spawns pendentes (enfileirados por kata_rt_spawn
                 // durante resume). O fiber_id que acabou de executar é
                 // o pai dos spawns pendentes.
-                self.drain_pending_spawns(fiber_id);
+                self.drain_pending_spawns(arenas, fiber_id);
                 continue;
             }
 
@@ -421,8 +438,8 @@ impl Scheduler {
         crate::log::restore_log_config(log_config);
         self.current_fiber = Some(fiber_id);
         let has_ready = !self.run_queue.is_empty();
-        HAS_READY_FIBER.with(|h| h.set(has_ready));
-        YIELD_COUNTER.with(|c| c.set(YIELD_INTERVAL));
+        self.has_ready_fiber = has_ready;
+        self.yield_counter = YIELD_INTERVAL;
         let result = entry.fiber.resume(spawn_args);
         self.current_fiber = None;
         // Se o fiber suspendeu, capturar o `Suspend` ptr publicado pelo
@@ -517,18 +534,13 @@ impl Scheduler {
     /// método é chamado após cada `resume()` para criar os fibers
     /// enfileirados. O `parent_id` é o fiber que acabou de executar
     /// (que chamou `kata_rt_spawn`).
-    fn drain_pending_spawns(&mut self, parent_id: FiberId) {
-        // Após fork(), o RefCell de PENDING_SPAWNS pode estar "borrowed"
-        // herdado do parent. Usar as_ptr() para bypassar o borrow check.
-        let pending: Vec<(i64, i64, i64)> = PENDING_SPAWNS.with(|p| unsafe {
-            let ptr = p.as_ptr();
-            (*ptr).drain(..).collect()
-        });
-        for (fn_ptr, caller_arena, args_ptr) in pending {
+    fn drain_pending_spawns(&mut self, arenas: &mut Vec<ArenaKind>, parent_id: FiberId) {
+        let pending: Vec<(i64, i64, i64, i64)> = std::mem::take(&mut self.pending_spawns);
+        for (fn_ptr, rt, caller_arena, args_ptr) in pending {
             // Usar parent_id como pai, não current_fiber (que é None
             // neste ponto).
             self.current_fiber = Some(parent_id);
-            if let Err(e) = self.spawn(fn_ptr, caller_arena, args_ptr) {
+            if let Err(e) = self.spawn(arenas, fn_ptr, rt, caller_arena, args_ptr) {
                 eprintln!("kata_rt_spawn: erro ao drenar spawn: {e}");
             }
             self.current_fiber = None;
@@ -542,7 +554,7 @@ impl Scheduler {
     /// O fiber raiz (sem pai) destrói a `root_arena` ao ser destruído — mas
     /// só quando **todos** os fibers terminaram (`self.fibers.is_empty()`),
     /// pois a `root_arena` é compartilhada entre todos os fibers raiz.
-    fn try_destroy(&mut self, fiber_id: FiberId) {
+    fn try_destroy(&mut self, arenas: &mut Vec<ArenaKind>, fiber_id: FiberId) {
         let should_destroy = {
             let Some(entry) = self.fibers.get(&fiber_id) else {
                 return;
@@ -559,10 +571,14 @@ impl Scheduler {
             .expect("fiber_id must exist if should_destroy was true");
         let arena_handle = entry.fiber.arena_handle;
         let parent_id = entry.parent_id;
-        kata_rt_arena_destroy(arena_handle);
-        // Drop manual do fiber — `ManuallyDrop` não dropa automaticamente.
-        // O fiber completou normalmente, então o Drop do wasmtime-fiber
-        // não vai panicar.
+        // Destruir a arena do fiber via pool direto.
+        if let Some(a) = arenas.get_mut(arena_handle as usize) {
+            match a {
+                ArenaKind::Bump(b) => b.reset(),
+                ArenaKind::Tracked(t) => t.destroy(),
+            }
+        }
+        // Drop manual do fiber.
         // SAFETY: fiber completou (completed=true), não está suspenso.
         unsafe {
             std::mem::ManuallyDrop::drop(&mut entry.fiber);
@@ -573,17 +589,10 @@ impl Scheduler {
             && let Some(parent) = self.fibers.get_mut(&pid)
         {
             parent.children.retain(|&c| c != fiber_id);
-            // Propagar: se o pai também está completado e sem filhos, destruir.
-            self.try_destroy(pid);
+            self.try_destroy(arenas, pid);
         }
-        // Não destruir root_arena aqui — o cleanup é feito por `reset_scheduler`
-        // ou `reset_all_arenas` entre testes. O `Drop` do Scheduler não pode
-        // acessar o pool de arenas (TLS pode estar sendo destruído).
+        // root_arena é destruída pelo `Drop` do Runtime.
     }
 }
 
-impl Default for Scheduler {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+// Default removido — Scheduler::new() agora requer root_arena_handle.

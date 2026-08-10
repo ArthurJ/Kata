@@ -36,6 +36,9 @@ pub(crate) type SuspendPtr = *mut wasmtime_fiber::Suspend<SpawnArgs, YieldReason
 pub(crate) struct SpawnArgs {
     /// Ponteiro da função JIT a executar (transmutado para `extern "C" fn`).
     pub(crate) fn_ptr: i64,
+    /// Ponteiro do Runtime (`*mut Runtime` como i64). A2: passado pelo
+    /// scheduler para que o fiber tenha acesso ao runtime nas FFIs centrais.
+    pub(crate) rt: i64,
     /// Arena do caller — onde alocar valores de retorno (sobrevivem ao fiber).
     pub(crate) caller_arena: i64,
     /// Ponteiro para a tupla de argumentos (0 se Unit).
@@ -146,8 +149,8 @@ fn trampoline(
     // O ptr é estável enquanto o fiber não completa — criado em `fiber_start`
     // no stack do fiber, reusado em todas as suspensões/resumes do mesmo fiber.
     LAST_SUSPEND_PTR.with(|cell| cell.set(suspend as *mut _));
-    let func: extern "C" fn(i64, i64, i64) -> i64 = unsafe { core::mem::transmute(args.fn_ptr) };
-    func(args.fiber_arena, args.caller_arena, args.args_ptr)
+    let func: extern "C" fn(i64, i64, i64, i64) -> i64 = unsafe { core::mem::transmute(args.fn_ptr) };
+    func(args.rt, args.fiber_arena, args.caller_arena, args.args_ptr)
 }
 
 /// Verifica se há um fiber em execução (Suspend em TLS).

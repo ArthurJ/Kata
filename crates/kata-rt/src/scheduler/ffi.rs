@@ -1,18 +1,21 @@
-//! FFI layer do scheduler — estado TLS e funções C-ABI expostas ao codegen.
+//! FFI layer do scheduler — funções C-ABI expostas ao codegen.
 //!
 //! O `Scheduler` struct + impl vivem no módulo pai (`scheduler.rs`); este
-//! submódulo concentra apenas a camada de integração FFI: o `thread_local!`
-//! `SCHEDULER`, os contadores de yield (`YIELD_COUNTER`, `HAS_READY_FIBER`),
-//! a fila de spawns pendentes (`PENDING_SPAWNS`) e as funções
-//! `extern "C"` chamadas pelo codegen JIT (`kata_rt_scheduler_init`,
-//! `kata_rt_spawn`, `kata_rt_run`, `kata_rt_yield`, `kata_rt_yield_check`),
-//! além de `reset_scheduler` (usada entre testes) e `DEADLOCK_SENTINEL`.
+//! submódulo concentra as funções `extern "C"` chamadas pelo codegen JIT
+//! (`kata_rt_scheduler_init`, `kata_rt_spawn`, `kata_rt_run`, `kata_rt_yield`,
+//! `kata_rt_yield_check`), além de `DEADLOCK_SENTINEL` e `TIMEOUT_SENTINEL`.
 //!
-//! `PENDING_SPAWNS`, `YIELD_COUNTER`, `HAS_READY_FIBER` e `YIELD_INTERVAL`
-//! são `pub(super)` porque o `Scheduler` impl no módulo pai os acessa
-//! diretamente (em `resume_fiber` e `drain_pending_spawns`).
+//! A2 — Runtime reentrante: o estado antes em TLS (`SCHEDULER`,
+//! `PENDING_SPAWNS`, `YIELD_COUNTER`, `HAS_READY_FIBER`) agora vive na struct
+//! `Runtime` (ver `runtime.rs`). As FFIs recebem `rt: i64` (ponteiro para
+//! `*mut Runtime`) como primeiro parâmetro. O `PENDING_SPAWNS` workaround
+//! foi eliminado — o scheduler é acessado via ponteiro direto, sem RefCell.
+//!
+//! `TIMEOUT_EXPIRED` e `PENDING_TIMER` permanecem globais (não-TLS) — a
+//! thread OS timer não tem acesso ao `Runtime*`.
 
 use crate::fiber::{YieldReason, is_in_fiber, with_suspend};
+use crate::runtime::Runtime;
 
 use super::Scheduler;
 
@@ -31,62 +34,18 @@ use std::time::{Duration, Instant};
 // o scheduler single-threaded).
 static TIMEOUT_EXPIRED: AtomicBool = AtomicBool::new(false);
 
-// Handle da thread OS timer pendente. `reset_scheduler` faz `unpark + join`
+// Handle da thread OS timer pendente. `reset_test_timer` faz `unpark + join`
 // para cancelar a thread anterior antes de resetar `TIMEOUT_EXPIRED` — ordem
 // obrigatória: `join` antes de `store(false)` (evita que a thread sete `true`
 // após o reset, poluindo o próximo teste com falso positivo).
 static PENDING_TIMER: Mutex<Option<JoinHandle<()>>> = Mutex::new(None);
 
-// ── Scheduler thread-local ────────────────────────────────────────────
-// Scheduler thread-local — 1 por thread (single-threaded).
-thread_local! {
-    static SCHEDULER: std::cell::RefCell<Option<Scheduler>> =
-        const { std::cell::RefCell::new(None) };
-}
-
-// Spawns pendentes — enfileirados por `kata_rt_spawn` quando chamado
-// de dentro de um fiber (durante `resume()`). O scheduler drena esta
-// lista após cada `resume()` no `run()`.
-//
-// Isto evita o double-borrow do SCHEDULER: durante `resume()`, o
-// scheduler já tem o `RefCell` emprestado (`borrow_mut` em `run()`).
-// Se a função JIT chamar `kata_rt_spawn`, um segundo `borrow_mut`
-// causaria panic. Em vez disso, `kata_rt_spawn` detecta que está
-// dentro de um fiber (Suspend em TLS) e enfileira o spawn aqui.
-thread_local! {
-    pub(super) static PENDING_SPAWNS: std::cell::RefCell<Vec<(i64, i64, i64)>> =
-        const { std::cell::RefCell::new(Vec::new()) };
-}
-
-// ── Yield points ──────────────────────────────────────────────
-//
-// `kata_rt_yield_check()` é chamada pelo codegen no header de cada iteração
-// de `Loop` e `ForIn`. Para evitar o custo de suspender a cada iteração,
-// decrementa um contador TLS e só pergunta ao scheduler se há outra fiber
-// pronta a cada YIELD_INTERVAL iterações.
-//
-// `HAS_READY_FIBER` é um snapshot booleano do estado do scheduler, setado
-// antes de cada `resume()` em `resume_fiber`. Isto evita o double-borrow do
-// `SCHEDULER` (pitfall #44): durante `resume()`, a função JIT pode chamar
-// `kata_rt_yield_check`, que lê apenas esta TLS — sem acessar o RefCell.
-pub(super) const YIELD_INTERVAL: i64 = 1000;
-
-thread_local! {
-    pub(super) static YIELD_COUNTER: std::cell::Cell<i64> =
-        const { std::cell::Cell::new(YIELD_INTERVAL) };
-    pub(super) static HAS_READY_FIBER: std::cell::Cell<bool> =
-        const { std::cell::Cell::new(false) };
-}
-
-/// Reseta o scheduler thread-local. Chamado entre execuções de teste.
+/// Reseta apenas o timer de teste global. Chamado entre execuções de teste.
 ///
-/// Primeiro cancela e espera a thread OS timer anterior terminar (`unpark` +
-/// `join`) — sem isto, a thread anterior pode setar `TIMEOUT_EXPIRED = true`
-/// após o reset e poluir o próximo teste com falso positivo. Depois reseta
-/// `TIMEOUT_EXPIRED` (após `join`, a thread terminou — a flag está em estado
-/// final). Por fim, reseta o resto (scheduler, spawns, contadores).
-pub fn reset_scheduler() {
-    // 1. Cancelar e esperar a thread timer anterior terminar.
+/// Cancela e espera a thread OS timer anterior terminar (`unpark` + `join`),
+/// depois reseta `TIMEOUT_EXPIRED`. Não toca o `Runtime` — o caller descarta
+/// o Runtime antigo e cria um novo.
+pub fn reset_test_timer() {
     if let Some(handle) = PENDING_TIMER
         .lock()
         .expect("PENDING_TIMER não envenenado")
@@ -95,82 +54,45 @@ pub fn reset_scheduler() {
         handle.thread().unpark();
         let _ = handle.join();
     }
-    // 2. Resetar a flag (após join, a thread terminou — flag está em estado final).
     TIMEOUT_EXPIRED.store(false, Relaxed);
-    // 3. Resetar o resto.
-    SCHEDULER.with(|s| {
-        s.borrow_mut().take();
-    });
-    PENDING_SPAWNS.with(|p| {
-        p.borrow_mut().clear();
-    });
-    YIELD_COUNTER.with(|c| c.set(YIELD_INTERVAL));
-    HAS_READY_FIBER.with(|h| h.set(false));
-    // Limpar TLS de Suspend — após timeout/drain, CURRENT_SUSPEND pode
-    // apontar para o Suspend de um fiber drenado (dangling). Sem isto,
-    // is_in_fiber() retorna true no próximo teste e kata_rt_spawn
-    // enfileira em PENDING_SPAWNS em vez de registrar no scheduler.
+}
+
+/// Limpa TLS de Suspend e log entre execuções de teste.
+///
+/// Com o `Runtime` explícito, o scheduler e as arenas são descartados com o
+/// `Runtime`. Mas `CURRENT_SUSPEND` (TLS) pode apontar para um Suspend
+/// dangling após timeout/drain, e o log TLS pode poluir. Esta função limpa
+/// apenas o que permanece em TLS.
+pub fn reset_tls_between_runs() {
     crate::fiber::clear_suspend_tls();
-    // Limpar TLS de log — LOG_CONFIG e registry de tópicos entre testes.
     crate::log::reset_log();
-    // Limpar TLS da root arena — entre testes, o handle anterior é invalidado.
-    crate::arena::ROOT_ARENA_HANDLE.with(|h| h.set(0));
-    // Limpar pool de arenas — entre testes, arenas anteriores são invalidadas.
-    crate::arena::reset_all_arenas();
-    // Limpar tabela de snapshots — entre testes, IDs de sessões anteriores
-    // podem poluir a tabela TLS.
     crate::snapshot::reset_snapshot_table();
 }
 
-/// Reseta apenas as TLS de runtime do scheduler (SCHEDULER + PENDING_SPAWNS),
-/// **sem** tocar estado global (TIMEOUT_EXPIRED, PENDING_TIMER) e **sem**
-/// resetar arenas, snapshots, log, ou root arena handle.
+/// Reseta o timer de teste global E as TLS periféricas (Suspend, log, snapshot).
 ///
-/// Usado por `kata_rt_spawn_process` no child após `fork()`: o child herda
-/// o address space do parent via COW, mas precisa de um scheduler limpo.
-/// As TLS do parent apontam para o scheduler do parent (em mid-execução) e
-/// para `Suspend` ptrs dangling — resetar apenas as TLS de runtime dá ao
-/// child um estado limpo sem destruir os dados herdados (arenas, type table).
-pub(crate) fn reset_scheduler_tls() {
-    // Após fork(), o child herda o RefCell do parent em estado "borrowed"
-    // (o parent está em mid-resume() com borrow_mut ativo). Usar borrow_mut()
-    // novamente causaria panic ("RefCell already borrowed"). Bypassar o
-    // borrow check escrevendo diretamente via as_ptr().
-    SCHEDULER.with(|s| unsafe {
-        let ptr = s.as_ptr();
-        (*ptr) = None;
-    });
-    PENDING_SPAWNS.with(|p| unsafe {
-        let ptr = p.as_ptr();
-        (*ptr).clear();
-    });
+/// Substitui o antigo `reset_scheduler` — o scheduler em si é descartado
+/// junto com o `Runtime`. Esta função limpa apenas o que permanece em
+/// TLS/global: timer de teste, Suspend TLS, log TLS, snapshot table.
+pub fn reset_scheduler() {
+    reset_test_timer();
+    reset_tls_between_runs();
 }
 
-/// Reseta apenas as TLS de yield (YIELD_COUNTER + HAS_READY_FIBER).
+/// Inicializa o `Runtime` apontado por `rt` e retorna o handle da root arena.
 ///
-/// Usado por `kata_rt_spawn_process` no child: o parent pode ter deixado
-/// estes em estado arbitrário (mid-yield-check). O child precisa de contadores
-/// zerados para que o primeiro yield check do scheduler funcione corretamente.
-pub(crate) fn reset_yield_tls() {
-    YIELD_COUNTER.with(|c| c.set(YIELD_INTERVAL));
-    HAS_READY_FIBER.with(|h| h.set(false));
-}
-
-/// Inicializa o scheduler thread-local e cria a arena raiz.
+/// O driver aloca um `Box<Runtime>` e passa o ponteiro bruto como `rt`.
+/// Esta função inicializa o Runtime (que já foi criado por `Runtime::new()`
+/// no driver) — na prática, é um no-op pois o `Runtime::new()` já fez tudo.
+/// Mantida para compatibilidade de ABI com o codegen que espera chamá-la.
 ///
-/// Retorna o handle da arena raiz para o codegen usar como `caller_arena`
-/// no entry point.
+/// Retorna o handle da root arena para o codegen usar como `caller_arena`.
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_scheduler_init() -> i64 {
-    // Após fork(), o RefCell pode estar em estado "borrowed" herdado do
-    // parent. Usar as_ptr() para bypassar o borrow check.
-    SCHEDULER.with(|s| unsafe {
-        let scheduler = Scheduler::new();
-        let root_arena = scheduler.root_arena;
-        let ptr = s.as_ptr();
-        (*ptr) = Some(scheduler);
-        root_arena
-    })
+pub extern "C" fn kata_rt_scheduler_init(rt: i64) -> i64 {
+    let runtime = unsafe { &mut *(rt as *mut Runtime) };
+    // Cache do ponteiro em TLS para FFIs periféricas (array, list, dict, etc.)
+    crate::arena::set_rt_ptr(rt);
+    runtime.root_arena_handle
 }
 
 /// Cria um fiber com arena própria e o enfileira.
@@ -178,35 +100,29 @@ pub extern "C" fn kata_rt_scheduler_init() -> i64 {
 /// Chamado no `__kata_entry` quando encontra ActionCall definida pelo usuário.
 ///
 /// Se chamado de dentro de um fiber (durante `resume()`), enfileira o
-/// spawn em `PENDING_SPAWNS` em vez de acessar o SCHEDULER diretamente —
-/// evita double-borrow do `RefCell`. O scheduler drena a lista após
-/// cada `resume()`.
+/// spawn em `scheduler.pending_spawns` — o scheduler drena a lista após
+/// cada `resume()`. Isto é necessário porque durante `resume()` o
+/// `scheduler.run()` tem `&mut self` ativo; o spawn não pode pegar
+/// `&mut scheduler` simultaneamente.
 ///
 /// Retorna o `FiberId` (i64). Quando enfileirado, retorna 0 (o FiberId
 /// será atribuído quando o scheduler drenar).
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_spawn(fn_ptr: i64, caller_arena: i64, args_ptr: i64) -> i64 {
+pub extern "C" fn kata_rt_spawn(rt: i64, fn_ptr: i64, caller_arena: i64, args_ptr: i64) -> i64 {
+    let runtime = unsafe { &mut *(rt as *mut Runtime) };
     if is_in_fiber() {
-        // Dentro de fiber — enfileirar em PENDING_SPAWNS.
-        PENDING_SPAWNS.with(|p| {
-            p.borrow_mut().push((fn_ptr, caller_arena, args_ptr));
-        });
+        // Dentro de fiber — enfileirar em pending_spawns (campo do scheduler).
+        runtime.scheduler.pending_spawns.push((fn_ptr, rt, caller_arena, args_ptr));
         0
     } else {
-        // Fora de fiber — acessar scheduler diretamente.
-        // Após fork(), o RefCell pode estar "borrowed" herdado do parent.
-        // Usar as_ptr() para bypassar o borrow check.
-        SCHEDULER.with(|s| unsafe {
-            let ptr = s.as_ptr();
-            let scheduler = (*ptr).as_mut().expect("scheduler não inicializado");
-            match scheduler.spawn(fn_ptr, caller_arena, args_ptr) {
-                Ok(id) => id as i64,
-                Err(_e) => {
-                    eprintln!("kata_rt_spawn: erro ao criar fiber: {_e}");
-                    0
-                }
+        // Fora de fiber — spawn direto.
+        match runtime.scheduler.spawn(&mut runtime.arenas, fn_ptr, rt, caller_arena, args_ptr) {
+            Ok(id) => id as i64,
+            Err(_e) => {
+                eprintln!("kata_rt_spawn: erro ao criar fiber: {_e}");
+                0
             }
-        })
+        }
     }
 }
 
@@ -216,18 +132,13 @@ pub extern "C" fn kata_rt_spawn(fn_ptr: i64, caller_arena: i64, args_ptr: i64) -
 /// imprime a mensagem no stderr e retorna `DEADLOCK_SENTINEL`. Se timeout
 /// de teste expirar, retorna `TIMEOUT_SENTINEL` (distinto de `DEADLOCK_SENTINEL`).
 ///
-/// Não faz `panic!` porque `extern "C"` é `nounwind` — um panic aqui
+/// Não faz `panic!` porque `extern \"C\"` é `nounwind` — um panic aqui
 /// aborta com SIGABRT (non-unwinding). O chamador (driver/teste)
 /// verifica o valor de retorno.
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_run() -> i64 {
-    // Após fork(), o RefCell pode estar "borrowed" herdado do parent.
-    // Usar as_ptr() para bypassar o borrow check.
-    let result = SCHEDULER.with(|s| unsafe {
-        let ptr = s.as_ptr();
-        let scheduler = (*ptr).as_mut().expect("scheduler não inicializado");
-        scheduler.run()
-    });
+pub extern "C" fn kata_rt_run(rt: i64) -> i64 {
+    let runtime = unsafe { &mut *(rt as *mut Runtime) };
+    let result = runtime.scheduler.run(&mut runtime.arenas);
     match result {
         Ok(v) => v,
         Err(msg) if msg == "timeout" => TIMEOUT_SENTINEL,
@@ -255,10 +166,9 @@ pub const TIMEOUT_SENTINEL: i64 = i64::MIN + 2;
 /// - `Unparked` → cancelada pelo runner (teste terminou antes), NÃO seta a flag
 ///   — evita falso positivo que poluiria o próximo teste.
 ///
-/// A thread é cancelável: `reset_scheduler` faz `unpark + join` na thread
+/// A thread é cancelável: `reset_test_timer` faz `unpark + join` na thread
 /// pendente antes de resetar `TIMEOUT_EXPIRED`. A thread OS só escreve no
-/// `AtomicBool` isolado — não toca scheduler, arenas, nem TLS. A invariant
-/// single-threaded é preservada.
+/// `AtomicBool` isolado — não toca scheduler, arenas, nem Runtime.
 ///
 /// `TIMEOUT_EXPIRED` é global (NÃO-TLS) — implica serialização de testes:
 /// `kata_rt_run` não pode ser chamada de múltiplas threads concorrentemente.
@@ -275,15 +185,10 @@ pub extern "C" fn kata_rt_set_test_timeout(millis: i64) {
     }
     let deadline = Instant::now() + Duration::from_millis(millis as u64);
     let handle = thread::spawn(move || {
-        // `park_timeout` retorna `()` em Rust stable — não distingue timeout
-        // de unpark. Para distinguir, comparamos `Instant::now()` com o
-        // deadline após acordar. Se `now >= deadline`, foi timeout real;
-        // senão, foi unpark (cancelada pelo runner) — não seta a flag.
         thread::park_timeout(deadline.saturating_duration_since(Instant::now()));
         if Instant::now() >= deadline {
             TIMEOUT_EXPIRED.store(true, Relaxed);
         }
-        // Unparked antes do deadline = cancelada — não seta a flag.
     });
     *PENDING_TIMER.lock().expect("PENDING_TIMER não envenenado") = Some(handle);
 }
@@ -292,9 +197,9 @@ pub extern "C" fn kata_rt_set_test_timeout(millis: i64) {
 ///
 /// Chamada pelo codegen em yield points ou por código Kata que
 /// explicitamente cede CPU. Não acessa o scheduler — apenas suspende via
-/// TLS `Suspend`. O scheduler interpreta o `YieldReason` quando `resume()`
-/// retorna `Err(YieldReason::Cooperative)` e coloca o fiber de volta na
-/// run_queue.
+/// TLS `Suspend` (CURRENT_SUSPEND). O scheduler interpreta o `YieldReason`
+/// quando `resume()` retorna `Err(YieldReason::Cooperative)` e coloca o fiber
+/// de volta na run_queue.
 ///
 /// Se chamada fora de um fiber (sem `Suspend` em TLS), é no-op.
 #[unsafe(no_mangle)]
@@ -307,39 +212,31 @@ pub extern "C" fn kata_rt_yield() {
 /// Yield point chamado pelo codegen no header de cada iteração de `Loop` e
 /// `ForIn` (Decisão G).
 ///
-/// Hot path (a cada iteração): decrementa `YIELD_COUNTER` TLS. Se ainda > 0,
-/// retorna imediatamente — 2 instruções no hot path (dec + branch).
+/// Hot path (a cada iteração): decrementa `scheduler.yield_counter`. Se
+/// ainda > 0, retorna imediatamente — 2 instruções no hot path (dec + branch).
 ///
 /// Slow path (a cada `YIELD_INTERVAL` iterações): reseta o contador e checa
-/// `HAS_READY_FIBER`. Se `true` (há outra fiber pronta na run_queue),
-/// suspende cooperativamente via `kata_rt_yield`. Se `false`, retorna sem
-/// suspender — evita suspend/resume desnecessário quando só há uma fiber.
+/// `scheduler.has_ready_fiber`. Se `true` (há outra fiber pronta na
+/// run_queue), suspende cooperativamente. Se `false`, retorna sem suspender.
 ///
-/// `HAS_READY_FIBER` é setado pelo scheduler antes de cada `resume()` em
-/// `resume_fiber`, evitando o double-borrow do `SCHEDULER` (pitfall #44):
-/// esta FFI lê apenas a TLS, sem acessar o `RefCell` do scheduler.
+/// Recebe `rt` para acessar `yield_counter` e `has_ready_fiber` do Runtime.
 ///
 /// Se chamada fora de um fiber (sem `Suspend` em TLS), é no-op em ambos os
 /// caminhos — `with_suspend` não faz nada se não há `Suspend` ativo.
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_yield_check() {
-    let remaining = YIELD_COUNTER.with(|c| {
-        let v = c.get() - 1;
-        c.set(v);
-        v
-    });
-    if remaining > 0 {
+pub extern "C" fn kata_rt_yield_check(rt: i64) {
+    let runtime = unsafe { &mut *(rt as *mut Runtime) };
+    runtime.scheduler.yield_counter -= 1;
+    if runtime.scheduler.yield_counter > 0 {
         return;
     }
-    YIELD_COUNTER.with(|c| c.set(YIELD_INTERVAL));
-    // Test timeout — sempre checa, ANTES do guard `HAS_READY_FIBER`. Runs de
-    // teste com fiber único precisam detectar o timeout mesmo sem outra fiber
-    // pronta. Runs normais (`TIMEOUT_EXPIRED = false`) não mudam comportamento.
+    runtime.scheduler.yield_counter = super::YIELD_INTERVAL;
+    // Test timeout — sempre checa, ANTES do guard `has_ready_fiber`.
     if TIMEOUT_EXPIRED.load(Relaxed) {
         with_suspend(|s| s.suspend(YieldReason::Timeout));
         return;
     }
-    if !HAS_READY_FIBER.with(|h| h.get()) {
+    if !runtime.scheduler.has_ready_fiber {
         return;
     }
     with_suspend(|suspend| {
@@ -354,8 +251,9 @@ pub extern "C" fn kata_rt_yield_check() {
 /// scheduler coloca o fiber em `blocked` com `WaitingOnSleep(deadline)` e o
 /// acorda quando `now >= deadline` (via `wake_pass` ou `earliest_deadline`).
 ///
-/// Se chamada fora de um fiber (sem `Suspend` em TLS), é no-op — não há como
-/// suspender.
+/// Não recebe `rt` — só usa `with_suspend` (TLS), não acessa o scheduler.
+///
+/// Se chamada fora de um fiber (sem `Suspend` em TLS), é no-op.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_sleep(ms: i64) {
     // Decodificar SMI: (val << 1 | 1) >> 1 = val.

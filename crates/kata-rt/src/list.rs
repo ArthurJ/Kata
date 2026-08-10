@@ -23,7 +23,7 @@ pub extern "C" fn kata_rt_list_nil() -> i64 {
 /// `head` e `tail` são valores i64 válidos. `arena_handle` é um handle válido.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_list_cons(head: i64, tail: i64, arena_handle: i64) -> i64 {
-    let ptr = crate::arena::kata_rt_arena_alloc(arena_handle, 16);
+    let ptr = crate::arena::kata_rt_arena_alloc(crate::arena::rt_ptr(), arena_handle, 16);
     if ptr == 0 {
         return 0;
     }

@@ -32,7 +32,7 @@ pub extern "C" fn kata_rt_bytes_alloc(len: i64, arena_handle: i64) -> i64 {
         return 0;
     }
     let size = 8 + len; // header (8 bytes) + data (len bytes)
-    let ptr = crate::arena::kata_rt_arena_alloc(arena_handle, size);
+    let ptr = crate::arena::kata_rt_arena_alloc(crate::arena::rt_ptr(), arena_handle, size);
     if ptr == 0 {
         return 0;
     }
