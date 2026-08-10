@@ -18,8 +18,8 @@ use kata_diagnostics::MiddleError;
 
 use crate::typed::{TypedExpr, TypedExprKind};
 
-use super::expr::{InferCtx, infer_expr_hinted};
-use super::helpers::InferResult;
+use super::expr::{infer_expr_hinted, InferCtx};
+use super::helpers::{peel_grouping_expr, InferResult};
 
 /// Resolve um callback que é `Expr::Ident` referenciando uma função do
 /// DispatchTable (ex: `+`, `*`, `<` usado como callback standalone).
@@ -38,7 +38,10 @@ fn resolve_operator_callback(
     ctx: &InferCtx,
     hint: &Ty,
 ) -> Option<InferResult<TypedExpr>> {
-    let name = match &callback.node {
+    // Peel Grouping — `(+)` produz Grouping(Ident("+")), não Ident direto.
+    // Grouping de uma única função = tratar a função como valor.
+    let core = peel_grouping_expr(&callback.node);
+    let name = match core {
         Expr::Ident { name } => name.clone(),
         _ => return None,
     };

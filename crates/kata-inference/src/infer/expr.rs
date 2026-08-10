@@ -165,8 +165,9 @@ pub(crate) fn infer_expr_hinted(
                     Err(MiddleError::UnboundName {
                         name: ref err_name, ..
                     }) if !err_name.contains("ambí") && !err_name.contains("payload") => {
-                        // Caminho 3: Action no DispatchTable (first-class reference).
+                        // Caminho 3: função no DispatchTable (first-class reference).
                         // `worker` sem `!` referencia a Action como valor.
+                        // `+`, `*`, `<` em Grouping `(+)` referenciam função despachada.
                         if let Some(overloads) = ctx.table.get_overloads(name) {
                             let action_overloads: Vec<_> =
                                 overloads.iter().filter(|o| o.is_action).collect();
@@ -201,12 +202,42 @@ pub(crate) fn infer_expr_hinted(
                                     )
                                 }
                             } else {
-                                // Caminho 4: realmente unbound.
-                                return Err(MiddleError::UnboundName {
-                                    name: name.clone(),
-                                    span: (*span).into(),
+                                // Caminho 3b: função despachada não-action (ex: `+`, `*`, `<`).
+                                // Quando aparece standalone (ex: callback de HOF em Grouping),
+                                // trata como valor de função. Se há um único overload, retorna
+                                // Ty::Function. Se múltiplos, Ty::OverloadSet para dispatch no
+                                // call site.
+                                let fn_overloads: Vec<_> =
+                                    overloads.iter().filter(|o| !o.is_action).collect();
+                                if fn_overloads.len() == 1 {
+                                    let o = fn_overloads[0];
+                                    (
+                                        Ty::Function(
+                                            o.params.clone(),
+                                            Box::new(o.ret.clone()),
+                                        ),
+                                        TypedExprKind::Ident { name: name.clone() },
+                                    )
+                                } else if !fn_overloads.is_empty() {
+                                    let overloads: Vec<(Vec<Ty>, Ty)> = fn_overloads
+                                        .iter()
+                                        .map(|o| (o.params.clone(), o.ret.clone()))
+                                        .collect();
+                                    (
+                                        Ty::OverloadSet {
+                                            name: name.clone(),
+                                            overloads,
+                                        },
+                                        TypedExprKind::Ident { name: name.clone() },
+                                    )
+                                } else {
+                                    // Caminho 4: realmente unbound.
+                                    return Err(MiddleError::UnboundName {
+                                        name: name.clone(),
+                                        span: (*span).into(),
         suggestion: None,
-                                });
+                                    });
+                                }
                             }
                         } else {
                             return Err(MiddleError::UnboundName {
