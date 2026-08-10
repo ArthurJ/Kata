@@ -62,6 +62,7 @@ fn coerce_return(
 pub(crate) fn declare_kata_function(
     func: &TypedFunction,
     cranelift_name: &str,
+    linkage: Linkage,
     module: &mut dyn ModuleBackend,
     struct_registry: &kata_core::StructRegistry,
 ) -> Result<cranelift_module::FuncId, CodegenError> {
@@ -85,7 +86,7 @@ pub(crate) fn declare_kata_function(
         struct_registry,
     )));
     module
-        .declare_function(cranelift_name, Linkage::Export, &sig)
+        .declare_function(cranelift_name, linkage, &sig)
         .map_err(|e| CodegenError::Cranelift { reason: format!("declare kata fn {}: {e}", func.name) })
 }
 

@@ -338,7 +338,7 @@ sem recompilação.
 - `let x := 42` depois `let f := lambda n: n + x` depois `let x := 99` depois `echo!(f 10)` → 52 (shadowing não retroage) ✅
 - `cargo test --workspace --no-fail-fast -- --test-threads=8` → 1496 passed ✅
 
-### Fase 4 — Funções nomeadas
+### Fase 4 — Funções nomeadas ✅
 
 **Escopo:** `double :: Int => Int` / `double x := * x 2` persiste entre
 linhas sem recompilação do body.
@@ -346,42 +346,75 @@ linhas sem recompilação do body.
 **Mudanças:**
 1. Funções nomeadas são `typed.functions` (não `pre_entry`) — compiladas
    como `__kata_fn_N` no JITModule. Hoje, o JITModule é descartado.
-2. Para persistir funções nomeadas sem recompilação, manter o JITModule
-   vivo (não fazer `std::mem::forget(backend.into_inner())` — reter
-   handle) e registrar os function pointers numa tabela de símbolos
+2. Para persistir funções nomeadas sem recompilação, extrair function
+   pointers antes de descartar o JITModule (leak sem handle, páginas de
+   código permanecem mapeadas) e armazenar numa tabela de símbolos
    na ReplSession.
-3. A próxima linha declara as funções anteriores como `Linkage::Import`
-   no novo JITModule, registrando os function pointers no symbol
-   registry do `JITBuilder`.
+3. A próxima linha registra os function pointers no
+   `JITBuilder::symbol_registry` do novo JITModule, e declara as funções
+   anteriores como `Linkage::Import`.
 
 **Isto é a parte que sai do modelo de snapshots.** Funções nomeadas têm
 corpo compilado — não são valores serializáveis. Precisam de linking
 entre modules JIT. Mas o custo é isolado a esta fase — bindings `let`
 (Fases 1-3) não precisam de linking.
 
+**Implementação:**
+- `canonical_fn_id` (FNV-1a de nome + param_types + clauses) identifica
+  funções univocamente. Redefinição (corpo diferente) produz hash
+  diferente → recompila como Export.
+- `declare_kata_function` aceita `Linkage` (Import vs Export).
+- `lower_module` recebe `prev_funcs: &HashMap<i64, (String, *const u8)>`
+  (fn_hash → (cranelift_name, fn_ptr)). Para cada `typed.functions`,
+  decide Import vs Export baseado no hash. Retorna `Vec<CompiledFunc>`
+  com info das funções Export recém-compiladas.
+- `jit_eval_repl` (wrapper de `jit_eval` para o REPL): registra
+  function pointers persistidos no `JITBuilder::symbol()`, executa,
+  extrai fn_ptrs das funções novas, retorna `ReplJitResult`.
+- `ReplSession.function_table: PrevFuncMap` acumula fn_hash →
+  (cranelift_name, fn_ptr) entre linhas.
+- Callers existentes (`jit_eval`, `jit_compile_tests`, `aot_emit`)
+  passam `&HashMap::new()` — sem mudanças.
+
 **Verificação:**
-- `double :: Int => Int` / `double x := * x 2` depois `echo!(double 5)` → 10
-- `double :: Int => Int` / `double x := * x 2` depois `echo!(double (double 5))` → 20
+- `double :: Int => Int` / `lambda x: * x 2` → `echo!(double 5)` → 10 ✅
+- `double :: Int => Int` / `lambda x: * x 2` → `echo!(double (double 5))` → 20 ✅
+- `fat :: Int Int => Int` / `lambda 0 acc: acc` / `lambda n acc: fat (- n 1) (* n acc)`
+  → `echo!(fat 5 1)` → 120, `echo!(fat 10 1)` → 3628800 ✅ (recursão)
+- Redefinição: `double` com `* x 2` → 10, depois `double` com `+ x 100` → 105 ✅
+- `cargo test --workspace --no-fail-fast -- --test-threads=8` → 1501 passed ✅
 
 ## 4. Estrutura esperada ao concluir
 
 ```
 kata-driver:
   repl/mod.rs:
-    - ReplSession com bindings: HashMap<String, (u32, Ty)>
-    - build_pre_entry() injeta bindings como HeapSnapshots
-    - eval_expr: Let → JIT-executa → serializa → armazena em bindings
-    - eval_expr: expressão → build_pre_entry + entry → JIT-executa
-    - run_pipeline_eval: constrói TypedModule minimal (não reprocessa items)
+    - ReplSession com compilação incremental completa
+    - frozen_bindings: escalares → literais AST
+    - snapshot_bindings: complexos + closures → HeapSnapshot na TAST
+    - function_table: funções nomeadas → (cranelift_name, fn_ptr)
+    - run_pipeline_eval usa jit_eval_repl (não jit_eval)
 
-kata-rt:
-  snapshot.rs:
-    - kata_rt_load_snapshot: skip se SNAPSHOT_PTRS[id] != 0
+kata-codegen:
+  lowering/jit.rs:
+    - jit_eval_repl: registra prev_funcs no JITBuilder, extrai new_funcs
+    - PrevFuncMap: HashMap<i64, (String, *const u8)>
+  lowering/module.rs:
+    - lower_module recebe prev_funcs, decide Import vs Export
+    - CompiledFunc: fn_hash + cranelift_name + func_id (funções Export)
+  lowering/function_def.rs:
+    - declare_kata_function aceita Linkage (Import vs Export)
+  lowering/cache_key.rs:
+    - canonical_fn_id: pub(crate) — hash FNV-1a de nome + tipos + clauses
 
 kata-comptime:
   snapshot.rs:
     - serialize_snapshot: braço Ty::Function serializa CaptureBox
       como raw i64s sem rebase — Fase 3 ✅
+
+kata-rt:
+  snapshot.rs:
+    - kata_rt_load_snapshot: skip se SNAPSHOT_PTRS[id] != 0
 ```
 
 ## 5. O que não muda

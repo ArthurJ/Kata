@@ -23,7 +23,7 @@ use kata_inference::{TypedExpr, TypedExprKind, TypedLambdaClause};
 ///
 /// Serializa nome + tipos + body em uma string canônica (sem spans, sem ty)
 /// e aplica FNV-1a para produzir um i64 estável.
-pub(super) fn canonical_fn_id(
+pub(crate) fn canonical_fn_id(
     name: &str,
     param_types: &[Ty],
     clauses: &[TypedLambdaClause],

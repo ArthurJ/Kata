@@ -54,19 +54,34 @@ pub(crate) type FuncKey = (String, Vec<Ty>, Ty);
 /// Tabela de símbolos de funções Kata nomeadas — mapeia chave composta → FuncId.
 pub(crate) type SymbolTable = HashMap<FuncKey, cranelift_module::FuncId>;
 
+/// Info de uma função nomeada recém-compilada nesta invocação de `lower_module`.
+/// O caller (REPL) usa isto para extrair function pointers e registrar na
+/// próxima linha como `Linkage::Import`.
+pub(crate) struct CompiledFunc {
+    /// Hash canônico (FNV-1a de nome + param_types + clauses).
+    pub fn_hash: i64,
+    /// Nome do símbolo no JITModule (ex: `__kata_fn_0`).
+    pub cranelift_name: String,
+    /// FuncId no JITModule atual — para `get_finalized_function`.
+    pub func_id: cranelift_module::FuncId,
+}
+
 /// Lower do `TypedModule` completo: cria a função `__kata_entry` e
-/// retorna o `MetadataTable` sidecar, a string table, e os wrappers de teste.
+/// retorna o `MetadataTable` sidecar, a string table, os wrappers de teste,
+/// e info das funções nomeadas recém-compiladas (para REPL incremental).
 pub(crate) fn lower_module(
     typed: &TypedModule,
     module: &mut dyn ModuleBackend,
     ffi_ids: &HashMap<String, cranelift_module::FuncId>,
     struct_registry: &kata_core::StructRegistry,
     type_id_map: &HashMap<Ty, i64>,
+    prev_funcs: &HashMap<i64, (String, *const u8)>,
 ) -> Result<
     (
         MetadataTable,
         StringTable,
         Vec<super::test_runner::TestWrapper>,
+        Vec<CompiledFunc>,
     ),
     CodegenError,
 > {
@@ -78,33 +93,69 @@ pub(crate) fn lower_module(
 
     // ── Declara e define funções nomeadas antes do entry point ──
     let mut func_ids: Vec<cranelift_module::FuncId> = Vec::new();
+    let mut compiled_funcs: Vec<CompiledFunc> = Vec::new();
     for func in &typed.functions {
-        let cranelift_name = format!("__kata_fn_{fn_counter}");
-        fn_counter += 1;
-        let func_id = declare_kata_function(func, &cranelift_name, module, struct_registry)?;
-        symbol_table.insert(
-            (
-                func.name.clone(),
-                func.param_types.clone(),
-                func.ret_ty.clone(),
-            ),
-            func_id,
+        let fn_hash = crate::lowering::cache_key::canonical_fn_id(
+            &func.name,
+            &func.param_types,
+            &func.clauses,
         );
-        func_ids.push(func_id);
+        if let Some((sym_name, _fn_ptr)) = prev_funcs.get(&fn_hash) {
+            // Função já compilada em linha anterior — declarar como Import.
+            // O símbolo foi registrado no JITBuilder pelo caller (jit_eval_repl).
+            let func_id =
+                declare_kata_function(func, sym_name, Linkage::Import, module, struct_registry)?;
+            symbol_table.insert(
+                (func.name.clone(), func.param_types.clone(), func.ret_ty.clone()),
+                func_id,
+            );
+            func_ids.push(func_id);
+        } else {
+            // Função nova — declarar como Export e definir corpo.
+            let cranelift_name = format!("__kata_fn_{fn_counter}");
+            fn_counter += 1;
+            let func_id = declare_kata_function(
+                func,
+                &cranelift_name,
+                Linkage::Export,
+                module,
+                struct_registry,
+            )?;
+            symbol_table.insert(
+                (func.name.clone(), func.param_types.clone(), func.ret_ty.clone()),
+                func_id,
+            );
+            compiled_funcs.push(CompiledFunc {
+                fn_hash,
+                cranelift_name,
+                func_id,
+            });
+            func_ids.push(func_id);
+        }
     }
 
+    // Definir corpo apenas das funções Export (novas).
+    // Funções Import (prev_funcs) já têm código compilado — só precisam
+    // do FuncId no symbol_table para resolver chamadas.
     for (i, func) in typed.functions.iter().enumerate() {
-        define_kata_function(
-            func,
-            func_ids[i],
-            module,
-            ffi_ids,
-            &symbol_table,
-            &mut string_table,
-            &mut bytes_table,
-            struct_registry,
-            type_id_map,
-        )?;
+        let fn_hash = crate::lowering::cache_key::canonical_fn_id(
+            &func.name,
+            &func.param_types,
+            &func.clauses,
+        );
+        if !prev_funcs.contains_key(&fn_hash) {
+            define_kata_function(
+                func,
+                func_ids[i],
+                module,
+                ffi_ids,
+                &symbol_table,
+                &mut string_table,
+                &mut bytes_table,
+                struct_registry,
+                type_id_map,
+            )?;
+        }
     }
 
     // ── Declara e define Actions antes do entry point ──
@@ -389,5 +440,5 @@ pub(crate) fn lower_module(
             .map_err(|e| CodegenError::Cranelift { reason: format!("define_data {rebase_sym}: {e}") })?;
     }
 
-    Ok((metadata, string_table, _test_wrappers))
+    Ok((metadata, string_table, _test_wrappers, compiled_funcs))
 }

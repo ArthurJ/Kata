@@ -74,12 +74,13 @@ pub fn jit_eval(
 
     // Declara __kata_entry e faz o lowering.
     let ret_ty = typed.entry.node.ty.clone();
-    let (_metadata, _string_table, _test_wrappers) = lower_module(
+    let (_metadata, _string_table, _test_wrappers, _compiled_funcs) = lower_module(
         typed,
         &mut backend,
         &ffi_ids,
         &typed.struct_registry,
         type_id_map,
+        &HashMap::new(),
     )?;
 
     // Finaliza todas as definições — resolve relocations, compila machine code.
@@ -172,15 +173,145 @@ pub fn jit_compile_tests(
 
     let ffi_ids = crate::ffi_registry::declare_ffi_symbols(&mut backend)?;
 
-    let (_metadata, _string_table, test_wrappers) = lower_module(
+    let (_metadata, _string_table, test_wrappers, _compiled_funcs) = lower_module(
         typed,
         &mut backend,
         &ffi_ids,
         &typed.struct_registry,
         type_id_map,
+        &HashMap::new(),
     )?;
 
     backend.finalize()?;
 
     Ok((backend.into_inner(), test_wrappers))
+}
+
+/// Função nomeada persistida entre linhas do REPL.
+/// Mapeia hash → (nome do símbolo JIT, ponteiro de código absoluto).
+/// O ponteiro permanece válido porque o JITModule anterior é leaked
+/// (páginas de código permanecem mapeadas).
+pub type PrevFuncMap = HashMap<i64, (String, *const u8)>;
+
+/// Resultado de `jit_eval_repl` — inclui function pointers das funções
+/// nomeadas recém-compiladas nesta linha, para persistir na próxima.
+pub struct ReplJitResult {
+    /// Resultado da execução do entry point.
+    pub jit: JitResult,
+    /// Funções nomeadas recém-compiladas: (fn_hash, cranelift_name, fn_ptr).
+    /// O caller armazena em `function_table` para registrar como Import
+    /// na próxima linha.
+    pub new_funcs: Vec<(i64, String, *const u8)>,
+}
+
+/// Compila e executa um `TypedModule` via Cranelift JIT, com suporte a
+/// funções nomeadas persistidas entre linhas do REPL.
+///
+/// Diferença vs `jit_eval`:
+/// - `prev_funcs`: mapeia fn_hash → nome do símbolo JIT das funções já
+///   compiladas em linhas anteriores. Estas são registradas no
+///   `JITBuilder::symbol()` e declaradas como `Linkage::Import` pelo
+///   `lower_module`. O corpo não é recompilado.
+/// - Retorna `new_funcs`: function pointers das funções recém-compiladas
+///   (Export) nesta linha. O caller armazena para usar como Import na
+///   próxima linha.
+///
+/// O caller é responsável pelo lifecycle do Runtime (`rt_ptr`).
+pub fn jit_eval_repl(
+    typed: &TypedModule,
+    type_id_map: &HashMap<Ty, i64>,
+    type_shapes: &[kata_rt::TypeShape],
+    rt_ptr: i64,
+    prev_funcs: &PrevFuncMap,
+) -> Result<ReplJitResult, CodegenError> {
+    let mut flags_builder = cranelift_codegen::settings::builder();
+    flags_builder
+        .set("preserve_frame_pointers", "true")
+        .map_err(|e| CodegenError::Cranelift { reason: format!("set preserve_frame_pointers: {e}") })?;
+    let flags = cranelift_codegen::settings::Flags::new(flags_builder);
+
+    let isa_builder = cranelift_native::builder()
+        .map_err(|e| CodegenError::Cranelift { reason: format!("native isa builder: {e}") })?;
+    let isa = isa_builder
+        .finish(flags)
+        .map_err(|e| CodegenError::Cranelift { reason: format!("isa finish: {e}") })?;
+
+    let mut builder =
+        cranelift_jit::JITBuilder::with_isa(isa, cranelift_module::default_libcall_names());
+
+    // Registrar símbolos FFI.
+    crate::ffi_registry::register_ffi_symbols(&mut builder);
+
+    // Registrar function pointers das funções persistidas de linhas anteriores.
+    // O nome do símbolo é o `cranelift_name` da linha original — o mesmo nome
+    // que `lower_module` usa para declarar como `Linkage::Import`.
+    for (_fn_hash, (sym_name, fn_ptr)) in prev_funcs {
+        builder.symbol(sym_name, *fn_ptr);
+    }
+
+    let inner = cranelift_jit::JITModule::new(builder);
+    let mut backend = JitBackend::new(inner);
+
+    let ffi_ids = crate::ffi_registry::declare_ffi_symbols(&mut backend)?;
+
+    let ret_ty = typed.entry.node.ty.clone();
+    let (_metadata, _string_table, _test_wrappers, compiled_funcs) = lower_module(
+        typed,
+        &mut backend,
+        &ffi_ids,
+        &typed.struct_registry,
+        type_id_map,
+        prev_funcs,
+    )?;
+
+    // Finaliza todas as definições.
+    backend.finalize()?;
+
+    // Obtém o ponteiro da função entry.
+    let entry_id = backend
+        .get_name("__kata_entry")
+        .ok_or_else(|| CodegenError::Cranelift { reason: "__kata_entry não encontrado".into() })?;
+    let entry_fid = match entry_id {
+        cranelift_module::FuncOrDataId::Func(fid) => fid,
+        _ => return Err(CodegenError::Cranelift { reason: "__kata_entry não é função".into() }),
+    };
+    let code = backend.get_finalized_function(entry_fid);
+
+    // Registrar type_shapes no Runtime se necessário.
+    if !type_shapes.is_empty() {
+        kata_rt::register_type_table(rt_ptr, type_shapes.to_vec());
+    }
+
+    // Executa o entry point.
+    let jit = match &ret_ty {
+        Ty::Prim(PrimTy::Float) => {
+            let func: extern "C" fn(i64) -> f64 = unsafe { std::mem::transmute(code) };
+            let f = func(rt_ptr);
+            JitResult {
+                raw: f.to_bits() as i64,
+                ty: ret_ty,
+            }
+        }
+        _ => {
+            let func: extern "C" fn(i64) -> i64 = unsafe { std::mem::transmute(code) };
+            let val = func(rt_ptr);
+            JitResult {
+                raw: val,
+                ty: ret_ty,
+            }
+        }
+    };
+
+    // Extrair function pointers das funções recém-compiladas (Export).
+    let mut new_funcs = Vec::new();
+    for cf in compiled_funcs {
+        let ptr = backend.get_finalized_function(cf.func_id);
+        new_funcs.push((cf.fn_hash, cf.cranelift_name, ptr));
+    }
+
+    // Leak do JITModule — páginas de código permanecem mapeadas.
+    // Os function pointers extraídos acima permanecem válidos.
+    std::mem::forget(backend.into_inner());
+
+    Ok(ReplJitResult { jit, new_funcs })
 }

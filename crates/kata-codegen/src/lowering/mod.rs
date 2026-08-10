@@ -47,7 +47,7 @@ mod variant;
 pub(crate) use backend::ModuleBackend;
 
 pub use aot::aot_emit;
-pub use jit::{JitResult, jit_compile_tests, jit_eval, leak_rt_ptr};
+pub use jit::{JitResult, PrevFuncMap, ReplJitResult, jit_compile_tests, jit_eval, jit_eval_repl, leak_rt_ptr};
 pub use module::CodegenError;
 use module::StringTable;
 pub use test_runner::TestWrapper;

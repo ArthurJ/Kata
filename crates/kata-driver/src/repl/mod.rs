@@ -18,7 +18,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use kata_ast::{Expr, Item, Module, Span, Spanned};
-use kata_codegen::jit_eval;
+use kata_codegen::{jit_eval_repl, PrevFuncMap};
 use kata_comptime::serialize_value;
 use kata_core::ty::{PrimTy, Ty};
 use kata_inference::infer_module;
@@ -52,6 +52,12 @@ pub(crate) struct ReplSession {
     pub(crate) snapshot_bindings: HashMap<String, (u32, Ty)>,
     /// Snapshots acumulados — indexados por snapshot_id global.
     pub(crate) snapshots: Vec<kata_core::snapshot::HeapSnapshotData>,
+    /// Funções nomeadas persistidas entre linhas — mapeia fn_hash →
+    /// (cranelift_name, fn_ptr). O fn_ptr é absoluto e permanece válido
+    /// porque o JITModule anterior é leaked (páginas de código mapeadas).
+    /// Na próxima linha, estes símbolos são registrados no JITBuilder e
+    /// declarados como Linkage::Import — o corpo não é recompilado.
+    pub(crate) function_table: kata_codegen::PrevFuncMap,
     /// Prelude resolvido (recarregado em `:reset`).
     pub(crate) prelude: ResolvedModule,
     /// Runtime persistente — vive entre avaliações para preservar valores
@@ -76,6 +82,7 @@ impl ReplSession {
             frozen_bindings: HashMap::new(),
             snapshot_bindings: HashMap::new(),
             snapshots: Vec::new(),
+            function_table: HashMap::new(),
             prelude,
             rt_ptr,
             history_path,
@@ -88,6 +95,7 @@ impl ReplSession {
         self.frozen_bindings.clear();
         self.snapshot_bindings.clear();
         self.snapshots.clear();
+        self.function_table.clear();
         self.prelude = load_prelude()
             .map_err(|e| format!("erro ao carregar prelude: {}", crate::format_error_vec(&e)))?;
         // Recriar Runtime — descarta o antigo e cria um novo limpo.
@@ -337,7 +345,7 @@ impl ReplSession {
     /// Após infer_module, injeta bindings complexos congelados como
     /// HeapSnapshot no pre_entry da TAST, e inclui os snapshots no
     /// TypedModule.snapshots para que o codegen emita load_snapshot.
-    fn run_pipeline_eval(&self, module: &Module) -> Result<crate::ExecResult, String> {
+    fn run_pipeline_eval(&mut self, module: &Module) -> Result<crate::ExecResult, String> {
         let user = resolve(module)
             .map_err(|e| format!("erro de resolução: {}", crate::format_error_vec(&e)))?;
         let resolved = merge_resolved(self.prelude.clone(), user);
@@ -351,11 +359,23 @@ impl ReplSession {
         let mono = monomorphize(typed);
         let mono = optimize(mono);
         let mono = kata_monomorph::MonoModule::from(tree_shake(mono.inner));
-        let jit =
-            jit_eval(&mono, &Default::default(), &[], self.rt_ptr).map_err(|e| format!("erro de codegen: {e}"))?;
+        let repl_result = jit_eval_repl(
+            &mono,
+            &Default::default(),
+            &[],
+            self.rt_ptr,
+            &self.function_table,
+        )
+        .map_err(|e| format!("erro de codegen: {e}"))?;
+
+        // Persistir function pointers das funções nomeadas recém-compiladas.
+        for (fn_hash, cranelift_name, fn_ptr) in repl_result.new_funcs {
+            self.function_table.insert(fn_hash, (cranelift_name, fn_ptr));
+        }
+
         Ok(crate::ExecResult {
-            raw: jit.raw,
-            ty: jit.ty,
+            raw: repl_result.jit.raw,
+            ty: repl_result.jit.ty,
         })
     }
 
