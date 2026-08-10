@@ -155,14 +155,14 @@ fn cmd_parse(file: &str) -> miette::Result<()> {
 }
 
 fn cmd_eval(expr: &str) -> miette::Result<()> {
-    let result = run_pipeline(expr)?;
+    let result = run_pipeline_display_wrap(expr)?;
     display::print_result(result.raw, &result.ty);
     Ok(())
 }
 
 fn cmd_run(file: &str) -> miette::Result<()> {
     let source = read_source(file)?;
-    let result = run_pipeline_with_file(&source, Some(file))?;
+    let result = run_pipeline_with_file_display_wrap(&source, Some(file))?;
     // Unit de retorno de `main` não carrega informação — o output do
     // programa já foi produzido via echo!/_print!. Suprimir o `()`.
     if !matches!(result.ty, Ty::Unit) {
@@ -373,15 +373,40 @@ fn run_pipeline(source: &str) -> miette::Result<ExecResult> {
     run_pipeline_with_file(source, None)
 }
 
+/// Igual a `run_pipeline` mas ativa display wrapping (show no entry point).
+fn run_pipeline_display_wrap(source: &str) -> miette::Result<ExecResult> {
+    run_pipeline_with_file_display_wrap(source, None)
+}
+
 /// Executa o pipeline completo com caminho do arquivo (para resolver imports).
 ///
 /// Delega a sequência de compilação ao `Pipeline` composicional (A1).
 /// Cada passo existe uma vez — este wrapper só escolhe os modos (two-pass,
 /// tree-shake default) e termina com `jit_eval`.
 fn run_pipeline_with_file(source: &str, file_path: Option<&str>) -> miette::Result<ExecResult> {
+    run_pipeline_with_file_inner(source, file_path, false)
+}
+
+/// Igual a `run_pipeline_with_file` mas ativa display wrapping.
+fn run_pipeline_with_file_display_wrap(
+    source: &str,
+    file_path: Option<&str>,
+) -> miette::Result<ExecResult> {
+    run_pipeline_with_file_inner(source, file_path, true)
+}
+
+fn run_pipeline_with_file_inner(
+    source: &str,
+    file_path: Option<&str>,
+    display_wrap: bool,
+) -> miette::Result<ExecResult> {
+    let mut pipeline = pipeline::Pipeline::new(source)
+        .with_file_path(file_path.unwrap_or("<eval>"));
+    if display_wrap {
+        pipeline = pipeline.with_display_wrap();
+    }
     let compiled = (|| -> Result<_, Vec<miette::Report>> {
-        pipeline::Pipeline::new(source)
-            .with_file_path(file_path.unwrap_or("<eval>"))
+        pipeline
             .lex()?
             .parse(pipeline::ParseMode::TwoPass, file_path)?
             .resolve(file_path)?

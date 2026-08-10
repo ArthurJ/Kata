@@ -517,3 +517,69 @@ fn ty_name(ty: &Ty) -> &str {
         _ => "",
     }
 }
+
+/// Envolve o entry point de um `TypedModule` com `show` para que o driver
+/// possa imprimir tipos compostos (List, Tuple, Struct, Sum) como Text.
+///
+/// Se o tipo do entry point é um tipo composto, substitui o entry por
+/// `show <entry>` (Closure com callee = Ident("show"), ffi_symbol = None).
+/// O monomorphizador resolve o overload genérico e instancia para o tipo
+/// concreto. Primitivos (Int, Float, Text, Rational, Boolean, Unit) não
+/// são afetados — já têm type tags no driver.
+pub fn wrap_entry_with_show(typed: &mut TypedModule) {
+    use kata_core::escape::EscapeTarget;
+    use crate::typed::TypedExprKind;
+
+    let entry_ty = typed.entry.node.ty.clone();
+    let needs_wrap = match &entry_ty {
+        Ty::Prim(_) | Ty::Unit => false,
+        Ty::Sum(name) if name == "Boolean" => false,
+        Ty::List(_) | Ty::Tuple(_) | Ty::Struct(_) | Ty::Sum(_) => true,
+        _ => false,
+    };
+    if !needs_wrap {
+        return;
+    }
+
+    let entry_span = typed.entry.span;
+    let entry_inner = std::mem::replace(
+        &mut typed.entry,
+        Spanned::new(
+            TypedExpr {
+                span: entry_span,
+                ty: entry_ty.clone(),
+                tail_pos: false,
+                escape: EscapeTarget::Local,
+                kind: TypedExprKind::Unit,
+            },
+            entry_span,
+        ),
+    );
+
+    // Constrói `show <entry>` como Closure. O monomorphizador encontra
+    // o overload `show` na DispatchTable, instancia para o tipo concreto,
+    // e reescreve o callee para o nome da instância.
+    let callee = TypedExpr {
+        span: entry_span,
+        ty: Ty::Function(vec![entry_ty.clone()], Box::new(Ty::text())),
+        tail_pos: false,
+        escape: EscapeTarget::Local,
+        kind: TypedExprKind::Ident {
+            name: "show".to_string(),
+        },
+    };
+    typed.entry = Spanned::new(
+        TypedExpr {
+            span: entry_span,
+            ty: Ty::text(),
+            tail_pos: false,
+            escape: EscapeTarget::Caller,
+            kind: TypedExprKind::Closure {
+                callee: Box::new(Spanned::new(callee, entry_span)),
+                args: vec![entry_inner],
+                ffi_symbol: None,
+            },
+        },
+        entry_span,
+    );
+}

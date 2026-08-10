@@ -184,10 +184,11 @@ fn comptime_list_top_level_no_crash() {
     let (stdout, stderr, code) = run_kata_eval("@comptime [1 2 3]");
     assert_eq!(code, 0, "kata eval deve exit 0 — stderr: {stderr}");
     let first = stdout.lines().next().unwrap_or("");
-    // Ponteiro cru — um número grande (endereço na root_arena).
+    // Display wrapping converte List para Text via show.
+    // @comptime pode produzir lista vazia — o importante é não crashar.
     assert!(
-        first.parse::<i64>().is_ok(),
-        "@comptime [1 2 3] deve retornar um ponteiro (i64), não crashar — stdout: {stdout}"
+        first.starts_with('['),
+        "@comptime [1 2 3] deve imprimir uma lista (via show), não crashar — stdout: {stdout}"
     );
 }
 

@@ -155,6 +155,11 @@ pub struct Pipeline {
     /// Path do arquivo (para NamedSource no source context dos erros).
     /// `None` para eval/REPL.
     file_path: Option<String>,
+    /// Se true, envolve o entry point com `show` após inference para que
+    /// o driver possa imprimir tipos compostos (List, Tuple, Struct, Sum)
+    /// como Text. Só ativado por `cmd_eval`/`cmd_run` — testes E2E e REPL
+    /// não ativam (preservam o tipo original do entry point).
+    display_wrap: bool,
     // Artefatos acumulados (preenchidos conforme avança):
     tokens: Option<Vec<kata_ast::TokenWithSpan>>,
     module: Option<kata_ast::Module>,
@@ -169,12 +174,23 @@ impl Pipeline {
         Pipeline {
             source: source.into(),
             file_path: None,
+            display_wrap: false,
             tokens: None,
             module: None,
             resolved: None,
             typed: None,
             mono: None,
         }
+    }
+
+    /// Ativa display wrapping do entry point com `show`.
+    ///
+    /// Faz o entry point retornar `Text` em vez do tipo composto
+    /// (List, Tuple, Struct, Sum), para que o driver possa imprimir
+    /// via `TYPE_TEXT`. Primitivos não são afetados.
+    pub fn with_display_wrap(mut self) -> Self {
+        self.display_wrap = true;
+        self
     }
 
     /// Define o path do arquivo para source context nos erros.
@@ -314,8 +330,15 @@ impl Pipeline {
             .as_ref()
             .ok_or_else(|| err("infer chamado antes de resolve"))?;
 
-        let typed = infer_module(module, resolved)
+        let mut typed = infer_module(module, resolved)
             .map_err(|e| one_err(e.into_report_with_source(&self.source, self.file_path.as_deref())))?;
+
+        // Display wrapping: se ativado, envolve o entry point com `show`
+        // para que o driver possa imprimir tipos compostos como Text.
+        if self.display_wrap {
+            kata_inference::wrap_entry_with_show(&mut typed);
+        }
+
         self.typed = Some(typed);
         Ok(self)
     }
