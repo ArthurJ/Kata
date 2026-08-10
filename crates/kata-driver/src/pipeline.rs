@@ -93,8 +93,18 @@ pub struct CompiledModule {
 impl CompiledModule {
     /// Codegen JIT — compila e executa o entry point, retornando o valor bruto.
     pub fn jit_eval(self) -> miette::Result<i64> {
-        let result = kata_codegen::jit_eval(&self.mono, &self.type_id_map, &self.type_shapes)
+        // Runtime lifecycle: criar, executar, droppar. Valores retornados
+        // que são ponteiros para a arena Bump são consumidos pelo display
+        // antes do drop (o raw é lido imediatamente neste escopo).
+        let rt = Box::new(kata_rt::Runtime::new());
+        let rt_ptr = Box::into_raw(rt) as i64;
+        let result = kata_codegen::jit_eval(&self.mono, &self.type_id_map, &self.type_shapes, rt_ptr)
             .map_err(|e| e.into_report_with_source(&self.source, self.file_path.as_deref()))?;
+        // Droppar o Runtime após consumir o resultado. Se o valor retornado
+        // é um ponteiro para arena (List, Struct), o display já aconteceu
+        // ou o raw já foi lido. Para segurança, leak como antes se necessário.
+        // NOTA: o driver `kata run` é efêmero — o leak é aceitável aqui também.
+        std::mem::forget(unsafe { Box::from_raw(rt_ptr as *mut kata_rt::Runtime) });
         Ok(result.raw)
     }
 

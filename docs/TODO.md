@@ -94,15 +94,17 @@ eliminado (acesso direto via ponteiro, sem RefCell).
 passada como `rt: i64` às FFIs centrais. TLS restante: `RT_PTR` (cache para FFIs
 periféricas), `CURRENT_SUSPEND` (continuação de fiber), `TIMEOUT_EXPIRED`/`PENDING_TIMER`
 (timer de teste). ABI de funções puras migrada para `(rt, arena_handle, box_ptr, ...args)`.
-`jit_eval` faz leak do Runtime para preservar arenas (valores retornados são ponteiros
-para a arena Bump). 1493 testes passando, 0 falhas.
+`jit_eval` recebe `rt_ptr` como parâmetro — o caller controla o lifecycle do Runtime.
+Testes E2E usam `leak_rt_ptr()` (leak aceitável para processos efêmeros). O REPL cria
+um Runtime persistente que vive entre avaliações — valores na arena Bump e type table
+persistem entre linhas. 1493 testes passando, 0 falhas.
 
-**Paralelismo de testes:** `cargo test --workspace -- --test-threads=N` funciona
-verificado empiricamente com N=4. Cada thread tem seu próprio `RT_PTR` TLS e seu
-próprio `Runtime` (variável local em `jit_eval`) — sem data races no runtime.
-Limitação: `TIMEOUT_EXPIRED`/`PENDING_TIMER` são `static` (shared entre threads);
-testes que usam o timer de teste podem racear se executados em paralelo. Os testes
-E2E de codegen não usam timer, então rodam em paralelo sem problemas.
+**Paralelismo de testes:** `cargo test --workspace --no-fail-fast -- --test-threads=8`
+funciona verificado empiricamente. Cada thread tem seu próprio `RT_PTR` TLS e seu
+próprio `Runtime` — sem data races no runtime. Limitação: `TIMEOUT_EXPIRED`/
+`PENDING_TIMER` são `static` (shared entre threads); testes que usam o timer de teste
+podem racear se executados em paralelo. Os testes E2E de codegen não usam timer, então
+rodam em paralelo sem problemas.
 
 ### A3. Decompor LowerCtx em sub-contextos estratificados
 

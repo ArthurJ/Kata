@@ -54,7 +54,7 @@ pub(crate) fn jit_execute_expr(
         refined_decls: Vec::new(),
     };
 
-    let result = kata_codegen::jit_eval(&mini, &Default::default(), &[]).map_err(|e| {
+    let result = kata_codegen::jit_eval(&mini, &Default::default(), &[], kata_codegen::leak_rt_ptr()).map_err(|e| {
         ComptimeError::JitError {
             reason: format!("{e}"),
         }

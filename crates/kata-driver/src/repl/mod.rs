@@ -38,6 +38,9 @@ pub(crate) struct ReplSession {
     pub(crate) items: Vec<Spanned<Item>>,
     /// Prelude resolvido (recarregado em `:reset`).
     pub(crate) prelude: ResolvedModule,
+    /// Runtime persistente — vive entre avaliações para preservar valores
+    /// na arena Bump e type table entre linhas.
+    pub(crate) rt_ptr: i64,
     /// Histórico rustyline.
     pub(crate) history_path: PathBuf,
 }
@@ -48,9 +51,14 @@ impl ReplSession {
         let prelude = load_prelude()
             .map_err(|e| format!("erro ao carregar prelude: {}", crate::format_error_vec(&e)))?;
         let history_path = dirs();
+        // Runtime persistente: vive entre avaliações. Leak intencional —
+        // o REPL é de longa duração e valores na arena devem persistir.
+        let rt = Box::new(kata_rt::Runtime::new());
+        let rt_ptr = Box::into_raw(rt) as i64;
         Ok(Self {
             items: Vec::new(),
             prelude,
+            rt_ptr,
             history_path,
         })
     }
@@ -60,6 +68,10 @@ impl ReplSession {
         self.items.clear();
         self.prelude = load_prelude()
             .map_err(|e| format!("erro ao carregar prelude: {}", crate::format_error_vec(&e)))?;
+        // Recriar Runtime — descarta o antigo e cria um novo limpo.
+        let _ = unsafe { Box::from_raw(self.rt_ptr as *mut kata_rt::Runtime) };
+        let rt = Box::new(kata_rt::Runtime::new());
+        self.rt_ptr = Box::into_raw(rt) as i64;
         Ok(())
     }
 
@@ -252,7 +264,7 @@ impl ReplSession {
         let mono = optimize(mono);
         let mono = kata_monomorph::MonoModule::from(tree_shake(mono.inner));
         let jit =
-            jit_eval(&mono, &Default::default(), &[]).map_err(|e| format!("erro de codegen: {e}"))?;
+            jit_eval(&mono, &Default::default(), &[], self.rt_ptr).map_err(|e| format!("erro de codegen: {e}"))?;
         Ok(crate::ExecResult {
             raw: jit.raw,
             ty: jit.ty,

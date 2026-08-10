@@ -6,7 +6,7 @@
 //! Estes testes usam `parse_with_arity` com aridades construídas manualmente,
 //! simulando o que o ciclo de dois passes (Fase 4) produzirá automaticamente.
 
-use kata_codegen::jit_eval;
+use kata_codegen::{jit_eval, leak_rt_ptr};
 use kata_core::ty::{PrimTy, Ty};
 use kata_inference::infer_module;
 use kata_lexer::lex;
@@ -28,7 +28,7 @@ fn eval_src_arity(src: &str, arities: HashMap<String, usize>) -> (i64, Ty) {
     let typed = monomorphize(typed);
     let typed = optimize(typed);
     let typed = kata_monomorph::MonoModule::from(tree_shake(typed.inner));
-    let jit = jit_eval(&typed, &Default::default(), &[]).expect("codegen+JIT deve succeed");
+    let jit = jit_eval(&typed, &Default::default(), &[], leak_rt_ptr()).expect("codegen+JIT deve succeed");
     (jit.raw, jit.ty)
 }
 

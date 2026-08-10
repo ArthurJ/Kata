@@ -11,6 +11,19 @@ use super::backend::{JitBackend, ModuleBackend};
 use super::module::{CodegenError, lower_module};
 use super::test_runner::TestWrapper;
 
+/// Cria um `Runtime` e faz leak (retorna o ponteiro bruto).
+///
+/// Para testes E2E short-lived: o Runtime precisa sobreviver à execução JIT
+/// porque valores retornados (List, Struct, etc.) são ponteiros para a
+/// arena Bump. O leak é aceitável em testes (processo efêmero).
+///
+/// Para REPL/LSP/driver: não usar este helper — criar `Box<Runtime>`
+/// explicitamente e gerenciar o lifecycle.
+pub fn leak_rt_ptr() -> i64 {
+    let rt = Box::new(kata_rt::Runtime::new());
+    Box::into_raw(rt) as i64
+}
+
 /// Resultado da execução JIT — valor bruto + tipo canônico para display.
 pub struct JitResult {
     /// Valor bruto retornado pela função JIT.
@@ -25,10 +38,16 @@ pub struct JitResult {
 /// Pipeline: criar JITBuilder → registrar símbolos FFI → declarar FFI →
 /// lower_module → finalize → get_finalized_function →
 /// transmutar → executar.
+///
+/// O caller é responsável por criar o `Runtime` e passar `rt_ptr`.
+/// Para testes E2E short-lived, o caller pode fazer leak do Runtime
+/// (valores retornados são ponteiros para a arena Bump). Para REPL/LSP,
+/// o caller mantém o Runtime vivo entre avaliações para persistir estado.
 pub fn jit_eval(
     typed: &TypedModule,
     type_id_map: &HashMap<Ty, i64>,
     type_shapes: &[kata_rt::TypeShape],
+    rt_ptr: i64,
 ) -> Result<JitResult, CodegenError> {
     // Configura preserve_frame_pointers = true (necessário para CallConv::Tail / return_call).
     let mut flags_builder = cranelift_codegen::settings::builder();
@@ -76,11 +95,8 @@ pub fn jit_eval(
     };
     let code = backend.get_finalized_function(entry_fid);
 
-    // A2: Aloca Runtime para a execução. O entry point recebe rt como param.
-    let rt = Box::new(kata_rt::Runtime::new());
-    let rt_ptr = Box::into_raw(rt) as i64;
-
-    // A2: Registrar type_shapes no Runtime (marshalling to_bytes/from_bytes).
+    // Registrar type_shapes no Runtime (marshalling to_bytes/from_bytes).
+    // O caller é responsável pelo lifecycle do Runtime.
     if !type_shapes.is_empty() {
         kata_rt::register_type_table(rt_ptr, type_shapes.to_vec());
     }
@@ -113,14 +129,6 @@ pub fn jit_eval(
             }
         }
     };
-
-    // A2: Leak do Runtime para preservar arenas — o valor retornado pode
-    // ser um ponteiro para a arena Bump. Droppar o Runtime libera a arena
-    // e invalida o ponteiro. Em produção (driver), o Runtime vive enquanto
-    // o processo. Em testes JIT (jit_eval), o leak é aceitável.
-    // TODO: para REPL/LSP, o Runtime deve ser droppado explicitamente após
-    // o valor ser consumido/copiado.
-    std::mem::forget(unsafe { Box::from_raw(rt_ptr as *mut kata_rt::Runtime) });
 
     // O module precisa sobreviver até aqui — dropping após execução.
     // Cranelift JIT mantém as páginas de código mapeadas enquanto o module vive.

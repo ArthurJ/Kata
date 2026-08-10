@@ -7,7 +7,7 @@
 //! Estes testes verificam que o fork+exec acontece sem crashar o parent.
 //! O child executa a Action e termina. O parent continua executando.
 
-use kata_codegen::jit_eval;
+use kata_codegen::{jit_eval, leak_rt_ptr};
 use kata_codegen::type_table::build_and_register_type_table;
 use kata_core::ty::{PrimTy, Ty};
 use kata_inference::infer_module;
@@ -34,7 +34,7 @@ fn eval_src(src: &str) -> (i64, Ty) {
     let (type_id_map, type_shapes) =
         build_and_register_type_table(&typed, &typed.struct_registry, &resolved.enum_registry);
 
-    let jit = jit_eval(&typed, &type_id_map, &type_shapes).expect("codegen+JIT deve succeed");
+    let jit = jit_eval(&typed, &type_id_map, &type_shapes, leak_rt_ptr()).expect("codegen+JIT deve succeed");
     (jit.raw, jit.ty)
 }
 
