@@ -10,6 +10,7 @@ Error: parse.unexpected_token
    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_phase10.kata:8:13]
  7 │     # Teste 1: Canal Rendezvous (channel!())
  8 │     let (tx rx) := channel!()
-   ·             ──
+   ·             ─┬
+   ·              ╰── token inesperado
  9 │     echo!("Canal Rendezvous criado (tx, rx)")
    ╰────

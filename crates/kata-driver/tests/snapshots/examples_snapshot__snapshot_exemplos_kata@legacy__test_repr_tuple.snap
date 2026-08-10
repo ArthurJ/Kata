@@ -9,6 +9,7 @@ Error: type.no_overload
    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_repr_tuple.kata:3:5]
  2 │ action main
  3 │     echo!({1 2 3})
-   ·     ─────────────
+   ·     ──────┬──────
+   ·           ╰── nenhuma sobrecarga compatível
  4 │ main!()
    ╰────

@@ -9,6 +9,7 @@ Error: parse.unexpected_token
    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_match_stmt.kata:6:13]
  5 │     match x
  6 │         > _ 100: echo!("alto")
-   ·             ───
+   ·             ─┬─
+   ·              ╰── token inesperado
  7 │         > _ 50: echo!("medio")
    ╰────

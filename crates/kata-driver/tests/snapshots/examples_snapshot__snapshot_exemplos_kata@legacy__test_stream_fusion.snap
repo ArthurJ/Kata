@@ -10,6 +10,7 @@ Error: parse.unexpected_token
     ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_stream_fusion.kata:13:42]
  12 │ processar :: Int => Int
  13 │ lambda arr: fold 0 + (filter f (map g arr))
-    ·                                          ─
+    ·                                          ┬
+    ·                                          ╰── token inesperado
  14 │ 
     ╰────

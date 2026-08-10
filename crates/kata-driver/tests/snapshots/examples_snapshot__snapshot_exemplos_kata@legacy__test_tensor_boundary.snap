@@ -9,6 +9,7 @@ Error: parse.unexpected_token
    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_tensor_boundary.kata:3:8]
  2 │ ler_banco :: Unit => Array::Int
  3 │ lambda : {10 20 30 40}
-   ·        ─
+   ·        ┬
+   ·        ╰── token inesperado
  4 │ 
    ╰────

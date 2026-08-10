@@ -10,6 +10,7 @@ Error: parse.unexpected_token
    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_fizzbuzz_list.kata:6:23]
  5 │ action main
  6 │     let nums := [1..15]
-   ·                       ─
+   ·                       ┬
+   ·                       ╰── token inesperado
  7 │     let result := $(fizzbuzz_list nums)
    ╰────

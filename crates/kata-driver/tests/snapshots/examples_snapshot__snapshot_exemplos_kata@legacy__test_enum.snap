@@ -1,5 +1,6 @@
 ---
 source: crates/kata-driver/tests/examples_snapshot.rs
+assertion_line: 100
 expression: output
 ---
 --- stderr ---
@@ -9,6 +10,7 @@ Error: parse.unexpected_token
    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_enum.kata:3:5]
  2 │ enum Sinal
  3 │     | Verde
-   ·     ─
+   ·     ┬
+   ·     ╰── token inesperado
  4 │     | Amarelo
    ╰────

@@ -9,6 +9,7 @@ Error: type.unbound_name
    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_closure_stack.kata:5:11]
  4 │     let f := lambda x: + x n
  5 │     echo!($(f 5))
-   ·           ─
+   ·           ┬
+   ·           ╰── nome não vinculado
    ╰────
   help: você quis dizer `*`, `+`, `-`?

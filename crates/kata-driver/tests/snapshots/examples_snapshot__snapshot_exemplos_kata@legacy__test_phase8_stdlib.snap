@@ -9,6 +9,7 @@ Error: parse.unexpected_token
    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_phase8_stdlib.kata:7:23]
  6 │ action main
  7 │     let my_list2 := [1, 2]
-   ·                       ─
+   ·                       ┬
+   ·                       ╰── token inesperado
  8 │     let my_list3 := [1, 2]
    ╰────

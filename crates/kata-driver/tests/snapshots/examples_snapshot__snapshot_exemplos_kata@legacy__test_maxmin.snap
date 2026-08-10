@@ -9,7 +9,8 @@ Error: type.unbound_name
     ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_maxmin.kata:16:14]
  15 │ action main
  16 │     let m := $(max 10 20)
-    ·              ─
+    ·              ┬
+    ·              ╰── nome não vinculado
  17 │     echo!($(str m))
     ╰────
   help: você quis dizer `*`, `+`, `-`?

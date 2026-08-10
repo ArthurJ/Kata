@@ -9,6 +9,7 @@ Error: parse.unexpected_token
    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_enum_print.kata:2:5]
  1 │ enum TestEnum
  2 │     | A(< _ 10)
-   ·     ─
+   ·     ┬
+   ·     ╰── token inesperado
  3 │     | B
    ╰────

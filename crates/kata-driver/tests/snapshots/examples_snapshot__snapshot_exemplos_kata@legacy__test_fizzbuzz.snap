@@ -11,7 +11,8 @@ parse.unexpected_token
    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_fizzbuzz.kata:8:17]
  7 │     with
  8 │         fizz := = 0 $(mod x 3)
-   ·                 ──────
+   ·                 ───┬──
+   ·                    ╰── token inesperado
  9 │         buzz := = 0 mod x 5
    ╰────
 
@@ -21,6 +22,7 @@ parse.unexpected_token
    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_fizzbuzz.kata:1:1]
  1 │ fizzbuzz :: Int => Text
    · ▲
+   · ╰── token inesperado
  2 │ lambda x:
    ╰────
 
@@ -30,6 +32,7 @@ parse.unexpected_token
    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_fizzbuzz.kata:1:1]
  1 │ fizzbuzz :: Int => Text
    · ▲
+   · ╰── token inesperado
  2 │ lambda x:
    ╰────
 

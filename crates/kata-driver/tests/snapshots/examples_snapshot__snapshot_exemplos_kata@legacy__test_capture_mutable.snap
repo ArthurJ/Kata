@@ -9,5 +9,6 @@ Error: parse.unexpected_token
    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_capture_mutable.kata:5:11]
  4 │     let f := lambda y: + y x
  5 │     echo! f 3
-   ·           ─
+   ·           ┬
+   ·           ╰── token inesperado
    ╰────

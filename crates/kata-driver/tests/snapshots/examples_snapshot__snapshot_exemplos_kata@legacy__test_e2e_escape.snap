@@ -9,6 +9,7 @@ Error: parse.unexpected_token
    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_e2e_escape.kata:6:13]
  5 │     match channel!()
  6 │         (tx rx):
-   ·             ──
+   ·             ─┬
+   ·              ╰── token inesperado
  7 │             let arr := {10 20 30}
    ╰────

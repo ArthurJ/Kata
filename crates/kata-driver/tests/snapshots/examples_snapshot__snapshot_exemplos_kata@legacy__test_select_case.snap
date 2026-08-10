@@ -10,6 +10,7 @@ Error: parse.unexpected_token
    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_select_case.kata:2:13]
  1 │ action main()
  2 │     let (tx rx) := queue!(2)
-   ·             ──
+   ·             ─┬
+   ·              ╰── token inesperado
  3 │ 
    ╰────

@@ -10,6 +10,7 @@ Error: parse.unexpected_token
     ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_is_prime.kata:17:33]
  16 │ is_prime :: Int => Bool
  17 │ lambda x: is_prime_aux x 0 [2..x]
-    ·                                 ─
+    ·                                 ┬
+    ·                                 ╰── token inesperado
  18 │ 
     ╰────

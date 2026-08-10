@@ -12,7 +12,7 @@ pub enum MiddleError {
     #[diagnostic(code = "type.unbound_name")]
     UnboundName {
         name: String,
-        #[label]
+        #[label("nome não vinculado")]
         span: MietteSpan,
         #[help]
         suggestion: Option<String>,
@@ -31,7 +31,7 @@ pub enum MiddleError {
     #[diagnostic(code = "type.ambiguous_dispatch")]
     AmbiguousDispatch {
         name: String,
-        #[label]
+        #[label("dispatch ambíguo")]
         span: MietteSpan,
     },
 
@@ -39,7 +39,7 @@ pub enum MiddleError {
     #[diagnostic(code = "type.no_overload")]
     NoOverload {
         name: String,
-        #[label]
+        #[label("nenhuma sobrecarga compatível")]
         span: MietteSpan,
     },
 
@@ -47,7 +47,7 @@ pub enum MiddleError {
     #[diagnostic(code = "type.duplicate_decl")]
     DuplicateDecl {
         name: String,
-        #[label]
+        #[label("declaração duplicada")]
         span: MietteSpan,
     },
 
@@ -56,7 +56,7 @@ pub enum MiddleError {
     ArityMismatch {
         expected: usize,
         found: usize,
-        #[label]
+        #[label("número incorreto de argumentos")]
         span: MietteSpan,
         #[help]
         hint: Option<String>,
@@ -66,7 +66,7 @@ pub enum MiddleError {
     #[diagnostic(code = "type.unknown_ffi")]
     UnknownFfi {
         name: String,
-        #[label]
+        #[label("símbolo FFI desconhecido")]
         span: MietteSpan,
     },
 
@@ -75,7 +75,7 @@ pub enum MiddleError {
     NonExhaustiveMatch {
         /// Variantes que faltam (ex: "False").
         missing: Vec<String>,
-        #[label]
+        #[label("match não-exaustivo")]
         span: MietteSpan,
         #[help]
         hint: Option<String>,
@@ -84,14 +84,14 @@ pub enum MiddleError {
     #[error("guard sem `otherwise` em tipo infinito")]
     #[diagnostic(code = "type.missing_otherwise")]
     MissingOtherwise {
-        #[label]
+        #[label("guard sem otherwise")]
         span: MietteSpan,
     },
 
     #[error("cláusula redundante: sombreada por cláusula anterior")]
     #[diagnostic(code = "type.redundant_clause")]
     RedundantClause {
-        #[label]
+        #[label("cláusula redundante")]
         span: MietteSpan,
     },
 
@@ -113,7 +113,7 @@ pub enum MiddleError {
     RecursiveAction {
         action: String,
         cycle: String,
-        #[label]
+        #[label("ação recursiva")]
         span: MietteSpan,
     },
 
@@ -122,7 +122,7 @@ pub enum MiddleError {
     UnknownField {
         struct_name: String,
         field_name: String,
-        #[label]
+        #[label("campo desconhecido")]
         span: MietteSpan,
     },
 
@@ -131,7 +131,7 @@ pub enum MiddleError {
     IndexOutOfBounds {
         index: i64,
         len: usize,
-        #[label]
+        #[label("índice fora dos limites")]
         span: MietteSpan,
     },
 
@@ -139,21 +139,21 @@ pub enum MiddleError {
     #[diagnostic(code = "type.not_indexable")]
     NotIndexable {
         ty: String,
-        #[label]
+        #[label("tipo não indexável")]
         span: MietteSpan,
     },
 
     #[error("tupla não tem campos nomeados — use `.N` para indexar")]
     #[diagnostic(code = "type.field_access_on_tuple")]
     FieldAccessOnTuple {
-        #[label]
+        #[label("acesso por nome em tupla")]
         span: MietteSpan,
     },
 
     #[error("struct não é indexável — use `.nome` para acessar campos")]
     #[diagnostic(code = "type.index_access_on_struct")]
     IndexAccessOnStruct {
-        #[label]
+        #[label("acesso por índice em struct")]
         span: MietteSpan,
     },
 
@@ -163,7 +163,7 @@ pub enum MiddleError {
     #[diagnostic(code = "type.channel_in_return")]
     ChannelInReturn {
         ty: String,
-        #[label]
+        #[label("canal no retorno")]
         span: MietteSpan,
     },
 
@@ -171,7 +171,7 @@ pub enum MiddleError {
     #[diagnostic(code = "type.cache_type_constraint")]
     CacheTypeConstraint {
         found: String,
-        #[label]
+        #[label("tipo não suportado por @cache")]
         span: MietteSpan,
     },
 }

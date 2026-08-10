@@ -9,5 +9,6 @@ Error: parse.unexpected_token
    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_make_adder_typed.kata:8:11]
  7 │     let a := add5 3
  8 │     echo! a
-   ·           ─
+   ·           ┬
+   ·           ╰── token inesperado
    ╰────

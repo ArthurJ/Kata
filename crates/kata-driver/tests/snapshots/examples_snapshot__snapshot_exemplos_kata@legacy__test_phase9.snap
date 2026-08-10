@@ -10,5 +10,6 @@ Error: parse.unexpected_token
    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_phase9.kata:1:1]
  1 │ # Teste de Validação — Fase 9
    · ▲
+   · ╰── token inesperado
  2 │ # Introspecção, Tipos, Global Implements e Templates (format)
    ╰────

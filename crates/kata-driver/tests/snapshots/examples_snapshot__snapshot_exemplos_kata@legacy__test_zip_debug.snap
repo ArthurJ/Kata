@@ -9,7 +9,8 @@ Error: type.unbound_name
    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_zip_debug.kata:4:14]
  3 │     let lista_b := [10 20 30]
  4 │     let z := zip lista_a lista_b
-   ·              ───
+   ·              ─┬─
+   ·               ╰── nome não vinculado
  5 │     echo!("Zip funcionou")
    ╰────
   help: você quis dizer `div`, `map`?

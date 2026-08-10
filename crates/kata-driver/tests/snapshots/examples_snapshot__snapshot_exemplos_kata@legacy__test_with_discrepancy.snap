@@ -9,6 +9,7 @@ Error: parse.unexpected_token
     ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_with_discrepancy.kata:17:11]
  16 │     with
  17 │         T implements ORD EQ
-    ·           ──────────
+    ·           ─────┬────
+    ·                ╰── token inesperado
  18 │         maior :: T T => Bool
     ╰────

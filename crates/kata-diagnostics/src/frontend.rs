@@ -36,7 +36,7 @@ pub enum FrontendError {
     UnexpectedToken {
         expected: String,
         found: String,
-        #[label]
+        #[label("token inesperado")]
         span: MietteSpan,
     },
 
@@ -44,14 +44,14 @@ pub enum FrontendError {
     #[diagnostic(code = "lex.invalid_char")]
     InvalidChar {
         char: String,
-        #[label]
+        #[label("caractere inválido")]
         span: MietteSpan,
     },
 
     #[error("string não terminada")]
     #[diagnostic(code = "lex.unterminated_string")]
     UnterminatedString {
-        #[label]
+        #[label("string não terminada")]
         span: MietteSpan,
     },
 
@@ -59,7 +59,7 @@ pub enum FrontendError {
     #[diagnostic(code = "lex.invalid_number")]
     InvalidNumber {
         text: String,
-        #[label]
+        #[label("número inválido")]
         span: MietteSpan,
     },
 
@@ -67,7 +67,7 @@ pub enum FrontendError {
     #[diagnostic(code = "parse.trailing_tokens")]
     TrailingTokens {
         found: String,
-        #[label]
+        #[label("tokens após fim do programa")]
         span: MietteSpan,
     },
 
@@ -75,7 +75,7 @@ pub enum FrontendError {
     #[diagnostic(code = "parse.expected_expr")]
     ExpectedExpr {
         found: String,
-        #[label]
+        #[label("esperado expressão")]
         span: MietteSpan,
     },
 
@@ -84,7 +84,7 @@ pub enum FrontendError {
     InconsistentIndent {
         expected: usize,
         found: usize,
-        #[label]
+        #[label("indentação inconsistente")]
         span: MietteSpan,
     },
 
@@ -94,7 +94,7 @@ pub enum FrontendError {
         name: String,
         expected_casing: String,
         found_casing: String,
-        #[label]
+        #[label("casing inválido")]
         span: MietteSpan,
     },
 }

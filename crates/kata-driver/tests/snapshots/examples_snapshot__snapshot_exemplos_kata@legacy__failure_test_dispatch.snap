@@ -1,5 +1,6 @@
 ---
 source: crates/kata-driver/tests/examples_snapshot.rs
+assertion_line: 100
 expression: output
 ---
 --- stderr ---
@@ -10,5 +11,6 @@ Error: parse.unexpected_token
    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/failure_test_dispatch.kata:1:1]
  1 │ # Múltiplo Despacho Customizado que funciona no Parser atual
    · ▲
+   · ╰── token inesperado
  2 │ interface NUM
    ╰────

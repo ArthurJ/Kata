@@ -9,5 +9,6 @@ Error: type.no_overload
    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_unit.kata:2:5]
  1 │ action main
  2 │     echo!(())
-   ·     ───────
+   ·     ───┬───
+   ·        ╰── nenhuma sobrecarga compatível
    ╰────

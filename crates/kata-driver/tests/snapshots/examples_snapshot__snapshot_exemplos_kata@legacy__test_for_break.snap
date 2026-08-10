@@ -9,6 +9,7 @@ Error: parse.unexpected_token
    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_for_break.kata:6:17]
  5 │         match i
  6 │             > _ 1: break
-   ·                 ─
+   ·                 ┬
+   ·                 ╰── token inesperado
  7 │             otherwise:
    ╰────

@@ -11,6 +11,7 @@ Error: parse.unexpected_token
    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_tco_simple.kata:6:15]
  5 │ lambda 0 acc: acc
  6 │ lambda n acc: fat_tail $(- n 1) $(* n acc)
-   ·               ───────────────────
+   ·               ─────────┬─────────
+   ·                        ╰── token inesperado
  7 │ 
    ╰────

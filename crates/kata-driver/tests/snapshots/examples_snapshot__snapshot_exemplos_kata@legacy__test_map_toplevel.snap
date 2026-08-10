@@ -10,6 +10,7 @@ parse.unexpected_token
    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_map_toplevel.kata:1:1]
  1 │ # Testa map simple sem captures nem parenteses
    · ▲
+   · ╰── token inesperado
  2 │ f :: Int => Int
    ╰────
 
@@ -19,6 +20,7 @@ parse.unexpected_token
    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_map_toplevel.kata:1:1]
  1 │ # Testa map simple sem captures nem parenteses
    · ▲
+   · ╰── token inesperado
  2 │ f :: Int => Int
    ╰────
 

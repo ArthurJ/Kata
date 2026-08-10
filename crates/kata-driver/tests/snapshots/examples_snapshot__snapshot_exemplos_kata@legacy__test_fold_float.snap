@@ -10,6 +10,7 @@ parse.unexpected_token
    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_fold_float.kata:1:1]
  1 │ @associative(0.0)
    · ▲
+   · ╰── token inesperado
  2 │ soma_floats :: Float Float => Float
    ╰────
 
@@ -19,6 +20,7 @@ parse.unexpected_token
    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_fold_float.kata:1:1]
  1 │ @associative(0.0)
    · ▲
+   · ╰── token inesperado
  2 │ soma_floats :: Float Float => Float
    ╰────
 

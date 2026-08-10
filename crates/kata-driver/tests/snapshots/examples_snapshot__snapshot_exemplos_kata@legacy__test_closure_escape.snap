@@ -9,6 +9,7 @@ Error: parse.unexpected_token
     ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_closure_escape.kata:12:11]
  11 │     let b := add10 7
  12 │     echo! a
-    ·           ─
+    ·           ┬
+    ·           ╰── token inesperado
  13 │     echo! b
     ╰────

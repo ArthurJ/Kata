@@ -9,6 +9,7 @@ Error: type.no_overload
     ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_e2e_iterables.kata:26:9]
  25 │     for x in []
  26 │         echo!(x)
-    ·         ───────
+    ·         ───┬───
+    ·            ╰── nenhuma sobrecarga compatível
  27 │ 
     ╰────

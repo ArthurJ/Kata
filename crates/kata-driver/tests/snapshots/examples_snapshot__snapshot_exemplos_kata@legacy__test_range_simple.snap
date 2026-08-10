@@ -10,6 +10,7 @@ Error: parse.unexpected_token
    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_range_simple.kata:2:23]
  1 │ action main
  2 │     let nums := [1..15]
-   ·                       ─
+   ·                       ┬
+   ·                       ╰── token inesperado
  3 │     echo!("Range criado")
    ╰────

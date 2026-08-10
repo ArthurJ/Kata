@@ -9,6 +9,7 @@ Error: parse.unexpected_token
     ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_log.kata:14:16]
  13 │     echo!("Auditor start")
  14 │     let msg := <! rx
-    ·                ──
+    ·                ─┬
+    ·                 ╰── token inesperado
  15 │     echo!(msg)
     ╰────

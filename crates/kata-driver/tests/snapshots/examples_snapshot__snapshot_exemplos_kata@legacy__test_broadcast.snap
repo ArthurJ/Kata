@@ -9,6 +9,7 @@ Error: parse.unexpected_token
    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_broadcast.kata:3:13]
  2 │     match broadcast!()
  3 │         (tx factory):
-   ·             ───────
+   ·             ───┬───
+   ·                ╰── token inesperado
  4 │             echo!("broadcast criado")
    ╰────

@@ -9,5 +9,6 @@ Error: parse.unexpected_token
    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/failure_test_orphan.kata:1:1]
  1 │ # Teste de Regra de Coerência
    · ▲
+   · ╰── token inesperado
  2 │ 
    ╰────

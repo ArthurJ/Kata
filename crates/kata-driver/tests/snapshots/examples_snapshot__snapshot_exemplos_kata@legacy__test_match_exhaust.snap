@@ -9,6 +9,7 @@ Error: parse.unexpected_token
    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_match_exhaust.kata:3:5]
  2 │ enum Cor
  3 │     | Azul
-   ·     ─
+   ·     ┬
+   ·     ╰── token inesperado
  4 │     | Verde
    ╰────
