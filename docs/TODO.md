@@ -38,6 +38,33 @@ Os docs `TODO-*.md` foram removidos (obsoletos ou resolvidos). Pendências vivem
 
 ---
 
+## OverloadSet — Partial Dispatch com Lambda Diferido ✅
+
+**Estado:** Concluído (2026-08-10). 6 fases implementadas e testadas.
+
+PRD: `docs/PRD-overloadset-partial.md`
+
+**Problema:** Overloads cross-type (ex: `+ :: Int Float => Float @commutative`)
+causam ambiguidade no partial dispatch. `+ 10 _` casa com `Int Int`, `Int Float`,
+`Int Rational` (segunda posição é hole = não restringe). Antes, isso produzia
+`LambdaInferenceFail`.
+
+**Solução:** `Ty::OverloadSet { name, overloads }` — projeta as overloads
+compatíveis para o lambda deferido. O call site (ou HOF com hint) desambigua.
+
+**Fases:**
+1. `PartialResolveOutcome::Ambiguous` em `resolve_partial` (commit `c6386ab`)
+2. `infer_lambda` produz `OverloadSet` quando ambíguo sem hint (commit `c6386ab`)
+3. `infer_apply` caminho 2c: re-infere lambda com args concretos (commit `c6386ab`)
+4. `infer_map`/`infer_fold`/`infer_filter` tratam `OverloadSet` no callback (commit `5065e61`)
+5. Re-inferência na inference layer: HOF com `OverloadSet` re-infere lambda com hint concreto (commit `a6eb330`)
+6. 20 testes atualizados em 8 arquivos (commit `9511662`)
+
+**Resultado:** `fold f 0 [1 2 3]` com `f := + _ _` (OverloadSet) retorna 6.
+`map f [1 2 3]` com `f := + _ 2` (partial dispatch resolve) retorna [3 4 5].
+
+---
+
 ## Arquitetura — Análise de Refatoração (do zero)
 
 Itens identificados na análise arquitetural de 2026-08-09. Cada item descreve
@@ -97,7 +124,7 @@ periféricas), `CURRENT_SUSPEND` (continuação de fiber), `TIMEOUT_EXPIRED`/`PE
 `jit_eval` recebe `rt_ptr` como parâmetro — o caller controla o lifecycle do Runtime.
 Testes E2E usam `leak_rt_ptr()` (leak aceitável para processos efêmeros). O REPL cria
 um Runtime persistente que vive entre avaliações — valores na arena Bump e type table
-persistem entre linhas. 1493 testes passando, 0 falhas.
+persistem entre linhas. 1515 testes passando, 0 falhas.
 
 **Paralelismo de testes:** `cargo test --workspace --no-fail-fast -- --test-threads=8`
 funciona verificado empiricamente. Cada thread tem seu próprio `RT_PTR` TLS e seu

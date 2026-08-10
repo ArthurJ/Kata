@@ -970,3 +970,14 @@ abordado quando o Fio 11 introduzir casos reais de fibers long-lived.
   múltiplos argumentos de tipo heterogêneo com aridade variável. Exige extensão do
   type system (`Ty::Tuple` com "rest element"), parser (`Token::TripleDot`), pattern
   matching (rest binding em tupla), e codegen (loop sobre os elementos rest).
+
+## Marcos Concluídos
+
+### OverloadSet — Partial Dispatch com Lambda Diferido ✅ (2026-08-10)
+
+PRD: `docs/PRD-overloadset-partial.md`
+
+Implementa interoperabilidade numérica via overloads cross-type explícitos
+no prelude (`+ :: Int Float => Float @commutative`). O partial dispatch
+ambíguo projeta as overloads compatíveis em `Ty::OverloadSet`, deferindo a
+seleção para o call site (ou HOF via hint). 6 fases, 1515 testes, 0 falhas.
