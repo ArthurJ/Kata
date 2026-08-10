@@ -196,15 +196,17 @@ pub(crate) fn sig_for(sym: FfiSymbol) -> Option<Signature> {
             sig.params.push(AbiParam::new(I64)); // end
             sig.returns.push(AbiParam::new(I64)); // c_str ptr
         }
-        // to_bytes: (value_ptr, type_id, arena) -> bytes_ptr
+        // A2: to_bytes: (rt, value_ptr, type_id, arena) -> bytes_ptr
         FfiSymbol::ToBytes => {
+            sig.params.push(AbiParam::new(I64)); // rt
             sig.params.push(AbiParam::new(I64)); // value_ptr
             sig.params.push(AbiParam::new(I64)); // type_id
             sig.params.push(AbiParam::new(I64)); // arena
             sig.returns.push(AbiParam::new(I64)); // bytes_ptr
         }
-        // from_bytes: (bytes_ptr, arena) -> value_ptr
+        // A2: from_bytes: (rt, bytes_ptr, arena) -> value_ptr
         FfiSymbol::FromBytes => {
+            sig.params.push(AbiParam::new(I64)); // rt
             sig.params.push(AbiParam::new(I64)); // bytes_ptr
             sig.params.push(AbiParam::new(I64)); // arena
             sig.returns.push(AbiParam::new(I64)); // value_ptr

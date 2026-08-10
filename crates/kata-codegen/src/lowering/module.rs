@@ -156,8 +156,10 @@ pub(crate) fn lower_module(
     let ret_ty = &typed.entry.node.ty;
     let ret_clif = crate::ffi_sigs::ty_to_clif(ret_ty);
 
-    // Assinatura do __kata_entry: () → ret_clif
+    // Assinatura do __kata_entry: (rt: i64) → ret_clif
+    // A2: rt é ponteiro para Box<Runtime>, passado pelo driver.
     let mut sig = Signature::new(CallConv::SystemV);
+    sig.params.push(AbiParam::new(I64)); // rt
     sig.returns.push(AbiParam::new(ret_clif));
 
     let entry_id = module
@@ -214,6 +216,9 @@ pub(crate) fn lower_module(
         builder.switch_to_block(entry_block);
         builder.seal_block(entry_block);
 
+        // A2: rt é o primeiro (e único) block param — ponteiro para Box<Runtime>.
+        let rt_value = builder.block_params(entry_block)[0];
+
         let mut lower = LowerCtx {
             builder: &mut builder,
             module,
@@ -238,19 +243,22 @@ pub(crate) fn lower_module(
             struct_registry,
             type_id_map,
             ipc_broker_fid: None,
+            rt: None,
         };
 
         // Prólogo do entry point: inicializa scheduler (cria arena raiz internamente).
-        // scheduler_init retorna o handle da arena raiz — usar como caller_arena.
-        // Pré-11: substitui a antiga arena global (handle 0, nunca destruída).
+        // A2: scheduler_init(rt) → root_arena. rt é o block param do entry point.
         let scheduler_init_ref = lower
             .ffi_refs
             .get("kata_rt_scheduler_init")
             .copied()
-            .ok_or_else(|| CodegenError::FfiSymbolNotFound { symbol: "kata_rt_scheduler_init".into() })?;
-        let init_inst = lower.builder.ins().call(scheduler_init_ref, &[]);
+            .ok_or_else(|| CodegenError::FfiSymbolNotFound {
+                symbol: "kata_rt_scheduler_init".into(),
+            })?;
+        let init_inst = lower.builder.ins().call(scheduler_init_ref, &[rt_value]);
         let root_arena = lower.builder.inst_results(init_inst)[0];
         lower.caller_arena = Some(root_arena);
+        lower.rt = Some(rt_value);
 
         // ── Carregar snapshots comptime na root_arena ──
         // Para cada snapshot, chama kata_rt_load_snapshot(root_arena, bytes_ptr,

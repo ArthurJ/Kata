@@ -54,6 +54,7 @@ pub(crate) fn ensure_f64_if(
 /// Arena handle para alocação de Cons cells (fiber_arena ou fallback 0).
 pub(crate) fn arena_handle(ctx: &mut LowerCtx) -> cranelift_codegen::ir::Value {
     ctx.fiber_arena
+        .or(ctx.caller_arena)
         .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0))
 }
 
@@ -67,6 +68,7 @@ fn build_callback_sig(
     struct_registry: &kata_core::StructRegistry,
 ) -> Signature {
     let mut sig = Signature::new(CallConv::Tail);
+    sig.params.push(AbiParam::new(I64)); // rt (A2)
     sig.params.push(AbiParam::new(I64)); // arena_handle
     sig.params.push(AbiParam::new(I64)); // box_ptr (sempre presente na ABI uniformizada)
     for pt in param_types {
@@ -98,11 +100,13 @@ pub(crate) fn call_callback(
 
     let sig = build_callback_sig(param_types, ret_ty, true, ctx.struct_registry);
     let sig_ref = ctx.builder.func.import_signature(sig);
+    // ABI A2: rt é o primeiro param implícito, seguido de arena_handle e box_ptr.
+    let rt_val = ctx.rt.unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
     let arena = ctx
         .fiber_arena
         .or(ctx.caller_arena)
         .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
-    let mut full_args = vec![arena, callback_val]; // arena_handle, box_ptr
+    let mut full_args = vec![rt_val, arena, callback_val]; // rt, arena_handle, box_ptr
     full_args.extend_from_slice(args);
     let call_inst = ctx
         .builder

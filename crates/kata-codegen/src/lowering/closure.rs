@@ -44,10 +44,11 @@ pub(crate) fn lower_closure(
             .map(|(_name, params, ret)| (sym_name.clone(), params, ret))
             .unwrap_or_else(|_| (sym_name.clone(), Vec::new(), Ty::Unit));
         if let Some(&func_ref) = ctx.kata_refs.get(&key) {
-            // ABI uniformizada: arena_handle + box_ptr (dummy 0) sempre presentes.
+            // ABI A2: rt + arena_handle + box_ptr (dummy 0) sempre presentes.
+            let rt_val = ctx.rt.unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
             let arena = caller_arena_handle(ctx);
             let dummy_box = ctx.builder.ins().iconst(I64, 0);
-            let mut kata_args = vec![arena, dummy_box];
+            let mut kata_args = vec![rt_val, arena, dummy_box];
             kata_args.extend_from_slice(&arg_values);
             let call_inst = ctx.builder.ins().call(func_ref, &kata_args);
             let results = ctx.builder.inst_results(call_inst);
@@ -193,14 +194,16 @@ pub(crate) fn lower_closure(
             // Carrega fn_ptr do box_ptr (offset 0 do CaptureBox).
             let flags = MemFlagsData::new();
             let func_ptr = ctx.builder.ins().load(I64, flags, box_ptr, 0);
-            // Primeiros params implícitos: arena_handle + box_ptr.
+            // A2: Primeiros params implícitos: rt + arena_handle + box_ptr.
+            let rt_val = ctx.rt.unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
             let arena = caller_arena_handle(ctx);
-            let mut call_args = vec![arena, box_ptr];
+            let mut call_args = vec![rt_val, arena, box_ptr];
             call_args.extend(arg_values.iter().copied());
             // Constrói a assinatura para call_indirect.
             let callee_ty = &callee.node.ty;
             if let Ty::Function(param_types, ret_ty) = callee_ty {
                 let mut sig = Signature::new(CallConv::Tail);
+                sig.params.push(AbiParam::new(I64)); // rt (A2)
                 sig.params.push(AbiParam::new(I64)); // arena_handle
                 sig.params.push(AbiParam::new(I64)); // box_ptr
                 for pt in param_types {
@@ -247,11 +250,12 @@ pub(crate) fn lower_closure(
                 && let Some(&func_ref) = ctx.kata_refs.get(&key)
             {
                 // Call direto para função Kata nomeada.
-                // ABI uniformizada: arena_handle + box_ptr (dummy 0) sempre presentes.
+                // ABI A2: rt + arena_handle + box_ptr (dummy 0) sempre presentes.
                 if expr.tail_pos && !ctx.no_tail_calls {
+                    let rt_val = ctx.rt.unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
                     let arena = caller_arena_handle(ctx);
                     let dummy_box = ctx.builder.ins().iconst(I64, 0);
-                    let mut tail_args = vec![arena, dummy_box];
+                    let mut tail_args = vec![rt_val, arena, dummy_box];
                     tail_args.extend(arg_values.iter().copied());
                     ctx.builder.ins().return_call(func_ref, &tail_args);
                     ctx.emitted_tail_call = true;
@@ -262,9 +266,10 @@ pub(crate) fn lower_closure(
                     ctx.builder.ins().return_(&[val]);
                     return Ok(val);
                 }
+                let rt_val = ctx.rt.unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
                 let arena = caller_arena_handle(ctx);
                 let dummy_box = ctx.builder.ins().iconst(I64, 0);
-                let mut call_args = vec![arena, dummy_box];
+                let mut call_args = vec![rt_val, arena, dummy_box];
                 call_args.extend(arg_values.iter().copied());
                 let call_inst = ctx.builder.ins().call(func_ref, &call_args);
                 return Ok(ctx.builder.inst_results(call_inst)[0]);
@@ -278,15 +283,17 @@ pub(crate) fn lower_closure(
                 let flags = MemFlagsData::new();
                 let func_ptr = ctx.builder.ins().load(I64, flags, box_ptr, 0);
 
-                // Primeiro param implícito: arena_handle.
+                // A2: Primeiros params implícitos: rt + arena_handle + box_ptr.
+                let rt_val = ctx.rt.unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
                 let arena = caller_arena_handle(ctx);
-                let mut call_args = vec![arena, box_ptr];
+                let mut call_args = vec![rt_val, arena, box_ptr];
                 call_args.extend(arg_values.iter().copied());
 
                 // Constrói a assinatura para call_indirect.
                 let callee_ty = &callee.node.ty;
                 if let Ty::Function(param_types, ret_ty) = callee_ty {
                     let mut sig = Signature::new(CallConv::Tail);
+                    sig.params.push(AbiParam::new(I64)); // rt (A2)
                     sig.params.push(AbiParam::new(I64)); // arena_handle
                     sig.params.push(AbiParam::new(I64)); // box_ptr
                     for pt in param_types {
@@ -343,6 +350,8 @@ pub(crate) fn alloc_capture_box(
 ) -> Result<cranelift_codegen::ir::Value, super::CodegenError> {
     let flags = MemFlagsData::new();
 
+    let rt_val = ctx.rt.unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
+
     let get_root_ref = ctx
         .ffi_refs
         .get("kata_rt_get_root_arena_handle")
@@ -350,7 +359,7 @@ pub(crate) fn alloc_capture_box(
         .ok_or_else(|| {
             super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_get_root_arena_handle".into() }
         })?;
-    let root_inst = ctx.builder.ins().call(get_root_ref, &[]);
+    let root_inst = ctx.builder.ins().call(get_root_ref, &[rt_val]);
     let capture_arena = ctx.builder.inst_results(root_inst)[0];
 
     let alloc_arc_ref = ctx
@@ -364,7 +373,7 @@ pub(crate) fn alloc_capture_box(
         let n_val = ctx.builder.ins().iconst(I64, 0);
         let arc_inst = ctx.builder.ins().call(
             *alloc_arc_ref,
-            &[func_ptr, null_array, n_val, capture_arena],
+            &[rt_val, func_ptr, null_array, n_val, capture_arena],
         );
         return Ok(ctx.builder.inst_results(arc_inst)[0]);
     }
@@ -379,7 +388,7 @@ pub(crate) fn alloc_capture_box(
     let alloc_inst = ctx
         .builder
         .ins()
-        .call(*arena_alloc_ref, &[capture_arena, array_size]);
+        .call(*arena_alloc_ref, &[rt_val, capture_arena, array_size]);
     let array_ptr = ctx.builder.inst_results(alloc_inst)[0];
 
     for (i, cap) in captures.iter().enumerate() {
@@ -398,7 +407,7 @@ pub(crate) fn alloc_capture_box(
     let arc_inst = ctx
         .builder
         .ins()
-        .call(*alloc_arc_ref, &[func_ptr, array_ptr, n_val, capture_arena]);
+        .call(*alloc_arc_ref, &[rt_val, func_ptr, array_ptr, n_val, capture_arena]);
     let box_ptr = ctx.builder.inst_results(arc_inst)[0];
 
     Ok(box_ptr)

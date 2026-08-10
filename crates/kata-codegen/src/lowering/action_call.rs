@@ -64,8 +64,11 @@ pub(crate) fn lower_action_call(
         // NOVO: invocação indireta — fn_ptr vem da expressão (variável/param).
         // 1. Lowerar a expressão do callee → fn_ptr (i64)
         let fn_ptr = super::expr::lower_expr(&callee_expr.node, ctx)?;
-        // 2. Preparar args: [fiber_arena, caller_arena, args_ptr]
-        //    Mesma ABI que ActionCall direto: (fiber_arena, caller_arena, args_ptr) -> i64
+        // A2: Preparar args: [rt, fiber_arena, caller_arena, args_ptr]
+        //    ABI: (rt: i64, fiber_arena: i64, caller_arena: i64, args_ptr: i64) -> i64
+        let rt_val = ctx
+            .rt
+            .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
         let fiber_arena_val = ctx
             .fiber_arena
             .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
@@ -81,17 +84,18 @@ pub(crate) fn lower_action_call(
                     .get("kata_rt_get_root_arena_handle")
                     .copied()
                     .ok_or_else(|| {
-                        super::CodegenError::FfiSymbolNotFound { symbol: 
+                        super::CodegenError::FfiSymbolNotFound { symbol:
                             "kata_rt_get_root_arena_handle".into(),
                          }
                     })?;
-                let root_inst = ctx.builder.ins().call(get_root, &[]);
+                let root_inst = ctx.builder.ins().call(get_root, &[rt_val]);
                 ctx.builder.inst_results(root_inst)[0]
             }
         };
-        let arg_values = [fiber_arena_val, caller_arena_val, args_ptr];
-        // 3. call_indirect — assinatura Action ABI: (I64, I64, I64) -> I64
+        let arg_values = [rt_val, fiber_arena_val, caller_arena_val, args_ptr];
+        // 3. call_indirect — assinatura Action ABI: (I64, I64, I64, I64) -> I64
         let mut sig = Signature::new(CallConv::Tail);
+        sig.params.push(AbiParam::new(I64)); // rt
         sig.params.push(AbiParam::new(I64)); // fiber_arena
         sig.params.push(AbiParam::new(I64)); // caller_arena
         sig.params.push(AbiParam::new(I64)); // args_ptr
@@ -156,22 +160,26 @@ pub(crate) fn lower_action_call(
                     .ins()
                     .global_value(ctx.module.target_config().pointer_type(), func_gv);
 
-                // 2. spawn(fn_ptr, caller_arena, args_ptr) → fiber_id
+                // 2. spawn(rt, fn_ptr, caller_arena, args_ptr) → fiber_id
                 let spawn_ref = ctx.ffi_refs.get("kata_rt_spawn").copied().ok_or_else(|| {
-                    super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_spawn".into() }
+                    super::CodegenError::FfiSymbolNotFound {
+                        symbol: "kata_rt_spawn".into(),
+                    }
                 })?;
+                let rt_val = ctx.rt.unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
                 let spawn_inst = ctx
                     .builder
                     .ins()
-                    .call(spawn_ref, &[fn_ptr, caller_arena_val, args_ptr]);
+                    .call(spawn_ref, &[rt_val, fn_ptr, caller_arena_val, args_ptr]);
                 let _fiber_id = ctx.builder.inst_results(spawn_inst)[0];
 
-                // 3. run() → result (i64)
-                let run_ref =
-                    ctx.ffi_refs.get("kata_rt_run").copied().ok_or_else(|| {
-                        super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_run".into() }
-                    })?;
-                let run_inst = ctx.builder.ins().call(run_ref, &[]);
+                // 3. run(rt) → result (i64)
+                let run_ref = ctx.ffi_refs.get("kata_rt_run").copied().ok_or_else(|| {
+                    super::CodegenError::FfiSymbolNotFound {
+                        symbol: "kata_rt_run".into(),
+                    }
+                })?;
+                let run_inst = ctx.builder.ins().call(run_ref, &[rt_val]);
                 let result = ctx.builder.inst_results(run_inst)[0];
 
                 // 4. Se ret_ty == Float: bitcast(F64 ← I64)
@@ -182,11 +190,12 @@ pub(crate) fn lower_action_call(
                 }
             } else {
                 // Dentro de Action: call direto (mesmo fiber, mesmo stack).
-                // arg_values = [fiber_arena, caller_arena, args_ptr]
+                // A2: arg_values = [rt, fiber_arena, caller_arena, args_ptr]
+                let rt_val = ctx.rt.unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
                 let fiber_arena_val = ctx
                     .fiber_arena
                     .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
-                let arg_values = [fiber_arena_val, caller_arena_val, args_ptr];
+                let arg_values = [rt_val, fiber_arena_val, caller_arena_val, args_ptr];
                 let call_inst = ctx.builder.ins().call(func_ref, &arg_values);
                 let result = ctx.builder.inst_results(call_inst)[0];
 

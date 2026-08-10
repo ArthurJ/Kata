@@ -55,7 +55,8 @@ pub(crate) fn lower_for_in(
                 .ok_or_else(|| {
                     super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_yield_check".into() }
                 })?;
-            ctx.builder.ins().call(yc, &[]);
+            let rt_val = ctx.rt.unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
+            ctx.builder.ins().call(yc, &[rt_val]);
             let current = ctx.builder.use_var(current_var);
             let is_nil = ctx.builder.ins().icmp_imm(
                 cranelift_codegen::ir::condcodes::IntCC::Equal,
@@ -117,7 +118,8 @@ pub(crate) fn lower_for_in(
                 .ok_or_else(|| {
                     super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_yield_check".into() }
                 })?;
-            ctx.builder.ins().call(yc, &[]);
+            let rt_val = ctx.rt.unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
+            ctx.builder.ins().call(yc, &[rt_val]);
             let idx = ctx.builder.use_var(idx_var);
             let done = ctx.builder.ins().icmp(
                 cranelift_codegen::ir::condcodes::IntCC::SignedGreaterThanOrEqual,
@@ -179,7 +181,8 @@ pub(crate) fn lower_for_in(
                 .ok_or_else(|| {
                     super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_yield_check".into() }
                 })?;
-            ctx.builder.ins().call(yc, &[]);
+            let rt_val = ctx.rt.unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
+            ctx.builder.ins().call(yc, &[rt_val]);
             let current = ctx.builder.use_var(current_var);
             let done = super::range_iter::range_done(coll_val, current, ctx);
             ctx.builder

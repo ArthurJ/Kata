@@ -122,11 +122,12 @@ pub(crate) fn lower_fork(
     // 5. Determinar caller_arena (onde os args vivem — EscapeTarget do expr).
     let caller_arena_val = crate::lowering::escape_arena::arena_handle_for_escape(expr.escape, ctx);
 
-    // 6. kata_rt_spawn(fn_ptr, caller_arena, args_ptr) → fiber_id
+    // 6. kata_rt_spawn(rt, fn_ptr, caller_arena, args_ptr) → fiber_id
     let spawn_ref = get_ffi(ctx, "kata_rt_spawn")?;
+    let rt_val = ctx.rt.unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
     ctx.builder
         .ins()
-        .call(spawn_ref, &[fn_ptr, caller_arena_val, args_ptr]);
+        .call(spawn_ref, &[rt_val, fn_ptr, caller_arena_val, args_ptr]);
 
     // Fork retorna Unit.
     Ok(ctx.builder.ins().iconst(I64, 0))
@@ -164,12 +165,13 @@ pub(crate) fn lower_spawn(
         .caller_arena
         .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
 
-    // 4. kata_rt_spawn_process(fn_ptr, args_ptr, arena) — fork e exec.
+    // 4. kata_rt_spawn_process(rt, fn_ptr, args_ptr, arena) — fork e exec.
     //    Fire-and-forget: não há pipe de resultado, não há return.
     let spawn_ref = get_ffi(ctx, "kata_rt_spawn_process")?;
+    let rt_val = ctx.rt.unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
     ctx.builder
         .ins()
-        .call(spawn_ref, &[fn_ptr, args_ptr, arena_val]);
+        .call(spawn_ref, &[rt_val, fn_ptr, args_ptr, arena_val]);
 
     // 5. Retorna Unit (fire-and-forget como fork!).
     Ok(ctx.builder.ins().iconst(I64, 0))

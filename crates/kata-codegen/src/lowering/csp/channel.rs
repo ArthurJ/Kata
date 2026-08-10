@@ -54,6 +54,8 @@ pub(crate) fn lower_channel_create(
         .fiber_arena
         .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
 
+    let rt_val = ctx.rt.unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
+
     // 1. Chamar a FFI de criação conforme o kind e backend (in-process vs IPC).
     let handle = match kind {
         ChannelKind::Rendezvous => {
@@ -130,14 +132,14 @@ pub(crate) fn lower_channel_create(
                 let spawn_ref = get_ffi(ctx, "kata_rt_spawn")?;
                 ctx.builder.ins().call(
                     spawn_ref,
-                    &[broker_fn_ptr, caller_arena_val, broker_args_ptr],
+                    &[rt_val, broker_fn_ptr, caller_arena_val, broker_args_ptr],
                 );
 
                 // A tupla que o usuário vê é (queue_tx, ipc_data_rx).
                 // Alocar tupla de 2 handles na arena (16 bytes).
                 let tup_size = ctx.builder.ins().iconst(I64, 16);
                 let alloc_fref = get_ffi(ctx, "kata_rt_arena_alloc")?;
-                let alloc_inst = ctx.builder.ins().call(alloc_fref, &[arena, tup_size]);
+                let alloc_inst = ctx.builder.ins().call(alloc_fref, &[rt_val, arena, tup_size]);
                 let tup_ptr = ctx.builder.inst_results(alloc_inst)[0];
                 ctx.builder.ins().store(flags, queue_tx, tup_ptr, 0);
                 ctx.builder.ins().store(flags, ipc_data_rx, tup_ptr, 8);
@@ -178,7 +180,7 @@ pub(crate) fn lower_channel_create(
     // 3. Alocar tupla (handle, rx_handle) na arena — 16 bytes.
     let size = ctx.builder.ins().iconst(I64, 16);
     let alloc_fref = get_ffi(ctx, "kata_rt_arena_alloc")?;
-    let alloc_inst = ctx.builder.ins().call(alloc_fref, &[arena, size]);
+    let alloc_inst = ctx.builder.ins().call(alloc_fref, &[rt_val, arena, size]);
     let ptr = ctx.builder.inst_results(alloc_inst)[0];
 
     // 4. Store dos dois handles na tupla.

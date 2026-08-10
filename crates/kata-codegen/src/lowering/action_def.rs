@@ -27,16 +27,18 @@ use super::module::{CodegenError, FuncKey, StringTable};
 /// (ex: `__kata_fn_5`). A identidade semântica vive na chave composta do
 /// `symbol_table`.
 ///
-/// Assinatura uniforme: `(fiber_arena: i64, caller_arena: i64, args_ptr: i64) -> i64`
+/// Assinatura uniforme: `(rt: i64, fiber_arena: i64, caller_arena: i64, args_ptr: i64) -> i64`
 /// com `CallConv::Tail`. Todos os params são I64, retorno é sempre I64
 /// (Float é bitcast na borda — epílogo da Action e caller).
+/// A2: rt é ponteiro para Box<Runtime>, passado pelo scheduler/entry point.
 pub(crate) fn declare_kata_action(
     action: &TypedAction,
     cranelift_name: &str,
     module: &mut dyn ModuleBackend,
 ) -> Result<cranelift_module::FuncId, CodegenError> {
     let mut sig = Signature::new(CallConv::Tail);
-    // ABI uniforme: fiber_arena, caller_arena, args_ptr — todos I64.
+    // A2: ABI uniforme: rt, fiber_arena, caller_arena, args_ptr — todos I64.
+    sig.params.push(AbiParam::new(I64)); // rt
     sig.params.push(AbiParam::new(I64)); // fiber_arena
     sig.params.push(AbiParam::new(I64)); // caller_arena
     sig.params.push(AbiParam::new(I64)); // args_ptr
@@ -75,8 +77,9 @@ pub(crate) fn define_kata_action(
 
     {
         let func_ir = &mut ctx.func;
-        // Assinatura uniforme: (fiber_arena, caller_arena, args_ptr) -> i64.
+        // A2: Assinatura uniforme: (rt, fiber_arena, caller_arena, args_ptr) -> i64.
         let mut sig = Signature::new(CallConv::Tail);
+        sig.params.push(AbiParam::new(I64)); // rt
         sig.params.push(AbiParam::new(I64)); // fiber_arena
         sig.params.push(AbiParam::new(I64)); // caller_arena
         sig.params.push(AbiParam::new(I64)); // args_ptr
@@ -105,10 +108,11 @@ pub(crate) fn define_kata_action(
 
         let params: Vec<cranelift_codegen::ir::Value> = builder.block_params(entry_block).to_vec();
 
-        // ABI uniforme: params[0] = fiber_arena, params[1] = caller_arena, params[2] = args_ptr.
-        let fiber_arena = params[0];
-        let caller_arena = params[1];
-        let args_ptr = params[2];
+        // A2: ABI uniforme: params[0] = rt, params[1] = fiber_arena, params[2] = caller_arena, params[3] = args_ptr.
+        let rt_value = params[0];
+        let fiber_arena = params[1];
+        let caller_arena = params[2];
+        let args_ptr = params[3];
 
         let mut lower = super::LowerCtx {
             builder: &mut builder,
@@ -134,9 +138,9 @@ pub(crate) fn define_kata_action(
             struct_registry,
             type_id_map,
             ipc_broker_fid: None,
+            rt: Some(rt_value),
         };
-
-        // Cria epilogue_block com 1 block param (result).
+        // Lowera o corpo da Action.
         // O tipo do param é o tipo NATURAL do retorno (F64 para Float, I64 para resto).
         // O bitcast F64→I64 acontece no epilogue, após ler o block param.
         // Se o param fosse I64 mas o body produz F64, o jump falha no verifier.

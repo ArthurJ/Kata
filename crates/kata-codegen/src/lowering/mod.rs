@@ -152,6 +152,11 @@ pub(crate) struct LowerCtx<'a, 'b> {
     /// FuncId do broker IPC sintetizado (uma vez por compilação).
     /// `None` até a primeira `queue!(N)` cross-process solicitar a síntese.
     pub ipc_broker_fid: Option<cranelift_module::FuncId>,
+    /// A2: Ponteiro do Runtime (`i64` como `Value`). Passado como primeiro
+    /// argumento a todas as FFIs que precisam de estado de execução.
+    /// `None` em funções puras (não chamam FFIs de runtime). Setado no
+    /// entry point e test wrapper após `kata_rt_scheduler_init`.
+    pub rt: Option<Value>,
 }
 
 /// Resolve o Cranelift type de um `Ty`, percorrendo a cadeia de `alias_of`

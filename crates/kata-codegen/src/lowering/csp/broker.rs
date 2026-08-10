@@ -22,7 +22,7 @@ const BROKER_TIMEOUT_MS: i64 = 30_000;
 /// Sintetiza a função JIT do broker IPC como uma Action separada.
 ///
 /// O broker é uma função JIT com a assinatura uniforme de Action:
-/// `(fiber_arena: i64, caller_arena: i64, args_ptr: i64) -> i64`
+/// `(rt: i64, fiber_arena: i64, caller_arena: i64, args_ptr: i64) -> i64`
 /// com `CallConv::Tail` (igual às Actions definidas pelo usuário).
 ///
 /// `args_ptr` aponta para 3 handles i64 na arena:
@@ -52,8 +52,9 @@ pub(crate) fn synthesize_ipc_broker(
     }
 
     // Declara a função no module (sem definir o corpo ainda).
-    // Assinatura uniforme de Action: (fiber_arena, caller_arena, args_ptr) -> i64.
+    // A2: Assinatura uniforme de Action: (rt, fiber_arena, caller_arena, args_ptr) -> i64.
     let mut sig = Signature::new(CallConv::Tail);
+    sig.params.push(AbiParam::new(I64)); // rt
     sig.params.push(AbiParam::new(I64)); // fiber_arena
     sig.params.push(AbiParam::new(I64)); // caller_arena
     sig.params.push(AbiParam::new(I64)); // args_ptr
@@ -91,9 +92,10 @@ pub(crate) fn synthesize_ipc_broker(
         builder.seal_block(entry);
 
         let params: Vec<Value> = builder.block_params(entry).to_vec();
-        let fiber_arena = params[0];
-        let _caller_arena = params[1]; // não usado pelo broker
-        let args_ptr = params[2];
+        let rt = params[0];
+        let fiber_arena = params[1];
+        let _caller_arena = params[2]; // não usado pelo broker
+        let args_ptr = params[3];
 
         // Helpers: FuncRefs para as FFIs que o broker usa.
         let flags = MemFlagsData::new();
@@ -109,7 +111,7 @@ pub(crate) fn synthesize_ipc_broker(
 
         // 2. Alocar array de 2 handles na fiber_arena: [queue_rx, ack_rx].
         let size_16 = builder.ins().iconst(I64, 16);
-        let alloc_inst = builder.ins().call(alloc_ref, &[fiber_arena, size_16]);
+        let alloc_inst = builder.ins().call(alloc_ref, &[rt, fiber_arena, size_16]);
         let handles_ptr = builder.inst_results(alloc_inst)[0];
         builder.ins().store(flags, queue_rx, handles_ptr, 0);
         builder.ins().store(flags, ack_rx, handles_ptr, 8);
@@ -224,10 +226,12 @@ pub(crate) fn build_broker_args(
         .fiber_arena
         .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
 
+    let rt_val = ctx.rt.unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
+
     // Alocar 24 bytes (3 * 8) na fiber_arena.
     let size = ctx.builder.ins().iconst(I64, 24);
     let alloc_fref = get_ffi(ctx, "kata_rt_arena_alloc")?;
-    let alloc_inst = ctx.builder.ins().call(alloc_fref, &[arena, size]);
+    let alloc_inst = ctx.builder.ins().call(alloc_fref, &[rt_val, arena, size]);
     let ptr = ctx.builder.inst_results(alloc_inst)[0];
 
     // Store dos 3 handles.

@@ -439,8 +439,9 @@ pub(crate) fn lower_expr(
             };
 
             // Declara a função no module (sem definir o corpo ainda).
-            // ABI uniformizada: arena_handle + box_ptr sempre presentes.
+            // ABI A2: rt + arena_handle + box_ptr sempre presentes.
             let mut sig = Signature::new(CallConv::Tail);
+            sig.params.push(AbiParam::new(I64)); // rt (A2)
             sig.params.push(AbiParam::new(I64)); // arena_handle
             sig.params.push(AbiParam::new(I64)); // box_ptr
             for pt in param_types {

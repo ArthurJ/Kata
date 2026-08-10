@@ -66,11 +66,15 @@ pub(crate) fn declare_kata_function(
     struct_registry: &kata_core::StructRegistry,
 ) -> Result<cranelift_module::FuncId, CodegenError> {
     let mut sig = Signature::new(CallConv::Tail);
-    // arena_handle é o primeiro param implícito — passado pelo caller
+    // A2: rt é o primeiro param implícito — ponteiro do Runtime passado
+    // pelo caller (Action ou outra função pura). Necessário para que
+    // funções puras possam chamar FFIs centrais (arena_alloc, etc.).
+    sig.params.push(AbiParam::new(I64)); // rt
+    // arena_handle é o segundo param implícito — passado pelo caller
     // (fiber_arena ou caller_arena do contexto de chamada).
     sig.params.push(AbiParam::new(I64));
-    // box_ptr: segundo param implícito (ABI uniformizada).
-    // Funções nomeadas não têm captures — recebem dummy (iconst 0).
+    // box_ptr: terceiro param implícito (ABI uniformizada).
+    // Funções nomeadas não têm capture — recebem dummy (iconst 0).
     sig.params.push(AbiParam::new(I64));
     for pt in &func.param_types {
         sig.params
@@ -114,9 +118,11 @@ pub(crate) fn define_function_body(
     {
         let func_ir = &mut ctx.func;
         let mut sig = Signature::new(CallConv::Tail);
-        // arena_handle: primeiro param implícito, passado pelo caller.
+        // A2: rt é o primeiro param implícito — ponteiro do Runtime.
+        sig.params.push(AbiParam::new(I64)); // rt
+        // arena_handle: segundo param implícito, passado pelo caller.
         sig.params.push(AbiParam::new(I64)); // arena_handle
-        // box_ptr: segundo param implícito. Sempre presente na ABI uniformizada
+        // box_ptr: terceiro param implícito. Sempre presente na ABI uniformizada
         // — lambdas sem captures recebem box com n_captures=0, funções
         // nomeadas recebem dummy (iconst 0). Isto elimina a necessidade de
         // distinguir box_ptr de fn_ptr no call site.
@@ -177,20 +183,29 @@ pub(crate) fn define_function_body(
             struct_registry,
             type_id_map,
             ipc_broker_fid: None,
+            rt: None,
         };
 
-        // params[0] = arena_handle (primeiro param implícito da nova ABI).
+        // params[0] = rt (primeiro param implícito da ABI A2).
+        let rt_value = params[0];
+
+        // params[1] = arena_handle (segundo param implícito).
         // Setar fiber_arena para que alocações internas (cons, array_alloc,
         // etc.) usem a arena do caller — sem leak, sem arena efêmera.
-        let arena_handle = params[0];
+        let arena_handle = params[1];
+
+        // A2: setar ctx.rt para que escape_arena.rs e FFIs centrais tenham
+        // acesso ao ponteiro do Runtime quando chamadas de dentro de funções
+        // puras. Isto resolve o bug rt=0 em map/filter/hof.
+        lower.rt = Some(rt_value);
         lower.fiber_arena = Some(arena_handle);
 
-        // Sempre há box_ptr (ABI uniformizada). Se há captures, carrega cada
-        // capture do box_ptr. Se não, box_ptr é dummy (0) e ignorado.
+        // params[2] = box_ptr (terceiro param implícito, ABI uniformizada).
+        // Se há captures, carrega cada capture do box_ptr. Se não, box_ptr é
+        // dummy (0) e ignorado.
         // Layout do CaptureBox: offset 0 = fn_ptr, offset 8 = refcount,
         // offset 16 = n_captures, offset 24 + i*8 = captures[i].
-        // box_ptr é o segundo block param (params[1]).
-        let box_ptr = params[1];
+        let box_ptr = params[2];
         let clause_params: Vec<cranelift_codegen::ir::Value> = if !captures.is_empty() {
             let flags = MemFlagsData::new();
             for (i, cap) in captures.iter().enumerate() {
@@ -204,9 +219,9 @@ pub(crate) fn define_function_body(
                     .expect("capture var must exist in var_map after new_var");
                 lower.builder.def_var(var, val);
             }
-            params[2..].to_vec()
+            params[3..].to_vec()
         } else {
-            params[2..].to_vec()
+            params[3..].to_vec()
         };
 
         // Bind patterns da primeira cláusula aos clause_params antes de @log

@@ -122,16 +122,21 @@ pub(crate) fn generate_test_wrappers(
     Ok(wrappers)
 }
 
-/// Declara um wrapper `() -> i64` com `CallConv::SystemV`.
+/// Declara um wrapper `(rt: i64) -> i64` com `CallConv::SystemV`.
+///
+/// A2: rt é ponteiro para Box<Runtime>, passado pelo driver.
 fn declare_test_wrapper(
     cranelift_name: &str,
     module: &mut dyn ModuleBackend,
 ) -> Result<cranelift_module::FuncId, CodegenError> {
     let mut sig = Signature::new(CallConv::SystemV);
+    sig.params.push(AbiParam::new(I64)); // rt
     sig.returns.push(AbiParam::new(I64));
     module
         .declare_function(cranelift_name, Linkage::Export, &sig)
-        .map_err(|e| CodegenError::Cranelift { reason: format!("declare test wrapper: {e}") })
+        .map_err(|e| CodegenError::Cranelift {
+            reason: format!("declare test wrapper: {e}"),
+        })
 }
 
 /// Contexto de lowering compartilhado entre wrappers de teste.
@@ -169,6 +174,7 @@ fn define_test_wrapper(
     {
         let func_ir = &mut ctx.func;
         let mut sig = Signature::new(CallConv::SystemV);
+        sig.params.push(AbiParam::new(I64)); // rt
         sig.returns.push(AbiParam::new(I64));
         func_ir.signature = sig;
 
@@ -188,8 +194,12 @@ fn define_test_wrapper(
         let mut builder = FunctionBuilder::new(func_ir, &mut func_ctx);
 
         let entry_block = builder.create_block();
+        builder.append_block_params_for_function_params(entry_block);
         builder.switch_to_block(entry_block);
         builder.seal_block(entry_block);
+
+        // A2: rt é o primeiro (e único) block param — ponteiro para Box<Runtime>.
+        let rt_value = builder.block_params(entry_block)[0];
 
         let mut lower = LowerCtx {
             builder: &mut builder,
@@ -215,17 +225,21 @@ fn define_test_wrapper(
             struct_registry: tctx.struct_registry,
             type_id_map: tctx.type_id_map,
             ipc_broker_fid: None,
+            rt: None,
         };
 
-        // 1. scheduler_init → root_arena (igual ao entry point).
+        // 1. scheduler_init(rt) → root_arena (igual ao entry point).
         let scheduler_init_ref = lower
             .ffi_refs
             .get("kata_rt_scheduler_init")
             .copied()
-            .ok_or_else(|| CodegenError::FfiSymbolNotFound { symbol: "kata_rt_scheduler_init".into() })?;
-        let init_inst = lower.builder.ins().call(scheduler_init_ref, &[]);
+            .ok_or_else(|| CodegenError::FfiSymbolNotFound {
+                symbol: "kata_rt_scheduler_init".into(),
+            })?;
+        let init_inst = lower.builder.ins().call(scheduler_init_ref, &[rt_value]);
         let root_arena = lower.builder.inst_results(init_inst)[0];
         lower.caller_arena = Some(root_arena);
+        lower.rt = Some(rt_value);
 
         // 2. Lowera args do @test → args_ptr.
         // Se args é None, passa 0 (Unit). Se é Some, lowera o TypedExpr
@@ -266,24 +280,28 @@ fn define_test_wrapper(
             .ins()
             .global_value(lower.module.target_config().pointer_type(), func_gv);
 
-        // 4. kata_rt_spawn(fn_ptr, root_arena, args_ptr) → fiber_id
+        // 4. kata_rt_spawn(rt, fn_ptr, root_arena, args_ptr) → fiber_id
         let spawn_ref = lower
             .ffi_refs
             .get("kata_rt_spawn")
             .copied()
-            .ok_or_else(|| CodegenError::FfiSymbolNotFound { symbol: "kata_rt_spawn".into() })?;
+            .ok_or_else(|| CodegenError::FfiSymbolNotFound {
+                symbol: "kata_rt_spawn".into(),
+            })?;
         lower
             .builder
             .ins()
-            .call(spawn_ref, &[fn_ptr, root_arena, args_ptr]);
+            .call(spawn_ref, &[rt_value, fn_ptr, root_arena, args_ptr]);
 
-        // 5. kata_rt_run() → result (i64)
+        // 5. kata_rt_run(rt) → result (i64)
         let run_ref = lower
             .ffi_refs
             .get("kata_rt_run")
             .copied()
-            .ok_or_else(|| CodegenError::FfiSymbolNotFound { symbol: "kata_rt_run".into() })?;
-        let run_inst = lower.builder.ins().call(run_ref, &[]);
+            .ok_or_else(|| CodegenError::FfiSymbolNotFound {
+                symbol: "kata_rt_run".into(),
+            })?;
+        let run_inst = lower.builder.ins().call(run_ref, &[rt_value]);
         let result = lower.builder.inst_results(run_inst)[0];
 
         // 6. return_(result) — Float bitcast se necessário.

@@ -247,21 +247,23 @@ pub(crate) fn collect_module_types(mono: &MonoModule) -> Vec<Ty> {
     seen
 }
 
-/// Constrói e registra a type table no runtime.
+/// Constrói a type table para o runtime.
 ///
-/// Converte cada `Ty` coletado do módulo para `kata_rt::TypeShape` e
-/// chama `register_type_table`. O `type_id` de cada tipo é seu índice
-/// no Vec retornado — o codegen usa esse índice ao emitir chamadas
-/// `to_bytes`.
+/// Converte cada `Ty` coletado do módulo para `kata_rt::TypeShape`.
+/// O `type_id` de cada tipo é seu índice no Vec retornado — o codegen
+/// usa esse índice ao emitir chamadas `to_bytes`.
 ///
-/// Retorna o mapa `Ty` → `type_id` para o codegen.
+/// A2: Não registra mais a type table aqui (falta `rt`). Retorna as
+/// `TypeShape`s para o driver registrar após alocar o `Runtime`.
+///
+/// Retorna `(mapa Ty → type_id, Vec<TypeShape>)`.
 pub fn build_and_register_type_table(
     mono: &MonoModule,
     structs: &StructRegistry,
     enums: &EnumRegistry,
-) -> HashMap<Ty, i64> {
+) -> (HashMap<Ty, i64>, Vec<kata_rt::TypeShape>) {
     let types = collect_module_types(mono);
-    let shapes: Vec<TypeShape> = types
+    let shapes: Vec<kata_rt::TypeShape> = types
         .iter()
         .map(|ty| ty_to_marshal_shape(ty, structs, enums))
         .collect();
@@ -271,6 +273,5 @@ pub fn build_and_register_type_table(
         .map(|(i, ty)| (ty.clone(), i as i64))
         .collect();
 
-    kata_rt::register_type_table(shapes);
-    type_id_map
+    (type_id_map, shapes)
 }

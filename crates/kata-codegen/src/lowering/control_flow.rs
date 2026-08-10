@@ -59,7 +59,8 @@ pub(crate) fn lower_control_flow(
                 .ok_or_else(|| {
                     super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_yield_check".into() }
                 })?;
-            ctx.builder.ins().call(yield_check_ref, &[]);
+            let rt_val = ctx.rt.unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
+            ctx.builder.ins().call(yield_check_ref, &[rt_val]);
             let mut hit_terminator = false;
             for e in body {
                 lower_expr(&e.node, ctx)?;

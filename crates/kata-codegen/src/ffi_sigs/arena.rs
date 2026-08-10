@@ -10,30 +10,37 @@ use kata_core::ffi::FfiSymbol;
 pub(crate) fn sig_for(sym: FfiSymbol) -> Option<Signature> {
     let mut sig = Signature::new(CallConv::SystemV);
     match sym {
-        // ── Arena (void → ptr, ptr,size → ptr, ptr → void) ──
+        // ── Arena (A2: todas recebem rt: i64 como primeiro param) ──
         FfiSymbol::ArenaCreate => {
+            sig.params.push(AbiParam::new(I64)); // rt
             sig.returns.push(AbiParam::new(I64));
         }
         FfiSymbol::ArenaAlloc => {
+            sig.params.push(AbiParam::new(I64)); // rt
             sig.params.push(AbiParam::new(I64)); // arena
             sig.params.push(AbiParam::new(I64)); // size
             sig.returns.push(AbiParam::new(I64)); // ptr
         }
         FfiSymbol::ArenaDestroy => {
+            sig.params.push(AbiParam::new(I64)); // rt
             sig.params.push(AbiParam::new(I64)); // arena
         }
         FfiSymbol::ArenaCreateTracked => {
+            sig.params.push(AbiParam::new(I64)); // rt
             sig.returns.push(AbiParam::new(I64)); // handle
         }
         FfiSymbol::ArenaDealloc => {
+            sig.params.push(AbiParam::new(I64)); // rt
             sig.params.push(AbiParam::new(I64)); // handle
             sig.params.push(AbiParam::new(I64)); // ptr
             sig.params.push(AbiParam::new(I64)); // size
         }
         FfiSymbol::GetRootArenaHandle => {
+            sig.params.push(AbiParam::new(I64)); // rt
             sig.returns.push(AbiParam::new(I64)); // root_arena handle
         }
         FfiSymbol::ArenaStats => {
+            sig.params.push(AbiParam::new(I64)); // rt
             sig.params.push(AbiParam::new(I64)); // handle
             sig.returns.push(AbiParam::new(I64)); // packed (alloc_count, dealloc_count)
         }
