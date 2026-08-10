@@ -31,28 +31,32 @@ fn entry_typed(tmod: &kata_inference::TypedModule) -> &kata_inference::TypedExpr
 // ── Casos principais do DoD 27 ─────────────────────────────────────
 
 /// `+ 10 _` → desugared para `lambda __hole_0: + 10 __hole_0`.
-/// Partial dispatch deve extrair `__hole_0: Int` e o lambda ter tipo
-/// `Function([Int], Int)`.
+/// Partial dispatch com cross-type overloads: `Some(Int)` no primeiro arg
+/// casa com Int Int, Int Float, Int Rational → OverloadSet (múltiplas overloads).
 #[test]
 fn partial_dispatch_plus_int_hole() {
     let tmod = infer_src("+ 10 _");
     let entry = entry_typed(&tmod);
 
-    // O entry deve ser um Lambda com tipo Function([Int], Int)
+    // OverloadSet: Int casa com Int Int, Int Float, Int Rational.
+    // Segundo arg é None (hole), então todas essas overloads casam.
     assert_eq!(
         entry.ty,
-        Ty::Function(vec![Ty::int()], Box::new(Ty::int())),
-        "+ 10 _ deve ter tipo Int -> Int"
+        Ty::OverloadSet {
+            name: "+".to_string(),
+            overloads: vec![
+                (vec![Ty::int()], Ty::int()),
+                (vec![Ty::float()], Ty::float()),
+                (vec![Ty::Prim(kata_core::ty::PrimTy::Rational)],
+                 Ty::Prim(kata_core::ty::PrimTy::Rational)),
+            ],
+        },
+        "+ 10 _ deve ter tipo OverloadSet(+, [Int], [Float], [Rational])"
     );
 
     match &entry.kind {
-        TypedExprKind::Lambda {
-            param_types,
-            ret_ty,
-            ..
-        } => {
-            assert_eq!(param_types, &[Ty::int()], "parâmetro deve ser Int");
-            assert_eq!(*ret_ty, Ty::int(), "retorno deve ser Int");
+        TypedExprKind::Lambda { param_types, .. } => {
+            assert_eq!(param_types, &[Ty::InferVar(0)], "parâmetro deve ser InferVar(0)");
         }
         other => panic!("expected Lambda, got {other:?}"),
     }
@@ -73,7 +77,8 @@ fn partial_dispatch_plus_hole_int() {
 }
 
 /// `+ 10.0 _` — Float no primeiro arg, hole no segundo.
-/// Deve extrair `Float` do overload `[Float, Float] → Float`.
+/// Cross-type overloads: Some(Float) no primeiro arg casa com Float Float,
+/// Float Rational → OverloadSet com projeções Float e Rational.
 #[test]
 fn partial_dispatch_plus_float_hole() {
     let tmod = infer_src("+ 10.0 _");
@@ -81,26 +86,37 @@ fn partial_dispatch_plus_float_hole() {
 
     assert_eq!(
         entry.ty,
-        Ty::Function(vec![Ty::float()], Box::new(Ty::float())),
-        "+ 10.0 _ deve ter tipo Float -> Float"
+        Ty::OverloadSet {
+            name: "+".to_string(),
+            overloads: vec![
+                (vec![Ty::float()], Ty::float()),
+                (vec![Ty::Prim(kata_core::ty::PrimTy::Rational)],
+                 Ty::float()),
+            ],
+        },
+        "+ 10.0 _ deve ter tipo OverloadSet(+, [Float], [Rational])"
     );
 }
 
-/// `+ _ _` — ambos args são holes. Deve ser ambíguo (3 overloads casam).
-/// Como é ambíguo, o lambda recebe InferVar — não há tipo para extrair.
-/// O typeck deve falhar ao tentar despachar `+ InferVar InferVar` no body.
+/// `+ _ _` — ambos args são holes. Com cross-type overloads, múltiplas
+/// overloads casam (Int Int, Int Float, Float Float, etc.), então o
+/// lambda recebe OverloadSet em vez de falhar.
 #[test]
 fn partial_dispatch_both_holes_ambiguous() {
     // `+ _ _` desugared vira `lambda __hole_0 __hole_1: + __hole_0 __hole_1`
     // Ambos params são InferVar, resolve_partial com [None, None] é ambíguo.
-    // try_partial_dispatch retorna Vec::new(), params ficam InferVar.
-    // O body `+ InferVar InferVar` não despacha → NoOverload ou AmbiguousDispatch.
-    let err = infer_src_err("+ _ _");
-    // Deve ser algum erro de dispatch — não importa qual variant específico
-    eprintln!("Got expected error: {err:?}");
+    // Com OverloadSet, o lambda defere e o dispatch resolve no call site.
+    let tmod = infer_src("+ _ _");
+    let entry = entry_typed(&tmod);
+    assert!(
+        matches!(&entry.ty, Ty::OverloadSet { name, .. } if name == "+"),
+        "+ _ _ deve produzir OverloadSet(+), got {:?}",
+        entry.ty
+    );
 }
 
-/// `- 10 _` — subtração com hole. Deve funcionar igual `+`.
+/// `- 10 _` — subtração com hole. Cross-type overloads fazem
+/// `Some(Int)` casar com Int Int, Int Float, Int Rational → OverloadSet.
 #[test]
 fn partial_dispatch_minus_int_hole() {
     let tmod = infer_src("- 10 _");
@@ -108,8 +124,16 @@ fn partial_dispatch_minus_int_hole() {
 
     assert_eq!(
         entry.ty,
-        Ty::Function(vec![Ty::int()], Box::new(Ty::int())),
-        "- 10 _ deve ter tipo Int -> Int"
+        Ty::OverloadSet {
+            name: "-".to_string(),
+            overloads: vec![
+                (vec![Ty::int()], Ty::int()),
+                (vec![Ty::float()], Ty::float()),
+                (vec![Ty::Prim(kata_core::ty::PrimTy::Rational)],
+                 Ty::Prim(kata_core::ty::PrimTy::Rational)),
+            ],
+        },
+        "- 10 _ deve ter tipo OverloadSet(-, [Int], [Float], [Rational])"
     );
 }
 
@@ -136,7 +160,8 @@ fn partial_dispatch_hole_then_apply() {
     }
 }
 
-/// `* 10 _` — multiplicação com hole. Deve extrair Int.
+/// `* 10 _` — multiplicação com hole. Cross-type overloads fazem
+/// `Some(Int)` casar com Int Int, Int Float, Int Rational → OverloadSet.
 #[test]
 fn partial_dispatch_times_int_hole() {
     let tmod = infer_src("* 10 _");
@@ -144,29 +169,38 @@ fn partial_dispatch_times_int_hole() {
 
     assert_eq!(
         entry.ty,
-        Ty::Function(vec![Ty::int()], Box::new(Ty::int())),
-        "* 10 _ deve ter tipo Int -> Int"
+        Ty::OverloadSet {
+            name: "*".to_string(),
+            overloads: vec![
+                (vec![Ty::int()], Ty::int()),
+                (vec![Ty::float()], Ty::float()),
+                (vec![Ty::Prim(kata_core::ty::PrimTy::Rational)],
+                 Ty::Prim(kata_core::ty::PrimTy::Rational)),
+            ],
+        },
+        "* 10 _ deve ter tipo OverloadSet(*, [Int], [Float], [Rational])"
     );
 }
 
-/// `+ 10 _` com Rational: `+ 10::Rational _`
-/// Não deve usar partial dispatch (ascription é tratada no DoD 28).
-/// Aqui testamos apenas que o literal `10::Rational` resolve para Rational
-/// e o partial dispatch extrai Rational do overload.
+/// `+ 10::Rational _` com Rational no primeiro arg.
+/// Cross-type overloads: Some(Rational) casa com Rational Rational e
+/// Rational Float → OverloadSet com projeções Rational e Rational (de Float).
 #[test]
 fn partial_dispatch_plus_rational_hole() {
     let tmod = infer_src("+ 10::Rational _");
     let entry = entry_typed(&tmod);
 
-    // 10::Rational rebaixa Int literal para Rational.
-    // + tem overload [Rational, Rational] → Rational.
-    // Partial dispatch deve extrair Rational.
     assert_eq!(
         entry.ty,
-        Ty::Function(
-            vec![Ty::Prim(kata_core::ty::PrimTy::Rational)],
-            Box::new(Ty::Prim(kata_core::ty::PrimTy::Rational))
-        ),
-        "+ 10::Rational _ deve ter tipo Rational -> Rational"
+        Ty::OverloadSet {
+            name: "+".to_string(),
+            overloads: vec![
+                (vec![Ty::Prim(kata_core::ty::PrimTy::Rational)],
+                 Ty::Prim(kata_core::ty::PrimTy::Rational)),
+                (vec![Ty::float()],
+                 Ty::Prim(kata_core::ty::PrimTy::Rational)),
+            ],
+        },
+        "+ 10::Rational _ deve ter tipo OverloadSet(+, [Rational], [Float])"
     );
 }

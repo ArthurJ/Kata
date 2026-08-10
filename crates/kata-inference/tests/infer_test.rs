@@ -364,14 +364,11 @@ fn infer_unbound_name_error() {
 
 #[test]
 fn infer_no_overload_for_mixed_types() {
-    // + :: Int Int => Int e + :: Float Float => Float
-    // + :: Rational Rational => Rational
-    // + 1 3.14 — Int e Float não dão match com nenhuma sobrecarga
-    let err = infer_src_err("+ 1 3.14");
-    assert!(matches!(
-        err,
-        kata_diagnostics::MiddleError::NoOverload { .. }
-    ));
+    // + :: Int Float => Float (cross-type overload) — agora succeeds
+    // + 1 3.14 — Int e Float dão match com a cross-type overload Int Float => Float
+    let tmod = infer_src("+ 1 3.14");
+    let entry = entry_typed(&tmod);
+    assert_eq!(entry.ty, Ty::float(), "+ 1 3.14 deve retornar Float via cross-type overload");
 }
 
 #[test]
@@ -414,8 +411,9 @@ fn dispatch_table_multiple_overloads_for_plus() {
         .dispatch_table
         .get_overloads("+")
         .expect("+ deve ter overloads");
-    // + tem 8 overloads: Int, Float, Rational, List, Set+Set, Set+elem, Dict+Dict, Bytes+Bytes
-    assert_eq!(overloads.len(), 8);
+    // + tem 12 overloads: Int, Float, Rational, List, Set+Set, Set+elem, Dict+Dict, Bytes+Bytes
+    // + 4 cross-type: Int Float, Int Rational, Float Rational, Rational Float
+    assert_eq!(overloads.len(), 12);
 }
 
 #[test]

@@ -72,13 +72,18 @@ fn hole_ascription_float_first_arg() {
     );
 }
 
-/// `+ _::Int _::Float` — ascription exclui Int e Float overlap.
+/// `+ _::Int _::Float` — cross-type overload Int Float => Float agora existe.
 /// O primeiro arg é Int (via ascription), o segundo é Float.
-/// `+` não tem overload [Int, Float] → deve falhar com NoOverload.
+/// Deve despachar para o overload [Int, Float] → Float.
 #[test]
 fn hole_ascription_mixed_types_no_overload() {
-    let err = infer_src_err("+ _::Int _::Float");
-    eprintln!("Got expected error: {err:?}");
+    let tmod = infer_src("+ _::Int _::Float");
+    let entry = entry_typed(&tmod);
+    assert_eq!(
+        entry.ty,
+        Ty::Function(vec![Ty::int(), Ty::float()], Box::new(Ty::float())),
+        "+ _::Int _::Float deve ter tipo (Int, Float) -> Float via cross-type overload"
+    );
 }
 
 /// `+ _::Rational _::Rational` — ambos holes com ascription Rational.

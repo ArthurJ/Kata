@@ -34,16 +34,24 @@ fn entry_typed(tmod: &kata_inference::TypedModule) -> &kata_inference::TypedExpr
 // ── DoD 27: Partial dispatch ─────────────────────────────────────
 
 /// `+ 10 _` desugared vira `lambda __hole0: + 10 __hole0`.
-/// Partial dispatch resolve `__hole0: Int` do overload de `+`.
-/// O resultado é um lambda Int -> Int (não Int, porque é uma função).
+/// Com cross-type overloads, `Some(Int)` no primeiro arg casa com
+/// Int Int, Int Float, Int Rational → OverloadSet (múltiplas overloads).
 #[test]
 fn dod27_partial_dispatch_resolves_int() {
     let tmod = infer_src("+ 10 _");
     let entry = entry_typed(&tmod);
     assert_eq!(
         entry.ty,
-        Ty::Function(vec![Ty::int()], Box::new(Ty::int())),
-        "+ 10 _ deve ser lambda Int -> Int"
+        Ty::OverloadSet {
+            name: "+".to_string(),
+            overloads: vec![
+                (vec![Ty::int()], Ty::int()),
+                (vec![Ty::float()], Ty::float()),
+                (vec![Ty::Prim(kata_core::ty::PrimTy::Rational)],
+                 Ty::Prim(kata_core::ty::PrimTy::Rational)),
+            ],
+        },
+        "+ 10 _ deve ser OverloadSet(+, [Int], [Float], [Rational])"
     );
 }
 

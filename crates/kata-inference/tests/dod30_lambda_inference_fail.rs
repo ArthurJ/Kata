@@ -7,6 +7,7 @@
 //! Caso base: `lambda x: + x 1` sem contexto de tipo — `x` é InferVar, `+` não
 //! despacha, mas o erro deve ser `LambdaInferenceFail` (não `NoOverload`).
 
+use kata_core::ty::Ty;
 use kata_diagnostics::MiddleError;
 use kata_inference::infer_module;
 use kata_lexer::lex;
@@ -34,14 +35,20 @@ fn identity_lambda_without_context_fails() {
     );
 }
 
-/// `lambda x y: + x y` — dois params sem contexto. Partial dispatch falha
-/// (ambos são InferVar). Deve produzir LambdaInferenceFail.
+/// `lambda x y: + x y` — dois params sem contexto. Com cross-type overloads,
+/// `+ InferVar InferVar` é ambíguo mas produz OverloadSet em vez de falhar.
+/// O lambda defere e o dispatch resolve no call site.
 #[test]
 fn two_param_lambda_without_context_fails() {
-    let err = infer_src_err("lambda x y: + x y");
+    let tokens = lex("lambda x y: + x y").unwrap();
+    let module = parse(tokens).unwrap();
+    let prelude = load_prelude().unwrap();
+    let tmod = infer_module(&module, &prelude).expect("lambda x y: + x y deve succeed com OverloadSet");
+    let entry = &tmod.entry.node;
     assert!(
-        matches!(err, MiddleError::LambdaInferenceFail { .. }),
-        "esperava LambdaInferenceFail, got {err:?}"
+        matches!(&entry.ty, Ty::OverloadSet { name, .. } if name == "+"),
+        "lambda x y: + x y deve produzir OverloadSet(+), got {:?}",
+        entry.ty
     );
 }
 
@@ -56,29 +63,23 @@ fn lambda_with_unknown_callee_fails() {
     );
 }
 
-/// `lambda x y: + x y` sem contexto — partial dispatch tenta `+` com [?, ?]
-/// mas ambos args são holes. `+` tem overloads [Int, Int] e [Float, Float] —
-/// sem nenhum arg concreto para restringir, múltiplas overloads casam (ambíguo).
-/// Deve produzir LambdaInferenceFail COM detail mencionando `+` e ambiguidade.
+/// `lambda x y: < x y` — agora succeeds com OverloadSet.
+/// `<` tem múltiplas overloads (Int Int, Float Float, Rational Rational),
+/// e com todos args como InferVar, múltiplas overloads casam → OverloadSet.
+/// Antes do OverloadSet, isto produzia LambdaInferenceFail com detail.
 #[test]
 fn lambda_inference_fail_has_detail() {
-    let err = infer_src_err("lambda x y: + x y");
-    match err {
-        MiddleError::LambdaInferenceFail { detail, .. } => {
-            let detail = detail.expect(
-                "lambda com partial dispatch aplicável deve ter detail com contexto de falha",
-            );
-            assert!(
-                detail.contains("+"),
-                "detail deve mencionar a função tentada: {detail}"
-            );
-            assert!(
-                detail.contains("amb") || detail.contains("Amb"),
-                "detail deve mencionar ambiguidade: {detail}"
-            );
-        }
-        other => panic!("esperava LambdaInferenceFail, got {other:?}"),
-    }
+    let tokens = lex("lambda x y: < x y").unwrap();
+    let module = parse(tokens).unwrap();
+    let prelude = load_prelude().unwrap();
+    let tmod = infer_module(&module, &prelude)
+        .expect("lambda x y: < x y deve succeed com OverloadSet");
+    let entry = &tmod.entry.node;
+    assert!(
+        matches!(&entry.ty, Ty::OverloadSet { name, .. } if name == "<"),
+        "lambda x y: < x y deve produzir OverloadSet(<), got {:?}",
+        entry.ty
+    );
 }
 
 /// `(lambda x: + x 1)::(Int -> Int)` — COM hint top-down, deve succeed.

@@ -115,8 +115,8 @@ fn prelude_has_multiple_add_overloads() {
         .collect();
     assert_eq!(
         adds.len(),
-        8,
-        "deve ter 8 overloads de + (Int, Float, Rational, List, Set+Set, Set+elem, Dict+Dict, Bytes+Bytes)"
+        12,
+        "deve ter 12 overloads de + (Int, Float, Rational, List, Set+Set, Set+elem, Dict+Dict, Bytes+Bytes + 4 cross-type: Int Float, Int Rational, Float Rational, Rational Float)"
     );
 }
 

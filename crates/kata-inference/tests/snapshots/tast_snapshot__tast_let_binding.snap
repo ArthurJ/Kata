@@ -7,6 +7,18 @@ expression: tast_snapshot(src)
   kind: Ident { name: "x" }
 
 === Functions ===
+  * :: [Prim(Int), Prim(Float)] => Prim(Float)
+  * :: [Prim(Int), Prim(Rational)] => Prim(Rational)
+  * :: [Prim(Float), Prim(Rational)] => Prim(Float)
+  * :: [Prim(Rational), Prim(Float)] => Prim(Rational)
+  + :: [Prim(Int), Prim(Float)] => Prim(Float)
+  + :: [Prim(Int), Prim(Rational)] => Prim(Rational)
+  + :: [Prim(Float), Prim(Rational)] => Prim(Float)
+  + :: [Prim(Rational), Prim(Float)] => Prim(Rational)
+  - :: [Prim(Int), Prim(Float)] => Prim(Float)
+  - :: [Prim(Int), Prim(Rational)] => Prim(Rational)
+  - :: [Prim(Float), Prim(Rational)] => Prim(Float)
+  - :: [Prim(Rational), Prim(Float)] => Prim(Rational)
   abs :: [Prim(Int)] => Prim(Int)
   abs :: [Prim(Float)] => Prim(Float)
   abs :: [Prim(Rational)] => Prim(Rational)
