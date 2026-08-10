@@ -140,8 +140,43 @@ pub(crate) fn infer_map(
     };
 
     // 4. Extrair ret_ty do callback (B).
+    //    Se o callback é OverloadSet (lambda deferido com partial dispatch
+    //    ambíguo), seleciona a overload cujo primeiro param casa com elem_ty.
     let cb_ret = match &callback_typed.ty {
         Ty::Function(_, ret) => (**ret).clone(),
+        Ty::OverloadSet { name, overloads } => {
+            // Fase 4: selecionar overload por elem_ty.
+            let matched: Vec<&(Vec<Ty>, Ty)> = overloads
+                .iter()
+                .filter(|(params, _)| {
+                    params.len() == 1
+                        && kata_core::dispatch::match_score(
+                            &[elem_ty.clone()],
+                            params,
+                            ctx.interface_registry,
+                        )
+                        .is_compatible(1)
+                })
+                .collect();
+            match matched.len() {
+                1 => matched[0].1.clone(),
+                0 => {
+                    return Err(MiddleError::TypeMismatch {
+                        expected: format!(
+                            "uma overload de `{name}` compatível com [{elem_ty}]"
+                        ),
+                        found: "nenhuma overload compatível".into(),
+                        span: args[0].span.into(),
+                    });
+                }
+                _ => {
+                    return Err(MiddleError::AmbiguousDispatch {
+                        name: name.clone(),
+                        span: args[0].span.into(),
+                    });
+                }
+            }
+        }
         _ => {
             return Err(MiddleError::TypeMismatch {
                 expected: "Function".into(),
@@ -207,6 +242,8 @@ pub(crate) fn infer_filter(
     };
 
     // 4. Verificar que o callback retorna Boolean.
+    //    Se o callback é OverloadSet (lambda deferido), seleciona a overload
+    //    cujo param casa com elem_ty e retorna Boolean.
     match &callback_typed.ty {
         Ty::Function(_, ret) if **ret == Ty::Sum("Boolean".into()) => {}
         Ty::Function(_, ret) => {
@@ -215,6 +252,41 @@ pub(crate) fn infer_filter(
                 found: format!("{}", ret),
                 span: args[0].span.into(),
             });
+        }
+        Ty::OverloadSet { name, overloads } => {
+            // Fase 4: selecionar overload por elem_ty com retorno Boolean.
+            let boolean = Ty::Sum("Boolean".into());
+            let matched: Vec<&(Vec<Ty>, Ty)> = overloads
+                .iter()
+                .filter(|(params, ret)| {
+                    params.len() == 1
+                        && *ret == boolean
+                        && kata_core::dispatch::match_score(
+                            &[elem_ty.clone()],
+                            params,
+                            ctx.interface_registry,
+                        )
+                        .is_compatible(1)
+                })
+                .collect();
+            match matched.len() {
+                1 => {}
+                0 => {
+                    return Err(MiddleError::TypeMismatch {
+                        expected: format!(
+                            "uma overload de `{name}` compatível com [{elem_ty}] => Boolean"
+                        ),
+                        found: "nenhuma overload compatível".into(),
+                        span: args[0].span.into(),
+                    });
+                }
+                _ => {
+                    return Err(MiddleError::AmbiguousDispatch {
+                        name: name.clone(),
+                        span: args[0].span.into(),
+                    });
+                }
+            }
         }
         _ => {
             return Err(MiddleError::TypeMismatch {
@@ -287,6 +359,8 @@ pub(crate) fn infer_fold(
     };
 
     // 4. Verificar que o callback retorna o tipo do acumulador.
+    //    Se o callback é OverloadSet (lambda deferido), seleciona a overload
+    //    cujos params casam com (acc_ty, elem_ty).
     match &callback_typed.ty {
         Ty::Function(_, ret) if **ret == acc_ty => {}
         Ty::Function(_, ret) => {
@@ -295,6 +369,40 @@ pub(crate) fn infer_fold(
                 found: format!("{}", ret),
                 span: args[0].span.into(),
             });
+        }
+        Ty::OverloadSet { name, overloads } => {
+            // Fase 4: selecionar overload por (acc_ty, elem_ty).
+            let matched: Vec<&(Vec<Ty>, Ty)> = overloads
+                .iter()
+                .filter(|(params, ret)| {
+                    params.len() == 2
+                        && *ret == acc_ty
+                        && kata_core::dispatch::match_score(
+                            &[acc_ty.clone(), elem_ty.clone()],
+                            params,
+                            ctx.interface_registry,
+                        )
+                        .is_compatible(2)
+                })
+                .collect();
+            match matched.len() {
+                1 => {}
+                0 => {
+                    return Err(MiddleError::TypeMismatch {
+                        expected: format!(
+                            "uma overload de `{name}` compatível com [{acc_ty}, {elem_ty}] => {acc_ty}"
+                        ),
+                        found: "nenhuma overload compatível".into(),
+                        span: args[0].span.into(),
+                    });
+                }
+                _ => {
+                    return Err(MiddleError::AmbiguousDispatch {
+                        name: name.clone(),
+                        span: args[0].span.into(),
+                    });
+                }
+            }
         }
         _ => {
             return Err(MiddleError::TypeMismatch {

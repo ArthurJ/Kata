@@ -116,10 +116,24 @@ pub(crate) fn call_callback(
 }
 
 /// Extrai tipos do callback (params, ret) a partir do tipo do callback.
+/// Se o callback é OverloadSet, usa a primeira overload (Fase 5 vai
+/// selecionar a correta pelo elem_ty no codegen).
 pub(crate) fn extract_callback_sig(callback: &TypedExpr) -> (Vec<Ty>, Ty) {
     match &callback.ty {
         Ty::Function(params, ret) => (params.clone(), (**ret).clone()),
-        _ => panic!("callback não é Function: {}", callback.ty),
+        Ty::OverloadSet { overloads, .. } => {
+            // Fase 4: quando o codegen recebe um callback OverloadSet,
+            // a inference já validou que existe uma única overload compatível.
+            // Por enquanto, usar a primeira overload de arity 1 (map/filter)
+            // ou arity 2 (fold). Fase 5 vai instanciar o lambda deferido
+            // com tipos concretos e gerar o function pointer correto.
+            if let Some(first) = overloads.first() {
+                (first.0.clone(), first.1.clone())
+            } else {
+                panic!("OverloadSet vazio no callback")
+            }
+        }
+        _ => panic!("callback não é Function nem OverloadSet: {}", callback.ty),
     }
 }
 
