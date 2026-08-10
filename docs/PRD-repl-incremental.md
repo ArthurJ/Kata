@@ -228,6 +228,13 @@ serializador precisa distinguir ponteiros para dados (rebase) de ponteiros
 para código (não rebase). Ver `serialize_snapshot` em
 `crates/kata-comptime/src/snapshot.rs`.
 
+**Implementado (Fase 3):** o braço `Ty::Function` serializa o CaptureBox
+como raw i64s (fn_ptr, refcount, n_captures, captures) **sem adicionar
+nenhum offset a `rebase_offsets`**. O `fn_ptr` é ponteiro absoluto para
+código JIT (páginas leaked permanecem mapeadas). Os captures são valores
+imediatos ou ponteiros absolutos para a arena persistente — ambos válidos
+sem rebasing porque o Runtime do REPL persiste entre linhas.
+
 **Isto é a única extensão do serializador.** Pode ser postergada: o primeiro
 corte do REPL incremental suporta bindings escalares e estruturas de dados
 sem closures. Closures como bindings `let` podem usar o fluxo de fallback
@@ -310,21 +317,26 @@ recompilação.
 - `let p := Point{ x: 1, y: 2 }` depois `echo!(p.x)` → 1
 - `let t := (1, 2.0, True)` depois `echo!(t)` → (1, 2.0, True)
 
-### Fase 3 — Closures como bindings
+### Fase 3 — Closures como bindings ✅
 
 **Escopo:** `let f := lambda n: n + 1` depois `echo!(f 10)` funciona
 sem recompilação.
 
 **Mudanças:**
-1. `serialize_snapshot`: distinguir function_ptr (absoluto, sem rebase)
-   de ponteiros para dados (relativo, com rebase)
-2. Validar que o function_ptr aponta para código JIT válido (páginas
-   leaked permanecem mapeadas)
+1. `serialize_snapshot`: adicionado braço `Ty::Function` — serializa
+   o CaptureBox como raw i64s (fn_ptr, refcount, n_captures,
+   captures[0..n]) sem rebase. O `fn_ptr` é ponteiro absoluto para
+   código JIT (páginas leaked permanecem mapeadas). Os captures são
+   valores imediatos ou ponteiros absolutos para a arena persistente
+   — ambos válidos sem rebasing porque o Runtime do REPL persiste.
+2. `result_to_literal`: adicionado `Ty::Function(_, _)` ao match de
+   tipos complexos que viram `HeapSnapshot`.
 
 **Verificação:**
-- `let f := lambda n: n + 1` depois `echo!(f 10)` → 11
-- `let x := 42` depois `let f := lambda n: n + x` depois `echo!(f 10)` → 52
-- `let x := 42` depois `let f := lambda n: n + x` depois `let x := 99` depois `echo!(f 10)` → 52 (shadowing não retroage)
+- `let f := lambda n: n + 1` depois `echo!(f 10)` → 11 ✅
+- `let x := 42` depois `let f := lambda n: n + x` depois `echo!(f 10)` → 52 ✅
+- `let x := 42` depois `let f := lambda n: n + x` depois `let x := 99` depois `echo!(f 10)` → 52 (shadowing não retroage) ✅
+- `cargo test --workspace --no-fail-fast -- --test-threads=8` → 1496 passed ✅
 
 ### Fase 4 — Funções nomeadas
 
@@ -368,8 +380,8 @@ kata-rt:
 
 kata-comptime:
   snapshot.rs:
-    - serialize_snapshot: distinguir function_ptr (sem rebase) de
-      ponteiros para dados (com rebase) — Fase 3
+    - serialize_snapshot: braço Ty::Function serializa CaptureBox
+      como raw i64s sem rebase — Fase 3 ✅
 ```
 
 ## 5. O que não muda

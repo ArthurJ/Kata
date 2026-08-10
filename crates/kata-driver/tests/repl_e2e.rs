@@ -501,3 +501,50 @@ fn repl_single_line_still_works() {
         "esperava 3, got: {out}"
     );
 }
+
+// ── Closures como bindings (Fase 3) ────────────────────────
+
+#[test]
+fn repl_closure_binding_no_capture() {
+    // let f := lambda n: + n 1 → echo!(f 10) → 11
+    let out = run_repl(&["let f := lambda n: + n 1", "echo!(f 10)", ":quit"]);
+    let lines = result_lines(&out);
+    assert!(
+        lines.iter().any(|l| l.trim() == "11"),
+        "esperava 11 (closure sem capture), got: {out}"
+    );
+}
+
+#[test]
+fn repl_closure_binding_with_capture() {
+    // let x := 42 → let f := lambda n: + n x → echo!(f 10) → 52
+    let out = run_repl(&[
+        "let x := 42",
+        "let f := lambda n: + n x",
+        "echo!(f 10)",
+        ":quit",
+    ]);
+    let lines = result_lines(&out);
+    assert!(
+        lines.iter().any(|l| l.trim() == "52"),
+        "esperava 52 (closure com capture), got: {out}"
+    );
+}
+
+#[test]
+fn repl_closure_shadowing_does_not_retroact() {
+    // let x := 42 → let f := lambda n: + n x → let x := 99 → echo!(f 10) → 52
+    // Shadowing de x não retroage: f capturou 42.
+    let out = run_repl(&[
+        "let x := 42",
+        "let f := lambda n: + n x",
+        "let x := 99",
+        "echo!(f 10)",
+        ":quit",
+    ]);
+    let lines = result_lines(&out);
+    assert!(
+        lines.iter().any(|l| l.trim() == "52"),
+        "esperava 52 (shadowing não retroage), got: {out}"
+    );
+}

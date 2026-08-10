@@ -119,7 +119,8 @@ pub(crate) fn result_to_literal(
         | Ty::Struct(_)
         | Ty::Prim(PrimTy::Text)
         | Ty::Sum(_)
-        | Ty::Generic(_, _) => {
+        | Ty::Generic(_, _)
+        | Ty::Function(_, _) => {
             let snapshot = crate::snapshot::serialize_snapshot(
                 result.raw,
                 &result.ty,

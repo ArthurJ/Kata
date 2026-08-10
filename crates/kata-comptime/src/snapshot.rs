@@ -292,6 +292,36 @@ fn serialize_value(
         Ty::Unit => {
             ser.write_i64(0);
         }
+        Ty::Function(_params, _ret) => {
+            // Closure — CaptureBox na arena.
+            // Layout: fn_ptr (offset 0), refcount (offset 8),
+            // n_captures (offset 16), captures[0..n] (offset 24+).
+            //
+            // fn_ptr é ponteiro absoluto para código JIT (páginas leaked
+            // permanecem mapeadas) — não precisa rebase.
+            // captures são ou valores imediatos (SMI, Float) ou ponteiros
+            // absolutos para dados na arena persistente. Como o Runtime do
+            // REPL persiste entre linhas, os ponteiros originais permanecem
+            // válidos. Serializamos como raw i64s sem rebase.
+            if raw == 0 {
+                ser.write_nil();
+            } else {
+                let ptr = raw as *const u8;
+                let fn_ptr = unsafe { read_i64_at(ptr, 0) };
+                let refcount = unsafe { read_i64_at(ptr, 8) };
+                let n_captures = unsafe { read_i64_at(ptr, 16) };
+
+                ser.write_i64(fn_ptr);
+                ser.write_i64(refcount);
+                ser.write_i64(n_captures);
+
+                let n = n_captures as usize;
+                for i in 0..n {
+                    let cap = unsafe { read_i64_at(ptr, 24 + i * 8) };
+                    ser.write_i64(cap);
+                }
+            }
+        }
         _ => {
             ser.write_i64(raw);
         }
