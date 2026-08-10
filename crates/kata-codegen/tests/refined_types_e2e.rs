@@ -216,7 +216,7 @@ fn multiplos_predicados_falha_segundo() {
 /// Ascription-refined exige literal — expr não-literal deve dar type error.
 #[test]
 fn ascription_refined_exige_literal() {
-    let src = "data (Int, > _ 0) as PositiveInt\nlet x := 5\nx::PositiveInt";
+    let src = "data (Int, > _ 0) as PositiveInt\nconstant x := 5\nx::PositiveInt";
     assert!(
         infer_fails(src),
         "x::PositiveInt deve falhar (ascription refined exige literal, não variável)"

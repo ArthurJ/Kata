@@ -145,7 +145,7 @@ match Boolean::False\n\
 /// `let soma_dez := + 10 _` + `soma_dez 5` → 15
 #[test]
 fn hole_partial_dispatch() {
-    let src = "let soma_dez := + 10 _\nsoma_dez 5";
+    let src = "constant soma_dez := + 10 _\nsoma_dez 5";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
     assert_eq!(untag_smi(raw), 15, "soma_dez 5 deve ser 15");
@@ -167,7 +167,7 @@ fn pipe_chain() {
 /// `let inc := lambda x: + x 1` + `let g := inc` + `g 41` → 42
 #[test]
 fn lambda_como_valor() {
-    let src = "let inc := lambda x: + x 1\nlet g := inc\ng 41";
+    let src = "constant inc := lambda x: + x 1\nconstant g := inc\ng 41";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
     assert_eq!(untag_smi(raw), 42, "g 41 deve ser 42");
@@ -202,7 +202,7 @@ fn funcao_nomeada_como_valor() {
 fat :: Int Int => Int\n\
 lambda 0 acc: acc\n\
 lambda n acc: fat (- n 1) (* n acc)\n\
-let g := fat\n\
+constant g := fat\n\
 g 5 1";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
@@ -258,7 +258,7 @@ fn match_tuple_pattern_third() {
 /// `test_single_pattern`). A inferência de `TypeExpr::Tuple` já funciona.
 #[test]
 fn lambda_tuple_pattern() {
-    let src = "let fst := lambda (a, b): a\nfst (10, 20)";
+    let src = "constant fst := lambda (a, b): a\nfst (10, 20)";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
     assert_eq!(untag_smi(raw), 10, "fst (10,20) deve ser 10");

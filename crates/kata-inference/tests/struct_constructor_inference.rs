@@ -64,7 +64,7 @@ fn infer_src(src: &str) -> kata_inference::TypedModule {
 
 #[test]
 fn struct_constructor_sintetizado() {
-    let src = "data Pessoa (nome::Text idade::Int)\nlet p := Pessoa \"João\" 30\np";
+    let src = "data Pessoa (nome::Text idade::Int)\nconstant p := Pessoa \"João\" 30\np";
     let typed = infer_src(src);
 
     // Pessoa está no dispatch_table
@@ -112,7 +112,7 @@ fn struct_sem_campos_nao_tem_constructor() {
 
 #[test]
 fn struct_aninhada_tem_constructor() {
-    let src = "data Endereco (rua::Text)\ndata Pessoa (nome::Text end::Endereco)\nlet p := Pessoa \"João\" (Endereco \"Rua A\")\np";
+    let src = "data Endereco (rua::Text)\ndata Pessoa (nome::Text end::Endereco)\nconstant p := Pessoa \"João\" (Endereco \"Rua A\")\np";
     let typed = infer_src(src);
 
     // Ambos construtores estão no dispatch_table

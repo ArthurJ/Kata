@@ -122,7 +122,7 @@ fn dod31_apply_lambda_inline_ascription() {
 /// `let f := (lambda x: + x 1)::(Int -> Int); f 5` — hint + apply via var.
 #[test]
 fn hint_then_apply_via_var() {
-    let tmod = infer_src("let f := (lambda x: + x 1)::(Int -> Int)\nf 5");
+    let tmod = infer_src("constant f := (lambda x: + x 1)::(Int -> Int)\nf 5");
     let entry = entry_typed(&tmod);
     assert_eq!(entry.ty, Ty::int(), "f 5 deve retornar Int");
 }
@@ -131,7 +131,7 @@ fn hint_then_apply_via_var() {
 /// f tem tipo Int -> Int, f 5 despacha via TypeEnv (call_indirect).
 #[test]
 fn partial_dispatch_then_apply_via_var() {
-    let tmod = infer_src("let f := lambda x: + x 1\nf 5");
+    let tmod = infer_src("constant f := lambda x: + x 1\nf 5");
     let entry = entry_typed(&tmod);
     assert_eq!(entry.ty, Ty::int(), "f 5 deve retornar Int");
 }

@@ -59,7 +59,7 @@ fn generate_synthetic_kata(n: usize) -> String {
         match i % 4 {
             0 => {
                 // let binding com expressão aritmética
-                out.push_str(&format!("let x{i} := + {i} (* {i} 2)\n"));
+                out.push_str(&format!("constant x{i} := + {i} (* {i} 2)\n"));
             }
             1 => {
                 // action com body simples
@@ -74,7 +74,7 @@ fn generate_synthetic_kata(n: usize) -> String {
             3 => {
                 // let com list literal
                 out.push_str(&format!(
-                    "let lst{i} := [{}]\n",
+                    "constant lst{i} := [{}]\n",
                     vec![i.to_string(); 5].join(", ")
                 ));
             }
@@ -83,7 +83,7 @@ fn generate_synthetic_kata(n: usize) -> String {
     }
 
     // Entry point para que o módulo não seja vazio
-    out.push_str("let main := 0\n");
+    out.push_str("constant main := 0\n");
     out
 }
 

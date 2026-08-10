@@ -26,8 +26,18 @@
   ],
   "repository": {
     "comment": {
-      "name": "comment.line.number-sign.kata",
-      "match": "#.*"
+      "patterns": [
+        {
+          "name": "comment.block.number-sign-brace.kata",
+          "begin": "#\\{",
+          "end": "\\}#",
+          "patterns": []
+        },
+        {
+          "name": "comment.line.number-sign.kata",
+          "match": "#.*"
+        }
+      ]
     },
 
     "string-triple": {
@@ -111,7 +121,7 @@
 
     "keyword-declaration": {
       "comment": "Declarations: let, var, data, enum, alias, action",
-      "match": "\\b(let|var|data|enum|alias|action)\\b",
+      "match": "\\b(let|var|constant|data|enum|alias|action)\\b",
       "name": "storage.type.kata"
     },
 

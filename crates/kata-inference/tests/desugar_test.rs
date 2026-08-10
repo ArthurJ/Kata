@@ -285,9 +285,22 @@ fn desugar_idempotent_no_hole_no_pipe() {
 
 #[test]
 fn desugar_preserves_let() {
-    // let x := 5 — Kata não tem `in`, let é só `let x := <expr>`
-    let entry = parse_entry("let x := 5");
-    let result = desugar::desugar(&entry);
+    // `let` dentro de uma action é preservado pelo desugar.
+    // `constant` no top-level produz ConstantDecl, não EntryExpr(Expr::Let).
+    let src = "action test_desugar_let\n    let x := 5";
+    let tokens = lex(src).unwrap();
+    let module = parse(tokens).unwrap();
+    // Extrai o corpo da action e procura o let.
+    let action = module
+        .items
+        .into_iter()
+        .find_map(|item| match item.node {
+            kata_ast::Item::ActionDecl { body, .. } => Some(body),
+            _ => None,
+        })
+        .expect("módulo deve ter ActionDecl");
+    let entry = &action[0].expr;
+    let result = desugar::desugar(entry);
     assert_no_holes(&result);
     assert_no_pipes(&result);
     // Deve ainda ter um Let

@@ -940,7 +940,7 @@ pub(crate) fn infer_expr_hinted(
 /// Extrai nomes dos parâmetros de uma lambda, se todos são nomeados (Ident ou TypedIdent).
 /// Retorna `None` se a expressão não é lambda ou se algum pattern não tem nome
 /// (Wildcard, Tuple, Cons, etc.).
-fn extract_lambda_param_names(expr: &Expr) -> Option<Vec<String>> {
+pub(crate) fn extract_lambda_param_names(expr: &Expr) -> Option<Vec<String>> {
     if let Expr::Lambda { patterns, .. } = expr {
         let mut names = Vec::with_capacity(patterns.len());
         for p in patterns {

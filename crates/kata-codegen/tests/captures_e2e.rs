@@ -113,7 +113,7 @@ fn find_last_lambda_captures(
 
 #[test]
 fn capture_simples_tast() {
-    let typed = infer_src("let n := 10\nlet add_n := + _ n\nadd_n 5");
+    let typed = infer_src("constant n := 10\nconstant add_n := + _ n\nadd_n 5");
     let captures = find_last_lambda_captures(&typed).expect("deveria ter um Lambda no pre_entry");
     assert_eq!(captures.len(), 1);
     assert_eq!(captures[0].name, "n");
@@ -123,7 +123,7 @@ fn capture_simples_tast() {
 #[test]
 fn capture_multipla_tast() {
     // Dois lets com captures separadas para evitar problemas de inferência.
-    let typed = infer_src("let a := 1\nlet b := 2\nlet g := + _ a\nlet h := + _ b\nh (g 10)");
+    let typed = infer_src("constant a := 1\nconstant b := 2\nconstant g := + _ a\nconstant h := + _ b\nh (g 10)");
     // g captura a, h captura b
     let captures = find_last_lambda_captures(&typed).expect("deveria ter um Lambda no pre_entry");
     // O último let (h) tem captures = [b]. Verificamos que não é vazio.
@@ -133,7 +133,7 @@ fn capture_multipla_tast() {
 
 #[test]
 fn capture_sem_captura_tast() {
-    let typed = infer_src("let f := + _ 1\nf 41");
+    let typed = infer_src("constant f := + _ 1\nf 41");
     let captures = find_last_lambda_captures(&typed).expect("deveria ter um Lambda no pre_entry");
     assert!(
         captures.is_empty(),
@@ -147,7 +147,7 @@ fn capture_sem_captura_tast() {
 #[test]
 fn capture_sem_captura_e2e() {
     // Sem captures, o codegen já funciona (params extras = 0)
-    let (raw, ty) = eval_src("let f := + _ 1\nf 41");
+    let (raw, ty) = eval_src("constant f := + _ 1\nf 41");
     assert_eq!(ty, Ty::int());
     assert_eq!(untag_smi(raw), 42);
 }
@@ -155,7 +155,7 @@ fn capture_sem_captura_e2e() {
 #[test]
 fn capture_simples_e2e() {
     // Closure com 1 capture: let n := 10, let add_n := + _ n, add_n 5 → 15
-    let (raw, ty) = eval_src("let n := 10\nlet add_n := + _ n\nadd_n 5");
+    let (raw, ty) = eval_src("constant n := 10\nconstant add_n := + _ n\nadd_n 5");
     assert_eq!(ty, Ty::int());
     assert_eq!(untag_smi(raw), 15);
 }
@@ -164,7 +164,7 @@ fn capture_simples_e2e() {
 fn capture_multipla_e2e() {
     // Duas closures com captures separadas.
     // let a := 1, let b := 2, let g := + _ a, let h := + _ b, h (g 10) → 13
-    let (raw, ty) = eval_src("let a := 1\nlet b := 2\nlet g := + _ a\nlet h := + _ b\nh (g 10)");
+    let (raw, ty) = eval_src("constant a := 1\nconstant b := 2\nconstant g := + _ a\nconstant h := + _ b\nh (g 10)");
     assert_eq!(ty, Ty::int());
     assert_eq!(untag_smi(raw), 13);
 }
@@ -175,7 +175,7 @@ fn capture_multipla_e2e() {
 fn closure_aninhada_e2e() {
     // Closure que captura variável do escopo externo e é chamada depois.
     // Equivalente a make_adder(10)(5) = 15.
-    let (raw, ty) = eval_src("let n := 10\nlet f := + _ n\nf 5");
+    let (raw, ty) = eval_src("constant n := 10\nconstant f := + _ n\nf 5");
     assert_eq!(ty, Ty::int());
     assert_eq!(untag_smi(raw), 15);
 }
@@ -183,7 +183,7 @@ fn closure_aninhada_e2e() {
 #[test]
 fn closure_em_tupla_e2e() {
     // Closure armazenada em tupla — não deve crashar no codegen.
-    let (raw, ty) = eval_src("let f := + _ 1\n(f, 42)");
+    let (raw, ty) = eval_src("constant f := + _ 1\n(f, 42)");
     eprintln!("tupla => raw={raw}, ty={ty:?}");
     assert!(matches!(ty, Ty::Tuple(_)));
 }
@@ -191,7 +191,7 @@ fn closure_em_tupla_e2e() {
 #[test]
 fn closure_com_float_e2e() {
     // Closure capturando Float, chamada com Float.
-    let (raw, ty) = eval_src("let pi := 3.14\nlet f := + _ pi\nf 1.0");
+    let (raw, ty) = eval_src("constant pi := 3.14\nconstant f := + _ pi\nf 1.0");
     assert_eq!(ty, Ty::float());
     let val = f64::from_bits(raw as u64);
     assert!((val - 4.14).abs() < 0.001, "esperado ~4.14, got {val}");
@@ -200,7 +200,7 @@ fn closure_com_float_e2e() {
 #[test]
 fn closure_multipla_chamada_aninhada_e2e() {
     // Duas closures com captures diferentes, uma chamando a outra.
-    let (raw, ty) = eval_src("let a := 1\nlet b := 2\nlet g := + _ a\nlet h := + _ b\nh (g 10)");
+    let (raw, ty) = eval_src("constant a := 1\nconstant b := 2\nconstant g := + _ a\nconstant h := + _ b\nh (g 10)");
     assert_eq!(ty, Ty::int());
     assert_eq!(untag_smi(raw), 13);
 }
@@ -214,7 +214,7 @@ fn closure_multipla_chamada_aninhada_e2e() {
 fn capture_nao_deve_incluir_funcao_global_tast() {
     // let f := lambda x: mod x 2
     // f captura NINGUÉM — mod é função global, x é param local.
-    let typed = infer_src("let f := lambda x: mod x 2\nf 7");
+    let typed = infer_src("constant f := lambda x: mod x 2\nf 7");
     let captures = find_last_lambda_captures(&typed).expect("deveria ter um Lambda no pre_entry");
     assert!(
         captures.iter().all(|c| c.name != "mod"),
@@ -227,7 +227,7 @@ fn capture_nao_deve_incluir_funcao_global_tast() {
 fn capture_nao_deve_incluir_funcao_global_and_tast() {
     // `and` é função global (Boolean Boolean => Boolean) em core.kata.
     // `t` é capturada (variável do escopo outer), `and` não deveria ser.
-    let typed = infer_src("let t := True\nlet f := lambda x: and x t\nf t");
+    let typed = infer_src("constant t := True\nconstant f := lambda x: and x t\nf t");
     let captures = find_last_lambda_captures(&typed).expect("deveria ter um Lambda no pre_entry");
     assert!(
         captures.iter().all(|c| c.name != "and"),
@@ -246,7 +246,7 @@ fn capture_nao_deve_incluir_funcao_global_and_tast() {
 fn closure_com_funcao_global_mod_e2e() {
     // lambda x: mod x 2 — mod é global, x é param. Sem captures.
     // mod 7 2 = 1
-    let (raw, ty) = eval_src("let f := lambda x: mod x 2\nf 7");
+    let (raw, ty) = eval_src("constant f := lambda x: mod x 2\nf 7");
     assert_eq!(ty, Ty::int());
     assert_eq!(untag_smi(raw), 1);
 }
@@ -255,7 +255,7 @@ fn closure_com_funcao_global_mod_e2e() {
 fn closure_com_funcao_global_and_e2e() {
     // lambda x: and x t — and é global, x é param, t é capturada.
     // and True True = True (SMI: True é variante 0 do enum Boolean → SMI 1)
-    let (raw, _) = eval_src("let t := True\nlet f := lambda x: and x t\nf t");
+    let (raw, _) = eval_src("constant t := True\nconstant f := lambda x: and x t\nf t");
     // True é variant index 0 do enum Boolean → SMI (0 << 1) | 1 = 1
     assert_eq!(raw, 1, "esperado True (SMI=1), got raw={raw}");
 }

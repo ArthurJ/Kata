@@ -65,7 +65,7 @@ fn infer_src(src: &str) -> kata_inference::TypedModule {
 /// `pessoa.nome` → FieldAccess com field_index = 0, ty = Text.
 #[test]
 fn field_access_em_struct() {
-    let src = "data Pessoa (nome::Text idade::Int)\nlet p := Pessoa \"João\" 30\np.nome";
+    let src = "data Pessoa (nome::Text idade::Int)\nconstant p := Pessoa \"João\" 30\np.nome";
     let typed = infer_src(src);
     let entry = &typed.entry.node;
     assert!(
@@ -87,7 +87,7 @@ fn field_access_em_struct() {
 /// `pessoa.idade` → FieldAccess com field_index = 1, ty = Int.
 #[test]
 fn field_access_segundo_campo() {
-    let src = "data Pessoa (nome::Text idade::Int)\nlet p := Pessoa \"João\" 30\np.idade";
+    let src = "data Pessoa (nome::Text idade::Int)\nconstant p := Pessoa \"João\" 30\np.idade";
     let typed = infer_src(src);
     let entry = &typed.entry.node;
     assert!(
@@ -203,7 +203,7 @@ fn field_access_em_tupla_da_erro() {
 /// `p.0` em struct → erro IndexAccessOnStruct.
 #[test]
 fn index_access_em_struct_da_erro() {
-    let src = "data Pessoa (nome::Text)\nlet p := Pessoa \"João\"\np.0";
+    let src = "data Pessoa (nome::Text)\nconstant p := Pessoa \"João\"\np.0";
     let tokens = lex(src).unwrap();
     let module = parse(tokens).unwrap();
     let prelude = load_prelude().unwrap();
@@ -232,7 +232,7 @@ fn dot_access_em_literal_da_erro() {
 /// Struct aninhada: `pessoa.endereco.rua` — field access encadeado.
 #[test]
 fn field_access_encadeado() {
-    let src = "data Endereco (rua::Text cidade::Text)\ndata Pessoa (nome::Text end::Endereco)\nlet p := Pessoa \"João\" (Endereco \"Rua A\" \"Cidade B\")\np.end.rua";
+    let src = "data Endereco (rua::Text cidade::Text)\ndata Pessoa (nome::Text end::Endereco)\nconstant p := Pessoa \"João\" (Endereco \"Rua A\" \"Cidade B\")\np.end.rua";
     let typed = infer_src(src);
     let entry = &typed.entry.node;
     // outer: FieldAccess(Endereco.rua, idx=0) → ty = Text
@@ -312,7 +312,7 @@ fn index_access_negativo_out_of_bounds() {
 /// Struct com 1 campo: field access funciona.
 #[test]
 fn struct_um_campo_field_access() {
-    let src = "data Wrapper (valor::Int)\nlet w := Wrapper 42\nw.valor";
+    let src = "data Wrapper (valor::Int)\nconstant w := Wrapper 42\nw.valor";
     let typed = infer_src(src);
     let entry = &typed.entry.node;
     assert!(
@@ -333,7 +333,7 @@ fn struct_um_campo_field_access() {
 /// Field access em campo inexistente → erro UnknownField.
 #[test]
 fn field_access_inexistente_da_erro() {
-    let src = "data Pessoa (nome::Text)\nlet p := Pessoa \"João\"\np.idade";
+    let src = "data Pessoa (nome::Text)\nconstant p := Pessoa \"João\"\np.idade";
     let tokens = lex(src).unwrap();
     let module = parse(tokens).unwrap();
     let prelude = load_prelude().unwrap();

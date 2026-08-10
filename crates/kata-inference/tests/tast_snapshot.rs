@@ -127,7 +127,7 @@ fn tast_aritmetica_simples() {
 
 #[test]
 fn tast_let_binding() {
-    let src = "let x := 42
+    let src = "constant x := 42
 x";
     insta::assert_snapshot!(tast_snapshot(src));
 }

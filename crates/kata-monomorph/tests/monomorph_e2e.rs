@@ -147,7 +147,7 @@ fn generic_id_generates_float_instance() {
 /// `id` com Int e Float → gera duas instâncias distintas.
 #[test]
 fn generic_id_two_instances() {
-    let src = "id :: T => T\nlet x := id 42\nlet y := id 3.14\nx";
+    let src = "id :: T => T\nconstant x := id 42\nconstant y := id 3.14\nx";
     let mono = mono_src(src);
 
     assert!(
@@ -245,7 +245,7 @@ fn original_generic_function_preserved() {
 /// `id 42` duas vezes → gera uma só instância (dedup).
 #[test]
 fn same_type_dedup_instance() {
-    let src = "id :: T => T\nlet x := id 42\nlet y := id 42\nx";
+    let src = "id :: T => T\nconstant x := id 42\nconstant y := id 42\nx";
     let mono = mono_src(src);
 
     let overloads = mono

@@ -93,7 +93,7 @@ fn hint_top_down_float() {
 /// `let f := (lambda x: + x 1)::(Int -> Int); f 5` — aplicação do lambda tipado via hint.
 #[test]
 fn hint_top_down_then_apply() {
-    let tmod = infer_src("let f := (lambda x: + x 1)::(Int -> Int)\nf 5");
+    let tmod = infer_src("constant f := (lambda x: + x 1)::(Int -> Int)\nf 5");
     let entry = entry_typed(&tmod);
 
     assert_eq!(entry.ty, Ty::int(), "f 5 deve retornar Int");

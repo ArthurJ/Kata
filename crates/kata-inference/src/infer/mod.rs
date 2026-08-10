@@ -52,7 +52,7 @@ mod variant_qual;
 mod walk;
 
 use action_infer::infer_action;
-use kata_ast::{GuardClause, Item, Module, Spanned, WithBinding};
+use kata_ast::{Expr, GuardClause, Item, Module, Spanned, WithBinding};
 use kata_core::dispatch::OverloadInfo;
 use kata_core::ty::{PrimTy, Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
@@ -63,7 +63,7 @@ use crate::desugar;
 use crate::typed::{TypedAction, TypedExpr, TypedFunction, TypedLambdaClause, TypedModule};
 
 use self::apply_lambda::infer_lambda_body;
-use self::expr::{InferCtx, infer_expr, infer_expr_hinted};
+use self::expr::{InferCtx, extract_lambda_param_names, infer_expr, infer_expr_hinted};
 use self::helpers::{
     InferResult, check_patterns, item_span_or_synthetic, populate_dispatch_table,
     process_with_bindings,
@@ -187,6 +187,60 @@ pub fn infer_module(
     //    locais (let) sem mutar o original.
     let mut type_env = resolved.type_env.clone();
 
+    // 2a. Pré-registra constants de módulo no TypeEnv ANTES de inferir
+    //     funções nomeadas. Funções nomeadas podem referenciar constants
+    //     no corpo — sem o pré-registro, UnboundName.
+    //     Reusa a lógica de infer_expr para Expr::Let — assim deferred
+    //     lambdas, OverloadSet, fn_alias, etc. são tratados igual ao let.
+    let mut constant_typed_values: Vec<(String, Spanned<TypedExpr>)> = Vec::new();
+    for item in &module.items {
+        if let Item::ConstantDecl { name, value } = &item.node {
+            let desugared = desugar::desugar(value);
+            let ctx = InferCtx {
+                table: &dispatch_table,
+                enum_registry: &resolved.enum_registry,
+                struct_registry: &resolved.struct_registry,
+                refined_decls: &resolved.refined_decls,
+                interface_registry: &interface_registry,
+                refines_registry: &resolved.refines_registry,
+                ret_ty: None,
+                in_loop: false,
+                deferred_lambdas: &deferred_lambdas,
+            };
+            // Envolver em Expr::Let para reusar toda a lógica de
+            // inferência de let (deferred lambda, OverloadSet, fn_alias).
+            let let_expr = Spanned::new(
+                Expr::Let {
+                    name: name.clone(),
+                    value: Box::new(desugared.clone()),
+                },
+                value.span,
+            );
+            let typed_let = infer_expr(
+                &let_expr.node,
+                &let_expr.span,
+                &mut type_env,
+                &ctx,
+                false,
+            )?;
+
+            // Extrair o typed_value do TypedExprKind::Let.
+            let typed_value = match &typed_let.kind {
+                crate::typed::TypedExprKind::Let { value, .. } => value.node.clone(),
+                _ => typed_let.clone(),
+            };
+
+            // O binding já foi registrado no type_env pelo infer_expr
+            // (Expr::Let chama env.define). Mas a origin é __local__.
+            // Mudar para __module__ se o nome não é "_".
+            if name != "_" {
+                type_env.set_origin(name, "__module__");
+            }
+
+            constant_typed_values.push((name.clone(), Spanned::new(typed_value, value.span)));
+        }
+    }
+
     // 3. Processa funções nomeadas com corpo Kata.
     //    Cada função é inferida com os tipos da assinatura (não InferVar).
     //    A função também é registrada no TypeEnv como Ty::Function para permitir
@@ -292,6 +346,32 @@ pub fn infer_module(
                 // (resolution) — o inference não os processa.
                 // DirectiveDecl é processado no resolution (DirectiveRegistry)
                 // e consumido pelo desugar_directives antes do inference.
+            }
+            Item::ConstantDecl { name, value } => {
+                // Pré-processado no passo 2a. Aqui só produzimos o
+                // pre_entry (TypedExprKind::Let) para o codegen lowerar,
+                // usando o typed_value já inferido.
+                let typed_value = constant_typed_values
+                    .iter()
+                    .find(|(n, _)| n == name)
+                    .map(|(_, tv)| tv.node.clone())
+                    .ok_or_else(|| MiddleError::UnboundName {
+                        name: format!("constant {name}"),
+                        span: value.span.into(),
+                        suggestion: None,
+                    })?;
+
+                let let_typed = TypedExpr {
+                    span: value.span,
+                    ty: Ty::Unit,
+                    tail_pos: false,
+                    escape: kata_core::escape::EscapeTarget::Local,
+                    kind: crate::typed::TypedExprKind::Let {
+                        name: name.clone(),
+                        value: Box::new(Spanned::new(typed_value, value.span)),
+                    },
+                };
+                pre_entry.push(Spanned::new(let_typed, value.span));
             }
             Item::ActionDecl { .. } => {
                 // Já processado no inference de Actions (abaixo).

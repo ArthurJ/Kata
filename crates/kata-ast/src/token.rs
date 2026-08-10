@@ -44,6 +44,8 @@ pub enum Token {
     // ── Palavras-chave ─────────────────────────────────
     /// `let` — binding imutável
     Let,
+    /// `constant` — declara constante de módulo (top-level only)
+    Constant,
     /// `var` — binding mutável (exclusivo de Actions, )
     Var,
     /// `data` — declara tipo produto
@@ -179,6 +181,7 @@ impl Token {
         matches!(
             self,
             Token::Let
+                | Token::Constant
                 | Token::Var
                 | Token::Data
                 | Token::Enum
@@ -222,6 +225,7 @@ impl std::fmt::Display for Token {
             ),
             Token::Ident(s) => write!(f, "{s}"),
             Token::Let => write!(f, "let"),
+            Token::Constant => write!(f, "constant"),
             Token::Var => write!(f, "var"),
             Token::Data => write!(f, "data"),
             Token::Enum => write!(f, "enum"),

@@ -81,7 +81,7 @@ fn untag_smi(raw: i64) -> i64 {
 /// O valor é um ponteiro para texto na arena; o JIT retorna o ptr como i64.
 #[test]
 fn field_access_primeiro_campo_retorna_text() {
-    let src = "data Pessoa (nome::Text idade::Int)\nlet p := Pessoa \"João\" 30\np.nome";
+    let src = "data Pessoa (nome::Text idade::Int)\nconstant p := Pessoa \"João\" 30\np.nome";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::text());
     // Text é ponteiro na arena — não é SMI. Apenas verifica que não panica.
@@ -91,7 +91,7 @@ fn field_access_primeiro_campo_retorna_text() {
 /// `pessoa.idade` retorna 30 (SMI) — field access segundo campo.
 #[test]
 fn field_access_segundo_campo_retorna_int() {
-    let src = "data Pessoa (nome::Text idade::Int)\nlet p := Pessoa \"João\" 30\np.idade";
+    let src = "data Pessoa (nome::Text idade::Int)\nconstant p := Pessoa \"João\" 30\np.idade";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::int());
     assert_eq!(untag_smi(raw), 30);
@@ -154,7 +154,7 @@ fn index_access_negativo_primeiro_retorna_10() {
 /// Struct aninhada: `pessoa.endereco.rua` retorna "Rua A" — field access encadeado.
 #[test]
 fn field_access_encadeado_retorna_text() {
-    let src = "data Endereco (rua::Text cidade::Text)\ndata Pessoa (nome::Text end::Endereco)\nlet p := Pessoa \"João\" (Endereco \"Rua A\" \"Cidade B\")\np.end.rua";
+    let src = "data Endereco (rua::Text cidade::Text)\ndata Pessoa (nome::Text end::Endereco)\nconstant p := Pessoa \"João\" (Endereco \"Rua A\" \"Cidade B\")\np.end.rua";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::text());
     let _ = raw;
@@ -163,7 +163,7 @@ fn field_access_encadeado_retorna_text() {
 /// Struct aninhada: `pessoa.endereco.cidade` retorna "Cidade B".
 #[test]
 fn field_access_encadeado_segundo_campo() {
-    let src = "data Endereco (rua::Text cidade::Text)\ndata Pessoa (nome::Text end::Endereco)\nlet p := Pessoa \"João\" (Endereco \"Rua A\" \"Cidade B\")\np.end.cidade";
+    let src = "data Endereco (rua::Text cidade::Text)\ndata Pessoa (nome::Text end::Endereco)\nconstant p := Pessoa \"João\" (Endereco \"Rua A\" \"Cidade B\")\np.end.cidade";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::text());
     let _ = raw;
@@ -190,7 +190,7 @@ fn index_access_tupla_heterogenea_primeiro() {
 /// Struct com 1 campo: `w.valor` retorna 42.
 #[test]
 fn struct_um_campo_field_access_retorna_42() {
-    let src = "data Wrapper (valor::Int)\nlet w := Wrapper 42\nw.valor";
+    let src = "data Wrapper (valor::Int)\nconstant w := Wrapper 42\nw.valor";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::int());
     assert_eq!(untag_smi(raw), 42);
@@ -199,7 +199,7 @@ fn struct_um_campo_field_access_retorna_42() {
 /// Field access seguido de aritmética: `p.idade + 1` retorna 31.
 #[test]
 fn field_access_em_expressao_aritmetica() {
-    let src = "data Pessoa (nome::Text idade::Int)\nlet p := Pessoa \"João\" 30\n+ p.idade 1";
+    let src = "data Pessoa (nome::Text idade::Int)\nconstant p := Pessoa \"João\" 30\n+ p.idade 1";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::int());
     assert_eq!(untag_smi(raw), 31);

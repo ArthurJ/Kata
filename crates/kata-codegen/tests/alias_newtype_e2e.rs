@@ -106,7 +106,7 @@ fn alias_float_as_altura_com_ascription() {
 /// layout, a ascription é um no-op em runtime (bitcast I64→F64 no codegen).
 #[test]
 fn alias_altura_downcast_para_float() {
-    let src = "alias Float as Altura\nlet x := Altura 1.75\nx::Float";
+    let src = "alias Float as Altura\nconstant x := Altura 1.75\nx::Float";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Float));
     let bits = f64::to_bits(1.75) as i64;
@@ -117,7 +117,7 @@ fn alias_altura_downcast_para_float() {
 /// `Pessoa2 "João" 30` produz `Ty::Struct("Pessoa2")`.
 #[test]
 fn alias_struct_com_campos_constrói() {
-    let src = "data Pessoa (nome::Text idade::Int)\nalias Pessoa as Pessoa2\nlet p := Pessoa2 \"João\" 30\np.idade";
+    let src = "data Pessoa (nome::Text idade::Int)\nalias Pessoa as Pessoa2\nconstant p := Pessoa2 \"João\" 30\np.idade";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::int());
     assert_eq!(untag_smi(raw), 30);
@@ -126,7 +126,7 @@ fn alias_struct_com_campos_constrói() {
 /// Alias de struct: field access funciona no newtype.
 #[test]
 fn alias_struct_field_access_retorna_text() {
-    let src = "data Pessoa (nome::Text idade::Int)\nalias Pessoa as Pessoa2\nlet p := Pessoa2 \"Maria\" 25\np.nome";
+    let src = "data Pessoa (nome::Text idade::Int)\nalias Pessoa as Pessoa2\nconstant p := Pessoa2 \"Maria\" 25\np.nome";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::text());
     let _ = raw; // Text é ponteiro na arena
@@ -156,7 +156,7 @@ fn alias_de_alias() {
 /// Rigidez nominal: `Counter` ≠ `Int` — passar Counter onde espera Int falha.
 #[test]
 fn alias_counter_nao_igual_int_typeck() {
-    let src = "alias Int as Counter\nlet c := Counter 5\nlet f := + _::Int 1\nf c";
+    let src = "alias Int as Counter\nconstant c := Counter 5\nconstant f := + _::Int 1\nf c";
     let tokens = lex(src).expect("lex deve succeed");
     let module = parse(tokens).expect("parse deve succeed");
     let prelude = load_prelude().expect("prelude deve carregar");

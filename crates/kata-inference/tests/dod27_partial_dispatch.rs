@@ -143,7 +143,7 @@ fn partial_dispatch_minus_int_hole() {
 /// é `None` (call_indirect) — o codegen decide como chamar.
 #[test]
 fn partial_dispatch_hole_then_apply() {
-    let tmod = infer_src("let f := + 10 _\nf 5");
+    let tmod = infer_src("constant f := + 10 _\nf 5");
     let entry = entry_typed(&tmod);
 
     assert_eq!(entry.ty, Ty::int(), "f 5 deve retornar Int");

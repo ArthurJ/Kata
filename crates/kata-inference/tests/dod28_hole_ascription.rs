@@ -119,7 +119,7 @@ fn hole_ascription_times_int() {
 /// `let f := + 10 _::Int; f 5` — aplicação do lambda tipado via ascription.
 #[test]
 fn hole_ascription_then_apply() {
-    let tmod = infer_src("let f := + 10 _::Int\nf 5");
+    let tmod = infer_src("constant f := + 10 _::Int\nf 5");
     let entry = entry_typed(&tmod);
 
     assert_eq!(entry.ty, Ty::int(), "f 5 deve retornar Int");

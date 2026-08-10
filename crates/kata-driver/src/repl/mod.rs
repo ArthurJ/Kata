@@ -25,7 +25,7 @@ use kata_inference::infer_module;
 use kata_lexer::lex;
 use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
-use kata_parser::{parse, parse_decls_only, parse_with_arity, scan_lambdas};
+use kata_parser::{parse, parse_repl_decls_only, parse_repl_with_arity, scan_lambdas};
 use kata_resolution::{ResolvedModule, extract_arities, load_prelude, resolve};
 use kata_tree_shaking::tree_shake;
 use rustyline::Editor;
@@ -139,7 +139,7 @@ impl ReplSession {
         // Signatures definem a aridade padrão; lambdas com mesmo nome são
         // overloads non-default.
         let decls_module =
-            parse_decls_only(tokens.clone()).map_err(|e| format!("erro de parse (Pass 1): {e}"))?;
+            parse_repl_decls_only(tokens.clone()).map_err(|e| format!("erro de parse (Pass 1): {e}"))?;
         let decls_user = resolve(&decls_module).map_err(|e| {
             format!(
                 "erro de resolução (Pass 1): {}",
@@ -151,7 +151,7 @@ impl ReplSession {
 
         // Pass 2: parse_with_arity (completo)
         let module =
-            parse_with_arity(tokens, arities).map_err(|e| format!("erro de parse: {e}"))?;
+            parse_repl_with_arity(tokens, arities).map_err(|e| format!("erro de parse: {e}"))?;
 
         if module.items.is_empty() {
             return Ok(());

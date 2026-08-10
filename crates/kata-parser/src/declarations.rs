@@ -75,24 +75,35 @@ impl Parser {
                     let item = self.parse_export_decl()?;
                     items.push(Spanned::new(item, item_start));
                 }
+                Token::Constant => {
+                    let item = self.parse_constant_decl(directives)?;
+                    items.push(Spanned::new(item, item_start));
+                }
                 Token::Let => {
-                    // Top-level let: produce a Let item
-                    let expr = self.parse_let()?;
-                    // Se há diretiva @comptime, envolver o let em Expr::Comptime.
-                    let final_expr = if directives.iter().any(|d| d.name == "comptime") {
-                        Spanned::new(
-                            Expr::Comptime {
-                                expr: Box::new(expr.clone()),
-                            },
-                            expr.span,
-                        )
+                    if self.repl_mode {
+                        // REPL mode: `let` no top level é aceito como EntryExpr
+                        // (PRD §2.5 — o REPL não é top-level de módulo).
+                        let expr = self.parse_let()?;
+                        let final_expr = if directives.iter().any(|d| d.name == "comptime") {
+                            Spanned::new(
+                                Expr::Comptime {
+                                    expr: Box::new(expr.clone()),
+                                },
+                                expr.span,
+                            )
+                        } else {
+                            expr.clone()
+                        };
+                        items.push(Spanned::new(
+                            Item::EntryExpr(final_expr.clone()),
+                            final_expr.span,
+                        ));
                     } else {
-                        expr.clone()
-                    };
-                    items.push(Spanned::new(
-                        Item::EntryExpr(final_expr.clone()),
-                        final_expr.span,
-                    ));
+                        // `let` no top level é proibido — usar `constant`.
+                        return Err(self.error(
+                            "`let` não é permitido no top level. Use `constant` para constantes de módulo, ou mova o código para uma action.",
+                        ));
+                    }
                 }
                 _ => {
                     // Could be a signature (name :: Type...), an implements
@@ -199,6 +210,10 @@ impl Parser {
                 }
                 Token::Export => {
                     let item = self.parse_export_decl()?;
+                    items.push(Spanned::new(item, item_start));
+                }
+                Token::Constant => {
+                    let item = self.parse_constant_decl(directives)?;
                     items.push(Spanned::new(item, item_start));
                 }
                 Token::Implements => {
@@ -327,29 +342,19 @@ impl Parser {
                         self.sync_to_stmt_sep();
                     }
                 },
-                Token::Let => match self.parse_let() {
-                    Ok(expr) => {
-                        // Se há diretiva @comptime, envolver em Expr::Comptime.
-                        let final_expr = if directives.iter().any(|d| d.name == "comptime") {
-                            Spanned::new(
-                                Expr::Comptime {
-                                    expr: Box::new(expr.clone()),
-                                },
-                                expr.span,
-                            )
-                        } else {
-                            expr.clone()
-                        };
-                        items.push(Spanned::new(
-                            Item::EntryExpr(final_expr.clone()),
-                            final_expr.span,
-                        ));
-                    }
+                Token::Constant => match self.parse_constant_decl(directives) {
+                    Ok(item) => items.push(Spanned::new(item, item_start)),
                     Err(e) => {
                         errors.push(e);
                         self.sync_to_stmt_sep();
                     }
                 },
+                Token::Let => {
+                    errors.push(self.error(
+                        "`let` não é permitido no top level. Use `constant` para constantes de módulo, ou mova o código para uma action.",
+                    ));
+                    self.sync_to_stmt_sep();
+                }
                 _ => {
                     // Signature, implements, refines, ou expression
                     if self.is_implements_start() {
@@ -735,5 +740,37 @@ impl Parser {
             guards: Vec::new(),
             with_bindings: Vec::new(),
         })
+    }
+
+    /// Parse `constant nome := expr` ou `constant _ := expr`.
+    /// Top-level only. Diretivas são aceitas mas ignoradas por ora
+    /// (diferentes de @comptime que era o antigo mecanismo).
+    fn parse_constant_decl(
+        &mut self,
+        _directives: Vec<Directive>,
+    ) -> Result<Item, FrontendError> {
+        self.expect(&Token::Constant, "`constant`")?;
+
+        // Nome do binding (ou `_` para descarte).
+        let name = match self.peek() {
+            Token::Ident(s) => {
+                let n = s.clone();
+                self.advance();
+                n
+            }
+            _ => return Err(self.error("nome do binding após `constant`")),
+        };
+
+        // Validar casing: constant é snake_case.
+        if !is_snake_case(&name) {
+            return Err(self.error(&format!(
+                "nome de `constant` \"{name}\" deve ser snake_case (minúsculo)"
+            )));
+        }
+
+        self.expect(&Token::BindAssign, "`:=` após nome da constant")?;
+        let value = crate::expressions::parse_expr(self)?;
+
+        Ok(Item::ConstantDecl { name, value })
     }
 }

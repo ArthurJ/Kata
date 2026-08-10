@@ -24,17 +24,14 @@ fn apply_plus_1_2() {
 
 #[test]
 fn let_binding() {
-    let m = parse_src("let x := 42");
+    let m = parse_src("constant x := 42");
     let item = first_item(&m);
     match item {
-        Item::EntryExpr(e) => match &e.node {
-            Expr::Let { name, value } => {
-                assert_eq!(name, "x");
-                assert_eq!(value.node, Expr::IntLit { text: "42".into() });
-            }
-            other => panic!("expected Let, got {other:?}"),
-        },
-        other => panic!("expected EntryExpr, got {other:?}"),
+        Item::ConstantDecl { name, value } => {
+            assert_eq!(name, "x");
+            assert_eq!(value.node, Expr::IntLit { text: "42".into() });
+        }
+        other => panic!("expected ConstantDecl, got {other:?}"),
     }
 }
 

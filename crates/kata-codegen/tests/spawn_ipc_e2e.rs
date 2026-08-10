@@ -120,9 +120,9 @@ fn spawn_ipc_send_fire_and_forget() {
     let src = r#"action worker (rx::Receiver::Int) => Int
     rx <! n
     n
-let ch := channel!()
-let tx := ch.0
-let rx := ch.1
+constant ch := channel!()
+constant tx := ch.0
+constant rx := ch.1
 spawn!(worker, (rx))
 tx !> 42
 42"#;
@@ -147,12 +147,12 @@ fn spawn_ipc_round_trip() {
     rx1 <! n
     tx2 !> + n 1
     n
-let ch1 := channel!()
-let tx1 := ch1.0
-let rx1 := ch1.1
-let ch2 := channel!()
-let tx2 := ch2.0
-let rx2 := ch2.1
+constant ch1 := channel!()
+constant tx1 := ch1.0
+constant rx1 := ch1.1
+constant ch2 := channel!()
+constant tx2 := ch2.0
+constant rx2 := ch2.1
 spawn!(worker, (rx1, tx2))
 tx1 !> 42
 rx2 <! result
@@ -189,12 +189,12 @@ fn spawn_ipc_tupla_round_trip() {
         (a, b): tx2 !> + a b
         otherwise: ()
     0
-let ch1 := channel!()
-let tx1 := ch1.0
-let rx1 := ch1.1
-let ch2 := channel!()
-let tx2 := ch2.0
-let rx2 := ch2.1
+constant ch1 := channel!()
+constant tx1 := ch1.0
+constant rx1 := ch1.1
+constant ch2 := channel!()
+constant tx2 := ch2.0
+constant rx2 := ch2.1
 spawn!(worker, (rx1, tx2))
 tx1 !> (10, 20)
 rx2 <! result
@@ -222,12 +222,12 @@ action worker (rx1::Receiver::Ponto, tx2::Sender::Int) => Int
     rx1 <! p
     tx2 !> * p.x p.y
     0
-let ch1 := channel!()
-let tx1 := ch1.0
-let rx1 := ch1.1
-let ch2 := channel!()
-let tx2 := ch2.0
-let rx2 := ch2.1
+constant ch1 := channel!()
+constant tx1 := ch1.0
+constant rx1 := ch1.1
+constant ch2 := channel!()
+constant tx2 := ch2.0
+constant rx2 := ch2.1
 spawn!(worker, (rx1, tx2))
 tx1 !> Ponto 3 4
 rx2 <! result
@@ -255,12 +255,12 @@ fn spawn_ipc_lista_round_trip() {
     let total := fold + 0 lst
     tx2 !> total
     0
-let ch1 := channel!()
-let tx1 := ch1.0
-let rx1 := ch1.1
-let ch2 := channel!()
-let tx2 := ch2.0
-let rx2 := ch2.1
+constant ch1 := channel!()
+constant tx1 := ch1.0
+constant rx1 := ch1.1
+constant ch2 := channel!()
+constant tx2 := ch2.0
+constant rx2 := ch2.1
 spawn!(worker, (rx1, tx2))
 tx1 !> [1 2 3]
 rx2 <! result

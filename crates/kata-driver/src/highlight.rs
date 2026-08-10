@@ -53,6 +53,7 @@ fn token_color(token: &Token) -> Option<&'static str> {
     match token {
         // ── Palavras-chave de declaração ──────────────────
         Token::Let
+        | Token::Constant
         | Token::Var
         | Token::Data
         | Token::Enum

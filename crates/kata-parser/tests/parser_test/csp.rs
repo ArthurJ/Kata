@@ -251,18 +251,15 @@ fn select_outside_action_is_error() {
 
 #[test]
 fn channel_send_in_let() {
-    // `let x := tx !> 42` — let value é ChannelSend
-    let m = parse_src("let x := tx !> 42");
+    // `constant x := tx !> 42` — constant value é ChannelSend
+    let m = parse_src("constant x := tx !> 42");
     let item = first_item(&m);
     match item {
-        Item::EntryExpr(e) => match &e.node {
-            Expr::Let { name, value } => {
-                assert_eq!(name, "x");
-                assert!(matches!(value.node, Expr::ChannelSend { .. }));
-            }
-            other => panic!("expected Let, got {other:?}"),
-        },
-        other => panic!("expected EntryExpr, got {other:?}"),
+        Item::ConstantDecl { name, value } => {
+            assert_eq!(name, "x");
+            assert!(matches!(value.node, Expr::ChannelSend { .. }));
+        }
+        other => panic!("expected ConstantDecl, got {other:?}"),
     }
 }
 

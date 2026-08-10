@@ -44,6 +44,9 @@ pub(crate) struct Parser {
     /// `Some(map)` = o parser coleta exatamente `map[name]` args posicionais
     /// para `Apply` onde o callee é `Ident(name)`.
     pub(crate) arities: Option<std::collections::HashMap<String, usize>>,
+    /// Modo REPL: quando true, `let` no top level é aceito como EntryExpr
+    /// (PRD §2.5 — o REPL não é top-level de módulo).
+    pub(crate) repl_mode: bool,
 }
 
 impl Parser {
@@ -53,6 +56,7 @@ impl Parser {
             pos: 0,
             in_action_body: false,
             arities: None,
+            repl_mode: false,
         }
     }
 
@@ -66,6 +70,7 @@ impl Parser {
             pos: 0,
             in_action_body: false,
             arities: Some(arities),
+            repl_mode: false,
         }
     }
 
@@ -177,6 +182,33 @@ pub fn parse_with_arity_recovery(
 /// parsing).
 pub fn parse_decls_only(tokens: Vec<TokenWithSpan>) -> Result<Module, FrontendError> {
     let mut parser = Parser::new(tokens);
+    parser.parse_module_decls_only()
+}
+
+/// Parse a token stream in REPL mode.
+///
+/// When `repl_mode` is true, `let` at the top level is accepted as an
+/// `EntryExpr` (PRD §2.5 — the REPL is not module top-level).
+pub fn parse_repl(tokens: Vec<TokenWithSpan>) -> Result<Module, FrontendError> {
+    let mut parser = Parser::new(tokens);
+    parser.repl_mode = true;
+    parser.parse_module()
+}
+
+/// Parse a token stream in REPL mode with arity-aware application parsing.
+pub fn parse_repl_with_arity(
+    tokens: Vec<TokenWithSpan>,
+    arities: std::collections::HashMap<String, usize>,
+) -> Result<Module, FrontendError> {
+    let mut parser = Parser::new_with_arities(tokens, arities);
+    parser.repl_mode = true;
+    parser.parse_module()
+}
+
+/// Parse only declarations in REPL mode.
+pub fn parse_repl_decls_only(tokens: Vec<TokenWithSpan>) -> Result<Module, FrontendError> {
+    let mut parser = Parser::new(tokens);
+    parser.repl_mode = true;
     parser.parse_module_decls_only()
 }
 
@@ -361,17 +393,14 @@ mod tests {
 
     #[test]
     fn let_binding() {
-        let m = parse_src("let x := 42");
+        let m = parse_src("constant x := 42");
         let item = first_item(&m);
         match item {
-            Item::EntryExpr(e) => match &e.node {
-                Expr::Let { name, value } => {
-                    assert_eq!(name, "x");
-                    assert_eq!(value.node, Expr::IntLit { text: "42".into() });
-                }
-                other => panic!("expected Let, got {other:?}"),
-            },
-            other => panic!("expected EntryExpr, got {other:?}"),
+            Item::ConstantDecl { name, value } => {
+                assert_eq!(name, "x");
+                assert_eq!(value.node, Expr::IntLit { text: "42".into() });
+            }
+            other => panic!("expected ConstantDecl, got {other:?}"),
         }
     }
 

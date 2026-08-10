@@ -123,7 +123,7 @@ fn untag_smi(raw: i64) -> i64 {
 fn b1_echo_positiveint_sem_refines() {
     // Entry point direto: echo! funciona em top-level (não precisa de action)
     let src = r#"data (Int, > _ 0) as PositiveInt
-let a := 5::PositiveInt
+constant a := 5::PositiveInt
 echo!(a)"#;
     let (_raw, ty) = eval_src(src);
     // echo! retorna Unit
@@ -138,7 +138,7 @@ echo!(a)"#;
 #[test]
 fn b1_show_positiveint_sem_refines() {
     let src = r#"data (Int, > _ 0) as PositiveInt
-let a := 5::PositiveInt
+constant a := 5::PositiveInt
 show a"#;
     let (_raw, ty) = eval_src(src);
     assert_eq!(
@@ -154,8 +154,8 @@ show a"#;
 fn b1_soma_positiveint_com_refines() {
     let src = r#"data (Int, > _ 0) as PositiveInt
 PositiveInt refines NUM
-let a := 5::PositiveInt
-let b := 3::PositiveInt
+constant a := 5::PositiveInt
+constant b := 3::PositiveInt
 PositiveInt (+ a b)"#;
     let (_raw, ty) = eval_src(src);
     assert_eq!(
@@ -172,7 +172,7 @@ PositiveInt (+ a b)"#;
 #[test]
 fn b1_soma_positiveint_sem_refines_falha() {
     let src = r#"data (Int, > _ 0) as PositiveInt
-let a := 5::PositiveInt
+constant a := 5::PositiveInt
 + a 0"#;
     assert!(
         try_eval(src).is_err(),
@@ -213,7 +213,7 @@ foo Boolean::False"#;
 /// existe, `mod` seria marcada como free var e o codegen falharia.
 #[test]
 fn b2_map_com_mod_em_lambda() {
-    let src = r#"let ys := map (lambda x: mod x 2) [1 2 3 4 5]
+    let src = r#"constant ys := map (lambda x: mod x 2) [1 2 3 4 5]
 echo!(ys)"#;
     let (_raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Unit, "map com mod em lambda deve funcionar");

@@ -18,15 +18,15 @@ fn comment_after_code() {
 
 #[test]
 fn comment_between_statements() {
-    let source = "let x := 1\n# comment line\nlet y := 2";
+    let source = "constant x := 1\n# comment line\nconstant y := 2";
     let tokens = lex(source).unwrap();
     let expected = vec![
-        Token::Let,
+        Token::Constant,
         Token::Ident("x".into()),
         Token::BindAssign,
         Token::IntLit("1".into()),
         Token::StmtSep,
-        Token::Let,
+        Token::Constant,
         Token::Ident("y".into()),
         Token::BindAssign,
         Token::IntLit("2".into()),

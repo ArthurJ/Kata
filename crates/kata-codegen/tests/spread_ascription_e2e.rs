@@ -111,7 +111,7 @@ fn spread_concat() {
 /// `f $ (a, b, c)` expande para `f a b c` — 3 elementos.
 #[test]
 fn spread_tres_elementos() {
-    let src = "data Trio (a::Int b::Int c::Int)\nlet t := Trio 1 2 3\n+ (+ t.a t.b) t.c";
+    let src = "data Trio (a::Int b::Int c::Int)\nconstant t := Trio 1 2 3\n+ (+ t.a t.b) t.c";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::int());
     assert_eq!(untag_smi(raw), 6);
@@ -149,7 +149,7 @@ fn ascription_construcao_basica() {
 /// Ascription-construção com field access — acessa campo da tupla promovida.
 #[test]
 fn ascription_construcao_field_access() {
-    let src = "data Pessoa (nome::Text idade::Int)\nlet p := (\"João\", 30)::Pessoa\np.idade";
+    let src = "data Pessoa (nome::Text idade::Int)\nconstant p := (\"João\", 30)::Pessoa\np.idade";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::int());
     assert_eq!(untag_smi(raw), 30);
@@ -158,7 +158,7 @@ fn ascription_construcao_field_access() {
 /// Ascription-construção com 3 campos.
 #[test]
 fn ascription_construcao_tres_campos() {
-    let src = "data Trio (a::Int b::Int c::Int)\nlet t := (1, 2, 3)::Trio\nt.b";
+    let src = "data Trio (a::Int b::Int c::Int)\nconstant t := (1, 2, 3)::Trio\nt.b";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::int());
     assert_eq!(untag_smi(raw), 2);

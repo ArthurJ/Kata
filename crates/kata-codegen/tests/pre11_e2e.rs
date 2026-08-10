@@ -101,7 +101,7 @@ fn tupla_literal_no_entry() {
 /// Closure com captura: CaptureBox alocado na caller_arena, não na global.
 #[test]
 fn closure_com_captura_nao_vaza() {
-    let src = "let n := 10\nlet f := + _ n\nf 5";
+    let src = "constant n := 10\nconstant f := + _ n\nf 5";
     let (val, _ty) = eval_src(src);
     assert_eq!(val >> 1, 15, "f 5 deve retornar 15");
 }

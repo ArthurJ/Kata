@@ -92,7 +92,7 @@ fn map_com_ident_overloadset_int() {
     // map f [1 2 3]  →  List(Int)
     // f tem tipo OverloadSet { name: "+", overloads: [(Int,Int)→Int, (Int,Float)→Float, ...] }
     // map seleciona (Int,Int)→Int porque elem_ty = Int
-    let typed = infer_src("let f := + _ 2\nmap f [1 2 3]");
+    let typed = infer_src("constant f := + _ 2\nmap f [1 2 3]");
     assert_eq!(typed.entry.node.ty, Ty::List(Box::new(Ty::int())));
 }
 
@@ -100,7 +100,7 @@ fn map_com_ident_overloadset_int() {
 fn map_com_ident_overloadset_float() {
     // let f := + _ 2.0
     // map f [1.0 2.0 3.0]  →  List(Float)
-    let typed = infer_src("let f := + _ 2.0\nmap f [1.0 2.0 3.0]");
+    let typed = infer_src("constant f := + _ 2.0\nmap f [1.0 2.0 3.0]");
     assert_eq!(typed.entry.node.ty, Ty::List(Box::new(Ty::float())));
 }
 
@@ -110,7 +110,7 @@ fn map_com_ident_overloadset_float() {
 fn fold_com_ident_overloadset_int() {
     // let f := + _ _
     // fold f 0 [1 2 3]  →  Int (6)
-    let typed = infer_src("let f := + _ _\nfold f 0 [1 2 3]");
+    let typed = infer_src("constant f := + _ _\nfold f 0 [1 2 3]");
     assert_eq!(typed.entry.node.ty, Ty::int());
 }
 

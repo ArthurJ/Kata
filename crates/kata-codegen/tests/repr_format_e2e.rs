@@ -88,7 +88,7 @@ fn untag_smi(raw: i64) -> i64 {
 /// `show pessoa` retorna "Pessoa(João, 30)" — show básico com Text + Int.
 #[test]
 fn repr_struct_text_int() {
-    let src = "data Pessoa (nome::Text idade::Int)\nlet p := Pessoa \"João\" 30\nshow p";
+    let src = "data Pessoa (nome::Text idade::Int)\nconstant p := Pessoa \"João\" 30\nshow p";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::text());
     // Text é ponteiro — não pode comparar valor diretamente.
@@ -99,7 +99,7 @@ fn repr_struct_text_int() {
 /// `show ponto` retorna "Ponto(3, 4)" — show com dois Ints.
 #[test]
 fn repr_struct_dois_ints() {
-    let src = "data Ponto (x::Int y::Int)\nlet p := Ponto 3 4\nshow p";
+    let src = "data Ponto (x::Int y::Int)\nconstant p := Ponto 3 4\nshow p";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::text());
     let _ = raw;
@@ -108,7 +108,7 @@ fn repr_struct_dois_ints() {
 /// `show` despacha por tipo — dois structs diferentes, mesmo nome "show".
 #[test]
 fn repr_despacha_por_tipo() {
-    let src = "data Pessoa (nome::Text idade::Int)\ndata Ponto (x::Int y::Int)\nlet p := Pessoa \"João\" 30\nlet pt := Ponto 3 4\nstring_concat (show p) (show pt)";
+    let src = "data Pessoa (nome::Text idade::Int)\ndata Ponto (x::Int y::Int)\nconstant p := Pessoa \"João\" 30\nconstant pt := Ponto 3 4\nstring_concat (show p) (show pt)";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::text());
     let _ = raw;
@@ -117,7 +117,7 @@ fn repr_despacha_por_tipo() {
 /// `show` de struct com campo Boolean.
 #[test]
 fn repr_struct_com_boolean() {
-    let src = "data Flag (nome::Text ativa::Boolean)\nlet f := Flag \"test\" Boolean::True\nshow f";
+    let src = "data Flag (nome::Text ativa::Boolean)\nconstant f := Flag \"test\" Boolean::True\nshow f";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::text());
     let _ = raw;
@@ -126,7 +126,7 @@ fn repr_struct_com_boolean() {
 /// `show` de struct aninhada — struct com campo que é outro struct.
 #[test]
 fn repr_struct_aninhada() {
-    let src = "data Endereco (rua::Text cidade::Text)\ndata Pessoa (nome::Text end::Endereco)\nlet e := Endereco \"Rua A\" \"Cidade B\"\nlet p := Pessoa \"João\" e\nshow p";
+    let src = "data Endereco (rua::Text cidade::Text)\ndata Pessoa (nome::Text end::Endereco)\nconstant e := Endereco \"Rua A\" \"Cidade B\"\nconstant p := Pessoa \"João\" e\nshow p";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::text());
     let _ = raw;
@@ -178,7 +178,7 @@ fn format_boolean() {
 #[test]
 fn format_struct_via_repr() {
     let src =
-        "data Pessoa (nome::Text idade::Int)\nlet p := Pessoa \"João\" 30\nformat \"{}\" (p,)";
+        "data Pessoa (nome::Text idade::Int)\nconstant p := Pessoa \"João\" 30\nformat \"{}\" (p,)";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::text());
     let _ = raw;

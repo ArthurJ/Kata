@@ -5,9 +5,9 @@ lambda 0: 1
 lambda n: * n (fatorial (- n 1))
 
 # Resultado escalar — vira literal no binário.
-@comptime let fatorial_10 := fatorial 10
+constant fatorial_10 := fatorial 10
 
 # Resultado complexo — vira HeapSnapshot no binário (lista de cons cells).
-@comptime let tabela := [1 2 3 4 5 6 7 8 9 10]
+constant tabela := [1 2 3 4 5 6 7 8 9 10]
 
 len tabela

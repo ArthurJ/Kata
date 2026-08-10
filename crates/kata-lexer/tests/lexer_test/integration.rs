@@ -16,9 +16,9 @@ fn simple_arithmetic_prefix() {
 
 #[test]
 fn let_binding() {
-    let tokens = lex("let x := 42").unwrap();
+    let tokens = lex("constant x := 42").unwrap();
     let expected = vec![
-        Token::Let,
+        Token::Constant,
         Token::Ident("x".into()),
         Token::BindAssign,
         Token::IntLit("42".into()),

@@ -103,7 +103,7 @@ fn repl_eval_boolean() {
 
 #[test]
 fn repl_let_binding_persists() {
-    let out = run_repl(&["let x := 10", "+ x 5", ":quit"]);
+    let out = run_repl(&["constant x := 10", "+ x 5", ":quit"]);
     let lines = result_lines(&out);
     // + x 5 deve produzir 15
     assert!(
@@ -114,7 +114,7 @@ fn repl_let_binding_persists() {
 
 #[test]
 fn repl_multiple_let_bindings() {
-    let out = run_repl(&["let x := 10", "let y := 20", "+ x y", ":quit"]);
+    let out = run_repl(&["constant x := 10", "constant y := 20", "+ x y", ":quit"]);
     let lines = result_lines(&out);
     assert!(
         lines.iter().any(|l| l.trim() == "30"),
@@ -136,7 +136,7 @@ fn repl_let_shadowing() {
 
 #[test]
 fn repl_type_command() {
-    let out = run_repl(&["let x := 10", ":type x", ":quit"]);
+    let out = run_repl(&["constant x := 10", ":type x", ":quit"]);
     let lines = result_lines(&out);
     assert!(
         lines.iter().any(|l| l.contains("Int")),
@@ -177,7 +177,7 @@ fn repl_env_empty() {
 
 #[test]
 fn repl_reset_clears_bindings() {
-    let out = run_repl(&["let x := 10", ":reset", ":env", ":quit"]);
+    let out = run_repl(&["constant x := 10", ":reset", ":env", ":quit"]);
     let lines = result_lines(&out);
     // Após reset, :env deve mostrar nenhum binding.
     assert!(
@@ -188,7 +188,7 @@ fn repl_reset_clears_bindings() {
 
 #[test]
 fn repl_reset_reloads_prelude() {
-    let out = run_repl(&["let x := 10", ":reset", "+ 1 2", ":quit"]);
+    let out = run_repl(&["constant x := 10", ":reset", "+ 1 2", ":quit"]);
     let lines = result_lines(&out);
     // Após reset, + 1 2 deve funcionar (prelude recarregado).
     assert!(
@@ -294,7 +294,7 @@ fn repl_load_makes_function_available() {
 
 #[test]
 fn repl_load_let_binding_persists() {
-    let path = write_temp_kata("load_let", "let x := 42\n");
+    let path = write_temp_kata("load_let", "constant x := 42\n");
     let out = run_repl(&[&format!(":load {path}"), "+ x 1", ":quit"]);
     let lines = result_lines(&out);
     // x = 42, + x 1 = 43
@@ -406,7 +406,7 @@ fn repl_multiline_enum_then_use() {
         "    Verde",
         "    Azul",
         "",
-        "let c := Cor::Verde",
+        "constant c := Cor::Verde",
         ":type c",
         ":quit",
     ]);
@@ -507,7 +507,7 @@ fn repl_single_line_still_works() {
 #[test]
 fn repl_closure_binding_no_capture() {
     // let f := lambda n: + n 1 → echo!(f 10) → 11
-    let out = run_repl(&["let f := lambda n: + n 1", "echo!(f 10)", ":quit"]);
+    let out = run_repl(&["constant f := lambda n: + n 1", "echo!(f 10)", ":quit"]);
     let lines = result_lines(&out);
     assert!(
         lines.iter().any(|l| l.trim() == "11"),
@@ -519,8 +519,8 @@ fn repl_closure_binding_no_capture() {
 fn repl_closure_binding_with_capture() {
     // let x := 42 → let f := lambda n: + n x → echo!(f 10) → 52
     let out = run_repl(&[
-        "let x := 42",
-        "let f := lambda n: + n x",
+        "constant x := 42",
+        "constant f := lambda n: + n x",
         "echo!(f 10)",
         ":quit",
     ]);
@@ -536,9 +536,9 @@ fn repl_closure_shadowing_does_not_retroact() {
     // let x := 42 → let f := lambda n: + n x → let x := 99 → echo!(f 10) → 52
     // Shadowing de x não retroage: f capturou 42.
     let out = run_repl(&[
-        "let x := 42",
-        "let f := lambda n: + n x",
-        "let x := 99",
+        "constant x := 42",
+        "constant f := lambda n: + n x",
+        "constant x := 99",
         "echo!(f 10)",
         ":quit",
     ]);

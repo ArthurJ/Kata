@@ -22,6 +22,7 @@ pub(crate) fn lex_ident(lex: &mut Lexer, start: &Pos) -> Result<TokenWithSpan, F
 
     let token = match ident {
         "let" => Token::Let,
+        "constant" => Token::Constant,
         "var" => Token::Var,
         "data" => Token::Data,
         "enum" => Token::Enum,

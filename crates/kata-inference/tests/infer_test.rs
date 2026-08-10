@@ -215,11 +215,13 @@ fn infer_echo_returns_unit() {
 
 #[test]
 fn infer_let_binds_name_in_scope() {
-    // let x := 42
-    let tmod = infer_src("let x := 42");
-    let entry = entry_typed(&tmod);
-    assert_eq!(entry.ty, Ty::Unit); // let retorna Unit
-    match &entry.kind {
+    // constant x := 42 — agora é ConstantDecl, vai para pre_entry como Let.
+    // Precisamos de uma entry expr final.
+    let tmod = infer_src("constant x := 42\n42");
+    // pre_entry[0] é o let (TypedExprKind::Let) do ConstantDecl.
+    let let_expr = &tmod.pre_entry[0];
+    assert_eq!(let_expr.node.ty, Ty::Unit); // let retorna Unit
+    match &let_expr.node.kind {
         TypedExprKind::Let { name, value } => {
             assert_eq!(name, "x");
             assert_eq!(value.node.ty, Ty::int());
@@ -233,7 +235,7 @@ fn infer_let_then_use_in_apply() {
     // let x := 42
     // + x 1
     // (EntryExpr é a última — let e apply no mesmo módulo)
-    let src = "let x := 42\n+ x 1";
+    let src = "constant x := 42\n+ x 1";
     let tmod = infer_src(src);
     let entry = entry_typed(&tmod);
     assert_eq!(entry.ty, Ty::int());

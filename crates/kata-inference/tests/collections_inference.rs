@@ -233,7 +233,7 @@ fn dod28_for_in_defines_x_int() {
 
 #[test]
 fn dod29_pattern_cons_match() {
-    let src = "let lst := [1 2 3]\nmatch lst\n    [h : t]: h\n    otherwise: 0";
+    let src = "constant lst := [1 2 3]\nmatch lst\n    [h : t]: h\n    otherwise: 0";
     let typed = infer_src(src);
     let e = entry(&typed);
     // O entry deve ser um Match com um arm Cons.
@@ -278,7 +278,7 @@ fn dod29_pattern_cons_match() {
 
 #[test]
 fn dod30_dot_n_array_desugars_to_at() {
-    let src = "let arr := {1 2 3}\narr.0";
+    let src = "constant arr := {1 2 3}\narr.0";
     let typed = infer_src(src);
     let e = entry(&typed);
     // O entry deve ser um Closure (call de `at`) com ffi_symbol.
@@ -354,7 +354,7 @@ fn dod32_in_operator_infere_boolean() {
 
 #[test]
 fn dot_n_on_range_is_type_error() {
-    let err = infer_src_err("let r := [0..1..10]\nr.0");
+    let err = infer_src_err("constant r := [0..1..10]\nr.0");
     // Deve falhar com NotIndexable ou TypeMismatch.
     let msg = format!("{err:?}");
     assert!(

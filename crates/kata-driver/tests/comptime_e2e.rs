@@ -129,7 +129,7 @@ fn comptime_same_as_runtime() {
 /// é um Cons cell válido, navegável por `len`, `head`, `tail`.
 #[test]
 fn comptime_list_len_via_snapshot() {
-    let (stdout, stderr, code) = run_kata_run("@comptime let x := [1 2 3]\nlen x");
+    let (stdout, stderr, code) = run_kata_run("constant x := [1 2 3]\nlen x");
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     let first = stdout.lines().next().unwrap_or("");
     assert_eq!(
@@ -141,7 +141,7 @@ fn comptime_list_len_via_snapshot() {
 /// `head` sobre `@comptime [1 2 3]` deve retornar 1 (primeiro elemento).
 #[test]
 fn comptime_list_head_via_snapshot() {
-    let (stdout, stderr, code) = run_kata_run("@comptime let x := [1 2 3]\nhead x");
+    let (stdout, stderr, code) = run_kata_run("constant x := [1 2 3]\nhead x");
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     let first = stdout.lines().next().unwrap_or("");
     assert_eq!(
@@ -153,7 +153,7 @@ fn comptime_list_head_via_snapshot() {
 /// `head (tail x)` sobre `@comptime [1 2 3]` deve retornar 2.
 #[test]
 fn comptime_list_head_tail_via_snapshot() {
-    let (stdout, stderr, code) = run_kata_run("@comptime let x := [1 2 3]\nhead (tail x)");
+    let (stdout, stderr, code) = run_kata_run("constant x := [1 2 3]\nhead (tail x)");
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     let first = stdout.lines().next().unwrap_or("");
     assert_eq!(
@@ -167,7 +167,7 @@ fn comptime_list_head_tail_via_snapshot() {
 /// ponteiro no snapshot carregado.
 #[test]
 fn comptime_list_double_tail_len_via_snapshot() {
-    let (stdout, stderr, code) = run_kata_run("@comptime let x := [1 2 3]\nlen (tail (tail x))");
+    let (stdout, stderr, code) = run_kata_run("constant x := [1 2 3]\nlen (tail (tail x))");
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     let first = stdout.lines().next().unwrap_or("");
     assert_eq!(
@@ -212,7 +212,7 @@ fn comptime_text_top_level() {
 /// snapshot + `kata_rt_string_len` (SMI-tagged).
 #[test]
 fn comptime_text_len() {
-    let (stdout, stderr, code) = run_kata_run("@comptime let x := \"hello\"\nlen x");
+    let (stdout, stderr, code) = run_kata_run("constant x := \"hello\"\nlen x");
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     let first = stdout.lines().next().unwrap_or("");
     assert_eq!(
@@ -225,7 +225,7 @@ fn comptime_text_len() {
 /// head é um ponteiro para a appended section.
 #[test]
 fn comptime_list_of_text_len() {
-    let (stdout, stderr, code) = run_kata_run("@comptime let x := [\"a\" \"b\" \"c\"]\nlen x");
+    let (stdout, stderr, code) = run_kata_run("constant x := [\"a\" \"b\" \"c\"]\nlen x");
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     let first = stdout.lines().next().unwrap_or("");
     assert_eq!(
@@ -240,7 +240,7 @@ fn comptime_list_of_text_len() {
 #[test]
 fn comptime_list_of_text_head_len() {
     let (stdout, stderr, code) =
-        run_kata_run("@comptime let x := [\"hello\" \"world\"]\nlen (head x)");
+        run_kata_run("constant x := [\"hello\" \"world\"]\nlen (head x)");
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     let first = stdout.lines().next().unwrap_or("");
     assert_eq!(
@@ -249,12 +249,12 @@ fn comptime_list_of_text_head_len() {
     );
 }
 
-/// `@comptime let p := Pessoa "Alice" 30` + `p.idade` → 30.
+/// `constant p := Pessoa "Alice" 30` + `p.idade` → 30.
 /// Struct com campo Text serializada via snapshot, acesso por campo.
 #[test]
 fn comptime_struct_field_access() {
     let src =
-        "data Pessoa (nome::Text idade::Int)\n@comptime let p := Pessoa \"Alice\" 30\np.idade";
+        "data Pessoa (nome::Text idade::Int)\nconstant p := Pessoa \"Alice\" 30\np.idade";
     let (stdout, stderr, code) = run_kata_run(src);
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     let first = stdout.lines().next().unwrap_or("");
@@ -269,7 +269,7 @@ fn comptime_struct_field_access() {
 #[test]
 fn comptime_struct_text_field_len() {
     let src =
-        "data Pessoa (nome::Text idade::Int)\n@comptime let p := Pessoa \"Alice\" 30\nlen p.nome";
+        "data Pessoa (nome::Text idade::Int)\nconstant p := Pessoa \"Alice\" 30\nlen p.nome";
     let (stdout, stderr, code) = run_kata_run(src);
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     let first = stdout.lines().next().unwrap_or("");
@@ -282,7 +282,7 @@ fn comptime_struct_text_field_len() {
 /// `@comptime (1, 2, 3)` + `x.0` → 1. Tuple sem regressão.
 #[test]
 fn comptime_tuple_index_access() {
-    let (stdout, stderr, code) = run_kata_run("@comptime let x := (1, 2, 3)\nx.0");
+    let (stdout, stderr, code) = run_kata_run("constant x := (1, 2, 3)\nx.0");
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     let first = stdout.lines().next().unwrap_or("");
     assert_eq!(
@@ -296,7 +296,7 @@ fn comptime_tuple_index_access() {
 #[test]
 fn comptime_sum_int_match() {
     let src =
-        "@comptime let r := Result::Ok 42\nmatch r\n    Result::Ok v: v\n    Result::Err e: 0";
+        "constant r := Result::Ok 42\nmatch r\n    Result::Ok v: v\n    Result::Err e: 0";
     let (stdout, stderr, code) = run_kata_run(src);
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     let first = stdout.lines().next().unwrap_or("");
@@ -311,7 +311,7 @@ fn comptime_sum_int_match() {
 /// funciona porque a arena comptime sobrevive até o fim do processo.
 #[test]
 fn comptime_sum_text_match() {
-    let src = "@comptime let r := Result::Err \"fail\"\nmatch r\n    Result::Ok v: v\n    Result::Err e: e";
+    let src = "constant r := Result::Err \"fail\"\nmatch r\n    Result::Ok v: v\n    Result::Err e: e";
     let (stdout, stderr, code) = run_kata_run(src);
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     let first = stdout.lines().next().unwrap_or("");
@@ -325,7 +325,7 @@ fn comptime_sum_text_match() {
 /// Exercita Text como payload de Sum acessado por `len`.
 #[test]
 fn comptime_sum_text_match_len() {
-    let src = "@comptime let r := Result::Err \"fail\"\nmatch r\n    Result::Ok v: v\n    Result::Err e: len e";
+    let src = "constant r := Result::Err \"fail\"\nmatch r\n    Result::Ok v: v\n    Result::Err e: len e";
     let (stdout, stderr, code) = run_kata_run(src);
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     let first = stdout.lines().next().unwrap_or("");
@@ -361,7 +361,7 @@ fn comptime_callsite_let_in_body() {
     let first = stdout.lines().next().unwrap_or("");
     assert_eq!(
         first, "3",
-        "@comptime let x := + 1 2 em body deve produzir 3 — stdout: {stdout}"
+        "constant x := + 1 2 em body deve produzir 3 — stdout: {stdout}"
     );
 }
 

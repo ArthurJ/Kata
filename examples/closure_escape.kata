@@ -4,15 +4,15 @@
 # a closure é criada em escopo local (let), não via return de função nomeada.
 
 # Closure captura variável local e é chamada depois
-let n := 5
-let add5 := + _ n
-let a := add5 3
+constant n := 5
+constant add5 := + _ n
+constant a := add5 3
 echo!(a)
 
 # Outro closure com captura diferente
-let m := 10
-let add10 := + _ m
-let b := add10 7
+constant m := 10
+constant add10 := + _ m
+constant b := add10 7
 echo!(b)
 
 0

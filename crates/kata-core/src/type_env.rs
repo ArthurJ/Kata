@@ -131,6 +131,14 @@ impl TypeEnv {
         self.mutables.insert(name.to_string());
     }
 
+    /// Redefine a origin de um binding existente (ex: __local__ → __module__).
+    /// Não muda o tipo nem fn_alias/param_names. No-op se o binding não existe.
+    pub fn set_origin(&mut self, name: &str, origin: &str) {
+        if let Some(binding) = self.bindings.get_mut(name) {
+            binding.origin = origin.to_string();
+        }
+    }
+
     /// Retorna o `fn_alias` de um binding, se houver. Percorre a cadeia
     /// de escopos.
     pub fn fn_alias_of(&self, name: &str) -> Option<&str> {

@@ -101,8 +101,8 @@ fn closure_escape_via_return_de_funcao_nomeada() {
 make_adder :: Int => (Int -> Int)
 lambda n: lambda x: + x n
 
-let add5 := make_adder 5
-let result := add5 3
+constant add5 := make_adder 5
+constant result := add5 3
 result
 "#;
     let (raw, ty) = eval_src(src);
@@ -114,8 +114,8 @@ result
 fn closure_sem_capture_funciona() {
     // Lambda sem captures também deve funcionar (box_ptr com n_captures=0).
     let src = r#"
-let f := lambda x: + x 1
-let result := f 41
+constant f := lambda x: + x 1
+constant result := f 41
 result
 "#;
     let (raw, ty) = eval_src(src);
@@ -131,10 +131,10 @@ fn closure_escape_encadeado() {
 make_adder :: Int => (Int -> Int)
 lambda n: lambda x: + x n
 
-let add5 := make_adder 5
-let add10 := make_adder 10
-let a := add5 3
-let b := add10 3
+constant add5 := make_adder 5
+constant add10 := make_adder 10
+constant a := add5 3
+constant b := add10 3
 + a b
 "#;
     let (raw, ty) = eval_src(src);
@@ -147,8 +147,8 @@ fn lambda_com_type_annotation_no_param() {
     // `lambda x::Int: + x 4` — parser deve produzir Pattern::TypedIdent,
     // typeck resolve Int, codegen binda como Ident normal.
     let src = r#"
-let f := lambda x::Int: + x 4
-let result := f 4
+constant f := lambda x::Int: + x 4
+constant result := f 4
 result
 "#;
     let (raw, ty) = eval_src(src);
@@ -160,8 +160,8 @@ result
 fn lambda_com_type_annotation_multiplos_params() {
     // Múltiplos params com type annotation.
     let src = r#"
-let f := lambda x::Int y::Int: + x y
-let result := f 3 4
+constant f := lambda x::Int y::Int: + x y
+constant result := f 3 4
 result
 "#;
     let (raw, ty) = eval_src(src);

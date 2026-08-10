@@ -4,10 +4,10 @@ use kata_lexer::lex;
 
 #[test]
 fn indent_simple_block() {
-    let source = "let x := 1\n    + 1 2";
+    let source = "constant x := 1\n    + 1 2";
     let tokens = lex(source).unwrap();
     let expected = vec![
-        Token::Let,
+        Token::Constant,
         Token::Ident("x".into()),
         Token::BindAssign,
         Token::IntLit("1".into()),
@@ -53,10 +53,10 @@ fn stmtsep_between_statements() {
 
 #[test]
 fn indent_dedent_block() {
-    let source = "let x := 1\n    + 1 2\n+ 3 4";
+    let source = "constant x := 1\n    + 1 2\n+ 3 4";
     let tokens = lex(source).unwrap();
     let expected = vec![
-        Token::Let,
+        Token::Constant,
         Token::Ident("x".into()),
         Token::BindAssign,
         Token::IntLit("1".into()),
