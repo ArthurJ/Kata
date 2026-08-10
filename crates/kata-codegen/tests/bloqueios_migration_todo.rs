@@ -80,7 +80,7 @@ fn eval_src(src: &str) -> (i64, Ty) {
     let typed = monomorphize(typed);
     let typed = optimize(typed);
     let typed = kata_monomorph::MonoModule::from(tree_shake(typed.inner));
-    let jit = jit_eval(&typed, &Default::default()).expect("codegen+JIT");
+    let jit = jit_eval(&typed, &Default::default(), &[]).expect("codegen+JIT");
     (jit.raw, jit.ty)
 }
 
@@ -94,7 +94,7 @@ fn try_eval(src: &str) -> Result<(i64, Ty), String> {
     let typed = monomorphize(typed);
     let typed = optimize(typed);
     let typed = kata_monomorph::MonoModule::from(tree_shake(typed.inner));
-    let jit = jit_eval(&typed, &Default::default()).map_err(|e| format!("codegen+JIT: {e:?}"))?;
+    let jit = jit_eval(&typed, &Default::default(), &[]).map_err(|e| format!("codegen+JIT: {e:?}"))?;
     Ok((jit.raw, jit.ty))
 }
 

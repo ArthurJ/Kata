@@ -44,9 +44,9 @@ fn eval_src(src: &str) -> (i64, Ty) {
     let typed = monomorphize(typed);
     let typed = optimize(typed);
     let typed = kata_monomorph::MonoModule::from(tree_shake(typed.inner));
-    let type_id_map =
+    let (type_id_map, type_shapes) =
         build_and_register_type_table(&typed, &typed.struct_registry, &resolved.enum_registry);
-    let jit = jit_eval(&typed, &type_id_map).expect("codegen+JIT deve succeed");
+    let jit = jit_eval(&typed, &type_id_map, &type_shapes).expect("codegen+JIT deve succeed");
     (jit.raw, jit.ty)
 }
 
