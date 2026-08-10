@@ -84,6 +84,8 @@ pub enum ShakeMode {
 pub struct CompiledModule {
     pub mono: MonoModule,
     pub type_id_map: HashMap<Ty, i64>,
+    /// A2: TypeShapes para registrar no Runtime antes da execução.
+    pub type_shapes: Vec<kata_rt::TypeShape>,
     source: String,
     file_path: Option<String>,
 }
@@ -91,7 +93,7 @@ pub struct CompiledModule {
 impl CompiledModule {
     /// Codegen JIT — compila e executa o entry point, retornando o valor bruto.
     pub fn jit_eval(self) -> miette::Result<i64> {
-        let result = kata_codegen::jit_eval(&self.mono, &self.type_id_map)
+        let result = kata_codegen::jit_eval(&self.mono, &self.type_id_map, &self.type_shapes)
             .map_err(|e| e.into_report_with_source(&self.source, self.file_path.as_deref()))?;
         Ok(result.raw)
     }
@@ -384,12 +386,13 @@ impl Pipeline {
             .enum_registry
             .clone();
 
-        let type_id_map =
+        let (type_id_map, type_shapes) =
             type_table::build_and_register_type_table(&mono, &mono.struct_registry, &enum_registry);
 
         Ok(CompiledModule {
             mono,
             type_id_map,
+            type_shapes,
             source: self.source,
             file_path: self.file_path,
         })

@@ -43,22 +43,66 @@ Os docs `TODO-*.md` foram removidos (obsoletos ou resolvidos). Pendências vivem
 Itens identificados na análise arquitetural de 2026-08-09. Cada item descreve
 o problema, a proposta, e o status (analisar / decidir / executar).
 
-### A2. Runtime reentrante — eliminar globals e TLS
+### A2. Runtime reentrante — eliminar TLS do scheduler e runtime
 
-**Problema:** `TYPE_TABLE: LazyLock<Mutex<...>>`, `SHARED_ARC`, `SHARED_ARENA`,
-`PER_FIBER_ARENA` (TLS), scheduler em `thread_local!`. `kata_rt_run` não é
-concorrente — testes precisam ser serializados. Estado global impede
-múltiplas execuções isoladas no mesmo processo.
+**Motivação:** Bloqueador para REPL e LSP. Ambos exigem múltiplas execuções
+isoladas no mesmo processo.
 
-**Proposta:** O scheduler e as arenas viveriam num `Runtime` struct explícito,
-passado por referência ao código JIT (generalizando o padrão já usado para
-`fiber_arena`). Em vez de `static TYPE_TABLE`, o `Runtime` carrega a type
-table. Torna o runtime reentrante, permite testes paralelos, remove a
-fragilidade de estado global.
+- **REPL:** cada linha é JIT-compilada e executada via `kata_rt_run()`. O
+  scheduler, as arenas e a type table estão em TLS — `reset_scheduler()`
+  entre linhas destrói arenas (valores de uma linha não sobrevivem para a
+  próxima), a type table é substituída (não incrementada), e o
+  `ROOT_ARENA_HANDLE` é zerado. Não há como manter estado entre avaliações.
+- **LSP:** requests sobrepostos (didChange + hover) compartilham o scheduler
+  em TLS — execuções se pisam. Comptime eval, testes inline e debug eval
+  precisam de runtime isolado por request.
 
-**Status:** Analisar. O custo é mais um parâmetro nas FFIs — mas o
-`fiber_arena` já é passado dessa forma; é generalizar o padrão. Avaliar
-impacto no codegen e na ABI das FFIs.
+**Problema (estado atual, pós-Fio 16):** Os nomes `SHARED_ARC`,
+`SHARED_ARENA`, `PER_FIBER_ARENA` foram removidos pelo Fio 16 (pool de
+arenas com handles i64 + TrackedArena). O que persiste:
+
+- `SCHEDULER: RefCell<Option<Scheduler>>` (TLS, `scheduler/ffi.rs:42`) —
+  scheduler de fibers. O `RefCell` causa double-borrow quando `kata_rt_spawn`
+  é chamado de dentro de `resume()`.
+- `PENDING_SPAWNS` (TLS, `scheduler/ffi.rs:56`) — workaround para o
+  double-borrow acima. Existe **apenas** porque o scheduler está em `RefCell`
+  em vez de ponteiro explícito. Desaparece com A2.
+- `ROOT_ARENA_HANDLE: Cell<i64>` (TLS, `arena.rs:33`) — lido por
+  `kata_rt_decref` em hot path de ARC. Frágil entre execuções.
+- `TYPE_TABLE: RefCell<Vec<TypeShape>>` (TLS, `marshal/mod.rs:71`) —
+  substituída por `register_type_table`, não incrementada.
+- `YIELD_COUNTER`, `HAS_READY_FIBER` (TLS, `scheduler/ffi.rs:74`) — yield
+  cooperativo, lidos em hot path de loops.
+- `CURRENT_SUSPEND` (TLS, `fiber.rs:88`) — ponteiro de Suspend para
+  yield/fork.
+- Log, snapshot, dict, cache — TLS periféricas, não no caminho crítico.
+- `TIMEOUT_EXPIRED: AtomicBool` + `PENDING_TIMER: Mutex<...>` (globals
+  process-wide, `scheduler/ffi.rs:32-38`) — timer de teste; a thread OS
+  timer não tem acesso ao `Runtime*`. Permanecem global ou exigem
+  arquitetura separada.
+
+**Proposta:** `Runtime` struct explícita carregando scheduler, arenas e type
+table, passada por ponteiro (`*mut Runtime` como i64) ao código JIT —
+generalizando o padrão já usado para `fiber_arena` e `caller_arena`. FFIs
+afetadas: `kata_rt_scheduler_init`, `kata_rt_spawn`, `kata_rt_run`,
+`kata_rt_yield`, `kata_rt_yield_check`, `kata_rt_decref`,
+`kata_rt_get_root_arena_handle`, `kata_rt_to_bytes`, `kata_rt_from_bytes`.
+Cada call site no codegen ganha um parâmetro `rt: i64`. `PENDING_SPAWNS` é
+eliminado (acesso direto via ponteiro, sem RefCell).
+
+**Status:** ✅ Concluído. `Runtime` struct implementada em `crates/kata-rt/src/runtime.rs`,
+passada como `rt: i64` às FFIs centrais. TLS restante: `RT_PTR` (cache para FFIs
+periféricas), `CURRENT_SUSPEND` (continuação de fiber), `TIMEOUT_EXPIRED`/`PENDING_TIMER`
+(timer de teste). ABI de funções puras migrada para `(rt, arena_handle, box_ptr, ...args)`.
+`jit_eval` faz leak do Runtime para preservar arenas (valores retornados são ponteiros
+para a arena Bump). 1493 testes passando, 0 falhas.
+
+**Paralelismo de testes:** `cargo test --workspace -- --test-threads=N` funciona
+verificado empiricamente com N=4. Cada thread tem seu próprio `RT_PTR` TLS e seu
+próprio `Runtime` (variável local em `jit_eval`) — sem data races no runtime.
+Limitação: `TIMEOUT_EXPIRED`/`PENDING_TIMER` são `static` (shared entre threads);
+testes que usam o timer de teste podem racear se executados em paralelo. Os testes
+E2E de codegen não usam timer, então rodam em paralelo sem problemas.
 
 ### A3. Decompor LowerCtx em sub-contextos estratificados
 

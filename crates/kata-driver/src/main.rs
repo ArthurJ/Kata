@@ -217,6 +217,7 @@ fn cmd_test(path: &str, filter: Option<&str>) -> miette::Result<()> {
         })()
         .map_err(crate::print_pipeline_errors)?;
 
+        let type_shapes = compiled.type_shapes.clone();
         let (jit_module, wrappers) = compiled.jit_tests()?;
 
         for w in &wrappers {
@@ -243,7 +244,7 @@ fn cmd_test(path: &str, filter: Option<&str>) -> miette::Result<()> {
                 continue;
             }
 
-            let outcome = run_test_wrapper(&jit_module, w);
+            let outcome = run_test_wrapper(&jit_module, w, &type_shapes);
 
             match outcome {
                 TestOutcome::Pass => {
@@ -275,11 +276,15 @@ fn cmd_test(path: &str, filter: Option<&str>) -> miette::Result<()> {
 
 /// Executa um wrapper de teste individualmente.
 ///
-/// Cada teste roda em scheduler fresco: `reset_scheduler` +
+/// Cada teste roda em Runtime fresco: `reset_scheduler` +
 /// `kata_rt_set_test_timeout(N)` + chamada do wrapper. O wrapper é
-/// `() -> i64` com `CallConv::SystemV` — autossuficiente.
-fn run_test_wrapper(module: &cranelift_jit::JITModule, w: &TestWrapper) -> TestOutcome {
-    // Resetar estado global entre testes.
+/// `(rt: i64) -> i64` com `CallConv::SystemV` — autossuficiente.
+fn run_test_wrapper(
+    module: &cranelift_jit::JITModule,
+    w: &TestWrapper,
+    type_shapes: &[kata_rt::TypeShape],
+) -> TestOutcome {
+    // Resetar estado global (timer + TLS periféricas) entre testes.
     rt::reset_scheduler();
 
     // Configurar timeout — opt-in. Sem `@test{timeout: N}`, o teste
@@ -288,13 +293,28 @@ fn run_test_wrapper(module: &cranelift_jit::JITModule, w: &TestWrapper) -> TestO
         rt::kata_rt_set_test_timeout(ms);
     }
 
+    // A2: Alocar Runtime fresco para cada teste.
+    let runtime = Box::new(rt::Runtime::new());
+    let rt_ptr = Box::into_raw(runtime) as i64;
+
+    // A2: Registrar type_shapes no Runtime (marshalling to_bytes/from_bytes).
+    if !type_shapes.is_empty() {
+        rt::register_type_table(rt_ptr, type_shapes.to_vec());
+    }
+
     // Obter ponteiro do wrapper compilado.
     let code = module.get_finalized_function(w.func_id);
 
     // SAFETY: `code` é ponteiro válido após finalize_definitions. O wrapper
-    // é `extern "C" fn() -> i64` — autossuficiente (faz scheduler_init +
+    // é `extern "C" fn(i64) -> i64` — autossuficiente (faz scheduler_init +
     // spawn + run internamente).
-    let result: i64 = unsafe { std::mem::transmute::<*const u8, extern "C" fn() -> i64>(code)() };
+    let result: i64 = unsafe {
+        std::mem::transmute::<*const u8, extern "C" fn(i64) -> i64>(code)(rt_ptr)
+    };
+
+    // A2: Descartar Runtime após a execução (Drop libera arenas).
+    // SAFETY: rt_ptr foi alocado acima; a execução já terminou.
+    unsafe { drop(Box::from_raw(rt_ptr as *mut rt::Runtime)) };
 
     if result == rt::TIMEOUT_SENTINEL {
         TestOutcome::Timeout

@@ -116,19 +116,24 @@ fn link(object_bytes: &[u8], output: &Path, dynamic: bool, type_tag: i32) -> Res
 
     // Gerar shim C que chama __kata_entry + kata_rt_print_result.
     //
+    // A2: __kata_entry agora recebe rt: i64 (ponteiro para Box<Runtime>).
+    // O shim chama kata_rt_runtime_new() para alocar o Runtime, passa ao
+    // entry point, e kata_rt_print_result exibe o resultado.
+    //
     // Float é especial: __kata_entry retorna f64 via XMM0 (SystemV ABI),
     // não i64 via RAX. O shim declara o retorno correto conforme o type_tag.
-    // Para Float, declara `double __kata_entry(void)` e bitcasta para i64
+    // Para Float, declara `double __kata_entry(int64_t)` e bitcasta para i64
     // antes de passar para kata_rt_print_result (que faz from_bits).
     let shim_c = tmp.join("kata_shim.c");
     let entry_decl = if type_tag == rt::TYPE_FLOAT {
-        "double __kata_entry(void)"
+        "double __kata_entry(int64_t rt)"
     } else {
-        "int64_t __kata_entry(void)"
+        "int64_t __kata_entry(int64_t rt)"
     };
     let call_and_print = if type_tag == rt::TYPE_FLOAT {
         format!(
-            r#"    double result_f64 = __kata_entry();
+            r#"    int64_t rt = kata_rt_runtime_new();
+    double result_f64 = __kata_entry(rt);
     // bitcast double → int64_t para kata_rt_print_result (que faz from_bits)
     int64_t result;
     __builtin_memcpy(&result, &result_f64, sizeof(result));
@@ -136,7 +141,8 @@ fn link(object_bytes: &[u8], output: &Path, dynamic: bool, type_tag: i32) -> Res
         )
     } else {
         format!(
-            r#"    int64_t result = __kata_entry();
+            r#"    int64_t rt = kata_rt_runtime_new();
+    int64_t result = __kata_entry(rt);
     kata_rt_print_result(result, {type_tag});"#
         )
     };
@@ -144,6 +150,7 @@ fn link(object_bytes: &[u8], output: &Path, dynamic: bool, type_tag: i32) -> Res
         r#"#include <stdint.h>
 
 extern {entry_decl};
+extern int64_t kata_rt_runtime_new(void);
 extern void kata_rt_print_result(int64_t raw, int32_t type_tag);
 
 int main(void) {{
