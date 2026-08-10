@@ -376,7 +376,7 @@ pub(crate) fn infer_action_call(
     // Normaliza Grouping → Tuple de 1 elemento para ActionCall args.
     // `action!(x)` produz Grouping no parser; o codegen precisa de Tuple
     // (ponteiro para array na arena) para passar args_ptr corretamente.
-    let typed_args = match &typed_args.kind {
+    let mut typed_args = match &typed_args.kind {
         TypedExprKind::Grouping { inner } => {
             let inner = inner.clone();
             TypedExpr {
@@ -400,10 +400,11 @@ pub(crate) fn infer_action_call(
     };
 
     // Resolve no DispatchTable.
-    let overload = ctx
+    let outcome = ctx
         .table
-        .resolve(callee, &arg_tys, ctx.interface_registry)
+        .resolve_with_swap(callee, &arg_tys, ctx.interface_registry)
         .map_err(|e| super::helpers::dispatch_to_middle_error(e, *span))?;
+    let overload = outcome.overload;
 
     // Verifica que é uma Action (is_action = true).
     if !overload.is_action {
@@ -412,6 +413,28 @@ pub(crate) fn infer_action_call(
             found: format!("função pura `{callee}` — use sem `!`"),
             span: (*span).into(),
         });
+    }
+
+    // Reordenar elementos da tupla de args se o dispatch resolveu via
+    // commutative swap. O codegen desempacota a tupla na ordem posicional,
+    // então os elementos precisam estar na ordem esperada pela overload.
+    if outcome.swapped {
+        typed_args = match typed_args.kind.clone() {
+            TypedExprKind::Tuple { elements } if elements.len() == 2 => {
+                let mut swapped_elements = elements;
+                swapped_elements.swap(0, 1);
+                TypedExpr {
+                    ty: typed_args.ty.clone(),
+                    kind: TypedExprKind::Tuple {
+                        elements: swapped_elements,
+                    },
+                    span: typed_args.span,
+                    tail_pos: typed_args.tail_pos,
+                    escape: typed_args.escape,
+                }
+            }
+            _ => typed_args, // não-tupla ou ≠2 elementos — não reordena
+        };
     }
 
     // Aplica defaults do EnumRegistry no tipo de retorno.

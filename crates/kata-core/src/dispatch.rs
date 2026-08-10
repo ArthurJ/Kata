@@ -89,6 +89,19 @@ pub struct PartialDispatchResult {
     pub hole_types: Vec<Option<Ty>>,
 }
 
+/// Resultado de dispatch com flag de swap comutativo.
+///
+/// `swapped = true` quando o dispatch resolveu via commutative swap (args
+/// invertidos). O caller (apply_dispatch.rs) precisa reordenar os typed_args
+/// para que o codegen receba os args na ordem esperada pela overload.
+#[derive(Debug, Clone)]
+pub struct DispatchOutcome {
+    /// O overload que casou.
+    pub overload: OverloadInfo,
+    /// True se o dispatch resolveu via commutative swap (arity=2, args invertidos).
+    pub swapped: bool,
+}
+
 /// Tabela de dispatch indexada por nome.
 #[derive(Debug, Clone)]
 pub struct DispatchTable {
@@ -162,12 +175,30 @@ impl DispatchTable {
     ///
     /// Algoritmo: coletar candidatos por nome, pontuar por compatibilidade,
     /// selecionar o de maior score. Empate → AmbiguousDispatch.
+    ///
+    /// Wrapper que descarta o flag `swapped`. Para saber se o dispatch
+    /// resolveu via commutative swap, use `resolve_with_swap`.
     pub fn resolve(
         &self,
         name: &str,
         args: &[Ty],
         iface_reg: &InterfaceRegistry,
     ) -> Result<OverloadInfo, DispatchError> {
+        self.resolve_with_swap(name, args, iface_reg)
+            .map(|outcome| outcome.overload)
+    }
+
+    /// Resolve uma chamada retornando `DispatchOutcome` com flag `swapped`.
+    ///
+    /// `swapped = true` quando o dispatch resolveu via commutative swap
+    /// (arity=2, args invertidos). O caller deve reordenar os typed_args
+    /// para que o codegen receba os args na ordem esperada pela overload.
+    pub fn resolve_with_swap(
+        &self,
+        name: &str,
+        args: &[Ty],
+        iface_reg: &InterfaceRegistry,
+    ) -> Result<DispatchOutcome, DispatchError> {
         self.resolve_inner(name, args, false, iface_reg)
     }
 
@@ -311,7 +342,7 @@ impl DispatchTable {
         args: &[Ty],
         tried_commutative: bool,
         iface_reg: &InterfaceRegistry,
-    ) -> Result<OverloadInfo, DispatchError> {
+    ) -> Result<DispatchOutcome, DispatchError> {
         let overloads = self
             .entries
             .get(name)
@@ -348,7 +379,14 @@ impl DispatchTable {
             && args.len() == 2
         {
             let swapped = vec![args[1].clone(), args[0].clone()];
-            return self.resolve_inner(name, &swapped, true, iface_reg);
+            // Marca swapped=true na chamada recursiva — o caller precisa saber
+            // que os args foram invertidos para reordenar typed_args no codegen.
+            return self
+                .resolve_inner(name, &swapped, true, iface_reg)
+                .map(|outcome| DispatchOutcome {
+                    swapped: true,
+                    ..outcome
+                });
         }
 
         if candidates.is_empty() {
@@ -377,7 +415,10 @@ impl DispatchTable {
         let top_count = candidates.iter().filter(|c| c.score == best_score).count();
 
         if top_count == 1 {
-            return Ok(best.info.clone());
+            return Ok(DispatchOutcome {
+                overload: best.info.clone(),
+                swapped: false,
+            });
         }
 
         // Empate → AmbiguousDispatch

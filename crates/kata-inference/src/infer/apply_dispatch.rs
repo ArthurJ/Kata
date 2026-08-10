@@ -137,9 +137,10 @@ pub(crate) fn try_dispatch_table(
     // procura overloads com type_params não-vazio e tenta unify.
     let generic_result = ctx
         .table
-        .resolve(func_name, arg_types, ctx.interface_registry);
+        .resolve_with_swap(func_name, arg_types, ctx.interface_registry);
     match generic_result {
-        Ok(overload) => {
+        Ok(outcome) => {
+            let overload = outcome.overload;
             if let Err(e) = super::apply::reject_action_arg_for_pure_fn(&overload, typed_args, span)
             {
                 return Some(Err(e));
@@ -156,11 +157,21 @@ pub(crate) fn try_dispatch_table(
                 },
             };
 
+            // Reordenar typed_args se o dispatch resolveu via commutative swap.
+            // O swap inverte os tipos para casar com a overload, mas os args
+            // na TAST estão na ordem original. O codegen precisa deles na ordem
+            // esperada pela overload (que é a ordem swapada).
+            let final_args = if outcome.swapped && typed_args.len() == 2 {
+                vec![typed_args[1].clone(), typed_args[0].clone()]
+            } else {
+                typed_args.to_vec()
+            };
+
             Some(Ok((
                 expanded_ret,
                 TypedExprKind::Closure {
                     callee: Box::new(Spanned::new(callee_typed, callee.span)),
-                    args: typed_args.to_vec(),
+                    args: final_args,
                     ffi_symbol: overload.ffi_symbol,
                 },
             )))

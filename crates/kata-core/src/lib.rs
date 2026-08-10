@@ -23,7 +23,8 @@ pub mod ty;
 pub mod type_env;
 
 pub use dispatch::{
-    DispatchError, DispatchTable, OverloadInfo, PartialDispatchResult, Score, match_score,
+    DispatchError, DispatchOutcome, DispatchTable, OverloadInfo, PartialDispatchResult, Score,
+    match_score,
 };
 pub use enum_registry::{EnumRegistry, VariantInfo};
 pub use escape::EscapeTarget;
