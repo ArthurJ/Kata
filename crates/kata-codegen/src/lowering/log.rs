@@ -67,7 +67,9 @@ pub(crate) fn inject_log(
         .ffi_refs
         .get("kata_rt_log_publish")
         .copied()
-        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_log_publish".into() })?;
+        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound {
+            symbol: "kata_rt_log_publish".into(),
+        })?;
     let call = lower
         .builder
         .ins()

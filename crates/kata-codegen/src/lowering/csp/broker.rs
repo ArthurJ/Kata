@@ -63,8 +63,8 @@ pub(crate) fn synthesize_ipc_broker(
     let func_id = ctx
         .module
         .declare_function(BROKER_NAME, Linkage::Local, &sig)
-        .map_err(|e| {
-            super::super::CodegenError::Cranelift { reason: format!("declare {BROKER_NAME}: {e}") }
+        .map_err(|e| super::super::CodegenError::Cranelift {
+            reason: format!("declare {BROKER_NAME}: {e}"),
         })?;
 
     // Cria Context + FunctionBuilder para construir o corpo do broker.
@@ -191,7 +191,9 @@ pub(crate) fn synthesize_ipc_broker(
     // Define a função no module.
     ctx.module
         .define_function(func_id, &mut fn_ctx)
-        .map_err(|e| super::super::CodegenError::Cranelift { reason: format!("define {BROKER_NAME}: {e}") })?;
+        .map_err(|e| super::super::CodegenError::Cranelift {
+            reason: format!("define {BROKER_NAME}: {e}"),
+        })?;
     ctx.module.clear_context(&mut fn_ctx);
 
     let _ = metadata; // silencia unused — reservado para futura instrumentação
@@ -209,7 +211,9 @@ fn get_ffi_from(
     ffi_refs
         .get(name)
         .copied()
-        .ok_or_else(|| super::super::CodegenError::FfiSymbolNotFound { symbol: name.into() })
+        .ok_or_else(|| super::super::CodegenError::FfiSymbolNotFound {
+            symbol: name.into(),
+        })
 }
 
 /// Constrói o args_ptr do broker: 3 handles i64 na arena.

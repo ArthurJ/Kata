@@ -193,10 +193,9 @@ impl EnumRegistry {
         let mut result = type_args.to_vec();
         for i in type_args.len()..type_params.len() {
             let default = defaults.and_then(|d| d.get(i).and_then(|opt| opt.clone()));
-            if let Some(default_ty) = default {
+            {
+                let default_ty = default?;
                 result.push(default_ty);
-            } else {
-                return None;
             }
         }
         Some(result)

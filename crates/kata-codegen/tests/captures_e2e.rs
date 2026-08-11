@@ -27,9 +27,11 @@ fn eval_src(src: &str) -> (i64, Ty) {
     let typed = infer_module(&module, &resolved).expect("infer deve succeed");
     let typed = monomorphize(typed);
     let typed = optimize(typed);
-    let typed = run_comptime_pass(tree_shake(typed.inner), &resolved.enum_registry).expect("comptime deve succeed");
+    let typed = run_comptime_pass(tree_shake(typed.inner), &resolved.enum_registry)
+        .expect("comptime deve succeed");
     let typed = kata_monomorph::MonoModule::from(typed);
-    let jit = jit_eval(&typed, &Default::default(), &[], leak_rt_ptr()).expect("codegen+JIT deve succeed");
+    let jit = jit_eval(&typed, &Default::default(), &[], leak_rt_ptr())
+        .expect("codegen+JIT deve succeed");
     (jit.raw, jit.ty)
 }
 
@@ -166,8 +168,10 @@ fn find_lambda_captures_in_expr(
 fn capture_simples_tast() {
     // `let n := 10` + `let add_n := + _ n` dentro de action.
     // add_n captura n (variável local do escopo da action).
-    let typed = infer_src("action main => Int\n    let n := 10\n    let add_n := + _ n\n    add_n 5\n42");
-    let captures = find_last_lambda_captures(&typed).expect("deveria ter um Lambda no pre_entry ou constants");
+    let typed =
+        infer_src("action main => Int\n    let n := 10\n    let add_n := + _ n\n    add_n 5\n42");
+    let captures =
+        find_last_lambda_captures(&typed).expect("deveria ter um Lambda no pre_entry ou constants");
     assert_eq!(captures.len(), 1);
     assert_eq!(captures[0].name, "n");
     assert_eq!(captures[0].ty, Ty::int());
@@ -177,7 +181,9 @@ fn capture_simples_tast() {
 #[ignore = "collect_captures não rastreia let bindings em action bodies"]
 fn capture_multipla_tast() {
     // Doos lets com captures separadas dentro de action.
-    let typed = infer_src("action main => Int\n    let a := 1\n    let b := 2\n    let g := + _ a\n    let h := + _ b\n    h (g 10)\n42");
+    let typed = infer_src(
+        "action main => Int\n    let a := 1\n    let b := 2\n    let g := + _ a\n    let h := + _ b\n    h (g 10)\n42",
+    );
     // g captura a, h captura b
     let captures = find_last_lambda_captures(&typed).expect("deveria ter um Lambda no pre_entry");
     // O último let (h) tem captures = [b]. Verificamos que não é vazio.
@@ -209,7 +215,8 @@ fn capture_sem_captura_e2e() {
 #[test]
 fn capture_simples_e2e() {
     // Closure com 1 capture: let n := 10, let add_n := + _ n, add_n 5 → 15
-    let (raw, ty) = eval_src("test_closure :: Int Int => Int\nlambda n x: + x n\ntest_closure 10 5");
+    let (raw, ty) =
+        eval_src("test_closure :: Int Int => Int\nlambda n x: + x n\ntest_closure 10 5");
     assert_eq!(ty, Ty::int());
     assert_eq!(untag_smi(raw), 15);
 }
@@ -218,7 +225,9 @@ fn capture_simples_e2e() {
 fn capture_multipla_e2e() {
     // Duas closures com captures separadas.
     // let a := 1, let b := 2, let g := + _ a, let h := + _ b, h (g 10) → 13
-    let (raw, ty) = eval_src("test_closure :: Int Int Int => Int\nlambda a b x: + (+ x a) b\ntest_closure 1 2 10");
+    let (raw, ty) = eval_src(
+        "test_closure :: Int Int Int => Int\nlambda a b x: + (+ x a) b\ntest_closure 1 2 10",
+    );
     assert_eq!(ty, Ty::int());
     assert_eq!(untag_smi(raw), 13);
 }
@@ -229,7 +238,8 @@ fn capture_multipla_e2e() {
 fn closure_aninhada_e2e() {
     // Closure que captura variável do escopo externo e é chamada depois.
     // Equivalente a make_adder(10)(5) = 15.
-    let (raw, ty) = eval_src("test_closure :: Int Int => Int\nlambda n x: + x n\ntest_closure 10 5");
+    let (raw, ty) =
+        eval_src("test_closure :: Int Int => Int\nlambda n x: + x n\ntest_closure 10 5");
     assert_eq!(ty, Ty::int());
     assert_eq!(untag_smi(raw), 15);
 }
@@ -245,7 +255,9 @@ fn closure_em_tupla_e2e() {
 #[test]
 fn closure_com_float_e2e() {
     // Closure capturando Float, chamada com Float.
-    let (raw, ty) = eval_src("test_closure :: Float Float => Float\nlambda pi x: + x pi\ntest_closure 3.14 1.0");
+    let (raw, ty) = eval_src(
+        "test_closure :: Float Float => Float\nlambda pi x: + x pi\ntest_closure 3.14 1.0",
+    );
     assert_eq!(ty, Ty::float());
     let val = f64::from_bits(raw as u64);
     assert!((val - 4.14).abs() < 0.001, "esperado ~4.14, got {val}");
@@ -254,7 +266,9 @@ fn closure_com_float_e2e() {
 #[test]
 fn closure_multipla_chamada_aninhada_e2e() {
     // Duas closures com captures diferentes, uma chamando a outra.
-    let (raw, ty) = eval_src("test_closure :: Int Int Int => Int\nlambda a b x: + (+ x a) b\ntest_closure 1 2 10");
+    let (raw, ty) = eval_src(
+        "test_closure :: Int Int Int => Int\nlambda a b x: + (+ x a) b\ntest_closure 1 2 10",
+    );
     assert_eq!(ty, Ty::int());
     assert_eq!(untag_smi(raw), 13);
 }
@@ -282,7 +296,9 @@ fn capture_nao_deve_incluir_funcao_global_tast() {
 fn capture_nao_deve_incluir_funcao_global_and_tast() {
     // `and` é função global (Boolean Boolean => Boolean) em core.kata.
     // `t` é capturada (variável do escopo da action), `and` não deveria ser.
-    let typed = infer_src("action main => Boolean\n    let t := True\n    let f := lambda x: and x t\n    f t\n42");
+    let typed = infer_src(
+        "action main => Boolean\n    let t := True\n    let f := lambda x: and x t\n    f t\n42",
+    );
     let captures = find_last_lambda_captures(&typed).expect("deveria ter um Lambda no pre_entry");
     assert!(
         captures.iter().all(|c| c.name != "and"),
@@ -310,7 +326,8 @@ fn closure_com_funcao_global_mod_e2e() {
 fn closure_com_funcao_global_and_e2e() {
     // lambda x: and x t — and é global, x é param, t é capturada.
     // and True True = True (SMI: True é variante 0 do enum Boolean → SMI 1)
-    let (raw, _) = eval_src("test_closure :: Boolean => Boolean\nlambda t: and t t\ntest_closure True");
+    let (raw, _) =
+        eval_src("test_closure :: Boolean => Boolean\nlambda t: and t t\ntest_closure True");
     // True é variant index 0 do enum Boolean → SMI (0 << 1) | 1 = 1
     assert_eq!(raw, 1, "esperado True (SMI=1), got raw={raw}");
 }

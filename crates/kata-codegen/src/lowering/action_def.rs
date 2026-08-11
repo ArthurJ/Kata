@@ -46,7 +46,9 @@ pub(crate) fn declare_kata_action(
     sig.returns.push(AbiParam::new(I64));
     module
         .declare_function(cranelift_name, Linkage::Export, &sig)
-        .map_err(|e| CodegenError::Cranelift { reason: format!("declare action {}: {e}", action.name) })
+        .map_err(|e| CodegenError::Cranelift {
+            reason: format!("declare action {}: {e}", action.name),
+        })
 }
 
 /// Define (compila o corpo de) uma Action.
@@ -223,12 +225,16 @@ pub(crate) fn define_kata_action(
             .ffi_refs
             .get("kata_rt_file_close")
             .copied()
-            .ok_or_else(|| CodegenError::FfiSymbolNotFound { symbol: "kata_rt_file_close".into() })?;
+            .ok_or_else(|| CodegenError::FfiSymbolNotFound {
+                symbol: "kata_rt_file_close".into(),
+            })?;
         let socket_close_ref = lower
             .ffi_refs
             .get("kata_rt_socket_close")
             .copied()
-            .ok_or_else(|| CodegenError::FfiSymbolNotFound { symbol: "kata_rt_socket_close".into() })?;
+            .ok_or_else(|| CodegenError::FfiSymbolNotFound {
+                symbol: "kata_rt_socket_close".into(),
+            })?;
         for (var, kind) in &lower.io_handle_vars {
             let val = lower.builder.use_var(*var);
             match kind {
@@ -270,7 +276,9 @@ pub(crate) fn define_kata_action(
     // Define a função no module — func_id passado diretamente (sem lookup por nome).
     module
         .define_function(func_id, &mut ctx)
-        .map_err(|e| CodegenError::Cranelift { reason: format!("define action {}: {e}", action.name) })?;
+        .map_err(|e| CodegenError::Cranelift {
+            reason: format!("define action {}: {e}", action.name),
+        })?;
     module.clear_context(&mut ctx);
     Ok(())
 }

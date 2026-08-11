@@ -239,8 +239,7 @@ fn comptime_list_of_text_len() {
 /// appended, `len` desreferencia e conta a string.
 #[test]
 fn comptime_list_of_text_head_len() {
-    let (stdout, stderr, code) =
-        run_kata_run("constant x := [\"hello\" \"world\"]\nlen (head x)");
+    let (stdout, stderr, code) = run_kata_run("constant x := [\"hello\" \"world\"]\nlen (head x)");
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     let first = stdout.lines().next().unwrap_or("");
     assert_eq!(
@@ -253,8 +252,7 @@ fn comptime_list_of_text_head_len() {
 /// Struct com campo Text serializada via snapshot, acesso por campo.
 #[test]
 fn comptime_struct_field_access() {
-    let src =
-        "data Pessoa (nome::Text idade::Int)\nconstant p := Pessoa \"Alice\" 30\np.idade";
+    let src = "data Pessoa (nome::Text idade::Int)\nconstant p := Pessoa \"Alice\" 30\np.idade";
     let (stdout, stderr, code) = run_kata_run(src);
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     let first = stdout.lines().next().unwrap_or("");
@@ -268,8 +266,7 @@ fn comptime_struct_field_access() {
 /// Campo Text em Struct acessado e navegado (len desreferencia a string).
 #[test]
 fn comptime_struct_text_field_len() {
-    let src =
-        "data Pessoa (nome::Text idade::Int)\nconstant p := Pessoa \"Alice\" 30\nlen p.nome";
+    let src = "data Pessoa (nome::Text idade::Int)\nconstant p := Pessoa \"Alice\" 30\nlen p.nome";
     let (stdout, stderr, code) = run_kata_run(src);
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     let first = stdout.lines().next().unwrap_or("");
@@ -295,8 +292,7 @@ fn comptime_tuple_index_access() {
 /// (SMI) serializado via snapshot, desempacotado por match.
 #[test]
 fn comptime_sum_int_match() {
-    let src =
-        "constant r := Result::Ok 42\nmatch r\n    Result::Ok v: v\n    Result::Err e: 0";
+    let src = "constant r := Result::Ok 42\nmatch r\n    Result::Ok v: v\n    Result::Err e: 0";
     let (stdout, stderr, code) = run_kata_run(src);
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     let first = stdout.lines().next().unwrap_or("");
@@ -311,7 +307,8 @@ fn comptime_sum_int_match() {
 /// funciona porque a arena comptime sobrevive até o fim do processo.
 #[test]
 fn comptime_sum_text_match() {
-    let src = "constant r := Result::Err \"fail\"\nmatch r\n    Result::Ok v: v\n    Result::Err e: e";
+    let src =
+        "constant r := Result::Err \"fail\"\nmatch r\n    Result::Ok v: v\n    Result::Err e: e";
     let (stdout, stderr, code) = run_kata_run(src);
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     let first = stdout.lines().next().unwrap_or("");

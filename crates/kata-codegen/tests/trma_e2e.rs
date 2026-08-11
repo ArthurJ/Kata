@@ -26,7 +26,8 @@ fn eval_src(src: &str) -> (i64, Ty) {
     let typed = monomorphize(typed);
     let typed = optimize(typed);
     let typed = kata_monomorph::MonoModule::from(tree_shake(typed.inner));
-    let jit = jit_eval(&typed, &Default::default(), &[], leak_rt_ptr()).expect("codegen+JIT deve succeed");
+    let jit = jit_eval(&typed, &Default::default(), &[], leak_rt_ptr())
+        .expect("codegen+JIT deve succeed");
     (jit.raw, jit.ty)
 }
 
@@ -211,8 +212,14 @@ sub 5"#;
     let typed = kata_monomorph::MonoModule::from(tree_shake(typed.inner));
     // Sem TRMA: só existe `sub`, nenhuma `sub_acc`.
     // Cross-type overloads adicionam funções extras ao módulo typed.
-    assert!(typed.functions.iter().any(|f| f.name == "sub"), "sub deve existir");
-    assert!(!typed.functions.iter().any(|f| f.name == "sub_acc"), "não deve ter sub_acc (TRMA não ativa)");
+    assert!(
+        typed.functions.iter().any(|f| f.name == "sub"),
+        "sub deve existir"
+    );
+    assert!(
+        !typed.functions.iter().any(|f| f.name == "sub_acc"),
+        "não deve ter sub_acc (TRMA não ativa)"
+    );
 }
 
 // ── Teste: TRMA com 2 cláusulas lambda (sugar para match) ───────────

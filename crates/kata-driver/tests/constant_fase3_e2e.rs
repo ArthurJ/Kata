@@ -97,8 +97,7 @@ fn constant_float_em_function() {
 /// Shadowing: parâmetro com mesmo nome de constant não deve ser substituído.
 #[test]
 fn constant_shadowed_por_parametro() {
-    let source =
-        "constant scale := 2\nid :: Int => Int\nlambda scale: scale\n\necho!(id 42)\n";
+    let source = "constant scale := 2\nid :: Int => Int\nlambda scale: scale\n\necho!(id 42)\n";
     let (stdout, stderr, code) = run_kata_run(source);
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     let first = stdout.lines().next().unwrap_or("");
@@ -128,14 +127,8 @@ fn constant_em_guard() {
     let (stdout, stderr, code) = run_kata_run(source);
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     let lines: Vec<&str> = stdout.lines().collect();
-    assert_eq!(
-        lines[0], "abaixo",
-        "verifica 5 = abaixo — stdout: {stdout}"
-    );
-    assert_eq!(
-        lines[1], "acima",
-        "verifica 15 = acima — stdout: {stdout}"
-    );
+    assert_eq!(lines[0], "abaixo", "verifica 5 = abaixo — stdout: {stdout}");
+    assert_eq!(lines[1], "acima", "verifica 15 = acima — stdout: {stdout}");
 }
 
 /// Constant referenciada em with_binding de function.

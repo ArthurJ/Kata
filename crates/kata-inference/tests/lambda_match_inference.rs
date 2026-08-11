@@ -347,7 +347,10 @@ fn let_value_not_tail_pos() {
     let binding = &tmod.constants[0];
     match &binding.node.kind {
         TypedExprKind::ConstantBinding { value, .. } => {
-            assert!(!value.node.tail_pos, "constant value deve ser tail_pos = false");
+            assert!(
+                !value.node.tail_pos,
+                "constant value deve ser tail_pos = false"
+            );
         }
         other => panic!("expected ConstantBinding, got {other:?}"),
     }

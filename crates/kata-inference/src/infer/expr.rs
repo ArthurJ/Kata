@@ -212,10 +212,7 @@ pub(crate) fn infer_expr_hinted(
                                 if fn_overloads.len() == 1 {
                                     let o = fn_overloads[0];
                                     (
-                                        Ty::Function(
-                                            o.params.clone(),
-                                            Box::new(o.ret.clone()),
-                                        ),
+                                        Ty::Function(o.params.clone(), Box::new(o.ret.clone())),
                                         TypedExprKind::Ident { name: name.clone() },
                                     )
                                 } else if !fn_overloads.is_empty() {
@@ -235,7 +232,7 @@ pub(crate) fn infer_expr_hinted(
                                     return Err(MiddleError::UnboundName {
                                         name: name.clone(),
                                         span: (*span).into(),
-        suggestion: None,
+                                        suggestion: None,
                                     });
                                 }
                             }
@@ -243,7 +240,7 @@ pub(crate) fn infer_expr_hinted(
                             return Err(MiddleError::UnboundName {
                                 name: name.clone(),
                                 span: (*span).into(),
-        suggestion: None,
+                                suggestion: None,
                             });
                         }
                     }
@@ -412,24 +409,23 @@ pub(crate) fn infer_expr_hinted(
             // table de deferred. O infer_apply caminho 2c consulta a side
             // table quando vê OverloadSet no TypeEnv e re-infere com tipos
             // concretos dos args.
-            if let Ty::OverloadSet { .. } = &typed_value.ty {
-                if let Expr::Lambda {
+            if let Ty::OverloadSet { .. } = &typed_value.ty
+                && let Expr::Lambda {
                     patterns,
                     body,
                     guards,
                     with_bindings,
                 } = &value.node
-                {
-                    ctx.deferred_lambdas.borrow_mut().insert(
-                        name.clone(),
-                        DeferredLambda {
-                            patterns: patterns.clone(),
-                            body: body.clone(),
-                            guards: guards.clone(),
-                            with_bindings: with_bindings.clone(),
-                        },
-                    );
-                }
+            {
+                ctx.deferred_lambdas.borrow_mut().insert(
+                    name.clone(),
+                    DeferredLambda {
+                        patterns: patterns.clone(),
+                        body: body.clone(),
+                        guards: guards.clone(),
+                        with_bindings: with_bindings.clone(),
+                    },
+                );
             }
 
             let val_ty = typed_value.ty.clone();
@@ -635,7 +631,7 @@ pub(crate) fn infer_expr_hinted(
             Err(MiddleError::UnboundName {
                 name: enum_name.clone(),
                 span: (*span).into(),
-                suggestion: suggest_similar(&enum_name, ctx.table.all_names()),
+                suggestion: suggest_similar(enum_name, ctx.table.all_names()),
             })?
         }
 
@@ -699,7 +695,7 @@ pub(crate) fn infer_expr_hinted(
                     .ok_or_else(|| MiddleError::UnboundName {
                         name: name.clone(),
                         span: (*span).into(),
-        suggestion: None,
+                        suggestion: None,
                     })?;
             if !env.is_mutable(name) {
                 return Err(MiddleError::TypeMismatch {
@@ -809,7 +805,7 @@ pub(crate) fn infer_expr_hinted(
             return Err(MiddleError::UnboundName {
                 name: "Spread ($) em posição inesperada — typeck deveria ter expandido".into(),
                 span: (*span).into(),
-        suggestion: None,
+                suggestion: None,
             });
         }
         // ── Coleções — inferência delegada para collections.rs ──
@@ -1010,7 +1006,10 @@ fn select_action_overload<'a>(
 /// Usa distância de Levenshtein simples (conta edições) para encontrar
 /// nomes no escopo que são parecidos com o nome digitado. Retorna
 /// `None` se nenhuma sugestão for boa o suficiente.
-pub(super) fn suggest_similar<'a>(name: &str, candidates: impl Iterator<Item = &'a str>) -> Option<String> {
+pub(super) fn suggest_similar<'a>(
+    name: &str,
+    candidates: impl Iterator<Item = &'a str>,
+) -> Option<String> {
     /// Distância de Levenshtein — número mínimo de edições
     /// (inserção, deleção, substituição) para transformar a em b.
     fn levenshtein(a: &str, b: &str) -> usize {
@@ -1053,7 +1052,10 @@ pub(super) fn suggest_similar<'a>(name: &str, candidates: impl Iterator<Item = &
         best.truncate(3);
         Some(format!(
             "você quis dizer {}?",
-            best.iter().map(|(_, s)| format!("`{s}`")).collect::<Vec<_>>().join(", ")
+            best.iter()
+                .map(|(_, s)| format!("`{s}`"))
+                .collect::<Vec<_>>()
+                .join(", ")
         ))
     }
 }

@@ -160,7 +160,7 @@ pub(crate) fn infer_variant_qual(
         Ty::Sum(name) if is_generic_qual(ctx, origin, name) => {
             if !is_variant_qual(ctx, origin, name, variant) {
                 return Err(MiddleError::UnboundName {
-                            suggestion: None,
+                    suggestion: None,
                     name: format!("{}::{}", name, variant),
                     span: (*span).into(),
                 });
@@ -169,7 +169,7 @@ pub(crate) fn infer_variant_qual(
             if fixed_value_qual(ctx, origin, name, variant).is_some() {
                 let tag = variant_index_qual(ctx, origin, name, variant).ok_or_else(|| {
                     MiddleError::UnboundName {
-                                suggestion: None,
+                        suggestion: None,
                         name: format!("{}::{}", name, variant),
                         span: (*span).into(),
                     }
@@ -199,7 +199,7 @@ pub(crate) fn infer_variant_qual(
             }
             let tag = variant_index_qual(ctx, origin, name, variant).ok_or_else(|| {
                 MiddleError::UnboundName {
-                            suggestion: None,
+                    suggestion: None,
                     name: format!("{}::{}", name, variant),
                     span: (*span).into(),
                 }
@@ -224,7 +224,7 @@ pub(crate) fn infer_variant_qual(
             // Verifica que a variante existe.
             if !is_variant_qual(ctx, origin, name, variant) {
                 return Err(MiddleError::UnboundName {
-                            suggestion: None,
+                    suggestion: None,
                     name: format!("{}::{}", name, variant),
                     span: (*span).into(),
                 });
@@ -233,7 +233,7 @@ pub(crate) fn infer_variant_qual(
             if let Some(fixed_text) = fixed_value_qual(ctx, origin, name, variant) {
                 let tag = variant_index_qual(ctx, origin, name, variant).ok_or_else(|| {
                     MiddleError::UnboundName {
-                                suggestion: None,
+                        suggestion: None,
                         name: format!("{}::{}", name, variant),
                         span: (*span).into(),
                     }
@@ -264,7 +264,7 @@ pub(crate) fn infer_variant_qual(
             }
             let tag = variant_index_qual(ctx, origin, name, variant).ok_or_else(|| {
                 MiddleError::UnboundName {
-                            suggestion: None,
+                    suggestion: None,
                     name: format!("{}::{}", name, variant),
                     span: (*span).into(),
                 }

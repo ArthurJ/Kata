@@ -33,13 +33,11 @@ pub use ffi::{
 
 use std::collections::{HashMap, VecDeque};
 
-use crate::arena::{Arena, ArenaKind, kata_rt_arena_destroy};
+use crate::arena::{Arena, ArenaKind};
 use crate::channel::{block_ipc_until_readable, can_recv, can_send, ipc_read_fd, is_ipc_handle};
 use crate::fiber::{KataFiber, SpawnArgs, YieldReason};
 use crate::file::{FILE_WOULD_BLOCK, collect_file_fds, try_select_files};
 use crate::socket::{SOCKET_WOULD_BLOCK, collect_socket_fds, try_select_sockets};
-
-
 
 /// Identificador de fiber no scheduler.
 pub(crate) type FiberId = u64;
@@ -63,6 +61,7 @@ pub(crate) enum BlockReason {
     /// Esperando sleep cooperativo expirar. `Instant` = deadline.
     WaitingOnSleep(std::time::Instant),
     /// Esperando outro fiber terminar.
+    #[allow(dead_code)] // variant usado em match arms mas não construído
     WaitingOnFiber(FiberId),
 }
 
@@ -100,6 +99,7 @@ pub(crate) struct Scheduler {
     fibers: HashMap<FiberId, FiberEntry>,
     next_id: u64,
     /// Arena raiz — criada pelo `Runtime::new()`, passada como parâmetro.
+    #[allow(dead_code)] // campo reservado para futura utilização via Scheduler
     root_arena: i64,
     /// Resultado do fiber raiz — guardado quando o fiber raiz completa.
     root_result: i64,

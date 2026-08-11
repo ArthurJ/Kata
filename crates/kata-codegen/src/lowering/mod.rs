@@ -47,7 +47,9 @@ mod variant;
 pub(crate) use backend::ModuleBackend;
 
 pub use aot::aot_emit;
-pub use jit::{JitResult, PrevFuncMap, ReplJitResult, jit_compile_tests, jit_eval, jit_eval_repl, leak_rt_ptr};
+pub use jit::{
+    JitResult, PrevFuncMap, ReplJitResult, jit_compile_tests, jit_eval, jit_eval_repl, leak_rt_ptr,
+};
 pub use module::CodegenError;
 use module::StringTable;
 pub use test_runner::TestWrapper;
@@ -80,18 +82,22 @@ pub(crate) fn func_key_from_callee(
     let name = match &callee.node.kind {
         TypedExprKind::Ident { name } => name.clone(),
         _ => {
-            return Err(module::CodegenError::UnsupportedNode { node: format!(
-                "callee não-Ident em func_key_from_callee: {:?}",
-                callee.node.kind
-            ) });
+            return Err(module::CodegenError::UnsupportedNode {
+                node: format!(
+                    "callee não-Ident em func_key_from_callee: {:?}",
+                    callee.node.kind
+                ),
+            });
         }
     };
     match &callee.node.ty {
         Ty::Function(params, ret) => Ok((name, params.clone(), (**ret).clone())),
-        _ => Err(module::CodegenError::UnsupportedNode { node: format!(
-            "callee.ty não é Function em func_key_from_callee: {}",
-            callee.node.ty
-        ) }),
+        _ => Err(module::CodegenError::UnsupportedNode {
+            node: format!(
+                "callee.ty não é Function em func_key_from_callee: {}",
+                callee.node.ty
+            ),
+        }),
     }
 }
 

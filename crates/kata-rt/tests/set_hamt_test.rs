@@ -1,4 +1,5 @@
-use kata_rt::{Runtime, kata_rt_arena_create, kata_rt_hash_int, kata_rt_set_contains, kata_rt_set_difference,
+use kata_rt::{
+    Runtime, kata_rt_arena_create, kata_rt_hash_int, kata_rt_set_contains, kata_rt_set_difference,
     kata_rt_set_empty, kata_rt_set_insert, kata_rt_set_intersection, kata_rt_set_len,
     kata_rt_set_union,
 };

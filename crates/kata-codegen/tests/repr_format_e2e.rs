@@ -23,7 +23,8 @@ fn eval_src(src: &str) -> (i64, Ty) {
     let typed = monomorphize(typed);
     let typed = optimize(typed);
     let typed = kata_monomorph::MonoModule::from(tree_shake(typed.inner));
-    let jit = jit_eval(&typed, &Default::default(), &[], leak_rt_ptr()).expect("codegen+JIT deve succeed");
+    let jit = jit_eval(&typed, &Default::default(), &[], leak_rt_ptr())
+        .expect("codegen+JIT deve succeed");
     (jit.raw, jit.ty)
 }
 
@@ -117,7 +118,8 @@ fn repr_despacha_por_tipo() {
 /// `show` de struct com campo Boolean.
 #[test]
 fn repr_struct_com_boolean() {
-    let src = "data Flag (nome::Text ativa::Boolean)\nconstant f := Flag \"test\" Boolean::True\nshow f";
+    let src =
+        "data Flag (nome::Text ativa::Boolean)\nconstant f := Flag \"test\" Boolean::True\nshow f";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::text());
     let _ = raw;

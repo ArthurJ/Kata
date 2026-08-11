@@ -68,7 +68,7 @@ pub(crate) fn infer_variant_construct(
     };
     if !variant_exists {
         return Err(MiddleError::UnboundName {
-                    suggestion: None,
+            suggestion: None,
             name: format!("{}::{}", enum_name, variant),
             span: (*span).into(),
         });
@@ -111,7 +111,7 @@ pub(crate) fn infer_variant_construct(
             expected: 1,
             found: args.len(),
             span: (*span).into(),
-        hint: None,
+            hint: None,
         });
     }
 
@@ -263,7 +263,7 @@ pub(crate) fn expand_spread(
                 return Err(MiddleError::UnboundName {
                     name: "$ spread requires a following tuple".into(),
                     span: args[i].span.into(),
-        suggestion: None,
+                    suggestion: None,
                 });
             }
             match &args[i + 1].node {

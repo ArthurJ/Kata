@@ -23,9 +23,9 @@ use crate::scheduler::Scheduler;
 /// `i64`) ao código JIT. Cada execução isolada cria seu próprio `Runtime`.
 pub struct Runtime {
     /// Scheduler de fibers. Antes em `SCHEDULER: RefCell<Option<Scheduler>>` TLS.
-    pub scheduler: Scheduler,
+    pub(crate) scheduler: Scheduler,
     /// Pool de arenas (Bump + Tracked). Antes em `ARENAS: RefCell<Vec<ArenaKind>>` TLS.
-    pub arenas: Vec<ArenaKind>,
+    pub(crate) arenas: Vec<ArenaKind>,
     /// Handle (índice em `arenas`) da root arena (Tracked). Antes em
     /// `ROOT_ARENA_HANDLE: Cell<i64>` TLS.
     pub root_arena_handle: i64,
@@ -40,8 +40,7 @@ impl Runtime {
     /// a FFI `kata_rt_arena_create_tracked` (que precisaria de `rt` que ainda
     /// não existe durante a construção).
     pub fn new() -> Self {
-        let mut arenas: Vec<ArenaKind> = Vec::new();
-        arenas.push(ArenaKind::Tracked(TrackedArena::new()));
+        let arenas: Vec<ArenaKind> = vec![ArenaKind::Tracked(TrackedArena::new())];
         let root_arena_handle = 0; // índice da primeira arena no pool
 
         // Scheduler::new() não cria mais a root arena — recebe o handle.
@@ -173,8 +172,9 @@ impl Default for Runtime {
 ///
 /// # Safety
 /// `rt` deve ser um ponteiro válido obtido de `Box::into_raw` ou similar.
+#[allow(dead_code)] // helper reservado para futuras FFIs que precisem de &mut Runtime
 pub(crate) unsafe fn rt_ref(rt: i64) -> &'static mut Runtime {
-    &mut *(rt as *mut Runtime)
+    unsafe { &mut *(rt as *mut Runtime) }
 }
 
 /// Aloca um novo `Runtime` no heap e retorna o ponteiro como `i64`.

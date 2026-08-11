@@ -11,8 +11,8 @@ use std::collections::{HashMap, HashSet};
 
 use kata_inference::{TypedExpr, TypedExprKind, TypedPattern};
 
-use crate::walk::walk_mut;
 use crate::error::ComptimeError;
+use crate::walk::walk_mut;
 
 /// Coleta nomes de bindings de um `TypedPattern` recursivamente.
 fn collect_pattern_names(pat: &TypedPattern, names: &mut HashSet<String>) {
@@ -48,13 +48,12 @@ fn replace_constant_refs_in_expr(
     local_names: &HashSet<String>,
 ) -> Result<(), ComptimeError> {
     // Primeiro, checar o próprio nó (walk_mut só visita filhos).
-    if let TypedExprKind::Ident { name } = &expr.kind {
-        if !local_names.contains(name) {
-            if let Some(replacement) = comptime_bindings.get(name) {
-                expr.kind = replacement.kind.clone();
-                expr.ty = replacement.ty.clone();
-            }
-        }
+    if let TypedExprKind::Ident { name } = &expr.kind
+        && !local_names.contains(name)
+        && let Some(replacement) = comptime_bindings.get(name)
+    {
+        expr.kind = replacement.kind.clone();
+        expr.ty = replacement.ty.clone();
     }
     // Depois, recursão nos filhos.
     walk_mut(expr, &mut |child| {
@@ -147,14 +146,8 @@ pub(crate) fn fold_constant_refs_in_actions(
             .collect();
 
         for stmt in &mut action.body {
-            replace_constant_refs_in_expr(
-                &mut stmt.node,
-                comptime_bindings,
-                &local_names,
-            )?;
+            replace_constant_refs_in_expr(&mut stmt.node, comptime_bindings, &local_names)?;
         }
     }
     Ok(())
 }
-
-

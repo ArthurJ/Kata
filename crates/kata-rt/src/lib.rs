@@ -8,7 +8,6 @@
 
 pub(crate) mod arc;
 pub(crate) mod arena;
-pub mod runtime;
 pub(crate) mod array;
 pub(crate) mod bigint;
 pub(crate) mod byte;
@@ -29,6 +28,7 @@ pub(crate) mod log;
 pub(crate) mod marshal;
 pub(crate) mod range;
 pub(crate) mod rational;
+pub mod runtime;
 pub(crate) mod scheduler;
 pub(crate) mod set;
 pub(crate) mod slice;

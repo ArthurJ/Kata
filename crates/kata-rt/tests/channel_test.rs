@@ -7,9 +7,11 @@
 //! Sem blocking real. `WOULD_BLOCK` (-1) é retornado quando
 //! a operação não pode completar. A versão com yield substitui por blocking cooperativo.
 
-use kata_rt::{Runtime, kata_rt_arena_create, kata_rt_arena_destroy, kata_rt_broadcast_create,
+use kata_rt::{
+    Runtime, kata_rt_arena_create, kata_rt_arena_destroy, kata_rt_broadcast_create,
     kata_rt_broadcast_receiver_create, kata_rt_channel_create, kata_rt_channel_recv,
-    kata_rt_channel_send, kata_rt_queue_create, kata_rt_select};
+    kata_rt_channel_send, kata_rt_queue_create, kata_rt_select,
+};
 
 const WOULD_BLOCK: i64 = -1;
 const OK: i64 = 0;

@@ -10,7 +10,7 @@ use kata_lexer::lex;
 use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
 use kata_parser::parse;
-use kata_resolution::{load_prelude, resolve, ResolvedModule};
+use kata_resolution::{ResolvedModule, load_prelude, resolve};
 use kata_tree_shaking::tree_shake;
 
 fn eval_src(src: &str) -> (i64, Ty) {
@@ -23,8 +23,8 @@ fn eval_src(src: &str) -> (i64, Ty) {
     let typed = monomorphize(typed);
     let typed = optimize(typed);
     let typed = kata_monomorph::MonoModule::from(tree_shake(typed.inner));
-    let jit =
-        jit_eval(&typed, &Default::default(), &[], leak_rt_ptr()).expect("codegen+JIT deve succeed");
+    let jit = jit_eval(&typed, &Default::default(), &[], leak_rt_ptr())
+        .expect("codegen+JIT deve succeed");
     (jit.raw, jit.ty)
 }
 
@@ -124,9 +124,7 @@ fn overloadset_map_com_both_holes() {
     // map só passa 1 arg. Então f recebe (elem, ?) — mas f é binário!
     // map espera callback de 1 arg. + _ _ é arity 2. Isso deveria falhar.
     // Vamos verificar o que acontece.
-    let result = std::panic::catch_unwind(|| {
-        eval_src("constant f := + _ _\nmap f [1 2 3]")
-    });
+    let result = std::panic::catch_unwind(|| eval_src("constant f := + _ _\nmap f [1 2 3]"));
     // Pode falhar na inference (arity mismatch) ou no codegen.
     // Por ora, só verificar que não crasha o processo.
     match result {

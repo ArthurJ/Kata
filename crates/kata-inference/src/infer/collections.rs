@@ -401,7 +401,7 @@ pub(crate) fn infer_in(
         &mut subs,
     )
     .map_err(|_| MiddleError::TypeMismatch {
-        expected: format!("{}", &contains_method.params[1]),
+        expected: format!("{}", contains_method.params[1]),
         found: format!("{}", typed_item.ty),
         span: item.span.into(),
     })?;

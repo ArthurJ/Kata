@@ -71,12 +71,12 @@ pub(crate) fn resolve_unqual_variant(
         return Err(MiddleError::UnboundName {
             name: name.to_string(),
             span: (*span).into(),
-        suggestion: None,
+            suggestion: None,
         });
     }
     if candidates.len() > 1 {
         return Err(MiddleError::UnboundName {
-                    suggestion: None,
+            suggestion: None,
             name: format!(
                 "variante '{name}' é ambígua — existe em: {}. Qualifique (ex: {}::{name})",
                 candidates.join(", "),
@@ -110,7 +110,7 @@ pub(crate) fn resolve_unqual_variant(
     }
     if ctx.enum_registry.payload_ty(enum_name, name).is_some() {
         return Err(MiddleError::UnboundName {
-                    suggestion: None,
+            suggestion: None,
             name: format!(
                 "{enum_name}::{name} tem payload — use Apply (ex: {enum_name}::{name} valor)"
             ),

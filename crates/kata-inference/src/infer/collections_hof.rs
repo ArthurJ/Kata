@@ -18,8 +18,8 @@ use kata_diagnostics::MiddleError;
 
 use crate::typed::{TypedExpr, TypedExprKind};
 
-use super::expr::{infer_expr_hinted, DeferredLambda, InferCtx};
-use super::helpers::{peel_grouping_expr, InferResult};
+use super::expr::{InferCtx, infer_expr_hinted};
+use super::helpers::{InferResult, peel_grouping_expr};
 use super::lambda::infer_lambda;
 
 /// Resolve um callback que é `Expr::Ident` referenciando uma função do
@@ -115,7 +115,7 @@ pub(crate) fn infer_map(
             expected: 2,
             found: args.len(),
             span: (*span).into(),
-        hint: None,
+            hint: None,
         });
     }
 
@@ -151,7 +151,8 @@ pub(crate) fn infer_map(
             if let Expr::Ident { name } = core {
                 if env
                     .lookup(name)
-                    .is_some_and(|ty| matches!(ty, Ty::OverloadSet { .. })) {
+                    .is_some_and(|ty| matches!(ty, Ty::OverloadSet { .. }))
+                {
                     if let Some(deferred) = ctx.deferred_lambdas.borrow().get(name).cloned() {
                         let (cb_ty, cb_kind) = infer_lambda(
                             &deferred.patterns,
@@ -166,7 +167,7 @@ pub(crate) fn infer_map(
                         // infer_lambda com hint concreto produz Function, não OverloadSet.
                         // Se ainda produziu OverloadSet, o hint não desambiguou —
                         // cai para o caminho de seleção no passo 4.
-                        let mut cb_typed = TypedExpr {
+                        let cb_typed = TypedExpr {
                             span: args[0].span,
                             ty: cb_ty,
                             tail_pos: false,
@@ -194,7 +195,14 @@ pub(crate) fn infer_map(
                         // OverloadSet ainda — cai para passo 4 com cb_typed
                         cb_typed
                     } else {
-                        infer_expr_hinted(&args[0].node, &args[0].span, env, ctx, false, Some(&hint))?
+                        infer_expr_hinted(
+                            &args[0].node,
+                            &args[0].span,
+                            env,
+                            ctx,
+                            false,
+                            Some(&hint),
+                        )?
                     }
                 } else {
                     infer_expr_hinted(&args[0].node, &args[0].span, env, ctx, false, Some(&hint))?
@@ -217,7 +225,7 @@ pub(crate) fn infer_map(
                 .filter(|(params, _)| {
                     params.len() == 1
                         && kata_core::dispatch::match_score(
-                            &[elem_ty.clone()],
+                            std::slice::from_ref(&elem_ty),
                             params,
                             ctx.interface_registry,
                         )
@@ -228,9 +236,7 @@ pub(crate) fn infer_map(
                 1 => matched[0].1.clone(),
                 0 => {
                     return Err(MiddleError::TypeMismatch {
-                        expected: format!(
-                            "uma overload de `{name}` compatível com [{elem_ty}]"
-                        ),
+                        expected: format!("uma overload de `{name}` compatível com [{elem_ty}]"),
                         found: "nenhuma overload compatível".into(),
                         span: args[0].span.into(),
                     });
@@ -283,7 +289,7 @@ pub(crate) fn infer_filter(
             expected: 2,
             found: args.len(),
             span: (*span).into(),
-        hint: None,
+            hint: None,
         });
     }
 
@@ -328,7 +334,7 @@ pub(crate) fn infer_filter(
                     params.len() == 1
                         && *ret == boolean
                         && kata_core::dispatch::match_score(
-                            &[elem_ty.clone()],
+                            std::slice::from_ref(&elem_ty),
                             params,
                             ctx.interface_registry,
                         )
@@ -395,7 +401,7 @@ pub(crate) fn infer_fold(
             expected: 3,
             found: args.len(),
             span: (*span).into(),
-        hint: None,
+            hint: None,
         });
     }
 
@@ -464,7 +470,14 @@ pub(crate) fn infer_fold(
                         }
                         cb_typed
                     } else {
-                        infer_expr_hinted(&args[0].node, &args[0].span, env, ctx, false, Some(&hint))?
+                        infer_expr_hinted(
+                            &args[0].node,
+                            &args[0].span,
+                            env,
+                            ctx,
+                            false,
+                            Some(&hint),
+                        )?
                     }
                 } else {
                     infer_expr_hinted(&args[0].node, &args[0].span, env, ctx, false, Some(&hint))?

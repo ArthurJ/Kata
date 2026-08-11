@@ -43,16 +43,14 @@ fn lookup_action_fn_ptr(
         }
     }
 
-    let key = found_key.ok_or_else(|| {
-        super::super::CodegenError::UnsupportedNode { node: format!(
-            "Action `{action_name}` não encontrada em kata_ids"
-        ) }
+    let key = found_key.ok_or_else(|| super::super::CodegenError::UnsupportedNode {
+        node: format!("Action `{action_name}` não encontrada em kata_ids"),
     })?;
 
     let callee_fid = ctx.kata_ids.get(&key).copied().ok_or_else(|| {
-        super::super::CodegenError::UnsupportedNode { node: format!(
-            "FuncId para Action `{action_name}` não encontrado"
-        ) }
+        super::super::CodegenError::UnsupportedNode {
+            node: format!("FuncId para Action `{action_name}` não encontrado"),
+        }
     })?;
 
     // Converte FuncId → fn_ptr (Value) via GlobalValue::Symbol.

@@ -53,14 +53,19 @@ pub fn jit_eval(
     let mut flags_builder = cranelift_codegen::settings::builder();
     flags_builder
         .set("preserve_frame_pointers", "true")
-        .map_err(|e| CodegenError::Cranelift { reason: format!("set preserve_frame_pointers: {e}") })?;
+        .map_err(|e| CodegenError::Cranelift {
+            reason: format!("set preserve_frame_pointers: {e}"),
+        })?;
     let flags = cranelift_codegen::settings::Flags::new(flags_builder);
 
-    let isa_builder = cranelift_native::builder()
-        .map_err(|e| CodegenError::Cranelift { reason: format!("native isa builder: {e}") })?;
+    let isa_builder = cranelift_native::builder().map_err(|e| CodegenError::Cranelift {
+        reason: format!("native isa builder: {e}"),
+    })?;
     let isa = isa_builder
         .finish(flags)
-        .map_err(|e| CodegenError::Cranelift { reason: format!("isa finish: {e}") })?;
+        .map_err(|e| CodegenError::Cranelift {
+            reason: format!("isa finish: {e}"),
+        })?;
 
     let mut builder =
         cranelift_jit::JITBuilder::with_isa(isa, cranelift_module::default_libcall_names());
@@ -89,10 +94,16 @@ pub fn jit_eval(
     // Obtém o ponteiro da função entry.
     let entry_id = backend
         .get_name("__kata_entry")
-        .ok_or_else(|| CodegenError::Cranelift { reason: "__kata_entry não encontrado".into() })?;
+        .ok_or_else(|| CodegenError::Cranelift {
+            reason: "__kata_entry não encontrado".into(),
+        })?;
     let entry_fid = match entry_id {
         cranelift_module::FuncOrDataId::Func(fid) => fid,
-        _ => return Err(CodegenError::Cranelift { reason: "__kata_entry não é função".into() }),
+        _ => {
+            return Err(CodegenError::Cranelift {
+                reason: "__kata_entry não é função".into(),
+            });
+        }
     };
     let code = backend.get_finalized_function(entry_fid);
 
@@ -154,14 +165,19 @@ pub fn jit_compile_tests(
     let mut flags_builder = cranelift_codegen::settings::builder();
     flags_builder
         .set("preserve_frame_pointers", "true")
-        .map_err(|e| CodegenError::Cranelift { reason: format!("set preserve_frame_pointers: {e}") })?;
+        .map_err(|e| CodegenError::Cranelift {
+            reason: format!("set preserve_frame_pointers: {e}"),
+        })?;
     let flags = cranelift_codegen::settings::Flags::new(flags_builder);
 
-    let isa_builder = cranelift_native::builder()
-        .map_err(|e| CodegenError::Cranelift { reason: format!("native isa builder: {e}") })?;
+    let isa_builder = cranelift_native::builder().map_err(|e| CodegenError::Cranelift {
+        reason: format!("native isa builder: {e}"),
+    })?;
     let isa = isa_builder
         .finish(flags)
-        .map_err(|e| CodegenError::Cranelift { reason: format!("isa finish: {e}") })?;
+        .map_err(|e| CodegenError::Cranelift {
+            reason: format!("isa finish: {e}"),
+        })?;
 
     let mut builder =
         cranelift_jit::JITBuilder::with_isa(isa, cranelift_module::default_libcall_names());
@@ -227,14 +243,19 @@ pub fn jit_eval_repl(
     let mut flags_builder = cranelift_codegen::settings::builder();
     flags_builder
         .set("preserve_frame_pointers", "true")
-        .map_err(|e| CodegenError::Cranelift { reason: format!("set preserve_frame_pointers: {e}") })?;
+        .map_err(|e| CodegenError::Cranelift {
+            reason: format!("set preserve_frame_pointers: {e}"),
+        })?;
     let flags = cranelift_codegen::settings::Flags::new(flags_builder);
 
-    let isa_builder = cranelift_native::builder()
-        .map_err(|e| CodegenError::Cranelift { reason: format!("native isa builder: {e}") })?;
+    let isa_builder = cranelift_native::builder().map_err(|e| CodegenError::Cranelift {
+        reason: format!("native isa builder: {e}"),
+    })?;
     let isa = isa_builder
         .finish(flags)
-        .map_err(|e| CodegenError::Cranelift { reason: format!("isa finish: {e}") })?;
+        .map_err(|e| CodegenError::Cranelift {
+            reason: format!("isa finish: {e}"),
+        })?;
 
     let mut builder =
         cranelift_jit::JITBuilder::with_isa(isa, cranelift_module::default_libcall_names());
@@ -245,7 +266,7 @@ pub fn jit_eval_repl(
     // Registrar function pointers das funções persistidas de linhas anteriores.
     // O nome do símbolo é o `cranelift_name` da linha original — o mesmo nome
     // que `lower_module` usa para declarar como `Linkage::Import`.
-    for (_fn_hash, (sym_name, fn_ptr)) in prev_funcs {
+    for (sym_name, fn_ptr) in prev_funcs.values() {
         builder.symbol(sym_name, *fn_ptr);
     }
 
@@ -270,10 +291,16 @@ pub fn jit_eval_repl(
     // Obtém o ponteiro da função entry.
     let entry_id = backend
         .get_name("__kata_entry")
-        .ok_or_else(|| CodegenError::Cranelift { reason: "__kata_entry não encontrado".into() })?;
+        .ok_or_else(|| CodegenError::Cranelift {
+            reason: "__kata_entry não encontrado".into(),
+        })?;
     let entry_fid = match entry_id {
         cranelift_module::FuncOrDataId::Func(fid) => fid,
-        _ => return Err(CodegenError::Cranelift { reason: "__kata_entry não é função".into() }),
+        _ => {
+            return Err(CodegenError::Cranelift {
+                reason: "__kata_entry não é função".into(),
+            });
+        }
     };
     let code = backend.get_finalized_function(entry_fid);
 

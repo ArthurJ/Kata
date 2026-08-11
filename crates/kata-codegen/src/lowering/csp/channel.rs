@@ -139,7 +139,10 @@ pub(crate) fn lower_channel_create(
                 // Alocar tupla de 2 handles na arena (16 bytes).
                 let tup_size = ctx.builder.ins().iconst(I64, 16);
                 let alloc_fref = get_ffi(ctx, "kata_rt_arena_alloc")?;
-                let alloc_inst = ctx.builder.ins().call(alloc_fref, &[rt_val, arena, tup_size]);
+                let alloc_inst = ctx
+                    .builder
+                    .ins()
+                    .call(alloc_fref, &[rt_val, arena, tup_size]);
                 let tup_ptr = ctx.builder.inst_results(alloc_inst)[0];
                 ctx.builder.ins().store(flags, queue_tx, tup_ptr, 0);
                 ctx.builder.ins().store(flags, ipc_data_rx, tup_ptr, 8);
@@ -153,7 +156,7 @@ pub(crate) fn lower_channel_create(
         }
         ChannelKind::Broadcast => {
             if cross_process {
-                return Err(super::super::CodegenError::UnsupportedNode { node: 
+                return Err(super::super::CodegenError::UnsupportedNode { node:
                     "broadcast!() cross-process não suportado — o child não vê writes do parent após fork (COW copy)".into(),
                  });
             }

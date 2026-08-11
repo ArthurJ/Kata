@@ -38,7 +38,11 @@ impl std::fmt::Display for LoadError {
             LoadError::Lex(e) => write!(f, "erro léxico ao carregar módulo: {e}"),
             LoadError::Parse(e) => write!(f, "erro de parse ao carregar módulo: {e}"),
             LoadError::Resolve(errors) => {
-                write!(f, "erro de resolução ao carregar módulo: {}", crate::format_resolve_errors(errors))
+                write!(
+                    f,
+                    "erro de resolução ao carregar módulo: {}",
+                    crate::format_resolve_errors(errors)
+                )
             }
             LoadError::CircularImport { path } => {
                 write!(f, "ciclo de import detectado: `{path}`")

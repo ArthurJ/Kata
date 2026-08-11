@@ -12,7 +12,10 @@ fn infer_src(src: &str) -> Result<kata_inference::TypedModule, kata_diagnostics:
 
 fn main() {
     let cases = [
-        ("lambda 1 param (funciona)", "f :: Int => Int\nlambda x: - x 1\nf 5"),
+        (
+            "lambda 1 param (funciona)",
+            "f :: Int => Int\nlambda x: - x 1\nf 5",
+        ),
         (
             "lambda 2 params (- a b)",
             "f :: Int Int => Int\nlambda a b: - a b\nf 5 3",

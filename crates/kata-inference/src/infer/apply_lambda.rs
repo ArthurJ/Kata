@@ -42,7 +42,7 @@ pub(crate) fn infer_apply_lambda(
             expected: patterns.len(),
             found: args.len(),
             span: (*span).into(),
-        hint: None,
+            hint: None,
         });
     }
 
@@ -89,7 +89,7 @@ pub(crate) fn infer_apply_lambda_with_hint(
             expected: patterns.len(),
             found: args.len(),
             span: (*span).into(),
-        hint: None,
+            hint: None,
         });
     }
 
@@ -110,7 +110,7 @@ pub(crate) fn infer_apply_lambda_with_hint(
             expected: patterns.len(),
             found: hint_params.len(),
             span: (*span).into(),
-        hint: None,
+            hint: None,
         });
     }
 

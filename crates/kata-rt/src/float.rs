@@ -54,13 +54,12 @@ pub extern "C" fn kata_rt_fcmp_ge(a: f64, b: f64) -> i64 {
 /// Recebe o valor cru do codegen (SMI-tagged) e retorna f64.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_int_to_float(val: i64) -> f64 {
-    use crate::bigint::{bigint_to_string, is_smi_pub, decode_smi_pub};
-    let n = if is_smi_pub(val) {
+    use crate::bigint::{bigint_to_string, decode_smi_pub, is_smi_pub};
+    if is_smi_pub(val) {
         decode_smi_pub(val) as f64
     } else {
         bigint_to_string(val).parse::<f64>().unwrap_or(f64::NAN)
-    };
-    n
+    }
 }
 
 /// Converte Float para String.

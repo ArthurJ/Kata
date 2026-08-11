@@ -14,8 +14,8 @@
 //! (Int, Float, Boolean, Unit) são suportados — viram `IntLit`/`FloatLit`/
 //! `TextLit`/`Unit` directo na TAST.
 
-mod constness;
 mod constant_fold;
+mod constness;
 mod ctx;
 mod error;
 mod fold;
@@ -33,8 +33,8 @@ use kata_ast::Spanned;
 use kata_core::EnumRegistry;
 use kata_inference::{TypedExpr, TypedExprKind, TypedModule};
 
-use ctx::ModuleCtx;
 use constness::is_comptime_available;
+use ctx::ModuleCtx;
 use fold::fold_literal_calls;
 use jit::jit_execute_expr;
 use predicates::validate_pending_predicates;
@@ -169,9 +169,7 @@ pub fn run_comptime_pass(
 
             if !is_comptime_available(&value_clone, &comptime_bindings) {
                 return Err(ComptimeError::NotConsttime {
-                    reason: format!(
-                        "constant {name} — expressão depende de valor runtime"
-                    ),
+                    reason: format!("constant {name} — expressão depende de valor runtime"),
                 });
             }
             check_purity(&value_clone)?;
@@ -185,7 +183,7 @@ pub fn run_comptime_pass(
             )?;
             // Substituir o value do ConstantBinding pelo literal.
             if let TypedExprKind::ConstantBinding { value, .. } = &mut binding.node.kind {
-                *value = Box::new(Spanned::new(literal.clone(), value_span));
+                **value = Spanned::new(literal.clone(), value_span);
             }
             comptime_bindings.insert(name, literal);
             changed = true;
@@ -273,14 +271,8 @@ pub fn run_comptime_pass(
     // que não têm acesso ao var_map do entry point (onde constants são
     // registradas). Esta passagem substitui Ident(name) pelo literal/snapshot
     // quando name é uma constant e não está mascarado por um binding local.
-    constant_fold::fold_constant_refs_in_functions(
-        &mut current.functions,
-        &comptime_bindings,
-    )?;
-    constant_fold::fold_constant_refs_in_actions(
-        &mut current.actions,
-        &comptime_bindings,
-    )?;
+    constant_fold::fold_constant_refs_in_functions(&mut current.functions, &comptime_bindings)?;
+    constant_fold::fold_constant_refs_in_actions(&mut current.actions, &comptime_bindings)?;
 
     // ── Fase 4: Validar predicados complexos pendentes ──
     // TypeAscription com pending_predicates foi produzida pelo typeck quando

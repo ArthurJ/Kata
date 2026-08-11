@@ -35,19 +35,23 @@ pub(crate) fn lower_map(
     let arena = arena_handle(ctx);
 
     // nil = kata_rt_list_nil()
-    let nil_ref = ctx
-        .ffi_refs
-        .get("kata_rt_list_nil")
-        .ok_or_else(|| CodegenError::FfiSymbolNotFound { symbol: "kata_rt_list_nil".into() })?;
+    let nil_ref =
+        ctx.ffi_refs
+            .get("kata_rt_list_nil")
+            .ok_or_else(|| CodegenError::FfiSymbolNotFound {
+                symbol: "kata_rt_list_nil".into(),
+            })?;
     let nil_call = ctx.builder.ins().call(*nil_ref, &[]);
     let acc_var = ctx.new_var("__map_acc", I64);
     ctx.builder
         .def_var(acc_var, ctx.builder.inst_results(nil_call)[0]);
 
-    let cons_ref = ctx
-        .ffi_refs
-        .get("kata_rt_list_cons")
-        .ok_or_else(|| CodegenError::FfiSymbolNotFound { symbol: "kata_rt_list_cons".into() })?;
+    let cons_ref =
+        ctx.ffi_refs
+            .get("kata_rt_list_cons")
+            .ok_or_else(|| CodegenError::FfiSymbolNotFound {
+                symbol: "kata_rt_list_cons".into(),
+            })?;
 
     let loop_block = ctx.builder.create_block();
     let continue_block = ctx.builder.create_block();
@@ -169,9 +173,9 @@ pub(crate) fn lower_map(
             ctx.builder.seal_block(continue_block);
         }
         _ => {
-            return Err(CodegenError::UnsupportedNode { node: format!(
-                "Map sobre tipo não-coleção: {coll_ty:?}"
-            ) });
+            return Err(CodegenError::UnsupportedNode {
+                node: format!("Map sobre tipo não-coleção: {coll_ty:?}"),
+            });
         }
     }
 
@@ -180,10 +184,11 @@ pub(crate) fn lower_map(
     ctx.builder.switch_to_block(break_block);
     ctx.builder.seal_block(break_block);
     let acc = ctx.builder.use_var(acc_var);
-    let reverse_ref = ctx
-        .ffi_refs
-        .get("kata_rt_list_reverse")
-        .ok_or_else(|| CodegenError::FfiSymbolNotFound { symbol: "kata_rt_list_reverse".into() })?;
+    let reverse_ref = ctx.ffi_refs.get("kata_rt_list_reverse").ok_or_else(|| {
+        CodegenError::FfiSymbolNotFound {
+            symbol: "kata_rt_list_reverse".into(),
+        }
+    })?;
     let call = ctx.builder.ins().call(*reverse_ref, &[acc, arena]);
     let reversed = ctx.builder.inst_results(call)[0];
 

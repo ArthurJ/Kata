@@ -127,10 +127,7 @@ pub enum Item {
     /// `constant nome := expr` — declara constante de módulo.
     /// Top-level only. RHS é implicitamente comptime-avaliado.
     /// `constant _ := expr` é válido (descarta binding, só side effect).
-    ConstantDecl {
-        name: String,
-        value: Spanned<Expr>,
-    },
+    ConstantDecl { name: String, value: Spanned<Expr> },
 
     /// Última expressão top-level — entry point implícito (I5).
     /// `+ 1 2` num arquivo é EntryExpr.

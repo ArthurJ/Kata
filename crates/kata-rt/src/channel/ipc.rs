@@ -214,7 +214,8 @@ pub(super) unsafe fn try_ipc_recv(handle: i64, arena: i64, out: *mut i64) -> boo
     // Reconstrói o blob completo (8 bytes header + content) em uma
     // alocação e chama from_bytes.
     let blob_size = 8 + total;
-    let blob_ptr = crate::arena::kata_rt_arena_alloc(crate::arena::rt_ptr(), arena, blob_size as i64);
+    let blob_ptr =
+        crate::arena::kata_rt_arena_alloc(crate::arena::rt_ptr(), arena, blob_size as i64);
     if blob_ptr == 0 {
         return false;
     }
@@ -338,5 +339,3 @@ pub(crate) unsafe fn ipc_read_fd(handle: i64) -> i32 {
     let inner = unsafe { &*(ptr as *const IpcChannelInner) };
     inner.read_fd
 }
-
-

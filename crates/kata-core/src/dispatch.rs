@@ -106,7 +106,7 @@ pub struct PartialProjections {
 #[derive(Debug, Clone)]
 pub enum PartialResolveOutcome {
     /// Uma única overload casou — caminho existente.
-    Unique(PartialDispatchResult),
+    Unique(Box<PartialDispatchResult>),
     /// Múltiplas overloads casam — carrega projeções para OverloadSet.
     Ambiguous(PartialProjections),
 }
@@ -346,10 +346,12 @@ impl DispatchTable {
 
         if all_same {
             // Todos casam com o mesmo overload (ex: comutatividade duplicou) — retorna o primeiro
-            return Ok(PartialResolveOutcome::Unique(PartialDispatchResult {
-                overload: candidates[0].0.clone(),
-                hole_types: candidates[0].1.clone(),
-            }));
+            return Ok(PartialResolveOutcome::Unique(Box::new(
+                PartialDispatchResult {
+                    overload: candidates[0].0.clone(),
+                    hole_types: candidates[0].1.clone(),
+                },
+            )));
         }
 
         // Múltiplos overloads distintos casam → ambíguo com projeções.
@@ -360,10 +362,7 @@ impl DispatchTable {
         let mut projections: Vec<(Vec<Ty>, Ty)> = Vec::new();
         for (info, hole_types) in &candidates {
             // Extrai os tipos das posições None (holes) como os params do lambda.
-            let proj_params: Vec<Ty> = hole_types
-                .iter()
-                .filter_map(|h| h.clone())
-                .collect();
+            let proj_params: Vec<Ty> = hole_types.iter().filter_map(|h| h.clone()).collect();
             let proj = (proj_params, info.ret.clone());
             let proj_key = (proj.0.clone(), proj.1.clone());
             if seen.insert(proj_key) {

@@ -47,7 +47,8 @@ impl Serializer {
     fn write_appended_ptr(&mut self, appended_offset: usize) {
         self.align_main();
         let pos = self.main.len();
-        self.main.extend_from_slice(&(appended_offset as i64).to_le_bytes());
+        self.main
+            .extend_from_slice(&(appended_offset as i64).to_le_bytes());
         self.appended_rebase_offsets.push(pos);
     }
 
@@ -188,7 +189,12 @@ fn serialize_list(ser: &mut Serializer, rt: i64, ptr: i64, elem_ty: &TypeShape) 
 ///
 /// Serializa um valor em um blob `Bytes` com header estendido.
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_to_bytes(rt: i64, value_ptr: i64, type_id: i64, arena_handle: i64) -> i64 {
+pub extern "C" fn kata_rt_to_bytes(
+    rt: i64,
+    value_ptr: i64,
+    type_id: i64,
+    arena_handle: i64,
+) -> i64 {
     let ty = match get_type_shape(rt, type_id) {
         Some(t) => t,
         None => return 0,

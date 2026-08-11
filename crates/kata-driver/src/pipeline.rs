@@ -25,16 +25,14 @@ use kata_comptime::run_comptime_pass;
 use kata_core::ty::Ty;
 use kata_inference::infer_module;
 use kata_lexer::lex_with_recovery;
-use kata_monomorph::{monomorphize, MonoModule};
+use kata_monomorph::{MonoModule, monomorphize};
 use kata_optimizer::optimize;
-use kata_parser::{
-    parse_decls_only, parse_with_arity_recovery, parse_with_recovery, scan_lambdas,
-};
-use kata_resolution::{extract_arities, load_prelude, resolve_with_imports, ResolvedModule};
+use kata_parser::{parse_decls_only, parse_with_arity_recovery, parse_with_recovery, scan_lambdas};
+use kata_resolution::{ResolvedModule, extract_arities, load_prelude, resolve_with_imports};
 use kata_tree_shaking::{tree_shake, tree_shake_preserve_tests};
 
 use crate::imports;
-use crate::{merge_resolved, IntoReport};
+use crate::{IntoReport, merge_resolved};
 
 // ── Erros ─────────────────────────────────────────────────
 
@@ -98,8 +96,9 @@ impl CompiledModule {
         // antes do drop (o raw é lido imediatamente neste escopo).
         let rt = Box::new(kata_rt::Runtime::new());
         let rt_ptr = Box::into_raw(rt) as i64;
-        let result = kata_codegen::jit_eval(&self.mono, &self.type_id_map, &self.type_shapes, rt_ptr)
-            .map_err(|e| e.into_report_with_source(&self.source, self.file_path.as_deref()))?;
+        let result =
+            kata_codegen::jit_eval(&self.mono, &self.type_id_map, &self.type_shapes, rt_ptr)
+                .map_err(|e| e.into_report_with_source(&self.source, self.file_path.as_deref()))?;
         // Droppar o Runtime após consumir o resultado. Se o valor retornado
         // é um ponteiro para arena (List, Struct), o display já aconteceu
         // ou o raw já foi lido. Para segurança, leak como antes se necessário.
@@ -285,9 +284,7 @@ impl Pipeline {
             .as_ref()
             .ok_or_else(|| err("resolve chamado antes de parse"))?;
 
-        let prelude = load_prelude().map_err(|e| {
-            resolve_errors_to_reports(&e, "", None)
-        })?;
+        let prelude = load_prelude().map_err(|e| resolve_errors_to_reports(&e, "", None))?;
 
         let imports = match file_path {
             Some(file) => imports::load_module_imports(file, module).map_err(one_err)?,
@@ -330,8 +327,9 @@ impl Pipeline {
             .as_ref()
             .ok_or_else(|| err("infer chamado antes de resolve"))?;
 
-        let mut typed = infer_module(module, resolved)
-            .map_err(|e| one_err(e.into_report_with_source(&self.source, self.file_path.as_deref())))?;
+        let mut typed = infer_module(module, resolved).map_err(|e| {
+            one_err(e.into_report_with_source(&self.source, self.file_path.as_deref()))
+        })?;
 
         // Display wrapping: se ativado, envolve o entry point com `show`
         // para que o driver possa imprimir tipos compostos como Text.
@@ -398,8 +396,9 @@ impl Pipeline {
             .enum_registry
             .clone();
 
-        let shaken = run_comptime_pass(mono.inner, &enum_registry)
-            .map_err(|e| one_err(e.into_report_with_source(&self.source, self.file_path.as_deref())))?;
+        let shaken = run_comptime_pass(mono.inner, &enum_registry).map_err(|e| {
+            one_err(e.into_report_with_source(&self.source, self.file_path.as_deref()))
+        })?;
         self.mono = Some(MonoModule::from(shaken));
         Ok(self)
     }

@@ -52,8 +52,8 @@ pub(crate) fn lower_for_in(
                 .ffi_refs
                 .get("kata_rt_yield_check")
                 .copied()
-                .ok_or_else(|| {
-                    super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_yield_check".into() }
+                .ok_or_else(|| super::CodegenError::FfiSymbolNotFound {
+                    symbol: "kata_rt_yield_check".into(),
                 })?;
             let rt_val = ctx.rt.unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
             ctx.builder.ins().call(yc, &[rt_val]);
@@ -115,8 +115,8 @@ pub(crate) fn lower_for_in(
                 .ffi_refs
                 .get("kata_rt_yield_check")
                 .copied()
-                .ok_or_else(|| {
-                    super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_yield_check".into() }
+                .ok_or_else(|| super::CodegenError::FfiSymbolNotFound {
+                    symbol: "kata_rt_yield_check".into(),
                 })?;
             let rt_val = ctx.rt.unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
             ctx.builder.ins().call(yc, &[rt_val]);
@@ -178,8 +178,8 @@ pub(crate) fn lower_for_in(
                 .ffi_refs
                 .get("kata_rt_yield_check")
                 .copied()
-                .ok_or_else(|| {
-                    super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_yield_check".into() }
+                .ok_or_else(|| super::CodegenError::FfiSymbolNotFound {
+                    symbol: "kata_rt_yield_check".into(),
                 })?;
             let rt_val = ctx.rt.unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
             ctx.builder.ins().call(yc, &[rt_val]);
@@ -221,9 +221,9 @@ pub(crate) fn lower_for_in(
             ctx.builder.seal_block(continue_block);
         }
         _ => {
-            return Err(super::CodegenError::UnsupportedNode { node: format!(
-                "ForIn sobre tipo não-iterável: {coll_ty:?}"
-            ) });
+            return Err(super::CodegenError::UnsupportedNode {
+                node: format!("ForIn sobre tipo não-iterável: {coll_ty:?}"),
+            });
         }
     }
 

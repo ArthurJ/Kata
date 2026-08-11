@@ -45,19 +45,23 @@ pub(crate) fn lower_fused_stream(
     let arena = arena_handle(ctx);
 
     // nil = kata_rt_list_nil()
-    let nil_ref = ctx
-        .ffi_refs
-        .get("kata_rt_list_nil")
-        .ok_or_else(|| CodegenError::FfiSymbolNotFound { symbol: "kata_rt_list_nil".into() })?;
+    let nil_ref =
+        ctx.ffi_refs
+            .get("kata_rt_list_nil")
+            .ok_or_else(|| CodegenError::FfiSymbolNotFound {
+                symbol: "kata_rt_list_nil".into(),
+            })?;
     let nil_call = ctx.builder.ins().call(*nil_ref, &[]);
     let acc_var = ctx.new_var("__fused_acc", I64);
     ctx.builder
         .def_var(acc_var, ctx.builder.inst_results(nil_call)[0]);
 
-    let cons_ref = ctx
-        .ffi_refs
-        .get("kata_rt_list_cons")
-        .ok_or_else(|| CodegenError::FfiSymbolNotFound { symbol: "kata_rt_list_cons".into() })?;
+    let cons_ref =
+        ctx.ffi_refs
+            .get("kata_rt_list_cons")
+            .ok_or_else(|| CodegenError::FfiSymbolNotFound {
+                symbol: "kata_rt_list_cons".into(),
+            })?;
 
     let loop_block = ctx.builder.create_block();
     let continue_block = ctx.builder.create_block();
@@ -266,9 +270,9 @@ pub(crate) fn lower_fused_stream(
             ctx.builder.seal_block(continue_block);
         }
         _ => {
-            return Err(CodegenError::UnsupportedNode { node: format!(
-                "FusedStream sobre tipo nao-colecao: {coll_ty:?}"
-            ) });
+            return Err(CodegenError::UnsupportedNode {
+                node: format!("FusedStream sobre tipo nao-colecao: {coll_ty:?}"),
+            });
         }
     }
 
@@ -276,10 +280,11 @@ pub(crate) fn lower_fused_stream(
     ctx.builder.switch_to_block(break_block);
     ctx.builder.seal_block(break_block);
     let acc = ctx.builder.use_var(acc_var);
-    let reverse_ref = ctx
-        .ffi_refs
-        .get("kata_rt_list_reverse")
-        .ok_or_else(|| CodegenError::FfiSymbolNotFound { symbol: "kata_rt_list_reverse".into() })?;
+    let reverse_ref = ctx.ffi_refs.get("kata_rt_list_reverse").ok_or_else(|| {
+        CodegenError::FfiSymbolNotFound {
+            symbol: "kata_rt_list_reverse".into(),
+        }
+    })?;
     let call = ctx.builder.ins().call(*reverse_ref, &[acc, arena]);
     let reversed = ctx.builder.inst_results(call)[0];
 
@@ -307,9 +312,7 @@ fn apply_stages(
 
     for (i, stage) in stages.iter().enumerate() {
         match stage {
-            FusedStage::Filter {
-                input_elem_ty: _, ..
-            } => {
+            FusedStage::Filter { .. } => {
                 // Se keep já é 0, skip o predicado (AND curto-circuito).
                 // Mas Cranelift nao tem short-circuit nativo em SSA.
                 // Solucao: sempre chama o predicado, faz AND com keep.
@@ -325,11 +328,7 @@ fn apply_stages(
                 let pred_i64 = ensure_i64(ctx, pred_result);
                 keep = ctx.builder.ins().band(keep, pred_i64);
             }
-            FusedStage::Map {
-                input_elem_ty: _,
-                output_elem_ty: _,
-                ..
-            } => {
+            FusedStage::Map { .. } => {
                 // Se keep é 0, o Map não precisa ser aplicado (elemento ja descartado).
                 // Mas em SSA não dá para skip condicional sem blocks.
                 // Aplicamos sempre — o resultado é ignorado se keep = 0.

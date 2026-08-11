@@ -49,8 +49,10 @@ fn dod27_partial_dispatch_resolves_int() {
             overloads: vec![
                 (vec![Ty::int()], Ty::int()),
                 (vec![Ty::float()], Ty::float()),
-                (vec![Ty::Prim(kata_core::ty::PrimTy::Rational)],
-                 Ty::Prim(kata_core::ty::PrimTy::Rational)),
+                (
+                    vec![Ty::Prim(kata_core::ty::PrimTy::Rational)],
+                    Ty::Prim(kata_core::ty::PrimTy::Rational)
+                ),
             ],
         },
         "+ 10 _ deve ser OverloadSet(+, [Int], [Float], [Rational])"

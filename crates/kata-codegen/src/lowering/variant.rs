@@ -32,7 +32,9 @@ pub(crate) fn lower_variant_qual(
     let func_ref = ctx
         .ffi_refs
         .get("kata_rt_store_sum_result")
-        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_store_sum_result".into() })?;
+        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound {
+            symbol: "kata_rt_store_sum_result".into(),
+        })?;
     let call_inst = ctx
         .builder
         .ins()
@@ -69,7 +71,9 @@ pub(crate) fn lower_variant_construct(
     let func_ref = ctx
         .ffi_refs
         .get("kata_rt_store_sum_result")
-        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_store_sum_result".into() })?;
+        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound {
+            symbol: "kata_rt_store_sum_result".into(),
+        })?;
     let call_inst = ctx
         .builder
         .ins()

@@ -76,6 +76,7 @@ pub(crate) enum YieldReason {
     /// `Err("timeout")`, que `kata_rt_run` mapeia para `TIMEOUT_SENTINEL`.
     Timeout,
     /// Não usado — fiber completou. Existe para exaustividade do enum.
+    #[allow(dead_code)] // variant usado em match arms mas não construído
     Done,
 }
 
@@ -149,7 +150,8 @@ fn trampoline(
     // O ptr é estável enquanto o fiber não completa — criado em `fiber_start`
     // no stack do fiber, reusado em todas as suspensões/resumes do mesmo fiber.
     LAST_SUSPEND_PTR.with(|cell| cell.set(suspend as *mut _));
-    let func: extern "C" fn(i64, i64, i64, i64) -> i64 = unsafe { core::mem::transmute(args.fn_ptr) };
+    let func: extern "C" fn(i64, i64, i64, i64) -> i64 =
+        unsafe { core::mem::transmute(args.fn_ptr) };
     func(args.rt, args.fiber_arena, args.caller_arena, args.args_ptr)
 }
 

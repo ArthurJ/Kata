@@ -152,7 +152,7 @@ pub(crate) fn reorder_dict_args_to_tuple(
     // Busca a função/action no DispatchTable para obter os nomes dos params.
     let overloads = ctx.table.get_overloads(callee).ok_or_else(|| {
         kata_diagnostics::MiddleError::UnboundName {
-                    suggestion: None,
+            suggestion: None,
             name: format!("Função `{callee}` não declarada"),
             span: span.into(),
         }

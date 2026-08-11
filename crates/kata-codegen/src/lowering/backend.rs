@@ -147,7 +147,9 @@ impl ModuleBackend for JitBackend {
     fn finalize(&mut self) -> Result<(), CodegenError> {
         self.inner
             .finalize_definitions()
-            .map_err(|e| CodegenError::Cranelift { reason: format!("finalize_definitions: {e}") })
+            .map_err(|e| CodegenError::Cranelift {
+                reason: format!("finalize_definitions: {e}"),
+            })
     }
 }
 
@@ -179,13 +181,12 @@ impl AotBackend {
     /// Específico de AOT — JIT retorna ponteiros, não bytes. Consome o
     /// `ObjectProduct` armazenado por `finalize()`.
     pub(crate) fn emit(&mut self) -> Result<Vec<u8>, CodegenError> {
-        let product = self
-            .product
-            .take()
-            .ok_or_else(|| CodegenError::Cranelift { reason: "emit() chamado antes de finalize()".into() })?;
-        product
-            .emit()
-            .map_err(|e| CodegenError::Cranelift { reason: format!("object emit: {e}") })
+        let product = self.product.take().ok_or_else(|| CodegenError::Cranelift {
+            reason: "emit() chamado antes de finalize()".into(),
+        })?;
+        product.emit().map_err(|e| CodegenError::Cranelift {
+            reason: format!("object emit: {e}"),
+        })
     }
 }
 
@@ -290,10 +291,9 @@ impl Module for AotBackend {
 
 impl ModuleBackend for AotBackend {
     fn finalize(&mut self) -> Result<(), CodegenError> {
-        let inner = self
-            .inner
-            .take()
-            .ok_or_else(|| CodegenError::Cranelift { reason: "finalize() chamado duas vezes".into() })?;
+        let inner = self.inner.take().ok_or_else(|| CodegenError::Cranelift {
+            reason: "finalize() chamado duas vezes".into(),
+        })?;
         self.product = Some(inner.finish());
         Ok(())
     }

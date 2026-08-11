@@ -43,7 +43,8 @@ fn two_param_lambda_without_context_fails() {
     let tokens = lex("lambda x y: + x y").unwrap();
     let module = parse(tokens).unwrap();
     let prelude = load_prelude().unwrap();
-    let tmod = infer_module(&module, &prelude).expect("lambda x y: + x y deve succeed com OverloadSet");
+    let tmod =
+        infer_module(&module, &prelude).expect("lambda x y: + x y deve succeed com OverloadSet");
     let entry = &tmod.entry.node;
     assert!(
         matches!(&entry.ty, Ty::OverloadSet { name, .. } if name == "+"),
@@ -72,8 +73,8 @@ fn lambda_inference_fail_has_detail() {
     let tokens = lex("lambda x y: < x y").unwrap();
     let module = parse(tokens).unwrap();
     let prelude = load_prelude().unwrap();
-    let tmod = infer_module(&module, &prelude)
-        .expect("lambda x y: < x y deve succeed com OverloadSet");
+    let tmod =
+        infer_module(&module, &prelude).expect("lambda x y: < x y deve succeed com OverloadSet");
     let entry = &tmod.entry.node;
     assert!(
         matches!(&entry.ty, Ty::OverloadSet { name, .. } if name == "<"),

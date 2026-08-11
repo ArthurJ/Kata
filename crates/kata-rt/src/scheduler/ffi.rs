@@ -17,8 +17,6 @@
 use crate::fiber::{YieldReason, is_in_fiber, with_suspend};
 use crate::runtime::Runtime;
 
-use super::Scheduler;
-
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 use std::thread::{self, JoinHandle};
@@ -45,7 +43,7 @@ static PENDING_TIMER: Mutex<Option<JoinHandle<()>>> = Mutex::new(None);
 /// Cancela e espera a thread OS timer anterior terminar (`unpark` + `join`),
 /// depois reseta `TIMEOUT_EXPIRED`. Não toca o `Runtime` — o caller descarta
 /// o Runtime antigo e cria um novo.
-pub fn reset_test_timer() {
+pub(crate) fn reset_test_timer() {
     if let Some(handle) = PENDING_TIMER
         .lock()
         .expect("PENDING_TIMER não envenenado")
@@ -63,7 +61,7 @@ pub fn reset_test_timer() {
 /// `Runtime`. Mas `CURRENT_SUSPEND` (TLS) pode apontar para um Suspend
 /// dangling após timeout/drain, e o log TLS pode poluir. Esta função limpa
 /// apenas o que permanece em TLS.
-pub fn reset_tls_between_runs() {
+pub(crate) fn reset_tls_between_runs() {
     crate::fiber::clear_suspend_tls();
     crate::log::reset_log();
     crate::snapshot::reset_snapshot_table();
@@ -112,11 +110,17 @@ pub extern "C" fn kata_rt_spawn(rt: i64, fn_ptr: i64, caller_arena: i64, args_pt
     let runtime = unsafe { &mut *(rt as *mut Runtime) };
     if is_in_fiber() {
         // Dentro de fiber — enfileirar em pending_spawns (campo do scheduler).
-        runtime.scheduler.pending_spawns.push((fn_ptr, rt, caller_arena, args_ptr));
+        runtime
+            .scheduler
+            .pending_spawns
+            .push((fn_ptr, rt, caller_arena, args_ptr));
         0
     } else {
         // Fora de fiber — spawn direto.
-        match runtime.scheduler.spawn(&mut runtime.arenas, fn_ptr, rt, caller_arena, args_ptr) {
+        match runtime
+            .scheduler
+            .spawn(&mut runtime.arenas, fn_ptr, rt, caller_arena, args_ptr)
+        {
             Ok(id) => id as i64,
             Err(_e) => {
                 eprintln!("kata_rt_spawn: erro ao criar fiber: {_e}");

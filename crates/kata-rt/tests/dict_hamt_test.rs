@@ -1,6 +1,7 @@
-use kata_rt::{Runtime, kata_rt_arena_create, kata_rt_dict_contains, kata_rt_dict_empty, kata_rt_dict_get_checked,
-    kata_rt_dict_insert, kata_rt_dict_len, kata_rt_dict_next, kata_rt_dict_remove,
-    kata_rt_hash_int,
+use kata_rt::{
+    Runtime, kata_rt_arena_create, kata_rt_dict_contains, kata_rt_dict_empty,
+    kata_rt_dict_get_checked, kata_rt_dict_insert, kata_rt_dict_len, kata_rt_dict_next,
+    kata_rt_dict_remove, kata_rt_hash_int,
 };
 
 /// Cria um Runtime para o teste e retorna o ponteiro `i64` a ser passado

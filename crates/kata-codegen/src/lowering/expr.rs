@@ -42,7 +42,9 @@ pub(crate) fn lower_expr(
                 // i64 mas não cabe em SMI — chama kata_rt_tag_int(val).
                 let raw = ctx.builder.ins().iconst(I64, val);
                 let func_ref = ctx.ffi_refs.get("kata_rt_tag_int").ok_or_else(|| {
-                    super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_tag_int".into() }
+                    super::CodegenError::FfiSymbolNotFound {
+                        symbol: "kata_rt_tag_int".into(),
+                    }
                 })?;
                 let call_inst = ctx.builder.ins().call(*func_ref, &[raw]);
                 return Ok(ctx.builder.inst_results(call_inst)[0]);
@@ -57,8 +59,8 @@ pub(crate) fn lower_expr(
             let func_ref = ctx
                 .ffi_refs
                 .get("kata_rt_tag_int_from_str")
-                .ok_or_else(|| {
-                    super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_tag_int_from_str".into() }
+                .ok_or_else(|| super::CodegenError::FfiSymbolNotFound {
+                    symbol: "kata_rt_tag_int_from_str".into(),
                 })?;
             let call_inst = ctx.builder.ins().call(*func_ref, &[ptr, len]);
             Ok(ctx.builder.inst_results(call_inst)[0])
@@ -95,7 +97,9 @@ pub(crate) fn lower_expr(
                 .or(ctx.caller_arena)
                 .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
             let from_ptr_ref = ctx.ffi_refs.get("kata_rt_bytes_from_ptr").ok_or_else(|| {
-                super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_bytes_from_ptr".into() }
+                super::CodegenError::FfiSymbolNotFound {
+                    symbol: "kata_rt_bytes_from_ptr".into(),
+                }
             })?;
             let call_inst = ctx
                 .builder
@@ -179,9 +183,9 @@ pub(crate) fn lower_expr(
             if let Ty::OverloadSet { .. } = &expr.ty {
                 return Ok(ctx.builder.ins().iconst(I64, 0));
             }
-            Err(super::CodegenError::UnsupportedNode { node: format!(
-                "unbound ident: {name}"
-            ) })
+            Err(super::CodegenError::UnsupportedNode {
+                node: format!("unbound ident: {name}"),
+            })
         }
 
         // ── Closure: call FFI, call direto (Kata), ou call_indirect ──
@@ -211,7 +215,9 @@ pub(crate) fn lower_expr(
                         .global_value(ctx.module.target_config().pointer_type(), global);
                     let len = ctx.builder.ins().iconst(I64, text.len() as i64);
                     let func_ref = ctx.ffi_refs.get("kata_rt_rat_literal").ok_or_else(|| {
-                        super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_rat_literal".into() }
+                        super::CodegenError::FfiSymbolNotFound {
+                            symbol: "kata_rt_rat_literal".into(),
+                        }
                     })?;
                     let call_inst = ctx.builder.ins().call(*func_ref, &[ptr, len]);
                     Ok(ctx.builder.inst_results(call_inst)[0])
@@ -225,7 +231,9 @@ pub(crate) fn lower_expr(
                         .global_value(ctx.module.target_config().pointer_type(), global);
                     let len = ctx.builder.ins().iconst(I64, text.len() as i64);
                     let func_ref = ctx.ffi_refs.get("kata_rt_rat_literal").ok_or_else(|| {
-                        super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_rat_literal".into() }
+                        super::CodegenError::FfiSymbolNotFound {
+                            symbol: "kata_rt_rat_literal".into(),
+                        }
                     })?;
                     let call_inst = ctx.builder.ins().call(*func_ref, &[ptr, len]);
                     Ok(ctx.builder.inst_results(call_inst)[0])
@@ -257,10 +265,9 @@ pub(crate) fn lower_expr(
                     }
                 }
                 // Demais casos: o typeck já deveria ter rejeitado.
-                _ => Err(super::CodegenError::UnsupportedNode { node: format!(
-                    "ascription não suportada: {:?} → {}",
-                    inner.kind, target_ty
-                ) }),
+                _ => Err(super::CodegenError::UnsupportedNode {
+                    node: format!("ascription não suportada: {:?} → {}", inner.kind, target_ty),
+                }),
             }
         }
 
@@ -457,7 +464,9 @@ pub(crate) fn lower_expr(
             let func_id = ctx
                 .module
                 .declare_function(&name, Linkage::Export, &sig)
-                .map_err(|e| super::CodegenError::Cranelift { reason: format!("declare fn {name}: {e}") })?;
+                .map_err(|e| super::CodegenError::Cranelift {
+                    reason: format!("declare fn {name}: {e}"),
+                })?;
 
             // Compila o corpo usando o pipeline compartilhado.
             crate::lowering::function_def::define_function_body(
@@ -529,11 +538,12 @@ pub(crate) fn lower_expr(
         // ── Reassign — def_var com novo valor (variável já existe) ──
         TypedExprKind::Reassign { name, value } => {
             let val = lower_expr(&value.node, ctx)?;
-            let var = *ctx.var_map.get(name).ok_or_else(|| {
-                super::CodegenError::UnsupportedNode { node: format!(
-                    "Reassign: variável `{name}` não encontrada no var_map"
-                ) }
-            })?;
+            let var =
+                *ctx.var_map
+                    .get(name)
+                    .ok_or_else(|| super::CodegenError::UnsupportedNode {
+                        node: format!("Reassign: variável `{name}` não encontrada no var_map"),
+                    })?;
             ctx.builder.def_var(var, val);
             // Reassign retorna Unit.
             Ok(ctx.builder.ins().iconst(I64, 0))
@@ -687,7 +697,9 @@ pub(crate) fn lower_expr(
         // o ponteiro da string (após rebasing, aponta para a appended).
         TypedExprKind::HeapSnapshot { snapshot_id, ty } => {
             let func_ref = ctx.ffi_refs.get("kata_rt_get_snapshot").ok_or_else(|| {
-                super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_get_snapshot".into() }
+                super::CodegenError::FfiSymbolNotFound {
+                    symbol: "kata_rt_get_snapshot".into(),
+                }
             })?;
             let id_val = ctx.builder.ins().iconst(I64, *snapshot_id as i64);
             let call = ctx.builder.ins().call(*func_ref, &[id_val]);
@@ -717,8 +729,6 @@ pub(crate) fn lower_expr(
         }
         // ConstantBinding — não deveria chegar ao codegen (comptime pass
         // avalia e substitui). Fallback defensivo: lowerar o value.
-        TypedExprKind::ConstantBinding { value, .. } => {
-            lower_expr(&value.node, ctx)
-        }
+        TypedExprKind::ConstantBinding { value, .. } => lower_expr(&value.node, ctx),
     }
 }

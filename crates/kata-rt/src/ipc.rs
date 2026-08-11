@@ -70,7 +70,12 @@ fn ensure_signal_handlers() {
 /// - `args_ptr` deve ser um ponteiro válido na arena do parent.
 /// - `arena_handle` deve ser um handle de arena válido.
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_spawn_process(rt: i64, fn_ptr: i64, args_ptr: i64, arena_handle: i64) -> i64 {
+pub extern "C" fn kata_rt_spawn_process(
+    _rt: i64,
+    fn_ptr: i64,
+    args_ptr: i64,
+    arena_handle: i64,
+) -> i64 {
     // Instalar SIG_IGN para SIGCHLD e SIGPIPE antes do fork(). Idempotente
     // via Once — programas que nunca fazem spawn! não são afetados.
     // O child herda ambos os dispositions via fork().

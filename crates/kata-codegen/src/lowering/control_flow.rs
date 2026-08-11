@@ -56,8 +56,8 @@ pub(crate) fn lower_control_flow(
                 .ffi_refs
                 .get("kata_rt_yield_check")
                 .copied()
-                .ok_or_else(|| {
-                    super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_yield_check".into() }
+                .ok_or_else(|| super::CodegenError::FfiSymbolNotFound {
+                    symbol: "kata_rt_yield_check".into(),
                 })?;
             let rt_val = ctx.rt.unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
             ctx.builder.ins().call(yield_check_ref, &[rt_val]);

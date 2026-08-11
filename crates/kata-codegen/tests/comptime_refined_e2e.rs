@@ -85,7 +85,8 @@ fn eval_with_comptime(src: &str) -> Result<(i64, Ty), String> {
     let typed = run_comptime_pass(typed.inner, &resolved.enum_registry)
         .map_err(|e| format!("comptime: {e:?}"))?;
     let typed = kata_monomorph::MonoModule::from(typed);
-    let jit = jit_eval(&typed, &Default::default(), &[], leak_rt_ptr()).map_err(|e| format!("codegen: {e:?}"))?;
+    let jit = jit_eval(&typed, &Default::default(), &[], leak_rt_ptr())
+        .map_err(|e| format!("codegen: {e:?}"))?;
     Ok((jit.raw, jit.ty))
 }
 

@@ -4,10 +4,7 @@
 //! recursive insert/get/remove/collect operations, and the `pub(super)`
 //! internal API wrappers used by the FFI layer in `dict/mod.rs`.
 
-use super::{
-    COLLISION_SENTINEL, COLLISION_TAG, EqFn, HASH_BITS, HASH_LEVELS, HASH_MASK, ITER_ARRAY,
-    ITER_COUNT, LEAF_TAG,
-};
+use super::{COLLISION_SENTINEL, COLLISION_TAG, EqFn, HASH_BITS, HASH_LEVELS, HASH_MASK, LEAF_TAG};
 
 // ── Helpers ──────────────────────────────────────────────
 

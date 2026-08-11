@@ -128,7 +128,10 @@ pub(crate) fn lower_select(
     // Alocar array de channel handles (se houver channel arms).
     let chan_ptr = if !channel_arms.is_empty() {
         let array_size = ctx.builder.ins().iconst(I64, n_c * 8);
-        let alloc_inst = ctx.builder.ins().call(alloc_fref, &[rt_val, arena, array_size]);
+        let alloc_inst = ctx
+            .builder
+            .ins()
+            .call(alloc_fref, &[rt_val, arena, array_size]);
         let ptr = ctx.builder.inst_results(alloc_inst)[0];
 
         for (j, (_orig, channel, _recv_ty, _bind_name, _body)) in channel_arms.iter().enumerate() {
@@ -145,7 +148,10 @@ pub(crate) fn lower_select(
     // Alocar array de file handles (se houver file arms).
     let file_ptr = if !file_arms.is_empty() {
         let array_size = ctx.builder.ins().iconst(I64, n_f * 8);
-        let alloc_inst = ctx.builder.ins().call(alloc_fref, &[rt_val, arena, array_size]);
+        let alloc_inst = ctx
+            .builder
+            .ins()
+            .call(alloc_fref, &[rt_val, arena, array_size]);
         let ptr = ctx.builder.inst_results(alloc_inst)[0];
 
         for (j, (_orig, handle_expr, read_mode, _bind_ty, _bind_name, _body)) in
@@ -173,7 +179,10 @@ pub(crate) fn lower_select(
     // Alocar array de socket handles (se houver socket arms).
     let socket_ptr = if !socket_arms.is_empty() {
         let array_size = ctx.builder.ins().iconst(I64, n_s * 8);
-        let alloc_inst = ctx.builder.ins().call(alloc_fref, &[rt_val, arena, array_size]);
+        let alloc_inst = ctx
+            .builder
+            .ins()
+            .call(alloc_fref, &[rt_val, arena, array_size]);
         let ptr = ctx.builder.inst_results(alloc_inst)[0];
 
         for (j, (_orig, handle_expr, read_mode, _bind_ty, _bind_name, _body)) in

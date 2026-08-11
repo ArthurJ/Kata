@@ -21,8 +21,6 @@
 //! A2: `kata_rt_alloc_arc` e `kata_rt_decref` agora recebem `rt` porque
 //! acessam o pool de arenas via `Runtime`.
 
-use crate::runtime::Runtime;
-
 /// Offset do `n_captures` no header do CaptureBox.
 const N_CAPTURES_OFFSET: usize = 16;
 /// Offset do primeiro capture no CaptureBox.

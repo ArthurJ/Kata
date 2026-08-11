@@ -93,7 +93,11 @@ fn deserialize_value(de: &mut Deserializer, ty: &TypeShape, base_ptr: i64) -> i6
             }
             let str_offset = raw as usize;
             let str_bytes = de.read_cstr_at(str_offset);
-            let ptr = crate::arena::kata_rt_arena_alloc(de.rt, de.arena_handle, (str_bytes.len() + 1) as i64);
+            let ptr = crate::arena::kata_rt_arena_alloc(
+                de.rt,
+                de.arena_handle,
+                (str_bytes.len() + 1) as i64,
+            );
             if ptr == 0 {
                 return 0;
             }

@@ -57,10 +57,12 @@ pub(crate) fn lower_closure(
             }
             return Ok(results[0]);
         }
-        let func_ref = ctx
-            .ffi_refs
-            .get(sym_name)
-            .ok_or_else(|| super::CodegenError::FfiSymbolNotFound { symbol: sym_name.clone() })?;
+        let func_ref =
+            ctx.ffi_refs
+                .get(sym_name)
+                .ok_or_else(|| super::CodegenError::FfiSymbolNotFound {
+                    symbol: sym_name.clone(),
+                })?;
         // FFIs que alocam na arena (cons, concat, reverse, array_alloc, etc.)
         // esperam arena_handle como último param, mas o caller não fornece.
         // Injetar automaticamente.
@@ -82,11 +84,11 @@ pub(crate) fn lower_closure(
                 call_args[1] = key_val;
                 let hash_name = super::dict_set_lit::hash_fn_name(key_ty)?;
                 let eq_name = super::dict_set_lit::eq_fn_name(key_ty)?;
-                let hash_ref = ctx
-                    .ffi_refs
-                    .get(hash_name)
-                    .copied()
-                    .ok_or_else(|| super::CodegenError::FfiSymbolNotFound { symbol: hash_name.into() })?;
+                let hash_ref = ctx.ffi_refs.get(hash_name).copied().ok_or_else(|| {
+                    super::CodegenError::FfiSymbolNotFound {
+                        symbol: hash_name.into(),
+                    }
+                })?;
                 let hash_call = ctx.builder.ins().call(hash_ref, &[key_val]);
                 let hash_val = ctx.builder.inst_results(hash_call)[0];
                 let eq_fn_ptr = super::dict_set_lit::get_ffi_fn_ptr(eq_name, ctx)?;
@@ -102,11 +104,11 @@ pub(crate) fn lower_closure(
                 call_args[1] = key_val;
                 let hash_name = super::dict_set_lit::hash_fn_name(key_ty)?;
                 let eq_name = super::dict_set_lit::eq_fn_name(key_ty)?;
-                let hash_ref = ctx
-                    .ffi_refs
-                    .get(hash_name)
-                    .copied()
-                    .ok_or_else(|| super::CodegenError::FfiSymbolNotFound { symbol: hash_name.into() })?;
+                let hash_ref = ctx.ffi_refs.get(hash_name).copied().ok_or_else(|| {
+                    super::CodegenError::FfiSymbolNotFound {
+                        symbol: hash_name.into(),
+                    }
+                })?;
                 let hash_call = ctx.builder.ins().call(hash_ref, &[key_val]);
                 let hash_val = ctx.builder.inst_results(hash_call)[0];
                 let eq_fn_ptr = super::dict_set_lit::get_ffi_fn_ptr(eq_name, ctx)?;
@@ -121,11 +123,11 @@ pub(crate) fn lower_closure(
                 call_args[1] = key_val;
                 let hash_name = super::dict_set_lit::hash_fn_name(key_ty)?;
                 let eq_name = super::dict_set_lit::eq_fn_name(key_ty)?;
-                let hash_ref = ctx
-                    .ffi_refs
-                    .get(hash_name)
-                    .copied()
-                    .ok_or_else(|| super::CodegenError::FfiSymbolNotFound { symbol: hash_name.into() })?;
+                let hash_ref = ctx.ffi_refs.get(hash_name).copied().ok_or_else(|| {
+                    super::CodegenError::FfiSymbolNotFound {
+                        symbol: hash_name.into(),
+                    }
+                })?;
                 let hash_call = ctx.builder.ins().call(hash_ref, &[key_val]);
                 let hash_val = ctx.builder.inst_results(hash_call)[0];
                 let eq_fn_ptr = super::dict_set_lit::get_ffi_fn_ptr(eq_name, ctx)?;
@@ -139,9 +141,9 @@ pub(crate) fn lower_closure(
                 let elem_ty = match &args[0].node.ty {
                     Ty::Set(inner) => inner.as_ref().clone(),
                     other => {
-                        return Err(super::CodegenError::UnsupportedNode { node: format!(
-                            "set op on non-Set type: {other}"
-                        ) });
+                        return Err(super::CodegenError::UnsupportedNode {
+                            node: format!("set op on non-Set type: {other}"),
+                        });
                     }
                 };
                 let eq_name = super::dict_set_lit::eq_fn_name(&elem_ty)?;
@@ -155,9 +157,9 @@ pub(crate) fn lower_closure(
                 let key_ty = match &args[0].node.ty {
                     Ty::Dict(k, _) => k.as_ref().clone(),
                     other => {
-                        return Err(super::CodegenError::UnsupportedNode { node: format!(
-                            "dict_merge on non-Dict type: {other}"
-                        ) });
+                        return Err(super::CodegenError::UnsupportedNode {
+                            node: format!("dict_merge on non-Dict type: {other}"),
+                        });
                     }
                 };
                 let eq_name = super::dict_set_lit::eq_fn_name(&key_ty)?;
@@ -237,10 +239,12 @@ pub(crate) fn lower_closure(
                 return Ok(result);
             }
             // Se o callee não é Function, não há como despachar.
-            return Err(super::CodegenError::UnsupportedNode { node: format!(
-                "Closure com callee Lambda não-Function: {:?}",
-                callee.node.ty
-            ) });
+            return Err(super::CodegenError::UnsupportedNode {
+                node: format!(
+                    "Closure com callee Lambda não-Function: {:?}",
+                    callee.node.ty
+                ),
+            });
         }
         // Sub-caminho B: callee é Ident — função Kata nomeada ou variável.
         // Tenta Kata function call direto primeiro.
@@ -328,10 +332,12 @@ pub(crate) fn lower_closure(
                 }
             }
         }
-        Err(super::CodegenError::UnsupportedNode { node: format!(
-            "Closure sem ffi_symbol e callee não-Ident: {:?}",
-            callee.node.kind
-        ) })
+        Err(super::CodegenError::UnsupportedNode {
+            node: format!(
+                "Closure sem ffi_symbol e callee não-Ident: {:?}",
+                callee.node.kind
+            ),
+        })
     }
 }
 
@@ -356,16 +362,17 @@ pub(crate) fn alloc_capture_box(
         .ffi_refs
         .get("kata_rt_get_root_arena_handle")
         .copied()
-        .ok_or_else(|| {
-            super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_get_root_arena_handle".into() }
+        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound {
+            symbol: "kata_rt_get_root_arena_handle".into(),
         })?;
     let root_inst = ctx.builder.ins().call(get_root_ref, &[rt_val]);
     let capture_arena = ctx.builder.inst_results(root_inst)[0];
 
-    let alloc_arc_ref = ctx
-        .ffi_refs
-        .get("kata_rt_alloc_arc")
-        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_alloc_arc".into() })?;
+    let alloc_arc_ref = ctx.ffi_refs.get("kata_rt_alloc_arc").ok_or_else(|| {
+        super::CodegenError::FfiSymbolNotFound {
+            symbol: "kata_rt_alloc_arc".into(),
+        }
+    })?;
 
     if captures.is_empty() {
         // Sem captures: cria box com fn_ptr e n_captures=0, sem alocar array.
@@ -380,10 +387,11 @@ pub(crate) fn alloc_capture_box(
 
     // Com captures: aloca array, preenche, e cria box.
     let n = captures.len() as i64;
-    let arena_alloc_ref = ctx
-        .ffi_refs
-        .get("kata_rt_arena_alloc")
-        .ok_or_else(|| super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_arena_alloc".into() })?;
+    let arena_alloc_ref = ctx.ffi_refs.get("kata_rt_arena_alloc").ok_or_else(|| {
+        super::CodegenError::FfiSymbolNotFound {
+            symbol: "kata_rt_arena_alloc".into(),
+        }
+    })?;
     let array_size = ctx.builder.ins().iconst(I64, n * 8);
     let alloc_inst = ctx
         .builder
@@ -392,22 +400,22 @@ pub(crate) fn alloc_capture_box(
     let array_ptr = ctx.builder.inst_results(alloc_inst)[0];
 
     for (i, cap) in captures.iter().enumerate() {
-        let cap_var = ctx.var_map.get(&cap.name).ok_or_else(|| {
-            super::CodegenError::UnsupportedNode { node: format!(
-                "capture '{}' não encontrada no var_map",
-                cap.name
-            ) }
-        })?;
+        let cap_var =
+            ctx.var_map
+                .get(&cap.name)
+                .ok_or_else(|| super::CodegenError::UnsupportedNode {
+                    node: format!("capture '{}' não encontrada no var_map", cap.name),
+                })?;
         let cap_val = ctx.builder.use_var(*cap_var);
         let offset = (i * 8) as i32;
         ctx.builder.ins().store(flags, cap_val, array_ptr, offset);
     }
 
     let n_val = ctx.builder.ins().iconst(I64, n);
-    let arc_inst = ctx
-        .builder
-        .ins()
-        .call(*alloc_arc_ref, &[rt_val, func_ptr, array_ptr, n_val, capture_arena]);
+    let arc_inst = ctx.builder.ins().call(
+        *alloc_arc_ref,
+        &[rt_val, func_ptr, array_ptr, n_val, capture_arena],
+    );
     let box_ptr = ctx.builder.inst_results(arc_inst)[0];
 
     Ok(box_ptr)

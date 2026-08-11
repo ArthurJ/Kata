@@ -28,7 +28,8 @@ fn eval_src_arity(src: &str, arities: HashMap<String, usize>) -> (i64, Ty) {
     let typed = monomorphize(typed);
     let typed = optimize(typed);
     let typed = kata_monomorph::MonoModule::from(tree_shake(typed.inner));
-    let jit = jit_eval(&typed, &Default::default(), &[], leak_rt_ptr()).expect("codegen+JIT deve succeed");
+    let jit = jit_eval(&typed, &Default::default(), &[], leak_rt_ptr())
+        .expect("codegen+JIT deve succeed");
     (jit.raw, jit.ty)
 }
 

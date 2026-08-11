@@ -308,9 +308,8 @@ fn run_test_wrapper(
     // SAFETY: `code` é ponteiro válido após finalize_definitions. O wrapper
     // é `extern "C" fn(i64) -> i64` — autossuficiente (faz scheduler_init +
     // spawn + run internamente).
-    let result: i64 = unsafe {
-        std::mem::transmute::<*const u8, extern "C" fn(i64) -> i64>(code)(rt_ptr)
-    };
+    let result: i64 =
+        unsafe { std::mem::transmute::<*const u8, extern "C" fn(i64) -> i64>(code)(rt_ptr) };
 
     // A2: Descartar Runtime após a execução (Drop libera arenas).
     // SAFETY: rt_ptr foi alocado acima; a execução já terminou.
@@ -366,28 +365,17 @@ pub(crate) struct ExecResult {
     pub ty: Ty,
 }
 
-/// Executa o pipeline completo (JIT): lex → parse (two-pass) → resolve →
-/// infer → monomorph → optimize → tree-shake → comptime → type-table →
-/// codegen + execução.
-fn run_pipeline(source: &str) -> miette::Result<ExecResult> {
-    run_pipeline_with_file(source, None)
-}
-
 /// Igual a `run_pipeline` mas ativa display wrapping (show no entry point).
 fn run_pipeline_display_wrap(source: &str) -> miette::Result<ExecResult> {
     run_pipeline_with_file_display_wrap(source, None)
 }
 
-/// Executa o pipeline completo com caminho do arquivo (para resolver imports).
+/// Executa o pipeline completo com caminho do arquivo (para resolver imports)
+/// e display wrapping ativo (show no entry point).
 ///
 /// Delega a sequência de compilação ao `Pipeline` composicional (A1).
 /// Cada passo existe uma vez — este wrapper só escolhe os modos (two-pass,
 /// tree-shake default) e termina com `jit_eval`.
-fn run_pipeline_with_file(source: &str, file_path: Option<&str>) -> miette::Result<ExecResult> {
-    run_pipeline_with_file_inner(source, file_path, false)
-}
-
-/// Igual a `run_pipeline_with_file` mas ativa display wrapping.
 fn run_pipeline_with_file_display_wrap(
     source: &str,
     file_path: Option<&str>,
@@ -400,8 +388,8 @@ fn run_pipeline_with_file_inner(
     file_path: Option<&str>,
     display_wrap: bool,
 ) -> miette::Result<ExecResult> {
-    let mut pipeline = pipeline::Pipeline::new(source)
-        .with_file_path(file_path.unwrap_or("<eval>"));
+    let mut pipeline =
+        pipeline::Pipeline::new(source).with_file_path(file_path.unwrap_or("<eval>"));
     if display_wrap {
         pipeline = pipeline.with_display_wrap();
     }

@@ -165,8 +165,5 @@ fn commutative_same_type_float_add_no_swap() {
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::float());
     let f = f64::from_bits(raw as u64);
-    assert!(
-        (f - 5.85).abs() < 0.01,
-        "esperado ~5.85, got {f}"
-    );
+    assert!((f - 5.85).abs() < 0.01, "esperado ~5.85, got {f}");
 }

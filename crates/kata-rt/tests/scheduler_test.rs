@@ -13,9 +13,8 @@
 //!   onde `args_ptr` e `caller_arena` são reinterpretados para passar dados
 
 use kata_rt::{
-    DEADLOCK_SENTINEL, Runtime, kata_rt_channel_create, kata_rt_channel_recv,
-    kata_rt_channel_send, kata_rt_run, kata_rt_scheduler_init, kata_rt_spawn, kata_rt_yield,
-    reset_scheduler,
+    DEADLOCK_SENTINEL, Runtime, kata_rt_channel_create, kata_rt_channel_recv, kata_rt_channel_send,
+    kata_rt_run, kata_rt_scheduler_init, kata_rt_spawn, kata_rt_yield, reset_scheduler,
 };
 use serial_test::serial;
 
@@ -57,7 +56,12 @@ extern "C" fn send_to_channel(_rt: i64, _fa: i64, handle: i64, value: i64) -> i6
 
 /// Faz spawn de um filho (return_42) e retorna 99.
 /// `args_ptr` = root_arena (caller_arena do filho).
-extern "C" fn spawn_child_and_return(rt: i64, _fa: i64, _caller_arena: i64, root_arena: i64) -> i64 {
+extern "C" fn spawn_child_and_return(
+    rt: i64,
+    _fa: i64,
+    _caller_arena: i64,
+    root_arena: i64,
+) -> i64 {
     kata_rt_spawn(rt, return_42 as *const () as i64, root_arena, 0);
     99
 }

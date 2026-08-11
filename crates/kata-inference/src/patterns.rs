@@ -158,7 +158,7 @@ fn check_pattern_inner(
                     Some(s) if enum_registry.is_variant(s, variant) => s,
                     _ => {
                         return Err(MiddleError::UnboundName {
-                                    suggestion: None,
+                            suggestion: None,
                             name: format!(
                                 "variante desqualificada `{}` — scrutinee {} não tem essa variante",
                                 variant, scrutinee_ty
@@ -173,7 +173,7 @@ fn check_pattern_inner(
             // Verifica que o enum existe e tem a variante.
             if !enum_registry.is_variant(enum_name, variant) {
                 return Err(MiddleError::UnboundName {
-                            suggestion: None,
+                    suggestion: None,
                     name: format!("{}::{}", enum_name, variant),
                     span: (*span).into(),
                 });

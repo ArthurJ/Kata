@@ -434,7 +434,9 @@ pub(crate) fn declare_ffi_symbols(
         let sig = ffi_signature(sym);
         let fid = module
             .declare_function(name, Linkage::Import, &sig)
-            .map_err(|e| CodegenError::Cranelift { reason: format!("declare FFI {name}: {e}") })?;
+            .map_err(|e| CodegenError::Cranelift {
+                reason: format!("declare FFI {name}: {e}"),
+            })?;
         ffi_ids.insert(name.to_string(), fid);
     }
     // Símbolo especial: kata_rt_tag_int_from_str (não está no FfiSymbol enum).
@@ -448,7 +450,9 @@ pub(crate) fn declare_ffi_symbols(
     };
     let tag_str_fid = module
         .declare_function("kata_rt_tag_int_from_str", Linkage::Import, &tag_str_sig)
-        .map_err(|e| CodegenError::Cranelift { reason: format!("declare kata_rt_tag_int_from_str: {e}") })?;
+        .map_err(|e| CodegenError::Cranelift {
+            reason: format!("declare kata_rt_tag_int_from_str: {e}"),
+        })?;
     ffi_ids.insert("kata_rt_tag_int_from_str".to_string(), tag_str_fid);
     Ok(ffi_ids)
 }

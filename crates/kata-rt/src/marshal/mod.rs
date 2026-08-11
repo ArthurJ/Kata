@@ -41,7 +41,6 @@ mod serialize;
 pub use deserialize::kata_rt_from_bytes;
 pub use serialize::kata_rt_to_bytes;
 
-
 /// Projeção runtime de `Ty` para marshalling — informação estrutural mínima
 /// para caminhar um valor em runtime.
 #[derive(Debug, Clone, PartialEq)]

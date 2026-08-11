@@ -35,8 +35,8 @@ pub(crate) fn arena_handle_for_escape(
                 .ffi_refs
                 .get("kata_rt_get_root_arena_handle")
                 .copied()
-                .ok_or_else(|| {
-                    super::CodegenError::FfiSymbolNotFound { symbol: "kata_rt_get_root_arena_handle".into() }
+                .ok_or_else(|| super::CodegenError::FfiSymbolNotFound {
+                    symbol: "kata_rt_get_root_arena_handle".into(),
                 })
                 .expect("kata_rt_get_root_arena_handle must be registered");
             let rt_val = ctx.rt.unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
@@ -65,6 +65,9 @@ pub(crate) fn alloc_for_escape(
         .ok_or_else(|| super::CodegenError::FfiSymbolNotFound {
             symbol: "kata_rt_arena_alloc".into(),
         })?;
-    let inst = ctx.builder.ins().call(alloc_ref, &[rt_val, handle, size_val]);
+    let inst = ctx
+        .builder
+        .ins()
+        .call(alloc_ref, &[rt_val, handle, size_val]);
     Ok(ctx.builder.inst_results(inst)[0])
 }

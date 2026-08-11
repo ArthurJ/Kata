@@ -157,7 +157,7 @@ pub(crate) fn try_partial_dispatch(
 
     // Tenta resolve_partial.
     let result = match table.resolve_partial(&callee_name, &partial_args, iface_reg) {
-        Ok(PartialResolveOutcome::Unique(r)) => r,
+        Ok(PartialResolveOutcome::Unique(r)) => *r,
         Ok(PartialResolveOutcome::Ambiguous(projections)) => {
             // Múltiplas overloads casam — retorna Ambiguous com as projeções.
             // O caller (infer_lambda) constrói Ty::OverloadSet e defere o lambda.

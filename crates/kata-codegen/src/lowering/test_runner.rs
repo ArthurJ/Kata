@@ -88,11 +88,13 @@ pub(crate) fn generate_test_wrappers(
                     .map(|t| t.to_string())
                     .collect::<Vec<_>>()
                     .join(", ");
-                return Err(CodegenError::UnsupportedNode { node: format!(
-                    "@test sem args em action `{}` que recebe ({}) — \
+                return Err(CodegenError::UnsupportedNode {
+                    node: format!(
+                        "@test sem args em action `{}` que recebe ({}) — \
                      forneça args: (..) no @test",
-                    action.name, params
-                ) });
+                        action.name, params
+                    ),
+                });
             }
 
             let cranelift_name = format!("__kata_fn_{}", *fn_counter);
@@ -256,12 +258,16 @@ fn define_test_wrapper(
             action.param_types.clone(),
             action.ret_ty.clone(),
         );
-        let callee_fid = *lower.kata_ids.get(&action_key).ok_or_else(|| {
-            CodegenError::UnsupportedNode { node: format!(
-                "test wrapper: Action `{}` não encontrada em symbol_table",
-                action.name
-            ) }
-        })?;
+        let callee_fid =
+            *lower
+                .kata_ids
+                .get(&action_key)
+                .ok_or_else(|| CodegenError::UnsupportedNode {
+                    node: format!(
+                        "test wrapper: Action `{}` não encontrada em symbol_table",
+                        action.name
+                    ),
+                })?;
         let func_ref = lower
             .module
             .declare_func_in_func(callee_fid, lower.builder.func);
@@ -294,13 +300,11 @@ fn define_test_wrapper(
             .call(spawn_ref, &[rt_value, fn_ptr, root_arena, args_ptr]);
 
         // 5. kata_rt_run(rt) → result (i64)
-        let run_ref = lower
-            .ffi_refs
-            .get("kata_rt_run")
-            .copied()
-            .ok_or_else(|| CodegenError::FfiSymbolNotFound {
+        let run_ref = lower.ffi_refs.get("kata_rt_run").copied().ok_or_else(|| {
+            CodegenError::FfiSymbolNotFound {
                 symbol: "kata_rt_run".into(),
-            })?;
+            }
+        })?;
         let run_inst = lower.builder.ins().call(run_ref, &[rt_value]);
         let result = lower.builder.inst_results(run_inst)[0];
 
@@ -320,7 +324,9 @@ fn define_test_wrapper(
 
     tctx.module
         .define_function(func_id, &mut ctx)
-        .map_err(|e| CodegenError::Cranelift { reason: format!("define test wrapper: {e}") })?;
+        .map_err(|e| CodegenError::Cranelift {
+            reason: format!("define test wrapper: {e}"),
+        })?;
     tctx.module.clear_context(&mut ctx);
     Ok(())
 }

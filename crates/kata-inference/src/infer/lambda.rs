@@ -14,7 +14,7 @@ use crate::typed::{TypedExpr, TypedExprKind, TypedLambdaClause};
 
 use super::apply_lambda::infer_lambda_body;
 use super::expr::InferCtx;
-use super::helpers::{peel_grouping_expr, InferResult, check_patterns, process_with_bindings};
+use super::helpers::{InferResult, check_patterns, peel_grouping_expr, process_with_bindings};
 use super::partial_dispatch::{
     PartialDispatchOutcome, PartialDispatchReason, try_partial_dispatch,
 };
@@ -79,64 +79,62 @@ pub(crate) fn infer_lambda(
     // projeções e defere o lambda. O tipo do lambda é OverloadSet, não
     // Function([InferVar], ...). O call site seleciona a overload correta
     // pelo tipo concreto dos args.
-    if !hint_has_params {
-        if let PartialDispatchOutcome::Ambiguous(projections) = &partial_outcome {
-            // Extrai o nome do callee do body (ex: "+" em `+ __hole_0 2`).
-            let callee_name = extract_callee_name(body).unwrap_or_else(|| "__unknown".to_string());
+    if !hint_has_params && let PartialDispatchOutcome::Ambiguous(projections) = &partial_outcome {
+        // Extrai o nome do callee do body (ex: "+" em `+ __hole_0 2`).
+        let callee_name = extract_callee_name(body).unwrap_or_else(|| "__unknown".to_string());
 
-            let overload_set_ty = Ty::OverloadSet {
-                name: callee_name.clone(),
-                overloads: projections.clone(),
-            };
+        let overload_set_ty = Ty::OverloadSet {
+            name: callee_name.clone(),
+            overloads: projections.clone(),
+        };
 
-            // Constrói skeleton do lambda com InferVar nos params.
-            let n_params = patterns.len();
-            let param_types: Vec<Ty> = (0..n_params).map(|i| Ty::InferVar(i as u32)).collect();
-            let ret_ty = Ty::InferVar(n_params as u32);
+        // Constrói skeleton do lambda com InferVar nos params.
+        let n_params = patterns.len();
+        let param_types: Vec<Ty> = (0..n_params).map(|i| Ty::InferVar(i as u32)).collect();
+        let ret_ty = Ty::InferVar(n_params as u32);
 
-            let typed_patterns = patterns
-                .iter()
-                .enumerate()
-                .map(|(i, pat)| {
-                    let name = if let Pattern::Ident(n) = &pat.node {
-                        n.clone()
-                    } else {
-                        format!("__param_{i}")
-                    };
-                    Spanned::new(
-                        crate::typed::TypedPattern::Ident {
-                            name,
-                            ty: Ty::InferVar(i as u32),
-                        },
-                        patterns[i].span,
-                    )
-                })
-                .collect();
+        let typed_patterns = patterns
+            .iter()
+            .enumerate()
+            .map(|(i, pat)| {
+                let name = if let Pattern::Ident(n) = &pat.node {
+                    n.clone()
+                } else {
+                    format!("__param_{i}")
+                };
+                Spanned::new(
+                    crate::typed::TypedPattern::Ident {
+                        name,
+                        ty: Ty::InferVar(i as u32),
+                    },
+                    patterns[i].span,
+                )
+            })
+            .collect();
 
-            let skeleton_kind = TypedExprKind::Lambda {
-                func_name: None,
-                param_types: param_types.clone(),
-                ret_ty: ret_ty.clone(),
-                clauses: vec![TypedLambdaClause {
-                    patterns: typed_patterns,
-                    body: Spanned::new(
-                        TypedExpr {
-                            span: body.span,
-                            ty: ret_ty.clone(),
-                            tail_pos: true,
-                            escape: EscapeTarget::Local,
-                            kind: TypedExprKind::Unit,
-                        },
-                        body.span,
-                    ),
-                    guards: Vec::new(),
-                    with_bindings: Vec::new(),
-                }],
-                captures: Vec::new(),
-            };
+        let skeleton_kind = TypedExprKind::Lambda {
+            func_name: None,
+            param_types: param_types.clone(),
+            ret_ty: ret_ty.clone(),
+            clauses: vec![TypedLambdaClause {
+                patterns: typed_patterns,
+                body: Spanned::new(
+                    TypedExpr {
+                        span: body.span,
+                        ty: ret_ty.clone(),
+                        tail_pos: true,
+                        escape: EscapeTarget::Local,
+                        kind: TypedExprKind::Unit,
+                    },
+                    body.span,
+                ),
+                guards: Vec::new(),
+                with_bindings: Vec::new(),
+            }],
+            captures: Vec::new(),
+        };
 
-            return Ok((overload_set_ty, skeleton_kind));
-        }
+        return Ok((overload_set_ty, skeleton_kind));
     }
 
     // DoD 29: Hint top-down via ascription em lambda.

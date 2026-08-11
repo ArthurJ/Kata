@@ -30,7 +30,9 @@ pub(crate) fn inject_timer_start(
         .ffi_refs
         .get("kata_rt_timer_now")
         .copied()
-        .ok_or_else(|| CodegenError::FfiSymbolNotFound { symbol: "kata_rt_timer_now".into() })?;
+        .ok_or_else(|| CodegenError::FfiSymbolNotFound {
+            symbol: "kata_rt_timer_now".into(),
+        })?;
     let call = lower.builder.ins().call(now_fn, &[]);
     let start_val = lower.builder.inst_results(call)[0];
 
@@ -72,7 +74,9 @@ pub(crate) fn inject_timer_stop(
         .ffi_refs
         .get("kata_rt_timer_now")
         .copied()
-        .ok_or_else(|| CodegenError::FfiSymbolNotFound { symbol: "kata_rt_timer_now".into() })?;
+        .ok_or_else(|| CodegenError::FfiSymbolNotFound {
+            symbol: "kata_rt_timer_now".into(),
+        })?;
     let call = lower.builder.ins().call(now_fn, &[]);
     let end = lower.builder.inst_results(call)[0];
 
@@ -83,7 +87,9 @@ pub(crate) fn inject_timer_stop(
         .ffi_refs
         .get("kata_rt_bi_sub")
         .copied()
-        .ok_or_else(|| CodegenError::FfiSymbolNotFound { symbol: "kata_rt_bi_sub".into() })?;
+        .ok_or_else(|| CodegenError::FfiSymbolNotFound {
+            symbol: "kata_rt_bi_sub".into(),
+        })?;
     let call = lower.builder.ins().call(bi_sub_fn, &[end, start]);
     let delta = lower.builder.inst_results(call)[0];
 
@@ -124,7 +130,9 @@ pub(crate) fn inject_timer_stop(
         .ffi_refs
         .get("kata_rt_log_publish")
         .copied()
-        .ok_or_else(|| CodegenError::FfiSymbolNotFound { symbol: "kata_rt_log_publish".into() })?;
+        .ok_or_else(|| CodegenError::FfiSymbolNotFound {
+            symbol: "kata_rt_log_publish".into(),
+        })?;
     lower
         .builder
         .ins()
@@ -215,7 +223,9 @@ fn format_timer_msg(
             .ffi_refs
             .get("kata_rt_text_replace_first")
             .copied()
-            .ok_or_else(|| CodegenError::FfiSymbolNotFound { symbol: "kata_rt_text_replace_first".into() })?;
+            .ok_or_else(|| CodegenError::FfiSymbolNotFound {
+                symbol: "kata_rt_text_replace_first".into(),
+            })?;
         let call = lower
             .builder
             .ins()
@@ -231,7 +241,9 @@ fn format_timer_msg(
             .ffi_refs
             .get("kata_rt_int_to_text")
             .copied()
-            .ok_or_else(|| CodegenError::FfiSymbolNotFound { symbol: "kata_rt_int_to_text".into() })?;
+            .ok_or_else(|| CodegenError::FfiSymbolNotFound {
+                symbol: "kata_rt_int_to_text".into(),
+            })?;
         let call = lower.builder.ins().call(int_to_text_fn, &[delta]);
         let delta_text = lower.builder.inst_results(call)[0];
 
@@ -239,7 +251,9 @@ fn format_timer_msg(
             .ffi_refs
             .get("kata_rt_text_replace_first")
             .copied()
-            .ok_or_else(|| CodegenError::FfiSymbolNotFound { symbol: "kata_rt_text_replace_first".into() })?;
+            .ok_or_else(|| CodegenError::FfiSymbolNotFound {
+                symbol: "kata_rt_text_replace_first".into(),
+            })?;
         let call = lower.builder.ins().call(replace_fn, &[msg, delta_text]);
         lower.builder.inst_results(call)[0]
     } else {
@@ -277,7 +291,9 @@ pub(crate) fn inject_timer_start_channel(
         .ffi_refs
         .get("kata_rt_queue_create")
         .copied()
-        .ok_or_else(|| CodegenError::FfiSymbolNotFound { symbol: "kata_rt_queue_create".into() })?;
+        .ok_or_else(|| CodegenError::FfiSymbolNotFound {
+            symbol: "kata_rt_queue_create".into(),
+        })?;
     let cap = lower.builder.ins().iconst(I64, 1);
     let policy = lower.builder.ins().iconst(I64, 1); // Drop
     let call = lower.builder.ins().call(queue_fn, &[arena, cap, policy]);
@@ -288,7 +304,9 @@ pub(crate) fn inject_timer_start_channel(
         .ffi_refs
         .get("kata_rt_timer_now")
         .copied()
-        .ok_or_else(|| CodegenError::FfiSymbolNotFound { symbol: "kata_rt_timer_now".into() })?;
+        .ok_or_else(|| CodegenError::FfiSymbolNotFound {
+            symbol: "kata_rt_timer_now".into(),
+        })?;
     let call = lower.builder.ins().call(now_fn, &[]);
     let start = lower.builder.inst_results(call)[0];
 
@@ -297,7 +315,9 @@ pub(crate) fn inject_timer_start_channel(
         .ffi_refs
         .get("kata_rt_channel_send")
         .copied()
-        .ok_or_else(|| CodegenError::FfiSymbolNotFound { symbol: "kata_rt_channel_send".into() })?;
+        .ok_or_else(|| CodegenError::FfiSymbolNotFound {
+            symbol: "kata_rt_channel_send".into(),
+        })?;
     lower.builder.ins().call(send_fn, &[chan, start]);
 
     // Retorna o handle do canal — o epílogo faz recv para obter start.
@@ -320,7 +340,9 @@ pub(crate) fn inject_timer_stop_channel(
         .ffi_refs
         .get("kata_rt_channel_recv")
         .copied()
-        .ok_or_else(|| CodegenError::FfiSymbolNotFound { symbol: "kata_rt_channel_recv".into() })?;
+        .ok_or_else(|| CodegenError::FfiSymbolNotFound {
+            symbol: "kata_rt_channel_recv".into(),
+        })?;
     let call = lower.builder.ins().call(recv_fn, &[chan]);
     let start = lower.builder.inst_results(call)[0];
 
@@ -329,7 +351,9 @@ pub(crate) fn inject_timer_stop_channel(
         .ffi_refs
         .get("kata_rt_timer_now")
         .copied()
-        .ok_or_else(|| CodegenError::FfiSymbolNotFound { symbol: "kata_rt_timer_now".into() })?;
+        .ok_or_else(|| CodegenError::FfiSymbolNotFound {
+            symbol: "kata_rt_timer_now".into(),
+        })?;
     let call = lower.builder.ins().call(now_fn, &[]);
     let end = lower.builder.inst_results(call)[0];
 
@@ -338,7 +362,9 @@ pub(crate) fn inject_timer_stop_channel(
         .ffi_refs
         .get("kata_rt_bi_sub")
         .copied()
-        .ok_or_else(|| CodegenError::FfiSymbolNotFound { symbol: "kata_rt_bi_sub".into() })?;
+        .ok_or_else(|| CodegenError::FfiSymbolNotFound {
+            symbol: "kata_rt_bi_sub".into(),
+        })?;
     let call = lower.builder.ins().call(bi_sub_fn, &[end, start]);
     let delta = lower.builder.inst_results(call)[0];
 
@@ -367,7 +393,9 @@ pub(crate) fn inject_timer_stop_channel(
         .ffi_refs
         .get("kata_rt_log_publish")
         .copied()
-        .ok_or_else(|| CodegenError::FfiSymbolNotFound { symbol: "kata_rt_log_publish".into() })?;
+        .ok_or_else(|| CodegenError::FfiSymbolNotFound {
+            symbol: "kata_rt_log_publish".into(),
+        })?;
     lower
         .builder
         .ins()

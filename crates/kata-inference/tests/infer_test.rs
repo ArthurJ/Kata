@@ -368,7 +368,11 @@ fn infer_no_overload_for_mixed_types() {
     // + 1 3.14 — Int e Float dão match com a cross-type overload Int Float => Float
     let tmod = infer_src("+ 1 3.14");
     let entry = entry_typed(&tmod);
-    assert_eq!(entry.ty, Ty::float(), "+ 1 3.14 deve retornar Float via cross-type overload");
+    assert_eq!(
+        entry.ty,
+        Ty::float(),
+        "+ 1 3.14 deve retornar Float via cross-type overload"
+    );
 }
 
 #[test]

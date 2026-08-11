@@ -8,8 +8,8 @@
 //! via poll(POLLIN) + suspensão de fiber. Testes de TCP usam `fork!` para rodar
 //! servidor e cliente em fibers separados (listen! bloqueia cooperativamente).
 
-use kata_codegen::{jit_eval, leak_rt_ptr};
 use kata_codegen::type_table::build_and_register_type_table;
+use kata_codegen::{jit_eval, leak_rt_ptr};
 use kata_core::ty::{PrimTy, Ty};
 use kata_inference::infer_module;
 use kata_lexer::lex;
@@ -33,7 +33,8 @@ fn eval_src(src: &str) -> (i64, Ty) {
     let typed = kata_monomorph::MonoModule::from(tree_shake(typed.inner));
     let (type_id_map, type_shapes) =
         build_and_register_type_table(&typed, &typed.struct_registry, &resolved.enum_registry);
-    let jit = jit_eval(&typed, &type_id_map, &type_shapes, leak_rt_ptr()).expect("codegen+JIT deve succeed");
+    let jit = jit_eval(&typed, &type_id_map, &type_shapes, leak_rt_ptr())
+        .expect("codegen+JIT deve succeed");
     (jit.raw, jit.ty)
 }
 

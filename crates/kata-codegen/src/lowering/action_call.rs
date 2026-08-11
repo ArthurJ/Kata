@@ -50,10 +50,12 @@ pub(crate) fn lower_action_call(
                 ffi_args.push(args_ptr);
             }
         }
-        let func_ref = ctx
-            .ffi_refs
-            .get(sym_name)
-            .ok_or_else(|| super::CodegenError::FfiSymbolNotFound { symbol: sym_name.clone() })?;
+        let func_ref =
+            ctx.ffi_refs
+                .get(sym_name)
+                .ok_or_else(|| super::CodegenError::FfiSymbolNotFound {
+                    symbol: sym_name.clone(),
+                })?;
         let call_inst = ctx.builder.ins().call(*func_ref, &ffi_args);
         if let Some(ret) = ctx.builder.inst_results(call_inst).first() {
             Ok(*ret)
@@ -66,9 +68,7 @@ pub(crate) fn lower_action_call(
         let fn_ptr = super::expr::lower_expr(&callee_expr.node, ctx)?;
         // A2: Preparar args: [rt, fiber_arena, caller_arena, args_ptr]
         //    ABI: (rt: i64, fiber_arena: i64, caller_arena: i64, args_ptr: i64) -> i64
-        let rt_val = ctx
-            .rt
-            .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
+        let rt_val = ctx.rt.unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
         let fiber_arena_val = ctx
             .fiber_arena
             .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
@@ -83,10 +83,8 @@ pub(crate) fn lower_action_call(
                     .ffi_refs
                     .get("kata_rt_get_root_arena_handle")
                     .copied()
-                    .ok_or_else(|| {
-                        super::CodegenError::FfiSymbolNotFound { symbol:
-                            "kata_rt_get_root_arena_handle".into(),
-                         }
+                    .ok_or_else(|| super::CodegenError::FfiSymbolNotFound {
+                        symbol: "kata_rt_get_root_arena_handle".into(),
                     })?;
                 let root_inst = ctx.builder.ins().call(get_root, &[rt_val]);
                 ctx.builder.inst_results(root_inst)[0]
@@ -138,11 +136,14 @@ pub(crate) fn lower_action_call(
             if ctx.scheduler_mode {
                 // Entry point: spawn + run (scheduler cria fiber + arena).
                 // 1. Obter fn_ptr via GlobalValue::Symbol.
-                let callee_fid = ctx.kata_ids.get(&key).ok_or_else(|| {
-                    super::CodegenError::UnsupportedNode { node: format!(
-                        "ActionCall: callee `{callee}` não encontrado em kata_ids"
-                    ) }
-                })?;
+                let callee_fid =
+                    ctx.kata_ids
+                        .get(&key)
+                        .ok_or_else(|| super::CodegenError::UnsupportedNode {
+                            node: format!(
+                                "ActionCall: callee `{callee}` não encontrado em kata_ids"
+                            ),
+                        })?;
                 let func_ref2 = ctx
                     .module
                     .declare_func_in_func(*callee_fid, ctx.builder.func);
@@ -207,9 +208,9 @@ pub(crate) fn lower_action_call(
                 }
             }
         } else {
-            Err(super::CodegenError::UnsupportedNode { node: format!(
-                "ActionCall: callee `{callee}` não encontrado"
-            ) })
+            Err(super::CodegenError::UnsupportedNode {
+                node: format!("ActionCall: callee `{callee}` não encontrado"),
+            })
         }
     }
 }
