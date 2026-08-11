@@ -238,30 +238,25 @@ uma Closure em literal, o valor é registrado em `comptime_bindings`.
 
 1541 passed, 0 failed.
 
-### C3. Inferência dedicada para constants (sem wrapping em `Expr::Let`)
+### C3. Inferência dedicada para constants (sem wrapping em `Expr::Let`) ✅
 
-**Motivação:** A inferência envelopa o value da constant em `Expr::Let` para
-reusar toda a lógica de inferência de `let` (deferred lambdas, OverloadSet,
-fn_alias) — `infer/mod.rs:218-227`. É engenhoso, mas cria acoplamento semântico:
-`constant` e `let` têm semânticas diferentes (comptime vs runtime, módulo vs
-local), mas partilham o path de inferência. Se o comportamento de `let` mudar,
-`constant` herda a mudança implicitamente. Além disso, o erro `ConstantLambda`
-só é detectado no comptime pass, não na inferência.
+**Concluído (2026-08-11).** Inferência de constants sem envolver value em
+`Expr::Let`. `check_constant_lambda` na inferência rejeita lambdas/sections
+em `constant` (Arthur: use sintaxe de função nomeada no top-level).
+`type_env.define(name, ty, "__module__")` direto (sem `set_origin` hack).
 
-**Proposta:** Clonar o path de inferência (não compartilhar com `let`):
-- Não precisa de `deferred_lambdas` (lambdas são proibidas em constants)
-- Não precisa de comportamento de `let` em escopo local
-- Pode validar explicitamente que o value é serializável (constness) já na
-  inferência, não só no comptime pass — torna o erro `ConstantLambda` mais
-  precoce
-- Mantém a reusabilidade de lógica comum (inferência de Apply, OverloadSet,
-  fn_alias) via funções auxiliares compartilhadas, não via wrapping em `Expr::Let`
+`constness.rs` (novo módulo em `kata-inference/src/infer/`):
+- `peel_to_lambda_ty(expr)` — detecta Lambda após desugar de holes
+- `check_constant_lambda(name, value, span)` — retorna `ConstantLambda` se value é lambda
+- `is_consttime_available_at_infer(expr, type_env, dispatch_table)` — versão simplificada
 
-**Status:** Analisar. Avaliar:
-- Quanta lógica de `let` é efetivamente reusada vs. contornada
-- Se a detecção precoce de `ConstantLambda` na inferência compensa a
-  duplicação de path
-- Impacto nos testes de inferência que esperam `TypedExprKind::ConstantBinding`
+Pureza (`check_purity`) e comptime-availability (`is_comptime_available`)
+continuam no comptime pass — são context-dependent (testes que não rodam
+comptime pass, como `spawn_ipc_e2e`, dependem de `constant ch := channel!()`
+impuro funcionando). Mover para inferência quebraria esses testes.
+
+8 testes migrados de `constant f := + _ 2` (section → lambda) para named functions.
+1541 passed, 0 failed.
 
 ### C4. Folding de chamadas literais em corpos de functions
 
