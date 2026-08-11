@@ -163,6 +163,9 @@ pub struct Pipeline {
     tokens: Option<Vec<kata_ast::TokenWithSpan>>,
     module: Option<kata_ast::Module>,
     resolved: Option<ResolvedModule>,
+    /// Módulos importados (carregados em `resolve`, usados em `infer`
+    /// para extrair constants exportadas e injetar no TypedModule).
+    imports: Vec<kata_resolution::ImportedModule>,
     typed: Option<kata_inference::TypedModule>,
     mono: Option<MonoModule>,
 }
@@ -177,6 +180,7 @@ impl Pipeline {
             tokens: None,
             module: None,
             resolved: None,
+            imports: Vec::new(),
             typed: None,
             mono: None,
         }
@@ -299,6 +303,7 @@ impl Pipeline {
         let mut resolved = merge_resolved(prelude, user);
         imports::merge_imports(&mut resolved, &imports);
 
+        self.imports = imports;
         self.resolved = Some(resolved);
         Ok(self)
     }
@@ -327,9 +332,47 @@ impl Pipeline {
             .as_ref()
             .ok_or_else(|| err("infer chamado antes de resolve"))?;
 
+        // Fase 4: Avaliar constants importadas (pipeline recursivo nos importados)
+        // ANTES de infer_module. O type_env do importador precisa dos bindings
+        // das constants importadas para que Ident("escala") resolva durante
+        // a inferência. As constants já vêm avaliadas (literal/HeapSnapshot).
+        let imported_constants = if !self.imports.is_empty() {
+            imports::evaluate_imported_constants(&self.imports).map_err(one_err)?
+        } else {
+            Vec::new()
+        };
+
+        // Clonar resolved para mutar o type_env com bindings importados.
+        // infer_module toma &ResolvedModule, então precisamos mutar antes.
+        let mut resolved = (*resolved).clone();
+        for ic in &imported_constants {
+            resolved.type_env.define(&ic.name, ic.value.ty.clone(), "__module__");
+        }
+        let resolved = &resolved; // re-borrow como imutável
+
         let mut typed = infer_module(module, resolved).map_err(|e| {
             one_err(e.into_report_with_source(&self.source, self.file_path.as_deref()))
         })?;
+
+        // Injetar constants importadas como ConstantBinding no TypedModule.
+        // O valor já está avaliado (literal/snapshot) — o comptime pass
+        // vai pular via is_already_evaluated e registrar no comptime_bindings.
+        for ic in imported_constants {
+            let dummy_span = kata_ast::Span::zero();
+            typed.constants.push(kata_ast::Spanned::new(
+                kata_inference::TypedExpr {
+                    span: dummy_span,
+                    ty: ic.value.ty.clone(),
+                    tail_pos: false,
+                    escape: kata_core::escape::EscapeTarget::Local,
+                    kind: kata_inference::TypedExprKind::ConstantBinding {
+                        name: ic.name.clone(),
+                        value: Box::new(kata_ast::Spanned::new(ic.value, dummy_span)),
+                    },
+                },
+                dummy_span,
+            ));
+        }
 
         // Display wrapping: se ativado, envolve o entry point com `show`
         // para que o driver possa imprimir tipos compostos como Text.

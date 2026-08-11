@@ -8,6 +8,9 @@
 
 use std::path::Path;
 
+use kata_ast::Item;
+use kata_comptime::run_comptime_pass;
+use kata_inference::{infer_module, TypedExpr, TypedExprKind};
 use kata_resolution::{ImportKind, ImportedModule, ModuleLoader, ResolvedModule};
 
 use crate::IntoReport;
@@ -262,4 +265,97 @@ pub(crate) fn collect_imported_directives(
         let _ = errors;
     }
     registry
+}
+
+/// Uma constant exportada por um módulo importado, já avaliada pelo comptime pass.
+/// O valor é um `TypedExpr` (literal escalar ou `HeapSnapshot` para tipos complexos).
+pub(crate) struct ImportedConstant {
+    pub name: String,
+    pub value: TypedExpr,
+}
+
+/// Roda inference + comptime pass recursivamente em cada módulo importado
+/// e extrai as constants exportadas (avaliadas para literal/HeapSnapshot).
+///
+/// O pipeline do importado usa `resolved_unfiltered` (com todos os itens,
+/// incluindo helpers não-exportados) para que o inference tenha acesso a
+/// funções auxiliares que as constants podem referenciar. Só as constants
+/// listadas em `export` do módulo importado são extraídas.
+///
+/// Retorna um mapa: nome_da_constant → ImportedConstant.
+pub(crate) fn evaluate_imported_constants(
+    imports: &[ImportedModule],
+) -> miette::Result<Vec<ImportedConstant>> {
+    let mut result = Vec::new();
+    for imported in imports {
+        // O módulo importado pode não ter entry point (só constants + exports).
+        // infer_module exige um entry point, então injetamos um IntLit(0)
+        // sintético no final do AST se não houver EntryExpr.
+        let module = if has_entry_expr(&imported.module_ast) {
+            imported.module_ast.clone()
+        } else {
+            inject_synthetic_entry(imported.module_ast.clone())
+        };
+
+        // Rodar inference no módulo importado (não-filtrado).
+        let typed = infer_module(&module, &imported.resolved_unfiltered)
+            .map_err(|e| e.into_report_with_source("", None))?;
+
+        // Rodar comptime pass para avaliar constants.
+        let typed = run_comptime_pass(typed, &imported.resolved_unfiltered.enum_registry)
+            .map_err(|e| e.into_report_with_source("", None))?;
+
+        // Coletar nomes exportados do AST do módulo importado.
+        let exported_names: std::collections::HashSet<String> = imported
+            .module_ast
+            .items
+            .iter()
+            .filter_map(|item| match &item.node {
+                Item::ExportDecl { items } => {
+                    Some(items.iter().filter(|ei| ei.reexport_from.is_none()).map(|ei| ei.name.clone()).collect::<Vec<_>>())
+                }
+                _ => None,
+            })
+            .flatten()
+            .collect();
+
+        // Se não há export decl, todas as constants são exportadas (módulo aberto).
+        let has_export = exported_names.is_empty();
+        let _ = has_export; // módulo aberto → todas exportadas
+
+        // Extrair constants avaliadas.
+        for binding in &typed.constants {
+            if let TypedExprKind::ConstantBinding { name, value } = &binding.node.kind {
+                // Só exportadas (ou todas se módulo aberto).
+                if has_export || exported_names.contains(name) || name == "_" {
+                    result.push(ImportedConstant {
+                        name: name.clone(),
+                        value: value.node.clone(),
+                    });
+                }
+            }
+        }
+    }
+    Ok(result)
+}
+
+/// Verifica se o módulo tem pelo menos um `Item::EntryExpr`.
+fn has_entry_expr(module: &kata_ast::Module) -> bool {
+    module
+        .items
+        .iter()
+        .any(|item| matches!(item.node, kata_ast::Item::EntryExpr(_)))
+}
+
+/// Injeta um `IntLit(0)` sintético como `EntryExpr` no final do módulo.
+/// Necessário porque `infer_module` exige um entry point, mas módulos
+/// exportadores de constants podem não ter um.
+fn inject_synthetic_entry(mut module: kata_ast::Module) -> kata_ast::Module {
+    let span = kata_ast::Span::zero();
+    let zero = kata_ast::Spanned::new(kata_ast::Expr::IntLit { text: "0".to_string() }, span);
+    module.items.push(kata_ast::Spanned::new(
+        kata_ast::Item::EntryExpr(zero),
+        span,
+    ));
+    module
 }

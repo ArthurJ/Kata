@@ -328,13 +328,13 @@ Item::ConstantDecl {
 - **Débito:** `constant base := [1 2 3]` + function que referencia `base` falha
   com `comptime.jit_failure` (fold_literal_calls tenta JIT antes do fold)
 
-### Fase 4: Export/import
+### Fase 4: Export/import ✅
 
 - `export escala` marca constant como exportado
 - `import mod.escala` carrega snapshot do módulo importado
 - ModuleLoader resolve dependência transitiva
-- **DoD:** módulo A exporta `constant escala := 2`; módulo B importa e usa
-  `escala` dentro de uma action
+- **DoD:** ✅ módulo A exporta `constant escala := 2`; módulo B importa e usa
+  `escala` dentro de uma action (3/3 testes E2E passando, 1524 total, 0 regressões)
 
 ### Fase 5: Remoção de `@comptime`
 

@@ -72,6 +72,11 @@ pub enum ImportKind {
 pub struct ImportedModule {
     /// O ResolvedModule do módulo importado (já filtrado por export).
     pub resolved: Arc<ResolvedModule>,
+    /// ResolvedModule não-filtrado (com todos os itens) para o driver
+    /// rodar inference com acesso a helpers internos.
+    pub resolved_unfiltered: Arc<ResolvedModule>,
+    /// AST do módulo importado (para `infer_module` no driver).
+    pub module_ast: Module,
     /// Como foi importado.
     pub import_kind: ImportKind,
     /// Nome do módulo (último componente do path — ex: "matematica"
@@ -80,10 +85,18 @@ pub struct ImportedModule {
     pub module_name: String,
 }
 
+/// Cache interno: AST + ResolvedModule não-filtrado.
+/// `filter_exports` é aplicado por `load_imports` ao construir `ImportedModule`.
+#[derive(Debug)]
+struct CachedModule {
+    module: Module,
+    resolved: Arc<ResolvedModule>,
+}
+
 /// Carregador de módulos com cache e cycle detection.
 pub struct ModuleLoader {
-    /// Cache de módulos já carregados: path → ResolvedModule.
-    cache: HashMap<PathBuf, Arc<ResolvedModule>>,
+    /// Cache de módulos já carregados: path → CachedModule (não-filtrado).
+    cache: HashMap<PathBuf, Arc<CachedModule>>,
     /// Paths em processo de loading (para detectar ciclos).
     loading: HashSet<PathBuf>,
     /// Diretórios de busca para módulos.
@@ -106,22 +119,34 @@ impl ModuleLoader {
     /// Procura `utilidades/matematica.kata` em cada search path.
     /// Se já está no cache, retorna a versão cacheada.
     /// Se está em loading, detecta ciclo.
+    ///
+    /// Retorna o `ResolvedModule` **não-filtrado** (com todos os itens).
+    /// O `filter_exports` é aplicado por `load_imports` ao construir `ImportedModule`.
     pub fn load(&mut self, module_path: &[String]) -> Result<Arc<ResolvedModule>, LoadError> {
         let resolved_path = self.resolve_path(module_path)?;
-        self.load_path(&resolved_path)
+        let cached = self.load_path(&resolved_path)?;
+        Ok(cached.resolved.clone())
     }
 
     /// Carrega todos os módulos importados por um módulo.
     ///
     /// Itera sobre `module.items`, encontra cada `Item::ImportDecl`,
-    /// carrega o módulo correspondente via `self.load()`, filtra por exports,
+    /// carrega o módulo correspondente via `self.load_path()`, filtra por exports,
     /// e retorna a lista de `ImportedModule`.
     pub fn load_imports(&mut self, module: &Module) -> Result<Vec<ImportedModule>, LoadError> {
         let mut imports = Vec::new();
         for item in &module.items {
             if let Item::ImportDecl { path, alias, items } = &item.node {
-                let resolved = self.load(path)?;
+                let resolved_path = self.resolve_path(path)?;
+                let cached = self.load_path(&resolved_path)?;
                 let module_name = path.last().cloned().unwrap_or_default();
+
+                // Aplicar filter_exports para obter a versão filtrada (visível
+                // para o importador). O não-filtrado fica para inference.
+                let filtered = filter_exports((*cached.resolved).clone(), &cached.module);
+                let resolved_filtered = Arc::new(filtered);
+                let resolved_unfiltered = cached.resolved.clone();
+
                 let import_kind = match (alias, items) {
                     (Some(alias_name), _) => ImportKind::WholeModuleAliased {
                         alias: alias_name.clone(),
@@ -136,7 +161,9 @@ impl ModuleLoader {
                     }
                 };
                 imports.push(ImportedModule {
-                    resolved,
+                    resolved: resolved_filtered,
+                    resolved_unfiltered,
+                    module_ast: cached.module.clone(),
                     import_kind,
                     module_name,
                 });
@@ -146,7 +173,11 @@ impl ModuleLoader {
     }
 
     /// Carrega um módulo pelo path do arquivo.
-    pub fn load_path(&mut self, path: &Path) -> Result<Arc<ResolvedModule>, LoadError> {
+    ///
+    /// Retorna `Arc<CachedModule>` contendo o AST + ResolvedModule não-filtrado.
+    /// O cache armazena a versão não-filtrada para que `load_imports` possa
+    /// aplicar `filter_exports` e ainda dar acesso ao não-filtrado para inference.
+    fn load_path(&mut self, path: &Path) -> Result<Arc<CachedModule>, LoadError> {
         // Cache hit
         if let Some(cached) = self.cache.get(path) {
             return Ok(cached.clone());
@@ -200,14 +231,15 @@ impl ModuleLoader {
             merge_two(prelude, resolved)
         };
 
-        // Filtrar por exports: só itens exportados são visíveis para importadores.
-        let filtered = filter_exports(merged, &module);
-
         self.loading.remove(path);
 
-        let filtered = Arc::new(filtered);
-        self.cache.insert(path.to_path_buf(), filtered.clone());
-        Ok(filtered)
+        // Cache armazena não-filtrado — filter_exports é aplicado por load_imports.
+        let cached = Arc::new(CachedModule {
+            module,
+            resolved: Arc::new(merged),
+        });
+        self.cache.insert(path.to_path_buf(), cached.clone());
+        Ok(cached)
     }
 
     /// Resolve um caminho de módulo (ex: `["utilidades", "matematica"]`)
@@ -536,10 +568,17 @@ mod tests {
         );
 
         let mut loader = ModuleLoader::new(vec![tmp.path().to_path_buf()]);
+        // `load` retorna não-filtrado agora. Precisamos chamar filter_exports
+        // explicitamente para obter a versão filtrada.
         let resolved = loader.load(&["filtered".into()]).unwrap();
+        // Re-lex/parse para obter o AST do módulo (filter_exports precisa do Module)
+        let source = std::fs::read_to_string(tmp.path().join("filtered.kata")).unwrap();
+        let tokens = lex(&source).unwrap();
+        let module = parse(tokens).unwrap();
+        let filtered = filter_exports((*resolved).clone(), &module);
         // Só public_fn visível (private_fn filtrada pelo export).
         // Prelude também está presente mas não tem public_fn/private_fn.
-        assert!(resolved.signatures.iter().any(|s| s.name == "public_fn"));
-        assert!(!resolved.signatures.iter().any(|s| s.name == "private_fn"));
+        assert!(filtered.signatures.iter().any(|s| s.name == "public_fn"));
+        assert!(!filtered.signatures.iter().any(|s| s.name == "private_fn"));
     }
 }
