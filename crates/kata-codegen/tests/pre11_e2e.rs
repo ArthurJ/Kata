@@ -99,11 +99,16 @@ fn tupla_literal_no_entry() {
 // ── Closure com captura ─────────────────────────────────────────────
 
 /// Closure com captura: CaptureBox alocado na caller_arena, não na global.
+/// (migrado de `constant f := + _ n` — sections produzem lambdas, que não
+/// são serializáveis como constant. Usa named function que retorna lambda.)
 #[test]
 fn closure_com_captura_nao_vaza() {
-    let src = "constant n := 10\nconstant f := + _ n\nf 5";
+    let src = "make_adder :: Int => (Int -> Int)
+lambda n: lambda x: + x n
+constant add10 := make_adder 10
+add10 5";
     let (val, _ty) = eval_src(src);
-    assert_eq!(val >> 1, 15, "f 5 deve retornar 15");
+    assert_eq!(val >> 1, 15, "make_adder 10 5 deve retornar 15");
 }
 
 // ── Sum result ──────────────────────────────────────────────────────

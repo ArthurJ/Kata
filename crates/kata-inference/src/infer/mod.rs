@@ -298,6 +298,7 @@ pub fn infer_module(
     //    O último vira o entry point; os anteriores viram pre_entry
     //    (lowerados em sequência pelo codegen, compartilhando var_map).
     let mut pre_entry: Vec<Spanned<TypedExpr>> = Vec::new();
+    let mut constants: Vec<Spanned<TypedExpr>> = Vec::new();
     let mut entry_expr: Option<Spanned<TypedExpr>> = None;
 
     for item in &module.items {
@@ -348,9 +349,11 @@ pub fn infer_module(
                 // e consumido pelo desugar_directives antes do inference.
             }
             Item::ConstantDecl { name, value } => {
-                // Pré-processado no passo 2a. Aqui só produzimos o
-                // pre_entry (TypedExprKind::Let) para o codegen lowerar,
-                // usando o typed_value já inferido.
+                // Pré-processado no passo 2a. Aqui produzimos um
+                // ConstantBinding na coleção constants (não pre_entry).
+                // O comptime pass avalia o RHS via JIT-and-execute e
+                // substitui por literal/HeapSnapshot. Se o RHS não é
+                // comptime-available (ex: lambda), erro de compilação.
                 let typed_value = constant_typed_values
                     .iter()
                     .find(|(n, _)| n == name)
@@ -361,17 +364,17 @@ pub fn infer_module(
                         suggestion: None,
                     })?;
 
-                let let_typed = TypedExpr {
+                let binding = TypedExpr {
                     span: value.span,
-                    ty: Ty::Unit,
+                    ty: typed_value.ty.clone(),
                     tail_pos: false,
                     escape: kata_core::escape::EscapeTarget::Local,
-                    kind: crate::typed::TypedExprKind::Let {
+                    kind: crate::typed::TypedExprKind::ConstantBinding {
                         name: name.clone(),
                         value: Box::new(Spanned::new(typed_value, value.span)),
                     },
                 };
-                pre_entry.push(Spanned::new(let_typed, value.span));
+                constants.push(Spanned::new(binding, value.span));
             }
             Item::ActionDecl { .. } => {
                 // Já processado no inference de Actions (abaixo).
@@ -402,6 +405,7 @@ pub fn infer_module(
         struct_registry: resolved.struct_registry.clone(),
         snapshots: Vec::new(),
         refined_decls: resolved.refined_decls.clone(),
+        constants,
     };
 
     // Coleta captures (free variables) de cada Closure.

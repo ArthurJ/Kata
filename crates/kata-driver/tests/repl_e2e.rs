@@ -507,7 +507,7 @@ fn repl_single_line_still_works() {
 #[test]
 fn repl_closure_binding_no_capture() {
     // let f := lambda n: + n 1 → echo!(f 10) → 11
-    let out = run_repl(&["constant f := lambda n: + n 1", "echo!(f 10)", ":quit"]);
+    let out = run_repl(&["let f := lambda n: + n 1", "echo!(f 10)", ":quit"]);
     let lines = result_lines(&out);
     assert!(
         lines.iter().any(|l| l.trim() == "11"),
@@ -519,8 +519,8 @@ fn repl_closure_binding_no_capture() {
 fn repl_closure_binding_with_capture() {
     // let x := 42 → let f := lambda n: + n x → echo!(f 10) → 52
     let out = run_repl(&[
-        "constant x := 42",
-        "constant f := lambda n: + n x",
+        "let x := 42",
+        "let f := lambda n: + n x",
         "echo!(f 10)",
         ":quit",
     ]);
@@ -536,9 +536,9 @@ fn repl_closure_shadowing_does_not_retroact() {
     // let x := 42 → let f := lambda n: + n x → let x := 99 → echo!(f 10) → 52
     // Shadowing de x não retroage: f capturou 42.
     let out = run_repl(&[
-        "constant x := 42",
-        "constant f := lambda n: + n x",
-        "constant x := 99",
+        "let x := 42",
+        "let f := lambda n: + n x",
+        "let x := 99",
         "echo!(f 10)",
         ":quit",
     ]);

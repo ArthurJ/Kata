@@ -59,11 +59,15 @@ use super::walk;
 /// `cross_process: true`. Também resolve `Var("T0")` na TAST para o tipo
 /// concreto inferido do uso.
 pub(crate) fn run(typed_module: &mut TypedModule) {
-    // ── Entry point: pre_entry + entry ──
-    // Coleta bindings de ChannelCreate de pre_entry + entry juntos.
+    // ── Entry point: constants + pre_entry + entry ──
+    // Coleta bindings de ChannelCreate de constants + pre_entry + entry juntos.
+    // constants é onde `constant ch := channel!()` vive na Fase 2 (não pre_entry).
     let mut channel_bindings: HashMap<String, kata_ast::Span> = HashMap::new();
     loop {
         let prev_len = channel_bindings.len();
+        for expr in &typed_module.constants {
+            collect_channel_bindings(&expr.node, &mut channel_bindings);
+        }
         for expr in &typed_module.pre_entry {
             collect_channel_bindings(&expr.node, &mut channel_bindings);
         }
@@ -76,6 +80,9 @@ pub(crate) fn run(typed_module: &mut TypedModule) {
     if !channel_bindings.is_empty() {
         // Coleta spans de ChannelCreate referenciados em Spawn args.
         let mut spans_to_mark: Vec<kata_ast::Span> = Vec::new();
+        for expr in &typed_module.constants {
+            collect_spawn_spans(&expr.node, &channel_bindings, &mut spans_to_mark);
+        }
         for expr in &typed_module.pre_entry {
             collect_spawn_spans(&expr.node, &channel_bindings, &mut spans_to_mark);
         }
@@ -85,7 +92,12 @@ pub(crate) fn run(typed_module: &mut TypedModule) {
             &mut spans_to_mark,
         );
 
-        // Marca os ChannelCreate correspondentes em todo o módulo (pre_entry + entry).
+        // Marca os ChannelCreate correspondentes em todo o módulo (constants + pre_entry + entry).
+        for expr in &mut typed_module.constants {
+            for span in &spans_to_mark {
+                mark_channel_create_by_span(&mut expr.node, *span);
+            }
+        }
         for expr in &mut typed_module.pre_entry {
             for span in &spans_to_mark {
                 mark_channel_create_by_span(&mut expr.node, *span);
@@ -136,6 +148,9 @@ pub(crate) fn run(typed_module: &mut TypedModule) {
         // Mapa: span_do_ChannelCreate -> tipo_concreto_do_elemento
         let mut create_types: HashMap<kata_ast::Span, Ty> = HashMap::new();
 
+        for expr in &typed_module.constants {
+            collect_concrete_channel_types(&expr.node, &channel_bindings, &mut create_types);
+        }
         for expr in &typed_module.pre_entry {
             collect_concrete_channel_types(&expr.node, &channel_bindings, &mut create_types);
         }
@@ -146,6 +161,9 @@ pub(crate) fn run(typed_module: &mut TypedModule) {
         );
 
         if !create_types.is_empty() {
+            for expr in &mut typed_module.constants {
+                resolve_channel_create(&mut expr.node, &create_types);
+            }
             for expr in &mut typed_module.pre_entry {
                 resolve_channel_create(&mut expr.node, &create_types);
             }
@@ -157,8 +175,9 @@ pub(crate) fn run(typed_module: &mut TypedModule) {
 /// Coleta bindings de `ChannelCreate` de uma expressão TAST e os adiciona
 /// ao mapa `channel_bindings`. Rastreia:
 /// - `let ch := channel!()` → `ch → span`
+/// - `constant ch := channel!()` → `ch → span` (Fase 2)
 /// - `let (tx, rx) := channel!()` (LetDestruct) → `tx, rx → span`
-/// - `let tx := ch.0` (IndexAccess de binding de canal) → `tx → span`
+/// - `let tx := ch.0` / `constant tx := ch.0` (IndexAccess de binding de canal) → `tx → span`
 /// - `var ch := channel!()` → `ch → span`
 ///
 /// Nota: `ch.0` em tupla é lowered pelo typeck para `IndexAccess` (não
@@ -168,38 +187,44 @@ fn collect_channel_bindings(
     channel_bindings: &mut HashMap<String, kata_ast::Span>,
 ) {
     walk::for_each_subexpr(expr, &mut |e| {
-        // let ch := channel!()
-        if let TypedExprKind::Let { name, value, .. } = &e.kind {
-            if matches!(value.node.kind, TypedExprKind::ChannelCreate { .. }) {
-                channel_bindings.insert(name.clone(), value.span);
+        // let ch := channel!()  /  constant ch := channel!()
+        // ConstantBinding tem a mesma estrutura de Let { name, value }.
+        let (name, value) = match &e.kind {
+            TypedExprKind::Let { name, value, .. } => (name, value),
+            TypedExprKind::ConstantBinding { name, value } => (name, value),
+            _ => {
+                // let (tx, rx) := channel!()  (LetDestruct — não tem equivalente ConstantBinding)
+                if let TypedExprKind::LetDestruct {
+                    temp_name,
+                    value,
+                    bindings,
+                } = &e.kind
+                    && matches!(value.node.kind, TypedExprKind::ChannelCreate { .. })
+                {
+                    channel_bindings.insert(temp_name.clone(), value.span);
+                    for (name, _) in bindings {
+                        channel_bindings.insert(name.clone(), value.span);
+                    }
+                }
+                // var ch := channel!()
+                if let TypedExprKind::Var { name, value, .. } = &e.kind
+                    && matches!(value.node.kind, TypedExprKind::ChannelCreate { .. })
+                {
+                    channel_bindings.insert(name.clone(), value.span);
+                }
+                return true;
             }
-            // let tx := ch.0  (ch já está no mapa)
-            // O typeck lowered `.0` para IndexAccess em tuplas.
-            if let TypedExprKind::IndexAccess { expr: inner, .. } = &value.node.kind
-                && let TypedExprKind::Ident { name: inner_name } = &inner.node.kind
-                && let Some(span) = channel_bindings.get(inner_name)
-            {
-                channel_bindings.insert(name.clone(), *span);
-            }
-        }
-        // let (tx, rx) := channel!()
-        if let TypedExprKind::LetDestruct {
-            temp_name,
-            value,
-            bindings,
-        } = &e.kind
-            && matches!(value.node.kind, TypedExprKind::ChannelCreate { .. })
-        {
-            channel_bindings.insert(temp_name.clone(), value.span);
-            for (name, _) in bindings {
-                channel_bindings.insert(name.clone(), value.span);
-            }
-        }
-        // var ch := channel!()
-        if let TypedExprKind::Var { name, value, .. } = &e.kind
-            && matches!(value.node.kind, TypedExprKind::ChannelCreate { .. })
-        {
+        };
+        if matches!(value.node.kind, TypedExprKind::ChannelCreate { .. }) {
             channel_bindings.insert(name.clone(), value.span);
+        }
+        // let tx := ch.0  /  constant tx := ch.0  (ch já está no mapa)
+        // O typeck lowered `.0` para IndexAccess em tuplas.
+        if let TypedExprKind::IndexAccess { expr: inner, .. } = &value.node.kind
+            && let TypedExprKind::Ident { name: inner_name } = &inner.node.kind
+            && let Some(span) = channel_bindings.get(inner_name)
+        {
+            channel_bindings.insert(name.clone(), *span);
         }
         true // continuar descida
     });

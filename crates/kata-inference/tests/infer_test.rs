@@ -215,18 +215,16 @@ fn infer_echo_returns_unit() {
 
 #[test]
 fn infer_let_binds_name_in_scope() {
-    // constant x := 42 — agora é ConstantDecl, vai para pre_entry como Let.
-    // Precisamos de uma entry expr final.
+    // constant x := 42 — agora é ConstantBinding em tmod.constants.
     let tmod = infer_src("constant x := 42\n42");
-    // pre_entry[0] é o let (TypedExprKind::Let) do ConstantDecl.
-    let let_expr = &tmod.pre_entry[0];
-    assert_eq!(let_expr.node.ty, Ty::Unit); // let retorna Unit
-    match &let_expr.node.kind {
-        TypedExprKind::Let { name, value } => {
+    // constants[0] é o ConstantBinding.
+    let binding = &tmod.constants[0];
+    match &binding.node.kind {
+        TypedExprKind::ConstantBinding { name, value } => {
             assert_eq!(name, "x");
             assert_eq!(value.node.ty, Ty::int());
         }
-        other => panic!("expected Let, got {other:?}"),
+        other => panic!("expected ConstantBinding, got {other:?}"),
     }
 }
 

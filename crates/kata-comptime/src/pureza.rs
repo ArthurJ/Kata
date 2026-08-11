@@ -227,5 +227,7 @@ fn check_purity_inner(expr: &TypedExpr) -> Result<(), ComptimeError> {
             }
             Ok(())
         }
+        // ConstantBinding — verificar pureza do value.
+        TypedExprKind::ConstantBinding { value, .. } => check_purity_inner(&value.node),
     }
 }

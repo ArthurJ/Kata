@@ -28,13 +28,18 @@ mod walk;
 
 use std::collections::HashMap;
 
+use kata_ast::Spanned;
 use kata_core::EnumRegistry;
-use kata_inference::{TypedExpr, TypedModule};
+use kata_inference::{TypedExpr, TypedExprKind, TypedModule};
 
 use ctx::ModuleCtx;
+use constness::is_comptime_available;
 use fold::fold_literal_calls;
+use jit::jit_execute_expr;
 use predicates::validate_pending_predicates;
+use pureza::check_purity;
 use replace::replace_comptime_in_place;
+use result::result_to_literal;
 use walk::contains_comptime;
 
 // Re-export da API pública.
@@ -114,6 +119,73 @@ pub fn run_comptime_pass(
             }
         }
 
+        // ── Fase 2: Avaliar constants (ConstantBinding) ──
+        // Percorre a coleção `constants` do TypedModule. Para cada
+        // ConstantBinding, verifica constness do value, JIT-executa,
+        // e substitui por literal (escalar) ou HeapSnapshot (complexo).
+        // Se não é comptime-available → erro (PRD §3.1).
+        // Se o value é uma Lambda → erro específico (PRD §3.7 — Function
+        // não é serializável). Peeling Grouping/TypeAscription para
+        // detectar lambda envolvida.
+        for binding in &mut current.constants {
+            let (name, value_span, value_clone) = match &binding.node.kind {
+                TypedExprKind::ConstantBinding { name, value } => {
+                    (name.clone(), value.span, value.node.clone())
+                }
+                _ => continue,
+            };
+
+            // Pular constants cujo value já foi avaliado (literal ou
+            // HeapSnapshot). Isto previne o fixpoint loop: sem o skip,
+            // HeapSnapshot é comptime-available → re-avalia → loop infinito.
+            if is_already_evaluated(&value_clone) {
+                continue;
+            }
+
+            // Pular Closures (chamadas de função) — o fold_literal_calls
+            // cuida de Closures com args literais (ex: `f 41` onde f é
+            // named function e 41 é literal). O passo de constants só
+            // avalia expressões estruturais (ListLit, StructConstruct,
+            // etc.), não chamadas de função.
+            if matches!(value_clone.kind, TypedExprKind::Closure { .. }) {
+                continue;
+            }
+
+            // Detectar lambda como value direto de constant (peeling
+            // Grouping e TypeAscription — `(lambda ...)::(Int -> Int)`
+            // é o padrão dos testes bidirectional).
+            if let Some(ty) = peel_to_lambda_ty(&value_clone) {
+                let sig = format_function_sig(&ty);
+                return Err(ComptimeError::ConstantLambda {
+                    name: name.clone(),
+                    sig,
+                });
+            }
+
+            if !is_comptime_available(&value_clone, &comptime_bindings) {
+                return Err(ComptimeError::NotConsttime {
+                    reason: format!(
+                        "constant {name} — expressão depende de valor runtime"
+                    ),
+                });
+            }
+            check_purity(&value_clone)?;
+            let result = jit_execute_expr(&value_clone, &ctx, &comptime_bindings)?;
+            let literal = result_to_literal(
+                &result,
+                &value_clone,
+                &mut snapshots,
+                ctx.struct_registry,
+                ctx.enum_registry,
+            )?;
+            // Substituir o value do ConstantBinding pelo literal.
+            if let TypedExprKind::ConstantBinding { value, .. } = &mut binding.node.kind {
+                *value = Box::new(Spanned::new(literal.clone(), value_span));
+            }
+            comptime_bindings.insert(name, literal);
+            changed = true;
+        }
+
         // Processar entry
         replace_comptime_in_place(
             &mut current.entry.node,
@@ -168,6 +240,20 @@ pub fn run_comptime_pass(
                 )?;
             }
         }
+        // Fold em constants: percorre o value de cada ConstantBinding.
+        // Isto pega `constant result := f 41` onde f é named function
+        // e 41 é literal — fold executa f(41) em compile-time.
+        for binding in &mut current.constants {
+            if let TypedExprKind::ConstantBinding { value, .. } = &mut binding.node.kind {
+                fold_literal_calls(
+                    &mut value.node,
+                    &ctx,
+                    &mut changed,
+                    &mut snapshots,
+                    &comptime_bindings,
+                )?;
+            }
+        }
 
         if !changed {
             break;
@@ -199,4 +285,44 @@ pub fn run_comptime_pass(
         }
     }
     Ok(current)
+}
+
+/// Verifica se o value de um ConstantBinding já foi avaliado (é literal
+/// ou HeapSnapshot). Usado para pular re-avaliação no fixpoint loop.
+fn is_already_evaluated(expr: &TypedExpr) -> bool {
+    matches!(
+        &expr.kind,
+        TypedExprKind::IntLit { .. }
+            | TypedExprKind::FloatLit { .. }
+            | TypedExprKind::TextLit { .. }
+            | TypedExprKind::Unit
+            | TypedExprKind::HeapSnapshot { .. }
+            | TypedExprKind::VariantQual { .. }
+    )
+}
+
+/// Faz peel de Grouping e TypeAscription para verificar se o value
+/// subjacente é uma Lambda. Se for, retorna o tipo (Function) da lambda
+/// para construir a mensagem de erro com a assinatura esperada.
+fn peel_to_lambda_ty(expr: &TypedExpr) -> Option<kata_core::ty::Ty> {
+    match &expr.kind {
+        TypedExprKind::Lambda { .. } => Some(expr.ty.clone()),
+        TypedExprKind::Grouping { inner } => peel_to_lambda_ty(&inner.node),
+        TypedExprKind::TypeAscription { expr: inner, .. } => peel_to_lambda_ty(&inner.node),
+        _ => None,
+    }
+}
+
+/// Formata um `Ty::Function` como assinatura Kata (`Int Int => Int`).
+fn format_function_sig(ty: &kata_core::ty::Ty) -> String {
+    if let kata_core::ty::Ty::Function(params, ret) = ty {
+        let params_str = params
+            .iter()
+            .map(|p| p.display())
+            .collect::<Vec<_>>()
+            .join(" ");
+        format!("{params_str} => {}", ret.display())
+    } else {
+        ty.display()
+    }
 }

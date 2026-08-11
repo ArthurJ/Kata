@@ -12,7 +12,7 @@ use cranelift_codegen::isa::CallConv;
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_module::{Linkage, Module};
 use kata_core::ty::Ty;
-use kata_inference::TypedModule;
+use kata_inference::{TypedExprKind, TypedModule};
 
 use super::LowerCtx;
 use super::action_def::{declare_kata_action, define_kata_action};
@@ -350,6 +350,18 @@ pub(crate) fn lower_module(
                         snapshot_id,
                     ],
                 );
+            }
+        }
+
+        // Lowera constants (ConstantBinding). O comptime pass já avaliou
+        // cada value e substituiu por literal/HeapSnapshot. Lowera em
+        // sequência antes do pre_entry, registrando no var_map.
+        for c in &typed.constants {
+            if let TypedExprKind::ConstantBinding { name, value } = &c.node.kind {
+                let val = lower_expr(&value.node, &mut lower)?;
+                let clif_ty = super::resolve_clif_ty(&value.node.ty, lower.struct_registry);
+                let var = lower.new_var(name, clif_ty);
+                lower.builder.def_var(var, val);
             }
         }
 

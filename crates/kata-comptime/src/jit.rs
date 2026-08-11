@@ -52,6 +52,7 @@ pub(crate) fn jit_execute_expr(
         struct_registry: ctx.struct_registry.clone(),
         snapshots: Vec::new(),
         refined_decls: Vec::new(),
+        constants: Vec::new(),
     };
 
     let result = kata_codegen::jit_eval(&mini, &Default::default(), &[], kata_codegen::leak_rt_ptr()).map_err(|e| {

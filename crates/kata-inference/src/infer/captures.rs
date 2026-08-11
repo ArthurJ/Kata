@@ -36,12 +36,17 @@ pub(crate) fn run(typed_module: &mut TypedModule) {
         struct_registry: _,
         snapshots: _,
         refined_decls: _,
+        constants,
     } = typed_module;
 
     let dispatch = &*dispatch_table;
 
     // Percorre pre_entry
     for expr in pre_entry {
+        collect_captures_in_expr(&mut expr.node, type_env, &empty_tys, dispatch);
+    }
+    // Percorre constants (ConstantBinding pode conter lambdas com captures)
+    for expr in constants {
         collect_captures_in_expr(&mut expr.node, type_env, &empty_tys, dispatch);
     }
     // Percorre entry

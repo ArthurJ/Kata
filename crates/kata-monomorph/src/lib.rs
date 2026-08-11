@@ -180,6 +180,13 @@ fn monomorph_pass(
         rewrite_typed_expr(expr, &ctx, &mut acc);
     }
 
+    // ── constants ──
+    // ConstantBinding pode conter call sites genéricos (ex: `constant x := id 42`).
+    // Percorrer para que o monomorphizer veja as chamadas e gere instâncias.
+    for c in &mut mono.constants {
+        rewrite_typed_expr(c, &ctx, &mut acc);
+    }
+
     // ── entry ──
     rewrite_typed_expr(&mut mono.entry, &ctx, &mut acc);
 
@@ -534,6 +541,10 @@ fn rewrite_typed_expr(expr_span: &mut Spanned<TypedExpr>, ctx: &MonoCtx, acc: &m
             for stmt in stmts {
                 rewrite_typed_expr(stmt, ctx, acc);
             }
+        }
+        // ConstantBinding — recursão no value.
+        TypedExprKind::ConstantBinding { value, .. } => {
+            rewrite_typed_expr(value, ctx, acc);
         }
     }
 }

@@ -51,6 +51,11 @@ pub struct TypedModule {
     /// (que envolvem chamada de função) são delegados ao comptime pass, que
     /// tem acesso a `jit_eval`. Populado por `infer_module`.
     pub refined_decls: Vec<RefinedDeclInfo>,
+    /// Constantes de módulo — `constant nome := expr`. O comptime pass avalia
+    /// cada `value` via JIT-and-execute e substitui por literal/HeapSnapshot.
+    /// O codegen lowera no prólogo de `__kata_entry`. Acessível de actions,
+    /// funções nomeadas, lambdas, e entry point.
+    pub constants: Vec<Spanned<TypedExpr>>,
 }
 
 /// Especificação de cache `@cache{strategy: "LRU"}`.

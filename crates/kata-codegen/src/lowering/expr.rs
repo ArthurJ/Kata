@@ -715,5 +715,10 @@ pub(crate) fn lower_expr(
             }
             Ok(last_val)
         }
+        // ConstantBinding — não deveria chegar ao codegen (comptime pass
+        // avalia e substitui). Fallback defensivo: lowerar o value.
+        TypedExprKind::ConstantBinding { value, .. } => {
+            lower_expr(&value.node, ctx)
+        }
     }
 }

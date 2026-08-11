@@ -210,6 +210,9 @@ where
                 for_each_subexpr(&stmt.node, f);
             }
         }
+        TypedExprKind::ConstantBinding { value, .. } => {
+            for_each_subexpr(&value.node, f);
+        }
         TypedExprKind::HeapSnapshot { .. }
         | TypedExprKind::ChannelCreate { .. }
         | TypedExprKind::IntLit { .. }

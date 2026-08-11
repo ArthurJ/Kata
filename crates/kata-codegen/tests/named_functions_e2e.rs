@@ -4,6 +4,7 @@
 //! Cada teste verifica o valor retornado pelo JIT.
 
 use kata_codegen::{jit_eval, leak_rt_ptr};
+use kata_comptime::run_comptime_pass;
 use kata_core::ty::{PrimTy, Ty};
 use kata_inference::infer_module;
 use kata_lexer::lex;
@@ -23,7 +24,8 @@ fn eval_src(src: &str) -> (i64, Ty) {
     let typed = infer_module(&module, &resolved).expect("infer deve succeed");
     let typed = monomorphize(typed);
     let typed = optimize(typed);
-    let typed = kata_monomorph::MonoModule::from(tree_shake(typed.inner));
+    let typed = run_comptime_pass(tree_shake(typed.inner), &resolved.enum_registry).expect("comptime deve succeed");
+    let typed = kata_monomorph::MonoModule::from(typed);
     let jit = jit_eval(&typed, &Default::default(), &[], leak_rt_ptr()).expect("codegen+JIT deve succeed");
     (jit.raw, jit.ty)
 }
@@ -142,10 +144,12 @@ match Boolean::False\n\
 
 // ── Hole (partial dispatch) ─────────────────────────────────────
 
-/// `let soma_dez := + 10 _` + `soma_dez 5` → 15
+/// `soma_dez :: Int => Int` + `lambda x: + 10 x` + `soma_dez 5` → 15
+/// (migrado de `constant soma_dez := + 10 _` — sections produzem closures,
+/// que não são serializáveis em compile-time)
 #[test]
 fn hole_partial_dispatch() {
-    let src = "constant soma_dez := + 10 _\nsoma_dez 5";
+    let src = "soma_dez :: Int => Int\nlambda x: + 10 x\nsoma_dez 5";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
     assert_eq!(untag_smi(raw), 15, "soma_dez 5 deve ser 15");
@@ -167,7 +171,7 @@ fn pipe_chain() {
 /// `let inc := lambda x: + x 1` + `let g := inc` + `g 41` → 42
 #[test]
 fn lambda_como_valor() {
-    let src = "constant inc := lambda x: + x 1\nconstant g := inc\ng 41";
+    let src = "inc :: Int => Int\nlambda x: + x 1\ng :: Int => Int\nlambda x: inc x\ng 41";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
     assert_eq!(untag_smi(raw), 42, "g 41 deve ser 42");
@@ -258,7 +262,7 @@ fn match_tuple_pattern_third() {
 /// `test_single_pattern`). A inferência de `TypeExpr::Tuple` já funciona.
 #[test]
 fn lambda_tuple_pattern() {
-    let src = "constant fst := lambda (a, b): a\nfst (10, 20)";
+    let src = "fst :: (Int, Int) => Int\nlambda (a, b): a\nfst (10, 20)";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
     assert_eq!(untag_smi(raw), 10, "fst (10,20) deve ser 10");

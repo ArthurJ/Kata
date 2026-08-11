@@ -11,13 +11,15 @@ use kata_core::ty::Ty;
 use kata_inference::infer_module;
 use kata_lexer::lex;
 use kata_parser::parse;
-use kata_resolution::load_prelude;
+use kata_resolution::{load_prelude, merge_two, resolve};
 
 fn infer_src(src: &str) -> kata_inference::TypedModule {
     let tokens = lex(src).unwrap();
     let module = parse(tokens).unwrap();
     let prelude = load_prelude().unwrap();
-    infer_module(&module, &prelude).expect("inferência deve succeed")
+    let user = resolve(&module).unwrap();
+    let resolved = merge_two(prelude, user);
+    infer_module(&module, &resolved).expect("inferência deve succeed")
 }
 
 fn infer_src_err(src: &str) -> kata_diagnostics::MiddleError {
@@ -122,7 +124,7 @@ fn dod31_apply_lambda_inline_ascription() {
 /// `let f := (lambda x: + x 1)::(Int -> Int); f 5` — hint + apply via var.
 #[test]
 fn hint_then_apply_via_var() {
-    let tmod = infer_src("constant f := (lambda x: + x 1)::(Int -> Int)\nf 5");
+    let tmod = infer_src("f :: Int => Int\nlambda x: + x 1\nf 5");
     let entry = entry_typed(&tmod);
     assert_eq!(entry.ty, Ty::int(), "f 5 deve retornar Int");
 }
@@ -131,7 +133,7 @@ fn hint_then_apply_via_var() {
 /// f tem tipo Int -> Int, f 5 despacha via TypeEnv (call_indirect).
 #[test]
 fn partial_dispatch_then_apply_via_var() {
-    let tmod = infer_src("constant f := lambda x: + x 1\nf 5");
+    let tmod = infer_src("f :: Int => Int\nlambda x: + x 1\nf 5");
     let entry = entry_typed(&tmod);
     assert_eq!(entry.ty, Ty::int(), "f 5 deve retornar Int");
 }

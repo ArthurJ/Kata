@@ -342,14 +342,14 @@ fn match_tail_pos_propagated() {
 #[test]
 fn let_value_not_tail_pos() {
     // constant value é tail_pos = false.
-    // constant é ConstantDecl → pre_entry como Let.
+    // constant é ConstantBinding em tmod.constants.
     let tmod = infer_src("constant x := 42\n42");
-    let let_expr = &tmod.pre_entry[0];
-    match &let_expr.node.kind {
-        TypedExprKind::Let { value, .. } => {
+    let binding = &tmod.constants[0];
+    match &binding.node.kind {
+        TypedExprKind::ConstantBinding { value, .. } => {
             assert!(!value.node.tail_pos, "constant value deve ser tail_pos = false");
         }
-        other => panic!("expected Let, got {other:?}"),
+        other => panic!("expected ConstantBinding, got {other:?}"),
     }
 }
 
@@ -377,7 +377,7 @@ fn apply_args_not_tail_pos() {
 fn lambda_assigned_to_var_has_function_type() {
     // let f := (lambda x: x)::(Int -> Int)
     // f é Ty::Function no TypeEnv. O typeck aceita.
-    let tmod = infer_src("constant f := (lambda x: x)::(Int -> Int)\n42");
+    let tmod = infer_src("f :: Int => Int\nlambda x: x\n42");
     let entry = entry_typed(&tmod);
     // Entry é 42 (Int) — o let define f mas entry é a última expr.
     assert_eq!(entry.ty, Ty::int());

@@ -265,7 +265,7 @@ fn erro_param_faltante_no_dict() {
 /// Com aridade 1, f coleta 1 arg. O grouping `(* 2 2)` é o argumento.
 #[test]
 fn let_lambda_sub_aplicacao_com_grouping() {
-    let src = "constant f := lambda x: + x 1\nf (* 2 2)";
+    let src = "f :: Int => Int\nlambda x: + x 1\nf (* 2 2)";
     let path = write_temp_kata("let_lambda_sub_group", src);
     let (stdout, stderr, code) = run_kata_file(&path);
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
@@ -276,7 +276,7 @@ fn let_lambda_sub_aplicacao_com_grouping() {
 /// Aridade 1, chamada simples.
 #[test]
 fn let_lambda_chamada_simples() {
-    let src = "constant f := lambda x: + x 1\nf 5";
+    let src = "f :: Int => Int\nlambda x: + x 1\nf 5";
     let path = write_temp_kata("let_lambda_simples", src);
     let (stdout, stderr, code) = run_kata_file(&path);
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
@@ -287,7 +287,7 @@ fn let_lambda_chamada_simples() {
 /// (f tem aridade 1, recebeu 3)
 #[test]
 fn let_lambda_excesso_posicional() {
-    let src = "constant f := lambda x: + x 1\nf 1 2 3";
+    let src = "f :: Int => Int\nlambda x: + x 1\nf 1 2 3";
     let path = write_temp_kata("let_lambda_excesso", src);
     let (_stdout, stderr, code) = run_kata_file(&path);
     assert_ne!(code, 0, "deve falhar — f tem aridade 1, recebeu 3");
@@ -301,7 +301,7 @@ fn let_lambda_excesso_posicional() {
 /// ainda funciona (não só lambdas).
 #[test]
 fn let_lambda_e_prelude_ambos_funcionam() {
-    let src = "constant f := lambda x: + x 1\n+ 5 * 2 2";
+    let src = "f :: Int => Int\nlambda x: + x 1\n+ 5 * 2 2";
     let path = write_temp_kata("let_lambda_e_prelude", src);
     let (stdout, stderr, code) = run_kata_file(&path);
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
@@ -323,19 +323,19 @@ fn let_nao_lambda_nao_quebra() {
 /// `g (* 4 5)` → g(20) = 19
 #[test]
 fn let_lambda_1param_aridade_extraida() {
-    let src = "constant g := lambda x: - x 1\ng (* 4 5)";
+    let src = "g :: Int => Int\nlambda x: - x 1\ng (* 4 5)";
     let path = write_temp_kata("let_lambda_1param", src);
     let (stdout, stderr, code) = run_kata_file(&path);
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     assert_eq!(stdout.trim(), "19", "g (* 4 5) = g(20) = 20 - 1 = 19");
 }
 
-/// Let-lambda com params nomeados acessível via dict dispatch.
-/// `let f := lambda x: - x 1` — f tem aridade 1, params nomeados ["x"].
-/// `f{"x": 5}` despacha via TypeEnv fallback (não está na DispatchTable).
+/// Named function com params nomeados acessível via dict dispatch.
+/// `f :: (x::Int) => Int` — f tem aridade 1, param nomeado "x".
+/// `f{"x": 5}` despacha via DispatchTable (param_names na assinatura).
 #[test]
 fn let_lambda_dict_dispatch_via_typeenv() {
-    let src = "constant f := lambda x: - x 1\nf{\"x\": 5}";
+    let src = "f :: (x::Int) => Int\nlambda x: - x 1\nf{\"x\": 5}";
     let path = write_temp_kata("let_lambda_dict", src);
     let (stdout, stderr, code) = run_kata_file(&path);
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");

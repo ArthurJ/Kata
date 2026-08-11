@@ -10,6 +10,7 @@
 //!     `trma.rs:94` exige 1 clause; multi-clause não otimiza?
 
 use kata_codegen::{jit_eval, leak_rt_ptr};
+use kata_comptime::run_comptime_pass;
 use kata_core::ty::{PrimTy, Ty};
 use kata_inference::infer_module;
 use kata_lexer::lex;
@@ -79,7 +80,8 @@ fn eval_src(src: &str) -> (i64, Ty) {
     let typed = infer_module(&module, &resolved).expect("infer");
     let typed = monomorphize(typed);
     let typed = optimize(typed);
-    let typed = kata_monomorph::MonoModule::from(tree_shake(typed.inner));
+    let typed = run_comptime_pass(tree_shake(typed.inner), &resolved.enum_registry).expect("comptime");
+    let typed = kata_monomorph::MonoModule::from(typed);
     let jit = jit_eval(&typed, &Default::default(), &[], leak_rt_ptr()).expect("codegen+JIT");
     (jit.raw, jit.ty)
 }
@@ -93,7 +95,8 @@ fn try_eval(src: &str) -> Result<(i64, Ty), String> {
     let typed = infer_module(&module, &resolved).map_err(|e| format!("infer: {e:?}"))?;
     let typed = monomorphize(typed);
     let typed = optimize(typed);
-    let typed = kata_monomorph::MonoModule::from(tree_shake(typed.inner));
+    let typed = run_comptime_pass(tree_shake(typed.inner), &resolved.enum_registry).map_err(|e| format!("comptime: {e:?}"))?;
+    let typed = kata_monomorph::MonoModule::from(typed);
     let jit = jit_eval(&typed, &Default::default(), &[], leak_rt_ptr()).map_err(|e| format!("codegen+JIT: {e:?}"))?;
     Ok((jit.raw, jit.ty))
 }
@@ -213,10 +216,9 @@ foo Boolean::False"#;
 /// existe, `mod` seria marcada como free var e o codegen falharia.
 #[test]
 fn b2_map_com_mod_em_lambda() {
-    let src = r#"constant ys := map (lambda x: mod x 2) [1 2 3 4 5]
-echo!(ys)"#;
+    let src = r#"map (lambda x: mod x 2) [1 2 3 4 5]"#;
     let (_raw, ty) = eval_src(src);
-    assert_eq!(ty, Ty::Unit, "map com mod em lambda deve funcionar");
+    assert!(matches!(ty, Ty::List(_)), "map com mod em lambda deve retornar List");
 }
 
 /// + em função nomeada (controle — + é FFI).

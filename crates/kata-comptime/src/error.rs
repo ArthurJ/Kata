@@ -25,4 +25,10 @@ pub enum ComptimeError {
     #[error("tipo não suportado em compile-time: {ty}")]
     #[diagnostic(code = "comptime.unsupported_type")]
     UnsupportedType { ty: Ty },
+
+    /// `constant` cujo value é uma lambda — Function não é serializável
+    /// em compile-time (PRD §3.7). O usuário deve usar named function.
+    #[error("constant {name} — função (lambda) não é serializável em compile-time\n  help: use uma função nomeada em vez de `constant {name} := lambda ...`:\n        {name} :: {sig}\n        lambda ...")]
+    #[diagnostic(code = "constant.lambda_not_serializable")]
+    ConstantLambda { name: String, sig: String },
 }

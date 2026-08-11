@@ -55,6 +55,7 @@ fn tree_shake_impl(typed: TypedModule, preserve_tests: bool) -> TypedModule {
         struct_registry,
         snapshots,
         refined_decls,
+        constants,
     } = typed;
 
     // ── Coleta nomes alcançados a partir do entry + pre_entry ──
@@ -69,6 +70,9 @@ fn tree_shake_impl(typed: TypedModule, preserve_tests: bool) -> TypedModule {
 
     let mut worklist: Vec<&Spanned<TypedExpr>> = pre_entry.iter().collect();
     worklist.push(&entry);
+    // Constants também são raízes de reachability — seus values podem
+    // referenciar funções nomeadas (ex: `constant result := f 41`).
+    worklist.extend(constants.iter());
 
     // Primeira passada: coleta direto do entry/pre_entry.
     for expr in &worklist {
@@ -173,6 +177,7 @@ fn tree_shake_impl(typed: TypedModule, preserve_tests: bool) -> TypedModule {
         struct_registry,
         snapshots,
         refined_decls,
+        constants,
     }
 }
 
@@ -490,6 +495,10 @@ fn collect_refs(
             for stmt in stmts {
                 collect_refs(&stmt.node, reached_fns, reached_actions, fn_names);
             }
+        }
+        // ConstantBinding — recursão no value.
+        TypedExprKind::ConstantBinding { value, .. } => {
+            collect_refs(&value.node, reached_fns, reached_actions, fn_names);
         }
     }
 }

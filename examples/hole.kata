@@ -1,3 +1,6 @@
 # Hole (currying) — + 10 _ gera closure de aridade 1
-constant soma_dez := + 10 _
+# Sections (+ _ n) viram Lambda via desugar de holes — não serializável como constant.
+# Named function equivalente:
+soma_dez :: Int => Int
+lambda x: + 10 x
 soma_dez 5

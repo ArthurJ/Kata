@@ -279,5 +279,9 @@ fn fallback_in_expr(expr_span: &mut Spanned<TypedExpr>) {
                 fallback_in_expr(stmt);
             }
         }
+        // ConstantBinding — recursão no value.
+        TypedExprKind::ConstantBinding { value, .. } => {
+            fallback_in_expr(value);
+        }
     }
 }

@@ -186,6 +186,8 @@ fn expr_has_tail_call(expr: &TypedExpr) -> bool {
         | TypedExprKind::Break
         | TypedExprKind::Continue
         | TypedExprKind::HeapSnapshot { .. } => false,
+        // ConstantBinding — não tem tail call (comptime avalia).
+        TypedExprKind::ConstantBinding { value, .. } => expr_has_tail_call(&value.node),
         // Lambda — não desce em corpos de lambdas internos (escopo diferente).
         TypedExprKind::Lambda { .. } => false,
     }

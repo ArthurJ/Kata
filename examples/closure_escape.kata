@@ -1,17 +1,17 @@
-# Closure escape — closure capturando variável do escopo e escapando via let.
+# Closure escape — closure capturando variável do escopo e escapando via return.
 # Tipo de função como valor: (Int -> Int). A closure escapa via return (heap/ARC).
-# Hole syntax (+ _ n) cria closure que captura n. O escape funciona quando
-# a closure é criada em escopo local (let), não via return de função nomeada.
+# Named function captura constant do escopo do módulo.
 
-# Closure captura variável local e é chamada depois
-constant n := 5
-constant add5 := + _ n
+# Named function que captura constant n
+make_adder :: Int => (Int -> Int)
+lambda n: lambda x: + x n
+
+constant add5 := make_adder 5
 constant a := add5 3
 echo!(a)
 
 # Outro closure com captura diferente
-constant m := 10
-constant add10 := + _ m
+constant add10 := make_adder 10
 constant b := add10 7
 echo!(b)
 

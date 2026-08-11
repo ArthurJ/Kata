@@ -417,6 +417,17 @@ pub enum TypedExprKind {
     /// Bloco de expressões sequenciais — usado em match arm body indentado
     /// com múltiplas statements. O resultado é a última expressão.
     Block { stmts: Vec<Spanned<TypedExpr>> },
+
+    /// `ConstantBinding { name, value }` — declaração de constante de módulo.
+    /// Produzido pela inference para `constant nome := expr`. O comptime pass
+    /// avalia `value` via JIT-and-execute e substitui por literal (escalar) ou
+    /// HeapSnapshot (complexo). Se o RHS não é comptime-available, erro de
+    /// compilação. Vive na coleção `constants` do `TypedModule`, não no
+    /// `pre_entry`. O codegen lowera no prólogo de `__kata_entry`.
+    ConstantBinding {
+        name: String,
+        value: Box<Spanned<TypedExpr>>,
+    },
 }
 
 /// Tipo de canal criado por `channel!()`, `queue!(N)`, `broadcast!()`.
