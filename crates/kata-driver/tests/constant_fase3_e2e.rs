@@ -189,3 +189,44 @@ fn constant_redefinida_erro() {
         "esperava erro duplicate_constant — stderr: {stderr}"
     );
 }
+
+// ── Bug 3: ConstantNameCollision — constant vs function/action ────
+
+/// `constant f := 10` quando `f` já é função nomeada deve falhar com
+/// `type.constant_name_collision`. O nome colide com uma entidade
+/// existente no módulo.
+#[test]
+fn constant_colide_com_function() {
+    let source = "f :: Int => Int\nlambda x: + x 1\nconstant f := 10\necho!(f 5)\n";
+    let (_stdout, stderr, code) = run_kata_run(source);
+    assert_ne!(code, 0, "kata run deve falhar — stderr: {stderr}");
+    assert!(
+        stderr.contains("constant_name_collision"),
+        "esperava erro constant_name_collision — stderr: {stderr}"
+    );
+}
+
+/// Ordem inversa: constant antes da function também deve detectar colisão.
+#[test]
+fn constant_colide_com_function_ordem_inversa() {
+    let source = "constant f := 10\nf :: Int => Int\nlambda x: + x 1\necho!(f 5)\n";
+    let (_stdout, stderr, code) = run_kata_run(source);
+    assert_ne!(code, 0, "kata run deve falhar — stderr: {stderr}");
+    assert!(
+        stderr.contains("constant_name_collision"),
+        "esperava erro constant_name_collision — stderr: {stderr}"
+    );
+}
+
+/// `constant foo := 10` quando `foo` já é action deve falhar com
+/// `type.constant_name_collision`.
+#[test]
+fn constant_colide_com_action() {
+    let source = "action foo (x::Int) => Unit\n  echo!(x)\n\nconstant foo := 10\necho!(foo)\n";
+    let (_stdout, stderr, code) = run_kata_run(source);
+    assert_ne!(code, 0, "kata run deve falhar — stderr: {stderr}");
+    assert!(
+        stderr.contains("constant_name_collision"),
+        "esperava erro constant_name_collision — stderr: {stderr}"
+    );
+}

@@ -59,6 +59,14 @@ pub enum MiddleError {
         span: MietteSpan,
     },
 
+    #[error("nome `{name}` já usado por uma função ou action")]
+    #[diagnostic(code = "type.constant_name_collision")]
+    ConstantNameCollision {
+        name: String,
+        #[label("nome colide com função/action existente")]
+        span: MietteSpan,
+    },
+
     #[error("número incorreto de argumentos: esperado {expected}, encontrado {found}")]
     #[diagnostic(code = "type.arity_mismatch")]
     ArityMismatch {

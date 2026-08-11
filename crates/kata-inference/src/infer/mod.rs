@@ -206,6 +206,14 @@ pub fn infer_module(
                     span: value.span.into(),
                 });
             }
+            // Colisão com função/action: o nome já existe no dispatch_table
+            // (populado no passo 1 com functions e actions).
+            if dispatch_table.has_function(name) {
+                return Err(MiddleError::ConstantNameCollision {
+                    name: name.clone(),
+                    span: value.span.into(),
+                });
+            }
             let desugared = desugar::desugar(value);
             let ctx = InferCtx {
                 table: &dispatch_table,
