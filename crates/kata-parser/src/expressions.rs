@@ -311,23 +311,16 @@ impl Parser {
                 Ok(Spanned::new(Expr::Ident { name }, start))
             }
             Token::At => {
-                // `@comptime` em call-site — envolve apenas `parse_apply`
-                // (aplicação greedy). Pipe (`|>`), fallback (`|`), canais
-                // (`!>`, `<!`) ficam fora do escopo do `@comptime`.
+                // `@comptime` foi removido da linguagem (PRD-constant Fase 5).
+                // Usar `constant` para declarações de módulo comptime.
                 self.advance(); // consume `@`
                 match self.peek() {
                     Token::Ident(s) if s == "comptime" => {
-                        self.advance(); // consume `comptime`
-                        let inner = parse_apply(self)?;
-                        let span = start.cover(inner.span);
-                        Ok(Spanned::new(
-                            Expr::Comptime {
-                                expr: Box::new(inner),
-                            },
-                            span,
+                        Err(self.error(
+                            "`@comptime` foi removido. Use `constant` para constantes de módulo, ou remova `@comptime` — o fold automático otimiza chamadas puras com args literais.",
                         ))
                     }
-                    _ => Err(self.error("`comptime` após `@`")),
+                    _ => Err(self.error("diretiva desconhecida após `@`")),
                 }
             }
             _ => Err(self.error("expression")),

@@ -1,4 +1,4 @@
-# @comptime em AOT — expressões avaliadas em compile-time e embedadas no binário.
+# constant em AOT — expressões avaliadas em compile-time e embedadas no binário.
 
 fatorial :: Int => Int
 lambda 0: 1

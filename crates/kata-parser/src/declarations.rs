@@ -81,20 +81,16 @@ impl Parser {
                     if self.repl_mode {
                         // REPL mode: `let` no top level é aceito como EntryExpr
                         // (PRD §2.5 — o REPL não é top-level de módulo).
+                        // `@comptime` foi removido — se presente, erro.
+                        if directives.iter().any(|d| d.name == "comptime") {
+                            return Err(self.error(
+                                "`@comptime` foi removido. Use `constant` para constantes de módulo, ou remova `@comptime`.",
+                            ));
+                        }
                         let expr = self.parse_let()?;
-                        let final_expr = if directives.iter().any(|d| d.name == "comptime") {
-                            Spanned::new(
-                                Expr::Comptime {
-                                    expr: Box::new(expr.clone()),
-                                },
-                                expr.span,
-                            )
-                        } else {
-                            expr.clone()
-                        };
                         items.push(Spanned::new(
-                            Item::EntryExpr(final_expr.clone()),
-                            final_expr.span,
+                            Item::EntryExpr(expr.clone()),
+                            expr.span,
                         ));
                     } else {
                         // `let` no top level é proibido — usar `constant`.
@@ -123,20 +119,15 @@ impl Parser {
                         while matches!(self.peek(), Token::StmtSep) {
                             self.advance();
                         }
-                        // Se há diretiva @comptime, envolver em Expr::Comptime.
-                        let final_expr = if directives.iter().any(|d| d.name == "comptime") {
-                            Spanned::new(
-                                Expr::Comptime {
-                                    expr: Box::new(expr.clone()),
-                                },
-                                expr.span,
-                            )
-                        } else {
-                            expr.clone()
-                        };
+                        // `@comptime` foi removido (PRD-constant Fase 5).
+                        if directives.iter().any(|d| d.name == "comptime") {
+                            return Err(self.error(
+                                "`@comptime` foi removido. Use `constant` para constantes de módulo, ou remova `@comptime` — o fold automático otimiza chamadas puras com args literais.",
+                            ));
+                        }
                         items.push(Spanned::new(
-                            Item::EntryExpr(final_expr.clone()),
-                            final_expr.span,
+                            Item::EntryExpr(expr.clone()),
+                            expr.span,
                         ));
                     }
                 }
@@ -385,21 +376,17 @@ impl Parser {
                                 while matches!(self.peek(), Token::StmtSep) {
                                     self.advance();
                                 }
-                                // Se há diretiva @comptime, envolver em Expr::Comptime.
-                                let final_expr = if directives.iter().any(|d| d.name == "comptime")
-                                {
-                                    Spanned::new(
-                                        Expr::Comptime {
-                                            expr: Box::new(expr.clone()),
-                                        },
-                                        expr.span,
-                                    )
-                                } else {
-                                    expr.clone()
-                                };
+                                // `@comptime` foi removido (PRD-constant Fase 5).
+                                if directives.iter().any(|d| d.name == "comptime") {
+                                    errors.push(self.error(
+                                        "`@comptime` foi removido. Use `constant` para constantes de módulo, ou remova `@comptime`.",
+                                    ));
+                                    self.sync_to_stmt_sep();
+                                    continue;
+                                }
                                 items.push(Spanned::new(
-                                    Item::EntryExpr(final_expr.clone()),
-                                    final_expr.span,
+                                    Item::EntryExpr(expr.clone()),
+                                    expr.span,
                                 ));
                             }
                             Err(e) => {

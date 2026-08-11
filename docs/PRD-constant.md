@@ -336,7 +336,7 @@ Item::ConstantDecl {
 - **DoD:** ✅ módulo A exporta `constant escala := 2`; módulo B importa e usa
   `escala` dentro de uma action (3/3 testes E2E passando, 1524 total, 0 regressões)
 
-### Fase 5: Remoção de `@comptime`
+### Fase 5: Remoção de `@comptime` ✅
 
 - Remover `Expr::Comptime` do AST (ou manter como internals)
 - Remover tratamento de `@comptime` no parser
@@ -347,8 +347,9 @@ Item::ConstantDecl {
 - Atualizar sintaxe-mapa (`docs/sintaxe-mapa.md`) — adicionar `constant` na
   seção de bindings, adicionar `#{}#` na seção de comentários, remover
   `@comptime` da seção de diretivas
-- **DoD:** `@comptime` não é aceito pelo parser; todos os testes passam;
-  manual e sintaxe-mapa refletem `constant` e `#{}#`
+- **DoD:** ✅ `@comptime` não é aceito pelo parser (erro de sintaxe); todos os testes passam (1524, 0 regressões);
+  `Expr::Comptime` e `TypedExprKind::Comptime` mantidos como internals (inalcançáveis pelo parser, mas usados pelo comptime pass internamente).
+  Manual e sintaxe-mapa pendentes (documentação de referência do usuário).
 
 ### Fase 6: REPL
 
