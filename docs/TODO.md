@@ -258,31 +258,21 @@ impuro funcionando). Mover para inferência quebraria esses testes.
 8 testes migrados de `constant f := + _ 2` (section → lambda) para named functions.
 1541 passed, 0 failed.
 
-### C4. Folding de chamadas literais em corpos de functions
+### C4. Folding de chamadas literais em corpos de functions ✅
 
-**Motivação:** Hoje, `fold_literal_calls` (que faz `f 2 → resultado`) só roda
-em `pre_entry`, `entry`, e `constants` durante o fixpoint — não em corpos de
-functions. Após `fold_constant_refs_in_functions` substituir
-`Ident(scale) → IntLit(2)` no corpo de uma function, `f 2` não é
-subsequentemente foldado. Otimização perdida, não bug de correção.
+**Concluído (2026-08-11).** Após `fold_constant_refs_in_functions` substituir
+`Ident("const")` → literal nos corpos, `fold_literal_calls` roda nos corpos
+de functions (Fase 3b do comptime pass). Fixpoint local por function — o
+resultado de um fold pode ser arg literal de outro fold na mesma function.
 
-C2 (pre-pass) resolve a **avaliação** das constants, mas não resolve este
-problema — ele é ortogonal. C2 simplifica o ponto de inserção (sem o fixpoint
-no caminho), mas o folding de chamadas literais em corpos de functions fica
-como item separado.
+Guard adicional em `fold_literal_calls`: chamadas que retornam `Ty::Function`
+(closures) não são foldadas — ponteiros de função JIT não são serializáveis.
+Sem este guard, `make_adder 5` era foldado para ponteiro bruto → SIGSEGV.
 
-**Proposta:** Após `fold_constant_refs_in_functions` substituir refs a
-constants nos corpos, rodar `fold_literal_calls` nos corpos de functions e
-actions. Isto permite que `f 2` (onde `f` é função pura com args literais) seja
-foldado para seu resultado.
+A recursão é tratada pelo `catch_unwind` existente — se o JIT executa
+`fatorial 10` recursivamente e termina, folda; se panica, não folda.
 
-**Status:** Analisar. Avaliar:
-- Se o folding em corpos de functions deve cascatear (resultado de um fold
-  vira arg literal de outro) — se sim, precisa de fixpoint local por function
-- Interação com codegen: functions são compiladas em `FunctionBuilder`s
-  separados — o fold precisa acontecer antes do lowering
-- Impacto em funções recursivas: folding de `f 2` onde `f` chama `f` precisa
-  de critério de terminação (arg literal decrescente? depth limit?)
+1546 testes passando, 0 falhas, 9 ignorados.
 
 ---
 
