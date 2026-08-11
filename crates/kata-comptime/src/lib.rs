@@ -12,6 +12,17 @@
 //! O pass recebe um `TypedModule` e retorna um `TypedModule` com as
 //! constants avaliadas (literais escalares ou `HeapSnapshot` para tipos
 //! complexos) e chamadas literais foldadas.
+//!
+//! Arquitetura (C2):
+//! 1. `evaluate_constants` — pre-pass linear: percorre constants em ordem
+//!    de declaração, avalia cada uma uma vez. Sem fixpoint. A ordem de
+//!    declaração é a ordem de dependência (a inferência já garante que
+//!    forward references falham com `UnboundName`).
+//! 2. Fixpoint loop — só para `fold_literal_calls` (cascata de folds:
+//!    o resultado de um fold pode ser arg literal de outro).
+//! 3. `fold_constant_refs_in_functions/actions` — substitui Idents de
+//!    constants nos corpos de functions e actions.
+//! 4. `validate_pending_predicates` — JIT-valida predicados complexos.
 
 mod constant_fold;
 mod constness;
@@ -58,126 +69,50 @@ pub fn serialize_value(
 
 /// Executa o comptime pass num `TypedModule`.
 ///
-/// Avalia `ConstantBinding`s (JIT-executa o value e substitui por literal
-/// ou `HeapSnapshot`), faz fold de chamadas literais em cascade, valida
-/// predicados pendentes, e substitui refs a constants nos corpos de
-/// functions e actions.
-///
-/// Repete até fixpoint (sem novas mudanças).
+/// Ver `module docs` para a arquitetura em 4 fases.
 pub fn run_comptime_pass(
     typed: TypedModule,
     enum_registry: &EnumRegistry,
 ) -> Result<TypedModule, ComptimeError> {
     let mut current = typed;
-    // Acumulador de snapshots — populado pela avaliação de constants.
-    // No fim, atribuído a current.snapshots.
     let mut snapshots: Vec<kata_core::snapshot::HeapSnapshotData> =
         std::mem::take(&mut current.snapshots);
 
-    // Bindings comptime-available — construído incrementalmente durante o
-    // fixpoint. Após avaliar uma constant, seu valor literal é adicionado
-    // aqui. Uma constant posterior que referencia outra vê o binding no mapa.
+    // Bindings comptime-available — construído incrementalmente.
+    // Após avaliar uma constant, seu valor literal é adicionado aqui.
+    // Uma constant posterior que referencia outra vê o binding no mapa.
     // O mapa também é injetado no mini TypedModule para o JIT resolver Idents
     // comptime-available.
     let mut comptime_bindings: HashMap<String, TypedExpr> = HashMap::new();
 
-    // Fixpoint: avaliar constants pode revelar folds em cascade (o resultado
-    // de um fold pode ser arg literal de outro).
+    // Clonar actions antes do loop para evitar conflito de borrow:
+    // o ctx precisa de &actions (imutável) para jit_execute_expr, mas
+    // precisamos mutar current.actions[i].body. Clonar resolve
+    // (consistente com jit_execute_expr que já clona tudo).
+    let actions_clone = current.actions.clone();
+    let ctx = ModuleCtx {
+        dispatch_table: &current.dispatch_table,
+        type_env: &current.type_env,
+        functions: &current.functions,
+        actions: &actions_clone,
+        struct_registry: &current.struct_registry,
+        enum_registry,
+    };
+
+    // ── Fase 1: Avaliar constants (pre-pass linear, sem fixpoint) ──
+    evaluate_constants(
+        &mut current.constants,
+        &ctx,
+        &mut snapshots,
+        &mut comptime_bindings,
+    )?;
+
+    // ── Fase 2: Fixpoint de fold_literal_calls (cascata de folds) ──
+    // O resultado de um fold pode ser arg literal de outro fold.
+    // Repete até que nenhuma mudança ocorra.
     loop {
         let mut changed = false;
 
-        // Clonar actions antes do loop para evitar conflito de borrow:
-        // o ctx precisa de &actions (imutável) para jit_execute_expr, mas
-        // precisamos mutar current.actions[i].body. Clonar resolve
-        // (consistente com jit_execute_expr que já clona tudo).
-        let actions_clone = current.actions.clone();
-
-        // Partial borrow: empresta campos imutáveis individuais de `current`.
-        // Não conflita com `&mut current.pre_entry` / `&mut current.entry`
-        // porque são campos diferentes do mesmo struct.
-        let ctx = ModuleCtx {
-            dispatch_table: &current.dispatch_table,
-            type_env: &current.type_env,
-            functions: &current.functions,
-            actions: &actions_clone,
-            struct_registry: &current.struct_registry,
-            enum_registry,
-        };
-
-        // ── Avaliar constants (ConstantBinding) ──
-        // Percorre a coleção `constants` do TypedModule. Para cada
-        // ConstantBinding, verifica constness do value, JIT-executa,
-        // e substitui por literal (escalar) ou HeapSnapshot (complexo).
-        // Se não é comptime-available → erro (PRD §3.1).
-        // Se o value é uma Lambda → erro específico (PRD §3.7 — Function
-        // não é serializável). Peeling Grouping/TypeAscription para
-        // detectar lambda envolvida.
-        for binding in &mut current.constants {
-            let (name, value_span, value_clone) = match &binding.node.kind {
-                TypedExprKind::ConstantBinding { name, value } => {
-                    (name.clone(), value.span, value.node.clone())
-                }
-                _ => continue,
-            };
-
-            // Pular constants cujo value já foi avaliado (literal ou
-            // HeapSnapshot). Isto previne o fixpoint loop: sem o skip,
-            // HeapSnapshot é comptime-available → re-avalia → loop infinito.
-            // Mas ainda precisamos registrar no comptime_bindings para que
-            // fold_constant_refs possa substituir Ident(name) nos corpos de
-            // functions e actions (Fase 3).
-            if is_already_evaluated(&value_clone) {
-                comptime_bindings.insert(name, value_clone);
-                continue;
-            }
-
-            // Pular Closures (chamadas de função) — o fold_literal_calls
-            // cuida de Closures com args literais (ex: `f 41` onde f é
-            // named function e 41 é literal). O passo de constants só
-            // avalia expressões estruturais (ListLit, StructConstruct,
-            // etc.), não chamadas de função.
-            if matches!(value_clone.kind, TypedExprKind::Closure { .. }) {
-                continue;
-            }
-
-            // Detectar lambda como value direto de constant (peeling
-            // Grouping e TypeAscription — `(lambda ...)::(Int -> Int)`
-            // é o padrão dos testes bidirectional).
-            if let Some(ty) = peel_to_lambda_ty(&value_clone) {
-                let sig = format_function_sig(&ty);
-                return Err(ComptimeError::ConstantLambda {
-                    name: name.clone(),
-                    sig,
-                });
-            }
-
-            if !is_comptime_available(&value_clone, &comptime_bindings) {
-                return Err(ComptimeError::NotConsttime {
-                    reason: format!("constant {name} — expressão depende de valor runtime"),
-                });
-            }
-            check_purity(&value_clone)?;
-            let result = jit_execute_expr(&value_clone, &ctx, &comptime_bindings)?;
-            let literal = result_to_literal(
-                &result,
-                &value_clone,
-                &mut snapshots,
-                ctx.struct_registry,
-                ctx.enum_registry,
-            )?;
-            // Substituir o value do ConstantBinding pelo literal.
-            if let TypedExprKind::ConstantBinding { value, .. } = &mut binding.node.kind {
-                **value = Spanned::new(literal.clone(), value_span);
-            }
-            comptime_bindings.insert(name, literal);
-            changed = true;
-        }
-
-        // ── Constant folding de chamadas com args literais ──
-        // Percorre a TAST procurando Closures com ffi_symbol: None e todos
-        // args literais. JIT-executa e substitui por literal. O fixpoint
-        // garante que folds em cascade (o resultado de um fold pode ser arg
-        // literal de outro).
         for expr in &mut current.pre_entry {
             fold_literal_calls(
                 &mut expr.node,
@@ -209,6 +144,12 @@ pub fn run_comptime_pass(
         // Isto pega `constant result := f 41` onde f é named function
         // e 41 é literal — fold executa f(41) em compile-time.
         for binding in &mut current.constants {
+            let (name, was_literal) = match &binding.node.kind {
+                TypedExprKind::ConstantBinding { name, value } => {
+                    (name.clone(), is_already_evaluated(&value.node))
+                }
+                _ => continue,
+            };
             if let TypedExprKind::ConstantBinding { value, .. } = &mut binding.node.kind {
                 fold_literal_calls(
                     &mut value.node,
@@ -217,6 +158,12 @@ pub fn run_comptime_pass(
                     &mut snapshots,
                     &comptime_bindings,
                 )?;
+                // Se o fold transformou o value em literal, registrar no
+                // comptime_bindings para que fold_constant_refs possa
+                // substituir Ident(name) nos corpos de functions/actions.
+                if !was_literal && is_already_evaluated(&value.node) {
+                    comptime_bindings.insert(name, value.node.clone());
+                }
             }
         }
 
@@ -261,8 +208,87 @@ pub fn run_comptime_pass(
     Ok(current)
 }
 
+/// Pre-pass linear: avalia cada `ConstantBinding` uma vez, em ordem de
+/// declaração. Sem fixpoint.
+///
+/// A ordem de declaração é a ordem de dependência — a inferência já garante
+/// que forward references entre constants falham com `UnboundName`. Cada
+/// constant avaliada é registrada em `comptime_bindings` imediatamente,
+/// para que a próxima constant que a referencia a veja.
+///
+/// Constants importadas (já avaliadas pelo pipeline recursivo do módulo
+/// exportador) são puladas — só precisam ser registradas em
+/// `comptime_bindings` para `fold_constant_refs`.
+fn evaluate_constants(
+    constants: &mut [Spanned<TypedExpr>],
+    ctx: &ModuleCtx<'_>,
+    snapshots: &mut Vec<kata_core::snapshot::HeapSnapshotData>,
+    comptime_bindings: &mut HashMap<String, TypedExpr>,
+) -> Result<(), ComptimeError> {
+    for binding in constants {
+        let (name, value_span, value_clone) = match &binding.node.kind {
+            TypedExprKind::ConstantBinding { name, value } => {
+                (name.clone(), value.span, value.node.clone())
+            }
+            _ => continue,
+        };
+
+        // Pular constants já avaliadas (importadas de outro módulo, ou
+        // já foldadas por iteração anterior). Registrar no mapa para que
+        // fold_constant_refs possa substituir Ident(name) nos corpos.
+        if is_already_evaluated(&value_clone) {
+            comptime_bindings.insert(name, value_clone);
+            continue;
+        }
+
+        // Pular Closures (chamadas de função) — o fold_literal_calls
+        // cuida de Closures com args literais (ex: `f 41` onde f é
+        // named function e 41 é literal). O passo de constants só
+        // avalia expressões estruturais (ListLit, StructConstruct,
+        // etc.), não chamadas de função.
+        if matches!(value_clone.kind, TypedExprKind::Closure { .. }) {
+            // Mas ainda precisamos registrar caso fold depois a avalie.
+            // Usamos o value original — fold_literal_calls pode trocá-lo.
+            comptime_bindings.insert(name, value_clone);
+            continue;
+        }
+
+        // Detectar lambda como value direto de constant (peeling
+        // Grouping e TypeAscription — `(lambda ...)::(Int -> Int)`
+        // é o padrão dos testes bidirectional).
+        if let Some(ty) = peel_to_lambda_ty(&value_clone) {
+            let sig = format_function_sig(&ty);
+            return Err(ComptimeError::ConstantLambda {
+                name: name.clone(),
+                sig,
+            });
+        }
+
+        if !is_comptime_available(&value_clone, comptime_bindings) {
+            return Err(ComptimeError::NotConsttime {
+                reason: format!("constant {name} — expressão depende de valor runtime"),
+            });
+        }
+        check_purity(&value_clone)?;
+        let result = jit_execute_expr(&value_clone, ctx, comptime_bindings)?;
+        let literal = result_to_literal(
+            &result,
+            &value_clone,
+            snapshots,
+            ctx.struct_registry,
+            ctx.enum_registry,
+        )?;
+        // Substituir o value do ConstantBinding pelo literal.
+        if let TypedExprKind::ConstantBinding { value, .. } = &mut binding.node.kind {
+            **value = Spanned::new(literal.clone(), value_span);
+        }
+        comptime_bindings.insert(name, literal);
+    }
+    Ok(())
+}
+
 /// Verifica se o value de um ConstantBinding já foi avaliado (é literal
-/// ou HeapSnapshot). Usado para pular re-avaliação no fixpoint loop.
+/// ou HeapSnapshot).
 fn is_already_evaluated(expr: &TypedExpr) -> bool {
     matches!(
         &expr.kind,

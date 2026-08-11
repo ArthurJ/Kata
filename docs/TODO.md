@@ -216,34 +216,27 @@ simplificado: removidas as calls a `replace_comptime_in_place` e
 `fold_literal_calls` + predicates. `fold_literal_calls` mantido — folda
 `Closure` com args literais, independe de `Comptime`. 1541 passed, 0 failed.
 
-### C2. Pre-pass dedicado para avaliação de constants (sem fixpoint)
+### C2. Pre-pass dedicado para avaliação de constants (sem fixpoint) ✅
 
-**Motivação:** Hoje, `ConstantBinding` é avaliado dentro do loop de fixpoint do
-comptime pass (`kata-comptime/src/lib.rs:123-190`). O workaround
-`is_already_evaluated` (linha 145) evita loop infinito: `HeapSnapshot` é
-comptime-available, então sem o skip seria re-avaliado a cada iteração. O
-fixpoint tem dois mecanismos diferentes para a mesma operação conceitual
-(avaliar em comptime), e a lógica de skip é específica para um caso.
+**Concluído (2026-08-11).** Separada a avaliação de constants do fixpoint loop.
 
-**Proposta:** Pre-pass dedicado **antes** do fixpoint (ou substituindo-o para
-constants):
-1. Ordenar constants por dependência (se `constant b := f a` e `a` é constant,
-   `a` antes de `b` — análise de referências no value)
-2. Avaliar cada constant uma vez (constness + pureza + JIT)
-3. Produzir `HashMap<String, TypedExpr>` com valores avaliados
-4. Não precisa de fixpoint — constants são imutáveis e avaliadas uma vez
+Mudança arquitetural:
+1. `evaluate_constants()` — pre-pass linear que percorre constants em ordem
+   de declaração, avalia cada uma uma vez (JIT-executa, substitui por literal
+   ou HeapSnapshot). Sem fixpoint. A ordem de declaração é a ordem de
+   dependência — a inferência já garante que forward references falham com
+   `UnboundName` (comportamento correto).
+2. Fixpoint loop simplificado — só `fold_literal_calls` (cascata de folds:
+   o resultado de um fold pode ser arg literal de outro). Após foldar uma
+   constant, registra o valor em `comptime_bindings` imediatamente.
+3. `is_already_evaluated` deixou de ser workaround anti-loop — é só um skip
+   de "já pronta" no pre-pass linear (constants importadas, já avaliadas).
 
-Isto elimina o workaround `is_already_evaluated` e simplifica o loop principal
-do comptime pass (que passaria a lidar só com `fold_literal_calls` em cascade).
+Constants que são Closures (chamadas de função) são puladas no pre-pass e
+deixadas para o `fold_literal_calls` no fixpoint. Após o fold transformar
+uma Closure em literal, o valor é registrado em `comptime_bindings`.
 
-**Status:** Analisar. Avaliar:
-- A análise de dependência entre constants (ordenção topológica) — pode haver
-  referências indiretas via funções nomeadas?
-- Se `fold_literal_calls` ainda precisa de fixpoint (cascata de folds:
-  resultado de um fold vira arg literal de outro), o fixpoint permanece para
-  esse fim, mas sem processar `ConstantBinding`.
-- Interação com Fase 4 (import): constants importadas já vêm avaliadas — o
-  pre-pass deve pulá-las (equivalente ao `is_already_evaluated` atual).
+1541 passed, 0 failed.
 
 ### C3. Inferência dedicada para constants (sem wrapping em `Expr::Let`)
 
