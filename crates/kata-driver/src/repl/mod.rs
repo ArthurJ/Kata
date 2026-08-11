@@ -20,6 +20,7 @@ use std::path::PathBuf;
 
 use kata_ast::{Expr, Item, Module, Span, Spanned};
 use kata_codegen::jit_eval_repl;
+use kata_comptime::run_comptime_pass;
 use kata_core::ty::{PrimTy, Ty};
 use kata_inference::infer_module;
 use kata_lexer::lex;
@@ -344,8 +345,17 @@ impl ReplSession {
         let user = resolve(module)
             .map_err(|e| format!("erro de resolução: {}", crate::format_error_vec(&e)))?;
         let resolved = merge_resolved(self.prelude.clone(), user);
-        let mut typed =
+        let typed =
             infer_module(module, &resolved).map_err(|e| format!("erro de tipo: {e}"))?;
+
+        // Comptime pass: avalia constants (JIT-executa), substitui por
+        // literais/snapshots, e roda constant_fold (substitui Ident de
+        // constants nos corpos de functions e actions). Isto é essencial
+        // para que functions e actions definidas no REPL possam referenciar
+        // constants — sem o fold, o var_map do FunctionBuilder delas não
+        // tem acesso às constants (que só existem no var_map do entry point).
+        let mut typed = run_comptime_pass(typed, &resolved.enum_registry)
+            .map_err(|e| format!("erro de comptime: {e}"))?;
 
         // Injetar bindings complexos congelados como HeapSnapshot no pre_entry.
         if !self.snapshot_bindings.is_empty() {
