@@ -351,11 +351,31 @@ Item::ConstantDecl {
   `Expr::Comptime` e `TypedExprKind::Comptime` mantidos como internals (inalcançáveis pelo parser, mas usados pelo comptime pass internamente).
   Manual e sintaxe-mapa pendentes (documentação de referência do usuário).
 
-### Fase 6: REPL
+### Fase 6: REPL ✅
 
-- Verificar que `let` no prompt do REPL continua funcionando
-- `constant` no REPL deve funcionar (registrar binding persistente)
-- **DoD:** REPL aceita `constant x := 42` e `let x := 42` (ambos no prompt)
+- Verificar que `let` no prompt do REPL continua funcionando ✅
+- `constant` no REPL deve funcionar (registrar binding persistente) ✅
+- **Implementação:** O pipeline do REPL (`run_pipeline_eval`) agora chama
+  `run_comptime_pass` após `infer_module`. O comptime pass avalia constants
+  (JIT-executa cada `ConstantBinding`), substitui por literais/snapshots, e
+  roda `constant_fold` — substitui `Ident` de constants por literais nos
+  corpos de functions e actions. Sem o fold, constants definidas no prompt
+  não eram visíveis em functions/actions (FunctionBuilder separado, sem
+  acesso ao `var_map` do entry point).
+- **Distinção `constant` vs `let` no REPL:** `let` é visível apenas no entry
+  point (lowerado em `pre_entry`, compartilha `var_map` do entry). `constant`
+  é visível em functions e actions via `constant_fold` (substituição de
+  `Ident` por literal antes do codegen). Esta é a única diferença semântica
+  entre os dois no contexto do REPL.
+- **DoD:** ✅ REPL aceita `constant x := 42` e `let x := 42` (ambos no prompt);
+  `constant` é acessível em functions definidas no REPL; 1530 testes passando,
+  0 falhas, 9 ignorados; 6 novos testes E2E.
+- **Bugs pré-existentes documentados (não bloqueadores):**
+  - Action call do prompt (`foo 5`) é inferido como `Closure` em vez de
+    `ActionCall` — bug do typechecker, não relacionado a Fase 6.
+  - Shadowing de constants com mesmo nome em módulo produz o primeiro
+    valor, não o último — bug do codegen (prólogo lowera ambos, primeiro
+    `def_var` vence).
 
 ### Fase 7: Comentários multilinha `#{}#`
 
