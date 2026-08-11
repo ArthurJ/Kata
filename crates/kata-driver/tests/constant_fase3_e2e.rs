@@ -230,3 +230,51 @@ fn constant_colide_com_action() {
         "esperava erro constant_name_collision — stderr: {stderr}"
     );
 }
+
+// ── C4: Folding de chamadas literais em corpos de functions ──────
+
+/// `constant n := 10` + `fatorial` + function que chama `fatorial n`
+/// — após fold_constant_refs, `n` vira `10` no corpo, e `fatorial 10`
+/// é foldado para `3628800` em compile-time (C4).
+#[test]
+fn c4_fold_chamada_literal_em_function_body() {
+    let source = "\
+constant n := 10
+fatorial :: Int => Int
+lambda 0: 1
+lambda n: * n (fatorial (- n 1))
+process :: Int => Int
+lambda x: fatorial n
+echo!(process 0)
+";
+    let (stdout, stderr, code) = run_kata_run(source);
+    assert_eq!(code, 0, "kata run deve sucesso — stderr: {stderr}");
+    assert!(
+        stdout.trim().contains("3628800"),
+        "esperava 3628800 (fatorial 10 foldado), got: {stdout}"
+    );
+}
+
+/// Closures que retornam Function NÃO devem ser foldadas — ponteiros
+/// de função JIT não são serializáveis. `make_adder 5` retorna uma
+/// closure; foldar causaria SIGSEGV em runtime.
+#[test]
+fn c4_nao_folda_chamada_que_retorna_function() {
+    let source = "\
+make_adder :: Int => (Int -> Int)
+lambda n: lambda x: + x n
+constant add5 := make_adder 5
+constant a := add5 3
+echo!(a)
+constant add10 := make_adder 10
+constant b := add10 7
+echo!(b)
+0
+";
+    let (stdout, stderr, code) = run_kata_run(source);
+    assert_eq!(code, 0, "kata run deve sucesso — stderr: {stderr}");
+    assert!(
+        stdout.contains("8") && stdout.contains("17"),
+        "esperava 8 e 17 (closures NÃO foldadas), got: {stdout}"
+    );
+}

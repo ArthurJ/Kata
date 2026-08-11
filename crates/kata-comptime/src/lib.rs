@@ -183,6 +183,70 @@ pub fn run_comptime_pass(
     constant_fold::fold_constant_refs_in_functions(&mut current.functions, &comptime_bindings)?;
     constant_fold::fold_constant_refs_in_actions(&mut current.actions, &comptime_bindings)?;
 
+    // ── Fase 3b: Folding de chamadas literais em corpos de functions (C4) ──
+    // Após fold_constant_refs substituir Ident("const") → literal nos corpos,
+    // chamadas como `f 10` (onde f é função pura e 10 veio de constant fold)
+    // tornam-se foldable. Roda fixpoint local por function — o resultado de
+    // um fold pode ser arg literal de outro fold na mesma function.
+    {
+        let functions_clone = current.functions.clone();
+        let fold_ctx = ModuleCtx {
+            dispatch_table: &current.dispatch_table,
+            type_env: &current.type_env,
+            functions: &functions_clone,
+            actions: &current.actions,
+            struct_registry: &current.struct_registry,
+            enum_registry,
+        };
+        for func in &mut current.functions {
+            for clause in &mut func.clauses {
+                let mut changed = true;
+                while changed {
+                    changed = false;
+                    // Fold no body (sem guards) ou em cada guard.
+                    if clause.guards.is_empty() {
+                        fold_literal_calls(
+                            &mut clause.body.node,
+                            &fold_ctx,
+                            &mut changed,
+                            &mut current.snapshots,
+                            &comptime_bindings,
+                        )?;
+                    } else {
+                        for guard in &mut clause.guards {
+                            if let Some(cond) = &mut guard.condition {
+                                fold_literal_calls(
+                                    &mut cond.node,
+                                    &fold_ctx,
+                                    &mut changed,
+                                    &mut current.snapshots,
+                                    &comptime_bindings,
+                                )?;
+                            }
+                            fold_literal_calls(
+                                &mut guard.body.node,
+                                &fold_ctx,
+                                &mut changed,
+                                &mut current.snapshots,
+                                &comptime_bindings,
+                            )?;
+                        }
+                    }
+                    // Fold nos values dos with_bindings.
+                    for wb in &mut clause.with_bindings {
+                        fold_literal_calls(
+                            &mut wb.value.node,
+                            &fold_ctx,
+                            &mut changed,
+                            &mut current.snapshots,
+                            &comptime_bindings,
+                        )?;
+                    }
+                }
+            }
+        }
+    }
+
     // ── Fase 4: Validar predicados complexos pendentes ──
     // TypeAscription com pending_predicates foi produzida pelo typeck quando
     // const_eval não conseguiu avaliar (predicado complexo, ex: is_prime).

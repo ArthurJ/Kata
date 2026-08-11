@@ -80,6 +80,13 @@ pub(crate) fn fold_literal_calls(
             if matches!(&expr.ty, Ty::Generic(name, _) if name == "Result") {
                 return Ok(());
             }
+            // Não dobrar chamadas que retornam Function (closures) —
+            // ponteiros de função JIT não são serializáveis como literal
+            // ou HeapSnapshot. O resultado seria um ponteiro bruto que
+            // causaria SIGSEGV em runtime.
+            if matches!(&expr.ty, Ty::Function(..)) {
+                return Ok(());
+            }
             // JIT-executar a Closure inteira.
             // Usar catch_unwind porque o Cranelift pode panicar em vez de
             // retornar Err (ex: type mismatch, alias edge cases). Um panic
