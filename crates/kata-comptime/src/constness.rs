@@ -94,8 +94,7 @@ fn check(expr: &TypedExpr, comptime_bindings: &HashMap<String, TypedExpr>) -> bo
         // Let — comptime-available se value é.
         TypedExprKind::Let { value, .. } => check(&value.node, comptime_bindings),
 
-        // Comptime wrapper — sempre comptime-available (será avaliado).
-        TypedExprKind::Comptime { expr } => check(&expr.node, comptime_bindings),
+
 
         // HeapSnapshot — sempre comptime-available (já avaliado).
         TypedExprKind::HeapSnapshot { .. } => true,

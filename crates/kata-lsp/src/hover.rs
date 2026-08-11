@@ -104,7 +104,6 @@ fn children<'a>(
         | VariantQual { .. }
         | ChannelCreate { .. }
         | HeapSnapshot { .. } => Box::new(std::iter::empty()),
-        Comptime { expr } => Box::new(std::iter::once(expr.as_ref())),
         ConstantBinding { value, .. } => Box::new(std::iter::once(value.as_ref())),
 
         // Um filho Box<Spanned<TypedExpr>>

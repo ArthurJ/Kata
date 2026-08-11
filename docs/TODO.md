@@ -198,6 +198,106 @@ mudança é profunda mas elimina uma classe inteira de bugs de sincronização.
 
 ---
 
+## Análise `constant` — Refatoração (2026-08-11)
+
+Itens identificados na análise da funcionalidade `constant` após a remoção de
+`@comptime`. Cada item descreve o problema, a proposta e o status.
+
+### C1. Remover `TypedExprKind::Comptime` (código morto) ✅
+
+**Concluído (2026-08-11).** Removidos `Expr::Comptime` da AST,
+`TypedExprKind::Comptime` da TAST, o braço de inferência que os conectava, o
+arquivo `replace.rs` inteiro (substituição de nós Comptime), `contains_comptime`
+e `walk_ref` de `walk.rs`, e 18 match arms em 15 arquivos (tree-shaker,
+monomorph, codegen, walk, pureza, constness, tail_call, cache_key, desugar,
+desugar_holes, hover, test helpers). O fixpoint loop do comptime pass foi
+simplificado: removidas as calls a `replace_comptime_in_place` e
+`contains_comptime`, ficou só o processamento de `ConstantBinding` +
+`fold_literal_calls` + predicates. `fold_literal_calls` mantido — folda
+`Closure` com args literais, independe de `Comptime`. 1541 passed, 0 failed.
+
+### C2. Pre-pass dedicado para avaliação de constants (sem fixpoint)
+
+**Motivação:** Hoje, `ConstantBinding` é avaliado dentro do loop de fixpoint do
+comptime pass (`kata-comptime/src/lib.rs:123-190`). O workaround
+`is_already_evaluated` (linha 145) evita loop infinito: `HeapSnapshot` é
+comptime-available, então sem o skip seria re-avaliado a cada iteração. O
+fixpoint tem dois mecanismos diferentes para a mesma operação conceitual
+(avaliar em comptime), e a lógica de skip é específica para um caso.
+
+**Proposta:** Pre-pass dedicado **antes** do fixpoint (ou substituindo-o para
+constants):
+1. Ordenar constants por dependência (se `constant b := f a` e `a` é constant,
+   `a` antes de `b` — análise de referências no value)
+2. Avaliar cada constant uma vez (constness + pureza + JIT)
+3. Produzir `HashMap<String, TypedExpr>` com valores avaliados
+4. Não precisa de fixpoint — constants são imutáveis e avaliadas uma vez
+
+Isto elimina o workaround `is_already_evaluated` e simplifica o loop principal
+do comptime pass (que passaria a lidar só com `fold_literal_calls` em cascade).
+
+**Status:** Analisar. Avaliar:
+- A análise de dependência entre constants (ordenção topológica) — pode haver
+  referências indiretas via funções nomeadas?
+- Se `fold_literal_calls` ainda precisa de fixpoint (cascata de folds:
+  resultado de um fold vira arg literal de outro), o fixpoint permanece para
+  esse fim, mas sem processar `ConstantBinding`.
+- Interação com Fase 4 (import): constants importadas já vêm avaliadas — o
+  pre-pass deve pulá-las (equivalente ao `is_already_evaluated` atual).
+
+### C3. Inferência dedicada para constants (sem wrapping em `Expr::Let`)
+
+**Motivação:** A inferência envelopa o value da constant em `Expr::Let` para
+reusar toda a lógica de inferência de `let` (deferred lambdas, OverloadSet,
+fn_alias) — `infer/mod.rs:218-227`. É engenhoso, mas cria acoplamento semântico:
+`constant` e `let` têm semânticas diferentes (comptime vs runtime, módulo vs
+local), mas partilham o path de inferência. Se o comportamento de `let` mudar,
+`constant` herda a mudança implicitamente. Além disso, o erro `ConstantLambda`
+só é detectado no comptime pass, não na inferência.
+
+**Proposta:** Clonar o path de inferência (não compartilhar com `let`):
+- Não precisa de `deferred_lambdas` (lambdas são proibidas em constants)
+- Não precisa de comportamento de `let` em escopo local
+- Pode validar explicitamente que o value é serializável (constness) já na
+  inferência, não só no comptime pass — torna o erro `ConstantLambda` mais
+  precoce
+- Mantém a reusabilidade de lógica comum (inferência de Apply, OverloadSet,
+  fn_alias) via funções auxiliares compartilhadas, não via wrapping em `Expr::Let`
+
+**Status:** Analisar. Avaliar:
+- Quanta lógica de `let` é efetivamente reusada vs. contornada
+- Se a detecção precoce de `ConstantLambda` na inferência compensa a
+  duplicação de path
+- Impacto nos testes de inferência que esperam `TypedExprKind::ConstantBinding`
+
+### C4. Folding de chamadas literais em corpos de functions
+
+**Motivação:** Hoje, `fold_literal_calls` (que faz `f 2 → resultado`) só roda
+em `pre_entry`, `entry`, e `constants` durante o fixpoint — não em corpos de
+functions. Após `fold_constant_refs_in_functions` substituir
+`Ident(scale) → IntLit(2)` no corpo de uma function, `f 2` não é
+subsequentemente foldado. Otimização perdida, não bug de correção.
+
+C2 (pre-pass) resolve a **avaliação** das constants, mas não resolve este
+problema — ele é ortogonal. C2 simplifica o ponto de inserção (sem o fixpoint
+no caminho), mas o folding de chamadas literais em corpos de functions fica
+como item separado.
+
+**Proposta:** Após `fold_constant_refs_in_functions` substituir refs a
+constants nos corpos, rodar `fold_literal_calls` nos corpos de functions e
+actions. Isto permite que `f 2` (onde `f` é função pura com args literais) seja
+foldado para seu resultado.
+
+**Status:** Analisar. Avaliar:
+- Se o folding em corpos de functions deve cascatear (resultado de um fold
+  vira arg literal de outro) — se sim, precisa de fixpoint local por function
+- Interação com codegen: functions são compiladas em `FunctionBuilder`s
+  separados — o fold precisa acontecer antes do lowering
+- Impacto em funções recursivas: folding de `f 2` onde `f` chama `f` precisa
+  de critério de terminação (arg literal decrescente? depth limit?)
+
+---
+
 ## Fora do Escopo 1.0
 
 Mantidos no ROADMAP. Não mover para cá sem decisão explícita.

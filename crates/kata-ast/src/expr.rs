@@ -249,12 +249,6 @@ pub enum Expr {
         timeout_body: Option<Box<Spanned<Expr>>>,
     },
 
-    // ── Comptime ─────────────────────────────────────────
-    /// `@comptime expr` — marca uma expressão para avaliação em compile-time.
-    /// O comptime pass JIT-executa a expressão e substitui por Literal ou
-    /// HeapSnapshot. Na TAST, vira `TypedExprKind::Comptime`.
-    Comptime { expr: Box<Spanned<Expr>> },
-
     /// Bloco de expressões sequenciais — usado em match arm body indentado
     /// com múltiplas statements (ex: `let` seguido de expressão).
     /// O resultado é a última expressão; as anteriores são computações

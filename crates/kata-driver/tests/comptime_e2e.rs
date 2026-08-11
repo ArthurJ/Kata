@@ -1,7 +1,7 @@
-//! Testes E2E — `@comptime` (Fio 12, Fases 1 e 2).
+//! Testes E2E — comptime evaluation (Fio 12, Fases 1 e 2).
 //!
-//! PRD-fio12-comptime.md: `@comptime` avalia expressões em compile-time
-//! via JIT-and-execute, substituindo o nó `Comptime` por um literal na TAST.
+//! O comptime pass avalia `ConstantBinding`s em compile-time via
+//! JIT-and-execute, substituindo o value por um literal ou HeapSnapshot.
 //!
 //! Fase 1 DoD: `@comptime let x := + 1 2` gera `x = 3` — a expressão
 //! `+ 1 2` é avaliada em compile-time e substituída por `IntLit "3"`.

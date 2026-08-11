@@ -399,19 +399,12 @@ pub enum TypedExprKind {
         action_expr: Box<Spanned<TypedExpr>>,
         args: Box<Spanned<TypedExpr>>,
     },
-    /// `@comptime expr` — expressão marcada para avaliação em compile-time.
-    /// O comptime pass identifica estes nós, verifica constness + pureza,
-    /// JIT-executa, e substitui por `IntLit`/`FloatLit`/`TextLit`/`Unit`
-    /// (escalares) ou `HeapSnapshot` (tipos complexos — Fase 2).
-    /// O tipo é o mesmo do inner expr.
-    Comptime { expr: Box<Spanned<TypedExpr>> },
-
-    /// `HeapSnapshot { snapshot_id, ty }` — resultado de `@comptime` para
-    /// tipos complexos (List, Struct, Tuple, Text, Sum com payload).
+    /// `HeapSnapshot { snapshot_id, ty }` — resultado de avaliação comptime
+    /// para tipos complexos (List, Struct, Tuple, Text, Sum com payload).
     /// O comptime pass serializa o valor JIT-executado em bytes + rebase_offsets,
-    /// armazena na tabela de snapshots do `TypedModule`, e substitui o nó
-    /// `Comptime` por `HeapSnapshot`. O codegen lowera para `kata_rt_get_snapshot(id)`,
-    /// que retorna um ponteiro válido na root_arena (carregado em load-time).
+    /// armazena na tabela de snapshots do `TypedModule`. O codegen lowera para
+    /// `kata_rt_get_snapshot(id)`, que retorna um ponteiro válido na root_arena
+    /// (carregado em load-time).
     /// `ty` é o mesmo tipo da expressão original — preservado exactamente.
     HeapSnapshot { snapshot_id: u32, ty: Ty },
     /// Bloco de expressões sequenciais — usado em match arm body indentado

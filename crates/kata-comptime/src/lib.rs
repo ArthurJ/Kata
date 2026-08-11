@@ -1,18 +1,17 @@
 //! Comptime pass — avaliação em compile-time via JIT-and-execute.
 //!
-//! Percorre a TAST identificando nós `TypedExprKind::Comptime`, verifica
-//! constness e pureza, JIT-executa a expressão, e substitui por `Literal`
-//! (escalares) ou `HeapSnapshot` (tipos complexos — Fase 2).
+//! Avalia `ConstantBinding`s (constants de módulo), faz fold de chamadas
+//! literais, valida predicados pendentes, e substitui refs a constants
+//! nos corpos de functions e actions.
 //!
 //! Posição no pipeline:
 //! ```text
 //! ... → tree_shake → comptime → lowering → ...
 //! ```
 //!
-//! O pass recebe um `TypedModule` e retorna um `TypedModule` com os nós
-//! `Comptime` substituídos. Para a Fase 1, apenas resultados escalares
-//! (Int, Float, Boolean, Unit) são suportados — viram `IntLit`/`FloatLit`/
-//! `TextLit`/`Unit` directo na TAST.
+//! O pass recebe um `TypedModule` e retorna um `TypedModule` com as
+//! constants avaliadas (literais escalares ou `HeapSnapshot` para tipos
+//! complexos) e chamadas literais foldadas.
 
 mod constant_fold;
 mod constness;
@@ -22,7 +21,6 @@ mod fold;
 mod jit;
 mod predicates;
 mod pureza;
-mod replace;
 mod result;
 mod snapshot;
 mod walk;
@@ -39,9 +37,7 @@ use fold::fold_literal_calls;
 use jit::jit_execute_expr;
 use predicates::validate_pending_predicates;
 use pureza::check_purity;
-use replace::replace_comptime_in_place;
 use result::result_to_literal;
-use walk::contains_comptime;
 
 // Re-export da API pública.
 pub use error::ComptimeError;
@@ -62,28 +58,31 @@ pub fn serialize_value(
 
 /// Executa o comptime pass num `TypedModule`.
 ///
-/// Percorre `pre_entry` e `entry` substituindo nós `TypedExprKind::Comptime`
-/// por literais (escalares) ou snapshots (complexos — Fase 2).
+/// Avalia `ConstantBinding`s (JIT-executa o value e substitui por literal
+/// ou `HeapSnapshot`), faz fold de chamadas literais em cascade, valida
+/// predicados pendentes, e substitui refs a constants nos corpos de
+/// functions e actions.
 ///
-/// Repete até fixpoint (sem novos nós `Comptime`).
+/// Repete até fixpoint (sem novas mudanças).
 pub fn run_comptime_pass(
     typed: TypedModule,
     enum_registry: &EnumRegistry,
 ) -> Result<TypedModule, ComptimeError> {
     let mut current = typed;
-    // Acumulador de snapshots — populado por replace_comptime_in_place.
+    // Acumulador de snapshots — populado pela avaliação de constants.
     // No fim, atribuído a current.snapshots.
     let mut snapshots: Vec<kata_core::snapshot::HeapSnapshotData> =
         std::mem::take(&mut current.snapshots);
 
     // Bindings comptime-available — construído incrementalmente durante o
-    // fixpoint. Após substituir @comptime let x := ..., x → literal é
-    // adicionado aqui. Um @comptime posterior que referencia x vê o binding
-    // no mapa. O mapa também é injetado no mini TypedModule para o JIT
-    // resolver Idents comptime-available.
+    // fixpoint. Após avaliar uma constant, seu valor literal é adicionado
+    // aqui. Uma constant posterior que referencia outra vê o binding no mapa.
+    // O mapa também é injetado no mini TypedModule para o JIT resolver Idents
+    // comptime-available.
     let mut comptime_bindings: HashMap<String, TypedExpr> = HashMap::new();
 
-    // Fixpoint: substituir Comptime pode revelar novos Comptime em inner exprs.
+    // Fixpoint: avaliar constants pode revelar folds em cascade (o resultado
+    // de um fold pode ser arg literal de outro).
     loop {
         let mut changed = false;
 
@@ -105,22 +104,7 @@ pub fn run_comptime_pass(
             enum_registry,
         };
 
-        // Processar pre_entry
-        for expr in &mut current.pre_entry {
-            let was_comptime = contains_comptime(&expr.node);
-            replace_comptime_in_place(
-                &mut expr.node,
-                &ctx,
-                &mut changed,
-                &mut snapshots,
-                &mut comptime_bindings,
-            )?;
-            if was_comptime && !contains_comptime(&expr.node) {
-                // Já substituído — ok
-            }
-        }
-
-        // ── Fase 2: Avaliar constants (ConstantBinding) ──
+        // ── Avaliar constants (ConstantBinding) ──
         // Percorre a coleção `constants` do TypedModule. Para cada
         // ConstantBinding, verifica constness do value, JIT-executa,
         // e substitui por literal (escalar) ou HeapSnapshot (complexo).
@@ -189,33 +173,11 @@ pub fn run_comptime_pass(
             changed = true;
         }
 
-        // Processar entry
-        replace_comptime_in_place(
-            &mut current.entry.node,
-            &ctx,
-            &mut changed,
-            &mut snapshots,
-            &mut comptime_bindings,
-        )?;
-
-        // Processar bodies de actions (Fase 3b)
-        for action in &mut current.actions {
-            for stmt in &mut action.body {
-                replace_comptime_in_place(
-                    &mut stmt.node,
-                    &ctx,
-                    &mut changed,
-                    &mut snapshots,
-                    &mut comptime_bindings,
-                )?;
-            }
-        }
-
-        // ── Ponto 7: Constant folding de chamadas com args literais ──
-        // Após replace_comptime_in_place, percorre a TAST procurando
-        // Closures com ffi_symbol: None e todos args literais. JIT-executa
-        // e substitui por literal. O fixpoint garante que folds em cascade
-        // (o resultado de um fold pode ser arg literal de outro).
+        // ── Constant folding de chamadas com args literais ──
+        // Percorre a TAST procurando Closures com ffi_symbol: None e todos
+        // args literais. JIT-executa e substitui por literal. O fixpoint
+        // garante que folds em cascade (o resultado de um fold pode ser arg
+        // literal de outro).
         for expr in &mut current.pre_entry {
             fold_literal_calls(
                 &mut expr.node,

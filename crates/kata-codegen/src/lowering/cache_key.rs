@@ -258,11 +258,7 @@ fn canonical_expr(expr: &TypedExpr, buf: &mut String) {
             }
             buf.push(')');
         }
-        TypedExprKind::Comptime { expr } => {
-            buf.push_str("Comptime(");
-            canonical_expr(&expr.node, buf);
-            buf.push(')');
-        }
+
         TypedExprKind::Block { stmts } => {
             buf.push_str("Block(");
             for stmt in stmts {

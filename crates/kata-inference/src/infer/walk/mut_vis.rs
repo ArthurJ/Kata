@@ -202,9 +202,7 @@ where
             for_each_subexpr_mut(&mut action_expr.node, f);
             for_each_subexpr_mut(&mut args.node, f);
         }
-        TypedExprKind::Comptime { expr } => {
-            for_each_subexpr_mut(&mut expr.node, f);
-        }
+
         TypedExprKind::Block { stmts } => {
             for stmt in stmts {
                 for_each_subexpr_mut(&mut stmt.node, f);

@@ -202,9 +202,7 @@ where
             for_each_subexpr(&action_expr.node, f);
             for_each_subexpr(&args.node, f);
         }
-        TypedExprKind::Comptime { expr } => {
-            for_each_subexpr(&expr.node, f);
-        }
+
         TypedExprKind::Block { stmts } => {
             for stmt in stmts {
                 for_each_subexpr(&stmt.node, f);

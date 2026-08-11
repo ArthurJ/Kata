@@ -1,5 +1,6 @@
-//! Traversal recursivo sobre `TypedExpr` — versões mut e ref, mais
-//! detector de nós `Comptime`.
+//! Traversal recursivo sobre `TypedExpr` — versão mut.
+//! (`walk_ref` e `contains_comptime` foram removidos com a eliminação
+//! de `TypedExprKind::Comptime` — não há mais nós Comptime para detectar.)
 
 use kata_inference::{TypedExpr, TypedExprKind};
 
@@ -43,7 +44,6 @@ where
         TypedExprKind::IndexAccess { expr, .. } => f(&mut expr.node)?,
         TypedExprKind::TypeAscription { expr, .. } => f(&mut expr.node)?,
         TypedExprKind::TypeOf { expr } => f(&mut expr.node)?,
-        TypedExprKind::Comptime { expr } => f(&mut expr.node)?,
         TypedExprKind::Match { scrutinee, arms } => {
             f(&mut scrutinee.node)?;
             for arm in arms.iter_mut() {
@@ -108,40 +108,4 @@ where
         _ => {}
     }
     Ok(())
-}
-
-/// Verifica se a expressão contém algum nó `Comptime`.
-pub(crate) fn contains_comptime(expr: &TypedExpr) -> bool {
-    let mut found = false;
-    walk_ref(expr, &mut |e| {
-        if matches!(e.kind, TypedExprKind::Comptime { .. }) {
-            found = true;
-        }
-    });
-    found
-}
-
-/// Walk imutável nos filhos de `expr`.
-pub(crate) fn walk_ref<F: FnMut(&TypedExpr)>(expr: &TypedExpr, f: &mut F) {
-    f(expr);
-    match &expr.kind {
-        TypedExprKind::Let { value, .. } | TypedExprKind::Var { value, .. } => {
-            walk_ref(&value.node, f);
-        }
-        TypedExprKind::Comptime { expr } => walk_ref(&expr.node, f),
-        TypedExprKind::Closure { callee, args, .. } => {
-            walk_ref(&callee.node, f);
-            for arg in args {
-                walk_ref(&arg.node, f);
-            }
-        }
-        TypedExprKind::Grouping { inner } => walk_ref(&inner.node, f),
-        TypedExprKind::Tuple { elements } => {
-            for el in elements {
-                walk_ref(&el.node, f);
-            }
-        }
-        TypedExprKind::HeapSnapshot { .. } => {}
-        _ => {}
-    }
 }

@@ -321,13 +321,7 @@ fn desugar_pipes(expr: &Spanned<Expr>) -> Spanned<Expr> {
             },
             expr.span,
         ),
-        // ── Comptime — pass-through, desugar o inner ──
-        Expr::Comptime { expr: inner } => Spanned::new(
-            Expr::Comptime {
-                expr: Box::new(desugar_pipes(inner)),
-            },
-            expr.span,
-        ),
+
         Expr::Block { stmts } => Spanned::new(
             Expr::Block {
                 stmts: stmts.iter().map(desugar_pipes).collect(),

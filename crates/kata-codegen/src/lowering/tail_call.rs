@@ -151,7 +151,7 @@ fn expr_has_tail_call(expr: &TypedExpr) -> bool {
         TypedExprKind::Spawn {
             action_expr, args, ..
         } => expr_has_tail_call(&action_expr.node) || expr_has_tail_call(&args.node),
-        TypedExprKind::Comptime { expr } => expr_has_tail_call(&expr.node),
+
         TypedExprKind::Select {
             arms,
             timeout_ms,
