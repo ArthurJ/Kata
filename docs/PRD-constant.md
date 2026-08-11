@@ -315,18 +315,18 @@ Item::ConstantDecl {
 - **DoD:** `constant x := 42` produz `IntLit { "42" }`; `constant xs := [1 2 3]`
   produz `HeapSnapshot`
 
-### Fase 3: Acesso de actions/funções/lambdas
+### Fase 3: Acesso de actions/funções/lambdas ✅ (commit `a6609e4`)
 
 - Typeck: `Ident` dentro de action/função/lambda resolve binding de módulo
-- Codegen: emite literal/`kata_rt_get_snapshot` para bindings de módulo
-- **DoD:**
-  ```kata
-  constant scale := 2
-  dobro :: Int => Int
-  dobro x := * x scale
-  echo!(dobro 21)
-  ```
-  imprime `42`
+- Comptime pass: `constant_fold.rs` substitui `Ident(name)` por literal/snapshot
+  nos corpos de functions e actions após o fixpoint
+- `walk_mut`: adicionados braços para `ActionCall` e `ConstantBinding`
+- `is_already_evaluated`: insere no `comptime_bindings` antes de pular
+- **DoD:** ✅ `constant scale := 2` + `dobro :: Int => Int` + `lambda x: * x scale`
+  + `echo!(dobro 21)` imprime `42`
+- **Testes E2E:** 9 passed, 1 ignored (HeapSnapshot em function body — Fase 3b)
+- **Débito:** `constant base := [1 2 3]` + function que referencia `base` falha
+  com `comptime.jit_failure` (fold_literal_calls tenta JIT antes do fold)
 
 ### Fase 4: Export/import
 
