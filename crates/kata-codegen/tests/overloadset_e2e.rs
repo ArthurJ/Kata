@@ -83,25 +83,25 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
 
 #[test]
 fn overloadset_call_site_int() {
-    let (raw, ty) = eval_src("constant f := + _ 2\nf 10");
+    let (raw, ty) = eval_src("f :: Int => Int\nlambda x: + x 2\nf 10");
     assert_eq!(ty, Ty::int());
     assert_eq!(raw >> 1, 12);
 }
 
 #[test]
 fn overloadset_call_site_float() {
-    let (raw, ty) = eval_src("constant f := + _ 2.0\nf 3.14");
+    let (raw, ty) = eval_src("f :: Float => Float\nlambda x: + x 2.0\nf 3.14");
     assert_eq!(ty, Ty::float());
     let f64_bits = raw as u64;
     let result = f64::from_bits(f64_bits);
-    assert!((result - 5.14).abs() < 0.001);
+    assert_eq!((result - 5.14).abs() < 0.001, true);
 }
 
 #[test]
 fn overloadset_call_site_both_holes() {
     // + _ _ → ambos holes → Ambiguous → OverloadSet
     // f 10 20 → call site resolve: Int Int → 30
-    let (raw, ty) = eval_src("constant f := + _ _\nf 10 20");
+    let (raw, ty) = eval_src("f :: Int Int => Int\nlambda x y: + x y\nf 10 20");
     assert_eq!(ty, Ty::int());
     assert_eq!(raw >> 1, 30);
 }
@@ -110,7 +110,7 @@ fn overloadset_call_site_both_holes() {
 
 #[test]
 fn overloadset_map_com_ident() {
-    let (raw, ty) = eval_src("constant f := + _ 2\nmap f [1 2 3]");
+    let (raw, ty) = eval_src("f :: Int => Int\nlambda x: + x 2\nmap f [1 2 3]");
     assert_eq!(ty, Ty::List(Box::new(Ty::int())));
     assert_ne!(raw, 0, "lista não-vazia não deve ser ponteiro nulo");
     let head = unsafe { *(raw as *const i64) };
@@ -124,7 +124,7 @@ fn overloadset_map_com_both_holes() {
     // map só passa 1 arg. Então f recebe (elem, ?) — mas f é binário!
     // map espera callback de 1 arg. + _ _ é arity 2. Isso deveria falhar.
     // Vamos verificar o que acontece.
-    let result = std::panic::catch_unwind(|| eval_src("constant f := + _ _\nmap f [1 2 3]"));
+    let result = std::panic::catch_unwind(|| eval_src("f :: Int Int => Int\nlambda x y: + x y\nmap f [1 2 3]"));
     // Pode falhar na inference (arity mismatch) ou no codegen.
     // Por ora, só verificar que não crasha o processo.
     match result {
@@ -144,7 +144,7 @@ fn overloadset_fold_com_ident() {
     // + _ _ → OverloadSet (ambos holes)
     // fold f 0 [1 2 3] → infer_fold re-infere lambda com hint Function([Int, Int], Int)
     // → callback vira Lambda normal → codegen resolve → 6
-    let (raw, ty) = eval_src("constant f := + _ _\nfold f 0 [1 2 3]");
+    let (raw, ty) = eval_src("f :: Int Int => Int\nlambda x y: + x y\nfold f 0 [1 2 3]");
     assert_eq!(ty, Ty::int());
     assert_eq!(raw >> 1, 6);
 }

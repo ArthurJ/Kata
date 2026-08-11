@@ -88,19 +88,16 @@ fn entry_kind(tmod: &kata_inference::TypedModule) -> &TypedExprKind {
 
 #[test]
 fn map_com_ident_overloadset_int() {
-    // let f := + _ 2
-    // map f [1 2 3]  →  List(Int)
-    // f tem tipo OverloadSet { name: "+", overloads: [(Int,Int)→Int, (Int,Float)→Float, ...] }
-    // map seleciona (Int,Int)→Int porque elem_ty = Int
-    let typed = infer_src("constant f := + _ 2\nmap f [1 2 3]");
+    // Migrado de `constant f := + _ 2` — sections produzem lambdas,
+    // que não são permitidas em `constant`. Usa sintaxe de função nomeada.
+    let typed = infer_src("f :: Int => Int\nlambda x: + x 2\nmap f [1 2 3]");
     assert_eq!(typed.entry.node.ty, Ty::List(Box::new(Ty::int())));
 }
 
 #[test]
 fn map_com_ident_overloadset_float() {
-    // let f := + _ 2.0
-    // map f [1.0 2.0 3.0]  →  List(Float)
-    let typed = infer_src("constant f := + _ 2.0\nmap f [1.0 2.0 3.0]");
+    // Migrado de `constant f := + _ 2.0` — sections produzem lambdas.
+    let typed = infer_src("f :: Float => Float\nlambda x: + x 2.0\nmap f [1.0 2.0 3.0]");
     assert_eq!(typed.entry.node.ty, Ty::List(Box::new(Ty::float())));
 }
 
@@ -108,9 +105,8 @@ fn map_com_ident_overloadset_float() {
 
 #[test]
 fn fold_com_ident_overloadset_int() {
-    // let f := + _ _
-    // fold f 0 [1 2 3]  →  Int (6)
-    let typed = infer_src("constant f := + _ _\nfold f 0 [1 2 3]");
+    // Migrado de `constant f := + _ _` — sections produzem lambdas.
+    let typed = infer_src("f :: Int Int => Int\nlambda x y: + x y\nfold f 0 [1 2 3]");
     assert_eq!(typed.entry.node.ty, Ty::int());
 }
 

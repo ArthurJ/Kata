@@ -6,16 +6,18 @@
 //! O typeck usa o tipo anotado diretamente.
 
 use kata_core::ty::{PrimTy, Ty};
-use kata_inference::{TypedExprKind, infer_module};
+use kata_inference::{infer_module, TypedExprKind};
 use kata_lexer::lex;
 use kata_parser::parse;
-use kata_resolution::load_prelude;
+use kata_resolution::{load_prelude, merge_two, resolve};
 
 fn infer_src(src: &str) -> kata_inference::TypedModule {
     let tokens = lex(src).unwrap();
     let module = parse(tokens).unwrap();
     let prelude = load_prelude().unwrap();
-    infer_module(&module, &prelude).expect("inferência deve succeed")
+    let user = resolve(&module).unwrap();
+    let resolved = merge_two(prelude, user);
+    infer_module(&module, &resolved).expect("inferência deve succeed")
 }
 
 fn infer_src_err(src: &str) -> kata_diagnostics::MiddleError {
@@ -119,7 +121,9 @@ fn hole_ascription_times_int() {
 /// `let f := + 10 _::Int; f 5` — aplicação do lambda tipado via ascription.
 #[test]
 fn hole_ascription_then_apply() {
-    let tmod = infer_src("constant f := + 10 _::Int\nf 5");
+    // Migrado de `constant f := + 10 _::Int` — sections produzem lambdas,
+    // que não são permitidas em `constant`. Usa sintaxe de função nomeada.
+    let tmod = infer_src("f :: Int => Int\nlambda x: + 10 x\nf 5");
     let entry = entry_typed(&tmod);
 
     assert_eq!(entry.ty, Ty::int(), "f 5 deve retornar Int");

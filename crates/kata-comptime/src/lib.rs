@@ -253,23 +253,17 @@ fn evaluate_constants(
             continue;
         }
 
-        // Detectar lambda como value direto de constant (peeling
-        // Grouping e TypeAscription — `(lambda ...)::(Int -> Int)`
-        // é o padrão dos testes bidirectional).
-        if let Some(ty) = peel_to_lambda_ty(&value_clone) {
-            let sig = format_function_sig(&ty);
-            return Err(ComptimeError::ConstantLambda {
-                name: name.clone(),
-                sig,
-            });
-        }
-
-        if !is_comptime_available(&value_clone, comptime_bindings) {
+        // Validações de constness:
+        // - ConstantLambda já detectado na inferência (C3).
+        // - Pureza e comptime-availability continuam aqui (dependem do
+        //   contexto de avaliação do comptime pass).
+        if !is_comptime_available(&value_clone, &comptime_bindings) {
             return Err(ComptimeError::NotConsttime {
                 reason: format!("constant {name} — expressão depende de valor runtime"),
             });
         }
         check_purity(&value_clone)?;
+
         let result = jit_execute_expr(&value_clone, ctx, comptime_bindings)?;
         let literal = result_to_literal(
             &result,
@@ -299,30 +293,4 @@ fn is_already_evaluated(expr: &TypedExpr) -> bool {
             | TypedExprKind::HeapSnapshot { .. }
             | TypedExprKind::VariantQual { .. }
     )
-}
-
-/// Faz peel de Grouping e TypeAscription para verificar se o value
-/// subjacente é uma Lambda. Se for, retorna o tipo (Function) da lambda
-/// para construir a mensagem de erro com a assinatura esperada.
-fn peel_to_lambda_ty(expr: &TypedExpr) -> Option<kata_core::ty::Ty> {
-    match &expr.kind {
-        TypedExprKind::Lambda { .. } => Some(expr.ty.clone()),
-        TypedExprKind::Grouping { inner } => peel_to_lambda_ty(&inner.node),
-        TypedExprKind::TypeAscription { expr: inner, .. } => peel_to_lambda_ty(&inner.node),
-        _ => None,
-    }
-}
-
-/// Formata um `Ty::Function` como assinatura Kata (`Int Int => Int`).
-fn format_function_sig(ty: &kata_core::ty::Ty) -> String {
-    if let kata_core::ty::Ty::Function(params, ret) = ty {
-        let params_str = params
-            .iter()
-            .map(|p| p.display())
-            .collect::<Vec<_>>()
-            .join(" ");
-        format!("{params_str} => {}", ret.display())
-    } else {
-        ty.display()
-    }
 }

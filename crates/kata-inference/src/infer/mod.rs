@@ -19,6 +19,7 @@ mod ascription;
 mod captures;
 mod collections;
 mod collections_hof;
+mod constness;
 mod const_eval;
 mod constructors;
 mod constructors_enum_pred;
@@ -190,11 +191,21 @@ pub fn infer_module(
     // 2a. Pré-registra constants de módulo no TypeEnv ANTES de inferir
     //     funções nomeadas. Funções nomeadas podem referenciar constants
     //     no corpo — sem o pré-registro, UnboundName.
-    //     Reusa a lógica de infer_expr para Expr::Let — assim deferred
-    //     lambdas, OverloadSet, fn_alias, etc. são tratados igual ao let.
+    //     Inferência dedicada (C3): não envolve em Expr::Let — chama
+    //     infer_expr diretamente no value e registra no type_env com
+    //     origin __module__. Validações de constness (lambda, pureza,
+    //     comptime-availability) são feitas aqui, não no comptime pass.
     let mut constant_typed_values: Vec<(String, Spanned<TypedExpr>)> = Vec::new();
+    let mut seen_constant_names: std::collections::HashSet<String> = std::collections::HashSet::new();
     for item in &module.items {
         if let Item::ConstantDecl { name, value } = &item.node {
+            // Constants são imutáveis por design — redefinir o mesmo nome é erro.
+            if !seen_constant_names.insert(name.clone()) {
+                return Err(MiddleError::DuplicateConstant {
+                    name: name.clone(),
+                    span: value.span.into(),
+                });
+            }
             let desugared = desugar::desugar(value);
             let ctx = InferCtx {
                 table: &dispatch_table,
@@ -207,28 +218,28 @@ pub fn infer_module(
                 in_loop: false,
                 deferred_lambdas: &deferred_lambdas,
             };
-            // Envolver em Expr::Let para reusar toda a lógica de
-            // inferência de let (deferred lambda, OverloadSet, fn_alias).
-            let let_expr = Spanned::new(
-                Expr::Let {
-                    name: name.clone(),
-                    value: Box::new(desugared.clone()),
-                },
-                value.span,
-            );
-            let typed_let = infer_expr(&let_expr.node, &let_expr.span, &mut type_env, &ctx, false)?;
+            // Inferência direta do value (sem wrapping em Expr::Let).
+            let typed_value = infer_expr(
+                &desugared.node,
+                &desugared.span,
+                &mut type_env,
+                &ctx,
+                false,
+            )?;
 
-            // Extrair o typed_value do TypedExprKind::Let.
-            let typed_value = match &typed_let.kind {
-                crate::typed::TypedExprKind::Let { value, .. } => value.node.clone(),
-                _ => typed_let.clone(),
-            };
+            // ── Validação de constness (C3): detectar lambda aqui, não
+            //    no comptime pass. Pureza e comptime-availability
+            //    continuam no comptime pass (dependem de contexto de
+            //    avaliação — alguns testes não rodam comptime pass). ──
+            // 1. Lambda como value → ConstantLambda (PRD §3.7).
+            //    Lambdas e sections (que desugar para lambda) não são
+            //    permitidos em `constant`. Para funções, use sintaxe
+            //    de função nomeada (f :: T => T / lambda ...).
+            constness::check_constant_lambda(name, &typed_value, value.span)?;
 
-            // O binding já foi registrado no type_env pelo infer_expr
-            // (Expr::Let chama env.define). Mas a origin é __local__.
-            // Mudar para __module__ se o nome não é "_".
+            // Registrar no type_env com origin __module__.
             if name != "_" {
-                type_env.set_origin(name, "__module__");
+                type_env.define(name, typed_value.ty.clone(), "__module__");
             }
 
             constant_typed_values.push((name.clone(), Spanned::new(typed_value, value.span)));

@@ -51,6 +51,14 @@ pub enum MiddleError {
         span: MietteSpan,
     },
 
+    #[error("constante `{name}` já declarada")]
+    #[diagnostic(code = "type.duplicate_constant")]
+    DuplicateConstant {
+        name: String,
+        #[label("constante redefinida")]
+        span: MietteSpan,
+    },
+
     #[error("número incorreto de argumentos: esperado {expected}, encontrado {found}")]
     #[diagnostic(code = "type.arity_mismatch")]
     ArityMismatch {
@@ -172,6 +180,39 @@ pub enum MiddleError {
     CacheTypeConstraint {
         found: String,
         #[label("tipo não suportado por @cache")]
+        span: MietteSpan,
+    },
+
+    /// `constant` cujo value é uma lambda — Function não é serializável
+    /// em compile-time (PRD §3.7). O usuário deve usar named function.
+    #[error(
+        "constant {name} — função (lambda) não é serializável em compile-time\n  help: use uma função nomeada em vez de `constant {name} := lambda ...`:\n        {name} :: {sig}\n        lambda ..."
+    )]
+    #[diagnostic(code = "constant.lambda_not_serializable")]
+    ConstantLambda {
+        name: String,
+        sig: String,
+        #[label("value é uma lambda")]
+        span: MietteSpan,
+    },
+
+    /// Expressão de `constant` não é avaliável em compile-time.
+    #[error("constant {name} — expressão depende de valor runtime: {reason}")]
+    #[diagnostic(code = "constant.not_comptime")]
+    NotConsttime {
+        name: String,
+        reason: String,
+        #[label("expressão não avaliável em compile-time")]
+        span: MietteSpan,
+    },
+
+    /// Expressão de `constant` é impura (contém ActionCall, Fork, etc.).
+    #[error("constant {name} — expressão é impura: {reason}")]
+    #[diagnostic(code = "constant.impure")]
+    ImpureConstant {
+        name: String,
+        reason: String,
+        #[label("expressão impura")]
         span: MietteSpan,
     },
 }
