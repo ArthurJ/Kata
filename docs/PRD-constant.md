@@ -371,13 +371,13 @@ Item::ConstantDecl {
   `constant` é acessível em functions definidas no REPL; 1530 testes passando,
   0 falhas, 9 ignorados; 6 novos testes E2E.
 - **Bugs pré-existentes documentados (não bloqueadores):**
-  - Action call do prompt (`foo 5`) é inferido como `Closure` em vez de
-    `ActionCall` — bug do typechecker, não relacionado a Fase 6.
-  - Shadowing de constants com mesmo nome em módulo produz o primeiro
-    valor, não o último — bug do codegen (prólogo lowera ambos, primeiro
-    `def_var` vence).
+  - Action call do prompt (`foo 5`) — `!` é o operador de action call por
+    design. Sem `!`, `foo 5` é function call, não action call. Não é bug.
+  - Shadowing de constants com mesmo nome — **corrigido na Fase 7**.
+    Duplicata em arquivo é erro (`type.duplicate_constant`). No REPL,
+    redefinição substitui a declaração anterior.
 
-### Fase 7: Comentários multilinha `#{}#`
+### Fase 7: Comentários multilinha `#{}#` ✅
 
 - Lexer: `#{` inicia comentário multilinha, `}#` termina
 - Lexer: `#` sem `{` continua sendo comentário de linha
@@ -385,8 +385,13 @@ Item::ConstantDecl {
 - Testes de lexer para casos edge (§9.3)
 - Atualizar sintaxe-mapa (`docs/sintaxe-mapa.md`) — adicionar `#{}#` na
   seção de comentários
-- **DoD:** `#{ multilinha }#` é ignorado; `# linha` continua funcionando;
-  `#{` sem fechamento dá erro léxico
+- **DoD:** ✅ `#{ multilinha }#` é ignorado; `# linha` continua funcionando;
+  `#{` sem fechamento dá erro léxico. 1541 testes passando, 0 falhas, 9
+  ignorados; 10 novos testes de lexer.
+- **Bug 2 corrigido:** shadowing de constants com mesmo nome em módulo
+  agora é erro de compilação (`type.duplicate_constant`). No REPL,
+  redefinir uma constant substitui a anterior (o REPL remove a declaração
+  anterior antes de adicionar a nova).
 
 ## 6. Breaking changes
 

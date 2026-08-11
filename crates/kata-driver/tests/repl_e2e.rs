@@ -744,12 +744,8 @@ fn repl_constant_multiple_in_function() {
 #[test]
 fn repl_constant_shadowing() {
     // constant x := 10 → echo!(x) → 10 → constant x := 20 → echo!(x) → 20
-    // NOTE: Shadowing of constants with the same name is a pre-existing
-    // bug in the module pipeline (not REPL-specific). In a module file,
-    // `constant x := 10` followed by `constant x := 20` also produces 10.
-    // The comptime pass evaluates both, comptime_bindings["x"] = 20, but
-    // the codegen lowera both ConstantBindings in the prologue and the
-    // first def_var seems to win. This is tracked separately.
+    // No REPL, redefinir uma constant substitui a anterior. Em arquivo,
+    // duplicatas são rejeitadas pela inference (DuplicateConstant).
     let out = run_repl(&[
         "constant x := 10",
         "echo!(x)",
@@ -762,11 +758,10 @@ fn repl_constant_shadowing() {
         lines.iter().any(|l| l.trim() == "10"),
         "esperava 10 (primeira constant), got: {out}"
     );
-    // TODO: uncomment when constant shadowing in module is fixed
-    // assert!(
-    //     lines.iter().any(|l| l.trim() == "20"),
-    //     "esperava 20 (shadowing de constant), got: {out}"
-    // );
+    assert!(
+        lines.iter().any(|l| l.trim() == "20"),
+        "esperava 20 (redefinição de constant), got: {out}"
+    );
 }
 
 #[test]

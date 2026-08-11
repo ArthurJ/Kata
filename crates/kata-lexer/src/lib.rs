@@ -174,8 +174,31 @@ pub fn lex_with_recovery(source: &str) -> (Vec<TokenWithSpan>, Vec<FrontendError
             lex.advance();
         }
 
-        // Comentário: pula até \n ou EOF
+        // Comentário
         if lex.ch == Some('#') {
+            // `#{` inicia comentário multilinha — consome até `}#`
+            if lex.peek() == Some('{') {
+                let start = lex.save_pos();
+                lex.advance(); // consome '#'
+                lex.advance(); // consome '{'
+                let mut found_close = false;
+                while let Some(ch) = lex.ch {
+                    if ch == '}' && lex.peek() == Some('#') {
+                        lex.advance(); // consome '}'
+                        lex.advance(); // consome '#'
+                        found_close = true;
+                        break;
+                    }
+                    lex.advance();
+                }
+                if !found_close {
+                    errors.push(FrontendError::UnterminatedComment {
+                        span: lex.span_from(&start).into(),
+                    });
+                }
+                continue;
+            }
+            // `#` sem `{` — comentário de linha, consome até \n ou EOF
             while lex.ch.is_some() && lex.ch != Some('\n') {
                 lex.advance();
             }

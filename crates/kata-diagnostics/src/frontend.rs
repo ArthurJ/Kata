@@ -97,4 +97,11 @@ pub enum FrontendError {
         #[label("casing inválido")]
         span: MietteSpan,
     },
+
+    #[error("comentário multilinha não terminado")]
+    #[diagnostic(code = "lex.unterminated_comment")]
+    UnterminatedComment {
+        #[label("comentário não fechado")]
+        span: MietteSpan,
+    },
 }

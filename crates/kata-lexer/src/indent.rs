@@ -30,7 +30,34 @@ pub(crate) fn process_indent(
                 lex.advance();
             }
             Some('#') => {
-                // Linha de comentário — pula até \n inclusive
+                // `#{` inicia comentário multilinha — consome até `}#`
+                if lex.peek() == Some('{') {
+                    let start = lex.save_pos();
+                    lex.advance(); // consome '#'
+                    lex.advance(); // consome '{'
+                    let mut found_close = false;
+                    while let Some(ch) = lex.ch {
+                        if ch == '}' && lex.peek() == Some('#') {
+                            lex.advance();
+                            lex.advance();
+                            found_close = true;
+                            break;
+                        }
+                        lex.advance();
+                    }
+                    if !found_close {
+                        return Err(FrontendError::UnterminatedComment {
+                            span: lex.span_from(&start).into(),
+                        });
+                    }
+                    // Após `}#`, pode haver mais conteúdo na mesma linha.
+                    // Se for whitespace, o loop de indent reinicia.
+                    // Se for `\n` ou EOF, cai nos braços abaixo.
+                    // Se for código, o `_` braço break.
+                    indent = 0;
+                    continue;
+                }
+                // `#` sem `{` — linha de comentário, pula até \n inclusive
                 while lex.ch.is_some() && lex.ch != Some('\n') {
                     lex.advance();
                 }

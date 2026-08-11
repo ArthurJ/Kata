@@ -68,13 +68,13 @@ colaterais, é **responsabilidade do desenvolvedor** declará-la como Action (co
 
 O otimizador confia nesta invariante: funções puras podem ser eliminadas por
 tree shaking se não são alcançadas, reordenadas, e avaliadas em compile-time via
-`@comptime`. Violar esta invariante (declarar função impura como pura) produz
+`constant`. Violar esta invariante (declarar função impura como pura) produz
 comportamento indefinido.
 
 ### I5. Entry Point Implícito
 
 Programas Kata **não exigem** `action main` ou `main!()`. O entry point é a
-**última expressão top-level** do arquivo executado como entrypoint. `@comptime`
+**última expressão top-level** do arquivo executado como entrypoint. `constant`
 top-level (sem `action`) produz `HeapSnapshot` e não gera código de runtime.
 
 Não assumir padrões de uso ao diagnosticar bugs — um arquivo Kata válido pode
@@ -355,7 +355,7 @@ semântica via uma MetadataTable sidecar.
   iterativa a partir das Actions, mark & filter. Produz o `ReachableModule`
   (TAST podado).
 
-- **Comptime (`kata-comptime`):** Avalia expressões `@comptime` via
+- **Comptime (`kata-comptime`):** Avalia expressões `constant` via
   JIT-and-execute (compila a expressão usando o pipeline normal e executa no
   `kata-rt` real). Substitui por `HeapSnapshot` na TAST. Coleta closure defs e
   snapshots para carga no runtime.
@@ -474,7 +474,7 @@ semântica via uma MetadataTable sidecar.
 │  kata-comptime                                      │
 │  JIT-and-execute: compila via pipeline normal,      │
 │  executa no kata-rt real, captura HeapSnapshot      │
-│  Substitui @comptime por snapshot_id na TAST        │
+│  Substitui constant bindings por snapshot_id na TAST  │
 │  Coleta closure_defs + snapshots                    │
 │  saída: ReachableModule + ComptimeArtifacts         │
 └─────────────────────────────────────────────────────┘
@@ -1884,29 +1884,26 @@ módulo), sempre precedendo imediatamente o item que modificam.
   Ideal para uso massivo de CPU com isolamento total. Aceita tupla (serializa
   implicitamente) ou dict com `raw:`/`serialized:` (controle explícito).
   Veja seção 6.4.
-* **`@comptime`**: Avalia uma expressão durante a compilação via JIT-and-execute
-  (compila a expressão usando o pipeline normal e executa no `kata-rt` real),
-  substituindo o resultado por um literal na TAST. Tem duas formas de uso:
-  - **Top-level (Fase 1-2 ✅):** `@comptime` antes de um `let` top-level ou
-    expressão top-level. O comptime pass avalia a expressão e substitui o
-    resultado por um literal (escalares: Int, Float, Boolean, Unit) ou por
-    um `HeapSnapshot` (tipos complexos: List, Tuple, Struct, Text, Sum com
-    payload). O snapshot é serializado de forma type-aware (incluindo
-    Sum/Result com payload Text — strings e payloads são copiados
-    recursivamente para o snapshot, não ponteiros crus), embutido como
-    data symbol no binário JIT, e carregado na root_arena em load-time via
-    `kata_rt_load_snapshot` com rebasing de ponteiros. Exemplo:
-    `@comptime let x := [1 2 3]` gera `x` como snapshot navegável em runtime.
-  - **Call-site (guarantee) — implementado:** `@comptime` antes de uma
-    expressão dentro de um body força avaliação em compile-time. Se
-    consegue, substitui por snapshot; se não consegue, erro de compilação.
-    `@comptime` envolve apenas a aplicação greedy (callee + args) —
-    pipe (`|>`), fallback (`|`), e canais (`!>`, `<!`) ficam fora do
-    escopo. Para incluí-los, use parênteses: `@comptime (x |> f)`.
-    Bindings locais avaliados via `@comptime let` são comptime-available
-    para `@comptime` posterior no mesmo body.
-    (Definition-site `@comptime` foi removido do escopo — a decisão de
-    avaliar pertence ao call-site, onde os args são visíveis.)
+* **`constant`** (keyword, não diretiva): Declara uma constante de módulo
+  avaliada em compile-time via JIT-and-execute (compila a expressão usando o
+  pipeline normal e executa no `kata-rt` real), substituindo o resultado por
+  um literal na TAST. Top-level only — `let` é proibido no top level de
+  arquivos `.kata` (apenas permitido no REPL e dentro de actions/funções).
+  Valores escalares (Int, Float, Boolean, Unit) são substituídos por
+  literais; tipos complexos (List, Tuple, Struct, Text, Sum com payload)
+  são substituídos por `HeapSnapshot` — serializado de forma type-aware
+  (incluindo Sum/Result com payload Text — strings e payloads são copiados
+  recursivamente para o snapshot, não ponteiros crus), embutido como data
+  symbol no binário JIT, e carregado na root_arena em load-time via
+  `kata_rt_load_snapshot` com rebasing de ponteiros.
+  Exemplo: `constant x := [1 2 3]` gera `x` como snapshot navegável em runtime.
+  Constants são acessíveis de functions e actions via `constant_fold`
+  (Fase 3). Não podem conter lambdas (`constant f := lambda ...` é erro —
+  usar named functions). Não podem ser redefinidas com o mesmo nome no
+  mesmo arquivo (erro `type.duplicate_constant`). No REPL, redefinir uma
+  constant substitui a declaração anterior.
+  (`@comptime` foi removido do parser na Fase 5 — usar `constant` para
+  bindings de módulo e named functions para comportamento reutilizável.)
 * **`@cache{strategy: "LRU"}`**: Interceta invocações puras repetidas e
   injeta pesquisas em Hash Table nativa (ex: `LRU` cache), efetuando
   *memoização* automática.

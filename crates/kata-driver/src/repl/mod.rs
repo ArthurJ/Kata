@@ -166,6 +166,32 @@ impl ReplSession {
 
         // Snapshot para rollback em caso de erro.
         let snapshot_len = self.items.len();
+
+        // Substitui constants redefinidas: se o novo input contém
+        // `ConstantDecl { name }`, remove qualquer `ConstantDecl` anterior
+        // com o mesmo nome de self.items. A inference rejeita duplicatas
+        // — o REPL resolve redefinições antes de chegar lá.
+        let new_constant_names: std::collections::HashSet<String> = module
+            .items
+            .iter()
+            .filter_map(|i| {
+                if let Item::ConstantDecl { name, .. } = &i.node {
+                    Some(name.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        if !new_constant_names.is_empty() {
+            self.items.retain(|i| {
+                if let Item::ConstantDecl { name, .. } = &i.node {
+                    !new_constant_names.contains(name)
+                } else {
+                    true
+                }
+            });
+        }
+
         self.items.extend(module.items);
 
         if !has_entry {

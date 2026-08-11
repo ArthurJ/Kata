@@ -5,6 +5,42 @@ contexto(s) de uso, semântica e relações com outras peças.
 
 ---
 
+## Comentários
+
+### `#` — Comentário de linha
+
+```
+# isto é um comentário de linha
+42 # comentário após código
+```
+
+`#` consome tudo até `\n` ou EOF. Qualquer caractere após `#` (incluindo `{`)
+que não seja imediatamente colado ao `#` é tratado como conteúdo do comentário.
+
+### `#{ }#` — Comentário multilinha
+
+```
+#{
+  Isto é um comentário multilinha.
+  Pode span várias linhas.
+}#
+
+#{ comentário inline }# echo!(1)  # imprime 1
+```
+
+`#{` (colado, sem espaço) inicia comentário multilinha. O scanner consome
+todos os caracteres até encontrar `}#`. Se `}#` não aparece até EOF, o lexer
+emite erro léxico (`lex.unterminated_comment`).
+
+**Sem nesting:** `#{ #{ }# }#` — o primeiro `}#` fecha o comentário. O
+conteúdo restante é tratado como código. Para controlar comentários
+multi-nível, usar `#` linha-a-linha como interruptor.
+
+`#` seguido de qualquer caractere que não `{` (incluindo espaço) é comentário
+de linha: `# {` é comentário de linha, não inicia multilinha.
+
+---
+
 ## Operadores de Binding
 
 ### `let`, `var` e `:=`
@@ -482,7 +518,7 @@ len "hello"              # 5 — text (COUNTABLE dispatch, kata_rt_string_len)
 ```
 
 - Posição: precedem item de topo (action, lambda, data). Podem ser empilhadas no mesmo item; a ordem importa (avaliação sequencial).
-- Catálogo: `@comptime`, `@cache_strategy`, `@test`, `@log`, `@associative`, `@commutative`, `@ffi`, `@builtin`. (`spawn!` é special form, não diretiva — veja abaixo.)
+- Catálogo: `@cache_strategy`, `@test`, `@log`, `@associative`, `@commutative`, `@ffi`, `@builtin`. (`spawn!` é special form, não diretiva — veja abaixo.) `@comptime` foi removido (Fase 5) — usar `constant` para bindings de módulo avaliados em compile-time.
 - **Relações**:
   - `@test` → tree shaking remove em produção.
   - `@associative` + `@commutative` → habilitam TRMA.

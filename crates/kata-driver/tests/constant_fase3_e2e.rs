@@ -173,3 +173,19 @@ fn constant_em_action() {
         "action imprimir deve imprimir constant msg — stdout: {stdout}"
     );
 }
+
+// ── Bug 2: DuplicateConstant em arquivo ───────────────────────────
+
+/// `constant x := 10` + `constant x := 20` no mesmo arquivo deve
+/// falhar com `type.duplicate_constant`. Constants são imutáveis —
+/// redefinir o mesmo nome é erro de compilação.
+#[test]
+fn constant_redefinida_erro() {
+    let source = "constant x := 10\nconstant x := 20\necho!(x)\n";
+    let (_stdout, stderr, code) = run_kata_run(source);
+    assert_ne!(code, 0, "kata run deve falhar — stderr: {stderr}");
+    assert!(
+        stderr.contains("duplicate_constant"),
+        "esperava erro duplicate_constant — stderr: {stderr}"
+    );
+}
