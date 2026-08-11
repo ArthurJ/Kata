@@ -13,13 +13,13 @@
 //! usuário pode corrigir e reintentar.
 
 mod commands;
+mod repl_loop;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
 
 use kata_ast::{Expr, Item, Module, Span, Spanned};
-use kata_codegen::{jit_eval_repl, PrevFuncMap};
-use kata_comptime::serialize_value;
+use kata_codegen::jit_eval_repl;
 use kata_core::ty::{PrimTy, Ty};
 use kata_inference::infer_module;
 use kata_lexer::lex;
@@ -28,12 +28,8 @@ use kata_optimizer::optimize;
 use kata_parser::{parse, parse_repl_decls_only, parse_repl_with_arity, scan_lambdas};
 use kata_resolution::{ResolvedModule, extract_arities, load_prelude, resolve};
 use kata_tree_shaking::tree_shake;
-use rustyline::Editor;
-use rustyline::error::ReadlineError;
-use rustyline::history::DefaultHistory;
 
 use crate::display;
-use crate::highlight::KataHelper;
 use crate::merge_resolved;
 
 /// Sessão REPL — acumula items do usuário entre expressões.
@@ -138,8 +134,8 @@ impl ReplSession {
         // Pass 1: parse_decls_only → resolve → extract_arities
         // Signatures definem a aridade padrão; lambdas com mesmo nome são
         // overloads non-default.
-        let decls_module =
-            parse_repl_decls_only(tokens.clone()).map_err(|e| format!("erro de parse (Pass 1): {e}"))?;
+        let decls_module = parse_repl_decls_only(tokens.clone())
+            .map_err(|e| format!("erro de parse (Pass 1): {e}"))?;
         let decls_user = resolve(&decls_module).map_err(|e| {
             format!(
                 "erro de resolução (Pass 1): {}",
@@ -195,51 +191,56 @@ impl ReplSession {
                     // `let x := <expr>` isolado (único EntryExpr do input),
                     // avaliar o valor do binding separadamente para obter
                     // seu tipo e valor, e guardar como literal.
-                    if input_items.len() == 1 {
-                        if let Item::EntryExpr(ref expr) = input_items[0].node {
-                            if let Expr::Let { ref name, ref value } = expr.node {
-                                // Avaliar só o valor do let para obter tipo
-                                // e valor corretos (o entry retorna Unit).
-                                // Inclui items acumulados (bindings anteriores)
-                                // para que o valor possa referenciá-los.
-                                let mut val_items = self.items.clone();
-                                // Substitui bindings congelados por literais.
-                                val_items = self.build_eval_items(&val_items);
-                                val_items.push(Spanned::new(
-                                    Item::EntryExpr(*value.clone()),
-                                    Span::synthetic(),
-                                ));
-                                let val_module = Module { items: val_items };
-                                if let Ok(val_result) = self.run_pipeline_eval(&val_module) {
-                                    // Tentar congelar como literal escalar.
-                                    if let Some(literal) =
-                                        Self::decode_to_literal(val_result.raw, &val_result.ty)
-                                    {
-                                        self.frozen_bindings.insert(name.clone(), literal);
-                                    } else {
-                                        // Tipo complexo — serializar como snapshot.
-                                        // Obter registries do resolved da avaliação.
-                                        let val_user = resolve(&val_module)
-                                            .map_err(|e| format!("erro de resolução: {}", crate::format_error_vec(&e)))?;
-                                        let val_resolved = merge_resolved(self.prelude.clone(), val_user);
-                                        match kata_comptime::serialize_value(
-                                            val_result.raw,
-                                            &val_result.ty,
-                                            &val_resolved.struct_registry,
-                                            &val_resolved.enum_registry,
-                                        ) {
-                                            Ok(snap) => {
-                                                let snapshot_id = self.snapshots.len() as u32;
-                                                self.snapshots.push(snap);
-                                                self.snapshot_bindings
-                                                    .insert(name.clone(), (snapshot_id, val_result.ty));
-                                            }
-                                            Err(e) => {
-                                                // Não consegue serializar — deixar como item
-                                                // acumulado (reprocessa a cada linha).
-                                                eprintln!("aviso: não foi possível congelar binding '{name}': {e}");
-                                            }
-                                        }
+                    if input_items.len() == 1
+                        && let Item::EntryExpr(ref expr) = input_items[0].node
+                        && let Expr::Let {
+                            ref name,
+                            ref value,
+                        } = expr.node
+                    {
+                        // Avaliar só o valor do let para obter tipo
+                        // e valor corretos (o entry retorna Unit).
+                        // Inclui items acumulados (bindings anteriores)
+                        // para que o valor possa referenciá-los.
+                        let mut val_items = self.items.clone();
+                        // Substitui bindings congelados por literais.
+                        val_items = self.build_eval_items(&val_items);
+                        val_items.push(Spanned::new(
+                            Item::EntryExpr(*value.clone()),
+                            Span::synthetic(),
+                        ));
+                        let val_module = Module { items: val_items };
+                        if let Ok(val_result) = self.run_pipeline_eval(&val_module) {
+                            // Tentar congelar como literal escalar.
+                            if let Some(literal) =
+                                Self::decode_to_literal(val_result.raw, &val_result.ty)
+                            {
+                                self.frozen_bindings.insert(name.clone(), literal);
+                            } else {
+                                // Tipo complexo — serializar como snapshot.
+                                // Obter registries do resolved da avaliação.
+                                let val_user = resolve(&val_module).map_err(|e| {
+                                    format!("erro de resolução: {}", crate::format_error_vec(&e))
+                                })?;
+                                let val_resolved = merge_resolved(self.prelude.clone(), val_user);
+                                match kata_comptime::serialize_value(
+                                    val_result.raw,
+                                    &val_result.ty,
+                                    &val_resolved.struct_registry,
+                                    &val_resolved.enum_registry,
+                                ) {
+                                    Ok(snap) => {
+                                        let snapshot_id = self.snapshots.len() as u32;
+                                        self.snapshots.push(snap);
+                                        self.snapshot_bindings
+                                            .insert(name.clone(), (snapshot_id, val_result.ty));
+                                    }
+                                    Err(e) => {
+                                        // Não consegue serializar — deixar como item
+                                        // acumulado (reprocessa a cada linha).
+                                        eprintln!(
+                                            "aviso: não foi possível congelar binding '{name}': {e}"
+                                        );
                                     }
                                 }
                             }
@@ -295,10 +296,7 @@ impl ReplSession {
                 text: "0".to_string(),
             };
             let spanned = Spanned::new(zero, Span::synthetic());
-            items.push(Spanned::new(
-                Item::EntryExpr(spanned),
-                Span::synthetic(),
-            ));
+            items.push(Spanned::new(Item::EntryExpr(spanned), Span::synthetic()));
         }
         Module { items }
     }
@@ -329,10 +327,7 @@ impl ReplSession {
                 text: "0".to_string(),
             };
             let spanned = Spanned::new(zero, Span::synthetic());
-            items.push(Spanned::new(
-                Item::EntryExpr(spanned),
-                Span::synthetic(),
-            ));
+            items.push(Spanned::new(Item::EntryExpr(spanned), Span::synthetic()));
             items
         };
         let module = Module { items };
@@ -349,11 +344,16 @@ impl ReplSession {
         let user = resolve(module)
             .map_err(|e| format!("erro de resolução: {}", crate::format_error_vec(&e)))?;
         let resolved = merge_resolved(self.prelude.clone(), user);
-        let mut typed = infer_module(module, &resolved).map_err(|e| format!("erro de tipo: {e}"))?;
+        let mut typed =
+            infer_module(module, &resolved).map_err(|e| format!("erro de tipo: {e}"))?;
 
         // Injetar bindings complexos congelados como HeapSnapshot no pre_entry.
         if !self.snapshot_bindings.is_empty() {
-            self.inject_snapshot_bindings(&mut typed, &resolved.struct_registry, &resolved.enum_registry);
+            self.inject_snapshot_bindings(
+                &mut typed,
+                &resolved.struct_registry,
+                &resolved.enum_registry,
+            );
         }
 
         let mono = monomorphize(typed);
@@ -370,7 +370,8 @@ impl ReplSession {
 
         // Persistir function pointers das funções nomeadas recém-compiladas.
         for (fn_hash, cranelift_name, fn_ptr) in repl_result.new_funcs {
-            self.function_table.insert(fn_hash, (cranelift_name, fn_ptr));
+            self.function_table
+                .insert(fn_hash, (cranelift_name, fn_ptr));
         }
 
         Ok(crate::ExecResult {
@@ -392,8 +393,8 @@ impl ReplSession {
         _struct_registry: &kata_core::StructRegistry,
         _enum_registry: &kata_core::EnumRegistry,
     ) {
-        use kata_inference::{TypedExpr, TypedExprKind};
         use kata_core::escape::EscapeTarget;
+        use kata_inference::{TypedExpr, TypedExprKind};
 
         // Para o REPL, typed.snapshots começa vazio (sem comptime pass).
         // Incluímos TODOS os snapshots da sessão em typed.snapshots, na
@@ -430,16 +431,16 @@ impl ReplSession {
             // O último Let no pre_entry com este nome é o ativo.
             let mut last_idx: Option<usize> = None;
             for (i, pre) in typed.pre_entry.iter().enumerate() {
-                if let TypedExprKind::Let { name: n, .. } = &pre.node.kind {
-                    if n == name {
-                        last_idx = Some(i);
-                    }
+                if let TypedExprKind::Let { name: n, .. } = &pre.node.kind
+                    && n == name
+                {
+                    last_idx = Some(i);
                 }
             }
-            if let Some(i) = last_idx {
-                if let TypedExprKind::Let { value, .. } = &mut typed.pre_entry[i].node.kind {
-                    *value = Box::new(Spanned::new(snap_expr, Span::synthetic()));
-                }
+            if let Some(i) = last_idx
+                && let TypedExprKind::Let { value, .. } = &mut typed.pre_entry[i].node.kind
+            {
+                **value = Spanned::new(snap_expr, Span::synthetic());
             }
         }
     }
@@ -452,19 +453,18 @@ impl ReplSession {
         items
             .iter()
             .map(|item| {
-                if let Item::EntryExpr(ref expr) = item.node {
-                    if let Expr::Let { ref name, .. } = expr.node {
-                        if let Some(literal) = self.frozen_bindings.get(name) {
-                            let new_expr = Expr::Let {
-                                name: name.clone(),
-                                value: Box::new(Spanned::new(literal.clone(), Span::synthetic())),
-                            };
-                            return Spanned::new(
-                                Item::EntryExpr(Spanned::new(new_expr, Span::synthetic())),
-                                Span::synthetic(),
-                            );
-                        }
-                    }
+                if let Item::EntryExpr(ref expr) = item.node
+                    && let Expr::Let { ref name, .. } = expr.node
+                    && let Some(literal) = self.frozen_bindings.get(name)
+                {
+                    let new_expr = Expr::Let {
+                        name: name.clone(),
+                        value: Box::new(Spanned::new(literal.clone(), Span::synthetic())),
+                    };
+                    return Spanned::new(
+                        Item::EntryExpr(Spanned::new(new_expr, Span::synthetic())),
+                        Span::synthetic(),
+                    );
                 }
                 item.clone()
             })
@@ -474,7 +474,9 @@ impl ReplSession {
     /// Constrói o Module para avaliação, substituindo bindings congelados
     /// por literais.
     fn build_eval_module(&self, items: &[Spanned<Item>]) -> Module {
-        Module { items: self.build_eval_items(items) }
+        Module {
+            items: self.build_eval_items(items),
+        }
     }
 
     /// Decodifica um JitResult (valor bruto + tipo) em um literal AST.
@@ -487,7 +489,9 @@ impl ReplSession {
             Ty::Prim(PrimTy::Int) => {
                 if (raw as u64) & 1 == 1 {
                     let value = (raw - 1) >> 1;
-                    Some(Expr::IntLit { text: format!("{value}") })
+                    Some(Expr::IntLit {
+                        text: format!("{value}"),
+                    })
                 } else {
                     // BigInt — LSB=0, ponteiro. Não suportado nesta fase.
                     None
@@ -496,7 +500,9 @@ impl ReplSession {
             // Float: raw é f64 reinterpretado como i64
             Ty::Prim(PrimTy::Float) => {
                 let f = f64::from_bits(raw as u64);
-                Some(Expr::FloatLit { text: format!("{f}") })
+                Some(Expr::FloatLit {
+                    text: format!("{f}"),
+                })
             }
             // Boolean: True = SMI 1, False = SMI 0
             Ty::Sum(name) if name == "Boolean" => {
@@ -537,125 +543,4 @@ fn dirs() -> PathBuf {
     PathBuf::from(home).join(".kata_repl_history")
 }
 
-/// Executa o subcomando `kata repl`.
-pub(crate) fn cmd_repl() -> miette::Result<()> {
-    let mut session = ReplSession::new().map_err(miette::Report::msg)?;
-
-    // Configurar rustyline com cores forçadas.
-    //
-    // ColorMode::Forced garante colorização mesmo em terminais que não
-    // reportam capacidade de cor. O eco duplo que víamos antes era
-    // causado pelo HistoryHinter (sugestões inline com ANSI), não pelo
-    // ColorMode — agora o hinter retorna None.
-    let config = rustyline::config::Builder::new()
-        .color_mode(rustyline::config::ColorMode::Forced)
-        .build();
-    let mut rl = Editor::<KataHelper, DefaultHistory>::with_config(config)
-        .map_err(|e| miette::Report::msg(format!("erro ao iniciar rustyline: {e}")))?;
-    rl.set_helper(Some(KataHelper::default()));
-
-    // Carregar histórico.
-    let _ = rl.load_history(&session.history_path);
-
-    println!("Kata REPL — digite :help para comandos, :quit para sair");
-
-    loop {
-        // Lê a primeira linha.
-        let first = match rl.readline("kata> ") {
-            Ok(line) => line,
-            Err(ReadlineError::Interrupted | ReadlineError::Eof) => break,
-            Err(e) => {
-                eprintln!("erro de leitura: {e}");
-                break;
-            }
-        };
-
-        // Comandos `:` são processados imediatamente (sem multiline).
-        let trimmed = first.trim();
-        if trimmed.starts_with(':') || trimmed.is_empty() {
-            let _ = rl.add_history_entry(&first);
-            match session.handle(&first) {
-                Ok(true) => {}
-                Ok(false) => break,
-                Err(e) => eprintln!("{e}"),
-            }
-            continue;
-        }
-        // Expressão: acumula linhas até o input ser completo.
-        // Heurística multiline:
-        //   1. Se o parse falha com "<EOF>", o input está incompleto —
-        //      continuar lendo (ex: `lambda n:`, `match True`).
-        //   2. Se a primeira linha é uma assinatura de função (`nome :: ... => T`)
-        //      sem `@ffi`, ativar modo multiline — acumular até linha em
-        //      branco (cláusulas lambda indentadas seguem).
-        //   3. Se a primeira linha termina com `=>` (action sem tipo de
-        //      retorno), body indentado pode seguir.
-        //   4. Se a primeira linha inicia um bloco indentado — `match`,
-        //      `enum`, `implements` — ativar modo multiline (break on
-        //      non-indented line), igual à Sig.
-        let first_trimmed = first.trim_end();
-        let multiline_sig = first_trimmed.contains("::")
-            && first_trimmed.contains("=>")
-            && !first_trimmed.contains("@ffi");
-        let multiline_action = first_trimmed.ends_with("=>");
-        let first_token = first_trimmed.split_whitespace().next().unwrap_or("");
-        let multiline_indent = matches!(first_token, "match" | "enum" | "implements" | "interface");
-
-        let mut buffer = first.clone();
-        let in_multiline = multiline_sig || multiline_action || multiline_indent;
-
-        loop {
-            if !in_multiline {
-                // Verifica se o parse falha com <EOF> (input incompleto).
-                if !ReplSession::is_input_incomplete(&buffer) {
-                    break;
-                }
-            }
-
-            // Lê próxima linha com prompt de continuação.
-            match rl.readline("   ... ") {
-                Ok(line) => {
-                    if line.trim().is_empty() {
-                        // Linha vazia termina o bloco multiline.
-                        break;
-                    }
-                    buffer.push('\n');
-                    buffer.push_str(&line);
-                    // Se estávamos em modo multiline_sig ou multiline_indent
-                    // e a nova linha não é indentada nem começa com
-                    // `lambda`/`λ`, o bloco terminou.
-                    if (multiline_sig || multiline_indent)
-                        && !line.starts_with(' ')
-                        && !line.starts_with('\t')
-                        && !line.trim_start().starts_with("lambda")
-                        && !line.trim_start().starts_with("λ")
-                    {
-                        break;
-                    }
-                }
-                Err(ReadlineError::Interrupted) => {
-                    buffer.clear();
-                    break;
-                }
-                Err(ReadlineError::Eof) => {
-                    break;
-                }
-                Err(e) => {
-                    eprintln!("erro de leitura: {e}");
-                    break;
-                }
-            }
-        }
-
-        let _ = rl.add_history_entry(&buffer);
-        match session.handle(&buffer) {
-            Ok(true) => {}
-            Ok(false) => break,
-            Err(e) => eprintln!("{e}"),
-        }
-    }
-
-    // Salvar histórico.
-    let _ = rl.save_history(&session.history_path);
-    Ok(())
-}
+pub(crate) use repl_loop::cmd_repl;

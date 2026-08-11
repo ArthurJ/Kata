@@ -20,6 +20,7 @@ mod imports;
 mod interface_decl;
 mod lambda;
 mod patterns;
+mod sig;
 mod type_decls;
 mod types;
 
