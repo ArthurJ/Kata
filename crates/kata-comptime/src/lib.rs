@@ -15,6 +15,7 @@
 //! `TextLit`/`Unit` directo na TAST.
 
 mod constness;
+mod constant_fold;
 mod ctx;
 mod error;
 mod fold;
@@ -138,7 +139,11 @@ pub fn run_comptime_pass(
             // Pular constants cujo value já foi avaliado (literal ou
             // HeapSnapshot). Isto previne o fixpoint loop: sem o skip,
             // HeapSnapshot é comptime-available → re-avalia → loop infinito.
+            // Mas ainda precisamos registrar no comptime_bindings para que
+            // fold_constant_refs possa substituir Ident(name) nos corpos de
+            // functions e actions (Fase 3).
             if is_already_evaluated(&value_clone) {
+                comptime_bindings.insert(name, value_clone);
                 continue;
             }
 
@@ -261,6 +266,21 @@ pub fn run_comptime_pass(
     }
 
     current.snapshots = snapshots;
+
+    // ── Fase 3: Substituir refs a constants nos corpos de functions e actions ──
+    // Após o fixpoint, comptime_bindings contém os valores avaliados de todas
+    // as constants. Functions e actions compilam em FunctionBuilders separados
+    // que não têm acesso ao var_map do entry point (onde constants são
+    // registradas). Esta passagem substitui Ident(name) pelo literal/snapshot
+    // quando name é uma constant e não está mascarado por um binding local.
+    constant_fold::fold_constant_refs_in_functions(
+        &mut current.functions,
+        &comptime_bindings,
+    )?;
+    constant_fold::fold_constant_refs_in_actions(
+        &mut current.actions,
+        &comptime_bindings,
+    )?;
 
     // ── Fase 4: Validar predicados complexos pendentes ──
     // TypeAscription com pending_predicates foi produzida pelo typeck quando

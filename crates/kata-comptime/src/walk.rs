@@ -96,6 +96,14 @@ where
         }
         // HeapSnapshot — folha.
         TypedExprKind::HeapSnapshot { .. } => {}
+        // ActionCall: percorre args (Box<Spanned<TypedExpr>>).
+        TypedExprKind::ActionCall { args, .. } => {
+            f(&mut args.node)?;
+        }
+        // ConstantBinding: percorre value.
+        TypedExprKind::ConstantBinding { value, .. } => {
+            f(&mut value.node)?;
+        }
         // Outros variants não têm filhos TypedExpr ou não aparecem em top-level.
         _ => {}
     }
