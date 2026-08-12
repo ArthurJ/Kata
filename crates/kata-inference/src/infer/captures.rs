@@ -80,10 +80,38 @@ pub(crate) fn run(typed_module: &mut TypedModule) {
         }
     }
 
-    // Percorre Actions
+    // Percorre Actions — rastreia let bindings locais cumulativamente.
+    // Cada `let` no body da action introduz um binding acessível a
+    // closures nos statements seguintes. O `local_tys` cresce a cada
+    // `let` encontrado, para que `collect_captures_in_expr` possa
+    // resolver tipos de captures que são bindings locais da action
+    // (não globais do type_env).
     for action in actions {
+        let mut local_tys: HashMap<String, Ty> = HashMap::new();
         for stmt in &mut action.body {
-            collect_captures_in_expr(&mut stmt.node, type_env, &empty_tys, dispatch);
+            // Se o statement é um Let, processa o value primeiro (com
+            // os locals acumulados até aqui, sem incluir o let atual),
+            // depois registra o binding para os próximos statements.
+            match &mut stmt.node.kind {
+                TypedExprKind::Let { name, value } => {
+                    collect_captures_in_expr(&mut value.node, type_env, &local_tys, dispatch);
+                    local_tys.insert(name.clone(), value.node.ty.clone());
+                }
+                TypedExprKind::LetDestruct {
+                    temp_name,
+                    value,
+                    bindings,
+                } => {
+                    collect_captures_in_expr(&mut value.node, type_env, &local_tys, dispatch);
+                    local_tys.insert(temp_name.clone(), value.node.ty.clone());
+                    for (bname, bval) in bindings.iter() {
+                        local_tys.insert(bname.clone(), bval.node.ty.clone());
+                    }
+                }
+                _ => {
+                    collect_captures_in_expr(&mut stmt.node, type_env, &local_tys, dispatch);
+                }
+            }
         }
     }
 }

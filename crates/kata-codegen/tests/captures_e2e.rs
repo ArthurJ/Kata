@@ -160,11 +160,7 @@ fn find_lambda_captures_in_expr(
 
 // ── Testes de coleta de captures (TAST inspection) ─────────────────
 
-// TODO: collect_captures não rastreia let bindings em action bodies
-// (usa empty_tys em vez de rastrear locals). Migrar para named function
-// com closure interna requer suporte a múltiplas expressões em lambda body.
 #[test]
-#[ignore = "collect_captures não rastreia let bindings em action bodies"]
 fn capture_simples_tast() {
     // `let n := 10` + `let add_n := + _ n` dentro de action.
     // add_n captura n (variável local do escopo da action).
@@ -178,7 +174,6 @@ fn capture_simples_tast() {
 }
 
 #[test]
-#[ignore = "collect_captures não rastreia let bindings em action bodies"]
 fn capture_multipla_tast() {
     // Doos lets com captures separadas dentro de action.
     let typed = infer_src(
@@ -292,7 +287,6 @@ fn capture_nao_deve_incluir_funcao_global_tast() {
 }
 
 #[test]
-#[ignore = "collect_captures não rastreia let bindings em action bodies"]
 fn capture_nao_deve_incluir_funcao_global_and_tast() {
     // `and` é função global (Boolean Boolean => Boolean) em core.kata.
     // `t` é capturada (variável do escopo da action), `and` não deveria ser.
