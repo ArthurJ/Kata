@@ -128,133 +128,181 @@ pub(crate) fn extract_test_specs(
     specs
 }
 
-/// Extrai `LogSpec` da diretiva `@log` se presente.
+/// Extrai `Vec<LogSpec>` de todas as diretivas `@log` presentes.
 ///
-/// `@log{msg: \"...\", when: \"enter\"/\"exit\", topic: \"...\", policy: \"...\", level: \"Info\"}`
+/// `@log{msg: "...", when: "enter"/"exit", topic: "...", policy: "...", level: "Info"}`
 ///
 /// `msg` e `when` são obrigatórios. `topic`, `policy`, `level` são opcionais.
-/// Retorna `None` se não há diretiva `@log`.
-pub(crate) fn extract_log_spec(
+/// Retorna `Vec` vazio se não há diretiva `@log`. Múltiplas diretivas `@log`
+/// são processadas independentemente — cada uma vira um `LogSpec` distinto.
+pub(crate) fn extract_log_specs(
     directives: &[Directive],
     item_name: &str,
     context: &'static str,
     errors: &mut Vec<ResolveError>,
-) -> Option<LogSpec> {
-    let log_dir = directives.iter().find(|d| d.name == "log")?;
-    let mut msg = None;
-    let mut when = None;
-    let mut topic = None;
-    let mut policy = None;
-    let mut level = None;
+) -> Vec<LogSpec> {
+    let log_dirs: Vec<&Directive> = directives.iter().filter(|d| d.name == "log").collect();
+    if log_dirs.is_empty() {
+        return Vec::new();
+    }
 
-    for arg in &log_dir.args {
-        if let DirectiveArg::Named { key, value } = arg {
-            match key.as_str() {
-                "msg" => {
-                    if let Expr::TextLit { text } = &value.node {
-                        msg = Some(text.clone());
-                    } else {
+    let mut specs = Vec::new();
+    for log_dir in log_dirs {
+        let mut msg = None;
+        let mut when = None;
+        let mut topic = None;
+        let mut file = None;
+        let mut policy = None;
+        let mut level = None;
+
+        for arg in &log_dir.args {
+            if let DirectiveArg::Named { key, value } = arg {
+                match key.as_str() {
+                    "msg" => {
+                        if let Expr::TextLit { text } = &value.node {
+                            msg = Some(text.clone());
+                        } else {
+                            errors.push(ResolveError::UnknownDirective {
+                                name: "log".into(),
+                                context,
+                                item_name: format!("{item_name}: msg deve ser Text"),
+                            });
+                        }
+                    }
+                    "when" => {
+                        if let Expr::TextLit { text } = &value.node {
+                            when = Some(text.clone());
+                        } else {
+                            errors.push(ResolveError::UnknownDirective {
+                                name: "log".into(),
+                                context,
+                                item_name: format!("{item_name}: when deve ser Text"),
+                            });
+                        }
+                    }
+                    "topic" => {
+                        if let Expr::TextLit { text } = &value.node {
+                            topic = Some(text.clone());
+                        } else {
+                            errors.push(ResolveError::UnknownDirective {
+                                name: "log".into(),
+                                context,
+                                item_name: format!("{item_name}: topic deve ser Text"),
+                            });
+                        }
+                    }
+                    "file" => {
+                        // file: identificador (ex: stdout) — resolve como Expr::Ident no inference.
+                        if let Expr::TextLit { text } = &value.node {
+                            file = Some(text.clone());
+                        } else if let Expr::Ident { name } = &value.node {
+                            file = Some(name.clone());
+                        } else {
+                            errors.push(ResolveError::UnknownDirective {
+                                name: "log".into(),
+                                context,
+                                item_name: format!(
+                                    "{item_name}: file deve ser Text ou identificador"
+                                ),
+                            });
+                        }
+                    }
+                    "policy" => {
+                        if let Expr::TextLit { text } = &value.node {
+                            policy = Some(text.clone());
+                        } else {
+                            errors.push(ResolveError::UnknownDirective {
+                                name: "log".into(),
+                                context,
+                                item_name: format!("{item_name}: policy deve ser Text"),
+                            });
+                        }
+                    }
+                    "level" => {
+                        // Level pode ser TextLit ("Info") ou VariantQual (LogLevel::Info).
+                        if let Expr::TextLit { text } = &value.node {
+                            level = Some(text.clone());
+                        } else if let Expr::VariantQual { variant, .. } = &value.node {
+                            level = Some(variant.clone());
+                        } else {
+                            errors.push(ResolveError::UnknownDirective {
+                                name: "log".into(),
+                                context,
+                                item_name: format!(
+                                    "{item_name}: level deve ser Text ou variante de LogLevel"
+                                ),
+                            });
+                        }
+                    }
+                    other => {
                         errors.push(ResolveError::UnknownDirective {
                             name: "log".into(),
                             context,
-                            item_name: format!("{item_name}: msg deve ser Text"),
+                            item_name: format!("{item_name}: chave desconhecida: {other}"),
                         });
                     }
-                }
-                "when" => {
-                    if let Expr::TextLit { text } = &value.node {
-                        when = Some(text.clone());
-                    } else {
-                        errors.push(ResolveError::UnknownDirective {
-                            name: "log".into(),
-                            context,
-                            item_name: format!("{item_name}: when deve ser Text"),
-                        });
-                    }
-                }
-                "topic" => {
-                    if let Expr::TextLit { text } = &value.node {
-                        topic = Some(text.clone());
-                    } else {
-                        errors.push(ResolveError::UnknownDirective {
-                            name: "log".into(),
-                            context,
-                            item_name: format!("{item_name}: topic deve ser Text"),
-                        });
-                    }
-                }
-                "policy" => {
-                    if let Expr::TextLit { text } = &value.node {
-                        policy = Some(text.clone());
-                    } else {
-                        errors.push(ResolveError::UnknownDirective {
-                            name: "log".into(),
-                            context,
-                            item_name: format!("{item_name}: policy deve ser Text"),
-                        });
-                    }
-                }
-                "level" => {
-                    // Level pode ser TextLit ("Info") ou VariantQual (LogLevel::Info).
-                    if let Expr::TextLit { text } = &value.node {
-                        level = Some(text.clone());
-                    } else if let Expr::VariantQual { variant, .. } = &value.node {
-                        level = Some(variant.clone());
-                    } else {
-                        errors.push(ResolveError::UnknownDirective {
-                            name: "log".into(),
-                            context,
-                            item_name: format!(
-                                "{item_name}: level deve ser Text ou variante de LogLevel"
-                            ),
-                        });
-                    }
-                }
-                other => {
-                    errors.push(ResolveError::UnknownDirective {
-                        name: "log".into(),
-                        context,
-                        item_name: format!("{item_name}: chave desconhecida: {other}"),
-                    });
                 }
             }
         }
+
+        // Valida campos obrigatórios.
+        let msg = msg.unwrap_or_else(|| {
+            errors.push(ResolveError::UnknownDirective {
+                name: "log".into(),
+                context,
+                item_name: format!("{item_name}: msg é obrigatório em @log"),
+            });
+            String::new()
+        });
+        let when = when.unwrap_or_else(|| {
+            errors.push(ResolveError::UnknownDirective {
+                name: "log".into(),
+                context,
+                item_name: format!("{item_name}: when é obrigatório em @log"),
+            });
+            String::new()
+        });
+
+        // Valida valor de when.
+        if when != "enter" && when != "exit" {
+            errors.push(ResolveError::UnknownDirective {
+                name: "log".into(),
+                context,
+                item_name: format!(
+                    "{item_name}: when deve ser \"enter\" ou \"exit\", got \"{when}\""
+                ),
+            });
+        }
+
+        // Validação: topic e file são mutuamente exclusivos.
+        if topic.is_some() && file.is_some() {
+            errors.push(ResolveError::UnknownDirective {
+                name: "log".into(),
+                context,
+                item_name: format!("{item_name}: topic e file são mutuamente exclusivos em @log"),
+            });
+        }
+
+        // Validação: policy só é válido com topic (não com file).
+        if policy.is_some() && file.is_some() {
+            errors.push(ResolveError::UnknownDirective {
+                name: "log".into(),
+                context,
+                item_name: format!("{item_name}: policy não é válido com file em @log"),
+            });
+        }
+
+        specs.push(LogSpec {
+            msg,
+            when,
+            topic,
+            file,
+            policy,
+            level,
+        });
     }
 
-    // Valida campos obrigatórios.
-    let msg = msg.unwrap_or_else(|| {
-        errors.push(ResolveError::UnknownDirective {
-            name: "log".into(),
-            context,
-            item_name: format!("{item_name}: msg é obrigatório em @log"),
-        });
-        String::new()
-    });
-    let when = when.unwrap_or_else(|| {
-        errors.push(ResolveError::UnknownDirective {
-            name: "log".into(),
-            context,
-            item_name: format!("{item_name}: when é obrigatório em @log"),
-        });
-        String::new()
-    });
-
-    // Valida valor de when.
-    if when != "enter" && when != "exit" {
-        errors.push(ResolveError::UnknownDirective {
-            name: "log".into(),
-            context,
-            item_name: format!("{item_name}: when deve ser \"enter\" ou \"exit\", got \"{when}\""),
-        });
-    }
-
-    Some(LogSpec {
-        msg,
-        when,
-        topic,
-        policy,
-        level,
-    })
+    specs
 }
 
 /// Extrai `TimerSpec` da diretiva `@timer` se presente.

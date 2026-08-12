@@ -81,9 +81,15 @@ pub struct LogSpec {
     pub msg: String,
     /// `"enter"` = loga no prólogo. `"exit"` = loga no epílogo. Obrigatório.
     pub when: String,
-    /// Tópico (nome do canal). None = usar config herdada do fiber.
+    /// Tópico (nome do canal CSP). None = usar config herdada do fiber.
+    /// Mutuamente exclusivo com `file`.
     pub topic: Option<String>,
+    /// Nome do identificador File para write direto (ex: `stdout`).
+    /// Mutuamente exclusivo com `topic`. O inference resolve como
+    /// `Expr::Ident(name)` e tipa como `Ty::File`.
+    pub file: Option<String>,
     /// Política: `"drop"` ou `"block"`. None = usar config herdada.
+    /// Só válido com `topic` (não com `file`).
     pub policy: Option<String>,
     /// Level como variante do enum LogLevel (ex: `"Info"`). None = Info default.
     pub level: Option<String>,
@@ -119,8 +125,10 @@ pub struct FunctionDef {
     pub param_types: Vec<Ty>,
     pub return_type: Ty,
     pub clauses: Vec<Spanned<LambdaClause>>,
-    /// Especificação de logging `@log`. None se a função não tem `@log`.
-    pub log: Option<LogSpec>,
+    /// Especificações de logging `@log`. Múltiplas diretivas `@log` são
+    /// suportadas — cada uma injeta independentemente no prólogo/epílogo.
+    /// Vazio se a função não tem `@log`.
+    pub log: Vec<LogSpec>,
     /// Especificação de cache `@cache{strategy: "LRU"}`. None se a função
     /// não tem `@cache`.
     pub cache_strategy: Option<String>,
@@ -148,8 +156,10 @@ pub struct ActionDef {
     /// cujos args são `Expr` não-tipado — o inference tipa via `infer_expr`.
     /// Vazio quando a action não tem `@test`.
     pub tests: Vec<TestSpec>,
-    /// Especificação de logging `@log`. None se a action não tem `@log`.
-    pub log: Option<LogSpec>,
+    /// Especificações de logging `@log`. Múltiplas diretivas `@log` são
+    /// suportadas — cada uma injeta independentemente no prólogo/epílogo.
+    /// Vazio se a action não tem `@log`.
+    pub log: Vec<LogSpec>,
     /// Nomes das diretivas customizadas aplicadas a esta action (em ordem).
     /// Preenchido pelo resolution, consumido pelo `desugar_directives`.
     pub custom_directives: Vec<String>,

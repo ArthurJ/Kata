@@ -18,6 +18,7 @@ use crate::channel::{
     Policy, kata_rt_broadcast_create, kata_rt_broadcast_receiver_create, kata_rt_channel_recv,
     kata_rt_channel_send, kata_rt_queue_create,
 };
+use crate::file::{alloc_result_box, alloc_text};
 
 // ── LogConfig TLS ───────────────────────────────────────────
 //
@@ -190,18 +191,6 @@ pub extern "C" fn kata_rt_log_publish(
         })
     };
 
-    // Tópicos especiais: stdout/stderr escrevem diretamente nas saídas padrão.
-    // Não passam pelo canal CSP — útil para debug e telemetria de desenvolvimento.
-    if topic == "stdout" || topic == "stderr" {
-        let msg_text = read_text(msg);
-        if topic == "stdout" {
-            println!("{msg_text}");
-        } else {
-            eprintln!("{msg_text}");
-        }
-        return 0;
-    }
-
     let handle = get_or_create_topic(&topic, policy);
     // Envia a mensagem no canal. Para "block", channel_send suspende se cheio.
     // Para "drop" (Broadcast), channel_send é fire-and-forget.
@@ -249,15 +238,29 @@ pub extern "C" fn kata_rt_log_recv(topic_ptr: i64) -> i64 {
                     rx
                 });
                 if rx_handle == 0 {
-                    return 0; // Falha ao criar receiver.
+                    // Falha ao criar receiver → Err("channel closed").
+                    return alloc_result_box(1, alloc_text("channel closed"));
                 }
-                kata_rt_channel_recv(rx_handle)
+                let msg = kata_rt_channel_recv(rx_handle);
+                if msg == 0 {
+                    // Canal fechado ou vazio → Err("channel closed").
+                    return alloc_result_box(1, alloc_text("channel closed"));
+                }
+                // Ok(msg).
+                alloc_result_box(0, msg)
             } else {
                 // Queue ou Channel — recv direto.
-                kata_rt_channel_recv(h)
+                let msg = kata_rt_channel_recv(h);
+                if msg == 0 {
+                    return alloc_result_box(1, alloc_text("channel closed"));
+                }
+                alloc_result_box(0, msg)
             }
         }
-        None => 0, // Tópico não existe → sem mensagem.
+        None => {
+            // Tópico não existe → Err("topic not found").
+            alloc_result_box(1, alloc_text("topic not found"))
+        }
     }
 }
 

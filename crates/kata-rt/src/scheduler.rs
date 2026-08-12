@@ -31,6 +31,7 @@ pub use ffi::{
     reset_scheduler,
 };
 
+use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, VecDeque};
 
 use crate::arena::{Arena, ArenaKind};
@@ -38,6 +39,18 @@ use crate::channel::{block_ipc_until_readable, can_recv, can_send, ipc_read_fd, 
 use crate::fiber::{KataFiber, SpawnArgs, YieldReason};
 use crate::file::{FILE_WOULD_BLOCK, collect_file_fds, try_select_files};
 use crate::socket::{SOCKET_WOULD_BLOCK, collect_socket_fds, try_select_sockets};
+
+// ── TLS para registry por-fiber (Fase 9) ───────────────────────────
+// CURRENT_FIBER_ARENA: setado antes de resume(), lido por kata_rt_file_open
+//   para determinar se o arquivo é fiber-local (arena do fiber) ou global.
+// FIBER_OPEN_FILES: Vec<i64> swap in/out de FiberEntry.open_files antes/depois
+//   de resume(). kata_rt_file_open registra aqui se fiber-local;
+//   try_destroy fecha os handles pendentes.
+
+thread_local! {
+    pub(crate) static CURRENT_FIBER_ARENA: Cell<Option<i64>> = const { Cell::new(None) };
+    pub(crate) static FIBER_OPEN_FILES: RefCell<Vec<i64>> = const { RefCell::new(Vec::new()) };
+}
 
 /// Identificador de fiber no scheduler.
 pub(crate) type FiberId = u64;
@@ -88,6 +101,10 @@ struct FiberEntry {
     /// Snapshot do `LOG_CONFIG` do pai no momento do spawn (herança β).
     /// Setado no `LOG_CONFIG` TLS antes de cada `resume()` deste fiber.
     log_config: Option<crate::log::LogConfig>,
+    /// Handles de arquivos abertos pelo fiber (não-stdio, alocados na
+    /// fiber_arena). Fechados em `try_destroy` se o fiber terminar sem
+    /// chamar `close!()`. Swap in/out via `FIBER_OPEN_FILES` TLS.
+    open_files: Vec<i64>,
 }
 
 /// Scheduler de fibers — coordena execução, arenas e yield.
@@ -185,6 +202,7 @@ impl Scheduler {
                 completed: false,
                 suspend_ptr: None,
                 log_config,
+                open_files: Vec::new(),
             },
         );
         // Registrar este fiber como filho do pai.
@@ -437,11 +455,40 @@ impl Scheduler {
         // Restaura LOG_CONFIG do snapshot do fiber (herança β).
         crate::log::restore_log_config(log_config);
         self.current_fiber = Some(fiber_id);
+
+        // Fase 9: setar CURRENT_FIBER_ARENA e swap FIBER_OPEN_FILES.
+        // kata_rt_file_open lê CURRENT_FIBER_ARENA para decidir se registra
+        // o handle em FIBER_OPEN_FILES (fiber-local) ou OPEN_FILES (global).
+        // FIBER_OPEN_FILES é swap in/out para evitar &mut Scheduler durante resume().
+        let fiber_arena = spawn_args.fiber_arena;
+        CURRENT_FIBER_ARENA.with(|c| c.set(Some(fiber_arena)));
+        let saved_open_files = FIBER_OPEN_FILES.with(|r| {
+            let mut borrow = r.borrow_mut();
+            std::mem::take(&mut *borrow)
+        });
+        // Restore the fiber's open_files into TLS (may be non-empty if resuming
+        // a suspended fiber that opened files before suspending).
+        FIBER_OPEN_FILES.with(|r| {
+            *r.borrow_mut() = saved_open_files;
+        });
+
         let has_ready = !self.run_queue.is_empty();
         self.has_ready_fiber = has_ready;
         self.yield_counter = YIELD_INTERVAL;
         let result = entry.fiber.resume(spawn_args);
         self.current_fiber = None;
+
+        // Fase 9: limpar CURRENT_FIBER_ARENA e recuperar FIBER_OPEN_FILES.
+        CURRENT_FIBER_ARENA.with(|c| c.set(None));
+        let recovered_open_files = FIBER_OPEN_FILES.with(|r| {
+            let mut borrow = r.borrow_mut();
+            std::mem::take(&mut *borrow)
+        });
+        // Devolve os open_files ao FiberEntry.
+        if let Some(entry) = self.fibers.get_mut(&fiber_id) {
+            entry.open_files = recovered_open_files;
+        }
+
         // Se o fiber suspendeu, capturar o `Suspend` ptr publicado pelo
         // trampoline para re-setar `CURRENT_SUSPEND` no próximo resume.
         if result.is_err() {
@@ -571,6 +618,17 @@ impl Scheduler {
             .expect("fiber_id must exist if should_destroy was true");
         let arena_handle = entry.fiber.arena_handle;
         let parent_id = entry.parent_id;
+
+        // Fase 9: fechar arquivos abertos pelo fiber que não foram fechados
+        // explicitamente com close!(). Isto previne FD leak quando um fiber
+        // termina sem fechar arquivos alocados na sua arena.
+        for handle in &entry.open_files {
+            // SAFETY: handle é um FileInner válido alocado na fiber_arena.
+            // kata_rt_file_close é idempotente (no-op se já fechado).
+            unsafe { crate::file::kata_rt_file_close(*handle) };
+        }
+        entry.open_files.clear();
+
         // Destruir a arena do fiber via pool direto.
         if let Some(a) = arenas.get_mut(arena_handle as usize) {
             match a {

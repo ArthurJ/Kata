@@ -11,10 +11,11 @@ pub(crate) fn sig_for(sym: FfiSymbol) -> Option<Signature> {
     let mut sig = Signature::new(CallConv::SystemV);
     match sym {
         // ── File I/O ──
-        // file_open: (path_ptr, mode_tag) -> i64 (Result box ARC)
+        // file_open: (path_ptr, mode_tag, arena_handle) -> i64 (Result box ARC)
         FfiSymbol::FileOpen => {
             sig.params.push(AbiParam::new(I64)); // path_ptr (Text)
             sig.params.push(AbiParam::new(I64)); // mode_tag (FileMode variant tag)
+            sig.params.push(AbiParam::new(I64)); // arena_handle (escape-based)
             sig.returns.push(AbiParam::new(I64)); // Result box ptr
         }
         // file_read: (handle) -> i64 (Result box ARC)
@@ -48,6 +49,11 @@ pub(crate) fn sig_for(sym: FfiSymbol) -> Option<Signature> {
         // file_close: (handle) -> void
         FfiSymbol::FileClose => {
             sig.params.push(AbiParam::new(I64)); // handle
+        }
+        // ── stdio: stdin/stdout/stderr ──
+        // stdin/stdout/stderr: () -> i64 (File handle)
+        FfiSymbol::Stdin | FfiSymbol::Stdout | FfiSymbol::Stderr => {
+            sig.returns.push(AbiParam::new(I64)); // File handle ptr
         }
         // ── Socket I/O ──
         // socket_open: (kind_box, mode_box) -> i64 (Result box)

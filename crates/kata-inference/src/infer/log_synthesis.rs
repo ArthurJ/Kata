@@ -17,11 +17,30 @@ use crate::typed::{TypedExpr, TypedLogSpec};
 use super::expr::InferCtx;
 use super::format_synthesis::infer_format;
 use super::helpers::InferResult;
+use super::log_template::{log_level_name, parse_placeholder, parse_template};
 
 /// Nomes das variantes de LogLevel e suas tags.
 const LOG_LEVEL_TAGS: &[(&str, i64)] = &[("Debug", 0), ("Info", 1), ("Warn", 2), ("Error", 3)];
 
-/// Sintetiza `TypedLogSpec` a partir de `LogSpec` do resolution.
+/// Sintetiza `Vec<TypedLogSpec>` a partir de múltiplos `LogSpec` do resolution.
+///
+/// Cada `LogSpec` é processado independentemente: parsear template, chamar
+/// `infer_format`, produzir `TypedLogSpec`. Retorna um `Vec` com um
+/// `TypedLogSpec` por `LogSpec` de entrada.
+pub(crate) fn synthesize_log_specs(
+    logs: &[kata_resolution::LogSpec],
+    param_names: &[String],
+    env: &mut TypeEnv,
+    ctx: &InferCtx,
+) -> InferResult<Vec<TypedLogSpec>> {
+    let mut specs = Vec::new();
+    for log in logs {
+        specs.push(synthesize_log_spec(log, param_names, env, ctx)?);
+    }
+    Ok(specs)
+}
+
+/// Sintetiza um único `TypedLogSpec` a partir de `LogSpec` do resolution.
 ///
 /// Processa o template `msg`, extrai placeholders, chama `infer_format`,
 /// e retorna o spec tipado pronto para o codegen.
@@ -31,6 +50,19 @@ pub(crate) fn synthesize_log_spec(
     env: &mut TypeEnv,
     ctx: &InferCtx,
 ) -> InferResult<TypedLogSpec> {
+    // Resolve level: nome da variante → tag (precisa antes do loop
+    // de placeholders para resolver {log_level} como TextLit).
+    let level = log.level.as_deref().unwrap_or("Info");
+    let level_tag = LOG_LEVEL_TAGS
+        .iter()
+        .find(|(name, _)| *name == level)
+        .map(|(_, tag)| *tag)
+        .ok_or_else(|| MiddleError::TypeMismatch {
+            expected: "LogLevel variant (Debug, Info, Warn, Error)".into(),
+            found: level.to_string(),
+            span: Span::synthetic().into(),
+        })?;
+
     // Parseia o template: extrai placeholders `{expr}`, `{{`, `}}`.
     let (template, placeholders) =
         parse_template(&log.msg).map_err(|e| MiddleError::TypeMismatch {
@@ -39,16 +71,29 @@ pub(crate) fn synthesize_log_spec(
             span: Span::synthetic().into(),
         })?;
 
-    // Constrói Expr::Ident para cada placeholder.
-    // MVP: só Ident simples. Se o placeholder contém `.`, é FieldAccess.
+    // Constrói Expr para cada placeholder.
+    // {log_level} → TextLit com a string do level (variável sintética).
+    // Outros → Ident ou FieldAccess via parse_placeholder.
     let mut args = Vec::new();
     for ph in &placeholders {
-        let expr = parse_placeholder(ph).map_err(|e| MiddleError::TypeMismatch {
-            expected: "placeholder válido: {expr} ou {expr.field}".into(),
-            found: e,
-            span: Span::synthetic().into(),
-        })?;
-        args.push(Spanned::new(expr, Span::synthetic()));
+        if ph == "log_level" {
+            // {log_level} → TextLit com a string do level.
+            // Resolvido aqui (não passa pelo escopo — é variável sintética).
+            let level_name = log_level_name(level_tag);
+            args.push(Spanned::new(
+                Expr::TextLit {
+                    text: level_name.to_string(),
+                },
+                Span::synthetic(),
+            ));
+        } else {
+            let expr = parse_placeholder(ph).map_err(|e| MiddleError::TypeMismatch {
+                expected: "placeholder válido: {expr} ou {expr.field}".into(),
+                found: e,
+                span: Span::synthetic().into(),
+            })?;
+            args.push(Spanned::new(expr, Span::synthetic()));
+        }
     }
 
     // Constrói a chamada para `infer_format`:
@@ -91,21 +136,13 @@ pub(crate) fn synthesize_log_spec(
         });
     }
 
-    // Resolve level: nome da variante → tag.
-    let level = log.level.as_deref().unwrap_or("Info");
-    let level_tag = LOG_LEVEL_TAGS
-        .iter()
-        .find(|(name, _)| *name == level)
-        .map(|(_, tag)| *tag)
-        .ok_or_else(|| MiddleError::TypeMismatch {
-            expected: "LogLevel variant (Debug, Info, Warn, Error)".into(),
-            found: level.to_string(),
-            span: Span::synthetic().into(),
-        })?;
-
-    // Validação: se when: "enter", placeholders só podem referenciar params.
+    // Validação: se when: "enter", placeholders só podem referenciar params
+    // (exceção: {log_level} é variável sintética, sempre válida).
     if log.when == "enter" {
         for ph in &placeholders {
+            if ph == "log_level" {
+                continue;
+            }
             let name = ph.split('.').next().unwrap_or(ph);
             if !param_names.contains(&name.to_string()) {
                 return Err(MiddleError::TypeMismatch {
@@ -130,10 +167,40 @@ pub(crate) fn synthesize_log_spec(
         Span::synthetic(),
     );
 
+    // Resolve file: se Some(name), inferir.
+    // `file` pode ser: (1) variável File no escopo, ou (2) action 0-ary que
+    // retorna File (ex: `stdout` em `import stdio.(stdout)` — `stdout!()` → File).
+    // Se o nome está no DispatchTable como action, geramos ActionCall; senão, Ident.
+    let file_expr = if let Some(file_name) = &log.file {
+        let file_ast = if ctx.table.has_function(file_name) {
+            // Action 0-ary: stdout!() → Expr::ActionCall { callee, args: () }
+            Expr::ActionCall {
+                callee: file_name.clone(),
+                args: Box::new(Spanned::new(Expr::Unit, Span::synthetic())),
+            }
+        } else {
+            Expr::Ident {
+                name: file_name.clone(),
+            }
+        };
+        let typed = super::expr::infer_expr(&file_ast, &Span::synthetic(), env, ctx, false)?;
+        if typed.ty != Ty::File {
+            return Err(MiddleError::TypeMismatch {
+                expected: "File".into(),
+                found: format!("{}", typed.ty),
+                span: Span::synthetic().into(),
+            });
+        }
+        Some(Spanned::new(typed, Span::synthetic()))
+    } else {
+        None
+    };
+
     if log.when == "enter" {
         Ok(TypedLogSpec::Enter {
             msg_expr,
             topic: log.topic.clone(),
+            file: file_expr,
             policy: log.policy.clone(),
             level: level_tag,
         })
@@ -142,92 +209,9 @@ pub(crate) fn synthesize_log_spec(
         Ok(TypedLogSpec::Exit {
             msg_expr,
             topic: log.topic.clone(),
+            file: file_expr,
             policy: log.policy.clone(),
             level: level_tag,
-        })
-    }
-}
-
-/// Resultado do parse de template: (template_com_placeholders, lista_de_exprs).
-///
-/// `"processando {x}, resultado: {y}"` → `("processando {}, resultado: {}", ["x", "y"])`
-/// `"literal {{ escapado }}"` → `("literal { escapado }", [])`
-fn parse_template(msg: &str) -> Result<(String, Vec<String>), String> {
-    let mut template = String::new();
-    let mut placeholders = Vec::new();
-    let chars: Vec<char> = msg.chars().collect();
-    let mut i = 0;
-
-    while i < chars.len() {
-        match chars[i] {
-            '{' => {
-                if i + 1 < chars.len() && chars[i + 1] == '{' {
-                    // {{ → { literal
-                    template.push('{');
-                    i += 2;
-                } else {
-                    // {expr} → placeholder
-                    let mut expr = String::new();
-                    i += 1; // consome {
-                    while i < chars.len() && chars[i] != '}' {
-                        expr.push(chars[i]);
-                        i += 1;
-                    }
-                    if i >= chars.len() {
-                        return Err(format!("template: {{ sem }} correspondente em \"{msg}\""));
-                    }
-                    i += 1; // consome }
-                    let expr = expr.trim().to_string();
-                    if expr.is_empty() {
-                        return Err(format!("template: placeholder vazio {{}} em \"{msg}\""));
-                    }
-                    template.push_str("{}");
-                    placeholders.push(expr);
-                }
-            }
-            '}' => {
-                if i + 1 < chars.len() && chars[i + 1] == '}' {
-                    // }} → } literal
-                    template.push('}');
-                    i += 2;
-                } else {
-                    // } sem {{ correspondente — erro
-                    return Err(format!("template: }} sem {{ correspondente em \"{msg}\""));
-                }
-            }
-            c => {
-                template.push(c);
-                i += 1;
-            }
-        }
-    }
-
-    Ok((template, placeholders))
-}
-
-/// Constrói `Expr` a partir de um placeholder string.
-///
-/// MVP: só `Ident` simples. Se contém `.`, constrói `FieldAccess`.
-/// `{x}` → `Expr::Ident("x")`
-/// `{foo.bar}` → `Expr::FieldAccess { target: Ident("foo"), field: "bar" }`
-fn parse_placeholder(ph: &str) -> Result<Expr, String> {
-    if ph.contains('.') {
-        let parts: Vec<&str> = ph.splitn(2, '.').collect();
-        if parts.len() != 2 || parts[1].is_empty() {
-            return Err(format!("placeholder inválido: {ph}"));
-        }
-        Ok(Expr::DotAccess {
-            expr: Box::new(Spanned::new(
-                Expr::Ident {
-                    name: parts[0].trim().to_string(),
-                },
-                Span::synthetic(),
-            )),
-            index: kata_ast::DotIndex::Field(parts[1].trim().to_string()),
-        })
-    } else {
-        Ok(Expr::Ident {
-            name: ph.to_string(),
         })
     }
 }

@@ -393,6 +393,10 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
         rt::kata_rt_file_write_bytes as *const u8,
     );
     builder.symbol("kata_rt_file_close", rt::kata_rt_file_close as *const u8);
+    // stdio
+    builder.symbol("kata_rt_stdin", rt::kata_rt_stdin as *const u8);
+    builder.symbol("kata_rt_stdout", rt::kata_rt_stdout as *const u8);
+    builder.symbol("kata_rt_stderr", rt::kata_rt_stderr as *const u8);
     // Socket I/O
     builder.symbol("kata_rt_socket_open", rt::kata_rt_socket_open as *const u8);
     builder.symbol(
@@ -641,6 +645,10 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         FileWriteText,
         FileWriteBytes,
         FileClose,
+        // stdio
+        Stdin,
+        Stdout,
+        Stderr,
         // Socket I/O
         SocketOpen,
         SocketListen,

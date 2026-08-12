@@ -167,6 +167,14 @@ pub(crate) fn lower_closure(
                 call_args.push(eq_fn_ptr);
                 call_args.push(arena_for_dict);
             }
+            "kata_rt_file_open" => {
+                // FileOpen precisa de arena baseada em escape analysis,
+                // não fiber_arena fixo. Local → fiber_arena, Caller →
+                // caller_arena, Heap → root_arena.
+                let arena =
+                    crate::lowering::escape_arena::arena_handle_for_escape(expr.escape, ctx);
+                call_args.push(arena);
+            }
             _ => {
                 // Default: inject arena if needed (existing behavior)
                 if crate::ffi_sigs::ffi_needs_arena(sym_name) {

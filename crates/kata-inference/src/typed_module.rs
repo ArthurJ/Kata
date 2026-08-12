@@ -83,8 +83,10 @@ pub struct TypedFunction {
     pub ret_ty: Ty,
     /// Cláusulas tipadas (padrões + corpo + guards + with bindings).
     pub clauses: Vec<TypedLambdaClause>,
-    /// Especificação de logging `@log`. None se a função não tem `@log`.
-    pub log: Option<TypedLogSpec>,
+    /// Especificações de logging `@log`. Múltiplas diretivas `@log` são
+    /// suportadas — cada uma injeta independentemente no prólogo/epílogo.
+    /// Vazio se a função não tem `@log`.
+    pub log: Vec<TypedLogSpec>,
     /// Especificação de cache `@cache`. None se a função não tem `@cache`.
     pub cache_spec: Option<CacheSpec>,
     /// Especificação de timer `@timer`. None se a função não tem `@timer`.
@@ -112,8 +114,10 @@ pub struct TypedAction {
     /// Casos de teste `@test` com args já tipados. O codegen gera
     /// um wrapper por spec (exceto negativos CompileError).
     pub tests: Vec<TypedTestSpec>,
-    /// Especificação de logging `@log`. None se a action não tem `@log`.
-    pub log: Option<TypedLogSpec>,
+    /// Especificações de logging `@log`. Múltiplas diretivas `@log` são
+    /// suportadas — cada uma injeta independentemente no prólogo/epílogo.
+    /// Vazio se a action não tem `@log`.
+    pub log: Vec<TypedLogSpec>,
 }
 
 /// `TestSpec` tipado — args já inferidos pelo typeck.
@@ -141,6 +145,9 @@ pub enum TypedLogSpec {
     Enter {
         msg_expr: Spanned<TypedExpr>,
         topic: Option<String>,
+        /// Expressão tipada que produz `File` para write direto.
+        /// Mutuamente exclusivo com `topic`.
+        file: Option<Spanned<TypedExpr>>,
         policy: Option<String>,
         level: i64,
     },
@@ -148,6 +155,9 @@ pub enum TypedLogSpec {
     Exit {
         msg_expr: Spanned<TypedExpr>,
         topic: Option<String>,
+        /// Expressão tipada que produz `File` para write direto.
+        /// Mutuamente exclusivo com `topic`.
+        file: Option<Spanned<TypedExpr>>,
         policy: Option<String>,
         level: i64,
     },

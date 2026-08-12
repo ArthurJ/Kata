@@ -28,10 +28,12 @@
 //! - `select`: seleção de file descriptors (helpers do scheduler —
 //!   `try_select_files`, `collect_file_fds`, `kata_rt_select_files`).
 
+use std::cell::Cell;
 use std::ffi::CStr;
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::os::raw::c_char;
+use std::os::unix::io::FromRawFd;
 
 // ── Submódulos ─────────────────────────────────────────────────────
 mod select;
@@ -83,11 +85,24 @@ pub(crate) struct FileInner {
     pub closed: bool,
     pub buf_reader: BufReader<File>,
     pub io: IoHandle,
+    /// Se true, o handle é um descritor padrão (FD 0/1/2).
+    /// `kata_rt_file_close` é no-op. `read`/`readline` em stdout/stderr
+    /// retornam `Err("not readable")`. `write` em stdin retorna
+    /// `Err("not writable")`.
+    pub is_stdio: bool,
     #[allow(dead_code)]
     pub path: String,
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
+
+/// Aloca um bloco na arena fornecida via `kata_rt_arena_alloc`.
+/// Usado por `kata_rt_file_open` que recebe `arena_handle` do codegen
+/// (baseado em escape analysis). `arena_alloc` (root_arena) permanece
+/// para Result boxes e Text — esses não precisam de escape analysis.
+fn arena_alloc_in(rt: i64, arena_handle: i64, size: i64) -> i64 {
+    crate::arena::kata_rt_arena_alloc(rt, arena_handle, size)
+}
 
 /// Aloca um bloco na root_arena via `kata_rt_arena_alloc`.
 /// Sem header ARC — a memória é liberada quando a root_arena for destruída
@@ -101,7 +116,7 @@ fn arena_alloc(size: i64) -> i64 {
 
 /// Aloca um Result box com tag e payload.
 /// Layout do data: tag (i64) no offset 0, payload (i64) no offset 8.
-fn alloc_result_box(tag: i64, payload: i64) -> i64 {
+pub(crate) fn alloc_result_box(tag: i64, payload: i64) -> i64 {
     let data_ptr = arena_alloc(16);
     if data_ptr == 0 {
         return 0;
@@ -113,7 +128,21 @@ fn alloc_result_box(tag: i64, payload: i64) -> i64 {
     data_ptr
 }
 
-/// Aloca um FileInner e retorna o ponteiro (handle).
+/// Aloca um FileInner na arena fornecida e retorna o ponteiro (handle).
+fn alloc_file_inner_in(rt: i64, arena_handle: i64, inner: FileInner) -> i64 {
+    let size = std::mem::size_of::<FileInner>() as i64;
+    let data_ptr = arena_alloc_in(rt, arena_handle, size);
+    if data_ptr == 0 {
+        return 0;
+    }
+    unsafe {
+        std::ptr::write_unaligned(data_ptr as *mut FileInner, inner);
+    }
+    data_ptr
+}
+
+/// Aloca um FileInner na root_arena e retorna o ponteiro (handle).
+/// Mantido para compatibilidade (stdio handles).
 fn alloc_file_inner(inner: FileInner) -> i64 {
     let size = std::mem::size_of::<FileInner>() as i64;
     let data_ptr = arena_alloc(size);
@@ -141,7 +170,7 @@ fn file_from_handle(handle: i64) -> Option<&'static mut FileInner> {
 
 /// Cria um Text a partir de uma String.
 /// Text é representado como C string (nulo-terminada).
-fn alloc_text(s: &str) -> i64 {
+pub(crate) fn alloc_text(s: &str) -> i64 {
     let data_size = s.len() as i64 + 1; // bytes + null terminator
     let data_ptr = arena_alloc(data_size);
     if data_ptr == 0 {
@@ -176,6 +205,50 @@ fn error_text(msg: &str) -> i64 {
     alloc_text(msg)
 }
 
+// ── OPEN_FILES registry ───────────────────────────────────────────
+// Registry global de handles FileInner abertos (não-stdio).
+// Usado por `reset_file_registry` para fechar FDs vazados entre testes.
+// stdio handles (is_stdio=true) NÃO são registrados.
+
+use std::cell::RefCell;
+
+thread_local! {
+    static OPEN_FILES: RefCell<Vec<i64>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Registra um handle em OPEN_FILES (se não for stdio).
+fn register_file_handle(handle: i64) {
+    if handle == 0 {
+        return;
+    }
+    // Verifica se é stdio — não registra.
+    if let Some(inner) = file_from_handle(handle) {
+        if inner.is_stdio {
+            return;
+        }
+    }
+    OPEN_FILES.with(|r| r.borrow_mut().push(handle));
+}
+
+/// Remove um handle de OPEN_FILES (se presente).
+fn unregister_file_handle(handle: i64) {
+    OPEN_FILES.with(|r| r.borrow_mut().retain(|&h| h != handle));
+}
+
+/// Fecha todos os FDs abertos não-stdio e limpa o registry.
+/// Chamada por `reset_scheduler` entre testes.
+pub(crate) fn reset_file_registry() {
+    reset_stdio_cache();
+    OPEN_FILES.with(|r| {
+        let handles: Vec<i64> = r.borrow().iter().copied().collect();
+        for handle in handles {
+            // Fecha cada handle — kata_rt_file_close é idempotente.
+            unsafe { kata_rt_file_close(handle) };
+        }
+        r.borrow_mut().clear();
+    });
+}
+
 // ── FFI ────────────────────────────────────────────────────────────
 
 /// Abre um arquivo e retorna um Result box.
@@ -188,11 +261,22 @@ fn error_text(msg: &str) -> i64 {
 /// - Result box Ok(handle) se sucesso — handle é ponteiro para FileInner.
 /// - Result box Err(text) se erro — text é ponteiro para C string.
 ///
+/// `kata_rt_file_open(path_ptr, mode_box, arena_handle) -> i64`
+///
+/// `arena_handle` é injetado pelo codegen via escape analysis:
+/// - `Local` → `fiber_arena` (arquivo local à action/fiber)
+/// - `Caller` → `caller_arena` (arquivo retornado pela action)
+/// - `Heap` → `root_arena` (arquivo enviado via canal entre fibers)
+///
 /// # Safety
 /// `path_ptr` deve ser um ponteiro C string válido (nulo-terminado) ou NULL.
 /// `mode_box` deve ser um ponteiro válido para um Sum box (FileMode variant).
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn kata_rt_file_open(path_ptr: *const c_char, mode_box: i64) -> i64 {
+pub unsafe extern "C" fn kata_rt_file_open(
+    path_ptr: *const c_char,
+    mode_box: i64,
+    arena_handle: i64,
+) -> i64 {
     if path_ptr.is_null() {
         return alloc_result_box(1, error_text("path nulo"));
     }
@@ -232,11 +316,25 @@ pub unsafe extern "C" fn kata_rt_file_open(path_ptr: *const c_char, mode_box: i6
         closed: false,
         buf_reader: BufReader::new(file),
         io: IoHandle { mode },
+        is_stdio: false,
         path,
     };
-    let handle = alloc_file_inner(inner);
+    let handle = alloc_file_inner_in(crate::arena::rt_ptr(), arena_handle, inner);
     if handle == 0 {
         return alloc_result_box(1, error_text("falha na alocação"));
+    }
+
+    // Registra handle para cleanup entre testes.
+    // Fase 9: se o arquivo foi alocado na fiber_arena, registra em
+    // FIBER_OPEN_FILES (fechado em try_destroy). Senão, registra em
+    // OPEN_FILES (global, fechado em reset_file_registry).
+    let fiber_arena = crate::scheduler::CURRENT_FIBER_ARENA.with(|c| c.get());
+    if fiber_arena == Some(arena_handle) {
+        // Arquivo fiber-local — registrar no TLS do fiber.
+        crate::scheduler::FIBER_OPEN_FILES.with(|r| r.borrow_mut().push(handle));
+    } else {
+        // Arquivo global (root_arena ou caller_arena) — registrar no global.
+        register_file_handle(handle);
     }
 
     // Ok box: tag=0, payload=handle.
@@ -257,9 +355,17 @@ pub unsafe extern "C" fn kata_rt_file_read(handle: i64) -> i64 {
     };
 
     // Verifica que o modo permite leitura.
+    // stdio write-only (stdout/stderr) usa mensagem "not readable".
     match inner.io.mode {
         IoMode::Read | IoMode::ReadWrite => {}
-        _ => return alloc_result_box(1, error_text("modo não permite leitura")),
+        _ => {
+            let msg = if inner.is_stdio {
+                "not readable"
+            } else {
+                "modo não permite leitura"
+            };
+            return alloc_result_box(1, error_text(msg));
+        }
     }
 
     let mut data = Vec::new();
@@ -295,9 +401,17 @@ pub unsafe extern "C" fn kata_rt_file_read_chunk(handle: i64, n: i64) -> i64 {
     };
 
     // Verifica que o modo permite leitura.
+    // stdio write-only (stdout/stderr) usa mensagem "not readable".
     match inner.io.mode {
         IoMode::Read | IoMode::ReadWrite => {}
-        _ => return alloc_result_box(1, error_text("modo não permite leitura")),
+        _ => {
+            let msg = if inner.is_stdio {
+                "not readable"
+            } else {
+                "modo não permite leitura"
+            };
+            return alloc_result_box(1, error_text(msg));
+        }
     }
 
     // Decodifica SMI: n >> 1.
@@ -344,9 +458,17 @@ pub unsafe extern "C" fn kata_rt_file_readline(handle: i64) -> i64 {
     };
 
     // Verifica que o modo permite leitura.
+    // stdio write-only (stdout/stderr) usa mensagem "not readable".
     match inner.io.mode {
         IoMode::Read | IoMode::ReadWrite => {}
-        _ => return alloc_result_box(1, error_text("modo não permite leitura")),
+        _ => {
+            let msg = if inner.is_stdio {
+                "not readable"
+            } else {
+                "modo não permite leitura"
+            };
+            return alloc_result_box(1, error_text(msg));
+        }
     }
 
     // Usa o BufReader persistente — bytes bufferizados de read_chunk
@@ -391,9 +513,17 @@ pub unsafe extern "C" fn kata_rt_file_write_text(handle: i64, data_ptr: i64) -> 
     };
 
     // Verifica que o modo permite escrita.
+    // stdio read-only (stdin) usa mensagem "not writable".
     match inner.io.mode {
         IoMode::Write | IoMode::Append | IoMode::ReadWrite | IoMode::Create => {}
-        _ => return alloc_result_box(1, error_text("modo não permite escrita")),
+        _ => {
+            let msg = if inner.is_stdio {
+                "not writable"
+            } else {
+                "modo não permite escrita"
+            };
+            return alloc_result_box(1, error_text(msg));
+        }
     }
 
     if data_ptr == 0 {
@@ -430,9 +560,17 @@ pub unsafe extern "C" fn kata_rt_file_write_bytes(handle: i64, data_ptr: i64) ->
     };
 
     // Verifica que o modo permite escrita.
+    // stdio read-only (stdin) usa mensagem "not writable".
     match inner.io.mode {
         IoMode::Write | IoMode::Append | IoMode::ReadWrite | IoMode::Create => {}
-        _ => return alloc_result_box(1, error_text("modo não permite escrita")),
+        _ => {
+            let msg = if inner.is_stdio {
+                "not writable"
+            } else {
+                "modo não permite escrita"
+            };
+            return alloc_result_box(1, error_text(msg));
+        }
     }
 
     if data_ptr == 0 {
@@ -473,15 +611,95 @@ pub unsafe extern "C" fn kata_rt_file_close(handle: i64) {
         return;
     }
     let inner = unsafe { &mut *(handle as *mut FileInner) };
-    if inner.closed {
-        // Já fechado — no-op (idempotente).
+    // stdio (FD 0/1/2) nunca fecha — is_stdio previne double-free.
+    if inner.is_stdio || inner.closed {
+        // Já fechado ou stdio — no-op (idempotente).
         return;
     }
     inner.closed = true;
+    // Remove do registry antes de drop (evita dangling no OPEN_FILES/FIBER_OPEN_FILES).
+    unregister_file_handle(handle);
+    crate::scheduler::FIBER_OPEN_FILES.with(|r| r.borrow_mut().retain(|&h| h != handle));
     // drop_in_place roda o Drop de FileInner (fecha BufReader→FD, libera String)
-    // sem chamar dealloc — a memória será liberada quando a root_arena
-    // for destruída no fim do processo.
+    // sem chamar dealloc — a memória será liberada quando a arena
+    // for destruída.
     unsafe {
         std::ptr::drop_in_place(handle as *mut FileInner);
     }
+}
+
+// ── stdio: stdin/stdout/stderr como File ───────────────────────────
+//
+// FFIs que retornam handles `File` apontando para FDs 0, 1 e 2.
+// O handle é `is_stdio: true` — `close!` é no-op, read/write guards
+// distinguem "not readable" (stdout/stderr) e "not writable" (stdin).
+//
+// Cache TLS: o handle é criado uma única vez (lazy) e cached.
+// Múltiplas chamadas a `stdout!()` retornam o mesmo handle.
+// `reset_file_registry` (Fase 1b) limpa o cache entre testes.
+
+thread_local! {
+    static STDIN_HANDLE: Cell<i64> = const { Cell::new(0) };
+    static STDOUT_HANDLE: Cell<i64> = const { Cell::new(0) };
+    static STDERR_HANDLE: Cell<i64> = const { Cell::new(0) };
+}
+
+/// Cria ou retorna o handle cached para um descritor padrão.
+/// `fd` é 0 (stdin), 1 (stdout) ou 2 (stderr).
+/// `mode` é `IoMode::Read` para stdin, `IoMode::Write` para stdout/stderr.
+/// `label` é usado como path no FileInner (apenas para debug).
+fn get_or_create_stdio(fd: i32, mode: IoMode, label: &str, cache: &Cell<i64>) -> i64 {
+    let cached = cache.get();
+    if cached != 0 {
+        return cached;
+    }
+    // SAFETY: `from_raw_fd` toma ownership do FD. Como `is_stdio` previne
+    // `close` e `Bump::reset` não chama Drop, o FD nunca é fechado pelo
+    // runtime — seguro na prática. O FD 0/1/2 pertence ao processo.
+    let file = unsafe { File::from_raw_fd(fd) };
+    let inner = FileInner {
+        closed: false,
+        buf_reader: BufReader::new(file),
+        io: IoHandle { mode },
+        is_stdio: true,
+        path: label.to_string(),
+    };
+    let handle = alloc_file_inner(inner);
+    if handle != 0 {
+        cache.set(handle);
+    }
+    handle
+}
+
+/// `kata_rt_stdin() -> i64` — handle `File` apontando para FD 0 (stdin).
+///
+/// Read-only. Múltiplas chamadas retornam o mesmo handle (TLS cache).
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_stdin() -> i64 {
+    STDIN_HANDLE.with(|c| get_or_create_stdio(0, IoMode::Read, "<stdin>", c))
+}
+
+/// `kata_rt_stdout() -> i64` — handle `File` apontando para FD 1 (stdout).
+///
+/// Write-only. Múltiplas chamadas retornam o mesmo handle (TLS cache).
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_stdout() -> i64 {
+    STDOUT_HANDLE.with(|c| get_or_create_stdio(1, IoMode::Write, "<stdout>", c))
+}
+
+/// `kata_rt_stderr() -> i64` — handle `File` apontando para FD 2 (stderr).
+///
+/// Write-only. Múltiplas chamadas retornam o mesmo handle (TLS cache).
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_stderr() -> i64 {
+    STDERR_HANDLE.with(|c| get_or_create_stdio(2, IoMode::Write, "<stderr>", c))
+}
+
+/// Limpa o cache de handles stdio entre testes.
+/// Chamada por `reset_file_registry` (Fase 1b) ou diretamente por
+/// `reset_scheduler`.
+pub(crate) fn reset_stdio_cache() {
+    STDIN_HANDLE.with(|c| c.set(0));
+    STDOUT_HANDLE.with(|c| c.set(0));
+    STDERR_HANDLE.with(|c| c.set(0));
 }

@@ -1,0 +1,21 @@
+# stdio.kata — descritores padrão (stdin, stdout, stderr) como File.
+#
+# Módulo opt-in: o usuário importa explicitamente.
+#   import stdio.(stdin, stdout, stderr)
+#   import stdio
+#
+# Os handles são FileInner com is_stdio=true:
+#   - close!() é no-op (não fecha FD 0/1/2)
+#   - read!(stdout!()) retorna Err("not readable")
+#   - write!(stdin!(), ...) retorna Err("not writable")
+
+import core
+
+@ffi("kata_rt_stdin")
+action stdin () => File
+
+@ffi("kata_rt_stdout")
+action stdout () => File
+
+@ffi("kata_rt_stderr")
+action stderr () => File

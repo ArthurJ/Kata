@@ -56,6 +56,12 @@ pub(crate) fn lower_action_call(
                 .ok_or_else(|| super::CodegenError::FfiSymbolNotFound {
                     symbol: sym_name.clone(),
                 })?;
+        // FileOpen precisa de arena_handle injetado via escape analysis.
+        // Outras FFIs que precisam de arena são interceptadas no closure.rs.
+        if sym_name == "kata_rt_file_open" {
+            let arena = crate::lowering::escape_arena::arena_handle_for_escape(expr.escape, ctx);
+            ffi_args.push(arena);
+        }
         let call_inst = ctx.builder.ins().call(*func_ref, &ffi_args);
         if let Some(ret) = ctx.builder.inst_results(call_inst).first() {
             Ok(*ret)
