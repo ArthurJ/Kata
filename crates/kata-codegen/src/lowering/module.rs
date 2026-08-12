@@ -102,7 +102,10 @@ pub(crate) fn lower_module(
     let mut string_table = StringTable::new();
     let mut bytes_table: Vec<Vec<u8>> = Vec::new();
     let mut symbol_table: SymbolTable = HashMap::new();
-    let mut fn_counter = 0u64;
+    // fn_counter deve começar a partir do número de funções persistidas
+    // (prev_funcs) para evitar colisão de nomes `__kata_fn_N` entre
+    // funções Export novas e símbolos Import já registrados no JITBuilder.
+    let mut fn_counter = prev_funcs.len() as u64;
 
     // ── Declara e define funções nomeadas antes do entry point ──
     let mut func_ids: Vec<cranelift_module::FuncId> = Vec::new();

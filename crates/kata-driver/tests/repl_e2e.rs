@@ -636,15 +636,7 @@ fn repl_named_function_recursive() {
     );
 }
 
-// NOTE: This test is #[ignore]'d because the new cross-type overloads
-// expose a pre-existing REPL codegen bug: when a function is redeclared,
-// the Cranelift module doesn't reset function signatures, causing a
-// "signature incompatible with previous declaration" error. The first
-// evaluation works (outputs 10), but the second fails at codegen.
-// This is a compiler bug in the REPL's Cranelift state management, not
-// a test issue.
 #[test]
-#[ignore = "REPL codegen bug: Cranelift signature mismatch on function redeclare (exposed by cross-type overloads)"]
 fn repl_named_function_redeclare() {
     // Redefinir double com corpo diferente — shadowing de função
     let out = run_repl(&[
