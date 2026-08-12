@@ -136,7 +136,7 @@ fn link(object_bytes: &[u8], output: &Path, dynamic: bool, type_tag: i32) -> Res
     double result_f64 = __kata_entry(rt);
     // bitcast double → int64_t para kata_rt_print_result (que faz from_bits)
     int64_t result;
-    __builtin_memcpy(&result, &result_f64, sizeof(result));
+    memcpy(&result, &result_f64, sizeof(result));
     kata_rt_print_result(result, {type_tag});"#
         )
     } else {
@@ -148,6 +148,7 @@ fn link(object_bytes: &[u8], output: &Path, dynamic: bool, type_tag: i32) -> Res
     };
     let shim_source = format!(
         r#"#include <stdint.h>
+#include <string.h>
 
 extern {entry_decl};
 extern int64_t kata_rt_runtime_new(void);
@@ -179,17 +180,23 @@ int main(void) {{
     cmd.args(["-o"]).arg(output).arg(&shim_o).arg(&cranelift_o);
 
     if dynamic {
-        // Link dinâmico: -lkata_rt resolve contra libkata_rt.so
+        // Link dinâmico: -lkata_rt resolve contra libkata_rt.so (Unix)
+        // ou .dll (Windows MinGW).
         cmd.arg(format!("-L{}", lib_dir.display()));
         cmd.arg("-lkata_rt");
         cmd.args(["-lm", "-lpthread"]);
-        // rpath para encontrar libkata_rt.so em runtime
+        // rpath para encontrar a lib em runtime — só Unix.
+        #[cfg(unix)]
         cmd.arg(format!("-Wl,-rpath,{}", lib_dir.display()));
     } else {
-        // Link estático: linka libkata_rt.a diretamente
+        // Link estático: linka libkata_rt.a diretamente.
         let static_lib = lib_dir.join("libkata_rt.a");
         cmd.arg(&static_lib);
+        #[cfg(unix)]
         cmd.args(["-lm", "-lpthread"]);
+        // Windows MinGW: math e pthreads são parte da CRT — não precisa -lm/-lpthread.
+        #[cfg(windows)]
+        cmd.args(["-lm", "-lwinpthread"]);
     }
 
     let status = cmd
@@ -206,8 +213,29 @@ int main(void) {{
 }
 
 /// Encontra um linker disponível: cc, gcc, ou clang.
+#[cfg(unix)]
 fn find_linker() -> Option<String> {
     for name in &["cc", "gcc", "clang"] {
+        if std::process::Command::new(name)
+            .arg("--version")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .is_ok()
+        {
+            return Some(name.to_string());
+        }
+    }
+    None
+}
+
+/// Encontra um linker disponível no Windows.
+///
+/// No target `windows-gnu`, procura `gcc` (MinGW) ou `clang`.
+/// No target `windows-msvc`, procura `cl` (MSVC) ou `clang-cl`.
+#[cfg(windows)]
+fn find_linker() -> Option<String> {
+    for name in &["gcc", "clang", "cc"] {
         if std::process::Command::new(name)
             .arg("--version")
             .stdout(std::process::Stdio::null())
