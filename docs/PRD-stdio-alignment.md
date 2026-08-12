@@ -4,16 +4,20 @@
 **Data:** 2026-08-04
 **Depende de:** Fio 14 ✅ (`@log`, `log!`, `log_recv!`), File I/O ✅ (`Ty::File`, `open!`, `write!`, `close!`), Socket I/O ✅ (`Ty::Socket`)
 **Não depende de:** `spawn!` (não implementado)
+**Habilita:** PRD-trace-directive.md (diretiva `trace`/`log` em Kata — exige `log!()` com `File` e stdin/stdout/stderr como `File` em módulo `stdio`)
 
 ## 1. Objetivo
 
-Alinhar stdout/stderr com o sistema de File I/O existente e com o sistema de
+Alinhar stdin/stdout/stderr com o sistema de File I/O existente e com o sistema de
 log, eliminando os "tópicos mágicos" (`"stdout"`, `"stderr"`) do runtime de log.
 Três mudanças coordenadas:
 
-1. **`stdout` e `stderr` como `File`** — FFIs novas no runtime que retornam
-   handles `File` apontando para FDs 1 e 2. Disponíveis no prelude como
-   constantes. Componíveis com `echo!(msg, stdout)`, `write!(stdout, msg)`, etc.
+1. **`stdin`, `stdout` e `stderr` como `File`** — FFIs novas no runtime que
+   retornam handles `File` apontando para FDs 0, 1 e 2. Disponíveis em um
+   **módulo `stdio` separado** (`stdlib/stdio.kata`), não no prelude. O usuário
+   importa explicitamente: `import stdio.(stdin, stdout, stderr)`. Se o core
+   precisar dos handles, pode importar o módulo `stdio`. Componíveis com
+   `echo!(msg, stdout)`, `write!(stdout, msg)`, `read!(stdin)`, etc.
 
 2. **`log!()` aceita `File` como 3º argumento** — bifurcação por tipo no
    `infer_log_builtin`: `Text` → canal CSP (como hoje), `File` → write direto
@@ -32,9 +36,15 @@ Três mudanças coordenadas:
 
 ## 2. Sintaxe
 
-### 2.1. `stdout` e `stderr` no prelude
+### 2.1. `stdin`, `stdout` e `stderr` no módulo `stdio`
 
 ```
+# stdlib/stdio.kata
+import core
+
+@ffi("kata_rt_stdin")
+action stdin () => File
+
 @ffi("kata_rt_stdout")
 action stdout () => File
 
@@ -42,9 +52,22 @@ action stdout () => File
 action stderr () => File
 ```
 
-`stdout!()` e `stderr!()` são actions FFI que retornam um handle `File`
-apontando para FD 1 e FD 2 respectivamente. O handle é um `FileInner` alocado
-na root_arena com `is_stdio: true` — o `close!` é no-op para estes handles.
+`stdin!()`, `stdout!()` e `stderr!()` são actions FFI que retornam um handle
+`File` apontando para FD 0, 1 e 2 respectivamente. O handle é um `FileInner`
+alocado na root_arena com `is_stdio: true` — o `close!` é no-op para estes
+handles.
+
+O módulo `stdio` é um módulo Kata normal em `stdlib/stdio.kata`, **não** parte
+do prelude. O usuário importa explicitamente:
+
+```
+import stdio.(stdout, stderr)       # seletivo
+import stdio                        # acesso via stdio.stdout!()
+```
+
+Se o `core` precisar de `stdout`/`stderr`/`stdin` (ex: `echo` com File,
+sinergias futuras), pode importar o módulo `stdio`:
+`import stdio.(stdout)`.
 
 Uso:
 
@@ -70,6 +93,14 @@ Bifurcação por tipo do 3º argumento:
 |---|---|---|
 | `Text` | `Ty::Text` | Canal CSP (Broadcast/Queue). Aceita 4º arg `policy`. `log_recv!` funciona. |
 | `File` | `Ty::File` | Write direto via `kata_rt_file_write_text`. Rejeita 4º arg `policy` (erro de tipo). `log_recv!` não aplicável. |
+
+`topic` (Text) e `file` (File) podem coexistir na mesma chamada — o log
+publica no canal CSP E escreve no arquivo. Nesse caso, `log!()` recebe
+5 args: `(level, msg, topic, file, policy?)`. A bifurcação por tipo se
+aplica ao argumento que seria `topic` ou `file`: se é `Text`, é topic;
+se é `File`, é file. Quando ambos estão presentes, a ordem é
+`(level, msg, topic, file)` ou `(level, msg, file, topic)` — decidir na
+implementação.
 
 A mensagem é tratada como template em ambos os caminhos (CSP e File).
 `{expr}` interpola expressões do escopo, `{{` escapa `{` literal. O parsing
@@ -110,12 +141,12 @@ Campos da diretiva `@log` (atualizado):
 | `msg` | `Text` | **obrigatório** | Template compile-time. `{expr}` interpola. `{{` escapa `{`. |
 | `level` | `LogLevel` | `LogLevel::Info` | Variante do enum `LogLevel`. |
 | `when` | `Text` | **obrigatório** | `"enter"` = prólogo. `"exit"` = epílogo. |
-| `topic` | `Text` | herdado ou `"default"` | Nome do canal CSP. Mutuamente exclusivo com `file`. |
+| `topic` | `Text` | herdado ou `"log"` | Nome do canal CSP. Pode coexistir com `file`. |
 | `policy` | `Text` | herdado ou `"drop"` | `"drop"` ou `"block"`. Só com `topic`. |
-| `file` | `Expr` (Ident) | — | Expressão que avalia para `File`. Mutuamente exclusivo com `topic` e `policy`. |
+| `file` | `Expr` (Ident) | — | Expressão que avalia para `File`. Pode coexistir com `topic`. |
 
-Validação: `topic` e `file` na mesma diretiva é erro. `policy` sem `topic`
-(com `file`) é erro.
+Validação: `policy` sem `topic` (com `file` mas sem `topic`) é erro. `topic`
+e `file` juntos são válidos — o log publica no canal CSP E escreve no arquivo.
 
 ### 2.4. `log_recv!` retorna `Result`
 
@@ -132,20 +163,26 @@ match log_recv!("audit")
 
 ## 3. Semântica
 
-### 3.1. `stdout`/`stderr` como `File`
+### 3.1. `stdin`/`stdout`/`stderr` como `File`
 
 `FileInner` ganha campo `is_stdio: bool`. Se `true`:
-- `kata_rt_file_close` é no-op (não fecha FD 1/2).
-- `kata_rt_file_write_text` funciona normalmente — escreve no FD subjacente.
-- `kata_rt_file_read`/`readline`/`read_chunk` retornam `Err("not readable")`
+- `kata_rt_file_close` é no-op (não fecha FD 0/1/2).
+- `kata_rt_file_write_text` funciona normalmente para stdout/stderr — escreve
+  no FD subjacente.
+- `kata_rt_file_read`/`readline`/`read_chunk` funcionam normalmente para stdin
+  — lê do FD 0. Para stdout/stderr, retornam `Err("not readable")`
   (stdout/stderr são write-only por convenção).
+- `kata_rt_file_write_text` em stdin retorna `Err("not writable")`
+  (stdin é read-only por convenção).
 
 O handle é criado uma única vez (lazy static no runtime) e cached. Múltiplas
-chamadas a `stdout!()` retornam o mesmo handle.
+chamadas a `stdout!()` retornam o mesmo handle. O mesmo para `stdin!()` e
+`stderr!()`.
 
-Plataforma: `File::from_raw_fd(1)` / `File::from_raw_fd(2)` é Unix-only. O
-runtime já assume Unix (`std::os::unix::io::AsRawFd` em `file.rs`). Se
-multiplataforma for necessária no futuro, adicionar `#[cfg(unix)]` + fallback.
+Plataforma: `File::from_raw_fd(0)` / `File::from_raw_fd(1)` /
+`File::from_raw_fd(2)` é Unix-only. O runtime já assume Unix
+(`std::os::unix::io::AsRawFd` em `file.rs`). Se multiplataforma for necessária
+no futuro, adicionar `#[cfg(unix)]` + fallback.
 
 ### 3.2. Bug fix: leak de FDs — escape analysis + registry de FileInner
 
@@ -186,7 +223,7 @@ O `arena_alloc` em `file.rs` passa a usar o `arena_handle` recebido em vez de
   (exceto `is_stdio` — no-op).
 - `reset_file_registry` (nova): chamada por `reset_scheduler` entre testes.
   Itera `OPEN_FILES`, chama `kata_rt_file_close` em cada handle, limpa Vec.
-- `stdout!()`/`stderr!()`: handles `is_stdio` **não** são registrados (não
+- `stdin!()`/`stdout!()`/`stderr!()`: handles `is_stdio` **não** são registrados (não
   precisam de cleanup).
 
 O registry global é o safety net: independente de qual arena o `FileInner`
@@ -285,20 +322,30 @@ O typeck muda o tipo de retorno de `Ty::text()` para
 ### 3.6. Remoção dos tópicos mágicos
 
 O bloco em `kata_rt_log_publish` (log.rs:185-193) que intercepta
-`topic == "stdout" || topic == "stderr"` é removido. stdout/stderr passam a
-ser acessados via `File` (constantes do prelude), não via strings mágicas.
+`topic == "stdout" || topic == "stderr"` é removido. stdin/stdout/stderr passam a
+ser acessados via `File` (módulo `stdio`), não via strings mágicas.
 
 ## 4. Fases de implementação
 
-### Fase 1: Runtime — `stdout`/`stderr` como `File`
+### Fase 1: Runtime — `stdin`/`stdout`/`stderr` como `File`
 
 - Adicionar `is_stdio: bool` a `FileInner` em `file.rs`.
-- Implementar `kata_rt_stdout() -> i64` e `kata_rt_stderr() -> i64`:
-  criam `FileInner` com `BufReader::new(File::from_raw_fd(1 ou 2))`,
-  `is_stdio: true`, `mode: Write`. Cacheiam o handle em TLS lazy static.
+- Implementar `kata_rt_stdin() -> i64`, `kata_rt_stdout() -> i64` e
+  `kata_rt_stderr() -> i64`:
+  - `stdin`: `FileInner` com `BufReader::new(File::from_raw_fd(0))`,
+    `is_stdio: true`, `mode: Read`. Cacheia em TLS lazy static.
+  - `stdout`: `FileInner` com `BufWriter::new(File::from_raw_fd(1))`,
+    `is_stdio: true`, `mode: Write`. Cacheia em TLS lazy static.
+  - `stderr`: `FileInner` com `BufWriter::new(File::from_raw_fd(2))`,
+    `is_stdio: true`, `mode: Write`. Cacheia em TLS lazy static.
 - `kata_rt_file_close`: se `is_stdio`, no-op (não fecha FD).
+- `kata_rt_file_write_text`: se `is_stdio` com `mode: Read` (stdin), retorna
+  `Err("not writable")`.
+- `kata_rt_file_read`/`readline`/`read_chunk`: se `is_stdio` com `mode: Write`
+  (stdout/stderr), retornam `Err("not readable")`.
 - Registrar FFIs em todos os sites (pitfall #31):
-  - `FfiSymbol::Stdout`, `FfiSymbol::Stderr` em `kata-core/ffi.rs`
+  - `FfiSymbol::Stdin`, `FfiSymbol::Stdout`, `FfiSymbol::Stderr` em
+    `kata-core/ffi.rs`
   - `symbol_name()`, `return_type()`, `from_name()`, `ffi_signature()` em
     `ffi_sigs.rs`
   - `all_ffi_symbols()`, `declare_ffi_symbols`, `register_ffi_symbols` em
@@ -306,8 +353,8 @@ ser acessados via `File` (constantes do prelude), não via strings mágicas.
   - `builder.symbol()` em `lib.rs`
 
 **Arquivos:**
-- `crates/kata-rt/src/file.rs` — `is_stdio`, FFIs novas, close guard
-- `crates/kata-core/src/ffi.rs` — `FfiSymbol::Stdout`, `Stderr`
+- `crates/kata-rt/src/file.rs` — `is_stdio`, FFIs novas, close guard, guards de read/write por mode
+- `crates/kata-core/src/ffi.rs` — `FfiSymbol::Stdin`, `Stdout`, `Stderr`
 - `crates/kata-codegen/src/ffi_sigs.rs` — assinatura `(caller_arena) -> File`
 - `crates/kata-codegen/src/ffi_registry.rs` — registro
 - `crates/kata-rt/src/lib.rs` — re-export, `builder.symbol`
@@ -330,7 +377,7 @@ ser acessados via `File` (constantes do prelude), não via strings mágicas.
 - Adicionar `OPEN_FILES: RefCell<Vec<i64>>` TLS em `file.rs`.
 - `kata_rt_file_open`: após `alloc_file_inner`, registrar handle em `OPEN_FILES`.
 - `kata_rt_file_close`: remover handle de `OPEN_FILES` antes de `drop_in_place`.
-- `kata_rt_stdout`/`kata_rt_stderr`: **não** registrar em `OPEN_FILES` (is_stdio).
+- `kata_rt_stdin`/`kata_rt_stdout`/`kata_rt_stderr`: **não** registrar em `OPEN_FILES` (is_stdio).
 - `reset_file_registry` (nova função pub(crate)): iterar `OPEN_FILES`, chamar
   `kata_rt_file_close` em cada handle, limpar Vec.
 - `reset_scheduler` em `scheduler/ffi.rs`: adicionar chamada
@@ -345,23 +392,34 @@ ser acessados via `File` (constantes do prelude), não via strings mágicas.
 **Verificação:** `cargo test --workspace --no-fail-fast` — verificar que testes
 de file I/O não vazam FDs entre execuções.
 
-### Fase 2: Prelude — `stdout`/`stderr` como constantes
+### Fase 2: Módulo `stdio` — `stdin`/`stdout`/`stderr` como actions FFI
 
-- Adicionar a `stdlib/core.kata`:
+- Criar `stdlib/stdio.kata` como módulo Kata normal (não prelude):
   ```
+  import core
+
+  @ffi("kata_rt_stdin")
+  action stdin () => File
+
   @ffi("kata_rt_stdout")
   action stdout () => File
 
   @ffi("kata_rt_stderr")
   action stderr () => File
   ```
+- O módulo `stdio` importa `core` para ter acesso a `File`, `Result`, etc.
+- O usuário importa `stdio` explicitamente: `import stdio.(stdout, stderr)`.
+- Se o `core` precisar de `stdout`/`stderr`/`stdin` (ex: `echo` com File),
+  pode importar `stdio`: `import stdio.(stdout)`.
 - Verificar que o DispatchTable registra os overloads e que `stdout!()`
   retorna `File`.
 
 **Arquivos:**
-- `stdlib/core.kata`
+- `stdlib/stdio.kata` — novo módulo
 
-**Verificação:** `cargo test -p kata-resolution -- prelude`
+**Verificação:** `cargo test -p kata-resolution -- prelude` (o prelude
+não deve conter stdout/stderr/stdin) e compilar um programa que faça
+`import stdio.(stdout)` seguido de `echo!(msg, stdout!())`.
 
 ### Fase 3: Remoção dos tópicos mágicos
 
@@ -469,13 +527,16 @@ de file I/O não vazam FDs entre execuções.
 
 **Verificação:** `cargo test --workspace --no-fail-fast`
 
-### Fase 8: Testes E2E
+### Fase 8: Testes E2E ✅
 
-Testes novos em `crates/kata-driver/tests/` e `crates/kata-codegen/tests/`:
+Testes novos em `crates/kata-driver/tests/stdio_log_e2e.rs` (17 testes):
 
-- `stdio_file_stdout.kata` — `echo!(msg, stdout!())` escreve em stdout.
-- `stdio_file_stderr.kata` — `echo!(msg, stderr!())` escreve em stderr.
+- `stdio_file_stdin.kata` — `read!(stdin!())` lê de stdin via File (import stdio).
+- `stdio_file_stdout.kata` — `echo!(msg, stdout!())` escreve em stdout (import stdio).
+- `stdio_file_stderr.kata` — `echo!(msg, stderr!())` escreve em stderr (import stdio).
 - `stdio_file_close_noop.kata` — `close!(stdout!())` é no-op, não crash.
+- `stdio_stdin_write_erro.kata` — `write!(stdin!(), "msg")` retorna `Err("not writable")`.
+- `stdio_stdout_read_erro.kata` — `read!(stdout!())` retorna `Err("not readable")`.
 - `log_to_file.kata` — `log!(LogLevel::Info, "msg {x}", stdout!())` escreve em stdout.
 - `log_to_file_arquivo.kata` — `log!(LogLevel::Info, "msg {x}", f)` escreve em arquivo.
 - `log_template_level.kata` — `log!(LogLevel::Warn, "[{log_level}] {x}")` interpola level.
@@ -487,9 +548,9 @@ Testes novos em `crates/kata-driver/tests/` e `crates/kata-codegen/tests/`:
 - `log_file_rejeita_policy.kata` — `log!(level, msg, stdout!(), "drop")` é erro de tipo.
 - `log_directive_topic_file_exclusivos.kata` — `@log{topic: ..., file: ...}` é erro.
 
-**Verificação:** `cargo test --workspace --no-fail-fast`, 0 failed.
+**Verificação:** `cargo test --workspace --no-fail-fast`, 0 failed. ✅ 17 testes passando.
 
-### Fase 9: Nível 2 — registry por-fiber com close na destruição
+### Fase 9: Nível 2 — registry por-fiber com close na destruição ✅
 
 - Adicionar `CURRENT_FIBER_ID: Cell<Option<FiberId>>` TLS em `scheduler.rs`.
 - `resume_fiber`: setar `CURRENT_FIBER_ID` com o fiber_id atual (linha 423,
@@ -512,15 +573,12 @@ Testes novos em `crates/kata-driver/tests/` e `crates/kata-codegen/tests/`:
 - `crates/kata-rt/src/file.rs` — `file_open` bifurca registro (fiber vs global), `file_close` remove de ambos
 
 **Verificação:** `cargo test --workspace --no-fail-fast` — teste E2E onde
-fiber abre arquivo sem `close!()`, fiber termina, FD é fechado em `try_destroy`.
+fiber abre arquivo sem `close!()`, fiber termina, FD é fechado em `try_destroy`. ✅ Implementado com `CURRENT_FIBER_ARENA` + `FIBER_OPEN_FILES` TLS (swap in/out em `resume_fiber`), `open_files` em `FiberEntry`, close em `try_destroy`. Teste `fiber_fecha_arquivo_sem_close` passando.
 
 ## 5. Fora do escopo
 
 - Multiplataforma Windows (`from_raw_fd` é Unix-only) — o runtime já assume
   Unix. Fallback futuro se necessário.
-- `stdin` como `File` — stdout/stderr são write-only, natural para `echo`/`log`.
-  `stdin` é read-only, exigiria `read!`/`readline!` em modo Read. Fica para
-  depois.
 - Diretivas Kata genéricas (decorators) — este PRD alinha `@log` com `@test`
   no padrão de múltiplas ocorrências, mas não implementa o sistema de
   decorators. Isso é trabalho futuro.
@@ -531,46 +589,51 @@ fiber abre arquivo sem `close!()`, fiber termina, FD é fechado em `try_destroy`
 
 ## 6. DoDs (Definitions of Done)
 
-1. `stdout!()` retorna `File` apontando para FD 1. `stderr!()` retorna `File`
-   apontando para FD 2.
+1. `stdin!()` retorna `File` apontando para FD 0. `stdout!()` retorna `File`
+   apontando para FD 1. `stderr!()` retorna `File` apontando para FD 2.
+   Todos disponíveis via `import stdio.(...)`, não no prelude.
 2. `echo!(msg, stdout!())` escreve em stdout via File. `echo!(msg, stderr!())`
    escreve em stderr via File.
-3. `close!(stdout!())` é no-op — não fecha FD 1/2.
-4. `log!(LogLevel::Info, "msg {x}", stdout!())` escreve `"msg 42"` em stdout
+3. `close!(stdout!())` é no-op — não fecha FD 0/1/2.
+4. `read!(stdin!())` lê de stdin via File (retorna `Result::(Bytes, Text)`).
+5. `write!(stdin!(), "msg")` retorna `Err("not writable")` (stdin é read-only).
+6. `read!(stdout!())` retorna `Err("not readable")` (stdout é write-only).
+7. `log!(LogLevel::Info, "msg {x}", stdout!())` escreve `"msg 42"` em stdout
    via `kata_rt_file_write_text`. `{log_level}` interpola para `"Info"`.
-5. `log!(LogLevel::Info, msg, "topic")` publica em canal CSP (como hoje).
-6. `log!(LogLevel::Info, msg, stdout!(), "drop")` é erro de tipo (policy com
+8. `log!(LogLevel::Info, msg, "topic")` publica em canal CSP (como hoje).
+9. `log!(LogLevel::Info, msg, stdout!(), "drop")` é erro de tipo (policy com
    File).
-7. Múltiplas `@log` na mesma action/função: cada uma injeta independentemente.
-8. `@log{msg: ..., topic: "metrics"}` publica em CSP. `@log{msg: ..., file:
-   stdout}` escreve direto. Ambos na mesma action.
-9. `@log{topic: "x", file: stdout}` é erro (mutuamente exclusivos).
-10. `log_recv!("topic")` retorna `Result::(Text, Text)`. `Ok(msg)` se sucesso,
+10. Múltiplas `@log` na mesma action/função: cada uma injeta independentemente.
+11. `@log{msg: ..., topic: "metrics"}` publica em CSP. `@log{msg: ..., file:
+    stdout}` escreve direto. Ambos na mesma action.
+12. `@log{topic: "x", file: stdout}` é erro (mutuamente exclusivos).
+13. `log_recv!("topic")` retorna `Result::(Text, Text)`. `Ok(msg)` se sucesso,
     `Err(reason)` se tópico inexistente ou canal fechou.
-11. Tópicos mágicos `"stdout"`/`"stderr"` removidos do `kata_rt_log_publish`.
-12. `kata_rt_file_open` recebe `arena_handle` do codegen via escape analysis.
+14. Tópicos mágicos `"stdout"`/`"stderr"` removidos do `kata_rt_log_publish`.
+15. `kata_rt_file_open` recebe `arena_handle` do codegen via escape analysis.
     `FileInner` alocado na arena correta (`fiber_arena` se local,
     `caller_arena` se retornado, `root_arena` se enviado via canal).
-13. `FileInner` abertos sem `close!()` explícito têm FDs fechados por
+16. `FileInner` abertos sem `close!()` explícito têm FDs fechados por
     `reset_file_registry` no `reset_scheduler` entre testes.
-14. `stdout!()`/`stderr!()` não são registrados em `OPEN_FILES` (is_stdio).
-15. `CURRENT_FIBER_ID` TLS rastreia a fiber em execução. `try_destroy`
+17. `stdin!()`/`stdout!()`/`stderr!()` não são registrados em `OPEN_FILES`
+    (is_stdio).
+18. `CURRENT_FIBER_ID` TLS rastreia a fiber em execução. `try_destroy`
     fecha FDs locais (`open_files` da fiber) antes de destruir a arena.
-16. `cargo test --workspace --no-fail-fast` passa sem regressão.
-17. `cargo clippy --workspace --all-targets -- -D warnings` limpo.
+19. `cargo test --workspace --no-fail-fast` passa sem regressão.
+20. `cargo clippy --workspace --all-targets -- -D warnings` limpo.
 
 ## 7. Arquitetura — componentes afetados
 
 ```
-stdlib/core.kata                              # stdout/stderr actions (novo)
-crates/kata-rt/src/file.rs                    # is_stdio, kata_rt_stdout/stderr, close guard, OPEN_FILES registry, reset_file_registry, file_open bifurca registro (fiber vs global)
+stdlib/stdio.kata                             # stdin/stdout/stderr actions (novo módulo)
+crates/kata-rt/src/file.rs                    # is_stdio, kata_rt_stdin/stdout/stderr, close guard, OPEN_FILES registry, reset_file_registry, file_open bifurca registro (fiber vs global), guards read/write por mode
 crates/kata-rt/src/log.rs                     # remover tópicos mágicos, log_recv → Result box
 crates/kata-rt/src/lib.rs                    # re-exports, builder.symbol
 crates/kata-rt/src/scheduler.rs              # CURRENT_FIBER_ID TLS, open_files em FiberEntry, close em try_destroy (Fase 9)
 crates/kata-rt/src/scheduler/ffi.rs          # reset_scheduler chama reset_file_registry
-crates/kata-core/src/ffi.rs                   # FfiSymbol::Stdout, Stderr
-crates/kata-codegen/src/ffi_sigs.rs           # assinatura stdout/stderr
-crates/kata-codegen/src/ffi_registry.rs       # registro stdout/stderr
+crates/kata-core/src/ffi.rs                   # FfiSymbol::Stdin, Stdout, Stderr
+crates/kata-codegen/src/ffi_sigs.rs           # assinatura stdin/stdout/stderr
+crates/kata-codegen/src/ffi_registry.rs       # registro stdin/stdout/stderr
 crates/kata-resolution/src/types.rs           # LogSpec.file, ActionDef.log → Vec
 crates/kata-resolution/src/directives.rs     # extract_log_specs (plural), chave file:
 crates/kata-resolution/src/lib.rs            # chamada extract_log_specs
@@ -590,8 +653,8 @@ crates/kata-codegen/tests/                   # testes E2E novos
 
 | # | Decisão | Racional |
 |---|---|---|
-| D1 | `stdout`/`stderr` como `File` via FFI | Reusa toda a maquinaria de File I/O (`echo`, `write`, `close`). Sem novo tipo. |
-| D2 | `is_stdio` flag em `FileInner` | Previne `close!` de fechar FD 1/2. Simples, não invasivo. |
+| D1 | `stdin`/`stdout`/`stderr` como `File` via FFI em módulo `stdio` | Reusa toda a maquinaria de File I/O (`echo`, `write`, `read`, `close`). Sem novo tipo. Módulo separado mantém o prelude enxuto — stdio é opt-in, não importado por padrão. |
+| D2 | `is_stdio` flag em `FileInner` | Previne `close!` de fechar FD 0/1/2. Simples, não invasivo. |
 | D3 | Handle cached em TLS lazy static | Múltiplas chamadas a `stdout!()` retornam o mesmo handle. Sem leak. |
 | D4 | `log!()` bifurca por tipo do 3º arg | Mesmo nome, comportamento distinto por tipo. Consistente com overload de `echo`. |
 | D5 | `@log` com chave `file:` distinta de `topic:` | Não mistura conceitos (canal CSP vs arquivo). Mutuamente exclusivo. |
@@ -600,7 +663,7 @@ crates/kata-codegen/tests/                   # testes E2E novos
 | D8 | Remoção dos tópicos mágicos | stdout/stderr são `File`, não strings. Elimina comportamento especial no runtime. |
 | D9 | `log!()` msg é template (não Text puro) | Unifica `log!()` e `@log` no mesmo mecanismo. Permite `{log_level}` sem formatação manual. Quebra retrocompatibilidade para strings com `{` não escapado. |
 | D10 | `{log_level}` é variável sintética no escopo do template | Resolve para a string do level (`"Info"`, etc.). Disponível em `@log` e `log!()`. Derivada da tag i64 do 1º arg. |
-| D11 | `stdin` fora do escopo | stdout/stderr são write-only (natural para echo/log). stdin exigiria modo Read. |
+| D11 | `stdin`/`stdout`/`stderr` em módulo `stdio` separado | stdio é I/O de processo — conceitualmente distinto do prelude (tipos/interfaces base). Módulo opt-in: programa que não usa terminal não paga custo. Core pode importar `stdio` se precisar. |
 
 ## 9. Riscos
 
@@ -623,5 +686,5 @@ Ao concluir:
 - `docs/PRD-fio14-log.md` — atualizar: tópicos mágicos removidos, `log_recv!`
   retorna `Result`, `@log` suporta múltiplas ocorrências
 - `docs/ROADMAP.md` — adicionar "Alinhamento stdio ✅" no pós-Fio 15
-- `docs/Kata-lang-manual.md` — documentar `stdout!()`, `stderr!()`,
+- `docs/Kata-lang-manual.md` — documentar `stdin!()`, `stdout!()`, `stderr!()`,
   `log!(level, msg, file)`, `@log{file: stdout}`

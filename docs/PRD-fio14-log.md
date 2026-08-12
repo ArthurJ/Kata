@@ -44,6 +44,11 @@ Campos da diretiva:
 | `topic` | `Text` | herdado de fiber ancestral (ou `"default"` se nenhuma config) | Nome do canal onde publicar. |
 | `policy` | `Text` | herdado de fiber ancestral (ou `"drop"`) | `"drop"` ou `"block"`. |
 | `when` | `Text` | automático (ver §2.2) | `"enter"` = loga no prólogo. `"exit"` = loga no epílogo. |
+| `file` | `Text` ou Ident | None | Nome do identificador `File` para write direto (ex: `stdout`). Mutuamente exclusivo com `topic`. `policy` não é válido com `file`. **(PRD-stdio-alignment)** |
+
+> **Múltiplas diretivas (PRD-stdio-alignment Fase 5/6):** `@log` pode aparecer
+> múltiplas vezes no mesmo item — cada uma injeta independentemente.
+> Exemplo: uma `@log` com `topic` (CSP) e outra com `file` (stdout) ambas disparam.
 
 ### 2.2. Comportamento automático do `when`
 
@@ -91,8 +96,12 @@ log_recv!("audit")
 ```
 
 Recebe a próxima mensagem de telemetria do tópico. Bloqueia (yield point via
-`BlockedOnRecv`) até chegar mensagem. Retorna `Text` (a mensagem) ou `Unit`
-se o canal fechou.
+`BlockedOnRecv`) até chegar mensagem. Retorna `Result::(Text, Text)` —
+`Ok(msg)` se recebida, `Err(reason)` se o tópico não existe ou canal fechou.
+
+> **Atualização (PRD-stdio-alignment Fase 7):** `log_recv!` agora retorna
+> `Result::(Text, Text)` em vez de `Text` (0 silencioso). Usar com `match`:
+> `match log_recv!("topic") Result::Ok m: ... Result::Err _: ...`
 
 | Pos | Tipo | Descrição |
 |---|---|---|

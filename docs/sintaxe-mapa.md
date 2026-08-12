@@ -86,6 +86,9 @@ enum IMC
 ### Distinção do Separador Visual
 O símbolo `_` em literais numéricos (`1_000`) é puramente léxico — o lexer descarta, não vira token. Não tem relação semântica com o Hole.
 
+### Floats sem parte inteira
+Floats podem omitir a parte inteira quando precedidos por whitespace ou início de linha: `.6` → `0.6`, `.5e10` → `0.5e10`. O lexer normaliza prefixando `0` ao texto preservado. Sem whitespace antes (ex: `tpl.0`), o `.` é dot-access — não float.
+
 ---
 
 ## Função `$` (Spread / Aplicação Explícita)
@@ -323,31 +326,31 @@ assert!(cond, "msg custom")     # 2 args: panic!(msg) se False
 ### Canais CSP
 | Operador | Direção | Exemplo |
 |---|---|---|
-| `!>` | Envio | `canal !> valor` |
-| `<!` | Recebimento | `canal <! variavel` |
+| `<!` | Envio — "valor entra no canal" | `canal <! valor` |
+| `!>` | Recebimento — "valor sai do canal" | `canal !> variavel` |
 
 - `channel!`, `queue!(N)`, `broadcast!` são actions que criam canais.
-- **Relações**: `fork!` submete Action a corrotina no scheduler cooperativo single-threaded. `select` multiplexa canais. Escape Analysis rastreia dados enviados por `!>` para alocação heap/`Arc<T>`.
+- **Relações**: `fork!` submete Action a corrotina no scheduler cooperativo single-threaded. `select` multiplexa canais. Escape Analysis rastreia dados enviados por `<!` para alocação heap/`Arc<T>`.
 
 ### `select` combinado (Channels + Files + Sockets)
 
 ```kata
 select
-  rx <! msg: echo!(msg)
-  read(file, 4096) <! result:
+  rx !> msg: echo!(msg)
+  read(file, 4096) !> result:
     match result
       Result::Ok chunk: processa!(chunk)
       Result::Err _: return
-  read(sock, 4096) <! result:
+  read(sock, 4096) !> result:
     match result
       Result::Ok chunk: handle!(chunk)
       Result::Err _: return
   timeout 5000: echo!(\"timeout\")
 ```
 
-- **Braço de canal**: `receiver <! binding: body` — sintaxe existente.
-- **Braço de I/O**: `read(handle, n) <! binding: body` — `handle` é `Ty::File` ou `Ty::Socket`, `n` é `Int` (bytes por chunk). Binding recebe `Result::(Bytes, Text)`.
-- **`<!` sobrecarregado**: mesmo conceito em todos — \"dado flui para binding\".
+- **Braço de canal**: `receiver !> binding: body` — sintaxe existente.
+- **Braço de I/O**: `read(handle, n) !> binding: body` — `handle` é `Ty::File` ou `Ty::Socket`, `n` é `Int` (bytes por chunk). Binding recebe `Result::(Bytes, Text)`.
+- **`!>` sobrecarregado**: mesmo conceito em todos — \"dado flui para binding\".
 - **Sem polimorfismo de tipo**: codegen separa braços por tipo em compile-time em três arrays: `channel_arms`, `file_arms`, `socket_arms`.
 - **FFI única**: `kata_rt_select_combined(chan_ptr, n_c, file_ptr, n_f, socket_ptr, n_s, timeout_ms) -> i64` (7 args). Retorna índice global: `0..n_c-1` = channel arm, `n_c..n_c+n_f-1` = file arm, `n_c+n_f..n_c+n_f+n_s-1` = socket arm, `-1` = WOULD_BLOCK, `-2` = SELECT_TIMEOUT.
 - **Arrays separados**: `try_select_files` faz cast para `FileInner` e `try_select_sockets` para `SocketInner` — layouts de memória diferentes exigem arrays separados (não unificados).
@@ -601,8 +604,9 @@ action processar (x::Int) => Int
 | `msg` | `Text` | **sim** | Template compile-time. `{expr}` interpola expressão do escopo (Ident ou `Ident.field`). `{{` escapa `{` literal; `}}` escapa `}`. `{` sem `}` = erro. Desugara para `format "template" (expr1, ...)` via `infer_format`. |
 | `when` | `Text` | **sim** (Decisão D1) | `"enter"` = loga no prólogo. `"exit"` = loga no epílogo. Ausente = erro compile-time (`when é obrigatório em @log`). Outro valor = erro. |
 | `level` | `LogLevel` | não | Variante do enum `LogLevel` do prelude (`Debug`/`Info`/`Warn`/`Error`). Default: `Info`. |
-| `topic` | `Text` | não | Nome do canal onde publicar. Default: herdado do fiber ancestral (ou `"default"` se nenhuma config). |
-| `policy` | `Text` | não | `"drop"` (fire-and-forget via Broadcast) ou `"block"` (Queue bounded cap=1 com backpressure, bloqueia se cheio). Default: herdado (ou `"drop"`). |
+|| `topic` | `Text` | não | Nome do canal onde publicar. Default: herdado do fiber ancestral (ou `"default"` se nenhuma config). Mutuamente exclusivo com `file`. |
+|| `file` | `Text` ou Ident | não | Identificador de action 0-ary que retorna `File` (ex: `stdout`) ou variável `File`. Escreve diretamente no arquivo via `kata_rt_file_write_text`. Mutuamente exclusivo com `topic`. `policy` não é válido com `file`. **(PRD-stdio-alignment)** |
+|| `policy` | `Text` | não | `"drop"` (fire-and-forget via Broadcast) ou `"block"` (Queue bounded cap=1 com backpressure, bloqueia se cheio). Default: herdado (ou `"drop"`). Só válido com `topic` (não com `file`). |
 
 ### Restrições de `when`
 
@@ -674,22 +678,28 @@ Sintaxe posicional (action call existente: `Ident ! (tuple)`):
 |---|---|---|
 | 0 | `LogLevel` | Level da mensagem. |
 | 1 | `Text` | Mensagem. Pode ser dinâmica (construída em runtime). |
-| 2 | `Text` | Tópico. Opcional — default herdado ou `"default"`. |
-| 3 | `Text` | Policy. Opcional — default herdado ou `"drop"`. |
+| 2 | `Text` ou `File` | Tópico (CSP) ou File (write direto). Opcional — default herdado ou `"default"`. Se `File`, escreve via `kata_rt_file_write_text` e policy (pos 3) é rejeitado. |
+| 3 | `Text` | Policy. Opcional — default herdado ou `"drop"`. Só válido com `Text` em pos 2 (não com `File`). |
 
-Typeck aceita 2, 3 ou 4 args. Dispara no ponto da chamada (linha), diferente de `@log` que dispara no wrapping.
+Typeck aceita 2, 3 ou 4 args. Dispara no ponto da chamada (linha), diferente de `@log` que dispara no wrapping. Com `File` em pos 2, aceita apenas 3 args (level, msg, file) — policy é erro de tipo.
+
+> **Template com `{log_level}`:** `log!()` suporta `{log_level}` como variável sintética que interpola o nome do level (ex: "Info", "Warn"). Outros placeholders `{expr}` são texto literal em `log!()` (não há interpolação compile-time — use `@log` para isso).
 
 ### `log_recv!()` — consumo de telemetria
 
 ```kata
-let msg := log_recv!("audit")
+match log_recv!("audit")
+    Result::Ok msg: echo!(msg, stdout!())
+    Result::Err _: echo!("erro: tópico não encontrado")
 ```
 
 | Pos | Tipo | Descrição |
 |---|---|---|
 | 0 | `Text` | Tópico a consumir. |
 
-Bloqueia via `YieldReason::BlockedOnRecv` até chegar mensagem. Retorna `Text` (payload) ou `Unit` se o canal fechou. Precisa estar em fiber context (`fork!()` ou action) — `kata_rt_channel_recv` só bloqueia dentro de um fiber; entry point não é fiber.
+Bloqueia via `YieldReason::BlockedOnRecv` até chegar mensagem. Retorna `Result::(Text, Text)` — `Ok(msg)` se recebida, `Err(reason)` se o tópico não existe ou canal fechou. Precisa estar em fiber context (`fork!()` ou action) — `kata_rt_channel_recv` só bloqueia dentro de um fiber; entry point não é fiber.
+
+> **Atualização (PRD-stdio-alignment Fase 7):** `log_recv!` agora retorna `Result::(Text, Text)` em vez de `Text` (0 silencioso). Usar com `match` para extrair a mensagem ou tratar o erro.
 
 Para Broadcast, o receiver é criado eagerly no `get_or_create_topic` (antes de qualquer publish) e cached em `RECEIVER_REGISTRY` (thread_local) — garante que mensagens publicadas antes de qualquer `log_recv` sejam visíveis.
 
@@ -709,6 +719,55 @@ Setta `LOG_CONFIG` TLS no fiber atual. Filhos spawnados herdam via snapshot no `
 
 - **Relações**: `log_config!()` é action nativa (não diretiva) porque configura em runtime, dinamicamente. Diretiva seria compile-time.
 - **Void FFI**: `kata_rt_log_config` é void (sem retorno). O `lower_closure` verifica `inst_results.is_empty()` antes de indexar e retorna `iconst(I64, 0)` (Unit) — não panica no codegen.
+
+---
+
+## Módulo `stdio` — descritores padrão como File (PRD-stdio-alignment)
+
+Módulo opt-in que expõe stdin/stdout/stderr como handles `File` apontando para FDs 0/1/2.
+
+```kata
+import stdio.(stdin, stdout, stderr)
+# ou
+import stdio
+```
+
+| Action | Assinatura | Descrição |
+|---|---|---|
+| `stdin!()` | `() => File` | Handle para FD 0 (read-only). Cache TLS (lazy). |
+| `stdout!()` | `() => File` | Handle para FD 1 (write-only). Cache TLS (lazy). |
+| `stderr!()` | `() => File` | Handle para FD 2 (write-only). Cache TLS (lazy). |
+
+Propriedades dos handles stdio:
+
+- **`close!(stdout!())` é no-op** — `is_stdio: true` no `FileInner` previne double-free. O FD não é fechado.
+- **`read!(stdout!())` retorna `Err("not readable")`** — stdout/stderr são write-only.
+- **`write!(stdin!(), ...)` retorna `Err("not writable")`** — stdin é read-only.
+- Handles são cached em TLS — múltiplas chamadas a `stdout!()` retornam o mesmo handle.
+- `reset_file_registry` (chamada entre testes) limpa o cache.
+
+Uso típico com `echo!`:
+
+```kata
+import stdio.(stdout)
+echo!("mensagem", stdout!())
+```
+
+Uso com `log!`:
+
+```kata
+import stdio.(stdout)
+log!(LogLevel::Info, "evento {x}", stdout!())
+```
+
+Uso com `@log`:
+
+```kata
+import stdio.(stdout)
+@log{msg: "entrada {x}", when: "enter", file: stdout}
+action processar (x::Int) => Int
+    + x 1
+```
 
 ---
 

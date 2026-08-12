@@ -534,7 +534,12 @@ em `kata-rt`, desacoplada do compilador.
 - **Comparação Float:** `kata_rt_fcmp_eq`, `kata_rt_fcmp_lt`, ...
 - **Rational:** `kata_rt_rat_add`, ..., `kata_rt_rat_literal`, `kata_rt_rat_show`,
   `kata_rt_rat_to_float`, `kata_rt_rat_from_float`, `kata_rt_int_to_rational`
-- **I/O:** `kata_rt_print`
+- **I/O:** `kata_rt_print`, `kata_rt_println`, `kata_rt_panic`
+- **stdio (descritores padrão):** `kata_rt_stdin`, `kata_rt_stdout`, `kata_rt_stderr` —
+  retornam handles `File` apontando para FD 0/1/2 (ver §22.5)
+- **File I/O:** `kata_rt_file_open`, `kata_rt_file_read`, `kata_rt_file_read_chunk`,
+  `kata_rt_file_readline`, `kata_rt_file_write_text`, `kata_rt_file_write_bytes`,
+  `kata_rt_file_close`
 - **Textos:** `kata_rt_string_concat`, `kata_rt_string_len`, `kata_rt_text_literal`,
   `kata_rt_int_to_text`, `kata_rt_bool_to_text`, `kata_rt_text_replace_first`
 - **Arena:** `kata_rt_arena_create`, `kata_rt_arena_alloc`, `kata_rt_arena_destroy`
@@ -1795,14 +1800,14 @@ desbloqueia multithread sem refatoração (post-1.0).
 ### 6.2. Fibers e Yielding Cooperativo
 
 Uma *Action* não bloqueia a thread OS. Ao invocar operações bloqueantes como
-`<!` (receber do canal), a fiber cede o controlo (yield) para o scheduler, que
+`!>` (receber do canal), a fiber cede o controlo (yield) para o scheduler, que
 retoma a próxima fiber pronta da `run_queue`. Quando o dado chega, a fiber
 original é acordada.
 
 ### 6.3. Topologias de Canais
 
 O *fork!* submete processos sequenciais isolados que comunicam por três vias:
-1.  `channel!`: Síncrono (Rendezvous). O envio `!>` bloqueia até o recetor `<!`
+1.  `channel!`: Síncrono (Rendezvous). O envio `<!` bloqueia até o recetor `!>`
     sincronizar.
 2.  `queue!(N)`: Fila com buffer de `N` espaços (Backpressure).
 3.  `broadcast!`: Difusão 1-para-N (Publish-Subscribe).
@@ -1910,12 +1915,15 @@ módulo), sempre precedendo imediatamente o item que modificam.
 * **`@test("descrição")`**: Marca um bloco para o *Test Runner*. A forma braced
   `@test{desc: "...", expects: "CompileError"}` marca um **teste negativo** —
   verifica que o código **não compila**.
-* **`@log{msg: "...", when: "enter"|"exit", level: LogLevel::Info, topic: "audit", policy: "block"}`**: Injeta
-  telemetria via canais CSP. `msg` é template compile-time com interpolação
-  `{expr}`. `when` obrigatório: `"enter"` loga no prólogo, `"exit"` no epílogo.
-  Política `"drop"` = Broadcast fire-and-forget; `"block"` = Queue com
-  backpressure. Independente de `log!()` (action nativa para publicação
-  explícita no corpo). Ver §20.
+* **`@log{msg: "...", when: "enter"|"exit", level: LogLevel::Info, topic: "audit", policy: "block", file: stdout}`**: Injeta
+  telemetria via canais CSP ou write direto em `File`. `msg` é template compile-time
+  com interpolação `{expr}` e a variável sintética `{log_level}`. `when` obrigatório:
+  `"enter"` loga no prólogo, `"exit"` no epílogo. `topic` (CSP) e `file` (write direto)
+  são **mutuamente exclusivos**. `policy` só é válido com `topic` (rejeitado com
+  `file`). `file` aceita identificador de action 0-ary que retorna `File` (ex: `stdout`
+  de `import stdio.(stdout)`) ou variável `File`. Múltiplas diretivas `@log` são
+  suportadas — cada uma injeta independentemente. Independente de `log!()` (action
+  nativa para publicação explícita no corpo). Ver §20.
 * **`@associative(0)`**: Anota que a função é associativa, informando o elemento
   neutro. Permite que o otimizador TRMA converta recursões bloqueadas em
   recursão de cauda perfeita.
@@ -2562,11 +2570,31 @@ action processar (x::Int) -> Int
 
 | Campo | Tipo | Obrigatório | Descrição |
 |---|---|---|---|
-| `msg` | `Text` | sim | Template compile-time. `{expr}` interpola expressão do escopo (Ident ou `Ident.field`). `{{` escapa `{` literal; `}}` escapa `}`. Desugara para `format "template" (expr1, ...)` via `infer_format`. |
+| `msg` | `Text` | sim | Template compile-time. `{expr}` interpola expressão do escopo (Ident ou `Ident.field`). `{log_level}` interpola o nome do level (variável sintética — ver §20.8). `{{` escapa `{` literal; `}}` escapa `}`. Desugara para `format "template" (expr1, ...)` via `infer_format`. |
 | `when` | `Text` | sim | `"enter"` = loga no prólogo. `"exit"` = loga no epílogo. |
 | `level` | `LogLevel` | não | Variante do enum `LogLevel` (`Debug`/`Info`/`Warn`/`Error`). Default: `Info`. |
-| `topic` | `Text` | não | Nome do canal. Default: herdado do fiber ancestral (ou `"default"`). |
-| `policy` | `Text` | não | `"drop"` (Broadcast, fire-and-forget) ou `"block"` (Queue cap=1, backpressure). Default: herdado (ou `"drop"`). |
+| `topic` | `Text` | não | Nome do canal CSP. Default: herdado do fiber ancestral (ou `"default"`). Mutuamente exclusivo com `file`. |
+| `file` | `Ident` | não | Identificador de action 0-ary que retorna `File` (ex: `stdout` de `import stdio.(stdout)`) ou variável `File` no escopo. Write direto via `kata_rt_file_write_text`. Mutuamente exclusivo com `topic`. `policy` não é válido com `file`. |
+| `policy` | `Text` | não | `"drop"` (Broadcast, fire-and-forget) ou `"block"` (Queue cap=1, backpressure). Default: herdado (ou `"drop"`). Só válido com `topic` (não com `file`). |
+
+**Múltiplas diretivas `@log`:** São suportadas múltiplas diretivas `@log` na mesma
+função/action. Cada uma é processada independentemente — o resolution produz um
+`LogSpec` por diretiva, e o inference/codegen injeta cada uma no prólogo/epílogo
+de forma independente. Isto permite combinar topic (CSP) e file (write direto)
+no mesmo item:
+
+```kata
+@log{msg: "via-topic {x}", when: "enter", topic: "audit"}
+@log{msg: "via-file {x}", when: "enter", file: stdout}
+action processar (x::Int) => Int
+    + x 1
+```
+
+**Validações compile-time:**
+- `topic` e `file` mutuamente exclusivos — erro se ambos presentes.
+- `policy` com `file` é rejeitado — policy só faz sentido no caminho CSP.
+- `file` deve tipar como `Ty::File` — se o identificador não resolve para `File`,
+  é erro de tipo.
 
 **Restrições de `when`:**
 - `when: "enter"` → placeholders do `msg` só podem referenciar **parâmetros**
@@ -2577,31 +2605,71 @@ action processar (x::Int) -> Int
 ### 20.2. Action nativa `log!()`
 
 Publicação explícita no corpo de actions. Dispara na execução da linha (não no
-wrapping como `@log`). A mensagem é **dinâmica** (construída em runtime) — não
-há interpolação de template como no `@log`.
+wrapping como `@log`). A mensagem é tratada como **template** se for `TextLit`
+— placeholders `{expr}` são interpolados via `infer_format`, e `{log_level}` é
+resolvido como variável sintética (ver §20.8). Se for uma expressão dinâmica
+(não-literal), é inferida como `Text` puro sem interpolação.
 
 ```kata
 log!(LogLevel::Info, "mensagem", "audit", "drop")
+log!(LogLevel::Warn, "[{log_level}] val={x}", stdout!())
 ```
+
+**Bifurcação por tipo do 3º arg:**
+
+O 3º argumento determina o destino da mensagem — CSP (tópico) ou write direto
+(File):
+
+| 3º arg | Tipo | Comportamento | FFI |
+|---|---|---|---|
+| `Text` (tópico) | `Ty::Text` | Publica no canal CSP nomeado | `kata_rt_log_publish` |
+| `File` | `Ty::File` | Escreve diretamente no arquivo | `kata_rt_file_write_text` |
+| ausente | — | CSP com config herdada do fiber | `kata_rt_log_publish` |
+
+**Policy (4º arg):** Só é válido quando o 3º arg é `Text` (tópico CSP). Passar
+policy quando o 3º arg é `File` é **erro de tipo** compile-time — policy só faz
+sentido no caminho CSP (controla o tipo de canal).
 
 | Pos | Tipo | Descrição |
 |---|---|---|
 | 0 | `LogLevel` | Level da mensagem. |
-| 1 | `Text` | Mensagem dinâmica (sem interpolação `{expr}`). |
-| 2 | `Text` | Tópico. Opcional — default herdado ou `"default"`. |
-| 3 | `Text` | Policy. Opcional — default herdado ou `"drop"`. |
+| 1 | `Text` | Mensagem — template se `TextLit`, senão `Text` dinâmico. |
+| 2 | `Text` \| `File` | Tópico CSP (`Text`) ou arquivo (`File`). Opcional. |
+| 3 | `Text` | Policy. Opcional — só com tópico CSP. Default herdado ou `"drop"`. |
 
-Typeck aceita 2, 3 ou 4 args.
+Typeck aceita 2, 3 ou 4 args. Exemplos:
+
+```kata
+# CSP com tópico e policy explícitos
+log!(LogLevel::Info, "msg {x}", "audit", "block")
+
+# Write direto em stdout (File)
+log!(LogLevel::Info, "msg {x}", stdout!())
+
+# CSP com config herdada (sem 3º arg)
+log!(LogLevel::Error, "msg {x}")
+
+# Template com {log_level}
+log!(LogLevel::Warn, "[{log_level}] val={x}", stdout!())
+# → escreve "[Warn] val=99" em stdout
+```
 
 ### 20.3. Action nativa `log_recv!()`
 
 Recebe a próxima mensagem de telemetria do tópico. Bloqueia (yield point via
-`BlockedOnRecv`) até chegar mensagem. Retorna `Text` (payload) ou `Unit` se o
-canal fechou. Precisa estar em fiber context.
+`BlockedOnRecv`) até chegar mensagem. Retorna `Result::(Text, Text)` —
+`Ok(msg)` com a mensagem, ou `Err(reason)` se o tópico não existe ou o canal
+fechou. Precisa estar em fiber context.
 
 ```kata
-let msg := log_recv!("audit")
+match log_recv!("audit")
+    Result::Ok msg: echo!(msg, stdout!())
+    Result::Err reason: echo!("erro: {reason}", stdout!())
 ```
+
+**Caminhos de erro:**
+- Tópico inexistente (nunca publicado) → `Err("topic not found")`.
+- Canal fechado ou receiver não pôde ser criado → `Err("channel closed")`.
 
 Para tópicos Broadcast (policy `"drop"`), o receiver é criado eagerly no
 `get_or_create_topic` e cached em `RECEIVER_REGISTRY` (thread_local).
@@ -2646,6 +2714,42 @@ passado na FFI mas não há filtragem. Reservado para filtragem futura.
 `@log` não muda a assinatura. O codegen insere o efeito colateral
 invisivelmente — na semântica da linguagem, a pureza não muda; no máximo a
 resposta é adiada (com `policy: "block"`).
+
+### 20.8. Variável sintética `{log_level}`
+
+`{log_level}` é uma variável sintética disponível em templates de `@log` e
+`log!()`. Interpola o **nome** do level da mensagem — não a tag numérica.
+
+**Resolução:** O inference resolve `{log_level}` durante o parsing do template,
+antes de consultar o escopo. A tag do level (extraída de `LogLevel::Info` etc.)
+é mapeada para a string correspondente via `log_level_name`:
+
+| Tag | Nome interpolado |
+|---|---|
+| 0 | `"Debug"` |
+| 1 | `"Info"` |
+| 2 | `"Warn"` |
+| 3 | `"Error"` |
+
+**Sintaxe:** `{log_level}` aparece em templates como qualquer outro placeholder.
+É resolvida como `TextLit` (literal de string) — não consulta o escopo, não é
+variável do usuário.
+
+```kata
+@log{msg: "[{log_level}] processando {x}", when: "enter", file: stdout, level: "Warn"}
+action processar (x::Int) => Int
+    + x 1
+# → escreve "[Warn] processando 42" em stdout
+```
+
+```kata
+log!(LogLevel::Error, "[{log_level}] falha em {x}", stdout!())
+# → escreve "[Error] falha em ..." em stdout
+```
+
+**Compatibilidade com `when: "enter"`:** `{log_level}` é sempre válida em
+`when: "enter"` — não é variável do corpo, é resolvida antes da verificação de
+placeholders.
 
 ## 21. Interoperabilidade e Baixo Nível (FFI)
 
@@ -2746,6 +2850,66 @@ close (s::Socket) => Unit
 | `read!` | ❌ `Err` | ✅ |
 | `write!` | ❌ `Err` | ✅ |
 
+### 22.5. Descritores Padrão (stdio como `File`)
+
+O módulo `stdio` fornece `stdin!()`, `stdout!()` e `stderr!()` como actions 0-ary
+que retornam `File`. Os handles apontam para FDs 0, 1 e 2 do processo,
+encapsulados em `FileInner` com `is_stdio: true`.
+
+**Importação — módulo opt-in, não no prelude:**
+
+```kata
+import stdio.(stdin, stdout, stderr)   # import seletivo
+import stdio                            # import do módulo inteiro
+```
+
+**Uso:**
+
+```kata
+import stdio.(stdout)
+echo!("msg", stdout!())
+```
+
+```kata
+import stdio.(stdin, stdout)
+action main => Int
+    let r := readline!(stdin!())
+    match r
+        Result::Ok msg: echo!(msg, stdout!())
+        Result::Err _: echo!("erro", stdout!())
+    0
+```
+
+**Propriedades dos handles stdio:**
+
+| Operação | stdin (FD 0) | stdout (FD 1) | stderr (FD 2) |
+|---|---|---|---|
+| `read!` / `readline!` / `read_chunk!` | ✅ | `Err("not readable")` | `Err("not readable")` |
+| `write!` | `Err("not writable")` | ✅ | ✅ |
+| `close!` | no-op | no-op | no-op |
+
+- **`close!` é no-op** — stdio handles têm `is_stdio: true`, que previne
+  `drop_in_place`. O FD 0/1/2 nunca é fechado pelo runtime.
+- **Handles são cached (TLS)** — múltiplas chamadas a `stdout!()` retornam o
+  mesmo handle. O cache é limpo entre testes por `reset_stdio_cache`.
+- **Modo:** stdin é `IoMode::Read`, stdout/stderr são `IoMode::Write`.
+
+**Integração com `echo!`, `log!()` e `@log`:**
+
+`echo!` tem overload `(msg::SHOW, f::File)` que escreve `show(msg) + "\n"` via
+`write!`. Com stdio, `echo!("msg", stdout!())` escreve em stdout via File.
+
+`log!()` aceita `File` como 3º arg — `log!(level, msg, stdout!())` escreve
+diretamente em stdout via `kata_rt_file_write_text` (ver §20.2).
+
+`@log{file: stdout}` aceita identificador de action 0-ary que retorna `File` —
+o inference gera `stdout!()` como expressão `File` (ver §20.1).
+
+**Runtime FFIs:**
+- `kata_rt_stdin() -> i64` — handle File para FD 0 (read-only).
+- `kata_rt_stdout() -> i64` — handle File para FD 1 (write-only).
+- `kata_rt_stderr() -> i64` — handle File para FD 2 (write-only).
+
 ## 23. Orquestração Não-Determinística (`select`)
 
 `select` multiplexa operações de canais, files e sockets. A Action cede ao
@@ -2753,7 +2917,7 @@ scheduler e é acordada quando um evento se concretiza. Os canais são
 verificados **em ordem** (primeiro pronto é selecionado) — não há
 aleatoriedade. `timeout N` (ms) como válvula de escape.
 
-Braços de I/O (`read(handle, n) <! binding: body`) aceitam `File` ou
+Braços de I/O (`read(handle, n) !> binding: body`) aceitam `File` ou
 `Socket` como handle. O codegen separa braços por tipo em compile-time
 (`channel_arms`, `file_arms`, `socket_arms`) e passa arrays separados
 para `kata_rt_select_combined` (7 args: chan_ptr, n_c, file_ptr, n_f,
@@ -2769,7 +2933,7 @@ O binário final encapsula código de máquina (Cranelift) acoplado ao runtime
   OS, com round-robin e yield cooperativo. TLS para suspend/resume. O scheduler
   é uma struct explícita. Multithread (M:N com work-stealing) é aspiracional.
 * **Corrotinas Stackful (wasmtime-fiber):** Cada Action é encapsulada numa
-  corrotina nativa. `<!` bloqueante faz yield da fiber, não da thread OS.
+  corrotina nativa. `!>` bloqueante faz yield da fiber, não da thread OS.
 * **ARC manual (CaptureBox):** Reference counting gerenciado pelo codegen via
   FFI (`kata_rt_incref`/`kata_rt_decref`). CaptureBox alocado na root arena
   (TrackedArena); quando refcount chega a 0, o bloco é liberado individualmente.

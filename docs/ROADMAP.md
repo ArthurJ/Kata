@@ -107,7 +107,7 @@ Fio 1: Fundação + Aritmética + CLI
 │       │   (árvore de arenas, escape analysis para LCA, ARC pass emitido)
 │       │
 │       └── Fio 11: CSP, Concorrência, Paralelismo
-│       │   (channel!, queue!, broadcast!, fork!, select, !>, <!,
+│       │   (channel!, queue!, broadcast!, fork!, select, <!, !>,
 │       │    yield points, structured concurrency, spawn!)
 │       │
 │       └── Fio 14: @log, @test, Test Runner
@@ -150,7 +150,7 @@ Fio 1: Fundação + Aritmética + CLI
 │    prelude de stdlib/core.kata substituindo prelude hardcoded)
 │
 ├── Fio 11: CSP, Concorrência, Paralelismo ✅ Concluído
-│   (channel!, queue!, broadcast!, fork!, !>, <!, select com timeout,
+│   (channel!, queue!, broadcast!, fork!, <!, !>, select com timeout,
 │    yield cooperativo, structured concurrency, scheduler com fibers)
 │   (spawn! — multiprocess via fork+IPC — redesign: special form ao lado de fork!,
 │    aceita tupla ou dict com raw:/serialized:, to_bytes() FFI — Fase 5 ✅, spawn! Fase 9 ✅)
@@ -607,7 +607,7 @@ pelo codegen. ARC pass emitido.
 ### Fio 11: CSP, Concorrência, Paralelismo ✅ Concluído
 
 **Status:** Fases 1-14 implementadas (Fases 1-14 do Fio 3, que incluem CSP).
-`channel!`, `queue!(N)`, `broadcast!()`, `fork!`, `!>`, `<!`, `select` com
+`channel!`, `queue!(N)`, `broadcast!()`, `fork!`, `<!`, `!>`, `select` com
 `timeout`, yield cooperativo, structured concurrency, scheduler com fibers.
 Testes E2E: `csp_channels_e2e.rs` (11 testes), `csp_broadcast_e2e.rs` (4 testes),
 `select_timeout_e2e.rs`, `scheduler_test.rs`. Exemplos: `broadcast.kata`,
@@ -644,7 +644,7 @@ blocking no FD quando todos fibers estão blocked em IPC. 5 testes E2E em
 - Criação retorna tupla `(Sender::T, Receiver::T)` ou `(Sender::T, ReceiverFactory::T)`
 - `fork!()` (submete Action ao scheduler com args)
 - `select` com `timeout` (multiplexação de canais)
-- `!>` (envio), `<!` (recebimento) — operadores infixos
+- `<!` (envio), `!>` (recebimento) — operadores infixos
 - Yield cooperativo via `wasmtime-fiber::Suspend` com `YieldReason`
 - Yield points no codegen (back-edge checks em `Loop` e `ForIn`)
 - Structured concurrency (Action espera forks completarem)
@@ -895,8 +895,8 @@ Fio 1  ────────────────────────�
   │       @comptime call-site, HeapSnapshot, @cache LRU, constant folding
   └── Fio 15 ✅ (AOT, REPL)
 
-Pós-Fio 15: Select I/O ✅ | Socket I/O ✅ | Uniformização de Aplicação ✅
-  select canais+files     Ty::Socket, 7 FFIs     arity-aware, dict dispatch
+Pós-Fio 15: Select I/O ✅ | Socket I/O ✅ | Uniformização de Aplicação ✅ | Alinhamento stdio ✅
+  select canais+files     Ty::Socket, 7 FFIs     arity-aware, dict dispatch     stdin/stdout/stderr como File, @log{file:}, registry por-fiber
 
 Zeladorias removidas — manutenção diária via skill `zeladoria-kata5` substitui zeladorias planejadas.
 ```
