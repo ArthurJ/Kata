@@ -2,15 +2,15 @@ action main()
     let (tx rx) := queue!(2)
 
     select
-        case (<! rx) -> valor:
+        case (!> rx) -> valor:
             echo!("Recebeu antes do send — falha")
         timeout 50:
             echo!("Timeout correto antes do send")
 
-    !> tx "hello"
+    <! tx "hello"
 
     select
-        case (<! rx) -> msg:
+        case (!> rx) -> msg:
             echo!("Recebeu apos o send")
             echo!(msg)
         timeout 50:

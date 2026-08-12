@@ -119,13 +119,13 @@ const DEADLOCK_SENTINEL: i64 = i64::MIN + 1;
 #[test]
 fn spawn_ipc_send_fire_and_forget() {
     let src = r#"action worker (rx::Receiver::Int) => Int
-    rx <! n
+    rx !> n
     n
 constant ch := channel!()
 constant tx := ch.0
 constant rx := ch.1
 spawn!(worker, (rx))
-tx !> 42
+tx <! 42
 42"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
@@ -145,8 +145,8 @@ tx !> 42
 #[test]
 fn spawn_ipc_round_trip() {
     let src = r#"action worker (rx1::Receiver::Int, tx2::Sender::Int) => Int
-    rx1 <! n
-    tx2 !> + n 1
+    rx1 !> n
+    tx2 <! + n 1
     n
 constant ch1 := channel!()
 constant tx1 := ch1.0
@@ -155,8 +155,8 @@ constant ch2 := channel!()
 constant tx2 := ch2.0
 constant rx2 := ch2.1
 spawn!(worker, (rx1, tx2))
-tx1 !> 42
-rx2 <! result
+tx1 <! 42
+rx2 !> result
 result"#;
     let (raw, _ty) = eval_src(src);
     // Nota: o tipo do entry point é Var("T0") porque channel!() cria
@@ -185,9 +185,9 @@ result"#;
 #[test]
 fn spawn_ipc_tupla_round_trip() {
     let src = r#"action worker (rx1::Receiver::((Int, Int)), tx2::Sender::Int) => Int
-    rx1 <! t
+    rx1 !> t
     match t
-        (a, b): tx2 !> + a b
+        (a, b): tx2 <! + a b
         otherwise: ()
     0
 constant ch1 := channel!()
@@ -197,8 +197,8 @@ constant ch2 := channel!()
 constant tx2 := ch2.0
 constant rx2 := ch2.1
 spawn!(worker, (rx1, tx2))
-tx1 !> (10, 20)
-rx2 <! result
+tx1 <! (10, 20)
+rx2 !> result
 result"#;
     let (raw, _ty) = eval_src(src);
     assert_ne!(raw, DEADLOCK_SENTINEL, "não deve deadlockar");
@@ -220,8 +220,8 @@ result"#;
 fn spawn_ipc_struct_round_trip() {
     let src = r#"data Ponto (x::Int y::Int)
 action worker (rx1::Receiver::Ponto, tx2::Sender::Int) => Int
-    rx1 <! p
-    tx2 !> * p.x p.y
+    rx1 !> p
+    tx2 <! * p.x p.y
     0
 constant ch1 := channel!()
 constant tx1 := ch1.0
@@ -230,8 +230,8 @@ constant ch2 := channel!()
 constant tx2 := ch2.0
 constant rx2 := ch2.1
 spawn!(worker, (rx1, tx2))
-tx1 !> Ponto 3 4
-rx2 <! result
+tx1 <! Ponto 3 4
+rx2 !> result
 result"#;
     let (raw, _ty) = eval_src(src);
     assert_ne!(raw, DEADLOCK_SENTINEL, "não deve deadlockar");
@@ -252,9 +252,9 @@ result"#;
 #[test]
 fn spawn_ipc_lista_round_trip() {
     let src = r#"action worker (rx1::Receiver::List::Int, tx2::Sender::Int) => Int
-    rx1 <! lst
+    rx1 !> lst
     let total := fold + 0 lst
-    tx2 !> total
+    tx2 <! total
     0
 constant ch1 := channel!()
 constant tx1 := ch1.0
@@ -263,8 +263,8 @@ constant ch2 := channel!()
 constant tx2 := ch2.0
 constant rx2 := ch2.1
 spawn!(worker, (rx1, tx2))
-tx1 !> [1 2 3]
-rx2 <! result
+tx1 <! [1 2 3]
+rx2 !> result
 result"#;
     let (raw, _ty) = eval_src(src);
     assert_ne!(raw, DEADLOCK_SENTINEL, "não deve deadlockar");
@@ -292,13 +292,13 @@ fn spawn_ipc_queue_multi_items() {
     var total := 0
     var n := 0
     loop
-      rx <! val
+      rx !> val
       total := + total val
       n := + n 1
       match >= n 3
         True: break
         False: continue
-    tx2 !> total
+    tx2 <! total
     0
 
 action main => Int
@@ -309,10 +309,10 @@ action main => Int
     let tx2 := ch2.0
     let rx2 := ch2.1
     spawn!(worker, (rx, tx2))
-    tx !> 10
-    tx !> 20
-    tx !> 30
-    rx2 <! result
+    tx <! 10
+    tx <! 20
+    tx <! 30
+    rx2 !> result
     result
 
 main!()"#;

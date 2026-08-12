@@ -91,6 +91,51 @@ fn float_with_underscore() {
     assert_eq!(tokens_only(&tokens), expected);
 }
 
+#[test]
+fn float_leading_dot() {
+    // `+ .6` — espaço antes do `.` → float normalizado para `0.6`
+    let tokens = lex("+ .6").unwrap();
+    let expected = vec![
+        Token::Ident("+".into()),
+        Token::FloatLit("0.6".into()),
+        Token::Eof,
+    ];
+    assert_eq!(tokens_only(&tokens), expected);
+}
+
+#[test]
+fn float_leading_dot_start_of_input() {
+    // `.6` no início do input → float (sem token anterior)
+    let tokens = lex(".6").unwrap();
+    let expected = vec![Token::FloatLit("0.6".into()), Token::Eof];
+    assert_eq!(tokens_only(&tokens), expected);
+}
+
+#[test]
+fn float_leading_dot_scientific() {
+    // `+ .5e10` — espaço antes do `.` → float normalizado para `0.5e10`
+    let tokens = lex("+ .5e10").unwrap();
+    let expected = vec![
+        Token::Ident("+".into()),
+        Token::FloatLit("0.5e10".into()),
+        Token::Eof,
+    ];
+    assert_eq!(tokens_only(&tokens), expected);
+}
+
+#[test]
+fn dot_access_not_float() {
+    // `tpl.0` sem espaço → Dot + IntLit (dot-access de tupla)
+    let tokens = lex("tpl.0").unwrap();
+    let expected = vec![
+        Token::Ident("tpl".into()),
+        Token::Dot,
+        Token::IntLit("0".into()),
+        Token::Eof,
+    ];
+    assert_eq!(tokens_only(&tokens), expected);
+}
+
 // ── Números com sinal ──────────────────────────────────────────
 
 #[test]

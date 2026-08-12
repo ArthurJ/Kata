@@ -310,7 +310,7 @@ pub(crate) fn inject_timer_start_channel(
     let call = lower.builder.ins().call(now_fn, &[]);
     let start = lower.builder.inst_results(call)[0];
 
-    // 4. chan !> start (kata_rt_channel_send)
+    // 4. chan <! start (kata_rt_channel_send)
     let send_fn = lower
         .ffi_refs
         .get("kata_rt_channel_send")
@@ -335,7 +335,7 @@ pub(crate) fn inject_timer_stop_channel(
     chan: cranelift_codegen::ir::Value,
     lower: &mut LowerCtx,
 ) -> Result<(), CodegenError> {
-    // 1. start = <! chan (kata_rt_channel_recv)
+    // 1. start = !> chan (kata_rt_channel_recv)
     let recv_fn = lower
         .ffi_refs
         .get("kata_rt_channel_recv")

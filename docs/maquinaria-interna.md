@@ -423,7 +423,7 @@ pub struct LowerCtx {
   - **Offset 0 do env record SEMPRE tem fn_ptr.** Mesmo quando usando `Call`
     direto (que não lê fn_ptr), o store DEVE ser emitido. O `Call` direto é
     uma otimização que pula o load, não substituto do store. Closures recebidas
-    via canal (`<! ch`) não estão em `closure_fn_names` — fazem `CallIndirect`
+    via canal (`!> ch`) não estão em `closure_fn_names` — fazem `CallIndirect`
     lendo fn_ptr do offset 0. Se o store foi omitido, `CallIndirect` carrega 0
     e crasha.
   - Inicializado em `new()`, `new_with_params()`, e `from_parent()`.

@@ -222,7 +222,7 @@ analysis opera sobre captures).
 ### 15 — Concorrência (CSP)
 
 `fork!` (fibers via wasmtime-fiber). `channel!` (rendezvous),
-`queue!(N)` (buffer), `broadcast!` (pub-sub). `!>` / `<!`
+`queue!(N)` (buffer), `broadcast!` (pub-sub). `<!` / `!>`
 (send/receive). `select` (multiplexação, timeout).
 
 Diretivas: `@log` (telemetria via canais CSP). Special forms: `spawn!`

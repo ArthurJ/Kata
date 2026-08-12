@@ -9,7 +9,7 @@ use crate::ident::lex_ident;
 use crate::number::lex_number;
 use crate::text::lex_string;
 
-pub(crate) fn lex_token(lex: &mut Lexer) -> Result<TokenWithSpan, FrontendError> {
+pub(crate) fn lex_token(lex: &mut Lexer, had_space: bool) -> Result<TokenWithSpan, FrontendError> {
     let start = lex.save_pos();
     let ch = lex.ch.expect("lex_token chamado no EOF");
 
@@ -89,7 +89,8 @@ pub(crate) fn lex_token(lex: &mut Lexer) -> Result<TokenWithSpan, FrontendError>
             lex.advance();
             if lex.ch == Some('>') {
                 lex.advance();
-                Token::SendArrow
+                // `!>` — recebimento por canal CSP: "valor sai do canal"
+                Token::RecvArrow
             } else if lex.ch == Some('=') {
                 // `!=` — operador de desigualdade. Lexar via lex_ident
                 // (identificador simbólico, mesmo mecanismo de `<`, `>`, `=`).
@@ -104,6 +105,11 @@ pub(crate) fn lex_token(lex: &mut Lexer) -> Result<TokenWithSpan, FrontendError>
             Token::At
         }
         '.' => {
+            // `.6` → float sem parte inteira, mas apenas com espaço antes
+            // (sem espaço, `.` é dot-access: `tpl.0`, `pessoa.nome`)
+            if had_space && lex.peek().is_some_and(|c| c.is_ascii_digit()) {
+                return lex_number(lex, &start);
+            }
             lex.advance();
             if lex.ch == Some('.') {
                 // `..` — pode ser `..=` ou `..`
@@ -151,10 +157,10 @@ pub(crate) fn lex_token(lex: &mut Lexer) -> Result<TokenWithSpan, FrontendError>
             Token::RBrace
         }
         '<' if lex.peek() == Some('!') => {
-            // `<` seguido de `!` → RecvArrow.
+            // `<!` — envio por canal CSP: "valor entra no canal"
             lex.advance(); // consumir <
             lex.advance(); // consumir !
-            Token::RecvArrow
+            Token::SendArrow
         }
         'b' if lex.peek() == Some('"') => {
             // `b"` — byte string literal.

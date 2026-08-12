@@ -158,7 +158,7 @@ pub(crate) fn synthesize_refined(
                     guards: Vec::new(),
                     with_bindings: Vec::new(),
                 }],
-                log: None,
+                log: Vec::new(),
                 cache_spec: None,
                 timer_spec: None,
             });
@@ -217,7 +217,7 @@ pub(crate) fn synthesize_refined(
                 guards: Vec::new(),
                 with_bindings: Vec::new(),
             }],
-            log: None,
+            log: Vec::new(),
             cache_spec: None,
             timer_spec: None,
         });

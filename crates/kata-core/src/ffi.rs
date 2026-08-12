@@ -345,6 +345,14 @@ pub enum FfiSymbol {
     /// `kata_rt_file_close(handle) -> ()` — fecha arquivo (decref ARC).
     FileClose,
 
+    // ── stdio: stdin/stdout/stderr como File ───────────────────────
+    /// `kata_rt_stdin() -> i64` — handle File apontando para FD 0 (stdin, read-only).
+    Stdin,
+    /// `kata_rt_stdout() -> i64` — handle File apontando para FD 1 (stdout, write-only).
+    Stdout,
+    /// `kata_rt_stderr() -> i64` — handle File apontando para FD 2 (stderr, write-only).
+    Stderr,
+
     // ── Socket I/O ─────────────────────────────────────────────────
     /// `kata_rt_socket_open(kind_box, mode_box) -> i64` — cria socket, retorna Result box.
     SocketOpen,
@@ -550,6 +558,10 @@ impl FfiSymbol {
             FfiSymbol::FileWriteText => "kata_rt_file_write_text",
             FfiSymbol::FileWriteBytes => "kata_rt_file_write_bytes",
             FfiSymbol::FileClose => "kata_rt_file_close",
+            // stdio
+            FfiSymbol::Stdin => "kata_rt_stdin",
+            FfiSymbol::Stdout => "kata_rt_stdout",
+            FfiSymbol::Stderr => "kata_rt_stderr",
             // Socket I/O
             FfiSymbol::SocketOpen => "kata_rt_socket_open",
             FfiSymbol::SocketListen => "kata_rt_socket_listen",
@@ -732,6 +744,10 @@ impl FfiSymbol {
             FfiSymbol::FileWriteText => Ty::int(), // Result box ptr
             FfiSymbol::FileWriteBytes => Ty::int(), // Result box ptr
             FfiSymbol::FileClose => Ty::Unit,
+            // stdio — retornam i64 (File handle ptr)
+            FfiSymbol::Stdin => Ty::int(),
+            FfiSymbol::Stdout => Ty::int(),
+            FfiSymbol::Stderr => Ty::int(),
             // Socket I/O — retornam i64 (Result box ptr) ou Unit (close)
             FfiSymbol::SocketOpen => Ty::int(),
             FfiSymbol::SocketListen => Ty::int(),
@@ -929,6 +945,10 @@ impl FfiSymbol {
             FfiSymbol::FileWriteText,
             FfiSymbol::FileWriteBytes,
             FfiSymbol::FileClose,
+            // stdio
+            FfiSymbol::Stdin,
+            FfiSymbol::Stdout,
+            FfiSymbol::Stderr,
             // Socket I/O
             FfiSymbol::SocketOpen,
             FfiSymbol::SocketListen,

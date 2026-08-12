@@ -136,7 +136,7 @@ loop_simples!()"#;
 // ── Teste 2: head-of-line blocking — loop pesado + canal ──
 
 /// Action `loop_worker` faz loop pesado (1..5000) e envia a soma no canal.
-/// Main fork o worker, recebe via `<!`, retorna o valor.
+/// Main fork o worker, recebe via `!>`, retorna o valor.
 ///
 /// Com yield points, `loop_worker` cede CPU a cada YIELD_INTERVAL (1000)
 /// iterações. Sem yield points, o loop monopolizaria a fiber até completar
@@ -157,12 +157,12 @@ fn yield_loop_nao_bloqueia() {
     match > i 5000
       True: break
       False: acc := + acc i
-  tx !> acc
+  tx <! acc
   ()
 action main => Int
   let (tx, rx) := channel!()
   fork!(loop_worker, (tx))
-  rx <! val
+  rx !> val
   val
 main!()"#;
     let (raw, ty) = eval_src(src);
@@ -188,12 +188,12 @@ fn yield_forin_nao_bloqueia() {
   var acc := 0
   for x in {1 2 3 4 5}
     acc := + acc x
-  tx !> acc
+  tx <! acc
   ()
 action main => Int
   let (tx, rx) := channel!()
   fork!(forin_worker, (tx))
-  rx <! val
+  rx !> val
   val
 main!()"#;
     let (raw, ty) = eval_src(src);

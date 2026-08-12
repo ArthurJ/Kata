@@ -5,9 +5,9 @@ action main
             let sub1 := subscribe!(factory)
             let sub2 := subscribe!(factory)
             echo!("2 subscribers")
-            42 !> tx
+            42 <! tx
             var v := 0
-            v <! sub1
+            v !> sub1
             echo!(v)
-            v <! sub2
+            v !> sub2
             echo!(v)

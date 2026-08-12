@@ -195,11 +195,11 @@
           "name": "keyword.operator.pipeline.kata"
         },
         {
-          "match": "!>",
+          "match": "<!",
           "name": "keyword.operator.channel.send.kata"
         },
         {
-          "match": "<!",
+          "match": "!>",
           "name": "keyword.operator.channel.recv.kata"
         },
         {
@@ -211,7 +211,7 @@
           "name": "keyword.operator.range.kata"
         },
         {
-          "comment": "! — action call suffix (must come after !> send arrow)",
+          "comment": "! — action call suffix (must come after !> recv arrow)",
           "match": "!(?!>)",
           "name": "keyword.operator.action-call.kata"
         },

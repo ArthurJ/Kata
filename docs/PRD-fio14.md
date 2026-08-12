@@ -488,7 +488,7 @@ isolados C1 não implementados).
   inventar infra de fatiamento de `TypedModule` por dependências transitivas
   (que não existe no projeto).
 
-- **`@test` em action com CSP pode bloquear o runner.** Se a action faz `<!`
+- **`@test` em action com CSP pode bloquear o runner.** Se a action faz `!>`
   em canal sem sender, o scheduler deadlocka. Solução: timeout cooperativo
   via thread OS + `AtomicBool` (Decisão A da Fase 4). A thread timer faz
   `park_timeout` e seta `TIMEOUT_EXPIRED`; o `kata_rt_yield_check` slow path

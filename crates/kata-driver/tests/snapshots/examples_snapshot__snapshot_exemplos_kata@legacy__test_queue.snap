@@ -11,5 +11,5 @@ Error: parse.unexpected_token
  3 │         (tx rx):
    ·             ─┬
    ·              ╰── token inesperado
- 4 │             1 !> tx
+ 4 │             1 <! tx
    ╰────

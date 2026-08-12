@@ -4,7 +4,7 @@
 import modules.mock_math
 import modules.mock_math.(triplicar)
 
-action main => Int
+action main => Unit
     # WholeModule: acessar via prefixo do módulo
     let resultado := mock_math.dobrar 21
     # Selective: triplicar no escopo direto
@@ -12,6 +12,5 @@ action main => Int
     echo!("Import OK")
     echo!(resultado)
     echo!(triplo)
-    0
 
 main!()

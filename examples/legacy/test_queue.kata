@@ -1,16 +1,16 @@
 action main
     match queue!(3)
         (tx rx):
-            1 !> tx
+            1 <! tx
             echo!("enviou 1")
-            2 !> tx
+            2 <! tx
             echo!("enviou 2")
-            3 !> tx
+            3 <! tx
             echo!("enviou 3")
             var v := 0
-            v <! rx
+            v !> rx
             echo!(v)
-            v <! rx
+            v !> rx
             echo!(v)
-            v <! rx
+            v !> rx
             echo!(v)

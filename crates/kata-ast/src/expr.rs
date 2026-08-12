@@ -230,13 +230,13 @@ pub enum Expr {
     },
 
     // ── CSP (Canais, Fork, Select) ───────────────────
-    /// `tx !> valor` — envio por canal.
+    /// `tx <! valor` — envio por canal.
     ChannelSend {
         channel: Box<Spanned<Expr>>,
         value: Box<Spanned<Expr>>,
     },
 
-    /// `rx <! nome` — recebimento de canal (binding em `nome`).
+    /// `rx !> nome` — recebimento de canal (binding em `nome`).
     ChannelRecv {
         channel: Box<Spanned<Expr>>,
         bind_name: String,
@@ -353,12 +353,12 @@ pub enum ReadMode {
 
 /// Um braço de `select`.
 ///
-/// Pode ser um braço de canal (`rx <! nome: body`) ou um braço de
-/// leitura de I/O (`read!(handle, n) <! nome: body` ou
-/// `readline!(handle) <! nome: body`).
+/// Pode ser um braço de canal (`rx !> nome: body`) ou um braço de
+/// leitura de I/O (`read!(handle, n) !> nome: body` ou
+/// `readline!(handle) !> nome: body`).
 #[derive(Debug, Clone, PartialEq)]
 pub enum SelectArm {
-    /// `rx <! nome: body` — braço de canal (receiver).
+    /// `rx !> nome: body` — braço de canal (receiver).
     Channel {
         /// Receiver de onde receber (expressão que avalia para Receiver::T).
         channel: Spanned<Expr>,
@@ -367,7 +367,7 @@ pub enum SelectArm {
         /// Corpo do braço.
         body: Spanned<Expr>,
     },
-    /// `read!(handle, n) <! nome: body` ou `readline!(handle) <! nome: body`.
+    /// `read!(handle, n) !> nome: body` ou `readline!(handle) !> nome: body`.
     /// `handle_expr` avalia para File ou Socket.
     /// `read_mode` determina se lê n bytes (Chunk) ou até `\n` (Line).
     IoRead {

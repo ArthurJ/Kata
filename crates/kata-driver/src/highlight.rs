@@ -12,7 +12,7 @@
 //! - Literais (Int, Float, Text): green
 //! - Diretivas (`@ffi`, `@builtin`, ...): bright magenta
 //! - Operadores simbólicos (`+`, `-`, `*`, `/`, `<`, `>`, `=`): bright yellow
-//! - Operadores sintáticos (`:=`, `::`, `=>`, `->`, `|>`, `!>`, `<!`, `?`, `!`, `|`): bright black (gray)
+//! - Operadores sintáticos (`:=`, `::`, `=>`, `->`, `|>`, `<!`, `!>`, `?`, `!`, `|`): bright black (gray)
 //! - Pontuação (`(`, `)`, `[`, `]`, `{`, `}`, `,`, `;`, `:`, `.`): gray
 //! - Identificadores PascalCase (tipos/construtores): bright blue
 //! - Identificadores comuns: sem cor (default)

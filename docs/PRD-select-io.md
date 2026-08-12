@@ -13,8 +13,8 @@
 
 Generalizar o `select` para multiplexar não apenas canais CSP, mas também
 leitura de File handles (`read(handle, n)`) e, futuramente, Sockets/Pipes.
-Hoje `select` só aceita braços de canal (`rx <! nome: body`). Após esta
-mudança, aceitará também braços de leitura de I/O (`read(handle, n) <! data: body`),
+Hoje `select` só aceita braços de canal (`rx !> nome: body`). Após esta
+mudança, aceitará também braços de leitura de I/O (`read(handle, n) !> data: body`),
 permitindo que um fiber espere simultaneamente por: mensagem de canal, chunk
 de arquivo, ou dados de rede — com um único timeout compartilhado.
 
@@ -65,27 +65,27 @@ runtime separado para files) porque:
 
 ```kata
 select
-  rx <! msg: echo!("canal: " + msg)
-  read(file, 4096) <! data: processa_chunk(data)
+  rx !> msg: echo!("canal: " + msg)
+  read(file, 4096) !> data: processa_chunk(data)
   timeout 5000: echo!("timeout")
 ```
 
-- **Braço de canal:** `receiver <! binding: body` — sintaxe existente, sem mudança.
-- **Braço de I/O:** `read(handle, n) <! binding: body` — nova sintaxe.
+- **Braço de canal:** `receiver !> binding: body` — sintaxe existente, sem mudança.
+- **Braço de I/O:** `read(handle, n) !> binding: body` — nova sintaxe.
   - `read(handle, n)` é a expressão de leitura (action `@ffi`).
-  - `<!` sobrecarregado: "o dado lido flui para `binding`".
+  - `!>` sobrecarregado: "o dado lido flui para `binding`".
   - O `n` controla quantos bytes ler por chunk — decisão explícita do desenvolvedor.
 - **Timeout:** `timeout N: body` — sintaxe existente, sem mudança.
 
-### 3.2. Semântica de `read(handle, n) <! binding` dentro de select
+### 3.2. Semântica de `read(handle, n) !> binding` dentro de select
 
 Fora de `select`, `read!(handle, 4096)` executa imediatamente e retorna
 `Result::(Bytes, Text)`. Dentro de `select`, a mesma expressão significa
 "registrar interesse em readiness deste handle, e quando pronto, executar
 `read` e conectar o resultado ao binding".
 
-Isto é análogo ao que já acontece com `<!` em canais: fora de `select`,
-`rx <! nome` é recebimento bloqueante; dentro de `select`, é "registrar
+Isto é análogo ao que já acontece com `!>` em canais: fora de `select`,
+`rx !> nome` é recebimento bloqueante; dentro de `select`, é "registrar
 interesse neste receiver". O `select` reinterpreta os operadores dos braços
 como "registro de interesse" em vez de "executar agora".
 
@@ -94,7 +94,7 @@ body para distinguir Ok (dados) de Err (EOF ou erro):
 
 ```kata
 select
-  read(file, 4096) <! result:
+  read(file, 4096) !> result:
     match result
       Result::Ok chunk: echo!("li " + show(length(chunk)) + " bytes")
       Result::Err msg: echo!("fim: " + msg)
@@ -122,13 +122,13 @@ canal de handle de file — o codegen já separou.
 ```rust
 /// Braço de select — generalizado para canal ou I/O.
 pub enum SelectArm {
-    /// `rx <! nome: body` — braço de canal (existente).
+    /// `rx !> nome: body` — braço de canal (existente).
     Channel {
         channel: Spanned<Expr>,
         bind_name: String,
         body: Spanned<Expr>,
     },
-    /// `read(handle, n) <! nome: body` — braço de leitura de I/O.
+    /// `read(handle, n) !> nome: body` — braço de leitura de I/O.
     /// handle_expr avalia para File (futuramente Socket).
     /// chunk_size_expr avalia para Int (n bytes por chunk).
     IoRead {
@@ -141,7 +141,7 @@ pub enum SelectArm {
 ```
 
 O parser diferencia os dois casos: se o braço começa com `read(...)` seguido
-de `<!`, é `IoRead`. Se começa com uma expressão de canal seguida de `<!`,
+de `!>`, é `IoRead`. Se começa com uma expressão de canal seguida de `!>`,
 é `Channel`. A distinção é sintática — `read` é keyword/action conhecida.
 
 ### 3.5. Runtime — duas funções de try_select
@@ -254,8 +254,8 @@ O branch chain precisa mapear índices dos arrays separados de volta aos
 action servidor (requests::Channel(Request), logfile::File) => Unit
   loop
     select
-      requests <! req: handle!(req)
-      read(logfile, 4096) <! result:
+      requests !> req: handle!(req)
+      read(logfile, 4096) !> result:
         match result
           Result::Ok chunk: parse_log!(chunk)
           Result::Err msg: return
@@ -268,11 +268,11 @@ action servidor (requests::Channel(Request), logfile::File) => Unit
 action processa_stream (input::File, ctrl::Channel(Cmd)) => Unit
   loop
     select
-      ctrl <! cmd:
+      ctrl !> cmd:
         match cmd
           Cmd::Stop: return
           Cmd::Reset: seek!(input, 0)
-      read(input, 8192) <! result:
+      read(input, 8192) !> result:
         match result
           Result::Ok chunk: transform!(chunk)
           Result::Err msg: return
@@ -282,8 +282,8 @@ action processa_stream (input::File, ctrl::Channel(Cmd)) => Unit
 
 ```kata
 select
-  read(file_a, 1024) <! a: echo!("A: " + show(length(a)))
-  read(file_b, 1024) <! b: echo!("B: " + show(length(b)))
+  read(file_a, 1024) !> a: echo!("A: " + show(length(a)))
+  read(file_b, 1024) !> b: echo!("B: " + show(length(b)))
   timeout 500: echo!("timeout")
 ```
 
@@ -301,7 +301,7 @@ Funciona — `channel_arms` é vazio, `kata_rt_select` não é chamado, só
 ### Fase 1: AST e parser — ✅ Concluído
 
 - `SelectArm` vira enum com variants `Channel` e `IoRead` ✅
-- Parser: distinguir `read(...) <!` de `expr <!` no braço do select ✅
+- Parser: distinguir `read(...) !>` de `expr !>` no braço do select ✅
 - `IoRead` arm: `handle_expr`, `chunk_size_expr`, `bind_name`, `body` ✅
 - Compatibilidade: braços só de canal continuam funcionando ✅
 
@@ -344,8 +344,8 @@ Funciona — `channel_arms` é vazio, `kata_rt_select` não é chamado, só
 | Decisão | Valor | Justificativa |
 |---|---|---|
 | FFI única combinada | `kata_rt_select_combined` (Opção A) | Loop try/suspend/retry é de runtime; codegen simples com 1 chamada |
-| Sintaxe do braço de I/O | `read(handle, n) <! binding: body` | Explícito, controle de n bytes |
-| `<!` sobrecarregado | Canal e I/O usam `<!` | Mesmo conceito: "dado flui para binding" |
+| Sintaxe do braço de I/O | `read(handle, n) !> binding: body` | Explícito, controle de n bytes |
+| `!>` sobrecarregado | Canal e I/O usam `!>` | Mesmo conceito: "dado flui para binding" |
 | Binding de I/O recebe `Result` | `Result::(Bytes, Text)` | Consistente com `read!(handle, n)` fora de select |
 | Sem polimorfismo de tipo | Codegen separa handles por tipo em compile-time | Handles são pseudo-tipos sem subtyping |
 | Runtime não distingue handle | Codegen passa arrays separados | Sem tagging, sem dispatch dinâmico |
@@ -361,9 +361,9 @@ Funciona — `channel_arms` é vazio, `kata_rt_select` não é chamado, só
 ### 7.1. Outras operações de I/O no select (futuro)
 
 Hoje só `read(handle, n)` é suportado em braços de I/O. Futuramente:
-- `readline(handle) <! line: body` — leitura linha-a-linha em select
-- `write(handle, data) <! _: body` — readiness para escrita (POLLOUT)
-- `accept(socket) <! conn: body` — aceitar conexão em select
+- `readline(handle) !> line: body` — leitura linha-a-linha em select
+- `write(handle, data) !> _: body` — readiness para escrita (POLLOUT)
+- `accept(socket) !> conn: body` — aceitar conexão em select
 
 Por ora, apenas `read(handle, n)`. As outras seguem o mesmo padrão quando
 existirem.
@@ -371,7 +371,7 @@ existirem.
 ### 7.2. Sockets no select — ✅ Implementado
 
 Sockets foram adicionados como `Ty::Socket` (PRD-socket-io). O `select` com
-`read(socket, n) <! data: body` funciona — o codegen separa `file_arms` e
+`read(socket, n) !> data: body` funciona — o codegen separa `file_arms` e
 `socket_arms` por tipo em compile-time e passa arrays separados para
 `kata_rt_select_combined` (estendida com `socket_ptr` + `n_s` params, 7 args
 no total). O runtime chama `try_select_sockets` para socket handles (não
@@ -411,6 +411,6 @@ dados. Avaliar na implementação.
 |---|---|
 | `poll` em arquivo regular sempre retorna pronto — select spin | Para arquivos regulares, `read` retorna EOF rapidamente; o fiber sai do loop naturalmente |
 | `FileInner` não expõe FD bruto | Adicionar método `as_raw_fd()` ou acessar `io.file.as_raw_fd()` via `std::os::unix::io::AsRawFd` |
-| Parser ambíguo: `read(...) <!` vs `expr <!` | `read` é keyword/action conhecida — parser verifica se o braço começa com `read(` antes de `<!` |
+| Parser ambíguo: `read(...) !>` vs `expr !>` | `read` é keyword/action conhecida — parser verifica se o braço começa com `read(` antes de `!>` |
 | `WaitingOnSelect` breaking change | Enum já é `#[derive(Debug, Clone)]` — mudar struct interna não quebra ABI externa |
 | Scheduler poll unificado pode ser complexo | Reutilizar `poll_ipc_with_timeout` como base, generalizar para poll de múltiplos FDs |

@@ -315,7 +315,7 @@ pub(crate) fn infer_fork_builtin(
     // Quando o arg contém Ty::Var (ex: Sender::T0 do channel!()) e o
     // param é concreto (ex: Sender::List::Int), extrai a substituição
     // T0 → List::Int e propaga para todos os bindings do env.
-    // Isto resolve T0 para que rx <! lst produza lst: List::Int (não Var).
+    // Isto resolve T0 para que rx !> lst produza lst: List::Int (não Var).
     if is_direct && let Some(overloads) = ctx.table.get_overloads(&action_name) {
         // Extrai tipos dos args.
         let arg_tys: Vec<Ty> = match &typed_args.kind {

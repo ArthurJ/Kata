@@ -330,13 +330,13 @@ pub enum TypedExprKind {
     },
 
     // ── CSP — canais, select, fork ──────────────────────
-    /// `tx !> valor` — envio por canal.
+    /// `tx <! valor` — envio por canal.
     ChannelSend {
         channel: Box<Spanned<TypedExpr>>,
         value: Box<Spanned<TypedExpr>>,
     },
 
-    /// `rx <! nome` — recebimento de canal.
+    /// `rx !> nome` — recebimento de canal.
     /// `recv_ty` é o tipo do valor recebido (inferido do tipo do canal).
     ChannelRecv {
         channel: Box<Spanned<TypedExpr>>,
@@ -447,14 +447,14 @@ pub enum TypedReadMode {
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum TypedSelectArm {
-    /// `rx <! nome: body` — braço de canal.
+    /// `rx !> nome: body` — braço de canal.
     Channel {
         channel: Spanned<TypedExpr>,
         recv_ty: Ty,
         bind_name: String,
         body: Spanned<TypedExpr>,
     },
-    /// `read!(handle, n) <! nome: body` ou `readline!(handle) <! nome: body`.
+    /// `read!(handle, n) !> nome: body` ou `readline!(handle) !> nome: body`.
     IoRead {
         handle_expr: Spanned<TypedExpr>,
         /// Modo de leitura: Chunk(n) ou Line.

@@ -7,13 +7,13 @@
 
 ## 1. Problema
 
-Valores que circulam por canais (`!>`) precisam sobreviver ao fiber sender. O
+Valores que circulam por canais (`<!`) precisam sobreviver ao fiber sender. O
 manual (§5.2) descreve que esses valores são alocados na heap global com
 `Arc<T>` nativo (reference counting thread-safe). A implementação atual **não
 cumpre isso**:
 
 - O escape analysis já marca `EscapeTarget::Heap` para variáveis enviadas via
-  `Send` (`!>`) — funciona no typeck.
+  `Send` (`<!`) — funciona no typeck.
 - O codegen **ignora** essa marcação: `lower_channel_send` passa o `i64` cru
   (ponteiro bruto da arena do sender) para `kata_rt_channel_send`.
 - `kata_rt_channel_send` armazena `Option<i64>` — o ponteiro cru no slot do

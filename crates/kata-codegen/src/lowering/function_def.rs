@@ -103,7 +103,7 @@ pub(crate) fn define_function_body(
     ret_ty: &Ty,
     clauses: &[TypedLambdaClause],
     captures: &[CaptureInfo],
-    log: &Option<TypedLogSpec>,
+    log: &[TypedLogSpec],
     cache_spec: &Option<CacheSpec>,
     timer_spec: &Option<TimerSpec>,
     func_id: cranelift_module::FuncId,
@@ -252,17 +252,17 @@ pub(crate) fn define_function_body(
             None
         };
 
-        // Se @log quando Enter, injeta antes do body (prólogo).
-        if let Some(TypedLogSpec::Enter { .. }) = log {
-            inject_log(
-                log.as_ref().expect("log é Some: guardado pelo match Enter"),
-                &mut lower,
-            )?;
+        // Injeta @log Enter (prólogo) — pode haver múltiplas diretivas.
+        for spec in log
+            .iter()
+            .filter(|s| matches!(s, TypedLogSpec::Enter { .. }))
+        {
+            inject_log(spec, &mut lower)?;
         }
 
         // Cria epilogue_block se @log Exit ou @timer (para interceptar retornos).
         let mut needs_epilogue =
-            matches!(log, Some(TypedLogSpec::Exit { .. })) || timer_spec.is_some();
+            log.iter().any(|s| matches!(s, TypedLogSpec::Exit { .. })) || timer_spec.is_some();
 
         // ── @cache: cache lookup no prólogo ──
         // Para funções anotadas com @cache{strategy: "LRU"}, serializa
@@ -453,12 +453,12 @@ pub(crate) fn define_function_body(
             lower.builder.seal_block(epi);
             let result = lower.builder.block_params(epi)[0];
 
-            // Injeta log no epílogo.
-            if let Some(TypedLogSpec::Exit { .. }) = log {
-                inject_log(
-                    log.as_ref().expect("log é Some: guardado pelo match Exit"),
-                    &mut lower,
-                )?;
+            // Injeta log no epílogo — pode haver múltiplas diretivas Exit.
+            for spec in log
+                .iter()
+                .filter(|s| matches!(s, TypedLogSpec::Exit { .. }))
+            {
+                inject_log(spec, &mut lower)?;
             }
 
             // Decref de variáveis ARC-managed antes do return.

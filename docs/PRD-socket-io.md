@@ -36,7 +36,7 @@ PRD-select-io generalizou `select` para multiplexar canais + file handles
 via `poll(POLLIN)`. O PRD-select-io diz explicitamente (seção 7.2):
 
 > Sockets serão adicionados como `Ty::Socket` no futuro. Quando existirem,
-> `select` com `read(socket, n) <! data: body` funcionará naturalmente —
+> `select` com `read(socket, n) !> data: body` funcionará naturalmente —
 > o codegen trata Socket igual a File (ambos têm FD para poll).
 
 Este PRD cumpre essa promessa.
@@ -794,7 +794,7 @@ Total: 1372 passed, 0 failed, 5 ignored.
 ### 12.1. `accept` em `select` (futuro)
 
 Hoje `listen!(listener)` é bloqueante cooperativo (suspende fiber,
-scheduler poll). No futuro, `accept(listener) <! conn: body` dentro de
+scheduler poll). No futuro, `accept(listener) !> conn: body` dentro de
 `select` permitiria um servidor esperar conexões e dados de sockets
 existentes simultaneamente. Segue o padrão previsto no PRD-select-io
 seção 7.1. Adiado — `fork!` por conexão é suficiente para começar.

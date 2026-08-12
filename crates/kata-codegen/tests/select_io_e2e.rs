@@ -118,8 +118,8 @@ fn select_files_only() {
       match f2
         Result::Ok h2:
           select
-            read!(h1, 100) <! chunk: 5
-            read!(h2, 100) <! chunk: 6
+            read!(h1, 100) !> chunk: 5
+            read!(h2, 100) !> chunk: 6
         Result::Err _: -4
     Result::Err _: -3
 
@@ -156,12 +156,12 @@ fn select_misto_channel_file() {
     Result::Err _: -1
 
 action prod (ch::Sender::Int) => Unit
-  ch !> 42
+  ch <! 42
   ()
 action do_select (rx::Receiver::Int, h::File) => Int
   select
-    rx <! msg: msg
-    read!(h, 100) <! chunk: chunk_len!(chunk)
+    rx !> msg: msg
+    read!(h, 100) !> chunk: chunk_len!(chunk)
 action main => Int
   let ch := channel!()
   let tx := ch.0
@@ -201,7 +201,7 @@ fn select_file_eof() {
 
 action do_select (h::File) => Int
   select
-    read!(h, 100) <! chunk: chunk_len!(chunk)
+    read!(h, 100) !> chunk: chunk_len!(chunk)
     timeout 5000: 0
 
 action main => Int
@@ -232,7 +232,7 @@ fn select_io_timeout() {
   let ch := channel!()
   let rx := ch.1
   select
-    rx <! msg: msg
+    rx !> msg: msg
     timeout 100: 999
 main!()"#;
     let (raw, ty) = eval_src(src);

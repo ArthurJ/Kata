@@ -6,8 +6,8 @@ action pipeline_test
 
 action produtor (ch)
     var arr := {1 2 3 4 5}
-    ch !> arr
+    ch <! arr
 
 action consumidor (ch)
-    let val := ch <!
+    let val := ch !>
     echo!(val)

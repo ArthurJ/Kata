@@ -20,7 +20,7 @@
 /// - Retorno de Action → `Caller`
 /// - Computação local em Action → `Local`
 ///
-/// Com canais (`!>`), valores enviados para outro fiber usam `Heap`:
+/// Com canais (`<!`), valores enviados para outro fiber usam `Heap`:
 /// - O valor sobrevive ao fiber sender
 /// - O receiver recebe um ponteiro válido na root_arena
 /// - Quando o receiver consume e o refcount → 0, a root_arena dealloca

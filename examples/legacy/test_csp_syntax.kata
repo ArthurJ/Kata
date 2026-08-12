@@ -1,7 +1,7 @@
 action worker (tx::Sender::(Int))
     # Envia o valor 42 para a ponta de escrita do canal
-    42 !> tx
-    100 !> tx
+    42 <! tx
+    100 <! tx
 
 action main
     # Cria o canal (retorna Sender e Receiver)
@@ -12,7 +12,7 @@ action main
             
             var x := 0
             # Recebe do canal (ponta de leitura) e coloca em x
-            x <! rx
+            x !> rx
             
             # Bloco select para multiplexação
             select

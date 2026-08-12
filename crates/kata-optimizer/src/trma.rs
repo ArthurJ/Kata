@@ -380,7 +380,7 @@ fn rewrite_with_accumulator(
             guards: vec![],
             with_bindings: vec![],
         }],
-        log: None,
+        log: Vec::new(),
         cache_spec: None,
         timer_spec: None,
     };
@@ -480,7 +480,7 @@ fn rewrite_with_accumulator(
             guards: vec![],
             with_bindings: vec![],
         }],
-        log: None,
+        log: Vec::new(),
         cache_spec: None,
         timer_spec: None,
     };

@@ -105,13 +105,13 @@ const DEADLOCK_SENTINEL: i64 = i64::MIN + 1;
 /// Main cria broadcast, cria 2 receivers via `rxf!()`, envia 42 e ambos
 /// recebem (latest only). Como o typeck não tem overload de aritmética para
 /// `Var("T0")` (valor recebido), retornamos apenas `b` — mas `b` só é
-/// recebido se `rx2 <!` desbloqueou, o que só acontece se `rx1 <! a` também
-/// desbloqueou antes (mesma fiber, sequencial). Se `rx1 <! a` travasse, o
-/// scheduler detectaria deadlock antes de chegar em `rx2 <! b`.
+/// recebido se `rx2 !>` desbloqueou, o que só acontece se `rx1 !> a` também
+/// desbloqueou antes (mesma fiber, sequencial). Se `rx1 !> a` travasse, o
+/// scheduler detectaria deadlock antes de chegar em `rx2 !> b`.
 ///
-/// Topologia: `tx !> 42` é fire-and-forget (não bloqueia). Ambos receivers
+/// Topologia: `tx <! 42` é fire-and-forget (não bloqueia). Ambos receivers
 /// compartilham o mesmo BroadcastInner via ponteiro. Cada um tem seu próprio
-/// `last_seen_version` (inicializado = version atual = 0). Quando `tx !> 42`
+/// `last_seen_version` (inicializado = version atual = 0). Quando `tx <! 42`
 /// incrementa version para 1, ambos veem `version > last_seen` e desbloqueiam.
 ///
 /// DoD: "Pub-sub via broadcast! com múltiplos receivers (latest only)".
@@ -122,9 +122,9 @@ fn broadcast_pubsub_multiplos_receivers() {
   let (tx, rxf) := broadcast!()
   let rx1 := rxf!()
   let rx2 := rxf!()
-  tx !> 42
-  rx1 <! a
-  rx2 <! b
+  tx <! 42
+  rx1 !> a
+  rx2 !> b
   b
 main!()"#;
     let (raw, ty) = eval_src(src);
@@ -141,7 +141,7 @@ main!()"#;
 /// Late subscriber não recebe histórico. Main cria broadcast, envia 99
 /// **antes** de criar o receiver. Como o receiver nasce com
 /// `last_seen_version = current_version`, ele **não** vê a mensagem 99
-/// (future-only). Ao tentar `<!`, bloqueia (sem nova mensagem). Como não há
+/// (future-only). Ao tentar `!>`, bloqueia (sem nova mensagem). Como não há
 /// outros fibers, o scheduler detecta deadlock.
 ///
 /// DoD: "Receiver factory: múltiplos receivers independentes" +
@@ -151,9 +151,9 @@ main!()"#;
 fn receiver_factory_late_subscriber_nao_recebe_historico() {
     let src = r#"action main => Int
   let (tx, rxf) := broadcast!()
-  tx !> 99
+  tx <! 99
   let rx := rxf!()
-  rx <! v
+  rx !> v
   v
 main!()"#;
     let (raw, _ty) = eval_src(src);
@@ -167,7 +167,7 @@ main!()"#;
 
 /// Main cria broadcast, cria receiver, envia 10, 20, 30 em sequência
 /// (sem yield entre sends — tudo na mesma fiber antes de recv). O receiver
-/// ao fazer `<!` vê apenas o último (30), pois `version` incrementou 3x
+/// ao fazer `!>` vê apenas o último (30), pois `version` incrementou 3x
 /// e o receiver só lê o valor atual.
 ///
 /// DoD: "Se o receiver é lento e perde mensagens intermediárias,
@@ -178,10 +178,10 @@ fn broadcast_multiplos_sends_latest_only() {
     let src = r#"action main => Int
   let (tx, rxf) := broadcast!()
   let rx := rxf!()
-  tx !> 10
-  tx !> 20
-  tx !> 30
-  rx <! v
+  tx <! 10
+  tx <! 20
+  tx <! 30
+  rx !> v
   v
 main!()"#;
     let (raw, ty) = eval_src(src);
@@ -196,8 +196,8 @@ main!()"#;
 // ── Teste 4: rxf!() retorna Receiver::T (typecheck) ──
 
 /// Smoke test do typeck: `rxf!()` deve produzir `Receiver::T0` que pode fazer
-/// `<!`. Se o typeck estivesse errado (produzindo ChannelCreate::Broadcast),
-/// `<!` falharia com "esperado Receiver, encontrado Sender/ReceiverFactory".
+/// `!>`. Se o typeck estivesse errado (produzindo ChannelCreate::Broadcast),
+/// `!>` falharia com "esperado Receiver, encontrado Sender/ReceiverFactory".
 ///
 /// Este teste é subsumido pelos anteriores, mas isola a verificação de tipos
 /// para facilitar diagnóstico de regressões.
@@ -207,8 +207,8 @@ fn rxf_retorna_receiver_que_pode_receber() {
     let src = r#"action main => Int
   let (tx, rxf) := broadcast!()
   let rx := rxf!()
-  tx !> 42
-  rx <! v
+  tx <! 42
+  rx !> v
   v
 main!()"#;
     let (raw, ty) = eval_src(src);

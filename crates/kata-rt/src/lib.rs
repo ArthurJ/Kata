@@ -143,6 +143,7 @@ pub use ipc::kata_rt_spawn_process;
 pub use file::{
     kata_rt_file_close, kata_rt_file_open, kata_rt_file_read, kata_rt_file_read_chunk,
     kata_rt_file_readline, kata_rt_file_write_bytes, kata_rt_file_write_text, kata_rt_select_files,
+    kata_rt_stderr, kata_rt_stdin, kata_rt_stdout,
 };
 // Socket I/O
 pub use socket::{

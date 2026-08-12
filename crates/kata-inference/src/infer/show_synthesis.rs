@@ -151,7 +151,7 @@ pub(crate) fn synthesize_show_functions(
                 guards: Vec::new(),
                 with_bindings: Vec::new(),
             }],
-            log: None,
+            log: Vec::new(),
             cache_spec: None,
             timer_spec: None,
         });
@@ -248,7 +248,7 @@ pub(crate) fn synthesize_show_functions(
                 guards: Vec::new(),
                 with_bindings: Vec::new(),
             }],
-            log: None,
+            log: Vec::new(),
             cache_spec: None,
             timer_spec: None,
         });

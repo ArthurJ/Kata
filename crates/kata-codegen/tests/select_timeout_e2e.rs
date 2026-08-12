@@ -109,10 +109,10 @@ const DEADLOCK_SENTINEL: i64 = i64::MIN + 1;
 #[test]
 fn select_2_receivers_dispara() {
     let src = r#"action prod_a (ch::Sender::Int) => Unit
-  ch !> 100
+  ch <! 100
   ()
 action prod_b (ch::Sender::Int) => Unit
-  ch !> 200
+  ch <! 200
   ()
 action main => Int
   let ch1 := channel!()
@@ -124,8 +124,8 @@ action main => Int
   fork!(prod_a, (tx1))
   fork!(prod_b, (tx2))
   select
-    rx1 <! msg: msg
-    rx2 <! msg: msg
+    rx1 !> msg: msg
+    rx2 !> msg: msg
     timeout 5000: 0
 main!()"#;
     let (raw, ty) = eval_src(src);
@@ -151,8 +151,8 @@ fn select_timeout_dispara() {
   let ch2 := channel!()
   let rx2 := ch2.1
   select
-    rx1 <! msg: msg
-    rx2 <! msg: msg
+    rx1 !> msg: msg
+    rx2 !> msg: msg
     timeout 100: 999
 main!()"#;
     let (raw, ty) = eval_src(src);
@@ -178,8 +178,8 @@ fn select_sem_timeout_deadlock() {
   let ch2 := channel!()
   let rx2 := ch2.1
   select
-    rx1 <! msg: msg
-    rx2 <! msg: msg
+    rx1 !> msg: msg
+    rx2 !> msg: msg
 main!()"#;
     let (raw, _ty) = eval_src(src);
     assert_eq!(
@@ -196,7 +196,7 @@ main!()"#;
 #[test]
 fn select_3_receivers_primeiro_pronto() {
     let src = r#"action prod (ch::Sender::Int) => Unit
-  ch !> 42
+  ch <! 42
   ()
 action main => Int
   let ch1 := channel!()
@@ -208,9 +208,9 @@ action main => Int
   let rx3 := ch3.1
   fork!(prod, (tx1))
   select
-    rx1 <! msg: msg
-    rx2 <! msg: msg
-    rx3 <! msg: msg
+    rx1 !> msg: msg
+    rx2 !> msg: msg
+    rx3 !> msg: msg
     timeout 5000: 0
 main!()"#;
     let (raw, ty) = eval_src(src);
@@ -231,7 +231,7 @@ main!()"#;
 #[test]
 fn select_dado_chega_antes_timeout() {
     let src = r#"action prod (ch::Sender::Int) => Unit
-  ch !> 55
+  ch <! 55
   ()
 action main => Int
   let ch := channel!()
@@ -239,7 +239,7 @@ action main => Int
   let rx := ch.1
   fork!(prod, (tx))
   select
-    rx <! msg: msg
+    rx !> msg: msg
     timeout 5000: 999
 main!()"#;
     let (raw, ty) = eval_src(src);

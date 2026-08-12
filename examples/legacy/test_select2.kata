@@ -1,16 +1,16 @@
 action produtor(tx)
     sleep!(100)
-    !> tx "1"
+    <! tx "1"
 
 action consumidor(rx)
     select
-        case (<! rx) -> valor:
+        case (!> rx) -> valor:
             echo!("Falha! Recebeu valor rapido demais")
         timeout 50:
             echo!("Sucesso! Timeout funcionou antes do produtor enviar")
 
     select
-        case (<! rx) -> valor:
+        case (!> rx) -> valor:
             echo!("Sucesso! Recebeu o valor do produtor")
         timeout 500:
             echo!("Falha! Deu timeout mas o produtor deveria ter enviado")

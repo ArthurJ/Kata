@@ -17,7 +17,7 @@ pub use types::*;
 
 pub use module_loader::{ImportKind, ImportedModule, LoadError, ModuleLoader, filter_exports};
 
-use directives::{extract_log_spec, extract_test_specs, extract_timer_spec};
+use directives::{extract_log_specs, extract_test_specs, extract_timer_spec};
 
 use kata_ast::{Item, Module};
 use kata_core::{Ty, TypeEnv};
@@ -261,7 +261,7 @@ fn resolve_inner(
 
                 // Se tem corpo Kata (cláusulas lambda), preserva para o inference.
                 if let Some(clauses) = body {
-                    let log = extract_log_spec(directives, name, "sig", &mut errors);
+                    let log = extract_log_specs(directives, name, "sig", &mut errors);
                     let timer = extract_timer_spec(directives, name, "sig", &mut errors);
                     functions.push(FunctionDef {
                         name: name.clone(),
@@ -374,7 +374,7 @@ fn resolve_inner(
                     });
                 } else {
                     // Action com corpo Kata — produz ActionDef para o inference.
-                    let log = extract_log_spec(action_dirs, name, "action", &mut errors);
+                    let log = extract_log_specs(action_dirs, name, "action", &mut errors);
                     actions.push(ActionDef {
                         name: name.clone(),
                         param_types,

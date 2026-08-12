@@ -91,7 +91,7 @@ fn action_em_channel_send_erro() {
     echo!(n)
 action main => Unit
     let (tx, rx) := channel!()
-    tx !> worker
+    tx <! worker
 "#;
     let err = infer_err(src);
     assert!(

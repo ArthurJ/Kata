@@ -4,12 +4,12 @@
 //! 1. `channel!()` infere `(Sender::T0, Receiver::T0)`
 //! 2. `broadcast!()` infere `(Sender::T0, ReceiverFactory::T0)`
 //! 3. `queue!(8)` infere `(Sender::T0, Receiver::T0)` com Buffered(8)
-//! 4. `tx !> 42` com tx: Sender → Unit (OK)
-//! 5. `rx !> 42` com rx: Receiver → TypeMismatch (receiver não pode enviar)
-//! 6. `tx <! x` com tx: Sender → TypeMismatch (sender não pode receber)
+//! 4. `tx <! 42` com tx: Sender → Unit (OK)
+//! 5. `rx <! 42` com rx: Receiver → TypeMismatch (receiver não pode enviar)
+//! 6. `tx !> x` com tx: Sender → TypeMismatch (sender não pode receber)
 //! 7. `fork!(nao_existe, ())` → UnboundName
 //! 8. `fork!(echo, ("hello"))` → OK (echo é Action declarada)
-//! 9. `send_wrong_type` — tx !> 3.14 com tx: Sender::Int → TypeMismatch
+//! 9. `send_wrong_type` — tx <! 3.14 com tx: Sender::Int → TypeMismatch
 //! 10. `queue!(0)` → TypeMismatch (capacidade deve ser positiva)
 
 use kata_core::ty::Ty;
@@ -145,22 +145,22 @@ fn queue_create_type_check() {
     }
 }
 
-// ── Teste 4: tx !> 42 com tx: Sender → Unit (OK) ────────────────────
+// ── Teste 4: tx <! 42 com tx: Sender → Unit (OK) ────────────────────
 //
-// Action com channel!() e !>. A última linha `prod!()` é o entry point.
-// O body da action tem `let tx := (channel!()).0` e `tx !> 42`.
+// Action com channel!() e <!. A última linha `prod!()` é o entry point.
+// O body da action tem `let tx := (channel!()).0` e `tx <! 42`.
 #[test]
 fn channel_send_type_check() {
-    let src = "action prod => Unit\n  let tx := (channel!()).0\n  tx !> 42\nprod!()";
+    let src = "action prod => Unit\n  let tx := (channel!()).0\n  tx <! 42\nprod!()";
     let tmod = infer_src(src);
-    // Se chegou aqui sem erro, o typeck aceitou tx !> 42 com tx: Sender.
+    // Se chegou aqui sem erro, o typeck aceitou tx <! 42 com tx: Sender.
     let _ = entry(&tmod);
 }
 
-// ── Teste 5: rx !> 42 com rx: Receiver → TypeMismatch ───────────────
+// ── Teste 5: rx <! 42 com rx: Receiver → TypeMismatch ───────────────
 #[test]
 fn send_from_receiver_type_mismatch() {
-    let src = "action prod => Unit\n  let rx := (channel!()).1\n  rx !> 42\nprod!()";
+    let src = "action prod => Unit\n  let rx := (channel!()).1\n  rx <! 42\nprod!()";
     let err = infer_src_err(src);
     assert!(
         matches!(err, kata_diagnostics::MiddleError::TypeMismatch { .. }),
@@ -168,10 +168,10 @@ fn send_from_receiver_type_mismatch() {
     );
 }
 
-// ── Teste 6: tx <! v com tx: Sender → TypeMismatch ─────────────────
+// ── Teste 6: tx !> v com tx: Sender → TypeMismatch ─────────────────
 #[test]
 fn recv_from_sender_type_mismatch() {
-    let src = "action prod => Unit\n  let tx := (channel!()).0\n  let x := tx <! v\nprod!()";
+    let src = "action prod => Unit\n  let tx := (channel!()).0\n  let x := tx !> v\nprod!()";
     let err = infer_src_err(src);
     assert!(
         matches!(err, kata_diagnostics::MiddleError::TypeMismatch { .. }),

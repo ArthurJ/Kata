@@ -386,7 +386,7 @@ typeck. Não despacham, não têm overloads, não são redefiníveis:
 
 - `::` — ascription/qualificação (cinco contextos, mesmo token)
 - `!` — sufixo de chamada de Action
-- `!>`, `<!` — send/receive de canal
+- `<!`, `!>` — send/receive de canal
 - `|` — fallback/coalescência
 - `?` — fail-fast (desugar para `return Err(e)`)
 - `|>` — pipeline (desugar no typeck)
@@ -565,7 +565,7 @@ porque SMI é inline (8 bytes, sem serialização recursiva).
 
 **Solução implementada:** o pass `cross_process.rs` (pós-inferência) resolve
 `ChannelCreate` na TAST substituindo `Var("T0")` pelo tipo concreto do
-primeiro `!>`/`<!` via `resolve_channel_create`. O `spawn!` também unifica
+primeiro `<!`/`!>` via `resolve_channel_create`. O `spawn!` também unifica
 `Var("T0")` no `TypeEnv` (mesmo mecanismo do `fork!`). `collect_module_types`
 recursiva em `type_table.rs` garante que o codegen encontre o `type_id`
 correto para serialização. Resultado: Int, tupla, struct e lista funcionam

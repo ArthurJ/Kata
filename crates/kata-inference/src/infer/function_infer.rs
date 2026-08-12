@@ -124,8 +124,8 @@ pub(crate) fn infer_named_function(
     // (sem condição adicional que a diferenciaria).
     crate::redundancy::check_redundant_clauses(&typed_clauses)?;
 
-    // Sintetiza log spec se a função tem @log.
-    let log = if let Some(log_spec) = &func_def.log {
+    // Sintetiza log specs se a função tem @log (pode ter múltiplas).
+    let log = if !func_def.log.is_empty() {
         // Extrai nomes dos params dos patterns da primeira cláusula.
         let param_names: Vec<String> = typed_clauses
             .first()
@@ -152,14 +152,9 @@ pub(crate) fn infer_named_function(
                 log_env.define(name, ty.clone(), "__local__");
             }
         }
-        Some(super::log_synthesis::synthesize_log_spec(
-            log_spec,
-            &param_names,
-            &mut log_env,
-            ctx,
-        )?)
+        super::log_synthesis::synthesize_log_specs(&func_def.log, &param_names, &mut log_env, ctx)?
     } else {
-        None
+        Vec::new()
     };
 
     // Validação de @cache: suporta qualquer tipo — a serialização da cache

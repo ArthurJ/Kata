@@ -141,7 +141,7 @@ fn build_list_show_func(
             guards: Vec::new(),
             with_bindings: Vec::new(),
         }],
-        log: None,
+        log: Vec::new(),
         cache_spec: None,
         timer_spec: None,
     }

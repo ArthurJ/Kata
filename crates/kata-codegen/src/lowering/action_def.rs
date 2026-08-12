@@ -180,15 +180,13 @@ pub(crate) fn define_kata_action(
         let mut last_result = lower.builder.ins().iconst(I64, 0); // Unit default
         let mut hit_return = false;
 
-        // Se @log quando Enter, injeta antes do body (prólogo).
-        if let Some(TypedLogSpec::Enter { .. }) = &action.log {
-            inject_log(
-                action
-                    .log
-                    .as_ref()
-                    .expect("log é Some: guardado pelo match Enter"),
-                &mut lower,
-            )?;
+        // Injeta @log Enter (prólogo) — pode haver múltiplas diretivas.
+        for spec in action
+            .log
+            .iter()
+            .filter(|s| matches!(s, TypedLogSpec::Enter { .. }))
+        {
+            inject_log(spec, &mut lower)?;
         }
 
         for (i, stmt) in action.body.iter().enumerate() {
@@ -247,15 +245,13 @@ pub(crate) fn define_kata_action(
             }
         }
 
-        // Se @log quando Exit, injeta antes do return (epílogo).
-        if let Some(TypedLogSpec::Exit { .. }) = &action.log {
-            inject_log(
-                action
-                    .log
-                    .as_ref()
-                    .expect("log é Some: guardado pelo match Exit"),
-                &mut lower,
-            )?;
+        // Injeta @log Exit (epílogo) — pode haver múltiplas diretivas.
+        for spec in action
+            .log
+            .iter()
+            .filter(|s| matches!(s, TypedLogSpec::Exit { .. }))
+        {
+            inject_log(spec, &mut lower)?;
         }
 
         // Float bitcast: se ret_ty == Float, o body produziu F64.

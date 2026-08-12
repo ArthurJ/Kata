@@ -11,11 +11,11 @@ action main => Int
     let rx2 := subscribe!()
 
     # enviar 42 — fire-and-forget (não bloqueia)
-    tx !> 42
+    tx <! 42
 
     # ambos receivers recebem 42 (latest-only)
-    rx1 <! a
-    rx2 <! b
+    rx1 !> a
+    rx2 !> b
 
     # retornar o valor recebido por rx2
     b

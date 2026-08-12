@@ -305,7 +305,7 @@ pub extern "C" fn kata_rt_ipc_channel_create(arena: i64, type_id: i64, ack_tx_ha
 /// Retorna ponteiro para tupla de 6 handles na arena (48 bytes):
 /// `(queue_tx, queue_rx, ipc_data_tx, ipc_data_rx, ack_tx, ack_rx)`
 ///
-/// - `queue_tx` (TAG_QUEUE): sender do usuário faz `!>` aqui
+/// - `queue_tx` (TAG_QUEUE): sender do usuário faz `<!` aqui
 /// - `queue_rx` (TAG_QUEUE): broker drena daqui
 /// - `ipc_data_tx` (TAG_IPC_CHANNEL): broker envia para o child
 /// - `ipc_data_rx` (TAG_IPC_CHANNEL): child recebe (herdado via fork)

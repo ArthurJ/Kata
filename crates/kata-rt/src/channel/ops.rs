@@ -37,7 +37,7 @@ pub(crate) unsafe fn block_ipc_until_readable(handle: i64) {
 pub(super) const WOULD_BLOCK: i64 = -1;
 pub(super) const OK: i64 = 0;
 
-// ── FFI: Envio (operador !>) ──────────────────────────────────────────
+// ── FFI: Envio (operador <!) ──────────────────────────────────────────
 
 /// Envia valor por um handle de canal. Despacha pela tag nos 2 bits
 /// baixos.
@@ -149,7 +149,7 @@ fn try_send(handle: i64, value: i64) -> i64 {
     }
 }
 
-// ── FFI: Recebimento (operador <!) ────────────────────────────────────
+// ── FFI: Recebimento (operador !>) ────────────────────────────────────
 
 /// Recebe valor por um handle de canal. Despacha pela tag.
 ///

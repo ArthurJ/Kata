@@ -40,7 +40,7 @@ refinados), em texto plano legível em qualquer terminal. O guia deve ser:
    `|>` pipeline
 9. **Enums e structs** — `enum`, variantes (unitárias, payload, constantes,
    predicadas), `data`, fields, dot access
-10. **Actions avançadas** — `fork!`, `spawn!`, channels `!>`/`<!`, `select`,
+10. **Actions avançadas** — `fork!`, `spawn!`, channels `<!`/`!>`, `select`,
     `timeout`, `queue!`, `broadcast!`, `sleep!`
 
 ### Capítulos opcionais (fase 2 — se tempo permitir)
@@ -195,7 +195,7 @@ kata> :quit
 ### Cap 10 — Actions avançadas (CSP)
 
 - `fork!(worker, (args))` — spawn de fiber
-- Channels: `!>` (send), `<!` (receive)
+- Channels: `<!` (send), `!>` (receive)
 - `queue!(capacidade)` — channel bufferizado
 - `select` / `timeout ms`
 - `broadcast!()` / `subscribe!()`

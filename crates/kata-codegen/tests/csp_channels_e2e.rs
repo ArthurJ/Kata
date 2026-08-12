@@ -1,4 +1,4 @@
-//! Testes E2E de codegen CSP (channel!, !>, <!, fork!).
+//! Testes E2E de codegen CSP (channel!, <!, !>, fork!).
 //!
 //! Pipeline completo: lex → parse → resolve → infer → optimize → codegen → JIT.
 //! Cada teste compila um programa Kata com operações CSP e verifica o
@@ -140,20 +140,20 @@ fn broadcast_create_retorna_tupla() {
 
 // ── Teste 4: Producer/consumer via fork — channel! rendezvous ──
 
-/// Action produtor envia 42 via `!>`. Action main cria canal, fork do
-/// produtor, recebe via `<!`, e retorna o valor.
+/// Action produtor envia 42 via `<!`. Action main cria canal, fork do
+/// produtor, recebe via `!>`, e retorna o valor.
 ///
 /// O scheduler coordena: main bloqueia em recv, prod envia, main acorda.
 #[serial]
 #[test]
 fn producer_consumer_rendezvous() {
     let src = r#"action prod (tx::Sender::Int) => Unit
-  tx !> 42
+  tx <! 42
   ()
 action main => Int
   let (tx, rx) := channel!()
   fork!(prod, (tx))
-  rx <! val
+  rx !> val
   val
 main!()"#;
     let (raw, ty) = eval_src(src);
@@ -173,12 +173,12 @@ main!()"#;
 #[test]
 fn producer_consumer_queue_buffered() {
     let src = r#"action prod (tx::Sender::Int) => Unit
-  tx !> 7
+  tx <! 7
   ()
 action main => Int
   let (tx, rx) := queue!(2)
   fork!(prod, (tx))
-  rx <! val
+  rx !> val
   val
 main!()"#;
     let (raw, ty) = eval_src(src);
@@ -199,7 +199,7 @@ main!()"#;
 fn deadlock_sem_producer() {
     let src = r#"action main => Int
   let (_, rx) := channel!()
-  rx <! val
+  rx !> val
   val
 main!()"#;
     let (raw, _ty) = eval_src(src);
@@ -218,16 +218,16 @@ main!()"#;
 #[test]
 fn multiplos_valores_queue() {
     let src = r#"action prod (tx::Sender::Int) => Unit
-  tx !> 10
-  tx !> 20
-  tx !> 30
+  tx <! 10
+  tx <! 20
+  tx <! 30
   ()
 action main => Int
   let (tx, rx) := queue!(3)
   fork!(prod, (tx))
-  rx <! a
-  rx <! b
-  rx <! c
+  rx !> a
+  rx !> b
+  rx !> c
   c
 main!()"#;
     let (raw, _ty) = eval_src(src);
@@ -237,9 +237,9 @@ main!()"#;
 // ── Teste 8: Backpressure — producer envia capacity+1, consumer drena ──
 
 /// `queue!(2)` com capacity 2. Producer envia 3 valores (10, 20, 30). O
-/// terceiro `!>` bloqueia (buffer cheio). O consumer (main) drena os 3 via
-/// `<!`. Como o scheduler é cooperativo, o producer bloqueado em `!>` cede
-/// (WaitingOnChannelSend), o main executa `<!`, drena 1 slot, o producer
+/// terceiro `<!` bloqueia (buffer cheio). O consumer (main) drena os 3 via
+/// `!>`. Como o scheduler é cooperativo, o producer bloqueado em `<!` cede
+/// (WaitingOnChannelSend), o main executa `!>`, drena 1 slot, o producer
 /// é acordado e envia o resto.
 ///
 /// Verifica: não deadlocka, valores chegam em ordem FIFO (10, 20, 30),
@@ -250,16 +250,16 @@ main!()"#;
 #[test]
 fn queue_backpressure_capacity_mais_um() {
     let src = r#"action prod (tx::Sender::Int) => Unit
-  tx !> 10
-  tx !> 20
-  tx !> 30
+  tx <! 10
+  tx <! 20
+  tx <! 30
   ()
 action main => Int
   let (tx, rx) := queue!(2)
   fork!(prod, (tx))
-  rx <! a
-  rx <! b
-  rx <! c
+  rx !> a
+  rx !> b
+  rx !> c
   c
 main!()"#;
     let (raw, _ty) = eval_src(src);
@@ -286,10 +286,10 @@ main!()"#;
 #[test]
 fn fork_multiplas_fibers_com_args() {
     let src = r#"action prod_a (tx::Sender::Int) => Unit
-  tx !> 100
+  tx <! 100
   ()
 action prod_b (tx::Sender::Int) => Unit
-  tx !> 200
+  tx <! 200
   ()
 action main => Int
   let ch1 := channel!()
@@ -300,8 +300,8 @@ action main => Int
   let rx2 := ch2.1
   fork!(prod_a, (tx1))
   fork!(prod_b, (tx2))
-  rx1 <! a
-  rx2 <! b
+  rx1 !> a
+  rx2 !> b
   b
 main!()"#;
     let (raw, _ty) = eval_src(src);
@@ -321,11 +321,11 @@ main!()"#;
 // ── Teste 10: Structured concurrency — parent espera forks ──
 
 /// Parent (main) faz fork de um produtor lento (loop 1..5000 + send) e
-/// depois executa um `<!` (recebe do canal). Pela Decisão E, o parent só
+/// depois executa um `!>` (recebe do canal). Pela Decisão E, o parent só
 /// termina depois do fork completar. Se o parent abandonasse o fork, o
-/// `<!` nunca desbloquearia e o scheduler deadlockaria.
+/// `!>` nunca desbloquearia e o scheduler deadlockaria.
 ///
-/// O teste verifica que o parent espera o fork completar: o `<!` recebe
+/// O teste verifica que o parent espera o fork completar: o `!>` recebe
 /// o valor (soma 1..5000 = 12502500) e main retorna esse valor.
 ///
 /// DoD: "Structured concurrency: parent espera forks".
@@ -340,12 +340,12 @@ fn structured_concurrency_parent_espera_fork() {
     match > i 5000
       True: break
       False: acc := + acc i
-  tx !> acc
+  tx <! acc
   ()
 action main => Int
   let (tx, rx) := channel!()
   fork!(worker, (tx))
-  rx <! result
+  rx !> result
   result
 main!()"#;
     let (raw, _ty) = eval_src(src);
@@ -377,12 +377,12 @@ main!()"#;
 #[test]
 fn escape_canal_sobrevive_sender() {
     let src = r#"action prod (tx::Sender::Int) => Unit
-  tx !> 42
+  tx <! 42
   ()
 action main => Int
   let (tx, rx) := channel!()
   fork!(prod, (tx))
-  rx <! v
+  rx !> v
   v
 main!()"#;
     let (raw, _ty) = eval_src(src);
@@ -406,12 +406,12 @@ main!()"#;
 #[test]
 fn channel_recv_negativo_um() {
     let src = r#"action prod (tx::Sender::Int) => Unit
-  tx !> -1
+  tx <! -1
   ()
 action main => Int
   let (tx, rx) := channel!()
   fork!(prod, (tx))
-  rx <! val
+  rx !> val
   val
 main!()"#;
     let (raw, _ty) = eval_src(src);
@@ -435,12 +435,12 @@ main!()"#;
 #[test]
 fn queue_recv_negativo_um() {
     let src = r#"action prod (tx::Sender::Int) => Unit
-  tx !> -1
+  tx <! -1
   ()
 action main => Int
   let (tx, rx) := queue!(1)
   fork!(prod, (tx))
-  rx <! val
+  rx !> val
   val
 main!()"#;
     let (raw, _ty) = eval_src(src);

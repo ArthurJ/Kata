@@ -142,12 +142,12 @@ fn socket_tcp_listen_connect_roundtrip() {
               Result::Ok bytes:
                 let n := len bytes
                 close!(conn)
-                tx !> n
+                tx <! n
               Result::Err msg:
                 close!(conn)
-                tx !> -1
-          Result::Err msg: tx !> -2
-      Result::Err msg: tx !> -3
+                tx <! -1
+          Result::Err msg: tx <! -2
+      Result::Err msg: tx <! -3
 
 action cliente (addr::Text) => Int
     let result := open!(SocketKind::TCP(addr), SocketMode::Connected)
@@ -164,7 +164,7 @@ action main => Int
     let rx := ch.1
     fork!(servidor, ("{addr}", tx))
     match (cliente!("{addr}"))
-      n: rx <! result
+      n: rx !> result
             result
 main!()"#
     );
@@ -221,7 +221,7 @@ main!()"#
 /// aceita a conexão (produzindo um socket Connected) e tenta `listen!(conn)`
 /// — deve retornar Err imediatamente. Sem canal: o main retorna o resultado
 /// diretamente, evitando o deadlock do `channel!()` (rendezvous) onde
-/// `tx !> -1` bloqueia se o main ainda não chegou em `rx <! result`.
+/// `tx <! -1` bloqueia se o main ainda não chegou em `rx !> result`.
 #[serial]
 #[test]
 fn socket_connected_listen_fails() {
@@ -294,13 +294,13 @@ action servidor (addr::Text, tx::Sender::Int) => Unit
               Result::Ok b1: match (read!(conn, 4))
                 Result::Ok b2: match (read!(conn, 4))
                   Result::Ok b3: match (read!(conn, 4))
-                    Result::Ok _: tx !> -10
-                    Result::Err _: tx !> sum3!(len b1, len b2, len b3)
-                  Result::Err _: tx !> -9
-                Result::Err _: tx !> -8
-              Result::Err _: tx !> -7
-          Result::Err msg: tx !> -2
-      Result::Err msg: tx !> -3
+                    Result::Ok _: tx <! -10
+                    Result::Err _: tx <! sum3!(len b1, len b2, len b3)
+                  Result::Err _: tx <! -9
+                Result::Err _: tx <! -8
+              Result::Err _: tx <! -7
+          Result::Err msg: tx <! -2
+      Result::Err msg: tx <! -3
 
 action cliente (addr::Text) => Int
     let result := open!(SocketKind::TCP(addr), SocketMode::Connected)
@@ -317,7 +317,7 @@ action main => Int
     let rx := ch.1
     fork!(servidor, ("{addr}", tx))
     let _ := cliente!("{addr}")
-    rx <! result
+    rx !> result
     result
 main!()"#
     );
@@ -353,12 +353,12 @@ fn socket_tcp_echo_server() {
               Result::Ok bytes:
                 let _ := write!(conn, bytes)
                 close!(conn)
-                tx !> 1
+                tx <! 1
               Result::Err msg:
                 close!(conn)
-                tx !> -1
-          Result::Err msg: tx !> -2
-      Result::Err msg: tx !> -3
+                tx <! -1
+          Result::Err msg: tx <! -2
+      Result::Err msg: tx <! -3
 
 action cliente (addr::Text) => Int
     let result := open!(SocketKind::TCP(addr), SocketMode::Connected)
@@ -382,7 +382,7 @@ action main => Int
     let rx := ch.1
     fork!(servidor, ("{addr}", tx))
     let n := cliente!("{addr}")
-    rx <! _
+    rx !> _
     n
 main!()"#
     );
@@ -476,10 +476,10 @@ fn socket_close_epilogo() {
             match dados
               Result::Ok bytes:
                 let n := len bytes
-                tx !> n
-              Result::Err _: tx !> -1
-          Result::Err _: tx !> -2
-      Result::Err _: tx !> -3
+                tx <! n
+              Result::Err _: tx <! -1
+          Result::Err _: tx <! -2
+      Result::Err _: tx <! -3
 
 action cliente (addr::Text) => Int
     # Não chama close!(sock) — epílogo deve fechar
@@ -496,7 +496,7 @@ action main => Int
     let rx := ch.1
     fork!(servidor, ("{addr}", tx))
     let _ := cliente!("{addr}")
-    rx <! result
+    rx !> result
     result
 main!()"#
     );
@@ -539,12 +539,12 @@ fn socket_unix_listen_connect_roundtrip() {
               Result::Ok bytes:
                 let n := len bytes
                 close!(conn)
-                tx !> n
+                tx <! n
               Result::Err msg:
                 close!(conn)
-                tx !> -1
-          Result::Err msg: tx !> -2
-      Result::Err msg: tx !> -3
+                tx <! -1
+          Result::Err msg: tx <! -2
+      Result::Err msg: tx <! -3
 
 action cliente (path::Text) => Int
     let result := open!(SocketKind::Unix(path), SocketMode::Connected)
@@ -561,7 +561,7 @@ action main => Int
     let rx := ch.1
     fork!(servidor, ("{path}", tx))
     let _ := cliente!("{path}")
-    rx <! result
+    rx !> result
     result
 main!()"#
     );
@@ -603,7 +603,7 @@ fn socket_select_with_socket() {
 
 action fazer_select (conn::Socket, tx::Sender::Int) => Unit
   select
-    read!(conn, 100) <! dados: tx !> extrair_n!(dados)
+    read!(conn, 100) !> dados: tx <! extrair_n!(dados)
 
 action servidor (addr::Text, tx::Sender::Int) => Unit
   let result := open!(SocketKind::TCP(addr), SocketMode::Listener)
@@ -612,8 +612,8 @@ action servidor (addr::Text, tx::Sender::Int) => Unit
       let client := listen!(listener)
       match client
         Result::Ok conn: fazer_select!(conn, tx)
-        Result::Err _: tx !> -2
-    Result::Err _: tx !> -3
+        Result::Err _: tx <! -2
+    Result::Err _: tx <! -3
 
 action cliente (addr::Text) => Int
   let result := open!(SocketKind::TCP(addr), SocketMode::Connected)
@@ -630,7 +630,7 @@ action main => Int
   let rx := ch.1
   fork!(servidor, ("{addr}", tx))
   let _ := cliente!("{addr}")
-  rx <! result
+  rx !> result
   result
 main!()"#
     );
@@ -672,11 +672,11 @@ fn socket_select_misto_channel_socket() {
 
 action fazer_select (conn::Socket, rx::Receiver::Int, tx_result::Sender::Int) => Unit
   select
-    rx <! msg: tx_result !> msg
-    read!(conn, 100) <! dados: tx_result !> extrair_n!(dados)
+    rx !> msg: tx_result <! msg
+    read!(conn, 100) !> dados: tx_result <! extrair_n!(dados)
 
 action prod (tx::Sender::Int) => Unit
-  tx !> 42
+  tx <! 42
   ()
 
 action servidor (addr::Text, rx::Receiver::Int, tx_result::Sender::Int) => Unit
@@ -686,8 +686,8 @@ action servidor (addr::Text, rx::Receiver::Int, tx_result::Sender::Int) => Unit
       let client := listen!(listener)
       match client
         Result::Ok conn: fazer_select!(conn, rx, tx_result)
-        Result::Err _: tx_result !> -2
-    Result::Err _: tx_result !> -3
+        Result::Err _: tx_result <! -2
+    Result::Err _: tx_result <! -3
 
 action cliente (addr::Text) => Int
   let result := open!(SocketKind::TCP(addr), SocketMode::Connected)
@@ -708,7 +708,7 @@ action main => Int
   fork!(servidor, ("{addr}", rx, tx2))
   fork!(prod, (tx))
   let _ := cliente!("{addr}")
-  rx2 <! result
+  rx2 !> result
   result
 main!()"#
     );
@@ -750,12 +750,12 @@ fn socket_readline_single_line() {
               Result::Ok text:
                 let n := len text
                 close!(conn)
-                tx !> n
+                tx <! n
               Result::Err msg:
                 close!(conn)
-                tx !> -1
-          Result::Err msg: tx !> -2
-      Result::Err msg: tx !> -3
+                tx <! -1
+          Result::Err msg: tx <! -2
+      Result::Err msg: tx <! -3
 
 action cliente (addr::Text) => Int
     let result := open!(SocketKind::TCP(addr), SocketMode::Connected)
@@ -772,7 +772,7 @@ action main => Int
     let rx := ch.1
     fork!(servidor, ("{addr}", tx))
     let _ := cliente!("{addr}")
-    rx <! result
+    rx !> result
     result
 main!()"#
     );
@@ -818,15 +818,15 @@ fn socket_readline_multiple_lines() {
                   Result::Ok t2:
                     let n2 := len t2
                     close!(conn)
-                    tx !> n2
+                    tx <! n2
                   Result::Err msg:
                     close!(conn)
-                    tx !> -1
+                    tx <! -1
               Result::Err msg:
                 close!(conn)
-                tx !> -2
-          Result::Err msg: tx !> -3
-      Result::Err msg: tx !> -4
+                tx <! -2
+          Result::Err msg: tx <! -3
+      Result::Err msg: tx <! -4
 
 action cliente (addr::Text) => Int
     let result := open!(SocketKind::TCP(addr), SocketMode::Connected)
@@ -843,7 +843,7 @@ action main => Int
     let rx := ch.1
     fork!(servidor, ("{addr}", tx))
     let _ := cliente!("{addr}")
-    rx <! result
+    rx !> result
     result
 main!()"#
     );
@@ -883,12 +883,12 @@ fn socket_readline_eof_partial() {
               Result::Ok text:
                 let n := len text
                 close!(conn)
-                tx !> n
+                tx <! n
               Result::Err msg:
                 close!(conn)
-                tx !> -1
-          Result::Err msg: tx !> -2
-      Result::Err msg: tx !> -3
+                tx <! -1
+          Result::Err msg: tx <! -2
+      Result::Err msg: tx <! -3
 
 action cliente (addr::Text) => Int
     let result := open!(SocketKind::TCP(addr), SocketMode::Connected)
@@ -905,7 +905,7 @@ action main => Int
     let rx := ch.1
     fork!(servidor, ("{addr}", tx))
     let _ := cliente!("{addr}")
-    rx <! result
+    rx !> result
     result
 main!()"#
     );

@@ -29,7 +29,7 @@ pub(crate) fn parse_expr(parser: &mut Parser) -> Result<Spanned<Expr>, FrontendE
         lhs = Spanned::new(Expr::Question(Box::new(lhs)), span);
     }
 
-    // `|>` pipe, `|` fallback, `!>` send, `<!` recv — same precedence, left-associative.
+    // `|>` pipe, `|` fallback, `<!` send, `!>` recv — same precedence, left-associative.
     // `lhs |> rhs |> rhs2` = `(lhs |> rhs) |> rhs2`
     // `lhs | rhs | rhs2`    = `(lhs | rhs) | rhs2`
     // `lhs |> rhs | rhs2`  = `(lhs |> rhs) | rhs2`  (intercalado)
@@ -72,8 +72,8 @@ pub(crate) fn parse_expr(parser: &mut Parser) -> Result<Spanned<Expr>, FrontendE
                 );
             }
             Token::SendArrow => {
-                // `tx !> valor` — envio por canal.
-                parser.advance(); // consume `!>`
+                // `tx <! valor` — envio por canal.
+                parser.advance(); // consume `<!`
                 let rhs = parse_apply(parser)?;
                 let span = lhs.span.cover(rhs.span);
                 lhs = Spanned::new(
@@ -85,9 +85,9 @@ pub(crate) fn parse_expr(parser: &mut Parser) -> Result<Spanned<Expr>, FrontendE
                 );
             }
             Token::RecvArrow => {
-                // `rx <! nome` — recebimento de canal.
-                // `<!` exige um Ident como destino (binding name).
-                parser.advance(); // consume `<!`
+                // `rx !> nome` — recebimento de canal.
+                // `!>` exige um Ident como destino (binding name).
+                parser.advance(); // consume `!>`
                 let name = match parser.peek() {
                     Token::Ident(s) => {
                         let n = s.clone();
@@ -96,7 +96,7 @@ pub(crate) fn parse_expr(parser: &mut Parser) -> Result<Spanned<Expr>, FrontendE
                     }
                     _ => {
                         return Err(parser
-                            .error("identificador após `<!` (nome do binding de recebimento)"));
+                            .error("identificador após `!>` (nome do binding de recebimento)"));
                     }
                 };
                 let end_span = parser

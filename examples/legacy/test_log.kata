@@ -11,7 +11,7 @@ action process_data
 action auditor
     let rx := log_subscribe!("metrics")
     echo!("Auditor start")
-    let msg := <! rx
+    let msg := !> rx
     echo!(msg)
 
 action main

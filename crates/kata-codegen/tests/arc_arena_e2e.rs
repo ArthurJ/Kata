@@ -107,12 +107,12 @@ const DEADLOCK_SENTINEL: i64 = i64::MIN + 1;
 #[test]
 fn lista_enviada_por_canal_sobrevive_sender() {
     let src = r#"action prod (tx::Sender::List::Int) => Unit
-  tx !> [1 2 3]
+  tx <! [1 2 3]
   ()
 action main => Int
   let (tx, rx) := channel!()
   fork!(prod, (tx))
-  rx <! lst
+  rx !> lst
   head lst
 main!()"#;
     let (raw, ty) = eval_src(src);
@@ -135,12 +135,12 @@ main!()"#;
 #[test]
 fn tupla_enviada_por_canal_sobrevive_sender() {
     let src = r#"action prod (tx::Sender::Tuple::(Int, Int)) => Unit
-  tx !> (10, 20)
+  tx <! (10, 20)
   ()
 action main => Int
   let (tx, rx) := channel!()
   fork!(prod, (tx))
-  rx <! tpl
+  rx !> tpl
   tpl.0
 main!()"#;
     let (raw, ty) = eval_src(src);
@@ -163,12 +163,12 @@ main!()"#;
 #[test]
 fn primitivo_int_por_canal_sem_arc() {
     let src = r#"action prod (tx::Sender::Int) => Unit
-  tx !> 42
+  tx <! 42
   ()
 action main => Int
   let (tx, rx) := channel!()
   fork!(prod, (tx))
-  rx <! v
+  rx !> v
   v
 main!()"#;
     let (raw, ty) = eval_src(src);
@@ -187,16 +187,16 @@ main!()"#;
 #[test]
 fn multiplos_listas_por_queue_bufferizada() {
     let src = r#"action prod (tx::Sender::List::Int) => Unit
-  tx !> [10 20]
-  tx !> [30 40]
-  tx !> [50 60]
+  tx <! [10 20]
+  tx <! [30 40]
+  tx <! [50 60]
   ()
 action main => Int
   let (tx, rx) := queue!(3)
   fork!(prod, (tx))
-  rx <! a
-  rx <! b
-  rx <! c
+  rx !> a
+  rx !> b
+  rx !> c
   head c
 main!()"#;
     let (raw, _ty) = eval_src(src);
@@ -219,12 +219,12 @@ main!()"#;
 #[test]
 fn lista_recebida_por_canal_len_retorna_5() {
     let src = r#"action prod (tx::Sender::List::Int) => Unit
-  tx !> [1 2 3 4 5]
+  tx <! [1 2 3 4 5]
   ()
 action main => Int
   let (tx, rx) := channel!()
   fork!(prod, (tx))
-  rx <! lst
+  rx !> lst
   len lst
 main!()"#;
     let (raw, _ty) = eval_src(src);
@@ -245,12 +245,12 @@ main!()"#;
 #[test]
 fn structured_concurrency_lista_composta() {
     let src = r#"action worker (tx::Sender::List::Int) => Unit
-  tx !> [100 200 300]
+  tx <! [100 200 300]
   ()
 action main => Int
   let (tx, rx) := channel!()
   fork!(worker, (tx))
-  rx <! result
+  rx !> result
   head result
 main!()"#;
     let (raw, _ty) = eval_src(src);

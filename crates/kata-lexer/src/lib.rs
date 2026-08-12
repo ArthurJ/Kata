@@ -170,6 +170,7 @@ pub fn lex_with_recovery(source: &str) -> (Vec<TokenWithSpan>, Vec<FrontendError
 
     loop {
         // Pula whitespace horizontal
+        let pos_before_whitespace = lex.pos;
         while matches!(lex.ch, Some(' ') | Some('\t') | Some('\r')) {
             lex.advance();
         }
@@ -238,7 +239,10 @@ pub fn lex_with_recovery(source: &str) -> (Vec<TokenWithSpan>, Vec<FrontendError
         }
 
         // Lexa um token real
-        match dispatch::lex_token(&mut lex) {
+        // `had_space` indica se houve whitespace (ou início de linha) antes
+        // deste token, usado para desambiguar `.6` (float) de `tpl.0` (dot-access).
+        let had_space = !line_has_content || pos_before_whitespace != lex.pos;
+        match dispatch::lex_token(&mut lex, had_space) {
             Ok(token) => {
                 line_has_content = true;
                 // Atualiza profundidade de brackets

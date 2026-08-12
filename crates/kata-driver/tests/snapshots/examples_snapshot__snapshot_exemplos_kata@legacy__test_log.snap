@@ -5,10 +5,10 @@ expression: output
 --- stderr ---
 Error: parse.unexpected_token
 
-  × token inesperado: esperado `expression`, encontrado `<!`
+  × token inesperado: esperado `expression`, encontrado `!>`
     ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_log.kata:14:16]
  13 │     echo!("Auditor start")
- 14 │     let msg := <! rx
+ 14 │     let msg := !> rx
     ·                ─┬
     ·                 ╰── token inesperado
  15 │     echo!(msg)

@@ -54,10 +54,10 @@ pub enum Ty {
     Dict(Box<Ty>, Box<Ty>),
     /// Set persistente: `Set::T` — HAMT de chaves (sem values).
     Set(Box<Ty>),
-    /// Sender de canal — `Sender::T`. Pode fazer `!>`.
+    /// Sender de canal — `Sender::T`. Pode fazer `<!`.
     /// Funciona para Channel (rendezvous), Queue (buffered), Broadcast.
     Sender(Box<Ty>),
-    /// Receiver de canal — `Receiver::T`. Pode fazer `<!`.
+    /// Receiver de canal — `Receiver::T`. Pode fazer `!>`.
     /// Funciona para Channel (rendezvous), Queue (buffered), Broadcast.
     Receiver(Box<Ty>),
     /// Fábrica de receivers para broadcast — `ReceiverFactory::T`.

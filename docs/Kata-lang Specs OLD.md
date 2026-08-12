@@ -165,7 +165,7 @@ A Kata-Lang não possui *Garbage Collector* tradicional de varredura (Tracing GC
 
 A linguagem utiliza uma abordagem híbrida guiada pelo compilador (Escape Analysis) para evitar o custo de cópias profundas em tempo de execução (Zero-Copy) ao enviar dados por canais, sem penalizar a performance de dados estritamente locais.
 
-* **Análise Estática (Escape Analysis):** Durante a compilação, o otimizador rastreia o ciclo de vida de cada dado. Se um dado (ou parte dele) for enviado por um canal (usando o operador `!>`), o compilador determina estaticamente que esse dado "foge" (escapes) do escopo local da *Action*.
+* **Análise Estática (Escape Analysis):** Durante a compilação, o otimizador rastreia o ciclo de vida de cada dado. Se um dado (ou parte dele) for enviado por um canal (usando o operador `<!`), o compilador determina estaticamente que esse dado "foge" (escapes) do escopo local da *Action*.
 * **Alocação Direta na Heap Global (ARC):** Estruturas que sofrem fuga são alocadas **diretamente na Heap Global** partilhada desde o seu nascimento, encapsuladas num bloco ARC (Atomic Reference Counting).
 * **Envio O(1) (Zero-Copy):** Quando o dado é enviado pelo canal, o *runtime* não precisa realizar verificações de cabeçalho ou cópias. Ele apenas incrementa o contador atómico e transfere o ponteiro (8 bytes). Não há cópia de memória em runtime, independentemente do tamanho e profundidade da estrutura.
 * **Isolamento Local (Arenas):** Se o dado nunca for enviado para um canal (o que representa a esmagadora maioria dos casos em cálculos puros), ele é alocado na Arena local, garantindo máxima performance de cache (*Cache Locality*) e libertação em O(1) sem nenhum *overhead* atómico.

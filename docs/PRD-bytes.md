@@ -190,7 +190,7 @@ let zeroed := and bytes 0x"00"   # broadcasting — cada byte AND 0x00
 | `Shr` | `>>` | `>` seguido de `>` — verificar peek após consumir `>` |
 | `Shl` | `<<` | `<` seguido de `<` — verificar peek após consumir `<` |
 
-**Atenção:** `<` já tem lookahead para `<!` (RecvArrow). A ordem de verificação
+**Atenção:** `<` já tem lookahead para `!>` (RecvArrow). A ordem de verificação
 deve ser: `<` seguido de `!` → RecvArrow; `<` seguido de `<` → Shl; senão →
 lex_ident (operador de comparação `<`).
 

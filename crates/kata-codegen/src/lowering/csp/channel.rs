@@ -227,7 +227,7 @@ pub(crate) fn lower_receiver_factory_call(
     Ok(rx_handle)
 }
 
-/// Lowera `TypedExprKind::ChannelSend` (`tx !> valor`).
+/// Lowera `TypedExprKind::ChannelSend` (`tx <! valor`).
 ///
 /// Chama `kata_rt_channel_send(handle, value)` e retorna Unit.
 pub(crate) fn lower_channel_send(
@@ -245,7 +245,7 @@ pub(crate) fn lower_channel_send(
     Ok(ctx.builder.ins().iconst(I64, 0))
 }
 
-/// Lowera `TypedExprKind::ChannelRecv` (`rx <! nome`).
+/// Lowera `TypedExprKind::ChannelRecv` (`rx !> nome`).
 ///
 /// Chama `kata_rt_channel_recv(handle)`, cria binding `bind_name` no
 /// `var_map`, e retorna o valor recebido.

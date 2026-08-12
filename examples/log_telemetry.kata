@@ -18,14 +18,17 @@ action anunciar => Unit
     log!(LogLevel::Warn, "evento-manual", "events")
     ()
 
-# Consumidor: log_recv!() bloqueia até chegar mensagem de cada tópico
+# Consumidor: log_recv!() retorna Result(Text, Text) — Ok(msg) ou Err(reason)
 action consumir => Int
-    let m1 := log_recv!("default")
-    echo!(m1)
-    let m2 := log_recv!("metrics")
-    echo!(m2)
-    let m3 := log_recv!("events")
-    echo!(m3)
+    match log_recv!("default")
+        Result::Ok m1: echo!(m1)
+        Result::Err _: echo!("erro: tópico default não encontrado")
+    match log_recv!("metrics")
+        Result::Ok m2: echo!(m2)
+        Result::Err _: echo!("erro: tópico metrics não encontrado")
+    match log_recv!("events")
+        Result::Ok m3: echo!(m3)
+        Result::Err _: echo!("erro: tópico events não encontrado")
     0
 
 action main => Int

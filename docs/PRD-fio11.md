@@ -5,7 +5,7 @@
 Implementar concorrência CSP (Communicating Sequential Processes) end-to-end:
 canais (rendezvous, buffered, broadcast) com ends separados (sender/receiver),
 `fork!` (spawn de fiber com args), `select` (multiplexação com timeout),
-operadores `!>` (envio) e `<!` (recebimento), yield points cooperativos no
+operadores `<!` (envio) e `!>` (recebimento), yield points cooperativos no
 codegen, e `spawn!` (paralelismo via multiprocess com fork+IPC).
 
 O Pré-11 entregou a árvore hierárquica de arenas, `EscapeTarget`, destruição
@@ -47,7 +47,7 @@ independentes do container — só a concorrência de acesso muda.
 
 ### B. Yield: `wasmtime-fiber::Suspend` com `YieldReason`
 
-Sem yield, CSP não funciona — `<!` em canal vazio trava a thread inteira.
+Sem yield, CSP não funciona — `!>` em canal vazio trava a thread inteira.
 `wasmtime-fiber` já está no projeto e suporta yield nativamente. O `Yield`
 muda de `()` para `YieldReason`:
 
@@ -64,7 +64,7 @@ pub enum YieldReason {
 }
 ```
 
-**Mecânica:** o fiber executa código JIT. Quando faz `<!` em canal vazio,
+**Mecânica:** o fiber executa código JIT. Quando faz `!>` em canal vazio,
 chama `kata_rt_yield()` (FFI). O `kata_rt_yield` acessa o `Suspend` via TLS,
 chama `suspend(YieldReason::WaitingOnChannel(handle))`, e o controle volta ao
 scheduler. O scheduler marca o fiber como blocked, pega o próximo da
@@ -97,7 +97,7 @@ Só verifica quando a run_queue esvazia. Custo zero em runtime normal.
 
 ### D. Select para envio — adiado
 
-`select` para recebimento (`<!`) está no escopo. `select` para envio
+`select` para recebimento (`!>`) está no escopo. `select` para envio
 (escolher qual canal enviar) é útil em roteamento, mas pode não ser compatível
 com as três topologias. Discutir após a implementação de `spawn!`, com
 experiência real dos padrões de uso com `spawn!`.
@@ -189,7 +189,7 @@ existe mas é stub. Não há canais, não há `fork!`, não há `select`. O
 `Effect::Spawn` e `Effect::ChannelOp` existiam no enum mas nunca foram consumidos
 (o enum `Effect` foi posteriormente removido por completo — ver TECH-DEBT.md).
 
-O codegen não sabe como lowerar `!>`, `<!`, `channel!`, `queue!`, `broadcast!`,
+O codegen não sabe como lowerar `<!`, `!>`, `channel!`, `queue!`, `broadcast!`,
 `fork!`, ou `select`. O parser não reconhece esses tokens. O runtime não tem
 `kata_rt_channel_*`, `kata_rt_fork`, `kata_rt_select`.
 
@@ -199,12 +199,12 @@ O codegen não sabe como lowerar `!>`, `<!`, `channel!`, `queue!`, `broadcast!`,
 
 | Canal | Sintaxe de criação | Retorno | Semântica |
 |---|---|---|---|
-| `channel!` | `let (tx, rx) := channel!()` | `(Sender::T, Receiver::T)` | Rendezvous — `!>` bloqueia até `<!` sincronizar |
-| `queue!(N)` | `let (tx, rx) := queue!(8)` | `(Sender::T, Receiver::T)` | Buffered — `!>` bloqueia só se buffer cheio |
-| `broadcast!` | `let (tx, rxf) := broadcast!()` | `(Sender::T, ReceiverFactory::T)` | Pub-sub — `!>` não bloqueia, `rxf!()` cria novo `Receiver::T` |
+| `channel!` | `let (tx, rx) := channel!()` | `(Sender::T, Receiver::T)` | Rendezvous — `<!` bloqueia até `!>` sincronizar |
+| `queue!(N)` | `let (tx, rx) := queue!(8)` | `(Sender::T, Receiver::T)` | Buffered — `<!` bloqueia só se buffer cheio |
+| `broadcast!` | `let (tx, rxf) := broadcast!()` | `(Sender::T, ReceiverFactory::T)` | Pub-sub — `<!` não bloqueia, `rxf!()` cria novo `Receiver::T` |
 
-**Criação retorna tupla sender/receiver.** O sender (`tx`) só pode fazer `!>`.
-O receiver (`rx`) só pode fazer `<!`. Para broadcast, uma **fábrica de
+**Criação retorna tupla sender/receiver.** O sender (`tx`) só pode fazer `<!`.
+O receiver (`rx`) só pode fazer `!>`. Para broadcast, uma **fábrica de
 receivers** (`rxf`) permite criar múltiplos receivers independentes — cada um
 vê apenas mensagens futuras (Decisão F).
 
@@ -214,17 +214,17 @@ let rx1 := rxf!()
 let rx2 := rxf!()
 fork!(consumidor!(rx1))
 fork!(consumidor!(rx2))
-tx !> 42           -- ambos rx1 e rx2 recebem 42
+tx <! 42           -- ambos rx1 e rx2 recebem 42
 ```
 
 ### Operadores de canal
 
 | Operador | Direção | Sintaxe | Tipos | Semântica |
 |---|---|---|---|---|
-| `!>` | envio | `tx !> valor` | `tx: Sender::T`, `valor: T` | Envia `valor` por `tx`. Bloqueia conforme topologia. |
-| `<!` | recebimento | `rx <! nome` | `rx: Receiver::T` | Recebe valor de `rx`, binding em `nome: T`. Bloqueia até haver mensagem. |
+| `<!` | envio | `tx <! valor` | `tx: Sender::T`, `valor: T` | Envia `valor` por `tx`. Bloqueia conforme topologia. |
+| `!>` | recebimento | `rx !> nome` | `rx: Receiver::T` | Recebe valor de `rx`, binding em `nome: T`. Bloqueia até haver mensagem. |
 
-**Domínio:** `!>` e `<!` são exclusivos de Actions (efeito `ChannelOp`). Não
+**Domínio:** `<!` e `!>` são exclusivos de Actions (efeito `ChannelOp`). Não
 existem em funções puras.
 
 ### `fork!`
@@ -253,8 +253,8 @@ action exemplo
     fork!(produtor!(tx1))
     fork!(produtor2!(tx2))
     select
-        rx1 <! msg: echo!(msg)
-        rx2 <! item: echo!(item)
+        rx1 !> msg: echo!(msg)
+        rx2 !> item: echo!(item)
         timeout 5000: echo!("timeout")
 ```
 
@@ -308,8 +308,8 @@ valores.
 
 | Token | Sintaxe | Como lexar |
 |---|---|---|
-| `SendArrow` | `!>` | `!` seguido de `>` — verificar peek após consumir `!` |
-| `RecvArrow` | `<!` | `<` seguido de `!` — `<` hoje vira `Ident("<")`; precisa de lookahead |
+| `SendArrow` | `<!` | `!` seguido de `>` — verificar peek após consumir `!` |
+| `RecvArrow` | `!>` | `<` seguido de `!` — `<` hoje vira `Ident("<")`; precisa de lookahead |
 
 **Mudança no dispatch.rs:**
 
@@ -337,8 +337,8 @@ valores.
 ```
 
 **Atenção:** `<` como operador de comparação (`> x 0`, `< y 5`) é `Ident("<")`
-via notação prefixa. `<!` só é distinto quando `<` é seguido imediatamente por
-`!`. O lookahead de 1 char resolve sem ambiguidade — `<!` não pode ser `< !`
+via notação prefixa. `!>` só é distinto quando `<` é seguido imediatamente por
+`!`. O lookahead de 1 char resolve sem ambiguidade — `!>` não pode ser `< !`
 (pois `!` como sufixo de Action vem após identificador+args, não após `<`).
 
 ### Nova palavra-chave: `select`
@@ -352,9 +352,9 @@ construção de fluxo dentro de Actions, similar a `match`.
 
 ## Sintaxe — mudanças no parser
 
-### `!>` e `<!` como operadores infixos
+### `<!` e `!>` como operadores infixos
 
-`!>` e `<!` têm precedência igual a `|` e `|>` — mesma camada de operadores
+`<!` e `!>` têm precedência igual a `|` e `|>` — mesma camada de operadores
 infixos baixos. O parser os trata no loop de pós-aplicação em `parse_expr`:
 
 ```rust
@@ -365,7 +365,7 @@ Token::SendArrow => {
 }
 Token::RecvArrow => {
     parser.advance();
-    // `<!` exige um Ident como destino (binding)
+    // `!>` exige um Ident como destino (binding)
     let name = expect_ident(parser)?;
     lhs = Expr::ChannelRecv { channel: Box::new(lhs), bind_name: name };
 }
@@ -378,8 +378,8 @@ Tem a mesma estrutura de `match` — braços indentados com `pattern: body`:
 
 ```kata
 select
-    rx <! msg: processa!(msg)
-    rx2 <! item: handle!(item)
+    rx !> msg: processa!(msg)
+    rx2 !> item: handle!(item)
     timeout 5000: echo!("timeout")
 ```
 
@@ -399,13 +399,13 @@ tupla de argumentos.
 
 ```rust
 // Em Expr:
-/// `tx !> valor` — envio por canal.
+/// `tx <! valor` — envio por canal.
 ChannelSend {
     channel: Box<Spanned<Expr>>,
     value: Box<Spanned<Expr>>,
 },
 
-/// `rx <! nome` — recebimento de canal.
+/// `rx !> nome` — recebimento de canal.
 ChannelRecv {
     channel: Box<Spanned<Expr>>,
     bind_name: String,
@@ -420,7 +420,7 @@ Select {
 ```
 
 ```rust
-/// Um braço de `select`: `rx <! nome: body`.
+/// Um braço de `select`: `rx !> nome: body`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SelectArm {
     /// Receiver de onde receber (expressão que avalia para Receiver::T).
@@ -436,13 +436,13 @@ pub struct SelectArm {
 
 ```rust
 // Em TypedExprKind:
-/// `tx !> valor` — envio por canal (effect = ChannelOp).
+/// `tx <! valor` — envio por canal (effect = ChannelOp).
 ChannelSend {
     channel: Box<Spanned<TypedExpr>>,
     value: Box<Spanned<TypedExpr>>,
 },
 
-/// `rx <! nome` — recebimento de canal (effect = ChannelOp).
+/// `rx !> nome` — recebimento de canal (effect = ChannelOp).
 ChannelRecv {
     channel: Box<Spanned<TypedExpr>>,
     /// Tipo do valor recebido (inferido do tipo do canal).
@@ -479,10 +479,10 @@ linguagem:
 // Em crates/kata-core/src/ty.rs:
 pub enum Ty {
     // ... variantes existentes ...
-    /// Sender de canal — `Sender::T`. Pode fazer `!>`.
+    /// Sender de canal — `Sender::T`. Pode fazer `<!`.
     /// Funciona para Channel (rendezvous), Queue (buffered), Broadcast.
     Sender(Box<Ty>),
-    /// Receiver de canal — `Receiver::T`. Pode fazer `<!`.
+    /// Receiver de canal — `Receiver::T`. Pode fazer `!>`.
     /// Funciona para Channel (rendezvous), Queue (buffered), Broadcast.
     Receiver(Box<Ty>),
     /// Fábrica de receivers para broadcast — `ReceiverFactory::T`.
@@ -492,7 +492,7 @@ pub enum Ty {
 ```
 
 **Por que sender/receiver separados:** direcionalidade é enforced pelo tipo.
-`!>` só aceita `Sender::T`. `<!` só aceita `Receiver::T`. Isto previne erro
+`<!` só aceita `Sender::T`. `!>` só aceita `Receiver::T`. Isto previne erro
 comum de tentar receber de um sender ou enviar por um receiver.
 
 **Por que intrínseco e não `data`:** canais têm semântica de runtime
@@ -501,7 +501,7 @@ O codegen precisa saber que é um end de canal para emitir a FFI correta. O
 runtime sabe a topologia pelo handle — o tipo `Sender::T` não distingue
 rendezvous de queue de broadcast; a FFI despacha pelo handle.
 
-**Type inference:** `channel!()` infere `T` do primeiro `!>` ou `<!` usado
+**Type inference:** `channel!()` infere `T` do primeiro `<!` ou `!>` usado
 nos ends. Se o canal é usado antes de qualquer operação, o tipo é
 `Sender::Unit` / `Receiver::Unit` (erro se usado com valor de outro tipo
 depois).
@@ -527,16 +527,16 @@ a tupla de argumentos tem os tipos esperados pela Action.
 
 ```rust
 // Effect::Spawn — fork!()
-// Effect::ChannelOp — !>, <!, channel!, queue!, broadcast!, select
+// Effect::ChannelOp — <!, !>, channel!, queue!, broadcast!, select
 ```
 
-O typeck marcaria `Effect::ChannelOp` em toda expressão que usa `!>`, `<!`, ou
+O typeck marcaria `Effect::ChannelOp` em toda expressão que usa `<!`, `!>`, ou
 `select`. Marcaria `Effect::Spawn` em `fork!`. O effect system propagaria
 (`IO | ChannelOp = IO`, pois ChannelOp subsume IO).
 
 ### Escape analysis para canais — LCA
 
-Valores enviados por `!>` escapam para outro fiber. O `EscapeTarget` do
+Valores enviados por `<!` escapam para outro fiber. O `EscapeTarget` do
 Pré-11 precisa saber o destino — e o destino é o **LCA (Lowest Common
 Ancestor)** entre o fiber que envia e o fiber que recebe, não
 necessariamente a raiz.
@@ -544,7 +544,7 @@ necessariamente a raiz.
 Pré-Fio 11, os únicos escape points eram retorno e closure (LCA = caller
 direto ou raiz). Agora:
 
-- `canal !> valor` → `valor` escapa para o fiber que fará `<!`. O LCA é
+- `canal <! valor` → `valor` escapa para o fiber que fará `!>`. O LCA é
   determinado em compile-time analisando a árvore de fibers:
   - Se o canal foi criado no mesmo escopo que `fork!`, o LCA é o fiber que
     criou o canal (pai comum dos fibers que compartilham o canal).
@@ -554,7 +554,7 @@ direto ou raiz). Agora:
     próximo dos fibers que têm acesso ao canal.
 
 **Implementação:** o typeck rastreia a "profundidade" do canal na árvore de
-fibers. Quando um valor é enviado por `!>`, o `EscapeTarget` é
+fibers. Quando um valor é enviado por `<!`, o `EscapeTarget` é
 `Ancestor(profundidade_do_lca)`. Se o LCA não pode ser determinado
 estaticamente (canal passado por múltiplas funções), fallback para
 `Ancestor(0)` (raiz) — conservador mas correto.
@@ -647,7 +647,7 @@ struct BroadcastReceiver {
 **Broadcast — mecânica por receiver:**
 
 Cada receiver mantém seu próprio `last_seen_version` (inicializado =
-`current_version` na criação). Ao fazer `<!`:
+`current_version` na criação). Ao fazer `!>`:
 
 ```
 if global_version > last_seen_version:
@@ -657,7 +657,7 @@ else:
     block on condvar                   -- espera próximo send
 ```
 
-`tx !> valor`: `value = Some(valor)`, `version += 1`, `notify_all()`.
+`tx <! valor`: `value = Some(valor)`, `version += 1`, `notify_all()`.
 Múltiplos receivers compartilham o mesmo `BroadcastInner` via ponteiro
 `inner`. O `value` é um `i64` (handle/ponteiro para valor na arena) —
 múltiplos readers é seguro porque o runtime é single-threaded (Decisão A).
@@ -679,11 +679,11 @@ kata_rt_broadcast_create(arena: i64) -> i64
 // Aloca BroadcastReceiver na arena do caller. Retorna handle com tag 0b11.
 kata_rt_broadcast_receiver_create(arena: i64, factory_handle: i64) -> i64
 
-// ── Envio (operador !>) ────────────────────────────────
+// ── Envio (operador <!) ────────────────────────────────
 /// Envia valor por sender. O runtime despacha pela tag nos 2 bits baixos.
 kata_rt_channel_send(handle: i64, value: i64)
 
-// ── Recebimento (operador <!) ──────────────────────────
+// ── Recebimento (operador !>) ──────────────────────────
 /// Recebe valor por receiver. Bloqueia conforme topologia.
 kata_rt_channel_recv(handle: i64) -> i64
 
@@ -864,7 +864,7 @@ match kind {
 // O typeck sabe qual end é tx e qual é rx pelo padrão de binding.
 ```
 
-### `!>` (envio)
+### `<!` (envio)
 
 O codegen despacha para a FFI de envio. O runtime sabe a topologia pelo
 handle:
@@ -879,7 +879,7 @@ let val = lower(value);    // valor (i64)
 emit_call("kata_rt_channel_send", &[ch, val])
 ```
 
-### `<!` (recebimento)
+### `!>` (recebimento)
 
 ```rust
 // TAST:
@@ -991,20 +991,20 @@ o parent continua.
 ### Fase 1: Tokens e AST (lexer + parser) ✅
 
 **Lexer:**
-- Adicionar `Token::SendArrow` (`!>`)
-- Adicionar `Token::RecvArrow` (`<!`)
+- Adicionar `Token::SendArrow` (`<!`)
+- Adicionar `Token::RecvArrow` (`!>`)
 - Adicionar `Token::Select` (keyword)
 - Adicionar `Token::Timeout` (keyword)
 - Modificar dispatch.rs: `!` com lookahead `>` → `SendArrow`; `<` com lookahead `!` → `RecvArrow`
 
 **Parser:**
-- `!>` e `<!` no loop de `parse_expr` (mesma camada que `|` e `|>`)
+- `<!` e `!>` no loop de `parse_expr` (mesma camada que `|` e `|>`)
 - `select` como expressão de Action (parse braços indentados)
 - `channel!`, `queue!`, `broadcast!` já são ActionCalls — nenhum parser novo
 - `fork!` já é ActionCall — nenhum parser novo (mas args é tupla)
 - Novos nós AST: `ChannelSend`, `ChannelRecv`, `Select`, `SelectArm`
 
-**DoD Fase 1:** `kata parse` de programa com `!>`, `<!`, `select` produz AST
+**DoD Fase 1:** `kata parse` de programa com `<!`, `!>`, `select` produz AST
 correta. Snapshots insta dos novos nós. ✅
 
 ### Fase 2: Sistema de tipos (`Sender::T`, `Receiver::T`, `ReceiverFactory::T`) ✅
@@ -1022,12 +1022,12 @@ correta. Snapshots insta dos novos nós. ✅
 - Typeck de `broadcast!()`: cria `(Sender::T0, ReceiverFactory::T0)`
 - Typeck de `rxf!()` (receiver factory call): cria `Receiver::T`
 - Typeck de `fork!(action, args)`: action deve ser nome de Action declarada, args deve matchar params, retorna `Unit`
-- ~~`Effect::ChannelOp` marcado em `!>`, `<!`, `select`~~ (removido)
+- ~~`Effect::ChannelOp` marcado em `<!`, `!>`, `select`~~ (removido)
 - ~~`Effect::Spawn` marcado em `fork!`~~ (removido)
-- Escape analysis: `!>` marca valor como `EscapeTarget::Ancestor(lca_depth)` onde lca_depth é calculado pela árvore de fibers
+- Escape analysis: `<!` marca valor como `EscapeTarget::Ancestor(lca_depth)` onde lca_depth é calculado pela árvore de fibers
 
-**DoD Fase 2:** Typeck rejeita `tx <! nome` (tx é Sender, não Receiver). Rejeita
-`rx !> valor` (rx é Receiver, não Sender). Rejeita `select` com braços de tipos
+**DoD Fase 2:** Typeck rejeita `tx !> nome` (tx é Sender, não Receiver). Rejeita
+`rx <! valor` (rx é Receiver, não Sender). Rejeita `select` com braços de tipos
 diferentes. `fork!(nao_eh_action, ())` é erro. `channel!()` infere tipo
 corretamente. `broadcast!()` produz receiver factory que cria receivers.
 
@@ -1056,18 +1056,18 @@ receivers independentes.
 - Run loop: continua processando até todos completarem (structured concurrency)
 - Deadlock detection: `run_queue` vazia + `blocked` não vazio + sem timers = abort
 
-**DoD Fase 4:** Fiber que faz `<!` em canal vazio bloqueia (yield). Scheduler
+**DoD Fase 4:** Fiber que faz `!>` em canal vazio bloqueia (yield). Scheduler
 executa outro fiber. Quando canal recebe dado, fiber bloqueado é acordado.
 Action que completa com forks vivos fica zombie até filhos terminarem. ✅
 
-### Fase 5: Codegen — `!>`, `<!`, `channel!`, `queue!`, `broadcast!`, `fork!` ✅
+### Fase 5: Codegen — `<!`, `!>`, `channel!`, `queue!`, `broadcast!`, `fork!` ✅
 
 **kata-codegen:**
 - Lowering de `ChannelCreate`, `ChannelSend`, `ChannelRecv`, `Fork`
 - FFI signatures para todas as funções de canal
 - `fork!(action, args)` → `kata_rt_spawn(fn_ptr, caller_arena, args_ptr)`
 
-**DoD Fase 5:** Programa Kata com `channel!`, `!>`, `<!`, `fork!` compila
+**DoD Fase 5:** Programa Kata com `channel!`, `<!`, `!>`, `fork!` compila
 e executa. Producer/consumer via fork funciona. ✅
 
 ### Fase 6: Codegen — `select` ✅
@@ -1163,12 +1163,12 @@ pré-convertidos sem re-conversão. Teste E2E com `spawn!` passa.
 4. **`fork!` submete Action em fiber separada com args.** A Action executa
    concorrentemente com os argumentos fornecidos.
 5. **`select` multiplexa 2+ receivers.** `timeout` dispara após N ms.
-6. **Yield cooperativo.** `<!` em canal vazio bloqueia o fiber, não a thread.
+6. **Yield cooperativo.** `!>` em canal vazio bloqueia o fiber, não a thread.
 7. **Yield points.** Fiber em `loop` pesado cede periodicamente — outras
    fibers executam. Sem head-of-line blocking.
 8. **Structured concurrency.** Action não termina até todos os forks
    completarem.
-9. **Escape analysis para canais.** Valores enviados por `!>` sobrevivem ao
+9. **Escape analysis para canais.** Valores enviados por `<!` sobrevivem ao
    sender, alocados na arena do LCA (não necessariamente raiz).
 10. **Deadlock detection.** Fibers bloqueados sem progresso possível são
     detectados e abortados.

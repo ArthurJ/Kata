@@ -4,8 +4,8 @@
 //! da TAST para chamadas FFI do runtime.
 //!
 //! - `channel!()` / `queue!(N)` / `broadcast!()` → FFI de criação + tupla (tx, rx)
-//! - `tx !> valor` → `kata_rt_channel_send(handle, value)`
-//! - `rx <! nome` → `kata_rt_channel_recv(handle)` + binding no var_map
+//! - `tx <! valor` → `kata_rt_channel_send(handle, value)`
+//! - `rx !> nome` → `kata_rt_channel_recv(handle)` + binding no var_map
 //! - `fork!(action, args)` → `kata_rt_spawn(fn_ptr, caller_arena, args_ptr)`
 //! - `select` → `kata_rt_select(handles, N, timeout_ms)` + dispatch por índice
 

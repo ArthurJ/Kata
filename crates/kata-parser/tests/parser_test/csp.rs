@@ -1,15 +1,15 @@
-//! CSP parser tests: channel send (`!>`), channel recv (`<!`),
+//! CSP parser tests: channel send (`<!`), channel recv (`!>`),
 //! select with timeout, fork! as ActionCall.
 
 use super::helpers::{first_item, parse_src};
 use kata_ast::{Expr, Item, SelectArm};
 
-// ── Token lexing: !> and <! ────────────────────────────────────────
+// ── Token lexing: <! and !> ────────────────────────────────────────
 
 #[test]
 fn lex_send_arrow() {
-    // `tx !> 42` — !> é um único token SendArrow
-    let m = parse_src("tx !> 42");
+    // `tx <! 42` — <! é um único token SendArrow
+    let m = parse_src("tx <! 42");
     let item = first_item(&m);
     match item {
         Item::EntryExpr(e) => match &e.node {
@@ -25,8 +25,8 @@ fn lex_send_arrow() {
 
 #[test]
 fn lex_recv_arrow() {
-    // `rx <! msg` — <! é um único token RecvArrow
-    let m = parse_src("rx <! msg");
+    // `rx !> msg` — !> é um único token RecvArrow
+    let m = parse_src("rx !> msg");
     let item = first_item(&m);
     match item {
         Item::EntryExpr(e) => match &e.node {
@@ -40,7 +40,7 @@ fn lex_recv_arrow() {
     }
 }
 
-// ── <! still allows < as operator ──────────────────────────────────
+// ── !> still allows < as operator ──────────────────────────────────
 
 #[test]
 fn less_than_still_ident() {
@@ -81,8 +81,8 @@ fn bang_still_works() {
 
 #[test]
 fn channel_send_complex_value() {
-    // `tx !> + 1 2` — send aplica greedy depois de !>
-    let m = parse_src("tx !> + 1 2");
+    // `tx <! + 1 2` — send aplica greedy depois de <!
+    let m = parse_src("tx <! + 1 2");
     let item = first_item(&m);
     match item {
         Item::EntryExpr(e) => match &e.node {
@@ -149,7 +149,7 @@ fn channel_create_is_action_call() {
 
 #[test]
 fn select_basic() {
-    let src = "action exemplo\n    select\n        rx <! msg: echo!(msg)\n        rx2 <! item: echo!(item)";
+    let src = "action exemplo\n    select\n        rx !> msg: echo!(msg)\n        rx2 !> item: echo!(item)";
     let m = parse_src(src);
     let item = first_item(&m);
     match item {
@@ -164,9 +164,9 @@ fn select_basic() {
                     assert_eq!(arms.len(), 2);
                     assert!(timeout_ms.is_none());
                     assert!(timeout_body.is_none());
-                    // Primeiro braço: rx <! msg: echo!(msg)
+                    // Primeiro braço: rx !> msg: echo!(msg)
                     check_select_arm(&arms[0], "rx", "msg", "echo");
-                    // Segundo braço: rx2 <! item: echo!(item)
+                    // Segundo braço: rx2 !> item: echo!(item)
                     check_select_arm(&arms[1], "rx2", "item", "echo");
                 }
                 other => panic!("expected Select, got {other:?}"),
@@ -178,7 +178,7 @@ fn select_basic() {
 
 #[test]
 fn select_with_timeout() {
-    let src = "action exemplo\n    select\n        rx <! msg: echo!(msg)\n        timeout 5000: echo!(\"timeout\")";
+    let src = "action exemplo\n    select\n        rx !> msg: echo!(msg)\n        timeout 5000: echo!(\"timeout\")";
     let m = parse_src(src);
     let item = first_item(&m);
     match item {
@@ -238,7 +238,7 @@ fn check_select_arm(
 fn select_outside_action_is_error() {
     use kata_lexer::lex;
     use kata_parser::parse;
-    let src = "select\n    rx <! msg: echo!(msg)";
+    let src = "select\n    rx !> msg: echo!(msg)";
     let tokens = lex(src).unwrap();
     let result = parse(tokens);
     assert!(
@@ -251,8 +251,8 @@ fn select_outside_action_is_error() {
 
 #[test]
 fn channel_send_in_let() {
-    // `constant x := tx !> 42` — constant value é ChannelSend
-    let m = parse_src("constant x := tx !> 42");
+    // `constant x := tx <! 42` — constant value é ChannelSend
+    let m = parse_src("constant x := tx <! 42");
     let item = first_item(&m);
     match item {
         Item::ConstantDecl { name, value } => {
@@ -263,19 +263,19 @@ fn channel_send_in_let() {
     }
 }
 
-// ── Left-associativity of !> ───────────────────────────────────────
+// ── Left-associativity of <! ───────────────────────────────────────
 
 #[test]
 fn send_arrow_left_assoc() {
-    // `a !> b !> c` = `(a !> b) !> c` — left-associative
-    // O primeiro `!>` produz ChannelSend(a, b).
-    // O segundo `!>` produz ChannelSend(ChannelSend(a, b), c).
-    let m = parse_src("a !> b !> c");
+    // `a <! b <! c` = `(a <! b) <! c` — left-associative
+    // O primeiro `<!` produz ChannelSend(a, b).
+    // O segundo `<!` produz ChannelSend(ChannelSend(a, b), c).
+    let m = parse_src("a <! b <! c");
     let item = first_item(&m);
     match item {
         Item::EntryExpr(e) => match &e.node {
             Expr::ChannelSend { channel, value } => {
-                // channel = (a !> b)
+                // channel = (a <! b)
                 match &channel.node {
                     Expr::ChannelSend {
                         channel: inner_ch,

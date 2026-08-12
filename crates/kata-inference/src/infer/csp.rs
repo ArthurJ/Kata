@@ -1,6 +1,6 @@
 //! Typeck de expressões CSP.
 //!
-//! `ChannelSend` (`!>`), `ChannelRecv` (`<!`), e `Select` são inferidos aqui.
+//! `ChannelSend` (`<!`), `ChannelRecv` (`!>`), e `Select` são inferidos aqui.
 //! `channel!()`, `queue!()`, `broadcast!()`, `rxf!()`, `fork!()` são
 //! interceptados em `infer_apply` (não despacham para DispatchTable).
 
@@ -15,7 +15,7 @@ use super::expr::InferCtx;
 use super::expr::infer_expr_hinted;
 use super::helpers::InferResult;
 
-/// `tx !> valor` — envio por canal.
+/// `tx <! valor` — envio por canal.
 ///
 /// `channel` deve ter tipo `Sender::T`. `value` deve ter tipo `T`.
 /// Produz `Unit` (envio é side-effect). Effect = `ChannelOp`.
@@ -93,7 +93,7 @@ pub(crate) fn infer_channel_send(
     })
 }
 
-/// `rx <! nome` — recebimento de canal.
+/// `rx !> nome` — recebimento de canal.
 ///
 /// `channel` deve ter tipo `Receiver::T`. Infere `T` e cria binding
 /// `bind_name: T` no `TypeEnv`. Produz `T` (o valor recebido).
@@ -362,7 +362,7 @@ fn type_compatible(actual: &Ty, expected: &Ty) -> bool {
     matches!(actual, Ty::Var(_)) || matches!(expected, Ty::Var(_))
 }
 
-/// Escape target para `!>` — valor escapa para outro fiber.
+/// Escape target para `<!` — valor escapa para outro fiber.
 ///
 /// Tipos compostos (Tuple, Struct, List, Array, Dict, Set, Text, etc.)
 /// são alocados na arena e precisam sobreviver ao sender → Heap.

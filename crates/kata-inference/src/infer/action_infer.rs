@@ -147,24 +147,19 @@ pub(crate) fn infer_action(
         });
     }
 
-    // Sintetiza log spec se a action tem @log.
+    // Sintetiza log specs se a action tem @log (pode ter múltiplas).
     // Params nomeados (forma `x::Tipo`) ficam disponíveis para o template
     // do `when: "enter"` via param_names. `when: "exit"` infere o template no
     // escopo da action (params + vars do corpo).
-    let log = if let Some(log_spec) = &action_def.log {
+    let log = if !action_def.log.is_empty() {
         let param_names: Vec<String> = action_def
             .param_names
             .iter()
             .filter_map(|n| n.clone())
             .collect();
-        Some(log_synthesis::synthesize_log_spec(
-            log_spec,
-            &param_names,
-            &mut action_env,
-            ctx,
-        )?)
+        log_synthesis::synthesize_log_specs(&action_def.log, &param_names, &mut action_env, ctx)?
     } else {
-        None
+        Vec::new()
     };
 
     Ok(TypedAction {

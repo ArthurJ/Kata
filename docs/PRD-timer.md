@@ -104,8 +104,8 @@ de baixar a função, um walk na TAST responde: "este corpo tem `Closure
 ├── @timer sozinho, body tem tail_pos call?
 │   → TCO ativo, return_call destrói frame
 │   → canal interno buffer-1 drop (first-write-wins)
-│   → prólogo: timer_now() !> canal_interno
-│   → epílogo: start = <! canal_interno; delta = now - start; publish
+│   → prólogo: timer_now() <! canal_interno
+│   → epílogo: start = !> canal_interno; delta = now - start; publish
 │
 └── @timer sozinho, body NÃO tem tail_pos call?
     → sem return_call, frame sobrevive
@@ -119,10 +119,10 @@ de baixar a função, um walk na TAST responde: "este corpo tem `Closure
 ```
 prólogo:
   start = kata_rt_timer_now()
-  timer_chan_{fn_id} !> start        // send com drop policy
+  timer_chan_{fn_id} <! start        // send com drop policy
 
 epílogo (só base case — return_call não chega aqui):
-  start = <! timer_chan_{fn_id}      // recebe o timestamp mais externo
+  start = !> timer_chan_{fn_id}      // recebe o timestamp mais externo
   delta = kata_rt_timer_now() - start
   publish(topic, format_msg(name, delta))
 ```

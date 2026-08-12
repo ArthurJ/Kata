@@ -9,13 +9,52 @@ use crate::{Lexer, Pos};
 ///
 /// Suporta bases: 10 (default), 16 (0x), 8 (0o), 2 (0b), 10 explícito (0d).
 /// Separador `_` é descartado léxicamente.
-/// Floats: `3.14`, `1.5e10`, `1.5E-10`, `1e10`.
+/// Floats: `3.14`, `1.5e10`, `1.5E-10`, `1e10`, `.6` (→ `0.6`).
 ///
 /// O texto bruto é preservado (com prefixo de base, sem underscores)
 /// para o runtime fazer parsing de BigInt/SMI.
 pub(crate) fn lex_number(lex: &mut Lexer, start: &Pos) -> Result<TokenWithSpan, FrontendError> {
     let mut base: u32 = 10;
     let mut has_digits = false;
+
+    // Float sem parte inteira: `.6` → normaliza para `0.6`
+    if lex.ch == Some('.') {
+        lex.advance(); // consome '.'
+        while lex.ch.is_some_and(|c| c.is_ascii_digit() || c == '_') {
+            if lex.ch != Some('_') {
+                has_digits = true;
+            }
+            lex.advance();
+        }
+        if !has_digits {
+            return Err(FrontendError::InvalidNumber {
+                text: lex.source[start.offset..lex.pos].to_string(),
+                span: MietteSpan(lex.span_from(start)),
+            });
+        }
+        // Expoente opcional
+        if lex.ch == Some('e') || lex.ch == Some('E') {
+            lex.advance();
+            if lex.ch == Some('-') || lex.ch == Some('+') {
+                lex.advance();
+            }
+            if !lex.ch.is_some_and(|c| c.is_ascii_digit()) {
+                return Err(FrontendError::InvalidNumber {
+                    text: lex.source[start.offset..lex.pos].to_string(),
+                    span: MietteSpan(lex.span_from(start)),
+                });
+            }
+            while lex.ch.is_some_and(|c| c.is_ascii_digit()) {
+                lex.advance();
+            }
+        }
+        let raw = &lex.source[start.offset..lex.pos];
+        let text: String = format!("0{}", raw.chars().filter(|c| *c != '_').collect::<String>());
+        return Ok(TokenWithSpan {
+            token: Token::FloatLit(text),
+            span: lex.span_from(start),
+        });
+    }
 
     // Verifica prefixo de base (apenas se o primeiro char for '0')
     if lex.ch == Some('0') {

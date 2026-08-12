@@ -26,7 +26,7 @@ do runtime.
 
 **Fluxo do deadlock:**
 
-1. Servidor envia `-1` via `tx !> -1` → `try_send` coloca `-1` no slot → OK
+1. Servidor envia `-1` via `tx <! -1` → `try_send` coloca `-1` no slot → OK
 2. `wake_pass` chama `can_recv(handle)` → `slot.is_some()` → `true` → acorda main
 3. Main chama `try_recv(handle)` → pega `-1` do slot → retorna `-1`
 4. `kata_rt_channel_recv` verifica `if result != WOULD_BLOCK` → `-1 != -1` → `false`
@@ -294,7 +294,7 @@ quantidade de canais sem benefício.
 1. Criar teste E2E: enviar `-1` via `channel!()`, receber, verificar resultado
 2. Criar teste E2E: enviar `-1` via `queue!(1)`, receber, verificar resultado
 3. Reativar o teste `socket_connected_listen_fails` com `channel!()` (versão
-   original que usava `tx !> -1`) — deve passar agora
+   original que usava `tx <! -1`) — deve passar agora
 4. Rodar `cargo test --workspace --no-fail-fast` — 1372 passed, 0 failed,
    5 ignored (pelo menos)
 

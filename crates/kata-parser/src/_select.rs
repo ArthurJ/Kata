@@ -3,16 +3,16 @@
 //! Sintaxe:
 //! ```text
 //! select
-//!     rx <! msg: echo!(msg)
-//!     read!(file, 4096) <! data: processa!(data)
+//!     rx !> msg: echo!(msg)
+//!     read!(file, 4096) !> data: processa!(data)
 //!     timeout 5000: echo!("timeout")
 //! ```
 //!
-//! Cada braço é `receiver <! binding_name: body` ou
-//! `read!(handle, n) <! binding_name: body`.
+//! Cada braço é `receiver !> binding_name: body` ou
+//! `read!(handle, n) !> binding_name: body`.
 //! O braço `timeout N: body` é opcional e sempre o último.
 //!
-//! Como `<!` é um operador infixo em `parse_expr`, o parser de select
+//! Como `!>` é um operador infixo em `parse_expr`, o parser de select
 //! chama `parse_expr` que produz `Expr::ChannelRecv { channel, bind_name }`
 //! para cada braço. O `: body` é então parseado separadamente.
 //!
@@ -29,7 +29,7 @@ use crate::expressions::parse_expr;
 impl Parser {
     /// Parse `select` com braços indentados.
     ///
-    /// Cada braço: `receiver <! nome: body` ou `read!(handle, n) <! nome: body`
+    /// Cada braço: `receiver !> nome: body` ou `read!(handle, n) !> nome: body`
     /// ou `timeout N: body`.
     pub(crate) fn parse_select(&mut self) -> Result<Spanned<Expr>, FrontendError> {
         let start = self.peek_span();
@@ -60,15 +60,15 @@ impl Parser {
                 timeout_ms = Some(Box::new(ms));
                 timeout_body = Some(Box::new(body));
             } else {
-                // `receiver <! nome: body` ou `read!(handle, n) <! nome: body`
-                // parse_expr consome `expr <! nome` como Expr::ChannelRecv.
+                // `receiver !> nome: body` ou `read!(handle, n) !> nome: body`
+                // parse_expr consome `expr !> nome` como Expr::ChannelRecv.
                 let recv_expr = parse_expr(self)?;
 
                 // Extrai channel e bind_name do ChannelRecv
                 let (channel, bind_name) = match recv_expr.node {
                     Expr::ChannelRecv { channel, bind_name } => (*channel, bind_name),
                     _ => {
-                        return Err(self.error("esperado `receiver <! nome` no braço do select"));
+                        return Err(self.error("esperado `receiver !> nome` no braço do select"));
                     }
                 };
 

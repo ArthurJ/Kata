@@ -114,9 +114,9 @@ pub enum Token {
     Question,
     /// `!` — sufixo de chamada de Action
     Bang,
-    /// `!>` — envio por canal CSP
+    /// `<!` — envio por canal CSP ("valor entra no canal")
     SendArrow,
-    /// `<!` — recebimento por canal CSP
+    /// `!>` — recebimento por canal CSP ("valor sai do canal")
     RecvArrow,
     /// `$` — spread/aplicação explícita (identificador interceptado pelo typeck)
     /// (Não é keyword — é Ident("$"). O lexer produz Ident para `$`.)
@@ -259,8 +259,8 @@ impl std::fmt::Display for Token {
             Token::PipeForward => write!(f, "|>"),
             Token::Question => write!(f, "?"),
             Token::Bang => write!(f, "!"),
-            Token::SendArrow => write!(f, "!>"),
-            Token::RecvArrow => write!(f, "<!"),
+            Token::SendArrow => write!(f, "<!"),
+            Token::RecvArrow => write!(f, "!>"),
             Token::LParen => write!(f, "("),
             Token::RParen => write!(f, ")"),
             Token::LBracket => write!(f, "["),
