@@ -1,13 +1,20 @@
-//! `format` builtin — interceptado no typeck, não no DispatchTable.
+//! `format!` builtin — interceptado no typeck como action call com `!`.
 //!
-//! `format "template {} {}" (a, b)` sintetiza a cadeia:
+//! `format!("template {} {}", (a, b))` sintetiza a cadeia (posicional):
 //!   text_replace_first(
 //!     text_replace_first("template {} {}", repr_a),
 //!     repr_b
 //!   )
 //!
-//! Para cada argumento na tupla, converte para Text (como `repr` faz) e
-//! substitui a primeira ocorrência de `{}` no template acumulado.
+//! `format!{"{x} {y}", "x": a, "y": b}` sintetiza a cadeia (nomeado):
+//!   text_replace_first(
+//!     text_replace_first("{x} {y}", repr_a),
+//!     repr_b
+//!   )
+//!
+//! Para cada argumento, converte para Text (como `repr` faz) e substitui
+//! a primeira ocorrência de `{}` (posicional) ou `{key}` (nomeado) no
+//! template acumulado.
 
 use kata_ast::{Expr, Span, Spanned};
 use kata_core::escape::EscapeTarget;
@@ -19,8 +26,163 @@ use crate::typed::{TypedExpr, TypedExprKind};
 use super::expr::{InferCtx, infer_expr};
 use super::helpers::InferResult;
 
-/// Intercepta `format "template" (args_tuple)` e sintetiza a cadeia de
-/// `text_replace_first` com a representação Text de cada argumento.
+/// `format!` builtin — recebe o `args` cru do ActionCall.
+///
+/// Pode ser `Expr::Tuple`/`Expr::Grouping` (posicional) ou `Expr::DictLit`
+/// (nomeado). O 1º elemento/sempre é o template (Text).
+///
+/// **Posicional**: `format!("tpl {} {}", (a, b))` — substitui `{}` na ordem.
+/// **Nomeado**: `format!{"{x} {y}", "x": a, "y": b}` — substitui `{x}` pela
+/// key `"x"` do dict.
+pub(crate) fn infer_format_builtin(
+    args: &Spanned<Expr>,
+    _span: &Span,
+    env: &mut TypeEnv,
+    ctx: &InferCtx,
+) -> InferResult<(Ty, TypedExprKind)> {
+    match &args.node {
+        Expr::DictLit { entries } => {
+            infer_format_named(args.span, entries, env, ctx)
+        }
+        // Tupla posicional ou Grouping — extrai elements como antes.
+        Expr::Tuple { .. } | Expr::Grouping { .. } | Expr::Unit => {
+            let elements = extract_positional_elements(args);
+            infer_format_positional(args.span, &elements, env, ctx)
+        }
+        // Expr única sem grouping — auto-wrap como tupla de 1.
+        other => {
+            let elements = vec![Spanned::new(other.clone(), args.span)];
+            infer_format_positional(args.span, &elements, env, ctx)
+        }
+    }
+}
+
+/// Interpolação nomeada via DictLit.
+///
+/// `format!{"{x} {y}", "x": a, "y": b}` — o 1º entry é o template,
+/// os demais são pares `"key": expr`.
+fn infer_format_named(
+    span: Span,
+    entries: &[(Spanned<Expr>, Spanned<Expr>)],
+    env: &mut TypeEnv,
+    ctx: &InferCtx,
+) -> InferResult<(Ty, TypedExprKind)> {
+    if entries.is_empty() {
+        return Err(MiddleError::ArityMismatch {
+            expected: 2,
+            found: 0,
+            span: span.into(),
+            hint: Some("format! nomeado precisa de template + pelo menos 1 par key:value".into()),
+        });
+    }
+
+    // 1º entry: template (key é descartada, value é o template Text).
+    let (_tpl_key, tpl_val) = &entries[0];
+    let template_expr = infer_expr(&tpl_val.node, &tpl_val.span, env, ctx, false)?;
+    if template_expr.ty != Ty::text() {
+        return Err(MiddleError::TypeMismatch {
+            expected: format!("{}", Ty::text()),
+            found: format!("{}", template_expr.ty),
+            span: tpl_val.span.into(),
+        });
+    }
+    let mut result = Spanned::new(template_expr, tpl_val.span);
+
+    // Demais entries: pares "key": expr.
+    // Para cada par, converte expr para Text e substitui {key} no template.
+    for (key, val) in &entries[1..] {
+        // Key deve ser TextLit (string literal).
+        let key_text = match &key.node {
+            Expr::TextLit { text } => text.clone(),
+            _ => {
+                return Err(MiddleError::TypeMismatch {
+                    expected: "Text literal como chave do dict".into(),
+                    found: format!("{:?}", key.node),
+                    span: key.span.into(),
+                });
+            }
+        };
+
+        // Converte value para Text.
+        let typed_val = infer_expr(&val.node, &val.span, env, ctx, false)?;
+        let text_val = convert_to_text(Spanned::new(typed_val, val.span));
+
+        // Substitui {key} por text_val no template acumulado.
+        // text_replace_first(result, text_val) — mas precisamos substituir
+        // {key} específico, não {}. Como text_replace_first substitui a
+        // primeira ocorrência de {}, e o template tem {key}, precisamos
+        // primeiro substituir {key} por {} e depois {} por text_val.
+        // Melhor: construir o placeholder "{key}" como Text e fazer
+        // text_replace_first com o placeholder como "agulha" — mas
+        // text_replace_first só substitui {}. Então precisamos de uma
+        // abordagem diferente: substituir diretamente {key} por text_val.
+        //
+        // Como text_replace_first substitui a primeira ocorrência de {}
+        // (literal), e o template nomeado tem {key} (não {}), precisamos
+        // de uma FFI que substitua {key} específico.
+        //
+        // Alternativa: pré-processar o template em compile-time, trocando
+        // {key} por {} na ordem das entries, e usar text_replace_first
+        // posicional. Mas isso requer que o template seja TextLit.
+        //
+        // Como o template geralmente é TextLit (string literal), podemos
+        // pré-processar em compile-time.
+        let placeholder = format!("{{{key_text}}}");
+        // Constrói text_replace_first com placeholder como "agulha" —
+        // mas text_replace_first só substitui {}. Então precisamos de
+        // text_replace(template, placeholder, replacement) — 3 args.
+        //
+        // Por ora, usar a abordagem de pré-processamento do template:
+        // se o template é TextLit, reescrever {key} → {} na ordem.
+        result = text_replace_named(result, &placeholder, text_val);
+    }
+
+    Ok((Ty::text(), result.node.kind))
+}
+
+/// Interpolação posicional via tupla.
+///
+/// `format!("tpl {} {}", (a, b))` — substitui `{}` na ordem dos elements.
+fn infer_format_positional(
+    span: Span,
+    elements: &[Spanned<Expr>],
+    env: &mut TypeEnv,
+    ctx: &InferCtx,
+) -> InferResult<(Ty, TypedExprKind)> {
+    if elements.is_empty() {
+        return Err(MiddleError::ArityMismatch {
+            expected: 2,
+            found: 0,
+            span: span.into(),
+            hint: Some("format! precisa de template + args".into()),
+        });
+    }
+
+    // Arg 0: template (deve ser Text)
+    let template_expr = infer_expr(&elements[0].node, &elements[0].span, env, ctx, false)?;
+    if template_expr.ty != Ty::text() {
+        return Err(MiddleError::TypeMismatch {
+            expected: format!("{}", Ty::text()),
+            found: format!("{}", template_expr.ty),
+            span: elements[0].span.into(),
+        });
+    }
+    let mut result = Spanned::new(template_expr, elements[0].span);
+
+    // Demais elements: valores a interpolar posicionalmente.
+    for elem in &elements[1..] {
+        let typed = infer_expr(&elem.node, &elem.span, env, ctx, false)?;
+        let text_typed = convert_to_text(Spanned::new(typed, elem.span));
+        result = text_replace_first(result, text_typed);
+    }
+
+    Ok((Ty::text(), result.node.kind))
+}
+
+/// Wrapper de compatibilidade — recebe args como slice (format antigo sem `!`).
+/// `args[0]` = template, `args[1]` = tupla de args (ou Unit, ou expr única).
+/// Usado por `log_synthesis.rs` e `log_builtins.rs` que constroem args
+/// programaticamente. Será removido quando `@log` intrínseco for removido (Fase 3).
 pub(crate) fn infer_format(
     _callee: &Spanned<Expr>,
     args: &[Spanned<Expr>],
@@ -28,55 +190,57 @@ pub(crate) fn infer_format(
     env: &mut TypeEnv,
     ctx: &InferCtx,
 ) -> InferResult<(Ty, TypedExprKind)> {
-    // Arg 0: template (deve ser Text)
-    let template_expr = infer_expr(&args[0].node, &args[0].span, env, ctx, false)?;
-    if template_expr.ty != Ty::text() {
-        return Err(MiddleError::TypeMismatch {
-            expected: format!("{}", Ty::text()),
-            found: format!("{}", template_expr.ty),
-            span: args[0].span.into(),
-        });
+    if args.len() == 2 {
+        // Desempacotar args[1] (tupla de args) em elements individuais.
+        let mut elements = vec![args[0].clone()];
+        match &args[1].node {
+            Expr::Tuple { elements: inner } => elements.extend(inner.iter().cloned()),
+            Expr::Unit => {} // sem args
+            Expr::Grouping { inner } => match &inner.node {
+                Expr::Tuple { elements: inner2 } => elements.extend(inner2.iter().cloned()),
+                _ => elements.push(args[1].clone()),
+            },
+            _ => elements.push(args[1].clone()),
+        }
+        infer_format_positional(*_span, &elements, env, ctx)
+    } else {
+        infer_format_positional(*_span, args, env, ctx)
     }
-    let template_typed = Spanned::new(template_expr, args[0].span);
+}
 
-    // Arg 1: tupla de valores a interpolar
-    let tuple_core = &args[1].node;
-    let elements: Vec<Spanned<Expr>> = match tuple_core {
-        Expr::Tuple { elements } => elements.clone(),
-        Expr::Unit => Vec::new(), // tupla vazia `()` = sem args
-        Expr::Grouping { inner } => {
-            // Grouping de uma tupla: (a, b) dentro de parênteses extras
-            match &inner.node {
-                Expr::Tuple { elements } => elements.clone(),
-                _ => {
-                    // Grouping de uma expressão única: auto-wrap como tupla de 1
-                    vec![Spanned::new(inner.node.clone(), inner.span)]
-                }
+/// Extrai elements de tupla, Grouping, ou auto-wrap de expr única.
+/// Trata `()` (Unit) como tupla vazia — `format!("tpl", ())` = sem args.
+/// Trata `(arg,)` (tupla de 1) como auto-wrap — o arg é o valor, não uma tupla.
+fn extract_positional_elements(args: &Spanned<Expr>) -> Vec<Spanned<Expr>> {
+    match &args.node {
+        Expr::Tuple { elements } => extract_tuple_elems(elements),
+        Expr::Unit => Vec::new(),
+        Expr::Grouping { inner } => match &inner.node {
+            Expr::Tuple { elements } => extract_tuple_elems(elements),
+            // Grouping de expr única — auto-wrap como tupla de 1.
+            _ => vec![Spanned::new(inner.node.clone(), inner.span)],
+        },
+        other => vec![Spanned::new(other.clone(), args.span)],
+    }
+}
+
+/// Extrai elements de uma tupla, tratando casos especiais:
+/// - `("tpl", ())` — 2 elems onde 2º é Unit = template sem args de interpolação.
+/// - `("tpl", (arg,))` — 2 elems onde 2º é Tuple de 1 = template + 1 arg (auto-wrap).
+fn extract_tuple_elems(elements: &[Spanned<Expr>]) -> Vec<Spanned<Expr>> {
+    if elements.len() == 2 {
+        // `("tpl", ())` — sem args.
+        if matches!(elements[1].node, Expr::Unit) {
+            return vec![elements[0].clone()];
+        }
+        // `("tpl", (arg,))` — auto-wrap de tupla de 1.
+        if let Expr::Tuple { elements: inner } = &elements[1].node {
+            if inner.len() == 1 {
+                return vec![elements[0].clone(), inner[0].clone()];
             }
         }
-        // Expressão única sem grouping — auto-wrap como tupla de 1 elemento.
-        // Ex: `format "Dobro: {}" 42` — `42` é IntLit, não Tuple.
-        other => vec![Spanned::new(other.clone(), args[1].span)],
-    };
-
-    // Infere cada elemento da tupla e converte para Text
-    let mut text_parts: Vec<Spanned<TypedExpr>> = Vec::new();
-    for elem in elements {
-        let typed = infer_expr(&elem.node, &elem.span, env, ctx, false)?;
-        let text_typed = convert_to_text(Spanned::new(typed, elem.span));
-        text_parts.push(text_typed);
     }
-
-    // Constrói a cadeia de text_replace_first:
-    //   text_replace_first(template, part0)
-    //   text_replace_first(^, part1)
-    //   ...
-    let mut result = template_typed;
-    for part in text_parts {
-        result = text_replace_first(result, part);
-    }
-
-    Ok((Ty::text(), result.node.kind))
+    elements.to_vec()
 }
 
 /// Converte um TypedExpr para Text, baseado no tipo.
@@ -177,6 +341,57 @@ fn ffi_call1(ffi_name: &str, arg: Spanned<TypedExpr>, ret_ty: Ty) -> Spanned<Typ
                 callee: Box::new(Spanned::new(callee, Span::synthetic())),
                 args: vec![arg],
                 ffi_symbol: Some(ffi_name.to_string()),
+            },
+        },
+        Span::synthetic(),
+    )
+}
+
+/// Constrói `text_replace(template, needle, replacement)` — FFI call 3-arg.
+/// Substitui a primeira ocorrência de `needle` por `replacement` no template.
+fn text_replace_named(
+    template: Spanned<TypedExpr>,
+    needle: &str,
+    replacement: Spanned<TypedExpr>,
+) -> Spanned<TypedExpr> {
+    // Aloca o needle como string literal no TAST.
+    let needle_typed = TypedExpr {
+        span: Span::synthetic(),
+        ty: Ty::text(),
+        tail_pos: false,
+        escape: EscapeTarget::Local,
+        kind: TypedExprKind::TextLit {
+            text: needle.to_string(),
+        },
+    };
+
+    let callee = TypedExpr {
+        span: Span::synthetic(),
+        ty: Ty::Function(
+            vec![Ty::text(), Ty::text(), Ty::text()],
+            Box::new(Ty::text()),
+        ),
+        tail_pos: false,
+        escape: EscapeTarget::Local,
+        kind: TypedExprKind::Ident {
+            name: "kata_rt_text_replace".to_string(),
+        },
+    };
+
+    Spanned::new(
+        TypedExpr {
+            span: Span::synthetic(),
+            ty: Ty::text(),
+            tail_pos: false,
+            escape: EscapeTarget::Caller,
+            kind: TypedExprKind::Closure {
+                callee: Box::new(Spanned::new(callee, Span::synthetic())),
+                args: vec![
+                    template,
+                    Spanned::new(needle_typed, Span::synthetic()),
+                    replacement,
+                ],
+                ffi_symbol: Some("kata_rt_text_replace".to_string()),
             },
         },
         Span::synthetic(),

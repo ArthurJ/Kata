@@ -63,6 +63,7 @@ pub enum FfiSymbol {
     IntToText,
     BoolToText,
     TextReplaceFirst,
+    TextReplace,
 
     // ── I/O ──────────────────────────────────────────────
     Print,
@@ -424,6 +425,7 @@ impl FfiSymbol {
             FfiSymbol::IntToText => "kata_rt_int_to_text",
             FfiSymbol::BoolToText => "kata_rt_bool_to_text",
             FfiSymbol::TextReplaceFirst => "kata_rt_text_replace_first",
+            FfiSymbol::TextReplace => "kata_rt_text_replace",
             FfiSymbol::Print => "kata_rt_print",
             FfiSymbol::Println => "kata_rt_println",
             FfiSymbol::ArenaCreate => "kata_rt_arena_create",
@@ -618,7 +620,7 @@ impl FfiSymbol {
             FfiSymbol::StringLen => Ty::int(),
             FfiSymbol::TextLiteral => Ty::text(),
             FfiSymbol::IntToText | FfiSymbol::BoolToText => Ty::text(),
-            FfiSymbol::TextReplaceFirst => Ty::text(),
+            FfiSymbol::TextReplaceFirst | FfiSymbol::TextReplace => Ty::text(),
             // I/O
             FfiSymbol::Print | FfiSymbol::Println => Ty::Unit,
             // Arena
@@ -811,6 +813,7 @@ impl FfiSymbol {
             FfiSymbol::IntToText,
             FfiSymbol::BoolToText,
             FfiSymbol::TextReplaceFirst,
+            FfiSymbol::TextReplace,
             FfiSymbol::Print,
             FfiSymbol::Println,
             FfiSymbol::ArenaCreate,

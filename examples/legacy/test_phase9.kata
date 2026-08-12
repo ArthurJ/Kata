@@ -12,7 +12,7 @@ action main
     let t := type my_config
     let f := fields my_config
     echo!(t)
-    let formatted_str := format "Configs passadas: {}" my_config
+    let formatted_str := format!("Configs passadas: {}", (my_config))
     echo!(formatted_str)
 
     # 3. Shape do novo Tensor (deveria validar se Tensor existir ou pode dar mismatch,

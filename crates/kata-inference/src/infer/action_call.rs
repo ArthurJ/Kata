@@ -18,6 +18,7 @@ use super::csp_builtins::{
 };
 use super::expr::{InferCtx, infer_expr};
 use super::helpers::{InferResult, reorder_dict_args_to_tuple};
+use super::format_synthesis::infer_format_builtin;
 use super::log_builtins::{infer_log_builtin, infer_log_config_builtin, infer_log_recv_builtin};
 use super::sugar::infer_assert;
 use super::timer_builtins::infer_now_builtin;
@@ -85,6 +86,15 @@ pub(crate) fn infer_action_call(
     // ── Builtins Log ──
     if callee == "log" {
         return infer_log_builtin(args, span, env, ctx);
+    }
+
+    // ── Builtin format! ──
+    // `format!("template {}") (a, b)` ou `format!{"{key} ...", "key": expr}`
+    // Sintetiza cadeia de text_replace_first. Primitiva pura (FFI direta),
+    // não passa pelo DispatchTable nem pelo scheduler.
+    if callee == "format" {
+        let (ty, kind) = infer_format_builtin(args, span, env, ctx)?;
+        return Ok(ActionDispatch::Tuple(ty, kind));
     }
     if callee == "log_recv" {
         return infer_log_recv_builtin(args, span, env, ctx);

@@ -19,7 +19,6 @@ use super::apply_lambda::{infer_apply_lambda, infer_apply_lambda_with_hint};
 use super::apply_len_tuple::try_len_tuple;
 use super::collections_hof::{infer_filter, infer_fold, infer_map};
 use super::expr::{InferCtx, infer_expr};
-use super::format_synthesis::infer_format;
 use super::helpers::{InferResult, peel_grouping_expr, reorder_dict_args_to_tuple};
 use super::iface_dispatch::try_iface_method_dispatch;
 use super::variant_construct::{VariantCall, expand_spread, infer_variant_construct};
@@ -158,12 +157,8 @@ pub(crate) fn infer_apply(
         }
     };
 
-    // `format "template {}" (a, b)` — builtin sintetizado.
-    // O typeck intercepta `format` e constrói a cadeia de text_replace_first
-    // inline. Não passa pelo DispatchTable.
-    if func_name == "format" && args.len() == 2 {
-        return infer_format(callee, args, span, env, ctx);
-    }
+    // `format` sem `!` foi removido — agora é `format!` (action call com `!`).
+    // Intercepado em action_call.rs como builtin, despacha para infer_format_builtin.
 
     // Map/filter/fold — interceptados por nome.
     // Não passam pelo DispatchTable. O typeck descobre o tipo concreto

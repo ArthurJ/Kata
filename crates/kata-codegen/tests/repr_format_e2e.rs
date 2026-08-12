@@ -149,56 +149,56 @@ fn repr_struct_sem_campos_falha() {
 // format — DoD 5: format interpola
 // ═══════════════════════════════════════════════════════════════
 
-/// `format "{} {}" (42, "ok")` retorna "42 ok" — interpolação básica.
+/// `format!("{} {}", (42, "ok"))` retorna "42 ok" — interpolação básica.
 #[test]
 fn format_basico_int_text() {
-    let src = "format \"{} {}\" (42, \"ok\")";
+    let src = "format!(\"{} {}\", (42, \"ok\"))";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::text());
     let _ = raw;
 }
 
-/// `format "{}" (42,)` — tupla de 1 elemento.
+/// `format!("{}", (42,))` — tupla de 1 elemento.
 #[test]
 fn format_um_arg() {
-    let src = "format \"{}\" (42,)";
+    let src = "format!(\"{}\", (42,))";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::text());
     let _ = raw;
 }
 
-/// `format "{}" (Boolean::True)` — interpola Boolean.
+/// `format!("{}", (Boolean::True,))` — interpola Boolean.
 #[test]
 fn format_boolean() {
-    let src = "format \"{}\" (Boolean::True,)";
+    let src = "format!(\"{}\", (Boolean::True,))";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::text());
     let _ = raw;
 }
 
-/// `format "{}" (pessoa)` — interpola struct via repr.
+/// `format!("{}", (p,))` — interpola struct via repr.
 #[test]
 fn format_struct_via_repr() {
     let src =
-        "data Pessoa (nome::Text idade::Int)\nconstant p := Pessoa \"João\" 30\nformat \"{}\" (p,)";
+        "data Pessoa (nome::Text idade::Int)\nconstant p := Pessoa \"João\" 30\nformat!(\"{}\", (p,))";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::text());
     let _ = raw;
 }
 
-/// `format` sem args (template puro) — tupla vazia `()`.
+/// `format!` sem args (template puro) — tupla vazia `()`.
 #[test]
 fn format_sem_args() {
-    let src = "format \"hello world\" ()";
+    let src = "format!(\"hello world\", ())";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::text());
     let _ = raw;
 }
 
-/// `format "Dobro: {}" 42` — arg único sem tupla (auto-wrap como tupla de 1).
+/// `format!("Dobro: {}", 42)` — arg único sem tupla (auto-wrap como tupla de 1).
 #[test]
 fn format_arg_unico_sem_tupla() {
-    let src = "format \"Dobro: {}\" 42";
+    let src = "format!(\"Dobro: {}\", 42)";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::text());
     let _ = raw;

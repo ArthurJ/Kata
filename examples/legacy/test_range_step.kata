@@ -16,10 +16,10 @@ lambda inicio passo fim: [inicio..passo..=fim]
 
 action main
     let r1 := [0..2..10]
-    echo!($(format "{}" r1))
+    echo!($(format!("{}", (r1))))
 
     let r2 := [0..3..=10]
-    echo!($(format "{}" r2))
+    echo!($(format!("{}", (r2))))
 
     let r3 := [10..-1..=0]
-    echo!($(format "{}" r3))
+    echo!($(format!("{}", (r3))))

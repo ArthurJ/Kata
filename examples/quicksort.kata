@@ -1,8 +1,9 @@
 import stdio
+# TODO deveria ser "stdio.(stdout)" para o stdout ficar disponivel no escopo do módulo
+#da maneira como está, o acesso deveria ser restrito com stdio.stdout
 
-#{
-@log{msg: "{pivo}", when: "exit", topic:'stdout'}
-#}#
+# o file deveria ser "file", e o valor deveria ser stdout, sem a chamada "!()", afinal, o que o stdout está "fazendo" nesta situação?
+@trace{msg: "{_return}\n", when: "exit", file:stdout!()}
 quicksort :: [Int] => [Int]
 lambda []: []
 lambda [pivo:resto]:

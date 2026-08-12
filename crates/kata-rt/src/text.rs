@@ -130,6 +130,50 @@ pub unsafe extern "C" fn kata_rt_bool_to_text(val: i64) -> *mut std::os::raw::c_
         .into_raw()
 }
 
+/// Substitui primeira ocorrência de `needle` por `replacement` (3 args).
+/// Usado por `format!` nomeado: substitui `{key}` por valor.
+///
+/// # Safety
+///
+/// `template`, `needle`, `replacement` devem ser ponteiros C string válidos ou NULL.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn kata_rt_text_replace(
+    template: *const std::os::raw::c_char,
+    needle: *const std::os::raw::c_char,
+    replacement: *const std::os::raw::c_char,
+) -> *mut std::os::raw::c_char {
+    let template = if template.is_null() {
+        String::new()
+    } else {
+        unsafe { std::ffi::CStr::from_ptr(template).to_string_lossy().into_owned() }
+    };
+    let needle = if needle.is_null() {
+        String::new()
+    } else {
+        unsafe { std::ffi::CStr::from_ptr(needle).to_string_lossy().into_owned() }
+    };
+    let replacement = if replacement.is_null() {
+        String::new()
+    } else {
+        unsafe { std::ffi::CStr::from_ptr(replacement).to_string_lossy().into_owned() }
+    };
+    let result = if let Some(pos) = template.find(&needle) {
+        format!(
+            "{}{}{}",
+            &template[..pos],
+            replacement,
+            &template[pos + needle.len()..]
+        )
+    } else {
+        template
+    };
+    std::ffi::CString::new(result)
+        .unwrap_or_else(|_| {
+            std::ffi::CString::new("").expect("empty string never contains nul bytes")
+        })
+        .into_raw()
+}
+
 /// Substitui primeira ocorrência de `{}` por valor (ponteiro C string).
 /// Chamado pelo codegen via `FfiSymbol::TextReplaceFirst`.
 ///

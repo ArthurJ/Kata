@@ -107,6 +107,10 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
         "kata_rt_text_replace_first",
         rt::kata_rt_text_replace_first as *const u8,
     );
+    builder.symbol(
+        "kata_rt_text_replace",
+        rt::kata_rt_text_replace as *const u8,
+    );
     // I/O
     builder.symbol("kata_rt_print", rt::kata_rt_print as *const u8);
     builder.symbol("kata_rt_println", rt::kata_rt_println as *const u8);
@@ -511,6 +515,7 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         TextLiteral,
         BoolToText,
         TextReplaceFirst,
+        TextReplace,
         Print,
         Println,
         ArenaCreate,

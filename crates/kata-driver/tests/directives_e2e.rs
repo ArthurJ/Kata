@@ -642,7 +642,7 @@ fn e2e_trace_args_function_pure() {
     // Não podemos verificar o log (precisa de consumidor log_recv!()),
     // mas verificamos que a função compila e executa corretamente.
     let src = r#"directive trace_test{when: Hook::Enter, on: Target::Function, msg: Text}
-    log!(LogLevel::Info, format _msg (_name,))
+    log!(LogLevel::Info, format!(_msg, (_name,)))
 
 @trace_test{msg: "entering {}", when: "enter"}
 dobra :: Int => Int
@@ -663,7 +663,7 @@ echo!(dobra 21)"#;
 #[test]
 fn e2e_trace_args_action() {
     let src = r#"directive trace_test{when: Hook::Enter, on: Target::Action, msg: Text}
-    echo!(format _msg (_name,))
+    echo!(format!(_msg, (_name,)))
 
 @trace_test{msg: "action {}", when: "enter"}
 action processar(x :: Int) => Int
@@ -688,10 +688,10 @@ echo!(processar!(5))"#;
 #[test]
 fn e2e_trace_dispatch_by_arg_keys() {
     let src = r#"directive trace_test{when: Hook::Enter, on: Target::Action, msg: Text}
-    echo!(format _msg (_name,))
+    echo!(format!(_msg, (_name,)))
 
 directive trace_test{when: Hook::Enter, on: Target::Action, msg: Text, topic: Text}
-    echo!(format _msg (_name,))
+    echo!(format!(_msg, (_name,)))
 
 @trace_test{msg: "simple {}", when: "enter"}
 action sem_topic(x :: Int) => Int
@@ -722,7 +722,7 @@ echo!(com_topic!(20))"#;
 fn e2e_trace_exit_args_function() {
     // Exit em função pura: log!() com _return. Verifica que compila e executa.
     let src = r#"directive trace_test{when: Hook::Exit, on: Target::Function, msg: Text}
-    log!(LogLevel::Info, format _msg (_name, _return))
+    log!(LogLevel::Info, format!(_msg, (_name, _return)))
 
 @trace_test{msg: "exit {} -> {}", when: "exit"}
 inc :: Int => Int

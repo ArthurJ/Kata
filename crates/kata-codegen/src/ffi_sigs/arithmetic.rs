@@ -144,8 +144,15 @@ pub(crate) fn sig_for(sym: FfiSymbol) -> Option<Signature> {
         }
         // ── Text replace first (ptr, ptr) → ptr ──
         FfiSymbol::TextReplaceFirst => {
-            sig.params.push(AbiParam::new(I64));
-            sig.params.push(AbiParam::new(I64));
+            sig.params.push(AbiParam::new(I64)); // template
+            sig.params.push(AbiParam::new(I64)); // replacement
+            sig.returns.push(AbiParam::new(I64));
+        }
+        // ── Text replace (ptr, ptr, ptr) → ptr — substitui needle por replacement ──
+        FfiSymbol::TextReplace => {
+            sig.params.push(AbiParam::new(I64)); // template
+            sig.params.push(AbiParam::new(I64)); // needle
+            sig.params.push(AbiParam::new(I64)); // replacement
             sig.returns.push(AbiParam::new(I64));
         }
         // ── String equality (Fio 13) ──

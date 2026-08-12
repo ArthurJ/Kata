@@ -120,7 +120,7 @@ pub use cache::{
 };
 pub use text::{
     kata_rt_bool_to_text, kata_rt_string_concat, kata_rt_string_eq, kata_rt_string_len,
-    kata_rt_text_literal, kata_rt_text_replace_first,
+    kata_rt_text_literal, kata_rt_text_replace, kata_rt_text_replace_first,
 };
 // Canais CSP
 pub use channel::{
