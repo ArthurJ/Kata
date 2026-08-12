@@ -346,7 +346,9 @@ impl Pipeline {
         // infer_module toma &ResolvedModule, então precisamos mutar antes.
         let mut resolved = (*resolved).clone();
         for ic in &imported_constants {
-            resolved.type_env.define(&ic.name, ic.value.ty.clone(), "__module__");
+            resolved
+                .type_env
+                .define(&ic.name, ic.value.ty.clone(), "__module__");
         }
         let resolved = &resolved; // re-borrow como imutável
 

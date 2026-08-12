@@ -124,7 +124,9 @@ fn overloadset_map_com_both_holes() {
     // map só passa 1 arg. Então f recebe (elem, ?) — mas f é binário!
     // map espera callback de 1 arg. + _ _ é arity 2. Isso deveria falhar.
     // Vamos verificar o que acontece.
-    let result = std::panic::catch_unwind(|| eval_src("f :: Int Int => Int\nlambda x y: + x y\nmap f [1 2 3]"));
+    let result = std::panic::catch_unwind(|| {
+        eval_src("f :: Int Int => Int\nlambda x y: + x y\nmap f [1 2 3]")
+    });
     // Pode falhar na inference (arity mismatch) ou no codegen.
     // Por ora, só verificar que não crasha o processo.
     match result {

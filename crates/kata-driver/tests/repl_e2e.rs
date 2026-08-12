@@ -795,9 +795,10 @@ fn repl_constant_float_in_function() {
     let lines = result_lines(&out);
     // 3.14 * 2.0 * 2.0 = 12.56
     assert!(
-        lines
-            .iter()
-            .any(|l| l.trim().parse::<f64>().map_or(false, |v| (v - 12.56).abs() < 0.01)),
+        lines.iter().any(|l| l
+            .trim()
+            .parse::<f64>()
+            .map_or(false, |v| (v - 12.56).abs() < 0.01)),
         "esperava ~12.56 (constant float em function), got: {out}"
     );
 }

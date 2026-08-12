@@ -371,8 +371,7 @@ impl ReplSession {
         let user = resolve(module)
             .map_err(|e| format!("erro de resolução: {}", crate::format_error_vec(&e)))?;
         let resolved = merge_resolved(self.prelude.clone(), user);
-        let typed =
-            infer_module(module, &resolved).map_err(|e| format!("erro de tipo: {e}"))?;
+        let typed = infer_module(module, &resolved).map_err(|e| format!("erro de tipo: {e}"))?;
 
         // Comptime pass: avalia constants (JIT-executa), substitui por
         // literais/snapshots, e roda constant_fold (substitui Ident de

@@ -386,7 +386,10 @@ fn comptime_callsite_param_not_comptime() {
     let (stdout, stderr, code) = run_kata_run(src);
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     let first = stdout.lines().next().unwrap_or("");
-    assert_eq!(first, "15", "+ x 5 com x=10 deve produzir 15 — stdout: {stdout}");
+    assert_eq!(
+        first, "15",
+        "+ x 5 com x=10 deve produzir 15 — stdout: {stdout}"
+    );
 }
 
 /// `@comptime echo!("msg")` — `@comptime` foi removido, erro de parser.

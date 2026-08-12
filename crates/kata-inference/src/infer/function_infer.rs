@@ -5,7 +5,7 @@
 //! contra tipos dos parâmetros, e body inferido em escopo filho.
 
 use kata_ast::{GuardClause, Spanned, WithBinding};
-use kata_core::ty::{TypeEnv, Ty};
+use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 use kata_resolution::FunctionDef;
 

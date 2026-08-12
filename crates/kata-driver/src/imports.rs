@@ -10,7 +10,7 @@ use std::path::Path;
 
 use kata_ast::Item;
 use kata_comptime::run_comptime_pass;
-use kata_inference::{infer_module, TypedExpr, TypedExprKind};
+use kata_inference::{TypedExpr, TypedExprKind, infer_module};
 use kata_resolution::{ImportKind, ImportedModule, ModuleLoader, ResolvedModule};
 
 use crate::IntoReport;
@@ -311,9 +311,13 @@ pub(crate) fn evaluate_imported_constants(
             .items
             .iter()
             .filter_map(|item| match &item.node {
-                Item::ExportDecl { items } => {
-                    Some(items.iter().filter(|ei| ei.reexport_from.is_none()).map(|ei| ei.name.clone()).collect::<Vec<_>>())
-                }
+                Item::ExportDecl { items } => Some(
+                    items
+                        .iter()
+                        .filter(|ei| ei.reexport_from.is_none())
+                        .map(|ei| ei.name.clone())
+                        .collect::<Vec<_>>(),
+                ),
                 _ => None,
             })
             .flatten()
@@ -352,7 +356,12 @@ fn has_entry_expr(module: &kata_ast::Module) -> bool {
 /// exportadores de constants podem não ter um.
 fn inject_synthetic_entry(mut module: kata_ast::Module) -> kata_ast::Module {
     let span = kata_ast::Span::zero();
-    let zero = kata_ast::Spanned::new(kata_ast::Expr::IntLit { text: "0".to_string() }, span);
+    let zero = kata_ast::Spanned::new(
+        kata_ast::Expr::IntLit {
+            text: "0".to_string(),
+        },
+        span,
+    );
     module.items.push(kata_ast::Spanned::new(
         kata_ast::Item::EntryExpr(zero),
         span,

@@ -677,8 +677,6 @@ pub(crate) fn lower_expr(
             Ok(ptr)
         }
 
-
-
         // ── HeapSnapshot — load de snapshot_ptrs[snapshot_id] ──
         // O runtime carrega snapshots em load-time via kata_rt_load_snapshots.
         // O codegen emite um call para kata_rt_get_snapshot(snapshot_id) que
