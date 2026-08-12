@@ -84,6 +84,7 @@ pub fn resolve_with_imports(
         origin,
         imported_directives,
         kata_core::InterfaceRegistry::new(),
+        &DirectiveRegistry::new(),
     )
 }
 
@@ -93,17 +94,26 @@ pub fn resolve_with_imports(
 /// com as interfaces do prelude. Isto é necessário para que tipos como
 /// `msg :: SHOW` sejam resolvidos como `Ty::Interface("SHOW")` em vez de
 /// `Ty::Var("SHOW")` quando o módulo do usuário não define a interface.
+///
+/// `prelude_directives` é o `DirectiveRegistry` do prelude (core.kata),
+/// usado para **consulta** durante validação de `@nome` em Sig/ActionDecl.
+/// As diretivas do prelude não são inseridas no registry do módulo — elas
+/// são mescladas posteriormente em `merge_two`. Sem isto, `@trace` (definida
+/// no stdlib) seria rejeitada como `unknown_directive` no resolve do usuário,
+/// antes do merge trazer as declarations do prelude.
 pub fn resolve_with_prelude(
     module: &Module,
     origin: &str,
     imported_directives: DirectiveRegistry,
     prelude_iface_reg: &kata_core::InterfaceRegistry,
+    prelude_directives: &DirectiveRegistry,
 ) -> Result<ResolvedModule, Vec<ResolveError>> {
     resolve_inner(
         module,
         origin,
         imported_directives,
         prelude_iface_reg.clone(),
+        prelude_directives,
     )
 }
 
@@ -112,6 +122,7 @@ fn resolve_inner(
     origin: &str,
     imported_directives: DirectiveRegistry,
     prelude_iface_reg: kata_core::InterfaceRegistry,
+    prelude_directives: &DirectiveRegistry,
 ) -> Result<ResolvedModule, Vec<ResolveError>> {
     let mut type_env = TypeEnv::new();
     // Unit é tipo primitivo da linguagem — sempre disponível no TypeEnv.
@@ -226,8 +237,10 @@ fn resolve_inner(
                         }
                         // Diretivas válidas em Sig mas sem processamento aqui.
                         "builtin" | "log" | "timer" => {}
-                        // Diretiva customizada — validar contra o registry.
-                        other if directive_registry.contains_name(other) => {}
+                        // Diretiva customizada — validar contra o registry
+                        // (local + prelude, para @trace do stdlib funcionar).
+                        other if directive_registry.contains_name(other)
+                            || prelude_directives.contains_name(other) => {}
                         other => {
                             errors.push(ResolveError::UnknownDirective {
                                 name: other.to_string(),
@@ -246,7 +259,10 @@ fn resolve_inner(
                 // aplicada em Sig é erro.
                 let custom_dirs: Vec<CustomDirectiveApp> = directives
                     .iter()
-                    .filter(|d| directive_registry.contains_name(&d.name))
+                    .filter(|d| {
+                        directive_registry.contains_name(&d.name)
+                            || prelude_directives.contains_name(&d.name)
+                    })
                     .map(|d| CustomDirectiveApp {
                         name: d.name.clone(),
                         args: d.args.clone(),
@@ -255,7 +271,9 @@ fn resolve_inner(
                     })
                     .collect();
                 for d in &custom_dirs {
-                    if !directive_registry.has_compatible_target(&d.name, Target::Function) {
+                    if !directive_registry.has_compatible_target(&d.name, Target::Function)
+                        && !prelude_directives.has_compatible_target(&d.name, Target::Function)
+                    {
                         errors.push(ResolveError::DirectiveTargetMismatch {
                             name: d.name.clone(),
                             item_kind: "function".into(),
@@ -325,8 +343,10 @@ fn resolve_inner(
                 for d in action_dirs {
                     match d.name.as_str() {
                         "ffi" | "test" | "log" => {}
-                        // Diretiva customizada — validar contra o registry.
-                        other if directive_registry.contains_name(other) => {}
+                        // Diretiva customizada — validar contra o registry
+                        // (local + prelude, para @trace do stdlib funcionar).
+                        other if directive_registry.contains_name(other)
+                            || prelude_directives.contains_name(other) => {}
                         other => {
                             errors.push(ResolveError::UnknownDirective {
                                 name: other.to_string(),
@@ -342,7 +362,10 @@ fn resolve_inner(
                 // aplicada em Action é erro.
                 let custom_dirs: Vec<CustomDirectiveApp> = action_dirs
                     .iter()
-                    .filter(|d| directive_registry.contains_name(&d.name))
+                    .filter(|d| {
+                        directive_registry.contains_name(&d.name)
+                            || prelude_directives.contains_name(&d.name)
+                    })
                     .map(|d| CustomDirectiveApp {
                         name: d.name.clone(),
                         args: d.args.clone(),
@@ -351,7 +374,9 @@ fn resolve_inner(
                     })
                     .collect();
                 for d in &custom_dirs {
-                    if !directive_registry.has_compatible_target(&d.name, Target::Action) {
+                    if !directive_registry.has_compatible_target(&d.name, Target::Action)
+                        && !prelude_directives.has_compatible_target(&d.name, Target::Action)
+                    {
                         errors.push(ResolveError::DirectiveTargetMismatch {
                             name: d.name.clone(),
                             item_kind: "action".into(),

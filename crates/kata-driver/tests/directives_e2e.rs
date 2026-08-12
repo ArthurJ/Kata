@@ -641,10 +641,10 @@ fn e2e_trace_args_function_pure() {
     // Função pura com diretiva Enter: log!() é FFI direta (não bloqueia).
     // Não podemos verificar o log (precisa de consumidor log_recv!()),
     // mas verificamos que a função compila e executa corretamente.
-    let src = r#"directive trace{when: Hook::Enter, on: Target::Function, msg: Text}
+    let src = r#"directive trace_test{when: Hook::Enter, on: Target::Function, msg: Text}
     log!(LogLevel::Info, format _msg (_name,))
 
-@trace{msg: "entering {}", when: "enter"}
+@trace_test{msg: "entering {}", when: "enter"}
 dobra :: Int => Int
 lambda n: * n 2
 
@@ -662,10 +662,10 @@ echo!(dobra 21)"#;
 
 #[test]
 fn e2e_trace_args_action() {
-    let src = r#"directive trace{when: Hook::Enter, on: Target::Action, msg: Text}
+    let src = r#"directive trace_test{when: Hook::Enter, on: Target::Action, msg: Text}
     echo!(format _msg (_name,))
 
-@trace{msg: "action {}", when: "enter"}
+@trace_test{msg: "action {}", when: "enter"}
 action processar(x :: Int) => Int
     + x 1
 
@@ -687,17 +687,17 @@ echo!(processar!(5))"#;
 
 #[test]
 fn e2e_trace_dispatch_by_arg_keys() {
-    let src = r#"directive trace{when: Hook::Enter, on: Target::Action, msg: Text}
+    let src = r#"directive trace_test{when: Hook::Enter, on: Target::Action, msg: Text}
     echo!(format _msg (_name,))
 
-directive trace{when: Hook::Enter, on: Target::Action, msg: Text, topic: Text}
+directive trace_test{when: Hook::Enter, on: Target::Action, msg: Text, topic: Text}
     echo!(format _msg (_name,))
 
-@trace{msg: "simple {}", when: "enter"}
+@trace_test{msg: "simple {}", when: "enter"}
 action sem_topic(x :: Int) => Int
     + x 1
 
-@trace{msg: "with topic {}", when: "enter", topic: "audit"}
+@trace_test{msg: "with topic {}", when: "enter", topic: "audit"}
 action com_topic(x :: Int) => Int
     + x 2
 
@@ -721,10 +721,10 @@ echo!(com_topic!(20))"#;
 #[test]
 fn e2e_trace_exit_args_function() {
     // Exit em função pura: log!() com _return. Verifica que compila e executa.
-    let src = r#"directive trace{when: Hook::Exit, on: Target::Function, msg: Text}
+    let src = r#"directive trace_test{when: Hook::Exit, on: Target::Function, msg: Text}
     log!(LogLevel::Info, format _msg (_name, _return))
 
-@trace{msg: "exit {} -> {}", when: "exit"}
+@trace_test{msg: "exit {} -> {}", when: "exit"}
 inc :: Int => Int
 lambda n: + n 1
 
@@ -735,5 +735,62 @@ echo!(inc 41)"#;
     assert!(
         stdout.contains("42"),
         "deve imprimir resultado 42 - stdout: {stdout} | stderr: {stderr}"
+    );
+}
+
+// ── Test 25: @trace do stdlib sem declaration local (Fase 2 DoD) ────
+
+#[test]
+fn e2e_trace_stdlib_function() {
+    // @trace do stdlib (core.kata) sem declaration local.
+    // log!() vai para CSP (não stdout) — verificamos que compila e executa.
+    let src = r#"@trace{msg: "entering {}", when: "enter"}
+dobra :: Int => Int
+lambda n: * n 2
+
+echo!(dobra 21)"#;
+    let path = write_temp_kata("e2e_trace_stdlib_fn", src);
+    let (stdout, stderr, code) = run_kata(&path);
+    assert_eq!(code, 0, "exit 0 - stderr: {stderr}");
+    assert!(
+        stdout.contains("42"),
+        "deve imprimir resultado 42 - stdout: {stdout} | stderr: {stderr}"
+    );
+}
+
+// ── Test 26: @trace do stdlib com exit hook (Fase 2 DoD) ────────────
+
+#[test]
+fn e2e_trace_stdlib_exit() {
+    let src = r#"@trace{msg: "exit {} -> {}", when: "exit"}
+inc :: Int => Int
+lambda n: + n 1
+
+echo!(inc 41)"#;
+    let path = write_temp_kata("e2e_trace_stdlib_exit", src);
+    let (stdout, stderr, code) = run_kata(&path);
+    assert_eq!(code, 0, "exit 0 - stderr: {stderr}");
+    assert!(
+        stdout.contains("42"),
+        "deve imprimir resultado 42 - stdout: {stdout} | stderr: {stderr}"
+    );
+}
+
+// ── Test 27: @trace do stdlib com topic+policy em action (Fase 2 DoD) ─
+
+#[test]
+fn e2e_trace_stdlib_action_topic_policy() {
+    // Action com topic+policy: log!() publica em CSP com policy "drop".
+    let src = r#"@trace{msg: "action {}", when: "enter", topic: "audit", policy: "drop"}
+action processar(x :: Int) => Int
+    + x 1
+
+echo!(processar!(5))"#;
+    let path = write_temp_kata("e2e_trace_stdlib_act", src);
+    let (stdout, stderr, code) = run_kata(&path);
+    assert_eq!(code, 0, "exit 0 - stderr: {stderr}");
+    assert!(
+        stdout.contains("6"),
+        "deve imprimir resultado 6 - stdout: {stdout} | stderr: {stderr}"
     );
 }

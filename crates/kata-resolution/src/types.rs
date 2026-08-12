@@ -350,7 +350,7 @@ pub struct DirectiveKey {
 }
 
 /// Definição de uma diretiva customizada — body que será inlined.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct DirectiveDef {
     pub key: DirectiveKey,
     /// Body da diretiva — statements copiados para o item decorado.
@@ -427,13 +427,20 @@ impl DirectiveRegistry {
     }
 
     /// Mescla outro registry neste, preservando overloads por `(when, on, arg_keys)`.
-    /// Diretivas com mesma chave `(nome, when, on, arg_keys)` → conflito (erro).
+    /// Diretivas com mesma chave `(nome, when, on, arg_keys)` → conflito (erro),
+    /// exceto quando o body é idêntico (mesma declaration vinda do prelude via
+    /// merge em módulo importado) — neste caso é no-op silencioso.
     /// Diretivas com mesmo nome mas `(when, on, arg_keys)` diferente coexistem.
     pub fn merge(&mut self, other: DirectiveRegistry) -> Vec<ResolveError> {
         let mut errors = Vec::new();
         for (key, def) in other.entries {
             match self.entries.entry(key) {
                 std::collections::hash_map::Entry::Occupied(entry) => {
+                    // Se o body é idêntico, é a mesma declaration do prelude
+                    // chegando via merge de módulo importado — no-op.
+                    if entry.get().body == def.body {
+                        continue;
+                    }
                     errors.push(ResolveError::DuplicateDirective {
                         name: entry.key().name.clone(),
                         when: format!("{:?}", entry.key().when),

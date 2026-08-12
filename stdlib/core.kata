@@ -678,3 +678,111 @@ enum Target
     Action
     Function
     Any
+
+# ── Diretiva trace (PRD-trace-directive Fase 2) ──────────────────────
+# Diretiva de instrumentação definida em Kata no stdlib.
+# Overloads despachados por (when, on, arg_keys) — cada combinação de
+# args no site de aplicação seleciona a declaration correta.
+#
+# arg_keys = chaves do dict da declaration (excluindo when/on).
+# O site @trace{msg: "...", when: "enter"} tem arg_keys=["msg"] e casa
+# com a declaration que declara msg: Text no dict.
+#
+# Actions: 16 overloads (policy "block" disponível, file disponível).
+# Funções: 8 overloads (sem policy, file disponível).
+# Total: 24 declarations.
+
+# ── trace para Actions: sem file ──
+
+directive trace{when: Hook::Enter, on: Target::Action, msg: Text}
+    log!(LogLevel::Info, format _msg (_name, _args))
+
+directive trace{when: Hook::Exit, on: Target::Action, msg: Text}
+    log!(LogLevel::Info, format _msg (_name, _return))
+
+directive trace{when: Hook::Enter, on: Target::Action, msg: Text, topic: Text}
+    log!(LogLevel::Info, format _msg (_name, _args), _topic)
+
+directive trace{when: Hook::Exit, on: Target::Action, msg: Text, topic: Text}
+    log!(LogLevel::Info, format _msg (_name, _return), _topic)
+
+directive trace{when: Hook::Enter, on: Target::Action, msg: Text, policy: Text}
+    log!(LogLevel::Info, format _msg (_name, _args), "default", _policy)
+
+directive trace{when: Hook::Exit, on: Target::Action, msg: Text, policy: Text}
+    log!(LogLevel::Info, format _msg (_name, _return), "default", _policy)
+
+directive trace{when: Hook::Enter, on: Target::Action, msg: Text, topic: Text, policy: Text}
+    log!(LogLevel::Info, format _msg (_name, _args), _topic, _policy)
+
+directive trace{when: Hook::Exit, on: Target::Action, msg: Text, topic: Text, policy: Text}
+    log!(LogLevel::Info, format _msg (_name, _return), _topic, _policy)
+
+# ── trace para Actions: com file ──
+# _file sozinho: write direto, sem CSP.
+
+directive trace{when: Hook::Enter, on: Target::Action, msg: Text, file: File}
+    log!(LogLevel::Info, format _msg (_name, _args), _file)
+
+directive trace{when: Hook::Exit, on: Target::Action, msg: Text, file: File}
+    log!(LogLevel::Info, format _msg (_name, _return), _file)
+
+# topic + file: duas chamadas log!() — uma CSP, uma file.
+
+directive trace{when: Hook::Enter, on: Target::Action, msg: Text, topic: Text, file: File}
+    log!(LogLevel::Info, format _msg (_name, _args), _topic)
+    log!(LogLevel::Info, format _msg (_name, _args), _file)
+
+directive trace{when: Hook::Exit, on: Target::Action, msg: Text, topic: Text, file: File}
+    log!(LogLevel::Info, format _msg (_name, _return), _topic)
+    log!(LogLevel::Info, format _msg (_name, _return), _file)
+
+# policy + file: CSP com policy + write direto.
+
+directive trace{when: Hook::Enter, on: Target::Action, msg: Text, policy: Text, file: File}
+    log!(LogLevel::Info, format _msg (_name, _args), "default", _policy)
+    log!(LogLevel::Info, format _msg (_name, _args), _file)
+
+directive trace{when: Hook::Exit, on: Target::Action, msg: Text, policy: Text, file: File}
+    log!(LogLevel::Info, format _msg (_name, _return), "default", _policy)
+    log!(LogLevel::Info, format _msg (_name, _return), _file)
+
+# topic + policy + file: CSP com topic+policy + write direto.
+
+directive trace{when: Hook::Enter, on: Target::Action, msg: Text, topic: Text, policy: Text, file: File}
+    log!(LogLevel::Info, format _msg (_name, _args), _topic, _policy)
+    log!(LogLevel::Info, format _msg (_name, _args), _file)
+
+directive trace{when: Hook::Exit, on: Target::Action, msg: Text, topic: Text, policy: Text, file: File}
+    log!(LogLevel::Info, format _msg (_name, _return), _topic, _policy)
+    log!(LogLevel::Info, format _msg (_name, _return), _file)
+
+# ── trace para Funções: sem policy, sem file ──
+
+directive trace{when: Hook::Enter, on: Target::Function, msg: Text}
+    log!(LogLevel::Info, format _msg (_name, _args))
+
+directive trace{when: Hook::Exit, on: Target::Function, msg: Text}
+    log!(LogLevel::Info, format _msg (_name, _return))
+
+directive trace{when: Hook::Enter, on: Target::Function, msg: Text, topic: Text}
+    log!(LogLevel::Info, format _msg (_name, _args), _topic)
+
+directive trace{when: Hook::Exit, on: Target::Function, msg: Text, topic: Text}
+    log!(LogLevel::Info, format _msg (_name, _return), _topic)
+
+# ── trace para Funções: com file ──
+
+directive trace{when: Hook::Enter, on: Target::Function, msg: Text, file: File}
+    log!(LogLevel::Info, format _msg (_name, _args), _file)
+
+directive trace{when: Hook::Exit, on: Target::Function, msg: Text, file: File}
+    log!(LogLevel::Info, format _msg (_name, _return), _file)
+
+directive trace{when: Hook::Enter, on: Target::Function, msg: Text, topic: Text, file: File}
+    log!(LogLevel::Info, format _msg (_name, _args), _topic)
+    log!(LogLevel::Info, format _msg (_name, _args), _file)
+
+directive trace{when: Hook::Exit, on: Target::Function, msg: Text, topic: Text, file: File}
+    log!(LogLevel::Info, format _msg (_name, _return), _topic)
+    log!(LogLevel::Info, format _msg (_name, _return), _file)

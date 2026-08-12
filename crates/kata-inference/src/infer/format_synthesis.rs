@@ -84,8 +84,11 @@ pub(crate) fn infer_format(
 /// - Text: identity
 /// - Int: int_to_text (FFI)
 /// - Boolean: bool_to_text (FFI)
-/// - Struct: repr (call direto via ffi_symbol mangled)
-/// - Outros: int_to_text como fallback
+/// - Struct/Enum: repr (call direto via ffi_symbol mangled)
+/// - Tuple/List/Outros compostos: `show` genérico (sem ffi_symbol) —
+///   o monomorphizador resolve o overload e instancia para o tipo concreto.
+///   Isto garante que `format "..." (_args,)` onde `_args` é `Tuple(Int)`
+///   não crash com SIGSEGV tratando o ponteiro da tupla como Int.
 fn convert_to_text(expr: Spanned<TypedExpr>) -> Spanned<TypedExpr> {
     let ty = &expr.node.ty;
     match ty {
@@ -111,8 +114,45 @@ fn convert_to_text(expr: Spanned<TypedExpr>) -> Spanned<TypedExpr> {
             let mangled = format!("__kata_show__{name}");
             repr_call(expr, mangled)
         }
+        // Tipos compostos (Tuple, List, etc.) não têm overload concreto
+        // no DispatchTable na inference. Gerar `show` genérico (callee =
+        // Ident("show"), ffi_symbol = None) — o monomorphizador resolve.
+        Ty::Tuple(_) | Ty::List(_) | Ty::Array(_) | Ty::Generic(..) => {
+            show_generic_call(expr)
+        }
         _ => ffi_call1("kata_rt_int_to_text", expr, Ty::text()),
     }
+}
+
+/// Constrói `show <expr>` como Closure genérica (sem ffi_symbol).
+/// O monomorphizador encontra o overload `show` na DispatchTable,
+/// instancia para o tipo concreto, e reescreve o callee.
+/// Para Tuple, `tuple_show.rs` no monomorph sintetiza a árvore de
+/// string_concat acessando cada elemento.
+fn show_generic_call(arg: Spanned<TypedExpr>) -> Spanned<TypedExpr> {
+    let callee = TypedExpr {
+        span: Span::synthetic(),
+        ty: Ty::Function(vec![arg.node.ty.clone()], Box::new(Ty::text())),
+        tail_pos: false,
+        escape: EscapeTarget::Local,
+        kind: TypedExprKind::Ident {
+            name: "show".to_string(),
+        },
+    };
+    Spanned::new(
+        TypedExpr {
+            span: Span::synthetic(),
+            ty: Ty::text(),
+            tail_pos: false,
+            escape: EscapeTarget::Caller,
+            kind: TypedExprKind::Closure {
+                callee: Box::new(Spanned::new(callee, Span::synthetic())),
+                args: vec![arg],
+                ffi_symbol: None,
+            },
+        },
+        Span::synthetic(),
+    )
 }
 
 /// Constrói `Closure { callee=Ident(ffi), args=[arg], ffi_symbol=Some(ffi) }`.

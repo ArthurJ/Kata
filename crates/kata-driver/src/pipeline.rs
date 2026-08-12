@@ -28,7 +28,9 @@ use kata_lexer::lex_with_recovery;
 use kata_monomorph::{MonoModule, monomorphize};
 use kata_optimizer::optimize;
 use kata_parser::{parse_decls_only, parse_with_arity_recovery, parse_with_recovery, scan_lambdas};
-use kata_resolution::{ResolvedModule, extract_arities, load_prelude, resolve_with_imports};
+use kata_resolution::{
+    extract_arities, load_prelude, resolve_with_prelude, ResolvedModule,
+};
 use kata_tree_shaking::{tree_shake, tree_shake_preserve_tests};
 
 use crate::imports;
@@ -295,7 +297,14 @@ impl Pipeline {
             None => Vec::new(),
         };
         let imported_directives = imports::collect_imported_directives(&imports);
-        let user = resolve_with_imports(module, "__local__", imported_directives).map_err(|e| {
+        let user = resolve_with_prelude(
+            module,
+            "__local__",
+            imported_directives,
+            &prelude.interface_registry,
+            &prelude.directive_registry,
+        )
+        .map_err(|e| {
             e.into_iter()
                 .map(|re| re.into_report_with_source(&self.source, self.file_path.as_deref()))
                 .collect::<Vec<_>>()
@@ -509,7 +518,14 @@ fn quick_resolve(
     };
     let imported_directives = imports::collect_imported_directives(&imports);
 
-    let user = resolve_with_imports(module, "__local__", imported_directives).map_err(|e| {
+    let user = resolve_with_prelude(
+        module,
+        "__local__",
+        imported_directives,
+        &prelude.interface_registry,
+        &prelude.directive_registry,
+    )
+    .map_err(|e| {
         e.into_iter()
             .map(|re| re.into_report_with_source("", file_path))
             .collect::<Vec<_>>()

@@ -1,6 +1,6 @@
 # PRD — Diretiva `trace` com Args no Site de Aplicação
 
-**Status:** 📝 Proposto
+**Status:** 📝 Proposto (Fase 1 ✅, Fase 2 ✅, Fase 3 pendente)
 **Data:** 2026-08-12
 **Pré-requisito 1:** PRD-diretivas.md (sistema de diretivas customizadas — ✅ implementado)
 **Pré-requisito 2:** PRD-stdio-alignment.md (stdin/stdout/stderr como `File` em módulo `stdio`, `log!()` com `File`, remoção de tópicos mágicos — ✅ implementado, 9 fases, 17 testes E2E)
@@ -297,7 +297,7 @@ tupla.
 
 ## 3. Fases
 
-### Fase 1 — Args no site de aplicação + reflexão em funções
+### Fase 1 — Args no site de aplicação + reflexão em funções ✅
 
 **Objetivo:** Fazer `@trace{msg: "...", when: "enter"}` funcionar com
 diretivas customizadas, com `_args` operacional em funções.
@@ -362,7 +362,7 @@ diretivas customizadas, com `_args` operacional em funções.
 - `_args` acessível no body da diretiva em funções multi-cláusula.
 - Teste E2E: quicksort com `@trace` imprime args na entrada.
 
-### Fase 2 — Definir `trace` no stdlib
+### Fase 2 — Definir `trace` no stdlib ✅
 
 **Objetivo:** Tornar `trace` uma diretiva disponível por default.
 
