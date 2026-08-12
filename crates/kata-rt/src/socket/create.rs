@@ -258,12 +258,17 @@ pub unsafe extern "C" fn kata_rt_socket_listen(listener_handle: i64) -> i64 {
         return alloc_result_box(1, error_text("socket conectado não aceita conexões"));
     }
 
-    // accept4 com SOCK_NONBLOCK — não precisa fcntl depois.
+    // accept em non-blocking.
+    // Linux: accept4 com SOCK_NONBLOCK (atômico).
+    // macOS: accept + fcntl(F_SETFL, O_NONBLOCK) (accept4 não disponível).
     let mut client_addr: libc::sockaddr_storage = unsafe { std::mem::zeroed() };
     let mut addr_len: libc::socklen_t =
         std::mem::size_of::<libc::sockaddr_storage>() as libc::socklen_t;
 
     loop {
+        // Linux: accept4 com SOCK_NONBLOCK (atômico).
+        // macOS/Outros: accept + fcntl(F_SETFL, O_NONBLOCK).
+        #[cfg(target_os = "linux")]
         let client_fd = unsafe {
             libc::accept4(
                 inner.fd,
@@ -271,6 +276,21 @@ pub unsafe extern "C" fn kata_rt_socket_listen(listener_handle: i64) -> i64 {
                 &mut addr_len,
                 libc::SOCK_NONBLOCK,
             )
+        };
+        #[cfg(not(target_os = "linux"))]
+        let client_fd = unsafe {
+            let fd = libc::accept(
+                inner.fd,
+                &mut client_addr as *mut _ as *mut libc::sockaddr,
+                &mut addr_len,
+            );
+            if fd >= 0 {
+                let flags = libc::fcntl(fd, libc::F_GETFL, 0);
+                if flags >= 0 {
+                    libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
+                }
+            }
+            fd
         };
 
         if client_fd >= 0 {

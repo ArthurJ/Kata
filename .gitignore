@@ -18,6 +18,9 @@ Thumbs.db
 # Hermes
 .hermes/
 
+# Cargo cross-compile config (machine-specific paths)
+.cargo/
+
 # Zeladoria
 .zeladoria-last-run
 
