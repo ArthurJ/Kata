@@ -31,8 +31,22 @@ impl ReflectionInfo {
     }
 
     pub(super) fn for_function(name: &str, param_types: &[Ty], ret: &Ty) -> Self {
-        let param_names: Vec<Option<String>> = (0..param_types.len()).map(|_| None).collect();
-        Self::new(name, param_types, &param_names, ret, false, false)
+        // Funções puras não nomeiam params na assinatura por design (P0.1).
+        // Gera `__param_{i}` posicional como identificador para cada parâmetro.
+        // Marca `has_args: true` para que `_args` seja sintetizado como tupla.
+        let arg_idents: Vec<String> = (0..param_types.len())
+            .map(|i| format!("__param_{i}"))
+            .collect();
+        let type_strings = param_types.iter().map(|t| t.to_string()).collect();
+        ReflectionInfo {
+            name: name.to_string(),
+            arity: param_types.len(),
+            arg_idents,
+            type_strings,
+            return_type_string: ret.to_string(),
+            is_action: false,
+            has_args: true,
+        }
     }
 
     fn new(

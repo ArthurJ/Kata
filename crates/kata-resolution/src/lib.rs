@@ -17,7 +17,7 @@ pub use types::*;
 
 pub use module_loader::{ImportKind, ImportedModule, LoadError, ModuleLoader, filter_exports};
 
-use directives::{extract_log_specs, extract_test_specs, extract_timer_spec};
+use directives::{extract_arg_keys, extract_log_specs, extract_site_when, extract_test_specs, extract_timer_spec};
 
 use kata_ast::{Item, Module};
 use kata_core::{Ty, TypeEnv};
@@ -241,18 +241,23 @@ fn resolve_inner(
                 // Coleta type params (Ty::Var UPPER_CASE em params/ret).
                 let type_params = collect_type_params(&param_types, &return_type);
 
-                // Coleta nomes das diretivas customizadas (no registry) em ordem.
+                // Coleta diretivas customizadas (no registry) em ordem.
                 // Valida Target: Sig é Function — diretiva com on: Target::Action
                 // aplicada em Sig é erro.
-                let custom_dirs: Vec<String> = directives
+                let custom_dirs: Vec<CustomDirectiveApp> = directives
                     .iter()
                     .filter(|d| directive_registry.contains_name(&d.name))
-                    .map(|d| d.name.clone())
+                    .map(|d| CustomDirectiveApp {
+                        name: d.name.clone(),
+                        args: d.args.clone(),
+                        arg_keys: extract_arg_keys(&d.args),
+                        site_when: extract_site_when(&d.args),
+                    })
                     .collect();
                 for d in &custom_dirs {
-                    if !directive_registry.has_compatible_target(d, Target::Function) {
+                    if !directive_registry.has_compatible_target(&d.name, Target::Function) {
                         errors.push(ResolveError::DirectiveTargetMismatch {
-                            name: d.clone(),
+                            name: d.name.clone(),
                             item_kind: "function".into(),
                             on: "Action".into(),
                         });
@@ -332,18 +337,23 @@ fn resolve_inner(
                     }
                 }
 
-                // Coleta nomes das diretivas customizadas (no registry) em ordem.
+                // Coleta diretivas customizadas (no registry) em ordem.
                 // Valida Target: ActionDecl é Action — diretiva com on: Target::Function
                 // aplicada em Action é erro.
-                let custom_dirs: Vec<String> = action_dirs
+                let custom_dirs: Vec<CustomDirectiveApp> = action_dirs
                     .iter()
                     .filter(|d| directive_registry.contains_name(&d.name))
-                    .map(|d| d.name.clone())
+                    .map(|d| CustomDirectiveApp {
+                        name: d.name.clone(),
+                        args: d.args.clone(),
+                        arg_keys: extract_arg_keys(&d.args),
+                        site_when: extract_site_when(&d.args),
+                    })
                     .collect();
                 for d in &custom_dirs {
-                    if !directive_registry.has_compatible_target(d, Target::Action) {
+                    if !directive_registry.has_compatible_target(&d.name, Target::Action) {
                         errors.push(ResolveError::DirectiveTargetMismatch {
-                            name: d.clone(),
+                            name: d.name.clone(),
                             item_kind: "action".into(),
                             on: "Function".into(),
                         });

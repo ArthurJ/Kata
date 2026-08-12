@@ -1,7 +1,7 @@
 //! Aplicação de diretivas (hooks Enter/Exit) em `LambdaClause` (funções puras).
 
 use kata_ast::{Expr, LambdaClause, Span, Spanned};
-use kata_resolution::{DirectiveDef, DirectiveRegistry, Hook, Target};
+use kata_resolution::{CustomDirectiveApp, DirectiveDef, DirectiveRegistry, Hook, Target};
 
 use super::reflection::{
     ReflectionInfo, action_stmts_to_exprs, synthesize_args_binding, synthesize_return_binding,
@@ -11,19 +11,22 @@ use super::reflection::{
 /// Aplica diretivas customizadas a uma `LambdaClause` de `Item::Sig`.
 pub(super) fn apply_directives_to_lambda_clause(
     clause: LambdaClause,
-    custom_names: &[String],
+    custom_apps: &[CustomDirectiveApp],
     refl: &ReflectionInfo,
     registry: &DirectiveRegistry,
 ) -> LambdaClause {
     let mut current_body = clause.body;
 
     // Processar de dentro para fora.
-    for name in custom_names.iter().rev() {
-        // Coletar defs aplicáveis a este item (função).
+    for app in custom_apps.iter().rev() {
+        // Coletar defs aplicáveis a este item (função) que casam
+        // com os arg_keys do site de aplicação e o when do site (se presente).
         let defs: Vec<&DirectiveDef> = registry
-            .lookup_by_name(name)
+            .lookup_by_name(&app.name)
             .into_iter()
             .filter(|d| matches!(d.key.on, Target::Function | Target::Any))
+            .filter(|d| d.key.arg_keys.as_slice() == app.arg_keys.as_slice())
+            .filter(|d| app.site_when.map_or(true, |w| d.key.when == w))
             .collect();
 
         if defs.is_empty() {
@@ -31,7 +34,7 @@ pub(super) fn apply_directives_to_lambda_clause(
         }
 
         for def in &defs {
-            current_body = apply_hook_to_lambda_body(current_body, def, refl);
+            current_body = apply_hook_to_lambda_body(current_body, def, refl, app);
         }
     }
 
@@ -48,10 +51,11 @@ fn apply_hook_to_lambda_body(
     body: Spanned<Expr>,
     def: &DirectiveDef,
     refl: &ReflectionInfo,
+    app: &CustomDirectiveApp,
 ) -> Spanned<Expr> {
     match def.key.when {
-        Hook::Enter => apply_enter_to_lambda_body(body, def, refl),
-        Hook::Exit => apply_exit_to_lambda_body(body, def, refl),
+        Hook::Enter => apply_enter_to_lambda_body(body, def, refl, app),
+        Hook::Exit => apply_exit_to_lambda_body(body, def, refl, app),
         Hook::ShortCircuit | Hook::Transform => {
             // ShortCircuit e Transform não podem decorar funções — o resolution
             // já rejeitou a combinação. Mas se chegamos aqui, o body da diretiva
@@ -62,12 +66,13 @@ fn apply_hook_to_lambda_body(
     }
 }
 
-/// Enter em função pura: prependa bindings + statements da diretiva
+/// Enter em função pura: prependa bindings + args do site + statements da diretiva
 /// antes do body, envolvendo em `Expr::Block`.
 fn apply_enter_to_lambda_body(
     body: Spanned<Expr>,
     def: &DirectiveDef,
     refl: &ReflectionInfo,
+    app: &CustomDirectiveApp,
 ) -> Spanned<Expr> {
     let span = Span::synthetic();
     let mut stmts = Vec::new();
@@ -77,6 +82,9 @@ fn apply_enter_to_lambda_body(
 
     // _args binding
     stmts.push(synthesize_args_binding(refl));
+
+    // Args do site de aplicação (let _msg := "..." etc.)
+    stmts.extend(super::action_hooks::synthesize_site_arg_bindings(app));
 
     // Statements do body da diretiva
     stmts.extend(action_stmts_to_exprs(&def.body));
@@ -96,6 +104,7 @@ fn apply_exit_to_lambda_body(
     body: Spanned<Expr>,
     def: &DirectiveDef,
     refl: &ReflectionInfo,
+    app: &CustomDirectiveApp,
 ) -> Spanned<Expr> {
     let span = Span::synthetic();
     let mut stmts = Vec::new();
@@ -114,6 +123,9 @@ fn apply_exit_to_lambda_body(
 
     // _args binding
     stmts.push(synthesize_args_binding(refl));
+
+    // Args do site de aplicação (let _msg := "..." etc.)
+    stmts.extend(super::action_hooks::synthesize_site_arg_bindings(app));
 
     // _return binding
     stmts.push(synthesize_return_binding());

@@ -69,6 +69,14 @@ pub(crate) fn infer_named_function(
             ctx.interface_registry,
         )?;
 
+        // Define `__param_{i}` no escopo da cláusula para que diretivas
+        // customizadas possam sintetizar `_args := (__param_0, __param_1, ...)`.
+        // Funções puras não nomeiam params na assinatura — `__param_{i}` é o
+        // identificador posicional usado pelo desugar de diretivas.
+        for (i, ty) in param_types.iter().enumerate() {
+            clause_env.define(&format!("__param_{i}"), ty.clone(), "__local__");
+        }
+
         // Processa with bindings (açúcar → let chain).
         let typed_with_bindings =
             process_with_bindings(&desugared_with_bindings, &mut clause_env, ctx)?;

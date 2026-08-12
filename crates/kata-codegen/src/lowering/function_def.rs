@@ -235,6 +235,22 @@ pub(crate) fn define_function_body(
             bind_patterns_to_params(&clauses[0].patterns, &clause_params, &mut lower);
         }
 
+        // Registrar `__param_{i}` no var_map para que diretivas customizadas
+        // possam sintetizar `_args := (__param_0, __param_1, ...)` em funções puras.
+        // Funções puras não nomeiam params na assinatura por design — `__param_{i}`
+        // é o identificador posicional usado pelo desugar de diretivas.
+        // O def_var no entry block domina todos os blocks de cláusulas.
+        for (i, val) in clause_params.iter().enumerate() {
+            let param_name = format!("__param_{i}");
+            let clif_ty = super::resolve_clif_ty(&param_types[i], struct_registry);
+            lower.new_var(&param_name, clif_ty);
+            let var = *lower
+                .var_map
+                .get(&param_name)
+                .expect("__param_{i} var must exist after new_var");
+            lower.builder.def_var(var, *val);
+        }
+
         // @timer start: injeta antes de tudo (PRD §4.7 ordem).
         // Estratégia: se a função faz tail call (return_call) e não tem
         // @cache, usa canal buffer-1 com policy Drop (first-write-wins)

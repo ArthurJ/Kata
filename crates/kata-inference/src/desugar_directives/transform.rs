@@ -1,7 +1,7 @@
 //! Transformação recursiva de returns e hook Transform.
 
 use kata_ast::{ActionStmt, Expr, MatchArm, Span, Spanned};
-use kata_resolution::DirectiveDef;
+use kata_resolution::{CustomDirectiveApp, DirectiveDef};
 
 use super::reflection::{
     ReflectionInfo, action_stmts_to_exprs, synthesize_args_binding, synthesize_return_binding,
@@ -14,6 +14,7 @@ pub(super) fn apply_transform_to_action_body(
     body: Vec<ActionStmt>,
     def: &DirectiveDef,
     refl: &ReflectionInfo,
+    app: &CustomDirectiveApp,
 ) -> Vec<ActionStmt> {
     if body.is_empty() {
         return body;
@@ -26,14 +27,14 @@ pub(super) fn apply_transform_to_action_body(
         let is_last = i == total - 1;
         if is_last && !stmt.has_semicolon {
             // Retorno implícito — envolver a expr.
-            let wrapped = wrap_transform_expr(&stmt.expr, def, refl);
+            let wrapped = wrap_transform_expr(&stmt.expr, def, refl, app);
             result.push(ActionStmt {
                 expr: wrapped,
                 has_semicolon: false,
             });
         } else if let Expr::Return(inner) = &stmt.expr.node {
             // return expr — envolver.
-            let wrapped = wrap_transform_expr(inner, def, refl);
+            let wrapped = wrap_transform_expr(inner, def, refl, app);
             result.push(ActionStmt {
                 expr: Spanned {
                     node: Expr::Return(Box::new(wrapped)),
@@ -44,7 +45,7 @@ pub(super) fn apply_transform_to_action_body(
         } else {
             // Statement intermediário — pode conter return em sub-expressões.
             let transformed = transform_returns_in_expr(stmt.expr.node.clone(), &|e| {
-                wrap_transform_expr(e, def, refl)
+                wrap_transform_expr(e, def, refl, app)
             });
             result.push(ActionStmt {
                 expr: Spanned {
@@ -65,6 +66,7 @@ fn wrap_transform_expr(
     expr: &Spanned<Expr>,
     def: &DirectiveDef,
     refl: &ReflectionInfo,
+    app: &CustomDirectiveApp,
 ) -> Spanned<Expr> {
     let span = Span::synthetic();
 
@@ -87,6 +89,9 @@ fn wrap_transform_expr(
 
     // _args binding
     stmts.push(synthesize_args_binding(refl));
+
+    // Args do site de aplicação (let _msg := "..." etc.)
+    stmts.extend(super::action_hooks::synthesize_site_arg_bindings(app));
 
     // _return binding
     stmts.push(synthesize_return_binding());

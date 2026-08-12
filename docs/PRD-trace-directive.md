@@ -15,8 +15,8 @@ em Kata no stdlib — uma versão flexível do `@log` intrínseco que usa `log!(
 como path único de publicação e `format` + variáveis de reflexão para
 composição de mensagem.
 
-Após validação, a diretiva `trace` é renomeada para `log` e a diretiva `@log`
-intrínseca é removida do compilador.
+Após validação, a diretiva `@log` intrínseca é removida do compilador e a
+diretiva `trace` é renomeada para `log`.
 
 ## 1. Motivação
 
@@ -381,15 +381,13 @@ diretivas customizadas, com `_args` operacional em funções.
   funciona com topic e policy.
 - Teste E2E: quicksort com `@trace` stdlib imprime corretamente.
 
-### Fase 3 — Renomear `trace` para `log` e remover `@log` intrínseco
+### Fase 3 — Remover `@log` intrínseco, depois renomear `trace` para `log`
 
 **Objetivo:** Unificar o path de logging.
 
 **Mudanças:**
 
-1. Renomear `trace` → `log` no stdlib.
-
-2. Remover do compilador:
+1. Remover do compilador:
    - `LogSpec` (`types.rs`)
    - `TypedLogSpec` (`typed_module.rs`)
    - `log_synthesis.rs` (arquivo inteiro)
@@ -398,6 +396,8 @@ diretivas customizadas, com `_args` operacional em funções.
    - Campos `log` em `FunctionDef`, `ActionDef`, `TypedFunction`, `TypedAction`
    - Injeção de `@log` em `function_def.rs` e `action_def.rs` (codegen)
    - Síntese de log em `function_infer.rs` e `action_infer.rs`
+
+2. Renomear `trace` → `log` no stdlib.
 
 3. Migrar testes E2E para usar `@log{msg: "...", when: "..."}`
    com a nova diretiva Kata. Total: 32 testes (17 em `stdio_log_e2e.rs`

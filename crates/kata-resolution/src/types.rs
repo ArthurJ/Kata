@@ -117,6 +117,24 @@ pub struct TimerSpec {
 /// Definição de função nomeada com corpo Kata (não-FFI).
 ///
 /// Produzida no resolution quando `Item::Sig` tem `body = Some(clauses)`.
+/// Aplicação de uma diretiva customizada no site de uso (`@nome{...}`).
+/// Carrega o nome da diretiva e os args fornecidos no site de aplicação.
+/// O desugar injeta `let _<key> := <value>` para cada arg antes do body da diretiva.
+#[derive(Debug, Clone)]
+pub struct CustomDirectiveApp {
+    /// Nome da diretiva aplicada (ex: "trace").
+    pub name: String,
+    /// Args nomeados do site de aplicação, em ordem (ex: msg, when, topic).
+    /// `when` é consumido como seletor de overload, os demais viram bindings.
+    pub args: Vec<kata_ast::DirectiveArg>,
+    /// Chaves dos args nomeados, excluindo `when` e `on` (metadados de despacho).
+    /// Usado para despachar a declaration correta por combinação de args.
+    pub arg_keys: Vec<String>,
+    /// `when` do site de aplicação como `Hook`, se presente.
+    /// Usado para despachar a declaration correta por hook (Enter vs Exit).
+    pub site_when: Option<Hook>,
+}
+
 /// O inference consome as cláusulas e produz `TypedExprKind::Lambda` com
 /// `func_name = Some(name)` e os tipos da assinatura.
 #[derive(Debug, Clone)]
@@ -134,9 +152,9 @@ pub struct FunctionDef {
     pub cache_strategy: Option<String>,
     /// Especificação de timer `@timer`. None se a função não tem `@timer`.
     pub timer: Option<TimerSpec>,
-    /// Nomes das diretivas customizadas aplicadas a esta função (em ordem).
+    /// Diretivas customizadas aplicadas a esta função (em ordem).
     /// Preenchido pelo resolution, consumido pelo `desugar_directives`.
-    pub custom_directives: Vec<String>,
+    pub custom_directives: Vec<CustomDirectiveApp>,
 }
 
 /// Definição de Action com body Kata.
@@ -160,9 +178,9 @@ pub struct ActionDef {
     /// suportadas — cada uma injeta independentemente no prólogo/epílogo.
     /// Vazio se a action não tem `@log`.
     pub log: Vec<LogSpec>,
-    /// Nomes das diretivas customizadas aplicadas a esta action (em ordem).
+    /// Diretivas customizadas aplicadas a esta action (em ordem).
     /// Preenchido pelo resolution, consumido pelo `desugar_directives`.
-    pub custom_directives: Vec<String>,
+    pub custom_directives: Vec<CustomDirectiveApp>,
 }
 
 /// Especificação de um caso de teste `@test` anotado em uma action.
@@ -318,13 +336,17 @@ pub enum Target {
     Any,
 }
 
-/// Chave do DirectiveRegistry: (nome, when, on).
-/// Diretivas com mesmo nome coexistem se tiverem (when, on) diferentes.
+/// Chave do DirectiveRegistry: (nome, when, on, arg_keys).
+/// Diretivas com mesmo nome coexistem se tiverem (when, on, arg_keys) diferentes.
+/// `arg_keys` é a lista ordenada de chaves de args que a declaration aceita
+/// no site de aplicação (ex: `["msg"]` vs `["msg", "topic"]`), excluindo
+/// `when` e `on` que são metadados de despacho.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct DirectiveKey {
     pub name: String,
     pub when: Hook,
     pub on: Target,
+    pub arg_keys: Vec<String>,
 }
 
 /// Definição de uma diretiva customizada — body que será inlined.
@@ -380,6 +402,7 @@ impl DirectiveRegistry {
     /// Verifica se o nome tem pelo menos uma def com Target compatível
     /// com o kind do item decorado (Function ou Action).
     /// `item_target` é `Target::Function` para Sig, `Target::Action` para ActionDecl.
+    /// Não considera `arg_keys` — só valida Target por nome.
     pub fn has_compatible_target(&self, name: &str, item_target: Target) -> bool {
         self.entries
             .iter()
@@ -387,9 +410,25 @@ impl DirectiveRegistry {
             .any(|(k, _)| k.on == item_target || k.on == Target::Any)
     }
 
-    /// Mescla outro registry neste, preservando overloads por `(when, on)`.
-    /// Diretivas com mesma chave `(nome, when, on)` → conflito (erro).
-    /// Diretivas com mesmo nome mas `(when, on)` diferente coexistem.
+    /// Busca a declaration que casa com o site de aplicação: mesmo nome,
+    /// Target compatível, e exatamente os mesmos `arg_keys`.
+    /// Retorna `None` se nenhuma declaration casar.
+    pub fn lookup_by_application(
+        &self,
+        name: &str,
+        item_target: Target,
+        arg_keys: &[String],
+    ) -> Option<&DirectiveDef> {
+        self.entries
+            .iter()
+            .filter(|(k, _)| k.name == name && (k.on == item_target || k.on == Target::Any))
+            .find(|(k, _)| k.arg_keys.as_slice() == arg_keys)
+            .map(|(_, v)| v)
+    }
+
+    /// Mescla outro registry neste, preservando overloads por `(when, on, arg_keys)`.
+    /// Diretivas com mesma chave `(nome, when, on, arg_keys)` → conflito (erro).
+    /// Diretivas com mesmo nome mas `(when, on, arg_keys)` diferente coexistem.
     pub fn merge(&mut self, other: DirectiveRegistry) -> Vec<ResolveError> {
         let mut errors = Vec::new();
         for (key, def) in other.entries {
@@ -410,22 +449,22 @@ impl DirectiveRegistry {
     }
 
     /// Valida que `Target::Any` não coexiste com `Target::Action` ou
-    /// `Target::Function` para o mesmo `(nome, when)` (PRD regra 2.5.4).
+    /// `Target::Function` para o mesmo `(nome, when, arg_keys)`.
     ///
     /// Deve ser chamado após todas as inserções (Pass 0.5 completo).
     /// Retorna erros para cada conflito encontrado.
     pub fn validate_any_conflicts(&self) -> Vec<ResolveError> {
         use std::collections::HashMap;
-        // Agrupa por (nome, when) → set de Targets encontrados.
-        let mut groups: HashMap<(&str, Hook), Vec<Target>> = HashMap::new();
+        // Agrupa por (nome, when, arg_keys) → set de Targets encontrados.
+        let mut groups: HashMap<(&str, Hook, &Vec<String>), Vec<Target>> = HashMap::new();
         for k in self.entries.keys() {
             groups
-                .entry((k.name.as_str(), k.when))
+                .entry((k.name.as_str(), k.when, &k.arg_keys))
                 .or_default()
                 .push(k.on);
         }
         let mut errors = Vec::new();
-        for ((name, when), targets) in &groups {
+        for ((name, when, _arg_keys), targets) in &groups {
             let has_any = targets.iter().any(|t| matches!(t, Target::Any));
             let has_specific = targets
                 .iter()

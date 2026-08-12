@@ -1,5 +1,7 @@
+import stdio
+
 #{
-@log{msg: "{{_return}}", when: "exit", topic:'stdout'}
+@log{msg: "{pivo}", when: "exit", topic:'stdout'}
 #}#
 quicksort :: [Int] => [Int]
 lambda []: []

@@ -9,6 +9,40 @@ use super::types::{
     DirectiveDef, DirectiveKey, Hook, LogSpec, ResolveError, Target, TestSpec, TimerSpec,
 };
 
+/// Extrai as chaves dos args nomeados, excluindo `when` e `on` (metadados
+/// de despacho). Usado para construir `CustomDirectiveApp.arg_keys` no site
+/// de aplicação e para despachar a declaration correta por combinação de args.
+pub(crate) fn extract_arg_keys(args: &[DirectiveArg]) -> Vec<String> {
+    args.iter()
+        .filter_map(|arg| match arg {
+            DirectiveArg::Named { key, .. } if key != "when" && key != "on" => Some(key.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Extrai o `when` do site de aplicação como `Hook`.
+/// O `when` no site é uma string (`"enter"`, `"exit"`) que precisa ser
+/// convertida para o enum `Hook` para despachar a declaration correta.
+pub(crate) fn extract_site_when(args: &[DirectiveArg]) -> Option<Hook> {
+    for arg in args {
+        if let DirectiveArg::Named { key, value } = arg {
+            if key == "when" {
+                if let Expr::TextLit { text } = &value.node {
+                    return match text.as_str() {
+                        "enter" => Some(Hook::Enter),
+                        "exit" => Some(Hook::Exit),
+                        "shortcircuit" => Some(Hook::ShortCircuit),
+                        "transform" => Some(Hook::Transform),
+                        _ => None,
+                    };
+                }
+            }
+        }
+    }
+    None
+}
+
 /// Extrai `TestSpec` das diretivas `@test` de uma `ActionDecl`.
 ///
 /// Suporta duas formas:
@@ -415,6 +449,7 @@ pub(crate) fn extract_directive_spec(
 ) -> Result<DirectiveDef, ResolveError> {
     let mut when: Option<Hook> = None;
     let mut on: Option<Target> = None;
+    let mut arg_keys: Vec<String> = Vec::new();
 
     for arg in args {
         let DirectiveArg::Named { key, value } = arg else {
@@ -455,12 +490,10 @@ pub(crate) fn extract_directive_spec(
                     });
                 }
             }
+            // Chaves adicionais são args do site de aplicação que a declaration
+            // aceita. Registradas em arg_keys para despacho por combinação de args.
             other => {
-                return Err(ResolveError::UnknownDirective {
-                    name: name.into(),
-                    context: "directive",
-                    item_name: format!("chave desconhecida: {other}"),
-                });
+                arg_keys.push(other.to_string());
             }
         }
     }
@@ -490,6 +523,7 @@ pub(crate) fn extract_directive_spec(
             name: name.into(),
             when,
             on,
+            arg_keys,
         },
         body,
     })

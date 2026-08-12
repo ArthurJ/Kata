@@ -1,7 +1,7 @@
 //! Aplicação de diretivas (hooks Enter/Exit/ShortCircuit) em bodies de Actions.
 
 use kata_ast::{ActionStmt, Expr, MatchArm, Pattern, Span, Spanned};
-use kata_resolution::{DirectiveDef, DirectiveRegistry, Hook, Target};
+use kata_resolution::{CustomDirectiveApp, DirectiveDef, DirectiveRegistry, Hook, Target};
 
 use super::reflection::{
     ReflectionInfo, action_stmts_to_exprs, directive_body_to_expr, synthesize_args_binding,
@@ -12,10 +12,10 @@ use super::transform::transform_returns_in_expr;
 // ── Aplicação de diretivas ───────────────────────────────────────────
 
 /// Aplica diretivas customizadas ao body de uma Action.
-/// `custom_names` em ordem: primeira = mais externa.
+/// `custom_apps` em ordem: primeira = mais externa.
 pub(super) fn apply_directives_to_action_body(
     body: Vec<ActionStmt>,
-    custom_names: &[String],
+    custom_apps: &[CustomDirectiveApp],
     refl: &ReflectionInfo,
     registry: &DirectiveRegistry,
 ) -> Vec<ActionStmt> {
@@ -23,12 +23,15 @@ pub(super) fn apply_directives_to_action_body(
     // Aplicamos de trás para frente para que a primeira diretiva envolva todas.
     let mut current_body = body;
 
-    for name in custom_names.iter().rev() {
-        // Coletar todas as defs aplicáveis a este item (action).
+    for app in custom_apps.iter().rev() {
+        // Coletar todas as defs aplicáveis a este item (action) que casam
+        // com os arg_keys do site de aplicação e o when do site (se presente).
         let defs: Vec<&DirectiveDef> = registry
-            .lookup_by_name(name)
+            .lookup_by_name(&app.name)
             .into_iter()
             .filter(|d| matches!(d.key.on, Target::Action | Target::Any))
+            .filter(|d| d.key.arg_keys.as_slice() == app.arg_keys.as_slice())
+            .filter(|d| app.site_when.map_or(true, |w| d.key.when == w))
             .collect();
 
         if defs.is_empty() {
@@ -38,7 +41,7 @@ pub(super) fn apply_directives_to_action_body(
         // Para cada hook presente, aplicar o inlining correspondente.
         // Múltiplos hooks da mesma diretiva = múltiplas injeções.
         for def in &defs {
-            current_body = apply_hook_to_action_body(current_body, def, refl);
+            current_body = apply_hook_to_action_body(current_body, def, refl, app);
         }
     }
 
@@ -50,20 +53,47 @@ fn apply_hook_to_action_body(
     body: Vec<ActionStmt>,
     def: &DirectiveDef,
     refl: &ReflectionInfo,
+    app: &CustomDirectiveApp,
 ) -> Vec<ActionStmt> {
     match def.key.when {
-        Hook::Enter => apply_enter_to_action_body(body, def, refl),
-        Hook::Exit => apply_exit_to_action_body(body, def, refl),
-        Hook::ShortCircuit => apply_shortcircuit_to_action_body(body, def, refl),
-        Hook::Transform => super::transform::apply_transform_to_action_body(body, def, refl),
+        Hook::Enter => apply_enter_to_action_body(body, def, refl, app),
+        Hook::Exit => apply_exit_to_action_body(body, def, refl, app),
+        Hook::ShortCircuit => apply_shortcircuit_to_action_body(body, def, refl, app),
+        Hook::Transform => super::transform::apply_transform_to_action_body(body, def, refl, app),
     }
 }
 
-/// Enter: prependa bindings de reflexão + statements da diretiva antes do body.
+/// Sintetiza `let _<key> := <value>` para cada arg nomeado do site de aplicação,
+/// excluindo `when` e `on` (metadados de despacho). Estas são as variáveis que
+/// o body da diretiva referencia (ex: `_msg`, `_topic`, `_policy`).
+pub(super) fn synthesize_site_arg_bindings(app: &CustomDirectiveApp) -> Vec<Spanned<Expr>> {
+    let span = Span::synthetic();
+    app.args
+        .iter()
+        .filter_map(|arg| match arg {
+            kata_ast::DirectiveArg::Named { key, value } if key != "when" && key != "on" => {
+                Some(Spanned {
+                    node: Expr::Let {
+                        name: format!("_{key}"),
+                        value: Box::new(Spanned {
+                            node: value.node.clone(),
+                            span: value.span,
+                        }),
+                    },
+                    span,
+                })
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+/// Enter: prependa bindings de reflexão + args do site + statements da diretiva antes do body.
 fn apply_enter_to_action_body(
     body: Vec<ActionStmt>,
     def: &DirectiveDef,
     refl: &ReflectionInfo,
+    app: &CustomDirectiveApp,
 ) -> Vec<ActionStmt> {
     let span = Span::synthetic();
 
@@ -81,6 +111,14 @@ fn apply_enter_to_action_body(
         expr: synthesize_args_binding(refl),
         has_semicolon: true,
     });
+
+    // Args do site de aplicação (let _msg := "..." etc.)
+    for e in synthesize_site_arg_bindings(app) {
+        injected.push(ActionStmt {
+            expr: e,
+            has_semicolon: true,
+        });
+    }
 
     // Statements do body da diretiva
     for stmt in &def.body {
@@ -105,6 +143,7 @@ fn apply_exit_to_action_body(
     body: Vec<ActionStmt>,
     def: &DirectiveDef,
     refl: &ReflectionInfo,
+    app: &CustomDirectiveApp,
 ) -> Vec<ActionStmt> {
     if body.is_empty() {
         return body;
@@ -117,14 +156,14 @@ fn apply_exit_to_action_body(
         let is_last = i == total - 1;
         if is_last && !stmt.has_semicolon {
             // Retorno implícito — envolver a expr.
-            let wrapped = wrap_exit_expr(&stmt.expr, def, refl);
+            let wrapped = wrap_exit_expr(&stmt.expr, def, refl, app);
             result.push(ActionStmt {
                 expr: wrapped,
                 has_semicolon: false,
             });
         } else if let Expr::Return(inner) = &stmt.expr.node {
             // return expr — envolver.
-            let wrapped = wrap_exit_expr(inner, def, refl);
+            let wrapped = wrap_exit_expr(inner, def, refl, app);
             result.push(ActionStmt {
                 expr: Spanned {
                     node: Expr::Return(Box::new(wrapped)),
@@ -135,7 +174,7 @@ fn apply_exit_to_action_body(
         } else {
             // Statement intermediário — pode conter return em sub-expressões.
             let transformed = transform_returns_in_expr(stmt.expr.node.clone(), &|e| {
-                wrap_exit_expr(e, def, refl)
+                wrap_exit_expr(e, def, refl, app)
             });
             result.push(ActionStmt {
                 expr: Spanned {
@@ -156,6 +195,7 @@ fn wrap_exit_expr(
     expr: &Spanned<Expr>,
     def: &DirectiveDef,
     refl: &ReflectionInfo,
+    app: &CustomDirectiveApp,
 ) -> Spanned<Expr> {
     let span = Span::synthetic();
 
@@ -178,6 +218,9 @@ fn wrap_exit_expr(
 
     // _args binding
     stmts.push(synthesize_args_binding(refl));
+
+    // Args do site de aplicação (let _msg := "..." etc.)
+    stmts.extend(synthesize_site_arg_bindings(app));
 
     // _return binding
     stmts.push(super::reflection::synthesize_return_binding());
@@ -205,6 +248,7 @@ fn apply_shortcircuit_to_action_body(
     body: Vec<ActionStmt>,
     def: &DirectiveDef,
     refl: &ReflectionInfo,
+    app: &CustomDirectiveApp,
 ) -> Vec<ActionStmt> {
     let span = Span::synthetic();
 
@@ -223,6 +267,14 @@ fn apply_shortcircuit_to_action_body(
         expr: synthesize_args_binding(refl),
         has_semicolon: true,
     });
+
+    // Args do site de aplicação (let _msg := "..." etc.)
+    for e in synthesize_site_arg_bindings(app) {
+        injected.push(ActionStmt {
+            expr: e,
+            has_semicolon: true,
+        });
+    }
 
     // let __decision := <body da diretiva>
     let decision_expr = directive_body_to_expr(&def.body);
