@@ -82,14 +82,14 @@ Arquivo afetado: `crates/kata-driver/src/aot.rs` (função `link`, linha 126).
 
 | Componente                       | macOS (x86_64/aarch64) | Windows (x86_64)      |
 |----------------------------------|------------------------|----------------------|
-| Lexer/Parser/AST/Resolution      | ✅                     | ✅                   |
-| Inference/Typechecker            | ✅                     | ✅                   |
-| Cranelift JIT                    | ✅ (provável)          | ⚠️ (CallConv hardcoded) |
-| Cranelift AOT emit               | ✅                     | ✅                   |
-| AOT linker                       | ⚠️ (flags quase)       | ❌ (linker/flags Unix-only) |
-| Fibers (wasmtime-fiber)          | ✅                     | ✅                   |
-| I/O (file/socket TCP)            | ✅                     | ✅ (via std)         |
-| Unix domain sockets              | ✅                     | ⚠️ (API diferente)   |
+| Lexer/Parser/AST/Resolution      | ✅ verificado           | ✅                   |
+| Inference/Typechecker            | ✅ verificado           | ✅                   |
+| Cranelift JIT                    | ✅ verificado           | ⚠️ (CallConv hardcoded) |
+| Cranelift AOT emit               | ✅ verificado           | ✅                   |
+| AOT linker                       | ✅ verificado (osxcross) | ❌ (linker/flags Unix-only) |
+| Fibers (wasmtime-fiber)          | ✅ verificado           | ✅                   |
+| I/O (file/socket TCP)            | ✅ verificado           | ✅ (via std)         |
+| Unix domain sockets              | ✅ (accept+fcntl)       | ⚠️ (API diferente)   |
 | `fork()`/`spawn!`                | ✅                     | ❌                   |
 | `poll()`/`sigaction`/`fcntl`    | ✅                     | ❌                   |
 | `select_files` (poll-based)      | ✅                     | ❌                   |
@@ -98,9 +98,10 @@ Arquivo afetado: `crates/kata-driver/src/aot.rs` (função `link`, linha 126).
 
 ### macOS
 
-O binário deve compilar e rodar com ajustes menores — principalmente
-corrigir as flags do linker AOT e possivelmente ajustar `CallConv`. O runtime
-POSIX é compatível.
+**Port completo e verificado (2026-08-12).** O binário compila para x86_64 e
+aarch64 após uma única correção (`accept4`/`SOCK_NONBLOCK` Linux-only em
+`socket/create.rs`). Binários Mach-O nativos gerados via osxcross e testados
+em Mac real (Apple Silicon). O runtime POSIX é totalmente compatível.
 
 ### Windows
 

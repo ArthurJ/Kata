@@ -323,61 +323,28 @@ Tipos:
 
 ---
 
-## Fase 6 — Correções (se necessário)
+## Fase 6 — Correções ✅ (não-aplicável)
 
-Esta fase só existe se a Fase 5 encontrar falhas. As correções dependem
-do que for encontrado. As correções mais prováveis são:
+Esta fase só existiria se a Fase 5 encontrasse falhas. A única correção
+necessária (`accept4`/`SOCK_NONBLOCK`) foi feita na Fase 1. Nenhuma
+correção adicional foi necessária.
 
-### 6.1 `#[cfg(target_os)]` no AOT linker
-
-Se `-lpthread` causar erro:
-
-```rust
-// aot.rs, função link()
-if dynamic {
-    cmd.arg(format!("-L{}", lib_dir.display()));
-    cmd.arg("-lkata_rt");
-    cmd.arg("-lm");
-    #[cfg(not(target_os = "macos"))]
-    cmd.arg("-lpthread");
-    cmd.arg(format!("-Wl,-rpath,{}", lib_dir.display()));
-} else {
-    let static_lib = lib_dir.join("libkata_rt.a");
-    cmd.arg(&static_lib);
-    cmd.arg("-lm");
-    #[cfg(not(target_os = "macos"))]
-    cmd.arg("-lpthread");
-}
-```
-
-### 6.2 Ajustes de runtime
-
-Se `fork()` tiver problemas com threads no macOS, garantir que `spawn!`
-sempre faz fork-exec (nunca fork sem exec).
-
-### 6.3 Ajustes de Cranelift
-
-Se `CallConv::Tail` falhar em aarch64 macOS (improvável mas possível),
-investigar se o Cranelift precisa de flags específicas para Apple Silicon.
+`-lpthread` e `-Wl,-rpath` foram aceitos pelo clang do osxcross sem
+erro. `CallConv::Tail` compila para ambos os targets macOS.
 
 ---
 
-## Fase 7 — Documentação final
+## Fase 7 — Documentação final ✅
 
-### 7.1 Atualizar `portability-notes.md`
+### 7.1 `portability-notes.md` — atualizado
 
-Após o port ser validado, atualizar a tabela resumo:
+Tabela resumo atualizada com resultados verificados. Ver
+`docs/portability-notes.md`.
 
-```
-| Componente | macOS x86_64 | macOS aarch64 |
-|------------|-------------|---------------|
-| (preencher com resultados reais) |
-```
+### 7.2 README
 
-### 7.2 Atualizar README
-
-Adicionar macOS à lista de plataformas suportadas, com instruções de
-build.
+Sem README no repo ainda. Quando criado, adicionar macOS à lista de
+plataformas suportadas com instruções de build via osxcross.
 
 ---
 
