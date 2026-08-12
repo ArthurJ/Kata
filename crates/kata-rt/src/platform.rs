@@ -27,18 +27,39 @@ pub struct PollFd {
 
 // ── Bindings Win32 (Winsock2) ───────────────────────────────────────
 #[cfg(windows)]
-mod winsock {
+pub(crate) mod winsock {
     use std::ffi::c_int;
 
     pub const SOL_SOCKET: c_int = 0xffff;
     pub const SO_REUSEADDR: c_int = 0x0004;
     pub const FIONBIO: u32 = 0x8004667c;
     pub const WSAEWOULDBLOCK: c_int = 10035;
+    pub const AF_INET: c_int = 2;
+    pub const AF_INET6: c_int = 23;
+    pub const SOCK_STREAM: c_int = 1;
+    pub const SOMAXCONN: c_int = 0x7fffffff;
 
     pub const SD_RECEIVE: c_int = 0;
     pub const SD_SEND: c_int = 1;
     pub const SD_BOTH: c_int = 2;
 
+    // sockaddr_in layout (IPv4)
+    #[repr(C)]
+    pub struct SockaddrIn {
+        pub sin_family: u16,
+        pub sin_port: u16,
+        pub sin_addr: u32,
+        pub sin_zero: [u8; 8],
+    }
+
+    // sockaddr layout (genérico)
+    #[repr(C)]
+    pub struct Sockaddr {
+        pub sa_family: u16,
+        pub sa_data: [u8; 14],
+    }
+
+    #[link(name = "ws2_32")]
     unsafe extern "C" {
         pub fn ioctlsocket(fd: usize, cmd: u32, argp: *mut c_int) -> c_int;
         pub fn closesocket(fd: usize) -> c_int;
@@ -52,7 +73,27 @@ mod winsock {
             optval: *const u8,
             optlen: c_int,
         ) -> c_int;
+        pub fn socket(af: c_int, sock_type: c_int, protocol: c_int) -> usize;
+        pub fn bind(fd: usize, addr: *const Sockaddr, addrlen: c_int) -> c_int;
+        pub fn listen(fd: usize, backlog: c_int) -> c_int;
+        pub fn accept(fd: usize, addr: *mut Sockaddr, addrlen: *mut c_int) -> usize;
+        pub fn connect(fd: usize, addr: *const Sockaddr, addrlen: c_int) -> c_int;
+        pub fn htons(val: u16) -> u16;
+        pub fn htonl(val: u32) -> u32;
+        pub fn WSAStartup(version: u16, data: *mut [u8; 408]) -> c_int;
     }
+}
+
+// ── WSAStartup (inicialização Winsock) ──────────────────────────────
+
+#[cfg(windows)]
+pub(crate) fn ensure_winsock_init() {
+    use std::sync::Once;
+    static WSA_INIT: Once = Once::new();
+    WSA_INIT.call_once(|| unsafe {
+        let mut data: [u8; 408] = [0; 408];
+        winsock::WSAStartup(0x0202, &mut data);
+    });
 }
 
 // ── set_nonblocking ────────────────────────────────────────────────

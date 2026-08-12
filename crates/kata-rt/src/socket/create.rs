@@ -352,26 +352,168 @@ fn accept_nonblocking(fd: i32) -> i32 {
 /// Accept non-blocking — implementação Windows (Winsock).
 #[cfg(windows)]
 fn accept_nonblocking(fd: i32) -> i32 {
-    // TODO: Implementar accept via Winsock. Ver PRD-Windows Fase 2/4.
-    // Por ora, retorna -1 (erro) — accept não funciona em Windows ainda.
-    let _ = fd;
-    -1
+    use crate::platform::winsock;
+
+    let mut addr: winsock::Sockaddr = unsafe { std::mem::zeroed() };
+    let mut addr_len: i32 = std::mem::size_of::<winsock::Sockaddr>() as i32;
+
+    let client_fd = unsafe {
+        winsock::accept(fd as usize, &mut addr, &mut addr_len)
+    };
+
+    if client_fd == usize::MAX {
+        // Erro — caller verifica is_would_block.
+        return -1;
+    }
+
+    // Non-blocking no novo socket.
+    super::set_nonblocking(client_fd as i32);
+
+    client_fd as i32
 }
 
-// ── Stubs Windows para criação de sockets ──────────────────────────
+// ── Implementação Windows (Winsock) para TCP sockets ───────────────
 //
-// No Windows, a criação de sockets TCP/Unix precisa de Winsock. Por ora,
-// retornamos erro — o crate compila mas sockets não funcionam em Windows.
-// A implementação completa é Fase 2/4 do PRD-Windows.
+// Unix domain sockets não existem em Windows (named pipes no lugar).
+// TCP listener/connected implementados via Winsock2.
 
 #[cfg(windows)]
-fn create_tcp_listener(_addr: &str) -> i64 {
-    alloc_result_box(1, error_text("socket TCP listener não suportado em Windows (TODO)"))
+fn create_tcp_listener(addr: &str) -> i64 {
+    use crate::platform::winsock;
+
+    crate::platform::ensure_winsock_init();
+
+    let (ip, port) = match parse_addr(addr) {
+        Some(v) => v,
+        None => return alloc_result_box(1, error_text(&format!("endereço inválido: {addr}"))),
+    };
+
+    // Criar socket TCP IPv4.
+    let fd = unsafe { winsock::socket(winsock::AF_INET, winsock::SOCK_STREAM, 0) };
+    if fd == usize::MAX {
+        return alloc_result_box(1, error_text("socket() falhou"));
+    }
+
+    // SO_REUSEADDR.
+    super::set_reuseaddr(fd as i32);
+
+    // bind.
+    let sa = winsock::SockaddrIn {
+        sin_family: winsock::AF_INET as u16,
+        sin_port: unsafe { winsock::htons(port) },
+        sin_addr: unsafe { winsock::htonl(ip) },
+        sin_zero: [0; 8],
+    };
+    let rc = unsafe {
+        winsock::bind(
+            fd,
+            &sa as *const _ as *const winsock::Sockaddr,
+            std::mem::size_of::<winsock::SockaddrIn>() as i32,
+        )
+    };
+    if rc != 0 {
+        unsafe { winsock::closesocket(fd) };
+        return alloc_result_box(1, error_text("bind falhou"));
+    }
+
+    // listen.
+    let rc = unsafe { winsock::listen(fd, winsock::SOMAXCONN) };
+    if rc != 0 {
+        unsafe { winsock::closesocket(fd) };
+        return alloc_result_box(1, error_text("listen falhou"));
+    }
+
+    // Non-blocking.
+    super::set_nonblocking(fd as i32);
+
+    let inner = SocketInner {
+        closed: false,
+        fd: fd as i32,
+        state: SocketState::Listener,
+        kind: SocketKindRust::Tcp,
+        addr: addr.to_string(),
+        line_buf: Vec::new(),
+    };
+    let handle = alloc_socket_inner(inner);
+    if handle == 0 {
+        close_fd(fd as i32);
+        return alloc_result_box(1, error_text("falha na alocação"));
+    }
+    alloc_result_box(0, handle)
 }
 
 #[cfg(windows)]
-fn create_tcp_connected(_addr: &str) -> i64 {
-    alloc_result_box(1, error_text("socket TCP connected não suportado em Windows (TODO)"))
+fn create_tcp_connected(addr: &str) -> i64 {
+    use crate::platform::winsock;
+
+    crate::platform::ensure_winsock_init();
+
+    let (ip, port) = match parse_addr(addr) {
+        Some(v) => v,
+        None => return alloc_result_box(1, error_text(&format!("endereço inválido: {addr}"))),
+    };
+
+    // Criar socket TCP IPv4.
+    let fd = unsafe { winsock::socket(winsock::AF_INET, winsock::SOCK_STREAM, 0) };
+    if fd == usize::MAX {
+        return alloc_result_box(1, error_text("socket() falhou"));
+    }
+
+    // Connect blocking.
+    let sa = winsock::SockaddrIn {
+        sin_family: winsock::AF_INET as u16,
+        sin_port: unsafe { winsock::htons(port) },
+        sin_addr: unsafe { winsock::htonl(ip) },
+        sin_zero: [0; 8],
+    };
+    let rc = unsafe {
+        winsock::connect(
+            fd,
+            &sa as *const _ as *const winsock::Sockaddr,
+            std::mem::size_of::<winsock::SockaddrIn>() as i32,
+        )
+    };
+    if rc != 0 {
+        unsafe { winsock::closesocket(fd) };
+        return alloc_result_box(1, error_text("connect falhou"));
+    }
+
+    // Non-blocking após connect.
+    super::set_nonblocking(fd as i32);
+
+    let inner = SocketInner {
+        closed: false,
+        fd: fd as i32,
+        state: SocketState::Connected,
+        kind: SocketKindRust::Tcp,
+        addr: addr.to_string(),
+        line_buf: Vec::new(),
+    };
+    let handle = alloc_socket_inner(inner);
+    if handle == 0 {
+        close_fd(fd as i32);
+        return alloc_result_box(1, error_text("falha na alocação"));
+    }
+    alloc_result_box(0, handle)
+}
+
+/// Parse "ip:port" → (ip as u32 in network byte order, port as u16).
+#[cfg(windows)]
+fn parse_addr(addr: &str) -> Option<(u32, u16)> {
+    let parts: Vec<&str> = addr.rsplitn(2, ':').collect();
+    if parts.len() != 2 {
+        return None;
+    }
+    let port: u16 = parts[0].parse().ok()?;
+    let ip_parts: Vec<&str> = parts[1].split('.').collect();
+    if ip_parts.len() != 4 {
+        return None;
+    }
+    let mut ip_bytes = [0u8; 4];
+    for (i, part) in ip_parts.iter().enumerate() {
+        ip_bytes[i] = part.parse().ok()?;
+    }
+    Some((u32::from_le_bytes(ip_bytes), port))
 }
 
 #[cfg(windows)]
