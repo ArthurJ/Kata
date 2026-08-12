@@ -357,10 +357,16 @@ diretivas customizadas, com `_args` operacional em funções.
     `__param_{i}`. (Decisão P0.2.)
 
 **DoD:**
-- `@trace{msg: "test {}", when: "enter"}` aplicado a função pura com
-  diretiva customizada definida pelo usuário funciona.
-- `_args` acessível no body da diretiva em funções multi-cláusula.
-- Teste E2E: quicksort com `@trace` imprime args na entrada.
+- ✅ `@trace{msg: "test {}", when: "enter"}` aplicado a função pura com
+  diretiva customizada definida pelo usuário funciona (teste E2E 21).
+- ✅ `_args` acessível no body da diretiva em funções multi-cláusula
+  (teste E2E 21, 24).
+- ✅ Despacho por `arg_keys`: `msg` vs `msg+topic` seleciona overload
+  correto (teste E2E 23).
+- ✅ Exit hook com `format _msg (_name, _return)` funciona — `_return`
+  é convertido via `show` genérico (teste E2E 24).
+- ✅ 1580 testes, 0 falhas (após fix de parse error no teste 24:
+  `+ _ 1` → `lambda n: + n 1`).
 
 ### Fase 2 — Definir `trace` no stdlib ✅
 
@@ -368,18 +374,40 @@ diretivas customizadas, com `_args` operacional em funções.
 
 **Mudanças:**
 
-1. Adicionar as 8 declarations de `trace` (4 overloads × 2 hooks) em
-   `stdlib/core.kata`.
+1. Adicionar as 24 declarations de `trace` em `stdlib/core.kata`:
+   16 para Actions (com policy e file, Enter/Exit) + 8 para Funções
+   (sem policy, com file, Enter/Exit). Cada declaration declara os
+   args esperados no dict (`msg: Text`, `topic: Text`, `policy: Text`,
+   `file: File`) para que `arg_keys` case com o site de aplicação.
 
-2. Garantir que o prelude merge traga as declarations de `trace` no
-   `DirectiveRegistry` do módulo usuário.
+2. `resolve_with_prelude` (`kata-resolution/src/lib.rs`): novo path de
+   resolução que recebe `prelude_directives: &DirectiveRegistry` como
+   parâmetro de consulta. Durante validação de `@trace` em Sig/ActionDecl,
+   verifica tanto o registry do módulo usuário quanto o registry do
+   prelude para `contains_name` e `has_compatible_target`. Isto permite
+   que `@trace` (definida no stdlib) seja validada antes do `merge_resolved`
+   trazer as declarations do prelude.
+
+3. `DirectiveRegistry.merge` idempotente (`types.rs`): se a chave já
+   existe e o body é idêntico (mesma declaration do prelude chegando via
+   merge de módulo importado), é no-op silencioso em vez de erro de
+   duplicata. `DirectiveDef` agora deriva `PartialEq` para comparação.
+
+4. `format` com tipos compostos (`format_synthesis.rs`): `convert_to_text`
+   agora gera `show` genérico (Closure com `Ident("show")`, `ffi_symbol=None`)
+   para `Tuple`, `List`, `Array`, `Generic`. O monomorphizador resolve o
+   overload e instancia. Isto fixa o SIGSEGV que ocorria quando `format`
+   recebia args não-Text (ex: `format _msg (_args,)` onde `_args` é
+   `Tuple(Int)`) — antes o builtin tratava Int como ponteiro de string.
 
 **DoD:**
-- `@trace{msg: "entering {}", when: "enter"}` funciona sem declaration
-  local de `trace`.
-- `@trace{msg: "result: {}", when: "exit", topic: "audit", policy: "block"}`
-  funciona com topic e policy.
-- Teste E2E: quicksort com `@trace` stdlib imprime corretamente.
+- ✅ `@trace{msg: "entering {}", when: "enter"}` funciona sem declaration
+  local de `trace` (teste E2E 25).
+- ✅ `@trace{msg: "result: {}", when: "exit", topic: "audit", policy: "block"}`
+  funciona com topic e policy (teste E2E 27).
+- ✅ Testes E2E 25-27: `@trace` do stdlib sem declaration local — função
+  pura (enter), exit hook, action com topic+policy.
+- ✅ 1583 testes, 0 falhas.
 
 ### Fase 3 — Remover `@log` intrínseco, depois renomear `trace` para `log`
 
