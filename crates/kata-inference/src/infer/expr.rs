@@ -296,7 +296,7 @@ pub(crate) fn infer_expr_hinted(
             // AST do lambda na side table e define o binding com InferVars.
             // Quando `f 5 3` for aplicado, infer_apply resgata o lambda e
             // re-inere com os arg types reais.
-            let typed_value = match infer_expr(&value.node, &value.span, env, ctx, false) {
+            let typed_value = match infer_expr_hinted(&value.node, &value.span, env, ctx, false, hint) {
                 Ok(tv) => tv,
                 Err(MiddleError::LambdaInferenceFail { .. })
                     if matches!(value.node, Expr::Lambda { .. }) =>
@@ -887,8 +887,22 @@ pub(crate) fn infer_expr_hinted(
         Expr::Block { stmts } => {
             let mut typed_stmts: Vec<Spanned<TypedExpr>> = Vec::new();
             let mut last_ty = Ty::Unit;
-            for stmt in stmts {
-                let typed_stmt = infer_expr(&stmt.node, &stmt.span, env, ctx, tail_pos)?;
+            let n = stmts.len();
+            for (i, stmt) in stmts.iter().enumerate() {
+                // Propagar hint para o último statement (posição de cauda) e
+                // para `let __result :=` (synthetic binding do Exit hook de
+                // diretivas). Sem isto, o desugar do Exit hook envolve o body
+                // em `let __result := <body>` que não recebe hint, produzindo
+                // InferVar não-resolvida em chamadas recursivas com listas.
+                let stmt_hint = if i + 1 == n {
+                    hint
+                } else if let Expr::Let { name, .. } = &stmt.node {
+                    if name == "__result" { hint } else { None }
+                } else {
+                    None
+                };
+                let typed_stmt =
+                    infer_expr_hinted(&stmt.node, &stmt.span, env, ctx, tail_pos, stmt_hint)?;
                 last_ty = typed_stmt.ty.clone();
                 typed_stmts.push(Spanned::new(typed_stmt, stmt.span));
             }
