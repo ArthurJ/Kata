@@ -91,9 +91,22 @@ pub(crate) fn fold_literal_calls(
             // Usar catch_unwind porque o Cranelift pode panicar em vez de
             // retornar Err (ex: type mismatch, alias edge cases). Um panic
             // não deve quebrar a compilação — apenas não faz fold.
+            //
+            // Passar TODAS as funções do módulo — o callee pode chamar
+            // outras funções (ex: show_A_Int chama show_A_Int_rest).
+            // Se alguma função tiver refs a constants ainda não foldadas
+            // (Fase 2, antes da Fase 3), o JIT falha e catch_unwind
+            // captura o erro, pulando o fold sem quebrar a compilação.
             let closure_expr = expr.clone();
             let result = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                jit_execute_expr(&closure_expr, ctx, comptime_bindings)
+                jit_execute_expr(
+                    &closure_expr,
+                    ctx,
+                    comptime_bindings,
+                    ctx.functions,
+                    ctx.actions,
+                    snapshots,
+                )
             })) {
                 Ok(Ok(r)) => r,
                 // JIT retornou Err ou panic — não faz fold.

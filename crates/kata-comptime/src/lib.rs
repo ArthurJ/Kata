@@ -328,7 +328,20 @@ fn evaluate_constants(
         }
         check_purity(&value_clone)?;
 
-        let result = jit_execute_expr(&value_clone, ctx, comptime_bindings)?;
+        // Passar todas as funções e actions — constants podem ser
+        // function references (`constant g := fat`) que precisam
+        // das funções no mini módulo. Se uma função tiver refs a
+        // constants ainda não foldadas, o JIT falha e pulamos esta
+        // constant (será tratada por fold_literal_calls na Fase 2).
+        let result = match jit_execute_expr(&value_clone, ctx, comptime_bindings, ctx.functions, ctx.actions, snapshots) {
+            Ok(r) => r,
+            Err(_) => {
+                // JIT falhou — registrar o value original e deixar
+                // fold_literal_calls cuidar na Fase 2.
+                comptime_bindings.insert(name, value_clone);
+                continue;
+            }
+        };
         let literal = result_to_literal(
             &result,
             &value_clone,

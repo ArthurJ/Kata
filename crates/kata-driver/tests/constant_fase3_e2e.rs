@@ -145,11 +145,11 @@ fn constant_em_with_binding() {
 }
 
 /// Constant List (HeapSnapshot) acessada por function.
-/// TODO: HeapSnapshot em function body requer que o codegen da função
-/// tenha acesso ao snapshot_id. O fold substitui Ident por HeapSnapshot,
-/// mas o codegen da função precisa de kata_rt_get_snapshot disponível.
+/// O comptime pass avalia `constant base := [1 2 3]` como HeapSnapshot,
+/// e `fold_constant_refs_in_functions` substitui `Ident("base")` por
+/// `HeapSnapshot` no corpo de `prepend`. O codegen da função resolve
+/// via `kata_rt_get_snapshot(snapshot_id)`.
 #[test]
-#[ignore = "HeapSnapshot em function body — Fase 3b"]
 fn constant_list_em_function() {
     let source = "constant base := [1 2 3]\nprepend :: Int => List::Int\nlambda x: + [x] base\n\necho!(prepend 0)\n";
     let (stdout, stderr, code) = run_kata_run(source);
