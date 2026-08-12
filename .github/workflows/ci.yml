@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ── Testes nativos (Linux + macOS) ─────────────────────────────────
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-13, macos-14]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y cmake
+      - name: Run tests
+        run: cargo test --workspace --no-fail-fast -- --test-threads=8
+        timeout-minutes: 30
+
+  # ── Cross-check Windows (compilação, sem testes) ───────────────────
+  # Compila todos os crates para x86_64-pc-windows-gnu no Linux.
+  # Valida que o código é portável sem precisar de runner Windows.
+  cross-check-windows:
+    name: Cross-check Windows GNU
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-gnu
+      - name: Install MinGW-w64
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mingw-w64
+      - name: Cross-check all crates
+        run: |
+          for crate in \
+            kata-lexer kata-parser kata-resolution kata-inference \
+            kata-codegen kata-optimizer kata-monomorph kata-tree-shaking \
+            kata-comptime kata-rt kata-driver kata-lsp; do
+            echo "=== $crate ==="
+            cargo check --target x86_64-pc-windows-gnu -p $crate
+          done
+        timeout-minutes: 20
+
+  # ── Cross-check macOS (compilação no Linux) ────────────────────────
+  cross-check-macos:
+    name: Cross-check macOS (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [x86_64-apple-darwin, aarch64-apple-darwin]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Cross-check all crates
+        run: |
+          for crate in \
+            kata-lexer kata-parser kata-resolution kata-inference \
+            kata-codegen kata-optimizer kata-monomorph kata-tree-shaking \
+            kata-comptime kata-rt kata-driver kata-lsp; do
+            echo "=== $crate ==="
+            cargo check --target ${{ matrix.target }} -p $crate || {
+              echo "crate $crate failed for ${{ matrix.target }}"
+              exit 1
+            }
+          done
+        timeout-minutes: 20
+
+  # ── Testes no Windows real ─────────────────────────────────────────
+  # Usa runner nativo do GitHub Actions (windows-latest).
+  # Testes de runtime (spawn, sockets) podem falhar — marcados como
+  # esperados até a Fase 4 ser completa.
+  test-windows:
+    name: Test Windows
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [x86_64-pc-windows-gnu]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Run tests (GNU)
+        run: cargo test --workspace --no-fail-fast -- --test-threads=8
+        timeout-minutes: 30
+        continue-on-error: true # Fase 4 incompleta — falhas de runtime esperadas
