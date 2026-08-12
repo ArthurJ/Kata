@@ -4,7 +4,6 @@ use kata_ast::{DotIndex, Expr, Spanned, Token};
 use kata_diagnostics::FrontendError;
 
 use crate::Parser;
-use crate::expr_apply::parse_apply;
 
 impl Parser {
     /// Determine if the current token can start an expression.

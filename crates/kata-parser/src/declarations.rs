@@ -1,6 +1,6 @@
 //! Declarations — parse_module, directives, sig, data, enum, fields.
 
-use kata_ast::{Expr, Item, Module, Spanned, Token};
+use kata_ast::{Item, Module, Spanned, Token};
 use kata_diagnostics::FrontendError;
 
 use crate::Parser;
@@ -88,10 +88,7 @@ impl Parser {
                             ));
                         }
                         let expr = self.parse_let()?;
-                        items.push(Spanned::new(
-                            Item::EntryExpr(expr.clone()),
-                            expr.span,
-                        ));
+                        items.push(Spanned::new(Item::EntryExpr(expr.clone()), expr.span));
                     } else {
                         // `let` no top level é proibido — usar `constant`.
                         return Err(self.error(
@@ -125,10 +122,7 @@ impl Parser {
                                 "`@comptime` foi removido. Use `constant` para constantes de módulo, ou remova `@comptime` — o fold automático otimiza chamadas puras com args literais.",
                             ));
                         }
-                        items.push(Spanned::new(
-                            Item::EntryExpr(expr.clone()),
-                            expr.span,
-                        ));
+                        items.push(Spanned::new(Item::EntryExpr(expr.clone()), expr.span));
                     }
                 }
             }
@@ -384,10 +378,7 @@ impl Parser {
                                     self.sync_to_stmt_sep();
                                     continue;
                                 }
-                                items.push(Spanned::new(
-                                    Item::EntryExpr(expr.clone()),
-                                    expr.span,
-                                ));
+                                items.push(Spanned::new(Item::EntryExpr(expr.clone()), expr.span));
                             }
                             Err(e) => {
                                 errors.push(e);

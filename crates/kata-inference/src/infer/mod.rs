@@ -19,8 +19,8 @@ mod ascription;
 mod captures;
 mod collections;
 mod collections_hof;
-mod constness;
 mod const_eval;
+mod constness;
 mod constructors;
 mod constructors_enum_pred;
 mod constructors_refined;
@@ -55,7 +55,7 @@ mod walk;
 
 use action_infer::infer_action;
 use function_infer::{infer_named_function, ty_name};
-use kata_ast::{Expr, Item, Module, Spanned};
+use kata_ast::{Item, Module, Spanned};
 use kata_core::dispatch::OverloadInfo;
 use kata_core::ty::Ty;
 use kata_diagnostics::MiddleError;
@@ -66,9 +66,7 @@ use crate::desugar;
 use crate::typed::{TypedAction, TypedExpr, TypedFunction, TypedModule};
 
 use self::expr::{InferCtx, infer_expr};
-use self::helpers::{
-    item_span_or_synthetic, populate_dispatch_table,
-};
+use self::helpers::{item_span_or_synthetic, populate_dispatch_table};
 
 /// Infere o tipo de um módulo completo.
 ///
@@ -196,7 +194,8 @@ pub fn infer_module(
     //     origin __module__. Validações de constness (lambda, pureza,
     //     comptime-availability) são feitas aqui, não no comptime pass.
     let mut constant_typed_values: Vec<(String, Spanned<TypedExpr>)> = Vec::new();
-    let mut seen_constant_names: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut seen_constant_names: std::collections::HashSet<String> =
+        std::collections::HashSet::new();
     for item in &module.items {
         if let Item::ConstantDecl { name, value } = &item.node {
             // Constants são imutáveis por design — redefinir o mesmo nome é erro.
@@ -227,13 +226,8 @@ pub fn infer_module(
                 deferred_lambdas: &deferred_lambdas,
             };
             // Inferência direta do value (sem wrapping em Expr::Let).
-            let typed_value = infer_expr(
-                &desugared.node,
-                &desugared.span,
-                &mut type_env,
-                &ctx,
-                false,
-            )?;
+            let typed_value =
+                infer_expr(&desugared.node, &desugared.span, &mut type_env, &ctx, false)?;
 
             // ── Validação de constness (C3): detectar lambda aqui, não
             //    no comptime pass. Pureza e comptime-availability
