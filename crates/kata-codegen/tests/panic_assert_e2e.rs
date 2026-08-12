@@ -106,33 +106,10 @@ fn assert_true_sem_msg() {
     assert_eq!(raw, 0);
 }
 
-// ── DoD 26: panic!("msg") aborta — não testável via eval_src ─────────
+// ── DoD 26-27: panic!/assert!(False) abortam — testados via subprocess ──
 //
 // panic! chama std::process::exit(1) que mata o processo de teste inteiro.
-// Para validar manualmente:
-//   echo 'action crash => Unit
-//       panic!("estado impossivel")
-//   crash!()' > /tmp/test_panic.kata
-//   cargo run --bin kata -- run /tmp/test_panic.kata
-//   echo $?  → deve ser != 0
-
-/// DoD 26: panic!("msg") aborta. Teste manual — #[ignore] porque mata o runner.
-#[test]
-#[ignore = "panic! chama exit(1) — mata o runner de testes. Validar via `cargo run --bin kata -- run <file>`"]
-fn panic_aborta_com_mensagem() {
-    let src = "action crash => Unit\n    panic!(\"estado impossivel\")\ncrash!()";
-    let (raw, _) = eval_src(src);
-    // Se chegou aqui, panic! não abortou — bug.
-    let _ = raw;
-    panic!("panic! deveria ter abortado");
-}
-
-/// DoD 27: assert!(False, "msg") aborta. Teste manual — #[ignore] mesmo motivo.
-#[test]
-#[ignore = "assert!(False) desugara para panic! que chama exit(1). Validar via subprocess."]
-fn assert_false_aborta() {
-    let src = "action valida => Unit\n    assert!(Boolean::False, \"x deve ser positivo\")\n    echo!(\"nao chega\")\nvalida!()";
-    let (raw, _) = eval_src(src);
-    let _ = raw;
-    panic!("assert!(False) deveria ter abortado");
-}
+// Os testes de abort estão em `kata-driver/tests/panic_subprocess_e2e.rs`
+// e executam `kata run` num processo filho isolado, verificando exit code
+// e stderr. Os testes não-abortantes (assert!(True) → Unit) continuam aqui
+// usando eval_src in-process.
