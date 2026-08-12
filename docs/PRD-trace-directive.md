@@ -3,7 +3,7 @@
 **Status:** 📝 Proposto
 **Data:** 2026-08-12
 **Pré-requisito 1:** PRD-diretivas.md (sistema de diretivas customizadas — ✅ implementado)
-**Pré-requisito 2:** PRD-stdio-alignment.md (stdin/stdout/stderr como `File` em módulo `stdio`, `log!()` com `File`, remoção de tópicos mágicos — 📋 proposto, NÃO implementado)
+**Pré-requisito 2:** PRD-stdio-alignment.md (stdin/stdout/stderr como `File` em módulo `stdio`, `log!()` com `File`, remoção de tópicos mágicos — ✅ implementado, 9 fases, 17 testes E2E)
 **Substitui:** `@log` intrínseco (PRD-fio14-log.md) — Fase 3 deste PRD
 
 ## 0. Resumo
@@ -76,7 +76,7 @@ let _arity := 1
 let _types := ["List::Int"]
 let _return_type := "List::Int"
 let _is_action := False
-let _args := (__arg_0,)
+let _args := (__param_0,)
 log!(LogLevel::Info, format _msg (_name, _args))
 ```
 
@@ -109,9 +109,11 @@ pub struct DirectiveKey {
 Definida em `stdlib/core.kata` com overloads separados por target (ver §6
 para rationale de pureza):
 
-**Actions** (8 overloads — `policy: "block"` disponível):
+**Actions** (16 overloads — `policy: "block"` disponível, `file` disponível):
 
 ```kata
+# ── sem file ──
+
 directive trace{when: Hook::Enter, on: Target::Action}
     log!(LogLevel::Info, format _msg (_name, _args))
 
@@ -135,11 +137,52 @@ directive trace{when: Hook::Enter, on: Target::Action}
 
 directive trace{when: Hook::Exit, on: Target::Action}
     log!(LogLevel::Info, format _msg (_name, _return), _topic, _policy)
+
+# ── com file (Decisão P0.5) ──
+# `_file` sozinho: write direto, sem CSP.
+
+directive trace{when: Hook::Enter, on: Target::Action}
+    log!(LogLevel::Info, format _msg (_name, _args), _file)
+
+directive trace{when: Hook::Exit, on: Target::Action}
+    log!(LogLevel::Info, format _msg (_name, _return), _file)
+
+# `topic` + `file`: duas chamadas log!() — uma CSP, uma file.
+
+directive trace{when: Hook::Enter, on: Target::Action}
+    log!(LogLevel::Info, format _msg (_name, _args), _topic)
+    log!(LogLevel::Info, format _msg (_name, _args), _file)
+
+directive trace{when: Hook::Exit, on: Target::Action}
+    log!(LogLevel::Info, format _msg (_name, _return), _topic)
+    log!(LogLevel::Info, format _msg (_name, _return), _file)
+
+# `policy` + `file`: CSP com policy + write direto.
+
+directive trace{when: Hook::Enter, on: Target::Action}
+    log!(LogLevel::Info, format _msg (_name, _args), "default", _policy)
+    log!(LogLevel::Info, format _msg (_name, _args), _file)
+
+directive trace{when: Hook::Exit, on: Target::Action}
+    log!(LogLevel::Info, format _msg (_name, _return), "default", _policy)
+    log!(LogLevel::Info, format _msg (_name, _return), _file)
+
+# `topic` + `policy` + `file`: CSP com topic+policy + write direto.
+
+directive trace{when: Hook::Enter, on: Target::Action}
+    log!(LogLevel::Info, format _msg (_name, _args), _topic, _policy)
+    log!(LogLevel::Info, format _msg (_name, _args), _file)
+
+directive trace{when: Hook::Exit, on: Target::Action}
+    log!(LogLevel::Info, format _msg (_name, _return), _topic, _policy)
+    log!(LogLevel::Info, format _msg (_name, _return), _file)
 ```
 
-**Funções** (4 overloads — sem `policy`, `topic` default "log"):
+**Funções** (8 overloads — sem `policy`, `topic` default "log", `file` disponível):
 
 ```kata
+# ── sem file ──
+
 directive trace{when: Hook::Enter, on: Target::Function}
     log!(LogLevel::Info, format _msg (_name, _args))
 
@@ -151,14 +194,37 @@ directive trace{when: Hook::Enter, on: Target::Function}
 
 directive trace{when: Hook::Exit, on: Target::Function}
     log!(LogLevel::Info, format _msg (_name, _return), _topic)
+
+# ── com file (Decisão P0.5) ──
+# `_file` sozinho: write direto, sem CSP.
+
+directive trace{when: Hook::Enter, on: Target::Function}
+    log!(LogLevel::Info, format _msg (_name, _args), _file)
+
+directive trace{when: Hook::Exit, on: Target::Function}
+    log!(LogLevel::Info, format _msg (_name, _return), _file)
+
+# `topic` + `file`: duas chamadas log!() — uma CSP, uma file.
+
+directive trace{when: Hook::Enter, on: Target::Function}
+    log!(LogLevel::Info, format _msg (_name, _args), _topic)
+    log!(LogLevel::Info, format _msg (_name, _args), _file)
+
+directive trace{when: Hook::Exit, on: Target::Function}
+    log!(LogLevel::Info, format _msg (_name, _return), _topic)
+    log!(LogLevel::Info, format _msg (_name, _return), _file)
 ```
 
 **Notas:**
-- `topic` e `file` podem coexistir — o log publica no canal CSP E escreve no
-  arquivo. Overloads com ambos seriam adicionados conforme necessário.
+- `topic` e `file` coexistem via duas chamadas `log!()` no body da diretiva
+  (uma CSP, uma file). O `log!()` atual bifurca por tipo no 3º arg
+  (Text=topic OU File=file), sem suportar ambos num único call.
 - Default do tópico é `"log"` (não `"default"` — ver PRD-stdio-alignment).
 - `file` como arg do site de aplicação exige o PRD-stdio-alignment implementado
-  (stdout/stderr como `File`, `log!()` aceitando `File`).
+  (✅ — stdout/stderr como `File`, `log!()` aceitando `File`).
+- **`_args` não é espalhado** no `format` (Decisão P0.3). O usuário usa `_args`
+  explicitamente no template se quiser os args individuais, ou confia na
+  representação textual da tupla.
 
 **Decisão D1:** `when` é obrigatório no site de aplicação. O `when` seleciona
 Enter vs Exit. Sem `when`, o compilador não sabe qual overload despachar.
@@ -182,22 +248,25 @@ overloads com `level`.
 Hoje `for_function` zera `param_names` e marca `has_args: false`. Para `_args`
 funcionar:
 
-1. `for_function` recebe `param_names` (hoje `Vec<Option<String>>` já existe
-   em `FunctionDef` mas é descartado). Marca `has_args: true`.
+1. `for_function` gera `__param_{i}` posicional como identificador para
+   cada parâmetro (funções puras não nomeiam params na assinatura por
+   design — Decisão P0.1). Marca `has_args: true`. **Não adicionar
+   `param_names` em `FunctionDef`** (P0.1).
 
-2. `arg_idents` usa `__arg_{i}` quando o param não tem nome (funções puras
-   não nomeiam params na assinatura por design).
+2. `arg_idents` usa `__param_{i}` quando o param não tem nome. Manter
+   `__param_{i}` (não renomear para `__arg_{i}` — Decisão P0.2).
 
-3. O desugar injeta `let _args := (__arg_0, __arg_1, ...)` no body da cláusula.
+3. O desugar injeta `let _args := (__param_0, __param_1, ...)` no body
+   da cláusula.
 
-4. A inference precisa de `__arg_{i}` no `TypeEnv` com o tipo posicional
-   correto. Hoje `function_infer.rs:147` já define `__param_{i}` — renomear
-   para `__arg_{i}` ou usar ambos.
+4. A inference já define `__param_{i}` no `TypeEnv` das cláusulas
+   (`function_infer.rs:147`). Sem mudanças — manter `__param_{i}`
+   (Decisão P0.2).
 
-5. O codegen precisa registrar `__arg_{i}` no `var_map` apontando para
+5. O codegen precisa registrar `__param_{i}` no `var_map` apontando para
    `clause_params[i]` em **cada** bloco de cláusula, não só na primeira.
    Hoje `bind_patterns_to_params` só binda patterns `Ident` da primeira
-   cláusula (`function_def.rs:234`). Adicionar registro de `__arg_{i}`
+   cláusula (`function_def.rs:234`). Adicionar registro de `__param_{i}`
    independente de pattern.
 
 #### `_return` em funções
@@ -238,9 +307,11 @@ diretivas customizadas, com `_args` operacional em funções.
 1. **`DirectiveKey`** (`types.rs`): adicionar `arg_keys: Vec<String>`.
    Atualizar `insert`, `lookup_by_name`, `merge`, `validate_any_conflicts`.
 
-2. **`DirectiveDef`** (`types.rs`): adicionar `param_keys: Vec<String>` —
+2. ~~**`DirectiveDef`** (`types.rs`): adicionar `param_keys: Vec<String>` —
    os nomes dos args que a declaration espera no site de aplicação
-   (extraídos do dict da declaration, excluindo `when` e `on`).
+   (extraídos do dict da declaration, excluindo `when` e `on`).~~
+   **REMOVIDO (Decisão P0.4):** `param_keys` é redundante com `DirectiveKey.arg_keys`.
+   A lista de chaves esperadas já vive em `arg_keys` na chave de despacho.
 
 3. **`extract_directive_spec`** (`directives.rs`): extrair `param_keys` dos
    args da declaration. Hoje só aceita `when` e `on` — aceitar chaves
@@ -265,18 +336,25 @@ diretivas customizadas, com `_args` operacional em funções.
 6. **Desugar** (`desugar_directives/mod.rs`): antes de inlinear o body,
    injetar `let _<key> := <value>` para cada arg do site de aplicação.
 
-7. **`for_function`** (`reflection.rs`): receber `param_names` de
-   `FunctionDef` (ou usar `__arg_{i}` como fallback). Marcar `has_args: true`.
+7. **`for_function`** (`reflection.rs`): usar `__param_{i}` posicional como
+   fallback (funções puras nunca nomeiam params na assinatura por design).
+   Marcar `has_args: true`. **Não adicionar `param_names` em `FunctionDef`**
+   (Decisão P0.1).
 
-8. **`FunctionDef`** (`types.rs`): o `param_names` já existe em `Item::Sig`
-   mas `FunctionDef` não o armazena. Adicionar campo.
+8. ~~**`FunctionDef`** (`types.rs`): o `param_names` já existe em `Item::Sig`
+   mas `FunctionDef` não o armazena. Adicionar campo.~~
+   **REMOVIDO (Decisão P0.1):** `param_names` não faz sentido em funções —
+   funções puras nunca nomeiam params na assinatura. `for_function` gera
+   `__param_{i}` posicional diretamente.
 
-9. **Codegen de funções** (`function_def.rs`): registrar `__arg_{i}` no
+9. **Codegen de funções** (`function_def.rs`): registrar `__param_{i}` no
    `var_map` apontando para `clause_params[i]` em cada bloco de cláusula,
-   independente de pattern.
+   independente de pattern. (Decisão P0.2: manter `__param_{i}`, não
+   renomear para `__arg_{i}`.)
 
-10. **Inference** (`function_infer.rs`): definir `__arg_{i}` no `TypeEnv`
-    das cláusulas com o tipo posicional correto.
+10. **Inference** (`function_infer.rs`): `__param_{i}` já é definido no
+    `TypeEnv` das cláusulas (`function_infer.rs:147`). Sem rename — manter
+    `__param_{i}`. (Decisão P0.2.)
 
 **DoD:**
 - `@trace{msg: "test {}", when: "enter"}` aplicado a função pura com
@@ -321,8 +399,10 @@ diretivas customizadas, com `_args` operacional em funções.
    - Injeção de `@log` em `function_def.rs` e `action_def.rs` (codegen)
    - Síntese de log em `function_infer.rs` e `action_infer.rs`
 
-3. Migrar 14 testes E2E de `log_e2e.rs` para usar `@log{msg: "...", when: "..."}`
-   com a nova diretiva Kata.
+3. Migrar testes E2E para usar `@log{msg: "...", when: "..."}`
+   com a nova diretiva Kata. Total: 32 testes (17 em `stdio_log_e2e.rs`
+   + 14 em `log_e2e.rs` + 1 snapshot em `examples_snapshot.rs`).
+   (Decisão P0.6: contagem atualizada.)
 
 4. Migrar exemplos (`quicksort.kata`, `log_telemetry.kata`, etc).
 
@@ -346,7 +426,7 @@ diretivas customizadas, com `_args` operacional em funções.
 | D3 | `level`/`topic`/`policy` opcionais, despachados por overload | Combinação de args presentes seleciona a declaration. `level` default `Info` na Fase 1. |
 | D4 | Template usa `{}` posicional com `format` | Consistente com `format` existente. Remove `parse_template`/`parse_placeholder`. |
 | D5 | `trace` é definida no stdlib, não no compilador | Validar que diretivas customizadas são infraestrutura suficiente para logging. |
-| D6 | `_args` em funções usa `__arg_{i}` posicional | Funções puras não nomeiam params na assinatura por design. `_args` é tupla posicional dos valores brutos. |
+| D6 | `_args` em funções usa `__param_{i}` posicional | Funções puras não nomeiam params na assinatura por design. `_args` é tupla posicional dos valores brutos. Manter `__param_{i}` (P0.2) — não renomear para `__arg_{i}`. |
 | D7 | `policy: "block"` só em `Target::Action`; funções usam `policy: "drop"` only | Preserva garantia de pureza estrutural. `policy: "block"` pode deadlockar — não é observacional. Impossibilidade estrutural via overloads separados por target. |
 
 ## 5. Riscos
@@ -405,7 +485,7 @@ por target — é a mecânica existente.
 ### Declarations do stdlib (revisadas)
 
 ```kata
-# ── trace para Actions: policy "block" disponível ──
+# ── trace para Actions: policy "block" disponível, file disponível ──
 
 directive trace{when: Hook::Enter, on: Target::Action}
     log!(LogLevel::Info, format _msg (_name, _args))
@@ -431,7 +511,46 @@ directive trace{when: Hook::Enter, on: Target::Action}
 directive trace{when: Hook::Exit, on: Target::Action}
     log!(LogLevel::Info, format _msg (_name, _return), _topic, _policy)
 
-# ── trace para Funções: sem policy "block" ──
+# ── trace para Actions com file (P0.5) ──
+# `_file` sozinho: write direto, sem CSP.
+
+directive trace{when: Hook::Enter, on: Target::Action}
+    log!(LogLevel::Info, format _msg (_name, _args), _file)
+
+directive trace{when: Hook::Exit, on: Target::Action}
+    log!(LogLevel::Info, format _msg (_name, _return), _file)
+
+# `topic` + `file`: duas chamadas log!() — uma CSP, uma file.
+
+directive trace{when: Hook::Enter, on: Target::Action}
+    log!(LogLevel::Info, format _msg (_name, _args), _topic)
+    log!(LogLevel::Info, format _msg (_name, _args), _file)
+
+directive trace{when: Hook::Exit, on: Target::Action}
+    log!(LogLevel::Info, format _msg (_name, _return), _topic)
+    log!(LogLevel::Info, format _msg (_name, _return), _file)
+
+# `policy` + `file`: CSP com policy + write direto.
+
+directive trace{when: Hook::Enter, on: Target::Action}
+    log!(LogLevel::Info, format _msg (_name, _args), "default", _policy)
+    log!(LogLevel::Info, format _msg (_name, _args), _file)
+
+directive trace{when: Hook::Exit, on: Target::Action}
+    log!(LogLevel::Info, format _msg (_name, _return), "default", _policy)
+    log!(LogLevel::Info, format _msg (_name, _return), _file)
+
+# `topic` + `policy` + `file`: CSP com topic+policy + write direto.
+
+directive trace{when: Hook::Enter, on: Target::Action}
+    log!(LogLevel::Info, format _msg (_name, _args), _topic, _policy)
+    log!(LogLevel::Info, format _msg (_name, _args), _file)
+
+directive trace{when: Hook::Exit, on: Target::Action}
+    log!(LogLevel::Info, format _msg (_name, _return), _topic, _policy)
+    log!(LogLevel::Info, format _msg (_name, _return), _file)
+
+# ── trace para Funções: sem policy "block", file disponível ──
 
 directive trace{when: Hook::Enter, on: Target::Function}
     log!(LogLevel::Info, format _msg (_name, _args))
@@ -444,13 +563,33 @@ directive trace{when: Hook::Enter, on: Target::Function}
 
 directive trace{when: Hook::Exit, on: Target::Function}
     log!(LogLevel::Info, format _msg (_name, _return), _topic)
+
+# ── trace para Funções com file (P0.5) ──
+# `_file` sozinho: write direto, sem CSP.
+
+directive trace{when: Hook::Enter, on: Target::Function}
+    log!(LogLevel::Info, format _msg (_name, _args), _file)
+
+directive trace{when: Hook::Exit, on: Target::Function}
+    log!(LogLevel::Info, format _msg (_name, _return), _file)
+
+# `topic` + `file`: duas chamadas log!() — uma CSP, uma file.
+
+directive trace{when: Hook::Enter, on: Target::Function}
+    log!(LogLevel::Info, format _msg (_name, _args), _topic)
+    log!(LogLevel::Info, format _msg (_name, _args), _file)
+
+directive trace{when: Hook::Exit, on: Target::Function}
+    log!(LogLevel::Info, format _msg (_name, _return), _topic)
+    log!(LogLevel::Info, format _msg (_name, _return), _file)
 ```
 
-Funções puras têm 4 overloads (sem policy). Actions têm 8 overloads (com
-policy). O despacho por `(when, on, arg_keys)` seleciona a declaration
-correta automaticamente — `@trace{msg: "...", when: "enter", policy: "block"}`
-em função pura não encontra declaration com `Target::Function` que aceite
-`policy` → erro `NoMatchingDirective`. A impossibilidade é estrutural.
+Funções puras têm 8 overloads (sem policy, com e sem file). Actions têm 16
+overloads (com policy, com e sem file). O despacho por `(when, on, arg_keys)`
+seleciona a declaration correta automaticamente — `@trace{msg: "...", when:
+"enter", policy: "block"}` em função pura não encontra declaration com
+`Target::Function` que aceite `policy` → erro `NoMatchingDirective`. A
+impossibilidade é estrutural.
 
 ### `log!()` em função pura
 
