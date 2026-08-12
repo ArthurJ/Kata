@@ -575,3 +575,24 @@ A lição permanece válida: `type_compatible` com `Var` como coringa é um
 atalho que funciona para dispatch mas não para codegen que precisa do
 tipo concreto. A solução não é mudar `type_compatible`, mas adicionar um
 pass separado que resolve `Var` para tipo concreto na TAST antes do codegen.
+
+### L7. `kata-inference` faz três jobs numa só camada — separar na próxima iteração
+
+`kata-inference` (16.4k LOC, 57 arquivos) intercala três concerns distintos
+num único `infer_module`: **desugar** (pipe, hole, directives — 1.7k LOC),
+**síntese** (show, smart constructors, log, timer — 2.8k LOC), e **type
+checking** (inferência, dispatch, pattern checking, CSP, const — 12k LOC).
+A ordem de descoberta acopla a ordem de processamento: a síntese de `show`
+roda dentro de `infer_module` e muta o `InterfaceRegistry` que o typeck
+consome; o desugar é chamado em 8 pontos diferentes, sempre imediatamente
+antes de `infer_expr`, em vez de um pass global.
+
+A separação em três camadas (`resolve → synthesize → infer`, cada uma com
+input/output bem definido) é conceitualmente limpa e foi analisada no item
+A4 do TODO. Não vale a pena executar na iteração 5 — o ROI é baixo: não
+elimina código, apenas move; não reduz match arms no codegen; `?` e `|`
+são context-dependent (exigem `InferCtx`) e não podem ir para o desugarer
+puro. Mas a separação deve ser nativa na arquitetura da próxima iteração:
+desugarer como pass global antes do typeck, synthesizer como camada que
+produz `DispatchTable` + `InterfaceRegistry` + `Vec<TypedFunction>` antes
+do type checker consumi-los, type checker que apenas consome sem sintetizar.
