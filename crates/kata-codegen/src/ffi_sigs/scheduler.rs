@@ -2,13 +2,13 @@
 
 use cranelift_codegen::ir::types::I64;
 use cranelift_codegen::ir::{AbiParam, Signature};
-use cranelift_codegen::isa::CallConv;
+use crate::call_conv::ffi_call_conv;
 use kata_core::ffi::FfiSymbol;
 
 /// Constrói a assinatura para símbolos de scheduler, fiber, arc e processos.
 /// Retorna `Some(sig)` se `sym` pertence a esta categoria, `None` caso contrário.
 pub(crate) fn sig_for(sym: FfiSymbol) -> Option<Signature> {
-    let mut sig = Signature::new(CallConv::SystemV);
+    let mut sig = Signature::new(ffi_call_conv());
     match sym {
         // ── Scheduler/Fiber ──
         // A2: scheduler_init: (rt: i64) -> i64 (root_arena_handle)

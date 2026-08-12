@@ -4,6 +4,7 @@
 //! Block arguments nativos (Cranelift 0.133) — sem stack slots.
 //! MetadataTable é read-only após lowering, consultada pelo ARC pass.
 
+pub(crate) mod call_conv;
 pub(crate) mod ffi_registry;
 pub(crate) mod ffi_sigs;
 pub(crate) mod lowering;

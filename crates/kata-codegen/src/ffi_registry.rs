@@ -8,7 +8,7 @@ use std::collections::HashMap;
 
 use cranelift_codegen::ir::types::I64;
 use cranelift_codegen::ir::{AbiParam, Signature};
-use cranelift_codegen::isa::CallConv;
+use crate::call_conv::ffi_call_conv;
 use cranelift_module::Linkage;
 use kata_core::ffi::FfiSymbol;
 use kata_rt as rt;
@@ -450,7 +450,7 @@ pub(crate) fn declare_ffi_symbols(
     // Símbolo especial: kata_rt_tag_int_from_str (não está no FfiSymbol enum).
     // Usado para lowerar IntLit que não cabe em SMI (BigInts).
     let tag_str_sig = {
-        let mut sig = Signature::new(CallConv::SystemV);
+        let mut sig = Signature::new(ffi_call_conv());
         sig.params.push(AbiParam::new(I64)); // ptr
         sig.params.push(AbiParam::new(I64)); // len
         sig.returns.push(AbiParam::new(I64)); // tagged i64

@@ -8,7 +8,7 @@ use std::collections::HashMap;
 
 use cranelift_codegen::ir::types::I64;
 use cranelift_codegen::ir::{AbiParam, InstBuilder, Signature};
-use cranelift_codegen::isa::CallConv;
+use crate::call_conv::ffi_call_conv;
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_module::{Linkage, Module};
 use kata_core::ty::Ty;
@@ -233,7 +233,7 @@ pub(crate) fn lower_module(
 
     // Assinatura do __kata_entry: (rt: i64) → ret_clif
     // A2: rt é ponteiro para Box<Runtime>, passado pelo driver.
-    let mut sig = Signature::new(CallConv::SystemV);
+    let mut sig = Signature::new(ffi_call_conv());
     sig.params.push(AbiParam::new(I64)); // rt
     sig.returns.push(AbiParam::new(ret_clif));
 

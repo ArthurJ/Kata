@@ -4,13 +4,13 @@
 
 use cranelift_codegen::ir::types::{F64, I64};
 use cranelift_codegen::ir::{AbiParam, Signature};
-use cranelift_codegen::isa::CallConv;
+use crate::call_conv::ffi_call_conv;
 use kata_core::ffi::FfiSymbol;
 
 /// Constrói a assinatura para símbolos de aritmética/comparação/conversão.
 /// Retorna `Some(sig)` se `sym` pertence a esta categoria, `None` caso contrário.
 pub(crate) fn sig_for(sym: FfiSymbol) -> Option<Signature> {
-    let mut sig = Signature::new(CallConv::SystemV);
+    let mut sig = Signature::new(ffi_call_conv());
     match sym {
         // ── Aritmética Int (i64, i64) → i64 ──
         FfiSymbol::BiAdd | FfiSymbol::BiSub | FfiSymbol::BiMul | FfiSymbol::BiDiv => {

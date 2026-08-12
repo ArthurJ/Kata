@@ -2,13 +2,13 @@
 
 use cranelift_codegen::ir::types::I64;
 use cranelift_codegen::ir::{AbiParam, Signature};
-use cranelift_codegen::isa::CallConv;
+use crate::call_conv::ffi_call_conv;
 use kata_core::ffi::FfiSymbol;
 
 /// Constrói a assinatura para símbolos de snapshots e cache.
 /// Retorna `Some(sig)` se `sym` pertence a esta categoria, `None` caso contrário.
 pub(crate) fn sig_for(sym: FfiSymbol) -> Option<Signature> {
-    let mut sig = Signature::new(CallConv::SystemV);
+    let mut sig = Signature::new(ffi_call_conv());
     match sym {
         // ── Comptime snapshots (Fio 12) ──
         // load_snapshot: (root_arena, bytes_ptr, bytes_len, rebase_offsets_ptr, rebase_count, snapshot_id) -> ()

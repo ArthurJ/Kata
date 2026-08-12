@@ -19,7 +19,7 @@ use std::collections::HashMap;
 
 use cranelift_codegen::ir::types::I64;
 use cranelift_codegen::ir::{AbiParam, GlobalValueData, InstBuilder, Signature};
-use cranelift_codegen::isa::CallConv;
+use crate::call_conv::ffi_call_conv;
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_module::{Linkage, Module};
 use kata_core::ty::Ty;
@@ -131,7 +131,7 @@ fn declare_test_wrapper(
     cranelift_name: &str,
     module: &mut dyn ModuleBackend,
 ) -> Result<cranelift_module::FuncId, CodegenError> {
-    let mut sig = Signature::new(CallConv::SystemV);
+    let mut sig = Signature::new(ffi_call_conv());
     sig.params.push(AbiParam::new(I64)); // rt
     sig.returns.push(AbiParam::new(I64));
     module
@@ -175,7 +175,7 @@ fn define_test_wrapper(
 
     {
         let func_ir = &mut ctx.func;
-        let mut sig = Signature::new(CallConv::SystemV);
+        let mut sig = Signature::new(ffi_call_conv());
         sig.params.push(AbiParam::new(I64)); // rt
         sig.returns.push(AbiParam::new(I64));
         func_ir.signature = sig;
