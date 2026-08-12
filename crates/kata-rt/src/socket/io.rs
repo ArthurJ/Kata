@@ -7,6 +7,7 @@ use super::{
     SocketInner, SocketState, alloc_bytes, alloc_result_box, alloc_text, error_text,
     socket_from_handle,
 };
+use crate::platform::{close_fd, is_would_block, raw_read, raw_write};
 use std::ffi::CStr;
 use std::os::raw::c_char;
 
@@ -33,7 +34,7 @@ pub unsafe extern "C" fn kata_rt_socket_read(handle: i64) -> i64 {
 
     loop {
         let n_read =
-            unsafe { libc::read(inner.fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len()) };
+            raw_read(inner.fd, buf.as_mut_ptr(), buf.len());
         if n_read > 0 {
             data.extend_from_slice(&buf[..n_read as usize]);
             // Continua lendo enquanto há dados (non-blocking).
@@ -48,7 +49,7 @@ pub unsafe extern "C" fn kata_rt_socket_read(handle: i64) -> i64 {
         }
         // n_read < 0 — erro.
         let err = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
-        if err == libc::EAGAIN || err == libc::EWOULDBLOCK {
+        if is_would_block(err) {
             if data.is_empty() {
                 // Sem dados — suspender fiber com o handle em socket_handles
                 // para o scheduler fazer poll(POLLIN) no FD do socket.
@@ -104,7 +105,7 @@ pub unsafe extern "C" fn kata_rt_socket_read_chunk(handle: i64, n: i64) -> i64 {
 
     loop {
         let n_read =
-            unsafe { libc::read(inner.fd, buf.as_mut_ptr() as *mut libc::c_void, max_bytes) };
+            raw_read(inner.fd, buf.as_mut_ptr(), max_bytes);
 
         if n_read > 0 {
             buf.truncate(n_read as usize);
@@ -122,7 +123,7 @@ pub unsafe extern "C" fn kata_rt_socket_read_chunk(handle: i64, n: i64) -> i64 {
 
         // n_read < 0 — erro.
         let err = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
-        if err == libc::EAGAIN || err == libc::EWOULDBLOCK {
+        if is_would_block(err) {
             // Sem dados — suspender fiber com o handle em socket_handles
             // para o scheduler fazer poll(POLLIN) no FD do socket.
             let suspended = crate::fiber::with_suspend(|suspend| {
@@ -196,7 +197,7 @@ pub unsafe extern "C" fn kata_rt_socket_readline(handle: i64) -> i64 {
 
         // Tenta ler mais dados do socket.
         let n_read =
-            unsafe { libc::read(inner.fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len()) };
+            raw_read(inner.fd, buf.as_mut_ptr(), buf.len());
 
         if n_read > 0 {
             inner.line_buf.extend_from_slice(&buf[..n_read as usize]);
@@ -224,7 +225,7 @@ pub unsafe extern "C" fn kata_rt_socket_readline(handle: i64) -> i64 {
 
         // n_read < 0 — erro.
         let err = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
-        if err == libc::EAGAIN || err == libc::EWOULDBLOCK {
+        if is_would_block(err) {
             // Sem dados e sem linha completa — suspender fiber.
             let suspended = crate::fiber::with_suspend(|suspend| {
                 suspend.suspend(crate::fiber::YieldReason::WaitingOnSelect {
@@ -319,9 +320,9 @@ fn write_all(inner: &mut SocketInner, handle: i64, data: &[u8]) -> i64 {
 
     while written < data.len() {
         let n_written = unsafe {
-            libc::write(
+            raw_write(
                 inner.fd,
-                data[written..].as_ptr() as *const libc::c_void,
+                data[written..].as_ptr(),
                 data.len() - written,
             )
         };
@@ -338,7 +339,7 @@ fn write_all(inner: &mut SocketInner, handle: i64, data: &[u8]) -> i64 {
 
         // n_written < 0 — erro.
         let err = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
-        if err == libc::EAGAIN || err == libc::EWOULDBLOCK {
+        if is_would_block(err) {
             // Buffer cheio — suspender fiber com o handle em socket_handles
             // para o scheduler fazer poll(POLLIN | POLLOUT) no FD do socket.
             // POLLOUT é essencial: sem ele, o fiber nunca seria acordado quando
@@ -383,6 +384,6 @@ pub unsafe extern "C" fn kata_rt_socket_close(handle: i64) {
     }
     inner.closed = true;
     unsafe {
-        libc::close(inner.fd);
+        close_fd(inner.fd);
     }
 }

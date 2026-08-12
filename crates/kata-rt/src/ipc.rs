@@ -38,8 +38,10 @@ use crate::runtime::Runtime;
 /// comportamento.
 ///
 /// `SA_RESTART` evita `EINTR` em syscalls bloqueantes do parent.
+#[cfg(unix)]
 static INSTALL_SIGNAL_HANDLERS: Once = Once::new();
 
+#[cfg(unix)]
 fn ensure_signal_handlers() {
     INSTALL_SIGNAL_HANDLERS.call_once(|| unsafe {
         let mut sa: libc::sigaction = std::mem::zeroed();
@@ -71,6 +73,24 @@ fn ensure_signal_handlers() {
 /// - `arena_handle` deve ser um handle de arena válido.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_spawn_process(
+    _rt: i64,
+    fn_ptr: i64,
+    args_ptr: i64,
+    arena_handle: i64,
+) -> i64 {
+    #[cfg(unix)]
+    {
+        spawn_process_unix(_rt, fn_ptr, args_ptr, arena_handle)
+    }
+    #[cfg(windows)]
+    {
+        spawn_process_windows(_rt, fn_ptr, args_ptr, arena_handle)
+    }
+}
+
+/// Implementação POSIX de spawn — fork + COW.
+#[cfg(unix)]
+fn spawn_process_unix(
     _rt: i64,
     fn_ptr: i64,
     args_ptr: i64,
@@ -121,4 +141,28 @@ pub extern "C" fn kata_rt_spawn_process(
             0
         }
     }
+}
+
+/// Implementação Windows de spawn.
+///
+/// **Limitação arquitetural:** Windows não tem `fork()`. O modelo COW do
+/// Kata5 (child herda address space inteiro do parent, incluindo código JIT
+/// e arenas) não tem equivalente direto em Windows. `CreateProcessW` começa
+/// um processo novo do zero.
+///
+/// Por enquanto, retorna 0 (sucesso no-op) — a Action não é executada.
+/// Isto é um stub: `spawn!` compila mas não funciona em Windows.
+/// A solução completa requer re-arquitetar o spawn para Windows (ex: shared
+/// memory + CreateProcessW, ou threads em vez de processos).
+#[cfg(windows)]
+fn spawn_process_windows(
+    _rt: i64,
+    _fn_ptr: i64,
+    _args_ptr: i64,
+    _arena_handle: i64,
+) -> i64 {
+    // TODO: Implementar spawn no Windows. Ver PRD-portability-windows.md.
+    // Opções: CreateProcessW + shared memory, ou threads, ou serializar
+    // a Action + args e re-executar num novo processo.
+    0
 }

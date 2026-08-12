@@ -38,6 +38,7 @@ use crate::arena::{Arena, ArenaKind};
 use crate::channel::{block_ipc_until_readable, can_recv, can_send, ipc_read_fd, is_ipc_handle};
 use crate::fiber::{KataFiber, SpawnArgs, YieldReason};
 use crate::file::{FILE_WOULD_BLOCK, collect_file_fds, try_select_files};
+use crate::platform::{poll_fds, PollFd, POLLIN};
 use crate::socket::{SOCKET_WOULD_BLOCK, collect_socket_fds, try_select_sockets};
 
 // ── TLS para registry por-fiber (Fase 9) ───────────────────────────
@@ -331,7 +332,7 @@ impl Scheduler {
                 });
 
                 // Coletar FDs de file e socket handles de fibers blocked em WaitingOnSelect.
-                let mut file_fds: Vec<libc::pollfd> = Vec::new();
+                let mut file_fds: Vec<PollFd> = Vec::new();
                 for reason in self.blocked.values() {
                     if let BlockReason::WaitingOnSelect {
                         file_handles,
@@ -362,22 +363,16 @@ impl Scheduler {
                                 // SAFETY: handle veio de um fiber blocked em canal IPC.
                                 let fd = unsafe { ipc_read_fd(handle) };
                                 if fd >= 0 {
-                                    file_fds.push(libc::pollfd {
+                                    file_fds.push(PollFd {
                                         fd,
-                                        events: libc::POLLIN,
+                                        events: POLLIN,
                                         revents: 0,
                                     });
                                 }
                             }
                             // SAFETY: poll com timeout específico. Acorda quando
                             // qualquer FD (IPC ou file) tem dados ou timeout expira.
-                            unsafe {
-                                libc::poll(
-                                    file_fds.as_mut_ptr(),
-                                    file_fds.len() as libc::nfds_t,
-                                    timeout_ms,
-                                );
-                            }
+                            poll_fds(&mut file_fds, timeout_ms);
                         } else if let Some(handle) = ipc_handle {
                             // Sem file FDs, mas há IPC — poll IPC com timeout.
                             unsafe {
@@ -410,9 +405,7 @@ impl Scheduler {
                 if !file_fds.is_empty() {
                     // SAFETY: poll com timeout -1 (infinite). Acorda quando
                     // qualquer file FD tem dados.
-                    unsafe {
-                        libc::poll(file_fds.as_mut_ptr(), file_fds.len() as libc::nfds_t, -1);
-                    }
+                    poll_fds(&mut file_fds, -1);
                     self.wake_pass();
                     continue;
                 }

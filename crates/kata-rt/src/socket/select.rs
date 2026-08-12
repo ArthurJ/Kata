@@ -3,6 +3,8 @@
 //! `try_select_sockets` faz poll non-blocking (timeout=0) nos FDs dos sockets.
 //! `collect_socket_fds` coleta pollfds para o sleep path unificado do scheduler.
 
+use crate::platform::{poll_fds, PollFd, POLLHUP, POLLIN, POLLOUT};
+
 use super::SocketInner;
 
 /// Sentinel: nenhum handle pronto.
@@ -19,7 +21,7 @@ pub(crate) fn try_select_sockets(handles: &[i64]) -> i64 {
         return SOCKET_WOULD_BLOCK;
     }
 
-    let mut fds: Vec<libc::pollfd> = Vec::with_capacity(handles.len());
+    let mut fds: Vec<PollFd> = Vec::with_capacity(handles.len());
     let mut valid_indices: Vec<usize> = Vec::with_capacity(handles.len());
 
     for (idx, &handle) in handles.iter().enumerate() {
@@ -30,9 +32,9 @@ pub(crate) fn try_select_sockets(handles: &[i64]) -> i64 {
         if inner.closed {
             continue;
         }
-        fds.push(libc::pollfd {
+        fds.push(PollFd {
             fd: inner.fd,
-            events: libc::POLLIN | libc::POLLOUT,
+            events: POLLIN | POLLOUT,
             revents: 0,
         });
         valid_indices.push(idx);
@@ -42,13 +44,13 @@ pub(crate) fn try_select_sockets(handles: &[i64]) -> i64 {
         return SOCKET_WOULD_BLOCK;
     }
 
-    let ret = unsafe { libc::poll(fds.as_mut_ptr(), fds.len() as libc::nfds_t, 0) };
+    let ret = poll_fds(&mut fds, 0);
     if ret <= 0 {
         return SOCKET_WOULD_BLOCK;
     }
 
     for (i, pfd) in fds.iter().enumerate() {
-        if pfd.revents & (libc::POLLIN | libc::POLLOUT | libc::POLLHUP) != 0 {
+        if pfd.revents & (POLLIN | POLLOUT | POLLHUP) != 0 {
             return valid_indices[i] as i64;
         }
     }
@@ -59,8 +61,8 @@ pub(crate) fn try_select_sockets(handles: &[i64]) -> i64 {
 /// Coleta os FDs brutos de socket handles válidos e não-fechados.
 /// Usado pelo scheduler no sleep path para poll unificado.
 /// Inclui POLLIN | POLLOUT — sockets podem bloquear tanto em read quanto write.
-pub(crate) fn collect_socket_fds(handles: &[i64]) -> Vec<libc::pollfd> {
-    let mut fds: Vec<libc::pollfd> = Vec::with_capacity(handles.len());
+pub(crate) fn collect_socket_fds(handles: &[i64]) -> Vec<PollFd> {
+    let mut fds: Vec<PollFd> = Vec::with_capacity(handles.len());
 
     for &handle in handles {
         if handle == 0 {
@@ -70,9 +72,9 @@ pub(crate) fn collect_socket_fds(handles: &[i64]) -> Vec<libc::pollfd> {
         if inner.closed {
             continue;
         }
-        fds.push(libc::pollfd {
+        fds.push(PollFd {
             fd: inner.fd,
-            events: libc::POLLIN | libc::POLLOUT,
+            events: POLLIN | POLLOUT,
             revents: 0,
         });
     }

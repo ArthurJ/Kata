@@ -26,6 +26,7 @@ pub(crate) mod ipc;
 pub(crate) mod list;
 pub(crate) mod log;
 pub(crate) mod marshal;
+pub(crate) mod platform;
 pub(crate) mod range;
 pub(crate) mod rational;
 pub mod runtime;

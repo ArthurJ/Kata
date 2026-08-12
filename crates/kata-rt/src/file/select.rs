@@ -10,7 +10,7 @@
 //! - `collect_file_fds`: coleta FDs brutos para poll unificado (sleep path).
 //! - `kata_rt_select_files`: FFI de select multiplexado com suspensão de fiber.
 
-use std::os::unix::io::AsRawFd;
+use crate::platform::{file_raw_fd, poll_fds, PollFd, POLLHUP, POLLIN};
 
 use super::FileInner;
 
@@ -33,7 +33,7 @@ pub(crate) fn try_select_files(handles: &[i64]) -> i64 {
     }
 
     // Coleta os FDs dos file handles.
-    let mut fds: Vec<libc::pollfd> = Vec::with_capacity(handles.len());
+    let mut fds: Vec<PollFd> = Vec::with_capacity(handles.len());
     let mut valid_indices: Vec<usize> = Vec::with_capacity(handles.len());
 
     for (idx, &handle) in handles.iter().enumerate() {
@@ -45,10 +45,10 @@ pub(crate) fn try_select_files(handles: &[i64]) -> i64 {
         if inner.closed {
             continue;
         }
-        let fd = inner.buf_reader.get_ref().as_raw_fd();
-        fds.push(libc::pollfd {
+        let fd = file_raw_fd(inner.buf_reader.get_ref());
+        fds.push(PollFd {
             fd,
-            events: libc::POLLIN,
+            events: POLLIN,
             revents: 0,
         });
         valid_indices.push(idx);
@@ -59,14 +59,14 @@ pub(crate) fn try_select_files(handles: &[i64]) -> i64 {
     }
 
     // poll non-blocking (timeout=0).
-    let ret = unsafe { libc::poll(fds.as_mut_ptr(), fds.len() as libc::nfds_t, 0) };
+    let ret = poll_fds(&mut fds, 0);
     if ret <= 0 {
         return FILE_WOULD_BLOCK;
     }
 
     // Encontra o primeiro FD pronto.
     for (i, pfd) in fds.iter().enumerate() {
-        if pfd.revents & (libc::POLLIN | libc::POLLHUP) != 0 {
+        if pfd.revents & (POLLIN | POLLHUP) != 0 {
             return valid_indices[i] as i64;
         }
     }
@@ -79,8 +79,8 @@ pub(crate) fn try_select_files(handles: &[i64]) -> i64 {
 ///
 /// Retorna `(fds, valid_indices)` — os FDs para poll e os índices originais
 /// correspondentes (necessário para mapear de volta se preciso).
-pub(crate) fn collect_file_fds(handles: &[i64]) -> Vec<libc::pollfd> {
-    let mut fds: Vec<libc::pollfd> = Vec::with_capacity(handles.len());
+pub(crate) fn collect_file_fds(handles: &[i64]) -> Vec<PollFd> {
+    let mut fds: Vec<PollFd> = Vec::with_capacity(handles.len());
 
     for &handle in handles {
         if handle == 0 {
@@ -91,10 +91,10 @@ pub(crate) fn collect_file_fds(handles: &[i64]) -> Vec<libc::pollfd> {
         if inner.closed {
             continue;
         }
-        let fd = inner.buf_reader.get_ref().as_raw_fd();
-        fds.push(libc::pollfd {
+        let fd = file_raw_fd(inner.buf_reader.get_ref());
+        fds.push(PollFd {
             fd,
-            events: libc::POLLIN,
+            events: POLLIN,
             revents: 0,
         });
     }

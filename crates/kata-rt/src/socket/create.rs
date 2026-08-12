@@ -3,14 +3,18 @@
 //! Cria listeners TCP/Unix e sockets conectados, com retry cooperativo
 //! para conectados (o servidor fork pode não ter feito listen ainda).
 
+use crate::platform::close_fd;
+
 use super::{
-    SocketInner, SocketKindRust, SocketState, alloc_result_box, alloc_socket_inner, error_text,
-    set_nonblocking, set_reuseaddr,
+    alloc_result_box, alloc_socket_inner, error_text, set_nonblocking, set_reuseaddr, SocketInner,
+    SocketKindRust, SocketState,
 };
 use std::ffi::CStr;
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::os::raw::c_char;
+#[cfg(unix)]
 use std::os::unix::io::{AsRawFd, IntoRawFd};
+#[cfg(unix)]
 use std::os::unix::net::UnixListener;
 
 /// Cria um socket (TCP ou Unix, Listener ou Connected) e retorna Result box.
@@ -62,6 +66,7 @@ pub unsafe extern "C" fn kata_rt_socket_open(kind_box: i64, mode_box: i64) -> i6
 }
 
 /// Cria listener TCP: bind + listen, configura non-blocking + SO_REUSEADDR.
+#[cfg(unix)]
 fn create_tcp_listener(addr: &str) -> i64 {
     let sock_addr: SocketAddr = match addr.parse() {
         Ok(a) => a,
@@ -73,10 +78,10 @@ fn create_tcp_listener(addr: &str) -> i64 {
         Err(e) => return alloc_result_box(1, error_text(&format!("bind falhou: {e}"))),
     };
 
-    set_reuseaddr(listener.as_raw_fd());
-    set_nonblocking(listener.as_raw_fd());
+    set_reuseaddr(crate::platform::tcp_listener_fd(&listener));
+    set_nonblocking(crate::platform::tcp_listener_fd(&listener));
 
-    let fd = listener.into_raw_fd();
+    let fd = crate::platform::tcp_listener_into_fd(listener);
 
     let inner = SocketInner {
         closed: false,
@@ -88,7 +93,7 @@ fn create_tcp_listener(addr: &str) -> i64 {
     };
     let handle = alloc_socket_inner(inner);
     if handle == 0 {
-        unsafe { libc::close(fd) };
+        close_fd(fd);
         return alloc_result_box(1, error_text("falha na alocação"));
     }
     alloc_result_box(0, handle)
@@ -99,6 +104,7 @@ fn create_tcp_listener(addr: &str) -> i64 {
 /// Usa `TcpStream::connect_timeout` do Rust std (blocking). Se o servidor não
 /// estiver ouvindo, suspende o fiber e tenta novamente (o servidor pode ainda
 /// não ter feito listen, especialmente em testes com fork!).
+#[cfg(unix)]
 fn create_tcp_connected(addr: &str) -> i64 {
     let sock_addr: SocketAddr = match addr.parse() {
         Ok(a) => a,
@@ -120,8 +126,8 @@ fn create_tcp_connected(addr: &str) -> i64 {
     for _ in 0..max_retries {
         match TcpStream::connect_timeout(&sock_addr, std::time::Duration::from_millis(200)) {
             Ok(stream) => {
-                set_nonblocking(stream.as_raw_fd());
-                let fd = stream.into_raw_fd();
+                set_nonblocking(crate::platform::tcp_stream_fd(&stream));
+                let fd = crate::platform::tcp_stream_into_fd(stream);
                 let inner = SocketInner {
                     closed: false,
                     fd,
@@ -132,7 +138,7 @@ fn create_tcp_connected(addr: &str) -> i64 {
                 };
                 let handle = alloc_socket_inner(inner);
                 if handle == 0 {
-                    unsafe { libc::close(fd) };
+                    close_fd(fd);
                     return alloc_result_box(1, error_text("falha na alocação"));
                 }
                 return alloc_result_box(0, handle);
@@ -160,6 +166,7 @@ fn create_tcp_connected(addr: &str) -> i64 {
 }
 
 /// Cria listener Unix domain socket: bind + listen, non-blocking.
+#[cfg(unix)]
 fn create_unix_listener(path: &str) -> i64 {
     // Remove socket file anterior se existir (para reiniciar servidor).
     let _ = std::fs::remove_file(path);
@@ -183,13 +190,14 @@ fn create_unix_listener(path: &str) -> i64 {
     };
     let handle = alloc_socket_inner(inner);
     if handle == 0 {
-        unsafe { libc::close(fd) };
+        close_fd(fd);
         return alloc_result_box(1, error_text("falha na alocação"));
     }
     alloc_result_box(0, handle)
 }
 
 /// Cria socket Unix conectado: connect com retry cooperativo.
+#[cfg(unix)]
 fn create_unix_connected(path: &str) -> i64 {
     // Ceder controle ao scheduler — o servidor (fork!) pode ainda não ter
     // feito bind+listen.
@@ -215,7 +223,7 @@ fn create_unix_connected(path: &str) -> i64 {
                 };
                 let handle = alloc_socket_inner(inner);
                 if handle == 0 {
-                    unsafe { libc::close(fd) };
+                    close_fd(fd);
                     return alloc_result_box(1, error_text("falha na alocação"));
                 }
                 return alloc_result_box(0, handle);
@@ -258,40 +266,9 @@ pub unsafe extern "C" fn kata_rt_socket_listen(listener_handle: i64) -> i64 {
         return alloc_result_box(1, error_text("socket conectado não aceita conexões"));
     }
 
-    // accept em non-blocking.
-    // Linux: accept4 com SOCK_NONBLOCK (atômico).
-    // macOS: accept + fcntl(F_SETFL, O_NONBLOCK) (accept4 não disponível).
-    let mut client_addr: libc::sockaddr_storage = unsafe { std::mem::zeroed() };
-    let mut addr_len: libc::socklen_t =
-        std::mem::size_of::<libc::sockaddr_storage>() as libc::socklen_t;
-
     loop {
-        // Linux: accept4 com SOCK_NONBLOCK (atômico).
-        // macOS/Outros: accept + fcntl(F_SETFL, O_NONBLOCK).
-        #[cfg(target_os = "linux")]
-        let client_fd = unsafe {
-            libc::accept4(
-                inner.fd,
-                &mut client_addr as *mut _ as *mut libc::sockaddr,
-                &mut addr_len,
-                libc::SOCK_NONBLOCK,
-            )
-        };
-        #[cfg(not(target_os = "linux"))]
-        let client_fd = unsafe {
-            let fd = libc::accept(
-                inner.fd,
-                &mut client_addr as *mut _ as *mut libc::sockaddr,
-                &mut addr_len,
-            );
-            if fd >= 0 {
-                let flags = libc::fcntl(fd, libc::F_GETFL, 0);
-                if flags >= 0 {
-                    libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
-                }
-            }
-            fd
-        };
+        // Accept non-blocking. Plataforma-específico.
+        let client_fd = accept_nonblocking(inner.fd);
 
         if client_fd >= 0 {
             let client_inner = SocketInner {
@@ -299,23 +276,21 @@ pub unsafe extern "C" fn kata_rt_socket_listen(listener_handle: i64) -> i64 {
                 fd: client_fd,
                 state: SocketState::Connected,
                 kind: inner.kind,
-                addr: String::new(), // peer addr — não necessário para operação
+                addr: String::new(),
                 line_buf: Vec::new(),
             };
             let handle = alloc_socket_inner(client_inner);
             if handle == 0 {
-                unsafe { libc::close(client_fd) };
+                close_fd(client_fd);
                 return alloc_result_box(1, error_text("falha na alocação"));
             }
             return alloc_result_box(0, handle);
         }
 
-        // Erro — verificar se é EAGAIN/EWOULDBLOCK (non-blocking, sem conexão pendente).
+        // Erro — verificar se é would-block (non-blocking, sem conexão pendente).
         let err = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
-        if err == libc::EAGAIN || err == libc::EWOULDBLOCK {
+        if crate::platform::is_would_block(err) {
             // Sem conexão pendente — suspender fiber, scheduler poll.
-            // O handle do listener vai em socket_handles para o scheduler
-            // fazer poll(POLLIN) no FD do listener.
             let suspended = crate::fiber::with_suspend(|suspend| {
                 suspend.suspend(crate::fiber::YieldReason::WaitingOnSelect {
                     channel_handles: Vec::new(),
@@ -325,14 +300,86 @@ pub unsafe extern "C" fn kata_rt_socket_listen(listener_handle: i64) -> i64 {
                 });
             });
             if suspended.is_none() {
-                // Fora de fiber (teste unitário) — retorna Err.
                 return alloc_result_box(1, error_text("WOULDBLOCK sem fiber"));
             }
-            // Fiber resumido — tentar novamente.
             continue;
         }
 
         // Erro real de accept.
         return alloc_result_box(1, error_text(&format!("accept falhou: {err}")));
     }
+}
+
+/// Accept non-blocking — implementação POSIX.
+#[cfg(unix)]
+fn accept_nonblocking(fd: i32) -> i32 {
+    // Linux: accept4 com SOCK_NONBLOCK (atômico).
+    // macOS: accept + fcntl(F_SETFL, O_NONBLOCK) (accept4 não disponível).
+    let mut client_addr: libc::sockaddr_storage = unsafe { std::mem::zeroed() };
+    let mut addr_len: libc::socklen_t =
+        std::mem::size_of::<libc::sockaddr_storage>() as libc::socklen_t;
+
+    #[cfg(target_os = "linux")]
+    {
+        unsafe {
+            libc::accept4(
+                fd,
+                &mut client_addr as *mut _ as *mut libc::sockaddr,
+                &mut addr_len,
+                libc::SOCK_NONBLOCK,
+            )
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        unsafe {
+            let new_fd = libc::accept(
+                fd,
+                &mut client_addr as *mut _ as *mut libc::sockaddr,
+                &mut addr_len,
+            );
+            if new_fd >= 0 {
+                let flags = libc::fcntl(new_fd, libc::F_GETFL, 0);
+                if flags >= 0 {
+                    libc::fcntl(new_fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
+                }
+            }
+            new_fd
+        }
+    }
+}
+
+/// Accept non-blocking — implementação Windows (Winsock).
+#[cfg(windows)]
+fn accept_nonblocking(fd: i32) -> i32 {
+    // TODO: Implementar accept via Winsock. Ver PRD-Windows Fase 2/4.
+    // Por ora, retorna -1 (erro) — accept não funciona em Windows ainda.
+    let _ = fd;
+    -1
+}
+
+// ── Stubs Windows para criação de sockets ──────────────────────────
+//
+// No Windows, a criação de sockets TCP/Unix precisa de Winsock. Por ora,
+// retornamos erro — o crate compila mas sockets não funcionam em Windows.
+// A implementação completa é Fase 2/4 do PRD-Windows.
+
+#[cfg(windows)]
+fn create_tcp_listener(_addr: &str) -> i64 {
+    alloc_result_box(1, error_text("socket TCP listener não suportado em Windows (TODO)"))
+}
+
+#[cfg(windows)]
+fn create_tcp_connected(_addr: &str) -> i64 {
+    alloc_result_box(1, error_text("socket TCP connected não suportado em Windows (TODO)"))
+}
+
+#[cfg(windows)]
+fn create_unix_listener(_path: &str) -> i64 {
+    alloc_result_box(1, error_text("Unix domain sockets não existem em Windows"))
+}
+
+#[cfg(windows)]
+fn create_unix_connected(_path: &str) -> i64 {
+    alloc_result_box(1, error_text("Unix domain sockets não existem em Windows"))
 }

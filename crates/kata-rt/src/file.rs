@@ -33,6 +33,7 @@ use std::ffi::CStr;
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::os::raw::c_char;
+#[cfg(unix)]
 use std::os::unix::io::FromRawFd;
 
 // ── Submódulos ─────────────────────────────────────────────────────
@@ -648,6 +649,7 @@ thread_local! {
 /// `fd` é 0 (stdin), 1 (stdout) ou 2 (stderr).
 /// `mode` é `IoMode::Read` para stdin, `IoMode::Write` para stdout/stderr.
 /// `label` é usado como path no FileInner (apenas para debug).
+#[cfg(unix)]
 fn get_or_create_stdio(fd: i32, mode: IoMode, label: &str, cache: &Cell<i64>) -> i64 {
     let cached = cache.get();
     if cached != 0 {
@@ -657,6 +659,42 @@ fn get_or_create_stdio(fd: i32, mode: IoMode, label: &str, cache: &Cell<i64>) ->
     // `close` e `Bump::reset` não chama Drop, o FD nunca é fechado pelo
     // runtime — seguro na prática. O FD 0/1/2 pertence ao processo.
     let file = unsafe { File::from_raw_fd(fd) };
+    alloc_stdio_inner(file, mode, label, cache)
+}
+
+/// No Windows, stdin/stdout/stderr usam GetStdHandle.
+#[cfg(windows)]
+fn get_or_create_stdio(_fd: i32, mode: IoMode, label: &str, cache: &Cell<i64>) -> i64 {
+    let cached = cache.get();
+    if cached != 0 {
+        return cached;
+    }
+    // No Windows, stdin/stdout/stderr são acessados via std::io::*::lock()
+    // ou GetStdHandle. Por ora, criar a partir de File da std.
+    let file = match _fd {
+        0 => {
+            // stdin — usar std::io::stdin
+            // TODO: Windows precisa de abordagem diferente para FD bruto.
+            // Por ora, retornar 0 (não suportado).
+            return 0;
+        }
+        1 => {
+            // stdout
+            // TODO: mesmo problema.
+            return 0;
+        }
+        2 => {
+            // stderr
+            return 0;
+        }
+        _ => return 0,
+    };
+    #[allow(unreachable_code)]
+    alloc_stdio_inner(file, mode, label, cache)
+}
+
+#[cfg(unix)]
+fn alloc_stdio_inner(file: File, mode: IoMode, label: &str, cache: &Cell<i64>) -> i64 {
     let inner = FileInner {
         closed: false,
         buf_reader: BufReader::new(file),
@@ -669,6 +707,11 @@ fn get_or_create_stdio(fd: i32, mode: IoMode, label: &str, cache: &Cell<i64>) ->
         cache.set(handle);
     }
     handle
+}
+
+#[cfg(windows)]
+fn alloc_stdio_inner(_file: File, _mode: IoMode, _label: &str, _cache: &Cell<i64>) -> i64 {
+    0
 }
 
 /// `kata_rt_stdin() -> i64` — handle `File` apontando para FD 0 (stdin).

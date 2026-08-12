@@ -18,6 +18,8 @@
 //! (64KB no Linux) acomoda a maioria dos blobs. Se o buffer enche, `send`
 //! bloqueia no `write` (limitação v1 — futuro: non-blocking write + yield).
 
+use crate::platform::{close_fd, poll_fds, raw_read, raw_write, PollFd, POLLIN};
+
 use super::ops::{OK, WOULD_BLOCK};
 use super::{IpcChannelInner, TAG_IPC_CHANNEL, arena_alloc_and_init, make_handle_pub, ptr_of};
 
@@ -40,7 +42,14 @@ use super::{IpcChannelInner, TAG_IPC_CHANNEL, arena_alloc_and_init, make_handle_
 pub(super) unsafe fn create_ipc_channel(arena: i64, type_id: i64, ack_tx_handle: i64) -> i64 {
     let mut fds = [0i32; 2];
     // SAFETY: pipe() cria dois FDs. Retorna 0 em sucesso, -1 em erro.
+    #[cfg(unix)]
     let rc = unsafe { libc::pipe(fds.as_mut_ptr()) };
+    #[cfg(windows)]
+    let rc = {
+        // TODO: Windows usa _pipe() ou CreateNamedPipe. Ver PRD-Windows Fase 2.
+        // Por ora, retorna erro — canais IPC não funcionam em Windows.
+        -1
+    };
     if rc != 0 {
         return 0;
     }
@@ -102,13 +111,11 @@ pub(super) unsafe fn try_ipc_send(handle: i64, value: i64) -> i64 {
     // SAFETY: write_fd é um FD válido de pipe. write é blocking.
     let mut written = 0usize;
     while written < slice.len() {
-        let n = unsafe {
-            libc::write(
-                inner.write_fd,
-                slice.as_ptr().add(written) as *const libc::c_void,
-                (slice.len() - written) as libc::size_t,
-            )
-        };
+        let n = raw_write(
+            inner.write_fd,
+            slice.as_ptr().add(written),
+            slice.len() - written,
+        );
         if n < 0 {
             // Erro de escrita.
             return WOULD_BLOCK;
@@ -160,14 +167,14 @@ pub(super) unsafe fn try_ipc_recv(handle: i64, arena: i64, out: *mut i64) -> boo
     let inner = unsafe { &*(ptr as *const IpcChannelInner) };
 
     // poll(read_fd, POLLIN, timeout=0) — non-blocking check.
-    let mut pfd = libc::pollfd {
+    let mut pfd = PollFd {
         fd: inner.read_fd,
-        events: libc::POLLIN,
+        events: POLLIN,
         revents: 0,
     };
     // SAFETY: poll com 1 FD e timeout 0 é non-blocking.
-    let rc = unsafe { libc::poll(&mut pfd as *mut libc::pollfd, 1, 0) };
-    if rc <= 0 || (pfd.revents & libc::POLLIN) == 0 {
+    let rc = poll_fds(std::slice::from_mut(&mut pfd), 0);
+    if rc <= 0 || (pfd.revents & POLLIN) == 0 {
         // Sem dados disponíveis.
         return false;
     }
@@ -176,13 +183,11 @@ pub(super) unsafe fn try_ipc_recv(handle: i64, arena: i64, out: *mut i64) -> boo
     let mut len_buf = [0u8; 8];
     let mut read_total = 0usize;
     while read_total < 8 {
-        let n = unsafe {
-            libc::read(
-                inner.read_fd,
-                len_buf.as_mut_ptr().add(read_total) as *mut libc::c_void,
-                (8 - read_total) as libc::size_t,
-            )
-        };
+        let n = raw_read(
+            inner.read_fd,
+            len_buf.as_mut_ptr().add(read_total),
+            8 - read_total,
+        );
         if n <= 0 {
             return false;
         }
@@ -198,13 +203,11 @@ pub(super) unsafe fn try_ipc_recv(handle: i64, arena: i64, out: *mut i64) -> boo
     let mut content = vec![0u8; total];
     read_total = 0usize;
     while read_total < total {
-        let n = unsafe {
-            libc::read(
-                inner.read_fd,
-                content.as_mut_ptr().add(read_total) as *mut libc::c_void,
-                (total - read_total) as libc::size_t,
-            )
-        };
+        let n = raw_read(
+            inner.read_fd,
+            content.as_mut_ptr().add(read_total),
+            total - read_total,
+        );
         if n <= 0 {
             return false;
         }
@@ -256,14 +259,14 @@ pub(super) unsafe fn can_ipc_recv(handle: i64) -> bool {
     }
     // SAFETY: handle veio de create_ipc_channel.
     let inner = unsafe { &*(ptr as *const IpcChannelInner) };
-    let mut pfd = libc::pollfd {
+    let mut pfd = PollFd {
         fd: inner.read_fd,
-        events: libc::POLLIN,
+        events: POLLIN,
         revents: 0,
     };
     // SAFETY: poll non-blocking (timeout=0).
-    let rc = unsafe { libc::poll(&mut pfd as *mut libc::pollfd, 1, 0) };
-    rc > 0 && (pfd.revents & libc::POLLIN) != 0
+    let rc = poll_fds(std::slice::from_mut(&mut pfd), 0);
+    rc > 0 && (pfd.revents & POLLIN) != 0
 }
 
 /// Verifica se `kata_rt_channel_send` retornaria OK (não WOULD_BLOCK)
@@ -288,15 +291,13 @@ pub(super) unsafe fn block_until_readable(handle: i64) {
         return;
     }
     let inner = unsafe { &*(ptr as *const IpcChannelInner) };
-    let mut pfd = libc::pollfd {
+    let mut pfd = PollFd {
         fd: inner.read_fd,
-        events: libc::POLLIN,
+        events: POLLIN,
         revents: 0,
     };
     // SAFETY: poll com timeout -1 (infinite) bloqueia até POLLIN ou POLLHUP.
-    unsafe {
-        libc::poll(&mut pfd as *mut libc::pollfd, 1, -1);
-    }
+    poll_fds(std::slice::from_mut(&mut pfd), -1);
 }
 
 /// Poll no read_fd do canal IPC com timeout específico (em ms).
@@ -314,16 +315,14 @@ pub(crate) unsafe fn poll_ipc_with_timeout(handle: i64, timeout_ms: i32) {
         return;
     }
     let inner = unsafe { &*(ptr as *const IpcChannelInner) };
-    let mut pfd = libc::pollfd {
+    let mut pfd = PollFd {
         fd: inner.read_fd,
-        events: libc::POLLIN,
+        events: POLLIN,
         revents: 0,
     };
     // SAFETY: poll com timeout específico. Retorna quando POLLIN/POLLHUP
     // ou timeout expira. Não é blocking infinito.
-    unsafe {
-        libc::poll(&mut pfd as *mut libc::pollfd, 1, timeout_ms);
-    }
+    poll_fds(std::slice::from_mut(&mut pfd), timeout_ms);
 }
 
 /// Retorna o read_fd (FD bruto) de um canal IPC, para inclusão num poll set

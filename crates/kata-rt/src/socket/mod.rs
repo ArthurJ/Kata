@@ -160,25 +160,7 @@ pub(crate) fn error_text(msg: &str) -> i64 {
 }
 
 /// Configura FD como non-blocking via fcntl(F_SETFL, O_NONBLOCK).
-pub(crate) fn set_nonblocking(fd: i32) {
-    unsafe {
-        let flags = libc::fcntl(fd, libc::F_GETFL, 0);
-        if flags >= 0 {
-            libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
-        }
-    }
-}
+pub(crate) use crate::platform::set_nonblocking;
 
 /// Habilita SO_REUSEADDR no socket (para reiniciar servidor após crash).
-pub(crate) fn set_reuseaddr(fd: i32) {
-    let optval: i32 = 1;
-    unsafe {
-        libc::setsockopt(
-            fd,
-            libc::SOL_SOCKET,
-            libc::SO_REUSEADDR,
-            &optval as *const _ as *const libc::c_void,
-            std::mem::size_of::<i32>() as libc::socklen_t,
-        );
-    }
-}
+pub(crate) use crate::platform::set_reuseaddr;
