@@ -321,7 +321,7 @@ fn evaluate_constants(
         // - ConstantLambda já detectado na inferência (C3).
         // - Pureza e comptime-availability continuam aqui (dependem do
         //   contexto de avaliação do comptime pass).
-        if !is_comptime_available(&value_clone, &comptime_bindings) {
+        if !is_comptime_available(&value_clone, comptime_bindings) {
             return Err(ComptimeError::NotConsttime {
                 reason: format!("constant {name} — expressão depende de valor runtime"),
             });
@@ -333,7 +333,14 @@ fn evaluate_constants(
         // das funções no mini módulo. Se uma função tiver refs a
         // constants ainda não foldadas, o JIT falha e pulamos esta
         // constant (será tratada por fold_literal_calls na Fase 2).
-        let result = match jit_execute_expr(&value_clone, ctx, comptime_bindings, ctx.functions, ctx.actions, snapshots) {
+        let result = match jit_execute_expr(
+            &value_clone,
+            ctx,
+            comptime_bindings,
+            ctx.functions,
+            ctx.actions,
+            snapshots,
+        ) {
             Ok(r) => r,
             Err(_) => {
                 // JIT falhou — registrar o value original e deixar
