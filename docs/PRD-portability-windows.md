@@ -3,7 +3,8 @@
 **Data:** 2026-08-12
 **Base:** `docs/portability-notes.md` (inspeção de 2026-08-09)
 **Estado do código:** 1555 testes passando, C-series completo
-**Dependência:** PRD-portability-mac.md (Mac é portado primeiro)
+**Dependência:** PRD-portability-mac.md (Mac é portado primeiro) ✅
+**Atualizado:** 2026-08-12 — Fases 1, 2, 3, 5 e 7 completas. Binário PE32+ gerado.
 
 ---
 
@@ -24,6 +25,16 @@ deixando o Windows focado nos problemas específicos de plataforma.
 
 Windows x86_64 apenas. Windows aarch64 (ARM64) está fora do escopo —
 o Cranelift suporta mas o esforço adicional não se justifica agora.
+
+### Resultado real (2026-08-12)
+
+Fases 1, 2, 3, 5 e 7 completas. Os 12 crates compilam para
+`x86_64-pc-windows-gnu` com zero erros. Binário PE32+ nativo (24MB)
+gerado via `cargo build --target x86_64-pc-windows-gnu --release`.
+CI multi-plataforma configurado (GitHub Actions).
+
+**Fases 4 (Winsock real) e 6 (testes em Windows real) pendentes.**
+Stubs Windows compilam mas spawn/sockets/pipe/stdio não funcionam.
 
 ---
 
