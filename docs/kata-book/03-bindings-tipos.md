@@ -39,9 +39,9 @@ main!()
 
 `let` não existe no top-level de arquivos — apenas dentro de actions e funções. No top-level, use `constant`.
 
-## Shadowing
+## `let` é único por escopo
 
-Um novo `let` com o mesmo nome sobrepõe o anterior:
+Cada `let` declara um binding imutável e **único** no escopo atual. Re-declarar o mesmo nome é erro:
 
 ```kata
 action main
@@ -52,10 +52,26 @@ main!()
 ```
 
 ```
-99
+Error: type.duplicate_decl
+
+  × tipo `x` já declarado
 ```
 
-O `x` original deixou de existir — o novo `x` toma seu lugar.
+Para reusar um nome, use `var` — ele cria um novo binding mutável que substitui o anterior:
+
+```kata
+action main
+    var x := 42
+    var x := + x 1
+    echo!(show x)
+main!()
+```
+
+```
+43
+```
+
+`let` é imutável e único: se você precisa reusar um nome, `var` é o mecanismo correto.
 
 ## Tipos primitivos
 
