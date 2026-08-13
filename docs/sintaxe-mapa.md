@@ -46,13 +46,21 @@ de linha: `# {` é comentário de linha, não inicia multilinha.
 ### `let`, `var` e `:=`
 
 ```kata
-let nome := expressão
-var nome := expressão
-var nome := nova_expressão   # reatribuição (apenas var)
+# Criação de binding:
+let nome := expressão          # imutável
+var nome := expressão          # mutável (exclusivo de Actions)
+
+# Reatribuição (só em var existente):
+nome := nova_expressão
 ```
 
-- **`let`**: Declara binding imutável. **`var`**: Binding mutável (exclusivo de Actions).
-- **`:=`**: Operador de binding — atribui o valor ao nome. **Exclusivo para binding** (`let` e `var`); não aparece em outro contexto.
+- **`let`**: Declara binding imutável.
+- **`var`**: Declara binding mutável (exclusivo de Actions). `var` sempre cria novo
+  binding — `var i := + i 1` dentro de um loop faz **rebinding** (sombreia o `i` anterior),
+  não atualiza a variável original.
+- **Reatribuição**: `nome := nova_expressão` (sem `let`/`var`) atualiza uma variável
+  `var` existente (gera `Expr::Reassign`). Só `var` pode ser reatribuído — reatribuir
+  `let` é erro de tipo.
 - **Relações**:
   - Interage com `|` para fallback: `let a := expr | fallback`.
   - Interage com `?` em Actions: `let texto := ler_arquivo!(id)?`.

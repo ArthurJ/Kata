@@ -2376,6 +2376,11 @@ traversal stdlib.
 * **`let`:** Imutável. Padrão da linguagem. Único permitido em funções puras.
 * **`var`:** Mutável. Exclusivo de Actions. Mutação na referência da stack da
   corrotina, nunca nos dados imutáveis da Arena.
+* **Reatribuição:** `nome := nova_expressão` (sem `let`/`var`) reatribui uma
+  variável `var` existente. O typeck valida que a variável foi declarada com
+  `var` — reatribuir `let` é erro de tipo. `var` sempre cria novo binding:
+  `var i := + i 1` dentro de um loop faz **rebinding** (sombreia o `i` anterior),
+  não atualiza a variável original. Para atualizar, use `i := + i 1` (sem `var`).
 * **`with`:** Bloco bottom-up no final de lambda. Computações prévias para Guards
   e restrições de genéricos (`T implements ORD`).
 
