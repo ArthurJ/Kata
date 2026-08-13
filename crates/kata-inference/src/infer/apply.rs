@@ -17,6 +17,8 @@ use crate::typed::{TypedExpr, TypedExprKind};
 use super::apply_dispatch::try_dispatch_table;
 use super::apply_lambda::{infer_apply_lambda, infer_apply_lambda_with_hint};
 use super::apply_len_tuple::try_len_tuple;
+use super::apply_repr::try_repr;
+use super::apply_show_tuple::try_show_tuple;
 use super::collections_hof::{infer_filter, infer_fold, infer_map};
 use super::expr::{InferCtx, infer_expr};
 use super::helpers::{InferResult, peel_grouping_expr, reorder_dict_args_to_tuple};
@@ -180,6 +182,19 @@ pub(crate) fn infer_apply(
         return result;
     }
 
+    // `repr <expr>` — intercepta antes do dispatch normal.
+    // repr é o protocolo round-tripable: cita Text, delega para show nos demais.
+    if let Some(result) = try_repr(&func_name, args, span, env, ctx) {
+        return result;
+    }
+
+    // `show tuple` — Tuple não registra overload de `show` no DispatchTable.
+    // Intercepta antes do dispatch normal e gera Closure genérica (ffi_symbol:
+    // None). O monomorphizador resolve via `tuple_show.rs::rewrite_show_tuple_call`.
+    if let Some(result) = try_show_tuple(&func_name, args, span, env, ctx) {
+        return result;
+    }
+
     // `$` spread — `f $ (a, b)` expande para `f a b`.
     // Se um arg é `Ident("$")`, o próximo arg deve ser `Tuple` — substitui
     // ambos pelos elementos individuais da tupla.
@@ -196,6 +211,21 @@ pub(crate) fn infer_apply(
     if expanded_args.len() == 1
         && let Expr::DictLit { .. } = &expanded_args[0].node
     {
+        // Antes de tentar param dispatch, verificar se a função tem um
+        // overload no DispatchTable que aceita Dict como tipo de arg.
+        // Se sim, o DictLit é um valor (ex: `show {"k": v}`), não params
+        // nomeados. Pular este bloco e deixar o dispatch normal tratar.
+        let has_dict_overload = ctx.table.has_function(&func_name)
+            && ctx
+                .table
+                .get_overloads(&func_name)
+                .expect("has_function retornou true")
+                .iter()
+                .any(|o| {
+                    o.params.len() == 1 && matches!(o.params[0], Ty::Dict(_, _))
+                });
+
+        if !has_dict_overload {
         // Caminho A: DispatchTable tem overloads com param_names.
         let has_named_in_table = ctx.table.has_function(&func_name)
             && ctx
@@ -346,6 +376,7 @@ pub(crate) fn infer_apply(
                 ));
             }
         }
+        } // fim if !has_dict_overload
     }
 
     // Infere tipos dos argumentos recursivamente (tail_pos = false para args).
