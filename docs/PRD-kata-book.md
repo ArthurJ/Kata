@@ -1,7 +1,7 @@
 # PRD — Kata Book: Guia Introdutório da Linguagem
 
-**Status:** Rascunho
-**Data:** 2026-08-10
+**Status:** Concluído (fases 1 e 2 — 14 capítulos)
+**Data:** 2026-08-13
 **Público-alvo:** Programadores interessados em linguagens funcionais, sem
 experiência prévia com Kata. Material para mostrar a amigos/coleagues.
 **Formato:** Texto plano (markdown), um único arquivo, distribuído junto com o
