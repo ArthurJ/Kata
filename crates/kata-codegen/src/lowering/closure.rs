@@ -180,6 +180,7 @@ pub(crate) fn lower_closure(
                 if crate::ffi_sigs::ffi_needs_arena(sym_name) {
                     let arena = ctx
                         .fiber_arena
+                        .or(ctx.caller_arena)
                         .unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
                     call_args.push(arena);
                 }

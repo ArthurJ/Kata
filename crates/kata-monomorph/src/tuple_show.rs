@@ -92,13 +92,21 @@ pub(crate) fn rewrite_show_tuple_call(tuple_expr: &Spanned<TypedExpr>) -> Spanne
 /// Para primitivos (Int, Float, Rational, Text), chama a FFI direto.
 /// Para Sum/Struct/List, chama o mangled `__kata_show__{Type}`.
 /// Para Tuple (aninhada), recursa via `rewrite_show_tuple_call`.
+///
+/// Text é citado (repr semantics): `repr "hello"` → `"hello"`.
+/// Containers chamam `repr` nos elementos para round-trip.
 fn show_for_type(arg: Spanned<TypedExpr>, elem_ty: &Ty) -> Spanned<TypedExpr> {
     use kata_core::ty::PrimTy;
     match elem_ty {
         Ty::Prim(PrimTy::Int) => ffi_call1("kata_rt_bi_show", arg),
         Ty::Prim(PrimTy::Float) => ffi_call1("kata_rt_float_to_text", arg),
         Ty::Prim(PrimTy::Rational) => ffi_call1("kata_rt_rat_show", arg),
-        Ty::Prim(PrimTy::Text) => arg, // identity
+        Ty::Prim(PrimTy::Text) => {
+            // repr: cita Text com aspas duplas
+            let open = text_lit("\"");
+            let close = text_lit("\"");
+            string_concat(open, string_concat(arg, close))
+        }
         Ty::Sum(name) => show_call_mangled(arg, name),
         Ty::Struct(name) => show_call_mangled(arg, name),
         Ty::List(_) => show_call_mangled(arg, "List"),
@@ -110,7 +118,7 @@ fn show_for_type(arg: Spanned<TypedExpr>, elem_ty: &Ty) -> Spanned<TypedExpr> {
 
 // ── Helpers de construção de TypedExpr ──────────────────────────────
 
-fn text_lit(text: &str) -> Spanned<TypedExpr> {
+pub(crate) fn text_lit(text: &str) -> Spanned<TypedExpr> {
     Spanned::new(
         TypedExpr {
             span: Span::synthetic(),
@@ -178,7 +186,7 @@ fn show_call_mangled(arg: Spanned<TypedExpr>, type_name: &str) -> Spanned<TypedE
     )
 }
 
-fn string_concat(left: Spanned<TypedExpr>, right: Spanned<TypedExpr>) -> Spanned<TypedExpr> {
+pub(crate) fn string_concat(left: Spanned<TypedExpr>, right: Spanned<TypedExpr>) -> Spanned<TypedExpr> {
     let callee = TypedExpr {
         span: Span::synthetic(),
         ty: Ty::Function(vec![Ty::text(), Ty::text()], Box::new(Ty::text())),

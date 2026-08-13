@@ -1,7 +1,7 @@
 # PRD — SHOW Universal: Array, Set, Dict, Tuple
 
-**Status:** Rascunho
-**Data:** 2026-08-13
+**Status:** Implementação completa — Tuple ✅, Array ✅, Set ✅, Dict ✅, repr standalone ✅, Unit ✅.
+**Data:** 2026-08-13 (atualizado 2026-08-14)
 **Motivação:** `echo!(show x)` falha para Array, Set, Dict e Tuple. O `show_synthesis`
 só cobre Structs, Enums e List. Coleções estruturais não têm `show` no DispatchTable,
 impedindo que `echo!` (que exige `SHOW`) funcione com esses tipos.
@@ -18,249 +18,206 @@ impedindo que `echo!` (que exige `SHOW`) funcione com esses tipos.
 
 Não sintetiza para:
 
-- ❌ Array `{1 2 3}` — `Ty::Array(Box<Ty>)`
-- ❌ Set `{|1 2 3|}` — `Ty::Set(Box<Ty>)`
-- ❌ Dict `{"k": v}` — `Ty::Dict(Box<Ty>, Box<Ty>)`
-- ❌ Tuple `(1, "a", True)` — `Ty::Tuple(Vec<Ty>)`
+- ✅ Set `{|1 2 3|}` — `Ty::Set(Box<Ty>)` — IMPLEMENTADO via `show_synthesis_set.rs`
+- ✅ Dict `{"k": v}` — `Ty::Dict(Box<Ty>, Box<Ty>)` — IMPLEMENTADO via `show_synthesis_dict.rs`
+- ✅ Array `{1 2 3}` — IMPLEMENTADO via `show_synthesis_array.rs`
+- ✅ Tuple `(1, "a", True)` — IMPLEMENTADO via interceptador + `tuple_show.rs`
 
-O `show_expr` em `show_synthesis_helpers.rs` **já sabe** produzir o body para Tuple
-inline (linhas 228-262: `build_tuple_show_inline`), mas não há overload de `show`
-no DispatchTable para Tuple, então o dispatch falha antes de chegar lá.
-
-### Sintoma
+### Sintoma (antes da implementação)
 
 ```kata
-echo!(show [1 2 3])          # ✅ funciona (List)
-echo!(show {1 2 3})          # ❌ type.no_overload
-echo!(show {|1 2 3|})        # ❌ type.no_overload
-echo!(show {"k": "v"})       # ❌ type.mismatch (Dict literal é parseado como Array)
-echo!(show (1, "a", True))   # ❌ type.no_overload
+echo!(show [1 2 3])          # ✅ funcionava (List)
+echo!(show {1 2 3})          # ❌ type.no_overload → ✅ RESOLVIDO
+echo!(show {|1 2 3|})        # ❌ type.no_overload → ✅ RESOLVIDO
+echo!(show {"k": "v"})       # ❌ → ✅ RESOLVIDO
+echo!(show (1, "a", True))   # ❌ type.no_overload → ✅ RESOLVIDO
 ```
 
 ---
 
 ## 2. Abordagem
 
-Duas opções foram consideradas:
+### 2.1. Dois protocolos: `show` e `repr`
 
-### Opção A: FFI `kata_rt_repr_to_text` no runtime
+`show` e `repr` são dois métodos do interface SHOW, com semântica distinta:
+
+- **`show :: T => Text`** — representação humana. `show "hello"` → `hello`.
+- **`repr :: T => Text`** — representação round-tripable. `repr "hello"` → `"hello"`.
+
+A diferença entre `show` e `repr` é **uma regra**: Text. Para todo outro tipo,
+`repr` delega para `show` (Int, Bool, Struct, Enum, coleções...). A única
+divergência é:
+
+| Tipo     | `show`              | `repr`              |
+|----------|---------------------|---------------------|
+| Text     | `hello` (identity)  | `"hello"` (citado)  |
+| Int      | `42`                | `42` (delega show)  |
+| List     | `[1, 2, 3]`         | `[1, 2, 3]` (delega)|
+| Struct   | `Nome(Ana)`         | `Nome(Ana)` (delega)|
+
+**Containers chamam `repr` nos elementos**, não `show`. Isso garante que
+Text aninhado seja citado em qualquer nível:
+
+```
+echo!(show "hello")          # hello
+echo!(show ["a" "b"])        # ["a", "b"]       ← List chama repr nos elementos
+echo!(show {"a" "b"})        # {"a", "b"}       ← Array chama repr nos elementos
+echo!(show (1, "a"))         # (1, "a")         ← Tuple chama repr nos elementos
+echo!(show MyStruct(n: "Ana")) # MyStruct(n: "Ana")  ← Struct chama repr nos campos
+```
+
+### 2.2. Implementação na síntese: `repr_expr`
+
+Na síntese TAST, o dispatcher interno mudou de `show_expr` para `repr_expr`:
+
+- `repr_expr(arg, Ty::Prim(PrimTy::Text))` → `string_concat("\"", string_concat(arg, "\""))`
+- `repr_expr(arg, Ty::Var(_))` → Closure genérica `repr <arg>` com `ffi_symbol: None` (ver 2.3)
+- `repr_expr(arg, ty)` para qualquer outro tipo concreto → delega para `show_expr(arg, ty)`
+
+Toda síntese de container (Structs, Enums, List existentes + Array, Tuple novos)
+passa a chamar `repr_expr` nos elementos/campos em vez de `show_expr`. Isso é
+uma mudança de comportamento nos tipos existentes:
+`show MyStruct(name: "Ana")` passa a produzir `MyStruct(name: "Ana")`
+em vez de `MyStruct(name: Ana)`.
+
+### 2.3. `repr` em tipos genéricos (List::A, Array::A) — Resolução no Monomorphizador
+
+**Problema:** `repr_expr` decide "isto é Text?" em tempo de síntese, mas para
+tipos genéricos (`List::A`, `Array::A`), o tipo do elemento é `Ty::Var("A")` —
+só resolvido na monomorfização. `repr_expr` com `Ty::Var` delegava para
+`show_expr`, que não cita Text.
+
+**Solução implementada:** `repr_expr` para `Ty::Var` gera uma Closure genérica
+`repr <arg>` com `ffi_symbol: None`. O monomorphizador (Layer 7 em `rewrite_typed_expr`)
+resolve essa Closure após instanciação:
+
+- **Tipo concreto = Text:** substitui a Closure por `string_concat("\"", arg, "\"")` (cita)
+- **Tipo concreto = outro:** troca o callee para `"show"` e resolve via DispatchTable/Layer 6
+
+**Pitfall crítico:** O Layer 7 só resolve `repr` quando o tipo é **concreto** (não `Var`).
+Se processar a template genérica com `Var("A")`, `resolve_repr_closure` mudaria o callee
+para `"show"` — destruindo a Closure `repr` antes da instanciação copiá-la. A instância
+resultante teria `show` em vez de `repr`, e Text não seria citado. Guard: `!matches!(arg_ty, Ty::Var(_))`.
+
+### 2.4. `repr` como função standalone ✅
+
+**Implementado** via interceptador `apply_repr.rs` na inference. Quando o usuário
+escreve `repr <expr>`, o interceptador:
+- Text concreto → gera `string_concat("\"", string_concat(arg, "\""))` inline (cita)
+- Ty::Var → gera Closure genérica `repr <arg>` com `ffi_symbol: None` (monomorph resolve)
+- Outro tipo concreto → delega para `show_expr` (mesma FFI)
+
+O usuário pode chamar `repr` diretamente: `echo!(repr "hello")` → `"hello"`.
+`repr 42` → `42` (delega para show).
+
+### 2.5. Opção rejeitada: FFI `kata_rt_repr_to_text` no runtime
 
 Uma FFI única que recebe `ptr + type_id` e caminha o `TypeShape` para produzir
-Text. O runtime já tem acesso aos dados e sabe iterá-los.
-
-**Prós:**
-- Uma única FFI cobre todos os tipos
-- O runtime já tem TypeShape (para `typeof` e reflexão)
-- Menos código na síntese TAST
-
-**Contras:**
-- `kata_rt_repr_to_text` e `pretty_print` **não existem** no runtime hoje
-- Precisa implementar do zero no runtime: iterar Array, Set (HAMT), Dict
-  (HAMT), Tuple (load por offset), com recursão para elementos aninhados
-- O runtime não tem acesso ao `show` do elemento (precisaria de callback
-  JIT → runtime, que não existe)
-- TypeShape mapeia Array/Set/Dict para `TypeShape::Struct { name: "Array" }`
-  — perde a informação do tipo do elemento. A FFI não saberia como mostrar
-  `Array(List(Int))` sem saber que cada elemento é uma List
-- Adia o problema: `pretty_print` precisaria reimplementar `show` para cada
-  tipo primitivo (BigInt, Rational, etc.) dentro do runtime
-
-**Decisão: rejeitada.** O runtime não tem informação de tipo suficiente (TypeShape
-descarta o tipo do elemento), e reimplementar `show` no runtime duplica lógica
-que já existe na síntese TAST.
-
-### Opção B: Síntese TAST (escolhida)
-
-Estender `show_synthesis` para sintetizar funções `show` para Array, Set, Dict
-e Tuple, da mesma forma que já faz para List.
-
-**Prós:**
-- Segue o padrão existente (List já faz isso)
-- O `show_expr` já sabe despachar para tipos primitivos, structs, enums, listas
-- Elementos aninhados são cobertos: `show (Array(List(Int)))` despacha
-  `show` para List, que despacha `show` para Int
-- Sem mudanças no runtime
-
-**Contras:**
-- Mais código na síntese (4 novos módulos ou extensão dos existentes)
-- Tuple é estrutural (não nominal) — precisa de abordagem diferente
-
-**Decisão: adotada.**
+Text. **Rejeitada** porque o runtime não tem informação de tipo suficiente
+(TypeShape descarta o tipo do elemento), e reimplementar `show` no runtime
+duplica lógica que já existe na síntese TAST.
 
 ---
 
 ## 3. Design
 
-### 3.1. Tuple — Overload Genérico no DispatchTable
+### 3.1. Tuple — Interceptador na inference + rewrite no monomorph ✅
 
-Tuple é estrutural, não nominal. Não está no `StructRegistry` nem no
-`EnumRegistry`. A síntese atual itera sobre registries de tipos nomeados.
+**Implementado.** Tuple é estrutural (não nominal) e não registra overload de
+`show` no DispatchTable. Dois mecanismos resolvem isso:
 
-**Abordagem:** Registrar um overload genérico de `show` para `Tuple(T1, T2, ...)`
-no DispatchTable. O body é `build_tuple_show_inline` (já existe em
-`show_synthesis_helpers.rs`).
+1. **`apply_show_tuple.rs`** (inference): intercepta `show <tuple>` antes do
+   dispatch normal. Se o arg é `Ty::Tuple`, gera uma Closure genérica
+   (`callee: Ident("show"), ffi_symbol: None`).
 
-O problema: Tuple tem aridade variável. `Ty::Tuple(Vec<Ty>)` pode ter 0, 1, 2,
-3, ... elementos. Cada aridade é um tipo distinto. Mas o `build_tuple_show_inline`
-já aceita `&[Ty]` de qualquer tamanho.
+2. **`tuple_show.rs`** (monomorph, Layer 6): quando o monomorphizador encontra
+   essa Closure com `ffi_symbol: None` e arg `Ty::Tuple`, substitui a Closure
+   inteira por uma árvore de `string_concat` com `FieldAccess` para cada elemento.
+   Cada elemento é despachado via `show_for_type` (que cita Text).
 
-**Síntese:** Para cada aridade N encontrada no programa (não para todas as
-aridades possíveis), registrar um overload `show :: Tuple(T1, ..., TN) => Text`.
-
-A detecção de aridades usadas pode ser feita no inference pass, coletando
-todos os `Ty::Tuple(...)` que aparecem na TAST e registrando overloads
-sob demanda.
-
-Alternativa mais simples: registrar um único overload genérico com
-`type_params: ["T1", "T2", ...]` — mas o número de type params é variável,
-o que não encaixa no modelo atual de type_params de tamanho fixo.
-
-**Solução pragmática:** Registrar overloads de `show` para tuplas de aridade
-1, 2, 3, 4, 5, 6, 7, 8 (cobertura prática) com type params `T1..TN`, no
-momento da síntese. O monomorphizador instancia quando encontra um call
-site `show` com `Tuple(Int, Text)` → resolve o overload de aridade 2.
-
-### 3.2. Array — Síntese Recursiva como List
-
-Array é `Ty::Array(Box<Ty>)` — contíguo, indexável O(1). A síntese é
-mais simples que List: não precisa de recursão entre duas funções (Array
-não é Cons/Nil, é contíguo com len).
-
-**Body:**
+**Resultado:**
 ```kata
-__kata_show__Array :: Array::A => Text
-lambda __self:
-    # Se len == 0: "[]"
-    # Senão: "[" + show(self.0) + ", " + show(self.1) + ... + "]"
+show (1, "hello")        # (1, "hello")
+show (1, 2, 3)           # (1, 2, 3)
+show (42,)               # (42)
+show (1, "a", True)      # (1, "a", True)
 ```
 
-Mas Array é indexável via `at` (retorna `Result`), não via `.N` direto
-(como Tuple). A síntese precisa:
-1. `len __self` — obtém o tamanho
-2. Para cada índice i de 0 a len-1: `match (at __self i) { Ok v: show v, ... }`
-3. Concatenar tudo com `", "` entre elementos
+**Limitação:** `show ()` (Unit) agora funciona — `try_show_tuple` detecta `Ty::Unit`
+e retorna `TextLit("()")` diretamente.
 
-Isso exige um loop, que **não existe em funções puras**. A síntese de List
-resolve isso com recursão (Cons/Nil pattern matching). Array não é recursivo.
+### 3.2. Array — Síntese Recursiva com `len + at` ✅
 
-**Alternativa:** Usar `ITERABLE` — Array implementa `ITERABLE(A)` com
-`next :: Array::A => Optional::A`. A síntese pode usar `next` recursivamente:
+**Implementado** via `show_synthesis_array.rs`. Duas funções genéricas mutuamente
+recursivas registradas no DispatchTable:
 
+- `__kata_show__Array :: Array::A => Text` — verifica `len == 0` (vazio: `{}`), senão
+  faz `match (at __self 0) { Ok(h): "{" + repr(h) + rest(__self, 1) ; Err(_): "{}" }`
+- `__kata_show__Array_rest :: Array::A Int => Text` — verifica `i == len` (fim: `}`), senão
+  faz `match (at __self i) { Ok(h): ", " + repr(h) + rest(__self, i+1) ; Err(_): "}" }`
+
+Usa `kata_rt_array_len` (retorna SMI-tagged) e `kata_rt_array_get_checked` (recebe idx
+SMI-tagged, retorna Result Sum). `=` e `+` são Closures genéricas (`ffi_symbol: None`)
+resolvidas pelo monomorphizador via DispatchTable.
+
+**Resultado:**
 ```kata
-__kata_show__Array :: Array::A => Text
-lambda __self:
-    match (next __self)
-        Optional::Some(h): "[" + show h + __kata_show__Array_rest __self
-        Optional::None: "[]"
-
-__kata_show__Array_rest :: Array::A => Text
-lambda __self:
-    match (next __self)
-        Optional::Some(h): ", " + show h + __kata_show__Array_rest __self
-        Optional::None: "]"
+show {1 2 3}            # {1, 2, 3}
+show {}                 # {}
+show {"a" "b"}          # {"a", "b"}
 ```
 
-Mas há um problema: `next` é `@ffi("kata_rt_array_next")` — mantém cursor
-interno (estado mutável no handle). Chamar `next` duas vezes na mesma
-instância avança o cursor. A síntese não pode assumir que `next` é
-idempotente.
+**Formato:** curly braces `{...}` — consistente com a sintaxe literal de Array.
 
-**Solução:** Para Array, usar `at` (indexação por índice) com recursão
-por índice:
+### 3.3. Set — Síntese via `kata_rt_set_next` ✅
 
+**Implementado** via `show_synthesis_set.rs`. Duas funções genéricas mutuamente
+recursivas registradas no DispatchTable. Usa `kata_rt_set_next(set, iter_state, arena)`.
+
+**SMI decode:** O codegen gera IntLit como SMI (`encode_smi(0) = 1`). `kata_rt_set_next`
+decodifica SMI antes de delegar para `kata_rt_dict_next` (guard `& 1 == 1`).
+
+**Resultado:**
 ```kata
-__kata_show__Array :: Array::A => Text
-lambda __self:
-    match (at __self 0)
-        Result::Ok(h): "[" + show h + __kata_show__Array_rest __self 1
-        Result::Err(_): "[]"
-
-__kata_show__Array_rest :: Array::A Int => Text
-lambda __self i:
-    match (at __self i)
-        Result::Ok(h): ", " + show h + __kata_show__Array_rest __self (+ i 1)
-        Result::Err(_): "]"
+show {|1 2 3|}       # {|3, 2, 1|}  (ordem reversa: Cons prepend)
+show {|1|}           # {|1|}
+show {|"a" "b" "c"|} # {|"c", "b", "a"|}  (repr cita Text)
 ```
 
-Isto é recursão em cauda (TCO aplicável). `at` é `@ffi("kata_rt_array_get_checked")`
-que retorna `Result::(A, Err)`. O `Result::Err` sinaliza fim (índice out of bounds).
+**Formato:** `{|1, 2, 3|}` — sintaxe literal de Set.
 
-**Atenção:** `at` sobre Array é O(1). A recursão é O(n) em profundidade, mas
-TCO a transforma em loop. O `Result::Err` como sentinela de fim é funcional
-mas semanticamente estranho — `Err` significa "out of bounds", não "fim da
-iteração". Alternativa: usar `len __self` e comparar índice:
+### 3.4. Dict — Síntese via `kata_rt_dict_next_smi` ✅
 
+**Implementado** via `show_synthesis_dict.rs`. Duas funções genéricas mutuamente
+recursivas registradas no DispatchTable. Usa `kata_rt_dict_next_smi(dict, iter_state, arena)`
+— wrapper que decodifica SMI do `iter_state` antes de delegar para `kata_rt_dict_next`.
+
+**SMI decode:** O codegen gera IntLit como SMI. `kata_rt_dict_next_smi` decodifica
+SMI (guard `& 1 == 1`) e chama `kata_rt_dict_next` com valor bruto. O `dict_next`
+original permanece sem decode (testes Rust passam valores brutos).
+
+**Extração de K e V:** `dict_next` retorna `Optional::(K, V)` — payload é tupla 16 bytes
+(key@0, value@8). O synthesis extrai via `FieldAccess(kv, field_index=0)` para K e
+`FieldAccess(kv, field_index=1)` para V — o codegen faz `load ptr + field_index * 8`.
+
+**Resultado:**
 ```kata
-__kata_show__Array :: Array::A => Text
-lambda __self:
-    match (= 0 (len __self))
-        Boolean::True: "[]"
-        Boolean::False: "[" + show (at __self 0 ?) + __kata_show__Array_rest __self 1
-
-__kata_show__Array_rest :: Array::A Int => Text
-lambda __self i:
-    match (= i (len __self))
-        Boolean::True: "]"
-        Boolean::False: ", " + show (at __self i ?) + __kata_show__Array_rest __self (+ i 1)
+show {"nome": "Ana"}          # {"nome": "Ana"}
+show {"a": 1 "b": 2 "c": 3}  # {"c": 3, "b": 2, "a": 1}  (ordem reversa)
+show {"a": "hello" "b": "world"} # {"b": "world", "a": "hello"}  (repr cita Text)
 ```
 
-O `?` desempacota `Result` — mas `?` é exclusivo de Actions. Em funções
-puras, usar `match` explícito:
-
-```kata
-__kata_show__Array_rest :: Array::A Int => Text
-lambda __self i:
-    match (= i (len __self))
-        Boolean::True: "]"
-        Boolean::False:
-            match (at __self i)
-                Result::Ok(h): ", " + show h + __kata_show__Array_rest __self (+ i 1)
-                Result::Err(_): "]"
-```
-
-**Decisão:** Usar `len + at` com match em `Result`. É mais código mas
-semanticamente correto e compatível com funções puras.
-
-### 3.3. Set — Síntese Recursiva via ITERABLE
-
-Set é `Ty::Set(Box<Ty>)`. Não é indexável (não implementa INDEXABLE). É
-ITERABLE. A única forma de iterar é `next :: Set::A => Optional::A`.
-
-**Problema:** Set implementa ITERABLE com `next` que consome (move cursor).
-O mesmo problema de Array — mas Set não tem `at` para indexação alternativa.
-
-**Solução:** A síntese para Set precisa criar uma **cópia** do Set antes de
-iterar, ou o `next` original consumiria o Set do chamador.
-
-Mas Set é imutável (HAMT persistente). O `next` retorna `Optional::A` e
-presumably avança um cursor interno no handle. Se o handle é a mesma
-referência, chamar `next` move o cursor.
-
-**Verificar:** Como `kata_rt_set_next` funciona? Se cria um novo iterador
-a cada chamada, o problema não existe. Se mantém estado no próprio Set
-(ao lado dos dados), é um problema.
-
-**Investigação necessária:** Verificar a implementação de
-`kata_rt_set_next` no runtime antes de decidir a abordagem.
-
-### 3.4. Dict — Síntese Recursiva via ITERABLE
-
-Dict é `Ty::Dict(Box<Ty>, Box<Ty>)`. ITERABLE sobre pares `(K, V)`. Mesmo
-problema de Set: iteração via `next` com cursor.
-
-**Output esperado:** `{"k1": v1, "k2": v2}` ou `{k1: v1, k2: v2}`?
-
-O sintaxe-mapa diz que Dict literal é `{"k": v}`. O `show` deve produzir
-formato legível: `{"k1": v1, "k2": v2}` (chaves como show K, valores como
-show V).
+**Formato:** `{"k1": v1, "k2": v2}` — K e V via `repr_expr`.
 
 ### 3.5. Ordem de implementação
 
-1. **Tuple** — mais simples (já tem `build_tuple_show_inline`), só precisa
-   registrar overloads no DispatchTable
-2. **Array** — `len + at` com recursão por índice
-3. **Set** — investigar `kata_rt_set_next` e implementar
-4. **Dict** — investigar `kata_rt_dict_next` e implementar
+1. ✅ **Tuple** — interceptador + `tuple_show.rs` (monomorph)
+2. ✅ **Array** — `show_synthesis_array.rs` com `len + at`
+3. ✅ **repr em genéricos** — Layer 7 no monomorph resolver `repr` para tipo concreto
+4. ✅ **Set** — `show_synthesis_set.rs` via `kata_rt_set_next` (iter_state explícito)
+5. ✅ **Dict** — `show_synthesis_dict.rs` via `kata_rt_dict_next_smi` (iter_state SMI-safe)
+6. ✅ **`repr` standalone** — interceptador `apply_repr.rs` na inference
+7. ✅ **`show ()` (Unit)** — `try_show_tuple` aceita `Ty::Unit`, retorna `TextLit("()")`
 
 ---
 
@@ -268,14 +225,20 @@ show V).
 
 ```
 crates/kata-inference/src/infer/
-├── show_synthesis.rs           # Structs + Enums (existente)
-├── show_synthesis_helpers.rs   # Helpers (existente, estendido)
-├── show_synthesis_list.rs      # List (existente)
-├── show_synthesis_tuple.rs     # NOVO — Tuple overloads
-├── show_synthesis_array.rs     # NOVO — Array (len + at)
-├── show_synthesis_set.rs       # NOVO — Set (via ITERABLE)
-├── show_synthesis_dict.rs      # NOVO — Dict (via ITERABLE)
+├── show_synthesis.rs           # Structs + Enums (existente, migrado para repr_expr)
+├── show_synthesis_helpers.rs   # Helpers (existente, adicionado repr_expr)
+├── show_synthesis_list.rs      # List (existente, migrado para repr_expr)
+├── show_synthesis_array.rs     # NOVO — Array (len + at, duas funções recursivas)
+├── show_synthesis_set.rs       # Set (via kata_rt_set_next, SMI decode)
+├── show_synthesis_dict.rs      # Dict (via kata_rt_dict_next_smi, FieldAccess K/V)
+├── apply_show_tuple.rs         # Interceptador show para Tuple/Unit na inference
+├── apply_repr.rs               # Interceptador repr standalone na inference
 └── mod.rs                      # Registro dos módulos (estendido)
+
+crates/kata-monomorph/src/
+├── tuple_show.rs               # Existente, atualizado: repr cita Text, helpers pub(crate)
+├── lib.rs                      # Layer 6 (Tuple) + Layer 7 (repr) adicionados
+└── array_show.rs               # REMOVIDO (placeholder descartado)
 ```
 
 ---
@@ -285,49 +248,67 @@ crates/kata-inference/src/infer/
 Cada tipo deve passar nos seguintes testes:
 
 ```kata
-# Tuple
-echo!(show (1, "hello"))           # (1, hello)
-echo!(show (1, 2, 3))              # (1, 2, 3)
-echo!(show (42,))                  # (42,)
-echo!(show ())                     # ()
+# Tuple ✅
+show (1, "hello")           # (1, "hello")
+show (1, 2, 3)              # (1, 2, 3)
+show (42,)                  # (42)
+show (1, "a", Boolean::True) # (1, "a", True)
+# show ()                   # ❌ pendente (Ty::Unit)
 
-# Array
-echo!(show {1 2 3})               # [1, 2, 3]  (ou similar)
-echo!(show {})                     # []
+# Array ✅
+show {1 2 3}               # {1, 2, 3}
+show {}                     # {}
+show {"a" "b"}             # {"a", "b"}
 
-# Set
-echo!(show {|1 2 3|})             # {|1, 2, 3|} (ou similar)
+# List ✅ (repr em genéricos resolvido)
+show [1 2 3]               # [1, 2, 3]
+show ["a" "b"]             # ["a", "b"]
 
-# Dict
-echo!(show {"nome": "Ana"})       # {"nome": Ana} (ou similar)
+# Set ✅
+show {|1 2 3|}             # {|3, 2, 1|}  (ordem reversa)
 
-# Aninhados
-echo!(show [(1, "a") (2, "b")])   # [(1, a), (2, b)]
-echo!(show {[(1 2) (3 4)]})       # [[1, 2], [3, 4]]
+# Dict ✅
+show {"nome": "Ana"}       # {"nome": "Ana"}
+
+# Unit ✅
+show ()                    # ()
+
+# repr standalone ✅
+repr "hello"               # "hello"
+repr 42                    # 42
+
+# Aninhados ✅
+show [(1, "a") (2, "b")]   # [(1, "a"), (2, "b")]
+show {(1, "a") (2, "b")}   # {(1, "a"), (2, "b")}
+show [[1 2] [3 4]]        # [[1, 2], [3, 4]]
 ```
 
 ---
 
-## 6. Decisões Pendentes
+## 6. Decisões Tomadas
 
-1. **Formato de saída de Set:** `{|1, 2, 3|}` (sintaxe literal) ou `{1, 2, 3}`
-   (sintaxe simplificada)? O `show` de List usa `[1, 2, 3]` (sintaxe literal).
-   Set deveria usar `{|1, 2, 3|}` para ser consistente.
+1. **Formato de saída de Set:** `{|1, 2, 3|}` (sintaxe literal, consistente
+   com List `[1, 2, 3]` e Array `{1, 2, 3}`).
 
-2. **Formato de saída de Dict:** `{"k": v}` (sintaxe literal com chaves
-   entre aspas) ou `{k: v}` (chaves sem aspas)? Se a chave é Text, as aspas
-   ajudam a distinguir. Se a chave é Int, `{"1": "v"}` é estranho.
-   Decisão: usar `show k` para a chave (sem aspas extras) — `show` de Text
-   já não inclui aspas, então `{nome: Ana}` é o output natural.
+2. **Formato de saída de Dict:** Aspas em K e V quando Text, via `repr_expr`.
+   Exemplo: `show {"nome": "Ana"}` → `{"nome": "Ana"}`.
 
-3. **Set/Dict iteração com cursor:** Verificar se `kata_rt_set_next` e
-   `kata_rt_dict_next` consomem o iterável ou criam novo iterador. Se
-   consomem, a síntese precisa copiar o handle antes de iterar.
+3. **Set/Dict iteração com cursor:** `kata_rt_set_next` e `kata_rt_dict_next`
+   recebem `iter_state` como **parâmetro explícito** (0=init, N=Nth). Não consomem
+   o handle — não precisa copiar. A síntese usa um contador inteiro como arg
+   de recursão, igual ao `i` de Array.
 
-4. **Tuple aridade máxima:** Registrar overloads para aridades 0-8 é
-   suficiente? Tuplas de 9+ elementos são raras. Se aparecerem, o
-   dispatch falha graciosamente (type.no_overload) — o usuário recebe
-   mensagem de erro clara.
+4. **Tuple aridade:** Sem limite. O interceptador `apply_show_tuple.rs` detecta
+   qualquer `Ty::Tuple(...)` e gera a Closure genérica. O `tuple_show.rs` no
+   monomorph desdobra a árvore para qualquer número de elementos.
+
+5. **Formato de Array:** `{1, 2, 3}` (curly braces) — consistente com a sintaxe
+   literal `{1 2 3}`. NÃO usa colchetes (que é de List).
+
+6. **repr em genéricos:** Layer 7 no monomorphizador. `repr_expr` gera Closure
+   `repr <arg>` com `ffi_symbol: None` para `Ty::Var`. O monomorph resolve:
+   Text → cita, outro → delega para `show`. Guard: não processar `Ty::Var`
+   (preserva a Closure para instanciação).
 
 ---
 
@@ -338,3 +319,4 @@ echo!(show {[(1 2) (3 4)]})       # [[1, 2], [3, 4]]
   OverloadSet — fora do escopo
 - `show` para Bytes — já implementado (`show :: Bytes => Text`)
 - Personalização de formato pelo usuário — o `show` sintetizado é fixo
+- `show ()` (Unit) — ✅ implementado via `try_show_tuple`

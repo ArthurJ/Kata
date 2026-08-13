@@ -16,7 +16,7 @@ use crate::typed::{
     TypedExpr, TypedExprKind, TypedFunction, TypedLambdaClause, TypedMatchArm, TypedPattern,
 };
 
-use super::show_synthesis_helpers::{show_call, show_expr, string_concat, text_lit};
+use super::show_synthesis_helpers::{repr_expr, show_call, string_concat, text_lit};
 
 /// Sintetiza `show` para `List::A` — lista persistente (Cons/Nil).
 ///
@@ -200,9 +200,9 @@ fn build_list_show_body(list_ty: &Ty, elem_ty: &Ty, sep: &str, nil_body: &str) -
     };
     let h_spanned = Spanned::new(h_expr, Span::synthetic());
 
-    // `show h` — despacha via show_expr (produz Closure com ffi_symbol: None
-    // porque elem_ty é Ty::Var("A"); o monomorphizador resolve via Layer 5)
-    let show_h = show_expr(h_spanned, elem_ty);
+    // `repr h` — despacha via repr_expr (cita Text, delega para show_expr
+    // nos demais). elem_ty é Ty::Var("A"); o monomorphizador resolve via Layer 5.
+    let show_h = repr_expr(h_spanned, elem_ty);
 
     // `t` como expr
     let t_expr = TypedExpr {

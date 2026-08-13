@@ -2,14 +2,4 @@
 source: crates/kata-driver/tests/examples_snapshot.rs
 expression: output
 ---
---- stderr ---
-Error: type.no_overload
-
-  × nenhuma sobrecarga compatível para `echo` com os argumentos fornecidos
-   ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_repr_tuple.kata:3:5]
- 2 │ action main
- 3 │     echo!({1 2 3})
-   ·     ──────┬──────
-   ·           ╰── nenhuma sobrecarga compatível
- 4 │ main!()
-   ╰────
+{1, 2, 3}

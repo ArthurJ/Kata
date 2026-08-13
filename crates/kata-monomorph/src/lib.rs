@@ -37,7 +37,7 @@ mod tuple_show;
 
 use kata_ast::Spanned;
 use kata_core::dispatch::DispatchTable;
-use kata_core::ty::Ty;
+use kata_core::ty::{PrimTy, Ty};
 use kata_inference::{
     FusedStage, TypedAction, TypedExpr, TypedExprKind, TypedFunction, TypedLambdaClause,
     TypedModule, TypedReadMode, TypedSelectArm,
@@ -243,9 +243,11 @@ fn rewrite_action(action: &mut TypedAction, ctx: &MonoCtx, acc: &mut RewriteAcc)
 /// overload com `type_params` não-vazio, gera a instância e rewrites
 /// o callee para o nome da instância.
 fn rewrite_typed_expr(expr_span: &mut Spanned<TypedExpr>, ctx: &MonoCtx, acc: &mut RewriteAcc) {
-    let expr = &mut expr_span.node;
+    // Coleta substituições do Layer 6/7 para aplicar após o match (evita
+    // conflito de borrow: o match empresta expr_span.node mutably).
+    let mut replacement: Option<Spanned<TypedExpr>> = None;
 
-    match &mut expr.kind {
+    match &mut expr_span.node.kind {
         TypedExprKind::Closure { callee, args, ffi_symbol } => {
             // Primeiro recurse nos argumentos (podem ter call sites genéricos aninhados).
             for arg in args.iter_mut() {
@@ -263,16 +265,23 @@ fn rewrite_typed_expr(expr_span: &mut Spanned<TypedExpr>, ctx: &MonoCtx, acc: &m
                 }
 
                 // Layer 6: show de Tuple sem overload concreto.
-                // Se o ffi_symbol ainda é None e o callee é `show` com arg
-                // Ty::Tuple, substitui a Closure inteira pelo body inline
-                // (string_concat de show de cada elemento via FieldAccess).
                 if ffi_symbol.is_none() && name == "show" && args.len() == 1
                     && let Ty::Tuple(_) = &args[0].node.ty
                 {
-                    let replacement = crate::tuple_show::rewrite_show_tuple_call(
-                        &args[0],
-                    );
-                    *expr_span = replacement;
+                    replacement = Some(crate::tuple_show::rewrite_show_tuple_call(&args[0]));
+                }
+
+                // Layer 7: repr sem overload concreto.
+                if name == "repr" && args.len() == 1 {
+                    let arg_ty = args[0].node.ty.clone();
+                    // Só resolve se o tipo for concreto (não Var). Se for Var,
+                    // a instância ainda não foi gerada — preserva a Closure
+                    // repr para que instantiate_function a copie intacta.
+                    if ffi_symbol.is_none() && !matches!(arg_ty, Ty::Var(_)) {
+                        if let Some(r) = resolve_repr_closure(callee, args, ffi_symbol, ctx) {
+                            replacement = Some(r);
+                        }
+                    }
                 }
             }
         }
@@ -544,9 +553,53 @@ fn rewrite_typed_expr(expr_span: &mut Spanned<TypedExpr>, ctx: &MonoCtx, acc: &m
             rewrite_typed_expr(value, ctx, acc);
         }
     }
+
+    // Aplica substituição do Layer 6/7 (após o match liberar o borrow).
+    if let Some(rep) = replacement {
+        *expr_span = rep;
+    }
 }
 
-/// Rewrita call sites genéricos em uma `TypedLambdaClause`.
+/// Layer 7: resolve `repr` closure com ffi_symbol: None.
+///
+/// `repr` é gerado pela síntese de List/Array para Ty::Var("A"). Após a
+/// instanciação, o tipo concreto do arg é conhecido:
+/// - Text → retorna Some(replacement) com string_concat("\"", arg, "\"")
+/// - Outro → troca o callee para "show", resolve via DispatchTable/Layer 6,
+///   e retorna None (a Closure in-place já foi resolvida) ou Some(replacement)
+///   se for Tuple e precisar reescrever inline.
+fn resolve_repr_closure(
+    callee: &mut Spanned<TypedExpr>,
+    args: &mut [Spanned<TypedExpr>],
+    ffi_symbol: &mut Option<String>,
+    ctx: &MonoCtx,
+) -> Option<Spanned<TypedExpr>> {
+    let arg_ty = args[0].node.ty.clone();
+    if matches!(arg_ty, Ty::Prim(PrimTy::Text)) {
+        // Text: cita com aspas duplas
+        let arg = args[0].clone();
+        let open = crate::tuple_show::text_lit("\"");
+        let close = crate::tuple_show::text_lit("\"");
+        Some(crate::tuple_show::string_concat(
+            open,
+            crate::tuple_show::string_concat(arg, close),
+        ))
+    } else {
+        // Demais tipos: delega para show — troca o callee
+        callee.node.kind = TypedExprKind::Ident {
+            name: "show".to_string(),
+        };
+        let mut new_ffi = None;
+        resolve_erased_ffi_symbol(callee, args, &mut new_ffi, ctx);
+        *ffi_symbol = new_ffi;
+        // Se ainda for None e for Tuple, Layer 6 já passou — reprocessa.
+        if ffi_symbol.is_none() && matches!(arg_ty, Ty::Tuple(_)) {
+            Some(crate::tuple_show::rewrite_show_tuple_call(&args[0]))
+        } else {
+            None
+        }
+    }
+}
 fn rewrite_lambda_clause(clause: &mut TypedLambdaClause, ctx: &MonoCtx, acc: &mut RewriteAcc) {
     rewrite_typed_expr(&mut clause.body, ctx, acc);
     for guard in &mut clause.guards {

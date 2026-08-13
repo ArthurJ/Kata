@@ -30,6 +30,9 @@ pub(crate) fn show_expr(arg: Spanned<TypedExpr>, arg_ty: &Ty) -> Spanned<TypedEx
         Ty::Sum(name) => show_call(arg, name.clone(), arg_ty),
         Ty::Struct(name) => show_call(arg, name.clone(), arg_ty),
         Ty::List(_) => show_call(arg, "List".to_string(), arg_ty),
+        Ty::Array(_) => show_call(arg, "Array".to_string(), arg_ty),
+        Ty::Set(_) => show_call(arg, "Set".to_string(), arg_ty),
+        Ty::Dict(_, _) => show_call(arg, "Dict".to_string(), arg_ty),
         Ty::Tuple(element_tys) => {
             // Constrói inline: string_concat("(", string_concat(show t.0,
             //   string_concat(", ", string_concat(show t.1, ... ")"))))
@@ -214,6 +217,60 @@ pub(crate) fn string_concat(
     )
 }
 
+/// Produz uma expressão `repr <expr>` — representação round-tripable.
+///
+/// Igual a `show_expr` para todos os tipos, exceto Text, onde cita o argumento
+/// com aspas duplas: `repr "hello"` → `"hello"` (string_concat("\"", arg, "\"")).
+///
+/// Containers (Struct, Enum, List, Array, Set, Dict, Tuple) chamam `repr_expr`
+/// nos elementos/campos — não `show_expr` — para garantir que Text aninhado
+/// seja citado em qualquer nível de profundidade.
+pub(crate) fn repr_expr(arg: Spanned<TypedExpr>, arg_ty: &Ty) -> Spanned<TypedExpr> {
+    match arg_ty {
+        Ty::Prim(PrimTy::Text) => {
+            // Text concreto: cita com aspas duplas.
+            let open_quote = text_lit("\"".to_string());
+            let close_quote = text_lit("\"".to_string());
+            string_concat(open_quote, string_concat(arg, close_quote))
+        }
+        Ty::Var(_) => {
+            // Type variable genérico (ex: A em List::A, Array::A). O tipo
+            // concreto só é conhecido na monomorfização. Geramos uma Closure
+            // `repr <arg>` com ffi_symbol: None. O monomorphizador, ao
+            // instanciar, descobre o tipo concreto:
+            // - Text → substitui por string_concat("\"", arg, "\"") (cita)
+            // - Outro → resolve como `show` normal (delega)
+            let callee = TypedExpr {
+                span: Span::synthetic(),
+                ty: Ty::Function(vec![arg_ty.clone()], Box::new(Ty::text())),
+                tail_pos: false,
+                escape: EscapeTarget::Local,
+                kind: TypedExprKind::Ident {
+                    name: "repr".to_string(),
+                },
+            };
+            Spanned::new(
+                TypedExpr {
+                    span: Span::synthetic(),
+                    ty: Ty::text(),
+                    tail_pos: false,
+                    escape: EscapeTarget::Caller,
+                    kind: TypedExprKind::Closure {
+                        callee: Box::new(Spanned::new(callee, Span::synthetic())),
+                        args: vec![arg],
+                        ffi_symbol: None,
+                    },
+                },
+                Span::synthetic(),
+            )
+        }
+        _ => {
+            // Demais tipos concretos: delega para show_expr
+            show_expr(arg, arg_ty)
+        }
+    }
+}
+
 /// Constrói `show` para `Tuple` inline (sem função separada no DispatchTable).
 ///
 /// Gera: `string_concat("(", string_concat(show t.0, string_concat(", ",
@@ -252,7 +309,7 @@ fn build_tuple_show_inline(arg: Spanned<TypedExpr>, element_tys: &[Ty]) -> Spann
             },
         };
         let access_spanned = Spanned::new(access, Span::synthetic());
-        parts.push(show_expr(access_spanned, elem_ty));
+        parts.push(repr_expr(access_spanned, elem_ty));
     }
 
     parts.push(text_lit(")".to_string()));

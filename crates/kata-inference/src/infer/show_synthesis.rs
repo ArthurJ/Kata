@@ -29,7 +29,7 @@ use crate::typed::{
 };
 
 use super::show_synthesis_helpers::{
-    ffi_call1, field_access_expr, show_call, show_expr, string_concat, text_lit,
+    ffi_call1, field_access_expr, repr_expr, show_call, string_concat, text_lit,
 };
 
 /// Verifica se um tipo já tem implementação manual do método `show` (via
@@ -369,8 +369,8 @@ fn field_show(
     let field_access = field_access_expr(field_index, &field.ty);
 
     match &field.ty {
-        Ty::Prim(PrimTy::Text) => field_access,
-        Ty::Prim(PrimTy::Int) => ffi_call1("kata_rt_int_to_text", field_access, Ty::text()),
+        Ty::Prim(PrimTy::Text) => repr_expr(field_access, &field.ty),
+        Ty::Prim(PrimTy::Int) => ffi_call1("kata_rt_bi_show", field_access, Ty::text()),
         Ty::Prim(PrimTy::Rational) => ffi_call1("kata_rt_rat_show", field_access, Ty::text()),
         Ty::Prim(PrimTy::Float) => ffi_call1("kata_rt_float_to_text", field_access, Ty::text()),
         Ty::Sum(name) => {
@@ -489,7 +489,7 @@ fn build_enum_show_arm(
             };
             let v_spanned = Spanned::new(v_expr, Span::synthetic());
 
-            let show_v = show_expr(v_spanned, payload_ty);
+            let show_v = repr_expr(v_spanned, payload_ty);
             let suffix = text_lit(")".to_string());
 
             let body_expr = string_concat(string_concat(prefix, show_v), suffix);
