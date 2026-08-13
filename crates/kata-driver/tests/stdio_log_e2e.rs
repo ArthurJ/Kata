@@ -268,7 +268,7 @@ main!()"#,
     // Limpa arquivo de saída anterior
     let _ = fs::remove_file("/tmp/kata-driver-stdio-log-e2e/log_test_out.txt");
 
-    let (stdout, stderr, code) = run_kata(&path);
+    let (_stdout, stderr, code) = run_kata(&path);
     assert_eq!(code, 0, "exit 0 — stderr: {stderr}");
     let content =
         fs::read_to_string("/tmp/kata-driver-stdio-log-e2e/log_test_out.txt").unwrap_or_default();
@@ -482,7 +482,7 @@ action main => Int
 main!()"#,
     );
 
-    let (stdout, stderr, code) = run_kata(&path);
+    let (_stdout, stderr, code) = run_kata(&path);
     assert_ne!(code, 0, "deve falhar (erro de tipo) — stderr: {stderr}");
     assert!(
         stderr.contains("policy") || stderr.contains("não é válido"),
@@ -510,7 +510,7 @@ action main => Int
 main!()"#,
     );
 
-    let (stdout, stderr, code) = run_kata(&path);
+    let (_stdout, stderr, code) = run_kata(&path);
     assert_ne!(
         code, 0,
         "deve falhar (topic+file exclusivos) — stderr: {stderr}"

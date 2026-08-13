@@ -1,8 +1,8 @@
 //! Assinaturas FFI para Arena e Sum (box tag+payload).
 
+use crate::call_conv::ffi_call_conv;
 use cranelift_codegen::ir::types::I64;
 use cranelift_codegen::ir::{AbiParam, Signature};
-use crate::call_conv::ffi_call_conv;
 use kata_core::ffi::FfiSymbol;
 
 /// Constrói a assinatura para símbolos de Arena e Sum.

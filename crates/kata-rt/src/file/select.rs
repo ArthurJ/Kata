@@ -10,7 +10,7 @@
 //! - `collect_file_fds`: coleta FDs brutos para poll unificado (sleep path).
 //! - `kata_rt_select_files`: FFI de select multiplexado com suspensão de fiber.
 
-use crate::platform::{file_raw_fd, poll_fds, PollFd, POLLHUP, POLLIN};
+use crate::platform::{POLLHUP, POLLIN, PollFd, file_raw_fd, poll_fds};
 
 use super::FileInner;
 

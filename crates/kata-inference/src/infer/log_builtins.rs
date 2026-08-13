@@ -110,14 +110,14 @@ pub(crate) fn infer_log_builtin(
         }
         Some(t) if t.ty == Ty::text() => {
             // CSP: kata_rt_log_publish(topic, level, msg, policy).
-            if let Some(p) = &policy_typed {
-                if p.ty != Ty::text() {
-                    return Err(MiddleError::TypeMismatch {
-                        expected: format!("{}", Ty::text()),
-                        found: format!("{}", p.ty),
-                        span: elements[3].span.into(),
-                    });
-                }
+            if let Some(p) = &policy_typed
+                && p.ty != Ty::text()
+            {
+                return Err(MiddleError::TypeMismatch {
+                    expected: format!("{}", Ty::text()),
+                    found: format!("{}", p.ty),
+                    span: elements[3].span.into(),
+                });
             }
             build_csp_closure(
                 args.span,

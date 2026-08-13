@@ -67,6 +67,7 @@ fn infer_src(src: &str) -> kata_inference::TypedModule {
     infer_module(&module, &resolved).expect("inferência deve succeed")
 }
 
+#[allow(dead_code)]
 fn infer_src_err(src: &str) -> kata_diagnostics::MiddleError {
     let tokens = lex(src).unwrap();
     let module = parse(tokens).unwrap();
@@ -76,10 +77,12 @@ fn infer_src_err(src: &str) -> kata_diagnostics::MiddleError {
     infer_module(&module, &resolved).expect_err("inferência deve falhar")
 }
 
+#[allow(dead_code)]
 fn entry_typed(tmod: &kata_inference::TypedModule) -> &kata_inference::TypedExpr {
     &tmod.entry.node
 }
 
+#[allow(dead_code)]
 fn entry_kind(tmod: &kata_inference::TypedModule) -> &TypedExprKind {
     &tmod.entry.node.kind
 }

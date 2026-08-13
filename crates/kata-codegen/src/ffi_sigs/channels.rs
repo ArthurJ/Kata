@@ -1,8 +1,8 @@
 //! Assinaturas FFI para canais CSP, queues, broadcast, IPC, select e logging.
 
+use crate::call_conv::ffi_call_conv;
 use cranelift_codegen::ir::types::I64;
 use cranelift_codegen::ir::{AbiParam, Signature};
-use crate::call_conv::ffi_call_conv;
 use kata_core::ffi::FfiSymbol;
 
 /// Constrói a assinatura para símbolos de canais/IPC/select/logging.

@@ -681,7 +681,7 @@ fn repl_constant_in_action() {
         "foo 5",
         ":quit",
     ]);
-    let lines = result_lines(&out);
+    let _lines = result_lines(&out);
     // TODO: uncomment when action call from REPL prompt is fixed
     // assert!(
     //     lines.iter().any(|l| l.trim() == "10"),
@@ -798,7 +798,7 @@ fn repl_constant_float_in_function() {
         lines.iter().any(|l| l
             .trim()
             .parse::<f64>()
-            .map_or(false, |v| (v - 12.56).abs() < 0.01)),
+            .is_ok_and(|v| (v - 12.56).abs() < 0.01)),
         "esperava ~12.56 (constant float em function), got: {out}"
     );
 }

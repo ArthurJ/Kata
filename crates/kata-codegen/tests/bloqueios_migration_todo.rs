@@ -155,7 +155,7 @@ show a"#;
 }
 
 /// + com PositiveInt COM `refines NUM` — fallback substitui por Int e
-/// passa pelo construtor falível. Retorna Result::(PositiveInt, Text).
+///   passa pelo construtor falível. Retorna Result::(PositiveInt, Text).
 #[test]
 fn b1_soma_positiveint_com_refines() {
     let src = r#"data (Int, > _ 0) as PositiveInt

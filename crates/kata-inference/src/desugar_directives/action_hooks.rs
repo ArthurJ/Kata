@@ -31,7 +31,7 @@ pub(super) fn apply_directives_to_action_body(
             .into_iter()
             .filter(|d| matches!(d.key.on, Target::Action | Target::Any))
             .filter(|d| d.key.arg_keys.as_slice() == app.arg_keys.as_slice())
-            .filter(|d| app.site_when.map_or(true, |w| d.key.when == w))
+            .filter(|d| app.site_when.is_none_or(|w| d.key.when == w))
             .collect();
 
         if defs.is_empty() {

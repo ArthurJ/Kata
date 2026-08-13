@@ -6,9 +6,9 @@
 
 use std::collections::HashMap;
 
+use crate::call_conv::ffi_call_conv;
 use cranelift_codegen::ir::types::I64;
 use cranelift_codegen::ir::{AbiParam, Signature};
-use crate::call_conv::ffi_call_conv;
 use cranelift_module::Linkage;
 use kata_core::ffi::FfiSymbol;
 use kata_rt as rt;

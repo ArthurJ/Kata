@@ -145,17 +145,29 @@ pub unsafe extern "C" fn kata_rt_text_replace(
     let template = if template.is_null() {
         String::new()
     } else {
-        unsafe { std::ffi::CStr::from_ptr(template).to_string_lossy().into_owned() }
+        unsafe {
+            std::ffi::CStr::from_ptr(template)
+                .to_string_lossy()
+                .into_owned()
+        }
     };
     let needle = if needle.is_null() {
         String::new()
     } else {
-        unsafe { std::ffi::CStr::from_ptr(needle).to_string_lossy().into_owned() }
+        unsafe {
+            std::ffi::CStr::from_ptr(needle)
+                .to_string_lossy()
+                .into_owned()
+        }
     };
     let replacement = if replacement.is_null() {
         String::new()
     } else {
-        unsafe { std::ffi::CStr::from_ptr(replacement).to_string_lossy().into_owned() }
+        unsafe {
+            std::ffi::CStr::from_ptr(replacement)
+                .to_string_lossy()
+                .into_owned()
+        }
     };
     let result = if let Some(pos) = template.find(&needle) {
         format!(

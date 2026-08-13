@@ -113,7 +113,7 @@ fn multiline_comment_no_nesting_inner_closes_early() {
     // Resto: " still comment }#" — é comentário de linha? Não, começa com espaço.
     // Na verdade: após fechar `}#`, o lexer volta ao loop. " still comment }#" vira
     // tentativa de lexar "still" como ident, "comment" como ident, "}" fecha bracket, "#" comentário.
-    let toks = tokens_only(&tokens);
+    let _toks = tokens_only(&tokens);
     // Não assertamos tokens exatos — o ponto é que `}#` interno fecha o externo.
     // Verificar que não é erro e que algo foi lexado.
     assert!(tokens.len() > 1); // mais que só Eof

@@ -296,113 +296,116 @@ pub(crate) fn infer_expr_hinted(
             // AST do lambda na side table e define o binding com InferVars.
             // Quando `f 5 3` for aplicado, infer_apply resgata o lambda e
             // re-inere com os arg types reais.
-            let typed_value = match infer_expr_hinted(&value.node, &value.span, env, ctx, false, hint) {
-                Ok(tv) => tv,
-                Err(MiddleError::LambdaInferenceFail { .. })
-                    if matches!(value.node, Expr::Lambda { .. }) =>
-                {
-                    // Deferre o lambda para use-site inference.
-                    if let Expr::Lambda {
-                        patterns,
-                        body,
-                        guards,
-                        with_bindings,
-                    } = &value.node
+            let typed_value =
+                match infer_expr_hinted(&value.node, &value.span, env, ctx, false, hint) {
+                    Ok(tv) => tv,
+                    Err(MiddleError::LambdaInferenceFail { .. })
+                        if matches!(value.node, Expr::Lambda { .. }) =>
                     {
-                        let n_params = patterns.len();
-                        let param_types: Vec<Ty> =
-                            (0..n_params).map(|i| Ty::InferVar(i as u32)).collect();
-                        let ret_ty = Ty::InferVar(n_params as u32);
-                        let lambda_ty = Ty::Function(param_types.clone(), Box::new(ret_ty.clone()));
+                        // Deferre o lambda para use-site inference.
+                        if let Expr::Lambda {
+                            patterns,
+                            body,
+                            guards,
+                            with_bindings,
+                        } = &value.node
+                        {
+                            let n_params = patterns.len();
+                            let param_types: Vec<Ty> =
+                                (0..n_params).map(|i| Ty::InferVar(i as u32)).collect();
+                            let ret_ty = Ty::InferVar(n_params as u32);
+                            let lambda_ty =
+                                Ty::Function(param_types.clone(), Box::new(ret_ty.clone()));
 
-                        // Guarda o AST do lambda na side table.
-                        ctx.deferred_lambdas.borrow_mut().insert(
-                            name.clone(),
-                            DeferredLambda {
-                                patterns: patterns.clone(),
-                                body: body.clone(),
-                                guards: guards.clone(),
-                                with_bindings: with_bindings.clone(),
-                            },
-                        );
+                            // Guarda o AST do lambda na side table.
+                            ctx.deferred_lambdas.borrow_mut().insert(
+                                name.clone(),
+                                DeferredLambda {
+                                    patterns: patterns.clone(),
+                                    body: body.clone(),
+                                    guards: guards.clone(),
+                                    with_bindings: with_bindings.clone(),
+                                },
+                            );
 
-                        // Constrói um TypedExpr skeleton para o lambda deferido.
-                        // O codegen verá InferVar nos param_types e tratará
-                        // como placeholder — o tipo real será resolvido no uso.
-                        let typed_patterns = patterns
-                            .iter()
-                            .enumerate()
-                            .map(|(i, _)| {
-                                Spanned::new(
-                                    crate::typed::TypedPattern::Ident {
-                                        name: if let kata_ast::Pattern::Ident(n) = &patterns[i].node
-                                        {
-                                            n.clone()
-                                        } else {
-                                            format!("__param_{i}")
+                            // Constrói um TypedExpr skeleton para o lambda deferido.
+                            // O codegen verá InferVar nos param_types e tratará
+                            // como placeholder — o tipo real será resolvido no uso.
+                            let typed_patterns = patterns
+                                .iter()
+                                .enumerate()
+                                .map(|(i, _)| {
+                                    Spanned::new(
+                                        crate::typed::TypedPattern::Ident {
+                                            name: if let kata_ast::Pattern::Ident(n) =
+                                                &patterns[i].node
+                                            {
+                                                n.clone()
+                                            } else {
+                                                format!("__param_{i}")
+                                            },
+                                            ty: Ty::InferVar(i as u32),
                                         },
-                                        ty: Ty::InferVar(i as u32),
-                                    },
-                                    patterns[i].span,
-                                )
-                            })
-                            .collect();
-                        let skeleton_kind = TypedExprKind::Lambda {
-                            func_name: None,
-                            param_types: param_types.clone(),
-                            ret_ty: ret_ty.clone(),
-                            clauses: vec![crate::typed::TypedLambdaClause {
-                                patterns: typed_patterns,
-                                body: Spanned::new(
-                                    TypedExpr {
-                                        span: body.span,
-                                        ty: ret_ty.clone(),
-                                        tail_pos: true,
-                                        escape: EscapeTarget::Local,
-                                        kind: TypedExprKind::Unit,
-                                    },
-                                    body.span,
-                                ),
-                                guards: Vec::new(),
-                                with_bindings: Vec::new(),
-                            }],
-                            captures: Vec::new(),
-                        };
-                        let skeleton = TypedExpr {
-                            span: value.span,
-                            ty: lambda_ty.clone(),
-                            tail_pos: false,
-                            escape: EscapeTarget::Local,
-                            kind: skeleton_kind,
-                        };
+                                        patterns[i].span,
+                                    )
+                                })
+                                .collect();
+                            let skeleton_kind = TypedExprKind::Lambda {
+                                func_name: None,
+                                param_types: param_types.clone(),
+                                ret_ty: ret_ty.clone(),
+                                clauses: vec![crate::typed::TypedLambdaClause {
+                                    patterns: typed_patterns,
+                                    body: Spanned::new(
+                                        TypedExpr {
+                                            span: body.span,
+                                            ty: ret_ty.clone(),
+                                            tail_pos: true,
+                                            escape: EscapeTarget::Local,
+                                            kind: TypedExprKind::Unit,
+                                        },
+                                        body.span,
+                                    ),
+                                    guards: Vec::new(),
+                                    with_bindings: Vec::new(),
+                                }],
+                                captures: Vec::new(),
+                            };
+                            let skeleton = TypedExpr {
+                                span: value.span,
+                                ty: lambda_ty.clone(),
+                                tail_pos: false,
+                                escape: EscapeTarget::Local,
+                                kind: skeleton_kind,
+                            };
 
-                        // Define no TypeEnv com InferVars.
-                        let param_names = extract_lambda_param_names(&value.node);
-                        if let Some(pnames) = param_names {
-                            env.define_with_param_names(name, lambda_ty, "__local__", pnames);
-                        } else {
-                            env.define(name, lambda_ty, "__local__");
+                            // Define no TypeEnv com InferVars.
+                            let param_names = extract_lambda_param_names(&value.node);
+                            if let Some(pnames) = param_names {
+                                env.define_with_param_names(name, lambda_ty, "__local__", pnames);
+                            } else {
+                                env.define(name, lambda_ty, "__local__");
+                            }
+
+                            return Ok(TypedExpr {
+                                span: *span,
+                                ty: Ty::Unit,
+                                tail_pos,
+                                escape: EscapeTarget::Local,
+                                kind: TypedExprKind::Let {
+                                    name: name.clone(),
+                                    value: Box::new(Spanned::new(skeleton, value.span)),
+                                },
+                            });
                         }
-
-                        return Ok(TypedExpr {
-                            span: *span,
-                            ty: Ty::Unit,
-                            tail_pos,
-                            escape: EscapeTarget::Local,
-                            kind: TypedExprKind::Let {
-                                name: name.clone(),
-                                value: Box::new(Spanned::new(skeleton, value.span)),
-                            },
+                        // Inalcançável — o guard do match garante que é Lambda.
+                        return Err(MiddleError::LambdaInferenceFail {
+                            span: (*span).into(),
+                            detail: None,
                         });
                     }
-                    // Inalcançável — o guard do match garante que é Lambda.
-                    return Err(MiddleError::LambdaInferenceFail {
-                        span: (*span).into(),
-                        detail: None,
-                    });
-                }
-                Err(e) => return Err(e),
-            };
+                    Err(e) => return Err(e),
+                };
 
             // Fase 2 (PRD OverloadSet): se o lambda retornou OverloadSet
             // (partial dispatch ambíguo), registra o AST do lambda na side

@@ -18,7 +18,7 @@
 //! (64KB no Linux) acomoda a maioria dos blobs. Se o buffer enche, `send`
 //! bloqueia no `write` (limitação v1 — futuro: non-blocking write + yield).
 
-use crate::platform::{close_fd, poll_fds, raw_read, raw_write, PollFd, POLLIN};
+use crate::platform::{POLLIN, PollFd, poll_fds, raw_read, raw_write};
 
 use super::ops::{OK, WOULD_BLOCK};
 use super::{IpcChannelInner, TAG_IPC_CHANNEL, arena_alloc_and_init, make_handle_pub, ptr_of};
@@ -100,7 +100,8 @@ pub(super) unsafe fn create_ipc_channel(arena: i64, type_id: i64, ack_tx_handle:
                         let port = u16::from_be(local.sin_port);
 
                         // 3. Client connect ao server (blocking).
-                        let cli = unsafe { winsock::socket(winsock::AF_INET, winsock::SOCK_STREAM, 0) };
+                        let cli =
+                            unsafe { winsock::socket(winsock::AF_INET, winsock::SOCK_STREAM, 0) };
                         if cli == usize::MAX {
                             unsafe { winsock::closesocket(srv) };
                             -1
@@ -126,9 +127,8 @@ pub(super) unsafe fn create_ipc_channel(arena: i64, type_id: i64, ack_tx_handle:
                                 // 4. Accept no server.
                                 let mut peer: winsock::Sockaddr = unsafe { std::mem::zeroed() };
                                 let mut peer_len = std::mem::size_of::<winsock::Sockaddr>() as i32;
-                                let accepted = unsafe {
-                                    winsock::accept(srv, &mut peer, &mut peer_len)
-                                };
+                                let accepted =
+                                    unsafe { winsock::accept(srv, &mut peer, &mut peer_len) };
                                 if accepted == usize::MAX {
                                     unsafe { winsock::closesocket(srv) };
                                     unsafe { winsock::closesocket(cli) };
@@ -216,7 +216,8 @@ pub(super) unsafe fn try_ipc_send(handle: i64, value: i64) -> i64 {
     while written < slice.len() {
         let n = raw_write(
             inner.write_fd,
-            slice.as_ptr().add(written),
+            // SAFETY: slice é válido, written < slice.len().
+            unsafe { slice.as_ptr().add(written) },
             slice.len() - written,
         );
         if n < 0 {
@@ -288,7 +289,8 @@ pub(super) unsafe fn try_ipc_recv(handle: i64, arena: i64, out: *mut i64) -> boo
     while read_total < 8 {
         let n = raw_read(
             inner.read_fd,
-            len_buf.as_mut_ptr().add(read_total),
+            // SAFETY: len_buf é válido, read_total < 8.
+            unsafe { len_buf.as_mut_ptr().add(read_total) },
             8 - read_total,
         );
         if n <= 0 {
@@ -308,7 +310,8 @@ pub(super) unsafe fn try_ipc_recv(handle: i64, arena: i64, out: *mut i64) -> boo
     while read_total < total {
         let n = raw_read(
             inner.read_fd,
-            content.as_mut_ptr().add(read_total),
+            // SAFETY: content é válido, read_total < total.
+            unsafe { content.as_mut_ptr().add(read_total) },
             total - read_total,
         );
         if n <= 0 {

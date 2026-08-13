@@ -17,9 +17,9 @@
 
 use std::collections::HashMap;
 
+use crate::call_conv::ffi_call_conv;
 use cranelift_codegen::ir::types::I64;
 use cranelift_codegen::ir::{AbiParam, GlobalValueData, InstBuilder, Signature};
-use crate::call_conv::ffi_call_conv;
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_module::{Linkage, Module};
 use kata_core::ty::Ty;

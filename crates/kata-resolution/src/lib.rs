@@ -17,7 +17,9 @@ pub use types::*;
 
 pub use module_loader::{ImportKind, ImportedModule, LoadError, ModuleLoader, filter_exports};
 
-use directives::{extract_arg_keys, extract_log_specs, extract_site_when, extract_test_specs, extract_timer_spec};
+use directives::{
+    extract_arg_keys, extract_log_specs, extract_site_when, extract_test_specs, extract_timer_spec,
+};
 
 use kata_ast::{Item, Module};
 use kata_core::{Ty, TypeEnv};
@@ -239,8 +241,9 @@ fn resolve_inner(
                         "builtin" | "log" | "timer" => {}
                         // Diretiva customizada — validar contra o registry
                         // (local + prelude, para @trace do stdlib funcionar).
-                        other if directive_registry.contains_name(other)
-                            || prelude_directives.contains_name(other) => {}
+                        other
+                            if directive_registry.contains_name(other)
+                                || prelude_directives.contains_name(other) => {}
                         other => {
                             errors.push(ResolveError::UnknownDirective {
                                 name: other.to_string(),
@@ -345,8 +348,9 @@ fn resolve_inner(
                         "ffi" | "test" | "log" => {}
                         // Diretiva customizada — validar contra o registry
                         // (local + prelude, para @trace do stdlib funcionar).
-                        other if directive_registry.contains_name(other)
-                            || prelude_directives.contains_name(other) => {}
+                        other
+                            if directive_registry.contains_name(other)
+                                || prelude_directives.contains_name(other) => {}
                         other => {
                             errors.push(ResolveError::UnknownDirective {
                                 name: other.to_string(),

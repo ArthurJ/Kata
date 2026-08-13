@@ -38,7 +38,7 @@ use crate::arena::{Arena, ArenaKind};
 use crate::channel::{block_ipc_until_readable, can_recv, can_send, ipc_read_fd, is_ipc_handle};
 use crate::fiber::{KataFiber, SpawnArgs, YieldReason};
 use crate::file::{FILE_WOULD_BLOCK, collect_file_fds, try_select_files};
-use crate::platform::{poll_fds, PollFd, POLLIN};
+use crate::platform::{POLLIN, PollFd, poll_fds};
 use crate::socket::{SOCKET_WOULD_BLOCK, collect_socket_fds, try_select_sockets};
 
 // ── TLS para registry por-fiber (Fase 9) ───────────────────────────

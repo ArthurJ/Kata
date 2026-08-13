@@ -179,8 +179,7 @@ fn format_boolean() {
 /// `format!("{}", (p,))` — interpola struct via repr.
 #[test]
 fn format_struct_via_repr() {
-    let src =
-        "data Pessoa (nome::Text idade::Int)\nconstant p := Pessoa \"João\" 30\nformat!(\"{}\", (p,))";
+    let src = "data Pessoa (nome::Text idade::Int)\nconstant p := Pessoa \"João\" 30\nformat!(\"{}\", (p,))";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::text());
     let _ = raw;

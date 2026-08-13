@@ -33,8 +33,7 @@ pub unsafe extern "C" fn kata_rt_socket_read(handle: i64) -> i64 {
     let mut buf = [0u8; 8192];
 
     loop {
-        let n_read =
-            raw_read(inner.fd, buf.as_mut_ptr(), buf.len());
+        let n_read = raw_read(inner.fd, buf.as_mut_ptr(), buf.len());
         if n_read > 0 {
             data.extend_from_slice(&buf[..n_read as usize]);
             // Continua lendo enquanto há dados (non-blocking).
@@ -104,8 +103,7 @@ pub unsafe extern "C" fn kata_rt_socket_read_chunk(handle: i64, n: i64) -> i64 {
     let mut buf = vec![0u8; max_bytes];
 
     loop {
-        let n_read =
-            raw_read(inner.fd, buf.as_mut_ptr(), max_bytes);
+        let n_read = raw_read(inner.fd, buf.as_mut_ptr(), max_bytes);
 
         if n_read > 0 {
             buf.truncate(n_read as usize);
@@ -196,8 +194,7 @@ pub unsafe extern "C" fn kata_rt_socket_readline(handle: i64) -> i64 {
         }
 
         // Tenta ler mais dados do socket.
-        let n_read =
-            raw_read(inner.fd, buf.as_mut_ptr(), buf.len());
+        let n_read = raw_read(inner.fd, buf.as_mut_ptr(), buf.len());
 
         if n_read > 0 {
             inner.line_buf.extend_from_slice(&buf[..n_read as usize]);
@@ -319,13 +316,7 @@ fn write_all(inner: &mut SocketInner, handle: i64, data: &[u8]) -> i64 {
     let mut written = 0usize;
 
     while written < data.len() {
-        let n_written = unsafe {
-            raw_write(
-                inner.fd,
-                data[written..].as_ptr(),
-                data.len() - written,
-            )
-        };
+        let n_written = raw_write(inner.fd, data[written..].as_ptr(), data.len() - written);
 
         if n_written > 0 {
             written += n_written as usize;
@@ -383,7 +374,5 @@ pub unsafe extern "C" fn kata_rt_socket_close(handle: i64) {
         return;
     }
     inner.closed = true;
-    unsafe {
-        close_fd(inner.fd);
-    }
+    close_fd(inner.fd);
 }

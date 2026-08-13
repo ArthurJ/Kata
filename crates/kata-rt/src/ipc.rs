@@ -15,9 +15,12 @@
 //! (com cooperação, yield, select) em vez de chamadas diretas de função.
 //! O child preserva os dados herdados via COW (arenas, type table, código JIT).
 
+#[cfg(unix)]
 use std::sync::Once;
 
+#[cfg(unix)]
 use crate::fiber::clear_suspend_tls;
+#[cfg(unix)]
 use crate::runtime::Runtime;
 
 /// Instala `SIG_IGN` para SIGCHLD e SIGPIPE uma única vez, antes do primeiro
@@ -90,12 +93,7 @@ pub extern "C" fn kata_rt_spawn_process(
 
 /// Implementação POSIX de spawn — fork + COW.
 #[cfg(unix)]
-fn spawn_process_unix(
-    _rt: i64,
-    fn_ptr: i64,
-    args_ptr: i64,
-    arena_handle: i64,
-) -> i64 {
+fn spawn_process_unix(_rt: i64, fn_ptr: i64, args_ptr: i64, arena_handle: i64) -> i64 {
     // Instalar SIG_IGN para SIGCHLD e SIGPIPE antes do fork(). Idempotente
     // via Once — programas que nunca fazem spawn! não são afetados.
     // O child herda ambos os dispositions via fork().
@@ -155,12 +153,7 @@ fn spawn_process_unix(
 /// A solução completa requer re-arquitetar o spawn para Windows (ex: shared
 /// memory + CreateProcessW, ou threads em vez de processos).
 #[cfg(windows)]
-fn spawn_process_windows(
-    _rt: i64,
-    _fn_ptr: i64,
-    _args_ptr: i64,
-    _arena_handle: i64,
-) -> i64 {
+fn spawn_process_windows(_rt: i64, _fn_ptr: i64, _args_ptr: i64, _arena_handle: i64) -> i64 {
     // TODO: Implementar spawn no Windows. Ver PRD-portability-windows.md.
     // Opções: CreateProcessW + shared memory, ou threads, ou serializar
     // a Action + args e re-executar num novo processo.

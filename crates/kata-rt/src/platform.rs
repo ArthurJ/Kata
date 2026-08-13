@@ -35,12 +35,16 @@ pub(crate) mod winsock {
     pub const FIONBIO: u32 = 0x8004667c;
     pub const WSAEWOULDBLOCK: c_int = 10035;
     pub const AF_INET: c_int = 2;
+    #[allow(dead_code)]
     pub const AF_INET6: c_int = 23;
     pub const SOCK_STREAM: c_int = 1;
     pub const SOMAXCONN: c_int = 0x7fffffff;
 
+    #[allow(dead_code)]
     pub const SD_RECEIVE: c_int = 0;
+    #[allow(dead_code)]
     pub const SD_SEND: c_int = 1;
+    #[allow(dead_code)]
     pub const SD_BOTH: c_int = 2;
 
     // sockaddr_in layout (IPv4)
@@ -262,24 +266,28 @@ pub fn tcp_stream_into_fd(stream: std::net::TcpStream) -> i32 {
 }
 
 #[cfg(windows)]
+#[allow(dead_code)]
 pub fn tcp_listener_fd(listener: &std::net::TcpListener) -> i32 {
     use std::os::windows::io::AsRawSocket;
     listener.as_raw_socket() as i32
 }
 
 #[cfg(windows)]
+#[allow(dead_code)]
 pub fn tcp_listener_into_fd(listener: std::net::TcpListener) -> i32 {
     use std::os::windows::io::IntoRawSocket;
     listener.into_raw_socket() as i32
 }
 
 #[cfg(windows)]
+#[allow(dead_code)]
 pub fn tcp_stream_fd(stream: &std::net::TcpStream) -> i32 {
     use std::os::windows::io::AsRawSocket;
     stream.as_raw_socket() as i32
 }
 
 #[cfg(windows)]
+#[allow(dead_code)]
 pub fn tcp_stream_into_fd(stream: std::net::TcpStream) -> i32 {
     use std::os::windows::io::IntoRawSocket;
     stream.into_raw_socket() as i32

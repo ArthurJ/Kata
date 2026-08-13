@@ -6,10 +6,12 @@
 use crate::platform::close_fd;
 
 use super::{
-    alloc_result_box, alloc_socket_inner, error_text, set_nonblocking, set_reuseaddr, SocketInner,
-    SocketKindRust, SocketState,
+    SocketInner, SocketKindRust, SocketState, alloc_result_box, alloc_socket_inner, error_text,
 };
+#[cfg(unix)]
+use super::{set_nonblocking, set_reuseaddr};
 use std::ffi::CStr;
+#[cfg(unix)]
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::os::raw::c_char;
 #[cfg(unix)]
@@ -357,9 +359,7 @@ fn accept_nonblocking(fd: i32) -> i32 {
     let mut addr: winsock::Sockaddr = unsafe { std::mem::zeroed() };
     let mut addr_len: i32 = std::mem::size_of::<winsock::Sockaddr>() as i32;
 
-    let client_fd = unsafe {
-        winsock::accept(fd as usize, &mut addr, &mut addr_len)
-    };
+    let client_fd = unsafe { winsock::accept(fd as usize, &mut addr, &mut addr_len) };
 
     if client_fd == usize::MAX {
         // Erro — caller verifica is_would_block.
@@ -660,7 +660,10 @@ fn create_unix_connected(path: &str) -> i64 {
                     });
                 });
                 if suspended.is_none() {
-                    return alloc_result_box(1, error_text("arquivo de coordenação não encontrado"));
+                    return alloc_result_box(
+                        1,
+                        error_text("arquivo de coordenação não encontrado"),
+                    );
                 }
                 continue;
             }

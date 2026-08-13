@@ -2,9 +2,9 @@
 //!
 //! Int, Float, Rational, Text (concat/len/literal/show), Boolean e StringEq.
 
+use crate::call_conv::ffi_call_conv;
 use cranelift_codegen::ir::types::{F64, I64};
 use cranelift_codegen::ir::{AbiParam, Signature};
-use crate::call_conv::ffi_call_conv;
 use kata_core::ffi::FfiSymbol;
 
 /// Constrói a assinatura para símbolos de aritmética/comparação/conversão.

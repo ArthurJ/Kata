@@ -94,7 +94,7 @@ fn overloadset_call_site_float() {
     assert_eq!(ty, Ty::float());
     let f64_bits = raw as u64;
     let result = f64::from_bits(f64_bits);
-    assert_eq!((result - 5.14).abs() < 0.001, true);
+    assert!((result - 5.14).abs() < 0.001);
 }
 
 #[test]

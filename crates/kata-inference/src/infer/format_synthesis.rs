@@ -41,9 +41,7 @@ pub(crate) fn infer_format_builtin(
     ctx: &InferCtx,
 ) -> InferResult<(Ty, TypedExprKind)> {
     match &args.node {
-        Expr::DictLit { entries } => {
-            infer_format_named(args.span, entries, env, ctx)
-        }
+        Expr::DictLit { entries } => infer_format_named(args.span, entries, env, ctx),
         // Tupla posicional ou Grouping — extrai elements como antes.
         Expr::Tuple { .. } | Expr::Grouping { .. } | Expr::Unit => {
             let elements = extract_positional_elements(args);
@@ -234,10 +232,10 @@ fn extract_tuple_elems(elements: &[Spanned<Expr>]) -> Vec<Spanned<Expr>> {
             return vec![elements[0].clone()];
         }
         // `("tpl", (arg,))` — auto-wrap de tupla de 1.
-        if let Expr::Tuple { elements: inner } = &elements[1].node {
-            if inner.len() == 1 {
-                return vec![elements[0].clone(), inner[0].clone()];
-            }
+        if let Expr::Tuple { elements: inner } = &elements[1].node
+            && inner.len() == 1
+        {
+            return vec![elements[0].clone(), inner[0].clone()];
         }
     }
     elements.to_vec()
@@ -281,9 +279,7 @@ fn convert_to_text(expr: Spanned<TypedExpr>) -> Spanned<TypedExpr> {
         // Tipos compostos (Tuple, List, etc.) não têm overload concreto
         // no DispatchTable na inference. Gerar `show` genérico (callee =
         // Ident("show"), ffi_symbol = None) — o monomorphizador resolve.
-        Ty::Tuple(_) | Ty::List(_) | Ty::Array(_) | Ty::Generic(..) => {
-            show_generic_call(expr)
-        }
+        Ty::Tuple(_) | Ty::List(_) | Ty::Array(_) | Ty::Generic(..) => show_generic_call(expr),
         _ => ffi_call1("kata_rt_int_to_text", expr, Ty::text()),
     }
 }

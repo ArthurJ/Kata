@@ -26,18 +26,17 @@ pub(crate) fn extract_arg_keys(args: &[DirectiveArg]) -> Vec<String> {
 /// convertida para o enum `Hook` para despachar a declaration correta.
 pub(crate) fn extract_site_when(args: &[DirectiveArg]) -> Option<Hook> {
     for arg in args {
-        if let DirectiveArg::Named { key, value } = arg {
-            if key == "when" {
-                if let Expr::TextLit { text } = &value.node {
-                    return match text.as_str() {
-                        "enter" => Some(Hook::Enter),
-                        "exit" => Some(Hook::Exit),
-                        "shortcircuit" => Some(Hook::ShortCircuit),
-                        "transform" => Some(Hook::Transform),
-                        _ => None,
-                    };
-                }
-            }
+        if let DirectiveArg::Named { key, value } = arg
+            && key == "when"
+            && let Expr::TextLit { text } = &value.node
+        {
+            return match text.as_str() {
+                "enter" => Some(Hook::Enter),
+                "exit" => Some(Hook::Exit),
+                "shortcircuit" => Some(Hook::ShortCircuit),
+                "transform" => Some(Hook::Transform),
+                _ => None,
+            };
         }
     }
     None

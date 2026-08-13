@@ -3,7 +3,7 @@
 //! `try_select_sockets` faz poll non-blocking (timeout=0) nos FDs dos sockets.
 //! `collect_socket_fds` coleta pollfds para o sleep path unificado do scheduler.
 
-use crate::platform::{poll_fds, PollFd, POLLHUP, POLLIN, POLLOUT};
+use crate::platform::{POLLHUP, POLLIN, POLLOUT, PollFd, poll_fds};
 
 use super::SocketInner;
 

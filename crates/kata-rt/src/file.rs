@@ -223,10 +223,10 @@ fn register_file_handle(handle: i64) {
         return;
     }
     // Verifica se é stdio — não registra.
-    if let Some(inner) = file_from_handle(handle) {
-        if inner.is_stdio {
-            return;
-        }
+    if let Some(inner) = file_from_handle(handle)
+        && inner.is_stdio
+    {
+        return;
     }
     OPEN_FILES.with(|r| r.borrow_mut().push(handle));
 }

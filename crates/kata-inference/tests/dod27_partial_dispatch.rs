@@ -19,6 +19,7 @@ fn infer_src(src: &str) -> kata_inference::TypedModule {
     infer_module(&module, &resolved).expect("inferência deve succeed")
 }
 
+#[allow(dead_code)]
 fn infer_src_err(src: &str) -> kata_diagnostics::MiddleError {
     let tokens = lex(src).unwrap();
     let module = parse(tokens).unwrap();
