@@ -2,9 +2,9 @@
 
 **Data:** 2026-08-12
 **Base:** `docs/portability-notes.md` (inspeção de 2026-08-09)
-**Estado do código:** 1555 testes passando, C-series completo
+**Estado do código:** 1583 testes passando, zero regressões
 **Dependência:** PRD-portability-mac.md (Mac é portado primeiro) ✅
-**Atualizado:** 2026-08-12 — Fases 1, 2, 3, 5 e 7 completas. Binário PE32+ gerado.
+**Atualizado:** 2026-08-12 — Fases 1, 2, 3, 4, 5 e 7 completas. Binário PE32+ gerado. Apenas Fase 6 pendente.
 
 ---
 
@@ -40,18 +40,19 @@ CI multi-plataforma configurado (GitHub Actions).
 
 ## Os 4 problemas
 
-| # | Componente | Problema | Esforço |
-|---|-----------|----------|---------|
-| 1 | Codegen | `CallConv::SystemV` hardcoded — Windows usa `WindowsFastcall` | Médio |
-| 2 | Runtime | 35 chamadas POSIX diretas (fork, poll, sigaction, Unix sockets) | Alto |
-| 3 | AOT linker | `cc` com flags Unix (`-lpthread`, `-Wl,-rpath`) | Médio |
-| 4 | Scheduler | `select_files` baseado em `poll()` — Windows usa `WSAPoll` ou IOCP | Médio |
+| # | Componente | Problema | Esforço | Status |
+|---|-----------|----------|---------|--------|
+| 1 | Codegen | `CallConv::SystemV` hardcoded — Windows usa `WindowsFastcall` | Médio | ✅ Fase 1 |
+| 2 | Runtime | 35 chamadas POSIX diretas (fork, poll, sigaction, Unix sockets) | Alto | ✅ Fase 2 (funções `#[cfg]`, sem trait) |
+| 3 | AOT linker | `cc` com flags Unix (`-lpthread`, `-Wl,-rpath`) | Médio | ✅ Fase 3 |
+| 4 | Scheduler | `select_files` baseado em `poll()` — Windows usa `WSAPoll` ou IOCP | Médio | ✅ Fase 4 |
 
 ---
 
 ## Fase 1 — CallConv no codegen
 
 **Objetivo:** Selecionar a calling convention correta por plataforma.
+**Status:** ✅ Completo (commit `78b2788`).
 
 ### 1.1 Problema
 
@@ -131,8 +132,8 @@ Alternativa: `x86_64-pc-windows-msvc` (toolchain MSVC). O target GNU
 
 ## Fase 2 — Abstração de plataforma no runtime
 
-**Objetivo:** Criar uma trait de plataforma no `kata-rt` com backends
-POSIX e Windows.
+**Objetivo:** Eliminar chamadas POSIX diretas em `kata-rt`.
+**Status:** ✅ Completo (commit `b23e7c6`).
 
 ### 2.1 Problema
 
@@ -145,106 +146,59 @@ POSIX e Windows.
 | `libc::poll()` / `libc::pollfd` | `WSAPoll()` ou IOCP | `file/select.rs`, `scheduler.rs:300-380`, `channel/ipc.rs` |
 | `libc::fcntl` / `libc::setsockopt` | `setsockopt` (Winsock) | `socket/mod.rs:167-183` |
 | `std::os::unix::io::AsRawFd` | `std::os::windows::io::AsRawSocket` | `file/select.rs:13` |
-| `std::os::unix::net::UnixListener` / `UnixStream` | Named pipes (`\\.\pipe\`) | `socket/create.rs:14,163-204` |
+| `std::os::unix::net::UnixListener` / `UnixStream` | TCP localhost (sem named pipes) | `socket/create.rs:14,163-204` |
 
-### 2.2 Arquitetura proposta
+### 2.2 Solução adotada — funções `#[cfg]`, sem trait
+
+**Decisão do Arthur:** não usar trait `Platform`. O overhead de vtable
+e a tentação de adicionar backends futuros não se justificam. Em vez
+disso, `platform.rs` tem funções com `#[cfg(unix)]`/`#[cfg(windows)]`:
 
 ```
 crates/kata-rt/src/
-├── platform/
-│   ├── mod.rs          — trait Platform + factory
-│   ├── posix.rs        — backend Linux + macOS
-│   └── windows.rs      — backend Windows
-├── ipc.rs              — usa platform::spawn_child
-├── file/select.rs      — usa platform::poll
-├── scheduler.rs        — usa platform::poll
-├── channel/ipc.rs      — usa platform::poll
-├── socket/mod.rs       — usa platform::setsockopt
-├── socket/create.rs    — usa platform::domain_socket
-└── fiber.rs            — sem mudança (wasmtime-fiber é portável)
+├── platform.rs          — funções #[cfg] + bindings Win32 (winsock, win32)
+├── ipc.rs               — #[cfg(unix)] fork, #[cfg(windows)] stub
+├── file.rs              — stdio: #[cfg(unix)] from_raw_fd, #[cfg(windows)] GetStdHandle
+├── file/select.rs       — poll: platform::poll_fds (unificado)
+├── channel/ipc.rs       — pipe: #[cfg(unix)] libc::pipe, #[cfg(windows)] socketpair TCP
+├── socket/create.rs     — TCP: Winsock real. Unix: #[cfg(unix)] real, #[cfg(windows)] TCP localhost
+├── socket/io.rs         — read/write: platform::raw_read/raw_write
+├── socket/select.rs     — poll: platform::poll_fds
+├── scheduler.rs         — poll: platform::poll_fds
+└── fiber.rs             — sem mudança (wasmtime-fiber é portável)
 ```
 
-### 2.3 Trait Platform
+Funções em `platform.rs`:
+- `set_nonblocking(fd)` — `fcntl(O_NONBLOCK)` / `ioctlsocket(FIONBIO)`
+- `close_fd(fd)` — `libc::close` / `closesocket`
+- `raw_read(fd, buf, len)` — `libc::read` / `winsock::recv`
+- `raw_write(fd, buf, len)` — `libc::write` / `winsock::send`
+- `poll_fds(fds, timeout)` — `libc::poll` / `winsock::WSAPoll`
+- `set_reuseaddr(fd)` — `setsockopt` / `winsock::setsockopt`
+- `is_would_block(errno)` — `EAGAIN/EWOULDBLOCK` / `WSAEWOULDBLOCK`
+- `tcp_listener_fd/into_fd`, `tcp_stream_fd/into_fd` — `as_raw_fd` / `as_raw_socket`
+- `file_raw_fd(file)` — `as_raw_fd` / `as_raw_handle`
+- `ensure_winsock_init()` — `WSAStartup` (Once)
 
-```rust
-// crates/kata-rt/src/platform/mod.rs
+Bindings diretos em `platform::winsock` (link `ws2_32`) e
+`platform::win32` (link `kernel32`). Sem dependência `windows-sys`.
 
-/// Abstração de plataforma para operações de I/O e IPC.
-///
-/// Linux e macOS usam o backend POSIX (fork, poll, sigaction, Unix sockets).
-/// Windows usa o backend Win32 (CreateProcess, WSAPoll, named pipes).
-pub trait Platform {
-    /// Spawna um processo filho. Retorna um handle/fd para comunicação.
-    fn spawn_child(
-        &self,
-        cmd: &str,
-        args: &[&str],
-    ) -> Result<ChildHandle, PlatformError>;
+### 2.3 Signals
 
-    /// Espera por I/O em múltiplos fds/sockets.
-    /// Equivalente a poll() no POSIX, WSAPoll() no Windows.
-    fn poll(
-        &self,
-        fds: &[PollFd],
-        timeout_ms: i32,
-    ) -> Result<Vec<PollEvent>, PlatformError>;
+`SIGCHLD` e `SIGPIPE` não existem no Windows:
 
-    /// Cria um socket de domínio Unix (POSIX) ou named pipe (Windows).
-    fn create_domain_endpoint(
-        &self,
-        path: &str,
-    ) -> Result<DomainEndpoint, PlatformError>;
-
-    /// Configura opções de socket (nível SOL_SOCKET etc).
-    fn set_socket_opt(
-        &self,
-        sock: RawSocket,
-        level: i32,
-        opt: i32,
-        val: &[u8],
-    ) -> Result<(), PlatformError>;
-}
-
-// Factory
-pub fn current_platform() -> Box<dyn Platform> {
-    #[cfg(unix)]
-    { Box::new(posix::PosixPlatform) }
-    #[cfg(windows)]
-    { Box::new(windows::WinPlatform) }
-}
-```
-
-### 2.4 Migração incremental
-
-Não migrar tudo de uma vez. Ordem de prioridade:
-
-1. **`spawn!` / IPC** (`ipc.rs`) — `fork` → `CreateProcess`
-2. **`select_files`** (`file/select.rs`) — `poll` → `WSAPoll`
-3. **Scheduler** (`scheduler.rs`) — `poll` → `WSAPoll`
-4. **Channel IPC** (`channel/ipc.rs`) — `poll` → `WSAPoll`
-5. **Socket** (`socket/`) — Unix sockets → named pipes
-6. **Signals** (`ipc.rs`) — `sigaction` → ignorar ou structured exceptions
-
-Cada item deve ser migrado independentemente e testado no Linux (regressão)
-antes de prosseguir.
-
-### 2.5 Signals
-
-`SIGCHLD` e `SIGPIPE` não existem no Windows. O comportamento atual:
-
-- `SIGPIPE` — ignorado para evitar crash ao escrever em pipe quebrado.
-  No Windows, writes em pipes quebrados retornam erro (`ERROR_BROKEN_PIPE`).
-  A lógica de tratamento muda mas o efeito é o mesmo.
-
+- `SIGPIPE` — ignorado no Unix para evitar crash. No Windows, writes em
+  sockets quebrados retornam `WSAECONNRESET`. A lógica de tratamento muda
+  mas o efeito é o mesmo (erro tratado, sem crash).
 - `SIGCHLD` — usado para reaproveitar processos filhos (`waitpid`).
   No Windows, `WaitForSingleObject` no handle do processo substitui.
-  Sem signal handler necessário.
+  Sem signal handler necessário. `spawn!` ainda é stub (ver Fase 4).
 
-### 2.6 Verificação
+### 2.4 Verificação
 
 ```bash
-# Cross-check
 cargo check --target x86_64-pc-windows-gnu -p kata-rt
+cargo check -p kata-rt  # Linux — zero regressões
 ```
 
 ---
@@ -252,6 +206,7 @@ cargo check --target x86_64-pc-windows-gnu -p kata-rt
 ## Fase 3 — AOT linker para Windows
 
 **Objetivo:** Linkar object files Cranelift em executáveis Windows (PE).
+**Status:** ✅ Completo (commit `ef699d4`).
 
 ### 3.1 Problema
 
@@ -386,6 +341,7 @@ O arquivo de coordenação é removido no início de `create_unix_listener`
 ## Fase 5 — Cross-check no Linux
 
 **Objetivo:** Confirmar que o código compila para Windows sem sair do Linux.
+**Status:** ✅ Completo. 12/12 crates + binário PE32+ 24MB linkam.
 
 ### 5.1 Setup
 
@@ -417,6 +373,7 @@ Zero erros de compilação. Warnings são aceitáveis.
 ## Fase 6 — Testes no Windows
 
 **Objetivo:** Rodar a suíte de testes no Windows.
+**Status:** Pendente — requer máquina Windows real.
 
 ### 6.1 Setup no Windows
 
@@ -451,6 +408,7 @@ no Windows até `spawn!` ser implementado.
 ## Fase 7 — CI multi-plataforma
 
 **Objetivo:** Garantir que futuras mudanças não quebram portabilidade.
+**Status:** ✅ Completo (commit `8702857`). 4 jobs: Linux, macOS x86+arm, cross-check Windows, Windows nativo (`continue-on-error`).
 
 ### 7.1 GitHub Actions matrix
 
@@ -486,16 +444,16 @@ pode rodar no CI Linux:
 [PRD-portability-mac.md completo]
          │
          ▼
-Fase 1 (CallConv) ────────── Fase 5 (cross-check)
+Fase 1 (CallConv) ────────── Fase 5 (cross-check) ✅
          │                          │
          ▼                          ▼
-Fase 2 (platform trait) ──── Fase 6 (testes Windows)
+Fase 2 (platform #[cfg]) ─── Fase 6 (testes Windows) ⏳
          │                          │
          ▼                          ▼
-Fase 3 (AOT linker) ──────── Fase 7 (CI)
+Fase 3 (AOT linker) ──────── Fase 7 (CI) ✅
          │
          ▼
-Fase 4 (scheduler)
+Fase 4 (scheduler/Winsock) ✅
 ```
 
 Fases 1, 2 e 3 podem ser feitas em paralelo (são independentes).
@@ -506,19 +464,19 @@ Fase 7 depende de 6 (CI só vale a pena quando os testes passam).
 
 ---
 
-## Estimativa de esforço
+## Esforço real
 
-| Fase | Esforço | Risco |
-|------|---------|-------|
-| 1 — CallConv | 2-3h | Baixo — refactor mecânico |
-| 2 — Platform trait | 1-2 dias | Alto — refactor arquitetural |
-| 3 — AOT linker | 3-4h | Médio — flags e toolchain |
-| 4 — Scheduler | 4-6h | Médio — WSAPoll vs IOCP |
-| 5 — Cross-check | 1h | Baixo |
-| 6 — Testes Windows | 2-4h | Médio — depende de 1-4 |
-| 7 — CI | 2h | Baixo |
+| Fase | Esforço estimado | Esforço real | Status |
+|------|-----------------|--------------|--------|
+| 1 — CallConv | 2-3h | ~2h | ✅ |
+| 2 — Platform `#[cfg]` | 1-2 dias | ~4h | ✅ |
+| 3 — AOT linker | 3-4h | ~3h | ✅ |
+| 4 — Scheduler/Winsock | 4-6h | ~5h (3 sessões) | ✅ |
+| 5 — Cross-check | 1h | ~1h | ✅ |
+| 6 — Testes Windows | 2-4h | — | ⏳ Pendente |
+| 7 — CI | 2h | ~2h | ✅ |
 
-**Total estimado:** 2-3 dias de trabalho focado.
+**Total real (Fases 1-5,7):** ~17h em 4 sessões (2026-08-09 a 2026-08-12).
 
 ---
 
@@ -527,8 +485,15 @@ Fase 7 depende de 6 (CI só vale a pena quando os testes passam).
 1. **Windows aarch64** — fora do escopo. Reavaliar após Windows x86_64.
 2. **IOCP** — mais performático que WSAPoll mas refactor grande. Adiar
    até que o port WSAPoll esteja estável e a performance seja um problema.
-3. **MSVC vs MinGW** — PRD foca em MSVC. Suporte a MinGW pode ser
-   adicionado depois se necessário.
+3. **MSVC vs MinGW** — **Resolvido:** MinGW (`x86_64-pc-windows-gnu`)
+   adotado. Mais fácil de cross-compilar no Linux (Arch). MinGW-w64
+   16.1.0 instalado via pacman. MSVC não testado mas possível via
+   `x86_64-pc-windows-msvc` se necessário.
 4. **Named pipes vs TCP** — **Resolvido:** TCP loopback adotado para
    pipe IPC e Unix domain sockets. Named pipes não usadas — TCP
    localhost é mais simples e funcionalmente equivalente para IPC.
+5. **`spawn!` no Windows** — **Pendente.** Stub atual (no-op retorna 0).
+   Opções: (a) `CreateProcessW` com serialização de args; (b) threads
+   com memória compartilhada; (c) processo filho via Win32 API com
+   pipes/socketpair TCP para IPC. Decisão de design — não implementar
+   até ter clareza sobre o modelo de concorrência desejado.
