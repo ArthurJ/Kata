@@ -1,6 +1,6 @@
-//! Testes E2E — Fase 3: acesso de functions e actions a constants.
+//! Testes E2E — acesso de functions e actions a constants.
 //!
-//! PRD-constant.md Fase 3: `Ident` dentro de action/função/lambda resolve
+//! PRD-constant.md: `Ident` dentro de action/função/lambda resolve
 //! binding de módulo (constant). O comptime pass substitui `Ident(name)`
 //! pelo literal/snapshot nos corpos de functions e actions após o fixpoint.
 //!
@@ -21,7 +21,7 @@ fn run_kata_run(source: &str) -> (String, String, i32) {
     let id = COUNTER.fetch_add(1, Ordering::SeqCst);
     let dir = std::env::temp_dir();
     let path = dir.join(format!(
-        "kata_constant_fase3_e2e_{id}_{pid}.kata",
+        "kata_constant_access_e2e_{id}_{pid}.kata",
         pid = std::process::id()
     ));
     std::fs::write(&path, source).expect("escrever arquivo temporário");
@@ -37,7 +37,7 @@ fn run_kata_run(source: &str) -> (String, String, i32) {
     )
 }
 
-// ── DoD Fase 3: constant + function acesso ─────────────────────────
+// ── DoD: constant + function acesso ─────────────────────────
 
 /// `constant scale := 2` + `dobro :: Int => Int` + `lambda x: * x scale`
 /// deve imprimir `42` quando chamado com `dobro 21`.

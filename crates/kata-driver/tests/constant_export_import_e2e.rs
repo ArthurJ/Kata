@@ -1,18 +1,16 @@
-//! Fase 4 — Export/import de constants entre módulos.
+//! Testes E2E — export/import de constants entre módulos.
 //!
-//! DoD do PRD-constant §Fase 4: módulo A exporta `constant escala := 2`;
+//! DoD do PRD-constant: módulo A exporta `constant escala := 2`;
 //! módulo B importa e usa `escala` dentro de uma action.
 
 use std::fs;
 use std::process::Command;
 
 fn kata_bin() -> String {
-    std::env::var("KATA_BIN")
-        .map(String::from)
-        .unwrap_or_else(|_| {
-            let manifest = env!("CARGO_MANIFEST_DIR");
-            format!("{manifest}/../../target/debug/kata")
-        })
+    std::env::var("KATA_BIN").unwrap_or_else(|_| {
+        let manifest = env!("CARGO_MANIFEST_DIR");
+        format!("{manifest}/../../target/debug/kata")
+    })
 }
 
 /// Cria um arquivo `.kata` temporário e retorna o path.
