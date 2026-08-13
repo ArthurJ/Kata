@@ -80,7 +80,26 @@ pub(crate) mod winsock {
         pub fn connect(fd: usize, addr: *const Sockaddr, addrlen: c_int) -> c_int;
         pub fn htons(val: u16) -> u16;
         pub fn htonl(val: u32) -> u32;
+        pub fn getsockname(fd: usize, addr: *mut Sockaddr, addrlen: *mut c_int) -> c_int;
         pub fn WSAStartup(version: u16, data: *mut [u8; 408]) -> c_int;
+    }
+}
+
+// ── Bindings Win32 (Console) ────────────────────────────────────────
+#[cfg(windows)]
+pub(crate) mod win32 {
+    use std::ffi::c_void;
+
+    // Constantes GetStdHandle — valores negativos castados para DWORD (u32).
+    pub const STD_INPUT_HANDLE: u32 = 0xFFFF_FFF6; // (DWORD)-10
+    pub const STD_OUTPUT_HANDLE: u32 = 0xFFFF_FFF5; // (DWORD)-11
+    pub const STD_ERROR_HANDLE: u32 = 0xFFFF_FFF4; // (DWORD)-12
+
+    pub type Handle = *mut c_void;
+
+    #[link(name = "kernel32")]
+    unsafe extern "C" {
+        pub fn GetStdHandle(n_std_handle: u32) -> Handle;
     }
 }
 

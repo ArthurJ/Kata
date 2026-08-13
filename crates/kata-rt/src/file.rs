@@ -662,38 +662,38 @@ fn get_or_create_stdio(fd: i32, mode: IoMode, label: &str, cache: &Cell<i64>) ->
     alloc_stdio_inner(file, mode, label, cache)
 }
 
-/// No Windows, stdin/stdout/stderr usam GetStdHandle.
+/// Windows: stdin/stdout/stderr via GetStdHandle + FromRawHandle.
+///
+/// `GetStdHandle` retorna um HANDLE Win32 para o dispositivo de console
+/// ou pipe/redirecionamento ativo. `File::from_raw_handle` envolve esse
+/// HANDLE em `std::fs::File`, cujo I/O usa `ReadFile`/`WriteFile` (não
+/// `recv`/`send` do Winsock).
 #[cfg(windows)]
-fn get_or_create_stdio(_fd: i32, mode: IoMode, label: &str, cache: &Cell<i64>) -> i64 {
+fn get_or_create_stdio(fd: i32, mode: IoMode, label: &str, cache: &Cell<i64>) -> i64 {
+    use crate::platform::win32;
+    use std::os::windows::io::FromRawHandle;
+
     let cached = cache.get();
     if cached != 0 {
         return cached;
     }
-    // No Windows, stdin/stdout/stderr são acessados via std::io::*::lock()
-    // ou GetStdHandle. Por ora, criar a partir de File da std.
-    let file = match _fd {
-        0 => {
-            // stdin — usar std::io::stdin
-            // TODO: Windows precisa de abordagem diferente para FD bruto.
-            // Por ora, retornar 0 (não suportado).
-            return 0;
-        }
-        1 => {
-            // stdout
-            // TODO: mesmo problema.
-            return 0;
-        }
-        2 => {
-            // stderr
-            return 0;
-        }
+
+    let std_handle = match fd {
+        0 => win32::STD_INPUT_HANDLE,
+        1 => win32::STD_OUTPUT_HANDLE,
+        2 => win32::STD_ERROR_HANDLE,
         _ => return 0,
     };
-    #[allow(unreachable_code)]
+    let handle = unsafe { win32::GetStdHandle(std_handle) };
+    if handle.is_null() || handle as usize == usize::MAX {
+        return 0;
+    }
+    // SAFETY: GetStdHandle retorna um HANDLE válido pertencente ao processo.
+    // Como `is_stdio` previne `close`, o handle nunca é fechado pelo runtime.
+    let file = unsafe { File::from_raw_handle(handle as std::os::windows::io::RawHandle) };
     alloc_stdio_inner(file, mode, label, cache)
 }
 
-#[cfg(unix)]
 fn alloc_stdio_inner(file: File, mode: IoMode, label: &str, cache: &Cell<i64>) -> i64 {
     let inner = FileInner {
         closed: false,
@@ -707,11 +707,6 @@ fn alloc_stdio_inner(file: File, mode: IoMode, label: &str, cache: &Cell<i64>) -
         cache.set(handle);
     }
     handle
-}
-
-#[cfg(windows)]
-fn alloc_stdio_inner(_file: File, _mode: IoMode, _label: &str, _cache: &Cell<i64>) -> i64 {
-    0
 }
 
 /// `kata_rt_stdin() -> i64` — handle `File` apontando para FD 0 (stdin).

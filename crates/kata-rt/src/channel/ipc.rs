@@ -44,11 +44,114 @@ pub(super) unsafe fn create_ipc_channel(arena: i64, type_id: i64, ack_tx_handle:
     // SAFETY: pipe() cria dois FDs. Retorna 0 em sucesso, -1 em erro.
     #[cfg(unix)]
     let rc = unsafe { libc::pipe(fds.as_mut_ptr()) };
+    // Windows não tem pipe() nem socketpair(). Em vez disso, cria um par
+    // TCP conectado em loopback: server em 127.0.0.1:0, connect, accept,
+    // fecha listener. O resultado é funcionalmente equivalente a um pipe
+    // para I/O bidirecional — ambos os FDs são sockets non-blocking.
     #[cfg(windows)]
     let rc = {
-        // TODO: Windows usa _pipe() ou CreateNamedPipe. Ver PRD-Windows Fase 2.
-        // Por ora, retorna erro — canais IPC não funcionam em Windows.
-        -1
+        use crate::platform::winsock;
+        crate::platform::ensure_winsock_init();
+
+        // 1. Listener em porta efêmera.
+        let srv = unsafe { winsock::socket(winsock::AF_INET, winsock::SOCK_STREAM, 0) };
+        if srv == usize::MAX {
+            -1
+        } else {
+            // SO_REUSEADDR para o caso de rebind rápido.
+            crate::platform::set_reuseaddr(srv as i32);
+
+            let sa = winsock::SockaddrIn {
+                sin_family: winsock::AF_INET as u16,
+                sin_port: unsafe { winsock::htons(0) }, // porta efêmera
+                sin_addr: unsafe { winsock::htonl(0x7f00_0001) }, // 127.0.0.1
+                sin_zero: [0; 8],
+            };
+            let bind_rc = unsafe {
+                winsock::bind(
+                    srv,
+                    &sa as *const _ as *const winsock::Sockaddr,
+                    std::mem::size_of::<winsock::SockaddrIn>() as i32,
+                )
+            };
+            if bind_rc != 0 {
+                unsafe { winsock::closesocket(srv) };
+                -1
+            } else {
+                let listen_rc = unsafe { winsock::listen(srv, 1) };
+                if listen_rc != 0 {
+                    unsafe { winsock::closesocket(srv) };
+                    -1
+                } else {
+                    // 2. Descobrir a porta atribuída.
+                    let mut local: winsock::SockaddrIn = unsafe { std::mem::zeroed() };
+                    let mut local_len = std::mem::size_of::<winsock::SockaddrIn>() as i32;
+                    let gn_rc = unsafe {
+                        winsock::getsockname(
+                            srv,
+                            &mut local as *mut _ as *mut winsock::Sockaddr,
+                            &mut local_len,
+                        )
+                    };
+                    if gn_rc != 0 {
+                        unsafe { winsock::closesocket(srv) };
+                        -1
+                    } else {
+                        let port = u16::from_be(local.sin_port);
+
+                        // 3. Client connect ao server (blocking).
+                        let cli = unsafe { winsock::socket(winsock::AF_INET, winsock::SOCK_STREAM, 0) };
+                        if cli == usize::MAX {
+                            unsafe { winsock::closesocket(srv) };
+                            -1
+                        } else {
+                            let cli_sa = winsock::SockaddrIn {
+                                sin_family: winsock::AF_INET as u16,
+                                sin_port: unsafe { winsock::htons(port) },
+                                sin_addr: unsafe { winsock::htonl(0x7f00_0001) },
+                                sin_zero: [0; 8],
+                            };
+                            let connect_rc = unsafe {
+                                winsock::connect(
+                                    cli,
+                                    &cli_sa as *const _ as *const winsock::Sockaddr,
+                                    std::mem::size_of::<winsock::SockaddrIn>() as i32,
+                                )
+                            };
+                            if connect_rc != 0 {
+                                unsafe { winsock::closesocket(srv) };
+                                unsafe { winsock::closesocket(cli) };
+                                -1
+                            } else {
+                                // 4. Accept no server.
+                                let mut peer: winsock::Sockaddr = unsafe { std::mem::zeroed() };
+                                let mut peer_len = std::mem::size_of::<winsock::Sockaddr>() as i32;
+                                let accepted = unsafe {
+                                    winsock::accept(srv, &mut peer, &mut peer_len)
+                                };
+                                if accepted == usize::MAX {
+                                    unsafe { winsock::closesocket(srv) };
+                                    unsafe { winsock::closesocket(cli) };
+                                    -1
+                                } else {
+                                    // 5. Fecha listener.
+                                    unsafe { winsock::closesocket(srv) };
+
+                                    // 6. Non-blocking em ambos.
+                                    crate::platform::set_nonblocking(cli as i32);
+                                    crate::platform::set_nonblocking(accepted as i32);
+
+                                    // write_fd = client, read_fd = accepted server-side.
+                                    fds[1] = cli as i32;
+                                    fds[0] = accepted as i32;
+                                    0
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     };
     if rc != 0 {
         return 0;
