@@ -468,6 +468,10 @@ bool_to_text :: Boolean => Text
 @ffi("kata_rt_string_concat")
 string_concat :: Text Text => Text
 
+# Text concat via + (mesmo FFI, açúcar de operador)
+@ffi("kata_rt_string_concat")
++ :: Text Text => Text
+
 @ffi("kata_rt_text_replace_first")
 text_replace :: Text Text => Text
 
