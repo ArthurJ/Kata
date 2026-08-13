@@ -28,13 +28,13 @@ o Cranelift suporta mas o esforço adicional não se justifica agora.
 
 ### Resultado real (2026-08-12)
 
-Fases 1, 2, 3, 5 e 7 completas. Os 12 crates compilam para
+Fases 1, 2, 3, 4, 5 e 7 completas. Os 12 crates compilam para
 `x86_64-pc-windows-gnu` com zero erros. Binário PE32+ nativo (24MB)
 gerado via `cargo build --target x86_64-pc-windows-gnu --release`.
 CI multi-plataforma configurado (GitHub Actions).
 
-**Fases 4 (Winsock real) e 6 (testes em Windows real) pendentes.**
-Stubs Windows compilam mas spawn/sockets/pipe/stdio não funcionam.
+**Fase 6 (testes em Windows real) pendente.** O único stub restante
+é `spawn!` (decisão de design pendente — threads vs CreateProcessW).
 
 ---
 
@@ -326,6 +326,8 @@ soma.exe
 
 **Objetivo:** Garantir que o scheduler não-bloqueante funciona no Windows.
 
+**Status:** ✅ Completo (exceto `spawn!` — stub intencional).
+
 ### 4.1 Problema
 
 O scheduler usa `libc::poll()` em três lugares:
@@ -340,31 +342,44 @@ crates/kata-rt/src/channel/ipc.rs
 sockets (não com fds arbitrários como no POSIX). Files, pipes e
 dispositivos não são sockets no Windows.
 
-### 4.2 Opções
+### 4.2 Solução adotada
 
-| Abordagem | Prós | Contras |
-|-----------|------|---------|
-| `WSAPoll` | API similar ao poll, migração fácil | Só sockets — files precisam de outro mecanismo |
-| IOCP | Mais performático, escala melhor | API complexa, refactor grande |
-| Threads bloqueantes | Simples de implementar | Perde não-bloqueância, não escala |
+**`WSAPoll` para sockets + `GetStdHandle` para stdio + TCP loopback
+para pipe/Unix sockets.** Sem IOCP, sem threads bloqueantes.
 
-### 4.3 Recomendação
+| Componente | Solução Windows | Arquivo |
+|------------|----------------|---------|
+| poll | `WSAPoll` (via `platform::poll_fds`) | `platform.rs` |
+| TCP sockets | Winsock2 real (`socket`/`bind`/`listen`/`connect`/`accept`) | `socket/create.rs` |
+| stdin/stdout/stderr | `GetStdHandle` + `FromRawHandle` | `file.rs` |
+| pipe IPC | socketpair TCP localhost (substitui `libc::pipe`) | `channel/ipc.rs` |
+| Unix domain sockets | TCP localhost + arquivo de coordenação de porta | `socket/create.rs` |
+| `spawn!` | **Stub** (no-op retorna 0) — decisão de design pendente | `ipc.rs` |
 
-**`WSAPoll` para sockets + threads para files.** O scheduler atual
-já distingue entre tipos de I/O (channels via sockets, files via fds).
-No Windows:
+### 4.3 Implementação
 
-- **Channels (sockets/named pipes)** → `WSAPoll`
-- **Files** → thread bloqueante por operação (ou overlapped I/O)
+A abstração `platform::*` (Fase 2) encapsula as diferenças. O scheduler
+chama `platform::poll_fds()` que, no Windows, usa `WSAPoll`. Sockets
+TCP e socketpair TCP são naturalmente compatíveis com `WSAPoll`.
 
-Isso preserva o modelo de concorrência para o caso principal (channels)
-e degraga graciosamente para I/O de arquivos.
+**stdin/stdout/stderr** usam `GetStdHandle` (binding direto em
+`platform::win32`) + `File::from_raw_handle`. O I/O de `File` no
+Windows usa `ReadFile`/`WriteFile` (não `recv`/`send`), então é
+compatível com `BufReader` sem mudanças no `FileInner`.
 
-### 4.4 Implementação
+**pipe IPC** cria um par TCP conectado em loopback: server em
+`127.0.0.1:0`, `getsockname` para descobrir a porta, `connect` +
+`accept`, fecha listener. Ambos os sockets são non-blocking. Como os
+FDs são sockets, `raw_read`/`raw_write` (que usam `recv`/`send` no
+Windows) e `WSAPoll` funcionam nativamente.
 
-A abstração `Platform::poll` (Fase 2) encapsula isso. O scheduler chama
-`platform.poll()` que, no Windows, usa `WSAPoll` para sockets e fallback
-para threads em files.
+**Unix domain sockets** usam TCP localhost com arquivo de coordenação:
+o listener faz bind em porta efêmera, escreve a porta num arquivo no
+mesmo path que o Unix usaria. O connected lê o arquivo, conecta na
+porta. `SocketKindRust::Unix` é preservado no `SocketInner` para que o
+`close` saiba que não deve fazer `unlink` do path (apenas `closesocket`).
+O arquivo de coordenação é removido no início de `create_unix_listener`
+(equivalente ao `remove_file` no Unix).
 
 ---
 
@@ -422,14 +437,14 @@ cargo test --workspace --no-fail-fast -- --test-threads=8
 
 ### 6.3 Testes que provavelmente falham
 
-- **`spawn!` / IPC** — fork não existe no Windows
-- **`select_files`** — poll não funciona com files no Windows
-- **Channel IPC** — Unix domain sockets não existem no Windows
-- **Socket create** — UnixListener não existe no Windows
-- **AOT build** — linker flags incompatíveis
+- **`spawn!` / IPC** — `spawn!` ainda é stub no Windows (no-op retorna 0).
+  Testes que exercitam `spawn!` vão falhar. Todos os outros componentes
+  (stdio, pipe IPC, sockets TCP, Unix sockets via TCP) estão implementados.
+- **AOT build** — linker flags podem ter diferenças não cobertas pelo
+  cross-check (só validável em Windows real).
 
 Estes testes devem ser `#[cfg(unix)]` ou marcados como `#[ignore]`
-no Windows até a Fase 2 ser concluída.
+no Windows até `spawn!` ser implementado.
 
 ---
 
@@ -514,6 +529,6 @@ Fase 7 depende de 6 (CI só vale a pena quando os testes passam).
    até que o port WSAPoll esteja estável e a performance seja um problema.
 3. **MSVC vs MinGW** — PRD foca em MSVC. Suporte a MinGW pode ser
    adicionado depois se necessário.
-4. **Named pipes vs TCP** — se channels IPC forem muito diferentes em
-   Windows, pode ser mais simples usar TCP loopback em vez de named pipes.
-   Decidir na Fase 2.
+4. **Named pipes vs TCP** — **Resolvido:** TCP loopback adotado para
+   pipe IPC e Unix domain sockets. Named pipes não usadas — TCP
+   localhost é mais simples e funcionalmente equivalente para IPC.
