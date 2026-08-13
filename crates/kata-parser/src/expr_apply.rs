@@ -175,6 +175,12 @@ fn parse_apply_impl(parser: &mut Parser, as_arg: bool) -> Result<Spanned<Expr>, 
             | Expr::TextLit { .. }
             | Expr::BytesLit { .. }
             | Expr::Unit
+            | Expr::Tuple { .. }
+            | Expr::ListLit { .. }
+            | Expr::ArrayLit { .. }
+            | Expr::SetLit { .. }
+            | Expr::DictLit { .. }
+            | Expr::RangeLit { .. }
             | Expr::Let { .. }
             | Expr::Var { .. }
             | Expr::Reassign { .. }
