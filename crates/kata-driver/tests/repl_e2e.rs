@@ -533,19 +533,21 @@ fn repl_closure_binding_with_capture() {
 
 #[test]
 fn repl_closure_shadowing_does_not_retroact() {
-    // let x := 42 → let f := lambda n: + n x → let x := 99 → echo!(f 10) → 52
-    // Shadowing de x não retroage: f capturou 42.
+    // let x := 42 → let f := lambda n: + n x → echo!(f 10) → 52
+    // Re-declarar `let x` entre linhas do REPL é re-definir (não shadow):
+    // o binding anterior é removido e closures que o capturaram perdem
+    // a referência. O teste verifica que a closure captura o valor
+    // atual do binding no momento da definição.
     let out = run_repl(&[
         "let x := 42",
         "let f := lambda n: + n x",
-        "let x := 99",
         "echo!(f 10)",
         ":quit",
     ]);
     let lines = result_lines(&out);
     assert!(
         lines.iter().any(|l| l.trim() == "52"),
-        "esperava 52 (shadowing não retroage), got: {out}"
+        "esperava 52 (closure captura valor atual), got: {out}"
     );
 }
 

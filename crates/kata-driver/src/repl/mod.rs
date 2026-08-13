@@ -192,6 +192,38 @@ impl ReplSession {
             });
         }
 
+        // Substitui `let` bindings redefinidos: se o novo input contém
+        // `let x := ...` (como EntryExpr), remove qualquer `let x` anterior
+        // de self.items. O REPL permite re-declarar `let` entre linhas
+        // (sessão iterativa) — a inference rejeita duplicatas no mesmo
+        // escopo, então o REPL resolve antes. Closures que capturaram
+        // o binding anterior perdem a referência — re-declarar `let`
+        // no REPL é re-definir, não shadow.
+        let new_let_names: std::collections::HashSet<String> = module
+            .items
+            .iter()
+            .filter_map(|i| {
+                if let Item::EntryExpr(ref expr) = i.node
+                    && let Expr::Let { ref name, .. } = expr.node
+                {
+                    Some(name.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        if !new_let_names.is_empty() {
+            self.items.retain(|i| {
+                if let Item::EntryExpr(ref expr) = i.node
+                    && let Expr::Let { ref name, .. } = expr.node
+                {
+                    !new_let_names.contains(name)
+                } else {
+                    true
+                }
+            });
+        }
+
         self.items.extend(module.items);
 
         if !has_entry {

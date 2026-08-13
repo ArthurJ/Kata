@@ -291,7 +291,22 @@ pub(crate) fn infer_expr_hinted(
 
         // ── Let binding ──────────────────────────────────────
         Expr::Let { name, value } => {
-            // Tenta inferir o valor. Se falha com LambdaInferenceFail e o
+            // `let` é imutável e único por escopo — re-declaração no mesmo
+            // escopo é erro. Exceções:
+            // - `_` (wildcard) — significa "descartar resultado".
+            // - Nomes prefixados com `_` — sintéticos injetados pelo desugar
+            //   de diretivas (`_name`, `_arity`, `_types`, `_return_type`,
+            //   `_is_action`, `_args`, `_return`). Múltiplas diretivas
+            //   empilhadas reutilizam os mesmos nomes.
+            // Shadowing de params/constantes (escopos pai) é permitido.
+            // Para reusar um nome, use `var` (re-binding explícito).
+            if !name.starts_with('_') && env.is_locally_defined(name) {
+                return Err(MiddleError::DuplicateDecl {
+                    name: name.clone(),
+                    span: (*span).into(),
+                });
+            }
+            // Tente inferir o valor. Se falha com LambdaInferenceFail e o
             // value é um lambda, deferre para use-site inference: guarda o
             // AST do lambda na side table e define o binding com InferVars.
             // Quando `f 5 3` for aplicado, infer_apply resgata o lambda e
@@ -498,6 +513,15 @@ pub(crate) fn infer_expr_hinted(
             let val_ty = typed_value.ty.clone();
             let temp_name = "__let_destruct";
 
+            // Verificar duplicação antes de definir qualquer binding.
+            // O temporário usa nome sintético — conflito só se o usuário
+            // usou `__let_destruct` explicitamente (improvável, mas seguro).
+            if env.is_locally_defined(temp_name) {
+                return Err(MiddleError::DuplicateDecl {
+                    name: temp_name.to_string(),
+                    span: (*span).into(),
+                });
+            }
             // Define o temporário no escopo.
             env.define(temp_name, val_ty.clone(), "__local__");
 
@@ -506,6 +530,13 @@ pub(crate) fn infer_expr_hinted(
             for (i, name) in names.iter().enumerate() {
                 if name == "_" {
                     continue;
+                }
+                // `let` é imutável e único por escopo — mesmo em destructuring.
+                if env.is_locally_defined(name) {
+                    return Err(MiddleError::DuplicateDecl {
+                        name: name.clone(),
+                        span: (*span).into(),
+                    });
                 }
                 // Tipo do elemento i da tupla.
                 let elem_ty = match &val_ty {

@@ -211,6 +211,14 @@ impl TypeEnv {
             .and_then(|p| p.lookup_with_origin(name, origin))
     }
 
+    /// Verifica se um nome já está definido **neste escopo** (não no parent).
+    /// Usado para proibir re-declaração de `let` no mesmo escopo — `let` é
+    /// imutável e único por escopo. Shadowing de params (que vivem no
+    /// parent) é permitido.
+    pub fn is_locally_defined(&self, name: &str) -> bool {
+        self.bindings.contains_key(name)
+    }
+
     /// Verifica se um nome está marcado como ambíguo (conflito de origin
     /// entre imports). Percorre a cadeia de escopos.
     pub fn is_ambiguous(&self, name: &str) -> bool {
