@@ -15,6 +15,8 @@ mod apply;
 mod apply_dispatch;
 mod apply_lambda;
 mod apply_len_tuple;
+mod apply_repr;
+mod apply_show_tuple;
 mod ascription;
 mod captures;
 mod collections;
@@ -46,8 +48,11 @@ mod partial_dispatch;
 mod recursion;
 mod refined_builders;
 mod show_synthesis;
+mod show_synthesis_array;
+mod show_synthesis_dict;
 mod show_synthesis_helpers;
 mod show_synthesis_list;
+mod show_synthesis_set;
 mod sugar;
 mod timer_builtins;
 mod variant;
@@ -183,6 +188,34 @@ pub fn infer_module(
         &mut interface_registry,
     );
     show_functions.extend(list_show_functions);
+
+    // 1f. sintetiza `show` para Array::A — duas funções genéricas mutuamente
+    //     recursivas (__kata_show__Array e __kata_show__Array_rest) usando
+    //     len + at (indexação O(1)). Registra `Array implements SHOW`.
+    let array_show_functions = show_synthesis_array::synthesize_array_show_functions(
+        &mut dispatch_table,
+        &mut interface_registry,
+    );
+    show_functions.extend(array_show_functions);
+
+    // 1g. sintetiza `show` para Set::A — duas funções genéricas mutuamente
+    //     recursivas (__kata_show__Set e __kata_show__Set_rest) usando
+    //     kata_rt_set_next (iter_state explícito). Registra `Set implements SHOW`.
+    let set_show_functions = show_synthesis_set::synthesize_set_show_functions(
+        &mut dispatch_table,
+        &mut interface_registry,
+    );
+    show_functions.extend(set_show_functions);
+
+    // 1h. sintetiza `show` para Dict::K V — duas funções genéricas mutuamente
+    //     recursivas (__kata_show__Dict e __kata_show__Dict_rest) usando
+    //     kata_rt_dict_next_smi (iter_state explícito, SMI-tagged). Registra
+    //     `Dict implements SHOW`.
+    let dict_show_functions = show_synthesis_dict::synthesize_dict_show_functions(
+        &mut dispatch_table,
+        &mut interface_registry,
+    );
+    show_functions.extend(dict_show_functions);
 
     // 2. Clona o TypeEnv do ResolvedModule — o typeck pode adicionar bindings
     //    locais (let) sem mutar o original.
@@ -443,7 +476,13 @@ pub fn wrap_entry_with_show(typed: &mut TypedModule) {
     let needs_wrap = match &entry_ty {
         Ty::Prim(_) | Ty::Unit => false,
         Ty::Sum(name) if name == "Boolean" => false,
-        Ty::List(_) | Ty::Tuple(_) | Ty::Struct(_) | Ty::Sum(_) => true,
+        Ty::List(_)
+        | Ty::Tuple(_)
+        | Ty::Array(_)
+        | Ty::Struct(_)
+        | Ty::Sum(_)
+        | Ty::Set(_)
+        | Ty::Dict(_, _) => true,
         _ => false,
     };
     if !needs_wrap {

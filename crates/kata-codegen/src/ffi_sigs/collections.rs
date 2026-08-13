@@ -179,6 +179,14 @@ pub(crate) fn sig_for(sym: FfiSymbol) -> Option<Signature> {
             sig.params.push(AbiParam::new(I64)); // arena
             sig.returns.push(AbiParam::new(I64)); // Optional box
         }
+        // dict_next_smi: (dict, iter_state_smi, arena) -> i64 (Optional box)
+        // Same as DictNext but with SMI-tagged iter_state.
+        FfiSymbol::DictNextSmi => {
+            sig.params.push(AbiParam::new(I64)); // dict
+            sig.params.push(AbiParam::new(I64)); // iter_state (SMI-tagged)
+            sig.params.push(AbiParam::new(I64)); // arena
+            sig.returns.push(AbiParam::new(I64)); // Optional box
+        }
         // ── Set (Fio 13) ──
         // set_empty: (arena) -> i64 (set ptr)
         FfiSymbol::SetEmpty => {

@@ -129,6 +129,7 @@ pub(crate) fn ffi_needs_arena(sym_name: &str) -> bool {
                 | FfiSymbol::DictGetChecked
                 | FfiSymbol::DictRemove
                 | FfiSymbol::DictNext
+                | FfiSymbol::DictNextSmi
                 | FfiSymbol::SetEmpty
                 | FfiSymbol::SetInsert
                 | FfiSymbol::SetRemove

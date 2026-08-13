@@ -178,6 +178,8 @@ pub enum FfiSymbol {
     DictRemove,
     /// `kata_rt_dict_next(dict, iter_state, arena) -> i64` — Optional box.
     DictNext,
+    /// `kata_rt_dict_next_smi(dict, iter_state_smi, arena) -> i64` — Optional box (SMI decode).
+    DictNextSmi,
 
     // ── Set (Fio 13) ────────────────────────────────────
     /// `kata_rt_set_empty(arena) -> i64` — delega para dict_empty.
@@ -480,6 +482,7 @@ impl FfiSymbol {
             FfiSymbol::DictLen => "kata_rt_dict_len",
             FfiSymbol::DictRemove => "kata_rt_dict_remove",
             FfiSymbol::DictNext => "kata_rt_dict_next",
+            FfiSymbol::DictNextSmi => "kata_rt_dict_next_smi",
             // Set (Fio 13)
             FfiSymbol::SetEmpty => "kata_rt_set_empty",
             FfiSymbol::SetInsert => "kata_rt_set_insert",
@@ -672,6 +675,7 @@ impl FfiSymbol {
             FfiSymbol::DictContains => Ty::boolean(),
             FfiSymbol::DictLen => Ty::int(),
             FfiSymbol::DictNext => Ty::int(),
+            FfiSymbol::DictNextSmi => Ty::int(),
             // Set (Fio 13)
             FfiSymbol::SetEmpty | FfiSymbol::SetInsert | FfiSymbol::SetRemove => Ty::int(),
             FfiSymbol::SetContains => Ty::boolean(),
@@ -868,6 +872,7 @@ impl FfiSymbol {
             FfiSymbol::DictLen,
             FfiSymbol::DictRemove,
             FfiSymbol::DictNext,
+            FfiSymbol::DictNextSmi,
             // Set (Fio 13)
             FfiSymbol::SetEmpty,
             FfiSymbol::SetInsert,

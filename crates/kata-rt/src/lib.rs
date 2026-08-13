@@ -79,7 +79,7 @@ pub use convert::{kata_rt_bytes_to_text, kata_rt_int_to_bytes, kata_rt_text_to_b
 pub use dict::kata_rt_dict_merge;
 pub use dict::{
     kata_rt_dict_contains, kata_rt_dict_empty, kata_rt_dict_get_checked, kata_rt_dict_insert,
-    kata_rt_dict_len, kata_rt_dict_next, kata_rt_dict_remove,
+    kata_rt_dict_len, kata_rt_dict_next, kata_rt_dict_next_smi, kata_rt_dict_remove,
 };
 pub use float::{
     kata_rt_fadd, kata_rt_fcmp_eq, kata_rt_fcmp_ge, kata_rt_fcmp_gt, kata_rt_fcmp_le,

@@ -66,6 +66,13 @@ pub extern "C" fn kata_rt_set_remove(
 /// just the key directly as the Sum payload.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_set_next(set_ptr: i64, iter_state: i64, arena_handle: i64) -> i64 {
+    // iter_state é SMI-tagged pelo codegen (IntLit → encode_smi).
+    // Decodificar para valor bruto antes de chamar dict_next (que espera bruto).
+    let iter_state = if iter_state & 1 == 1 {
+        (iter_state - 1) >> 1
+    } else {
+        iter_state
+    };
     // Reuse the dict_next machinery — it populates the thread-local
     // iterator state and returns a Some(tuple) box. We extract the key
     // from the tuple instead of returning the tuple itself.

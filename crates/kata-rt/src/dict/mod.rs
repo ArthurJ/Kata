@@ -338,6 +338,26 @@ pub extern "C" fn kata_rt_dict_next(dict_ptr: i64, iter_state: i64, arena_handle
     unsafe { make_kv_tuple(arr, iter_state, arena_handle) }
 }
 
+/// Wrapper de `kata_rt_dict_next` que aceita `iter_state` SMI-tagged
+/// (como o codegen gera para IntLit). Decodifica SMI e delega para
+/// `kata_rt_dict_next` com valor bruto.
+///
+/// SMI decode: se bit 0 = 1, é SMI → `(val - 1) >> 1`.
+/// Se bit 0 = 0, é valor bruto → passa direto.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_dict_next_smi(
+    dict_ptr: i64,
+    iter_state: i64,
+    arena_handle: i64,
+) -> i64 {
+    let iter_state = if iter_state & 1 == 1 {
+        (iter_state - 1) >> 1
+    } else {
+        iter_state
+    };
+    kata_rt_dict_next(dict_ptr, iter_state, arena_handle)
+}
+
 /// Merge two dicts (right-biased union).
 ///
 /// `kata_rt_dict_merge(a, b, eq_fn, arena) -> i64`

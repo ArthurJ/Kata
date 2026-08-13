@@ -226,6 +226,7 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
     builder.symbol("kata_rt_dict_len", rt::kata_rt_dict_len as *const u8);
     builder.symbol("kata_rt_dict_remove", rt::kata_rt_dict_remove as *const u8);
     builder.symbol("kata_rt_dict_next", rt::kata_rt_dict_next as *const u8);
+    builder.symbol("kata_rt_dict_next_smi", rt::kata_rt_dict_next_smi as *const u8);
     // Set (Fio 13)
     builder.symbol("kata_rt_set_empty", rt::kata_rt_set_empty as *const u8);
     builder.symbol("kata_rt_set_insert", rt::kata_rt_set_insert as *const u8);
@@ -569,6 +570,7 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         DictLen,
         DictRemove,
         DictNext,
+        DictNextSmi,
         // Set (Fio 13)
         SetEmpty,
         SetInsert,
