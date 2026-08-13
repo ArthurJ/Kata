@@ -27,6 +27,7 @@ mod constructors_refined;
 mod cross_process;
 mod csp;
 mod csp_builtins;
+mod csp_concurrency;
 mod cycle;
 mod dict_set;
 mod dot_access;

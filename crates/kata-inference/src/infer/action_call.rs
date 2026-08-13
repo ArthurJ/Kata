@@ -13,12 +13,11 @@ use kata_core::ty::{Ty, TypeEnv};
 
 use crate::typed::{TypedExpr, TypedExprKind};
 
-use super::csp_builtins::{
-    infer_channel_builtin, infer_fork_builtin, infer_queue_builtin, infer_spawn_builtin,
-};
+use super::csp_builtins::{infer_channel_builtin, infer_queue_builtin};
+use super::csp_concurrency::{infer_fork_builtin, infer_spawn_builtin};
 use super::expr::{InferCtx, infer_expr};
-use super::helpers::{InferResult, reorder_dict_args_to_tuple};
 use super::format_synthesis::infer_format_builtin;
+use super::helpers::{InferResult, reorder_dict_args_to_tuple};
 use super::log_builtins::{infer_log_builtin, infer_log_config_builtin, infer_log_recv_builtin};
 use super::sugar::infer_assert;
 use super::timer_builtins::infer_now_builtin;
