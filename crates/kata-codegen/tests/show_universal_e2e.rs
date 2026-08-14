@@ -5,7 +5,7 @@
 //! Valida que `repr` cita Text e delega para show nos demais.
 
 use kata_codegen::{jit_eval, leak_rt_ptr};
-use kata_core::ty::{PrimTy, Ty};
+use kata_core::ty::Ty;
 use kata_inference::infer_module;
 use kata_lexer::lex;
 use kata_monomorph::monomorphize;

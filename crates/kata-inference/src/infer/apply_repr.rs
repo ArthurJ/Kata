@@ -10,14 +10,13 @@
 //!   (o monomorphizador resolve via Layer 7)
 
 use kata_ast::{Expr, Span, Spanned};
-use kata_core::escape::EscapeTarget;
-use kata_core::ty::{PrimTy, Ty, TypeEnv};
+use kata_core::ty::{Ty, TypeEnv};
 
-use crate::typed::{TypedExpr, TypedExprKind};
+use crate::typed::TypedExprKind;
 
 use super::expr::{InferCtx, infer_expr};
 use super::helpers::InferResult;
-use super::show_synthesis_helpers::{repr_expr, string_concat, text_lit};
+use super::show_synthesis_helpers::repr_expr;
 
 /// Tenta a forma `repr <expr>`. Retorna `Some(Ok(..))` se `func_name == "repr"`
 /// e há 1 arg, `None` caso contrário.
@@ -48,8 +47,5 @@ pub(crate) fn try_repr(
     // - Outro → delega para show_expr
     let result_expr = repr_expr(typed_arg_spanned, &arg_ty);
 
-    Some(Ok((
-        Ty::text(),
-        result_expr.node.kind,
-    )))
+    Some(Ok((Ty::text(), result_expr.node.kind)))
 }

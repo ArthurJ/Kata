@@ -277,10 +277,10 @@ fn rewrite_typed_expr(expr_span: &mut Spanned<TypedExpr>, ctx: &MonoCtx, acc: &m
                     // Só resolve se o tipo for concreto (não Var). Se for Var,
                     // a instância ainda não foi gerada — preserva a Closure
                     // repr para que instantiate_function a copie intacta.
-                    if ffi_symbol.is_none() && !matches!(arg_ty, Ty::Var(_)) {
-                        if let Some(r) = resolve_repr_closure(callee, args, ffi_symbol, ctx) {
-                            replacement = Some(r);
-                        }
+                    if ffi_symbol.is_none() && !matches!(arg_ty, Ty::Var(_))
+                        && let Some(r) = resolve_repr_closure(callee, args, ffi_symbol, ctx)
+                    {
+                        replacement = Some(r);
                     }
                 }
             }
