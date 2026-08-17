@@ -119,7 +119,12 @@ pub(crate) fn fits_return(actual: &Ty, declared: &Ty) -> bool {
         | (Ty::Range(a), Ty::Range(b))
         | (Ty::Sender(a), Ty::Sender(b))
         | (Ty::Receiver(a), Ty::Receiver(b))
-        | (Ty::ReceiverFactory(a), Ty::ReceiverFactory(b)) => fits_return(a, b),
+        | (Ty::ReceiverFactory(a), Ty::ReceiverFactory(b))
+        | (Ty::Set(a), Ty::Set(b)) => fits_return(a, b),
+        // Tipos binários (Dict) — recursão para K e V.
+        (Ty::Dict(k1, v1), Ty::Dict(k2, v2)) => {
+            fits_return(k1, k2) && fits_return(v1, v2)
+        }
         _ => actual == declared,
     }
 }
