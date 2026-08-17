@@ -42,7 +42,6 @@ pub(crate) fn instantiate_function(
         param_types,
         ret_ty,
         clauses,
-        log: orig.log.clone(),
         cache_spec: orig.cache_spec.clone(),
         timer_spec: orig.timer_spec.clone(),
     }
@@ -78,7 +77,6 @@ pub(crate) fn instantiate_action(
         ret_ty,
         body,
         tests: orig.tests.clone(),
-        log: orig.log.clone(),
     }
 }
 

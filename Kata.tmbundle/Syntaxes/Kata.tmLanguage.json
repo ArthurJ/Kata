@@ -4,6 +4,7 @@
   "fileTypes": ["kata"],
   "patterns": [
     { "include": "#comment" },
+    { "include": "#string-bytes" },
     { "include": "#string-triple" },
     { "include": "#string-double" },
     { "include": "#string-single" },
@@ -40,6 +41,34 @@
       ]
     },
 
+    "string-bytes": {
+      "name": "string.quoted.bytes.kata",
+      "patterns": [
+        {
+          "name": "string.quoted.double.bytes.kata",
+          "begin": "\\bb\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.kata",
+              "match": "\\\\x[0-9a-fA-F]{2}|\\\\."
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.bytes.kata",
+          "begin": "\\bb'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.kata",
+              "match": "\\\\x[0-9a-fA-F]{2}|\\\\."
+            }
+          ]
+        }
+      ]
+    },
+
     "string-triple": {
       "name": "string.quoted.triple.raw.kata",
       "begin": "\"\"\"",
@@ -72,7 +101,7 @@
     },
 
     "number-float": {
-      "comment": "Floats: 3.14, 1.5e10, 1.5E-10, 1e10",
+      "comment": "Floats: 3.14, 1.5e10, 1.5E-10, 1e10, .6, .5e10 (sem parte inteira, com whitespace antes)",
       "patterns": [
         {
           "name": "constant.numeric.float.kata",
@@ -81,6 +110,11 @@
         {
           "name": "constant.numeric.float.kata",
           "match": "\\b\\d[\\d_]*[eE][+-]?\\d+\\b"
+        },
+        {
+          "comment": "Floats sem parte inteira: .6, .5e10 — precedidos por whitespace ou início de linha",
+          "name": "constant.numeric.float.kata",
+          "match": "(?<=^|\\s)\\.\\d[\\d_]*([eE][+-]?\\d+)?\\b"
         }
       ]
     },
@@ -120,8 +154,8 @@
     },
 
     "keyword-declaration": {
-      "comment": "Declarations: let, var, data, enum, alias, action",
-      "match": "\\b(let|var|constant|data|enum|alias|action)\\b",
+      "comment": "Declarations: let, var, constant, data, enum, alias, action, directive",
+      "match": "\\b(let|var|constant|data|enum|alias|action|directive)\\b",
       "name": "storage.type.kata"
     },
 

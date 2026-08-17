@@ -454,7 +454,6 @@ pub(crate) fn run_pass0(
                         is_action: false,
                         is_commutative,
                         type_params,
-                        param_names: m.param_names.clone(),
                     });
 
                     // Método com corpo Kata (lambda) precisa de
@@ -466,7 +465,6 @@ pub(crate) fn run_pass0(
                             param_types,
                             return_type,
                             clauses: clauses.clone(),
-                            log: Vec::new(),
                             cache_strategy: None,
                             timer: None,
                             custom_directives: Vec::new(),
@@ -562,7 +560,6 @@ pub(crate) fn run_pass0(
                         is_action: false,
                         is_commutative: false,
                         type_params,
-                        param_names: m.param_names.clone(),
                     });
 
                     // Método com corpo Kata (lambda) precisa de FunctionDef.
@@ -572,7 +569,6 @@ pub(crate) fn run_pass0(
                             param_types,
                             return_type,
                             clauses: clauses.clone(),
-                            log: Vec::new(),
                             cache_strategy: None,
                             timer: None,
                             custom_directives: Vec::new(),

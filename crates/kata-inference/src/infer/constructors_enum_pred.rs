@@ -57,6 +57,7 @@ pub(crate) fn synthesize_enum_pred(
                     type_params: vec![],
                     substitutions: None,
                     param_names: vec![],
+                    param_defaults: vec![],
                 });
             }
         }
@@ -74,6 +75,7 @@ pub(crate) fn synthesize_enum_pred(
             type_params: vec![],
             substitutions: None,
             param_names: vec![],
+            param_defaults: vec![],
         });
     }
 
@@ -139,7 +141,6 @@ pub(crate) fn synthesize_enum_pred(
                         guards: Vec::new(),
                         with_bindings: Vec::new(),
                     }],
-                    log: Vec::new(),
                     cache_spec: None,
                     timer_spec: None,
                 });
@@ -222,7 +223,6 @@ pub(crate) fn synthesize_enum_pred(
                 guards,
                 with_bindings: Vec::new(),
             }],
-            log: Vec::new(),
             cache_spec: None,
             timer_spec: None,
         });

@@ -72,6 +72,7 @@ pub(crate) fn synthesize_constructors(
             type_params: vec![],
             substitutions: None,
             param_names: vec![],
+            param_defaults: vec![],
         });
 
         // Sintetiza a TypedFunction com uma cláusula:
@@ -134,7 +135,6 @@ pub(crate) fn synthesize_constructors(
                 guards: Vec::new(),
                 with_bindings: Vec::new(),
             }],
-            log: Vec::new(),
             cache_spec: None,
             timer_spec: None,
         });
@@ -179,6 +179,7 @@ pub(crate) fn synthesize_constructors(
                 type_params: vec![],
                 substitutions: None,
                 param_names: vec![],
+                param_defaults: vec![],
             });
 
             let pattern = Spanned::new(
@@ -207,7 +208,6 @@ pub(crate) fn synthesize_constructors(
                     guards: Vec::new(),
                     with_bindings: Vec::new(),
                 }],
-                log: Vec::new(),
                 cache_spec: None,
                 timer_spec: None,
             });
@@ -245,6 +245,7 @@ pub(crate) fn synthesize_constructors(
                 type_params: vec![],
                 substitutions: None,
                 param_names: vec![],
+                param_defaults: vec![],
             });
 
             let patterns: Vec<Spanned<TypedPattern>> = field_types
@@ -300,7 +301,6 @@ pub(crate) fn synthesize_constructors(
                     guards: Vec::new(),
                     with_bindings: Vec::new(),
                 }],
-                log: Vec::new(),
                 cache_spec: None,
                 timer_spec: None,
             });

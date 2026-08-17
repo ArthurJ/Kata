@@ -376,6 +376,11 @@ houver excesso.
 
 ### Fase 1: Propagação de `param_names` em `Signature`
 
+> **⚠️ Substituída** — Fases 1-2 do `PRD-dict-dispatch-fix.md` revertem esta fase:
+> funções puras são exclusivamente posicionais. `param_names` removido de
+> `Signature`, `Item::Sig`, e `ImplMethod`. `OverloadInfo.param_names` é `vec![]`
+> para funções.
+
 - Adicionar `param_names: Vec<Option<String>>` em `Signature` (types.rs)
 - Propagar nomes de params do AST em `pass0.rs` (Sigs com params nomeados)
 - Propagar em `populate_dispatch_table` (helpers.rs)
@@ -385,6 +390,9 @@ houver excesso.
 params nomeados. Testes existentes passam.
 
 ### Fase 2: Dict dispatch para funções puras
+
+> **⚠️ Substituída** — `PRD-dict-dispatch-fix.md` Fase 2 remove o bloco de dict
+> dispatch de `apply.rs` (~180 linhas). Funções não recebem args nomeados.
 
 - Em `infer_apply`, detectar `Expr::Apply` com `DictLit` como único arg
 - Reusar `reorder_dict_args_to_tuple` para mapear chaves → params
@@ -420,6 +428,10 @@ parser. `parse(tokens)` (sem aridade) mantém comportamento atual.
 `+ 5 * 2 2` imprime `9`. `+ 1 2 3` reporta erro de parser.
 
 ### Fase 5: Sintaxe `Ident { dict }` para funções (sem `!`)
+
+> **⚠️ Substituída** — `PRD-dict-dispatch-fix.md` Fase 3 remove o branch especial
+> de dict dispatch em `expr_apply.rs`. `f {"k": v}` agora é dict como valor
+> posicional (não args nomeados). Funções são exclusivamente posicionais.
 
 - Parser: `Ident {` sem `!` → `Expr::Apply` com `DictLit` (ou `Expr::ApplyDict`)
 - Type checker: dispatch por nomes de params

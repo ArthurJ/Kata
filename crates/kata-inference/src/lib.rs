@@ -22,7 +22,7 @@ pub use infer::infer_module;
 pub use infer::wrap_entry_with_show;
 pub use typed::{
     CacheSpec, CaptureInfo, ChannelKind, FusedStage, TypedAction, TypedExpr, TypedExprKind,
-    TypedFunction, TypedLogSpec, TypedModule, TypedReadMode, TypedSelectArm, TypedTestSpec,
+    TypedFunction, TypedModule, TypedReadMode, TypedSelectArm, TypedTestSpec,
 };
 pub use typed_module::TimerSpec;
 pub use typed_pattern::{

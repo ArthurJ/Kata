@@ -339,15 +339,8 @@ impl Parser {
             self.expect(&Token::DoubleColon, "`::` in method signature")?;
 
             let mut params = Vec::new();
-            let mut param_names = Vec::new();
             while !matches!(self.peek(), Token::FatArrow | Token::Eof) {
-                if let Some((pname, ty)) = self.try_parse_named_type_param() {
-                    params.push(ty);
-                    param_names.push(Some(pname));
-                } else {
-                    params.push(self.parse_type_expr()?);
-                    param_names.push(None);
-                }
+                params.push(self.parse_type_expr()?);
             }
             self.expect(&Token::FatArrow, "`=>` in method signature")?;
             let ret = self.parse_type_expr()?;
@@ -373,7 +366,6 @@ impl Parser {
             methods.push(ImplMethod {
                 name: method_name,
                 params,
-                param_names,
                 ret,
                 directives: method_directives,
                 body,
@@ -472,15 +464,8 @@ impl Parser {
                 self.expect(&Token::DoubleColon, "`::` in method signature")?;
 
                 let mut params = Vec::new();
-                let mut param_names = Vec::new();
                 while !matches!(self.peek(), Token::FatArrow | Token::Eof) {
-                    if let Some((pname, ty)) = self.try_parse_named_type_param() {
-                        params.push(ty);
-                        param_names.push(Some(pname));
-                    } else {
-                        params.push(self.parse_type_expr()?);
-                        param_names.push(None);
-                    }
+                    params.push(self.parse_type_expr()?);
                 }
                 self.expect(&Token::FatArrow, "`=>` in method signature")?;
                 let ret = self.parse_type_expr()?;
@@ -505,7 +490,6 @@ impl Parser {
                 methods.push(ImplMethod {
                     name: method_name,
                     params,
-                    param_names,
                     ret,
                     directives: method_directives,
                     body,

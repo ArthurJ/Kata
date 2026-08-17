@@ -12,11 +12,12 @@
 
 use crate::interface_registry::InterfaceRegistry;
 use crate::ty::{Ty, ty_list_to_string};
+use kata_ast::{Expr, Spanned};
 use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
 
 /// Informação de uma sobrecarga registrada.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct OverloadInfo {
     pub name: String,
     pub params: Vec<Ty>,
@@ -37,6 +38,10 @@ pub struct OverloadInfo {
     /// `None` para posicional legado. Vazio para funções puras e FFI.
     /// Usado pelo typeck para mapear DictLit args → params nomeados.
     pub param_names: Vec<Option<String>>,
+    /// Defaults dos params da action. `None` = obrigatório, `Some(expr)` = tem
+    /// default. Paralelo a `param_names`. Vazio para funções, FFI, e actions
+    /// sem defaults (sintaxe `(x::Int, y::Int)` → `vec![None; N]`).
+    pub param_defaults: Vec<Option<Spanned<Expr>>>,
 }
 
 /// Score de um candidato — 4D + tiebreak genérico.
@@ -175,6 +180,7 @@ impl DispatchTable {
             type_params: vec![],
             substitutions: None,
             param_names: vec![],
+            param_defaults: vec![],
         });
     }
 

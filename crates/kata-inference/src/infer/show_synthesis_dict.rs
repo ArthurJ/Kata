@@ -62,6 +62,7 @@ pub(crate) fn synthesize_dict_show_functions(
         type_params: vec![k_param.to_string(), v_param.to_string()],
         substitutions: None,
         param_names: vec![],
+        param_defaults: vec![],
     });
 
     // ── __kata_show__Dict_rest :: Dict::K V Int => Text ──
@@ -78,6 +79,7 @@ pub(crate) fn synthesize_dict_show_functions(
         type_params: vec![k_param.to_string(), v_param.to_string()],
         substitutions: None,
         param_names: vec![],
+        param_defaults: vec![],
     });
 
     // ── Dict implements SHOW ──
@@ -144,7 +146,6 @@ fn build_show_func(
             guards: Vec::new(),
             with_bindings: Vec::new(),
         }],
-        log: Vec::new(),
         cache_spec: None,
         timer_spec: None,
     }
@@ -519,11 +520,7 @@ fn generic_op_closure(
 /// O codegen faz `load ptr + field_index * 8`:
 /// - field_index=0: lê key (offset 0)
 /// - field_index=1: lê value (offset 8)
-fn field_access(
-    expr: Spanned<TypedExpr>,
-    field_ty: &Ty,
-    field_index: u32,
-) -> Spanned<TypedExpr> {
+fn field_access(expr: Spanned<TypedExpr>, field_ty: &Ty, field_index: u32) -> Spanned<TypedExpr> {
     Spanned::new(
         TypedExpr {
             span: Span::synthetic(),
@@ -582,10 +579,7 @@ fn rest_call_expr(
 ) -> Spanned<TypedExpr> {
     let callee = TypedExpr {
         span: Span::synthetic(),
-        ty: Ty::Function(
-            vec![dict_ty.clone(), Ty::int()],
-            Box::new(Ty::text()),
-        ),
+        ty: Ty::Function(vec![dict_ty.clone(), Ty::int()], Box::new(Ty::text())),
         tail_pos: false,
         escape: EscapeTarget::Local,
         kind: TypedExprKind::Ident {

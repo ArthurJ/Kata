@@ -475,7 +475,6 @@ pub(crate) fn lower_expr(
                 ret_ty,
                 clauses,
                 captures,
-                &[],   // lambdas anônimas não têm @log
                 &None, // lambdas anônimas não têm @cache
                 &None, // lambdas anônimas não têm @timer
                 func_id,

@@ -24,13 +24,6 @@ pub struct TypeBinding {
     /// reflexão para distinguir alias de função nomeada (caso dinâmico escalar)
     /// de lambda com binding (caso estático lista).
     pub fn_alias: Option<String>,
-    /// Nomes dos parâmetros quando o binding é uma lambda com params nomeados.
-    /// `Some(vec!["x", "y"])` para `let f := lambda (x::Int) (y::Int): ...`.
-    /// `None` para bindings não-função ou lambdas sem params nomeados.
-    /// Usado pelo dict dispatch fallback: quando a DispatchTable não tem
-    /// overloads com `param_names`, o type checker consulta o TypeEnv e usa
-    /// estes nomes para reordenar o dict.
-    pub param_names: Option<Vec<String>>,
 }
 
 /// Árvore de escopos para name resolution.
@@ -77,7 +70,6 @@ impl TypeEnv {
                 ty,
                 origin: origin.to_string(),
                 fn_alias: None,
-                param_names: None,
             },
         );
     }
@@ -91,27 +83,6 @@ impl TypeEnv {
                 ty,
                 origin: origin.to_string(),
                 fn_alias: alias,
-                param_names: None,
-            },
-        );
-    }
-
-    /// Define um nome com `param_names` — usado por `let f := lambda ...`
-    /// para que o dict dispatch fallback possa acessar os nomes dos params.
-    pub fn define_with_param_names(
-        &mut self,
-        name: &str,
-        ty: Ty,
-        origin: &str,
-        param_names: Vec<String>,
-    ) {
-        self.bindings.insert(
-            name.to_string(),
-            TypeBinding {
-                ty,
-                origin: origin.to_string(),
-                fn_alias: None,
-                param_names: Some(param_names),
             },
         );
     }
@@ -125,7 +96,6 @@ impl TypeEnv {
                 ty,
                 origin: origin.to_string(),
                 fn_alias: None,
-                param_names: None,
             },
         );
         self.mutables.insert(name.to_string());
@@ -179,18 +149,6 @@ impl TypeEnv {
             return Some(binding);
         }
         self.parent.as_deref().and_then(|p| p.lookup_binding(name))
-    }
-
-    /// Procura `param_names` de um binding na cadeia de escopos.
-    /// Retorna `Some(&[String])` se o binding tem param_names (lambda com
-    /// params nomeados), `None` caso contrário.
-    pub fn lookup_param_names(&self, name: &str) -> Option<&[String]> {
-        if let Some(binding) = self.bindings.get(name) {
-            return binding.param_names.as_deref();
-        }
-        self.parent
-            .as_deref()
-            .and_then(|p| p.lookup_param_names(name))
     }
 
     /// Procura um nome na cadeia de escopos, filtrando por origin.

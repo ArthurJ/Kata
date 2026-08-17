@@ -12,13 +12,11 @@ use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_module::{Linkage, Module};
 use kata_core::ty::Ty;
 use kata_inference::TypedAction;
-use kata_inference::TypedLogSpec;
 
 use super::expr::lower_expr;
 use crate::metadata::MetadataTable;
 
 use super::backend::ModuleBackend;
-use super::log::inject_log;
 use super::module::{CodegenError, FuncKey, StringTable};
 
 /// Declara uma Action no JITModule (sem definir ainda).
@@ -180,15 +178,6 @@ pub(crate) fn define_kata_action(
         let mut last_result = lower.builder.ins().iconst(I64, 0); // Unit default
         let mut hit_return = false;
 
-        // Injeta @log Enter (prólogo) — pode haver múltiplas diretivas.
-        for spec in action
-            .log
-            .iter()
-            .filter(|s| matches!(s, TypedLogSpec::Enter { .. }))
-        {
-            inject_log(spec, &mut lower)?;
-        }
-
         for (i, stmt) in action.body.iter().enumerate() {
             last_result = lower_expr(&stmt.node, &mut lower)?;
             // Se emitiu return (jump para epilogue_block), não continuar.
@@ -243,15 +232,6 @@ pub(crate) fn define_kata_action(
                     lower.builder.ins().call(socket_close_ref, &[val]);
                 }
             }
-        }
-
-        // Injeta @log Exit (epílogo) — pode haver múltiplas diretivas.
-        for spec in action
-            .log
-            .iter()
-            .filter(|s| matches!(s, TypedLogSpec::Exit { .. }))
-        {
-            inject_log(spec, &mut lower)?;
         }
 
         // Float bitcast: se ret_ty == Float, o body produziu F64.

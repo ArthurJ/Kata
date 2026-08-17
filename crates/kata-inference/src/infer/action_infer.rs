@@ -1,8 +1,8 @@
 //! Inferência de Actions — extrai `infer_action` de `mod.rs`.
 //!
 //! Produz `TypedAction` a partir de `ActionDef`: infere cada statement do
-//! body em sequência, valida o tipo de retorno, tipa args de `@test` specs,
-//! e sintetiza `@log` spec. Separado de `mod.rs` por ser self-contained
+//! body em sequência, valida o tipo de retorno, e tipa args de `@test` specs.
+//! Separado de `mod.rs` por ser self-contained
 //! (só recebe `ActionDef`, `InferCtx`, `TypeEnv`).
 
 use kata_ast::Spanned;
@@ -14,7 +14,6 @@ use crate::typed::{TypedAction, TypedExpr, TypedExprKind, TypedTestSpec};
 
 use super::expr::{InferCtx, fits_return, infer_expr};
 use super::helpers::InferResult;
-use super::log_synthesis;
 
 /// Infere uma Action — produz `TypedAction` a partir de `ActionDef`.
 ///
@@ -147,21 +146,6 @@ pub(crate) fn infer_action(
         });
     }
 
-    // Sintetiza log specs se a action tem @log (pode ter múltiplas).
-    // Params nomeados (forma `x::Tipo`) ficam disponíveis para o template
-    // do `when: "enter"` via param_names. `when: "exit"` infere o template no
-    // escopo da action (params + vars do corpo).
-    let log = if !action_def.log.is_empty() {
-        let param_names: Vec<String> = action_def
-            .param_names
-            .iter()
-            .filter_map(|n| n.clone())
-            .collect();
-        log_synthesis::synthesize_log_specs(&action_def.log, &param_names, &mut action_env, ctx)?
-    } else {
-        Vec::new()
-    };
-
     Ok(TypedAction {
         name: action_def.name.clone(),
         param_types: param_types.clone(),
@@ -169,7 +153,6 @@ pub(crate) fn infer_action(
         ret_ty: expanded_ret.clone(),
         body: typed_body,
         tests: typed_tests,
-        log,
     })
 }
 

@@ -156,6 +156,7 @@ fn action_decl_no_params_no_ret() {
             name,
             params,
             param_names: _,
+            param_defaults: _,
             ret,
             directives,
             body,
@@ -197,6 +198,7 @@ fn action_decl_with_params_and_ret() {
             name,
             params,
             param_names,
+            param_defaults: _,
             ret,
             directives,
             body,
@@ -418,4 +420,71 @@ fn continue_outside_action_errors() {
         result.is_err(),
         "continue fora de Action deve produzir erro"
     );
+}
+
+// ── Dict-template em actions (Fase 6) ───────────────────────────
+
+/// `action act{msg::Text: _, dft::Int: 5}` — dict-template com defaults.
+/// `_` = obrigatório (None), `5` = default (Some).
+#[test]
+fn action_decl_dict_template_com_defaults() {
+    let src = "action act{msg::Text: _, dft::Int: 5} => Unit\n    echo!(msg)";
+    let m = parse_src(src);
+    let item = first_item(&m);
+    match item {
+        Item::ActionDecl {
+            name,
+            params,
+            param_names,
+            param_defaults,
+            ret,
+            body,
+            ..
+        } => {
+            assert_eq!(name, "act");
+            assert_eq!(params.len(), 2);
+            assert_eq!(params[0].node, TypeExpr::Named("Text".into()));
+            assert_eq!(params[1].node, TypeExpr::Named("Int".into()));
+            assert_eq!(
+                &param_names[..],
+                vec![Some("msg".to_string()), Some("dft".to_string())]
+            );
+            // msg = _ (obrigatório), dft = 5 (default)
+            assert_eq!(param_defaults.len(), 2);
+            assert!(param_defaults[0].is_none(), "msg deve ser obrigatório (_)");
+            assert!(param_defaults[1].is_some(), "dft deve ter default");
+            // Verifica que o default é IntLit 5
+            match &param_defaults[1].as_ref().unwrap().node {
+                Expr::IntLit { text } => assert_eq!(text, "5"),
+                other => panic!("expected IntLit 5 as default, got {other:?}"),
+            }
+            assert_eq!(ret.node, TypeExpr::Named("Unit".into()));
+            assert_eq!(body.len(), 1);
+        }
+        other => panic!("expected ActionDecl, got {other:?}"),
+    }
+}
+
+/// `action f(x::Int, y::Int)` — açúcar para `{x::Int: _, y::Int: _}`.
+/// Todos os param_defaults devem ser None (obrigatórios).
+#[test]
+fn action_decl_sintaxe_parenteses_sem_defaults() {
+    let src = "action soma (a::Int, b::Int) => Int\n    + a b";
+    let m = parse_src(src);
+    let item = first_item(&m);
+    match item {
+        Item::ActionDecl {
+            name,
+            param_defaults,
+            ..
+        } => {
+            assert_eq!(name, "soma");
+            assert_eq!(param_defaults.len(), 2);
+            assert!(
+                param_defaults.iter().all(|d| d.is_none()),
+                "todos devem ser obrigatórios"
+            );
+        }
+        other => panic!("expected ActionDecl, got {other:?}"),
+    }
 }

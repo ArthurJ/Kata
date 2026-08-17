@@ -4,7 +4,7 @@
 //! de assinaturas (nome :: params => ret, cláusulas lambda, constant)
 //! do dispatch de top-level items.
 
-use kata_ast::{Directive, Expr, Item, LambdaClause, Spanned, Token, TypeExpr};
+use kata_ast::{Directive, Expr, Item, LambdaClause, Spanned, Token};
 use kata_diagnostics::FrontendError;
 
 use crate::CasingPattern;
@@ -13,71 +13,6 @@ use crate::expressions::parse_expr;
 use crate::is_snake_case;
 
 impl Parser {
-    /// Tenta parsear um param de tipo nomeado: `(ident::TypeExpr)`.
-    ///
-    /// Retorna `Some((name, TypeExpr))` se a posição atual é `(` seguido de
-    /// `Ident` snake_case, `::`, e um `TypeExpr`, fechado por `)`. Caso
-    /// contrário (incluindo `(T)` como grouping, `(Array::A)` como ParamApp,
-    /// `(A -> B)` como Func, ou qualquer outro uso de parênteses em tipos`),
-    /// não consome tokens e retorna `None` — o caller deve chamar
-    /// `parse_type_expr` normalmente.
-    ///
-    /// Critério de ambiguidade: só ativa se o `Ident` dentro dos parênteses
-    /// é snake_case (primeiro char lowercase). Tipos são PascalCase ou
-    /// ALL_CAPS — `Array`, `List`, `Int`, `A`, `K` — nunca snake_case.
-    /// Isto elimina a ambiguidade com `(Array::A)` sem lookahead extra.
-    pub(crate) fn try_parse_named_type_param(&mut self) -> Option<(String, Spanned<TypeExpr>)> {
-        // Precisa de pelo menos: ( Ident :: ... )
-        if !matches!(self.peek(), Token::LParen) {
-            return None;
-        }
-        let lookahead = self.pos + 1;
-        let t1 = self.tokens.get(lookahead)?;
-        let Token::Ident(name) = &t1.token else {
-            return None;
-        };
-        // Só snake_case ativa o caminho nomeado.
-        if !is_snake_case(name) {
-            return None;
-        }
-        // Próximo deve ser `::`.
-        let t2 = self.tokens.get(lookahead + 1)?;
-        if !matches!(t2.token, Token::DoubleColon) {
-            return None;
-        }
-        // Snapshot da posição para rollback se não fechar com `)`.
-        let saved_pos = self.pos;
-
-        // Consome `(`.
-        self.advance();
-        // Consome Ident (nome do param).
-        let pname = match self.peek() {
-            Token::Ident(s) => s.clone(),
-            _ => {
-                self.pos = saved_pos;
-                return None;
-            }
-        };
-        self.advance();
-        // Consome `::`.
-        self.advance();
-        // Parseia o TypeExpr.
-        let ty = match self.parse_type_expr() {
-            Ok(t) => t,
-            Err(_) => {
-                self.pos = saved_pos;
-                return None;
-            }
-        };
-        // Precisa fechar `)`.
-        if !matches!(self.peek(), Token::RParen) {
-            self.pos = saved_pos;
-            return None;
-        }
-        self.advance(); // consome `)`
-        Some((pname, ty))
-    }
-
     pub(crate) fn parse_sig(&mut self, directives: Vec<Directive>) -> Result<Item, FrontendError> {
         // name :: T1 T2 ... => TRet
         let name = match self.peek() {
@@ -95,26 +30,11 @@ impl Parser {
         };
         self.expect(&Token::DoubleColon, "`::`")?;
 
-        // Parse type params until `=>`.
-        //
-        // Cada param pode ser nomeado: `(x::Type)` — Ident snake_case seguido
-        // de `::` e TypeExpr, tudo entre parênteses. Params sem nome: `Type`
-        // direto (ex: `Int`, `Float`, `(A -> B)`, `List::A`).
-        //
-        // Ambiguidade: `(Array::A)` é ParamApp (tipo genérico), não param
-        // nomeado. Resolução: o Ident dentro dos parênteses é snake_case
-        // (param nomeado) ou PascalCase/ALL_CAPS (tipo). Só snake_case
-        // seguido de `::` ativa o caminho de param nomeado.
+        // Parse type params until `=>`. Funções puras são exclusivamente
+        // posicionais — cada param é um TypeExpr direto.
         let mut params = Vec::new();
-        let mut param_names = Vec::new();
         while !matches!(self.peek(), Token::FatArrow | Token::Eof) {
-            if let Some((pname, ty)) = self.try_parse_named_type_param() {
-                params.push(ty);
-                param_names.push(Some(pname));
-            } else {
-                params.push(self.parse_type_expr()?);
-                param_names.push(None);
-            }
+            params.push(self.parse_type_expr()?);
         }
 
         self.expect(&Token::FatArrow, "`=>`")?;
@@ -141,7 +61,6 @@ impl Parser {
         Ok(Item::Sig {
             name,
             params,
-            param_names,
             ret,
             directives,
             body,

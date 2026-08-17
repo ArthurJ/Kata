@@ -132,39 +132,6 @@ pub(crate) fn infer_named_function(
     // (sem condição adicional que a diferenciaria).
     crate::redundancy::check_redundant_clauses(&typed_clauses)?;
 
-    // Sintetiza log specs se a função tem @log (pode ter múltiplas).
-    let log = if !func_def.log.is_empty() {
-        // Extrai nomes dos params dos patterns da primeira cláusula.
-        let param_names: Vec<String> = typed_clauses
-            .first()
-            .map(|c| {
-                c.patterns
-                    .iter()
-                    .filter_map(|p| match &p.node {
-                        crate::typed_pattern::TypedPattern::Ident { name, .. } => {
-                            Some(name.clone())
-                        }
-                        _ => None,
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-        // Cria escopo com bindings dos params para inferir o template.
-        let mut log_env = TypeEnv::with_parent(module_type_env.clone());
-        for (i, ty) in param_types.iter().enumerate() {
-            log_env.define(&format!("__param_{i}"), ty.clone(), "__local__");
-        }
-        // Se há nomes de params, define-os também (associados por posição).
-        for (i, name) in param_names.iter().enumerate() {
-            if let Some(ty) = param_types.get(i) {
-                log_env.define(name, ty.clone(), "__local__");
-            }
-        }
-        super::log_synthesis::synthesize_log_specs(&func_def.log, &param_names, &mut log_env, ctx)?
-    } else {
-        Vec::new()
-    };
-
     // Validação de @cache: suporta qualquer tipo — a serialização da cache
     // key é feita via type descriptor (function_def.rs::build_type_descriptor)
     // que cobre Int, Float, Text, List, Struct, Tuple. Sum/Generic serializa
@@ -176,7 +143,6 @@ pub(crate) fn infer_named_function(
         param_types: param_types.clone(),
         ret_ty: ret_ty.clone(),
         clauses: typed_clauses,
-        log,
         cache_spec: func_def
             .cache_strategy
             .as_ref()

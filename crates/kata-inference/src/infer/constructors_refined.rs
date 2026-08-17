@@ -69,6 +69,7 @@ pub(crate) fn synthesize_refined(
                 type_params: vec![],
                 substitutions: None,
                 param_names: vec![],
+                param_defaults: vec![],
             });
         }
 
@@ -89,6 +90,7 @@ pub(crate) fn synthesize_refined(
             type_params: vec![],
             substitutions: None,
             param_names: vec![],
+            param_defaults: vec![],
         });
     }
 
@@ -158,7 +160,6 @@ pub(crate) fn synthesize_refined(
                     guards: Vec::new(),
                     with_bindings: Vec::new(),
                 }],
-                log: Vec::new(),
                 cache_spec: None,
                 timer_spec: None,
             });
@@ -217,7 +218,6 @@ pub(crate) fn synthesize_refined(
                 guards: Vec::new(),
                 with_bindings: Vec::new(),
             }],
-            log: Vec::new(),
             cache_spec: None,
             timer_spec: None,
         });

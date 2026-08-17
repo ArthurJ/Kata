@@ -15,7 +15,7 @@ use cranelift_module::{Linkage, Module};
 use kata_core::ty::Ty;
 use kata_inference::CacheSpec;
 use kata_inference::TimerSpec;
-use kata_inference::{CaptureInfo, TypedFunction, TypedLambdaClause, TypedLogSpec};
+use kata_inference::{CaptureInfo, TypedFunction, TypedLambdaClause};
 
 use super::LowerCtx;
 use super::backend::ModuleBackend;
@@ -23,7 +23,6 @@ use super::clause::{
     all_patterns_are_ident, bind_patterns_to_params, lower_clause_body, lower_clause_chain,
     lower_with_bindings,
 };
-use super::log::inject_log;
 use super::module::{CodegenError, FuncKey, StringTable};
 use super::tail_call::has_tail_pos_call;
 use super::timer::{
@@ -103,7 +102,6 @@ pub(crate) fn define_function_body(
     ret_ty: &Ty,
     clauses: &[TypedLambdaClause],
     captures: &[CaptureInfo],
-    log: &[TypedLogSpec],
     cache_spec: &Option<CacheSpec>,
     timer_spec: &Option<TimerSpec>,
     func_id: cranelift_module::FuncId,
@@ -268,17 +266,8 @@ pub(crate) fn define_function_body(
             None
         };
 
-        // Injeta @log Enter (prólogo) — pode haver múltiplas diretivas.
-        for spec in log
-            .iter()
-            .filter(|s| matches!(s, TypedLogSpec::Enter { .. }))
-        {
-            inject_log(spec, &mut lower)?;
-        }
-
-        // Cria epilogue_block se @log Exit ou @timer (para interceptar retornos).
-        let mut needs_epilogue =
-            log.iter().any(|s| matches!(s, TypedLogSpec::Exit { .. })) || timer_spec.is_some();
+        // Cria epilogue_block se @timer (para interceptar retornos).
+        let mut needs_epilogue = timer_spec.is_some();
 
         // ── @cache: cache lookup no prólogo ──
         // Para funções anotadas com @cache{strategy: "LRU"}, serializa
@@ -469,14 +458,6 @@ pub(crate) fn define_function_body(
             lower.builder.seal_block(epi);
             let result = lower.builder.block_params(epi)[0];
 
-            // Injeta log no epílogo — pode haver múltiplas diretivas Exit.
-            for spec in log
-                .iter()
-                .filter(|s| matches!(s, TypedLogSpec::Exit { .. }))
-            {
-                inject_log(spec, &mut lower)?;
-            }
-
             // Decref de variáveis ARC-managed antes do return.
             emit_close_io_handles(&mut lower);
 
@@ -549,7 +530,6 @@ pub(crate) fn define_kata_function(
         &func.ret_ty,
         &func.clauses,
         &[], // funções nomeadas não têm capture
-        &func.log,
         &func.cache_spec,
         &func.timer_spec,
         func_id,

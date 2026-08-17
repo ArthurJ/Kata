@@ -849,9 +849,9 @@ executa sem o compilador. `kata repl` mantém bindings entre expressões.
 
 ---
 
-### Pós-Fio 15: Uniformização de Aplicação ✅
+### Pós-Fio 15: Uniformização de Aplicação
 
-**Status:** Concluído (branch `arity-uniformization`)
+**Status:** Parcialmente substituído por `PRD-dict-dispatch-fix.md`
 
 **PRD:** `docs/PRD-arity-uniformization.md`
 
@@ -859,18 +859,40 @@ executa sem o compilador. `kata repl` mantém bindings entre expressões.
 - Parser arity-aware: ciclo de dois passes (Pass 1 extract_arities, Pass 2
   parse_with_arity) — coleta exatamente N args por callee, elimina ambiguidade
   de `+ 5 * 2 2` e descarte silencioso de `5 + 2 2`
-- Dict dispatch para funções puras: `f{"a": x, "b": y}` sem `!` — chaves
-  mapeiam para params nomeados, reordena para tupla posicional
-- Dict dispatch para actions: `f!{"a": x, "b": y}` com `!` (já existente)
-- `param_names: Vec<Option<String>>` propagado do AST até `OverloadInfo`
+- ~~Dict dispatch para funções puras: `f{"a": x, "b": y}` sem `!`~~ — **removido**
+  pelo PRD-dict-dispatch-fix. Funções são exclusivamente posicionais.
+- Dict dispatch para actions: `f!{"a": x, "b": y}` com `!` (mantido)
+- ~~`param_names` propagado para funções puras~~ — **removido** (mantido em actions)
 - Warning quando nome tem overloads com aridades diferentes
 - Erros claros: excesso posicional, dict sem params nomeados, chave inexistente,
   param faltante
 
 **Depende de:** Fio 2 (assinaturas, lambda), Fio 10 (módulos, prelude)
 
-**DoD:** `+ 5 * 2 2` retorna 9. `soma{"a": 3, "b": 4}` retorna 7. Erro de
-excesso posicional em `+ 1 2 3`. 1459 testes passando.
+**DoD:** `+ 5 * 2 2` retorna 9. Erro de excesso posicional em `+ 1 2 3`.
+
+---
+
+### Pós-Fio 15: Dict Dispatch Fix — Funções Posicionais + Default Args ✅
+
+**Status:** Concluído (2026-08-13)
+
+**PRD:** `docs/PRD-dict-dispatch-fix.md`
+
+**Features:**
+- Funções puras são exclusivamente posicionais — `param_names` removido de
+  `Signature`, `Item::Sig`, `ImplMethod`, `TypeBinding`
+- `f {"k": v}` sem `!` é dict como valor posicional (não args nomeados)
+- Disambiguação em actions é sintática (`!(` vs `!{`), sem guard de tipo
+- Default args via dict-template: `action f{x::Int: _, y::Int: 5}`
+- Prólogo de merge preenche faltantes com defaults (nomeado e posicional)
+- Omitir obrigatório (`_`) → erro de compilação
+
+**Depende de:** Uniformização de Aplicação (parser arity-aware)
+
+**DoD:** `act!{"msg": "hi"}` com `action act{msg::Text: _, dft::Int: 5}` → dft=5
+(default). `act!("hi")` posicional também. `act!{"dft": 3}` sem `msg` → erro.
+1620 testes passando.
 
 ---
 

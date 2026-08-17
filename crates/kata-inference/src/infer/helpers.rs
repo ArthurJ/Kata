@@ -5,7 +5,7 @@
 //! e span fallback. A resolução de `TypeExpr` → `Ty` usa
 //! [`kata_resolution::resolve_type_expr`].
 
-use kata_ast::{Item, Pattern, Span, Spanned, WithBinding};
+use kata_ast::{Expr, Item, Pattern, Span, Spanned, WithBinding};
 use kata_core::dispatch::{DispatchError, DispatchTable, OverloadInfo};
 use kata_core::enum_registry::EnumRegistry;
 use kata_core::ty::{Ty, TypeEnv};
@@ -38,7 +38,8 @@ pub(crate) fn populate_dispatch_table(signatures: &[Signature]) -> DispatchTable
             associative_neutral,
             type_params: sig.type_params.clone(),
             substitutions: None,
-            param_names: sig.param_names.clone(),
+            param_names: vec![],
+            param_defaults: vec![],
         });
 
         // Marca comutativa quando a assinatura tem @commutative.
@@ -147,6 +148,7 @@ pub(crate) fn reorder_dict_args_to_tuple(
     entries: &[(Spanned<TypedExpr>, Spanned<TypedExpr>)],
     typed_args: &TypedExpr,
     ctx: &InferCtx,
+    env: &mut TypeEnv,
     span: Span,
 ) -> InferResult<TypedExpr> {
     // Busca a função/action no DispatchTable para obter os nomes dos params.
@@ -160,10 +162,9 @@ pub(crate) fn reorder_dict_args_to_tuple(
 
     // Encontra o overload com param_names não-vazios. Pode ser função pura
     // ou action — o critério é ter nomes, não o flag is_action.
-    let param_names: &[Option<String>] = overloads
+    let overload = overloads
         .iter()
         .find(|o| !o.param_names.is_empty())
-        .map(|o| o.param_names.as_slice())
         .ok_or_else(|| kata_diagnostics::MiddleError::TypeMismatch {
             expected: format!("`{callee}` com params nomeados para chamada via Dict"),
             found: format!(
@@ -171,6 +172,9 @@ pub(crate) fn reorder_dict_args_to_tuple(
             ),
             span: span.into(),
         })?;
+
+    let param_names: &[Option<String>] = &overload.param_names;
+    let param_defaults: &[Option<Spanned<Expr>>] = &overload.param_defaults;
 
     // Constrói mapa nome → índice posicional.
     let name_to_idx: std::collections::HashMap<&str, usize> = param_names
@@ -215,9 +219,19 @@ pub(crate) fn reorder_dict_args_to_tuple(
         reordered[idx] = Some(val_expr.clone());
     }
 
-    // Verifica que nenhum param faltante.
-    for (i, slot) in reordered.iter().enumerate() {
-        if slot.is_none() {
+    // Preenche faltantes: usa default se houver, erro se obrigatório.
+    let missing_indices: Vec<usize> = reordered
+        .iter()
+        .enumerate()
+        .filter_map(|(i, slot)| if slot.is_none() { Some(i) } else { None })
+        .collect();
+
+    for i in missing_indices {
+        if let Some(default_expr) = param_defaults.get(i).and_then(|d| d.as_ref()) {
+            let typed_default =
+                infer_expr(&default_expr.node, &default_expr.span, env, ctx, false)?;
+            reordered[i] = Some(Spanned::new(typed_default, default_expr.span));
+        } else {
             let name = param_names[i].as_deref().unwrap_or("?");
             return Err(kata_diagnostics::MiddleError::TypeMismatch {
                 expected: format!("parâmetro `{name}` de `{callee}`"),
@@ -237,6 +251,83 @@ pub(crate) fn reorder_dict_args_to_tuple(
     Ok(TypedExpr {
         ty: Ty::Tuple(tys),
         kind: TypedExprKind::Tuple { elements },
+        span: typed_args.span,
+        tail_pos: typed_args.tail_pos,
+        escape: typed_args.escape,
+    })
+}
+
+/// Preenche defaults em chamada posicional de action.
+///
+/// Se a tupla de args tem menos elementos que o número de params da action,
+/// e os params faltantes têm default no template, infere os defaults e anexa.
+/// Se um param faltante é obrigatório (`_`), retorna erro.
+///
+/// Se o número de args já bate com o número de params, ou a action não tem
+/// params nomeados (função pura chamada via `!` — não deveria acontecer),
+/// retorna `typed_args` inalterado.
+pub(crate) fn fill_positional_defaults(
+    callee: &str,
+    typed_args: &TypedExpr,
+    ctx: &InferCtx,
+    env: &mut TypeEnv,
+    span: Span,
+) -> InferResult<TypedExpr> {
+    // Extrai elementos da tupla (se for Tuple).
+    let elements = match &typed_args.kind {
+        TypedExprKind::Tuple { elements } => elements.clone(),
+        TypedExprKind::Unit => Vec::new(),
+        _ => return Ok(typed_args.clone()), // não-tupla: não tenta preencher
+    };
+
+    // Busca overloads da action no DispatchTable.
+    let overloads = match ctx.table.get_overloads(callee) {
+        Some(o) => o,
+        None => return Ok(typed_args.clone()), // não encontrado: deixa dispatch falhar
+    };
+
+    // Encontra o overload com param_names não-vazios (é uma action com params).
+    let overload = match overloads.iter().find(|o| !o.param_names.is_empty()) {
+        Some(o) => o,
+        None => return Ok(typed_args.clone()), // sem params nomeados: nada a preencher
+    };
+
+    let param_count = overload.param_names.len();
+    let arg_count = elements.len();
+
+    // Args >= params: nada a preencher.
+    if arg_count >= param_count {
+        return Ok(typed_args.clone());
+    }
+
+    // Params faltantes: do índice arg_count até param_count.
+    let mut new_elements = elements;
+    for i in arg_count..param_count {
+        if let Some(default_expr) = overload.param_defaults.get(i).and_then(|d| d.as_ref()) {
+            let typed_default =
+                infer_expr(&default_expr.node, &default_expr.span, env, ctx, false)?;
+            new_elements.push(Spanned::new(typed_default, default_expr.span));
+        } else {
+            // Param obrigatório faltante em chamada posicional.
+            let name = overload
+                .param_names
+                .get(i)
+                .and_then(|n| n.as_deref())
+                .unwrap_or("?");
+            return Err(kata_diagnostics::MiddleError::TypeMismatch {
+                expected: format!("parâmetro `{name}` de `{callee}`"),
+                found: "parâmetro não fornecido".into(),
+                span: span.into(),
+            });
+        }
+    }
+
+    let tys: Vec<Ty> = new_elements.iter().map(|e| e.node.ty.clone()).collect();
+    Ok(TypedExpr {
+        ty: Ty::Tuple(tys),
+        kind: TypedExprKind::Tuple {
+            elements: new_elements,
+        },
         span: typed_args.span,
         tail_pos: typed_args.tail_pos,
         escape: typed_args.escape,

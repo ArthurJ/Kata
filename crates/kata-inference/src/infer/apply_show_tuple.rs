@@ -45,7 +45,9 @@ pub(crate) fn try_show_tuple(
     if matches!(&typed_arg.ty, Ty::Unit) {
         return Some(Ok((
             Ty::text(),
-            TypedExprKind::TextLit { text: "()".to_string() },
+            TypedExprKind::TextLit {
+                text: "()".to_string(),
+            },
         )));
     }
 

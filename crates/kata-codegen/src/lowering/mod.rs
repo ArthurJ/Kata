@@ -34,7 +34,6 @@ mod for_in;
 mod function_def;
 mod fused_stream;
 mod jit;
-mod log;
 mod map;
 mod module;
 mod pattern;

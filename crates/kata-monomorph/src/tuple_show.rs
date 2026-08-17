@@ -186,7 +186,10 @@ fn show_call_mangled(arg: Spanned<TypedExpr>, type_name: &str) -> Spanned<TypedE
     )
 }
 
-pub(crate) fn string_concat(left: Spanned<TypedExpr>, right: Spanned<TypedExpr>) -> Spanned<TypedExpr> {
+pub(crate) fn string_concat(
+    left: Spanned<TypedExpr>,
+    right: Spanned<TypedExpr>,
+) -> Spanned<TypedExpr> {
     let callee = TypedExpr {
         span: Span::synthetic(),
         ty: Ty::Function(vec![Ty::text(), Ty::text()], Box::new(Ty::text())),

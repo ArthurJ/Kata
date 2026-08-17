@@ -32,10 +32,6 @@ que não seja imediatamente colado ao `#` é tratado como conteúdo do comentár
 todos os caracteres até encontrar `}#`. Se `}#` não aparece até EOF, o lexer
 emite erro léxico (`lex.unterminated_comment`).
 
-**Sem nesting:** `#{ #{ }# }#` — o primeiro `}#` fecha o comentário. O
-conteúdo restante é tratado como código. Para controlar comentários
-multi-nível, usar `#` linha-a-linha como interruptor.
-
 `#` seguido de qualquer caractere que não `{` (incluindo espaço) é comentário
 de linha: `# {` é comentário de linha, não inicia multilinha.
 
@@ -67,11 +63,14 @@ nome := nova_expressão
 
 ---
 
-## Operador Hole (`_`)
+## Operador `_` (Hole / Wildcard)
 
-Token que representa um "buraco" a ser preenchido. Dois contextos:
+Token que representa um "buraco" a ser preenchido ou um curinga
+que ignora. A semântica depende do contexto de uso.
 
-### Currying Explícito
+### Hole — preenchimento (gera lambda ou marca obrigatório)
+
+#### Currying Explícito
 ```kata
 let soma_dez := + 10 _       # gera closure de aridade 1
 ```
@@ -80,7 +79,19 @@ let soma_dez := + 10 _       # gera closure de aridade 1
 - Semântica: Congela a aplicação, gerando closure que aguarda o argumento faltante.
 - **Relações**: Toda closure na TAST tem campo `holes` contando quantos `_` restam.
 
-### Placeholder em Predicados
+#### Hole com Ascription de Tipo (DoD 28)
+```kata
++ 10 _::Int                  # lambda com tipo do hole anotado
+```
+
+- Posição: call-site, no lugar de um argumento, com `::Type` anexado.
+- Semântica: O desugar preserva a ascription no parâmetro fresh
+  (`lambda __hole_0: + 10 (__hole_0::Int)`). O typeck usa o tipo
+  anotado diretamente, sem precisar de partial dispatch.
+- **Relações**: Útil quando o typeck não consegue inferir o tipo do
+  hole por contexto (ex: primeiro arg de `+` com segundo Float).
+
+#### Placeholder em Predicados
 ```kata
 data (Int, > _ 0) as PositiveInt
 enum IMC
@@ -91,56 +102,63 @@ enum IMC
 - Semântica: Representa o valor sendo testado pelo predicado no construtor inteligente.
 - **Relações**: Construtor inteligente sintetiza lambda com Guard usando `_` como parâmetro implícito.
 
+#### Marcador de Obrigatório em Dict-Template
+```kata
+action f{x::Int: _, y::Int: 5}   # x é obrigatório, y tem default 5
+```
+
+- Posição: no valor do dict-template de declaração de Action.
+- Semântica: Marca o parâmetro como obrigatório — o caller deve
+  preencher. O parser produz `Expr::Hole` que vira `None` (sem
+  default). Literais (ex: `5`) marcam default. `f!{"x": 1}` →
+  y=5 (default); omitir `x` → erro.
+- **Relações**: Reutiliza o conceito de `_` como "espaço a preencher",
+  mas não gera closure — é marcador de obrigatoriedade na declaração.
+
+### Wildcard — ignora / descarta (não gera lambda)
+
+#### Wildcard em Patterns
+```kata
+match x
+    Some(v): v
+    _: 0                      # aceita qualquer valor, não liga nome
+
+lambda _: 42                  # ignora o argumento
+```
+
+- Posição: pattern de `match` ou cláusula `lambda`.
+- Semântica: `Pattern::Wildcard` — aceita qualquer valor sem
+  ligar nome. Distinto do Hole: não gera closure, não preenche
+  nada. O parser distingue por contexto: `_` em posição de
+  pattern → `Wildcard`; em posição de expressão → `Hole`.
+
+#### Skip em `let` Destructuring
+```kata
+let (x, _) := pair            # descarta o segundo elemento
+```
+
+- Posição: nome no destructuring de tupla.
+- Semântica: O elemento é descartado — não gera binding.
+  Aceito como `Ident("_")` que não cria variável.
+
+#### Sub-pattern Wildcard em Variant
+```kata
+match result
+    Result::Err _: "erro"      # descarta o payload do Err
+```
+
+- Posição: sub-pattern dentro de `Variant(...)` em pattern.
+- Semântica: `Pattern::Wildcard` dentro do payload — descarta o
+  valor. O `|` (fallback) usa isto internamente: `Result::Err _`
+  descarta o payload da cauda e avalia o fallback.
+
 ### Distinção do Separador Visual
-O símbolo `_` em literais numéricos (`1_000`) é puramente léxico — o lexer descarta, não vira token. Não tem relação semântica com o Hole.
+O símbolo `_` em literais numéricos (`1_000`) é puramente léxico —
+o lexer descarta, não vira token. Não tem relação semântica com o
+Hole.
 
 ### Floats sem parte inteira
 Floats podem omitir a parte inteira quando precedidos por whitespace ou início de linha: `.6` → `0.6`, `.5e10` → `0.5e10`. O lexer normaliza prefixando `0` ao texto preservado. Sem whitespace antes (ex: `tpl.0`), o `.` é dot-access — não float.
-
----
-
-## Função `$` (Spread / Aplicação Explícita)
-
-```kata
-f $ (a, b, c)         # spread: f recebe a, b, c como argumentos separados
-$ (+ 1 2)             # standalone: $ recebe o tuplo (+ 1 2)
-let idade := $(PositiveInt 25)
-```
-
-- **Lexer**: `$` é `Ident("$")` — não é operador sintático. Qualquer símbolo
-  não-reservado vira identificador.
-- **Parser**: `$` participa da aplicação greedy normal. Não há tratamento
-  especial no parser.
-- **Semântica (typeck, não middle-end)**: `$` é um identificador interceptado
-  pelo typeck em dois contextos:
-
-  **Contexto 1 — `$` como prefixo de argumento** (`f $ tuplo`):
-  O typeck reescreve `f $ (a, b, c)` para que `f` receba `a`, `b`, `c` como
-  argumentos posicionais separados. Na TAST, isto vira
-  `TypedExprKind::Spread(Box<TypedExpr>)` com tipo `Unit` — `Spread` é um
-  marcador, não um valor. Os handlers de aplicação (closures, lambdas, TRMA)
-  expandem `Spread(Tuple([a, b]))` em `[a, b]`.
-
-  **Contexto 2 — `$` como callee standalone** (`$ (tuplo)`):
-  O typeck cria `Spread(Tuple([...]))`. O argumento deve ser uma tupla
-  (`SpreadExpectedTuple` se não for).
-
-  Em ambos os casos, `$` **nunca chega ao codegen como call**. É totalmente
-  resolvido no typeck — `Spread` é expandido pelos handlers antes do lowering.
-
-- **Por que não é um builtin sintetizado**: `$` não tem assinatura de função
-  e não produz um valor de retorno. É um marcador na TAST com tipo `Unit`,
-  expandido pelos handlers de aplicação. Se fosse um builtin, teria que ter
-  tipo `Tuple([T]) → T` — mas o `Spread` tem tipo `Unit`, não `T`. A
-  interceptação no typeck é o mecanismo correto, não síntese de builtin.
-
-- **Relações**:
-  - Útil quando o argumento é um tuplo que precisa ser desempacotado em
-    argumentos posicionais. Para construtores refinados, a notação prefixa
-    `PositiveInt 25` funciona diretamente — `$` só é necessário quando o
-    argumento já está em forma de tuplo.
-  - Interage com `|` em `$(PositiveInt 25) | 0` e com `?` em Actions.
-  - O TRMA helpers expandem spreads antes de analisar padrões recursivos.
 
 ---
 
@@ -305,7 +323,7 @@ conectar_servidor!()
 
 - Posição: sufixo do nome da função na chamada.
 - Semântica: **Sinaliza impureza** — toda chamada a Action usa `!`. Na declaração, Actions não usam `!` (`action conectar_servidor` vs chamada `conectar_servidor!()`). Actions podem ser passadas como argumento sem `!` (referência, sem ativação).
-- **Argumentos**: Toda Action recebe exatamente uma tupla como argumento (parênteses obrigatórios na chamada). Pode ser tupla vazia (`!()`) para Actions sem parâmetros, ou tupla de N elementos para variadismo.
+- **Argumentos**: Toda Action recebe exatamente um argumento estruturado. **Posicional** `!(` — tupla explícita: `f!(1, 2)`, `f!()` (sem args), `f!({\"k\": v})` (dict como valor posicional). **Nomeado** `!{` — dict nomeado: `f!{"x": 1 "y": 2}` (chaves são nomes de params, reordenadas no prólogo). A disambiguação é sintática (`!(` vs `!{`), sem guard de tipo. **Default args**: se a action declara defaults via dict-template (`action f{x::Int: _, y::Int: 5}`), o prólogo preenche faltantes com defaults do template. `f!{"x": 1}` → y=5 (default). `f!(1)` posicional também → y=5. Omitir obrigatório (`_`) → erro.
 - **Relações**:
   - Algumas Actions são builtins do compilador (`fork!`, `panic!`, `assert!`), outras são stdlib (`echo!`), mas todas seguem a mesma sintaxe `!`.
   - Actions de I/O no prelude: `open!`, `listen!`, `read!`, `write!`, `close!` para File e Socket (ver seção 22.4).
@@ -871,7 +889,7 @@ soma_positiva :: PositiveInt PositiveInt => PositiveInt?
 | Palavra | Uso |
 |---|---|
 | `lambda` / `λ` | Declara função anônima. Múltiplas cláusulas após assinatura: `lambda <padrões>: <corpo>` — a primeira que encaixa vence |
-| `action` | Declara Action com params nomeados: `action nome (p::T, ...) => Ret`. Forma posicional legada `(T1 T2) -> Ret` removida na migração total. Params sem nome não são mais aceitos; `::` etiqueta é obrigatória em cada argumento. `=>` separa args de retorno (igual a assinaturas de função). Sem params: `action greet` (retorna `Unit`) ou `action greet => Unit` (retorno explícito). |
+| `action` | Declara Action com params nomeados. Duas formas: **posicional** `action nome (p::T, ...) => Ret` (açúcar para dict-template sem defaults) ou **dict-template** `action nome {p::T: _, q::T: 5} => Ret` onde `_` marca obrigatório e literal marca default. `=>` separa args de retorno. Sem params: `action greet` (retorna `Unit`) ou `action greet => Unit` (retorno explícito). |
 | `data` | Declara tipo produto |
 | `enum` | Declara tipo soma |
 | `alias` | Cria Newtype |
@@ -879,6 +897,7 @@ soma_positiva :: PositiveInt PositiveInt => PositiveInt?
 | `implements` | Implementa interface (ex: `T implements IFACE`) |
 | `refines` | Delega interface do tipo base ao refined (ex: `PositiveInt refines NUM`). Não registra no InterfaceRegistry; usa fallback no dispatch |
 | `directive` | Declara diretiva customizada: `directive nome{when: Hook::..., on: Target::...}`. Body é inlined no ponto de aplicação `@nome` |
+| `constant` | Declara binding de módulo avaliado em compile-time. Top-level only. Sintaxe: `constant nome := expr` ou `constant _ := expr` (discard). Substituiu `@comptime` (removido Fase 5). Lambdas/sections proibidas no valor — use função nomeada. Shadowing de constants é erro (`DuplicateConstant`). |
 | `import` | Importa módulo |
 | `export` | Exporta itens |
 | `as` | Alias de import (`import x as y`) ou de tipo (`data (...) as Nome`, `alias T as Nome`) |

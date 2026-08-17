@@ -66,17 +66,31 @@ fn apply_hook_to_action_body(
 /// Sintetiza `let _<key> := <value>` para cada arg nomeado do site de aplicação,
 /// excluindo `when` e `on` (metadados de despacho). Estas são as variáveis que
 /// o body da diretiva referencia (ex: `_msg`, `_topic`, `_policy`).
+///
+/// Para `msg` (template do `format!`), pré-processa escape `{{` → `{` e `}}` → `}`
+/// quando o value é `TextLit`. Isto permite `@log{msg: "literal {{chave}}"}` →
+/// `_msg := "literal {chave}"` (chaves simples) → `format!` não interpola `chave`.
 pub(super) fn synthesize_site_arg_bindings(app: &CustomDirectiveApp) -> Vec<Spanned<Expr>> {
     let span = Span::synthetic();
     app.args
         .iter()
         .filter_map(|arg| match arg {
             kata_ast::DirectiveArg::Named { key, value } if key != "when" && key != "on" => {
+                let value_expr = if key == "msg" {
+                    if let Expr::TextLit { text } = &value.node {
+                        let processed = preprocess_template_escape(text);
+                        Expr::TextLit { text: processed }
+                    } else {
+                        value.node.clone()
+                    }
+                } else {
+                    value.node.clone()
+                };
                 Some(Spanned {
                     node: Expr::Let {
                         name: format!("_{key}"),
                         value: Box::new(Spanned {
-                            node: value.node.clone(),
+                            node: value_expr,
                             span: value.span,
                         }),
                     },
@@ -86,6 +100,15 @@ pub(super) fn synthesize_site_arg_bindings(app: &CustomDirectiveApp) -> Vec<Span
             _ => None,
         })
         .collect()
+}
+
+/// Pré-processa escape `{{` → `{` e `}}` → `}` em um template TextLit.
+/// `{{chave}}` → `{chave}` (literal), `{key}` (chaves simples) = interpolação.
+fn preprocess_template_escape(text: &str) -> String {
+    text.replace("{{", "\x00")
+        .replace("}}", "\x01")
+        .replace('\x00', "{")
+        .replace('\x01', "}")
 }
 
 /// Enter: prependa bindings de reflexão + args do site + statements da diretiva antes do body.

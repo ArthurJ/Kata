@@ -51,6 +51,7 @@ pub(crate) fn synthesize_array_show_functions(
         type_params: vec![type_param.to_string()],
         substitutions: None,
         param_names: vec![],
+        param_defaults: vec![],
     });
 
     // ── __kata_show__Array_rest :: Array::A Int => Text ──
@@ -67,6 +68,7 @@ pub(crate) fn synthesize_array_show_functions(
         type_params: vec![type_param.to_string()],
         substitutions: None,
         param_names: vec![],
+        param_defaults: vec![],
     });
 
     // ── Array implements SHOW ──
@@ -140,7 +142,6 @@ fn build_show_func(
             guards: Vec::new(),
             with_bindings: Vec::new(),
         }],
-        log: Vec::new(),
         cache_spec: None,
         timer_spec: None,
     }

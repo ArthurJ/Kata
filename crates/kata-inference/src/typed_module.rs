@@ -1,5 +1,5 @@
 //! Artefatos tipados de nível de módulo — `TypedModule`, `TypedFunction`,
-//! `TypedAction`, `TypedTestSpec`, `TypedLogSpec`.
+//! `TypedAction`, `TypedTestSpec`.
 //!
 //! Saída final do Pass 2 (inference) no que tange ao agrupamento por módulo:
 //! o entry point tipado, as funções nomeadas e as actions. O codegen e o
@@ -83,10 +83,6 @@ pub struct TypedFunction {
     pub ret_ty: Ty,
     /// Cláusulas tipadas (padrões + corpo + guards + with bindings).
     pub clauses: Vec<TypedLambdaClause>,
-    /// Especificações de logging `@log`. Múltiplas diretivas `@log` são
-    /// suportadas — cada uma injeta independentemente no prólogo/epílogo.
-    /// Vazio se a função não tem `@log`.
-    pub log: Vec<TypedLogSpec>,
     /// Especificação de cache `@cache`. None se a função não tem `@cache`.
     pub cache_spec: Option<CacheSpec>,
     /// Especificação de timer `@timer`. None se a função não tem `@timer`.
@@ -114,10 +110,6 @@ pub struct TypedAction {
     /// Casos de teste `@test` com args já tipados. O codegen gera
     /// um wrapper por spec (exceto negativos CompileError).
     pub tests: Vec<TypedTestSpec>,
-    /// Especificações de logging `@log`. Múltiplas diretivas `@log` são
-    /// suportadas — cada uma injeta independentemente no prólogo/epílogo.
-    /// Vazio se a action não tem `@log`.
-    pub log: Vec<TypedLogSpec>,
 }
 
 /// `TestSpec` tipado — args já inferidos pelo typeck.
@@ -131,34 +123,4 @@ pub struct TypedTestSpec {
     pub args: Option<Spanned<TypedExpr>>,
     pub timeout: Option<i64>,
     pub expects: Option<String>,
-}
-
-/// Especificação de logging `@log` tipada — pronta para o codegen.
-///
-/// O typeck processa o template `msg` e produz `msg_expr` (expressão tipada
-/// que produz `Text` — cadeia de `text_replace_first` via `infer_format`).
-/// O codegen injeta `kata_rt_log_publish` no prólogo (`Enter`) ou
-/// epílogo (`Exit`) com o valor SSA de `msg_expr`.
-#[derive(Debug, Clone)]
-pub enum TypedLogSpec {
-    /// Loga no prólogo (entrada). Placeholders só podem referenciar params.
-    Enter {
-        msg_expr: Spanned<TypedExpr>,
-        topic: Option<String>,
-        /// Expressão tipada que produz `File` para write direto.
-        /// Mutuamente exclusivo com `topic`.
-        file: Option<Spanned<TypedExpr>>,
-        policy: Option<String>,
-        level: i64,
-    },
-    /// Loga no epílogo (saída). Placeholders podem referenciar params e vars do corpo.
-    Exit {
-        msg_expr: Spanned<TypedExpr>,
-        topic: Option<String>,
-        /// Expressão tipada que produz `File` para write direto.
-        /// Mutuamente exclusivo com `topic`.
-        file: Option<Spanned<TypedExpr>>,
-        policy: Option<String>,
-        level: i64,
-    },
 }
