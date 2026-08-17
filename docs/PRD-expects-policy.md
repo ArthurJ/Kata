@@ -1,6 +1,6 @@
 # PRD — `expects` com `policy`: Verificação de Erro em Testes
 
-**Status:** Rascunho
+**Status:** Concluído
 **Data:** 2026-08-17
 **Depende de:** `@test` runner ✅, `show` sintetizado ✅, `Result::(T, E)` ✅
 **Não depende de:** `enum extends`, `KataError` no prelude, `ExpectSpec`, type bounds
