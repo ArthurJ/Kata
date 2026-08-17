@@ -305,6 +305,7 @@ x in [1 2 3]             # List contains (percurso linear)
   - **Array**: percurso linear via `kata_rt_array_contains`.
   - **Range**: O(1) aritmético — `start <= item AND item < end` (não verifica
     step). Dois `icmp` combinados com `band`, resultado `uextend` para I64.
+    Para range inclusivo (`..=`), usa `<=` no limite superior.
 - **Domínio**: Funções puras e Actions.
 - **Relações**: Despacha via interface `CONTAINS(A)`. No codegen, o tipo concreto
   é conhecido em compile-time pela TAST, então o dispatch é inlined por tipo —
@@ -808,7 +809,7 @@ action processar (x::Int) => Int
 | `{1; 2; 3}` | Tensor N-D | Dimensões separadas por `;` |
 | `(1, 2, 3)` | Tupla | Agrupamento heterogêneo. `(42,)` é tupla de 1 elemento (vírgula obrigatória). `(42)` é agrupamento, não tupla. `()` é `Unit`. |
 
-- **Ranges (Lazy)**: `[0..10]` (0 a 9), `[0..=9]` (0 a 9 incluso), `[0..2..10]` (step 2: 0, 2, 4, 6, 8). Geram `Range` lazy que implementa `ITERABLE`. O step é definido por um segundo `..`: `start..step..end`.
+- **Ranges**: `[0..10]` (0 a 9), `[0..=9]` (0 a 9 incluso), `[0..2..10]` (step 2: 0, 2, 4, 6, 8). Geram um descritor `Range` (struct com start, step, end) alocado na arena — os limites são materializados na criação, mas a sequência é virtual: cada elemento é computado sob demanda durante a iteração, sem pré-materializar a lista. Implementa `ITERABLE`. Sintaxe: `start..end` (step default via `STEPPABLE`), `start..=end` (inclusivo, step default), `start..step..end` (step explícito, exclusivo), `start..step..=end` (step explícito, inclusivo). Range degenerado (step não progressivo, ex: `start == start + step`) produz zero iterações.
 
 ---
 

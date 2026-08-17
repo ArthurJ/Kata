@@ -1976,9 +1976,15 @@ sintáticos no momento da declaração.
   HAMT, não determinística).
 * **Tensores N-Dimensionais (`{T::Int...}`):** Separador de dimensão `;` dentro
   de `{}`. Dimensionalidade processada em compile-time (*Const Generics*).
-* **Ranges (Lazy):** `[0..10]` (0 a 9), `[0..=9]` (0 a 9 incluso),
-  `[0..2..10]` (0 a 9 com step 2). Geram `Range` lazy que implementa `ITERABLE`.
-  O step é definido por um segundo `..`: `start..step..end`.
+* **Ranges:** `[0..10]` (0 a 9), `[0..=9]` (0 a 9 incluso),
+  `[0..2..10]` (0 a 8 com step 2). Geram um descritor `Range` (struct com
+  start, step, end) alocado na arena — os limites são materializados na
+  criação, mas a sequência é virtual: cada elemento é computado sob demanda
+  durante a iteração. Implementa `ITERABLE`. Sintaxe: `start..end` (step
+  default via `STEPPABLE`), `start..=end` (inclusivo, step default),
+  `start..step..end` (step explícito, exclusivo), `start..step..=end`
+  (step explícito, inclusivo). Range degenerado (step não progressivo)
+  produz zero iterações.
 
 ### 8.2. Interfaces de Coleção
 
