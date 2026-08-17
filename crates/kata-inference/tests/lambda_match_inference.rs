@@ -101,7 +101,7 @@ fn closure_rename_int_add() {
 
 #[test]
 fn match_boolean_exhaustive() {
-    let tmod = infer_src("match Boolean::True\n    True: 1\n    False: 0");
+    let tmod = infer_src("match True\n    True: 1\n    False: 0");
     let entry = entry_typed(&tmod);
     assert_eq!(entry.ty, Ty::int());
     match &entry.kind {
@@ -117,7 +117,7 @@ fn match_boolean_exhaustive() {
 
 #[test]
 fn match_boolean_non_exhaustive_error() {
-    let err = infer_src_err("match Boolean::True\n    True: 1");
+    let err = infer_src_err("match True\n    True: 1");
     assert!(matches!(
         err,
         kata_diagnostics::MiddleError::NonExhaustiveMatch { .. }
@@ -128,7 +128,7 @@ fn match_boolean_non_exhaustive_error() {
 
 #[test]
 fn match_with_otherwise_is_exhaustive() {
-    let tmod = infer_src("match Boolean::True\n    True: 1\n    otherwise: 0");
+    let tmod = infer_src("match True\n    True: 1\n    otherwise: 0");
     let entry = entry_typed(&tmod);
     assert_eq!(entry.ty, Ty::int());
 }
@@ -157,7 +157,7 @@ fn match_int_with_otherwise_ok() {
 fn match_unqualified_variants_resolved() {
     // True e False sem qualificação são resolvidos pelo EnumRegistry
     // como variantes de Boolean (tipo do scrutinee).
-    let tmod = infer_src("match Boolean::True\n    True: 1\n    False: 0");
+    let tmod = infer_src("match True\n    True: 1\n    False: 0");
     let entry = entry_typed(&tmod);
     assert_eq!(entry.ty, Ty::int());
     match &entry.kind {
@@ -180,7 +180,7 @@ fn match_unqualified_variants_resolved() {
 
 #[test]
 fn match_qualified_variants() {
-    let tmod = infer_src("match Boolean::True\n    Boolean::True: 1\n    Boolean::False: 0");
+    let tmod = infer_src("match True\n    True: 1\n    False: 0");
     let entry = entry_typed(&tmod);
     assert_eq!(entry.ty, Ty::int());
 }
@@ -189,7 +189,7 @@ fn match_qualified_variants() {
 
 #[test]
 fn match_arms_type_mismatch_error() {
-    let err = infer_src_err("match Boolean::True\n    True: 1\n    False: \"texto\"");
+    let err = infer_src_err("match True\n    True: 1\n    False: \"texto\"");
     assert!(matches!(
         err,
         kata_diagnostics::MiddleError::TypeMismatch { .. }
@@ -278,7 +278,7 @@ fn lambda_anon_two_params() {
 fn guard_condition_must_be_boolean() {
     // Match em Boolean — True e False são resolvidos via EnumRegistry.
     // Testa que o body de match arms pode ser Boolean.
-    let src = "match Boolean::True\n    True: Boolean::True\n    False: Boolean::False";
+    let src = "match True\n    True: True\n    False: False";
     let tmod = infer_src(src);
     let entry = entry_typed(&tmod);
     assert_eq!(entry.ty, Ty::boolean());
@@ -288,7 +288,7 @@ fn guard_condition_must_be_boolean() {
 fn guard_condition_non_boolean_error() {
     // Match arms devem retornar o mesmo tipo. Se um retorna Int e outro
     // Boolean, deve dar TypeMismatch.
-    let src = "match Boolean::True\n    True: 1\n    False: Boolean::False";
+    let src = "match True\n    True: 1\n    False: False";
     let err = infer_src_err(src);
     assert!(matches!(
         err,
@@ -323,7 +323,7 @@ fn cons_pattern_rejected_in_fio2() {
 #[test]
 fn match_tail_pos_propagated() {
     // match em tail position — body de cada arm é tail_pos = true.
-    let tmod = infer_src("match Boolean::True\n    True: 1\n    False: 0");
+    let tmod = infer_src("match True\n    True: 1\n    False: 0");
     let entry = entry_typed(&tmod);
     assert!(entry.tail_pos, "entry point é tail_pos");
     match &entry.kind {

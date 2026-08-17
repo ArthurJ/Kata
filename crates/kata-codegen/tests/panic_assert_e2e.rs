@@ -85,22 +85,22 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
 
 // ── DoD 27: assert!(True, "msg") retorna Unit (não aborta) ──────────
 
-/// DoD 27: `assert!(Boolean::True, "x deve ser positivo")` não aborta.
-/// Retorna Unit. O desugar produz `match Boolean::True { True: Unit, False: panic!(msg) }`.
+/// DoD 27: `assert!(True, "x deve ser positivo")` não aborta.
+/// Retorna Unit. O desugar produz `match True { True: Unit, False: panic!(msg) }`.
 /// O braço True é tomado — retorna Unit. panic!(msg) não é avaliado.
 #[test]
 fn assert_true_retorna_unit() {
-    let src = "action valida => Unit\n    assert!(Boolean::True, \"x deve ser positivo\")\n    echo!(\"ok\")\nvalida!()";
+    let src = "action valida => Unit\n    assert!(True, \"x deve ser positivo\")\n    echo!(\"ok\")\nvalida!()";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Unit, "assert!(True) deve retornar Unit");
     assert_eq!(raw, 0, "Unit é 0");
 }
 
-/// DoD 27: `assert!(Boolean::True)` sem msg — não aborta.
-/// Desugar: `match Boolean::True { True: Unit, False: panic!("assertion failed") }`.
+/// DoD 27: `assert!(True)` sem msg — não aborta.
+/// Desugar: `match True { True: Unit, False: panic!("assertion failed") }`.
 #[test]
 fn assert_true_sem_msg() {
-    let src = "action valida => Unit\n    assert!(Boolean::True)\n    echo!(\"ok\")\nvalida!()";
+    let src = "action valida => Unit\n    assert!(True)\n    echo!(\"ok\")\nvalida!()";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Unit);
     assert_eq!(raw, 0);

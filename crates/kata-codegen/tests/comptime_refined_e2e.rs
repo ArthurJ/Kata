@@ -98,30 +98,30 @@ fn untag_smi(raw: i64) -> i64 {
 /// avaliar (envolve chamada de função). O comptime pass deve JIT-executar.
 ///
 /// is_prime :: Int => Boolean
-/// lambda 0: Boolean::False
-/// lambda 1: Boolean::False
-/// lambda 2: Boolean::True
-/// lambda 3: Boolean::True
-/// lambda 4: Boolean::False
-/// lambda 5: Boolean::True
-/// lambda _: Boolean::False
+/// lambda 0: False
+/// lambda 1: False
+/// lambda 2: True
+/// lambda 3: True
+/// lambda 4: False
+/// lambda 5: True
+/// lambda _: False
 const IS_PRIME_SRC: &str = "\
 data (Int, is_prime _) as Prime
 is_prime :: Int => Boolean
-lambda 0: Boolean::False
-lambda 1: Boolean::False
-lambda 2: Boolean::True
-lambda 3: Boolean::True
-lambda 4: Boolean::False
-lambda 5: Boolean::True
-lambda _: Boolean::False
+lambda 0: False
+lambda 1: False
+lambda 2: True
+lambda 3: True
+lambda 4: False
+lambda 5: True
+lambda _: False
 ";
 
 /// DoD Fase 4: `5::Prime` valida em compile-time via JIT (predicado complexo).
 ///
 /// O typeck não consegue avaliar `is_prime _` localmente (const_eval retorna None).
 /// O predicado é tipado, armazenado como pending, e o comptime pass o JIT-executa.
-/// Resultado: Boolean::True → ascription válida.
+/// Resultado: True → ascription válida.
 #[test]
 fn ascription_refined_predicado_complexo_passa() {
     let src = format!("{IS_PRIME_SRC}\n5::Prime");
@@ -130,9 +130,9 @@ fn ascription_refined_predicado_complexo_passa() {
     assert_eq!(untag_smi(raw), 5);
 }
 
-/// DoD Fase 4: `4::Prime` falha — predicado complexo retorna Boolean::False.
+/// DoD Fase 4: `4::Prime` falha — predicado complexo retorna False.
 ///
-/// O comptime pass JIT-executa `is_prime 4`, obtém Boolean::False (tag 0),
+/// O comptime pass JIT-executa `is_prime 4`, obtém False (tag 0),
 /// e emite erro.
 #[test]
 fn ascription_refined_predicado_complexo_falha() {
@@ -140,7 +140,7 @@ fn ascription_refined_predicado_complexo_falha() {
     let result = eval_with_comptime(&src);
     assert!(
         result.is_err(),
-        "4::Prime deve falhar — is_prime 4 retorna Boolean::False"
+        "4::Prime deve falhar — is_prime 4 retorna False"
     );
     let err = result.unwrap_err();
     assert!(

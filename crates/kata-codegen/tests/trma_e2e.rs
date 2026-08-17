@@ -132,18 +132,18 @@ fat 20"#;
 fn recursao_mutua_nao_trma() {
     let src = r#"is_even :: Int => Boolean
 lambda n: match n
-    0: Boolean::True
+    0: True
     otherwise: is_odd (- n 1)
 
 is_odd :: Int => Boolean
 lambda n: match n
-    0: Boolean::False
+    0: False
     otherwise: is_even (- n 1)
 
 is_even 10"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Sum("Boolean".into()));
-    // 10 é par → True. Boolean::True = 1, Boolean::False = 0 (sem SMI tag).
+    // 10 é par → True. True = 1, False = 0 (sem SMI tag).
     assert_eq!(raw, 1);
 }
 

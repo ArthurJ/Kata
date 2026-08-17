@@ -110,12 +110,12 @@ echo!(double!(21))"#;
     );
 }
 
-// ── Test 4: ShortCircuit — prossegue quando Optional::None ──────────
+// ── Test 4: ShortCircuit — prossegue quando None ──────────
 
 #[test]
 fn e2e_shortcircuit_proceeds() {
     let src = r#"directive gate{when: Hook::ShortCircuit, on: Target::Action}
-    Optional::None
+    None
 
 @gate
 action process(x :: Int) => Int
@@ -132,12 +132,12 @@ echo!(process!(10))"#;
     );
 }
 
-// ── Test 5: ShortCircuit — short-circuita com Optional::Some ────────
+// ── Test 5: ShortCircuit — short-circuita com Some ────────
 
 #[test]
 fn e2e_shortcircuit_blocks() {
     let src = r#"directive gate{when: Hook::ShortCircuit, on: Target::Action}
-    Optional::Some(999)
+    Some(999)
 
 @gate
 action process(x :: Int) => Int
@@ -305,7 +305,7 @@ directive log_exit{when: Hook::Exit, on: Target::Any}
     echo!("EXIT")
 
 directive gate{when: Hook::ShortCircuit, on: Target::Action}
-    Optional::None
+    None
 
 @log_enter
 @log_exit
@@ -340,7 +340,7 @@ fn e2e_shortcircuit_inner_exit_outer() {
     echo!(_return)
 
 directive gate{when: Hook::ShortCircuit, on: Target::Action}
-    Optional::Some(999)
+    Some(999)
 
 @log_exit
 @gate
@@ -369,7 +369,7 @@ fn e2e_shortcircuit_inner_exit_outer_proceeds() {
     echo!(_return)
 
 directive gate{when: Hook::ShortCircuit, on: Target::Action}
-    Optional::None
+    None
 
 @log_exit
 @gate

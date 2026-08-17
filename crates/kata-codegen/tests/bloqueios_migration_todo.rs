@@ -207,11 +207,11 @@ foo 7"#;
 #[test]
 fn b2_and_em_funcao_nomeada() {
     let src = r#"foo :: Boolean => Boolean
-lambda x: and x Boolean::True
-foo Boolean::False"#;
+lambda x: and x True
+foo False"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Sum("Boolean".into()));
-    // Boolean::False = 0 (sem SMI tag)
+    // False = 0 (sem SMI tag)
     assert_eq!(raw, 0, "and False True = False = 0");
 }
 

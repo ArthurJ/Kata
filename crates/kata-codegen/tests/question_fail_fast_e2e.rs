@@ -121,18 +121,18 @@ fn count_match_in_module(typed: &kata_inference::TypedModule) -> usize {
     total
 }
 
-// ── DoD 20: `?` desempacota Result::Ok e continua ──────────────────
+// ── DoD 20: `?` desempacota Ok e continua ──────────────────
 
-/// DoD 20: `?` em `Result::Ok 42` desempacota o valor (42) e continua.
+/// DoD 20: `?` em `Ok 42` desempacota o valor (42) e continua.
 /// A action retorna `Result::(Int, Text)` — o `?` desempacota, e o body
-/// continua com `Result::Ok 0`. O resultado final é `Ok(0)`.
+/// continua com `Ok 0`. O resultado final é `Ok(0)`.
 /// E|Text é o default do prelude (`Err(E|Text)`).
 #[test]
 fn question_desempacota_result_ok() {
     let src = r#"action extrai => Result::(Int, Text)
-    let r := Result::Ok 42
+    let r := Ok 42
     r ?
-    Result::Ok 0
+    Ok 0
 extrai!()"#;
     let (raw, ty) = eval_src(src);
     // O tipo de retorno é Result::(Int, Text) = Generic
@@ -148,16 +148,16 @@ extrai!()"#;
     assert_eq!(raw & 1, 0, "esperado ponteiro (Sum), não SMI");
 }
 
-/// DoD 20: `?` em `Result::Err 99` aborta com `return Err(99)`.
+/// DoD 20: `?` em `Err 99` aborta com `return Err(99)`.
 /// A action retorna `Result::(Int, Text)` — o `?` aborta, o body
 /// não continua. O resultado final é `Err(99)`.
 /// E|Text é o default do prelude (`Err(E|Text)`).
 #[test]
 fn question_aborta_result_err() {
     let src = r#"action extrai => Result::(Int, Text)
-    let r := Result::Err 99
+    let r := Err 99
     r ?
-    Result::Ok 0
+    Ok 0
 extrai!()"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(
@@ -170,15 +170,15 @@ extrai!()"#;
     assert_eq!(raw & 1, 0, "esperado ponteiro (Sum), não SMI");
 }
 
-// ── DoD 20: `?` desempacota Optional::Some e aborta em None ─────────
+// ── DoD 20: `?` desempacota Some e aborta em None ─────────
 
-/// DoD 20: `?` em `Optional::Some 42` desempacota o valor e continua.
+/// DoD 20: `?` em `Some 42` desempacota o valor e continua.
 #[test]
 fn question_desempacota_optional_some() {
     let src = r#"action extrai => Optional::(Int)
-    let r := Optional::Some 42
+    let r := Some 42
     r ?
-    Optional::None
+    None
 extrai!()"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(
@@ -188,13 +188,13 @@ extrai!()"#;
     assert_eq!(raw & 1, 0, "esperado ponteiro (Sum), não SMI");
 }
 
-/// DoD 20: `?` em `Optional::None` aborta com `return None`.
+/// DoD 20: `?` em `None` aborta com `return None`.
 #[test]
 fn question_aborta_optional_none() {
     let src = r#"action extrai => Optional::(Int)
-    let r := Optional::None
+    let r := None
     r ?
-    Optional::Some 0
+    Some 0
 extrai!()"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(
@@ -211,9 +211,9 @@ extrai!()"#;
 #[test]
 fn question_desugared_para_match_na_tast() {
     let src = r#"action extrai => Result::(Int, Text)
-    let r := Result::Ok 42
+    let r := Ok 42
     r ?
-    Result::Ok 0
+    Ok 0
 extrai!()"#;
     let typed = infer_src(src);
     let match_count = count_match_in_module(&typed);
@@ -225,52 +225,52 @@ extrai!()"#;
 
 // ── Testes de infraestrutura (match explícito com generics do prelude) ──
 
-/// DoD 20 (infra): Match em Result::Ok do prelude dentro de Action.
+/// DoD 20 (infra): Match em Ok do prelude dentro de Action.
 #[test]
 fn match_result_ok_dentro_de_action() {
     let src = r#"action extrai => Int
-    match Result::Ok 42
-        Result::Ok v: v
-        Result::Err e: 0
+    match Ok 42
+        Ok v: v
+        Err e: 0
 extrai!()"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
     assert_eq!(untag_smi(raw), 42);
 }
 
-/// DoD 20 (infra): Match em Optional::Some do prelude dentro de Action.
+/// DoD 20 (infra): Match em Some do prelude dentro de Action.
 #[test]
 fn match_optional_some_dentro_de_action() {
     let src = r#"action extrai => Int
-    match Optional::Some 42
-        Optional::Some v: v
-        Optional::None: 0
+    match Some 42
+        Some v: v
+        None: 0
 extrai!()"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
     assert_eq!(untag_smi(raw), 42);
 }
 
-/// DoD 20 (infra): Match em Result::Err do prelude dentro de Action.
+/// DoD 20 (infra): Match em Err do prelude dentro de Action.
 #[test]
 fn match_result_err_dentro_de_action() {
     let src = r#"action extrai => Int
-    match Result::Err 99
-        Result::Ok v: v
-        Result::Err e: 0
+    match Err 99
+        Ok v: v
+        Err e: 0
 extrai!()"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
     assert_eq!(untag_smi(raw), 0);
 }
 
-/// DoD 20 (infra): Match em Optional::None do prelude dentro de Action.
+/// DoD 20 (infra): Match em None do prelude dentro de Action.
 #[test]
 fn match_optional_none_dentro_de_action() {
     let src = r#"action extrai => Int
-    match Optional::None
-        Optional::Some v: v
-        Optional::None: 0
+    match None
+        Some v: v
+        None: 0
 extrai!()"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));

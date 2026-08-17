@@ -8,7 +8,7 @@
 //! (TAST nunca contém PipeFallback), e effect = Puro.
 //!
 //! `|` é generalizado para qualquer enum cujas variantes (exceto a última)
-//! carreguem payload. A última (cauda) pode ter payload (ex: Result::Err(E))
+//! carreguem payload. A última (cauda) pode ter payload (ex: Err(E))
 //! — o payload é descartado e o fallback é avaliado.
 
 use kata_codegen::{jit_eval, leak_rt_ptr};
@@ -130,22 +130,22 @@ fn count_match_in_module(typed: &kata_inference::TypedModule) -> usize {
 
 // ── DoD 22: `|` desempacota payload e avalia direita se cauda unitária ──
 
-/// DoD 22: `Optional::Some 42 | 99` desempacota Some(42) → 42.
+/// DoD 22: `Some 42 | 99` desempacota Some(42) → 42.
 #[test]
 fn pipe_fallback_desempacota_optional_some() {
-    let src = "Optional::Some 42 | 99";
+    let src = "Some 42 | 99";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
-    assert_eq!(untag_smi(raw), 42, "Optional::Some 42 | 99 deve ser 42");
+    assert_eq!(untag_smi(raw), 42, "Some 42 | 99 deve ser 42");
 }
 
-/// DoD 22: `Optional::None | 99` cai em None (cauda), avalia rhs = 99.
+/// DoD 22: `None | 99` cai em None (cauda), avalia rhs = 99.
 #[test]
 fn pipe_fallback_avalia_rhs_em_optional_none() {
-    let src = "Optional::None | 99";
+    let src = "None | 99";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
-    assert_eq!(untag_smi(raw), 99, "Optional::None | 99 deve ser 99");
+    assert_eq!(untag_smi(raw), 99, "None | 99 deve ser 99");
 }
 
 /// DoD 22: User enum com cauda unitária — desempacota variante com payload.
@@ -180,7 +180,7 @@ fn pipe_fallback_user_enum_segunda_variante() {
 /// DoD 23: `|` dentro de Action (com Optional).
 #[test]
 fn pipe_fallback_dentro_de_action() {
-    let src = "action extrai => Int\n    let r := Optional::Some 42\n    r | 0\nextrai!()";
+    let src = "action extrai => Int\n    let r := Some 42\n    r | 0\nextrai!()";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
     assert_eq!(untag_smi(raw), 42, "r | 0 dentro de Action deve ser 42");
@@ -189,7 +189,7 @@ fn pipe_fallback_dentro_de_action() {
 /// DoD 23: `|` dentro de Action com None — avalia fallback.
 #[test]
 fn pipe_fallback_dentro_de_action_none() {
-    let src = "action extrai => Int\n    let r := Optional::None\n    r | 0\nextrai!()";
+    let src = "action extrai => Int\n    let r := None\n    r | 0\nextrai!()";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
     assert_eq!(untag_smi(raw), 0, "r | 0 com None deve ser 0");
@@ -200,7 +200,7 @@ fn pipe_fallback_dentro_de_action_none() {
 /// DoD 24: `|` é desugared para Match no typeck. A TAST contém Match, não PipeFallback.
 #[test]
 fn pipe_fallback_desugared_para_match_na_tast() {
-    let src = "Optional::Some 42 | 99";
+    let src = "Some 42 | 99";
     let typed = infer_src(src);
     let match_count = count_match_in_module(&typed);
     assert!(
@@ -216,7 +216,7 @@ fn pipe_fallback_desugared_para_match_na_tast() {
 /// Verificamos que o tipo do resultado é Int (não aborta, não retorna None).
 #[test]
 fn pipe_fallback_effect_puro_optional() {
-    let src = "Optional::None | 99";
+    let src = "None | 99";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int), "effect deve ser Puro — tipo Int");
     assert_eq!(untag_smi(raw), 99);
@@ -224,20 +224,20 @@ fn pipe_fallback_effect_puro_optional() {
 
 // ── Result com `|` (cauda com payload — descartada) ──
 
-/// `Result::Ok 42 | 0` desempacota Ok(42) → 42. Se fosse Err, descartaria o
+/// `Ok 42 | 0` desempacota Ok(42) → 42. Se fosse Err, descartaria o
 /// payload e retornaria 0. O programador escolheu `|` — não precisa do erro.
 #[test]
 fn pipe_fallback_result_ok_desempacota() {
-    let src = "Result::Ok 42 | 0";
+    let src = "Ok 42 | 0";
     let (raw, ty) = eval_src(src);
-    assert_eq!(ty, Ty::Prim(PrimTy::Int), "Result::Ok 42 | 0 deve ser Int");
+    assert_eq!(ty, Ty::Prim(PrimTy::Int), "Ok 42 | 0 deve ser Int");
     assert_eq!(untag_smi(raw), 42);
 }
 
-/// `Result::Err \"err\" | 99` — cauda (Err) tem payload, descarta, avalia fallback.
+/// `Err \"err\" | 99` — cauda (Err) tem payload, descarta, avalia fallback.
 #[test]
 fn pipe_fallback_result_err_descarta_payload() {
-    let src = "Result::Err \"err\" | 99";
+    let src = "Err \"err\" | 99";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int), "fallback deve ser Int");
     assert_eq!(untag_smi(raw), 99);

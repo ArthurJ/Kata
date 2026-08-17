@@ -155,42 +155,42 @@ fn untag_smi(raw: i64) -> i64 {
 
 // ── DoD 5: Coerção contextual no `|` com refined types ──────────────
 
-/// DoD 5: `Optional::Some(5::PositiveInt) | 1` desempacota 5.
+/// DoD 5: `Some(5::PositiveInt) | 1` desempacota 5.
 /// O fallback `1` é implicitamente tratado como `PositiveInt` (predicado
 /// `> _ 0` validado em compile-time). O resultado é o payload desempacotado.
 #[test]
 fn dod5_pipe_fallback_coercao_refined_valida() {
-    let src = "data (Int, > _ 0) as PositiveInt\nOptional::Some(5::PositiveInt) | 1";
+    let src = "data (Int, > _ 0) as PositiveInt\nSome(5::PositiveInt) | 1";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Struct("PositiveInt".into()));
     assert_eq!(untag_smi(raw), 5);
 }
 
-/// DoD 5 (erro): `Optional::Some(5::PositiveInt) | 0` é type error.
+/// DoD 5 (erro): `Some(5::PositiveInt) | 0` é type error.
 /// O fallback `0` falha o predicado `> _ 0` — 0 não é positivo.
 #[test]
 fn dod5_pipe_fallback_coercao_refined_falha() {
-    let src = "data (Int, > _ 0) as PositiveInt\nOptional::Some(5::PositiveInt) | 0";
+    let src = "data (Int, > _ 0) as PositiveInt\nSome(5::PositiveInt) | 0";
     assert!(
         infer_fails(src),
-        "Optional::Some(5::PositiveInt) | 0 deve falhar (predicado > _ 0 não satisfeito)"
+        "Some(5::PositiveInt) | 0 deve falhar (predicado > _ 0 não satisfeito)"
     );
 }
 
-/// DoD 5 (fallback sem refined): `Optional::Some(42) | 0` funciona normalmente.
+/// DoD 5 (fallback sem refined): `Some(42) | 0` funciona normalmente.
 /// Sem refined type no payload, o `|` funciona como antes — sem coerção.
 #[test]
 fn dod5_pipe_fallback_sem_refined_funciona() {
-    let src = "Optional::Some(42) | 0";
+    let src = "Some(42) | 0";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::int());
     assert_eq!(untag_smi(raw), 42);
 }
 
-/// DoD 5 (None): `Optional::None | 42` → 42 (fallback).
+/// DoD 5 (None): `None | 42` → 42 (fallback).
 #[test]
 fn dod5_pipe_fallback_none_retorna_fallback() {
-    let src = "Optional::None | 42";
+    let src = "None | 42";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::int());
     assert_eq!(untag_smi(raw), 42);

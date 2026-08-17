@@ -120,11 +120,11 @@ abs (- 0 5)";
 
 // ── Match Boolean ───────────────────────────────────────────────
 
-/// `match Boolean::True` com braços `True: 1` e `False: 0` → 1
+/// `match True` com braços `True: 1` e `False: 0` → 1
 #[test]
 fn match_boolean_true() {
     let src = "\
-match Boolean::True\n\
+match True\n\
 \x20   True: 1\n\
 \x20   False: 0";
     let (raw, ty) = eval_src(src);
@@ -132,11 +132,11 @@ match Boolean::True\n\
     assert_eq!(untag_smi(raw), 1, "match True deve ser 1");
 }
 
-/// `match Boolean::False` com braços `True: 1` e `False: 0` → 0
+/// `match False` com braços `True: 1` e `False: 0` → 0
 #[test]
 fn match_boolean_false() {
     let src = "\
-match Boolean::False\n\
+match False\n\
 \x20   True: 1\n\
 \x20   False: 0";
     let (raw, ty) = eval_src(src);

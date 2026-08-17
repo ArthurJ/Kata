@@ -59,19 +59,19 @@ fn eval_src(src: &str) -> (i64, Ty) {
 }
 
 // Caso A: let na mesma linha do pattern (body = let inline)
-//   Result::Ok h: let x := 1; + x 1
+//   Ok h: let x := 1; + x 1
 // Isso funciona? let é uma expressão que retorna o valor?
 
 // Caso B: let em match arm body indentado
 #[test]
 fn let_in_match_arm_indented() {
     let src = r#"action main => Int
-  let r := Result::Ok(42)
+  let r := Ok(42)
   match r
-    Result::Ok h:
+    Ok h:
       let x := 10
       + x h
-    Result::Err _: 0
+    Err _: 0
 main!()"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::int());
@@ -82,11 +82,11 @@ main!()"#;
 #[test]
 fn let_in_match_arm_same_line() {
     let src = r#"action main => Int
-  let r := Result::Ok(42)
+  let r := Ok(42)
   match r
-    Result::Ok h: let x := 10
+    Ok h: let x := 10
       + x h
-    Result::Err _: 0
+    Err _: 0
 main!()"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::int());

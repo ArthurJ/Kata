@@ -223,4 +223,41 @@ pub enum MiddleError {
         #[label("expressão impura")]
         span: MietteSpan,
     },
+
+    /// `extends` referencia um enum `final` — não pode ser estendido.
+    #[error("enum `{base_name}` é final — não pode ser estendido")]
+    #[diagnostic(code = "type.enum_final_extend")]
+    EnumFinalExtend {
+        base_name: String,
+        #[label("enum base é final")]
+        span: MietteSpan,
+    },
+
+    /// `extends` referencia um enum que não existe no escopo.
+    #[error("enum base `{base_name}` não encontrado")]
+    #[diagnostic(code = "type.enum_base_unbound")]
+    EnumBaseUnbound {
+        base_name: String,
+        #[label("enum base desconhecido")]
+        span: MietteSpan,
+    },
+
+    /// `extends` tenta redefinir variante herdada do enum base.
+    #[error("variante `{variant}` já existe no enum base `{base_name}` — não pode ser redefinida")]
+    #[diagnostic(code = "type.enum_variant_redef")]
+    EnumVariantRedef {
+        variant: String,
+        base_name: String,
+        #[label("variante redefinida")]
+        span: MietteSpan,
+    },
+
+    /// `extends` forma um ciclo (A extends B extends A).
+    #[error("ciclo de extends detectado: {cycle}")]
+    #[diagnostic(code = "type.enum_extends_cycle")]
+    EnumExtendsCycle {
+        cycle: String,
+        #[label("ciclo de extends")]
+        span: MietteSpan,
+    },
 }

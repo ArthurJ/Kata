@@ -211,8 +211,8 @@ action worker_b (n :: Int) => Unit
 action main => Unit
     let cond := True
     let f := match cond
-        Boolean::True: worker_a
-        Boolean::False: worker_b
+        True: worker_a
+        False: worker_b
     f!(42)
 
 main!()"#;

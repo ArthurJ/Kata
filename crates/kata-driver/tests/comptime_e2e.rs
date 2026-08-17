@@ -288,47 +288,47 @@ fn comptime_tuple_index_access() {
     );
 }
 
-/// `@comptime Result::Ok 42` + match → 42. Sum com payload Int
+/// `@comptime Ok 42` + match → 42. Sum com payload Int
 /// (SMI) serializado via snapshot, desempacotado por match.
 #[test]
 fn comptime_sum_int_match() {
-    let src = "constant r := Result::Ok 42\nmatch r\n    Result::Ok v: v\n    Result::Err e: 0";
+    let src = "constant r := Ok 42\nmatch r\n    Ok v: v\n    Err e: 0";
     let (stdout, stderr, code) = run_kata_run(src);
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     let first = stdout.lines().next().unwrap_or("");
     assert_eq!(
         first, "42",
-        "match @comptime Result::Ok 42 deve produzir 42 — stdout: {stdout}"
+        "match @comptime Ok 42 deve produzir 42 — stdout: {stdout}"
     );
 }
 
-/// `@comptime Result::Err "fail"` + match → `fail`. Sum com payload
+/// `@comptime Err "fail"` + match → `fail`. Sum com payload
 /// Text. O payload é copiado como ponteiro cru no serializer atual;
 /// funciona porque a arena comptime sobrevive até o fim do processo.
 #[test]
 fn comptime_sum_text_match() {
     let src =
-        "constant r := Result::Err \"fail\"\nmatch r\n    Result::Ok v: v\n    Result::Err e: e";
+        "constant r := Err \"fail\"\nmatch r\n    Ok v: v\n    Err e: e";
     let (stdout, stderr, code) = run_kata_run(src);
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     let first = stdout.lines().next().unwrap_or("");
     assert_eq!(
         first, "fail",
-        "match @comptime Result::Err \"fail\" deve imprimir fail — stdout: {stdout}"
+        "match @comptime Err \"fail\" deve imprimir fail — stdout: {stdout}"
     );
 }
 
-/// `len e` no match de `@comptime Result::Err "fail"` → 4.
+/// `len e` no match de `@comptime Err "fail"` → 4.
 /// Exercita Text como payload de Sum acessado por `len`.
 #[test]
 fn comptime_sum_text_match_len() {
-    let src = "constant r := Result::Err \"fail\"\nmatch r\n    Result::Ok v: v\n    Result::Err e: len e";
+    let src = "constant r := Err \"fail\"\nmatch r\n    Ok v: v\n    Err e: len e";
     let (stdout, stderr, code) = run_kata_run(src);
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     let first = stdout.lines().next().unwrap_or("");
     assert_eq!(
         first, "4",
-        "len e de @comptime Result::Err \"fail\" deve ser 4 — stdout: {stdout}"
+        "len e de @comptime Err \"fail\" deve ser 4 — stdout: {stdout}"
     );
 }
 

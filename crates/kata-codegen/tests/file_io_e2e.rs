@@ -116,14 +116,14 @@ fn file_open_read_bytes() {
         r#"action read_bytes_len (h::File) => Int
   let content := read!(h)
   match content
-    Result::Ok bytes: len bytes
-    Result::Err _: -1
+    Ok bytes: len bytes
+    Err _: -1
 
 action main => Int
   let f := open!("{path}", FileMode::Read)
   match f
-    Result::Ok handle: read_bytes_len!(handle)
-    Result::Err _: -2
+    Ok handle: read_bytes_len!(handle)
+    Err _: -2
 main!()"#
     );
     let (raw, ty) = eval_src(&src);
@@ -145,14 +145,14 @@ fn file_open_readline_text() {
         r#"action readline_len (h::File) => Int
   let line := readline!(h)
   match line
-    Result::Ok text: len text
-    Result::Err _: -1
+    Ok text: len text
+    Err _: -1
 
 action main => Int
   let f := open!("{path}", FileMode::Read)
   match f
-    Result::Ok handle: readline_len!(handle)
-    Result::Err _: -2
+    Ok handle: readline_len!(handle)
+    Err _: -2
 main!()"#
     );
     let (raw, ty) = eval_src(&src);
@@ -185,10 +185,10 @@ fn file_write_read_roundtrip() {
         r#"action read_back (p::Text) => Int
   let f2 := open!(p, FileMode::Read)
   match f2
-    Result::Ok h2: match (read!(h2))
-      Result::Ok bytes: len bytes
-      Result::Err _: -1
-    Result::Err _: -2
+    Ok h2: match (read!(h2))
+      Ok bytes: len bytes
+      Err _: -1
+    Err _: -2
 
 action do_write (h::File, p::Text) => Int
   let _ := write!(h, "test content")
@@ -198,8 +198,8 @@ action do_write (h::File, p::Text) => Int
 action main => Int
   let f := open!("{path}", FileMode::Write)
   match f
-    Result::Ok handle: do_write!(handle, "{path}")
-    Result::Err _: -3
+    Ok handle: do_write!(handle, "{path}")
+    Err _: -3
 main!()"#
     );
     let (raw, ty) = eval_src(&src);
@@ -221,8 +221,8 @@ fn file_create_falha_se_existe() {
         r#"action main => Int
   let f := open!("{path}", FileMode::Create)
   match f
-    Result::Ok _: 0
-    Result::Err _: -1
+    Ok _: 0
+    Err _: -1
 main!()"#
     );
     let (raw, ty) = eval_src(&src);
@@ -259,8 +259,8 @@ fn file_create_sucesso_se_nao_existe() {
 action main => Int
   let f := open!("{path}", FileMode::Create)
   match f
-    Result::Ok handle: close_and_one!(handle)
-    Result::Err _: -1
+    Ok handle: close_and_one!(handle)
+    Err _: -1
 main!()"#
     );
     let (raw, ty) = eval_src(&src);
@@ -293,10 +293,10 @@ fn file_echo_writes_show_plus_newline() {
         r#"action read_back (p::Text) => Int
   let f2 := open!(p, FileMode::Read)
   match f2
-    Result::Ok h2: match (read!(h2))
-      Result::Ok bytes: len bytes
-      Result::Err _: -1
-    Result::Err _: -2
+    Ok h2: match (read!(h2))
+      Ok bytes: len bytes
+      Err _: -1
+    Err _: -2
 
 action do_echo (h::File, p::Text) => Int
   echo!(42, h)
@@ -306,8 +306,8 @@ action do_echo (h::File, p::Text) => Int
 action main => Int
   let f := open!("{path}", FileMode::Write)
   match f
-    Result::Ok handle: do_echo!(handle, "{path}")
-    Result::Err _: -3
+    Ok handle: do_echo!(handle, "{path}")
+    Err _: -3
 main!()"#
     );
     let (raw, ty) = eval_src(&src);
@@ -328,8 +328,8 @@ fn file_open_inexistente_retorna_err() {
     let src = r#"action main => Int
   let f := open!("/tmp/kata_nao_existe_99999.txt", FileMode::Read)
   match f
-    Result::Ok _: 0
-    Result::Err _: -1
+    Ok _: 0
+    Err _: -1
 main!()"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::int(), "deve retornar Int");
@@ -360,20 +360,20 @@ fn file_read_chunk_streaming() {
 action read_all_chunks (h::File) => Int
   let c1 := read!(h, 4096)
   match c1
-    Result::Ok b1: match (read!(h, 4096))
-      Result::Ok b2: match (read!(h, 4096))
-        Result::Ok b3: match (read!(h, 4096))
-          Result::Ok _: -10
-          Result::Err _: sum3!(len b1, len b2, len b3)
-        Result::Err _: -9
-      Result::Err _: -8
-    Result::Err _: -7
+    Ok b1: match (read!(h, 4096))
+      Ok b2: match (read!(h, 4096))
+        Ok b3: match (read!(h, 4096))
+          Ok _: -10
+          Err _: sum3!(len b1, len b2, len b3)
+        Err _: -9
+      Err _: -8
+    Err _: -7
 
 action main => Int
   let f := open!("{path}", FileMode::Read)
   match f
-    Result::Ok handle: read_all_chunks!(handle)
-    Result::Err _: -3
+    Ok handle: read_all_chunks!(handle)
+    Err _: -3
 main!()"#
     );
     let (raw, ty) = eval_src(&src);
@@ -414,20 +414,20 @@ fn file_read_chunk_readline_intercalados() {
 action interleave (h::File) => Int
   let c1 := read!(h, 5)
   match c1
-    Result::Ok b1: match (readline!(h))
-      Result::Ok l1: match (read!(h, 5))
-        Result::Ok b2: match (read!(h, 1))
-          Result::Ok _: -10
-          Result::Err _: sum3!(len b1, len l1, len b2)
-        Result::Err _: -9
-      Result::Err _: -8
-    Result::Err _: -7
+    Ok b1: match (readline!(h))
+      Ok l1: match (read!(h, 5))
+        Ok b2: match (read!(h, 1))
+          Ok _: -10
+          Err _: sum3!(len b1, len l1, len b2)
+        Err _: -9
+      Err _: -8
+    Err _: -7
 
 action main => Int
   let f := open!("{path}", FileMode::Read)
   match f
-    Result::Ok handle: interleave!(handle)
-    Result::Err _: -3
+    Ok handle: interleave!(handle)
+    Err _: -3
 main!()"#
     );
     let (raw, ty) = eval_src(&src);
@@ -454,10 +454,10 @@ fn file_read_chunk_eof_imediato() {
         r#"action main => Int
   let f := open!("{path}", FileMode::Read)
   match f
-    Result::Ok handle: match (read!(handle, 100))
-      Result::Ok _: 0
-      Result::Err _: -1
-    Result::Err _: -3
+    Ok handle: match (read!(handle, 100))
+      Ok _: 0
+      Err _: -1
+    Err _: -3
 main!()"#
     );
     let (raw, ty) = eval_src(&src);

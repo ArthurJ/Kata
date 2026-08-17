@@ -147,41 +147,41 @@ fn type_of_unit() {
     assert_eq!(first, "Unit", "type!(()) deve imprimir \"Unit\"");
 }
 
-// ── DoD 8: type!(Boolean::True) retorna "Boolean" ─────────────────
+// ── DoD 8: type!(True) retorna "Boolean" ─────────────────
 
 #[test]
 fn type_of_boolean() {
     let first = build_and_get_first_line(
         "type_of_boolean",
-        "action main => Unit\n    echo!(type!(Boolean::True))\nmain!()",
+        "action main => Unit\n    echo!(type!(True))\nmain!()",
     );
     assert_eq!(
         first, "Boolean",
-        "type!(Boolean::True) deve imprimir \"Boolean\""
+        "type!(True) deve imprimir \"Boolean\""
     );
 }
 
-// ── DoD 9: type!(Optional::Some 42) retorna "Optional::Int" ────────
+// ── DoD 9: type!(Some 42) retorna "Optional::Int" ────────
 
 #[test]
 fn type_of_generic_one_param() {
     let first = build_and_get_first_line(
         "type_of_generic_one",
-        "action main => Unit\n    echo!(type!(Optional::Some 42))\nmain!()",
+        "action main => Unit\n    echo!(type!(Some 42))\nmain!()",
     );
     assert_eq!(
         first, "Optional::Int",
-        "type!(Optional::Some 42) deve imprimir \"Optional::Int\""
+        "type!(Some 42) deve imprimir \"Optional::Int\""
     );
 }
 
-// ── DoD 10: type!(Result::Ok 42) retorna "Result::(Int, Text)" ────
+// ── DoD 10: type!(Ok 42) retorna "Result::(Int, Text)" ────
 
-/// `type!(r)` onde `r := Result::Ok 42` → "Result::(Int, Text)".
+/// `type!(r)` onde `r := Ok 42` → "Result::(Int, Text)".
 /// O default `Err(E|Text)` do prelude preenche E|Text automaticamente.
 #[test]
 fn type_of_generic_two_params() {
-    let src = "action main => Unit\n    let r := Result::Ok 42\n    echo!(type!(r))\nmain!()";
+    let src = "action main => Unit\n    let r := Ok 42\n    echo!(type!(r))\nmain!()";
     let first = build_and_get_first_line("type_of_generic_two", src);
     assert_eq!(
         first, "Result::(Int, Text)",

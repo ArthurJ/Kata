@@ -83,8 +83,8 @@ fn stdio_file_stdin() {
 action main => Int
     let r := readline!(stdin!())
     match r
-        Result::Ok msg: echo!(msg, stdout!())
-        Result::Err _: echo!("erro", stdout!())
+        Ok msg: echo!(msg, stdout!())
+        Err _: echo!("erro", stdout!())
     0
 
 main!()"#,
@@ -179,8 +179,8 @@ fn stdio_stdin_write_erro() {
 action main => Int
     let r := write!(stdin!(), "msg")
     match r
-        Result::Ok _: echo!("ok", stdout!())
-        Result::Err e: echo!(e, stdout!())
+        Ok _: echo!("ok", stdout!())
+        Err e: echo!(e, stdout!())
     0
 
 main!()"#,
@@ -205,8 +205,8 @@ fn stdio_stdout_read_erro() {
 action main => Int
     let r := read!(stdout!())
     match r
-        Result::Ok _: echo!("ok", stdout!())
-        Result::Err e: echo!(e, stdout!())
+        Ok _: echo!("ok", stdout!())
+        Err e: echo!(e, stdout!())
     0
 
 main!()"#,
@@ -257,10 +257,10 @@ fn log_to_file_arquivo() {
 action main => Int
     let f := open!("/tmp/kata-driver-stdio-log-e2e/log_test_out.txt", FileMode::Write)
     match f
-        Result::Ok fh:
+        Ok fh:
             log!(LogLevel::Info, "arquivo-log", fh)
             close!(fh)
-        Result::Err _: echo!("erro-open", stdout!())
+        Err _: echo!("erro-open", stdout!())
     0
 
 main!()"#,
@@ -350,8 +350,8 @@ action processar (x::Int) => Int
 
 action consumir => Int
     match log_recv!("audit")
-        Result::Ok m: echo!(m, stdout!())
-        Result::Err _: echo!("erro-recv", stdout!())
+        Ok m: echo!(m, stdout!())
+        Err _: echo!("erro-recv", stdout!())
     0
 
 action main => Int
@@ -408,7 +408,7 @@ main!()"#,
 // ── 13. log_recv_result_ok — log_recv! retorna Ok(msg) ──
 
 /// `log_recv!("topic")` com mensagem disponível retorna `Ok(msg)`.
-/// O match em `Result::Ok` extrai a mensagem.
+/// O match em `Ok` extrai a mensagem.
 #[test]
 fn log_recv_result_ok() {
     let path = write_temp_kata(
@@ -420,8 +420,8 @@ action emitir => Unit
 
 action consumir => Int
     match log_recv!("test-ok")
-        Result::Ok m: echo!(m, stdout!())
-        Result::Err e: echo!("err: {e}", stdout!())
+        Ok m: echo!(m, stdout!())
+        Err e: echo!("err: {e}", stdout!())
     0
 
 action main => Int
@@ -451,8 +451,8 @@ fn log_recv_result_err() {
         r#"import stdio.(stdout)
 action consumir => Int
     match log_recv!("topico-inexistente")
-        Result::Ok m: echo!("ok: {m}", stdout!())
-        Result::Err e: echo!("err: {e}", stdout!())
+        Ok m: echo!("ok: {m}", stdout!())
+        Err e: echo!("err: {e}", stdout!())
     0
 
 action main => Int
@@ -511,8 +511,8 @@ action processar (x::Int) => Int
 
 action consumir => Int
     match log_recv!("coexist")
-        Result::Ok m: echo!(m, stdout!())
-        Result::Err _: echo!("erro-recv", stdout!())
+        Ok m: echo!(m, stdout!())
+        Err _: echo!("erro-recv", stdout!())
     0
 
 action main => Int
@@ -547,11 +547,11 @@ fn fiber_fecha_arquivo_sem_close() {
 action vazador => Unit
     let f := open!("/tmp/kata-driver-stdio-log-e2e/fase9_vazamento.txt", FileMode::Write)
     match f
-        Result::Ok fh:
+        Ok fh:
             write!(fh, "auto-fechado")
             # NÃO chama close!(fh) — try_destroy fecha automaticamente
             ()
-        Result::Err _: ()
+        Err _: ()
 
 action main => Int
     fork!(vazador, ())
@@ -560,13 +560,13 @@ action main => Int
     # Verificamos lendo o conteúdo de volta.
     let f2 := open!("/tmp/kata-driver-stdio-log-e2e/fase9_vazamento.txt", FileMode::Read)
     match f2
-        Result::Ok fh:
+        Ok fh:
             let r := readline!(fh)
             match r
-                Result::Ok txt: echo!(txt, stdout!())
-                Result::Err _: echo!("erro-read", stdout!())
+                Ok txt: echo!(txt, stdout!())
+                Err _: echo!("erro-read", stdout!())
             close!(fh)
-        Result::Err _: echo!("erro-open2", stdout!())
+        Err _: echo!("erro-open2", stdout!())
     0
 
 main!()"#,

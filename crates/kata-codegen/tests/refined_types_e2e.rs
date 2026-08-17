@@ -7,7 +7,7 @@
 //! - DoD 1: `5::PositiveInt` é `PositiveInt` direto (ascription-refined)
 //! - DoD 2: `(-5)::PositiveInt` é type error (predicado falha)
 //! - DoD 3: `PositiveInt 25 ?` desempacota (construtor falível + `?`)
-//! - DoD 4: `PositiveInt (-5)` retorna `Result::Err` (construtor falível)
+//! - DoD 4: `PositiveInt (-5)` retorna `Err` (construtor falível)
 
 use kata_codegen::{jit_eval, leak_rt_ptr};
 use kata_core::ty::{PrimTy, Ty};
@@ -152,34 +152,34 @@ fn ascription_refined_float_falha() {
     );
 }
 
-/// DoD 3: Smart constructor falível com valor válido retorna `Result::Ok`.
-/// `match PositiveInt 25 { Result::Ok v: v, Result::Err _: 42::PositiveInt }` → 25.
+/// DoD 3: Smart constructor falível com valor válido retorna `Ok`.
+/// `match PositiveInt 25 { Ok v: v, Err _: 42::PositiveInt }` → 25.
 /// Ambos os braços produzem `PositiveInt` — sem widening, o match exige
 /// o mesmo tipo em todos os braços.
 #[test]
 fn smart_constructor_falivel_ok_match_extrai_valor() {
-    let src = "data (Int, > _ 0) as PositiveInt\nmatch PositiveInt 25\n    Result::Ok v: v\n    Result::Err _: 42::PositiveInt";
+    let src = "data (Int, > _ 0) as PositiveInt\nmatch PositiveInt 25\n    Ok v: v\n    Err _: 42::PositiveInt";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Struct("PositiveInt".into()));
     assert_eq!(untag_smi(raw), 25);
 }
 
-/// DoD 4: Smart constructor falível com valor inválido retorna `Result::Err`.
-/// `match PositiveInt (-5) { Result::Ok v: v, Result::Err _: 42::PositiveInt }` → 42.
+/// DoD 4: Smart constructor falível com valor inválido retorna `Err`.
+/// `match PositiveInt (-5) { Ok v: v, Err _: 42::PositiveInt }` → 42.
 /// Ambos os braços produzem `PositiveInt`.
 #[test]
 fn smart_constructor_falivel_err_match_cai_no_fallback() {
-    let src = "data (Int, > _ 0) as PositiveInt\nmatch PositiveInt (-5)\n    Result::Ok v: v\n    Result::Err _: 42::PositiveInt";
+    let src = "data (Int, > _ 0) as PositiveInt\nmatch PositiveInt (-5)\n    Ok v: v\n    Err _: 42::PositiveInt";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Struct("PositiveInt".into()));
     assert_eq!(untag_smi(raw), 42);
 }
 
 /// Smart constructor falível com valor válido retorna Ok.
-/// `match PositiveInt 42 { Result::Ok v: v, Result::Err _: 42::PositiveInt }` → 42.
+/// `match PositiveInt 42 { Ok v: v, Err _: 42::PositiveInt }` → 42.
 #[test]
 fn smart_constructor_ok_retorna_tag_zero() {
-    let src = "data (Int, > _ 0) as PositiveInt\nmatch PositiveInt 42\n    Result::Ok v: v\n    Result::Err _: 42::PositiveInt";
+    let src = "data (Int, > _ 0) as PositiveInt\nmatch PositiveInt 42\n    Ok v: v\n    Err _: 42::PositiveInt";
     let (raw, _ty) = eval_src(src);
     assert_eq!(untag_smi(raw), 42);
 }

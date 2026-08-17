@@ -547,7 +547,7 @@ fn bytes_de_text_com_acento_retorna_5_bytes() {
     );
 }
 
-/// `text(b"Hello")` decodifica UTF-8 → Result::Ok("Hello").
+/// `text(b"Hello")` decodifica UTF-8 → Ok("Hello").
 /// Text é ponteiro — não podemos verificar conteúdo, apenas que não panica.
 #[test]
 fn text_de_bytes_retorna_result_ok() {

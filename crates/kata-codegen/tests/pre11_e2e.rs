@@ -117,14 +117,14 @@ add10 5";
 /// Sum result: não vaza na arena global.
 #[test]
 fn sum_result_em_funcao_pura_nao_vaza() {
-    let (val, _ty) = eval_src("Result::Ok 42");
+    let (val, _ty) = eval_src("Ok 42");
     assert!(val != 0, "sum box deve ser alocado (ptr != 0)");
 }
 
-/// Variante unitária de enum do usuário (Optional::None).
+/// Variante unitária de enum do usuário (None).
 #[test]
 fn variant_unitaria_nao_vaza() {
-    let (val, _ty) = eval_src("Optional::None");
+    let (val, _ty) = eval_src("None");
     assert!(val != 0, "sum box unitário deve ser alocado (ptr != 0)");
 }
 

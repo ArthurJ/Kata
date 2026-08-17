@@ -154,14 +154,14 @@ f!()"#;
 
 /// `?` em runtime desempacota Result. Se Ok, continua executando o body.
 /// Se Err, aborta a action com return Err. O `?` não é no-op em não-Result.
-/// Este teste verifica que `?` extrai o valor de `Result::Ok 42` e o
-/// body continua, retornando `Result::Ok 0`.
+/// Este teste verifica que `?` extrai o valor de `Ok 42` e o
+/// body continua, retornando `Ok 0`.
 #[test]
 fn t_question_runtime_desempacota_result() {
     let src = r#"action extrai => Result::(Int, Text)
-    let r := Result::Ok 42
+    let r := Ok 42
     r ?
-    Result::Ok 0
+    Ok 0
 extrai!()"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(
@@ -170,8 +170,8 @@ extrai!()"#;
             "Result".into(),
             vec![Ty::Prim(PrimTy::Int), Ty::Prim(PrimTy::Text)]
         ),
-        "? deve desempacotar Result::Ok e o body continua"
+        "? deve desempacotar Ok e o body continua"
     );
-    // Result::Ok 0 é um Sum (ponteiro), não SMI
+    // Ok 0 é um Sum (ponteiro), não SMI
     assert_eq!(raw & 1, 0, "esperado ponteiro (Sum), não SMI");
 }

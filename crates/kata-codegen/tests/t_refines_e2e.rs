@@ -312,7 +312,7 @@ PositiveInt refines NUM
     - :: PositiveInt PositiveInt => PositiveInt
     lambda a b:
         match (PositiveInt (- (a::Int) (b::Int)))
-            Result::Ok v: v
+            Ok v: v
             otherwise: 1::PositiveInt
 action sub_pos => Unit
     let a := 10::PositiveInt

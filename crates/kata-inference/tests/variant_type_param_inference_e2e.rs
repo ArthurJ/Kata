@@ -1,6 +1,6 @@
 //! Testes E2E de inferência bidirecional de type params em variants.
 //!
-//! Valida que a construção de variantes de enum genérico (ex: `Result::Ok`)
+//! Valida que a construção de variantes de enum genérico (ex: `Ok`)
 //! em funções nomeadas com assinatura que menciona o tipo completo
 //! (ex: `Result::(Int, Text)`) preenche os type params não-inferidos
 //! pelo payload da variante usando o tipo esperado do contexto.
@@ -81,7 +81,7 @@ fn find_function<'a>(
 
 // ── Ok em função nomeada: E não aparece no payload de Ok ──────────
 
-/// `ok_id :: Int => Result::(Int, Text)` com body `Result::Ok x`.
+/// `ok_id :: Int => Result::(Int, Text)` com body `Ok x`.
 ///
 /// Sem inferência bidirecional, `Ok x` infere `T=Int` mas `E` fica
 /// `Ty::Var("E")`. O typeck rejeitaria porque `Result::(Int, Var("E"))`
@@ -91,7 +91,7 @@ fn find_function<'a>(
 /// para a construção.
 #[test]
 fn ok_em_funcao_nomeada_preenche_e_do_hint() {
-    let src = "ok_id :: Int => Result::(Int, Text)\nlambda x: Result::Ok x\nok_id 42";
+    let src = "ok_id :: Int => Result::(Int, Text)\nlambda x: Ok x\nok_id 42";
     let tmod = infer_src(src);
     let func = find_function(&tmod, "ok_id");
     // O ret_ty da função é o da assinatura: Result::(Int, Text)
@@ -103,14 +103,14 @@ fn ok_em_funcao_nomeada_preenche_e_do_hint() {
 
 // ── Err em função nomeada: T não aparece no payload de Err ─────────
 
-/// `err_str :: Text => Result::(Int, Text)` com body `Result::Err msg`.
+/// `err_str :: Text => Result::(Int, Text)` com body `Err msg`.
 ///
 /// `Err msg` infere `E|Text` mas `T` fica `Ty::Var("T")`.
 /// O hint propaga `T=Int`.
 #[test]
 fn err_em_funcao_nomeada_preenche_t_do_hint() {
     let src =
-        "err_str :: Text => Result::(Int, Text)\nlambda msg: Result::Err msg\nerr_str \"erro\"";
+        "err_str :: Text => Result::(Int, Text)\nlambda msg: Err msg\nerr_str \"erro\"";
     let tmod = infer_src(src);
     let func = find_function(&tmod, "err_str");
     assert_eq!(
@@ -127,10 +127,10 @@ fn err_em_funcao_nomeada_preenche_t_do_hint() {
 /// O braço `Ok v` deve inferir `v: Int`. O braço `Err _` não acessa payload.
 #[test]
 fn match_com_scrutinee_tipado_resolve_type_args() {
-    // O entry point chama extract_ok com um Result::Ok 42.
-    // O argumento Result::Ok 42 sem hint tem E=Var("E"), mas o dispatch
+    // O entry point chama extract_ok com um Ok 42.
+    // O argumento Ok 42 sem hint tem E=Var("E"), mas o dispatch
     // de extract_ok espera Result::(Int, Text). Usa ascription para forçar.
-    let src = "extract_ok :: Result::(Int, Text) => Int\nlambda r: match r\n        Result::Ok v: v\n        Result::Err _: 0\nextract_ok ((Result::Ok 42)::Result::(Int, Text))";
+    let src = "extract_ok :: Result::(Int, Text) => Int\nlambda r: match r\n        Ok v: v\n        Err _: 0\nextract_ok ((Ok 42)::Result::(Int, Text))";
     let tmod = infer_src(src);
     let func = find_function(&tmod, "extract_ok");
     assert_eq!(func.ret_ty, Ty::int());
@@ -141,13 +141,13 @@ fn match_com_scrutinee_tipado_resolve_type_args() {
 /// `re_wrap :: Result::(Int, Text) => Result::(Int, Text)` com match
 /// onde cada arm constrói um variant do Result.
 ///
-/// O arm `Ok v` constrói `Result::Ok v` — `Ok` menciona `T` mas não `E`.
+/// O arm `Ok v` constrói `Ok v` — `Ok` menciona `T` mas não `E`.
 /// Sem propagação de hint para o match, `E` ficaria `Var("E")` dentro do arm.
 /// Com a correção, o hint `Result::(Int, Text)` é propagado para o body
 /// do arm e `E|Text` é preenchido.
 #[test]
 fn match_arm_construction_recebe_hint_do_contexto() {
-    let src = "re_wrap :: Result::(Int, Text) => Result::(Int, Text)\nlambda r: match r\n        Result::Ok v: Result::Ok v\n        Result::Err e: Result::Err e\nre_wrap ((Result::Ok 42)::Result::(Int, Text))";
+    let src = "re_wrap :: Result::(Int, Text) => Result::(Int, Text)\nlambda r: match r\n        Ok v: Ok v\n        Err e: Err e\nre_wrap ((Ok 42)::Result::(Int, Text))";
     let tmod = infer_src(src);
     let func = find_function(&tmod, "re_wrap");
     assert_eq!(
@@ -156,7 +156,7 @@ fn match_arm_construction_recebe_hint_do_contexto() {
     );
 }
 
-/// `lambda x: Result::Ok x` sem assinatura.
+/// `lambda x: Ok x` sem assinatura.
 ///
 /// Sem hint, `E` fica como `Ty::Var("E")`. Isto é aceitável —
 /// o lambda anônimo não tem assinatura para fornecer o tipo completo.
@@ -164,7 +164,7 @@ fn match_arm_construction_recebe_hint_do_contexto() {
 #[test]
 fn ok_sem_hint_deixa_e_como_var() {
     // Aplicar o lambda a um Int para ter um entry point tipável.
-    let src = "(lambda x: Result::Ok x) 42";
+    let src = "(lambda x: Ok x) 42";
     let tmod = infer_src(src);
     let entry = &tmod.entry.node;
     // O tipo do apply é o tipo de retorno do lambda: Result::(Int, Var("E"))
@@ -181,11 +181,11 @@ fn ok_sem_hint_deixa_e_como_var() {
 /// Match top-level (sem assinatura) onde arms têm informação complementar
 /// sobre type params DIFERENTES.
 ///
-/// Scrutinee: `Result::Ok 42` → `Generic("Result", [Int, Text])`.
+/// Scrutinee: `Ok 42` → `Generic("Result", [Int, Text])`.
 /// O default `Err(E|Text)` do prelude preenche E|Text automaticamente.
-/// Arm `Ok v`: constrói `Result::Ok v` → `Generic("Result", [Int, Text])`.
+/// Arm `Ok v`: constrói `Ok v` → `Generic("Result", [Int, Text])`.
 /// Arm `Err e`: `e` tem tipo `Text` (do default), constrói
-/// `Result::Err e` → `Generic("Result", [Var("T"), Text])`.
+/// `Err e` → `Generic("Result", [Var("T"), Text])`.
 ///
 /// Unificação recursiva: posição 0 Int vs Var("T") → Int.
 /// Posição 1 Text vs Text → Text.
@@ -193,7 +193,7 @@ fn ok_sem_hint_deixa_e_como_var() {
 #[test]
 fn match_arms_complementares_unificam_t_mas_e_fica_var() {
     let src =
-        "match (Result::Ok 42)\n    Result::Ok v: Result::Ok v\n    Result::Err e: Result::Err e";
+        "match (Ok 42)\n    Ok v: Ok v\n    Err e: Err e";
     let tmod = infer_src(src);
     let entry = &tmod.entry.node;
     // T é resolvido (Int) pela unificação entre arms.
@@ -205,18 +205,18 @@ fn match_arms_complementares_unificam_t_mas_e_fica_var() {
 }
 
 /// Match onde ambos os arms constroem Ok com tipos diferentes para T.
-/// O arm `Ok v` (v=42, Int) constrói `Result::Ok v` → T=Int.
-/// O arm `Err e` constrói `Result::Ok e` → T=tipo de e (Var("E") do scrutinee).
+/// O arm `Ok v` (v=42, Int) constrói `Ok v` → T=Int.
+/// O arm `Err e` constrói `Ok e` → T=tipo de e (Var("E") do scrutinee).
 /// Unificação: T=Int vs T=Var("E") → Int (Var aceita concreto).
 /// Não deve falhar — o Var do scrutinee é compatível com Int.
 #[test]
 fn match_arms_complementares_com_text_no_err() {
-    // Scrutinee: Result::Err "erro" → Generic("Result", [Var("T"), Text])
-    // Arm Ok v: v tem tipo Var("T"), constrói Result::Ok v → [Var("T"), Var("E")]
-    // Arm Err e: e tem tipo Text, constrói Result::Err e → [Var("T"), Text]
+    // Scrutinee: Err "erro" → Generic("Result", [Var("T"), Text])
+    // Arm Ok v: v tem tipo Var("T"), constrói Ok v → [Var("T"), Var("E")]
+    // Arm Err e: e tem tipo Text, constrói Err e → [Var("T"), Text]
     // Unificação: T: Var vs Var → Var; E: Var vs Text → Text
     // Resultado: Generic("Result", [Var("T"), Text])
-    let src = "match (Result::Err \"erro\")\n    Result::Ok v: Result::Ok v\n    Result::Err e: Result::Err e";
+    let src = "match (Err \"erro\")\n    Ok v: Ok v\n    Err e: Err e";
     let tmod = infer_src(src);
     let entry = &tmod.entry.node;
     assert_eq!(
@@ -229,7 +229,7 @@ fn match_arms_complementares_com_text_no_err() {
 /// Arm 1 retorna Result, arm 2 retorna Int. Deve falhar.
 #[test]
 fn match_arms_incompatíveis_deve_falhar() {
-    let src = "match (Result::Ok 42)\n    Result::Ok v: Result::Ok v\n    Result::Err _: 0";
+    let src = "match (Ok 42)\n    Ok v: Ok v\n    Err _: 0";
     let tokens = lex(src).unwrap();
     let module = parse(tokens).unwrap();
     let prelude = load_prelude().unwrap();

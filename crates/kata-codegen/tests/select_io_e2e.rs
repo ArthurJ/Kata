@@ -114,14 +114,14 @@ fn select_files_only() {
   let f1 := open!(p1, FileMode::Read)
   let f2 := open!(p2, FileMode::Read)
   match f1
-    Result::Ok h1:
+    Ok h1:
       match f2
-        Result::Ok h2:
+        Ok h2:
           select
             read!(h1, 100) !> chunk: 5
             read!(h2, 100) !> chunk: 6
-        Result::Err _: -4
-    Result::Err _: -3
+        Err _: -4
+    Err _: -3
 
 action main => Int
   open_and_select!("{path1}", "{path2}")
@@ -152,8 +152,8 @@ fn select_misto_channel_file() {
     let src = format!(
         r#"action chunk_len (r::Result::(Bytes, Text)) => Int
   match r
-    Result::Ok bytes: len bytes
-    Result::Err _: -1
+    Ok bytes: len bytes
+    Err _: -1
 
 action prod (ch::Sender::Int) => Unit
   ch <! 42
@@ -169,8 +169,8 @@ action main => Int
   fork!(prod, (tx))
   let f := open!("{path}", FileMode::Read)
   match f
-    Result::Ok h: do_select!(rx, h)
-    Result::Err _: -3
+    Ok h: do_select!(rx, h)
+    Err _: -3
 main!()"#
     );
     let (raw, ty) = eval_src(&src);
@@ -196,8 +196,8 @@ fn select_file_eof() {
     let src = format!(
         r#"action chunk_len (r::Result::(Bytes, Text)) => Int
   match r
-    Result::Ok bytes: len bytes
-    Result::Err _: -99
+    Ok bytes: len bytes
+    Err _: -99
 
 action do_select (h::File) => Int
   select
@@ -207,8 +207,8 @@ action do_select (h::File) => Int
 action main => Int
   let f := open!("{path}", FileMode::Read)
   match f
-    Result::Ok h: do_select!(h)
-    Result::Err _: -3
+    Ok h: do_select!(h)
+    Err _: -3
 main!()"#
     );
     let (raw, ty) = eval_src(&src);

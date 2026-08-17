@@ -312,7 +312,7 @@ fn infer_grouping_transparent() {
 
 #[test]
 fn infer_boolean_true() {
-    let tmod = infer_src("Boolean::True");
+    let tmod = infer_src("True");
     let entry = entry_typed(&tmod);
     assert_eq!(entry.ty, Ty::boolean());
     match &entry.kind {
@@ -328,7 +328,7 @@ fn infer_boolean_true() {
 
 #[test]
 fn infer_boolean_false() {
-    let tmod = infer_src("Boolean::False");
+    let tmod = infer_src("False");
     let entry = entry_typed(&tmod);
     assert_eq!(entry.ty, Ty::boolean());
 }

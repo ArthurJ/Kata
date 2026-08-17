@@ -56,11 +56,11 @@ fn panic_aborta_com_mensagem() {
     );
 }
 
-/// DoD 27: assert!(Boolean::False, "msg") aborta o processo.
+/// DoD 27: assert!(False, "msg") aborta o processo.
 /// O False desugara para panic!("msg").
 #[test]
 fn assert_false_aborta() {
-    let src = "action valida => Unit\n    assert!(Boolean::False, \"x deve ser positivo\")\n    echo!(\"nao chega\")\nvalida!()";
+    let src = "action valida => Unit\n    assert!(False, \"x deve ser positivo\")\n    echo!(\"nao chega\")\nvalida!()";
     let (stdout, stderr, code) = run_kata(src);
     assert_ne!(
         code, 0,
@@ -85,11 +85,11 @@ fn panic_imprime_mensagem_no_stderr() {
     );
 }
 
-/// DoD 27: assert!(Boolean::False, "msg") imprime a mensagem no stderr.
+/// DoD 27: assert!(False, "msg") imprime a mensagem no stderr.
 #[test]
 fn assert_false_imprime_mensagem_no_stderr() {
     let src =
-        "action valida => Unit\n    assert!(Boolean::False, \"x deve ser positivo\")\nvalida!()";
+        "action valida => Unit\n    assert!(False, \"x deve ser positivo\")\nvalida!()";
     let (_stdout, stderr, code) = run_kata(src);
     assert_ne!(code, 0, "deve abortar — code: {code}");
     assert!(

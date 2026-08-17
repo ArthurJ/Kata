@@ -5,7 +5,7 @@
 //! - `Result::(Int)` resolve para `Result::(Int, Text)` via default
 //! - `Result::(Int, MyError)` funciona com tipo customizado (não usa default)
 //! - `T?` desaçucar para `Result::(T)` e o default preenche `E|Text`
-//! - Construção `Result::Ok 42` sem hint produz `Result::(Int, Text)` via default
+//! - Construção `Ok 42` sem hint produz `Result::(Int, Text)` via default
 //! - Enum customizado do usuário com defaults (ex: `enum Config { Port(P|Int) }`)
 //! - `at` em Array/List/Text/Dict retorna `Result::A` — default preenche `E|Text`
 
@@ -91,16 +91,16 @@ fn untag_smi(raw: i64) -> i64 {
 // ── Result::(Int) na assinatura — default preenche E|Text ────────────
 
 /// `Result::(Int)` na assinatura de action deve resolver para `Result::(Int, Text)`
-/// via default. A action retorna `Result::Ok 42` e o match desempacota.
+/// via default. A action retorna `Ok 42` e o match desempacota.
 #[test]
 fn result_int_assinatura_resolve_default() {
     let src = r#"action faz_ok => Result::(Int)
-    Result::Ok 42
+    Ok 42
 
 action main => Int
     match (faz_ok!())
-        Result::Ok v: v
-        Result::Err _: 0
+        Ok v: v
+        Err _: 0
 
 main!()"#;
     let (raw, ty) = eval_src(src);
@@ -116,12 +116,12 @@ fn result_com_erro_customizado_nao_usa_default() {
     Code(Int)
 
 action faz_err => Result::(Int, MyError)
-    Result::Err (MyError::Code 99)
+    Err (MyError::Code 99)
 
 action main => Int
     match (faz_err!())
-        Result::Ok v: v
-        Result::Err e: match e
+        Ok v: v
+        Err e: match e
             MyError::Code c: c
 
 main!()"#;
@@ -137,11 +137,11 @@ main!()"#;
 #[test]
 fn question_mark_desempacota_result_com_default() {
     let src = r#"action faz_ok => Result::(Int, Text)
-    Result::Ok 42
+    Ok 42
 
 action main => Result::(Int, Text)
     let v := faz_ok!() ?
-    Result::Ok v
+    Ok v
 
 main!()"#;
     let (_, ty) = eval_src(src);
@@ -155,11 +155,11 @@ main!()"#;
 #[test]
 fn question_mark_com_result_1_arg_default() {
     let src = r#"action faz_ok => Result::(Int)
-    Result::Ok 42
+    Ok 42
 
 action main => Result::(Int)
     let v := faz_ok!() ?
-    Result::Ok v
+    Ok v
 
 main!()"#;
     let (_, ty) = eval_src(src);
@@ -171,13 +171,13 @@ main!()"#;
 
 // ── Construção sem hint — default preenche na construção do variant ──
 
-/// `Result::Ok 42` sem hint em match top-level.
+/// `Ok 42` sem hint em match top-level.
 /// O default `Err(E|Text)` preenche E|Text automaticamente.
 #[test]
 fn result_ok_sem_hint_preenche_default() {
-    let src = r#"match (Result::Ok 42)
-    Result::Ok v: v
-    Result::Err _: 0"#;
+    let src = r#"match (Ok 42)
+    Ok v: v
+    Err _: 0"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
     assert_eq!(untag_smi(raw), 42);
@@ -212,8 +212,8 @@ fn at_em_array_retorna_result_com_default() {
     let src = r#"action main => Int
     let arr := {10 20 30}
     match (at arr 0)
-        Result::Ok v: v
-        Result::Err _: 0
+        Ok v: v
+        Err _: 0
 
 main!()"#;
     let (raw, ty) = eval_src(src);

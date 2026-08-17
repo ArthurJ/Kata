@@ -82,48 +82,48 @@ fn untag_smi(raw: i64) -> i64 {
     raw >> 1
 }
 
-/// DoD 19: `Result::Ok 42` com Result do prelude (não definido pelo usuário).
+/// DoD 19: `Ok 42` com Result do prelude (não definido pelo usuário).
 /// O typeck infere T=Int do argumento e o default preenche E|Text.
 /// O arm Err precisa retornar Int (não e:Text) para unificar com Ok.
 #[test]
 fn result_ok_do_prelude() {
-    let src = r#"match Result::Ok 42
-    Result::Ok v: v
-    Result::Err e: 0"#;
+    let src = r#"match Ok 42
+    Ok v: v
+    Err e: 0"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
     assert_eq!(untag_smi(raw), 42);
 }
 
-/// DoD 19: `Result::Err 99` com Result do prelude.
+/// DoD 19: `Err 99` com Result do prelude.
 /// E=Int do argumento, T=Int do arm Ok.
 #[test]
 fn result_err_do_prelude() {
-    let src = r#"match Result::Err 99
-    Result::Ok v: v
-    Result::Err e: e"#;
+    let src = r#"match Err 99
+    Ok v: v
+    Err e: e"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
     assert_eq!(untag_smi(raw), 99);
 }
 
-/// DoD 19: `Optional::Some 42` com Optional do prelude.
+/// DoD 19: `Some 42` com Optional do prelude.
 #[test]
 fn optional_some_do_prelude() {
-    let src = r#"match Optional::Some 42
-    Optional::Some v: v
-    Optional::None: 0"#;
+    let src = r#"match Some 42
+    Some v: v
+    None: 0"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
     assert_eq!(untag_smi(raw), 42);
 }
 
-/// DoD 19: `Optional::None` — variante unitária de enum genérico do prelude.
+/// DoD 19: `None` — variante unitária de enum genérico do prelude.
 #[test]
 fn optional_none_do_prelude() {
-    let src = r#"match Optional::None
-    Optional::Some v: v
-    Optional::None: 0"#;
+    let src = r#"match None
+    Some v: v
+    None: 0"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
     assert_eq!(untag_smi(raw), 0);
@@ -133,9 +133,9 @@ fn optional_none_do_prelude() {
 /// Valida que T e E são inferidos independentemente.
 #[test]
 fn result_com_tipos_diferentes() {
-    let src = r#"match Result::Ok 42
-    Result::Ok v: v
-    Result::Err e: 0"#;
+    let src = r#"match Ok 42
+    Ok v: v
+    Err e: 0"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
     assert_eq!(untag_smi(raw), 42);
@@ -146,9 +146,9 @@ fn result_com_tipos_diferentes() {
 #[test]
 fn result_dentro_de_action() {
     let src = r#"action extrai_ok => Int
-    match Result::Ok 42
-        Result::Ok v: v
-        Result::Err e: 0
+    match Ok 42
+        Ok v: v
+        Err e: 0
 extrai_ok!()"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
@@ -159,9 +159,9 @@ extrai_ok!()"#;
 #[test]
 fn optional_none_dentro_de_action() {
     let src = r#"action extrai_optional => Int
-    match Optional::None
-        Optional::Some v: v
-        Optional::None: 0
+    match None
+        Some v: v
+        None: 0
 extrai_optional!()"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));

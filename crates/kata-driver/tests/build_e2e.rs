@@ -175,10 +175,10 @@ fn build_text_literal() {
 
 // ── Teste 4: Boolean (match) ─────────────────────────────────
 
-/// `match Boolean::True` com braços True: 1, False: 0 → 1.
+/// `match True` com braços True: 1, False: 0 → 1.
 #[test]
 fn build_boolean() {
-    let src = "match Boolean::True\n   True: 1\n   False: 0";
+    let src = "match True\n   True: 1\n   False: 0";
     let path = write_temp_kata("build_boolean", src);
     let (build_out, build_code) = run_kata_build(&path, "build_boolean_bin");
     assert_eq!(

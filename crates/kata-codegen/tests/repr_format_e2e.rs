@@ -119,7 +119,7 @@ fn repr_despacha_por_tipo() {
 #[test]
 fn repr_struct_com_boolean() {
     let src =
-        "data Flag (nome::Text ativa::Boolean)\nconstant f := Flag \"test\" Boolean::True\nshow f";
+        "data Flag (nome::Text ativa::Boolean)\nconstant f := Flag \"test\" True\nshow f";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::text());
     let _ = raw;
@@ -167,10 +167,10 @@ fn format_um_arg() {
     let _ = raw;
 }
 
-/// `format!("{}", (Boolean::True,))` — interpola Boolean.
+/// `format!("{}", (True,))` — interpola Boolean.
 #[test]
 fn format_boolean() {
-    let src = "format!(\"{}\", (Boolean::True,))";
+    let src = "format!(\"{}\", (True,))";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::text());
     let _ = raw;
