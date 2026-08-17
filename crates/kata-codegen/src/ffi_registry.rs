@@ -96,6 +96,18 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
     );
     builder.symbol("kata_rt_string_len", rt::kata_rt_string_len as *const u8);
     builder.symbol(
+        "kata_rt_string_eq",
+        rt::kata_rt_string_eq as *const u8,
+    );
+    builder.symbol(
+        "kata_rt_string_starts_with",
+        rt::kata_rt_string_starts_with as *const u8,
+    );
+    builder.symbol(
+        "kata_rt_string_contains",
+        rt::kata_rt_string_contains as *const u8,
+    );
+    builder.symbol(
         "kata_rt_text_literal",
         rt::kata_rt_text_literal as *const u8,
     );
@@ -597,8 +609,10 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         SetIntersection,
         SetDifference,
         DictMerge,
-        // String equality (Fio 13)
+        // String comparison (Fio 13 + expects)
         StringEq,
+        StringStartsWith,
+        StringContains,
         // Canais CSP
         ChannelCreate,
         QueueCreate,

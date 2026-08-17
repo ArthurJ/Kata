@@ -5,7 +5,9 @@
 
 use kata_ast::{Directive, DirectiveArg, Expr};
 
-use super::types::{DirectiveDef, DirectiveKey, Hook, ResolveError, Target, TestSpec, TimerSpec};
+use super::types::{
+    DirectiveDef, DirectiveKey, Hook, MatchPolicy, ResolveError, Target, TestSpec, TimerSpec,
+};
 
 /// Extrai as chaves dos args nomeados, excluindo `when` e `on` (metadados
 /// de despacho). Usado para construir `CustomDirectiveApp.arg_keys` no site
@@ -64,6 +66,7 @@ pub(crate) fn extract_test_specs(
             args: None,
             timeout: None,
             expects: None,
+            policy: None,
         };
         match d.args.as_slice() {
             // @test("desc") — forma curta: 1 posicional.
@@ -126,6 +129,33 @@ pub(crate) fn extract_test_specs(
                                         name: "test".into(),
                                         context: "action",
                                         item_name: format!("{action_name}: expects deve ser Text"),
+                                    });
+                                }
+                            }
+                            "policy" => {
+                                if let Expr::Ident { name } = &value.node {
+                                    spec.policy = Some(match name.as_str() {
+                                        "exact" => MatchPolicy::Exact,
+                                        "prefix" => MatchPolicy::Prefix,
+                                        "contains" => MatchPolicy::Contains,
+                                        _ => {
+                                            errors.push(ResolveError::UnknownDirective {
+                                                name: "test".into(),
+                                                context: "action",
+                                                item_name: format!(
+                                                    "{action_name}: policy deve ser exact, prefix, ou contains"
+                                                ),
+                                            });
+                                            continue;
+                                        }
+                                    });
+                                } else {
+                                    errors.push(ResolveError::UnknownDirective {
+                                        name: "test".into(),
+                                        context: "action",
+                                        item_name: format!(
+                                            "{action_name}: policy deve ser identificador (exact/prefix/contains)"
+                                        ),
                                     });
                                 }
                             }

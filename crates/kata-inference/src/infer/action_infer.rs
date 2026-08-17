@@ -12,7 +12,7 @@ use kata_diagnostics::{MiddleError, MietteSpan};
 use crate::desugar;
 use crate::typed::{TypedAction, TypedExpr, TypedExprKind, TypedTestSpec};
 
-use super::expr::{InferCtx, fits_return, infer_expr};
+use super::expr::{InferCtx, fits_return, infer_expr, infer_expr_hinted};
 use super::helpers::InferResult;
 
 /// Infere uma Action — produz `TypedAction` a partir de `ActionDef`.
@@ -62,12 +62,18 @@ pub(crate) fn infer_action(
         // Se o último statement tem `;`, não é retorno implícito.
         let tail_pos = is_last && !stmt.has_semicolon;
         let desugared = desugar::desugar(&stmt.expr);
-        let typed = infer_expr(
+        // Quando é o retorno implícito (tail_pos), passar o tipo de retorno
+        // declarado como hint. Isso permite inferência bidirecional top-down:
+        // construtores de variante genérica (ex: Result::Ok "x") usam o hint
+        // para preencher type params não-inferidos pelo payload (ex: E).
+        let hint = if tail_pos { Some(&expanded_ret) } else { None };
+        let typed = infer_expr_hinted(
             &desugared.node,
             &desugared.span,
             &mut action_env,
             ctx,
             tail_pos,
+            hint,
         )?;
         let is_return = matches!(typed.kind, TypedExprKind::Return(_));
         typed_body.push(Spanned::new(typed, stmt.expr.span));
@@ -143,7 +149,25 @@ pub(crate) fn infer_action(
             args: typed_args,
             timeout: spec.timeout,
             expects: spec.expects.clone(),
+            policy: spec.policy,
         });
+    }
+
+    // Validação: `expects` exige que o tipo de retorno da action seja
+    // `Result::(_, _)`. `expects` sem Result é erro de tipo — o usuário
+    // declara "espero erro" numa action que estruturalmente não pode
+    // retornar erro. Compile error é mais honesto que warning: não dá
+    // falsa sensação de segurança.
+    for spec in &typed_tests {
+        if spec.expects.is_some() && !is_result_type(&expanded_ret) {
+            return Err(MiddleError::TypeMismatch {
+                expected: format!(
+                    "Result::(T, E) — `expects` requer action que retorna Result"
+                ),
+                found: format!("{expanded_ret} — action não retorna Result"),
+                span: MietteSpan(kata_ast::Span::synthetic()),
+            });
+        }
     }
 
     Ok(TypedAction {
@@ -284,4 +308,10 @@ fn contains_channel_type(ty: &Ty) -> bool {
         | Ty::Socket
         | Ty::OverloadSet { .. } => false,
     }
+}
+
+/// Verifica se `ty` é `Ty::Generic("Result", [_, _])` — o tipo de retorno
+/// exigido por `@test{expects: ...}`.
+fn is_result_type(ty: &Ty) -> bool {
+    matches!(ty, Ty::Generic(name, args) if name == "Result" && args.len() >= 2)
 }

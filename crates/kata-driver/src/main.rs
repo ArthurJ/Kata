@@ -178,6 +178,7 @@ enum TestOutcome {
     Pass,
     Timeout,
     Deadlock,
+    Fail(String),
 }
 
 /// Executa o subcomando `kata test`.
@@ -246,6 +247,10 @@ fn cmd_test(path: &str, filter: Option<&str>) -> miette::Result<()> {
                     println!("  [DEADLOCK] {label}: {desc}");
                     total_fail += 1;
                 }
+                TestOutcome::Fail(msg) => {
+                    println!("  [FAIL] {label}: {desc}: {msg}");
+                    total_fail += 1;
+                }
             }
         }
     }
@@ -306,8 +311,23 @@ fn run_test_wrapper(
         TestOutcome::Timeout
     } else if result == rt::DEADLOCK_SENTINEL {
         TestOutcome::Deadlock
+    } else if w.spec.expects.is_some() {
+        // Wrapper com expects retorna status codes:
+        // 0 = pass (show(err) casou expects com policy)
+        // 1 = fail (show(err) não casou expects com policy)
+        // 2 = fail (action retornou Ok quando expects esperava Err)
+        match result {
+            0 => TestOutcome::Pass,
+            1 => TestOutcome::Fail(format!(
+                "expects mismatch: {} não casou com policy {:?}",
+                w.spec.expects.as_deref().unwrap_or(""),
+                w.spec.policy.unwrap_or(kata_resolution::MatchPolicy::Exact)
+            )),
+            2 => TestOutcome::Fail("expected Err, got Ok".into()),
+            _ => TestOutcome::Pass, // fallback gracioso
+        }
     } else {
-        // Sucesso — o valor retornado é o resultado da action.
+        // Sem expects — comportamento atual: pass se completa.
         TestOutcome::Pass
     }
 }

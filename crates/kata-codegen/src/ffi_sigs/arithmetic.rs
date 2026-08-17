@@ -155,11 +155,13 @@ pub(crate) fn sig_for(sym: FfiSymbol) -> Option<Signature> {
             sig.params.push(AbiParam::new(I64)); // replacement
             sig.returns.push(AbiParam::new(I64));
         }
-        // ── String equality (Fio 13) ──
+        // ── String comparison (Fio 13 + expects) ──
         // string_eq: (a, b) -> i64 (0/1)
-        FfiSymbol::StringEq => {
-            sig.params.push(AbiParam::new(I64)); // a (str ptr)
-            sig.params.push(AbiParam::new(I64)); // b (str ptr)
+        // string_starts_with: (haystack, needle) -> i64 (0/1)
+        // string_contains: (haystack, needle) -> i64 (0/1)
+        FfiSymbol::StringEq | FfiSymbol::StringStartsWith | FfiSymbol::StringContains => {
+            sig.params.push(AbiParam::new(I64)); // haystack/a (str ptr)
+            sig.params.push(AbiParam::new(I64)); // needle/b (str ptr)
             sig.returns.push(AbiParam::new(I64)); // bool (0/1)
         }
         _ => return None,

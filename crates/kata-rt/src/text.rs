@@ -70,6 +70,50 @@ pub extern "C" fn kata_rt_string_eq(a: i64, b: i64) -> i64 {
     if a_bytes == b_bytes { 1 } else { 0 }
 }
 
+/// Verifica se `haystack` começa com `needle`. Retorna 1 se verdadeiro, 0 se falso.
+///
+/// # Safety
+///
+/// `haystack` e `needle` são ponteiros i64 para C strings (nulo-terminadas) ou 0 (NULL).
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_string_starts_with(haystack: i64, needle: i64) -> i64 {
+    if needle == 0 {
+        return 1; // prefixo vazio sempre casa
+    }
+    if haystack == 0 {
+        return 0;
+    }
+    // SAFETY: caller (JIT codegen) garante ponteiros C string válidos.
+    let h = unsafe { std::ffi::CStr::from_ptr(haystack as *const std::os::raw::c_char).to_bytes() };
+    let n = unsafe { std::ffi::CStr::from_ptr(needle as *const std::os::raw::c_char).to_bytes() };
+    if h.starts_with(n) { 1 } else { 0 }
+}
+
+/// Verifica se `haystack` contém `needle` como substring. Retorna 1 se verdadeiro, 0 se falso.
+///
+/// # Safety
+///
+/// `haystack` e `needle` são ponteiros i64 para C strings (nulo-terminadas) ou 0 (NULL).
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_string_contains(haystack: i64, needle: i64) -> i64 {
+    if needle == 0 {
+        return 1; // substring vazia sempre está contida
+    }
+    if haystack == 0 {
+        return 0;
+    }
+    // SAFETY: caller (JIT codegen) garante ponteiros C string válidos.
+    let h = unsafe { std::ffi::CStr::from_ptr(haystack as *const std::os::raw::c_char).to_bytes() };
+    let n = unsafe { std::ffi::CStr::from_ptr(needle as *const std::os::raw::c_char).to_bytes() };
+    if n.is_empty() {
+        1
+    } else if h.windows(n.len()).any(|w| w == n) {
+        1
+    } else {
+        0
+    }
+}
+
 /// Substitui primeira ocorrência de `{}` por valor (para `format`).
 pub(crate) fn text_replace_first(template: &str, replacement: &str) -> String {
     if let Some(pos) = template.find("{}") {

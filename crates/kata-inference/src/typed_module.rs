@@ -123,4 +123,5 @@ pub struct TypedTestSpec {
     pub args: Option<Spanned<TypedExpr>>,
     pub timeout: Option<i64>,
     pub expects: Option<String>,
+    pub policy: Option<kata_resolution::MatchPolicy>,
 }

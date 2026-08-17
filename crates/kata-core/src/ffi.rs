@@ -203,9 +203,13 @@ pub enum FfiSymbol {
     /// `kata_rt_dict_merge(a, b, eq_fn, arena) -> i64` — merge right-biased.
     DictMerge,
 
-    // ── String equality (for Text keys in Dict/Set) ─────
+    // ── String comparison (for Text keys in Dict/Set + expects) ─────
     /// `kata_rt_string_eq(a, b) -> i64` — compara C strings por conteúdo.
     StringEq,
+    /// `kata_rt_string_starts_with(haystack, needle) -> i64` — prefix match.
+    StringStartsWith,
+    /// `kata_rt_string_contains(haystack, needle) -> i64` — substring match.
+    StringContains,
 
     // ── Canais CSP ────────────────────────────
     /// `kata_rt_channel_create(arena) -> i64` — canal rendezvous.
@@ -500,8 +504,10 @@ impl FfiSymbol {
             FfiSymbol::SetIntersection => "kata_rt_set_intersection",
             FfiSymbol::SetDifference => "kata_rt_set_difference",
             FfiSymbol::DictMerge => "kata_rt_dict_merge",
-            // String equality (Fio 13)
+            // String comparison (Fio 13 + expects)
             FfiSymbol::StringEq => "kata_rt_string_eq",
+            FfiSymbol::StringStartsWith => "kata_rt_string_starts_with",
+            FfiSymbol::StringContains => "kata_rt_string_contains",
             // Canais CSP
             FfiSymbol::ChannelCreate => "kata_rt_channel_create",
             FfiSymbol::QueueCreate => "kata_rt_queue_create",
@@ -694,8 +700,10 @@ impl FfiSymbol {
                 Ty::int()
             }
             FfiSymbol::DictMerge => Ty::int(),
-            // String equality (Fio 13) — retorna 0/1
-            FfiSymbol::StringEq => Ty::boolean(),
+            // String comparison (Fio 13 + expects) — retorna 0/1
+            FfiSymbol::StringEq | FfiSymbol::StringStartsWith | FfiSymbol::StringContains => {
+                Ty::boolean()
+            }
             // Canais CSP — handles são i64 (ponteiro+tag)
             FfiSymbol::ChannelCreate => Ty::int(),
             FfiSymbol::QueueCreate => Ty::int(),
@@ -896,8 +904,10 @@ impl FfiSymbol {
             FfiSymbol::SetIntersection,
             FfiSymbol::SetDifference,
             FfiSymbol::DictMerge,
-            // String equality (Fio 13)
+            // String comparison (Fio 13 + expects)
             FfiSymbol::StringEq,
+            FfiSymbol::StringStartsWith,
+            FfiSymbol::StringContains,
             // Canais CSP
             FfiSymbol::ChannelCreate,
             FfiSymbol::QueueCreate,

@@ -158,14 +158,29 @@ pub struct ActionDef {
 /// - `desc`: identificação do teste no relatório do driver.
 /// - `args`: argumentos literais para chamar a action (None = Unit).
 /// - `timeout`: timeout em ms para o runner (`kata_rt_set_test_timeout`).
-/// - `expects`: mensagem esperada de erro. Prefixo `"Panic:"` marca
-///   teste que espera panic em runtime — não implementado.
+/// - `expects`: string esperada do `show` do payload de `Result::Err`.
+///   Verificada pelo wrapper via `policy`. Se `None`, não verifica.
+/// - `policy`: política de match entre `show(err)` e `expects`.
+///   Default `Exact` quando `expects` está presente e `policy` é omitido.
 #[derive(Debug, Clone)]
 pub struct TestSpec {
     pub desc: Option<String>,
     pub args: Option<Spanned<Expr>>,
     pub timeout: Option<i64>,
     pub expects: Option<String>,
+    pub policy: Option<MatchPolicy>,
+}
+
+/// Política de match entre `show(err)` e a string `expects`.
+///
+/// - `Exact`: `show(err) == expects`
+/// - `Prefix`: `show(err).starts_with(expects)`
+/// - `Contains`: `show(err).contains(expects)`
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MatchPolicy {
+    Exact,
+    Prefix,
+    Contains,
 }
 
 /// Informação de um tipo refinado declarado pelo usuário.
