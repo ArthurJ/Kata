@@ -287,3 +287,100 @@ fn build_rational() {
     assert_eq!(code, 0, "binário AOT deve exit 0 — stdout: {stdout}");
     assert_eq!(stdout.trim(), "3.14", "rational deve imprimir 3.14");
 }
+
+// ── Teste 9: Range Int com step default ─────────────────────
+
+/// `[0..3]` com for-in → 0, 1, 2. Testa step default (STEPPABLE)
+/// para Int: step=1, exclusive.
+#[test]
+fn build_range_int_step_default() {
+    let src = "action main\n    for x in [0..3]\n        echo!(x)\nmain!()";
+    let path = write_temp_kata("build_range_int_step_default", src);
+    let (build_out, build_code) = run_kata_build(&path, "build_range_int_step_default_bin");
+    assert_eq!(
+        build_code, 0,
+        "kata build deve ter exit 0 — output: {build_out}"
+    );
+
+    let (stdout, code) = run_built_binary("build_range_int_step_default_bin");
+    assert_eq!(code, 0, "binário AOT deve exit 0 — stdout: {stdout}");
+    let lines: Vec<&str> = stdout
+        .trim()
+        .lines()
+        .filter(|l| *l != "()")
+        .collect();
+    assert_eq!(lines, vec!["0", "1", "2"], "range [0..3] deve iterar 0,1,2");
+}
+
+// ── Teste 10: Range Int com step default inclusive ───────────
+
+/// `[0..=3]` com for-in → 0, 1, 2, 3. Testa step default + inclusive.
+#[test]
+fn build_range_int_step_default_inclusive() {
+    let src = "action main\n    for x in [0..=3]\n        echo!(x)\nmain!()";
+    let path = write_temp_kata("build_range_int_step_default_inclusive", src);
+    let (build_out, build_code) =
+        run_kata_build(&path, "build_range_int_step_default_inclusive_bin");
+    assert_eq!(
+        build_code, 0,
+        "kata build deve ter exit 0 — output: {build_out}"
+    );
+
+    let (stdout, code) = run_built_binary("build_range_int_step_default_inclusive_bin");
+    assert_eq!(code, 0, "binário AOT deve exit 0 — stdout: {stdout}");
+    let lines: Vec<&str> = stdout.trim().lines().filter(|l| *l != "()").collect();
+    assert_eq!(
+        lines,
+        vec!["0", "1", "2", "3"],
+        "range [0..=3] deve iterar 0,1,2,3"
+    );
+}
+
+// ── Teste 11: Range Float com step explícito ─────────────────
+
+/// `[0.0..0.5..2.0]` com for-in → 0.0, 0.5, 1.0, 1.5. Testa
+/// codegen de Float no range: fcmp para condição de parada,
+/// fadd para avanço.
+#[test]
+fn build_range_float_explicit_step() {
+    let src = "action main\n    for x in [0.0..0.5..2.0]\n        echo!(x)\nmain!()";
+    let path = write_temp_kata("build_range_float_explicit_step", src);
+    let (build_out, build_code) = run_kata_build(&path, "build_range_float_explicit_step_bin");
+    assert_eq!(
+        build_code, 0,
+        "kata build deve ter exit 0 — output: {build_out}"
+    );
+
+    let (stdout, code) = run_built_binary("build_range_float_explicit_step_bin");
+    assert_eq!(code, 0, "binário AOT deve exit 0 — stdout: {stdout}");
+    let lines: Vec<&str> = stdout.trim().lines().filter(|l| *l != "()").collect();
+    assert_eq!(
+        lines,
+        vec!["0.0", "0.5", "1.0", "1.5"],
+        "range [0.0..0.5..2.0] deve iterar 0.0,0.5,1.0,1.5"
+    );
+}
+
+// ── Teste 12: Range Float com step default ───────────────────
+
+/// `[0.0..3.0]` com for-in → 0.0, 1.0, 2.0. Testa step default
+/// via STEPPABLE para Float: step=1.0, exclusive.
+#[test]
+fn build_range_float_step_default() {
+    let src = "action main\n    for x in [0.0..3.0]\n        echo!(x)\nmain!()";
+    let path = write_temp_kata("build_range_float_step_default", src);
+    let (build_out, build_code) = run_kata_build(&path, "build_range_float_step_default_bin");
+    assert_eq!(
+        build_code, 0,
+        "kata build deve ter exit 0 — output: {build_out}"
+    );
+
+    let (stdout, code) = run_built_binary("build_range_float_step_default_bin");
+    assert_eq!(code, 0, "binário AOT deve exit 0 — stdout: {stdout}");
+    let lines: Vec<&str> = stdout.trim().lines().filter(|l| *l != "()").collect();
+    assert_eq!(
+        lines,
+        vec!["0.0", "1.0", "2.0"],
+        "range [0.0..3.0] deve iterar 0.0,1.0,2.0"
+    );
+}

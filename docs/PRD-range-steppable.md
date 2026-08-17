@@ -1,7 +1,7 @@
 # PRD — Range Float + STEPPABLE + Default Methods
 
 **Data:** 2026-08-17
-**Status:** Planejamento
+**Status:** Concluído
 **Autor:** Arthur + Hermes
 
 ## Contexto
@@ -242,39 +242,43 @@ inclusive), sem ponteiros ou dispatch em runtime.
 
 ## Fases
 
-### Fase 1: Self substitution no monomorphizador
+### Fase 1: Self substitution no monomorphizador ✅
 
 - Monomorphizador substitui `Ty::Var("Self")` pelo tipo concreto ao
-  instanciar impls de interface
+  instanciar impls de interface (commit `e28f172`)
 - Testes: impl que usa `Self` no retorno produz tipo concreto correto
   na TAST monomorfizada
 
-### Fase 2: Default methods em interfaces
+### Fase 2: Default methods em interfaces ✅
 
-- AST: `InterfaceSig.default_body: Option<Vec<LambdaClause>>`
+- AST: `InterfaceSig.default_body: Option<Vec<Spanned<LambdaClause>>>`
 - Parser: após assinatura, se próximo token (após StmtSep) é `Lambda`,
   parseia corpo como default method — mesmo padrão de `implements`
 - Resolution: `InterfaceInfo` carrega default_body
 - Dispatch: fallback para default method quando impl não define
-- Testes: interface com default, tipo sem shadow usa default, tipo com
-  shadow usa próprio
+- Testes: 3 testes em `default_methods.rs` (commit `5fce36e`)
 
-### Fase 3: Interface STEPPABLE + step opcional
+### Fase 3: Interface STEPPABLE + step opcional ✅
 
-- Prelude: declarar `STEPPABLE` com `step` default
+- Prelude: `STEPPABLE` com default `step` (identidade) (commit `9314dab`)
 - Prelude: `Int implements STEPPABLE` com `step` retornando `1`
 - Prelude: `Float implements STEPPABLE` com `step` retornando `1.0`
-- Parser: step opcional em range (`[0..10]` = step default)
-- Typeck: `infer_range_lit` despacha `step` via STEPPABLE em compile-time
-  quando step está ausente, insere valor literal no TAST
-- Testes: `[0..10]` com Int (step 1), `[0.0..10.0]` com Float (step 1.0)
+- Parser: step opcional em range (`[0..10]` = step default via Hole)
+  (commit `1cd53b5`)
+- Typeck: `infer_range_lit` despacha `step` via STEPPABLE quando step é
+  Hole — insere literal no TAST (Int→1, Float→1.0) (commit `115dc61`)
+- Testes: 5 parser, 5 inferência
 
-### Fase 4: Codegen de Float no range
+### Fase 4: Codegen de Float no range ✅
 
-- `range_iter.rs`: despacha comparação por tipo (Int = icmp, Float =
-  float_cmp)
-- `kata_rt_range_alloc`: sem mudança (f64 também é 8 bytes)
-- Testes E2E: `[1.0..0.5..10.0]` produz iteração correta de floats
+- `range_iter.rs`: `range_done` despacha por `elem_ty` (Int=icmp,
+  Float=fcmp com FloatCC) (commit `7afaa7f`)
+- `range_iter.rs`: `range_advance` despacha por `elem_ty` (Int=iadd+SMI,
+  Float=fadd+bitcast)
+- 5 callers atualizados (map, filter, fused_stream, collections_hof,
+  for_in)
+- Testes E2E: 4 testes AOT em `build_e2e.rs` — Int/Float × step
+  default/explicit, inclusive
 
 ---
 
