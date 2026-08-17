@@ -243,7 +243,7 @@ pub(crate) fn lower_fold(
             ctx.builder.ins().jump(loop_block, &[]);
             ctx.builder.switch_to_block(loop_block);
             let current = ctx.builder.use_var(current_var);
-            let done = super::range_iter::range_done(coll_val, current, ctx);
+            let done = super::range_iter::range_done(coll_val, current, elem_ty, ctx);
             ctx.builder
                 .ins()
                 .brif(done, break_block, &[], continue_block, &[]);
@@ -255,10 +255,7 @@ pub(crate) fn lower_fold(
             let new_acc = call_callback(callback_val, &[acc, elem_val], &cb_params, &cb_ret, ctx)?;
             let new_acc = ensure_i64(ctx, new_acc);
             ctx.builder.def_var(acc_var, new_acc);
-            let step_val = ctx.builder.ins().load(I64, flags, coll_val, 8);
-            let next_raw = ctx.builder.ins().iadd(current, step_val);
-            // SMI fix: (a<<1|1) + (b<<1|1) = (a+b)<<1 | 2. Subtrair 1 restaura tag.
-            let next = ctx.builder.ins().iadd_imm(next_raw, -1);
+            let next = super::range_iter::range_advance(coll_val, current, elem_ty, ctx);
             ctx.builder.def_var(current_var, next);
             ctx.builder.ins().jump(loop_block, &[]);
 

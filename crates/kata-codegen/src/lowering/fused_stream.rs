@@ -215,7 +215,7 @@ pub(crate) fn lower_fused_stream(
             ctx.builder.ins().jump(loop_block, &[]);
             ctx.builder.switch_to_block(loop_block);
             let current = ctx.builder.use_var(current_var);
-            let done = super::range_iter::range_done(coll_val, current, ctx);
+            let done = super::range_iter::range_done(coll_val, current, source_elem_ty, ctx);
             ctx.builder
                 .ins()
                 .brif(done, break_block, &[], continue_block, &[]);
@@ -260,9 +260,7 @@ pub(crate) fn lower_fused_stream(
             ctx.builder.switch_to_block(after_cons);
             ctx.builder.seal_block(after_cons);
 
-            let step_val = ctx.builder.ins().load(I64, flags, coll_val, 8);
-            let next_raw = ctx.builder.ins().iadd(current, step_val);
-            let next = ctx.builder.ins().iadd_imm(next_raw, -1);
+            let next = super::range_iter::range_advance(coll_val, current, source_elem_ty, ctx);
             ctx.builder.def_var(current_var, next);
             ctx.builder.ins().jump(loop_block, &[]);
 

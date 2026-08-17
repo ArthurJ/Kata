@@ -177,6 +177,96 @@ fn dod26_range_lit_float() {
     assert_eq!(e.ty, Ty::Range(Box::new(Ty::float())));
 }
 
+// ── Step default: `[0..10]` infere Range(Int) com step=IntLit(1) ──
+
+#[test]
+fn range_step_default_int_infers_range_int() {
+    let typed = infer_src("[0..10]");
+    let e = entry(&typed);
+    assert!(
+        matches!(
+            &e.kind,
+            TypedExprKind::RangeLit {
+                inclusive: false,
+                elem_ty,
+                ..
+            } if *elem_ty == Ty::int()
+        ),
+        "entry deve ser RangeLit(Int, inclusive=false), encontrado {:?}",
+        e.kind
+    );
+    assert_eq!(e.ty, Ty::Range(Box::new(Ty::int())));
+}
+
+#[test]
+fn range_step_default_int_step_is_literal_one() {
+    // [0..10] deve ter step = IntLit { text: "1" } no TAST
+    let typed = infer_src("[0..10]");
+    let e = entry(&typed);
+    if let TypedExprKind::RangeLit { step, .. } = &e.kind {
+        assert!(
+            matches!(&step.node.kind, TypedExprKind::IntLit { text } if text == "1"),
+            "step deve ser IntLit(\"1\"), encontrado {:?}",
+            step.node.kind
+        );
+    } else {
+        panic!("expected RangeLit, got {:?}", e.kind);
+    }
+}
+
+#[test]
+fn range_step_default_inclusive_int() {
+    let typed = infer_src("[0..=10]");
+    let e = entry(&typed);
+    assert!(
+        matches!(
+            &e.kind,
+            TypedExprKind::RangeLit {
+                inclusive: true,
+                elem_ty,
+                ..
+            } if *elem_ty == Ty::int()
+        ),
+        "entry deve ser RangeLit(Int, inclusive=true), encontrado {:?}",
+        e.kind
+    );
+}
+
+#[test]
+fn range_step_default_float_infers_range_float() {
+    let typed = infer_src("[0.0..10.0]");
+    let e = entry(&typed);
+    assert!(
+        matches!(
+            &e.kind,
+            TypedExprKind::RangeLit {
+                inclusive: false,
+                elem_ty,
+                ..
+            } if *elem_ty == Ty::float()
+        ),
+        "entry deve ser RangeLit(Float, inclusive=false), encontrado {:?}",
+        e.kind
+    );
+    assert_eq!(e.ty, Ty::Range(Box::new(Ty::float())));
+}
+
+#[test]
+fn range_step_default_float_step_is_literal_one() {
+    // [0.0..10.0] deve ter step = FloatLit { text: "1.0" } no TAST
+    let typed = infer_src("[0.0..10.0]");
+    let e = entry(&typed);
+    if let TypedExprKind::RangeLit { step, .. } = &e.kind {
+        assert!(
+            matches!(&step.node.kind, TypedExprKind::FloatLit { text } if text == "1.0"),
+            "step deve ser FloatLit(\"1.0\"), encontrado {:?}",
+            step.node.kind
+        );
+    } else {
+        panic!("expected RangeLit, got {:?}", e.kind);
+    }
+}
+
 // ── DoD 27: `[]` infere `List(InferVar)` ──────────────────────────────
 
 #[test]

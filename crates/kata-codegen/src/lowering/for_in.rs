@@ -184,7 +184,7 @@ pub(crate) fn lower_for_in(
             let rt_val = ctx.rt.unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
             ctx.builder.ins().call(yc, &[rt_val]);
             let current = ctx.builder.use_var(current_var);
-            let done = super::range_iter::range_done(coll_val, current, ctx);
+            let done = super::range_iter::range_done(coll_val, current, var_ty, ctx);
             ctx.builder
                 .ins()
                 .brif(done, break_block, &[], continue_block, &[]);
@@ -206,10 +206,7 @@ pub(crate) fn lower_for_in(
             ctx.builder.def_var(elem_var, elem_val);
 
             // current += step
-            let step_val = ctx.builder.ins().load(I64, flags, coll_val, 8);
-            let next_raw = ctx.builder.ins().iadd(current, step_val);
-            // SMI fix: (a<<1|1) + (b<<1|1) = (a+b)<<1 | 2. Subtrair 1 restaura tag.
-            let next = ctx.builder.ins().iadd_imm(next_raw, -1);
+            let next = super::range_iter::range_advance(coll_val, current, var_ty, ctx);
             ctx.builder.def_var(current_var, next);
 
             for e in body {
