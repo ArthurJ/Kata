@@ -301,7 +301,6 @@ impl Pipeline {
             imported_directives,
             &prelude.interface_registry,
             &prelude.directive_registry,
-            &prelude.enum_registry,
         )
         .map_err(|e| {
             e.into_iter()
@@ -523,7 +522,6 @@ fn quick_resolve(
         imported_directives,
         &prelude.interface_registry,
         &prelude.directive_registry,
-        &prelude.enum_registry,
     )
     .map_err(|e| {
         e.into_iter()

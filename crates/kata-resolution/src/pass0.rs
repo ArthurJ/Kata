@@ -174,92 +174,8 @@ pub(crate) fn run_pass0(
                     );
                 }
             }
-            Item::EnumDecl {
-                name,
-                variants,
-                extends,
-                is_final,
-                ..
-            } => {
+            Item::EnumDecl { name, variants, .. } => {
                 type_env.define(name, Ty::Sum(name.clone()), origin);
-
-                // Se extends, fazer flattening recursivo com detecção de ciclo.
-                let inherited_variants = if let Some(base_name) = extends {
-                    // Detecção de ciclo: BFS no grafo de extends.
-                    let mut visited = std::collections::HashSet::new();
-                    visited.insert(name.clone());
-                    let mut chain = vec![name.clone()];
-
-                    let current_base = base_name.clone();
-                    let mut accumulated: Vec<kata_core::VariantInfo> = Vec::new();
-
-                    #[allow(clippy::never_loop)]
-                    loop {
-                        if !visited.insert(current_base.clone()) {
-                            // Ciclo detectado
-                            chain.push(current_base.clone());
-                            errors.push(ResolveError::EnumExtendsCycle {
-                                cycle: chain.join(" -> "),
-                                enum_name: name.clone(),
-                            });
-                            break;
-                        }
-                        chain.push(current_base.clone());
-
-                        // Buscar base no EnumRegistry.
-                        let base_variants = enum_registry.all_variants(&current_base);
-                        match base_variants {
-                            Some(vs) => {
-                                // Verificar se base é final.
-                                if enum_registry.is_final(&current_base) {
-                                    errors.push(ResolveError::EnumFinalExtend {
-                                        base_name: current_base.clone(),
-                                        enum_name: name.clone(),
-                                    });
-                                    break;
-                                }
-
-                                // Acumular variantes herdadas (na ordem: base primeiro).
-                                // Como iteramos de base → topo, prependemos.
-                                let vs_owned: Vec<kata_core::VariantInfo> = vs.to_vec();
-                                accumulated = vs_owned.into_iter().chain(accumulated).collect();
-
-                                // Verificar transitividade: o base também tem extends?
-                                // Para simplicidade, por ora não rastreamos extends no
-                                // EnumRegistry — o flattening já resolveu as variantes
-                                // do base quando ele foi registrado. Se o base tem
-                                // extends, suas variantes já incluem as herdadas.
-                                // Então basta um nível: as variantes do base já são
-                                // o union completo.
-                                break;
-                            }
-                            None => {
-                                errors.push(ResolveError::EnumBaseUnbound {
-                                    base_name: current_base.clone(),
-                                    enum_name: name.clone(),
-                                });
-                                break;
-                            }
-                        }
-                    }
-
-                    // Verificar colisão: variante própria que já existe nas herdadas.
-                    let inherited_names: std::collections::HashSet<&str> =
-                        accumulated.iter().map(|v| v.name.as_str()).collect();
-                    for v in variants.iter() {
-                        if inherited_names.contains(v.name.as_str()) {
-                            errors.push(ResolveError::EnumVariantRedef {
-                                variant: v.name.clone(),
-                                base_name: base_name.clone(),
-                                enum_name: name.clone(),
-                            });
-                        }
-                    }
-
-                    accumulated
-                } else {
-                    Vec::new()
-                };
 
                 // Cataloga variantes no EnumRegistry.
                 // Resolve payload types das variantes.
@@ -323,12 +239,7 @@ pub(crate) fn run_pass0(
                         })
                         .collect()
                 };
-
-                // Union: herdadas + próprias.
-                let all_variants: Vec<kata_core::VariantInfo> = inherited_variants
-                    .into_iter()
-                    .chain(variant_infos.clone())
-                    .collect();
+                enum_registry.register(origin, name, variant_infos.clone());
 
                 // Se variantes têm payloads Ty::Var (type params),
                 // registrar como enum genérico. Coleta type params dos payloads.
@@ -361,15 +272,8 @@ pub(crate) fn run_pass0(
                         name,
                         type_params,
                         defaults,
-                        all_variants.clone(),
+                        variant_infos,
                     );
-                } else {
-                    enum_registry.register(origin, name, all_variants);
-                }
-
-                // Marcar como final se declarado com `final`.
-                if *is_final {
-                    enum_registry.mark_final(origin, name);
                 }
 
                 // Se tem variantes predicadas, guarda para o inference sintetizar

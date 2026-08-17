@@ -47,12 +47,6 @@ pub enum Item {
         name: String,
         variants: Vec<VariantDecl>,
         directives: Vec<Directive>,
-        /// `enum Nome extends Base` — nome do enum base cujas variantes
-        /// são herdadas (flattening em resolution-time). None = enum normal.
-        extends: Option<String>,
-        /// `final enum Nome` — bloqueia extensão por outros enums.
-        /// false = aberto (default), true = fechado.
-        is_final: bool,
     },
 
     // ── Aliases ──────────────────────────────────

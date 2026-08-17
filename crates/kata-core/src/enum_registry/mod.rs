@@ -46,8 +46,6 @@ pub struct EnumRegistry {
     /// Paralelo a `type_params`: `defaults[i]` é o default de `type_params[i]`.
     /// `None` = sem default (param obrigatório).
     defaults: HashMap<(String, String), Vec<Option<Ty>>>,
-    /// (origin, enum_name) → flag `final` (bloqueia extensão).
-    final_enums: HashSet<(String, String)>,
     /// enum_name → conjunto de origins que definem este enum.
     origins: HashMap<String, HashSet<String>>,
     /// Nomes ambíguos (definidos em múltiplas origins).
@@ -66,29 +64,6 @@ impl EnumRegistry {
         let key = (origin.to_string(), enum_name.to_string());
         self.variants.insert(key, variants);
         self.track_origin(enum_name, origin);
-    }
-
-    /// Marca um enum como `final` (não pode ser estendido).
-    pub fn mark_final(&mut self, origin: &str, enum_name: &str) {
-        self.final_enums
-            .insert((origin.to_string(), enum_name.to_string()));
-    }
-
-    /// Verifica se um enum é `final` (bloqueia extensão).
-    /// Usa `resolve_origin` para encontrar a origin.
-    pub fn is_final(&self, enum_name: &str) -> bool {
-        let origin = match self.resolve_origin(enum_name) {
-            Some(o) => o,
-            None => return false,
-        };
-        self.final_enums
-            .contains(&(origin.to_string(), enum_name.to_string()))
-    }
-
-    /// `is_final` com origin explícita.
-    pub fn is_final_with_origin(&self, origin: &str, enum_name: &str) -> bool {
-        self.final_enums
-            .contains(&(origin.to_string(), enum_name.to_string()))
     }
 
     /// Registra um enum genérico com type params e variantes.
@@ -517,7 +492,6 @@ impl EnumRegistry {
             let key = (origin, name);
             self.defaults.insert(key, defaults);
         }
-        self.final_enums.extend(other.final_enums);
     }
 
     /// Filtra enums mantendo apenas aqueles cujo nome está no `closure`
@@ -545,13 +519,7 @@ impl EnumRegistry {
                     .is_some_and(|origins| origins.contains("core"))
             }
         });
-        self.final_enums.retain(|(_origin, name)| {
-            closure.contains(name) || {
-                self.origins
-                    .get(name)
-                    .is_some_and(|origins| origins.contains("core"))
-            }
-        });
+
         // Reconstruir origins e ambiguous com base nos sobreviventes
         self.origins.clear();
         self.ambiguous.clear();

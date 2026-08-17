@@ -59,9 +59,7 @@ fn token_color(token: &Token) -> Option<&'static str> {
         | Token::Enum
         | Token::Alias
         | Token::Action
-        | Token::Directive
-        | Token::Final
-        | Token::Extends => Some(BOLD_CYAN),
+        | Token::Directive => Some(BOLD_CYAN),
 
         // ── Palavras-chave de controle ────────────────────
         Token::Match

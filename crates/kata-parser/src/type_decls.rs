@@ -208,7 +208,6 @@ impl Parser {
 
     pub(crate) fn parse_enum_decl(
         &mut self,
-        is_final: bool,
         directives: Vec<Directive>,
     ) -> Result<Item, FrontendError> {
         self.expect(&Token::Enum, "`enum`")?;
@@ -221,23 +220,6 @@ impl Parser {
                 n
             }
             _ => return Err(self.error("enum name after `enum`")),
-        };
-
-        // `enum Nome extends Base` — parsear extends opcional.
-        let extends = if matches!(self.peek(), Token::Extends) {
-            self.advance(); // consome `extends`
-            match self.peek() {
-                Token::Ident(s) => {
-                    let span = self.peek_span();
-                    let base = s.clone();
-                    self.advance();
-                    self.validate_name(&base, CasingPattern::PascalCase, span)?;
-                    Some(base)
-                }
-                _ => return Err(self.error("enum base name after `extends`")),
-            }
-        } else {
-            None
         };
 
         // Variants are in an INDENT..DEDENT block
@@ -317,8 +299,6 @@ impl Parser {
             name,
             variants,
             directives,
-            extends,
-            is_final,
         })
     }
 }

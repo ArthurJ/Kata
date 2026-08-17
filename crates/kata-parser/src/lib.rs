@@ -515,16 +515,12 @@ mod tests {
                 name,
                 variants,
                 directives,
-                extends,
-                is_final,
             } => {
                 assert_eq!(name, "Boolean");
                 assert_eq!(variants.len(), 2);
                 assert_eq!(variants[0].name, "True");
                 assert_eq!(variants[1].name, "False");
                 assert!(directives.is_empty());
-                assert!(extends.is_none());
-                assert!(!is_final);
             }
             other => panic!("expected EnumDecl, got {other:?}"),
         }

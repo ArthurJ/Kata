@@ -19,7 +19,7 @@ data Rational ()
 
 # ── Boolean ───────────────────────────────────────────────────
 
-final enum Boolean
+enum Boolean
     True
     False
 
@@ -27,11 +27,11 @@ final enum Boolean
 # Variantes com payload Ty::Var (UPPER_CASE) são detectadas pelo
 # resolution como type params → register_generic.
 
-final enum Result
+enum Result
     Ok(T)
     Err(E|Text)
 
-final enum Optional
+enum Optional
     Some(T)
     None
 

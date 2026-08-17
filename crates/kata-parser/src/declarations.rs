@@ -39,13 +39,7 @@ impl Parser {
                     items.push(Spanned::new(item, item_start));
                 }
                 Token::Enum => {
-                    let item = self.parse_enum_decl(false, directives)?;
-                    items.push(Spanned::new(item, item_start));
-                }
-                Token::Final => {
-                    // `final enum Nome` — consome `final`, espera `enum`.
-                    self.advance(); // consome Token::Final
-                    let item = self.parse_enum_decl(true, directives)?;
+                    let item = self.parse_enum_decl(directives)?;
                     items.push(Spanned::new(item, item_start));
                 }
                 Token::Alias => {
@@ -174,13 +168,7 @@ impl Parser {
                     items.push(Spanned::new(item, item_start));
                 }
                 Token::Enum => {
-                    let item = self.parse_enum_decl(false, directives)?;
-                    items.push(Spanned::new(item, item_start));
-                }
-                Token::Final => {
-                    // `final enum Nome` — consome `final`, espera `enum`.
-                    self.advance(); // consome Token::Final
-                    let item = self.parse_enum_decl(true, directives)?;
+                    let item = self.parse_enum_decl(directives)?;
                     items.push(Spanned::new(item, item_start));
                 }
                 Token::Alias => {
@@ -284,23 +272,14 @@ impl Parser {
                         self.sync_to_stmt_sep();
                     }
                 },
-                Token::Enum => match self.parse_enum_decl(false, directives) {
+                Token::Enum => match self.parse_enum_decl(directives) {
                     Ok(item) => items.push(Spanned::new(item, item_start)),
                     Err(e) => {
                         errors.push(e);
                         self.sync_to_stmt_sep();
                     }
                 },
-                Token::Final => {
-                    self.advance(); // consome `final`
-                    match self.parse_enum_decl(true, directives) {
-                        Ok(item) => items.push(Spanned::new(item, item_start)),
-                        Err(e) => {
-                            errors.push(e);
-                            self.sync_to_stmt_sep();
-                        }
-                    }
-                }
+
                 Token::Alias => match self.parse_alias_decl(directives) {
                     Ok(item) => items.push(Spanned::new(item, item_start)),
                     Err(e) => {

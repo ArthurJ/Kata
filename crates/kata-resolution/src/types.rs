@@ -261,35 +261,6 @@ pub enum ResolveError {
     #[diagnostic(code = "resolve.directive_any_conflict")]
     DirectiveAnyConflict { name: String, when: String },
 
-    /// `extends` referencia um enum `final` — não pode ser estendido.
-    #[error("enum `{base_name}` é final — não pode ser estendido")]
-    #[diagnostic(code = "resolve.enum_final_extend")]
-    EnumFinalExtend {
-        base_name: String,
-        enum_name: String,
-    },
-
-    /// `extends` referencia um enum que não existe no escopo.
-    #[error("enum base `{base_name}` não encontrado")]
-    #[diagnostic(code = "resolve.enum_base_unbound")]
-    EnumBaseUnbound {
-        base_name: String,
-        enum_name: String,
-    },
-
-    /// `extends` tenta redefinir variante herdada do enum base.
-    #[error("variante `{variant}` já existe no enum base `{base_name}` — não pode ser redefinida")]
-    #[diagnostic(code = "resolve.enum_variant_redef")]
-    EnumVariantRedef {
-        variant: String,
-        base_name: String,
-        enum_name: String,
-    },
-
-    /// `extends` forma um ciclo (A extends B extends A).
-    #[error("ciclo de extends detectado: {cycle}")]
-    #[diagnostic(code = "resolve.enum_extends_cycle")]
-    EnumExtendsCycle { cycle: String, enum_name: String },
 }
 
 /// Formata um `Vec<ResolveError>` como string legível (erros separados por `; `).

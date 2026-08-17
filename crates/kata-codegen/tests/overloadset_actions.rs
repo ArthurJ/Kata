@@ -27,7 +27,6 @@ fn eval_src(src: &str) -> (i64, Ty) {
         kata_resolution::DirectiveRegistry::new(),
         &prelude.interface_registry,
         &prelude.directive_registry,
-        &prelude.enum_registry,
     )
     .expect("resolve deve succeed");
     let resolved = merge_resolved(prelude, user);
