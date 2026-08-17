@@ -318,9 +318,9 @@ fn existing_directives_still_parse() {
 
 #[test]
 fn test_directive_negative_form() {
-    // @test{desc: "...", expects: "CompileError: msg"} — teste negativo
+    // @test{desc: "...", expects: "Panic: msg"} — teste que espera panic
     let m = parse_src(&format!(
-        "@test{{desc: \"espera erro\", expects: \"CompileError: type mismatch\"}}\n{ACTION_MIN}"
+        "@test{{desc: \"espera pânico\", expects: \"Panic: divisão por zero\"}}\n{ACTION_MIN}"
     ));
     let d = first_test_directive(&m);
     assert_eq!(d.args.len(), 2);
@@ -330,7 +330,7 @@ fn test_directive_negative_form() {
             assert_eq!(
                 value.node,
                 Expr::TextLit {
-                    text: "CompileError: type mismatch".into()
+                    text: "Panic: divisão por zero".into()
                 }
             );
         }

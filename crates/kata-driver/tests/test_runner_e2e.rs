@@ -9,8 +9,6 @@
 //! - `Unit` como Ident não é `Expr::Unit` — usar `()` (pitfall #45).
 //! - Panic detection sem catch_unwind: panic = SIGABRT, não capturável
 //!   (pitfall #38/#42). Teste de `expects: "Panic: msg"` adiado.
-//! - CompileError sub-módulos (C1) não implementados — `expects: "CompileError:"`
-//!   reporta `[PENDENTE]` e pula. Teste adiado.
 
 use std::fs;
 use std::process::Command;
@@ -249,11 +247,3 @@ soma!(1, 2)"#,
     assert_ne!(code, 139, "não deve ser SIGSEGV (exit 139) — code: {code}");
     assert_eq!(code, 1, "deve ser exit 1 (erro de codegen) — code: {code}");
 }
-
-/// `expects: "CompileError: msg"` exige que o driver compile um sub-módulo
-/// isolado e verifique que a inferência/codegen falha com o erro esperado.
-/// O design C1 (sub-módulos isolados) não tem fase atribuída — o driver
-/// atual reporta `[PENDENTE]` e pula. Ver handoff ponto de revisão 3.
-#[test]
-#[ignore = "sub-módulos isolados (C1) não implementados"]
-fn test_expects_compileerror_adiado() {}

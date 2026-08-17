@@ -11,9 +11,6 @@
 //! O runner (driver) faz `reset_scheduler` + `kata_rt_set_test_timeout(N)` +
 //! chama o wrapper. O wrapper é autossuficiente — não acopla o driver ao
 //! ABI interno das Actions.
-//!
-//! Testes negativos (`expects: "CompileError: ..."`) NÃO geram wrapper —
-//! o codegen pula a geração. O driver tenta compilar o sub-módulo isolado.
 
 use std::collections::HashMap;
 
@@ -44,9 +41,6 @@ pub struct TestWrapper {
 
 /// Gera wrappers `__kata_test_*` para todos os `@test` não-negativos.
 ///
-/// Negativos (`expects: "CompileError: ..."`) são pulados — o driver
-/// compila o sub-módulo isolado em vez de executar um wrapper.
-///
 /// Retorna a lista de wrappers gerados. Chamado por `lower_module` após
 /// declarar e definir Actions (para que `symbol_table` tenha os FuncIds).
 #[allow(clippy::too_many_arguments)]
@@ -65,19 +59,6 @@ pub(crate) fn generate_test_wrappers(
 
     for action in &typed.actions {
         for (test_index, spec) in action.tests.iter().enumerate() {
-            // Negativos (CompileError) não geram wrapper.
-            if let Some(expects) = &spec.expects
-                && expects.starts_with("CompileError:")
-            {
-                wrappers.push(TestWrapper {
-                    action_name: action.name.clone(),
-                    test_index,
-                    func_id: cranelift_module::FuncId::from_u32(0), // placeholder
-                    spec: spec.clone(),
-                });
-                continue;
-            }
-
             // Validação: action com params exige args no @test. Sem args,
             // o wrapper passa args_ptr = 0 (null) e a action lê params de
             // null → SIGSEGV em runtime. Falhar aqui com erro claro.

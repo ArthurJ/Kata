@@ -231,19 +231,6 @@ fn cmd_test(path: &str, filter: Option<&str>) -> miette::Result<()> {
                 continue;
             }
 
-            // Negativos CompileError não têm wrapper — não há nada para
-            // executar. O driver compila o sub-módulo isolado.
-            // Por ora, reporta como pendente.
-            if w.spec
-                .expects
-                .as_deref()
-                .is_some_and(|e| e.starts_with("CompileError:"))
-            {
-                println!("  [PENDENTE] {label}: {desc} (negativo CompileError)");
-                total_skip += 1;
-                continue;
-            }
-
             let outcome = run_test_wrapper(&jit_module, w, &type_shapes);
 
             match outcome {

@@ -8,21 +8,7 @@ Os docs `TODO-*.md` foram removidos (obsoletos ou resolvidos). Pendências vivem
 
 ## Débito Técnico
 
-### 1. `@test{expects: \"CompileError\"}` — execução não implementada
-
-**Estado:** Parser aceita, codegen cria placeholder, driver imprime `[PENDENTE]` e pula.
-
-**O que falta (design C1 — sub-módulos isolados):**
-1. Extrair o sub-módulo referenciado por `expects`
-2. Compilá-lo isoladamente (lex → parse → resolve → infer)
-3. Verificar que a compilação falha com o erro esperado (substring match)
-4. Reportar PASS se falhou com o erro esperado, FAIL se compilou ou falhou com erro diferente
-
-**Arquivos:** `crates/kata-driver/src/main.rs:234-242`, `crates/kata-codegen/src/lowering/test_runner.rs:68-72`, `crates/kata-driver/tests/test_runner_e2e.rs` (teste `#[ignore]`)
-
-**Impacto:** Médio. Testes negativos são silenciosamente pulados — o programador escreve o teste, o runner diz `[PENDENTE]`, mas a validação nunca acontece.
-
-### 2. `$` (Spread) — funcionalidade precisa de revisão
+### 1. `$` (Spread) — funcionalidade precisa de revisão
 
 **Estado:** Parcialmente implementado. `expand_spread()` em `variant_construct.rs`
 expande tupla literal em argumentos posicionais, mas só funciona quando o

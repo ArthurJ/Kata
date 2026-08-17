@@ -108,7 +108,7 @@ pub struct TypedAction {
     /// Body da Action (statements sequenciais).
     pub body: Vec<Spanned<TypedExpr>>,
     /// Casos de teste `@test` com args já tipados. O codegen gera
-    /// um wrapper por spec (exceto negativos CompileError).
+    /// um wrapper por spec.
     pub tests: Vec<TypedTestSpec>,
 }
 

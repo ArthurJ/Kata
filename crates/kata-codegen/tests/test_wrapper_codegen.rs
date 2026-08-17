@@ -3,8 +3,7 @@
 //! Pipeline completo: lex → parse → resolve → infer → optimize → codegen.
 //! Usa `jit_compile_tests` que compila sem executar e retorna
 //! `(JITModule, Vec<TestWrapper>)`. Verifica que os wrappers são
-//! gerados com a identidade semântica correta (action_name, test_index)
-//! e que negativos CompileError recebem func_id placeholder.
+//! gerados com a identidade semântica correta (action_name, test_index).
 
 use cranelift_module::FuncId;
 use kata_codegen::{TestWrapper, jit_compile_tests};
@@ -155,36 +154,7 @@ res!()"#;
     assert_eq!(w1.spec.desc.as_deref(), Some("caso 2"));
 }
 
-// ── Teste 4: @test com expects CompileError tem func_id placeholder ──
-
-/// Negativo `expects: "CompileError: ..."` não gera wrapper — func_id é
-/// `FuncId::from_u32(0)` (placeholder). O driver compila sub-módulo isolado.
-/// O módulo em si compila normalmente — a action é válida, o `expects`
-/// indica que um sub-módulo do teste deve falhar.
-#[test]
-fn test_wrapper_negativo_compileerror_placeholder() {
-    let src = r#"@test{desc: "tipo errado", expects: "CompileError: TypeMismatch"}
-action valida => Int
-    42
-valida!()"#;
-    let (_module, wrappers) = compile_tests(src);
-    assert_eq!(wrappers.len(), 1);
-
-    let w = find_wrapper(&wrappers, "valida", 0);
-    assert_eq!(
-        w.spec.expects.as_deref(),
-        Some("CompileError: TypeMismatch"),
-        "expects deve ter prefixo CompileError"
-    );
-    // func_id placeholder — não deve ser chamado pelo driver.
-    assert_eq!(
-        w.func_id,
-        FuncId::from_u32(0),
-        "negativo CompileError deve ter func_id placeholder"
-    );
-}
-
-// ── Teste 5: @test com timeout — spec carrega timeout ──
+// ── Teste 4: @test com timeout — spec carrega timeout ──
 
 /// `@test{timeout: 5000}` — spec tem timeout definido.
 #[test]
@@ -200,10 +170,9 @@ rapida!()"#;
     assert_eq!(w.spec.timeout, Some(5000), "timeout deve ser 5000");
 }
 
-// ── Teste 6: wrappers positivos têm func_id válido (não placeholder) ──
+// ── Teste 5: wrappers têm func_id válido ──
 
-/// Wrappers positivos (sem CompileError) devem ter func_id != placeholder.
-/// `FuncId::from_u32(0)` é reservado para negativos.
+/// Wrappers devem ter func_id != `FuncId::from_u32(0)`.
 #[test]
 fn test_wrapper_positivo_tem_func_id_valido() {
     let src = r#"@test("positivo")
