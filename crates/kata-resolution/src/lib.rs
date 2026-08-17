@@ -87,6 +87,7 @@ pub fn resolve_with_imports(
         imported_directives,
         kata_core::InterfaceRegistry::new(),
         &DirectiveRegistry::new(),
+        kata_core::EnumRegistry::new(),
     )
 }
 
@@ -109,6 +110,7 @@ pub fn resolve_with_prelude(
     imported_directives: DirectiveRegistry,
     prelude_iface_reg: &kata_core::InterfaceRegistry,
     prelude_directives: &DirectiveRegistry,
+    prelude_enum_registry: &kata_core::EnumRegistry,
 ) -> Result<ResolvedModule, Vec<ResolveError>> {
     resolve_inner(
         module,
@@ -116,6 +118,7 @@ pub fn resolve_with_prelude(
         imported_directives,
         prelude_iface_reg.clone(),
         prelude_directives,
+        prelude_enum_registry.clone(),
     )
 }
 
@@ -125,6 +128,7 @@ fn resolve_inner(
     imported_directives: DirectiveRegistry,
     prelude_iface_reg: kata_core::InterfaceRegistry,
     prelude_directives: &DirectiveRegistry,
+    prelude_enum_registry: kata_core::EnumRegistry,
 ) -> Result<ResolvedModule, Vec<ResolveError>> {
     let mut type_env = TypeEnv::new();
     // Unit é tipo primitivo da linguagem — sempre disponível no TypeEnv.
@@ -132,7 +136,9 @@ fn resolve_inner(
     let mut signatures: Vec<Signature> = Vec::new();
     let mut functions: Vec<FunctionDef> = Vec::new();
     let mut actions: Vec<ActionDef> = Vec::new();
-    let mut enum_registry = kata_core::EnumRegistry::new();
+    // Pré-popula com enums do prelude para que `extends Base` resolva
+    // enums do prelude (Boolean, Result, Optional, etc).
+    let mut enum_registry = prelude_enum_registry;
     let mut struct_registry = kata_core::StructRegistry::new();
     let mut refined_decls = Vec::new();
     let mut enum_pred_decls = Vec::new();
