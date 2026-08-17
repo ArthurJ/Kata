@@ -307,8 +307,7 @@ fn comptime_sum_int_match() {
 /// funciona porque a arena comptime sobrevive até o fim do processo.
 #[test]
 fn comptime_sum_text_match() {
-    let src =
-        "constant r := Err \"fail\"\nmatch r\n    Ok v: v\n    Err e: e";
+    let src = "constant r := Err \"fail\"\nmatch r\n    Ok v: v\n    Err e: e";
     let (stdout, stderr, code) = run_kata_run(src);
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     let first = stdout.lines().next().unwrap_or("");

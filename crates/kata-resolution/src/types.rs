@@ -264,12 +264,18 @@ pub enum ResolveError {
     /// `extends` referencia um enum `final` — não pode ser estendido.
     #[error("enum `{base_name}` é final — não pode ser estendido")]
     #[diagnostic(code = "resolve.enum_final_extend")]
-    EnumFinalExtend { base_name: String, enum_name: String },
+    EnumFinalExtend {
+        base_name: String,
+        enum_name: String,
+    },
 
     /// `extends` referencia um enum que não existe no escopo.
     #[error("enum base `{base_name}` não encontrado")]
     #[diagnostic(code = "resolve.enum_base_unbound")]
-    EnumBaseUnbound { base_name: String, enum_name: String },
+    EnumBaseUnbound {
+        base_name: String,
+        enum_name: String,
+    },
 
     /// `extends` tenta redefinir variante herdada do enum base.
     #[error("variante `{variant}` já existe no enum base `{base_name}` — não pode ser redefinida")]

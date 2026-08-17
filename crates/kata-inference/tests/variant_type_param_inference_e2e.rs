@@ -109,8 +109,7 @@ fn ok_em_funcao_nomeada_preenche_e_do_hint() {
 /// O hint propaga `T=Int`.
 #[test]
 fn err_em_funcao_nomeada_preenche_t_do_hint() {
-    let src =
-        "err_str :: Text => Result::(Int, Text)\nlambda msg: Err msg\nerr_str \"erro\"";
+    let src = "err_str :: Text => Result::(Int, Text)\nlambda msg: Err msg\nerr_str \"erro\"";
     let tmod = infer_src(src);
     let func = find_function(&tmod, "err_str");
     assert_eq!(
@@ -192,8 +191,7 @@ fn ok_sem_hint_deixa_e_como_var() {
 /// Resultado: `Generic("Result", [Int, Text])`.
 #[test]
 fn match_arms_complementares_unificam_t_mas_e_fica_var() {
-    let src =
-        "match (Ok 42)\n    Ok v: Ok v\n    Err e: Err e";
+    let src = "match (Ok 42)\n    Ok v: Ok v\n    Err e: Err e";
     let tmod = infer_src(src);
     let entry = &tmod.entry.node;
     // T é resolvido (Int) pela unificação entre arms.

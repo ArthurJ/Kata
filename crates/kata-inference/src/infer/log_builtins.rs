@@ -172,10 +172,7 @@ fn extract_tuple_elements(args: &Spanned<Expr>) -> Result<Vec<Spanned<Expr>>, Mi
 /// - `VariantConstruct` de LogLevel → tag em compile-time
 /// - `IntLit` → direto
 /// - `Int` → direto (fallback)
-fn resolve_log_level(
-    typed: &TypedExpr,
-    span: &kata_ast::Span,
-) -> Result<TypedExpr, MiddleError> {
+fn resolve_log_level(typed: &TypedExpr, span: &kata_ast::Span) -> Result<TypedExpr, MiddleError> {
     // Se já é IntLit, retorna.
     if let TypedExprKind::IntLit { .. } = &typed.kind {
         return Ok(typed.clone());

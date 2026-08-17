@@ -15,9 +15,7 @@ use kata_lexer::lex;
 use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
 use kata_parser::parse;
-use kata_resolution::{
-    load_prelude, resolve_with_prelude, ResolvedModule,
-};
+use kata_resolution::{ResolvedModule, load_prelude, resolve_with_prelude};
 use kata_tree_shaking::tree_shake;
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -263,14 +261,8 @@ enum Deriv extends Base
     let err = resolve_src(src);
     assert!(err.is_err(), "estender enum final deve falhar");
     let msg = err.unwrap_err();
-    assert!(
-        msg.contains("final"),
-        "erro deve mencionar final: {msg}"
-    );
-    assert!(
-        msg.contains("Base"),
-        "erro deve mencionar Base: {msg}"
-    );
+    assert!(msg.contains("final"), "erro deve mencionar final: {msg}");
+    assert!(msg.contains("Base"), "erro deve mencionar Base: {msg}");
 }
 
 /// Enums do prelude (Boolean, Result, Optional) são final.
@@ -282,10 +274,7 @@ fn prelude_boolean_is_final() {
     let err = resolve_src(src);
     assert!(err.is_err(), "estender Boolean (final) deve falhar");
     let msg = err.unwrap_err();
-    assert!(
-        msg.contains("final"),
-        "erro deve mencionar final: {msg}"
-    );
+    assert!(msg.contains("final"), "erro deve mencionar final: {msg}");
 }
 
 /// Estender Result (final) deve falhar.
@@ -296,10 +285,7 @@ fn prelude_result_is_final() {
     let err = resolve_src(src);
     assert!(err.is_err(), "estender Result (final) deve falhar");
     let msg = err.unwrap_err();
-    assert!(
-        msg.contains("final"),
-        "erro deve mencionar final: {msg}"
-    );
+    assert!(msg.contains("final"), "erro deve mencionar final: {msg}");
 }
 
 /// Estender Optional (final) deve falhar.
@@ -310,10 +296,7 @@ fn prelude_optional_is_final() {
     let err = resolve_src(src);
     assert!(err.is_err(), "estender Optional (final) deve falhar");
     let msg = err.unwrap_err();
-    assert!(
-        msg.contains("final"),
-        "erro deve mencionar final: {msg}"
-    );
+    assert!(msg.contains("final"), "erro deve mencionar final: {msg}");
 }
 
 // ── Redefinição de variante ───────────────────────────────────────

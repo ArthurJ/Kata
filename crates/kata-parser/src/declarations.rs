@@ -300,7 +300,7 @@ impl Parser {
                             self.sync_to_stmt_sep();
                         }
                     }
-                },
+                }
                 Token::Alias => match self.parse_alias_decl(directives) {
                     Ok(item) => items.push(Spanned::new(item, item_start)),
                     Err(e) => {

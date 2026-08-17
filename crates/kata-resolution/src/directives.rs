@@ -5,9 +5,7 @@
 
 use kata_ast::{Directive, DirectiveArg, Expr};
 
-use super::types::{
-    DirectiveDef, DirectiveKey, Hook, ResolveError, Target, TestSpec, TimerSpec,
-};
+use super::types::{DirectiveDef, DirectiveKey, Hook, ResolveError, Target, TestSpec, TimerSpec};
 
 /// Extrai as chaves dos args nomeados, excluindo `when` e `on` (metadados
 /// de despacho). Usado para construir `CustomDirectiveApp.arg_keys` no site

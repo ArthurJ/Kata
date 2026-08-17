@@ -425,7 +425,11 @@ fn bytes_and_broadcast_tamanho_do_maior() {
     let src = "len(and b\"\\xFF\\xF0\" b\"\\xAA\")";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::int());
-    assert_eq!(untag_smi(raw), 2, "broadcast: resultado tem tamanho do maior");
+    assert_eq!(
+        untag_smi(raw),
+        2,
+        "broadcast: resultado tem tamanho do maior"
+    );
 }
 
 /// `and b"\xFF\xF0" b"\xAA"` byte 1 = 0x00 (0xF0 AND 0x00 pad).

@@ -142,8 +142,7 @@ fn generic_const_float_int() {
 /// não é inferido por esta chamada.
 #[test]
 fn generic_result_type_param() {
-    let src =
-        "identity_result :: Result::(T, E) => Result::(T, E)\nidentity_result (Ok 42)";
+    let src = "identity_result :: Result::(T, E) => Result::(T, E)\nidentity_result (Ok 42)";
     let tmod = infer_src(src);
     let entry = entry_typed(&tmod);
     // T = Int (do payload), E não-inferido → mantém Var("E")

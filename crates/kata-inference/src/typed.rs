@@ -496,6 +496,4 @@ pub struct CaptureInfo {
 // Artefatos tipados de nível de módulo (TypedModule, TypedFunction,
 // TypedAction, TypedTestSpec) foram extraídos para
 // `typed_module.rs` — ver [`crate::typed_module`].
-pub use crate::typed_module::{
-    CacheSpec, TypedAction, TypedFunction, TypedModule, TypedTestSpec,
-};
+pub use crate::typed_module::{CacheSpec, TypedAction, TypedFunction, TypedModule, TypedTestSpec};

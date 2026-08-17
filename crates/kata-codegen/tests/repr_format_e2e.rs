@@ -118,8 +118,7 @@ fn repr_despacha_por_tipo() {
 /// `show` de struct com campo Boolean.
 #[test]
 fn repr_struct_com_boolean() {
-    let src =
-        "data Flag (nome::Text ativa::Boolean)\nconstant f := Flag \"test\" True\nshow f";
+    let src = "data Flag (nome::Text ativa::Boolean)\nconstant f := Flag \"test\" True\nshow f";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::text());
     let _ = raw;

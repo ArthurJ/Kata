@@ -155,10 +155,7 @@ fn type_of_boolean() {
         "type_of_boolean",
         "action main => Unit\n    echo!(type!(True))\nmain!()",
     );
-    assert_eq!(
-        first, "Boolean",
-        "type!(True) deve imprimir \"Boolean\""
-    );
+    assert_eq!(first, "Boolean", "type!(True) deve imprimir \"Boolean\"");
 }
 
 // ── DoD 9: type!(Some 42) retorna "Optional::Int" ────────
