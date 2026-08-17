@@ -545,7 +545,7 @@ impl EnumRegistry {
                     .is_some_and(|origins| origins.contains("core"))
             }
         });
-        self.final_enums.retain(|(origin, name)| {
+        self.final_enums.retain(|(_origin, name)| {
             closure.contains(name) || {
                 self.origins
                     .get(name)

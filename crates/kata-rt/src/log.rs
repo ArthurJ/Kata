@@ -204,7 +204,6 @@ pub extern "C" fn kata_rt_log_publish(
 ///
 /// Ordem dos args nas wrappers: (level, msg, [topic], [policy]).
 /// Isto espelha a ordem posicional de `log!()` em Kata (level primeiro).
-
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_log_publish_default(level: i64, msg: i64) -> i64 {
     kata_rt_log_publish(0, level, msg, 0)
@@ -216,7 +215,12 @@ pub extern "C" fn kata_rt_log_publish_topic(level: i64, msg: i64, topic_ptr: i64
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_log_publish_full(level: i64, msg: i64, topic_ptr: i64, policy_ptr: i64) -> i64 {
+pub extern "C" fn kata_rt_log_publish_full(
+    level: i64,
+    msg: i64,
+    topic_ptr: i64,
+    policy_ptr: i64,
+) -> i64 {
     kata_rt_log_publish(topic_ptr, level, msg, policy_ptr)
 }
 

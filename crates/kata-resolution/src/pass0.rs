@@ -190,9 +190,10 @@ pub(crate) fn run_pass0(
                     visited.insert(name.clone());
                     let mut chain = vec![name.clone()];
 
-                    let mut current_base = base_name.clone();
+                    let current_base = base_name.clone();
                     let mut accumulated: Vec<kata_core::VariantInfo> = Vec::new();
 
+                    #[allow(clippy::never_loop)]
                     loop {
                         if !visited.insert(current_base.clone()) {
                             // Ciclo detectado
@@ -220,12 +221,8 @@ pub(crate) fn run_pass0(
 
                                 // Acumular variantes herdadas (na ordem: base primeiro).
                                 // Como iteramos de base → topo, prependemos.
-                                let vs_owned: Vec<kata_core::VariantInfo> =
-                                    vs.iter().cloned().collect();
-                                accumulated = vs_owned
-                                    .into_iter()
-                                    .chain(accumulated)
-                                    .collect();
+                                let vs_owned: Vec<kata_core::VariantInfo> = vs.to_vec();
+                                accumulated = vs_owned.into_iter().chain(accumulated).collect();
 
                                 // Verificar transitividade: o base também tem extends?
                                 // Para simplicidade, por ora não rastreamos extends no
