@@ -23,6 +23,55 @@ use kata_core::ty::Ty;
 /// O callee produzido é `Ident("show")` sem overload específico — o
 /// monomorphizador resolve a impl concreta ao instanciar a Action
 /// polimórfica que contém esta chamada.
+/// Substitui todas as ocorrências de `Ty::Var("Self")` em `ty` por `replacement`.
+///
+/// Recursiva em tipos compostos (Generic, Function, Tuple, List, etc.).
+fn substitute_self(ty: &Ty, replacement: &Ty) -> Ty {
+    match ty {
+        Ty::Var(name) if name == "Self" => replacement.clone(),
+        Ty::Generic(name, args) => Ty::Generic(
+            name.clone(),
+            args.iter()
+                .map(|a| substitute_self(a, replacement))
+                .collect(),
+        ),
+        Ty::Function(params, ret) => Ty::Function(
+            params
+                .iter()
+                .map(|p| substitute_self(p, replacement))
+                .collect(),
+            Box::new(substitute_self(ret, replacement)),
+        ),
+        Ty::Action(params, ret) => Ty::Action(
+            params
+                .iter()
+                .map(|p| substitute_self(p, replacement))
+                .collect(),
+            Box::new(substitute_self(ret, replacement)),
+        ),
+        Ty::Tuple(elems) => Ty::Tuple(
+            elems
+                .iter()
+                .map(|e| substitute_self(e, replacement))
+                .collect(),
+        ),
+        Ty::List(elem) => Ty::List(Box::new(substitute_self(elem, replacement))),
+        Ty::Array(elem) => Ty::Array(Box::new(substitute_self(elem, replacement))),
+        Ty::Range(elem) => Ty::Range(Box::new(substitute_self(elem, replacement))),
+        Ty::Dict(k, v) => Ty::Dict(
+            Box::new(substitute_self(k, replacement)),
+            Box::new(substitute_self(v, replacement)),
+        ),
+        Ty::Set(elem) => Ty::Set(Box::new(substitute_self(elem, replacement))),
+        Ty::Sender(elem) => Ty::Sender(Box::new(substitute_self(elem, replacement))),
+        Ty::Receiver(elem) => Ty::Receiver(Box::new(substitute_self(elem, replacement))),
+        Ty::ReceiverFactory(elem) => {
+            Ty::ReceiverFactory(Box::new(substitute_self(elem, replacement)))
+        }
+        _ => ty.clone(),
+    }
+}
+
 pub(crate) fn try_iface_method_dispatch(
     func_name: &str,
     arg_types: &[Ty],
@@ -57,7 +106,13 @@ pub(crate) fn try_iface_method_dispatch(
                                 }
                             }
                             if params_match {
-                                return Some(sig.ret.clone());
+                                // Self no retorno é substituído pelo tipo do arg
+                                // (Interface(name)) — assim, step :: Self => Self
+                                // com arg Interface("STEPPABLE") retorna Interface("STEPPABLE"),
+                                // e o monomorphizador resolve ao instanciar.
+                                let ret =
+                                    substitute_self(&sig.ret, &Ty::Interface(iface_name.clone()));
+                                return Some(ret);
                             }
                         }
                     }
@@ -89,7 +144,11 @@ pub(crate) fn try_iface_method_dispatch(
                                 }
                             }
                             if params_match {
-                                return Some(sig.ret.clone());
+                                // Self no retorno é substituído pelo tipo do arg
+                                // (Ty::Var) — o monomorphizador resolve ao
+                                // instanciar a função genérica.
+                                let ret = substitute_self(&sig.ret, arg);
+                                return Some(ret);
                             }
                         }
                     }
