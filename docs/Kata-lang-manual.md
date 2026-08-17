@@ -2263,7 +2263,6 @@ vírgula após o primeiro elemento.
 * `(1,)` = tuplo de 1 elemento (vírgula obrigatória). Sem vírgula, `(1)` é
   agrupamento.
 * `()` = `Unit` (zero-sized, tupla vazia).
-* `$ tuplo` = spread (interceptado pelo typeck, não builtin — ver §19.3).
 
 **Invariante de codegen: Tuple é sempre heap type (ponteiro).** Assim como Sum
 com payload (§9.2), toda Tuple é alocada na arena como um bloco contíguo de
@@ -2534,7 +2533,6 @@ template literal + tupla de argumentos e substitui `{}` via FFI.
 | Builtin | Síntese |
 |---|---|
 | `format` | Substitui `{}` via `kata_rt_text_replace_first` iterativo |
-| `$` | Spread: interceptado pelo typeck, não builtin. `f $ (a, b)` → `f` recebe `a`, `b` como args separados. `TypedExprKind::Spread` (tipo `Unit`), expandido pelos handlers de aplicação. Nunca chega ao codegen. |
 | `map` | `@builtin("map")` → nó TAST `Map { func, iterable }` |
 | `filter` | `@builtin("filter")` → nó TAST `Filter { func, iterable }` |
 | `fold` | `@builtin("fold")` → nó TAST `Fold { func, init, iterable }` |

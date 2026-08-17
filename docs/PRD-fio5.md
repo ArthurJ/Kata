@@ -52,7 +52,7 @@ O que não existe e este PRD cria:
 5. Index access em tupla (`t.0`, `t.(-1)`) — parser, typeck, codegen
 6. `alias` (newtype) — parser, resolution, smart constructor
 7. `format` (builtin sintetizado)
-8. `$` spread (interceptado pelo typeck)
+8. ~~`$` spread (interceptado pelo typeck)~~ — **removido 2026-08-17** (redundante: `f $ (a, b)` ≡ `f a b`, sem consumidor real)
 9. Ascription-construção (`(a, b)::Struct`)
 10. `repr` auto-sintetizado para `data` com campos
 
@@ -235,13 +235,18 @@ Para structs aninhadas, delega para `kata_rt_repr_to_text` (que caminha o
 - `Struct` aninhado: `repr` recursivo
 - Outros: `kata_rt_repr_to_text` via FFI
 
-### `$` spread
+### ~~`$` spread~~ — **REMOVIDO 2026-08-17**
 
-Sintaxe: `f $ (a, b)` → `f` recebe `a` e `b` como args separados.
+> ~~Sintaxe: `f $ (a, b)` → `f` recebe `a` e `b` como args separados.~~
+>
+> Removido: o único caso funcional (`f $ (1, 2, 3)` ≡ `f 1 2 3`) era tautológico.
+> Caso com variáveis nunca foi implementado. Sem consumidor real.
 
-`$` é interceptado pelo typeck, não chega ao codegen. Quando o typeck vê
-`Apply(callee, args)` onde um dos args é `Ident("$")`, expande a tupla
-seguinte: se o arg seguinte é `Tuple { elements }`, substitui o `$` e a tupla
+~~Sintaxe: `f $ (a, b)` → `f` recebe `a` e `b` como args separados.~~
+
+~~`$` é interceptado pelo typeck, não chega ao codegen. Quando o typeck vê~~
+~~`Apply(callee, args)` onde um dos args é `Ident("$")`, expande a tupla~~
+~~seguinte: se o arg seguinte é `Tuple { elements }`, substitui o `$` e a tupla~~
 pelos elementos individuais. Se o arg seguinte não é tupla → error.
 
 O parser já produz `Ident("$")` (o lexer produz `Token::Dollar`, mas `Dollar`
@@ -334,12 +339,12 @@ Validação de shape: para cada elemento `i` da tupla, verifica que
 - Runtime: `kata_rt_text_replace_first`, `kata_rt_string_concat`, `kata_rt_int_to_text`, `kata_rt_bool_to_text` já existiam
 - Verificação: 13 testes E2E ✅
 
-### Fase 7: `$` spread + ascription-construção ✅
+### Fase 7: ~~`$` spread~~ + ascription-construção — spread removido 2026-08-17
 
-- `$` é `Ident("$")` (não `Token::Dollar`) — o lexer já produz `Ident`
-- Typeck: `expand_spread` em `infer_apply` detecta `Ident("$")` + `Tuple` seguinte, substitui pelos elementos individuais
+- ~~`$` é `Ident("$")` (não `Token::Dollar`) — o lexer já produz `Ident`~~ — removido
+- ~~Typeck: `expand_spread` em `infer_apply` detecta `Ident("$")` + `Tuple` seguinte, substitui pelos elementos individuais~~ — removido
 - Ascription-construção: `Tuple::Struct` com shape check em `infer_expr_hinted` → `StructConstruct`
-- Verificação: 10 testes E2E ✅
+- Verificação: 5 testes E2E (ascription apenas) ✅
 
 ## DoD
 
@@ -360,7 +365,7 @@ Validação de shape: para cada elemento `i` da tupla, verifica que
 6. **`repr` auto-sintetizado.** `repr pessoa` retorna `"Pessoa(João, 30)"`
    para `data Pessoa (nome::Text idade::Int)`. ✅
 
-7. **`$` spread expande.** `f $ (a, b)` = `f a b`. Nunca chega ao codegen. ✅
+7. ~~**`$` spread expande.** `f $ (a, b)` = `f a b`. Nunca chega ao codegen.~~ **REMOVIDO 2026-08-17** — redundante, sem consumidor real.
 
 8. **Ascription-construção promove.** `("João", 30)::Pessoa` produz
    `Ty::Struct("Pessoa")`. Shape mismatch → error. ✅

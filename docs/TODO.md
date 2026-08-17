@@ -8,29 +8,7 @@ Os docs `TODO-*.md` foram removidos (obsoletos ou resolvidos). Pendências vivem
 
 ## Débito Técnico
 
-### 1. `$` (Spread) — funcionalidade precisa de revisão
-
-**Estado:** Parcialmente implementado. `expand_spread()` em `variant_construct.rs`
-expande tupla literal em argumentos posicionais, mas só funciona quando o
-argumento após `$` é `Expr::Tuple` literal. Não funciona com variáveis
-(`let args := (1, 2, 3); f $ args` — `args` é `Expr::Ident`, não `Expr::Tuple`).
-O contexto 2 (`$ (tuplo)` como callee standalone) não tem implementação —
-falha com `UnboundName`. `Expr::Spread` existe na AST mas nunca é produzido
-pelo parser (variant defensivo). Seção removida do sintaxe-mapa até revisão.
-
-**O que decidir:**
-- `$` deve funcionar com variáveis (não só literais)? Se sim, a expansão
-  precisa mover da AST para o typeck (decidir por tipo, não por construtor)
-- `$` como callee standalone deve ser implementado ou removido?
-- Ou remover `$` inteiramente (nenhum caso prático funciona que `f a b c` resolva)?
-
-**Arquivos:** `crates/kata-inference/src/infer/variant_construct.rs:250-299`,
-`crates/kata-inference/src/infer/apply.rs:201`,
-`crates/kata-ast/src/expr.rs:193` (`Expr::Spread` — defensivo),
-`crates/kata-codegen/tests/spread_ascription_e2e.rs` (testes existentes)
-
-**Impacto:** Baixo. `$` com literal é redundante (`f $ (1, 2, 3)` ≡ `f 1 2 3`).
-Sem utilidade real até suportar variáveis.
+(Nenhum pendência ativa.)
 
 ---
 

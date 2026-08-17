@@ -191,7 +191,6 @@ fn desugar_pipes(expr: &Spanned<Expr>) -> Spanned<Expr> {
                 expr.span,
             )
         }
-        Expr::Spread => expr.clone(),
         // ── Coleções — recursão nos elementos ───────────
         Expr::ListLit { elements } => Spanned::new(
             Expr::ListLit {

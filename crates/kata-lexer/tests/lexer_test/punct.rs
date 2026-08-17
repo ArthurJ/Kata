@@ -147,10 +147,3 @@ fn operators_as_identifiers() {
     ];
     assert_eq!(tokens_only(&tokens), expected);
 }
-
-#[test]
-fn dollar_is_ident() {
-    let tokens = lex("$").unwrap();
-    let expected = vec![Token::Ident("$".into()), Token::Eof];
-    assert_eq!(tokens_only(&tokens), expected);
-}

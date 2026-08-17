@@ -1,8 +1,7 @@
-//! Construção de variantes de enum e expansão de spread.
+//! Construção de variantes de enum.
 //!
 //! Funções extraídas de `apply.rs`:
 //! - `infer_variant_construct`: infere `Apply(VariantQual, [arg])` — construção de Sum
-//! - `expand_spread`: expande `$` spread em argumentos de Apply
 
 use kata_ast::{Expr, Span, Spanned};
 use kata_core::ty::{Ty, TypeEnv};
@@ -240,60 +239,4 @@ pub(crate) fn infer_variant_construct(
             module_path: module_path.map(|p| p.to_vec()),
         },
     ))
-}
-
-/// Expande `$` spread em argumentos de Apply.
-///
-/// `f $ (a, b)` → `f a b`. Se um arg é `Ident("$")`, o próximo arg deve ser
-/// `Expr::Tuple` — substitui ambos (`$` + `Tuple`) pelos elementos individuais.
-/// Se `$` não é seguido por tupla → `SpreadRequiresTuple` error.
-pub(crate) fn expand_spread(
-    args: &[Spanned<Expr>],
-    _span: &kata_ast::Span,
-) -> Result<Vec<Spanned<Expr>>, MiddleError> {
-    let mut result = Vec::new();
-    let mut i = 0;
-    while i < args.len() {
-        // Verifica se é `Ident("$")`
-        if let Expr::Ident { name } = &args[i].node
-            && name == "$"
-        {
-            // Próximo arg deve ser Tuple
-            if i + 1 >= args.len() {
-                return Err(MiddleError::UnboundName {
-                    name: "$ spread requires a following tuple".into(),
-                    span: args[i].span.into(),
-                    suggestion: None,
-                });
-            }
-            match &args[i + 1].node {
-                Expr::Tuple { elements } => {
-                    result.extend(elements.iter().cloned());
-                }
-                Expr::Grouping { inner } => {
-                    if let Expr::Tuple { elements } = &inner.node {
-                        result.extend(elements.iter().cloned());
-                    } else {
-                        return Err(MiddleError::TypeMismatch {
-                            expected: "Tuple".into(),
-                            found: format!("{:?}", inner.node),
-                            span: args[i + 1].span.into(),
-                        });
-                    }
-                }
-                _ => {
-                    return Err(MiddleError::TypeMismatch {
-                        expected: "Tuple after $".into(),
-                        found: format!("{:?}", args[i + 1].node),
-                        span: args[i + 1].span.into(),
-                    });
-                }
-            }
-            i += 2; // pula $ e a tupla
-            continue;
-        }
-        result.push(args[i].clone());
-        i += 1;
-    }
-    Ok(result)
 }

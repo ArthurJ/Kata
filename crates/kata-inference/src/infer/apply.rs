@@ -23,7 +23,7 @@ use super::collections_hof::{infer_filter, infer_fold, infer_map};
 use super::expr::{InferCtx, infer_expr};
 use super::helpers::{InferResult, peel_grouping_expr};
 use super::iface_dispatch::try_iface_method_dispatch;
-use super::variant_construct::{VariantCall, expand_spread, infer_variant_construct};
+use super::variant_construct::{VariantCall, infer_variant_construct};
 use kata_resolution::resolve_type_expr;
 
 /// Infere uma aplicação prefixa — dois caminhos de callee.
@@ -195,16 +195,11 @@ pub(crate) fn infer_apply(
         return result;
     }
 
-    // `$` spread — `f $ (a, b)` expande para `f a b`.
-    // Se um arg é `Ident("$")`, o próximo arg deve ser `Tuple` — substitui
-    // ambos pelos elementos individuais da tupla.
-    let expanded_args = expand_spread(args, span)?;
-
     // Infere tipos dos argumentos recursivamente (tail_pos = false para args).
-    let mut typed_args: Vec<Spanned<TypedExpr>> = Vec::with_capacity(expanded_args.len());
-    let mut arg_types: Vec<Ty> = Vec::with_capacity(expanded_args.len());
+    let mut typed_args: Vec<Spanned<TypedExpr>> = Vec::with_capacity(args.len());
+    let mut arg_types: Vec<Ty> = Vec::with_capacity(args.len());
 
-    for arg in &expanded_args {
+    for arg in args {
         let typed = infer_expr(&arg.node, &arg.span, env, ctx, false)?;
         arg_types.push(typed.ty.clone());
         typed_args.push(Spanned::new(typed, arg.span));
@@ -281,7 +276,7 @@ pub(crate) fn infer_apply(
                 &deferred.body,
                 &deferred.guards,
                 &deferred.with_bindings,
-                &expanded_args,
+                &args,
                 span,
                 env,
                 ctx,
@@ -327,7 +322,7 @@ pub(crate) fn infer_apply(
                     &deferred.body,
                     &deferred.guards,
                     &deferred.with_bindings,
-                    &expanded_args,
+                    &args,
                     span,
                     env,
                     ctx,
@@ -358,7 +353,7 @@ pub(crate) fn infer_apply(
                 return Err(MiddleError::TypeMismatch {
                     expected: format!("{}", param_ty),
                     found: format!("{}", arg_ty),
-                    span: expanded_args[i].span.into(),
+                    span: args[i].span.into(),
                 });
             }
         }

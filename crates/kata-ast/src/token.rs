@@ -118,8 +118,6 @@ pub enum Token {
     SendArrow,
     /// `!>` — recebimento por canal CSP ("valor sai do canal")
     RecvArrow,
-    /// `$` — spread/aplicação explícita (identificador interceptado pelo typeck)
-    /// (Não é keyword — é Ident("$"). O lexer produz Ident para `$`.)
 
     // ── Delimitadores ───────────────────────────────────
     /// `(` — abre parênteses

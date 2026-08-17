@@ -206,8 +206,7 @@ A função em si pode permanecer em `helpers.rs`, mas só é chamada por
 O bloco inteiro que detecta `DictLit` como único arg e faz `reorder_dict_args_to_tuple`
 é removido. Após a remoção, `infer_apply` faz dispatch puramente posicional:
 
-1. Expande spread (`$`)
-2. Infere tipos dos args
+1. Infere tipos dos args
 3. Tenta dispatch por interface (Caminho 0)
 4. Tenta dispatch por DispatchTable (Caminho 1)
 5. Tenta dispatch por TypeEnv (Caminho 2 — call_indirect)

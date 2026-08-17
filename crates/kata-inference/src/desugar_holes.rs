@@ -227,7 +227,6 @@ pub(crate) fn desugar_holes(expr: &Spanned<Expr>) -> Spanned<Expr> {
             },
             expr.span,
         ),
-        Expr::Spread => expr.clone(),
         // ── Coleções — recursão nos elementos ───────────
         Expr::ListLit { elements } => Spanned::new(
             Expr::ListLit {

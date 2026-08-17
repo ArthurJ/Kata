@@ -1,4 +1,4 @@
-//! Testes E2E de codegen de $ spread + ascription-construção.
+//! Testes E2E de codegen de ascription-construção.
 //!
 //! Pipeline completo: lex → parse → resolve → infer → optimize → codegen → JIT.
 
@@ -88,57 +88,10 @@ fn untag_smi(raw: i64) -> i64 {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// $ spread — DoD 7: $ spread expande
-// ═══════════════════════════════════════════════════════════════
-
-/// `+ $ (1, 2)` expande para `+ 1 2` = 3.
-#[test]
-fn spread_soma_tupla() {
-    let src = "+ $ (1, 2)";
-    let (raw, ty) = eval_src(src);
-    assert_eq!(ty, Ty::int());
-    assert_eq!(untag_smi(raw), 3);
-}
-
-/// `+ $ (\"a\", \"b\")` expande para `+ \"a\" \"b\"`.
-#[test]
-fn spread_concat() {
-    let src = "+ $ (\"a\", \"b\")";
-    let (raw, ty) = eval_src(src);
-    assert_eq!(ty, Ty::text());
-    let _ = raw;
-}
-
-/// `f $ (a, b, c)` expande para `f a b c` — 3 elementos.
-#[test]
-fn spread_tres_elementos() {
-    let src = "data Trio (a::Int b::Int c::Int)\nconstant t := Trio 1 2 3\n+ (+ t.a t.b) t.c";
-    let (raw, ty) = eval_src(src);
-    assert_eq!(ty, Ty::int());
-    assert_eq!(untag_smi(raw), 6);
-}
-
-/// `$` sem tupla following → erro.
-#[test]
-fn spread_sem_tupla_falha() {
-    let src = "+ $ 42";
-    let result = infer_src(src);
-    assert!(result.is_err(), "$ sem tupla deve falhar");
-}
-
-/// `$` no final sem nada → erro.
-#[test]
-fn spread_no_final_falha() {
-    let src = "+ 1 $";
-    let result = infer_src(src);
-    assert!(result.is_err(), "$ no final deve falhar");
-}
-
-// ═══════════════════════════════════════════════════════════════
 // Ascription-construção — DoD 8: (a, b)::Struct promove
 // ═══════════════════════════════════════════════════════════════
 
-/// `(\"João\", 30)::Pessoa` produz Ty::Struct(\"Pessoa\").
+/// `("João", 30)::Pessoa` produz Ty::Struct("Pessoa").
 #[test]
 fn ascription_construcao_basica() {
     let src = "data Pessoa (nome::Text idade::Int)\n(\"João\", 30)::Pessoa";

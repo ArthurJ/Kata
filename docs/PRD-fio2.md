@@ -296,6 +296,9 @@ parseando um argumento ou um pattern), não no typeck. Isto é diferente de `$`
 standalone exige contexto de tipos), enquanto `_` em args é unambiguamente
 hole.
 
+> **Nota:** `$` spread foi removido em 2026-08-17. O parágrafo acima é
+> histórico — a ambiguidade deixou de ser relevante.
+
 #### `Pattern` enum
 
 ```rust

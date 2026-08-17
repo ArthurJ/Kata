@@ -258,11 +258,6 @@
           "comment": "| — fallback / error coalescing (must come after |>)",
           "match": "\\|",
           "name": "keyword.operator.fallback.kata"
-        },
-        {
-          "comment": "$ — spread / explicit application",
-          "match": "\\$",
-          "name": "keyword.operator.spread.kata"
         }
       ]
     },

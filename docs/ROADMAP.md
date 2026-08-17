@@ -377,7 +377,6 @@ trap. (Enum predicado `IMC(17.0)` é Fio 6.)
 - `alias` (newtype, construtor sintetizado, orphan rule)
 - Smart constructors para structs (infalíveis)
 - `format` (builtin sintetizado, substitui `{}`)
-- `$` spread (interceptado pelo typeck)
 
 **Runtime:**
 - Struct/tuple arena alloc + Store por campo/elemento

@@ -24,7 +24,7 @@ primitivos implementam NUM/ORD/EQ/SHOW), e o prelude em Kata precisa de
 - **Fio 1** (TypeEnv, DispatchTable com scoring, `Ty`, `data` opaco, `enum` unitário, `::` postfix)
 - **Fio 2** (lambdas, guards, match, Hole `_`, `hint: Option<&Ty>` top-down, partial dispatch)
 - **Fio 4** (`Ty::Sum` com payload, `Result::(T, E)`, `Optional::T`, `Ty::Generic` para enums genéricos)
-- **Fio 5** (`Ty::Struct`, `StructRegistry`, smart constructor infalível, `alias`, `format`, `$` spread)
+- **Fio 5** (`Ty::Struct`, `StructRegistry`, smart constructor infalível, `alias`, `format`, ~~`$` spread~~ removido)
 - **Fio 6** (ascription-refined, ret-directed dispatch, `fits_return`)
 
 ## Estado herdado

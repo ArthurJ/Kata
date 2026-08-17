@@ -827,14 +827,6 @@ pub(crate) fn infer_expr_hinted(
         Expr::DotAccess { expr, index } => {
             return infer_dot_access(expr, index, span, env, ctx, tail_pos);
         }
-        // ── Spread ($) — typeck expande, nunca deveria chegar aqui ──
-        Expr::Spread => {
-            return Err(MiddleError::UnboundName {
-                name: "Spread ($) em posição inesperada — typeck deveria ter expandido".into(),
-                span: (*span).into(),
-                suggestion: None,
-            });
-        }
         // ── Coleções — inferência delegada para collections.rs ──
         Expr::ListLit { elements } => {
             return super::collections::infer_list_lit(elements, span, env, ctx, tail_pos, hint);

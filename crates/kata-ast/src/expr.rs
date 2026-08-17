@@ -189,9 +189,6 @@ pub enum Expr {
         index: DotIndex,
     },
 
-    /// `$` — marcador de spread (typeck expande, nunca chega à TAST).
-    Spread,
-
     // ── Coleções ────────────────────────────────────
     /// `[1 2 3]` — lista literal (Cons cells).
     ListLit { elements: Vec<Spanned<Expr>> },
