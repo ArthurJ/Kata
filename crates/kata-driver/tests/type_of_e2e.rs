@@ -223,7 +223,7 @@ fn type_of_function() {
     );
 }
 
-// ── DoD 13: type!(worker) retorna "Action(Int) => Unit" ────────────
+// ── DoD 13: type!(worker) retorna "Action(Int) -> Unit" ────────────
 
 #[test]
 fn type_of_action_ref() {
@@ -236,8 +236,8 @@ action main => Unit
 main!()";
     let first = build_and_get_first_line("type_of_action_ref", src);
     assert_eq!(
-        first, "Action(Int) => Unit",
-        "type!(worker) deve imprimir \"Action(Int) => Unit\""
+        first, "Action(Int) -> Unit",
+        "type!(worker) deve imprimir \"Action(Int) -> Unit\""
     );
 }
 

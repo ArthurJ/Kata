@@ -78,7 +78,7 @@ fn collect_action_calls(expr: &TypedExpr, out: &mut Vec<(String, Span)>) {
 /// invocação indireta via parâmetro first-class (PRD §4.3, 1 nível).
 ///
 /// Quando `dispatcher!(worker_a, 42)` passa `worker_a` como param
-/// `job :: Action(Int) => Unit`, e `dispatcher` chama `job!(payload)`,
+/// `job :: Action(Int) -> Unit`, e `dispatcher` chama `job!(payload)`,
 /// o call graph precisa da aresta `dispatcher → worker_a`. Se
 /// `worker_a` chama `dispatcher` (direta ou indiretamente), há ciclo.
 ///

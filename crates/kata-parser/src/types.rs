@@ -23,7 +23,7 @@ impl Parser {
     fn parse_type_expr_inner(&mut self) -> Result<Spanned<TypeExpr>, FrontendError> {
         let start = self.peek_span();
 
-        // Action(Params) => Ret — tipo de Action first-class.
+        // Action(Params) -> Ret — tipo de Action first-class.
         if matches!(self.peek(), Token::Ident(name) if name == "Action") {
             self.advance(); // consome "Action"
             self.expect(&Token::LParen, "\"(\" após Action")?;
@@ -48,7 +48,7 @@ impl Parser {
                 }
                 self.expect(&Token::RParen, "\")\"")?;
             }
-            self.expect(&Token::FatArrow, "'=>' após Action(params)")?;
+            self.expect(&Token::ThinArrow, "'->' após Action(params)")?;
             let ret = self.parse_type_expr()?;
             let span = start.cover(ret.span);
             return Ok(Spanned::new(

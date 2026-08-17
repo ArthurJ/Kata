@@ -81,13 +81,13 @@ fn infer_ok(src: &str) {
 
 // ── Test 1: Recursão indireta via param — a → b → a ──────────────────
 
-/// `a(f :: Action(Int) => Unit)` calls `f!(1)`, and `b(n :: Int)` calls
+/// `a(f :: Action(Int) -> Unit)` calls `f!(1)`, and `b(n :: Int)` calls
 /// `a!(b)`. This creates an indirect cycle: a → b → a (via param f).
 /// Should fail with RecursiveAction.
 #[test]
 fn indirect_recursion_detected() {
     let src = "
-action a (f :: Action(Int) => Unit) => Unit
+action a (f :: Action(Int) -> Unit) => Unit
     f!(1)
 
 action b (n :: Int) => Unit
@@ -104,14 +104,14 @@ b!(0)
 
 // ── Test 2: Dispatch/strategy pattern — sem falsa recursão ───────────
 
-/// `dispatcher(job :: Action(Int) => Unit, payload :: Int)` calls `job!(payload)`.
+/// `dispatcher(job :: Action(Int) -> Unit, payload :: Int)` calls `job!(payload)`.
 /// `worker_a` and `worker_b` are passed as first-class Action refs.
 /// No cycle: dispatcher → worker_a, dispatcher → worker_b, but workers
 /// don't call back dispatcher. Should compile fine.
 #[test]
 fn dispatch_no_false_recursion() {
     let src = "
-action dispatcher (job :: Action(Int) => Unit, payload :: Int) => Unit
+action dispatcher (job :: Action(Int) -> Unit, payload :: Int) => Unit
     job!(payload)
 
 action worker_a (n :: Int) => Unit
@@ -169,7 +169,7 @@ fn run_kata(path: &str) -> (String, String, i32) {
 /// `kata run`, e verifica stdout contém "43" e "44".
 #[test]
 fn e2e_dispatch_strategy_runs() {
-    let src = r#"action dispatcher (job :: Action(Int) => Unit, payload :: Int) => Unit
+    let src = r#"action dispatcher (job :: Action(Int) -> Unit, payload :: Int) => Unit
     job!(payload)
 
 action worker_a (n :: Int) => Unit

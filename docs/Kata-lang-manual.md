@@ -1658,7 +1658,7 @@ passadas como parâmetros para outras Actions. Isto habilita o pattern de
 dispatch/strategy:
 
 ```kata
-action dispatcher (job :: Action(Int) => Unit, payload :: Int) => Unit
+action dispatcher (job :: Action(Int) -> Unit, payload :: Int) => Unit
     job!(payload)
 
 action worker_a (n :: Int) => Unit
@@ -1677,7 +1677,7 @@ main!()
 #### Referência vs Invocação
 
 ```kata
-worker_a           # referência — valor do tipo Action(Int) => Unit
+worker_a           # referência — valor do tipo Action(Int) -> Unit
 worker_a!(42)      # invocação — executa a action, retorna Unit
 ```
 
@@ -1690,13 +1690,13 @@ recebe `Ty::Action(param_types, ret_ty)`.
 #### Sintaxe de Tipo
 
 ```
-Action(Param1, Param2, ...) => Ret
+Action(Param1, Param2, ...) -> Ret
 ```
 
-Espelha a sintaxe de assinatura de actions, sem os nomes dos params:
+Tipo de Action first-class. Usa `->` (tipo de função), não `=>` (declaração):
 
 ```kata
-action dispatcher (job :: Action(Int) => Unit, payload :: Int) => Unit
+action dispatcher (job :: Action(Int) -> Unit, payload :: Int) => Unit
 ```
 
 `Ty::Action` é separada de `Ty::Function` porque as ABIs são semanticamente

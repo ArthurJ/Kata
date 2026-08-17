@@ -46,39 +46,9 @@ pelo parser (variant defensivo). Seção removida do sintaxe-mapa até revisão.
 **Impacto:** Baixo. `$` com literal é redundante (`f $ (1, 2, 3)` ≡ `f 1 2 3`).
 Sem utilidade real até suportar variáveis.
 
-### 3. Sintaxe de assinatura de Action deveria usar `->` em vez de `=>`
+### 3. ~~Sintaxe de assinatura de Action deveria usar `->` em vez de `=>`~~ — RESOLVIDO
 
-**Estado:** Pendente (decisão de design).
-
-**Problema:** Hoje `=>` aparece em dois contextos distintos:
-
-1. **Declaração de função pura:** `nome :: Int Int => Int` — `=>` separa
-   "o que entra" de "o que sai" no nível léxico da declaração. Correto.
-2. **Assinatura de Action:** `action f(x::Int) => Unit` — também usa `=>`,
-   mas Action é um *tipo*, não uma declaração no mesmo sentido que função pura.
-
-O caso que quebra a regra é `Action(Int) => Unit` — um *tipo* usando `=>`,
-que é o separador de *declaração*. Se fosse `Action(Int) -> Unit`, a
-distinção seria limpa: `=>` sempre declara (separador léxico de assinatura),
-`->` sempre descreve um tipo de função transitável
-(`A B -> C` dentro de uma assinatura maior, ou tipo de Action).
-
-**Proposta:** Assinatura de action passa a usar `->`:
-
-- `action f(x::Int) -> Unit` (declaração)
-- `Action(Int) -> Unit` (tipo)
-
-`=>` fica reservado exclusivamente para declaração de função pura
-(`nome :: ... => ...`). `->` cobre todos os contextos onde a seta descreve
-um *tipo* de função (pura como valor transitável ou action como tipo).
-
-**Arquivos a alterar (estimativa):** parser (token `=>` vs `->` em posição
-de action), inference (type checking de assinatura de action), manual
-(`Kata-lang-manual.md`, `sintaxe-mapa.md`), testes snapshot.
-
-**Status:** Analisar. Confirmação pendente — Arthur pediu para registrar
-o TODO; decisão final requer revisão do impacto no parser e nos
-snapshots existentes.
+Tipo `Action(Params)` agora usa `->` (tipo de função). Declarações `action name(...) => ...` mantêm `=>` (declaração).
 
 ### 4. Byte string `b'...'` — lexer não aceita aspa simples
 

@@ -1,11 +1,11 @@
-//! Action type syntax: `Action(Params) => Ret`.
+//! Action type syntax: `Action(Params) -> Ret`.
 
 use super::helpers::{first_item, parse_src};
 use kata_ast::{Item, TypeExpr};
 
 #[test]
 fn action_type_no_params() {
-    let m = parse_src("action f => Action() => Unit\n    Unit");
+    let m = parse_src("action f => Action() -> Unit\n    Unit");
     let item = first_item(&m);
     match item {
         Item::ActionDecl { ret, .. } => match &ret.node {
@@ -21,7 +21,7 @@ fn action_type_no_params() {
 
 #[test]
 fn action_type_one_param() {
-    let m = parse_src("action f => Action(Int) => Unit\n    Unit");
+    let m = parse_src("action f => Action(Int) -> Unit\n    Unit");
     let item = first_item(&m);
     match item {
         Item::ActionDecl { ret, .. } => match &ret.node {
@@ -38,7 +38,7 @@ fn action_type_one_param() {
 
 #[test]
 fn action_type_multi_params() {
-    let m = parse_src("action f => Action(Int, Text) => Boolean\n    True");
+    let m = parse_src("action f => Action(Int, Text) -> Boolean\n    True");
     let item = first_item(&m);
     match item {
         Item::ActionDecl { ret, .. } => match &ret.node {
@@ -57,8 +57,8 @@ fn action_type_multi_params() {
 #[test]
 fn action_type_in_action_param_signature() {
     // Action with a param whose type is an Action type:
-    // `action f (g :: Action(Int) => Unit) => Unit`
-    let src = "action f (g :: Action(Int) => Unit) => Unit\n    g!(1)";
+    // `action f (g :: Action(Int) -> Unit) => Unit`
+    let src = "action f (g :: Action(Int) -> Unit) => Unit\n    g!(1)";
     let m = parse_src(src);
     let item = first_item(&m);
     match item {
@@ -68,7 +68,7 @@ fn action_type_in_action_param_signature() {
             ret,
             ..
         } => {
-            // One param: g :: Action(Int) => Unit
+            // One param: g :: Action(Int) -> Unit
             assert_eq!(params.len(), 1);
             assert_eq!(param_names.len(), 1);
             assert_eq!(param_names[0], Some("g".to_string()));

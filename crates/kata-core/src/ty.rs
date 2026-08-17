@@ -292,7 +292,7 @@ impl Ty {
                     .map(|p| p.display())
                     .collect::<Vec<_>>()
                     .join(", ");
-                format!("Action({params_str}) => {}", ret.display())
+                format!("Action({params_str}) -> {}", ret.display())
             }
             Ty::Tuple(elements) => {
                 let elems_str = elements
@@ -405,7 +405,7 @@ mod display_tests {
     fn display_action() {
         assert_eq!(
             Ty::Action(vec![Ty::int()], Box::new(Ty::Unit)).display(),
-            "Action(Int) => Unit"
+            "Action(Int) -> Unit"
         );
     }
 
@@ -413,7 +413,7 @@ mod display_tests {
     fn display_action_multi_param() {
         assert_eq!(
             Ty::Action(vec![Ty::int(), Ty::text()], Box::new(Ty::int())).display(),
-            "Action(Int, Text) => Int"
+            "Action(Int, Text) -> Int"
         );
     }
 

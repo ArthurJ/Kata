@@ -108,7 +108,7 @@ main!()"#;
 
 // ── Test 2: dispatcher!(echo, "hello") com hint — hint resolve ──
 // (já funcionava com hint-based, mas valida que não quebrou)
-// Nota: o hint Action(Text) => Unit usa tipo concreto (Text implementa SHOW),
+// Nota: o hint Action(Text) -> Unit usa tipo concreto (Text implementa SHOW),
 // mas echo tem overload com params [Interface("SHOW")]. O select_action_overload
 // usa match_score que verifica se Text implementa SHOW via InterfaceRegistry.
 // O call indireto dentro de dispatcher usa == estrito, que não suporta
@@ -118,9 +118,9 @@ main!()"#;
 #[test]
 #[serial]
 fn overloadset_hint_resolves() {
-    // Testa que `let f := echo` com hint de tipo Action(Text) => Unit
+    // Testa que `let f := echo` com hint de tipo Action(Text) -> Unit
     // resolve via select_action_overload (hint-based).
-    // O hint Action(Text) => Unit deve casar com echo(SHOW) => Unit
+    // O hint Action(Text) -> Unit deve casar com echo(SHOW) => Unit
     // porque Text implementa SHOW.
     let src = r#"action main => Unit
     let f := echo
@@ -242,7 +242,7 @@ main!()"#;
 //
 // Passar uma action como argumento para outra action. `echo` é
 // referenciado sem hint → Ty::OverloadSet. `dispatcher` espera
-// `g :: Action(Text) => Unit`. O match_score (braço OverloadSet
+// `g :: Action(Text) -> Unit`. O match_score (braço OverloadSet
 // vs Action) aceita na inference. O monomorphizer instancia
 // echo_SHOW_Text e rewrites o arg para Ident("echo_SHOW_Text")
 // com ty: Action([Text], Unit). O codegen produz fn_ptr válido.
@@ -250,7 +250,7 @@ main!()"#;
 #[test]
 #[serial]
 fn dispatcher_recebe_action_concreta() {
-    let src = r#"action dispatcher (g :: Action(Text) => Unit) => Unit
+    let src = r#"action dispatcher (g :: Action(Text) -> Unit) => Unit
     g!("hello")
 action main => Unit
     dispatcher!(echo)
@@ -269,7 +269,7 @@ main!()"#;
 #[test]
 #[serial]
 fn overloadset_via_variavel_passa_para_dispatcher() {
-    let src = r#"action dispatcher (g :: Action(Text) => Unit) => Unit
+    let src = r#"action dispatcher (g :: Action(Text) -> Unit) => Unit
     g!("hello")
 action main => Unit
     let f := echo

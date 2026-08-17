@@ -421,7 +421,7 @@ pub enum TypeExpr {
         ret: Box<Spanned<TypeExpr>>,
     },
 
-    /// `Action(Param1, Param2, ...) => Ret` — tipo de Action first-class.
+    /// `Action(Param1, Param2, ...) -> Ret` — tipo de Action first-class.
     /// Espelha a assinatura de actions, sem nomes dos params.
     ActionType {
         params: Vec<Spanned<TypeExpr>>,

@@ -208,22 +208,22 @@ Separa os tipos dos argumentos (esquerda) do tipo de retorno (direita). Os argum
 nome :: TipoArg1 TipoArg2 => TipoSaida
 ```
 
-### `Action(Params) => Ret` — Tipo de Action como valor first-class
+### `Action(Params) -> Ret` — Tipo de Action como valor first-class
 
 ```kata
-action dispatcher (job :: Action(Int) => Unit, payload :: Int) => Unit
+action dispatcher (job :: Action(Int) -> Unit, payload :: Int) => Unit
     job!(payload)
 ```
 
-- **Sintaxe**: `Action(T1, T2, ...) => Ret` — espelha a assinatura de actions
-  (`action nome (p::T, ...) => Ret`), sem os nomes dos params.
+- **Sintaxe**: `Action(T1, T2, ...) -> Ret` — tipo de Action first-class.
+  Diferente de `=>` (declaração), `->` descreve o tipo de função.
 - **Posição**: qualquer posição onde um tipo aparece (assinaturas de Action,
   tipos de param, annotations).
 - **Semântica**: `Ty::Action(Vec<Ty>, Box<Ty>)` — separada de `Ty::Function`
   (que aparece como `Lambda(...)` no `display()`) porque as ABIs são
   semanticamente diferentes (Actions usam scheduler cooperativo, funções puras não).
 - **Referência sem `!()`**: `worker_a` (sem `!()`) é uma referência que carrega
-  o tipo `Action(Int) => Unit`. O valor em runtime é o `fn_ptr` (i64) da Action.
+  o tipo `Action(Int) -> Unit`. O valor em runtime é o `fn_ptr` (i64) da Action.
 - **Relações**:
   - `worker_a` é referência (valor first-class); `worker_a!(42)` é invocação.
   - Pode ser passada como parâmetro de outra Action: `dispatcher!(worker_a, 42)`.
@@ -328,7 +328,7 @@ conectar_servidor!()
   - Algumas Actions são builtins do compilador (`fork!`, `panic!`, `assert!`), outras são stdlib (`echo!`), mas todas seguem a mesma sintaxe `!`.
   - Actions de I/O no prelude: `open!`, `listen!`, `read!`, `write!`, `close!` para File e Socket (ver seção 22.4).
   - Interage com `?` e `|` no tratamento de erro.
-  - **First-class**: `worker_a` sem `!()` é uma referência (valor do tipo `Action(Int) => Unit`). `worker_a!(42)` é invocação. Ver secção `Action(Params) => Ret` acima.
+  - **First-class**: `worker_a` sem `!()` é uma referência (valor do tipo `Action(Int) -> Unit`). `worker_a!(42)` é invocação. Ver secção `Action(Params) -> Ret` acima.
 
 ### `panic!` e `assert!` (Builtins de Abort)
 

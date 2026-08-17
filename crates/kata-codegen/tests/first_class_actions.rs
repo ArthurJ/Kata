@@ -74,7 +74,7 @@ fn infer_err(src: &str) -> MiddleError {
 fn action_em_campo_de_data_erro() {
     let src = r#"action worker (n :: Int) => Unit
     echo!(n)
-data Wrapper (job :: Action(Int) => Unit)
+data Wrapper (job :: Action(Int) -> Unit)
 "#;
     let err = infer_err(src);
     assert!(
