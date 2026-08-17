@@ -614,7 +614,7 @@ enum Target
 
 ## Diretiva `@log` (Telemetria via CSP)
 
-Anotação em actions e funções nomeadas que injeta `kata_rt_log_publish` no wrapping (prólogo ou epílogo da definição). Permite emitir telemetria estruturada sem contaminar a assinatura matemática — a pureza nominal da função não muda. Independente da action nativa `log!()` (que dispara na execução da linha).
+Anotação em actions e funções nomeadas que injeta publicação de telemetria no wrapping (prólogo ou epílogo da definição). Permite emitir telemetria estruturada sem contaminar a assinatura matemática — a pureza nominal da função não muda. Em `Target::Action`, o body da diretiva chama `log!()` (action normal do stdlib). Em `Target::Function`, o body chama `_log_publish!` (FFI direta) e `write!` (FFI) — funções puras não podem chamar actions. Independente da action `log!()` usada explicitamente no corpo (que dispara na execução da linha).
 
 ```kata
 @log{msg: "processando {x}", level: LogLevel::Info, topic: "audit", policy: "block", when: "exit"}
@@ -684,9 +684,9 @@ Defaults de `topic`/`policy`/`level` são armazenados em TLS `LOG_CONFIG: RefCel
 
 ---
 
-## Actions nativas de log: `log!()`, `log_recv!()`, `log_config!()`
+## Actions de log: `log!()`, `log_recv!()`, `log_config!()`
 
-Três actions interceptadas no typeck (como `format`, `map`, `filter`, `len`) — não passam pelo DispatchTable. Desugaram para FFIs do runtime (`kata_rt_log_publish`, `kata_rt_log_recv`, `kata_rt_log_config`).
+`log!()` é uma **action normal do stdlib** com 4 overloads despachados pelo `DispatchTable` (como qualquer função sobrecarregada). Internamente chama `_log_publish!` (FFI `kata_rt_log_publish_{default,topic,full}`) após converter `LogLevel` para tag `Int` via `_log_tag`. `log_recv!()` e `log_config!()` permanecem interceptadas no typeck (aridade fixa, não precisam de overloading).
 
 ### `log!()` — publicação explícita
 
@@ -709,7 +709,7 @@ Sintaxe posicional (action call existente: `Ident ! (tuple)`):
 
 Typeck aceita 2, 3 ou 4 args. Dispara no ponto da chamada (linha), diferente de `@log` que dispara no wrapping. Com `File` em pos 2, aceita apenas 3 args (level, msg, file) — policy é erro de tipo.
 
-> **Template com `{log_level}`:** `log!()` suporta `{log_level}` como variável sintética que interpola o nome do level (ex: "Info", "Warn"). Outros placeholders `{expr}` são texto literal em `log!()` (não há interpolação compile-time — use `@log` para isso).
+> **Sem interpolação mágica:** `log!()` não interpola `{expr}` nem `{log_level}` — a string é passada literal ao runtime. Para interpolação, use `format!{}` ou `string_concat` antes de chamar `log!()`.
 
 ### `log_recv!()` — consumo de telemetria
 

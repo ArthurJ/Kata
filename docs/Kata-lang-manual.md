@@ -1923,7 +1923,7 @@ módulo), sempre precedendo imediatamente o item que modificam.
   `file`). `file` aceita identificador de action 0-ary que retorna `File` (ex: `stdout`
   de `import stdio.(stdout)`) ou variável `File`. Múltiplas diretivas `@log` são
   suportadas — cada uma injeta independentemente. Independente de `log!()` (action
-  nativa para publicação explícita no corpo). Ver §20.
+  do stdlib para publicação explícita no corpo). Ver §20.
 * **`@associative(0)`**: Anota que a função é associativa, informando o elemento
   neutro. Permite que o otimizador TRMA converta recursões bloqueadas em
   recursão de cauda perfeita.
@@ -2575,7 +2575,7 @@ action processar (x::Int) -> Int
 
 | Campo | Tipo | Obrigatório | Descrição |
 |---|---|---|---|
-| `msg` | `Text` | sim | Template compile-time. `{expr}` interpola expressão do escopo (Ident ou `Ident.field`). `{log_level}` interpola o nome do level (variável sintética — ver §20.8). `{{` escapa `{` literal; `}}` escapa `}`. Desugara para `format "template" (expr1, ...)` via `infer_format`. |
+| `msg` | `Text` | sim | Template compile-time. `{expr}` interpola expressão do escopo (Ident ou `Ident.field`). `{{` escapa `{` literal; `}}` escapa `}`. Desugara para `format!{}` no body da diretiva. `{log_level}` não é mais suportado (ver §20.8). |
 | `when` | `Text` | sim | `"enter"` = loga no prólogo. `"exit"` = loga no epílogo. |
 | `level` | `LogLevel` | não | Variante do enum `LogLevel` (`Debug`/`Info`/`Warn`/`Error`). Default: `Info`. |
 | `topic` | `Text` | não | Nome do canal CSP. Default: herdado do fiber ancestral (ou `"default"`). Mutuamente exclusivo com `file`. |
@@ -2607,17 +2607,17 @@ action processar (x::Int) => Int
 - `when: "exit"` → placeholders podem referenciar params e variáveis do corpo.
   O codegen injeta a publicação no epílogo (antes do retorno).
 
-### 20.2. Action nativa `log!()`
+### 20.2. Action `log!()`
 
 Publicação explícita no corpo de actions. Dispara na execução da linha (não no
-wrapping como `@log`). A mensagem é tratada como **template** se for `TextLit`
-— placeholders `{expr}` são interpolados via `infer_format`, e `{log_level}` é
-resolvido como variável sintética (ver §20.8). Se for uma expressão dinâmica
-(não-literal), é inferida como `Text` puro sem interpolação.
+wrapping como `@log`). `log!()` é uma **action normal do stdlib** com 4 overloads
+despachados pelo `DispatchTable` — não é mais interceptada no typeck. A mensagem
+(pos 1) é passada literal ao runtime, **sem interpolação**. Para interpolar
+valores, use `format!{}` ou `string_concat` antes de chamar `log!()`.
 
 ```kata
 log!(LogLevel::Info, "mensagem", "audit", "drop")
-log!(LogLevel::Warn, "[{log_level}] val={x}", stdout!())
+log!(LogLevel::Warn, string_concat "[Warn] val=" (show x), stdout!())
 ```
 
 **Bifurcação por tipo do 3º arg:**
@@ -2627,9 +2627,9 @@ O 3º argumento determina o destino da mensagem — CSP (tópico) ou write diret
 
 | 3º arg | Tipo | Comportamento | FFI |
 |---|---|---|---|
-| `Text` (tópico) | `Ty::Text` | Publica no canal CSP nomeado | `kata_rt_log_publish` |
+| `Text` (tópico) | `Ty::Text` | Publica no canal CSP nomeado | `kata_rt_log_publish_topic` |
 | `File` | `Ty::File` | Escreve diretamente no arquivo | `kata_rt_file_write_text` |
-| ausente | — | CSP com config herdada do fiber | `kata_rt_log_publish` |
+| ausente | — | CSP com config herdada do fiber | `kata_rt_log_publish_default` |
 
 **Policy (4º arg):** Só é válido quando o 3º arg é `Text` (tópico CSP). Passar
 policy quando o 3º arg é `File` é **erro de tipo** compile-time — policy só faz
@@ -2638,25 +2638,25 @@ sentido no caminho CSP (controla o tipo de canal).
 | Pos | Tipo | Descrição |
 |---|---|---|
 | 0 | `LogLevel` | Level da mensagem. |
-| 1 | `Text` | Mensagem — template se `TextLit`, senão `Text` dinâmico. |
+| 1 | `Text` | Mensagem — passada literal, sem interpolação. |
 | 2 | `Text` \| `File` | Tópico CSP (`Text`) ou arquivo (`File`). Opcional. |
 | 3 | `Text` | Policy. Opcional — só com tópico CSP. Default herdado ou `"drop"`. |
 
-Typeck aceita 2, 3 ou 4 args. Exemplos:
+Overloads (4): `(LogLevel, Text)`, `(LogLevel, Text, Text)`, `(LogLevel, Text, Text, Text)`,
+`(LogLevel, Text, File)`. Exemplos:
 
 ```kata
 # CSP com tópico e policy explícitos
-log!(LogLevel::Info, "msg {x}", "audit", "block")
+log!(LogLevel::Info, "msg dinamica", "audit", "block")
 
 # Write direto em stdout (File)
-log!(LogLevel::Info, "msg {x}", stdout!())
+log!(LogLevel::Info, "msg dinamica", stdout!())
 
 # CSP com config herdada (sem 3º arg)
-log!(LogLevel::Error, "msg {x}")
+log!(LogLevel::Error, "erro dinamico")
 
-# Template com {log_level}
-log!(LogLevel::Warn, "[{log_level}] val={x}", stdout!())
-# → escreve "[Warn] val=99" em stdout
+# Interpolação manual com string_concat + show
+log!(LogLevel::Warn, string_concat "[Warn] val=" (show x), stdout!())
 ```
 
 ### 20.3. Action nativa `log_recv!()`
@@ -2720,41 +2720,23 @@ passado na FFI mas não há filtragem. Reservado para filtragem futura.
 invisivelmente — na semântica da linguagem, a pureza não muda; no máximo a
 resposta é adiada (com `policy: "block"`).
 
-### 20.8. Variável sintética `{log_level}`
+### 20.8. Interpolação em `@log` (sem `{log_level}`)
 
-`{log_level}` é uma variável sintética disponível em templates de `@log` e
-`log!()`. Interpola o **nome** do level da mensagem — não a tag numérica.
+A diretiva `@log` interpola `{expr}` via `format!{}` no body da diretiva — `{x}`
+é resolvido se `x` estiver no escopo (param ou variável do corpo). `{{` escapa
+`{` literal.
 
-**Resolução:** O inference resolve `{log_level}` durante o parsing do template,
-antes de consultar o escopo. A tag do level (extraída de `LogLevel::Info` etc.)
-é mapeada para a string correspondente via `log_level_name`:
-
-| Tag | Nome interpolado |
-|---|---|
-| 0 | `"Debug"` |
-| 1 | `"Info"` |
-| 2 | `"Warn"` |
-| 3 | `"Error"` |
-
-**Sintaxe:** `{log_level}` aparece em templates como qualquer outro placeholder.
-É resolvida como `TextLit` (literal de string) — não consulta o escopo, não é
-variável do usuário.
+**`{log_level}` foi removido** — era uma variável sintética resolvida magicamente
+pelo typeck. Para incluir o nome do level na mensagem, construa a string
+manualmente com `string_concat` ou passe o level como parte do template:
 
 ```kata
-@log{msg: "[{log_level}] processando {x}", when: "enter", file: stdout, level: "Warn"}
+@log{msg: "processando {x}", when: "enter", level: LogLevel::Warn}
 action processar (x::Int) => Int
     + x 1
-# → escreve "[Warn] processando 42" em stdout
+# → loga "processando 42" com level Warn (o nome do level é metadado do log,
+#    não parte da mensagem)
 ```
-
-```kata
-log!(LogLevel::Error, "[{log_level}] falha em {x}", stdout!())
-# → escreve "[Error] falha em ..." em stdout
-```
-
-**Compatibilidade com `when: "enter"`:** `{log_level}` é sempre válida em
-`when: "enter"` — não é variável do corpo, é resolvida antes da verificação de
-placeholders.
 
 ## 21. Interoperabilidade e Baixo Nível (FFI)
 
