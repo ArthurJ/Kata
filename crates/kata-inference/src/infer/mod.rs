@@ -42,8 +42,6 @@ pub(crate) mod helpers;
 mod iface_dispatch;
 mod lambda;
 mod log_builtins;
-mod log_synthesis;
-mod log_template;
 mod partial_dispatch;
 mod recursion;
 mod refined_builders;
@@ -138,6 +136,7 @@ pub fn infer_module(
             type_params,
             substitutions: None,
             param_names: action_def.param_names.clone(),
+            param_defaults: action_def.param_defaults.clone(),
         });
     }
 

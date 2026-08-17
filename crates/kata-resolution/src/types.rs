@@ -63,36 +63,6 @@ pub struct Signature {
     /// Vazio para funções não-genéricas. Coletado examinando os `Ty::Var` em
     /// param_types e return_type cujo nome é UPPER_CASE e não está no TypeEnv.
     pub type_params: Vec<String>,
-    /// Nomes dos params. `Some(nome)` para params nomeados (`x::Tipo`),
-    /// `None` para posicional. Vazio para funções puras/FFI sem nomes.
-    /// Usado pelo typeck para mapear DictLit args → params nomeados.
-    pub param_names: Vec<Option<String>>,
-}
-
-/// Especificação de logging `@log` anotada em Action ou função nomeada.
-///
-/// Produzida no resolution a partir das diretivas `@log`.
-/// O inference consome e produz `TypedLogSpec` em `TypedAction`/`TypedFunction`.
-/// O codegen injeta `kata_rt_log_publish` no prólogo (`when: "enter"`) ou
-/// epílogo (`when: "exit"`).
-#[derive(Debug, Clone)]
-pub struct LogSpec {
-    /// Template compile-time. `{expr}` interpola. `{{` escapa `{`.
-    pub msg: String,
-    /// `"enter"` = loga no prólogo. `"exit"` = loga no epílogo. Obrigatório.
-    pub when: String,
-    /// Tópico (nome do canal CSP). None = usar config herdada do fiber.
-    /// Mutuamente exclusivo com `file`.
-    pub topic: Option<String>,
-    /// Nome do identificador File para write direto (ex: `stdout`).
-    /// Mutuamente exclusivo com `topic`. O inference resolve como
-    /// `Expr::Ident(name)` e tipa como `Ty::File`.
-    pub file: Option<String>,
-    /// Política: `"drop"` ou `"block"`. None = usar config herdada.
-    /// Só válido com `topic` (não com `file`).
-    pub policy: Option<String>,
-    /// Level como variante do enum LogLevel (ex: `"Info"`). None = Info default.
-    pub level: Option<String>,
 }
 
 /// Especificação de timer `@timer` anotada em função nomeada.
@@ -143,10 +113,6 @@ pub struct FunctionDef {
     pub param_types: Vec<Ty>,
     pub return_type: Ty,
     pub clauses: Vec<Spanned<LambdaClause>>,
-    /// Especificações de logging `@log`. Múltiplas diretivas `@log` são
-    /// suportadas — cada uma injeta independentemente no prólogo/epílogo.
-    /// Vazio se a função não tem `@log`.
-    pub log: Vec<LogSpec>,
     /// Especificação de cache `@cache{strategy: "LRU"}`. None se a função
     /// não tem `@cache`.
     pub cache_strategy: Option<String>,
@@ -168,16 +134,15 @@ pub struct ActionDef {
     /// Nomes dos params. `Some(nome)` para params nomeados (`x::Tipo`),
     /// `None` para posicional legado (não usado após migração total).
     pub param_names: Vec<Option<String>>,
+    /// Defaults dos params. `None` = obrigatório, `Some(expr)` = tem default.
+    /// Paralelo a `param_names`. Vazio para actions sem defaults.
+    pub param_defaults: Vec<Option<Spanned<Expr>>>,
     pub return_type: Ty,
     pub body: Vec<ActionStmt>,
     /// Casos de teste anotados com `@test`. Cada `@test` vira um `TestSpec`
     /// cujos args são `Expr` não-tipado — o inference tipa via `infer_expr`.
     /// Vazio quando a action não tem `@test`.
     pub tests: Vec<TestSpec>,
-    /// Especificações de logging `@log`. Múltiplas diretivas `@log` são
-    /// suportadas — cada uma injeta independentemente no prólogo/epílogo.
-    /// Vazio se a action não tem `@log`.
-    pub log: Vec<LogSpec>,
     /// Diretivas customizadas aplicadas a esta action (em ordem).
     /// Preenchido pelo resolution, consumido pelo `desugar_directives`.
     pub custom_directives: Vec<CustomDirectiveApp>,
@@ -296,12 +261,6 @@ pub enum ResolveError {
     #[error("diretiva `{name}` mistura Target::Any com específico para when={when}")]
     #[diagnostic(code = "resolve.directive_any_conflict")]
     DirectiveAnyConflict { name: String, when: String },
-
-    /// `directive` e `action` com o mesmo nome no mesmo escopo —
-    /// namespaces disjuntos (PRD D12).
-    #[error("diretiva `{name}` e action com mesmo nome no mesmo escopo — namespace disjunto")]
-    #[diagnostic(code = "resolve.directive_action_name_conflict")]
-    DirectiveActionNameConflict { name: String },
 }
 
 /// Formata um `Vec<ResolveError>` como string legível (erros separados por `; `).

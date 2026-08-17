@@ -3,12 +3,14 @@
 # log!() dispara na linha. log_recv!("topic") bloqueia até chegar mensagem.
 
 # @log no prólogo: loga params na entrada (topic default, policy drop)
-@log{msg: "entrada x={x}", when: "enter"}
+# _args é a tupla de params (41,) — repr inclém parênteses e vírgula
+@log{msg: "entrada {_args}", when: "enter"}
 action processar (x::Int) => Int
     + x 1
 
-# @log no epílogo: loga variável do corpo na saída (topic metrics, policy block)
-@log{msg: "resultado r={r}", when: "exit", topic: "metrics", policy: "block"}
+# @log no epílogo: loga o valor retornado na saída (topic metrics, policy block)
+# _return é o valor retornado (Int 42) — repr sem parênteses
+@log{msg: "resultado {_return}", when: "exit", topic: "metrics", policy: "block"}
 action dobrar (x::Int) => Int
     let r := * x 2
     r

@@ -26,6 +26,20 @@ use crate::typed::{TypedExpr, TypedExprKind};
 use super::expr::{InferCtx, infer_expr};
 use super::helpers::InferResult;
 
+/// Pré-processa escape `{{` → `{` e `}}` → `}` em um template TextLit.
+///
+/// Regra: `{{` sempre vira `{` literal, `}}` sempre vira `}` literal,
+/// `{key}` (chaves simples) é interpolação e permanece intacto.
+///
+/// Isto permite escrever `{{chave}}` para produzir o texto literal `{chave}`,
+/// distinguindo de `{chave}` que seria interpolação da key `chave`.
+fn preprocess_escape(text: &str) -> String {
+    text.replace("{{", "\x00")
+        .replace("}}", "\x01")
+        .replace('\x00', "{")
+        .replace('\x01', "}")
+}
+
 /// `format!` builtin — recebe o `args` cru do ActionCall.
 ///
 /// Pode ser `Expr::Tuple`/`Expr::Grouping` (posicional) ou `Expr::DictLit`
@@ -84,6 +98,20 @@ fn infer_format_named(
             span: tpl_val.span.into(),
         });
     }
+    // Pré-processa escape {{ }} se o template é TextLit.
+    // {{ → { literal, }} → } literal, {key} (chaves simples) = interpolação.
+    let template_expr = if let TypedExprKind::TextLit { text } = &template_expr.kind {
+        let processed = preprocess_escape(text);
+        TypedExpr {
+            span: tpl_val.span,
+            ty: Ty::text(),
+            tail_pos: false,
+            escape: kata_core::escape::EscapeTarget::Local,
+            kind: TypedExprKind::TextLit { text: processed },
+        }
+    } else {
+        template_expr
+    };
     let mut result = Spanned::new(template_expr, tpl_val.span);
 
     // Demais entries: pares "key": expr.
@@ -165,6 +193,19 @@ fn infer_format_positional(
             span: elements[0].span.into(),
         });
     }
+    // Pré-processa escape {{ }} se o template é TextLit.
+    let template_expr = if let TypedExprKind::TextLit { text } = &template_expr.kind {
+        let processed = preprocess_escape(text);
+        TypedExpr {
+            span: elements[0].span,
+            ty: Ty::text(),
+            tail_pos: false,
+            escape: kata_core::escape::EscapeTarget::Local,
+            kind: TypedExprKind::TextLit { text: processed },
+        }
+    } else {
+        template_expr
+    };
     let mut result = Spanned::new(template_expr, elements[0].span);
 
     // Demais elements: valores a interpolar posicionalmente.
@@ -175,35 +216,6 @@ fn infer_format_positional(
     }
 
     Ok((Ty::text(), result.node.kind))
-}
-
-/// Wrapper de compatibilidade — recebe args como slice (format antigo sem `!`).
-/// `args[0]` = template, `args[1]` = tupla de args (ou Unit, ou expr única).
-/// Usado por `log_synthesis.rs` e `log_builtins.rs` que constroem args
-/// programaticamente. Será removido quando `@log` intrínseco for removido (Fase 3).
-pub(crate) fn infer_format(
-    _callee: &Spanned<Expr>,
-    args: &[Spanned<Expr>],
-    _span: &Span,
-    env: &mut TypeEnv,
-    ctx: &InferCtx,
-) -> InferResult<(Ty, TypedExprKind)> {
-    if args.len() == 2 {
-        // Desempacotar args[1] (tupla de args) em elements individuais.
-        let mut elements = vec![args[0].clone()];
-        match &args[1].node {
-            Expr::Tuple { elements: inner } => elements.extend(inner.iter().cloned()),
-            Expr::Unit => {} // sem args
-            Expr::Grouping { inner } => match &inner.node {
-                Expr::Tuple { elements: inner2 } => elements.extend(inner2.iter().cloned()),
-                _ => elements.push(args[1].clone()),
-            },
-            _ => elements.push(args[1].clone()),
-        }
-        infer_format_positional(*_span, &elements, env, ctx)
-    } else {
-        infer_format_positional(*_span, args, env, ctx)
-    }
 }
 
 /// Extrai elements de tupla, Grouping, ou auto-wrap de expr única.
