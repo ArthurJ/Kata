@@ -30,6 +30,8 @@ expression: tast_snapshot(src)
   mod :: [Prim(Int), Prim(Int)] => Prim(Int)
   mod :: [Prim(Int), Struct("NonZero")] => Prim(Int)
   show :: [Prim(Text)] => Prim(Text)
+  step :: [Prim(Int)] => Prim(Int)
+  step :: [Prim(Float)] => Prim(Float)
 
 === Actions ===
   echo :: [Interface("SHOW")] => Unit

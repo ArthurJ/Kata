@@ -114,12 +114,12 @@ greet 42
 #[test]
 fn default_method_self_in_return() {
     let src = r#"
-interface STEPPABLE
+interface STEPPER
     step :: Self => Self
     lambda x:
         x
 
-Int implements STEPPABLE
+Int implements STEPPER
     step :: Int => Int @ffi("kata_rt_bi_add")
 
 step 42
