@@ -2,7 +2,7 @@
 
 ## Status
 
-**Status:** 📄 Rascunho
+**Status:** ✅ Concluído (Fases 1-6: tipo + runtime, lexer/parser, typeck/interfaces, codegen, to_bytes/from_bytes, testes E2E)
 **Data:** 2026-07-30
 **Depende de:** Fio 11 (CSP — `spawn!` usa `Bytes` como formato serializado), Fio 8 (coleções — `Bytes` segue modelo de `Array`/`Text`)
 **Não depende de:** `spawn!` (Bytes tem utilidade independente — I/O, buffers, manipulação de dados crus)
@@ -478,7 +478,7 @@ alocados num único bloco contíguo na arena.
 
 ## 9. Fases de implementação
 
-### Fase 1: Tipo e runtime
+### Fase 1: Tipo e runtime ✅
 
 **kata-core:**
 - `Ty::Bytes` no enum
@@ -490,7 +490,7 @@ alocados num único bloco contíguo na arena.
 
 **DoD Fase 1:** Runtime cria blob, acessa bytes, concatena. Testes unitários.
 
-### Fase 2: Lexer e parser
+### Fase 2: Lexer e parser ✅
 
 **kata-lexer:**
 - Tokens `Shr` (`>>`) e `Shl` (`<<`)
@@ -503,7 +503,7 @@ alocados num único bloco contíguo na arena.
 **DoD Fase 2:** `kata parse` de programa com `b"Hello"`, `>>`, `<<`
 produz AST correta. Snapshots.
 
-### Fase 3: Typeck e interfaces
+### Fase 3: Typeck e interfaces ✅
 
 **kata-inference:**
 - Typeck de `DotAccess` em `Bytes` → `Result::(Byte, Text)`
@@ -528,7 +528,7 @@ produz AST correta. Snapshots.
 Sobrecargas de `and/or/xor/not` resolvem por tipo. `t.0` retorna
 `Result::(Text, Text)`. `len(t)` retorna `Int` (codepoints).
 
-### Fase 4: Codegen
+### Fase 4: Codegen ✅
 
 **kata-codegen:**
 - Lowering de `BytesLit` → `kata_rt_bytes_from_ptr` com dados embutidos

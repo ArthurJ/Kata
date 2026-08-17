@@ -1,6 +1,6 @@
 # PRD — Diretiva `trace` com Args no Site de Aplicação
 
-**Status:** 📝 Proposto (Fase 1 ✅, Fase 2 ✅, Fase 3 pendente)
+**Status:** ✅ Concluído (Fase 1 ✅, Fase 2 ✅, Fase 3 ✅)
 **Data:** 2026-08-12
 **Pré-requisito 1:** PRD-diretivas.md (sistema de diretivas customizadas — ✅ implementado)
 **Pré-requisito 2:** PRD-stdio-alignment.md (stdin/stdout/stderr como `File` em módulo `stdio`, `log!()` com `File`, remoção de tópicos mágicos — ✅ implementado, 9 fases, 17 testes E2E)

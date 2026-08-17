@@ -1,6 +1,6 @@
 # PRD — `constant`: Constantes de Módulo + Remoção de `@comptime` + Comentários Multilinha
 
-**Status:** Pendente
+**Status:** ✅ Concluído (Fases 1-7: `constant` keyword, remoção de `@comptime`, comentários multilinha `#{}#`, REPL, colisão de nomes)
 **Data:** 2026-08-10
 **Depende de:** Fio 12 ✅ (comptime pass — JIT-and-execute, HeapSnapshot, serialização), Module system ✅ (import/export, ModuleLoader)
 **Substitui:** `@comptime` como diretiva de usuário (Fio 12 §2.1–2.3)

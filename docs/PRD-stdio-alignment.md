@@ -1,6 +1,6 @@
 # PRD — Alinhamento de stdio: `stdout`/`stderr` como `File`, `log!` com File, sobrecarga de `@log`
 
-**Status:** 📋 Proposto
+**Status:** ✅ Concluído (9 fases, 17 testes E2E)
 **Data:** 2026-08-04
 **Depende de:** Fio 14 ✅ (`@log`, `log!`, `log_recv!`), File I/O ✅ (`Ty::File`, `open!`, `write!`, `close!`), Socket I/O ✅ (`Ty::Socket`)
 **Não depende de:** `spawn!` (não implementado)

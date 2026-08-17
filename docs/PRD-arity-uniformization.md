@@ -1,6 +1,6 @@
 # PRD — Uniformização de aplicação: arity-aware parsing e dict dispatch para funções e actions
 
-**Status:** Rascunho
+**Status:** ✅ Concluído (parsing arity-aware implementado; dict dispatch para funções removido pelo PRD-dict-dispatch-fix.md)
 **Data:** 2026-08-06
 **Depende de:** Pipeline lex→parse→resolve→infer existente, DispatchTable, InterfaceRegistry
 

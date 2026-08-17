@@ -1,6 +1,6 @@
 # PRD — OverloadSet em Aplicação Parcial
 
-**Status:** Rascunho
+**Status:** ✅ Concluído (`Ty::OverloadSet` em partial dispatch, lambda deferido, resolução no call site, HOF callback)
 **Data:** 2026-08-10
 **Pré-requisito:** `@commutative` cross-type fix (commit `34c8154`), overloads
 cross-type no prelude (em andamento)
