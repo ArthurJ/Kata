@@ -68,10 +68,10 @@ fn constant_em_function_multi_clauses() {
     assert_eq!(lines[1], "8", "soma 3 5 = 3 + 5 = 8 — stdout: {stdout}");
 }
 
-/// Constant Text usada em function (string_concat para Text).
+/// Constant Text usada em function (+ para Text).
 #[test]
 fn constant_text_em_function() {
-    let source = "constant prefix := \"Hello: \"\ngreet :: Text => Text\nlambda name: string_concat prefix name\n\necho!(greet \"World\")\n";
+    let source = "constant prefix := \"Hello: \"\ngreet :: Text => Text\nlambda name: + prefix name\n\necho!(greet \"World\")\n";
     let (stdout, stderr, code) = run_kata_run(source);
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     let first = stdout.lines().next().unwrap_or("");

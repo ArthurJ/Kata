@@ -111,7 +111,7 @@ fn prelude_arities() -> HashMap<String, usize> {
     m.insert("cons".to_string(), 2);
     m.insert("int_to_text".to_string(), 1);
     m.insert("bool_to_text".to_string(), 1);
-    m.insert("string_concat".to_string(), 2);
+    m.insert("+".to_string(), 2);
     m.insert("text_replace".to_string(), 2);
     m.insert("from_int".to_string(), 1);
     m.insert("to_float".to_string(), 1);

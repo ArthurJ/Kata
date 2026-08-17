@@ -465,10 +465,7 @@ bool_to_text :: Boolean => Text
 
 # ── Text operações ─────────────────────────────────────────────
 
-@ffi("kata_rt_string_concat")
-string_concat :: Text Text => Text
-
-# Text concat via + (mesmo FFI, açúcar de operador)
+# Text concat via + (prefix, mesmo FFI)
 @ffi("kata_rt_string_concat")
 + :: Text Text => Text
 

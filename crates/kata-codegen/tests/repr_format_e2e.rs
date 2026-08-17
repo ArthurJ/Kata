@@ -109,7 +109,7 @@ fn repr_struct_dois_ints() {
 /// `show` despacha por tipo — dois structs diferentes, mesmo nome "show".
 #[test]
 fn repr_despacha_por_tipo() {
-    let src = "data Pessoa (nome::Text idade::Int)\ndata Ponto (x::Int y::Int)\nconstant p := Pessoa \"João\" 30\nconstant pt := Ponto 3 4\nstring_concat (show p) (show pt)";
+    let src = "data Pessoa (nome::Text idade::Int)\ndata Ponto (x::Int y::Int)\nconstant p := Pessoa \"João\" 30\nconstant pt := Ponto 3 4\n+ (show p) (show pt)";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::text());
     let _ = raw;

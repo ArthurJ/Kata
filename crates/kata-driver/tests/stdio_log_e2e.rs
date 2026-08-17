@@ -230,7 +230,7 @@ fn log_to_file_stdout() {
         r#"import stdio.(stdout)
 action main => Int
     let x := 42
-    let msg := string_concat "log-msg " (show x)
+    let msg := + "log-msg " (show x)
     log!(LogLevel::Info, msg, stdout!())
     0
 
@@ -289,7 +289,7 @@ fn log_template_level() {
         r#"import stdio.(stdout)
 action main => Int
     let x := 99
-    let msg := string_concat "[Warn] val=" (show x)
+    let msg := + "[Warn] val=" (show x)
     log!(LogLevel::Warn, msg, stdout!())
     0
 

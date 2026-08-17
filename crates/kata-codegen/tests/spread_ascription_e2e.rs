@@ -100,10 +100,10 @@ fn spread_soma_tupla() {
     assert_eq!(untag_smi(raw), 3);
 }
 
-/// `string_concat $ (\"a\", \"b\")` expande para `string_concat \"a\" \"b\"`.
+/// `+ $ (\"a\", \"b\")` expande para `+ \"a\" \"b\"`.
 #[test]
 fn spread_concat() {
-    let src = "string_concat $ (\"a\", \"b\")";
+    let src = "+ $ (\"a\", \"b\")";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::text());
     let _ = raw;

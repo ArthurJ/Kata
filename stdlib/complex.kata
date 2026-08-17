@@ -18,4 +18,4 @@ Complex implements NUM
 
 Complex implements SHOW
     show :: Complex => Text
-    lambda a: string_concat "(" (string_concat (show a.re) (string_concat " + " (string_concat (show a.im) "i)")))
+    lambda a: + "(" (+ (show a.re) (+ " + " (+ (show a.im) "i)")))
