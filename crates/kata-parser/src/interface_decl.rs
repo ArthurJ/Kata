@@ -143,10 +143,28 @@ impl Parser {
             self.expect(&Token::FatArrow, "`=>` in interface signature")?;
             let ret = self.parse_type_expr()?;
 
+            // Default method: após a assinatura, se o próximo token (após
+            // StmtSep) é `Lambda`, parseia o corpo — mesmo padrão de
+            // `parse_implements_decl`. Assinatura sem `lambda` = obrigatória.
+            while matches!(self.peek(), Token::StmtSep) {
+                self.advance();
+            }
+            let default_body = if matches!(self.peek(), Token::Lambda) {
+                Some(self.parse_sig_clauses()?)
+            } else {
+                None
+            };
+
+            // Consome StmtSep após o método (se houver).
+            if matches!(self.peek(), Token::StmtSep) {
+                self.advance();
+            }
+
             signatures.push(InterfaceSig {
                 name: sig_name,
                 params,
                 ret,
+                default_body,
             });
         }
         self.expect(&Token::Dedent, "DEDENT (end of interface)")?;
@@ -312,10 +330,17 @@ impl Parser {
             Vec::new()
         };
 
-        // Bloco indentado de métodos
-        self.expect(&Token::Indent, "INDENT (implements methods)")?;
+        // Bloco indentado de métodos (opcional — tipo pode usar apenas defaults).
+        // Com INDENT: parseia métodos normalmente.
+        // Sem INDENT (StmtSep/outra decl): methods = vec![] — tipo usa apenas defaults.
+        // Eof sem INDENT = input incompleto — o REPL precisa acumular mais linhas.
+        if matches!(self.peek(), Token::Eof) {
+            return Err(self.error("INDENT (implements methods)"));
+        }
         let mut methods = Vec::new();
-        loop {
+        if matches!(self.peek(), Token::Indent) {
+            self.advance(); // consume INDENT
+            loop {
             while matches!(self.peek(), Token::StmtSep) {
                 self.advance();
             }
@@ -370,8 +395,9 @@ impl Parser {
                 directives: method_directives,
                 body,
             });
+            }
+            self.expect(&Token::Dedent, "DEDENT (end of implements)")?;
         }
-        self.expect(&Token::Dedent, "DEDENT (end of implements)")?;
 
         if matches!(self.peek(), Token::StmtSep) {
             self.advance();

@@ -42,6 +42,11 @@ pub struct InterfaceSignature {
     pub name: String,
     pub params: Vec<Ty>,
     pub ret: Ty,
+    /// Default method body — cláusulas lambda da AST.
+    /// `None` = assinatura obrigatória (impl deve definir).
+    /// `Some` = default method (impl pode sobrescrever com shadow).
+    /// O typeck tipa o corpo quando despacha para o default method.
+    pub default_body: Option<Vec<kata_ast::Spanned<kata_ast::LambdaClause>>>,
 }
 
 /// Implementação registrada.

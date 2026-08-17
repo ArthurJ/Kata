@@ -218,11 +218,17 @@ pub enum DirectiveArg {
 
 /// Assinatura dentro de interface — sem corpo, sem diretivas.
 /// `+ :: NUM NUM => NUM`
+///
+/// Com `default_body: Some(...)`, é um default method — o impl pode
+/// sobrescrever (shadow). Sem `default_body`, é assinatura obrigatória.
 #[derive(Debug, Clone, PartialEq)]
 pub struct InterfaceSig {
     pub name: String,
     pub params: Vec<Spanned<TypeExpr>>,
     pub ret: Spanned<TypeExpr>,
+    /// Default method body. `None` = assinatura obrigatória (impl deve definir).
+    /// `Some` = default method (impl pode sobrescrever com shadow).
+    pub default_body: Option<Vec<Spanned<LambdaClause>>>,
 }
 
 /// Método dentro de implements — assinatura + corpo.

@@ -179,6 +179,44 @@ impl Ty {
             _ => false,
         }
     }
+
+    /// Substitui todas as ocorrências de `Ty::Var("Self")` por `replacement`,
+    /// recursivamente em tipos compostos. Usado no resolution para instanciar
+    /// default methods de interface para um tipo concreto.
+    pub fn substitute_self(&self, replacement: &Ty) -> Ty {
+        match self {
+            Ty::Var(name) if name == "Self" => replacement.clone(),
+            Ty::Generic(name, args) => Ty::Generic(
+                name.clone(),
+                args.iter().map(|a| a.substitute_self(replacement)).collect(),
+            ),
+            Ty::Function(params, ret) => Ty::Function(
+                params.iter().map(|p| p.substitute_self(replacement)).collect(),
+                Box::new(ret.substitute_self(replacement)),
+            ),
+            Ty::Action(params, ret) => Ty::Action(
+                params.iter().map(|p| p.substitute_self(replacement)).collect(),
+                Box::new(ret.substitute_self(replacement)),
+            ),
+            Ty::Tuple(elems) => {
+                Ty::Tuple(elems.iter().map(|e| e.substitute_self(replacement)).collect())
+            }
+            Ty::List(elem) => Ty::List(Box::new(elem.substitute_self(replacement))),
+            Ty::Array(elem) => Ty::Array(Box::new(elem.substitute_self(replacement))),
+            Ty::Range(elem) => Ty::Range(Box::new(elem.substitute_self(replacement))),
+            Ty::Dict(k, v) => Ty::Dict(
+                Box::new(k.substitute_self(replacement)),
+                Box::new(v.substitute_self(replacement)),
+            ),
+            Ty::Set(elem) => Ty::Set(Box::new(elem.substitute_self(replacement))),
+            Ty::Sender(elem) => Ty::Sender(Box::new(elem.substitute_self(replacement))),
+            Ty::Receiver(elem) => Ty::Receiver(Box::new(elem.substitute_self(replacement))),
+            Ty::ReceiverFactory(elem) => {
+                Ty::ReceiverFactory(Box::new(elem.substitute_self(replacement)))
+            }
+            _ => self.clone(),
+        }
+    }
 }
 
 pub use crate::type_env::{TypeBinding, TypeEnv};

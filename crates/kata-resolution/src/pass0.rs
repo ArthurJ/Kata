@@ -335,6 +335,7 @@ pub(crate) fn run_pass0(
                             .map(|t| resolve_type_expr(&t.node, type_env, interface_registry))
                             .collect(),
                         ret: resolve_type_expr(&s.ret.node, type_env, interface_registry),
+                        default_body: s.default_body.clone(),
                     })
                     .collect();
                 let info = InterfaceInfo {
@@ -470,6 +471,62 @@ pub(crate) fn run_pass0(
                             timer: None,
                             custom_directives: Vec::new(),
                         });
+                    }
+                }
+
+                // ── Default methods: métodos da interface com default_body
+                // que não foram definidos no impl. Gera Signature +
+                // FunctionDef sintetizada usando o default_body da interface.
+                // Self na assinatura é substituído pelo tipo concreto.
+                if let Some(iface_info) = interface_registry.get_interface(interface_name) {
+                    let defined_names: std::collections::HashSet<&str> =
+                        methods.iter().map(|m| m.name.as_str()).collect();
+                    for sig in &iface_info.signatures {
+                        if defined_names.contains(sig.name.as_str()) {
+                            continue; // método definido no impl — não usa default
+                        }
+                        if let Some(default_clauses) = &sig.default_body {
+                            // Substituir Self pelo tipo concreto nos param/ret.
+                            // type_name é o nome do tipo (ex: "Int", "Float").
+                            // resolve_type_expr mapeia "Int" → Ty::Prim(PrimTy::Int), etc.
+                            let concrete_ty = resolve_type_expr(
+                                &kata_ast::TypeExpr::Named(type_name.clone()),
+                                type_env,
+                                interface_registry,
+                            );
+                            let param_types: Vec<Ty> = sig
+                                .params
+                                .iter()
+                                .map(|t| t.substitute_self(&concrete_ty))
+                                .collect();
+                            let return_type = sig.ret.substitute_self(&concrete_ty);
+                            let type_params = collect_type_params(&param_types, &return_type);
+
+                            signatures.push(Signature {
+                                name: sig.name.clone(),
+                                param_types: param_types.clone(),
+                                return_type: return_type.clone(),
+                                ffi_symbol: None,
+                                is_associative: false,
+                                associative_neutral: None,
+                                is_action: false,
+                                is_commutative: false,
+                                type_params,
+                            });
+
+                            // O default_body tem Self no tipo — precisa ser
+                            // substituído pelo tipo concreto. O typeck vai
+                            // tipar o corpo com os tipos concretos.
+                            functions.push(FunctionDef {
+                                name: sig.name.clone(),
+                                param_types,
+                                return_type,
+                                clauses: default_clauses.clone(),
+                                cache_strategy: None,
+                                timer: None,
+                                custom_directives: Vec::new(),
+                            });
+                        }
                     }
                 }
             }

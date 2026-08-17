@@ -5,11 +5,11 @@ expression: output
 --- stderr ---
 Error: parse.unexpected_token
 
-  × token inesperado: esperado `INDENT (implements methods)`, encontrado
-  │ `<STMT_SEP>`
-   ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_phase9.kata:1:1]
- 1 │ # Teste de Validação — Fase 9
-   · ▲
-   · ╰── token inesperado
- 2 │ # Introspecção, Tipos, Global Implements e Templates (format)
-   ╰────
+  × token inesperado: esperado ``!` após `type``, encontrado `my_config`
+    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_phase9.kata:12:19]
+ 11 │     let my_config := Config "localhost" 8080
+ 12 │     let t := type my_config
+    ·                   ────┬────
+    ·                       ╰── token inesperado
+ 13 │     let f := fields my_config
+    ╰────
