@@ -172,14 +172,19 @@ passam a ter sobrecargas para `Byte` e `Bytes`:
 
 ### 4.2. Sobrecarga para Bytes
 
-`and`, `or`, `xor` também operam em `Bytes` (elemento-a-elemento, com
-broadcasting se um operando for `Byte`):
+`and`, `or`, `xor` também operam em `Bytes` (elemento-a-elemento). Quando os
+operandos têm tamanhos diferentes, o menor é zero-padded até o tamanho do
+maior (broadcast):
 
 ```
-let mask := 0x"FF00FF00"
+let mask := b"\xFF\x00\xFF\x00"
 let masked := and bytes mask     # AND elemento-a-elemento
-let zeroed := and bytes 0x"00"   # broadcasting — cada byte AND 0x00
+let mixed := and b"\xFF\xF0" b"\xAA"  # broadcast → 2 bytes: [AA 00]
 ```
+
+Broadcast com zero-pad preserva a semântica algebraica: `x OR 0 = x`,
+`x XOR 0 = x`, `x AND 0 = 0`. O resultado tem sempre o tamanho do maior
+operand.
 
 ### 4.3. Tokens no lexer
 
@@ -397,17 +402,19 @@ conversão.
 
 ### 7.3. Bytes literal — sintaxe
 
-`b"Hello"` — byte string literal. Conteúdo entre aspas é interpretado como
-bytes crus (não UTF-8 processado, não escape sequences de texto). Aceita
+`b"Hello"` ou `b'Hello'` — byte string literal. Aspas duplas e simples são
+equivalentes (mesma semântica que Text). Conteúdo entre aspas é interpretado
+como bytes crus (não UTF-8 processado, não escape sequences de texto). Aceita
 qualquer byte 0x00-0xFF.
 
 ```
 let b := b"Hello"              # 5 bytes: 48 65 6c 6c 6f
 let raw := b"\x00\xFF"         # 2 bytes: 00 FF (escape hex)
 let mixed := b"ABC\x00"        # 4 bytes: 41 42 43 00
+let eq := b'Hello'             # equivalente a b"Hello"
 ```
 
-Escape sequences: `\xNN` (hex byte), `\\` (backslash literal), `\"` (aspas).
+Escape sequences: `\xNN` (hex byte), `\\` (backslash literal), `\"`, `\'` (aspas).
 Demais escapes de Text (`\n`, `\t`) também aceitos — representam o byte
 correspondente.
 

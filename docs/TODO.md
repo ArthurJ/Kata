@@ -46,30 +46,6 @@ pelo parser (variant defensivo). Seção removida do sintaxe-mapa até revisão.
 **Impacto:** Baixo. `$` com literal é redundante (`f $ (1, 2, 3)` ≡ `f 1 2 3`).
 Sem utilidade real até suportar variáveis.
 
-### 3. ~~Sintaxe de assinatura de Action deveria usar `->` em vez de `=>`~~ — RESOLVIDO
-
-Tipo `Action(Params)` agora usa `->` (tipo de função). Declarações `action name(...) => ...` mantêm `=>` (declaração).
-
-### 4. Byte string `b'...'` — lexer não aceita aspa simples
-
-**Estado:** Gap no lexer. tmLanguage já cobre (preemptivamente).
-
-**Problema:** O dispatcher do lexer (`crates/kata-lexer/src/dispatch.rs:165`)
-só intercepta `b"` — `b' if peek == Some('"')`. Não há branch para
-`b'`. O módulo `bytes.rs` documenta apenas `b"..."`. `b'Hello'` cai
-no fallback `_ => lex_ident(lex, &start)`, produzindo `Ident("b")`
-seguido de `TextLit("Hello'")` (a aspa simples abre string single).
-
-**Correção:** Adicionar branch `b' if peek == Some('\'')` no dispatch,
-chamando `lex_bytes_string` (ou variante que aceita `'` como delimitador).
-O `lex_bytes_string` precisa parametrizar o delimitador de fechamento
-(`"` vs `'`) — hoje hardcoded em `Some('"')` no match do conteúdo.
-
-**Arquivos:** `crates/kata-lexer/src/dispatch.rs:165`, `crates/kata-lexer/src/bytes.rs`
-
-**Impacto:** Baixo. `b"..."` já funciona; `b'...'` é paridade sintática
-com strings normais (dupla e simples são equivalentes).
-
 ---
 
 ## Migração de Exemplos

@@ -1,22 +1,24 @@
-//! Byte string literals — `b"Hello"`, `b"\x00\xFF"`.
+//! Byte string literals — `b"Hello"`, `b'\x00\xFF'`.
 
 use kata_ast::{Token, TokenWithSpan};
 use kata_diagnostics::{FrontendError, MietteSpan};
 
 use crate::{Lexer, Pos};
 
-/// Lexa um byte string literal: `b"..."`.
+/// Lexa um byte string literal: `b"..."` ou `b'...'`.
 ///
 /// O `b` já foi consumido pelo dispatch. Esta função é chamada quando
-/// o lexer vê `"` após um `b` que foi reconhecido como prefixo de bytes.
+/// o lexer vê `"` ou `'` após um `b` que foi reconhecido como prefixo de bytes.
+/// Aspas duplas e simples são equivalentes (mesma semântica que Text).
 ///
-/// Escapes suportados: `\xNN` (hex byte), `\\`, `\"`, `\n`, `\t`, `\r`, `\0`.
+/// Escapes suportados: `\xNN` (hex byte), `\\`, `\"`, `\'`, `\n`, `\t`, `\r`, `\0`.
 /// Qualquer byte 0x00-0xFF é aceito.
 pub(crate) fn lex_bytes_string(
     lex: &mut Lexer,
     start: &Pos,
 ) -> Result<TokenWithSpan, FrontendError> {
-    // `"` já é o char atual — consumir
+    // Aspa de abertura já é o char atual — ler e consumir
+    let quote = lex.ch.expect("lex_bytes_string chamado sem aspa");
     lex.advance(); // consome aspa de abertura
 
     let mut bytes: Vec<u8> = Vec::new();
@@ -98,7 +100,7 @@ pub(crate) fn lex_bytes_string(
                     }
                 }
             }
-            Some('"') => {
+            Some(ch) if ch == quote => {
                 lex.advance(); // consome aspa de fechamento
                 break;
             }

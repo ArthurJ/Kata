@@ -116,6 +116,34 @@ fn bytes_lit_vazio_retorna_bytes() {
     assert_ne!(raw, 0, "blob vazio não deve ser null (tem header)");
 }
 
+/// `b'Hello'` (aspas simples) cria mesmo blob que `b"Hello"`.
+#[test]
+fn bytes_lit_single_quotes_retorna_bytes() {
+    let src = "b'Hello'";
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Bytes, "b'Hello' deve ter tipo Bytes");
+    assert_ne!(raw, 0, "blob não deve ser null");
+}
+
+/// `b'Hello'` e `b"Hello"` produzem blobs com mesmo len e conteúdo.
+#[test]
+fn bytes_lit_single_and_double_quotes_equivalent() {
+    let (raw_single, ty_single) = eval_src("len(b'Hello')");
+    let (raw_double, ty_double) = eval_src("len(b\"Hello\")");
+    assert_eq!(ty_single, ty_double);
+    assert_eq!(untag_smi(raw_single), untag_smi(raw_double));
+    assert_eq!(untag_smi(raw_single), 5);
+}
+
+/// `b'\x00\xFF'` (aspas simples + hex escape) produz 2 bytes.
+#[test]
+fn bytes_lit_single_quotes_hex_escape() {
+    let src = "len(b'\\x00\\xFF')";
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::int());
+    assert_eq!(untag_smi(raw), 2, "b'\\x00\\xFF' = 2 bytes");
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // Indexação — b.N retorna Result::(Byte, Text), | extrai Byte
 // ═══════════════════════════════════════════════════════════════════
@@ -384,6 +412,47 @@ fn bytes_not_preserva_conteudo() {
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Byte);
     assert_eq!(untag_smi(raw), 0xFF, "NOT 0x00 = 0xFF");
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Bitwise Bytes — broadcast (tamanhos diferentes)
+// ═══════════════════════════════════════════════════════════════════
+
+/// `and b"\xFF\xF0" b"\xAA"` — broadcast: resultado tem 2 bytes.
+/// byte 0: 0xFF AND 0xAA = 0xAA. byte 1: 0xF0 AND 0 (pad) = 0x00.
+#[test]
+fn bytes_and_broadcast_tamanho_do_maior() {
+    let src = "len(and b\"\\xFF\\xF0\" b\"\\xAA\")";
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::int());
+    assert_eq!(untag_smi(raw), 2, "broadcast: resultado tem tamanho do maior");
+}
+
+/// `and b"\xFF\xF0" b"\xAA"` byte 1 = 0x00 (0xF0 AND 0x00 pad).
+#[test]
+fn bytes_and_broadcast_byte_extra_eh_zero() {
+    let src = "(and b\"\\xFF\\xF0\" b\"\\xAA\").1 | byte(0)";
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Byte);
+    assert_eq!(untag_smi(raw), 0x00, "0xF0 AND 0 (pad) = 0x00");
+}
+
+/// `or b"\xF0\x0F" b"\x0F"` — broadcast: byte 1 preserva (0x0F OR 0 = 0x0F).
+#[test]
+fn bytes_or_broadcast_preserva_byte_extra() {
+    let src = "(or b\"\\xF0\\x0F\" b\"\\x0F\").1 | byte(0)";
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Byte);
+    assert_eq!(untag_smi(raw), 0x0F, "0x0F OR 0 (pad) = 0x0F");
+}
+
+/// `xor b"\xFF\x42" b"\x0F"` — broadcast: byte 1 preserva (0x42 XOR 0 = 0x42).
+#[test]
+fn bytes_xor_broadcast_preserva_byte_extra() {
+    let src = "(xor b\"\\xFF\\x42\" b\"\\x0F\").1 | byte(0)";
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Byte);
+    assert_eq!(untag_smi(raw), 0x42, "0x42 XOR 0 (pad) = 0x42");
 }
 
 // ═══════════════════════════════════════════════════════════════════

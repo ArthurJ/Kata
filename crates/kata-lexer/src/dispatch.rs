@@ -167,6 +167,11 @@ pub(crate) fn lex_token(lex: &mut Lexer, had_space: bool) -> Result<TokenWithSpa
             lex.advance(); // consome `b`, agora `"` é o char atual.
             return lex_bytes_string(lex, &start);
         }
+        'b' if lex.peek() == Some('\'') => {
+            // `b'` — byte string literal com aspas simples (equivalente a `b"`).
+            lex.advance(); // consome `b`, agora `'` é o char atual.
+            return lex_bytes_string(lex, &start);
+        }
         _ => return lex_ident(lex, &start),
     };
 

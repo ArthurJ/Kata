@@ -1,3 +1,5 @@
+#[path = "lexer_test/bytes.rs"]
+mod bytes;
 #[path = "lexer_test/comments.rs"]
 mod comments;
 #[path = "lexer_test/errors.rs"]

@@ -306,29 +306,32 @@ pub unsafe extern "C" fn kata_rt_bytes_slice(
 
 // ── Operações bitwise ──────────────────────────────────────
 
-/// AND bit-a-bit de dois blobs (elemento-a-elemento). Requer mesmo tamanho.
+/// AND bit-a-bit de dois blobs (elemento-a-elemento, com broadcast).
+/// Tamanhos diferentes: menor é zero-padded até o tamanho do maior.
 ///
 /// # Safety
-/// `a` e `b` devem ser válidos e de mesmo comprimento.
+/// `a` e `b` devem ser válidos.
 /// `arena_handle` deve ser válido.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn kata_rt_bytes_and(a: i64, b: i64, arena_handle: i64) -> i64 {
     bitwise_elementwise(a, b, arena_handle, |x, y| x & y)
 }
 
-/// OR bit-a-bit de dois blobs (elemento-a-elemento).
+/// OR bit-a-bit de dois blobs (elemento-a-elemento, com broadcast).
+/// Tamanhos diferentes: menor é zero-padded. Bytes extras preservados (x OR 0 = x).
 ///
 /// # Safety
-/// `a` e `b` devem ser válidos e de mesmo comprimento.
+/// `a` e `b` devem ser válidos.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn kata_rt_bytes_or(a: i64, b: i64, arena_handle: i64) -> i64 {
     bitwise_elementwise(a, b, arena_handle, |x, y| x | y)
 }
 
-/// XOR bit-a-bit de dois blobs (elemento-a-elemento).
+/// XOR bit-a-bit de dois blobs (elemento-a-elemento, com broadcast).
+/// Tamanhos diferentes: menor é zero-padded. Bytes extras preservados (x XOR 0 = x).
 ///
 /// # Safety
-/// `a` e `b` devem ser válidos e de mesmo comprimento.
+/// `a` e `b` devem ser válidos.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn kata_rt_bytes_xor(a: i64, b: i64, arena_handle: i64) -> i64 {
     bitwise_elementwise(a, b, arena_handle, |x, y| x ^ y)
@@ -358,27 +361,34 @@ pub unsafe extern "C" fn kata_rt_bytes_not(ptr: i64, arena_handle: i64) -> i64 {
 }
 
 /// Aplica uma operação bitwise elemento-a-elemento entre dois blobs.
-/// Requer que ambos tenham o mesmo comprimento.
+/// Broadcast: o blob menor é zero-padded até o tamanho do maior.
+/// Resultado tem o tamanho do maior operand.
 fn bitwise_elementwise<F>(a: i64, b: i64, arena_handle: i64, op: F) -> i64
 where
     F: Fn(u8, u8) -> u8,
 {
     if a == 0 || b == 0 {
+        // Um operand é null (blob vazio) — resultado é vazio.
         return kata_rt_bytes_alloc(0, arena_handle);
     }
     let len_a = unsafe { std::ptr::read_unaligned(a as *const i64) };
     let len_b = unsafe { std::ptr::read_unaligned(b as *const i64) };
-    if len_a != len_b {
-        // Tamanhos diferentes — retorna blob vazio (erro em runtime).
-        return kata_rt_bytes_alloc(0, arena_handle);
-    }
-    let new_ptr = kata_rt_bytes_alloc(len_a, arena_handle);
+    let result_len = len_a.max(len_b);
+    let new_ptr = kata_rt_bytes_alloc(result_len, arena_handle);
     if new_ptr == 0 {
         return 0;
     }
-    for i in 0..len_a {
-        let byte_a = unsafe { std::ptr::read_unaligned((a as *const u8).add(8 + i as usize)) };
-        let byte_b = unsafe { std::ptr::read_unaligned((b as *const u8).add(8 + i as usize)) };
+    for i in 0..result_len {
+        let byte_a = if i < len_a {
+            unsafe { std::ptr::read_unaligned((a as *const u8).add(8 + i as usize)) }
+        } else {
+            0
+        };
+        let byte_b = if i < len_b {
+            unsafe { std::ptr::read_unaligned((b as *const u8).add(8 + i as usize)) }
+        } else {
+            0
+        };
         let result = op(byte_a, byte_b);
         unsafe {
             std::ptr::write_unaligned((new_ptr as *mut u8).add(8 + i as usize), result);
