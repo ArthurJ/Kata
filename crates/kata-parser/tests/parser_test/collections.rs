@@ -193,6 +193,128 @@ fn array_lit_empty() {
     }
 }
 
+// ── Step default: 2-component range (Fase 3b) ──────────
+
+#[test]
+fn range_step_default_exclusive() {
+    // `[0..10]` → RangeLit { start=0, step=Hole, end=10, inclusive=false }
+    let m = parse_src("[0..10]");
+    let item = first_item(&m);
+    match item {
+        Item::EntryExpr(e) => match &e.node {
+            Expr::RangeLit {
+                start,
+                step,
+                end,
+                inclusive,
+            } => {
+                assert_eq!(start.node, Expr::IntLit { text: "0".into() });
+                assert_eq!(step.node, Expr::Hole);
+                assert_eq!(end.node, Expr::IntLit { text: "10".into() });
+                assert!(!inclusive);
+            }
+            other => panic!("expected RangeLit, got {other:?}"),
+        },
+        other => panic!("expected EntryExpr, got {other:?}"),
+    }
+}
+
+#[test]
+fn range_step_default_inclusive() {
+    // `[0..=10]` → RangeLit { start=0, step=Hole, end=10, inclusive=true }
+    let m = parse_src("[0..=10]");
+    let item = first_item(&m);
+    match item {
+        Item::EntryExpr(e) => match &e.node {
+            Expr::RangeLit {
+                start,
+                step,
+                end,
+                inclusive,
+            } => {
+                assert_eq!(start.node, Expr::IntLit { text: "0".into() });
+                assert_eq!(step.node, Expr::Hole);
+                assert_eq!(end.node, Expr::IntLit { text: "10".into() });
+                assert!(inclusive);
+            }
+            other => panic!("expected RangeLit, got {other:?}"),
+        },
+        other => panic!("expected EntryExpr, got {other:?}"),
+    }
+}
+
+#[test]
+fn range_step_default_float() {
+    // `[0.0..10.0]` → RangeLit com step=Hole (Float)
+    let m = parse_src("[0.0..10.0]");
+    let item = first_item(&m);
+    match item {
+        Item::EntryExpr(e) => match &e.node {
+            Expr::RangeLit {
+                start,
+                step,
+                end,
+                inclusive,
+            } => {
+                assert_eq!(start.node, Expr::FloatLit { text: "0.0".into() });
+                assert_eq!(step.node, Expr::Hole);
+                assert_eq!(end.node, Expr::FloatLit { text: "10.0".into() });
+                assert!(!inclusive);
+            }
+            other => panic!("expected RangeLit, got {other:?}"),
+        },
+        other => panic!("expected EntryExpr, got {other:?}"),
+    }
+}
+
+#[test]
+fn range_step_explicit_still_works() {
+    // `[0..2..10]` → inalterado: step=2 explícito
+    let m = parse_src("[0..2..10]");
+    let item = first_item(&m);
+    match item {
+        Item::EntryExpr(e) => match &e.node {
+            Expr::RangeLit {
+                start,
+                step,
+                end,
+                inclusive,
+            } => {
+                assert_eq!(start.node, Expr::IntLit { text: "0".into() });
+                assert_eq!(step.node, Expr::IntLit { text: "2".into() });
+                assert_eq!(end.node, Expr::IntLit { text: "10".into() });
+                assert!(!inclusive);
+            }
+            other => panic!("expected RangeLit, got {other:?}"),
+        },
+        other => panic!("expected EntryExpr, got {other:?}"),
+    }
+}
+
+#[test]
+fn range_step_explicit_inclusive_still_works() {
+    // `[0..2..=10]` → inalterado: step=2 explícito, inclusive
+    let m = parse_src("[0..2..=10]");
+    let item = first_item(&m);
+    match item {
+        Item::EntryExpr(e) => match &e.node {
+            Expr::RangeLit {
+                start,
+                step,
+                end,
+                inclusive,
+            } => {
+                assert_eq!(start.node, Expr::IntLit { text: "0".into() });
+                assert_eq!(step.node, Expr::IntLit { text: "2".into() });
+                assert_eq!(end.node, Expr::IntLit { text: "10".into() });
+                assert!(inclusive);
+            }
+            other => panic!("expected RangeLit, got {other:?}"),
+        },
+        other => panic!("expected EntryExpr, got {other:?}"),
+    }
+}
+
 // ── for x in + operador in (DoDs 13-16) ──────────────────
 
 use kata_lexer::lex;

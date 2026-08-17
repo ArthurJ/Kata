@@ -3,14 +3,27 @@ source: crates/kata-driver/tests/examples_snapshot.rs
 expression: output
 ---
 --- stderr ---
-Error: parse.unexpected_token
+parse.unexpected_token
 
-  × token inesperado: esperado ``..` ou `..=` após step do range`, encontrado
-  │ `]`
-   ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_fizzbuzz_list.kata:6:23]
- 5 │ action main
- 6 │     let nums := [1..15]
-   ·                       ┬
-   ·                       ╰── token inesperado
- 7 │     let result := $(fizzbuzz_list nums)
+  × token inesperado: esperado ``=` tem aridade padrão 2 — excesso de
+  │ argumentos posicionais. Use `={...}` para aridade diferente ou separe com
+  │ quebra de linha.`, encontrado `(`
+    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_fizzbuzz_list.kata:18:17]
+ 17 │     with
+ 18 │         fizz := = 0 $(mod x 3)
+    ·                 ───┬──
+    ·                    ╰── token inesperado
+ 19 │         buzz := = 0 mod x 5
+    ╰────
+
+parse.unexpected_token
+
+  × token inesperado: esperado `expression`, encontrado `<DEDENT>`
+   ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/legacy/test_fizzbuzz_list.kata:1:1]
+ 1 │ fizzbuzz_list :: List::Int => List::Text
+   · ▲
+   · ╰── token inesperado
+ 2 │ lambda lista:
    ╰────
+
+Error:   × 2 erro(s) encontrado(s)

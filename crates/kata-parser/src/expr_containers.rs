@@ -60,15 +60,13 @@ impl Parser {
         // Parseia primeiro elemento
         let first = parse_expr(self)?;
 
-        // Se vê `..` ou `..=`, é Range: `[start..step..end]` ou `[start..step..=end]`
-        // O primeiro `..` é sempre exclusive (separa start de step).
-        // Se for `..=` como primeiro separador, é erro de sintaxe.
+        // Se vê `..` ou `..=`, é Range.
+        // `..` como primeiro separador: pode ser 2-component (step default) ou
+        //   3-component (step explícito). Decisão após parsear próximo elemento.
+        // `..=` como primeiro separador: sempre 2-component (step default, inclusive).
         match self.peek() {
-            Token::DotDot => return self.parse_range_rest(first, start),
-            Token::DotDotEq => {
-                return Err(self
-                    .error("`..` (não `..=`) após start do range — o passo é separado por `..`"));
-            }
+            Token::DotDot => return self.parse_range_rest(first, start, false),
+            Token::DotDotEq => return self.parse_range_rest(first, start, true),
             _ => {}
         }
 
@@ -107,44 +105,66 @@ impl Parser {
 
     /// Parseia o resto de um RangeLit após `start ..` ou `start ..=`.
     /// Já consumiu `start` e está posicionado em `..` ou `..=`.
+    /// `first_is_inclusive`: true se o primeiro separador foi `..=`.
     pub(crate) fn parse_range_rest(
         &mut self,
         start: Spanned<Expr>,
         bracket_span: kata_ast::Span,
+        first_is_inclusive: bool,
     ) -> Result<Spanned<Expr>, FrontendError> {
-        // Consome primeiro `..` (sempre exclusive — o step não usa `..=`)
-        self.expect(&Token::DotDot, "`..` após start do range")?;
+        // Consome primeiro separador: `..` (exclusive) ou `..=` (inclusive)
+        if first_is_inclusive {
+            self.expect(&Token::DotDotEq, "`..=` após start do range")?;
+        } else {
+            self.expect(&Token::DotDot, "`..` após start do range")?;
+        }
 
-        // Parseia step
-        let step = parse_expr(self)?;
+        // Parseia próximo elemento (pode ser step ou end)
+        let next = parse_expr(self)?;
 
-        // Segundo separador: `..` (exclusive) ou `..=` (inclusive)
-        let inclusive = match self.peek() {
-            Token::DotDot => {
-                self.advance();
-                false
-            }
-            Token::DotDotEq => {
-                self.advance();
-                true
-            }
-            _ => return Err(self.error("`..` ou `..=` após step do range")),
-        };
-
-        // Parseia end
-        let end = parse_expr(self)?;
-
-        self.expect(&Token::RBracket, "`]` para fechar range")?;
-        let span = bracket_span.cover(self.tokens[self.pos - 1].span);
-        Ok(Spanned::new(
-            Expr::RangeLit {
-                start: Box::new(start),
-                step: Box::new(step),
-                end: Box::new(end),
-                inclusive,
-            },
-            span,
-        ))
+        // Se vê `..` ou `..=`: next é step explícito, parsear end (3-component)
+        // Senão: next é end, step default (Hole) (2-component)
+        if matches!(self.peek(), Token::DotDot | Token::DotDotEq) {
+            // Step explícito — comportamento original
+            let step = next;
+            let inclusive = match self.peek() {
+                Token::DotDot => {
+                    self.advance();
+                    false
+                }
+                Token::DotDotEq => {
+                    self.advance();
+                    true
+                }
+                _ => unreachable!(),
+            };
+            let end = parse_expr(self)?;
+            self.expect(&Token::RBracket, "`]` para fechar range")?;
+            let span = bracket_span.cover(self.tokens[self.pos - 1].span);
+            Ok(Spanned::new(
+                Expr::RangeLit {
+                    start: Box::new(start),
+                    step: Box::new(step),
+                    end: Box::new(end),
+                    inclusive,
+                },
+                span,
+            ))
+        } else {
+            // Step default — insere Hole como step
+            let end = next;
+            self.expect(&Token::RBracket, "`]` para fechar range")?;
+            let span = bracket_span.cover(self.tokens[self.pos - 1].span);
+            Ok(Spanned::new(
+                Expr::RangeLit {
+                    start: Box::new(start),
+                    step: Box::new(Spanned::new(Expr::Hole, end.span)),
+                    end: Box::new(end),
+                    inclusive: first_is_inclusive,
+                },
+                span,
+            ))
+        }
     }
 
     /// Parse `{...}` — disambiguates ArrayLit, DictLit, and SetLit.

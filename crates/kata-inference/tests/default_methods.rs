@@ -115,16 +115,16 @@ greet 42
 fn default_method_self_in_return() {
     let src = r#"
 interface STEPPER
-    step :: Self => Self
+    next :: Self => Self
     lambda x:
         x
 
 Int implements STEPPER
-    step :: Int => Int @ffi("kata_rt_bi_add")
+    next :: Int => Int @ffi("kata_rt_bi_add")
 
-step 42
+next 42
 "#;
     let typed = infer_src(src);
-    // step 42 com Int deve retornar Int (shadow do impl).
+    // next 42 com Int deve retornar Int (shadow do impl).
     assert_eq!(typed.entry.node.ty, Ty::int());
 }
