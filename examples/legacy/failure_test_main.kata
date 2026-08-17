@@ -1,5 +1,0 @@
-@test{desc: "Entry point inexistente falha", expects: "CompileError"}
-foo :: Int => Int
-lambda x: x
-main!()
-

@@ -72,9 +72,10 @@ Nenhuma mudança na síntese de `show` é necessária.
 
 ### 3.3. Tipos não-Result
 
-Se a action não retorna `Result`, `expects` é **ignorado** — o teste passa se
-completa sem timeout/deadlock. Não é erro compile-time; `expects` sem `Result`
-é warning: *expects sem Result — string não verificada*.
+Se a action não retorna `Result`, `expects` é **erro compile-time** — o
+usuário declara "espero erro" numa action que estruturalmente não pode
+retornar erro. Compile error é mais honesto que warning: não dá falsa
+sensação de segurança.
 
 ### 3.4. Interação com timeout/deadlock
 
@@ -209,7 +210,7 @@ crates/kata-driver/tests/test_runner_e2e.rs  + testes expects com policy
 5. Action que retorna `Result::Err(KataError.Panic("crash"))` com `expects: "Panic(crash)", policy: exact` → PASS
 6. `expects` sem `policy` → default `exact`
 7. Sem `expects` → comportamento atual (pass se completa)
-8. Action sem `Result` com `expects` → warning, não falha
+8. Action sem `Result` com `expects` → compile error (não warning)
 
 ## 7. Decisões
 
@@ -219,7 +220,7 @@ crates/kata-driver/tests/test_runner_e2e.rs  + testes expects com policy
 | D2 | `policy` é Ident no directive, não string | Aprovada |
 | D3 | Default de `policy` é `exact` | Aprovada |
 | D4 | Wrapper gera match em Result (Opção B) — distingue Ok de Err | Aprovada |
-| D5 | `expects` sem Result é warning, não erro | Aprovada |
+| D5 | `expects` sem Result é compile error, não warning | Aprovada |
 | D6 | `partial` removido — só exact/prefix/contains | Aprovada |
 
 ## 8. Não-objetivos

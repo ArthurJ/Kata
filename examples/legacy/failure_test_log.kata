@@ -1,7 +1,0 @@
-# Teste de nível de log inválido
-@test{desc: "@log com nível inválido rejeitado", expects: "CompileError"}
-@log{level: "extreme", msg: "teste"}
-action test_log
-    echo!("Ola")
-
-#test_log!()
