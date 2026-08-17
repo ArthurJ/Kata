@@ -151,6 +151,34 @@ impl Ty {
     pub fn boolean() -> Ty {
         Ty::Sum("Boolean".into())
     }
+
+    /// Verifica recursivamente se este tipo contém `Ty::Var` em qualquer
+    /// profundidade. Usado pelo monomorphizador para distinguir templates
+    /// genéricos (contêm `Var`) de instâncias concretas.
+    ///
+    /// `Ty::Generic("Result", [Var("T"), Var("E")])` → true (template)
+    /// `Ty::Generic("Result", [Int, Sum("MeuErro")])`  → false (instância)
+    /// `Ty::Sum("MeuErro")`                           → false (não-genérico)
+    pub fn contains_var(&self) -> bool {
+        match self {
+            Ty::Var(_) => true,
+            Ty::Generic(_, args) => args.iter().any(|a| a.contains_var()),
+            Ty::Function(params, ret) => {
+                params.iter().any(|p| p.contains_var()) || ret.contains_var()
+            }
+            Ty::Action(params, ret) => {
+                params.iter().any(|p| p.contains_var()) || ret.contains_var()
+            }
+            Ty::Tuple(elements) => elements.iter().any(|e| e.contains_var()),
+            Ty::List(inner) | Ty::Array(inner) | Ty::Range(inner)
+            | Ty::Set(inner) | Ty::Sender(inner) | Ty::Receiver(inner)
+            | Ty::ReceiverFactory(inner) => inner.contains_var(),
+            Ty::Dict(k, v) => k.contains_var() || v.contains_var(),
+            // Folhas sem Var: Prim, Unit, Struct, Sum, InferVar, Interface,
+            // Byte, Bytes, File, Socket, OverloadSet.
+            _ => false,
+        }
+    }
 }
 
 pub use crate::type_env::{TypeBinding, TypeEnv};

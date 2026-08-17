@@ -68,6 +68,20 @@ fn tree_shake_impl(typed: TypedModule, preserve_tests: bool) -> TypedModule {
     // primeiro precisa ser coletado para tree shaking.
     let fn_names: HashSet<String> = functions.iter().map(|f| f.name.clone()).collect();
 
+    // Quando preserve_tests é true, preservar funções __kata_show__*
+    // sintetizadas para enums não-genéricos — o wrapper de teste pode
+    // chamá-las via Cranelift para verificar expects. Templates genéricos
+    // (ex: __kata_show__Result com Ty::Var nos params) já foram removidos
+    // pelo monomorphizador, então não precisamos filtrar por Var aqui —
+    // toda função __kata_show__* restante é não-genérica.
+    if preserve_tests {
+        for f in &functions {
+            if f.name.starts_with("__kata_show__") {
+                reached_fns.insert(f.name.clone());
+            }
+        }
+    }
+
     let mut worklist: Vec<&Spanned<TypedExpr>> = pre_entry.iter().collect();
     worklist.push(&entry);
     // Constants também são raízes de reachability — seus values podem

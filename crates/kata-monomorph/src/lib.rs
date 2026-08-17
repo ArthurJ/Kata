@@ -105,7 +105,7 @@ pub fn monomorphize(typed: TypedModule) -> MonoModule {
         }
     }
 
-    // ── Remove templates genéricas após monomorfização ──
+    // ── Remove templates genéricos após monomorfização ──
     // Actions com Interface(_) nos param_types são templates que foram
     // instanciadas em versões concretas (ex: echo_SHOW_Text). As instâncias
     // já estão em mono.actions com tipos concretos. As templates não devem
@@ -115,6 +115,16 @@ pub fn monomorphize(typed: TypedModule) -> MonoModule {
         !a.param_types
             .iter()
             .any(|ty| matches!(ty, Ty::Interface(_)))
+    });
+
+    // Funções com Ty::Var nos param_types são templates genéricos que foram
+    // instanciados em versões concretas (ex: __kata_show__Result com
+    // Var("T"), Var("E") → instância __kata_show__Result_Text_MeuErro). As
+    // instâncias já estão em mono.functions com tipos concretos. Os templates
+    // não devem chegar ao codegen — seus corpos contêm Closures `repr`/
+    // `show` com ffi_symbol: None que o codegen não sabe compilar.
+    mono.functions.retain(|f| {
+        !f.param_types.iter().any(|ty| ty.contains_var())
     });
 
     // Passada final: aplica fallback gracioso a Closures com ffi_symbol: None

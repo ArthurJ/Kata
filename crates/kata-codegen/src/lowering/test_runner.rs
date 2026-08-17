@@ -21,6 +21,7 @@ use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_module::{Linkage, Module};
 use kata_core::ty::Ty;
 use kata_inference::{TypedAction, TypedTestSpec};
+use kata_resolution::MatchPolicy;
 
 use super::LowerCtx;
 use super::backend::ModuleBackend;
@@ -289,7 +290,7 @@ fn define_test_wrapper(
         let run_inst = lower.builder.ins().call(run_ref, &[rt_value]);
         let result = lower.builder.inst_results(run_inst)[0];
 
-        // 6. return_(result) — Float bitcast se necessário.
+        // 6. Retorno — verifica expects se presente, senão retorna resultado bruto.
         let ret_val = if action.ret_ty == Ty::float() {
             lower
                 .builder
@@ -298,7 +299,128 @@ fn define_test_wrapper(
         } else {
             result
         };
-        lower.builder.ins().return_(&[ret_val]);
+
+        if spec.expects.is_some() {
+            // ── Verificação de expects ──
+            // O wrapper retorna status codes:
+            //   0 = pass (show(err) casou expects com policy)
+            //   1 = fail (show(err) não casou)
+            //   2 = fail (action retornou Ok quando esperava Err)
+            // Sentinel values (timeout/deadlock) são repassados intactos.
+
+            // Blocks para os branches.
+            let sentinel_block = lower.builder.create_block();
+            let check_tag_block = lower.builder.create_block();
+            let ok_block = lower.builder.create_block();
+            let err_block = lower.builder.create_block();
+            let pass_block = lower.builder.create_block();
+            let fail_block = lower.builder.create_block();
+
+            // Checar se result é sentinel (timeout/deadlock).
+            // TIMEOUT_SENTINEL = i64::MIN + 2, DEADLOCK_SENTINEL = i64::MIN + 1.
+            // Se result <= i64::MIN + 2, é sentinel — retornar result intacto.
+            let sentinel_threshold = lower.builder.ins().iconst(I64, i64::MIN + 2);
+            let is_sentinel = lower.builder.ins().icmp(
+                cranelift_codegen::ir::condcodes::IntCC::SignedLessThanOrEqual,
+                result,
+                sentinel_threshold,
+            );
+            lower.builder.ins().brif(is_sentinel, sentinel_block, &[], check_tag_block, &[]);
+
+            // sentinel_block: retornar result (timeout/deadlock).
+            lower.builder.switch_to_block(sentinel_block);
+            lower.builder.seal_block(sentinel_block);
+            lower.builder.ins().return_(&[result]);
+
+            // check_tag_block: extrair tag do Sum.
+            lower.builder.switch_to_block(check_tag_block);
+            lower.builder.seal_block(check_tag_block);
+            let tag_ref = lower
+                .ffi_refs
+                .get("kata_rt_sum_tag_int")
+                .copied()
+                .ok_or_else(|| CodegenError::FfiSymbolNotFound {
+                    symbol: "kata_rt_sum_tag_int".into(),
+                })?;
+            let tag_inst = lower.builder.ins().call(tag_ref, &[result]);
+            let tag = lower.builder.inst_results(tag_inst)[0];
+            let zero = lower.builder.ins().iconst(I64, 0);
+            let is_ok = lower.builder.ins().icmp(
+                cranelift_codegen::ir::condcodes::IntCC::Equal,
+                tag,
+                zero,
+            );
+            lower.builder.ins().brif(is_ok, ok_block, &[], err_block, &[]);
+
+            // ok_block: action retornou Ok — expected Err.
+            lower.builder.switch_to_block(ok_block);
+            lower.builder.seal_block(ok_block);
+            let two = lower.builder.ins().iconst(I64, 2);
+            lower.builder.ins().return_(&[two]);
+
+            // err_block: extrair payload, chamar show, comparar com expects.
+            lower.builder.switch_to_block(err_block);
+            lower.builder.seal_block(err_block);
+
+            // Load payload do offset 8 do Sum box.
+            let payload = lower.builder.ins().load(
+                I64,
+                cranelift_codegen::ir::MemFlagsData::new(),
+                result,
+                8,
+            );
+
+            // Determinar o tipo do payload de Err e chamar show apropriado.
+            // ret_ty é Ty::Generic("Result", [T, E]).
+            // E é o segundo type arg — o tipo do payload de Err.
+            let shown = lower_expects_show(&action.ret_ty, payload, &mut lower)?;
+
+            // Carregar string expects como global data.
+            let expects_str = spec.expects.as_ref().unwrap();
+            let expects_global = lower.add_string(expects_str);
+            let expects_ptr = lower
+                .builder
+                .ins()
+                .global_value(lower.module.target_config().pointer_type(), expects_global);
+
+            // Chamar FFI de comparação conforme policy.
+            let cmp_fn_name = match spec.policy.unwrap_or(MatchPolicy::Exact) {
+                MatchPolicy::Exact => "kata_rt_string_eq",
+                MatchPolicy::Prefix => "kata_rt_string_starts_with",
+                MatchPolicy::Contains => "kata_rt_string_contains",
+            };
+            let cmp_ref = lower
+                .ffi_refs
+                .get(cmp_fn_name)
+                .copied()
+                .ok_or_else(|| CodegenError::FfiSymbolNotFound {
+                    symbol: cmp_fn_name.into(),
+                })?;
+            let cmp_inst = lower.builder.ins().call(cmp_ref, &[shown, expects_ptr]);
+            let cmp_result = lower.builder.inst_results(cmp_inst)[0];
+            let one = lower.builder.ins().iconst(I64, 1);
+            let is_match = lower.builder.ins().icmp(
+                cranelift_codegen::ir::condcodes::IntCC::Equal,
+                cmp_result,
+                one,
+            );
+            lower.builder.ins().brif(is_match, pass_block, &[], fail_block, &[]);
+
+            // pass_block: return 0.
+            lower.builder.switch_to_block(pass_block);
+            lower.builder.seal_block(pass_block);
+            let zero_status = lower.builder.ins().iconst(I64, 0);
+            lower.builder.ins().return_(&[zero_status]);
+
+            // fail_block: return 1.
+            lower.builder.switch_to_block(fail_block);
+            lower.builder.seal_block(fail_block);
+            let one_status = lower.builder.ins().iconst(I64, 1);
+            lower.builder.ins().return_(&[one_status]);
+        } else {
+            // Sem expects — retornar resultado bruto (comportamento atual).
+            lower.builder.ins().return_(&[ret_val]);
+        }
 
         builder.finalize();
     }
@@ -310,4 +432,102 @@ fn define_test_wrapper(
         })?;
     tctx.module.clear_context(&mut ctx);
     Ok(())
+}
+
+/// Chama `show` no payload de `Result::Err`, retornando um `i64` (ponteiro C string).
+///
+/// `ret_ty` é o tipo de retorno da action — esperado `Ty::Generic("Result", [T, E])`.
+/// Extrai `E` (segundo type arg) para determinar qual `show` chamar:
+///
+/// - `Ty::Sum(name)` → chama `__kata_show__{name}` via kata_refs (enum não-genérico).
+/// - `Ty::Prim(PrimTy::Text)` → chama `kata_rt_bi_show` via ffi_refs (Text direto).
+/// - `Ty::Prim(PrimTy::Int)` → chama `kata_rt_bi_show` via ffi_refs.
+/// - Outros → fallback gracoso: chama `kata_rt_int_to_text` (representação genérica).
+fn lower_expects_show(
+    ret_ty: &Ty,
+    payload: cranelift_codegen::ir::Value,
+    lower: &mut LowerCtx,
+) -> Result<cranelift_codegen::ir::Value, CodegenError> {
+    use kata_core::ty::PrimTy;
+
+    // Extrair E de Ty::Generic("Result", [T, E]).
+    let err_ty = match ret_ty {
+        Ty::Generic(name, args) if name == "Result" && args.len() >= 2 => &args[1],
+        _ => {
+            // Não é Result — fallback: int_to_text no payload.
+            let ffi = lower
+                .ffi_refs
+                .get("kata_rt_int_to_text")
+                .copied()
+                .ok_or_else(|| CodegenError::FfiSymbolNotFound {
+                    symbol: "kata_rt_int_to_text".into(),
+                })?;
+            let inst = lower.builder.ins().call(ffi, &[payload]);
+            return Ok(lower.builder.inst_results(inst)[0]);
+        }
+    };
+
+    match err_ty {
+        Ty::Sum(enum_name) => {
+            // Enum não-genérico: chamar __kata_show__{enum_name} via kata_refs.
+            let show_name = format!("__kata_show__{enum_name}");
+            let show_key: FuncKey = (
+                show_name,
+                vec![Ty::Sum(enum_name.clone())],
+                Ty::text(),
+            );
+            let show_fid = lower
+                .kata_ids
+                .get(&show_key)
+                .copied()
+                .ok_or_else(|| CodegenError::UnsupportedNode {
+                    node: format!("show para enum `{enum_name}` não encontrado na symbol_table"),
+                })?;
+            let show_ref = lower
+                .module
+                .declare_func_in_func(show_fid, lower.builder.func);
+            // ABI Kata: (rt, arena_handle, box_ptr, payload) -> i64.
+            let rt_val = lower.rt.unwrap_or_else(|| lower.builder.ins().iconst(I64, 0));
+            let arena = lower.caller_arena.unwrap_or_else(|| lower.builder.ins().iconst(I64, 0));
+            let dummy_box = lower.builder.ins().iconst(I64, 0);
+            let inst = lower.builder.ins().call(show_ref, &[rt_val, arena, dummy_box, payload]);
+            Ok(lower.builder.inst_results(inst)[0])
+        }
+        Ty::Prim(PrimTy::Text) => {
+            // Text direto: o payload já é um ponteiro C string.
+            // show de Text cita com aspas: "\"text\"". Usar kata_rt_bi_show.
+            let ffi = lower
+                .ffi_refs
+                .get("kata_rt_bi_show")
+                .copied()
+                .ok_or_else(|| CodegenError::FfiSymbolNotFound {
+                    symbol: "kata_rt_bi_show".into(),
+                })?;
+            let inst = lower.builder.ins().call(ffi, &[payload]);
+            Ok(lower.builder.inst_results(inst)[0])
+        }
+        Ty::Prim(PrimTy::Int) => {
+            let ffi = lower
+                .ffi_refs
+                .get("kata_rt_bi_show")
+                .copied()
+                .ok_or_else(|| CodegenError::FfiSymbolNotFound {
+                    symbol: "kata_rt_bi_show".into(),
+                })?;
+            let inst = lower.builder.ins().call(ffi, &[payload]);
+            Ok(lower.builder.inst_results(inst)[0])
+        }
+        _ => {
+            // Fallback gracoso para outros tipos.
+            let ffi = lower
+                .ffi_refs
+                .get("kata_rt_int_to_text")
+                .copied()
+                .ok_or_else(|| CodegenError::FfiSymbolNotFound {
+                    symbol: "kata_rt_int_to_text".into(),
+                })?;
+            let inst = lower.builder.ins().call(ffi, &[payload]);
+            Ok(lower.builder.inst_results(inst)[0])
+        }
+    }
 }
