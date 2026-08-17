@@ -7,7 +7,7 @@
 use kata_ast::{Expr, Span, Spanned};
 use kata_core::escape::EscapeTarget;
 use kata_core::interface_registry::ImplEntry;
-use kata_core::ty::{Ty, TypeEnv, ty_list_to_string};
+use kata_core::ty::{ty_list_to_string, PrimTy, Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 
 use crate::typed::{TypedExpr, TypedExprKind};
@@ -224,6 +224,11 @@ pub(crate) fn infer_array_lit(
 // ── RangeLit ─────────────────────────────────────────────────────────────
 
 /// `[a..s..b]` ou `[a..s..=b]` → Ty::Range(A) onde A = tipo de start/step/end.
+///
+/// Quando step é `Expr::Hole` (step default), o typeck verifica que elem_ty
+/// implementa STEPPABLE e insere o valor literal do step default no TAST.
+/// O valor é determinado pelo tipo concreto: Int → 1, Float → 1.0.
+/// Tipos sem impl de STEPPABLE geram erro de tipo.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn infer_range_lit(
     start: &Spanned<Expr>,
@@ -236,18 +241,10 @@ pub(crate) fn infer_range_lit(
     tail_pos: bool,
 ) -> InferResult<TypedExpr> {
     let typed_start = infer_expr(&start.node, &start.span, env, ctx, false)?;
-    let typed_step = infer_expr(&step.node, &step.span, env, ctx, false)?;
     let typed_end = infer_expr(&end.node, &end.span, env, ctx, false)?;
 
-    // start, step, end devem ser do mesmo tipo.
+    // start e end devem ser do mesmo tipo.
     let elem_ty = typed_start.ty.clone();
-    if typed_step.ty != elem_ty {
-        return Err(MiddleError::TypeMismatch {
-            expected: format!("{elem_ty}"),
-            found: format!("{}", typed_step.ty),
-            span: step.span.into(),
-        });
-    }
     if typed_end.ty != elem_ty {
         return Err(MiddleError::TypeMismatch {
             expected: format!("{elem_ty}"),
@@ -255,6 +252,39 @@ pub(crate) fn infer_range_lit(
             span: end.span.into(),
         });
     }
+
+    // Step: se for Hole, é step default via STEPPABLE.
+    // Se for expr explícita, comporta-se como antes.
+    let typed_step = if matches!(step.node, Expr::Hole) {
+        // Verifica que elem_ty implementa STEPPABLE
+        let type_name = concrete_type_name(&elem_ty).ok_or_else(|| MiddleError::TypeMismatch {
+            expected: "tipo que implementa STEPPABLE".into(),
+            found: format!("{elem_ty}"),
+            span: step.span.into(),
+        })?;
+        if !ctx
+            .interface_registry
+            .type_implements(&type_name, "STEPPABLE")
+        {
+            return Err(MiddleError::TypeMismatch {
+                expected: format!("tipo que implementa STEPPABLE ({type_name} não implementa)"),
+                found: format!("{elem_ty}"),
+                span: step.span.into(),
+            });
+        }
+        // Insere o valor literal do step default baseado no tipo concreto.
+        step_default_literal(&elem_ty, &step.span)?
+    } else {
+        let ts = infer_expr(&step.node, &step.span, env, ctx, false)?;
+        if ts.ty != elem_ty {
+            return Err(MiddleError::TypeMismatch {
+                expected: format!("{elem_ty}"),
+                found: format!("{}", ts.ty),
+                span: step.span.into(),
+            });
+        }
+        ts
+    };
 
     let range_ty = Ty::Range(Box::new(elem_ty.clone()));
 
@@ -281,6 +311,35 @@ pub(crate) fn infer_range_lit(
             elem_ty,
         },
     })
+}
+
+/// Produz o TypedExpr literal do step default para um tipo concreto.
+///
+/// Int → IntLit { text: "1" }, Float → FloatLit { text: "1.0" }.
+/// Outros tipos que implementam STEPPABLE devem ter seu step literal
+/// definido aqui quando adicionados ao prelude.
+fn step_default_literal(elem_ty: &Ty, span: &Span) -> InferResult<TypedExpr> {
+    match elem_ty {
+        Ty::Prim(PrimTy::Int) => Ok(TypedExpr {
+            span: *span,
+            ty: elem_ty.clone(),
+            tail_pos: false,
+            escape: EscapeTarget::Local,
+            kind: TypedExprKind::IntLit { text: "1".into() },
+        }),
+        Ty::Prim(PrimTy::Float) => Ok(TypedExpr {
+            span: *span,
+            ty: elem_ty.clone(),
+            tail_pos: false,
+            escape: EscapeTarget::Local,
+            kind: TypedExprKind::FloatLit { text: "1.0".into() },
+        }),
+        _ => Err(MiddleError::TypeMismatch {
+            expected: "tipo primitivo com STEPPABLE (Int ou Float)".into(),
+            found: format!("{elem_ty}"),
+            span: (*span).into(),
+        }),
+    }
 }
 
 // ── ForIn ────────────────────────────────────────────────────────────────
