@@ -18,7 +18,7 @@ pub use types::*;
 pub use module_loader::{ImportKind, ImportedModule, LoadError, ModuleLoader, filter_exports};
 
 use directives::{
-    extract_arg_keys, extract_log_specs, extract_site_when, extract_test_specs, extract_timer_spec,
+    extract_arg_keys, extract_site_when, extract_test_specs, extract_timer_spec,
 };
 
 use kata_ast::{Item, Module};
@@ -186,7 +186,6 @@ fn resolve_inner(
             Item::Sig {
                 name,
                 params,
-                param_names,
                 ret,
                 directives,
                 body,
@@ -287,14 +286,12 @@ fn resolve_inner(
 
                 // Se tem corpo Kata (cláusulas lambda), preserva para o inference.
                 if let Some(clauses) = body {
-                    let log = extract_log_specs(directives, name, "sig", &mut errors);
                     let timer = extract_timer_spec(directives, name, "sig", &mut errors);
                     functions.push(FunctionDef {
                         name: name.clone(),
                         param_types: param_types.clone(),
                         return_type: return_type.clone(),
                         clauses: clauses.clone(),
-                        log,
                         cache_strategy,
                         timer,
                         custom_directives: custom_dirs,
@@ -311,13 +308,13 @@ fn resolve_inner(
                     is_action: false,
                     is_commutative,
                     type_params,
-                    param_names: param_names.clone(),
                 });
             }
             Item::ActionDecl {
                 name,
                 params,
                 param_names,
+                param_defaults,
                 ret,
                 directives: action_dirs,
                 body,
@@ -409,19 +406,17 @@ fn resolve_inner(
                         is_action: true,
                         is_commutative: false,
                         type_params: vec![],
-                        param_names: param_names.clone(),
                     });
                 } else {
                     // Action com corpo Kata — produz ActionDef para o inference.
-                    let log = extract_log_specs(action_dirs, name, "action", &mut errors);
                     actions.push(ActionDef {
                         name: name.clone(),
                         param_types,
                         param_names: param_names.clone(),
+                        param_defaults: param_defaults.clone(),
                         return_type,
                         body: body.clone(),
                         tests,
-                        log,
                         custom_directives: custom_dirs,
                     });
                 }
@@ -430,20 +425,9 @@ fn resolve_inner(
         }
     }
 
-    // Validação D12: directive e action com mesmo nome no mesmo escopo → erro.
-    // Namespace disjunto — diretivas não são actions.
-    let directive_names: std::collections::HashSet<&str> = directive_registry
-        .entries
-        .keys()
-        .map(|k| k.name.as_str())
-        .collect();
-    for action in &actions {
-        if directive_names.contains(action.name.as_str()) {
-            errors.push(ResolveError::DirectiveActionNameConflict {
-                name: action.name.clone(),
-            });
-        }
-    }
+    // Validação D12 (removida): directive e action com mesmo nome podem
+    // coexistir — `@log{...}` (diretiva) e `log!(...)` (action) são
+    // sintaticamente distintas (`@` vs `!`). Não há ambiguidade.
 
     if !errors.is_empty() {
         return Err(errors);

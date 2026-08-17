@@ -80,14 +80,15 @@ fn run_kata_test(path: &str) -> (String, i32) {
 
 // ── 1. log_directive_prologo — @log com só params ─────────────
 
-/// `@log{msg: "entrada {x}", when: "enter"}` em action com param `x`:
-/// o codegen injeta `kata_rt_log_publish` no prólogo (antes do body).
+/// `@log{msg: "entrada {_args}", when: "enter"}` em action com param `x`:
+/// o codegen injeta log!() no prólogo via despacho de diretiva.
+/// `_args` é a tupla de params `(41,)` — repr inclém parênteses e vírgula.
 /// O consumidor recebe via `log_recv!("default")` e imprime com `echo`.
 #[test]
 fn log_directive_prologo() {
     let path = write_temp_kata(
         "log_directive_prologo",
-        r#"@log{msg: "entrada {x}", when: "enter"}
+        r#"@log{msg: "entrada {_args}", when: "enter"}
 action processar (x::Int) => Int
     + x 1
 
@@ -103,20 +104,21 @@ consumir!()"#,
     let (stdout, stderr, code) = run_kata(&path);
     assert_eq!(code, 0, "exit 0 — stderr: {stderr}");
     assert!(
-        stdout.contains("entrada 41"),
-        "deve imprimir 'entrada 41' — stdout: {stdout} | stderr: {stderr}"
+        stdout.contains("entrada (41)"),
+        "deve imprimir 'entrada (41)' — stdout: {stdout} | stderr: {stderr}"
     );
 }
 
 // ── 2. log_directive_epilogo — @log com vars do corpo ─────────
 
-/// `@log{msg: "resultado {r}", when: "exit"}` em action onde `r` é
-/// variável do corpo: o codegen injeta no epílogo (antes do return).
+/// `@log{msg: "resultado {_return}", when: "exit"}` em action onde o
+/// codegen injeta log!() no epílogo. `_return` é o valor retornado (Int 42),
+/// repr é "42" (sem parênteses — é Int, não tupla).
 #[test]
 fn log_directive_epilogo() {
     let path = write_temp_kata(
         "log_directive_epilogo",
-        r#"@log{msg: "resultado {r}", when: "exit"}
+        r#"@log{msg: "resultado {_return}", when: "exit"}
 action dobrar (x::Int) => Int
     let r := * x 2
     r
@@ -140,12 +142,12 @@ consumir!()"#,
 
 // ── 3. log_directive_when_enter — when explícito ──────────────
 
-/// `when: "enter"` explícito loga no prólogo. Param `x` referenciado.
+/// `when: "enter"` explícito loga no prólogo. `_args` é tupla `(99,)`.
 #[test]
 fn log_directive_when_enter() {
     let path = write_temp_kata(
         "log_directive_when_enter",
-        r#"@log{msg: "enter {x}", when: "enter"}
+        r#"@log{msg: "enter {_args}", when: "enter"}
 action ident (x::Int) => Int
     x
 
@@ -161,19 +163,19 @@ consumir!()"#,
     let (stdout, stderr, code) = run_kata(&path);
     assert_eq!(code, 0, "exit 0 — stderr: {stderr}");
     assert!(
-        stdout.contains("enter 99"),
-        "deve imprimir 'enter 99' — stdout: {stdout} | stderr: {stderr}"
+        stdout.contains("enter (99)"),
+        "deve imprimir 'enter (99)' — stdout: {stdout} | stderr: {stderr}"
     );
 }
 
 // ── 4. log_directive_when_exit — when: "exit" explícito ───────
 
-/// `when: "exit"` explícito loga no epílogo. Variável do corpo `r`.
+/// `when: "exit"` explícito loga no epílogo. `_return` é o valor retornado.
 #[test]
 fn log_directive_when_exit() {
     let path = write_temp_kata(
         "log_directive_when_exit",
-        r#"@log{msg: "exit {r}", when: "exit"}
+        r#"@log{msg: "exit {_return}", when: "exit"}
 action triplo (x::Int) => Int
     let r := * x 3
     r
@@ -370,12 +372,13 @@ consumir!()"#,
 
 // ── 11. log_template_interpolacao — {expr} interpola ───────────
 
-/// `@log{msg: "x={x} r={r}", when: "exit"}` interpola variáveis.
+/// `@log{msg: "result={_return}", when: "exit"}` interpola `_return`.
+/// A action quadruplo recebe x=10, retorna x*4=40. _return é 40.
 #[test]
 fn log_template_interpolacao() {
     let path = write_temp_kata(
         "log_template_interpolacao",
-        r#"@log{msg: "x={x} r={r}", when: "exit"}
+        r#"@log{msg: "result={_return}", when: "exit"}
 action quadruplo (x::Int) => Int
     let r := * x 4
     r
@@ -392,14 +395,15 @@ consumir!()"#,
     let (stdout, stderr, code) = run_kata(&path);
     assert_eq!(code, 0, "exit 0 — stderr: {stderr}");
     assert!(
-        stdout.contains("x=10 r=40"),
-        "deve imprimir 'x=10 r=40' — stdout: {stdout} | stderr: {stderr}"
+        stdout.contains("result=40"),
+        "deve imprimir 'result=40' — stdout: {stdout} | stderr: {stderr}"
     );
 }
 
 // ── 12. log_template_escape — {{ produz { literal ─────────────
 
-/// `@log{msg: "literal {{chave}}", when: "enter"}` produz "literal {chave}".
+/// `@log{msg: "literal {{chave}}", when: "enter"}` — `{{` escapa para `{` literal.
+/// `format!{dict}` pré-processa `{{` → `{` e `}}` → `}` antes das interpolações.
 #[test]
 fn log_template_escape() {
     let path = write_temp_kata(
@@ -419,9 +423,10 @@ consumir!()"#,
 
     let (stdout, stderr, code) = run_kata(&path);
     assert_eq!(code, 0, "exit 0 — stderr: {stderr}");
+    // {{chave}} no template Kata → preprocess_escape → {chave} literal
     assert!(
         stdout.contains("literal {chave}"),
-        "deve imprimir 'literal {{chave}}' sem escapar — stdout: {stdout} | stderr: {stderr}"
+        "deve imprimir 'literal {{chave}}' — stdout: {stdout} | stderr: {stderr}"
     );
 }
 
@@ -460,11 +465,12 @@ consumir!()"#,
 /// Ambos disparam — dois `log_recv!()` consomem as duas mensagens.
 /// Usa policy "block" (Queue) para garantir que ambas as mensagens
 /// são preservadas e consumidas em ordem.
+/// `_args` é a tupla de params `(1,)`.
 #[test]
 fn log_diretiva_e_action_independentes() {
     let path = write_temp_kata(
         "log_diretiva_e_action_independentes",
-        r#"@log{msg: "dir: {x}", when: "enter", policy: "block"}
+        r#"@log{msg: "dir: {_args}", when: "enter", policy: "block"}
 action ambos (x::Int) => Int
     log!(LogLevel::Info, "act: explicit", "default", "block")
     + x 100
@@ -483,7 +489,7 @@ consumir!()"#,
     let (stdout, stderr, code) = run_kata(&path);
     assert_eq!(code, 0, "exit 0 — stderr: {stderr}");
     assert!(
-        stdout.contains("dir: 1") && stdout.contains("act: explicit"),
+        stdout.contains("dir: (1)") && stdout.contains("act: explicit"),
         "deve imprimir ambas as mensagens — stdout: {stdout} | stderr: {stderr}"
     );
 }

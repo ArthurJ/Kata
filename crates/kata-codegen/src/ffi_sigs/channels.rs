@@ -94,6 +94,27 @@ pub(crate) fn sig_for(sym: FfiSymbol) -> Option<Signature> {
             sig.params.push(AbiParam::new(I64)); // policy_ptr (handle Text ou 0)
             sig.returns.push(AbiParam::new(I64)); // status
         }
+        // log_publish_default: (level, msg) -> i64 — wrapper com config herdada
+        FfiSymbol::LogPublishDefault => {
+            sig.params.push(AbiParam::new(I64)); // level (tag)
+            sig.params.push(AbiParam::new(I64)); // msg (handle Text)
+            sig.returns.push(AbiParam::new(I64)); // status
+        }
+        // log_publish_topic: (level, msg, topic_ptr) -> i64 — wrapper com tópico
+        FfiSymbol::LogPublishTopic => {
+            sig.params.push(AbiParam::new(I64)); // level (tag)
+            sig.params.push(AbiParam::new(I64)); // msg (handle Text)
+            sig.params.push(AbiParam::new(I64)); // topic_ptr (handle Text)
+            sig.returns.push(AbiParam::new(I64)); // status
+        }
+        // log_publish_full: (level, msg, topic_ptr, policy_ptr) -> i64 — wrapper completo
+        FfiSymbol::LogPublishFull => {
+            sig.params.push(AbiParam::new(I64)); // level (tag)
+            sig.params.push(AbiParam::new(I64)); // msg (handle Text)
+            sig.params.push(AbiParam::new(I64)); // topic_ptr (handle Text)
+            sig.params.push(AbiParam::new(I64)); // policy_ptr (handle Text)
+            sig.returns.push(AbiParam::new(I64)); // status
+        }
         // log_recv: (topic_ptr) -> i64 (valor ou 0 se canal fechou)
         FfiSymbol::LogRecv => {
             sig.params.push(AbiParam::new(I64)); // topic_ptr (handle Text ou 0)

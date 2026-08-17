@@ -198,6 +198,28 @@ pub extern "C" fn kata_rt_log_publish(
     0
 }
 
+/// Convenience wrappers for `kata_rt_log_publish` — cada um com a aridade
+/// correspondente a um overload de `log!()` no stdlib. Passam 0 (null) nos
+/// args omitidos para que o runtime use config herdada via TLS.
+///
+/// Ordem dos args nas wrappers: (level, msg, [topic], [policy]).
+/// Isto espelha a ordem posicional de `log!()` em Kata (level primeiro).
+
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_log_publish_default(level: i64, msg: i64) -> i64 {
+    kata_rt_log_publish(0, level, msg, 0)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_log_publish_topic(level: i64, msg: i64, topic_ptr: i64) -> i64 {
+    kata_rt_log_publish(topic_ptr, level, msg, 0)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_log_publish_full(level: i64, msg: i64, topic_ptr: i64, policy_ptr: i64) -> i64 {
+    kata_rt_log_publish(topic_ptr, level, msg, policy_ptr)
+}
+
 /// `kata_rt_log_recv(topic_ptr) -> i64`
 ///
 /// Recebe a próxima mensagem de telemetria do tópico. Bloqueia (yield point)

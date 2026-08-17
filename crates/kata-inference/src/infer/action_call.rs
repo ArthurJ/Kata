@@ -17,8 +17,8 @@ use super::csp_builtins::{infer_channel_builtin, infer_queue_builtin};
 use super::csp_concurrency::{infer_fork_builtin, infer_spawn_builtin};
 use super::expr::{InferCtx, infer_expr};
 use super::format_synthesis::infer_format_builtin;
-use super::helpers::{InferResult, reorder_dict_args_to_tuple};
-use super::log_builtins::{infer_log_builtin, infer_log_config_builtin, infer_log_recv_builtin};
+use super::helpers::{InferResult, fill_positional_defaults, reorder_dict_args_to_tuple};
+use super::log_builtins::{infer_log_config_builtin, infer_log_recv_builtin};
 use super::sugar::infer_assert;
 use super::timer_builtins::infer_now_builtin;
 
@@ -83,8 +83,13 @@ pub(crate) fn infer_action_call(
     }
 
     // ── Builtins Log ──
-    if callee == "log" {
-        return infer_log_builtin(args, span, env, ctx);
+    // `log!()` agora é action normal do stdlib (overloads no DispatchTable).
+    // `log_recv!()` e `log_config!()` continuam interceptadas (FFI direta).
+    if callee == "log_recv" {
+        return infer_log_recv_builtin(args, span, env, ctx);
+    }
+    if callee == "log_config" {
+        return infer_log_config_builtin(args, span, env, ctx);
     }
 
     // ── Builtin format! ──
@@ -94,12 +99,6 @@ pub(crate) fn infer_action_call(
     if callee == "format" {
         let (ty, kind) = infer_format_builtin(args, span, env, ctx)?;
         return Ok(ActionDispatch::Tuple(ty, kind));
-    }
-    if callee == "log_recv" {
-        return infer_log_recv_builtin(args, span, env, ctx);
-    }
-    if callee == "log_config" {
-        return infer_log_config_builtin(args, span, env, ctx);
     }
 
     // ── Builtins Timer ──
@@ -371,21 +370,50 @@ pub(crate) fn infer_action_call(
     }
 
     // Lowera a tupla de argumentos.
-    let typed_args = infer_expr(&args.node, &args.span, env, ctx, false)?;
-
-    // Se args é DictLit, mapeia chaves → nomes de params e reordena para Tuple.
-    // `g!{"b": 2 "a": 1}` → Tuple [1, 2] na ordem posicional dos params de g.
-    let typed_args = match &typed_args.kind {
-        TypedExprKind::DictLit { entries, .. } => {
-            reorder_dict_args_to_tuple(callee, entries, &typed_args, ctx, *span)?
+    // Se args é DictLit (chamada nomeada `!{}`), infere cada entrada individualmente
+    // SEM unificar tipos dos valores — os valores podem ter tipos diferentes
+    // (ex: `act!{"msg": "hi" "dft": 10}` tem Text e Int). Depois reordena para Tuple.
+    let typed_args = match &args.node {
+        Expr::DictLit { entries } => {
+            let mut typed_entries = Vec::with_capacity(entries.len());
+            for (key_expr, val_expr) in entries {
+                let typed_key = infer_expr(&key_expr.node, &key_expr.span, env, ctx, false)?;
+                let typed_val = infer_expr(&val_expr.node, &val_expr.span, env, ctx, false)?;
+                typed_entries.push((
+                    Spanned::new(typed_key, key_expr.span),
+                    Spanned::new(typed_val, val_expr.span),
+                ));
+            }
+            // Constrói um TypedExpr "wrapper" com span/tail_pos/escape para o reorder.
+            let wrapper = TypedExpr {
+                ty: Ty::Tuple(Vec::new()), // tipo placeholder — reorder substitui
+                kind: TypedExprKind::DictLit {
+                    entries: typed_entries.clone(),
+                    key_ty: Ty::InferVar(0),
+                    value_ty: Ty::InferVar(0),
+                },
+                span: args.span,
+                tail_pos: false,
+                escape: kata_core::escape::EscapeTarget::Local,
+            };
+            reorder_dict_args_to_tuple(callee, &typed_entries, &wrapper, ctx, env, *span)?
         }
-        _ => typed_args,
+        _ => {
+            let typed = infer_expr(&args.node, &args.span, env, ctx, false)?;
+            // Se por algum motivo o resultado é DictLit (ex: desugar), reorder.
+            match &typed.kind {
+                TypedExprKind::DictLit { entries, .. } => {
+                    reorder_dict_args_to_tuple(callee, entries, &typed, ctx, env, *span)?
+                }
+                _ => typed,
+            }
+        }
     };
 
     // Normaliza Grouping → Tuple de 1 elemento para ActionCall args.
     // `action!(x)` produz Grouping no parser; o codegen precisa de Tuple
     // (ponteiro para array na arena) para passar args_ptr corretamente.
-    let mut typed_args = match &typed_args.kind {
+    let typed_args = match &typed_args.kind {
         TypedExprKind::Grouping { inner } => {
             let inner = inner.clone();
             TypedExpr {
@@ -400,6 +428,11 @@ pub(crate) fn infer_action_call(
         }
         _ => typed_args,
     };
+
+    // Preenche defaults em chamada posicional: se a tupla tem menos elementos
+    // que o número de params, e os faltantes têm default no template, infere e
+    // anexa. Isso permite `act!("hi")` com `action act{msg::Text: _, dft::Int: 5}`.
+    let mut typed_args = fill_positional_defaults(callee, &typed_args, ctx, env, *span)?;
 
     // Extrai tipos dos elementos da tupla para dispatch.
     let arg_tys: Vec<Ty> = match &typed_args.kind {

@@ -2,7 +2,7 @@
 source: crates/kata-driver/tests/examples_snapshot.rs
 expression: output
 ---
-entrada x=41
-resultado r=42
+entrada (41)
+resultado 42
 evento-manual
 0

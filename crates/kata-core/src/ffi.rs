@@ -235,6 +235,12 @@ pub enum FfiSymbol {
     SelectCombined,
     /// `kata_rt_log_publish(topic_ptr, level, msg, policy_ptr) -> i64` — publica msg no tópico.
     LogPublish,
+    /// `kata_rt_log_publish_default(level, msg) -> i64` — wrapper: CSP com config herdada.
+    LogPublishDefault,
+    /// `kata_rt_log_publish_topic(level, msg, topic_ptr) -> i64` — wrapper: CSP com tópico.
+    LogPublishTopic,
+    /// `kata_rt_log_publish_full(level, msg, topic_ptr, policy_ptr) -> i64` — wrapper: CSP completo.
+    LogPublishFull,
     /// `kata_rt_log_recv(topic_ptr) -> i64` — recebe próxima mensagem do tópico.
     LogRecv,
     /// `kata_rt_log_config(topic_ptr, policy_ptr, level) -> ()` — setta defaults de logging.
@@ -510,6 +516,9 @@ impl FfiSymbol {
             FfiSymbol::SelectCombined => "kata_rt_select_combined",
             // Log
             FfiSymbol::LogPublish => "kata_rt_log_publish",
+            FfiSymbol::LogPublishDefault => "kata_rt_log_publish_default",
+            FfiSymbol::LogPublishTopic => "kata_rt_log_publish_topic",
+            FfiSymbol::LogPublishFull => "kata_rt_log_publish_full",
             FfiSymbol::LogRecv => "kata_rt_log_recv",
             FfiSymbol::LogConfig => "kata_rt_log_config",
             // Comptime snapshots
@@ -699,8 +708,11 @@ impl FfiSymbol {
             FfiSymbol::ChannelSelect => Ty::int(),
             FfiSymbol::SelectFiles => Ty::int(),
             FfiSymbol::SelectCombined => Ty::int(),
-            // Log — LogPublish/LogRecv retornam i64 (status/valor), LogConfig retorna Unit
+            // Log — LogPublish*/LogRecv retornam i64 (status/valor), LogConfig retorna Unit
             FfiSymbol::LogPublish => Ty::int(),
+            FfiSymbol::LogPublishDefault => Ty::int(),
+            FfiSymbol::LogPublishTopic => Ty::int(),
+            FfiSymbol::LogPublishFull => Ty::int(),
             FfiSymbol::LogRecv => Ty::int(),
             FfiSymbol::LogConfig => Ty::Unit,
             // Comptime snapshots
@@ -900,6 +912,9 @@ impl FfiSymbol {
             FfiSymbol::SelectCombined,
             // Log
             FfiSymbol::LogPublish,
+            FfiSymbol::LogPublishDefault,
+            FfiSymbol::LogPublishTopic,
+            FfiSymbol::LogPublishFull,
             FfiSymbol::LogRecv,
             FfiSymbol::LogConfig,
             // Comptime snapshots

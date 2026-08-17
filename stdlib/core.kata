@@ -587,6 +587,47 @@ enum LogLevel
   Warn
   Error
 
+# ── log!() — Actions de telemetria (Fio 14) ──────────────────────
+# Migradas de interceptação no typeck para actions normais do stdlib.
+# 4 overloads despacham por aridade e tipo (DispatchTable normal).
+# O nível LogLevel é convertido para tag Int via pattern matching no
+# body — não há mais resolve_log_level especializado no typeck.
+
+# Helper pura: LogLevel → tag Int
+_log_tag :: LogLevel => Int
+lambda LogLevel::Debug: 0
+lambda LogLevel::Info: 1
+lambda LogLevel::Warn: 2
+lambda LogLevel::Error: 3
+
+# FFI wrappers — cada um com a aridade correspondente a um overload.
+# Passam 0 (null) nos args omitidos para que o runtime use config herdada.
+
+@ffi("kata_rt_log_publish_default")
+action _log_publish (tag::Int, msg::Text) => Unit
+
+@ffi("kata_rt_log_publish_topic")
+action _log_publish (tag::Int, msg::Text, topic::Text) => Unit
+
+@ffi("kata_rt_log_publish_full")
+action _log_publish (tag::Int, msg::Text, topic::Text, policy::Text) => Unit
+
+# log!() — 2 args: level + msg, CSP com config herdada
+action log (level::LogLevel, msg::Text) => Unit
+    _log_publish!(_log_tag level, msg)
+
+# log!() — 3 args, Text em pos 2: level + msg + topic
+action log (level::LogLevel, msg::Text, topic::Text) => Unit
+    _log_publish!(_log_tag level, msg, topic)
+
+# log!() — 4 args: level + msg + topic + policy
+action log (level::LogLevel, msg::Text, topic::Text, policy::Text) => Unit
+    _log_publish!(_log_tag level, msg, topic, policy)
+
+# log!() — 3 args, File em pos 2: level + msg + file (write direto)
+action log (level::LogLevel, msg::Text, file::File) => Unit
+    let _ := write!(file, msg)
+
 # ── File I/O ──────────────────────────────────────────────────────
 # File é um tipo intrínseco (Ty::File) — handle opaco para arquivo aberto.
 # Encoding é determinado pela operação: read → Bytes, readline → Text.
@@ -696,97 +737,128 @@ enum Target
 # Funções: 8 overloads (sem policy, file disponível).
 # Total: 24 declarations.
 
-# ── trace para Actions: sem file ──
+# ── log para Actions: sem file ──
 
-directive trace{when: Hook::Enter, on: Target::Action, msg: Text}
+directive log{when: Hook::Enter, on: Target::Action, msg: Text}
     log!(LogLevel::Info, format!{"_msg": _msg, "_name": _name, "_args": _args})
 
-directive trace{when: Hook::Exit, on: Target::Action, msg: Text}
+directive log{when: Hook::Exit, on: Target::Action, msg: Text}
     log!(LogLevel::Info, format!{"_msg": _msg, "_name": _name, "_return": _return})
 
-directive trace{when: Hook::Enter, on: Target::Action, msg: Text, topic: Text}
+directive log{when: Hook::Enter, on: Target::Action, msg: Text, topic: Text}
     log!(LogLevel::Info, format!{"_msg": _msg, "_name": _name, "_args": _args}, _topic)
 
-directive trace{when: Hook::Exit, on: Target::Action, msg: Text, topic: Text}
+directive log{when: Hook::Exit, on: Target::Action, msg: Text, topic: Text}
     log!(LogLevel::Info, format!{"_msg": _msg, "_name": _name, "_return": _return}, _topic)
 
-directive trace{when: Hook::Enter, on: Target::Action, msg: Text, policy: Text}
+directive log{when: Hook::Enter, on: Target::Action, msg: Text, policy: Text}
     log!(LogLevel::Info, format!{"_msg": _msg, "_name": _name, "_args": _args}, "default", _policy)
 
-directive trace{when: Hook::Exit, on: Target::Action, msg: Text, policy: Text}
+directive log{when: Hook::Exit, on: Target::Action, msg: Text, policy: Text}
     log!(LogLevel::Info, format!{"_msg": _msg, "_name": _name, "_return": _return}, "default", _policy)
 
-directive trace{when: Hook::Enter, on: Target::Action, msg: Text, topic: Text, policy: Text}
+directive log{when: Hook::Enter, on: Target::Action, msg: Text, topic: Text, policy: Text}
     log!(LogLevel::Info, format!{"_msg": _msg, "_name": _name, "_args": _args}, _topic, _policy)
 
-directive trace{when: Hook::Exit, on: Target::Action, msg: Text, topic: Text, policy: Text}
+directive log{when: Hook::Exit, on: Target::Action, msg: Text, topic: Text, policy: Text}
     log!(LogLevel::Info, format!{"_msg": _msg, "_name": _name, "_return": _return}, _topic, _policy)
 
-# ── trace para Actions: com file ──
+# ── log para Actions: com file ──
 # _file sozinho: write direto, sem CSP.
 
-directive trace{when: Hook::Enter, on: Target::Action, msg: Text, file: File}
+directive log{when: Hook::Enter, on: Target::Action, msg: Text, file: File}
     log!(LogLevel::Info, format!{"_msg": _msg, "_name": _name, "_args": _args}, _file)
 
-directive trace{when: Hook::Exit, on: Target::Action, msg: Text, file: File}
+directive log{when: Hook::Exit, on: Target::Action, msg: Text, file: File}
     log!(LogLevel::Info, format!{"_msg": _msg, "_name": _name, "_return": _return}, _file)
 
 # topic + file: duas chamadas log!() — uma CSP, uma file.
 
-directive trace{when: Hook::Enter, on: Target::Action, msg: Text, topic: Text, file: File}
+directive log{when: Hook::Enter, on: Target::Action, msg: Text, topic: Text, file: File}
     log!(LogLevel::Info, format!{"_msg": _msg, "_name": _name, "_args": _args}, _topic)
     log!(LogLevel::Info, format!{"_msg": _msg, "_name": _name, "_args": _args}, _file)
 
-directive trace{when: Hook::Exit, on: Target::Action, msg: Text, topic: Text, file: File}
+directive log{when: Hook::Exit, on: Target::Action, msg: Text, topic: Text, file: File}
     log!(LogLevel::Info, format!{"_msg": _msg, "_name": _name, "_return": _return}, _topic)
     log!(LogLevel::Info, format!{"_msg": _msg, "_name": _name, "_return": _return}, _file)
 
 # policy + file: CSP com policy + write direto.
 
-directive trace{when: Hook::Enter, on: Target::Action, msg: Text, policy: Text, file: File}
+directive log{when: Hook::Enter, on: Target::Action, msg: Text, policy: Text, file: File}
     log!(LogLevel::Info, format!{"_msg": _msg, "_name": _name, "_args": _args}, "default", _policy)
     log!(LogLevel::Info, format!{"_msg": _msg, "_name": _name, "_args": _args}, _file)
 
-directive trace{when: Hook::Exit, on: Target::Action, msg: Text, policy: Text, file: File}
+directive log{when: Hook::Exit, on: Target::Action, msg: Text, policy: Text, file: File}
     log!(LogLevel::Info, format!{"_msg": _msg, "_name": _name, "_return": _return}, "default", _policy)
     log!(LogLevel::Info, format!{"_msg": _msg, "_name": _name, "_return": _return}, _file)
 
 # topic + policy + file: CSP com topic+policy + write direto.
 
-directive trace{when: Hook::Enter, on: Target::Action, msg: Text, topic: Text, policy: Text, file: File}
+directive log{when: Hook::Enter, on: Target::Action, msg: Text, topic: Text, policy: Text, file: File}
     log!(LogLevel::Info, format!{"_msg": _msg, "_name": _name, "_args": _args}, _topic, _policy)
     log!(LogLevel::Info, format!{"_msg": _msg, "_name": _name, "_args": _args}, _file)
 
-directive trace{when: Hook::Exit, on: Target::Action, msg: Text, topic: Text, policy: Text, file: File}
+directive log{when: Hook::Exit, on: Target::Action, msg: Text, topic: Text, policy: Text, file: File}
     log!(LogLevel::Info, format!{"_msg": _msg, "_name": _name, "_return": _return}, _topic, _policy)
     log!(LogLevel::Info, format!{"_msg": _msg, "_name": _name, "_return": _return}, _file)
 
-# ── trace para Funções: sem policy, sem file ──
+# ── log para Funções: sem policy, sem file ──
+# Funções puras usam _log_publish! (FFI) diretamente — não podem chamar log! (action).
 
-directive trace{when: Hook::Enter, on: Target::Function, msg: Text}
-    log!(LogLevel::Info, format!{"_msg": _msg, "_name": _name, "_args": _args})
+directive log{when: Hook::Enter, on: Target::Function, msg: Text}
+    _log_publish!(_log_tag(LogLevel::Info), format!{"_msg": _msg, "_name": _name, "_args": _args})
 
-directive trace{when: Hook::Exit, on: Target::Function, msg: Text}
-    log!(LogLevel::Info, format!{"_msg": _msg, "_name": _name, "_return": _return})
+directive log{when: Hook::Exit, on: Target::Function, msg: Text}
+    _log_publish!(_log_tag(LogLevel::Info), format!{"_msg": _msg, "_name": _name, "_return": _return})
 
-directive trace{when: Hook::Enter, on: Target::Function, msg: Text, topic: Text}
-    log!(LogLevel::Info, format!{"_msg": _msg, "_name": _name, "_args": _args}, _topic)
+directive log{when: Hook::Enter, on: Target::Function, msg: Text, topic: Text}
+    _log_publish!(_log_tag(LogLevel::Info), format!{"_msg": _msg, "_name": _name, "_args": _args}, _topic)
 
-directive trace{when: Hook::Exit, on: Target::Function, msg: Text, topic: Text}
-    log!(LogLevel::Info, format!{"_msg": _msg, "_name": _name, "_return": _return}, _topic)
+directive log{when: Hook::Exit, on: Target::Function, msg: Text, topic: Text}
+    _log_publish!(_log_tag(LogLevel::Info), format!{"_msg": _msg, "_name": _name, "_return": _return}, _topic)
 
-# ── trace para Funções: com file ──
+# ── log para Funções: com file ──
+# file: write direto via write! (FFI), sem CSP.
 
-directive trace{when: Hook::Enter, on: Target::Function, msg: Text, file: File}
-    log!(LogLevel::Info, format!{"_msg": _msg, "_name": _name, "_args": _args}, _file)
+directive log{when: Hook::Enter, on: Target::Function, msg: Text, file: File}
+    write!(_file, format!{"_msg": _msg, "_name": _name, "_args": _args})
 
-directive trace{when: Hook::Exit, on: Target::Function, msg: Text, file: File}
-    log!(LogLevel::Info, format!{"_msg": _msg, "_name": _name, "_return": _return}, _file)
+directive log{when: Hook::Exit, on: Target::Function, msg: Text, file: File}
+    write!(_file, format!{"_msg": _msg, "_name": _name, "_return": _return})
 
-directive trace{when: Hook::Enter, on: Target::Function, msg: Text, topic: Text, file: File}
-    log!(LogLevel::Info, format!{"_msg": _msg, "_name": _name, "_args": _args}, _topic)
-    log!(LogLevel::Info, format!{"_msg": _msg, "_name": _name, "_args": _args}, _file)
+directive log{when: Hook::Enter, on: Target::Function, msg: Text, topic: Text, file: File}
+    _log_publish!(_log_tag(LogLevel::Info), format!{"_msg": _msg, "_name": _name, "_args": _args}, _topic)
+    write!(_file, format!{"_msg": _msg, "_name": _name, "_args": _args})
 
-directive trace{when: Hook::Exit, on: Target::Function, msg: Text, topic: Text, file: File}
-    log!(LogLevel::Info, format!{"_msg": _msg, "_name": _name, "_return": _return}, _topic)
-    log!(LogLevel::Info, format!{"_msg": _msg, "_name": _name, "_return": _return}, _file)
+directive log{when: Hook::Exit, on: Target::Function, msg: Text, topic: Text, file: File}
+    _log_publish!(_log_tag(LogLevel::Info), format!{"_msg": _msg, "_name": _name, "_return": _return}, _topic)
+    write!(_file, format!{"_msg": _msg, "_name": _name, "_return": _return})
+
+# ── log com level: LogLevel — despacho por arg_key, level repassado direto ──
+# level: LogLevel no dict serve para despacho por arg_keys.
+# O body passa _level direto ao log!() — resolve_log_level aceita VariantQual.
+# 8 overloads: 4 Actions (Enter/Exit × sem file/com file) + 4 Functions.
+
+directive log{when: Hook::Enter, on: Target::Action, msg: Text, level: LogLevel}
+    log!(_level, format!{"_msg": _msg, "_name": _name, "_args": _args})
+
+directive log{when: Hook::Exit, on: Target::Action, msg: Text, level: LogLevel}
+    log!(_level, format!{"_msg": _msg, "_name": _name, "_return": _return})
+
+directive log{when: Hook::Enter, on: Target::Action, msg: Text, file: File, level: LogLevel}
+    log!(_level, format!{"_msg": _msg, "_name": _name, "_args": _args}, _file)
+
+directive log{when: Hook::Exit, on: Target::Action, msg: Text, file: File, level: LogLevel}
+    log!(_level, format!{"_msg": _msg, "_name": _name, "_return": _return}, _file)
+
+directive log{when: Hook::Enter, on: Target::Function, msg: Text, level: LogLevel}
+    _log_publish!(_log_tag(_level), format!{"_msg": _msg, "_name": _name, "_args": _args})
+
+directive log{when: Hook::Exit, on: Target::Function, msg: Text, level: LogLevel}
+    _log_publish!(_log_tag(_level), format!{"_msg": _msg, "_name": _name, "_return": _return})
+
+directive log{when: Hook::Enter, on: Target::Function, msg: Text, file: File, level: LogLevel}
+    write!(_file, format!{"_msg": _msg, "_name": _name, "_args": _args})
+
+directive log{when: Hook::Exit, on: Target::Function, msg: Text, file: File, level: LogLevel}
+    write!(_file, format!{"_msg": _msg, "_name": _name, "_return": _return})

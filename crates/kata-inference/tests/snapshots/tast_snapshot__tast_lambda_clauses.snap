@@ -19,6 +19,7 @@ expression: tast_snapshot(src)
   - :: [Prim(Int), Prim(Rational)] => Prim(Rational)
   - :: [Prim(Float), Prim(Rational)] => Prim(Float)
   - :: [Prim(Rational), Prim(Float)] => Prim(Rational)
+  _log_tag :: [Sum("LogLevel")] => Prim(Int)
   abs :: [Prim(Int)] => Prim(Int)
   abs :: [Prim(Float)] => Prim(Float)
   abs :: [Prim(Rational)] => Prim(Rational)
@@ -35,4 +36,8 @@ expression: tast_snapshot(src)
   echo :: [Interface("SHOW")] => Unit
   echo :: [Interface("SHOW"), File] => Unit
   echo :: [Interface("SHOW"), Socket] => Unit
+  log :: [Sum("LogLevel"), Prim(Text)] => Unit
+  log :: [Sum("LogLevel"), Prim(Text), Prim(Text)] => Unit
+  log :: [Sum("LogLevel"), Prim(Text), Prim(Text), Prim(Text)] => Unit
+  log :: [Sum("LogLevel"), Prim(Text), File] => Unit
   main :: [] => Unit

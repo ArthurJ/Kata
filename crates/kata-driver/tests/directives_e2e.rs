@@ -638,17 +638,17 @@ greet!("world")"#,
 
 #[test]
 fn e2e_trace_args_function_pure() {
-    // Função pura com diretiva Enter: log!() é FFI direta (não bloqueia).
+    // Função pura com diretiva Enter: _log_publish! é FFI direta (não bloqueia).
     // Não podemos verificar o log (precisa de consumidor log_recv!()),
     // mas verificamos que a função compila e executa corretamente.
     let src = r#"directive trace_test{when: Hook::Enter, on: Target::Function, msg: Text}
-    log!(LogLevel::Info, format!(_msg, (_name,)))
+    _log_publish!(_log_tag(LogLevel::Info), format!(_msg, (_name,)))
 
 @trace_test{msg: "entering {}", when: "enter"}
-dobra :: Int => Int
+dobro :: Int => Int
 lambda n: * n 2
 
-echo!(dobra 21)"#;
+echo!(dobro 21)"#;
     let path = write_temp_kata("e2e_trace_args_fn", src);
     let (stdout, stderr, code) = run_kata(&path);
     assert_eq!(code, 0, "exit 0 - stderr: {stderr}");
@@ -720,9 +720,9 @@ echo!(com_topic!(20))"#;
 
 #[test]
 fn e2e_trace_exit_args_function() {
-    // Exit em função pura: log!() com _return. Verifica que compila e executa.
+    // Exit em função pura: _log_publish! com _return. Verifica que compila e executa.
     let src = r#"directive trace_test{when: Hook::Exit, on: Target::Function, msg: Text}
-    log!(LogLevel::Info, format!(_msg, (_name, _return)))
+    _log_publish!(_log_tag(LogLevel::Info), format!(_msg, (_name, _return)))
 
 @trace_test{msg: "exit {} -> {}", when: "exit"}
 inc :: Int => Int
@@ -738,13 +738,13 @@ echo!(inc 41)"#;
     );
 }
 
-// ── Test 25: @trace do stdlib sem declaration local (Fase 2 DoD) ────
+// ── Test 25: @log do stdlib sem declaration local (Fase 2 DoD) ────
 
 #[test]
 fn e2e_trace_stdlib_function() {
-    // @trace do stdlib (core.kata) sem declaration local.
+    // @log do stdlib (core.kata) sem declaration local.
     // log!() vai para CSP (não stdout) — verificamos que compila e executa.
-    let src = r#"@trace{msg: "entering {}", when: "enter"}
+    let src = r#"@log{msg: "entering {_args}", when: "enter"}
 dobra :: Int => Int
 lambda n: * n 2
 
@@ -758,11 +758,11 @@ echo!(dobra 21)"#;
     );
 }
 
-// ── Test 26: @trace do stdlib com exit hook (Fase 2 DoD) ────────────
+// ── Test 26: @log do stdlib com exit hook (Fase 2 DoD) ────────────
 
 #[test]
 fn e2e_trace_stdlib_exit() {
-    let src = r#"@trace{msg: "exit {} -> {}", when: "exit"}
+    let src = r#"@log{msg: "exit {_return}", when: "exit"}
 inc :: Int => Int
 lambda n: + n 1
 
@@ -776,12 +776,12 @@ echo!(inc 41)"#;
     );
 }
 
-// ── Test 27: @trace do stdlib com topic+policy em action (Fase 2 DoD) ─
+// ── Test 27: @log do stdlib com topic+policy em action (Fase 2 DoD) ─
 
 #[test]
 fn e2e_trace_stdlib_action_topic_policy() {
     // Action com topic+policy: log!() publica em CSP com policy "drop".
-    let src = r#"@trace{msg: "action {}", when: "enter", topic: "audit", policy: "drop"}
+    let src = r#"@log{msg: "action {_args}", when: "enter", topic: "audit", policy: "drop"}
 action processar(x :: Int) => Int
     + x 1
 

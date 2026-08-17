@@ -345,11 +345,7 @@ pub extern "C" fn kata_rt_dict_next(dict_ptr: i64, iter_state: i64, arena_handle
 /// SMI decode: se bit 0 = 1, é SMI → `(val - 1) >> 1`.
 /// Se bit 0 = 0, é valor bruto → passa direto.
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_dict_next_smi(
-    dict_ptr: i64,
-    iter_state: i64,
-    arena_handle: i64,
-) -> i64 {
+pub extern "C" fn kata_rt_dict_next_smi(dict_ptr: i64, iter_state: i64, arena_handle: i64) -> i64 {
     let iter_state = if iter_state & 1 == 1 {
         (iter_state - 1) >> 1
     } else {

@@ -226,7 +226,10 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
     builder.symbol("kata_rt_dict_len", rt::kata_rt_dict_len as *const u8);
     builder.symbol("kata_rt_dict_remove", rt::kata_rt_dict_remove as *const u8);
     builder.symbol("kata_rt_dict_next", rt::kata_rt_dict_next as *const u8);
-    builder.symbol("kata_rt_dict_next_smi", rt::kata_rt_dict_next_smi as *const u8);
+    builder.symbol(
+        "kata_rt_dict_next_smi",
+        rt::kata_rt_dict_next_smi as *const u8,
+    );
     // Set (Fio 13)
     builder.symbol("kata_rt_set_empty", rt::kata_rt_set_empty as *const u8);
     builder.symbol("kata_rt_set_insert", rt::kata_rt_set_insert as *const u8);
@@ -293,6 +296,18 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
     );
     // Log
     builder.symbol("kata_rt_log_publish", rt::kata_rt_log_publish as *const u8);
+    builder.symbol(
+        "kata_rt_log_publish_default",
+        rt::kata_rt_log_publish_default as *const u8,
+    );
+    builder.symbol(
+        "kata_rt_log_publish_topic",
+        rt::kata_rt_log_publish_topic as *const u8,
+    );
+    builder.symbol(
+        "kata_rt_log_publish_full",
+        rt::kata_rt_log_publish_full as *const u8,
+    );
     builder.symbol("kata_rt_log_recv", rt::kata_rt_log_recv as *const u8);
     builder.symbol("kata_rt_log_config", rt::kata_rt_log_config as *const u8);
     // Comptime snapshots (Fio 12)
@@ -598,6 +613,9 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         SelectCombined,
         // Log
         LogPublish,
+        LogPublishDefault,
+        LogPublishTopic,
+        LogPublishFull,
         LogRecv,
         LogConfig,
         // Comptime snapshots (Fio 12)
