@@ -408,6 +408,28 @@ f x |> g |> h         # encadeamento left-assoc: h(g(f(x)))
 
 ---
 
+## Operador `|N>` (Pipe Limitado)
+
+```kata
+[0 1 2 3 4 5] |3> map (+ _ 1) _     # [1, 2, 3] — pega 3 da fonte, mapeia
+[0..2..10] |3> map (+ _ 1) _        # [1, 3, 5] — range finito, take 3
+[0..1..1000000] |5> map (+ _ 1) _   # [1, 2, 3, 4, 5] — range grande, take 5
+[0 1 2 3 4] |0> map (+ _ 1) _       # [] — zero iterações
+[0 1 2 3 4 5] |3> filter (> _ 2) _  # [] — take-then-filter: 0,1,2 não passam
+```
+
+- **Sintaxe:** `expr |N> hof args _` onde N é literal int (`|3>`) ou variável Int (`|n>`).
+- **Semântica:** Limita a iteração a N elementos da **fonte** (take-then-filter/streaming). O contador limita quantos elementos vêm da coleção; cada elemento passa individualmente pelo HOF. `filter` pode retornar menos que N (elementos que não passam no predicado).
+- **HOFs suportados:** `map`, `filter`, `fold` sobre `List`, `Array`, `Range`.
+- **Precedência:** Mesma de `|>` e `|`. Associatividade à esquerda.
+- **Ortogonalidade:** `|N>` é independente de `|>`. `|>` passa a coleção inteira como argumento; `|N>` itera elemento-por-elemento limitando a N. `|>` NÃO é açúcar para `|1>` — semânticas diferentes para coleções.
+- **Hole explícito obrigatório:** O HOF à direita deve ter um hole `_` na posição da coleção: `map f _`, não `map f`. Isso é exigência do two-pass arity system do parser (a aridade completa deve ser visível antes do pipe). O `|>` tem a mesma limitação pré-existente.
+- **N=0:** Produz coleção vazia. N negativo não é testado (comportamento indefinido).
+- **Implementação:** O lexer produz `Token::PipeLimit { limit: String }` com lookahead (só dispara se dígitos/ident são seguidos por `>`; não conflita com `|` fallback ou set literals `{|...|}`). O typeck constrói um `Apply` artificial, infere, e injeta `limit: Some(...)` no TAST do HOF. O codegen adiciona um contador com check `count >= limit` no loop, decodificando o SMI do limit.
+- **Relações:** Combinável com `|>`: `[0..1..1000000] |> map f |3> filter pred` mapeia tudo, pega 3 do resultado, filtra. `[0..1..1000000] |3> map f |> filter pred` pega 3 da fonte, mapeia, filtra.
+
+---
+
 ## Operador `return` (Early Return em Actions)
 
 ```kata

@@ -2460,6 +2460,35 @@ let soma := + _ _            # Int Int => Int
 5 |> double              # 10 — sem Hole, injeta como 1º argumento
 ```
 
+### Pipe Limitado (`|N>`)
+
+O operador `|N>` limita a iteração de um HOF a N elementos da fonte. É
+ortogonal ao `|>` — `|>` passa a coleção inteira como argumento; `|N>`
+itera elemento-por-elemento, parando após N.
+
+```kata
+[0 1 2 3 4 5] |3> map (+ _ 1) _      # [1, 2, 3] — pega 3, mapeia
+[0..2..10] |3> map (+ _ 1) _         # [1, 3, 5] — range finito, take 3
+[0..1..1000000] |5> map (+ _ 1) _    # [1, 2, 3, 4, 5] — range grande
+[0 1 2 3 4] |0> map (+ _ 1) _        # [] — zero iterações
+```
+
+- **N** pode ser literal int (`|3>`) ou variável Int (`|n>`)
+- **Semântica take-then-filter:** o contador limita elementos da **fonte**,
+  não do resultado. `filter` pode retornar menos que N:
+  ```kata
+  [0 1 2 3 4 5] |3> filter (> _ 2) _  # [] — pega 0,1,2; nenhum passa
+  ```
+- **HOFs suportados:** `map`, `filter`, `fold` sobre `List`, `Array`, `Range`
+- **Hole explícito obrigatório:** o HOF deve ter `_` na posição da coleção
+  (`map f _`, não `map f`). Mesma exigência do `|>` com funções de aridade
+  conhecida — o two-pass arity system do parser precisa ver a aridade completa
+- **Combinável com `|>`:** a ordem importa:
+  ```kata
+  [0..1..1000000] |> map f |3> filter pred   # mapeia tudo, pega 3, filtra
+  [0..1..1000000] |3> map f |> filter pred   # pega 3 da fonte, mapeia, filtra
+  ```
+
 ### Closures com Captura Léxica
 
 Na TAST, toda chamada de função é `TypedExprKind::Closure`:
