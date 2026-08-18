@@ -41,6 +41,16 @@ fn desugar_pipes(expr: &Spanned<Expr>) -> Spanned<Expr> {
             let rhs_d = desugar_pipes(rhs);
             apply_pipe(&lhs_d, &rhs_d, expr.span)
         }
+        // PipeLimit NÃO é desugared — chega à TAST como PipeLimit.
+        // Apenas desugar sub-expressões (lhs, rhs, limit).
+        Expr::PipeLimit { lhs, rhs, limit } => Spanned::new(
+            Expr::PipeLimit {
+                lhs: Box::new(desugar_pipes(lhs)),
+                rhs: Box::new(desugar_pipes(rhs)),
+                limit: Box::new(desugar_pipes(limit)),
+            },
+            expr.span,
+        ),
         // Recursão para todos os outros variants
         Expr::Apply { callee, args } => Spanned::new(
             Expr::Apply {

@@ -73,10 +73,54 @@ pub(crate) fn lex_token(lex: &mut Lexer, had_space: bool) -> Result<TokenWithSpa
             }
         }
         '|' => {
-            lex.advance();
+            lex.advance(); // consome |
             if lex.ch == Some('>') {
                 lex.advance();
                 Token::PipeForward
+            } else if lex.ch.is_some_and(|c| c.is_ascii_digit()) {
+                // |N> — pipe limitado com literal int.
+                // Mas | também é usado em set literals: {|1 2 3|}.
+                // Peek ahead: só é pipe limitado se os dígitos são seguidos por `>`.
+                let mut peek_idx = 0usize;
+                while lex.peek_n(peek_idx).is_some_and(|c| c.is_ascii_digit()) {
+                    peek_idx += 1;
+                }
+                if lex.peek_n(peek_idx) == Some('>') {
+                    let mut limit = String::new();
+                    while lex.ch.is_some_and(|c| c.is_ascii_digit()) {
+                        limit.push(lex.ch.unwrap());
+                        lex.advance();
+                    }
+                    lex.advance(); // consome >
+                    Token::PipeLimit { limit }
+                } else {
+                    // Não é pipe limitado — é | (pipe/set delimiter).
+                    Token::Pipe
+                }
+            } else if lex.ch.is_some_and(|c| c.is_alphabetic() || c == '_') {
+                // |ident> — pipe limitado com variável Int.
+                // Mas | também é operador de fallback: `Err(E|Text)`.
+                // Precisa lookahead: só é pipe limitado se o ident é
+                // seguido por `>`. Senão, é Pipe seguido de Ident normal.
+                // Peek ahead: conta chars alphanuméricos e verifica se
+                // o próximo char após eles é `>`.
+                let mut peek_idx = 0usize;
+                while lex.peek_n(peek_idx).is_some_and(|c| c.is_alphanumeric() || c == '_') {
+                    peek_idx += 1;
+                }
+                if lex.peek_n(peek_idx) == Some('>') {
+                    // É pipe limitado — consome o ident e o >.
+                    let mut limit = String::new();
+                    while lex.ch.is_some_and(|c| c.is_alphanumeric() || c == '_') {
+                        limit.push(lex.ch.unwrap());
+                        lex.advance();
+                    }
+                    lex.advance(); // consome >
+                    Token::PipeLimit { limit }
+                } else {
+                    // É Pipe (fallback) — não consome o ident.
+                    Token::Pipe
+                }
             } else {
                 Token::Pipe
             }

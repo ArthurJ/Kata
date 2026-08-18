@@ -107,6 +107,7 @@ fn token_color(token: &Token) -> Option<&'static str> {
         | Token::FatArrow
         | Token::ThinArrow
         | Token::PipeForward
+        | Token::PipeLimit { .. }
         | Token::SendArrow
         | Token::RecvArrow
         | Token::Question

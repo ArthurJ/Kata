@@ -189,6 +189,7 @@ pub(crate) fn infer_map(
                                 coll_ty,
                                 elem_ty,
                                 ret_ty: map_ret.clone(),
+                                limit: None,
                             };
                             return Ok((map_ret, kind));
                         }
@@ -267,6 +268,7 @@ pub(crate) fn infer_map(
         coll_ty,
         elem_ty,
         ret_ty: map_ret.clone(),
+        limit: None,
     };
 
     Ok((map_ret, kind))
@@ -378,6 +380,7 @@ pub(crate) fn infer_filter(
         coll_ty,
         elem_ty: elem_ty.clone(),
         ret_ty: filter_ret.clone(),
+        limit: None,
     };
 
     Ok((filter_ret, kind))
@@ -465,6 +468,7 @@ pub(crate) fn infer_fold(
                                 coll_ty,
                                 elem_ty,
                                 ret_ty: fold_ret.clone(),
+                                limit: None,
                             };
                             return Ok((fold_ret, kind));
                         }
@@ -553,6 +557,7 @@ pub(crate) fn infer_fold(
         coll_ty,
         elem_ty,
         ret_ty: fold_ret.clone(),
+        limit: None,
     };
 
     Ok((fold_ret, kind))

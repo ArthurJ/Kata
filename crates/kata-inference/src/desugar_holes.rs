@@ -178,6 +178,15 @@ pub(crate) fn desugar_holes(expr: &Spanned<Expr>) -> Spanned<Expr> {
         | Expr::Continue => expr.clone(),
         // Pipe não deve aparecer aqui (desugar_pipes roda primeiro)
         Expr::Pipe { .. } => expr.clone(),
+        // PipeLimit não é desugared — desugar sub-expressões apenas.
+        Expr::PipeLimit { lhs, rhs, limit } => Spanned::new(
+            Expr::PipeLimit {
+                lhs: Box::new(desugar_holes(lhs)),
+                rhs: Box::new(desugar_holes(rhs)),
+                limit: Box::new(desugar_holes(limit)),
+            },
+            expr.span,
+        ),
 
         // ── Novos nós — recursão nos filhos ──────────
         Expr::ActionCall { callee, args } => Spanned::new(

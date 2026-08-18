@@ -147,7 +147,9 @@ pub(crate) fn lower_fold(
     elem_ty: &Ty,
     ret_ty: &Ty,
     ctx: &mut LowerCtx,
+    limit: Option<&kata_ast::Spanned<TypedExpr>>,
 ) -> Result<cranelift_codegen::ir::Value, CodegenError> {
+    let limit_ctx = setup_limit(limit, ctx)?;
     let coll_val = super::expr::lower_expr(&collection.node, ctx)?;
     let callback_val = super::expr::lower_expr(&callback.node, ctx)?;
     let init_val = super::expr::lower_expr(&initial.node, ctx)?;
@@ -181,6 +183,7 @@ pub(crate) fn lower_fold(
                 .brif(is_nil, break_block, &[], continue_block, &[]);
 
             ctx.builder.switch_to_block(continue_block);
+            check_limit(&limit_ctx, break_block, ctx);
             let flags = MemFlagsData::new();
             let head_val = ctx.builder.ins().load(I64, flags, current, 0);
             let head_val = ensure_f64_if(ctx, head_val, elem_ty);
@@ -192,6 +195,7 @@ pub(crate) fn lower_fold(
             let new_acc = ensure_i64(ctx, new_acc);
             ctx.builder.def_var(acc_var, new_acc);
             ctx.builder.def_var(current_var, tail_val);
+            increment_limit(&limit_ctx, ctx);
             ctx.builder.ins().jump(loop_block, &[]);
 
             ctx.builder.seal_block(loop_block);
@@ -217,6 +221,7 @@ pub(crate) fn lower_fold(
                 .brif(done, break_block, &[], continue_block, &[]);
 
             ctx.builder.switch_to_block(continue_block);
+            check_limit(&limit_ctx, break_block, ctx);
             let offset = ctx.builder.ins().imul_imm(idx, 8);
             let data_ptr = ctx.builder.ins().iadd_imm(coll_val, 8);
             let elem_ptr = ctx.builder.ins().iadd(data_ptr, offset);
@@ -229,6 +234,7 @@ pub(crate) fn lower_fold(
             ctx.builder.def_var(acc_var, new_acc);
             let next_idx = ctx.builder.ins().iadd_imm(idx, 1);
             ctx.builder.def_var(idx_var, next_idx);
+            increment_limit(&limit_ctx, ctx);
             ctx.builder.ins().jump(loop_block, &[]);
 
             ctx.builder.seal_block(loop_block);
@@ -249,6 +255,7 @@ pub(crate) fn lower_fold(
                 .brif(done, break_block, &[], continue_block, &[]);
 
             ctx.builder.switch_to_block(continue_block);
+            check_limit(&limit_ctx, break_block, ctx);
             let elem_val = ensure_f64_if(ctx, current, elem_ty);
 
             let acc = ctx.builder.use_var(acc_var);
@@ -257,6 +264,7 @@ pub(crate) fn lower_fold(
             ctx.builder.def_var(acc_var, new_acc);
             let next = super::range_iter::range_advance(coll_val, current, elem_ty, ctx);
             ctx.builder.def_var(current_var, next);
+            increment_limit(&limit_ctx, ctx);
             ctx.builder.ins().jump(loop_block, &[]);
 
             ctx.builder.seal_block(loop_block);
@@ -383,4 +391,70 @@ pub(crate) fn list_to_array(
     ctx.builder.seal_block(copy_done);
 
     Ok(arr_ptr)
+}
+
+// ── Pipe limit (|N>) helpers ───────────────────────────────────────────
+
+/// Contexto de limite para pipe |N>. Se Some, contém o valor do limite
+/// e a variável do contador.
+pub(crate) struct LimitCtx {
+    limit_val: cranelift_codegen::ir::Value,
+    count_var: cranelift_frontend::Variable,
+}
+
+/// Prepara o contexto de limite: lowera a expressão do limit, cria contador
+/// iniciando em 0. Retorna None se limit é None (sem |N>).
+pub(crate) fn setup_limit(
+    limit: Option<&kata_ast::Spanned<TypedExpr>>,
+    ctx: &mut LowerCtx,
+) -> Result<Option<LimitCtx>, CodegenError> {
+    if let Some(limit_expr) = limit {
+        let limit_smi = super::expr::lower_expr(&limit_expr.node, ctx)?;
+        // O limit é um Int SMI-tagged: (value << 1) | 1.
+        // Decodificar para raw: (smi - 1) >> 1.
+        let limit_raw = ctx.builder.ins().ushr_imm(limit_smi, 1);
+        let count_var = ctx.new_var("__pipe_limit_count", I64);
+        let zero = ctx.builder.ins().iconst(I64, 0);
+        ctx.builder.def_var(count_var, zero);
+        Ok(Some(LimitCtx { limit_val: limit_raw, count_var }))
+    } else {
+        Ok(None)
+    }
+}
+
+/// Verifica se o contador atingiu o limite. Se sim, jump para break_block.
+/// Cria um block intermediário para a continuação (elemento não limitado).
+/// O caller deve estar no block onde o done-check já foi feito.
+/// Após esta chamada, o builder está posicionado no block de processamento.
+pub(crate) fn check_limit(
+    limit_ctx: &Option<LimitCtx>,
+    break_block: cranelift_codegen::ir::Block,
+    ctx: &mut LowerCtx,
+) {
+    if let Some(lc) = limit_ctx {
+        let count = ctx.builder.use_var(lc.count_var);
+        let reached = ctx.builder.ins().icmp(
+            cranelift_codegen::ir::condcodes::IntCC::SignedGreaterThanOrEqual,
+            count,
+            lc.limit_val,
+        );
+        let process_block = ctx.builder.create_block();
+        ctx.builder
+            .ins()
+            .brif(reached, break_block, &[], process_block, &[]);
+        ctx.builder.switch_to_block(process_block);
+        ctx.builder.seal_block(process_block);
+    }
+}
+
+/// Incrementa o contador de limite após processar um elemento.
+pub(crate) fn increment_limit(
+    limit_ctx: &Option<LimitCtx>,
+    ctx: &mut LowerCtx,
+) {
+    if let Some(lc) = limit_ctx {
+        let count = ctx.builder.use_var(lc.count_var);
+        let next = ctx.builder.ins().iadd_imm(count, 1);
+        ctx.builder.def_var(lc.count_var, next);
+    }
 }

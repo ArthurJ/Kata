@@ -53,6 +53,37 @@ pub(crate) fn parse_expr(parser: &mut Parser) -> Result<Spanned<Expr>, FrontendE
                     span,
                 );
             }
+            Token::PipeLimit { .. } => {
+                let pipe_span = parser.advance(); // consume `|N>`
+                // O limit é o texto entre `|` e `>`: literal int ou ident.
+                let limit_text = if let Token::PipeLimit { limit } = &parser.tokens[parser.pos - 1].token {
+                    limit.clone()
+                } else {
+                    unreachable!()
+                };
+                // Constrói a expressão do limit: IntLit se for dígitos, Ident caso contrário.
+                let limit_expr = if limit_text.chars().all(|c| c.is_ascii_digit()) {
+                    Spanned::new(Expr::IntLit { text: limit_text }, pipe_span)
+                } else {
+                    Spanned::new(Expr::Ident { name: limit_text }, pipe_span)
+                };
+                let mut rhs = parse_apply(parser)?;
+                // rhs também pode ter `?` postfix.
+                while matches!(parser.peek(), Token::Question) {
+                    let q_span = parser.advance();
+                    let span = rhs.span.cover(q_span);
+                    rhs = Spanned::new(Expr::Question(Box::new(rhs)), span);
+                }
+                let span = lhs.span.cover(rhs.span);
+                lhs = Spanned::new(
+                    Expr::PipeLimit {
+                        lhs: Box::new(lhs),
+                        rhs: Box::new(rhs),
+                        limit: Box::new(limit_expr),
+                    },
+                    span,
+                );
+            }
             Token::Pipe => {
                 let pipe_span = parser.advance(); // consume `|`
                 let mut rhs = parse_apply(parser)?;

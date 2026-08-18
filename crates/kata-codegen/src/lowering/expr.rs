@@ -587,7 +587,8 @@ pub(crate) fn lower_expr(
             coll_ty,
             elem_ty,
             ret_ty,
-        } => lower_map(callback, collection, coll_ty, elem_ty, ret_ty, ctx),
+            limit,
+        } => lower_map(callback, collection, coll_ty, elem_ty, ret_ty, ctx, limit.as_deref()),
 
         TypedExprKind::Filter {
             callback,
@@ -595,7 +596,8 @@ pub(crate) fn lower_expr(
             coll_ty,
             elem_ty,
             ret_ty,
-        } => lower_filter(callback, collection, coll_ty, elem_ty, ret_ty, ctx),
+            limit,
+        } => lower_filter(callback, collection, coll_ty, elem_ty, ret_ty, ctx, limit.as_deref()),
 
         TypedExprKind::Fold {
             callback,
@@ -604,7 +606,8 @@ pub(crate) fn lower_expr(
             coll_ty,
             elem_ty,
             ret_ty,
-        } => lower_fold(callback, initial, collection, coll_ty, elem_ty, ret_ty, ctx),
+            limit,
+        } => lower_fold(callback, initial, collection, coll_ty, elem_ty, ret_ty, ctx, limit.as_deref()),
 
         // ── FusedStream — stream fusion ──
         TypedExprKind::FusedStream {
@@ -614,6 +617,7 @@ pub(crate) fn lower_expr(
             source_elem_ty,
             result_elem_ty,
             ret_ty,
+            limit,
         } => lower_fused_stream(
             stages,
             source,
@@ -622,6 +626,7 @@ pub(crate) fn lower_expr(
             result_elem_ty,
             ret_ty,
             ctx,
+            limit.as_deref(),
         ),
 
         // ── CSP — lowering ──

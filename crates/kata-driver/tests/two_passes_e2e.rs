@@ -432,3 +432,65 @@ fn kata_run_step_neutral_float_falha_compile_time() {
         "stderr deve mencionar 'degenerado', encontrado: {stderr}"
     );
 }
+
+// ── Pipe limitado (|N>) ─────────────────────────────────────────────────
+
+/// `[0 1 2 3 4 5] |3> map (+ _ 1) _` → `[1, 2, 3]` (lista finita, take 3)
+#[test]
+fn kata_run_pipe_limit_map_lista_finita() {
+    let src = "action main => Unit\n    var r := [0 1 2 3 4 5 6 7 8 9] |3> map (+ _ 1) _\n    echo!(show r)\nmain!()";
+    let path = write_temp_kata("pipe_limit_map_list", src);
+    let (stdout, stderr, code) = run_kata_file(&path);
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    assert_eq!(stdout.trim(), "[1, 2, 3]");
+}
+
+/// `[0..2..10] |3> map (+ _ 1) _` → `[1, 3, 5]` (range finito, take 3)
+#[test]
+fn kata_run_pipe_limit_map_range() {
+    let src = "action main => Unit\n    var r := [0..2..10] |3> map (+ _ 1) _\n    echo!(show r)\nmain!()";
+    let path = write_temp_kata("pipe_limit_map_range", src);
+    let (stdout, stderr, code) = run_kata_file(&path);
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    assert_eq!(stdout.trim(), "[1, 3, 5]");
+}
+
+/// `[0..1..1000000] |5> map (+ _ 1) _` → `[1, 2, 3, 4, 5]` (range grande, take 5)
+#[test]
+fn kata_run_pipe_limit_map_range_grande() {
+    let src = "action main => Unit\n    var r := [0..1..1000000] |5> map (+ _ 1) _\n    echo!(show r)\nmain!()";
+    let path = write_temp_kata("pipe_limit_map_big_range", src);
+    let (stdout, stderr, code) = run_kata_file(&path);
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    assert_eq!(stdout.trim(), "[1, 2, 3, 4, 5]");
+}
+
+/// `[0 1 2 3 4] |0> map (+ _ 1) _` → `[]` (zero iterações)
+#[test]
+fn kata_run_pipe_limit_zero() {
+    let src = "action main => Unit\n    var r := [0 1 2 3 4] |0> map (+ _ 1) _\n    echo!(show r)\nmain!()";
+    let path = write_temp_kata("pipe_limit_zero", src);
+    let (stdout, stderr, code) = run_kata_file(&path);
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    assert_eq!(stdout.trim(), "[]");
+}
+
+/// `[0 1 2 3 4 5] |3> filter (> _ 2) _` → `[]` (take-then-filter: 0,1,2 não passam)
+#[test]
+fn kata_run_pipe_limit_filter() {
+    let src = "action main => Unit\n    var r := [0 1 2 3 4 5] |3> filter (> _ 2) _\n    echo!(show r)\nmain!()";
+    let path = write_temp_kata("pipe_limit_filter", src);
+    let (stdout, stderr, code) = run_kata_file(&path);
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    assert_eq!(stdout.trim(), "[]");
+}
+
+/// `[0 1 2 3 4] |3> fold (+ _ _) 0 _` → `3` (soma 0+1+2 = 3, take 3)
+#[test]
+fn kata_run_pipe_limit_fold() {
+    let src = "action main => Unit\n    var r := [0 1 2 3 4] |3> fold (+ _ _) 0 _\n    echo!(r)\nmain!()";
+    let path = write_temp_kata("pipe_limit_fold", src);
+    let (stdout, stderr, code) = run_kata_file(&path);
+    assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
+    assert_eq!(stdout.trim(), "3");
+}

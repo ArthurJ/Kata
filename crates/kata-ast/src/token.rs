@@ -110,6 +110,9 @@ pub enum Token {
     Pipe,
     /// `|>` — pipeline (transformação)
     PipeForward,
+    /// `|N>` — pipe limitado (transformação com limite de iteração).
+    /// `limit` é o texto entre `|` e `>`: literal int (`"3"`) ou ident (`"n"`).
+    PipeLimit { limit: String },
     /// `?` — delegação/fail-fast (exclusivo de Actions)
     Question,
     /// `!` — sufixo de chamada de Action
@@ -255,6 +258,7 @@ impl std::fmt::Display for Token {
             Token::ThinArrow => write!(f, "->"),
             Token::Pipe => write!(f, "|"),
             Token::PipeForward => write!(f, "|>"),
+            Token::PipeLimit { limit } => write!(f, "|{limit}>"),
             Token::Question => write!(f, "?"),
             Token::Bang => write!(f, "!"),
             Token::SendArrow => write!(f, "<!"),

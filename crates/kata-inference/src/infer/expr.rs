@@ -25,7 +25,7 @@ use super::apply::infer_apply;
 use super::dot_access::infer_dot_access;
 use super::helpers::InferResult;
 use super::lambda::infer_lambda;
-use super::sugar::{infer_pipe_fallback, infer_question};
+use super::sugar::{infer_pipe_fallback, infer_pipe_limit, infer_question};
 use super::variant::resolve_unqual_variant;
 
 /// Lambda deferido para use-site inference.
@@ -674,6 +674,10 @@ pub(crate) fn infer_expr_hinted(
                 found: "Pipe".into(),
                 span: (*span).into(),
             });
+        }
+        Expr::PipeLimit { lhs, rhs, limit } => {
+            let result = infer_pipe_limit(lhs, rhs, limit, span, env, ctx)?;
+            (result.ty, result.kind)
         }
 
         // ── Lambda ──────────────────────────────

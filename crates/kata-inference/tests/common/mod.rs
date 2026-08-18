@@ -138,6 +138,12 @@ pub fn assert_no_holes(expr: &Spanned<Expr>) {
 
         // Block — recursão em cada stmt
         Expr::Block { stmts } => stmts.iter().for_each(assert_no_holes),
+        // PipeLimit — recursão nos filhos (lhs, rhs, limit podem ter holes)
+        Expr::PipeLimit { lhs, rhs, limit } => {
+            assert_no_holes(lhs);
+            assert_no_holes(rhs);
+            assert_no_holes(limit);
+        }
     }
 }
 
@@ -271,5 +277,11 @@ pub fn assert_no_pipes(expr: &Spanned<Expr>) {
 
         // Block — recursão em cada stmt
         Expr::Block { stmts } => stmts.iter().for_each(assert_no_pipes),
+        // PipeLimit — NÃO é Pipe, mas filhos podem ter pipes. Recursão.
+        Expr::PipeLimit { lhs, rhs, limit } => {
+            assert_no_pipes(lhs);
+            assert_no_pipes(rhs);
+            assert_no_pipes(limit);
+        }
     }
 }

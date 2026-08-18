@@ -302,6 +302,7 @@ fn fuse_expr(expr: &Spanned<TypedExpr>) -> Spanned<TypedExpr> {
             coll_ty,
             elem_ty,
             ret_ty,
+            limit,
         } => {
             let fused_callback = fuse_expr(callback);
             let fused_collection = fuse_expr(collection);
@@ -313,6 +314,7 @@ fn fuse_expr(expr: &Spanned<TypedExpr>) -> Spanned<TypedExpr> {
                     coll_ty: coll_ty.clone(),
                     elem_ty: elem_ty.clone(),
                     ret_ty: ret_ty.clone(),
+                    limit: limit.clone(),
                 },
                 expr.node.ty.clone(),
             );
@@ -333,6 +335,7 @@ fn fuse_expr(expr: &Spanned<TypedExpr>) -> Spanned<TypedExpr> {
                         source_elem_ty,
                         result_elem_ty,
                         ret_ty: f_ret_ty,
+                        limit: limit.clone(),
                     }
                 }
                 FusionResult::NotFused => {
@@ -347,6 +350,7 @@ fn fuse_expr(expr: &Spanned<TypedExpr>) -> Spanned<TypedExpr> {
             coll_ty,
             elem_ty,
             ret_ty,
+            limit,
         } => {
             let fused_callback = fuse_expr(callback);
             let fused_collection = fuse_expr(collection);
@@ -357,6 +361,7 @@ fn fuse_expr(expr: &Spanned<TypedExpr>) -> Spanned<TypedExpr> {
                     coll_ty: coll_ty.clone(),
                     elem_ty: elem_ty.clone(),
                     ret_ty: ret_ty.clone(),
+                    limit: limit.clone(),
                 },
                 expr.node.ty.clone(),
             );
@@ -375,6 +380,7 @@ fn fuse_expr(expr: &Spanned<TypedExpr>) -> Spanned<TypedExpr> {
                     source_elem_ty,
                     result_elem_ty,
                     ret_ty: f_ret_ty,
+                    limit: limit.clone(),
                 },
                 FusionResult::NotFused => {
                     return reconstructed;
@@ -388,6 +394,7 @@ fn fuse_expr(expr: &Spanned<TypedExpr>) -> Spanned<TypedExpr> {
             coll_ty,
             elem_ty,
             ret_ty,
+            limit,
         } => {
             // Fold não é fundido, mas suas sub-expressões podem conter fusões.
             TypedExprKind::Fold {
@@ -397,6 +404,7 @@ fn fuse_expr(expr: &Spanned<TypedExpr>) -> Spanned<TypedExpr> {
                 coll_ty: coll_ty.clone(),
                 elem_ty: elem_ty.clone(),
                 ret_ty: ret_ty.clone(),
+                limit: limit.clone(),
             }
         }
         // Outros nós: recursar genericamente seria ideal, mas para o escopo

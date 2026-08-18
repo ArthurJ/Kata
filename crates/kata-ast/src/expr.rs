@@ -125,6 +125,15 @@ pub enum Expr {
         rhs: Box<Spanned<Expr>>,
     },
 
+    /// `lhs |N> rhs` — pipe limitado. Limita a iteração do consumidor (rhs)
+    /// a N elementos da fonte (lhs). N pode ser literal int ou variável Int.
+    /// Não desugar para Apply — chega à TAST como PipeLimit.
+    PipeLimit {
+        lhs: Box<Spanned<Expr>>,
+        rhs: Box<Spanned<Expr>>,
+        limit: Box<Spanned<Expr>>,
+    },
+
     // ── Actions, return, var, loop, break, continue ───────────
     /// `nome!(args)` — chamada de Action.
     /// `!` é o marcador de impureza. O parser produz `ActionCall` quando vê `!`

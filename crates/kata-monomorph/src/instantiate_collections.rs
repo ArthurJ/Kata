@@ -91,6 +91,7 @@ pub(crate) fn instantiate_collections(
             coll_ty,
             elem_ty,
             ret_ty,
+            limit,
         } => Some(TypedExprKind::Map {
             callback: Box::new(Spanned::new(
                 instantiate_typed_expr(&callback.node, subs),
@@ -103,6 +104,7 @@ pub(crate) fn instantiate_collections(
             coll_ty: apply_subs(coll_ty, subs),
             elem_ty: apply_subs(elem_ty, subs),
             ret_ty: apply_subs(ret_ty, subs),
+            limit: limit.clone(),
         }),
 
         TypedExprKind::Filter {
@@ -111,6 +113,7 @@ pub(crate) fn instantiate_collections(
             coll_ty,
             elem_ty,
             ret_ty,
+            limit,
         } => Some(TypedExprKind::Filter {
             callback: Box::new(Spanned::new(
                 instantiate_typed_expr(&callback.node, subs),
@@ -123,6 +126,7 @@ pub(crate) fn instantiate_collections(
             coll_ty: apply_subs(coll_ty, subs),
             elem_ty: apply_subs(elem_ty, subs),
             ret_ty: apply_subs(ret_ty, subs),
+            limit: limit.clone(),
         }),
 
         TypedExprKind::Fold {
@@ -132,6 +136,7 @@ pub(crate) fn instantiate_collections(
             coll_ty,
             elem_ty,
             ret_ty,
+            limit,
         } => Some(TypedExprKind::Fold {
             callback: Box::new(Spanned::new(
                 instantiate_typed_expr(&callback.node, subs),
@@ -148,6 +153,7 @@ pub(crate) fn instantiate_collections(
             coll_ty: apply_subs(coll_ty, subs),
             elem_ty: apply_subs(elem_ty, subs),
             ret_ty: apply_subs(ret_ty, subs),
+            limit: limit.clone(),
         }),
 
         // ── FusedStream: instanciar stages + source + Ty ──
@@ -158,6 +164,7 @@ pub(crate) fn instantiate_collections(
             source_elem_ty,
             result_elem_ty,
             ret_ty,
+            limit,
         } => {
             let new_stages = stages
                 .iter()
@@ -196,6 +203,7 @@ pub(crate) fn instantiate_collections(
                 source_elem_ty: apply_subs(source_elem_ty, subs),
                 result_elem_ty: apply_subs(result_elem_ty, subs),
                 ret_ty: apply_subs(ret_ty, subs),
+                limit: limit.clone(),
             })
         }
 

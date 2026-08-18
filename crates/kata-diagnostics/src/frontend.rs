@@ -104,4 +104,12 @@ pub enum FrontendError {
         #[label("comentário não fechado")]
         span: MietteSpan,
     },
+
+    #[error("pipe limitado inválido: {message}")]
+    #[diagnostic(code = "lex.invalid_pipe_limit")]
+    InvalidPipeLimit {
+        message: String,
+        #[label("pipe limitado inválido")]
+        span: MietteSpan,
+    },
 }

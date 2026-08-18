@@ -22,7 +22,9 @@ pub(crate) fn lower_filter(
     elem_ty: &Ty,
     _ret_ty: &Ty,
     ctx: &mut LowerCtx,
+    limit: Option<&kata_ast::Spanned<TypedExpr>>,
 ) -> Result<cranelift_codegen::ir::Value, CodegenError> {
+    let limit_ctx = super::collections_hof::setup_limit(limit, ctx)?;
     let coll_val = super::expr::lower_expr(&collection.node, ctx)?;
     let callback_val = super::expr::lower_expr(&callback.node, ctx)?;
 
@@ -72,6 +74,7 @@ pub(crate) fn lower_filter(
                 .brif(is_nil, break_block, &[], continue_block, &[]);
 
             ctx.builder.switch_to_block(continue_block);
+            super::collections_hof::check_limit(&limit_ctx, break_block, ctx);
             let flags = MemFlagsData::new();
             let head_val = ctx.builder.ins().load(I64, flags, current, 0);
             let head_val = ensure_f64_if(ctx, head_val, elem_ty);
@@ -101,6 +104,7 @@ pub(crate) fn lower_filter(
             // skip_block: avança para próximo
             ctx.builder.switch_to_block(skip_block);
             ctx.builder.def_var(current_var, tail_val);
+            super::collections_hof::increment_limit(&limit_ctx, ctx);
             ctx.builder.ins().jump(loop_block, &[]);
 
             ctx.builder.seal_block(loop_block);
@@ -128,6 +132,7 @@ pub(crate) fn lower_filter(
                 .brif(done, break_block, &[], continue_block, &[]);
 
             ctx.builder.switch_to_block(continue_block);
+            super::collections_hof::check_limit(&limit_ctx, break_block, ctx);
             let offset = ctx.builder.ins().imul_imm(idx, 8);
             let data_ptr = ctx.builder.ins().iadd_imm(coll_val, 8);
             let elem_ptr = ctx.builder.ins().iadd(data_ptr, offset);
@@ -156,6 +161,7 @@ pub(crate) fn lower_filter(
             ctx.builder.switch_to_block(skip_block);
             let next_idx = ctx.builder.ins().iadd_imm(idx, 1);
             ctx.builder.def_var(idx_var, next_idx);
+            super::collections_hof::increment_limit(&limit_ctx, ctx);
             ctx.builder.ins().jump(loop_block, &[]);
 
             ctx.builder.seal_block(loop_block);
@@ -178,6 +184,7 @@ pub(crate) fn lower_filter(
                 .brif(done, break_block, &[], continue_block, &[]);
 
             ctx.builder.switch_to_block(continue_block);
+            super::collections_hof::check_limit(&limit_ctx, break_block, ctx);
             let elem_val = ensure_f64_if(ctx, current, elem_ty);
 
             let pred = call_callback(callback_val, &[elem_val], &cb_params, &cb_ret, ctx)?;
@@ -202,6 +209,7 @@ pub(crate) fn lower_filter(
             ctx.builder.switch_to_block(skip_block);
             let next = super::range_iter::range_advance(coll_val, current, elem_ty, ctx);
             ctx.builder.def_var(current_var, next);
+            super::collections_hof::increment_limit(&limit_ctx, ctx);
             ctx.builder.ins().jump(loop_block, &[]);
 
             ctx.builder.seal_block(loop_block);

@@ -10,7 +10,7 @@ use kata_core::escape::EscapeTarget;
 use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 
-use crate::typed::TypedExpr;
+use crate::typed::{TypedExpr, TypedExprKind};
 
 use super::_match::infer_match;
 use super::expr::{InferCtx, infer_expr};
@@ -470,4 +470,205 @@ pub(crate) fn infer_assert(
         escape: EscapeTarget::Local,
         kind: match_kind,
     })
+}
+
+// ── Pipe limit (|N>) ───────────────────────────────────────────────────
+
+/// `lhs |N> rhs` — pipe limitado.
+///
+/// Constrói `Apply(rhs, lhs)` artificialmente e infere. O resultado deve
+/// ser um HOF (Map/Filter/Fold/FusedStream). O `limit` é injetado no TAST
+/// para que o codegen limite a iteração.
+pub(crate) fn infer_pipe_limit(
+    lhs: &Spanned<Expr>,
+    rhs: &Spanned<Expr>,
+    limit: &Spanned<Expr>,
+    span: &Span,
+    env: &mut TypeEnv,
+    ctx: &InferCtx,
+) -> InferResult<TypedExpr> {
+    // Inferir limit — deve ser Int.
+    let typed_limit = infer_expr(&limit.node, &limit.span, env, ctx, false)?;
+    if typed_limit.ty != Ty::int() {
+        return Err(MiddleError::TypeMismatch {
+            expected: "Int (limite do pipe |N>)".into(),
+            found: format!("{}", typed_limit.ty),
+            span: limit.span.into(),
+        });
+    }
+
+    // Constrói Apply artificial: rhs com lhs injetado como último argumento.
+    // rhs pode ser Apply { callee, args } (ex: `map f`), Ident (ex: `show`),
+    // ou Lambda (após desugar_holes, ex: `lambda __hole_0: map f __hole_0`).
+    //
+    // Para Lambda: desembrulhar o body (que é Apply com o hole preenchido)
+    // e substituir o hole pelo lhs. Isso evita reinfir a Lambda (que criaria
+    // uma função anônima duplicada no codegen).
+    let apply_expr = match &rhs.node {
+        Expr::Apply { callee, args } => {
+            let mut all_args = args.clone();
+            all_args.push(lhs.clone());
+            Spanned::new(
+                Expr::Apply {
+                    callee: callee.clone(),
+                    args: all_args,
+                },
+                *span,
+            )
+        }
+        Expr::Ident { name } => Spanned::new(
+            Expr::Apply {
+                callee: Box::new(Spanned::new(
+                    Expr::Ident { name: name.clone() },
+                    rhs.span,
+                )),
+                args: vec![lhs.clone()],
+            },
+            *span,
+        ),
+        Expr::Lambda { patterns, body, .. } => {
+            // Após desugar_holes, `map f _` vira `lambda __hole_0: map f __hole_0`.
+            // O body é `Apply { map, [f, __hole_0] }`.
+            // Substituir o pattern (hole) pelo lhs no body e inferir diretamente.
+            // O pattern é `Ident(__hole_N)`.
+            let hole_name = patterns
+                .first()
+                .and_then(|p| match &p.node {
+                    kata_ast::Pattern::Ident(name) => Some(name.clone()),
+                    _ => None,
+                });
+            if let Some(hname) = hole_name {
+                let body_with_lhs = substitute_ident_in_expr(&body.node, &hname, lhs);
+                Spanned::new(body_with_lhs, *span)
+            } else {
+                // Fallback: aplicar lambda ao lhs diretamente.
+                Spanned::new(
+                    Expr::Apply {
+                        callee: Box::new(rhs.clone()),
+                        args: vec![lhs.clone()],
+                    },
+                    *span,
+                )
+            }
+        }
+        _ => {
+            return Err(MiddleError::TypeMismatch {
+                expected: "função (map/filter/fold) após |N>".into(),
+                found: format!("{:?}", rhs.node),
+                span: rhs.span.into(),
+            });
+        }
+    };
+
+    // Infere o Apply artificial.
+    let typed = infer_expr(&apply_expr.node, &apply_expr.span, env, ctx, false)?;
+
+    // Injeta o limit no TAST se for um HOF.
+    let limit_box = Box::new(Spanned::new(typed_limit, limit.span));
+    let modified_kind = match typed.kind {
+        TypedExprKind::Map {
+            callback,
+            collection,
+            coll_ty,
+            elem_ty,
+            ret_ty,
+            ..
+        } => {
+            TypedExprKind::Map {
+            callback,
+            collection,
+            coll_ty,
+            elem_ty,
+            ret_ty,
+            limit: Some(limit_box),
+            }
+        }
+        TypedExprKind::Filter {
+            callback,
+            collection,
+            coll_ty,
+            elem_ty,
+            ret_ty,
+            ..
+        } => TypedExprKind::Filter {
+            callback,
+            collection,
+            coll_ty,
+            elem_ty,
+            ret_ty,
+            limit: Some(limit_box),
+        },
+        TypedExprKind::Fold {
+            callback,
+            initial,
+            collection,
+            coll_ty,
+            elem_ty,
+            ret_ty,
+            ..
+        } => TypedExprKind::Fold {
+            callback,
+            initial,
+            collection,
+            coll_ty,
+            elem_ty,
+            ret_ty,
+            limit: Some(limit_box),
+        },
+        TypedExprKind::FusedStream {
+            stages,
+            source,
+            coll_ty,
+            source_elem_ty,
+            result_elem_ty,
+            ret_ty,
+            ..
+        } => TypedExprKind::FusedStream {
+            stages,
+            source,
+            coll_ty,
+            source_elem_ty,
+            result_elem_ty,
+            ret_ty,
+            limit: Some(limit_box),
+        },
+        // Se não é HOF, o |N> opera como aplicação normal com limit ignorado
+        // (ex: `5 |1> show` → show 5). O limit não tem efeito em não-iteráveis.
+        _ => typed.kind.clone(),
+    };
+
+    Ok(TypedExpr {
+        span: *span,
+        ty: typed.ty,
+        tail_pos: false,
+        escape: typed.escape,
+        kind: modified_kind,
+    })
+}
+
+/// Substitui todas as ocorrências de `Ident(name)` por `replacement` em uma expressão.
+/// Usado para desembrulhar Lambdas pós-desugar_holes: substituir o hole pelo lhs.
+fn substitute_ident_in_expr(expr: &Expr, name: &str, replacement: &Spanned<Expr>) -> Expr {
+    match expr {
+        Expr::Ident { name: n } if n == name => replacement.node.clone(),
+        Expr::Apply { callee, args } => Expr::Apply {
+            callee: Box::new(Spanned::new(
+                substitute_ident_in_expr(&callee.node, name, replacement),
+                callee.span,
+            )),
+            args: args
+                .iter()
+                .map(|a| Spanned::new(substitute_ident_in_expr(&a.node, name, replacement), a.span))
+                .collect(),
+        },
+        Expr::Grouping { inner } => Expr::Grouping {
+            inner: Box::new(Spanned::new(
+                substitute_ident_in_expr(&inner.node, name, replacement),
+                inner.span,
+            )),
+        },
+        // Para outros variants, não há substituição necessária no caso comum.
+        // O hole pós-desugar é sempre um Ident simples.
+        other => other.clone(),
+    }
 }

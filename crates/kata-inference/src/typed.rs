@@ -283,25 +283,30 @@ pub enum TypedExprKind {
     /// `map f coll` — aplica f a cada elemento, retorna List(B).
     /// coll_ty é o tipo concreto (List/Array/Range). ret_ty é List(B).
     /// Se coll_ty é Array, o codegen converte List→Array no final.
+    /// `limit` é Some quando originado de `|N>` — limita iteração a N elementos.
     Map {
         callback: Box<Spanned<TypedExpr>>,
         collection: Box<Spanned<TypedExpr>>,
         coll_ty: Ty,
         elem_ty: Ty,
         ret_ty: Ty,
+        limit: Option<Box<Spanned<TypedExpr>>>,
     },
 
     /// `filter f coll` — filtra elementos por predicado, retorna List(A).
+    /// `limit` é Some quando originado de `|N>` — take-then-filter com streaming.
     Filter {
         callback: Box<Spanned<TypedExpr>>,
         collection: Box<Spanned<TypedExpr>>,
         coll_ty: Ty,
         elem_ty: Ty,
         ret_ty: Ty,
+        limit: Option<Box<Spanned<TypedExpr>>>,
     },
 
     /// `fold f init coll` — reduz coleção com função e acumulador.
     /// ret_ty é o tipo do acumulador (init).
+    /// `limit` é Some quando originado de `|N>` — limita elementos que entram no fold.
     Fold {
         callback: Box<Spanned<TypedExpr>>,
         initial: Box<Spanned<TypedExpr>>,
@@ -309,6 +314,7 @@ pub enum TypedExprKind {
         coll_ty: Ty,
         elem_ty: Ty,
         ret_ty: Ty,
+        limit: Option<Box<Spanned<TypedExpr>>>,
     },
 
     /// `map f (filter g coll)` (e composições) — stream fusion (DoD 60).
@@ -320,6 +326,7 @@ pub enum TypedExprKind {
     /// `source_elem_ty` é o tipo do elemento da coleção fonte.
     /// `result_elem_ty` é o tipo do elemento após todos os estágios.
     /// `ret_ty` é sempre `List(result_elem_ty)`.
+    /// `limit` é Some quando originado de `|N>` — limita iteração da fonte.
     FusedStream {
         stages: Vec<FusedStage>,
         source: Box<Spanned<TypedExpr>>,
@@ -327,6 +334,7 @@ pub enum TypedExprKind {
         source_elem_ty: Ty,
         result_elem_ty: Ty,
         ret_ty: Ty,
+        limit: Option<Box<Spanned<TypedExpr>>>,
     },
 
     // ── CSP — canais, select, fork ──────────────────────

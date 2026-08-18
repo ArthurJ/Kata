@@ -53,11 +53,29 @@ ser verificado sem comptime pass).
 literal ou `constant`. Expressões dinâmicas como step são aceitas sem check
 (o usuário assume a responsabilidade).
 
-### `|N>` é independente
+### `|N>` é independente de `|>`
 
-O pipe limitado não existe para resolver range degenerado — é uma feature útil
-por si só. Permite truncar um pipeline em N elementos sem materializar a coleção
+O pipe limitado não existe para resolver range degenerado — é uma feature útil por
+si só. Permite truncar um pipeline em N elementos sem materializar a coleção
 completa. Funciona com qualquer iterable (Range, List, Array), finito ou grande.
+
+`|>` e `|N>` são operadores ortogonais:
+- **`|>`** — aplicação de função: passa o valor inteiro como argumento.
+  `coll |> f` → `f(coll)`. Açúcar sintático desugarado antes do typeck.
+- **`|N>`** — limite de iteração: controla quantos elementos um HOF consome
+  da fonte. `coll |N> map f` itera no máximo N elementos de `coll`.
+
+A coincidência no caso escalar (`5 |> f` ≡ `5 |1> f`) não justifica fundir os
+operadores: para coleções, `|>` passa a coleção inteira e `|1>` extrai 1 elemento.
+`|>` NÃO é açúcar para `|1>` — semânticas diferentes para coleções.
+
+### `|N>` com escalar
+
+Escalar é tratado como sequência de 1 elemento pelo `|N>`:
+- `scalar |N> f` com N ≥ 1 → `f(scalar)` (equivale a `|>`)
+- `scalar |0> f` → **erro de tipo** — `|0>` exige iterável, escalar não qualifica
+- `scalar |N> f` com N > 1 → `f(scalar)` — limitar mais que 1 num sequência de 1
+  não muda o resultado (só há 1 elemento disponível)
 
 ## Fases
 
@@ -139,44 +157,40 @@ no máximo N elementos.
 
 #### Semântica
 
-- `|N>` só faz sentido quando `lhs` é iterable e `rhs` é um consumidor que itera
-  (`map`, `filter`, `fold`).
-- `|>` sem número é composição normal como hoje.
-- `|0>` produz iterable vazio (zero iterações).
+- `|N>` limita quantos elementos da fonte o consumidor à direita itera.
+- `|>` sem número continua sendo aplicação de função (passa valor inteiro).
+  `|>` NÃO é açúcar para `|1>` — semânticas diferentes para coleções.
+- `|0>` em iterável produz iterable vazio (zero iterações).
+- `|0>` em escalar → **erro de tipo** (escalar não é iterável).
 - Com lista finita: `|N>` age como `take N` — pega os primeiros N.
 - Com range muito grande: `|N>` limita iteração, evitando materialização completa.
 - Posição importa: `[0..1..1000000] |> map f |3> filter pred` pega 3 do map,
   filtra. `[0..1..1000000] |> map f |> filter pred |3>` filtra tudo e pega 3.
 
-#### Decisões pendentes (confirmar com Arthur)
+#### Decisões fechadas
 
-1. **N literal ou variável?** `|5>` (literal) é simples no lexer. `|n>` (variável)
-   exige que o lexer diferencie `|ident>` de `|>` e que o typeck avalie `n`.
-   Recomendação: começar com literal, adicionar variável depois se necessário.
+1. **N é variável (binding Int), não só literal.** O lexer detecta `|<ident>>`
+   e `|<int>>`. O typeck infere que o ident é Int. O codegen lê o valor em
+   runtime. Literais também são aceitos.
 
-2. **`|N>` com filter**: `|5> filter pred` itera 5 elementos do source e filtra
-   — pode retornar menos de 5 (elementos que não passam no predicado).
-   Alternativa: "primeiros 5 que passam" — itera até achar 5 que satisfazem
-   (potencialmente percorre muito mais). Recomendação: "itera N do source e
-   filtra" (take-then-filter), mais simples e consistente com a posição no
-   pipeline.
+2. **`|N>` com filter — take-then-filter com streaming.** O contador limita
+   quantos elementos vêm da fonte; cada elemento passa individualmente pelo
+   filtro (sem acumular batch). Resultado: `|3> filter pred` pode retornar
+   menos de 3 (elementos que não passam no predicado).
 
-3. **`|N>` com fold**: `|5> fold op init` reduz apenas os primeiros 5 elementos.
-   fold sem `|N>` reduz tudo (comportamento atual). Sem ambiguidade — `|N>` é
-   posicional.
+3. **`|N>` com fold.** `fold f init lista |N> ...` — fold produz escalar.
+   `|N>` em escalar: N ≥ 1 funciona como `|>` (1 elemento disponível);
+   N = 0 é erro de tipo. Se a intenção é limitar os elementos que entram
+   no fold, o `|N>` deve vir **antes** do fold: `lista |N> fold f init`.
 
-4. **Onde mora no typeck**: hoje `|>` é desugarado em composição de função
-   (`desugar_pipes` em `desugar.rs`). `|N>` não desagua para nada existente.
-   Opções:
-   - **Novo nó TAST** `PipeLimit { lhs, rhs, limit }` — o codegen dos builtins
-     recebe o limite como parâmetro.
-   - **Desugar para `take`** — se `take` existisse, `|N>` desugararia para
-     `take lhs N |> rhs`. Mas `take` não existe.
-   Recomendação: novo nó TAST, o codegen de cada builtin incorpora o contador.
+4. **Novo nó TAST `PipeLimit { lhs, rhs, limit }`.** `|N>` não desuga para
+   Apply. O codegen dos builtins recebe o limite como parâmetro e incorpora
+   contador no loop.
 
-5. **Codegen**: map/filter/fold têm lowering dedicado com loops próprios. Cada
-   um precisa de um contador adicional (0..N) que para o loop em N iterações.
-   `fused_stream` (map|>filter) também. `for_in` não é afetado (tem `break`).
+5. **Codegen: `range_done` checa o limite do pipe.** Em vez de um contador
+   separado em cada loop, `range_done` (e equivalentes para List/Array)
+   recebe o limite como parâmetro adicional. Quando o contador atinge N,
+   o loop para. Aplica-se a map, filter, fold, e fused_stream.
 
 #### Camadas afetadas
 
@@ -194,7 +208,11 @@ no máximo N elementos.
 - `[0 1 2 3 4 5 6 7 8 9] |3> map (+ _ 1)` → `[1, 2, 3]` (lista finita, take 3)
 - `[0..2..10] |3> map (+ _ 1)` → `[1, 3, 5]` (range finito, take 3)
 - `[0..1..1000000] |5> map (+ _ 1)` → `[1, 2, 3, 4, 5]` (range grande, take 5)
-- `[0 1 2 3 4] |0> map (+ _ 1)` → `[]` (zero iterações)
+- `[0 1 2 3 4] |0> map (+ _ 1)` → `[]` (zero iterações em iterável)
+- `5 |0> map (+ _ 1)` → erro de tipo (escalar não é iterável)
+- `5 |1> show` → `5` (escalar com N=1, equivale a `|>`)
+- `n := 3; [0 1 2 3 4 5] |n> map (+ _ 1)` → `[1, 2, 3]` (variável Int)
+- `[0 1 2 3 4 5] |3> filter (> _ 2)` → `[3, 4]` (take-then-filter, 3 pegos, 2 passam)
 
 ## Ordem de implementação
 
