@@ -24,9 +24,7 @@ pub(crate) fn lower_control_flow(
             let val = lower_expr(&inner.node, ctx)?;
             let epilogue = ctx.epilogue_block.expect("return fora de Action");
             ctx.builder.ins().jump(epilogue, &[BlockArg::Value(val)]);
-            // Após jump (terminador), o block está fechado. Não pode adicionar
-            // instruções. Retornamos `val` — o caller do loop em define_kata_action
-            // detecta Return e break, então este valor é unreachable.
+            ctx.emitted_terminator = true;
             Ok(Some(val))
         }
 
@@ -63,11 +61,9 @@ pub(crate) fn lower_control_flow(
             ctx.builder.ins().call(yield_check_ref, &[rt_val]);
             let mut hit_terminator = false;
             for e in body {
+                ctx.emitted_terminator = false;
                 lower_expr(&e.node, ctx)?;
-                if matches!(
-                    e.node.kind,
-                    TypedExprKind::Break | TypedExprKind::Continue | TypedExprKind::Return(_)
-                ) {
+                if ctx.emitted_terminator {
                     hit_terminator = true;
                     break;
                 }
@@ -94,6 +90,10 @@ pub(crate) fn lower_control_flow(
             // Restaura ctx.
             ctx.loop_break_block = prev_break;
             ctx.loop_continue_block = prev_continue;
+            // O loop como um todo não é um terminador — retorna Unit.
+            // Break/continue internos setaram emitted_terminator, mas isso
+            // é interno ao loop e não deve propagar para o caller.
+            ctx.emitted_terminator = false;
 
             Ok(Some(unit))
         }
@@ -105,8 +105,7 @@ pub(crate) fn lower_control_flow(
             // Cria valor Unit ANTES do jump (o jump é terminador e fecha o block).
             let unit = ctx.builder.ins().iconst(I64, 0);
             ctx.builder.ins().jump(break_block, &[]);
-            // Após jump (terminador), o block está fechado. O caller detecta
-            // Break e não usa o valor de retorno.
+            ctx.emitted_terminator = true;
             Ok(Some(unit))
         }
 
@@ -116,6 +115,7 @@ pub(crate) fn lower_control_flow(
                 .expect("continue fora de loop (typeck deveria ter rejeitado)");
             let unit = ctx.builder.ins().iconst(I64, 0);
             ctx.builder.ins().jump(continue_block, &[]);
+            ctx.emitted_terminator = true;
             Ok(Some(unit))
         }
 

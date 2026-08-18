@@ -118,6 +118,10 @@ pub(crate) struct LowerCtx<'a, 'b> {
     /// Flag: se `true`, o último `lower_expr` emitiu um `return_call` (tail call).
     /// O caller NÃO deve emitir `return_` depois — a função já terminou.
     pub emitted_tail_call: bool,
+    /// Flag: se `true`, o último `lower_expr` emitiu um terminador de block
+    /// (break/continue/return — jump para break_block/continue_block/epilogue).
+    /// O caller NÃO deve emitir jump/return_ depois — o block já está fechado.
+    pub emitted_terminator: bool,
     /// Se `true`, tail calls estão desabilitados (entry point usa SystemV,
     /// não pode fazer return_call para funções Kata com CallConv::Tail).
     pub no_tail_calls: bool,

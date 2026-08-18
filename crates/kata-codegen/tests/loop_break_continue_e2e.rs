@@ -146,3 +146,78 @@ soma_pulando!()"#;
         "soma_pulando deve ser 12 (1+2+4+5, pulando 3)"
     );
 }
+
+/// Break dentro de match aninhado em loop — o caso que crashava o Cranelift
+/// antes do fix do `emitted_terminator`. O break está no body de um braço de
+/// match interno (Boolean::True), que por sua vez está no body de um braço do
+/// match externo (Boolean::False). O `is_terminator` antigo só checava o topo
+/// do body do arm — não detectava Break aninhado em Match → "block already filled".
+#[test]
+fn break_em_match_aninhado_em_loop() {
+    let src = r#"action break_aninhado => Int
+    var x := 0
+    loop
+        match > x 3
+            Boolean::True: break
+            Boolean::False:
+                x := + x 1
+                continue
+    x
+break_aninhado!()"#;
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Prim(PrimTy::Int));
+    assert_eq!(untag_smi(raw), 4, "break_aninhado deve ser 4 (loop até x > 3)");
+}
+
+/// Break dentro de match dentro de match dentro de loop — aninhamento profundo.
+/// O break está dentro de um match interno que está dentro de outro match,
+/// tudo dentro de um loop. O `emitted_terminator` propaga através de todos os
+/// níveis de aninhamento.
+#[test]
+fn break_em_match_match_aninhado_em_loop() {
+    let src = r#"action break_duplo => Int
+    var x := 0
+    var sum := 0
+    loop
+        match > x 5
+            Boolean::True: break
+            Boolean::False:
+                match = (mod x 2) 0
+                    Boolean::True:
+                        sum := + sum x
+                        x := + x 1
+                        continue
+                    Boolean::False:
+                        x := + x 1
+                        continue
+    sum
+break_duplo!()"#;
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Prim(PrimTy::Int));
+    // Soma dos pares de 0 a 4: 0 + 2 + 4 = 6
+    assert_eq!(untag_smi(raw), 6, "break_duplo deve ser 6 (soma dos pares 0+2+4)");
+}
+
+/// Continue dentro de match aninhado com Block (múltiplas expressões no body).
+/// O continue está após um echo! dentro de um Block que é o body de um braço
+/// de match. O `emitted_terminator` precisa ser detectado após lowerar o Block
+/// inteiro, não apenas o topo.
+#[test]
+fn continue_em_block_dentro_de_match_em_loop() {
+    let src = r#"action continue_block => Int
+    var x := 0
+    var acc := 0
+    loop
+        match > x 4
+            Boolean::True: break
+            Boolean::False:
+                acc := + acc x
+                x := + x 1
+                continue
+    acc
+continue_block!()"#;
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Prim(PrimTy::Int));
+    // 0 + 1 + 2 + 3 = 6
+    assert_eq!(untag_smi(raw), 10, "continue_block deve ser 10 (0+1+2+3+4)");
+}

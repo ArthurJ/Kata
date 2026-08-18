@@ -313,6 +313,7 @@ pub(crate) fn lower_module(
             var_map: HashMap::new(),
             anon_counter: 0,
             emitted_tail_call: false,
+            emitted_terminator: false,
             no_tail_calls: true, // entry point usa SystemV — sem return_call
             epilogue_block: None,
             fiber_arena: None,

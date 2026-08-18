@@ -81,17 +81,12 @@ pub(crate) fn lower_match(
         // Lowera o body do arm.
         ctx.builder.switch_to_block(body_block);
         ctx.emitted_tail_call = false;
+        ctx.emitted_terminator = false;
         let body_val = lower_expr(&arm.body.node, ctx)?;
 
         // Se o body emitiu break/continue/return/return_call (terminador),
         // não emitir jump para cont_block — o código é unreachable.
-        let is_terminator = matches!(
-            arm.body.node.kind,
-            kata_inference::TypedExprKind::Break
-                | kata_inference::TypedExprKind::Continue
-                | kata_inference::TypedExprKind::Return(_)
-        );
-        if !is_terminator && !ctx.emitted_tail_call {
+        if !ctx.emitted_terminator && !ctx.emitted_tail_call {
             ctx.builder.ins().jump(
                 cont_block,
                 &[cranelift_codegen::ir::BlockArg::Value(body_val)],
@@ -110,10 +105,11 @@ pub(crate) fn lower_match(
     ctx.builder.switch_to_block(cont_block);
     let result = ctx.builder.block_params(cont_block)[0];
 
-    // O match pode ter arms que emitiram return_call (TCO), mas o match
-    // como um todo retorna um valor via cont_block. Resetar a flag para
-    // que o caller decida se emite return_ ou não.
+    // O match pode ter arms que emitiram return_call (TCO) ou break/continue,
+    // mas o match como um todo retorna um valor via cont_block. Resetar as
+    // flags para que o caller decida se emite return_ ou jump.
     ctx.emitted_tail_call = false;
+    ctx.emitted_terminator = false;
 
     Ok(result)
 }

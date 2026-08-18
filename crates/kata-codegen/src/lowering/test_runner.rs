@@ -198,6 +198,7 @@ fn define_test_wrapper(
             var_map: HashMap::new(),
             anon_counter: 0,
             emitted_tail_call: false,
+            emitted_terminator: false,
             no_tail_calls: true, // SystemV — sem return_call
             epilogue_block: None,
             fiber_arena: None,

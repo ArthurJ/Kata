@@ -713,7 +713,13 @@ pub(crate) fn lower_expr(
             let mut last_val = ctx.builder.ins().iconst(I64, 0); // Unit fallback
             for stmt in stmts {
                 ctx.emitted_tail_call = false;
+                ctx.emitted_terminator = false;
                 last_val = lower_expr(&stmt.node, ctx)?;
+                // Se o stmt emitiu terminador (break/continue/return),
+                // o restante do block é unreachable — parar.
+                if ctx.emitted_terminator {
+                    break;
+                }
             }
             Ok(last_val)
         }

@@ -106,8 +106,9 @@ pub(crate) fn lower_guards(
             lower.builder.switch_to_block(body_block);
             lower.builder.seal_block(body_block);
             lower.emitted_tail_call = false;
+            lower.emitted_terminator = false;
             let body_val = lower_expr(&guard.body.node, lower)?;
-            if !lower.emitted_tail_call {
+            if !lower.emitted_terminator && !lower.emitted_tail_call {
                 lower
                     .builder
                     .ins()
@@ -123,8 +124,9 @@ pub(crate) fn lower_guards(
             lower.builder.switch_to_block(body_block);
             lower.builder.seal_block(body_block);
             lower.emitted_tail_call = false;
+            lower.emitted_terminator = false;
             let body_val = lower_expr(&guard.body.node, lower)?;
-            if !lower.emitted_tail_call {
+            if !lower.emitted_terminator && !lower.emitted_tail_call {
                 lower
                     .builder
                     .ins()
@@ -143,8 +145,9 @@ pub(crate) fn lower_guards(
     if !had_otherwise {
         lower.builder.switch_to_block(next_test_block);
         lower.emitted_tail_call = false;
+        lower.emitted_terminator = false;
         let fallback_val = lower_expr(&fallback_body.node, lower)?;
-        if !lower.emitted_tail_call {
+        if !lower.emitted_terminator && !lower.emitted_tail_call {
             lower
                 .builder
                 .ins()
@@ -171,11 +174,13 @@ pub(crate) fn lower_guards(
             .builder
             .ins()
             .trap(cranelift_codegen::ir::TrapCode::user(1).expect("trap code 1"));
+        lower.emitted_terminator = false;
         return Ok(result);
     }
 
     lower.builder.switch_to_block(cont_block);
     let result = lower.builder.block_params(cont_block)[0];
+    lower.emitted_terminator = false;
     Ok(result)
 }
 
@@ -232,8 +237,9 @@ pub(crate) fn lower_clause_chain(
         // Se o body é um tail call (return_call), lower_expr emite return_call
         // e seta emitted_tail_call — não emitir return_ depois.
         lower.emitted_tail_call = false;
+        lower.emitted_terminator = false;
         let body_val = lower_clause_body(clause, lower)?;
-        if !lower.emitted_tail_call {
+        if !lower.emitted_terminator && !lower.emitted_tail_call {
             if let Some(epi) = lower.epilogue_block {
                 lower
                     .builder

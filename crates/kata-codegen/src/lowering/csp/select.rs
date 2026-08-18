@@ -5,7 +5,7 @@ use cranelift_codegen::ir::condcodes::IntCC;
 use cranelift_codegen::ir::types::I64;
 use cranelift_codegen::ir::{BlockArg, InstBuilder, MemFlagsData, Value};
 use kata_core::ty::Ty;
-use kata_inference::{TypedExpr, TypedExprKind, TypedReadMode, TypedSelectArm};
+use kata_inference::{TypedExpr, TypedReadMode, TypedSelectArm};
 
 use super::super::LowerCtx;
 use super::get_ffi;
@@ -283,6 +283,7 @@ pub(crate) fn lower_select(
                 // body_block: recv do canal j, binding, lowerar body.
                 ctx.builder.switch_to_block(body_block);
                 ctx.emitted_tail_call = false;
+                ctx.emitted_terminator = false;
 
                 let recv_fref = get_ffi(ctx, "kata_rt_channel_recv")?;
                 let recv_inst = ctx
@@ -299,11 +300,7 @@ pub(crate) fn lower_select(
                 // Lowerar body.
                 let body_val = super::super::expr::lower_expr(&body.node, ctx)?;
 
-                let is_terminator = matches!(
-                    body.node.kind,
-                    TypedExprKind::Break | TypedExprKind::Continue | TypedExprKind::Return(_)
-                );
-                if !is_terminator && !ctx.emitted_tail_call {
+                if !ctx.emitted_terminator && !ctx.emitted_tail_call {
                     ctx.builder
                         .ins()
                         .jump(cont_block, &[BlockArg::Value(body_val)]);
@@ -357,6 +354,7 @@ pub(crate) fn lower_select(
                 // - Line:  readline(handle)
                 ctx.builder.switch_to_block(body_block);
                 ctx.emitted_tail_call = false;
+                ctx.emitted_terminator = false;
 
                 let read_fref = get_ffi(ctx, read_ffi_name)?;
 
@@ -387,11 +385,7 @@ pub(crate) fn lower_select(
                 // Lowerar body.
                 let body_val = super::super::expr::lower_expr(&body.node, ctx)?;
 
-                let is_terminator = matches!(
-                    body.node.kind,
-                    TypedExprKind::Break | TypedExprKind::Continue | TypedExprKind::Return(_)
-                );
-                if !is_terminator && !ctx.emitted_tail_call {
+                if !ctx.emitted_terminator && !ctx.emitted_tail_call {
                     ctx.builder
                         .ins()
                         .jump(cont_block, &[BlockArg::Value(body_val)]);
@@ -424,13 +418,10 @@ pub(crate) fn lower_select(
         // Lowerar timeout_body.
         ctx.builder.switch_to_block(timeout_block);
         ctx.emitted_tail_call = false;
+        ctx.emitted_terminator = false;
         let tb_val = super::super::expr::lower_expr(&tb.node, ctx)?;
 
-        let is_terminator = matches!(
-            tb.node.kind,
-            TypedExprKind::Break | TypedExprKind::Continue | TypedExprKind::Return(_)
-        );
-        if !is_terminator && !ctx.emitted_tail_call {
+        if !ctx.emitted_terminator && !ctx.emitted_tail_call {
             ctx.builder
                 .ins()
                 .jump(cont_block, &[BlockArg::Value(tb_val)]);

@@ -127,6 +127,7 @@ pub(crate) fn define_kata_action(
             var_map: HashMap::new(),
             anon_counter: 0,
             emitted_tail_call: false,
+            emitted_terminator: false,
             no_tail_calls: false,
             epilogue_block: None,
             fiber_arena: Some(fiber_arena),
@@ -179,9 +180,11 @@ pub(crate) fn define_kata_action(
         let mut hit_return = false;
 
         for (i, stmt) in action.body.iter().enumerate() {
+            lower.emitted_terminator = false;
             last_result = lower_expr(&stmt.node, &mut lower)?;
-            // Se emitiu return (jump para epilogue_block), não continuar.
-            if matches!(stmt.node.kind, kata_inference::TypedExprKind::Return(_)) {
+            // Se emitiu return/break/continue (jump para epilogue/loop block),
+            // não continuar — o block atual está fechado.
+            if lower.emitted_terminator {
                 hit_return = true;
                 break;
             }
