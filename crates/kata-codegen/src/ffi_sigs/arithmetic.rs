@@ -137,6 +137,26 @@ pub(crate) fn sig_for(sym: FfiSymbol) -> Option<Signature> {
             sig.params.push(AbiParam::new(I64));
             sig.returns.push(AbiParam::new(I64));
         }
+        // ── Text (ptr C string) → Int (i64 tagged) ──
+        FfiSymbol::TextToInt => {
+            sig.params.push(AbiParam::new(I64)); // ptr
+            sig.returns.push(AbiParam::new(I64)); // tagged Int
+        }
+        // ── Text (ptr C string) → Float (f64) ──
+        FfiSymbol::TextToFloat => {
+            sig.params.push(AbiParam::new(I64)); // ptr
+            sig.returns.push(AbiParam::new(F64)); // f64
+        }
+        // ── Rand () → Float (f64) ──
+        FfiSymbol::Rand => {
+            sig.returns.push(AbiParam::new(F64)); // f64
+        }
+        // ── RandInt (min, max) → Int (i64 SMI-tagged) ──
+        FfiSymbol::RandInt => {
+            sig.params.push(AbiParam::new(I64)); // min
+            sig.params.push(AbiParam::new(I64)); // max
+            sig.returns.push(AbiParam::new(I64)); // tagged Int
+        }
         // ── Boolean → Text (i64 0/1) → ptr ──
         FfiSymbol::BoolToText => {
             sig.params.push(AbiParam::new(I64));

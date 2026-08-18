@@ -171,6 +171,12 @@ Text implements SHOW
     show :: Text => Text
     lambda x: x
 
+# ── Unit ─────────────────────────────────────────────────────
+# Unit implementa SHOW: show sempre retorna "()".
+Unit implements SHOW
+    show :: Unit => Text
+    lambda _: "()"
+
 # ── Implementações HASHABLE ───────────────────────────────────
 
 Int implements HASHABLE
@@ -465,6 +471,15 @@ action echo (msg::SHOW) => Unit
 @ffi("kata_rt_panic")
 action panic (msg::Text) => Unit
 
+# ── RNG ───────────────────────────────────────────────────────
+# Gera um Float aleatório no intervalo [0.0, 1.0).
+
+@ffi("kata_rt_rand")
+action rand => Float
+
+@ffi("kata_rt_rand_int")
+action rand_int (min::Int, max::Int) => Int
+
 # ── Sleep cooperativo (CSP) ─────────────────────────────────────
 # Suspende o fiber atual por N milissegundos. Cooperativo — o scheduler
 # acorda o fiber quando o deadline expira (via wake_pass ou earliest_deadline).
@@ -476,6 +491,12 @@ action sleep (ms::Int) => Unit
 
 @ffi("kata_rt_int_to_text")
 int_to_text :: Int => Text
+
+@ffi("kata_rt_text_to_int")
+int :: Text => Int
+
+@ffi("kata_rt_text_to_float")
+float :: Text => Float
 
 @ffi("kata_rt_bool_to_text")
 bool_to_text :: Boolean => Text

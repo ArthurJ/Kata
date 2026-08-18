@@ -45,6 +45,7 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
         rt::kata_rt_tag_int_from_str as *const u8,
     );
     builder.symbol("kata_rt_int_to_text", rt::kata_rt_int_to_text as *const u8);
+    builder.symbol("kata_rt_text_to_int", rt::kata_rt_text_to_int as *const u8);
     // Float
     builder.symbol("kata_rt_fadd", rt::kata_rt_fadd as *const u8);
     builder.symbol("kata_rt_fsub", rt::kata_rt_fsub as *const u8);
@@ -60,6 +61,12 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
         "kata_rt_float_to_text",
         rt::kata_rt_float_to_text as *const u8,
     );
+    builder.symbol(
+        "kata_rt_text_to_float",
+        rt::kata_rt_text_to_float as *const u8,
+    );
+    builder.symbol("kata_rt_rand", rt::kata_rt_rand as *const u8);
+    builder.symbol("kata_rt_rand_int", rt::kata_rt_rand_int as *const u8);
     // Rational
     builder.symbol("kata_rt_rat_add", rt::kata_rt_rat_add as *const u8);
     builder.symbol("kata_rt_rat_sub", rt::kata_rt_rat_sub as *const u8);
@@ -508,6 +515,7 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         BiToRational,
         TagInt,
         IntToText,
+        TextToInt,
         Fadd,
         Fsub,
         Fmul,
@@ -519,6 +527,9 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         FcmpGt,
         FcmpGe,
         FloatToText,
+        TextToFloat,
+        Rand,
+        RandInt,
         RatAdd,
         RatSub,
         RatMul,

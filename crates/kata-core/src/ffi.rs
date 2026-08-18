@@ -37,6 +37,9 @@ pub enum FfiSymbol {
     FcmpGt,
     FcmpGe,
     FloatToText,
+    TextToFloat,
+    Rand,
+    RandInt,
 
     // ── Rational ─────────────────────────────────────────
     RatAdd,
@@ -61,6 +64,7 @@ pub enum FfiSymbol {
     StringLen,
     TextLiteral,
     IntToText,
+    TextToInt,
     BoolToText,
     TextReplaceFirst,
     TextReplace,
@@ -415,6 +419,9 @@ impl FfiSymbol {
             FfiSymbol::FcmpGt => "kata_rt_fcmp_gt",
             FfiSymbol::FcmpGe => "kata_rt_fcmp_ge",
             FfiSymbol::FloatToText => "kata_rt_float_to_text",
+            FfiSymbol::TextToFloat => "kata_rt_text_to_float",
+            FfiSymbol::Rand => "kata_rt_rand",
+            FfiSymbol::RandInt => "kata_rt_rand_int",
             FfiSymbol::RatAdd => "kata_rt_rat_add",
             FfiSymbol::RatSub => "kata_rt_rat_sub",
             FfiSymbol::RatMul => "kata_rt_rat_mul",
@@ -435,6 +442,7 @@ impl FfiSymbol {
             FfiSymbol::StringLen => "kata_rt_string_len",
             FfiSymbol::TextLiteral => "kata_rt_text_literal",
             FfiSymbol::IntToText => "kata_rt_int_to_text",
+            FfiSymbol::TextToInt => "kata_rt_text_to_int",
             FfiSymbol::BoolToText => "kata_rt_bool_to_text",
             FfiSymbol::TextReplaceFirst => "kata_rt_text_replace_first",
             FfiSymbol::TextReplace => "kata_rt_text_replace",
@@ -619,6 +627,9 @@ impl FfiSymbol {
             | FfiSymbol::FcmpGt
             | FfiSymbol::FcmpGe => Ty::boolean(),
             FfiSymbol::FloatToText => Ty::text(),
+            FfiSymbol::TextToFloat => Ty::float(),
+            FfiSymbol::Rand => Ty::float(),
+            FfiSymbol::RandInt => Ty::int(),
             // Rational
             FfiSymbol::RatAdd | FfiSymbol::RatSub | FfiSymbol::RatMul | FfiSymbol::RatDiv => {
                 Ty::rational()
@@ -638,6 +649,7 @@ impl FfiSymbol {
             FfiSymbol::StringLen => Ty::int(),
             FfiSymbol::TextLiteral => Ty::text(),
             FfiSymbol::IntToText | FfiSymbol::BoolToText => Ty::text(),
+            FfiSymbol::TextToInt => Ty::int(),
             FfiSymbol::TextReplaceFirst | FfiSymbol::TextReplace => Ty::text(),
             // I/O
             FfiSymbol::Print | FfiSymbol::Println => Ty::Unit,
@@ -815,6 +827,9 @@ impl FfiSymbol {
             FfiSymbol::FcmpGt,
             FfiSymbol::FcmpGe,
             FfiSymbol::FloatToText,
+            FfiSymbol::TextToFloat,
+            FfiSymbol::Rand,
+            FfiSymbol::RandInt,
             FfiSymbol::RatAdd,
             FfiSymbol::RatSub,
             FfiSymbol::RatMul,
@@ -835,6 +850,7 @@ impl FfiSymbol {
             FfiSymbol::StringLen,
             FfiSymbol::TextLiteral,
             FfiSymbol::IntToText,
+            FfiSymbol::TextToInt,
             FfiSymbol::BoolToText,
             FfiSymbol::TextReplaceFirst,
             FfiSymbol::TextReplace,

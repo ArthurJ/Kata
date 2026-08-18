@@ -452,6 +452,20 @@ pub extern "C" fn kata_rt_int_to_text(val: i64) -> *mut std::os::raw::c_char {
         .into_raw()
 }
 
+/// Converte Text (ponteiro C string) para Int tagged.
+/// Chamado pelo codegen via `FfiSymbol::TextToInt`.
+/// Suporta decimal, hex (0x), octal (0o), bin (0b), separador `_`.
+/// Retorna 0 se a string for inválida ou nula.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_text_to_int(s: *const std::os::raw::c_char) -> i64 {
+    if s.is_null() {
+        return encode_smi(0);
+    }
+    let c_str = unsafe { std::ffi::CStr::from_ptr(s) };
+    let text = c_str.to_str().unwrap_or("0");
+    tag_int_from_str(text)
+}
+
 // ── Debug helpers (não C-ABI) ─────────────────────────────
 
 /// Verifica se valor é SMI. Para testes e debug.

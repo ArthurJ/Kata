@@ -130,7 +130,7 @@ fn prelude_has_show_for_int_float_rational_and_text() {
         .collect();
     assert_eq!(
         shows.len(),
-        5,
-        "deve ter 5 overloads de show (Int, Float, Rational, Text, Bytes)"
+        6,
+        "deve ter 6 overloads de show (Int, Float, Rational, Text, Bytes, Unit)"
     );
 }

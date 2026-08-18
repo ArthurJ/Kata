@@ -523,6 +523,14 @@ pub fn match_score(args: &[Ty], params: &[Ty], iface_reg: &InterfaceRegistry) ->
         if arg == param {
             exact += 1;
         } else if let Some(iface_name) = extract_iface_name(param)
+            && iface_name == "SHOW"
+            && matches!(arg, Ty::Tuple(_))
+        {
+            // Tuple é estrutural (aridade variável) — não registra SHOW no
+            // InterfaceRegistry. Mas `show tuple` é interceptado em apply_show_tuple,
+            // então todo Tuple implementa SHOW implicitamente.
+            iface += 1;
+        } else if let Some(iface_name) = extract_iface_name(param)
             && let Some(type_name) = extract_type_name(arg)
             && iface_reg.type_implements(&type_name, &iface_name)
         {
@@ -595,6 +603,7 @@ fn extract_type_name(ty: &Ty) -> Option<String> {
         Ty::Set(_) => Some("Set".into()),
         Ty::Bytes => Some("Bytes".into()),
         Ty::Byte => Some("Byte".into()),
+        Ty::Unit => Some("Unit".into()),
         Ty::Sender(_) => Some("Sender".into()),
         Ty::Receiver(_) => Some("Receiver".into()),
         Ty::ReceiverFactory(_) => Some("ReceiverFactory".into()),
