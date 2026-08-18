@@ -300,7 +300,7 @@ fn define_test_wrapper(
             result
         };
 
-        if spec.expects.is_some() {
+        if let Some(expects_str) = spec.expects.as_ref() {
             // ── Verificação de expects ──
             // O wrapper retorna status codes:
             //   0 = pass (show(err) casou expects com policy)
@@ -325,7 +325,10 @@ fn define_test_wrapper(
                 result,
                 sentinel_threshold,
             );
-            lower.builder.ins().brif(is_sentinel, sentinel_block, &[], check_tag_block, &[]);
+            lower
+                .builder
+                .ins()
+                .brif(is_sentinel, sentinel_block, &[], check_tag_block, &[]);
 
             // sentinel_block: retornar result (timeout/deadlock).
             lower.builder.switch_to_block(sentinel_block);
@@ -345,12 +348,15 @@ fn define_test_wrapper(
             let tag_inst = lower.builder.ins().call(tag_ref, &[result]);
             let tag = lower.builder.inst_results(tag_inst)[0];
             let zero = lower.builder.ins().iconst(I64, 0);
-            let is_ok = lower.builder.ins().icmp(
-                cranelift_codegen::ir::condcodes::IntCC::Equal,
-                tag,
-                zero,
-            );
-            lower.builder.ins().brif(is_ok, ok_block, &[], err_block, &[]);
+            let is_ok =
+                lower
+                    .builder
+                    .ins()
+                    .icmp(cranelift_codegen::ir::condcodes::IntCC::Equal, tag, zero);
+            lower
+                .builder
+                .ins()
+                .brif(is_ok, ok_block, &[], err_block, &[]);
 
             // ok_block: action retornou Ok — expected Err.
             lower.builder.switch_to_block(ok_block);
@@ -376,7 +382,6 @@ fn define_test_wrapper(
             let shown = lower_expects_show(&action.ret_ty, payload, &mut lower)?;
 
             // Carregar string expects como global data.
-            let expects_str = spec.expects.as_ref().unwrap();
             let expects_global = lower.add_string(expects_str);
             let expects_ptr = lower
                 .builder
@@ -389,13 +394,11 @@ fn define_test_wrapper(
                 MatchPolicy::Prefix => "kata_rt_string_starts_with",
                 MatchPolicy::Contains => "kata_rt_string_contains",
             };
-            let cmp_ref = lower
-                .ffi_refs
-                .get(cmp_fn_name)
-                .copied()
-                .ok_or_else(|| CodegenError::FfiSymbolNotFound {
+            let cmp_ref = lower.ffi_refs.get(cmp_fn_name).copied().ok_or_else(|| {
+                CodegenError::FfiSymbolNotFound {
                     symbol: cmp_fn_name.into(),
-                })?;
+                }
+            })?;
             let cmp_inst = lower.builder.ins().call(cmp_ref, &[shown, expects_ptr]);
             let cmp_result = lower.builder.inst_results(cmp_inst)[0];
             let one = lower.builder.ins().iconst(I64, 1);
@@ -404,7 +407,10 @@ fn define_test_wrapper(
                 cmp_result,
                 one,
             );
-            lower.builder.ins().brif(is_match, pass_block, &[], fail_block, &[]);
+            lower
+                .builder
+                .ins()
+                .brif(is_match, pass_block, &[], fail_block, &[]);
 
             // pass_block: return 0.
             lower.builder.switch_to_block(pass_block);
@@ -471,26 +477,27 @@ fn lower_expects_show(
         Ty::Sum(enum_name) => {
             // Enum não-genérico: chamar __kata_show__{enum_name} via kata_refs.
             let show_name = format!("__kata_show__{enum_name}");
-            let show_key: FuncKey = (
-                show_name,
-                vec![Ty::Sum(enum_name.clone())],
-                Ty::text(),
-            );
-            let show_fid = lower
-                .kata_ids
-                .get(&show_key)
-                .copied()
-                .ok_or_else(|| CodegenError::UnsupportedNode {
+            let show_key: FuncKey = (show_name, vec![Ty::Sum(enum_name.clone())], Ty::text());
+            let show_fid = lower.kata_ids.get(&show_key).copied().ok_or_else(|| {
+                CodegenError::UnsupportedNode {
                     node: format!("show para enum `{enum_name}` não encontrado na symbol_table"),
-                })?;
+                }
+            })?;
             let show_ref = lower
                 .module
                 .declare_func_in_func(show_fid, lower.builder.func);
             // ABI Kata: (rt, arena_handle, box_ptr, payload) -> i64.
-            let rt_val = lower.rt.unwrap_or_else(|| lower.builder.ins().iconst(I64, 0));
-            let arena = lower.caller_arena.unwrap_or_else(|| lower.builder.ins().iconst(I64, 0));
+            let rt_val = lower
+                .rt
+                .unwrap_or_else(|| lower.builder.ins().iconst(I64, 0));
+            let arena = lower
+                .caller_arena
+                .unwrap_or_else(|| lower.builder.ins().iconst(I64, 0));
             let dummy_box = lower.builder.ins().iconst(I64, 0);
-            let inst = lower.builder.ins().call(show_ref, &[rt_val, arena, dummy_box, payload]);
+            let inst = lower
+                .builder
+                .ins()
+                .call(show_ref, &[rt_val, arena, dummy_box, payload]);
             Ok(lower.builder.inst_results(inst)[0])
         }
         Ty::Prim(PrimTy::Text) => {

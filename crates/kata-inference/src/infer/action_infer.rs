@@ -161,7 +161,7 @@ pub(crate) fn infer_action(
     for spec in &typed_tests {
         if spec.expects.is_some() && !is_result_type(&expanded_ret) {
             return Err(MiddleError::TypeMismatch {
-                expected: format!("Result::(T, E) — `expects` requer action que retorna Result"),
+                expected: "Result::(T, E) — `expects` requer action que retorna Result".to_string(),
                 found: format!("{expanded_ret} — action não retorna Result"),
                 span: MietteSpan(kata_ast::Span::synthetic()),
             });

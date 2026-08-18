@@ -105,9 +105,7 @@ pub extern "C" fn kata_rt_string_contains(haystack: i64, needle: i64) -> i64 {
     // SAFETY: caller (JIT codegen) garante ponteiros C string válidos.
     let h = unsafe { std::ffi::CStr::from_ptr(haystack as *const std::os::raw::c_char).to_bytes() };
     let n = unsafe { std::ffi::CStr::from_ptr(needle as *const std::os::raw::c_char).to_bytes() };
-    if n.is_empty() {
-        1
-    } else if h.windows(n.len()).any(|w| w == n) {
+    if n.is_empty() || h.windows(n.len()).any(|w| w == n) {
         1
     } else {
         0

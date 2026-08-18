@@ -218,7 +218,7 @@ action resposta => Int
 resposta!()"#,
     );
 
-    let (stdout, stderr, code) = run_kata_test(&path);
+    let (_stdout, stderr, code) = run_kata_test(&path);
 
     // Deve falhar com compile error (não SIGSEGV, não passar).
     assert!(
