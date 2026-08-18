@@ -124,32 +124,27 @@ muito alto
 
 ## Loop: múltiplas tentativas
 
-Uma tentativa só não é um jogo. Precisamos de um loop que pede palpites até acertar. Kata tem `loop`, `break` (sai do loop) e `var` (binding mutável):
+Uma tentativa só não é um jogo. Precisamos de um loop que pede palpites até acertar. Kata tem `loop` e `break` (sai do loop):
 
 ```kata
 action jogar (alvo::Int) => Unit
-    var done := False
     let r := open!("/dev/stdin", Read)
     match r
         Result::Ok f:
             loop
-                match done
-                    Boolean::True: break
-                    Boolean::False:
-                        let r2 := readline!(f)
-                        match r2
-                            Result::Ok linha:
-                                let palpite := int linha
-                                match (> palpite alvo)
-                                    Boolean::True: echo!("muito alto")
+                let r2 := readline!(f)
+                match r2
+                    Result::Ok linha:
+                        let palpite := int linha
+                        match (> palpite alvo)
+                            Boolean::True: echo!("muito alto")
+                            Boolean::False:
+                                match (< palpite alvo)
+                                    Boolean::True: echo!("muito baixo")
                                     Boolean::False:
-                                        match (< palpite alvo)
-                                            Boolean::True: echo!("muito baixo")
-                                            Boolean::False:
-                                                echo!("acertou!")
-                                                done := True
-                            Result::Err e:
-                                done := True
+                                        echo!("acertou!")
+                                        break
+                    Result::Err e: break
         Result::Err e: echo!("erro ao abrir stdin")
 
 jogar!(42)
@@ -168,12 +163,10 @@ acertou!
 Muita coisa aconteceu aqui:
 
 - `action jogar (alvo::Int) => Unit` define uma action chamada `jogar` que recebe um `Int` e retorna `Unit` (nada).
-- `var done := False` cria um binding mutável. `done := True` atualiza o valor. O capítulo 7 explica `var` em detalhe.
 - `loop` é um laço infinito. `break` sai dele.
-- O `match done` no topo do loop controla quando sair: se `done` virou `True`, `break`. Senão, continua.
-- Quando o palpite é correto, `done := True` marca para sair na próxima iteração.
-
-Por que `match done` no topo em vez de `break` direto dentro do `match` do palpite? Porque `break` dentro de um `match` aninhado dentro de um `loop` é uma limitação conhecida do compilador. O padrão `var done` no topo do loop é o contorno recomendado.
+- A cada iteração, lemos uma linha do stdin, convertemos para `Int`, e comparamos com o alvo.
+- Quando o palpite é correto, `break` sai do loop imediatamente.
+- Se `readline!` retorna `Err` (fim do input), `break` também sai do loop.
 
 ## Jogo completo: número aleatório
 
@@ -181,28 +174,23 @@ Agora juntamos tudo — o número alvo é gerado aleatoriamente:
 
 ```kata
 action jogar (alvo::Int) => Unit
-    var done := False
     let r := open!("/dev/stdin", Read)
     match r
         Result::Ok f:
             loop
-                match done
-                    Boolean::True: break
-                    Boolean::False:
-                        let r2 := readline!(f)
-                        match r2
-                            Result::Ok linha:
-                                let palpite := int linha
-                                match (> palpite alvo)
-                                    Boolean::True: echo!("muito alto")
+                let r2 := readline!(f)
+                match r2
+                    Result::Ok linha:
+                        let palpite := int linha
+                        match (> palpite alvo)
+                            Boolean::True: echo!("muito alto")
+                            Boolean::False:
+                                match (< palpite alvo)
+                                    Boolean::True: echo!("muito baixo")
                                     Boolean::False:
-                                        match (< palpite alvo)
-                                            Boolean::True: echo!("muito baixo")
-                                            Boolean::False:
-                                                echo!("acertou!")
-                                                done := True
-                            Result::Err e:
-                                done := True
+                                        echo!("acertou!")
+                                        break
+                    Result::Err e: break
         Result::Err e: echo!("erro ao abrir stdin")
 
 jogar!(rand_int!(1, 100))
@@ -230,7 +218,7 @@ Você construiu um jogo interativo completo. No caminho, tocou em:
 - **Actions** — funções impuras com `!` (`rand_int!`, `open!`, `readline!`, `echo!`)
 - **`Result`** — success ou erro, sempre via `match`
 - **`match`** — condicional sem `if`, examinando a forma do valor
-- **`var` e `loop`** — estado mutável e iteração em actions
+- **`loop` e `break`** — iteração e saída de loop
 - **`int`** — conversão de `Text` para `Int`
 
 Cada um desses conceitos é coberto em profundidade nos próximos capítulos. O capítulo 3 mostra a sintaxe básica. O capítulo 7 explica actions, `var`, e `loop`. O capítulo 6 cobre `match` em detalhe.
