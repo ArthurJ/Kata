@@ -68,4 +68,4 @@ O REPL mantém bindings entre linhas e suporta `:type` para inspecionar tipos, `
 
 ## Próximos passos
 
-Você escreveu seu primeiro programa Kata. O próximo capítulo explora a sintaxe básica: literais, comentários, e como `show` converte qualquer valor em texto.
+Você escreveu seu primeiro programa Kata. O próximo capítulo constrói um jogo de adivinhação completo — um mini-projeto que introduz actions, pattern matching, e leitura de entrada antes da teoria.

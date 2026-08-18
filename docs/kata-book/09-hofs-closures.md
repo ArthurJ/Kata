@@ -1,4 +1,4 @@
-# Capítulo 8 — HOFs e Closures
+# Capítulo 9 — HOFs e Closures
 
 Funções de ordem superior (HOFs) recebem ou retornam funções. Kata tem três builtins — `map`, `filter`, `fold` — e o operador pipeline `|>`.
 
@@ -7,7 +7,7 @@ Funções de ordem superior (HOFs) recebem ou retornam funções. Kata tem três
 `map` aplica uma função a cada elemento de uma coleção:
 
 ```kata
-echo!(show map (* _ 2) [1 2 3])
+echo!(map (* _ 2) [1 2 3])
 ```
 
 ```
@@ -21,7 +21,7 @@ O `_` é um hole — um espaço a preencher. `* _ 2` cria uma closure que aguard
 `filter` seleciona elementos que satisfazem um predicado:
 
 ```kata
-echo!(show filter (lambda x: > x 0) [1 -2 3])
+echo!(filter (lambda x: > x 0) [1 -2 3])
 ```
 
 ```
@@ -35,7 +35,7 @@ Aqui usamos `lambda` em vez de hole porque a condição `> x 0` precisa nomear o
 `fold` reduz uma coleção a um único valor, acumulando:
 
 ```kata
-echo!(show fold (+) 0 [1 2 3])
+echo!(fold (+) 0 [1 2 3])
 ```
 
 ```
@@ -51,7 +51,7 @@ O `_` no lugar de um argumento congela a aplicação, gerando uma closure:
 ```kata
 action main
     let soma_dez := + 10 _
-    echo!(show (soma_dez 5))
+    echo!(soma_dez 5)
 main!()
 ```
 
@@ -66,7 +66,7 @@ main!()
 O pipeline passa o resultado da esquerda como argumento da função à direita. Associatividade à esquerda:
 
 ```kata
-echo!(show (5 |> + 1 _ |> * 2 _))
+echo!(5 |> + 1 _ |> * 2 _)
 ```
 
 ```

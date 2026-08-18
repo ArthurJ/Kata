@@ -1,4 +1,4 @@
-# Capítulo 9 — Enums e Structs
+# Capítulo 10 — Enums e Structs
 
 Kata modela dados com tipos algébricos. `enum` define tipos soma (OR) — um valor é uma de várias variantes. `data` define tipos produto (AND) — um valor combina vários campos.
 
@@ -12,8 +12,8 @@ enum Cor
     Amarelo
     Vermelho
 
-echo!(show Verde)
-echo!(show Cor::Amarelo)
+echo!(Verde)
+echo!(Cor::Amarelo)
 ```
 
 ```
@@ -32,8 +32,8 @@ enum Optional
     Some(Int)
     None
 
-echo!(show (Some 42))
-echo!(show None)
+echo!((Some 42))
+echo!(None)
 ```
 
 ```
@@ -41,7 +41,7 @@ Some(42)
 None
 ```
 
-`Some 42` constrói a variante com payload. Os parênteses em `show (Some 42)` são necessários — `show` tem aridade 1 e `Some 42` precisa ser agrupado.
+`Some 42` constrói a variante com payload. Os parênteses em `echo!(Some 42)` são necessários — `echo!` tem aridade 1 e `Some 42` precisa ser agrupado.
 
 ## `match` em enums
 
@@ -53,7 +53,7 @@ enum Optional
     None
 
 match (Some 42)
-    Some v: echo!(show v)
+    Some v: echo!(v)
     None: echo!("nada")
 ```
 
@@ -72,8 +72,8 @@ data Pessoa (nome::Text idade::Int)
 
 action main
     let p := Pessoa "João" 30
-    echo!(show p.nome)
-    echo!(show p.idade)
+    echo!(p.nome)
+    echo!(p.idade)
 main!()
 ```
 
@@ -91,7 +91,7 @@ data Ponto (x::Int y::Int)
 
 action main
     let p := Ponto 3 4
-    echo!(show + (* p.x p.x) (* p.y p.y))
+    echo!(+ (* p.x p.x) (* p.y p.y))
 main!()
 ```
 

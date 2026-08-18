@@ -1,4 +1,4 @@
-# Capítulo 3 — Bindings e Tipos
+# Capítulo 4 — Bindings e Tipos
 
 Bindings dão nomes a valores. Kata tem dois tipos de binding no nível de módulo e dentro de funções.
 
@@ -10,8 +10,8 @@ No top-level de um arquivo, use `constant` para declarar valores avaliados em co
 constant pi := 3.14
 constant nome := "Kata"
 
-echo!(show pi)
-echo!(show nome)
+echo!(pi)
+echo!(nome)
 ```
 
 ```
@@ -29,7 +29,7 @@ Dentro de funções e actions, use `let` para bindings imutáveis:
 action main
     let x := 42
     let y := 99
-    echo!(show + x y)
+    echo!(+ x y)
 main!()
 ```
 
@@ -47,7 +47,7 @@ Cada `let` declara um binding imutável e **único** no escopo atual. Re-declara
 action main
     let x := 42
     let x := 99
-    echo!(show x)
+    echo!(x)
 main!()
 ```
 
@@ -63,7 +63,7 @@ Para reusar um nome, use `var` — ele cria um novo binding mutável que substit
 action main
     var x := 42
     var x := + x 1
-    echo!(show x)
+    echo!(x)
 main!()
 ```
 
@@ -87,7 +87,7 @@ main!()
 Inteiros têm precisão arbitrária. Não há overflow:
 
 ```kata
-echo!(show * 99999999999999999999 99999999999999999999)
+echo!(* 99999999999999999999 99999999999999999999)
 ```
 
 ```
@@ -101,7 +101,7 @@ O operador `::` anexa um tipo a uma expressão. Útil quando você quer ser expl
 ```kata
 action main
     let x := 42 :: Int
-    echo!(show x)
+    echo!(x)
 main!()
 ```
 
@@ -114,7 +114,7 @@ main!()
 Floats têm imprecisão inerente. `Rational` é exato — `1/3 * 3 = 1`, não `0.999...`:
 
 ```kata
-echo!(show 3.14::Rational)
+echo!(3.14::Rational)
 ```
 
 ```

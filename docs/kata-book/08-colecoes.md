@@ -1,4 +1,4 @@
-# Capítulo 7 — Coleções
+# Capítulo 8 — Coleções
 
 Kata tem quatro coleções principais, cada uma com delimitadores próprios. Todas são imutáveis e persistentes — modificar cria uma nova versão que compartilha estrutura com a original.
 
@@ -9,7 +9,7 @@ Listas usam `[ ]`. São encadeadas (Cons) — imutabilidade de custo zero via pa
 ```kata
 action main
     let lista := [1 2 3]
-    echo!(show lista)
+    echo!(lista)
 main!()
 ```
 
@@ -20,7 +20,7 @@ main!()
 `+` concatena listas:
 
 ```kata
-echo!(show + [1 2] [3 4])
+echo!(+ [1 2] [3 4])
 ```
 
 ```
@@ -34,7 +34,7 @@ Tuplas agrupam valores heterogêneos. Vírgula separa elementos. Parênteses obr
 ```kata
 action main
     let t := (1, "a", True)
-    echo!(show t)
+    echo!(t)
 main!()
 ```
 
@@ -49,7 +49,7 @@ Dicionários usam `{k: v}`. Chaves devem implementar `HASHABLE`:
 ```kata
 action main
     let d := {"nome": "Ana"}
-    echo!(show d)
+    echo!(d)
 main!()
 ```
 
@@ -62,7 +62,7 @@ O `:` após a primeira entrada desambigua de Array. Para múltiplas entradas:
 ```kata
 action main
     let d := {"nome": "Ana" "cidade": "São Paulo"}
-    echo!(show d)
+    echo!(d)
 main!()
 ```
 
@@ -79,7 +79,7 @@ Conjuntos usam `{| |}`. Não há ordem garantida:
 ```kata
 action main
     let s := {|1 2 3|}
-    echo!(show s)
+    echo!(s)
 main!()
 ```
 
@@ -90,7 +90,7 @@ main!()
 `+` une sets:
 
 ```kata
-echo!(show + {|1 2|} {|3 4|})
+echo!(+ {|1 2|} {|3 4|})
 ```
 
 ```
@@ -104,7 +104,7 @@ Ranges são preguiçosos — geram valores sob demanda. A sintaxe é `[start..st
 ```kata
 action main
     for x in [1..1..5]
-        echo!(show x)
+        echo!(x)
 main!()
 ```
 
@@ -118,7 +118,7 @@ main!()
 ```kata
 action main
     for x in [0..2..10]
-        echo!(show x)
+        echo!(x)
 main!()
 ```
 
@@ -135,7 +135,7 @@ Range decrescente com step negativo:
 ```kata
 action main
     for x in [10..-1..=0]
-        echo!(show x)
+        echo!(x)
 main!()
 ```
 
@@ -160,7 +160,7 @@ main!()
 ```kata
 action main
     for x in [1 2 3]
-        echo!(show x)
+        echo!(x)
 main!()
 ```
 
@@ -175,8 +175,8 @@ main!()
 O operador `in` testa se um elemento pertence à coleção:
 
 ```kata
-echo!(show (3 in [1 2 3]))
-echo!(show (5 in [1 2 3]))
+echo!((3 in [1 2 3]))
+echo!((5 in [1 2 3]))
 ```
 
 ```

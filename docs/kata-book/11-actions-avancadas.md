@@ -1,4 +1,4 @@
-# Capítulo 10 — Actions Avançadas
+# Capítulo 11 — Actions Avançadas
 
 Kata tem concorrência cooperativa baseada em CSP (Communicating Sequential Processes). Fibers — corrotinas leves — comunicam via canais. O scheduler é single-threaded: yield cooperativo, não preempção.
 
@@ -8,7 +8,7 @@ Kata tem concorrência cooperativa baseada em CSP (Communicating Sequential Proc
 
 ```kata
 action worker (n::Int) => Unit
-    echo!(show n)
+    echo!(n)
 
 action main => Unit
     fork!(worker, (42,))
@@ -103,6 +103,6 @@ O produtor envia após 50ms — o `select` recebe antes do timeout de 100ms.
 
 ## Fim
 
-Você completou o Kata Book. Dos literais à concorrência — em 10 capítulos, sem `if`, sem classes, sem herança. Kata é pequena por design: notação prefixa, pattern matching, e tipos algébricos resolvem o que outras linguagens espalham por dezenas de features.
+Você completou a parte principal do Kata Book. Dos literais à concorrência — sem `if`, sem classes, sem herança. Kata é pequena por design: notação prefixa, pattern matching, e tipos algébricos resolvem o que outras linguagens espalham por dezenas de features.
 
 Para aprofundar, explore o `examples/` no repositório e o manual técnico em `docs/Kata-lang-manual.md`.

@@ -1,4 +1,4 @@
-# Capítulo 5 — Pattern Matching
+# Capítulo 6 — Pattern Matching
 
 Kata não tem `if`. Condicionais são expressas via pattern matching e guards. Isto garante exaustividade — o compilador verifica que todos os casos estão cobertos.
 
@@ -24,7 +24,7 @@ Padrões podem extrair o payload de variantes. `Result` tem `Ok(T)` e `Err(E)`:
 
 ```kata
 match (div 10 3)
-    Result::Ok v: echo!(show v)
+    Result::Ok v: echo!(v)
     Result::Err e: echo!("erro")
 ```
 
@@ -44,8 +44,8 @@ lambda x:
     > x 0: x
     otherwise: - 0 x
 
-echo!(show abs 5)
-echo!(show abs (- 0 5))
+echo!(abs 5)
+echo!(abs (- 0 5))
 ```
 
 ```
@@ -67,8 +67,8 @@ lambda x:
     with
         doubled := * x 2
 
-echo!(show classify 3)
-echo!(show classify 6)
+echo!(classify 3)
+echo!(classify 6)
 ```
 
 ```

@@ -1,4 +1,4 @@
-# Capítulo 6 — Actions
+# Capítulo 7 — Actions
 
 Tudo até aqui foi código puro — funções sem efeitos colaterais. Actions são o lado impuro: interagem com o mundo, têm estado mutável, e controlam fluxo imperativo.
 
@@ -41,7 +41,7 @@ action somar_acumulado (n::Int) => Int
             Boolean::False: continue
     acc
 
-echo!(show somar_acumulado!(5))
+echo!(somar_acumulado!(5))
 ```
 
 ```
@@ -59,7 +59,7 @@ action contar
     var i := 0
     loop
         i := + i 1
-        echo!(show i)
+        echo!(i)
         match (> i 3)
             Boolean::True: break
             Boolean::False: continue
@@ -98,7 +98,7 @@ action calcular => Int
     let y := + x 1
     y
 
-echo!(show calcular!())
+echo!(calcular!())
 ```
 
 ```
@@ -109,7 +109,7 @@ O `;` termina um statement e suprime o retorno — a action retorna `Unit`. Úti
 
 ```kata
 action test_semi
-    let x := 5; echo!(show x)
+    let x := 5; echo!(x)
     echo!("depois")
 
 test_semi!()

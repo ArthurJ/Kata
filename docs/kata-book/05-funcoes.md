@@ -1,4 +1,4 @@
-# Capítulo 4 — Funções
+# Capítulo 5 — Funções
 
 Funções em Kata são puras: recebem argumentos, computam um resultado, e não têm efeitos colaterais. A definição tem duas partes — assinatura e corpo.
 
@@ -10,7 +10,7 @@ A assinatura declara o nome e os tipos. O corpo usa `lambda` com os parâmetros:
 dobrar :: Int => Int
 lambda x: * x 2
 
-echo!(show dobrar 21)
+echo!(dobrar 21)
 ```
 
 ```
@@ -28,7 +28,7 @@ fat :: Int Int => Int
 lambda 0 acc: acc
 lambda n acc: fat (- n 1) (* n acc)
 
-echo!(show fat 5 1)
+echo!(fat 5 1)
 ```
 
 ```
@@ -47,7 +47,7 @@ lambda 0: 0
 lambda 1: 1
 lambda n: + (fib (- n 1)) (fib (- n 2))
 
-echo!(show fib 10)
+echo!(fib 10)
 ```
 
 ```
@@ -63,7 +63,7 @@ fat :: Int Int => Int
 lambda 0 acc: acc
 lambda n acc: fat (- n 1) (* n acc)
 
-echo!(show fat 100000 1)
+echo!(fat 100000 1)
 ```
 
 ```

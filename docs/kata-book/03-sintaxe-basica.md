@@ -1,4 +1,4 @@
-# Capítulo 2 — Sintaxe Básica
+# Capítulo 3 — Sintaxe Básica
 
 Kata usa notação prefixa: a função vem antes dos argumentos, sem parênteses. Isto elimina ambiguidade de precedência e trata operadores e funções da mesma forma.
 
@@ -53,14 +53,14 @@ Inteiros têm precisão arbitrária (BigInt). Não há overflow.
 
 ## `echo!` e `show`
 
-`echo!` imprime texto na tela. `show` converte qualquer valor em texto. Combine os dois para imprimir qualquer tipo:
+`echo!` imprime texto na tela. Todo tipo em Kata implementa a interface `SHOW`, então `echo!` aceita qualquer valor diretamente:
 
 ```kata
-echo!(show 42)
-echo!(show 3.14)
-echo!(show "hello")
-echo!(show True)
-echo!(show ())
+echo!(42)
+echo!(3.14)
+echo!("hello")
+echo!(True)
+echo!(())
 ```
 
 ```
@@ -71,14 +71,34 @@ True
 ()
 ```
 
-`show` funciona com todos os tipos — coleções, tuplas, enums, structs. Veremos mais no capítulo 7.
+`show` é a função que converte qualquer valor em `Text`. `echo!` já chama `show` internamente, então você raramente precisa chamar `show` explicitamente — apenas quando quiser o texto sem imprimir. `show` funciona com todos os tipos — coleções, tuplas, enums, structs. Veremos mais no capítulo 8.
+
+## Converter Text em número
+
+As funções `int` e `float` convertem `Text` para `Int` e `Float` respectivamente:
+
+```kata
+echo!(int "42")
+echo!(int "0xFF")
+echo!(float "3.14")
+echo!(+ (float "1.5") (float "2.5"))
+```
+
+```
+42
+255
+3.14
+4.0
+```
+
+`int` suporta decimal, hexadecimal (`0x`), octal (`0o`), binário (`0b`) e underscores (`1_000`). `float` suporta notação decimal e exponencial (`1e10`).
 
 ## Concatenar texto
 
 O operador `+` também concatena texto:
 
 ```kata
-echo!(show + "hello " "world")
+echo!(+ "hello " "world")
 ```
 
 ```

@@ -1,4 +1,4 @@
-# Capítulo 13 — Otimizações
+# Capítulo 14 — Otimizações
 
 Kata aplica otimizações automaticamente. O programador escreve código declarativo; o compilador transforma para rodar sem estourar a pilha e sem coleções intermediárias.
 
@@ -15,7 +15,7 @@ fatorial :: Int => Int
 lambda n: fat_tail n 1
 
 action main
-    echo!(show fatorial 5)
+    echo!(fatorial 5)
 main!()
 ```
 
@@ -46,7 +46,7 @@ lambda n acc: soma_acc (- n 1) (+ acc n)
 Agora é cauda — TCO aplica. O programador não precisa fazer nada:
 
 ```kata
-echo!(show soma 1000000)
+echo!(soma 1000000)
 ```
 
 ```
@@ -63,7 +63,7 @@ Sem TRMA, 1 milhão de chamadas recursivas estourariam a pilha. Com TRMA, roda s
 processar :: [Int] => Int
 lambda arr: fold (+) 0 (filter (lambda x: > x 0) (map (* _ 2) arr))
 
-echo!(show processar [1 -2 3])
+echo!(processar [1 -2 3])
 ```
 
 ```
@@ -83,7 +83,7 @@ lambda n: * n (fatorial (- n 1))
 
 constant fatorial_10 := fatorial 10
 
-echo!(show fatorial_10)
+echo!(fatorial_10)
 ```
 
 ```
@@ -101,8 +101,8 @@ O cálculo `fatorial 10` roda em compile-time. No binário, `fatorial_10` é o l
 dobro :: Int => Int
 lambda n: * n 2
 
-echo!(show dobro 5)
-echo!(show dobro 5)
+echo!(dobro 5)
+echo!(dobro 5)
 ```
 
 ```

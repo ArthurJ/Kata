@@ -541,7 +541,9 @@ em `kata-rt`, desacoplada do compilador.
   `kata_rt_file_readline`, `kata_rt_file_write_text`, `kata_rt_file_write_bytes`,
   `kata_rt_file_close`
 - **Textos:** `kata_rt_string_concat`, `kata_rt_string_len`, `kata_rt_text_literal`,
-  `kata_rt_int_to_text`, `kata_rt_bool_to_text`, `kata_rt_text_replace_first`
+  `kata_rt_int_to_text`, `kata_rt_text_to_int`, `kata_rt_float_to_text`,
+  `kata_rt_text_to_float`, `kata_rt_bool_to_text`, `kata_rt_text_replace_first`
+- **RNG:** `kata_rt_rand` (→ f64 [0,1)), `kata_rt_rand_int` (min, max → Int [min,max])
 - **Arena:** `kata_rt_arena_create`, `kata_rt_arena_alloc`, `kata_rt_arena_destroy`
 - **Coleções — Listas:** `kata_rt_list_nil`, `kata_rt_list_cons`, `kata_rt_list_is_empty`,
   `kata_rt_list_head`, `kata_rt_list_tail`

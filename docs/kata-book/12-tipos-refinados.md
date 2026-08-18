@@ -1,4 +1,4 @@
-# Capítulo 11 — Tipos Refinados
+# Capítulo 12 — Tipos Refinados
 
 Tipos refinados adicionam predicados a tipos existentes. Em vez de definir um novo tipo do zero, você refina um tipo base com uma condição que o valor deve satisfazer.
 
@@ -19,7 +19,7 @@ Para literais que satisfazem o predicado, use `::` diretamente:
 ```kata
 action main
     let x := 5::PositiveInt
-    echo!(show x)
+    echo!(x)
 main!()
 ```
 
@@ -43,7 +43,7 @@ data (Int, > _ 0) as PositiveInt
 action main
     let r := PositiveInt 42
     match r
-        Ok v: echo!(show v)
+        Ok v: echo!(v)
         Err _: echo!("erro")
 main!()
 ```
@@ -58,7 +58,7 @@ Quando o valor não satisfaz o predicado, o construtor retorna `Err`:
 action main
     let r := PositiveInt (- 0 5)
     match r
-        Ok v: echo!(show v)
+        Ok v: echo!(v)
         Err _: echo!("erro")
 main!()
 ```
@@ -81,7 +81,7 @@ action main
     let b := 3::PositiveInt
     let soma := PositiveInt (+ a b)
     match soma
-        Ok v: echo!(show v)
+        Ok v: echo!(v)
         Err _: echo!("erro")
 main!()
 ```
@@ -100,7 +100,7 @@ Para converter um tipo refinado de volta ao tipo base, use `::`:
 action main
     let a := 5::PositiveInt
     let n := a::Int
-    echo!(show n)
+    echo!(n)
 main!()
 ```
 

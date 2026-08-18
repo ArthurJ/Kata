@@ -1,4 +1,4 @@
-# Capítulo 14 — REPL Interativo
+# Capítulo 15 — REPL Interativo
 
 O REPL (Read-Eval-Print Loop) é a forma mais rápida de experimentar Kata. Sem criar arquivos, você avalia expressões, inspeciona tipos, e carrega módulos.
 
@@ -98,7 +98,7 @@ comandos:
 
 ## Fim do Kata Book
 
-Você completou todos os 14 capítulos. Dos literais à concorrência, dos tipos refinados ao REPL — Kata é pequena por design.
+Você completou todos os 15 capítulos. Dos literais à concorrência, dos tipos refinados ao REPL — Kata é pequena por design.
 
 Para aprofundar:
 - `examples/` — exemplos completos de cada feature

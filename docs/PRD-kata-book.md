@@ -1,6 +1,6 @@
 # PRD — Kata Book: Guia Introdutório da Linguagem
 
-**Status:** Concluído (fases 1 e 2 — 14 capítulos)
+**Status:** Concluído (fases 1 e 2 — 15 capítulos, incluindo mini-projeto de guessing game)
 **Data:** 2026-08-13
 **Público-alvo:** Programadores interessados em linguagens funcionais, sem
 experiência prévia com Kata. Material para mostrar a amigos/coleagues.
@@ -25,31 +25,33 @@ refinados), em texto plano legível em qualquer terminal. O guia deve ser:
 ### Capítulos obrigatórios (fase 1)
 
 1. **Olá, Kata** — instalar, primeiro programa, `kata run`, `kata repl`
-2. **Sintaxe básica** — notação prefixa, literais, comentários, `echo!`
-3. **Bindings e tipos** — `let`, tipos primitivos (Int, Float, Text, Boolean,
+2. **Adivinhe o Número** — mini-projeto hands-on: guessing game com `rand_int!`,
+   leitura de stdin, `match`, `loop`, `var`. Introduz conceitos antes da teoria
+3. **Sintaxe básica** — notação prefixa, literais, comentários, `echo!`
+4. **Bindings e tipos** — `let`, tipos primitivos (Int, Float, Text, Boolean,
    Unit), anotação `::`, shadowing
-4. **Funções** — assinaturas `nome :: T1 T2 => Ret`, `lambda`, múltiplas
+5. **Funções** — assinaturas `nome :: T1 T2 => Ret`, `lambda`, múltiplas
    cláusulas, recursão, TCO/TRMA
-5. **Pattern matching** — `match`, variantes qualificadas/desqualificadas,
+6. **Pattern matching** — `match`, variantes qualificadas/desqualificadas,
    guards, `otherwise`, `with`
-6. **Actions** — barreira pure/impure, `action`, `!`, `echo!`, `var`, `loop`,
+7. **Actions** — barreira pure/impure, `action`, `!`, `echo!`, `var`, `loop`,
    `break`/`continue`, `;` vs retorno implícito
-7. **Colecões** — List `[1 2 3]`, `cons [h : t]`, tupla `(a, b)`, Dict
+8. **Colecões** — List `[1 2 3]`, `cons [h : t]`, tupla `(a, b)`, Dict
    `{k: v}`, Set `{|1 2 3|}`, ranges `[1..1..10]`, `for x in`
-8. **HOFs e closures** — `map`, `filter`, `fold`, holes `_`, currying, capture,
+9. **HOFs e closures** — `map`, `filter`, `fold`, holes `_`, currying, capture,
    `|>` pipeline
-9. **Enums e structs** — `enum`, variantes (unitárias, payload, constantes,
-   predicadas), `data`, fields, dot access
-10. **Actions avançadas** — `fork!`, `spawn!`, channels `<!`/`!>`, `select`,
+10. **Enums e structs** — `enum`, variantes (unitárias, payload, constantes,
+    predicadas), `data`, fields, dot access
+11. **Actions avançadas** — `fork!`, `spawn!`, channels `<!`/`!>`, `select`,
     `timeout`, `queue!`, `broadcast!`, `sleep!`
 
 ### Capítulos opcionais (fase 2 — se tempo permitir)
 
-11. **Tipos refinados** — `data (Int, > _ 0) as PositiveInt`, smart
+12. **Tipos refinados** — `data (Int, > _ 0) as PositiveInt`, smart
     constructors, `refines`, `?`, `|`, downcast `::`
-12. **Módulos** — `import`, `export`, selective import
-13. **Otimizações** — TCO, TRMA, stream fusion, `@comptime`, `@cache`
-14. **REPL interativo** — `:type`, `:env`, `:load`, `:reset`, multiline,
+13. **Módulos** — `import`, `export`, selective import
+14. **Otimizações** — TCO, TRMA, stream fusion, `@comptime`, `@cache`
+15. **REPL interativo** — `:type`, `:env`, `:load`, `:reset`, multiline,
     persistência de bindings
 
 ## 3. Princípios de escrita

@@ -1,4 +1,4 @@
-# Capítulo 12 — Módulos
+# Capítulo 13 — Módulos
 
 Kata organiza código em módulos. Cada arquivo `.kata` é um módulo. Itens exportados com `export` ficam visíveis para quem importar; itens não exportados são privados.
 
@@ -32,8 +32,8 @@ import mock_math
 action main
     let dobro := mock_math.dobrar 21
     let triplo := mock_math.triplicar 21
-    echo!(show dobro)
-    echo!(show triplo)
+    echo!(dobro)
+    echo!(triplo)
 main!()
 ```
 
@@ -51,7 +51,7 @@ import mock_math.(triplicar)
 
 action main
     let triplo := triplicar 21
-    echo!(show triplo)
+    echo!(triplo)
 main!()
 ```
 
@@ -69,8 +69,8 @@ import mock_math.(dobrar as d, triplicar as t)
 action main
     let dobro := d 21
     let triplo := t 21
-    echo!(show dobro)
-    echo!(show triplo)
+    echo!(dobro)
+    echo!(triplo)
 main!()
 ```
 
