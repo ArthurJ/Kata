@@ -1,7 +1,7 @@
 # PRD — STEPPABLE Neutral Check + Pipe Limitado (`|N>`)
 
 **Data:** 2026-08-17
-**Status:** Planejamento
+**Status:** ✅ Concluído (Fase 1 ✅, Fase 2 ✅)
 **Autor:** Arthur + Hermes
 
 ## Contexto
