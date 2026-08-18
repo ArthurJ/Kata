@@ -123,9 +123,8 @@ pub fn monomorphize(typed: TypedModule) -> MonoModule {
     // instâncias já estão em mono.functions com tipos concretos. Os templates
     // não devem chegar ao codegen — seus corpos contêm Closures `repr`/
     // `show` com ffi_symbol: None que o codegen não sabe compilar.
-    mono.functions.retain(|f| {
-        !f.param_types.iter().any(|ty| ty.contains_var())
-    });
+    mono.functions
+        .retain(|f| !f.param_types.iter().any(|ty| ty.contains_var()));
 
     // Passada final: aplica fallback gracioso a Closures com ffi_symbol: None
     // cujo arg_type é Ty::Var(_) não resolvido (ex: braço Err de show_Result

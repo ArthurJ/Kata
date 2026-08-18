@@ -115,10 +115,7 @@ fn range_done_float(
 
     // Detecta step < 0 (float)
     let zero_f64 = ctx.builder.ins().f64const(0.0);
-    let step_neg = ctx
-        .builder
-        .ins()
-        .fcmp(FloatCC::LessThan, step_f, zero_f64);
+    let step_neg = ctx.builder.ins().fcmp(FloatCC::LessThan, step_f, zero_f64);
 
     // Detecta inclusive (incl_val != 0) — incl_val ainda é I64
     let is_inclusive = ctx.builder.ins().icmp_imm(IntCC::NotEqual, incl_val, 0);
@@ -142,10 +139,7 @@ fn range_done_float(
         .builder
         .ins()
         .fcmp(FloatCC::LessThanOrEqual, current_f, end_f);
-    let done_neg_incl = ctx
-        .builder
-        .ins()
-        .fcmp(FloatCC::LessThan, current_f, end_f);
+    let done_neg_incl = ctx.builder.ins().fcmp(FloatCC::LessThan, current_f, end_f);
     let done_neg = ctx
         .builder
         .ins()

@@ -341,60 +341,60 @@ impl Parser {
         if matches!(self.peek(), Token::Indent) {
             self.advance(); // consume INDENT
             loop {
-            while matches!(self.peek(), Token::StmtSep) {
-                self.advance();
-            }
-            if matches!(self.peek(), Token::Dedent | Token::Eof) {
-                break;
-            }
-
-            // Assinatura: `name :: Type1 Type2 ... => RetType [@ffi(...)]`
-            let method_name = match self.peek() {
-                Token::Ident(s) => {
-                    let span = self.peek_span();
-                    let n = s.clone();
+                while matches!(self.peek(), Token::StmtSep) {
                     self.advance();
-                    if n.chars().next().is_some_and(|c| c.is_alphabetic()) {
-                        self.validate_name(&n, CasingPattern::SnakeCase, span)?;
-                    }
-                    n
                 }
-                _ => return Err(self.error("method name in implements")),
-            };
-            self.expect(&Token::DoubleColon, "`::` in method signature")?;
+                if matches!(self.peek(), Token::Dedent | Token::Eof) {
+                    break;
+                }
 
-            let mut params = Vec::new();
-            while !matches!(self.peek(), Token::FatArrow | Token::Eof) {
-                params.push(self.parse_type_expr()?);
-            }
-            self.expect(&Token::FatArrow, "`=>` in method signature")?;
-            let ret = self.parse_type_expr()?;
+                // Assinatura: `name :: Type1 Type2 ... => RetType [@ffi(...)]`
+                let method_name = match self.peek() {
+                    Token::Ident(s) => {
+                        let span = self.peek_span();
+                        let n = s.clone();
+                        self.advance();
+                        if n.chars().next().is_some_and(|c| c.is_alphabetic()) {
+                            self.validate_name(&n, CasingPattern::SnakeCase, span)?;
+                        }
+                        n
+                    }
+                    _ => return Err(self.error("method name in implements")),
+                };
+                self.expect(&Token::DoubleColon, "`::` in method signature")?;
 
-            // Diretivas opcionais APÓS o tipo de retorno: @ffi, @commutative
-            let method_directives = self.parse_directives()?;
+                let mut params = Vec::new();
+                while !matches!(self.peek(), Token::FatArrow | Token::Eof) {
+                    params.push(self.parse_type_expr()?);
+                }
+                self.expect(&Token::FatArrow, "`=>` in method signature")?;
+                let ret = self.parse_type_expr()?;
 
-            // Corpo: lambda no mesmo nível (Some) ou apenas diretivas @ffi (None)
-            // Consumir StmtSep antes de checar (newline entre assinatura e lambda).
-            while matches!(self.peek(), Token::StmtSep) {
-                self.advance();
-            }
-            let body = if matches!(self.peek(), Token::Lambda) {
-                Some(self.parse_sig_clauses()?)
-            } else {
-                None
-            };
+                // Diretivas opcionais APÓS o tipo de retorno: @ffi, @commutative
+                let method_directives = self.parse_directives()?;
 
-            if matches!(self.peek(), Token::StmtSep) {
-                self.advance();
-            }
+                // Corpo: lambda no mesmo nível (Some) ou apenas diretivas @ffi (None)
+                // Consumir StmtSep antes de checar (newline entre assinatura e lambda).
+                while matches!(self.peek(), Token::StmtSep) {
+                    self.advance();
+                }
+                let body = if matches!(self.peek(), Token::Lambda) {
+                    Some(self.parse_sig_clauses()?)
+                } else {
+                    None
+                };
 
-            methods.push(ImplMethod {
-                name: method_name,
-                params,
-                ret,
-                directives: method_directives,
-                body,
-            });
+                if matches!(self.peek(), Token::StmtSep) {
+                    self.advance();
+                }
+
+                methods.push(ImplMethod {
+                    name: method_name,
+                    params,
+                    ret,
+                    directives: method_directives,
+                    body,
+                });
             }
             self.expect(&Token::Dedent, "DEDENT (end of implements)")?;
         }

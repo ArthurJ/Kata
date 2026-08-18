@@ -258,7 +258,12 @@ fn range_step_default_float() {
             } => {
                 assert_eq!(start.node, Expr::FloatLit { text: "0.0".into() });
                 assert_eq!(step.node, Expr::Hole);
-                assert_eq!(end.node, Expr::FloatLit { text: "10.0".into() });
+                assert_eq!(
+                    end.node,
+                    Expr::FloatLit {
+                        text: "10.0".into()
+                    }
+                );
                 assert!(!inclusive);
             }
             other => panic!("expected RangeLit, got {other:?}"),

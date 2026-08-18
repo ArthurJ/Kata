@@ -275,7 +275,6 @@ pub enum ResolveError {
     #[error("diretiva `{name}` mistura Target::Any com específico para when={when}")]
     #[diagnostic(code = "resolve.directive_any_conflict")]
     DirectiveAnyConflict { name: String, when: String },
-
 }
 
 /// Formata um `Vec<ResolveError>` como string legível (erros separados por `; `).

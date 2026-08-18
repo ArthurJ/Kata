@@ -304,11 +304,7 @@ fn build_range_int_step_default() {
 
     let (stdout, code) = run_built_binary("build_range_int_step_default_bin");
     assert_eq!(code, 0, "binário AOT deve exit 0 — stdout: {stdout}");
-    let lines: Vec<&str> = stdout
-        .trim()
-        .lines()
-        .filter(|l| *l != "()")
-        .collect();
+    let lines: Vec<&str> = stdout.trim().lines().filter(|l| *l != "()").collect();
     assert_eq!(lines, vec!["0", "1", "2"], "range [0..3] deve iterar 0,1,2");
 }
 

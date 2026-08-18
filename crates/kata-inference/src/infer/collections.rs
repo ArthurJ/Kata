@@ -7,7 +7,7 @@
 use kata_ast::{Expr, Span, Spanned};
 use kata_core::escape::EscapeTarget;
 use kata_core::interface_registry::ImplEntry;
-use kata_core::ty::{ty_list_to_string, PrimTy, Ty, TypeEnv};
+use kata_core::ty::{PrimTy, Ty, TypeEnv, ty_list_to_string};
 use kata_diagnostics::MiddleError;
 
 use crate::typed::{TypedExpr, TypedExprKind};

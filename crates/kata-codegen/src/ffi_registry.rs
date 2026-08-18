@@ -95,10 +95,7 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
         rt::kata_rt_string_concat as *const u8,
     );
     builder.symbol("kata_rt_string_len", rt::kata_rt_string_len as *const u8);
-    builder.symbol(
-        "kata_rt_string_eq",
-        rt::kata_rt_string_eq as *const u8,
-    );
+    builder.symbol("kata_rt_string_eq", rt::kata_rt_string_eq as *const u8);
     builder.symbol(
         "kata_rt_string_starts_with",
         rt::kata_rt_string_starts_with as *const u8,

@@ -223,5 +223,4 @@ pub enum MiddleError {
         #[label("expressão impura")]
         span: MietteSpan,
     },
-
 }

@@ -170,8 +170,12 @@ impl Ty {
                 params.iter().any(|p| p.contains_var()) || ret.contains_var()
             }
             Ty::Tuple(elements) => elements.iter().any(|e| e.contains_var()),
-            Ty::List(inner) | Ty::Array(inner) | Ty::Range(inner)
-            | Ty::Set(inner) | Ty::Sender(inner) | Ty::Receiver(inner)
+            Ty::List(inner)
+            | Ty::Array(inner)
+            | Ty::Range(inner)
+            | Ty::Set(inner)
+            | Ty::Sender(inner)
+            | Ty::Receiver(inner)
             | Ty::ReceiverFactory(inner) => inner.contains_var(),
             Ty::Dict(k, v) => k.contains_var() || v.contains_var(),
             // Folhas sem Var: Prim, Unit, Struct, Sum, InferVar, Interface,
@@ -188,19 +192,30 @@ impl Ty {
             Ty::Var(name) if name == "Self" => replacement.clone(),
             Ty::Generic(name, args) => Ty::Generic(
                 name.clone(),
-                args.iter().map(|a| a.substitute_self(replacement)).collect(),
+                args.iter()
+                    .map(|a| a.substitute_self(replacement))
+                    .collect(),
             ),
             Ty::Function(params, ret) => Ty::Function(
-                params.iter().map(|p| p.substitute_self(replacement)).collect(),
+                params
+                    .iter()
+                    .map(|p| p.substitute_self(replacement))
+                    .collect(),
                 Box::new(ret.substitute_self(replacement)),
             ),
             Ty::Action(params, ret) => Ty::Action(
-                params.iter().map(|p| p.substitute_self(replacement)).collect(),
+                params
+                    .iter()
+                    .map(|p| p.substitute_self(replacement))
+                    .collect(),
                 Box::new(ret.substitute_self(replacement)),
             ),
-            Ty::Tuple(elems) => {
-                Ty::Tuple(elems.iter().map(|e| e.substitute_self(replacement)).collect())
-            }
+            Ty::Tuple(elems) => Ty::Tuple(
+                elems
+                    .iter()
+                    .map(|e| e.substitute_self(replacement))
+                    .collect(),
+            ),
             Ty::List(elem) => Ty::List(Box::new(elem.substitute_self(replacement))),
             Ty::Array(elem) => Ty::Array(Box::new(elem.substitute_self(replacement))),
             Ty::Range(elem) => Ty::Range(Box::new(elem.substitute_self(replacement))),
