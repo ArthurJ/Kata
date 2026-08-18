@@ -1,6 +1,5 @@
 ---
 source: crates/kata-inference/tests/tast_snapshot.rs
-assertion_line: 156
 expression: tast_snapshot(src)
 ---
 === Entry ===
@@ -28,6 +27,8 @@ expression: tast_snapshot(src)
   div :: [Prim(Int), Prim(Int)] => Generic("Result", [Prim(Int), Prim(Text)])
   div :: [Prim(Float), Prim(Float)] => Generic("Result", [Prim(Float), Prim(Text)])
   div :: [Prim(Rational), Prim(Rational)] => Generic("Result", [Prim(Rational), Prim(Text)])
+  is_neutral :: [Prim(Int)] => Sum("Boolean")
+  is_neutral :: [Prim(Float)] => Sum("Boolean")
   mod :: [Prim(Int), Prim(Int)] => Prim(Int)
   mod :: [Prim(Int), Struct("NonZero")] => Prim(Int)
   show :: [Prim(Text)] => Prim(Text)

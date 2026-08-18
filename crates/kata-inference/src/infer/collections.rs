@@ -286,6 +286,11 @@ pub(crate) fn infer_range_lit(
         ts
     };
 
+    // Check de neutralidade: se o step é um literal conhecido em compile-time,
+    // verificar se é neutro (zero). Step neutro produz range degenerado (loop
+    // infinito). Step dinâmico (não literal) não pode ser verificado — aceitar.
+    check_neutral_step(&typed_step, &step.span)?;
+
     let range_ty = Ty::Range(Box::new(elem_ty.clone()));
 
     let escape = if ctx.ret_ty.is_some() {
@@ -340,6 +345,39 @@ fn step_default_literal(elem_ty: &Ty, span: &Span) -> InferResult<TypedExpr> {
             span: (*span).into(),
         }),
     }
+}
+
+/// Verifica se o step de um range é neutro (zero) em compile-time.
+///
+/// Apenas literais conhecidos são verificados. Expressões dinâmicas
+/// (identificadores, chamadas) não podem ser avaliadas em compile-time
+/// e são aceitas sem check — o usuário assume a responsabilidade.
+fn check_neutral_step(typed_step: &TypedExpr, span: &Span) -> InferResult<()> {
+    match &typed_step.kind {
+        TypedExprKind::IntLit { text } => {
+            let val: i64 = text.parse().unwrap_or(0);
+            if val == 0 {
+                return Err(MiddleError::TypeMismatch {
+                    expected: "range step não-neutro (step ≠ 0)".into(),
+                    found: format!("step = {val} — range degenerado (loop infinito)"),
+                    span: (*span).into(),
+                });
+            }
+        }
+        TypedExprKind::FloatLit { text } => {
+            let val: f64 = text.parse().unwrap_or(0.0);
+            if val == 0.0 {
+                return Err(MiddleError::TypeMismatch {
+                    expected: "range step não-neutro (step ≠ 0.0)".into(),
+                    found: format!("step = {val} — range degenerado (loop infinito)"),
+                    span: (*span).into(),
+                });
+            }
+        }
+        // Step dinâmico — não pode verificar em compile-time.
+        _ => {}
+    }
+    Ok(())
 }
 
 // ── ForIn ────────────────────────────────────────────────────────────────

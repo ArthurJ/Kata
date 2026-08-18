@@ -452,3 +452,57 @@ fn dot_n_on_range_is_type_error() {
         "deve falhar com NotIndexable ou TypeMismatch, encontrado {msg}"
     );
 }
+
+// ── Step neutro é erro de compile-time ─────────────────────────────────
+
+#[test]
+fn range_step_neutral_int_is_error() {
+    let err = infer_src_err("[0..0..10]");
+    let msg = format!("{err:?}");
+    assert!(
+        msg.contains("TypeMismatch"),
+        "step neutro Int deve falhar com TypeMismatch, encontrado {msg}"
+    );
+    assert!(
+        msg.contains("degenerado"),
+        "mensagem deve mencionar 'degenerado', encontrado {msg}"
+    );
+}
+
+#[test]
+fn range_step_neutral_float_is_error() {
+    let err = infer_src_err("[0.0..0.0..10.0]");
+    let msg = format!("{err:?}");
+    assert!(
+        msg.contains("TypeMismatch"),
+        "step neutro Float deve falhar com TypeMismatch, encontrado {msg}"
+    );
+    assert!(
+        msg.contains("degenerado"),
+        "mensagem deve mencionar 'degenerado', encontrado {msg}"
+    );
+}
+
+#[test]
+fn range_step_default_int_is_not_neutral() {
+    // [0..10] — step default = 1, não neutro. Deve passar.
+    let typed = infer_src("[0..10]");
+    let e = entry(&typed);
+    assert_eq!(e.ty, Ty::Range(Box::new(Ty::int())));
+}
+
+#[test]
+fn range_step_explicit_nonzero_int_is_not_neutral() {
+    // [0..2..10] — step explícito = 2, não neutro. Deve passar.
+    let typed = infer_src("[0..2..10]");
+    let e = entry(&typed);
+    assert_eq!(e.ty, Ty::Range(Box::new(Ty::int())));
+}
+
+#[test]
+fn range_step_explicit_nonzero_float_is_not_neutral() {
+    // [0.0..0.5..10.0] — step explícito = 0.5, não neutro. Deve passar.
+    let typed = infer_src("[0.0..0.5..10.0]");
+    let e = entry(&typed);
+    assert_eq!(e.ty, Ty::Range(Box::new(Ty::float())));
+}

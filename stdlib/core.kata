@@ -80,6 +80,9 @@ interface STEPPABLE
     step :: Self => Self
     lambda x:
         x
+    is_neutral :: Self => Boolean
+    lambda x:
+        false
 
 # ── Refined: NonZero ──────────────────────────────────────────
 # Int ≠ 0. Usado por `/ Int NonZero => Int` (divisão exata segura).
@@ -194,11 +197,17 @@ Int implements STEPPABLE
     step :: Int => Int
     lambda x:
         1
+    is_neutral :: Int => Boolean
+    lambda x:
+        = x 0
 
 Float implements STEPPABLE
     step :: Float => Float
     lambda x:
         1.0
+    is_neutral :: Float => Boolean
+    lambda x:
+        = x 0.0
 
 # ── Coleções: implements (Fio 8 Fase 4) ────────────────────────
 # List/Array/Range são tipos intrínsecos (variants de Ty), não data.

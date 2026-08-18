@@ -403,3 +403,32 @@ fn kata_run_default_args_sobrescrevendo_default() {
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     assert_eq!(stdout.trim(), "12", "10 + len(\"hi\") = 12");
 }
+
+// ── Step neutro é erro de compile-time (não runtime) ──────────────────
+
+/// `[0..0..10]` deve falhar em compile-time com erro de tipo,
+/// não produzir loop infinito em runtime.
+#[test]
+fn kata_run_step_neutral_int_falha_compile_time() {
+    let src = "action main => Unit\n    var x := 0\n    for y in [0..0..10]\n        x := + x y\n    echo!(x)\nmain!()";
+    let path = write_temp_kata("step_neutral_int", src);
+    let (_stdout, stderr, code) = run_kata_file(&path);
+    assert_ne!(code, 0, "kata run deve falhar (exit != 0) — step neutro");
+    assert!(
+        stderr.contains("degenerado"),
+        "stderr deve mencionar 'degenerado', encontrado: {stderr}"
+    );
+}
+
+/// `[0.0..0.0..10.0]` deve falhar em compile-time com erro de tipo.
+#[test]
+fn kata_run_step_neutral_float_falha_compile_time() {
+    let src = "action main => Unit\n    var x := 0\n    for y in [0.0..0.0..10.0]\n        x := + x y\n    echo!(x)\nmain!()";
+    let path = write_temp_kata("step_neutral_float", src);
+    let (_stdout, stderr, code) = run_kata_file(&path);
+    assert_ne!(code, 0, "kata run deve falhar (exit != 0) — step neutro Float");
+    assert!(
+        stderr.contains("degenerado"),
+        "stderr deve mencionar 'degenerado', encontrado: {stderr}"
+    );
+}
