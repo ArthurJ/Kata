@@ -12,7 +12,7 @@ use kata_resolution::FunctionDef;
 use crate::typed::{TypedFunction, TypedLambdaClause};
 
 use super::apply_lambda::infer_lambda_body;
-use super::expr::{InferCtx, infer_expr_hinted};
+use super::expr::{InferCtx, infer_expr_hinted, fits_return};
 use super::helpers::{InferResult, check_patterns, process_with_bindings};
 
 /// Infere uma função nomeada com corpo Kata (múltiplas cláusulas).
@@ -92,7 +92,7 @@ pub(crate) fn infer_named_function(
                 Some(ret_ty), // hint = tipo de retorno da assinatura
             )?;
             // Verifica que o body retorna o tipo esperado.
-            if typed_body.ty != *ret_ty {
+            if !fits_return(&typed_body.ty, ret_ty) {
                 return Err(MiddleError::TypeMismatch {
                     expected: format!("{}", ret_ty),
                     found: format!("{}", typed_body.ty),
@@ -108,7 +108,7 @@ pub(crate) fn infer_named_function(
                 ctx,
                 Some(ret_ty),
             )?;
-            if guard_ret != *ret_ty {
+            if !fits_return(&guard_ret, ret_ty) {
                 return Err(MiddleError::TypeMismatch {
                     expected: format!("{}", ret_ty),
                     found: format!("{}", guard_ret),

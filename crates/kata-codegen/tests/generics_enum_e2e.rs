@@ -184,3 +184,27 @@ match Traffic::Red 100
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
     assert_eq!(untag_smi(raw), 100);
 }
+
+/// Bug: `Optional::None` (variante unitária de enum genérico) em função pura
+/// com guards e tipo de retorno declarado `Optional::Text`. Antes do fix,
+/// o typeck inferia `Optional::(T)` (T não-resolvido) para `None` e rejeitava
+/// com type.mismatch, porque usava `!=` em vez de `fits_return`.
+/// `fits_return` trata `Ty::Var("T")` como compatível com qualquer tipo declarado.
+#[test]
+fn optional_none_em_funcao_com_guard_e_retorno_declarado() {
+    let src = r#"comparar :: Int Int => Optional::Text
+lambda palpite alvo:
+    > palpite alvo: Optional::Some "alto"
+    < palpite alvo: Optional::Some "baixo"
+    otherwise: Optional::None
+
+match comparar 50 42
+    Optional::Some msg: msg
+    Optional::None: "ok""#;
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Prim(PrimTy::Text));
+    // "alto" — palpite 50 > alvo 42
+    // Text é representado como ponteiro na arena; raw é o endereço.
+    // Apenas verificamos que typeck passou e o tipo é Text.
+    let _ = raw;
+}

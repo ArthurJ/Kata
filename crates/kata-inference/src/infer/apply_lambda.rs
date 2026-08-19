@@ -17,7 +17,7 @@ use kata_diagnostics::MiddleError;
 
 use crate::typed::{TypedExpr, TypedExprKind, TypedGuardClause, TypedLambdaClause};
 
-use super::expr::{InferCtx, infer_expr, infer_expr_hinted};
+use super::expr::{InferCtx, infer_expr, infer_expr_hinted, fits_return};
 use super::helpers::{InferResult, check_patterns, process_with_bindings};
 
 /// Infere `(lambda x: ...) 42` — args fornecem tipos dos parâmetros.
@@ -183,7 +183,7 @@ fn build_lambda_apply(
 
     // Verifica o tipo de retorno se um esperado foi fornecido (caminho com hint).
     if let Some(expected_ret) = ret_check
-        && ret_ty != *expected_ret
+        && !fits_return(&ret_ty, expected_ret)
     {
         return Err(MiddleError::TypeMismatch {
             expected: format!("{}", expected_ret),
@@ -264,7 +264,7 @@ pub(crate) fn infer_lambda_body(
                     ret_hint,
                 )?;
                 if let Some(ref existing) = guard_ret_ty {
-                    if *existing != body_typed.ty {
+                    if !fits_return(&body_typed.ty, existing) {
                         return Err(MiddleError::TypeMismatch {
                             expected: format!("{}", existing),
                             found: format!("{}", body_typed.ty),
@@ -289,7 +289,7 @@ pub(crate) fn infer_lambda_body(
                 ret_hint,
             )?;
             if let Some(ref existing) = guard_ret_ty {
-                if *existing != body_typed.ty {
+                if !fits_return(&body_typed.ty, existing) {
                     return Err(MiddleError::TypeMismatch {
                         expected: format!("{}", existing),
                         found: format!("{}", body_typed.ty),
