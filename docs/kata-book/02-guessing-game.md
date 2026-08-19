@@ -127,11 +127,11 @@ action jogar (alvo::Int) => Unit
     loop
         let palpite := int!(input!("Palpite: ")) | 0
         match (> palpite alvo)
-            Boolean::True: echo!("muito alto")
-            Boolean::False:
+            True: echo!("muito alto")
+            False:
                 match (< palpite alvo)
-                    Boolean::True: echo!("muito baixo")
-                    Boolean::False:
+                    True: echo!("muito baixo")
+                    False:
                         echo!("acertou!")
                         break
 
@@ -170,11 +170,11 @@ action jogar (alvo::Int) => Unit
         match r
             Ok palpite:
                 match (> palpite alvo)
-                    Boolean::True: echo!("muito alto")
-                    Boolean::False:
+                    True: echo!("muito alto")
+                    False:
                         match (< palpite alvo)
-                            Boolean::True: echo!("muito baixo")
-                            Boolean::False:
+                            True: echo!("muito baixo")
+                            False:
                                 echo!("acertou!")
                                 break
             Err e: echo!("não é um número")
