@@ -217,31 +217,33 @@ lambda palpite alvo:
 
 `Optional::Text` significa "talvez um `Text`". `Some` carrega o valor; `None` significa ausência. A função é pura porque não depende do estado do mundo — mesma entrada, mesma saída, sempre.
 
-Agora a parte que envolve I/O. Uma tentativa do jogador lê o input, converte para Int, e compara com o alvo. Isso pode falhar de duas formas: o input não é um número, ou o jogador acertou (não há dica). Vamos encapsular tudo numa action:
+Agora a parte que envolve I/O. Ler o input e converter para Int pode falhar — o usuário pode digitar "abc". Mas em vez de propagar o erro, podemos tratar dentro da própria action: se o input é inválido, avisamos e pedimos de novo. O `loop` faz isso naturalmente:
 
 ```kata
-action tentativa (alvo::Int) => Result::(Optional::Text, Text)
-    let palpite := int!(input!("Palpite: ")) ?
-    Ok (comparar palpite alvo)
+action ler_palpite => Int
+    loop
+        match int!(input!("Palpite: "))
+            Ok n: return n
+            Err e:
+                echo!("não é um número")
+                continue
 ```
 
-O `?` é o operador de fail-fast: desempacota o `Result` — se for `Ok n`, o valor está em `n` e a action continua; se for `Err e`, a action aborta imediatamente e retorna `Err e`. É o que `|` faz, mas em vez de usar um fallback, propaga o erro.
+`ler_palpite` só retorna quando o input é válido. O `loop` pede palpites até o usuário digitar um número. `return n` sai da action (não só do loop) com o número. `continue` volta ao início do loop — pede outra tentativa.
 
-Aqui o `?` transforma `int!(input!("Palpite: "))` — que retorna `Result::(Int, Text)` — num `Int` direto. Se o usuário digita "abc", o `?` aborta `tentativa` e devolve `Err "número inválido"`. Se digita um número válido, o fluxo continua para `comparar` e o resultado é `Ok (Some "muito alto")` ou `Ok None`.
+Isso significa que `ler_palpite` sempre devolve um `Int` válido. Nunca falha. O erro de input é tratado internamente, não propagado.
 
-Com `comparar` e `tentativa` extraídas, o `jogar` fica raso:
+Com `comparar` e `ler_palpite` extraídas, o `jogar` fica raso:
 
 ```kata
 action jogar (alvo::Int) => Unit
     loop
-        match tentativa!(alvo)
-            Ok resultado:
-                match resultado
-                    Some msg: echo!(msg)
-                    None:
-                        echo!("acertou!")
-                        break
-            Err e: echo!("não é um número")
+        let palpite := ler_palpite!()
+        match comparar palpite alvo
+            Some msg: echo!(msg)
+            None:
+                echo!("acertou!")
+                break
 
 jogar!(rand_int!(1, 100))
 ```
@@ -257,31 +259,33 @@ Palpite: muito baixo
 Palpite: acertou!
 ```
 
-Dois níveis de `match`, cada um com um propósito: o primeiro separa sucesso de erro de input, o segundo decide o que fazer com a dica. Sem aninhamento de `Boolean` dentro de `Boolean` dentro de `Result`.
+Um nível de `match` — só o `comparar`. Sem `match` em `Result`, sem `match` em `Boolean`, sem aninhamento.
 
 O código completo:
 
 ```kata
+action ler_palpite => Int
+    loop
+        match int!(input!("Palpite: "))
+            Ok n: return n
+            Err e:
+                echo!("não é um número")
+                continue
+
 comparar :: Int Int => Optional::Text
 lambda palpite alvo:
     > palpite alvo: Some "muito alto"
     < palpite alvo: Some "muito baixo"
     otherwise: None
 
-action tentativa (alvo::Int) => Result::(Optional::Text, Text)
-    let palpite := int!(input!("Palpite: ")) ?
-    Ok (comparar palpite alvo)
-
 action jogar (alvo::Int) => Unit
     loop
-        match tentativa!(alvo)
-            Ok resultado:
-                match resultado
-                    Some msg: echo!(msg)
-                    None:
-                        echo!("acertou!")
-                        break
-            Err e: echo!("não é um número")
+        let palpite := ler_palpite!()
+        match comparar palpite alvo
+            Some msg: echo!(msg)
+            None:
+                echo!("acertou!")
+                break
 
 jogar!(rand_int!(1, 100))
 ```
@@ -306,8 +310,8 @@ O output acima é de uma partida onde o alvo era 42. Como o número é aleatóri
 A versão decomposta é maior — mais linhas, mais definições. Mas cada peça faz uma coisa só:
 
 - `comparar` é pura — dá para testar isoladamente, sem mockar stdin. Dá para reusar num modo de jogo diferente (ex: dois jogadores).
-- `tentativa` encapsula I/O + conversão + comparação — o `?` aplaina o `int!` que seria um `match` inteiro.
-- `jogar` orquestra — loop, match, e controle de fluxo. Cada `match` tem um nível.
+- `ler_palpite` encapsula I/O + conversão + validação — o loop interno trata o erro e só devolve um `Int` válido.
+- `jogar` orquestra — loop, match, e controle de fluxo. Um único `match`, um nível.
 
 A versão aninhada (segunda) não é "errada" — é o ponto de chegada natural quando você está aprendendo. A decomposição é o próximo passo: quando o aninhamento começa a atrapalhar a leitura, é hora de extrair.
 
@@ -320,9 +324,8 @@ Você construiu um jogo interativo completo. No caminho, tocou em:
 - **`Result`** — success ou erro, sempre via `match`
 - **`Optional`** — presença ou ausência de valor (`Some` / `None`)
 - **`|`** — operador de fallback: desempacota `Ok`, usa o lado direito se `Err`
-- **`?`** — operador de fail-fast: desempacota `Ok`, propaga `Err` se falhar
 - **`match`** — condicional sem `if`, examinando a forma do valor
-- **`loop` e `break`** — iteração e saída de loop
+- **`loop`, `break`, `continue` e `return`** — iteração, saída de loop, e saída de action
 
 Cada um desses conceitos é coberto em profundidade nos próximos capítulos. O capítulo 3 mostra a sintaxe básica. O capítulo 7 explica actions, `var`, e `loop`. O capítulo 6 cobre `match` em detalhe. O capítulo 12 mostra I/O completo — `open!`, `readline!`, e o módulo `stdio`.
 
