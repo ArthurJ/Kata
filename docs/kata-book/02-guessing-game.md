@@ -217,26 +217,26 @@ lambda palpite alvo:
 
 `Optional::Text` significa "talvez um `Text`". `Some` carrega o valor; `None` significa ausência. A função é pura porque não depende do estado do mundo — mesma entrada, mesma saída, sempre.
 
-Da mesma forma, a lógica de "ler uma linha do stdin e converter para Int" é uma action que pode falhar. Vamos extraí-la também:
+Agora a parte que envolve I/O. Uma tentativa do jogador lê o input, converte para Int, e compara com o alvo. Isso pode falhar de duas formas: o input não é um número, ou o jogador acertou (não há dica). Vamos encapsular tudo numa action:
 
 ```kata
-action ler_palpite => Result::(Int, Text)
-    let n := int!(input!("Palpite: ")) ?
-    Ok n
+action tentativa (alvo::Int) => Result::(Optional::Text, Text)
+    let palpite := int!(input!("Palpite: ")) ?
+    Ok (comparar palpite alvo)
 ```
 
 O `?` é o operador de fail-fast: desempacota o `Result` — se for `Ok n`, o valor está em `n` e a action continua; se for `Err e`, a action aborta imediatamente e retorna `Err e`. É o que `|` faz, mas em vez de usar um fallback, propaga o erro.
 
-`ler_palpite` retorna `Result::(Int, Text)` — sucesso traz o número, erro traz a mensagem. O `?` permite que o corpo da action seja linear: ler input, converter, devolver `Ok n`. Sem `match`, sem aninhamento.
+Aqui o `?` transforma `int!(input!("Palpite: "))` — que retorna `Result::(Int, Text)` — num `Int` direto. Se o usuário digita "abc", o `?` aborta `tentativa` e devolve `Err "número inválido"`. Se digita um número válido, o fluxo continua para `comparar` e o resultado é `Ok (Some "muito alto")` ou `Ok None`.
 
-Com essas duas funções, o `jogar` fica raso:
+Com `comparar` e `tentativa` extraídas, o `jogar` fica raso:
 
 ```kata
 action jogar (alvo::Int) => Unit
     loop
-        match ler_palpite!()
-            Ok palpite:
-                match comparar palpite alvo
+        match tentativa!(alvo)
+            Ok resultado:
+                match resultado
                     Some msg: echo!(msg)
                     None:
                         echo!("acertou!")
@@ -257,26 +257,26 @@ Palpite: muito baixo
 Palpite: acertou!
 ```
 
-Dois níveis de `match`, cada um com um propósito: o primeiro decide se o input foi válido, o segundo decide o que fazer com a dica. Sem aninhamento de `Boolean` dentro de `Boolean` dentro de `Result`.
+Dois níveis de `match`, cada um com um propósito: o primeiro separa sucesso de erro de input, o segundo decide o que fazer com a dica. Sem aninhamento de `Boolean` dentro de `Boolean` dentro de `Result`.
 
 O código completo:
 
 ```kata
-action ler_palpite => Result::(Int, Text)
-    let n := int!(input!("Palpite: ")) ?
-    Ok n
-
 comparar :: Int Int => Optional::Text
 lambda palpite alvo:
     > palpite alvo: Some "muito alto"
     < palpite alvo: Some "muito baixo"
     otherwise: None
 
+action tentativa (alvo::Int) => Result::(Optional::Text, Text)
+    let palpite := int!(input!("Palpite: ")) ?
+    Ok (comparar palpite alvo)
+
 action jogar (alvo::Int) => Unit
     loop
-        match ler_palpite!()
-            Ok palpite:
-                match comparar palpite alvo
+        match tentativa!(alvo)
+            Ok resultado:
+                match resultado
                     Some msg: echo!(msg)
                     None:
                         echo!("acertou!")
@@ -306,8 +306,8 @@ O output acima é de uma partida onde o alvo era 42. Como o número é aleatóri
 A versão decomposta é maior — mais linhas, mais definições. Mas cada peça faz uma coisa só:
 
 - `comparar` é pura — dá para testar isoladamente, sem mockar stdin. Dá para reusar num modo de jogo diferente (ex: dois jogadores).
-- `ler_palpite` encapsula I/O + conversão — o `?` aplaina o que seria um `match` inteiro.
-- `jogar` orquestra — lê, compara, reage. Cada `match` tem um nível.
+- `tentativa` encapsula I/O + conversão + comparação — o `?` aplaina o `int!` que seria um `match` inteiro.
+- `jogar` orquestra — loop, match, e controle de fluxo. Cada `match` tem um nível.
 
 A versão aninhada (segunda) não é "errada" — é o ponto de chegada natural quando você está aprendendo. A decomposição é o próximo passo: quando o aninhamento começa a atrapalhar a leitura, é hora de extrair.
 
