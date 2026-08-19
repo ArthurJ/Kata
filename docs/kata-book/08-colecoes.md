@@ -99,11 +99,11 @@ echo!(+ {|1 2|} {|3 4|})
 
 ## Ranges
 
-Ranges são preguiçosos — geram valores sob demanda. A sintaxe é `[start..step..end]` (exclusivo) ou `[start..step..=end]` (inclusivo). O step é obrigatório:
+Ranges são preguiçosos — geram valores sob demanda. A sintaxe base é `[start..end]` (exclusivo) ou `[start..=end]` (inclusivo), com step default de 1:
 
 ```kata
 action main
-    for x in [1..1..5]
+    for x in [1..5]
         echo!(x)
 main!()
 ```
@@ -114,6 +114,22 @@ main!()
 3
 4
 ```
+
+```kata
+action main
+    for x in [0..=3]
+        echo!(x)
+main!()
+```
+
+```
+0
+1
+2
+3
+```
+
+Para um step diferente de 1, use a forma de três componentes `[start..step..end]` (exclusivo) ou `[start..step..=end]` (inclusivo):
 
 ```kata
 action main

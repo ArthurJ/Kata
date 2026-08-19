@@ -1,6 +1,6 @@
 # Capítulo 9 — HOFs e Closures
 
-Funções de ordem superior (HOFs) recebem ou retornam funções. Kata tem três builtins — `map`, `filter`, `fold` — e o operador pipeline `|>`.
+Funções de ordem superior (HOFs) recebem ou retornam funções. Kata tem três builtins — `map`, `filter`, `fold` — e dois operadores pipeline: `|>` (forward) e `|N>` (limitado).
 
 ## `map`
 
@@ -73,7 +73,61 @@ echo!(5 |> + 1 _ |> * 2 _)
 12
 ```
 
-Equivalente a `* 2 (+ 1 5)` = `* 2 6` = `12`. O `_` marca onde o resultado da esquerda entra. Sem `_`, o resultado é injetado como primeiro argumento.
+Equivalente a `* 2 (+ 1 5)` = `* 2 6` = `12`. O `_` marca onde o resultado da esquerda entra.
+
+### Pipe sem Hole
+
+Se a função à direita não tem `_`, o resultado da esquerda é injetado como primeiro argumento:
+
+```kata
+echo!(5 |> show)
+```
+
+```
+5
+```
+
+Equivalente a `show 5`. Útil quando a função já tem aridade 1 e não precisa de hole.
+
+## Pipe limitado `|N>`
+
+O pipe limitado combina pipeline com lazy evaluation — processa apenas os primeiros N elementos da coleção:
+
+```kata
+action main
+    var r := [0 1 2 3 4 5 6 7 8 9] |3> map (+ _ 1) _
+    echo!(show r)
+main!()
+```
+
+```
+[1, 2, 3]
+```
+
+`|3>` pega os 3 primeiros elementos antes de aplicar `map`. Com um range infinito ou muito grande, só os primeiros N são consumidos — o restante nunca é avaliado:
+
+```kata
+action main
+    var r := [0..1..1000000] |5> map (+ _ 1) _
+    echo!(show r)
+main!()
+```
+
+```
+[1, 2, 3, 4, 5]
+```
+
+`|N>` funciona com `map`, `filter`, e `fold`. Com `filter`, o limite aplica-se antes do predicado — os N elementos são tomados da fonte e filtrados depois:
+
+```kata
+echo!([0 1 2 3 4 5] |3> filter (> _ 2) _)
+```
+
+```
+[]
+```
+
+Os 3 primeiros (0, 1, 2) são tomados e nenhum passa no filtro `> _ 2`.
 
 ## Próximo capítulo
 

@@ -1,6 +1,6 @@
 # Capítulo 4 — Bindings e Tipos
 
-Bindings dão nomes a valores. Kata tem dois tipos de binding no nível de módulo e dentro de funções.
+Bindings dão nomes a valores. Kata tem três tipos de binding: `constant` no nível de módulo, `let` para bindings locais imutáveis, e `var` para bindings locais mutáveis.
 
 ## `constant` — constantes de módulo
 
@@ -57,7 +57,11 @@ Error: type.duplicate_decl
   × tipo `x` já declarado
 ```
 
-Para reusar um nome, use `var` — ele cria um novo binding mutável que substitui o anterior:
+Para reusar um nome, use `var` — descrito na próxima seção.
+
+## `var` — bindings mutáveis
+
+`var` cria um binding mutável e pode ser redeclarado no mesmo escopo, substituindo o binding anterior:
 
 ```kata
 action main
@@ -71,7 +75,7 @@ main!()
 43
 ```
 
-`let` é imutável e único: se você precisa reusar um nome, `var` é o mecanismo correto.
+`var` é o mecanismo correto quando você precisa reusar um nome ou atualizar um valor dentro de um escopo. `let` é imutável e único; `var` é mutável e substituível.
 
 ## Tipos primitivos
 
