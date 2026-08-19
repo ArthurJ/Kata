@@ -123,10 +123,10 @@ pub extern "C" fn kata_rt_tag_int_from_str(s: *const std::os::raw::c_char, len: 
     tag_int_from_str(text)
 }
 
-/// Cria um Int a partir de texto bruto do literal.
+/// Tenta parsear texto como BigInt.
 /// Suporta decimal, hex (0x), octal (0o), bin (0b), separador _.
-/// (Versão interna — chamada pelo codegen ao lowerar IntLit.)
-pub fn tag_int_from_str(text: &str) -> i64 {
+/// Retorna None se o texto for inválido.
+fn parse_int_to_bigint(text: &str) -> Option<BigInt> {
     let cleaned = text.replace('_', "");
     // Extrai sinal antes do dispatch de base
     let (sign, digits) = if let Some(rest) = cleaned.strip_prefix('-') {
@@ -158,15 +158,28 @@ pub fn tag_int_from_str(text: &str) -> i64 {
         BigInt::parse_bytes(dec.as_bytes(), 10)
     } else {
         BigInt::parse_bytes(digits.as_bytes(), 10)
-    };
-    let n = n.expect("número inválido");
+    }?;
     let n = if sign < 0 { -n } else { n };
+    Some(n)
+}
+
+/// Codifica um BigInt como Int tagged (SMI ou heap pointer).
+fn bigint_to_tagged(n: BigInt) -> i64 {
     if let Some(small) = n.to_i64()
         && fits_smi(small)
     {
         return encode_smi(small);
     }
     alloc_bigint(n)
+}
+
+/// Cria um Int a partir de texto bruto do literal.
+/// Suporta decimal, hex (0x), octal (0o), bin (0b), separador _.
+/// (Versão interna — chamada pelo codegen ao lowerar IntLit.)
+/// Panica se o texto for inválido — assumido válido em compile-time.
+pub fn tag_int_from_str(text: &str) -> i64 {
+    let n = parse_int_to_bigint(text).expect("número inválido");
+    bigint_to_tagged(n)
 }
 
 /// Soma dois Int. Se ambos SMI e resultado cabe, opera inline.
@@ -499,5 +512,30 @@ pub fn tag_int_pub(val: i64) -> i64 {
         encode_smi(val)
     } else {
         alloc_bigint(BigInt::from(val))
+    }
+}
+
+/// `kata_rt_try_int(s: *const c_char) -> i64` — converte Text para Int sem panicar.
+///
+/// Retorna Result box: Ok(Int tagged) ou Err(Text "número inválido").
+/// Ao contrário de `kata_rt_text_to_int`, não panica em input inválido.
+///
+/// # Safety
+/// `s` deve ser um ponteiro válido para C string nul-terminada, ou NULL.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn kata_rt_try_int(s: *const std::os::raw::c_char) -> i64 {
+    use crate::file::{alloc_result_box, alloc_text};
+
+    if s.is_null() {
+        return alloc_result_box(1, alloc_text("número inválido"));
+    }
+    let c_str = unsafe { std::ffi::CStr::from_ptr(s) };
+    let text = match c_str.to_str() {
+        Ok(t) => t,
+        Err(_) => return alloc_result_box(1, alloc_text("número inválido")),
+    };
+    match parse_int_to_bigint(text) {
+        Some(n) => alloc_result_box(0, bigint_to_tagged(n)),
+        None => alloc_result_box(1, alloc_text("número inválido")),
     }
 }
