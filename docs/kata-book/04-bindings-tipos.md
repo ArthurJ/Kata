@@ -98,9 +98,9 @@ echo!(* 99999999999999999999 99999999999999999999)
 9999999999999999999800000000000000000001
 ```
 
-## Anotação de tipo com `::`
+## O operador `::`
 
-O operador `::` anexa um tipo a uma expressão. Útil quando você quer ser explícito:
+`::` é um operador multifunção em Kata. Seu papel principal é **ascription de tipo** — anexar um tipo a uma expressão:
 
 ```kata
 action main
@@ -113,9 +113,11 @@ main!()
 42
 ```
 
-## Rational — precisão exata
+A ascription é útil quando você quer ser explícito sobre o tipo de uma expressão. O compilador verifica que o tipo é compatível com o valor.
 
-Floats têm imprecisão inerente. `Rational` é exato — `1/3 * 3 = 1`, não `0.999...`:
+### Conversão de literal com `::`
+
+`::` também converte literais entre tipos relacionados. O caso mais comum é `Rational`:
 
 ```kata
 echo!(3.14::Rational)
@@ -125,7 +127,32 @@ echo!(3.14::Rational)
 3.14
 ```
 
-Use `::Rational` para converter um literal em racional. O texto bruto do literal é preservado — não há passagem por `f64`, então não há perda de precisão na conversão.
+O texto bruto do literal é preservado — não há passagem por `f64`, então não há perda de precisão na conversão. (Para precisão exata com `Rational`, veja a próxima seção.)
+
+### Os outros papéis de `::`
+
+`::` aparece em quatro outros contextos em Kata. Cada um será explorado em seu capítulo:
+
+- **Assinatura de função** (cap 5): `dobrar :: Int => Int` etiqueta o nome com seu tipo
+- **Tipagem de campos e parâmetros** (caps 7, 10): `data Pessoa (nome::Text)`, `action jogar (alvo::Int)`
+- **Qualificação de variante** (cap 10): `Cor::Amarelo`, `Result::Ok` — acessa uma variante de enum pelo nome do tipo
+- **Tipos refinados** (cap 12): `5 :: PositiveInt` valida predicados em compile-time; `a :: Int` faz downcast de refinado para base
+
+Embora o token seja o mesmo, ascription (`valor :: Tipo`) e qualificação (`Tipo::Variante`) operam em direções opostas: a primeira vai do valor ao tipo, a segunda do tipo à variante.
+
+## Rational — precisão exata
+
+Floats têm imprecisão inerente. `Rational` é exato — `1/3 * 3 = 1`, não `0.999...`:
+
+```kata
+echo!(* 3.14::Rational 100)
+```
+
+```
+314
+```
+
+Com `Float`, o mesmo cálculo poderia dar `314.00000000000006`. `Rational` preserva o valor exato.
 
 ## Próximo capítulo
 
