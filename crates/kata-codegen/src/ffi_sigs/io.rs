@@ -14,6 +14,21 @@ pub(crate) fn sig_for(sym: FfiSymbol) -> Option<Signature> {
         FfiSymbol::Print | FfiSymbol::Println => {
             sig.params.push(AbiParam::new(I64));
         }
+        // input: (prompt_ptr) -> i64 (Text ptr)
+        FfiSymbol::Input => {
+            sig.params.push(AbiParam::new(I64)); // prompt_ptr (Text — C string)
+            sig.returns.push(AbiParam::new(I64)); // Text ptr
+        }
+        // try_int: (text_ptr) -> i64 (Result box ptr)
+        FfiSymbol::TryInt => {
+            sig.params.push(AbiParam::new(I64)); // text_ptr (Text — C string)
+            sig.returns.push(AbiParam::new(I64)); // Result box ptr
+        }
+        // try_float: (text_ptr) -> i64 (Result box ptr)
+        FfiSymbol::TryFloat => {
+            sig.params.push(AbiParam::new(I64)); // text_ptr (Text — C string)
+            sig.returns.push(AbiParam::new(I64)); // Result box ptr
+        }
         // ── Control flow (ptr) → void (never returns) ──
         FfiSymbol::Panic => {
             sig.params.push(AbiParam::new(I64)); // msg ptr

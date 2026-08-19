@@ -480,6 +480,11 @@ action echo (msg::SHOW) => Unit
 @ffi("kata_rt_panic")
 action panic (msg::Text) => Unit
 
+# input! — imprime prompt e lê uma linha de stdin. Retorna Text.
+# Em EOF ou erro, retorna Text vazio ("").
+@ffi("kata_rt_input")
+action input (prompt::Text) => Text
+
 # ── RNG ───────────────────────────────────────────────────────
 # Gera um Float aleatório no intervalo [0.0, 1.0).
 
@@ -501,11 +506,15 @@ action sleep (ms::Int) => Unit
 @ffi("kata_rt_int_to_text")
 int_to_text :: Int => Text
 
-@ffi("kata_rt_text_to_int")
-int :: Text => Int
+# int — converte Text para Int. Retorna Result: Ok(n) ou Err("número inválido").
+# Action porque pode falhar em runtime (input do usuário).
+@ffi("kata_rt_try_int")
+action int (text::Text) => Result::(Int, Text)
 
-@ffi("kata_rt_text_to_float")
-float :: Text => Float
+# float — converte Text para Float. Retorna Result: Ok(f) ou Err("número inválido").
+# Action porque pode falhar em runtime (input do usuário).
+@ffi("kata_rt_try_float")
+action float (text::Text) => Result::(Float, Text)
 
 @ffi("kata_rt_bool_to_text")
 bool_to_text :: Boolean => Text

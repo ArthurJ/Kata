@@ -65,6 +65,10 @@ pub enum FfiSymbol {
     TextLiteral,
     IntToText,
     TextToInt,
+    /// `kata_rt_try_int(s) -> i64` — converte Text para Int, retorna Result box (não panica).
+    TryInt,
+    /// `kata_rt_try_float(s) -> i64` — converte Text para Float, retorna Result box (não panica).
+    TryFloat,
     BoolToText,
     TextReplaceFirst,
     TextReplace,
@@ -72,6 +76,8 @@ pub enum FfiSymbol {
     // ── I/O ──────────────────────────────────────────────
     Print,
     Println,
+    /// `kata_rt_input(prompt_ptr) -> i64` — imprime prompt, lê linha de stdin, retorna Text.
+    Input,
 
     // ── Arena ────────────────────────────────────────────
     ArenaCreate,
@@ -443,11 +449,14 @@ impl FfiSymbol {
             FfiSymbol::TextLiteral => "kata_rt_text_literal",
             FfiSymbol::IntToText => "kata_rt_int_to_text",
             FfiSymbol::TextToInt => "kata_rt_text_to_int",
+            FfiSymbol::TryInt => "kata_rt_try_int",
+            FfiSymbol::TryFloat => "kata_rt_try_float",
             FfiSymbol::BoolToText => "kata_rt_bool_to_text",
             FfiSymbol::TextReplaceFirst => "kata_rt_text_replace_first",
             FfiSymbol::TextReplace => "kata_rt_text_replace",
             FfiSymbol::Print => "kata_rt_print",
             FfiSymbol::Println => "kata_rt_println",
+            FfiSymbol::Input => "kata_rt_input",
             FfiSymbol::ArenaCreate => "kata_rt_arena_create",
             FfiSymbol::ArenaAlloc => "kata_rt_arena_alloc",
             FfiSymbol::ArenaDestroy => "kata_rt_arena_destroy",
@@ -650,9 +659,12 @@ impl FfiSymbol {
             FfiSymbol::TextLiteral => Ty::text(),
             FfiSymbol::IntToText | FfiSymbol::BoolToText => Ty::text(),
             FfiSymbol::TextToInt => Ty::int(),
+            FfiSymbol::TryInt => Ty::int(), // Result box ptr
+            FfiSymbol::TryFloat => Ty::int(), // Result box ptr
             FfiSymbol::TextReplaceFirst | FfiSymbol::TextReplace => Ty::text(),
             // I/O
             FfiSymbol::Print | FfiSymbol::Println => Ty::Unit,
+            FfiSymbol::Input => Ty::text(),
             // Arena
             FfiSymbol::ArenaCreate | FfiSymbol::ArenaAlloc | FfiSymbol::ArenaCreateTracked => {
                 Ty::int()
@@ -851,11 +863,14 @@ impl FfiSymbol {
             FfiSymbol::TextLiteral,
             FfiSymbol::IntToText,
             FfiSymbol::TextToInt,
+            FfiSymbol::TryInt,
+            FfiSymbol::TryFloat,
             FfiSymbol::BoolToText,
             FfiSymbol::TextReplaceFirst,
             FfiSymbol::TextReplace,
             FfiSymbol::Print,
             FfiSymbol::Println,
+            FfiSymbol::Input,
             FfiSymbol::ArenaCreate,
             FfiSymbol::ArenaAlloc,
             FfiSymbol::ArenaDestroy,

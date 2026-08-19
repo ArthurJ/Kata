@@ -46,6 +46,8 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
     );
     builder.symbol("kata_rt_int_to_text", rt::kata_rt_int_to_text as *const u8);
     builder.symbol("kata_rt_text_to_int", rt::kata_rt_text_to_int as *const u8);
+    builder.symbol("kata_rt_try_int", rt::kata_rt_try_int as *const u8);
+    builder.symbol("kata_rt_try_float", rt::kata_rt_try_float as *const u8);
     // Float
     builder.symbol("kata_rt_fadd", rt::kata_rt_fadd as *const u8);
     builder.symbol("kata_rt_fsub", rt::kata_rt_fsub as *const u8);
@@ -130,6 +132,7 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
     // I/O
     builder.symbol("kata_rt_print", rt::kata_rt_print as *const u8);
     builder.symbol("kata_rt_println", rt::kata_rt_println as *const u8);
+    builder.symbol("kata_rt_input", rt::kata_rt_input as *const u8);
     // Control flow — panic
     builder.symbol("kata_rt_panic", rt::kata_rt_panic as *const u8);
     // Arena — C-ABI para alocação de tuplas (DoD 22)
@@ -554,6 +557,9 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         TextReplace,
         Print,
         Println,
+        Input,
+        TryInt,
+        TryFloat,
         ArenaCreate,
         ArenaAlloc,
         ArenaDestroy,

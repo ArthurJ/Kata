@@ -741,3 +741,45 @@ pub(crate) fn reset_stdio_cache() {
     STDOUT_HANDLE.with(|c| c.set(0));
     STDERR_HANDLE.with(|c| c.set(0));
 }
+
+/// `kata_rt_input(prompt_ptr) -> i64` — imprime prompt, lê uma linha de stdin.
+///
+/// Combina `print(prompt)` + `readline(stdin)` num único FFI call.
+/// Retorna Text (C string ptr). Em EOF ou erro, retorna Text vazio ("").
+///
+/// # Safety
+/// `prompt_ptr` deve ser um ponteiro C string válido (nulo-terminado) ou NULL.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn kata_rt_input(prompt_ptr: *const std::os::raw::c_char) -> i64 {
+    // Imprime o prompt (sem newline) em stdout.
+    if !prompt_ptr.is_null() {
+        let cstr = unsafe { std::ffi::CStr::from_ptr(prompt_ptr) };
+        let prompt = cstr.to_string_lossy();
+        print!("{prompt}");
+        let _ = std::io::stdout().flush();
+    }
+
+    // Lê uma linha de stdin via BufReader do handle cached.
+    let handle = kata_rt_stdin();
+    let inner = match file_from_handle(handle) {
+        Some(f) => f,
+        None => return alloc_text(""),
+    };
+
+    let mut line = String::new();
+    match inner.buf_reader.read_line(&mut line) {
+        Ok(0) => return alloc_text(""), // EOF → Text vazio
+        Ok(_) => {}
+        Err(_) => return alloc_text(""), // erro → Text vazio
+    }
+
+    // Remove \n ou \r\n do final.
+    if line.ends_with('\n') {
+        line.pop();
+        if line.ends_with('\r') {
+            line.pop();
+        }
+    }
+
+    alloc_text(&line)
+}
