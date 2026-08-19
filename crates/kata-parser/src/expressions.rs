@@ -310,7 +310,7 @@ impl Parser {
                 Ok(Spanned::new(Expr::Ident { name }, start))
             }
             Token::At => {
-                // `@comptime` foi removido da linguagem (PRD-constant Fase 5).
+                // `@comptime` foi removido da linguagem (PRD-constant ).
                 // Usar `constant` para declarações de módulo comptime.
                 self.advance(); // consume `@`
                 match self.peek() {

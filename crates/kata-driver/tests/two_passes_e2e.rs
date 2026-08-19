@@ -426,7 +426,10 @@ fn kata_run_step_neutral_float_falha_compile_time() {
     let src = "action main => Unit\n    var x := 0\n    for y in [0.0..0.0..10.0]\n        x := + x y\n    echo!(x)\nmain!()";
     let path = write_temp_kata("step_neutral_float", src);
     let (_stdout, stderr, code) = run_kata_file(&path);
-    assert_ne!(code, 0, "kata run deve falhar (exit != 0) — step neutro Float");
+    assert_ne!(
+        code, 0,
+        "kata run deve falhar (exit != 0) — step neutro Float"
+    );
     assert!(
         stderr.contains("degenerado"),
         "stderr deve mencionar 'degenerado', encontrado: {stderr}"
@@ -488,7 +491,8 @@ fn kata_run_pipe_limit_filter() {
 /// `[0 1 2 3 4] |3> fold (+ _ _) 0 _` → `3` (soma 0+1+2 = 3, take 3)
 #[test]
 fn kata_run_pipe_limit_fold() {
-    let src = "action main => Unit\n    var r := [0 1 2 3 4] |3> fold (+ _ _) 0 _\n    echo!(r)\nmain!()";
+    let src =
+        "action main => Unit\n    var r := [0 1 2 3 4] |3> fold (+ _ _) 0 _\n    echo!(r)\nmain!()";
     let path = write_temp_kata("pipe_limit_fold", src);
     let (stdout, stderr, code) = run_kata_file(&path);
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");

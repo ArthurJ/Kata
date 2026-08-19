@@ -109,7 +109,7 @@ pub(crate) fn sig_for(sym: FfiSymbol) -> Option<Signature> {
             sig.params.push(AbiParam::new(I64)); // arena
             sig.returns.push(AbiParam::new(I64)); // ptr (concatenated list)
         }
-        // ── Hash (Fio 13) ──
+        // ── Hash ──
         // hash_int: (val) -> i64 (hash)
         FfiSymbol::HashInt => {
             sig.params.push(AbiParam::new(I64)); // val (SMI-tagged)
@@ -125,7 +125,7 @@ pub(crate) fn sig_for(sym: FfiSymbol) -> Option<Signature> {
             sig.params.push(AbiParam::new(I64)); // rat_ptr
             sig.returns.push(AbiParam::new(I64)); // hash
         }
-        // ── Dict (Fio 13) ──
+        // ── Dict ──
         // dict_empty: (arena) -> i64 (dict ptr)
         FfiSymbol::DictEmpty => {
             sig.params.push(AbiParam::new(I64)); // arena
@@ -187,7 +187,7 @@ pub(crate) fn sig_for(sym: FfiSymbol) -> Option<Signature> {
             sig.params.push(AbiParam::new(I64)); // arena
             sig.returns.push(AbiParam::new(I64)); // Optional box
         }
-        // ── Set (Fio 13) ──
+        // ── Set ──
         // set_empty: (arena) -> i64 (set ptr)
         FfiSymbol::SetEmpty => {
             sig.params.push(AbiParam::new(I64)); // arena

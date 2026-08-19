@@ -116,16 +116,16 @@ pub(crate) fn call_callback(
 }
 
 /// Extrai tipos do callback (params, ret) a partir do tipo do callback.
-/// Se o callback é OverloadSet, usa a primeira overload (Fase 5 vai
+/// Se o callback é OverloadSet, usa a primeira overload ( vai
 /// selecionar a correta pelo elem_ty no codegen).
 pub(crate) fn extract_callback_sig(callback: &TypedExpr) -> (Vec<Ty>, Ty) {
     match &callback.ty {
         Ty::Function(params, ret) => (params.clone(), (**ret).clone()),
         Ty::OverloadSet { overloads, .. } => {
-            // Fase 4: quando o codegen recebe um callback OverloadSet,
+            // Quando o codegen recebe um callback OverloadSet,
             // a inference já validou que existe uma única overload compatível.
             // Por enquanto, usar a primeira overload de arity 1 (map/filter)
-            // ou arity 2 (fold). Fase 5 vai instanciar o lambda deferido
+            // ou arity 2 (fold). vai instanciar o lambda deferido
             // com tipos concretos e gerar o function pointer correto.
             if let Some(first) = overloads.first() {
                 (first.0.clone(), first.1.clone())
@@ -139,6 +139,7 @@ pub(crate) fn extract_callback_sig(callback: &TypedExpr) -> (Vec<Ty>, Ty) {
 
 // ── Fold ─────────────────────────────────────────────────────
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn lower_fold(
     callback: &kata_ast::Spanned<TypedExpr>,
     initial: &kata_ast::Spanned<TypedExpr>,
@@ -416,7 +417,10 @@ pub(crate) fn setup_limit(
         let count_var = ctx.new_var("__pipe_limit_count", I64);
         let zero = ctx.builder.ins().iconst(I64, 0);
         ctx.builder.def_var(count_var, zero);
-        Ok(Some(LimitCtx { limit_val: limit_raw, count_var }))
+        Ok(Some(LimitCtx {
+            limit_val: limit_raw,
+            count_var,
+        }))
     } else {
         Ok(None)
     }
@@ -448,10 +452,7 @@ pub(crate) fn check_limit(
 }
 
 /// Incrementa o contador de limite após processar um elemento.
-pub(crate) fn increment_limit(
-    limit_ctx: &Option<LimitCtx>,
-    ctx: &mut LowerCtx,
-) {
+pub(crate) fn increment_limit(limit_ctx: &Option<LimitCtx>, ctx: &mut LowerCtx) {
     if let Some(lc) = limit_ctx {
         let count = ctx.builder.use_var(lc.count_var);
         let next = ctx.builder.ins().iadd_imm(count, 1);

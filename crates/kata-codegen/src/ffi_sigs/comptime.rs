@@ -10,7 +10,7 @@ use kata_core::ffi::FfiSymbol;
 pub(crate) fn sig_for(sym: FfiSymbol) -> Option<Signature> {
     let mut sig = Signature::new(ffi_call_conv());
     match sym {
-        // ── Comptime snapshots (Fio 12) ──
+        // ── Comptime snapshots ──
         // load_snapshot: (root_arena, bytes_ptr, bytes_len, rebase_offsets_ptr, rebase_count, snapshot_id) -> ()
         FfiSymbol::LoadSnapshot => {
             sig.params.push(AbiParam::new(I64)); // root_arena
@@ -25,7 +25,7 @@ pub(crate) fn sig_for(sym: FfiSymbol) -> Option<Signature> {
             sig.params.push(AbiParam::new(I64)); // snapshot_id
             sig.returns.push(AbiParam::new(I64)); // ptr
         }
-        // ── Cache @cache{strategy: "LRU"} (Fio 12, Fase 5) ──
+        // ── Cache @cache{strategy: "LRU"} ( , ) ──
         // cache_get_or_create: (arena, fn_id, capacity) -> handle
         FfiSymbol::CacheGetOrCreate => {
             sig.params.push(AbiParam::new(I64)); // arena

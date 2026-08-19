@@ -61,7 +61,7 @@ use super::walk;
 pub(crate) fn run(typed_module: &mut TypedModule) {
     // ── Entry point: constants + pre_entry + entry ──
     // Coleta bindings de ChannelCreate de constants + pre_entry + entry juntos.
-    // constants é onde `constant ch := channel!()` vive na Fase 2 (não pre_entry).
+    // constants é onde `constant ch := channel!()` vive (não pre_entry).
     let mut channel_bindings: HashMap<String, kata_ast::Span> = HashMap::new();
     loop {
         let prev_len = channel_bindings.len();
@@ -175,7 +175,7 @@ pub(crate) fn run(typed_module: &mut TypedModule) {
 /// Coleta bindings de `ChannelCreate` de uma expressão TAST e os adiciona
 /// ao mapa `channel_bindings`. Rastreia:
 /// - `let ch := channel!()` → `ch → span`
-/// - `constant ch := channel!()` → `ch → span` (Fase 2)
+/// - `constant ch := channel!()` → `ch → span`
 /// - `let (tx, rx) := channel!()` (LetDestruct) → `tx, rx → span`
 /// - `let tx := ch.0` / `constant tx := ch.0` (IndexAccess de binding de canal) → `tx → span`
 /// - `var ch := channel!()` → `ch → span`

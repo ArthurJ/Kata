@@ -135,7 +135,7 @@ pub(crate) fn infer_map(
     //    Se o callback é um operador standalone (Expr::Ident no DispatchTable),
     //    desugar para lambda sintético antes de inferir.
     //
-    //    Fase 5: se o callback é Ident("f") com tipo OverloadSet no TypeEnv e
+    //    Se o callback é Ident("f") com tipo OverloadSet no TypeEnv e
     //    tem lambda deferido na side table, re-infere o lambda com hint concreto
     //    Function([elem_ty], InferVar). O hint desambigua as overloads e produz
     //    Function([elem_ty], ret_ty) em vez de OverloadSet. O codegen então
@@ -220,7 +220,7 @@ pub(crate) fn infer_map(
     let cb_ret = match &callback_typed.ty {
         Ty::Function(_, ret) => (**ret).clone(),
         Ty::OverloadSet { name, overloads } => {
-            // Fase 4: selecionar overload por elem_ty.
+            // Selecionar overload por elem_ty.
             let matched: Vec<&(Vec<Ty>, Ty)> = overloads
                 .iter()
                 .filter(|(params, _)| {
@@ -328,7 +328,7 @@ pub(crate) fn infer_filter(
             });
         }
         Ty::OverloadSet { name, overloads } => {
-            // Fase 4: selecionar overload por elem_ty com retorno Boolean.
+            // Selecionar overload por elem_ty com retorno Boolean.
             let boolean = Ty::Sum("Boolean".into());
             let matched: Vec<&(Vec<Ty>, Ty)> = overloads
                 .iter()
@@ -425,7 +425,7 @@ pub(crate) fn infer_fold(
     //    O callback recebe (acumulador, elemento) e retorna o novo acumulador.
     //    Se o callback é um operador standalone, desugar para lambda.
     //
-    //    Fase 5: se o callback é Ident com OverloadSet e lambda deferido,
+    //    Se o callback é Ident com OverloadSet e lambda deferido,
     //    re-infere o lambda com hint concreto. O hint desambigua as overloads.
     let hint = Ty::Function(
         vec![acc_ty.clone(), elem_ty.clone()],
@@ -505,7 +505,7 @@ pub(crate) fn infer_fold(
             });
         }
         Ty::OverloadSet { name, overloads } => {
-            // Fase 4: selecionar overload por (acc_ty, elem_ty).
+            // Selecionar overload por (acc_ty, elem_ty).
             let matched: Vec<&(Vec<Ty>, Ty)> = overloads
                 .iter()
                 .filter(|(params, ret)| {

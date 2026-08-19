@@ -116,7 +116,7 @@ impl Parser {
                         while matches!(self.peek(), Token::StmtSep) {
                             self.advance();
                         }
-                        // `@comptime` foi removido (PRD-constant Fase 5).
+                        // `@comptime` foi removido (PRD-constant ).
                         if directives.iter().any(|d| d.name == "comptime") {
                             return Err(self.error(
                                 "`@comptime` foi removido. Use `constant` para constantes de módulo, ou remova `@comptime` — o fold automático otimiza chamadas puras com args literais.",
@@ -133,7 +133,7 @@ impl Parser {
 
     /// Parse apenas declarações — skipa entry exprs e top-level lets.
     ///
-    /// Usado pelo Pass 1 do ciclo de dois passes (Fase 4). Reconhece
+    /// Usado pelo Pass 1 do ciclo de dois passes. Reconhece
     /// declarações pelos mesmos tokens iniciais que `parse_module`:
     /// `data`, `enum`, `alias`, `action`, `interface`, `implements`,
     /// `refines`, `sig` (Ident ::), `import`, `export`. Tudo else é
@@ -371,7 +371,7 @@ impl Parser {
                                 while matches!(self.peek(), Token::StmtSep) {
                                     self.advance();
                                 }
-                                // `@comptime` foi removido (PRD-constant Fase 5).
+                                // `@comptime` foi removido (PRD-constant ).
                                 if directives.iter().any(|d| d.name == "comptime") {
                                     errors.push(self.error(
                                         "`@comptime` foi removido. Use `constant` para constantes de módulo, ou remova `@comptime`.",

@@ -1,4 +1,4 @@
-//! Inferência de DictLit e SetLit (Fio 13).
+//! Inferência de DictLit e SetLit.
 //!
 //! `DictLit` — `{"k": v ...}` → `Ty::Dict(K, V)`.
 //! `SetLit` — `{|1 2 3|}` → `Ty::Set(T)`.

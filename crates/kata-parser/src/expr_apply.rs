@@ -56,11 +56,12 @@ pub(crate) fn parse_expr(parser: &mut Parser) -> Result<Spanned<Expr>, FrontendE
             Token::PipeLimit { .. } => {
                 let pipe_span = parser.advance(); // consume `|N>`
                 // O limit é o texto entre `|` e `>`: literal int ou ident.
-                let limit_text = if let Token::PipeLimit { limit } = &parser.tokens[parser.pos - 1].token {
-                    limit.clone()
-                } else {
-                    unreachable!()
-                };
+                let limit_text =
+                    if let Token::PipeLimit { limit } = &parser.tokens[parser.pos - 1].token {
+                        limit.clone()
+                    } else {
+                        unreachable!()
+                    };
                 // Constrói a expressão do limit: IntLit se for dígitos, Ident caso contrário.
                 let limit_expr = if limit_text.chars().all(|c| c.is_ascii_digit()) {
                     Spanned::new(Expr::IntLit { text: limit_text }, pipe_span)

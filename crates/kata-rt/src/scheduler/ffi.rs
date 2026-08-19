@@ -66,7 +66,7 @@ pub(crate) fn reset_tls_between_runs() {
     crate::log::reset_log();
     crate::snapshot::reset_snapshot_table();
     crate::file::reset_file_registry();
-    // Fase 9: limpar TLS de registry por-fiber.
+    // limpar TLS de registry por-fiber.
     crate::scheduler::CURRENT_FIBER_ARENA.with(|c| c.set(None));
     crate::scheduler::FIBER_OPEN_FILES.with(|r| r.borrow_mut().clear());
 }

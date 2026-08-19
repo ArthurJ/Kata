@@ -166,7 +166,11 @@ fn break_em_match_aninhado_em_loop() {
 break_aninhado!()"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
-    assert_eq!(untag_smi(raw), 4, "break_aninhado deve ser 4 (loop até x > 3)");
+    assert_eq!(
+        untag_smi(raw),
+        4,
+        "break_aninhado deve ser 4 (loop até x > 3)"
+    );
 }
 
 /// Break dentro de match dentro de match dentro de loop — aninhamento profundo.
@@ -195,7 +199,11 @@ break_duplo!()"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
     // Soma dos pares de 0 a 4: 0 + 2 + 4 = 6
-    assert_eq!(untag_smi(raw), 6, "break_duplo deve ser 6 (soma dos pares 0+2+4)");
+    assert_eq!(
+        untag_smi(raw),
+        6,
+        "break_duplo deve ser 6 (soma dos pares 0+2+4)"
+    );
 }
 
 /// Continue dentro de match aninhado com Block (múltiplas expressões no body).

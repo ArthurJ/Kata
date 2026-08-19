@@ -1,8 +1,8 @@
 //! Marshalling — `to_bytes` / `from_bytes` para `spawn!` e IPC cross-process.
 //!
 //! `to_bytes` serializa um valor runtime em um blob `Bytes` com header estendido
-//! (type_id + rebase_offsets), reaproveitando a mecânica de `HeapSnapshotData`
-//! (Fio 12). `from_bytes` reconstrói o valor na arena destino.
+//! (type_id + rebase_offsets), reaproveitando a mecânica de `HeapSnapshotData`.
+//! `from_bytes` reconstrói o valor na arena destino.
 //!
 //! ## Type table
 //!

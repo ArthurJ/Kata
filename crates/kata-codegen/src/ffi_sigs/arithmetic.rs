@@ -175,7 +175,7 @@ pub(crate) fn sig_for(sym: FfiSymbol) -> Option<Signature> {
             sig.params.push(AbiParam::new(I64)); // replacement
             sig.returns.push(AbiParam::new(I64));
         }
-        // ── String comparison (Fio 13 + expects) ──
+        // ── String comparison ( + expects) ──
         // string_eq: (a, b) -> i64 (0/1)
         // string_starts_with: (haystack, needle) -> i64 (0/1)
         // string_contains: (haystack, needle) -> i64 (0/1)

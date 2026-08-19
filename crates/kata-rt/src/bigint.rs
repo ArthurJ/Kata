@@ -456,8 +456,13 @@ pub extern "C" fn kata_rt_int_to_text(val: i64) -> *mut std::os::raw::c_char {
 /// Chamado pelo codegen via `FfiSymbol::TextToInt`.
 /// Suporta decimal, hex (0x), octal (0o), bin (0b), separador `_`.
 /// Retorna 0 se a string for inválida ou nula.
+///
+/// # Safety
+///
+/// `s` deve ser um ponteiro válido para uma string C terminada em NUL,
+/// ou um ponteiro nulo (que retorna 0).
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_text_to_int(s: *const std::os::raw::c_char) -> i64 {
+pub unsafe extern "C" fn kata_rt_text_to_int(s: *const std::os::raw::c_char) -> i64 {
     if s.is_null() {
         return encode_smi(0);
     }

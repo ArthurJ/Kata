@@ -63,8 +63,8 @@ pub use array::{
 pub use bigint::{
     kata_rt_bi_add, kata_rt_bi_div, kata_rt_bi_eq, kata_rt_bi_ge, kata_rt_bi_gt, kata_rt_bi_le,
     kata_rt_bi_lt, kata_rt_bi_mul, kata_rt_bi_neq, kata_rt_bi_show, kata_rt_bi_sub,
-    kata_rt_bi_to_rational, kata_rt_int_to_text, kata_rt_text_to_int, kata_rt_tag_int,
-    kata_rt_tag_int_from_str,
+    kata_rt_bi_to_rational, kata_rt_int_to_text, kata_rt_tag_int, kata_rt_tag_int_from_str,
+    kata_rt_text_to_int,
 };
 pub use byte::{
     kata_rt_byte_and, kata_rt_byte_not, kata_rt_byte_or, kata_rt_byte_shl, kata_rt_byte_shr,
@@ -84,9 +84,8 @@ pub use dict::{
 };
 pub use float::{
     kata_rt_fadd, kata_rt_fcmp_eq, kata_rt_fcmp_ge, kata_rt_fcmp_gt, kata_rt_fcmp_le,
-    kata_rt_fcmp_lt, kata_rt_fcmp_neq, kata_rt_fdiv, kata_rt_float_to_text,
-    kata_rt_fmul, kata_rt_fsub, kata_rt_int_to_float, kata_rt_rand, kata_rt_rand_int,
-    kata_rt_text_to_float,
+    kata_rt_fcmp_lt, kata_rt_fcmp_neq, kata_rt_fdiv, kata_rt_float_to_text, kata_rt_fmul,
+    kata_rt_fsub, kata_rt_int_to_float, kata_rt_rand, kata_rt_rand_int, kata_rt_text_to_float,
 };
 pub use io::{kata_rt_panic, kata_rt_print, kata_rt_println};
 pub use list::{

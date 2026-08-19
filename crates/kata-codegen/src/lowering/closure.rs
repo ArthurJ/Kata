@@ -68,7 +68,7 @@ pub(crate) fn lower_closure(
         // Injetar automaticamente.
         let mut call_args = arg_values;
 
-        // ── Dict/Set FFI interception (Fio 13) ──
+        // ── Dict/Set FFI interception ──
         // These FFI functions need extra params (hash, eq_fn, arena) that
         // aren't in the Kata-level signatures. Intercept and inject them.
         let arena_for_dict = ctx

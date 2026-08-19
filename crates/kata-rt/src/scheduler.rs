@@ -41,7 +41,7 @@ use crate::file::{FILE_WOULD_BLOCK, collect_file_fds, try_select_files};
 use crate::platform::{POLLIN, PollFd, poll_fds};
 use crate::socket::{SOCKET_WOULD_BLOCK, collect_socket_fds, try_select_sockets};
 
-// ── TLS para registry por-fiber (Fase 9) ───────────────────────────
+// ── TLS para registry por-fiber ───────────────────────────
 // CURRENT_FIBER_ARENA: setado antes de resume(), lido por kata_rt_file_open
 //   para determinar se o arquivo é fiber-local (arena do fiber) ou global.
 // FIBER_OPEN_FILES: Vec<i64> swap in/out de FiberEntry.open_files antes/depois
@@ -449,7 +449,7 @@ impl Scheduler {
         crate::log::restore_log_config(log_config);
         self.current_fiber = Some(fiber_id);
 
-        // Fase 9: setar CURRENT_FIBER_ARENA e swap FIBER_OPEN_FILES.
+        // Setar CURRENT_FIBER_ARENA e swap FIBER_OPEN_FILES.
         // kata_rt_file_open lê CURRENT_FIBER_ARENA para decidir se registra
         // o handle em FIBER_OPEN_FILES (fiber-local) ou OPEN_FILES (global).
         // FIBER_OPEN_FILES é swap in/out para evitar &mut Scheduler durante resume().
@@ -471,7 +471,7 @@ impl Scheduler {
         let result = entry.fiber.resume(spawn_args);
         self.current_fiber = None;
 
-        // Fase 9: limpar CURRENT_FIBER_ARENA e recuperar FIBER_OPEN_FILES.
+        // Limpar CURRENT_FIBER_ARENA e recuperar FIBER_OPEN_FILES.
         CURRENT_FIBER_ARENA.with(|c| c.set(None));
         let recovered_open_files = FIBER_OPEN_FILES.with(|r| {
             let mut borrow = r.borrow_mut();
@@ -612,7 +612,7 @@ impl Scheduler {
         let arena_handle = entry.fiber.arena_handle;
         let parent_id = entry.parent_id;
 
-        // Fase 9: fechar arquivos abertos pelo fiber que não foram fechados
+        // Fechar arquivos abertos pelo fiber que não foram fechados
         // explicitamente com close!(). Isto previne FD leak quando um fiber
         // termina sem fechar arquivos alocados na sua arena.
         for handle in &entry.open_files {

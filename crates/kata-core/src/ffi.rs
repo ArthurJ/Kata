@@ -77,13 +77,13 @@ pub enum FfiSymbol {
     ArenaCreate,
     ArenaAlloc,
     ArenaDestroy,
-    /// `kata_rt_arena_create_tracked() -> handle` — cria arena Tracked (Fio 16).
+    /// `kata_rt_arena_create_tracked() -> handle` — cria arena Tracked.
     ArenaCreateTracked,
-    /// `kata_rt_arena_dealloc(handle, ptr, size) -> void` — dealloc individual (Fio 16).
+    /// `kata_rt_arena_dealloc(handle, ptr, size) -> void` — dealloc individual.
     ArenaDealloc,
-    /// `kata_rt_get_root_arena_handle() -> handle` — lê TLS root arena (Fio 16).
+    /// `kata_rt_get_root_arena_handle() -> handle` — lê TLS root arena.
     GetRootArenaHandle,
-    /// `kata_rt_arena_stats(handle) -> i64` — (alloc_count, dealloc_count) packed (Fio 16).
+    /// `kata_rt_arena_stats(handle) -> i64` — (alloc_count, dealloc_count) packed.
     ArenaStats,
 
     // ── Sum ──────────────────────────────────────
@@ -159,7 +159,7 @@ pub enum FfiSymbol {
     /// `kata_rt_list_concat(first, second, arena) -> ptr` — concatena duas listas.
     ListConcat,
 
-    // ── Hash (Fio 13) ───────────────────────────────────
+    // ── Hash ───────────────────────────────────
     /// `kata_rt_hash_int(val) -> i64` — FNV-1a hash de Int (SMI-tagged).
     HashInt,
     /// `kata_rt_hash_text(str_ptr) -> i64` — FNV-1a hash de Text.
@@ -167,7 +167,7 @@ pub enum FfiSymbol {
     /// `kata_rt_hash_rational(rat_ptr) -> i64` — FNV-1a hash de Rational.
     HashRational,
 
-    // ── Dict (Fio 13) ───────────────────────────────────
+    // ── Dict ───────────────────────────────────
     /// `kata_rt_dict_empty(arena) -> i64` — aloca Dict vazio.
     DictEmpty,
     /// `kata_rt_dict_insert(dict, key, val, hash, eq_fn, arena) -> i64` — insere par.
@@ -185,7 +185,7 @@ pub enum FfiSymbol {
     /// `kata_rt_dict_next_smi(dict, iter_state_smi, arena) -> i64` — Optional box (SMI decode).
     DictNextSmi,
 
-    // ── Set (Fio 13) ────────────────────────────────────
+    // ── Set ────────────────────────────────────
     /// `kata_rt_set_empty(arena) -> i64` — delega para dict_empty.
     SetEmpty,
     /// `kata_rt_set_insert(set, elem, hash, eq_fn, arena) -> i64` — novo Set.
@@ -254,14 +254,14 @@ pub enum FfiSymbol {
     /// `kata_rt_log_config(topic_ptr, policy_ptr, level) -> ()` — setta defaults de logging.
     LogConfig,
 
-    // ── Comptime snapshots (Fio 12) ──────────────────────
+    // ── Comptime snapshots ──────────────────────
     /// `kata_rt_load_snapshot(root_arena, bytes_ptr, bytes_len, rebase_offsets_ptr, rebase_count, snapshot_id) -> ()`
     /// — carrega um snapshot na root_arena e armazena na tabela TLS.
     LoadSnapshot,
     /// `kata_rt_get_snapshot(snapshot_id) -> ptr` — retorna ponteiro do snapshot da tabela TLS.
     GetSnapshot,
 
-    // ── Cache @cache{strategy: "LRU"} (Fio 12, Fase 5) ──
+    // ── Cache @cache{strategy: "LRU"} ( , ) ──
     /// `kata_rt_cache_get_or_create(arena, fn_id, capacity) -> handle`
     CacheGetOrCreate,
     /// `kata_rt_cache_lookup(handle, key_ptr, key_len) -> i64` (0=miss, ptr=hit)
@@ -488,11 +488,11 @@ impl FfiSymbol {
             FfiSymbol::ArrayContains => "kata_rt_array_contains",
             FfiSymbol::ListReverse => "kata_rt_list_reverse",
             FfiSymbol::ListConcat => "kata_rt_list_concat",
-            // Hash (Fio 13)
+            // Hash
             FfiSymbol::HashInt => "kata_rt_hash_int",
             FfiSymbol::HashText => "kata_rt_hash_text",
             FfiSymbol::HashRational => "kata_rt_hash_rational",
-            // Dict (Fio 13)
+            // Dict
             FfiSymbol::DictEmpty => "kata_rt_dict_empty",
             FfiSymbol::DictInsert => "kata_rt_dict_insert",
             FfiSymbol::DictGetChecked => "kata_rt_dict_get_checked",
@@ -501,7 +501,7 @@ impl FfiSymbol {
             FfiSymbol::DictRemove => "kata_rt_dict_remove",
             FfiSymbol::DictNext => "kata_rt_dict_next",
             FfiSymbol::DictNextSmi => "kata_rt_dict_next_smi",
-            // Set (Fio 13)
+            // Set
             FfiSymbol::SetEmpty => "kata_rt_set_empty",
             FfiSymbol::SetInsert => "kata_rt_set_insert",
             FfiSymbol::SetContains => "kata_rt_set_contains",
@@ -512,7 +512,7 @@ impl FfiSymbol {
             FfiSymbol::SetIntersection => "kata_rt_set_intersection",
             FfiSymbol::SetDifference => "kata_rt_set_difference",
             FfiSymbol::DictMerge => "kata_rt_dict_merge",
-            // String comparison (Fio 13 + expects)
+            // String comparison ( + expects)
             FfiSymbol::StringEq => "kata_rt_string_eq",
             FfiSymbol::StringStartsWith => "kata_rt_string_starts_with",
             FfiSymbol::StringContains => "kata_rt_string_contains",
@@ -694,16 +694,16 @@ impl FfiSymbol {
             FfiSymbol::ArrayContains => Ty::boolean(),
             FfiSymbol::ListReverse => Ty::int(),
             FfiSymbol::ListConcat => Ty::int(),
-            // Hash (Fio 13) — todas retornam i64 (hash)
+            // Hash — todas retornam i64 (hash)
             FfiSymbol::HashInt | FfiSymbol::HashText | FfiSymbol::HashRational => Ty::int(),
-            // Dict (Fio 13) — todas retornam i64 (ptr ou bool)
+            // Dict — todas retornam i64 (ptr ou bool)
             FfiSymbol::DictEmpty | FfiSymbol::DictInsert | FfiSymbol::DictRemove => Ty::int(),
             FfiSymbol::DictGetChecked => Ty::int(),
             FfiSymbol::DictContains => Ty::boolean(),
             FfiSymbol::DictLen => Ty::int(),
             FfiSymbol::DictNext => Ty::int(),
             FfiSymbol::DictNextSmi => Ty::int(),
-            // Set (Fio 13)
+            // Set
             FfiSymbol::SetEmpty | FfiSymbol::SetInsert | FfiSymbol::SetRemove => Ty::int(),
             FfiSymbol::SetContains => Ty::boolean(),
             FfiSymbol::SetLen => Ty::int(),
@@ -712,7 +712,7 @@ impl FfiSymbol {
                 Ty::int()
             }
             FfiSymbol::DictMerge => Ty::int(),
-            // String comparison (Fio 13 + expects) — retorna 0/1
+            // String comparison ( + expects) — retorna 0/1
             FfiSymbol::StringEq | FfiSymbol::StringStartsWith | FfiSymbol::StringContains => {
                 Ty::boolean()
             }
@@ -896,11 +896,11 @@ impl FfiSymbol {
             FfiSymbol::ArrayContains,
             FfiSymbol::ListReverse,
             FfiSymbol::ListConcat,
-            // Hash (Fio 13)
+            // Hash
             FfiSymbol::HashInt,
             FfiSymbol::HashText,
             FfiSymbol::HashRational,
-            // Dict (Fio 13)
+            // Dict
             FfiSymbol::DictEmpty,
             FfiSymbol::DictInsert,
             FfiSymbol::DictGetChecked,
@@ -909,7 +909,7 @@ impl FfiSymbol {
             FfiSymbol::DictRemove,
             FfiSymbol::DictNext,
             FfiSymbol::DictNextSmi,
-            // Set (Fio 13)
+            // Set
             FfiSymbol::SetEmpty,
             FfiSymbol::SetInsert,
             FfiSymbol::SetContains,
@@ -920,7 +920,7 @@ impl FfiSymbol {
             FfiSymbol::SetIntersection,
             FfiSymbol::SetDifference,
             FfiSymbol::DictMerge,
-            // String comparison (Fio 13 + expects)
+            // String comparison ( + expects)
             FfiSymbol::StringEq,
             FfiSymbol::StringStartsWith,
             FfiSymbol::StringContains,

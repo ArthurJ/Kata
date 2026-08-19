@@ -518,10 +518,7 @@ pub(crate) fn infer_pipe_limit(
         }
         Expr::Ident { name } => Spanned::new(
             Expr::Apply {
-                callee: Box::new(Spanned::new(
-                    Expr::Ident { name: name.clone() },
-                    rhs.span,
-                )),
+                callee: Box::new(Spanned::new(Expr::Ident { name: name.clone() }, rhs.span)),
                 args: vec![lhs.clone()],
             },
             *span,
@@ -531,12 +528,10 @@ pub(crate) fn infer_pipe_limit(
             // O body é `Apply { map, [f, __hole_0] }`.
             // Substituir o pattern (hole) pelo lhs no body e inferir diretamente.
             // O pattern é `Ident(__hole_N)`.
-            let hole_name = patterns
-                .first()
-                .and_then(|p| match &p.node {
-                    kata_ast::Pattern::Ident(name) => Some(name.clone()),
-                    _ => None,
-                });
+            let hole_name = patterns.first().and_then(|p| match &p.node {
+                kata_ast::Pattern::Ident(name) => Some(name.clone()),
+                _ => None,
+            });
             if let Some(hname) = hole_name {
                 let body_with_lhs = substitute_ident_in_expr(&body.node, &hname, lhs);
                 Spanned::new(body_with_lhs, *span)
@@ -573,16 +568,14 @@ pub(crate) fn infer_pipe_limit(
             elem_ty,
             ret_ty,
             ..
-        } => {
-            TypedExprKind::Map {
+        } => TypedExprKind::Map {
             callback,
             collection,
             coll_ty,
             elem_ty,
             ret_ty,
             limit: Some(limit_box),
-            }
-        }
+        },
         TypedExprKind::Filter {
             callback,
             collection,

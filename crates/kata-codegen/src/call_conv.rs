@@ -6,7 +6,7 @@
 //! - macOS aarch64      → `SystemV` (Cranelift mapeia para AAPCS)
 //!
 //! `CallConv::Tail` (Actions e funções Kata) é suportado pelo Cranelift em
-//! todas as plataformas-alvo; verificação empírica na Fase 6 do PRD-Windows.
+//! todas as plataformas-alvo; verificação empírica do PRD-Windows.
 
 use cranelift_codegen::isa::CallConv;
 

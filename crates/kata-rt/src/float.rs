@@ -86,13 +86,22 @@ pub extern "C" fn kata_rt_float_to_text(val: f64) -> *mut std::os::raw::c_char {
 /// Chamado pelo codegen via `FfiSymbol::TextToFloat`.
 /// Suporta notação decimal e exponencial (ex: "3.14", "1e10", "-0.5").
 /// Retorna NaN se a string for inválida ou nula.
+///
+/// # Safety
+///
+/// `s` deve ser um ponteiro válido para uma string C terminada em NUL,
+/// ou um ponteiro nulo (que retorna NaN).
 #[unsafe(no_mangle)]
-pub extern "C" fn kata_rt_text_to_float(s: *const std::os::raw::c_char) -> f64 {
+pub unsafe extern "C" fn kata_rt_text_to_float(s: *const std::os::raw::c_char) -> f64 {
     if s.is_null() {
         return f64::NAN;
     }
     let c_str = unsafe { std::ffi::CStr::from_ptr(s) };
-    c_str.to_str().unwrap_or("").parse::<f64>().unwrap_or(f64::NAN)
+    c_str
+        .to_str()
+        .unwrap_or("")
+        .parse::<f64>()
+        .unwrap_or(f64::NAN)
 }
 
 /// Gera um Float aleatório no intervalo [0.0, 1.0).
@@ -110,8 +119,16 @@ pub extern "C" fn kata_rt_rand() -> f64 {
 pub extern "C" fn kata_rt_rand_int(min: i64, max: i64) -> i64 {
     use crate::bigint::{decode_smi_pub, encode_smi_pub, is_smi_pub};
     use rand::Rng;
-    let lo = if is_smi_pub(min) { decode_smi_pub(min) } else { min };
-    let hi = if is_smi_pub(max) { decode_smi_pub(max) } else { max };
+    let lo = if is_smi_pub(min) {
+        decode_smi_pub(min)
+    } else {
+        min
+    };
+    let hi = if is_smi_pub(max) {
+        decode_smi_pub(max)
+    } else {
+        max
+    };
     if lo > hi {
         return encode_smi_pub(lo);
     }

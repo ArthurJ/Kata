@@ -420,7 +420,7 @@ pub(crate) fn infer_expr_hinted(
                     Err(e) => return Err(e),
                 };
 
-            // Fase 2 (PRD OverloadSet): se o lambda retornou OverloadSet
+            // (PRD OverloadSet): se o lambda retornou OverloadSet
             // (partial dispatch ambíguo), registra o AST do lambda na side
             // table de deferred. O infer_apply caminho 2c consulta a side
             // table quando vê OverloadSet no TypeEnv e re-infere com tipos

@@ -178,7 +178,7 @@ pub fn parse_with_arity_recovery(
 /// os tokens são consumidos até o próximo `StmtSep` ou `Eof` sem produzir
 /// AST.
 ///
-/// Usado pelo Pass 1 do ciclo de dois passes (Fase 4): extrai assinaturas
+/// Usado pelo Pass 1 do ciclo de dois passes: extrai assinaturas
 /// sem precisar de aridades (declarações não dependem de arity-aware
 /// parsing).
 pub fn parse_decls_only(tokens: Vec<TokenWithSpan>) -> Result<Module, FrontendError> {

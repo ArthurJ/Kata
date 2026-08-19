@@ -142,7 +142,7 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
         "kata_rt_arena_destroy",
         rt::kata_rt_arena_destroy as *const u8,
     );
-    // Arena Tracked — root arena para valores ARC-managed (Fio 16)
+    // Arena Tracked — root arena para valores ARC-managed
     builder.symbol(
         "kata_rt_arena_create_tracked",
         rt::kata_rt_arena_create_tracked as *const u8,
@@ -221,14 +221,14 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
         "kata_rt_array_contains",
         rt::kata_rt_array_contains as *const u8,
     );
-    // Hash (Fio 13)
+    // Hash
     builder.symbol("kata_rt_hash_int", rt::kata_rt_hash_int as *const u8);
     builder.symbol("kata_rt_hash_text", rt::kata_rt_hash_text as *const u8);
     builder.symbol(
         "kata_rt_hash_rational",
         rt::kata_rt_hash_rational as *const u8,
     );
-    // Dict (Fio 13)
+    // Dict
     builder.symbol("kata_rt_dict_empty", rt::kata_rt_dict_empty as *const u8);
     builder.symbol("kata_rt_dict_insert", rt::kata_rt_dict_insert as *const u8);
     builder.symbol(
@@ -246,7 +246,7 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
         "kata_rt_dict_next_smi",
         rt::kata_rt_dict_next_smi as *const u8,
     );
-    // Set (Fio 13)
+    // Set
     builder.symbol("kata_rt_set_empty", rt::kata_rt_set_empty as *const u8);
     builder.symbol("kata_rt_set_insert", rt::kata_rt_set_insert as *const u8);
     builder.symbol(
@@ -326,7 +326,7 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
     );
     builder.symbol("kata_rt_log_recv", rt::kata_rt_log_recv as *const u8);
     builder.symbol("kata_rt_log_config", rt::kata_rt_log_config as *const u8);
-    // Comptime snapshots (Fio 12)
+    // Comptime snapshots
     builder.symbol(
         "kata_rt_load_snapshot",
         rt::kata_rt_load_snapshot as *const u8,
@@ -335,7 +335,7 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
         "kata_rt_get_snapshot",
         rt::kata_rt_get_snapshot as *const u8,
     );
-    // Cache @cache{strategy: "LRU"} (Fio 12, Fase 5)
+    // Cache @cache{strategy: "LRU"} ( , )
     builder.symbol(
         "kata_rt_cache_get_or_create",
         rt::kata_rt_cache_get_or_create as *const u8,
@@ -593,11 +593,11 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         ArrayContains,
         ListReverse,
         ListConcat,
-        // Hash (Fio 13)
+        // Hash
         HashInt,
         HashText,
         HashRational,
-        // Dict (Fio 13)
+        // Dict
         DictEmpty,
         DictInsert,
         DictGetChecked,
@@ -606,7 +606,7 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         DictRemove,
         DictNext,
         DictNextSmi,
-        // Set (Fio 13)
+        // Set
         SetEmpty,
         SetInsert,
         SetContains,
@@ -617,7 +617,7 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         SetIntersection,
         SetDifference,
         DictMerge,
-        // String comparison (Fio 13 + expects)
+        // String comparison ( + expects)
         StringEq,
         StringStartsWith,
         StringContains,
@@ -640,10 +640,10 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         LogPublishFull,
         LogRecv,
         LogConfig,
-        // Comptime snapshots (Fio 12)
+        // Comptime snapshots
         LoadSnapshot,
         GetSnapshot,
-        // Cache @cache{strategy: "LRU"} (Fio 12, Fase 5)
+        // Cache @cache{strategy: "LRU"} ( , )
         CacheGetOrCreate,
         CacheLookup,
         CacheInsert,

@@ -74,7 +74,7 @@ pub(crate) fn infer_lambda(
     // as múltiplas overloads de `+`.
     let hint_has_params = matches!(hint, Some(Ty::Function(hp, _)) if !hp.is_empty());
 
-    // Fase 2 (PRD OverloadSet): se partial dispatch é ambíguo (múltiplas
+    // (PRD OverloadSet): se partial dispatch é ambíguo (múltiplas
     // overloads casam) E não há hint útil, constrói Ty::OverloadSet com as
     // projeções e defere o lambda. O tipo do lambda é OverloadSet, não
     // Function([InferVar], ...). O call site seleciona a overload correta

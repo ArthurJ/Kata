@@ -16,6 +16,7 @@ use super::collections_hof::{
     arena_handle, call_callback, ensure_f64_if, ensure_i64, extract_callback_sig, list_to_array,
 };
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn lower_fused_stream(
     stages: &[FusedStage],
     source: &kata_ast::Spanned<TypedExpr>,

@@ -105,7 +105,10 @@ pub(crate) fn lex_token(lex: &mut Lexer, had_space: bool) -> Result<TokenWithSpa
                 // Peek ahead: conta chars alphanuméricos e verifica se
                 // o próximo char após eles é `>`.
                 let mut peek_idx = 0usize;
-                while lex.peek_n(peek_idx).is_some_and(|c| c.is_alphanumeric() || c == '_') {
+                while lex
+                    .peek_n(peek_idx)
+                    .is_some_and(|c| c.is_alphanumeric() || c == '_')
+                {
                     peek_idx += 1;
                 }
                 if lex.peek_n(peek_idx) == Some('>') {

@@ -326,7 +326,7 @@ pub unsafe extern "C" fn kata_rt_file_open(
     }
 
     // Registra handle para cleanup entre testes.
-    // Fase 9: se o arquivo foi alocado na fiber_arena, registra em
+    // Se o arquivo foi alocado na fiber_arena, registra em
     // FIBER_OPEN_FILES (fechado em try_destroy). Senão, registra em
     // OPEN_FILES (global, fechado em reset_file_registry).
     let fiber_arena = crate::scheduler::CURRENT_FIBER_ARENA.with(|c| c.get());
@@ -637,7 +637,7 @@ pub unsafe extern "C" fn kata_rt_file_close(handle: i64) {
 //
 // Cache TLS: o handle é criado uma única vez (lazy) e cached.
 // Múltiplas chamadas a `stdout!()` retornam o mesmo handle.
-// `reset_file_registry` (Fase 1b) limpa o cache entre testes.
+// `reset_file_registry` limpa o cache entre testes.
 
 thread_local! {
     static STDIN_HANDLE: Cell<i64> = const { Cell::new(0) };
@@ -734,7 +734,7 @@ pub extern "C" fn kata_rt_stderr() -> i64 {
 }
 
 /// Limpa o cache de handles stdio entre testes.
-/// Chamada por `reset_file_registry` (Fase 1b) ou diretamente por
+/// Chamada por `reset_file_registry` ou diretamente por
 /// `reset_scheduler`.
 pub(crate) fn reset_stdio_cache() {
     STDIN_HANDLE.with(|c| c.set(0));

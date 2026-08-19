@@ -3,7 +3,7 @@
 //! Fiber arenas usam bumpalo: alloc O(1), reset O(1), sem dealloc individual.
 //! A root arena usa `std::alloc` + tracking: alloc O(1), dealloc O(1) com
 //! swap_remove, destroy O(n). Isto permite deallocation individual para
-//! valores ARC-managed (Fio 16).
+//! valores ARC-managed.
 //!
 //! Funções C-ABI expostas para o codegen alocar tuplas.
 //! Pool de arenas indexado por handle — cada Action cria
@@ -203,7 +203,7 @@ pub(crate) extern "C" fn kata_rt_arena_stats(rt: i64, handle: i64) -> i64 {
 /// Lê o handle da root arena do Runtime.
 ///
 /// FFI C-ABI exposta ao codegen — o `alloc_capture_box` chama esta função
-/// para obter o handle da root arena onde CaptureBoxes são alocados (Fio 16).
+/// para obter o handle da root arena onde CaptureBoxes são alocados.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_get_root_arena_handle(rt: i64) -> i64 {
     let runtime = unsafe { &mut *(rt as *mut Runtime) };
