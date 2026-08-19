@@ -61,8 +61,8 @@ action main
     let linha := input!("Palpite: ")
     let r := int!(linha)
     match r
-        Result::Ok n: echo!(n)
-        Result::Err e: echo!("não é um número")
+        Ok n: echo!(n)
+        Err e: echo!("não é um número")
 main!()
 ```
 
@@ -168,7 +168,7 @@ action jogar (alvo::Int) => Unit
         let linha := input!("Palpite: ")
         let r := int!(linha)
         match r
-            Result::Ok palpite:
+            Ok palpite:
                 match (> palpite alvo)
                     Boolean::True: echo!("muito alto")
                     Boolean::False:
@@ -177,7 +177,7 @@ action jogar (alvo::Int) => Unit
                             Boolean::False:
                                 echo!("acertou!")
                                 break
-            Result::Err e: echo!("não é um número")
+            Err e: echo!("não é um número")
 
 jogar!(rand_int!(1, 100))
 ```
@@ -204,16 +204,16 @@ O problema da versão anterior não é falta de features — é falta de decompo
 ```kata
 comparar :: Int Int => Optional::Text
 lambda palpite alvo:
-    > palpite alvo: Optional::Some "muito alto"
-    < palpite alvo: Optional::Some "muito baixo"
-    otherwise: Optional::None
+    > palpite alvo: Some "muito alto"
+    < palpite alvo: Some "muito baixo"
+    otherwise: None
 ```
 
 `comparar` é uma função pura — sem `!`, sem `action`. Recebe dois `Int`s e retorna `Optional::Text`:
 
-- `Optional::Some "muito alto"` se o palpite é maior que o alvo
-- `Optional::Some "muito baixo"` se é menor
-- `Optional::None` se acertou (não há dica a dar)
+- `Some "muito alto"` se o palpite é maior que o alvo
+- `Some "muito baixo"` se é menor
+- `None` se acertou (não há dica a dar)
 
 `Optional::Text` significa "talvez um `Text`". `Some` carrega o valor; `None` significa ausência. A função é pura porque não depende do estado do mundo — mesma entrada, mesma saída, sempre.
 
@@ -222,7 +222,7 @@ Da mesma forma, a lógica de "ler uma linha do stdin e converter para Int" é um
 ```kata
 action ler_palpite => Result::(Int, Text)
     let n := int!(input!("Palpite: ")) ?
-    core.Result::Ok n
+    Ok n
 ```
 
 O `?` é o operador de fail-fast: desempacota o `Result` — se for `Ok n`, o valor está em `n` e a action continua; se for `Err e`, a action aborta imediatamente e retorna `Err e`. É o que `|` faz, mas em vez de usar um fallback, propaga o erro.
@@ -235,13 +235,13 @@ Com essas duas funções, o `jogar` fica raso:
 action jogar (alvo::Int) => Unit
     loop
         match ler_palpite!()
-            Result::Ok palpite:
+            Ok palpite:
                 match comparar palpite alvo
-                    Optional::Some msg: echo!(msg)
-                    Optional::None:
+                    Some msg: echo!(msg)
+                    None:
                         echo!("acertou!")
                         break
-            Result::Err e: echo!("não é um número")
+            Err e: echo!("não é um número")
 
 jogar!(rand_int!(1, 100))
 ```
@@ -264,24 +264,24 @@ O código completo:
 ```kata
 action ler_palpite => Result::(Int, Text)
     let n := int!(input!("Palpite: ")) ?
-    core.Result::Ok n
+    Ok n
 
 comparar :: Int Int => Optional::Text
 lambda palpite alvo:
-    > palpite alvo: Optional::Some "muito alto"
-    < palpite alvo: Optional::Some "muito baixo"
-    otherwise: Optional::None
+    > palpite alvo: Some "muito alto"
+    < palpite alvo: Some "muito baixo"
+    otherwise: None
 
 action jogar (alvo::Int) => Unit
     loop
         match ler_palpite!()
-            Result::Ok palpite:
+            Ok palpite:
                 match comparar palpite alvo
-                    Optional::Some msg: echo!(msg)
-                    Optional::None:
+                    Some msg: echo!(msg)
+                    None:
                         echo!("acertou!")
                         break
-            Result::Err e: echo!("não é um número")
+            Err e: echo!("não é um número")
 
 jogar!(rand_int!(1, 100))
 ```
