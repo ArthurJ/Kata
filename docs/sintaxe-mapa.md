@@ -279,8 +279,9 @@ let a := $(Altura typed_input!(...)) | exit!(...) # action
   funciona com `|`: desempacota o payload se for qualquer variante não-cauda,
   avalia o lado direito se for a última. Enums com variantes unitárias não-cauda
   (ex: `Boolean` com `True` antes de `False`) não são compatíveis com `|` — type
-  error, porque não há payload para desempacotar. `Result` NÃO é compatível
-  com `|` (Err tem payload, não é cauda unitária) — use `?` para fail-fast.
+  error, porque não há payload para desempacotar. `Result` é compatível com `|`
+  (`Ok(v) | default` desempacota `v`, `Err(e) | default` avalia `default`) —
+  use `?` para fail-fast quando quiser propagar o erro em vez de ignorá-lo.
 - **Domínio**: Funções puras e Actions.
 - **Relações**: Preserva pureza — ao contrário de `?`, não aborta fluxo. Com
   construtores refinados (notação prefixa `PositiveInt 25 | 0`), se o fallback é
