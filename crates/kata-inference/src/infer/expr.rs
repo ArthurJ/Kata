@@ -81,6 +81,30 @@ pub(crate) struct InferCtx<'a> {
 
 /// Infere o tipo de uma expressão, produzindo um `TypedExpr`.
 ///
+/// Verifica se um TypedExprKind contém `break` (recursivamente).
+/// Usado para determinar se um `loop` pode completar normalmente (tem break)
+/// ou é divergente (só sai via return).
+fn contains_break(kind: &TypedExprKind) -> bool {
+    match kind {
+        TypedExprKind::Break => true,
+        TypedExprKind::Loop { .. } => {
+            // break em loop interno não conta — pertence ao loop interno.
+            false
+        }
+        TypedExprKind::Match { scrutinee, arms } => {
+            arms.iter().any(|arm| contains_break(&arm.body.node.kind))
+                || arms.iter().any(|arm| {
+                    arm.guard.as_ref().is_some_and(|g| contains_break(&g.node.kind))
+                })
+                || contains_break(&scrutinee.node.kind)
+        }
+        TypedExprKind::Let { value, .. } => contains_break(&value.node.kind),
+        TypedExprKind::Var { value, .. } => contains_break(&value.node.kind),
+        TypedExprKind::Return(inner) => contains_break(&inner.node.kind),
+        _ => false,
+    }
+}
+
 /// `tail_pos` é `true` quando a expressão está em posição de cauda. O entry
 /// point é sempre `tail_pos = true`. Sub-expressões de `Let` value são
 /// `tail_pos = false`. Argumentos de `Apply` são `tail_pos = false`.
@@ -774,7 +798,12 @@ pub(crate) fn infer_expr_hinted(
         Expr::Loop { body } => {
             // Loop body é inferido com in_loop = true.
             // Cada expr do body é inferida em sequência no mesmo escopo.
-            // O tipo do loop é Unit (break sem valor).
+            //
+            // Se o loop contém `break`, ele pode completar normalmente — o tipo
+            // é Unit (break sem valor). Se NÃO contém `break`, o loop só sai
+            // via `return` (que escapa da action) — é divergente. Nesse caso
+            // o tipo é irrelevante: usamos Ty::Var para que fits_return aceite
+            // contra qualquer tipo de retorno declarado.
             let loop_ctx = InferCtx {
                 table: ctx.table,
                 enum_registry: ctx.enum_registry,
@@ -794,7 +823,10 @@ pub(crate) fn infer_expr_hinted(
                 )?;
                 typed_body.push(Spanned::new(typed, expr.span));
             }
-            (Ty::Unit, TypedExprKind::Loop { body: typed_body })
+            // Busca break recursivamente no body — pode estar dentro de match.
+            let has_break = typed_body.iter().any(|s| contains_break(&s.node.kind));
+            let loop_ty = if has_break { Ty::Unit } else { Ty::Var("_divergent".into()) };
+            (loop_ty, TypedExprKind::Loop { body: typed_body })
         }
         Expr::Break => {
             if !ctx.in_loop {
