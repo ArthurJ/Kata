@@ -115,6 +115,48 @@ Se o output não bater:
 
 `--filter` não afeta doctests — eles sempre rodam.
 
+## Reutilizando código do arquivo
+
+Doctests criam uma sessão REPL fresca — não enxergam declarações do
+arquivo automaticamente. Para testar funções definidas no arquivo,
+use `:load` como primeiro caso do bloco:
+
+```
+fat :: Int => Int
+lambda 0: 1
+lambda n: * n (fat (- n 1))
+
+#{
+A função `fat` calcula o fatorial.
+
+>>> :load exemplos/fatorial.kata
+>>> fat 5
+120
+>>> fat 0
+1
+}#
+```
+
+A mensagem `carregado: exemplos/fatorial.kata` vai para stderr —
+não atrapalha a captura de output do doctest.
+
+Para testar funções de outro módulo, use `import` como linha `>>>`:
+
+```
+#{
+>>> import exemplos/mock_math.(dobrar)
+>>> dobrar 5
+10
+}#
+```
+
+A distinção entre `:load` e `import` é intencional:
+
+- **`:load`** carrega tudo do arquivo (declarações + entry point),
+  executa top-level, side effects acontecem. Não exige `export`.
+- **`import`** traz só os símbolos exportados, sem executar top-level.
+  Sem side effects. Exige `export` no módulo.
+
 ## Comentários sem doctests
 
 Comentários `#{ }#` sem nenhuma linha `>>> ` são ignorados completamente. Não há impacto em `kata test` — comportamento é idêntico a antes.
