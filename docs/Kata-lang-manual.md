@@ -180,7 +180,11 @@ Floats aceitam notação decimal e científica:
 `NaN` e `Infinity` não têm representação visível na linguagem — o runtime
 converte `NaN`/`Infinity` para `0` na exibição (`float_to_text`). A divisão
 `0.0 / 0.0` produz `NaN` em f64 no runtime, mas o programador nunca o vê no
-output.
+output. Para evitar divisão por zero, a linguagem oferece dois caminhos
+(§22.1): `/` exige `NonZero` (refined) para Int — o type system garante que o
+divisor não é zero; `div` retorna `Result` para todos os tipos NUM. Para Float,
+`/` não exige `NonZero` — NaN pode ocorrer em runtime mas é invisibilizado no
+display.
 
 ### Rational
 
@@ -430,10 +434,14 @@ semântica via uma MetadataTable sidecar.
   lex → parse → module load → resolution → inference → monomorph →
   tree shaking → comptime → lowering → optimize → emit → JIT/AOT → execução.
 
+- **LSP (`kata-lsp`):** Servidor Language Server Protocol em stdio. Fornece
+  diagnósticos, hover e análise para editores. Pode ser invocado via
+  `kata lsp` ou como binário standalone `kata-lsp`.
+
 ### 2.2. Diagrama do Pipeline
 
 ```
-                        KATA5 — PIPELINE DE COMPILAÇÃO
+                        KATA — PIPELINE DE COMPILAÇÃO
                         ═══════════════════════════════
 
   source string
@@ -555,45 +563,89 @@ semântica via uma MetadataTable sidecar.
 Biblioteca nativa isolada, linkada no JIT/AOT via symbol map. O compilador
 conhece apenas o enum `FfiSymbol` (tipado, com metadados) e as 3 strings de
 mapeamento (`"i64"`, `"f64"`, `"kata_rt_string"`) — toda a implementação vive
-em `kata-rt`, desacoplada do compilador.
+em `kata-rt`, desacoplada do compilador. O runtime exporta ~220 funções
+`extern "C"` organizadas por categoria:
 
-- **Aritmética Inteira:** `kata_rt_iadd`, `kata_rt_isub`, `kata_rt_imul`,
-  `kata_rt_idiv`
-- **BigInt (precisão arbitrária, SMI tagging):** `kata_rt_bi_add`, `kata_rt_bi_sub`,
-  `kata_rt_bi_mul`, `kata_rt_bi_div`, `kata_rt_bi_eq`, ..., `kata_rt_tag_int`
-- **Bitwise (BigInt):** `kata_rt_and`, `kata_rt_or`, `kata_rt_not`
-- **Comparação Inteira:** `kata_rt_icmp_eq`, `kata_rt_icmp_lt`, `kata_rt_icmp_gt`, ...
-- **Aritmética Float:** `kata_rt_fadd`, `kata_rt_fsub`, `kata_rt_fmul`, `kata_rt_fdiv`
-- **Comparação Float:** `kata_rt_fcmp_eq`, `kata_rt_fcmp_lt`, ...
-- **Rational:** `kata_rt_rat_add`, ..., `kata_rt_rat_literal`, `kata_rt_rat_show`,
-  `kata_rt_rat_to_float`, `kata_rt_rat_from_float`, `kata_rt_int_to_rational`
-- **I/O:** `kata_rt_print`, `kata_rt_println`, `kata_rt_panic`
+- **BigInt (SMI tagging, precisão arbitrária):** `kata_rt_bi_add`, `kata_rt_bi_sub`,
+  `kata_rt_bi_mul`, `kata_rt_bi_div`, `kata_rt_bi_eq`, `kata_rt_bi_lt`, `kata_rt_bi_gt`,
+  `kata_rt_bi_le`, `kata_rt_bi_ge`, `kata_rt_bi_neq`, `kata_rt_bi_show`,
+  `kata_rt_bi_to_rational`, `kata_rt_tag_int`, `kata_rt_tag_int_from_str`
+- **Float (f64):** `kata_rt_fadd`, `kata_rt_fsub`, `kata_rt_fmul`, `kata_rt_fdiv`,
+  `kata_rt_fcmp_eq`, `kata_rt_fcmp_lt`, `kata_rt_fcmp_gt`, `kata_rt_fcmp_le`,
+  `kata_rt_fcmp_ge`, `kata_rt_fcmp_neq`, `kata_rt_float_to_int`, `kata_rt_float_to_text`
+- **Rational (BigRational):** `kata_rt_rat_add`, `kata_rt_rat_sub`, `kata_rt_rat_mul`,
+  `kata_rt_rat_div`, `kata_rt_rat_eq`, `kata_rt_rat_lt`, `kata_rt_rat_gt`,
+  `kata_rt_rat_le`, `kata_rt_rat_ge`, `kata_rt_rat_neq`, `kata_rt_rat_literal`,
+  `kata_rt_rat_show`, `kata_rt_rat_show_raw`, `kata_rt_rat_to_float`,
+  `kata_rt_rat_from_float`
+- **Conversões:** `kata_rt_int_to_text`, `kata_rt_text_to_int`, `kata_rt_try_int`,
+  `kata_rt_text_to_float`, `kata_rt_try_float`, `kata_rt_int_to_float`,
+  `kata_rt_int_to_byte`, `kata_rt_int_to_rational`, `kata_rt_rational_to_int`,
+  `kata_rt_int_to_bytes`, `kata_rt_float_to_int`, `kata_rt_bool_to_text`
+- **Byte/Bitwise:** `kata_rt_byte_and`, `kata_rt_byte_or`, `kata_rt_byte_xor`,
+  `kata_rt_byte_not`, `kata_rt_byte_shl`, `kata_rt_byte_shr`, `kata_rt_byte_to_int`
+- **Bytes (Bytes mutável):** `kata_rt_bytes_alloc`, `kata_rt_bytes_get`, `kata_rt_bytes_set`,
+  `kata_rt_bytes_len`, `kata_rt_bytes_concat`, `kata_rt_bytes_eq`, `kata_rt_bytes_neq`,
+  `kata_rt_bytes_slice`, `kata_rt_bytes_show`, `kata_rt_bytes_to_text`,
+  `kata_rt_bytes_from_ints`, `kata_rt_bytes_from_ptr`, `kata_rt_bytes_and/or/xor/not`
+- **I/O:** `kata_rt_print`, `kata_rt_println`, `kata_rt_print_result`, `kata_rt_panic`,
+  `kata_rt_input`
 - **stdio (descritores padrão):** `kata_rt_stdin`, `kata_rt_stdout`, `kata_rt_stderr` —
   retornam handles `File` apontando para FD 0/1/2 (ver §22.5)
 - **File I/O:** `kata_rt_file_open`, `kata_rt_file_read`, `kata_rt_file_read_chunk`,
   `kata_rt_file_readline`, `kata_rt_file_write_text`, `kata_rt_file_write_bytes`,
   `kata_rt_file_close`
-- **Textos:** `kata_rt_string_concat`, `kata_rt_string_len`, `kata_rt_text_literal`,
-  `kata_rt_int_to_text`, `kata_rt_text_to_int`, `kata_rt_float_to_text`,
-  `kata_rt_text_to_float`, `kata_rt_bool_to_text`, `kata_rt_text_replace_first`
+- **Socket I/O:** `kata_rt_socket_open`, `kata_rt_socket_listen`, `kata_rt_socket_read`,
+  `kata_rt_socket_read_chunk`, `kata_rt_socket_readline`, `kata_rt_socket_write_text`,
+  `kata_rt_socket_write_bytes`, `kata_rt_socket_close`
+- **Textos:** `kata_rt_string_concat`, `kata_rt_string_len`, `kata_rt_string_eq`,
+  `kata_rt_string_contains`, `kata_rt_string_starts_with`, `kata_rt_text_literal`,
+  `kata_rt_text_len`, `kata_rt_text_at`, `kata_rt_text_slice`, `kata_rt_text_replace`,
+  `kata_rt_text_replace_first`, `kata_rt_text_to_bytes`
+- **Math:** `kata_rt_sqrt`, `kata_rt_pow`, `kata_rt_exp`, `kata_rt_log`, `kata_rt_log2`,
+  `kata_rt_log10`, `kata_rt_sin`, `kata_rt_cos`, `kata_rt_tan`, `kata_rt_asin`,
+  `kata_rt_acos`, `kata_rt_atan`, `kata_rt_atan2`, `kata_rt_sinh`, `kata_rt_cosh`,
+  `kata_rt_tanh`, `kata_rt_ceil`, `kata_rt_floor`, `kata_rt_cbrt`, `kata_rt_signum`
 - **RNG:** `kata_rt_rand` (→ f64 [0,1)), `kata_rt_rand_int` (min, max → Int [min,max])
-- **Arena:** `kata_rt_arena_create`, `kata_rt_arena_alloc`, `kata_rt_arena_destroy`
+- **Arena:** `kata_rt_arena_create`, `kata_rt_arena_create_tracked`, `kata_rt_arena_alloc`,
+  `kata_rt_arena_dealloc`, `kata_rt_arena_destroy`, `kata_rt_arena_stats`
 - **Coleções — Listas:** `kata_rt_list_nil`, `kata_rt_list_cons`, `kata_rt_list_is_empty`,
-  `kata_rt_list_head`, `kata_rt_list_tail`
+  `kata_rt_list_head`, `kata_rt_list_tail`, `kata_rt_list_len`, `kata_rt_list_get_checked`,
+  `kata_rt_list_contains`, `kata_rt_list_concat`, `kata_rt_list_reverse`, `kata_rt_list_slice`
 - **Coleções — Arrays:** `kata_rt_array_alloc`, `kata_rt_array_len`, `kata_rt_array_get`,
-  `kata_rt_array_set`
-- **Sum:** `kata_rt_store_sum_result`, `kata_rt_tag_int`
-- **CSP:** `kata_rt_channel_create`, `kata_rt_channel_send`,
-  `kata_rt_channel_recv`, `kata_rt_queue_create`, `kata_rt_broadcast_create`,
-  `kata_rt_select` (com timeout), `kata_rt_fork` (scheduler cooperativo)
-- **ARC (Arc<T> nativo):** `kata_rt_alloc_arc`, `kata_rt_incref`, `kata_rt_decref`
-- **Type Table (reflexão estrutural):** `kata_rt_register_type`,
-  `kata_rt_register_type_arena`, `kata_rt_typeof`, `kata_rt_repr_to_text`
-- **Pretty Printing:** `kata_rt::pretty_print(ptr, type_id, max_depth)`
-- **Logging (`@log`):** `kata_rt_log_publish`, `kata_rt_log_recv`, `kata_rt_log_config`
-- **Comptime/Snapshots:** `kata_rt_struct_to_bump`, `kata_rt_load_snapshot`,
-  `kata_rt_get_snapshot_root`, `kata_rt_register_fn`
-- **Fuel:** `kata_rt_fuel_decrement`, `kata_rt_fuel_exhausted`
+  `kata_rt_array_get_checked`, `kata_rt_array_set`, `kata_rt_array_contains`,
+  `kata_rt_array_slice`
+- **Coleções — Dicts:** `kata_rt_dict_empty`, `kata_rt_dict_insert`, `kata_rt_dict_get_checked`,
+  `kata_rt_dict_contains`, `kata_rt_dict_len`, `kata_rt_dict_remove`, `kata_rt_dict_merge`,
+  `kata_rt_dict_next`, `kata_rt_dict_next_smi`
+- **Coleções — Sets:** `kata_rt_set_empty`, `kata_rt_set_insert`, `kata_rt_set_contains`,
+  `kata_rt_set_len`, `kata_rt_set_remove`, `kata_rt_set_union`, `kata_rt_set_intersection`,
+  `kata_rt_set_difference`, `kata_rt_set_next`, `kata_rt_set_test_timeout`
+- **Range:** `kata_rt_range_alloc`
+- **Sum/Tagging:** `kata_rt_store_sum_result`, `kata_rt_sum_tag_int`, `kata_rt_tag_int`
+- **CSP:** `kata_rt_channel_create`, `kata_rt_channel_send`, `kata_rt_channel_recv`,
+  `kata_rt_queue_create`, `kata_rt_broadcast_create`, `kata_rt_broadcast_receiver_create`,
+  `kata_rt_select`, `kata_rt_select_combined`, `kata_rt_select_files`
+- **Scheduler/Runtime:** `kata_rt_runtime_new`, `kata_rt_scheduler_init`, `kata_rt_spawn`,
+  `kata_rt_spawn_process`, `kata_rt_run`, `kata_rt_yield`, `kata_rt_yield_check`
+- **IPC (multiprocess):** `kata_rt_ipc_channel_create`, `kata_rt_ipc_queue_create`,
+  `kata_rt_serialize_key`, `kata_rt_to_bytes`, `kata_rt_from_bytes`
+- **ARC (Arc<T> nativo):** `kata_rt_alloc_arc`, `kata_rt_incref`, `kata_rt_decref`,
+  `kata_rt_arc_fn_ptr`
+- **Type Table (reflexão estrutural):** não exposta como FFI C-ABI — o driver
+  Rust chama `register_type_table(rt, types)` diretamente antes da execução
+  (Rust-to-Rust, pois `TypeShape` contém `Box`/`String`/`Vec` sem layout
+  C-ABI estável). O runtime consulta a type table internamente para `decref`
+  e pretty printing.
+- **Pretty Printing:** interno ao runtime via type table (não exposto como FFI)
+- **Logging (`@log`):** `kata_rt_log_publish`, `kata_rt_log_publish_default`,
+  `kata_rt_log_publish_full`, `kata_rt_log_publish_topic`, `kata_rt_log_recv`,
+  `kata_rt_log_config`
+- **Comptime/Snapshots:** `kata_rt_load_snapshot`, `kata_rt_get_snapshot`,
+  `kata_rt_cache_lookup`, `kata_rt_cache_insert`, `kata_rt_cache_get_or_create`
+- **Timer:** `kata_rt_timer_now` (clock monotono em nanossegundos), `kata_rt_sleep`
+- **Hashing:** `kata_rt_hash_int`, `kata_rt_hash_text`, `kata_rt_hash_rational`
+- **Teoria dos Números:** `kata_rt_gcd`, `kata_rt_lcm`
 
 ### 2.4. Fundação Transversal (kata-core)
 
@@ -2852,9 +2904,17 @@ compilador não mascara falhas com retornos silenciosos; ele as tipifica.
 
 ### 22.1. Divisão: Exatidão Estática vs Resolução Dinâmica
 
-* **`/` (Exato):** Exige divisor `NonZero` (refined). Sendo o zero
-  matematicamente impossível por contrato, o retorno é o valor puro direto.
-* **`div` (Dinâmica):** Aceita `NUM` normais, retorna `Result::(NUM, Err)`.
+A linguagem oferece dois operadores de divisão com semântica distinta:
+
+* **`/` (Exato):** Para Int, exige divisor `NonZero` (refined) — o type system
+  garante que o divisor não é zero, e o retorno é o valor puro direto. Para
+  Rational, `/` panica em runtime se o divisor for zero (não há `NonZero`
+  para Rational). Para Float, `/` é `a / b` direto em f64 — NaN/Infinity podem
+  ocorrer mas são convertidos para 0 no display.
+  Existe também uma overload legada `/ :: Int Int => Int` que panica em zero
+  (mantida para compatibilidade).
+* **`div` (Dinâmica):** Aceita `NUM` normais, verifica zero em runtime, retorna
+  `Result::(NUM, Text)`. Definida na stdlib para Int, Float, e Rational.
 
 ### 22.2. Acesso Posicional: Sintaxe Uniforme, Retorno Distinto
 
