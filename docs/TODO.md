@@ -65,20 +65,6 @@ garantiriam divisão exata segura em compile-time para todos os tipos NUM.
 A overload legada `/ Int Int => Int` pode ser removida quando `NonZero`
 for a única forma de dividir sem `Result`.
 
-### Reescrever §27 (Reflexão de Funções) — mecanismo substituído
-
-**Estado:** O §27 descreve reflexão via dot access (`f.name`, `f.arity`) +
-sidecar table (`__kata_fn_meta_table`) + FFI (`kata_rt_fn_meta_lookup`).
-Este mecanismo foi substituído por variáveis de reflexão (`_name`, `_arity`,
-`_types`, `_return_type`, `_is_action`) sintetizadas em compile-time pelo
-`desugar_directives`. O dot access em funções não existe mais no typeck
-(`dot_access.rs` só lida com struct fields, tuple index, coleções, module
-access).
-
-**Impacto:** Alto. O §27 inteiro (linhas 3343-3535) descreve um mecanismo
-inexistente. Precisa ser reescrito para descrever as variáveis de reflexão
-do `desugar_directives`.
-
 ---
 
 ## Migração de Exemplos

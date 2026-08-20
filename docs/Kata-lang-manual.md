@@ -815,10 +815,9 @@ Componentes intermediários (`utilidades/`) são diretórios de namespace —
 a navegação continua sem precisar de `mod.kata`.
 
 **Search paths:** O `ModuleLoader` procura primeiro no diretório do arquivo
-importador (`entry_dir`), depois na stdlib (fallback). Não há search paths
-configuráveis via CLI — os `search_paths` são `entry_dir` + `stdlib_dir`
-hardcoded no driver. Prefixos `super.` e `stdlib.` modificam este
-comportamento (ver 3.2).
+importador (`entry_dir`), depois na stdlib (fallback). Os `search_paths` são
+`entry_dir` + `stdlib_dir` hardcoded no driver. Prefixos `super.` e `stdlib.`
+modificam este comportamento (ver 3.2).
 
 ### 3.5. Prevenção de Ciclos
 
@@ -914,9 +913,9 @@ ordenadas lexicograficamente por prioridade:
 
 | Categoria | Quando | Estado |
 |---|---|---|
-| `exact` | `arg == param` (tipo idêntico) | Ativo desde Fio 1 |
-| `alias` | arg é alias de param via `alias_of` | Reservado (sempre 0) |
-| `refined` | arg é subtipo refinado de param | Reservado (sempre 0) |
+| `exact` | `arg == param` (tipo idêntico) | Ativo |
+| `alias` | arg é alias de param via `alias_of` | Não implementado (sempre 0) |
+| `refined` | arg é subtipo refinado de param | Não implementado (sempre 0) |
 | `iface` | arg implementa param (ex: Int implementa NUM) | Ativo |
 
 **Ordenação:** lexicográfica decrescente. Mais `exact` vence; empate em
@@ -924,10 +923,9 @@ ordenadas lexicograficamente por prioridade:
 `refined` → mais `iface`; empate total → concreto vence genérico
 (`is_generic_origin: false > true`).
 
-`alias` e `refined` são sempre 0 na implementação atual — a estrutura do
-`Score` e a ordenação lexicográfica já estão prontas, mas as dimensões ainda
-não são populadas. Adicionar uma dimensão nova é preencher um campo que já
-existe, não mudar o algoritmo.
+`alias` e `refined` são sempre 0 na implementação atual — os campos existem
+na struct `Score` mas `match_score` nunca os incrementa. A estrutura e a
+ordenância lexicográfica já estão prontas para quando forem populados.
 
 #### Algoritmo de Resolução
 
@@ -3465,208 +3463,99 @@ ou Ctrl-D).
 
 ---
 
-## 27. Reflexão de Funções
+## 27. Variáveis de Reflexão
 
-**⚠️ Seção desatualizada.** O mecanismo descrito abaixo (sidecar table
-`__kata_fn_meta_table`, FFI `kata_rt_fn_meta_lookup`, dot access `f.name`)
-foi substituído por **variáveis de reflexão** sintetizadas em compile-time
-pelo `desugar_directives` (`_name`, `_arity`, `_types`, `_return_type`,
-`_is_action`). O dot access `f.name` em funções não existe mais no typeck.
-Esta seção será reescrita. Ver `crates/kata-inference/src/desugar_directives/reflection.rs`
-para o mecanismo atual.
+Kata sintetiza variáveis de reflexão em compile-time para funções e actions
+decoradas com diretivas customizadas. Estas variáveis expõem metadata do item
+decorado — nome, aridade, tipos, retorno — como `let` bindings injetados no
+corpo da função/action antes do typeck.
 
----
+A reflexão é **estática** — todos os valores são conhecidos em compile-time e
+embutidos como literais. Não há introspecção arbitrária de runtime, nem dot
+access sobre valores funcionais. As variáveis existem apenas dentro do corpo
+de items decorados — não estão disponíveis em código não-decorado.
 
-Kata permite inspecionar metadata de funções e actions em tempo de execução
-ou compilação através de acesso de campo (`.`) sobre valores funcionais. Isto
-é **reflexão estruturada** — não é introspecção arbitrária de runtime, mas
-um conjunto fixo de fields com semântica definida pelo typeck.
+### 27.1. Variáveis Disponíveis
 
-A reflexão é o pré-requisito para o sistema de diretivas definidas pelo
-usuário (decorators), onde `f.name` e `f.arity` são passados como metadata
-para hooks de before/after.
-
-### 27.1. Fields Disponíveis
-
-| Field | Tipo (estático, elemento de lista) | Tipo (dinâmico/desambiguado) | Descrição |
+| Variável | Tipo | Disponibilidade | Descrição |
 |---|---|---|---|
-| `name` | `Text` | `Text` | Nome no DispatchTable (ou nome do binding para lambdas) |
-| `arity` | `Int` | `Int` | Número de parâmetros |
-| `param_types` | `List::Text` | `List::Text` | Tipos dos parâmetros como texto |
-| `return_type` | `Text` | `Text` | Tipo de retorno como texto |
-| `is_action` | `Boolean` | `Boolean` | `True` se Action, `False` se função pura |
+| `_name` | `Text` | Actions e funções | Nome do item no DispatchTable |
+| `_arity` | `Int` | Actions e funções | Número de parâmetros |
+| `_types` | `List::Text` | Actions e funções | Tipos dos parâmetros como texto |
+| `_return_type` | `Text` | Actions e funções | Tipo de retorno como texto |
+| `_is_action` | `Boolean` | Actions e funções | `True` se Action, `False` se função pura |
+| `_args` | Tupla | Actions e funções | Tupla dos parâmetros posicionais |
+| `_return` | any | Actions (exit hooks) | Valor de retorno da action |
 
-Field desconhecido (`f.foo`) → erro de compilação. Receptor não-funcional
-(`42.name`) → erro de compilação.
+**Síntese:** O `desugar_directives` (pass entre resolution e inference) cria
+`ReflectionInfo` para cada item decorado e injeta `let` bindings no início do
+corpo. Para actions, `_args` é uma tupla dos nomes dos parâmetros; para
+funções puras, usa `__param_{i}` como identificador posicional. `_return` é
+sintetizado apenas em hooks de saída (`when: "exit"`) como `let _return :=
+__result`.
 
-### 27.2. Os Quatro Casos de Dispatch
+### 27.2. Quando estão disponíveis
 
-O typeck distingue quatro casos baseado no receptor e no tipo do index. A
-distinção é **estática** — resolvida em compile-time, sem dispatch em
-runtime sobre o tipo do receptor.
-
-#### Caso 1: Estático sem desambiguação — sempre lista
+As variáveis de reflexão são sintetizadas **apenas** para items com diretivas
+customizadas anexas. O `desugar_directives` percorre `custom_directives` em
+cada `ActionDef` e `FunctionDef` — se a lista está vazia, nada é injetado.
 
 ```kata
+@log{msg: "entrada {_name} {_args}", when: "enter"}
+action processa(x::Int, y::Text) -> Text:
+    # _name = "processa"
+    # _arity = 2
+    # _types = ["Int", "Text"]
+    # _return_type = "Text"
+    # _is_action = True
+    # _args = (x, y)
+    ...
+```
+
+```kata
+@log{msg: "{_name}({_types}) -> {_return_type}", when: "enter"}
 soma :: Int Int => Int
 lambda a b: + a b
-
-soma.name          # → ["soma"]
-soma.arity         # → [2]
-soma.param_types   # → [["Int", "Int"]]
-soma.return_type   # → ["Int"]
-soma.is_action     # → [False]
+    # _name = "soma"
+    # _arity = 2
+    # _types = ["Int", "Int"]
+    # _return_type = "Int"
+    # _is_action = False
+    # _args = (__param_0, __param_1)
 ```
 
-Quando o receptor é `Ident` direto para uma função nomeada no
-`DispatchTable`, o typeck consulta todas as overloads e produz `ListLit` —
-um elemento por overload. O tipo do elemento **não muda** quando overloads
-são adicionadas: `soma.arity` sempre é `List::Int`, nunca `Int`.
+### 27.3. Hooks de Diretivas
 
-Actions também seguem este caso (4a). Como actions não são first-class, a
-reflexão de actions é sempre estática via DispatchTable — sempre lista.
+As diretivas customizadas usam as variáveis de reflexão em quatro padrões de
+hook:
 
-#### Caso 2: Estático desambiguado — escalar
-
-```kata
-soma.(Int Int).arity   # → 2
-soma.(Int Int).name    # → "soma"
-```
-
-A sintaxe `f.(T1 T2 ...)` seleciona uma overload específica por tipos de
-parâmetros (ver §27.3). A partir daí, `.field` é escalar — um único valor,
-não lista.
-
-#### Caso 3: Dinâmico — escalar via sidecar table
-
-```kata
-let g := soma
-g.name    # → "soma"   (escalar)
-g.arity   # → 2        (escalar)
-```
-
-Quando o receptor é uma variável local (`let g := soma`) com `fn_alias`
-rastreando a função original, o typeck não sabe em compile-time qual overload
-está em `g` (pode haver múltiplas). Emite chamada FFI para
-`kata_rt_fn_meta_lookup(fn_ptr, field_id)`, que faz binary search O(log N)
-na sidecar table (`__kata_fn_meta_table`) em runtime.
-
-#### Caso 4: Lambda com binding — lista de length 1
-
-```kata
-let h := lambda x: + x 1
-h.name    # → ["h"]   (lista, length 1)
-```
-
-Quando o receptor é uma variável local com `Ty::Function` mas **sem**
-`fn_alias` (não é alias para função nomeada) e não está no DispatchTable, é
-uma lambda anônima. O typeck produz `ListLit` com 1 elemento usando o nome
-do binding.
-
-### 27.3. Desambiguação por Tipos: `f.(Int Int)`
-
-```kata
-soma :: Int Int => Int
-lambda a b: + a b
-soma :: Text Text => Text
-lambda a b: a
-
-soma.(Int Int).arity        # → 2 (escalar — overload Int Int)
-soma.(Text Text).name       # → "soma" (escalar — overload Text Text)
-soma.(Float Float).arity    # → erro: nenhuma overload compatível
-```
-
-**Sintaxe.** `f.(T1 T2 ...)` onde cada `Ti` é um `TypeExpr` resolvido pelo
-typeck para `Ty`. Tipos separados por espaço. Parênteses obrigatórios.
-
-**Parser.** No loop de DotAccess, `.(...)` pode conter `IntLit` (→
-`DotIndex::Int`, indexação de tupla) ou `TypeExpr` (→ `DotIndex::Type`,
-desambiguação). O lexer distingue naturalmente: `Token::IntLit` produz
-inteiros; `Token::Ident("Int")` produz tipos. O parser lê TypeExprs
-separados por espaço até encontrar `)`.
-
-**Typeck.** Filtra overloads (não-actions) por `params == requested`.
-- 1 match → `TypedExprKind::Ident` com `Ty::Function(params, ret)`
-  específica. A partir daí, `.field` usa a overload selecionada (escalar).
-- 0 matches → erro `TypeMismatch` ("nenhuma overload compatível").
-- 2+ matches (mesmos params, ret diferente) → erro ("múltiplas overloads com
-  mesmos params — ambígua").
-
-**Codegen.** Não precisa de mudança. O typeck produz um `Ident` com
-`Ty::Function` concreta, e o codegen já resolve via `symbol_table.get((name,
-params, ret))` → `FuncId` exata.
-
-### 27.4. Provenance Tracking (`fn_alias`)
-
-A distinção entre caso 3 (dinâmico, escalar) e caso 4 (lambda, lista) exige
-saber se um binding `let g := ...` é alias para função nomeada ou lambda
-anônima. Isto é rastreado via `fn_alias: Option<String>` em `TypeBinding`.
-
-No `Expr::Let`, se o value é `Expr::Ident` apontando para função nomeada no
-`DispatchTable`, o binding recebe `fn_alias = Some("nome_original")`.
-Lambdas (`let g := lambda...`) recebem `fn_alias = None`.
-
-A regra de dispatch no `dot_access`:
-
-| Condição | Caso | Retorno |
+| Hook | Quando | Variáveis disponíveis |
 |---|---|---|
-| Nome no DispatchTable (Ident direto) | 1 — estático | Lista |
-| `fn_alias = Some`, nome no DispatchTable | 3 — dinâmico | Escalar (sidecar table) |
-| `fn_alias = None`, não no DispatchTable | 4 — lambda | Lista (length 1) |
+| Enter | Prólogo (antes do corpo) | `_name`, `_arity`, `_types`, `_return_type`, `_is_action`, `_args` |
+| Exit | Epílogo (após o corpo) | Todas as anteriores + `_return` |
+| ShortCircuit | Antes do corpo, pode abortar | Todas de Enter |
+| Transform | Substitui o corpo | Todas de Enter + `_return` no epílogo |
 
-### 27.5. Sidecar Table e ABI do Caso Dinâmico
+`_return` é o único que não é estático — contém o valor de retorno computado
+em runtime. O desugaring injeta `let _return := __result` após o corpo
+produzir `__result`, disponível apenas em hooks Exit e Transform.
 
-O caso dinâmico não consulta o DispatchTable em runtime (ele é destruído após
-o typeck). Em vez disso, o codegen emite um data symbol
-`__kata_fn_meta_table` com entries de 56 bytes cada:
+### 27.4. Implementação
 
-```
-offset  0: fn_ptr           (i64 — relocation resolvida pelo JIT)
-offset  8: name_ptr         (i64 — ponteiro para string estática)
-offset 16: arity            (i64 — número de parâmetros)
-offset 24: param_types_ptr  (i64 — ponteiro para array de string ptrs)
-offset 32: param_types_len  (i64 — número de param types)
-offset 40: return_type_ptr  (i64 — ponteiro para string estática)
-offset 48: is_action        (i64 — 0 = Function, 1 = Action)
-```
+O `desugar_directives` em `kata-inference` faz o trabalho:
 
-O runtime registra esta tabela no prólogo do entry point (antes da execução
-do código do usuário) e consulta via binary search ordenado por `fn_ptr`.
+1. **Coleta** — `ReflectionInfo::for_action` ou `for_function` extrai nome,
+   arity, tipos e return type do `ActionDef`/`FunctionDef` resolvido.
+2. **Síntese** — `synthesize_static_bindings` produz `let` bindings como
+   `Expr::Let` com valores literais (`TextLit`, `IntLit`, `ListLit`,
+   `VariantQual` para Boolean).
+3. **Injeção** — Os bindings são prependidos ao corpo da action ou cláusula
+   lambda. O typeck processa a AST expandida normalmente — as variáveis são
+   `let` bindings comuns, sem tratamento especial.
 
-**ABI do lookup.** `kata_rt_fn_meta_lookup(fn_ptr, field_id)` retorna:
-- `arity`: SMI-tagged `(val << 1) | 1` via `kata_rt_tag_int`
-- `param_types`: List Cons na root arena via `kata_rt_list_cons`
-- `name`/`return_type`: C string ptr
-- `is_action`: inline 0/1
-
-**CaptureBox.** `let g := soma` produz um `CaptureBox` (box_ptr), não
-`fn_ptr` direto. O codegen intercepta `kata_rt_fn_meta_lookup` em
-`closure.rs` e faz `load(call_args[0], 0)` para extrair `fn_ptr` do
-CaptureBox antes de passar para a FFI.
-
-**SMI untag.** O `field_id` produzido pelo typeck como `IntLit` sofre SMI
-tagging no codegen (`encode_smi(0) = 1`). A interceptação faz untag
-(`(smi - 1) >> 1`) antes de passar para a FFI.
-
-### 27.6. Regras e Edge Cases
-
-1. **Actions não são first-class.** Reflexão de actions é sempre estática
-   via DispatchTable (caso 1 — sempre lista). `let g := action_name` não
-   existe.
-2. **Sempre lista no caso estático sem desambiguação.** `f.arity` →
-   `List::Int`. `f.(Int Int).arity` → `Int` escalar (desambiguado).
-3. **Caso dinâmico sempre escalar.** `fn_ptr` identifica overload exata na
-   sidecar table.
-4. **ABI não muda.** Função continua `I64` na ABI. `ty_to_clif` não muda.
-5. **`display()` de `Ty::Function`** produz `Lambda(Int Int -> Int)` —
-   renomeado de `Function` para `Lambda` na linguagem para evitar confusão
-   com `Ty::Action`.
-6. **Overloads com mesmos params, ret diferente.** `soma.(Int Int)` com duas
-   overloads `Int Int => Int` e `Int Int => Text` → erro de ambiguidade.
-7. **Field desconhecido** (`f.foo`) → erro de compilação
-   (`is_reflection_field` retorna `false`).
-8. **Receptor não-funcional** (`42.name`) → erro de compilação
-   (`NotIndexable`).
+Como as variáveis são `let` bindings comuns, seguem as regras normais:
+shadowing proibido (o desugaring usa nomes `_`-prefixados que não colidem),
+escopo limitado ao corpo onde foram injetadas, imutáveis.
 
 ## 28. Módulo Math (`import math`)
 
