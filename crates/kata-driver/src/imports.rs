@@ -248,6 +248,36 @@ pub(crate) fn load_module_imports(
     })
 }
 
+/// Carrega módulos importados no contexto do REPL.
+///
+/// Diferente de `load_module_imports` (que usa o diretório do arquivo como
+/// search path), esta função usa o diretório atual (`.`) + stdlib. O REPL
+/// não tem arquivo-base, então `.` é o ponto de partida natural.
+pub(crate) fn load_repl_imports(
+    module: &kata_ast::Module,
+) -> miette::Result<Vec<ImportedModule>> {
+    let stdlib_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../stdlib")
+        .canonicalize()
+        .unwrap_or_else(|_| Path::new("../../stdlib").to_path_buf());
+
+    let search_paths = vec![Path::new(".").to_path_buf(), stdlib_dir];
+    let mut loader = ModuleLoader::new(search_paths);
+    loader.load_imports(module).map_err(|e| match e {
+        kata_resolution::LoadError::Lex(inner) | kata_resolution::LoadError::Parse(inner) => {
+            inner.into_report_with_source("", None)
+        }
+        kata_resolution::LoadError::Resolve(errors) => {
+            if let Some(first) = errors.first() {
+                first.clone().into_report_with_source("", None)
+            } else {
+                miette::Report::msg("erro de resolução ao carregar módulo (sem detalhes)")
+            }
+        }
+        other => miette::Report::msg(format!("erro ao carregar imports: {other}")),
+    })
+}
+
 /// Extrai o `DirectiveRegistry` dos módulos importados, para ser usado
 /// como base no `resolve_with_imports` do módulo do usuário.
 ///

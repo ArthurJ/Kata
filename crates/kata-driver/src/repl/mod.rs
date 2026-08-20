@@ -55,6 +55,10 @@ pub(crate) struct ReplSession {
     /// Na próxima linha, estes símbolos são registrados no JITBuilder e
     /// declarados como Linkage::Import — o corpo não é recompilado.
     pub(crate) function_table: kata_codegen::PrevFuncMap,
+    /// Módulos importados via `import` no REPL — cacheados entre linhas.
+    /// Carregados uma vez quando o usuário digita `import MOD.(items)`,
+    /// reusados em todas as avaliações subsequentes via `merge_imports`.
+    pub(crate) imports: Vec<kata_resolution::ImportedModule>,
     /// Prelude resolvido (recarregado em `:reset`).
     pub(crate) prelude: ResolvedModule,
     /// Runtime persistente — vive entre avaliações para preservar valores
@@ -80,6 +84,7 @@ impl ReplSession {
             snapshot_bindings: HashMap::new(),
             snapshots: Vec::new(),
             function_table: HashMap::new(),
+            imports: Vec::new(),
             prelude,
             rt_ptr,
             history_path,
@@ -93,6 +98,7 @@ impl ReplSession {
         self.snapshot_bindings.clear();
         self.snapshots.clear();
         self.function_table.clear();
+        self.imports.clear();
         self.prelude = load_prelude()
             .map_err(|e| format!("erro ao carregar prelude: {}", crate::format_error_vec(&e)))?;
         // Recriar Runtime — descarta o antigo e cria um novo limpo.
@@ -166,6 +172,7 @@ impl ReplSession {
 
         // Snapshot para rollback em caso de erro.
         let snapshot_len = self.items.len();
+        let snapshot_imports_len = self.imports.len();
 
         // Substitui constants redefinidas: se o novo input contém
         // `ConstantDecl { name }`, remove qualquer `ConstantDecl` anterior
@@ -226,6 +233,22 @@ impl ReplSession {
 
         self.items.extend(module.items);
 
+        // Carregar imports do módulo: se há ImportDecl nos items (novos ou
+        // acumulados), carregar todos os módulos importados e atualizar o
+        // cache. Isto é feito a cada eval porque imports podem aparecer em
+        // qualquer linha, e o ModuleLoader é idempotente (cache interno).
+        let import_module = Module {
+            items: self.items.clone(),
+        };
+        let has_imports = import_module
+            .items
+            .iter()
+            .any(|i| matches!(i.node, Item::ImportDecl { .. }));
+        if has_imports {
+            self.imports = crate::imports::load_repl_imports(&import_module)
+                .map_err(|e| format!("erro ao carregar imports: {e}"))?;
+        }
+
         if !has_entry {
             // Apenas declarações — não executa, apenas adiciona à lista.
             // Valida com pipeline_typed para verificar consistência.
@@ -236,6 +259,7 @@ impl ReplSession {
                 Ok(_) => Ok(()),
                 Err(e) => {
                     self.items.truncate(snapshot_len);
+                    self.imports.truncate(snapshot_imports_len);
                     Err(e)
                 }
             }
@@ -324,6 +348,7 @@ impl ReplSession {
                 }
                 Err(e) => {
                     self.items.truncate(snapshot_len);
+                    self.imports.truncate(snapshot_imports_len);
                     Err(e)
                 }
             }
@@ -369,7 +394,12 @@ impl ReplSession {
     fn run_pipeline_typed(&self, module: &Module) -> Result<kata_inference::TypedModule, String> {
         let user = resolve(module)
             .map_err(|e| format!("erro de resolução: {}", crate::format_error_vec(&e)))?;
-        let resolved = merge_resolved(self.prelude.clone(), user);
+        let mut resolved = merge_resolved(self.prelude.clone(), user);
+        // Merge de imports cacheados — traz signatures/functions/actions
+        // dos módulos importados para o escopo do REPL.
+        if !self.imports.is_empty() {
+            crate::imports::merge_imports(&mut resolved, &self.imports);
+        }
         let typed = infer_module(module, &resolved).map_err(|e| format!("erro de tipo: {e}"))?;
         Ok(typed)
     }
@@ -407,7 +437,25 @@ impl ReplSession {
     fn run_pipeline_eval(&mut self, module: &Module) -> Result<crate::ExecResult, String> {
         let user = resolve(module)
             .map_err(|e| format!("erro de resolução: {}", crate::format_error_vec(&e)))?;
-        let resolved = merge_resolved(self.prelude.clone(), user);
+        let mut resolved = merge_resolved(self.prelude.clone(), user);
+
+        // Merge de imports cacheados + avaliação de constants importadas.
+        // Isto traz signatures/functions/actions dos módulos importados e
+        // injeta constants exportadas no type_env antes da inferência.
+        let imported_constants = if !self.imports.is_empty() {
+            crate::imports::merge_imports(&mut resolved, &self.imports);
+            let ics = crate::imports::evaluate_imported_constants(&self.imports)
+                .map_err(|e| format!("erro ao avaliar constants importadas: {e}"))?;
+            for ic in &ics {
+                resolved
+                    .type_env
+                    .define(&ic.name, ic.value.ty.clone(), "__module__");
+            }
+            ics
+        } else {
+            Vec::new()
+        };
+
         let typed = infer_module(module, &resolved).map_err(|e| format!("erro de tipo: {e}"))?;
 
         // Comptime pass: avalia constants (JIT-executa), substitui por
@@ -418,6 +466,26 @@ impl ReplSession {
         // tem acesso às constants (que só existem no var_map do entry point).
         let mut typed = run_comptime_pass(typed, &resolved.enum_registry)
             .map_err(|e| format!("erro de comptime: {e}"))?;
+
+        // Injetar constants importadas como ConstantBinding no TypedModule.
+        // O valor já está avaliado (literal/snapshot) — o comptime pass
+        // vai pular via is_already_evaluated e registrar no comptime_bindings.
+        for ic in imported_constants {
+            let dummy_span = kata_ast::Span::zero();
+            typed.constants.push(kata_ast::Spanned::new(
+                kata_inference::TypedExpr {
+                    span: dummy_span,
+                    ty: ic.value.ty.clone(),
+                    tail_pos: false,
+                    escape: kata_core::escape::EscapeTarget::Local,
+                    kind: kata_inference::TypedExprKind::ConstantBinding {
+                        name: ic.name.clone(),
+                        value: Box::new(kata_ast::Spanned::new(ic.value, dummy_span)),
+                    },
+                },
+                dummy_span,
+            ));
+        }
 
         // Injetar bindings complexos congelados como HeapSnapshot no pre_entry.
         if !self.snapshot_bindings.is_empty() {

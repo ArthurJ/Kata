@@ -158,7 +158,25 @@ impl ReplSession {
 
         // Snapshot para rollback em caso de erro.
         let snapshot_len = self.items.len();
+        let snapshot_imports_len = self.imports.len();
         self.items.extend(module.items);
+
+        // Carregar imports do arquivo: se há ImportDecl nos items (novos ou
+        // acumulados), carregar todos os módulos importados e atualizar o cache.
+        let import_module = Module {
+            items: self.items.clone(),
+        };
+        let has_imports = import_module
+            .items
+            .iter()
+            .any(|i| matches!(i.node, Item::ImportDecl { .. }));
+        if has_imports {
+            self.imports = crate::imports::load_repl_imports(&import_module)
+                .map_err(|e| {
+                    self.items.truncate(snapshot_len);
+                    format!("erro ao carregar imports: {e}")
+                })?;
+        }
 
         if !has_entry {
             // Apenas declarações — valida com typeck sem executar.
@@ -172,6 +190,7 @@ impl ReplSession {
                 }
                 Err(e) => {
                     self.items.truncate(snapshot_len);
+                    self.imports.truncate(snapshot_imports_len);
                     Err(e)
                 }
             }
@@ -190,6 +209,7 @@ impl ReplSession {
                 }
                 Err(e) => {
                     self.items.truncate(snapshot_len);
+                    self.imports.truncate(snapshot_imports_len);
                     Err(e)
                 }
             }
