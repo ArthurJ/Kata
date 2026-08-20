@@ -26,6 +26,7 @@ pub(crate) mod ipc;
 pub(crate) mod list;
 pub(crate) mod log;
 pub(crate) mod marshal;
+pub(crate) mod math;
 pub(crate) mod platform;
 pub(crate) mod range;
 pub(crate) mod rational;
@@ -93,6 +94,12 @@ pub use list::{
     kata_rt_list_concat, kata_rt_list_cons, kata_rt_list_contains, kata_rt_list_get_checked,
     kata_rt_list_head, kata_rt_list_is_empty, kata_rt_list_len, kata_rt_list_nil,
     kata_rt_list_reverse, kata_rt_list_tail,
+};
+pub use math::{
+    kata_rt_acos, kata_rt_asin, kata_rt_atan, kata_rt_atan2, kata_rt_cbrt, kata_rt_ceil,
+    kata_rt_cos, kata_rt_cosh, kata_rt_exp, kata_rt_floor, kata_rt_gcd, kata_rt_lcm, kata_rt_log,
+    kata_rt_log10, kata_rt_log2, kata_rt_pow, kata_rt_signum, kata_rt_sin, kata_rt_sinh,
+    kata_rt_sqrt, kata_rt_tan, kata_rt_tanh,
 };
 pub use range::kata_rt_range_alloc;
 pub use rational::{
