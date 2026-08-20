@@ -746,5 +746,28 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         SocketClose,
         // Timer
         TimerNow,
+        // Math
+        Sin,
+        Cos,
+        Tan,
+        Asin,
+        Acos,
+        Atan,
+        Atan2,
+        Sinh,
+        Cosh,
+        Tanh,
+        Sqrt,
+        Cbrt,
+        Log,
+        Log2,
+        Log10,
+        Exp,
+        Floor,
+        Ceil,
+        Gcd,
+        Lcm,
+        Pow,
+        Signum,
     ]
 }

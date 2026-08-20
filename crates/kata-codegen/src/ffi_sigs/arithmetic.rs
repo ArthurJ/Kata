@@ -194,6 +194,47 @@ pub(crate) fn sig_for(sym: FfiSymbol) -> Option<Signature> {
             sig.params.push(AbiParam::new(I64)); // needle/b (str ptr)
             sig.returns.push(AbiParam::new(I64)); // bool (0/1)
         }
+        // ── Math: Float → Float (f64) → f64 ──
+        FfiSymbol::Sin
+        | FfiSymbol::Cos
+        | FfiSymbol::Tan
+        | FfiSymbol::Asin
+        | FfiSymbol::Acos
+        | FfiSymbol::Atan
+        | FfiSymbol::Sinh
+        | FfiSymbol::Cosh
+        | FfiSymbol::Tanh
+        | FfiSymbol::Sqrt
+        | FfiSymbol::Cbrt
+        | FfiSymbol::Log
+        | FfiSymbol::Log2
+        | FfiSymbol::Log10
+        | FfiSymbol::Exp => {
+            sig.params.push(AbiParam::new(F64));
+            sig.returns.push(AbiParam::new(F64));
+        }
+        // ── Math: atan2 (f64, f64) → f64 ──
+        FfiSymbol::Atan2 => {
+            sig.params.push(AbiParam::new(F64));
+            sig.params.push(AbiParam::new(F64));
+            sig.returns.push(AbiParam::new(F64));
+        }
+        // ── Math: floor/ceil (f64) → i64 tagged ──
+        FfiSymbol::Floor | FfiSymbol::Ceil => {
+            sig.params.push(AbiParam::new(F64));
+            sig.returns.push(AbiParam::new(I64));
+        }
+        // ── Math: gcd/lcm/pow (i64, i64) → i64 tagged ──
+        FfiSymbol::Gcd | FfiSymbol::Lcm | FfiSymbol::Pow => {
+            sig.params.push(AbiParam::new(I64));
+            sig.params.push(AbiParam::new(I64));
+            sig.returns.push(AbiParam::new(I64));
+        }
+        // ── Math: signum (i64) → i64 tagged ──
+        FfiSymbol::Signum => {
+            sig.params.push(AbiParam::new(I64));
+            sig.returns.push(AbiParam::new(I64));
+        }
         _ => return None,
     }
     Some(sig)
