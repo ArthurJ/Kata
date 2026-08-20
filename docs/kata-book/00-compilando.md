@@ -139,6 +139,29 @@ Alguns notáveis:
 
 Explore à vontade — todo exemplo é executável com `kata run`.
 
+## Syntax highlighting
+
+O repositório inclui um bundle TextMate na raiz para realce de sintaxe em editores:
+
+```
+Kata.tmbundle/
+├── info.plist                  — metadados do bundle
+└── Syntaxes/
+    └── Kata.tmLanguage.json    — gramática TextMate
+```
+
+### VS Code
+
+O VS Code usa o arquivo `.tmLanguage.json` diretamente. Para instalar manualmente, copie `Kata.tmLanguage.json` para a pasta de extensões do VS Code, ou use uma extensão que carregue gramáticas TextMate customizadas.
+
+### JetBrains (IntelliJ, CLion, RustRover, etc.)
+
+IDEs da JetBrains leem o bundle `.tmbundle` inteiro. Importe via *Settings → Editor → TextMate Bundles → +* e selecione a pasta `Kata.tmbundle/` na raiz do projeto. O editor passa a reconhecer arquivos `.kata` com a gramática do bundle.
+
+### LSP
+
+Além do highlighter, o binário `kata` inclui um servidor LSP (`kata lsp`) que fornece diagnósticos, hover de tipos, e autocomplete para editores que suportam Language Server Protocol. Veja o [Capítulo 15](15-repl.md) para mais detalhes sobre a integração com editores.
+
 ## Próximo capítulo
 
 Com o binário compilado e os comandos em mãos, o [Capítulo 1](01-ola-kata.md) mostra seu primeiro programa em Kata.
