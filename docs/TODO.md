@@ -21,6 +21,26 @@ Search paths configuráveis só são necessários para libs externas.
 
 ---
 
+### `filter_exports` não preserva dependências transitivas de funções
+
+**Estado:** Se módulo A exporta `fn1` cujo corpo referencia `fn2` (não
+exportada), e módulo B importa `A.(fn1)`, o `infer_module` falha com
+`unbound_name` para `fn2`. O `filter_exports` remove `fn2` do
+`ResolvedModule` filtrado, mas o corpo de `fn1` referencia `fn2`. O
+`resolved_unfiltered` tem `fn2`, mas `merge_imports` usa o filtrado.
+
+**Impacto:** Médio. Sub-módulos que importam de outros sub-módulos e
+re-exportam funções que dependem de imports internos falham. Workaround:
+exportar todas as funções referenciadas por funções exportadas, ou usar
+funções autocontidas (sem dependências internas).
+
+** Quando surgir caso de uso real:** avaliar se `filter_exports` deve
+preservar o fechamento transitivo das referências de cada função exportada
+(percorrer `TypedFunction` body em busca de `Ident` que resolvem para
+signatures/functions do mesmo módulo).
+
+---
+
 ## Migração de Exemplos
 
 ### `parallel.kata` (Cluster 4)
