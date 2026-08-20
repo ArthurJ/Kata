@@ -4,6 +4,7 @@ use super::ReplSession;
 use crate::display;
 use crate::merge_resolved;
 use kata_ast::{Expr, Item, Module};
+use kata_core::ty::Ty;
 use kata_lexer::lex;
 use kata_parser::{parse_decls_only, parse_with_arity, scan_lambdas};
 use kata_resolution::{extract_arities, resolve};
@@ -182,7 +183,9 @@ impl ReplSession {
 
             match self.run_pipeline_eval(&full_module) {
                 Ok(result) => {
-                    display::print_result(result.raw, &result.ty);
+                    if !matches!(result.ty, Ty::Unit) {
+                        display::print_result(result.raw, &result.ty);
+                    }
                     Ok(())
                 }
                 Err(e) => {

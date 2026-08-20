@@ -305,7 +305,12 @@ impl ReplSession {
                             }
                         }
                     }
-                    display::print_result(result.raw, &result.ty);
+                    // Suprimir Unit — igual a cmd_run. Declaracoes (let,
+                    // constant, Sig, Data, Enum) retornam Unit e não devem
+                    // imprimir `()` no REPL. echo! já produziu seu output.
+                    if !matches!(result.ty, Ty::Unit) {
+                        display::print_result(result.raw, &result.ty);
+                    }
                     // Remove EntryExpr que não são bindings — expressões
                     // puras (ex: `5`, `echo!(5)`, `g 5`) são "avaliar e
                     // esquecer". Apenas `Let`/`LetDestruct` persistem.
