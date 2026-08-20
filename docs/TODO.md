@@ -8,15 +8,18 @@ Os docs `TODO-*.md` foram removidos (obsoletos ou resolvidos). Pendências vivem
 
 ## Débito Técnico
 
-### `import` de módulo inteiro (sem `.(items)`)
+### Search paths configuráveis + import relativo
 
-**Estado:** `import modulo` (sem lista seletiva `.(items)`) falha com
-"módulo não encontrado" tanto no pipeline normal quanto no REPL. O
-`ModuleLoader` não resolve paths com `/` (ex: `examples/modules/mock_math`).
-Import seletivo (`import mod.(fn)`) e import com alias funcionam normalmente.
+**Estado:** Imports são relativos apenas ao diretório do arquivo importador
+(`entry_dir`) + stdlib. Não há como importar de diretórios pai (`import ../math`
+— parser rejeita `..`), nem configurar search paths adicionais via CLI ou env var.
+Import de módulo inteiro (`import mod` sem `.(items)`) **funciona** quando o
+módulo está no search path correto — o diagnóstico anterior de "bug" era erro
+de teste (path composto a partir de diretório errado).
 
-**Impacto:** Usuários precisam sempre usar import seletivo. Não bloqueia
-doctests (workaround: usar `.(items)`).
+**Impacto:** Projetos com estrutura de diretórios não-trivial não podem
+organizar módulos em subdiretórios sem que cada arquivo importador esteja
+no mesmo diretório do importado.
 
 ---
 
