@@ -3342,6 +3342,16 @@ ou Ctrl-D).
 
 ## 27. Reflexão de Funções
 
+**⚠️ Seção desatualizada.** O mecanismo descrito abaixo (sidecar table
+`__kata_fn_meta_table`, FFI `kata_rt_fn_meta_lookup`, dot access `f.name`)
+foi substituído por **variáveis de reflexão** sintetizadas em compile-time
+pelo `desugar_directives` (`_name`, `_arity`, `_types`, `_return_type`,
+`_is_action`). O dot access `f.name` em funções não existe mais no typeck.
+Esta seção será reescrita. Ver `crates/kata-inference/src/desugar_directives/reflection.rs`
+para o mecanismo atual.
+
+---
+
 Kata permite inspecionar metadata de funções e actions em tempo de execução
 ou compilação através de acesso de campo (`.`) sobre valores funcionais. Isto
 é **reflexão estruturada** — não é introspecção arbitrária de runtime, mas
