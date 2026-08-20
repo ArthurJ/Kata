@@ -20,40 +20,15 @@ não-recursivas, constants, types, structs funcionam normalmente.
 **Impacto:** Doctests no kata-book não podem usar recursão. O cap 16
 foi escrito sem exemplos recursivos como workaround.
 
-### `:load` falha com funções (lambda com cláusulas)
+### `import` de módulo inteiro (sem `.(items)`)
 
-**Estado:** `:load` no REPL falha com "erro de parse (Pass 1): token
-inesperado: esperado \`\`:\` após patterns da cláusula, encontrado
-\`<INDENT>\`" quando o arquivo contém funções puras com `lambda` e
-cláusulas indentadas. `parse_repl_decls_only` não parseia corretamente
-a sintaxe `lambda a b\n  + a b` — espera `:` após patterns da cláusula,
-mas encontra `<INDENT>`. `constant` e `@ffi` funcionam; apenas funções
-com `lambda` quebram.
+**Estado:** `import modulo` (sem lista seletiva `.(items)`) falha com
+"módulo não encontrado" tanto no pipeline normal quanto no REPL. O
+`ModuleLoader` não resolve paths com `/` (ex: `examples/modules/mock_math`).
+Import seletivo (`import mod.(fn)`) e import com alias funcionam normalmente.
 
-**Impacto:** Doctests com `>>> :load arquivo.kata` só carregam
-constants e declarações `@ffi`/`Sig`. Não é possível carregar funções
-puras definidas com `lambda` no arquivo.
-
-### `import` no REPL
-
-**Estado:** `import` é keyword da linguagem (declaração top-level), não
-expressão. `eval_expr` no REPL só processa expressões — `>>> import
-foo.(bar)` falha no `handle` porque não é uma expressão válida. Para
-que doctests usem `import`, seria necessário fazer o REPL processar
-`import` como declaração.
-
-**Distinção `:load` vs `import` (design intencional):**
-- `:load` carrega **tudo** do arquivo (declarações + entry point) e
-  executa top-level. Side effects acontecem. Não exige `export`. Útil
-  quando o doctest testa comportamento de um programa em execução.
-- `import` traz **só os símbolos exportados**, sem executar top-level.
-  Sem side effects. Exige `export` no módulo. Útil para testar funções
-  isoladas (testes unitários de biblioteca).
-
-Ambos têm uso legítimo em doctests. Ambos estão quebrados no contexto
-de doctests: `:load` não parseia `lambda`, `import` não é aceito pelo
-REPL. Corrigir os dois dá ao autor do doctest a escolha do mecanismo
-apropriado.
+**Impacto:** Usuários precisam sempre usar import seletivo. Não bloqueia
+doctests (workaround: usar `.(items)`).
 
 ---
 
