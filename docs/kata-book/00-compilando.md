@@ -94,17 +94,22 @@ kata build examples/fatorial.kata --dynamic
 
 ### `kata test` — executar testes
 
-Descorre e executa testes anotados com `@test` em um arquivo ou diretório:
+Descobre e executa testes em um arquivo ou diretório. Há dois tipos:
+
+- **`@test`** — testes anotados com a diretiva `@test` em actions
+- **Doctests** — exemplos executáveis em comentários multilinha `#{ }#` com marcador `>>> `
 
 ```bash
 kata test examples/assertions.kata
 ```
 
-Use `--filter` para rodar apenas testes que contenham uma substring:
+Use `--filter` para rodar apenas testes `@test` que contenham uma substring:
 
 ```bash
 kata test examples/ --filter "fib"
 ```
+
+Doctests sempre rodam (não são afetados por `--filter`). Veja o [Capítulo 16](16-doctests.md) para detalhes sobre doctests.
 
 ### `kata lex` e `kata parse` — inspeção do compilador
 
@@ -117,7 +122,7 @@ kata parse examples/hello.kata
 
 ### `kata lsp` — servidor de linguagem
 
-Inicia o servidor LSP (Language Server Protocol) em stdio. Editores como VS Code e Neovim podem conectar para obter autocomplete, diagnósticos, e hover de tipos. O capítulo sobre plataformas ([Apêndice](16-plataformas-limitacoes.md)) tem mais sobre onde o LSP funciona.
+Inicia o servidor LSP (Language Server Protocol) em stdio. Editores como VS Code e Neovim podem conectar para obter autocomplete, diagnósticos, e hover de tipos. O apêndice sobre plataformas ([Apêndice](17-plataformas-limitacoes.md)) tem mais sobre onde o LSP funciona.
 
 ## Onde encontrar exemplos
 

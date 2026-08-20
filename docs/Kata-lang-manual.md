@@ -3071,21 +3071,21 @@ e `=>` (sem `@ffi`), o modo multiline ativa. Cláusulas `lambda` seguintes
 podem estar no mesmo nível (não-indentadas). Uma linha em branco encerra o bloco.
 
 ```
-kata> fat :: Int Int => Int
+>>> fat :: Int Int => Int
    ... lambda 0 acc: acc
    ... lambda n acc: fat (- n 1) (* n acc)
    ...
-kata> fat 5 1
+>>> fat 5 1
 120
 ```
 
 **2. Action:** Se a primeira linha termina com `=>`, o body indentado segue.
 
 ```
-kata> action ola => Text
+>>> action ola => Text
    ...     "hello"
    ...
-kata> ola!()
+>>> ola!()
 hello
 ```
 
@@ -3095,23 +3095,23 @@ Linhas indentadas (começam com espaço ou tab) são acumuladas. Uma linha
 não-indentada encerra o bloco.
 
 ```
-kata> match = 1 1
+>>> match = 1 1
    ...     True: "igual"
    ...     False: "diferente"
    ...
-kata>
+>>>
 igual
 ```
 
 ```
-kata> enum Cor
+>>> enum Cor
    ...     Vermelho
    ...     Verde
    ...     Azul
    ...
-kata> let c := Cor::Verde
+>>> let c := Cor::Verde
 ()
-kata> :type c
+>>> :type c
 Cor
 ```
 
@@ -3125,9 +3125,9 @@ no REPL. `let` bindings, `data`, `enum`, `Sig`+`lambda`, `implements` entram
 na sessão. Se o arquivo contém `EntryExpr`, executa e mostra o resultado.
 
 ```
-kata> :load examples/fatorial.kata
+>>> :load examples/fatorial.kata
 120
-kata> fat 6 1
+>>> fat 6 1
 720
 ```
 
@@ -3135,9 +3135,9 @@ Se o arquivo só tem declarações (sem `EntryExpr`), os items são adicionados 
 execução:
 
 ```
-kata> :load examples/modules/mock_math.kata
+>>> :load examples/modules/mock_math.kata
 carregado: examples/modules/mock_math.kata
-kata> mock_math.dobrar 21
+>>> mock_math.dobrar 21
 42
 ```
 
@@ -3147,12 +3147,12 @@ Executa o pipeline até `infer_module` e imprime o tipo do entry point sem
 fazer codegen. Útil para inspecionar tipos sem side-effects.
 
 ```
-kata> :type + 1 2
+>>> :type + 1 2
 Int
-kata> :type (1, 2)
+>>> :type (1, 2)
 (Int, Int)
-kata> let f := + 10 _
-kata> :type f
+>>> let f := + 10 _
+>>> :type f
 Int -> Int
 ```
 
@@ -3162,9 +3162,9 @@ Mostra todos os bindings atuais com seus tipos. Roda o pipeline até
 `TypedModule` para obter os tipos inferidos.
 
 ```
-kata> let x := 10
-kata> let y := 20.0
-kata> :env
+>>> let x := 10
+>>> let y := 20.0
+>>> :env
   x: Int
   y: Float
 ```
@@ -3175,14 +3175,14 @@ Limpa todos os bindings do usuário e recarrega o prelude. Equivalente a sair
 e reentrar no REPL.
 
 ```
-kata> let x := 42
-kata> :env
+>>> let x := 42
+>>> :env
   x: Int
-kata> :reset
+>>> :reset
 sessão resetada — prelude recarregado
-kata> :env
+>>> :env
 (nenhum binding)
-kata> + 1 2
+>>> + 1 2
 3
 ```
 
@@ -3193,12 +3193,12 @@ removido da lista (rollback) e o usuário pode corrigir e reintentar. O estado
 anterior é preservado.
 
 ```
-kata> let x := 10
-kata> undefined_name
+>>> let x := 10
+>>> undefined_name
 erro de tipo: UnboundName { name: "undefined_name", ... }
-kata> :env
+>>> :env
   x: Int
-kata> + x 5
+>>> + x 5
 15
 ```
 

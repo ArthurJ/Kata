@@ -14,7 +14,7 @@ kata --version
 kata 0.1.0
 ```
 
-Kata roda em Linux e macOS nativamente. Há um port experimental para Windows — veja o [Apêndice — Plataformas e Limitações](16-plataformas-limitacoes.md) para detalhes.
+Kata roda em Linux e macOS nativamente. Há um port experimental para Windows — veja o [Apêndice — Plataformas e Limitações](17-plataformas-limitacoes.md) para detalhes.
 
 ## Seu primeiro programa
 
@@ -59,11 +59,11 @@ kata repl
 ```
 
 ```
-kata> + 1 2
+>>> + 1 2
 3
-kata> echo!("olá")
+>>> echo!("olá")
 olá
-kata> :quit
+>>> :quit
 ```
 
 O REPL mantém bindings entre linhas e suporta `:type` para inspecionar tipos, `:env` para ver o ambiente, e `:load arquivo.kata` para carregar um módulo.

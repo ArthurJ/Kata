@@ -35,7 +35,7 @@ pub(crate) fn cmd_repl() -> miette::Result<()> {
 
     loop {
         // Lê a primeira linha.
-        let first = match rl.readline("kata> ") {
+        let first = match rl.readline(">>> ") {
             Ok(line) => line,
             Err(ReadlineError::Interrupted | ReadlineError::Eof) => break,
             Err(e) => {

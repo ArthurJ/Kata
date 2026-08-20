@@ -17,11 +17,11 @@ Kata REPL — digite :help para comandos, :quit para sair
 Digite qualquer expressão Kata. O resultado aparece imediatamente:
 
 ```
-kata> + 1 2
+>>> + 1 2
 3
-kata> * 3 4
+>>> * 3 4
 12
-kata> echo!("olá")
+>>> echo!("olá")
 olá
 ```
 
@@ -30,8 +30,8 @@ olá
 Bindings feitos com `let` persistem entre linhas:
 
 ```
-kata> let x := 42
-kata> + x 8
+>>> let x := 42
+>>> + x 8
 50
 ```
 
@@ -42,7 +42,7 @@ O binding `x` fica disponível nas linhas seguintes até você sair ou resetar.
 Sem executar, veja o tipo de uma expressão:
 
 ```
-kata> :type + 1 2
+>>> :type + 1 2
 Int
 ```
 
@@ -53,8 +53,8 @@ Int
 Lista todos os bindings e seus tipos:
 
 ```
-kata> let x := 42
-kata> :env
+>>> let x := 42
+>>> :env
   x: Int
 ```
 
@@ -63,9 +63,9 @@ kata> :env
 Carrega um arquivo `.kata` no ambiente do REPL:
 
 ```
-kata> :load fatorial.kata
+>>> :load fatorial.kata
 carregado: fatorial.kata
-kata> fat 5 1
+>>> fat 5 1
 120
 ```
 
@@ -76,17 +76,17 @@ As funções e constantes do arquivo ficam disponíveis para uso interativo.
 Remove todos os bindings e recarrega o prelude:
 
 ```
-kata> let x := 42
-kata> :reset
+>>> let x := 42
+>>> :reset
 sessão resetada — prelude recarregado
-kata> :env
+>>> :env
 (nenhum binding)
 ```
 
 ## `:help` — comandos disponíveis
 
 ```
-kata> :help
+>>> :help
 comandos:
   :help          mostra esta mensagem
   :type <expr>   mostra o tipo de <expr> sem executar
@@ -98,9 +98,9 @@ comandos:
 
 ## Próximo capítulo
 
-Você completou todos os 15 capítulos do guia principal. Há ainda um apêndice sobre plataformas suportadas e limitações — incluindo o estado do port para Windows:
+O REPL é ótimo para experimentar, mas testes reproduzíveis são essenciais. O próximo capítulo mostra como escrever doctests — exemplos executáveis embutidos em comentários que rodam com `kata test`:
 
-→ [Apêndice — Plataformas e Limitações](16-plataformas-limitacoes.md)
+→ [Capítulo 16 — Doctests](16-doctests.md)
 
 Para aprofundar:
 - `examples/` — exemplos completos de cada feature

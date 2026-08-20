@@ -124,9 +124,9 @@ kata run hello.kata
 
 # REPL
 kata repl
-kata> + 1 2
+>>> + 1 2
 3
-kata> :quit
+>>> :quit
 ```
 
 ### Cap 2 — Sintaxe básica

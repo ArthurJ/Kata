@@ -268,7 +268,7 @@ impl Highlighter for KataHelper {
         prompt: &'p str,
         _default: bool,
     ) -> Cow<'b, str> {
-        // "kata> " em bold green, "   ... " em gray
+        // ">>> " em bold green, "   ... " em gray
         if prompt.ends_with("... ") {
             Owned(format!("{BRIGHT_BLACK}{prompt}{RESET}"))
         } else {

@@ -52,7 +52,7 @@ fn run_repl(inputs: &[&str]) -> String {
 fn result_lines(output: &str) -> Vec<&str> {
     output
         .lines()
-        .filter(|l| !l.starts_with("Kata REPL") && !l.starts_with("kata>"))
+        .filter(|l| !l.starts_with("Kata REPL") && !l.starts_with(">>>"))
         .collect()
 }
 
