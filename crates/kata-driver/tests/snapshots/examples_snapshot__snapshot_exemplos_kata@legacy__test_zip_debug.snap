@@ -13,4 +13,4 @@ Error: type.unbound_name
    ·               ╰── nome não vinculado
  5 │     echo!("Zip funcionou")
    ╰────
-  help: você quis dizer `div`, `map`?
+  help: você quis dizer `div`, `map`, `min`?

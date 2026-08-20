@@ -13,4 +13,4 @@ Error: type.unbound_name
    ·               ╰── nome não vinculado
  4 │     let c := cos 0.0
    ╰────
-  help: você quis dizer `div`, `int`, `len`?
+  help: você quis dizer `min`, `div`, `int`?
