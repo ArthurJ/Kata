@@ -786,7 +786,8 @@ import stdlib.math                            # força stdlib built-in (ignora s
   o mesmo nome. Não repetível. Proibido nomear um módulo como `stdlib`
   (erro de compilação — nome reservado).
 - Sem prefixo — procura no diretório do arquivo importador (`entry_dir`)
-  primeiro, depois nos search paths (inclui stdlib como fallback).
+  primeiro, depois na stdlib (fallback). Search paths configuráveis via
+  CLI (`-I`) ou env var (`KATA_PATH`) não estão implementados — ver TODO.
 
 Cada módulo na cadeia de imports usa seu próprio diretório como `entry_dir`
 para seus imports — `super.` é sempre relativo ao arquivo que faz o import.
@@ -814,8 +815,9 @@ Componentes intermediários (`utilidades/`) são diretórios de namespace —
 a navegação continua sem precisar de `mod.kata`.
 
 **Search paths:** O `ModuleLoader` procura primeiro no diretório do arquivo
-importador (`entry_dir`), depois nos search paths configurados (que incluem
-a stdlib como fallback). Prefixos `super.` e `stdlib.` modificam este
+importador (`entry_dir`), depois na stdlib (fallback). Não há search paths
+configuráveis via CLI — os `search_paths` são `entry_dir` + `stdlib_dir`
+hardcoded no driver. Prefixos `super.` e `stdlib.` modificam este
 comportamento (ver 3.2).
 
 ### 3.5. Prevenção de Ciclos
