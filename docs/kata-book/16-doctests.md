@@ -8,12 +8,14 @@ Dentro de um comentário multilinha `#{ }#`, linhas que começam com `>>> ` são
 
 ```
 #{
-Calcula o fatorial de um número.
+Calcula o dobro de um número.
 
->>> fatorial 5
-120
->>> fatorial 0
-1
+>>> constant n := 5
+>>> + n n
+10
+>>> constant m := 0
+>>> + m m
+0
 }#
 ```
 
@@ -24,9 +26,9 @@ Cada bloco de doctest cria uma sessão REPL fresca. Linhas `>>> ` consecutivas c
 ```
 #{
 >>> constant x := 10
->>> x + 1
+>>> + x 1
 11
->>> x * 2
+>>> * x 2
 20
 }#
 ```
@@ -36,11 +38,11 @@ Uma linha vazia separa blocos. Cada bloco começa sessão nova — bindings não
 ```
 #{
 >>> constant x := 10
->>> x + 1
+>>> + x 1
 11
 
 >>> constant y := 20
->>> y + 1
+>>> + y 1
 21
 }#
 ```
@@ -56,7 +58,7 @@ Linhas antes da primeira `>>> ` dentro do `#{ }#` são documentação livre — 
 A função `soma` recebe dois Int e retorna a soma.
 
 Exemplo:
->>> soma 3 4
+>>> + 3 4
 7
 }#
 ```
@@ -93,21 +95,21 @@ A primeira linha (`constant x := 42`) não tem output esperado. A segunda (`x`) 
 Doctests rodam automaticamente com `kata test`, antes dos testes `@test`:
 
 ```bash
-kata test examples/fatorial.kata
+kata test examples/exemplo.kata
 ```
 
 ```
-  [PASS] fatorial.kata: doctest linha 3
-  [PASS] fatorial.kata: doctest linha 5
+  [PASS] exemplo.kata: doctest linha 2
+  [PASS] exemplo.kata: doctest linha 3
   2 passed, 0 failed, 0 skipped
 ```
 
 Se o output não bater:
 
 ```
-  [FAIL] fatorial.kata: doctest linha 3: output mismatch
-    esperado: 120
-    obtido:   720
+  [FAIL] exemplo.kata: doctest linha 3: output mismatch
+    esperado: 99
+    obtido:   10
   1 passed, 1 failed, 0 skipped
 ```
 
