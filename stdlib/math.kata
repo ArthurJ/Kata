@@ -1,0 +1,90 @@
+# Math — funções matemáticas e constantes.
+# Demonstra FFI para funções de f64 do Rust.
+
+import core
+
+# ── Constantes ──────────────────────────────────────────────────
+
+constant pi := 3.14159265358979323846264338327950288
+constant euler := 2.71828182845904523536028747135266249
+constant phi := 1.61803398874989484820458683436563811
+
+# ── Trigonométricas (Float → Float) ─────────────────────────────
+
+@ffi("kata_rt_sin")
+sin :: Float => Float
+
+@ffi("kata_rt_cos")
+cos :: Float => Float
+
+@ffi("kata_rt_tan")
+tan :: Float => Float
+
+@ffi("kata_rt_asin")
+asin :: Float => Float
+
+@ffi("kata_rt_acos")
+acos :: Float => Float
+
+@ffi("kata_rt_atan")
+atan :: Float => Float
+
+@ffi("kata_rt_atan2")
+atan2 :: Float Float => Float
+
+# ── Hiperbólicas (Float → Float) ────────────────────────────────
+
+@ffi("kata_rt_sinh")
+sinh :: Float => Float
+
+@ffi("kata_rt_cosh")
+cosh :: Float => Float
+
+@ffi("kata_rt_tanh")
+tanh :: Float => Float
+
+# ── Raiz e log (Float → Float) ──────────────────────────────────
+
+@ffi("kata_rt_sqrt")
+sqrt :: Float => Float
+
+@ffi("kata_rt_cbrt")
+cbrt :: Float => Float
+
+@ffi("kata_rt_log")
+log :: Float => Float
+
+@ffi("kata_rt_log2")
+log2 :: Float => Float
+
+@ffi("kata_rt_log10")
+log10 :: Float => Float
+
+@ffi("kata_rt_exp")
+exp :: Float => Float
+
+# ── Floor e ceil (Float → Int) ──────────────────────────────────
+
+@ffi("kata_rt_floor")
+floor :: Float => Int
+
+@ffi("kata_rt_ceil")
+ceil :: Float => Int
+
+# ── Aritmética Int (Int Int → Int) ─────────────────────────────
+
+@ffi("kata_rt_gcd")
+gcd :: Int Int => Int
+
+@ffi("kata_rt_lcm")
+lcm :: Int Int => Int
+
+@ffi("kata_rt_pow")
+pow :: Int Int => Int
+
+@ffi("kata_rt_signum")
+signum :: Int => Int
+
+# ── Exports ─────────────────────────────────────────────────────
+
+export pi euler phi sin cos tan asin acos atan atan2 sinh cosh tanh sqrt cbrt log log2 log10 exp floor ceil gcd lcm pow signum

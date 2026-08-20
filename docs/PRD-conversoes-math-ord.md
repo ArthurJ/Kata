@@ -1,6 +1,6 @@
 # PRD — Conversões Numéricas, Módulo Math, e Separação NUM/ORD
 
-**Status:** 🔄 Em andamento
+**Status:** ✅ Concluído
 **Data:** 2026-08-20
 **Depende de:** FFI framework ✅, InterfaceRegistry ✅, DispatchTable ✅, `constant` ✅
 **Handoff:** `/tmp/kata5-math-handoff.md`
@@ -47,7 +47,7 @@ Três frentes relacionadas que consolidam o sistema numérico de Kata:
 
 **Verificação:** `cargo build` ✅, `cargo test` ✅, testes E2E ✅.
 
-### 2.2. Separação NUM/ORD (NÃO INICIADO)
+### 2.2. Separação NUM/ORD (CONCLUÍDO)
 
 **Problema:** A hierarquia atual é `NUM implements ORD implements EQ`. `Complex implements NUM` — mas complexos não têm ordem total. Módulo (`|z|`) é um preorder, não ordem: `|1+0i| = |0+1i| = 1` mas `1+0i ≠ 0+1i`, violando o contrato de `<=` (que deve ser derivado de `<` e `=`).
 
@@ -90,7 +90,7 @@ Int, Float, Rational já implementam `NUM` (com `+`, `-`, `*`, etc.) e já têm 
 
 **Verificação:** `cargo build` + `cargo test` + `cargo insta test --accept` (snapshots TAST vão mudar).
 
-### 2.3. Módulo math.kata (NÃO INICIADO)
+### 2.3. Módulo math.kata (CONCLUÍDO)
 
 **Escopo aprovado pelo usuário:**
 
@@ -251,12 +251,12 @@ Se o sistema de tipos suporta funções standalone genéricas com constraint (`A
 - `docs/Kata-lang-manual.md`, `docs/maquinaria-interna.md`
 - `docs/kata-book/02-guessing-game.md`, `03-sintaxe-basica.md`, `10-enums-structs.md`
 
-### Pendente (NUM/ORD + math):
-- `stdlib/core.kata` — separar NUM/ORD, adicionar min/max
-- `stdlib/complex.kata` — adicionar `Complex implements EQ`
-- `stdlib/math.kata` — **NOVO**
-- `crates/kata-rt/src/math.rs` ou `float.rs` — **NOVO** (22 funções FFI)
-- `crates/kata-core/src/ffi.rs` — 22 FfiSymbol novos
-- `crates/kata-codegen/src/ffi_registry.rs`, `ffi_sigs/arithmetic.rs` — registro
-- `crates/kata-driver/tests/math_e2e.rs` — **NOVO**
-- `docs/Kata-lang-manual.md` — seção math (solicitar permissão)
+### Concluído (todas as frentes):
+- `stdlib/core.kata` — separar NUM/ORD, adicionar min/max ✅
+- `stdlib/complex.kata` — adicionar `Complex implements EQ` ✅
+- `stdlib/math.kata` — **NOVO** ✅ (constantes, trig, hyper, raiz/log, floor/ceil, int arith, exports)
+- `crates/kata-rt/src/math.rs` — **NOVO** ✅ (22 funções FFI)
+- `crates/kata-core/src/ffi.rs` — 22 FfiSymbol novos ✅
+- `crates/kata-codegen/src/ffi_registry.rs`, `ffi_sigs/arithmetic.rs` — registro ✅
+- `crates/kata-driver/tests/math_e2e.rs` — **NOVO** ✅ (11 testes E2E)
+- `docs/Kata-lang-manual.md` — seção math (pendente — solicitar permissão)
