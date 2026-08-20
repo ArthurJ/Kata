@@ -13,7 +13,7 @@ Port completo e verificado. O binário compila nativamente para ambas as arquite
 Build a partir do código-fonte:
 
 ```bash
-git clone <repo-url> && cd Kata5
+git clone <repo-url> && cd kata
 cargo build --release
 ```
 
