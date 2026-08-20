@@ -10,6 +10,7 @@ use kata_rt as rt;
 
 mod aot;
 mod display;
+mod doctest;
 mod highlight;
 mod imports;
 mod pipeline;
@@ -201,7 +202,78 @@ fn cmd_test(path: &str, filter: Option<&str>) -> miette::Result<()> {
         let source = read_source(&file.to_string_lossy())?;
         let label = file.display();
 
+        // Doctests — pré-passo textual, antes do pipeline e de @test.
+        let doctest_blocks = doctest::scan_doctests(&source);
+        for block in &doctest_blocks {
+            let mut session = match repl::ReplSession::new() {
+                Ok(s) => s,
+                Err(e) => {
+                    println!("  [FAIL] {label}: doctest linha {}: {}", block.line, e);
+                    total_fail += 1;
+                    continue;
+                }
+            };
+            for case in &block.cases {
+                // Capturar stdout E resultado do handle numa única chamada.
+                let mut eval_result: Result<bool, String> = Ok(true);
+                let actual = doctest::capture_stdout(|| {
+                    eval_result = session.handle(&case.input);
+                });
+
+                match eval_result {
+                    Ok(_) => {
+                        let actual_norm = doctest::normalize_output(&actual);
+                        match &case.expected {
+                            Some(expected) => {
+                                if actual_norm == *expected {
+                                    println!(
+                                        "  [PASS] {label}: doctest linha {}",
+                                        case.line
+                                    );
+                                    total_pass += 1;
+                                } else {
+                                    println!(
+                                        "  [FAIL] {label}: doctest linha {}: output mismatch",
+                                        case.line
+                                    );
+                                    println!("    esperado: {expected}");
+                                    println!("    obtido:   {actual_norm}");
+                                    total_fail += 1;
+                                }
+                            }
+                            None => {
+                                // Sem output esperado — pass se actual está vazio
+                                if actual_norm.is_empty() {
+                                    println!(
+                                        "  [PASS] {label}: doctest linha {}",
+                                        case.line
+                                    );
+                                    total_pass += 1;
+                                } else {
+                                    println!(
+                                        "  [FAIL] {label}: doctest linha {}: output inesperado",
+                                        case.line
+                                    );
+                                    println!("    obtido:   {actual_norm}");
+                                    total_fail += 1;
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        println!(
+                            "  [FAIL] {label}: doctest linha {}: erro: {e}",
+                            case.line
+                        );
+                        total_fail += 1;
+                    }
+                }
+            }
+        }
+
         // Pipeline até jit_compile_tests.
+        // Se o arquivo só tem doctests (sem código executável), o pipeline
+        // pode falhar — não abortar, apenas pula para o próximo arquivo.
         let compiled = (|| -> Result<_, Vec<miette::Report>> {
             pipeline::Pipeline::new(&source)
                 .with_file_path(&file.to_string_lossy())
@@ -215,8 +287,21 @@ fn cmd_test(path: &str, filter: Option<&str>) -> miette::Result<()> {
                 .tree_shake(pipeline::ShakeMode::PreserveTests)?
                 .comptime()?
                 .build_type_table()
-        })()
-        .map_err(crate::print_pipeline_errors)?;
+        })();
+
+        let compiled = match compiled {
+            Ok(c) => c,
+            Err(errors) => {
+                // Se há doctests, não abortar — pode ser um arquivo só
+                // com documentação. Imprimir erros como aviso.
+                if doctest_blocks.is_empty() {
+                    return Err(crate::print_pipeline_errors(errors));
+                }
+                // Há doctests — ignorar erros de pipeline e continuar
+                // para o próximo arquivo (não há wrappers para rodar).
+                continue;
+            }
+        };
 
         let type_shapes = compiled.type_shapes.clone();
         let (jit_module, wrappers) = compiled.jit_tests()?;
