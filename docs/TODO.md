@@ -41,6 +41,17 @@ signatures/functions do mesmo módulo).
 
 ---
 
+### `--emit-ir` não implementado
+
+**Estado:** O manual descreve `--emit-ir` em `kata run` e `kata eval` para
+imprimir a CLIF canônica antes da execução. A flag não existe no código
+(`clap` CLI nem a declara). O manual foi mantido descrevendo-a como contrato.
+
+**Impacto:** Baixo. Útil para depuração do codegen. Sem ela, usar
+`eprintln!("{}", ctx.func.display())` no código.
+
+---
+
 ## Migração de Exemplos
 
 ### `parallel.kata` (Cluster 4)

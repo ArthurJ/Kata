@@ -113,15 +113,35 @@ desenvolvimento impraticável.
 
 ### Comentários
 
-Apenas comentários de linha: `#` até o final da linha. Não existem blocos de
-documentação (`///`, `"""doc"""`, `/** */`) na linguagem — se necessário no
-futuro, a decisão de sintaxe pode ser tomada com mais contexto. Adiar é
-seguro porque adicionar doc comments depois é estritamente aditivo.
+Três formas de comentário:
 
 ```kata
-# Isto é um comentário
+# Isto é um comentário de linha — vai até o final da linha
 let x := 42  # comentário ao lado do código
+
+#{
+  Comentário multilinha — tudo entre #{ e }# é ignorado.
+  Pode spanner múltiplas linhas.
+}#
+
+#{
+  Linhas >>> dentro de comentários multilinha são doctests:
+  >>> constant x := 42
+  >>> x
+  42
+  Linhas antes da primeira >>> são texto livre (ignoradas).
+}#
 ```
+
+`#` até o final da linha é o comentário de linha. `#{ ... }#` é o comentário
+multilinha. Dentro de `#{ }#`, linhas iniciadas com `>>> ` são interpretadas
+como doctests — inputs do REPL executados por `kata test` (ver §16 do book).
+`#{ }#` sem `>>> ` é um comentário normal ignorado completamente.
+
+Não existem blocos de documentação (`///`, `"""doc"""`, `/** */`) na linguagem
+— se necessário no futuro, a decisão de sintaxe pode ser tomada com mais
+contexto. Adiar é seguro porque adicionar doc comments depois é estritamente
+aditivo.
 
 ### Identificadores
 
@@ -157,8 +177,10 @@ Floats aceitam notação decimal e científica:
 1.5E-10
 ```
 
-`NaN` não existe na linguagem — o sistema de tipos bloqueia estaticamente
-operações que resultariam em NaN.
+`NaN` e `Infinity` não têm representação visível na linguagem — o runtime
+converte `NaN`/`Infinity` para `0` na exibição (`float_to_text`). A divisão
+`0.0 / 0.0` produz `NaN` em f64 no runtime, mas o programador nunca o vê no
+output.
 
 ### Rational
 
@@ -239,8 +261,7 @@ delimitadores de coleção.
 
 ## 1. Interface de Linha de Comandos (CLI)
 
-O binário `kata` expõe os seguintes comandos para a gestão do ciclo de vida do
-código:
+O binário `kata` expõe os seguintes comandos:
 
 * **`lex <arquivo.kata>`**: Executa a análise léxica e imprime a lista de tokens
   com os respetivos *spans* no terminal. Útil para depuração do lexer.
@@ -258,7 +279,12 @@ código:
   AOT → object file → link → executável.
   ```bash
   kata build examples/test_fatorial.kata
+  kata build examples/test_fatorial.kata --output meu_prog
+  kata build examples/test_fatorial.kata --dynamic
   ```
+  `--output <path>` define o path de saída (default: nome do arquivo sem
+  extensão no cwd). `--dynamic` linka dinamicamente contra `libkata_rt.so`
+  (default: link estático).
 * **`run <arquivo.kata>`**: Compila e executa o código em modo JIT via Cranelift.
   Carrega o prelude, resolve `import` recursivamente, e invoca a função
   `__kata_entry`. Aceita a flag `--emit-ir` para imprimir a CLIF canônica antes
@@ -267,12 +293,14 @@ código:
   kata run examples/test_simple.kata
   kata run --emit-ir examples/test_simple.kata
   ```
-* **`test <arquivo.kata>`**: Invoca o *Test Runner* nativo. Descobre diretivas
+* **`test <path>`**: Invoca o *Test Runner* nativo. `<path>` pode ser um arquivo
+  `.kata` ou um diretório (recursivo em `*.kata`). Descobre diretivas
   `@test("descrição")` e `@test{desc: "...", expects: "CompileError"}`, executa
   cada teste em JIT isolado, e reporta contagem pass/fail/error com exit code
-  apropriado.
+  apropriado. `--filter <substring>` filtra testes pela descrição.
   ```bash
   kata test examples/test_assert.kata
+  kata test tests/ --filter "fatorial"
   ```
 * **`repl`**: Inicia o REPL interativo com `TypeEnv` persistente e histórico
   persistente (`~/.kata_repl_history`). Suporta comandos especiais `:help`,
@@ -289,6 +317,11 @@ código:
   ```bash
   kata eval '+ 1 2'
   kata eval --emit-ir '+ 1 2'
+  ```
+* **`lsp`**: Inicia o servidor LSP (Language Server Protocol) em stdio. Fornece
+  diagnósticos de compilador para editores que suportam LSP.
+  ```bash
+  kata lsp
   ```
 
 ## 2. Pipeline de Compilação
