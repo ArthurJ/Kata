@@ -47,7 +47,7 @@ interface ORD implements EQ
     <= :: Self Self => Boolean
     >= :: Self Self => Boolean
 
-interface NUM implements ORD EQ
+interface NUM implements EQ
     + :: NUM NUM => NUM
     - :: NUM NUM => NUM
     * :: NUM NUM => NUM
@@ -104,12 +104,14 @@ Int implements NUM
     lambda a:
         < a 0: - 0 a
         otherwise: a
+    = :: Int Int => Boolean @ffi("kata_rt_bi_eq") @commutative
+    != :: Int Int => Boolean @ffi("kata_rt_bi_neq") @commutative
+
+Int implements ORD
     < :: Int Int => Boolean @ffi("kata_rt_bi_lt")
     > :: Int Int => Boolean @ffi("kata_rt_bi_gt")
     <= :: Int Int => Boolean @ffi("kata_rt_bi_le")
     >= :: Int Int => Boolean @ffi("kata_rt_bi_ge")
-    = :: Int Int => Boolean @ffi("kata_rt_bi_eq") @commutative
-    != :: Int Int => Boolean @ffi("kata_rt_bi_neq") @commutative
 
 Int implements SHOW
     show :: Int => Text @ffi("kata_rt_bi_show")
@@ -128,12 +130,14 @@ Float implements NUM
     lambda a:
         < a 0.0: - 0.0 a
         otherwise: a
+    = :: Float Float => Boolean @ffi("kata_rt_fcmp_eq") @commutative
+    != :: Float Float => Boolean @ffi("kata_rt_fcmp_neq") @commutative
+
+Float implements ORD
     < :: Float Float => Boolean @ffi("kata_rt_fcmp_lt")
     > :: Float Float => Boolean @ffi("kata_rt_fcmp_gt")
     <= :: Float Float => Boolean @ffi("kata_rt_fcmp_le")
     >= :: Float Float => Boolean @ffi("kata_rt_fcmp_ge")
-    = :: Float Float => Boolean @ffi("kata_rt_fcmp_eq") @commutative
-    != :: Float Float => Boolean @ffi("kata_rt_fcmp_neq") @commutative
 
 Float implements SHOW
     show :: Float => Text @ffi("kata_rt_float_to_text")
@@ -153,12 +157,14 @@ Rational implements NUM
     lambda a:
         < a (rational 0): - (rational 0) a
         otherwise: a
+    = :: Rational Rational => Boolean @ffi("kata_rt_rat_eq") @commutative
+    != :: Rational Rational => Boolean @ffi("kata_rt_rat_neq") @commutative
+
+Rational implements ORD
     < :: Rational Rational => Boolean @ffi("kata_rt_rat_lt")
     > :: Rational Rational => Boolean @ffi("kata_rt_rat_gt")
     <= :: Rational Rational => Boolean @ffi("kata_rt_rat_le")
     >= :: Rational Rational => Boolean @ffi("kata_rt_rat_ge")
-    = :: Rational Rational => Boolean @ffi("kata_rt_rat_eq") @commutative
-    != :: Rational Rational => Boolean @ffi("kata_rt_rat_neq") @commutative
 
 Rational implements SHOW
     show :: Rational => Text @ffi("kata_rt_rat_show")

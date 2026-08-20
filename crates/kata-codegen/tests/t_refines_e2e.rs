@@ -183,7 +183,7 @@ soma!()"#;
 #[test]
 fn t_refines_comparacao_retorna_boolean_direto() {
     let src = r#"data (Int, > _ 0) as PositiveInt
-PositiveInt refines NUM
+PositiveInt refines ORD
 action menor => Boolean
     let a := 5::PositiveInt
     let b := 10::PositiveInt

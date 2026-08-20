@@ -16,6 +16,14 @@ Complex implements NUM
     * :: Complex Complex => Complex
     lambda a b: Complex (- (* a.re b.re) (* a.im b.im)) (+ (* a.re b.im) (* a.im b.re))
 
+Complex implements EQ
+    = :: Complex Complex => Boolean
+    lambda a b: and (= a.re b.re) (= a.im b.im)
+    != :: Complex Complex => Boolean
+    lambda a b:
+        = a b: False
+        otherwise: True
+
 Complex implements SHOW
     show :: Complex => Text
     lambda a: + "(" (+ (show a.re) (+ " + " (+ (show a.im) "i)")))
