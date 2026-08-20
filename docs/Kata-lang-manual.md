@@ -906,29 +906,26 @@ O `DispatchTable` em `kata-core` coleta candidatos por nome, pontua cada par
 (arg, param) por compatibilidade de tipos, e seleciona o de maior score.
 Empate → `AmbiguousDispatch`.
 
-#### Score 3D — Categorias de Match
+#### Score 2D — Categorias de Match
 
-O scoring classifica cada par (arg, param) em uma de três categorias,
+O scoring classifica cada par (arg, param) em uma de duas categorias,
 ordenadas lexicograficamente por prioridade:
 
 | Categoria | Quando | Estado |
 |---|---|---|
 | `exact` | `arg == param` (tipo idêntico) | Ativo |
-| `alias` | arg é alias de param via `alias_of` | Não implementado (sempre 0) |
 | `iface` | arg implementa param (ex: Int implementa NUM) | Ativo |
 
 **Ordenação:** lexicográfica decrescente. Mais `exact` vence; empate em
-`exact` → mais `alias` vence; empate em `alias` → mais `iface`; empate total
-→ concreto vence genérico (`is_generic_origin: false > true`).
+`exact` → mais `iface`; empate total → concreto vence genérico
+(`is_generic_origin: false > true`).
 
-`alias` é sempre 0 na implementação atual — o campo existe na struct `Score`
-mas `match_score` nunca o incrementa. A estrutura e a ordenância lexicográfica
-já estão prontas para quando for populado.
-
-Refined→base **não** é uma dimensão do Score. É resolvido por fallback em
-`apply_dispatch.rs`: quando o dispatch normal falha e algum arg é tipo
-refined com delegação `refines`, o fallback substitui o arg pelo tipo base
-e retenta o dispatch.
+Alias→base e refined→base **não** são dimensões do Score. São resolvidos
+por fallback em `apply_dispatch.rs`: quando o dispatch normal falha e algum
+arg é tipo refined (ou alias de refined) com delegação `refines`, o fallback
+substitui o arg pelo tipo base e retenta o dispatch. Alias puro (sem
+`refines`) é nominalmente distinto do base e não interoperaciona sem
+downcast explícito — por design.
 
 #### Algoritmo de Resolução
 
@@ -953,7 +950,7 @@ O `match_score` itera posição-a-posição. Para cada par `(arg, param)`:
 - `Tuple` vs `SHOW` → `iface++` (Tuple implementa SHOW implicitamente)
 - nenhum → `Score::incompatible()` (descarta candidato)
 
-Se `exact + alias + iface != args.len()`, o candidato é
+Se `exact + iface != args.len()`, o candidato é
 incompatível e descartado.
 
 #### Commutative
@@ -2462,6 +2459,36 @@ de falha (se o base retorna `Result`, o alias também).
 O principal motivo de existência do `alias` é resolver a **Regra de Coerência
 (Orphan Rule)** — permite implementar uma interface externa num tipo externo
 encapsulando-o localmente.
+
+### 12.1. `alias` vs `data` — A Relação
+
+`alias` e `data` (refined) não são mecanismos ortogonais. Ambos produzem
+`Ty::Struct` nominalmente distinto do tipo base, e ambos usam o campo
+`alias_of` no `StructRegistry` para indicar o tipo por baixo. A diferença é
+`predicates`:
+
+| Declaração | `alias_of` | `predicates` | Construtor |
+|---|---|---|---|
+| `alias Float as Altura` | `Some("Float")` | `None` | Infalível (identity) |
+| `data (Int, > _ 0) as PositiveInt` | `Some("Int")` | `Some([...])` | Falível (`Result`) |
+| `alias PositiveInt as Peso` | `Some("PositiveInt")` | `Some([...])` (herda) | Falível (`Result`, herda) |
+
+Alias puro é `data` sem predicados — sem validação na construção, construtor
+infalível, mesmos bits. Alias de refined herda os predicados do target e torna-se
+refined também: o `pass0.rs` copia `predicates` e registra `RefinedDeclInfo`
+para que o inference sintetize o construtor falível.
+
+A cadeia `alias_of` é seguida pelo fallback de `refines` em `apply_dispatch.rs`:
+`Peso` → `alias_of` → `PositiveFloat` → `refines NUM` → `Float`. Por isso
+`Peso (+ a b)` despacha sem downcast, enquanto `Altura + 3.0` falha — `Altura`
+não tem `refines` e é nominalmente distinto de `Float`.
+
+### 12.2. Alias e Interfaces
+
+Alias puro **não herda** implementações de interface do tipo base (Orphan Rule).
+`Altura` não implementa NUM mesmo que `Float` implemente. Para interoperar com
+dispatch de interface, use `refines` (se o alias for de um refined) ou downcast
+explícito (`(a::Float)`).
 
 ## 13. Variantes Predicadas e Valores Fixos em Tipos Soma (`enum`)
 
