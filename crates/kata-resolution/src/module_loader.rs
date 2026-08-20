@@ -12,7 +12,65 @@ use kata_ast::{Item, Module};
 use kata_lexer::lex;
 use kata_parser::parse;
 
-use crate::{ResolvedModule, merge_two, resolve_with_origin};
+use crate::{merge_two, resolve_with_origin, ResolvedModule};
+
+// ── Prefixos de import path ──────────────────────────────
+
+/// Prefixo especial detectado no início de um import path.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum PrefixKind {
+    /// `super` repetido n vezes — `super.X` (n=1), `super.super.X` (n=2)
+    Super(usize),
+    /// `stdlib` — resolve na stdlib built-in
+    Stdlib,
+    /// Sem prefixo — comportamento normal (entry_dir + stdlib fallback)
+    None,
+}
+
+/// Separa o prefixo especial do restante do path.
+///
+/// `["super", "calculus"]` → `(Super(1), ["calculus"])`
+/// `["super", "super", "utils"]` → `(Super(2), ["utils"])`
+/// `["stdlib", "math"]` → `(Stdlib, ["math"])`
+/// `["math", "algebra"]` → `(None, ["math", "algebra"])`
+fn split_import_prefix(path: &[String]) -> (PrefixKind, &[String]) {
+    if path.is_empty() {
+        return (PrefixKind::None, path);
+    }
+
+    if path[0] == "super" {
+        let n = path.iter().take_while(|s| s == &"super").count();
+        return (PrefixKind::Super(n), &path[n..]);
+    }
+
+    if path[0] == "stdlib" {
+        return (PrefixKind::Stdlib, &path[1..]);
+    }
+
+    (PrefixKind::None, path)
+}
+
+/// Constrói um path relativo a partir de componentes normais.
+///
+/// `["math", "algebra"]` → `math/algebra.kata`
+/// `["calculus"]` → `calculus.kata`
+/// `["math", "vectors", "vec2"]` → `math/vectors/vec2.kata`
+///
+/// O último componente vira `component.kata`. Componentes intermediários
+/// são diretórios (namespaces). Se o último componente existe como
+/// diretório com `mod.kata`, o caller deve detectar isso separadamente
+/// — esta função só monta o path do arquivo.
+fn build_relative_path(normal_path: &[String]) -> PathBuf {
+    let mut relative = PathBuf::new();
+    for (i, part) in normal_path.iter().enumerate() {
+        if i + 1 == normal_path.len() {
+            relative.push(format!("{part}.kata"));
+        } else {
+            relative.push(part);
+        }
+    }
+    relative
+}
 
 /// Erro de carregamento de módulo.
 #[derive(Debug, Clone)]
@@ -122,8 +180,8 @@ impl ModuleLoader {
     ///
     /// Retorna o `ResolvedModule` **não-filtrado** (com todos os itens).
     /// O `filter_exports` é aplicado por `load_imports` ao construir `ImportedModule`.
-    pub fn load(&mut self, module_path: &[String]) -> Result<Arc<ResolvedModule>, LoadError> {
-        let resolved_path = self.resolve_path(module_path)?;
+    pub fn load(&mut self, module_path: &[String], entry_dir: &Path) -> Result<Arc<ResolvedModule>, LoadError> {
+        let resolved_path = self.resolve_path(module_path, entry_dir)?;
         let cached = self.load_path(&resolved_path)?;
         Ok(cached.resolved.clone())
     }
@@ -133,11 +191,18 @@ impl ModuleLoader {
     /// Itera sobre `module.items`, encontra cada `Item::ImportDecl`,
     /// carrega o módulo correspondente via `self.load_path()`, filtra por exports,
     /// e retorna a lista de `ImportedModule`.
-    pub fn load_imports(&mut self, module: &Module) -> Result<Vec<ImportedModule>, LoadError> {
+    ///
+    /// `entry_dir` é o diretório do arquivo importador — usado para resolver
+    /// `super.` nos imports deste módulo.
+    pub fn load_imports(
+        &mut self,
+        module: &Module,
+        entry_dir: &Path,
+    ) -> Result<Vec<ImportedModule>, LoadError> {
         let mut imports = Vec::new();
         for item in &module.items {
             if let Item::ImportDecl { path, alias, items } = &item.node {
-                let resolved_path = self.resolve_path(path)?;
+                let resolved_path = self.resolve_path(path, entry_dir)?;
                 let cached = self.load_path(&resolved_path)?;
                 let module_name = path.last().cloned().unwrap_or_default();
 
@@ -156,6 +221,8 @@ impl ModuleLoader {
                     },
                     (None, None) => {
                         // Módulo inteiro — prefixo é o último componente do path.
+                        // Para paths com prefixo super/stdlib, o prefixo visível
+                        // é o último componente normal (não "super"/"stdlib").
                         let prefix = path.last().cloned().unwrap_or_default();
                         ImportKind::WholeModule { prefix }
                     }
@@ -244,27 +311,94 @@ impl ModuleLoader {
 
     /// Resolve um caminho de módulo (ex: `["utilidades", "matematica"]`)
     /// para um path de filesystem: `utilidades/matemática.kata`.
-    fn resolve_path(&self, module_path: &[String]) -> Result<PathBuf, LoadError> {
-        let mut relative = PathBuf::new();
-        for (i, part) in module_path.iter().enumerate() {
-            if i + 1 == module_path.len() {
-                // Último componente: adiciona extensão .kata
-                relative.push(format!("{part}.kata"));
-            } else {
-                relative.push(part);
-            }
+    ///
+    /// Aceita prefixos especiais no path:
+    /// - `["super", ...]` — sobe um nível de `entry_dir` por `super`
+    /// - `["super", "super", ...]` — sobe dois níveis
+    /// - `["stdlib", ...]` — resolve na stdlib built-in
+    /// - `["modulo", ...]` — procura em `entry_dir` primeiro, stdlib como fallback
+    ///
+    /// Detecção de `mod.kata`: se o último componente é um diretório `D`,
+    /// carrega `D/mod.kata`. Se `D` não tem `mod.kata`, é `NotFound`.
+    /// Componentes intermediários que são diretórios são namespaces —
+    /// a navegação continua sem precisar de `mod.kata`.
+    fn resolve_path(
+        &self,
+        module_path: &[String],
+        entry_dir: &Path,
+    ) -> Result<PathBuf, LoadError> {
+        if module_path.is_empty() {
+            return Err(LoadError::NotFound {
+                path: String::new(),
+            });
         }
 
-        for search_path in &self.search_paths {
-            let candidate = search_path.join(&relative);
-            if candidate.exists() {
-                return Ok(candidate);
-            }
+        // Detectar e separar prefixo especial
+        let (prefix_kind, normal_path) = split_import_prefix(module_path);
+
+        if normal_path.is_empty() {
+            return Err(LoadError::NotFound {
+                path: module_path.join("."),
+            });
         }
 
-        Err(LoadError::NotFound {
-            path: module_path.join("."),
-        })
+        match prefix_kind {
+            PrefixKind::Super(n) => {
+                // Subir n níveis de entry_dir
+                let mut base = entry_dir.to_path_buf();
+                for _ in 0..n {
+                    if !base.pop() {
+                        return Err(LoadError::NotFound {
+                            path: module_path.join("."),
+                        });
+                    }
+                }
+                // Procurar SÓ no base resolvido (não fallback stdlib)
+                let relative = build_relative_path(normal_path);
+                let candidate = base.join(&relative);
+                if candidate.exists() {
+                    Ok(candidate)
+                } else {
+                    Err(LoadError::NotFound {
+                        path: module_path.join("."),
+                    })
+                }
+            }
+            PrefixKind::Stdlib => {
+                // Procurar SÓ no stdlib_dir
+                let stdlib_dir = self.stdlib_dir();
+                let relative = build_relative_path(normal_path);
+                let candidate = stdlib_dir.join(&relative);
+                if candidate.exists() {
+                    Ok(candidate)
+                } else {
+                    Err(LoadError::NotFound {
+                        path: module_path.join("."),
+                    })
+                }
+            }
+            PrefixKind::None => {
+                // Comportamento atual: entry_dir primeiro, stdlib fallback
+                let relative = build_relative_path(normal_path);
+                for search_path in &self.search_paths {
+                    let candidate = search_path.join(&relative);
+                    if candidate.exists() {
+                        return Ok(candidate);
+                    }
+                }
+                Err(LoadError::NotFound {
+                    path: module_path.join("."),
+                })
+            }
+        }
+    }
+
+    /// Retorna o diretório da stdlib (hardcoded via CARGO_MANIFEST_DIR).
+    fn stdlib_dir(&self) -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../stdlib")
+            .canonicalize()
+            .unwrap_or_else(|_| Path::new("../../stdlib").to_path_buf())
     }
 
     /// Limpa o cache (útil para testes).
@@ -418,7 +552,7 @@ mod tests {
         create_temp_file(tmp.path(), "simple.kata", "42");
 
         let mut loader = ModuleLoader::new(vec![tmp.path().to_path_buf()]);
-        let resolved = loader.load(&["simple".into()]).unwrap();
+        let resolved = loader.load(&["simple".into()], tmp.path()).unwrap();
 
         // 42 é a entry expr — não há assinaturas do usuário, mas o prelude
         // é injetado, então signatures contém as do prelude (ex: +, -, *).
@@ -435,7 +569,7 @@ mod tests {
         );
 
         let mut loader = ModuleLoader::new(vec![tmp.path().to_path_buf()]);
-        let resolved = loader.load(&["util".into(), "math".into()]).unwrap();
+        let resolved = loader.load(&["util".into(), "math".into()], tmp.path()).unwrap();
         // A assinatura do usuário (+) está entre as signatures (junto com prelude).
         assert!(resolved.signatures.iter().any(|s| s.name == "+"));
     }
@@ -446,8 +580,8 @@ mod tests {
         create_temp_file(tmp.path(), "cached.kata", "42");
 
         let mut loader = ModuleLoader::new(vec![tmp.path().to_path_buf()]);
-        let first = loader.load(&["cached".into()]).unwrap();
-        let second = loader.load(&["cached".into()]).unwrap();
+        let first = loader.load(&["cached".into()], tmp.path()).unwrap();
+        let second = loader.load(&["cached".into()], tmp.path()).unwrap();
         // Arc clones — mesmo ponteiro
         assert!(Arc::ptr_eq(&first, &second));
     }
@@ -456,7 +590,7 @@ mod tests {
     fn not_found_returns_error() {
         let tmp = tempfile::tempdir().unwrap();
         let mut loader = ModuleLoader::new(vec![tmp.path().to_path_buf()]);
-        let err = loader.load(&["nonexistent".into()]).unwrap_err();
+        let err = loader.load(&["nonexistent".into()], tmp.path()).unwrap_err();
         assert!(matches!(err, LoadError::NotFound { .. }));
     }
 
@@ -486,7 +620,7 @@ mod tests {
 
         let mut loader =
             ModuleLoader::new(vec![tmp1.path().to_path_buf(), tmp2.path().to_path_buf()]);
-        let resolved = loader.load(&["found".into()]).unwrap();
+        let resolved = loader.load(&["found".into()], tmp1.path()).unwrap();
         // Prelude injetado — signatures não está vazio.
         assert!(!resolved.signatures.is_empty());
     }
@@ -512,7 +646,7 @@ mod tests {
         let tokens = lex(&source).unwrap();
         let module = parse(tokens).unwrap();
 
-        let imports = loader.load_imports(&module).unwrap();
+        let imports = loader.load_imports(&module, tmp.path()).unwrap();
         // Dois imports (do mesmo módulo — cache retorna Arc igual)
         assert_eq!(imports.len(), 2);
 
@@ -551,7 +685,7 @@ mod tests {
         );
 
         let mut loader = ModuleLoader::new(vec![tmp.path().to_path_buf()]);
-        let resolved = loader.load(&["open".into()]).unwrap();
+        let resolved = loader.load(&["open".into()], tmp.path()).unwrap();
         // Sem export decl → ambas signatures visíveis (junto com prelude).
         assert!(resolved.signatures.iter().any(|s| s.name == "foo"));
         assert!(resolved.signatures.iter().any(|s| s.name == "bar"));
@@ -570,7 +704,7 @@ mod tests {
         let mut loader = ModuleLoader::new(vec![tmp.path().to_path_buf()]);
         // `load` retorna não-filtrado agora. Precisamos chamar filter_exports
         // explicitamente para obter a versão filtrada.
-        let resolved = loader.load(&["filtered".into()]).unwrap();
+        let resolved = loader.load(&["filtered".into()], tmp.path()).unwrap();
         // Re-lex/parse para obter o AST do módulo (filter_exports precisa do Module)
         let source = std::fs::read_to_string(tmp.path().join("filtered.kata")).unwrap();
         let tokens = lex(&source).unwrap();

@@ -223,9 +223,9 @@ pub(crate) fn load_module_imports(
         .canonicalize()
         .unwrap_or_else(|_| Path::new("../../stdlib").to_path_buf());
 
-    let search_paths = vec![entry_dir, stdlib_dir];
+    let search_paths = vec![entry_dir.clone(), stdlib_dir];
     let mut loader = ModuleLoader::new(search_paths);
-    loader.load_imports(module).map_err(|e| {
+    loader.load_imports(module, &entry_dir).map_err(|e| {
         // LoadError carrega tipos estruturados (FrontendError, Vec<ResolveError>).
         // Para source context completo, precisaríamos do source code do
         // módulo importado — o ModuleLoader não o expõe. Por ora, extrai
@@ -263,7 +263,7 @@ pub(crate) fn load_repl_imports(
 
     let search_paths = vec![Path::new(".").to_path_buf(), stdlib_dir];
     let mut loader = ModuleLoader::new(search_paths);
-    loader.load_imports(module).map_err(|e| match e {
+    loader.load_imports(module, Path::new(".")).map_err(|e| match e {
         kata_resolution::LoadError::Lex(inner) | kata_resolution::LoadError::Parse(inner) => {
             inner.into_report_with_source("", None)
         }

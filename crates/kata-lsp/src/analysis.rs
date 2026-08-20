@@ -98,9 +98,9 @@ fn load_module_imports(file: &str, module: &Module) -> Vec<ImportedModule> {
         .canonicalize()
         .unwrap_or_else(|_| Path::new("../../stdlib").to_path_buf());
 
-    let search_paths = vec![entry_dir, stdlib_dir];
+    let search_paths = vec![entry_dir.clone(), stdlib_dir];
     let mut loader = ModuleLoader::new(search_paths);
-    loader.load_imports(module).unwrap_or_default()
+    loader.load_imports(module, &entry_dir).unwrap_or_default()
 }
 
 /// Mergeia imports no `ResolvedModule` (reimplementação de
