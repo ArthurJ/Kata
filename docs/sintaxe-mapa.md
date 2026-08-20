@@ -35,6 +35,29 @@ emite erro léxico (`lex.unterminated_comment`).
 `#` seguido de qualquer caractere que não `{` (incluindo espaço) é comentário
 de linha: `# {` é comentário de linha, não inicia multilinha.
 
+### `>>> ` — Doctests em comentários multilinha
+
+Linhas `>>> ` dentro de `#{ }#` são doctests: inputs do REPL executados por
+`kata test`. O output de cada avaliação é comparado com as linhas seguintes.
+
+```
+#{
+>>> constant x := 42
+>>> x
+42
+}#
+```
+
+- Linhas `>>> ` consecutivas compartilham a mesma sessão REPL (bindings persistem)
+- Linha vazia separa blocos — cada bloco começa sessão fresca
+- Linhas antes da primeira `>>> ` são texto livre (ignoradas)
+- Comentários `#{ }#` sem `>>> ` são ignorados completamente
+- Input multiline (`match`, `enum`): linhas indentadas são continuação do input
+- `>>> ` sem output esperado significa "não produz output" (declarações)
+- Doctests rodam antes de `@test` no `kata test`
+
+PRD: `docs/PRD-doctests.md`. Book: `docs/kata-book/16-doctests.md`.
+
 ---
 
 ## Operadores de Binding
