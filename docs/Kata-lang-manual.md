@@ -3402,3 +3402,114 @@ tagging no codegen (`encode_smi(0) = 1`). A interceptação faz untag
    (`is_reflection_field` retorna `false`).
 8. **Receptor não-funcional** (`42.name`) → erro de compilação
    (`NotIndexable`).
+
+## 28. Módulo Math (`import math`)
+
+O módulo `math` fornece constantes matemáticas e funções de ponto flutuante
+via FFI para os métodos correspondentes de `f64` em Rust. É um módulo opt-in
+— não está no prelude.
+
+**Importação:**
+
+```kata
+import math.(pi, sin, cos, sqrt)   # import seletivo
+import math                        # import do módulo inteiro
+```
+
+### 28.1. Constantes
+
+| Nome | Valor | Descrição |
+|---|---|---|
+| `pi` | 3.14159265... | Razão entre circunferência e diâmetro |
+| `euler` | 2.71828182... | Base do logaritmo natural (`e`) |
+| `phi` | 1.61803398... | Proporção áurea |
+
+As constantes são declaradas com `constant` e avaliadas em compile-time.
+O literal é preservado como texto — convertido para `f64` quando usado como
+`Float`, ou para `Rational` quando anotado com `::Rational`.
+
+### 28.2. Funções Float → Float
+
+**Trigonométricas:**
+
+| Função | Descrição |
+|---|---|
+| `sin :: Float => Float` | Seno |
+| `cos :: Float => Float` | Cosseno |
+| `tan :: Float => Float` | Tangente |
+| `asin :: Float => Float` | Arco-seno |
+| `acos :: Float => Float` | Arco-cosseno |
+| `atan :: Float => Float` | Arco-tangente |
+| `atan2 :: Float Float => Float` | Arco-tangente de `y/x` com quadrante |
+
+**Hiperbólicas:**
+
+| Função | Descrição |
+|---|---|
+| `sinh :: Float => Float` | Seno hiperbólico |
+| `cosh :: Float => Float` | Cosseno hiperbólico |
+| `tanh :: Float => Float` | Tangente hiperbólica |
+
+**Raiz, logaritmo e exponencial:**
+
+| Função | Descrição |
+|---|---|
+| `sqrt :: Float => Float` | Raiz quadrada |
+| `cbrt :: Float => Float` | Raiz cúbica |
+| `log :: Float => Float` | Logaritmo natural |
+| `log2 :: Float => Float` | Logaritmo base 2 |
+| `log10 :: Float => Float` | Logaritmo base 10 |
+| `exp :: Float => Float` | Exponencial (`e^x`) |
+
+### 28.3. Conversão Float → Int
+
+| Função | Descrição |
+|---|---|
+| `floor :: Float => Int` | Arredonda em direção a -∞ |
+| `ceil :: Float => Int` | Arredonda em direção a +∞ |
+
+`floor` e `ceil` diferem de `int :: Float => Int` (que trunca em direção a
+zero): `int (-3.7)` = `-3`, `floor (-3.7)` = `-4`, `ceil (-3.7)` = `-3`.
+
+### 28.4. Aritmática de Inteiros
+
+| Função | Descrição |
+|---|---|
+| `gcd :: Int Int => Int` | Máximo divisor comum (Euclidiana) |
+| `lcm :: Int Int => Int` | Mínimo múltiplo comum |
+| `pow :: Int Int => Int` | Exponenciação (BigInt) |
+| `signum :: Int => Int` | Sinal: -1, 0, ou 1 |
+
+`abs` **não** está em `math` — é método da interface `NUM` no prelude.
+
+### 28.5. Min e max genéricos
+
+`min` e `max` estão no prelude (`core.kata`), não em `math`:
+
+```kata
+echo!(min 3 7)      # 3
+echo!(max 3.5 2.1)  # 3.5
+```
+
+São funções genéricas (`min :: A A => A`) que despacham `<=`/`>=` por tipo
+concreto. Funcionam com qualquer tipo que implementa `ORD` (Int, Float,
+Rational).
+
+### 28.6. Exemplo
+
+```kata
+import math.(pi, sin, cos, sqrt, floor, gcd)
+
+action main => Unit
+    echo!(pi)                    # 3.141592653589793
+    echo!(sin 0.0)               # 0.0
+    echo!(cos 0.0)               # 1.0
+    echo!(sqrt 16.0)             # 4.0
+    echo!(floor 3.7)             # 3
+    echo!(gcd 12 8)              # 4
+
+main!()
+```
+
+**Nota sintática:** Kata usa notação prefixa. `pi / 2.0` (infix) não
+funciona — usar `(/ pi 2.0)` ou `pi |> / _ 2.0`.
