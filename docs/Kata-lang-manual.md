@@ -2097,6 +2097,9 @@ sintáticos no momento da declaração.
   HAMT, não determinística).
 * **Tensores N-Dimensionais (`{T::Int...}`):** Separador de dimensão `;` dentro
   de `{}`. Dimensionalidade processada em compile-time (*Const Generics*).
+  **Não implementado** — `Tensor` não existe no type system nem no codegen.
+  O `;` como separador de dimensão é reconhecido pelo lexer (comentário no
+  token) mas não há código para processá-lo.
 * **Ranges:** `[0..10]` (0 a 9), `[0..=9]` (0 a 9 incluso),
   `[0..2..10]` (0 a 8 com step 2). Geram um descritor `Range` (struct com
   start, step, end) alocado na arena — os limites são materializados na
