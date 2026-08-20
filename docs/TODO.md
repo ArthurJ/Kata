@@ -8,18 +8,16 @@ Os docs `TODO-*.md` foram removidos (obsoletos ou resolvidos). Pendências vivem
 
 ## Débito Técnico
 
-### Search paths configuráveis + import relativo
+### Search paths configuráveis (-I / KATA_PATH)
 
-**Estado:** Imports são relativos apenas ao diretório do arquivo importador
-(`entry_dir`) + stdlib. Não há como importar de diretórios pai (`import ../math`
-— parser rejeita `..`), nem configurar search paths adicionais via CLI ou env var.
-Import de módulo inteiro (`import mod` sem `.(items)`) **funciona** quando o
-módulo está no search path correto — o diagnóstico anterior de "bug" era erro
-de teste (path composto a partir de diretório errado).
+**Estado:** Import relativo via `super.` IMPLEMENTADO (PRD-modulos-super).
+`mod.kata` como ponto de entrada de diretório IMPLEMENTADO. `stdlib.` como
+namespace explícito IMPLEMENTADO. O que falta: search paths configuráveis
+via CLI (`-I`) ou env var (`KATA_PATH`) para libs externas — não suportado,
+Kata5 não tem libs externas por enquanto.
 
-**Impacto:** Projetos com estrutura de diretórios não-trivial não podem
-organizar módulos em subdiretórios sem que cada arquivo importador esteja
-no mesmo diretório do importado.
+**Impacto:** Baixo. `super.` + `mod.kata` cobrem organização intra-projeto.
+Search paths configuráveis só são necessários para libs externas.
 
 ---
 

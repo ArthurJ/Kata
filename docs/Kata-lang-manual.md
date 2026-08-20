@@ -685,7 +685,26 @@ submódulo como se fossem do módulo atual (reexportação).
 import utilidades.matematica                 # import de módulo inteiro
 import utilidades.matematica as mat           # com alias
 import utilidades.(matematica TipoX IFACE)    # import seletivo de itens específicos
+
+# Prefixos especiais (PRD-modulos-super):
+import super.utils                            # sobe um nível do diretório do arquivo importador
+import super.super.root                       # sobe dois níveis
+import stdlib.math                            # força stdlib built-in (ignora shadow local)
 ```
+
+**Prefixos de caminho:**
+
+- `super.` — sobe um nível na árvore de diretórios relativo ao arquivo que
+  faz o import. Repetível (`super.super.X` para subir dois níveis). Só procura
+  no diretório resolvido (sem fallback para stdlib).
+- `stdlib.` — resolve sempre na stdlib built-in, ignorando módulos locais com
+  o mesmo nome. Não repetível. Proibido nomear um módulo como `stdlib`
+  (erro de compilação — nome reservado).
+- Sem prefixo — procura no diretório do arquivo importador (`entry_dir`)
+  primeiro, depois nos search paths (inclui stdlib como fallback).
+
+Cada módulo na cadeia de imports usa seu próprio diretório como `entry_dir`
+para seus imports — `super.` é sempre relativo ao arquivo que faz o import.
 
 ### 3.3. Injeção Automática do Prelude (`core`)
 
@@ -699,9 +718,20 @@ independentemente. O carregamento do prelude é responsabilidade do
 ### 3.4. Resolução de Caminhos (Path Resolution)
 
 A importação de um módulo como `utilidades.matematica` é resolvida substituindo
-os pontos por separadores de sistema. O `ModuleLoader` pesquisa em duas vertentes:
-1.  **Ficheiro Direto**: Procura a existência exata de `utilidades/matematica.kata`.
-2.  **Agregador de Diretório**: Caso falhe, procura `utilidades/matematica/mod.kata`.
+os pontos por separadores de sistema. O `ModuleLoader` procura:
+
+1. **Arquivo direto**: `utilidades/matematica.kata`
+2. **Diretório como módulo**: se `utilidades/matematica/` é um diretório com
+   `mod.kata`, carrega `utilidades/matematica/mod.kata`. Se o diretório não tem
+   `mod.kata`, é erro (não cai para `.kata`).
+
+Componentes intermediários (`utilidades/`) são diretórios de namespace —
+a navegação continua sem precisar de `mod.kata`.
+
+**Search paths:** O `ModuleLoader` procura primeiro no diretório do arquivo
+importador (`entry_dir`), depois nos search paths configurados (que incluem
+a stdlib como fallback). Prefixos `super.` e `stdlib.` modificam este
+comportamento (ver 3.2).
 
 ### 3.5. Prevenção de Ciclos
 

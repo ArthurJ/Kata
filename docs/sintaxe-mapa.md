@@ -974,7 +974,19 @@ lambda n acc: fat_tail $(- n 1) $(* n acc)
 import utilidades.matematica                 # import de módulo inteiro
 import utilidades.matematica as mat           # com alias
 import utilidades.(matematica TipoX IFACE)    # import seletivo de itens específicos (parênteses obrigatórios)
+
+# Prefixos especiais (PRD-modulos-super):
+import super.utils                            # sobe um nível do diretório do arquivo importador
+import super.super.root                       # sobe dois níveis
+import stdlib.math                            # força stdlib built-in (ignora shadow local)
 ```
+
+**Prefixos:**
+- `super.` — sobe um nível na árvore de diretórios relativo ao arquivo que faz o import. Repetível (`super.super.X`). Só resolve no base resolvido (sem fallback stdlib).
+- `stdlib.` — resolve sempre na stdlib built-in, ignorando módulos locais com mesmo nome. Único uso (não repetível). Proibido nomear um módulo como `stdlib` (erro de compilação).
+- Sem prefixo — procura no diretório do arquivo importador (`entry_dir`) primeiro, depois nos search paths (inclui stdlib como fallback).
+
+**`mod.kata`:** Um diretório `D/` pode ser importado como unidade (`import D`) se contiver `mod.kata`. Sem `mod.kata`, `import D` é erro. Submódulos diretos (`import D.sub`) não precisam de `mod.kata`.
 
 ### `export`
 

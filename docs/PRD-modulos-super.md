@@ -1,10 +1,24 @@
 # PRD — Sistema de Módulos Rust-style com `super.` e `stdlib.`
 
 **Data:** 2026-08-20
-**Status:** Rascunho
+**Status:** Implementado (Fases 1-5 completas)
 **Autor:** Arthur + Hermes
 **Depende de:** `kata-parser` (imports), `kata-resolution` (module_loader), `kata-driver` (imports)
 **Não depende de:** AOT, LSP, codegen, `kata-rt`
+
+## Status de implementação
+
+| Fase | Descrição | Status | Commit |
+|---|---|---|---|
+| 1 | Parser: Token::Super + parse_import_decl | ✅ | `98aa7ea` |
+| 2 | resolve_path: 3 modos + mod.kata | ✅ | `9d4e239` |
+| 3 | Recursão de imports + merge_imports em kata-resolution | ✅ | `5a83c88` |
+| 4 | Testes E2E (10 testes) | ✅ | `d536621` |
+| 5 | Documentação (sintaxe-mapa, manual, TODO) | ✅ | — |
+
+**Débito técnico:** `filter_exports` não preserva dependências transitivas
+de funções (fn1 exportada referencia fn2 não-exportada → unbound_name
+no importador). Testes E2E contornam com funções autocontidas.
 
 ## Contexto
 
