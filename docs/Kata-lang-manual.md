@@ -844,7 +844,7 @@ nestas restrições para selecionar a implementação correta no momento do desp
 **Declaração de Interface:**
 
 ```kata
-interface NUM implements ORD EQ
+interface NUM implements EQ
     + :: NUM NUM => NUM
     - :: NUM NUM => NUM
     * :: NUM NUM => NUM
@@ -873,30 +873,30 @@ recai sobre o tipo novo, não sobre os estabelecidos.
 #### 4.1.1. Interfaces Parametrizadas (Genéricas)
 
 Interfaces podem ter **type params** — parâmetros de tipo declarados entre
-parênteses após o nome. A interface `ITERABLE(A)` é o exemplo canônico na stdlib:
+parênteses após o nome. A interface `ITERABLE::A` é o exemplo canônico na stdlib:
 
 ```kata
-interface ITERABLE(A)
-    next :: Self => Optional(A)
+interface ITERABLE::A
+    next :: Self => Optional::A
 ```
 
 O type param `A` representa o tipo do elemento iterado. Ao declarar `impl`, o
 tipo concreto vincula seus próprios type params ao pattern da interface:
 
 ```kata
-List(A) implements ITERABLE(A)
-    next :: List(A) => Optional(A)
+List::A implements ITERABLE::A
+    next :: List::A => Optional::A
 
-Array(A) implements ITERABLE(A)
-    next :: Array(A) => Optional(A)
+Array::A implements ITERABLE::A
+    next :: Array::A => Optional::A
 ```
 
 O motor do typeck registra cada `impl` como um `ImplEntry` contendo:
-- **`type_pattern`** — o tipo concreto com type params resolvidos (ex: `List(A)`)
+- **`type_pattern`** — o tipo concreto com type params resolvidos (ex: `List::A`)
 - **`iface_params`** — os parâmetros da interface instanciados (ex: `A`)
 - **`type_params`** — os nomes dos type params do tipo (ex: `A`)
 
-Quando o dispatch encontra uma call sobre `ITERABLE(A)`, ele unifica o
+Quando o dispatch encontra uma call sobre `ITERABLE::A`, ele unifica o
 `type_pattern` do `ImplEntry` com o tipo concreto do receptor para instanciar o
 impl correto.
 
@@ -921,12 +921,12 @@ corpo dependem da natureza do tipo:
 | Declaração | Construtor | Assinatura | Retorno | Corpo |
 |---|---|---|---|---|
 | `data Pessoa (nome::Text, idade::Int)` | `Pessoa` | `Pessoa :: Text Int => Pessoa` | Direto | `StructAlloc` + `FieldStore` por campo |
-| `data (Int, > _ 0) as PositiveInt` | `PositiveInt` | `PositiveInt :: Int => Result::(PositiveInt, Error)` | Falível | Guard chain com predicados → `Ok`/`Err` |
+| `data (Int, > _ 0) as PositiveInt` | `PositiveInt` | `PositiveInt :: Int => Result::(PositiveInt, Text)` | Falível | Guard chain com predicados → `Ok`/`Err` |
 | `enum IMC` com predicados | `IMC` | `IMC :: Float => IMC` | Direto | Guard chain por variante, primeira que satisfaz vence, variante default é fallback |
 | `enum Result { Ok(T), Err(E) }` | `Ok`, `Err` | `Ok :: T => Result::(T, E)`, `Err :: E => Result::(T, E)` | Direto | Variante como função (não é smart constructor — é função de primeira classe) |
 | `enum Boolean { True, False }` | `True`, `False` | `True :: => Boolean`, `False :: => Boolean` | Direto | Variante unitária como constante |
 | `alias Float as Altura` | `Altura` | `Altura :: Float => Altura` | Direto | Identity: retorna o parâmetro |
-| `alias PositiveInt as PNZ` | `PNZ` | `PNZ :: Int => Result::(PNZ, Error)` | Falível | Delega ao construtor do target |
+| `alias PositiveInt as PNZ` | `PNZ` | `PNZ :: Int => Result::(PNZ, Text)` | Falível | Delega ao construtor do target |
 
 **A linha que distingue:** se há **predicados**, o construtor é sintetizado com
 guard chain. Se não há predicados, é variante como função/constante ou struct
@@ -940,13 +940,13 @@ estrutural é `Int`, mas que carrega um predicado matemático. O compilador
 sintetiza automaticamente:
 
 ```kata
-PositiveInt :: Int => Result::(PositiveInt, Error)
+PositiveInt :: Int => Result::(PositiveInt, Text)
 lambda v:
     > v 0: Ok(v)
     otherwise: Err("predicado > _ 0 falhou em PositiveInt v")
 ```
 
-* **Retorno Falível:** O construtor devolve `Result::(T, Error)`, forçando o
+* **Retorno Falível:** O construtor devolve `Result::(T, Text)`, forçando o
   programador a lidar com a falha lógica — o "atrito sadio".
 * **Corpo com Guards:** O predicado é avaliado via `Guard` encadeado — se passar,
   retorna `Ok(v)`; se falha, retorna `Err(código)`.
@@ -965,7 +965,7 @@ validar!()
 Em funções puras, `?` não existe — use `match` explícito:
 
 ```kata
-extrai :: Result::(PositiveInt, Error) => Int
+extrai :: Result::(PositiveInt, Text) => Int
 lambda r:
     match r
         Result::Ok(v): v
@@ -981,9 +981,8 @@ data Pessoa (nome::Text idade::Int)
 
 Construtor sintetizado infalível — todos os campos são aceitos sem validação.
 Cada argumento mapeia posicionalmente para um campo. O corpo sintetizado é
-`StructAlloc` seguido de `FieldStore` por campo, na ordem inversa (último campo
-primeiro, primeiro campo por último — para que o `let` chain termine com o
-primeiro campo no topo).
+`TypedExprKind::StructConstruct` com valores em ordem de declaração (primeiro
+campo primeiro, último campo por último).
 
 O construtor existe no `TypeEnv` antes do type-check dos corpos. Quando o
 usuário escreve `Pessoa "João" 30`, o typeck despacha para o construtor
@@ -1081,8 +1080,8 @@ apenas o invólucro nominal:
 | Declaração | Tipo base | Construtor sintetizado | Corpo |
 |-----------|-----------|------------------------|-------|
 | `alias Float as Altura` | `Float` (primitivo) | `Altura :: Float => Altura` | Identity: retorna `__x` tipado como `Altura` |
-| `alias PositiveInt as PositiveNonZero` | `PositiveInt` (refined) | `PositiveNonZero :: Int => Result::(PositiveNonZero, Error)` | Delega: `PositiveInt(__x)` |
-| `alias Matrix as MatrizLocal` | `Matrix` (struct) | `MatrizLocal :: Text Int => MatrizLocal` | Delega: `Matrix(__x_1, __x_2)` |
+| `alias PositiveInt as PositiveNonZero` | `PositiveInt` (refined) | `PositiveNonZero :: Int => Result::(PositiveNonZero, Text)` | Delega: `PositiveInt(__x)` |
+| `alias Matrix as MatrizLocal` | `Matrix` (struct) | `MatrizLocal :: Text Int => MatrizLocal` | StructConstruct direto com `MatrizLocal` como struct_name (mesmo layout do target, identidade nominal própria) |
 
 O alias preserva exatamente a mesma semântica de falha do tipo base:
 - Se o target é infalível (primitivo, struct), o alias é infalível (identity ou
@@ -1172,7 +1171,7 @@ O construtor valida em runtime.
 **Falha:** ambos podem falhar com `TypeMismatch`. Ascription additionally
 falha com **refinamento não atendido** — o predicado é avaliado em
 typeck e rejeita o programa antes do codegen. O construtor falível
-devolve `Result::(T, Error)`, forçando o programador a lidar com a
+devolve `Result::(T, Text)`, forçando o programador a lidar com a
 falha via `|` (funções puras) ou `?` (Actions).
 
 ```kata
@@ -1214,40 +1213,42 @@ passar um refined onde a base é esperada, sem recorrer ao construtor falível.
 É complementar ao `refines` (§4.4): `refines` habilita interoperabilidade
 automática via fallback no dispatch; downcast é a forma explícita.
 
-#### 4.2.9. `repr` como implementação automática de SHOW
+#### 4.2.9. `show` como implementação automática de SHOW
 
 Separado dos smart constructors, o typeck sintetiza automaticamente a função
-`repr` para tipos `data` com campos. Esta função é a implementação automática
+`show` para tipos `data` com campos. Esta função é a implementação automática
 de `SHOW`:
 
 ```kata
 data Pessoa (nome::Text idade::Int)
-# typeck sintetiza:
-repr :: Pessoa => Text
+# typeck sintetiza (registrada como __kata_show__Pessoa no DispatchTable):
+show :: Pessoa => Text
 lambda x:
-    + "Pessoa(" (+ (+ (repr x.nome) ", ") (+ (repr x.idade) ")"))
+    + "Pessoa(" (+ (+ (show x.nome) ", ") (+ (show x.idade) ")"))
 ```
 
-A síntese de `repr` é por tipo de campo:
+A síntese de `show` é por tipo de campo:
 - `Text`: identity (pass-through)
-- `Int`: `kata_rt_int_to_text` via FFI
-- `Boolean`: `kata_rt_bool_to_text` via FFI
-- `Struct` aninhado: `repr` recursivo (chamada a `repr` do campo)
-- Outros (`Float`, `Sum`, `List`, `Array`, `Function`): `kata_rt_repr_to_text`
-  via FFI (delega para `pretty_print` do runtime, que caminha o `TypeShape`).
+- `Int`: `kata_rt_bi_show` via FFI
+- `Float`: `kata_rt_float_to_text` via FFI
+- `Boolean` (Sum): chama `__kata_show__Boolean` (show sintetizado para o enum)
+- `Struct`/`Sum` aninhado: `show` recursivo (chamada a `__kata_show__{Type}`)
+- `List`: `__kata_show__List` (genérico, instanciado pelo monomorphizador)
+- Outros: fallback `kata_rt_int_to_text` via FFI
 
-`repr` é parte do contrato `SHOW`, não do smart constructor. Um tipo pode ter
-smart constructor sem `repr` (se não implementa `SHOW`), e pode ter `repr` sem
-smart constructor (se o usuário define `show` manualmente).
+`show` é parte do contrato `SHOW`, não do smart constructor. Um tipo pode ter
+smart constructor sem `show` (se não implementa `SHOW`), e pode ter `show` sem
+smart constructor (se o usuário define `show` manualmente). A função `repr` é
+um interceptador explícito do usuário (`repr x`), não a função sintetizada.
 
 **SHOW universal (post-refines):** A síntese de `show` é estendida para cobrir
 **todos** os tipos, sem exceção:
 
-- Structs com campos → `repr` sintetizado (caso existente).
+- Structs com campos → `show` sintetizado (caso existente).
 - Enums → sintetizado.
 - Refined (struct sem campos com `alias_of` e `predicates`) → sintetiza
   `show :: Refined => Text` chamando o show do tipo base (FFI direto, ex:
-  `kata_rt_int_show` para base Int).
+  `kata_rt_bi_show` para base Int).
 - Struct sem campos não-refined → sintetiza `show :: Struct => Text` com
   body `TextLit("StructName")` (representação trivial).
 - Primitives (Int, Float, Text, Boolean, Rational) → `implements SHOW`
@@ -1321,7 +1322,8 @@ no `InterfaceRegistry` e não cria overloads no `DispatchTable`.
 - `refines` só se aplica a tipos refined (`StructInfo` com `alias_of` e
   `predicates`). Aplicar a struct não-refined ou alias puro → erro compile-time.
 - A interface deve já estar implementada pelo tipo base no `InterfaceRegistry`.
-  Se o base não implementa → erro compile-time.
+  Se o base não implementa → warning em resolution (validação final adiada
+  para `infer_module`).
 - O tipo base é resolvido seguindo `alias_of` no `StructRegistry`.
 - `refines` não aceita `type_params` ou `iface_params` — refined types não são
   genéricos em 1.0.
@@ -1331,33 +1333,25 @@ no `InterfaceRegistry` e não cria overloads no `DispatchTable`.
 #### 4.4.3. Fallback no Dispatch
 
 `refines` não cria overloads no `DispatchTable`. O mecanismo é um fallback
-em `apply.rs`, executado quando o dispatch normal falha:
+em `apply_dispatch.rs` (`try_refines_fallback`), executado quando o dispatch
+normal falha:
 
-1. Verificar se **todos** os args refined são o **mesmo** tipo refined.
-2. Consultar `refines_registry` para o tipo.
-3. Verificar se `func_name` é método de alguma interface que o refined delega
-   (percorrendo supertraits recursivamente).
-4. Substituir todos os args refined pelo tipo base.
-5. Retentar dispatch com os tipos base.
-6. Se encontrado, examinar o tipo de retorno:
-   - Se o retorno **implementa a interface** → passar pelo construtor falível
-     do refined → `Result::(Refined, Err)`.
-   - Se o retorno **não implementa a interface** → retornar direto, sem
-     construtor.
+1. Para cada arg, se é refined e tem `refines` declarado, substituir pelo
+   tipo base (individualmente — cada arg é tratado de forma independente).
+2. Retentar dispatch com os tipos base.
 
-O construtor é chamado **só** quando o tipo de retorno implementa a interface
-sendo refinada. `PositiveInt refines NUM` (base Int, interface NUM):
+Se o dispatch com tipos base encontra uma overload, retorna o resultado com
+o tipo do base diretamente (ex: `Int`). **Não há wrapping automático em
+construtor falível** — o usuário precisa fazer `PositiveInt (+ a b)` se quiser
+`Result::(PositiveInt, Text)`.
 
-| Método | Fallback | Retorno | Implementa NUM? | Resultado |
-|---|---|---|---|---|
-| `+` | `+ :: Int Int => Int` | Int | Sim | `PositiveInt(resultado)` → `Result::(PositiveInt, Err)` |
-| `-` | `- :: Int Int => Int` | Int | Sim | `PositiveInt(resultado)` → `Result::(PositiveInt, Err)` |
-| `<` | `< :: Int Int => Boolean` | Boolean | Não | `Boolean` direto |
-| `=` | `= :: Int Int => Boolean` | Boolean | Não | `Boolean` direto |
+Exemplo: `+ a b` onde `a :: PositiveInt, b :: PositiveInt` com
+`PositiveInt refines NUM`:
+- Fallback substitui ambos por `Int` → encontra `+ :: Int Int => Int`
+- Retorna `Int` diretamente (não `Result::(PositiveInt, Text)`)
 
-O construtor falível avalia os predicados (`> _ 0`). Se o resultado viola o
-predicado (ex: `- 1 5` = -4 para PositiveInt), o construtor retorna `Err`.
-O usuário desempacota com `?` (Action) ou `match` explícito (função pura).
+Para obter `PositiveInt` como resultado, o usuário envolve explicitamente:
+`PositiveInt (+ a b)` → `Result::(PositiveInt, Text)`.
 
 #### 4.4.4. Caso Misto (Partial Delegation)
 
@@ -1394,18 +1388,18 @@ Sem `refines`, PositiveInt **não interoperar** com Int. `+ a 0` onde
 Com `PositiveInt refines NUM`, o fallback passa a existir:
 
 - `+ a b` onde `a :: PositiveInt, b :: Int`: fallback substitui PositiveInt
-  por Int → `+ :: Int Int => Int` → encontrado. Retorno Int implementa NUM →
-  construtor → `Result::(PositiveInt, Err)`.
+  por Int → `+ :: Int Int => Int` → encontrado. Retorna `Int` diretamente.
 - `+ a b` onde `a :: PositiveInt, b :: Float`: fallback substitui →
   `+ :: Int Float => ...` → não existe → falha.
 
 A interoperabilidade é **opt-in** — o usuário declara intenção explicitamente.
 
-#### 4.4.6. Incompatibilidade Nominal Entre Refineds Distintos
+#### 4.4.6. Refineds Distintos com Mesma Base
 
 Dois tipos refined sobre a mesma base, mesmo com os mesmos predicados, são
-**nominalmente incompatíveis**. O fallback só dispara quando **todos** os args
-refined são o **mesmo** tipo.
+nominalmente distintos. O fallback trata cada arg independentemente — se
+ambos têm `refines`, ambos são substituídos pelo seu base (que é o mesmo
+`Int`), e o dispatch prossegue.
 
 ```kata
 data (Int, > _ 0) as PositiveInt
@@ -1415,9 +1409,10 @@ PositiveInt refines NUM
 NonZeroInt refines NUM
 ```
 
-`+ a b` onde `a :: PositiveInt` e `b :: NonZeroInt` → **falha**. Os refineds
-são diferentes. O fallback não dispara. Para combinar refineds distintos, o
-usuário faz downcast explícito: `+ (a::Int) b` ou `+ a (b::Int)`.
+`+ a b` onde `a :: PositiveInt` e `b :: NonZeroInt` → fallback substitui
+ambos por `Int` (cada um independentemente) → encontra `+ :: Int Int => Int`
+→ retorna `Int`. O resultado não é PositiveInt nem NonZeroInt — é `Int`.
+Para obter um refined como resultado, envolver explicitamente no construtor.
 
 #### 4.4.7. Relação com `implements`
 
@@ -1445,7 +1440,7 @@ tipos de retorno, tipos de campos, ascriptions.
 `PositiveInt?` ≡ `Result::(PositiveInt)`. `Int?` ≡ `Result::(Int)`.
 
 O tipo `Err` do `Result` tem um **default type param** declarado no prelude:
-`Err(E=Text)`. Quando `Result` é instanciado com apenas 1 arg (como acontece
+`Err(E|Text)`. Quando `Result` é instanciado com apenas 1 arg (como acontece
 com `T?`), o default preenche `E=Text` automaticamente. Assim, o tipo final
 efetivo é `Result::(T, Text)` — `Text` é o default, não hardcoded no açúcar.
 
@@ -1455,12 +1450,12 @@ lambda a b: PositiveInt (+ a b)
 ```
 
 Isso é apenas açúcar — o typeck resolve `PositiveInt?` para
-`Result::(PositiveInt)` (1 arg), e o default `Err(E=Text)` do prelude
+`Result::(PositiveInt)` (1 arg), e o default `Err(E|Text)` do prelude
 preenche `E=Text` antes de qualquer verificação.
 
 #### 4.5.1. Default Type Params
 
-A sintaxe `Err(E=Text)` no prelude declara que o type param `E` tem default
+A sintaxe `Err(E|Text)` no prelude declara que o type param `E` tem default
 `Text`. Isto é **geral para qualquer enum com defaults**, não específico de
 `Result`. O usuário pode declarar defaults em seus próprios enums:
 
@@ -2115,10 +2110,10 @@ sintáticos no momento da declaração.
 As coleções implementam interfaces parametrizadas que definem contratos
 uniformes para operações comuns:
 
-**`ITERABLE(A)`** — Iteração:
+**`ITERABLE::A`** — Iteração:
 ```kata
-interface ITERABLE(A)
-    next :: Self => Optional(A)
+interface ITERABLE::A
+    next :: Self => Optional::A
 ```
 
 **`COUNTABLE`** — Tamanho:
@@ -2127,15 +2122,15 @@ interface COUNTABLE
     len :: Self => Int
 ```
 
-**`INDEXABLE(A)`** — Acesso posicional:
+**`INDEXABLE::A`** — Acesso posicional:
 ```kata
-interface INDEXABLE(A)
+interface INDEXABLE::A
     at :: Self Int => Result::(A, Err)
 ```
 
-**`CONTAINS(A)`** — Pertinência:
+**`CONTAINS::A`** — Pertinência:
 ```kata
-interface CONTAINS(A)
+interface CONTAINS::A
     contains :: Self A => Boolean
 ```
 
@@ -2155,8 +2150,8 @@ Implementações na stdlib:
 
 | Tipo | ITERABLE | COUNTABLE | INDEXABLE | CONTAINS | HASHABLE |
 |---|---|---|---|---|---|
-| `Array(A)` | ✅ | ✅ (`kata_rt_array_len`) | ✅ (`kata_rt_array_get_checked`) | ✅ | — |
-| `List(A)` | ✅ | ✅ (traversal stdlib) | ✅ (traversal stdlib) | ✅ | — |
+| `Array::A` | ✅ | ✅ (`kata_rt_array_len`) | ✅ (`kata_rt_array_get_checked`) | ✅ | — |
+| `List::A` | ✅ | ✅ (traversal stdlib) | ✅ (traversal stdlib) | ✅ | — |
 | `Text` | ✅ | ✅ (`kata_rt_string_len`) | ✅ (`kata_rt_string_get_checked`) | ✅ | ✅ |
 | `Range` | ✅ | ✅ (compile-time) | — | — | — |
 | `Dict::(K, V)` | ✅ | ✅ (`kata_rt_dict_len`) | ✅ (`kata_rt_dict_get_checked`, chave) | ✅ (`kata_rt_dict_contains`) | K deve implementar |
@@ -2435,7 +2430,7 @@ let lst := [1 2 3]
 lst.1 ?        # desugar → (at lst 1) ?   → Int (List implementa INDEXABLE, O(n) traversal)
 ```
 
-Para coleções, `.N` é **syntactic sugar para `at`** (interface `INDEXABLE(A)`).
+Para coleções, `.N` é **syntactic sugar para `at`** (interface `INDEXABLE::A`).
 O typeck faz o desugar baseado no tipo do receptor: se implementa `INDEXABLE`,
 `.N` vira `at obj N`, retornando `Result::(A, Err>`. O programador usa `?` ou
 `|` para desempacotar — mesma friction de qualquer operação com risco de
@@ -2452,7 +2447,7 @@ resolvido em runtime (`at` recebe o índice negativo e o runtime ajusta).
 | Receptor | Tipo de retorno | Mecanismo |
 |---|---|---|
 | `Tuple([T])` | `T_N` direto | `IndexAccess` — compile-time bounds check |
-| Tipo implementa `INDEXABLE(A)` | `Result::(A, Err>` | Desugar para `at obj N` |
+| Tipo implementa `INDEXABLE::A` | `Result::(A, Err>` | Desugar para `at obj N` |
 | Outro | — | `NotIndexable` error |
 
 **Por que Tuple é direto e coleções são Result:**
@@ -2930,7 +2925,7 @@ O mesmo princípio aplica-se ao acesso posicional (ver §14.3):
 * **Tupla `.N` (Exato):** O typeck conhece o tamanho estaticamente. Bounds
   check em compile-time. Retorno direto — `t.0` é `Int`, não `Result`.
 * **Coleção `.N` / `at` (Dinâmico):** O tamanho é runtime. `.N` em coleções é
-  syntactic sugar para `at` (interface `INDEXABLE(A)`), que retorna
+  syntactic sugar para `at` (interface `INDEXABLE::A`), que retorna
   `Result::(A, Err)`. O programador usa `?` (em Actions) ou `match` explícito
   para desempacotar.
 
