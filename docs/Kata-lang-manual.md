@@ -900,6 +900,82 @@ Quando o dispatch encontra uma call sobre `ITERABLE::A`, ele unifica o
 `type_pattern` do `ImplEntry` com o tipo concreto do receptor para instanciar o
 impl correto.
 
+### 4.1.2. DispatchTable — Despacho Múltiplo por Dominância
+
+O despacho de funções é feito por uma tabela de overloads indexada por nome.
+O `DispatchTable` em `kata-core` coleta candidatos por nome, pontua cada par
+(arg, param) por compatibilidade de tipos, e seleciona o de maior score.
+Empate → `AmbiguousDispatch`.
+
+#### Score 4D — Categorias de Match
+
+O scoring classifica cada par (arg, param) em uma de quatro categorias,
+ordenadas lexicograficamente por prioridade:
+
+| Categoria | Quando | Estado |
+|---|---|---|
+| `exact` | `arg == param` (tipo idêntico) | Ativo desde Fio 1 |
+| `alias` | arg é alias de param via `alias_of` | Reservado (sempre 0) |
+| `refined` | arg é subtipo refinado de param | Reservado (sempre 0) |
+| `iface` | arg implementa param (ex: Int implementa NUM) | Ativo |
+
+**Ordenação:** lexicográfica decrescente. Mais `exact` vence; empate em
+`exact` → mais `alias` vence; empate em `alias` → mais `refined`; empate em
+`refined` → mais `iface`; empate total → concreto vence genérico
+(`is_generic_origin: false > true`).
+
+`alias` e `refined` são sempre 0 na implementação atual — a estrutura do
+`Score` e a ordenação lexicográfica já estão prontas, mas as dimensões ainda
+não são populadas. Adicionar uma dimensão nova é preencher um campo que já
+existe, não mudar o algoritmo.
+
+#### Algoritmo de Resolução
+
+```
+resolve(name, args):
+    1. FILTRAR: para cada overload com mesma arity:
+       score = match_score(args, params)
+       se score.is_compatible(args.len()):
+           adiciona candidato (overload, score)
+    2. COMMUTATIVE: se 0 candidatos e @commutative e arity == 2:
+       tenta args invertidos (uma única vez)
+    3. ORDENAR: lexicográfico decrescente por Score
+    4. TOPO ÚNICO → Ok(info)
+    5. EMPATE → AmbiguousDispatch
+```
+
+O `match_score` itera posição-a-posição. Para cada par `(arg, param)`:
+- `arg == param` → `exact++`
+- param é interface e arg implementa → `iface++`
+- arg é `OverloadSet` e param é `Action` → verifica compatibilidade de
+  assinatura (algum overload do set casa com a assinatura esperada) → `iface++`
+- `Tuple` vs `SHOW` → `iface++` (Tuple implementa SHOW implicitamente)
+- nenhum → `Score::incompatible()` (descarta candidato)
+
+Se `exact + alias + refined + iface != args.len()`, o candidato é
+incompatível e descartado.
+
+#### Commutative
+
+Funções marcadas com `@commutative` (ex: `=`, `+`) têm um short-circuit: se
+nenhum candidato compatível é encontrado com os args originais e a função é
+comutativa com arity 2, o dispatcher tenta args invertidos. Isto resolve
+casos como `Float == Int` quando só existe overload `Int == Float`. O
+`DispatchOutcome` carrega flag `swapped: true` para que o typeck reordene os
+`typed_args` no codegen.
+
+#### Ret-directed Dispatch
+
+Quando uma ascription anota uma aplicação de função (ex: `(/ 1 3)::Int`), o
+tipo anotado propaga como `hint` para o `DispatchTable`. O dispatcher filtra
+overloads cujo retorno é compatível com o hint **antes** do scoring por args.
+Isto desambigua sobrecargas que têm os mesmos tipos de argumento mas retornos
+diferentes — sem o hint, `(/ 1 3)::Int` poderia despachar pela primeira
+overload de `/` com args `[Int, Int]` em vez da que retorna `Int`.
+
+O hint é `Option<&Ty>` — `None` quando não há ascription. O hint não força o
+retorno — apenas filtra. Se nenhuma overload retorna o tipo esperado, é erro.
+
 ### 4.2. Construtores Universais de Tipo (Smart Constructors)
 
 A Kata-Lang adota um princípio unificador: **todo nome de tipo (`CamelCase`) é
@@ -1213,7 +1289,38 @@ passar um refined onde a base é esperada, sem recorrer ao construtor falível.
 É complementar ao `refines` (§4.4): `refines` habilita interoperabilidade
 automática via fallback no dispatch; downcast é a forma explícita.
 
-#### 4.2.9. `show` como implementação automática de SHOW
+#### 4.2.9. Ascription como Barreira de Hint (Grouped)
+
+A ascription não é apenas uma anotação pós-inferência — ela participa
+ativamente do dispatch através da propagação de **hint de retorno**. Quando
+o typeck infere `expr::Type`, o `Type` anotado é passado como `hint` para
+`infer_expr_hinted`, que o propaga para `infer_apply` e daí para o
+`DispatchTable` (ver §4.1.2 — Ret-directed Dispatch).
+
+**Grouped barrier:** parênteses extras bloqueiam a propagação do hint. Um
+nível de `Grouping` é transparente (strip) — o hint atravessa. Dois ou mais
+níveis de `Grouping` são barreira: o mais interno avalia **sem hint**, e o
+externo valida o resultado contra o tipo alvo:
+
+```kata
+(/ 1 3)::Rational     # erro — hint Rational, nenhuma overload de / retorna Rational
+((/ 1 3))::Rational   # 1/3 — Grouped interno avalia sem hint → Int 0, depois rebaixa
+```
+
+No primeiro caso, o hint `Rational` filtra overloads de `/` antes do scoring.
+Nenhuma overload de `/` com args `[Int, Int]` retorna `Rational` → erro.
+
+No segundo, o `Grouped` duplo força avaliação sem hint: `/ 1 3` despacha
+pela overload padrão (`idiv`, retorna `Int 0`). Depois o externo tenta
+rebaixar `Int 0` para `Rational` — como é literal, o rebaixamento compile-time
+produz `Rational "1/3"` a partir do texto bruto.
+
+Se o resultado do barrier não é literal e o tipo não bate com o alvo, é
+`TypeMismatch` — o Kata5 não faz conversão implícita via dispatch após o
+barrier. Para converter um valor não-literal, use a função de conversão
+explícita (`rational expr`, `float expr`).
+
+#### 4.2.10. `show` como implementação automática de SHOW
 
 Separado dos smart constructors, o typeck sintetiza automaticamente a função
 `show` para tipos `data` com campos. Esta função é a implementação automática
@@ -1260,7 +1367,7 @@ sem `refines SHOW` e sem declaração do usuário. O `show_synthesis.rs`
 verifica `has_manual_show` antes de sintetizar — implementação manual tem
 prioridade.
 
-#### 4.2.10. O Princípio Nominal-Estrutural ("Atrito Sadio")
+#### 4.2.11. O Princípio Nominal-Estrutural ("Atrito Sadio")
 
 * **Nas Fronteiras das Funções (Rigidez Nominal):** Se uma função espera
   `IdadeValida`, rejeita `Int` puro ou outro tipo refinado com os mesmos
@@ -3087,6 +3194,29 @@ O binário final encapsula código de máquina (Cranelift) acoplado ao runtime
   Refcount não-atomic (single-threaded).
 * **`spawn!` multiprocess:** Fork de processo OS com IPC. Isolamento total
   para CPU-bound pesado. Valores são serializados por marshalling (by-value).
+
+### 24.1. Type Table — Reflexão Estrutural
+
+O runtime mantém uma type table para reflexão estrutural: dado um `type_id`
+(u32), obter o `TypeShape` que descreve o layout do valor. Isto é usado
+internamente para `decref` (walk type-directed em ARC pointers) e pretty
+printing.
+
+**Implementação:** A type table é um `Vec<TypeShape>` no `Runtime` struct,
+indexada por `type_id`. O driver (Rust) chama
+`register_type_table(rt, types)` diretamente antes da execução — **não
+através da fronteira C-ABI**. O motivo: `TypeShape` contém `Box`, `String` e
+`Vec`, que não têm layout C-ABI estável. Serializar através de FFI exigiria
+formato binário + struct espelho C-compatible — mais trabalho e mais frágil.
+O código JIT não precisa registrar tipos; a table já está no runtime.
+
+**`type_id`** é atribuído em compile-time para cada `Ty` distinto no módulo.
+É estrutural: mesmo `Ty` (por `Hash + Eq`) = mesmo `type_id`, independente de
+arena/ARC. `Tuple(Int, Float)` na arena e como ARC compartilham ID.
+
+**`TypeShape`** é a projeção runtime de `Ty` — descarta `InferVar`/`Generic`/
+`Interface` (mapeados para `Unit`/`User` graceful). `assign_type_ids` roda
+após escape analysis e antes de tree shaking.
 
 ## 25. Diagnostics
 
