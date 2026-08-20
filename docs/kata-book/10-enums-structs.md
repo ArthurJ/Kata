@@ -214,4 +214,4 @@ Use `?` quando quer propagar o erro para quem chamou. Use `|` quando quer um val
 
 ## Próximo capítulo
 
-Tipos de dados são o lado puro. O último capítulo entra no mundo da concorrência — `fork!`, canais, `select`, e comunicação entre fibers.
+Tipos de dados são o lado puro. O próximo capítulo entra no mundo da concorrência — `fork!`, canais, `select`, e comunicação entre fibers. → [Capítulo 11](11-actions-avancadas.md)

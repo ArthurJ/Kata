@@ -107,4 +107,4 @@ hello world
 
 ## Próximo capítulo
 
-Agora que você sabe escrever expressões, o próximo capítulo mostra como dar nomes a valores com bindings e explorar os tipos primitivos da linguagem.
+Agora que você sabe escrever expressões, o próximo capítulo mostra como dar nomes a valores com bindings e explorar os tipos primitivos da linguagem. → [Capítulo 4](04-bindings-tipos.md)

@@ -156,4 +156,4 @@ Com `Float`, o mesmo cálculo poderia dar `314.00000000000006`. `Rational` prese
 
 ## Próximo capítulo
 
-Agora que você sabe dar nomes a valores, o próximo capítulo mostra como definir funções com assinaturas, múltiplas cláusulas, e recursão.
+Agora que você sabe dar nomes a valores, o próximo capítulo mostra como definir funções com assinaturas, múltiplas cláusulas, e recursão. → [Capítulo 5](05-funcoes.md)

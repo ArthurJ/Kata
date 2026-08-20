@@ -112,4 +112,4 @@ O downcast é um no-op em runtime — mesmos bits, sem custo. O typeck verifica 
 
 ## Próximo capítulo
 
-Tipos refinados garantem invariantes em compile-time. O próximo capítulo mostra como organizar código em módulos com `import` e `export`.
+Tipos refinados garantem invariantes em compile-time. O próximo capítulo mostra como organizar código em módulos com `import` e `export`. → [Capítulo 13](13-modulos.md)

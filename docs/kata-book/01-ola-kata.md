@@ -70,4 +70,4 @@ O REPL mantém bindings entre linhas e suporta `:type` para inspecionar tipos, `
 
 ## Próximos passos
 
-Você escreveu seu primeiro programa Kata. O próximo capítulo constrói um jogo de adivinhação completo — um mini-projeto que introduz actions, pattern matching, e leitura de entrada antes da teoria.
+Você escreveu seu primeiro programa Kata. O próximo capítulo constrói um jogo de adivinhação completo — um mini-projeto que introduz actions, pattern matching, e leitura de entrada antes da teoria. → [Capítulo 2](02-guessing-game.md)

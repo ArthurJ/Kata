@@ -74,4 +74,4 @@ Mesmo com 100000 chamadas recursivas, a pilha não estoura. O compilador reescre
 
 ## Próximo capítulo
 
-Funções ficam mais poderosas com pattern matching. O próximo capítulo mostra como ramificar a lógica com `match`, guards, e `otherwise`.
+Funções ficam mais poderosas com pattern matching. O próximo capítulo mostra como ramificar a lógica com `match`, guards, e `otherwise`. → [Capítulo 6](06-pattern-matching.md)

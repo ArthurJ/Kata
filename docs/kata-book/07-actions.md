@@ -122,4 +122,4 @@ depois
 
 ## Próximo capítulo
 
-Actions têm estado e controle. O próximo capítulo introduz coleções — listas, tuplas, dicionários, sets — e como iterar sobre elas com `for`.
+Actions têm estado e controle. O próximo capítulo introduz coleções — listas, tuplas, dicionários, sets — e como iterar sobre elas com `for`. → [Capítulo 8](08-colecoes.md)

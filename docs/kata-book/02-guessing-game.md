@@ -330,3 +330,5 @@ Você construiu um jogo interativo completo. No caminho, tocou em:
 Cada um desses conceitos é coberto em profundidade nos próximos capítulos. O capítulo 3 mostra a sintaxe básica. O capítulo 7 explica actions, `var`, e `loop`. O capítulo 6 cobre `match` em detalhe. O capítulo 12 mostra I/O completo — `open!`, `readline!`, e o módulo `stdio`.
 
 Por enquanto, você já escreveu um programa real em Kata — em três versões, da mais simples à mais decomposta. Isso é mais do que a maioria das linguagens oferece no primeiro dia.
+
+→ [Capítulo 3 — Sintaxe básica](03-sintaxe-basica.md)

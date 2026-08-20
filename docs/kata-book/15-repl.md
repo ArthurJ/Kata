@@ -100,7 +100,7 @@ comandos:
 
 Você completou todos os 15 capítulos do guia principal. Há ainda um apêndice sobre plataformas suportadas e limitações — incluindo o estado do port para Windows:
 
-- [Apêndice — Plataformas e Limitações](16-plataformas-limitacoes.md)
+→ [Apêndice — Plataformas e Limitações](16-plataformas-limitacoes.md)
 
 Para aprofundar:
 - `examples/` — exemplos completos de cada feature

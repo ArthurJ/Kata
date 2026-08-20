@@ -202,4 +202,4 @@ False
 
 ## Próximo capítulo
 
-Coleções ficam mais poderosas com funções de ordem superior. O próximo capítulo mostra `map`, `filter`, `fold`, e o operador pipeline `|>`.
+Coleções ficam mais poderosas com funções de ordem superior. O próximo capítulo mostra `map`, `filter`, `fold`, e o operador pipeline `|>`. → [Capítulo 9](09-hofs-closures.md)

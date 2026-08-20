@@ -131,4 +131,4 @@ Os 3 primeiros (0, 1, 2) são tomados e nenhum passa no filtro `> _ 2`.
 
 ## Próximo capítulo
 
-HOFs transformam coleções. O próximo capítulo mostra como definir seus próprios tipos com `enum` (tipos soma) e `data` (tipos produto).
+HOFs transformam coleções. O próximo capítulo mostra como definir seus próprios tipos com `enum` (tipos soma) e `data` (tipos produto). → [Capítulo 10](10-enums-structs.md)

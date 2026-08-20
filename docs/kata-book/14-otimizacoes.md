@@ -114,4 +114,4 @@ A segunda chamada com o mesmo argumento retorna o valor cacheado sem reexecutar 
 
 ## Próximo capítulo
 
-Otimizações são automáticas. O próximo capítulo mostra o REPL interativo — explorar a linguagem sem criar arquivos.
+Otimizações são automáticas. O próximo capítulo mostra o REPL interativo — explorar a linguagem sem criar arquivos. → [Capítulo 15](15-repl.md)

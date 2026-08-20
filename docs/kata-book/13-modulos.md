@@ -85,4 +85,4 @@ O loader procura módulos no mesmo diretório do arquivo que faz o import. Para 
 
 ## Próximo capítulo
 
-Módulos organizam código. O próximo capítulo mostra as otimizações que o compilador aplica automaticamente — TCO, TRMA, stream fusion, e `@cache`.
+Módulos organizam código. O próximo capítulo mostra as otimizações que o compilador aplica automaticamente — TCO, TRMA, stream fusion, e `@cache`. → [Capítulo 14](14-otimizacoes.md)

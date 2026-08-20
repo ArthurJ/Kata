@@ -80,4 +80,4 @@ grande
 
 ## Próximo capítulo
 
-Tudo até aqui é código puro — sem efeitos colaterais. O próximo capítulo introduz actions, a barreira entre código puro e impuro, e os mecanismos de controle imperativo: `var`, `loop`, `break`.
+Tudo até aqui é código puro — sem efeitos colaterais. O próximo capítulo introduz actions, a barreira entre código puro e impuro, e os mecanismos de controle imperativo: `var`, `loop`, `break`. → [Capítulo 7](07-actions.md)
