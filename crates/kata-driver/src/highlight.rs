@@ -74,7 +74,7 @@ fn token_color(token: &Token) -> Option<&'static str> {
         | Token::Timeout => Some(BOLD_YELLOW),
 
         // ── Palavras-chave de módulo ──────────────────────
-        Token::Import | Token::Export | Token::As => Some(BOLD_MAGENTA),
+        Token::Import | Token::Export | Token::As | Token::Super => Some(BOLD_MAGENTA),
 
         // ── Palavras-chave de tipo ────────────────────────
         Token::Interface | Token::Implements | Token::Refines | Token::With => Some(BOLD_BLUE),

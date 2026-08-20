@@ -64,6 +64,8 @@ pub enum Token {
     Export,
     /// `as` — alias de import ou de tipo
     As,
+    /// `super` — navegação relativa em import paths (sobe um nível)
+    Super,
     /// `interface` — declara contrato de tipo
     Interface,
     /// `implements` — implementa interface
@@ -192,6 +194,7 @@ impl Token {
                 | Token::Import
                 | Token::Export
                 | Token::As
+                | Token::Super
                 | Token::Interface
                 | Token::Implements
                 | Token::Refines
@@ -236,6 +239,7 @@ impl std::fmt::Display for Token {
             Token::Import => write!(f, "import"),
             Token::Export => write!(f, "export"),
             Token::As => write!(f, "as"),
+            Token::Super => write!(f, "super"),
             Token::Interface => write!(f, "interface"),
             Token::Implements => write!(f, "implements"),
             Token::Refines => write!(f, "refines"),

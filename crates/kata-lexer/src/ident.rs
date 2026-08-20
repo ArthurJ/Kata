@@ -32,6 +32,7 @@ pub(crate) fn lex_ident(lex: &mut Lexer, start: &Pos) -> Result<TokenWithSpan, F
         "import" => Token::Import,
         "export" => Token::Export,
         "as" => Token::As,
+        "super" => Token::Super,
         "interface" => Token::Interface,
         "implements" => Token::Implements,
         "refines" => Token::Refines,

@@ -362,7 +362,7 @@ pub fn parse_with_recovery(tokens: Vec<TokenWithSpan>) -> (Module, Vec<FrontendE
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kata_ast::{DirectiveArg, Expr, Item, TypeExpr};
+    use kata_ast::{DirectiveArg, Expr, ImportItem, Item, TypeExpr};
     use kata_lexer::lex;
 
     fn parse_src(src: &str) -> Module {
@@ -597,5 +597,134 @@ mod tests {
             }
             other => panic!("expected Sig, got {other:?}"),
         }
+    }
+
+    // ── Import paths: super e stdlib ──────────────────────
+
+    fn first_import(m: &Module) -> (&[String], &Option<String>, &Option<Vec<ImportItem>>) {
+        match first_item(m) {
+            Item::ImportDecl { path, alias, items } => (path, alias, items),
+            other => panic!("expected ImportDecl, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn import_super_single() {
+        let m = parse_src("import super.calculus");
+        let (path, _, _) = first_import(&m);
+        assert_eq!(path, &vec!["super", "calculus"]);
+    }
+
+    #[test]
+    fn import_super_double() {
+        let m = parse_src("import super.super.utils");
+        let (path, _, _) = first_import(&m);
+        assert_eq!(path, &vec!["super", "super", "utils"]);
+    }
+
+    #[test]
+    fn import_super_nested() {
+        let m = parse_src("import super.vectors.vec2");
+        let (path, _, _) = first_import(&m);
+        assert_eq!(path, &vec!["super", "vectors", "vec2"]);
+    }
+
+    #[test]
+    fn import_super_selective() {
+        let m = parse_src("import super.calculus.(dobrar fatorial)");
+        let (path, _, items) = first_import(&m);
+        assert_eq!(path, &vec!["super", "calculus"]);
+        let items = items.as_ref().expect("selective import");
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].name, "dobrar");
+        assert_eq!(items[1].name, "fatorial");
+    }
+
+    #[test]
+    fn import_super_alias() {
+        let m = parse_src("import super.calculus as calc");
+        let (path, alias, _) = first_import(&m);
+        // super.calculus as calc — alias do módulo inteiro
+        // (normal_components = 1, não 2, então não desugara)
+        assert_eq!(path, &vec!["super", "calculus"]);
+        assert_eq!(alias, &Some("calc".to_string()));
+    }
+
+    #[test]
+    fn import_stdlib_basic() {
+        let m = parse_src("import stdlib.math");
+        let (path, _, _) = first_import(&m);
+        assert_eq!(path, &vec!["stdlib", "math"]);
+    }
+
+    #[test]
+    fn import_stdlib_selective() {
+        let m = parse_src("import stdlib.math.(sqrt)");
+        let (path, _, items) = first_import(&m);
+        assert_eq!(path, &vec!["stdlib", "math"]);
+        let items = items.as_ref().expect("selective import");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].name, "sqrt");
+    }
+
+    #[test]
+    fn import_stdlib_alias() {
+        let m = parse_src("import stdlib.complex as cm");
+        let (path, alias, _) = first_import(&m);
+        assert_eq!(path, &vec!["stdlib", "complex"]);
+        assert_eq!(alias, &Some("cm".to_string()));
+    }
+
+    #[test]
+    fn import_super_after_normal_is_error() {
+        // `import math.super` — super não pode aparecer após componente normal
+        let tokens = lex("import math.super").unwrap();
+        assert!(parse(tokens).is_err());
+    }
+
+    #[test]
+    fn import_super_alone_is_error() {
+        // `import super` sozinho não carrega nada
+        let tokens = lex("import super").unwrap();
+        assert!(parse(tokens).is_err());
+    }
+
+    #[test]
+    fn import_stdlib_alone_is_error() {
+        // `import stdlib` sozinho não carrega nada
+        let tokens = lex("import stdlib").unwrap();
+        assert!(parse(tokens).is_err());
+    }
+
+    #[test]
+    fn import_existing_still_works() {
+        // Retrocompatibilidade: import sem prefixo especial
+        let m = parse_src("import modulo.submodulo");
+        let (path, _, _) = first_import(&m);
+        assert_eq!(path, &vec!["modulo", "submodulo"]);
+    }
+
+    #[test]
+    fn import_existing_selective_still_works() {
+        let m = parse_src("import modulo.(item1 item2 as alias2)");
+        let (path, _, items) = first_import(&m);
+        assert_eq!(path, &vec!["modulo"]);
+        let items = items.as_ref().expect("selective import");
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].name, "item1");
+        assert_eq!(items[1].name, "item2");
+        assert_eq!(items[1].alias, Some("alias2".to_string()));
+    }
+
+    #[test]
+    fn import_existing_alias_desugar_still_works() {
+        // `import mod.item as al` desugara para `import mod.(item as al)`
+        let m = parse_src("import modulo.item as al");
+        let (path, _, items) = first_import(&m);
+        assert_eq!(path, &vec!["modulo"]);
+        let items = items.as_ref().expect("selective import");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].name, "item");
+        assert_eq!(items[0].alias, Some("al".to_string()));
     }
 }
