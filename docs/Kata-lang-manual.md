@@ -1566,7 +1566,7 @@ exclusivamente via canais. O fork não produz um valor de retorno síncrono.
 
 ### 5.2.2. Modelo de Memória
 
-O Kata5 usa **arenas bump per-fiber** para toda alocação. Não há garbage
+Kata usa **arenas bump per-fiber** para toda alocação. Não há garbage
 collector, não há reference counting, não há free individual. O modelo
 funciona porque três restrições se combinam para garantir que todo
 valor vive na arena certa e é liberado no momento certo.
@@ -1643,7 +1643,7 @@ resetada em O(1) quando o fiber morre.
 
 #### Por que não ARC
 
-O Kata5 teve ARC (`alloc_tracked`/`incref_tracked`/`decref_tracked`)
+Kata teve ARC (`alloc_tracked`/`incref_tracked`/`decref_tracked`)
 entre as sessões 2-7. Foi removido na sessão 8 porque:
 
 1. **Structured concurrency torna ARC desnecessário para canais.**
@@ -3242,7 +3242,7 @@ ou Ctrl-D).
 
 ## 27. Reflexão de Funções
 
-Kata5 permite inspecionar metadata de funções e actions em tempo de execução
+Kata permite inspecionar metadata de funções e actions em tempo de execução
 ou compilação através de acesso de campo (`.`) sobre valores funcionais. Isto
 é **reflexão estruturada** — não é introspecção arbitrária de runtime, mas
 um conjunto fixo de fields com semântica definida pelo typeck.

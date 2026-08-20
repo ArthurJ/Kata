@@ -62,6 +62,8 @@ Kata não tem tracing GC nem borrow checker. A gestão de memória é por arenas
 
 O compilador faz escape analysis para determinar onde alocar cada valor: local ao fiber, escapando para o caller, ou escapando para outro fiber via canal. Essa seleção é estática, decidida em compile-time. O resultado é que dados puramente locais — a esmagadora maioria dos casos em funções puras — têm máxima localidade de cache e zero overhead atômico, sem que o programador precise pensar em ownership.
 
+O modelo funciona porque o scheduler é structured concurrency: um fiber só é destruído quando completa *e* todos os seus filhos completaram. Isso garante que a caller_arena do pai está viva quando um filho retorna um valor ou envia por canal, e que irmãos que compartilham a arena do pai trocam valores válidos. Sem essa invariante, o modelo quebraria — valores enviados por canal poderiam ser use-after-free se o fiber sender morresse antes do receiver consumir.
+
 ## Por que não existe try/catch?
 
 Exceções invisíveis quebram a pureza funcional. Uma função que pode disparar uma exceção a qualquer momento, sem declarar, não é realmente pura — o caller não sabe que está sujeito a um desvio de fluxo não-expresso na assinatura. A ausência de try/catch força o tratamento explícito de falhas no sistema de tipos: operações falíveis retornam `Result`, e o compilador exige que o programador lide com ambos os ramos. O operador `?` em actions e o operador `|` em funções puras são os mecanismos de propagação — mas a falha é sempre visível na assinatura.
@@ -75,3 +77,9 @@ Kata tem dois mecanismos de introspecção, ambos compile-time. `type!()` consul
 ## Por que convenções de nomenclatura obrigatórias?
 
 O lexer e o parser usam a capitalização de identificadores para desambiguação. A convenção não é estilística — é estrutural. O parser precisa distinguir um nome de tipo de um nome de função em posições ambíguas, e a capitalização resolve isso sem anotações redundantes. A violação constitui erro fatal de compilação, não aviso.
+
+## Por que o compilador não tem builtins?
+
+O princípio "sem builtins" significa que aritmética, comparação, strings, coleções e I/O são todos definidos na stdlib em código Kata via `@ffi` — não há tratamento especial para `+`, `-`, `<`, `=` no parser, typeck, ou codegen. São identificadores comuns apontando para funções em `kata-rt`. O compilador conhece apenas o catálogo de símbolos FFI e as strings de mapeamento de representação (`"i64"`, `"f64"`, `"kata_rt_string"`).
+
+Não tivemos 100% de sucesso nesse ponto. `map`, `filter` e `fold` são interceptadas pelo typeck antes do dispatch normal — o compilador as reconhece por nome, extrai o tipo do elemento da coleção, infere o callback com hint, e produz nós TAST dedicados. Isso é necessário para stream fusion e para desugarar operadores standalone como callbacks (`map + [1 2 3]` precisa transformar `+` em lambda sintético). É o ponto onde o compilador ainda conhece nomes específicos da linguagem.
