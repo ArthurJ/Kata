@@ -68,8 +68,8 @@ Se o input após `>>> ` é incompleto (ex: `match` sem cláusulas), as linhas in
 ```
 #{
 >>> match True
-  True => "sim"
-  False => "nao"
+  True: "sim"
+  False: "nao"
 sim
 }#
 ```

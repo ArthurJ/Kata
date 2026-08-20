@@ -1,6 +1,6 @@
 # PRD — Doctests em Comentários Multilinha
 
-**Status:** Rascunho
+**Status:** Implementado
 **Data:** 2026-08-20
 **Depende de:** REPL (`ReplSession`), `kata test`
 **Não depende de:** AOT, LSP, `kata-rt` (zero mudanças no runtime)
