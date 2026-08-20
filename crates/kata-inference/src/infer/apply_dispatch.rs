@@ -351,12 +351,35 @@ pub(crate) fn try_refines_fallback(
     arg_types: &[Ty],
     ctx: &InferCtx,
 ) -> Option<(Vec<Ty>, kata_core::OverloadInfo)> {
+    // Overloads de aridade compatível — usadas para verificar se um arg
+    // refined já é exact match com o param correspondente em alguma overload.
+    // Se for, o arg não precisa ser substituído: o dispatch normal já deveria
+    // tê-lo casado por exact match naquela posição. A substituição cega destrói
+    // o match que já existia (ex: `foo :: Int PositiveInt` chamado com
+    // `(PositiveInt, PositiveInt)` — o segundo arg já casa com PositiveInt,
+    // só o primeiro precisa ser substituído para Int).
+    let overloads = ctx.table.get_overloads(func_name);
+    let arity_params: Vec<&[Ty]> = overloads
+        .iter()
+        .flat_map(|ovs| ovs.iter())
+        .filter(|oi| oi.params.len() == arg_types.len())
+        .map(|oi| oi.params.as_slice())
+        .collect();
+
     // Para cada arg, se é refined (Ty::Struct com refines), coletar o tipo base.
     let mut fallback_arg_types = arg_types.to_vec();
     let mut any_substituted = false;
 
-    for arg_ty in &mut fallback_arg_types {
+    for (i, arg_ty) in fallback_arg_types.iter_mut().enumerate() {
         if let Ty::Struct(name) = arg_ty {
+            // Se o arg já é exact match com o param na posição i de alguma
+            // overload de aridade compatível, não substituir — o dispatch
+            // normal já deveria ter casado este arg por exact match.
+            let already_exact = arity_params.iter().any(|params| params[i] == arg_types[i]);
+            if already_exact {
+                continue;
+            }
+
             // Segue a cadeia de alias_of se o tipo não tem refines direto.
             // Ex: Peso é alias de PositiveFloat que tem refines NUM.
             let mut current = name.clone();

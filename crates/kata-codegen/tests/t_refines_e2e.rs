@@ -265,6 +265,41 @@ f!()"#;
     );
 }
 
+// ── DoD 11: fallback não substitui arg que já é exact match com o param ──
+
+/// `bar :: Int PositiveInt => Int` é método de MIXED. PositiveInt delega MIXED.
+/// Chamada `bar(PositiveInt, PositiveInt)`: o primeiro arg não casa com Int
+/// (precisa fallback), mas o segundo arg já casa com PositiveInt por exact
+/// match. O fallback cego substitui ambos → `(Int, Int)` → não casa com
+/// `Int PositiveInt` → TypeMismatch. A correção só substitui o primeiro →
+/// `(Int, PositiveInt)` → casa.
+#[test]
+fn t_refines_fallback_nao_substitui_arg_exact_match() {
+    let src = r#"data (Int, > _ 0) as PositiveInt
+
+interface MIXED
+    bar :: Int PositiveInt => Int
+
+Int implements MIXED
+    bar :: Int PositiveInt => Int
+    lambda a b: + a (b::Int)
+
+PositiveInt refines MIXED
+
+action test => Int
+    let a := 5::PositiveInt
+    let b := 3::PositiveInt
+    bar a b
+test!()"#;
+    let (_raw, ty) = eval_src(src);
+    assert_eq!(
+        ty,
+        Ty::int(),
+        "fallback deve preservar o segundo arg (PositiveInt) que já é exact match, \
+         só substituindo o primeiro (PositiveInt→Int)"
+    );
+}
+
 // ── DoD 9: `refines` em tipo não-refined → erro compile-time ──
 
 /// Aplicar `refines` a um struct não-refined (sem `alias_of` + `predicates`)
