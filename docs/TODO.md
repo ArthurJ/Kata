@@ -52,6 +52,34 @@ imprimir a CLIF canônica antes da execução. A flag não existe no código
 
 ---
 
+### `NonZero` só existe para Int — divisão por zero não é estaticamente segura para Float/Rational
+
+**Estado:** `NonZero` (refined `data (Int, != _ 0) as NonZero`) só é definido
+para Int. `/ :: Int NonZero => Int` usa o refined para garantir divisor
+não-zero em compile-time. Float e Rational não têm `NonZero` equivalente:
+
+- Float: `/ :: Float Float => Float` é `a / b` direto — `0.0 / 0.0` produz
+  NaN em runtime, invisibilizado no display (`float_to_text` converte NaN/Inf
+  para 0). `div` verifica `= b 0.0` mas não captura NaN de outras fontes.
+- Rational: `/ :: Rational Rational => Rational` panica em runtime se o
+  divisor for zero. `div` retorna `Result` mas a overload `/` é insegura.
+- Int: existe também `/ :: Int Int => Int` (legada) que panica em zero —
+  mantida para compatibilidade.
+
+**Impacto:** Médio. A linguagem oferece `div` (retorna `Result`) como
+alternativa segura para todos os tipos, mas a overload `/` sem `NonZero`
+para Float/Rational é uma armadilha — parece exata mas panica ou produz NaN.
+
+**Quando surgir caso de uso real:** estender `NonZero` para Float
+(`data (Float, != _ 0.0) as NonZeroFloat`) e Rational
+(`data (Rational, != _ (rational 0)) as NonZeroRational`). As overloads
+`/ Float NonZeroFloat => Float` e `/ Rational NonZeroRational => Rational`
+garantiriam divisão exata segura em compile-time para todos os tipos NUM.
+A overload legada `/ Int Int => Int` pode ser removida quando `NonZero`
+for a única forma de dividir sem `Result`.
+
+---
+
 ## Migração de Exemplos
 
 ### `parallel.kata` (Cluster 4)
