@@ -1013,7 +1013,7 @@ O parser valida a capitalização de todos os nomes no momento do parse. A viola
 
 1. **Nomes simbólicos** (`+`, `-`, `*`, `<`, `>`, `=`) não são validados — são operadores, não identificadores alfabéticos.
 2. **Prefixo `_`** é aceito em snake_case (convenção para internals/builtins: `_print`, `_println`).
-3. **Prelude** não é isento — todo código Kata5 segue as mesmas regras.
+3. **Prelude** não é isento — todo código Kata segue as mesmas regras.
 4. **Type params de interface** seguem PascalCase (aceitam tanto single-letter `A`, `K` quanto nomes de tipos concretos `Text`).
 5. **Mensagens de erro** em Português: `nome "X" deve be PascalCase, mas está em snake_case`.
 
