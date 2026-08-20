@@ -101,6 +101,10 @@ O produtor envia após 50ms — o `select` recebe antes do timeout de 100ms.
 
 `sleep!(ms)` suspende o fiber atual por N milissegundos, cedendo o controle ao scheduler. É a forma de esperar sem bloquear a thread.
 
+## Limitações no Windows
+
+`fork!`, canais, `select`, e `sleep!` funcionam em todas as plataformas. No entanto, `spawn!` — que cria processos filhos isolados do sistema operacional — é um stub no Windows: compila, mas em runtime não faz nada (retorna 0). Se você precisa de processos externos, use Linux ou macOS. Veja o [Apêndice — Plataformas e Limitações](16-plataformas-limitacoes.md) para detalhes.
+
 ## Fim
 
 Você completou a parte principal do Kata Book. Dos literais à concorrência — sem `if`, sem classes, sem herança. Kata é pequena por design: notação prefixa, pattern matching, e tipos algébricos resolvem o que outras linguagens espalham por dezenas de features.

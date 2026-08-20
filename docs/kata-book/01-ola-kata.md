@@ -4,7 +4,7 @@ Kata é uma linguagem funcional com notação prefixa, tipos algébricos, e conc
 
 ## Instalação
 
-O binário `kata` é distribuído como executável nativo. Após instalar, verifique a versão:
+Se você ainda não compilou o binário `kata`, veja o [Capítulo 0 — Compilando o Kata](00-compilando.md) para instruções de build. Após instalar, verifique:
 
 ```bash
 kata --version
@@ -13,6 +13,8 @@ kata --version
 ```
 kata 0.1.0
 ```
+
+Kata roda em Linux e macOS nativamente. Há um port experimental para Windows — veja o [Apêndice — Plataformas e Limitações](16-plataformas-limitacoes.md) para detalhes.
 
 ## Seu primeiro programa
 

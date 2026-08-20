@@ -1,6 +1,6 @@
 # PRD — Kata Book: Guia Introdutório da Linguagem
 
-**Status:** Concluído (fases 1 e 2 — 15 capítulos, incluindo mini-projeto de guessing game)
+**Status:** Concluído (fases 1 e 2 — 15 capítulos + capítulo 0 de build + apêndice de plataformas, incluindo mini-projeto de guessing game)
 **Data:** 2026-08-13
 **Público-alvo:** Programadores interessados em linguagens funcionais, sem
 experiência prévia com Kata. Material para mostrar a amigos/coleagues.
@@ -24,6 +24,7 @@ refinados), em texto plano legível em qualquer terminal. O guia deve ser:
 
 ### Capítulos obrigatórios (fase 1)
 
+0. **Compilando o Kata** — pré-requisitos (Rust 1.85+, linker C), `cargo build --release`, subcomandos do binário (`run`, `eval`, `build`, `test`, `repl`, `lex`, `parse`, `lsp`), exemplos do repositório
 1. **Olá, Kata** — instalar, primeiro programa, `kata run`, `kata repl`
 2. **Adivinhe o Número** — mini-projeto hands-on: guessing game com `rand_int!`,
    leitura de stdin, `match`, `loop`, `var`. Introduz conceitos antes da teoria
@@ -53,6 +54,12 @@ refinados), em texto plano legível em qualquer terminal. O guia deve ser:
 14. **Otimizações** — TCO, TRMA, stream fusion, `@comptime`, `@cache`
 15. **REPL interativo** — `:type`, `:env`, `:load`, `:reset`, multiline,
     persistência de bindings
+
+### Apêndice
+
+16. **Plataformas e Limitações** — Linux (completo), macOS (completo,
+    verificado em hardware), Windows (experimental: `spawn!` é stub,
+    Unix sockets via TCP, sem testes em hardware real)
 
 ## 3. Princípios de escrita
 
