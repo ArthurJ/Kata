@@ -32,6 +32,7 @@ rustyline.workspace = true
 kata-lsp.workspace = true
 tower-lsp.workspace = true
 tokio = { workspace = true, features = ["full"] }
+libc.workspace = true
 
 [dev-dependencies]
 insta.workspace = true
