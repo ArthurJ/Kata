@@ -32,19 +32,28 @@ com `lambda` quebram.
 
 **Impacto:** Doctests com `>>> :load arquivo.kata` só carregam
 constants e declarações `@ffi`/`Sig`. Não é possível carregar funções
-puras definidas com `lambda` no arquivo. Doctests que precisam de
-funções precisam redefini-las dentro do comentário.
+puras definidas com `lambda` no arquivo.
 
 ### `import` no REPL
 
 **Estado:** `import` é keyword da linguagem (declaração top-level), não
 expressão. `eval_expr` no REPL só processa expressões — `>>> import
 foo.(bar)` falha no `handle` porque não é uma expressão válida. Para
-que doctests usem `import` (mais idiomático que `:load`), seria
-necessário fazer o REPL processar `import` como declaração.
+que doctests usem `import`, seria necessário fazer o REPL processar
+`import` como declaração.
 
-**Impacto:** Doctests usam `:load` (comando de REPL) em vez de `import`
-(keyword da linguagem). Funcional mas não idiomático.
+**Distinção `:load` vs `import` (design intencional):**
+- `:load` carrega **tudo** do arquivo (declarações + entry point) e
+  executa top-level. Side effects acontecem. Não exige `export`. Útil
+  quando o doctest testa comportamento de um programa em execução.
+- `import` traz **só os símbolos exportados**, sem executar top-level.
+  Sem side effects. Exige `export` no módulo. Útil para testar funções
+  isoladas (testes unitários de biblioteca).
+
+Ambos têm uso legítimo em doctests. Ambos estão quebrados no contexto
+de doctests: `:load` não parseia `lambda`, `import` não é aceito pelo
+REPL. Corrigir os dois dá ao autor do doctest a escolha do mecanismo
+apropriado.
 
 ---
 
