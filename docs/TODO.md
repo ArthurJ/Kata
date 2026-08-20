@@ -8,19 +8,6 @@ Os docs `TODO-*.md` foram removidos (obsoletos ou resolvidos). Pendências vivem
 
 ## Débito Técnico
 
-### Search paths configuráveis (-I / KATA_PATH)
-
-**Estado:** Import relativo via `super.` IMPLEMENTADO (PRD-modulos-super).
-`mod.kata` como ponto de entrada de diretório IMPLEMENTADO. `stdlib.` como
-namespace explícito IMPLEMENTADO. O que falta: search paths configuráveis
-via CLI (`-I`) ou env var (`KATA_PATH`) para libs externas — não suportado,
-Kata5 não tem libs externas por enquanto.
-
-**Impacto:** Baixo. `super.` + `mod.kata` cobrem organização intra-projeto.
-Search paths configuráveis só são necessários para libs externas.
-
----
-
 ### `filter_exports` não preserva dependências transitivas de funções
 
 **Estado:** Se módulo A exporta `fn1` cujo corpo referencia `fn2` (não

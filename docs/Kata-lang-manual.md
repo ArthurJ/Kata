@@ -1653,10 +1653,12 @@ exclusivamente via canais. O fork não produz um valor de retorno síncrono.
 
 ### 5.2.2. Modelo de Memória
 
-Kata usa **arenas bump per-fiber** para toda alocação. Não há garbage
-collector, não há reference counting, não há free individual. O modelo
-funciona porque três restrições se combinam para garantir que todo
-valor vive na arena certa e é liberado no momento certo.
+Kata usa **arenas bump per-fiber** para toda alocação de dados. Não há garbage
+collector nem free individual para dados. Closures com captura usam ARC
+manual (CaptureBox com refcount — ver §6.5), e file/socket handles usam
+close determinístico. O modelo de dados funciona porque três restrições se
+combinam para garantir que todo valor vive na arena certa e é liberado no
+momento certo.
 
 #### As três arenas
 
@@ -1728,7 +1730,7 @@ Todos os outros valores (Bytes, Text, Result boxes, listas, structs,
 tuplas) são arena-allocated sem cleanup individual. A arena é
 resetada em O(1) quando o fiber morre.
 
-#### Por que não ARC
+#### Por que não ARC para dados em canais
 
 Kata teve ARC (`alloc_tracked`/`incref_tracked`/`decref_tracked`)
 entre as sessões 2-7. Foi removido na sessão 8 porque:
