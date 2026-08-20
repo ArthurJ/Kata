@@ -473,6 +473,29 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
     );
     // Timer
     builder.symbol("kata_rt_timer_now", rt::kata_rt_timer_now as *const u8);
+    // Math
+    builder.symbol("kata_rt_sin", rt::kata_rt_sin as *const u8);
+    builder.symbol("kata_rt_cos", rt::kata_rt_cos as *const u8);
+    builder.symbol("kata_rt_tan", rt::kata_rt_tan as *const u8);
+    builder.symbol("kata_rt_asin", rt::kata_rt_asin as *const u8);
+    builder.symbol("kata_rt_acos", rt::kata_rt_acos as *const u8);
+    builder.symbol("kata_rt_atan", rt::kata_rt_atan as *const u8);
+    builder.symbol("kata_rt_atan2", rt::kata_rt_atan2 as *const u8);
+    builder.symbol("kata_rt_sinh", rt::kata_rt_sinh as *const u8);
+    builder.symbol("kata_rt_cosh", rt::kata_rt_cosh as *const u8);
+    builder.symbol("kata_rt_tanh", rt::kata_rt_tanh as *const u8);
+    builder.symbol("kata_rt_sqrt", rt::kata_rt_sqrt as *const u8);
+    builder.symbol("kata_rt_cbrt", rt::kata_rt_cbrt as *const u8);
+    builder.symbol("kata_rt_log", rt::kata_rt_log as *const u8);
+    builder.symbol("kata_rt_log2", rt::kata_rt_log2 as *const u8);
+    builder.symbol("kata_rt_log10", rt::kata_rt_log10 as *const u8);
+    builder.symbol("kata_rt_exp", rt::kata_rt_exp as *const u8);
+    builder.symbol("kata_rt_floor", rt::kata_rt_floor as *const u8);
+    builder.symbol("kata_rt_ceil", rt::kata_rt_ceil as *const u8);
+    builder.symbol("kata_rt_gcd", rt::kata_rt_gcd as *const u8);
+    builder.symbol("kata_rt_lcm", rt::kata_rt_lcm as *const u8);
+    builder.symbol("kata_rt_pow", rt::kata_rt_pow as *const u8);
+    builder.symbol("kata_rt_signum", rt::kata_rt_signum as *const u8);
 }
 
 /// Declara todos os símbolos FFI no module e retorna o mapa nome → FuncId.

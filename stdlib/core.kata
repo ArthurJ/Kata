@@ -397,6 +397,18 @@ lambda a b:
     a: b
     otherwise: False
 
+# OR lógico — short-circuit: se a é True, retorna True sem avaliar b
+or :: Boolean Boolean => Boolean
+lambda a b:
+    a: True
+    otherwise: b
+
+# NOT lógico — inverte Boolean
+not :: Boolean => Boolean
+lambda a:
+    a: False
+    otherwise: True
+
 # List head/tail (extrai primeiro elemento / resto da lista)
 @ffi("kata_rt_list_head")
 head :: List::A => A

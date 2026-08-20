@@ -20,9 +20,7 @@ Complex implements EQ
     = :: Complex Complex => Boolean
     lambda a b: and (= a.re b.re) (= a.im b.im)
     != :: Complex Complex => Boolean
-    lambda a b:
-        = a b: False
-        otherwise: True
+    lambda a b: not (= a b)
 
 Complex implements SHOW
     show :: Complex => Text

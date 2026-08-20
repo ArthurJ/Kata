@@ -397,6 +397,30 @@ pub enum FfiSymbol {
     SocketClose,
     /// `kata_rt_timer_now() -> i64` — clock monotônico em nanossegundos.
     TimerNow,
+
+    // ── Math (math.kata) ───────────────────────────────────
+    Sin,
+    Cos,
+    Tan,
+    Asin,
+    Acos,
+    Atan,
+    Atan2,
+    Sinh,
+    Cosh,
+    Tanh,
+    Sqrt,
+    Cbrt,
+    Log,
+    Log2,
+    Log10,
+    Exp,
+    Floor,
+    Ceil,
+    Gcd,
+    Lcm,
+    Pow,
+    Signum,
 }
 
 impl FfiSymbol {
@@ -614,6 +638,29 @@ impl FfiSymbol {
             FfiSymbol::SocketClose => "kata_rt_socket_close",
             // Timer
             FfiSymbol::TimerNow => "kata_rt_timer_now",
+            // Math
+            FfiSymbol::Sin => "kata_rt_sin",
+            FfiSymbol::Cos => "kata_rt_cos",
+            FfiSymbol::Tan => "kata_rt_tan",
+            FfiSymbol::Asin => "kata_rt_asin",
+            FfiSymbol::Acos => "kata_rt_acos",
+            FfiSymbol::Atan => "kata_rt_atan",
+            FfiSymbol::Atan2 => "kata_rt_atan2",
+            FfiSymbol::Sinh => "kata_rt_sinh",
+            FfiSymbol::Cosh => "kata_rt_cosh",
+            FfiSymbol::Tanh => "kata_rt_tanh",
+            FfiSymbol::Sqrt => "kata_rt_sqrt",
+            FfiSymbol::Cbrt => "kata_rt_cbrt",
+            FfiSymbol::Log => "kata_rt_log",
+            FfiSymbol::Log2 => "kata_rt_log2",
+            FfiSymbol::Log10 => "kata_rt_log10",
+            FfiSymbol::Exp => "kata_rt_exp",
+            FfiSymbol::Floor => "kata_rt_floor",
+            FfiSymbol::Ceil => "kata_rt_ceil",
+            FfiSymbol::Gcd => "kata_rt_gcd",
+            FfiSymbol::Lcm => "kata_rt_lcm",
+            FfiSymbol::Pow => "kata_rt_pow",
+            FfiSymbol::Signum => "kata_rt_signum",
         }
     }
 
@@ -815,6 +862,30 @@ impl FfiSymbol {
             FfiSymbol::SocketClose => Ty::Unit,
             // Timer
             FfiSymbol::TimerNow => Ty::int(),
+            // Math — trig/hyper/raiz/log/exp retornam Float
+            FfiSymbol::Sin
+            | FfiSymbol::Cos
+            | FfiSymbol::Tan
+            | FfiSymbol::Asin
+            | FfiSymbol::Acos
+            | FfiSymbol::Atan
+            | FfiSymbol::Atan2
+            | FfiSymbol::Sinh
+            | FfiSymbol::Cosh
+            | FfiSymbol::Tanh
+            | FfiSymbol::Sqrt
+            | FfiSymbol::Cbrt
+            | FfiSymbol::Log
+            | FfiSymbol::Log2
+            | FfiSymbol::Log10
+            | FfiSymbol::Exp => Ty::float(),
+            // Math — floor/ceil/gcd/lcm/pow/signum retornam Int
+            FfiSymbol::Floor
+            | FfiSymbol::Ceil
+            | FfiSymbol::Gcd
+            | FfiSymbol::Lcm
+            | FfiSymbol::Pow
+            | FfiSymbol::Signum => Ty::int(),
         }
     }
 
@@ -1030,6 +1101,29 @@ impl FfiSymbol {
             FfiSymbol::SocketClose,
             // Timer
             FfiSymbol::TimerNow,
+            // Math
+            FfiSymbol::Sin,
+            FfiSymbol::Cos,
+            FfiSymbol::Tan,
+            FfiSymbol::Asin,
+            FfiSymbol::Acos,
+            FfiSymbol::Atan,
+            FfiSymbol::Atan2,
+            FfiSymbol::Sinh,
+            FfiSymbol::Cosh,
+            FfiSymbol::Tanh,
+            FfiSymbol::Sqrt,
+            FfiSymbol::Cbrt,
+            FfiSymbol::Log,
+            FfiSymbol::Log2,
+            FfiSymbol::Log10,
+            FfiSymbol::Exp,
+            FfiSymbol::Floor,
+            FfiSymbol::Ceil,
+            FfiSymbol::Gcd,
+            FfiSymbol::Lcm,
+            FfiSymbol::Pow,
+            FfiSymbol::Signum,
         ];
         all.iter().copied().find(|s| s.symbol_name() == name)
     }
