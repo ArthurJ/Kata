@@ -84,9 +84,9 @@ pub use dict::{
 };
 pub use float::{
     kata_rt_fadd, kata_rt_fcmp_eq, kata_rt_fcmp_ge, kata_rt_fcmp_gt, kata_rt_fcmp_le,
-    kata_rt_fcmp_lt, kata_rt_fcmp_neq, kata_rt_fdiv, kata_rt_float_to_text, kata_rt_fmul,
-    kata_rt_fsub, kata_rt_int_to_float, kata_rt_rand, kata_rt_rand_int, kata_rt_text_to_float,
-    kata_rt_try_float,
+    kata_rt_fcmp_lt, kata_rt_fcmp_neq, kata_rt_fdiv, kata_rt_float_to_int, kata_rt_float_to_text,
+    kata_rt_fmul, kata_rt_fsub, kata_rt_int_to_float, kata_rt_rand, kata_rt_rand_int,
+    kata_rt_text_to_float, kata_rt_try_float,
 };
 pub use io::{kata_rt_panic, kata_rt_print, kata_rt_println};
 pub use list::{
@@ -98,8 +98,8 @@ pub use range::kata_rt_range_alloc;
 pub use rational::{
     kata_rt_int_to_rational, kata_rt_rat_add, kata_rt_rat_div, kata_rt_rat_eq,
     kata_rt_rat_from_float, kata_rt_rat_ge, kata_rt_rat_gt, kata_rt_rat_le, kata_rt_rat_literal,
-    kata_rt_rat_lt, kata_rt_rat_mul, kata_rt_rat_neq, kata_rt_rat_show, kata_rt_rat_sub,
-    kata_rt_rat_to_float,
+    kata_rt_rat_lt, kata_rt_rat_mul, kata_rt_rat_neq, kata_rt_rational_to_int, kata_rt_rat_show,
+    kata_rt_rat_sub, kata_rt_rat_to_float,
 };
 pub use scheduler::{
     DEADLOCK_SENTINEL, TIMEOUT_SENTINEL, kata_rt_run, kata_rt_scheduler_init,

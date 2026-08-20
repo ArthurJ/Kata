@@ -147,11 +147,11 @@ Rational implements NUM
     / :: Rational Rational => Rational @ffi("kata_rt_rat_div")
     div :: Rational Rational => Result::(Rational, Text)
     lambda a b:
-        = b (from_int 0): core.Result::Err "divisão por zero"
+        = b (rational 0): core.Result::Err "divisão por zero"
         otherwise: core.Result::Ok (/ a b)
     abs :: Rational => Rational
     lambda a:
-        < a (from_int 0): - (from_int 0) a
+        < a (rational 0): - (rational 0) a
         otherwise: a
     < :: Rational Rational => Boolean @ffi("kata_rt_rat_lt")
     > :: Rational Rational => Boolean @ffi("kata_rt_rat_gt")
@@ -397,16 +397,32 @@ cons :: A List::A => List::A
 # ── Conversões ────────────────────────────────────────────────
 
 @ffi("kata_rt_rat_to_float")
-to_float :: Rational => Float
+float :: Rational => Float
 
 @ffi("kata_rt_rat_from_float")
-from_float :: Float => Rational
+rational :: Float => Rational
 
 @ffi("kata_rt_int_to_rational")
-from_int :: Int => Rational
+rational :: Int => Rational
 
 @ffi("kata_rt_int_to_float")
-to_float :: Int => Float
+float :: Int => Float
+
+# ── Sobrecargas de int e float para conversão entre tipos numéricos ──
+# int recebe Float, Rational, ou Byte e converte para Int.
+# float recebe Int, Rational, ou Byte e converte para Float.
+
+# int: Float → Int (trunca em direção a zero)
+@ffi("kata_rt_float_to_int")
+int :: Float => Int
+
+# int: Rational → Int (trunca em direção a zero)
+@ffi("kata_rt_rational_to_int")
+int :: Rational => Int
+
+# float: Byte → Float (Byte → Int → Float, reusa conversões existentes)
+float :: Byte => Float
+lambda b: float (int b)
 
 # ── Interoperabilidade numérica cross-type ──────────────────────
 # Overloads explícitos para operações entre tipos numéricos diferentes.
@@ -416,54 +432,54 @@ to_float :: Int => Float
 # Int × Float → Float
 @commutative
 + :: Int Float => Float
-lambda i f: + (to_float i) f
+lambda i f: + (float i) f
 
 @commutative
 - :: Int Float => Float
-lambda i f: - (to_float i) f
+lambda i f: - (float i) f
 
 @commutative
 * :: Int Float => Float
-lambda i f: * (to_float i) f
+lambda i f: * (float i) f
 
 # Int × Rational → Rational
 @commutative
 + :: Int Rational => Rational
-lambda i r: + (from_int i) r
+lambda i r: + (rational i) r
 
 @commutative
 - :: Int Rational => Rational
-lambda i r: - (from_int i) r
+lambda i r: - (rational i) r
 
 @commutative
 * :: Int Rational => Rational
-lambda i r: * (from_int i) r
+lambda i r: * (rational i) r
 
 # Float × Rational → Float (converte Rational→Float, opera Float)
 @commutative
 + :: Float Rational => Float
-lambda f r: + f (to_float r)
+lambda f r: + f (float r)
 
 @commutative
 - :: Float Rational => Float
-lambda f r: - f (to_float r)
+lambda f r: - f (float r)
 
 @commutative
 * :: Float Rational => Float
-lambda f r: * f (to_float r)
+lambda f r: * f (float r)
 
 # Rational × Float → Rational (converte Float→Rational, opera Rational)
 @commutative
 + :: Rational Float => Rational
-lambda r f: + r (from_float f)
+lambda r f: + r (rational f)
 
 @commutative
 - :: Rational Float => Rational
-lambda r f: - r (from_float f)
+lambda r f: - r (rational f)
 
 @commutative
 * :: Rational Float => Rational
-lambda r f: * r (from_float f)
+lambda r f: * r (rational f)
 
 # ── I/O (Actions FFI builtin) ──────────────────────────────────
 

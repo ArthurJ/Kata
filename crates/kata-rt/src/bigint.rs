@@ -76,7 +76,7 @@ fn fits_smi(val: i64) -> bool {
 // SAFETY: FFI — o codegen chama estas funções via `#[unsafe(no_mangle)]`.
 /// Aloca BigInt no heap e retorna o ponteiro como i64.
 /// O LSB será 0 (alinhamento de Box<BigInt> é ≥ 8 bytes).
-fn alloc_bigint(n: BigInt) -> i64 {
+pub(crate) fn alloc_bigint(n: BigInt) -> i64 {
     let boxed = Box::new(n);
     let ptr = Box::into_raw(boxed) as i64;
     // LSB deve ser 0 — Box<BigInt> tem alinhamento ≥ 8.

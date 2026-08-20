@@ -84,7 +84,7 @@ Palpite: não é um número
 
 - `int!(linha)` tenta converter `Text` para `Int`. Retorna `Result::(Int, Text)` — `Ok(n)` se a string é um número válido, `Err("número inválido")` se não é.
 - `match r` examina o `Result`. Se for `Ok n`, o número está em `n`. Se for `Err e`, o erro está em `e`.
-- `int` é uma action porque pode falhar — o usuário pode digitar qualquer coisa. O `!` sinaliza isso: "esta operação pode dar errado, trate o erro".
+- `int!` é uma action porque pode falhar — o usuário pode digitar qualquer coisa. O `!` sinaliza isso: "esta operação pode dar errado, trate o erro".
 
 Por que tanto `Result`? Porque operações que podem falhar não deveriam crashar o programa. O usuário digitou "abc"? Tudo bem — você lida com o erro explicitamente via `match`. O capítulo 6 cobre `match` em detalhe.
 

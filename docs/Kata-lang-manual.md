@@ -192,8 +192,8 @@ show (1::Rational / 3::Rational)  # "1/3"
 Conversões com Float são **explícitas** — sem coerção implícita:
 
 ```kata
-to_float :: Rational => Float       # você sabe que perde precisão
-from_float :: Float => Rational     # racional mais próximo do f64
+float :: Rational => Float       # você sabe que perde precisão
+rational :: Float => Rational     # racional mais próximo do f64
 ```
 
 ### Strings
@@ -896,7 +896,7 @@ data Complex (re::Float, im::Float)
 
 # Overload manual — Int Int
 Complex :: Int Int => Complex
-lambda re im: Complex (from_int re) (from_int im)
+lambda re im: Complex (rational re) (rational im)
 ```
 
 Multiple dispatch seleciona por tipo de argumento: `Complex 3 4` → `[Int, Int]`
@@ -992,7 +992,7 @@ no tipo alvo desde o início, sem conversão em runtime:
 ```
 
 Rebaixamento só se aplica a literais. `x::Float` onde `x` é variável Int
-não rebaixa — é `TypeMismatch` (use `from_int x`). O codegen inspeciona
+não rebaixa — é `TypeMismatch` (use `rational x`). O codegen inspeciona
 `(literal_kind, target_ty)` para decidir o símbolo FFI: `IntLit→Float` =
 `f64 const`, `IntLit→Rational` = `kata_rt_rat_literal`,
 `FloatLit→Rational` = `kata_rt_rat_literal`.

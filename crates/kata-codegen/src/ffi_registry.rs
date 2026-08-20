@@ -98,6 +98,14 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
         "kata_rt_int_to_float",
         rt::kata_rt_int_to_float as *const u8,
     );
+    builder.symbol(
+        "kata_rt_float_to_int",
+        rt::kata_rt_float_to_int as *const u8,
+    );
+    builder.symbol(
+        "kata_rt_rational_to_int",
+        rt::kata_rt_rational_to_int as *const u8,
+    );
     // Text
     builder.symbol(
         "kata_rt_string_concat",
@@ -549,6 +557,8 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         RatLiteral,
         IntToRational,
         IntToFloat,
+        FloatToInt,
+        RatToInt,
         StringConcat,
         StringLen,
         TextLiteral,

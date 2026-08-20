@@ -777,11 +777,11 @@ fn infer_with_hint(&mut self, expr: &Spanned<Expr>, hint_ret: Option<&Type>)
   mas nenhuma sobrecarga de `/` com args `[Int, Int]` retorna Rational.
   `((/ 1 3))::Rational` funciona: o `Grouped` interno avalia `/ 1 3`
   **sem hint** → resulta em `Int 0` (idiv default), depois o externo
-  converte `Int 0 → Rational` via `from_int`.
+  converte `Int 0 → Rational` via `rational`.
 
 ```kata
 (/ 1 3)::Rational     # erro — hint Rational, nenhuma sobrecarga de / retorna Rational
-((/ 1 3))::Rational  # 1/3 — Grouped interno avalia sem hint → Int 0, depois from_int converte
+((/ 1 3))::Rational  # 1/3 — Grouped interno avalia sem hint → Int 0, depois rational converte
 ```
 
 - **Implementação Kata4:** `infer_ascription` detecta `Grouped(Grouped(...))`
@@ -806,15 +806,15 @@ fn convert_typed_expr(
 - **Fio:** 6 (grouped barrier precisa de conversão)
 - **Função:** Converte um `TypedExpr` de `from_ty` para `target_ty` via
   dispatch normal. Procura uma função de conversão no `DispatchTable`
-  (ex: `from_int`, `from_float`, `to_float`) que aceite `from_ty` e retorne
+  (ex: `rational`, `float`) que aceite `from_ty` e retorne
   `target_ty`.
 - **Tabela de conversões conhecidas (Kata4):**
 
 ```rust
 match (&inner.ty, target_ty) {
-    (Int, Rational) => "from_int",
-    (Float, Rational) => "from_float",
-    (Rational, Float) => "to_float",
+    (Int, Rational) => "rational",
+    (Float, Rational) => "rational",
+    (Rational, Float) => "float",
     _ => TypeMismatch,
 }
 ```
@@ -825,7 +825,7 @@ match (&inner.ty, target_ty) {
 - **Invariantes:**
   - Literais têm caminho compile-time (não passam por dispatch) —
     `Int(n) → Rational(n.to_string())` direto na TAST.
-  - Não-literais passam por dispatch — `from_int`, `from_float`, `to_float`
+  - Não-literais passam por dispatch — `rational`, `float`
     são funções normais no `DispatchTable`.
   - Se não há função de conversão conhecida, é `TypeMismatch` — não há
     coerção implícita.

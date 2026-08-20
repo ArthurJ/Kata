@@ -107,7 +107,7 @@ O operador `?` desempacota `Result` e `Optional` dentro de Actions. Se o valor f
 
 ```kata
 action parse_num (s::Text) => Result::(Int, Text)
-    let n := int s ?
+    let n := int!(s) ?
     Ok n
 
 action main => Unit
@@ -121,12 +121,12 @@ Ok(42)
 Err("número inválido")
 ```
 
-`int s` retorna `Result::(Int, Text)`. O `?` desempacota o `Ok` e liga `n` ao valor interno. Se `int s` falha, `?` aborta a action — a linha `Ok n` nunca executa, e o `Err` propaga como retorno.
+`int!(s)` retorna `Result::(Int, Text)`. O `?` desempacota o `Ok` e liga `n` ao valor interno. Se `int!(s)` falha, `?` aborta a action — a linha `Ok n` nunca executa, e o `Err` propaga como retorno.
 
 Sem `?`, o equivalente seria:
 
 ```kata
-match (int s)
+match int!(s)
     Ok v: Ok v
     Err e: Err e
 ```
@@ -192,8 +192,8 @@ echo!(show (Light::Off | 0))
 `|` é útil para dar um valor default quando uma operação pode falhar:
 
 ```kata
-echo!(show ((int "42") | 0))
-echo!(show ((int "abc") | 0))
+echo!(show (int!("42") | 0))
+echo!(show (int!("abc") | 0))
 ```
 
 ```

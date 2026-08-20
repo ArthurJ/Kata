@@ -75,13 +75,13 @@ True
 
 ## Converter Text em número
 
-As funções `int` e `float` convertem `Text` para `Int` e `Float` respectivamente:
+As actions `int!` e `float!` convertem `Text` para `Int` e `Float` respectivamente. Como são actions (podem falhar se o texto não é um número válido), retornam `Result`. O operador `|` desempacota o `Ok` e fornece um fallback se falhar (visto no capítulo 2):
 
 ```kata
-echo!(int "42")
-echo!(int "0xFF")
-echo!(float "3.14")
-echo!(+ (float "1.5") (float "2.5"))
+echo!(int!("42") | 0)
+echo!(int!("0xFF") | 0)
+echo!(float!("3.14") | 0.0)
+echo!(+ (float!("1.5") | 0.0) (float!("2.5") | 0.0))
 ```
 
 ```
@@ -91,7 +91,7 @@ echo!(+ (float "1.5") (float "2.5"))
 4.0
 ```
 
-`int` suporta decimal, hexadecimal (`0x`), octal (`0o`), binário (`0b`) e underscores (`1_000`). `float` suporta notação decimal e exponencial (`1e10`).
+`int!` suporta decimal, hexadecimal (`0x`), octal (`0o`), binário (`0b`) e underscores (`1_000`). `float!` suporta notação decimal e exponencial (`1e10`).
 
 ## Concatenar texto
 

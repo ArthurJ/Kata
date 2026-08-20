@@ -115,6 +115,16 @@ pub(crate) fn sig_for(sym: FfiSymbol) -> Option<Signature> {
             sig.params.push(AbiParam::new(I64));
             sig.returns.push(AbiParam::new(F64));
         }
+        // ── Float → Int (f64) → i64 tagged ──
+        FfiSymbol::FloatToInt => {
+            sig.params.push(AbiParam::new(F64));
+            sig.returns.push(AbiParam::new(I64));
+        }
+        // ── Rational → Int (ptr) → i64 tagged ──
+        FfiSymbol::RatToInt => {
+            sig.params.push(AbiParam::new(I64));
+            sig.returns.push(AbiParam::new(I64));
+        }
         // ── Text concat (ptr, ptr) → ptr ──
         FfiSymbol::StringConcat => {
             sig.params.push(AbiParam::new(I64));

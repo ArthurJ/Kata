@@ -10,7 +10,7 @@ Complex implements NUM
     + :: Complex Complex => Complex
     lambda a b: Complex (+ a.re b.re) (+ a.im b.im)
     + :: Complex Int => Complex
-    lambda a b: Complex (+ a.re (to_float (from_int b))) a.im
+    lambda a b: Complex (+ a.re (float b)) a.im
     - :: Complex Complex => Complex
     lambda a b: Complex (- a.re b.re) (- a.im b.im)
     * :: Complex Complex => Complex
@@ -19,3 +19,15 @@ Complex implements NUM
 Complex implements SHOW
     show :: Complex => Text
     lambda a: + "(" (+ (show a.re) (+ " + " (+ (show a.im) "i)")))
+
+# int: Complex → Int (trunca parte real)
+int :: Complex => Int
+lambda z: int z.re
+
+# complex: Float → Complex (construtor com im=0)
+complex :: Float => Complex
+lambda f: Complex f 0.0
+
+# complex: Int → Complex (construtor com im=0)
+complex :: Int => Complex
+lambda n: Complex (float n) 0.0

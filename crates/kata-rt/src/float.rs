@@ -140,6 +140,32 @@ pub extern "C" fn kata_rt_rand() -> f64 {
     rand::rng().random::<f64>()
 }
 
+/// Converte Float para Int (SMI-tagged). Trunca em direção a zero.
+/// Se o valor cabe em SMI, retorna SMI; caso contrário, aloca BigInt no heap.
+/// NaN/Infinity viram 0.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_float_to_int(val: f64) -> i64 {
+    use crate::bigint::{alloc_bigint, encode_smi_pub, fits_smi_pub};
+    use num_bigint::ToBigInt;
+    use num_traits::ToPrimitive;
+
+    if !val.is_finite() {
+        return encode_smi_pub(0);
+    }
+
+    // Trunca em direção a zero (mesmo comportamento de `as i64` para finitos).
+    if let Some(big) = val.trunc().to_bigint() {
+        if let Some(small) = big.to_i64() {
+            if fits_smi_pub(small) {
+                return encode_smi_pub(small);
+            }
+        }
+        alloc_bigint(big)
+    } else {
+        encode_smi_pub(0)
+    }
+}
+
 /// Gera um Int aleatório no intervalo [min, max] (inclusivo).
 /// Recebe SMI-tagged Ints e retorna SMI-tagged Int.
 /// Usado pelo prelude como `rand_int!(min, max)`.

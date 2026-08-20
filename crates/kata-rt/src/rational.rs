@@ -358,3 +358,29 @@ pub unsafe extern "C" fn kata_rt_int_to_rational(val: i64) -> *mut BigRational {
     let r = crate::bigint::to_rational(val);
     Box::into_raw(Box::new(r))
 }
+
+/// Converte Rational para Int (SMI-tagged). Trunca em direção a zero.
+/// Recebe ponteiro para BigRational. Retorna Int tagged (SMI ou BigInt ptr).
+///
+/// # Safety
+///
+/// `r` deve ser ponteiro válido para `BigRational`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn kata_rt_rational_to_int(r: *const BigRational) -> i64 {
+    use crate::bigint::{alloc_bigint, encode_smi_pub, fits_smi_pub};
+    use num_bigint::ToBigInt;
+
+    // SAFETY: caller (codegen) garante ponteiro válido.
+    let r = unsafe { &*r };
+
+    // Trunca em direção a zero: numerador / denominador (divisão inteira).
+    let trunc = r.numer() / r.denom();
+    let big = trunc.to_bigint().unwrap_or_else(BigInt::zero);
+
+    if let Some(small) = big.to_i64() {
+        if fits_smi_pub(small) {
+            return encode_smi_pub(small);
+        }
+    }
+    alloc_bigint(big)
+}
