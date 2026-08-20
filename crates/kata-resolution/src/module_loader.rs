@@ -57,9 +57,7 @@ fn split_import_prefix(path: &[String]) -> (PrefixKind, &[String]) {
 /// `["math", "vectors", "vec2"]` → `math/vectors/vec2.kata`
 ///
 /// O último componente vira `component.kata`. Componentes intermediários
-/// são diretórios (namespaces). Se o último componente existe como
-/// diretório com `mod.kata`, o caller deve detectar isso separadamente
-/// — esta função só monta o path do arquivo.
+/// são diretórios (namespaces).
 fn build_relative_path(normal_path: &[String]) -> PathBuf {
     let mut relative = PathBuf::new();
     for (i, part) in normal_path.iter().enumerate() {
@@ -70,6 +68,35 @@ fn build_relative_path(normal_path: &[String]) -> PathBuf {
         }
     }
     relative
+}
+
+/// Tenta resolver `normal_path` contra `base`.
+///
+/// Para o último componente `C`:
+/// - Se `base/.../C.kata` existe → arquivo módulo
+/// - Se `base/.../C/` é diretório com `mod.kata` → diretório módulo
+/// - Caso contrário → `None` (não encontrado)
+fn try_resolve(base: &Path, normal_path: &[String]) -> Option<PathBuf> {
+    // 1. Tenta como arquivo: base/.../last.kata
+    let file_path = base.join(build_relative_path(normal_path));
+    if file_path.exists() {
+        return Some(file_path);
+    }
+    // 2. Se o último componente é diretório, tenta mod.kata
+    if let Some(last) = normal_path.last() {
+        let mut dir = base.to_path_buf();
+        for part in &normal_path[..normal_path.len() - 1] {
+            dir.push(part);
+        }
+        dir.push(last);
+        if dir.is_dir() {
+            let mod_path = dir.join("mod.kata");
+            if mod_path.exists() {
+                return Some(mod_path);
+            }
+        }
+    }
+    None
 }
 
 /// Erro de carregamento de módulo.
@@ -85,6 +112,8 @@ pub enum LoadError {
     Resolve(Vec<crate::ResolveError>),
     /// Ciclo de import detectado.
     CircularImport { path: String },
+    /// Nome de módulo reservado (`stdlib`).
+    ReservedName { name: String },
     /// Erro de I/O.
     Io(String),
 }
@@ -104,6 +133,9 @@ impl std::fmt::Display for LoadError {
             }
             LoadError::CircularImport { path } => {
                 write!(f, "ciclo de import detectado: `{path}`")
+            }
+            LoadError::ReservedName { name } => {
+                write!(f, "não é possível nomear um módulo como `{name}` — nome reservado")
             }
             LoadError::Io(msg) => write!(f, "erro de I/O ao carregar módulo: {msg}"),
         }
@@ -259,6 +291,14 @@ impl ModuleLoader {
 
         self.loading.insert(path.to_path_buf());
 
+        // Proibir `stdlib` como nome de módulo — é um namespace reservado.
+        if path.file_stem().is_some_and(|s| s == "stdlib") {
+            self.loading.remove(path);
+            return Err(LoadError::ReservedName {
+                name: "stdlib".to_string(),
+            });
+        }
+
         // Lê o arquivo
         let source = std::fs::read_to_string(path).map_err(|e| {
             self.loading.remove(path);
@@ -288,7 +328,7 @@ impl ModuleLoader {
         // tipo do prelude falha com UnboundName.
         // Exceção: core.kata É o prelude — não injeta em si mesmo.
         let is_core = path.file_stem().is_some_and(|s| s == "core");
-        let merged = if is_core {
+        let mut merged = if is_core {
             resolved
         } else {
             let prelude = crate::prelude_sigs::load_prelude().map_err(|e| {
@@ -297,6 +337,18 @@ impl ModuleLoader {
             })?;
             merge_two(prelude, resolved)
         };
+
+        // Carregar imports do módulo recursivamente e fazer merge.
+        // Cada sub-módulo usa seu próprio diretório como entry_dir para
+        // resolver `super.` nos seus imports.
+        // Exceção: core.kata não tem imports (é o prelude).
+        if !is_core {
+            let entry_dir = path.parent().unwrap_or(Path::new(".")).to_path_buf();
+            let imports = self.load_imports(&module, &entry_dir)?;
+            if !imports.is_empty() {
+                crate::merge_imports::merge_imports(&mut merged, &imports);
+            }
+        }
 
         self.loading.remove(path);
 
@@ -354,36 +406,26 @@ impl ModuleLoader {
                     }
                 }
                 // Procurar SÓ no base resolvido (não fallback stdlib)
-                let relative = build_relative_path(normal_path);
-                let candidate = base.join(&relative);
-                if candidate.exists() {
-                    Ok(candidate)
-                } else {
-                    Err(LoadError::NotFound {
-                        path: module_path.join("."),
-                    })
-                }
+                try_resolve(&base, normal_path).ok_or_else(|| LoadError::NotFound {
+                    path: module_path.join("."),
+                })
             }
             PrefixKind::Stdlib => {
                 // Procurar SÓ no stdlib_dir
                 let stdlib_dir = self.stdlib_dir();
-                let relative = build_relative_path(normal_path);
-                let candidate = stdlib_dir.join(&relative);
-                if candidate.exists() {
-                    Ok(candidate)
-                } else {
-                    Err(LoadError::NotFound {
-                        path: module_path.join("."),
-                    })
-                }
+                try_resolve(&stdlib_dir, normal_path).ok_or_else(|| LoadError::NotFound {
+                    path: module_path.join("."),
+                })
             }
             PrefixKind::None => {
-                // Comportamento atual: entry_dir primeiro, stdlib fallback
-                let relative = build_relative_path(normal_path);
+                // entry_dir primeiro (diretório do arquivo importador),
+                // depois search_paths (inclui stdlib como fallback).
+                if let Some(found) = try_resolve(entry_dir, normal_path) {
+                    return Ok(found);
+                }
                 for search_path in &self.search_paths {
-                    let candidate = search_path.join(&relative);
-                    if candidate.exists() {
-                        return Ok(candidate);
+                    if let Some(found) = try_resolve(search_path, normal_path) {
+                        return Ok(found);
                     }
                 }
                 Err(LoadError::NotFound {

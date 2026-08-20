@@ -6,6 +6,7 @@
 //! Produz o `ResolvedModule` (imutável).
 
 mod directives;
+pub(crate) mod merge_imports;
 pub(crate) mod module_loader;
 mod pass0;
 mod prelude_sigs;
@@ -16,6 +17,7 @@ pub use type_resolve::{collect_type_params, resolve_type_expr};
 pub use types::*;
 
 pub use module_loader::{ImportKind, ImportedModule, LoadError, ModuleLoader, filter_exports};
+pub use merge_imports::merge_imports;
 
 use directives::{extract_arg_keys, extract_site_when, extract_test_specs, extract_timer_spec};
 

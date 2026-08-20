@@ -398,7 +398,7 @@ impl ReplSession {
         // Merge de imports cacheados — traz signatures/functions/actions
         // dos módulos importados para o escopo do REPL.
         if !self.imports.is_empty() {
-            crate::imports::merge_imports(&mut resolved, &self.imports);
+            kata_resolution::merge_imports(&mut resolved, &self.imports);
         }
         let typed = infer_module(module, &resolved).map_err(|e| format!("erro de tipo: {e}"))?;
         Ok(typed)
@@ -443,7 +443,7 @@ impl ReplSession {
         // Isto traz signatures/functions/actions dos módulos importados e
         // injeta constants exportadas no type_env antes da inferência.
         let imported_constants = if !self.imports.is_empty() {
-            crate::imports::merge_imports(&mut resolved, &self.imports);
+            kata_resolution::merge_imports(&mut resolved, &self.imports);
             let ics = crate::imports::evaluate_imported_constants(&self.imports)
                 .map_err(|e| format!("erro ao avaliar constants importadas: {e}"))?;
             for ic in &ics {

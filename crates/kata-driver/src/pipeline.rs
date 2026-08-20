@@ -308,7 +308,7 @@ impl Pipeline {
                 .collect::<Vec<_>>()
         })?;
         let mut resolved = merge_resolved(prelude, user);
-        imports::merge_imports(&mut resolved, &imports);
+        kata_resolution::merge_imports(&mut resolved, &imports);
 
         self.imports = imports;
         self.resolved = Some(resolved);
