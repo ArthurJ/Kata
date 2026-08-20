@@ -2,13 +2,14 @@
 //!
 //! Algoritmo (nasce, mesmo com 1 overload):
 //! 1. FILTRAR: candidatas compatíveis (arity + match_score)
-//! 2. PONTUAR: match_score → Score(exact, alias, refined, iface)
-//! 3. ORDENAR: lexicográfico decrescente (exact, alias, refined, iface, !generic)
+//! 2. PONTUAR: match_score → Score(exact, alias, iface)
+//! 3. ORDENAR: lexicográfico decrescente (exact, alias, iface, !generic)
 //! 4. TOPO ÚNICO → Ok
 //! 5. EMPATE → AmbiguousDispatch
 //!
-//! Só `exact` é não-zero. Alias, refined,
-//! iface são sempre 0. Mas a estrutura do algoritmo está pronta.
+//! Só `exact` é não-zero. Alias e iface são sempre 0.
+//! Refined→base é resolvido por fallback em `apply_dispatch.rs`,
+//! não por scoring.
 
 use crate::interface_registry::InterfaceRegistry;
 use crate::ty::{Ty, ty_list_to_string};
@@ -44,15 +45,14 @@ pub struct OverloadInfo {
     pub param_defaults: Vec<Option<Spanned<Expr>>>,
 }
 
-/// Score de um candidato — 4D + tiebreak genérico.
+/// Score de um candidato — 3D + tiebreak genérico.
 ///
 /// Ordenação lexicográfica: mais exact vence, depois mais alias,
-/// depois mais refined, depois mais iface. Concreto vence genérico.
+/// depois mais iface. Concreto vence genérico.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Score {
     pub exact: usize,
     pub alias: usize,
-    pub refined: usize,
     pub iface: usize,
     /// false (concreto) vence true (genérico) no tiebreak.
     pub is_generic_origin: bool,
@@ -64,7 +64,6 @@ impl Score {
         Score {
             exact: 0,
             alias: 0,
-            refined: 0,
             iface: 0,
             is_generic_origin: false,
         }
@@ -72,7 +71,7 @@ impl Score {
 
     /// Verifica se o score é compatível (todos args deram match em alguma categoria).
     pub fn is_compatible(&self, arg_count: usize) -> bool {
-        self.exact + self.alias + self.refined + self.iface == arg_count
+        self.exact + self.alias + self.iface == arg_count
     }
 }
 
@@ -504,19 +503,18 @@ pub enum DispatchError {
     },
 }
 
-/// Conta matches por categoria: exact, alias, refined, iface.
+/// Conta matches por categoria: exact, alias, iface.
 ///
 /// - `exact`: arg == param (já existe desde o início)
 /// - `iface`: param é `Ty::Interface(name)` e arg implementa essa interface
 ///   via `InterfaceRegistry::type_implements`
 ///
-/// Alias e refined ainda são sempre 0 — serão populados
-/// em fios posteriores. Se qualquer posição é incompatível, retorna
-/// `Score::incompatible()` (todos zero).
+/// Alias ainda é sempre 0 — será populado em fio posterior.
+/// Refined→base é resolvido por fallback em `apply_dispatch.rs`, não por scoring.
+/// Se qualquer posição é incompatível, retorna `Score::incompatible()` (todos zero).
 pub fn match_score(args: &[Ty], params: &[Ty], iface_reg: &InterfaceRegistry) -> Score {
     let mut exact = 0;
     let alias = 0;
-    let refined = 0;
     let mut iface = 0;
 
     for (arg, param) in args.iter().zip(params) {
@@ -553,7 +551,7 @@ pub fn match_score(args: &[Ty], params: &[Ty], iface_reg: &InterfaceRegistry) ->
                 return Score::incompatible();
             }
         } else {
-            // Não é exato, não é alias, não é refined, não é iface → incompatível.
+            // Não é exato, não é alias, não é iface → incompatível.
             return Score::incompatible();
         }
     }
@@ -561,7 +559,6 @@ pub fn match_score(args: &[Ty], params: &[Ty], iface_reg: &InterfaceRegistry) ->
     Score {
         exact,
         alias,
-        refined,
         iface,
         is_generic_origin: false,
     }

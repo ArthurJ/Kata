@@ -239,7 +239,7 @@ fn resolve_commutative_no_swap_if_direct_match() {
     assert!(result.is_ok());
 }
 
-// ── Score 4D ──────────────────────────────────────────────────
+// ── Score 3D ──────────────────────────────────────────────────
 
 #[test]
 fn score_exact_beats_incompatible() {
@@ -248,7 +248,6 @@ fn score_exact_beats_incompatible() {
     let compatible = Score {
         exact: 2,
         alias: 0,
-        refined: 0,
         iface: 0,
         is_generic_origin: false,
     };
@@ -266,14 +265,12 @@ fn score_ordering_exact_vs_alias() {
     let more_exact = Score {
         exact: 2,
         alias: 0,
-        refined: 0,
         iface: 0,
         is_generic_origin: false,
     };
     let more_alias = Score {
         exact: 1,
         alias: 1,
-        refined: 0,
         iface: 0,
         is_generic_origin: false,
     };
@@ -289,14 +286,12 @@ fn score_ordering_concrete_beats_generic() {
     let concrete = Score {
         exact: 2,
         alias: 0,
-        refined: 0,
         iface: 0,
         is_generic_origin: false,
     };
     let generic = Score {
         exact: 2,
         alias: 0,
-        refined: 0,
         iface: 0,
         is_generic_origin: true,
     };

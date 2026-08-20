@@ -906,26 +906,29 @@ O `DispatchTable` em `kata-core` coleta candidatos por nome, pontua cada par
 (arg, param) por compatibilidade de tipos, e seleciona o de maior score.
 Empate → `AmbiguousDispatch`.
 
-#### Score 4D — Categorias de Match
+#### Score 3D — Categorias de Match
 
-O scoring classifica cada par (arg, param) em uma de quatro categorias,
+O scoring classifica cada par (arg, param) em uma de três categorias,
 ordenadas lexicograficamente por prioridade:
 
 | Categoria | Quando | Estado |
 |---|---|---|
 | `exact` | `arg == param` (tipo idêntico) | Ativo |
 | `alias` | arg é alias de param via `alias_of` | Não implementado (sempre 0) |
-| `refined` | arg é subtipo refinado de param | Não implementado (sempre 0) |
 | `iface` | arg implementa param (ex: Int implementa NUM) | Ativo |
 
 **Ordenação:** lexicográfica decrescente. Mais `exact` vence; empate em
-`exact` → mais `alias` vence; empate em `alias` → mais `refined`; empate em
-`refined` → mais `iface`; empate total → concreto vence genérico
-(`is_generic_origin: false > true`).
+`exact` → mais `alias` vence; empate em `alias` → mais `iface`; empate total
+→ concreto vence genérico (`is_generic_origin: false > true`).
 
-`alias` e `refined` são sempre 0 na implementação atual — os campos existem
-na struct `Score` mas `match_score` nunca os incrementa. A estrutura e a
-ordenância lexicográfica já estão prontas para quando forem populados.
+`alias` é sempre 0 na implementação atual — o campo existe na struct `Score`
+mas `match_score` nunca o incrementa. A estrutura e a ordenância lexicográfica
+já estão prontas para quando for populado.
+
+Refined→base **não** é uma dimensão do Score. É resolvido por fallback em
+`apply_dispatch.rs`: quando o dispatch normal falha e algum arg é tipo
+refined com delegação `refines`, o fallback substitui o arg pelo tipo base
+e retenta o dispatch.
 
 #### Algoritmo de Resolução
 
@@ -950,7 +953,7 @@ O `match_score` itera posição-a-posição. Para cada par `(arg, param)`:
 - `Tuple` vs `SHOW` → `iface++` (Tuple implementa SHOW implicitamente)
 - nenhum → `Score::incompatible()` (descarta candidato)
 
-Se `exact + alias + refined + iface != args.len()`, o candidato é
+Se `exact + alias + iface != args.len()`, o candidato é
 incompatível e descartado.
 
 #### Commutative
