@@ -103,10 +103,10 @@ pub extern "C" fn kata_rt_floor(val: f64) -> i64 {
         return encode_smi_pub(0);
     }
     if let Some(big) = val.floor().to_bigint() {
-        if let Some(small) = big.to_i64() {
-            if fits_smi_pub(small) {
-                return encode_smi_pub(small);
-            }
+        if let Some(small) = big.to_i64()
+            && fits_smi_pub(small)
+        {
+            return encode_smi_pub(small);
         }
         alloc_bigint(big)
     } else {
@@ -124,10 +124,10 @@ pub extern "C" fn kata_rt_ceil(val: f64) -> i64 {
         return encode_smi_pub(0);
     }
     if let Some(big) = val.ceil().to_bigint() {
-        if let Some(small) = big.to_i64() {
-            if fits_smi_pub(small) {
-                return encode_smi_pub(small);
-            }
+        if let Some(small) = big.to_i64()
+            && fits_smi_pub(small)
+        {
+            return encode_smi_pub(small);
         }
         alloc_bigint(big)
     } else {
@@ -209,8 +209,16 @@ pub extern "C" fn kata_rt_pow(base: i64, exp: i64) -> i64 {
     use num_bigint::BigInt;
     use num_traits::ToPrimitive;
 
-    let b = if is_smi_pub(base) { decode_smi_pub(base) } else { base };
-    let e = if is_smi_pub(exp) { decode_smi_pub(exp) } else { exp };
+    let b = if is_smi_pub(base) {
+        decode_smi_pub(base)
+    } else {
+        base
+    };
+    let e = if is_smi_pub(exp) {
+        decode_smi_pub(exp)
+    } else {
+        exp
+    };
 
     if e < 0 {
         return encode_smi_pub(0);
@@ -261,7 +269,17 @@ fn checked_pow_i64(base: i64, exp: u64) -> Option<i64> {
 pub extern "C" fn kata_rt_signum(val: i64) -> i64 {
     use crate::bigint::{decode_smi_pub, encode_smi_pub, is_smi_pub};
 
-    let v = if is_smi_pub(val) { decode_smi_pub(val) } else { val };
-    let s = if v > 0 { 1 } else if v < 0 { -1 } else { 0 };
+    let v = if is_smi_pub(val) {
+        decode_smi_pub(val)
+    } else {
+        val
+    };
+    let s = if v > 0 {
+        1
+    } else if v < 0 {
+        -1
+    } else {
+        0
+    };
     encode_smi_pub(s)
 }

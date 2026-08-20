@@ -98,15 +98,15 @@ pub use list::{
 pub use math::{
     kata_rt_acos, kata_rt_asin, kata_rt_atan, kata_rt_atan2, kata_rt_cbrt, kata_rt_ceil,
     kata_rt_cos, kata_rt_cosh, kata_rt_exp, kata_rt_floor, kata_rt_gcd, kata_rt_lcm, kata_rt_log,
-    kata_rt_log10, kata_rt_log2, kata_rt_pow, kata_rt_signum, kata_rt_sin, kata_rt_sinh,
+    kata_rt_log2, kata_rt_log10, kata_rt_pow, kata_rt_signum, kata_rt_sin, kata_rt_sinh,
     kata_rt_sqrt, kata_rt_tan, kata_rt_tanh,
 };
 pub use range::kata_rt_range_alloc;
 pub use rational::{
     kata_rt_int_to_rational, kata_rt_rat_add, kata_rt_rat_div, kata_rt_rat_eq,
     kata_rt_rat_from_float, kata_rt_rat_ge, kata_rt_rat_gt, kata_rt_rat_le, kata_rt_rat_literal,
-    kata_rt_rat_lt, kata_rt_rat_mul, kata_rt_rat_neq, kata_rt_rational_to_int, kata_rt_rat_show,
-    kata_rt_rat_sub, kata_rt_rat_to_float,
+    kata_rt_rat_lt, kata_rt_rat_mul, kata_rt_rat_neq, kata_rt_rat_show, kata_rt_rat_sub,
+    kata_rt_rat_to_float, kata_rt_rational_to_int,
 };
 pub use scheduler::{
     DEADLOCK_SENTINEL, TIMEOUT_SENTINEL, kata_rt_run, kata_rt_scheduler_init,

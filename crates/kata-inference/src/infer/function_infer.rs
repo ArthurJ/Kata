@@ -12,7 +12,7 @@ use kata_resolution::FunctionDef;
 use crate::typed::{TypedFunction, TypedLambdaClause};
 
 use super::apply_lambda::infer_lambda_body;
-use super::expr::{InferCtx, infer_expr_hinted, fits_return};
+use super::expr::{InferCtx, fits_return, infer_expr_hinted};
 use super::helpers::{InferResult, check_patterns, process_with_bindings};
 
 /// Infere uma função nomeada com corpo Kata (múltiplas cláusulas).

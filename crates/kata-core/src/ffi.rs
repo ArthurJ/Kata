@@ -712,7 +712,7 @@ impl FfiSymbol {
             FfiSymbol::TextLiteral => Ty::text(),
             FfiSymbol::IntToText | FfiSymbol::BoolToText => Ty::text(),
             FfiSymbol::TextToInt => Ty::int(),
-            FfiSymbol::TryInt => Ty::int(), // Result box ptr
+            FfiSymbol::TryInt => Ty::int(),   // Result box ptr
             FfiSymbol::TryFloat => Ty::int(), // Result box ptr
             FfiSymbol::TextReplaceFirst | FfiSymbol::TextReplace => Ty::text(),
             // I/O

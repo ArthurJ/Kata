@@ -17,7 +17,7 @@ use kata_diagnostics::MiddleError;
 
 use crate::typed::{TypedExpr, TypedExprKind, TypedGuardClause, TypedLambdaClause};
 
-use super::expr::{InferCtx, infer_expr, infer_expr_hinted, fits_return};
+use super::expr::{InferCtx, fits_return, infer_expr, infer_expr_hinted};
 use super::helpers::{InferResult, check_patterns, process_with_bindings};
 
 /// Infere `(lambda x: ...) 42` — args fornecem tipos dos parâmetros.

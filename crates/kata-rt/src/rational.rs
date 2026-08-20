@@ -377,10 +377,10 @@ pub unsafe extern "C" fn kata_rt_rational_to_int(r: *const BigRational) -> i64 {
     let trunc = r.numer() / r.denom();
     let big = trunc.to_bigint().unwrap_or_else(BigInt::zero);
 
-    if let Some(small) = big.to_i64() {
-        if fits_smi_pub(small) {
-            return encode_smi_pub(small);
-        }
+    if let Some(small) = big.to_i64()
+        && fits_smi_pub(small)
+    {
+        return encode_smi_pub(small);
     }
     alloc_bigint(big)
 }

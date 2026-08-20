@@ -155,10 +155,10 @@ pub extern "C" fn kata_rt_float_to_int(val: f64) -> i64 {
 
     // Trunca em direção a zero (mesmo comportamento de `as i64` para finitos).
     if let Some(big) = val.trunc().to_bigint() {
-        if let Some(small) = big.to_i64() {
-            if fits_smi_pub(small) {
-                return encode_smi_pub(small);
-            }
+        if let Some(small) = big.to_i64()
+            && fits_smi_pub(small)
+        {
+            return encode_smi_pub(small);
         }
         alloc_bigint(big)
     } else {

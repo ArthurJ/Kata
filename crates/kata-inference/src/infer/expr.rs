@@ -94,7 +94,9 @@ fn contains_break(kind: &TypedExprKind) -> bool {
         TypedExprKind::Match { scrutinee, arms } => {
             arms.iter().any(|arm| contains_break(&arm.body.node.kind))
                 || arms.iter().any(|arm| {
-                    arm.guard.as_ref().is_some_and(|g| contains_break(&g.node.kind))
+                    arm.guard
+                        .as_ref()
+                        .is_some_and(|g| contains_break(&g.node.kind))
                 })
                 || contains_break(&scrutinee.node.kind)
         }
@@ -825,7 +827,11 @@ pub(crate) fn infer_expr_hinted(
             }
             // Busca break recursivamente no body — pode estar dentro de match.
             let has_break = typed_body.iter().any(|s| contains_break(&s.node.kind));
-            let loop_ty = if has_break { Ty::Unit } else { Ty::Var("_divergent".into()) };
+            let loop_ty = if has_break {
+                Ty::Unit
+            } else {
+                Ty::Var("_divergent".into())
+            };
             (loop_ty, TypedExprKind::Loop { body: typed_body })
         }
         Expr::Break => {
