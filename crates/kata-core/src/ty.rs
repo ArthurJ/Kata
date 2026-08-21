@@ -263,6 +263,9 @@ impl std::fmt::Display for Ty {
             Ty::Sum(name) | Ty::Interface(name) => f.write_str(name),
             Ty::Struct(key) => match key {
                 crate::struct_registry::StructKey::Plain(name) => f.write_str(name),
+                crate::struct_registry::StructKey::Family(name) => {
+                    write!(f, "{name} (family)")
+                }
                 crate::struct_registry::StructKey::Instance(name, concrete) => {
                     write!(f, "{name} ({concrete})")
                 }
@@ -352,6 +355,9 @@ impl Ty {
             Ty::Unit => "Unit".into(),
             Ty::Struct(key) => match key {
                 crate::struct_registry::StructKey::Plain(name) => name.clone(),
+                crate::struct_registry::StructKey::Family(name) => {
+                    format!("{name} (family)")
+                }
                 crate::struct_registry::StructKey::Instance(name, concrete) => {
                     format!("{name} ({concrete})")
                 }

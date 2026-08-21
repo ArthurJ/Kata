@@ -375,6 +375,49 @@ impl InterfaceRegistry {
             .collect()
     }
 
+    /// Atualiza as assinaturas de uma interface já registrada.
+    /// Usado no two-pass: o pass0a registra a interface com signatures vazias,
+    /// o pass0b resolve os TypeExprs e atualiza.
+    pub fn update_interface_signatures(
+        &mut self,
+        origin: &str,
+        name: &str,
+        signatures: Vec<InterfaceSignature>,
+    ) -> Result<(), String> {
+        let key = (origin.to_string(), name.to_string());
+        let info = self
+            .interfaces
+            .get_mut(&key)
+            .ok_or_else(|| format!("interface '{name}' não encontrada em origin '{origin}'"))?;
+        info.signatures = signatures;
+        Ok(())
+    }
+
+    /// Atualiza os métodos de um impl já registrado.
+    /// Usado no two-pass: o pass0a registra o impl com methods vazios,
+    /// o pass0b resolve os tipos e atualiza.
+    pub fn update_impl_methods(
+        &mut self,
+        origin: &str,
+        type_name: &str,
+        interface_name: &str,
+        methods: Vec<ImplMethodInfo>,
+    ) -> Result<(), String> {
+        let entry = self
+            .impls
+            .iter_mut()
+            .find(|e| {
+                e.origin == origin
+                    && e.type_name == type_name
+                    && e.interface_name == interface_name
+            })
+            .ok_or_else(|| {
+                format!("impl '{type_name}' implements '{interface_name}' não encontrado em origin '{origin}'")
+            })?;
+        entry.methods = methods;
+        Ok(())
+    }
+
     /// Filtra interfaces e impls mantendo apenas aqueles cujo nome está no
     /// `closure` ou cuja origin é `core` (prelude). Usado por `filter_exports`.
     pub fn retain_by_closure(&mut self, closure: &std::collections::HashSet<String>) {

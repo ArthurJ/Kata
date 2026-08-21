@@ -19,6 +19,9 @@ use crate::ty::Ty;
 /// instâncias de família de refined polimórfico.
 ///
 /// - `Plain("Pessoa")` — struct comum ou refined concreto.
+/// - `Family("NonZero")` — referência a família polimórfica
+///   (`data (NUM, ...) as NonZero`). Expandir em instâncias concretas
+///   antes do dispatch.
 /// - `Instance("NonZero", "Int")` — instância de `data (NUM, ...) as NonZero`
 ///   para o tipo concreto `Int`. O nome público é `"NonZero"`.
 ///
@@ -28,15 +31,20 @@ use crate::ty::Ty;
 pub enum StructKey {
     /// Tipo comum: "Pessoa", "Float", "NonZero" (refined concreto).
     Plain(String),
+    /// Família polimórfica: "NonZero" = `data (NUM, ...) as NonZero`.
+    /// Não há struct concreto com este nome — é uma referência à família
+    /// que deve ser expandida em `Instance` concretas.
+    Family(String),
     /// Instância de família: ("NonZero", "Int") = NonZero sobre Int.
     Instance(String, String),
 }
 
 impl StructKey {
-    /// Nome público (ex: "NonZero" tanto para Plain quanto Instance).
+    /// Nome público (ex: "NonZero" para Plain, Family e Instance).
     pub fn name(&self) -> &str {
         match self {
             StructKey::Plain(n) => n,
+            StructKey::Family(n) => n,
             StructKey::Instance(n, _) => n,
         }
     }
@@ -44,7 +52,7 @@ impl StructKey {
     /// Tipo concreto da instância, se aplicável.
     pub fn concrete_type(&self) -> Option<&str> {
         match self {
-            StructKey::Plain(_) => None,
+            StructKey::Plain(_) | StructKey::Family(_) => None,
             StructKey::Instance(_, t) => Some(t),
         }
     }
@@ -257,6 +265,12 @@ impl StructRegistry {
     }
 
     // ── Consulta ──────────────────────────────────────────
+
+    /// Verifica se um nome é uma família polimórfica (tem instâncias
+    /// registradas com `is_instance_of: Some(name)`).
+    pub fn is_family(&self, name: &str) -> bool {
+        !self.all_instances(name).is_empty()
+    }
 
     /// Busca informações de um struct pelo nome (não-qualificado).
     /// Retorna `None` se o nome é ambíguo ou não existe.

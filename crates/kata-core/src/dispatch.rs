@@ -11,6 +11,7 @@
 //! são resolvidos por fallback em `apply_dispatch.rs`, não por scoring.
 
 use crate::interface_registry::InterfaceRegistry;
+use crate::struct_registry::StructKey;
 use crate::ty::{Ty, ty_list_to_string};
 use kata_ast::{Expr, Spanned};
 use std::cmp::Reverse;
@@ -517,14 +518,26 @@ pub fn match_score(args: &[Ty], params: &[Ty], iface_reg: &InterfaceRegistry) ->
         if arg == param {
             exact += 1;
         } else if let (Ty::Struct(arg_key), Ty::Struct(param_key)) = (arg, param) {
-            // Família ↔ instância: Instance("NonZero", "Int") vs Plain("NonZero")
+            // Família ↔ instância: Instance("NonZero", "Int") vs Family("NonZero")
             // (ou vice-versa). Se ambos têm o mesmo nome público, é exact match
             // — a instância pertence à família por construção.
-            if arg_key.name() == param_key.name()
-                && (matches!(arg_key, crate::struct_registry::StructKey::Instance(..))
-                    || matches!(param_key, crate::struct_registry::StructKey::Instance(..)))
-            {
-                exact += 1;
+            // Instance ↔ Instance: só é exact match se o tipo concreto for o mesmo.
+            // Family ↔ Family: exact match (mesma família).
+            // Family ↔ Plain: incompatível (família não é struct concreto).
+            if arg_key.name() == param_key.name() {
+                match (arg_key, param_key) {
+                    (StructKey::Instance(_, a), StructKey::Instance(_, p)) if a == p => {
+                        exact += 1;
+                    }
+                    (StructKey::Instance(..), StructKey::Plain(..))
+                    | (StructKey::Plain(..), StructKey::Instance(..))
+                    | (StructKey::Instance(..), StructKey::Family(..))
+                    | (StructKey::Family(..), StructKey::Instance(..))
+                    | (StructKey::Family(..), StructKey::Family(..)) => {
+                        exact += 1;
+                    }
+                    _ => return Score::incompatible(),
+                }
             } else {
                 return Score::incompatible();
             }
