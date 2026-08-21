@@ -5,6 +5,7 @@
 //! (Tuple→StructConstruct), e rebaixamento de literais (Int→Float, etc.).
 
 use kata_ast::{Expr, Span, Spanned, TypeExpr};
+use kata_core::StructKey;
 use kata_core::escape::EscapeTarget;
 use kata_core::ty::{PrimTy, Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
@@ -58,6 +59,44 @@ pub(crate) fn infer_type_ascription(
         }
     };
 
+    // Família polimórfica → instância concreta.
+    // Se target_ty é Plain(family_name) e a família tem instâncias
+    // (is_instance_of), e o inner tem tipo primitivo concreto, promove
+    // target_ty para Instance(family_name, concrete). Ex: `3::NonZero`
+    // com inner :: Int → Ty::Struct(Instance("NonZero", "Int")).
+    let target_ty = if let Ty::Struct(StructKey::Plain(family_name)) = &target_ty {
+        if let Some(info) = ctx.struct_registry.get(family_name) {
+            if info.is_instance_of.is_some() {
+                let concrete = match &inner.ty {
+                    Ty::Prim(PrimTy::Int) => "Int",
+                    Ty::Prim(PrimTy::Float) => "Float",
+                    Ty::Prim(PrimTy::Rational) => "Rational",
+                    Ty::Prim(PrimTy::Text) => "Text",
+                    _ => "",
+                };
+                if !concrete.is_empty()
+                    && ctx
+                        .struct_registry
+                        .get_instance(family_name, concrete)
+                        .is_some()
+                {
+                    Ty::Struct(StructKey::Instance(
+                        family_name.clone(),
+                        concrete.to_string(),
+                    ))
+                } else {
+                    target_ty
+                }
+            } else {
+                target_ty
+            }
+        } else {
+            target_ty
+        }
+    } else {
+        target_ty
+    };
+
     // Downcast refined/alias→base — `a::Int` onde `a :: PositiveInt`
     // ou `x::Float` onde `x :: Altura` (alias de Float) ou
     // `p::Float` onde `p :: Peso` (alias de PositiveFloat que é refined de Float).
@@ -65,12 +104,12 @@ pub(crate) fn infer_type_ascription(
     // Válido quando target_ty aparece em algum ponto da cadeia de alias_of.
     // Deve vir ANTES do ascription-refined, senão `p::Float` entra no path
     // de refined-validation que exige literal e falha para variáveis.
-    if let Ty::Struct(ref inner_name) = inner.ty
-        && let Some(struct_info) = ctx.struct_registry.get(inner_name)
+    if let Ty::Struct(ref key) = inner.ty
+        && let Some(struct_info) = ctx.struct_registry.get(key.name())
         && (struct_info.alias_of.is_some() || struct_info.predicates.is_some())
     {
         // Percorre a cadeia de alias_of recursivamente.
-        let mut current = inner_name.clone();
+        let mut current = key.name().to_string();
         let mut found_match = false;
         while let Some(info) = ctx.struct_registry.get(&current) {
             let base_name = match &info.alias_of {
@@ -82,7 +121,7 @@ pub(crate) fn infer_type_ascription(
                 (Ty::Prim(PrimTy::Float), "Float") => true,
                 (Ty::Prim(PrimTy::Rational), "Rational") => true,
                 (Ty::Prim(PrimTy::Text), "Text") => true,
-                (Ty::Struct(s), b) if s == b => true,
+                (Ty::Struct(key), b) if key.name() == b => true,
                 _ => false,
             };
             if base_matches {
@@ -118,8 +157,8 @@ pub(crate) fn infer_type_ascription(
     // em compile-time. Se target é um tipo refined (StructInfo com
     // predicates) e expr é literal, avalia cada predicado via
     // const_eval. Se todos passam → TypeAscription com target_ty.
-    if let Ty::Struct(ref struct_name) = target_ty
-        && let Some(struct_info) = ctx.struct_registry.get(struct_name)
+    if let Ty::Struct(ref key) = target_ty
+        && let Some(struct_info) = ctx.struct_registry.get(key.name())
         && struct_info.predicates.is_some()
     {
         // Refined type — expr deve ser literal numérico.
@@ -130,8 +169,9 @@ pub(crate) fn infer_type_ascription(
         if !is_literal {
             return Err(MiddleError::TypeMismatch {
                 expected: format!(
-                    "literal para ascription refined {struct_name} \
-                     (use construtor para expr não-literal)"
+                    "literal para ascription refined {key_name} \
+                     (use construtor para expr não-literal)",
+                    key_name = key.name(),
                 ),
                 found: format!("{:?}", inner.kind),
                 span: expr.span.into(),
@@ -142,9 +182,9 @@ pub(crate) fn infer_type_ascription(
         let refined_decl = ctx
             .refined_decls
             .iter()
-            .find(|rd| rd.name == *struct_name)
+            .find(|rd| rd.name == key.name())
             .ok_or_else(|| MiddleError::TypeMismatch {
-                expected: format!("RefinedDeclInfo para {struct_name}"),
+                expected: format!("RefinedDeclInfo para {}", key.name()),
                 found: "não encontrado em refined_decls".into(),
                 span: expr.span.into(),
             })?;
@@ -156,7 +196,7 @@ pub(crate) fn infer_type_ascription(
                 Some(true) => {} // predicado satisfeito
                 Some(false) => {
                     return Err(MiddleError::TypeMismatch {
-                        expected: format!("predicado {i} de {struct_name} satisfeito"),
+                        expected: format!("predicado {i} de {} satisfeito", key.name()),
                         found: "predicado falhou para valor".to_string(),
                         span: expr.span.into(),
                     });
@@ -205,9 +245,9 @@ pub(crate) fn infer_type_ascription(
     // Ascription-construção — `(a, b)::Pessoa` → StructConstruct.
     // Se inner é Tuple e target é Struct, e o shape bate (mesmo nº de
     // elementos, tipos compatíveis), produz StructConstruct.
-    if let Ty::Struct(ref struct_name) = target_ty
+    if let Ty::Struct(ref key) = target_ty
         && let TypedExprKind::Tuple { elements } = &inner.kind
-        && let Some(struct_info) = ctx.struct_registry.get(struct_name)
+        && let Some(struct_info) = ctx.struct_registry.get(key.name())
         && !struct_info.fields.is_empty()
         && struct_info.alias_of.is_none()
     {
@@ -216,7 +256,7 @@ pub(crate) fn infer_type_ascription(
             return Err(MiddleError::TypeMismatch {
                 expected: format!(
                     "Struct {} with {} fields",
-                    struct_name,
+                    key.name(),
                     struct_info.fields.len()
                 ),
                 found: format!("Tuple with {} elements", elements.len()),
@@ -250,7 +290,7 @@ pub(crate) fn infer_type_ascription(
                     EscapeTarget::Caller
                 },
                 kind: TypedExprKind::StructConstruct {
-                    struct_name: struct_name.clone(),
+                    struct_name: key.name().to_string(),
                     values,
                 },
             });
@@ -259,7 +299,7 @@ pub(crate) fn infer_type_ascription(
         return Err(MiddleError::TypeMismatch {
             expected: format!(
                 "Struct {} fields [{}]",
-                struct_name,
+                key.name(),
                 struct_info
                     .fields
                     .iter()

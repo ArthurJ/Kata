@@ -7,26 +7,11 @@
 use kata_ast::{Expr, Span, Spanned};
 use kata_core::dispatch::{OverloadInfo, Score, match_score};
 use kata_core::escape::EscapeTarget;
-use kata_core::ty::{PrimTy, Ty};
+use kata_core::ty::Ty;
 use kata_diagnostics::MiddleError;
 use std::collections::HashMap;
 
 use crate::typed::{TypedExpr, TypedExprKind};
-
-/// Converte um nome de tipo primitivo para `Ty`.
-/// Usado pelo fallback de família polimórfica para substituir instância
-/// pelo tipo concreto (`alias_of`).
-fn type_name_to_ty(name: &str) -> Option<Ty> {
-    match name {
-        "Int" => Some(Ty::Prim(PrimTy::Int)),
-        "Float" => Some(Ty::Prim(PrimTy::Float)),
-        "Text" => Some(Ty::Prim(PrimTy::Text)),
-        "Rational" => Some(Ty::Prim(PrimTy::Rational)),
-        "Boolean" => Some(Ty::Sum("Boolean".into())),
-        "Unit" => Some(Ty::Unit),
-        _ => Some(Ty::Struct(name.into())),
-    }
-}
 
 use super::expr::InferCtx;
 use super::helpers::{InferResult, dispatch_to_middle_error};
@@ -384,13 +369,9 @@ pub(crate) fn try_refines_fallback(
     // Para cada arg, se é refined (Ty::Struct com refines), coletar o tipo base.
     let mut fallback_arg_types = arg_types.to_vec();
     let mut any_substituted = false;
-    // Args que são famílias polimórficas (sem refines) — processados depois
-    // do iter_mut para evitar borrow conflict. Cada entrada é
-    // (index, family_name, [alias_of candidatos]).
-    let mut pending_family_fallback: Vec<(usize, String, Vec<String>)> = Vec::new();
 
     for (i, arg_ty) in fallback_arg_types.iter_mut().enumerate() {
-        if let Ty::Struct(name) = arg_ty {
+        if let Ty::Struct(key) = arg_ty {
             // Se o arg já é exact match com o param na posição i de alguma
             // overload de aridade compatível, não substituir — o dispatch
             // normal já deveria ter casado este arg por exact match.
@@ -401,7 +382,7 @@ pub(crate) fn try_refines_fallback(
 
             // Segue a cadeia de alias_of se o tipo não tem refines direto.
             // Ex: Peso é alias de PositiveFloat que tem refines NUM.
-            let mut current = name.clone();
+            let mut current = key.name().to_string();
             let entries = loop {
                 let e = ctx.refines_registry.get(&current);
                 if !e.is_empty() {
@@ -419,19 +400,7 @@ pub(crate) fn try_refines_fallback(
                 }
             };
             if entries.is_empty() {
-                // Sem refines, mas pode ser instância de família polimórfica.
-                // NonZeroPoly (instância de `data (NUM, ...) as NonZeroPoly`)
-                // tem alias_of no StructRegistry. Como Ty::Struct não carrega
-                // a instância concreta, tentamos cada alias_of possível.
-                //
-                // Não podemos chamar resolve() aqui porque fallback_arg_types
-                // está mutably borrowed pelo iter_mut. Coletamos o nome da
-                // família e o índice para processar depois.
-                let instances = ctx.struct_registry.all_instances(name);
-                if !instances.is_empty() {
-                    pending_family_fallback
-                        .push((i, name.clone(), instances.iter().map(|(a, _)| a.to_string()).collect()));
-                }
+                // Sem refines e sem instância polimórfica — não há fallback.
                 continue;
             }
             // Verificar se func_name é método de alguma interface delegada
@@ -448,50 +417,6 @@ pub(crate) fn try_refines_fallback(
             let base_ty = &entries[0].base_ty;
             *arg_ty = base_ty.clone();
             any_substituted = true;
-        }
-    }
-
-    // Processa famílias polimórficas pendentes: para cada arg que é uma
-    // família (NonZeroPoly), tenta cada alias_of (Int, Float, Rational)
-    // e vê qual resolve o dispatch com melhor match_score.
-    for (i, _family, aliases) in &pending_family_fallback {
-        // Heurística: preferir alias cujo tipo é compatível com os outros
-        // args do dispatch. Se algum outro arg é Int, preferir Int.
-        let other_types: Vec<Ty> = fallback_arg_types
-            .iter()
-            .enumerate()
-            .filter(|(j, _)| j != i)
-            .map(|(_, t)| t.clone())
-            .collect();
-
-        // Ordena aliases por prioridade: 0 = casa com outro arg, 1 = não casa.
-        let mut sorted: Vec<(u8, &String)> = aliases
-            .iter()
-            .map(|a| {
-                let ty = type_name_to_ty(a);
-                let prio = match &ty {
-                    Some(t) if other_types.iter().any(|o| o == t) => 0u8,
-                    _ => 1u8,
-                };
-                (prio, a)
-            })
-            .collect();
-        sorted.sort_by_key(|(p, _)| *p);
-
-        for (_, alias) in &sorted {
-            if let Some(base_ty) = type_name_to_ty(alias) {
-                let mut trial_args = fallback_arg_types.clone();
-                trial_args[*i] = base_ty.clone();
-                if ctx
-                    .table
-                    .resolve(func_name, &trial_args, ctx.interface_registry)
-                    .is_ok()
-                {
-                    fallback_arg_types[*i] = base_ty;
-                    any_substituted = true;
-                    break;
-                }
-            }
         }
     }
 

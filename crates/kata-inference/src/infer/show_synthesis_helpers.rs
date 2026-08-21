@@ -28,7 +28,7 @@ pub(crate) fn show_expr(arg: Spanned<TypedExpr>, arg_ty: &Ty) -> Spanned<TypedEx
         Ty::Prim(PrimTy::Rational) => ffi_call1("kata_rt_rat_show", arg, Ty::text()),
         Ty::Prim(PrimTy::Text) => arg, // identity
         Ty::Sum(name) => show_call(arg, name.clone(), arg_ty),
-        Ty::Struct(name) => show_call(arg, name.clone(), arg_ty),
+        Ty::Struct(name) => show_call(arg, name.name().to_string(), arg_ty),
         Ty::List(_) => show_call(arg, "List".to_string(), arg_ty),
         Ty::Array(_) => show_call(arg, "Array".to_string(), arg_ty),
         Ty::Set(_) => show_call(arg, "Set".to_string(), arg_ty),

@@ -276,11 +276,11 @@ pub(crate) fn infer_pipe_fallback(
                         .unwrap_or(concrete_payload.clone()),
                     _ => concrete_payload.clone(),
                 };
-                if let Ty::Struct(ref name) = resolved
-                    && let Some(info) = ctx.struct_registry.get(name)
+                if let Ty::Struct(ref key) = resolved
+                    && let Some(info) = ctx.struct_registry.get(key.name())
                     && info.predicates.is_some()
                 {
-                    return Some(name.clone());
+                    return Some(key.name().to_string());
                 }
                 None
             });

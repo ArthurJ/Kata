@@ -283,9 +283,9 @@ fn convert_to_text(expr: Spanned<TypedExpr>) -> Spanned<TypedExpr> {
             let mangled = format!("__kata_show__{name}");
             repr_call(expr, mangled)
         }
-        Ty::Struct(name) => {
+        Ty::Struct(key) => {
             // Struct — chama `__kata_show__{name}` via ffi_symbol mangled.
-            let mangled = format!("__kata_show__{name}");
+            let mangled = format!("__kata_show__{}", key.name());
             repr_call(expr, mangled)
         }
         // Tipos compostos (Tuple, List, etc.) não têm overload concreto

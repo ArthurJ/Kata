@@ -9,6 +9,7 @@
 //! do JIT. É `pub` para que testes E2E em `kata-codegen/tests/` possam
 //! importá-lo — `kata-driver` é crate binária e não pode ser importada.
 
+use kata_core::StructKey;
 use kata_core::enum_registry::EnumRegistry;
 use kata_core::struct_registry::StructRegistry;
 use kata_core::ty::{PrimTy, Ty};
@@ -49,13 +50,26 @@ pub(crate) fn ty_to_marshal_shape(
                 .collect(),
         ),
         // Struct — campos em ordem de declaração, cada um 8 bytes.
-        Ty::Struct(name) => {
-            let info = structs.get(name);
+        Ty::Struct(key) => {
+            // Instance: o tipo concreto já está no StructKey.
+            // Marshal como o tipo concreto (alias de primitivo).
+            if let StructKey::Instance(_, concrete) = key {
+                let target = match concrete.as_str() {
+                    "Int" => Ty::Prim(PrimTy::Int),
+                    "Float" => Ty::Prim(PrimTy::Float),
+                    "Text" => Ty::Prim(PrimTy::Text),
+                    "Rational" => Ty::Prim(PrimTy::Rational),
+                    _ => Ty::Struct(StructKey::Plain(concrete.clone())),
+                };
+                return ty_to_marshal_shape(&target, structs, enums);
+            }
+            // Plain: consulta o registry para campos/alias_of.
+            let info = structs.get(key.name());
             match info {
                 Some(info) => {
                     if let Some(alias_of) = &info.alias_of {
                         // Alias de outro tipo — resolve o target.
-                        let target = Ty::Struct(alias_of.clone());
+                        let target = Ty::Struct(StructKey::Plain(alias_of.clone()));
                         ty_to_marshal_shape(&target, structs, enums)
                     } else {
                         TypeShape::Struct(

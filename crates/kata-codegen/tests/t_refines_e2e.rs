@@ -20,6 +20,7 @@
 //! - DoD 10: `refines` em interface que o base não implementa → erro compile-time
 
 use kata_codegen::{jit_eval, leak_rt_ptr};
+use kata_core::StructKey;
 use kata_core::ty::{PrimTy, Ty};
 use kata_inference::infer_module;
 use kata_lexer::lex;
@@ -153,7 +154,7 @@ soma_pos!()"#;
     let (_raw, ty) = eval_src(src);
     assert_eq!(
         ty,
-        result_text_ty(Ty::Struct("PositiveInt".into())),
+        result_text_ty(Ty::Struct(StructKey::Plain("PositiveInt".into()))),
         "refines NUM deve delegar + via fallback, retornando Result::(PositiveInt, Text)"
     );
 }
@@ -172,7 +173,10 @@ action soma => Result::(PositiveInt, Text)
     PositiveInt (+ a b)
 soma!()"#;
     let (_raw, ty) = eval_src(src);
-    assert_eq!(ty, result_text_ty(Ty::Struct("PositiveInt".into())));
+    assert_eq!(
+        ty,
+        result_text_ty(Ty::Struct(StructKey::Plain("PositiveInt".into())))
+    );
 }
 
 // ── DoD 3: `< a b` retorna Boolean direto (sem construtor) ──
@@ -222,7 +226,10 @@ action soma_mista => Result::(PositiveInt, Text)
     PositiveInt (+ a 3)
 soma_mista!()"#;
     let (_raw, ty) = eval_src(src);
-    assert_eq!(ty, result_text_ty(Ty::Struct("PositiveInt".into())));
+    assert_eq!(
+        ty,
+        result_text_ty(Ty::Struct(StructKey::Plain("PositiveInt".into())))
+    );
 }
 
 // ── DoD 7: `+ a 0` falha SEM `refines NUM` ──

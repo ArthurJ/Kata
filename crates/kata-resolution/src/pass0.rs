@@ -10,7 +10,8 @@
 use kata_ast::{Item, TypeExpr};
 use kata_core::{
     EnumRegistry, FieldInfo, ImplEntry, ImplMethodInfo, InterfaceInfo, InterfaceRegistry,
-    InterfaceSignature, PrimTy, RefinesEntry, RefinesRegistry, StructRegistry, Ty, TypeEnv,
+    InterfaceSignature, PrimTy, RefinesEntry, RefinesRegistry, StructKey, StructRegistry, Ty,
+    TypeEnv,
 };
 
 use crate::type_resolve::{
@@ -84,7 +85,11 @@ pub(crate) fn run_pass0(
                                     .collect();
                                 struct_registry
                                     .register_refined(origin, name, iface_name, pred_names);
-                                type_env.define(name, Ty::Struct(name.clone()), origin);
+                                type_env.define(
+                                    name,
+                                    Ty::Struct(StructKey::Plain(name.clone())),
+                                    origin,
+                                );
                                 refined_decls.push(RefinedDeclInfo {
                                     name: name.clone(),
                                     base_ty,
@@ -107,7 +112,7 @@ pub(crate) fn run_pass0(
                                         "Float" => Ty::Prim(PrimTy::Float),
                                         "Rational" => Ty::Prim(PrimTy::Rational),
                                         "Text" => Ty::Prim(PrimTy::Text),
-                                        _ => Ty::Struct(concrete.clone()),
+                                        _ => Ty::Struct(StructKey::Plain(concrete.clone())),
                                     };
                                     refined_decls.push(RefinedDeclInfo {
                                         name: name.clone(),
@@ -116,7 +121,11 @@ pub(crate) fn run_pass0(
                                     });
                                 }
                                 // Registrar o nome público no type_env.
-                                type_env.define(name, Ty::Struct(name.clone()), origin);
+                                type_env.define(
+                                    name,
+                                    Ty::Struct(StructKey::Plain(name.clone())),
+                                    origin,
+                                );
                             }
                         }
                         _ => {
@@ -134,7 +143,11 @@ pub(crate) fn run_pass0(
                                 &base_ty_name,
                                 pred_names,
                             );
-                            type_env.define(name, Ty::Struct(name.clone()), origin);
+                            type_env.define(
+                                name,
+                                Ty::Struct(StructKey::Plain(name.clone())),
+                                origin,
+                            );
                             refined_decls.push(RefinedDeclInfo {
                                 name: name.clone(),
                                 base_ty,
@@ -162,7 +175,7 @@ pub(crate) fn run_pass0(
                     Some("f64") => Ty::Prim(PrimTy::Float),
                     Some("kata_rt_string") => Ty::Prim(PrimTy::Text),
                     Some("kata_rt_rat") => Ty::Prim(PrimTy::Rational),
-                    _ => Ty::Struct(name.clone()),
+                    _ => Ty::Struct(StructKey::Plain(name.clone())),
                 };
                 type_env.define(name, ty, origin);
 
@@ -184,7 +197,11 @@ pub(crate) fn run_pass0(
             Item::AliasDecl { target, new_name } => {
                 // alias Target as NewName — cria tipo nominal distinto.
                 // O alias é Ty::Struct(new_name) independentemente do target.
-                type_env.define(new_name, Ty::Struct(new_name.clone()), origin);
+                type_env.define(
+                    new_name,
+                    Ty::Struct(StructKey::Plain(new_name.clone())),
+                    origin,
+                );
 
                 // Se o target é refined (tem predicates no StructRegistry),
                 // o alias herda os predicados e torna-se refined também.
@@ -731,7 +748,7 @@ fn resolve_base_ty(base_name: &str, type_env: &TypeEnv, iface_reg: &InterfaceReg
             if iface_reg.get_interface(base_name).is_some() {
                 Ty::Interface(base_name.into())
             } else {
-                Ty::Struct(base_name.into())
+                Ty::Struct(StructKey::Plain(base_name.into()))
             }
         }
     }

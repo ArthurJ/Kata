@@ -9,6 +9,7 @@
 //! são funções Kata puras com corpo lambda.
 
 use kata_codegen::{jit_eval, leak_rt_ptr};
+use kata_core::StructKey;
 use kata_core::ty::Ty;
 use kata_inference::infer_module;
 use kata_lexer::lex;
@@ -149,7 +150,7 @@ fn complex_smart_constructor_aloca_struct() {
     let (raw, ty) = eval_src(&src);
     assert_eq!(
         ty,
-        Ty::Struct("Complex".to_string()),
+        Ty::Struct(StructKey::Plain("Complex".into())),
         "Complex 3.0 4.0 deve retornar Ty::Struct(\"Complex\")"
     );
     // Struct é alocada na arena — raw é ponteiro (não-zero, LSB=0).

@@ -6,6 +6,7 @@
 //! Pipeline completo: lex → parse → resolve → infer → optimize → codegen → JIT.
 
 use kata_codegen::{jit_eval, leak_rt_ptr};
+use kata_core::StructKey;
 use kata_core::ty::{PrimTy, Ty};
 use kata_inference::infer_module;
 use kata_lexer::lex;
@@ -107,7 +108,7 @@ test_nz_int!()"#;
     let (_raw, ty) = eval_src(src);
     assert_eq!(
         ty,
-        result_text_ty(Ty::Struct("NonZeroPoly".into())),
+        result_text_ty(Ty::Struct(StructKey::Plain("NonZeroPoly".into()))),
         "NonZeroPoly(3) deve retornar Result::(NonZeroPoly, Text)"
     );
 }
@@ -122,7 +123,7 @@ test_nz_zero!()"#;
     let (_raw, ty) = eval_src(src);
     assert_eq!(
         ty,
-        result_text_ty(Ty::Struct("NonZeroPoly".into())),
+        result_text_ty(Ty::Struct(StructKey::Plain("NonZeroPoly".into()))),
         "NonZeroPoly(0) deve retornar Result::(NonZeroPoly, Text) — tipo é o mesmo, valor é Err"
     );
     // O valor raw indica qual variante do Result: 0 = Ok, 1 = Err (tag do enum).
@@ -142,7 +143,7 @@ test_nz_float!()"#;
     let (_raw, ty) = eval_src(src);
     assert_eq!(
         ty,
-        result_text_ty(Ty::Struct("NonZeroPoly".into())),
+        result_text_ty(Ty::Struct(StructKey::Plain("NonZeroPoly".into()))),
         "NonZeroPoly(3.0) deve retornar Result::(NonZeroPoly, Text) — instância Float"
     );
 }
@@ -157,7 +158,11 @@ action test_nz_err => Boolean
         Err _: Boolean::True
 test_nz_err!()"#;
     let (_raw, ty) = eval_src(src);
-    assert_eq!(ty, Ty::boolean(), "match sobre NonZeroPoly(0) deve retornar Boolean");
+    assert_eq!(
+        ty,
+        Ty::boolean(),
+        "match sobre NonZeroPoly(0) deve retornar Boolean"
+    );
 }
 
 /// Verifica que NonZeroPoly(3) retorna Ok desestruturando o Result.
@@ -170,7 +175,11 @@ action test_nz_ok => Boolean
         Err _: Boolean::False
 test_nz_ok!()"#;
     let (_raw, ty) = eval_src(src);
-    assert_eq!(ty, Ty::boolean(), "match sobre NonZeroPoly(3) deve retornar Boolean");
+    assert_eq!(
+        ty,
+        Ty::boolean(),
+        "match sobre NonZeroPoly(3) deve retornar Boolean"
+    );
 }
 
 /// Verifica que NonZeroPoly(3.0) retorna Ok desestruturando o Result.
@@ -183,5 +192,9 @@ action test_nz_float_ok => Boolean
         Err _: Boolean::False
 test_nz_float_ok!()"#;
     let (_raw, ty) = eval_src(src);
-    assert_eq!(ty, Ty::boolean(), "match sobre NonZeroPoly(3.0) deve retornar Boolean");
+    assert_eq!(
+        ty,
+        Ty::boolean(),
+        "match sobre NonZeroPoly(3.0) deve retornar Boolean"
+    );
 }

@@ -11,6 +11,7 @@
 
 use kata_codegen::{jit_eval, leak_rt_ptr};
 use kata_comptime::run_comptime_pass;
+use kata_core::StructKey;
 use kata_core::ty::Ty;
 use kata_inference::infer_module;
 use kata_lexer::lex;
@@ -126,7 +127,7 @@ lambda _: False
 fn ascription_refined_predicado_complexo_passa() {
     let src = format!("{IS_PRIME_SRC}\n5::Prime");
     let (raw, ty) = eval_with_comptime(&src).expect("deve compilar e executar");
-    assert_eq!(ty, Ty::Struct("Prime".into()));
+    assert_eq!(ty, Ty::Struct(StructKey::Plain("Prime".into())));
     assert_eq!(untag_smi(raw), 5);
 }
 
@@ -166,7 +167,7 @@ fn predicado_trivial_continua_local() {
     let typed = kata_monomorph::MonoModule::from(tree_shake(typed.inner));
     // Sem comptime pass — predicado trivial já foi validado no typeck.
     let jit = jit_eval(&typed, &Default::default(), &[], leak_rt_ptr(), false).expect("codegen");
-    assert_eq!(jit.ty, Ty::Struct("PositiveInt".into()));
+    assert_eq!(jit.ty, Ty::Struct(StructKey::Plain("PositiveInt".into())));
     assert_eq!(untag_smi(jit.raw), 5);
 }
 

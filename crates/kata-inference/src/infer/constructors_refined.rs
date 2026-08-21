@@ -21,6 +21,7 @@
 //!    de unificação de tipos `Result` entre guards.
 
 use kata_ast::{Expr, Span, Spanned};
+use kata_core::StructKey;
 use kata_core::dispatch::{DispatchTable, OverloadInfo};
 use kata_core::escape::EscapeTarget;
 use kata_core::ty::{Ty, TypeEnv};
@@ -78,7 +79,7 @@ pub(crate) fn synthesize_refined(
         // Registra smart constructor falível: TypeName :: base_ty => Result::(TypeName, Text)
         let ret_ty = Ty::Generic(
             "Result".into(),
-            vec![Ty::Struct(decl.name.clone()), Ty::text()],
+            vec![Ty::Struct(StructKey::Plain(decl.name.clone())), Ty::text()],
         );
         dispatch_table.insert(OverloadInfo {
             name: decl.name.clone(),
@@ -169,7 +170,7 @@ pub(crate) fn synthesize_refined(
         // ── 2b. Sintetiza smart constructor falível ──
         let result_ty = Ty::Generic(
             "Result".into(),
-            vec![Ty::Struct(decl.name.clone()), Ty::text()],
+            vec![Ty::Struct(StructKey::Plain(decl.name.clone())), Ty::text()],
         );
 
         // Constrói as chamadas dos predicados: __pred_N(v) para cada predicado

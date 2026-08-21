@@ -206,8 +206,8 @@ fn serialize_value(
                 serialize_value(ser, word, elem_ty, struct_registry, enum_registry)?;
             }
         }
-        Ty::Struct(name) => {
-            if let Some(info) = struct_registry.get(name) {
+        Ty::Struct(key) => {
+            if let Some(info) = struct_registry.get(key.name()) {
                 let ptr = raw as *const u8;
                 for (i, field) in info.fields.iter().enumerate() {
                     let word = unsafe { read_i64_at(ptr, i * 8) };

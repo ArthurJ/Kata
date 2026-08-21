@@ -17,6 +17,7 @@
 //! garantida pela invariant de que todo tipo concreto implementará SHOW.
 
 use kata_ast::{Span, Spanned};
+use kata_core::StructKey;
 use kata_core::dispatch::{DispatchTable, OverloadInfo};
 use kata_core::enum_registry::EnumRegistry;
 use kata_core::escape::EscapeTarget;
@@ -78,7 +79,7 @@ pub(crate) fn synthesize_show_functions(
         }
 
         let ret_ty = Ty::text();
-        let param_ty = Ty::Struct(struct_name.to_string());
+        let param_ty = Ty::Struct(StructKey::Plain(struct_name.to_string()));
         let mangled = format!("__kata_show__{struct_name}");
 
         // Registra overload `show :: Struct => Text` no DispatchTable.
@@ -315,7 +316,7 @@ fn build_refined_show_body(
     // diretamente sobre `__self`.
     let self_expr = TypedExpr {
         span: Span::synthetic(),
-        ty: Ty::Struct(refined_name.to_string()),
+        ty: Ty::Struct(StructKey::Plain(refined_name.to_string())),
         tail_pos: false,
         escape: EscapeTarget::Local,
         kind: TypedExprKind::Ident {
@@ -336,7 +337,7 @@ fn build_refined_show_body(
             show_call(
                 self_spanned,
                 base_name.clone(),
-                &Ty::Struct(base_name.clone()),
+                &Ty::Struct(StructKey::Plain(base_name.clone())),
             )
         }
     };
@@ -378,8 +379,8 @@ fn field_show(
             show_call(field_access, name.clone(), &field.ty)
         }
         Ty::Struct(name) => {
-            // Struct aninhado — chama `__kata_show__{Struct}` mangled.
-            show_call(field_access, name.clone(), &field.ty)
+            // Struct aninhado — chama `__kata_show__{name}` mangled.
+            show_call(field_access, name.name().to_string(), &field.ty)
         }
         Ty::List(_) => {
             // List — chama `__kata_show__List` mangled (genérico, instanciado

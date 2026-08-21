@@ -292,11 +292,7 @@ impl StructRegistry {
         self.structs
             .iter()
             .filter(|((_, k), info)| k.name() == family_name && info.is_instance_of.is_some())
-            .filter_map(|(_, info)| {
-                info.alias_of
-                    .as_ref()
-                    .map(|alias| (alias.as_str(), info))
-            })
+            .filter_map(|(_, info)| info.alias_of.as_ref().map(|alias| (alias.as_str(), info)))
             .collect()
     }
 

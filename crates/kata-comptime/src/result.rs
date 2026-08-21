@@ -13,8 +13,8 @@ use crate::error::ComptimeError;
 /// Se `ty` é `Ty::Struct("Altura")` e `Altura` tem `alias_of: "Float"`,
 /// retorna `Ty::Prim(Float)`. Para structs não-alias, retorna `None`.
 pub(crate) fn resolve_alias_base(ty: &Ty, struct_registry: &StructRegistry) -> Option<Ty> {
-    if let Ty::Struct(name) = ty {
-        let mut current = name.clone();
+    if let Ty::Struct(key) = ty {
+        let mut current = key.name().to_string();
         loop {
             let info = struct_registry.get(&current)?;
             let base = info.alias_of.as_ref()?;

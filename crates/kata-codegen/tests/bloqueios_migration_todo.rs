@@ -11,6 +11,7 @@
 
 use kata_codegen::{jit_eval, leak_rt_ptr};
 use kata_comptime::run_comptime_pass;
+use kata_core::StructKey;
 use kata_core::ty::{PrimTy, Ty};
 use kata_inference::infer_module;
 use kata_lexer::lex;
@@ -169,7 +170,10 @@ PositiveInt (+ a b)"#;
         ty,
         Ty::Generic(
             "Result".into(),
-            vec![Ty::Struct("PositiveInt".into()), Ty::text()]
+            vec![
+                Ty::Struct(StructKey::Plain("PositiveInt".into())),
+                Ty::text()
+            ]
         ),
         "+ com PositiveInt + refines NUM deve retornar Result::(PositiveInt, Text)"
     );

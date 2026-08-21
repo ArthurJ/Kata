@@ -7,6 +7,7 @@
 //! - DoD 12: Grouped ascription `((expr))::Type` — barreira de hint
 
 use kata_codegen::{jit_eval, leak_rt_ptr};
+use kata_core::StructKey;
 use kata_core::ty::Ty;
 use kata_inference::infer_module;
 use kata_lexer::lex;
@@ -162,7 +163,7 @@ fn untag_smi(raw: i64) -> i64 {
 fn dod5_pipe_fallback_coercao_refined_valida() {
     let src = "data (Int, > _ 0) as PositiveInt\nSome(5::PositiveInt) | 1";
     let (raw, ty) = eval_src(src);
-    assert_eq!(ty, Ty::Struct("PositiveInt".into()));
+    assert_eq!(ty, Ty::Struct(StructKey::Plain("PositiveInt".into())));
     assert_eq!(untag_smi(raw), 5);
 }
 

@@ -1,5 +1,6 @@
 //! Testes de inference de smart constructor de struct.
 
+use kata_core::StructKey;
 use kata_core::ty::Ty;
 use kata_inference::{TypedExprKind, infer_module};
 use kata_lexer::lex;
@@ -81,7 +82,7 @@ fn struct_constructor_sintetizado() {
     );
     let c = constructor.unwrap();
     assert_eq!(c.param_types, vec![Ty::text(), Ty::int()]);
-    assert_eq!(c.ret_ty, Ty::Struct("Pessoa".into()));
+    assert_eq!(c.ret_ty, Ty::Struct(StructKey::Plain("Pessoa".into())));
 
     // Body é StructConstruct
     let body = &c.clauses[0].body.node;
@@ -123,7 +124,7 @@ fn struct_aninhada_tem_constructor() {
     let c = typed.functions.iter().find(|f| f.name == "Pessoa").unwrap();
     assert_eq!(
         c.param_types,
-        vec![Ty::text(), Ty::Struct("Endereco".into())]
+        vec![Ty::text(), Ty::Struct(StructKey::Plain("Endereco".into()))]
     );
-    assert_eq!(c.ret_ty, Ty::Struct("Pessoa".into()));
+    assert_eq!(c.ret_ty, Ty::Struct(StructKey::Plain("Pessoa".into())));
 }

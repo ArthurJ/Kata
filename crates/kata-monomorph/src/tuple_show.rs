@@ -108,7 +108,7 @@ fn show_for_type(arg: Spanned<TypedExpr>, elem_ty: &Ty) -> Spanned<TypedExpr> {
             string_concat(open, string_concat(arg, close))
         }
         Ty::Sum(name) => show_call_mangled(arg, name),
-        Ty::Struct(name) => show_call_mangled(arg, name),
+        Ty::Struct(key) => show_call_mangled(arg, key.name()),
         Ty::List(_) => show_call_mangled(arg, "List"),
         Ty::Tuple(_) => rewrite_show_tuple_call(&arg),
         Ty::Generic(name, _) => show_call_mangled(arg, name),

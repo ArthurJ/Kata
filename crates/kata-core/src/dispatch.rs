@@ -516,6 +516,18 @@ pub fn match_score(args: &[Ty], params: &[Ty], iface_reg: &InterfaceRegistry) ->
     for (arg, param) in args.iter().zip(params) {
         if arg == param {
             exact += 1;
+        } else if let (Ty::Struct(arg_key), Ty::Struct(param_key)) = (arg, param) {
+            // Família ↔ instância: Instance("NonZero", "Int") vs Plain("NonZero")
+            // (ou vice-versa). Se ambos têm o mesmo nome público, é exact match
+            // — a instância pertence à família por construção.
+            if arg_key.name() == param_key.name()
+                && (matches!(arg_key, crate::struct_registry::StructKey::Instance(..))
+                    || matches!(param_key, crate::struct_registry::StructKey::Instance(..)))
+            {
+                exact += 1;
+            } else {
+                return Score::incompatible();
+            }
         } else if let Some(iface_name) = extract_iface_name(param)
             && iface_name == "SHOW"
             && matches!(arg, Ty::Tuple(_))
@@ -585,7 +597,7 @@ fn extract_type_name(ty: &Ty) -> Option<String> {
         Ty::Prim(crate::ty::PrimTy::Float) => Some("Float".into()),
         Ty::Prim(crate::ty::PrimTy::Text) => Some("Text".into()),
         Ty::Prim(crate::ty::PrimTy::Rational) => Some("Rational".into()),
-        Ty::Struct(name) => Some(name.clone()),
+        Ty::Struct(key) => Some(key.name().to_string()),
         Ty::Sum(name) => Some(name.clone()),
         Ty::Generic(name, _) => Some(name.clone()),
         Ty::List(_) => Some("List".into()),

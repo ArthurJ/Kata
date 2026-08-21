@@ -15,7 +15,10 @@ pub enum Ty {
     /// `()` — unit.
     Unit,
     /// Tipo struct (produto) — `data Pessoa (nome::Text idade::Int)`.
-    Struct(String),
+    /// Carrega `StructKey`: `Plain("Pessoa")` para structs comuns e refineds
+    /// concretos, `Instance("NonZero", "Int")` para instâncias de família
+    /// polimórfica (`data (NUM, ...) as NonZero` sobre Int).
+    Struct(crate::struct_registry::StructKey),
     /// Tipo soma (enum) — `enum Boolean { True, False }`.
     Sum(String),
     /// Tipo função — `(A B -> C)`.
@@ -257,7 +260,13 @@ impl std::fmt::Display for Ty {
             Ty::Prim(p) => write!(f, "{p}"),
             Ty::Unit => f.write_str("()"),
             Ty::Var(name) => f.write_str(name),
-            Ty::Sum(name) | Ty::Struct(name) | Ty::Interface(name) => f.write_str(name),
+            Ty::Sum(name) | Ty::Interface(name) => f.write_str(name),
+            Ty::Struct(key) => match key {
+                crate::struct_registry::StructKey::Plain(name) => f.write_str(name),
+                crate::struct_registry::StructKey::Instance(name, concrete) => {
+                    write!(f, "{name} ({concrete})")
+                }
+            },
             Ty::Generic(name, args) => {
                 f.write_str(name)?;
                 f.write_str("::(")?;
@@ -341,7 +350,13 @@ impl Ty {
         match self {
             Ty::Prim(p) => p.to_string(),
             Ty::Unit => "Unit".into(),
-            Ty::Struct(name) | Ty::Sum(name) | Ty::Interface(name) => name.clone(),
+            Ty::Struct(key) => match key {
+                crate::struct_registry::StructKey::Plain(name) => name.clone(),
+                crate::struct_registry::StructKey::Instance(name, concrete) => {
+                    format!("{name} ({concrete})")
+                }
+            },
+            Ty::Sum(name) | Ty::Interface(name) => name.clone(),
             Ty::Var(name) => name.clone(),
             Ty::Generic(name, params) => {
                 if params.len() == 1 {
@@ -404,6 +419,7 @@ impl Ty {
 #[cfg(test)]
 mod display_tests {
     use super::*;
+    use crate::struct_registry::StructKey;
 
     #[test]
     fn display_prim_int() {
@@ -432,7 +448,10 @@ mod display_tests {
 
     #[test]
     fn display_struct() {
-        assert_eq!(Ty::Struct("Pessoa".into()).display(), "Pessoa");
+        assert_eq!(
+            Ty::Struct(StructKey::Plain("Pessoa".into())).display(),
+            "Pessoa"
+        );
     }
 
     #[test]

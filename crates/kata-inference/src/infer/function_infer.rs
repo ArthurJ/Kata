@@ -162,7 +162,7 @@ pub(crate) fn ty_name(ty: &Ty) -> &str {
         Ty::Prim(kata_core::ty::PrimTy::Float) => "Float",
         Ty::Prim(kata_core::ty::PrimTy::Rational) => "Rational",
         Ty::Prim(kata_core::ty::PrimTy::Text) => "Text",
-        Ty::Struct(name) => name,
+        Ty::Struct(key) => key.name(),
         Ty::Sum(name) => name,
         _ => "",
     }

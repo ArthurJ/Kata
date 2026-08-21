@@ -67,6 +67,7 @@ pub(crate) enum IoHandleKind {
 use std::collections::HashMap;
 
 use crate::metadata::MetadataTable;
+use kata_core::StructKey;
 use kata_core::ty::Ty;
 use kata_inference::{TypedExpr, TypedExprKind};
 pub(crate) use module::FuncKey;
@@ -175,17 +176,46 @@ pub(crate) struct LowerCtx<'a, 'b> {
 }
 
 /// Resolve o Cranelift type de um `Ty`, percorrendo a cadeia de `alias_of`
-/// para refined/alias de primitivos. `Ty::Struct("PositiveFloat")` → F64,
-/// `Ty::Struct("Peso")` → F64 (Peso → PositiveFloat → Float).
+/// para refined/alias de primitivos. `Ty::Struct(Plain("PositiveFloat"))` → F64,
+/// `Ty::Struct(Plain("Peso"))` → F64 (Peso → PositiveFloat → Float).
+/// Para `Instance("NonZero", "Int")`, o tipo concreto já está no StructKey
+/// — resolve direto sem consultar o registry.
 pub(crate) fn resolve_clif_ty(
     ty: &Ty,
     struct_registry: &kata_core::StructRegistry,
 ) -> cranelift_codegen::ir::Type {
-    if let Ty::Struct(name) = ty {
-        let mut current = name.clone();
+    if let Ty::Struct(key) = ty {
+        // Instance carrega o tipo concreto — resolve direto.
+        if let StructKey::Instance(_, concrete) = key {
+            return match concrete.as_str() {
+                "Int" => I64,
+                "Float" => F64,
+                "Text" | "Rational" => I64,
+                _ => {
+                    // Alias de outro struct — percorrer a cadeia.
+                    let mut current = concrete.clone();
+                    while let Some(info) = struct_registry.get(&current) {
+                        if let Some(base) = &info.alias_of {
+                            match base.as_str() {
+                                "Int" => return I64,
+                                "Float" => return F64,
+                                "Text" | "Rational" => return I64,
+                                _ => {
+                                    current = base.clone();
+                                    continue;
+                                }
+                            }
+                        }
+                        break;
+                    }
+                    I64 // fallback: structs são ponteiros (I64)
+                }
+            };
+        }
+        // Plain: percorre cadeia de alias_of no registry.
+        let mut current = key.name().to_string();
         while let Some(info) = struct_registry.get(&current) {
             if let Some(base) = &info.alias_of {
-                // Se o base é um primitivo conhecido, retorna o Cranelift type.
                 match base.as_str() {
                     "Int" => return I64,
                     "Float" => return F64,

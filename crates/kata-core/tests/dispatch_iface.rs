@@ -222,7 +222,7 @@ fn iface_dispatch_user_type() {
     ));
 
     // Complex implementa NUM → iface++
-    let complex = Ty::Struct("Complex".into());
+    let complex = Ty::Struct(kata_core::StructKey::Plain("Complex".into()));
     let result = table.resolve("+", &[complex.clone(), complex], &reg);
     assert!(
         result.is_ok(),

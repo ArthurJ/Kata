@@ -7,7 +7,7 @@
 //! - `collect_type_params`: coleta type params de uma assinatura resolvida
 
 use kata_ast::{Expr, TypeExpr};
-use kata_core::{InterfaceRegistry, PrimTy, Ty, TypeEnv};
+use kata_core::{InterfaceRegistry, PrimTy, StructKey, Ty, TypeEnv};
 
 /// Converte TypeExpr → Ty usando TypeEnv para resolver nomes.
 ///
@@ -68,7 +68,7 @@ pub fn resolve_type_expr(expr: &TypeExpr, env: &TypeEnv, iface_reg: &InterfaceRe
                             // UPPER_CASE sem :: é type param (ex: T, E, A).
                             Ty::Var(name.clone())
                         } else {
-                            Ty::Struct(name.clone()) // fallback: tipo declarado pelo usuário
+                            Ty::Struct(StructKey::Plain(name.clone())) // fallback: tipo declarado pelo usuário
                         }
                     }
                 }
@@ -105,7 +105,7 @@ pub fn resolve_type_expr(expr: &TypeExpr, env: &TypeEnv, iface_reg: &InterfaceRe
                     if iface_reg.get_interface(name).is_some() {
                         Ty::Interface(name.clone())
                     } else {
-                        Ty::Struct(name.clone())
+                        Ty::Struct(StructKey::Plain(name.clone()))
                     }
                 }
             }

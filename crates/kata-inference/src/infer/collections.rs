@@ -31,7 +31,7 @@ fn concrete_type_name(ty: &Ty) -> Option<String> {
         Ty::Prim(kata_core::ty::PrimTy::Float) => Some("Float".into()),
         Ty::Prim(kata_core::ty::PrimTy::Text) => Some("Text".into()),
         Ty::Prim(kata_core::ty::PrimTy::Rational) => Some("Rational".into()),
-        Ty::Struct(name) => Some(name.clone()),
+        Ty::Struct(key) => Some(key.name().to_string()),
         Ty::Sum(name) => Some(name.clone()),
         Ty::Generic(name, _) => Some(name.clone()),
         _ => None,

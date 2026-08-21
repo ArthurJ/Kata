@@ -10,6 +10,7 @@
 //! - DoD 4: `PositiveInt (-5)` retorna `Err` (construtor falível)
 
 use kata_codegen::{jit_eval, leak_rt_ptr};
+use kata_core::StructKey;
 use kata_core::ty::{PrimTy, Ty};
 use kata_inference::infer_module;
 use kata_lexer::lex;
@@ -117,7 +118,7 @@ fn untag_smi(raw: i64) -> i64 {
 fn ascription_refined_valida_predicado() {
     let src = "data (Int, > _ 0) as PositiveInt\n5::PositiveInt";
     let (raw, ty) = eval_src(src);
-    assert_eq!(ty, Ty::Struct("PositiveInt".into()));
+    assert_eq!(ty, Ty::Struct(StructKey::Plain("PositiveInt".into())));
     assert_eq!(untag_smi(raw), 5);
 }
 
@@ -137,7 +138,7 @@ fn ascription_refined_predicado_falha_type_error() {
 fn ascription_refined_float_valida() {
     let src = "data (Float, > _ 0.0) as Positivo\n17.5::Positivo";
     let (raw, ty) = eval_src(src);
-    assert_eq!(ty, Ty::Struct("Positivo".into()));
+    assert_eq!(ty, Ty::Struct(StructKey::Plain("Positivo".into())));
     let bits = f64::to_bits(17.5) as i64;
     assert_eq!(raw, bits);
 }
@@ -160,7 +161,7 @@ fn ascription_refined_float_falha() {
 fn smart_constructor_falivel_ok_match_extrai_valor() {
     let src = "data (Int, > _ 0) as PositiveInt\nmatch PositiveInt 25\n    Ok v: v\n    Err _: 42::PositiveInt";
     let (raw, ty) = eval_src(src);
-    assert_eq!(ty, Ty::Struct("PositiveInt".into()));
+    assert_eq!(ty, Ty::Struct(StructKey::Plain("PositiveInt".into())));
     assert_eq!(untag_smi(raw), 25);
 }
 
@@ -171,7 +172,7 @@ fn smart_constructor_falivel_ok_match_extrai_valor() {
 fn smart_constructor_falivel_err_match_cai_no_fallback() {
     let src = "data (Int, > _ 0) as PositiveInt\nmatch PositiveInt (-5)\n    Ok v: v\n    Err _: 42::PositiveInt";
     let (raw, ty) = eval_src(src);
-    assert_eq!(ty, Ty::Struct("PositiveInt".into()));
+    assert_eq!(ty, Ty::Struct(StructKey::Plain("PositiveInt".into())));
     assert_eq!(untag_smi(raw), 42);
 }
 
@@ -190,7 +191,7 @@ fn smart_constructor_ok_retorna_tag_zero() {
 fn multiplos_predicados_passa() {
     let src = "data (Int, > _ 0, <= _ 100) as Percentage\n50::Percentage";
     let (raw, ty) = eval_src(src);
-    assert_eq!(ty, Ty::Struct("Percentage".into()));
+    assert_eq!(ty, Ty::Struct(StructKey::Plain("Percentage".into())));
     assert_eq!(untag_smi(raw), 50);
 }
 

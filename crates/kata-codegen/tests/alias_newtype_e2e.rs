@@ -4,6 +4,7 @@
 //! Verifica DoD 4: `alias` cria newtype com rigidez nominal e mesmo ABI.
 
 use kata_codegen::{jit_eval, leak_rt_ptr};
+use kata_core::StructKey;
 use kata_core::ty::{PrimTy, Ty};
 use kata_inference::infer_module;
 use kata_lexer::lex;
@@ -85,7 +86,7 @@ fn untag_smi(raw: i64) -> i64 {
 fn alias_float_as_altura_constrói() {
     let src = "alias Float as Altura\nAltura 1.75";
     let (raw, ty) = eval_src(src);
-    assert_eq!(ty, Ty::Struct("Altura".into()));
+    assert_eq!(ty, Ty::Struct(StructKey::Plain("Altura".into())));
     // Float é retornado como bits F64 reinterpretados como i64.
     let bits = f64::to_bits(1.75) as i64;
     assert_eq!(raw, bits);
@@ -97,7 +98,7 @@ fn alias_float_as_altura_constrói() {
 fn alias_float_as_altura_com_ascription() {
     let src = "alias Float as Altura\nAltura (42::Float)";
     let (raw, ty) = eval_src(src);
-    assert_eq!(ty, Ty::Struct("Altura".into()));
+    assert_eq!(ty, Ty::Struct(StructKey::Plain("Altura".into())));
     let bits = f64::to_bits(42.0) as i64;
     assert_eq!(raw, bits);
 }
@@ -139,7 +140,7 @@ fn alias_struct_field_access_retorna_text() {
 fn alias_int_as_counter() {
     let src = "alias Int as Counter\nCounter 5";
     let (raw, ty) = eval_src(src);
-    assert_eq!(ty, Ty::Struct("Counter".into()));
+    assert_eq!(ty, Ty::Struct(StructKey::Plain("Counter".into())));
     assert_eq!(untag_smi(raw), 5);
 }
 
@@ -149,7 +150,7 @@ fn alias_int_as_counter() {
 fn alias_de_alias() {
     let src = "alias Float as Altura\nalias Altura as AlturaValida\nAlturaValida (Altura 1.75)";
     let (raw, ty) = eval_src(src);
-    assert_eq!(ty, Ty::Struct("AlturaValida".into()));
+    assert_eq!(ty, Ty::Struct(StructKey::Plain("AlturaValida".into())));
     let bits = f64::to_bits(1.75) as i64;
     assert_eq!(raw, bits);
 }

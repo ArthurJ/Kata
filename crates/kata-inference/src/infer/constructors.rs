@@ -5,6 +5,7 @@
 //! `alias Float as Altura` → `Altura :: Float => Altura` (identity).
 
 use kata_ast::Spanned;
+use kata_core::StructKey;
 use kata_core::dispatch::{DispatchTable, OverloadInfo};
 use kata_core::escape::EscapeTarget;
 use kata_core::struct_registry::StructRegistry;
@@ -39,7 +40,7 @@ pub(crate) fn synthesize_constructors(
         }
 
         let field_types: Vec<Ty> = struct_info.fields.iter().map(|f| f.ty.clone()).collect();
-        let ret_ty = Ty::Struct(struct_name.to_string());
+        let ret_ty = Ty::Struct(StructKey::Plain(struct_name.to_string()));
 
         // Proibe Ty::Action em campos de data — Actions são comportamento,
         // não informação. (PRD §3.7)
@@ -157,7 +158,7 @@ pub(crate) fn synthesize_constructors(
             continue;
         }
 
-        let ret_ty = Ty::Struct(struct_name.to_string());
+        let ret_ty = Ty::Struct(StructKey::Plain(struct_name.to_string()));
 
         if struct_info.fields.is_empty() {
             // Alias de primitivo/opaco — construtor identity.
@@ -201,7 +202,7 @@ pub(crate) fn synthesize_constructors(
             constructors.push(TypedFunction {
                 name: struct_name.to_string(),
                 param_types: vec![target_ty],
-                ret_ty: Ty::Struct(struct_name.to_string()),
+                ret_ty: Ty::Struct(StructKey::Plain(struct_name.to_string())),
                 clauses: vec![TypedLambdaClause {
                     patterns: vec![pattern],
                     body: Spanned::new(body, kata_ast::Span::synthetic()),

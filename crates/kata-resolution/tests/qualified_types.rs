@@ -6,7 +6,7 @@
 //! 3. Ambiguidade é detectada quando dois módulos definem o mesmo tipo
 //! 4. Local shadowa imports sem ambiguidade
 
-use kata_core::{Ty, TypeEnv};
+use kata_core::{StructKey, Ty, TypeEnv};
 use kata_resolution::{ResolvedModule, merge_two, resolve_with_origin};
 
 // Helper: cria um ResolvedModule mínimo com um tipo definido.
@@ -31,24 +31,39 @@ fn make_module_with_type(name: &str, ty: Ty, origin: &str) -> ResolvedModule {
 #[test]
 fn typebinding_origin_e_lookup_binding() {
     let mut env = TypeEnv::new();
-    env.define("Pessoa", Ty::Struct("Pessoa".into()), "my_module");
+    env.define(
+        "Pessoa",
+        Ty::Struct(StructKey::Plain("Pessoa".into())),
+        "my_module",
+    );
 
     // lookup retorna apenas Ty
-    assert_eq!(env.lookup("Pessoa"), Some(&Ty::Struct("Pessoa".into())));
+    assert_eq!(
+        env.lookup("Pessoa"),
+        Some(&Ty::Struct(StructKey::Plain("Pessoa".into())))
+    );
 
     // lookup_binding retorna TypeBinding com origin
     let binding = env.lookup_binding("Pessoa").expect("binding deve existir");
-    assert_eq!(binding.ty, Ty::Struct("Pessoa".into()));
+    assert_eq!(binding.ty, Ty::Struct(StructKey::Plain("Pessoa".into())));
     assert_eq!(binding.origin, "my_module");
 }
 
 #[test]
 fn merge_bindings_from_marcas_ambiguidade() {
     let mut env_a = TypeEnv::new();
-    env_a.define("Result", Ty::Struct("Result".into()), "module_a");
+    env_a.define(
+        "Result",
+        Ty::Struct(StructKey::Plain("Result".into())),
+        "module_a",
+    );
 
     let mut env_b = TypeEnv::new();
-    env_b.define("Result", Ty::Struct("Result".into()), "module_b");
+    env_b.define(
+        "Result",
+        Ty::Struct(StructKey::Plain("Result".into())),
+        "module_b",
+    );
 
     // Merge: mesmo nome, origins diferentes → ambíguo
     env_a.merge_bindings_from(&mut env_b);
@@ -61,10 +76,18 @@ fn merge_bindings_from_marcas_ambiguidade() {
 #[test]
 fn merge_bindings_from_mesma_origin_nao_e_ambiguo() {
     let mut env_a = TypeEnv::new();
-    env_a.define("Result", Ty::Struct("Result".into()), "module_a");
+    env_a.define(
+        "Result",
+        Ty::Struct(StructKey::Plain("Result".into())),
+        "module_a",
+    );
 
     let mut env_b = TypeEnv::new();
-    env_b.define("Result", Ty::Struct("Result".into()), "module_a");
+    env_b.define(
+        "Result",
+        Ty::Struct(StructKey::Plain("Result".into())),
+        "module_a",
+    );
 
     // Mesmo nome, mesma origin → não é ambíguo (mesmo módulo)
     env_a.merge_bindings_from(&mut env_b);
@@ -76,9 +99,17 @@ fn merge_bindings_from_mesma_origin_nao_e_ambiguo() {
 fn local_shadowa_import_sem_ambiguidade() {
     let mut env = TypeEnv::new();
     // Import de module_a
-    env.define("Result", Ty::Struct("Result".into()), "module_a");
+    env.define(
+        "Result",
+        Ty::Struct(StructKey::Plain("Result".into())),
+        "module_a",
+    );
     // Local define o mesmo nome
-    env.define("Result", Ty::Struct("Result".into()), "__local__");
+    env.define(
+        "Result",
+        Ty::Struct(StructKey::Plain("Result".into())),
+        "__local__",
+    );
 
     // Local shadowa — lookup retorna o local
     let binding = env.lookup_binding("Result").expect("binding");
@@ -101,7 +132,7 @@ fn resolve_with_origin_popula_origin_nos_bindings() {
         .type_env
         .lookup_binding("Pessoa")
         .expect("Pessoa deve estar no type_env");
-    assert_eq!(binding.ty, Ty::Struct("Pessoa".into()));
+    assert_eq!(binding.ty, Ty::Struct(StructKey::Plain("Pessoa".into())));
     assert_eq!(binding.origin, "my_module");
 }
 
@@ -144,13 +175,20 @@ fn type_expr_qualified_parse_e_resolve() {
 
     // return_type já é Ty resolvida — deve ser Ty::Struct("Result")
     // (fallback de Qualified quando o módulo não está importado)
-    assert_eq!(sig.return_type, Ty::Struct("Result".into()));
+    assert_eq!(
+        sig.return_type,
+        Ty::Struct(StructKey::Plain("Result".into()))
+    );
 }
 
 #[test]
 fn merge_two_preserva_origins() {
     let prelude = make_module_with_type("Int", Ty::int(), "core");
-    let user = make_module_with_type("Pessoa", Ty::Struct("Pessoa".into()), "my_module");
+    let user = make_module_with_type(
+        "Pessoa",
+        Ty::Struct(StructKey::Plain("Pessoa".into())),
+        "my_module",
+    );
 
     let merged = merge_two(prelude, user);
 

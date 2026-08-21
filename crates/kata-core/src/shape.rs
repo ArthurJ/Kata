@@ -65,8 +65,8 @@ impl Ty {
         match self {
             Ty::Prim(_) => TypeShape::Prim,
             Ty::Unit => TypeShape::Unit,
-            Ty::Struct(name) => TypeShape::Struct {
-                name: name.clone(),
+            Ty::Struct(key) => TypeShape::Struct {
+                name: key.name().to_string(),
                 fields: Vec::new(),
             },
             Ty::Sum(name) => TypeShape::Sum {

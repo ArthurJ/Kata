@@ -11,6 +11,7 @@
 //! `function_def.rs` — extraí-las aqui separa o "machinery de cache key"
 //! do "machinery de lowering de função".
 
+use kata_core::StructKey;
 use kata_core::ty::{PrimTy, Ty};
 use kata_inference::{TypedExpr, TypedExprKind, TypedLambdaClause};
 
@@ -331,9 +332,21 @@ fn write_descriptor(buf: &mut Vec<u8>, ty: &Ty, struct_registry: &kata_core::Str
                 write_descriptor(buf, elem, struct_registry);
             }
         }
-        Ty::Struct(name) => {
+        Ty::Struct(key) => {
+            // Instance: descriptor do tipo concreto (alias).
+            if let StructKey::Instance(_, concrete) = key {
+                let target = match concrete.as_str() {
+                    "Int" => Ty::Prim(PrimTy::Int),
+                    "Float" => Ty::Prim(PrimTy::Float),
+                    "Text" => Ty::Prim(PrimTy::Text),
+                    "Rational" => Ty::Prim(PrimTy::Rational),
+                    _ => Ty::Struct(StructKey::Plain(concrete.clone())),
+                };
+                write_descriptor(buf, &target, struct_registry);
+                return;
+            }
             buf.push(TD_STRUCT);
-            if let Some(info) = struct_registry.get(name) {
+            if let Some(info) = struct_registry.get(key.name()) {
                 buf.push(info.fields.len() as u8);
                 for field in &info.fields {
                     write_descriptor(buf, &field.ty, struct_registry);

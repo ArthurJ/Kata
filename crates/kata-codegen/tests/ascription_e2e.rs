@@ -3,6 +3,7 @@
 //! Pipeline completo: lex → parse → resolve → infer → optimize → codegen → JIT.
 
 use kata_codegen::{jit_eval, leak_rt_ptr};
+use kata_core::StructKey;
 use kata_core::ty::Ty;
 use kata_inference::infer_module;
 use kata_lexer::lex;
@@ -96,7 +97,7 @@ fn untag_smi(raw: i64) -> i64 {
 fn ascription_construcao_basica() {
     let src = "data Pessoa (nome::Text idade::Int)\n(\"João\", 30)::Pessoa";
     let (raw, ty) = eval_src(src);
-    assert_eq!(ty, Ty::Struct("Pessoa".into()));
+    assert_eq!(ty, Ty::Struct(StructKey::Plain("Pessoa".into())));
     let _ = raw;
 }
 
