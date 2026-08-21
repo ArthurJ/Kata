@@ -185,6 +185,7 @@ pub(crate) fn infer_match(
                 ctx.enum_registry,
                 &mut arm_env,
                 ctx.interface_registry,
+                ctx.struct_registry,
             )?;
             // Coleta variantes cobertas para exaustividade.
             if let TypedPattern::Variant { variant, .. } = &typed_pat.node {

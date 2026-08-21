@@ -32,7 +32,7 @@ pub(crate) fn infer_type_ascription(
     tail_pos: bool,
     _hint: Option<&Ty>,
 ) -> InferResult<TypedExpr> {
-    let target_ty = resolve_type_expr(&ty.node, env, ctx.interface_registry);
+    let target_ty = resolve_type_expr(&ty.node, env, ctx.interface_registry, ctx.struct_registry);
 
     // Grouped ascription `((expr))::Type` — barreira de hint.
     // Se expr é Grouping(Grouping(inner2)), o grouping duplo bloqueia

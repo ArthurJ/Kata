@@ -67,6 +67,7 @@ pub(crate) fn infer_named_function(
             ctx.enum_registry,
             &mut clause_env,
             ctx.interface_registry,
+            ctx.struct_registry,
         )?;
 
         // Define `__param_{i}` no escopo da cláusula para que diretivas

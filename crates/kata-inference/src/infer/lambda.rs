@@ -60,8 +60,14 @@ pub(crate) fn infer_lambda(
     // Se o body é um Apply com callee Ident, e alguns args são parâmetros do
     // lambda (Ident com nome = nome do pattern), tenta resolve_partial com
     // None nessas posições e tipos concretos nas demais.
-    let partial_outcome =
-        try_partial_dispatch(patterns, body, env, ctx.table, ctx.interface_registry);
+    let partial_outcome = try_partial_dispatch(
+        patterns,
+        body,
+        env,
+        ctx.table,
+        ctx.interface_registry,
+        ctx.struct_registry,
+    );
 
     // DoD 29: Hint top-down via ascription em lambda.
     // O hint tem PRIORIDADE sobre partial dispatch — a anotação explícita
@@ -183,6 +189,7 @@ pub(crate) fn infer_lambda(
                     &ty.node,
                     &lambda_env,
                     ctx.interface_registry,
+                    ctx.struct_registry,
                 );
             }
             Ty::InferVar(i as u32)
@@ -194,6 +201,7 @@ pub(crate) fn infer_lambda(
         ctx.enum_registry,
         &mut lambda_env,
         ctx.interface_registry,
+        ctx.struct_registry,
     )?;
 
     // Processa with bindings (açúcar → let chain no escopo do lambda).

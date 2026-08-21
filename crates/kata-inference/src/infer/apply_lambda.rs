@@ -172,6 +172,7 @@ fn build_lambda_apply(
         ctx.enum_registry,
         &mut lambda_env,
         ctx.interface_registry,
+        ctx.struct_registry,
     )?;
 
     // Processa with bindings.

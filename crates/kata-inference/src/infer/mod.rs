@@ -91,8 +91,12 @@ pub fn infer_module(
     // consulta esta table e re-inere o lambda com os arg types reais.
     let deferred_lambdas = expr::DeferredLambdaTable::default();
 
-    // 1. Popula DispatchTable com as assinaturas (prelude + módulo)
-    let mut dispatch_table = populate_dispatch_table(&resolved.signatures);
+    // 1. Popula DispatchTable com as assinaturas (prelude + módulo).
+    // Expande signatures com família polimórfica antes de popular.
+    let mut signatures = resolved.signatures.clone();
+    let functions = resolved.functions.clone();
+    kata_resolution::expand_family_signatures(&mut signatures, &resolved.struct_registry);
+    let mut dispatch_table = populate_dispatch_table(&signatures);
 
     // Clone mutável do InterfaceRegistry — a síntese de `show` registra
     // impls de SHOW para structs e enums aqui, e o typeck (InferCtx)
@@ -289,7 +293,7 @@ pub fn infer_module(
     //    A função também é registrada no TypeEnv como Ty::Function para permitir
     //    `let g := fat` (função como valor).
     let mut typed_functions: Vec<TypedFunction> = Vec::new();
-    for func_def in &resolved.functions {
+    for func_def in &functions {
         let ctx = InferCtx {
             table: &dispatch_table,
             enum_registry: &resolved.enum_registry,

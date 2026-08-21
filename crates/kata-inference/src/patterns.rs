@@ -10,6 +10,7 @@
 use kata_ast::{Pattern, Span, Spanned};
 use kata_core::enum_registry::EnumRegistry;
 use kata_core::escape::EscapeTarget;
+use kata_core::struct_registry::StructRegistry;
 use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 use kata_resolution::resolve_type_expr;
@@ -32,6 +33,7 @@ pub(crate) fn check_pattern(
     enum_registry: &EnumRegistry,
     env: &mut TypeEnv,
     iface_registry: &kata_core::InterfaceRegistry,
+    struct_registry: &StructRegistry,
 ) -> PatternResult<Spanned<TypedPattern>> {
     let typed = check_pattern_inner(
         &pat.node,
@@ -40,6 +42,7 @@ pub(crate) fn check_pattern(
         env,
         &pat.span,
         iface_registry,
+        struct_registry,
     )?;
     Ok(Spanned::new(typed, pat.span))
 }
@@ -51,6 +54,7 @@ fn check_pattern_inner(
     env: &mut TypeEnv,
     span: &Span,
     iface_registry: &kata_core::InterfaceRegistry,
+    struct_registry: &StructRegistry,
 ) -> PatternResult<TypedPattern> {
     match pat {
         // ── Ident: pode ser binding ou variante sem qualificação ──
@@ -86,7 +90,7 @@ fn check_pattern_inner(
         // anotado. Se o scrutinee tem tipo conhecido e difere do anotado,
         // é erro. Se o scrutinee é InferVar, o tipo anotado ajuda a inferir.
         Pattern::TypedIdent { name, ty } => {
-            let annotated_ty = resolve_type_expr(&ty.node, env, iface_registry);
+            let annotated_ty = resolve_type_expr(&ty.node, env, iface_registry, struct_registry);
             // Valida compatibilidade com o scrutinee.
             match scrutinee_ty {
                 Ty::InferVar(_) => {
@@ -229,6 +233,7 @@ fn check_pattern_inner(
                         env,
                         &sub_pat.span,
                         iface_registry,
+                        struct_registry,
                     )?;
                     typed_subs.push(Spanned::new(typed, sub_pat.span));
                 }
@@ -284,6 +289,7 @@ fn check_pattern_inner(
                     env,
                     &pat.span,
                     iface_registry,
+                    struct_registry,
                 )?;
                 typed_elements.push(Spanned::new(typed, pat.span));
             }
@@ -313,6 +319,7 @@ fn check_pattern_inner(
                 env,
                 &head.span,
                 iface_registry,
+                struct_registry,
             )?;
             let tail_ty = Ty::List(Box::new(elem_ty));
             let typed_tail = check_pattern_inner(
@@ -322,6 +329,7 @@ fn check_pattern_inner(
                 env,
                 &tail.span,
                 iface_registry,
+                struct_registry,
             )?;
             Ok(TypedPattern::Cons {
                 head: Box::new(Spanned::new(typed_head, head.span)),

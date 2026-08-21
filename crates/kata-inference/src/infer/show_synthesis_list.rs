@@ -31,8 +31,8 @@ use super::show_synthesis_helpers::{repr_expr, show_call, string_concat, text_li
 ///   - `Nil` → `"]"`
 ///
 /// Registra:
-/// - `show :: List::A => Text @ffi("__kata_show__List")` no DispatchTable (genérico, type_params: ["A"])
-/// - `__kata_show__List_rest :: List::A => Text @ffi("__kata_show__List_rest")` no DispatchTable (genérico, type_params: ["A"])
+/// - `@ffi("__kata_show__List")` prefixado em `show :: List::A => Text` no DispatchTable (genérico, type_params: ["A"])
+/// - `@ffi("__kata_show__List_rest")` prefixado em `__kata_show__List_rest :: List::A => Text` no DispatchTable (genérico, type_params: ["A"])
 /// - `List implements SHOW` no InterfaceRegistry (type_params: ["A"])
 ///
 /// O monomorphizador instancia ambas quando um call site `show` com arg

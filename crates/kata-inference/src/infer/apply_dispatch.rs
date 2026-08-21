@@ -5,9 +5,10 @@
 //! error reporting.
 
 use kata_ast::{Expr, Span, Spanned};
+use kata_core::StructKey;
 use kata_core::dispatch::{OverloadInfo, Score, match_score};
 use kata_core::escape::EscapeTarget;
-use kata_core::ty::Ty;
+use kata_core::ty::{PrimTy, Ty};
 use kata_diagnostics::MiddleError;
 use std::collections::HashMap;
 
@@ -370,54 +371,71 @@ pub(crate) fn try_refines_fallback(
     let mut fallback_arg_types = arg_types.to_vec();
     let mut any_substituted = false;
 
-    for (i, arg_ty) in fallback_arg_types.iter_mut().enumerate() {
-        if let Ty::Struct(key) = arg_ty {
-            // Se o arg já é exact match com o param na posição i de alguma
-            // overload de aridade compatível, não substituir — o dispatch
-            // normal já deveria ter casado este arg por exact match.
-            let already_exact = arity_params.iter().any(|params| params[i] == arg_types[i]);
-            if already_exact {
-                continue;
-            }
-
-            // Segue a cadeia de alias_of se o tipo não tem refines direto.
-            // Ex: Peso é alias de PositiveFloat que tem refines NUM.
-            let mut current = key.name().to_string();
-            let entries = loop {
-                let e = ctx.refines_registry.get(&current);
-                if !e.is_empty() {
-                    break e;
-                }
-                // Tenta seguir alias_of
-                match ctx.struct_registry.get(&current) {
-                    Some(info) if info.alias_of.is_some() => {
-                        current = info
-                            .alias_of
-                            .clone()
-                            .expect("alias_of verificado por is_some na guarda");
-                    }
-                    _ => break &[][..],
-                }
-            };
-            if entries.is_empty() {
-                // Sem refines e sem instância polimórfica — não há fallback.
-                continue;
-            }
-            // Verificar se func_name é método de alguma interface delegada
-            // (incluindo supertraits). Só substitui se pelo menos uma interface
-            // delegada tiver func_name como signature direta ou herdada — evita
-            // fallback cego em funções fora da interface.
-            let delegates_func = entries.iter().any(|entry| {
-                ctx.interface_registry
-                    .interface_has_method(&entry.interface_name, func_name)
-            });
-            if !delegates_func {
-                continue;
-            }
-            let base_ty = &entries[0].base_ty;
-            *arg_ty = base_ty.clone();
-            any_substituted = true;
+    for i in 0..fallback_arg_types.len() {
+        let Ty::Struct(key) = &fallback_arg_types[i] else {
+            continue;
+        };
+        let key = key.clone();
+        // Se o arg já é exact match com o param na posição i de alguma
+        // overload de aridade compatível, não substituir — o dispatch
+        // normal já deveria ter casado este arg por exact match.
+        let already_exact = arity_params.iter().any(|params| params[i] == arg_types[i]);
+        if already_exact {
+            continue;
         }
+
+        // Segue a cadeia de alias_of se o tipo não tem refines direto.
+        // Ex: Peso é alias de PositiveFloat que tem refines NUM.
+        let mut current = key.name().to_string();
+        let entries = loop {
+            let e = ctx.refines_registry.get(&current);
+            if !e.is_empty() {
+                break e;
+            }
+            // Tenta seguir alias_of
+            match ctx.struct_registry.get(&current) {
+                Some(info) if info.alias_of.is_some() => {
+                    current = info
+                        .alias_of
+                        .clone()
+                        .expect("alias_of verificado por is_some na guarda");
+                }
+                _ => break &[][..],
+            }
+        };
+        if entries.is_empty() {
+            // Sem refines e sem instância polimórfica — não há fallback.
+            continue;
+        }
+        // Verificar se func_name é método de alguma interface delegada
+        // (incluindo supertraits). Só substitui se pelo menos uma interface
+        // delegada tiver func_name como signature direta ou herdada — evita
+        // fallback cego em funções fora da interface.
+        let delegates_func = entries.iter().any(|entry| {
+            ctx.interface_registry
+                .interface_has_method(&entry.interface_name, func_name)
+        });
+        if !delegates_func {
+            continue;
+        }
+        // Para Instance de família polimórfica, o alias_of já é o tipo
+        // concreto — usar diretamente em vez do base_ty do refines_registry
+        // (que é arbitrário para famílias).
+        if let StructKey::Instance(_, concrete) = &key {
+            let instance_ty = match concrete.as_str() {
+                "Int" => Ty::Prim(PrimTy::Int),
+                "Float" => Ty::Prim(PrimTy::Float),
+                "Rational" => Ty::Prim(PrimTy::Rational),
+                "Text" => Ty::Prim(PrimTy::Text),
+                other => Ty::Struct(StructKey::Plain(other.to_string())),
+            };
+            fallback_arg_types[i] = instance_ty;
+            any_substituted = true;
+            continue;
+        }
+        let base_ty = &entries[0].base_ty;
+        fallback_arg_types[i] = base_ty.clone();
+        any_substituted = true;
     }
 
     if !any_substituted {

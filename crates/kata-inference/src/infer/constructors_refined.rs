@@ -77,10 +77,13 @@ pub(crate) fn synthesize_refined(
         }
 
         // Registra smart constructor falível: TypeName :: base_ty => Result::(TypeName, Text)
-        let ret_ty = Ty::Generic(
-            "Result".into(),
-            vec![Ty::Struct(StructKey::Plain(decl.name.clone())), Ty::text()],
-        );
+        // Famílias polimórficas usam Family(name); refineds concretos usam Plain(name).
+        let type_key = if struct_registry.is_family(&decl.name) {
+            StructKey::Family(decl.name.clone())
+        } else {
+            StructKey::Plain(decl.name.clone())
+        };
+        let ret_ty = Ty::Generic("Result".into(), vec![Ty::Struct(type_key), Ty::text()]);
         dispatch_table.insert(OverloadInfo {
             name: decl.name.clone(),
             params: vec![decl.base_ty.clone()],
@@ -168,10 +171,13 @@ pub(crate) fn synthesize_refined(
         }
 
         // ── 2b. Sintetiza smart constructor falível ──
-        let result_ty = Ty::Generic(
-            "Result".into(),
-            vec![Ty::Struct(StructKey::Plain(decl.name.clone())), Ty::text()],
-        );
+        // Famílias polimórficas usam Family(name); refineds concretos usam Plain(name).
+        let type_key = if struct_registry.is_family(&decl.name) {
+            StructKey::Family(decl.name.clone())
+        } else {
+            StructKey::Plain(decl.name.clone())
+        };
+        let result_ty = Ty::Generic("Result".into(), vec![Ty::Struct(type_key), Ty::text()]);
 
         // Constrói as chamadas dos predicados: __pred_N(v) para cada predicado
         let pred_calls: Vec<Spanned<TypedExpr>> = pred_names
