@@ -50,7 +50,10 @@ echo!(0)"#,
 
     let (stdout, _stderr, code) = run_kata_test(&path);
 
-    assert!(stdout.contains("[PASS]"), "deve ter [PASS] — stdout: {stdout}");
+    assert!(
+        stdout.contains("[PASS]"),
+        "deve ter [PASS] — stdout: {stdout}"
+    );
     assert!(
         stdout.contains("doctest linha 2"),
         "deve citar linha 2 — stdout: {stdout}"
@@ -121,7 +124,10 @@ echo!(0)"#,
 
     let (stdout, _stderr, code) = run_kata_test(&path);
 
-    assert!(stdout.contains("4 passed"), "deve ter 4 passed — stdout: {stdout}");
+    assert!(
+        stdout.contains("4 passed"),
+        "deve ter 4 passed — stdout: {stdout}"
+    );
     assert_eq!(code, 0, "exit 0 — stdout: {stdout}");
 }
 
@@ -171,7 +177,10 @@ echo!(0)"#,
     let (stdout, _stderr, code) = run_kata_test(&path);
 
     assert!(stdout.contains("[PASS]"), "deve passar — stdout: {stdout}");
-    assert!(stdout.contains("1 passed"), "deve ter 1 passed — stdout: {stdout}");
+    assert!(
+        stdout.contains("1 passed"),
+        "deve ter 1 passed — stdout: {stdout}"
+    );
     assert_eq!(code, 0, "exit 0 — stdout: {stdout}");
 }
 
@@ -196,7 +205,10 @@ soma!()"#,
     let (stdout, _stderr, code) = run_kata_test(&path);
 
     // Doctest + @test = 3 passed
-    assert!(stdout.contains("3 passed"), "deve ter 3 passed — stdout: {stdout}");
+    assert!(
+        stdout.contains("3 passed"),
+        "deve ter 3 passed — stdout: {stdout}"
+    );
     assert!(
         stdout.contains("doctest linha 2"),
         "deve citar doctest linha 2 — stdout: {stdout}"
@@ -226,7 +238,10 @@ echo!(0)"#,
 
     // `let x := 42` não produz output (Unit suprimido)
     // `x` produz 42
-    assert!(stdout.contains("2 passed"), "deve ter 2 passed — stdout: {stdout}");
+    assert!(
+        stdout.contains("2 passed"),
+        "deve ter 2 passed — stdout: {stdout}"
+    );
     assert_eq!(code, 0, "exit 0 — stdout: {stdout}");
 }
 
@@ -246,7 +261,10 @@ echo!(0)"#,
     let (stdout, _stderr, code) = run_kata_test(&path);
 
     // Nenhum doctest, nenhum @test — 0 passed
-    assert!(stdout.contains("0 passed"), "deve ter 0 passed — stdout: {stdout}");
+    assert!(
+        stdout.contains("0 passed"),
+        "deve ter 0 passed — stdout: {stdout}"
+    );
     assert_eq!(code, 0, "exit 0 — stdout: {stdout}");
 }
 
@@ -266,7 +284,10 @@ fn doctest_sem_codigo_executavel() {
     let (stdout, _stderr, code) = run_kata_test(&path);
 
     // Doctests passam mesmo sem código executável
-    assert!(stdout.contains("2 passed"), "deve ter 2 passed — stdout: {stdout}");
+    assert!(
+        stdout.contains("2 passed"),
+        "deve ter 2 passed — stdout: {stdout}"
+    );
     assert_eq!(code, 0, "exit 0 — stdout: {stdout}");
 }
 
@@ -288,7 +309,10 @@ echo!(0)"#,
     let (stdout, _stderr, code) = run_kata_test(&path);
 
     assert!(stdout.contains("[PASS]"), "deve passar — stdout: {stdout}");
-    assert!(stdout.contains("1 passed"), "deve ter 1 passed — stdout: {stdout}");
+    assert!(
+        stdout.contains("1 passed"),
+        "deve ter 1 passed — stdout: {stdout}"
+    );
     assert_eq!(code, 0, "exit 0 — stdout: {stdout}");
 }
 
@@ -311,6 +335,9 @@ echo!(0)"#,
 
     let (stdout, _stderr, code) = run_kata_test(&path);
 
-    assert!(stdout.contains("2 passed"), "deve ter 2 passed — stdout: {stdout}");
+    assert!(
+        stdout.contains("2 passed"),
+        "deve ter 2 passed — stdout: {stdout}"
+    );
     assert_eq!(code, 0, "exit 0 — stdout: {stdout}");
 }

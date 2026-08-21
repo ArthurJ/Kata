@@ -158,7 +158,9 @@ fn register_qualified(merged: &mut ResolvedModule, prefix: &str, resolved: &Reso
         // Só insere se não existe signature idêntica (nome + tipos).
         // Overloads de mesmo nome com tipos diferentes coexistem.
         let dup = merged.signatures.iter().any(|s| {
-            s.name == sig.name && s.param_types == sig.param_types && s.return_type == sig.return_type
+            s.name == sig.name
+                && s.param_types == sig.param_types
+                && s.return_type == sig.return_type
         });
         if !dup {
             merged.signatures.push(sig.clone());
@@ -173,7 +175,9 @@ fn register_qualified(merged: &mut ResolvedModule, prefix: &str, resolved: &Reso
         }
         // Forma não-qualificada — mesmo critério de duplicata.
         let dup = merged.functions.iter().any(|f| {
-            f.name == func.name && f.param_types == func.param_types && f.return_type == func.return_type
+            f.name == func.name
+                && f.param_types == func.param_types
+                && f.return_type == func.return_type
         });
         if !dup {
             merged.functions.push(func.clone());

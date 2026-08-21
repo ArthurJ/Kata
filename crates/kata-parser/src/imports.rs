@@ -93,9 +93,9 @@ impl Parser {
                 Token::Super => {
                     // `super` após componente normal é erro:
                     // `import math.super` não faz sentido
-                    return Err(self.error(
-                        "`super` can only appear at the start of an import path",
-                    ));
+                    return Err(
+                        self.error("`super` can only appear at the start of an import path")
+                    );
                 }
                 Token::LParen => {
                     // Import seletivo: `import MOD.(Item1 Item2)` ou

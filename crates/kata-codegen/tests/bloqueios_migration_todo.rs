@@ -83,7 +83,8 @@ fn eval_src(src: &str) -> (i64, Ty) {
     let typed =
         run_comptime_pass(tree_shake(typed.inner), &resolved.enum_registry).expect("comptime");
     let typed = kata_monomorph::MonoModule::from(typed);
-    let jit = jit_eval(&typed, &Default::default(), &[], leak_rt_ptr(), false).expect("codegen+JIT");
+    let jit =
+        jit_eval(&typed, &Default::default(), &[], leak_rt_ptr(), false).expect("codegen+JIT");
     (jit.raw, jit.ty)
 }
 

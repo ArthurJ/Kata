@@ -12,7 +12,7 @@ use kata_ast::{Item, Module};
 use kata_lexer::lex;
 use kata_parser::parse;
 
-use crate::{merge_two, resolve_with_origin, ResolvedModule};
+use crate::{ResolvedModule, merge_two, resolve_with_origin};
 
 // ── Prefixos de import path ──────────────────────────────
 
@@ -135,7 +135,10 @@ impl std::fmt::Display for LoadError {
                 write!(f, "ciclo de import detectado: `{path}`")
             }
             LoadError::ReservedName { name } => {
-                write!(f, "não é possível nomear um módulo como `{name}` — nome reservado")
+                write!(
+                    f,
+                    "não é possível nomear um módulo como `{name}` — nome reservado"
+                )
             }
             LoadError::Io(msg) => write!(f, "erro de I/O ao carregar módulo: {msg}"),
         }
@@ -212,7 +215,11 @@ impl ModuleLoader {
     ///
     /// Retorna o `ResolvedModule` **não-filtrado** (com todos os itens).
     /// O `filter_exports` é aplicado por `load_imports` ao construir `ImportedModule`.
-    pub fn load(&mut self, module_path: &[String], entry_dir: &Path) -> Result<Arc<ResolvedModule>, LoadError> {
+    pub fn load(
+        &mut self,
+        module_path: &[String],
+        entry_dir: &Path,
+    ) -> Result<Arc<ResolvedModule>, LoadError> {
         let resolved_path = self.resolve_path(module_path, entry_dir)?;
         let cached = self.load_path(&resolved_path)?;
         Ok(cached.resolved.clone())
@@ -374,11 +381,7 @@ impl ModuleLoader {
     /// carrega `D/mod.kata`. Se `D` não tem `mod.kata`, é `NotFound`.
     /// Componentes intermediários que são diretórios são namespaces —
     /// a navegação continua sem precisar de `mod.kata`.
-    fn resolve_path(
-        &self,
-        module_path: &[String],
-        entry_dir: &Path,
-    ) -> Result<PathBuf, LoadError> {
+    fn resolve_path(&self, module_path: &[String], entry_dir: &Path) -> Result<PathBuf, LoadError> {
         if module_path.is_empty() {
             return Err(LoadError::NotFound {
                 path: String::new(),
@@ -611,7 +614,9 @@ mod tests {
         );
 
         let mut loader = ModuleLoader::new(vec![tmp.path().to_path_buf()]);
-        let resolved = loader.load(&["util".into(), "math".into()], tmp.path()).unwrap();
+        let resolved = loader
+            .load(&["util".into(), "math".into()], tmp.path())
+            .unwrap();
         // A assinatura do usuário (+) está entre as signatures (junto com prelude).
         assert!(resolved.signatures.iter().any(|s| s.name == "+"));
     }
@@ -632,7 +637,9 @@ mod tests {
     fn not_found_returns_error() {
         let tmp = tempfile::tempdir().unwrap();
         let mut loader = ModuleLoader::new(vec![tmp.path().to_path_buf()]);
-        let err = loader.load(&["nonexistent".into()], tmp.path()).unwrap_err();
+        let err = loader
+            .load(&["nonexistent".into()], tmp.path())
+            .unwrap_err();
         assert!(matches!(err, LoadError::NotFound { .. }));
     }
 

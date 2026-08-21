@@ -207,11 +207,7 @@ fn stdlib_explicito_com_shadow() {
     let dir = fresh_dir("kata-e2e-stdlib-shadow");
 
     // math.kata local (sombra a stdlib)
-    write_kata(
-        &dir,
-        "math",
-        "constant local_only := 99\nexport local_only",
-    );
+    write_kata(&dir, "math", "constant local_only := 99\nexport local_only");
 
     // main.kata — import stdlib.math força stdlib built-in
     let main_path = write_kata(&dir, "main", "import stdlib.math\n\n42");

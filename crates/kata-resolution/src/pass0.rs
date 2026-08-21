@@ -82,9 +82,8 @@ pub(crate) fn run_pass0(
                                 let pred_names: Vec<String> = (0..refined_decl.predicates.len())
                                     .map(|i| format!("__pred_{name}_{i}"))
                                     .collect();
-                                struct_registry.register_refined(
-                                    origin, name, iface_name, pred_names,
-                                );
+                                struct_registry
+                                    .register_refined(origin, name, iface_name, pred_names);
                                 type_env.define(name, Ty::Struct(name.clone()), origin);
                                 refined_decls.push(RefinedDeclInfo {
                                     name: name.clone(),
@@ -99,10 +98,7 @@ pub(crate) fn run_pass0(
                                             .map(|i| format!("__pred_{name}_{concrete}_{i}"))
                                             .collect();
                                     struct_registry.register_refined_instance(
-                                        origin,
-                                        name,
-                                        concrete,
-                                        pred_names,
+                                        origin, name, concrete, pred_names,
                                     );
                                     // RefinedDeclInfo por instância para o inference
                                     // sintetizar o construtor.
@@ -133,7 +129,10 @@ pub(crate) fn run_pass0(
                                 .map(|i| format!("__pred_{name}_{i}"))
                                 .collect();
                             struct_registry.register_refined(
-                                origin, name, &base_ty_name, pred_names,
+                                origin,
+                                name,
+                                &base_ty_name,
+                                pred_names,
                             );
                             type_env.define(name, Ty::Struct(name.clone()), origin);
                             refined_decls.push(RefinedDeclInfo {

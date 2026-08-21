@@ -22,7 +22,12 @@ fn kata_bin() -> String {
         .unwrap_or_else(|_| Path::new(".").to_path_buf());
     option_env!("CARGO_BIN_EXE_kata")
         .map(String::from)
-        .unwrap_or_else(|| workspace.join("target/debug/kata").to_string_lossy().to_string())
+        .unwrap_or_else(|| {
+            workspace
+                .join("target/debug/kata")
+                .to_string_lossy()
+                .to_string()
+        })
 }
 
 /// Executa `kata repl` com stdin pipe, envia os inputs sequenciais
@@ -893,10 +898,7 @@ fn repl_load_with_import() {
     let temp = std::env::temp_dir().join("kata5_repl_load_import_test.kata");
     std::fs::write(&temp, "import examples/modules/mock_math.(dobrar)\n\ndobrar_e_somar :: Int Int => Int\nlambda a b: + (dobrar a) (dobrar b)\n\necho!(dobrar_e_somar 3 4)\n").unwrap();
     let path = temp.to_string_lossy().to_string();
-    let out = run_repl(&[
-        &format!(":load {path}"),
-        ":quit",
-    ]);
+    let out = run_repl(&[&format!(":load {path}"), ":quit"]);
     let lines = result_lines(&out);
     assert!(
         lines.iter().any(|l| l.trim() == "14"),

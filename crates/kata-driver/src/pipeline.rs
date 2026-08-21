@@ -99,9 +99,14 @@ impl CompiledModule {
         // antes do drop (o raw é lido imediatamente neste escopo).
         let rt = Box::new(kata_rt::Runtime::new());
         let rt_ptr = Box::into_raw(rt) as i64;
-        let result =
-            kata_codegen::jit_eval(&self.mono, &self.type_id_map, &self.type_shapes, rt_ptr, emit_ir)
-                .map_err(|e| e.into_report_with_source(&self.source, self.file_path.as_deref()))?;
+        let result = kata_codegen::jit_eval(
+            &self.mono,
+            &self.type_id_map,
+            &self.type_shapes,
+            rt_ptr,
+            emit_ir,
+        )
+        .map_err(|e| e.into_report_with_source(&self.source, self.file_path.as_deref()))?;
         // Droppar o Runtime após consumir o resultado. Se o valor retornado
         // é um ponteiro para arena (List, Struct), o display já aconteceu
         // ou o raw já foi lido. Para segurança, leak como antes se necessário.

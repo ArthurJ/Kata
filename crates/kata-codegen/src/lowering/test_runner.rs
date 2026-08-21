@@ -447,7 +447,11 @@ fn define_test_wrapper(
         })?;
     if tctx.dump_ir {
         tctx.ir_dump.push((
-            format!("__kata_test_{}_{}", action.name, spec.desc.as_deref().unwrap_or("")),
+            format!(
+                "__kata_test_{}_{}",
+                action.name,
+                spec.desc.as_deref().unwrap_or("")
+            ),
             format!("{}", ctx.func.display()),
         ));
     }

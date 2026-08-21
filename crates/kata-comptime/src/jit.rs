@@ -71,11 +71,16 @@ pub(crate) fn jit_execute_expr(
         constants: Vec::new(),
     };
 
-    let result =
-        kata_codegen::jit_eval(&mini, &Default::default(), &[], kata_codegen::leak_rt_ptr(), false)
-            .map_err(|e| ComptimeError::JitError {
-                reason: format!("{e}"),
-            })?;
+    let result = kata_codegen::jit_eval(
+        &mini,
+        &Default::default(),
+        &[],
+        kata_codegen::leak_rt_ptr(),
+        false,
+    )
+    .map_err(|e| ComptimeError::JitError {
+        reason: format!("{e}"),
+    })?;
 
     Ok(ComptimeResult {
         raw: result.raw,

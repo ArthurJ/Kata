@@ -171,11 +171,10 @@ impl ReplSession {
             .iter()
             .any(|i| matches!(i.node, Item::ImportDecl { .. }));
         if has_imports {
-            self.imports = crate::imports::load_repl_imports(&import_module)
-                .map_err(|e| {
-                    self.items.truncate(snapshot_len);
-                    format!("erro ao carregar imports: {e}")
-                })?;
+            self.imports = crate::imports::load_repl_imports(&import_module).map_err(|e| {
+                self.items.truncate(snapshot_len);
+                format!("erro ao carregar imports: {e}")
+            })?;
         }
 
         if !has_entry {

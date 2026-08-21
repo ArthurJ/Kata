@@ -236,10 +236,7 @@ fn cmd_test(path: &str, filter: Option<&str>) -> miette::Result<()> {
                         match &case.expected {
                             Some(expected) => {
                                 if actual_norm == *expected {
-                                    println!(
-                                        "  [PASS] {label}: doctest linha {}",
-                                        case.line
-                                    );
+                                    println!("  [PASS] {label}: doctest linha {}", case.line);
                                     total_pass += 1;
                                 } else {
                                     println!(
@@ -254,10 +251,7 @@ fn cmd_test(path: &str, filter: Option<&str>) -> miette::Result<()> {
                             None => {
                                 // Sem output esperado — pass se actual está vazio
                                 if actual_norm.is_empty() {
-                                    println!(
-                                        "  [PASS] {label}: doctest linha {}",
-                                        case.line
-                                    );
+                                    println!("  [PASS] {label}: doctest linha {}", case.line);
                                     total_pass += 1;
                                 } else {
                                     println!(
@@ -271,10 +265,7 @@ fn cmd_test(path: &str, filter: Option<&str>) -> miette::Result<()> {
                         }
                     }
                     Err(e) => {
-                        println!(
-                            "  [FAIL] {label}: doctest linha {}: erro: {e}",
-                            case.line
-                        );
+                        println!("  [FAIL] {label}: doctest linha {}: erro: {e}", case.line);
                         total_fail += 1;
                     }
                 }
