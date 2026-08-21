@@ -28,31 +28,30 @@ signatures/functions do mesmo módulo).
 
 ---
 
-### `NonZero` só existe para Int — divisão por zero não é estaticamente segura para Float/Rational
+### Parser deve validar que `refines` só aceita interface
 
-**Estado:** `NonZero` (refined `data (Int, != _ 0) as NonZero`) só é definido
-para Int. `/ :: Int NonZero => Int` usa o refined para garantir divisor
-não-zero em compile-time. Float e Rational não têm `NonZero` equivalente:
+**Estado:** `refines` deve SEMPRE ser sucedido de uma interface. Qualquer
+coisa diferente (família, tipo concreto, outra refined) deve ser erro de
+sintaxe. `PositiveInt refines NonZero` (família refina família) é ilegal.
+O parser atual não valida isto — precisa adicionar check semântico (em pass0
+ou no parser) que rejeita `refines <não-interface>` com erro claro.
 
-- Float: `/ :: Float Float => Float` é `a / b` direto — `0.0 / 0.0` produz
-  NaN em runtime, invisibilizado no display (`float_to_text` converte NaN/Inf
-  para 0). `div` verifica `= b 0.0` mas não captura NaN de outras fontes.
-- Rational: `/ :: Rational Rational => Rational` panica em runtime se o
-  divisor for zero. `div` retorna `Result` mas a overload `/` é insegura.
-- Int: existe também `/ :: Int Int => Int` (legada) que panica em zero —
-  mantida para compatibilidade.
+**Impacto:** Baixo. `refines` em família já causa erro de dispatch
+(comportamento correto), mas a mensagem é confusa — um erro de sintaxe
+na declaração seria mais claro.
 
-**Impacto:** Médio. A linguagem oferece `div` (retorna `Result`) como
-alternativa segura para todos os tipos, mas a overload `/` sem `NonZero`
-para Float/Rational é uma armadilha — parece exata mas panica ou produz NaN.
+---
 
-**Quando surgir caso de uso real:** estender `NonZero` para Float
-(`data (Float, != _ 0.0) as NonZeroFloat`) e Rational
-(`data (Rational, != _ (rational 0)) as NonZeroRational`). As overloads
-`/ Float NonZeroFloat => Float` e `/ Rational NonZeroRational => Rational`
-garantiriam divisão exata segura em compile-time para todos os tipos NUM.
-A overload legada `/ Int Int => Int` pode ser removida quando `NonZero`
-for a única forma de dividir sem `Result`.
+### Parser deve rejeitar nomes de função/action começando com `__`
+
+**Estado:** `__` é prefixo reservado para símbolos gerados pelo compilador
+(`__kata_fn_N`, `__kata_entry`, `__kata_test_*`, `__kata_show__*`,
+`__pred_*`, `__local__`, etc.). Funções/actions definidas pelo usuário
+NÃO devem começar com `__` — colidem com o namespace do compilador. O
+parser atual não valida isto.
+
+**Impacto:** Baixo. Colisão real é improvável (usuário raramente usa `__`),
+mas a validação é trivial e preventiva.
 
 ---
 
