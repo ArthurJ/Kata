@@ -181,10 +181,11 @@ Floats aceitam notação decimal e científica:
 converte `NaN`/`Infinity` para `0` na exibição (`float_to_text`). A divisão
 `0.0 / 0.0` produz `NaN` em f64 no runtime, mas o programador nunca o vê no
 output. Para evitar divisão por zero, a linguagem oferece dois caminhos
-(§22.1): `/` exige `NonZero` (refined) para Int — o type system garante que o
-divisor não é zero; `div` retorna `Result` para todos os tipos NUM. Para Float,
-`/` não exige `NonZero` — NaN pode ocorrer em runtime mas é invisibilizado no
-display.
+(§22.1): `/` exige `NonZero` (refined) para todos os tipos NUM — o type
+system garante que o divisor não é zero; `div` retorna `Result` para todos
+os tipos NUM. Para Float, `NonZero` rejeita NaN via um segundo predicado
+(`= _ _` — `= NaN NaN` é `false` em IEEE 754), então NaN não pode surgir
+pelo construtor `NonZero`.
 
 ### Rational
 
@@ -844,18 +845,26 @@ nestas restrições para selecionar a implementação correta no momento do desp
 
 ```kata
 interface NUM implements EQ
-    + :: NUM NUM => NUM
-    - :: NUM NUM => NUM
-    * :: NUM NUM => NUM
-    abs :: NUM => NUM
-    div :: NUM NUM => Result::(NUM, Err)
+    + :: Self Self => Self
+    - :: Self Self => Self
+    * :: Self Self => Self
+    abs :: Self => Self
+    zero :: Self => Self
+    div :: Self Self => Result::(Self, Text)
+    / :: Self NonZero => Self
+    mod :: Self NonZero => Self
 ```
 
 A sintaxe é `interface NOME` seguido opcionalmente de `implements
 SUPERINTERFACE...` e um bloco indentado contendo as assinaturas obrigatórias
 (definições vazias de função, apenas com `::` e `=>`). O nome da interface pode
 ser usado como tipo nos parâmetros e retorno das suas próprias assinaturas,
-indicando "qualquer tipo que implemente esta interface".
+indicando "qualquer tipo que implemente esta interface". `Self` é substituído
+pelo tipo concreto no implements (ex: `Int implements NUM` substitui
+`Self → Int`). `NonZero` é uma família polimórfica sobre NUM —
+`data (NUM, != _ (zero _)) as NonZero` — e é resolvida para a instância concreta
+do tipo que implementa a interface (ex: `Int implements NUM` resolve
+`NonZero → Instance("NonZero", "Int")`).
 
 A herança de super-traits propaga obrigações: implementar `NUM` exige
 implementar todas as funções de `NUM`, `ORD` e `EQ` de uma vez. Quando `Int`
@@ -3043,15 +3052,17 @@ compilador não mascara falhas com retornos silenciosos; ele as tipifica.
 
 A linguagem oferece dois operadores de divisão com semântica distinta:
 
-* **`/` (Exato):** Para Int, exige divisor `NonZero` (refined) — o type system
-  garante que o divisor não é zero, e o retorno é o valor puro direto. Para
-  Rational, `/` panica em runtime se o divisor for zero (não há `NonZero`
-  para Rational). Para Float, `/` é `a / b` direto em f64 — NaN/Infinity podem
-  ocorrer mas são convertidos para 0 no display.
-  Existe também uma overload legada `/ :: Int Int => Int` que panica em zero
-  (mantida para compatibilidade).
-* **`div` (Dinâmica):** Aceita `NUM` normais, verifica zero em runtime, retorna
-  `Result::(NUM, Text)`. Definida na stdlib para Int, Float, e Rational.
+* **`/` (Exato):** Exige divisor `NonZero` (refined polimórfico sobre NUM) —
+  o type system garante que o divisor não é zero para todos os tipos NUM (Int,
+  Float, Rational). Para Float, `NonZero` rejeita NaN via segundo predicado
+  (`= _ _` — `= NaN NaN` é `false` em IEEE 754). O retorno é o valor puro
+  direto. Não há overload legada `/ :: Int Int => Int` — foi removida.
+* **`div` (Dinâmica):** Aceita `Self Self` (sem `NonZero`), verifica zero em
+  runtime via guard `= b 0`, retorna `Result::(Self, Text)`. Definida como
+  método de interface NUM para Int, Float, e Rational. Usa funções FFI
+  internas unchecked (`bi_div`, `f_div`, `rat_div` em `core_internals.kata`)
+  no braço `otherwise` — estas não competem no dispatch de `/` pois não são
+  métodos de interface.
 
 ### 22.2. Acesso Posicional: Sintaxe Uniforme, Retorno Distinto
 
