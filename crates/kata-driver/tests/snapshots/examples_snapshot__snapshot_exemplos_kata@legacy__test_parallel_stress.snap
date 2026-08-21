@@ -1,8 +1,0 @@
----
-source: crates/kata-driver/tests/examples_snapshot.rs
-expression: output
----
---- stderr ---
-Error: resolve.unknown_directive
-
-  × diretiva `parallel` não reconhecida em action `cpu_infinita`

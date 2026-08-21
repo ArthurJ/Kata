@@ -672,7 +672,14 @@ impl ReplSession {
         };
         match parse(tokens) {
             Ok(_) => false,
-            Err(e) => format!("{e}").contains("<EOF>"),
+            // `<EOF>` e `<DEDENT>` ambos indicam que o parser esperava mais
+            // conteúdo — o input está incompleto. `<DEDENT>` ocorre quando
+            // o parser consome diretivas prefix dentro de implements e ainda
+            // espera a assinatura do método na próxima linha indentada.
+            Err(e) => {
+                let msg = format!("{e}");
+                msg.contains("<EOF>") || msg.contains("<DEDENT>")
+            }
         }
     }
 }

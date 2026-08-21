@@ -456,7 +456,8 @@ fn repl_multiline_implements() {
     // implements também é um bloco indentado.
     let out = run_repl(&[
         "Int implements SHOW",
-        "    show :: Int => Text @ffi(\"kata_rt_bi_show\")",
+        "    @ffi(\"kata_rt_bi_show\")",
+        "    show :: Int => Text",
         "",
         ":quit",
     ]);

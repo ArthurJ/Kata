@@ -67,6 +67,11 @@ fn collect_kata_recursive(
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_dir() {
+            // Pula subdiretório legacy/ — exemplos de Kata4 com sintaxe
+            // que não funciona em Kata5. Não são entrypoints válidos.
+            if path.file_name().is_some_and(|n| n == "legacy") {
+                continue;
+            }
             collect_kata_recursive(base, &path, out);
         } else if path.extension().is_some_and(|ext| ext == "kata") {
             // Nome do snapshot: caminho relativo a examples/ sem extensão.

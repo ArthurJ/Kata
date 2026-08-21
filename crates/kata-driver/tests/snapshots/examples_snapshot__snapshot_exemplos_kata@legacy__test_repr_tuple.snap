@@ -1,5 +1,0 @@
----
-source: crates/kata-driver/tests/examples_snapshot.rs
-expression: output
----
-{1, 2, 3}

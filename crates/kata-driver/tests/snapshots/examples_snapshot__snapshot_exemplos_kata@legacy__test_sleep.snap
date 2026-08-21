@@ -1,6 +1,0 @@
----
-source: crates/kata-driver/tests/examples_snapshot.rs
-expression: output
----
---- stderr ---
-Error:   × erro ao carregar imports: módulo não encontrado: `csp`

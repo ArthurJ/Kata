@@ -1,0 +1,9 @@
+---
+source: crates/kata-driver/tests/examples_snapshot.rs
+expression: output
+---
+--- stderr ---
+Error: type.no_overload
+
+  × nenhuma sobrecarga compatível para `/` com os argumentos fornecidos
+  [Failed to read contents for label `nenhuma sobrecarga compatível` (offset: 1725, length: 5): OutOfBounds]

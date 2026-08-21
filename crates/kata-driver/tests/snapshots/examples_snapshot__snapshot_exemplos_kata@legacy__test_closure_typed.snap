@@ -1,9 +1,0 @@
----
-source: crates/kata-driver/tests/examples_snapshot.rs
-expression: output
----
---- stderr ---
-Error: type.lambda_inference_fail
-
-  × não foi possível inferir os tipos dos parâmetros do lambda — forneça uma
-  │ anotação de tipo (ex: ::(Int -> Int))
