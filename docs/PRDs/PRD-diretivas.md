@@ -3,7 +3,7 @@
 **Status:** ✅ Implementado (Fases 1-6 completas)
 **Data:** 2026-08-08 (revisão: constructo `directive`)
 **Substitui:** `docs/visao-diretivas-kata.md` (documento de exploração — ideias absorvidas e refinadas aqui)
-**Pré-requisito:** Variáveis de reflexão (`_name`, `_arity`, etc.) substituem a sidecar table e o `kata_rt_fn_meta_lookup` do PRD de reflexão de funções (`docs/PRD-fn-reflection.md`, status obsoleto).
+**Pré-requisito:** Variáveis de reflexão (`_name`, `_arity`, etc.) substituem a sidecar table e o `kata_rt_fn_meta_lookup` do PRD de reflexão de funções (`docs/PRDs/PRD-fn-reflection.md`, status obsoleto).
 
 ## 0. Resumo
 

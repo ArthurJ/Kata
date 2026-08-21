@@ -678,7 +678,7 @@ implements SHOW for Complex
 
 Ao concluir o fio:
 - `docs/ROADMAP.md` — marcar Fio 7 e Fio 10 como ✅ Concluído. Fundir as entradas.
-- `docs/PRD-fio7-10.md` — marcar fases e DoDs como ✅
+- `docs/PRDs/PRD-fio7-10.md` — marcar fases e DoDs como ✅
 - `docs/Kata-lang-manual.md` — **NÃO atualizar** (manual é aspiracional)
 - `docs/maquinaria-interna.md` — atualizar seções de InterfaceRegistry e
   DispatchTable com o estado final implementado

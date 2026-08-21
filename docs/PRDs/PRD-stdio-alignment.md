@@ -682,8 +682,8 @@ crates/kata-codegen/tests/                   # testes E2E novos
 ## 10. Atualização da documentação
 
 Ao concluir:
-- `docs/PRD-stdio-alignment.md` — este arquivo (status → concluído)
-- `docs/PRD-fio14-log.md` — atualizar: tópicos mágicos removidos, `log_recv!`
+- `docs/PRDs/PRD-stdio-alignment.md` — este arquivo (status → concluído)
+- `docs/PRDs/PRD-fio14-log.md` — atualizar: tópicos mágicos removidos, `log_recv!`
   retorna `Result`, `@log` suporta múltiplas ocorrências
 - `docs/ROADMAP.md` — adicionar "Alinhamento stdio ✅" no pós-Fio 15
 - `docs/Kata-lang-manual.md` — documentar `stdin!()`, `stdout!()`, `stderr!()`,

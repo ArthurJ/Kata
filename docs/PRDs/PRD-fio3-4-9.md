@@ -614,7 +614,7 @@ Variante predicada (com guard no payload) é adiada para Fio 6.
 > definido no Pré-11, que classifica não apenas *se* um valor escapa
 > mas *para onde* — `Local`, `Caller`, ou `Ancestor(n)`. Isso é
 > necessário para a árvore hierárquica de arenas. Ver
-> `docs/PRD-pre-11.md`.
+> `docs/PRDs/PRD-pre-11.md`.
 
 #### `FfiSymbol` — novos símbolos
 
@@ -735,7 +735,7 @@ pub struct TypedFunction {
     pub clauses: Vec<TypedLambdaClause>,
     /// Escape target (Pré-11). Substitui `EscapeKind` — classifica
     /// não apenas se escapa, mas para onde. `Local` por padrão.
-    /// Ver `docs/PRD-pre-11.md`.
+    /// Ver `docs/PRDs/PRD-pre-11.md`.
     pub escape: EscapeTarget,
     /// Captures coletadas (Fio 9). Vazio se não há captura.
     pub captures: Vec<CaptureInfo>,
@@ -821,7 +821,7 @@ O desugar é no typeck — a TAST contém `Match`.
 > estendida: classificar *para onde* o valor escapa (`EscapeTarget`:
 > `Local`, `Caller`, `Ancestor(n)`), para suportar a árvore hierárquica
 > de arenas. Os 4 passes originais são reformulados no Pré-11 com base
-> em `EscapeTarget`. Ver `docs/PRD-pre-11.md`.
+> em `EscapeTarget`. Ver `docs/PRDs/PRD-pre-11.md`.
 >
 > **Estado atual:** sem escape analysis. Wrapper-only: toda closure com
 > captures aloca CaptureBox na arena global (handle 0).
@@ -896,7 +896,7 @@ O desugar já produziu `Match`. O codegen lowera Match normalmente.
 
 #### ARC pass (transferido para Pré-11)
 
-> O ARC pass foi transferido para o Pré-11 (`docs/PRD-pre-11.md`).
+> O ARC pass foi transferido para o Pré-11 (`docs/PRDs/PRD-pre-11.md`).
 > A emissão de `incref`/`decref` depende de `EscapeTarget` (análise de
 > escape com destino classificado) e da árvore hierárquica de arenas.
 > Sem essa infraestrutura, o refcount é escrito mas nunca lido para
@@ -1222,7 +1222,7 @@ não por fio. Cada fase depende apenas das anteriores.
 > heap via `kata_rt_alloc_arc`, sem escape analysis. DoD 34-36a marcados N/A.
 >
 > **Atualização (2026-07-13):** Fase 13 transferida para o Pré-11
-> (`docs/PRD-pre-11.md`). A escape analysis é reintroduzida lá como
+> (`docs/PRDs/PRD-pre-11.md`). A escape analysis é reintroduzida lá como
 > `EscapeTarget` (não `EscapeKind`), com destino de escape classificado
 > para suportar a árvore hierárquica de arenas. O wrapper-only atual
 > permanece como comportamento até o Pré-11 ser implementado.
@@ -1235,7 +1235,7 @@ não por fio. Cada fase depende apenas das anteriores.
 ### Fase 15 — ARC pass (transferida para Pré-11)
 
 > **Transferida (2026-07-13):** A Fase 15 (ARC pass) foi movida para o
-> Pré-11 (`docs/PRD-pre-11.md`). O ARC pass faz parte da infraestrutura
+> Pré-11 (`docs/PRDs/PRD-pre-11.md`). O ARC pass faz parte da infraestrutura
 > de memória hierárquica — sua emissão pelo codegen depende de
 > `EscapeTarget` e da árvore de arenas, que são construídas no Pré-11.
 > Implementar o ARC pass aqui, sem a infraestrutura de destino, repetiria
@@ -1277,7 +1277,7 @@ não por fio. Cada fase depende apenas das anteriores.
 - Tipos refinados/ascription de expressão (Fio 6)
 - Structs com campos/field access (Fio 5) — Ty::Tuple já existe, sem .N
 - Escape analysis (Fase 13) e ARC pass (Fase 15) — **transferidos para o
-  Pré-11** (`docs/PRD-pre-11.md`). A escape analysis é reintroduzida como
+  Pré-11** (`docs/PRDs/PRD-pre-11.md`). A escape analysis é reintroduzida como
   `EscapeTarget` (com destino de escape, não apenas flag) para suportar
   a árvore hierárquica de arenas. O ARC pass depende de `EscapeTarget`.
 - TRMA (Tail Recursion Modulo Associativity) — **incluída neste PRD** (Fase 16).

@@ -308,9 +308,9 @@ quantidade de canais sem benefício.
 
 ### Fase 4 — Documentação
 
-1. Atualizar `docs/PRD-csp-channels.md` (ou criar seção neste PRD) com a
+1. Atualizar `docs/PRDs/PRD-csp-channels.md` (ou criar seção neste PRD) com a
    mudança de design
-2. Atualizar `docs/PRD-socket-io.md` — item 7 (`socket_connected_listen_fails`)
+2. Atualizar `docs/PRDs/PRD-socket-io.md` — item 7 (`socket_connected_listen_fails`)
    pode voltar a usar `channel!()` se desejado, ou manter a versão sem canal
 3. Atualizar `docs/sintaxe-mapa.md` se houver documentação de sentinel de canal
 

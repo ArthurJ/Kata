@@ -385,8 +385,8 @@ crates/kata-driver/tests/                 # testes E2E
 ## 10. Atualização da documentação
 
 Ao concluir:
-- `docs/PRD-fio14-log.md` — este arquivo (status → concluído)
+- `docs/PRDs/PRD-fio14-log.md` — este arquivo (status → concluído)
 - `docs/ROADMAP.md` Fio 14 — marcar `@log` ✅
-- `docs/PRD-fio14.md` — atualizar status: `@log` concluído
+- `docs/PRDs/PRD-fio14.md` — atualizar status: `@log` concluído
 - `docs/Kata-lang-manual.md` — confirmar compatibilidade com sintaxe implementada (manual é aspiracional; se implementação divergir, solicitar permissão)
 - `docs/sintaxe-mapa.md` — confirmar `@log` listada (já está, linha 427)

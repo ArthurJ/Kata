@@ -92,7 +92,7 @@ em qualquer profundidade, emitir `MiddleError::TypeMismatch`.
 Função auxiliar `contains_channel_type(ty: &Ty) -> bool` recursiva em
 Tuple, Struct, List, Array, Dict, Set, Sender, Receiver, ReceiverFactory.
 
-### 3.3. PRD Fio 16 — `docs/PRD-fio16-arc-arena.md`
+### 3.3. PRD Fio 16 — `docs/PRDs/PRD-fio16-arc-arena.md`
 
 Mover "Lifecycle de canais" de §8 (Evolução Futura) para resolvido.
 

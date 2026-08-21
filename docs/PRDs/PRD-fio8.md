@@ -933,7 +933,7 @@ em um único loop, evitando coleções intermediárias.
 
 Ao concluir:
 - `docs/ROADMAP.md` — marcar Fio 8 ✅ Concluído
-- `docs/PRD-fio8.md` — marcar fases e DoDs como ✅
+- `docs/PRDs/PRD-fio8.md` — marcar fases e DoDs como ✅
 - `docs/Kata-lang-manual.md` — **NÃO atualizar** (aspiracional)
 - `docs/maquinaria-interna.md` — atualizar seções relevantes (LowerCtx, EmitCtx,
   novos HashMaps para coleções, stream fusion, CONTAINS dispatch)

@@ -418,7 +418,7 @@ sem `msg` dá erro.
 
 ### Fase 9: Atualizar documentação
 
-- `docs/PRD-arity-uniformization.md` — marcar Fases 1-2 e 5 como substituídas
+- `docs/PRDs/PRD-arity-uniformization.md` — marcar Fases 1-2 e 5 como substituídas
 - `docs/sintaxe-mapa.md` — atualizar § sobre chamada de funções (remover dict
   dispatch para funções, esclarecer que `{...}` após `Ident` sem `!` é dict como
   valor posicional). Adicionar § sobre dict-template em actions.

@@ -522,5 +522,5 @@ crates/kata-driver/tests/modules_e2e.rs    — testes de super + stdlib + mod.ka
 docs/sintaxe-mapa.md                       — sintaxe super + stdlib + mod.kata   (ATUALIZADO)
 docs/Kata-lang-manual.md                   — seção módulos reescrita              (ATUALIZADO)
 docs/TODO.md                               — item corrigido                      (ATUALIZADO)
-docs/PRD-modulos-super.md                  — este PRD                            (NOVO)
+docs/PRDs/PRD-modulos-super.md                  — este PRD                            (NOVO)
 ```

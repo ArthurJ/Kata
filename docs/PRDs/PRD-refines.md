@@ -508,7 +508,7 @@ docs/sintaxe-mapa.md                        # adicionar refines, T?
 ## 10. Atualização da documentação
 
 Ao concluir:
-- `docs/PRD-refines.md` — este arquivo (status → concluído)
+- `docs/PRDs/PRD-refines.md` — este arquivo (status → concluído)
 - `docs/Kata-lang-manual.md` — §4.2.10 emendar: "mediante declaração explícita
   de `refines`, o compilador delega as operações da interface ao tipo base"
 - `docs/sintaxe-mapa.md` — adicionar `refines` e `T?` à lista de keywords

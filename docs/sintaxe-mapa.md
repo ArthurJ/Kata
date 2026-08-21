@@ -56,7 +56,7 @@ Linhas `>>> ` dentro de `#{ }#` são doctests: inputs do REPL executados por
 - `>>> ` sem output esperado significa "não produz output" (declarações)
 - Doctests rodam antes de `@test` no `kata test`
 
-PRD: `docs/PRD-doctests.md`. Book: `docs/kata-book/16-doctests.md`.
+PRD: `docs/PRDs/PRD-doctests.md`. Book: `docs/kata-book/16-doctests.md`.
 
 ---
 
@@ -655,7 +655,7 @@ enum Target
     chumbadas no compilador. `directive` introduz apenas diretivas customizadas.
   - Desugaring acontece entre `resolve` e `infer` no pipeline, produzindo AST
     expandida que o typeck valida normalmente.
-  - Ver `docs/PRD-diretivas.md` para o design completo.
+  - Ver `docs/PRDs/PRD-diretivas.md` para o design completo.
 
 ---
 

@@ -350,7 +350,7 @@ plataformas suportadas com instruções de build via osxcross.
 
 ## Futuro — Port para Windows
 
-Coberto em `docs/PRD-portability-windows.md`. O port para Windows requer:
+Coberto em `docs/PRDs/PRD-portability-windows.md`. O port para Windows requer:
 
 1. **Abstração de plataforma no `kata-rt`** — trait com backend POSIX
    (Linux + macOS) e backend Windows (`CreateProcess`, `WSAPoll`,

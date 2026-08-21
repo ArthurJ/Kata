@@ -735,9 +735,9 @@ Total: 1372 passed, 0 failed, 5 ignored.
 
 ### Fase 6: Documentação — ✅ Concluído
 
-- `docs/PRD-socket-io.md` — status e fases atualizados ✅
+- `docs/PRDs/PRD-socket-io.md` — status e fases atualizados ✅
 - `docs/ROADMAP.md` — feature Socket I/O adicionada ✅
-- `docs/PRD-select-io.md` — seção 7.2 atualizada ✅
+- `docs/PRDs/PRD-select-io.md` — seção 7.2 atualizada ✅
 - `docs/Kata-lang-manual.md` — seção Socket I/O (solicitar permissão)
 - `docs/sintaxe-mapa.md` — entradas de socket (solicitar permissão)
 

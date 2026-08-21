@@ -155,7 +155,7 @@ Fio 1: Fundação + Aritmética + CLI
 │   (spawn! — multiprocess via fork+IPC — redesign: special form ao lado de fork!,
 │    aceita tupla ou dict com raw:/serialized:, to_bytes() FFI — Fase 5 ✅, spawn! Fase 9 ✅)
 │
-├── Fio 12: Comptime, @cache ✅ Concluído — PRD: docs/PRD-fio12-comptime.md
+├── Fio 12: Comptime, @cache ✅ Concluído — PRD: docs/PRDs/PRD-fio12-comptime.md
 │   (@comptime call-site explícito, JIT-and-execute, HeapSnapshot com arenas,
 │    @cache{strategy: "LRU"} em caller_arena, ascription refined delega ao comptime)
 │   Fases 1-6 ✅ + constant folding de funções com args literais (Ponto 7)
@@ -570,7 +570,7 @@ especial no compilador.
 
 ### Pré-11: Infraestrutura de Memória Hierárquica ✅
 
-**PRD:** `docs/PRD-pre-11.md`
+**PRD:** `docs/PRDs/PRD-pre-11.md`
 
 **Problema:** Todo objeto que escapa do fiber (CaptureBox, Sum results,
 tuplas em função pura) cai na arena global (handle 0), que nunca é
@@ -672,7 +672,7 @@ previnem head-of-line blocking. Structured concurrency garante lifecycle.
 (Fase 2), `718f74e`/`138af02`/`d2dc096`/`377c7b3` (Fase 3), `08d0c8f` (Fase 4),
 `519a539` (Fase 5), `e5c89b5` (Fase 6), `2289ed6` (Ponto 7 — constant folding).
 
-**PRD:** `docs/PRD-fio12-comptime.md`
+**PRD:** `docs/PRDs/PRD-fio12-comptime.md`
 
 **Maquinaria de tipos construída:**
 - `TypedExprKind::HeapSnapshot { snapshot_id, ty }` — resultado de comptime
@@ -852,7 +852,7 @@ executa sem o compilador. `kata repl` mantém bindings entre expressões.
 
 **Status:** Parcialmente substituído por `PRD-dict-dispatch-fix.md`
 
-**PRD:** `docs/PRD-arity-uniformization.md`
+**PRD:** `docs/PRDs/PRD-arity-uniformization.md`
 
 **Features:**
 - Parser arity-aware: ciclo de dois passes (Pass 1 extract_arities, Pass 2
@@ -876,7 +876,7 @@ executa sem o compilador. `kata repl` mantém bindings entre expressões.
 
 **Status:** Concluído (2026-08-13)
 
-**PRD:** `docs/PRD-dict-dispatch-fix.md`
+**PRD:** `docs/PRDs/PRD-dict-dispatch-fix.md`
 
 **Features:**
 - Funções puras são exclusivamente posicionais — `param_names` removido de
@@ -996,7 +996,7 @@ abordado quando o Fio 11 introduzir casos reais de fibers long-lived.
 
 ### OverloadSet — Partial Dispatch com Lambda Diferido ✅ (2026-08-10)
 
-PRD: `docs/PRD-overloadset-partial.md`
+PRD: `docs/PRDs/PRD-overloadset-partial.md`
 
 Implementa interoperabilidade numérica via overloads cross-type explícitos
 no prelude (`+ :: Int Float => Float @commutative`). O partial dispatch
