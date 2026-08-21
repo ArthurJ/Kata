@@ -198,3 +198,82 @@ test_nz_float_ok!()"#;
         "match sobre NonZeroPoly(3.0) deve retornar Boolean"
     );
 }
+
+// ── Fase 6: NonZeroFloat com NaN — 2 predicados ──
+
+/// `data (NUM, != _ (zero _), = _ _) as NonZeroPoly` adiciona o predicado
+/// `= _ _` (que vira `= x x`). Para Float, `= NaN NaN` → False (IEEE 754),
+/// rejeitando NaN. Para Int/Rational, `= x x` é sempre True — inócuo.
+///
+/// `NonZeroPoly(3)` com 2 predicados: `!= 3 (zero 3)` → True, `= 3 3` → True → Ok.
+#[test]
+fn t_nonzero_poly_two_preds_int_ok() {
+    let src = r#"data (NUM, != _ (zero _), = _ _) as NonZeroPoly
+action test_nz2_int => Boolean
+    match NonZeroPoly 3
+        Ok _: Boolean::True
+        Err _: Boolean::False
+test_nz2_int!()"#;
+    let (_raw, ty) = eval_src(src);
+    assert_eq!(
+        ty,
+        Ty::boolean(),
+        "NonZeroPoly(3) com 2 predicados deve retornar Ok"
+    );
+}
+
+/// `NonZeroPoly(0.0)` com 2 predicados: `!= 0.0 (zero 0.0)` → `!= 0.0 0.0` → False → Err.
+/// O primeiro predicado já rejeita; o segundo nem é avaliado (match aninhado).
+#[test]
+fn t_nonzero_poly_two_preds_float_zero_err() {
+    let src = r#"data (NUM, != _ (zero _), = _ _) as NonZeroPoly
+action test_nz2_zero => Boolean
+    match NonZeroPoly 0.0
+        Ok _: Boolean::False
+        Err _: Boolean::True
+test_nz2_zero!()"#;
+    let (_raw, ty) = eval_src(src);
+    assert_eq!(
+        ty,
+        Ty::boolean(),
+        "NonZeroPoly(0.0) com 2 predicados deve retornar Err"
+    );
+}
+
+/// `NonZeroPoly(NaN)` com 2 predicados: `!= NaN (zero NaN)` → `!= NaN 0.0` → True
+/// (NaN != 0.0 é True em IEEE 754). Segundo predicado: `= NaN NaN` → False → Err.
+/// NaN é gerado via `/ 0.0 0.0` (kata_rt_fdiv: 0.0/0.0 = NaN em IEEE 754).
+#[test]
+fn t_nonzero_poly_two_preds_float_nan_err() {
+    let src = r#"data (NUM, != _ (zero _), = _ _) as NonZeroPoly
+action test_nz2_nan => Boolean
+    let nan := / 0.0 0.0
+    match NonZeroPoly nan
+        Ok _: Boolean::False
+        Err _: Boolean::True
+test_nz2_nan!()"#;
+    let (_raw, ty) = eval_src(src);
+    assert_eq!(
+        ty,
+        Ty::boolean(),
+        "NonZeroPoly(NaN) com predicado = _ _ deve retornar Err"
+    );
+}
+
+/// `NonZeroPoly(3.0)` com 2 predicados: `!= 3.0 (zero 3.0)` → True,
+/// `= 3.0 3.0` → True → Ok. Ambos predicados passam para Float normal.
+#[test]
+fn t_nonzero_poly_two_preds_float_ok() {
+    let src = r#"data (NUM, != _ (zero _), = _ _) as NonZeroPoly
+action test_nz2_float_ok => Boolean
+    match NonZeroPoly 3.0
+        Ok _: Boolean::True
+        Err _: Boolean::False
+test_nz2_float_ok!()"#;
+    let (_raw, ty) = eval_src(src);
+    assert_eq!(
+        ty,
+        Ty::boolean(),
+        "NonZeroPoly(3.0) com 2 predicados deve retornar Ok"
+    );
+}
