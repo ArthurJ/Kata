@@ -22,7 +22,7 @@ pub use module_loader::{ImportKind, ImportedModule, LoadError, ModuleLoader, fil
 use directives::{extract_arg_keys, extract_site_when, extract_test_specs, extract_timer_spec};
 
 use kata_ast::{Item, Module};
-use kata_core::{Ty, TypeEnv};
+use kata_core::{StructKey, Ty, TypeEnv};
 
 /// Extrai a aridade padrão de cada nome de função a partir das assinaturas
 /// resolvidas.
@@ -193,9 +193,12 @@ fn resolve_inner(
                 // Converte TypeExpr → Ty
                 let param_types: Vec<Ty> = params
                     .iter()
-                    .map(|t| resolve_type_expr(&t.node, &type_env, &interface_registry))
+                    .map(|t| {
+                        resolve_type_expr(&t.node, &type_env, &interface_registry, &struct_registry)
+                    })
                     .collect();
-                let return_type = resolve_type_expr(&ret.node, &type_env, &interface_registry);
+                let return_type =
+                    resolve_type_expr(&ret.node, &type_env, &interface_registry, &struct_registry);
 
                 // Extrai metadados de diretivas
                 let mut ffi_symbol = None;
@@ -322,9 +325,12 @@ fn resolve_inner(
                 // Converte TypeExpr → Ty para os parâmetros e retorno.
                 let param_types: Vec<Ty> = params
                     .iter()
-                    .map(|t| resolve_type_expr(&t.node, &type_env, &interface_registry))
+                    .map(|t| {
+                        resolve_type_expr(&t.node, &type_env, &interface_registry, &struct_registry)
+                    })
                     .collect();
-                let return_type = resolve_type_expr(&ret.node, &type_env, &interface_registry);
+                let return_type =
+                    resolve_type_expr(&ret.node, &type_env, &interface_registry, &struct_registry);
 
                 // Extrai ffi_symbol das diretivas da Action.
                 let ffi_symbol = action_dirs.iter().find_map(|d| {
@@ -519,5 +525,108 @@ pub fn merge_two(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModul
         functions,
         actions,
         directive_registry,
+    }
+}
+
+/// Expande signatures e functions que usam `Family("FamilyName")` de uma
+/// família polimórfica em múltiplas versões concretas, uma por instância.
+///
+/// `Family("NonZero")` é produzido por `resolve_type_expr` quando o nome
+/// é uma família polimórfica registrada. A expansão substitui cada
+/// `Family("NonZero")` por `Instance("NonZero","Int")`,
+/// `Instance("NonZero","Float")`, etc. O tree-shaking remove as
+/// instâncias sem chamador.
+pub fn expand_family_signatures(
+    signatures: &mut Vec<Signature>,
+    _struct_registry: &kata_core::StructRegistry,
+) {
+    // Para cada signature, verificar se algum param é Family.
+    // Se sim, expandir em instâncias concretas.
+    let mut new_sigs = Vec::new();
+
+    for sig in signatures.iter() {
+        // Coletar posições dos params que são Family.
+        let family_positions: Vec<(usize, String)> = sig
+            .param_types
+            .iter()
+            .enumerate()
+            .filter_map(|(i, ty)| {
+                if let Ty::Struct(StructKey::Family(name)) = ty {
+                    Some((i, name.clone()))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        if family_positions.is_empty() {
+            // Sem famílias — signature fica como está.
+            continue;
+        }
+
+        // Gerar combinações: produto cartesiano das instâncias de cada família.
+        // Por enquanto, suportamos 1 família por signature (suficiente para stdlib).
+        // Para múltiplas famílias (ex: NUM NonZero), generalizar com produto cartesiano.
+        if family_positions.len() == 1 {
+            let (pos, family_name) = &family_positions[0];
+            let instances = _struct_registry.all_instances(family_name);
+            for (concrete_alias, _) in &instances {
+                let instance_key =
+                    StructKey::Instance(family_name.clone(), concrete_alias.to_string());
+                let mut new_params = sig.param_types.clone();
+                new_params[*pos] = Ty::Struct(instance_key);
+
+                let new_sig = Signature {
+                    name: sig.name.clone(),
+                    param_types: new_params.clone(),
+                    return_type: sig.return_type.clone(),
+                    ffi_symbol: sig.ffi_symbol.clone(),
+                    is_associative: sig.is_associative,
+                    associative_neutral: sig.associative_neutral,
+                    is_action: sig.is_action,
+                    is_commutative: sig.is_commutative,
+                    type_params: sig.type_params.clone(),
+                };
+                new_sigs.push(new_sig);
+
+                // NÃO expandir FunctionDefs com corpo Kata.
+                // Funções FFI (sem corpo) são expandidas via Signature apenas.
+                // Funções com corpo Kata mantêm Family nos param_types — o
+                // dispatch resolve Family ↔ Instance no call site via
+                // match_score (Family ↔ Instance = exact).
+            }
+
+            // Marcar a signature original para remoção.
+            // (Fazemos isso adiando: não adicionamos a original de volta.)
+        }
+    }
+
+    // Se houve expansão, substituir as signatures originais pelas expandidas.
+    if !new_sigs.is_empty() {
+        // Coletar nomes das signatures que foram expandidas (têm Family nos params).
+        let expanded_names: Vec<(String, Vec<Ty>)> = signatures
+            .iter()
+            .filter(|sig| {
+                sig.param_types
+                    .iter()
+                    .any(|ty| matches!(ty, Ty::Struct(StructKey::Family(_))))
+            })
+            .map(|sig| (sig.name.clone(), sig.param_types.clone()))
+            .collect();
+
+        // Remover signatures originais que foram expandidas.
+        signatures.retain(|sig| {
+            !expanded_names
+                .iter()
+                .any(|(name, params)| sig.name == *name && sig.param_types == *params)
+        });
+
+        // Adicionar signatures expandidas.
+        signatures.extend(new_sigs);
+
+        // FunctionDefs NÃO são removidos — mantêm Family nos param_types.
+        // O dispatch encontra a Signature expandida (Instance concreta)
+        // para FFI, e encontra a Signature original (Family) para corpos
+        // Kata via match_score (Family ↔ Instance = exact).
     }
 }

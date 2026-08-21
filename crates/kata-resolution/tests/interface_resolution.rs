@@ -52,7 +52,7 @@ fn interface_com_type_params() {
 fn implements_decl_registra_no_registry() {
     let src = "\
 interface NUM\n    + :: NUM NUM => NUM
-Int implements NUM\n    + :: Int Int => Int @ffi(\"kata_rt_bi_add\")";
+Int implements NUM\n    @ffi(\"kata_rt_bi_add\")\n    + :: Int Int => Int";
     let resolved = resolve_src(src);
     assert!(resolved.interface_registry.type_implements("Int", "NUM"));
 }
@@ -89,7 +89,7 @@ Int implements NUM\n    + :: Int Int => Int";
 fn metodo_com_ffi_symbol_registrado() {
     let src = "\
 interface NUM\n    + :: NUM NUM => NUM
-Int implements NUM\n    + :: Int Int => Int @ffi(\"kata_rt_bi_add\")";
+Int implements NUM\n    @ffi(\"kata_rt_bi_add\")\n    + :: Int Int => Int";
     let resolved = resolve_src(src);
     let impls = resolved.interface_registry.get_impls_for_type("Int");
     assert_eq!(impls.len(), 1);

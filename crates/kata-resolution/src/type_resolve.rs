@@ -7,13 +7,22 @@
 //! - `collect_type_params`: coleta type params de uma assinatura resolvida
 
 use kata_ast::{Expr, TypeExpr};
-use kata_core::{InterfaceRegistry, PrimTy, StructKey, Ty, TypeEnv};
+use kata_core::{InterfaceRegistry, PrimTy, StructKey, StructRegistry, Ty, TypeEnv};
 
 /// Converte TypeExpr → Ty usando TypeEnv para resolver nomes.
 ///
 /// Se `name` é uma interface registrada no `InterfaceRegistry`, produz
 /// `Ty::Interface(name)` em vez de `Ty::Struct(name)`.
-pub fn resolve_type_expr(expr: &TypeExpr, env: &TypeEnv, iface_reg: &InterfaceRegistry) -> Ty {
+///
+/// Se `name` é uma família polimórfica registrada no `StructRegistry`
+/// (tem instâncias com `is_instance_of`), produz
+/// `Ty::Struct(StructKey::Family(name))` em vez de `Plain`.
+pub fn resolve_type_expr(
+    expr: &TypeExpr,
+    env: &TypeEnv,
+    iface_reg: &InterfaceRegistry,
+    struct_reg: &StructRegistry,
+) -> Ty {
     match expr {
         TypeExpr::Named(name) => {
             // Verifica ambiguidade primeiro — se o nome está marcado como
@@ -67,8 +76,12 @@ pub fn resolve_type_expr(expr: &TypeExpr, env: &TypeEnv, iface_reg: &InterfaceRe
                         } else if is_type_param_name(name) {
                             // UPPER_CASE sem :: é type param (ex: T, E, A).
                             Ty::Var(name.clone())
+                        } else if struct_reg.is_family(name) {
+                            // Família polimórfica: `data (NUM, ...) as NonZero`
+                            // — tem instâncias registradas mas não é struct concreto.
+                            Ty::Struct(StructKey::Family(name.clone()))
                         } else {
-                            Ty::Struct(StructKey::Plain(name.clone())) // fallback: tipo declarado pelo usuário
+                            Ty::Struct(StructKey::Plain(name.clone()))
                         }
                     }
                 }
@@ -104,6 +117,8 @@ pub fn resolve_type_expr(expr: &TypeExpr, env: &TypeEnv, iface_reg: &InterfaceRe
                     // Tenta interface registry
                     if iface_reg.get_interface(name).is_some() {
                         Ty::Interface(name.clone())
+                    } else if struct_reg.is_family(name) {
+                        Ty::Struct(StructKey::Family(name.clone()))
                     } else {
                         Ty::Struct(StructKey::Plain(name.clone()))
                     }
@@ -111,28 +126,28 @@ pub fn resolve_type_expr(expr: &TypeExpr, env: &TypeEnv, iface_reg: &InterfaceRe
             }
         }
         TypeExpr::Unit => Ty::Unit,
-        TypeExpr::Grouping(inner) => resolve_type_expr(&inner.node, env, iface_reg),
+        TypeExpr::Grouping(inner) => resolve_type_expr(&inner.node, env, iface_reg, struct_reg),
         TypeExpr::Tuple(elements) => {
             let tys: Vec<Ty> = elements
                 .iter()
-                .map(|t| resolve_type_expr(&t.node, env, iface_reg))
+                .map(|t| resolve_type_expr(&t.node, env, iface_reg, struct_reg))
                 .collect();
             Ty::Tuple(tys)
         }
         TypeExpr::Func { params, ret } => {
             let param_types: Vec<Ty> = params
                 .iter()
-                .map(|t| resolve_type_expr(&t.node, env, iface_reg))
+                .map(|t| resolve_type_expr(&t.node, env, iface_reg, struct_reg))
                 .collect();
-            let return_type = resolve_type_expr(&ret.node, env, iface_reg);
+            let return_type = resolve_type_expr(&ret.node, env, iface_reg, struct_reg);
             Ty::Function(param_types, Box::new(return_type))
         }
         TypeExpr::ActionType { params, ret } => {
             let param_types: Vec<Ty> = params
                 .iter()
-                .map(|t| resolve_type_expr(&t.node, env, iface_reg))
+                .map(|t| resolve_type_expr(&t.node, env, iface_reg, struct_reg))
                 .collect();
-            let return_type = resolve_type_expr(&ret.node, env, iface_reg);
+            let return_type = resolve_type_expr(&ret.node, env, iface_reg, struct_reg);
             Ty::Action(param_types, Box::new(return_type))
         }
         TypeExpr::ParamApp { name, params } => {
@@ -141,7 +156,7 @@ pub fn resolve_type_expr(expr: &TypeExpr, env: &TypeEnv, iface_reg: &InterfaceRe
             // Se não é genérico (fallback), produz Ty::Sum como antes.
             let resolved_params: Vec<Ty> = params
                 .iter()
-                .map(|p| resolve_type_expr(&p.node, env, iface_reg))
+                .map(|p| resolve_type_expr(&p.node, env, iface_reg, struct_reg))
                 .collect();
             // Tipos intrínsecos de coleção — List::(A), Array::(A), Range::(A).
             // São variants de Ty, não Ty::Generic. O codegen precisa do layout.
@@ -227,7 +242,7 @@ pub fn resolve_type_expr(expr: &TypeExpr, env: &TypeEnv, iface_reg: &InterfaceRe
         // preenche E|Text automaticamente. A expansão acontece no inference
         // (variant_construct, sugar, dispatch) via `expand_defaults`.
         TypeExpr::Question(inner) => {
-            let inner_ty = resolve_type_expr(&inner.node, env, iface_reg);
+            let inner_ty = resolve_type_expr(&inner.node, env, iface_reg, struct_reg);
             Ty::Generic("Result".into(), vec![inner_ty])
         }
     }

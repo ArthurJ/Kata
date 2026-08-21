@@ -92,7 +92,7 @@ fn builtin_directive_in_sig_accepted() {
 #[test]
 fn unknown_directive_in_implements_method_rejected() {
     // @tset é typo — não é válida em implements
-    let src = "Int implements NUM\n    + :: Int Int => Int @tset(\"desc\")";
+    let src = "Int implements NUM\n    @tset(\"desc\")\n    + :: Int Int => Int";
     let errors = resolve_src_err(src);
     assert!(
         errors.iter().any(|e| matches!(
@@ -133,7 +133,7 @@ fn ffi_directive_in_data_accepted() {
 
 #[test]
 fn commutative_in_implements_accepted() {
-    let src = "Int implements NUM\n    + :: Int Int => Int @commutative";
+    let src = "Int implements NUM\n    @commutative\n    + :: Int Int => Int";
     let tokens = lex(src).unwrap();
     let module = parse(tokens).unwrap();
     resolve(&module).expect("@commutative em implements deve ser aceita");

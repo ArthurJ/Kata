@@ -22,6 +22,112 @@ use crate::types::{
     EnumPredDeclInfo, EnumPredVariant, FunctionDef, RefinedDeclInfo, ResolveError, Signature,
 };
 
+/// Substitui `Family(name)` por `Instance(name, concrete_type)` em um `Ty`,
+/// recursivamente, quando a instância existe no StructRegistry.
+///
+/// No contexto de `Int implements NUM`, os params do impl referenciam `NonZero`
+/// (família polimórfica). `resolve_type_expr` produz `Family("NonZero")`.
+/// Mas o implements é específico de Int — `NonZero` aqui significa
+/// `Instance("NonZero", "Int")`, não a família abstrata. Sem esta substituição,
+/// `expand_family_signatures` expande cegamente para TODAS as instâncias
+/// (Int, Float, Rational), criando overloads espúrias que causam
+/// `AmbiguousDispatch` no call-site.
+fn instantiate_family_for_concrete(
+    ty: &Ty,
+    concrete_type: &str,
+    struct_reg: &StructRegistry,
+) -> Ty {
+    match ty {
+        Ty::Struct(StructKey::Family(name)) => {
+            if struct_reg.get_instance(name, concrete_type).is_some() {
+                Ty::Struct(StructKey::Instance(name.clone(), concrete_type.to_string()))
+            } else {
+                ty.clone()
+            }
+        }
+        Ty::Generic(name, args) => Ty::Generic(
+            name.clone(),
+            args.iter()
+                .map(|a| instantiate_family_for_concrete(a, concrete_type, struct_reg))
+                .collect(),
+        ),
+        Ty::Function(params, ret) => Ty::Function(
+            params
+                .iter()
+                .map(|p| instantiate_family_for_concrete(p, concrete_type, struct_reg))
+                .collect(),
+            Box::new(instantiate_family_for_concrete(
+                ret,
+                concrete_type,
+                struct_reg,
+            )),
+        ),
+        Ty::Action(params, ret) => Ty::Action(
+            params
+                .iter()
+                .map(|p| instantiate_family_for_concrete(p, concrete_type, struct_reg))
+                .collect(),
+            Box::new(instantiate_family_for_concrete(
+                ret,
+                concrete_type,
+                struct_reg,
+            )),
+        ),
+        Ty::Tuple(elems) => Ty::Tuple(
+            elems
+                .iter()
+                .map(|e| instantiate_family_for_concrete(e, concrete_type, struct_reg))
+                .collect(),
+        ),
+        Ty::List(elem) => Ty::List(Box::new(instantiate_family_for_concrete(
+            elem,
+            concrete_type,
+            struct_reg,
+        ))),
+        Ty::Array(elem) => Ty::Array(Box::new(instantiate_family_for_concrete(
+            elem,
+            concrete_type,
+            struct_reg,
+        ))),
+        Ty::Range(elem) => Ty::Range(Box::new(instantiate_family_for_concrete(
+            elem,
+            concrete_type,
+            struct_reg,
+        ))),
+        Ty::Dict(k, v) => Ty::Dict(
+            Box::new(instantiate_family_for_concrete(
+                k,
+                concrete_type,
+                struct_reg,
+            )),
+            Box::new(instantiate_family_for_concrete(
+                v,
+                concrete_type,
+                struct_reg,
+            )),
+        ),
+        Ty::Set(elem) => Ty::Set(Box::new(instantiate_family_for_concrete(
+            elem,
+            concrete_type,
+            struct_reg,
+        ))),
+        Ty::Sender(elem) => Ty::Sender(Box::new(instantiate_family_for_concrete(
+            elem,
+            concrete_type,
+            struct_reg,
+        ))),
+        Ty::Receiver(elem) => Ty::Receiver(Box::new(instantiate_family_for_concrete(
+            elem,
+            concrete_type,
+            struct_reg,
+        ))),
+        Ty::ReceiverFactory(elem) => Ty::ReceiverFactory(Box::new(
+            instantiate_family_for_concrete(elem, concrete_type, struct_reg),
+        )),
+        _ => ty.clone(),
+    }
+}
+
 /// Pass 0: popula TypeEnv + registries com tipos declarados no módulo.
 ///
 /// Recebe mut refs para os acumuladores que `resolve()` criou e preenche
@@ -41,8 +147,89 @@ pub(crate) fn run_pass0(
     errors: &mut Vec<ResolveError>,
     origin: &str,
 ) {
+    // Two-pass: coleta InterfaceDecl e ImplementsDecl para defer,
+    // processa o resto (data, enum, alias, refines) inline.
+    // Pass 0a: registra interfaces/impls com signatures/methods vazios +
+    //   processa data/enum/alias inline (popula type_env, struct_registry).
+    // Pass 0b: resolve assinaturas de interfaces e impls (agora todos os
+    //   tipos estão disponíveis no type_env e struct_registry).
+
+    /// InterfaceDecl deferido — coletado no passo 0a, resolvido no 0b.
+    struct DeferredInterface {
+        name: String,
+        supertraits: Vec<String>,
+        type_params: Vec<String>,
+        signatures: Vec<kata_ast::InterfaceSig>,
+    }
+
+    /// ImplementsDecl deferido — coletado no passo 0a, resolvido no 0b.
+    struct DeferredImpl {
+        type_name: String,
+        type_params: Vec<String>,
+        interface_name: String,
+        iface_params: Vec<String>,
+        methods: Vec<kata_ast::ImplMethod>,
+    }
+
+    let mut deferred_interfaces: Vec<DeferredInterface> = Vec::new();
+    let mut deferred_impls: Vec<DeferredImpl> = Vec::new();
+
+    // ── Pass 0a: registrar declarações ──────────────────────────
     for item in items {
         match &item.node {
+            Item::InterfaceDecl {
+                name,
+                supertraits,
+                type_params,
+                signatures: iface_sigs,
+            } => {
+                // Registrar interface com signatures vazias — serão
+                // preenchidas no passo 0b, quando todos os tipos (incluindo
+                // famílias polimórficas como NonZero) estiverem no type_env.
+                let info = InterfaceInfo {
+                    name: name.clone(),
+                    supertraits: supertraits.clone(),
+                    type_params: type_params.clone(),
+                    signatures: Vec::new(),
+                };
+                if let Err(e) = interface_registry.register_interface(origin, info) {
+                    eprintln!("[resolution] warning: {e}");
+                }
+                deferred_interfaces.push(DeferredInterface {
+                    name: name.clone(),
+                    supertraits: supertraits.clone(),
+                    type_params: type_params.clone(),
+                    signatures: iface_sigs.clone(),
+                });
+            }
+            Item::ImplementsDecl {
+                type_name,
+                type_params,
+                interface_name,
+                iface_params,
+                methods,
+            } => {
+                // Registrar impl com methods vazios — serão preenchidos no 0b.
+                let entry = ImplEntry {
+                    origin: origin.to_string(),
+                    type_name: type_name.clone(),
+                    type_params: type_params.clone(),
+                    interface_name: interface_name.clone(),
+                    iface_params: iface_params.clone(),
+                    methods: Vec::new(),
+                };
+                if let Err(e) = interface_registry.register_impl(entry) {
+                    eprintln!("[resolution] warning: {e}");
+                }
+                deferred_impls.push(DeferredImpl {
+                    type_name: type_name.clone(),
+                    type_params: type_params.clone(),
+                    interface_name: interface_name.clone(),
+                    iface_params: iface_params.clone(),
+                    methods: methods.clone(),
+                });
+            }
+            // Processar data/enum/alias/refines inline no passo 0a.
             Item::DataDecl {
                 name,
                 fields,
@@ -70,8 +257,12 @@ pub(crate) fn run_pass0(
                     //
                     // Registra no StructRegistry e guarda para o inference
                     // sintetizar as funções predicado.
-                    let base_ty =
-                        resolve_type_expr(&refined_decl.base_ty.node, type_env, interface_registry);
+                    let base_ty = resolve_type_expr(
+                        &refined_decl.base_ty.node,
+                        type_env,
+                        interface_registry,
+                        &*struct_registry,
+                    );
 
                     match &base_ty {
                         Ty::Interface(iface_name) => {
@@ -120,10 +311,11 @@ pub(crate) fn run_pass0(
                                         predicates: refined_decl.predicates.clone(),
                                     });
                                 }
-                                // Registrar o nome público no type_env.
+                                // Registrar o nome público no type_env como Family
+                                // — NonZero é família, não struct concreto.
                                 type_env.define(
                                     name,
-                                    Ty::Struct(StructKey::Plain(name.clone())),
+                                    Ty::Struct(StructKey::Family(name.clone())),
                                     origin,
                                 );
                             }
@@ -187,7 +379,12 @@ pub(crate) fn run_pass0(
                         .enumerate()
                         .map(|(i, f)| FieldInfo {
                             name: f.name.clone(),
-                            ty: resolve_type_expr(&f.ty.node, type_env, interface_registry),
+                            ty: resolve_type_expr(
+                                &f.ty.node,
+                                type_env,
+                                interface_registry,
+                                &*struct_registry,
+                            ),
                             offset: (i as u32) * 8,
                         })
                         .collect();
@@ -258,7 +455,14 @@ pub(crate) fn run_pass0(
                         variants.iter().find_map(|v| {
                             v.payload
                                 .as_ref()
-                                .map(|p| resolve_type_expr(&p.node, type_env, interface_registry))
+                                .map(|p| {
+                                    resolve_type_expr(
+                                        &p.node,
+                                        type_env,
+                                        interface_registry,
+                                        &*struct_registry,
+                                    )
+                                })
                                 .or_else(|| {
                                     v.predicate
                                         .as_ref()
@@ -275,7 +479,14 @@ pub(crate) fn run_pass0(
                             let payload_ty = v
                                 .payload
                                 .as_ref()
-                                .map(|p| resolve_type_expr(&p.node, type_env, interface_registry))
+                                .map(|p| {
+                                    resolve_type_expr(
+                                        &p.node,
+                                        type_env,
+                                        interface_registry,
+                                        &*struct_registry,
+                                    )
+                                })
                                 .or_else(|| {
                                     v.predicate
                                         .as_ref()
@@ -318,8 +529,12 @@ pub(crate) fn run_pass0(
                 let mut defaults: Vec<Option<Ty>> = Vec::new();
                 for v in variants.iter() {
                     if let Some(payload) = &v.payload {
-                        let payload_ty =
-                            resolve_type_expr(&payload.node, type_env, interface_registry);
+                        let payload_ty = resolve_type_expr(
+                            &payload.node,
+                            type_env,
+                            interface_registry,
+                            &*struct_registry,
+                        );
                         if let Ty::Var(n) = &payload_ty
                             && is_type_param_name(n)
                         {
@@ -328,7 +543,12 @@ pub(crate) fn run_pass0(
                                 type_params.push(n.clone());
                                 // Se o variant tem default, resolve e registra.
                                 let default_ty = v.default.as_ref().map(|d| {
-                                    resolve_type_expr(&d.node, type_env, interface_registry)
+                                    resolve_type_expr(
+                                        &d.node,
+                                        type_env,
+                                        interface_registry,
+                                        &*struct_registry,
+                                    )
                                 });
                                 defaults.push(default_ty);
                             }
@@ -355,9 +575,14 @@ pub(crate) fn run_pass0(
                     let payload_ty = variants
                         .iter()
                         .find_map(|v| {
-                            v.payload
-                                .as_ref()
-                                .map(|p| resolve_type_expr(&p.node, type_env, interface_registry))
+                            v.payload.as_ref().map(|p| {
+                                resolve_type_expr(
+                                    &p.node,
+                                    type_env,
+                                    interface_registry,
+                                    &*struct_registry,
+                                )
+                            })
                         })
                         .unwrap_or_else(|| {
                             // Infere do predicado: aplicação `op _ literal` → tipo do literal.
@@ -387,218 +612,10 @@ pub(crate) fn run_pass0(
                     });
                 }
             }
-            // InterfaceDecl — registra no InterfaceRegistry.
-            Item::InterfaceDecl {
-                name,
-                supertraits,
-                type_params,
-                signatures,
-            } => {
-                let iface_sigs: Vec<InterfaceSignature> = signatures
-                    .iter()
-                    .map(|s| InterfaceSignature {
-                        name: s.name.clone(),
-                        params: s
-                            .params
-                            .iter()
-                            .map(|t| resolve_type_expr(&t.node, type_env, interface_registry))
-                            .collect(),
-                        ret: resolve_type_expr(&s.ret.node, type_env, interface_registry),
-                        default_body: s.default_body.clone(),
-                    })
-                    .collect();
-                let info = InterfaceInfo {
-                    name: name.clone(),
-                    supertraits: supertraits.clone(),
-                    type_params: type_params.clone(),
-                    signatures: iface_sigs,
-                };
-                if let Err(e) = interface_registry.register_interface(origin, info) {
-                    eprintln!("[resolution] warning: {e}");
-                }
-            }
-            // ImplementsDecl — registra no InterfaceRegistry.
-            // O registro no DispatchTable será feito quando o prelude migrar
-            // para Kata. Por ora, o InterfaceRegistry cataloga a impl.
-            Item::ImplementsDecl {
-                type_name,
-                type_params,
-                interface_name,
-                iface_params,
-                methods,
-            } => {
-                // Valida diretivas de cada método: só @ffi, @builtin, @commutative,
-                // @associative são válidas em implements. Outras → erro.
-                for m in methods {
-                    for d in &m.directives {
-                        match d.name.as_str() {
-                            "ffi" | "builtin" | "commutative" | "associative" => {}
-                            other => {
-                                errors.push(ResolveError::UnknownDirective {
-                                    name: other.to_string(),
-                                    context: "implements method",
-                                    item_name: m.name.clone(),
-                                });
-                            }
-                        }
-                    }
-                }
-                let impl_methods: Vec<ImplMethodInfo> = methods
-                    .iter()
-                    .map(|m| {
-                        // Extrai @ffi OU @builtin como símbolo.
-                        // @ffi("kata_rt_array_next") → Some("kata_rt_array_next")
-                        // @builtin("range_next") → Some("range_next")
-                        let ffi_symbol = m.directives.iter().find_map(|d| {
-                            if (d.name == "ffi" || d.name == "builtin")
-                                && let Some(kata_ast::DirectiveArg::Expr(e)) = d.args.first()
-                                && let kata_ast::Expr::TextLit { text } = &e.node
-                            {
-                                return Some(text.clone());
-                            }
-                            None
-                        });
-                        ImplMethodInfo {
-                            name: m.name.clone(),
-                            params: m
-                                .params
-                                .iter()
-                                .map(|t| resolve_type_expr(&t.node, type_env, interface_registry))
-                                .collect(),
-                            ret: resolve_type_expr(&m.ret.node, type_env, interface_registry),
-                            ffi_symbol,
-                        }
-                    })
-                    .collect();
-                let entry = ImplEntry {
-                    origin: origin.to_string(),
-                    type_name: type_name.clone(),
-                    type_params: type_params.clone(),
-                    interface_name: interface_name.clone(),
-                    iface_params: iface_params.clone(),
-                    methods: impl_methods,
-                };
-                if let Err(e) = interface_registry.register_impl(entry) {
-                    eprintln!("[resolution] warning: {e}");
-                }
-
-                // Cada método de implements vira uma Signature flat
-                // (como se fosse uma Sig standalone). O dispatch usa estas
-                // signatures para popular o DispatchTable.
-                for m in methods {
-                    let param_types: Vec<Ty> = m
-                        .params
-                        .iter()
-                        .map(|t| resolve_type_expr(&t.node, type_env, interface_registry))
-                        .collect();
-                    let return_type = resolve_type_expr(&m.ret.node, type_env, interface_registry);
-                    let ffi_symbol = m.directives.iter().find_map(|d| {
-                        if (d.name == "ffi" || d.name == "builtin")
-                            && let Some(kata_ast::DirectiveArg::Expr(e)) = d.args.first()
-                            && let kata_ast::Expr::TextLit { text } = &e.node
-                        {
-                            return Some(text.clone());
-                        }
-                        None
-                    });
-                    let is_commutative = m.directives.iter().any(|d| d.name == "commutative");
-                    let is_associative = m.directives.iter().any(|d| d.name == "associative");
-                    let associative_neutral = m.directives.iter().find_map(|d| {
-                        if d.name == "associative"
-                            && let Some(kata_ast::DirectiveArg::Expr(e)) = d.args.first()
-                            && let kata_ast::Expr::IntLit { text } = &e.node
-                            && let Ok(n) = text.parse::<i64>()
-                        {
-                            return Some(n);
-                        }
-                        None
-                    });
-                    let type_params = collect_type_params(&param_types, &return_type);
-
-                    signatures.push(Signature {
-                        name: m.name.clone(),
-                        param_types: param_types.clone(),
-                        return_type: return_type.clone(),
-                        ffi_symbol: ffi_symbol.clone(),
-                        is_associative,
-                        associative_neutral,
-                        is_action: false,
-                        is_commutative,
-                        type_params,
-                    });
-
-                    // Método com corpo Kata (lambda) precisa de
-                    // FunctionDef para o inference produzir TypedFunction.
-                    // Sem isso, o corpo é invisível para o inference/codegen.
-                    if let Some(clauses) = &m.body {
-                        functions.push(FunctionDef {
-                            name: m.name.clone(),
-                            param_types,
-                            return_type,
-                            clauses: clauses.clone(),
-                            cache_strategy: None,
-                            timer: None,
-                            custom_directives: Vec::new(),
-                        });
-                    }
-                }
-
-                // ── Default methods: métodos da interface com default_body
-                // que não foram definidos no impl. Gera Signature +
-                // FunctionDef sintetizada usando o default_body da interface.
-                // Self na assinatura é substituído pelo tipo concreto.
-                if let Some(iface_info) = interface_registry.get_interface(interface_name) {
-                    let defined_names: std::collections::HashSet<&str> =
-                        methods.iter().map(|m| m.name.as_str()).collect();
-                    for sig in &iface_info.signatures {
-                        if defined_names.contains(sig.name.as_str()) {
-                            continue; // método definido no impl — não usa default
-                        }
-                        if let Some(default_clauses) = &sig.default_body {
-                            // Substituir Self pelo tipo concreto nos param/ret.
-                            // type_name é o nome do tipo (ex: "Int", "Float").
-                            // resolve_type_expr mapeia "Int" → Ty::Prim(PrimTy::Int), etc.
-                            let concrete_ty = resolve_type_expr(
-                                &kata_ast::TypeExpr::Named(type_name.clone()),
-                                type_env,
-                                interface_registry,
-                            );
-                            let param_types: Vec<Ty> = sig
-                                .params
-                                .iter()
-                                .map(|t| t.substitute_self(&concrete_ty))
-                                .collect();
-                            let return_type = sig.ret.substitute_self(&concrete_ty);
-                            let type_params = collect_type_params(&param_types, &return_type);
-
-                            signatures.push(Signature {
-                                name: sig.name.clone(),
-                                param_types: param_types.clone(),
-                                return_type: return_type.clone(),
-                                ffi_symbol: None,
-                                is_associative: false,
-                                associative_neutral: None,
-                                is_action: false,
-                                is_commutative: false,
-                                type_params,
-                            });
-
-                            // O default_body tem Self no tipo — precisa ser
-                            // substituído pelo tipo concreto. O typeck vai
-                            // tipar o corpo com os tipos concretos.
-                            functions.push(FunctionDef {
-                                name: sig.name.clone(),
-                                param_types,
-                                return_type,
-                                clauses: default_clauses.clone(),
-                                cache_strategy: None,
-                                timer: None,
-                                custom_directives: Vec::new(),
-                            });
-                        }
-                    }
-                }
-            }
+            // InterfaceDecl e ImplementsDecl já foram registrados no
+            // passo 0a com signatures/methods vazios. A resolução das
+            // assinaturas acontece no passo 0b (após o loop).
+            Item::InterfaceDecl { .. } | Item::ImplementsDecl { .. } => {}
             // RefinesDecl — registra no RefinesRegistry.
             // Não registra no InterfaceRegistry nem cria overloads no DispatchTable.
             // O fallback no dispatch (apply.rs) usa este registry para substituir
@@ -685,9 +702,21 @@ pub(crate) fn run_pass0(
                     let param_types: Vec<Ty> = m
                         .params
                         .iter()
-                        .map(|t| resolve_type_expr(&t.node, type_env, interface_registry))
+                        .map(|t| {
+                            resolve_type_expr(
+                                &t.node,
+                                type_env,
+                                interface_registry,
+                                &*struct_registry,
+                            )
+                        })
                         .collect();
-                    let return_type = resolve_type_expr(&m.ret.node, type_env, interface_registry);
+                    let return_type = resolve_type_expr(
+                        &m.ret.node,
+                        type_env,
+                        interface_registry,
+                        &*struct_registry,
+                    );
                     let ffi_symbol = m.directives.iter().find_map(|d| {
                         if (d.name == "ffi" || d.name == "builtin")
                             && let Some(kata_ast::DirectiveArg::Expr(e)) = d.args.first()
@@ -728,8 +757,245 @@ pub(crate) fn run_pass0(
             _ => {}
         }
     }
-}
 
+    // ── Pass 0b: resolver assinaturas de interfaces e impls ──────
+    // Agora que todas as declarações (data, enum, interface, implements,
+    // refines, refined polimórfico) foram processadas no passo 0a,
+    // todos os tipos estão disponíveis no type_env e struct_registry.
+    // Isto permite que assinaturas de interface referenciem famílias
+    // polimórficas (ex: NonZero) mesmo se declaradas depois da interface.
+
+    // 0b.1: Resolver assinaturas das interfaces.
+    for deferred in &deferred_interfaces {
+        let iface_sigs: Vec<InterfaceSignature> = deferred
+            .signatures
+            .iter()
+            .map(|s| InterfaceSignature {
+                name: s.name.clone(),
+                params: s
+                    .params
+                    .iter()
+                    .map(|t| {
+                        resolve_type_expr(&t.node, type_env, interface_registry, &*struct_registry)
+                    })
+                    .collect(),
+                ret: resolve_type_expr(
+                    &s.ret.node,
+                    type_env,
+                    interface_registry,
+                    &*struct_registry,
+                ),
+                default_body: s.default_body.clone(),
+            })
+            .collect();
+        if let Err(e) =
+            interface_registry.update_interface_signatures(origin, &deferred.name, iface_sigs)
+        {
+            eprintln!("[resolution] warning: {e}");
+        }
+    }
+
+    // 0b.2: Resolver métodos dos impls + gerar Signatures/FunctionDefs +
+    //       processar default methods.
+    for deferred in &deferred_impls {
+        // Valida diretivas de cada método.
+        for m in &deferred.methods {
+            for d in &m.directives {
+                match d.name.as_str() {
+                    "ffi" | "builtin" | "commutative" | "associative" => {}
+                    other => {
+                        errors.push(ResolveError::UnknownDirective {
+                            name: other.to_string(),
+                            context: "implements method",
+                            item_name: m.name.clone(),
+                        });
+                    }
+                }
+            }
+        }
+
+        // Resolver métodos para InterfaceRegistry (ImplMethodInfo).
+        let impl_methods: Vec<ImplMethodInfo> = deferred
+            .methods
+            .iter()
+            .map(|m| {
+                let ffi_symbol = m.directives.iter().find_map(|d| {
+                    if (d.name == "ffi" || d.name == "builtin")
+                        && let Some(kata_ast::DirectiveArg::Expr(e)) = d.args.first()
+                        && let kata_ast::Expr::TextLit { text } = &e.node
+                    {
+                        return Some(text.clone());
+                    }
+                    None
+                });
+                ImplMethodInfo {
+                    name: m.name.clone(),
+                    params: m
+                        .params
+                        .iter()
+                        .map(|t| {
+                            let ty = resolve_type_expr(
+                                &t.node,
+                                type_env,
+                                interface_registry,
+                                &*struct_registry,
+                            );
+                            instantiate_family_for_concrete(
+                                &ty,
+                                &deferred.type_name,
+                                &struct_registry,
+                            )
+                        })
+                        .collect(),
+                    ret: {
+                        let ty = resolve_type_expr(
+                            &m.ret.node,
+                            type_env,
+                            interface_registry,
+                            &*struct_registry,
+                        );
+                        instantiate_family_for_concrete(&ty, &deferred.type_name, &struct_registry)
+                    },
+                    ffi_symbol,
+                }
+            })
+            .collect();
+        if let Err(e) = interface_registry.update_impl_methods(
+            origin,
+            &deferred.type_name,
+            &deferred.interface_name,
+            impl_methods,
+        ) {
+            eprintln!("[resolution] warning: {e}");
+        }
+
+        // Gerar Signature + FunctionDef para cada método do impl.
+        for m in &deferred.methods {
+            let param_types: Vec<Ty> = m
+                .params
+                .iter()
+                .map(|t| {
+                    let ty =
+                        resolve_type_expr(&t.node, type_env, interface_registry, &*struct_registry);
+                    instantiate_family_for_concrete(&ty, &deferred.type_name, &struct_registry)
+                })
+                .collect();
+            let return_type = {
+                let ty =
+                    resolve_type_expr(&m.ret.node, type_env, interface_registry, &*struct_registry);
+                instantiate_family_for_concrete(&ty, &deferred.type_name, &struct_registry)
+            };
+            let ffi_symbol = m.directives.iter().find_map(|d| {
+                if (d.name == "ffi" || d.name == "builtin")
+                    && let Some(kata_ast::DirectiveArg::Expr(e)) = d.args.first()
+                    && let kata_ast::Expr::TextLit { text } = &e.node
+                {
+                    return Some(text.clone());
+                }
+                None
+            });
+            let is_commutative = m.directives.iter().any(|d| d.name == "commutative");
+            let is_associative = m.directives.iter().any(|d| d.name == "associative");
+            let associative_neutral = m.directives.iter().find_map(|d| {
+                if d.name == "associative"
+                    && let Some(kata_ast::DirectiveArg::Expr(e)) = d.args.first()
+                    && let kata_ast::Expr::IntLit { text } = &e.node
+                    && let Ok(n) = text.parse::<i64>()
+                {
+                    return Some(n);
+                }
+                None
+            });
+            let type_params = collect_type_params(&param_types, &return_type);
+
+            signatures.push(Signature {
+                name: m.name.clone(),
+                param_types: param_types.clone(),
+                return_type: return_type.clone(),
+                ffi_symbol: ffi_symbol.clone(),
+                is_associative,
+                associative_neutral,
+                is_action: false,
+                is_commutative,
+                type_params,
+            });
+
+            // Método com corpo Kata (lambda) precisa de FunctionDef.
+            if let Some(clauses) = &m.body {
+                functions.push(FunctionDef {
+                    name: m.name.clone(),
+                    param_types,
+                    return_type,
+                    clauses: clauses.clone(),
+                    cache_strategy: None,
+                    timer: None,
+                    custom_directives: Vec::new(),
+                });
+            }
+        }
+
+        // ── Default methods: métodos da interface com default_body
+        // que não foram definidos no impl. Gera Signature +
+        // FunctionDef sintetizada usando o default_body da interface.
+        // Self na assinatura é substituído pelo tipo concreto.
+        if let Some(iface_info) = interface_registry.get_interface(&deferred.interface_name) {
+            let defined_names: std::collections::HashSet<&str> =
+                deferred.methods.iter().map(|m| m.name.as_str()).collect();
+            for sig in &iface_info.signatures {
+                if defined_names.contains(sig.name.as_str()) {
+                    continue;
+                }
+                if let Some(default_clauses) = &sig.default_body {
+                    let concrete_ty = resolve_type_expr(
+                        &kata_ast::TypeExpr::Named(deferred.type_name.clone()),
+                        type_env,
+                        interface_registry,
+                        &*struct_registry,
+                    );
+                    let param_types: Vec<Ty> = sig
+                        .params
+                        .iter()
+                        .map(|t| {
+                            let ty = t.substitute_self(&concrete_ty);
+                            instantiate_family_for_concrete(
+                                &ty,
+                                &deferred.type_name,
+                                &struct_registry,
+                            )
+                        })
+                        .collect();
+                    let return_type = {
+                        let ty = sig.ret.substitute_self(&concrete_ty);
+                        instantiate_family_for_concrete(&ty, &deferred.type_name, &struct_registry)
+                    };
+                    let type_params = collect_type_params(&param_types, &return_type);
+
+                    signatures.push(Signature {
+                        name: sig.name.clone(),
+                        param_types: param_types.clone(),
+                        return_type: return_type.clone(),
+                        ffi_symbol: None,
+                        is_associative: false,
+                        associative_neutral: None,
+                        is_action: false,
+                        is_commutative: false,
+                        type_params,
+                    });
+
+                    functions.push(FunctionDef {
+                        name: sig.name.clone(),
+                        param_types,
+                        return_type,
+                        clauses: default_clauses.clone(),
+                        cache_strategy: None,
+                        timer: None,
+                        custom_directives: Vec::new(),
+                    });
+                }
+            }
+        }
+    }
+}
 /// Resolve um nome de tipo base (ex: "Int") para `Ty`.
 /// Usado pelo processamento de RefinesDecl para obter o tipo base do refined.
 fn resolve_base_ty(base_name: &str, type_env: &TypeEnv, iface_reg: &InterfaceRegistry) -> Ty {
