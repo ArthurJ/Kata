@@ -95,10 +95,51 @@ Quando `pass0.rs` encontra `base_ty = Ty::Interface("NUM")`:
    - **Novo campo `is_instance_of: Option<String>`**: `Some("NonZero")` indicando
      que este StructInfo é instância de uma família
 
-**Nomenclatura interna:** as instâncias são registradas com nomes internos
-distintos (`NonZero$Int`, `NonZero$Float`, `NonZero$Rational`) para evitar
-colisão no `StructRegistry` (que usa `(origin, struct_name)` como chave). O nome
-público `NonZero` mapeia para a família.
+### 3.3.1. `StructKey` — identidade estrutural, não string-encoded
+
+O `StructRegistry` usa `(origin, struct_name)` como chave. Hoje `struct_name`
+é `String`. Com famílias, três instâncias chamadas `NonZero` na mesma origin
+colidem. Em vez de resolver com nomes internos (`NonZero$Int`), introduzir um
+tipo estrutural como chave:
+
+```rust
+enum StructKey {
+    /// Tipo comum: "Pessoa", "Float", "NonZero"
+    Plain(String),
+    /// Instância de família: ("NonZero", "Int")
+    Instance(String, String),
+}
+```
+
+O `StructRegistry` passa a ser `HashMap<(String, StructKey), StructInfo>`.
+
+**Por que não `String` com `$`:**
+- Colisão: nada impede o usuário de declarar `data (...) as NonZero$Int`
+- Parsing implícito: cada site que precisa distinguir família vs concreto faria
+  `name.contains('$')` — string matching onde deveria ser pattern matching
+- Display acoplado à identidade: traduzir `NonZero$Int` → `NonZero` é
+  transformação de string frágil
+
+**`Ty::Struct` carrega `String` ou `StructKey`?**
+
+Duas opções:
+- **Normalização na fronteira:** `Ty::Struct` continua `String`. O `StructRegistry`
+  expõe `fn lookup(&self, origin: &str, name: &str, type_hint: Option<&Ty>)`.
+  Quando `name` é uma família, `type_hint` seleciona a instância. Confina a
+  mudança ao `StructRegistry` — menor invasão.
+- **`StructKey` em `Ty`:** `Ty::Struct(StructKey)` — a distinção família vs
+  concreto é estrutural em todo o type system. Mais limpo, mas `Ty::Struct(String)`
+  aparece em ~todos os crates — mudança grande.
+
+**Recomendação:** normalização na fronteira (opção 1) para minimizar invasão.
+O `StructKey` existe internamente no `StructRegistry`; `Ty::Struct(String)`
+continua carregando o nome público `"NonZero"`. Quando o codegen ou inference
+precisa do `StructInfo` concreto, consulta o registry com type hint — o
+registry resolve `"NonZero"` + hint `Int` → `StructKey::Instance("NonZero", "Int")`.
+
+Quando não há type hint (ex: `fn :: NonZero => Int` sem saber o tipo do arg),
+o registry retorna a família — um `StructInfo` virtual que lista as instâncias.
+O dispatch então testa cada instância (ver §3.5).
 
 ### 3.4. Predicado com `zero`
 
@@ -119,34 +160,44 @@ implícito, sem literal polimórfico.
 ```
 
 O dispatch precisa matchar `NonZero` (família) contra um argumento concreto.
-Quando o caller passa `3::NonZero$Int` (que é `Ty::Struct("NonZero$Int")`):
+Quando o caller passa `3::NonZero` com tipo inferido `Int`, o ascription
+resolve `NonZero` + hint `Int` → `StructKey::Instance("NonZero", "Int")`. O
+tipo do argumento é `Ty::Struct("NonZero")` com `is_instance_of = Some("NonZero")`
+e `alias_of = "Int"`.
 
-1. `match_score` testa `arg == param`: `NonZero$Int != NonZero` (nomes distintos)
-2. Fallback: testa se `arg` é instância da família `NonZero` — consulta
-   `StructInfo.is_instance_of == Some("NonZero")` → sim
-3. Trata como exact match (o arg é da família correta)
+Matching no dispatch:
 
-Isso é análogo ao `try_refines_fallback` atual: `NonZero$Int refines NonZero`
-é uma relação que o fallback já sabe seguir, estendida para o caso de família.
+1. `match_score` testa `arg == param`: o arg é `Ty::Struct("NonZero")` (nome
+   público da instância), o param é `Ty::Struct("NonZero")` — match direto
+   se ambos usam o nome público
+2. Se o arg é uma instância e o param é a família (ou vice-versa), o fallback
+   consulta `StructInfo.is_instance_of` — se `Some("NonZero")` == nome da
+   família do param, trata como exact match
+
+Isso é análogo ao `try_refines_fallback` atual: a relação "instância pertence
+à família" é seguida pelo fallback, como `refines` já é.
 
 ### 3.6. Smart constructor polimórfico
 
 `NonZero(x)` despacha por tipo de `x`:
-- `NonZero(3)` → `NonZero$Int` (valida `!= 3 (zero 3)` → `!= 3 0` → `True` → `Ok`)
-- `NonZero(3.0)` → `NonZero$Float` (valida `!= 3.0 (zero 3.0)` → `!= 3.0 0.0` → `True` → `Ok`)
-- `NonZero(0)` → `NonZero$Int` (valida `!= 0 (zero 0)` → `!= 0 0` → `False` → `Err`)
+- `NonZero(3)` → instância `("NonZero", "Int")` (valida `!= 3 (zero 3)` → `!= 3 0` → `True` → `Ok`)
+- `NonZero(3.0)` → instância `("NonZero", "Float")` (valida `!= 3.0 (zero 3.0)` → `!= 3.0 0.0` → `True` → `Ok`)
+- `NonZero(0)` → instância `("NonZero", "Int")` (valida `!= 0 (zero 0)` → `!= 0 0` → `False` → `Err`)
 
-O construtor é um OverloadSet com 3 overloads:
-- `NonZero :: Int => Result::(NonZero$Int, Text)`
-- `NonZero :: Float => Result::(NonZero$Float, Text)`
-- `NonZero :: Rational => Result::(NonZero$Rational, Text)`
+O construtor é um OverloadSet com 3 overloads, uma por instância concreta:
+- `NonZero :: Int => Result::(NonZero, Text)` (instância Int)
+- `NonZero :: Float => Result::(NonZero, Text)` (instância Float)
+- `NonZero :: Rational => Result::(NonZero, Text)` (instância Rational)
 
-O dispatch resolve por tipo do argumento — já funciona hoje.
+O tipo de retorno `NonZero` é o nome público — o dispatch sabe que é uma
+família e resolve a instância concreta pelo tipo do argumento. O dispatch
+resolve por tipo do argumento — já funciona hoje.
 
 ### 3.7. Ascription
 
-`3::NonZero` despacha o construtor por tipo de `3` (Int) → escolhe `NonZero$Int`.
-O tipo resultado é `NonZero$Int`, que é da família `NonZero`. Assinaturas que
+`3::NonZero` despacha o construtor por tipo de `3` (Int) → seleciona a
+instância `("NonZero", "Int")`. O tipo resultado é `Ty::Struct("NonZero")`
+com `is_instance_of = Some("NonZero")` e `alias_of = "Int"`. Assinaturas que
 pedem `NonZero` aceitam via fallback de família.
 
 ## 4. Fases
@@ -162,10 +213,15 @@ pedem `NonZero` aceitam via fallback de família.
 
 - `pass0.rs`: quando `base_ty` é `Ty::Interface`, expande em instâncias concretas
 - `StructInfo`: adicionar campo `is_instance_of: Option<String>`
-- `StructRegistry`: registrar instâncias com nomes internos (`Name$Concrete`)
+- `StructRegistry`: introduzir `StructKey` (enum `Plain` / `Instance`) como
+  chave interna. Instâncias registradas como `StructKey::Instance("NonZero", "Int")`
+- `StructRegistry::lookup`: aceitar type hint para resolver família → instância
+- `Ty::Struct` continua carregando `String` (nome público). Normalização
+  na fronteira do registry
 - Predicados sintetizados por instância (já funciona — `constructors_refined.rs`
   usa `base_ty` concreto)
 - Testes E2E: `data (NUM, != _ (zero _)) as NonZero` registra 3 instâncias
+  acessíveis via lookup com type hint
 
 ### Fase 3: Smart constructor polimórfico
 
@@ -175,14 +231,15 @@ pedem `NonZero` aceitam via fallback de família.
 
 ### Fase 4: Família no dispatch
 
-- `match_score` / fallback: matchar `NonZero` (família) contra `NonZero$Int` (instância)
-- Consultar `is_instance_of` no StructRegistry
+- `match_score` / fallback: matchar `NonZero` (família) contra instância concreta
+- Consultar `is_instance_of` no StructRegistry — se o arg é instância da família
+  do param, trata como exact match
 - Testes E2E: `/ 10 (3::NonZero)` → 3, `/ 10.0 (3.0::NonZero)` → 3.333...
 
 ### Fase 5: Overloads polimórficos
 
 - `/ :: NUM NonZero => NUM` como assinatura única
-- Dispatch unifica NUM + NonZero simultaneamente (NUM → Int, NonZero → NonZero$Int)
+- Dispatch unifica NUM + NonZero simultaneamente (NUM → Int, NonZero → instância Int)
 - Testes E2E: `/ 10 (3::NonZero)` e `/ 10.0 (3.0::NonZero)` despacham para a
   mesma assinatura, resolvida por tipo dos args
 - Migrar `/ :: Int NonZero => Int` legada para a polimórfica
@@ -218,16 +275,20 @@ pedem `NonZero` aceitam via fallback de família.
 
 ## 6. Riscos
 
-### 6.1. Nomes internos expostos
+### 6.1. Identidade de instâncias
 
-`NonZero$Int` pode aparecer em mensagens de erro ou output de debug. Mitigação:
-display de tipos traduz `NonZero$Int` → `NonZero` quando `is_instance_of` é
-`Some("NonZero")`. O `$` é convenção interna, nunca exibida ao usuário.
+Instâncias de família são identificadas por `StructKey::Instance("NonZero", "Int")`
+internamente. O nome público `"NonZero"` é o que aparece em `Ty::Struct` e no
+display. Mensagens de erro que precisam distinguir instâncias (ex: "NonZero Int
+falhou predicado") usam `is_instance_of` + `alias_of` do `StructInfo` — nunca
+parsing de string. O display de tipos sempre mostra o nome público `NonZero`;
+quando necessário distinguir, mostra `NonZero (Int)` ou similar — uma decisão de
+UI, não de identidade.
 
 ### 6.2. Ambiguidade de dispatch
 
-`/ :: NUM NonZero => NUM` com args `(Int, NonZero$Float)` — o primeiro arg
-resolve NUM → Int, o segundo NonZero → NonZero$Float. O retorno NUM → ?
+`/ :: NUM NonZero => NUM` com args `(Int, 3.0::NonZero)` — o primeiro arg
+resolve NUM → Int, o segundo NonZero → instância Float. O retorno NUM → ?
 Qual tipo de retorno? Solução: o tipo de retorno é unificado com o primeiro
 arg — se NUM resolve para Int, retorno é Int. Isso é unificação conjunta de
 constraints, que o dispatch atual não faz. Pode exigir que a Fase 5 implemente
@@ -238,8 +299,8 @@ unificação de type variables junto com interface dispatch.
 `NonZero` hoje é `data (Int, != _ 0) as NonZero` — concreto sobre Int. A
 migração para polimórfico muda o StructInfo de NonZero. Assinaturas existentes
 (`/ :: Int NonZero => Int`) continuam funcionando — o dispatch de família
-matcha `NonZero$Int` contra `NonZero`. A overload legada pode coexistir durante
-a migração e ser removida quando a polimórfica estiver testada.
+matcha a instância Int contra a família NonZero. A overload legada pode
+coexistir durante a migração e ser removida quando a polimórfica estiver testada.
 
 ## 7. Documentação
 
