@@ -1,8 +1,8 @@
-# Capítulo 12 — Tipos Refinados
+# Capítulo 12 — Tipos Refinados e Alias
 
-Tipos refinados adicionam predicados a tipos existentes. Em vez de definir um novo tipo do zero, você refina um tipo base com uma condição que o valor deve satisfazer.
+Kata oferece duas formas de criar um novo tipo nominal sobre um tipo existente: **tipos refinados** (com validação) e **alias** (sem validação). Ambos são zero-cost em runtime — mesmos bits, mesmo Cranelift type, sem wrapping.
 
-## Declarando um tipo refinado
+## Tipos Refinados
 
 A sintaxe `data (Base, predicado) as Nome` cria um tipo refinado. O `_` no predicado representa o valor sendo testado:
 
@@ -12,7 +12,7 @@ data (Int, > _ 0) as PositiveInt
 
 Isto declara `PositiveInt` — um `Int` que deve ser maior que zero. O predicado é verificado em compile-time para literais e em runtime para valores dinâmicos.
 
-## Ascription literal
+### Ascription literal
 
 Para literais que satisfazem o predicado, use `::` diretamente:
 
@@ -33,7 +33,7 @@ O compilador valida o predicado em compile-time. Um literal negativo falha:
 let x := (- 0 5)::PositiveInt   # erro de tipo: -5 não é > 0
 ```
 
-## Smart constructor
+### Smart constructor
 
 Para valores dinâmicos, use o construtor falível. Ele retorna `Result`:
 
@@ -67,9 +67,51 @@ main!()
 erro
 ```
 
+## Alias — Newtype sem predicados
+
+`alias` cria um novo tipo nominal distinto do original, mas sem validação.
+É um *newtype* puro: mesmos bits, construtor infalível, custo zero em runtime.
+
+```kata
+alias Float as Altura
+```
+
+`Altura` é um tipo diferente de `Float` para o type checker. O construtor é
+infalível — não retorna `Result`, porque não há predicado para falhar:
+
+```kata
+action main
+    let a := Altura 1.75
+    echo!(a)
+main!()
+```
+
+### Quando usar alias vs tipo refinado
+
+Use **tipo refinado** quando há uma condição que o valor deve satisfazer
+(`> 0`, `/= 0`, `< 100`). Use **alias** quando quer apenas um nome distinto
+para um tipo existente — por exemplo, para evitar confusão entre valores
+com a mesma representação mas significados diferentes (`Altura` vs `Float`).
+
+### Alias de tipo refinado
+
+Um alias pode ter como alvo um tipo refinado. Nesse caso, o alias herda
+os predicados e torna-se refinado também:
+
+```kata
+data (Float, > _ 0.0) as PositiveFloat
+alias PositiveFloat as Peso
+```
+
+`Peso` é um tipo refinado: tem os mesmos predicados que `PositiveFloat`,
+o construtor é falível (retorna `Result`), e pode declarar `refines`.
+Internamente, o compilador segue a cadeia: `Peso` → `alias_of` →
+`PositiveFloat` → `alias_of` → `Float`.
+
 ## `refines` — delegação de interface
 
-Um tipo refinado não herda automaticamente as operações do tipo base. `refines` delega uma interface ao tipo base:
+Um tipo refinado não herda automaticamente as operações do tipo base.
+`refines` delega uma interface ao tipo base:
 
 ```kata
 data (Int, > _ 0) as PositiveInt
@@ -90,11 +132,22 @@ main!()
 8
 ```
 
-Sem `refines NUM`, `+ a b` falharia — `+` não está definido para `PositiveInt`. Com `refines`, o dispatch tenta o tipo base `Int` e envolve o resultado no construtor falível, produzindo `Result::(PositiveInt, Err)`.
+Sem `refines NUM`, `+ a b` falharia — `+` não está definido para
+`PositiveInt`. Com `refines`, o dispatch tenta o tipo base `Int` e envolve
+o resultado no construtor falível, produzindo `Result::(PositiveInt, Err)`.
+
+O fallback de `refines` segue a cadeia de `alias_of`. Por isso, se `Peso`
+é alias de `PositiveFloat` que tem `refines NUM`, então `+ a b` onde
+`a` e `b` são `Peso` também funciona — o fallback percorre
+`Peso → PositiveFloat → refines NUM → Float`.
+
+Alias puro (sem `refines`) **não** interoperaciona com o tipo base no
+dispatch. `Altura + 3.0` falha porque `Altura` é nominalmente distinta de
+`Float`. Para interoperar, use downcast explícito.
 
 ## Downcast com `::`
 
-Para converter um tipo refinado de volta ao tipo base, use `::`:
+Para converter um tipo refinado (ou alias) de volta ao tipo base, use `::`:
 
 ```kata
 action main
@@ -108,8 +161,11 @@ main!()
 5
 ```
 
-O downcast é um no-op em runtime — mesmos bits, sem custo. O typeck verifica que o alvo é o tipo base.
+O downcast é um no-op em runtime — mesmos bits, sem custo. O typeck
+verifica que o alvo é o tipo base (ou um tipo na cadeia de `alias_of`).
 
 ## Próximo capítulo
 
-Tipos refinados garantem invariantes em compile-time. O próximo capítulo mostra como organizar código em módulos com `import` e `export`. → [Capítulo 13](13-modulos.md)
+Tipos refinados e alias garantem invariantes em compile-time. O próximo
+capítulo mostra como organizar código em módulos com `import` e `export`.
+→ [Capítulo 13](13-modulos.md)

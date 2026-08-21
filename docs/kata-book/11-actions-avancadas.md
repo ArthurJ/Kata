@@ -109,4 +109,4 @@ O produtor envia após 50ms — o `select` recebe antes do timeout de 100ms.
 
 Você completou a parte principal do Kata Book. Dos literais à concorrência — sem `if`, sem classes, sem herança. Kata é pequena por design: notação prefixa, pattern matching, e tipos algébricos resolvem o que outras linguagens espalham por dezenas de features.
 
-→ [Capítulo 12 — Tipos Refinados](12-tipos-refinados.md)
+→ [Capítulo 12 — Tipos Refinados e Alias](12-tipos-refinados.md)
