@@ -31,9 +31,19 @@ enum Command {
     /// Análise sintática — imprime AST via Debug pretty-print
     Parse { file: String },
     /// Avalia expressão via JIT, imprime resultado
-    Eval { expr: String },
+    Eval {
+        expr: String,
+        /// Imprime a CLIF canônica antes da execução
+        #[arg(long = "emit-ir")]
+        emit_ir: bool,
+    },
     /// Compila e executa arquivo via JIT
-    Run { file: String },
+    Run {
+        file: String,
+        /// Imprime a CLIF canônica antes da execução
+        #[arg(long = "emit-ir")]
+        emit_ir: bool,
+    },
     /// Descobre e executa testes `@test` em arquivo ou diretório
     Test {
         /// Arquivo `.kata` ou diretório com `*.kata` (recursivo)
@@ -64,8 +74,8 @@ fn main() -> miette::Result<()> {
     match cli.command {
         Command::Lex { file } => cmd_lex(&file),
         Command::Parse { file } => cmd_parse(&file),
-        Command::Eval { expr } => cmd_eval(&expr),
-        Command::Run { file } => cmd_run(&file),
+        Command::Eval { expr, emit_ir } => cmd_eval(&expr, emit_ir),
+        Command::Run { file, emit_ir } => cmd_run(&file, emit_ir),
         Command::Test { path, filter } => cmd_test(&path, filter.as_deref()),
         Command::Build {
             file,
@@ -155,15 +165,15 @@ fn cmd_parse(file: &str) -> miette::Result<()> {
     Ok(())
 }
 
-fn cmd_eval(expr: &str) -> miette::Result<()> {
-    let result = run_pipeline_display_wrap(expr)?;
+fn cmd_eval(expr: &str, emit_ir: bool) -> miette::Result<()> {
+    let result = run_pipeline_display_wrap(expr, emit_ir)?;
     display::print_result(result.raw, &result.ty);
     Ok(())
 }
 
-fn cmd_run(file: &str) -> miette::Result<()> {
+fn cmd_run(file: &str, emit_ir: bool) -> miette::Result<()> {
     let source = read_source(file)?;
-    let result = run_pipeline_with_file_display_wrap(&source, Some(file))?;
+    let result = run_pipeline_with_file_display_wrap(&source, Some(file), emit_ir)?;
     // Unit de retorno de `main` não carrega informação — o output do
     // programa já foi produzido via echo!/_print!. Suprimir o `()`.
     if !matches!(result.ty, Ty::Unit) {
@@ -458,8 +468,8 @@ pub(crate) struct ExecResult {
 }
 
 /// Igual a `run_pipeline` mas ativa display wrapping (show no entry point).
-fn run_pipeline_display_wrap(source: &str) -> miette::Result<ExecResult> {
-    run_pipeline_with_file_display_wrap(source, None)
+fn run_pipeline_display_wrap(source: &str, emit_ir: bool) -> miette::Result<ExecResult> {
+    run_pipeline_with_file_display_wrap(source, None, emit_ir)
 }
 
 /// Executa o pipeline completo com caminho do arquivo (para resolver imports)
@@ -471,14 +481,16 @@ fn run_pipeline_display_wrap(source: &str) -> miette::Result<ExecResult> {
 fn run_pipeline_with_file_display_wrap(
     source: &str,
     file_path: Option<&str>,
+    emit_ir: bool,
 ) -> miette::Result<ExecResult> {
-    run_pipeline_with_file_inner(source, file_path, true)
+    run_pipeline_with_file_inner(source, file_path, true, emit_ir)
 }
 
 fn run_pipeline_with_file_inner(
     source: &str,
     file_path: Option<&str>,
     display_wrap: bool,
+    emit_ir: bool,
 ) -> miette::Result<ExecResult> {
     let mut pipeline =
         pipeline::Pipeline::new(source).with_file_path(file_path.unwrap_or("<eval>"));
@@ -501,7 +513,7 @@ fn run_pipeline_with_file_inner(
     .map_err(crate::print_pipeline_errors)?;
 
     let ty = compiled.entry_ty();
-    let raw = compiled.jit_eval()?;
+    let raw = compiled.jit_eval(emit_ir)?;
 
     Ok(ExecResult { raw, ty })
 }

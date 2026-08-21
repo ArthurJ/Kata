@@ -28,17 +28,6 @@ signatures/functions do mesmo módulo).
 
 ---
 
-### `--emit-ir` não implementado
-
-**Estado:** O manual descreve `--emit-ir` em `kata run` e `kata eval` para
-imprimir a CLIF canônica antes da execução. A flag não existe no código
-(`clap` CLI nem a declara). O manual foi mantido descrevendo-a como contrato.
-
-**Impacto:** Baixo. Útil para depuração do codegen. Sem ela, usar
-`eprintln!("{}", ctx.func.display())` no código.
-
----
-
 ### `NonZero` só existe para Int — divisão por zero não é estaticamente segura para Float/Rational
 
 **Estado:** `NonZero` (refined `data (Int, != _ 0) as NonZero`) só é definido

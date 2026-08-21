@@ -48,6 +48,7 @@ pub fn jit_eval(
     type_id_map: &HashMap<Ty, i64>,
     type_shapes: &[kata_rt::TypeShape],
     rt_ptr: i64,
+    emit_ir: bool,
 ) -> Result<JitResult, CodegenError> {
     // Configura preserve_frame_pointers = true (necessário para CallConv::Tail / return_call).
     let mut flags_builder = cranelift_codegen::settings::builder();
@@ -79,14 +80,23 @@ pub fn jit_eval(
 
     // Declara __kata_entry e faz o lowering.
     let ret_ty = typed.entry.node.ty.clone();
-    let (_metadata, _string_table, _test_wrappers, _compiled_funcs) = lower_module(
+    let (_metadata, _string_table, _test_wrappers, _compiled_funcs, ir_dump) = lower_module(
         typed,
         &mut backend,
         &ffi_ids,
         &typed.struct_registry,
         type_id_map,
         &HashMap::new(),
+        emit_ir,
     )?;
+
+    // Imprimir CLIF no stderr se solicitado (antes de finalizar/executar).
+    if emit_ir {
+        for (name, clif) in &ir_dump {
+            eprintln!(";; ── {name} ──");
+            eprintln!("{clif}");
+        }
+    }
 
     // Finaliza todas as definições — resolve relocations, compila machine code.
     backend.finalize()?;
@@ -189,13 +199,14 @@ pub fn jit_compile_tests(
 
     let ffi_ids = crate::ffi_registry::declare_ffi_symbols(&mut backend)?;
 
-    let (_metadata, _string_table, test_wrappers, _compiled_funcs) = lower_module(
+    let (_metadata, _string_table, test_wrappers, _compiled_funcs, _ir_dump) = lower_module(
         typed,
         &mut backend,
         &ffi_ids,
         &typed.struct_registry,
         type_id_map,
         &HashMap::new(),
+        false,
     )?;
 
     backend.finalize()?;
@@ -276,13 +287,14 @@ pub fn jit_eval_repl(
     let ffi_ids = crate::ffi_registry::declare_ffi_symbols(&mut backend)?;
 
     let ret_ty = typed.entry.node.ty.clone();
-    let (_metadata, _string_table, _test_wrappers, compiled_funcs) = lower_module(
+    let (_metadata, _string_table, _test_wrappers, compiled_funcs, _ir_dump) = lower_module(
         typed,
         &mut backend,
         &ffi_ids,
         &typed.struct_registry,
         type_id_map,
         prev_funcs,
+        false,
     )?;
 
     // Finaliza todas as definições.

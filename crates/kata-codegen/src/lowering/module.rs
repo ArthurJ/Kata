@@ -89,12 +89,14 @@ pub(crate) fn lower_module(
     struct_registry: &kata_core::StructRegistry,
     type_id_map: &HashMap<Ty, i64>,
     prev_funcs: &HashMap<i64, (String, *const u8)>,
+    dump_ir: bool,
 ) -> Result<
     (
         MetadataTable,
         StringTable,
         Vec<super::test_runner::TestWrapper>,
         Vec<CompiledFunc>,
+        Vec<(String, String)>,
     ),
     CodegenError,
 > {
@@ -102,6 +104,7 @@ pub(crate) fn lower_module(
     let mut string_table = StringTable::new();
     let mut bytes_table: Vec<Vec<u8>> = Vec::new();
     let mut symbol_table: SymbolTable = HashMap::new();
+    let mut ir_dump: Vec<(String, String)> = Vec::new();
     // fn_counter deve começar a partir do número de funções persistidas
     // (prev_funcs) para evitar colisão de nomes `__kata_fn_N` entre
     // funções Export novas e símbolos Import já registrados no JITBuilder.
@@ -178,6 +181,8 @@ pub(crate) fn lower_module(
                 &mut bytes_table,
                 struct_registry,
                 type_id_map,
+                dump_ir,
+                &mut ir_dump,
             )?;
         }
     }
@@ -210,6 +215,8 @@ pub(crate) fn lower_module(
             &mut bytes_table,
             struct_registry,
             type_id_map,
+            dump_ir,
+            &mut ir_dump,
         )?;
     }
 
@@ -225,6 +232,8 @@ pub(crate) fn lower_module(
         &mut fn_counter,
         struct_registry,
         type_id_map,
+        dump_ir,
+        &mut ir_dump,
     )?;
 
     // Determina o tipo de retorno do entry point.
@@ -326,6 +335,8 @@ pub(crate) fn lower_module(
             type_id_map,
             ipc_broker_fid: None,
             rt: None,
+            dump_ir,
+            ir_dump: &mut ir_dump,
         };
 
         // Prólogo do entry point: inicializa scheduler (cria arena raiz internamente).
@@ -433,6 +444,9 @@ pub(crate) fn lower_module(
         .map_err(|e| CodegenError::Cranelift {
             reason: format!("define __kata_entry: {e}"),
         })?;
+    if dump_ir {
+        ir_dump.push(("__kata_entry".to_string(), format!("{}", ctx.func.display())));
+    }
     module.clear_context(&mut ctx);
 
     // Define os data symbols para strings literais.
@@ -499,5 +513,5 @@ pub(crate) fn lower_module(
             })?;
     }
 
-    Ok((metadata, string_table, _test_wrappers, compiled_funcs))
+    Ok((metadata, string_table, _test_wrappers, compiled_funcs, ir_dump))
 }

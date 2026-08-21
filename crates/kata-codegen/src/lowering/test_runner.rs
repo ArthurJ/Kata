@@ -55,6 +55,8 @@ pub(crate) fn generate_test_wrappers(
     fn_counter: &mut u64,
     struct_registry: &kata_core::StructRegistry,
     type_id_map: &HashMap<Ty, i64>,
+    dump_ir: bool,
+    ir_dump: &mut Vec<(String, String)>,
 ) -> Result<Vec<TestWrapper>, CodegenError> {
     let mut wrappers = Vec::new();
 
@@ -91,6 +93,8 @@ pub(crate) fn generate_test_wrappers(
                 bytes_table: &mut *bytes_table,
                 struct_registry,
                 type_id_map,
+                dump_ir,
+                ir_dump: &mut *ir_dump,
             };
             define_test_wrapper(action, spec, func_id, &mut tctx)?;
 
@@ -135,6 +139,8 @@ pub(crate) struct TestLowerCtx<'a> {
     pub bytes_table: &'a mut Vec<Vec<u8>>,
     pub struct_registry: &'a kata_core::StructRegistry,
     pub type_id_map: &'a HashMap<Ty, i64>,
+    pub dump_ir: bool,
+    pub ir_dump: &'a mut Vec<(String, String)>,
 }
 
 /// Define (compila) o corpo de um wrapper de teste.
@@ -211,6 +217,8 @@ fn define_test_wrapper(
             type_id_map: tctx.type_id_map,
             ipc_broker_fid: None,
             rt: None,
+            dump_ir: tctx.dump_ir,
+            ir_dump: &mut *tctx.ir_dump,
         };
 
         // 1. scheduler_init(rt) → root_arena (igual ao entry point).
@@ -437,6 +445,12 @@ fn define_test_wrapper(
         .map_err(|e| CodegenError::Cranelift {
             reason: format!("define test wrapper: {e}"),
         })?;
+    if tctx.dump_ir {
+        tctx.ir_dump.push((
+            format!("__kata_test_{}_{}", action.name, spec.desc.as_deref().unwrap_or("")),
+            format!("{}", ctx.func.display()),
+        ));
+    }
     tctx.module.clear_context(&mut ctx);
     Ok(())
 }

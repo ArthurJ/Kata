@@ -90,14 +90,17 @@ pub struct CompiledModule {
 
 impl CompiledModule {
     /// Codegen JIT — compila e executa o entry point, retornando o valor bruto.
-    pub fn jit_eval(self) -> miette::Result<i64> {
+    ///
+    /// Se `emit_ir` for true, imprime a CLIF de cada função no stderr antes
+    /// da execução.
+    pub fn jit_eval(self, emit_ir: bool) -> miette::Result<i64> {
         // Runtime lifecycle: criar, executar, droppar. Valores retornados
         // que são ponteiros para a arena Bump são consumidos pelo display
         // antes do drop (o raw é lido imediatamente neste escopo).
         let rt = Box::new(kata_rt::Runtime::new());
         let rt_ptr = Box::into_raw(rt) as i64;
         let result =
-            kata_codegen::jit_eval(&self.mono, &self.type_id_map, &self.type_shapes, rt_ptr)
+            kata_codegen::jit_eval(&self.mono, &self.type_id_map, &self.type_shapes, rt_ptr, emit_ir)
                 .map_err(|e| e.into_report_with_source(&self.source, self.file_path.as_deref()))?;
         // Droppar o Runtime após consumir o resultado. Se o valor retornado
         // é um ponteiro para arena (List, Struct), o display já aconteceu

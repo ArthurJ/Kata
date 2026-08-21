@@ -72,7 +72,7 @@ pub(crate) fn jit_execute_expr(
     };
 
     let result =
-        kata_codegen::jit_eval(&mini, &Default::default(), &[], kata_codegen::leak_rt_ptr())
+        kata_codegen::jit_eval(&mini, &Default::default(), &[], kata_codegen::leak_rt_ptr(), false)
             .map_err(|e| ComptimeError::JitError {
                 reason: format!("{e}"),
             })?;

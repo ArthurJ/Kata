@@ -485,6 +485,8 @@ pub(crate) fn lower_expr(
                 ctx.bytes_table,
                 ctx.struct_registry,
                 ctx.type_id_map,
+                ctx.dump_ir,
+                &mut *ctx.ir_dump,
             )?;
 
             // Obtém o function pointer via GlobalValue.

@@ -71,6 +71,8 @@ pub(crate) fn define_kata_action(
     bytes_table: &mut Vec<Vec<u8>>,
     struct_registry: &kata_core::StructRegistry,
     type_id_map: &HashMap<Ty, i64>,
+    dump_ir: bool,
+    ir_dump: &mut Vec<(String, String)>,
 ) -> Result<(), CodegenError> {
     let mut ctx = module.make_context();
     let mut metadata = MetadataTable::new();
@@ -140,6 +142,8 @@ pub(crate) fn define_kata_action(
             type_id_map,
             ipc_broker_fid: None,
             rt: Some(rt_value),
+            dump_ir,
+            ir_dump,
         };
         // Lowera o corpo da Action.
         // O tipo do param é o tipo NATURAL do retorno (F64 para Float, I64 para resto).
@@ -258,6 +262,9 @@ pub(crate) fn define_kata_action(
         .map_err(|e| CodegenError::Cranelift {
             reason: format!("define action {}: {e}", action.name),
         })?;
+    if dump_ir {
+        ir_dump.push((action.name.clone(), format!("{}", ctx.func.display())));
+    }
     module.clear_context(&mut ctx);
     Ok(())
 }

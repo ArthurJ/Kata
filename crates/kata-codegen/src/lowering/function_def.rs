@@ -112,6 +112,8 @@ pub(crate) fn define_function_body(
     bytes_table: &mut Vec<Vec<u8>>,
     struct_registry: &kata_core::StructRegistry,
     type_id_map: &HashMap<Ty, i64>,
+    dump_ir: bool,
+    ir_dump: &mut Vec<(String, String)>,
 ) -> Result<(), CodegenError> {
     let mut ctx = module.make_context();
     let mut metadata = MetadataTable::new();
@@ -186,6 +188,8 @@ pub(crate) fn define_function_body(
             type_id_map,
             ipc_broker_fid: None,
             rt: None,
+            dump_ir,
+            ir_dump,
         };
 
         // params[0] = rt (primeiro param implícito da ABI A2).
@@ -509,6 +513,9 @@ pub(crate) fn define_function_body(
         .map_err(|e| CodegenError::Cranelift {
             reason: format!("define fn {name}: {e}"),
         })?;
+    if dump_ir {
+        ir_dump.push((name.to_string(), format!("{}", ctx.func.display())));
+    }
     module.clear_context(&mut ctx);
     Ok(())
 }
@@ -525,6 +532,8 @@ pub(crate) fn define_kata_function(
     bytes_table: &mut Vec<Vec<u8>>,
     struct_registry: &kata_core::StructRegistry,
     type_id_map: &HashMap<Ty, i64>,
+    dump_ir: bool,
+    ir_dump: &mut Vec<(String, String)>,
 ) -> Result<(), CodegenError> {
     define_function_body(
         &func.name,
@@ -542,6 +551,8 @@ pub(crate) fn define_kata_function(
         bytes_table,
         struct_registry,
         type_id_map,
+        dump_ir,
+        ir_dump,
     )
 }
 

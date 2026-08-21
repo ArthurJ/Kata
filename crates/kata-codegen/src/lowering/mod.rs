@@ -166,6 +166,12 @@ pub(crate) struct LowerCtx<'a, 'b> {
     /// `None` em funções puras (não chamam FFIs de runtime). Setado no
     /// entry point e test wrapper após `kata_rt_scheduler_init`.
     pub rt: Option<Value>,
+    /// Se `true`, capturar a CLIF de cada função antes de `clear_context`.
+    /// Propagado para `define_function_body` quando lambdas anônimas são compiladas.
+    pub dump_ir: bool,
+    /// Coletor da CLIF capturada — `(nome, clif_text)`.
+    /// Ponteiro para o vec de `lower_module`.
+    pub ir_dump: &'a mut Vec<(String, String)>,
 }
 
 /// Resolve o Cranelift type de um `Ty`, percorrendo a cadeia de `alias_of`
