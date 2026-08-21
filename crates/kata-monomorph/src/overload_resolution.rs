@@ -160,7 +160,7 @@ pub(crate) fn instantiate_generic_closure(
 /// que casa e possui `ffi_symbol: Some(...)`, preenchemos aqui.
 ///
 /// Isto resolve `show msg` dentro de `echo_SHOW_Int`: DispatchTable tem
-/// `show :: Int => Text @ffi("kata_rt_bi_show")`.
+/// `@ffi("kata_rt_bi_show")` prefixado em `show :: Int => Text`.
 ///
 /// Fallback gracioso: se o arg_type é `Ty::Var(_)` (type param não resolvido
 /// — ex: `E` em `Result::Ok 42`, onde a variante Err nunca é construída),
