@@ -1,6 +1,13 @@
 # map/filter/fold — higher-order functions sobre List::Int.
 # Exercita os três builtins interceptados pelo codegen (core.kata).
 
+# Helper: resto da divisão por 2.
+# div x 2 retorna Result::(Int, Text); o operador | (fallback)
+# desempacota o Ok (Int) e fornece 0 no caso Err (inalcançável: 2 ≠ 0).
+# resto = x - 2 * (x / 2).
+resto2 :: Int => Int
+lambda x: - x (* 2 (div x 2 | 0))
+
 action main
     let numeros := [1 2 3 4 5]
 
@@ -10,7 +17,7 @@ action main
         echo!(x)
 
     echo!("--- filter: elementos pares ---")
-    let pares := filter (lambda x: = 0 (mod x 2)) numeros
+    let pares := filter (lambda x: = 0 (resto2 x)) numeros
     for x in pares
         echo!(x)
 

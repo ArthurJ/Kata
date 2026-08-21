@@ -1,9 +1,12 @@
 # Verificação de primalidade por divisão trial.
 # Migração de examples/legacy/test_is_prime.kata.
 
-# Verifica se x é divisível por y (remanescente da divisão = 0).
+# Verifica se x é divisível por y: resto da divisão = 0.
+# div x y retorna Result::(Int, Text); | desempacota o Ok (Int)
+# e fornece 0 no caso Err (y = 0, inalcançável: y ≥ 2 sempre).
+# resto = x - y * (x / y).
 check_divisor :: Int Int => Boolean
-lambda x y: = 0 (mod x y)
+lambda x y: = 0 (- x (* y (div x y | 0)))
 
 # Itera y de 2 até limit. Para ao encontrar divisor (eh_divisor = True)
 # ou ao ultrapassar limit (passou_limite = True → primo).

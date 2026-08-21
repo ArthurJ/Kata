@@ -17,10 +17,12 @@ enum IMC
 
 # classificador_imc — recebe Peso e Altura (aliases de PositiveFloat).
 # * é método de NUM → refines fallback despacha sem downcast (Peso→Float).
-# / não é método de NUM (só div é) → downcast explícito necessário.
+# div é método de NUM que retorna Result — match desempacota para Float.
 classificador_imc :: Peso Altura => IMC
 lambda p a:
-    IMC (/ (p::Float) (* a a))
+    match div (p::Float) (* a a)
+        Ok v: IMC v
+        Err _: IMC 0.0
 
 # Bloco 1 — Construtores falíveis (alias de refined) + enum predicado
 action bloco1 => Unit

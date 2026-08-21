@@ -5,9 +5,19 @@ lambda x:
     buzz: "Buzz"
     otherwise: show x
     with
-        fizz := = 0 (mod x 3)
-        buzz := = 0 (mod x 5)
+        fizz := divisible x 3
+        buzz := divisible x 5
         both := and fizz buzz
+
+# Verifica se x é divisível por n usando div (retorna Result).
+# div x n verifica = n 0 primeiro, mas n é literal não-zero.
+# Se n = 0, div retorna Err — mas chamamos com literais 3 e 5.
+# O resto da divisão é x - n * (x / n). Se resto = 0, é divisível.
+divisible :: Int Int => Boolean
+lambda x n:
+    match div x n
+        Ok q: = x (* n q)
+        Err _: Boolean::False
 
 action main
     echo!(fizzbuzz 3)
