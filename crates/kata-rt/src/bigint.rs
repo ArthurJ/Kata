@@ -409,6 +409,13 @@ pub extern "C" fn kata_rt_bi_ge(a: i64, b: i64) -> i64 {
     }
 }
 
+/// Retorna o zero do tipo Int (SMI-tagged). Identidade aditiva de NUM.
+/// Recebe `self` por convenção da assinatura `zero :: Self => Self`, mas o ignora.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_bi_zero(_val: i64) -> i64 {
+    encode_smi(0)
+}
+
 /// Converte Int para String (para show/println).
 /// Retorna String alocada no heap (propriedade transferida ao caller).
 pub fn bigint_to_string(val: i64) -> String {

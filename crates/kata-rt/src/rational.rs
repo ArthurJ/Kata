@@ -346,6 +346,17 @@ pub unsafe extern "C" fn kata_rt_rat_literal(
     Box::into_raw(Box::new(r))
 }
 
+/// Retorna o zero do tipo Rational. Identidade aditiva de NUM.
+/// Recebe `self` por convenção da assinatura `zero :: Self => Self`, mas o ignora.
+///
+/// # Safety
+///
+/// Marcada `unsafe` apenas por convenção C-ABI. Não dereferencia ponteiros.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn kata_rt_rat_zero(_val: *const BigRational) -> *mut BigRational {
+    Box::into_raw(Box::new(BigRational::zero()))
+}
+
 /// Converte Int tagged para Rational (retorna ponteiro).
 /// Chamado pelo codegen via `FfiSymbol::IntToRational`.
 ///

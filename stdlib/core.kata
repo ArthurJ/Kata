@@ -52,6 +52,7 @@ interface NUM implements EQ
     - :: NUM NUM => NUM
     * :: NUM NUM => NUM
     div :: NUM NUM => Result::NUM
+    zero :: Self => Self
     abs :: NUM => NUM
 
 interface SHOW
@@ -100,6 +101,7 @@ Int implements NUM
     lambda a b:
         = b 0: core.Result::Err "divisão por zero"
         otherwise: core.Result::Ok (/ a b)
+    zero :: Int => Int @ffi("kata_rt_bi_zero")
     abs :: Int => Int
     lambda a:
         < a 0: - 0 a
@@ -126,6 +128,7 @@ Float implements NUM
     lambda a b:
         = b 0.0: core.Result::Err "divisão por zero"
         otherwise: core.Result::Ok (/ a b)
+    zero :: Float => Float @ffi("kata_rt_fzero")
     abs :: Float => Float
     lambda a:
         < a 0.0: - 0.0 a
@@ -153,6 +156,7 @@ Rational implements NUM
     lambda a b:
         = b (rational 0): core.Result::Err "divisão por zero"
         otherwise: core.Result::Ok (/ a b)
+    zero :: Rational => Rational @ffi("kata_rt_rat_zero")
     abs :: Rational => Rational
     lambda a:
         < a (rational 0): - (rational 0) a

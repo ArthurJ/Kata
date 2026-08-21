@@ -44,6 +44,11 @@ pub(crate) fn sig_for(sym: FfiSymbol) -> Option<Signature> {
             sig.params.push(AbiParam::new(I64));
             sig.returns.push(AbiParam::new(I64));
         }
+        // ── BiZero (i64) → Int (i64 SMI-tagged) — ignora o arg ──
+        FfiSymbol::BiZero => {
+            sig.params.push(AbiParam::new(I64));
+            sig.returns.push(AbiParam::new(I64));
+        }
         // ── Aritmética Float (f64, f64) → f64 ──
         FfiSymbol::Fadd | FfiSymbol::Fsub | FfiSymbol::Fmul | FfiSymbol::Fdiv => {
             sig.params.push(AbiParam::new(F64));
@@ -166,6 +171,16 @@ pub(crate) fn sig_for(sym: FfiSymbol) -> Option<Signature> {
             sig.params.push(AbiParam::new(I64)); // min
             sig.params.push(AbiParam::new(I64)); // max
             sig.returns.push(AbiParam::new(I64)); // tagged Int
+        }
+        // ── Fzero (f64) → Float (f64) — ignora o arg ──
+        FfiSymbol::Fzero => {
+            sig.params.push(AbiParam::new(F64));
+            sig.returns.push(AbiParam::new(F64)); // 0.0
+        }
+        // ── RatZero (ptr) → Rational (ptr BigRational) — ignora o arg ──
+        FfiSymbol::RatZero => {
+            sig.params.push(AbiParam::new(I64)); // ptr self
+            sig.returns.push(AbiParam::new(I64)); // ptr
         }
         // ── Boolean → Text (i64 0/1) → ptr ──
         FfiSymbol::BoolToText => {

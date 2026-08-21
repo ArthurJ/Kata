@@ -20,6 +20,13 @@ pub extern "C" fn kata_rt_fdiv(a: f64, b: f64) -> f64 {
     a / b
 }
 
+/// Retorna o zero do tipo Float (0.0). Identidade aditiva de NUM.
+/// Recebe `self` por convenção da assinatura `zero :: Self => Self`, mas o ignora.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_fzero(_val: f64) -> f64 {
+    0.0
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_fcmp_eq(a: f64, b: f64) -> i64 {
     if a == b { 1 } else { 0 }

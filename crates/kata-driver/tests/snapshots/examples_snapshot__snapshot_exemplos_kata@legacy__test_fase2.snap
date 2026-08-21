@@ -6,4 +6,4 @@ expression: output
 Error: type.ambiguous_dispatch
 
   × dispatch ambíguo: múltiplas sobrecargas compatíveis para `-`
-  [Failed to read contents for label `dispatch ambíguo` (offset: 3192, length: 5): OutOfBounds]
+  [Failed to read contents for label `dispatch ambíguo` (offset: 3264, length: 5): OutOfBounds]

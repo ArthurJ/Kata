@@ -23,6 +23,7 @@ pub enum FfiSymbol {
     BiGe,
     BiShow,
     BiToRational,
+    BiZero,
     TagInt,
 
     // ── Float ────────────────────────────────────────────
@@ -40,6 +41,7 @@ pub enum FfiSymbol {
     TextToFloat,
     Rand,
     RandInt,
+    Fzero,
 
     // ── Rational ─────────────────────────────────────────
     RatAdd,
@@ -60,6 +62,7 @@ pub enum FfiSymbol {
     IntToFloat,
     FloatToInt,
     RatToInt,
+    RatZero,
 
     // ── Text ─────────────────────────────────────────────
     StringConcat,
@@ -439,6 +442,7 @@ impl FfiSymbol {
             FfiSymbol::BiGe => "kata_rt_bi_ge",
             FfiSymbol::BiShow => "kata_rt_bi_show",
             FfiSymbol::BiToRational => "kata_rt_bi_to_rational",
+            FfiSymbol::BiZero => "kata_rt_bi_zero",
             FfiSymbol::TagInt => "kata_rt_tag_int",
             FfiSymbol::Fadd => "kata_rt_fadd",
             FfiSymbol::Fsub => "kata_rt_fsub",
@@ -454,6 +458,7 @@ impl FfiSymbol {
             FfiSymbol::TextToFloat => "kata_rt_text_to_float",
             FfiSymbol::Rand => "kata_rt_rand",
             FfiSymbol::RandInt => "kata_rt_rand_int",
+            FfiSymbol::Fzero => "kata_rt_fzero",
             FfiSymbol::RatAdd => "kata_rt_rat_add",
             FfiSymbol::RatSub => "kata_rt_rat_sub",
             FfiSymbol::RatMul => "kata_rt_rat_mul",
@@ -472,6 +477,7 @@ impl FfiSymbol {
             FfiSymbol::IntToFloat => "kata_rt_int_to_float",
             FfiSymbol::FloatToInt => "kata_rt_float_to_int",
             FfiSymbol::RatToInt => "kata_rt_rational_to_int",
+            FfiSymbol::RatZero => "kata_rt_rat_zero",
             FfiSymbol::StringConcat => "kata_rt_string_concat",
             FfiSymbol::StringLen => "kata_rt_string_len",
             FfiSymbol::TextLiteral => "kata_rt_text_literal",
@@ -677,6 +683,7 @@ impl FfiSymbol {
             | FfiSymbol::BiGt
             | FfiSymbol::BiGe => Ty::boolean(),
             FfiSymbol::BiShow | FfiSymbol::BiToRational => Ty::text(),
+            FfiSymbol::BiZero => Ty::int(),
             FfiSymbol::TagInt => Ty::int(),
             // Float
             FfiSymbol::Fadd | FfiSymbol::Fsub | FfiSymbol::Fmul | FfiSymbol::Fdiv => Ty::float(),
@@ -690,6 +697,7 @@ impl FfiSymbol {
             FfiSymbol::TextToFloat => Ty::float(),
             FfiSymbol::Rand => Ty::float(),
             FfiSymbol::RandInt => Ty::int(),
+            FfiSymbol::Fzero => Ty::float(),
             // Rational
             FfiSymbol::RatAdd | FfiSymbol::RatSub | FfiSymbol::RatMul | FfiSymbol::RatDiv => {
                 Ty::rational()
@@ -706,6 +714,7 @@ impl FfiSymbol {
             FfiSymbol::IntToFloat => Ty::float(),
             FfiSymbol::FloatToInt => Ty::int(),
             FfiSymbol::RatToInt => Ty::int(),
+            FfiSymbol::RatZero => Ty::rational(),
             // Text
             FfiSymbol::StringConcat => Ty::text(),
             FfiSymbol::StringLen => Ty::int(),
@@ -904,6 +913,7 @@ impl FfiSymbol {
             FfiSymbol::BiGe,
             FfiSymbol::BiShow,
             FfiSymbol::BiToRational,
+            FfiSymbol::BiZero,
             FfiSymbol::TagInt,
             FfiSymbol::Fadd,
             FfiSymbol::Fsub,
@@ -919,6 +929,7 @@ impl FfiSymbol {
             FfiSymbol::TextToFloat,
             FfiSymbol::Rand,
             FfiSymbol::RandInt,
+            FfiSymbol::Fzero,
             FfiSymbol::RatAdd,
             FfiSymbol::RatSub,
             FfiSymbol::RatMul,
@@ -935,6 +946,9 @@ impl FfiSymbol {
             FfiSymbol::RatLiteral,
             FfiSymbol::IntToRational,
             FfiSymbol::IntToFloat,
+            FfiSymbol::FloatToInt,
+            FfiSymbol::RatToInt,
+            FfiSymbol::RatZero,
             FfiSymbol::StringConcat,
             FfiSymbol::StringLen,
             FfiSymbol::TextLiteral,
