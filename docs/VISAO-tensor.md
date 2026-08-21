@@ -44,18 +44,23 @@ Tensor. Sem `;`, é List.
 `{1 2 3}` continua sendo Array (contíguo, imutável, tamanho dinâmico).
 `{"k": v}` continua sendo Dict. `{|1 2 3|}` continua sendo Set.
 
-### Desambiguação Array vs Tensor
+### Desambiguação List vs Tensor
 
-| Propriedade | Array `{1 2 3}` | Tensor `[1 2 3;]` |
+`[1 2 3]` sem `;` é List (Cons, persistente). `[1 2 3; 4 5 6]` com `;` é
+Tensor. O `;` é o discriminador dentro de `[]`.
+
+| Propriedade | List `[1 2 3]` | Tensor `[1 2 3; 4 5 6]` |
 |---|---|---|
-| Sintaxe | `{}` sem `;` | `[]` com `;` |
+| Sintaxe | `[]` sem `;` | `[]` com `;` |
+| Topologia | Encadeada (Cons, partilha estrutural) | Contíguo (row-major) |
 | Tamanho | Dinâmico (runtime) | Estático (compile-time) |
 | Dimensionalidade | 1-D | N-D |
 | Álgebra linear | ❌ | ✅ (`+`, `*`, `dot`) |
 | SIMD | ❌ | ✅ |
-| Tipo | `Array::T` | `Tensor::T::(Int...)` |
+| Tipo | `List::T` | `Tensor::T::(Int...)` |
 
-Arrays são para I/O de bloco (cache-friendly, tamanho desconhecido).
+Array `{1 2 3}` não tem ambiguidade com nenhum dos dois — usa `{}`.
+Lists são para processamento funcional (imutabilidade, partilha).
 Tensores são para cálculo matemático (rígido, acelerado).
 
 ### Aninhamento N-D
