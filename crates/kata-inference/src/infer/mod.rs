@@ -155,6 +155,8 @@ pub fn infer_module(
         &resolved.struct_registry,
         &resolved.type_env,
         &mut dispatch_table,
+        &interface_registry,
+        &resolved.refines_registry,
     )?;
 
     // 1f. sintetiza construtores despachadores para enums com

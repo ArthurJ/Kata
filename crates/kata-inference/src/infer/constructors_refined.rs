@@ -43,6 +43,8 @@ pub(crate) fn synthesize_refined(
     struct_registry: &kata_core::struct_registry::StructRegistry,
     type_env: &TypeEnv,
     dispatch_table: &mut DispatchTable,
+    interface_registry: &kata_core::interface_registry::InterfaceRegistry,
+    refines_registry: &kata_core::RefinesRegistry,
 ) -> InferResult<Vec<TypedFunction>> {
     if refined_decls.is_empty() {
         return Ok(Vec::new());
@@ -51,7 +53,7 @@ pub(crate) fn synthesize_refined(
     // ── Passo 1: registra assinaturas no DispatchTable ──
     for decl in refined_decls {
         let pred_names = struct_registry
-            .get(&decl.name)
+            .lookup(&decl.name, Some(&decl.base_ty))
             .and_then(|si| si.predicates.as_ref())
             .expect("refined decl deve ter predicates no StructRegistry");
 
@@ -96,17 +98,16 @@ pub(crate) fn synthesize_refined(
 
     // ── Passo 2: sintetiza TypedFunctions ──
     // Cria InferCtx com o DispatchTable já populado (borrow imutável).
-    // Construtores refined não usam interfaces — registry vazio.
-    let empty_iface_reg = kata_core::interface_registry::InterfaceRegistry::new();
-    let empty_refines_reg = kata_core::RefinesRegistry::new();
+    // Precisa do interface_registry real para despachar `zero` via NUM
+    // em predicados de refined polimórfico (`!= _ (zero _)`).
     let deferred = super::expr::DeferredLambdaTable::default();
     let ctx = InferCtx {
         table: &*dispatch_table,
         enum_registry,
         struct_registry,
         refined_decls: &[],
-        interface_registry: &empty_iface_reg,
-        refines_registry: &empty_refines_reg,
+        interface_registry,
+        refines_registry,
         ret_ty: None,
         in_loop: false,
         deferred_lambdas: &deferred,
@@ -116,7 +117,7 @@ pub(crate) fn synthesize_refined(
 
     for decl in refined_decls {
         let pred_names = struct_registry
-            .get(&decl.name)
+            .lookup(&decl.name, Some(&decl.base_ty))
             .and_then(|si| si.predicates.as_ref())
             .expect("refined decl deve ter predicates");
 
