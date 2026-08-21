@@ -140,11 +140,7 @@ fn process_comment(content: &str, base_line: usize) -> Option<Vec<DocBlock>> {
             }
 
             // Extrair input após `>>> ` (ou `>>>` vazio)
-            let input_part = if line.len() > 4 {
-                &line[4..]
-            } else {
-                ""
-            };
+            let input_part = if line.len() > 4 { &line[4..] } else { "" };
             current_input.push_str(input_part);
             current_input.push('\n');
             case_line = line_num;
@@ -188,11 +184,7 @@ fn process_comment(content: &str, base_line: usize) -> Option<Vec<DocBlock>> {
                 // linhas indentadas são continuação (mesmo se o parser
                 // aceita o input parcial — ex: match com 1 braço).
                 // Caso contrário, usa is_input_incomplete (<EOF> no parse).
-                let first_token = current_input
-                    .trim_start()
-                    .split_whitespace()
-                    .next()
-                    .unwrap_or("");
+                let first_token = current_input.split_whitespace().next().unwrap_or("");
                 let multiline_indent =
                     matches!(first_token, "match" | "enum" | "implements" | "interface");
                 let is_continuation = if multiline_indent {

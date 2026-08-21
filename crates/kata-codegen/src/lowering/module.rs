@@ -79,6 +79,16 @@ pub(crate) struct CompiledFunc {
     pub func_id: cranelift_module::FuncId,
 }
 
+/// Resultado de [`lower_module`]: tabelas sidecar, wrappers de teste,
+/// funções compiladas e dump de IR (quando `--emit-ir`).
+pub(crate) type LowerModuleResult = (
+    MetadataTable,
+    StringTable,
+    Vec<super::test_runner::TestWrapper>,
+    Vec<CompiledFunc>,
+    Vec<(String, String)>,
+);
+
 /// Lower do `TypedModule` completo: cria a função `__kata_entry` e
 /// retorna o `MetadataTable` sidecar, a string table, os wrappers de teste,
 /// e info das funções nomeadas recém-compiladas (para REPL incremental).
@@ -90,16 +100,7 @@ pub(crate) fn lower_module(
     type_id_map: &HashMap<Ty, i64>,
     prev_funcs: &HashMap<i64, (String, *const u8)>,
     dump_ir: bool,
-) -> Result<
-    (
-        MetadataTable,
-        StringTable,
-        Vec<super::test_runner::TestWrapper>,
-        Vec<CompiledFunc>,
-        Vec<(String, String)>,
-    ),
-    CodegenError,
-> {
+) -> Result<LowerModuleResult, CodegenError> {
     let mut metadata = MetadataTable::new();
     let mut string_table = StringTable::new();
     let mut bytes_table: Vec<Vec<u8>> = Vec::new();
@@ -445,7 +446,10 @@ pub(crate) fn lower_module(
             reason: format!("define __kata_entry: {e}"),
         })?;
     if dump_ir {
-        ir_dump.push(("__kata_entry".to_string(), format!("{}", ctx.func.display())));
+        ir_dump.push((
+            "__kata_entry".to_string(),
+            format!("{}", ctx.func.display()),
+        ));
     }
     module.clear_context(&mut ctx);
 
@@ -513,5 +517,11 @@ pub(crate) fn lower_module(
             })?;
     }
 
-    Ok((metadata, string_table, _test_wrappers, compiled_funcs, ir_dump))
+    Ok((
+        metadata,
+        string_table,
+        _test_wrappers,
+        compiled_funcs,
+        ir_dump,
+    ))
 }
