@@ -82,3 +82,4 @@ for a única forma de dividir sem `Result`.
 ## Futuro
 - Tensor/SIMD
 - `@restart` (retry policy para Actions)
+- Renomear `@trace` de volta para `@log` (diretiva de telemetria)
