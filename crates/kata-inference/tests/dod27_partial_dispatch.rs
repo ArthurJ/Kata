@@ -34,37 +34,26 @@ fn entry_typed(tmod: &kata_inference::TypedModule) -> &kata_inference::TypedExpr
 // ── Casos principais do DoD 27 ─────────────────────────────────────
 
 /// `+ 10 _` → desugared para `lambda __hole_0: + 10 __hole_0`.
-/// Partial dispatch com cross-type overloads: `Some(Int)` no primeiro arg
-/// casa com Int Int, Int Float, Int Rational → OverloadSet (múltiplas overloads).
+/// Some(Int) no primeiro arg: casa com Int Int (same-type). As overloads
+/// cross-type (Float Int, Rational Int) têm Float/Rational no primeiro param,
+/// não casam com Int no primeiro arg sem swap. Resultado: Function([Int], Int).
 #[test]
 fn partial_dispatch_plus_int_hole() {
     let tmod = infer_src("+ 10 _");
     let entry = entry_typed(&tmod);
 
-    // OverloadSet: Int casa com Int Int, Int Float, Int Rational.
-    // Segundo arg é None (hole), então todas essas overloads casam.
     assert_eq!(
         entry.ty,
-        Ty::OverloadSet {
-            name: "+".to_string(),
-            overloads: vec![
-                (vec![Ty::int()], Ty::int()),
-                (vec![Ty::float()], Ty::float()),
-                (
-                    vec![Ty::Prim(kata_core::ty::PrimTy::Rational)],
-                    Ty::Prim(kata_core::ty::PrimTy::Rational)
-                ),
-            ],
-        },
-        "+ 10 _ deve ter tipo OverloadSet(+, [Int], [Float], [Rational])"
+        Ty::Function(vec![Ty::int()], Box::new(Ty::int())),
+        "+ 10 _ deve ter tipo Int -> Int (cross-type só casa via swap, partial dispatch não faz swap)"
     );
 
     match &entry.kind {
         TypedExprKind::Lambda { param_types, .. } => {
             assert_eq!(
                 param_types,
-                &[Ty::InferVar(0)],
-                "parâmetro deve ser InferVar(0)"
+                &[Ty::int()],
+                "parâmetro deve ser Int (resolvido por partial dispatch)"
             );
         }
         other => panic!("expected Lambda, got {other:?}"),
@@ -72,7 +61,9 @@ fn partial_dispatch_plus_int_hole() {
 }
 
 /// `+ _ 10` — hole no primeiro arg, Int no segundo.
-/// Mesmo resultado: `Function([Int], Int)`.
+/// Cross-type overloads via @commutative swap: Int no segundo arg casa com
+/// Int Int, Float Int (swap→Int Float), Rational Int (swap→Int Rational).
+/// Resultado: OverloadSet com Int, Float, Rational.
 #[test]
 fn partial_dispatch_plus_hole_int() {
     let tmod = infer_src("+ _ 10");
@@ -80,14 +71,21 @@ fn partial_dispatch_plus_hole_int() {
 
     assert_eq!(
         entry.ty,
-        Ty::Function(vec![Ty::int()], Box::new(Ty::int())),
-        "+ _ 10 deve ter tipo Int -> Int"
+        Ty::OverloadSet {
+            name: "+".to_string(),
+            overloads: vec![
+                (vec![Ty::int()], Ty::int()),
+                (vec![Ty::float()], Ty::float()),
+                (vec![Ty::Prim(kata_core::ty::PrimTy::Rational)], Ty::Prim(kata_core::ty::PrimTy::Rational)),
+            ],
+        },
+        "+ _ 10 deve ter tipo OverloadSet(+, [Int], [Float], [Rational])"
     );
 }
 
 /// `+ 10.0 _` — Float no primeiro arg, hole no segundo.
 /// Cross-type overloads: Some(Float) no primeiro arg casa com Float Float,
-/// Float Rational → OverloadSet com projeções Float e Rational.
+/// Float Int, Float Rational → OverloadSet com projeções Float, Int e Rational.
 #[test]
 fn partial_dispatch_plus_float_hole() {
     let tmod = infer_src("+ 10.0 _");
@@ -99,10 +97,11 @@ fn partial_dispatch_plus_float_hole() {
             name: "+".to_string(),
             overloads: vec![
                 (vec![Ty::float()], Ty::float()),
+                (vec![Ty::int()], Ty::float()),
                 (vec![Ty::Prim(kata_core::ty::PrimTy::Rational)], Ty::float()),
             ],
         },
-        "+ 10.0 _ deve ter tipo OverloadSet(+, [Float], [Rational])"
+        "+ 10.0 _ deve ter tipo OverloadSet(+, [Float], [Int], [Rational]) — todas retornam Float"
     );
 }
 
@@ -123,8 +122,9 @@ fn partial_dispatch_both_holes_ambiguous() {
     );
 }
 
-/// `- 10 _` — subtração com hole. Cross-type overloads fazem
-/// `Some(Int)` casar com Int Int, Int Float, Int Rational → OverloadSet.
+/// `- 10 _` — subtração com hole. Some(Int) no primeiro arg casa com
+/// Int Int (same-type) apenas. Cross-type (Float Int, Rational Int) não
+/// casam no primeiro arg sem swap. Resultado: Function([Int], Int).
 #[test]
 fn partial_dispatch_minus_int_hole() {
     let tmod = infer_src("- 10 _");
@@ -132,18 +132,8 @@ fn partial_dispatch_minus_int_hole() {
 
     assert_eq!(
         entry.ty,
-        Ty::OverloadSet {
-            name: "-".to_string(),
-            overloads: vec![
-                (vec![Ty::int()], Ty::int()),
-                (vec![Ty::float()], Ty::float()),
-                (
-                    vec![Ty::Prim(kata_core::ty::PrimTy::Rational)],
-                    Ty::Prim(kata_core::ty::PrimTy::Rational)
-                ),
-            ],
-        },
-        "- 10 _ deve ter tipo OverloadSet(-, [Int], [Float], [Rational])"
+        Ty::Function(vec![Ty::int()], Box::new(Ty::int())),
+        "- 10 _ deve ter tipo Int -> Int (cross-type só casa via swap)"
     );
 }
 
@@ -172,8 +162,9 @@ fn partial_dispatch_hole_then_apply() {
     }
 }
 
-/// `* 10 _` — multiplicação com hole. Cross-type overloads fazem
-/// `Some(Int)` casar com Int Int, Int Float, Int Rational → OverloadSet.
+/// `* 10 _` — multiplicação com hole. Some(Int) no primeiro arg casa com
+/// Int Int (same-type) apenas. Cross-type (Float Int, Rational Int) não
+/// casam no primeiro arg sem swap. Resultado: Function([Int], Int).
 #[test]
 fn partial_dispatch_times_int_hole() {
     let tmod = infer_src("* 10 _");
@@ -181,24 +172,15 @@ fn partial_dispatch_times_int_hole() {
 
     assert_eq!(
         entry.ty,
-        Ty::OverloadSet {
-            name: "*".to_string(),
-            overloads: vec![
-                (vec![Ty::int()], Ty::int()),
-                (vec![Ty::float()], Ty::float()),
-                (
-                    vec![Ty::Prim(kata_core::ty::PrimTy::Rational)],
-                    Ty::Prim(kata_core::ty::PrimTy::Rational)
-                ),
-            ],
-        },
-        "* 10 _ deve ter tipo OverloadSet(*, [Int], [Float], [Rational])"
+        Ty::Function(vec![Ty::int()], Box::new(Ty::int())),
+        "* 10 _ deve ter tipo Int -> Int (cross-type só casa via swap)"
     );
 }
 
 /// `+ 10::Rational _` com Rational no primeiro arg.
-/// Cross-type overloads: Some(Rational) casa com Rational Rational e
-/// Rational Float → OverloadSet com projeções Rational e Rational (de Float).
+/// Cross-type overloads: Some(Rational) no primeiro arg casa com Rational
+/// Rational, Rational Int, Rational Float → OverloadSet com projeções
+/// Rational (same-type), Rational (de Int), Rational (de Float).
 #[test]
 fn partial_dispatch_plus_rational_hole() {
     let tmod = infer_src("+ 10::Rational _");
@@ -209,13 +191,11 @@ fn partial_dispatch_plus_rational_hole() {
         Ty::OverloadSet {
             name: "+".to_string(),
             overloads: vec![
-                (
-                    vec![Ty::Prim(kata_core::ty::PrimTy::Rational)],
-                    Ty::Prim(kata_core::ty::PrimTy::Rational)
-                ),
+                (vec![Ty::Prim(kata_core::ty::PrimTy::Rational)], Ty::Prim(kata_core::ty::PrimTy::Rational)),
+                (vec![Ty::int()], Ty::Prim(kata_core::ty::PrimTy::Rational)),
                 (vec![Ty::float()], Ty::Prim(kata_core::ty::PrimTy::Rational)),
             ],
         },
-        "+ 10::Rational _ deve ter tipo OverloadSet(+, [Rational], [Float])"
+        "+ 10::Rational _ deve ter tipo OverloadSet(+, [Rational], [Int], [Float]) — todas retornam Rational"
     );
 }

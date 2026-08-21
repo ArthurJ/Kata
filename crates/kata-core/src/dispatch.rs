@@ -186,6 +186,11 @@ impl DispatchTable {
         self.commutative.insert(name.to_string());
     }
 
+    /// Verifica se uma função está marcada como comutativa (`@commutative`).
+    pub fn is_commutative(&self, name: &str) -> bool {
+        self.commutative.contains(name)
+    }
+
     /// Verifica se uma função existe.
     pub fn has_function(&self, name: &str) -> bool {
         self.entries.contains_key(name)

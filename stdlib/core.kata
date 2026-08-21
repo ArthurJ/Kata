@@ -171,6 +171,32 @@ Float implements NUM
     @ffi("kata_rt_fdiv")
     / :: Float NonZero => Float
 
+    # ── Cross-type: Float × Int → Float ──────────────────────────
+    @commutative
+    + :: Float Int => Float
+    lambda f i: + f (float i)
+
+    @commutative
+    - :: Float Int => Float
+    lambda f i: - f (float i)
+
+    @commutative
+    * :: Float Int => Float
+    lambda f i: * f (float i)
+
+    # ── Cross-type: Float × Rational → Float ──────────────────────
+    @commutative
+    + :: Float Rational => Float
+    lambda f r: + f (float r)
+
+    @commutative
+    - :: Float Rational => Float
+    lambda f r: - f (float r)
+
+    @commutative
+    * :: Float Rational => Float
+    lambda f r: * f (float r)
+
     @ffi("kata_rt_fzero")
     zero :: Float => Float
 
@@ -221,6 +247,32 @@ Rational implements NUM
     lambda a b:
         = b (rational 0): core.Result::Err "divisão por zero"
         otherwise: core.Result::Ok (rat_div a b)
+
+    # ── Cross-type: Rational × Int → Rational ────────────────────
+    @commutative
+    + :: Rational Int => Rational
+    lambda r i: + r (rational i)
+
+    @commutative
+    - :: Rational Int => Rational
+    lambda r i: - r (rational i)
+
+    @commutative
+    * :: Rational Int => Rational
+    lambda r i: * r (rational i)
+
+    # ── Cross-type: Rational × Float → Rational ──────────────────
+    @commutative
+    + :: Rational Float => Rational
+    lambda r f: + r (rational f)
+
+    @commutative
+    - :: Rational Float => Rational
+    lambda r f: - r (rational f)
+
+    @commutative
+    * :: Rational Float => Rational
+    lambda r f: * r (rational f)
 
     @ffi("kata_rt_rat_zero")
     zero :: Rational => Rational
@@ -561,63 +613,6 @@ int :: Rational => Int
 # float: Byte → Float (Byte → Int → Float, reusa conversões existentes)
 float :: Byte => Float
 lambda b: float (int b)
-
-# ── Interoperabilidade numérica cross-type ──────────────────────
-# Overloads explícitos para operações entre tipos numéricos diferentes.
-# @commutative cobre a direção inversa — só precisamos declarar uma
-# direção por par. Tipo da saída = tipo do primeiro argumento.
-
-# Int × Float → Float
-@commutative
-+ :: Int Float => Float
-lambda i f: + (float i) f
-
-@commutative
-- :: Int Float => Float
-lambda i f: - (float i) f
-
-@commutative
-* :: Int Float => Float
-lambda i f: * (float i) f
-
-# Int × Rational → Rational
-@commutative
-+ :: Int Rational => Rational
-lambda i r: + (rational i) r
-
-@commutative
-- :: Int Rational => Rational
-lambda i r: - (rational i) r
-
-@commutative
-* :: Int Rational => Rational
-lambda i r: * (rational i) r
-
-# Float × Rational → Float (converte Rational→Float, opera Float)
-@commutative
-+ :: Float Rational => Float
-lambda f r: + f (float r)
-
-@commutative
-- :: Float Rational => Float
-lambda f r: - f (float r)
-
-@commutative
-* :: Float Rational => Float
-lambda f r: * f (float r)
-
-# Rational × Float → Rational (converte Float→Rational, opera Rational)
-@commutative
-+ :: Rational Float => Rational
-lambda r f: + r (rational f)
-
-@commutative
-- :: Rational Float => Rational
-lambda r f: - r (rational f)
-
-@commutative
-* :: Rational Float => Rational
-lambda r f: * r (rational f)
 
 # ── I/O (Actions FFI builtin) ──────────────────────────────────
 

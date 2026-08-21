@@ -91,8 +91,81 @@ pub(crate) fn try_dispatch_table(
         }
 
         if top_count == 0 {
-            // Nenhuma overload compatível com o hint tem args que casam
-            // via match_score. Pode ser que uma overload genérica casasse
+            // Nenhuma overload compatível com o hint tem args que casam na
+            // ordem original. Se a função é comutativa e tem 2 args, tenta
+            // swap: inverte os args e re-faz scoring ainda filtrado por hint.
+            // Isto permite que @commutative desambigue via hint de retorno
+            // quando ambas as direções de retorno existem (ex: Float×Rational
+            // pode retornar Float ou Rational — o hint escolhe).
+            if arg_types.len() == 2 && ctx.table.is_commutative(func_name) {
+                let swapped = vec![arg_types[1].clone(), arg_types[0].clone()];
+                for oi in &compatible {
+                    let score = match_score(&swapped, &oi.params, ctx.interface_registry);
+                    if !score.is_compatible(2) {
+                        continue;
+                    }
+                    let score = Score {
+                        is_generic_origin: oi.is_generic,
+                        ..score
+                    };
+                    match best_score {
+                        None => {
+                            best_score = Some(score);
+                            best_overload = Some(oi);
+                            top_count = 1;
+                        }
+                        Some(bs) if score > bs => {
+                            best_score = Some(score);
+                            best_overload = Some(oi);
+                            top_count = 1;
+                        }
+                        Some(bs) if score == bs => {
+                            top_count += 1;
+                        }
+                        _ => {}
+                    }
+                }
+                if top_count == 1
+                    && let Some(oi) = best_overload
+                {
+                    let overload = oi.clone();
+                    if let Err(e) =
+                        super::apply::reject_action_arg_for_pure_fn(&overload, typed_args, span)
+                    {
+                        return Some(Err(e));
+                    }
+                    let expanded_ret = super::apply::expand_ret(&overload.ret, ctx);
+                    let callee_ty =
+                        Ty::Function(overload.params.clone(), Box::new(expanded_ret.clone()));
+                    let callee_typed = TypedExpr {
+                        span: callee.span,
+                        ty: callee_ty,
+                        tail_pos: false,
+                        escape: EscapeTarget::Local,
+                        kind: TypedExprKind::Ident {
+                            name: func_name.to_string(),
+                        },
+                    };
+                    // Reordenar typed_args: o swap inverteu os tipos para casar
+                    // com a overload, mas os args na TAST estão na ordem original.
+                    let final_args = vec![typed_args[1].clone(), typed_args[0].clone()];
+                    return Some(Ok((
+                        expanded_ret,
+                        TypedExprKind::Closure {
+                            callee: Box::new(Spanned::new(callee_typed, callee.span)),
+                            args: final_args,
+                            ffi_symbol: overload.ffi_symbol,
+                        },
+                    )));
+                }
+                if top_count > 1 {
+                    return Some(Err(MiddleError::AmbiguousDispatch {
+                        name: func_name.to_string(),
+                        span: (*span).into(),
+                    }));
+                }
+            }
+            // top_count ainda == 0: pode ser que uma overload genérica casasse
             // via unify (ex: `+ :: List::A List::A => List::A` com args
             // `List(Int)`), mas match_score não unifica type params em
             // Ty::List. Cair para o caminho genérico abaixo em vez de

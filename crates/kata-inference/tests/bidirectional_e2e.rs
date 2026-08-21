@@ -36,26 +36,17 @@ fn entry_typed(tmod: &kata_inference::TypedModule) -> &kata_inference::TypedExpr
 // ── DoD 27: Partial dispatch ─────────────────────────────────────
 
 /// `+ 10 _` desugared vira `lambda __hole0: + 10 __hole0`.
-/// Com cross-type overloads, `Some(Int)` no primeiro arg casa com
-/// Int Int, Int Float, Int Rational → OverloadSet (múltiplas overloads).
+/// Some(Int) no primeiro arg: casa com Int Int (same-type) apenas.
+/// Cross-type (Float Int, Rational Int) têm Float/Rational no primeiro
+/// param, não casam com Int sem swap. Resultado: Function([Int], Int).
 #[test]
 fn dod27_partial_dispatch_resolves_int() {
     let tmod = infer_src("+ 10 _");
     let entry = entry_typed(&tmod);
     assert_eq!(
         entry.ty,
-        Ty::OverloadSet {
-            name: "+".to_string(),
-            overloads: vec![
-                (vec![Ty::int()], Ty::int()),
-                (vec![Ty::float()], Ty::float()),
-                (
-                    vec![Ty::Prim(kata_core::ty::PrimTy::Rational)],
-                    Ty::Prim(kata_core::ty::PrimTy::Rational)
-                ),
-            ],
-        },
-        "+ 10 _ deve ser OverloadSet(+, [Int], [Float], [Rational])"
+        Ty::Function(vec![Ty::int()], Box::new(Ty::int())),
+        "+ 10 _ deve ser Function([Int], Int) — cross-type só casa via swap"
     );
 }
 
