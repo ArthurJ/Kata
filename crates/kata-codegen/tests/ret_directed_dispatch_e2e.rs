@@ -3,9 +3,9 @@
 //! Pipeline completo: lex → parse → resolve → infer → optimize → codegen → JIT.
 //!
 //! DoDs cobertos:
-//! - DoD 6: `(/ 1 3)::Int` → OK (hint Int compatível com única overload Int→Int)
-//! - DoD 7: `(/ 1 3)::Rational` → type error (hint Rational incompatível)
-//! - DoD 8: `(/ 1 3)` sem hint → despacha normalmente (única overload)
+//! - DoD 6: `(+ 1 3)::Int` → OK (hint Int compatível com única overload Int→Int)
+//! - DoD 7: `(+ 1 3)::Rational` → type error (hint Rational incompatível)
+//! - DoD 8: `(+ 1 3)` sem hint → despacha normalmente (única overload)
 //! - DoD 8b: função custom com 2 overloads mesmo arg shape, retorno diferente:
 //!   - Sem hint → AmbiguousDispatch
 //!   - Com hint Int → seleciona Int→Int
@@ -160,66 +160,66 @@ fn untag_smi(raw: i64) -> i64 {
     raw >> 1
 }
 
-// ── DoD 6: `(/ 1 3)::Int` → OK ──────────────────────────────────────
+// ── DoD 6: `(+ 1 3)::Int` → OK ──────────────────────────────────────
 
-/// DoD 6: hint `Int` é compatível com a única overload de `/` (Int, Int) → Int.
-/// Resultado: 1/3 truncado = 0.
+/// DoD 6: hint `Int` é compatível com a única overload de `+` (Int, Int) → Int.
+/// Resultado: 1+3 = 4.
 #[test]
 fn dod6_hint_int_seleciona_unica_overload() {
-    let src = "(/ 1 3)::Int";
+    let src = "(+ 1 3)::Int";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::int());
-    assert_eq!(untag_smi(raw), 0);
+    assert_eq!(untag_smi(raw), 4);
 }
 
-/// DoD 6 com Float: `(/ 1.0 2.0)::Float` → hint Float compatível com
-/// a overload (Float, Float) → Float. Resultado: 0.5.
+/// DoD 6 com Float: `(+ 1.0 2.0)::Float` → hint Float compatível com
+/// a overload (Float, Float) → Float. Resultado: 3.0.
 #[test]
 fn dod6_hint_float_seleciona_overload_float() {
-    let src = "(/ 1.0 2.0)::Float";
+    let src = "(+ 1.0 2.0)::Float";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::float());
     let f = f64::from_bits(raw as u64);
-    assert!((f - 0.5).abs() < 0.001, "esperado 0.5, got {f}");
+    assert!((f - 3.0).abs() < 0.001, "esperado 3.0, got {f}");
 }
 
-/// Hint `Int` com args Float: `(/ 1.0 2.0)::Int` deve falhar.
+/// Hint `Int` com args Float: `(+ 1.0 2.0)::Int` deve falhar.
 /// O hint filtra para (Int, Int) → Int, mas match_score([Float, Float], [Int, Int])
 /// é incompatível → TypeMismatch.
 #[test]
 fn dod6_hint_int_com_args_float_falha() {
-    let src = "(/ 1.0 2.0)::Int";
+    let src = "(+ 1.0 2.0)::Int";
     assert!(
         infer_fails(src),
-        "(/ 1.0 2.0)::Int deve falhar — args Float não casam com overload Int"
+        "(+ 1.0 2.0)::Int deve falhar — args Float não casam com overload Int"
     );
 }
 
-// ── DoD 7: `(/ 1 3)::Rational` → type error ─────────────────────────
+// ── DoD 7: `(+ 1 3)::Rational` → type error ─────────────────────────
 
-/// DoD 7: hint `Rational` não é compatível com nenhuma overload de `/`
+/// DoD 7: hint `Rational` não é compatível com nenhuma overload de `+`
 /// que aceita args Int. A overload (Int, Int) → Int tem retorno Int ≠ Rational.
 /// A overload (Rational, Rational) → Rational tem retorno compatível, mas
 /// args Int não casam com params Rational → top_count == 0 → TypeMismatch.
 #[test]
 fn dod7_hint_rational_incompativel_type_error() {
-    let src = "(/ 1 3)::Rational";
+    let src = "(+ 1 3)::Rational";
     assert!(
         infer_fails(src),
-        "(/ 1 3)::Rational deve falhar — / não tem overload Int→Rational"
+        "(+ 1 3)::Rational deve falhar — + não tem overload Int→Rational"
     );
 }
 
-// ── DoD 8: `(/ 1 3)` sem hint → despacha normalmente ────────────────
+// ── DoD 8: `(+ 1 3)` sem hint → despacha normalmente ────────────────
 
-/// DoD 8: sem hint, `/` com args Int despacha para (Int, Int) → Int.
-/// Resultado: 1/3 truncado = 0.
+/// DoD 8: sem hint, `+` com args Int despacha para (Int, Int) → Int.
+/// Resultado: 1+3 = 4.
 #[test]
 fn dod8_sem_hint_despacha_normalmente() {
-    let src = "/ 1 3";
+    let src = "+ 1 3";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::int());
-    assert_eq!(untag_smi(raw), 0);
+    assert_eq!(untag_smi(raw), 4);
 }
 
 // ── DoD 8b: múltiplas overloads, mesmo arg shape, retorno diferente ──

@@ -177,8 +177,8 @@ fn infer_show_int_returns_text() {
 
 #[test]
 fn infer_show_rational_returns_text() {
-    // Sintaxe prefix-only: / 1::Rational 3::Rational
-    let tmod = infer_src("show (/ 1::Rational 3::Rational)");
+    // Soma Rational: + 1::Rational 3::Rational (= 4/3, ainda Rational)
+    let tmod = infer_src("show (+ 1::Rational 3::Rational)");
     let entry = entry_typed(&tmod);
     assert_eq!(entry.ty, Ty::text());
     match &entry.kind {

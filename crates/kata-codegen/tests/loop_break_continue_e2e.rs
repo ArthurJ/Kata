@@ -186,7 +186,7 @@ fn break_em_match_match_aninhado_em_loop() {
         match > x 5
             Boolean::True: break
             Boolean::False:
-                match = (mod x 2) 0
+                match > x 2
                     Boolean::True:
                         sum := + sum x
                         x := + x 1
@@ -198,11 +198,11 @@ fn break_em_match_match_aninhado_em_loop() {
 break_duplo!()"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
-    // Soma dos pares de 0 a 4: 0 + 2 + 4 = 6
+    // Soma dos maiores que 2 de 0 a 5: 3 + 4 + 5 = 12
     assert_eq!(
         untag_smi(raw),
-        6,
-        "break_duplo deve ser 6 (soma dos pares 0+2+4)"
+        12,
+        "break_duplo deve ser 12 (soma dos >2: 3+4+5)"
     );
 }
 

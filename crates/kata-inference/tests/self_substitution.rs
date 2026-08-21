@@ -88,7 +88,8 @@ interface DUP
     dup :: Self => Self
 
 Int implements DUP
-    dup :: Int => Int @ffi("kata_rt_bi_add")
+    @ffi("kata_rt_bi_add")
+    dup :: Int => Int
 "#;
     let resolved = {
         let tokens = lex(src).unwrap();
@@ -140,7 +141,8 @@ interface DUP
     dup :: Self => Self
 
 Int implements DUP
-    dup :: Int => Int @ffi("kata_rt_bi_add")
+    @ffi("kata_rt_bi_add")
+    dup :: Int => Int
 
 dup 42
 "#;
@@ -165,7 +167,8 @@ interface WRAP
     wrap :: Self => Optional::Self
 
 Int implements WRAP
-    wrap :: Int => Optional::Int @ffi("kata_rt_some")
+    @ffi("kata_rt_some")
+    wrap :: Int => Optional::Int
 "#;
     let resolved = {
         let tokens = lex(src).unwrap();

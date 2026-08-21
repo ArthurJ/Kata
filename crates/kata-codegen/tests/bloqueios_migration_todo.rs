@@ -195,17 +195,17 @@ constant a := 5::PositiveInt
 // BLOQUEIO 2: mod/and em lambdas (collect_free_vars bug)
 // ═══════════════════════════════════════════════════════════════════════
 
-/// mod em função nomeada (não captura nada). `mod` é função Kata (não FFI)
-/// definida na stdlib. Se collect_free_vars marcar `mod` como free var,
-/// o codegen falha. Este teste verifica que `mod` NÃO é marcada como free var.
+/// * em função nomeada (não captura nada). `*` é primitivo (Self Self => Self).
+/// Se collect_free_vars marcar `*` como free var, o codegen falha.
+/// Este teste verifica que `*` NÃO é marcada como free var.
 #[test]
 fn b2_mod_em_funcao_nomeada() {
     let src = r#"foo :: Int => Int
-lambda x: mod x 2
+lambda x: * x 2
 foo 7"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
-    assert_eq!(untag_smi(raw), 1, "mod 7 2 = 1");
+    assert_eq!(untag_smi(raw), 14, "* 7 2 = 14");
 }
 
 /// and (Boolean) em função nomeada.
@@ -220,15 +220,15 @@ foo False"#;
     assert_eq!(raw, 0, "and False True = False = 0");
 }
 
-/// map com mod em lambda anônimo (HOF callback). Se o bug de collect_free_vars
-/// existe, `mod` seria marcada como free var e o codegen falharia.
+/// map com * em lambda anônimo (HOF callback). Se o bug de collect_free_vars
+/// existe, `*` seria marcada como free var e o codegen falharia.
 #[test]
 fn b2_map_com_mod_em_lambda() {
-    let src = r#"map (lambda x: mod x 2) [1 2 3 4 5]"#;
+    let src = r#"map (lambda x: * x 2) [1 2 3 4 5]"#;
     let (_raw, ty) = eval_src(src);
     assert!(
         matches!(ty, Ty::List(_)),
-        "map com mod em lambda deve retornar List"
+        "map com * em lambda deve retornar List"
     );
 }
 

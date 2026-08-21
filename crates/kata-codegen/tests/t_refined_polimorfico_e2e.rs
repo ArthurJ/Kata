@@ -108,7 +108,7 @@ test_nz_int!()"#;
     let (_raw, ty) = eval_src(src);
     assert_eq!(
         ty,
-        result_text_ty(Ty::Struct(StructKey::Plain("NonZeroPoly".into()))),
+        result_text_ty(Ty::Struct(StructKey::Family("NonZeroPoly".into()))),
         "NonZeroPoly(3) deve retornar Result::(NonZeroPoly, Text)"
     );
 }
@@ -123,7 +123,7 @@ test_nz_zero!()"#;
     let (_raw, ty) = eval_src(src);
     assert_eq!(
         ty,
-        result_text_ty(Ty::Struct(StructKey::Plain("NonZeroPoly".into()))),
+        result_text_ty(Ty::Struct(StructKey::Family("NonZeroPoly".into()))),
         "NonZeroPoly(0) deve retornar Result::(NonZeroPoly, Text) — tipo é o mesmo, valor é Err"
     );
     // O valor raw indica qual variante do Result: 0 = Ok, 1 = Err (tag do enum).
@@ -143,7 +143,7 @@ test_nz_float!()"#;
     let (_raw, ty) = eval_src(src);
     assert_eq!(
         ty,
-        result_text_ty(Ty::Struct(StructKey::Plain("NonZeroPoly".into()))),
+        result_text_ty(Ty::Struct(StructKey::Family("NonZeroPoly".into()))),
         "NonZeroPoly(3.0) deve retornar Result::(NonZeroPoly, Text) — instância Float"
     );
 }
@@ -242,12 +242,13 @@ test_nz2_zero!()"#;
 
 /// `NonZeroPoly(NaN)` com 2 predicados: `!= NaN (zero NaN)` → `!= NaN 0.0` → True
 /// (NaN != 0.0 é True em IEEE 754). Segundo predicado: `= NaN NaN` → False → Err.
-/// NaN é gerado via `/ 0.0 0.0` (kata_rt_fdiv: 0.0/0.0 = NaN em IEEE 754).
+/// NaN é gerado via `f_div 0.0 0.0` (kata_rt_fdiv: 0.0/0.0 = NaN em IEEE 754).
+/// `f_div` é divisão unchecked de core_internals, disponível no prelude.
 #[test]
 fn t_nonzero_poly_two_preds_float_nan_err() {
     let src = r#"data (NUM, != _ (zero _), = _ _) as NonZeroPoly
 action test_nz2_nan => Boolean
-    let nan := / 0.0 0.0
+    let nan := f_div 0.0 0.0
     match NonZeroPoly nan
         Ok _: Boolean::False
         Err _: Boolean::True

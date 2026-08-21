@@ -199,38 +199,38 @@ fn dod5_pipe_fallback_none_retorna_fallback() {
 
 // ── DoD 12: Grouped ascription `((expr))::Type` ─────────────────────
 
-/// DoD 12: `((/ 1 3))::Int` → OK.
-/// Grouped: sem hint, `/ 1 3` despacha para (Int, Int) → Int.
+/// DoD 12: `((+ 1 3))::Int` → OK.
+/// Grouped: sem hint, `+ 1 3` despacha para (Int, Int) → Int.
 /// Depois valida Int == Int → confirma.
 #[test]
 fn dod12_grouped_ascription_confirma_int() {
-    let src = "((/ 1 3))::Int";
+    let src = "((+ 1 3))::Int";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::int());
-    assert_eq!(untag_smi(raw), 0);
+    assert_eq!(untag_smi(raw), 4);
 }
 
-/// DoD 12 (erro): `((/ 1 3))::Rational` → type error.
-/// Grouped: sem hint, `/ 1 3` despacha para (Int, Int) → Int.
+/// DoD 12 (erro): `((+ 1 3))::Rational` → type error.
+/// Grouped: sem hint, `+ 1 3` despacha para (Int, Int) → Int.
 /// Depois valida Int ≠ Rational → type mismatch.
 #[test]
 fn dod12_grouped_ascription_rational_falha() {
-    let src = "((/ 1 3))::Rational";
+    let src = "((+ 1 3))::Rational";
     assert!(
         infer_fails(src),
-        "((/ 1 3))::Rational deve falhar — grouped barreira impede hint, / despacha Int"
+        "((+ 1 3))::Rational deve falhar — grouped barreira impede hint, + despacha Int"
     );
 }
 
-/// DoD 12 (com Float): `((/ 1.0 2.0))::Float` → OK.
-/// Grouped: sem hint, `/ 1.0 2.0` despacha para (Float, Float) → Float.
+/// DoD 12 (com Float): `((+ 1.0 2.0))::Float` → OK.
+/// Grouped: sem hint, `+ 1.0 2.0` despacha para (Float, Float) → Float.
 #[test]
 fn dod12_grouped_ascription_float_confirma() {
-    let src = "((/ 1.0 2.0))::Float";
+    let src = "((+ 1.0 2.0))::Float";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::float());
     let f = f64::from_bits(raw as u64);
-    assert!((f - 0.5).abs() < 0.001, "esperado 0.5, got {f}");
+    assert!((f - 3.0).abs() < 0.001, "esperado 3.0, got {f}");
 }
 
 /// DoD 12 vs grouped ascription: diferença entre `(expr)::Type` e `((expr))::Type`

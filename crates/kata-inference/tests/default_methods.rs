@@ -100,7 +100,8 @@ interface GREETER
         "hello"
 
 Int implements GREETER
-    greet :: Int => Text @ffi("kata_rt_bi_show")
+    @ffi("kata_rt_bi_show")
+    greet :: Int => Text
 
 greet 42
 "#;
@@ -120,7 +121,8 @@ interface STEPPER
         x
 
 Int implements STEPPER
-    next :: Int => Int @ffi("kata_rt_bi_add")
+    @ffi("kata_rt_bi_add")
+    next :: Int => Int
 
 next 42
 "#;

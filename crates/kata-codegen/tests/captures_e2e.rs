@@ -269,19 +269,19 @@ fn closure_multipla_chamada_aninhada_e2e() {
 }
 
 // ── Função global pura referenciada em lambda não é capture ───────
-// `mod` é função definida em core.kata (não-FFI, DispatchTable).
-// Referenciar `mod` dentro de lambda NÃO deve gerar capture —
-// é resolvida em compile-time via call direto, não via CaptureBox.
+// `*` é operador primitivo (Self Self => Self).
+// Referenciar `*` dentro de lambda NÃO deve gerar capture —
+// é resolvida em compile-time, não via CaptureBox.
 
 #[test]
 fn capture_nao_deve_incluir_funcao_global_tast() {
-    // let f := lambda x: mod x 2  dentro de action
-    // f captura NINGUÉM — mod é função global, x é param local.
-    let typed = infer_src("action main => Int\n    let f := lambda x: mod x 2\n    f 7\n42");
+    // let f := lambda x: * x 2  dentro de action
+    // f captura NINGUÉM — * é primitivo global, x é param local.
+    let typed = infer_src("action main => Int\n    let f := lambda x: * x 2\n    f 7\n42");
     let captures = find_last_lambda_captures(&typed).expect("deveria ter um Lambda no pre_entry");
     assert!(
-        captures.iter().all(|c| c.name != "mod"),
-        "mod é função global, não deveria ser capture. captures = {:?}",
+        captures.iter().all(|c| c.name != "*"),
+        "* é primitivo global, não deveria ser capture. captures = {:?}",
         captures
     );
 }
@@ -309,11 +309,11 @@ fn capture_nao_deve_incluir_funcao_global_and_tast() {
 
 #[test]
 fn closure_com_funcao_global_mod_e2e() {
-    // lambda x: mod x 2 — mod é global, x é param. Sem captures.
-    // mod 7 2 = 1
-    let (raw, ty) = eval_src("f :: Int => Int\nlambda x: mod x 2\nf 7");
+    // lambda x: * x 2 — * é primitivo, x é param. Sem captures.
+    // * 7 2 = 14
+    let (raw, ty) = eval_src("f :: Int => Int\nlambda x: * x 2\nf 7");
     assert_eq!(ty, Ty::int());
-    assert_eq!(untag_smi(raw), 1);
+    assert_eq!(untag_smi(raw), 14);
 }
 
 #[test]

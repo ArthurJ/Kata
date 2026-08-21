@@ -95,7 +95,7 @@ fn untag_smi(raw: i64) -> i64 {
 // ── Prova que o swap chega ao codegen ──────────────────────────
 
 /// `@commutative` em função cross-type Int→Float.
-/// Declara `first :: Int Float => Float @commutative` com lambda que retorna f.
+/// Declara `@commutative\nfirst :: Int Float => Float` com lambda que retorna f.
 /// Chamada `first 2.5 10` (Float Int) → swap → (Int Float) → codegen
 /// recebe args reordenados [10, 2.5] → lambda i=10 f=2.5 → retorna 2.5.
 ///
@@ -120,7 +120,7 @@ first 2.5 10
 
 /// Mesma função, mas retorna i (Int). O swap reordena args para que
 /// o Int chegue na posição correta.
-/// `first_int :: Int Float => Int @commutative` com lambda que retorna i.
+/// `@commutative\nfirst_int :: Int Float => Int` com lambda que retorna i.
 /// Chamada `first_int 2.5 10` (Float Int) → swap → (Int Float) → retorna 10.
 #[test]
 fn commutative_cross_type_swap_codegen_int_result() {
