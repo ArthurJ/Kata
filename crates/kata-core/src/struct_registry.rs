@@ -282,6 +282,24 @@ impl StructRegistry {
         self.structs.get(&key)
     }
 
+    /// Lista todas as instâncias de uma família polimórfica.
+    /// Retorna `(concrete_type, StructInfo)` para cada instância.
+    /// `all_instances("NonZeroPoly")` → [("Int", info), ("Float", info), ("Rational", info)]
+    ///
+    /// Só retorna instâncias com `is_instance_of: Some` — refineds concretos
+    /// (que têm `is_instance_of: None`) não são famílias polimórficas.
+    pub fn all_instances(&self, family_name: &str) -> Vec<(&str, &StructInfo)> {
+        self.structs
+            .iter()
+            .filter(|((_, k), info)| k.name() == family_name && info.is_instance_of.is_some())
+            .filter_map(|(_, info)| {
+                info.alias_of
+                    .as_ref()
+                    .map(|alias| (alias.as_str(), info))
+            })
+            .collect()
+    }
+
     /// Busca uma instância específica de família pelo nome e tipo concreto.
     /// `get_instance("NonZero", "Int")` → StructInfo da instância NonZero/Int.
     pub fn get_instance(&self, family_name: &str, concrete_type: &str) -> Option<&StructInfo> {
