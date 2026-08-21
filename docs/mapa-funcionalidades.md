@@ -33,10 +33,11 @@ Dependencies: 0.
   (dispatch nos parâmetros). Exhaustiveness checking.
 - **Diretivas (infra):** lexer reconhece `@nome`, `@nome("arg")`,
   `@nome{chave: valor}`. Parser produz `Directive { name, args }` anexado
-  a item de topo. AST carrega `Vec<Directive>` em toda declaração. Typeck
-  consulta via `item.directives.find("nome")`. Semântica de cada diretiva
-  é implementada pela feature que a consome — esta camada só fornece o
-  canal.
+  ao item (prefixo — antes da assinatura em todos os contextos: top-level
+  e métodos em implements/refines). AST carrega `Vec<Directive>` em toda
+  declaração. Typeck consulta via `item.directives.find("nome")`. Semântica
+  de cada diretiva é implementada pela feature que a consome — esta camada
+  só fornece o canal.
 
 Dependencies: 1.
 

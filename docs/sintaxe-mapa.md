@@ -593,7 +593,23 @@ len "hello"              # 5 — text (COUNTABLE dispatch, kata_rt_string_len)
 @nome{chave: valor}
 ```
 
-- Posição: precedem item de topo (action, lambda, data). Podem ser empilhadas no mesmo item; a ordem importa (avaliação sequencial).
+- Posição: **prefixo** — precedem o item que decoram. Funciona em todos os contextos:
+  - Top-level (action, função pura, data): uma ou mais diretivas na linha acima.
+    ```kata
+    @ffi("i64")
+    data Int ()
+    ```
+  - Métodos em `implements`/`refines`: uma ou mais diretivas na linha acima da assinatura.
+    Diretivas empilhadas ficam numa única linha; linhas em branco separam métodos.
+    ```kata
+    Int implements NUM
+        @ffi("kata_rt_bi_add") @associative(0) @commutative
+        + :: Int Int => Int
+
+        @ffi("kata_rt_bi_sub")
+        - :: Int Int => Int
+    ```
+  A ordem das diretivas importa (avaliação sequencial).
 - Catálogo: `@cache_strategy`, `@test`, `@log`, `@associative`, `@commutative`, `@ffi`, `@builtin`. (`spawn!` é special form, não diretiva — veja abaixo.) `@comptime` foi removido (Fase 5) — usar `constant` para bindings de módulo avaliados em compile-time.
 - **Relações**:
   - `@test` → tree shaking remove em produção.

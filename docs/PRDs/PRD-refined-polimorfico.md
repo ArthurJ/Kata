@@ -2,8 +2,16 @@
 
 ## Status
 
-**Status:** Pendente
-**Data:** 2026-08-20
+**Status:** Fases 1-7 COMPLETAS e testadas (1751 passed, 0 failed, 1 ignored).
+`StructKey::Family` + `Instance` implementadas, `resolve_type_expr` family-aware,
+`Self` em interface NUM, two-pass no pass0 (0a registra interfaces/impls,
+0b resolve assinaturas), `instantiate_family_for_concrete` resolve
+`Family→Instance` no implements, `expand_family_signatures` só expande
+Signatures FFI (FunctionDefs mantêm `Family` para dispatch no call-site).
+Stdlib migrada: `/` e `mod` exigem `NonZero`, `div` retorna `Result`,
+FFI unchecked em `stdlib/core_internals.kata` (`bi_div`/`f_div`/`rat_div`).
+Exemplos e testes migrados. `examples/legacy/` excluído do snapshot test.
+**Data:** 2026-08-22
 **Depende de:** Sistema de refinados atual (tipos refinados concretos), dispatch por Score 2D + fallback `refines`
 **Não depende de:** Nenhum PRD pendente
 
@@ -106,12 +114,20 @@ tipo estrutural como chave:
 enum StructKey {
     /// Tipo comum: "Pessoa", "Float", "NonZero"
     Plain(String),
+    /// Família polimórfica: "NonZero" = data (NUM, ...) as NonZero
+    Family(String),
     /// Instância de família: ("NonZero", "Int")
     Instance(String, String),
 }
 ```
 
 O `StructRegistry` passa a ser `HashMap<(String, StructKey), StructInfo>`.
+
+**`Family` vs `Plain`:** `Plain("NonZero")` é ambíguo — serve para struct
+concreto e família. `Family("NonZero")` carrega a semântica: "referência a
+família, expandir em instâncias concretas". `resolve_type_expr` produz
+`Family` quando o `struct_registry.is_family(name)` é true. O `type_env.define`
+para famílias polimórficas também registra `Family` (não `Plain`).
 
 **Por que não `String` com `$`:**
 - Colisão: nada impede o usuário de declarar `data (...) as NonZero$Int`
@@ -236,10 +252,29 @@ pedem `NonZero` aceitam via fallback de família.
   do param, trata como exact match
 - Testes E2E: `/ 10 (3::NonZero)` → 3, `/ 10.0 (3.0::NonZero)` → 3.333...
 
-### Fase 5: Overloads polimórficos
+### Fase 5: Overloads polimórficos com `Self` + two-pass — COMPLETA
 
-- `/ :: NUM NonZero => NUM` como assinatura única
-- Dispatch unifica NUM + NonZero simultaneamente (NUM → Int, NonZero → instância Int)
+**Estado:** Completa e testada. `Self` substituído por tipo concreto via
+`substitute_self`. Two-pass no pass0 quebra o ciclo interface→NonZero→interface
+(0a registra interfaces/impls com assinaturas vazias, 0b resolve após todas
+as declarações). `instantiate_family_for_concrete` resolve `Family→Instance`
+no contexto do implements.
+
+- Migrar operações aritméticas de NUM para `Self`:
+  `+ :: Self Self => Self`, `-`, `*`, `div`, `abs` (substituir `NUM NUM => NUM`)
+- Adicionar métodos que usam NonZero como família:
+  `/ :: Self NonZero => Self`, `mod :: Self NonZero => Self`
+- **Two-pass no pass0:**
+  - Passo 1: registrar declarações de dados (interfaces, data, enum) — popula
+    `struct_registry`, `type_env`, `interface_registry` com assinaturas
+  - Passo 2: resolver assinaturas de métodos de interface e implements — agora
+    NonZero é `Family` no `type_env`, `Self` é substituído por tipo concreto
+- **Expansão só de Signatures (não FunctionDefs):** funções com corpo Kata
+  mantêm `Family("NonZero")` no FunctionDef. O `try_refines_fallback` resolve
+  `Family → Instance → concreto` no call site. Funções FFI (sem corpo) são
+  expandidas em `Instance` concretas normalmente.
+- Dispatch unifica `Self` + `NonZero` simultaneamente (Self → Int,
+  NonZero → Instance("NonZero","Int"))
 - Testes E2E: `/ 10 (3::NonZero)` e `/ 10.0 (3.0::NonZero)` despacham para a
   mesma assinatura, resolvida por tipo dos args
 - Migrar `/ :: Int NonZero => Int` legada para a polimórfica
