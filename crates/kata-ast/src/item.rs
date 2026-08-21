@@ -232,7 +232,12 @@ pub struct InterfaceSig {
 }
 
 /// Método dentro de implements — assinatura + corpo.
-/// `+ :: Complex Complex => Complex` + lambda ou @ffi.
+/// Diretivas (`@ffi`, `@commutative`, ...) aparecem antes da assinatura:
+/// ```text
+/// @ffi("kata_rt_complex_sub")
+/// - :: Complex Complex => Complex
+/// ```
+/// seguido de lambda ou apenas @ffi (FFI builtin).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ImplMethod {
     pub name: String,

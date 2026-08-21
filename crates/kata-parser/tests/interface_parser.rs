@@ -83,7 +83,7 @@ fn interface_with_type_params() {
 
 #[test]
 fn implements_with_ffi() {
-    let src = "Int implements NUM\n    + :: Int Int => Int @ffi(\"kata_rt_bi_add\")";
+    let src = "Int implements NUM\n    @ffi(\"kata_rt_bi_add\")\n    + :: Int Int => Int";
     let m = parse_src(src);
     match first_item(&m) {
         Item::ImplementsDecl {

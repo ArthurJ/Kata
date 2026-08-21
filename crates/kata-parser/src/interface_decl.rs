@@ -187,7 +187,8 @@ impl Parser {
     /// Complex implements NUM
     ///     + :: Complex Complex => Complex
     ///         lambda a b: Complex (+ a.re b.re) (+ a.im b.im)
-    ///     - :: Complex Complex => Complex @ffi("kata_rt_complex_sub")
+    ///     @ffi("kata_rt_complex_sub")
+    ///     - :: Complex Complex => Complex
     /// ```
     /// Ou com type params:
     /// ```text
@@ -348,7 +349,10 @@ impl Parser {
                     break;
                 }
 
-                // Assinatura: `name :: Type1 Type2 ... => RetType [@ffi(...)]`
+                // Diretivas opcionais ANTES da assinatura (prefixo): @ffi, @commutative
+                let method_directives = self.parse_directives()?;
+
+                // Assinatura: `name :: Type1 Type2 ... => RetType`
                 let method_name = match self.peek() {
                     Token::Ident(s) => {
                         let span = self.peek_span();
@@ -369,9 +373,6 @@ impl Parser {
                 }
                 self.expect(&Token::FatArrow, "`=>` in method signature")?;
                 let ret = self.parse_type_expr()?;
-
-                // Diretivas opcionais APÓS o tipo de retorno: @ffi, @commutative
-                let method_directives = self.parse_directives()?;
 
                 // Corpo: lambda no mesmo nível (Some) ou apenas diretivas @ffi (None)
                 // Consumir StmtSep antes de checar (newline entre assinatura e lambda).
@@ -474,7 +475,10 @@ impl Parser {
                     break;
                 }
 
-                // Assinatura: `name :: Type1 Type2 ... => RetType [@ffi(...)]`
+                // Diretivas opcionais ANTES da assinatura (prefixo): @ffi, @commutative
+                let method_directives = self.parse_directives()?;
+
+                // Assinatura: `name :: Type1 Type2 ... => RetType`
                 let method_name = match self.peek() {
                     Token::Ident(s) => {
                         let span = self.peek_span();
@@ -495,9 +499,6 @@ impl Parser {
                 }
                 self.expect(&Token::FatArrow, "`=>` in method signature")?;
                 let ret = self.parse_type_expr()?;
-
-                // Diretivas opcionais após o tipo de retorno
-                let method_directives = self.parse_directives()?;
 
                 // Corpo: lambda no mesmo nível (override) ou apenas @ffi (None)
                 while matches!(self.peek(), Token::StmtSep) {
