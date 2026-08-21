@@ -185,7 +185,8 @@ Dependencies: 2 (assinaturas), 7 (dispatch seleciona sobrecarga FFI).
 List `[T]` (Cons, persistente). Array `{T}` (contíguo). Range `[0..10]`
 (lazy). Interface `ITERABLE`. `@builtin("map"/"filter"/"fold")` —
 typeck intercepta diretiva e gera nós TAST estruturados. Stream fusion
-(futuro — fusão de cadeias map/filter/fold na TAST).
+(fusão de cadeias map/filter/fold na TAST — `stream_fusion.rs`,
+`FusedStream` na TAST, `stream_fusion_e2e.rs`).
 
 Dependencies: 4 (ADTs para Cons), 7 (ITERABLE como interface), 10 (FFI
 para operações de coleção no runtime).
@@ -210,11 +211,8 @@ Dependencies: 4 (alias), 7 (interfaces).
 Arena (bump allocator, O(1) free ao término da Action). Escape Analysis
 (4 passes sobre TAST: retorno de função, posições de escape,
 propagação de aliases, promoção de CaptureStorage). ARC (incref/decref
-injetados pelo optimizer). `FnValueCall` (call_indirect para closures
-escapadas).
-
-Diretiva: `@heapstack` (gerenciamento heurístico de memória stack/heap
-em loops).
+injetados pelo codegen no epílogo da Action). `FnValueCall`
+(call_indirect para closures escapadas).
 
 Dependencies: 3 (Actions — arena é por Action), 5 (closures — escape
 analysis opera sobre captures).
@@ -250,20 +248,26 @@ eval), 11 (stream fusion precisa de @builtin).
 
 ### 17 — Otimização de IR
 
-Otimizações que operam sobre o IR depois do lowering, em loop até ponto
-fixo:
+Otimizações que operam sobre o IR depois do lowering. Constant folding,
+DCE, inlining e TCO são delegados ao Cranelift — o `JITModule` já aplica
+otimizações nativas durante a compilação CLIF → machine code. Não há
+loop de ponto fixo próprio; `optimize()` aplica os passes próprios uma
+vez cada.
 
-- Constant folding (Binary/Icmp com consts)
-- Dead code elimination (remove insts sem uses, preserva side-effects)
-- Inline calls (callees abaixo do threshold)
-- TCO (pattern match no IR: Call + Return no mesmo bloco)
-- TRMA (depende de `@associative`/`@commutative` — injeta acumulador,
-  converte recursão bloqueada em cauda)
-- ARC pass (incref/decref após fixed-point)
+Passes próprios em `kata-optimizer`:
+
+- TRMA (Tail Recursion Modulo Associativity — depende de
+  `@associative`/`@commutative`: injeta acumulador, converte recursão
+  bloqueada em cauda)
+- Stream Fusion (`@builtin` map/filter/fold → fusão de cadeias)
+
+ARC (incref/decref) é injetado no codegen, não no optimizer — o epílogo
+da Action emite decref de variáveis ARC e close de handles de I/O.
 
 Diretiva: `@associative` (habilita TRMA).
 
-Dependencies: 10 (IR existe), 14 (ARC pass precisa de info de escape).
+Dependencies: 10 (IR existe), 14 (ARC no codegen precisa de info de
+escape).
 
 Se a TAST carregar `tail_pos`, `escape`, `mono_instance` (Recomendação
 2 do post-mortem), o lowering preserva essa informação no IR e o
@@ -288,6 +292,25 @@ optimizer). `repl` (TypeEnv persistente entre expressões, comandos
 
 Dependencies: 16-17 (build precisa de optimizer), 3 (repl precisa de
 module system para persistência).
+
+## Funcionalidades transversais
+
+Funcionalidades implementadas que atravessam múltiplas camadas do
+pipeline e não se encaixam no esquema de camadas sequenciais:
+
+- **Sistema de módulos (import/export):** `module_loader.rs`,
+  `merge_imports.rs`. `mod.kata` (arquivo de módulo por diretório),
+  `super.` (referência ao módulo pai), `stdlib.` (referência à
+  biblioteca padrão). Resolution e merge de imports em
+  `kata-resolution`.
+- **File I/O:** `File` (handles abertos/fechados pelo epílogo da
+  Action). PRD-file-io.
+- **Sockets:** `Socket` (TCP/UDP), `select` (multiplexação de I/O
+  handles — file e socket). PRD-socket-io, PRD-select-io.
+- **Doctests:** `kata-driver/src/doctest.rs` — extração e execução de
+  blocos de documentação como testes.
+- **LSP:** crate `kata-lsp` — Language Server Protocol para
+  integração com editores.
 
 ## Caminho crítico
 
