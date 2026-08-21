@@ -107,7 +107,11 @@ fn tree_shake_impl(typed: TypedModule, preserve_tests: bool) -> TypedModule {
         let snapshot_actions: Vec<String> = reached_actions.iter().cloned().collect();
 
         for name in &snapshot_fns {
-            if let Some(func) = functions.iter().find(|f| &f.name == name) {
+            // Visita o corpo de TODAS as funções com este nome (overload set).
+            // Usar `filter` em vez de `find` garante que predicados de todas
+            // as instâncias polimórficas (ex: __pred_NonZeroPoly_Float_0)
+            // sejam coletados, não apenas os da primeira overload encontrada.
+            for func in functions.iter().filter(|f| &f.name == name) {
                 for clause in &func.clauses {
                     collect_refs(
                         &clause.body.node,
