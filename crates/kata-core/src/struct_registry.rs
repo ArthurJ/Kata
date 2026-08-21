@@ -260,11 +260,20 @@ impl StructRegistry {
 
     /// Busca informações de um struct pelo nome (não-qualificado).
     /// Retorna `None` se o nome é ambíguo ou não existe.
-    /// Para instâncias de família, use `lookup` com type hint ou `get_instance`.
+    /// Para famílias polimórficas, retorna a primeira instância encontrada
+    /// (para obter instância específica, use `lookup` com type hint ou `get_instance`).
     pub fn get(&self, name: &str) -> Option<&StructInfo> {
         let origin = self.resolve_origin(name)?;
         let key = (origin.to_string(), StructKey::Plain(name.to_string()));
-        self.structs.get(&key)
+        // Tentar Plain primeiro (struct comum ou refined concreto).
+        if let Some(info) = self.structs.get(&key) {
+            return Some(info);
+        }
+        // Fallback: buscar qualquer Instance com este nome de família.
+        self.structs
+            .iter()
+            .find(|((_, k), _)| k.name() == name && matches!(k, StructKey::Instance(..)))
+            .map(|(_, info)| info)
     }
 
     /// `get` com origin explícita.

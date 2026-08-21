@@ -64,32 +64,85 @@ pub(crate) fn run_pass0(
                 }
                 // Refined declaration?
                 if let Some(refined_decl) = refined {
-                    // `data (Int, > _ 0) as PositiveInt`
-                    // Registra no StructRegistry como refined:
-                    //   alias_of = base_ty_name, predicates = [nomes das funções]
-                    // As funções predicado são sintetizadas no inference.
-                    let base_ty_name = match &refined_decl.base_ty.node {
-                        TypeExpr::Named(n) => n.clone(),
-                        _ => {
-                            // TODO: base non-named (Tuple, etc.) — fora do escopo
-                            String::new()
-                        }
-                    };
-                    // Gera nomes das funções predicado: __pred_<TypeName>_<idx>
-                    let pred_names: Vec<String> = (0..refined_decl.predicates.len())
-                        .map(|i| format!("__pred_{name}_{i}"))
-                        .collect();
-                    struct_registry.register_refined(origin, name, &base_ty_name, pred_names);
-                    type_env.define(name, Ty::Struct(name.clone()), origin);
-
-                    // Guarda para o inference sintetizar as funções predicado.
+                    // `data (Int, > _ 0) as PositiveInt` — refined concreto
+                    // `data (NUM, != _ (zero _)) as NonZero` — refined polimórfico
+                    //
+                    // Registra no StructRegistry e guarda para o inference
+                    // sintetizar as funções predicado.
                     let base_ty =
                         resolve_type_expr(&refined_decl.base_ty.node, type_env, interface_registry);
-                    refined_decls.push(RefinedDeclInfo {
-                        name: name.clone(),
-                        base_ty,
-                        predicates: refined_decl.predicates.clone(),
-                    });
+
+                    match &base_ty {
+                        Ty::Interface(iface_name) => {
+                            // Refined polimórfico: expandir em instâncias por tipo concreto.
+                            let implementors = interface_registry.implementors_of(iface_name);
+                            if implementors.is_empty() {
+                                // Ninguém implementa a interface — registrar como
+                                // refined concreto com alias_of = interface (fallback).
+                                let pred_names: Vec<String> = (0..refined_decl.predicates.len())
+                                    .map(|i| format!("__pred_{name}_{i}"))
+                                    .collect();
+                                struct_registry.register_refined(
+                                    origin, name, iface_name, pred_names,
+                                );
+                                type_env.define(name, Ty::Struct(name.clone()), origin);
+                                refined_decls.push(RefinedDeclInfo {
+                                    name: name.clone(),
+                                    base_ty,
+                                    predicates: refined_decl.predicates.clone(),
+                                });
+                            } else {
+                                // Registrar uma instância por tipo concreto.
+                                for concrete in &implementors {
+                                    let pred_names: Vec<String> =
+                                        (0..refined_decl.predicates.len())
+                                            .map(|i| format!("__pred_{name}_{concrete}_{i}"))
+                                            .collect();
+                                    struct_registry.register_refined_instance(
+                                        origin,
+                                        name,
+                                        concrete,
+                                        pred_names,
+                                    );
+                                    // RefinedDeclInfo por instância para o inference
+                                    // sintetizar o construtor.
+                                    let instance_base = match concrete.as_str() {
+                                        "Int" => Ty::Prim(PrimTy::Int),
+                                        "Float" => Ty::Prim(PrimTy::Float),
+                                        "Rational" => Ty::Prim(PrimTy::Rational),
+                                        "Text" => Ty::Prim(PrimTy::Text),
+                                        _ => Ty::Struct(concrete.clone()),
+                                    };
+                                    refined_decls.push(RefinedDeclInfo {
+                                        name: name.clone(),
+                                        base_ty: instance_base,
+                                        predicates: refined_decl.predicates.clone(),
+                                    });
+                                }
+                                // Registrar o nome público no type_env.
+                                type_env.define(name, Ty::Struct(name.clone()), origin);
+                            }
+                        }
+                        _ => {
+                            // Refined concreto: `data (Int, > _ 0) as PositiveInt`
+                            let base_ty_name = match &refined_decl.base_ty.node {
+                                TypeExpr::Named(n) => n.clone(),
+                                _ => String::new(),
+                            };
+                            let pred_names: Vec<String> = (0..refined_decl.predicates.len())
+                                .map(|i| format!("__pred_{name}_{i}"))
+                                .collect();
+                            struct_registry.register_refined(
+                                origin, name, &base_ty_name, pred_names,
+                            );
+                            type_env.define(name, Ty::Struct(name.clone()), origin);
+                            refined_decls.push(RefinedDeclInfo {
+                                name: name.clone(),
+                                base_ty,
+                                predicates: refined_decl.predicates.clone(),
+                            });
+                        }
+                    }
                     continue;
                 }
 
@@ -546,11 +599,20 @@ pub(crate) fn run_pass0(
                 methods,
             } => {
                 // Validar que type_name é refined.
+                // Para refined polimórfico, `get` retorna None (só há
+                // instâncias Instance, não Plain). Verificar também
+                // se há instâncias de família com is_instance_of.
                 let struct_info = struct_registry.get(type_name);
                 let is_refined = struct_info
                     .map(|si| si.alias_of.is_some() && si.predicates.is_some())
                     .unwrap_or(false);
-                if !is_refined {
+                // Para famílias polimórficas, get_instance com qualquer
+                // tipo concreto conhecido deve retornar Some.
+                let is_family = struct_registry
+                    .get_instance(type_name, "Int")
+                    .or_else(|| struct_registry.get_instance(type_name, "Float"))
+                    .is_some();
+                if !is_refined && !is_family {
                     errors.push(ResolveError::InvalidRefines {
                         type_name: type_name.clone(),
                         reason:
@@ -562,16 +624,29 @@ pub(crate) fn run_pass0(
                 }
 
                 // Resolver tipo base via alias_of no StructRegistry.
-                let base_ty_name = struct_info
-                    .and_then(|si| si.alias_of.as_deref())
-                    .unwrap_or("");
-                let base_ty = resolve_base_ty(base_ty_name, type_env, interface_registry);
+                // Para famílias polimórficas, struct_info é None — usar
+                // uma instância para obter alias_of (todas compartilham
+                // o mesmo base_ty conceitual: a interface).
+                let base_ty_name = if let Some(si) = struct_info {
+                    si.alias_of.as_deref().unwrap_or("").to_string()
+                } else if is_family {
+                    // Para famílias, o base_ty é a interface (ex: "NUM").
+                    // Usar alias_of da primeira instância encontrada.
+                    struct_registry
+                        .get_instance(type_name, "Int")
+                        .or_else(|| struct_registry.get_instance(type_name, "Float"))
+                        .and_then(|si| si.alias_of.as_deref().map(String::from))
+                        .unwrap_or_default()
+                } else {
+                    String::new()
+                };
+                let base_ty = resolve_base_ty(&base_ty_name, type_env, interface_registry);
 
                 // Validar que o base implementa a interface.
                 // Aviso apenas — a validação final acontece em infer_module,
                 // depois do merge com o prelude (que contém `Int implements NUM`).
                 if !base_ty_name.is_empty()
-                    && !interface_registry.type_implements(base_ty_name, interface_name)
+                    && !interface_registry.type_implements(&base_ty_name, interface_name)
                 {
                     eprintln!(
                         "[resolution] warning: tipo base {base_ty_name} pode não implementar \
