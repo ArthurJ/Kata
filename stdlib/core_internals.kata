@@ -1,0 +1,17 @@
+# core_internals — funções internas do prelude, não exportadas.
+# Acessíveis apenas via import core_internals (o core importa).
+# Não há declaração export — módulo sem export é aberto, mas o
+# module_loader aplica filter_exports ao importar, e o core
+# não re-exporta estas funções.
+
+# Divisão unchecked — não verifica zero. Usada por `div` (método NUM)
+# após verificar zero em runtime. Não pode ser `/` porque `/` exige NonZero.
+
+@ffi("kata_rt_bi_div")
+bi_div :: Int Int => Int
+
+@ffi("kata_rt_fdiv")
+f_div :: Float Float => Float
+
+@ffi("kata_rt_rat_div")
+rat_div :: Rational Rational => Rational

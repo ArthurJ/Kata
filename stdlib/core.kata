@@ -1,6 +1,8 @@
 # Prelude do Kata — tipos primitivos, enums, operadores.
 # Carregado pelo ModuleLoader antes do módulo do usuário.
 
+import core_internals
+
 # ── Tipos primitivos ──────────────────────────────────────────
 # @ffi mapeia para PrimTy no resolution: i64→Int, f64→Float,
 # kata_rt_string→Text, kata_rt_rat→Rational.
@@ -43,17 +45,30 @@ interface EQ
 
 interface ORD implements EQ
     < :: Self Self => Boolean
+
     > :: Self Self => Boolean
+
     <= :: Self Self => Boolean
+
     >= :: Self Self => Boolean
 
 interface NUM implements EQ
-    + :: NUM NUM => NUM
-    - :: NUM NUM => NUM
-    * :: NUM NUM => NUM
-    div :: NUM NUM => Result::NUM
+    + :: Self Self => Self
+
+    - :: Self Self => Self
+
+    * :: Self Self => Self
+
+    div :: Self Self => Result::(Self, Text)
+
+    / :: Self NonZero => Self
+
+    mod :: Self NonZero => Self
+    lambda a b: - a (* b (/ a b))
+
     zero :: Self => Self
-    abs :: NUM => NUM
+
+    abs :: Self => Self
 
 interface SHOW
     show :: Self => Text
@@ -85,93 +100,158 @@ interface STEPPABLE
     lambda x:
         false
 
-# ── Refined: NonZero ──────────────────────────────────────────
-# Int ≠ 0. Usado por `/ Int NonZero => Int` (divisão exata segura).
-# Construtor falível: `3::NonZero` valida ≠ 0 em compile-time.
-
-data (Int, != _ 0) as NonZero
-
 # ── Implementações para Int ───────────────────────────────────
 
 Int implements NUM
-    + :: Int Int => Int @ffi("kata_rt_bi_add") @associative(0) @commutative
-    - :: Int Int => Int @ffi("kata_rt_bi_sub")
-    * :: Int Int => Int @ffi("kata_rt_bi_mul") @associative(1) @commutative
+    @ffi("kata_rt_bi_add") @associative(0) @commutative
+    + :: Int Int => Int
+
+    @ffi("kata_rt_bi_sub")
+    - :: Int Int => Int
+
+    @ffi("kata_rt_bi_mul") @associative(1) @commutative
+    * :: Int Int => Int
+
     div :: Int Int => Result::(Int, Text)
     lambda a b:
         = b 0: core.Result::Err "divisão por zero"
-        otherwise: core.Result::Ok (/ a b)
-    zero :: Int => Int @ffi("kata_rt_bi_zero")
+        otherwise: core.Result::Ok (bi_div a b)
+
+    @ffi("kata_rt_bi_div")
+    / :: Int NonZero => Int
+
+    @ffi("kata_rt_bi_zero")
+    zero :: Int => Int
+
     abs :: Int => Int
     lambda a:
         < a 0: - 0 a
         otherwise: a
-    = :: Int Int => Boolean @ffi("kata_rt_bi_eq") @commutative
-    != :: Int Int => Boolean @ffi("kata_rt_bi_neq") @commutative
+
+    @ffi("kata_rt_bi_eq") @commutative
+    = :: Int Int => Boolean
+
+    @ffi("kata_rt_bi_neq") @commutative
+    != :: Int Int => Boolean
 
 Int implements ORD
-    < :: Int Int => Boolean @ffi("kata_rt_bi_lt")
-    > :: Int Int => Boolean @ffi("kata_rt_bi_gt")
-    <= :: Int Int => Boolean @ffi("kata_rt_bi_le")
-    >= :: Int Int => Boolean @ffi("kata_rt_bi_ge")
+    @ffi("kata_rt_bi_lt")
+    < :: Int Int => Boolean
+
+    @ffi("kata_rt_bi_gt")
+    > :: Int Int => Boolean
+
+    @ffi("kata_rt_bi_le")
+    <= :: Int Int => Boolean
+
+    @ffi("kata_rt_bi_ge")
+    >= :: Int Int => Boolean
 
 Int implements SHOW
-    show :: Int => Text @ffi("kata_rt_bi_show")
+    @ffi("kata_rt_bi_show")
+    show :: Int => Text
 
 # ── Implementações para Float ──────────────────────────────────
 
 Float implements NUM
-    + :: Float Float => Float @ffi("kata_rt_fadd") @commutative
-    - :: Float Float => Float @ffi("kata_rt_fsub")
-    * :: Float Float => Float @ffi("kata_rt_fmul") @commutative
+    @ffi("kata_rt_fadd") @commutative
+    + :: Float Float => Float
+
+    @ffi("kata_rt_fsub")
+    - :: Float Float => Float
+
+    @ffi("kata_rt_fmul") @commutative
+    * :: Float Float => Float
+
     div :: Float Float => Result::(Float, Text)
     lambda a b:
         = b 0.0: core.Result::Err "divisão por zero"
-        otherwise: core.Result::Ok (/ a b)
-    zero :: Float => Float @ffi("kata_rt_fzero")
+        otherwise: core.Result::Ok (f_div a b)
+
+    @ffi("kata_rt_fdiv")
+    / :: Float NonZero => Float
+
+    @ffi("kata_rt_fzero")
+    zero :: Float => Float
+
     abs :: Float => Float
     lambda a:
         < a 0.0: - 0.0 a
         otherwise: a
-    = :: Float Float => Boolean @ffi("kata_rt_fcmp_eq") @commutative
-    != :: Float Float => Boolean @ffi("kata_rt_fcmp_neq") @commutative
+
+    @ffi("kata_rt_fcmp_eq") @commutative
+    = :: Float Float => Boolean
+
+    @ffi("kata_rt_fcmp_neq") @commutative
+    != :: Float Float => Boolean
 
 Float implements ORD
-    < :: Float Float => Boolean @ffi("kata_rt_fcmp_lt")
-    > :: Float Float => Boolean @ffi("kata_rt_fcmp_gt")
-    <= :: Float Float => Boolean @ffi("kata_rt_fcmp_le")
-    >= :: Float Float => Boolean @ffi("kata_rt_fcmp_ge")
+    @ffi("kata_rt_fcmp_lt")
+    < :: Float Float => Boolean
+
+    @ffi("kata_rt_fcmp_gt")
+    > :: Float Float => Boolean
+
+    @ffi("kata_rt_fcmp_le")
+    <= :: Float Float => Boolean
+
+    @ffi("kata_rt_fcmp_ge")
+    >= :: Float Float => Boolean
 
 Float implements SHOW
-    show :: Float => Text @ffi("kata_rt_float_to_text")
+    @ffi("kata_rt_float_to_text")
+    show :: Float => Text
 
 # ── Implementações para Rational ──────────────────────────────
 
 Rational implements NUM
-    + :: Rational Rational => Rational @ffi("kata_rt_rat_add") @associative(0) @commutative
-    - :: Rational Rational => Rational @ffi("kata_rt_rat_sub")
-    * :: Rational Rational => Rational @ffi("kata_rt_rat_mul") @associative(1) @commutative
-    / :: Rational Rational => Rational @ffi("kata_rt_rat_div")
+    @ffi("kata_rt_rat_add") @associative(0) @commutative
+    + :: Rational Rational => Rational
+
+    @ffi("kata_rt_rat_sub")
+    - :: Rational Rational => Rational
+
+    @ffi("kata_rt_rat_mul") @associative(1) @commutative
+    * :: Rational Rational => Rational
+
+    @ffi("kata_rt_rat_div")
+    / :: Rational NonZero => Rational
+
     div :: Rational Rational => Result::(Rational, Text)
     lambda a b:
         = b (rational 0): core.Result::Err "divisão por zero"
-        otherwise: core.Result::Ok (/ a b)
-    zero :: Rational => Rational @ffi("kata_rt_rat_zero")
+        otherwise: core.Result::Ok (rat_div a b)
+
+    @ffi("kata_rt_rat_zero")
+    zero :: Rational => Rational
+
     abs :: Rational => Rational
     lambda a:
         < a (rational 0): - (rational 0) a
         otherwise: a
-    = :: Rational Rational => Boolean @ffi("kata_rt_rat_eq") @commutative
-    != :: Rational Rational => Boolean @ffi("kata_rt_rat_neq") @commutative
+
+    @ffi("kata_rt_rat_eq") @commutative
+    = :: Rational Rational => Boolean
+
+    @ffi("kata_rt_rat_neq") @commutative
+    != :: Rational Rational => Boolean
 
 Rational implements ORD
-    < :: Rational Rational => Boolean @ffi("kata_rt_rat_lt")
-    > :: Rational Rational => Boolean @ffi("kata_rt_rat_gt")
-    <= :: Rational Rational => Boolean @ffi("kata_rt_rat_le")
-    >= :: Rational Rational => Boolean @ffi("kata_rt_rat_ge")
+    @ffi("kata_rt_rat_lt")
+    < :: Rational Rational => Boolean
+
+    @ffi("kata_rt_rat_gt")
+    > :: Rational Rational => Boolean
+
+    @ffi("kata_rt_rat_le")
+    <= :: Rational Rational => Boolean
+
+    @ffi("kata_rt_rat_ge")
+    >= :: Rational Rational => Boolean
 
 Rational implements SHOW
-    show :: Rational => Text @ffi("kata_rt_rat_show")
+    @ffi("kata_rt_rat_show")
+    show :: Rational => Text
 
 # ── Min/max genéricos (via ORD) ────────────────────────────────
 
@@ -185,9 +265,18 @@ lambda a b:
     >= a b: a
     otherwise: b
 
-# NonZero refines NUM — delega aritmética para Int.
-# Posicionado após Int/Float/Rational implements NUM para que o
-# pass0 encontre a implementação ao validar.
+# ── Refined: NonZero (polimórfico sobre NUM) ──────────────────
+# NonZero para Int, Float e Rational — declarado uma vez sobre NUM.
+# Posicionado APÓS Int/Float/Rational implements NUM para que o
+# pass0 encontre os implementores ao expandir a família.
+# Predicado != _ (zero _): rejeita zero de cada tipo (0, 0.0, rational 0).
+# Predicado = _ _: rejeita NaN em Float (= NaN NaN → False em IEEE 754).
+# Inócuo para Int/Rational (= x x sempre True).
+# Construtor falível: NonZero(3) → Ok, NonZero(0) → Err, NonZero(NaN) → Err.
+
+data (NUM, != _ (zero _), = _ _) as NonZero
+
+# NonZero refines NUM — delega aritmética para o tipo base de cada instância.
 NonZero refines NUM
 
 # ── Text ──────────────────────────────────────────────────────
@@ -205,13 +294,16 @@ Unit implements SHOW
 # ── Implementações HASHABLE ───────────────────────────────────
 
 Int implements HASHABLE
-    hash :: Int => Int @ffi("kata_rt_hash_int")
+    @ffi("kata_rt_hash_int")
+    hash :: Int => Int
 
 Text implements HASHABLE
-    hash :: Text => Int @ffi("kata_rt_hash_text")
+    @ffi("kata_rt_hash_text")
+    hash :: Text => Int
 
 Rational implements HASHABLE
-    hash :: Rational => Int @ffi("kata_rt_hash_rational")
+    @ffi("kata_rt_hash_rational")
+    hash :: Rational => Int
 
 # ── Implementações STEPPABLE ──────────────────────────────────
 
@@ -219,6 +311,7 @@ Int implements STEPPABLE
     step :: Int => Int
     lambda x:
         1
+
     is_neutral :: Int => Boolean
     lambda x:
         = x 0
@@ -227,6 +320,7 @@ Float implements STEPPABLE
     step :: Float => Float
     lambda x:
         1.0
+
     is_neutral :: Float => Boolean
     lambda x:
         = x 0.0
@@ -238,53 +332,68 @@ Float implements STEPPABLE
 
 # Array implementa ITERABLE, COUNTABLE, INDEXABLE, CONTAINS
 Array::A implements ITERABLE::A
-    next :: Array::A => Optional::A @ffi("kata_rt_array_next")
+    @ffi("kata_rt_array_next")
+    next :: Array::A => Optional::A
 
 Array::A implements COUNTABLE
-    len :: Array::A => Int @ffi("kata_rt_array_len")
+    @ffi("kata_rt_array_len")
+    len :: Array::A => Int
 
 Array::A implements INDEXABLE::A
-    at :: Array::A Int => Result::A @ffi("kata_rt_array_get_checked")
+    @ffi("kata_rt_array_get_checked")
+    at :: Array::A Int => Result::A
 
 Array::A implements CONTAINS::A
-    contains :: Array::A A => Boolean @ffi("kata_rt_array_contains")
+    @ffi("kata_rt_array_contains")
+    contains :: Array::A A => Boolean
 
 # List implementa ITERABLE, COUNTABLE, INDEXABLE, CONTAINS
 List::A implements ITERABLE::A
-    next :: List::A => Optional::A @ffi("kata_rt_list_next")
+    @ffi("kata_rt_list_next")
+    next :: List::A => Optional::A
 
 List::A implements COUNTABLE
-    len :: List::A => Int @ffi("kata_rt_list_len")
+    @ffi("kata_rt_list_len")
+    len :: List::A => Int
 
 List::A implements INDEXABLE::A
-    at :: List::A Int => Result::A @ffi("kata_rt_list_get_checked")
+    @ffi("kata_rt_list_get_checked")
+    at :: List::A Int => Result::A
 
 List::A implements CONTAINS::A
-    contains :: List::A A => Boolean @ffi("kata_rt_list_contains")
+    @ffi("kata_rt_list_contains")
+    contains :: List::A A => Boolean
 
 # Range implementa ITERABLE, COUNTABLE, CONTAINS (não INDEXABLE)
 # Range usa @builtin — codegen inlined com base no tipo concreto de A
 Range::A implements ITERABLE::A
-    next :: Range::A => Optional::A @builtin("range_next")
+    @builtin("range_next")
+    next :: Range::A => Optional::A
 
 Range::A implements COUNTABLE
-    len :: Range::A => Int @builtin("range_len")
+    @builtin("range_len")
+    len :: Range::A => Int
 
 Range::A implements CONTAINS::A
-    contains :: Range::A A => Boolean @builtin("range_contains")
+    @builtin("range_contains")
+    contains :: Range::A A => Boolean
 
 # Text implementa ITERABLE, COUNTABLE, INDEXABLE, CONTAINS
 Text implements ITERABLE::Text
-    next :: Text => Optional::Text @ffi("kata_rt_string_next")
+    @ffi("kata_rt_string_next")
+    next :: Text => Optional::Text
 
 Text implements COUNTABLE
-    len :: Text => Int @ffi("kata_rt_text_len")
+    @ffi("kata_rt_text_len")
+    len :: Text => Int
 
 Text implements INDEXABLE::Text
-    at :: Text Int => Result::Text @ffi("kata_rt_text_at")
+    @ffi("kata_rt_text_at")
+    at :: Text Int => Result::Text
 
 Text implements CONTAINS::Text
-    contains :: Text Text => Boolean @ffi("kata_rt_string_contains")
+    @ffi("kata_rt_string_contains")
+    contains :: Text Text => Boolean
 
 # ── SLICEABLE (Fio 11 / PRD-bytes Fase 3) ────────────────────────
 
@@ -293,40 +402,50 @@ interface SLICEABLE::A
 
 # Text implementa SLICEABLE (codepoints)
 Text implements SLICEABLE::Text
-    slice :: Text Int Int => Text @ffi("kata_rt_text_slice")
+    @ffi("kata_rt_text_slice")
+    slice :: Text Int Int => Text
 
 # Array implementa SLICEABLE
 Array::A implements SLICEABLE::A
-    slice :: (Array::A) Int Int => (Array::A) @ffi("kata_rt_array_slice")
+    @ffi("kata_rt_array_slice")
+    slice :: (Array::A) Int Int => (Array::A)
 
 # List implementa SLICEABLE
 List::A implements SLICEABLE::A
-    slice :: (List::A) Int Int => (List::A) @ffi("kata_rt_list_slice")
+    @ffi("kata_rt_list_slice")
+    slice :: (List::A) Int Int => (List::A)
 
 # ── Dict (Fio 13) ───────────────────────────────────────────────
 
 Dict::(K, V) implements ITERABLE::(K, V)
-    next :: Dict::(K, V) => Optional::(K, V) @ffi("kata_rt_dict_next")
+    @ffi("kata_rt_dict_next")
+    next :: Dict::(K, V) => Optional::(K, V)
 
 Dict::(K, V) implements COUNTABLE
-    len :: Dict::(K, V) => Int @ffi("kata_rt_dict_len")
+    @ffi("kata_rt_dict_len")
+    len :: Dict::(K, V) => Int
 
 Dict::(K, V) implements INDEXABLE::V
-    at :: Dict::(K, V) K => Result::V @ffi("kata_rt_dict_get_checked")
+    @ffi("kata_rt_dict_get_checked")
+    at :: Dict::(K, V) K => Result::V
 
 Dict::(K, V) implements CONTAINS::K
-    contains :: Dict::(K, V) K => Boolean @ffi("kata_rt_dict_contains")
+    @ffi("kata_rt_dict_contains")
+    contains :: Dict::(K, V) K => Boolean
 
 # ── Set (Fio 13) ────────────────────────────────────────────────
 
 Set::T implements ITERABLE::T
-    next :: Set::T => Optional::T @ffi("kata_rt_set_next")
+    @ffi("kata_rt_set_next")
+    next :: Set::T => Optional::T
 
 Set::T implements COUNTABLE
-    len :: Set::T => Int @ffi("kata_rt_set_len")
+    @ffi("kata_rt_set_len")
+    len :: Set::T => Int
 
 Set::T implements CONTAINS::T
-    contains :: Set::T T => Boolean @ffi("kata_rt_set_contains")
+    @ffi("kata_rt_set_contains")
+    contains :: Set::T T => Boolean
 
 # ── Operações de Set (standalone) ───────────────────────────────
 
@@ -372,28 +491,13 @@ remove :: Dict::(K, V) K => Dict::(K, V)
 
 # ── Operadores standalone (não-interface) ──────────────────────
 
-# Int divisão exata — exige NonZero (segura, não pânica)
-@ffi("kata_rt_bi_div")
-/ :: Int NonZero => Int
-
-# Int divisão (legada — pânica em zero, mantida para compatibilidade)
-@ffi("kata_rt_bi_div")
-/ :: Int Int => Int
-
-# Int divisão com verificação — retorna Result
-# Agora método da interface NUM: ver implementações acima.
-
-# Float divisão
-@ffi("kata_rt_fdiv")
-/ :: Float Float => Float
-
-# Int módulo (resto da divisão inteira)
-mod :: Int Int => Int
-lambda a b: - a (* b (/ a b))
-
-# Int módulo seguro — exige NonZero (não pânica em zero)
-mod :: Int NonZero => Int
-lambda a b: - a (* b (/ a b))
+# / e mod agora são métodos da interface NUM:
+# / :: Self NonZero => Self  (divisão segura)
+# mod :: Self NonZero => Self (default method da interface NUM)
+# Ver implementações em Int/Float/Rational implements NUM acima.
+#
+# Divisão unchecked (bi_div, f_div, rat_div) vem de import core_internals.
+# São usadas por `div` após verificar zero em runtime.
 
 # AND lógico (Boolean é enum True/False, sem operador nativo)
 and :: Boolean Boolean => Boolean
@@ -595,24 +699,31 @@ fold :: (A B -> A) A List::B => A
 
 # Bytes implementa INDEXABLE (acesso por índice → Result::(Byte, Text))
 Bytes implements INDEXABLE::Byte
-    at :: Bytes Int => Result::Byte @ffi("kata_rt_bytes_get_checked")
+    @ffi("kata_rt_bytes_get_checked")
+    at :: Bytes Int => Result::Byte
 
 # Bytes implementa COUNTABLE
 Bytes implements COUNTABLE
-    len :: Bytes => Int @ffi("kata_rt_bytes_len")
+    @ffi("kata_rt_bytes_len")
+    len :: Bytes => Int
 
 # Bytes implementa SLICEABLE
 Bytes implements SLICEABLE::Bytes
-    slice :: Bytes Int Int => Bytes @ffi("kata_rt_bytes_slice")
+    @ffi("kata_rt_bytes_slice")
+    slice :: Bytes Int Int => Bytes
 
 # Bytes implementa EQ
 Bytes implements EQ
-    = :: Bytes Bytes => Boolean @ffi("kata_rt_bytes_eq")
-    != :: Bytes Bytes => Boolean @ffi("kata_rt_bytes_neq")
+    @ffi("kata_rt_bytes_eq")
+    = :: Bytes Bytes => Boolean
+
+    @ffi("kata_rt_bytes_neq")
+    != :: Bytes Bytes => Boolean
 
 # Bytes implementa SHOW (hex)
 Bytes implements SHOW
-    show :: Bytes => Text @ffi("kata_rt_bytes_show")
+    @ffi("kata_rt_bytes_show")
+    show :: Bytes => Text
 
 # Concatenação de Bytes (+)
 @ffi("kata_rt_bytes_concat")
