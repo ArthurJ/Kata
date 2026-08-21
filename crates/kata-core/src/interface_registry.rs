@@ -252,6 +252,17 @@ impl InterfaceRegistry {
             .collect()
     }
 
+    /// Lista os nomes dos tipos concretos que implementam uma interface.
+    /// Usado na expansão de refined polimórfico: `data (NUM, ...) as NonZero`
+    /// consulta `implementors_of("NUM")` → `["Int", "Float", "Rational"]`.
+    pub fn implementors_of(&self, iface_name: &str) -> Vec<String> {
+        self.impls
+            .iter()
+            .filter(|e| e.interface_name == iface_name)
+            .map(|e| e.type_name.clone())
+            .collect()
+    }
+
     // ── Verificação ───────────────────────────────────────
 
     /// Verifica se um tipo implementa uma interface (direto ou via supertrait).

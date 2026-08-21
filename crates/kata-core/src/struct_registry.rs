@@ -15,6 +15,41 @@ use std::collections::{HashMap, HashSet};
 
 use crate::ty::Ty;
 
+/// Chave interna do `StructRegistry` para distinguir tipos comuns de
+/// instâncias de família de refined polimórfico.
+///
+/// - `Plain("Pessoa")` — struct comum ou refined concreto.
+/// - `Instance("NonZero", "Int")` — instância de `data (NUM, ...) as NonZero`
+///   para o tipo concreto `Int`. O nome público é `"NonZero"`.
+///
+/// `Ty::Struct` continua carregando o nome público (`"NonZero"`). A
+/// distinção família vs concreto é confinada ao `StructRegistry`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum StructKey {
+    /// Tipo comum: "Pessoa", "Float", "NonZero" (refined concreto).
+    Plain(String),
+    /// Instância de família: ("NonZero", "Int") = NonZero sobre Int.
+    Instance(String, String),
+}
+
+impl StructKey {
+    /// Nome público (ex: "NonZero" tanto para Plain quanto Instance).
+    pub fn name(&self) -> &str {
+        match self {
+            StructKey::Plain(n) => n,
+            StructKey::Instance(n, _) => n,
+        }
+    }
+
+    /// Tipo concreto da instância, se aplicável.
+    pub fn concrete_type(&self) -> Option<&str> {
+        match self {
+            StructKey::Plain(_) => None,
+            StructKey::Instance(_, t) => Some(t),
+        }
+    }
+}
+
 /// Informação de um campo de struct.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FieldInfo {
@@ -43,6 +78,10 @@ pub struct StructInfo {
     /// `None` = struct normal. `Some(vec)` = tipo refinado.
     /// Cada nome é uma função `BaseTy => Boolean` sintetizada no resolution.
     pub predicates: Option<Vec<String>>,
+    /// Se este StructInfo é uma instância de uma família de refined polimórfico.
+    /// `Some("NonZero")` = instância de `data (NUM, ...) as NonZero`.
+    /// `None` = struct normal ou refined concreto (não-polimórfico).
+    pub is_instance_of: Option<String>,
 }
 
 impl StructInfo {
@@ -74,11 +113,13 @@ impl StructInfo {
     }
 }
 
-/// Catálogo de structs por nome, com rastreio de origem.
+/// Catálogo de structs por nome, com rastreio de origem (origin).
 #[derive(Debug, Clone, Default)]
 pub struct StructRegistry {
-    /// (origin, struct_name) → StructInfo.
-    structs: HashMap<(String, String), StructInfo>,
+    /// (origin, StructKey) → StructInfo.
+    /// `StructKey::Plain(name)` para structs comuns e refined concretos.
+    /// `StructKey::Instance(family, concrete)` para instâncias de família.
+    structs: HashMap<(String, StructKey), StructInfo>,
     /// struct_name → conjunto de origins que definem este struct.
     origins: HashMap<String, HashSet<String>>,
     /// Nomes ambíguos (definidos em múltiplas origins).
@@ -106,7 +147,7 @@ impl StructRegistry {
         fields: Vec<FieldInfo>,
         alias_of: Option<String>,
     ) {
-        let key = (origin.to_string(), name.to_string());
+        let key = (origin.to_string(), StructKey::Plain(name.to_string()));
         self.structs.insert(
             key,
             StructInfo {
@@ -114,6 +155,7 @@ impl StructRegistry {
                 fields,
                 alias_of,
                 predicates: None,
+                is_instance_of: None,
             },
         );
         self.track_origin(name, origin);
@@ -128,7 +170,7 @@ impl StructRegistry {
         alias_of: &str,
         predicates: Vec<String>,
     ) {
-        let key = (origin.to_string(), name.to_string());
+        let key = (origin.to_string(), StructKey::Plain(name.to_string()));
         self.structs.insert(
             key,
             StructInfo {
@@ -136,9 +178,39 @@ impl StructRegistry {
                 fields: Vec::new(),
                 alias_of: Some(alias_of.to_string()),
                 predicates: Some(predicates),
+                is_instance_of: None,
             },
         );
         self.track_origin(name, origin);
+    }
+
+    /// Registra uma instância de família de refined polimórfico.
+    ///
+    /// `data (NUM, != _ (zero _)) as NonZero` com `concrete_type = "Int"`
+    /// registra `StructKey::Instance("NonZero", "Int")` com
+    /// `alias_of = "Int"`, `is_instance_of = Some("NonZero")`.
+    pub fn register_refined_instance(
+        &mut self,
+        origin: &str,
+        family_name: &str,
+        concrete_type: &str,
+        predicates: Vec<String>,
+    ) {
+        let key = (
+            origin.to_string(),
+            StructKey::Instance(family_name.to_string(), concrete_type.to_string()),
+        );
+        self.structs.insert(
+            key,
+            StructInfo {
+                name: family_name.to_string(),
+                fields: Vec::new(),
+                alias_of: Some(concrete_type.to_string()),
+                predicates: Some(predicates),
+                is_instance_of: Some(family_name.to_string()),
+            },
+        );
+        self.track_origin(family_name, origin);
     }
 
     /// Rastreia a origin de um struct e marca ambíguo se >1 origin.
@@ -188,16 +260,49 @@ impl StructRegistry {
 
     /// Busca informações de um struct pelo nome (não-qualificado).
     /// Retorna `None` se o nome é ambíguo ou não existe.
+    /// Para instâncias de família, use `lookup` com type hint ou `get_instance`.
     pub fn get(&self, name: &str) -> Option<&StructInfo> {
         let origin = self.resolve_origin(name)?;
-        let key = (origin.to_string(), name.to_string());
+        let key = (origin.to_string(), StructKey::Plain(name.to_string()));
         self.structs.get(&key)
     }
 
     /// `get` com origin explícita.
     pub fn get_with_origin(&self, origin: &str, name: &str) -> Option<&StructInfo> {
-        let key = (origin.to_string(), name.to_string());
+        let key = (origin.to_string(), StructKey::Plain(name.to_string()));
         self.structs.get(&key)
+    }
+
+    /// Busca uma instância específica de família pelo nome e tipo concreto.
+    /// `get_instance("NonZero", "Int")` → StructInfo da instância NonZero/Int.
+    pub fn get_instance(&self, family_name: &str, concrete_type: &str) -> Option<&StructInfo> {
+        let origin = self.resolve_origin(family_name)?;
+        let key = (
+            origin.to_string(),
+            StructKey::Instance(family_name.to_string(), concrete_type.to_string()),
+        );
+        self.structs.get(&key)
+    }
+
+    /// Lookup com type hint: resolve família → instância concreta.
+    /// Se `name` é uma família e `type_hint` é `Some(Ty::Prim(PrimTy::Int))`,
+    /// retorna a instância de NonZero para Int.
+    /// Se `name` é um struct/refined comum, retorna como `get`.
+    pub fn lookup(&self, name: &str, type_hint: Option<&Ty>) -> Option<&StructInfo> {
+        // Se há type hint e o nome tem instâncias, tentar resolver instância.
+        if let Some(hint) = type_hint {
+            let concrete = match hint {
+                Ty::Prim(crate::ty::PrimTy::Int) => "Int",
+                Ty::Prim(crate::ty::PrimTy::Float) => "Float",
+                Ty::Prim(crate::ty::PrimTy::Rational) => "Rational",
+                _ => return self.get(name),
+            };
+            if let Some(instance) = self.get_instance(name, concrete) {
+                return Some(instance);
+            }
+        }
+        // Fallback: lookup como struct comum.
+        self.get(name)
     }
 
     /// Verifica se um nome é um struct registrado.
@@ -218,17 +323,18 @@ impl StructRegistry {
     /// são marcados como ambíguos. Structs da mesma origin são sobrescritos
     /// (re-registro no mesmo módulo).
     pub fn merge(&mut self, other: StructRegistry) {
-        for ((origin, name), info) in other.structs {
-            let key = (origin.clone(), name.clone());
-            self.structs.insert(key, info);
-            self.track_origin(&name, &origin);
+        for ((origin, key), info) in other.structs {
+            let k = (origin.clone(), key.clone());
+            self.structs.insert(k, info);
+            self.track_origin(key.name(), &origin);
         }
     }
 
     /// Filtra structs mantendo apenas aqueles cujo nome está no `closure`
     /// ou cuja origin é `core` (prelude). Usado por `filter_exports`.
     pub fn retain_by_closure(&mut self, closure: &std::collections::HashSet<String>) {
-        self.structs.retain(|(_, name), _| {
+        self.structs.retain(|(_, key), _| {
+            let name = key.name();
             closure.contains(name) || {
                 self.origins
                     .get(name)
@@ -238,11 +344,12 @@ impl StructRegistry {
         // Reconstruir origins e ambiguous
         self.origins.clear();
         self.ambiguous.clear();
-        for (origin, name) in self.structs.keys() {
-            let origins = self.origins.entry(name.clone()).or_default();
+        for (origin, key) in self.structs.keys() {
+            let name = key.name();
+            let origins = self.origins.entry(name.to_string()).or_default();
             origins.insert(origin.clone());
             if origins.len() > 1 {
-                self.ambiguous.insert(name.clone());
+                self.ambiguous.insert(name.to_string());
             }
         }
     }

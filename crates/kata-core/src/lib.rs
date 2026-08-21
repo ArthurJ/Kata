@@ -34,5 +34,5 @@ pub use interface_registry::{
 };
 pub use refines_registry::{RefinesEntry, RefinesRegistry};
 pub use snapshot::HeapSnapshotData;
-pub use struct_registry::{FieldInfo, StructInfo, StructRegistry};
+pub use struct_registry::{FieldInfo, StructInfo, StructKey, StructRegistry};
 pub use ty::{PrimTy, Ty, TypeEnv};
