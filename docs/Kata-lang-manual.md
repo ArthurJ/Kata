@@ -866,6 +866,18 @@ pelo tipo concreto no implements (ex: `Int implements NUM` substitui
 do tipo que implementa a interface (ex: `Int implements NUM` resolve
 `NonZero → Instance("NonZero", "Int")`).
 
+**Instanciação explícita de família** (`NonZero::Int`): dentro de um
+`implements`, pode-se referenciar uma instância específica da família
+para declarar overloads cross-type. Ex: `mod :: Float NonZero::Int => Float`
+dentro de `Float implements NUM` define `mod` entre Float e Int (o divisor
+é `NonZero::Int`, não `NonZero::Float`). O `resolve_type_expr` resolve
+`NonZero::Int` → `Instance("NonZero", "Int")`. Em ascription de expressão
+(`3::NonZero`), o typeck promove `Family("NonZero")` → `Instance` baseado
+no tipo primitivo do inner (`3` é Int → `Instance("NonZero", "Int")`).
+Para `mod` Float/Rational same-type, o override usa truncagem
+(`a - b*(float(int(a/b)))`) em Kata puro para evitar erro de precisão
+IEEE 754.
+
 A herança de super-traits propaga obrigações: implementar `NUM` exige
 implementar todas as funções de `NUM`, `ORD` e `EQ` de uma vez. Quando `Int`
 implementa `NUM`, as funções de `ORD` e `EQ` são fornecidas como parte do mesmo
@@ -3063,6 +3075,19 @@ A linguagem oferece dois operadores de divisão com semântica distinta:
   internas unchecked (`bi_div`, `f_div`, `rat_div` em `core_internals.kata`)
   no braço `otherwise` — estas não competem no dispatch de `/` pois não são
   métodos de interface.
+* **`mod` (Resto):** Exige divisor `NonZero` como `/`. Definido como default
+  method da interface NUM (`a - b*(a/b)`) — funciona para Int (divisão
+  inteira exata) e Rational same-type. Para Float same-type, o default method
+  produz erro de precisão IEEE 754 (`10.0 - 3.0*3.333... = 0.0` em vez de
+  `1.0`), então o override em `Float implements NUM` usa truncagem:
+  `a - b*(float(int(a/b)))`. O mesmo padrão aplica-se a Rational same-type
+  e aos cross-type (`mod :: Float NonZero::Int`, `mod :: Rational
+  NonZero::Float`, etc.). Implementado em Kata puro, sem FFI adicional.
+* **Cross-type:** `/`, `div`, `mod` operam entre tipos numéricos distintos.
+  Dentro de `Float implements NUM`, overloads como `mod :: Float NonZero::Int
+  => Float` definem a operação entre Float e Int. A instanciação explícita
+  `NonZero::Int` qualifica qual instância da família polimórfica o divisor
+  pertence (ver §8).
 
 ### 22.2. Acesso Posicional: Sintaxe Uniforme, Retorno Distinto
 
