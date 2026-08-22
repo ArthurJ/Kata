@@ -171,6 +171,9 @@ Float implements NUM
     @ffi("kata_rt_fdiv")
     / :: Float NonZero => Float
 
+    mod :: Float NonZero => Float
+    lambda a b: - a (* b (float (int (/ a b))))
+
     # ── Cross-type: Float × Int → Float ──────────────────────────
     @commutative
     + :: Float Int => Float
@@ -184,6 +187,16 @@ Float implements NUM
     * :: Float Int => Float
     lambda f i: * f (float i)
 
+    # ── Cross-type: Float × Int → Float (divisão) ─────────────────
+    div :: Float Int => Result::(Float, Text)
+    lambda f i: div f (float i)
+
+    / :: Float NonZero::Int => Float
+    lambda f i: f_div f (float (i::Int))
+
+    mod :: Float NonZero::Int => Float
+    lambda f i: - f (* (float (int (/ f i))) i)
+
     # ── Cross-type: Float × Rational → Float ──────────────────────
     @commutative
     + :: Float Rational => Float
@@ -196,6 +209,16 @@ Float implements NUM
     @commutative
     * :: Float Rational => Float
     lambda f r: * f (float r)
+
+    # ── Cross-type: Float × Rational → Float (divisão) ────────────
+    div :: Float Rational => Result::(Float, Text)
+    lambda f r: div f (float r)
+
+    / :: Float NonZero::Rational => Float
+    lambda f r: f_div f (float (r::Rational))
+
+    mod :: Float NonZero::Rational => Float
+    lambda f r: - f (* (float (int (/ f r))) r)
 
     @ffi("kata_rt_fzero")
     zero :: Float => Float
@@ -261,6 +284,16 @@ Rational implements NUM
     * :: Rational Int => Rational
     lambda r i: * r (rational i)
 
+    # ── Cross-type: Rational × Int → Rational (divisão) ───────────
+    div :: Rational Int => Result::(Rational, Text)
+    lambda r i: div r (rational i)
+
+    / :: Rational NonZero::Int => Rational
+    lambda r i: rat_div r (rational (i::Int))
+
+    mod :: Rational NonZero::Int => Rational
+    lambda r i: - r (* (rational (int (/ r i))) i)
+
     # ── Cross-type: Rational × Float → Rational ──────────────────
     @commutative
     + :: Rational Float => Rational
@@ -273,6 +306,16 @@ Rational implements NUM
     @commutative
     * :: Rational Float => Rational
     lambda r f: * r (rational f)
+
+    # ── Cross-type: Rational × Float → Rational (divisão) ─────────
+    div :: Rational Float => Result::(Rational, Text)
+    lambda r f: div r (rational f)
+
+    / :: Rational NonZero::Float => Rational
+    lambda r f: rat_div r (rational (f::Float))
+
+    mod :: Rational NonZero::Float => Rational
+    lambda r f: - r (* (rational (int (/ r f))) f)
 
     @ffi("kata_rt_rat_zero")
     zero :: Rational => Rational
