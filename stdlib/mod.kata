@@ -1,0 +1,7 @@
+# stdlib/mod.kata — gateway da stdlib.
+# Import implícito em todo módulo do usuário.
+# Símbolos internos (core_internals: bi_div, f_div, rat_div) não são re-exportados.
+
+import core
+
+export Int Float Text Rational Unit Boolean Result Optional Encoding LogLevel FileMode SocketKind SocketMode Hook Target EQ ORD NUM SHOW ITERABLE COUNTABLE INDEXABLE CONTAINS HASHABLE STEPPABLE SLICEABLE NonZero min max and or not head tail cons float rational int byte bytes text int_to_text bool_to_text text_replace map filter fold union intersection difference insert remove xor _log_tag >> << _print _println echo panic input rand rand_int sleep log _log_publish open read readline write close listen
