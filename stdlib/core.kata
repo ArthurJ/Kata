@@ -66,6 +66,9 @@ interface NUM implements EQ
     mod :: Self NonZero => Self
     lambda a b: - a (* b (/ a b))
 
+    // :: Self NonZero => Int
+    lambda a b: int (/ a b)
+
     zero :: Self => Self
 
     abs :: Self => Self
@@ -119,6 +122,9 @@ Int implements NUM
 
     @ffi("kata_rt_bi_div")
     / :: Int NonZero => Int
+
+    @ffi("kata_rt_bi_div")
+    // :: Int NonZero => Int
 
     @ffi("kata_rt_bi_zero")
     zero :: Int => Int
@@ -220,6 +226,12 @@ Float implements NUM
     mod :: Float NonZero::Rational => Float
     lambda f r: - f (* (float (int (/ f r))) r)
 
+    // :: Float NonZero::Int => Int
+    lambda f i: int (/ f i)
+
+    // :: Float NonZero::Rational => Int
+    lambda f r: int (/ f r)
+
     @ffi("kata_rt_fzero")
     zero :: Float => Float
 
@@ -319,6 +331,12 @@ Rational implements NUM
 
     mod :: Rational NonZero::Float => Rational
     lambda r f: - r (* (rational (int (/ r f))) f)
+
+    // :: Rational NonZero::Int => Int
+    lambda r i: int (/ r i)
+
+    // :: Rational NonZero::Float => Int
+    lambda r f: int (/ r f)
 
     @ffi("kata_rt_rat_zero")
     zero :: Rational => Rational
