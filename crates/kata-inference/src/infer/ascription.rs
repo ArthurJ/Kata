@@ -52,9 +52,12 @@ pub(crate) fn infer_type_ascription(
                     Ty::Struct(StructKey::Family(n)) | Ty::Struct(StructKey::Plain(n))
                         if ctx.struct_registry.get(n).is_some_and(|si| si.is_instance_of.is_some())
                 );
-                let hint = if is_family_target { None } else { Some(&target_ty) };
-                let typed =
-                    infer_expr_hinted(&expr.node, &expr.span, env, ctx, false, hint)?;
+                let hint = if is_family_target {
+                    None
+                } else {
+                    Some(&target_ty)
+                };
+                let typed = infer_expr_hinted(&expr.node, &expr.span, env, ctx, false, hint)?;
                 (typed, false)
             }
         }
@@ -71,9 +74,12 @@ pub(crate) fn infer_type_ascription(
                 Ty::Struct(StructKey::Family(n)) | Ty::Struct(StructKey::Plain(n))
                     if ctx.struct_registry.get(n).is_some_and(|si| si.is_instance_of.is_some())
             );
-            let hint = if is_family_target { None } else { Some(&target_ty) };
-            let typed =
-                infer_expr_hinted(&expr.node, &expr.span, env, ctx, false, hint)?;
+            let hint = if is_family_target {
+                None
+            } else {
+                Some(&target_ty)
+            };
+            let typed = infer_expr_hinted(&expr.node, &expr.span, env, ctx, false, hint)?;
             (typed, false)
         }
     };
@@ -88,7 +94,7 @@ pub(crate) fn infer_type_ascription(
     // quando NonZero é família registrada, e `Plain("NonZero")` quando ainda
     // não foi registrada (pass0a). Ambos precisam ser tratados aqui.
     let target_ty = if let Ty::Struct(StructKey::Family(family_name))
-        | Ty::Struct(StructKey::Plain(family_name)) = &target_ty
+    | Ty::Struct(StructKey::Plain(family_name)) = &target_ty
     {
         if let Some(info) = ctx.struct_registry.get(family_name) {
             if info.is_instance_of.is_some() {
@@ -129,39 +135,37 @@ pub(crate) fn infer_type_ascription(
     // porque struct_registry.get("NonZero") retorna a família (sem
     // alias_of), não a instância específica.
     if let Ty::Struct(StructKey::Instance(family, concrete)) = &inner.ty
+        && let Some(inst_info) = ctx.struct_registry.get_instance(family, concrete)
     {
-        if let Some(inst_info) = ctx.struct_registry.get_instance(family, concrete)
-        {
-            let base_name = inst_info.alias_of.as_deref().unwrap_or(concrete);
-            let base_matches = match (&target_ty, base_name) {
-                (Ty::Prim(PrimTy::Int), "Int") => true,
-                (Ty::Prim(PrimTy::Float), "Float") => true,
-                (Ty::Prim(PrimTy::Rational), "Rational") => true,
-                (Ty::Prim(PrimTy::Text), "Text") => true,
-                (Ty::Struct(key), b) if key.name() == b => true,
-                _ => false,
-            };
-            if base_matches {
-                return Ok(TypedExpr {
-                    span: *span,
-                    ty: target_ty.clone(),
-                    tail_pos,
-                    escape: if ctx.ret_ty.is_some() {
-                        if tail_pos {
-                            EscapeTarget::Caller
-                        } else {
-                            EscapeTarget::Local
-                        }
-                    } else {
+        let base_name = inst_info.alias_of.as_deref().unwrap_or(concrete);
+        let base_matches = match (&target_ty, base_name) {
+            (Ty::Prim(PrimTy::Int), "Int") => true,
+            (Ty::Prim(PrimTy::Float), "Float") => true,
+            (Ty::Prim(PrimTy::Rational), "Rational") => true,
+            (Ty::Prim(PrimTy::Text), "Text") => true,
+            (Ty::Struct(key), b) if key.name() == b => true,
+            _ => false,
+        };
+        if base_matches {
+            return Ok(TypedExpr {
+                span: *span,
+                ty: target_ty.clone(),
+                tail_pos,
+                escape: if ctx.ret_ty.is_some() {
+                    if tail_pos {
                         EscapeTarget::Caller
-                    },
-                    kind: TypedExprKind::TypeAscription {
-                        expr: Box::new(Spanned::new(inner, expr.span)),
-                        target_ty,
-                        pending_predicates: Vec::new(),
-                    },
-                });
-            }
+                    } else {
+                        EscapeTarget::Local
+                    }
+                } else {
+                    EscapeTarget::Caller
+                },
+                kind: TypedExprKind::TypeAscription {
+                    expr: Box::new(Spanned::new(inner, expr.span)),
+                    target_ty,
+                    pending_predicates: Vec::new(),
+                },
+            });
         }
     }
 
