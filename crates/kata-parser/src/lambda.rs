@@ -77,6 +77,9 @@ impl Parser {
         let mut guards = Vec::new();
         let mut with_bindings = Vec::new();
         let mut last_body = None;
+        // Acumula expressões em body direto (sem guards) para produzir Expr::Block
+        // quando há múltiplas. Antes, só a última sobrevivia — bug do `let` em lambdas.
+        let mut body_stmts: Vec<Spanned<Expr>> = Vec::new();
 
         loop {
             // Skip StmtSep entre guard clauses
@@ -130,18 +133,33 @@ impl Parser {
                     body: guard_body,
                 });
             } else {
-                // Body direto sem guards — expressão única (seguida de `with` opcional)
+                // Body direto sem guards — expressão (seguida de `with` opcional).
+                // Acumula em body_stmts; se houver múltiplas, vira Expr::Block.
                 if matches!(self.peek(), Token::StmtSep) {
                     self.advance();
                 }
-                last_body = Some(cond);
+                body_stmts.push(cond);
             }
         }
 
         self.expect(&Token::Dedent, "DEDENT (fim dos guards)")?;
 
         // body é o último guard body (fallback) ou body direto quando não há guards.
-        let body = last_body.unwrap_or_else(|| Spanned::new(Expr::Unit, start));
+        // Se há múltiplas expressões em body direto (sem guards), produz Expr::Block.
+        let body = if !guards.is_empty() {
+            last_body.unwrap_or_else(|| Spanned::new(Expr::Unit, start))
+        } else if body_stmts.len() > 1 {
+            let span = body_stmts
+                .first()
+                .zip(body_stmts.last())
+                .map(|(f, l)| f.span.cover(l.span))
+                .unwrap_or(start);
+            Spanned::new(Expr::Block { stmts: body_stmts }, span)
+        } else if body_stmts.len() == 1 {
+            body_stmts.pop().unwrap()
+        } else {
+            Spanned::new(Expr::Unit, start)
+        };
 
         let end_span = self
             .tokens

@@ -226,7 +226,109 @@ fn lambda_with_block_multiple_bindings() {
     }
 }
 
-// ── Body direto sem guards + with (sem otherwise) ───────────────
+// ── `let` em lambdas: múltiplas expressões sem guards viram Expr::Block ──
+
+#[test]
+fn lambda_body_direct_multiple_exprs_produces_block() {
+    // Bug do `let` em lambdas: múltiplas expressões sem guards eram descartadas,
+    // só a última sobrevivia. Agora acumula em Expr::Block.
+    let src = "lambda x:\n    let doubled := * x 2\n    + x doubled";
+    let m = parse_src(src);
+    let item = first_item(&m);
+    match item {
+        Item::EntryExpr(e) => match &e.node {
+            Expr::Lambda {
+                guards,
+                body,
+                with_bindings,
+                ..
+            } => {
+                assert!(guards.is_empty(), "não deveria ter guards");
+                assert!(with_bindings.is_empty(), "não deveria ter with");
+                // Body deve ser Expr::Block com 2 stmts
+                match &body.node {
+                    Expr::Block { stmts } => {
+                        assert_eq!(stmts.len(), 2, "deveria ter 2 statements no block");
+                        // Primeiro stmt: let doubled := * x 2
+                        match &stmts[0].node {
+                            Expr::Let { name, .. } => {
+                                assert_eq!(name, "doubled");
+                            }
+                            other => panic!("expected Let as first stmt, got {other:?}"),
+                        }
+                        // Segundo stmt: + x doubled
+                        match &stmts[1].node {
+                            Expr::Apply { callee, args } => {
+                                assert_eq!(callee.node, Expr::Ident { name: "+".into() });
+                                assert_eq!(args.len(), 2);
+                            }
+                            other => panic!("expected Apply as second stmt, got {other:?}"),
+                        }
+                    }
+                    other => panic!("expected Block body, got {other:?}"),
+                }
+            }
+            other => panic!("expected Lambda, got {other:?}"),
+        },
+        other => panic!("expected EntryExpr(Lambda), got {other:?}"),
+    }
+}
+
+#[test]
+fn lambda_body_direct_single_expr_stays_inline() {
+    // Expressão única sem guards NÃO deve envolver em Block (mantém comportamento).
+    let src = "lambda x:\n    + x 1";
+    let m = parse_src(src);
+    let item = first_item(&m);
+    match item {
+        Item::EntryExpr(e) => match &e.node {
+            Expr::Lambda { guards, body, .. } => {
+                assert!(guards.is_empty());
+                // Body deve ser Apply direto, NÃO Block
+                match &body.node {
+                    Expr::Apply { callee, .. } => {
+                        assert_eq!(callee.node, Expr::Ident { name: "+".into() });
+                    }
+                    Expr::Block { stmts } => {
+                        panic!("single expr should not be wrapped in Block, got {} stmts", stmts.len());
+                    }
+                    other => panic!("expected Apply body, got {other:?}"),
+                }
+            }
+            other => panic!("expected Lambda, got {other:?}"),
+        },
+        other => panic!("expected EntryExpr(Lambda), got {other:?}"),
+    }
+}
+
+#[test]
+fn sig_clause_body_direct_multiple_exprs_produces_block() {
+    // Função nomeada com cláusula lambda com múltiplas expressões sem guards.
+    let src = "f :: Int => Int\nlambda x:\n    let doubled := * x 2\n    + x doubled";
+    let m = parse_src(src);
+    let item = first_item(&m);
+    match item {
+        Item::Sig { name, body, .. } => {
+            assert_eq!(name, "f");
+            let clauses = body.as_ref().expect("body should have clauses");
+            assert_eq!(clauses.len(), 1);
+            let clause = &clauses[0].node;
+            assert!(clause.guards.is_empty(), "não deveria ter guards");
+            // Body deve ser Expr::Block com 2 stmts
+            match &clause.body.node {
+                Expr::Block { stmts } => {
+                    assert_eq!(stmts.len(), 2, "deveria ter 2 statements no block");
+                    match &stmts[0].node {
+                        Expr::Let { name, .. } => assert_eq!(name, "doubled"),
+                        other => panic!("expected Let, got {other:?}"),
+                    }
+                }
+                other => panic!("expected Block body, got {other:?}"),
+            }
+        }
+        other => panic!("expected Sig, got {other:?}"),
+    }
+}
 
 #[test]
 fn lambda_body_direct_with_block_no_guards() {
