@@ -1,6 +1,6 @@
 # TODO — Kata-Lang
 
-Único arquivo de pendências. Atualizado 2026-08-20.
+Único arquivo de pendências. Atualizado 2026-08-22.
 
 Os docs `TODO-*.md` foram removidos (obsoletos ou resolvidos). Pendências vivem aqui.
 
@@ -106,6 +106,32 @@ automaticamente `NUM`, `EQ`, `+`, `show`, etc.). O que falta:
 **Impacto:** Médio-alto. Resolve a visibilidade de funções internas,
 unifica prelude e módulos no mesmo caminho de código, e prepara para
 múltiplos módulos stdlib (math, complex, stdio) com visibilidade controlada.
+
+---
+
+### `with` sem guards não é aceito pelo parser
+
+**Estado:** O bloco `with` (computações prévias nomeadas para Guards) só é
+aceito pelo parser quando a lambda tem guards explícitos (`>= ...`/`otherwise:`).
+Uma lambda com body direto seguido de `with` — `lambda z: expr\n    with\n        x := ...` —
+causa `parse.unexpected_token: esperado expression, encontrado <INDENT>`.
+
+O `with` funciona corretamente em:
+- Lambdas com guards (top-level e dentro de `implements`)
+- Lambdas com `otherwise:` como único guard
+
+O `with` NÃO funciona em:
+- Lambdas com body direto (sem guards) — `lambda z: expr\n    with ...`
+
+**Impacto:** Médio. Qualquer função que precise de `with` mas não tem
+condicionais é forçada a usar `otherwise: expr` como guard único (hack
+semântico — `otherwise` sempre é verdadeiro). Funções afetadas em `math.kata`:
+`log`, `cbrt`, `asin`, `acos`, `atan`, `atanh` Complex — todas usam
+`otherwise:` como workaround.
+
+**Investigar:** Se o parser deve aceitar `with` após body direto (sem guards),
+ou se `otherwise:` é o caminho canônico e o manual/ref deve ser atualizado para
+refletir isso. Confirmar se é limitação intencional da gramática ou bug.
 
 ---
 

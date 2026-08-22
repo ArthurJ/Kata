@@ -2,6 +2,7 @@
 # Demonstra FFI para funções de f64 do Rust.
 
 import core
+import complex
 
 # ── Constantes ──────────────────────────────────────────────────
 
@@ -63,6 +64,217 @@ log10 :: Float => Float
 @ffi("kata_rt_exp")
 exp :: Float => Float
 
+# ── Sobrecargas Int → Float ─────────────────────────────────────
+# Convertem Int para Float (função pura) e delegam para a FFI Float.
+# float :: Int => Float é @ffi("kata_rt_int_to_float") — função pura,
+# não action, pode ser chamada dentro de lambda.
+
+sin :: Int => Float
+lambda n: sin (float n)
+
+cos :: Int => Float
+lambda n: cos (float n)
+
+tan :: Int => Float
+lambda n: tan (float n)
+
+asin :: Int => Float
+lambda n: asin (float n)
+
+acos :: Int => Float
+lambda n: acos (float n)
+
+atan :: Int => Float
+lambda n: atan (float n)
+
+atan2 :: Int Int => Float
+lambda y x: atan2 (float y) (float x)
+
+sinh :: Int => Float
+lambda n: sinh (float n)
+
+cosh :: Int => Float
+lambda n: cosh (float n)
+
+tanh :: Int => Float
+lambda n: tanh (float n)
+
+sqrt :: Int => Float
+lambda n: sqrt (float n)
+
+cbrt :: Int => Float
+lambda n: cbrt (float n)
+
+log :: Int => Float
+lambda n: log (float n)
+
+log2 :: Int => Float
+lambda n: log2 (float n)
+
+log10 :: Int => Float
+lambda n: log10 (float n)
+
+exp :: Int => Float
+lambda n: exp (float n)
+
+# ── Sobrecargas Rational → Float ────────────────────────────────
+# Convertem Rational para Float (função pura) e delegam para a FFI Float.
+# float :: Rational => Float é @ffi("kata_rt_rat_to_float") — função pura.
+
+sin :: Rational => Float
+lambda r: sin (float r)
+
+cos :: Rational => Float
+lambda r: cos (float r)
+
+tan :: Rational => Float
+lambda r: tan (float r)
+
+asin :: Rational => Float
+lambda r: asin (float r)
+
+acos :: Rational => Float
+lambda r: acos (float r)
+
+atan :: Rational => Float
+lambda r: atan (float r)
+
+atan2 :: Rational Rational => Float
+lambda y x: atan2 (float y) (float x)
+
+sinh :: Rational => Float
+lambda r: sinh (float r)
+
+cosh :: Rational => Float
+lambda r: cosh (float r)
+
+tanh :: Rational => Float
+lambda r: tanh (float r)
+
+sqrt :: Rational => Float
+lambda r: sqrt (float r)
+
+cbrt :: Rational => Float
+lambda r: cbrt (float r)
+
+log :: Rational => Float
+lambda r: log (float r)
+
+log2 :: Rational => Float
+lambda r: log2 (float r)
+
+log10 :: Rational => Float
+lambda r: log10 (float r)
+
+exp :: Rational => Float
+lambda r: exp (float r)
+
+# ── Sobrecargas Complex → Complex ───────────────────────────────
+# Trigonometria complexa. z = x + yi. Fórmulas de Euler / identidades
+# hiperbólicas. Usam apenas +, -, * (Complex) e sin/cos/sinh/cosh/exp (Float).
+
+sin :: Complex => Complex
+lambda z: Complex (* (sin z.re) (cosh z.im)) (* (cos z.re) (sinh z.im))
+
+cos :: Complex => Complex
+lambda z: Complex (* (cos z.re) (cosh z.im)) (* -1.0 (* (sin z.re) (sinh z.im)))
+
+tan :: Complex => Complex
+lambda z: div (sin z) (cos z) | Complex 0.0 0.0
+
+sinh :: Complex => Complex
+lambda z: Complex (* (sinh z.re) (cos z.im)) (* (cosh z.re) (sin z.im))
+
+cosh :: Complex => Complex
+lambda z: Complex (* (cosh z.re) (cos z.im)) (* (sinh z.re) (sin z.im))
+
+tanh :: Complex => Complex
+lambda z: div (sinh z) (cosh z) | Complex 0.0 0.0
+
+exp :: Complex => Complex
+lambda z: Complex (* (exp z.re) (cos z.im)) (* (exp z.re) (sin z.im))
+
+# sqrt Complex — raiz principal.
+# r = |z| = norm z. sqrt(z) = sqrt((r+x)/2) + i·sign(y)·sqrt((r-x)/2).
+# Multiplicar por 0.5 evita divisão. sign(y) via guards: y >= 0 → +, y < 0 → -.
+sqrt :: Complex => Complex
+lambda z:
+    >= z.im 0.0: Complex (sqrt (* (+ r z.re) 0.5)) (sqrt (* (- r z.re) 0.5))
+    otherwise: Complex (sqrt (* (+ r z.re) 0.5)) (* -1.0 (sqrt (* (- r z.re) 0.5)))
+    with
+        r := norm z
+
+# log Complex — logaritmo natural complexo.
+# log(z) = ln|z| + i·arg(z), onde |z| = norm z, arg(z) = atan2(y, x).
+log :: Complex => Complex
+lambda z: Complex (log (norm z)) (atan2 z.im z.re)
+
+# log2/log10 Complex — derivam de log por mudança de base.
+log2 :: Complex => Complex
+lambda z: div (log z) (complex (log 2.0)) | Complex 0.0 0.0
+
+log10 :: Complex => Complex
+lambda z: div (log z) (complex (log 10.0)) | Complex 0.0 0.0
+
+# cbrt Complex — cbrt(z) = exp(log(z)/3).
+cbrt :: Complex => Complex
+lambda z: exp (div (log z) (Complex 3.0 0.0) | Complex 0.0 0.0)
+
+# ── Inversas Complex → Complex ──────────────────────────────────
+# Usam sqrt e log Complex (definidos acima) + div Complex.
+# iz = Complex (-y) x (rotação 90°). i·w = Complex (-w.im) w.re.
+# -i·w = Complex w.im (-w.re). (i/2)·w = Complex (* w.im -0.5) (* w.re -0.5).
+
+# asin(z) = -i·log(iz + sqrt(1 - z²))
+# iz = Complex (* -1.0 z.im) z.re. -i·w = Complex w.im (* -1.0 w.re).
+asin :: Complex => Complex
+lambda z:
+    otherwise: Complex w.im (* -1.0 w.re)
+    with
+        w := log (+ (Complex (* -1.0 z.im) z.re) (sqrt (- (Complex 1.0 0.0) (* z z))))
+
+# acos(z) = -i·log(z + i·sqrt(1 - z²))
+# i·s = Complex (* -1.0 s.im) s.re. -i·w = Complex w.im (* -1.0 w.re).
+acos :: Complex => Complex
+lambda z:
+    otherwise: Complex w.im (* -1.0 w.re)
+    with
+        s := sqrt (- (Complex 1.0 0.0) (* z z))
+        w := log (+ z (Complex (* -1.0 s.im) s.re))
+
+# atan(z) = (i/2)·(log(1 - iz) - log(1 + iz))
+# iz = Complex (* -1.0 z.im) z.re. (i/2)·w = Complex (* w.im -0.5) (* w.re 0.5).
+atan :: Complex => Complex
+lambda z:
+    otherwise: Complex (* w.im -0.5) (* w.re 0.5)
+    with
+        w := - (log (- (Complex 1.0 0.0) (Complex (* -1.0 z.im) z.re))) (log (+ (Complex 1.0 0.0) (Complex (* -1.0 z.im) z.re)))
+
+# asinh(z) = log(z + sqrt(z² + 1))
+asinh :: Complex => Complex
+lambda z: log (+ z (sqrt (+ (* z z) (Complex 1.0 0.0))))
+
+# acosh(z) = log(z + sqrt(z+1)·sqrt(z-1))
+acosh :: Complex => Complex
+lambda z: log (+ z (* (sqrt (+ z (Complex 1.0 0.0))) (sqrt (- z (Complex 1.0 0.0)))))
+
+# atanh(z) = (1/2)·(log(1+z) - log(1-z))
+# (1/2)·w = Complex (* w.re 0.5) (* w.im 0.5).
+atanh :: Complex => Complex
+lambda z:
+    otherwise: Complex (* w.re 0.5) (* w.im 0.5)
+    with
+        w := - (log (+ (Complex 1.0 0.0) z)) (log (- (Complex 1.0 0.0) z))
+
+# ── Sobrecargas Complex → Float ─────────────────────────────────
+# norm(z) = |z| = sqrt(x² + y²) — módulo do complexo.
+norm :: Complex => Float
+lambda z: sqrt (+ (* z.re z.re) (* z.im z.im))
+
+# arg(z) = atan2(y, x) — argumento (fase) do complexo.
+arg :: Complex => Float
+lambda z: atan2 z.im z.re
+
 # ── Floor e ceil (Float → Int) ──────────────────────────────────
 
 @ffi("kata_rt_floor")
@@ -87,4 +299,4 @@ signum :: Int => Int
 
 # ── Exports ─────────────────────────────────────────────────────
 
-export pi euler phi sin cos tan asin acos atan atan2 sinh cosh tanh sqrt cbrt log log2 log10 exp floor ceil gcd lcm pow signum
+export pi euler phi sin cos tan asin acos atan atan2 sinh cosh tanh sqrt cbrt log log2 log10 exp floor ceil gcd lcm pow signum norm arg asinh acosh atanh Complex

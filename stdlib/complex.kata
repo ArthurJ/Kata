@@ -15,6 +15,14 @@ Complex implements NUM
     lambda a b: Complex (- a.re b.re) (- a.im b.im)
     * :: Complex Complex => Complex
     lambda a b: Complex (- (* a.re b.re) (* a.im b.im)) (+ (* a.re b.im) (* a.im b.re))
+    div :: Complex Complex => Result::(Complex, Text)
+    lambda a b:
+        = denom 0.0: core.Result::Err "divisão por zero"
+        otherwise: core.Result::Ok (Complex (div nr denom | 0.0) (div ni denom | 0.0))
+        with
+            denom := + (* b.re b.re) (* b.im b.im)
+            nr := + (* a.re b.re) (* a.im b.im)
+            ni := - (* a.im b.re) (* a.re b.im)
 
 Complex implements EQ
     = :: Complex Complex => Boolean
