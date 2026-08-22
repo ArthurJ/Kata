@@ -2,12 +2,15 @@
 
 ## Status
 
-**Status:** Fases 1-7 COMPLETAS e testadas (1751 passed, 0 failed, 1 ignored).
+**Status:** Fases 1-8 COMPLETAS e testadas (1751 passed, 0 failed, 1 ignored).
 `StructKey::Family` + `Instance` implementadas, `resolve_type_expr` family-aware,
 `Self` em interface NUM, two-pass no pass0 (0a registra interfaces/impls,
 0b resolve assinaturas), `instantiate_family_for_concrete` resolve
 `Family→Instance` no implements, `expand_family_signatures` só expande
 Signatures FFI (FunctionDefs mantêm `Family` para dispatch no call-site).
+Fase 8: `/`, `div`, `mod` cross-type com `NonZero::Int` (instanciação explícita
+de família em type expressions), ascription `Family→Instance`, default method
+coexiste com cross-type overloads, `mod` Float/Rational com truncagem.
 Stdlib migrada: `/` e `mod` exigem `NonZero`, `div` retorna `Result`,
 FFI unchecked em `stdlib/core_internals.kata` (`bi_div`/`f_div`/`rat_div`).
 Exemplos e testes migrados. `examples/legacy/` excluído do snapshot test.
@@ -287,6 +290,27 @@ no contexto do implements.
   - Ou: `zero` para Float poderia retornar NaN? Não — zero é 0.0, NaN é outro
     conceito. O predicado `= _ _` é o correto para rejeitar NaN.
 - Testes E2E: `NonZero(0.0)` → Err, `NonZero(NaN)` → Err (via `= NaN NaN` → False)
+
+### Fase 8: `/`, `div`, `mod` cross-type com NonZero qualificado — COMPLETA
+
+Interoperabilidade cross-type de divisão entre Int, Float, Rational. `+`, `-`,
+`*` cross-type já completo (Fase 7). Esta fase adiciona `/`, `div`, `mod`.
+
+- **Sintaxe `NonZero::Int`**: instanciação explícita de família polimórfica em
+  type expressions. O parser já produzia `ParamApp { name: "NonZero", params:
+  [Named("Int")] }` via `::`. Implementado: `resolve_type_expr` resolve
+  `ParamApp` → `Instance("NonZero", "Int")` quando `name` é família registrada.
+- **Ascription `Family→Instance`**: `3::NonZero` promove `Family("NonZero")`
+  → `Instance("NonZero", "Int")` baseado no tipo primitivo do inner. Antes só
+  verificava `StructKey::Plain`; agora também trata `Family`.
+- **Default method coexiste com cross-type**: `defined_names` comparava só nome
+  — `mod` cross-type pulava o default method same-type. Agora compara nome +
+  param_types: só pula se o impl define o mesmo método com os mesmos tipos.
+- **`mod` Float/Rational com truncagem**: `a - b*(a/b)` dá `0.0` para Float em
+  IEEE 754 (`10.0 - 3.0*3.333... = 0.0`). Solução: `a - b*(float(int(a/b)))` —
+  truncagem elimina o erro de precisão. Override do default method para Float
+  same-type; cross-type segue o mesmo padrão com conversão apropriada.
+- **Sem FFI nova**: `mod` implementado em Kata puro, sem `kata_rt_fmod`.
 
 ## 5. Escopo e não-escopo
 
