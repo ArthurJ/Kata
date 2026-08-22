@@ -76,7 +76,10 @@ fn partial_dispatch_plus_hole_int() {
             overloads: vec![
                 (vec![Ty::int()], Ty::int()),
                 (vec![Ty::float()], Ty::float()),
-                (vec![Ty::Prim(kata_core::ty::PrimTy::Rational)], Ty::Prim(kata_core::ty::PrimTy::Rational)),
+                (
+                    vec![Ty::Prim(kata_core::ty::PrimTy::Rational)],
+                    Ty::Prim(kata_core::ty::PrimTy::Rational)
+                ),
             ],
         },
         "+ _ 10 deve ter tipo OverloadSet(+, [Int], [Float], [Rational])"
@@ -191,7 +194,10 @@ fn partial_dispatch_plus_rational_hole() {
         Ty::OverloadSet {
             name: "+".to_string(),
             overloads: vec![
-                (vec![Ty::Prim(kata_core::ty::PrimTy::Rational)], Ty::Prim(kata_core::ty::PrimTy::Rational)),
+                (
+                    vec![Ty::Prim(kata_core::ty::PrimTy::Rational)],
+                    Ty::Prim(kata_core::ty::PrimTy::Rational)
+                ),
                 (vec![Ty::int()], Ty::Prim(kata_core::ty::PrimTy::Rational)),
                 (vec![Ty::float()], Ty::Prim(kata_core::ty::PrimTy::Rational)),
             ],

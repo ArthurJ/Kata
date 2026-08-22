@@ -8,13 +8,13 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 use kata_ast::{Expr, GuardClause, Pattern, Span, Spanned, TypeExpr, WithBinding};
+use kata_core::StructKey;
 use kata_core::dispatch::{DispatchTable, match_score};
 use kata_core::enum_registry::EnumRegistry;
 use kata_core::escape::EscapeTarget;
 use kata_core::interface_registry::InterfaceRegistry;
 use kata_core::struct_registry::StructRegistry;
 use kata_core::ty::{Ty, TypeEnv};
-use kata_core::StructKey;
 use kata_diagnostics::MiddleError;
 use kata_resolution::RefinedDeclInfo;
 
@@ -139,11 +139,10 @@ pub(crate) fn fits_return(actual: &Ty, declared: &Ty) -> bool {
         // Instance de família polimórfica é compatível com Family da mesma família.
         // Ex: construtor NonZeroPoly(3) retorna Result::(Instance("NonZeroPoly", "Int"), Text),
         // mas a action declara Result::(NonZeroPoly, Text) onde NonZeroPoly resolve para Family.
-        (Ty::Struct(StructKey::Instance(family, _)), Ty::Struct(StructKey::Family(decl_family)))
-            if family == decl_family =>
-        {
-            true
-        }
+        (
+            Ty::Struct(StructKey::Instance(family, _)),
+            Ty::Struct(StructKey::Family(decl_family)),
+        ) if family == decl_family => true,
         (Ty::Generic(n1, a1), Ty::Generic(n2, a2)) if n1 == n2 && a1.len() == a2.len() => {
             a1.iter().zip(a2).all(|(x, y)| fits_return(x, y))
         }
