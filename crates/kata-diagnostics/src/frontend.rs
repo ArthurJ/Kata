@@ -112,4 +112,12 @@ pub enum FrontendError {
         #[label("pipe limitado inválido")]
         span: MietteSpan,
     },
+
+    #[error("nome `{name}` é reservado: identificadores começando com `__` são de uso exclusivo do compilador")]
+    #[diagnostic(code = "parse.reserved_name")]
+    ReservedName {
+        name: String,
+        #[label("nome reservado")]
+        span: MietteSpan,
+    },
 }

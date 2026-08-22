@@ -126,10 +126,7 @@ impl Parser {
                     let span = self.peek_span();
                     let n = s.clone();
                     self.advance();
-                    // Validar casing apenas para nomes alfabéticos (não símbolos como +, -, *)
-                    if n.chars().next().is_some_and(|c| c.is_alphabetic()) {
-                        self.validate_name(&n, CasingPattern::SnakeCase, span)?;
-                    }
+                    self.validate_name(&n, CasingPattern::SnakeCase, span)?;
                     n
                 }
                 _ => return Err(self.error("method name in interface")),
@@ -358,9 +355,7 @@ impl Parser {
                         let span = self.peek_span();
                         let n = s.clone();
                         self.advance();
-                        if n.chars().next().is_some_and(|c| c.is_alphabetic()) {
-                            self.validate_name(&n, CasingPattern::SnakeCase, span)?;
-                        }
+                        self.validate_name(&n, CasingPattern::SnakeCase, span)?;
                         n
                     }
                     _ => return Err(self.error("method name in implements")),
@@ -484,9 +479,7 @@ impl Parser {
                         let span = self.peek_span();
                         let n = s.clone();
                         self.advance();
-                        if n.chars().next().is_some_and(|c| c.is_alphabetic()) {
-                            self.validate_name(&n, CasingPattern::SnakeCase, span)?;
-                        }
+                        self.validate_name(&n, CasingPattern::SnakeCase, span)?;
                         n
                     }
                     _ => return Err(self.error("method name in refines")),

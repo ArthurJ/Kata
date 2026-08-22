@@ -198,3 +198,31 @@ fn invalid_casing_message_content() {
         other => panic!("expected InvalidCasing, got {other:?}"),
     }
 }
+
+// ── Nomes reservados (__prefix) ──────────────────────────────────
+
+#[test]
+fn action_name_double_underscore_fails() {
+    let err = parse_err("action __foo (x::Int) => Int\n    x");
+    assert!(matches!(err, FrontendError::ReservedName { ref name, .. } if name == "__foo"));
+}
+
+#[test]
+fn sig_name_double_underscore_fails() {
+    let err = parse_err("__foo :: Int => Int");
+    assert!(matches!(err, FrontendError::ReservedName { ref name, .. } if name == "__foo"));
+}
+
+#[test]
+fn data_name_double_underscore_fails() {
+    let err = parse_err("data __Foo (x::Int)");
+    assert!(matches!(err, FrontendError::ReservedName { ref name, .. } if name == "__Foo"));
+}
+
+#[test]
+fn single_underscore_prefix_ok() {
+    // _print começa com _ (não __) — é válido
+    let src = "@ffi(\"kata_rt_print\")\naction _print (msg::Text) => Unit";
+    let tokens = lex(src).unwrap();
+    parse(tokens).unwrap();
+}

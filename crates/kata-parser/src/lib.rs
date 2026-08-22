@@ -114,15 +114,31 @@ impl Parser {
         }
     }
 
-    /// Valida casing de `name` contra `expected`. Se inválido, retorna
+    /// Valida `name` contra `expected`. Se inválido, retorna
     /// `FrontendError::InvalidCasing` com o span do nome.
+    ///
+    /// Nomes começando com `__` são rejeitados (`ReservedName`) — são
+    /// reservados para símbolos gerados pelo compilador.
+    ///
+    /// A validação de casing só se aplica a nomes alfabéticos (não símbolos
+    /// como `+`, `-`, `*`). Nomes começando com `_` são válidos em snake_case.
     pub(crate) fn validate_name(
         &self,
         name: &str,
         expected: CasingPattern,
         span: Span,
     ) -> Result<(), FrontendError> {
-        validate_casing(name, expected, span)
+        if name.starts_with("__") {
+            return Err(FrontendError::ReservedName {
+                name: name.to_string(),
+                span: span.into(),
+            });
+        }
+        // Casing só para nomes alfabéticos (não símbolos como +, -, *).
+        if name.chars().next().is_some_and(|c| c.is_alphabetic()) {
+            validate_casing(name, expected, span)?;
+        }
+        Ok(())
     }
 }
 
