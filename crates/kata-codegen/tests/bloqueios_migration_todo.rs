@@ -195,7 +195,8 @@ constant a := 5::PositiveInt
 // BLOQUEIO 2: mod/and em lambdas (collect_free_vars bug)
 // ═══════════════════════════════════════════════════════════════════════
 
-/// * em função nomeada (não captura nada). `*` é primitivo (Self Self => Self).
+/// `*` em função nomeada (não captura nada). `*` é primitivo (Self Self => Self).
+///
 /// Se collect_free_vars marcar `*` como free var, o codegen falha.
 /// Este teste verifica que `*` NÃO é marcada como free var.
 #[test]
