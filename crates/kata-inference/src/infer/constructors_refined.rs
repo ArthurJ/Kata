@@ -24,7 +24,7 @@ use kata_ast::{Expr, Span, Spanned};
 use kata_core::StructKey;
 use kata_core::dispatch::{DispatchTable, OverloadInfo};
 use kata_core::escape::EscapeTarget;
-use kata_core::ty::{Ty, TypeEnv};
+use kata_core::ty::{PrimTy, Ty, TypeEnv};
 use kata_resolution::RefinedDeclInfo;
 
 use crate::desugar;
@@ -77,9 +77,21 @@ pub(crate) fn synthesize_refined(
         }
 
         // Registra smart constructor falível: TypeName :: base_ty => Result::(TypeName, Text)
-        // Famílias polimórficas usam Family(name); refineds concretos usam Plain(name).
+        // Famílias polimórficas usam Instance(name, concrete) derivado do base_ty;
+        // refineds concretos usam Plain(name).
         let type_key = if struct_registry.is_family(&decl.name) {
-            StructKey::Family(decl.name.clone())
+            let concrete = match &decl.base_ty {
+                Ty::Prim(PrimTy::Int) => "Int",
+                Ty::Prim(PrimTy::Float) => "Float",
+                Ty::Prim(PrimTy::Rational) => "Rational",
+                Ty::Prim(PrimTy::Text) => "Text",
+                _ => "",
+            };
+            if concrete.is_empty() {
+                StructKey::Family(decl.name.clone())
+            } else {
+                StructKey::Instance(decl.name.clone(), concrete.to_string())
+            }
         } else {
             StructKey::Plain(decl.name.clone())
         };
@@ -171,9 +183,21 @@ pub(crate) fn synthesize_refined(
         }
 
         // ── 2b. Sintetiza smart constructor falível ──
-        // Famílias polimórficas usam Family(name); refineds concretos usam Plain(name).
+        // Famílias polimórficas usam Instance(name, concrete) derivado do base_ty;
+        // refineds concretos usam Plain(name).
         let type_key = if struct_registry.is_family(&decl.name) {
-            StructKey::Family(decl.name.clone())
+            let concrete = match &decl.base_ty {
+                Ty::Prim(PrimTy::Int) => "Int",
+                Ty::Prim(PrimTy::Float) => "Float",
+                Ty::Prim(PrimTy::Rational) => "Rational",
+                Ty::Prim(PrimTy::Text) => "Text",
+                _ => "",
+            };
+            if concrete.is_empty() {
+                StructKey::Family(decl.name.clone())
+            } else {
+                StructKey::Instance(decl.name.clone(), concrete.to_string())
+            }
         } else {
             StructKey::Plain(decl.name.clone())
         };

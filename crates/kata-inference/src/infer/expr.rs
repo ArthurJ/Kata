@@ -14,6 +14,7 @@ use kata_core::escape::EscapeTarget;
 use kata_core::interface_registry::InterfaceRegistry;
 use kata_core::struct_registry::StructRegistry;
 use kata_core::ty::{Ty, TypeEnv};
+use kata_core::StructKey;
 use kata_diagnostics::MiddleError;
 use kata_resolution::RefinedDeclInfo;
 
@@ -132,6 +133,14 @@ pub(crate) fn fits_return(actual: &Ty, declared: &Ty) -> bool {
         // is a bottom/divergent expression — accept regardless of declared return type.
         (Ty::Generic(n, args), _)
             if n == "Result" && args.len() == 2 && matches!(args[0], Ty::Var(_)) =>
+        {
+            true
+        }
+        // Instance de família polimórfica é compatível com Family da mesma família.
+        // Ex: construtor NonZeroPoly(3) retorna Result::(Instance("NonZeroPoly", "Int"), Text),
+        // mas a action declara Result::(NonZeroPoly, Text) onde NonZeroPoly resolve para Family.
+        (Ty::Struct(StructKey::Instance(family, _)), Ty::Struct(StructKey::Family(decl_family)))
+            if family == decl_family =>
         {
             true
         }
