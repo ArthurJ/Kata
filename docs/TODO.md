@@ -30,28 +30,20 @@ signatures/functions do mesmo módulo).
 
 ### Parser deve validar que `refines` só aceita interface
 
-**Estado:** `refines` deve SEMPRE ser sucedido de uma interface. Qualquer
-coisa diferente (família, tipo concreto, outra refined) deve ser erro de
-sintaxe. `PositiveInt refines NonZero` (família refina família) é ilegal.
-O parser atual não valida isto — precisa adicionar check semântico (em pass0
-ou no parser) que rejeita `refines <não-interface>` com erro claro.
-
-**Impacto:** Baixo. `refines` em família já causa erro de dispatch
-(comportamento correto), mas a mensagem é confusa — um erro de sintaxe
-na declaração seria mais claro.
+**Estado:** RESOLVIDO. Validação post-merge em `infer/mod.rs` verifica se
+`interface_name` está registrada no `interface_registry` via `get_interface()`.
+Se não existe, retorna erro claro: "não é uma interface — `refines` só aceita
+interfaces, não famílias ou tipos concretos". O `eprintln!` de warning em
+`pass0.rs` foi removido — a validação post-merge cobre ambos os casos.
 
 ---
 
 ### Parser deve rejeitar nomes de função/action começando com `__`
 
-**Estado:** `__` é prefixo reservado para símbolos gerados pelo compilador
-(`__kata_fn_N`, `__kata_entry`, `__kata_test_*`, `__kata_show__*`,
-`__pred_*`, `__local__`, etc.). Funções/actions definidas pelo usuário
-NÃO devem começar com `__` — colidem com o namespace do compilador. O
-parser atual não valida isto.
-
-**Impacto:** Baixo. Colisão real é improvável (usuário raramente usa `__`),
-mas a validação é trivial e preventiva.
+**Estado:** RESOLVIDO. `validate_name` agora rejeita nomes começando com `__`
+via `FrontendError::ReservedName`. O guard `is_alphabetic` foi internalizado
+em `validate_name` — todos os sites de declaração chamam `validate_name`
+incondicionalmente.
 
 ---
 
