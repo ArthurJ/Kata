@@ -96,7 +96,15 @@ pub fn infer_module(
     let mut signatures = resolved.signatures.clone();
     let functions = resolved.functions.clone();
     kata_resolution::expand_family_signatures(&mut signatures, &resolved.struct_registry);
-    let mut dispatch_table = populate_dispatch_table(&signatures);
+
+    // internal_signatures: dependências de corpos de funções exportadas
+    // que não são exportadas (ex: bi_div usada por div). Populadas no
+    // DispatchTable para a Fase 1 (inferir funções do prelude), removidas
+    // antes da Fase 2 (inferir Actions e EntryExpr do usuário).
+    let internal_signatures = resolved.internal_signatures.clone();
+    let mut all_signatures = signatures.clone();
+    all_signatures.extend(internal_signatures.clone());
+    let mut dispatch_table = populate_dispatch_table(&all_signatures);
 
     // Clone mutável do InterfaceRegistry — a síntese de `show` registra
     // impls de SHOW para structs e enums aqui, e o typeck (InferCtx)
@@ -329,6 +337,15 @@ pub fn infer_module(
             "__local__",
         );
         typed_functions.push(typed_func);
+    }
+
+    // ── Fase 2: remover internal_signatures do DispatchTable ──
+    // As signatures internas (ex: bi_div) só eram necessárias para
+    // inferir os corpos das funções do prelude (Fase 1). Agora, antes
+    // de inferir Actions e EntryExpr do usuário, removemos para que o
+    // usuário não possa chamá-las.
+    for sig in &internal_signatures {
+        dispatch_table.remove(&sig.name);
     }
 
     // 3a. Processa Actions. Cada Action é inferida com os tipos

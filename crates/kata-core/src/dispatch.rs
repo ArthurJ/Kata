@@ -196,6 +196,13 @@ impl DispatchTable {
         self.entries.contains_key(name)
     }
 
+    /// Remove todas as overloads de um nome. Usado para remover
+    /// signatures internas após inferir funções do prelude.
+    pub fn remove(&mut self, name: &str) {
+        self.entries.remove(name);
+        self.commutative.remove(name);
+    }
+
     /// Retorna todas as overloads de um nome.
     pub fn get_overloads(&self, name: &str) -> Option<&Vec<OverloadInfo>> {
         self.entries.get(name)
