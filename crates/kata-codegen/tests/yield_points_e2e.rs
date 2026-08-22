@@ -103,7 +103,7 @@ fn untag_smi(raw: i64) -> i64 {
 }
 
 /// Sentinel de deadlock retornado por `kata_rt_run`.
-const DEADLOCK_SENTINEL: i64 = i64::MIN + 1;
+use kata_rt::DEADLOCK_SENTINEL;
 
 // ── Teste 1: loop simples sem outras fibers — yield_check é no-op ──
 
