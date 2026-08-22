@@ -50,8 +50,7 @@ fn instantiate_family_for_concrete(
         // declarado depois de interface NUM). Se o nome é família
         // registrada agora, instanciar para o tipo concreto.
         Ty::Struct(StructKey::Plain(name)) => {
-            if struct_reg.is_family(name)
-                && struct_reg.get_instance(name, concrete_type).is_some()
+            if struct_reg.is_family(name) && struct_reg.get_instance(name, concrete_type).is_some()
             {
                 Ty::Struct(StructKey::Instance(name.clone(), concrete_type.to_string()))
             } else {
@@ -170,17 +169,13 @@ pub(crate) fn run_pass0(
     /// InterfaceDecl deferido — coletado no passo 0a, resolvido no 0b.
     struct DeferredInterface {
         name: String,
-        supertraits: Vec<String>,
-        type_params: Vec<String>,
         signatures: Vec<kata_ast::InterfaceSig>,
     }
 
     /// ImplementsDecl deferido — coletado no passo 0a, resolvido no 0b.
     struct DeferredImpl {
         type_name: String,
-        type_params: Vec<String>,
         interface_name: String,
-        iface_params: Vec<String>,
         methods: Vec<kata_ast::ImplMethod>,
     }
 
@@ -210,8 +205,6 @@ pub(crate) fn run_pass0(
                 }
                 deferred_interfaces.push(DeferredInterface {
                     name: name.clone(),
-                    supertraits: supertraits.clone(),
-                    type_params: type_params.clone(),
                     signatures: iface_sigs.clone(),
                 });
             }
@@ -236,9 +229,7 @@ pub(crate) fn run_pass0(
                 }
                 deferred_impls.push(DeferredImpl {
                     type_name: type_name.clone(),
-                    type_params: type_params.clone(),
                     interface_name: interface_name.clone(),
-                    iface_params: iface_params.clone(),
                     methods: methods.clone(),
                 });
             }
@@ -625,10 +616,6 @@ pub(crate) fn run_pass0(
                     });
                 }
             }
-            // InterfaceDecl e ImplementsDecl já foram registrados no
-            // passo 0a com signatures/methods vazios. A resolução das
-            // assinaturas acontece no passo 0b (após o loop).
-            Item::InterfaceDecl { .. } | Item::ImplementsDecl { .. } => {}
             // RefinesDecl — registra no RefinesRegistry.
             // Não registra no InterfaceRegistry nem cria overloads no DispatchTable.
             // O fallback no dispatch (apply.rs) usa este registry para substituir
@@ -856,7 +843,7 @@ pub(crate) fn run_pass0(
                             instantiate_family_for_concrete(
                                 &ty,
                                 &deferred.type_name,
-                                &struct_registry,
+                                struct_registry,
                             )
                         })
                         .collect(),
@@ -867,7 +854,7 @@ pub(crate) fn run_pass0(
                             interface_registry,
                             &*struct_registry,
                         );
-                        instantiate_family_for_concrete(&ty, &deferred.type_name, &struct_registry)
+                        instantiate_family_for_concrete(&ty, &deferred.type_name, struct_registry)
                     },
                     ffi_symbol,
                 }
@@ -890,13 +877,13 @@ pub(crate) fn run_pass0(
                 .map(|t| {
                     let ty =
                         resolve_type_expr(&t.node, type_env, interface_registry, &*struct_registry);
-                    instantiate_family_for_concrete(&ty, &deferred.type_name, &struct_registry)
+                    instantiate_family_for_concrete(&ty, &deferred.type_name, struct_registry)
                 })
                 .collect();
             let return_type = {
                 let ty =
                     resolve_type_expr(&m.ret.node, type_env, interface_registry, &*struct_registry);
-                instantiate_family_for_concrete(&ty, &deferred.type_name, &struct_registry)
+                instantiate_family_for_concrete(&ty, &deferred.type_name, struct_registry)
             };
             let ffi_symbol = m.directives.iter().find_map(|d| {
                 if (d.name == "ffi" || d.name == "builtin")
@@ -972,7 +959,11 @@ pub(crate) fn run_pass0(
                                 interface_registry,
                                 &*struct_registry,
                             );
-                            instantiate_family_for_concrete(&ty, &deferred.type_name, &struct_registry)
+                            instantiate_family_for_concrete(
+                                &ty,
+                                &deferred.type_name,
+                                struct_registry,
+                            )
                         })
                         .collect();
                     (m.name.clone(), pts)
@@ -994,21 +985,21 @@ pub(crate) fn run_pass0(
                             instantiate_family_for_concrete(
                                 &ty,
                                 &deferred.type_name,
-                                &struct_registry,
+                                struct_registry,
                             )
                         })
                         .collect();
                     let return_type = {
                         let ty = sig.ret.substitute_self(&concrete_ty);
-                        instantiate_family_for_concrete(&ty, &deferred.type_name, &struct_registry)
+                        instantiate_family_for_concrete(&ty, &deferred.type_name, struct_registry)
                     };
 
                     // Pular se o impl já define este método com os mesmos
                     // param_types (override real). Cross-type overloads
                     // (param_types diferentes) não pular o default method.
-                    let is_overridden = defined_sigs.iter().any(|(name, pts)| {
-                        name == &sig.name && pts == &param_types
-                    });
+                    let is_overridden = defined_sigs
+                        .iter()
+                        .any(|(name, pts)| name == &sig.name && pts == &param_types);
                     if is_overridden {
                         continue;
                     }
