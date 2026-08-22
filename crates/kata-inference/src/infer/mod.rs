@@ -103,18 +103,31 @@ pub fn infer_module(
     // precisa enxergá-los para despachar `show` corretamente.
     let mut interface_registry = resolved.interface_registry.clone();
 
-    // 0. Validação post-merge de `refines`: verifica que o tipo base implementa
-    //     a interface delegada. Esta validação só pode ser feita aqui porque o
-    //     prelude (com `Int implements NUM`) é mergeado antes de infer_module.
+    // 0. Validação post-merge de `refines`: verifica que a interface delegada
+    //     existe e que o tipo base a implementa. Esta validação só pode ser
+    //     feita aqui porque o prelude (com `Int implements NUM`) é mergeado
+    //     antes de infer_module.
     for refines_entry in resolved.refines_registry.all_entries() {
+        let iface_name = &refines_entry.interface_name;
+
+        // Primeiro: a interface existe?
+        if interface_registry.get_interface(iface_name).is_none() {
+            return Err(MiddleError::NoOverload {
+                name: format!(
+                    "refines: `{iface_name}` não é uma interface — `refines` só aceita interfaces, não famílias ou tipos concretos"
+                ),
+                span: kata_ast::Span::synthetic().into(),
+            });
+        }
+
+        // Segundo: o tipo base implementa a interface?
         let base_ty_name = ty_name(&refines_entry.base_ty);
         if !base_ty_name.is_empty()
-            && !interface_registry.type_implements(base_ty_name, &refines_entry.interface_name)
+            && !interface_registry.type_implements(base_ty_name, iface_name)
         {
             return Err(MiddleError::NoOverload {
                 name: format!(
-                    "refines: tipo base {base_ty_name} não implementa a interface {}",
-                    refines_entry.interface_name
+                    "refines: tipo base {base_ty_name} não implementa a interface {iface_name}"
                 ),
                 span: kata_ast::Span::synthetic().into(),
             });

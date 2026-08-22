@@ -675,18 +675,11 @@ pub(crate) fn run_pass0(
                 };
                 let base_ty = resolve_base_ty(&base_ty_name, type_env, interface_registry);
 
-                // Validar que o base implementa a interface.
-                // Aviso apenas — a validação final acontece em infer_module,
-                // depois do merge com o prelude (que contém `Int implements NUM`).
-                if !base_ty_name.is_empty()
-                    && !interface_registry.type_implements(&base_ty_name, interface_name)
-                {
-                    eprintln!(
-                        "[resolution] warning: tipo base {base_ty_name} pode não implementar \
-                         a interface {interface_name} (PositiveInt refines {interface_name}) — \
-                         validação final em infer_module"
-                    );
-                }
+                // O tipo base implementa a interface? A validação final
+                // acontece em infer_module, depois do merge com o prelude.
+                // (eprintln de warning removido — a validação post-merge em
+                // infer/mod.rs cobre ambos os casos: interface inexistente e
+                // base não implementa, com mensagens claras.)
 
                 // Registrar delegação no RefinesRegistry.
                 refines_registry.register(RefinesEntry {
