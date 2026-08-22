@@ -227,6 +227,32 @@ pub fn resolve_type_expr(
                     Ty::ReceiverFactory(Box::new(elem))
                 }
                 _ => {
+                    // Família polimórfica instanciada: `NonZero::Int` →
+                    // Instance("NonZero", "Int"). O parser já produz
+                    // ParamApp { name: "NonZero", params: [Named("Int")] }
+                    // via `::` em type expressions. Se `name` é família
+                    // registrada e o param resolve para um tipo primitivo
+                    // concreto, produz Instance em vez de Generic.
+                    if struct_reg.is_family(name)
+                        && resolved_params.len() == 1
+                    {
+                        let concrete = match &resolved_params[0] {
+                            Ty::Prim(PrimTy::Int) => "Int",
+                            Ty::Prim(PrimTy::Float) => "Float",
+                            Ty::Prim(PrimTy::Rational) => "Rational",
+                            Ty::Prim(PrimTy::Text) => "Text",
+                            Ty::Struct(StructKey::Plain(n)) => n.as_str(),
+                            _ => "",
+                        };
+                        if !concrete.is_empty()
+                            && struct_reg.get_instance(name, concrete).is_some()
+                        {
+                            return Ty::Struct(StructKey::Instance(
+                                name.clone(),
+                                concrete.to_string(),
+                            ));
+                        }
+                    }
                     // Tenta resolver como Ty::Var se o param é um nome que não está no TypeEnv
                     // (ex: "T" em Result::(T, E) dentro de uma declaração de função genérica).
                     Ty::Generic(name.clone(), resolved_params)
