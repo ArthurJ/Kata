@@ -206,17 +206,6 @@ soma!(1, 2)"#,
     assert_eq!(code, 0, "exit 0 — stdout: {stdout}");
 }
 
-// ── Testes adiados (sem mecanismo ainda) ──────────────────────────
-
-/// `expects: "Panic: msg"` exige detecção de panic sem abortar o processo.
-/// O runtime usa `extern "C"` (nounwind em Rust 2024) — panic vira SIGABRT,
-/// não capturável via `#[should_panic]` ou valor de retorno. Necessário
-/// `catch_unwind` no runtime ou panic sentinel — não implementado.
-/// Ver handoff pitfall #38/#42.
-#[test]
-#[ignore = "panic detection sem catch_unwind — mecanismo não implementado"]
-fn test_expects_panic_adiado() {}
-
 /// `@test` sem `args` em action que recebe params deve falhar com erro
 /// claro de codegen, não SIGSEGV em runtime. O wrapper passa `args_ptr = 0`
 /// (null) quando `@test` não tem `args` — a action lê params de null →
