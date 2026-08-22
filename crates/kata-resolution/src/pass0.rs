@@ -45,6 +45,19 @@ fn instantiate_family_for_concrete(
                 ty.clone()
             }
         }
+        // Plain pode ser uma família polimórfica que ainda não foi
+        // registrada quando a interface foi parseada (ex: NonZero é
+        // declarado depois de interface NUM). Se o nome é família
+        // registrada agora, instanciar para o tipo concreto.
+        Ty::Struct(StructKey::Plain(name)) => {
+            if struct_reg.is_family(name)
+                && struct_reg.get_instance(name, concrete_type).is_some()
+            {
+                Ty::Struct(StructKey::Instance(name.clone(), concrete_type.to_string()))
+            } else {
+                ty.clone()
+            }
+        }
         Ty::Generic(name, args) => Ty::Generic(
             name.clone(),
             args.iter()
@@ -939,12 +952,33 @@ pub(crate) fn run_pass0(
         // FunctionDef sintetizada usando o default_body da interface.
         // Self na assinatura é substituído pelo tipo concreto.
         if let Some(iface_info) = interface_registry.get_interface(&deferred.interface_name) {
-            let defined_names: std::collections::HashSet<&str> =
-                deferred.methods.iter().map(|m| m.name.as_str()).collect();
+            // Coletar assinaturas definidas no impl (nome + param_types
+            // após instantiate_family_for_concrete) para decidir se o
+            // default method deve ser pulado. Só pula se o impl define
+            // o mesmo método com os mesmos param_types (override real).
+            // Cross-type overloads (param_types diferentes) NÃO pulam
+            // o default method — elas cobrem combinações de tipos diferentes.
+            let defined_sigs: Vec<(String, Vec<Ty>)> = deferred
+                .methods
+                .iter()
+                .map(|m| {
+                    let pts: Vec<Ty> = m
+                        .params
+                        .iter()
+                        .map(|t| {
+                            let ty = resolve_type_expr(
+                                &t.node,
+                                type_env,
+                                interface_registry,
+                                &*struct_registry,
+                            );
+                            instantiate_family_for_concrete(&ty, &deferred.type_name, &struct_registry)
+                        })
+                        .collect();
+                    (m.name.clone(), pts)
+                })
+                .collect();
             for sig in &iface_info.signatures {
-                if defined_names.contains(sig.name.as_str()) {
-                    continue;
-                }
                 if let Some(default_clauses) = &sig.default_body {
                     let concrete_ty = resolve_type_expr(
                         &kata_ast::TypeExpr::Named(deferred.type_name.clone()),
@@ -968,6 +1002,17 @@ pub(crate) fn run_pass0(
                         let ty = sig.ret.substitute_self(&concrete_ty);
                         instantiate_family_for_concrete(&ty, &deferred.type_name, &struct_registry)
                     };
+
+                    // Pular se o impl já define este método com os mesmos
+                    // param_types (override real). Cross-type overloads
+                    // (param_types diferentes) não pular o default method.
+                    let is_overridden = defined_sigs.iter().any(|(name, pts)| {
+                        name == &sig.name && pts == &param_types
+                    });
+                    if is_overridden {
+                        continue;
+                    }
+
                     let type_params = collect_type_params(&param_types, &return_type);
 
                     signatures.push(Signature {
