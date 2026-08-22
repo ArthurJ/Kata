@@ -18,6 +18,36 @@ Kata usa notação prefixa: a função vem antes dos argumentos, sem parênteses
 
 Operadores (`+`, `-`, `*`) são nomes de função como qualquer outro. `+ 1 2` e `soma 1 2` têm a mesma estrutura. Não há tabela de precedência para memorizar.
 
+## Divisão e resto
+
+Kata tem três operadores de divisão com semântica distinta:
+
+```kata
+echo!(/ 10 (3::NonZero))       # divisão exata — exige NonZero
+echo!(mod 10 (3::NonZero))     # resto — exige NonZero
+match (div 10 3)               # divisão dinâmica — retorna Result
+    Result::Ok v: echo!(v)
+    Result::Err e: echo!("erro")
+```
+
+```
+3
+1
+3
+```
+
+`/` é a divisão matemática exata: retorna o valor puro diretamente, sem
+`Result`. Para garantir que o divisor não é zero, `/` exige `NonZero` —
+um tipo refinado sobre a interface `NUM` (ver capítulo 12). O literal
+`3::NonZero` é validado em compile-time: o compilador prova que 3 ≠ 0.
+
+`mod` é o resto da divisão. Também exige `NonZero` pelo mesmo motivo.
+
+`div` é a divisão dinâmica: aceita qualquer valor, verifica zero em
+runtime, e retorna `Result::(Self, Text)` — `Ok` com o quociente ou
+`Err` com mensagem de erro. Use `div` quando o divisor vem de uma fonte
+que o type system não pode provar não-zero em compile-time.
+
 ## Comentários
 
 `#` inicia um comentário que vai até o final da linha:

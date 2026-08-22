@@ -34,6 +34,12 @@ match (div 10 3)
 
 O padrão `Result::Ok v` casa quando o valor é `Ok` e liga o payload à variável `v`.
 
+`div` é a divisão dinâmica: retorna `Result` porque o divisor pode ser zero
+— o type system não pode provar que 3 ≠ 0 em compile-time (3 é um `Int`
+comum, não `NonZero`). O braço `Ok` recebe o quociente; o braço `Err`
+recebe a mensagem de erro. A divisão exata `/` exige `NonZero` e não
+retorna `Result` — ver capítulo 12.
+
 ## Guards em lambda
 
 Dentro de funções, guards substituem `if/else`. Um guard é uma condição booleana após o parâmetro:

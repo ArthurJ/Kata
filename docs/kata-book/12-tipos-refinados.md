@@ -67,6 +67,96 @@ main!()
 erro
 ```
 
+## Famílias polimórficas
+
+Os refineds que vimos até agora são **concretos**: `PositiveInt` refina
+`Int`. Kata também suporta **famílias polimórficas** — refineds que
+refinam uma *interface* inteira em vez de um tipo específico:
+
+```kata
+data (NUM, != _ (zero _)) as NonZero
+```
+
+`NonZero` refina `NUM` — a interface que `Int`, `Float` e `Rational`
+implementam. O predicado `!= _ (zero _)` verifica que o valor é diferente
+de `zero` do seu tipo (`0` para Int, `0.0` para Float, `rational 0` para
+Rational). Existem três instâncias de `NonZero`: `NonZero::Int`,
+`NonZero::Float` e `NonZero::Rational`.
+
+### Ascription de literal
+
+`5::NonZero` funciona como nos refineds concretos — o compilador valida
+o predicado em compile-time. A instância concreta é inferida do tipo do
+literal:
+
+```kata
+action main
+    let x := 5::NonZero       # NonZero::Int
+    let y := 3.0::NonZero     # NonZero::Float
+    echo!(x::Int)
+    echo!(y::Float)
+main!()
+```
+
+```
+5
+3.0
+```
+
+O downcast `x::Int` extrai o valor base — é um no-op em runtime (mesmos
+bits).
+
+### Divisão segura com NonZero
+
+O propósito principal de `NonZero` é garantir divisão segura em
+compile-time. O operador `/` exige `NonZero` como divisor:
+
+```kata
+echo!(/ 10 (3::NonZero))           # 3 — divisão exata, sem Result
+echo!(/ 10.0 (3.0::NonZero))       # 3.3333333333333335
+echo!(mod 10 (3::NonZero))         # 1 — resto
+```
+
+Se o divisor fosse zero, a ascription `0::NonZero` falharia em
+compile-time — o programa nem compila. Isto elimina uma classe inteira
+de bugs de divisão por zero sem custo de runtime.
+
+### Construtor falível
+
+Para valores dinâmicos, o construtor `NonZero` retorna `Result`. A
+instância concreta é determinada pelo tipo do argumento:
+
+```kata
+action main
+    let r := NonZero 0
+    match r
+        Ok v: echo!(v::Int)
+        Err _: echo!("zero rejeitado")
+main!()
+```
+
+```
+zero rejeitado
+```
+
+`NonZero 0` retorna `Err` porque `!= 0 (zero 0)` é falso. `NonZero 42`
+retornaria `Ok` com `NonZero::Int`. `NonZero 3.0` retornaria `Ok` com
+`NonZero::Float`.
+
+### Cross-type com NonZero
+
+Como `NonZero` é uma família sobre `NUM`, operações entre tipos diferentes
+funcionam quando o divisor é qualificado:
+
+```kata
+echo!(/ 10.0 (3::NonZero))              # 3.333... (Float ÷ NonZero::Int)
+echo!(mod (rational 10) (3::NonZero))   # 1 (Rational ÷ NonZero::Int)
+```
+
+O divisor `3::NonZero` é `NonZero::Int`. A divisão `/ 10.0` despacha para
+a overload `Float × NonZero::Int → Float`. O compilador seleciona a
+instância correta baseada no tipo do argumento.
+
 ## Alias — Newtype sem predicados
 
 `alias` cria um novo tipo nominal distinto do original, mas sem validação.
