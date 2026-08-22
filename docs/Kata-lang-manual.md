@@ -2688,10 +2688,9 @@ Sem `if/else`, a Kata-Lang usa pattern matching estrutural e guards condicionais
 
 ### 16.1 `with` Block — Computações Prévias
 
-`with` é um bloco de bindings nomeados que aparece **depois dos guards** (ou do
-body direto, quando não há guards) no fim da cláusula lambda (como `where` em
-Haskell). Os bindings são visíveis em **todos os guards da cláusula**, mesmo
-sendo escritos depois — a ordem é visual
+`with` é um bloco de bindings nomeados que aparece **depois dos guards** no fim
+da cláusula lambda (como `where` em Haskell). Os bindings são visíveis em
+**todos os guards da cláusula**, mesmo sendo escritos depois — a ordem é visual
 (legibilidade), a semântica é que os bindings são avaliados antes dos guards.
 
 ```kata
@@ -2703,6 +2702,25 @@ lambda x:
         doubled := * x 2
 ```
 
+`with` também pode aparecer sem guards no path indentado (body direto + `with`),
+mas binding local sem guards é mais natural com `let` no body:
+
+```kata
+# Com guards — caso canônico de `with`:
+sqrt :: Complex => Complex
+lambda z:
+    >= z.im 0.0: Complex (sqrt (* (+ r z.re) 0.5)) (sqrt (* (- r z.re) 0.5))
+    otherwise: Complex (sqrt (* (+ r z.re) 0.5)) (* -1.0 (sqrt (* (- r z.re) 0.5)))
+    with
+        r := norm z
+
+# Sem guards — prefira `let`:
+asin :: Complex => Complex
+lambda z:
+    let w := log (+ (Complex (* -1.0 z.im) z.re) (sqrt (- (Complex 1.0 0.0) (* z z))))
+    Complex w.im (* -1.0 w.re)
+```
+
 * **Sintaxe:** `with` seguido de bindings indentados (`nome := expr`, sem keyword
   `let`). A ausência de `let` é visual — distingue o bloco `with` do corpo
   principal da cláusula.
@@ -2710,6 +2728,10 @@ lambda x:
 * **Escopo:** Bindings do `with` são visíveis em todos os guards da cláusula
   (não apenas nos que vêm depois — `with` é pós-escrito mas pré-avaliado).
 * **Imutabilidade:** Os bindings são imutáveis (mesma semântica de `let`).
+* **`with` sem guards:** Funciona no path indentado, mas `let` no body é o
+  padrão canônico para binding local sem guards. `with` same-line (após
+  expressão na mesma linha do `lambda x:`) não é suportado — o parser rejeita
+  com mensagem específica.
 * **Representação na TAST:** Os bindings são preservados como
   `TypedWithBinding` na `TypedLambdaClause` (não desugared para `let` — o
   typeck infere cada binding e registra no escopo antes de processar os

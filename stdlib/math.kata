@@ -229,26 +229,23 @@ lambda z: exp (div (log z) (Complex 3.0 0.0) | Complex 0.0 0.0)
 # iz = Complex (* -1.0 z.im) z.re. -i·w = Complex w.im (* -1.0 w.re).
 asin :: Complex => Complex
 lambda z:
-    otherwise: Complex w.im (* -1.0 w.re)
-    with
-        w := log (+ (Complex (* -1.0 z.im) z.re) (sqrt (- (Complex 1.0 0.0) (* z z))))
+    let w := log (+ (Complex (* -1.0 z.im) z.re) (sqrt (- (Complex 1.0 0.0) (* z z))))
+    Complex w.im (* -1.0 w.re)
 
 # acos(z) = -i·log(z + i·sqrt(1 - z²))
 # i·s = Complex (* -1.0 s.im) s.re. -i·w = Complex w.im (* -1.0 w.re).
 acos :: Complex => Complex
 lambda z:
-    otherwise: Complex w.im (* -1.0 w.re)
-    with
-        s := sqrt (- (Complex 1.0 0.0) (* z z))
-        w := log (+ z (Complex (* -1.0 s.im) s.re))
+    let s := sqrt (- (Complex 1.0 0.0) (* z z))
+    let w := log (+ z (Complex (* -1.0 s.im) s.re))
+    Complex w.im (* -1.0 w.re)
 
 # atan(z) = (i/2)·(log(1 - iz) - log(1 + iz))
 # iz = Complex (* -1.0 z.im) z.re. (i/2)·w = Complex (* w.im -0.5) (* w.re 0.5).
 atan :: Complex => Complex
 lambda z:
-    otherwise: Complex (* w.im -0.5) (* w.re 0.5)
-    with
-        w := - (log (- (Complex 1.0 0.0) (Complex (* -1.0 z.im) z.re))) (log (+ (Complex 1.0 0.0) (Complex (* -1.0 z.im) z.re)))
+    let w := - (log (- (Complex 1.0 0.0) (Complex (* -1.0 z.im) z.re))) (log (+ (Complex 1.0 0.0) (Complex (* -1.0 z.im) z.re)))
+    Complex (* w.im -0.5) (* w.re 0.5)
 
 # asinh(z) = log(z + sqrt(z² + 1))
 asinh :: Complex => Complex
@@ -262,9 +259,8 @@ lambda z: log (+ z (* (sqrt (+ z (Complex 1.0 0.0))) (sqrt (- z (Complex 1.0 0.0
 # (1/2)·w = Complex (* w.re 0.5) (* w.im 0.5).
 atanh :: Complex => Complex
 lambda z:
-    otherwise: Complex (* w.re 0.5) (* w.im 0.5)
-    with
-        w := - (log (+ (Complex 1.0 0.0) z)) (log (- (Complex 1.0 0.0) z))
+    let w := - (log (+ (Complex 1.0 0.0) z)) (log (- (Complex 1.0 0.0) z))
+    Complex (* w.re 0.5) (* w.im 0.5)
 
 # ── Sobrecargas Complex → Float ─────────────────────────────────
 # norm(z) = |z| = sqrt(x² + y²) — módulo do complexo.

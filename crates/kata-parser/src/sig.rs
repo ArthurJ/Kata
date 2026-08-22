@@ -209,6 +209,21 @@ impl Parser {
 
         let body = parse_expr(self)?;
 
+        // Detectar `with` same-line (erro comum): após a expressão,
+        // se há INDENT seguido de `with`, o usuário tentou usar `with`
+        // no path same-line — que não é suportado. Binding local sem
+        // guards deve usar `let` no body indentado.
+        if matches!(self.peek(), Token::Indent) {
+            let saved_pos = self.pos;
+            self.advance();
+            if matches!(self.peek(), Token::With) {
+                return Err(self.error(
+                    "`with` same-line não é suportado — use `let` no body indentado, ou `with` no path indentado (lambda x:\\n    expr\\n    with ...)",
+                ));
+            }
+            self.pos = saved_pos;
+        }
+
         // Consume trailing StmtSep
         if matches!(self.peek(), Token::StmtSep) {
             self.advance();
