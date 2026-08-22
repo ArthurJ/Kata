@@ -187,7 +187,7 @@ impl Parser {
     }
 
     /// Parse um binding do `with` block: `nome := expr`.
-    fn parse_with_binding(&mut self) -> Result<WithBinding, FrontendError> {
+    pub(crate) fn parse_with_binding(&mut self) -> Result<WithBinding, FrontendError> {
         let name = match self.peek() {
             Token::Ident(s) => {
                 let n = s.clone();

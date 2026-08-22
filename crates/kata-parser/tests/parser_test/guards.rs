@@ -4,6 +4,74 @@
 use super::helpers::{first_item, parse_src};
 use kata_ast::{Expr, GuardClause, Item};
 
+// ── Cross-clause with (açúcar sintático) ──────────────────────────
+
+#[test]
+fn sig_cross_clause_with_basic() {
+    // `with` cross-clause injeta bindings em todas as cláusulas.
+    let src = "f :: Int => Int\nlambda x: + x doubled\nwith\n    doubled := * x 2";
+    let m = parse_src(src);
+    let item = first_item(&m);
+    match item {
+        Item::Sig { name, body, .. } => {
+            assert_eq!(name, "f");
+            let clauses = body.as_ref().expect("body should have clauses");
+            assert_eq!(clauses.len(), 1);
+            let clause = &clauses[0].node;
+            // with_bindings do cross-clause foram injetadas
+            assert_eq!(clause.with_bindings.len(), 1);
+            assert_eq!(clause.with_bindings[0].name, "doubled");
+        }
+        other => panic!("expected Sig, got {other:?}"),
+    }
+}
+
+#[test]
+fn sig_cross_clause_with_multiple_clauses() {
+    // `with` cross-clause injeta seletivamente: cada binding só vai
+    // para cláusulas que o referenciam no body.
+    let src = "abs :: Int => Int\nlambda 0: zero_val\nlambda x: + x doubled\nwith\n    doubled := * x 2\n    zero_val := 0";
+    let m = parse_src(src);
+    let item = first_item(&m);
+    match item {
+        Item::Sig { name, body, .. } => {
+            assert_eq!(name, "abs");
+            let clauses = body.as_ref().expect("body should have clauses");
+            assert_eq!(clauses.len(), 2);
+            // Cláusula 1: `lambda 0: zero_val` — referencia zero_val, não doubled
+            assert_eq!(clauses[0].node.with_bindings.len(), 1);
+            assert_eq!(clauses[0].node.with_bindings[0].name, "zero_val");
+            // Cláusula 2: `lambda x: + x doubled` — referencia doubled, não zero_val
+            assert_eq!(clauses[1].node.with_bindings.len(), 1);
+            assert_eq!(clauses[1].node.with_bindings[0].name, "doubled");
+        }
+        other => panic!("expected Sig, got {other:?}"),
+    }
+}
+
+#[test]
+fn sig_cross_clause_with_merges_with_nested_with() {
+    // `with` cross-clause (bindings outer) + `with` aninhado (bindings da cláusula).
+    // Cross-clause vêm primeiro, aninhados depois (podem fazer shadow).
+    // O body `+ x offset` referencia offset (aninhado) mas não doubled (cross-clause),
+    // então doubled NÃO é injetado.
+    let src = "f :: Int => Int\nlambda x:\n    otherwise: + x offset\n    with\n        offset := * x 2\nwith\n    doubled := * x 2";
+    let m = parse_src(src);
+    let item = first_item(&m);
+    match item {
+        Item::Sig { name, body, .. } => {
+            assert_eq!(name, "f");
+            let clauses = body.as_ref().expect("body should have clauses");
+            assert_eq!(clauses.len(), 1);
+            let clause = &clauses[0].node;
+            // Só o binding aninhado (offset) é injetado — doubled não é referenciado
+            assert_eq!(clause.with_bindings.len(), 1);
+            assert_eq!(clause.with_bindings[0].name, "offset");
+        }
+        other => panic!("expected Sig, got {other:?}"),
+    }
+}
+
 // ── Guards in anonymous lambda ───────────────────────────────────
 
 #[test]
