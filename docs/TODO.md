@@ -28,25 +28,6 @@ signatures/functions do mesmo módulo).
 
 ---
 
-### Parser deve validar que `refines` só aceita interface
-
-**Estado:** RESOLVIDO. Validação post-merge em `infer/mod.rs` verifica se
-`interface_name` está registrada no `interface_registry` via `get_interface()`.
-Se não existe, retorna erro claro: "não é uma interface — `refines` só aceita
-interfaces, não famílias ou tipos concretos". O `eprintln!` de warning em
-`pass0.rs` foi removido — a validação post-merge cobre ambos os casos.
-
----
-
-### Parser deve rejeitar nomes de função/action começando com `__`
-
-**Estado:** RESOLVIDO. `validate_name` agora rejeita nomes começando com `__`
-via `FrontendError::ReservedName`. O guard `is_alphabetic` foi internalizado
-em `validate_name` — todos os sites de declaração chamam `validate_name`
-incondicionalmente.
-
----
-
 ### Tree-shaking por instância de família polimórfica
 
 **Estado:** O tree-shaking remove funções por **nome** — se uma função
@@ -98,22 +79,6 @@ automaticamente `NUM`, `EQ`, `+`, `show`, etc.). O que falta:
 **Impacto:** Médio-alto. Resolve a visibilidade de funções internas,
 unifica prelude e módulos no mesmo caminho de código, e prepara para
 múltiplos módulos stdlib (math, complex, stdio) com visibilidade controlada.
-
----
-
-### `with` sem guards e `let` em lambdas — RESOLVIDO
-
-**Estado:** RESOLVIDO. O bloco `with` sem guards no path indentado já era aceito
-pelo parser. O bug real era que `let` em lambdas era descartado pelo parser
-(`parse_lambda_body_block` sobrescrevia todas as expressões sem guards exceto
-a última). Corrigido: múltiplas expressões sem guards agora produzem `Expr::Block`.
-
-Os 4 workarounds `otherwise:` em `math.kata` (`asin`, `acos`, `atan`, `atanh`
-Complex) foram substituídos por `let` direto no body.
-
-`with` same-line (após expressão na mesma linha do `lambda x:`) não é
-suportado — o parser rejeita com mensagem específica indicando usar `let`
-no body indentado ou `with` no path indentado.
 
 ---
 
