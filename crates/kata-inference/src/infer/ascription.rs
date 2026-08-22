@@ -45,16 +45,35 @@ pub(crate) fn infer_type_ascription(
                 let typed = infer_expr_hinted(&g2.node, &g2.span, env, ctx, false, None)?;
                 (typed, true)
             } else {
-                // (expr)::Type — propaga hint normalmente
+                // (expr)::Type — propaga hint normalmente.
+                // Mesma lógica de família polimórfica do branch _ abaixo.
+                let is_family_target = matches!(
+                    &resolve_type_expr(&ty.node, env, ctx.interface_registry, ctx.struct_registry),
+                    Ty::Struct(StructKey::Family(n)) | Ty::Struct(StructKey::Plain(n))
+                        if ctx.struct_registry.get(n).is_some_and(|si| si.is_instance_of.is_some())
+                );
+                let hint = if is_family_target { None } else { Some(&target_ty) };
                 let typed =
-                    infer_expr_hinted(&expr.node, &expr.span, env, ctx, false, Some(&target_ty))?;
+                    infer_expr_hinted(&expr.node, &expr.span, env, ctx, false, hint)?;
                 (typed, false)
             }
         }
         _ => {
-            // expr::Type — propaga hint normalmente
+            // expr::Type — propaga hint normalmente.
+            // Mas se target_ty é família polimórfica (Family/Plain com
+            // instâncias), não propagar como hint — o inner será promovido
+            // a Instance depois. Passar Family como hint causa erro em
+            // actions como `(rational 3)::NonZero` (rational não retorna
+            // Family). Para literals como `3::NonZero`, o hint é ignorado
+            // (IntLit não usa hint de tipo struct).
+            let is_family_target = matches!(
+                &resolve_type_expr(&ty.node, env, ctx.interface_registry, ctx.struct_registry),
+                Ty::Struct(StructKey::Family(n)) | Ty::Struct(StructKey::Plain(n))
+                    if ctx.struct_registry.get(n).is_some_and(|si| si.is_instance_of.is_some())
+            );
+            let hint = if is_family_target { None } else { Some(&target_ty) };
             let typed =
-                infer_expr_hinted(&expr.node, &expr.span, env, ctx, false, Some(&target_ty))?;
+                infer_expr_hinted(&expr.node, &expr.span, env, ctx, false, hint)?;
             (typed, false)
         }
     };
