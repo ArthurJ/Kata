@@ -20,6 +20,12 @@ use thiserror::Error;
 pub struct ResolvedModule {
     pub type_env: TypeEnv,
     pub signatures: Vec<Signature>,
+    /// Signaturas internas — dependências de corpos de funções exportadas
+    /// que não são exportadas (ex: `bi_div` usado por `div`). Disponíveis
+    /// para o DispatchTable durante inferência de funções do prelude, mas
+    /// removidas antes de inferir código do usuário. Vazio em módulos
+    /// sem `filter_exports` (prelude não-filtrado, módulos do usuário).
+    pub internal_signatures: Vec<Signature>,
     /// Catálogo de variantes por enum.
     pub enum_registry: EnumRegistry,
     /// Catálogo de structs com campos e offsets.

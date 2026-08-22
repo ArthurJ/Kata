@@ -15,7 +15,7 @@ fn make_module_with_type(name: &str, ty: Ty, origin: &str) -> ResolvedModule {
     type_env.define(name, ty, origin);
     ResolvedModule {
         type_env,
-        signatures: Vec::new(),
+        signatures: Vec::new(), internal_signatures: Vec::new(),
         enum_registry: kata_core::EnumRegistry::new(),
         struct_registry: kata_core::StructRegistry::new(),
         refined_decls: Vec::new(),

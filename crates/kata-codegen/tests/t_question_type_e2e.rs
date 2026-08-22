@@ -37,6 +37,7 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
     ResolvedModule {
         type_env,
         signatures,
+        internal_signatures: Vec::new(),
         enum_registry,
         struct_registry,
         refined_decls,

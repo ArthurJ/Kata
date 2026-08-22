@@ -442,6 +442,7 @@ fn resolve_inner(
     Ok(ResolvedModule {
         type_env,
         signatures,
+        internal_signatures: Vec::new(),
         enum_registry,
         struct_registry,
         refined_decls,
@@ -464,6 +465,9 @@ pub use prelude_sigs::load_prelude;
 pub fn merge_two(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModule {
     let mut signatures = prelude.signatures;
     signatures.extend(user.signatures);
+
+    let mut internal_signatures = prelude.internal_signatures;
+    internal_signatures.extend(user.internal_signatures);
 
     let mut type_env = kata_core::ty::TypeEnv::with_parent(prelude.type_env);
     let mut user_type_env = user.type_env;
@@ -516,6 +520,7 @@ pub fn merge_two(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModul
     ResolvedModule {
         type_env,
         signatures,
+        internal_signatures,
         enum_registry,
         struct_registry,
         refined_decls,

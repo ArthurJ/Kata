@@ -25,6 +25,7 @@ fn eval_src(src: &str) -> (i64, Ty) {
     let resolved = ResolvedModule {
         type_env,
         signatures,
+        internal_signatures: Vec::new(),
         enum_registry,
         struct_registry,
         refined_decls: Vec::new(),

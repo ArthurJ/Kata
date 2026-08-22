@@ -28,6 +28,7 @@ fn merge_resolved(
     kata_resolution::ResolvedModule {
         type_env,
         signatures,
+        internal_signatures: Vec::new(),
         enum_registry,
         struct_registry,
         refined_decls: Vec::new(),
