@@ -114,6 +114,8 @@ compile-time. O operador `/` exige `NonZero` como divisor:
 ```kata
 echo!(/ 10 (3::NonZero))           # 3 — divisão exata, sem Result
 echo!(/ 10.0 (3.0::NonZero))       # 3.3333333333333335
+echo!(// 10 (3::NonZero))          # 3 — divisão inteira, retorna Int
+echo!(// 10.0 (3.0::NonZero))      # 3 — Float truncado para Int
 echo!(mod 10 (3::NonZero))         # 1 — resto
 ```
 

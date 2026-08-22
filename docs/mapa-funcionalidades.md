@@ -150,18 +150,22 @@ para valores não-literais (retorna `Result`). Ambos falham com
 `TypeMismatch`; ascription additionally falha com **refinamento não
 atendido** (predicado avaliado em typeck rejeita antes do codegen).
 
-**Cross-type `div`/`mod` com `NonZero` qualificado**: `/`, `div`, `mod`
-operam entre tipos numéricos distintos (Int, Float, Rational). O segundo
-argumento é `NonZero` (família polimórfica) — a instância concreta é
-qualificada na declaração: `mod :: Float NonZero::Int => Float`. O
-`resolve_type_expr` resolve `NonZero::Int` → `Instance("NonZero", "Int")`.
-Ascription de literal (`3::NonZero`) promove `Family` → `Instance` baseado
-no tipo primitivo do inner. Construtor falível (`NonZero(3)`,
-`NonZero(rational 3)`) retorna `Result::(Instance("NonZero", "Int"), Text)`
-— não `Family` — permitindo dispatch não-ambíguo no call-site. `fits_return`
-aceita `Instance(family, _)` como compatível com `Family(family)`. `mod`
-Float/Rational usa truncagem (`a - b*(float(int(a/b)))`) em Kata puro para
-evitar erro de precisão IEEE 754 — sem FFI adicional.
+**Cross-type `/`, `//`, `div`, `mod` com `NonZero` qualificado**: `/`, `//`,
+`div`, `mod` operam entre tipos numéricos distintos (Int, Float, Rational).
+`/` (divisão exata) e `mod` (resto) retornam o tipo do dividendo; `//`
+(divisão inteira) retorna sempre `Int`. O segundo argumento é `NonZero`
+(família polimórfica) — a instância concreta é qualificada na declaração:
+`mod :: Float NonZero::Int => Float`. O `resolve_type_expr` resolve
+`NonZero::Int` → `Instance("NonZero", "Int")`. Ascription de literal
+(`3::NonZero`) promove `Family` → `Instance` baseado no tipo primitivo do
+inner. Construtor falível (`NonZero(3)`, `NonZero(rational 3)`) retorna
+`Result::(Instance("NonZero", "Int"), Text)` — não `Family` — permitindo
+dispatch não-ambíguo no call-site. `fits_return` aceita `Instance(family,
+_)` como compatível com `Family(family)`. `mod` Float/Rational usa
+truncagem (`a - b*(float(int(a/b)))`) em Kata puro para evitar erro de
+precisão IEEE 754 — sem FFI adicional. `//` implementado em Kata puro:
+`int (/ a b)` — `int` trunca Float/Rational para Int; Int same-type usa
+FFI `kata_rt_bi_div` diretamente.
 
 Coerção contextual no `|`: fallback literal validado em compile-time
 contra predicados.

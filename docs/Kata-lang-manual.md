@@ -180,10 +180,12 @@ Floats aceitam notação decimal e científica:
 `NaN` e `Infinity` não têm representação visível na linguagem — o runtime
 converte `NaN`/`Infinity` para `0` na exibição (`float_to_text`). A divisão
 `0.0 / 0.0` produz `NaN` em f64 no runtime, mas o programador nunca o vê no
-output. Para evitar divisão por zero, a linguagem oferece dois caminhos
+output. Para evitar divisão por zero, a linguagem oferece três caminhos
 (§22.1): `/` exige `NonZero` (refined) para todos os tipos NUM — o type
-system garante que o divisor não é zero; `div` retorna `Result` para todos
-os tipos NUM. Para Float, `NonZero` rejeita NaN via um segundo predicado
+system garante que o divisor não é zero; `//` exige `NonZero` e retorna
+o quociente inteiro truncado como `Int` (divisão inteira segura);
+`div` retorna `Result` para todos os tipos NUM (divisão dinâmica, sem
+exigir `NonZero`). Para Float, `NonZero` rejeita NaN via um segundo predicado
 (`= _ _` — `= NaN NaN` é `false` em IEEE 754), então NaN não pode surgir
 pelo construtor `NonZero`.
 
@@ -852,6 +854,7 @@ interface NUM implements EQ
     zero :: Self => Self
     div :: Self Self => Result::(Self, Text)
     / :: Self NonZero => Self
+    // :: Self NonZero => Int
     mod :: Self NonZero => Self
 ```
 

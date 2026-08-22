@@ -563,6 +563,49 @@ lst.2 ?                  # indexação em lista (O(n) traversal, retorna Result)
 
 ---
 
+## Operadores Aritméticos (`+`, `-`, `*`, `/`, `//`, `div`, `mod`)
+
+Kata tem três operadores de divisão com semântica distinta:
+
+| Operador | Assinatura | Exige NonZero | Retorno | Descrição |
+|---|---|---|---|---|
+| `/` | `Self NonZero => Self` | sim | direto | Divisão exata (matemática) |
+| `//` | `Self NonZero => Int` | sim | direto | Divisão inteira (quociente truncado) |
+| `div` | `Self Self => Result::(Self, Text)` | não | `Result` | Divisão dinâmica (verifica zero em runtime) |
+| `mod` | `Self NonZero => Self` | sim | direto | Resto da divisão |
+
+```kata
+echo!(/ 10 (3::NonZero))       # 3 — divisão exata Int
+echo!(/ 10.0 (3.0::NonZero))   # 3.3333333333333335 — divisão exata Float
+echo!(// 10 (3::NonZero))      # 3 — divisão inteira Int → Int
+echo!(// 10.0 (3.0::NonZero)) # 3 — divisão inteira Float → Int (truncado)
+echo!(mod 10 (3::NonZero))     # 1 — resto Int
+```
+
+- **`/`** (divisão exata): Retorna o quociente no mesmo tipo do dividendo.
+  Exige `NonZero` no divisor — zero é rejeitado em compile-time. Para Int,
+  é divisão inteira (BigInt trunca). Para Float/Rational, é divisão matemática
+  exata.
+- **`//`** (divisão inteira): Retorna o quociente truncado como `Int`,
+  independente do tipo dos operandos. Exige `NonZero`. Implementado em Kata
+  puro: `int (/ a b)` — `int` trunca Float/Rational para Int. Para Int
+  same-type, usa FFI `kata_rt_bi_div` diretamente. Cross-type: `// 10.0
+  (3::NonZero)` → `int (/ 10.0 (3::NonZero))` → `int 3.333...` → `3`.
+- **`div`** (divisão dinâmica): Aceita qualquer divisor (não exige NonZero),
+  verifica zero em runtime, retorna `Result::(Self, Text)`. Use quando o
+  divisor vem de uma fonte que o type system não pode provar não-zero.
+- **`mod`** (resto): Resto da divisão inteira. Exige `NonZero`. Para Float e
+  Rational, usa truncagem do quociente para evitar erro de precisão IEEE 754.
+- **Cross-type**: `/`, `//`, `mod` têm overloads explícitas para cada par de
+  tipos numéricos (Int×Float, Int×Rational, Float×Rational). `div` cross-type
+  converte o segundo argumento e delega para `div` same-type. Não há coerção
+  implícita — cada overload é declarada explicitamente em `core.kata`.
+- **Relações**: `//` é complementar a `/` (exata) e `div` (dinâmica). `mod`
+  satisfaz `a = b * (// a b) + mod a b` para Int. Ver manual §4.2.8 e capítulo
+  12 do book para `NonZero` e famílias polimórficas.
+
+---
+
 ## Função `len` (Tamanho)
 
 ```kata

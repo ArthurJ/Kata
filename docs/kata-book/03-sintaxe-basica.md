@@ -20,10 +20,11 @@ Operadores (`+`, `-`, `*`) são nomes de função como qualquer outro. `+ 1 2` e
 
 ## Divisão e resto
 
-Kata tem três operadores de divisão com semântica distinta:
+Kata tem quatro operadores de divisão com semântica distinta:
 
 ```kata
 echo!(/ 10 (3::NonZero))       # divisão exata — exige NonZero
+echo!(// 10 (3::NonZero))      # divisão inteira — exige NonZero, retorna Int
 echo!(mod 10 (3::NonZero))     # resto — exige NonZero
 match (div 10 3)               # divisão dinâmica — retorna Result
     Result::Ok v: echo!(v)
@@ -31,6 +32,7 @@ match (div 10 3)               # divisão dinâmica — retorna Result
 ```
 
 ```
+3
 3
 1
 3
@@ -40,6 +42,9 @@ match (div 10 3)               # divisão dinâmica — retorna Result
 `Result`. Para garantir que o divisor não é zero, `/` exige `NonZero` —
 um tipo refinado sobre a interface `NUM` (ver capítulo 12). O literal
 `3::NonZero` é validado em compile-time: o compilador prova que 3 ≠ 0.
+
+`//` é a divisão inteira: retorna o quociente truncado como `Int`,
+independente do tipo dos operandos. Também exige `NonZero`.
 
 `mod` é o resto da divisão. Também exige `NonZero` pelo mesmo motivo.
 
