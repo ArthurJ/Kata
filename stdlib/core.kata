@@ -266,6 +266,9 @@ Rational implements NUM
     @ffi("kata_rt_rat_div")
     / :: Rational NonZero => Rational
 
+    mod :: Rational NonZero => Rational
+    lambda a b: - a (* b (rational (int (/ a b))))
+
     div :: Rational Rational => Result::(Rational, Text)
     lambda a b:
         = b (rational 0): core.Result::Err "divisão por zero"
