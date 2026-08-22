@@ -333,3 +333,14 @@ pub fn capture_stdout<F: FnOnce() -> R, R>(f: F) -> String {
 
     String::from_utf8_lossy(&captured).to_string()
 }
+
+/// Stub Windows — executa a closure sem capturar stdout.
+///
+/// No Windows, doctests com output esperado não podem comparar output
+/// (não há captura de stdout portável sem `AllocConsole` + redirect).
+/// Casos sem `expected` (só verificam que não dá erro) ainda funcionam.
+#[cfg(not(unix))]
+pub fn capture_stdout<F: FnOnce() -> R, R>(f: F) -> String {
+    f();
+    String::new()
+}
