@@ -158,12 +158,13 @@ main!()"#;
 
 #[test]
 fn tast_cons_pattern() {
-    let src = r#"head :: [Int] => Int
-lambda [h:_]: h
+    let src = r#"head :: [Int] => Optional::(Int)
+lambda []: None
+lambda [h:_]: Some h
 
 action main
     let r := head [10 20 30]
-    echo!(r)
+    echo!(show r)
 
 main!()"#;
     insta::assert_snapshot!(tast_snapshot(src));

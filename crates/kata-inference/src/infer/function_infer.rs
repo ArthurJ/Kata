@@ -133,6 +133,13 @@ pub(crate) fn infer_named_function(
     // (sem condição adicional que a diferenciaria).
     crate::redundancy::check_redundant_clauses(&typed_clauses)?;
 
+    // Verifica exaustividade das cláusulas lambda (pattern matching implícito).
+    // Múltiplas cláusulas lambda são equivalentes a um match sobre os params,
+    // mas a verificação de exaustividade só era aplicada em match explícito.
+    // Sem isto, cláusulas não-exaustivas (ex: quicksort sem `lambda []: []`)
+    // passam no typeck e crasham em runtime com SIGILL (trap de pattern falho).
+    check_clause_exhaustiveness(&typed_clauses, param_types, ctx, &func_def.clauses)?;
+
     // Validação de @cache: suporta qualquer tipo — a serialização da cache
     // key é feita via type descriptor (function_def.rs::build_type_descriptor)
     // que cobre Int, Float, Text, List, Struct, Tuple. Sum/Generic serializa
@@ -167,4 +174,106 @@ pub(crate) fn ty_name(ty: &Ty) -> &str {
         Ty::Sum(name) => name,
         _ => "",
     }
+}
+
+/// Verifica exaustividade de cláusulas lambda (pattern matching implícito).
+///
+/// Múltiplas cláusulas lambda são semanticamente equivalentes a um `match`
+/// sobre os parâmetros. Esta função coleta as variantes cobertas pelos
+/// patterns das cláusulas e chama `check_exhaustiveness` — a mesma
+/// verificação que `match` explícito já faz.
+///
+/// Para funções de 1 parâmetro, verifica diretamente. Para múltiplos
+/// parâmetros, só verifica se algum pattern da primeira posição é
+/// estrutural (Variant/Cons/Nil/Literal) — caso contrário, todos são
+/// Ident/Wildcard e a exaustividade é trivialmente satisfeita.
+fn check_clause_exhaustiveness(
+    typed_clauses: &[TypedLambdaClause],
+    param_types: &[Ty],
+    ctx: &InferCtx,
+    ast_clauses: &[Spanned<kata_ast::LambdaClause>],
+) -> InferResult<()> {
+    if typed_clauses.is_empty() || param_types.is_empty() {
+        return Ok(());
+    }
+
+    // Para múltiplos parâmetros, a verificação de exaustividade é mais
+    // complexa (produto cartesiano de patterns). Por ora, só verificamos
+    // quando há exatamente 1 parâmetro. Para N params, se TODOS os patterns
+    // em TODAS as posições são Ident/Wildcard, é trivialmente exaustivo.
+    // Caso contrário (pattern estrutural em alguma posição), não verificamos
+    // — débito técnico.
+    if param_types.len() != 1 {
+        let all_ident_wildcard = typed_clauses.iter().all(|clause| {
+            clause.patterns.iter().all(|p| {
+                matches!(
+                    p.node,
+                    crate::typed::TypedPattern::Ident { .. }
+                        | crate::typed::TypedPattern::Wildcard
+                )
+            })
+        });
+        if all_ident_wildcard {
+            return Ok(());
+        }
+        // TODO: exaustividade para múltiplos parâmetros com patterns estruturais.
+        return Ok(());
+    }
+
+    let scrutinee_ty = &param_types[0];
+    let mut covered_variants: Vec<String> = Vec::new();
+    let mut has_otherwise = false;
+
+    for clause in typed_clauses {
+        if let Some(pattern) = clause.patterns.first() {
+            match &pattern.node {
+                crate::typed::TypedPattern::Variant { variant, .. } => {
+                    covered_variants.push(variant.clone());
+                }
+                crate::typed::TypedPattern::Cons { .. } => {
+                    covered_variants.push("Cons".to_string());
+                }
+                crate::typed::TypedPattern::Nil => {
+                    covered_variants.push("Nil".to_string());
+                }
+                crate::typed::TypedPattern::Ident { .. }
+                | crate::typed::TypedPattern::Wildcard => {
+                    has_otherwise = true;
+                }
+                // Literal não cobre todos os valores do tipo.
+                crate::typed::TypedPattern::Literal { .. } => {}
+                // Tuple cobre todas as tuplas do tipo se todos os sub-patterns
+                // são Ident/Wildcard. Caso contrário (Literal/Variant dentro),
+                // só cobre tuplas específicas.
+                crate::typed::TypedPattern::Tuple { elements } => {
+                    let all_ident_wildcard = elements.iter().all(|e| {
+                        matches!(
+                            e.node,
+                            crate::typed::TypedPattern::Ident { .. }
+                                | crate::typed::TypedPattern::Wildcard
+                        )
+                    });
+                    if all_ident_wildcard {
+                        has_otherwise = true;
+                    }
+                }
+            }
+        }
+    }
+
+    // Span da primeira cláusula para a mensagem de erro.
+    let span = ast_clauses
+        .first()
+        .map(|c| c.span)
+        .unwrap_or(kata_ast::Span::zero());
+
+    crate::patterns::check_exhaustiveness(
+        &covered_variants,
+        scrutinee_ty,
+        has_otherwise,
+        ctx.enum_registry,
+        &span,
+    )?;
+
+    Ok(())
 }

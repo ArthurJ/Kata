@@ -432,7 +432,8 @@ pub(crate) fn check_exhaustiveness(
         }
         Ty::List(_) => {
             // List tem duas variantes virtuais: Cons e Nil.
-            // Se ambas cobertas → exaustivo. Senão → exige otherwise.
+            // Se ambas cobertas → exaustivo. Senão → NonExhaustiveMatch
+            // com variantes faltantes (mensagem mais útil que MissingOtherwise).
             let list_variants = ["Cons", "Nil"];
             let missing: Vec<String> = list_variants
                 .iter()
@@ -442,8 +443,13 @@ pub(crate) fn check_exhaustiveness(
             if missing.is_empty() {
                 Ok(())
             } else {
-                Err(MiddleError::MissingOtherwise {
+                Err(MiddleError::NonExhaustiveMatch {
+                    missing: missing.clone(),
                     span: (*span).into(),
+                    hint: Some(format!(
+                        "variantes faltantes: {}. Adicione uma cláusula para cada uma ou use `otherwise:` como fallback",
+                        missing.join(", ")
+                    )),
                 })
             }
         }

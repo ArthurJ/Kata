@@ -4,7 +4,7 @@ expression: tast_snapshot(src)
 ---
 === Entry ===
   ty: Unit
-  kind: ActionCall { callee: "main", args: Spanned { node: TypedExpr { span: Span { offset: 98, line: 8, col: 6, len: 1 }, ty: Unit, tail_pos: false, escape: Caller, kind: Unit }, span: Span { offset: 98, line: 8, col: 6, len: 1 } }, caller_arena: 0, ffi_symbol: None, indirect_callee: None }
+  kind: ActionCall { callee: "main", args: Spanned { node: TypedExpr { span: Span { offset: 136, line: 9, col: 6, len: 1 }, ty: Unit, tail_pos: false, escape: Caller, kind: Unit }, span: Span { offset: 136, line: 9, col: 6, len: 1 } }, caller_arena: 0, ffi_symbol: None, indirect_callee: None }
 
 === Functions ===
   * :: [Prim(Float), Prim(Int)] => Prim(Float)
@@ -42,7 +42,7 @@ expression: tast_snapshot(src)
   div :: [Prim(Rational), Prim(Int)] => Generic("Result", [Prim(Rational), Prim(Text)])
   div :: [Prim(Rational), Prim(Float)] => Generic("Result", [Prim(Rational), Prim(Text)])
   float :: [Byte] => Prim(Float)
-  head :: [List(Prim(Int))] => Prim(Int)
+  head :: [List(Prim(Int))] => Generic("Optional", [Prim(Int)])
   is_neutral :: [Prim(Int)] => Sum("Boolean")
   is_neutral :: [Prim(Float)] => Sum("Boolean")
   max :: [Var("A"), Var("A")] => Var("A")
