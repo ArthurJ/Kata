@@ -60,11 +60,17 @@ pub(crate) fn infer_type_ascription(
     };
 
     // Família polimórfica → instância concreta.
-    // Se target_ty é Plain(family_name) e a família tem instâncias
+    // Se target_ty é Family ou Plain(family_name) e a família tem instâncias
     // (is_instance_of), e o inner tem tipo primitivo concreto, promove
     // target_ty para Instance(family_name, concrete). Ex: `3::NonZero`
     // com inner :: Int → Ty::Struct(Instance("NonZero", "Int")).
-    let target_ty = if let Ty::Struct(StructKey::Plain(family_name)) = &target_ty {
+    //
+    // `resolve_type_expr` produz `Family("NonZero")` para `Named("NonZero")`
+    // quando NonZero é família registrada, e `Plain("NonZero")` quando ainda
+    // não foi registrada (pass0a). Ambos precisam ser tratados aqui.
+    let target_ty = if let Ty::Struct(StructKey::Family(family_name))
+        | Ty::Struct(StructKey::Plain(family_name)) = &target_ty
+    {
         if let Some(info) = ctx.struct_registry.get(family_name) {
             if info.is_instance_of.is_some() {
                 let concrete = match &inner.ty {
@@ -96,6 +102,49 @@ pub(crate) fn infer_type_ascription(
     } else {
         target_ty
     };
+
+    // Downcast Instance de família polimórfica → tipo base.
+    // `i::Int` onde `i :: NonZero::Int` (Instance("NonZero", "Int")).
+    // A instância tem alias_of = "Int" no StructRegistry. No-op em runtime
+    // (mesmos bits). Deve vir antes do downcast refined/alias genérico
+    // porque struct_registry.get("NonZero") retorna a família (sem
+    // alias_of), não a instância específica.
+    if let Ty::Struct(StructKey::Instance(family, concrete)) = &inner.ty
+    {
+        if let Some(inst_info) = ctx.struct_registry.get_instance(family, concrete)
+        {
+            let base_name = inst_info.alias_of.as_deref().unwrap_or(concrete);
+            let base_matches = match (&target_ty, base_name) {
+                (Ty::Prim(PrimTy::Int), "Int") => true,
+                (Ty::Prim(PrimTy::Float), "Float") => true,
+                (Ty::Prim(PrimTy::Rational), "Rational") => true,
+                (Ty::Prim(PrimTy::Text), "Text") => true,
+                (Ty::Struct(key), b) if key.name() == b => true,
+                _ => false,
+            };
+            if base_matches {
+                return Ok(TypedExpr {
+                    span: *span,
+                    ty: target_ty.clone(),
+                    tail_pos,
+                    escape: if ctx.ret_ty.is_some() {
+                        if tail_pos {
+                            EscapeTarget::Caller
+                        } else {
+                            EscapeTarget::Local
+                        }
+                    } else {
+                        EscapeTarget::Caller
+                    },
+                    kind: TypedExprKind::TypeAscription {
+                        expr: Box::new(Spanned::new(inner, expr.span)),
+                        target_ty,
+                        pending_predicates: Vec::new(),
+                    },
+                });
+            }
+        }
+    }
 
     // Downcast refined/alias→base — `a::Int` onde `a :: PositiveInt`
     // ou `x::Float` onde `x :: Altura` (alias de Float) ou
