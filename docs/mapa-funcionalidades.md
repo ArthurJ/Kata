@@ -156,9 +156,12 @@ argumento é `NonZero` (família polimórfica) — a instância concreta é
 qualificada na declaração: `mod :: Float NonZero::Int => Float`. O
 `resolve_type_expr` resolve `NonZero::Int` → `Instance("NonZero", "Int")`.
 Ascription de literal (`3::NonZero`) promove `Family` → `Instance` baseado
-no tipo primitivo do inner. `mod` Float/Rational usa truncagem
-(`a - b*(float(int(a/b)))`) em Kata puro para evitar erro de precisão
-IEEE 754 — sem FFI adicional.
+no tipo primitivo do inner. Construtor falível (`NonZero(3)`,
+`NonZero(rational 3)`) retorna `Result::(Instance("NonZero", "Int"), Text)`
+— não `Family` — permitindo dispatch não-ambíguo no call-site. `fits_return`
+aceita `Instance(family, _)` como compatível com `Family(family)`. `mod`
+Float/Rational usa truncagem (`a - b*(float(int(a/b)))`) em Kata puro para
+evitar erro de precisão IEEE 754 — sem FFI adicional.
 
 Coerção contextual no `|`: fallback literal validado em compile-time
 contra predicados.

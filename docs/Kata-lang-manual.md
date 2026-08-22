@@ -1269,6 +1269,15 @@ typeck e rejeita o programa antes do codegen. O construtor falível
 devolve `Result::(T, Text)`, forçando o programador a lidar com a
 falha via `|` (funções puras) ou `?` (Actions).
 
+**Famílias polimórficas:** o construtor de uma família (ex: `NonZero`)
+retorna `Result::(Instance("NonZero", "Int"), Text)` — não
+`Result::(Family("NonZero"), Text)`. A instância concreta é derivada do
+tipo do argumento (`NonZero(3)` → Int, `NonZero(3.0)` → Float,
+`NonZero(rational 3)` → Rational). Isto permite que o dispatch distinga
+instâncias no call-site. Actions que declaram `Result::(NonZero, Text)`
+(onde `NonZero` resolve para `Family`) aceitam o retorno `Instance` via
+`fits_return` — `Instance(family, _)` é compatível com `Family(family)`.
+
 ```kata
 let x := 5::PositiveInt            # ascription: predicado avaliado em typeck
 let erro := (-5)::PositiveInt      # type error: predicado falhou em compile-time

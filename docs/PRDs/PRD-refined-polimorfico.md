@@ -204,13 +204,17 @@ Isso é análogo ao `try_refines_fallback` atual: a relação "instância perten
 - `NonZero(0)` → instância `("NonZero", "Int")` (valida `!= 0 (zero 0)` → `!= 0 0` → `False` → `Err`)
 
 O construtor é um OverloadSet com 3 overloads, uma por instância concreta:
-- `NonZero :: Int => Result::(NonZero, Text)` (instância Int)
-- `NonZero :: Float => Result::(NonZero, Text)` (instância Float)
-- `NonZero :: Rational => Result::(NonZero, Text)` (instância Rational)
+- `NonZero :: Int => Result::(Instance("NonZero", "Int"), Text)` (instância Int)
+- `NonZero :: Float => Result::(Instance("NonZero", "Float"), Text)` (instância Float)
+- `NonZero :: Rational => Result::(Instance("NonZero", "Rational"), Text)` (instância Rational)
 
-O tipo de retorno `NonZero` é o nome público — o dispatch sabe que é uma
-família e resolve a instância concreta pelo tipo do argumento. O dispatch
-resolve por tipo do argumento — já funciona hoje.
+O tipo de retorno é `Instance` concreta derivada do `base_ty` do
+`RefinedDeclInfo` — não `Family`. Isto permite que o dispatch distinga
+instâncias no call-site (ex: `mod (rational 10) n` onde `n` vem de
+`NonZero(rational 3)` despacha para `mod :: Rational NonZero::Rational`).
+Actions que declaram `Result::(NonZero, Text)` (onde `NonZero` resolve para
+`Family`) aceitam o retorno `Instance` via `fits_return` (Instance é
+compatível com Family da mesma família).
 
 ### 3.7. Ascription
 
