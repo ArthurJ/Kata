@@ -16,6 +16,55 @@ use kata_parser::parse;
 
 use crate::{FunctionDef, ResolvedModule, merge_two, resolve_with_origin};
 
+// ── Stdlib embedded no binário ───────────────────────────
+
+/// Código fonte dos arquivos da stdlib, embutidos via `include_str!`.
+/// O ModuleLoader lê destes em vez do filesystem.
+mod embedded {
+    pub const MOD: &str = include_str!("../../../stdlib/mod.kata");
+    pub const CORE: &str = include_str!("../../../stdlib/core.kata");
+    pub const CORE_INTERNALS: &str = include_str!("../../../stdlib/core_internals.kata");
+    pub const MATH: &str = include_str!("../../../stdlib/math.kata");
+    pub const COMPLEX: &str = include_str!("../../../stdlib/complex.kata");
+    pub const STDIO: &str = include_str!("../../../stdlib/stdio.kata");
+}
+
+/// Prefixo sintético para paths de stdlib embedded.
+const STDLIB_PREFIX: &str = "$stdlib";
+
+/// Mapa de nome do módulo (sem extensão) → código fonte embedded.
+fn embedded_source(name: &str) -> Option<&'static str> {
+    match name {
+        "mod" => Some(embedded::MOD),
+        "core" => Some(embedded::CORE),
+        "core_internals" => Some(embedded::CORE_INTERNALS),
+        "math" => Some(embedded::MATH),
+        "complex" => Some(embedded::COMPLEX),
+        "stdio" => Some(embedded::STDIO),
+        _ => None,
+    }
+}
+
+/// Verifica se um path é sintético (embedded stdlib).
+fn is_stdlib_path(path: &Path) -> bool {
+    path.starts_with(STDLIB_PREFIX)
+}
+
+/// Constrói um path sintético para um módulo stdlib embedded.
+fn stdlib_synthetic_path(name: &str) -> PathBuf {
+    PathBuf::from(format!("{STDLIB_PREFIX}/{name}.kata"))
+}
+
+/// Tenta resolver um nome contra os módulos stdlib embedded.
+/// Retorna o path sintético se o módulo existe.
+fn try_resolve_embedded(normal_path: &[String]) -> Option<PathBuf> {
+    let last = normal_path.last()?;
+    if embedded_source(last).is_some() && normal_path.len() == 1 {
+        return Some(stdlib_synthetic_path(last));
+    }
+    None
+}
+
 // ── Prefixos de import path ──────────────────────────────
 
 /// Prefixo especial detectado no início de um import path.
@@ -308,11 +357,26 @@ impl ModuleLoader {
             });
         }
 
-        // Lê o arquivo
-        let source = std::fs::read_to_string(path).map_err(|e| {
-            self.loading.remove(path);
-            LoadError::Io(e.to_string())
-        })?;
+        // Lê o arquivo — embedded stdlib ou filesystem.
+        let source = if is_stdlib_path(path) {
+            let name = path
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default();
+            embedded_source(&name)
+                .ok_or_else(|| {
+                    self.loading.remove(path);
+                    LoadError::NotFound {
+                        path: path.display().to_string(),
+                    }
+                })?
+                .to_string()
+        } else {
+            std::fs::read_to_string(path).map_err(|e| {
+                self.loading.remove(path);
+                LoadError::Io(e.to_string())
+            })?
+        };
 
         // Lex → Parse → Resolve
         let tokens = lex(&source).map_err(|e| {
@@ -332,31 +396,24 @@ impl ModuleLoader {
             LoadError::Resolve(e)
         })?;
 
-        // Sub-módulos precisam do prelude: Int, Float, +, etc.
-        // Sem isso, o TypeEnv do sub-módulo só tem Unit, e qualquer
-        // tipo do prelude falha com UnboundName.
-        // Exceção: core.kata É o prelude — não injeta em si mesmo.
-        let is_core = path.file_stem().is_some_and(|s| s == "core");
-        let mut merged = if is_core {
-            resolved
-        } else {
-            let prelude = crate::prelude_sigs::load_prelude().map_err(|e| {
-                self.loading.remove(path);
-                LoadError::Resolve(e)
-            })?;
-            merge_two(prelude, resolved)
-        };
+        // Stdlib embedded: processa imports recursivamente (ex: core.kata
+        // importa core_internals).
+        // User modules: NÃO injeta stdlib aqui — a injeção fica nos callers
+        // (pipeline, repl, lsp) para evitar ciclo recursivo quando user
+        // modules importam outros user modules.
+        let mut merged = resolved;
 
         // Carregar imports do módulo recursivamente e fazer merge.
-        // Cada sub-módulo usa seu próprio diretório como entry_dir para
-        // resolver `super.` nos seus imports.
-        // Exceção: core.kata não tem imports (é o prelude).
-        if !is_core {
-            let entry_dir = path.parent().unwrap_or(Path::new(".")).to_path_buf();
-            let imports = self.load_imports(&module, &entry_dir)?;
-            if !imports.is_empty() {
-                crate::merge_imports::merge_imports(&mut merged, &imports);
-            }
+        // Stdlib embedded usa diretório sintético; user modules usam
+        // o diretório do arquivo importador.
+        let entry_dir = if is_stdlib_path(path) {
+            PathBuf::from(STDLIB_PREFIX)
+        } else {
+            path.parent().unwrap_or(Path::new(".")).to_path_buf()
+        };
+        let imports = self.load_imports(&module, &entry_dir)?;
+        if !imports.is_empty() {
+            crate::merge_imports::merge_imports(&mut merged, &imports);
         }
 
         self.loading.remove(path);
@@ -393,7 +450,9 @@ impl ModuleLoader {
         // Detectar e separar prefixo especial
         let (prefix_kind, normal_path) = split_import_prefix(module_path);
 
-        if normal_path.is_empty() {
+        // `import stdlib` (sem subpath) resolve para stdlib/mod.kata.
+        // Outros prefixos com path vazio são erro.
+        if normal_path.is_empty() && prefix_kind != PrefixKind::Stdlib {
             return Err(LoadError::NotFound {
                 path: module_path.join("."),
             });
@@ -416,15 +475,19 @@ impl ModuleLoader {
                 })
             }
             PrefixKind::Stdlib => {
-                // Procurar SÓ no stdlib_dir
-                let stdlib_dir = self.stdlib_dir();
-                try_resolve(&stdlib_dir, normal_path).ok_or_else(|| LoadError::NotFound {
-                    path: module_path.join("."),
-                })
+                // Stdlib embedded no binário — path sintético.
+                // `import stdlib` (path vazio) resolve para mod.kata.
+                if normal_path.is_empty() {
+                    Ok(stdlib_synthetic_path("mod"))
+                } else {
+                    try_resolve_embedded(normal_path).ok_or_else(|| LoadError::NotFound {
+                        path: module_path.join("."),
+                    })
+                }
             }
             PrefixKind::None => {
                 // entry_dir primeiro (diretório do arquivo importador),
-                // depois search_paths (inclui stdlib como fallback).
+                // depois search_paths, depois stdlib embedded como fallback.
                 if let Some(found) = try_resolve(entry_dir, normal_path) {
                     return Ok(found);
                 }
@@ -432,6 +495,10 @@ impl ModuleLoader {
                     if let Some(found) = try_resolve(search_path, normal_path) {
                         return Ok(found);
                     }
+                }
+                // Fallback: stdlib embedded.
+                if let Some(found) = try_resolve_embedded(normal_path) {
+                    return Ok(found);
                 }
                 Err(LoadError::NotFound {
                     path: module_path.join("."),
