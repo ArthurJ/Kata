@@ -92,28 +92,6 @@ echo!(fatorial_10)
 
 O cálculo `fatorial 10` roda em compile-time. No binário, `fatorial_10` é o literal `3628800` — não há chamadas de função em runtime.
 
-## `@cache` — memoização
-
-`@cache{strategy: "LRU"}` intercepta chamadas repetidas e armazena resultados em uma tabela hash:
-
-```kata
-@cache{strategy: "LRU"}
-dobro :: Int => Int
-lambda n: * n 2
-
-echo!(dobro 5)
-echo!(dobro 5)
-```
-
-```
-10
-10
-```
-
-A segunda chamada com o mesmo argumento retorna o valor cacheado sem reexecutar o body.
-
-> **Limitação atual:** `@cache` suporta apenas funções `Int => Int`. O diagnostic rejeita outros tipos de parâmetro ou retorno com uma mensagem clara.
-
 ## Próximo capítulo
 
 Otimizações são automáticas. O próximo capítulo mostra o REPL interativo — explorar a linguagem sem criar arquivos. → [Capítulo 15](15-repl.md)
