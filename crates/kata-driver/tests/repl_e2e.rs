@@ -686,28 +686,23 @@ fn repl_named_function_redeclare() {
 
 #[test]
 fn repl_constant_in_action() {
-    // constant scale := 2 → action foo (x::Int) => Int / * x scale → foo 5 → 10
-    // NOTE: Action call from REPL prompt is a pre-existing codegen bug
-    // (foo 5 is inferred as Closure instead of ActionCall). This is NOT
-    // related to Fase 6 — the same bug occurs without `constant`.
-    // The constant_fold pass correctly substitutes `scale` in the action
-    // body; the failure is in the action call dispatch, not in constant.
+    // constant scale := 2 → action foo (x::Int) => Int / * x scale → foo!(5) → 10
+    // `foo 5` (sem `!`) é rejeitado pelo inference: action chamada sem `!`
+    // é erro semântico, não bug de codegen. Usa `foo!(5)` para chamar actions.
     let out = run_repl(&[
         "constant scale := 2",
         "action foo (x::Int) => Int",
         "    * x scale",
         "",
-        "foo 5",
+        "foo!(5)",
         ":quit",
     ]);
-    let _lines = result_lines(&out);
-    // TODO: uncomment when action call from REPL prompt is fixed
-    // assert!(
-    //     lines.iter().any(|l| l.trim() == "10"),
-    //     "esperava 10 (constant em action), got: {out}"
-    // );
-    // Por enquanto, apenas verificar que não há "unbound ident: scale"
-    // (o constant_fold funcionou, o erro é no action call dispatch)
+    let lines = result_lines(&out);
+    assert!(
+        lines.iter().any(|l| l.trim() == "10"),
+        "esperava 10 (constant em action com foo!), got: {out}"
+    );
+    // Verifica que constant_fold substituiu scale (não há unbound ident).
     assert!(
         !out.contains("unbound ident: scale"),
         "constant_fold deveria substituir scale, got: {out}"

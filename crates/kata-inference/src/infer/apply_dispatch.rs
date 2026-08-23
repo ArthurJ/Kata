@@ -35,6 +35,21 @@ pub(crate) fn try_dispatch_table(
         return None;
     }
 
+    // Se todas as overloads de `func_name` são Actions, o usuário está
+    // chamando uma action sem `!` (sintaxe de função pura). Actions são
+    // comportamento — devem ser chamadas com `!` (ActionCall), não com
+    // aplicação prefix (Closure). Rejeita com mensagem acionável em vez
+    // de produzir um TypedExprKind::Closure que o codegen não sabe lowerar.
+    if let Some(overloads) = ctx.table.get_overloads(func_name) {
+        if !overloads.is_empty() && overloads.iter().all(|oi| oi.is_action) {
+            return Some(Err(MiddleError::TypeMismatch {
+                expected: format!("função pura chamada sem `!`"),
+                found: format!("{func_name} é uma action — use {func_name}!(...) para chamá-la"),
+                span: (*span).into(),
+            }));
+        }
+    }
+
     // Ret-directed dispatch — se hint é Some(ty), filtra overloads
     // cujo retorno é compatível com ty (via fits_return) antes do scoring.
     if let Some(hint_ty) = hint {
