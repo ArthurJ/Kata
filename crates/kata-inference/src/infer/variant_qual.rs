@@ -165,8 +165,9 @@ pub(crate) fn infer_variant_qual(
                     span: (*span).into(),
                 });
             }
-            // Variante constante: OK sem args constrói com valor fixo.
-            if fixed_value_qual(ctx, origin, name, variant).is_some() {
+            // Variante constante: constrói com valor fixo (igual ao ramo
+            // não-genérico, mas preserva Ty::Generic com type_args não-inferidos).
+            if let Some(fixed_text) = fixed_value_qual(ctx, origin, name, variant) {
                 let tag = variant_index_qual(ctx, origin, name, variant).ok_or_else(|| {
                     MiddleError::UnboundName {
                         suggestion: None,
@@ -174,17 +175,18 @@ pub(crate) fn infer_variant_qual(
                         span: (*span).into(),
                     }
                 })?;
-                // TODO: produzir VariantConstruct com payload = literal do fixed_value.
-                // Por ora, VariantQual (sem payload) — o codegen precisaria do valor.
-                // Isso é uma implementação parcial; o caso genérico + fixed_value é raro.
+                let payload_ty = payload_ty_qual(ctx, origin, name, variant)
+                    .expect("fixed_value implica payload_ty inferido");
+                let payload = build_fixed_payload(fixed_text, payload_ty, *span);
                 let type_params = type_params_of_qual(ctx, origin, name).expect("is_generic true");
                 let type_args: Vec<Ty> = type_params.iter().map(|p| Ty::Var(p.clone())).collect();
                 let result_ty = Ty::Generic(name.clone(), type_args);
                 return Ok(Some((
                     result_ty,
-                    TypedExprKind::VariantQual {
+                    TypedExprKind::VariantConstruct {
                         enum_name: name.clone(),
                         variant: variant.to_string(),
+                        payload: Box::new(kata_ast::Spanned::new(payload, *span)),
                         tag,
                         module_path: module_path.map(|p| p.to_vec()),
                     },

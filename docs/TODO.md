@@ -56,13 +56,6 @@ Itens coletados de comentários `TODO` no código-fonte. Ainda não
 triados — podem ser obsoletos, redundantes com itens acima, ou
 ação imediata. Reavaliar caso a caso.
 
-### kata-inference
-
-- **`src/infer/variant_qual.rs:177`** — Produzir `VariantConstruct` com
-  payload = literal do `fixed_value` (em vez de só marcar como resolvido).
-- **`tests/csp_typeck.rs:216`** — Quando `T0` for unificado, testar rejeição
-  de tipos diferentes. Teste aguarda feature subjacente.
-
 ### kata-rt
 
 - **`src/ipc.rs:157`** — Implementar `spawn` no Windows. Ver

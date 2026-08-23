@@ -147,9 +147,12 @@ pub(crate) fn infer_channel_recv(
 
 /// `select` com braços de canal, I/O e timeout opcional.
 ///
-/// Braços de canal: todos devem ter receivers do mesmo tipo `T`.
+/// Cada braço lê de seu canal/handle e executa seu corpo
+/// independentemente. Os receivers **não precisam ter o mesmo tipo** —
+/// cada braço faz binding do seu próprio `recv_ty`.
+/// Os corpos dos braços devem produzir o mesmo tipo (o valor do braço
+/// que disparar é o valor do `select`).
 /// Braços de I/O: binding recebe `Result::(Bytes, Text)`.
-/// O tipo do `select` é a unificação de todos os braços + timeout_body.
 pub(crate) fn infer_select(
     arms: &[SelectArm],
     timeout_ms: &Option<Box<Spanned<Expr>>>,
