@@ -95,8 +95,6 @@ fn check_pattern_inner(
             match scrutinee_ty {
                 Ty::InferVar(_) => {
                     // Scrutinee não tem tipo ainda — o annotation define.
-                    // Ver TODO.md (kata-inference / patterns.rs): a anotação
-                    // não retropropaga para resolver o InferVar do scrutinee.
                 }
                 _ => {
                     if !pattern_type_compatible(&annotated_ty, scrutinee_ty) {

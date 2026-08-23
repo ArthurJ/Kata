@@ -58,17 +58,6 @@ ação imediata. Reavaliar caso a caso.
 
 ### kata-inference
 
-- **`src/patterns.rs` — Retropropagação de tipo anotado para scrutinee `InferVar`.**
-  Quando o scrutinee de `match` chega como `Ty::InferVar` e o pattern traz
-  anotação (`x::Int`), a anotação define o binding mas **não resolve** o
-  `InferVar` do scrutinee. Isso impede: (a) verificação de exaustividade
-  (precisa do tipo concreto do scrutinee) e (b) detecção de contradição
-  entre braços com anotações incompatíveis. A infraestrutura de unificação
-  (`unify_arm_types`) existe para `Ty::Var` mas não cobre `InferVar`; além
-  disso, `check_pattern` recebe `scrutinee_ty: &Ty` (imutável) — retropropagar
-  exigiria tornar o scrutinee mutável no caller ou usar `Substitutions`
-  compartilhado. Baixa prioridade: o scrutinee só chega como `InferVar` em
-  casos de dispatch ambíguo, que normalmente falham antes de chegar ao match.
 - **`src/infer/variant_qual.rs:177`** — Produzir `VariantConstruct` com
   payload = literal do `fixed_value` (em vez de só marcar como resolvido).
 - **`tests/csp_typeck.rs:216`** — Quando `T0` for unificado, testar rejeição
