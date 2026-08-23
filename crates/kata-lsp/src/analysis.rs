@@ -102,7 +102,7 @@ fn load_module_imports(file: &str, module: &Module) -> Vec<ImportedModule> {
 }
 
 /// Carrega a stdlib (core → core_internals) via `ModuleLoader`, substituindo
-/// o antigo `load_prelude()`. Retorna o `ResolvedModule` não-filtrado.
+/// Retorna o `ResolvedModule` não-filtrado.
 fn load_stdlib() -> Result<ResolvedModule, Vec<kata_resolution::ResolveError>> {
     let mut loader = ModuleLoader::new(Vec::new());
     let stdlib = loader

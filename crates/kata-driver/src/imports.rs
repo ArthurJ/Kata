@@ -17,7 +17,7 @@ use crate::IntoReport;
 ///
 /// Cria um `ModuleLoader` com search paths = diretório do arquivo + stdlib.
 /// Retorna a lista de `ImportedModule` (vazia se não há imports).
-/// O prelude (core) é injetado separadamente pelo caller via load_prelude.
+/// O prelude (core) é injetado separadamente pelo caller via load_stdlib.
 pub(crate) fn load_module_imports(
     file: &str,
     module: &kata_ast::Module,

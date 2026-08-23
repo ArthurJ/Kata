@@ -52,12 +52,12 @@ fn err(msg: impl std::fmt::Display) -> Vec<miette::Report> {
 }
 
 /// Carrega a stdlib (core → core_internals) via `ModuleLoader`, substituindo
-/// o antigo `load_prelude()`. Retorna o `ResolvedModule` não-filtrado para
+/// Retorna o `ResolvedModule` não-filtrado para
 /// que o pipeline faça `merge_two(stdlib, user)`.
 ///
 /// Carrega `["stdlib", "core"]` (não `mod.kata`) porque o pipeline precisa
 /// dos tipos primitivos não-qualificados (`Int`, `Float`, etc.) no `TypeEnv`,
-/// como `load_prelude()` fazia via `merge_two(internals, core)`. O `mod.kata`
+/// O `mod.kata`
 /// é o gateway para importação explícita do usuário (`import stdlib`), não
 /// para o prelude implícito.
 fn load_stdlib() -> PipelineResult<ResolvedModule> {
@@ -516,7 +516,7 @@ impl Pipeline {
 
 // ── Helpers ────────────────────────────────────────────────
 
-/// Converte `Vec<ResolveError>` (de `load_prelude` ou `resolve_with_imports`)
+/// Converte `Vec<ResolveError>` (de `resolve_with_imports`)
 /// em `Vec<Report>`. `source` e `file` são do módulo onde o erro ocorreu
 /// (prelude não tem file_path; o módulo do usuário usa `self.source`).
 fn resolve_errors_to_reports(

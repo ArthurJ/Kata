@@ -34,7 +34,7 @@ use crate::display;
 use crate::merge_resolved;
 
 /// Carrega a stdlib (core → core_internals) via `ModuleLoader`, substituindo
-/// o antigo `load_prelude()`. Mesma semântica do `load_stdlib()` do pipeline.
+/// Mesma semântica do `load_stdlib()` do pipeline.
 fn load_stdlib() -> Result<ResolvedModule, String> {
     let mut loader = ModuleLoader::new(Vec::new());
     let stdlib = loader

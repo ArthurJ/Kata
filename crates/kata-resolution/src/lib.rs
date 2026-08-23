@@ -9,7 +9,6 @@ mod directives;
 pub(crate) mod merge_imports;
 pub(crate) mod module_loader;
 mod pass0;
-mod prelude_sigs;
 mod type_resolve;
 mod types;
 
@@ -457,7 +456,7 @@ fn resolve_inner(
 
 /// Carrega a stdlib (core → core_internals) via `ModuleLoader` embedded.
 ///
-/// Substitui `load_prelude()` para testes e callers que precisam do
+/// Carrega a stdlib embedded para testes e callers que precisam do
 /// `ResolvedModule` não-filtrado da stdlib. Carrega `["stdlib", "core"]`
 /// (não `mod.kata`) para preservar tipos primitivos não-qualificados
 /// (`Int`, `Float`, etc.) no `TypeEnv`.

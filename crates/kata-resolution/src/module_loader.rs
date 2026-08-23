@@ -429,7 +429,7 @@ impl ModuleLoader {
         let mut merged = if is_stdlib_path(path) {
             resolved
         } else if let Some(stdlib) = self.stdlib.clone() {
-            crate::merge_two((*stdlib).clone(), resolved)
+            merge_two((*stdlib).clone(), resolved)
         } else {
             // stdlib não carregada (loader temporário) — sem injeção.
             resolved
@@ -537,14 +537,6 @@ impl ModuleLoader {
                 })
             }
         }
-    }
-
-    /// Retorna o diretório da stdlib (hardcoded via CARGO_MANIFEST_DIR).
-    fn stdlib_dir(&self) -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../stdlib")
-            .canonicalize()
-            .unwrap_or_else(|_| Path::new("../../stdlib").to_path_buf())
     }
 
     /// Limpa o cache (útil para testes).

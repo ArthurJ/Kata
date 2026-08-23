@@ -218,7 +218,7 @@ Vermelho"#;
 // Nota: O parser de Kata5 atualmente não suporta `enum Forma\n    Circulo Int`
 // como variante com payload — ele separa `Circulo` e `Int` como variantes
 // unitárias distintas. Variantes com payload só funcionam para enums do
-// prelude (Result/Optional), que são registrados manualmente em prelude_sigs.rs.
+// prelude (Result/Optional), que são registrados via stdlib embedded.
 // Quando o parser for estendido para suportar payloads em enums do usuário,
 // o fallback de infer_apply já estará pronto para resolver `Circulo 42`.
 
