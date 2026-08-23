@@ -47,3 +47,44 @@ do codegen.
 - Tensor/SIMD
 - `@restart` (retry policy para Actions)
 - Renomear `@trace` de volta para `@log` (diretiva de telemetria)
+
+---
+
+## TODOs esparsos no código (pendentes de reavaliação)
+
+Itens coletados de comentários `TODO` no código-fonte. Ainda não
+triados — podem ser obsoletos, redundantes com itens acima, ou
+ação imediata. Reavaliar caso a caso.
+
+### kata-inference
+
+- **`src/patterns.rs` — Retropropagação de tipo anotado para scrutinee `InferVar`.**
+  Quando o scrutinee de `match` chega como `Ty::InferVar` e o pattern traz
+  anotação (`x::Int`), a anotação define o binding mas **não resolve** o
+  `InferVar` do scrutinee. Isso impede: (a) verificação de exaustividade
+  (precisa do tipo concreto do scrutinee) e (b) detecção de contradição
+  entre braços com anotações incompatíveis. A infraestrutura de unificação
+  (`unify_arm_types`) existe para `Ty::Var` mas não cobre `InferVar`; além
+  disso, `check_pattern` recebe `scrutinee_ty: &Ty` (imutável) — retropropagar
+  exigiria tornar o scrutinee mutável no caller ou usar `Substitutions`
+  compartilhado. Baixa prioridade: o scrutinee só chega como `InferVar` em
+  casos de dispatch ambíguo, que normalmente falham antes de chegar ao match.
+- **`src/infer/variant_qual.rs:177`** — Produzir `VariantConstruct` com
+  payload = literal do `fixed_value` (em vez de só marcar como resolvido).
+- **`tests/csp_typeck.rs:216`** — Quando `T0` for unificado, testar rejeição
+  de tipos diferentes. Teste aguarda feature subjacente.
+
+### kata-rt
+
+- **`src/ipc.rs:157`** — Implementar `spawn` no Windows. Ver
+  `docs/PRDs/PRD-portability-windows.md`.
+
+### kata-driver
+
+- **`tests/repl_e2e.rs:704`** — Uncomment quando action call do REPL
+  prompt for corrigido.
+
+### examples
+
+- **`quicksort.kata:2`** — Deveria ser `"stdio.(stdout)"` para o stdout
+  ficar disponível no escopo do módulo.
