@@ -19,6 +19,7 @@
 //! parseado produziria erros em cascata em resolve/infer.
 
 use std::collections::HashMap;
+use std::path::Path;
 
 use kata_codegen::type_table;
 use kata_comptime::run_comptime_pass;
@@ -28,7 +29,7 @@ use kata_lexer::lex_with_recovery;
 use kata_monomorph::{MonoModule, monomorphize};
 use kata_optimizer::optimize;
 use kata_parser::{parse_decls_only, parse_with_arity_recovery, parse_with_recovery, scan_lambdas};
-use kata_resolution::{ResolvedModule, extract_arities, load_prelude, resolve_with_prelude};
+use kata_resolution::{ModuleLoader, ResolvedModule, extract_arities, resolve_with_prelude};
 use kata_tree_shaking::{tree_shake, tree_shake_preserve_tests};
 
 use crate::imports;
@@ -48,6 +49,28 @@ fn one_err(report: miette::Report) -> Vec<miette::Report> {
 /// Cria um `Vec<Report>` a partir de uma mensagem simples.
 fn err(msg: impl std::fmt::Display) -> Vec<miette::Report> {
     one_err(miette::Report::msg(msg.to_string()))
+}
+
+/// Carrega a stdlib (core → core_internals) via `ModuleLoader`, substituindo
+/// o antigo `load_prelude()`. Retorna o `ResolvedModule` não-filtrado para
+/// que o pipeline faça `merge_two(stdlib, user)`.
+///
+/// Carrega `["stdlib", "core"]` (não `mod.kata`) porque o pipeline precisa
+/// dos tipos primitivos não-qualificados (`Int`, `Float`, etc.) no `TypeEnv`,
+/// como `load_prelude()` fazia via `merge_two(internals, core)`. O `mod.kata`
+/// é o gateway para importação explícita do usuário (`import stdlib`), não
+/// para o prelude implícito.
+fn load_stdlib() -> PipelineResult<ResolvedModule> {
+    let mut loader = ModuleLoader::new(Vec::new());
+    let stdlib = loader
+        .load(&["stdlib".into(), "core".into()], Path::new("."))
+        .map_err(|e| match e {
+            kata_resolution::LoadError::Resolve(errors) => {
+                resolve_errors_to_reports(&errors, "", None)
+            }
+            other => err(format!("erro ao carregar stdlib: {other}")),
+        })?;
+    Ok((*stdlib).clone())
 }
 
 // ── Modos configuráveis ────────────────────────────────────
@@ -296,7 +319,7 @@ impl Pipeline {
             .as_ref()
             .ok_or_else(|| err("resolve chamado antes de parse"))?;
 
-        let prelude = load_prelude().map_err(|e| resolve_errors_to_reports(&e, "", None))?;
+        let prelude = load_stdlib()?;
 
         let imports = match file_path {
             Some(file) => imports::load_module_imports(file, module).map_err(one_err)?,
@@ -516,7 +539,7 @@ fn quick_resolve(
     module: &kata_ast::Module,
     file_path: Option<&str>,
 ) -> PipelineResult<ResolvedModule> {
-    let prelude = load_prelude().map_err(|e| resolve_errors_to_reports(&e, "", None))?;
+    let prelude = load_stdlib()?;
 
     let imports = match file_path {
         Some(file) => imports::load_module_imports(file, module).map_err(one_err)?,

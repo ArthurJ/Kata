@@ -1,0 +1,10 @@
+---
+source: crates/kata-driver/tests/examples_snapshot.rs
+assertion_line: 105
+expression: output
+---
+--- stderr ---
+Error: type.unbound_name
+
+  × nome `+` não está no escopo
+  [Failed to read contents for label `nome não vinculado` (offset: 157, length: 1): OutOfBounds]
