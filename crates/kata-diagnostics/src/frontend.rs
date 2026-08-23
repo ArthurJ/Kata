@@ -113,7 +113,9 @@ pub enum FrontendError {
         span: MietteSpan,
     },
 
-    #[error("nome `{name}` é reservado: identificadores começando com `__` são de uso exclusivo do compilador")]
+    #[error(
+        "nome `{name}` é reservado: identificadores começando com `__` são de uso exclusivo do compilador"
+    )]
     #[diagnostic(code = "parse.reserved_name")]
     ReservedName {
         name: String,

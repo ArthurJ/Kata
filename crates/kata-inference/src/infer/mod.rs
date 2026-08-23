@@ -130,8 +130,7 @@ pub fn infer_module(
 
         // Segundo: o tipo base implementa a interface?
         let base_ty_name = ty_name(&refines_entry.base_ty);
-        if !base_ty_name.is_empty()
-            && !interface_registry.type_implements(base_ty_name, iface_name)
+        if !base_ty_name.is_empty() && !interface_registry.type_implements(base_ty_name, iface_name)
         {
             return Err(MiddleError::NoOverload {
                 name: format!(

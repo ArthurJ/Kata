@@ -208,8 +208,7 @@ fn check_clause_exhaustiveness(
             clause.patterns.iter().all(|p| {
                 matches!(
                     p.node,
-                    crate::typed::TypedPattern::Ident { .. }
-                        | crate::typed::TypedPattern::Wildcard
+                    crate::typed::TypedPattern::Ident { .. } | crate::typed::TypedPattern::Wildcard
                 )
             })
         });
@@ -236,8 +235,7 @@ fn check_clause_exhaustiveness(
                 crate::typed::TypedPattern::Nil => {
                     covered_variants.push("Nil".to_string());
                 }
-                crate::typed::TypedPattern::Ident { .. }
-                | crate::typed::TypedPattern::Wildcard => {
+                crate::typed::TypedPattern::Ident { .. } | crate::typed::TypedPattern::Wildcard => {
                     has_otherwise = true;
                 }
                 // Literal não cobre todos os valores do tipo.

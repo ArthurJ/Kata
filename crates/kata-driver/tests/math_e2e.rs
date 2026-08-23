@@ -370,10 +370,7 @@ main!()"#,
     );
     let (stdout, stderr, code) = run_kata(&path);
     assert_eq!(code, 0, "stderr: {stderr}");
-    let val: f64 = stdout
-        .trim()
-        .parse()
-        .expect("atan2 1 1 deve ser Float");
+    let val: f64 = stdout.trim().parse().expect("atan2 1 1 deve ser Float");
     // atan2(1,1) = π/4 ≈ 0.7854
     assert!(
         (val - std::f64::consts::FRAC_PI_4).abs() < 1e-10,
@@ -689,7 +686,10 @@ main!()"#,
     let (stdout, stderr, code) = run_kata(&path);
     assert_eq!(code, 0, "stderr: {stderr}");
     let out = stdout.trim();
-    assert!(out.contains("1.999") || out.contains("2.0"), "cbrt(8+0i) ≈ 2+0i: {out}");
+    assert!(
+        out.contains("1.999") || out.contains("2.0"),
+        "cbrt(8+0i) ≈ 2+0i: {out}"
+    );
 }
 
 // ── Sobrecargas Complex → Float (norm, arg) ────────────────────

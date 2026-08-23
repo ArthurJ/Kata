@@ -81,8 +81,7 @@ pub(crate) struct ReplSession {
 impl ReplSession {
     /// Cria nova sessão carregando o prelude.
     pub fn new() -> Result<Self, String> {
-        let prelude = load_stdlib()
-            .map_err(|e| format!("erro ao carregar prelude: {e}"))?;
+        let prelude = load_stdlib().map_err(|e| format!("erro ao carregar prelude: {e}"))?;
         let history_path = dirs();
         // Runtime persistente: vive entre avaliações. Leak intencional —
         // o REPL é de longa duração e valores na arena devem persistir.
@@ -109,8 +108,7 @@ impl ReplSession {
         self.snapshots.clear();
         self.function_table.clear();
         self.imports.clear();
-        self.prelude = load_stdlib()
-            .map_err(|e| format!("erro ao carregar prelude: {e}"))?;
+        self.prelude = load_stdlib().map_err(|e| format!("erro ao carregar prelude: {e}"))?;
         // Recriar Runtime — descarta o antigo e cria um novo limpo.
         let _ = unsafe { Box::from_raw(self.rt_ptr as *mut kata_rt::Runtime) };
         let rt = Box::new(kata_rt::Runtime::new());

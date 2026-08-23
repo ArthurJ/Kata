@@ -6,10 +6,7 @@
 //!
 //! Opera sobre `TypedPattern` (pós-resolução do typeck) para distinguir
 //! `Ident("True")` resolvido para `Variant { Boolean, True }` de um
-//! binding `Ident { name: "x", ty: Int }`. Antes, operava sobre `Pattern`
-//! (AST não-tipada) e tratava todo `Ident` como wildcard — causando falso
-//! positivo em multi-cláusula com variantes de enum (`lambda True True`
-//! cobria `lambda True False`).
+//! binding `Ident { name: "x", ty: Int }`.
 
 use kata_diagnostics::MiddleError;
 

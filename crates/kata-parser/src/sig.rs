@@ -4,9 +4,7 @@
 //! de assinaturas (nome :: params => ret, cláusulas lambda, constant)
 //! do dispatch de top-level items.
 
-use kata_ast::{
-    Directive, Expr, Item, LambdaClause, SelectArm, Spanned, Token, WithBinding,
-};
+use kata_ast::{Directive, Expr, Item, LambdaClause, SelectArm, Spanned, Token, WithBinding};
 use kata_diagnostics::FrontendError;
 
 use crate::CasingPattern;
@@ -328,9 +326,7 @@ fn expr_uses_name(expr: &Spanned<Expr>, name: &str) -> bool {
             expr_uses_name(lhs, name) || expr_uses_name(rhs, name)
         }
         Expr::PipeLimit { lhs, rhs, limit } => {
-            expr_uses_name(lhs, name)
-                || expr_uses_name(rhs, name)
-                || expr_uses_name(limit, name)
+            expr_uses_name(lhs, name) || expr_uses_name(rhs, name) || expr_uses_name(limit, name)
         }
         Expr::ActionCall { args, .. } => expr_uses_name(args, name),
         Expr::TypeOf { expr } => expr_uses_name(expr, name),
@@ -347,11 +343,9 @@ fn expr_uses_name(expr: &Spanned<Expr>, name: &str) -> bool {
             .iter()
             .any(|(k, v)| expr_uses_name(k, name) || expr_uses_name(v, name)),
         Expr::SetLit { elements } => elements.iter().any(|e| expr_uses_name(e, name)),
-        Expr::RangeLit { start, step, end, .. } => {
-            expr_uses_name(start, name)
-                || expr_uses_name(step, name)
-                || expr_uses_name(end, name)
-        }
+        Expr::RangeLit {
+            start, step, end, ..
+        } => expr_uses_name(start, name) || expr_uses_name(step, name) || expr_uses_name(end, name),
         Expr::ForIn {
             var_name,
             iterable,
@@ -379,9 +373,7 @@ fn expr_uses_name(expr: &Spanned<Expr>, name: &str) -> bool {
                     bind_name,
                     body,
                 } => {
-                    expr_uses_name(channel, name)
-                        || bind_name == name
-                        || expr_uses_name(body, name)
+                    expr_uses_name(channel, name) || bind_name == name || expr_uses_name(body, name)
                 }
                 SelectArm::IoRead {
                     handle_expr,
@@ -393,17 +385,16 @@ fn expr_uses_name(expr: &Spanned<Expr>, name: &str) -> bool {
                         || bind_name == name
                         || expr_uses_name(body, name)
                 }
-            }) || timeout_ms
-                .as_ref()
-                .is_some_and(|t| expr_uses_name(t, name))
+            }) || timeout_ms.as_ref().is_some_and(|t| expr_uses_name(t, name))
                 || timeout_body
                     .as_ref()
                     .is_some_and(|t| expr_uses_name(t, name))
         }
         Expr::Block { stmts } => stmts.iter().any(|e| expr_uses_name(e, name)),
         // Literais não contêm idents
-        Expr::IntLit { .. } | Expr::FloatLit { .. } | Expr::TextLit { .. } | Expr::BytesLit { .. } => {
-            false
-        }
+        Expr::IntLit { .. }
+        | Expr::FloatLit { .. }
+        | Expr::TextLit { .. }
+        | Expr::BytesLit { .. } => false,
     }
 }

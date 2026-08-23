@@ -290,7 +290,10 @@ fn lambda_body_direct_single_expr_stays_inline() {
                         assert_eq!(callee.node, Expr::Ident { name: "+".into() });
                     }
                     Expr::Block { stmts } => {
-                        panic!("single expr should not be wrapped in Block, got {} stmts", stmts.len());
+                        panic!(
+                            "single expr should not be wrapped in Block, got {} stmts",
+                            stmts.len()
+                        );
                     }
                     other => panic!("expected Apply body, got {other:?}"),
                 }
