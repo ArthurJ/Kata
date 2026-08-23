@@ -59,7 +59,7 @@ pub fn run_frontend(
     }
 
     // 3. Resolve (prelude + módulo do usuário)
-    let prelude = kata_resolution::load_prelude().map_err(|e| vec![FrontendBatch::Resolve(e)])?;
+    let prelude = load_stdlib().map_err(|e| vec![FrontendBatch::Resolve(e)])?;
     let user = kata_resolution::resolve(&module).map_err(|e| vec![FrontendBatch::Resolve(e)])?;
     let mut resolved = kata_resolution::merge_two(prelude, user);
 
@@ -99,4 +99,19 @@ fn load_module_imports(file: &str, module: &Module) -> Vec<ImportedModule> {
     let search_paths = vec![entry_dir.clone(), stdlib_dir];
     let mut loader = ModuleLoader::new(search_paths);
     loader.load_imports(module, &entry_dir).unwrap_or_default()
+}
+
+/// Carrega a stdlib (core → core_internals) via `ModuleLoader`, substituindo
+/// o antigo `load_prelude()`. Retorna o `ResolvedModule` não-filtrado.
+fn load_stdlib() -> Result<ResolvedModule, Vec<kata_resolution::ResolveError>> {
+    let mut loader = ModuleLoader::new(Vec::new());
+    let stdlib = loader
+        .load(&["stdlib".into(), "core".into()], Path::new("."))
+        .map_err(|e| match e {
+            kata_resolution::LoadError::Resolve(errors) => errors,
+            other => vec![kata_resolution::ResolveError::UnknownFfi {
+                name: format!("erro ao carregar stdlib: {other}"),
+            }],
+        })?;
+    Ok((*stdlib).clone())
 }

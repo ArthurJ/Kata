@@ -27,11 +27,21 @@ use kata_lexer::lex;
 use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
 use kata_parser::{parse, parse_repl_decls_only, parse_repl_with_arity, scan_lambdas};
-use kata_resolution::{ResolvedModule, extract_arities, load_prelude, resolve};
+use kata_resolution::{ModuleLoader, ResolvedModule, extract_arities, resolve};
 use kata_tree_shaking::tree_shake;
 
 use crate::display;
 use crate::merge_resolved;
+
+/// Carrega a stdlib (core → core_internals) via `ModuleLoader`, substituindo
+/// o antigo `load_prelude()`. Mesma semântica do `load_stdlib()` do pipeline.
+fn load_stdlib() -> Result<ResolvedModule, String> {
+    let mut loader = ModuleLoader::new(Vec::new());
+    let stdlib = loader
+        .load(&["stdlib".into(), "core".into()], std::path::Path::new("."))
+        .map_err(|e| format!("erro ao carregar stdlib: {e}"))?;
+    Ok((*stdlib).clone())
+}
 
 /// Sessão REPL — acumula items do usuário entre expressões.
 pub(crate) struct ReplSession {
@@ -71,8 +81,8 @@ pub(crate) struct ReplSession {
 impl ReplSession {
     /// Cria nova sessão carregando o prelude.
     pub fn new() -> Result<Self, String> {
-        let prelude = load_prelude()
-            .map_err(|e| format!("erro ao carregar prelude: {}", crate::format_error_vec(&e)))?;
+        let prelude = load_stdlib()
+            .map_err(|e| format!("erro ao carregar prelude: {e}"))?;
         let history_path = dirs();
         // Runtime persistente: vive entre avaliações. Leak intencional —
         // o REPL é de longa duração e valores na arena devem persistir.
@@ -99,8 +109,8 @@ impl ReplSession {
         self.snapshots.clear();
         self.function_table.clear();
         self.imports.clear();
-        self.prelude = load_prelude()
-            .map_err(|e| format!("erro ao carregar prelude: {}", crate::format_error_vec(&e)))?;
+        self.prelude = load_stdlib()
+            .map_err(|e| format!("erro ao carregar prelude: {e}"))?;
         // Recriar Runtime — descarta o antigo e cria um novo limpo.
         let _ = unsafe { Box::from_raw(self.rt_ptr as *mut kata_rt::Runtime) };
         let rt = Box::new(kata_rt::Runtime::new());
