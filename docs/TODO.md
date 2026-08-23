@@ -101,34 +101,17 @@ do codegen.
 
 ---
 
-### Import implícito de stdlib via `mod.kata` (substituir `load_prelude` + `merge_two`)
+### ~~Import implícito de stdlib via `mod.kata` (substituir `load_prelude` + `merge_two`)~~ ✅ RESOLVIDO
 
-**Estado:** O prelude (`stdlib/core.kata`) é carregado via `include_str!` em
-`prelude_sigs.rs` e injetado no módulo do usuário via `merge_two`. Isto
-bypassa o sistema de módulos — `filter_exports` não é aplicado, então tudo
-no core é visível para o usuário (incluindo funções internas como
-`bi_div`, `f_div`, `rat_div` de `core_internals`).
-
-O sistema de módulos já suporta `mod.kata` (gateway com `export` seletivo)
-e `filter_exports` com fechamento transitivo (exportar `Int` traz
-automaticamente `NUM`, `EQ`, `+`, `show`, etc.). O que falta:
-
-1. Criar `stdlib/mod.kata` com `import core` + `export` dos símbolos públicos
-   (tipos + funções standalone). `core_internals` não é re-exportado.
-2. Substituir `load_prelude() + merge_two()` por `ModuleLoader::load_imports()`
-   com import implícito de `stdlib`. Aplicar em 3 callers:
-   - `pipeline.rs` (linha 299+318)
-   - `repl/mod.rs` (REPL)
-   - `kata-lsp/src/analysis.rs` (linha 62+64)
-3. Remover `prelude_sigs.rs` (substituído pelo ModuleLoader).
-4. Decidir: stdlib embedded no binário (`include_str!`) vs filesystem em
-   runtime. Hoje o ModuleLoader lê do filesystem; o prelude é embedded.
-5. O `module_loader.rs` linha 337 (`is_core` bypass) é removido — o core
-   passa a ter imports reais (`import core_internals`).
-
-**Impacto:** Médio-alto. Resolve a visibilidade de funções internas,
-unifica prelude e módulos no mesmo caminho de código, e prepara para
-múltiplos módulos stdlib (math, complex, stdio) com visibilidade controlada.
+**Estado:** Concluído. O `load_prelude()` e `prelude_sigs.rs` foram removidos.
+A stdlib é carregada via `ModuleLoader` com embedded source (`include_str!`).
+O `ModuleLoader` pré-carrega a stdlib (core + core_internals) no construtor
+via `load_stdlib_embedded()`. Em `load_path` de user modules, faz
+`merge_two(stdlib, resolved)` para injetar tipos primitivos no `TypeEnv`.
+Testes usam `load_stdlib_for_tests()` com cache `OnceLock`.
+`stdlib/mod.kata` é o gateway para importação explícita do usuário.
+`filter_exports` controla visibilidade (funções internas não vazam).
+1785 testes passando, 0 warnings, clippy limpo.
 
 ---
 
