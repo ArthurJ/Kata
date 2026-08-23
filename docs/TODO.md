@@ -101,20 +101,6 @@ do codegen.
 
 ---
 
-### ~~Import implícito de stdlib via `mod.kata` (substituir `load_prelude` + `merge_two`)~~ ✅ RESOLVIDO
-
-**Estado:** Concluído. O `load_prelude()` e `prelude_sigs.rs` foram removidos.
-A stdlib é carregada via `ModuleLoader` com embedded source (`include_str!`).
-O `ModuleLoader` pré-carrega a stdlib (core + core_internals) no construtor
-via `load_stdlib_embedded()`. Em `load_path` de user modules, faz
-`merge_two(stdlib, resolved)` para injetar tipos primitivos no `TypeEnv`.
-Testes usam `load_stdlib_for_tests()` com cache `OnceLock`.
-`stdlib/mod.kata` é o gateway para importação explícita do usuário.
-`filter_exports` controla visibilidade (funções internas não vazam).
-1785 testes passando, 0 warnings, clippy limpo.
-
----
-
 ## Migração de Exemplos
 
 ### `parallel.kata` (Cluster 4)
