@@ -824,8 +824,8 @@ pub fn filter_exports(resolved: ResolvedModule, module: &Module) -> ResolvedModu
     let mut internal_closure: HashSet<String> = HashSet::new();
     let mut worklist: Vec<String> = closure
         .iter()
+        .filter(|n| func_by_name.contains_key(*n))
         .cloned()
-        .filter(|n| func_by_name.contains_key(n))
         .collect();
 
     while let Some(fname) = worklist.pop() {

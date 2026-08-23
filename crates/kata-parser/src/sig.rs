@@ -121,7 +121,7 @@ impl Parser {
                         .collect();
                     if !applicable.is_empty() {
                         let mut combined = applicable;
-                        combined.extend(clause.node.with_bindings.drain(..));
+                        combined.append(&mut clause.node.with_bindings);
                         clause.node.with_bindings = combined;
                     }
                 }
