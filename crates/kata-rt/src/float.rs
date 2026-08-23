@@ -131,11 +131,11 @@ pub unsafe extern "C" fn kata_rt_try_float(s: *const std::os::raw::c_char) -> i6
         Err(_) => return alloc_result_box(1, alloc_text("número inválido")),
     };
     match text.parse::<f64>() {
-        Ok(f) => {
+        Ok(f) if f.is_finite() => {
             // f64::to_bits() — o codegen faz bitcast I64→F64 ao desempacotar.
             alloc_result_box(0, f.to_bits() as i64)
         }
-        Err(_) => alloc_result_box(1, alloc_text("número inválido")),
+        _ => alloc_result_box(1, alloc_text("número inválido")),
     }
 }
 

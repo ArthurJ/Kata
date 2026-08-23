@@ -720,14 +720,14 @@ action sleep (ms::Int) => Unit
 int_to_text :: Int => Text
 
 # int — converte Text para Int. Retorna Result: Ok(n) ou Err("número inválido").
-# Action porque pode falhar em runtime (input do usuário).
+# Função pura — falha é valor (Result), não efeito colateral.
 @ffi("kata_rt_try_int")
-action int (text::Text) => Result::(Int, Text)
+int :: Text => Result::(Int, Text)
 
 # float — converte Text para Float. Retorna Result: Ok(f) ou Err("número inválido").
-# Action porque pode falhar em runtime (input do usuário).
+# Função pura — falha é valor (Result), não efeito colateral.
 @ffi("kata_rt_try_float")
-action float (text::Text) => Result::(Float, Text)
+float :: Text => Result::(Float, Text)
 
 @ffi("kata_rt_bool_to_text")
 bool_to_text :: Boolean => Text
