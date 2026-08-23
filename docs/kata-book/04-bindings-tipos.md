@@ -87,6 +87,8 @@ main!()
 | `Boolean` | Verdadeiro ou falso | `True` |
 | `Unit` | Ausência de valor | `()` |
 | `Rational` | Número racional exato | `3.14::Rational` |
+| `Bytes` | Sequência de bytes binários | `b"hello"` |
+| `Byte` | Byte individual (0–255) | via `at` em `Bytes` |
 
 Inteiros têm precisão arbitrária. Não há overflow:
 
@@ -153,6 +155,36 @@ echo!(* 3.14::Rational 100)
 ```
 
 Com `Float`, o mesmo cálculo poderia dar `314.00000000000006`. `Rational` preserva o valor exato.
+
+## `Bytes` — dados binários
+
+`Bytes` é uma sequência imutável de bytes brutos. Literais usam o prefixo `b`:
+
+```kata
+echo!(b"hello")
+echo!(len b"hello")
+echo!(show b"\xFF\x00")
+```
+
+```
+68656c6c6f
+5
+ff00
+```
+
+`echo!` mostra `Bytes` em hexdecimal. `show` também — a representação textual de `Bytes` é sempre hex. `len` retorna o número de bytes.
+
+`+` concatena `Bytes`:
+
+```kata
+echo!(+ b"abc" b"def")
+```
+
+```
+616263646566
+```
+
+`Bytes` implementa `INDEXABLE` — acesso por índice retorna `Result::(Byte, Text)` (erro se índice fora de range). `Byte` é o tipo de um byte individual, com operações bitwise (`and`, `or`, `xor`, `not`, `<<`, `>>`). `int` e `float` aceitam `Byte` como argumento, convertendo para o valor numérico correspondente.
 
 ## Próximo capítulo
 

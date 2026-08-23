@@ -84,6 +84,35 @@ grande
 
 `doubled := * x 2` é avaliado antes dos guards, mesmo sendo escrito depois deles. A ordem é visual — `with` é pós-escrito mas pré-avaliado.
 
+### `with` cross-clause — bindings compartilhados
+
+Quando uma função tem múltiplas cláusulas `lambda`, o `with` pode ser declarado no nível outer — após a última cláusula. Os bindings são injetados seletivamente em cada cláusula que os referencia:
+
+```kata
+classify :: Int => Text
+lambda 0: tag_zero
+lambda x:
+    > doubled 10: "grande"
+    otherwise: "pequeno"
+with
+    doubled := * x 2
+    tag_zero := "zero"
+```
+
+```kata
+echo!(classify 0)
+echo!(classify 3)
+echo!(classify 6)
+```
+
+```
+zero
+pequeno
+grande
+```
+
+A cláusula `lambda 0` recebe `tag_zero` (referencia no body) mas não `doubled` (não referencia). A cláusula `lambda x` recebe `doubled` mas não `tag_zero`. A injeção é seletiva — cada binding só vai para as cláusulas que o usam, evitando erros de variável não vinculada quando os patterns diferem.
+
 ## Próximo capítulo
 
 Tudo até aqui é código puro — sem efeitos colaterais. O próximo capítulo introduz actions, a barreira entre código puro e impuro, e os mecanismos de controle imperativo: `var`, `loop`, `break`. → [Capítulo 7](07-actions.md)

@@ -73,6 +73,12 @@ kata eval '+ 1 2'
 
 Útil para testar rapidamente uma expressão.
 
+Ambos `kata run` e `kata eval` aceitam a flag `--emit-ir` para imprimir o IR do Cranelift antes de executar. Útil para inspecionar o código gerado — otimizações, TCO, stream fusion:
+
+```bash
+kata eval '+ 1 2' --emit-ir
+```
+
 ### `kata repl` — REPL interativo
 
 Inicia o REPL para experimentar expressões interativamente. Detalhado no [Capítulo 15](15-repl.md).

@@ -112,6 +112,8 @@ echo!(dobro 5)
 
 A segunda chamada com o mesmo argumento retorna o valor cacheado sem reexecutar o body.
 
+> **Limitação atual:** `@cache` suporta apenas funções `Int => Int`. O diagnostic rejeita outros tipos de parâmetro ou retorno com uma mensagem clara.
+
 ## Próximo capítulo
 
 Otimizações são automáticas. O próximo capítulo mostra o REPL interativo — explorar a linguagem sem criar arquivos. → [Capítulo 15](15-repl.md)
