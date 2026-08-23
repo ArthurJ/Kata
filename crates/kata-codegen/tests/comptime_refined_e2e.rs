@@ -18,7 +18,7 @@ use kata_lexer::lex;
 use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
 use kata_parser::parse;
-use kata_resolution::{ResolvedModule, load_prelude, resolve};
+use kata_resolution::{ResolvedModule, load_stdlib_for_tests, resolve};
 use kata_tree_shaking::tree_shake;
 
 fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModule {
@@ -77,7 +77,7 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
 fn eval_with_comptime(src: &str) -> Result<(i64, Ty), String> {
     let tokens = lex(src).map_err(|e| format!("lex: {e:?}"))?;
     let module = parse(tokens).map_err(|e| format!("parse: {e:?}"))?;
-    let prelude = load_prelude().map_err(|e| format!("prelude: {e:?}"))?;
+    let prelude = load_stdlib_for_tests().map_err(|e| format!("prelude: {e:?}"))?;
     let user = resolve(&module).map_err(|e| format!("resolve: {e:?}"))?;
     let resolved = merge_resolved(prelude, user);
     let typed = infer_module(&module, &resolved).map_err(|e| format!("infer: {e:?}"))?;
@@ -159,7 +159,7 @@ fn predicado_trivial_continua_local() {
     let src = "data (Int, > _ 0) as PositiveInt\n5::PositiveInt";
     let tokens = lex(src).expect("lex");
     let module = parse(tokens).expect("parse");
-    let prelude = load_prelude().expect("prelude");
+    let prelude = load_stdlib_for_tests().expect("prelude");
     let user = resolve(&module).expect("resolve");
     let resolved = merge_resolved(prelude, user);
     let typed = infer_module(&module, &resolved).expect("infer");
@@ -179,7 +179,7 @@ fn predicado_trivial_falha_local() {
     let src = "data (Int, > _ 0) as PositiveInt\n(-5)::PositiveInt";
     let tokens = lex(src).expect("lex");
     let module = parse(tokens).expect("parse");
-    let prelude = load_prelude().expect("prelude");
+    let prelude = load_stdlib_for_tests().expect("prelude");
     let user = resolve(&module).expect("resolve");
     let resolved = merge_resolved(prelude, user);
     let result = infer_module(&module, &resolved);

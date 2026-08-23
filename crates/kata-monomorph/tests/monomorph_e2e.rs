@@ -17,7 +17,7 @@ use kata_inference::{TypedExprKind, infer_module};
 use kata_lexer::lex;
 use kata_monomorph::{MonoModule, monomorphize};
 use kata_parser::parse;
-use kata_resolution::{ResolvedModule, load_prelude, resolve};
+use kata_resolution::{ResolvedModule, load_stdlib_for_tests, resolve};
 
 /// Combina prelude + módulo do usuário (replica do driver).
 fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModule {
@@ -69,7 +69,7 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
 fn mono_src(src: &str) -> MonoModule {
     let tokens = lex(src).unwrap();
     let module = parse(tokens).unwrap();
-    let prelude = load_prelude().unwrap();
+    let prelude = load_stdlib_for_tests().unwrap();
     let user = resolve(&module).unwrap();
     let resolved = merge_resolved(prelude, user);
     let typed = infer_module(&module, &resolved).expect("infer deve succeed");

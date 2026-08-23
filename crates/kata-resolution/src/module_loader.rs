@@ -245,17 +245,41 @@ pub struct ModuleLoader {
     loading: HashSet<PathBuf>,
     /// Diretórios de busca para módulos.
     search_paths: Vec<PathBuf>,
+    /// Stdlib pré-carregada (core + core_internals) para injetar tipos
+    /// primitivos em user modules durante `load_path`. `None` no loader
+    /// temporário interno de `load_stdlib_embedded`.
+    stdlib: Option<Arc<ResolvedModule>>,
 }
 
 impl ModuleLoader {
     /// Cria um novo loader com search paths dados.
     /// O primeiro path deve ser o diretório do arquivo atual.
+    /// Pré-carrega a stdlib embedded (core + core_internals) para que
+    /// `load_path` de user modules tenha tipos primitivos no TypeEnv.
     pub fn new(search_paths: Vec<PathBuf>) -> Self {
+        let stdlib = Self::load_stdlib_embedded();
         ModuleLoader {
             cache: HashMap::new(),
             loading: HashSet::new(),
             search_paths,
+            stdlib,
         }
+    }
+
+    /// Carrega a stdlib embedded (core + core_internals) sem filesystem.
+    /// Cria um `ModuleLoader` temporário com `stdlib: None` para evitar
+    /// recursão. O `load_path` de `core.kata` (stdlib path) não tenta
+    /// `merge_two` porque `is_stdlib_path` é true.
+    fn load_stdlib_embedded() -> Option<Arc<ResolvedModule>> {
+        let mut loader = ModuleLoader {
+            cache: HashMap::new(),
+            loading: HashSet::new(),
+            search_paths: Vec::new(),
+            stdlib: None,
+        };
+        loader
+            .load(&["stdlib".into(), "core".into()], Path::new(STDLIB_PREFIX))
+            .ok()
     }
 
     /// Carrega um módulo pelo nome (ex: "utilidades.matematica").
@@ -398,10 +422,18 @@ impl ModuleLoader {
 
         // Stdlib embedded: processa imports recursivamente (ex: core.kata
         // importa core_internals).
-        // User modules: NÃO injeta stdlib aqui — a injeção fica nos callers
-        // (pipeline, repl, lsp) para evitar ciclo recursivo quando user
-        // modules importam outros user modules.
-        let mut merged = resolved;
+        // User modules: injeta stdlib pré-carregada (merge_two) para que
+        // tipos primitivos (Int, Float, etc.) estejam no TypeEnv. Sem isso,
+        // `resolve_with_origin` resolve `Int` como `Ty::Var("Int")` em vez
+        // de `Ty::Prim(Int)`, e o inference não despacha operadores.
+        let mut merged = if is_stdlib_path(path) {
+            resolved
+        } else if let Some(stdlib) = self.stdlib.clone() {
+            crate::merge_two((*stdlib).clone(), resolved)
+        } else {
+            // stdlib não carregada (loader temporário) — sem injeção.
+            resolved
+        };
 
         // Carregar imports do módulo recursivamente e fazer merge.
         // Stdlib embedded usa diretório sintético; user modules usam
@@ -909,9 +941,12 @@ mod tests {
         let mut loader = ModuleLoader::new(vec![tmp.path().to_path_buf()]);
         let resolved = loader.load(&["simple".into()], tmp.path()).unwrap();
 
-        // 42 é a entry expr — não há assinaturas do usuário, mas o prelude
-        // é injetado, então signatures contém as do prelude (ex: +, -, *).
+        // 42 é a entry expr — sem declarações do usuário. Mas load_path
+        // agora injeta stdlib pré-carregada (merge_two), então signatures
+        // contém as assinaturas do prelude (Int, Float, +, *, etc.).
+        // Verificamos que o módulo carrega sem erro e tem prelude.
         assert!(!resolved.signatures.is_empty());
+        assert!(resolved.signatures.iter().any(|s| s.name == "+"));
     }
 
     #[test]
@@ -980,8 +1015,9 @@ mod tests {
         let mut loader =
             ModuleLoader::new(vec![tmp1.path().to_path_buf(), tmp2.path().to_path_buf()]);
         let resolved = loader.load(&["found".into()], tmp1.path()).unwrap();
-        // Prelude injetado — signatures não está vazio.
+        // load_path injeta stdlib pré-carregada — signatures contém prelude.
         assert!(!resolved.signatures.is_empty());
+        assert!(resolved.signatures.iter().any(|s| s.name == "+"));
     }
 
     #[test]

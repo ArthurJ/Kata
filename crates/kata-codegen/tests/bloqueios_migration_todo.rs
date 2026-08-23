@@ -18,7 +18,7 @@ use kata_lexer::lex;
 use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
 use kata_parser::parse;
-use kata_resolution::{ResolvedModule, load_prelude, resolve};
+use kata_resolution::{ResolvedModule, load_stdlib_for_tests, resolve};
 use kata_tree_shaking::tree_shake;
 
 fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModule {
@@ -76,7 +76,7 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
 fn eval_src(src: &str) -> (i64, Ty) {
     let tokens = lex(src).expect("lex");
     let module = parse(tokens).expect("parse");
-    let prelude = load_prelude().expect("prelude");
+    let prelude = load_stdlib_for_tests().expect("prelude");
     let user = resolve(&module).expect("resolve");
     let resolved = merge_resolved(prelude, user);
     let typed = infer_module(&module, &resolved).expect("infer");
@@ -93,7 +93,7 @@ fn eval_src(src: &str) -> (i64, Ty) {
 fn try_eval(src: &str) -> Result<(i64, Ty), String> {
     let tokens = lex(src).map_err(|e| format!("lex: {e:?}"))?;
     let module = parse(tokens).map_err(|e| format!("parse: {e:?}"))?;
-    let prelude = load_prelude().map_err(|e| format!("prelude: {e:?}"))?;
+    let prelude = load_stdlib_for_tests().map_err(|e| format!("prelude: {e:?}"))?;
     let user = resolve(&module).map_err(|e| format!("resolve: {e:?}"))?;
     let resolved = merge_resolved(prelude, user);
     let typed = infer_module(&module, &resolved).map_err(|e| format!("infer: {e:?}"))?;
@@ -110,7 +110,7 @@ fn try_eval(src: &str) -> Result<(i64, Ty), String> {
 fn infer_optimize(src: &str) -> kata_inference::TypedModule {
     let tokens = lex(src).expect("lex");
     let module = parse(tokens).expect("parse");
-    let prelude = load_prelude().expect("prelude");
+    let prelude = load_stdlib_for_tests().expect("prelude");
     let user = resolve(&module).expect("resolve");
     let resolved = merge_resolved(prelude, user);
     let typed = infer_module(&module, &resolved).expect("infer");

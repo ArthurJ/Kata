@@ -17,7 +17,7 @@ use kata_core::ty::Ty;
 use kata_inference::infer_module;
 use kata_lexer::lex;
 use kata_parser::parse;
-use kata_resolution::{load_prelude, resolve};
+use kata_resolution::{load_stdlib_for_tests, resolve};
 
 /// Combina prelude + módulo do usuário (replica do driver).
 fn merge_resolved(
@@ -72,7 +72,7 @@ fn merge_resolved(
 fn infer_src(src: &str) -> kata_inference::TypedModule {
     let tokens = lex(src).expect("lex deve succeed");
     let module = parse(tokens).expect("parse deve succeed");
-    let prelude = load_prelude().expect("prelude deve carregar");
+    let prelude = load_stdlib_for_tests().expect("prelude deve carregar");
     let user = resolve(&module).expect("resolve deve succeed");
     let resolved = merge_resolved(prelude, user);
     infer_module(&module, &resolved).expect("infer deve succeed")
@@ -95,7 +95,7 @@ Int implements DUP
     let resolved = {
         let tokens = lex(src).unwrap();
         let module = parse(tokens).unwrap();
-        let prelude = load_prelude().unwrap();
+        let prelude = load_stdlib_for_tests().unwrap();
         let user = resolve(&module).unwrap();
         merge_resolved(prelude, user)
     };
@@ -174,7 +174,7 @@ Int implements WRAP
     let resolved = {
         let tokens = lex(src).unwrap();
         let module = parse(tokens).unwrap();
-        let prelude = load_prelude().unwrap();
+        let prelude = load_stdlib_for_tests().unwrap();
         let user = resolve(&module).unwrap();
         merge_resolved(prelude, user)
     };

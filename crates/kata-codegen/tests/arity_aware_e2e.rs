@@ -13,7 +13,7 @@ use kata_lexer::lex;
 use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
 use kata_parser::parse_with_arity;
-use kata_resolution::{ResolvedModule, load_prelude, resolve};
+use kata_resolution::{ResolvedModule, load_stdlib_for_tests, resolve};
 use kata_tree_shaking::tree_shake;
 use std::collections::HashMap;
 
@@ -21,7 +21,7 @@ use std::collections::HashMap;
 fn eval_src_arity(src: &str, arities: HashMap<String, usize>) -> (i64, Ty) {
     let tokens = lex(src).expect("lex deve succeed");
     let module = parse_with_arity(tokens, arities).expect("parse_with_arity deve succeed");
-    let prelude = load_prelude().expect("prelude deve carregar");
+    let prelude = load_stdlib_for_tests().expect("prelude deve carregar");
     let user = resolve(&module).expect("resolve deve succeed");
     let resolved = merge_resolved(prelude, user);
     let typed = infer_module(&module, &resolved).expect("infer deve succeed");

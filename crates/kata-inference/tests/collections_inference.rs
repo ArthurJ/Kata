@@ -17,7 +17,7 @@ use kata_core::ty::Ty;
 use kata_inference::{TypedExprKind, TypedPattern, infer_module};
 use kata_lexer::lex;
 use kata_parser::parse;
-use kata_resolution::{ResolvedModule, load_prelude, resolve};
+use kata_resolution::{ResolvedModule, load_stdlib_for_tests, resolve};
 
 /// Combina prelude + módulo do usuário (replica do driver).
 fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModule {
@@ -68,7 +68,7 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
 fn infer_src(src: &str) -> kata_inference::TypedModule {
     let tokens = lex(src).unwrap();
     let module = parse(tokens).unwrap();
-    let prelude = load_prelude().unwrap();
+    let prelude = load_stdlib_for_tests().unwrap();
     let user = resolve(&module).unwrap();
     let resolved = merge_resolved(prelude, user);
     infer_module(&module, &resolved).expect("inferência deve succeed")
@@ -77,7 +77,7 @@ fn infer_src(src: &str) -> kata_inference::TypedModule {
 fn infer_src_err(src: &str) -> kata_diagnostics::MiddleError {
     let tokens = lex(src).unwrap();
     let module = parse(tokens).unwrap();
-    let prelude = load_prelude().unwrap();
+    let prelude = load_stdlib_for_tests().unwrap();
     let user = resolve(&module).unwrap();
     let resolved = merge_resolved(prelude, user);
     infer_module(&module, &resolved).expect_err("inferência deve falhar")

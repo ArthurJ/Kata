@@ -1,9 +1,9 @@
 use kata_core::{PrimTy, Ty};
-use kata_resolution::load_prelude;
+use kata_resolution::load_stdlib_for_tests;
 
 #[test]
 fn prelude_has_int_type() {
-    let resolved = load_prelude().expect("prelude deve resolver");
+    let resolved = load_stdlib_for_tests().expect("prelude deve resolver");
     assert_eq!(
         resolved.type_env.lookup("Int"),
         Some(&Ty::Prim(PrimTy::Int))
@@ -12,7 +12,7 @@ fn prelude_has_int_type() {
 
 #[test]
 fn prelude_has_float_type() {
-    let resolved = load_prelude().expect("prelude deve resolver");
+    let resolved = load_stdlib_for_tests().expect("prelude deve resolver");
     assert_eq!(
         resolved.type_env.lookup("Float"),
         Some(&Ty::Prim(PrimTy::Float))
@@ -21,7 +21,7 @@ fn prelude_has_float_type() {
 
 #[test]
 fn prelude_has_text_type() {
-    let resolved = load_prelude().expect("prelude deve resolver");
+    let resolved = load_stdlib_for_tests().expect("prelude deve resolver");
     assert_eq!(
         resolved.type_env.lookup("Text"),
         Some(&Ty::Prim(PrimTy::Text))
@@ -30,7 +30,7 @@ fn prelude_has_text_type() {
 
 #[test]
 fn prelude_has_rational_type() {
-    let resolved = load_prelude().expect("prelude deve resolver");
+    let resolved = load_stdlib_for_tests().expect("prelude deve resolver");
     assert_eq!(
         resolved.type_env.lookup("Rational"),
         Some(&Ty::Prim(PrimTy::Rational))
@@ -39,7 +39,7 @@ fn prelude_has_rational_type() {
 
 #[test]
 fn prelude_has_boolean_type() {
-    let resolved = load_prelude().expect("prelude deve resolver");
+    let resolved = load_stdlib_for_tests().expect("prelude deve resolver");
     assert_eq!(
         resolved.type_env.lookup("Boolean"),
         Some(&Ty::Sum("Boolean".into()))
@@ -48,13 +48,13 @@ fn prelude_has_boolean_type() {
 
 #[test]
 fn prelude_has_unit_type() {
-    let resolved = load_prelude().expect("prelude deve resolver");
+    let resolved = load_stdlib_for_tests().expect("prelude deve resolver");
     assert_eq!(resolved.type_env.lookup("Unit"), Some(&Ty::Unit));
 }
 
 #[test]
 fn prelude_has_int_add_signature() {
-    let resolved = load_prelude().expect("prelude deve resolver");
+    let resolved = load_stdlib_for_tests().expect("prelude deve resolver");
     let add = resolved
         .signatures
         .iter()
@@ -68,7 +68,7 @@ fn prelude_has_int_add_signature() {
 
 #[test]
 fn prelude_has_float_add_signature() {
-    let resolved = load_prelude().expect("prelude deve resolver");
+    let resolved = load_stdlib_for_tests().expect("prelude deve resolver");
     let add = resolved
         .signatures
         .iter()
@@ -80,7 +80,7 @@ fn prelude_has_float_add_signature() {
 
 #[test]
 fn prelude_has_rational_add_signature() {
-    let resolved = load_prelude().expect("prelude deve resolver");
+    let resolved = load_stdlib_for_tests().expect("prelude deve resolver");
     let add = resolved
         .signatures
         .iter()
@@ -93,7 +93,7 @@ fn prelude_has_rational_add_signature() {
 
 #[test]
 fn prelude_has_echo_signature() {
-    let resolved = load_prelude().expect("prelude deve resolver");
+    let resolved = load_stdlib_for_tests().expect("prelude deve resolver");
     // echo agora é uma Action Kata (não FFI) com body que despacha show.
     // Vai para resolved.actions, não resolved.signatures.
     let echo = resolved
@@ -107,7 +107,7 @@ fn prelude_has_echo_signature() {
 
 #[test]
 fn prelude_has_multiple_add_overloads() {
-    let resolved = load_prelude().expect("prelude deve resolver");
+    let resolved = load_stdlib_for_tests().expect("prelude deve resolver");
     let adds: Vec<_> = resolved
         .signatures
         .iter()
@@ -122,7 +122,7 @@ fn prelude_has_multiple_add_overloads() {
 
 #[test]
 fn prelude_has_show_for_int_float_rational_and_text() {
-    let resolved = load_prelude().expect("prelude deve resolver");
+    let resolved = load_stdlib_for_tests().expect("prelude deve resolver");
     let shows: Vec<_> = resolved
         .signatures
         .iter()

@@ -6,7 +6,7 @@ use kata_lexer::lex;
 use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
 use kata_parser::parse;
-use kata_resolution::{load_prelude, resolve};
+use kata_resolution::{load_stdlib_for_tests, resolve};
 
 fn merge_resolved(
     prelude: kata_resolution::ResolvedModule,
@@ -120,7 +120,7 @@ fn inspect_trma_kata_snapshot() {
     .expect("não consegui ler examples/trma.kata");
     let tokens = lex(&src).expect("lex");
     let module = parse(tokens).expect("parse");
-    let prelude = load_prelude().expect("prelude");
+    let prelude = load_stdlib_for_tests().expect("prelude");
     let user = resolve(&module).expect("resolve");
     let resolved = merge_resolved(prelude, user);
     let typed = infer_module(&module, &resolved).expect("infer");

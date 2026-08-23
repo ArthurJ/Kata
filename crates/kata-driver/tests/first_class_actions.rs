@@ -9,7 +9,7 @@ use kata_diagnostics::MiddleError;
 use kata_inference::infer_module;
 use kata_lexer::lex;
 use kata_parser::parse;
-use kata_resolution::{DirectiveRegistry, ResolvedModule, load_prelude, resolve};
+use kata_resolution::{DirectiveRegistry, ResolvedModule, load_stdlib_for_tests, resolve};
 
 /// Combina prelude + módulo do usuário (replica do driver).
 fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModule {
@@ -64,7 +64,7 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
 fn infer_err(src: &str) -> MiddleError {
     let tokens = lex(src).expect("lex deve succeed");
     let module = parse(tokens).expect("parse deve succeed");
-    let prelude = load_prelude().expect("prelude deve carregar");
+    let prelude = load_stdlib_for_tests().expect("prelude deve carregar");
     let user = resolve(&module).expect("resolve deve succeed");
     let resolved = merge_resolved(prelude, user);
     infer_module(&module, &resolved).expect_err("deve produzir erro")
@@ -74,7 +74,7 @@ fn infer_err(src: &str) -> MiddleError {
 fn infer_ok(src: &str) {
     let tokens = lex(src).expect("lex deve succeed");
     let module = parse(tokens).expect("parse deve succeed");
-    let prelude = load_prelude().expect("prelude deve carregar");
+    let prelude = load_stdlib_for_tests().expect("prelude deve carregar");
     let user = resolve(&module).expect("resolve deve succeed");
     let resolved = merge_resolved(prelude, user);
     let _ = infer_module(&module, &resolved).expect("deve passar sem erro");

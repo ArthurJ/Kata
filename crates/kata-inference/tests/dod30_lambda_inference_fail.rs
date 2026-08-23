@@ -12,12 +12,12 @@ use kata_diagnostics::MiddleError;
 use kata_inference::infer_module;
 use kata_lexer::lex;
 use kata_parser::parse;
-use kata_resolution::load_prelude;
+use kata_resolution::load_stdlib_for_tests;
 
 fn infer_src_err(src: &str) -> MiddleError {
     let tokens = lex(src).unwrap();
     let module = parse(tokens).unwrap();
-    let prelude = load_prelude().unwrap();
+    let prelude = load_stdlib_for_tests().unwrap();
     match infer_module(&module, &prelude) {
         Ok(_) => panic!("esperava erro de inferência para: {src}"),
         Err(e) => e,
@@ -42,7 +42,7 @@ fn identity_lambda_without_context_fails() {
 fn two_param_lambda_without_context_fails() {
     let tokens = lex("lambda x y: + x y").unwrap();
     let module = parse(tokens).unwrap();
-    let prelude = load_prelude().unwrap();
+    let prelude = load_stdlib_for_tests().unwrap();
     let tmod =
         infer_module(&module, &prelude).expect("lambda x y: + x y deve succeed com OverloadSet");
     let entry = &tmod.entry.node;
@@ -72,7 +72,7 @@ fn lambda_with_unknown_callee_fails() {
 fn lambda_inference_fail_has_detail() {
     let tokens = lex("lambda x y: < x y").unwrap();
     let module = parse(tokens).unwrap();
-    let prelude = load_prelude().unwrap();
+    let prelude = load_stdlib_for_tests().unwrap();
     let tmod =
         infer_module(&module, &prelude).expect("lambda x y: < x y deve succeed com OverloadSet");
     let entry = &tmod.entry.node;
@@ -89,7 +89,7 @@ fn lambda_inference_fail_has_detail() {
 fn lambda_with_hint_does_not_fail() {
     let tokens = lex("(lambda x: + x 1)::(Int -> Int)").unwrap();
     let module = parse(tokens).unwrap();
-    let prelude = load_prelude().unwrap();
+    let prelude = load_stdlib_for_tests().unwrap();
     let result = infer_module(&module, &prelude);
     assert!(
         result.is_ok(),

@@ -4,7 +4,7 @@ use kata_core::ty::Ty;
 use kata_inference::{TypedExprKind, infer_module};
 use kata_lexer::lex;
 use kata_parser::parse;
-use kata_resolution::{ResolvedModule, load_prelude, resolve};
+use kata_resolution::{ResolvedModule, load_stdlib_for_tests, resolve};
 
 fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModule {
     let mut signatures = prelude.signatures;
@@ -57,7 +57,7 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
 fn infer_src(src: &str) -> kata_inference::TypedModule {
     let tokens = lex(src).unwrap();
     let module = parse(tokens).unwrap();
-    let prelude = load_prelude().unwrap();
+    let prelude = load_stdlib_for_tests().unwrap();
     let user = resolve(&module).unwrap();
     let resolved = merge_resolved(prelude, user);
     infer_module(&module, &resolved).unwrap()
@@ -175,7 +175,7 @@ fn index_access_out_of_bounds() {
     let src = "(10, 20, 30).5";
     let tokens = lex(src).unwrap();
     let module = parse(tokens).unwrap();
-    let prelude = load_prelude().unwrap();
+    let prelude = load_stdlib_for_tests().unwrap();
     let user = resolve(&module).unwrap();
     let resolved = merge_resolved(prelude, user);
     let result = infer_module(&module, &resolved);
@@ -191,7 +191,7 @@ fn field_access_em_tupla_da_erro() {
     let src = "(10, 20, 30).nome";
     let tokens = lex(src).unwrap();
     let module = parse(tokens).unwrap();
-    let prelude = load_prelude().unwrap();
+    let prelude = load_stdlib_for_tests().unwrap();
     let user = resolve(&module).unwrap();
     let resolved = merge_resolved(prelude, user);
     let result = infer_module(&module, &resolved);
@@ -207,7 +207,7 @@ fn index_access_em_struct_da_erro() {
     let src = "data Pessoa (nome::Text)\nconstant p := Pessoa \"João\"\np.0";
     let tokens = lex(src).unwrap();
     let module = parse(tokens).unwrap();
-    let prelude = load_prelude().unwrap();
+    let prelude = load_stdlib_for_tests().unwrap();
     let user = resolve(&module).unwrap();
     let resolved = merge_resolved(prelude, user);
     let result = infer_module(&module, &resolved);
@@ -223,7 +223,7 @@ fn dot_access_em_literal_da_erro() {
     let src = "42.nome";
     let tokens = lex(src).unwrap();
     let module = parse(tokens).unwrap();
-    let prelude = load_prelude().unwrap();
+    let prelude = load_stdlib_for_tests().unwrap();
     let user = resolve(&module).unwrap();
     let resolved = merge_resolved(prelude, user);
     let result = infer_module(&module, &resolved);
@@ -300,7 +300,7 @@ fn index_access_negativo_out_of_bounds() {
     let src = "(10, 20, 30).(-4)";
     let tokens = lex(src).unwrap();
     let module = parse(tokens).unwrap();
-    let prelude = load_prelude().unwrap();
+    let prelude = load_stdlib_for_tests().unwrap();
     let user = resolve(&module).unwrap();
     let resolved = merge_resolved(prelude, user);
     let result = infer_module(&module, &resolved);
@@ -337,7 +337,7 @@ fn field_access_inexistente_da_erro() {
     let src = "data Pessoa (nome::Text)\nconstant p := Pessoa \"João\"\np.idade";
     let tokens = lex(src).unwrap();
     let module = parse(tokens).unwrap();
-    let prelude = load_prelude().unwrap();
+    let prelude = load_stdlib_for_tests().unwrap();
     let user = resolve(&module).unwrap();
     let resolved = merge_resolved(prelude, user);
     let result = infer_module(&module, &resolved);

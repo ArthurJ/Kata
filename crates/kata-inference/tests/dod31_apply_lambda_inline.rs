@@ -10,12 +10,12 @@ use kata_core::ty::Ty;
 use kata_inference::{TypedExprKind, infer_module};
 use kata_lexer::lex;
 use kata_parser::parse;
-use kata_resolution::load_prelude;
+use kata_resolution::load_stdlib_for_tests;
 
 fn infer_src(src: &str) -> kata_inference::TypedModule {
     let tokens = lex(src).unwrap();
     let module = parse(tokens).unwrap();
-    let prelude = load_prelude().unwrap();
+    let prelude = load_stdlib_for_tests().unwrap();
     infer_module(&module, &prelude).expect("inferência deve succeed")
 }
 
@@ -92,7 +92,7 @@ fn apply_lambda_inline_produces_closure() {
 fn apply_lambda_inline_arity_mismatch() {
     let tokens = lex("(lambda x: + x 1) 1 2").unwrap();
     let module = parse(tokens).unwrap();
-    let prelude = load_prelude().unwrap();
+    let prelude = load_stdlib_for_tests().unwrap();
     let err = infer_module(&module, &prelude).expect_err("deve falhar");
     assert!(
         matches!(err, kata_diagnostics::MiddleError::ArityMismatch { .. }),

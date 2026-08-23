@@ -455,7 +455,32 @@ fn resolve_inner(
     })
 }
 
-pub use prelude_sigs::load_prelude;
+/// Carrega a stdlib (core → core_internals) via `ModuleLoader` embedded.
+///
+/// Substitui `load_prelude()` para testes e callers que precisam do
+/// `ResolvedModule` não-filtrado da stdlib. Carrega `["stdlib", "core"]`
+/// (não `mod.kata`) para preservar tipos primitivos não-qualificados
+/// (`Int`, `Float`, etc.) no `TypeEnv`.
+pub fn load_stdlib_for_tests() -> Result<ResolvedModule, Vec<ResolveError>> {
+    use std::path::Path;
+    use std::sync::OnceLock;
+
+    static STDLIB: OnceLock<Result<ResolvedModule, Vec<ResolveError>>> = OnceLock::new();
+    STDLIB
+        .get_or_init(|| {
+            let mut loader = module_loader::ModuleLoader::new(Vec::new());
+            loader
+                .load(&["stdlib".into(), "core".into()], Path::new("."))
+                .map(|arc| (*arc).clone())
+                .map_err(|e| match e {
+                    module_loader::LoadError::Resolve(errors) => errors,
+                    other => vec![ResolveError::UnknownFfi {
+                        name: format!("erro ao carregar stdlib: {other}"),
+                    }],
+                })
+        })
+        .clone()
+}
 
 /// Combina dois ResolvedModules (prelude + módulo) em um único.
 ///

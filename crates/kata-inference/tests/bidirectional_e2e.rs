@@ -11,12 +11,12 @@ use kata_core::ty::Ty;
 use kata_inference::infer_module;
 use kata_lexer::lex;
 use kata_parser::parse;
-use kata_resolution::{load_prelude, merge_two, resolve};
+use kata_resolution::{load_stdlib_for_tests, merge_two, resolve};
 
 fn infer_src(src: &str) -> kata_inference::TypedModule {
     let tokens = lex(src).unwrap();
     let module = parse(tokens).unwrap();
-    let prelude = load_prelude().unwrap();
+    let prelude = load_stdlib_for_tests().unwrap();
     let user = resolve(&module).unwrap();
     let resolved = merge_two(prelude, user);
     infer_module(&module, &resolved).expect("inferência deve succeed")
@@ -25,7 +25,7 @@ fn infer_src(src: &str) -> kata_inference::TypedModule {
 fn infer_src_err(src: &str) -> kata_diagnostics::MiddleError {
     let tokens = lex(src).unwrap();
     let module = parse(tokens).unwrap();
-    let prelude = load_prelude().unwrap();
+    let prelude = load_stdlib_for_tests().unwrap();
     infer_module(&module, &prelude).expect_err("deve falhar")
 }
 

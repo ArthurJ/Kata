@@ -12,7 +12,7 @@ use kata_lexer::lex;
 use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
 use kata_parser::parse;
-use kata_resolution::{ResolvedModule, load_prelude, resolve_with_prelude};
+use kata_resolution::{ResolvedModule, load_stdlib_for_tests, resolve_with_prelude};
 use kata_tree_shaking::tree_shake;
 use serial_test::serial;
 
@@ -20,7 +20,7 @@ use serial_test::serial;
 fn eval_src(src: &str) -> (i64, Ty) {
     let tokens = lex(src).expect("lex deve succeed");
     let module = parse(tokens).expect("parse deve succeed");
-    let prelude = load_prelude().expect("prelude deve carregar");
+    let prelude = load_stdlib_for_tests().expect("prelude deve carregar");
     let user = resolve_with_prelude(
         &module,
         "__local__",

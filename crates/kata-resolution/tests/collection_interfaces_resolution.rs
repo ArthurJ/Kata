@@ -8,12 +8,12 @@
 //! - resolve_type_expr mapeia List::(A) → Ty::List(A), etc.
 
 use kata_core::Ty;
-use kata_resolution::load_prelude;
+use kata_resolution::load_stdlib_for_tests;
 
 /// Carrega o prelude e verifica as 4 interfaces de coleção.
 #[test]
 fn prelude_has_collection_interfaces() {
-    let resolved = load_prelude().expect("prelude deve resolver");
+    let resolved = load_stdlib_for_tests().expect("prelude deve resolver");
 
     // DoD 17: ITERABLE(A), COUNTABLE, INDEXABLE(A), CONTAINS(A) registradas
     assert!(
@@ -75,7 +75,7 @@ fn prelude_has_collection_interfaces() {
 
 #[test]
 fn array_implements_iterable_countable_indexable_contains() {
-    let resolved = load_prelude().expect("prelude deve resolver");
+    let resolved = load_stdlib_for_tests().expect("prelude deve resolver");
 
     assert!(
         resolved
@@ -126,7 +126,7 @@ fn array_implements_iterable_countable_indexable_contains() {
 
 #[test]
 fn list_implements_iterable_countable_indexable_contains() {
-    let resolved = load_prelude().expect("prelude deve resolver");
+    let resolved = load_stdlib_for_tests().expect("prelude deve resolver");
 
     assert!(
         resolved
@@ -176,7 +176,7 @@ fn list_implements_iterable_countable_indexable_contains() {
 
 #[test]
 fn range_implements_iterable_countable_contains_not_indexable() {
-    let resolved = load_prelude().expect("prelude deve resolver");
+    let resolved = load_stdlib_for_tests().expect("prelude deve resolver");
 
     assert!(
         resolved
@@ -229,7 +229,7 @@ fn range_implements_iterable_countable_contains_not_indexable() {
 
 #[test]
 fn text_implements_iterable_countable_indexable_contains() {
-    let resolved = load_prelude().expect("prelude deve resolver");
+    let resolved = load_stdlib_for_tests().expect("prelude deve resolver");
 
     assert!(
         resolved
@@ -279,7 +279,7 @@ fn text_implements_iterable_countable_indexable_contains() {
 
 #[test]
 fn signatures_dos_metodos_estao_no_resolved_module() {
-    let resolved = load_prelude().expect("prelude deve resolver");
+    let resolved = load_stdlib_for_tests().expect("prelude deve resolver");
 
     // As signatures dos métodos de implements devem estar em resolved.signatures
     // para que o DispatchTable as receba.

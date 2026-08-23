@@ -1,12 +1,12 @@
 use kata_inference::infer_module;
 use kata_lexer::lex;
 use kata_parser::parse;
-use kata_resolution::load_prelude;
+use kata_resolution::load_stdlib_for_tests;
 
 fn infer_src(src: &str) -> Result<kata_inference::TypedModule, kata_diagnostics::MiddleError> {
     let tokens = lex(src).unwrap();
     let module = parse(tokens).unwrap();
-    let prelude = load_prelude().unwrap();
+    let prelude = load_stdlib_for_tests().unwrap();
     infer_module(&module, &prelude)
 }
 

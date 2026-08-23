@@ -12,14 +12,14 @@ use kata_lexer::lex;
 use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
 use kata_parser::parse;
-use kata_resolution::{ResolvedModule, load_prelude, resolve};
+use kata_resolution::{ResolvedModule, load_stdlib_for_tests, resolve};
 use kata_tree_shaking::tree_shake;
 
 /// Executa o pipeline completo e retorna o valor bruto do JIT + tipo.
 fn eval_src(src: &str) -> (i64, Ty) {
     let tokens = lex(src).expect("lex deve succeed");
     let module = parse(tokens).expect("parse deve succeed");
-    let prelude = load_prelude().expect("prelude deve carregar");
+    let prelude = load_stdlib_for_tests().expect("prelude deve carregar");
     let user = resolve(&module).expect("resolve deve succeed");
     let resolved = merge_resolved(prelude, user);
     let typed = infer_module(&module, &resolved).expect("infer deve succeed");
@@ -35,7 +35,7 @@ fn eval_src(src: &str) -> (i64, Ty) {
 fn infer_src(src: &str) -> kata_inference::TypedModule {
     let tokens = lex(src).expect("lex deve succeed");
     let module = parse(tokens).expect("parse deve succeed");
-    let prelude = load_prelude().expect("prelude deve carregar");
+    let prelude = load_stdlib_for_tests().expect("prelude deve carregar");
     let user = resolve(&module).expect("resolve deve succeed");
     let resolved = merge_resolved(prelude, user);
     infer_module(&module, &resolved).expect("infer deve succeed")

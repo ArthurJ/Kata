@@ -8,7 +8,7 @@
 use kata_inference::infer_module;
 use kata_lexer::lex;
 use kata_parser::parse;
-use kata_resolution::{load_prelude, resolve};
+use kata_resolution::{load_stdlib_for_tests, resolve};
 
 fn merge_resolved(
     prelude: kata_resolution::ResolvedModule,
@@ -63,7 +63,7 @@ fn merge_resolved(
 fn infer_err(src: &str) -> kata_diagnostics::MiddleError {
     let tokens = lex(src).expect("lex deve succeed");
     let module = parse(tokens).expect("parse deve succeed");
-    let prelude = load_prelude().expect("prelude deve carregar");
+    let prelude = load_stdlib_for_tests().expect("prelude deve carregar");
     let user = resolve(&module).expect("resolve deve succeed");
     let resolved = merge_resolved(prelude, user);
     infer_module(&module, &resolved).unwrap_err()
@@ -73,7 +73,7 @@ fn infer_err(src: &str) -> kata_diagnostics::MiddleError {
 fn infer_ok(src: &str) -> kata_inference::TypedModule {
     let tokens = lex(src).expect("lex deve succeed");
     let module = parse(tokens).expect("parse deve succeed");
-    let prelude = load_prelude().expect("prelude deve carregar");
+    let prelude = load_stdlib_for_tests().expect("prelude deve carregar");
     let user = resolve(&module).expect("resolve deve succeed");
     let resolved = merge_resolved(prelude, user);
     infer_module(&module, &resolved).expect("infer deve succeed")
