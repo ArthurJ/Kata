@@ -1,82 +1,12 @@
 # TODO — Kata-Lang
 
-Único arquivo de pendências. Atualizado 2026-08-22.
+Único arquivo de pendências. Atualizado 2026-08-23.
 
 Os docs `TODO-*.md` foram removidos (obsoletos ou resolvidos). Pendências vivem aqui.
 
 ---
 
 ## Débito Técnico
-
-### `filter_exports` não preserva dependências transitivas de funções
-
-**Estado:** Se módulo A exporta `fn1` cujo corpo referencia `fn2` (não
-exportada), e módulo B importa `A.(fn1)`, o `infer_module` falha com
-`unbound_name` para `fn2`. O `filter_exports` remove `fn2` do
-`ResolvedModule` filtrado, mas o corpo de `fn1` referencia `fn2`. O
-`resolved_unfiltered` tem `fn2`, mas `merge_imports` usa o filtrado.
-
-**Impacto:** Médio. Sub-módulos que importam de outros sub-módulos e
-re-exportam funções que dependem de imports internos falham. Workaround:
-exportar todas as funções referenciadas por funções exportadas, ou usar
-funções autocontidas (sem dependências internas).
-
-**Análise (2026-08-22):**
-
-O fluxo do bug:
-1. `load_imports` (module_loader.rs:250) chama `filter_exports` → produz
-   `resolved_filtered` (sem `fn2`) e `resolved_unfiltered` (com `fn2`).
-2. `merge_imports` (merge_imports.rs:20) mescla `resolved_filtered` no
-   importador B. `resolved_unfiltered` só é usado por
-   `evaluate_imported_constants` (imports.rs:140) — inference de constants,
-   não de funções.
-3. `infer_module` (infer/mod.rs:97) clona `resolved.functions` — agora
-   inclui `fn1` (de A, filtrada) mas não `fn2`. No passo 3 (mod.rs:309),
-   processa cada `FunctionDef` via `infer_named_function`. Ao inferir o
-   corpo de `fn1`, a referência a `fn2` não está no `dispatch_table` nem
-   no `type_env` → `UnboundName`.
-
-Por que o inference re-processa funções importadas: `resolved.functions`
-contém `FunctionDef` (AST com cláusulas lambda, não TAST). O `infer_module`
-tipa todas as funções indiscriminadamente — por design, o codegen precisa
-da TAST de todas as funções (incluindo importadas) para gerar código
-Cranelift. O `resolved_unfiltered` existe para dar acesso a helpers
-internos, mas só é usado no pipeline recursivo de constants, não no de
-funções.
-
-O que `filter_exports` já faz: fechamento transitivo para **tipos**
-(mod_loader.rs:489-526) — tipo exportado → impls → interfaces → métodos
-→ supertraits (fixpoint).
-
-**Solução proposta:** estender o closure com dependências de corpos de
-funções — análogo ao fixpoint de supertraits que já existe:
-1. Coletar `module_names` — nomes de signatures/functions/actions
-   definidas no módulo (via `Module` AST, que `filter_exports` recebe).
-2. Para cada função no `closure`, percorrer as cláusulas lambda (corpo)
-   coletando `Expr::Ident(name)` onde `name ∈ module_names`.
-3. Adicionar esses nomes ao `closure`. Repetir até fixpoint (`fn2` pode
-   referenciar `fn3`, etc.).
-4. O filtro de `functions`/`signatures` por `closure.contains(&s.name)`
-   (linhas 532-543) já faz o resto.
-
-A peça que falta é um walker de AST que percorra `FunctionDef` (cláusulas
-→ body `Expr`) coletando `Ident`. Não há visitor existente no codebase
-para isso — a AST de `Expr` é recursiva, é trabalho mecânico.
-
-Risco principal: o walker precisa cobrir todos os nós de `Expr` que podem
-conter `Ident` (call, pipe desugared, let, match arms, lambda body, etc.).
-Se perder um caso, o fixpoint não converge e `fn2` ainda é filtrada — mas
-o sintoma é o mesmo erro atual, não regresso silencioso.
-
-Questão arquitetural: a raiz mais profunda é que funções importadas são
-re-inferidas pelo importador, não no módulo de origem. Seria "mais correto"
-inferir no módulo de origem (com `resolved_unfiltered`) e importar a TAST
-já tipada — eliminando a necessidade do fechamento transitivo. Mas isso
-seria refatoração grande (o pipeline não tem noção de "TAST importada").
-O fechamento transitivo é pragmático, resolve o bug, e é consistente com
-o que já existe para tipos.
-
----
 
 ### Tree-shaking por instância de família polimórfica
 
