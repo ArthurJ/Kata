@@ -501,3 +501,60 @@ pub(crate) fn check_exhaustiveness(
         }
     }
 }
+
+/// Universo de valores possíveis para um tipo, como sentinelas `String`.
+///
+/// - `Sum`/`Generic` → todas as variantes do enum.
+/// - `List` → `["Cons", "Nil"]`.
+/// - Tipos infinitos (`Int`, `Float`, `Text`, `Byte`, etc.) → `["__ANY__"]`.
+/// - `Tuple` → `["__ANY__"]` (átomo, não decompõe).
+/// - `Struct` → `["__ANY__"]`.
+/// - `Unit` → `["__ANY__"]` (único valor, Ident/Wildcard cobre).
+///
+/// `__ANY__` é um sentinela que representa "qualquer valor deste tipo".
+/// Só `Ident`/`Wildcard` cobre `__ANY__`.
+pub(crate) fn enum_universe(ty: &Ty, enum_registry: &EnumRegistry) -> Vec<String> {
+    match ty {
+        Ty::Sum(enum_name) | Ty::Generic(enum_name, _) => {
+            let variants = enum_registry.variants_of(enum_name);
+            if variants.is_empty() {
+                vec!["__ANY__".to_string()]
+            } else {
+                variants.iter().map(|v| v.to_string()).collect()
+            }
+        }
+        Ty::List(_) => vec!["Cons".to_string(), "Nil".to_string()],
+        // Tipos infinitos, Tuple, Struct, Unit, etc. — átomo.
+        _ => vec!["__ANY__".to_string()],
+    }
+}
+
+/// Verifica se um pattern cobre uma variante do universo.
+///
+/// - `Variant{v}` cobre `v`.
+/// - `Cons` cobre `"Cons"`, `Nil` cobre `"Nil"`.
+/// - `Ident`/`Wildcard` cobre qualquer coisa (inclusive `__ANY__`).
+/// - `Literal` não cobre `__ANY__` (só um valor específico).
+/// - `Tuple(all Ident/Wildcard)` cobre `__ANY__`.
+/// - `Tuple(outro)` não cobre `__ANY__`.
+pub(crate) fn pattern_covers_variant(pattern: &TypedPattern, variant: &str) -> bool {
+    match pattern {
+        TypedPattern::Ident { .. } | TypedPattern::Wildcard => true,
+        TypedPattern::Variant { variant: v, .. } => v == variant,
+        TypedPattern::Cons { .. } => variant == "Cons",
+        TypedPattern::Nil => variant == "Nil",
+        TypedPattern::Literal { .. } => variant != "__ANY__",
+        TypedPattern::Tuple { elements } => {
+            if variant == "__ANY__" {
+                elements.iter().all(|e| {
+                    matches!(
+                        e.node,
+                        TypedPattern::Ident { .. } | TypedPattern::Wildcard
+                    )
+                })
+            } else {
+                false
+            }
+        }
+    }
+}

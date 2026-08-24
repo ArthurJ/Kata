@@ -179,14 +179,18 @@ pub(crate) fn ty_name(ty: &Ty) -> &str {
 /// Verifica exaustividade de cláusulas lambda (pattern matching implícito).
 ///
 /// Múltiplas cláusulas lambda são semanticamente equivalentes a um `match`
-/// sobre os parâmetros. Esta função coleta as variantes cobertas pelos
-/// patterns das cláusulas e chama `check_exhaustiveness` — a mesma
-/// verificação que `match` explícito já faz.
+/// sobre os parâmetros. Esta função computa o produto cartesiano dos
+/// universos de cada parâmetro e verifica se alguma cláusula cobre cada
+/// célula do produto. Funciona para qualquer aridade (N parâmetros).
 ///
-/// Para funções de 1 parâmetro, verifica diretamente. Para múltiplos
-/// parâmetros, só verifica se algum pattern da primeira posição é
-/// estrutural (Variant/Cons/Nil/Literal) — caso contrário, todos são
-/// Ident/Wildcard e a exaustividade é trivialmente satisfeita.
+/// O universo de cada posição é determinado por `enum_universe`:
+/// - `Sum`/`Generic` → todas as variantes do enum.
+/// - `List` → `{Cons, Nil}`.
+/// - Tipos infinitos (Int, Float, Text, etc.) → `{__ANY__}`.
+/// - `Tuple`/`Struct`/`Unit` → `{__ANY__}` (átomo, não decompõe).
+///
+/// Uma cláusula cobre uma célula se, em todas as posições, o pattern da
+/// cláusula cobre a variante da célula (via `pattern_covers_variant`).
 fn check_clause_exhaustiveness(
     typed_clauses: &[TypedLambdaClause],
     param_types: &[Ty],
@@ -197,66 +201,45 @@ fn check_clause_exhaustiveness(
         return Ok(());
     }
 
-    // Para múltiplos parâmetros, a verificação de exaustividade é mais
-    // complexa (produto cartesiano de patterns). Por ora, só verificamos
-    // quando há exatamente 1 parâmetro. Para N params, se TODOS os patterns
-    // em TODAS as posições são Ident/Wildcard, é trivialmente exaustivo.
-    // Caso contrário (pattern estrutural em alguma posição), não verificamos
-    // — débito técnico.
-    if param_types.len() != 1 {
-        let all_ident_wildcard = typed_clauses.iter().all(|clause| {
-            clause.patterns.iter().all(|p| {
-                matches!(
-                    p.node,
-                    crate::typed::TypedPattern::Ident { .. } | crate::typed::TypedPattern::Wildcard
-                )
-            })
-        });
-        if all_ident_wildcard {
-            return Ok(());
-        }
-        // TODO: exaustividade para múltiplos parâmetros com patterns estruturais.
-        return Ok(());
-    }
+    // Computa o universo de cada parâmetro.
+    let universes: Vec<Vec<String>> = param_types
+        .iter()
+        .map(|ty| crate::patterns::enum_universe(ty, ctx.enum_registry))
+        .collect();
 
-    let scrutinee_ty = &param_types[0];
-    let mut covered_variants: Vec<String> = Vec::new();
-    let mut has_otherwise = false;
-
-    for clause in typed_clauses {
-        if let Some(pattern) = clause.patterns.first() {
-            match &pattern.node {
-                crate::typed::TypedPattern::Variant { variant, .. } => {
-                    covered_variants.push(variant.clone());
-                }
-                crate::typed::TypedPattern::Cons { .. } => {
-                    covered_variants.push("Cons".to_string());
-                }
-                crate::typed::TypedPattern::Nil => {
-                    covered_variants.push("Nil".to_string());
-                }
-                crate::typed::TypedPattern::Ident { .. } | crate::typed::TypedPattern::Wildcard => {
-                    has_otherwise = true;
-                }
-                // Literal não cobre todos os valores do tipo.
-                crate::typed::TypedPattern::Literal { .. } => {}
-                // Tuple cobre todas as tuplas do tipo se todos os sub-patterns
-                // são Ident/Wildcard. Caso contrário (Literal/Variant dentro),
-                // só cobre tuplas específicas.
-                crate::typed::TypedPattern::Tuple { elements } => {
-                    let all_ident_wildcard = elements.iter().all(|e| {
-                        matches!(
-                            e.node,
-                            crate::typed::TypedPattern::Ident { .. }
-                                | crate::typed::TypedPattern::Wildcard
-                        )
-                    });
-                    if all_ident_wildcard {
-                        has_otherwise = true;
-                    }
-                }
+    // Produto cartesiano: todas as combinações de variantes.
+    // Começa com uma célula vazia e vai expandindo cada posição.
+    let mut product: Vec<Vec<String>> = vec![Vec::new()];
+    for universe in &universes {
+        let mut next = Vec::new();
+        for cell in &product {
+            for variant in universe {
+                let mut new_cell = cell.clone();
+                new_cell.push(variant.clone());
+                next.push(new_cell);
             }
         }
+        product = next;
+    }
+
+    // Para cada célula do produto, verifica se alguma cláusula a cobre.
+    let mut missing: Vec<Vec<String>> = Vec::new();
+    for cell in &product {
+        let covered = typed_clauses.iter().any(|clause| {
+            cell.iter().enumerate().all(|(i, variant)| {
+                clause
+                    .patterns
+                    .get(i)
+                    .is_some_and(|p| crate::patterns::pattern_covers_variant(&p.node, variant))
+            })
+        });
+        if !covered {
+            missing.push(cell.clone());
+        }
+    }
+
+    if missing.is_empty() {
+        return Ok(());
     }
 
     // Span da primeira cláusula para a mensagem de erro.
@@ -265,13 +248,25 @@ fn check_clause_exhaustiveness(
         .map(|c| c.span)
         .unwrap_or(kata_ast::Span::zero());
 
-    crate::patterns::check_exhaustiveness(
-        &covered_variants,
-        scrutinee_ty,
-        has_otherwise,
-        ctx.enum_registry,
-        &span,
-    )?;
+    // Formata as células faltantes para a mensagem.
+    let missing_str: Vec<String> = missing
+        .iter()
+        .map(|cell| {
+            if cell.len() == 1 {
+                cell[0].clone()
+            } else {
+                format!("({})", cell.join(", "))
+            }
+        })
+        .collect();
 
-    Ok(())
+    Err(MiddleError::NonExhaustiveMatch {
+        missing: missing_str.clone(),
+        span: span.into(),
+        hint: Some(format!(
+            "combinações faltantes: {}. \
+             Adicione cláusulas para cada uma ou use `otherwise:` como fallback",
+            missing_str.join(", ")
+        )),
+    })
 }
