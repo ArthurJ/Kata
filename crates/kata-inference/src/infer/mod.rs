@@ -44,6 +44,7 @@ mod lambda;
 mod log_builtins;
 mod partial_dispatch;
 mod path_conditions;
+mod post_conditions;
 mod recursion;
 mod refined_builders;
 mod show_synthesis;
@@ -73,6 +74,9 @@ use crate::typed::{TypedAction, TypedExpr, TypedFunction, TypedModule};
 
 use self::expr::{InferCtx, infer_expr};
 use self::helpers::{item_span_or_synthetic, populate_dispatch_table};
+use self::post_conditions::{
+    InlineFnTable, PostCondTable, extract_inline_bodies, extract_post_conditions,
+};
 
 /// Infere o tipo de um módulo completo.
 ///
@@ -243,6 +247,30 @@ pub fn infer_module(
     );
     show_functions.extend(dict_show_functions);
 
+    // ── Post-condições (Nível 2) ──
+    // Extrai post-condições de funções com guards que produzem variants
+    // de enum. Roda antes de qualquer InferCtx ser instanciado.
+    // Usa um InferCtx temporário com PostCondTable vazia (o pass só
+    // precisa do DispatchTable e registries para tipar guards/bodies).
+    let empty_post_conds = PostCondTable::default();
+    let empty_inline_fns = InlineFnTable::default();
+    let extraction_ctx = InferCtx {
+        table: &dispatch_table,
+        enum_registry: &resolved.enum_registry,
+        struct_registry: &resolved.struct_registry,
+        refined_decls: &resolved.refined_decls,
+        interface_registry: &interface_registry,
+        refines_registry: &resolved.refines_registry,
+        ret_ty: None,
+        in_loop: false,
+        deferred_lambdas: &deferred_lambdas,
+        path_conditions: Default::default(),
+        post_conds: &empty_post_conds,
+        inline_fns: &empty_inline_fns,
+    };
+    let post_cond_table = extract_post_conditions(&functions, &extraction_ctx, &resolved.type_env);
+    let inline_fn_table = extract_inline_bodies(&functions, &extraction_ctx, &resolved.type_env);
+
     // 2. Clona o TypeEnv do ResolvedModule — o typeck pode adicionar bindings
     //    locais (let) sem mutar o original.
     let mut type_env = resolved.type_env.clone();
@@ -286,6 +314,8 @@ pub fn infer_module(
                 in_loop: false,
                 deferred_lambdas: &deferred_lambdas,
                 path_conditions: Default::default(),
+                post_conds: &post_cond_table,
+                inline_fns: &inline_fn_table,
             };
             // Inferência direta do value (sem wrapping em Expr::Let).
             let typed_value =
@@ -326,7 +356,9 @@ pub fn infer_module(
             ret_ty: None,
             in_loop: false,
             deferred_lambdas: &deferred_lambdas,
-                path_conditions: Default::default(),
+            path_conditions: Default::default(),
+            post_conds: &post_cond_table,
+            inline_fns: &inline_fn_table,
         };
         let typed_func = infer_named_function(func_def, &ctx, &type_env)?;
         // Registra no TypeEnv para permitir uso como valor (call_indirect).
@@ -364,7 +396,9 @@ pub fn infer_module(
             ret_ty: Some(&action_def.return_type),
             in_loop: false,
             deferred_lambdas: &deferred_lambdas,
-                path_conditions: Default::default(),
+            path_conditions: Default::default(),
+            post_conds: &post_cond_table,
+            inline_fns: &inline_fn_table,
         };
         let typed_action = infer_action(action_def, &ctx, &type_env)?;
         typed_actions.push(typed_action);
@@ -398,7 +432,9 @@ pub fn infer_module(
                     ret_ty: None,
                     in_loop: false,
                     deferred_lambdas: &deferred_lambdas,
-                path_conditions: Default::default(),
+                    path_conditions: Default::default(),
+                    post_conds: &post_cond_table,
+                    inline_fns: &inline_fn_table,
                 };
                 let typed = infer_expr(
                     &desugared.node,

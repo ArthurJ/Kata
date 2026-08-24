@@ -275,6 +275,8 @@ pub(crate) fn infer_lambda_body(
                     in_loop: ctx.in_loop,
                     deferred_lambdas: ctx.deferred_lambdas,
                     path_conditions: ctx.path_conditions.with_fact(cond_typed.clone()),
+                    post_conds: ctx.post_conds,
+                    inline_fns: ctx.inline_fns,
                 };
 
                 let body_typed = infer_expr_hinted(

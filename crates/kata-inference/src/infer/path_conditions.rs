@@ -13,11 +13,10 @@ use crate::typed::TypedExprKind;
 
 use kata_ast::Spanned;
 
-use z3::{
-    Config, SatResult, Solver,
-    ast::Bool,
-    with_z3_config,
-};
+use z3::{Config, SatResult, Solver, ast::Bool, with_z3_config};
+
+use super::post_conditions::{InlineFnTable, substitute_params};
+use kata_core::ty::Ty;
 
 /// Facts acumulados no contexto de inferência.
 ///
@@ -77,6 +76,7 @@ fn z3_config() -> Config {
 pub(crate) fn try_prove_with_path_conditions(
     pred_typed: &TypedExpr,
     path_conditions: &PathConditionCtx,
+    inline_fns: &InlineFnTable,
 ) -> Option<bool> {
     if path_conditions.is_empty() {
         return None;
@@ -86,7 +86,7 @@ pub(crate) fn try_prove_with_path_conditions(
 
     with_z3_config(&cfg, || {
         let solver = Solver::new();
-        let mut translator = Z3PathTranslator::new();
+        let mut translator = Z3PathTranslator::new(inline_fns);
 
         // Traduz facts como conjunção.
         let z3_facts: Vec<Bool> = path_conditions
@@ -117,9 +117,10 @@ pub(crate) fn try_prove_with_path_conditions(
 /// Replica o `Z3Translator` de `guard_completeness.rs` — mesmas
 /// traduções, mesmos fallbacks conservadores. Duplicado (não importado)
 /// porque `Z3Translator` é privado ao módulo `guard_completeness`.
-struct Z3PathTranslator {
+struct Z3PathTranslator<'a> {
     var_cache: std::collections::HashMap<String, VarKind>,
     fresh_counter: u32,
+    inline_fns: &'a InlineFnTable,
 }
 
 enum VarKind {
@@ -127,11 +128,12 @@ enum VarKind {
     Bool(Bool),
 }
 
-impl Z3PathTranslator {
-    fn new() -> Self {
+impl<'a> Z3PathTranslator<'a> {
+    fn new(inline_fns: &'a InlineFnTable) -> Self {
         Z3PathTranslator {
             var_cache: std::collections::HashMap::new(),
             fresh_counter: 0,
+            inline_fns,
         }
     }
 
@@ -139,6 +141,19 @@ impl Z3PathTranslator {
         let name = format!("__path_opaque_{}", self.fresh_counter);
         self.fresh_counter += 1;
         Bool::fresh_const(&name)
+    }
+
+    /// Tenta inlinar uma chamada de função pura. Se `name` está na
+    /// `inline_fns` table, substitui os params pelos args e retorna o
+    /// corpo tipado. O caller então traduz o corpo inlinado em vez da
+    /// chamada. Retorna `None` se a função não está na tabela ou não
+    /// tem corpo inlinable.
+    fn try_inline(&self, name: &str, args: &[Spanned<TypedExpr>]) -> Option<TypedExpr> {
+        let arg_types: Vec<Ty> = args.iter().map(|a| a.node.ty.clone()).collect();
+        let fn_body = self.inline_fns.get(name, &arg_types)?;
+        let body = fn_body.body.as_ref()?;
+        let result = substitute_params(body, &fn_body.param_names, args);
+        Some(result)
     }
 
     fn translate_bool(&mut self, expr: &TypedExpr) -> Bool {
@@ -175,7 +190,15 @@ impl Z3PathTranslator {
                         ">" | "<" | ">=" | "<=" | "=" | "!=" => {
                             self.translate_comparison(name, args)
                         }
-                        _ => self.fresh_bool(),
+                        _ => {
+                            // Tenta inlinar função pura (ex: zero). Se
+                            // inlinable, traduz o corpo; senão, opaca.
+                            if let Some(inlined) = self.try_inline(name, args) {
+                                self.translate_bool(&inlined)
+                            } else {
+                                self.fresh_bool()
+                            }
+                        }
                     }
                 } else {
                     self.fresh_bool()
@@ -196,11 +219,7 @@ impl Z3PathTranslator {
         }
     }
 
-    fn translate_comparison(
-        &mut self,
-        op: &str,
-        args: &[Spanned<TypedExpr>],
-    ) -> Bool {
+    fn translate_comparison(&mut self, op: &str, args: &[Spanned<TypedExpr>]) -> Bool {
         if args.len() != 2 {
             return self.fresh_bool();
         }
@@ -226,16 +245,13 @@ impl Z3PathTranslator {
 
     fn translate_int(&mut self, expr: &TypedExpr) -> Option<z3::ast::Int> {
         match &expr.kind {
-            TypedExprKind::IntLit { text } => {
-                text.parse::<i64>().ok().map(z3::ast::Int::from_i64)
-            }
+            TypedExprKind::IntLit { text } => text.parse::<i64>().ok().map(z3::ast::Int::from_i64),
             TypedExprKind::Ident { name } => {
                 if let Some(VarKind::Int(i)) = self.var_cache.get(name) {
                     Some(i.clone())
                 } else {
                     let i = z3::ast::Int::new_const(name.as_str());
-                    self.var_cache
-                        .insert(name.clone(), VarKind::Int(i.clone()));
+                    self.var_cache.insert(name.clone(), VarKind::Int(i.clone()));
                     Some(i)
                 }
             }
@@ -269,7 +285,15 @@ impl Z3PathTranslator {
                                 None
                             }
                         }
-                        _ => None,
+                        _ => {
+                            // Tenta inlinar função pura (ex: zero). Se
+                            // inlinable, traduz o corpo; senão, None.
+                            if let Some(inlined) = self.try_inline(name, args) {
+                                self.translate_int(&inlined)
+                            } else {
+                                None
+                            }
+                        }
                     }
                 } else {
                     None

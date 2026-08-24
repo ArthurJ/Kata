@@ -18,14 +18,22 @@ use kata_lexer::lex;
 use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
 use kata_parser::parse;
-use kata_resolution::{ResolvedModule, load_stdlib_for_tests, resolve};
+use kata_resolution::{ResolvedModule, load_stdlib_for_tests, resolve_with_prelude};
 use kata_tree_shaking::tree_shake;
 
 fn eval_src(src: &str) -> (i64, Ty) {
     let tokens = lex(src).expect("lex deve succeed");
     let module = parse(tokens).expect("parse deve succeed");
     let prelude = load_stdlib_for_tests().expect("prelude deve carregar");
-    let user = resolve(&module).expect("resolve deve succeed");
+    let user = resolve_with_prelude(
+        &module,
+        "__local__",
+        kata_resolution::DirectiveRegistry::new(),
+        &prelude.interface_registry,
+        &prelude.directive_registry,
+        Some(&prelude.type_graph),
+    )
+    .expect("resolve deve succeed");
     let resolved = merge_resolved(prelude, user);
     let typed = infer_module(&module, &resolved).expect("infer deve succeed");
     let typed = monomorphize(typed);
@@ -40,7 +48,15 @@ fn infer_src(src: &str) -> Result<kata_inference::TypedModule, kata_diagnostics:
     let tokens = lex(src).expect("lex deve succeed");
     let module = parse(tokens).expect("parse deve succeed");
     let prelude = load_stdlib_for_tests().expect("prelude deve carregar");
-    let user = resolve(&module).expect("resolve deve succeed");
+    let user = resolve_with_prelude(
+        &module,
+        "__local__",
+        kata_resolution::DirectiveRegistry::new(),
+        &prelude.interface_registry,
+        &prelude.directive_registry,
+        Some(&prelude.type_graph),
+    )
+    .expect("resolve deve succeed");
     let resolved = merge_resolved(prelude, user);
     infer_module(&module, &resolved)
 }
@@ -345,7 +361,7 @@ fn t_post_cond_user_defined_func() {
     let src = r#"safe_half :: Int => Result::(Int, Text)
 lambda n:
     = n 0: Result::Err "zero"
-    otherwise: Result::Ok (// n 2)
+    otherwise: Result::Ok (// n (2::NonZero))
 
 action test_user => NonZero::Int
     match (safe_half 10)

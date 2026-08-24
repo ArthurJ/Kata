@@ -84,6 +84,8 @@ pub(crate) fn synthesize_enum_pred(
     let empty_iface_reg = kata_core::interface_registry::InterfaceRegistry::new();
     let empty_refines_reg = kata_core::RefinesRegistry::new();
     let deferred = super::expr::DeferredLambdaTable::default();
+    let empty_post_conds = super::post_conditions::PostCondTable::default();
+    let empty_inline_fns = super::post_conditions::InlineFnTable::default();
     let ctx = InferCtx {
         table: &*dispatch_table,
         enum_registry,
@@ -94,7 +96,9 @@ pub(crate) fn synthesize_enum_pred(
         ret_ty: None,
         in_loop: false,
         deferred_lambdas: &deferred,
-                path_conditions: Default::default(),
+        path_conditions: Default::default(),
+        post_conds: &empty_post_conds,
+        inline_fns: &empty_inline_fns,
     };
 
     let mut functions = Vec::new();

@@ -190,6 +190,7 @@ pub(crate) fn infer_lambda(
                     &lambda_env,
                     ctx.interface_registry,
                     ctx.struct_registry,
+                    None,
                 );
             }
             Ty::InferVar(i as u32)

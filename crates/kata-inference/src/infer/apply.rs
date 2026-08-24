@@ -85,8 +85,13 @@ pub(crate) fn infer_apply(
                 with_bindings,
             } = inner_core
             {
-                let hint_ty =
-                    resolve_type_expr(&ty.node, env, ctx.interface_registry, ctx.struct_registry);
+                let hint_ty = resolve_type_expr(
+                    &ty.node,
+                    env,
+                    ctx.interface_registry,
+                    ctx.struct_registry,
+                    None,
+                );
                 return infer_apply_lambda_with_hint(
                     patterns,
                     body,

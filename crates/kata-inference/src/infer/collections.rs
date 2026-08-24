@@ -413,6 +413,8 @@ pub(crate) fn infer_for_in(
         in_loop: true,
         deferred_lambdas: ctx.deferred_lambdas,
         path_conditions: ctx.path_conditions.clone(),
+        post_conds: ctx.post_conds,
+        inline_fns: ctx.inline_fns,
     };
 
     let mut typed_body = Vec::new();

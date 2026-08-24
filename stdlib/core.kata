@@ -126,8 +126,8 @@ Int implements NUM
     @ffi("kata_rt_bi_div")
     // :: Int NonZero => Int
 
-    @ffi("kata_rt_bi_zero")
     zero :: Int => Int
+    lambda _: 0
 
     abs :: Int => Int
     lambda a:
@@ -232,8 +232,8 @@ Float implements NUM
     // :: Float NonZero::Rational => Int
     lambda f r: int (/ f r)
 
-    @ffi("kata_rt_fzero")
     zero :: Float => Float
+    lambda _: 0.0
 
     abs :: Float => Float
     lambda a:
@@ -338,8 +338,8 @@ Rational implements NUM
     // :: Rational NonZero::Float => Int
     lambda r f: int (/ r f)
 
-    @ffi("kata_rt_rat_zero")
     zero :: Rational => Rational
+    lambda _: rational 0
 
     abs :: Rational => Rational
     lambda a:

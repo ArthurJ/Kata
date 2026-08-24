@@ -770,12 +770,41 @@ Nível 2 e Nível 3 coexistem: Nível 2 para funções Kata com corpo (o
 compiler deriva post-condições dos guards), Nível 3 para funções FFI
 sem corpo (contratos declarados explicitamente na assinatura).
 
+### 9.10. Inlining de funções puras no Z3 translator
+
+O `Z3PathTranslator` hoje não inlina funções — trata `Closure { Ident("zero"),
+[_] }` como variável opaca. Isso impede que o Z3 prove predicados que
+referenciam funções do stdlib, como `!= _ (zero _)` em `NonZero`.
+
+**Duas frentes:**
+
+1. **Remover FFI de funções que são constantes puras.** `zero` é `@ffi` em
+   todos os impls concretos (Int, Float, Rational), mas as implementações C
+   ignoram o argumento e retornam a constante zero do tipo
+   (`encode_smi(0)`, `0.0`, `BigRational::zero()`). Não há vantagem em FFI
+   aqui — o corpo Kata `lambda _: 0` é semanticamente equivalente e
+   visível para o compiler. Converter `zero` (e qualquer outra função
+   `@ffi` que seja uma constante pura) para função com corpo Kata.
+
+2. **Inlinar funções puras com corpo no translator.** Quando o
+   `Z3PathTranslator` encontra `Closure { Ident(f), args }` e `f` tem corpo
+   Kata (cláusulas lambda), substitui os parâmetros pelos argumentos e
+   traduz o corpo inlinado. Isso torna qualquer função pura definida pelo
+   usuário transparente para o Z3 — não só `zero`.
+
+A frente 1 é pré-requisito da frente 2 para o caso de `zero`: sem corpo
+Kata, não há o que inlinar. A frente 2 é a generalização que beneficia
+todo o sistema de proof obligations.
+
 ### Roadmap
 
 Nível 1 cria a infraestrutura (`PathConditionCtx`, prova Z3, coleta no
 visitor). Nível 2 adiciona o pass de extração de post-condições e o
 consumo no visitor de match. Nível 3 adiciona contratos explícitos em
 assinaturas. Cada nível é incremental sobre o anterior.
+
+**Nível 2 desbloqueio:** remover FFI de `zero` (frente 1) + inlinar
+funções puras no translator (frente 2) — §9.10.
 
 ## 10. Riscos
 

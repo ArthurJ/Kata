@@ -83,6 +83,17 @@ pub(crate) struct InferCtx<'a> {
     /// ascriptions refinadas sobre não-literais via Z3.
     /// Nível 1: guards locais apenas (PRD-refinement-propagation).
     pub path_conditions: super::path_conditions::PathConditionCtx,
+    /// Post-condições inter-procedurais — Nível 2.
+    /// Mapa func_name → post-condições extraídas dos guards do corpo
+    /// da função. Consumido no visitor de match quando o scrutinee é
+    /// uma chamada de função (Closure).
+    pub post_conds: &'a super::post_conditions::PostCondTable,
+    /// Corpos tipados de funções puras inlinable, para o Z3 translator.
+    /// Quando o translator encontra `Closure { Ident(f), args }` e `f`
+    /// está nesta tabela, inlina o corpo (substituindo params por args)
+    /// e traduz o resultado. Torna funções puras com corpo Kata
+    /// transparentes para o Z3 (ex: `zero`).
+    pub inline_fns: &'a super::post_conditions::InlineFnTable,
 }
 
 /// Infere o tipo de uma expressão, produzindo um `TypedExpr`.
@@ -830,6 +841,8 @@ pub(crate) fn infer_expr_hinted(
                 in_loop: true,
                 deferred_lambdas: ctx.deferred_lambdas,
                 path_conditions: ctx.path_conditions.clone(),
+                post_conds: ctx.post_conds,
+                inline_fns: ctx.inline_fns,
             };
             let mut typed_body = Vec::new();
             for expr in body {

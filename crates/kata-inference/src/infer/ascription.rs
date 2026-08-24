@@ -32,7 +32,13 @@ pub(crate) fn infer_type_ascription(
     tail_pos: bool,
     _hint: Option<&Ty>,
 ) -> InferResult<TypedExpr> {
-    let target_ty = resolve_type_expr(&ty.node, env, ctx.interface_registry, ctx.struct_registry);
+    let target_ty = resolve_type_expr(
+        &ty.node,
+        env,
+        ctx.interface_registry,
+        ctx.struct_registry,
+        None,
+    );
 
     // Grouped ascription `((expr))::Type` — barreira de hint.
     // Se expr é Grouping(Grouping(inner2)), o grouping duplo bloqueia
@@ -48,7 +54,7 @@ pub(crate) fn infer_type_ascription(
                 // (expr)::Type — propaga hint normalmente.
                 // Mesma lógica de família polimórfica do branch _ abaixo.
                 let is_family_target = matches!(
-                    &resolve_type_expr(&ty.node, env, ctx.interface_registry, ctx.struct_registry),
+                    &resolve_type_expr(&ty.node, env, ctx.interface_registry, ctx.struct_registry, None),
                     Ty::Struct(StructKey::Family(n)) | Ty::Struct(StructKey::Plain(n))
                         if ctx.struct_registry.get(n).is_some_and(|si| si.is_instance_of.is_some())
                 );
@@ -70,7 +76,7 @@ pub(crate) fn infer_type_ascription(
             // Family). Para literals como `3::NonZero`, o hint é ignorado
             // (IntLit não usa hint de tipo struct).
             let is_family_target = matches!(
-                &resolve_type_expr(&ty.node, env, ctx.interface_registry, ctx.struct_registry),
+                &resolve_type_expr(&ty.node, env, ctx.interface_registry, ctx.struct_registry, None),
                 Ty::Struct(StructKey::Family(n)) | Ty::Struct(StructKey::Plain(n))
                     if ctx.struct_registry.get(n).is_some_and(|si| si.is_instance_of.is_some())
             );
@@ -302,16 +308,13 @@ pub(crate) fn infer_type_ascription(
                     match super::path_conditions::try_prove_with_path_conditions(
                         &typed_pred,
                         &ctx.path_conditions,
+                        ctx.inline_fns,
                     ) {
                         Some(true) => {} // provado satisfeito pelas path conditions
                         Some(false) => {
                             return Err(MiddleError::TypeMismatch {
-                                expected: format!(
-                                    "predicado {i} de {} satisfeito",
-                                    key.name()
-                                ),
-                                found: "predicado refutado pelas path conditions"
-                                    .to_string(),
+                                expected: format!("predicado {i} de {} satisfeito", key.name()),
+                                found: "predicado refutado pelas path conditions".to_string(),
                                 span: expr.span.into(),
                             });
                         }

@@ -4,6 +4,7 @@
 //! verifica uniformidade de tipo entre braços e exaustividade.
 
 use kata_ast::{Expr, MatchArm, Span, Spanned};
+use kata_core::escape::EscapeTarget;
 use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 
@@ -288,6 +289,7 @@ pub(crate) fn infer_match(
             && let TypedPattern::Variant {
                 ref enum_name,
                 ref variant,
+                ref sub_patterns,
                 ..
             } = pat.node
         {
@@ -317,6 +319,69 @@ pub(crate) fn infer_match(
                             args,
                         );
                         arm_path_conditions.add_fact(substituted);
+
+                        // Conecta binding do pattern ao payload do variant.
+                        // Se o pattern é `Ok n` e o payload (após substituição)
+                        // é `7`, adiciona fato `= n 7`. Isso permite ao Z3
+                        // provar predicados sobre o binding usando facts sobre
+                        // o argumento.
+                        if let Some(ref payload) = pc.payload
+                            && let Some(subs) = sub_patterns
+                            && let Some(first_sub) = subs.first()
+                            && let TypedPattern::Ident { name: binding_name, .. } =
+                                &first_sub.node
+                        {
+                            let payload_sub =
+                                super::post_conditions::substitute_params(
+                                    payload,
+                                    &pc.param_names,
+                                    args,
+                                );
+                            // Só adiciona se o payload substituído for simples
+                            // (Ident ou IntLit) — evita criar variáveis opacas
+                            // que podem interferir com outras provas Z3.
+                            if matches!(
+                                payload_sub.kind,
+                                TypedExprKind::Ident { .. }
+                                    | TypedExprKind::IntLit { .. }
+                            ) {
+                                let binding_expr = TypedExpr {
+                                    span: first_sub.span,
+                                    ty: payload_sub.ty.clone(),
+                                    tail_pos: false,
+                                    escape: EscapeTarget::Local,
+                                    kind: TypedExprKind::Ident {
+                                        name: binding_name.clone(),
+                                    },
+                                };
+                                let eq_fact = TypedExpr {
+                                    span: first_sub.span,
+                                    ty: Ty::boolean(),
+                                    tail_pos: false,
+                                    escape: EscapeTarget::Local,
+                                    kind: TypedExprKind::Closure {
+                                        callee: Box::new(Spanned::new(
+                                            TypedExpr {
+                                                span: first_sub.span,
+                                                ty: Ty::boolean(),
+                                                tail_pos: false,
+                                                escape: EscapeTarget::Local,
+                                                kind: TypedExprKind::Ident {
+                                                    name: "=".to_string(),
+                                                },
+                                            },
+                                            first_sub.span,
+                                        )),
+                                        args: vec![
+                                            Spanned::new(binding_expr, first_sub.span),
+                                            Spanned::new(payload_sub, first_sub.span),
+                                        ],
+                                        ffi_symbol: None,
+                                    },
+                                };
+                                arm_path_conditions.add_fact(eq_fact);
+                            }
+                        }
                     }
                 }
             }

@@ -33,6 +33,11 @@ pub(crate) struct PostCondition {
     pub param_names: Vec<String>,
     /// Tipos dos parâmetros (para desambiguar overloads no consumo).
     pub param_types: Vec<Ty>,
+    /// Expressão do payload do variant (sobre os params da função).
+    /// `None` para variantes unitárias ou quando guards que produzem o
+    /// mesmo variant têm payloads divergentes.
+    /// Usado para conectar o binding do pattern ao valor de retorno.
+    pub payload: Option<TypedExpr>,
 }
 
 /// Tabela de post-condições por nome de função.
@@ -101,9 +106,10 @@ fn extract_for_function(
     let first_clause = func_def.clauses.first()?;
     let param_names = extract_param_names(&first_clause.node.patterns);
 
-    // 3. Percorre todas as cláusulas, coletando (condition, variant) entries.
+    // 3. Percorre todas as cláusulas, coletando (condition, variant, payload) entries.
     // condition = None para otherwise sem guards anteriores (True — não adiciona info).
-    let mut entries: Vec<(Option<TypedExpr>, String, String)> = Vec::new();
+    // payload = expressão do payload do variant (None para variantes unitárias).
+    let mut entries: Vec<(Option<TypedExpr>, String, String, Option<TypedExpr>)> = Vec::new();
 
     for clause in &func_def.clauses {
         let clause_inner = &clause.node;
@@ -155,9 +161,9 @@ fn extract_for_function(
             )
             .ok()?;
 
-            if let Some((enum_n, var_n)) = classify_variant(&body_typed.kind) {
+            if let Some((enum_n, var_n, payload)) = classify_variant(&body_typed.kind) {
                 // Sem guards = condição True. None = não adiciona info útil.
-                entries.push((None, enum_n, var_n));
+                entries.push((None, enum_n, var_n, payload));
             } else {
                 return None;
             }
@@ -195,8 +201,8 @@ fn extract_for_function(
                     }
                 };
 
-                if let Some((enum_n, var_n)) = classify_variant(&body_typed.kind) {
-                    entries.push((Some(cond_typed.clone()), enum_n, var_n));
+                if let Some((enum_n, var_n, payload)) = classify_variant(&body_typed.kind) {
+                    entries.push((Some(cond_typed.clone()), enum_n, var_n, payload));
                     prev_conditions.push(cond_typed);
                 } else {
                     return None;
@@ -218,9 +224,9 @@ fn extract_for_function(
                     }
                 };
 
-                if let Some((enum_n, var_n)) = classify_variant(&body_typed.kind) {
+                if let Some((enum_n, var_n, payload)) = classify_variant(&body_typed.kind) {
                     let implicit_cond = build_not_of_disjunction(&prev_conditions);
-                    entries.push((implicit_cond, enum_n, var_n));
+                    entries.push((implicit_cond, enum_n, var_n, payload));
                 } else {
                     return None;
                 }
@@ -230,13 +236,18 @@ fn extract_for_function(
 
     // 4. Agrupa por (enum_name, variant). Para cada variant V:
     //    Post-cond de V = disjunção das condições dos guards que produzem V.
-    let mut by_variant: HashMap<(String, String), Vec<Option<TypedExpr>>> = HashMap::new();
-    for (cond, enum_n, var_n) in entries {
-        by_variant.entry((enum_n, var_n)).or_default().push(cond);
+    //    payload de V = payload do variant (se todos os guards que produzem V
+    //    têm o mesmo payload; None caso contrário — conservador).
+    let mut by_variant: HashMap<(String, String), (Vec<Option<TypedExpr>>, Vec<Option<TypedExpr>>)> =
+        HashMap::new();
+    for (cond, enum_n, var_n, payload) in entries {
+        let (conds, payloads) = by_variant.entry((enum_n, var_n)).or_default();
+        conds.push(cond);
+        payloads.push(payload);
     }
 
     let mut result = Vec::new();
-    for ((enum_n, var_n), conds) in &by_variant {
+    for ((enum_n, var_n), (conds, payloads)) in &by_variant {
         // Filtra None (condição True — não adiciona info como path condition).
         let conds_filtered: Vec<&TypedExpr> = conds.iter().flatten().collect();
         if conds_filtered.is_empty() {
@@ -249,12 +260,17 @@ fn extract_for_function(
             build_disjunction(&conds_filtered)
         };
 
+        // Payload: só usa se todos os guards que produzem este variant têm
+        // o mesmo payload (None = unitária ou payloads divergentes).
+        let payload = unify_payloads(payloads);
+
         result.push(PostCondition {
             enum_name: enum_n.clone(),
             variant: var_n.clone(),
             condition,
             param_names: param_names.clone(),
             param_types: func_def.param_types.clone(),
+            payload,
         });
     }
 
@@ -286,16 +302,82 @@ fn extract_param_names(patterns: &[Spanned<Pattern>]) -> Vec<String> {
         .collect()
 }
 
-/// Classifica um `TypedExprKind` em `(enum_name, variant)`.
-/// Retorna `Some` apenas para `VariantConstruct` e `VariantQual`.
-fn classify_variant(kind: &TypedExprKind) -> Option<(String, String)> {
+/// Unifica payloads de múltiplos guards que produzem o mesmo variant.
+/// Retorna `Some(expr)` se todos os payloads são iguais (ou se há apenas um).
+/// Retorna `None` se payloads divergem ou se todos são None (unitária).
+fn unify_payloads(payloads: &[Option<TypedExpr>]) -> Option<TypedExpr> {
+    let first = payloads.iter().flatten().next()?;
+    for p in payloads.iter().flatten() {
+        // Compara por kind (ignora span/tail_pos/etc).
+        if !typed_expr_eq(first, p) {
+            return None;
+        }
+    }
+    Some(first.clone())
+}
+
+/// Comparação estrutural de TypedExpr por kind (sem comparar span/metadata).
+fn typed_expr_eq(a: &TypedExpr, b: &TypedExpr) -> bool {
+    match (&a.kind, &b.kind) {
+        (TypedExprKind::Ident { name: na }, TypedExprKind::Ident { name: nb }) => na == nb,
+        (TypedExprKind::IntLit { text: ta }, TypedExprKind::IntLit { text: tb }) => ta == tb,
+        (TypedExprKind::FloatLit { text: ta }, TypedExprKind::FloatLit { text: tb }) => ta == tb,
+        (TypedExprKind::TextLit { text: ta }, TypedExprKind::TextLit { text: tb }) => ta == tb,
+        (
+            TypedExprKind::Closure {
+                callee: ca,
+                args: aa,
+                ffi_symbol: fa,
+            },
+            TypedExprKind::Closure {
+                callee: cb,
+                args: ab,
+                ffi_symbol: fb,
+            },
+        ) => {
+            typed_expr_eq(&ca.node, &cb.node)
+                && aa.len() == ab.len()
+                && aa.iter().zip(ab.iter()).all(|(x, y)| typed_expr_eq(&x.node, &y.node))
+                && fa == fb
+        }
+        (TypedExprKind::Grouping { inner: ia }, TypedExprKind::Grouping { inner: ib }) => {
+            typed_expr_eq(&ia.node, &ib.node)
+        }
+        (
+            TypedExprKind::VariantConstruct {
+                enum_name: ea,
+                variant: va,
+                payload: pa,
+                ..
+            },
+            TypedExprKind::VariantConstruct {
+                enum_name: eb,
+                variant: vb,
+                payload: pb,
+                ..
+            },
+        ) => ea == eb && va == vb && typed_expr_eq(&pa.node, &pb.node),
+        _ => false,
+    }
+}
+
+/// Classifica um `TypedExprKind` em `(enum_name, variant, payload)`.
+/// `payload` é `Some(expr)` para `VariantConstruct` (variante com payload),
+/// `None` para `VariantQual` (variante unitária).
+/// Retorna `None` se o kind não é um variant de enum.
+fn classify_variant(kind: &TypedExprKind) -> Option<(String, String, Option<TypedExpr>)> {
     match kind {
         TypedExprKind::VariantConstruct {
-            enum_name, variant, ..
-        } => Some((enum_name.clone(), variant.clone())),
+            enum_name,
+            variant,
+            payload,
+            ..
+        } => Some((enum_name.clone(), variant.clone(), Some(payload.node.clone()))),
         TypedExprKind::VariantQual {
-            enum_name, variant, ..
-        } => Some((enum_name.clone(), variant.clone())),
+            enum_name,
+            variant,
+            ..
+        } => Some((enum_name.clone(), variant.clone(), None)),
         _ => None,
     }
 }
