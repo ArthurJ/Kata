@@ -21,34 +21,62 @@ use kata_core::ty::Ty;
 /// Facts acumulados no contexto de inferência.
 ///
 /// Cada fact é um `TypedExpr` booleano verdadeiro no escopo atual.
-/// Clonado (snapshot) a cada braço de match/lambda — o restore é lexical
-/// (o clone local é descartado ao sair do escopo).
+///
+/// Duas lojas de facts:
+/// - `facts`: facts de guard/Boolean — braço-específicos, rolled back
+///   ao sair do braço de match/lambda.
+/// - `learned_facts`: facts da Direção B (aprendidos via dispatch) —
+///   trans-escopo, preservados ao sair do braço. Sound porque bindings
+///   `let`/`constant` são imutáveis: o conhecimento sobre um binding
+///   é válido pelo seu tempo de vida.
+///
+/// O Z3 vê `facts + learned_facts` concatenados via `facts()`.
+/// `checkpoint()`/`rollback_to(n)` gerenciam o escopo: grava-se o
+/// índice de `facts` antes do braço, trunca-se ao sair (preservando
+/// `learned_facts`).
 #[derive(Debug, Clone, Default)]
 pub(crate) struct PathConditionCtx {
     facts: Vec<TypedExpr>,
+    learned_facts: Vec<TypedExpr>,
 }
 
 impl PathConditionCtx {
-    /// Adiciona um fact (TypedExpr booleano verdadeiro no escopo).
+    /// Adiciona um fact braço-específico (guard/Boolean).
+    /// Rolled back ao sair do braço via `rollback_to`.
     pub(crate) fn add_fact(&mut self, fact: TypedExpr) {
         self.facts.push(fact);
     }
 
-    /// Facts acumulados.
-    pub(crate) fn facts(&self) -> &[TypedExpr] {
-        &self.facts
+    /// Adiciona um fact trans-escopo (Direção B — aprendido via dispatch).
+    /// Preservado ao sair do braço.
+    pub(crate) fn add_learned_fact(&mut self, fact: TypedExpr) {
+        self.learned_facts.push(fact);
     }
 
-    /// True se não há path conditions.
+    /// Facts acumulados (facts + learned_facts concatenados).
+    /// O Z3 vê o conjunto unificado.
+    pub(crate) fn facts(&self) -> Vec<&TypedExpr> {
+        self.facts
+            .iter()
+            .chain(self.learned_facts.iter())
+            .collect()
+    }
+
+    /// True se não há facts nem learned_facts.
     pub(crate) fn is_empty(&self) -> bool {
-        self.facts.is_empty()
+        self.facts.is_empty() && self.learned_facts.is_empty()
     }
 
-    /// Cria uma cópia com um fact adicional (snapshot + extend).
-    pub(crate) fn with_fact(&self, fact: TypedExpr) -> Self {
-        let mut clone = self.clone();
-        clone.facts.push(fact);
-        clone
+    /// Grava o índice atual de `facts` como checkpoint.
+    /// Usar antes de entrar num braço; `rollback_to` ao sair.
+    pub(crate) fn checkpoint(&self) -> usize {
+        self.facts.len()
+    }
+
+    /// Trunca `facts` de volta ao checkpoint, preservando `learned_facts`.
+    /// Usar ao sair de um braço para remover facts de guard.
+    pub(crate) fn rollback_to(&mut self, checkpoint: usize) {
+        self.facts.truncate(checkpoint);
     }
 }
 

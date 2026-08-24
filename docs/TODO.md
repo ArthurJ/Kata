@@ -70,7 +70,12 @@ conecta binding do pattern ao argumento. 13 testes E2E em
   — após dispatch bem-sucedido com arg `Ident`, o predicado do refined
   é extraído e adicionado como path condition no escopo do caller.
   Migra `PathConditionCtx` para `RefCell` (mutação interior).
-4 testes E2E novos (20 total). 1848 testes, 0 regressão.
+- **Propagação para escopo pai** (commit abaixo): arquitetura
+  checkpoint/rollback com `Rc<RefCell<PathConditionCtx>>`.
+  `learned_facts` separado de `facts` — facts de guard são rolled back
+  ao sair do braço, facts da Direção B são preservados. Sound porque
+  `let`/`constant` são imutáveis. 3 testes E2E novos (23 total).
+  1851 testes, 0 regressão.
 
 ### TypeGraph: migrar 6 sites de classificação ad-hoc para o grafo
 **Estado:** Pendente (consolidação de dívida técnica).

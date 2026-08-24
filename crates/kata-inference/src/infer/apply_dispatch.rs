@@ -633,7 +633,9 @@ pub(crate) fn extract_preconditions(
                     Ok(tp) => tp,
                     Err(_) => continue,
                 };
-                ctx.path_conditions.borrow_mut().add_fact(typed_pred);
+                ctx.path_conditions
+                    .borrow_mut()
+                    .add_learned_fact(typed_pred);
             }
         }
     }

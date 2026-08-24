@@ -233,9 +233,13 @@ pub(crate) fn infer_match(
         // ── Path conditions: coleta facts do braço ──
         // Guard direto: o guard tipado é verdadeiro neste braço.
         // Match sobre Boolean: True → scrutinee é true; False → scrutinee é false.
-        let mut arm_path_conditions = ctx.path_conditions.borrow().clone();
+        // Checkpoint/rollback: facts do braço são adicionados ao RefCell
+        // compartilhado e revertidos ao sair (preservando learned_facts).
+        let arm_checkpoint = ctx.path_conditions.borrow().checkpoint();
         if let Some(ref guard_spanned) = typed_guard {
-            arm_path_conditions.add_fact(guard_spanned.node.clone());
+            ctx.path_conditions
+                .borrow_mut()
+                .add_fact(guard_spanned.node.clone());
         }
         if scrutinee_ty == Ty::boolean()
             && let Some(ref pat) = typed_pattern
@@ -248,7 +252,9 @@ pub(crate) fn infer_match(
         {
             match variant.as_str() {
                 "True" => {
-                    arm_path_conditions.add_fact(typed_scrutinee.clone());
+                    ctx.path_conditions
+                        .borrow_mut()
+                        .add_fact(typed_scrutinee.clone());
                 }
                 "False" => {
                     // not(scrutinee) — constrói Closure { not, [scrutinee] }
@@ -274,7 +280,7 @@ pub(crate) fn infer_match(
                             ffi_symbol: None,
                         },
                     };
-                    arm_path_conditions.add_fact(not_scrut);
+                    ctx.path_conditions.borrow_mut().add_fact(not_scrut);
                 }
                 _ => {}
             }
@@ -318,7 +324,7 @@ pub(crate) fn infer_match(
                             &pc.param_names,
                             args,
                         );
-                        arm_path_conditions.add_fact(substituted);
+                        ctx.path_conditions.borrow_mut().add_fact(substituted);
 
                         // Conecta binding do pattern ao payload do variant.
                         // Se o pattern é `Ok n` e o payload (após substituição)
@@ -379,7 +385,7 @@ pub(crate) fn infer_match(
                                         ffi_symbol: None,
                                     },
                                 };
-                                arm_path_conditions.add_fact(eq_fact);
+                                ctx.path_conditions.borrow_mut().add_fact(eq_fact);
                             }
                         }
                     }
@@ -387,7 +393,7 @@ pub(crate) fn infer_match(
             }
         }
 
-        // InferCtx local com path conditions do braço.
+        // InferCtx local com path conditions do braço (RefCell compartilhado).
         let arm_ctx = InferCtx {
             table: ctx.table,
             enum_registry: ctx.enum_registry,
@@ -398,7 +404,7 @@ pub(crate) fn infer_match(
             ret_ty: ctx.ret_ty,
             in_loop: ctx.in_loop,
             deferred_lambdas: ctx.deferred_lambdas,
-            path_conditions: std::cell::RefCell::new(arm_path_conditions),
+            path_conditions: std::rc::Rc::clone(&ctx.path_conditions),
             post_conds: ctx.post_conds,
             inline_fns: ctx.inline_fns,
         };
@@ -414,6 +420,10 @@ pub(crate) fn infer_match(
             tail_pos,
             hint,
         )?;
+        // Rollback: remove facts de guard do braço, preserva learned_facts.
+        ctx.path_conditions
+            .borrow_mut()
+            .rollback_to(arm_checkpoint);
 
         // Verifica que todos os braços retornam o mesmo tipo.
         // Unificação limitada — Ty::Var unifica com qualquer tipo concreto.

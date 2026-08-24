@@ -923,7 +923,111 @@ post-condição na saída do `match`.
    contém funções não-inlinable, o Z3 produz variável opaca
    (fallback conservador).
 
-### 9.10. Inlining de funções puras no Z3 translator
+### 9.10. Propagação de learned_facts para o escopo pai (checkpoint/rollback)
+
+**Status:** ✅ Implementado — checkpoint/rollback com `Rc<RefCell<PathConditionCtx>>`.
+
+#### Problema
+
+A Direção B adiciona facts aprendidos após dispatch ao
+`RefCell<PathConditionCtx>` do escopo **do braço**. O visitor de match
+cria um `RefCell` novo (snapshot/restore) para cada braço — quando o
+braço termina, o `RefCell` do braço é descartado. Os facts da Direção B
+**não propagam para o escopo pai**.
+
+Nos testes E2E atuais, o conhecimento que a Direção B aprende já está
+disponível via path conditions do braço (guard/Boolean). A Direção B é
+redundante. Para ter valor real, precisa propagar facts do braço para
+o escopo pai após a chamada.
+
+#### Soundness
+
+A imutabilidade de `let`/`constant` em Kata é o que torna a preservação
+de `learned_facts` *sound*. Uma vez que a Direção B aprende um predicado
+sobre um binding (ex: `b ≠ 0` após `div 10 (b::NonZero)`), esse
+conhecimento é válido pelo tempo de vida do binding — o binding não
+pode ser reatribuído. Se o binding foi definido no escopo pai, o fact
+sobrevive ao braço corretamente. Se o binding foi definido no braço, o
+fact referencia variável que não existe no pai — inofensivo para o Z3.
+
+Sem imutabilidade, `learned_facts` seria unsound: o binding poderia
+mudar e o fact ficaria stale.
+
+#### Arquitetura: duas lojas de facts
+
+`PathConditionCtx` ganha um segundo campo:
+
+```rust
+pub(crate) struct PathConditionCtx {
+    facts: Vec<TypedExpr>,         // guard/Boolean — rolled back ao sair do braço
+    learned_facts: Vec<TypedExpr>, // Direção B — preservados ao sair do braço
+}
+```
+
+- `add_fact()` adiciona em `facts` (braço-específico).
+- `add_learned_fact()` adiciona em `learned_facts` (trans-escopo).
+- `facts()` retorna `facts + learned_facts` concatenados (Z3 vê conjunto unificado).
+- `is_empty()` checa ambos.
+- `checkpoint()` retorna `facts.len()` (índice antes do braço).
+- `rollback_to(n)` trunca `facts` para `n`, preserva `learned_facts`.
+
+#### Arquitetura: RefCell compartilhado via `Rc`
+
+Hoje, cada visitor cria um `RefCell<PathConditionCtx>` novo por braço
+(clone + `RefCell::new`). Isso isola o estado do braço — mas isola
+também os `learned_facts`, que somem ao sair.
+
+Mudança: `InferCtx.path_conditions` passa de
+`RefCell<PathConditionCtx>` para `Rc<RefCell<PathConditionCtx>>`.
+O braço recebe `Rc::clone(&ctx.path_conditions)` — mesmo `RefCell`,
+compartilhado entre pai e braço.
+
+`InferCtx` tem 13 campos; 12 são `&'a` references imutáveis já
+compartilhadas entre pai e braço. O único campo owned mutável é
+`path_conditions`. Compartilhar o `RefCell` via `Rc` não introduz
+efeitos colaterais em outros campos — não há estado mutável a vazar.
+
+#### Fluxo por braço
+
+```rust
+// Antes do braço:
+let checkpoint = ctx.path_conditions.borrow().checkpoint();
+// Braço adiciona facts via borrow_mut().add_fact(...)
+// Direção B adiciona via borrow_mut().add_learned_fact(...)
+// Após o braço:
+ctx.path_conditions.borrow_mut().rollback_to(checkpoint);
+```
+
+- Facts de guard do braço → somem (rollback). Não poluem o escopo pai
+  com condições que só valem dentro do braço.
+- Facts da Direção B → permanecem. O conhecimento aprendido propaga
+  para o pai.
+
+`with_fact()` (clone + extend) deixa de ser necessário nos visitors —
+o braço adiciona facts diretamente no `RefCell` compartilhado.
+
+#### Sites de modificação
+
+| Arquivo | Padrão atual | Padrão novo |
+|---|---|---|
+| `path_conditions.rs` | `facts: Vec<TypedExpr>` | + `learned_facts`, `add_learned_fact`, `checkpoint`, `rollback_to` |
+| `expr.rs` (InferCtx) | `path_conditions: RefCell<PathConditionCtx>` | `Rc<RefCell<PathConditionCtx>>` |
+| `_match.rs` | `RefCell::new(arm_path_conditions)` (clone) | `Rc::clone` + checkpoint/rollback |
+| `apply_lambda.rs` | `RefCell::new(ctx.path_conditions.borrow().with_fact(...))` | `Rc::clone` + checkpoint/rollback |
+| `collections.rs` | `RefCell::new(ctx.path_conditions.borrow().clone())` | `Rc::clone` + checkpoint/rollback |
+| `expr.rs` (loop) | `RefCell::new(ctx.path_conditions.borrow().clone())` | `Rc::clone` + checkpoint/rollback |
+| `mod.rs` (5 sites) | `RefCell::new(Default::default())` | `Rc::new(RefCell::new(Default::default()))` |
+| `apply_dispatch.rs` | `add_fact(typed_pred)` | `add_learned_fact(typed_pred)` |
+
+#### Testes E2E
+
+1. Fact aprendido pela Direção B dentro de um braço é visível **após**
+   o braço.
+2. Fact do guard do braço **não** é visível após o braço (rollback).
+3. Composição: guard + Direção B no mesmo braço — guard rolled back,
+   Direção B preservado.
+
+### 9.11. Inlining de funções puras no Z3 translator
 
 **Status:** ✅ Implementado — `InlineFnTable` + `extract_inline_bodies` +
 `try_inline` no `Z3PathTranslator`.

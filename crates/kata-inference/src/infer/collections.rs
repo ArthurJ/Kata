@@ -412,7 +412,7 @@ pub(crate) fn infer_for_in(
         ret_ty: ctx.ret_ty,
         in_loop: true,
         deferred_lambdas: ctx.deferred_lambdas,
-        path_conditions: std::cell::RefCell::new(ctx.path_conditions.borrow().clone()),
+        path_conditions: std::rc::Rc::clone(&ctx.path_conditions),
         post_conds: ctx.post_conds,
         inline_fns: ctx.inline_fns,
     };

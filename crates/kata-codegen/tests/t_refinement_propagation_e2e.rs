@@ -572,3 +572,80 @@ test!()"#;
     );
     assert_eq!(untag_smi(raw), 5);
 }
+
+// ── 21. Propagação de learned_fact para o escopo pai ──────────────────
+//
+// Fact aprendido pela Direção B dentro de um braço de match é visível
+// APÓS o braço. O guard do braço (`Boolean::False` → `not(= b 0)`) é
+// rolled back, mas o learned_fact (`!= b 0` da Direção B) é preservado.
+// Após o match, `b::NonZero` é provado pelo learned_fact propagado.
+
+#[test]
+fn t_learned_fact_propaga_para_escopo_pai() {
+    let src = r#"action test => NonZero::Int
+    let b := 5
+    match (= b 0)
+        Boolean::False:
+            let _ := / 10 b
+            0
+        Boolean::True: 0
+    b::NonZero
+test!()"#;
+    let (raw, ty) = eval_src(src);
+    assert_eq!(
+        ty,
+        Ty::Struct(StructKey::Instance("NonZero".into(), "Int".into())),
+        "learned_fact da Direção B deve propagar para o escopo pai após o match"
+    );
+    assert_eq!(untag_smi(raw), 5);
+}
+
+// ── 22. Fact de guard NÃO propaga para o escopo pai (rollback) ────────
+//
+// O guard do braço (`Boolean::False` → `not(= b 0)`) é um fact de
+// guard (braço-específico). Após o match, o rollback o remove.
+// `b::NonZero` fora do match falha — o fact do guard não propagou.
+
+#[test]
+fn t_guard_fact_nao_propaga_para_escopo_pai() {
+    let src = r#"action test => Int
+    let b := 5
+    match (= b 0)
+        Boolean::False:
+            b::NonZero
+        Boolean::True: 0
+test!()"#;
+    assert!(
+        infer_fails(src),
+        "fact de guard não deve propagar para o escopo pai após o match"
+    );
+}
+
+// ── 23. Composição: guard + Direção B no mesmo braço ─────────────────
+//
+// No braço `Boolean::False`, o guard adiciona `not(= b 0)` como fact
+// (rolled back) e a Direção B adiciona `!= b 0` como learned_fact
+// (preservado). Após o match:
+// - O fact do guard (`not(= b 0)`) foi rolled back — não está visível.
+// - O learned_fact (`!= b 0`) foi preservado — está visível.
+// `b::NonZero` após o match é provado pelo learned_fact, não pelo guard.
+
+#[test]
+fn t_composicao_guard_e_learned_fact() {
+    let src = r#"action test => NonZero::Int
+    let b := 5
+    match (= b 0)
+        Boolean::False:
+            let _ := / 10 b
+            0
+        Boolean::True: 0
+    b::NonZero
+test!()"#;
+    let (raw, ty) = eval_src(src);
+    assert_eq!(
+        ty,
+        Ty::Struct(StructKey::Instance("NonZero".into(), "Int".into())),
+        "composição: learned_fact preservado após match, guard rolled back"
+    );
+    assert_eq!(untag_smi(raw), 5);
+}

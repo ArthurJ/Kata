@@ -82,7 +82,12 @@ pub(crate) struct InferCtx<'a> {
     /// pattern matches no escopo atual. Usados para provar
     /// ascriptions refinadas sobre não-literais via Z3.
     /// Nível 1: guards locais apenas (PRD-refinement-propagation).
-    pub path_conditions: std::cell::RefCell<super::path_conditions::PathConditionCtx>,
+    ///
+    /// `Rc<RefCell<>>` para compartilhar entre pai e braços de
+    /// match/lambda. O braço recebe `Rc::clone` do pai, adiciona
+    /// facts via `borrow_mut()`, e faz rollback via `rollback_to`
+    /// ao sair — preservando `learned_facts` (Direção B).
+    pub path_conditions: std::rc::Rc<std::cell::RefCell<super::path_conditions::PathConditionCtx>>,
     /// Post-condições inter-procedurais — Nível 2.
     /// Mapa func_name → post-condições extraídas dos guards do corpo
     /// da função. Consumido no visitor de match quando o scrutinee é
@@ -840,7 +845,7 @@ pub(crate) fn infer_expr_hinted(
                 ret_ty: ctx.ret_ty,
                 in_loop: true,
                 deferred_lambdas: ctx.deferred_lambdas,
-                path_conditions: std::cell::RefCell::new(ctx.path_conditions.borrow().clone()),
+                path_conditions: std::rc::Rc::clone(&ctx.path_conditions),
                 post_conds: ctx.post_conds,
                 inline_fns: ctx.inline_fns,
             };

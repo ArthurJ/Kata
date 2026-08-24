@@ -264,6 +264,12 @@ pub(crate) fn infer_lambda_body(
                 }
 
                 // Path conditions: guard é verdadeiro neste braço.
+                // Checkpoint/rollback: adiciona o fact no RefCell
+                // compartilhado e reverte ao sair do braço.
+                let guard_checkpoint = ctx.path_conditions.borrow().checkpoint();
+                ctx.path_conditions
+                    .borrow_mut()
+                    .add_fact(cond_typed.clone());
                 let guard_ctx = InferCtx {
                     table: ctx.table,
                     enum_registry: ctx.enum_registry,
@@ -274,7 +280,7 @@ pub(crate) fn infer_lambda_body(
                     ret_ty: ctx.ret_ty,
                     in_loop: ctx.in_loop,
                     deferred_lambdas: ctx.deferred_lambdas,
-                    path_conditions: std::cell::RefCell::new(ctx.path_conditions.borrow().with_fact(cond_typed.clone())),
+                    path_conditions: std::rc::Rc::clone(&ctx.path_conditions),
                     post_conds: ctx.post_conds,
                     inline_fns: ctx.inline_fns,
                 };
@@ -287,6 +293,10 @@ pub(crate) fn infer_lambda_body(
                     true,
                     ret_hint,
                 )?;
+                // Rollback: remove o fact do guard, preserva learned_facts.
+                ctx.path_conditions
+                    .borrow_mut()
+                    .rollback_to(guard_checkpoint);
                 if let Some(ref existing) = guard_ret_ty {
                     if !fits_return(&body_typed.ty, existing) {
                         return Err(MiddleError::TypeMismatch {
