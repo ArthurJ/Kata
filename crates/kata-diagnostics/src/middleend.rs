@@ -109,6 +109,8 @@ pub enum MiddleError {
     RedundantClause {
         #[label("cláusula redundante")]
         span: MietteSpan,
+        #[help]
+        hint: Option<String>,
     },
 
     #[error(

@@ -220,6 +220,12 @@ pub(crate) fn infer_lambda(
     let (ret_ty, typed_body, typed_guards) =
         infer_lambda_body(body, guards, &mut lambda_env, ctx, ret_hint)?;
 
+    // Verifica completude de guards para lambda anônimo.
+    // (Movido de infer_lambda_body — ver function_infer.rs para funções nomeadas.)
+    if !typed_guards.is_empty() {
+        crate::guard_completeness::check_guard_completeness(&typed_guards, &body.span)?;
+    }
+
     let lambda_ty = Ty::Function(param_types.clone(), Box::new(ret_ty.clone()));
 
     let clause = TypedLambdaClause {

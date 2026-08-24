@@ -11,6 +11,9 @@
 //!    - `Unsat` → tautologia provada, Ok.
 //!    - `Sat` → contra-exemplo encontrado, `NonExhaustiveMatch`.
 //!    - `Unknown` → limite atingido, `MissingOtherwise`.
+//!
+//! Também oferece `check_guard_implication` para verificação de
+//! redundância de cláusulas: prova se `guards_N ⟹ guards_M`.
 
 use std::collections::HashMap;
 
@@ -27,6 +30,17 @@ use z3::{
 
 /// Resultado da verificação de completude de guards.
 pub(crate) type GuardResult = Result<(), MiddleError>;
+
+/// Resultado trivalorado de uma prova Z3.
+///
+/// `Proven` = UNSAT (propriedade provada).
+/// `Refuted` = SAT (contra-exemplo existe).
+/// `Unknown` = Z3 não decidiu (limite de esforço).
+enum Ternary {
+    Proven,
+    Refuted,
+    Unknown,
+}
 
 /// Verifica se os guards são exaustivos.
 ///
@@ -49,57 +63,199 @@ pub(crate) fn check_guard_completeness(guards: &[TypedGuardClause], span: &Span)
         return Ok(());
     }
 
-    // Configura Z3 com rlimit para determinismo de esforço.
+    let span_val = *span;
+
+    match prove_tautology(&conditions) {
+        Ternary::Proven => Ok(()),
+        Ternary::Refuted => {
+            // ¬(cond1 ∨ ... ∨ condN) é satisfazível → existe contra-exemplo.
+            // Precisa reexecutar com modelo para extrair o contra-exemplo.
+            let counter_example = prove_tautology_with_model(&conditions);
+            Err(MiddleError::NonExhaustiveMatch {
+                missing: vec![counter_example],
+                span: span_val.into(),
+                hint: Some(
+                    "guards não cobrem todos os casos. \
+                     Adicione um guard ou use `otherwise:` como fallback"
+                        .to_string(),
+                ),
+            })
+        }
+        Ternary::Unknown => {
+            // Z3 não decidiu a tempo — exigir otherwise.
+            Err(MiddleError::MissingOtherwise {
+                span: span_val.into(),
+            })
+        }
+    }
+}
+
+/// Verifica se os guards de N implicam os guards de M.
+///
+/// Prova: `guards_N ⟹ guards_M`, i.e., `guards_N ∧ ¬guards_M` é UNSAT.
+///
+/// Retorna `true` se a implicação foi provada (N é redundante).
+/// Retorna `false` se refutada (SAT — contra-exemplo existe) ou se
+/// Z3 não decidiu (Unknown — conservador, assume não-redundante).
+pub(crate) fn check_guard_implication(
+    guards_n: &[TypedGuardClause],
+    guards_m: &[TypedGuardClause],
+    _span: &Span,
+) -> bool {
+    // Se N tem otherwise (condition: None), disj_N é True.
+    // True ∧ ¬disj_M = ¬disj_M. Se disj_M é tautologia, UNSAT → true.
+    // Se disj_M não é tautologia, SAT → false. Correto.
+    //
+    // Se M tem otherwise, disj_M é True. ¬True = False.
+    // disj_N ∧ False = False → UNSAT → true.
+    // Correto: M com otherwise sempre dispara, N é redundante.
+
+    let conditions_n: Vec<TypedExpr> = guards_n
+        .iter()
+        .filter_map(|g| g.condition.as_ref().map(|c| c.node.clone()))
+        .collect();
+    let conditions_m: Vec<TypedExpr> = guards_m
+        .iter()
+        .filter_map(|g| g.condition.as_ref().map(|c| c.node.clone()))
+        .collect();
+
+    // Se N não tem condições (nem otherwise), não há como N disparar —
+    // não é redundante por implicação de guards (pode ser por pattern alone).
+    if conditions_n.is_empty() && !guards_n.iter().any(|g| g.condition.is_none()) {
+        return false;
+    }
+
+    match prove_implication(&conditions_n, &conditions_m, guards_n, guards_m) {
+        Ternary::Proven => true,
+        Ternary::Refuted | Ternary::Unknown => false,
+    }
+}
+
+// ── Funções internas de prova Z3 ─────────────────────────────────────
+
+/// Configura Z3 com rlimit para determinismo de esforço.
+fn z3_config() -> Config {
     let mut cfg = Config::new();
     cfg.set_param_value("rlimit", "10000");
+    cfg
+}
 
-    let span_val = *span;
+/// Prova se a disjunção de `conditions` é tautologia.
+///
+/// Verifica se `¬(cond1 ∨ ... ∨ condN)` é insatisfazível.
+fn prove_tautology(conditions: &[TypedExpr]) -> Ternary {
+    let cfg = z3_config();
 
     with_z3_config(&cfg, || {
         let solver = Solver::new();
-
-        // Traduz cada condição para Z3 Bool.
         let mut translator = Z3Translator::new();
+
         let z3_conditions: Vec<Bool> = conditions
             .iter()
             .map(|cond| translator.translate_bool(cond))
             .collect();
 
-        // Constrói a disjunção de todas as condições.
         let disjunction = Bool::or(&z3_conditions);
-
-        // Para provar que a disjunção é tautologia, verificamos se
-        // a NEGAÇÃO da disjunção é insatisfazível.
         solver.assert(disjunction.not());
 
         match solver.check() {
-            SatResult::Unsat => {
-                // ¬(cond1 ∨ ... ∨ condN) é insatisfazível → disjunção é tautologia.
-                GuardResult::Ok(())
-            }
-            SatResult::Sat => {
-                // ¬(cond1 ∨ ... ∨ condN) é satisfazível → existe contra-exemplo.
-                let model = solver.get_model().unwrap();
-                let counter_example = translator.extract_counter_example(&model);
-                Err(MiddleError::NonExhaustiveMatch {
-                    missing: vec![counter_example],
-                    span: span_val.into(),
-                    hint: Some(
-                        "guards não cobrem todos os casos. \
-                         Adicione um guard ou use `otherwise:` como fallback"
-                            .to_string(),
-                    ),
-                })
-            }
-            SatResult::Unknown => {
-                // Z3 não decidiu a tempo — exigir otherwise.
-                Err(MiddleError::MissingOtherwise {
-                    span: span_val.into(),
-                })
-            }
+            SatResult::Unsat => Ternary::Proven,
+            SatResult::Sat => Ternary::Refuted,
+            SatResult::Unknown => Ternary::Unknown,
         }
     })
 }
+
+/// Reexecuta a prova de tautologia extraindo o contra-exemplo do modelo.
+///
+/// Usado quando `prove_tautology` retorna `Refuted` e precisamos do
+/// contra-exemplo para a mensagem de erro.
+fn prove_tautology_with_model(conditions: &[TypedExpr]) -> String {
+    let cfg = z3_config();
+
+    with_z3_config(&cfg, || {
+        let solver = Solver::new();
+        let mut translator = Z3Translator::new();
+
+        let z3_conditions: Vec<Bool> = conditions
+            .iter()
+            .map(|cond| translator.translate_bool(cond))
+            .collect();
+
+        let disjunction = Bool::or(&z3_conditions);
+        solver.assert(disjunction.not());
+
+        if let SatResult::Sat = solver.check() {
+            if let Some(model) = solver.get_model() {
+                return translator.extract_counter_example(&model);
+            }
+        }
+
+        "caso não coberto pelos guards".to_string()
+    })
+}
+
+/// Prova se `conditions_n ⟹ conditions_m`.
+///
+/// Constrói `disj_n ∧ ¬disj_m` e verifica satisfatibilidade.
+/// Se UNSAT, a implicação é provada.
+///
+/// `guards_n`/`guards_m` são passados para detectar `otherwise`
+/// (condition: None), que faz a disjunção ser trivialmente `True`.
+fn prove_implication(
+    conditions_n: &[TypedExpr],
+    conditions_m: &[TypedExpr],
+    guards_n: &[TypedGuardClause],
+    guards_m: &[TypedGuardClause],
+) -> Ternary {
+    let cfg = z3_config();
+
+    with_z3_config(&cfg, || {
+        let solver = Solver::new();
+        let mut translator = Z3Translator::new();
+
+        // disj_N: se N tem otherwise, é True. Senão, disjunção das condições.
+        let n_has_otherwise = guards_n.iter().any(|g| g.condition.is_none());
+        let disj_n = if n_has_otherwise {
+            Bool::from_bool(true)
+        } else if conditions_n.is_empty() {
+            // Sem condições e sem otherwise — disjunção vazia = False.
+            Bool::from_bool(false)
+        } else {
+            let z3_conds: Vec<Bool> = conditions_n
+                .iter()
+                .map(|c| translator.translate_bool(c))
+                .collect();
+            Bool::or(&z3_conds)
+        };
+
+        // disj_M: se M tem otherwise, é True. Senão, disjunção das condições.
+        let m_has_otherwise = guards_m.iter().any(|g| g.condition.is_none());
+        let disj_m = if m_has_otherwise {
+            Bool::from_bool(true)
+        } else if conditions_m.is_empty() {
+            Bool::from_bool(false)
+        } else {
+            let z3_conds: Vec<Bool> = conditions_m
+                .iter()
+                .map(|c| translator.translate_bool(c))
+                .collect();
+            Bool::or(&z3_conds)
+        };
+
+        // Asserção: disj_N ∧ ¬disj_M
+        solver.assert(disj_n);
+        solver.assert(disj_m.not());
+
+        match solver.check() {
+            SatResult::Unsat => Ternary::Proven,
+            SatResult::Sat => Ternary::Refuted,
+            SatResult::Unknown => Ternary::Unknown,
+        }
+    })
+}
+
+// ── Tradutor TypedExpr → Z3 ──────────────────────────────────────────
 
 /// Tradutor de `TypedExpr` para expressões Z3.
 ///

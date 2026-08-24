@@ -128,10 +128,21 @@ pub(crate) fn infer_named_function(
     }
 
     // DoD 12: Verifica sobreposição de cláusulas (RedundantClause).
-    // Uma cláusula é redundante se uma cláusula anterior já cobre todos
-    // os valores que ela casaria, e a cláusula posterior não tem guards
-    // (sem condição adicional que a diferenciaria).
+    // Roda ANTES da verificação de exaustividade de guards para poder
+    // ver cláusulas com guards não-tautológicos (sem otherwise).
     crate::redundancy::check_redundant_clauses(&typed_clauses)?;
+
+    // Verifica completude de guards: se há guards mas sem `otherwise`,
+    // usa Z3 para provar que a disjunção das condições é tautologia.
+    // Movido de infer_lambda_body para cá (depois da redundância).
+    for clause in &typed_clauses {
+        if !clause.guards.is_empty() {
+            crate::guard_completeness::check_guard_completeness(
+                &clause.guards,
+                &clause.body.span,
+            )?;
+        }
+    }
 
     // Verifica exaustividade das cláusulas lambda (pattern matching implícito).
     // Múltiplas cláusulas lambda são equivalentes a um match sobre os params,

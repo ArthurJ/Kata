@@ -182,6 +182,12 @@ fn build_lambda_apply(
     let (ret_ty, typed_body, typed_guards) =
         infer_lambda_body(body, guards, &mut lambda_env, ctx, ret_check)?;
 
+    // Verifica completude de guards para lambda em aplicação.
+    // (Movido de infer_lambda_body — ver function_infer.rs para funções nomeadas.)
+    if !typed_guards.is_empty() {
+        crate::guard_completeness::check_guard_completeness(&typed_guards, &body.span)?;
+    }
+
     // Verifica o tipo de retorno se um esperado foi fornecido (caminho com hint).
     if let Some(expected_ret) = ret_check
         && !fits_return(&ret_ty, expected_ret)
@@ -319,11 +325,10 @@ pub(crate) fn infer_lambda_body(
         )
     };
 
-    // Verifica completude de guards: se há guards mas sem `otherwise`,
-    // usa Z3 para provar que a disjunção das condições é tautologia.
-    if !typed_guards.is_empty() {
-        crate::guard_completeness::check_guard_completeness(&typed_guards, &body.span)?;
-    }
+    // NOTA: check_guard_completeness foi movido para function_infer.rs,
+    // onde roda DEPOIS de check_redundant_clauses. Isso permite que a
+    // verificação de redundância veja cláusulas com guards não-tautológicos
+    // (sem otherwise) antes que sejam rejeitadas por NonExhaustiveMatch.
 
     Ok((ret_ty, typed_body, typed_guards))
 }

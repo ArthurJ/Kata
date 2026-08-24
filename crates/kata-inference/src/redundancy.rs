@@ -7,45 +7,129 @@
 //! Opera sobre `TypedPattern` (pós-resolução do typeck) para distinguir
 //! `Ident("True")` resolvido para `Variant { Boolean, True }` de um
 //! binding `Ident { name: "x", ty: Int }`.
+//!
+//! ## Interação com guards
+//!
+//! Quando a cláusula anterior (M) ou posterior (N) tem guards, a
+//! verificação considera os guards:
+//!
+//! | M guards | N guards | Decisão |
+//! |----------|-----------|---------|
+//! | não | não | `patterns_cover(M, N)` → redundante (caso original) |
+//! | não | sim | M sempre dispara sobre os patterns → redundante |
+//! | sim | não | Se guards de M são tautologia (Z3) → redundante |
+//! | sim | sim | Se `guards_N ⟹ guards_M` (Z3) → redundante |
+//!
+//! Nos casos com Z3, se o solver não decide (Unknown), a verificação é
+//! conservadora: assume não-redundante.
 
+use kata_ast::Span;
 use kata_diagnostics::MiddleError;
 
+use crate::guard_completeness::{check_guard_completeness, check_guard_implication};
 use crate::infer::helpers::InferResult;
 use crate::typed::TypedExpr;
 use crate::typed_pattern::{TypedLambdaClause, TypedPattern};
 
 /// Verifica sobreposição de cláusulas (RedundantClause).
 ///
-/// Para cada cláusula N (N > 0), se existe uma cláusula M < N cujos patterns
-/// "cobrem" todos os valores que a cláusula N casaria, e a cláusula N não
-/// tem guards (sem condição adicional que a diferenciaria), a cláusula N
+/// Para cada cláusula N (N > 0), se existe uma cláusula M < N cujos
+/// patterns "cobrem" todos os valores que a cláusula N casaria, e
+/// os guards de M sempre disparam para esses valores, a cláusula N
 /// é inalcançável → `RedundantClause`.
 pub(crate) fn check_redundant_clauses(clauses: &[TypedLambdaClause]) -> InferResult<()> {
-    for (i, clause) in clauses.iter().enumerate().skip(1) {
-        // Cláusulas com guards não são redundantes por pattern alone —
-        // a condição do guard pode diferenciá-las.
-        if !clause.guards.is_empty() {
-            continue;
-        }
-        let clause_patterns: Vec<&TypedPattern> = clause.patterns.iter().map(|p| &p.node).collect();
+    for (i, clause_n) in clauses.iter().enumerate().skip(1) {
+        let n_patterns: Vec<&TypedPattern> =
+            clause_n.patterns.iter().map(|p| &p.node).collect();
+        let n_has_guards = !clause_n.guards.is_empty();
 
-        for prev in &clauses[..i] {
-            let prev_patterns: Vec<&TypedPattern> = prev.patterns.iter().map(|p| &p.node).collect();
+        for clause_m in &clauses[..i] {
+            let m_patterns: Vec<&TypedPattern> =
+                clause_m.patterns.iter().map(|p| &p.node).collect();
+            let m_has_guards = !clause_m.guards.is_empty();
 
-            // Cláusula anterior com guards não torna a posterior redundante
-            // — o guard pode falhar e deixar a posterior alcançável.
-            if !prev.guards.is_empty() {
+            // Passo 1: patterns de M devem cobrir patterns de N.
+            if !patterns_cover(&m_patterns, &n_patterns) {
                 continue;
             }
 
-            if patterns_cover(&prev_patterns, &clause_patterns) {
-                return Err(MiddleError::RedundantClause {
-                    span: clause.body.span.into(),
-                });
+            // Passo 2: decidir baseado em quem tem guards.
+            match (m_has_guards, n_has_guards) {
+                // (false, false) — caso original: M sem guards sempre dispara.
+                (false, false) => {
+                    return Err(MiddleError::RedundantClause {
+                        span: clause_n.body.span.into(),
+                        hint: Some(
+                            "a cláusula anterior já cobre todos os patterns \
+                             desta cláusula"
+                                .to_string(),
+                        ),
+                    });
+                }
+                // (false, true) — M sem guards sempre dispara sobre os patterns.
+                // Guards de N não importam: M captura o input antes de N.
+                (false, true) => {
+                    return Err(MiddleError::RedundantClause {
+                        span: clause_n.body.span.into(),
+                        hint: Some(
+                            "a cláusula anterior cobre os mesmos patterns \
+                             sem guards — sempre dispara antes desta cláusula"
+                                .to_string(),
+                        ),
+                    });
+                }
+                // (true, false) — Fase 1: guards de M são tautologia?
+                // Se M sempre dispara (guards exaustivos), N é inalcançável.
+                (true, false) => {
+                    let span = &clause_m.body.span;
+                    if guard_is_tautology(&clause_m.guards, span) {
+                        return Err(MiddleError::RedundantClause {
+                            span: clause_n.body.span.into(),
+                            hint: Some(
+                                "a cláusula anterior cobre os mesmos patterns \
+                                 e seus guards sempre disparam (são exaustivos)"
+                                    .to_string(),
+                            ),
+                        });
+                    }
+                    // Guards de M não são tautologia — M pode falhar e N
+                    // ser alcançável. Não é redundante.
+                }
+                // (true, true) — Fase 2: guards_N ⟹ guards_M?
+                // Se todo input que satisfaz guards de N também satisfaz
+                // guards de M, M dispara antes de N → N redundante.
+                (true, true) => {
+                    let span = &clause_n.body.span;
+                    if check_guard_implication(&clause_n.guards, &clause_m.guards, span) {
+                        return Err(MiddleError::RedundantClause {
+                            span: clause_n.body.span.into(),
+                            hint: Some(
+                                "qualquer input que satisfaça os guards desta \
+                                 cláusula também satisfaz os guards da cláusula \
+                                 anterior, que dispara primeiro"
+                                    .to_string(),
+                            ),
+                        });
+                    }
+                    // Implicação não provada — N pode ser alcançável.
+                }
             }
         }
     }
     Ok(())
+}
+
+/// Verifica se os guards formam uma tautologia (sempre disparam).
+///
+/// Wrapper sobre `check_guard_completeness` que trata `Err(MissingOtherwise)`
+/// (Z3 Unknown) como "não provado" — conservador, não reporta redundância.
+/// `Err(NonExhaustiveMatch)` (Z3 SAT — contra-exemplo existe) também é
+/// "não provado".
+fn guard_is_tautology(guards: &[crate::typed_pattern::TypedGuardClause], span: &Span) -> bool {
+    match check_guard_completeness(guards, span) {
+        Ok(()) => true,
+        Err(_) => false,
+    }
 }
 
 /// Verifica se `covering` patterns cobrem todos os valores que `covered` patterns casariam.

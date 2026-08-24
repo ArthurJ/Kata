@@ -454,11 +454,12 @@ fun 5";
     assert_eq!(entry.ty, Ty::int());
 }
 
-/// Cláusula com guards não é redundante mesmo se o pattern cobre.
-/// `lambda x: 1` (sem guards) seguida de `lambda x: 2` (com guard `> x 0`)
-/// — a segunda não é redundante porque o guard pode falhar.
+/// Cláusula sem guards seguida de cláusula com guards E mesmos patterns
+/// → redundante. M sem guards sempre dispara sobre os patterns,capturando
+/// o input antes de N ser avaliada.
+/// `lambda x: 1` (sem guards, Ident cobre tudo) → `lambda x: guards` é redundante.
 #[test]
-fn redundant_clause_with_guards_not_redundant() {
+fn redundant_clause_no_guards_covers_guarded() {
     let src = "\
 fun :: Int => Int\n\
 lambda x: 1\n\
@@ -466,10 +467,142 @@ lambda x:\n\
 \x20   > x 0: 2\n\
 \x20   otherwise: 3\n\
 fun 5";
-    // Não deve falhar — a segunda cláusula tem guards.
-    let tmod = infer_src(src);
-    let entry = entry_typed(&tmod);
-    assert_eq!(entry.ty, Ty::int());
+    let err = infer_src_err(src);
+    assert!(
+        matches!(err, kata_diagnostics::MiddleError::RedundantClause { .. }),
+        "esperava RedundantClause, got {err:?}"
+    );
+}
+
+// ── Redundância com guards: Fase 1 (tautologia dos guards de M) ─────
+
+/// M com guards tautológicos (x > 0 ∨ x <= 0 = True) cobre tudo.
+/// N sem guards com mesmo pattern é redundante.
+/// Não precisa de otherwise: os guards são tautológicos (Z3 prova).
+#[test]
+fn redundant_clause_guarded_m_tautology_n_no_guards() {
+    let src = "\
+fun :: Int => Int\n\
+lambda x:\n\
+\x20   > x 0: 1\n\
+\x20   <= x 0: 2\n\
+lambda x: 3\n\
+fun 5";
+    let err = infer_src_err(src);
+    assert!(
+        matches!(err, kata_diagnostics::MiddleError::RedundantClause { .. }),
+        "esperava RedundantClause (guards de M são tautologia), got {err:?}"
+    );
+}
+
+/// M com otherwise (trivialmente tautologia) cobre tudo.
+/// N sem guards com mesmo pattern é redundante.
+#[test]
+fn redundant_clause_guarded_m_otherwise_n_no_guards() {
+    let src = "\
+fun :: Int => Int\n\
+lambda x:\n\
+\x20   > x 0: 1\n\
+\x20   otherwise: 2\n\
+lambda x: 3\n\
+fun 5";
+    let err = infer_src_err(src);
+    assert!(
+        matches!(err, kata_diagnostics::MiddleError::RedundantClause { .. }),
+        "esperava RedundantClause (M tem otherwise), got {err:?}"
+    );
+}
+
+/// M com guards NÃO-tautológicos não pode ser testado isoladamente:
+/// se M tem guards sem otherwise e não-tautologia, `check_guard_completeness`
+/// dispara NonExhaustiveMatch durante a inferência (antes de
+/// `check_redundant_clauses`). O caso (true, false) onde M tem guards
+/// não-tautológicos simplesmente nunca chega à verificação de redundância.
+///
+/// O teste abaixo usa M com guards tautológicos (otherwise) + N sem guards.
+/// N é redundante porque M sempre dispara.
+/// Para testar não-redundância com guards, ver Fase 2 (guard_implication).
+
+// ── Redundância com guards: Fase 2 (implicação guards_N ⟹ guards_M) ─
+
+/// Guards de N implicam guards de M: x > 5 ⟹ x > 0.
+/// N é redundante — M dispara antes para todo input que N casaria.
+/// Não precisam de otherwise: a redundância roda antes da exaustividade
+/// de guards.
+#[test]
+fn redundant_clause_guard_implication() {
+    let src = "\
+fun :: Int => Int\n\
+lambda x:\n\
+\x20   > x 0: 1\n\
+lambda x:\n\
+\x20   > x 5: 2\n\
+fun 5";
+    let err = infer_src_err(src);
+    assert!(
+        matches!(err, kata_diagnostics::MiddleError::RedundantClause { .. }),
+        "esperava RedundantClause (x > 5 implica x > 0), got {err:?}"
+    );
+}
+
+/// Guards de N NÃO implicam guards de M: x <= 5 não implica x > 0.
+/// N não é redundante — x = -1 satisfaz N mas não M.
+/// Neste caso, a exaustividade de guards dispara NonExhaustiveMatch
+/// para M (guards não-tautológicos sem otherwise), mas não dispara
+/// RedundantClause. Verificamos que o erro NÃO é RedundantClause.
+#[test]
+fn non_redundant_guard_no_implication() {
+    let src = "\
+fun :: Int => Int\n\
+lambda x:\n\
+\x20   > x 0: 1\n\
+lambda x:\n\
+\x20   <= x 5: 2\n\
+fun 5";
+    let err = infer_src_err(src);
+    // Pode ser NonExhaustiveMatch (M ou N não-tautológicos) ou
+    // MissingOtherwise, mas NÃO deve ser RedundantClause.
+    assert!(
+        !matches!(err, kata_diagnostics::MiddleError::RedundantClause { .. }),
+        "não esperava RedundantClause, got {err:?}"
+    );
+}
+
+/// Guards idênticos: x > 0 ⟹ x > 0 (trivialmente verdadeiro).
+/// N é redundante — M dispara primeiro com o mesmo guard.
+#[test]
+fn redundant_clause_identical_guards() {
+    let src = "\
+fun :: Int => Int\n\
+lambda x:\n\
+\x20   > x 0: 1\n\
+lambda x:\n\
+\x20   > x 0: 2\n\
+fun 5";
+    let err = infer_src_err(src);
+    assert!(
+        matches!(err, kata_diagnostics::MiddleError::RedundantClause { .. }),
+        "esperava RedundantClause (guards idênticos), got {err:?}"
+    );
+}
+
+/// Guards disjuntos: x < 0 não implica x > 10.
+/// N não é redundante. O erro deve ser NonExhaustiveMatch, não
+/// RedundantClause.
+#[test]
+fn non_redundant_disjoint_guards() {
+    let src = "\
+fun :: Int => Int\n\
+lambda x:\n\
+\x20   > x 10: 1\n\
+lambda x:\n\
+\x20   < x 0: 2\n\
+fun 5";
+    let err = infer_src_err(src);
+    assert!(
+        !matches!(err, kata_diagnostics::MiddleError::RedundantClause { .. }),
+        "não esperava RedundantClause, got {err:?}"
+    );
 }
 
 /// Multi-cláusula com variantes de enum Boolean NÃO é redundante.
