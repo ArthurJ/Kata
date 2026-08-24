@@ -49,22 +49,39 @@ do codegen.
 - Renomear `@trace` de volta para `@log` (diretiva de telemetria)
 
 ### Refinement propagation (path conditions no typeck)
-**Estado:** Nível 1 implementado (PRD `docs/PRDs/PRD-refinement-propagation.md`).
-Tipos refinados já existem — predicados no `StructRegistry`,
-smart constructor falível, `const_eval_predicate` valida literais em
-compile-time. **Nível 1 (guards locais) implementado:** `PathConditionCtx`
-em `InferCtx` coleta facts de guards e `match` sobre `Boolean` no visitor
-de inferência. `try_prove_with_path_conditions` (Z3) prova ascriptions
-refinadas sobre não-literais. 8 testes E2E em
-`t_refinement_propagation_e2e.rs`. 1823 testes, 0 regressão.
+**Estado:** Nível 1 e Nível 2 implementados (PRD
+`docs/PRDs/PRD-refinement-propagation.md`). Tipos refinados já existem —
+predicados no `StructRegistry`, smart constructor falível,
+`const_eval_predicate` valida literais em compile-time. **Nível 1
+(guards locais) implementado:** `PathConditionCtx` em `InferCtx`
+coleta facts de guards e `match` sobre `Boolean` no visitor de
+inferência. `try_prove_with_path_conditions` (Z3) prova ascriptions
+refinadas sobre não-literais. **Nível 2 (post-condições
+inter-procedurais) implementado:** `PostCondTable` extraída de
+funções com guards, consumo no `_match.rs`, `InlineFnTable` para
+inlining de funções puras no Z3 translator, payload binding
+conecta binding do pattern ao argumento. 13 testes E2E em
+`t_refinement_propagation_e2e.rs`. 1841 testes, 0 regressão.
 Níveis restantes:
-- **Nível 2 — Pattern matches:** facts extraídos de patterns (ex: braço
-  `Result::Ok n` de `div` sabe `b ≠ 0`). Exige propagar pré-condições de
-  funções, não só guards locais.
 - **Nível 3 — Contratos de função:** tipos refinados em assinaturas
   (`div :: Int NonZero => ...`) propagados como path conditions no caller.
   Refinement typing completo — o typeck consulta predicados do
   `StructRegistry` em cada ascription contra as constraints acumuladas.
+
+### TypeGraph: migrar 6 sites de classificação ad-hoc para o grafo
+**Estado:** Pendente (consolidação de dívida técnica).
+O `TypeGraph` (`kata-core/src/type_graph.rs`) centraliza a
+classificação "este tipo é Instance ou Generic desta família?" num
+único grafo construído após o Pass 0. Hoje essa decisão está
+duplicada em checks ad-hoc contra `StructRegistry` em ~6 sites do
+inference: `ascription.rs`, `dispatch.rs`, `apply_dispatch.rs`,
+e provavelmente mais em `fits_return` e `try_refines_fallback`.
+Migrar para consultar o grafo elimina classificação inconsistente
+(um site trata `NonZero` como Instance, outro como Generic → bug
+silencioso de dispatch). Para implementar: adicionar
+`type_graph: &TypeGraph` ao `InferCtx` e migrar cada site.
+Prioridade: baixa (o grafo já funciona para `resolve_type_expr`;
+a migração é consolidação, não desbloqueio de feature).
 
 ### Patterns aninhados (Maranget + SMT)
 **Estado:** Avaliar. O PRD-exaustividade §9 exclui patterns aninhados.
