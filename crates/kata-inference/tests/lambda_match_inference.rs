@@ -520,11 +520,18 @@ lambda True False: False\n\
 and True False";
     let err = infer_src_err(src);
     assert!(
-        matches!(err, kata_diagnostics::MiddleError::NonExhaustiveMatch { .. }),
+        matches!(
+            err,
+            kata_diagnostics::MiddleError::NonExhaustiveMatch { .. }
+        ),
         "esperava NonExhaustiveMatch, got {err:?}"
     );
     if let kata_diagnostics::MiddleError::NonExhaustiveMatch { missing, .. } = err {
-        assert_eq!(missing.len(), 2, "deve faltar exatamente 2 células: {missing:?}");
+        assert_eq!(
+            missing.len(),
+            2,
+            "deve faltar exatamente 2 células: {missing:?}"
+        );
     }
 }
 
@@ -552,7 +559,10 @@ lambda False 1: 1\n\
 f True 42";
     let err = infer_src_err(src);
     assert!(
-        matches!(err, kata_diagnostics::MiddleError::NonExhaustiveMatch { .. }),
+        matches!(
+            err,
+            kata_diagnostics::MiddleError::NonExhaustiveMatch { .. }
+        ),
         "esperava NonExhaustiveMatch, got {err:?}"
     );
 }
@@ -614,11 +624,18 @@ lambda True False False: False\n\
 f3 True True True";
     let err = infer_src_err(src);
     assert!(
-        matches!(err, kata_diagnostics::MiddleError::NonExhaustiveMatch { .. }),
+        matches!(
+            err,
+            kata_diagnostics::MiddleError::NonExhaustiveMatch { .. }
+        ),
         "esperava NonExhaustiveMatch, got {err:?}"
     );
     if let kata_diagnostics::MiddleError::NonExhaustiveMatch { missing, .. } = err {
-        assert_eq!(missing.len(), 4, "deve faltar exatamente 4 células: {missing:?}");
+        assert_eq!(
+            missing.len(),
+            4,
+            "deve faltar exatamente 4 células: {missing:?}"
+        );
     }
 }
 

@@ -20,8 +20,9 @@ use kata_diagnostics::MiddleError;
 use crate::typed::{TypedExpr, TypedExprKind, TypedGuardClause};
 
 use z3::{
-    ast::{Ast, Bool, Int},
-    Config, SatResult, Solver, with_z3_config,
+    Config, SatResult, Solver,
+    ast::{Bool, Int},
+    with_z3_config,
 };
 
 /// Resultado da verificação de completude de guards.
@@ -31,10 +32,7 @@ pub(crate) type GuardResult = Result<(), MiddleError>;
 ///
 /// Se algum guard tem `condition: None` (`otherwise`), trivialmente Ok.
 /// Senão, usa Z3 para provar que a disjunção das condições é tautologia.
-pub(crate) fn check_guard_completeness(
-    guards: &[TypedGuardClause],
-    span: &Span,
-) -> GuardResult {
+pub(crate) fn check_guard_completeness(guards: &[TypedGuardClause], span: &Span) -> GuardResult {
     // otherwise presente — trivialmente exaustivo.
     if guards.iter().any(|g| g.condition.is_none()) {
         return Ok(());
@@ -72,7 +70,7 @@ pub(crate) fn check_guard_completeness(
 
         // Para provar que a disjunção é tautologia, verificamos se
         // a NEGAÇÃO da disjunção é insatisfazível.
-        solver.assert(&disjunction.not());
+        solver.assert(disjunction.not());
 
         match solver.check() {
             SatResult::Unsat => {
@@ -197,11 +195,7 @@ impl Z3Translator {
     }
 
     /// Traduz uma comparação (`>`, `<`, `>=`, `<=`, `=`, `!=`).
-    fn translate_comparison(
-        &mut self,
-        op: &str,
-        args: &[kata_ast::Spanned<TypedExpr>],
-    ) -> Bool {
+    fn translate_comparison(&mut self, op: &str, args: &[kata_ast::Spanned<TypedExpr>]) -> Bool {
         if args.len() != 2 {
             return self.fresh_bool();
         }
@@ -220,8 +214,8 @@ impl Z3Translator {
             "<" => lhs.lt(&rhs),
             ">=" => lhs.ge(&rhs),
             "<=" => lhs.le(&rhs),
-            "=" => lhs._eq(&rhs),
-            "!=" => lhs._eq(&rhs).not(),
+            "=" => lhs.eq(&rhs),
+            "!=" => lhs.eq(&rhs).not(),
             _ => self.fresh_bool(),
         }
     }
@@ -239,8 +233,7 @@ impl Z3Translator {
                     Some(i.clone())
                 } else {
                     let i = Int::new_const(name.as_str());
-                    self.var_cache
-                        .insert(name.clone(), VarKind::Int(i.clone()));
+                    self.var_cache.insert(name.clone(), VarKind::Int(i.clone()));
                     Some(i)
                 }
             }

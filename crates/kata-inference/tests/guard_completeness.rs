@@ -128,7 +128,10 @@ lambda x:\n\
 foo 5";
     let err = infer_src_err(src);
     assert!(
-        matches!(err, kata_diagnostics::MiddleError::NonExhaustiveMatch { .. }),
+        matches!(
+            err,
+            kata_diagnostics::MiddleError::NonExhaustiveMatch { .. }
+        ),
         "esperava NonExhaustiveMatch, got {err:?}"
     );
 }
@@ -199,7 +202,10 @@ lambda x:\n\
 foo 5";
     let err = infer_src_err(src);
     assert!(
-        matches!(err, kata_diagnostics::MiddleError::NonExhaustiveMatch { .. }),
+        matches!(
+            err,
+            kata_diagnostics::MiddleError::NonExhaustiveMatch { .. }
+        ),
         "esperava NonExhaustiveMatch, got {err:?}"
     );
 }

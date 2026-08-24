@@ -546,12 +546,9 @@ pub(crate) fn pattern_covers_variant(pattern: &TypedPattern, variant: &str) -> b
         TypedPattern::Literal { .. } => variant != "__ANY__",
         TypedPattern::Tuple { elements } => {
             if variant == "__ANY__" {
-                elements.iter().all(|e| {
-                    matches!(
-                        e.node,
-                        TypedPattern::Ident { .. } | TypedPattern::Wildcard
-                    )
-                })
+                elements
+                    .iter()
+                    .all(|e| matches!(e.node, TypedPattern::Ident { .. } | TypedPattern::Wildcard))
             } else {
                 false
             }
