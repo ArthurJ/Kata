@@ -21,6 +21,7 @@ pub mod snapshot;
 pub mod struct_registry;
 pub mod ty;
 pub mod type_env;
+pub mod type_graph;
 
 pub use dispatch::{
     DispatchError, DispatchOutcome, DispatchTable, OverloadInfo, PartialDispatchResult, Score,
@@ -36,3 +37,4 @@ pub use refines_registry::{RefinesEntry, RefinesRegistry};
 pub use snapshot::HeapSnapshotData;
 pub use struct_registry::{FieldInfo, StructInfo, StructKey, StructRegistry};
 pub use ty::{PrimTy, Ty, TypeEnv};
+pub use type_graph::{TypeEdge, TypeGraph, TypeGraphBuilder, TypeId, TypeKind, TypeNode};

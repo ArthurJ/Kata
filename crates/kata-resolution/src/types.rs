@@ -11,7 +11,9 @@
 //! - `ResolveError`: erro de resolution
 
 use kata_ast::{ActionStmt, Expr, LambdaClause, Spanned};
-use kata_core::{EnumRegistry, InterfaceRegistry, RefinesRegistry, StructRegistry, Ty, TypeEnv};
+use kata_core::{
+    EnumRegistry, InterfaceRegistry, RefinesRegistry, StructRegistry, Ty, TypeEnv, TypeGraph,
+};
 use std::collections::HashMap;
 use thiserror::Error;
 
@@ -40,6 +42,13 @@ pub struct ResolvedModule {
     pub interface_registry: InterfaceRegistry,
     /// Catálogo de delegações `refines` — tipo refined → interfaces delegadas.
     pub refines_registry: RefinesRegistry,
+    /// Grafo de classificação de tipos — desacoplado de layout.
+    ///
+    /// Construído a partir dos registries (struct, enum, interface, refines)
+    /// após o Pass 0 e disponibilizado para Pass 1 (resolução de assinaturas)
+    /// e inference. Para módulos do usuário, é pré-construído do prelude
+    /// e estendido com declarações locais — disponível antes do `merge_two`.
+    pub type_graph: TypeGraph,
     /// Funções nomeadas com corpo Kata.
     /// Cada entrada preserva as cláusulas lambda para o inference processar.
     pub functions: Vec<FunctionDef>,

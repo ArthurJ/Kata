@@ -255,8 +255,7 @@ pub(crate) fn lower_expr(
                     if !matches!(
                         inner_kind,
                         TypedExprKind::Tuple { .. } | TypedExprKind::StructConstruct { .. }
-                    )
-                        && !matches!(inner.ty, Ty::Struct(_)) =>
+                    ) && !matches!(inner.ty, Ty::Struct(_)) =>
                 {
                     lower_expr(inner, ctx)
                 }

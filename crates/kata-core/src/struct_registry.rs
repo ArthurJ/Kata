@@ -353,6 +353,31 @@ impl StructRegistry {
         self.origins.keys().map(|s| s.as_str())
     }
 
+    /// Itera sobre todas as entradas (origin, StructKey, StructInfo).
+    ///
+    /// Usado pelo `TypeGraphBuilder` para classificar cada tipo registrado
+    /// sem depender de nomes individuais.
+    pub fn iter_all(&self) -> impl Iterator<Item = (&str, &StructKey, &StructInfo)> {
+        self.structs
+            .iter()
+            .map(|((origin, key), info)| (origin.as_str(), key, info))
+    }
+
+    /// Lista os nomes de todas as famílias polimórficas registradas.
+    ///
+    /// Uma família é um nome que tem pelo menos uma instância
+    /// (`is_instance_of: Some`). Derivado dos `origins` — para cada nome,
+    /// verifica se existe pelo menos uma entrada com `is_instance_of: Some`.
+    pub fn all_family_names(&self) -> Vec<String> {
+        let mut families: HashSet<String> = HashSet::new();
+        for ((_, key), info) in &self.structs {
+            if info.is_instance_of.is_some() {
+                families.insert(key.name().to_string());
+            }
+        }
+        families.into_iter().collect()
+    }
+
     // ── Merge ─────────────────────────────────────────────
 
     /// Mescla outro StructRegistry neste.

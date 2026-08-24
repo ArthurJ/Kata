@@ -27,6 +27,7 @@ fn eval_src(src: &str) -> (i64, Ty) {
         kata_resolution::DirectiveRegistry::new(),
         &prelude.interface_registry,
         &prelude.directive_registry,
+        Some(&prelude.type_graph),
     )
     .expect("resolve deve succeed");
     let resolved = merge_resolved(prelude, user);
@@ -68,6 +69,7 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
             rr.merge(user.refines_registry.clone());
             rr
         },
+        type_graph: prelude.type_graph.clone(),
         functions: {
             let mut fns = prelude.functions;
             let user_fn_names: std::collections::HashSet<&str> =

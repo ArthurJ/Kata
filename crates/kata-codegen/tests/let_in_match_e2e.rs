@@ -32,6 +32,7 @@ fn eval_src(src: &str) -> (i64, Ty) {
         enum_pred_decls: Vec::new(),
         interface_registry: prelude.interface_registry.clone(),
         refines_registry: prelude.refines_registry.clone(),
+        type_graph: prelude.type_graph.clone(),
         functions: {
             let mut fns = prelude.functions;
             let names: std::collections::HashSet<&str> =

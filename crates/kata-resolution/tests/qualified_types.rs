@@ -23,6 +23,7 @@ fn make_module_with_type(name: &str, ty: Ty, origin: &str) -> ResolvedModule {
         enum_pred_decls: Vec::new(),
         interface_registry: kata_core::InterfaceRegistry::new(),
         refines_registry: kata_core::RefinesRegistry::new(),
+        type_graph: kata_core::TypeGraph::new(),
         functions: Vec::new(),
         actions: Vec::new(),
         directive_registry: kata_resolution::DirectiveRegistry::new(),

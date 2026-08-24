@@ -39,6 +39,7 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
             rr.merge(user.refines_registry.clone());
             rr
         },
+        type_graph: prelude.type_graph.clone(),
         functions: {
             let mut fns = prelude.functions;
             let user_fn_names: std::collections::HashSet<&str> =

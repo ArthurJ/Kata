@@ -39,8 +39,7 @@ use crate::typed_pattern::{TypedLambdaClause, TypedPattern};
 /// é inalcançável → `RedundantClause`.
 pub(crate) fn check_redundant_clauses(clauses: &[TypedLambdaClause]) -> InferResult<()> {
     for (i, clause_n) in clauses.iter().enumerate().skip(1) {
-        let n_patterns: Vec<&TypedPattern> =
-            clause_n.patterns.iter().map(|p| &p.node).collect();
+        let n_patterns: Vec<&TypedPattern> = clause_n.patterns.iter().map(|p| &p.node).collect();
         let n_has_guards = !clause_n.guards.is_empty();
 
         for clause_m in &clauses[..i] {

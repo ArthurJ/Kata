@@ -1,5 +1,6 @@
 ---
 source: crates/kata-inference/tests/tast_snapshot.rs
+assertion_line: 146
 expression: tast_snapshot(src)
 ---
 === Entry ===
@@ -60,6 +61,9 @@ expression: tast_snapshot(src)
   show :: [Unit] => Prim(Text)
   step :: [Prim(Int)] => Prim(Int)
   step :: [Prim(Float)] => Prim(Float)
+  zero :: [Prim(Int)] => Prim(Int)
+  zero :: [Prim(Float)] => Prim(Float)
+  zero :: [Prim(Rational)] => Prim(Rational)
 
 === Actions ===
   echo :: [Interface("SHOW")] => Unit

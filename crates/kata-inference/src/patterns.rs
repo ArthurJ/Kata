@@ -90,7 +90,8 @@ fn check_pattern_inner(
         // anotado. Se o scrutinee tem tipo conhecido e difere do anotado,
         // é erro. Se o scrutinee é InferVar, o tipo anotado ajuda a inferir.
         Pattern::TypedIdent { name, ty } => {
-            let annotated_ty = resolve_type_expr(&ty.node, env, iface_registry, struct_registry);
+            let annotated_ty =
+                resolve_type_expr(&ty.node, env, iface_registry, struct_registry, None);
             // Valida compatibilidade com o scrutinee.
             match scrutinee_ty {
                 Ty::InferVar(_) => {

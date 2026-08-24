@@ -266,6 +266,7 @@ pub(crate) fn run_pass0(
                         type_env,
                         interface_registry,
                         &*struct_registry,
+                        None,
                     );
 
                     match &base_ty {
@@ -388,6 +389,7 @@ pub(crate) fn run_pass0(
                                 type_env,
                                 interface_registry,
                                 &*struct_registry,
+                                None,
                             ),
                             offset: (i as u32) * 8,
                         })
@@ -465,6 +467,7 @@ pub(crate) fn run_pass0(
                                         type_env,
                                         interface_registry,
                                         &*struct_registry,
+                                        None,
                                     )
                                 })
                                 .or_else(|| {
@@ -489,6 +492,7 @@ pub(crate) fn run_pass0(
                                         type_env,
                                         interface_registry,
                                         &*struct_registry,
+                                        None,
                                     )
                                 })
                                 .or_else(|| {
@@ -538,6 +542,7 @@ pub(crate) fn run_pass0(
                             type_env,
                             interface_registry,
                             &*struct_registry,
+                            None,
                         );
                         if let Ty::Var(n) = &payload_ty
                             && is_type_param_name(n)
@@ -552,6 +557,7 @@ pub(crate) fn run_pass0(
                                         type_env,
                                         interface_registry,
                                         &*struct_registry,
+                                        None,
                                     )
                                 });
                                 defaults.push(default_ty);
@@ -585,6 +591,7 @@ pub(crate) fn run_pass0(
                                     type_env,
                                     interface_registry,
                                     &*struct_registry,
+                                    None,
                                 )
                             })
                         })
@@ -701,6 +708,7 @@ pub(crate) fn run_pass0(
                                 type_env,
                                 interface_registry,
                                 &*struct_registry,
+                                None,
                             )
                         })
                         .collect();
@@ -709,6 +717,7 @@ pub(crate) fn run_pass0(
                         type_env,
                         interface_registry,
                         &*struct_registry,
+                        None,
                     );
                     let ffi_symbol = m.directives.iter().find_map(|d| {
                         if (d.name == "ffi" || d.name == "builtin")
@@ -769,7 +778,13 @@ pub(crate) fn run_pass0(
                     .params
                     .iter()
                     .map(|t| {
-                        resolve_type_expr(&t.node, type_env, interface_registry, &*struct_registry)
+                        resolve_type_expr(
+                            &t.node,
+                            type_env,
+                            interface_registry,
+                            &*struct_registry,
+                            None,
+                        )
                     })
                     .collect(),
                 ret: resolve_type_expr(
@@ -777,6 +792,7 @@ pub(crate) fn run_pass0(
                     type_env,
                     interface_registry,
                     &*struct_registry,
+                    None,
                 ),
                 default_body: s.default_body.clone(),
             })
@@ -832,6 +848,7 @@ pub(crate) fn run_pass0(
                                 type_env,
                                 interface_registry,
                                 &*struct_registry,
+                                None,
                             );
                             instantiate_family_for_concrete(
                                 &ty,
@@ -846,6 +863,7 @@ pub(crate) fn run_pass0(
                             type_env,
                             interface_registry,
                             &*struct_registry,
+                            None,
                         );
                         instantiate_family_for_concrete(&ty, &deferred.type_name, struct_registry)
                     },
@@ -868,14 +886,24 @@ pub(crate) fn run_pass0(
                 .params
                 .iter()
                 .map(|t| {
-                    let ty =
-                        resolve_type_expr(&t.node, type_env, interface_registry, &*struct_registry);
+                    let ty = resolve_type_expr(
+                        &t.node,
+                        type_env,
+                        interface_registry,
+                        &*struct_registry,
+                        None,
+                    );
                     instantiate_family_for_concrete(&ty, &deferred.type_name, struct_registry)
                 })
                 .collect();
             let return_type = {
-                let ty =
-                    resolve_type_expr(&m.ret.node, type_env, interface_registry, &*struct_registry);
+                let ty = resolve_type_expr(
+                    &m.ret.node,
+                    type_env,
+                    interface_registry,
+                    &*struct_registry,
+                    None,
+                );
                 instantiate_family_for_concrete(&ty, &deferred.type_name, struct_registry)
             };
             let ffi_symbol = m.directives.iter().find_map(|d| {
@@ -951,6 +979,7 @@ pub(crate) fn run_pass0(
                                 type_env,
                                 interface_registry,
                                 &*struct_registry,
+                                None,
                             );
                             instantiate_family_for_concrete(
                                 &ty,
@@ -969,6 +998,7 @@ pub(crate) fn run_pass0(
                         type_env,
                         interface_registry,
                         &*struct_registry,
+                        None,
                     );
                     let param_types: Vec<Ty> = sig
                         .params

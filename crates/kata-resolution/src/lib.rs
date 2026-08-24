@@ -86,6 +86,7 @@ pub fn resolve_with_imports(
         imported_directives,
         kata_core::InterfaceRegistry::new(),
         &DirectiveRegistry::new(),
+        None,
     )
 }
 
@@ -108,6 +109,7 @@ pub fn resolve_with_prelude(
     imported_directives: DirectiveRegistry,
     prelude_iface_reg: &kata_core::InterfaceRegistry,
     prelude_directives: &DirectiveRegistry,
+    prelude_type_graph: Option<&kata_core::TypeGraph>,
 ) -> Result<ResolvedModule, Vec<ResolveError>> {
     resolve_inner(
         module,
@@ -115,6 +117,7 @@ pub fn resolve_with_prelude(
         imported_directives,
         prelude_iface_reg.clone(),
         prelude_directives,
+        prelude_type_graph,
     )
 }
 
@@ -124,6 +127,7 @@ fn resolve_inner(
     imported_directives: DirectiveRegistry,
     prelude_iface_reg: kata_core::InterfaceRegistry,
     prelude_directives: &DirectiveRegistry,
+    prelude_type_graph: Option<&kata_core::TypeGraph>,
 ) -> Result<ResolvedModule, Vec<ResolveError>> {
     let mut type_env = TypeEnv::new();
     // Unit é tipo primitivo da linguagem — sempre disponível no TypeEnv.
@@ -157,6 +161,23 @@ fn resolve_inner(
         &mut errors,
         origin,
     );
+
+    // Constrói o TypeGraph a partir dos registries populados no Pass 0.
+    // Para módulos do usuário, o prelude_iface_reg já traz interfaces do
+    // prelude (SHOW, NUM, etc.). Se `prelude_type_graph` está disponível,
+    // faz merge antes do Pass 1 — assim `resolve_type_expr` conhece
+    // structs/enums do prelude (NonZero, Result) durante a resolução de
+    // assinaturas, sem esperar por `merge_two`.
+    let mut type_graph = kata_core::TypeGraphBuilder {
+        struct_reg: &struct_registry,
+        enum_reg: &enum_registry,
+        iface_reg: &interface_registry,
+        refines_reg: &refines_registry,
+    }
+    .build(origin);
+    if let Some(prelude_tg) = prelude_type_graph {
+        type_graph.merge(prelude_tg);
+    }
 
     // Pass 0.5: coleta diretivas customizadas (DirectiveDecl) no registry.
     // Antes do Pass 1 para que a validação de @nome em Sig/ActionDecl
@@ -193,11 +214,22 @@ fn resolve_inner(
                 let param_types: Vec<Ty> = params
                     .iter()
                     .map(|t| {
-                        resolve_type_expr(&t.node, &type_env, &interface_registry, &struct_registry)
+                        resolve_type_expr(
+                            &t.node,
+                            &type_env,
+                            &interface_registry,
+                            &struct_registry,
+                            Some(&type_graph),
+                        )
                     })
                     .collect();
-                let return_type =
-                    resolve_type_expr(&ret.node, &type_env, &interface_registry, &struct_registry);
+                let return_type = resolve_type_expr(
+                    &ret.node,
+                    &type_env,
+                    &interface_registry,
+                    &struct_registry,
+                    Some(&type_graph),
+                );
 
                 // Extrai metadados de diretivas
                 let mut ffi_symbol = None;
@@ -325,11 +357,22 @@ fn resolve_inner(
                 let param_types: Vec<Ty> = params
                     .iter()
                     .map(|t| {
-                        resolve_type_expr(&t.node, &type_env, &interface_registry, &struct_registry)
+                        resolve_type_expr(
+                            &t.node,
+                            &type_env,
+                            &interface_registry,
+                            &struct_registry,
+                            Some(&type_graph),
+                        )
                     })
                     .collect();
-                let return_type =
-                    resolve_type_expr(&ret.node, &type_env, &interface_registry, &struct_registry);
+                let return_type = resolve_type_expr(
+                    &ret.node,
+                    &type_env,
+                    &interface_registry,
+                    &struct_registry,
+                    Some(&type_graph),
+                );
 
                 // Extrai ffi_symbol das diretivas da Action.
                 let ffi_symbol = action_dirs.iter().find_map(|d| {
@@ -448,6 +491,7 @@ fn resolve_inner(
         enum_pred_decls,
         interface_registry,
         refines_registry,
+        type_graph,
         functions,
         actions,
         directive_registry,
@@ -514,6 +558,10 @@ pub fn merge_two(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModul
     let mut refines_registry = prelude.refines_registry;
     refines_registry.merge(user.refines_registry);
 
+    // Merge do TypeGraph: prelude + user. Nós locais prevalecem (shadow).
+    let mut type_graph = prelude.type_graph;
+    type_graph.merge(&user.type_graph);
+
     let mut functions = prelude.functions;
     let user_fn_names: std::collections::HashSet<&str> =
         user.functions.iter().map(|f| f.name.as_str()).collect();
@@ -551,6 +599,7 @@ pub fn merge_two(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModul
         enum_pred_decls,
         interface_registry,
         refines_registry,
+        type_graph,
         functions,
         actions,
         directive_registry,
