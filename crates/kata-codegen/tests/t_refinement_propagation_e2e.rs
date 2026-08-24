@@ -429,3 +429,52 @@ test_complex!()"#;
     // (+ x y) = 7
     assert_eq!(untag_smi(raw), 7);
 }
+
+// ── 14. Direção A — pré-condição inter-procedural (path condition prova arg) ──
+
+/// `(/ 10 b)` onde `b` é `Int`. O braço `Boolean::False` do match sobre
+/// `(= b 0)` tem path condition `not(= b 0)` = `b ≠ 0`. O predicado de
+/// NonZero é `!= _ (zero _)` = `!= _ 0`. O Z3 prova que `b ≠ 0` implica
+/// `b ≠ 0`. A Direção A aceita `b` como `NonZero` sem ascription explícita.
+#[test]
+fn t_nivel3_direcao_a_div_com_path_condition() {
+    let src = r#"action test => Int
+    let b := 5
+    match (= b 0)
+        Boolean::False: / 10 b
+        Boolean::True: 0
+test!()"#;
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::int(), "div deve retornar Int");
+    // 10 / 5 = 2
+    assert_eq!(untag_smi(raw), 2);
+}
+
+// ── 15. Direção A — sem path conditions, falha como antes ──────────
+
+/// Sem path conditions (b não é guardado), o Z3 não prova. Deve falhar
+/// em compile-time como antes — o usuário precisa de ascription explícita.
+#[test]
+fn t_nivel3_direcao_a_sem_path_conditions_falha() {
+    let src = r#"action test => Int
+    let b := 5
+    / 10 b
+test!()"#;
+    assert!(infer_fails(src), "sem path conditions, dispatch deve falhar");
+}
+
+// ── 16. Direção A — path condition refuta predicado (b = 0) ─────────
+
+/// No braço `Boolean::True` do match sobre `(= b 0)`, a path condition
+/// é `= b 0` — que REFUTA o predicado `!= b 0` de NonZero. Deve ser
+/// erro compile-time.
+#[test]
+fn t_nivel3_direcao_a_path_condition_refuta() {
+    let src = r#"action test => Int
+    let b := 0
+    match (= b 0)
+        Boolean::True: / 10 b
+        Boolean::False: 0
+test!()"#;
+    assert!(infer_fails(src), "path condition = b 0 refuta NonZero");
+}

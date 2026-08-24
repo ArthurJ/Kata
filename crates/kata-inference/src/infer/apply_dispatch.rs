@@ -539,3 +539,212 @@ pub(crate) fn try_refines_fallback(
 
     Some((fallback_arg_types, overload))
 }
+
+/// Direção A (Nível 3 — pré-condições inter-procedurais):
+///
+/// Quando o dispatch falha porque um argumento é tipo base (`Int`) e o
+/// parâmetro correspondente na assinatura é tipo refined (`NonZero`), tenta
+/// provar via Z3 que o argumento satisfaz o predicado do refined usando as
+/// path conditions do caller. Se provado, aceita o argumento inserindo
+/// ascription implícita e retenta o dispatch.
+///
+/// Retorna:
+/// - `Some(Ok(...))` — predicado provado, dispatch aceito.
+/// - `Some(Err(...))` — predicado refutado (Some(false) do Z3).
+/// - `None` — Z3 não decidiu, ou não há mismatch base→refined, ou sem
+///   path conditions. O caller deve usar o erro original do dispatch.
+pub(crate) fn try_refined_precondition(
+    func_name: &str,
+    args: &[Spanned<Expr>],
+    typed_args: &[Spanned<TypedExpr>],
+    arg_types: &[Ty],
+    callee: &Spanned<Expr>,
+    span: &Span,
+    env: &mut kata_core::ty::TypeEnv,
+    ctx: &InferCtx,
+) -> Option<InferResult<(Ty, TypedExprKind)>> {
+    // Sem path conditions, o Z3 não pode provar nada.
+    if ctx.path_conditions.is_empty() {
+        return None;
+    }
+
+    // Procura overloads de func_name com aridade correta.
+    let overloads = ctx.table.get_overloads(func_name)?;
+    let candidates: Vec<&OverloadInfo> = overloads
+        .iter()
+        .filter(|oi| oi.params.len() == arg_types.len())
+        .collect();
+    if candidates.is_empty() {
+        return None;
+    }
+
+    // Para cada overload candidata, identifica posições onde o param é
+    // refined e o arg é tipo base. Se todas as posições refined são
+    // provadas, aceita.
+    for oi in &candidates {
+        let mut refined_positions: Vec<usize> = Vec::new();
+        for (i, param) in oi.params.iter().enumerate() {
+            // O param é refined? (Family ou Instance de refined)
+            let param_refined_name = match param {
+                Ty::Struct(StructKey::Family(name)) | Ty::Struct(StructKey::Instance(name, _)) => {
+                    Some(name.clone())
+                }
+                _ => None,
+            };
+            let Some(rname) = param_refined_name else {
+                continue;
+            };
+            // O arg é tipo base (não-refined)?
+            let arg_is_base = !matches!(&arg_types[i], Ty::Struct(_));
+            if !arg_is_base {
+                continue;
+            }
+            // O arg é compatível com o base_ty do refined?
+            let base_match = ctx
+                .refined_decls
+                .iter()
+                .filter(|rd| rd.name == rname)
+                .any(|rd| rd.base_ty == arg_types[i]);
+            if !base_match {
+                continue;
+            }
+            refined_positions.push(i);
+        }
+        if refined_positions.is_empty() {
+            continue;
+        }
+
+        // Para cada posição refined, prova o predicado via Z3.
+        let mut all_proven = true;
+        let mut any_refuted = false;
+        for &i in &refined_positions {
+            let rname = match &oi.params[i] {
+                Ty::Struct(StructKey::Family(name)) | Ty::Struct(StructKey::Instance(name, _)) => {
+                    name.clone()
+                }
+                _ => unreachable!(),
+            };
+            // Pega os predicados do refined_decls cujo base_ty casa com o arg.
+            let refined_decls: Vec<_> = ctx
+                .refined_decls
+                .iter()
+                .filter(|rd| rd.name == rname && rd.base_ty == arg_types[i])
+                .collect();
+            if refined_decls.is_empty() {
+                all_proven = false;
+                break;
+            }
+            // Para cada predicado, substitui Hole pelo arg e prova via Z3.
+            for rd in &refined_decls {
+                for pred in &rd.predicates {
+                    let substituted = super::const_eval::substitute_hole(pred, &args[i]);
+                    let typed_pred = match super::expr::infer_expr_hinted(
+                        &substituted.node,
+                        &substituted.span,
+                        env,
+                        ctx,
+                        false,
+                        Some(&Ty::Sum("Boolean".to_string())),
+                    ) {
+                        Ok(tp) => tp,
+                        Err(_) => {
+                            all_proven = false;
+                            break;
+                        }
+                    };
+                    match super::path_conditions::try_prove_with_path_conditions(
+                        &typed_pred,
+                        &ctx.path_conditions,
+                        ctx.inline_fns,
+                    ) {
+                        Some(true) => {}
+                        Some(false) => {
+                            any_refuted = true;
+                            all_proven = false;
+                            break;
+                        }
+                        None => {
+                            all_proven = false;
+                            break;
+                        }
+                    }
+                }
+                if !all_proven {
+                    break;
+                }
+            }
+            if !all_proven {
+                break;
+            }
+        }
+
+        if any_refuted {
+            return Some(Err(MiddleError::TypeMismatch {
+                expected: format!(
+                    "argumento satisfaz predicado do tipo refined (path conditions refutam)"
+                ),
+                found: format!("path conditions implicem negação do predicado"),
+                span: (*span).into(),
+            }));
+        }
+        if !all_proven {
+            continue;
+        }
+
+        // Todos os predicados provados. Constrói args com ascription implícita
+        // e retenta o dispatch.
+        let mut new_arg_types = arg_types.to_vec();
+        let mut new_typed_args = typed_args.to_vec();
+        for &i in &refined_positions {
+            let refined_ty = oi.params[i].clone();
+            new_arg_types[i] = refined_ty.clone();
+            let ascripted = TypedExpr {
+                span: typed_args[i].span,
+                ty: refined_ty,
+                tail_pos: typed_args[i].node.tail_pos,
+                escape: typed_args[i].node.escape,
+                kind: TypedExprKind::TypeAscription {
+                    expr: Box::new(typed_args[i].clone()),
+                    target_ty: oi.params[i].clone(),
+                    pending_predicates: Vec::new(),
+                },
+            };
+            new_typed_args[i] = Spanned::new(ascripted, typed_args[i].span);
+        }
+
+        // Retenta o dispatch com os novos arg types.
+        let retry = ctx
+            .table
+            .resolve_with_swap(func_name, &new_arg_types, ctx.interface_registry);
+        if let Ok(outcome) = retry {
+            let overload = outcome.overload;
+            let expanded_ret = super::apply::expand_ret(&overload.ret, ctx);
+            let callee_ty =
+                Ty::Function(overload.params.clone(), Box::new(expanded_ret.clone()));
+            let callee_typed = TypedExpr {
+                span: callee.span,
+                ty: callee_ty,
+                tail_pos: false,
+                escape: EscapeTarget::Local,
+                kind: TypedExprKind::Ident {
+                    name: func_name.to_string(),
+                },
+            };
+            let final_args = if outcome.swapped && new_typed_args.len() == 2 {
+                vec![new_typed_args[1].clone(), new_typed_args[0].clone()]
+            } else {
+                new_typed_args
+            };
+            return Some(Ok((
+                expanded_ret,
+                TypedExprKind::Closure {
+                    callee: Box::new(Spanned::new(callee_typed, callee.span)),
+                    args: final_args,
+                    ffi_symbol: overload.ffi_symbol,
+                },
+            )));
+        }
+    }
+
+    None
+}

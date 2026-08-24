@@ -245,10 +245,23 @@ pub(crate) fn infer_apply(
     }
 
     // Caminho 1: DispatchTable (call direto para FFI ou função Kata nomeada).
-    if let Some(result) =
-        try_dispatch_table(&func_name, &typed_args, &arg_types, callee, span, ctx, hint)
-    {
-        return result;
+    match try_dispatch_table(&func_name, &typed_args, &arg_types, callee, span, ctx, hint) {
+        Some(Ok(result)) => return Ok(result),
+        Some(Err(dispatch_err)) => {
+            // Direção A (Nível 3): se o dispatch falhou por mismatch
+            // base→refined, tenta provar o predicado do refined via Z3
+            // com as path conditions do caller antes de propagar o erro.
+            if let Some(precond_result) = super::apply_dispatch::try_refined_precondition(
+                &func_name, args, &typed_args, &arg_types, callee, span, env, ctx,
+            ) {
+                match precond_result {
+                    Ok(result) => return Ok(result),
+                    Err(precond_err) => return Err(precond_err),
+                }
+            }
+            return Err(dispatch_err);
+        }
+        None => {}
     }
 
     // Caminho 2c: OverloadSet no TypeEnv (PRD OverloadSet — aplicação parcial
