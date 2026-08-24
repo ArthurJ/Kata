@@ -585,16 +585,180 @@ erro compile-time.
 **Critério:** Suíte de testes cobre todos os exemplos deste PRD.
 `cargo test --workspace` passa.
 
-## 9. O que fica de fora (Nível 2 e 3)
+## 9. Nível 2 — Post-condições de funções (pattern matches)
 
-### Nível 2 — Pattern matches
+**Status:** Design especificado, não implementado.
 
-Facts extraídos de patterns estruturais. Ex: braço `Result::Ok n` de
-`div` sabe que o divisor ≠ 0. Exige propagar **pré-condições de
-funções** — não só guards locais, mas contratos das funções chamadas.
-Depende de o caller saber que `div` tem pré-condição `NonZero`.
+Nível 1 coleta facts **diretos** do código fonte (guard `> n 0` → fact
+`> n 0`). Nível 2 extrai **post-condições inter-procedurais**: quando
+uma função tem guards que decidem entre variants de um enum (ex:
+`Result::Ok` vs `Result::Err`, `Some` vs `None`), o caller que faz
+`match (f a b): Ok n: ...` aprende a condição que fez aquele variant
+ser produzido.
 
-### Nível 3 — Contratos de função
+### 9.1. Caso paradigmático
+
+```kata
+div :: Int Int => Result::(Int, Text)
+lambda a b:
+    = b 0: Result::Err "divisão por zero"
+    otherwise: Result::Ok (bi_div a b)
+```
+
+No call site `match (div 10 b): Result::Ok n: ...`, o braço `Ok` deveria
+saber que `b ≠ 0` — porque o guard `= b 0` produz `Err`, e `Ok` só é
+produzido no `otherwise` (negação do guard).
+
+### 9.2. Pass de extração (module-level)
+
+Um pass rodando **antes** da inferência dos call sites analisa cada
+`FunctionDef` que retorna `Result` e tem guards. Extrai qual condição
+faz a função produzir `Ok` vs `Err`.
+
+**Input:** `&[FunctionDef]` (disponível em `ResolvedModule.functions`)
+
+**Output:** `PostCondTable` — mapa `func_name → Vec<PostCondition>`
+
+```rust
+struct PostCondition {
+    /// Qual variante do enum esta post-condição descreve.
+    /// Ex: "Ok", "Err", "Some", "None", ou variant de enum customizado.
+    variant: String,
+    /// Enum ao qual o variant pertence (ex: "Result", "Optional").
+    enum_name: String,
+    /// Condição (sobre os params da função) que produz esta variante.
+    /// Negação da disjunção dos guards que produzem outros variants
+    /// do mesmo enum.
+    condition: TypedExpr,
+    /// Nomes dos parâmetros da função, na ordem posicional.
+    /// Extraídos dos patterns da primeira cláusula lambda.
+    param_names: Vec<String>,
+}
+```
+
+**Algoritmo por função:**
+
+1. Filtra funções cujo `return_type` é um enum (`Ty::Sum` ou
+   `Ty::Generic` com base de enum). `Result`, `Optional`, e enums
+   customizados do usuário todos se qualificam.
+2. Percorre os guards das cláusulas lambda.
+3. Para cada guard, classifica o body: qual variant do enum é produzido.
+   - `TypedExprKind::VariantConstruct { enum_name, variant, .. }` →
+     registra `(enum_name, variant)`.
+   - `TypedExprKind::VariantQual { enum_name, variant, .. }` →
+     equivalente para variants sem payload.
+   - Outro → não classificável, skip da função.
+4. Agrupa guards por variant produzido. Para cada variant V:
+   - Post-condição de V = negação da disjunção dos guards que produzem
+     **outros** variants do mesmo enum.
+   - Para `div`: guard `= b 0` → `Err`. Post-cond de `Ok` = `not(= b 0)`.
+     Post-cond de `Err` = `= b 0`.
+   - Para `find` com guard `x in lst` → `Some`: Post-cond de `Some` =
+     `x in lst`. Post-cond de `None` = `not(x in lst)`.
+5. `otherwise` (guard sem condition) produz o body daquele braço —
+   classifica o variant pelo body. A negação dos guards anteriores é a
+   condição implícita do `otherwise`.
+6. Registra na tabela com `param_names` extraídos dos patterns da
+   primeira cláusula (`lambda a b:` → `["a", "b"]`).
+
+### 9.3. Threading no InferCtx
+
+`PostCondTable` entra no `InferCtx` como referência imutável:
+
+```rust
+pub(crate) struct InferCtx<'a> {
+    // ... campos existentes ...
+    pub post_conds: &'a PostCondTable,
+}
+```
+
+Construído em `infer_module` logo após `populate_dispatch_table`, antes
+de qualquer `InferCtx` ser instanciado. O pass de extração tipa os
+guards reusando o `InferCtx` inicial (que já tem `table`,
+`enum_registry`, etc. populados).
+
+### 9.4. Consumo no visitor de match
+
+Em `infer_match` (`_match.rs`), ao processar um braço cujo pattern é
+`TypedPattern::Variant { enum_name, variant, .. }`:
+
+1. **Verifica se o scrutinee é `TypedExprKind::Closure { callee: Ident(name), args, .. }`.
+2. Consulta `ctx.post_conds.get(name)` → encontra post-condições da função.
+3. Identifica o variant do pattern (`enum_name`, `variant`) e busca a
+   post-condição correspondente.
+4. **Substituição parâmetro→argumento:** mapeia cada `Ident(param_name)`
+   na condition pelo arg correspondente do `Closure`.
+   - `div`'s condition `not(= b 0)` com `param_names: ["a", "b"]`.
+   - Call site `div 10 b` → args = `[10, b]`.
+   - `Ident("a")` → `args[0]` (IntLit 10), `Ident("b")` → `args[1]` (Ident "b").
+   - Resultado: `not(= b 0)` onde `b` agora referencia o `b` do caller.
+5. Adiciona o fact substituído às `arm_path_conditions`.
+
+Funciona para qualquer enum, não só `Result`. Se o pattern é
+`Some v` e a função tem guard que decide `Some` vs `None`, a
+post-condição de `Some` é adicionada.
+
+### 9.5. Substituição parâmetro→argumento
+
+A substituição é estrutural (alpha-renaming + splice), não unificação.
+A condition é uma `TypedExpr` com `Ident`s referenciando nomes dos
+params. Para cada `Ident(name)` na condition, se `name` corresponde a
+`param_names[i]`, substitui por `args[i].node.clone()`. Se o arg é
+`Ident("b")` (mesmo nome léxico, escopo diferente — coincidência), o
+fact vira `!= b 0` referenciando o `b` do caller. Se o arg é `(+ m n)`,
+vira `!= (+ m n) 0` — o Z3 trata aritmética de Ints, então funciona.
+Se o arg é uma chamada de função opaca, o Z3 produz variável opaca
+(fallback conservador).
+
+### 9.6. Generalização
+
+Não só `div` — qualquer função com o padrão:
+
+```kata
+f :: A B => Result::(C, Text)
+lambda x y:
+    <guard1>: Err "msg1"
+    <guard2>: Err "msg2"
+    otherwise: Ok (computation)
+```
+
+Post-cond de `Ok` = `not(<guard1> OR <guard2>)`.
+Post-cond de `Err` = `<guard1> OR <guard2>`.
+
+Ex: `safe_get :: List::A Int => Result::(A, Text)` com guard
+`>= idx (len lst): Err` → braço `Ok` aprende `< idx (len lst)`.
+
+### 9.7. Limitações honestas
+
+1. **Só funções Kata com corpo visível** — FFI (`@ffi`) não tem guards.
+   `div` é Kata com corpo (guard no lambda, chamada unchecked é FFI).
+   `/` é FFI puro — não se aplica.
+2. **Só guards cujo body é diretamente `VariantConstruct` ou
+   `VariantQual`** — se o body é expressão complexa que eventualmente
+   retorna um variant (ex: `let x := ...; Ok x`), o pass não rastreia
+   através de `let`/`match` aninhados. Versão inicial: classificação
+   direta apenas.
+3. **Só funções não-recursivas** — post-condições de funções recursivas
+   não são extraídas (a função chamada pode não ter sido inferida ainda).
+4. **Substituição de args complexos** — se o arg é uma chamada de função
+   opaca, o Z3 não prova (fallback conservador, sem regressão).
+
+### 9.8. Decisões de design fechadas
+
+1. **Nomes dos parâmetros:** extraídos dos patterns da primeira cláusula
+   lambda. Se cláusulas diferentes usam nomes diferentes, a primeira
+   vingar (padrão da linguagem — assinatura não nomeia, patterns sim).
+2. **`otherwise` como guard negado:** o `otherwise` não tem condition
+   explícita — é o fallback. A post-condição do body do `otherwise` é a
+   negação da disjunção dos guards anteriores que produziram a variante
+   oposta.
+3. **Tipagem das condições:** o pass de extração tipa os guards no
+   momento da extração, reusando `InferCtx` (que já tem `table`,
+   `enum_registry`, etc. populados antes do passo 3 de `infer_module`).
+4. **PostCondTable no InferCtx:** `&'a PostCondTable` (borrow), seguindo
+   o padrão dos outros campos de `InferCtx` que são referências.
+
+### 9.9. Nível 3 — Contratos de função (futuro)
 
 Tipos refinados em assinaturas (`div :: Int NonZero => ...`) propagados
 como path conditions no caller. Se `b::NonZero` está na assinatura, o
@@ -602,12 +766,16 @@ caller que passa `b` sabe que `b ≠ 0` no contexto. Refinement typing
 completo — o typeck consulta predicados do `StructRegistry` em cada
 ascription contra as constraints acumuladas.
 
+Nível 2 e Nível 3 coexistem: Nível 2 para funções Kata com corpo (o
+compiler deriva post-condições dos guards), Nível 3 para funções FFI
+sem corpo (contratos declarados explicitamente na assinatura).
+
 ### Roadmap
 
 Nível 1 cria a infraestrutura (`PathConditionCtx`, prova Z3, coleta no
-visitor). Nível 2 estende a coleta para patterns estruturais. Nível 3
-adiciona propagação inter-procedural de contratos. Cada nível é
-incremental sobre o anterior.
+visitor). Nível 2 adiciona o pass de extração de post-condições e o
+consumo no visitor de match. Nível 3 adiciona contratos explícitos em
+assinaturas. Cada nível é incremental sobre o anterior.
 
 ## 10. Riscos
 
