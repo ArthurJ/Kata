@@ -1,6 +1,6 @@
 import stdio
 
-@log{msg: "{_return}\n", when: "exit", file:stdout!()}
+@log{msg: "{_return}\n", when: "exit", file:__stdout__}
 quicksort :: [Int] => [Int]
 lambda []: []
 lambda [pivo:resto]:

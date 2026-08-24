@@ -1,21 +1,21 @@
 //! Testes E2E do PRD-stdio-alignment — stdio como File + log com File.
 //!
 //! Cobertura:
-//!  1. stdio_file_stdin          — read!(stdin!()) lê de stdin via File
-//!  2. stdio_file_stdout         — echo!(msg, stdout!()) escreve em stdout
-//!  3. stdio_file_stderr         — echo!(msg, stderr!()) escreve em stderr
-//!  4. stdio_file_close_noop     — close!(stdout!()) é no-op, não crash
-//!  5. stdio_stdin_write_erro    — write!(stdin!(), "msg") retorna Err
-//!  6. stdio_stdout_read_erro    — read!(stdout!()) retorna Err
-//!  7. log_to_file_stdout        — log!(level, msg, stdout!()) escreve em stdout
+//!  1. stdio_file_stdin          — read!(__stdin__) lê de stdin via File
+//!  2. stdio_file_stdout         — echo!(msg, __stdout__) escreve em stdout
+//!  3. stdio_file_stderr         — echo!(msg, __stderr__) escreve em stderr
+//!  4. stdio_file_close_noop     — close!(__stdout__) é no-op, não crash
+//!  5. stdio_stdin_write_erro    — write!(__stdin__, "msg") retorna Err
+//!  6. stdio_stdout_read_erro    — read!(__stdout__) retorna Err
+//!  7. log_to_file_stdout        — log!(level, msg, __stdout__) escreve em stdout
 //!  8. log_to_file_arquivo       — log!(level, msg, f) escreve em arquivo
 //!  9. log_template_level        — log!(level, "[{log_level}] {x}") interpola level
-//! 10. log_directive_file        — @log{msg: "...", file: stdout!()} escreve em stdout
+//! 10. log_directive_file        — @log{msg: "...", file: __stdout__} escreve em stdout
 //! 11. log_directive_multiplas   — duas @log (uma topic, uma file) ambas disparam
 //! 12. log_directive_log_level   — @log{msg: "[{log_level}] {x}", ...} interpola level
 //! 13. log_recv_result_ok        — log_recv!() retorna Ok(msg)
 //! 14. log_recv_result_err       — log_recv!() em tópico inexistente retorna Err
-//! 15. log_file_rejeita_policy   — log!(level, msg, stdout!(), "drop") é erro de tipo
+//! 15. log_file_rejeita_policy   — log!(level, msg, __stdout__, "drop") é erro de tipo
 //! 16. log_directive_topic_file_exclusivos — @log{topic: ..., file: ...} é erro
 
 use std::fs;
@@ -71,20 +71,20 @@ fn run_kata_with_stdin(path: &str, input: &str) -> (String, String, i32) {
     )
 }
 
-// ── 1. stdio_file_stdin — read!(stdin!()) lê de stdin via File ──
+// ── 1. stdio_file_stdin — read!(__stdin__) lê de stdin via File ──
 
-/// `read!(stdin!())` lê uma linha de stdin via File (FD 0).
+/// `read!(__stdin__)` lê uma linha de stdin via File (FD 0).
 /// O programa recebe "hello\n" via stdin e imprime o conteúdo lido.
 #[test]
 fn stdio_file_stdin() {
     let path = write_temp_kata(
         "stdio_file_stdin",
-        r#"import stdio.(stdin, stdout)
+        r#"import stdio
 action main => Int
-    let r := readline!(stdin!())
+    let r := readline!(__stdin__)
     match r
-        Ok msg: echo!(msg, stdout!())
-        Err _: echo!("erro", stdout!())
+        Ok msg: echo!(msg, __stdout__)
+        Err _: echo!("erro", __stdout__)
     0
 
 main!()"#,
@@ -98,16 +98,16 @@ main!()"#,
     );
 }
 
-// ── 2. stdio_file_stdout — echo!(msg, stdout!()) escreve em stdout ──
+// ── 2. stdio_file_stdout — echo!(msg, __stdout__) escreve em stdout ──
 
-/// `echo!(msg, stdout!())` escreve a mensagem em stdout via File (FD 1).
+/// `echo!(msg, __stdout__)` escreve a mensagem em stdout via File (FD 1).
 #[test]
 fn stdio_file_stdout() {
     let path = write_temp_kata(
         "stdio_file_stdout",
-        r#"import stdio.(stdout)
+        r#"import stdio
 action main => Int
-    echo!("via-stdout-file", stdout!())
+    echo!("via-stdout-file", __stdout__)
     0
 
 main!()"#,
@@ -121,16 +121,16 @@ main!()"#,
     );
 }
 
-// ── 3. stdio_file_stderr — echo!(msg, stderr!()) escreve em stderr ──
+// ── 3. stdio_file_stderr — echo!(msg, __stderr__) escreve em stderr ──
 
-/// `echo!(msg, stderr!())` escreve a mensagem em stderr via File (FD 2).
+/// `echo!(msg, __stderr__)` escreve a mensagem em stderr via File (FD 2).
 #[test]
 fn stdio_file_stderr() {
     let path = write_temp_kata(
         "stdio_file_stderr",
-        r#"import stdio.(stderr)
+        r#"import stdio
 action main => Int
-    echo!("via-stderr-file", stderr!())
+    echo!("via-stderr-file", __stderr__)
     0
 
 main!()"#,
@@ -144,17 +144,17 @@ main!()"#,
     );
 }
 
-// ── 4. stdio_file_close_noop — close!(stdout!()) é no-op ──
+// ── 4. stdio_file_close_noop — close!(__stdout__) é no-op ──
 
-/// `close!(stdout!())` não fecha FD 1 — stdout continua funcionando após close.
+/// `close!(__stdout__)` não fecha FD 1 — stdout continua funcionando após close.
 #[test]
 fn stdio_file_close_noop() {
     let path = write_temp_kata(
         "stdio_file_close_noop",
-        r#"import stdio.(stdout)
+        r#"import stdio
 action main => Int
-    close!(stdout!())
-    echo!("apos-close", stdout!())
+    close!(__stdout__)
+    echo!("apos-close", __stdout__)
     0
 
 main!()"#,
@@ -168,19 +168,19 @@ main!()"#,
     );
 }
 
-// ── 5. stdio_stdin_write_erro — write!(stdin!(), ...) retorna Err ──
+// ── 5. stdio_stdin_write_erro — write!(__stdin__, ...) retorna Err ──
 
-/// `write!(stdin!(), "msg")` retorna `Err("not writable")` — stdin é read-only.
+/// `write!(__stdin__, "msg")` retorna `Err("not writable")` — stdin é read-only.
 #[test]
 fn stdio_stdin_write_erro() {
     let path = write_temp_kata(
         "stdio_stdin_write_erro",
-        r#"import stdio.(stdin, stdout)
+        r#"import stdio
 action main => Int
-    let r := write!(stdin!(), "msg")
+    let r := write!(__stdin__, "msg")
     match r
-        Ok _: echo!("ok", stdout!())
-        Err e: echo!(e, stdout!())
+        Ok _: echo!("ok", __stdout__)
+        Err e: echo!(e, __stdout__)
     0
 
 main!()"#,
@@ -194,19 +194,19 @@ main!()"#,
     );
 }
 
-// ── 6. stdio_stdout_read_erro — read!(stdout!()) retorna Err ──
+// ── 6. stdio_stdout_read_erro — read!(__stdout__) retorna Err ──
 
-/// `read!(stdout!())` retorna `Err("not readable")` — stdout é write-only.
+/// `read!(__stdout__)` retorna `Err("not readable")` — stdout é write-only.
 #[test]
 fn stdio_stdout_read_erro() {
     let path = write_temp_kata(
         "stdio_stdout_read_erro",
-        r#"import stdio.(stdout)
+        r#"import stdio
 action main => Int
-    let r := read!(stdout!())
+    let r := read!(__stdout__)
     match r
-        Ok _: echo!("ok", stdout!())
-        Err e: echo!(e, stdout!())
+        Ok _: echo!("ok", __stdout__)
+        Err e: echo!(e, __stdout__)
     0
 
 main!()"#,
@@ -220,18 +220,18 @@ main!()"#,
     );
 }
 
-// ── 7. log_to_file_stdout — log!(level, msg, stdout!()) ──
+// ── 7. log_to_file_stdout — log!(level, msg, __stdout__) ──
 
-/// `log!(LogLevel::Info, "msg {x}", stdout!())` escreve em stdout via File.
+/// `log!(LogLevel::Info, "msg {x}", __stdout__)` escreve em stdout via File.
 #[test]
 fn log_to_file_stdout() {
     let path = write_temp_kata(
         "log_to_file_stdout",
-        r#"import stdio.(stdout)
+        r#"import stdio
 action main => Int
     let x := 42
     let msg := + "log-msg " (show x)
-    log!(LogLevel::Info, msg, stdout!())
+    log!(LogLevel::Info, msg, __stdout__)
     0
 
 main!()"#,
@@ -253,14 +253,14 @@ main!()"#,
 fn log_to_file_arquivo() {
     let path = write_temp_kata(
         "log_to_file_arquivo",
-        r#"import stdio.(stdout)
+        r#"import stdio
 action main => Int
     let f := open!("/tmp/kata-driver-stdio-log-e2e/log_test_out.txt", FileMode::Write)
     match f
         Ok fh:
             log!(LogLevel::Info, "arquivo-log", fh)
             close!(fh)
-        Err _: echo!("erro-open", stdout!())
+        Err _: echo!("erro-open", __stdout__)
     0
 
 main!()"#,
@@ -286,11 +286,11 @@ main!()"#,
 fn log_template_level() {
     let path = write_temp_kata(
         "log_template_level",
-        r#"import stdio.(stdout)
+        r#"import stdio
 action main => Int
     let x := 99
     let msg := + "[Warn] val=" (show x)
-    log!(LogLevel::Warn, msg, stdout!())
+    log!(LogLevel::Warn, msg, __stdout__)
     0
 
 main!()"#,
@@ -304,16 +304,16 @@ main!()"#,
     );
 }
 
-// ── 10. log_directive_file — @log{file: stdout!()} ──
+// ── 10. log_directive_file — @log{file: __stdout__} ──
 
-/// `@log{msg: "directive-file {_args}", when: "enter", file: stdout!()}` escreve em stdout.
-/// `_args` é a tupla de params `(42,)`. `stdout` é action 0-ary → `stdout!()`.
+/// `@log{msg: "directive-file {_args}", when: "enter", file: __stdout__}` escreve em stdout.
+/// `_args` é a tupla de params `(42,)`. `stdout` é action 0-ary → `__stdout__`.
 #[test]
 fn log_directive_file() {
     let path = write_temp_kata(
         "log_directive_file",
-        r#"import stdio.(stdout)
-@log{msg: "directive-file {_args}", when: "enter", file: stdout!()}
+        r#"import stdio
+@log{msg: "directive-file {_args}", when: "enter", file: __stdout__}
 action processar (x::Int) => Int
     + x 1
 
@@ -342,16 +342,16 @@ main!()"#,
 fn log_directive_multiplas() {
     let path = write_temp_kata(
         "log_directive_multiplas",
-        r#"import stdio.(stdout)
+        r#"import stdio
 @log{msg: "via-topic {_args}", when: "enter", topic: "audit"}
-@log{msg: "via-file {_args}", when: "enter", file: stdout!()}
+@log{msg: "via-file {_args}", when: "enter", file: __stdout__}
 action processar (x::Int) => Int
     + x 1
 
 action consumir => Int
     match log_recv!("audit")
-        Ok m: echo!(m, stdout!())
-        Err _: echo!("erro-recv", stdout!())
+        Ok m: echo!(m, __stdout__)
+        Err _: echo!("erro-recv", __stdout__)
     0
 
 action main => Int
@@ -377,7 +377,7 @@ main!()"#,
 
 // ── 12. log_directive_log_level — @log{msg: "[{log_level}] ..."} ──
 
-/// `@log{msg: "dir {_args}", when: "enter", file: stdout!(), level: LogLevel::Warn}`.
+/// `@log{msg: "dir {_args}", when: "enter", file: __stdout__, level: LogLevel::Warn}`.
 /// No sistema novo, `format!{dict}` não tem `_log_level`. O `level: LogLevel::Warn`
 /// despacha para o overload com `level: Text`, mas o body usa LogLevel::Info
 /// hardcoded. O teste verifica despacho com level, não interpolação de level.
@@ -385,8 +385,8 @@ main!()"#,
 fn log_directive_log_level() {
     let path = write_temp_kata(
         "log_directive_log_level",
-        r#"import stdio.(stdout)
-@log{msg: "dir {_args}", when: "enter", file: stdout!(), level: LogLevel::Warn}
+        r#"import stdio
+@log{msg: "dir {_args}", when: "enter", file: __stdout__, level: LogLevel::Warn}
 action processar (x::Int) => Int
     x
 
@@ -413,15 +413,15 @@ main!()"#,
 fn log_recv_result_ok() {
     let path = write_temp_kata(
         "log_recv_result_ok",
-        r#"import stdio.(stdout)
+        r#"import stdio
 action emitir => Unit
     log!(LogLevel::Info, "msg-ok", "test-ok")
     ()
 
 action consumir => Int
     match log_recv!("test-ok")
-        Ok m: echo!(m, stdout!())
-        Err e: echo!("err: {e}", stdout!())
+        Ok m: echo!(m, __stdout__)
+        Err e: echo!("err: {e}", __stdout__)
     0
 
 action main => Int
@@ -448,11 +448,11 @@ main!()"#,
 fn log_recv_result_err() {
     let path = write_temp_kata(
         "log_recv_result_err",
-        r#"import stdio.(stdout)
+        r#"import stdio
 action consumir => Int
     match log_recv!("topico-inexistente")
-        Ok m: echo!("ok: {m}", stdout!())
-        Err e: echo!("err: {e}", stdout!())
+        Ok m: echo!("ok: {m}", __stdout__)
+        Err e: echo!("err: {e}", __stdout__)
     0
 
 action main => Int
@@ -473,15 +473,15 @@ main!()"#,
 
 // ── 15. log_file_rejeita_policy — log!(..., file, "drop") é erro ──
 
-/// `log!(level, msg, stdout!(), "drop")` — policy com File é erro de tipo.
+/// `log!(level, msg, __stdout__, "drop")` — policy com File é erro de tipo.
 /// O 4º argumento (policy) não é válido quando o 3º é File.
 #[test]
 fn log_file_rejeita_policy() {
     let path = write_temp_kata(
         "log_file_rejeita_policy",
-        r#"import stdio.(stdout)
+        r#"import stdio
 action main => Int
-    log!(LogLevel::Info, "msg", stdout!(), "drop")
+    log!(LogLevel::Info, "msg", __stdout__, "drop")
     0
 
 main!()"#,
@@ -497,22 +497,22 @@ main!()"#,
 
 // ── 16. log_directive_topic_file_coexistem — @log{topic+file} funciona ──
 
-/// `@log{msg: "...", when: "enter", topic: "foo", file: stdout!()}` —
+/// `@log{msg: "...", when: "enter", topic: "foo", file: __stdout__}` —
 /// topic e file coexistem: o body da diretiva faz 2× log!() (uma CSP, uma file).
 /// No sistema de diretivas do stdlib, topic+file não são mutuamente exclusivos.
 #[test]
 fn log_directive_topic_file_coexistem() {
     let path = write_temp_kata(
         "log_directive_topic_file_coexistem",
-        r#"import stdio.(stdout)
-@log{msg: "coexist {_args}", when: "enter", topic: "coexist", file: stdout!()}
+        r#"import stdio
+@log{msg: "coexist {_args}", when: "enter", topic: "coexist", file: __stdout__}
 action processar (x::Int) => Int
     x
 
 action consumir => Int
     match log_recv!("coexist")
-        Ok m: echo!(m, stdout!())
-        Err _: echo!("erro-recv", stdout!())
+        Ok m: echo!(m, __stdout__)
+        Err _: echo!("erro-recv", __stdout__)
     0
 
 action main => Int
@@ -526,7 +526,7 @@ main!()"#,
 
     let (stdout, stderr, code) = run_kata(&path);
     assert_eq!(code, 0, "exit 0 — stderr: {stderr}");
-    // file: stdout!() escreve diretamente, topic: "coexist" publica via CSP
+    // file: __stdout__ escreve diretamente, topic: "coexist" publica via CSP
     // Ambas as mensagens aparecem em stdout — uma do file, uma do consumidor
     assert!(
         stdout.contains("coexist (42)"),
@@ -543,7 +543,7 @@ main!()"#,
 fn fiber_fecha_arquivo_sem_close() {
     let path = write_temp_kata(
         "fiber_fecha_arquivo_sem_close",
-        r#"import stdio.(stdout)
+        r#"import stdio
 action vazador => Unit
     let f := open!("/tmp/kata-driver-stdio-log-e2e/fase9_vazamento.txt", FileMode::Write)
     match f
@@ -563,10 +563,10 @@ action main => Int
         Ok fh:
             let r := readline!(fh)
             match r
-                Ok txt: echo!(txt, stdout!())
-                Err _: echo!("erro-read", stdout!())
+                Ok txt: echo!(txt, __stdout__)
+                Err _: echo!("erro-read", __stdout__)
             close!(fh)
-        Err _: echo!("erro-open2", stdout!())
+        Err _: echo!("erro-open2", __stdout__)
     0
 
 main!()"#,

@@ -1,21 +1,15 @@
-# stdio.kata — descritores padrão (stdin, stdout, stderr) como File.
+# stdio.kata — descritores padrão (stdin, stdout, stderr) como valores.
 #
 # Módulo opt-in: o usuário importa explicitamente.
-#   import stdio.(stdin, stdout, stderr)
 #   import stdio
 #
+# __stdin__, __stdout__, __stderr__ são injetados estruturalmente pelo
+# resolution (kata-resolution/src/lib.rs) — não são declarados aqui.
+# São bindings globais de tipo Ty::File no TypeEnv do módulo.
+#
 # Os handles são FileInner com is_stdio=true:
-#   - close!() é no-op (não fecha FD 0/1/2)
-#   - read!(stdout!()) retorna Err("not readable")
-#   - write!(stdin!(), ...) retorna Err("not writable")
+#   - close!(__stdout__) é no-op (não fecha FD 0/1/2)
+#   - read!(__stdout__) retorna Err("not readable")
+#   - write!(__stdin__, ...) retorna Err("not writable")
 
 import core
-
-@ffi("kata_rt_stdin")
-action stdin () => File
-
-@ffi("kata_rt_stdout")
-action stdout () => File
-
-@ffi("kata_rt_stderr")
-action stderr () => File

@@ -27,7 +27,7 @@ Port em estágio experimental. O compilador gera um binário PE32+ nativo (24MB)
 
 - Compilação JIT e geração de código
 - REPL interativo
-- I/O de arquivo, stdin/stdout/stderr
+- I/O de arquivo, e os valores de stdio (`__stdin__`, `__stdout__`, `__stderr__` via `import stdio`)
 - Sockets TCP
 - Canais (`channel!`, `<!`, `!>`, `select`, `timeout`)
 - `fork!` (fibers cooperativos)

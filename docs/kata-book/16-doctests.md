@@ -137,8 +137,8 @@ A função `fat` calcula o fatorial.
 }#
 ```
 
-A mensagem `carregado: exemplos/fatorial.kata` vai para stderr —
-não atrapalha a captura de output do doctest.
+A mensagem `carregado: exemplos/fatorial.kata` vai para `__stderr__` (o valor `File` de stderr, disponível via `import stdio`) —
+não atrapalha a captura de output do doctest, que só coleta `__stdout__`.
 
 Para testar funções de outro módulo, use `import` como linha `>>>`:
 

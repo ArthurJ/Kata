@@ -738,7 +738,7 @@ action processar (x::Int) => Int
 | `when` | `Text` | **sim** (Decisão D1) | `"enter"` = loga no prólogo. `"exit"` = loga no epílogo. Ausente = erro compile-time (`when é obrigatório em @log`). Outro valor = erro. |
 | `level` | `LogLevel` | não | Variante do enum `LogLevel` do prelude (`Debug`/`Info`/`Warn`/`Error`). Default: `Info`. |
 || `topic` | `Text` | não | Nome do canal onde publicar. Default: herdado do fiber ancestral (ou `"default"` se nenhuma config). Mutuamente exclusivo com `file`. |
-|| `file` | `Text` ou Ident | não | Identificador de action 0-ary que retorna `File` (ex: `stdout`) ou variável `File`. Escreve diretamente no arquivo via `kata_rt_file_write_text`. Mutuamente exclusivo com `topic`. `policy` não é válido com `file`. **(PRD-stdio-alignment)** |
+|| `file` | `Text` ou expressão | não | Expressão que resolve para `Ty::File` (ex: `__stdout__`) ou variável `File`. Escreve diretamente no arquivo via `kata_rt_file_write_text`. Mutuamente exclusivo com `topic`. `policy` não é válido com `file`. |
 || `policy` | `Text` | não | `"drop"` (fire-and-forget via Broadcast) ou `"block"` (Queue bounded cap=1 com backpressure, bloqueia se cheio). Default: herdado (ou `"drop"`). Só válido com `topic` (não com `file`). |
 
 ### Restrições de `when`
@@ -822,7 +822,7 @@ Typeck aceita 2, 3 ou 4 args. Dispara no ponto da chamada (linha), diferente de 
 
 ```kata
 match log_recv!("audit")
-    Result::Ok msg: echo!(msg, stdout!())
+    Result::Ok msg: echo!(msg, __stdout__)
     Result::Err _: echo!("erro: tópico não encontrado")
 ```
 
@@ -855,49 +855,47 @@ Setta `LOG_CONFIG` TLS no fiber atual. Filhos spawnados herdam via snapshot no `
 
 ---
 
-## Módulo `stdio` — descritores padrão como File (PRD-stdio-alignment)
+## Módulo `stdio` — descritores padrão como valores
 
-Módulo opt-in que expõe stdin/stdout/stderr como handles `File` apontando para FDs 0/1/2.
+Módulo opt-in que expõe stdin/stdout/stderr como bindings `Ty::File` apontando para FDs 0/1/2. Os identificadores dunder são injetados estruturalmente pelo resolution no módulo `stdio` e disponibilizados via `import stdio`.
 
 ```kata
-import stdio.(stdin, stdout, stderr)
-# ou
 import stdio
 ```
 
-| Action | Assinatura | Descrição |
+| Valor | Tipo | Descrição |
 |---|---|---|
-| `stdin!()` | `() => File` | Handle para FD 0 (read-only). Cache TLS (lazy). |
-| `stdout!()` | `() => File` | Handle para FD 1 (write-only). Cache TLS (lazy). |
-| `stderr!()` | `() => File` | Handle para FD 2 (write-only). Cache TLS (lazy). |
+| `__stdin__` | `File` | Handle para FD 0 (read-only). Cache TLS (lazy). |
+| `__stdout__` | `File` | Handle para FD 1 (write-only). Cache TLS (lazy). |
+| `__stderr__` | `File` | Handle para FD 2 (write-only). Cache TLS (lazy). |
 
 Propriedades dos handles stdio:
 
-- **`close!(stdout!())` é no-op** — `is_stdio: true` no `FileInner` previne double-free. O FD não é fechado.
-- **`read!(stdout!())` retorna `Err("not readable")`** — stdout/stderr são write-only.
-- **`write!(stdin!(), ...)` retorna `Err("not writable")`** — stdin é read-only.
-- Handles são cached em TLS — múltiplas chamadas a `stdout!()` retornam o mesmo handle.
+- **`close!(__stdout__)` é no-op** — `is_stdio: true` no `FileInner` previne double-free. O FD não é fechado.
+- **`read!(__stdout__)` retorna `Err("not readable")`** — stdout/stderr são write-only.
+- **`write!(__stdin__, ...)` retorna `Err("not writable")`** — stdin é read-only.
+- Handles são cached em TLS — múltiplas referências a `__stdout__` retornam o mesmo handle.
 - `reset_file_registry` (chamada entre testes) limpa o cache.
 
 Uso típico com `echo!`:
 
 ```kata
-import stdio.(stdout)
-echo!("mensagem", stdout!())
+import stdio
+echo!("mensagem", __stdout__)
 ```
 
 Uso com `log!`:
 
 ```kata
-import stdio.(stdout)
-log!(LogLevel::Info, "evento {x}", stdout!())
+import stdio
+log!(LogLevel::Info, "evento {x}", __stdout__)
 ```
 
 Uso com `@log`:
 
 ```kata
-import stdio.(stdout)
-@log{msg: "entrada {x}", when: "enter", file: stdout}
+import stdio
+@log{msg: "entrada {x}", when: "enter", file: __stdout__}
 action processar (x::Int) => Int
     + x 1
 ```

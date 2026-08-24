@@ -113,6 +113,27 @@ pub(crate) fn lower_expr(
 
         // ── Ident: use_var (variável local) ou function pointer (função nomeada) ──
         TypedExprKind::Ident { name } => {
+            // Caminho 0: valores stdio injetados pelo resolution.
+            // __stdin__/__stdout__/__stderr__ são bindings Ty::File que
+            // loweram para chamadas FFI (lazy materialization do handle).
+            if expr.ty == Ty::File {
+                let ffi_name = match name.as_str() {
+                    "__stdin__" => "kata_rt_stdin",
+                    "__stdout__" => "kata_rt_stdout",
+                    "__stderr__" => "kata_rt_stderr",
+                    _ => "",
+                };
+                if !ffi_name.is_empty() {
+                    let func_ref =
+                        ctx.ffi_refs
+                            .get(ffi_name)
+                            .ok_or_else(|| super::CodegenError::FfiSymbolNotFound {
+                                symbol: ffi_name.to_string(),
+                            })?;
+                    let call_inst = ctx.builder.ins().call(*func_ref, &[]);
+                    return Ok(ctx.builder.inst_results(call_inst)[0]);
+                }
+            }
             // Caminho 1: variável local no var_map (let bindings, parâmetros).
             if let Some(var) = ctx.var_map.get(name) {
                 return Ok(ctx.builder.use_var(*var));

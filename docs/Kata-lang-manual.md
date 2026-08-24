@@ -2169,13 +2169,13 @@ módulo), sempre precedendo imediatamente o item que modificam.
 * **`@test("descrição")`**: Marca um bloco para o *Test Runner*. A forma braced
   `@test{desc: "...", expects: "CompileError"}` marca um **teste negativo** —
   verifica que o código **não compila**.
-* **`@log{msg: "...", when: "enter"|"exit", level: LogLevel::Info, topic: "audit", policy: "block", file: stdout}`**: Injeta
+* **`@log{msg: "...", when: "enter"|"exit", level: LogLevel::Info, topic: "audit", policy: "block", file: __stdout__}`**: Injeta
   telemetria via canais CSP ou write direto em `File`. `msg` é template compile-time
   com interpolação `{expr}` e a variável sintética `{log_level}`. `when` obrigatório:
   `"enter"` loga no prólogo, `"exit"` no epílogo. `topic` (CSP) e `file` (write direto)
   são **mutuamente exclusivos**. `policy` só é válido com `topic` (rejeitado com
-  `file`). `file` aceita identificador de action 0-ary que retorna `File` (ex: `stdout`
-  de `import stdio.(stdout)`) ou variável `File`. Múltiplas diretivas `@log` são
+  `file`). `file` aceita expressão que resolve para `Ty::File` (ex: `__stdout__`
+  de `import stdio`) ou variável `File`. Múltiplas diretivas `@log` são
   suportadas — cada uma injeta independentemente. Independente de `log!()` (action
   do stdlib para publicação explícita no corpo). Ver §20.
 * **`@associative(0)`**: Anota que a função é associativa, informando o elemento
@@ -2921,7 +2921,7 @@ action processar (x::Int) -> Int
 | `when` | `Text` | sim | `"enter"` = loga no prólogo. `"exit"` = loga no epílogo. |
 | `level` | `LogLevel` | não | Variante do enum `LogLevel` (`Debug`/`Info`/`Warn`/`Error`). Default: `Info`. |
 | `topic` | `Text` | não | Nome do canal CSP. Default: herdado do fiber ancestral (ou `"default"`). Mutuamente exclusivo com `file`. |
-| `file` | `Ident` | não | Identificador de action 0-ary que retorna `File` (ex: `stdout` de `import stdio.(stdout)`) ou variável `File` no escopo. Write direto via `kata_rt_file_write_text`. Mutuamente exclusivo com `topic`. `policy` não é válido com `file`. |
+| `file` | `Expr` | não | Expressão que resolve para `Ty::File` (ex: `__stdout__` de `import stdio`) ou variável `File` no escopo. Write direto via `kata_rt_file_write_text`. Mutuamente exclusivo com `topic`. `policy` não é válido com `file`. |
 | `policy` | `Text` | não | `"drop"` (Broadcast, fire-and-forget) ou `"block"` (Queue cap=1, backpressure). Default: herdado (ou `"drop"`). Só válido com `topic` (não com `file`). |
 
 **Múltiplas diretivas `@log`:** São suportadas múltiplas diretivas `@log` na mesma
@@ -2932,7 +2932,7 @@ no mesmo item:
 
 ```kata
 @log{msg: "via-topic {x}", when: "enter", topic: "audit"}
-@log{msg: "via-file {x}", when: "enter", file: stdout}
+@log{msg: "via-file {x}", when: "enter", file: __stdout__}
 action processar (x::Int) => Int
     + x 1
 ```
@@ -2959,7 +2959,7 @@ valores, use `format!{}` ou `string_concat` antes de chamar `log!()`.
 
 ```kata
 log!(LogLevel::Info, "mensagem", "audit", "drop")
-log!(LogLevel::Warn, string_concat "[Warn] val=" (show x), stdout!())
+log!(LogLevel::Warn, string_concat "[Warn] val=" (show x), __stdout__)
 ```
 
 **Bifurcação por tipo do 3º arg:**
@@ -2992,13 +2992,13 @@ Overloads (4): `(LogLevel, Text)`, `(LogLevel, Text, Text)`, `(LogLevel, Text, T
 log!(LogLevel::Info, "msg dinamica", "audit", "block")
 
 # Write direto em stdout (File)
-log!(LogLevel::Info, "msg dinamica", stdout!())
+log!(LogLevel::Info, "msg dinamica", __stdout__)
 
 # CSP com config herdada (sem 3º arg)
 log!(LogLevel::Error, "erro dinamico")
 
 # Interpolação manual com string_concat + show
-log!(LogLevel::Warn, string_concat "[Warn] val=" (show x), stdout!())
+log!(LogLevel::Warn, string_concat "[Warn] val=" (show x), __stdout__)
 ```
 
 ### 20.3. Action nativa `log_recv!()`
@@ -3010,8 +3010,8 @@ fechou. Precisa estar em fiber context.
 
 ```kata
 match log_recv!("audit")
-    Result::Ok msg: echo!(msg, stdout!())
-    Result::Err reason: echo!("erro: {reason}", stdout!())
+    Result::Ok msg: echo!(msg, __stdout__)
+    Result::Err reason: echo!("erro: {reason}", __stdout__)
 ```
 
 **Caminhos de erro:**
@@ -3202,39 +3202,40 @@ close (s::Socket) => Unit
 | `read!` | ❌ `Err` | ✅ |
 | `write!` | ❌ `Err` | ✅ |
 
-### 22.5. Descritores Padrão (stdio como `File`)
+### 22.5. Descritores Padrão (stdin/stdout/stderr como valores)
 
-O módulo `stdio` fornece `stdin!()`, `stdout!()` e `stderr!()` como actions 0-ary
-que retornam `File`. Os handles apontam para FDs 0, 1 e 2 do processo,
+O módulo `stdio` fornece `__stdin__`, `__stdout__` e `__stderr__` como valores
+`Ty::File`. Os identificadores dunder são bindings injetados estruturalmente pelo
+resolution no módulo `stdio`. Os handles apontam para FDs 0, 1 e 2 do processo,
 encapsulados em `FileInner` com `is_stdio: true`.
 
 **Importação — módulo opt-in, não no prelude:**
 
 ```kata
-import stdio.(stdin, stdout, stderr)   # import seletivo
-import stdio                            # import do módulo inteiro
+import stdio                            # importa o módulo; __stdin__, __stdout__, __stderr__ ficam disponíveis
+import stdio.(__stdout__)               # import seletivo
 ```
 
 **Uso:**
 
 ```kata
-import stdio.(stdout)
-echo!("msg", stdout!())
+import stdio
+echo!("msg", __stdout__)
 ```
 
 ```kata
-import stdio.(stdin, stdout)
+import stdio
 action main => Int
-    let r := readline!(stdin!())
+    let r := readline!(__stdin__)
     match r
-        Result::Ok msg: echo!(msg, stdout!())
-        Result::Err _: echo!("erro", stdout!())
+        Result::Ok msg: echo!(msg, __stdout__)
+        Result::Err _: echo!("erro", __stdout__)
     0
 ```
 
 **Propriedades dos handles stdio:**
 
-| Operação | stdin (FD 0) | stdout (FD 1) | stderr (FD 2) |
+| Operação | `__stdin__` (FD 0) | `__stdout__` (FD 1) | `__stderr__` (FD 2) |
 |---|---|---|---|
 | `read!` / `readline!` / `read_chunk!` | ✅ | `Err("not readable")` | `Err("not readable")` |
 | `write!` | `Err("not writable")` | ✅ | ✅ |
@@ -3242,20 +3243,20 @@ action main => Int
 
 - **`close!` é no-op** — stdio handles têm `is_stdio: true`, que previne
   `drop_in_place`. O FD 0/1/2 nunca é fechado pelo runtime.
-- **Handles são cached (TLS)** — múltiplas chamadas a `stdout!()` retornam o
+- **Handles são cached (TLS)** — os bindings dunder resolvem sempre para o
   mesmo handle. O cache é limpo entre testes por `reset_stdio_cache`.
-- **Modo:** stdin é `IoMode::Read`, stdout/stderr são `IoMode::Write`.
+- **Modo:** `__stdin__` é `IoMode::Read`, `__stdout__`/`__stderr__` são `IoMode::Write`.
 
 **Integração com `echo!`, `log!()` e `@log`:**
 
 `echo!` tem overload `(msg::SHOW, f::File)` que escreve `show(msg) + "\n"` via
-`write!`. Com stdio, `echo!("msg", stdout!())` escreve em stdout via File.
+`write!`. Com stdio, `echo!("msg", __stdout__)` escreve em stdout via File.
 
-`log!()` aceita `File` como 3º arg — `log!(level, msg, stdout!())` escreve
+`log!()` aceita `File` como 3º arg — `log!(level, msg, __stdout__)` escreve
 diretamente em stdout via `kata_rt_file_write_text` (ver §20.2).
 
-`@log{file: stdout}` aceita identificador de action 0-ary que retorna `File` —
-o inference gera `stdout!()` como expressão `File` (ver §20.1).
+`@log{file: __stdout__}` aceita expressão que resolve para `Ty::File` —
+o inference usa o valor dunder como expressão `File` (ver §20.1).
 
 **Runtime FFIs:**
 - `kata_rt_stdin() -> i64` — handle File para FD 0 (read-only).

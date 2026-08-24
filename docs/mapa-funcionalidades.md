@@ -323,6 +323,13 @@ pipeline e não se encaixam no esquema de camadas sequenciais:
   `kata-resolution`.
 - **File I/O:** `File` (handles abertos/fechados pelo epílogo da
   Action). PRD-file-io.
+- **stdio como valores:** `__stdin__`, `__stdout__`, `__stderr__` —
+  bindings `Ty::File` injetados estruturalmente pelo resolution no
+  módulo `stdio`. Disponíveis via `import stdio`. Lazy materialization:
+  o handle só é criado na primeira referência ao valor (FFI
+  `kata_rt_stdin/stdout/stderr`). `close!` é no-op (`is_stdio` flag),
+  read/write enforcement por `IoMode` (runtime, não tipo).
+  PRD-stdio-values.
 - **Sockets:** `Socket` (TCP/UDP), `select` (multiplexação de I/O
   handles — file e socket). PRD-socket-io, PRD-select-io.
 - **Doctests:** `kata-driver/src/doctest.rs` — extração e execução de

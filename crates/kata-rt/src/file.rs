@@ -636,7 +636,7 @@ pub unsafe extern "C" fn kata_rt_file_close(handle: i64) {
 // distinguem "not readable" (stdout/stderr) e "not writable" (stdin).
 //
 // Cache TLS: o handle é criado uma única vez (lazy) e cached.
-// Múltiplas chamadas a `stdout!()` retornam o mesmo handle.
+// Múltiplas chamadas a `__stdout__` retornam o mesmo handle.
 // `reset_file_registry` limpa o cache entre testes.
 
 thread_local! {

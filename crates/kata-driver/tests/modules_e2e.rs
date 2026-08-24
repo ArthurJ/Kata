@@ -225,12 +225,12 @@ fn stdlib_explicito_com_shadow() {
 
 // ── 7. Fallback stdlib sem shadow ────────────────────────────────
 
-/// `import stdio.(stdin)` sem shadow local cai para stdlib.
+/// `import stdio` sem shadow local cai para stdlib.
 #[test]
 fn fallback_stdlib_sem_shadow() {
     let dir = fresh_dir("kata-e2e-fallback-stdlib");
 
-    let main_path = write_kata(&dir, "main", "import stdio.(stdin)\n\n42");
+    let main_path = write_kata(&dir, "main", "import stdio\n\n42");
 
     let (stdout, stderr, code) = run_kata(&main_path);
     assert_eq!(code, 0, "exit code não-zero. stderr: {stderr}");

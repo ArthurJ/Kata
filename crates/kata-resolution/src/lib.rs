@@ -162,6 +162,16 @@ fn resolve_inner(
         origin,
     );
 
+    // Injeção estrutural: módulo stdio exporta __stdin__/__stdout__/__stderr__
+    // como valores Ty::File. Não são declarados no .kata — são injetados aqui
+    // porque FD 0/1/2 são fatos do mundo, não computações. O codegen lowera
+    // estes idents para chamadas FFI (kata_rt_stdin/stdout/stderr).
+    if origin == "stdio" {
+        type_env.define("__stdin__", Ty::File, "stdio");
+        type_env.define("__stdout__", Ty::File, "stdio");
+        type_env.define("__stderr__", Ty::File, "stdio");
+    }
+
     // Constrói o TypeGraph a partir dos registries populados no Pass 0.
     // Para módulos do usuário, o prelude_iface_reg já traz interfaces do
     // prelude (SHOW, NUM, etc.). Se `prelude_type_graph` está disponível,

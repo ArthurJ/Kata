@@ -86,6 +86,13 @@ pub fn merge_imports(merged: &mut ResolvedModule, imports: &[ImportedModule]) {
                     merged
                         .type_env
                         .define(&qual_name, binding.ty.clone(), origin);
+                    // Bindings dunder (__name__) são valores built-in injetados
+                    // estruturalmente (ex: __stdin__, __stdout__, __stderr__).
+                    // Disponibilizar no escopo direto — `import stdio` traz
+                    // __stdout__ sem precisar qualificar.
+                    if name.starts_with("__") {
+                        merged.type_env.define(name, binding.ty.clone(), origin);
+                    }
                 }
                 merge_registries(merged, &imported.resolved);
             }
@@ -97,6 +104,10 @@ pub fn merge_imports(merged: &mut ResolvedModule, imports: &[ImportedModule]) {
                     merged
                         .type_env
                         .define(&qual_name, binding.ty.clone(), origin);
+                    // Bindings dunder no escopo direto (mesmo que WholeModule).
+                    if name.starts_with("__") {
+                        merged.type_env.define(name, binding.ty.clone(), origin);
+                    }
                 }
                 merge_registries(merged, &imported.resolved);
             }
