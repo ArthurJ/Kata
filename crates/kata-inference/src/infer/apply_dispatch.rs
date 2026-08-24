@@ -540,6 +540,105 @@ pub(crate) fn try_refines_fallback(
     Some((fallback_arg_types, overload))
 }
 
+/// Direção B — wrapper que extrai params da overload do resultado do dispatch.
+///
+/// O resultado do dispatch é `(Ty, TypedExprKind)` onde `TypedExprKind::Closure`
+/// contém o callee tipado com `ty: Ty::Function(params, ret)`. Esta função
+/// extrai os params e delega para `extract_preconditions`.
+pub(crate) fn extract_preconditions_from_result(
+    result: &(Ty, TypedExprKind),
+    typed_args: &[Spanned<TypedExpr>],
+    refined_decls: &[kata_resolution::RefinedDeclInfo],
+    env: &mut kata_core::ty::TypeEnv,
+    ctx: &InferCtx,
+) {
+    let TypedExprKind::Closure { callee, .. } = &result.1 else {
+        return;
+    };
+    let Ty::Function(params, _) = &callee.node.ty else {
+        return;
+    };
+    extract_preconditions(params, typed_args, refined_decls, env, ctx);
+}
+
+/// Direção B (Nível 3 — aprendizado de predicados após chamada):
+///
+/// Após dispatch bem-sucedido, se a assinatura tem parâmetros refined e o
+/// argumento correspondente é `Ident(name)` (variável do caller), adiciona
+/// o predicado substituído como path condition no escopo do caller.
+///
+/// Para cada (param, arg) onde param é refined e arg é `Ident`:
+/// 1. Consulta `refined_decls` para obter os predicados do tipo refined.
+/// 2. Substitui Hole `_` pelo arg na AST do predicado.
+/// 3. Tipa o predicado substituído via `infer_expr_hinted`.
+/// 4. Adiciona como fact nas `path_conditions` do caller.
+///
+/// Se o arg não é `Ident` (ex: literal, expressão complexa), não adiciona
+/// — não há variável para propagar.
+pub(crate) fn extract_preconditions(
+    params: &[Ty],
+    typed_args: &[Spanned<TypedExpr>],
+    refined_decls: &[kata_resolution::RefinedDeclInfo],
+    env: &mut kata_core::ty::TypeEnv,
+    ctx: &InferCtx,
+) {
+    for (param, typed_arg) in params.iter().zip(typed_args.iter()) {
+        // Extrai o nome da variável do arg. Aceita Ident direto ou
+        // TypeAscription { expr: Ident } (quando o arg foi ascriptado
+        // explicitamente ou via Direção A).
+        let var_name = match &typed_arg.node.kind {
+            TypedExprKind::Ident { name } => name.clone(),
+            TypedExprKind::TypeAscription { expr, .. } => {
+                if let TypedExprKind::Ident { name } = &expr.node.kind {
+                    name.clone()
+                } else {
+                    continue;
+                }
+            }
+            _ => continue,
+        };
+        // O tipo base do arg é o tipo antes do refining. Se o arg é
+        // TypeAscription, o tipo base está dentro do expr.
+        let arg_base_ty = match &typed_arg.node.kind {
+            TypedExprKind::TypeAscription { expr, .. } => &expr.node.ty,
+            _ => &typed_arg.node.ty,
+        };
+        for rd in refined_decls {
+            if rd.base_ty != *arg_base_ty {
+                continue;
+            }
+            let param_refined_name = match param {
+                Ty::Struct(StructKey::Family(name)) | Ty::Struct(StructKey::Instance(name, _)) => {
+                    name.clone()
+                }
+                _ => continue,
+            };
+            if rd.name != param_refined_name {
+                continue;
+            }
+            let arg_expr = Spanned::new(
+                Expr::Ident { name: var_name.clone() },
+                typed_arg.span,
+            );
+            for pred in &rd.predicates {
+                let substituted = super::const_eval::substitute_hole(pred, &arg_expr);
+                let typed_pred = match super::expr::infer_expr_hinted(
+                    &substituted.node,
+                    &substituted.span,
+                    env,
+                    ctx,
+                    false,
+                    Some(&Ty::Sum("Boolean".to_string())),
+                ) {
+                    Ok(tp) => tp,
+                    Err(_) => continue,
+                };
+                ctx.path_conditions.borrow_mut().add_fact(typed_pred);
+            }
+        }
+    }
+}
+
 /// Direção A (Nível 3 — pré-condições inter-procedurais):
 ///
 /// Quando o dispatch falha porque um argumento é tipo base (`Int`) e o

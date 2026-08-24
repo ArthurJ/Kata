@@ -246,7 +246,15 @@ pub(crate) fn infer_apply(
 
     // Caminho 1: DispatchTable (call direto para FFI ou função Kata nomeada).
     match try_dispatch_table(&func_name, &typed_args, &arg_types, callee, span, ctx, hint) {
-        Some(Ok(result)) => return Ok(result),
+        Some(Ok(result)) => {
+            // Direção B (Nível 3): após dispatch bem-sucedido, se a overload
+            // tem parâmetros refined e o arg é Ident, aprende o predicado
+            // como path condition no escopo do caller.
+            super::apply_dispatch::extract_preconditions_from_result(
+                &result, &typed_args, ctx.refined_decls, env, ctx,
+            );
+            return Ok(result);
+        }
         Some(Err(dispatch_err)) => {
             // Direção A (Nível 3): se o dispatch falhou por mismatch
             // base→refined, tenta provar o predicado do refined via Z3
@@ -255,7 +263,13 @@ pub(crate) fn infer_apply(
                 &func_name, args, &typed_args, &arg_types, callee, span, env, ctx,
             ) {
                 match precond_result {
-                    Ok(result) => return Ok(result),
+                    Ok(result) => {
+                        // Direção B também se aplica após Direção A.
+                        super::apply_dispatch::extract_preconditions_from_result(
+                            &result, &typed_args, ctx.refined_decls, env, ctx,
+                        );
+                        return Ok(result);
+                    }
                     Err(precond_err) => return Err(precond_err),
                 }
             }

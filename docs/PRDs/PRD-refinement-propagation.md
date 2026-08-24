@@ -1,7 +1,7 @@
 # PRD — Refinement Propagation (Path Conditions no Typeck)
 
-**Status:** ✅ Nível 1 e Nível 2 implementados. Nível 3 design especificado.
-**Data:** 2026-08-23
+**Status:** ✅ Nível 1, Nível 2 e Nível 3 implementados.
+**Data:** 2026-08-24
 **Implementado em:** sessão 2026-08-23 — `path_conditions.rs`, `_match.rs`, `apply_lambda.rs`, `ascription.rs`, `lowering/expr.rs`
 **Depende de:** `const_eval_predicate` (const_eval.rs) ✅, `Z3Translator` (guard_completeness.rs) ✅, `StructRegistry` com predicados ✅, smart constructors falíveis (constructors_refined.rs) ✅
 **Não depende de:** Nenhum PRD pendente
@@ -760,7 +760,7 @@ Ex: `safe_get :: List::A Int => Result::(A, Text)` com guard
 
 ### 9.9. Nível 3 — Contratos de função (pré-condições inter-procedurais)
 
-**Status:** Design especificado, não implementado.
+**Status:** ✅ Implementado — Direção A (commit `41df71a`) + Direção B (commit abaixo).
 
 Nível 1 coleta facts locais (guards). Nível 2 propaga post-condições
 (extraídas do corpo da função chamada). Nível 3 propaga **pré-condições**:

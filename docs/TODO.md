@@ -62,12 +62,15 @@ funções com guards, consumo no `_match.rs`, `InlineFnTable` para
 inlining de funções puras no Z3 translator, payload binding
 conecta binding do pattern ao argumento. 13 testes E2E em
 `t_refinement_propagation_e2e.rs`. 1841 testes, 0 regressão.
-Níveis restantes:
-- **Nível 3 — Contratos de função:** pré-condições inter-procedurais.
-  Design especificado no PRD §9.9 (duas direções: A=aceitação via path
-  conditions no dispatch, B=aprendizado de predicados após chamada).
-  Reusa `refined_decls` e `try_prove_with_path_conditions` — sem
-  desbloqueio. A implementar.
+**Nível 3 (contratos de função) implementado:**
+- **Direção A** (commit `41df71a`): aceitação via path conditions no
+  dispatch — quando arg é tipo base e param é refined, Z3 prova o
+  predicado com as path conditions do caller.
+- **Direção B** (commit abaixo): aprendizado de predicados após chamada
+  — após dispatch bem-sucedido com arg `Ident`, o predicado do refined
+  é extraído e adicionado como path condition no escopo do caller.
+  Migra `PathConditionCtx` para `RefCell` (mutação interior).
+4 testes E2E novos (20 total). 1848 testes, 0 regressão.
 
 ### TypeGraph: migrar 6 sites de classificação ad-hoc para o grafo
 **Estado:** Pendente (consolidação de dívida técnica).

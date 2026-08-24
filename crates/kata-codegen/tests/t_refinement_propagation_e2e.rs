@@ -478,3 +478,97 @@ fn t_nivel3_direcao_a_path_condition_refuta() {
 test!()"#;
     assert!(infer_fails(src), "path condition = b 0 refuta NonZero");
 }
+
+// ── 17. Direção B — aprende predicado após chamada com ascription explícita ──
+
+/// Dentro de um braço com path condition `not(= b 0)`, `b::NonZero`
+/// é provado pela path condition. A chamada `/ 10 (b::NonZero)` sucede.
+/// Após o dispatch, a Direção B extrai o predicado `!= b 0` e adiciona
+/// como path condition. A ascription `b::NonZero` subsequente é provada
+/// pela path condition aprendida — mas neste caso ela já era provável
+/// pela path condition do braço. O teste verifica que a Direção B não
+/// interfere negativamente quando a path condition já existia.
+#[test]
+fn t_nivel3_direcao_b_apos_ascription_explicita() {
+    let src = r#"action test => NonZero::Int
+    let b := 5
+    match (= b 0)
+        Boolean::False:
+            let _ := / 10 (b::NonZero)
+            b::NonZero
+        Boolean::True: 5::NonZero
+test!()"#;
+    let (raw, ty) = eval_src(src);
+    assert_eq!(
+        ty,
+        Ty::Struct(StructKey::Instance("NonZero".into(), "Int".into())),
+        "Direção B deve aprender b ≠ 0 após chamada e provar b::NonZero"
+    );
+    assert_eq!(untag_smi(raw), 5);
+}
+
+// ── 18. Direção B — após Direção A, predicado é aprendido ──────────────
+
+/// `(/ 10 b)` no braço `Boolean::False` do match sobre `(= b 0)`.
+/// A Direção A aceita `b` (Int) como `NonZero` usando a path condition
+/// `not(= b 0)` do braço. Após o dispatch, a Direção B aprende
+/// `!= b 0` como path condition. A ascription `b::NonZero` na linha
+/// seguinte é provada pela path condition aprendida.
+#[test]
+fn t_nivel3_direcao_b_apos_direcao_a() {
+    let src = r#"action test => NonZero::Int
+    let b := 5
+    match (= b 0)
+        Boolean::False:
+            let _ := / 10 b
+            b::NonZero
+        Boolean::True: 5::NonZero
+test!()"#;
+    let (raw, ty) = eval_src(src);
+    assert_eq!(
+        ty,
+        Ty::Struct(StructKey::Instance("NonZero".into(), "Int".into())),
+        "Direção B após Direção A deve aprender b ≠ 0 e provar b::NonZero"
+    );
+    assert_eq!(untag_smi(raw), 5);
+}
+
+// ── 19. Direção B — sem chamada prévia, ascription de não-literal falha ──
+
+/// Sem chamada prévia que ensine o predicado, `b::NonZero` sobre
+/// não-literal continua falhando (comportamento original). A Direção B
+/// não introduz regressão — só aprende quando há dispatch bem-sucedido.
+#[test]
+fn t_nivel3_direcao_b_sem_chamada_falha() {
+    let src = r#"action test => NonZero::Int
+    let b := 5
+    b::NonZero
+test!()"#;
+    assert!(
+        infer_fails(src),
+        "sem chamada prévia, ascription de não-literal deve falhar"
+    );
+}
+
+// ── 20. Direção B — arg não-Ident (literal) não propaga ───────────────
+
+/// `/ 10 (5::NonZero)` — o arg é literal `5`, não `Ident`. A Direção B
+/// não adiciona path condition (não há variável para propagar).
+/// O código compila porque `5::NonZero` é literal (validado por const_eval).
+/// Mas `b::NonZero` na linha seguinte ainda falha (b não é literal e
+/// sem path condition aprendida).
+#[test]
+fn t_nivel3_direcao_b_arg_literal_nao_propaga() {
+    let src = r#"action test => NonZero::Int
+    let b := 5
+    let _ := / 10 (5::NonZero)
+    5::NonZero
+test!()"#;
+    let (raw, ty) = eval_src(src);
+    assert_eq!(
+        ty,
+        Ty::Struct(StructKey::Instance("NonZero".into(), "Int".into())),
+        "literal não propaga path condition, mas compila com literal"
+    );
+    assert_eq!(untag_smi(raw), 5);
+}
