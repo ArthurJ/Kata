@@ -49,20 +49,15 @@ do codegen.
 - Renomear `@trace` de volta para `@log` (diretiva de telemetria)
 
 ### Refinement propagation (path conditions no typeck)
-**Estado:** Ideia. Tipos refinados já existem — predicados no `StructRegistry`,
+**Estado:** Nível 1 implementado (PRD `docs/PRDs/PRD-refinement-propagation.md`).
+Tipos refinados já existem — predicados no `StructRegistry`,
 smart constructor falível, `const_eval_predicate` valida literais em
-compile-time. O gap: `const_eval_predicate` só funciona sobre literais;
-non-literals retornam `None` e a ascription passa sem verificação.
-Path conditions acumulariam facts (de guards e pattern matches) em cada
-branch, permitindo ao Z3 provar implicações sobre valores não-literais
-(ex: `n::PositiveInt` onde `n > 0` é conhecido do contexto). O Z3 é o
-motor de prova, o tradutor `TypedExpr → Z3` já existe
-(`guard_completeness.rs`), o fallback conservador (smart constructor) já
-existe. O componente ausente é a coleta de path conditions no visitor de
-inferência. Níveis de maturidade da coleta:
-- **Nível 1 — Guards locais:** acumular facts dos guards do próprio
-  lambda/match no visitor de inferência. Mais direto, cobre o padrão mais
-  comum.
+compile-time. **Nível 1 (guards locais) implementado:** `PathConditionCtx`
+em `InferCtx` coleta facts de guards e `match` sobre `Boolean` no visitor
+de inferência. `try_prove_with_path_conditions` (Z3) prova ascriptions
+refinadas sobre não-literais. 8 testes E2E em
+`t_refinement_propagation_e2e.rs`. 1823 testes, 0 regressão.
+Níveis restantes:
 - **Nível 2 — Pattern matches:** facts extraídos de patterns (ex: braço
   `Result::Ok n` de `div` sabe `b ≠ 0`). Exige propagar pré-condições de
   funções, não só guards locais.
@@ -92,8 +87,4 @@ ação imediata. Reavaliar caso a caso.
 - **`src/ipc.rs:157`** — Implementar `spawn` no Windows. Ver
   `docs/PRDs/PRD-portability-windows.md`.
 
-### kata-driver
-
-- **`tests/repl_e2e.rs:704`** — Uncomment quando action call do REPL
-  prompt for corrigido.
 

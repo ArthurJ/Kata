@@ -127,6 +127,7 @@ pub(crate) fn synthesize_refined(
         ret_ty: None,
         in_loop: false,
         deferred_lambdas: &deferred,
+                path_conditions: Default::default(),
     };
 
     let mut functions = Vec::new();

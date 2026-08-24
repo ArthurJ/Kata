@@ -78,6 +78,11 @@ pub(crate) struct InferCtx<'a> {
     /// o lambda é guardado aqui. Quando `f 5 3` é aplicado, `infer_apply`
     /// consulta esta table e re-inere o lambda com os arg types reais.
     pub deferred_lambdas: &'a DeferredLambdaTable,
+    /// Path conditions — facts booleanos acumulados de guards e
+    /// pattern matches no escopo atual. Usados para provar
+    /// ascriptions refinadas sobre não-literais via Z3.
+    /// Nível 1: guards locais apenas (PRD-refinement-propagation).
+    pub path_conditions: super::path_conditions::PathConditionCtx,
 }
 
 /// Infere o tipo de uma expressão, produzindo um `TypedExpr`.
@@ -824,6 +829,7 @@ pub(crate) fn infer_expr_hinted(
                 ret_ty: ctx.ret_ty,
                 in_loop: true,
                 deferred_lambdas: ctx.deferred_lambdas,
+                path_conditions: ctx.path_conditions.clone(),
             };
             let mut typed_body = Vec::new();
             for expr in body {

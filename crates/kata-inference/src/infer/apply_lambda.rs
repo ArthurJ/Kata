@@ -262,11 +262,26 @@ pub(crate) fn infer_lambda_body(
                         span: cond.span.into(),
                     });
                 }
+
+                // Path conditions: guard é verdadeiro neste braço.
+                let guard_ctx = InferCtx {
+                    table: ctx.table,
+                    enum_registry: ctx.enum_registry,
+                    struct_registry: ctx.struct_registry,
+                    refined_decls: ctx.refined_decls,
+                    interface_registry: ctx.interface_registry,
+                    refines_registry: ctx.refines_registry,
+                    ret_ty: ctx.ret_ty,
+                    in_loop: ctx.in_loop,
+                    deferred_lambdas: ctx.deferred_lambdas,
+                    path_conditions: ctx.path_conditions.with_fact(cond_typed.clone()),
+                };
+
                 let body_typed = infer_expr_hinted(
                     &guard.body.node,
                     &guard.body.span,
                     lambda_env,
-                    ctx,
+                    &guard_ctx,
                     true,
                     ret_hint,
                 )?;

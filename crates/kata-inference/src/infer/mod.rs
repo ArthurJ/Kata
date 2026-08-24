@@ -43,6 +43,7 @@ mod iface_dispatch;
 mod lambda;
 mod log_builtins;
 mod partial_dispatch;
+mod path_conditions;
 mod recursion;
 mod refined_builders;
 mod show_synthesis;
@@ -284,6 +285,7 @@ pub fn infer_module(
                 ret_ty: None,
                 in_loop: false,
                 deferred_lambdas: &deferred_lambdas,
+                path_conditions: Default::default(),
             };
             // Inferência direta do value (sem wrapping em Expr::Let).
             let typed_value =
@@ -324,6 +326,7 @@ pub fn infer_module(
             ret_ty: None,
             in_loop: false,
             deferred_lambdas: &deferred_lambdas,
+                path_conditions: Default::default(),
         };
         let typed_func = infer_named_function(func_def, &ctx, &type_env)?;
         // Registra no TypeEnv para permitir uso como valor (call_indirect).
@@ -361,6 +364,7 @@ pub fn infer_module(
             ret_ty: Some(&action_def.return_type),
             in_loop: false,
             deferred_lambdas: &deferred_lambdas,
+                path_conditions: Default::default(),
         };
         let typed_action = infer_action(action_def, &ctx, &type_env)?;
         typed_actions.push(typed_action);
@@ -394,6 +398,7 @@ pub fn infer_module(
                     ret_ty: None,
                     in_loop: false,
                     deferred_lambdas: &deferred_lambdas,
+                path_conditions: Default::default(),
                 };
                 let typed = infer_expr(
                     &desugared.node,

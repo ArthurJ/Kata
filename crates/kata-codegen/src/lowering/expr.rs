@@ -245,6 +245,21 @@ pub(crate) fn lower_expr(
                 // é o mesmo do tipo base (alias). Lowerar inner diretamente.
                 (TypedExprKind::IntLit { .. }, Ty::Struct(_))
                 | (TypedExprKind::FloatLit { .. }, Ty::Struct(_)) => lower_expr(inner, ctx),
+                // Ascription de não-literal para refined (refinement propagation):
+                // o typeck provou o predicado via path conditions (Z3).
+                // Semanticamente é um no-op — o valor já é do tipo base,
+                // o tipo refined é apenas anotação nominal. Lowerar inner.
+                // Só aplica quando inner NÃO é Struct (downcast é tratado abaixo)
+                // e NÃO é Tuple (construção de struct é tratada depois).
+                (inner_kind, Ty::Struct(_))
+                    if !matches!(
+                        inner_kind,
+                        TypedExprKind::Tuple { .. } | TypedExprKind::StructConstruct { .. }
+                    )
+                        && !matches!(inner.ty, Ty::Struct(_)) =>
+                {
+                    lower_expr(inner, ctx)
+                }
                 // Downcast refined/alias→base (ex: PositiveInt → Int,
                 // Altura → Float). No-op em runtime — mesmos bits.
                 // O typeck já validou que o Struct é alias do target.

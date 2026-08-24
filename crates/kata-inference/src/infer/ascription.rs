@@ -233,12 +233,15 @@ pub(crate) fn infer_type_ascription(
         && let Some(struct_info) = ctx.struct_registry.get(key.name())
         && struct_info.predicates.is_some()
     {
-        // Refined type — expr deve ser literal numérico.
+        // Refined type — expr deve ser literal numérico OU path conditions
+        // podem provar o predicado sobre não-literais (refinement propagation).
         let is_literal = matches!(
             inner.kind,
             TypedExprKind::IntLit { .. } | TypedExprKind::FloatLit { .. }
         );
-        if !is_literal {
+        if !is_literal && ctx.path_conditions.is_empty() {
+            // Sem path conditions e não-literal: não há como provar em
+            // compile-time. Usar construtor falível (ex: PositiveInt n).
             return Err(MiddleError::TypeMismatch {
                 expected: format!(
                     "literal para ascription refined {key_name} \
@@ -248,6 +251,13 @@ pub(crate) fn infer_type_ascription(
                 found: format!("{:?}", inner.kind),
                 span: expr.span.into(),
             });
+        }
+        if !is_literal {
+            // Não-literal com path conditions: tenta provar via Z3.
+            // Se Z3 não decide (Unknown), fallback para pending (comptime).
+            // Continua para o loop de predicados abaixo, onde
+            // const_eval_predicate retornará None e try_prove_with_path_conditions
+            // será tentado.
         }
 
         // Busca os predicados em refined_decls.
@@ -275,9 +285,9 @@ pub(crate) fn infer_type_ascription(
                 }
                 None => {
                     // Predicado complexo — não avaliável localmente pelo
-                    // const_eval. Substitui Hole pelo literal, tipa via
-                    // infer_expr_hinted, e armazena como pending para o
-                    // comptime pass validar via jit_eval.
+                    // const_eval. Substitui Hole pelo valor, tipa via
+                    // infer_expr_hinted, e tenta provar com path conditions
+                    // (Z3) antes de adicionar como pending.
                     let substituted = super::const_eval::substitute_hole(pred, expr);
                     let typed_pred = infer_expr_hinted(
                         &substituted.node,
@@ -287,7 +297,30 @@ pub(crate) fn infer_type_ascription(
                         false,
                         Some(&Ty::Sum("Boolean".to_string())),
                     )?;
-                    pending.push(Spanned::new(typed_pred, substituted.span));
+
+                    // Tenta provar com path conditions (Z3).
+                    match super::path_conditions::try_prove_with_path_conditions(
+                        &typed_pred,
+                        &ctx.path_conditions,
+                    ) {
+                        Some(true) => {} // provado satisfeito pelas path conditions
+                        Some(false) => {
+                            return Err(MiddleError::TypeMismatch {
+                                expected: format!(
+                                    "predicado {i} de {} satisfeito",
+                                    key.name()
+                                ),
+                                found: "predicado refutado pelas path conditions"
+                                    .to_string(),
+                                span: expr.span.into(),
+                            });
+                        }
+                        None => {
+                            // Z3 não decidiu — fallback conservador: pending
+                            // para comptime pass validar via jit_eval.
+                            pending.push(Spanned::new(typed_pred, substituted.span));
+                        }
+                    }
                 }
             }
         }

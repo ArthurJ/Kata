@@ -8,7 +8,7 @@ use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 
 use crate::patterns;
-use crate::typed::{TypedExprKind, TypedMatchArm, TypedPattern};
+use crate::typed::{TypedExpr, TypedExprKind, TypedMatchArm, TypedPattern};
 
 use super::expr::{InferCtx, infer_expr, infer_expr_hinted};
 use super::helpers::InferResult;
@@ -229,6 +229,71 @@ pub(crate) fn infer_match(
             None
         };
 
+        // ── Path conditions: coleta facts do braço ──
+        // Guard direto: o guard tipado é verdadeiro neste braço.
+        // Match sobre Boolean: True → scrutinee é true; False → scrutinee é false.
+        let mut arm_path_conditions = ctx.path_conditions.clone();
+        if let Some(ref guard_spanned) = typed_guard {
+            arm_path_conditions.add_fact(guard_spanned.node.clone());
+        }
+        if scrutinee_ty == Ty::boolean() {
+            if let Some(ref pat) = typed_pattern {
+                if let TypedPattern::Variant { ref enum_name, ref variant, .. } = pat.node {
+                    if enum_name == "Boolean" {
+                        match variant.as_str() {
+                            "True" => {
+                                arm_path_conditions.add_fact(typed_scrutinee.clone());
+                            }
+                            "False" => {
+                                // not(scrutinee) — constrói Closure { not, [scrutinee] }
+                                let not_scrut = TypedExpr {
+                                    span: scrutinee.span,
+                                    ty: Ty::boolean(),
+                                    tail_pos: false,
+                                    escape: typed_scrutinee.escape.clone(),
+                                    kind: TypedExprKind::Closure {
+                                        callee: Box::new(Spanned::new(
+                                            TypedExpr {
+                                                span: scrutinee.span,
+                                                ty: Ty::boolean(),
+                                                tail_pos: false,
+                                                escape: typed_scrutinee.escape.clone(),
+                                                kind: TypedExprKind::Ident {
+                                                    name: "not".to_string(),
+                                                },
+                                            },
+                                            scrutinee.span,
+                                        )),
+                                        args: vec![Spanned::new(
+                                            typed_scrutinee.clone(),
+                                            scrutinee.span,
+                                        )],
+                                        ffi_symbol: None,
+                                    },
+                                };
+                                arm_path_conditions.add_fact(not_scrut);
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+
+        // InferCtx local com path conditions do braço.
+        let arm_ctx = InferCtx {
+            table: ctx.table,
+            enum_registry: ctx.enum_registry,
+            struct_registry: ctx.struct_registry,
+            refined_decls: ctx.refined_decls,
+            interface_registry: ctx.interface_registry,
+            refines_registry: ctx.refines_registry,
+            ret_ty: ctx.ret_ty,
+            in_loop: ctx.in_loop,
+            deferred_lambdas: ctx.deferred_lambdas,
+            path_conditions: arm_path_conditions,
+        };
+
         // Infere body do braço — propaga hint do contexto (ex: tipo de
         // retorno da função nomeada) para permitir que construções de
         // variant dentro do arm resolvam type params não-inferidos.
@@ -236,7 +301,7 @@ pub(crate) fn infer_match(
             &arm.body.node,
             &arm.body.span,
             &mut arm_env,
-            ctx,
+            &arm_ctx,
             tail_pos,
             hint,
         )?;
