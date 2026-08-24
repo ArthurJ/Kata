@@ -1,8 +1,8 @@
 # PRD — Refinement Propagation (Path Conditions no Typeck)
 
-**Status:** ✅ Nível 1, Nível 2 e Nível 3 implementados.
+**Status:** ✅ Concluído — Nível 1, Nível 2, Nível 3 (Direções A + B) e propagação de learned_facts para escopo pai implementados. 23 testes E2E, 1851 testes workspace, 0 regressão.
 **Data:** 2026-08-24
-**Implementado em:** sessão 2026-08-23 — `path_conditions.rs`, `_match.rs`, `apply_lambda.rs`, `ascription.rs`, `lowering/expr.rs`
+**Implementado em:** sessões 2026-08-23/24 — `path_conditions.rs`, `_match.rs`, `apply_lambda.rs`, `ascription.rs`, `lowering/expr.rs`, `apply_dispatch.rs`, `post_conditions.rs`
 **Depende de:** `const_eval_predicate` (const_eval.rs) ✅, `Z3Translator` (guard_completeness.rs) ✅, `StructRegistry` com predicados ✅, smart constructors falíveis (constructors_refined.rs) ✅
 **Não depende de:** Nenhum PRD pendente
 
@@ -21,7 +21,7 @@ Com path conditions, o fato `n > 0` (extraído do guard do braço) alimenta
 o Z3, que prova `n > 0 ⟹ n > 0` — a ascription é válida em compile-time
 sem precisar de literal.
 
-**Escopo:** Nível 1 (guards locais). Níveis 2 e 3 são futuro.
+**Escopo:** Nível 1 (guards locais), Nível 2 (post-condições inter-procedurais), Nível 3 (pré-condições inter-procedurais — Direções A + B) e propagação de learned_facts para escopo pai (checkpoint/rollback). Todos implementados.
 
 ## 2. Motivação
 
