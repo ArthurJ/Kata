@@ -236,45 +236,87 @@ pub(crate) fn infer_match(
         if let Some(ref guard_spanned) = typed_guard {
             arm_path_conditions.add_fact(guard_spanned.node.clone());
         }
-        if scrutinee_ty == Ty::boolean() {
-            if let Some(ref pat) = typed_pattern {
-                if let TypedPattern::Variant { ref enum_name, ref variant, .. } = pat.node {
-                    if enum_name == "Boolean" {
-                        match variant.as_str() {
-                            "True" => {
-                                arm_path_conditions.add_fact(typed_scrutinee.clone());
-                            }
-                            "False" => {
-                                // not(scrutinee) — constrói Closure { not, [scrutinee] }
-                                let not_scrut = TypedExpr {
+        if scrutinee_ty == Ty::boolean()
+            && let Some(ref pat) = typed_pattern
+            && let TypedPattern::Variant {
+                ref enum_name,
+                ref variant,
+                ..
+            } = pat.node
+            && enum_name == "Boolean"
+        {
+            match variant.as_str() {
+                "True" => {
+                    arm_path_conditions.add_fact(typed_scrutinee.clone());
+                }
+                "False" => {
+                    // not(scrutinee) — constrói Closure { not, [scrutinee] }
+                    let not_scrut = TypedExpr {
+                        span: scrutinee.span,
+                        ty: Ty::boolean(),
+                        tail_pos: false,
+                        escape: typed_scrutinee.escape,
+                        kind: TypedExprKind::Closure {
+                            callee: Box::new(Spanned::new(
+                                TypedExpr {
                                     span: scrutinee.span,
                                     ty: Ty::boolean(),
                                     tail_pos: false,
-                                    escape: typed_scrutinee.escape.clone(),
-                                    kind: TypedExprKind::Closure {
-                                        callee: Box::new(Spanned::new(
-                                            TypedExpr {
-                                                span: scrutinee.span,
-                                                ty: Ty::boolean(),
-                                                tail_pos: false,
-                                                escape: typed_scrutinee.escape.clone(),
-                                                kind: TypedExprKind::Ident {
-                                                    name: "not".to_string(),
-                                                },
-                                            },
-                                            scrutinee.span,
-                                        )),
-                                        args: vec![Spanned::new(
-                                            typed_scrutinee.clone(),
-                                            scrutinee.span,
-                                        )],
-                                        ffi_symbol: None,
+                                    escape: typed_scrutinee.escape,
+                                    kind: TypedExprKind::Ident {
+                                        name: "not".to_string(),
                                     },
-                                };
-                                arm_path_conditions.add_fact(not_scrut);
-                            }
-                            _ => {}
-                        }
+                                },
+                                scrutinee.span,
+                            )),
+                            args: vec![Spanned::new(typed_scrutinee.clone(), scrutinee.span)],
+                            ffi_symbol: None,
+                        },
+                    };
+                    arm_path_conditions.add_fact(not_scrut);
+                }
+                _ => {}
+            }
+        }
+
+        // ── Nível 2: Post-condições inter-procedurais ──
+        // Se o scrutinee é uma chamada de função (Closure, possivelmente
+        // dentro de Grouping) e o pattern é um variant de enum, consulta
+        // a PostCondTable para extrair a condição que produziu aquele
+        // variant e adiciona como path condition.
+        if let Some(ref pat) = typed_pattern
+            && let TypedPattern::Variant {
+                ref enum_name,
+                ref variant,
+                ..
+            } = pat.node
+        {
+            // Desembrulha Grouping para chegar no Closure.
+            let scrutinee_inner = match &typed_scrutinee.kind {
+                TypedExprKind::Grouping { inner } => &inner.node,
+                _ => &typed_scrutinee,
+            };
+            if let TypedExprKind::Closure { callee, args, .. } = &scrutinee_inner.kind
+                && let TypedExprKind::Ident { name: func_name } = &callee.node.kind
+                && let Some(post_conds) = ctx.post_conds.get(func_name)
+            {
+                let arg_types: Vec<Ty> = args.iter().map(|a| a.node.ty.clone()).collect();
+                for pc in post_conds {
+                    if pc.enum_name == *enum_name
+                        && pc.variant == *variant
+                        && pc.param_types.len() == arg_types.len()
+                        && pc
+                            .param_types
+                            .iter()
+                            .zip(arg_types.iter())
+                            .all(|(pt, at)| pt == at)
+                    {
+                        let substituted = super::post_conditions::substitute_params(
+                            &pc.condition,
+                            &pc.param_names,
+                            args,
+                        );
+                        arm_path_conditions.add_fact(substituted);
                     }
                 }
             }
@@ -292,6 +334,8 @@ pub(crate) fn infer_match(
             in_loop: ctx.in_loop,
             deferred_lambdas: ctx.deferred_lambdas,
             path_conditions: arm_path_conditions,
+            post_conds: ctx.post_conds,
+            inline_fns: ctx.inline_fns,
         };
 
         // Infere body do braço — propaga hint do contexto (ex: tipo de

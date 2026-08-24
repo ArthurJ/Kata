@@ -7,7 +7,7 @@
 //! - `collect_type_params`: coleta type params de uma assinatura resolvida
 
 use kata_ast::{Expr, TypeExpr};
-use kata_core::{InterfaceRegistry, PrimTy, StructKey, StructRegistry, Ty, TypeEnv};
+use kata_core::{InterfaceRegistry, PrimTy, StructKey, StructRegistry, Ty, TypeEnv, TypeGraph};
 
 /// Converte TypeExpr → Ty usando TypeEnv para resolver nomes.
 ///
@@ -17,11 +17,16 @@ use kata_core::{InterfaceRegistry, PrimTy, StructKey, StructRegistry, Ty, TypeEn
 /// Se `name` é uma família polimórfica registrada no `StructRegistry`
 /// (tem instâncias com `is_instance_of`), produz
 /// `Ty::Struct(StructKey::Family(name))` em vez de `Plain`.
+///
+/// `type_graph` (opcional) permite classificação de tipos antes do merge
+/// do prelude. Quando `Some`, o bloco `ParamApp` consulta o grafo em vez
+/// do `struct_registry` para decidir entre `Instance` e `Generic`.
 pub fn resolve_type_expr(
     expr: &TypeExpr,
     env: &TypeEnv,
     iface_reg: &InterfaceRegistry,
     struct_reg: &StructRegistry,
+    type_graph: Option<&TypeGraph>,
 ) -> Ty {
     match expr {
         TypeExpr::Named(name) => {
@@ -126,28 +131,30 @@ pub fn resolve_type_expr(
             }
         }
         TypeExpr::Unit => Ty::Unit,
-        TypeExpr::Grouping(inner) => resolve_type_expr(&inner.node, env, iface_reg, struct_reg),
+        TypeExpr::Grouping(inner) => {
+            resolve_type_expr(&inner.node, env, iface_reg, struct_reg, type_graph)
+        }
         TypeExpr::Tuple(elements) => {
             let tys: Vec<Ty> = elements
                 .iter()
-                .map(|t| resolve_type_expr(&t.node, env, iface_reg, struct_reg))
+                .map(|t| resolve_type_expr(&t.node, env, iface_reg, struct_reg, type_graph))
                 .collect();
             Ty::Tuple(tys)
         }
         TypeExpr::Func { params, ret } => {
             let param_types: Vec<Ty> = params
                 .iter()
-                .map(|t| resolve_type_expr(&t.node, env, iface_reg, struct_reg))
+                .map(|t| resolve_type_expr(&t.node, env, iface_reg, struct_reg, type_graph))
                 .collect();
-            let return_type = resolve_type_expr(&ret.node, env, iface_reg, struct_reg);
+            let return_type = resolve_type_expr(&ret.node, env, iface_reg, struct_reg, type_graph);
             Ty::Function(param_types, Box::new(return_type))
         }
         TypeExpr::ActionType { params, ret } => {
             let param_types: Vec<Ty> = params
                 .iter()
-                .map(|t| resolve_type_expr(&t.node, env, iface_reg, struct_reg))
+                .map(|t| resolve_type_expr(&t.node, env, iface_reg, struct_reg, type_graph))
                 .collect();
-            let return_type = resolve_type_expr(&ret.node, env, iface_reg, struct_reg);
+            let return_type = resolve_type_expr(&ret.node, env, iface_reg, struct_reg, type_graph);
             Ty::Action(param_types, Box::new(return_type))
         }
         TypeExpr::ParamApp { name, params } => {
@@ -156,7 +163,7 @@ pub fn resolve_type_expr(
             // Se não é genérico (fallback), produz Ty::Sum como antes.
             let resolved_params: Vec<Ty> = params
                 .iter()
-                .map(|p| resolve_type_expr(&p.node, env, iface_reg, struct_reg))
+                .map(|p| resolve_type_expr(&p.node, env, iface_reg, struct_reg, type_graph))
                 .collect();
             // Tipos intrínsecos de coleção — List::(A), Array::(A), Range::(A).
             // São variants de Ty, não Ty::Generic. O codegen precisa do layout.
@@ -227,12 +234,21 @@ pub fn resolve_type_expr(
                     Ty::ReceiverFactory(Box::new(elem))
                 }
                 _ => {
-                    // Família polimórfica instanciada: `NonZero::Int` →
-                    // Instance("NonZero", "Int"). O parser já produz
-                    // ParamApp { name: "NonZero", params: [Named("Int")] }
-                    // via `::` em type expressions. Se `name` é família
-                    // registrada e o param resolve para um tipo primitivo
-                    // concreto, produz Instance em vez de Generic.
+                    // Família polimórfica instanciada: NonZero::Int ->
+                    // Instance("NonZero", "Int").
+                    //
+                    // Quando type_graph está disponível, consulta o grafo
+                    // (que pode conhecer famílias do prelude ainda não merged
+                    // no struct_registry). Caso contrário, consulta o
+                    // struct_registry diretamente (comportamento anterior).
+                    if let Some(graph) = type_graph
+                        && let Some(resolved) =
+                            kata_core::type_graph::resolve_param_app(name, &resolved_params, graph)
+                    {
+                        return resolved;
+                    }
+                    // Fallback: consulta struct_registry (para quando o
+                    // grafo não tem o tipo ou type_graph é None).
                     if struct_reg.is_family(name) && resolved_params.len() == 1 {
                         let concrete = match &resolved_params[0] {
                             Ty::Prim(PrimTy::Int) => "Int",
@@ -265,7 +281,7 @@ pub fn resolve_type_expr(
         // preenche E|Text automaticamente. A expansão acontece no inference
         // (variant_construct, sugar, dispatch) via `expand_defaults`.
         TypeExpr::Question(inner) => {
-            let inner_ty = resolve_type_expr(&inner.node, env, iface_reg, struct_reg);
+            let inner_ty = resolve_type_expr(&inner.node, env, iface_reg, struct_reg, type_graph);
             Ty::Generic("Result".into(), vec![inner_ty])
         }
     }

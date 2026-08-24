@@ -41,6 +41,7 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
             rr.merge(user.refines_registry.clone());
             rr
         },
+        type_graph: prelude.type_graph.clone(),
         functions: {
             let mut fns = prelude.functions;
             let user_fn_names: std::collections::HashSet<&str> =
@@ -522,9 +523,8 @@ fun 5";
 /// O teste abaixo usa M com guards tautológicos (otherwise) + N sem guards.
 /// N é redundante porque M sempre dispara.
 /// Para testar não-redundância com guards, ver Fase 2 (guard_implication).
-
+//
 // ── Redundância com guards: Fase 2 (implicação guards_N ⟹ guards_M) ─
-
 /// Guards de N implicam guards de M: x > 5 ⟹ x > 0.
 /// N é redundante — M dispara antes para todo input que N casaria.
 /// Não precisam de otherwise: a redundância roda antes da exaustividade

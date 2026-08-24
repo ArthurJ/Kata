@@ -185,10 +185,10 @@ fn prove_tautology_with_model(conditions: &[TypedExpr]) -> String {
         let disjunction = Bool::or(&z3_conditions);
         solver.assert(disjunction.not());
 
-        if let SatResult::Sat = solver.check() {
-            if let Some(model) = solver.get_model() {
-                return translator.extract_counter_example(&model);
-            }
+        if let SatResult::Sat = solver.check()
+            && let Some(model) = solver.get_model()
+        {
+            return translator.extract_counter_example(&model);
         }
 
         "caso não coberto pelos guards".to_string()

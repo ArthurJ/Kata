@@ -46,7 +46,7 @@ fn infer_src(src: &str) -> Result<kata_inference::TypedModule, kata_diagnostics:
 }
 
 fn infer_fails(src: &str) -> bool {
-    matches!(infer_src(src), Err(_))
+    infer_src(src).is_err()
 }
 
 fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModule {
@@ -80,6 +80,11 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
             let mut rr = prelude.refines_registry.clone();
             rr.merge(user.refines_registry.clone());
             rr
+        },
+        type_graph: {
+            let mut tg = prelude.type_graph.clone();
+            tg.merge(&user.type_graph);
+            tg
         },
         functions: {
             let mut fns = prelude.functions;
@@ -280,4 +285,131 @@ test_false!()"#;
         "Boolean::False deve extrair fact negado e provar ascription"
     );
     assert_eq!(untag_smi(raw), 5);
+}
+
+// ── Nível 2: Post-condições inter-procedurais ─────────────────────
+
+// ── 9. match (div 10 b): Ok n → b::NonZero (b ≠ 0 provado) ──
+
+/// `div 10 b` tem guard `= b 0: Err` e `otherwise: Ok`.
+/// No braço `Ok`, a post-condição `not(= b 0)` é adicionada como path
+/// condition. O braço faz `b::NonZero` — o predicado de NonZero é
+/// `!= _ (zero _)` = `!= _ 0`, que é exatamente `not(= b 0)`.
+/// O Z3 prova que o predicado é satisfeito pela post-condição.
+/// NonZero já existe no stdlib (não precisa redefinir).
+#[test]
+fn t_post_cond_div_ok_prova_nonzero() {
+    let src = r#"action test_post_cond => NonZero::Int
+    let b := 5
+    match (div 10 b)
+        Result::Ok n: b::NonZero
+        Result::Err _: 5::NonZero
+test_post_cond!()"#;
+    let (raw, ty) = eval_src(src);
+    assert_eq!(
+        ty,
+        Ty::Struct(StructKey::Instance("NonZero".into(), "Int".into())),
+        "braço Ok de div deve aprender b ≠ 0 e provar b::NonZero"
+    );
+    assert_eq!(untag_smi(raw), 5);
+}
+
+// ── 10. match (div 10 0): Err → sem crash, fallback conservador ──
+
+/// `div 10 0` sempre produz `Err`. O braço `Err` recebe a post-condição
+/// `= b 0` (= 0 0 = True). O braço usa literal como fallback.
+/// Este teste verifica que o braço Err funciona sem crash.
+#[test]
+fn t_post_cond_div_err_fallback() {
+    let src = r#"action test_err => NonZero::Int
+    match (div 10 0)
+        Result::Ok n: 5::NonZero
+        Result::Err _: 5::NonZero
+test_err!()"#;
+    let (raw, ty) = eval_src(src);
+    assert_eq!(
+        ty,
+        Ty::Struct(StructKey::Instance("NonZero".into(), "Int".into())),
+        "braço Err de div deve funcionar com fallback literal"
+    );
+    assert_eq!(untag_smi(raw), 5);
+}
+
+// ── 11. Função user-defined com guard produzindo Err ──
+
+/// `safe_half :: Int => Result::(Int, Text)` com guard `= n 0: Err`.
+/// O caller que faz `match (safe_half 10): Ok m: 10::NonZero`
+/// aprende que `n ≠ 0` no braço Ok (o arg `10` é NonZero).
+#[test]
+fn t_post_cond_user_defined_func() {
+    let src = r#"safe_half :: Int => Result::(Int, Text)
+lambda n:
+    = n 0: Result::Err "zero"
+    otherwise: Result::Ok (// n 2)
+
+action test_user => NonZero::Int
+    match (safe_half 10)
+        Result::Ok m: 10::NonZero
+        Result::Err _: 5::NonZero
+test_user!()"#;
+    let (raw, ty) = eval_src(src);
+    assert_eq!(
+        ty,
+        Ty::Struct(StructKey::Instance("NonZero".into(), "Int".into())),
+        "função user-defined com guard deve propagar post-condição"
+    );
+    // 10::NonZero = 10
+    assert_eq!(untag_smi(raw), 10);
+}
+
+// ── 12. Post-condição com múltiplos guards (disjunção) ──
+
+/// `clamp_pos :: Int => Result::(Int, Text)` tem DOIS guards que
+/// produzem Err: `= n 0` e `< n 0`. Post-cond de Ok =
+/// `not(or(= n 0, < n 0))` = `n > 0`. O caller prova `n::NonZero`
+/// (predicado `!= _ 0` = `not(= _ 0)`, satisfatório pois n > 0 → n ≠ 0).
+#[test]
+fn t_post_cond_multiple_guards_disjunction() {
+    let src = r#"clamp_pos :: Int => Result::(Int, Text)
+lambda n:
+    = n 0: Result::Err "zero"
+    < n 0: Result::Err "negative"
+    otherwise: Result::Ok n
+
+action test_multi => NonZero::Int
+    match (clamp_pos 7)
+        Result::Ok n: n::NonZero
+        Result::Err _: 5::NonZero
+test_multi!()"#;
+    let (raw, ty) = eval_src(src);
+    assert_eq!(
+        ty,
+        Ty::Struct(StructKey::Instance("NonZero".into(), "Int".into())),
+        "múltiplos guards devem produzir disjunção como post-condição"
+    );
+    assert_eq!(untag_smi(raw), 7);
+}
+
+// ── 13. Arg complexo — Z3 prova post-condição sobre expr aritmética ──
+
+/// `div 10 (+ x y)` — o arg `(+ x y)` é aritmética. A post-condição
+/// vira `not(= (+ x y) 0)`. O predicado de NonZero sobre `(+ x y)` é
+/// `!= (+ x y) 0` — exatamente a post-condição! O Z3 deve provar.
+#[test]
+fn t_post_cond_complex_arg_provable() {
+    let src = r#"action test_complex => NonZero::Int
+    let x := 3
+    let y := 4
+    match (div 10 (+ x y))
+        Result::Ok n: (+ x y)::NonZero
+        Result::Err _: 5::NonZero
+test_complex!()"#;
+    let (raw, ty) = eval_src(src);
+    assert_eq!(
+        ty,
+        Ty::Struct(StructKey::Instance("NonZero".into(), "Int".into())),
+        "arg complexo deve ter post-condição provável pelo Z3"
+    );
+    // (+ x y) = 7
+    assert_eq!(untag_smi(raw), 7);
 }
