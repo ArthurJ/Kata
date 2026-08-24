@@ -66,7 +66,3 @@ ação imediata. Reavaliar caso a caso.
 - **`tests/repl_e2e.rs:704`** — Uncomment quando action call do REPL
   prompt for corrigido.
 
-### examples
-
-- **`quicksort.kata:2`** — Deveria ser `"stdio.(stdout)"` para o stdout
-  ficar disponível no escopo do módulo.

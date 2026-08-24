@@ -1,7 +1,8 @@
 # PRD — Exaustividade de Cláusulas e Guards
 
-**Status:** 🟡 Pendente
+**Status:** ✅ Concluído
 **Data:** 2026-08-23
+**Implementado em:** `0697ad8` (Frente 1), `da22230` (Frente 2)
 **Depende de:** `check_exhaustiveness` (patterns.rs) ✅, `check_redundant_clauses` (redundancy.rs) ✅, `check_clause_exhaustiveness` (function_infer.rs) ✅
 **Não depende de:** Nenhum PRD pendente
 
@@ -188,12 +189,22 @@ código com guards complementares passa.
 #### Limite de esforço
 
 Z3 pode retornar `unknown` para fórmulas complexas ou não-lineares.
-Definir um timeout curto (configurável, default ~100ms por verificação).
-Passado o limite, Z3 retorna `unknown` → exigir `otherwise`.
+Definir um `rlimit` (limite de conflicts internos do Z3, configurável,
+default ~10000). O `rlimit` conta operações internas do solver, não
+wall-clock — determinístico entre máquinas. A mesma fórmula consome
+o mesmo número de passos Z3-internos em qualquer hardware, produzindo
+o mesmo resultado (UNSAT/SAT/UNKNOWN) em qualquer máquina.
+
+Passado o `rlimit`, Z3 retorna `unknown` → exigir `otherwise`.
 
 Isso garante que a compilação nunca trava por causa da verificação de
-guards. Inputs adversariais podem falhar a prova, mas o fallback é
-conservador (exige `otherwise`), não unsound.
+guards e que dois binários do mesmo source são idênticos
+(reprodutibilidade de build). Inputs adversariais podem falhar a
+prova, mas o fallback é conservador (exige `otherwise`), não unsound.
+
+Para garantir determinismo total, fixar também o random seed do Z3
+(`smt.random_seed`), senão heurísticas internas com seeds diferentes
+podem seguir ramos diferentes e atingir `rlimit` em pontos distintos.
 
 #### Tradução de TypedExpr → Z3
 
