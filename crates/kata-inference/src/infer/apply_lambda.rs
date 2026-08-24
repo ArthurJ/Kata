@@ -318,5 +318,12 @@ pub(crate) fn infer_lambda_body(
             },
         )
     };
+
+    // Verifica completude de guards: se há guards mas sem `otherwise`,
+    // usa Z3 para provar que a disjunção das condições é tautologia.
+    if !typed_guards.is_empty() {
+        crate::guard_completeness::check_guard_completeness(&typed_guards, &body.span)?;
+    }
+
     Ok((ret_ty, typed_body, typed_guards))
 }

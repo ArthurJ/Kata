@@ -10,6 +10,10 @@ kata-core.workspace = true
 kata-ast.workspace = true
 kata-diagnostics.workspace = true
 kata-resolution.workspace = true
+z3 = { version = "0.20", default-features = false }
+
+[features]
+vendored-z3 = ["z3/vendored"]
 
 [dev-dependencies]
 insta.workspace = true

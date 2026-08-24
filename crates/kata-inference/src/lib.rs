@@ -10,6 +10,7 @@
 pub mod desugar;
 pub mod desugar_directives;
 pub(crate) mod desugar_holes;
+pub(crate) mod guard_completeness;
 pub(crate) mod infer;
 pub(crate) mod patterns;
 pub(crate) mod redundancy;
