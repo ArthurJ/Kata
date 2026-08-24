@@ -233,7 +233,7 @@ pub(crate) fn infer_match(
         // ── Path conditions: coleta facts do braço ──
         // Guard direto: o guard tipado é verdadeiro neste braço.
         // Match sobre Boolean: True → scrutinee é true; False → scrutinee é false.
-        let mut arm_path_conditions = ctx.path_conditions.clone();
+        let mut arm_path_conditions = ctx.path_conditions.borrow().clone();
         if let Some(ref guard_spanned) = typed_guard {
             arm_path_conditions.add_fact(guard_spanned.node.clone());
         }
@@ -398,7 +398,7 @@ pub(crate) fn infer_match(
             ret_ty: ctx.ret_ty,
             in_loop: ctx.in_loop,
             deferred_lambdas: ctx.deferred_lambdas,
-            path_conditions: arm_path_conditions,
+            path_conditions: std::cell::RefCell::new(arm_path_conditions),
             post_conds: ctx.post_conds,
             inline_fns: ctx.inline_fns,
         };

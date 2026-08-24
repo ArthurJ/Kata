@@ -264,7 +264,7 @@ pub fn infer_module(
         ret_ty: None,
         in_loop: false,
         deferred_lambdas: &deferred_lambdas,
-        path_conditions: Default::default(),
+        path_conditions: std::cell::RefCell::new(Default::default()),
         post_conds: &empty_post_conds,
         inline_fns: &empty_inline_fns,
     };
@@ -313,7 +313,7 @@ pub fn infer_module(
                 ret_ty: None,
                 in_loop: false,
                 deferred_lambdas: &deferred_lambdas,
-                path_conditions: Default::default(),
+                path_conditions: std::cell::RefCell::new(Default::default()),
                 post_conds: &post_cond_table,
                 inline_fns: &inline_fn_table,
             };
@@ -356,7 +356,7 @@ pub fn infer_module(
             ret_ty: None,
             in_loop: false,
             deferred_lambdas: &deferred_lambdas,
-            path_conditions: Default::default(),
+            path_conditions: std::cell::RefCell::new(Default::default()),
             post_conds: &post_cond_table,
             inline_fns: &inline_fn_table,
         };
@@ -396,7 +396,7 @@ pub fn infer_module(
             ret_ty: Some(&action_def.return_type),
             in_loop: false,
             deferred_lambdas: &deferred_lambdas,
-            path_conditions: Default::default(),
+            path_conditions: std::cell::RefCell::new(Default::default()),
             post_conds: &post_cond_table,
             inline_fns: &inline_fn_table,
         };
@@ -432,7 +432,7 @@ pub fn infer_module(
                     ret_ty: None,
                     in_loop: false,
                     deferred_lambdas: &deferred_lambdas,
-                    path_conditions: Default::default(),
+                    path_conditions: std::cell::RefCell::new(Default::default()),
                     post_conds: &post_cond_table,
                     inline_fns: &inline_fn_table,
                 };

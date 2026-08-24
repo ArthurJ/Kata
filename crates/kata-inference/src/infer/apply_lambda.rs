@@ -274,7 +274,7 @@ pub(crate) fn infer_lambda_body(
                     ret_ty: ctx.ret_ty,
                     in_loop: ctx.in_loop,
                     deferred_lambdas: ctx.deferred_lambdas,
-                    path_conditions: ctx.path_conditions.with_fact(cond_typed.clone()),
+                    path_conditions: std::cell::RefCell::new(ctx.path_conditions.borrow().with_fact(cond_typed.clone())),
                     post_conds: ctx.post_conds,
                     inline_fns: ctx.inline_fns,
                 };

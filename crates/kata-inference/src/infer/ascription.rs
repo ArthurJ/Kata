@@ -245,7 +245,7 @@ pub(crate) fn infer_type_ascription(
             inner.kind,
             TypedExprKind::IntLit { .. } | TypedExprKind::FloatLit { .. }
         );
-        if !is_literal && ctx.path_conditions.is_empty() {
+        if !is_literal && ctx.path_conditions.borrow().is_empty() {
             // Sem path conditions e não-literal: não há como provar em
             // compile-time. Usar construtor falível (ex: PositiveInt n).
             return Err(MiddleError::TypeMismatch {
@@ -307,7 +307,7 @@ pub(crate) fn infer_type_ascription(
                     // Tenta provar com path conditions (Z3).
                     match super::path_conditions::try_prove_with_path_conditions(
                         &typed_pred,
-                        &ctx.path_conditions,
+                        &ctx.path_conditions.borrow(),
                         ctx.inline_fns,
                     ) {
                         Some(true) => {} // provado satisfeito pelas path conditions

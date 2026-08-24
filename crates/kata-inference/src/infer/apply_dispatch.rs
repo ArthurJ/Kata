@@ -564,7 +564,7 @@ pub(crate) fn try_refined_precondition(
     ctx: &InferCtx,
 ) -> Option<InferResult<(Ty, TypedExprKind)>> {
     // Sem path conditions, o Z3 não pode provar nada.
-    if ctx.path_conditions.is_empty() {
+    if ctx.path_conditions.borrow().is_empty() {
         return None;
     }
 
@@ -654,7 +654,7 @@ pub(crate) fn try_refined_precondition(
                     };
                     match super::path_conditions::try_prove_with_path_conditions(
                         &typed_pred,
-                        &ctx.path_conditions,
+                        &ctx.path_conditions.borrow(),
                         ctx.inline_fns,
                     ) {
                         Some(true) => {}
