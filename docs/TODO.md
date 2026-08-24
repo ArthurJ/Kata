@@ -63,10 +63,11 @@ inlining de funções puras no Z3 translator, payload binding
 conecta binding do pattern ao argumento. 13 testes E2E em
 `t_refinement_propagation_e2e.rs`. 1841 testes, 0 regressão.
 Níveis restantes:
-- **Nível 3 — Contratos de função:** tipos refinados em assinaturas
-  (`div :: Int NonZero => ...`) propagados como path conditions no caller.
-  Refinement typing completo — o typeck consulta predicados do
-  `StructRegistry` em cada ascription contra as constraints acumuladas.
+- **Nível 3 — Contratos de função:** pré-condições inter-procedurais.
+  Design especificado no PRD §9.9 (duas direções: A=aceitação via path
+  conditions no dispatch, B=aprendizado de predicados após chamada).
+  Reusa `refined_decls` e `try_prove_with_path_conditions` — sem
+  desbloqueio. A implementar.
 
 ### TypeGraph: migrar 6 sites de classificação ad-hoc para o grafo
 **Estado:** Pendente (consolidação de dívida técnica).

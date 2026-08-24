@@ -1,6 +1,6 @@
 # PRD — Refinement Propagation (Path Conditions no Typeck)
 
-**Status:** ✅ Nível 1 implementado
+**Status:** ✅ Nível 1 e Nível 2 implementados. Nível 3 design especificado.
 **Data:** 2026-08-23
 **Implementado em:** sessão 2026-08-23 — `path_conditions.rs`, `_match.rs`, `apply_lambda.rs`, `ascription.rs`, `lowering/expr.rs`
 **Depende de:** `const_eval_predicate` (const_eval.rs) ✅, `Z3Translator` (guard_completeness.rs) ✅, `StructRegistry` com predicados ✅, smart constructors falíveis (constructors_refined.rs) ✅
@@ -758,17 +758,170 @@ Ex: `safe_get :: List::A Int => Result::(A, Text)` com guard
 4. **PostCondTable no InferCtx:** `&'a PostCondTable` (borrow), seguindo
    o padrão dos outros campos de `InferCtx` que são referências.
 
-### 9.9. Nível 3 — Contratos de função (futuro)
+### 9.9. Nível 3 — Contratos de função (pré-condições inter-procedurais)
 
-Tipos refinados em assinaturas (`div :: Int NonZero => ...`) propagados
-como path conditions no caller. Se `b::NonZero` está na assinatura, o
-caller que passa `b` sabe que `b ≠ 0` no contexto. Refinement typing
-completo — o typeck consulta predicados do `StructRegistry` em cada
-ascription contra as constraints acumuladas.
+**Status:** Design especificado, não implementado.
 
-Nível 2 e Nível 3 coexistem: Nível 2 para funções Kata com corpo (o
-compiler deriva post-condições dos guards), Nível 3 para funções FFI
-sem corpo (contratos declarados explicitamente na assinatura).
+Nível 1 coleta facts locais (guards). Nível 2 propaga post-condições
+(extraídas do corpo da função chamada). Nível 3 propaga **pré-condições**:
+ predicados declarados na assinatura da função que o caller deve satisfazer
+ e pode aprender.
+
+#### Motivação
+
+```kata
+action test => Int
+    let b := 5
+    match (= b 0)
+        Boolean::False: (/ 10 b)   # b é Int, path condition: b ≠ 0
+        Boolean::True: 0
+```
+
+Hoje, `/ 10 b` falha: `b` é `Int`, `/` exige `NonZero`. Mesmo que o braço
+`False` garanta `b ≠ 0` via path condition, o typeck não usa esse
+conhecimento para aceitar `b` como `NonZero`. O usuário precisa escrever
+`(/ 10 (b::NonZero))` — ascription redundante que o compiler deveria
+inferir.
+
+#### Duas direções
+
+**Direção A (pré-condição → aceitação):** O caller tem path conditions
+que provam o predicado de um parâmetro refined. O typeck aceita o
+argumento sem ascription explícita.
+
+**Direção B (assinatura → aprendizado):** O caller passa um argumento
+para um parâmetro refined (seja por ascription explícita, seja por
+Direção A). Após a chamada, o contexto do caller aprende o predicado
+como path condition, propagando para código subsequente.
+
+A Direção A é o caso principal. A Direção B é consequência natural —
+se o argumento satisfaz o predicado (provado ou ascriptado), o
+conhecimento não se perde após a chamada.
+
+#### Direção A: aceitação via path conditions
+
+**Onde:** no dispatch (`apply_dispatch.rs`), quando o dispatch normal
+falha por tipo mismatch (arg é tipo base `Int`, param é refined
+`NonZero`). Antes de falhar:
+
+1. Verifica se o parâmetro em mismatch é `Ty::Struct(StructKey::Family(name))`
+   ou `Ty::Struct(StructKey::Instance(name, _))` — um tipo refined.
+2. Consulta `refined_decls` para obter os predicados do tipo refined.
+3. Para cada predicado, substitui o Hole `_` pelo argumento
+   (`substitute_hole`).
+4. Tenta provar o predicado substituído com as path conditions do caller
+   via `try_prove_with_path_conditions` (Z3).
+5. Se **todos** os predicados são provados (ou `Some(true)`), aceita o
+   argumento — insere ascription implícita `arg::RefinedType`.
+6. Se algum predicado é `Some(false)` (refutado), `TypeMismatch`.
+7. Se algum predicado é `None` (Z3 não decide), fallback conservador:
+   falha como hoje (o smart constructor em runtime é a rede de segurança).
+
+**Exemplo:**
+
+```kata
+/ :: Self NonZero => Self   # assinatura do stdlib
+
+action test => Int
+    let b := 5
+    match (= b 0)
+        Boolean::False: (/ 10 b)
+        # b é Int, param é NonZero.
+        # Predicado de NonZero: != _ (zero _) → != b (zero b) → != b 0
+        # Path condition do braço: not(= b 0) = b ≠ 0
+        # Z3 prova: b ≠ 0 ⟹ b ≠ 0 → aceita
+        Boolean::True: 0
+```
+
+**Conservador:** se o Z3 não decide, o typeck falha — não aceita
+cegamente. O usuário pode ainda usar ascription explícita (`b::NonZero`)
+que passa pelo caminho normal (ascription sobre não-literal com path
+conditions, já implementado no Nível 1).
+
+#### Direção B: aprendizado de predicados da assinatura
+
+**Onde:** no `apply.rs` ou `apply_lambda.rs`, após o dispatch
+bem-sucedido. Se a assinatura tem parâmetros refined e o argumento
+correspondente é `Ident(name)` (variável do caller), adiciona o
+predicado substituído como path condition.
+
+1. Para cada parâmetro refined na assinatura:
+   - Extrai o predicado de `refined_decls`.
+   - Substitui o Hole `_` pelo argumento.
+   - Se o argumento é `Ident(name)`, adiciona `predicado_substituído`
+     como path condition no escopo do caller.
+2. Se o argumento não é `Ident` (ex: literal, expressão complexa),
+   não adiciona — não há variável para propagar.
+
+**Exemplo:**
+
+```kata
+action test => NonZero::Int
+    let b := 5
+    let _ := / 10 (b::NonZero)   # / exige NonZero, b é NonZero
+    # Direção B: aprende not(= b 0) como path condition
+    b::NonZero                   # já é NonZero, mas agora também provado
+```
+
+**Utilidade real:** quando Direção A aceita `b` (Int) como `NonZero`,
+Direção B propaga `b ≠ 0` para código subsequente. Sem Direção B, o
+conhecimento obtido na chamada se perde.
+
+#### Extração de pré-condições das assinaturas
+
+Não há um pass separado — as pré-condições são os **predicados dos
+tipos refined dos parâmetros**, já disponíveis em `refined_decls`.
+A consulta é feita no momento do dispatch, não pré-computada.
+
+```rust
+/// Para cada parâmetro refined, extrai o predicado e o nome do arg
+/// (se arg é Ident). Retorna facts a adicionar como path conditions.
+fn extract_preconditions(
+    params: &[Ty],
+    args: &[Spanned<TypedExpr>],
+    refined_decls: &[RefinedDeclInfo],
+) -> Vec<TypedExpr> {
+    // Para cada (param, arg) onde param é refined:
+    // 1. Consulta predicados em refined_decls.
+    // 2. substitute_hole(pred, arg) para cada predicado.
+    // 3. Se arg é Ident, adiciona como fact.
+}
+```
+
+#### Threading
+
+Não exige novo campo no `InferCtx` — usa `refined_decls` (já presente)
+e `path_conditions` (já presente). A Direção A é tentada no dispatch
+quando o tipo mismatch é base→refined. A Direção B é aplicada após o
+dispatch bem-sucedido.
+
+#### Interação com Nível 2
+
+Nível 2 e Nível 3 são complementares:
+
+- **Nível 2 (post-condições):** função com corpo Kata. O caller aprende
+  a condição que produziu o variant (ex: `Ok` → `b ≠ 0`).
+- **Nível 3 (pré-condições):** função com assinatura refined. O caller
+  prova o predicado do parâmetro (ex: `NonZero` → `b ≠ 0`) e/ou
+  aprende o predicado após a chamada.
+
+Uma função pode ter ambos: `div :: Int NonZero => Result::(Int, Text)`
+(hipotético). Nível 3 prova `b ≠ 0` na entrada; Nível 2 aprende a
+post-condição na saída do `match`.
+
+#### Limitações honestas
+
+1. **Só tipos refined com predicados no `refined_decls`** — se o
+   parâmetro é `NonZero`, os predicados são `!= _ (zero _)` e
+   `= _ _`. Nível 3 consulta esses predicados.
+2. **Só funciona se o caller tem path conditions** — se não há
+   conhecimento acumulado (ex: `let b := some_opaque()`), o Z3 não
+   prova e o typeck falha como hoje.
+3. **Só args `Ident` para Direção B** — se o arg é expressão complexa
+   (`(+ x y)`), não há variável para propagar após a chamada.
+4. **Predicado precisa ser traduzível pelo Z3** — se o predicado
+   contém funções não-inlinable, o Z3 produz variável opaca
+   (fallback conservador).
 
 ### 9.10. Inlining de funções puras no Z3 translator
 
@@ -790,14 +943,20 @@ variáveis opacas no Z3).
 
 ### Roadmap
 
-Nível 1 cria a infraestrutura (`PathConditionCtx`, prova Z3, coleta no
+Nível 1 cria a infrastrutura (`PathConditionCtx`, prova Z3, coleta no
 visitor). Nível 2 adiciona o pass de extração de post-condições e o
-consumo no visitor de match. Nível 3 adiciona contratos explícitos em
-assinaturas. Cada nível é incremental sobre o anterior.
+consumo no visitor de match. Nível 3 adiciona pré-condições inter-
+procedurais no dispatch e aprendizado de predicados da assinatura.
+Cada nível é incremental sobre o anterior.
 
 **Nível 2 desbloqueio:** ✅ Resolvido — inlining de funções puras no
 translator (`InlineFnTable`) + payload binding conectando binding do
 pattern ao argumento.
+
+**Nível 3 desbloqueio:** Nenhum — reusa `refined_decls` (já presente)
+e `try_prove_with_path_conditions` (já implementado no Nível 1).
+A Direção A é tentada no dispatch quando há mismatch base→refined.
+A Direção B é aplicada após dispatch bem-sucedido.
 
 ## 10. Riscos
 
