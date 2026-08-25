@@ -653,12 +653,11 @@ pub(crate) fn extract_preconditions(
 /// - `Some(Err(...))` — predicado refutado (Some(false) do Z3).
 /// - `None` — Z3 não decidiu, ou não há mismatch base→refined, ou sem
 ///   path conditions. O caller deve usar o erro original do dispatch.
-#[allow(clippy::too_many_arguments)] // 8 params: Z3 precondition probe precisa de caller+callee+ctx
+#[allow(clippy::too_many_arguments)] // 7 params: Z3 precondition probe precisa de caller+callee+ctx
 pub(crate) fn try_refined_precondition(
     func_name: &str,
     args: &[Spanned<Expr>],
     typed_args: &[Spanned<TypedExpr>],
-    arg_types: &[Ty],
     callee: &Spanned<Expr>,
     span: &Span,
     env: &mut kata_core::ty::TypeEnv,
@@ -673,7 +672,7 @@ pub(crate) fn try_refined_precondition(
     let overloads = ctx.table.get_overloads(func_name)?;
     let candidates: Vec<&OverloadInfo> = overloads
         .iter()
-        .filter(|oi| oi.params.len() == arg_types.len())
+        .filter(|oi| oi.params.len() == typed_args.len())
         .collect();
     if candidates.is_empty() {
         return None;
@@ -696,7 +695,7 @@ pub(crate) fn try_refined_precondition(
                 continue;
             };
             // O arg é tipo base (não-refined)?
-            let arg_is_base = !matches!(&arg_types[i], Ty::Struct(_));
+            let arg_is_base = !matches!(&typed_args[i].node.ty, Ty::Struct(_));
             if !arg_is_base {
                 continue;
             }
@@ -705,7 +704,7 @@ pub(crate) fn try_refined_precondition(
                 .refined_decls
                 .iter()
                 .filter(|rd| rd.name == rname)
-                .any(|rd| rd.base_ty == arg_types[i]);
+                .any(|rd| rd.base_ty == typed_args[i].node.ty);
             if !base_match {
                 continue;
             }
@@ -729,7 +728,7 @@ pub(crate) fn try_refined_precondition(
             let refined_decls: Vec<_> = ctx
                 .refined_decls
                 .iter()
-                .filter(|rd| rd.name == rname && rd.base_ty == arg_types[i])
+                .filter(|rd| rd.name == rname && rd.base_ty == typed_args[i].node.ty)
                 .collect();
             if refined_decls.is_empty() {
                 all_proven = false;
@@ -793,7 +792,7 @@ pub(crate) fn try_refined_precondition(
 
         // Todos os predicados provados. Constrói args com ascription implícita
         // e retenta o dispatch.
-        let mut new_arg_types = arg_types.to_vec();
+        let mut new_arg_types: Vec<Ty> = typed_args.iter().map(|ta| ta.node.ty.clone()).collect();
         let mut new_typed_args = typed_args.to_vec();
         for &i in &refined_positions {
             let refined_ty = oi.params[i].clone();

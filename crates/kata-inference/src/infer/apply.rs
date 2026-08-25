@@ -267,7 +267,6 @@ pub(crate) fn infer_apply(
                 &func_name,
                 args,
                 &typed_args,
-                &arg_types,
                 callee,
                 span,
                 env,
