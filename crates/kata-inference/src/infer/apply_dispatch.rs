@@ -481,15 +481,12 @@ pub(crate) fn try_refines_fallback(
             if !e.is_empty() {
                 break e;
             }
-            // Tenta seguir alias_of
-            match ctx.struct_registry.get(&current) {
-                Some(info) if info.alias_of.is_some() => {
-                    current = info
-                        .alias_of
-                        .clone()
-                        .expect("alias_of verificado por is_some na guarda");
+            // Tenta seguir alias_of via TypeGraph (classificação).
+            match ctx.type_graph.alias_target(&current) {
+                Some(target) => {
+                    current = target.to_string();
                 }
-                _ => break &[][..],
+                None => break &[][..],
             }
         };
         if entries.is_empty() {
@@ -617,7 +614,9 @@ pub(crate) fn extract_preconditions(
                 continue;
             }
             let arg_expr = Spanned::new(
-                Expr::Ident { name: var_name.clone() },
+                Expr::Ident {
+                    name: var_name.clone(),
+                },
                 typed_arg.span,
             );
             for pred in &rd.predicates {
@@ -654,6 +653,7 @@ pub(crate) fn extract_preconditions(
 /// - `Some(Err(...))` — predicado refutado (Some(false) do Z3).
 /// - `None` — Z3 não decidiu, ou não há mismatch base→refined, ou sem
 ///   path conditions. O caller deve usar o erro original do dispatch.
+#[allow(clippy::too_many_arguments)] // 8 params: Z3 precondition probe precisa de caller+callee+ctx
 pub(crate) fn try_refined_precondition(
     func_name: &str,
     args: &[Spanned<Expr>],
@@ -781,10 +781,9 @@ pub(crate) fn try_refined_precondition(
 
         if any_refuted {
             return Some(Err(MiddleError::TypeMismatch {
-                expected: format!(
-                    "argumento satisfaz predicado do tipo refined (path conditions refutam)"
-                ),
-                found: format!("path conditions implicem negação do predicado"),
+                expected: "argumento satisfaz predicado do tipo refined (path conditions refutam)"
+                    .to_string(),
+                found: "path conditions implicem negação do predicado".to_string(),
                 span: (*span).into(),
             }));
         }
@@ -820,8 +819,7 @@ pub(crate) fn try_refined_precondition(
         if let Ok(outcome) = retry {
             let overload = outcome.overload;
             let expanded_ret = super::apply::expand_ret(&overload.ret, ctx);
-            let callee_ty =
-                Ty::Function(overload.params.clone(), Box::new(expanded_ret.clone()));
+            let callee_ty = Ty::Function(overload.params.clone(), Box::new(expanded_ret.clone()));
             let callee_typed = TypedExpr {
                 span: callee.span,
                 ty: callee_ty,

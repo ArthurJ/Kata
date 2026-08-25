@@ -38,6 +38,7 @@ use super::refined_builders::{build_nested_match, build_result_err, build_result
 ///
 /// Retorna `Vec<TypedFunction>` com todas as funções sintetizadas (predicados +
 /// construtores falíveis). Registra overloads no `dispatch_table`.
+#[allow(clippy::too_many_arguments)] // 8 params: sintetizador precisa de 4 registries + env + dispatch
 pub(crate) fn synthesize_refined(
     refined_decls: &[RefinedDeclInfo],
     enum_registry: &kata_core::enum_registry::EnumRegistry,
@@ -46,6 +47,7 @@ pub(crate) fn synthesize_refined(
     dispatch_table: &mut DispatchTable,
     interface_registry: &kata_core::interface_registry::InterfaceRegistry,
     refines_registry: &kata_core::RefinesRegistry,
+    type_graph: &kata_core::TypeGraph,
 ) -> InferResult<Vec<TypedFunction>> {
     if refined_decls.is_empty() {
         return Ok(Vec::new());
@@ -79,7 +81,7 @@ pub(crate) fn synthesize_refined(
         // Registra smart constructor falível: TypeName :: base_ty => Result::(TypeName, Text)
         // Famílias polimórficas usam Instance(name, concrete) derivado do base_ty;
         // refineds concretos usam Plain(name).
-        let type_key = if struct_registry.is_family(&decl.name) {
+        let type_key = if type_graph.is_family(&decl.name) {
             let concrete = match &decl.base_ty {
                 Ty::Prim(PrimTy::Int) => "Int",
                 Ty::Prim(PrimTy::Float) => "Float",
@@ -126,6 +128,7 @@ pub(crate) fn synthesize_refined(
         refined_decls: &[],
         interface_registry,
         refines_registry,
+        type_graph,
         ret_ty: None,
         in_loop: false,
         deferred_lambdas: &deferred,
@@ -190,7 +193,7 @@ pub(crate) fn synthesize_refined(
         // ── 2b. Sintetiza smart constructor falível ──
         // Famílias polimórficas usam Instance(name, concrete) derivado do base_ty;
         // refineds concretos usam Plain(name).
-        let type_key = if struct_registry.is_family(&decl.name) {
+        let type_key = if type_graph.is_family(&decl.name) {
             let concrete = match &decl.base_ty {
                 Ty::Prim(PrimTy::Int) => "Int",
                 Ty::Prim(PrimTy::Float) => "Float",

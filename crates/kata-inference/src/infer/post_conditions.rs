@@ -238,8 +238,11 @@ fn extract_for_function(
     //    Post-cond de V = disjunção das condições dos guards que produzem V.
     //    payload de V = payload do variant (se todos os guards que produzem V
     //    têm o mesmo payload; None caso contrário — conservador).
-    let mut by_variant: HashMap<(String, String), (Vec<Option<TypedExpr>>, Vec<Option<TypedExpr>>)> =
-        HashMap::new();
+    #[allow(clippy::type_complexity)] // grouping map for post-condition analysis — single use
+    let mut by_variant: HashMap<
+        (String, String),
+        (Vec<Option<TypedExpr>>, Vec<Option<TypedExpr>>),
+    > = HashMap::new();
     for (cond, enum_n, var_n, payload) in entries {
         let (conds, payloads) = by_variant.entry((enum_n, var_n)).or_default();
         conds.push(cond);
@@ -337,7 +340,10 @@ fn typed_expr_eq(a: &TypedExpr, b: &TypedExpr) -> bool {
         ) => {
             typed_expr_eq(&ca.node, &cb.node)
                 && aa.len() == ab.len()
-                && aa.iter().zip(ab.iter()).all(|(x, y)| typed_expr_eq(&x.node, &y.node))
+                && aa
+                    .iter()
+                    .zip(ab.iter())
+                    .all(|(x, y)| typed_expr_eq(&x.node, &y.node))
                 && fa == fb
         }
         (TypedExprKind::Grouping { inner: ia }, TypedExprKind::Grouping { inner: ib }) => {
@@ -372,11 +378,13 @@ fn classify_variant(kind: &TypedExprKind) -> Option<(String, String, Option<Type
             variant,
             payload,
             ..
-        } => Some((enum_name.clone(), variant.clone(), Some(payload.node.clone()))),
+        } => Some((
+            enum_name.clone(),
+            variant.clone(),
+            Some(payload.node.clone()),
+        )),
         TypedExprKind::VariantQual {
-            enum_name,
-            variant,
-            ..
+            enum_name, variant, ..
         } => Some((enum_name.clone(), variant.clone(), None)),
         _ => None,
     }

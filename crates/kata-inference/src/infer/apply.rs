@@ -251,7 +251,11 @@ pub(crate) fn infer_apply(
             // tem parâmetros refined e o arg é Ident, aprende o predicado
             // como path condition no escopo do caller.
             super::apply_dispatch::extract_preconditions_from_result(
-                &result, &typed_args, ctx.refined_decls, env, ctx,
+                &result,
+                &typed_args,
+                ctx.refined_decls,
+                env,
+                ctx,
             );
             return Ok(result);
         }
@@ -260,18 +264,25 @@ pub(crate) fn infer_apply(
             // base→refined, tenta provar o predicado do refined via Z3
             // com as path conditions do caller antes de propagar o erro.
             if let Some(precond_result) = super::apply_dispatch::try_refined_precondition(
-                &func_name, args, &typed_args, &arg_types, callee, span, env, ctx,
+                &func_name,
+                args,
+                &typed_args,
+                &arg_types,
+                callee,
+                span,
+                env,
+                ctx,
             ) {
-                match precond_result {
-                    Ok(result) => {
-                        // Direção B também se aplica após Direção A.
-                        super::apply_dispatch::extract_preconditions_from_result(
-                            &result, &typed_args, ctx.refined_decls, env, ctx,
-                        );
-                        return Ok(result);
-                    }
-                    Err(precond_err) => return Err(precond_err),
-                }
+                let result = precond_result?;
+                // Direção B também se aplica após Direção A.
+                super::apply_dispatch::extract_preconditions_from_result(
+                    &result,
+                    &typed_args,
+                    ctx.refined_decls,
+                    env,
+                    ctx,
+                );
+                return Ok(result);
             }
             return Err(dispatch_err);
         }
