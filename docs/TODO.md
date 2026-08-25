@@ -42,6 +42,22 @@ do codegen.
 ## Futuro
 - Tensor/SIMD
 
+### Fiber arena: dealloc individual para fibers long-lived
+**Estado:** Avaliar. Fibers long-lived (loops, servidores) acumulam dados
+locais na bump arena sem dealloc individual — a arena só libera tudo no
+`reset()` quando a fiber termina. Para fibers curtas isso é ótimo (alloc
+O(1), reset O(1)). Para fibers long-lived é um vazamento sem bound.
+
+**Tensão:** substituir bumpalo pelo modelo Tracked (std::alloc + dealloc
+individual por escopo) resolve dados lineares, mas não persistent data
+structures (Cons, HAMT) — estas compartilham estrutura e só refcount
+pode liberar corretamente. A maioria dos valores em Kata são persistent.
+
+**Direção:** modelo híbrido — dados lineares (Tuple, Array mutável, bytes)
+com dealloc por escopo; persistent data structures com refcount. Ou
+aceitar que fibers long-lived precisam de um mecanismo de GC para a
+bump arena (periodic compaction, copying collection).
+
 ### Patterns aninhados (Maranget + SMT)
 **Estado:** Avaliar. O PRD-exaustividade §9 exclui patterns aninhados.
 Hoje `Some(True)` não é verificado contra `Some(False)` — `Some` é tratado
