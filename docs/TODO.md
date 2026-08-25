@@ -53,25 +53,36 @@ do codegen.
    via refcount. Valores que cruzam fronteiras de fibers (canais,
    EscapeTarget::Heap) usam esta.
 
-Cons/HAMT alocam na fiber_arena quando o escape é Local, e na
-caller_arena (ou root_arena) quando escapam. O problema é computação
-local em fibers long-lived: listas/dicts construídos e descartados
-dentro de um loop usam a bump arena, que só libera tudo no reset
-quando a fiber termina. Para fibers curtas isso é ótimo. Para fibers
-long-lived (loops, servidores) é crescimento sem bound.
+O escape analysis decide onde cada valor é alocado. ListLit, ArrayLit,
+DictLit, Tuple, Struct — todos usam `arena_handle_for_escape` no codegen.
+Valores que escapam (retorno de Action, envio por canal) vão para
+caller_arena ou root_arena. Valores locais (escape=Local) vão para
+fiber_arena.
+
+O problema é computação local em fibers long-lived: listas/tuplas/arrays
+construídos e descartados dentro de um loop (escape=Local) usam a bump
+arena, que só libera tudo no reset quando a fiber termina. Para fibers
+curtas isso é ótimo. Para fibers long-lived (loops, servidores) é
+crescimento sem bound.
 
 **Tensão:** substituir bumpalo pelo modelo Tracked (std::alloc + dealloc
-individual por escopo) resolve dados locais, mas Cons/HAMT são
-persistent data structures — compartilham estrutura (partilha de células
-Cons, HAMT nodes). Não dá para liberar uma célula quando a variável sai
-de escopo porque outra parte do programa pode estar apontando para ela.
-Só refcount resolve, e refcount na fiber arena significa trocar bumpalo
-por algo mais caro.
+individual por escopo) resolve dados locais. Tuplas/Arrays são lineares
+— não compartilham estrutura, dealloc por escopo é direto. Listas (Cons)
+e Dicts (HAMT) são persistent — compartilham estrutura (partilha de
+células Cons, HAMT nodes). Não dá para liberar uma célula quando a
+variável sai de escopo porque outra parte do programa pode estar
+apontando para ela. Só refcount resolve.
 
-**Direção:** modelo híbrido — dados lineares (Tuple, Array mutável, bytes)
-com dealloc por escopo; persistent data structures com refcount. Ou
-aceitar que fibers long-lived precisam de um mecanismo de GC para a
-bump arena (periodic compaction, copying collection).
+**Direção:** modelo híbrido — dados lineares (Tuple, Array, bytes)
+com dealloc por escopo; persistent data structures (Cons, HAMT) com
+refcount. Ou aceitar que fibers long-lived precisam de um mecanismo
+de GC para a bump arena (periodic compaction, copying collection).
+
+**Nota:** o caminho default de FFI injection em `closure.rs:181` injeta
+`fiber_arena.or(caller_arena)` para `list_cons` sem consultar
+`expr.escape`. Isso pode ser inconsistente com o caminho de ListLit
+que usa `arena_handle_for_escape`. Investigar se o caminho de closure
+precisa respeitar escape também.
 
 ### Patterns aninhados (Maranget + SMT)
 **Estado:** Avaliar. O PRD-exaustividade §9 exclui patterns aninhados.
