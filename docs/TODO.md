@@ -1,6 +1,6 @@
 # TODO — Kata-Lang
 
-Único arquivo de pendências. Atualizado 2026-08-23.
+Único arquivo de pendências. Atualizado 2026-08-24.
 
 Os docs `TODO-*.md` foram removidos (obsoletos ou resolvidos). Pendências vivem aqui.
 
@@ -33,10 +33,6 @@ do codegen.
 
 ## Migração de Exemplos
 
-### `parallel.kata` (Cluster 4)
-
-**Estado:** `spawn!` totalmente implementado (parser, inference, codegen, runtime). 10 testes E2E passando. Falta apenas criar `examples/parallel.kata` migrando `examples/legacy/test_parallel.kata` (ajustar sintaxe `n :: Int` → `n::Int`).
-
 ### Tensor (Cluster 3)
 
 **Estado:** `test_tensor_math.kata` não migrado. Bug intencional de dot com shapes incompatíveis — decisão de design pendente.
@@ -45,52 +41,6 @@ do codegen.
 
 ## Futuro
 - Tensor/SIMD
-- `@restart` (retry policy para Actions)
-- Renomear `@trace` de volta para `@log` (diretiva de telemetria)
-
-### Refinement propagation (path conditions no typeck)
-**Estado:** Nível 1 e Nível 2 implementados (PRD
-`docs/PRDs/PRD-refinement-propagation.md`). Tipos refinados já existem —
-predicados no `StructRegistry`, smart constructor falível,
-`const_eval_predicate` valida literais em compile-time. **Nível 1
-(guards locais) implementado:** `PathConditionCtx` em `InferCtx`
-coleta facts de guards e `match` sobre `Boolean` no visitor de
-inferência. `try_prove_with_path_conditions` (Z3) prova ascriptions
-refinadas sobre não-literais. **Nível 2 (post-condições
-inter-procedurais) implementado:** `PostCondTable` extraída de
-funções com guards, consumo no `_match.rs`, `InlineFnTable` para
-inlining de funções puras no Z3 translator, payload binding
-conecta binding do pattern ao argumento. 13 testes E2E em
-`t_refinement_propagation_e2e.rs`. 1841 testes, 0 regressão.
-**Nível 3 (contratos de função) implementado:**
-- **Direção A** (commit `41df71a`): aceitação via path conditions no
-  dispatch — quando arg é tipo base e param é refined, Z3 prova o
-  predicado com as path conditions do caller.
-- **Direção B** (commit abaixo): aprendizado de predicados após chamada
-  — após dispatch bem-sucedido com arg `Ident`, o predicado do refined
-  é extraído e adicionado como path condition no escopo do caller.
-  Migra `PathConditionCtx` para `RefCell` (mutação interior).
-- **Propagação para escopo pai** (commit abaixo): arquitetura
-  checkpoint/rollback com `Rc<RefCell<PathConditionCtx>>`.
-  `learned_facts` separado de `facts` — facts de guard são rolled back
-  ao sair do braço, facts da Direção B são preservados. Sound porque
-  `let`/`constant` são imutáveis. 3 testes E2E novos (23 total).
-  1851 testes, 0 regressão.
-
-### TypeGraph: migrar 6 sites de classificação ad-hoc para o grafo
-**Estado:** Pendente (consolidação de dívida técnica).
-O `TypeGraph` (`kata-core/src/type_graph.rs`) centraliza a
-classificação "este tipo é Instance ou Generic desta família?" num
-único grafo construído após o Pass 0. Hoje essa decisão está
-duplicada em checks ad-hoc contra `StructRegistry` em ~6 sites do
-inference: `ascription.rs`, `dispatch.rs`, `apply_dispatch.rs`,
-e provavelmente mais em `fits_return` e `try_refines_fallback`.
-Migrar para consultar o grafo elimina classificação inconsistente
-(um site trata `NonZero` como Instance, outro como Generic → bug
-silencioso de dispatch). Para implementar: adicionar
-`type_graph: &TypeGraph` ao `InferCtx` e migrar cada site.
-Prioridade: baixa (o grafo já funciona para `resolve_type_expr`;
-a migração é consolidação, não desbloqueio de feature).
 
 ### Patterns aninhados (Maranget + SMT)
 **Estado:** Avaliar. O PRD-exaustividade §9 exclui patterns aninhados.
@@ -112,5 +62,3 @@ ação imediata. Reavaliar caso a caso.
 
 - **`src/ipc.rs:157`** — Implementar `spawn` no Windows. Ver
   `docs/PRDs/PRD-portability-windows.md`.
-
-
