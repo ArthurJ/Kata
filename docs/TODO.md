@@ -42,48 +42,6 @@ do codegen.
 ## Futuro
 - Tensor/SIMD
 
-### Fiber arena: dealloc individual para fibers long-lived
-**Estado:** Avaliar. O runtime tem três arenas:
-
-1. **fiber_arena** (Bump/bumpalo) — dados locais do fiber, reset O(1)
-   quando o fiber termina. Sem dealloc individual.
-2. **caller_arena** — passada pelo caller; no entry point é a root_arena.
-   Valores que escapam para o caller (EscapeTarget::Caller) usam esta.
-3. **root_arena** (Tracked) — arena raiz do Runtime, com dealloc individual
-   via refcount. Valores que cruzam fronteiras de fibers (canais,
-   EscapeTarget::Heap) usam esta.
-
-O escape analysis decide onde cada valor é alocado. ListLit, ArrayLit,
-DictLit, Tuple, Struct — todos usam `arena_handle_for_escape` no codegen.
-Valores que escapam (retorno de Action, envio por canal) vão para
-caller_arena ou root_arena. Valores locais (escape=Local) vão para
-fiber_arena.
-
-O problema é computação local em fibers long-lived: listas/tuplas/arrays
-construídos e descartados dentro de um loop (escape=Local) usam a bump
-arena, que só libera tudo no reset quando a fiber termina. Para fibers
-curtas isso é ótimo. Para fibers long-lived (loops, servidores) é
-crescimento sem bound.
-
-**Tensão:** substituir bumpalo pelo modelo Tracked (std::alloc + dealloc
-individual por escopo) resolve dados locais. Tuplas/Arrays são lineares
-— não compartilham estrutura, dealloc por escopo é direto. Listas (Cons)
-e Dicts (HAMT) são persistent — compartilham estrutura (partilha de
-células Cons, HAMT nodes). Não dá para liberar uma célula quando a
-variável sai de escopo porque outra parte do programa pode estar
-apontando para ela. Só refcount resolve.
-
-**Direção:** modelo híbrido — dados lineares (Tuple, Array, bytes)
-com dealloc por escopo; persistent data structures (Cons, HAMT) com
-refcount. Ou aceitar que fibers long-lived precisam de um mecanismo
-de GC para a bump arena (periodic compaction, copying collection).
-
-**Nota:** o caminho default de FFI injection em `closure.rs:181` injeta
-`fiber_arena.or(caller_arena)` para `list_cons` sem consultar
-`expr.escape`. Isso pode ser inconsistente com o caminho de ListLit
-que usa `arena_handle_for_escape`. Investigar se o caminho de closure
-precisa respeitar escape também.
-
 ### Patterns aninhados (Maranget + SMT)
 **Estado:** Avaliar. O PRD-exaustividade §9 exclui patterns aninhados.
 Hoje `Some(True)` não é verificado contra `Some(False)` — `Some` é tratado
