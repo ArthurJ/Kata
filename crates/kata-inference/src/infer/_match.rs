@@ -334,22 +334,21 @@ pub(crate) fn infer_match(
                         if let Some(ref payload) = pc.payload
                             && let Some(subs) = sub_patterns
                             && let Some(first_sub) = subs.first()
-                            && let TypedPattern::Ident { name: binding_name, .. } =
-                                &first_sub.node
+                            && let TypedPattern::Ident {
+                                name: binding_name, ..
+                            } = &first_sub.node
                         {
-                            let payload_sub =
-                                super::post_conditions::substitute_params(
-                                    payload,
-                                    &pc.param_names,
-                                    args,
-                                );
+                            let payload_sub = super::post_conditions::substitute_params(
+                                payload,
+                                &pc.param_names,
+                                args,
+                            );
                             // Só adiciona se o payload substituído for simples
                             // (Ident ou IntLit) — evita criar variáveis opacas
                             // que podem interferir com outras provas Z3.
                             if matches!(
                                 payload_sub.kind,
-                                TypedExprKind::Ident { .. }
-                                    | TypedExprKind::IntLit { .. }
+                                TypedExprKind::Ident { .. } | TypedExprKind::IntLit { .. }
                             ) {
                                 let binding_expr = TypedExpr {
                                     span: first_sub.span,
@@ -401,6 +400,7 @@ pub(crate) fn infer_match(
             refined_decls: ctx.refined_decls,
             interface_registry: ctx.interface_registry,
             refines_registry: ctx.refines_registry,
+            type_graph: ctx.type_graph,
             ret_ty: ctx.ret_ty,
             in_loop: ctx.in_loop,
             deferred_lambdas: ctx.deferred_lambdas,
@@ -421,9 +421,7 @@ pub(crate) fn infer_match(
             hint,
         )?;
         // Rollback: remove facts de guard do braço, preserva learned_facts.
-        ctx.path_conditions
-            .borrow_mut()
-            .rollback_to(arm_checkpoint);
+        ctx.path_conditions.borrow_mut().rollback_to(arm_checkpoint);
 
         // Verifica que todos os braços retornam o mesmo tipo.
         // Unificação limitada — Ty::Var unifica com qualquer tipo concreto.

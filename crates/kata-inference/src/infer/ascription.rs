@@ -56,7 +56,7 @@ pub(crate) fn infer_type_ascription(
                 let is_family_target = matches!(
                     &resolve_type_expr(&ty.node, env, ctx.interface_registry, ctx.struct_registry, None),
                     Ty::Struct(StructKey::Family(n)) | Ty::Struct(StructKey::Plain(n))
-                        if ctx.struct_registry.get(n).is_some_and(|si| si.is_instance_of.is_some())
+                        if ctx.type_graph.is_family(n)
                 );
                 let hint = if is_family_target {
                     None
@@ -78,7 +78,7 @@ pub(crate) fn infer_type_ascription(
             let is_family_target = matches!(
                 &resolve_type_expr(&ty.node, env, ctx.interface_registry, ctx.struct_registry, None),
                 Ty::Struct(StructKey::Family(n)) | Ty::Struct(StructKey::Plain(n))
-                    if ctx.struct_registry.get(n).is_some_and(|si| si.is_instance_of.is_some())
+                    if ctx.type_graph.is_family(n)
             );
             let hint = if is_family_target {
                 None
@@ -102,28 +102,24 @@ pub(crate) fn infer_type_ascription(
     let target_ty = if let Ty::Struct(StructKey::Family(family_name))
     | Ty::Struct(StructKey::Plain(family_name)) = &target_ty
     {
-        if let Some(info) = ctx.struct_registry.get(family_name) {
-            if info.is_instance_of.is_some() {
-                let concrete = match &inner.ty {
-                    Ty::Prim(PrimTy::Int) => "Int",
-                    Ty::Prim(PrimTy::Float) => "Float",
-                    Ty::Prim(PrimTy::Rational) => "Rational",
-                    Ty::Prim(PrimTy::Text) => "Text",
-                    _ => "",
-                };
-                if !concrete.is_empty()
-                    && ctx
-                        .struct_registry
-                        .get_instance(family_name, concrete)
-                        .is_some()
-                {
-                    Ty::Struct(StructKey::Instance(
-                        family_name.clone(),
-                        concrete.to_string(),
-                    ))
-                } else {
-                    target_ty
-                }
+        if ctx.type_graph.is_family(family_name) {
+            let concrete = match &inner.ty {
+                Ty::Prim(PrimTy::Int) => "Int",
+                Ty::Prim(PrimTy::Float) => "Float",
+                Ty::Prim(PrimTy::Rational) => "Rational",
+                Ty::Prim(PrimTy::Text) => "Text",
+                _ => "",
+            };
+            if !concrete.is_empty()
+                && ctx
+                    .struct_registry
+                    .get_instance(family_name, concrete)
+                    .is_some()
+            {
+                Ty::Struct(StructKey::Instance(
+                    family_name.clone(),
+                    concrete.to_string(),
+                ))
             } else {
                 target_ty
             }

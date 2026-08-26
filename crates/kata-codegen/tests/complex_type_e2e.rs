@@ -99,7 +99,11 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
         enum_pred_decls,
         interface_registry,
         refines_registry,
-        type_graph: prelude.type_graph.clone(),
+        type_graph: {
+            let mut tg = prelude.type_graph.clone();
+            tg.merge(&user.type_graph);
+            tg
+        },
         functions: {
             let mut fns = prelude.functions;
             let user_fn_names: std::collections::HashSet<&str> =

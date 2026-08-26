@@ -34,6 +34,7 @@ pub(crate) fn synthesize_enum_pred(
     struct_registry: &kata_core::struct_registry::StructRegistry,
     type_env: &TypeEnv,
     dispatch_table: &mut DispatchTable,
+    type_graph: &kata_core::TypeGraph,
 ) -> InferResult<Vec<TypedFunction>> {
     if enum_pred_decls.is_empty() {
         return Ok(Vec::new());
@@ -93,6 +94,7 @@ pub(crate) fn synthesize_enum_pred(
         refined_decls: &[],
         interface_registry: &empty_iface_reg,
         refines_registry: &empty_refines_reg,
+        type_graph,
         ret_ty: None,
         in_loop: false,
         deferred_lambdas: &deferred,

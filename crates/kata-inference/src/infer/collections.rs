@@ -409,6 +409,7 @@ pub(crate) fn infer_for_in(
         refined_decls: ctx.refined_decls,
         interface_registry: ctx.interface_registry,
         refines_registry: ctx.refines_registry,
+        type_graph: ctx.type_graph,
         ret_ty: ctx.ret_ty,
         in_loop: true,
         deferred_lambdas: ctx.deferred_lambdas,

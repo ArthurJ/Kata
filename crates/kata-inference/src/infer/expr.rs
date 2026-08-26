@@ -9,6 +9,7 @@ use std::collections::HashMap;
 
 use kata_ast::{Expr, GuardClause, Pattern, Span, Spanned, TypeExpr, WithBinding};
 use kata_core::StructKey;
+use kata_core::TypeGraph;
 use kata_core::dispatch::{DispatchTable, match_score};
 use kata_core::enum_registry::EnumRegistry;
 use kata_core::escape::EscapeTarget;
@@ -66,6 +67,10 @@ pub(crate) struct InferCtx<'a> {
     /// Catálogo de delegações `refines` — fallback no dispatch:
     /// substitui args refined pelo tipo base e retenta.
     pub refines_registry: &'a kata_core::RefinesRegistry,
+    /// Grafo de classificação de tipos — consultas `is_family`,
+    /// `has_instance`, `alias_target` usam este grafo em vez de
+    /// checks ad-hoc contra `StructRegistry`.
+    pub type_graph: &'a TypeGraph,
     /// Tipo de retorno da Action atual — `Some(ty)` quando inferindo
     /// o body de uma Action, `None` caso contrário. Usado por `infer_return`
     /// para verificar que `return expr` produz o tipo esperado.
@@ -842,6 +847,7 @@ pub(crate) fn infer_expr_hinted(
                 refined_decls: ctx.refined_decls,
                 interface_registry: ctx.interface_registry,
                 refines_registry: ctx.refines_registry,
+                type_graph: ctx.type_graph,
                 ret_ty: ctx.ret_ty,
                 in_loop: true,
                 deferred_lambdas: ctx.deferred_lambdas,

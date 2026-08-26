@@ -460,7 +460,10 @@ fn t_nivel3_direcao_a_sem_path_conditions_falha() {
     let b := 5
     / 10 b
 test!()"#;
-    assert!(infer_fails(src), "sem path conditions, dispatch deve falhar");
+    assert!(
+        infer_fails(src),
+        "sem path conditions, dispatch deve falhar"
+    );
 }
 
 // ── 16. Direção A — path condition refuta predicado (b = 0) ─────────

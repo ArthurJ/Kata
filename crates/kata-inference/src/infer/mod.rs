@@ -186,6 +186,7 @@ pub fn infer_module(
         &mut dispatch_table,
         &interface_registry,
         &resolved.refines_registry,
+        &resolved.type_graph,
     )?;
 
     // 1f. sintetiza construtores despachadores para enums com
@@ -196,6 +197,7 @@ pub fn infer_module(
         &resolved.struct_registry,
         &resolved.type_env,
         &mut dispatch_table,
+        &resolved.type_graph,
     )?;
 
     // 1d. sintetiza `show` para structs com campos e todos os enums.
@@ -261,6 +263,7 @@ pub fn infer_module(
         refined_decls: &resolved.refined_decls,
         interface_registry: &interface_registry,
         refines_registry: &resolved.refines_registry,
+        type_graph: &resolved.type_graph,
         ret_ty: None,
         in_loop: false,
         deferred_lambdas: &deferred_lambdas,
@@ -310,6 +313,7 @@ pub fn infer_module(
                 refined_decls: &resolved.refined_decls,
                 interface_registry: &interface_registry,
                 refines_registry: &resolved.refines_registry,
+                type_graph: &resolved.type_graph,
                 ret_ty: None,
                 in_loop: false,
                 deferred_lambdas: &deferred_lambdas,
@@ -353,6 +357,7 @@ pub fn infer_module(
             refined_decls: &resolved.refined_decls,
             interface_registry: &interface_registry,
             refines_registry: &resolved.refines_registry,
+            type_graph: &resolved.type_graph,
             ret_ty: None,
             in_loop: false,
             deferred_lambdas: &deferred_lambdas,
@@ -393,6 +398,7 @@ pub fn infer_module(
             refined_decls: &resolved.refined_decls,
             interface_registry: &interface_registry,
             refines_registry: &resolved.refines_registry,
+            type_graph: &resolved.type_graph,
             ret_ty: Some(&action_def.return_type),
             in_loop: false,
             deferred_lambdas: &deferred_lambdas,
@@ -429,6 +435,7 @@ pub fn infer_module(
                     refined_decls: &resolved.refined_decls,
                     interface_registry: &interface_registry,
                     refines_registry: &resolved.refines_registry,
+                    type_graph: &resolved.type_graph,
                     ret_ty: None,
                     in_loop: false,
                     deferred_lambdas: &deferred_lambdas,
