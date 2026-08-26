@@ -44,6 +44,12 @@ impl KataLsp {
     }
 
     /// Roda análise no documento e publica diagnósticos.
+    ///
+    /// `run_frontend` é CPU-bound (lex → parse → resolve → infer) e bloquearia
+    /// o runtime tokio se rodasse inline no async context. `spawn_blocking`
+    /// move a análise para uma thread dedicada do pool de blocking do tokio,
+    /// mantendo o servidor responsivo a outras requests (hover, didChange de
+    /// outros arquivos) durante a análise.
     async fn analyze_and_publish(&self, uri: &tower_lsp::lsp_types::Url) {
         let text = {
             let docs = self.docs.lock().await;
@@ -53,13 +59,17 @@ impl KataLsp {
             }
         };
 
-        let (analysis, diagnostics) = match run_frontend(&text, uri_to_path(uri)) {
-            Ok(result) => {
-                let diags = Vec::new(); // Sem erros — diagnósticos vazios
-                (Some(result), diags)
-            }
+        let file_path = uri_to_path(uri);
+        let text_for_diags = text.clone();
+        let analysis =
+            tokio::task::spawn_blocking(move || run_frontend(&text, file_path.as_deref()))
+                .await
+                .expect("análise do front-end panicked");
+
+        let (analysis, diagnostics) = match analysis {
+            Ok(result) => (Some(result), Vec::new()),
             Err(errors) => {
-                let diags = to_diagnostics(&errors, &text);
+                let diags = to_diagnostics(&errors, &text_for_diags);
                 (None, diags)
             }
         };
@@ -165,6 +175,9 @@ impl LanguageServer for KataLsp {
 }
 
 /// Worker de debounce: aguarda 100ms de silêncio antes de re-analisar.
+///
+/// `run_frontend` roda em `spawn_blocking` para não bloquear o runtime tokio
+/// durante a análise (lex → parse → resolve → infer é CPU-bound).
 async fn debounce_worker(mut rx: DebounceRx, docs: Arc<Mutex<DocumentStore>>, client: Client) {
     while let Some(uri) = rx.recv().await {
         // Aguarda debounce
@@ -182,10 +195,17 @@ async fn debounce_worker(mut rx: DebounceRx, docs: Arc<Mutex<DocumentStore>>, cl
             }
         };
 
-        let (analysis, diagnostics) = match run_frontend(&text, uri_to_path(&uri)) {
+        let file_path = uri_to_path(&uri);
+        let text_for_diags = text.clone();
+        let analysis =
+            tokio::task::spawn_blocking(move || run_frontend(&text, file_path.as_deref()))
+                .await
+                .expect("análise do front-end panicked");
+
+        let (analysis, diagnostics) = match analysis {
             Ok(result) => (Some(result), Vec::new()),
             Err(errors) => {
-                let diags = to_diagnostics(&errors, &text);
+                let diags = to_diagnostics(&errors, &text_for_diags);
                 (None, diags)
             }
         };
@@ -199,10 +219,13 @@ async fn debounce_worker(mut rx: DebounceRx, docs: Arc<Mutex<DocumentStore>>, cl
     }
 }
 
-/// Converte Url → Option<&str> para file_path (usado por run_frontend).
-fn uri_to_path(uri: &tower_lsp::lsp_types::Url) -> Option<&str> {
+/// Converte Url → Option<String> para file_path (usado por run_frontend).
+///
+/// Retorna `String` (owned) para que o resultado possa atravessar a fronteira
+/// de `spawn_blocking` sem empréstimo da `Url`.
+fn uri_to_path(uri: &tower_lsp::lsp_types::Url) -> Option<String> {
     if uri.scheme() == "file" {
-        uri.path().into()
+        Some(uri.path().to_string())
     } else {
         None
     }
