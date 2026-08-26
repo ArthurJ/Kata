@@ -124,12 +124,11 @@ pub(crate) fn lower_expr(
                     _ => "",
                 };
                 if !ffi_name.is_empty() {
-                    let func_ref =
-                        ctx.ffi_refs
-                            .get(ffi_name)
-                            .ok_or_else(|| super::CodegenError::FfiSymbolNotFound {
-                                symbol: ffi_name.to_string(),
-                            })?;
+                    let func_ref = ctx.ffi_refs.get(ffi_name).ok_or_else(|| {
+                        super::CodegenError::FfiSymbolNotFound {
+                            symbol: ffi_name.to_string(),
+                        }
+                    })?;
                     let call_inst = ctx.builder.ins().call(*func_ref, &[]);
                     return Ok(ctx.builder.inst_results(call_inst)[0]);
                 }

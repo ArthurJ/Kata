@@ -56,10 +56,7 @@ impl PathConditionCtx {
     /// Facts acumulados (facts + learned_facts concatenados).
     /// O Z3 vê o conjunto unificado.
     pub(crate) fn facts(&self) -> Vec<&TypedExpr> {
-        self.facts
-            .iter()
-            .chain(self.learned_facts.iter())
-            .collect()
+        self.facts.iter().chain(self.learned_facts.iter()).collect()
     }
 
     /// True se não há facts nem learned_facts.
