@@ -147,6 +147,15 @@ Como `rx1` e `rx2` são receivers independentes da mesma fonte, cada um recebe o
 
 A semântica é *latest only*: se múltiplos valores são enviados antes de um receiver ler, ele vê apenas o último. Não há fila — é um latch, não um buffer.
 
+## Topologia de canais
+
+Canais conectam fibers na árvore de `fork!`. A comunicação acontece em duas direções:
+
+- **Pai → filho:** o pai cria o canal, passa o `Sender` ou `Receiver` como argumento de `fork!`.
+- **Irmão → irmão:** o pai cria o canal, passa o `Sender` para uma filha e o `Receiver` para outra.
+
+`Sender`, `Receiver` e `ReceiverFactory` fluem apenas descendente — do pai para os filhos via argumentos de `fork!`. Eles são handles de operadores, não valores de dados: não trafegam por `<!` nem são retornados de actions. Essa restrição garante que o ancestral comum de dois fibers conectados por canal é sempre o pai direto do sender — o que permite ao compilador alocar os valores na arena correta em compile-time, sem cópia nem garbage collector.
+
 ## `spawn!` — processo OS isolado
 
 `fork!` cria um fiber — uma corrotina leve no mesmo processo. `spawn!` vai além: cria um **processo OS separado** via `fork` do sistema operacional. O child herda a arena via copy-on-write e executa a action isoladamente.

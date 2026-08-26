@@ -1830,6 +1830,26 @@ antes do pai, a arena dela seria resetada e valores enviados via canal
 seriam use-after-free. A garantia de que o pai só morre depois das
 filhas é o que fecha o sistema.
 
+#### Restrição topológica de canais
+
+A escape analysis é sound porque canais só conectam fibers que compartilham
+um ancestral comum imediato — **pai-filho** ou **irmãos** (filhos do mesmo
+pai). O typeck enforced essa topologia com duas restrições em compile-time:
+
+1. **`Sender`, `Receiver` e `ReceiverFactory` não trafegam via `<!`.** O
+   typeck rejeita esses tipos como payload de envio (`MiddleError::TypeMismatch`
+   em `infer_channel_send`). Canais são operadores de comunicação, não valores
+   de dados — não podem viajar por outros canais (endpoint mobility).
+
+2. **Canais não são retornados de Actions.** O typeck rejeita `Sender`/
+   `Receiver`/`ReceiverFactory` no tipo de retorno de Actions
+   (`MiddleError::ChannelInReturn` em `action_infer`). Canais fluem apenas
+   descendente: do pai para os filhos via argumentos de `fork!`.
+
+Essas restrições garantem que o caller (pai direto do sender) é sempre o
+LCA (lowest common ancestor) de sender e receiver. A caller_arena cobre o
+lifetime de ambos, e a escape analysis aloca na arena correta sem cópia.
+
 #### EscapeTarget — como o inference decide a arena
 
 O inference atribui `EscapeTarget` a cada expressão:
@@ -2005,6 +2025,8 @@ action main => Unit
 | `fork!(f, (42,))` onde `f := worker` | ✅ Permitido | Fork recebe Action como valor |
 | Action como campo de `data` | ❌ Proibido | `data` é reino de dados, não de comportamento |
 | Action via canal | ❌ Proibido | Canais transportam dados, não comportamento |
+| Canal via canal (`<!`) | ❌ Proibido | Endpoint mobility quebraria a topologia — ver §6.3 |
+| Canal como retorno de Action | ❌ Proibido | Handle sobreviveria ao fiber criador — ver §6.3 |
 | Action como parâmetro de função pura | ❌ Proibido | Funções puras não podem invocar actions |
 | Interface `CALLABLE` | ❌ Não existe | Functions e Actions são reinos separados |
 
@@ -2072,6 +2094,27 @@ wake pass do scheduler, não para concorrência entre threads.
 
 Para orquestrar múltiplas vias, utiliza-se a estrutura `select` com casos de
 `timeout`, que multiplexa eventos sem inanição (*starvation*).
+
+#### Topologia e endpoint mobility
+
+Canais operam dentro da árvore de fibers de `fork!` — conectam apenas
+**pai-filho** (o pai passa o canal como argumento de `fork!`) ou **irmãos**
+(o pai cria o canal e passa `Sender`/`Receiver` para filhas diferentes).
+
+`Sender`, `Receiver` e `ReceiverFactory` são handles de operadores, não
+valores de dados. O typeck enforced duas restrições em compile-time:
+
+- **`<!` rejeita canais como payload** (`infer_channel_send`): enviar um
+  `Sender` ou `Receiver` por outro canal criaria conexões fora da árvore
+  (tio-sobrinho, primos), quebrando a garantia de que o LCA de sender e
+  receiver é o pai direto do sender.
+- **Retorno de Action rejeita canais** (`action_infer` — `ChannelInReturn`):
+  retornar um canal faria o handle sobreviver ao fiber criador, cuja arena
+  (e o canal nela) seria resetada.
+
+Canais fluem apenas descendente: do pai para os filhos via argumentos de
+`fork!`. Ver §5.2.2, "Restrição topológica de canais", para a relação com
+a escape analysis e seleção de arena.
 
 ### 6.4. `spawn!` (Multiprocess)
 

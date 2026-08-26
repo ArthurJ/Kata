@@ -60,11 +60,12 @@ pub(crate) fn infer_channel_send(
 
     // Proibe Ty::Sender/Receiver/ReceiverFactory em canal — canais não são
     // valores de primeira classe que possam viajar por outros canais. Canais
-    // só se movem via argumentos de fork! ou retorno de Action, garantindo
-    // que a topologia de comunicação respeita a árvore de fibers (pai-filho
-    // e irmãos). Permitir endpoint mobility via canal quebraria a garantia
-    // de que Caller (caller_arena do sender) é sempre o LCA de sender e
-    // receiver, tornando a escape analysis insound.
+    // só se movem via argumentos de fork!, garantindo que a topologia de
+    // comunicação respeita a árvore de fibers (pai-filho e irmãos).
+    // Permitir endpoint mobility via canal quebraria a garantia de que Caller
+    // (caller_arena do sender) é sempre o LCA de sender e receiver, tornando
+    // a escape analysis insound. Canais também não podem ser retornados de
+    // Action (ver action_infer.rs — check ChannelInReturn).
     if matches!(&typed_value.ty, Ty::Sender(_) | Ty::Receiver(_) | Ty::ReceiverFactory(_)) {
         return Err(MiddleError::TypeMismatch {
             expected: "valor serializável (não-Action, não-Canal)".into(),
