@@ -1,4 +1,4 @@
-# PRD — Diretiva `trace` com Args no Site de Aplicação
+# PRD — Diretiva `log` com Args no Site de Aplicação
 
 **Status:** ✅ Concluído (Fase 1 ✅, Fase 2 ✅, Fase 3 ✅)
 **Data:** 2026-08-12
@@ -9,14 +9,14 @@
 ## 0. Resumo
 
 Estender o sistema de diretivas customizadas para suportar **args no site de
-aplicação** (`@trace{msg: "..."}`) e **variáveis de reflexão em funções puras**
-(`_args` operacional). Usando essa infraestrutura, definir a diretiva `trace`
+aplicação** (`@log{msg: "..."}`) e **variáveis de reflexão em funções puras**
+(`_args` operacional). Usando essa infraestrutura, definir a diretiva `log`
 em Kata no stdlib — uma versão flexível do `@log` intrínseco que usa `log!()`
 como path único de publicação e `format` + variáveis de reflexão para
 composição de mensagem.
 
 Após validação, a diretiva `@log` intrínseca é removida do compilador e a
-diretiva `trace` é renomeada para `log`.
+diretiva `log` é renomeada para `log`.
 
 ## 1. Motivação
 
@@ -43,16 +43,16 @@ O `@log` intrínseco tem três problemas:
 
 ### 2.1. Args no site de aplicação
 
-Hoje: `@trace` (sem args). O desugar inlinea o body fixo da declaration.
+Hoje: `@log` (sem args). O desugar inlinea o body fixo da declaration.
 
-Proposto: `@trace{msg: "entering {}", when: "enter"}`. Os args do site de
+Proposto: `@log{msg: "entering {}", when: "enter"}`. Os args do site de
 aplicação são injetados como `let` bindings no body inlined, antes dos
 statements da diretiva.
 
 #### Sintaxe de aplicação
 
 ```kata
-@trace{msg: "entering {} with {}", when: "enter"}
+@log{msg: "entering {} with {}", when: "enter"}
 quicksort :: [Int] => [Int]
 lambda []: []
 lambda [pivo:resto]:
@@ -68,7 +68,7 @@ Os args nomeados do site de aplicação (exceto `when`, que é consumido como
 seletor de overload) viram bindings `let _<key> := <value>` no body inlined:
 
 ```
-# @trace{msg: "entering {}", when: "enter"} aplicado a quicksort
+# @log{msg: "entering {}", when: "enter"} aplicado a quicksort
 # Desugaring conceptual:
 let _msg := "entering {}"
 let _name := "quicksort"
@@ -98,13 +98,13 @@ pub struct DirectiveKey {
 }
 ```
 
-`@trace{msg: "...", when: "enter"}` despacha para a declaration cuja chave é
+`@log{msg: "...", when: "enter"}` despacha para a declaration cuja chave é
 `(name="trace", when=Enter, on=Any, arg_keys=["msg"])`.
 
-`@trace{msg: "...", when: "enter", topic: "audit"}` despacha para
+`@log{msg: "...", when: "enter", topic: "audit"}` despacha para
 `(name="trace", when=Enter, on=Any, arg_keys=["msg", "topic"])`.
 
-### 2.3. Diretiva `trace` no stdlib
+### 2.3. Diretiva `log` no stdlib
 
 Definida em `stdlib/core.kata` com overloads separados por target (ver §6
 para rationale de pureza):
@@ -114,66 +114,66 @@ para rationale de pureza):
 ```kata
 # ── sem file ──
 
-directive trace{when: Hook::Enter, on: Target::Action}
+directive log{when: Hook::Enter, on: Target::Action}
     log!(LogLevel::Info, format _msg (_name, _args))
 
-directive trace{when: Hook::Exit, on: Target::Action}
+directive log{when: Hook::Exit, on: Target::Action}
     log!(LogLevel::Info, format _msg (_name, _return))
 
-directive trace{when: Hook::Enter, on: Target::Action}
+directive log{when: Hook::Enter, on: Target::Action}
     log!(LogLevel::Info, format _msg (_name, _args), _topic)
 
-directive trace{when: Hook::Exit, on: Target::Action}
+directive log{when: Hook::Exit, on: Target::Action}
     log!(LogLevel::Info, format _msg (_name, _return), _topic)
 
-directive trace{when: Hook::Enter, on: Target::Action}
+directive log{when: Hook::Enter, on: Target::Action}
     log!(LogLevel::Info, format _msg (_name, _args), "default", _policy)
 
-directive trace{when: Hook::Exit, on: Target::Action}
+directive log{when: Hook::Exit, on: Target::Action}
     log!(LogLevel::Info, format _msg (_name, _return), "default", _policy)
 
-directive trace{when: Hook::Enter, on: Target::Action}
+directive log{when: Hook::Enter, on: Target::Action}
     log!(LogLevel::Info, format _msg (_name, _args), _topic, _policy)
 
-directive trace{when: Hook::Exit, on: Target::Action}
+directive log{when: Hook::Exit, on: Target::Action}
     log!(LogLevel::Info, format _msg (_name, _return), _topic, _policy)
 
 # ── com file (Decisão P0.5) ──
 # `_file` sozinho: write direto, sem CSP.
 
-directive trace{when: Hook::Enter, on: Target::Action}
+directive log{when: Hook::Enter, on: Target::Action}
     log!(LogLevel::Info, format _msg (_name, _args), _file)
 
-directive trace{when: Hook::Exit, on: Target::Action}
+directive log{when: Hook::Exit, on: Target::Action}
     log!(LogLevel::Info, format _msg (_name, _return), _file)
 
 # `topic` + `file`: duas chamadas log!() — uma CSP, uma file.
 
-directive trace{when: Hook::Enter, on: Target::Action}
+directive log{when: Hook::Enter, on: Target::Action}
     log!(LogLevel::Info, format _msg (_name, _args), _topic)
     log!(LogLevel::Info, format _msg (_name, _args), _file)
 
-directive trace{when: Hook::Exit, on: Target::Action}
+directive log{when: Hook::Exit, on: Target::Action}
     log!(LogLevel::Info, format _msg (_name, _return), _topic)
     log!(LogLevel::Info, format _msg (_name, _return), _file)
 
 # `policy` + `file`: CSP com policy + write direto.
 
-directive trace{when: Hook::Enter, on: Target::Action}
+directive log{when: Hook::Enter, on: Target::Action}
     log!(LogLevel::Info, format _msg (_name, _args), "default", _policy)
     log!(LogLevel::Info, format _msg (_name, _args), _file)
 
-directive trace{when: Hook::Exit, on: Target::Action}
+directive log{when: Hook::Exit, on: Target::Action}
     log!(LogLevel::Info, format _msg (_name, _return), "default", _policy)
     log!(LogLevel::Info, format _msg (_name, _return), _file)
 
 # `topic` + `policy` + `file`: CSP com topic+policy + write direto.
 
-directive trace{when: Hook::Enter, on: Target::Action}
+directive log{when: Hook::Enter, on: Target::Action}
     log!(LogLevel::Info, format _msg (_name, _args), _topic, _policy)
     log!(LogLevel::Info, format _msg (_name, _args), _file)
 
-directive trace{when: Hook::Exit, on: Target::Action}
+directive log{when: Hook::Exit, on: Target::Action}
     log!(LogLevel::Info, format _msg (_name, _return), _topic, _policy)
     log!(LogLevel::Info, format _msg (_name, _return), _file)
 ```
@@ -183,34 +183,34 @@ directive trace{when: Hook::Exit, on: Target::Action}
 ```kata
 # ── sem file ──
 
-directive trace{when: Hook::Enter, on: Target::Function}
+directive log{when: Hook::Enter, on: Target::Function}
     log!(LogLevel::Info, format _msg (_name, _args))
 
-directive trace{when: Hook::Exit, on: Target::Function}
+directive log{when: Hook::Exit, on: Target::Function}
     log!(LogLevel::Info, format _msg (_name, _return))
 
-directive trace{when: Hook::Enter, on: Target::Function}
+directive log{when: Hook::Enter, on: Target::Function}
     log!(LogLevel::Info, format _msg (_name, _args), _topic)
 
-directive trace{when: Hook::Exit, on: Target::Function}
+directive log{when: Hook::Exit, on: Target::Function}
     log!(LogLevel::Info, format _msg (_name, _return), _topic)
 
 # ── com file (Decisão P0.5) ──
 # `_file` sozinho: write direto, sem CSP.
 
-directive trace{when: Hook::Enter, on: Target::Function}
+directive log{when: Hook::Enter, on: Target::Function}
     log!(LogLevel::Info, format _msg (_name, _args), _file)
 
-directive trace{when: Hook::Exit, on: Target::Function}
+directive log{when: Hook::Exit, on: Target::Function}
     log!(LogLevel::Info, format _msg (_name, _return), _file)
 
 # `topic` + `file`: duas chamadas log!() — uma CSP, uma file.
 
-directive trace{when: Hook::Enter, on: Target::Function}
+directive log{when: Hook::Enter, on: Target::Function}
     log!(LogLevel::Info, format _msg (_name, _args), _topic)
     log!(LogLevel::Info, format _msg (_name, _args), _file)
 
-directive trace{when: Hook::Exit, on: Target::Function}
+directive log{when: Hook::Exit, on: Target::Function}
     log!(LogLevel::Info, format _msg (_name, _return), _topic)
     log!(LogLevel::Info, format _msg (_name, _return), _file)
 ```
@@ -232,7 +232,7 @@ Diferente do `@log` intrínseco onde `when` era campo da declaration, aqui `when
 é arg do site de aplicação e seletor de overload simultaneamente.
 
 **Decisão D2:** `msg` é obrigatório no site de aplicação. Sem `msg`, não há
-mensagem para logar. Validação em compile-time: se `@trace{when: "enter"}`
+mensagem para logar. Validação em compile-time: se `@log{when: "enter"}`
 sem `msg`, erro.
 
 **Decisão D3:** `level`, `topic`, `policy` são opcionais. A combinação de args
@@ -280,7 +280,7 @@ O codegen de funções cria `__result` no epílogo quando há hooks de Exit
 O `@log` intrínseco tem `parse_template` que extrai `{expr}` do template e
 constrói `Expr::Ident(name)` para cada placeholder. Isso reimplanta `format`.
 
-Com a diretiva `trace`, o body usa `format` diretamente:
+Com a diretiva `log`, o body usa `format` diretamente:
 
 ```kata
 log!(LogLevel::Info, format _msg (_name, _args))
@@ -299,7 +299,7 @@ tupla.
 
 ### Fase 1 — Args no site de aplicação + reflexão em funções ✅
 
-**Objetivo:** Fazer `@trace{msg: "...", when: "enter"}` funcionar com
+**Objetivo:** Fazer `@log{msg: "...", when: "enter"}` funcionar com
 diretivas customizadas, com `_args` operacional em funções.
 
 **Mudanças:**
@@ -328,7 +328,7 @@ diretivas customizadas, com `_args` operacional em funções.
    }
    ```
 
-5. **Resolution** (`lib.rs`): ao processar `@trace{msg: "...", when: "enter"}`
+5. **Resolution** (`lib.rs`): ao processar `@log{msg: "...", when: "enter"}`
    em Sig/ActionDecl, construir `CustomDirectiveApp` com os args. Validar
    que o `arg_keys` do site casa com alguma declaration no registry
    (despacho por args).
@@ -357,7 +357,7 @@ diretivas customizadas, com `_args` operacional em funções.
     `__param_{i}`. (Decisão P0.2.)
 
 **DoD:**
-- ✅ `@trace{msg: "test {}", when: "enter"}` aplicado a função pura com
+- ✅ `@log{msg: "test {}", when: "enter"}` aplicado a função pura com
   diretiva customizada definida pelo usuário funciona (teste E2E 21).
 - ✅ `_args` acessível no body da diretiva em funções multi-cláusula
   (teste E2E 21, 24).
@@ -368,13 +368,13 @@ diretivas customizadas, com `_args` operacional em funções.
 - ✅ 1580 testes, 0 falhas (após fix de parse error no teste 24:
   `+ _ 1` → `lambda n: + n 1`).
 
-### Fase 2 — Definir `trace` no stdlib ✅
+### Fase 2 — Definir `log` no stdlib ✅
 
-**Objetivo:** Tornar `trace` uma diretiva disponível por default.
+**Objetivo:** Tornar `log` uma diretiva disponível por default.
 
 **Mudanças:**
 
-1. Adicionar as 24 declarations de `trace` em `stdlib/core.kata`:
+1. Adicionar as 24 declarations de `log` em `stdlib/core.kata`:
    16 para Actions (com policy e file, Enter/Exit) + 8 para Funções
    (sem policy, com file, Enter/Exit). Cada declaration declara os
    args esperados no dict (`msg: Text`, `topic: Text`, `policy: Text`,
@@ -382,10 +382,10 @@ diretivas customizadas, com `_args` operacional em funções.
 
 2. `resolve_with_prelude` (`kata-resolution/src/lib.rs`): novo path de
    resolução que recebe `prelude_directives: &DirectiveRegistry` como
-   parâmetro de consulta. Durante validação de `@trace` em Sig/ActionDecl,
+   parâmetro de consulta. Durante validação de `@log` em Sig/ActionDecl,
    verifica tanto o registry do módulo usuário quanto o registry do
    prelude para `contains_name` e `has_compatible_target`. Isto permite
-   que `@trace` (definida no stdlib) seja validada antes do `merge_resolved`
+   que `@log` (definida no stdlib) seja validada antes do `merge_resolved`
    trazer as declarations do prelude.
 
 3. `DirectiveRegistry.merge` idempotente (`types.rs`): se a chave já
@@ -401,15 +401,15 @@ diretivas customizadas, com `_args` operacional em funções.
    `Tuple(Int)`) — antes o builtin tratava Int como ponteiro de string.
 
 **DoD:**
-- ✅ `@trace{msg: "entering {}", when: "enter"}` funciona sem declaration
-  local de `trace` (teste E2E 25).
-- ✅ `@trace{msg: "result: {}", when: "exit", topic: "audit", policy: "block"}`
+- ✅ `@log{msg: "entering {}", when: "enter"}` funciona sem declaration
+  local de `log` (teste E2E 25).
+- ✅ `@log{msg: "result: {}", when: "exit", topic: "audit", policy: "block"}`
   funciona com topic e policy (teste E2E 27).
-- ✅ Testes E2E 25-27: `@trace` do stdlib sem declaration local — função
+- ✅ Testes E2E 25-27: `@log` do stdlib sem declaration local — função
   pura (enter), exit hook, action com topic+policy.
 - ✅ 1583 testes, 0 falhas.
 
-### Fase 3 — Remover `@log` intrínseco, depois renomear `trace` para `log`
+### Fase 3 — Remover `@log` intrínseco, depois renomear `log` para `log`
 
 **Objetivo:** Unificar o path de logging.
 
@@ -425,7 +425,7 @@ diretivas customizadas, com `_args` operacional em funções.
    - Injeção de `@log` em `function_def.rs` e `action_def.rs` (codegen)
    - Síntese de log em `function_infer.rs` e `action_infer.rs`
 
-2. Renomear `trace` → `log` no stdlib.
+2. Renomear `log` → `log` no stdlib.
 
 3. Migrar testes E2E para usar `@log{msg: "...", when: "..."}`
    com a nova diretiva Kata. Total: 32 testes (17 em `stdio_log_e2e.rs`
@@ -453,7 +453,7 @@ diretivas customizadas, com `_args` operacional em funções.
 | D2 | `msg` obrigatório no site de aplicação | Sem `msg`, não há mensagem. Erro compile-time. |
 | D3 | `level`/`topic`/`policy` opcionais, despachados por overload | Combinação de args presentes seleciona a declaration. `level` default `Info` na Fase 1. |
 | D4 | Template usa `{}` posicional com `format` | Consistente com `format` existente. Remove `parse_template`/`parse_placeholder`. |
-| D5 | `trace` é definida no stdlib, não no compilador | Validar que diretivas customizadas são infraestrutura suficiente para logging. |
+| D5 | `log` é definida no stdlib, não no compilador | Validar que diretivas customizadas são infraestrutura suficiente para logging. |
 | D6 | `_args` em funções usa `__param_{i}` posicional | Funções puras não nomeiam params na assinatura por design. `_args` é tupla posicional dos valores brutos. Manter `__param_{i}` (P0.2) — não renomear para `__arg_{i}`. |
 | D7 | `policy: "block"` só em `Target::Action`; funções usam `policy: "drop"` only | Preserva garantia de pureza estrutural. `policy: "block"` pode deadlockar — não é observacional. Impossibilidade estrutural via overloads separados por target. |
 
@@ -461,8 +461,8 @@ diretivas customizadas, com `_args` operacional em funções.
 
 1. **Despacho por args pode ser ambíguo.** Se duas declarations têm
    `arg_keys` sobrepostos (uma com `["msg"]`, outra com `["msg", "topic"]`),
-   o site `@trace{msg: "...", topic: "..."}` só casa com a segunda. O site
-   `@trace{msg: "..."}` só casa com a primeira. Não há ambiguidade — o match
+   o site `@log{msg: "...", topic: "..."}` só casa com a segunda. O site
+   `@log{msg: "..."}` só casa com a primeira. Não há ambiguidade — o match
    é exato por conjunto de chaves. Se nenhuma casar, erro
    `NoMatchingDirective`.
 
@@ -473,7 +473,7 @@ diretivas customizadas, com `_args` operacional em funções.
 
 3. **Performance de `format` vs template direto.** O `@log` intrínseco
    constrói a cadeia de `text_replace_first` em compile-time via
-   `infer_format`. A diretiva `trace` chama `format` que faz o mesmo em
+   `infer_format`. A diretiva `log` chama `format` que faz o mesmo em
    runtime. Diferença: `format` é uma chamada de função vs inlining do
    template. Aceitável — `log!()` já é uma chamada de FFI.
 
@@ -498,7 +498,7 @@ deadlock se não há consumidor, a função não retorna.
 
 ### Decisão D7
 
-`trace` (e futura `log`) usa overloads separados por target:
+`log` (e futura `log`) usa overloads separados por target:
 
 - **`Target::Function`**: body usa `log!()` com `policy: "drop"` apenas.
   Fire-and-forget. Não bloqueia. Preserva transparência semântica.
@@ -515,106 +515,106 @@ por target — é a mecânica existente.
 ```kata
 # ── trace para Actions: policy "block" disponível, file disponível ──
 
-directive trace{when: Hook::Enter, on: Target::Action}
+directive log{when: Hook::Enter, on: Target::Action}
     log!(LogLevel::Info, format _msg (_name, _args))
 
-directive trace{when: Hook::Exit, on: Target::Action}
+directive log{when: Hook::Exit, on: Target::Action}
     log!(LogLevel::Info, format _msg (_name, _return))
 
-directive trace{when: Hook::Enter, on: Target::Action}
+directive log{when: Hook::Enter, on: Target::Action}
     log!(LogLevel::Info, format _msg (_name, _args), _topic)
 
-directive trace{when: Hook::Exit, on: Target::Action}
+directive log{when: Hook::Exit, on: Target::Action}
     log!(LogLevel::Info, format _msg (_name, _return), _topic)
 
-directive trace{when: Hook::Enter, on: Target::Action}
+directive log{when: Hook::Enter, on: Target::Action}
     log!(LogLevel::Info, format _msg (_name, _args), "default", _policy)
 
-directive trace{when: Hook::Exit, on: Target::Action}
+directive log{when: Hook::Exit, on: Target::Action}
     log!(LogLevel::Info, format _msg (_name, _return), "default", _policy)
 
-directive trace{when: Hook::Enter, on: Target::Action}
+directive log{when: Hook::Enter, on: Target::Action}
     log!(LogLevel::Info, format _msg (_name, _args), _topic, _policy)
 
-directive trace{when: Hook::Exit, on: Target::Action}
+directive log{when: Hook::Exit, on: Target::Action}
     log!(LogLevel::Info, format _msg (_name, _return), _topic, _policy)
 
 # ── trace para Actions com file (P0.5) ──
 # `_file` sozinho: write direto, sem CSP.
 
-directive trace{when: Hook::Enter, on: Target::Action}
+directive log{when: Hook::Enter, on: Target::Action}
     log!(LogLevel::Info, format _msg (_name, _args), _file)
 
-directive trace{when: Hook::Exit, on: Target::Action}
+directive log{when: Hook::Exit, on: Target::Action}
     log!(LogLevel::Info, format _msg (_name, _return), _file)
 
 # `topic` + `file`: duas chamadas log!() — uma CSP, uma file.
 
-directive trace{when: Hook::Enter, on: Target::Action}
+directive log{when: Hook::Enter, on: Target::Action}
     log!(LogLevel::Info, format _msg (_name, _args), _topic)
     log!(LogLevel::Info, format _msg (_name, _args), _file)
 
-directive trace{when: Hook::Exit, on: Target::Action}
+directive log{when: Hook::Exit, on: Target::Action}
     log!(LogLevel::Info, format _msg (_name, _return), _topic)
     log!(LogLevel::Info, format _msg (_name, _return), _file)
 
 # `policy` + `file`: CSP com policy + write direto.
 
-directive trace{when: Hook::Enter, on: Target::Action}
+directive log{when: Hook::Enter, on: Target::Action}
     log!(LogLevel::Info, format _msg (_name, _args), "default", _policy)
     log!(LogLevel::Info, format _msg (_name, _args), _file)
 
-directive trace{when: Hook::Exit, on: Target::Action}
+directive log{when: Hook::Exit, on: Target::Action}
     log!(LogLevel::Info, format _msg (_name, _return), "default", _policy)
     log!(LogLevel::Info, format _msg (_name, _return), _file)
 
 # `topic` + `policy` + `file`: CSP com topic+policy + write direto.
 
-directive trace{when: Hook::Enter, on: Target::Action}
+directive log{when: Hook::Enter, on: Target::Action}
     log!(LogLevel::Info, format _msg (_name, _args), _topic, _policy)
     log!(LogLevel::Info, format _msg (_name, _args), _file)
 
-directive trace{when: Hook::Exit, on: Target::Action}
+directive log{when: Hook::Exit, on: Target::Action}
     log!(LogLevel::Info, format _msg (_name, _return), _topic, _policy)
     log!(LogLevel::Info, format _msg (_name, _return), _file)
 
 # ── trace para Funções: sem policy "block", file disponível ──
 
-directive trace{when: Hook::Enter, on: Target::Function}
+directive log{when: Hook::Enter, on: Target::Function}
     log!(LogLevel::Info, format _msg (_name, _args))
 
-directive trace{when: Hook::Exit, on: Target::Function}
+directive log{when: Hook::Exit, on: Target::Function}
     log!(LogLevel::Info, format _msg (_name, _return))
 
-directive trace{when: Hook::Enter, on: Target::Function}
+directive log{when: Hook::Enter, on: Target::Function}
     log!(LogLevel::Info, format _msg (_name, _args), _topic)
 
-directive trace{when: Hook::Exit, on: Target::Function}
+directive log{when: Hook::Exit, on: Target::Function}
     log!(LogLevel::Info, format _msg (_name, _return), _topic)
 
 # ── trace para Funções com file (P0.5) ──
 # `_file` sozinho: write direto, sem CSP.
 
-directive trace{when: Hook::Enter, on: Target::Function}
+directive log{when: Hook::Enter, on: Target::Function}
     log!(LogLevel::Info, format _msg (_name, _args), _file)
 
-directive trace{when: Hook::Exit, on: Target::Function}
+directive log{when: Hook::Exit, on: Target::Function}
     log!(LogLevel::Info, format _msg (_name, _return), _file)
 
 # `topic` + `file`: duas chamadas log!() — uma CSP, uma file.
 
-directive trace{when: Hook::Enter, on: Target::Function}
+directive log{when: Hook::Enter, on: Target::Function}
     log!(LogLevel::Info, format _msg (_name, _args), _topic)
     log!(LogLevel::Info, format _msg (_name, _args), _file)
 
-directive trace{when: Hook::Exit, on: Target::Function}
+directive log{when: Hook::Exit, on: Target::Function}
     log!(LogLevel::Info, format _msg (_name, _return), _topic)
     log!(LogLevel::Info, format _msg (_name, _return), _file)
 ```
 
 Funções puras têm 8 overloads (sem policy, com e sem file). Actions têm 16
 overloads (com policy, com e sem file). O despacho por `(when, on, arg_keys)`
-seleciona a declaration correta automaticamente — `@trace{msg: "...", when:
+seleciona a declaration correta automaticamente — `@log{msg: "...", when:
 "enter", policy: "block"}` em função pura não encontra declaration com
 `Target::Function` que aceite `policy` → erro `NoMatchingDirective`. A
 impossibilidade é estrutural.
@@ -634,9 +634,9 @@ impossibilidade estrutural garante que funções puras nunca recebem
 `policy: "block"`.
 
 **Dependência do PRD-stdio-alignment:** o `file` como arg da diretiva
-`trace` (escrever em stdout/stderr/arquivo) exige que o `log!()` action
+`log` (escrever em stdout/stderr/arquivo) exige que o `log!()` action
 já aceite `File` como argumento, o que é implementado pelo
-PRD-stdio-alignment. Sem esse pré-requisito, a diretiva `trace` só
+PRD-stdio-alignment. Sem esse pré-requisito, a diretiva `log` só
 suporta `topic` (CSP).
 
 ## 7. Não-objetivos
@@ -644,4 +644,4 @@ suporta `topic` (CSP).
 - Migrar `@timer` para diretiva Kata (futuro).
 - Migrar `@cache` para diretiva Kata (futuro).
 - Sintaxe de defaults em declarations de diretiva (`{msg: Text = "..."}`).
-- Args posicionais no site de aplicação (`@trace("...")`).
+- Args posicionais no site de aplicação (`@log("...")`).

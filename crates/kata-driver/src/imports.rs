@@ -90,7 +90,7 @@ pub(crate) fn load_repl_imports(module: &kata_ast::Module) -> miette::Result<Vec
 /// Extrai o `DirectiveRegistry` dos módulos importados, para ser usado
 /// como base no `resolve_with_imports` do módulo do usuário.
 ///
-/// Isto permite que `@trace_enter` referencie uma diretiva definida num
+/// Isto permite que `@log` referencie uma diretiva definida num
 /// módulo importado — o registry já contém a diretiva quando a validação
 /// de `@nome` roda no Pass 1 do resolve.
 pub(crate) fn collect_imported_directives(

@@ -634,7 +634,7 @@ greet!("world")"#,
 
 // ── Fase 1: Args no site de aplicação + _args em funções ────────────
 
-// ── Test 21: @trace{msg: Text, when: "enter"} em função pura com _args ─
+// ── Test 21: @log{msg: Text, when: "enter"} em função pura com _args ─
 
 #[test]
 fn e2e_trace_args_function_pure() {
@@ -658,7 +658,7 @@ echo!(dobro 21)"#;
     );
 }
 
-// ── Test 22: @trace{msg: Text, when: "enter"} em action com _args ────
+// ── Test 22: @log{msg: Text, when: "enter"} em action com _args ────
 
 #[test]
 fn e2e_trace_args_action() {
@@ -741,7 +741,7 @@ echo!(inc 41)"#;
 // ── Test 25: @log do stdlib sem declaration local (Fase 2 DoD) ────
 
 #[test]
-fn e2e_trace_stdlib_function() {
+fn e2e_log_stdlib_function() {
     // @log do stdlib (core.kata) sem declaration local.
     // log!() vai para CSP (não stdout) — verificamos que compila e executa.
     let src = r#"@log{msg: "entering {_args}", when: "enter"}
@@ -761,7 +761,7 @@ echo!(dobra 21)"#;
 // ── Test 26: @log do stdlib com exit hook (Fase 2 DoD) ────────────
 
 #[test]
-fn e2e_trace_stdlib_exit() {
+fn e2e_log_stdlib_exit() {
     let src = r#"@log{msg: "exit {_return}", when: "exit"}
 inc :: Int => Int
 lambda n: + n 1
@@ -779,7 +779,7 @@ echo!(inc 41)"#;
 // ── Test 27: @log do stdlib com topic+policy em action (Fase 2 DoD) ─
 
 #[test]
-fn e2e_trace_stdlib_action_topic_policy() {
+fn e2e_log_stdlib_action_topic_policy() {
     // Action com topic+policy: log!() publica em CSP com policy "drop".
     let src = r#"@log{msg: "action {_args}", when: "enter", topic: "audit", policy: "drop"}
 action processar(x :: Int) => Int

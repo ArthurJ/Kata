@@ -72,7 +72,7 @@ pub fn resolve_with_origin(
 /// `imported_directives` contém diretivas de módulos importados que já foram
 /// carregados e resolvidos. Estas diretivas são mescladas no `directive_registry`
 /// antes da validação de `@nome` em Sig/ActionDecl, permitindo que o módulo
-/// use `@trace_enter` quando `trace_enter` vem de um import.
+/// use `@log` quando `log` vem de um import.
 ///
 /// Se `imported_directives` está vazio, comporta-se como `resolve_with_origin`.
 pub fn resolve_with_imports(
@@ -100,7 +100,7 @@ pub fn resolve_with_imports(
 /// `prelude_directives` é o `DirectiveRegistry` do prelude (core.kata),
 /// usado para **consulta** durante validação de `@nome` em Sig/ActionDecl.
 /// As diretivas do prelude não são inseridas no registry do módulo — elas
-/// são mescladas posteriormente em `merge_two`. Sem isto, `@trace` (definida
+/// são mescladas posteriormente em `merge_two`. Sem isto, `@log` (definida
 /// no stdlib) seria rejeitada como `unknown_directive` no resolve do usuário,
 /// antes do merge trazer as declarations do prelude.
 pub fn resolve_with_prelude(
@@ -283,7 +283,7 @@ fn resolve_inner(
                         // Diretivas válidas em Sig mas sem processamento aqui.
                         "builtin" | "log" | "timer" => {}
                         // Diretiva customizada — validar contra o registry
-                        // (local + prelude, para @trace do stdlib funcionar).
+                        // (local + prelude, para @log do stdlib funcionar).
                         other
                             if directive_registry.contains_name(other)
                                 || prelude_directives.contains_name(other) => {}
@@ -402,7 +402,7 @@ fn resolve_inner(
                     match d.name.as_str() {
                         "ffi" | "test" | "log" => {}
                         // Diretiva customizada — validar contra o registry
-                        // (local + prelude, para @trace do stdlib funcionar).
+                        // (local + prelude, para @log do stdlib funcionar).
                         other
                             if directive_registry.contains_name(other)
                                 || prelude_directives.contains_name(other) => {}

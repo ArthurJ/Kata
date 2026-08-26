@@ -64,7 +64,7 @@ diretiva.
 ### 2.1. Declaração de diretiva
 
 ```kata
-directive trace{when: Hook::Enter, on: Target::Action}
+directive log{when: Hook::Enter, on: Target::Action}
     log!(LogLevel::Info, "enter: " + _name)
 ```
 
@@ -114,12 +114,12 @@ para saber se uma função pura é segura.
 ### 2.3. Aplicação de diretiva
 
 ```kata
-@trace
+@log
 action processar(x :: Int) => Int
     x + 1
 ```
 
-O compilador encontra `@trace`, resolve `trace` no `DirectiveRegistry`, e
+O compilador encontra `@log`, resolve `log` no `DirectiveRegistry`, e
 inlinea o body conforme o `when` e `on` declarado. Múltiplas diretivas podem
 ser empilhadas no mesmo item:
 
@@ -134,24 +134,24 @@ action processar(x :: Int) => Int
 
 Uma diretiva pode ter **múltiplas declarações com o mesmo nome**, cada uma com
 `when` e/ou `on` diferentes. O nome agrupa; `when` e `on` distinguem. Ao
-aplicar `@trace` num item, o compilador inlinea **todas** as declarações
+aplicar `@log` num item, o compilador inlinea **todas** as declarações
 aplicáveis ao Hook e ao Target daquele item — simultaneamente.
 
 ```kata
-directive trace{when: Hook::Enter, on: Target::Action}
+directive log{when: Hook::Enter, on: Target::Action}
     log!(LogLevel::Info, "enter action: " + _name)
 
-directive trace{when: Hook::Enter, on: Target::Function}
+directive log{when: Hook::Enter, on: Target::Function}
     log!(LogLevel::Info, "enter function: " + _name)
 
-directive trace{when: Hook::Exit, on: Target::Any}
+directive log{when: Hook::Exit, on: Target::Any}
     log!(LogLevel::Info, "exit: " + _name + " => " + format("{}", _return))
 ```
 
 Uso — uma anotação dispara todos os hooks cujo `when` e `on` casam:
 
 ```kata
-@trace
+@log
 action processar(x :: Int) => Int
     x + 1
 ```
@@ -160,7 +160,7 @@ Desugaring (conceptual — Target::Action casa com Enter::Action e Exit::Any):
 
 ```kata
 action processar(x :: Int) => Int
-    # ── inlined: directive trace{Enter, Action} ──
+    # ── inlined: directive log{Enter, Action} ──
     let _name := "processar"
     let _arity := 1
     let _types := ["Int"]
@@ -170,7 +170,7 @@ action processar(x :: Int) => Int
     log!(LogLevel::Info, "enter action: " + _name)
     # ── body original ──
     let __result := x + 1
-    # ── inlined: directive trace{Exit, Any} ──
+    # ── inlined: directive log{Exit, Any} ──
     let _name := "processar"
     let _arity := 1
     let _return_type := "Int"
@@ -292,11 +292,11 @@ pelo desugaring (`__result`, `__decision`, `__body`). O prefixo `__hole_` já
 Injeta o body da diretiva **antes** do corpo da função decorada.
 
 ```kata
-directive trace{when: Hook::Enter, on: Target::Action}
+directive log{when: Hook::Enter, on: Target::Action}
     log!(LogLevel::Info, "enter: " + _name)
 ```
 
-Desugaring de `@trace` em `processar` (conceptual):
+Desugaring de `@log` em `processar` (conceptual):
 
 ```kata
 action processar(x :: Int) => Int
@@ -481,7 +481,7 @@ customizadas coexistem no mesmo stack — cada uma é aplicada na sua fase
 o modelo de composição é o mesmo:
 
 ```kata
-@trace
+@log
 @cache
 fib :: Int => Int
     lambda n: ...
@@ -610,7 +610,7 @@ lex → scan_lambdas → parse_decls_only → resolve → extract_arities
 ```
 
 O desugaring de diretivas precisa acontecer **depois** da resolução de
-módulos (para saber qual diretiva `@trace` se refere, consultando o
+módulos (para saber qual diretiva `@log` se refere, consultando o
 `DirectiveRegistry`) mas **antes** do typeck (para validar o código
 expandido). O encaixe é entre o segundo `resolve` e `infer_module`, no
 driver.
@@ -630,8 +630,8 @@ desugar_directives(module, registry) → module      # nova passada, separada
 O desugaring transforma a AST (`kata_ast::Module`) antes do typeck. Ele não
 produz TAST — produz AST expandida que o typeck consome normalmente.
 
-**Enter:** para cada `Item::ActionDecl` ou `Item::Sig` com `@trace` (onde
-`trace` tem `when: Hook::Enter`), prependa ao body:
+**Enter:** para cada `Item::ActionDecl` ou `Item::Sig` com `@log` (onde
+`log` tem `when: Hook::Enter`), prependa ao body:
 - `let` bindings das variáveis de reflexão (estáticas e `_args`)
 - statements do body da diretiva (copiados, não chamados)
 
@@ -713,10 +713,10 @@ A validação de Target acontece em dois pontos:
 
 1. **Na declaração da diretiva** — o compilador valida que `ShortCircuit`/
    `Transform` têm `on: Target::Action`. Se não, erro na declaração.
-2. **Na aplicação da diretiva** — ao aplicar `@trace` num item, o
+2. **Na aplicação da diretiva** — ao aplicar `@log` num item, o
    compilador verifica que o Target da diretiva é compatível com o tipo do
-   item. `@trace` com `on: Target::Action` aplicada numa função pura é erro.
-   `@trace` com `on: Target::Function` aplicada numa action é erro.
+   item. `@log` com `on: Target::Action` aplicada numa função pura é erro.
+   `@log` com `on: Target::Function` aplicada numa action é erro.
 
 A validação na aplicação acontece no desugaring, antes do typeck. Se o
 item é `Item::Sig` (função), o Target deve ser `Function` ou `Any`. Se é
@@ -724,7 +724,7 @@ item é `Item::Sig` (função), o Target deve ser `Function` ou `Any`. Se é
 
 ### 7.6. Importação de diretivas
 
-Diretivas são declarações de top-level. São exportadas com `export trace` e
+Diretivas são declarações de top-level. São exportadas com `export log` e
 importadas com `import mod.trace` — mesma sintaxe de import/export de
 actions e funções. O `ModuleLoader` carrega diretivas importadas e as
 adiciona ao `DirectiveRegistry` do módulo importador. A resolução de
@@ -810,7 +810,7 @@ crates/kata-driver/tests/                  # E2E: Enter, Exit, ShortCircuit, Tra
 - **Diretivas em `implements`** — `directive` só se aplica a actions e
   funções nomeadas. Não decora métodos de `implements`.
 - **Diretivas parametrizadas** — o dict da diretiva aceita apenas `when` e
-  `on`. Parâmetros adicionais (ex: `directive trace{when: ..., on: ...,
+  `on`. Parâmetros adicionais (ex: `directive log{when: ..., on: ...,
   level: "Info"}`) ficam para um PRD futuro.
 - **Actions genéricas** — se o polimorfismo via inlining não é suficiente
   para casos extremos, actions genéricas poderiam resolver. Verificar se
@@ -831,14 +831,14 @@ crates/kata-driver/tests/                  # E2E: Enter, Exit, ShortCircuit, Tra
 | D2 | `ShortCircuit`/`Transform` exigem `Target::Action` | Garantia de pureza das funções por impossibilidade estrutural, não por convenção. O leitor não precisa auditar diretivas. |
 | D3 | `Exit` é observacional (body é Unit), `Transform` é transformacional (body produz valor) | O Hook comunica se a diretiva é observacional ou ativa. O leitor sabe pelo nome do Hook sem ler o corpo. |
 | D4 | Inlining, não chamada | O body da diretiva é copiado para dentro da função decorada. Variáveis de reflexão são `let` bindings no escopo inlined. Resolve polimorfismo de `_args`/`_return` sem generics — cada site type-checka com tipos concretos. |
-| D5 | Diretivas não estão no `dispatch_table` | Diretivas não são chamáveis diretamente. `trace!()` não resolve. Erro claro: "`trace` é diretiva, não é chamável". |
+| D5 | Diretivas não estão no `dispatch_table` | Diretivas não são chamáveis diretamente. `trace!()` não resolve. Erro claro: "`log` é diretiva, não é chamável". |
 | D6 | `desugar_directives` é passada separada no driver, não fase de `desugar(expr)` | `desugar(expr)` opera em `Spanned<Expr>`; `desugar_directives` opera em `Module` (nível de declaração). Precisa de `DirectiveRegistry` (do resolution) que não está disponível em `desugar(expr)`. |
 | D7 | Overloading por `(when, on)` — nome agrupa, Hook/Target distingue | Cada combinação é uma declaração distinta com seu próprio body. Type-checking limpo no inlining, separação de responsabilidades, especialização por Target. |
 | D8 | `Target::Any` não coexiste com específico para o mesmo `when` | Elimina ambiguidade de resolução na declaração. Any existe para evitar duplicação quando o comportamento é idêntico para actions e funções. |
 | D9 | Diretivas intrínsecas não migram | `@ffi`, `@builtin`, `@commutative`, `@associative`, `@cache`, `@test` têm semântica de compilação/codegen, não de hook. `@log` migra quando (e se) customizadas atingirem paridade. |
 | D10 | Identificadores `_` são reservados | Variáveis de reflexão e variáveis geradas (`__result`, `__decision`) nunca colidem com código de usuário. `_` simples continua válido como hole e wildcard. |
 | D11 | Escape hatch via wrapper action | Interceptação de função pura é explicitamente visível (uma action extra), não espalhada no type system. Cobre casos raros sem complicar o design. |
-| D12 | `directive` e `action` têm namespaces disjuntos | Diretivas não são actions. `directive trace` e `action trace` no mesmo escopo é erro. Evita ambiguidade na resolução de `@trace` vs `trace!()`. |
+| D12 | `directive` e `action` têm namespaces disjuntos | Diretivas não são actions. `directive log` e `action trace` no mesmo escopo é erro. Evita ambiguidade na resolução de `@log` vs `trace!()`. |
 
 ---
 
@@ -884,7 +884,7 @@ crates/kata-driver/tests/                  # E2E: Enter, Exit, ShortCircuit, Tra
     literais na AST.
 15. Variáveis de reflexão dinâmicas (`_args`, `_return`) são sintetizadas
     como `Expr::Tuple` dos params e `let _return := __result`.
-16. Validação de Target na aplicação: `@trace` com `on: Target::Action`
+16. Validação de Target na aplicação: `@log` com `on: Target::Action`
     aplicada em função pura → erro.
 
 ### Fase 3 — Stacking ✅
@@ -898,14 +898,14 @@ crates/kata-driver/tests/                  # E2E: Enter, Exit, ShortCircuit, Tra
 ### Fase 4 — Overloading ✅
 
 20. Múltiplas declarations com mesmo nome e `(when, on)` diferentes coexistem.
-21. `@trace` aplicado em action inlinea apenas as declarações com
+21. `@log` aplicado em action inlinea apenas as declarações com
     `on: Action` ou `on: Any`.
-22. `@trace` aplicado em função pura inlinea apenas as declarações com
+22. `@log` aplicado em função pura inlinea apenas as declarações com
     `on: Function` ou `on: Any`.
 
 ### Fase 5 — Importação ✅
 
-23. `export trace` exporta a diretiva. `import mod.trace` torna `@trace`
+23. `export log` exporta a diretiva. `import mod.trace` torna `@log`
     disponível no módulo importador.
 24. Diretiva importada resolve corretamente no desugaring.
 25. `merge_two` mescla `DirectiveRegistry` preservando overloads por

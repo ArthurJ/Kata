@@ -997,13 +997,13 @@ enum Target
     Function
     Any
 
-# ── Diretiva trace (PRD-trace-directive Fase 2) ──────────────────────
+# ── Diretiva log (PRD-trace-directive Fase 2) ──────────────────────
 # Diretiva de instrumentação definida em Kata no stdlib.
 # Overloads despachados por (when, on, arg_keys) — cada combinação de
 # args no site de aplicação seleciona a declaration correta.
 #
 # arg_keys = chaves do dict da declaration (excluindo when/on).
-# O site @trace{msg: "...", when: "enter"} tem arg_keys=["msg"] e casa
+# O site @log{msg: "...", when: "enter"} tem arg_keys=["msg"] e casa
 # com a declaration que declara msg: Text no dict.
 #
 # Actions: 16 overloads (policy "block" disponível, file disponível).

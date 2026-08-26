@@ -2,7 +2,7 @@
 //!
 //! Sintaxe:
 //! ```text
-//! directive trace{when: Hook::Enter, on: Target::Action}
+//! directive log{when: Hook::Enter, on: Target::Action}
 //!     let _ := print!(_name)
 //! ```
 //!
