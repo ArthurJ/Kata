@@ -20,16 +20,25 @@
 /// - Retorno de Action → `Caller`
 /// - Computação local em Action → `Local`
 ///
-/// Com canais (`<!`), valores enviados para outro fiber usam `Heap`:
-/// - O valor sobrevive ao fiber sender
-/// - O receiver recebe um ponteiro válido na root_arena
-/// - Quando o receiver consume e o refcount → 0, a root_arena dealloca
+/// Com canais (`<!`), valores enviados para outro fiber usam `Caller`:
+/// - Canais só existem entre pai-filho e irmãos (topologia enforced em
+///   compile-time: Sender/Receiver não podem viajar via `<!` nem ser
+///   retornados de Action — só se movem via args de `fork!`)
+/// - O caller do sender (pai direto) é sempre o LCA (lowest common
+///   ancestor) de sender e receiver
+/// - Logo `caller_arena` cobre o lifetime de ambos: o pai só morre
+///   depois de todos os filhos (structured concurrency)
+/// - `Heap` (root_arena) seria conservador demais — subiria a alocação
+///   até a raiz desnecessariamente
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EscapeTarget {
     /// Valor local ao fiber — aloca em `fiber_arena`.
     Local,
     /// Valor escapa para o caller — aloca em `caller_arena`.
     Caller,
-    /// Valor escapa para outro fiber via canal — aloca em `root_arena`.
+    /// Valor escapa para a root_arena (sobrevive a todos os fibers,
+    /// dealloc individual quando ARC refcount → 0). Usado em casos
+    /// onde `Caller` não é suficiente (ex: closures com capture que
+    /// ultrapassam o lifetime do caller direto).
     Heap,
 }

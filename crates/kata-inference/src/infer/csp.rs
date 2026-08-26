@@ -58,6 +58,25 @@ pub(crate) fn infer_channel_send(
         });
     }
 
+    // Proibe Ty::Sender/Receiver/ReceiverFactory em canal — canais não são
+    // valores de primeira classe que possam viajar por outros canais. Canais
+    // só se movem via argumentos de fork! ou retorno de Action, garantindo
+    // que a topologia de comunicação respeita a árvore de fibers (pai-filho
+    // e irmãos). Permitir endpoint mobility via canal quebraria a garantia
+    // de que Caller (caller_arena do sender) é sempre o LCA de sender e
+    // receiver, tornando a escape analysis insound.
+    if matches!(&typed_value.ty, Ty::Sender(_) | Ty::Receiver(_) | Ty::ReceiverFactory(_)) {
+        return Err(MiddleError::TypeMismatch {
+            expected: "valor serializável (não-Action, não-Canal)".into(),
+            found: format!(
+                "Canal não é permitido em canal — use argumento de fork! ou retorno de Action. \
+                 Tipo: `{}`",
+                typed_value.ty
+            ),
+            span: value.span.into(),
+        });
+    }
+
     if !type_compatible(&typed_value.ty, &elem_ty) {
         return Err(MiddleError::TypeMismatch {
             expected: format!("{elem_ty:?}"),
@@ -368,9 +387,16 @@ fn type_compatible(actual: &Ty, expected: &Ty) -> bool {
 /// Escape target para `<!` — valor escapa para outro fiber.
 ///
 /// Tipos compostos (Tuple, Struct, List, Array, Dict, Set, Text, etc.)
-/// são alocados na arena e precisam sobreviver ao sender → Heap.
+/// são alocados na arena e precisam sobreviver ao sender → `Caller`
+/// (caller_arena = arena do pai direto do sender).
+///
+/// `Caller` é o LCA de sender e receiver porque canais só existem entre
+/// pai-filho e irmãos (topologia enforced em compile-time). O pai só
+/// morre depois de todos os filhos (structured concurrency), então a
+/// caller_arena cobre o lifetime de ambos.
+///
 /// Tipos primitivos (Int/SMI, Float, Boolean, Unit) são inline (i64)
-/// e não precisam de ARC → Local (sem overhead).
+/// e não precisam de ARC → `Local` (sem overhead).
 fn escape_for_channel_send(ty: &Ty, _tail_pos: bool, _ctx: &InferCtx) -> EscapeTarget {
     match ty {
         // Primitivos inline — sem alocação.
