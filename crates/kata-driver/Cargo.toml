@@ -22,6 +22,7 @@ kata-monomorph.workspace = true
 kata-optimizer.workspace = true
 kata-tree-shaking.workspace = true
 kata-comptime.workspace = true
+kata-interp.workspace = true
 kata-core.workspace = true
 kata-ast.workspace = true
 kata-diagnostics.workspace = true

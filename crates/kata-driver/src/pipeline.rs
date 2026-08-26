@@ -158,6 +158,46 @@ impl CompiledModule {
     }
 }
 
+// ── Artefato interpretador ──────────────────────────────────
+
+/// Módulo pronto para interpretação — TAST pós-optimize, sem codegen.
+///
+/// Contém o `TypedModule` e metadados para display. O interpretador
+/// consome isto diretamente via `kata_interp::interpret`.
+pub struct InterpModule {
+    pub inner: kata_inference::TypedModule,
+    source: String,
+    file_path: Option<String>,
+}
+
+impl InterpModule {
+    /// Interpreta o entry point, retornando o valor bruto.
+    pub fn interp_eval(self) -> miette::Result<i64> {
+        let rt = Box::new(kata_rt::Runtime::new());
+        let rt_ptr = Box::into_raw(rt) as i64;
+        let result = kata_interp::interpret(self.inner, rt_ptr)
+            .map_err(|e| miette::Report::msg(e.to_string()))?;
+        // Leak do Runtime — valores retornados são ponteiros para a arena.
+        std::mem::forget(unsafe { Box::from_raw(rt_ptr as *mut kata_rt::Runtime) });
+        Ok(result.raw)
+    }
+
+    /// Tipo canônico do entry point (para display).
+    pub fn entry_ty(&self) -> Ty {
+        self.inner.entry.node.ty.clone()
+    }
+
+    /// Código-fonte (para source context de erros).
+    pub(crate) fn source(&self) -> &str {
+        &self.source
+    }
+
+    /// Path do arquivo (para source context de erros).
+    pub(crate) fn file_path(&self) -> Option<&str> {
+        self.file_path.as_deref()
+    }
+}
+
 // ── Pipeline ───────────────────────────────────────────────
 
 /// Pipeline composicional do compilador.
@@ -485,6 +525,24 @@ impl Pipeline {
         })?;
         self.mono = Some(MonoModule::from(shaken));
         Ok(self)
+    }
+
+    // ── Interpretador ────────────────────────────────────
+
+    /// Interpreta o módulo via tree-walking (sem codegen/Cranelift).
+    ///
+    /// Para em `optimize()` — não chama `tree_shake()`, `comptime()`,
+    /// `build_type_table()`. O interpretador consome o `TypedModule`
+    /// diretamente e avalia `ConstantBinding` no prólogo.
+    pub fn interpret(self) -> PipelineResult<InterpModule> {
+        let mono = self
+            .mono
+            .ok_or_else(|| err("interpret chamado antes de optimize"))?;
+        Ok(InterpModule {
+            inner: mono.inner,
+            source: self.source,
+            file_path: self.file_path,
+        })
     }
 
     // ── Type table ──────────────────────────────────────

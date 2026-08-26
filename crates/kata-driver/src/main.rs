@@ -36,6 +36,9 @@ enum Command {
         /// Imprime a CLIF canônica antes da execução
         #[arg(long = "emit-ir")]
         emit_ir: bool,
+        /// Usa interpretador tree-walking em vez de JIT
+        #[arg(long = "interp")]
+        interp: bool,
     },
     /// Compila e executa arquivo via JIT
     Run {
@@ -43,6 +46,9 @@ enum Command {
         /// Imprime a CLIF canônica antes da execução
         #[arg(long = "emit-ir")]
         emit_ir: bool,
+        /// Usa interpretador tree-walking em vez de JIT
+        #[arg(long = "interp")]
+        interp: bool,
     },
     /// Descobre e executa testes `@test` em arquivo ou diretório
     Test {
@@ -74,8 +80,8 @@ fn main() -> miette::Result<()> {
     match cli.command {
         Command::Lex { file } => cmd_lex(&file),
         Command::Parse { file } => cmd_parse(&file),
-        Command::Eval { expr, emit_ir } => cmd_eval(&expr, emit_ir),
-        Command::Run { file, emit_ir } => cmd_run(&file, emit_ir),
+        Command::Eval { expr, emit_ir, interp } => cmd_eval(&expr, emit_ir, interp),
+        Command::Run { file, emit_ir, interp } => cmd_run(&file, emit_ir, interp),
         Command::Test { path, filter } => cmd_test(&path, filter.as_deref()),
         Command::Build {
             file,
@@ -165,15 +171,24 @@ fn cmd_parse(file: &str) -> miette::Result<()> {
     Ok(())
 }
 
-fn cmd_eval(expr: &str, emit_ir: bool) -> miette::Result<()> {
-    let result = run_pipeline_display_wrap(expr, emit_ir)?;
-    display::print_result(result.raw, &result.ty);
+fn cmd_eval(expr: &str, emit_ir: bool, interp: bool) -> miette::Result<()> {
+    if interp {
+        let result = run_pipeline_interp(expr, None)?;
+        display::print_result(result.raw, &result.ty);
+    } else {
+        let result = run_pipeline_display_wrap(expr, emit_ir)?;
+        display::print_result(result.raw, &result.ty);
+    }
     Ok(())
 }
 
-fn cmd_run(file: &str, emit_ir: bool) -> miette::Result<()> {
+fn cmd_run(file: &str, emit_ir: bool, interp: bool) -> miette::Result<()> {
     let source = read_source(file)?;
-    let result = run_pipeline_with_file_display_wrap(&source, Some(file), emit_ir)?;
+    let result = if interp {
+        run_pipeline_interp(&source, Some(file))?
+    } else {
+        run_pipeline_with_file_display_wrap(&source, Some(file), emit_ir)?
+    };
     // Unit de retorno de `main` não carrega informação — o output do
     // programa já foi produzido via echo!/_print!. Suprimir o `()`.
     if !matches!(result.ty, Ty::Unit) {
@@ -505,6 +520,33 @@ fn run_pipeline_with_file_inner(
 
     let ty = compiled.entry_ty();
     let raw = compiled.jit_eval(emit_ir)?;
+
+    Ok(ExecResult { raw, ty })
+}
+
+/// Executa via interpretador tree-walking (sem JIT/Cranelift).
+///
+/// Pipeline até `optimize()`, depois `Pipeline::interpret()`.
+fn run_pipeline_interp(source: &str, file_path: Option<&str>) -> miette::Result<ExecResult> {
+    let mut pipeline =
+        pipeline::Pipeline::new(source).with_file_path(file_path.unwrap_or("<eval>"));
+    pipeline = pipeline.with_display_wrap();
+
+    let interp_module = (|| -> Result<_, Vec<miette::Report>> {
+        pipeline
+            .lex()?
+            .parse(pipeline::ParseMode::TwoPass, file_path)?
+            .resolve(file_path)?
+            .desugar()
+            .infer()?
+            .monomorph()
+            .optimize()
+            .interpret()
+    })()
+    .map_err(crate::print_pipeline_errors)?;
+
+    let ty = interp_module.entry_ty();
+    let raw = interp_module.interp_eval()?;
 
     Ok(ExecResult { raw, ty })
 }
