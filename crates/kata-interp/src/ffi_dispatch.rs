@@ -10,7 +10,7 @@ use std::ffi::CString;
 
 use kata_rt as rt;
 
-use crate::value::{Value, decode_smi, encode_smi, fits_smi, is_smi, f64_to_value, value_to_f64};
+use crate::value::{Value, decode_smi, encode_smi, f64_to_value, fits_smi, is_smi, value_to_f64};
 
 /// Despacha uma chamada FFI pelo nome do símbolo.
 ///
@@ -74,23 +74,55 @@ pub(crate) fn ffi_dispatch(
         "kata_rt_bi_ge" => Ok(rt::kata_rt_bi_ge(args[0], args[1])),
 
         // ── Aritmética Float ─────────────────────────────────
-        "kata_rt_fadd" => Ok(f64_to_value(rt::kata_rt_fadd(value_to_f64(args[0]), value_to_f64(args[1])))),
-        "kata_rt_fsub" => Ok(f64_to_value(rt::kata_rt_fsub(value_to_f64(args[0]), value_to_f64(args[1])))),
-        "kata_rt_fmul" => Ok(f64_to_value(rt::kata_rt_fmul(value_to_f64(args[0]), value_to_f64(args[1])))),
-        "kata_rt_fdiv" => Ok(f64_to_value(rt::kata_rt_fdiv(value_to_f64(args[0]), value_to_f64(args[1])))),
+        "kata_rt_fadd" => Ok(f64_to_value(rt::kata_rt_fadd(
+            value_to_f64(args[0]),
+            value_to_f64(args[1]),
+        ))),
+        "kata_rt_fsub" => Ok(f64_to_value(rt::kata_rt_fsub(
+            value_to_f64(args[0]),
+            value_to_f64(args[1]),
+        ))),
+        "kata_rt_fmul" => Ok(f64_to_value(rt::kata_rt_fmul(
+            value_to_f64(args[0]),
+            value_to_f64(args[1]),
+        ))),
+        "kata_rt_fdiv" => Ok(f64_to_value(rt::kata_rt_fdiv(
+            value_to_f64(args[0]),
+            value_to_f64(args[1]),
+        ))),
 
         // ── Comparação Float ─────────────────────────────────
-        "kata_rt_fcmp_eq" => Ok(rt::kata_rt_fcmp_eq(value_to_f64(args[0]), value_to_f64(args[1]))),
-        "kata_rt_fcmp_neq" => Ok(rt::kata_rt_fcmp_neq(value_to_f64(args[0]), value_to_f64(args[1]))),
-        "kata_rt_fcmp_lt" => Ok(rt::kata_rt_fcmp_lt(value_to_f64(args[0]), value_to_f64(args[1]))),
-        "kata_rt_fcmp_gt" => Ok(rt::kata_rt_fcmp_gt(value_to_f64(args[0]), value_to_f64(args[1]))),
-        "kata_rt_fcmp_le" => Ok(rt::kata_rt_fcmp_le(value_to_f64(args[0]), value_to_f64(args[1]))),
-        "kata_rt_fcmp_ge" => Ok(rt::kata_rt_fcmp_ge(value_to_f64(args[0]), value_to_f64(args[1]))),
+        "kata_rt_fcmp_eq" => Ok(rt::kata_rt_fcmp_eq(
+            value_to_f64(args[0]),
+            value_to_f64(args[1]),
+        )),
+        "kata_rt_fcmp_neq" => Ok(rt::kata_rt_fcmp_neq(
+            value_to_f64(args[0]),
+            value_to_f64(args[1]),
+        )),
+        "kata_rt_fcmp_lt" => Ok(rt::kata_rt_fcmp_lt(
+            value_to_f64(args[0]),
+            value_to_f64(args[1]),
+        )),
+        "kata_rt_fcmp_gt" => Ok(rt::kata_rt_fcmp_gt(
+            value_to_f64(args[0]),
+            value_to_f64(args[1]),
+        )),
+        "kata_rt_fcmp_le" => Ok(rt::kata_rt_fcmp_le(
+            value_to_f64(args[0]),
+            value_to_f64(args[1]),
+        )),
+        "kata_rt_fcmp_ge" => Ok(rt::kata_rt_fcmp_ge(
+            value_to_f64(args[0]),
+            value_to_f64(args[1]),
+        )),
 
         // ── Conversões ───────────────────────────────────────
         "kata_rt_int_to_float" => Ok(f64_to_value(rt::kata_rt_int_to_float(decode_smi(args[0])))),
         "kata_rt_float_to_int" => Ok(rt::kata_rt_float_to_int(value_to_f64(args[0]))),
-        "kata_rt_int_to_rational" => Ok(unsafe { rt::kata_rt_int_to_rational(decode_smi(args[0])) } as i64),
+        "kata_rt_int_to_rational" => {
+            Ok(unsafe { rt::kata_rt_int_to_rational(decode_smi(args[0])) } as i64)
+        }
         "kata_rt_rat_to_float" => {
             let r = args[0] as *const num_rational::BigRational;
             Ok(f64_to_value(unsafe { rt::kata_rt_rat_to_float(r) }))
@@ -99,7 +131,9 @@ pub(crate) fn ffi_dispatch(
             let r = args[0] as *const num_rational::BigRational;
             Ok(unsafe { rt::kata_rt_rational_to_int(r) })
         }
-        "kata_rt_rat_from_float" => Ok(unsafe { rt::kata_rt_rat_from_float(value_to_f64(args[0])) } as i64),
+        "kata_rt_rat_from_float" => {
+            Ok(unsafe { rt::kata_rt_rat_from_float(value_to_f64(args[0])) } as i64)
+        }
 
         // ── Aritmética Rational ──────────────────────────────
         "kata_rt_rat_add" => {
@@ -192,7 +226,9 @@ pub(crate) fn ffi_dispatch(
         "kata_rt_string_contains" => Ok(rt::kata_rt_string_contains(args[0], args[1])),
         "kata_rt_string_len" => {
             // Retorna SMI — o codegen também retorna SMI
-            Ok(encode_smi(unsafe { rt::kata_rt_string_len(args[0] as *const std::os::raw::c_char) }))
+            Ok(encode_smi(unsafe {
+                rt::kata_rt_string_len(args[0] as *const std::os::raw::c_char)
+            }))
         }
 
         // ── I/O ──────────────────────────────────────────────
@@ -315,12 +351,18 @@ pub(crate) fn ffi_dispatch(
         }
 
         // ── Text to int/float (conversões) ───────────────────
-        "kata_rt_text_to_int" => Ok(unsafe { rt::kata_rt_text_to_int(args[0] as *const std::os::raw::c_char) }),
-        "kata_rt_try_int" => Ok(unsafe { rt::kata_rt_try_int(args[0] as *const std::os::raw::c_char) }),
-        "kata_rt_text_to_float" => {
-            Ok(f64_to_value(unsafe { rt::kata_rt_text_to_float(args[0] as *const std::os::raw::c_char) }))
+        "kata_rt_text_to_int" => {
+            Ok(unsafe { rt::kata_rt_text_to_int(args[0] as *const std::os::raw::c_char) })
         }
-        "kata_rt_try_float" => Ok(unsafe { rt::kata_rt_try_float(args[0] as *const std::os::raw::c_char) }),
+        "kata_rt_try_int" => {
+            Ok(unsafe { rt::kata_rt_try_int(args[0] as *const std::os::raw::c_char) })
+        }
+        "kata_rt_text_to_float" => Ok(f64_to_value(unsafe {
+            rt::kata_rt_text_to_float(args[0] as *const std::os::raw::c_char)
+        })),
+        "kata_rt_try_float" => {
+            Ok(unsafe { rt::kata_rt_try_float(args[0] as *const std::os::raw::c_char) })
+        }
 
         // ── Bi to rational ───────────────────────────────────
         "kata_rt_bi_to_rational" => {
@@ -350,7 +392,9 @@ pub(crate) fn ffi_dispatch(
         }
 
         // ── Arc (CaptureBox) ─────────────────────────────────
-        "kata_rt_alloc_arc" => Ok(rt::kata_rt_alloc_arc(rt_ptr, args[0], args[1], args[2], arena)),
+        "kata_rt_alloc_arc" => Ok(rt::kata_rt_alloc_arc(
+            rt_ptr, args[0], args[1], args[2], arena,
+        )),
         "kata_rt_incref" => Ok(rt::kata_rt_incref(args[0])),
         "kata_rt_decref" => Ok(rt::kata_rt_decref(rt_ptr, args[0])),
         "kata_rt_arc_fn_ptr" => Ok(rt::kata_rt_arc_fn_ptr(args[0])),
@@ -365,18 +409,30 @@ pub(crate) fn ffi_dispatch(
 
         // ── Set ──────────────────────────────────────────────
         "kata_rt_set_empty" => Ok(rt::kata_rt_set_empty(arena)),
-        "kata_rt_set_insert" => Ok(rt::kata_rt_set_insert(args[0], args[1], args[2], args[3], arena)),
+        "kata_rt_set_insert" => Ok(rt::kata_rt_set_insert(
+            args[0], args[1], args[2], args[3], arena,
+        )),
         "kata_rt_set_contains" => Ok(rt::kata_rt_set_contains(args[0], args[1], args[2], args[3])),
         "kata_rt_set_len" => Ok(rt::kata_rt_set_len(args[0])),
         "kata_rt_set_union" => Ok(rt::kata_rt_set_union(args[0], args[1], args[2], arena)),
-        "kata_rt_set_intersection" => Ok(rt::kata_rt_set_intersection(args[0], args[1], args[2], arena)),
-        "kata_rt_set_difference" => Ok(rt::kata_rt_set_difference(args[0], args[1], args[2], arena)),
+        "kata_rt_set_intersection" => Ok(rt::kata_rt_set_intersection(
+            args[0], args[1], args[2], arena,
+        )),
+        "kata_rt_set_difference" => {
+            Ok(rt::kata_rt_set_difference(args[0], args[1], args[2], arena))
+        }
 
         // ── Dict ─────────────────────────────────────────────
         "kata_rt_dict_empty" => Ok(rt::kata_rt_dict_empty(arena)),
-        "kata_rt_dict_insert" => Ok(rt::kata_rt_dict_insert(args[0], args[1], args[2], args[3], args[4], arena)),
-        "kata_rt_dict_get_checked" => Ok(rt::kata_rt_dict_get_checked(args[0], args[1], args[2], args[3], arena)),
-        "kata_rt_dict_contains" => Ok(rt::kata_rt_dict_contains(args[0], args[1], args[2], args[3])),
+        "kata_rt_dict_insert" => Ok(rt::kata_rt_dict_insert(
+            args[0], args[1], args[2], args[3], args[4], arena,
+        )),
+        "kata_rt_dict_get_checked" => Ok(rt::kata_rt_dict_get_checked(
+            args[0], args[1], args[2], args[3], arena,
+        )),
+        "kata_rt_dict_contains" => Ok(rt::kata_rt_dict_contains(
+            args[0], args[1], args[2], args[3],
+        )),
         "kata_rt_dict_len" => Ok(rt::kata_rt_dict_len(args[0])),
         "kata_rt_dict_merge" => Ok(rt::kata_rt_dict_merge(args[0], args[1], args[2], arena)),
 
@@ -429,8 +485,8 @@ pub(crate) fn ffi_dispatch(
         sym if sym.starts_with("__kata_show__") => {
             // Por enquanto, retornar placeholder text.
             // Fase 2 vai implementar show para List, Struct, Tuple, etc.
-            let cstr = CString::new(format!("<{}>", sym))
-                .unwrap_or_else(|_| CString::new("?").unwrap());
+            let cstr =
+                CString::new(format!("<{}>", sym)).unwrap_or_else(|_| CString::new("?").unwrap());
             Ok(cstr.into_raw() as i64)
         }
 

@@ -80,8 +80,16 @@ fn main() -> miette::Result<()> {
     match cli.command {
         Command::Lex { file } => cmd_lex(&file),
         Command::Parse { file } => cmd_parse(&file),
-        Command::Eval { expr, emit_ir, interp } => cmd_eval(&expr, emit_ir, interp),
-        Command::Run { file, emit_ir, interp } => cmd_run(&file, emit_ir, interp),
+        Command::Eval {
+            expr,
+            emit_ir,
+            interp,
+        } => cmd_eval(&expr, emit_ir, interp),
+        Command::Run {
+            file,
+            emit_ir,
+            interp,
+        } => cmd_run(&file, emit_ir, interp),
         Command::Test { path, filter } => cmd_test(&path, filter.as_deref()),
         Command::Build {
             file,

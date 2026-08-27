@@ -166,8 +166,6 @@ impl CompiledModule {
 /// consome isto diretamente via `kata_interp::interpret`.
 pub struct InterpModule {
     pub inner: kata_inference::TypedModule,
-    source: String,
-    file_path: Option<String>,
 }
 
 impl InterpModule {
@@ -185,16 +183,6 @@ impl InterpModule {
     /// Tipo canônico do entry point (para display).
     pub fn entry_ty(&self) -> Ty {
         self.inner.entry.node.ty.clone()
-    }
-
-    /// Código-fonte (para source context de erros).
-    pub(crate) fn source(&self) -> &str {
-        &self.source
-    }
-
-    /// Path do arquivo (para source context de erros).
-    pub(crate) fn file_path(&self) -> Option<&str> {
-        self.file_path.as_deref()
     }
 }
 
@@ -538,11 +526,7 @@ impl Pipeline {
         let mono = self
             .mono
             .ok_or_else(|| err("interpret chamado antes de optimize"))?;
-        Ok(InterpModule {
-            inner: mono.inner,
-            source: self.source,
-            file_path: self.file_path,
-        })
+        Ok(InterpModule { inner: mono.inner })
     }
 
     // ── Type table ──────────────────────────────────────

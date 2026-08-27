@@ -5,22 +5,16 @@
 //! não re-infere, não re-resolve. A TAST já tem tipos resolvidos,
 //! dispatch decidido, escape analysis marcado, TRMA aplicado.
 
-use std::collections::HashMap;
 use std::ffi::CString;
 use std::sync::Arc;
 
 use kata_ast::Spanned;
-use kata_core::ty::{PrimTy, Ty};
-use kata_inference::{
-    TypedExpr, TypedExprKind, TypedLambdaClause, TypedModule, TypedPattern,
-};
+use kata_inference::{TypedExpr, TypedExprKind, TypedLambdaClause, TypedModule, TypedPattern};
 use kata_rt as rt;
 
 use crate::env::Env;
 use crate::ffi_dispatch::ffi_dispatch;
-use crate::value::{
-    Value, decode_smi, encode_smi, f64_to_value, fits_smi, is_smi, value_to_f64,
-};
+use crate::value::{Value, decode_smi, encode_smi, f64_to_value, fits_smi};
 
 /// Erro de interpretação — control flow + erros runtime.
 #[derive(Debug)]
@@ -54,43 +48,19 @@ pub struct InterpCtx {
     rt_ptr: i64,
     /// Handle da fiber arena atual.
     arena: i64,
-    /// Handle da root arena (para closures e valores heap).
-    root_arena: i64,
     /// TypedModule (Arc'd) — sobrevive durante toda a execução.
     module: Arc<TypedModule>,
-    /// Cache de funções nomeadas por nome.
-    functions: HashMap<String, Arc<TypedLambdaClause>>,
 }
 
 impl InterpCtx {
     /// Cria o contexto de execução a partir de um `TypedModule`.
     pub fn new(module: TypedModule, rt_ptr: i64) -> Self {
-        let root_arena = {
-            // Arena 0 é a root (Tracked) criada no Runtime::new()
-            // Usamos o handle 0 diretamente.
-            0i64
-        };
         let arena = rt::kata_rt_arena_create(rt_ptr);
-
-        // Indexar funções nomeadas por nome para lookup rápido.
-        // Cada TypedFunction tem cláusulas — armazenamos a primeira
-        // como representante (o dispatch é por pattern matching).
-        let mut functions = HashMap::new();
-        for func in &module.functions {
-            // Guardar todas as cláusulas como uma única entrada.
-            // Na prática, funções nomeadas têm múltiplas cláusulas
-            // que são testadas em sequência.
-            if let Some(first) = func.clauses.first() {
-                functions.insert(func.name.clone(), Arc::new(first.clone()));
-            }
-        }
 
         InterpCtx {
             rt_ptr,
             arena,
-            root_arena,
             module: Arc::new(module),
-            functions,
         }
     }
 
@@ -140,11 +110,20 @@ pub fn eval(
                 (1i64, cleaned.as_str())
             };
 
-            let n = if let Some(hex) = digits.strip_prefix("0x").or_else(|| digits.strip_prefix("0X")) {
+            let n = if let Some(hex) = digits
+                .strip_prefix("0x")
+                .or_else(|| digits.strip_prefix("0X"))
+            {
                 i64::from_str_radix(hex, 16).ok()
-            } else if let Some(oct) = digits.strip_prefix("0o").or_else(|| digits.strip_prefix("0O")) {
+            } else if let Some(oct) = digits
+                .strip_prefix("0o")
+                .or_else(|| digits.strip_prefix("0O"))
+            {
                 i64::from_str_radix(oct, 8).ok()
-            } else if let Some(bin) = digits.strip_prefix("0b").or_else(|| digits.strip_prefix("0B")) {
+            } else if let Some(bin) = digits
+                .strip_prefix("0b")
+                .or_else(|| digits.strip_prefix("0B"))
+            {
                 i64::from_str_radix(bin, 2).ok()
             } else {
                 digits.parse::<i64>().ok()
@@ -166,22 +145,22 @@ pub fn eval(
         }
         TypedExprKind::TextLit { text } => {
             // Alocar C string na heap ( CString::into_raw )
-            let cstr = CString::new(text.as_str())
-                .unwrap_or_else(|_| CString::new("").unwrap());
+            let cstr = CString::new(text.as_str()).unwrap_or_else(|_| CString::new("").unwrap());
             Ok(cstr.into_raw() as i64)
         }
         TypedExprKind::BytesLit { bytes } => {
             // Alocar Bytes no runtime
-            let ptr = unsafe { rt::kata_rt_bytes_from_ptr(bytes.as_ptr() as i64, bytes.len() as i64, ctx.arena) };
+            let ptr = unsafe {
+                rt::kata_rt_bytes_from_ptr(bytes.as_ptr() as i64, bytes.len() as i64, ctx.arena)
+            };
             Ok(ptr)
         }
         TypedExprKind::Unit => Ok(0),
 
         // ── Identificador ────────────────────────────────────
-        TypedExprKind::Ident { name } => {
-            env.lookup(name)
-                .ok_or_else(|| InterpError::Runtime(format!("variável não definida: {name}")))
-        }
+        TypedExprKind::Ident { name } => env
+            .lookup(name)
+            .ok_or_else(|| InterpError::Runtime(format!("variável não definida: {name}"))),
 
         // ── Let / Var / Reassign ─────────────────────────────
         TypedExprKind::Let { name, value } => {
@@ -189,7 +168,11 @@ pub fn eval(
             env.define(name, v);
             Ok(0)
         }
-        TypedExprKind::LetDestruct { temp_name, value, bindings } => {
+        TypedExprKind::LetDestruct {
+            temp_name,
+            value,
+            bindings,
+        } => {
             let v = eval(ctx, value, env)?;
             env.define(temp_name, v);
             for (name, field_expr) in bindings {
@@ -205,8 +188,7 @@ pub fn eval(
         }
         TypedExprKind::Reassign { name, value } => {
             let v = eval(ctx, value, env)?;
-            env.reassign(name, v)
-                .map_err(InterpError::Runtime)?;
+            env.reassign(name, v).map_err(InterpError::Runtime)?;
             Ok(0)
         }
 
@@ -240,11 +222,19 @@ pub fn eval(
             }
             Ok(ptr)
         }
-        TypedExprKind::FieldAccess { expr: inner, field_index, .. } => {
+        TypedExprKind::FieldAccess {
+            expr: inner,
+            field_index,
+            ..
+        } => {
             let ptr = eval(ctx, inner, env)?;
             Ok(unsafe { std::ptr::read((ptr as *const Value).add(*field_index as usize)) })
         }
-        TypedExprKind::IndexAccess { expr: inner, element_index, .. } => {
+        TypedExprKind::IndexAccess {
+            expr: inner,
+            element_index,
+            ..
+        } => {
             let ptr = eval(ctx, inner, env)?;
             Ok(unsafe { std::ptr::read((ptr as *const Value).add(*element_index as usize)) })
         }
@@ -262,8 +252,7 @@ pub fn eval(
 
             if let Some(sym) = ffi_symbol {
                 // Dispatch FFI direto
-                ffi_dispatch(sym, &arg_vals, ctx.rt_ptr, ctx.arena)
-                    .map_err(InterpError::Runtime)
+                ffi_dispatch(sym, &arg_vals, ctx.rt_ptr, ctx.arena).map_err(InterpError::Runtime)
             } else {
                 // Chamada de função Kata pura
                 call_named_function(ctx, callee, &arg_vals, env)
@@ -272,9 +261,7 @@ pub fn eval(
 
         // ── Lambda (construção de closure) ───────────────────
         TypedExprKind::Lambda {
-            clauses,
-            captures,
-            ..
+            clauses, captures, ..
         } => {
             // Construir closure value na arena:
             // offset 0: tag CLOSURE_TAG
@@ -294,9 +281,9 @@ pub fn eval(
                 std::ptr::write((ptr as *mut Value).add(1), clauses_ptr);
                 std::ptr::write((ptr as *mut Value).add(2), n_caps);
                 for (i, cap) in captures.iter().enumerate() {
-                    let cap_val = env
-                        .lookup(&cap.name)
-                        .ok_or_else(|| InterpError::Runtime(format!("capture não encontrada: {}", cap.name)))?;
+                    let cap_val = env.lookup(&cap.name).ok_or_else(|| {
+                        InterpError::Runtime(format!("capture não encontrada: {}", cap.name))
+                    })?;
                     std::ptr::write((ptr as *mut Value).add(3 + i), cap_val);
                 }
             }
@@ -366,8 +353,7 @@ pub fn eval(
             };
 
             if let Some(sym) = ffi_symbol {
-                ffi_dispatch(sym, &arg_vals, ctx.rt_ptr, ctx.arena)
-                    .map_err(InterpError::Runtime)
+                ffi_dispatch(sym, &arg_vals, ctx.rt_ptr, ctx.arena).map_err(InterpError::Runtime)
             } else {
                 // Action definida pelo usuário
                 call_action(ctx, callee, &arg_vals, env)
@@ -389,38 +375,36 @@ pub fn eval(
         TypedExprKind::Break => Err(InterpError::Break),
         TypedExprKind::Continue => Err(InterpError::Continue),
 
-        TypedExprKind::Loop { body } => {
-            loop {
-                env.push_scope();
-                let mut result = 0i64;
-                let mut early_exit = None;
-                for stmt in body {
-                    match eval(ctx, stmt, env) {
-                        Ok(v) => result = v,
-                        Err(InterpError::Break) => {
-                            early_exit = Some(Ok(result));
-                            break;
-                        }
-                        Err(InterpError::Continue) => {
-                            early_exit = Some(Ok(0));
-                            break;
-                        }
-                        Err(e) => {
-                            early_exit = Some(Err(e));
-                            break;
-                        }
+        TypedExprKind::Loop { body } => loop {
+            env.push_scope();
+            let mut result = 0i64;
+            let mut early_exit = None;
+            for stmt in body {
+                match eval(ctx, stmt, env) {
+                    Ok(v) => result = v,
+                    Err(InterpError::Break) => {
+                        early_exit = Some(Ok(result));
+                        break;
+                    }
+                    Err(InterpError::Continue) => {
+                        early_exit = Some(Ok(0));
+                        break;
+                    }
+                    Err(e) => {
+                        early_exit = Some(Err(e));
+                        break;
                     }
                 }
-                env.pop_scope();
-                match early_exit {
-                    Some(Ok(v)) => return Ok(v),
-                    Some(Err(InterpError::Break)) => return Ok(0),
-                    Some(Err(InterpError::Continue)) => continue,
-                    Some(Err(e)) => return Err(e),
-                    None => {}
-                }
             }
-        }
+            env.pop_scope();
+            match early_exit {
+                Some(Ok(v)) => return Ok(v),
+                Some(Err(InterpError::Break)) => return Ok(0),
+                Some(Err(InterpError::Continue)) => continue,
+                Some(Err(e)) => return Err(e),
+                None => {}
+            }
+        },
 
         // ── Variants ─────────────────────────────────────────
         TypedExprKind::VariantQual { tag, .. } => {
@@ -428,7 +412,11 @@ pub fn eval(
         }
         TypedExprKind::VariantConstruct { tag, payload, .. } => {
             let payload_val = eval(ctx, payload, env)?;
-            Ok(rt::kata_rt_store_sum_result(*tag as i64, payload_val, ctx.arena))
+            Ok(rt::kata_rt_store_sum_result(
+                *tag as i64,
+                payload_val,
+                ctx.arena,
+            ))
         }
 
         // ── List literal ─────────────────────────────────────
@@ -557,11 +545,7 @@ pub fn eval(
             }
             Ok(acc)
         }
-        TypedExprKind::FusedStream {
-            stages,
-            source,
-            ..
-        } => {
+        TypedExprKind::FusedStream { stages, source, .. } => {
             let coll_val = eval(ctx, source, env)?;
             let mut items = Vec::new();
             let mut current = coll_val;
@@ -579,10 +563,7 @@ pub fn eval(
                                 break;
                             }
                         }
-                        kata_inference::FusedStage::Map {
-                            callback,
-                            ..
-                        } => {
+                        kata_inference::FusedStage::Map { callback, .. } => {
                             val = call_closure(ctx, callback, &[val], env)?;
                         }
                     }
@@ -642,27 +623,27 @@ pub fn eval(
         }
 
         // ── CSP (Fase 5 — stubs por enquanto) ────────────────
-        TypedExprKind::ChannelCreate { .. } => {
-            Err(InterpError::Runtime("CSP não implementado (Fase 5)".to_string()))
-        }
-        TypedExprKind::ChannelSend { .. } => {
-            Err(InterpError::Runtime("CSP não implementado (Fase 5)".to_string()))
-        }
-        TypedExprKind::ChannelRecv { .. } => {
-            Err(InterpError::Runtime("CSP não implementado (Fase 5)".to_string()))
-        }
-        TypedExprKind::Select { .. } => {
-            Err(InterpError::Runtime("CSP não implementado (Fase 5)".to_string()))
-        }
-        TypedExprKind::Fork { .. } => {
-            Err(InterpError::Runtime("CSP não implementado (Fase 5)".to_string()))
-        }
-        TypedExprKind::Spawn { .. } => {
-            Err(InterpError::Runtime("CSP não implementado (Fase 5)".to_string()))
-        }
-        TypedExprKind::ReceiverFactoryCall { .. } => {
-            Err(InterpError::Runtime("CSP não implementado (Fase 5)".to_string()))
-        }
+        TypedExprKind::ChannelCreate { .. } => Err(InterpError::Runtime(
+            "CSP não implementado (Fase 5)".to_string(),
+        )),
+        TypedExprKind::ChannelSend { .. } => Err(InterpError::Runtime(
+            "CSP não implementado (Fase 5)".to_string(),
+        )),
+        TypedExprKind::ChannelRecv { .. } => Err(InterpError::Runtime(
+            "CSP não implementado (Fase 5)".to_string(),
+        )),
+        TypedExprKind::Select { .. } => Err(InterpError::Runtime(
+            "CSP não implementado (Fase 5)".to_string(),
+        )),
+        TypedExprKind::Fork { .. } => Err(InterpError::Runtime(
+            "CSP não implementado (Fase 5)".to_string(),
+        )),
+        TypedExprKind::Spawn { .. } => Err(InterpError::Runtime(
+            "CSP não implementado (Fase 5)".to_string(),
+        )),
+        TypedExprKind::ReceiverFactoryCall { .. } => Err(InterpError::Runtime(
+            "CSP não implementado (Fase 5)".to_string(),
+        )),
 
         // ── Dict / Set (Fase 2 — stubs por enquanto) ─────────
         TypedExprKind::DictLit { entries, .. } => {
@@ -969,34 +950,27 @@ fn match_pattern(pat: &Spanned<TypedPattern>, value: Value, env: &mut Env) -> bo
                 }
                 TypedExprKind::TextLit { text } => {
                     // Comparar C strings
-                    let val_cstr = unsafe {
-                        std::ffi::CStr::from_ptr(value as *const std::os::raw::c_char)
-                    };
+                    let val_cstr =
+                        unsafe { std::ffi::CStr::from_ptr(value as *const std::os::raw::c_char) };
                     val_cstr.to_string_lossy() == *text
                 }
                 TypedExprKind::Unit => value == 0,
                 _ => false,
             }
         }
-        TypedPattern::Variant { tag, .. } => {
-            let actual_tag = rt::kata_rt_sum_tag_int(value);
-            actual_tag == *tag as i64
-        }
         TypedPattern::Variant {
-            sub_patterns: Some(subs),
-            tag,
-            ..
+            tag, sub_patterns, ..
         } => {
             let actual_tag = rt::kata_rt_sum_tag_int(value);
             if actual_tag != *tag as i64 {
                 return false;
             }
-            // Extrair payload — no runtime, o payload está no offset 8
-            // do Sum result box (offset 0 = tag, offset 8 = payload)
-            let payload = unsafe { std::ptr::read((value as *const Value).add(1)) };
-            for sub in subs {
-                if !match_pattern(sub, payload, env) {
-                    return false;
+            if let Some(subs) = sub_patterns {
+                let payload = unsafe { std::ptr::read((value as *const Value).add(1)) };
+                for sub in subs {
+                    if !match_pattern(sub, payload, env) {
+                        return false;
+                    }
                 }
             }
             true
@@ -1020,27 +994,4 @@ fn match_pattern(pat: &Spanned<TypedPattern>, value: Value, env: &mut Env) -> bo
             true
         }
     }
-}
-
-/// Desempacota uma tupla (valor bruto) em um vec de valores.
-fn unpack_tuple(tuple_val: Value) -> Vec<Value> {
-    if tuple_val == 0 {
-        return Vec::new();
-    }
-    // Não sabemos o tamanho da tupla sem o tipo.
-    // Para actions, os args são uma tupla — precisamos do tipo
-    // para saber o tamanho.
-    //
-    // Hack: para Fase 1, vamos retornar o valor como único arg.
-    // Para actions com 1 arg, isso funciona.
-    // Para actions com 0 args (main), o args é Unit (0).
-    //
-    // Melhor: o ActionCall na TAST tem args que é um TypedExpr
-    // que é uma Tuple. Podemos contar os elementos.
-    // Mas aqui só temos o valor bruto.
-    //
-    // Solução: não usar unpack_tuple. O ActionCall.args é avaliado
-    // como Tuple, e sabemos quantos elementos ela tem pelo tipo.
-    // Vamos mudar a abordagem no ActionCall.
-    vec![tuple_val]
 }

@@ -8,15 +8,6 @@
 /// Valor no interpretador — i64 cru, mesmo formato do runtime.
 pub(crate) type Value = i64;
 
-/// Constante para Unit (0).
-pub(crate) const UNIT: Value = 0;
-
-/// Constante para Boolean::True (1).
-pub(crate) const TRUE: Value = 1;
-
-/// Constante para Boolean::False (0).
-pub(crate) const FALSE: Value = 0;
-
 // ── SMI helpers ──────────────────────────────────────────────
 
 /// Codifica um i64 como SMI: shift left 1, OR com 1.

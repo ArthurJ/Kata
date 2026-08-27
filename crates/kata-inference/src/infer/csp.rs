@@ -66,7 +66,10 @@ pub(crate) fn infer_channel_send(
     // (caller_arena do sender) é sempre o LCA de sender e receiver, tornando
     // a escape analysis insound. Canais também não podem ser retornados de
     // Action (ver action_infer.rs — check ChannelInReturn).
-    if matches!(&typed_value.ty, Ty::Sender(_) | Ty::Receiver(_) | Ty::ReceiverFactory(_)) {
+    if matches!(
+        &typed_value.ty,
+        Ty::Sender(_) | Ty::Receiver(_) | Ty::ReceiverFactory(_)
+    ) {
         return Err(MiddleError::TypeMismatch {
             expected: "valor serializável (não-Action, não-Canal)".into(),
             found: format!(
