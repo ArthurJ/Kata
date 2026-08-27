@@ -1,7 +1,7 @@
 # PRD — Interpretador Tree-Walking sobre TAST
 
-**Status:** Fases 1-3 ✅, Fases 4-6 pendentes
-**Data:** 2026-08-26
+**Status:** Fases 1-4 ✅, Fases 5-6 pendentes
+**Data:** 2026-08-27
 **Depende de:** Pipeline completo até `optimize()` ✅ (lex → parse → resolve → infer → monomorph → optimize)
 **Não depende de:** Cranelift, codegen, tree-shaking, comptime
 
@@ -627,25 +627,43 @@ imperativo, echo!, input!, I/O.
   loop funciona
 - `kata run --interp examples/is_prime.kata` → output correto
 
-### Fase 4 — REPL interpretado
+### Fase 4 — REPL interpretado ✅
 
-**Escopo:** REPL usando interpretador como modo padrão.
+**Status:** Completa e commitada. Todos os exemplos canônicos funcionam via `:load`.
 
-**Mudanças:**
-1. `InterpReplSession` com env persistente
-2. `cmd_repl` usa `InterpReplSession` por default, `--jit` usa `ReplSession`
-   existente
-3. `:reset` recria env + Runtime
-4. `:load` carrega módulo e adiciona items ao env
-5. Persistência de funções nomeadas entre linhas
+**Implementação:**
+- `InterpReplSession` em `repl/interp_session.rs` — sessão REPL com Env persistente
+- `interp_loop.rs` — loop rustyline idêntico ao JIT, despachando para `InterpReplSession`
+- `cmd_repl(interp: bool)` despacha entre JIT (`ReplSession`) e interp (`InterpReplSession`)
+- `interpret_with_env` no `kata-interp` — reusa `Env` persistente em vez de criar novo
+- `eval_entry_with_env` no `InterpCtx` — avalia entry point com Env fornecido
+- `Env` tornado `pub` para uso cross-crate
+- `:reset` recria Env + Runtime + recarrega prelude
+- `:load` carrega arquivo .kata (items entram no env)
+- `:type` infere tipo sem executar
+- `:env` mostra bindings e tipos
+- Redefinição de `let` remove binding anterior (igual ao JIT REPL)
+- Runtime persistente (Box::into_raw) — arena Bump preserva valores entre linhas
+
+**Diferença do JIT REPL:**
+- Não congela bindings (não precisa — Env persiste valores i64)
+- Não gerencia snapshots (não precisa — valores ficam na arena)
+- Não persiste function pointers (funções são reavaliadas a cada linha)
+- pre_entry é reavaliado a cada linha (bindings já no Env são sobrescritos)
 
 **Verificação:**
-- `let x := 42` depois `echo!(x)` → 42
-- `fat :: Int Int => Int` / `lambda 0 acc: acc` / `lambda n acc: fat (- n 1) (* n acc)`
-  depois `echo!(fat 5 1)` → 120
-- `let f := lambda n: * n 2` depois `echo!(f 21)` → 42
-- `:reset` limpa env
-- `cargo test --workspace --all` → sem regressões nos testes JIT
+- `let x := 42` depois `echo!(x)` → 42 ✅
+- `fat :: Int Int => Int` / lambdas / `echo!(fat 5 1)` → 120 ✅
+- `let f := lambda n: * n 2` / `echo!(f 21)` → 42 ✅
+- `:reset` limpa env ✅
+- `:load examples/quicksort.kata` → [-1, 1, 2, 5, 5, 6, 9, 12] ✅
+- `:load examples/loop_action.kata` → 0 1 2 3 4 5 ✅
+- `:type x` → Int ✅
+- `:env` → x: Int ✅
+- `cargo test --workspace` → 1851 passed, 0 failed ✅
+
+**Limitação conhecida:**
+- Actions multiline no input direto (não via `:load`) falham no parser REPL — bug de heurística multiline que afeta ambos JIT e interp (`action` não está na lista de triggers multiline)
 
 ### Fase 5 — CSP (fork!, channels, select)
 

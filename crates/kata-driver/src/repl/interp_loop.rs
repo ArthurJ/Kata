@@ -1,34 +1,20 @@
-//! REPL loop — rustyline I/O e multiline accumulation.
+//! REPL loop interpretador — `kata repl --interp`.
 //!
-//! Extraído de `repl/mod.rs` — separa a interação I/O (rustyline,
-//! multiline heuristics, history) da lógica de sessão (pipeline,
-//! bindings, snapshots).
+//! Mesma I/O do REPL JIT (rustyline, multiline heuristics, history),
+//! mas usando `InterpReplSession` (interpretador tree-walking) em vez
+//! de `ReplSession` (codegen Cranelift).
 
 use rustyline::Editor;
 use rustyline::error::ReadlineError;
 use rustyline::history::DefaultHistory;
 
 use crate::highlight::KataHelper;
-use crate::repl::ReplSession;
+use crate::repl::interp_session::InterpReplSession;
 
-pub(crate) fn cmd_repl(interp: bool) -> miette::Result<()> {
-    if interp {
-        crate::repl::interp_loop::cmd_repl_interp()
-    } else {
-        cmd_repl_jit()
-    }
-}
+/// Executa o subcomando `kata repl --interp`.
+pub(crate) fn cmd_repl_interp() -> miette::Result<()> {
+    let mut session = InterpReplSession::new().map_err(miette::Report::msg)?;
 
-/// Executa o subcomando `kata repl` (JIT).
-fn cmd_repl_jit() -> miette::Result<()> {
-    let mut session = ReplSession::new().map_err(miette::Report::msg)?;
-
-    // Configurar rustyline com cores forçadas.
-    //
-    // ColorMode::Forced garante colorização mesmo em terminais que não
-    // reportam capacidade de cor. O eco duplo que víamos antes era
-    // causado pelo HistoryHinter (sugestões inline com ANSI), não pelo
-    // ColorMode — agora o hinter retorna None.
     let config = rustyline::config::Builder::new()
         .color_mode(rustyline::config::ColorMode::Forced)
         .build();
@@ -36,13 +22,11 @@ fn cmd_repl_jit() -> miette::Result<()> {
         .map_err(|e| miette::Report::msg(format!("erro ao iniciar rustyline: {e}")))?;
     rl.set_helper(Some(KataHelper::default()));
 
-    // Carregar histórico.
     let _ = rl.load_history(&session.history_path);
 
-    println!("Kata REPL — digite :help para comandos, :quit para sair");
+    println!("Kata REPL (interp) — digite :help para comandos, :quit para sair");
 
     loop {
-        // Lê a primeira linha.
         let first = match rl.readline(">>> ") {
             Ok(line) => line,
             Err(ReadlineError::Interrupted | ReadlineError::Eof) => break,
@@ -52,7 +36,6 @@ fn cmd_repl_jit() -> miette::Result<()> {
             }
         };
 
-        // Comandos `:` são processados imediatamente (sem multiline).
         let trimmed = first.trim();
         if trimmed.starts_with(':') || trimmed.is_empty() {
             let _ = rl.add_history_entry(&first);
@@ -63,18 +46,8 @@ fn cmd_repl_jit() -> miette::Result<()> {
             }
             continue;
         }
-        // Expressão: acumula linhas até o input ser completo.
-        // Heurística multiline:
-        //   1. Se o parse falha com "<EOF>", o input está incompleto —
-        //      continuar lendo (ex: `lambda n:`, `match True`).
-        //   2. Se a primeira linha é uma assinatura de função (`nome :: ... => T`)
-        //      sem `@ffi`, ativar modo multiline — acumular até linha em
-        //      branco (cláusulas lambda indentadas seguem).
-        //   3. Se a primeira linha termina com `=>` (action sem tipo de
-        //      retorno), body indentado pode seguir.
-        //   4. Se a primeira linha inicia um bloco indentado — `match`,
-        //      `enum`, `implements` — ativar modo multiline (break on
-        //      non-indented line), igual à Sig.
+
+        // Heurística multiline (igual ao REPL JIT).
         let first_trimmed = first.trim_end();
         let multiline_sig = first_trimmed.contains("::")
             && first_trimmed.contains("=>")
@@ -88,24 +61,17 @@ fn cmd_repl_jit() -> miette::Result<()> {
 
         loop {
             if !in_multiline {
-                // Verifica se o parse falha com <EOF> (input incompleto).
-                if !ReplSession::is_input_incomplete(&buffer) {
+                if !InterpReplSession::is_input_incomplete(&buffer) {
                     break;
                 }
             }
-
-            // Lê próxima linha com prompt de continuação.
             match rl.readline("   ... ") {
                 Ok(line) => {
                     if line.trim().is_empty() {
-                        // Linha vazia termina o bloco multiline.
                         break;
                     }
                     buffer.push('\n');
                     buffer.push_str(&line);
-                    // Se estávamos em modo multiline_sig ou multiline_indent
-                    // e a nova linha não é indentada nem começa com
-                    // `lambda`/`λ`, o bloco terminou.
                     if (multiline_sig || multiline_indent)
                         && !line.starts_with(' ')
                         && !line.starts_with('\t')
@@ -119,9 +85,7 @@ fn cmd_repl_jit() -> miette::Result<()> {
                     buffer.clear();
                     break;
                 }
-                Err(ReadlineError::Eof) => {
-                    break;
-                }
+                Err(ReadlineError::Eof) => break,
                 Err(e) => {
                     eprintln!("erro de leitura: {e}");
                     break;
@@ -137,7 +101,6 @@ fn cmd_repl_jit() -> miette::Result<()> {
         }
     }
 
-    // Salvar histórico.
     let _ = rl.save_history(&session.history_path);
     Ok(())
 }

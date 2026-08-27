@@ -70,10 +70,17 @@ impl InterpCtx {
         }
     }
 
-    /// Avalia o entry point do módulo.
+    /// Avalia o entry point do módulo criando um Env novo.
     pub fn eval_entry(&mut self) -> Result<Value, InterpError> {
         let mut env = Env::new();
+        self.eval_entry_with_env(&mut env)
+    }
 
+    /// Avalia o entry point reusando um `Env` persistente (para REPL).
+    ///
+    /// O Env deve conter bindings `let` acumulados de linhas anteriores.
+    /// Constants e pre_entry são avaliados no env fornecido.
+    pub fn eval_entry_with_env(&mut self, env: &mut Env) -> Result<Value, InterpError> {
         // Clonar Arc<TypedModule> para evitar borrow conflict: iteramos
         // sobre &module.* (imutável) enquanto chamamos eval(self, ...) (mutável).
         let module = self.module.clone();
@@ -81,25 +88,32 @@ impl InterpCtx {
         // Bindings stdio: __stdin__/__stdout__/__stderr__ são handles File.
         // O resolution os define no type_env; o interpretador precisa
         // definir no env de runtime com os handles reais.
-        env.define("__stdin__", rt::kata_rt_stdin());
-        env.define("__stdout__", rt::kata_rt_stdout());
-        env.define("__stderr__", rt::kata_rt_stderr());
+        // Usar define_if_undefined para não sobrescrever bindings persistentes.
+        if env.lookup("__stdin__").is_none() {
+            env.define("__stdin__", rt::kata_rt_stdin());
+        }
+        if env.lookup("__stdout__").is_none() {
+            env.define("__stdout__", rt::kata_rt_stdout());
+        }
+        if env.lookup("__stderr__").is_none() {
+            env.define("__stderr__", rt::kata_rt_stderr());
+        }
 
         // Avaliar constants (ConstantBinding) no prólogo.
         for c in &module.constants {
             if let TypedExprKind::ConstantBinding { name, value } = &c.node.kind {
-                let v = eval(self, value, &mut env)?;
+                let v = eval(self, value, env)?;
                 env.define(name, v);
             }
         }
 
         // Avaliar pre_entry (let bindings top-level antes do entry).
         for stmt in &module.pre_entry {
-            eval(self, stmt, &mut env)?;
+            eval(self, stmt, env)?;
         }
 
         // Avaliar entry point.
-        eval(self, &module.entry, &mut env)
+        eval(self, &module.entry, env)
     }
 }
 

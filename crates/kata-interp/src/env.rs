@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 use crate::value::Value;
 
-pub(crate) struct Env {
+pub struct Env {
     /// Variáveis locais — nome → valor (i64).
     /// Vec<HashMap> para escopo léxico: push em bloco, pop ao sair.
     scopes: Vec<HashMap<String, Value>>,

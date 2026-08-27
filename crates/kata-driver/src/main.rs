@@ -70,7 +70,11 @@ enum Command {
         dynamic: bool,
     },
     /// REPL interativo — TypeEnv persistente + JIT fresco por expressão
-    Repl,
+    Repl {
+        /// Usa interpretador tree-walking em vez de JIT
+        #[arg(long = "interp")]
+        interp: bool,
+    },
     /// Inicia o servidor LSP (Language Server Protocol) em stdio
     Lsp,
 }
@@ -96,7 +100,7 @@ fn main() -> miette::Result<()> {
             output,
             dynamic,
         } => aot::cmd_build(&file, output.as_deref(), dynamic),
-        Command::Repl => repl::cmd_repl(),
+        Command::Repl { interp } => repl::cmd_repl(interp),
         Command::Lsp => cmd_lsp(),
     }
 }

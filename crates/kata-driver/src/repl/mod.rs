@@ -13,6 +13,8 @@
 //! usuário pode corrigir e reintentar.
 
 mod commands;
+mod interp_loop;
+mod interp_session;
 mod repl_loop;
 
 use std::collections::HashMap;
