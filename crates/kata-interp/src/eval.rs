@@ -73,6 +73,19 @@ impl InterpCtx {
         }
     }
 
+    /// Cria o contexto reusando uma arena existente (para fibers do scheduler).
+    ///
+    /// O `arena` é o handle da arena criada pelo scheduler para o fiber.
+    /// O `module` é compartilhado via Arc (clonado da tabela global).
+    pub fn new_with_arena(module: Arc<TypedModule>, rt_ptr: i64, arena: i64) -> Self {
+        rt::set_rt_ptr(rt_ptr);
+        InterpCtx {
+            rt_ptr,
+            arena,
+            module,
+        }
+    }
+
     /// Avalia o entry point do módulo criando um Env novo.
     pub fn eval_entry(&mut self) -> Result<Value, InterpError> {
         let mut env = Env::new();
