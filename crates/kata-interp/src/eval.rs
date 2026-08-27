@@ -55,6 +55,11 @@ pub struct InterpCtx {
 impl InterpCtx {
     /// Cria o contexto de execução a partir de um `TypedModule`.
     pub fn new(module: TypedModule, rt_ptr: i64) -> Self {
+        // Registrar rt_ptr em TLS — FFIs de coleção (list_cons, array_alloc,
+        // dict_insert, etc.) lêem o Runtime via `rt_ptr()` (thread_local),
+        // não via parâmetro. Sem isto, essas FFIs veem 0 → null deref.
+        rt::set_rt_ptr(rt_ptr);
+
         let arena = rt::kata_rt_arena_create(rt_ptr);
 
         InterpCtx {
@@ -251,8 +256,18 @@ pub fn eval(
                 .collect::<Result<_, _>>()?;
 
             if let Some(sym) = ffi_symbol {
-                // Dispatch FFI direto
-                ffi_dispatch(sym, &arg_vals, ctx.rt_ptr, ctx.arena).map_err(InterpError::Runtime)
+                // show sintetizado: interceptar antes do ffi_dispatch.
+                // O ffi_dispatch não tem acesso ao Ty do valor, mas aqui
+                // temos o TypedExpr do argumento com seu tipo resolvido.
+                if sym.starts_with("__kata_show__") {
+                    // show recebe 1 arg; pegar seu tipo do TypedExpr
+                    let arg_ty = &args[0].node.ty;
+                    Ok(crate::show::show_value(arg_vals[0], arg_ty, ctx))
+                } else {
+                    // Dispatch FFI direto
+                    ffi_dispatch(sym, &arg_vals, ctx.rt_ptr, ctx.arena)
+                        .map_err(InterpError::Runtime)
+                }
             } else {
                 // Chamada de função Kata pura
                 call_named_function(ctx, callee, &arg_vals, env)

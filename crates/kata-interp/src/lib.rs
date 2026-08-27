@@ -6,6 +6,7 @@
 mod env;
 mod eval;
 mod ffi_dispatch;
+mod show;
 mod value;
 
 use kata_core::ty::Ty;

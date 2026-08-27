@@ -483,8 +483,8 @@ pub(crate) fn ffi_dispatch(
         // O interpretador não tem codegen — precisamos implementar
         // show para tipos compostos diretamente (Fase 2).
         sym if sym.starts_with("__kata_show__") => {
-            // Por enquanto, retornar placeholder text.
-            // Fase 2 vai implementar show para List, Struct, Tuple, etc.
+            // Placeholder — o show real é interceptado em eval.rs
+            // (ffi_dispatch não tem acesso ao Ty do valor)
             let cstr =
                 CString::new(format!("<{}>", sym)).unwrap_or_else(|_| CString::new("?").unwrap());
             Ok(cstr.into_raw() as i64)
