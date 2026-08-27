@@ -1,6 +1,6 @@
 # PRD — Interpretador Tree-Walking sobre TAST
 
-**Status:** Fase 1 ✅, Fase 2 ✅ (exceto Dict/Set), Fases 3-6 pendentes
+**Status:** Fases 1-3 ✅, Fases 4-6 pendentes
 **Data:** 2026-08-26
 **Depende de:** Pipeline completo até `optimize()` ✅ (lex → parse → resolve → infer → monomorph → optimize)
 **Não depende de:** Cranelift, codegen, tree-shaking, comptime
@@ -585,7 +585,31 @@ with bindings, e exemplos canônicos todos funcionando.
 - `kata eval --interp "filter (lambda x: > x 2) [1 2 3 4]"` → [3, 4]
 - `kata run --interp examples/quicksort.kata` → output correto
 
-### Fase 3 — Actions + controle de fluxo
+### Fase 3 — Actions + controle de fluxo ✅
+
+**Status:** Completa e commitada. Todos os exemplos canônicos batem com JIT.
+
+**Implementação:**
+- `eval` para Loop, Break, Continue, Return, Var, Reassign, TypeOf, BytesLit — já existiam desde Fase 1
+- `InterpError::Return/Break/Continue` para controle de fluxo
+- `eval_action_body` — cria fiber arena, avalia corpo, destrói arena
+- `echo!`/`println!` converte args via `show_value` antes de chamar `kata_rt_print`
+- `__stdin__/__stdout__/__stderr__` definidos no env de runtime em `eval_entry`
+- `__param_{i}` ligados em `call_typed_clauses` para hooks `@log`
+- Boolean `VariantQual` retorna i64 cru (1/0) em vez de Sum box
+- Loop `break`/`continue` armazenados como `Err` (não `Ok`) para despachar corretamente
+
+**Bugs corrigidos:**
+- `echo!(True)` segfault: `echo` recebe Text mas Boolean era i64 cru. Fix: interceptar `echo!` e converter via `show_value`
+- `show.rs` Boolean: usava `kata_rt_sum_tag_int` (Sum box) mas Boolean é i64 cru
+- Loop `continue`: armazenado como `Ok(0)` confundia com retorno normal. Fix: armazenar como `Err(Continue)`
+- `@log` + `import stdio`: `__param_0` e `__stdout__` não definidos no env
+
+**Pendências (não bloqueantes):**
+- `input!` (stdin interativo): FFI `kata_rt_input` existe mas não testado
+- `rational` show: misaligned pointer (Rational precisa de ponteiro alinhado)
+- `ranges` contains: `In` operator para Range não despacha corretamente
+- File I/O: `read!`/`write!`/`close!` não testados
 
 **Escopo:** var, return, loop, break, continue, for, actions com corpo
 imperativo, echo!, input!, I/O.
