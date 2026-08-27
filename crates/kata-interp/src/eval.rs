@@ -10,7 +10,10 @@ use std::sync::Arc;
 
 use kata_ast::Spanned;
 use kata_core::ty::{PrimTy, Ty};
-use kata_inference::{TypedExpr, TypedExprKind, TypedLambdaClause, TypedModule, TypedPattern};
+use kata_inference::{
+    ChannelKind, TypedExpr, TypedExprKind, TypedLambdaClause, TypedModule, TypedPattern,
+    TypedSelectArm,
+};
 use kata_rt as rt;
 
 use crate::env::Env;
@@ -691,27 +694,97 @@ pub fn eval(
             Ok(rt::kata_rt_get_snapshot(*snapshot_id as i64))
         }
 
-        // ── CSP (Fase 5 — stubs por enquanto) ────────────────
-        TypedExprKind::ChannelCreate { .. } => Err(InterpError::Runtime(
-            "CSP não implementado (Fase 5)".to_string(),
+        // ── CSP (Fase 5) ─────────────────────────────────────
+        TypedExprKind::ChannelCreate {
+            kind,
+            elem_ty: _,
+            cross_process: false,
+        } => {
+            // Criar canal conforme o kind. Alocar tupla (handle, handle) na arena.
+            let handle = match kind {
+                ChannelKind::Rendezvous => rt::kata_rt_channel_create(ctx.arena),
+                ChannelKind::Buffered(cap) => {
+                    rt::kata_rt_queue_create(ctx.arena, *cap, 0) // policy=Block
+                }
+                ChannelKind::Broadcast => rt::kata_rt_broadcast_create(ctx.arena),
+            };
+            if handle == 0 {
+                return Err(InterpError::Runtime("falha ao criar canal".to_string()));
+            }
+            // Alocar tupla (handle, handle) — 16 bytes.
+            let ptr = rt::kata_rt_arena_alloc(ctx.rt_ptr, ctx.arena, 16);
+            unsafe {
+                std::ptr::write(ptr as *mut Value, handle);
+                std::ptr::write((ptr as *mut Value).add(1), handle);
+            }
+            Ok(ptr)
+        }
+        TypedExprKind::ChannelCreate {
+            cross_process: true,
+            ..
+        } => Err(InterpError::Runtime(
+            "canais cross-process não suportados no interpretador".to_string(),
         )),
-        TypedExprKind::ChannelSend { .. } => Err(InterpError::Runtime(
-            "CSP não implementado (Fase 5)".to_string(),
-        )),
-        TypedExprKind::ChannelRecv { .. } => Err(InterpError::Runtime(
-            "CSP não implementado (Fase 5)".to_string(),
-        )),
-        TypedExprKind::Select { .. } => Err(InterpError::Runtime(
-            "CSP não implementado (Fase 5)".to_string(),
-        )),
+        TypedExprKind::ChannelSend { channel, value } => {
+            let handle = eval(ctx, channel, env)?;
+            let val = eval(ctx, value, env)?;
+            let result = rt::kata_rt_channel_send(handle, val);
+            if result < 0 {
+                // WOULD_BLOCK — sem fiber, não pode bloquear.
+                return Err(InterpError::Runtime(format!(
+                    "channel_send bloqueado (sem fiber disponível)"
+                )));
+            }
+            Ok(0) // Unit
+        }
+        TypedExprKind::ChannelRecv {
+            channel,
+            recv_ty: _,
+            bind_name,
+        } => {
+            let handle = eval(ctx, channel, env)?;
+            let val = rt::kata_rt_channel_recv(handle);
+            if val < 0 && val != 0 {
+                // WOULD_BLOCK ou erro — sem fiber, não pode bloquear.
+                // Mas val=0 é um valor válido (Unit, False, etc).
+                // Verificar se é WOULD_BLOCK especificamente.
+                // kata_rt_channel_recv retorna WOULD_BLOCK (-1) se não há dado.
+                return Err(InterpError::Runtime(
+                    "channel_recv sem dado disponível (sem fiber)".to_string(),
+                ));
+            }
+            env.define(bind_name, val);
+            Ok(val)
+        }
+        TypedExprKind::ReceiverFactoryCall {
+            factory,
+            elem_ty: _,
+        } => {
+            let factory_handle = eval(ctx, factory, env)?;
+            let rx_handle = rt::kata_rt_broadcast_receiver_create(ctx.arena, factory_handle);
+            if rx_handle == 0 {
+                return Err(InterpError::Runtime(
+                    "falha ao criar receiver do broadcast".to_string(),
+                ));
+            }
+            Ok(rx_handle)
+        }
+        TypedExprKind::Select {
+            arms,
+            timeout_ms,
+            timeout_body,
+        } => eval_select(
+            ctx,
+            arms,
+            timeout_ms.as_deref(),
+            timeout_body.as_deref(),
+            env,
+        ),
         TypedExprKind::Fork { .. } => Err(InterpError::Runtime(
-            "CSP não implementado (Fase 5)".to_string(),
+            "fork! não implementado no interpretador (requer scheduler de fibers)".to_string(),
         )),
         TypedExprKind::Spawn { .. } => Err(InterpError::Runtime(
-            "CSP não implementado (Fase 5)".to_string(),
-        )),
-        TypedExprKind::ReceiverFactoryCall { .. } => Err(InterpError::Runtime(
-            "CSP não implementado (Fase 5)".to_string(),
+            "spawn! não implementado no interpretador (requer fork OS)".to_string(),
         )),
 
         // ── Dict / Set (Fase 2 — stubs por enquanto) ─────────
@@ -737,6 +810,106 @@ pub fn eval(
             Ok(set)
         }
     }
+}
+
+/// Sentinelas de canal (espelham channel/select.rs).
+const WOULD_BLOCK: i64 = -1;
+const SELECT_TIMEOUT: i64 = -2;
+
+/// Avalia `select` com braços de canal e timeout.
+///
+/// Para o interpretador (sem scheduler de fibers), o select é síncrono:
+/// chama `kata_rt_select` que tenta todos os canais sem bloquear. Se
+/// nenhum tem dado e há timeout, espera via `std::thread::sleep`. Se
+/// nenhum tem dado e não há timeout, retorna erro.
+fn eval_select(
+    ctx: &mut InterpCtx,
+    arms: &[TypedSelectArm],
+    timeout_ms: Option<&Spanned<TypedExpr>>,
+    timeout_body: Option<&Spanned<TypedExpr>>,
+    env: &mut Env,
+) -> Result<Value, InterpError> {
+    // Coletar braços de canal (ignorar IoRead por enquanto).
+    let channel_arms: Vec<&TypedSelectArm> = arms
+        .iter()
+        .filter(|a| matches!(a, TypedSelectArm::Channel { .. }))
+        .collect();
+
+    if channel_arms.is_empty() {
+        // Sem canais — apenas timeout.
+        if let Some(body) = timeout_body {
+            return eval(ctx, body, env);
+        }
+        return Err(InterpError::Runtime(
+            "select sem braços de canal".to_string(),
+        ));
+    }
+
+    // Avaliar handles dos canais.
+    let mut handles: Vec<i64> = Vec::with_capacity(channel_arms.len());
+    for arm in &channel_arms {
+        if let TypedSelectArm::Channel { channel, .. } = arm {
+            handles.push(eval(ctx, channel, env)?);
+        }
+    }
+
+    // Avaliar timeout_ms (se houver).
+    let timeout_val = if let Some(tm_expr) = timeout_ms {
+        Some(eval(ctx, tm_expr, env)?)
+    } else {
+        None
+    };
+
+    // Alocar array de handles na arena.
+    let n = handles.len() as i64;
+    let handles_ptr = rt::kata_rt_arena_alloc(ctx.rt_ptr, ctx.arena, n * 8);
+    for (i, &h) in handles.iter().enumerate() {
+        unsafe {
+            std::ptr::write((handles_ptr as *mut i64).add(i), h);
+        }
+    }
+
+    // Chamar kata_rt_select.
+    let timeout_ms_val = timeout_val.unwrap_or(0);
+    let result = rt::kata_rt_select(handles_ptr as *const i64, n, timeout_ms_val);
+
+    if result >= 0 {
+        // Canal pronto — result é o índice.
+        let idx = result as usize;
+        if let Some(TypedSelectArm::Channel {
+            channel,
+            bind_name,
+            body,
+            ..
+        }) = channel_arms.get(idx)
+        {
+            // Fazer o recv.
+            let handle = handles[idx];
+            let val = rt::kata_rt_channel_recv(handle);
+            if val == WOULD_BLOCK {
+                return Err(InterpError::Runtime(
+                    "select: canal pronto mas recv falhou".to_string(),
+                ));
+            }
+            env.define(bind_name, val);
+            return eval(ctx, body, env);
+        }
+        return Err(InterpError::Runtime(
+            "select: índice de braço inválido".to_string(),
+        ));
+    }
+
+    if result == SELECT_TIMEOUT {
+        if let Some(body) = timeout_body {
+            return eval(ctx, body, env);
+        }
+        return Ok(0); // Unit se não há timeout_body
+    }
+
+    // WOULD_BLOCK — sem fiber, não pode bloquear.
+    Err(InterpError::Runtime(
+        "select: nenhum canal pronto (sem fiber/scheduler)".to_string(),
+    ))
 }
 
 /// Tag para closures na arena (magic number para identificar struct de closure).

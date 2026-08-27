@@ -1,6 +1,6 @@
 # PRD — Interpretador Tree-Walking sobre TAST
 
-**Status:** Fases 1-4 ✅, Fases 5-6 pendentes
+**Status:** Fases 1-4 ✅, Fase 5 parcial (Nível 1 ✅, Nível 2 pendente), Fase 6 pendente
 **Data:** 2026-08-27
 **Depende de:** Pipeline completo até `optimize()` ✅ (lex → parse → resolve → infer → monomorph → optimize)
 **Não depende de:** Cranelift, codegen, tree-shaking, comptime
@@ -665,20 +665,34 @@ imperativo, echo!, input!, I/O.
 **Limitação conhecida:**
 - Actions multiline no input direto (não via `:load`) falham no parser REPL — bug de heurística multiline que afeta ambos JIT e interp (`action` não está na lista de triggers multiline)
 
-### Fase 5 — CSP (fork!, channels, select)
+### Fase 5 — CSP (fork!, channels, select) — Parcial
 
-**Escopo:** Concorrência cooperativa no interpretador.
+**Status:** Nível 1 (canais síncronos) completo. Nível 2 (fork!/spawn! + scheduler) pendente.
 
-**Mudanças:**
-1. `eval` para ChannelCreate, ChannelSend, ChannelRecv, ReceiverFactoryCall
-2. `eval` para Fork — trampoline adapter
-3. `eval` for Spawn — fork sem exec
-4. `eval` para Select — chama `kata_rt_select`, avalia body do braço
-5. `ffi_dispatch` para channel operations
-6. `InterpFiberEntry` + `interp_trampoline`
+**Nível 1 — Completo ✅:**
+- `ChannelCreate` — cria canal (Rendezvous/Buffered/Broadcast), aloca tupla (handle, handle)
+- `ChannelSend` — chama `kata_rt_channel_send(handle, value)`
+- `ChannelRecv` — chama `kata_rt_channel_recv(handle)`, define binding
+- `ReceiverFactoryCall` — chama `kata_rt_broadcast_receiver_create(arena, factory)`
+- `Select` (canais) — chama `kata_rt_select(handles, n, timeout_ms)`, avalia body do braço
+- Cross-process: não suportado (retorna erro)
+- `broadcast.kata` — funciona ✅ (bater com JIT)
 
-**Verificação:**
-- Exemplos de channel do kata-book (produtor/consumidor) funcionam
+**Nível 2 — Pendente:**
+- `Fork` — requer scheduler de fibers (wasmtime-fiber) + `fn_ptr`. O interpretador
+  não tem fn_ptr (sem codegen). Solução proposta: `interp_trampoline` que despacha
+  de volta para o interpretador. Complexidade: o trampoline precisa saber qual
+  action executar, e o scheduler faz `transmute(fn_ptr)` — precisa de um ponteiro
+  de função válido.
+- `Spawn` — requer `fork()` OS + `kata_rt_spawn_process`
+- `Select` com timeout — `kata_rt_select` retorna `WOULD_BLOCK` sem fiber. Para
+  timeout sem fiber, seria preciso `std::thread::sleep` + retry (busy-wait).
+
+**Verificação Nível 1:**
+- `kata run --interp examples/broadcast.kata` → 42 ✅ (bate com JIT)
+- `cargo test --workspace` → 1851 passed, 0 failed ✅
+
+**Verificação Nível 2 (pendente):**
 - `fork!(worker, (42,))` + `sleep!(50)` → worker executa
 - `select` com timeout funciona
 - `spawn!` em processo isolado funciona (Linux)
