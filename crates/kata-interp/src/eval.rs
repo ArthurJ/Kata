@@ -175,14 +175,17 @@ fn eval_entry_scheduler_mode(
     let saved_arena = ctx.arena;
     ctx.arena = root_arena;
     let args_ptr = eval(ctx, args, env)?;
-    let n_args = match &args.node.kind {
-        TypedExprKind::Tuple { elements } => elements.len() as i64,
-        TypedExprKind::Unit => 0,
-        _ => 1,
+    let (n_args, arg_tys) = match &args.node.kind {
+        TypedExprKind::Tuple { elements } => (
+            elements.len() as i64,
+            elements.iter().map(|e| e.node.ty.clone()).collect(),
+        ),
+        TypedExprKind::Unit => (0, Vec::new()),
+        _ => (1, vec![args.node.ty.clone()]),
     };
 
     // 3. Registrar action na tabela global → action_id.
-    let action_id = crate::csp::register_action(callee, &ctx.module);
+    let action_id = crate::csp::register_action(callee, &ctx.module, arg_tys);
 
     // 4. Empacotar (action_id, args_ptr, n_args) na arena.
     let packed_ptr = rt::kata_rt_arena_alloc(ctx.rt_ptr, ctx.arena, 24);
@@ -520,7 +523,7 @@ pub fn eval(
                 ffi_dispatch(sym, &arg_vals, ctx.rt_ptr, ctx.arena).map_err(InterpError::Runtime)
             } else {
                 // Action definida pelo usuário
-                call_action(ctx, callee, &arg_vals, env)
+                call_action(ctx, callee, &arg_vals, &arg_tys, env)
             }
         }
 
@@ -1037,14 +1040,31 @@ fn call_named_function(
                 return call_typed_clauses(ctx, &clauses, args, env);
             }
         }
-        // Procurar nas actions do módulo (despachar por aridade)
+        // Procurar nas actions do módulo (despachar por aridade + tipo)
         let n_args = args.len();
-        for action in &module.actions {
-            if action.name == name && action.param_types.len() == n_args {
-                // Clonar a action para evitar borrow conflict
-                let action_clone = action.clone();
-                return call_action_body(ctx, &action_clone, args, env);
-            }
+        let candidates: Vec<&kata_inference::TypedAction> = module
+            .actions
+            .iter()
+            .filter(|a| a.name == name && a.param_types.len() == n_args)
+            .collect();
+        if !candidates.is_empty() {
+            // Coletar arg_tys do callee (TypedExpr de cada arg)
+            let arg_tys: Vec<Ty> = if let TypedExprKind::Closure { args, .. } = &callee.node.kind {
+                args.iter().map(|a| a.node.ty.clone()).collect()
+            } else {
+                vec![]
+            };
+            let best = if candidates.len() == 1 {
+                candidates[0]
+            } else {
+                candidates
+                    .iter()
+                    .max_by_key(|a| ty_compat_score(&arg_tys, &a.param_types))
+                    .copied()
+                    .expect("candidates é não-vazio")
+            };
+            let action_clone = best.clone();
+            return call_action_body(ctx, &action_clone, args, env);
         }
         // Procurar no env (lambda como valor)
         if let Some(val) = env.lookup(&name) {
@@ -1187,27 +1207,92 @@ fn call_closure(
 }
 
 /// Chama uma action definida pelo usuário.
+/// Chama uma action definida pelo usuário.
+///
+/// Despacha por nome E compatibilidade de tipos (aridade + Ty dos params).
+/// Múltiplos overloads (ex: log, _log_publish, write) têm o mesmo nome mas
+/// assinaturas diferentes. O codegen usa DispatchTable com chave
+/// `(name, params, ret)`; o interp usa comparação de Ty por compatibilidade.
 fn call_action(
     ctx: &mut InterpCtx,
     name: &str,
     args: &[Value],
+    arg_tys: &[Ty],
     env: &mut Env,
 ) -> Result<Value, InterpError> {
-    // Procurar a action no módulo — despachar por nome E aridade.
-    // Múltiplos overloads (ex: log, _log_publish) têm o mesmo nome mas
-    // aridades diferentes. O codegen usa DispatchTable; o interp usa
-    // match por número de params.
     let module = ctx.module.clone();
     let n_args = args.len();
-    for action in &module.actions {
-        if action.name == name && action.param_types.len() == n_args {
-            let action_clone = action.clone();
-            return call_action_body(ctx, &action_clone, args, env);
-        }
+
+    // Coletar todos os overloads com mesma aridade.
+    let candidates: Vec<&kata_inference::TypedAction> = module
+        .actions
+        .iter()
+        .filter(|a| a.name == name && a.param_types.len() == n_args)
+        .collect();
+
+    if candidates.is_empty() {
+        return Err(InterpError::Runtime(format!(
+            "action não encontrada: {name} (aridade {n_args})"
+        )));
     }
-    Err(InterpError::Runtime(format!(
-        "action não encontrada: {name} (aridade {n_args})"
-    )))
+
+    // Se há apenas um candidato, despachar diretamente.
+    if candidates.len() == 1 {
+        let action_clone = candidates[0].clone();
+        return call_action_body(ctx, &action_clone, args, env);
+    }
+
+    // Múltiplos overloads com mesma aridade — despachar por tipo.
+    // Comparar arg_tys vs param_types com Ty::ty_compat (compatibilidade
+    // estrutural, não igualdade estrita — permite Generic com type args
+    // e Sum com variantes).
+    let best = candidates
+        .iter()
+        .max_by_key(|a| ty_compat_score(arg_tys, &a.param_types))
+        .copied()
+        .expect("candidates é não-vazio");
+
+    let action_clone = best.clone();
+    call_action_body(ctx, &action_clone, args, env)
+}
+
+/// Pontua compatibilidade de tipos entre args e params.
+/// Retorna número de matches exatos + parciais. Maior = melhor.
+pub(crate) fn ty_compat_score(arg_tys: &[Ty], param_types: &[Ty]) -> usize {
+    arg_tys
+        .iter()
+        .zip(param_types.iter())
+        .map(|(arg, param)| {
+            if arg == param {
+                3 // match exato
+            } else if ty_compatible(arg, param) {
+                2 // compatível (Generic com type args, etc.)
+            } else {
+                0 // incompatível
+            }
+        })
+        .sum()
+}
+
+/// Verifica compatibilidade flexível entre dois Ty.
+/// Permite Generic com type args diferentes (ex: Result(File, Text) vs Result(Socket, Text))
+/// e Prim vs Prim iguais.
+fn ty_compatible(a: &Ty, b: &Ty) -> bool {
+    // Prim iguais
+    if a == b {
+        return true;
+    }
+    // Generic com mesmo nome mas type args diferentes — contar como compatível
+    if let (Ty::Generic(name_a, args_a), Ty::Generic(name_b, args_b)) = (a, b) {
+        return name_a == name_b && args_a.len() == args_b.len();
+    }
+    // Sum com mesmo nome — compatível (variantes diferentes do mesmo enum)
+    if let (Ty::Sum(name_a), Ty::Sum(name_b)) = (a, b) {
+        return name_a == name_b;
+    }
+    // File vs Text — incompatível (caso comum: log 3-arg)
+    // Nada mais a fazer sem InterfaceRegistry
+    false
 }
 
 /// Executa o corpo de uma action.

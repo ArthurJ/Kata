@@ -22,6 +22,9 @@ use crate::eval::{InterpCtx, InterpError, eval};
 struct InterpActionEntry {
     action_name: String,
     module: Arc<TypedModule>,
+    /// Tipos dos argumentos passados no fork!/spawn! — para despacho
+    /// de overloads com mesma aridade mas assinaturas diferentes.
+    arg_tys: Vec<kata_core::ty::Ty>,
 }
 
 /// Tabela global de actions — indexada por `action_id` (índice no Vec).
@@ -38,12 +41,17 @@ fn actions_table() -> &'static Mutex<Vec<InterpActionEntry>> {
 ///
 /// Chamada antes de `kata_rt_spawn` para que o trampoline possa despachar
 /// de volta para o interpretador.
-pub(crate) fn register_action(action_name: &str, module: &Arc<TypedModule>) -> i64 {
+pub(crate) fn register_action(
+    action_name: &str,
+    module: &Arc<TypedModule>,
+    arg_tys: Vec<kata_core::ty::Ty>,
+) -> i64 {
     let mut table = actions_table().lock().unwrap();
     let id = table.len() as i64;
     table.push(InterpActionEntry {
         action_name: action_name.to_string(),
         module: module.clone(),
+        arg_tys,
     });
     id
 }
@@ -112,20 +120,30 @@ pub extern "C" fn interp_trampoline(
     }
 
     // 5. Encontrar a action pelo nome no module e executar.
-    // Despachar por nome E aridade (overloads).
+    // Despachar por nome E aridade + compatibilidade de tipos.
     let module = ctx.module.clone();
     let n_args = arg_vals.len();
-    let action = module
+    let candidates: Vec<&kata_inference::TypedAction> = module
         .actions
         .iter()
-        .find(|a| a.name == entry.action_name && a.param_types.len() == n_args);
+        .filter(|a| a.name == entry.action_name && a.param_types.len() == n_args)
+        .collect();
 
-    let Some(action) = action else {
+    let action = if candidates.is_empty() {
         eprintln!(
-            "interp_trampoline: action '{}' não encontrada",
-            entry.action_name
+            "interp_trampoline: action '{}' não encontrada (aridade {})",
+            entry.action_name, n_args
         );
         return 0;
+    } else if candidates.len() == 1 {
+        candidates[0]
+    } else {
+        // Despachar por tipo usando arg_tys da entrada
+        candidates
+            .iter()
+            .max_by_key(|a| crate::eval::ty_compat_score(&entry.arg_tys, &a.param_types))
+            .copied()
+            .expect("candidates é não-vazio")
     };
 
     // 6. Bindar argumentos e executar o body da action.
@@ -181,15 +199,18 @@ pub(crate) fn eval_fork(
     // 1. Avaliar args (tupla) → args_ptr.
     let args_ptr = eval(ctx, args, env)?;
 
-    // 2. Contar n_args (número de elementos na tupla).
-    let n_args = match &args.node.kind {
-        TypedExprKind::Tuple { elements } => elements.len() as i64,
-        TypedExprKind::Unit => 0,
-        _ => 1,
+    // 2. Contar n_args e coletar arg_tys para despacho de overloads.
+    let (n_args, arg_tys) = match &args.node.kind {
+        TypedExprKind::Tuple { elements } => (
+            elements.len() as i64,
+            elements.iter().map(|e| e.node.ty.clone()).collect(),
+        ),
+        TypedExprKind::Unit => (0, Vec::new()),
+        _ => (1, vec![args.node.ty.clone()]),
     };
 
     // 3. Registrar action na tabela global → action_id.
-    let action_id = register_action(action_name, &ctx.module);
+    let action_id = register_action(action_name, &ctx.module, arg_tys);
 
     // 4. Empacotar (action_id, args_ptr, n_args) na arena.
     let packed_ptr = kata_rt::kata_rt_arena_alloc(ctx.rt_ptr, ctx.arena, 24);
@@ -219,15 +240,18 @@ pub(crate) fn eval_spawn(
     // 1. Avaliar args (tupla) → args_ptr.
     let args_ptr = eval(ctx, args, env)?;
 
-    // 2. Contar n_args.
-    let n_args = match &args.node.kind {
-        TypedExprKind::Tuple { elements } => elements.len() as i64,
-        TypedExprKind::Unit => 0,
-        _ => 1,
+    // 2. Contar n_args e coletar arg_tys.
+    let (n_args, arg_tys) = match &args.node.kind {
+        TypedExprKind::Tuple { elements } => (
+            elements.len() as i64,
+            elements.iter().map(|e| e.node.ty.clone()).collect(),
+        ),
+        TypedExprKind::Unit => (0, Vec::new()),
+        _ => (1, vec![args.node.ty.clone()]),
     };
 
     // 3. Registrar action na tabela global → action_id.
-    let action_id = register_action(action_name, &ctx.module);
+    let action_id = register_action(action_name, &ctx.module, arg_tys);
 
     // 4. Empacotar (action_id, args_ptr, n_args) na arena.
     let packed_ptr = kata_rt::kata_rt_arena_alloc(ctx.rt_ptr, ctx.arena, 24);
