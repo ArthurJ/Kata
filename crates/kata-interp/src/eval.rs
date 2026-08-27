@@ -788,13 +788,7 @@ fn call_typed_clauses(
     for clause in clauses {
         env.push_scope();
 
-        // with bindings (avaliados antes dos guards)
-        for wb in &clause.with_bindings {
-            let v = eval(ctx, &wb.value, env)?;
-            env.define(&wb.name, v);
-        }
-
-        // Pattern match dos argumentos
+        // Pattern match dos argumentos (liga variáveis do pattern)
         let mut all_match = true;
         for (i, pat) in clause.patterns.iter().enumerate() {
             if !match_pattern(pat, args[i], env) {
@@ -804,6 +798,13 @@ fn call_typed_clauses(
         }
 
         if all_match {
+            // with bindings (avaliados depois do pattern match, que liga
+            // as variáveis do pattern; com_bindings podem referenciar essas variáveis)
+            for wb in &clause.with_bindings {
+                let v = eval(ctx, &wb.value, env)?;
+                env.define(&wb.name, v);
+            }
+
             // Se há guards, testar
             if !clause.guards.is_empty() {
                 for guard in &clause.guards {
@@ -974,8 +975,22 @@ fn match_pattern(pat: &Spanned<TypedPattern>, value: Value, env: &mut Env) -> bo
             }
         }
         TypedPattern::Variant {
-            tag, sub_patterns, ..
+            enum_name,
+            tag,
+            sub_patterns,
+            ..
         } => {
+            // Boolean é representado como i64 cru (1=True, 0=False),
+            // não como Sum box (ponteiro para arena). Caso especial.
+            if enum_name == "Boolean" {
+                // True (tag=0) → value==1, False (tag=1) → value==0
+                if value != (1 - *tag as i64) {
+                    return false;
+                }
+                // Boolean não tem payload
+                return true;
+            }
+
             let actual_tag = rt::kata_rt_sum_tag_int(value);
             if actual_tag != *tag as i64 {
                 return false;
