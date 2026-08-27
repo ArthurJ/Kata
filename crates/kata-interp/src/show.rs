@@ -55,10 +55,9 @@ pub fn show_value(val: Value, ty: &Ty, ctx: &InterpCtx) -> Value {
         // ── Unit ──────────────────────────────────────────────
         Ty::Unit => CString::new("()").unwrap().into_raw() as i64,
 
-        // ── Boolean (Sum com tag 0=False, 1=True) ─────────────
+        // ── Boolean — i64 cru (1=True, 0=False) ───────────────
         Ty::Sum(name) if name == "Boolean" => {
-            let tag = rt::kata_rt_sum_tag_int(val);
-            if tag == 1 {
+            if val == 1 {
                 CString::new("True").unwrap().into_raw() as i64
             } else {
                 CString::new("False").unwrap().into_raw() as i64

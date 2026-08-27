@@ -9,6 +9,7 @@ use std::ffi::CString;
 use std::sync::Arc;
 
 use kata_ast::Spanned;
+use kata_core::ty::{PrimTy, Ty};
 use kata_inference::{TypedExpr, TypedExprKind, TypedLambdaClause, TypedModule, TypedPattern};
 use kata_rt as rt;
 
@@ -76,6 +77,13 @@ impl InterpCtx {
         // Clonar Arc<TypedModule> para evitar borrow conflict: iteramos
         // sobre &module.* (imutável) enquanto chamamos eval(self, ...) (mutável).
         let module = self.module.clone();
+
+        // Bindings stdio: __stdin__/__stdout__/__stderr__ são handles File.
+        // O resolution os define no type_env; o interpretador precisa
+        // definir no env de runtime com os handles reais.
+        env.define("__stdin__", rt::kata_rt_stdin());
+        env.define("__stdout__", rt::kata_rt_stdout());
+        env.define("__stderr__", rt::kata_rt_stderr());
 
         // Avaliar constants (ConstantBinding) no prólogo.
         for c in &module.constants {
@@ -354,18 +362,46 @@ pub fn eval(
             // Extrair argumentos diretamente da TAST em vez de avaliar
             // como Tuple e depois desempacotar. O `args` é sempre uma
             // Tuple na TAST (ou Unit para sem args).
-            let arg_vals = match &args.node.kind {
+            // Guardamos também o Ty de cada arg para conversão via show.
+            let mut arg_vals: Vec<Value> = Vec::new();
+            let mut arg_tys: Vec<Ty> = Vec::new();
+            match &args.node.kind {
                 TypedExprKind::Tuple { elements } => {
-                    let mut vals = Vec::with_capacity(elements.len());
                     for elem in elements {
-                        vals.push(eval(ctx, elem, env)?);
+                        arg_vals.push(eval(ctx, elem, env)?);
+                        arg_tys.push(elem.node.ty.clone());
                     }
-                    vals
                 }
-                TypedExprKind::Unit => Vec::new(),
+                TypedExprKind::Unit => {}
                 // Fallback: avaliar como valor único
-                _ => vec![eval(ctx, args, env)?],
-            };
+                _ => {
+                    arg_vals.push(eval(ctx, args, env)?);
+                    arg_tys.push(args.node.ty.clone());
+                }
+            }
+
+            // echo!/println! recebem Text (C string ptr). O typeck insere
+            // `show` para tipos não-Text antes de chamar a FFI. O interpretador
+            // precisa fazer o mesmo: converter cada arg via show_value.
+            if ffi_symbol.as_deref() == Some("kata_rt_print")
+                || ffi_symbol.as_deref() == Some("kata_rt_println")
+            {
+                let mut converted = Vec::with_capacity(arg_vals.len());
+                for (val, ty) in arg_vals.iter().zip(arg_tys.iter()) {
+                    if matches!(ty, Ty::Prim(PrimTy::Text)) {
+                        converted.push(*val);
+                    } else {
+                        converted.push(crate::show::show_value(*val, ty, ctx));
+                    }
+                }
+                return ffi_dispatch(
+                    ffi_symbol.as_ref().unwrap(),
+                    &converted,
+                    ctx.rt_ptr,
+                    ctx.arena,
+                )
+                .map_err(InterpError::Runtime);
+            }
 
             if let Some(sym) = ffi_symbol {
                 ffi_dispatch(sym, &arg_vals, ctx.rt_ptr, ctx.arena).map_err(InterpError::Runtime)
@@ -393,16 +429,16 @@ pub fn eval(
         TypedExprKind::Loop { body } => loop {
             env.push_scope();
             let mut result = 0i64;
-            let mut early_exit = None;
+            let mut early_exit: Option<Result<Value, InterpError>> = None;
             for stmt in body {
                 match eval(ctx, stmt, env) {
                     Ok(v) => result = v,
                     Err(InterpError::Break) => {
-                        early_exit = Some(Ok(result));
+                        early_exit = Some(Err(InterpError::Break));
                         break;
                     }
                     Err(InterpError::Continue) => {
-                        early_exit = Some(Ok(0));
+                        early_exit = Some(Err(InterpError::Continue));
                         break;
                     }
                     Err(e) => {
@@ -413,16 +449,20 @@ pub fn eval(
             }
             env.pop_scope();
             match early_exit {
-                Some(Ok(v)) => return Ok(v),
-                Some(Err(InterpError::Break)) => return Ok(0),
+                Some(Err(InterpError::Break)) => return Ok(result),
                 Some(Err(InterpError::Continue)) => continue,
                 Some(Err(e)) => return Err(e),
+                Some(Ok(_)) => return Ok(result),
                 None => {}
             }
         },
 
         // ── Variants ─────────────────────────────────────────
-        TypedExprKind::VariantQual { tag, .. } => {
+        TypedExprKind::VariantQual { enum_name, tag, .. } => {
+            // Boolean é i64 cru (1=True, 0=False), não Sum box.
+            if enum_name == "Boolean" {
+                return Ok(1 - *tag as i64); // True(0)→1, False(1)→0
+            }
             Ok(rt::kata_rt_store_sum_result(*tag as i64, 0, ctx.arena))
         }
         TypedExprKind::VariantConstruct { tag, payload, .. } => {
@@ -787,6 +827,12 @@ fn call_typed_clauses(
 ) -> Result<Value, InterpError> {
     for clause in clauses {
         env.push_scope();
+
+        // Ligar args como __param_{i} para que hooks (@log etc.) que
+        // referenciam __param_0 possam acessar os argumentos originais.
+        for (i, val) in args.iter().enumerate() {
+            env.define(&format!("__param_{i}"), *val);
+        }
 
         // Pattern match dos argumentos (liga variáveis do pattern)
         let mut all_match = true;
