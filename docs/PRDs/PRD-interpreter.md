@@ -1,6 +1,6 @@
 # PRD — Interpretador Tree-Walking sobre TAST
 
-**Status:** Rascunho
+**Status:** Fase 1 ✅, Fase 2 ✅ (exceto Dict/Set), Fases 3-6 pendentes
 **Data:** 2026-08-26
 **Depende de:** Pipeline completo até `optimize()` ✅ (lex → parse → resolve → infer → monomorph → optimize)
 **Não depende de:** Cranelift, codegen, tree-shaking, comptime
@@ -523,7 +523,9 @@ mesma estrutura de `JitResult`.
 
 ## 4. Fases
 
-### Fase 1 — Núcleo: expressões puras + aritmética
+### Fase 1 — Núcleo: expressões puras + aritmética ✅
+
+**Status:** Completa e commitada (`96fff96`).
 
 **Escopo:** `+ 3 4`, `let x := 5`, `echo!(x)`, fatorial recursivo.
 
@@ -548,7 +550,22 @@ mesma estrutura de `JitResult`.
 - `kata run --interp examples/fib_ramified.kata` → output correto
 - `kata eval --interp "let x := 10 echo!(* x 2)"` → 20
 
-### Fase 2 — Coleções + HOFs
+### Fase 2 — Coleções + HOFs ✅ (exceto Dict/Set)
+
+**Status:** Completa e commitada. Show para List, Array, Tuple, Boolean funcionando.
+map/filter/fold, quicksort, stream fusion, pattern matching (Cons, Tuple, Variant),
+with bindings, e exemplos canônicos todos funcionando.
+
+**Pendências:**
+- Dict/Set: stubs retornam erro. Requer investigar hash_fn/eq_fn do codegen.
+- Struct show: esquema de campos não disponível no show.rs (placeholder).
+- Sum/Enum show: tag numérica sem mapeamento para nome da variante.
+
+**Bugs corrigidos durante a implementação:**
+- `set_rt_ptr` em TLS: FFIs de coleção lêem Runtime via thread_local, não parâmetro
+- Boolean pattern matching: Boolean é i64 cru (1/0), não Sum box
+- `with_bindings` ordem: avaliados após pattern match (podem referenciar variáveis do pattern)
+- `kata_rt_array_len` retorna SMI-encoded: `decode_smi` necessário no show
 
 **Escopo:** List, Array, Dict, Set, Range, map, filter, fold, stream fusion.
 
