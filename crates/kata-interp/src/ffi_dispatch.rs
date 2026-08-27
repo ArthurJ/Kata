@@ -478,6 +478,19 @@ pub(crate) fn ffi_dispatch(
             Ok(0)
         }
 
+        // ── Log (@log, log!, log_recv!) ───────────────────────
+        "kata_rt_log_publish" => Ok(rt::kata_rt_log_publish(args[0], args[1], args[2], args[3])),
+        "kata_rt_log_publish_default" => Ok(rt::kata_rt_log_publish_default(args[0], args[1])),
+        "kata_rt_log_publish_topic" => Ok(rt::kata_rt_log_publish_topic(args[0], args[1], args[2])),
+        "kata_rt_log_publish_full" => Ok(rt::kata_rt_log_publish_full(
+            args[0], args[1], args[2], args[3],
+        )),
+        "kata_rt_log_recv" => Ok(rt::kata_rt_log_recv(args[0])),
+        "kata_rt_log_config" => {
+            rt::kata_rt_log_config(args[0], args[1], args[2]);
+            Ok(0)
+        }
+
         // ── Show sintetizado para tipos compostos ────────────
         // Estas são funções geradas pelo codegen (__kata_show__Type).
         // O interpretador não tem codegen — precisamos implementar

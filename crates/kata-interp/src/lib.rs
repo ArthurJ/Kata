@@ -3,6 +3,7 @@
 //! Terceiro backend do compilador Kata. Consome o `TypedModule` pós-`optimize()`
 //! sem passar por codegen/Cranelift. Reusa o runtime `kata-rt` diretamente.
 
+mod csp;
 mod env;
 mod eval;
 mod ffi_dispatch;

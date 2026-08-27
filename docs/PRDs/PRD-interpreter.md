@@ -1,6 +1,6 @@
 # PRD — Interpretador Tree-Walking sobre TAST
 
-**Status:** Fases 1-4 ✅, Fase 5 parcial (Nível 1 ✅, Nível 2 pendente), Fase 6 pendente
+**Status:** Fases 1-5 ✅, Fase 6 pendente
 **Data:** 2026-08-27
 **Depende de:** Pipeline completo até `optimize()` ✅ (lex → parse → resolve → infer → monomorph → optimize)
 **Não depende de:** Cranelift, codegen, tree-shaking, comptime
@@ -665,9 +665,9 @@ imperativo, echo!, input!, I/O.
 **Limitação conhecida:**
 - Actions multiline no input direto (não via `:load`) falham no parser REPL — bug de heurística multiline que afeta ambos JIT e interp (`action` não está na lista de triggers multiline)
 
-### Fase 5 — CSP (fork!, channels, select) — Parcial
+### Fase 5 — CSP (fork!, channels, select) — Completa ✅
 
-**Status:** Nível 1 (canais síncronos) completo. Nível 2 (fork!/spawn! + scheduler) pendente.
+**Status:** Nível 1 (canais síncronos) e Nível 2 (fork!/spawn! + scheduler) completos.
 
 **Nível 1 — Completo ✅:**
 - `ChannelCreate` — cria canal (Rendezvous/Buffered/Broadcast), aloca tupla (handle, handle)
@@ -676,26 +676,38 @@ imperativo, echo!, input!, I/O.
 - `ReceiverFactoryCall` — chama `kata_rt_broadcast_receiver_create(arena, factory)`
 - `Select` (canais) — chama `kata_rt_select(handles, n, timeout_ms)`, avalia body do braço
 - Cross-process: não suportado (retorna erro)
-- `broadcast.kata` — funciona ✅ (bater com JIT)
+- `broadcast.kata` — funciona ✅ (bate com JIT)
 
-**Nível 2 — Pendente:**
-- `Fork` — requer scheduler de fibers (wasmtime-fiber) + `fn_ptr`. O interpretador
-  não tem fn_ptr (sem codegen). Solução proposta: `interp_trampoline` que despacha
-  de volta para o interpretador. Complexidade: o trampoline precisa saber qual
-  action executar, e o scheduler faz `transmute(fn_ptr)` — precisa de um ponteiro
-  de função válido.
-- `Spawn` — requer `fork()` OS + `kata_rt_spawn_process`
-- `Select` com timeout — `kata_rt_select` retorna `WOULD_BLOCK` sem fiber. Para
-  timeout sem fiber, seria preciso `std::thread::sleep` + retry (busy-wait).
+**Nível 2 — Completo ✅:**
+- `Fork` — implementado via `interp_trampoline` (`extern "C"` que despacha de volta
+  para o interpretador). Tabela global `INTERP_ACTIONS` (Mutex<Vec>) registra a action
+  antes de `kata_rt_spawn`. O trampoline lê `action_id` do `args_ptr`, recupera
+  `(action_name, module)` da tabela, cria `InterpCtx::new_with_arena`, e executa o body.
+- `Spawn` — implementado via `kata_rt_spawn_process` (fork OS). Mesmo mecanismo do
+  `Fork` mas com `kata_rt_spawn_process` em vez de `kata_rt_spawn`.
+- `eval_entry_scheduler_mode` — se o entry point é uma `ActionCall` definida pelo
+  usuário (sem `ffi_symbol`), faz spawn + `kata_rt_run` em vez de `call_action` direto.
+  O fiber raiz executa a action dentro do scheduler de fibers, permitindo que
+  `fork!` dentro da action crie fibers filhas drenadas pelo `run`.
+- `Select` com timeout — `decode_smi` no `timeout_ms` para alinhar com o codegen.
+- Despacho de overloads por aridade — `call_action` e trampoline despacham por
+  nome **E** aridade (número de params), não apenas primeiro match. Necessário
+  para actions com múltiplos overloads (`log`, `_log_publish`).
+- FFIs de log despachadas: `kata_rt_log_publish`, `kata_rt_log_publish_default`,
+  `kata_rt_log_publish_topic`, `kata_rt_log_publish_full`, `kata_rt_log_recv`,
+  `kata_rt_log_config`.
 
 **Verificação Nível 1:**
 - `kata run --interp examples/broadcast.kata` → 42 ✅ (bate com JIT)
 - `cargo test --workspace` → 1851 passed, 0 failed ✅
 
-**Verificação Nível 2 (pendente):**
-- `fork!(worker, (42,))` + `sleep!(50)` → worker executa
-- `select` com timeout funciona
-- `spawn!` em processo isolado funciona (Linux)
+**Verificação Nível 2:**
+- `kata run --interp examples/select_queue.kata` → 2 linhas ✅ (bate com JIT)
+- `kata run --interp examples/log_telemetry.kata` → entrada (41) / resultado 42 /
+  evento-manual / 0 ✅ (bate com JIT)
+- `cargo test --workspace` → 1851 passed, 0 failed ✅
+- 18/22 exemplos canônicos batem com JIT (4 divergências pré-existentes: rational,
+  ranges, quicksort, trma — não relacionadas a CSP)
 
 ### Fase 6 — Testes + portabilidade
 

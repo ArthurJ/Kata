@@ -49,11 +49,11 @@ impl std::error::Error for InterpError {}
 /// Contexto de execução do interpretador.
 pub struct InterpCtx {
     /// Runtime pointer (Box<Runtime> como i64).
-    rt_ptr: i64,
+    pub(crate) rt_ptr: i64,
     /// Handle da fiber arena atual.
-    arena: i64,
+    pub(crate) arena: i64,
     /// TypedModule (Arc'd) — sobrevive durante toda a execução.
-    module: Arc<TypedModule>,
+    pub(crate) module: Arc<TypedModule>,
 }
 
 impl InterpCtx {
@@ -129,8 +129,91 @@ impl InterpCtx {
         }
 
         // Avaliar entry point.
+        //
+        // Scheduler mode (espelha o JIT): se o entry point é uma ActionCall
+        // definida pelo usuário (sem ffi_symbol), faz spawn + run em vez de
+        // call_action direto. O fiber raiz executa a action dentro do
+        // scheduler de fibers, permitindo que fork! dentro da action crie
+        // fibers filhas que são drenadas pelo run.
+        //
+        // FFIs (echo!, sleep!, etc.) continuam sendo call direto.
+        if let TypedExprKind::ActionCall {
+            callee,
+            args,
+            ffi_symbol: None,
+            ..
+        } = &module.entry.node.kind
+        {
+            return eval_entry_scheduler_mode(self, callee, args, env);
+        }
+
         eval(self, &module.entry, env)
     }
+}
+
+/// Avalia o entry point em scheduler mode (spawn + run).
+///
+/// Espelha o comportamento do codegen em `scheduler_mode = true`:
+/// 1. `kata_rt_scheduler_init(rt)` → root_arena (no-op se já inicializado)
+/// 2. Registrar a action na tabela global → action_id
+/// 3. Avaliar args (tupla) → args_ptr na arena
+/// 4. Empacotar (action_id, args_ptr, n_args) na arena
+/// 5. `kata_rt_spawn(rt, interp_trampoline, caller_arena, packed_ptr)`
+/// 6. `kata_rt_run(rt)` → resultado do fiber raiz
+fn eval_entry_scheduler_mode(
+    ctx: &mut InterpCtx,
+    callee: &str,
+    args: &kata_ast::Spanned<kata_inference::TypedExpr>,
+    env: &mut Env,
+) -> Result<Value, InterpError> {
+    // 1. Inicializar scheduler (compatibilidade — na prática é no-op,
+    //    mas seta rt_ptr em TLS).
+    let root_arena = rt::kata_rt_scheduler_init(ctx.rt_ptr);
+
+    // 2. Avaliar args (tupla) → args_ptr na root_arena.
+    //    O entry point usa root_arena como caller_arena.
+    let saved_arena = ctx.arena;
+    ctx.arena = root_arena;
+    let args_ptr = eval(ctx, args, env)?;
+    let n_args = match &args.node.kind {
+        TypedExprKind::Tuple { elements } => elements.len() as i64,
+        TypedExprKind::Unit => 0,
+        _ => 1,
+    };
+
+    // 3. Registrar action na tabela global → action_id.
+    let action_id = crate::csp::register_action(callee, &ctx.module);
+
+    // 4. Empacotar (action_id, args_ptr, n_args) na arena.
+    let packed_ptr = rt::kata_rt_arena_alloc(ctx.rt_ptr, ctx.arena, 24);
+    unsafe {
+        std::ptr::write(packed_ptr as *mut i64, action_id);
+        std::ptr::write((packed_ptr as *mut i64).add(1), args_ptr);
+        std::ptr::write((packed_ptr as *mut i64).add(2), n_args);
+    }
+
+    // 5. kata_rt_spawn(rt, fn_ptr, caller_arena, packed_ptr).
+    let fn_ptr = crate::csp::interp_trampoline as *const () as i64;
+    let caller_arena = ctx.arena;
+    let _fiber_id = rt::kata_rt_spawn(ctx.rt_ptr, fn_ptr, caller_arena, packed_ptr);
+
+    // 6. kata_rt_run(rt) → resultado do fiber raiz.
+    let result = rt::kata_rt_run(ctx.rt_ptr);
+
+    // Restaurar arena original.
+    ctx.arena = saved_arena;
+
+    // Verificar sentinelas.
+    if result == rt::DEADLOCK_SENTINEL {
+        return Err(InterpError::Runtime(
+            "deadlock detectado pelo scheduler".to_string(),
+        ));
+    }
+    if result == rt::TIMEOUT_SENTINEL {
+        return Err(InterpError::Runtime("timeout do scheduler".to_string()));
+    }
+
+    Ok(result)
 }
 
 /// Avalia uma expressão tipada.
@@ -793,12 +876,16 @@ pub fn eval(
             timeout_body.as_deref(),
             env,
         ),
-        TypedExprKind::Fork { .. } => Err(InterpError::Runtime(
-            "fork! não implementado no interpretador (requer scheduler de fibers)".to_string(),
-        )),
-        TypedExprKind::Spawn { .. } => Err(InterpError::Runtime(
-            "spawn! não implementado no interpretador (requer fork OS)".to_string(),
-        )),
+        TypedExprKind::Fork {
+            action_name,
+            action_expr: _,
+            args,
+        } => crate::csp::eval_fork(ctx, action_name, args, env),
+        TypedExprKind::Spawn {
+            action_name,
+            action_expr: _,
+            args,
+        } => crate::csp::eval_spawn(ctx, action_name, args, env),
 
         // ── Dict / Set (Fase 2 — stubs por enquanto) ─────────
         TypedExprKind::DictLit { entries, .. } => {
@@ -883,7 +970,12 @@ fn eval_select(
     }
 
     // Chamar kata_rt_select.
-    let timeout_ms_val = timeout_val.unwrap_or(0);
+    // O timeout_ms na TAST é um Int SMI-tagged. A FFI espera o valor cru
+    // em ms — decodificar SMI (val >> 1) como o codegen faz (ushr_imm 1).
+    let timeout_ms_val = match timeout_val {
+        Some(v) => decode_smi(v),
+        None => 0,
+    };
     let result = rt::kata_rt_select(handles_ptr as *const i64, n, timeout_ms_val);
 
     if result >= 0 {
@@ -948,9 +1040,10 @@ fn call_named_function(
                 return call_typed_clauses(ctx, &clauses, args, env);
             }
         }
-        // Procurar nas actions do módulo
+        // Procurar nas actions do módulo (despachar por aridade)
+        let n_args = args.len();
         for action in &module.actions {
-            if action.name == name {
+            if action.name == name && action.param_types.len() == n_args {
                 // Clonar a action para evitar borrow conflict
                 let action_clone = action.clone();
                 return call_action_body(ctx, &action_clone, args, env);
@@ -1103,17 +1196,20 @@ fn call_action(
     args: &[Value],
     env: &mut Env,
 ) -> Result<Value, InterpError> {
-    // Procurar a action no módulo
-    // Clonar Arc<TypedModule> para evitar borrow conflict.
+    // Procurar a action no módulo — despachar por nome E aridade.
+    // Múltiplos overloads (ex: log, _log_publish) têm o mesmo nome mas
+    // aridades diferentes. O codegen usa DispatchTable; o interp usa
+    // match por número de params.
     let module = ctx.module.clone();
+    let n_args = args.len();
     for action in &module.actions {
-        if action.name == name {
+        if action.name == name && action.param_types.len() == n_args {
             let action_clone = action.clone();
             return call_action_body(ctx, &action_clone, args, env);
         }
     }
     Err(InterpError::Runtime(format!(
-        "action não encontrada: {name}"
+        "action não encontrada: {name} (aridade {n_args})"
     )))
 }
 
