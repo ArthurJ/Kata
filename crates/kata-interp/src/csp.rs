@@ -131,10 +131,10 @@ pub extern "C" fn interp_trampoline(
     // 6. Bindar argumentos e executar o body da action.
     env.push_scope();
     for (i, param_name) in action.param_names.iter().enumerate() {
-        if let Some(name) = param_name {
-            if let Some(val) = arg_vals.get(i) {
-                env.define(name, *val);
-            }
+        if let Some(name) = param_name
+            && let Some(val) = arg_vals.get(i)
+        {
+            env.define(name, *val);
         }
     }
 
@@ -180,7 +180,6 @@ pub(crate) fn eval_fork(
 ) -> Result<i64, InterpError> {
     // 1. Avaliar args (tupla) → args_ptr.
     let args_ptr = eval(ctx, args, env)?;
-    let args_ptr = args_ptr;
 
     // 2. Contar n_args (número de elementos na tupla).
     let n_args = match &args.node.kind {

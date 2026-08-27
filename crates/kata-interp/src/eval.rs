@@ -827,9 +827,9 @@ pub fn eval(
             let result = rt::kata_rt_channel_send(handle, val);
             if result < 0 {
                 // WOULD_BLOCK — sem fiber, não pode bloquear.
-                return Err(InterpError::Runtime(format!(
-                    "channel_send bloqueado (sem fiber disponível)"
-                )));
+                return Err(InterpError::Runtime(
+                    "channel_send bloqueado (sem fiber disponível)".to_string(),
+                ));
             }
             Ok(0) // Unit
         }
@@ -982,10 +982,7 @@ fn eval_select(
         // Canal pronto — result é o índice.
         let idx = result as usize;
         if let Some(TypedSelectArm::Channel {
-            channel,
-            bind_name,
-            body,
-            ..
+            bind_name, body, ..
         }) = channel_arms.get(idx)
         {
             // Fazer o recv.
@@ -1018,7 +1015,7 @@ fn eval_select(
 }
 
 /// Tag para closures na arena (magic number para identificar struct de closure).
-const CLOSURE_TAG: i64 = 0xC105_C10;
+const CLOSURE_TAG: i64 = 0x0C10_5C10;
 
 /// Chama uma função nomeada (declarada com `::` e `lambda`).
 fn call_named_function(

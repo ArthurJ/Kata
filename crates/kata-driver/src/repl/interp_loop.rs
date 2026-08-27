@@ -60,10 +60,8 @@ pub(crate) fn cmd_repl_interp() -> miette::Result<()> {
         let in_multiline = multiline_sig || multiline_action || multiline_indent;
 
         loop {
-            if !in_multiline {
-                if !InterpReplSession::is_input_incomplete(&buffer) {
-                    break;
-                }
+            if !in_multiline && !InterpReplSession::is_input_incomplete(&buffer) {
+                break;
             }
             match rl.readline("   ... ") {
                 Ok(line) => {

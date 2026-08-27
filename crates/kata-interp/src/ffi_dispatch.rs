@@ -213,7 +213,7 @@ pub(crate) fn ffi_dispatch(
         }
         "kata_rt_text_literal" => {
             // Já tratado em eval (TextLit) — se chegar aqui, é erro.
-            Err(format!("kata_rt_text_literal não esperado em ffi_dispatch"))
+            Err("kata_rt_text_literal não esperado em ffi_dispatch".to_string())
         }
         "kata_rt_string_concat" => {
             let a = args[0] as *const std::os::raw::c_char;
