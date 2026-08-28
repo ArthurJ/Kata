@@ -31,5 +31,5 @@ expression: output
 1
 0
 --- contains: 5 in [0..2..10] ---
-True
+False
 fim

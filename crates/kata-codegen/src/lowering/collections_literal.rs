@@ -260,6 +260,19 @@ pub(crate) fn lower_collections_literal(
                         0,
                     );
 
+                    // Step alignment: (item - start) % step == 0.
+                    // Decodificar SMI (>>1) para aritmética com sinal.
+                    let item_dec = ctx.builder.ins().sshr_imm(item_val, 1);
+                    let start_dec = ctx.builder.ins().sshr_imm(start, 1);
+                    let step_dec = ctx.builder.ins().sshr_imm(step, 1);
+                    let diff = ctx.builder.ins().isub(item_dec, start_dec);
+                    let remainder = ctx.builder.ins().srem(diff, step_dec);
+                    let aligned = ctx.builder.ins().icmp_imm(
+                        cranelift_codegen::ir::condcodes::IntCC::Equal,
+                        remainder,
+                        0,
+                    );
+
                     // step >= 0: item >= start AND (item < end OR (inclusive AND item == end))
                     let ge_start = ctx.builder.ins().icmp(
                         cranelift_codegen::ir::condcodes::IntCC::SignedGreaterThanOrEqual,
@@ -279,6 +292,7 @@ pub(crate) fn lower_collections_literal(
                     let incl_ok = ctx.builder.ins().band(is_inclusive, eq_end);
                     let in_pos = ctx.builder.ins().bor(lt_end, incl_ok);
                     let result_pos = ctx.builder.ins().band(ge_start, in_pos);
+                    let result_pos = ctx.builder.ins().band(result_pos, aligned);
 
                     // step < 0: item <= start AND (item > end OR (inclusive AND item == end))
                     let le_start = ctx.builder.ins().icmp(
@@ -293,6 +307,7 @@ pub(crate) fn lower_collections_literal(
                     );
                     let in_neg = ctx.builder.ins().bor(gt_end, incl_ok);
                     let result_neg = ctx.builder.ins().band(le_start, in_neg);
+                    let result_neg = ctx.builder.ins().band(result_neg, aligned);
 
                     // Seleciona baseado no sinal do step
                     let result_i8 = ctx.builder.ins().select(step_neg, result_neg, result_pos);

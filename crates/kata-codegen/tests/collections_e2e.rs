@@ -215,23 +215,23 @@ fn in_array_retorna_true() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// DoD 56: `5 in [0..2..10]` → `true` (Range CONTAINS O(1))
+// DoD 56: `6 in [0..2..10]` → `true` (Range CONTAINS O(1) com step alignment)
 // ═══════════════════════════════════════════════════════════════
 
 #[test]
 fn in_range_retorna_true() {
-    let src = "5 in [0..2..10]";
+    let src = "6 in [0..2..10]";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::boolean(), "in deve retornar Boolean");
-    assert_eq!(raw, 1, "5 in [0..2..10] = true (1)");
+    assert_eq!(raw, 1, "6 in [0..2..10] = true (6 é múltiplo de 2 a partir de 0)");
 }
 
-/// `7 in [0..2..10]` → `true` (7 está no intervalo [0, 10), mesmo não sendo múltiplo de step).
+/// `5 in [0..2..10]` → `false` (5 está no intervalo [0, 10) mas não é múltiplo de step).
 #[test]
-fn in_range_step_nao_divide_retorna_true() {
-    let src = "7 in [0..2..10]";
+fn in_range_step_nao_divide_retorna_false() {
+    let src = "5 in [0..2..10]";
     let (raw, _ty) = eval_src(src);
-    assert_eq!(raw, 1, "7 in [0..2..10] = true (interval check sem step)");
+    assert_eq!(raw, 0, "5 in [0..2..10] = false (não é múltiplo de step)");
 }
 
 /// `3 in [1 2 3]` → `true` (List CONTAINS).
