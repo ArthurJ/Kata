@@ -208,6 +208,8 @@ fn build_lambda_apply(
         param_types: param_tys,
         ret_ty: lambda_ret.clone(),
         clauses: vec![TypedLambdaClause {
+            synthetic_pre: Vec::new(),
+            synthetic_post: Vec::new(),
             patterns: typed_patterns,
             body: Spanned::new(typed_body, body.span),
             guards: typed_guards,

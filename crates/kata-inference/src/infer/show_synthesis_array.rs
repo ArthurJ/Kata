@@ -137,6 +137,8 @@ fn build_show_func(
         param_types: param_tys,
         ret_ty: ret_ty.clone(),
         clauses: vec![TypedLambdaClause {
+            synthetic_pre: Vec::new(),
+            synthetic_post: Vec::new(),
             patterns,
             body: Spanned::new(body, Span::synthetic()),
             guards: Vec::new(),

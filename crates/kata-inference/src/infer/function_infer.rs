@@ -9,7 +9,7 @@ use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 use kata_resolution::FunctionDef;
 
-use crate::typed::{TypedFunction, TypedLambdaClause};
+use crate::typed::{TypedExpr, TypedFunction, TypedLambdaClause};
 
 use super::apply_lambda::infer_lambda_body;
 use super::expr::{InferCtx, fits_return, infer_expr_hinted};
@@ -82,6 +82,22 @@ pub(crate) fn infer_named_function(
         let typed_with_bindings =
             process_with_bindings(&desugared_with_bindings, &mut clause_env, ctx)?;
 
+        // Infere synthetic_pre (diretivas Enter): cada expr é inferida no
+        // escopo da cláusula. Não são tail_pos nem têm hint de retorno.
+        let mut typed_synthetic_pre: Vec<Spanned<TypedExpr>> = Vec::new();
+        for e in &clause_inner.synthetic_pre {
+            let desugared = crate::desugar::desugar(e);
+            let typed = infer_expr_hinted(
+                &desugared.node,
+                &desugared.span,
+                &mut clause_env,
+                ctx,
+                false, // synthetic_pre não é tail_pos
+                None,  // sem hint de retorno
+            )?;
+            typed_synthetic_pre.push(Spanned::new(typed, e.span));
+        }
+
         // Infere body (com ou sem guards).
         let (typed_body, typed_guards) = if desugared_guards.is_empty() {
             let typed_body = infer_expr_hinted(
@@ -119,9 +135,31 @@ pub(crate) fn infer_named_function(
             (typed_body, guards)
         };
 
+        // Infere synthetic_post (diretivas Exit): cada expr é inferida no
+        // escopo da cláusula com `_return` bindado ao tipo de retorno.
+        // synthetic_post não é tail_pos nem tem hint de retorno.
+        if !clause_inner.synthetic_post.is_empty() {
+            clause_env.define("_return", ret_ty.clone(), "__local__");
+        }
+        let mut typed_synthetic_post: Vec<Spanned<TypedExpr>> = Vec::new();
+        for e in &clause_inner.synthetic_post {
+            let desugared = crate::desugar::desugar(e);
+            let typed = infer_expr_hinted(
+                &desugared.node,
+                &desugared.span,
+                &mut clause_env,
+                ctx,
+                false, // synthetic_post não é tail_pos
+                None,  // sem hint de retorno
+            )?;
+            typed_synthetic_post.push(Spanned::new(typed, e.span));
+        }
+
         typed_clauses.push(TypedLambdaClause {
             patterns: typed_patterns,
             body: Spanned::new(typed_body, clause_inner.body.span),
+            synthetic_pre: typed_synthetic_pre,
+            synthetic_post: typed_synthetic_post,
             guards: typed_guards,
             with_bindings: typed_with_bindings,
         });

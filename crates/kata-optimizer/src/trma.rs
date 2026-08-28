@@ -341,6 +341,8 @@ fn rewrite_with_accumulator(
         param_types: func.param_types.clone(),
         ret_ty: ret_ty.clone(),
         clauses: vec![TypedLambdaClause {
+                synthetic_pre: Vec::new(),
+                synthetic_post: Vec::new(),
             patterns: vec![Spanned::new(
                 TypedPattern::Ident {
                     name: orig_param_name.clone(),
@@ -390,6 +392,8 @@ fn rewrite_with_accumulator(
         param_types: vec![param_ty.clone(), param_ty.clone()],
         ret_ty: ret_ty.clone(),
         clauses: vec![TypedLambdaClause {
+                    synthetic_pre: Vec::new(),
+                    synthetic_post: Vec::new(),
             patterns: vec![
                 Spanned::new(
                     TypedPattern::Ident {

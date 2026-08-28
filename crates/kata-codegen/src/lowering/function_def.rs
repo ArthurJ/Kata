@@ -24,6 +24,7 @@ use super::clause::{
     all_patterns_are_ident, bind_patterns_to_params, lower_clause_body, lower_clause_chain,
     lower_with_bindings,
 };
+use super::expr::lower_expr;
 use super::module::{CodegenError, FuncKey, StringTable};
 use super::tail_call::has_tail_pos_call;
 use super::timer::{inject_timer_start, inject_timer_stop};
@@ -280,14 +281,29 @@ pub(crate) fn define_function_body(
         // split (needs_split) — o wrapper tem stack slot e o inner faz TCO.
         // Funções sem split não têm @timer + tail calls (needs_split = true
         // nesse caso), então o stack slot é sempre seguro.
+
+        // synthetic_pre (diretivas Enter customizadas): lowera antes do body.
+        // Executa uma vez no entry block. Bindings (_name, _args, etc.) ficam
+        // disponíveis para todo o resto.
+        let has_synthetic_pre = clauses.iter().any(|c| !c.synthetic_pre.is_empty());
+        let has_synthetic_post = clauses.iter().any(|c| !c.synthetic_post.is_empty());
+        if has_synthetic_pre {
+            // Usa synthetic_pre da primeira cláusula — o desugar aplica as
+            // mesmas diretivas a todas as cláusulas, então synthetic_pre é
+            // idêntico em todas.
+            for pre_expr in &clauses[0].synthetic_pre {
+                lower_expr(&pre_expr.node, &mut lower)?;
+            }
+        }
+
         let timer_start_val = if timer_spec.is_some() {
             Some(inject_timer_start(&mut lower)?)
         } else {
             None
         };
 
-        // Cria epilogue_block se @timer (para interceptar retornos).
-        let mut needs_epilogue = timer_spec.is_some();
+        // Cria epilogue_block se @timer, @cache, ou synthetic_post.
+        let mut needs_epilogue = timer_spec.is_some() || has_synthetic_post;
 
         // ── @cache: cache lookup no prólogo ──
         // Para funções anotadas com @cache{strategy: "LRU"}, serializa
@@ -518,6 +534,23 @@ pub(crate) fn define_function_body(
                 && let Some(start) = timer_start_val
             {
                 inject_timer_stop(ts, name, start, &mut lower)?;
+            }
+
+            // synthetic_post (diretivas Exit customizadas): lowera após
+            // timer/cache no epílogo. _return é bindado ao result do body.
+            if has_synthetic_post {
+                // Bindar _return ao result (block_param do epilogue).
+                let ret_clif_ty = super::resolve_clif_ty(ret_ty, lower.struct_registry);
+                lower.new_var("_return", ret_clif_ty);
+                let return_var = *lower
+                    .var_map
+                    .get("_return")
+                    .expect("_return var must exist after new_var");
+                lower.builder.def_var(return_var, result);
+
+                for post_expr in &clauses[0].synthetic_post {
+                    lower_expr(&post_expr.node, &mut lower)?;
+                }
             }
 
             let result = coerce_return(result, ret_ty, &mut lower);

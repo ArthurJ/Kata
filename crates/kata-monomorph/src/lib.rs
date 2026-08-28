@@ -236,6 +236,12 @@ fn rewrite_function(func: &mut TypedFunction, ctx: &MonoCtx, acc: &mut RewriteAc
         for wb in &mut clause.with_bindings {
             rewrite_typed_expr(&mut wb.value, ctx, acc);
         }
+        for pre in &mut clause.synthetic_pre {
+            rewrite_typed_expr(pre, ctx, acc);
+        }
+        for post in &mut clause.synthetic_post {
+            rewrite_typed_expr(post, ctx, acc);
+        }
     }
 }
 
@@ -619,5 +625,11 @@ fn rewrite_lambda_clause(clause: &mut TypedLambdaClause, ctx: &MonoCtx, acc: &mu
     }
     for wb in &mut clause.with_bindings {
         rewrite_typed_expr(&mut wb.value, ctx, acc);
+    }
+    for pre in &mut clause.synthetic_pre {
+        rewrite_typed_expr(pre, ctx, acc);
+    }
+    for post in &mut clause.synthetic_post {
+        rewrite_typed_expr(post, ctx, acc);
     }
 }

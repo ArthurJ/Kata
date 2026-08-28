@@ -138,6 +138,8 @@ fn build_list_show_func(
         param_types: vec![list_ty.clone()],
         ret_ty: ret_ty.clone(),
         clauses: vec![TypedLambdaClause {
+            synthetic_pre: Vec::new(),
+            synthetic_post: Vec::new(),
             patterns: vec![pattern],
             body: Spanned::new(body, Span::synthetic()),
             guards: Vec::new(),

@@ -29,6 +29,12 @@ pub(crate) fn fallback_unresolved_show(mono: &mut MonoModule) {
             for wb in &mut clause.with_bindings {
                 fallback_in_expr(&mut wb.value);
             }
+            for pre in &mut clause.synthetic_pre {
+                fallback_in_expr(pre);
+            }
+            for post in &mut clause.synthetic_post {
+                fallback_in_expr(post);
+            }
         }
     }
     for action in &mut mono.actions {
@@ -112,6 +118,12 @@ fn fallback_in_expr(expr_span: &mut Spanned<TypedExpr>) {
                 }
                 for wb in &mut clause.with_bindings {
                     fallback_in_expr(&mut wb.value);
+                }
+                for pre in &mut clause.synthetic_pre {
+                    fallback_in_expr(pre);
+                }
+                for post in &mut clause.synthetic_post {
+                    fallback_in_expr(post);
                 }
             }
         }

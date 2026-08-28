@@ -95,6 +95,16 @@ pub(crate) fn instantiate_clause(
             instantiate_typed_expr(&clause.body.node, subs),
             clause.body.span,
         ),
+        synthetic_pre: clause
+            .synthetic_pre
+            .iter()
+            .map(|e| Spanned::new(instantiate_typed_expr(&e.node, subs), e.span))
+            .collect(),
+        synthetic_post: clause
+            .synthetic_post
+            .iter()
+            .map(|e| Spanned::new(instantiate_typed_expr(&e.node, subs), e.span))
+            .collect(),
         guards: clause
             .guards
             .iter()

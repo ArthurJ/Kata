@@ -194,6 +194,8 @@ impl Parser {
                     return Ok(LambdaClause {
                         patterns,
                         body: *body,
+                        synthetic_pre: Vec::new(),
+                        synthetic_post: Vec::new(),
                         guards,
                         with_bindings,
                     });
@@ -227,6 +229,8 @@ impl Parser {
         Ok(LambdaClause {
             patterns,
             body,
+            synthetic_pre: Vec::new(),
+            synthetic_post: Vec::new(),
             guards: Vec::new(),
             with_bindings: Vec::new(),
         })

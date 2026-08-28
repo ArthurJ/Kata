@@ -251,6 +251,12 @@ where
     for wb in &mut clause.with_bindings {
         for_each_subexpr_mut(&mut wb.value.node, f);
     }
+    for pre in &mut clause.synthetic_pre {
+        for_each_subexpr_mut(&mut pre.node, f);
+    }
+    for post in &mut clause.synthetic_post {
+        for_each_subexpr_mut(&mut post.node, f);
+    }
     if clause.guards.is_empty() {
         for_each_subexpr_mut(&mut clause.body.node, f);
     }

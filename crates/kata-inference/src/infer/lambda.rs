@@ -134,6 +134,8 @@ pub(crate) fn infer_lambda(
                     },
                     body.span,
                 ),
+                synthetic_pre: Vec::new(),
+                synthetic_post: Vec::new(),
                 guards: Vec::new(),
                 with_bindings: Vec::new(),
             }],
@@ -230,6 +232,8 @@ pub(crate) fn infer_lambda(
     let lambda_ty = Ty::Function(param_types.clone(), Box::new(ret_ty.clone()));
 
     let clause = TypedLambdaClause {
+        synthetic_pre: Vec::new(),
+        synthetic_post: Vec::new(),
         patterns: typed_patterns,
         body: Spanned::new(typed_body, body.span),
         guards: typed_guards,

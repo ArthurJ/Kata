@@ -148,6 +148,8 @@ pub(crate) fn synthesize_show_functions(
             param_types: vec![param_ty],
             ret_ty,
             clauses: vec![TypedLambdaClause {
+                synthetic_pre: Vec::new(),
+                synthetic_post: Vec::new(),
                 patterns: vec![pattern],
                 body: Spanned::new(body, Span::synthetic()),
                 guards: Vec::new(),
@@ -245,6 +247,8 @@ pub(crate) fn synthesize_show_functions(
             param_types: vec![param_ty],
             ret_ty,
             clauses: vec![TypedLambdaClause {
+                synthetic_pre: Vec::new(),
+                synthetic_post: Vec::new(),
                 patterns: vec![pattern],
                 body: Spanned::new(body, Span::synthetic()),
                 guards: Vec::new(),

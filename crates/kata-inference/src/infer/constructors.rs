@@ -131,6 +131,8 @@ pub(crate) fn synthesize_constructors(
             param_types: field_types,
             ret_ty,
             clauses: vec![TypedLambdaClause {
+                synthetic_pre: Vec::new(),
+                synthetic_post: Vec::new(),
                 patterns,
                 body: Spanned::new(body, kata_ast::Span::synthetic()),
                 guards: Vec::new(),
@@ -204,6 +206,8 @@ pub(crate) fn synthesize_constructors(
                 param_types: vec![target_ty],
                 ret_ty: Ty::Struct(StructKey::Plain(struct_name.to_string())),
                 clauses: vec![TypedLambdaClause {
+                    synthetic_pre: Vec::new(),
+                    synthetic_post: Vec::new(),
                     patterns: vec![pattern],
                     body: Spanned::new(body, kata_ast::Span::synthetic()),
                     guards: Vec::new(),
@@ -297,6 +301,8 @@ pub(crate) fn synthesize_constructors(
                 param_types: field_types,
                 ret_ty,
                 clauses: vec![TypedLambdaClause {
+                    synthetic_pre: Vec::new(),
+                    synthetic_post: Vec::new(),
                     patterns,
                     body: Spanned::new(body, kata_ast::Span::synthetic()),
                     guards: Vec::new(),

@@ -180,6 +180,8 @@ pub(crate) fn synthesize_refined(
                 param_types: vec![decl.base_ty.clone()],
                 ret_ty: Ty::boolean(),
                 clauses: vec![TypedLambdaClause {
+                    synthetic_pre: Vec::new(),
+                    synthetic_post: Vec::new(),
                     patterns: vec![pattern],
                     body: Spanned::new(typed_body, desugared.span),
                     guards: Vec::new(),
@@ -253,6 +255,8 @@ pub(crate) fn synthesize_refined(
             param_types: vec![decl.base_ty.clone()],
             ret_ty: result_ty,
             clauses: vec![TypedLambdaClause {
+                synthetic_pre: Vec::new(),
+                synthetic_post: Vec::new(),
                 patterns: vec![pattern],
                 body,
                 guards: Vec::new(),

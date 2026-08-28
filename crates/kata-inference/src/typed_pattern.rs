@@ -83,8 +83,15 @@ pub struct TypedWithBinding {
 pub struct TypedLambdaClause {
     /// Padrões já tipados (com tipo de cada binding).
     pub patterns: Vec<Spanned<TypedPattern>>,
-    /// Corpo da cláusula (quando não há guards).
+    /// Corpo original do usuário — preserva tail_pos.
     pub body: Spanned<TypedExpr>,
+    /// Código injetado antes do body por diretivas (Enter hooks).
+    /// Vazio quando não há diretivas. Vai para o wrapper quando há split.
+    pub synthetic_pre: Vec<Spanned<TypedExpr>>,
+    /// Código injetado em cada ponto de saída por diretivas (Exit hooks).
+    /// Vazio quando não há diretivas. Vai para o wrapper (epílogo) quando há split.
+    /// Quando não há split, é inserido inline em cada retorno do body.
+    pub synthetic_post: Vec<Spanned<TypedExpr>>,
     /// Guards opcionais. Se não-vazio, o corpo é decidido pelos guards.
     pub guards: Vec<TypedGuardClause>,
     /// `with` bindings (açúcar → `let` chain, já resolvidos).

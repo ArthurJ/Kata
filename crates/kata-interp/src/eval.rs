@@ -1352,7 +1352,23 @@ fn call_typed_clauses(
     // com as novas cláusulas e argumentos — sem empilhar frames Rust.
     let mut current_clauses: Vec<TypedLambdaClause> = clauses.to_vec();
 
-    loop {
+    // synthetic_pre (diretivas Enter): avalia uma vez antes do trampoline.
+    // synthetic_post (diretivas Exit): avalia uma vez após o trampoline.
+    // Ambos precisam de __param_{i} no escopo para _args.
+    let has_synthetic = !clauses.is_empty()
+        && (!clauses[0].synthetic_pre.is_empty() || !clauses[0].synthetic_post.is_empty());
+
+    if has_synthetic {
+        env.push_scope();
+        for (i, val) in args.iter().enumerate() {
+            env.define(&format!("__param_{i}"), *val);
+        }
+        for pre_expr in &clauses[0].synthetic_pre {
+            eval(ctx, pre_expr, env)?;
+        }
+    }
+
+    let result = 'trampoline: loop {
         // Avaliar cláusulas atuais. Se o body é uma chamada de cauda,
         // `tail_call` recebe o nome e args para o próximo loop.
         let mut tail_call: Option<(String, Vec<Value>)> = None;
@@ -1389,7 +1405,7 @@ fn call_typed_clauses(
                             let result = eval_tail(ctx, &guard.body, env);
                             env.pop_scope();
                             match result? {
-                                TailResult::Done(v) => return Ok(v),
+                                TailResult::Done(v) => break 'trampoline Ok(v),
                                 TailResult::TailCall { name, args: new_args } => {
                                     tail_call = Some((name, new_args));
                                     break 'clause_loop;
@@ -1406,7 +1422,7 @@ fn call_typed_clauses(
                 let result = eval_tail(ctx, &clause.body, env);
                 env.pop_scope();
                 match result? {
-                    TailResult::Done(v) => return Ok(v),
+                    TailResult::Done(v) => break 'trampoline Ok(v),
                     TailResult::TailCall { name, args: new_args } => {
                         tail_call = Some((name, new_args));
                         break 'clause_loop;
@@ -1423,11 +1439,31 @@ fn call_typed_clauses(
                 args = resolved_args;
             }
             None => {
-                return Err(InterpError::Runtime(format!(
+                break 'trampoline Err(InterpError::Runtime(format!(
                     "nenhuma cláusula匹配: args={args:?}"
                 )));
             }
         }
+    };
+
+    // synthetic_post (diretivas Exit): avalia uma vez após o trampoline
+    // produzir o valor final, com _return bindado ao resultado.
+    if has_synthetic {
+        if !clauses[0].synthetic_post.is_empty() {
+            let result_val = result?;
+            env.define("_return", result_val);
+            for post_expr in &clauses[0].synthetic_post {
+                eval(ctx, post_expr, env)?;
+            }
+            env.pop_scope();
+            Ok(result_val)
+        } else {
+            // Só synthetic_pre — pop_scope e retornar.
+            env.pop_scope();
+            result
+        }
+    } else {
+        result
     }
 }
 

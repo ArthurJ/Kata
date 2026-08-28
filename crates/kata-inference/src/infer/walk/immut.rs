@@ -251,6 +251,12 @@ where
     for wb in &clause.with_bindings {
         for_each_subexpr(&wb.value.node, f);
     }
+    for pre in &clause.synthetic_pre {
+        for_each_subexpr(&pre.node, f);
+    }
+    for post in &clause.synthetic_post {
+        for_each_subexpr(&post.node, f);
+    }
     if clause.guards.is_empty() {
         for_each_subexpr(&clause.body.node, f);
     }

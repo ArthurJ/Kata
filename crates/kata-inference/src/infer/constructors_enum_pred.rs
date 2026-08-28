@@ -143,6 +143,8 @@ pub(crate) fn synthesize_enum_pred(
                     param_types: vec![decl.payload_ty.clone()],
                     ret_ty: Ty::boolean(),
                     clauses: vec![TypedLambdaClause {
+                        synthetic_pre: Vec::new(),
+                        synthetic_post: Vec::new(),
                         patterns: vec![pattern],
                         body: Spanned::new(typed_body, desugared.span),
                         guards: Vec::new(),
@@ -225,6 +227,8 @@ pub(crate) fn synthesize_enum_pred(
             param_types: vec![decl.payload_ty.clone()],
             ret_ty: enum_ty,
             clauses: vec![TypedLambdaClause {
+                synthetic_pre: Vec::new(),
+                synthetic_post: Vec::new(),
                 patterns: vec![pattern],
                 body,
                 guards,

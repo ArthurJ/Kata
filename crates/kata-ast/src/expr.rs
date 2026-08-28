@@ -326,6 +326,12 @@ pub enum Pattern {
 pub struct LambdaClause {
     pub patterns: Vec<Spanned<Pattern>>,
     pub body: Spanned<Expr>,
+    /// Código injetado antes do body por diretivas Enter (desugar anotativo).
+    /// Vazio quando não há diretivas Enter.
+    pub synthetic_pre: Vec<Spanned<Expr>>,
+    /// Código injetado em cada saída por diretivas Exit (desugar anotativo).
+    /// Vazio quando não há diretivas Exit.
+    pub synthetic_post: Vec<Spanned<Expr>>,
     pub guards: Vec<GuardClause>,
     pub with_bindings: Vec<WithBinding>,
 }

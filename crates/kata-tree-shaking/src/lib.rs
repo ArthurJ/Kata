@@ -143,6 +143,22 @@ fn tree_shake_impl(typed: TypedModule, preserve_tests: bool) -> TypedModule {
                             &fn_names,
                         );
                     }
+                    for pre in &clause.synthetic_pre {
+                        collect_refs(
+                            &pre.node,
+                            &mut reached_fns,
+                            &mut reached_actions,
+                            &fn_names,
+                        );
+                    }
+                    for post in &clause.synthetic_post {
+                        collect_refs(
+                            &post.node,
+                            &mut reached_fns,
+                            &mut reached_actions,
+                            &fn_names,
+                        );
+                    }
                 }
             }
         }
@@ -367,6 +383,12 @@ fn collect_refs(
                 }
                 for wb in &clause.with_bindings {
                     collect_refs(&wb.value.node, reached_fns, reached_actions, fn_names);
+                }
+                for pre in &clause.synthetic_pre {
+                    collect_refs(&pre.node, reached_fns, reached_actions, fn_names);
+                }
+                for post in &clause.synthetic_post {
+                    collect_refs(&post.node, reached_fns, reached_actions, fn_names);
                 }
             }
         }

@@ -1,26 +1,35 @@
 //! Aplicação de diretivas (hooks Enter/Exit) em `LambdaClause` (funções puras).
+//!
+//! Desugar anotativo: o body NÃO é reescrito. Enter hooks populam
+//! `synthetic_pre` e Exit hooks populam `synthetic_post`. O body original
+//! permanece inalterado, preservando `tail_pos` para o typeck.
 
-use kata_ast::{Expr, LambdaClause, Span, Spanned};
+use kata_ast::{Expr, LambdaClause, Spanned};
 use kata_resolution::{CustomDirectiveApp, DirectiveDef, DirectiveRegistry, Hook, Target};
 
 use super::reflection::{
-    ReflectionInfo, action_stmts_to_exprs, synthesize_args_binding, synthesize_return_binding,
+    ReflectionInfo, action_stmts_to_exprs, synthesize_args_binding,
     synthesize_static_bindings,
 };
 
 /// Aplica diretivas customizadas a uma `LambdaClause` de `Item::Sig`.
+///
+/// Desugar anotativo: popula `synthetic_pre` (Enter) e `synthetic_post` (Exit)
+/// em vez de reescrever `body`. O body original é preservado inalterado.
 pub(super) fn apply_directives_to_lambda_clause(
     clause: LambdaClause,
     custom_apps: &[CustomDirectiveApp],
     refl: &ReflectionInfo,
     registry: &DirectiveRegistry,
 ) -> LambdaClause {
-    let mut current_body = clause.body;
+    let mut synthetic_pre: Vec<Spanned<Expr>> = Vec::new();
+    let mut synthetic_post: Vec<Spanned<Expr>> = Vec::new();
 
-    // Processar de dentro para fora.
-    for app in custom_apps.iter().rev() {
-        // Coletar defs aplicáveis a este item (função) que casam
-        // com os arg_keys do site de aplicação e o when do site (se presente).
+    // Processar em ordem normal (primeira = mais externa = executa primeiro).
+    // No approach anterior (rev + envolvimento), a mais externa envolvia tudo
+    // e seus bindings executavam primeiro. Aqui, append em ordem normal
+    // produz a mesma ordem de execução.
+    for app in custom_apps {
         let defs: Vec<&DirectiveDef> = registry
             .lookup_by_name(&app.name)
             .into_iter()
@@ -34,47 +43,40 @@ pub(super) fn apply_directives_to_lambda_clause(
         }
 
         for def in &defs {
-            current_body = apply_hook_to_lambda_body(current_body, def, refl, app);
+            match def.key.when {
+                Hook::Enter => {
+                    synthetic_pre.extend(build_synthetic_pre(def, refl, app));
+                }
+                Hook::Exit => {
+                    synthetic_post.extend(build_synthetic_post(def, refl, app));
+                }
+                Hook::ShortCircuit | Hook::Transform => {
+                    // ShortCircuit e Transform não podem decorar funções — o
+                    // resolution já rejeitou a combinação. Ignorar.
+                }
+            }
         }
     }
 
     LambdaClause {
         patterns: clause.patterns,
-        body: current_body,
+        body: clause.body,
+        synthetic_pre,
+        synthetic_post,
         guards: clause.guards,
         with_bindings: clause.with_bindings,
     }
 }
 
-/// Aplica um hook específico ao body de uma função pura (uma `Spanned<Expr>`).
-fn apply_hook_to_lambda_body(
-    body: Spanned<Expr>,
+/// Enter em função pura: produz código para `synthetic_pre`.
+///
+/// Contém: bindings estáticos + _args + args do site + statements da diretiva.
+/// O codegen/interp avalia isto antes do body.
+fn build_synthetic_pre(
     def: &DirectiveDef,
     refl: &ReflectionInfo,
     app: &CustomDirectiveApp,
-) -> Spanned<Expr> {
-    match def.key.when {
-        Hook::Enter => apply_enter_to_lambda_body(body, def, refl, app),
-        Hook::Exit => apply_exit_to_lambda_body(body, def, refl, app),
-        Hook::ShortCircuit | Hook::Transform => {
-            // ShortCircuit e Transform não podem decorar funções — o resolution
-            // já rejeitou a combinação. Mas se chegamos aqui, o body da diretiva
-            // tem Target::Any ou Target::Function com ShortCircuit/Transform, o que
-            // é impossível. Retornar inalterado.
-            body
-        }
-    }
-}
-
-/// Enter em função pura: prependa bindings + args do site + statements da diretiva
-/// antes do body, envolvendo em `Expr::Block`.
-fn apply_enter_to_lambda_body(
-    body: Spanned<Expr>,
-    def: &DirectiveDef,
-    refl: &ReflectionInfo,
-    app: &CustomDirectiveApp,
-) -> Spanned<Expr> {
-    let span = Span::synthetic();
+) -> Vec<Spanned<Expr>> {
     let mut stmts = Vec::new();
 
     // Bindings estáticos
@@ -89,34 +91,20 @@ fn apply_enter_to_lambda_body(
     // Statements do body da diretiva
     stmts.extend(action_stmts_to_exprs(&def.body));
 
-    // Body original
-    stmts.push(body);
-
-    Spanned {
-        node: Expr::Block { stmts },
-        span,
-    }
+    stmts
 }
 
-/// Exit em função pura: envolve o body com `let __result := ...; <bindings>;
-/// <body da diretiva>; __result` em `Expr::Block`.
-fn apply_exit_to_lambda_body(
-    body: Spanned<Expr>,
+/// Exit em função pura: produz código para `synthetic_post`.
+///
+/// Contém: bindings estáticos + _args + args do site + statements da diretiva.
+/// O `_return` é bindado pelo codegen/interp ao resultado do body — não pelo
+/// desugar. O typeck declara `_return` no escopo ao inferir `synthetic_post`.
+fn build_synthetic_post(
     def: &DirectiveDef,
     refl: &ReflectionInfo,
     app: &CustomDirectiveApp,
-) -> Spanned<Expr> {
-    let span = Span::synthetic();
+) -> Vec<Spanned<Expr>> {
     let mut stmts = Vec::new();
-
-    // let __result := <body>
-    stmts.push(Spanned {
-        node: Expr::Let {
-            name: "__result".into(),
-            value: Box::new(body),
-        },
-        span,
-    });
 
     // Bindings estáticos
     stmts.extend(synthesize_static_bindings(refl));
@@ -127,22 +115,9 @@ fn apply_exit_to_lambda_body(
     // Args do site de aplicação (let _msg := "..." etc.)
     stmts.extend(super::action_hooks::synthesize_site_arg_bindings(app));
 
-    // _return binding
-    stmts.push(synthesize_return_binding());
-
-    // Statements do body da diretiva
+    // Statements do body da diretiva (referenciam _return, que é bindado
+    // pelo codegen/interp ao resultado do body)
     stmts.extend(action_stmts_to_exprs(&def.body));
 
-    // __result como valor de retorno
-    stmts.push(Spanned {
-        node: Expr::Ident {
-            name: "__result".into(),
-        },
-        span,
-    });
-
-    Spanned {
-        node: Expr::Block { stmts },
-        span,
-    }
+    stmts
 }
