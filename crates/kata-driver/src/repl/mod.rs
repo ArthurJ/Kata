@@ -17,6 +17,8 @@ mod interp_loop;
 mod interp_session;
 mod repl_loop;
 
+pub(crate) use interp_session::InterpReplSession;
+
 use std::collections::HashMap;
 use std::path::PathBuf;
 

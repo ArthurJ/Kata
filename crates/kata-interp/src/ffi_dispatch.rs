@@ -121,7 +121,9 @@ pub(crate) fn ffi_dispatch(
         "kata_rt_int_to_float" => Ok(f64_to_value(rt::kata_rt_int_to_float(decode_smi(args[0])))),
         "kata_rt_float_to_int" => Ok(rt::kata_rt_float_to_int(value_to_f64(args[0]))),
         "kata_rt_int_to_rational" => {
-            Ok(unsafe { rt::kata_rt_int_to_rational(decode_smi(args[0])) } as i64)
+            // kata_rt_int_to_rational chama to_rational(val) que faz is_smi(val)
+            // internamente — passar o valor SMI-tagged, não decodificado.
+            Ok(unsafe { rt::kata_rt_int_to_rational(args[0]) } as i64)
         }
         "kata_rt_rat_to_float" => {
             let r = args[0] as *const num_rational::BigRational;

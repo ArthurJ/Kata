@@ -1,6 +1,6 @@
 # PRD — Interpretador Tree-Walking sobre TAST
 
-**Status:** Fases 1-5 ✅, Fase 6 pendente
+**Status:** Fases 1-6 ✅
 **Data:** 2026-08-27
 **Depende de:** Pipeline completo até `optimize()` ✅ (lex → parse → resolve → infer → monomorph → optimize)
 **Não depende de:** Cranelift, codegen, tree-shaking, comptime

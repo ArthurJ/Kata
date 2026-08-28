@@ -166,6 +166,8 @@ impl CompiledModule {
 /// consome isto diretamente via `kata_interp::interpret`.
 pub struct InterpModule {
     pub inner: kata_inference::TypedModule,
+    /// Enum registry do módulo — para mapear tag → nome de variante em show.
+    pub enum_registry: kata_core::EnumRegistry,
 }
 
 impl InterpModule {
@@ -173,7 +175,7 @@ impl InterpModule {
     pub fn interp_eval(self) -> miette::Result<i64> {
         let rt = Box::new(kata_rt::Runtime::new());
         let rt_ptr = Box::into_raw(rt) as i64;
-        let result = kata_interp::interpret(self.inner, rt_ptr)
+        let result = kata_interp::interpret_with_registry(self.inner, rt_ptr, self.enum_registry)
             .map_err(|e| miette::Report::msg(e.to_string()))?;
         // Leak do Runtime — valores retornados são ponteiros para a arena.
         std::mem::forget(unsafe { Box::from_raw(rt_ptr as *mut kata_rt::Runtime) });
@@ -526,7 +528,16 @@ impl Pipeline {
         let mono = self
             .mono
             .ok_or_else(|| err("interpret chamado antes de optimize"))?;
-        Ok(InterpModule { inner: mono.inner })
+        let enum_registry = self
+            .resolved
+            .as_ref()
+            .ok_or_else(|| err("interpret chamado antes de resolve"))?
+            .enum_registry
+            .clone();
+        Ok(InterpModule {
+            inner: mono.inner,
+            enum_registry,
+        })
     }
 
     // ── Type table ──────────────────────────────────────

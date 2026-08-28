@@ -25,6 +25,8 @@ struct InterpActionEntry {
     /// Tipos dos argumentos passados no fork!/spawn! — para despacho
     /// de overloads com mesma aridade mas assinaturas diferentes.
     arg_tys: Vec<kata_core::ty::Ty>,
+    /// Enum registry para show de variants em fibers.
+    enum_registry: Arc<kata_core::EnumRegistry>,
 }
 
 /// Tabela global de actions — indexada por `action_id` (índice no Vec).
@@ -45,6 +47,7 @@ pub(crate) fn register_action(
     action_name: &str,
     module: &Arc<TypedModule>,
     arg_tys: Vec<kata_core::ty::Ty>,
+    enum_registry: Arc<kata_core::EnumRegistry>,
 ) -> i64 {
     let mut table = actions_table().lock().unwrap();
     let id = table.len() as i64;
@@ -52,6 +55,7 @@ pub(crate) fn register_action(
         action_name: action_name.to_string(),
         module: module.clone(),
         arg_tys,
+        enum_registry,
     });
     id
 }
@@ -101,10 +105,23 @@ pub extern "C" fn interp_trampoline(
     };
 
     // 3. Criar InterpCtx reusando a fiber_arena do scheduler.
-    let mut ctx = InterpCtx::new_with_arena(entry.module.clone(), rt, fiber_arena);
+    let mut ctx = InterpCtx::new_with_arena_registry(
+        entry.module.clone(),
+        rt,
+        fiber_arena,
+        entry.enum_registry.clone(),
+    );
 
     // 4. Criar Env novo e desserializar args da tupla.
     let mut env = Env::new();
+
+    // Definir stdio bindings — fibers forked precisam de __stdout__ etc.
+    // Sem isto, echo! e @log{file: __stdout__} falham com "variável não definida".
+    // Ver eval_entry_with_env em eval.rs para o mesmo padrão.
+    env.define("__stdin__", kata_rt::kata_rt_stdin());
+    env.define("__stdout__", kata_rt::kata_rt_stdout());
+    env.define("__stderr__", kata_rt::kata_rt_stderr());
+
     let mut arg_vals: Vec<i64> = Vec::new();
 
     if args_ptr_real != 0 {
@@ -210,7 +227,7 @@ pub(crate) fn eval_fork(
     };
 
     // 3. Registrar action na tabela global → action_id.
-    let action_id = register_action(action_name, &ctx.module, arg_tys);
+    let action_id = register_action(action_name, &ctx.module, arg_tys, ctx.enum_registry.clone());
 
     // 4. Empacotar (action_id, args_ptr, n_args) na arena.
     let packed_ptr = kata_rt::kata_rt_arena_alloc(ctx.rt_ptr, ctx.arena, 24);
@@ -251,7 +268,7 @@ pub(crate) fn eval_spawn(
     };
 
     // 3. Registrar action na tabela global → action_id.
-    let action_id = register_action(action_name, &ctx.module, arg_tys);
+    let action_id = register_action(action_name, &ctx.module, arg_tys, ctx.enum_registry.clone());
 
     // 4. Empacotar (action_id, args_ptr, n_args) na arena.
     let packed_ptr = kata_rt::kata_rt_arena_alloc(ctx.rt_ptr, ctx.arena, 24);

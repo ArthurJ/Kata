@@ -18,7 +18,12 @@ use std::cell::Cell;
 use wasmtime_fiber::{Fiber, FiberStack};
 
 /// Tamanho da stack de cada fiber.
-const FIBER_STACK_SIZE: usize = 1024 * 1024; // 1 MB
+///
+/// 8 MB — suficiente para recursão tree-walking do interpretador até
+/// ~8000 níveis. O JIT tem TCO/TRMA e não depende deste limite, mas o
+/// interpretador (sem TCO) precisa de stack maior para exemplos
+/// recursivos. Ver PRD-interpreter.md Fase 6, pitfall #40.
+const FIBER_STACK_SIZE: usize = 32 * 1024 * 1024; // 32 MB
 
 /// Ponteiro para o `Suspend` de um fiber. Armazenado no `KataFiber` para
 /// que o scheduler re-sete `CURRENT_SUSPEND` antes de cada `resume()`.

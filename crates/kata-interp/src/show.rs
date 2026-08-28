@@ -20,9 +20,10 @@ pub fn show_value(val: Value, ty: &Ty, ctx: &InterpCtx) -> Value {
     match ty {
         // ── Primitivos ───────────────────────────────────────
         Ty::Prim(PrimTy::Int) => {
+            // kata_rt_int_to_text espera o valor SMI-tagged (ou ponteiro BigInt).
+            // Faz is_smi(val) internamente — passar val cru, não decode_smi(val).
             if is_smi(val) {
-                let n = decode_smi(val);
-                rt::kata_rt_int_to_text(n) as i64
+                rt::kata_rt_int_to_text(val) as i64
             } else {
                 // BigInt pointer
                 rt::kata_rt_bi_show(val) as i64
@@ -210,19 +211,45 @@ fn show_struct(
 }
 
 /// show de um Sum/Enum: tag name + payload entre parênteses se houver.
-fn show_sum(val: Value, _name: &str, _ty: &Ty, ctx: &InterpCtx) -> Value {
+fn show_sum(val: Value, name: &str, _ty: &Ty, ctx: &InterpCtx) -> Value {
     let tag = rt::kata_rt_sum_tag_int(val);
-    // Sem o enum registry para mapear tag → nome, usar o número da tag.
-    // Fase 2 pode melhorar isso com acesso ao enum_registry do TypedModule.
     let payload = unsafe { std::ptr::read((val as *const Value).add(1)) };
-    if payload == 0 {
-        text_from_str(&format!("Variant({tag})"))
-    } else {
-        let payload_str = show_value(payload, &Ty::Unit, ctx);
-        text_concat(
-            text_from_str(&format!("Variant({tag}, ")),
-            text_concat(payload_str, text_from_str(")")),
-        )
+
+    // Consultar enum_registry para mapear tag → nome da variante e payload_ty.
+    let variants = ctx.enum_registry.all_variants(name);
+    match variants {
+        Some(variants) => {
+            let variant_info = variants.get(tag as usize);
+            let variant_name: String = variant_info
+                .map(|v| v.name.clone())
+                .unwrap_or_else(|| format!("Variant({tag})"));
+            let payload_ty = variant_info
+                .and_then(|v| v.payload_ty.as_ref())
+                .unwrap_or(&Ty::Unit);
+
+            if payload == 0 && payload_ty == &Ty::Unit {
+                // Variante unitária — sem payload.
+                text_from_str(&variant_name)
+            } else {
+                let payload_str = show_value(payload, payload_ty, ctx);
+                text_concat(
+                    text_from_str(&format!("{variant_name}(")),
+                    text_concat(payload_str, text_from_str(")")),
+                )
+            }
+        }
+        None => {
+            // Sem enum registry — fallback para formato numérico.
+            if payload == 0 {
+                text_from_str(&format!("Variant({tag})"))
+            } else {
+                let payload_str = show_value(payload, &Ty::Unit, ctx);
+                text_concat(
+                    text_from_str(&format!("Variant({tag}, ")),
+                    text_concat(payload_str, text_from_str(")")),
+                )
+            }
+        }
     }
 }
 

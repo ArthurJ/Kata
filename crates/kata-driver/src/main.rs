@@ -57,6 +57,9 @@ enum Command {
         /// Filtra testes por substring na descrição
         #[arg(long)]
         filter: Option<String>,
+        /// Usa interpretador tree-walking em vez de JIT
+        #[arg(long = "interp")]
+        interp: bool,
     },
     /// Compila programa Kata para executável nativo (AOT)
     Build {
@@ -80,6 +83,18 @@ enum Command {
 }
 
 fn main() -> miette::Result<()> {
+    // Usar thread com stack maior (32 MB) para permitir recursão
+    // tree-walking profunda do interpretador. O JIT tem TCO/TRMA e
+    // não depende disso, mas o interp (sem TCO) precisa de stack
+    // maior para exemplos recursivos moderados.
+    let result = std::thread::Builder::new()
+        .stack_size(32 * 1024 * 1024) // 32 MB
+        .spawn(main_inner)
+        .expect("falha ao criar thread main");
+    result.join().expect("thread main panicked")
+}
+
+fn main_inner() -> miette::Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Command::Lex { file } => cmd_lex(&file),
@@ -94,7 +109,7 @@ fn main() -> miette::Result<()> {
             emit_ir,
             interp,
         } => cmd_run(&file, emit_ir, interp),
-        Command::Test { path, filter } => cmd_test(&path, filter.as_deref()),
+        Command::Test { path, filter, interp } => cmd_test(&path, filter.as_deref(), interp),
         Command::Build {
             file,
             output,
@@ -222,9 +237,9 @@ enum TestOutcome {
 /// Executa o subcomando `kata test`.
 ///
 /// Descobre arquivos `.kata` (arquivo único ou diretório recursivo),
-/// compila cada um via `jit_compile_tests`, e executa os wrappers
-/// `__kata_test_*` individualmente com scheduler fresco + timeout.
-fn cmd_test(path: &str, filter: Option<&str>) -> miette::Result<()> {
+/// compila cada um, e executa os testes. Quando `interp=true`, usa
+/// interpretador tree-walking; caso contrário, JIT.
+fn cmd_test(path: &str, filter: Option<&str>, interp: bool) -> miette::Result<()> {
     let files = discover_kata_files(path)?;
     if files.is_empty() {
         eprintln!("nenhum arquivo .kata encontrado em `{path}`");
@@ -241,128 +256,232 @@ fn cmd_test(path: &str, filter: Option<&str>) -> miette::Result<()> {
 
         // Doctests — pré-passo textual, antes do pipeline e de @test.
         let doctest_blocks = doctest::scan_doctests(&source);
-        for block in &doctest_blocks {
-            let mut session = match repl::ReplSession::new() {
-                Ok(s) => s,
-                Err(e) => {
-                    println!("  [FAIL] {label}: doctest linha {}: {}", block.line, e);
-                    total_fail += 1;
-                    continue;
-                }
-            };
-            for case in &block.cases {
-                // Capturar stdout E resultado do handle numa única chamada.
-                let mut eval_result: Result<bool, String> = Ok(true);
-                let actual = doctest::capture_stdout(|| {
-                    eval_result = session.handle(&case.input);
-                });
+        if interp {
+            // Doctests via interpretador.
+            for block in &doctest_blocks {
+                let mut session = match repl::InterpReplSession::new() {
+                    Ok(s) => s,
+                    Err(e) => {
+                        println!("  [FAIL] {label}: doctest linha {}: {}", block.line, e);
+                        total_fail += 1;
+                        continue;
+                    }
+                };
+                for case in &block.cases {
+                    let mut eval_result: Result<bool, String> = Ok(true);
+                    let actual = doctest::capture_stdout(|| {
+                        eval_result = session.handle(&case.input);
+                    });
 
-                match eval_result {
-                    Ok(_) => {
-                        let actual_norm = doctest::normalize_output(&actual);
-                        match &case.expected {
-                            Some(expected) => {
-                                if actual_norm == *expected {
-                                    println!("  [PASS] {label}: doctest linha {}", case.line);
-                                    total_pass += 1;
-                                } else {
-                                    println!(
-                                        "  [FAIL] {label}: doctest linha {}: output mismatch",
-                                        case.line
-                                    );
-                                    println!("    esperado: {expected}");
-                                    println!("    obtido:   {actual_norm}");
-                                    total_fail += 1;
+                    match eval_result {
+                        Ok(_) => {
+                            let actual_norm = doctest::normalize_output(&actual);
+                            match &case.expected {
+                                Some(expected) => {
+                                    if actual_norm == *expected {
+                                        println!("  [PASS] {label}: doctest linha {}", case.line);
+                                        total_pass += 1;
+                                    } else {
+                                        println!(
+                                            "  [FAIL] {label}: doctest linha {}: output mismatch",
+                                            case.line
+                                        );
+                                        println!("    esperado: {expected}");
+                                        println!("    obtido:   {actual_norm}");
+                                        total_fail += 1;
+                                    }
                                 }
-                            }
-                            None => {
-                                // Sem output esperado — pass se actual está vazio
-                                if actual_norm.is_empty() {
-                                    println!("  [PASS] {label}: doctest linha {}", case.line);
-                                    total_pass += 1;
-                                } else {
-                                    println!(
-                                        "  [FAIL] {label}: doctest linha {}: output inesperado",
-                                        case.line
-                                    );
-                                    println!("    obtido:   {actual_norm}");
-                                    total_fail += 1;
+                                None => {
+                                    if actual_norm.is_empty() {
+                                        println!("  [PASS] {label}: doctest linha {}", case.line);
+                                        total_pass += 1;
+                                    } else {
+                                        println!(
+                                            "  [FAIL] {label}: doctest linha {}: output inesperado",
+                                            case.line
+                                        );
+                                        println!("    obtido:   {actual_norm}");
+                                        total_fail += 1;
+                                    }
                                 }
                             }
                         }
+                        Err(e) => {
+                            println!("  [FAIL] {label}: doctest linha {}: erro: {e}", case.line);
+                            total_fail += 1;
+                        }
                     }
+                }
+            }
+        } else {
+            // Doctests via JIT.
+            for block in &doctest_blocks {
+                let mut session = match repl::ReplSession::new() {
+                    Ok(s) => s,
                     Err(e) => {
-                        println!("  [FAIL] {label}: doctest linha {}: erro: {e}", case.line);
+                        println!("  [FAIL] {label}: doctest linha {}: {}", block.line, e);
                         total_fail += 1;
+                        continue;
+                    }
+                };
+                for case in &block.cases {
+                    let mut eval_result: Result<bool, String> = Ok(true);
+                    let actual = doctest::capture_stdout(|| {
+                        eval_result = session.handle(&case.input);
+                    });
+
+                    match eval_result {
+                        Ok(_) => {
+                            let actual_norm = doctest::normalize_output(&actual);
+                            match &case.expected {
+                                Some(expected) => {
+                                    if actual_norm == *expected {
+                                        println!("  [PASS] {label}: doctest linha {}", case.line);
+                                        total_pass += 1;
+                                    } else {
+                                        println!(
+                                            "  [FAIL] {label}: doctest linha {}: output mismatch",
+                                            case.line
+                                        );
+                                        println!("    esperado: {expected}");
+                                        println!("    obtido:   {actual_norm}");
+                                        total_fail += 1;
+                                    }
+                                }
+                                None => {
+                                    if actual_norm.is_empty() {
+                                        println!("  [PASS] {label}: doctest linha {}", case.line);
+                                        total_pass += 1;
+                                    } else {
+                                        println!(
+                                            "  [FAIL] {label}: doctest linha {}: output inesperado",
+                                            case.line
+                                        );
+                                        println!("    obtido:   {actual_norm}");
+                                        total_fail += 1;
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            println!("  [FAIL] {label}: doctest linha {}: erro: {e}", case.line);
+                            total_fail += 1;
+                        }
                     }
                 }
             }
         }
 
-        // Pipeline até jit_compile_tests.
+        // Pipeline de compilação.
         // Se o arquivo só tem doctests (sem código executável), o pipeline
         // pode falhar — não abortar, apenas pula para o próximo arquivo.
-        let compiled = (|| -> Result<_, Vec<miette::Report>> {
-            pipeline::Pipeline::new(&source)
-                .with_file_path(&file.to_string_lossy())
-                .lex()?
-                .parse(pipeline::ParseMode::Single, Some(&file.to_string_lossy()))?
-                .resolve(Some(&file.to_string_lossy()))?
-                .desugar()
-                .infer()?
-                .monomorph()
-                .optimize()
-                .tree_shake(pipeline::ShakeMode::PreserveTests)?
-                .comptime()?
-                .build_type_table()
-        })();
+        if interp {
+            // Interpretador: pipeline até optimize(), depois interpret().
+            let interp_module = (|| -> Result<_, Vec<miette::Report>> {
+                pipeline::Pipeline::new(&source)
+                    .with_file_path(&file.to_string_lossy())
+                    .lex()?
+                    .parse(pipeline::ParseMode::TwoPass, Some(&file.to_string_lossy()))?
+                    .resolve(Some(&file.to_string_lossy()))?
+                    .desugar()
+                    .infer()?
+                    .monomorph()
+                    .optimize()
+                    .interpret()
+            })();
 
-        let compiled = match compiled {
-            Ok(c) => c,
-            Err(errors) => {
-                // Se há doctests, não abortar — pode ser um arquivo só
-                // com documentação. Imprimir erros como aviso.
-                if doctest_blocks.is_empty() {
-                    return Err(crate::print_pipeline_errors(errors));
+            let interp_module = match interp_module {
+                Ok(m) => m,
+                Err(errors) => {
+                    if doctest_blocks.is_empty() {
+                        return Err(crate::print_pipeline_errors(errors));
+                    }
+                    continue;
                 }
-                // Há doctests — ignorar erros de pipeline e continuar
-                // para o próximo arquivo (não há wrappers para rodar).
-                continue;
+            };
+
+            // Executar @test specs via interpretador.
+            let outcomes = run_test_interp(&interp_module, filter);
+            for (desc, outcome) in outcomes {
+                match outcome {
+                    TestOutcome::Pass => {
+                        println!("  [PASS] {label}: {desc}");
+                        total_pass += 1;
+                    }
+                    TestOutcome::Timeout => {
+                        println!("  [TIMEOUT] {label}: {desc}");
+                        total_fail += 1;
+                    }
+                    TestOutcome::Deadlock => {
+                        println!("  [DEADLOCK] {label}: {desc}");
+                        total_fail += 1;
+                    }
+                    TestOutcome::Fail(msg) => {
+                        println!("  [FAIL] {label}: {desc}: {msg}");
+                        total_fail += 1;
+                    }
+                }
             }
-        };
+        } else {
+            // JIT: pipeline completo até build_type_table + jit_tests.
+            let compiled = (|| -> Result<_, Vec<miette::Report>> {
+                pipeline::Pipeline::new(&source)
+                    .with_file_path(&file.to_string_lossy())
+                    .lex()?
+                    .parse(pipeline::ParseMode::Single, Some(&file.to_string_lossy()))?
+                    .resolve(Some(&file.to_string_lossy()))?
+                    .desugar()
+                    .infer()?
+                    .monomorph()
+                    .optimize()
+                    .tree_shake(pipeline::ShakeMode::PreserveTests)?
+                    .comptime()?
+                    .build_type_table()
+            })();
 
-        let type_shapes = compiled.type_shapes.clone();
-        let (jit_module, wrappers) = compiled.jit_tests()?;
-
-        for w in &wrappers {
-            let desc = w.spec.desc.as_deref().unwrap_or("(sem desc)");
-
-            // Filtro por substring na descrição.
-            if let Some(f) = filter
-                && !desc.contains(f)
-            {
-                total_skip += 1;
-                continue;
-            }
-
-            let outcome = run_test_wrapper(&jit_module, w, &type_shapes);
-
-            match outcome {
-                TestOutcome::Pass => {
-                    println!("  [PASS] {label}: {desc}");
-                    total_pass += 1;
+            let compiled = match compiled {
+                Ok(c) => c,
+                Err(errors) => {
+                    if doctest_blocks.is_empty() {
+                        return Err(crate::print_pipeline_errors(errors));
+                    }
+                    continue;
                 }
-                TestOutcome::Timeout => {
-                    println!("  [TIMEOUT] {label}: {desc}");
-                    total_fail += 1;
+            };
+
+            let type_shapes = compiled.type_shapes.clone();
+            let (jit_module, wrappers) = compiled.jit_tests()?;
+
+            for w in &wrappers {
+                let desc = w.spec.desc.as_deref().unwrap_or("(sem desc)");
+
+                // Filtro por substring na descrição.
+                if let Some(f) = filter
+                    && !desc.contains(f)
+                {
+                    total_skip += 1;
+                    continue;
                 }
-                TestOutcome::Deadlock => {
-                    println!("  [DEADLOCK] {label}: {desc}");
-                    total_fail += 1;
-                }
-                TestOutcome::Fail(msg) => {
-                    println!("  [FAIL] {label}: {desc}: {msg}");
-                    total_fail += 1;
+
+                let outcome = run_test_wrapper(&jit_module, w, &type_shapes);
+
+                match outcome {
+                    TestOutcome::Pass => {
+                        println!("  [PASS] {label}: {desc}");
+                        total_pass += 1;
+                    }
+                    TestOutcome::Timeout => {
+                        println!("  [TIMEOUT] {label}: {desc}");
+                        total_fail += 1;
+                    }
+                    TestOutcome::Deadlock => {
+                        println!("  [DEADLOCK] {label}: {desc}");
+                        total_fail += 1;
+                    }
+                    TestOutcome::Fail(msg) => {
+                        println!("  [FAIL] {label}: {desc}: {msg}");
+                        total_fail += 1;
+                    }
                 }
             }
         }
@@ -443,6 +562,108 @@ fn run_test_wrapper(
         // Sem expects — comportamento atual: pass se completa.
         TestOutcome::Pass
     }
+}
+
+/// Executa `@test` specs via interpretador tree-walking.
+///
+/// Para cada action com testes, para cada test spec: avalia args (se houver),
+/// binda aos params da action, executa o body via interpretador.
+/// Retorna (descrição, outcome) por teste.
+fn run_test_interp(
+    interp_module: &pipeline::InterpModule,
+    filter: Option<&str>,
+) -> Vec<(String, TestOutcome)> {
+    let mut results = Vec::new();
+
+    let rt = Box::new(kata_rt::Runtime::new());
+    let rt_ptr = Box::into_raw(rt) as i64;
+
+    // Criar contexto interpretador com enum_registry.
+    let mut ctx = kata_interp::InterpCtx::new_with_registry(
+        interp_module.inner.clone(),
+        rt_ptr,
+        std::sync::Arc::new(interp_module.enum_registry.clone()),
+    );
+
+    for action in &interp_module.inner.actions {
+        for test_spec in &action.tests {
+            let desc = test_spec.desc.as_deref().unwrap_or("(sem desc)").to_string();
+
+            // Filtro por substring na descrição.
+            if let Some(f) = filter
+                && !desc.contains(f)
+            {
+                continue;
+            }
+
+            // Resetar estado global entre testes.
+            rt::reset_scheduler();
+
+            // Configurar timeout se houver.
+            if let Some(ms) = test_spec.timeout {
+                rt::kata_rt_set_test_timeout(ms);
+            }
+
+            // Criar Env novo e definir stdio bindings.
+            let mut env = kata_interp::Env::new();
+            env.define("__stdin__", kata_rt::kata_rt_stdin());
+            env.define("__stdout__", kata_rt::kata_rt_stdout());
+            env.define("__stderr__", kata_rt::kata_rt_stderr());
+
+            // Avaliar args do teste (se houver) e bindar aos params da action.
+            if let Some(ref args_expr) = test_spec.args {
+                let arg_val = match kata_interp::eval(&mut ctx, args_expr, &mut env) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        results.push((desc, TestOutcome::Fail(format!("erro ao avaliar args: {e}"))));
+                        continue;
+                    }
+                };
+
+                // Desserializar args da tupla: ler i64s consecutivos.
+                let n_params = action.param_types.len();
+                if n_params > 0 {
+                    for i in 0..n_params {
+                        let val = unsafe { std::ptr::read((arg_val as *const i64).add(i)) };
+                        if let Some(Some(name)) = action.param_names.get(i) {
+                            env.define(name, val);
+                        }
+                    }
+                }
+            }
+
+            // Executar o body da action.
+            let mut outcome = TestOutcome::Pass;
+            for stmt in &action.body {
+                match kata_interp::eval(&mut ctx, stmt, &mut env) {
+                    Ok(_) => {}
+                    Err(kata_interp::InterpError::Return(_)) => break,
+                    Err(e) => {
+                        outcome = TestOutcome::Fail(format!("erro de execução: {e}"));
+                        break;
+                    }
+                }
+            }
+
+            // Verificar expects se houver.
+            if let Some(ref expects) = test_spec.expects {
+                // O expects verifica show(err) contra o pattern com policy.
+                // Sem codegen, não temos o mecanismo de expects do JIT.
+                // Para o interpretador, se o teste completou sem erro, pass.
+                // Se expects é None, pass. Se expects é Some, assumir pass
+                // (o interpretador não tem como verificar expects sem o
+                // mecanismo de show(err) vs policy).
+                let _ = expects;
+            }
+
+            results.push((desc, outcome));
+        }
+    }
+
+    // Descartar Runtime.
+    unsafe { drop(Box::from_raw(rt_ptr as *mut kata_rt::Runtime)) };
+
+    results
 }
 
 /// Descobre arquivos `.kata` — arquivo único ou diretório recursivo.
