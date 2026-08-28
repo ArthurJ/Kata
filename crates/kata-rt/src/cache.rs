@@ -1,11 +1,13 @@
-//! Cache de memoização para funções `@cache{strategy: "LRU"}`.
+//! Cache de memoização para funções `@cache{strategy: "LRU", capacity: 256}`.
 //!
 //! O codegen emite cache lookup no prólogo da função e insert no epílogo.
 //! O cache é armazenado em TLS, indexado por `fn_id`. Os valores cacheados
 //! são ponteiros (i64) para dados na caller_arena — quando a arena morre
 //! (fiber termina ou root no fim do run), os valores morrem junto.
 //!
-//! `kata_rt_cache_get_or_create(arena, fn_id, capacity)` → handle (fn_id)
+//! Estratégias de eviction: LRU, FIFO, MRU, LFU.
+//!
+//! `kata_rt_cache_get_or_create(arena, fn_id, capacity, strategy_tag)` → handle
 //! `kata_rt_cache_lookup(handle, key_bytes, key_len)` → 0=miss, ptr=hit
 //! `kata_rt_cache_insert(handle, key_bytes, key_len, value)`
 
@@ -16,37 +18,66 @@ thread_local! {
     static CACHES: RefCell<HashMap<i64, CacheTable>> = RefCell::new(HashMap::new());
 }
 
+/// Estratégia de eviction do cache.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CacheStrategy {
+    LRU = 0,
+    FIFO = 1,
+    MRU = 2,
+    LFU = 3,
+}
+
 struct CacheTable {
     /// Mapa de key_bytes → value (ponteiro para arena).
     entries: HashMap<Vec<u8>, i64>,
-    /// Capacidade máxima (LRU eviction quando excedida).
+    /// Capacidade máxima (eviction quando excedida).
     capacity: usize,
-    /// Contador de acesso global para LRU.
+    /// Estratégia de eviction.
+    strategy: CacheStrategy,
+    /// Contador global de acessos (lookup + insert).
     access_counter: i64,
-    /// Último acesso de cada key (para LRU eviction).
+    /// Último acesso de cada key (para LRU/MRU).
     last_access: HashMap<Vec<u8>, i64>,
+    /// Ordem de inserção de cada key (para FIFO).
+    insert_order: HashMap<Vec<u8>, i64>,
+    /// Contador de inserção (para FIFO).
+    insert_counter: i64,
+    /// Contagem de acessos por key (para LFU).
+    access_count: HashMap<Vec<u8>, i64>,
 }
 
 /// Cria ou retorna o handle do cache para `fn_id`.
 ///
 /// O `arena_handle` é aceito para futura implementação arena-allocated,
 /// mas atualmente o cache vive em TLS (Rust heap). O `capacity` define
-/// o número máximo de entradas antes de LRU eviction.
+/// o número máximo de entradas antes de eviction. O `strategy_tag` define
+/// a política de eviction: 0=LRU, 1=FIFO, 2=MRU, 3=LFU.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_cache_get_or_create(
     _arena_handle: i64,
     fn_id: i64,
     capacity: i64,
+    strategy_tag: i64,
 ) -> i64 {
     CACHES.with(|caches| {
         let mut caches = caches.borrow_mut();
         caches.entry(fn_id).or_insert_with(|| {
             let cap = if capacity > 0 { capacity as usize } else { 256 };
+            let strategy = match strategy_tag {
+                1 => CacheStrategy::FIFO,
+                2 => CacheStrategy::MRU,
+                3 => CacheStrategy::LFU,
+                _ => CacheStrategy::LRU,
+            };
             CacheTable {
                 entries: HashMap::new(),
                 capacity: cap,
+                strategy,
                 access_counter: 0,
                 last_access: HashMap::new(),
+                insert_order: HashMap::new(),
+                insert_counter: 0,
+                access_count: HashMap::new(),
             }
         });
     });
@@ -66,15 +97,24 @@ pub extern "C" fn kata_rt_cache_lookup(handle: i64, key_ptr: i64, key_len: i64) 
         if let Some(table) = caches.get_mut(&handle)
             && let Some(&val) = table.entries.get(&key)
         {
-            table.access_counter += 1;
-            table.last_access.insert(key, table.access_counter);
+            // Atualiza metadata conforme estratégia.
+            match table.strategy {
+                CacheStrategy::LRU | CacheStrategy::MRU => {
+                    table.access_counter += 1;
+                    table.last_access.insert(key, table.access_counter);
+                }
+                CacheStrategy::LFU => {
+                    *table.access_count.get_mut(&key).unwrap() += 1;
+                }
+                CacheStrategy::FIFO => {}
+            }
             return val;
         }
         0
     })
 }
 
-/// Insere um valor no cache. Se o cache está cheio, evicta a entrada LRU.
+/// Insere um valor no cache. Se o cache está cheio, evicta conforme estratégia.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_cache_insert(handle: i64, key_ptr: i64, key_len: i64, value: i64) {
     if key_len <= 0 || key_ptr == 0 {
@@ -85,23 +125,70 @@ pub extern "C" fn kata_rt_cache_insert(handle: i64, key_ptr: i64, key_len: i64, 
     CACHES.with(|caches| {
         let mut caches = caches.borrow_mut();
         if let Some(table) = caches.get_mut(&handle) {
-            // LRU eviction se cache cheio e key é nova.
-            if !table.entries.contains_key(&key)
-                && table.entries.len() >= table.capacity
-                && let Some(lru_key) = table
-                    .last_access
-                    .iter()
-                    .min_by_key(|(_, ts)| *ts)
-                    .map(|(k, _)| k.clone())
-            {
-                table.entries.remove(&lru_key);
-                table.last_access.remove(&lru_key);
+            // Eviction se cache cheio e key é nova.
+            if !table.entries.contains_key(&key) && table.entries.len() >= table.capacity {
+                if let Some(victim) = evict(table) {
+                    table.entries.remove(&victim);
+                    table.last_access.remove(&victim);
+                    table.insert_order.remove(&victim);
+                    table.access_count.remove(&victim);
+                }
             }
-            table.access_counter += 1;
             table.entries.insert(key.clone(), value);
-            table.last_access.insert(key, table.access_counter);
+            // Atualiza metadata conforme estratégia.
+            match table.strategy {
+                CacheStrategy::LRU | CacheStrategy::MRU => {
+                    table.access_counter += 1;
+                    table.last_access.insert(key, table.access_counter);
+                }
+                CacheStrategy::FIFO => {
+                    table.insert_counter += 1;
+                    table.insert_order.insert(key, table.insert_counter);
+                }
+                CacheStrategy::LFU => {
+                    table.access_count.insert(key, 1);
+                }
+            }
         }
     });
+}
+
+/// Encontra a key vítima para eviction conforme a estratégia.
+fn evict(table: &CacheTable) -> Option<Vec<u8>> {
+    match table.strategy {
+        CacheStrategy::LRU => {
+            // Evicta menor last_access (menos recentemente acessada).
+            table
+                .last_access
+                .iter()
+                .min_by_key(|(_, ts)| *ts)
+                .map(|(k, _)| k.clone())
+        }
+        CacheStrategy::FIFO => {
+            // Evicta menor insert_order (primeira inserida).
+            table
+                .insert_order
+                .iter()
+                .min_by_key(|(_, order)| *order)
+                .map(|(k, _)| k.clone())
+        }
+        CacheStrategy::MRU => {
+            // Evicta maior last_access (mais recentemente acessada).
+            table
+                .last_access
+                .iter()
+                .max_by_key(|(_, ts)| *ts)
+                .map(|(k, _)| k.clone())
+        }
+        CacheStrategy::LFU => {
+            // Evicta menor access_count (menos frequentemente acessada).
+            table
+                .access_count
+                .iter()
+                .min_by_key(|(_, count)| *count)
+                .map(|(k, _)| k.clone())
+        }
+    }
 }
 
 // ── Serialização de cache key por conteúdo ─────────────────────────

@@ -1,9 +1,37 @@
-# @cache{strategy: "LRU"} — memoização em funções puras.
+# @cache — memoização em funções puras.
 # A segunda chamada com o mesmo argumento retorna o valor cacheado
 # sem reexecutar o body.
 
-@cache{strategy: "LRU"}
+# Estratégia default (LRU), capacity default (256).
+@cache
 dobro :: Int => Int
 lambda n: * n 2
 
-dobro 5
+# FIFO com capacity explícito.
+@cache{strategy: "FIFO", capacity: 512}
+busca :: Int => Int
+lambda x: x
+
+# MRU com capacity pequeno (testar eviction).
+@cache{strategy: "MRU", capacity: 4}
+janela :: Int => Int
+lambda x: x
+
+# LFU — ideal para frequência estável.
+@cache{strategy: "LFU", capacity: 128}
+hash :: Int => Int
+lambda x: * x x
+
+# Múltiplas cláusulas + cache = memoização efetiva.
+# fib 35 seria intratável sem cache.
+@cache{strategy: "LRU"}
+fib :: Int => Int
+lambda 0: 0
+lambda 1: 1
+lambda n: + (fib (- n 1)) (fib (- n 2))
+
+action main
+    echo!(dobro 5)
+    echo!(dobro 5)  # cache hit
+    echo!(fib 35)   # instantâneo com cache
+main!()

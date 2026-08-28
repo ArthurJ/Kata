@@ -117,8 +117,10 @@ impl Parser {
     /// Valida `name` contra `expected`. Se inválido, retorna
     /// `FrontendError::InvalidCasing` com o span do nome.
     ///
-    /// Nomes começando com `__` são rejeitados (`ReservedName`) — são
-    /// reservados para símbolos gerados pelo compilador.
+    /// Nomes contendo `__` (duplo underscore em qualquer posição) são
+    /// rejeitados (`ReservedName`) — são reservados para símbolos gerados
+    /// pelo compilador e valores injetados pelo runtime (ex: `__stdin__`,
+    /// `__stdout__`, `__stderr__`, que o usuário referencia mas não cria).
     ///
     /// A validação de casing só se aplica a nomes alfabéticos (não símbolos
     /// como `+`, `-`, `*`). Nomes começando com `_` são válidos em snake_case.
@@ -128,7 +130,7 @@ impl Parser {
         expected: CasingPattern,
         span: Span,
     ) -> Result<(), FrontendError> {
-        if name.starts_with("__") {
+        if name.contains("__") {
             return Err(FrontendError::ReservedName {
                 name: name.to_string(),
                 span: span.into(),

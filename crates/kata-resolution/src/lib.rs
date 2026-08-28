@@ -247,6 +247,7 @@ fn resolve_inner(
                 let mut associative_neutral = None;
                 let mut is_commutative = false;
                 let mut cache_strategy = None;
+                let mut cache_capacity = None;
 
                 for d in directives {
                     match d.name.as_str() {
@@ -270,13 +271,45 @@ fn resolve_inner(
                             is_commutative = true;
                         }
                         "cache" => {
-                            // @cache{strategy: "LRU"} — extrai a estratégia.
+                            // @cache presente — ativa com defaults mesmo sem args.
+                            cache_strategy = Some("LRU".to_string());
+                            cache_capacity = Some(256);
                             for arg in &d.args {
-                                if let kata_ast::DirectiveArg::Named { key, value } = arg
-                                    && key == "strategy"
-                                    && let kata_ast::Expr::TextLit { text } = &value.node
-                                {
-                                    cache_strategy = Some(text.clone());
+                                if let kata_ast::DirectiveArg::Named { key, value } = arg {
+                                    match key.as_str() {
+                                        "strategy" => {
+                                            if let kata_ast::Expr::TextLit { text } = &value.node {
+                                                match text.as_str() {
+                                                    "LRU" | "FIFO" | "MRU" | "LFU" => {
+                                                        cache_strategy = Some(text.clone());
+                                                    }
+                                                    _ => errors.push(
+                                                        ResolveError::UnknownCacheStrategy {
+                                                            strategy: text.clone(),
+                                                            item_name: name.clone(),
+                                                        },
+                                                    ),
+                                                }
+                                            }
+                                        }
+                                        "capacity" => {
+                                            if let kata_ast::Expr::IntLit { text } = &value.node
+                                                && let Ok(n) = text.parse::<i64>()
+                                            {
+                                                if n <= 0 {
+                                                    errors.push(
+                                                        ResolveError::CacheCapacityInvalid {
+                                                            value: n,
+                                                            item_name: name.clone(),
+                                                        },
+                                                    );
+                                                } else {
+                                                    cache_capacity = Some(n);
+                                                }
+                                            }
+                                        }
+                                        _ => {}
+                                    }
                                 }
                             }
                         }
@@ -337,6 +370,7 @@ fn resolve_inner(
                         return_type: return_type.clone(),
                         clauses: clauses.clone(),
                         cache_strategy,
+                        cache_capacity,
                         timer,
                         custom_directives: custom_dirs,
                     });

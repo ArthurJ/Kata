@@ -159,12 +159,18 @@ pub(crate) fn infer_named_function(
         param_types: param_types.clone(),
         ret_ty: ret_ty.clone(),
         clauses: typed_clauses,
-        cache_spec: func_def
-            .cache_strategy
-            .as_ref()
-            .map(|s| crate::typed_module::CacheSpec {
-                strategy: s.clone(),
-            }),
+        cache_spec: func_def.cache_strategy.as_ref().map(|s| {
+            use crate::typed_module::CacheStrategy;
+            crate::typed_module::CacheSpec {
+                strategy: match s.as_str() {
+                    "FIFO" => CacheStrategy::FIFO,
+                    "MRU" => CacheStrategy::MRU,
+                    "LFU" => CacheStrategy::LFU,
+                    _ => CacheStrategy::LRU, // LRU default — resolution valida
+                },
+                capacity: func_def.cache_capacity.unwrap_or(256),
+            }
+        }),
         timer_spec: func_def.timer.clone(),
     })
 }

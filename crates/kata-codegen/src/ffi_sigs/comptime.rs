@@ -25,12 +25,13 @@ pub(crate) fn sig_for(sym: FfiSymbol) -> Option<Signature> {
             sig.params.push(AbiParam::new(I64)); // snapshot_id
             sig.returns.push(AbiParam::new(I64)); // ptr
         }
-        // ── Cache @cache{strategy: "LRU"} ( , ) ──
-        // cache_get_or_create: (arena, fn_id, capacity) -> handle
+        // ── Cache @cache{strategy: "LRU", capacity: 256} ( , ) ──
+        // cache_get_or_create: (arena, fn_id, capacity, strategy_tag) -> handle
         FfiSymbol::CacheGetOrCreate => {
             sig.params.push(AbiParam::new(I64)); // arena
             sig.params.push(AbiParam::new(I64)); // fn_id
             sig.params.push(AbiParam::new(I64)); // capacity
+            sig.params.push(AbiParam::new(I64)); // strategy_tag (0=LRU, 1=FIFO, 2=MRU, 3=LFU)
             sig.returns.push(AbiParam::new(I64)); // handle
         }
         // cache_lookup: (handle, key_ptr, key_len) -> i64 (0=miss, ptr=hit)

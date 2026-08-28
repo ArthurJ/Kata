@@ -226,3 +226,47 @@ fn single_underscore_prefix_ok() {
     let tokens = lex(src).unwrap();
     parse(tokens).unwrap();
 }
+
+// ── __ no meio do nome ───────────────────────────────────────────
+
+#[test]
+fn sig_name_double_underscore_middle_fails() {
+    let err = parse_err("foo__bar :: Int => Int");
+    assert!(matches!(err, FrontendError::ReservedName { ref name, .. } if name == "foo__bar"));
+}
+
+#[test]
+fn action_name_double_underscore_middle_fails() {
+    let err = parse_err("action foo__bar (x::Int) => Int\n    x");
+    assert!(matches!(err, FrontendError::ReservedName { ref name, .. } if name == "foo__bar"));
+}
+
+#[test]
+fn data_name_double_underscore_middle_fails() {
+    let err = parse_err("data Foo__Bar (x::Int)");
+    assert!(matches!(err, FrontendError::ReservedName { ref name, .. } if name == "Foo__Bar"));
+}
+
+// ── Exceção: valores injetados pelo runtime (stdio) ─────────────
+
+#[test]
+fn stdio_names_rejected_in_declarations() {
+    // __stdin__, __stdout__, __stderr__ são valores injetados pelo runtime.
+    // O usuário referencia em expressões, mas não pode declarar.
+    let err = parse_err("action __stdout__ (msg::Text) => Unit\n    msg");
+    assert!(matches!(err, FrontendError::ReservedName { ref name, .. } if name == "__stdout__"));
+}
+
+#[test]
+fn stdio_names_accepted_in_expressions() {
+    // __stdout__ em posição de expressão (não declaração) é aceito —
+    // validate_name só rooda em declarações.
+    let src = "action main => Unit\n    echo!(\"hello\", __stdout__)\nmain!()";
+    let tokens = lex(src).unwrap();
+    let result = parse(tokens);
+    assert!(
+        result.is_ok(),
+        "parser deve aceitar __stdout__ em expressão — erro: {:?}",
+        result.err()
+    );
+}

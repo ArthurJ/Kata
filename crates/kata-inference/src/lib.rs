@@ -22,8 +22,8 @@ pub use infer::generics::{Substitutions, apply_subs, unify};
 pub use infer::infer_module;
 pub use infer::wrap_entry_with_show;
 pub use typed::{
-    CacheSpec, CaptureInfo, ChannelKind, FusedStage, TypedAction, TypedExpr, TypedExprKind,
-    TypedFunction, TypedModule, TypedReadMode, TypedSelectArm, TypedTestSpec,
+    CacheSpec, CacheStrategy, CaptureInfo, ChannelKind, FusedStage, TypedAction, TypedExpr,
+    TypedExprKind, TypedFunction, TypedModule, TypedReadMode, TypedSelectArm, TypedTestSpec,
 };
 pub use typed_module::TimerSpec;
 pub use typed_pattern::{

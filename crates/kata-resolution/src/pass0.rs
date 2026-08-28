@@ -750,6 +750,7 @@ pub(crate) fn run_pass0(
                             return_type,
                             clauses: clauses.clone(),
                             cache_strategy: None,
+                            cache_capacity: None,
                             timer: None,
                             custom_directives: Vec::new(),
                         });
@@ -949,6 +950,7 @@ pub(crate) fn run_pass0(
                     return_type,
                     clauses: clauses.clone(),
                     cache_strategy: None,
+                    cache_capacity: None,
                     timer: None,
                     custom_directives: Vec::new(),
                 });
@@ -1047,6 +1049,7 @@ pub(crate) fn run_pass0(
                         return_type,
                         clauses: default_clauses.clone(),
                         cache_strategy: None,
+                        cache_capacity: None,
                         timer: None,
                         custom_directives: Vec::new(),
                     });

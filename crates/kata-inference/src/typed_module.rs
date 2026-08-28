@@ -58,14 +58,26 @@ pub struct TypedModule {
     pub constants: Vec<Spanned<TypedExpr>>,
 }
 
-/// Especificação de cache `@cache{strategy: "LRU"}`.
+/// Estratégia de eviction do cache `@cache`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CacheStrategy {
+    LRU,
+    FIFO,
+    MRU,
+    LFU,
+}
+
+/// Especificação de cache `@cache{strategy: "LRU", capacity: 256}`.
 ///
 /// Anota uma função para memoização. O codegen emite cache lookup no prólogo
-/// e insert no epílogo. Cache lazy-allocated em `caller_arena`.
+/// e insert no epílogo. Cache lazy-allocated em TLS (futuramente em
+/// `caller_arena`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct CacheSpec {
-    /// Estratégia de eviction. Atualmente só `"LRU"`.
-    pub strategy: String,
+    /// Estratégia de eviction.
+    pub strategy: CacheStrategy,
+    /// Número máximo de entradas antes de eviction.
+    pub capacity: i64,
 }
 
 /// Função nomeada tipada — pronta para o codegen.

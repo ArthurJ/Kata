@@ -131,6 +131,9 @@ pub struct FunctionDef {
     /// Especificação de cache `@cache{strategy: "LRU"}`. None se a função
     /// não tem `@cache`.
     pub cache_strategy: Option<String>,
+    /// Capacidade do cache (número de entradas). Default 256 se `@cache`
+    /// está presente mas `capacity` não foi especificado.
+    pub cache_capacity: Option<i64>,
     /// Especificação de timer `@timer`. None se a função não tem `@timer`.
     pub timer: Option<TimerSpec>,
     /// Diretivas customizadas aplicadas a esta função (em ordem).
@@ -290,6 +293,16 @@ pub enum ResolveError {
     #[error("diretiva `{name}` mistura Target::Any com específico para when={when}")]
     #[diagnostic(code = "resolve.directive_any_conflict")]
     DirectiveAnyConflict { name: String, when: String },
+
+    /// Estratégia de cache desconhecida em `@cache{strategy: "..."}`.
+    #[error("estratégia de cache desconhecida: `{strategy}` em `{item_name}`")]
+    #[diagnostic(code = "type.unknown_cache_strategy")]
+    UnknownCacheStrategy { strategy: String, item_name: String },
+
+    /// Capacidade de cache inválida (zero ou negativa).
+    #[error("capacidade de cache inválida: {value} em `{item_name}` (deve ser > 0)")]
+    #[diagnostic(code = "type.cache_capacity_invalid")]
+    CacheCapacityInvalid { value: i64, item_name: String },
 }
 
 /// Formata um `Vec<ResolveError>` como string legível (erros separados por `; `).
