@@ -17,7 +17,7 @@ use kata_inference::{TypedExprKind, TypedModule};
 use super::LowerCtx;
 use super::action_def::{declare_kata_action, define_kata_action};
 use super::expr::lower_expr;
-use super::function_def::{declare_kata_function, define_kata_function};
+use super::function_def::{declare_kata_function, define_kata_function, needs_split};
 use crate::metadata::MetadataTable;
 
 use super::backend::ModuleBackend;
@@ -114,6 +114,9 @@ pub(crate) fn lower_module(
     // ── Declara e define funções nomeadas antes do entry point ──
     let mut func_ids: Vec<cranelift_module::FuncId> = Vec::new();
     let mut compiled_funcs: Vec<CompiledFunc> = Vec::new();
+    // Inner table: mapeia FuncKey → inner FuncId (para wrapper/inner split).
+    // Populado apenas para funções que precisam de split.
+    let mut inner_table: HashMap<FuncKey, cranelift_module::FuncId> = HashMap::new();
     for func in &typed.functions {
         let fn_hash = crate::lowering::cache_key::canonical_fn_id(
             &func.name,
@@ -145,14 +148,27 @@ pub(crate) fn lower_module(
                 module,
                 struct_registry,
             )?;
-            symbol_table.insert(
-                (
-                    func.name.clone(),
-                    func.param_types.clone(),
-                    func.ret_ty.clone(),
-                ),
-                func_id,
+            let key = (
+                func.name.clone(),
+                func.param_types.clone(),
+                func.ret_ty.clone(),
             );
+            symbol_table.insert(key.clone(), func_id);
+
+            // Se a função precisa de split, declarar também o inner.
+            if needs_split(func) {
+                let inner_name = format!("__kata_fn_inner_{fn_counter}");
+                fn_counter += 1;
+                let inner_id = declare_kata_function(
+                    func,
+                    &inner_name,
+                    Linkage::Export,
+                    module,
+                    struct_registry,
+                )?;
+                inner_table.insert(key, inner_id);
+            }
+
             compiled_funcs.push(CompiledFunc {
                 fn_hash,
                 cranelift_name,
@@ -178,6 +194,7 @@ pub(crate) fn lower_module(
                 module,
                 ffi_ids,
                 &symbol_table,
+                &inner_table,
                 &mut string_table,
                 &mut bytes_table,
                 struct_registry,
@@ -298,6 +315,8 @@ pub(crate) fn lower_module(
             let func_ref = module.declare_func_in_func(fid, func);
             kata_refs.insert(key.clone(), func_ref);
         }
+        // Entry point nunca precisa de inner refs — não faz self-calls.
+        let kata_refs_inner: HashMap<FuncKey, cranelift_codegen::ir::FuncRef> = HashMap::new();
 
         let mut func_ctx = FunctionBuilderContext::new();
         let mut builder = FunctionBuilder::new(func, &mut func_ctx);
@@ -315,6 +334,7 @@ pub(crate) fn lower_module(
             module,
             ffi_refs: &ffi_refs,
             kata_refs: &kata_refs,
+            kata_refs_inner: &kata_refs_inner,
             ffi_ids,
             kata_ids: &symbol_table,
             metadata: &mut metadata,

@@ -99,6 +99,7 @@ pub(crate) fn define_kata_action(
             let func_ref = module.declare_func_in_func(fid, func_ir);
             kata_refs.insert(key.clone(), func_ref);
         }
+        let kata_refs_inner: HashMap<FuncKey, cranelift_codegen::ir::FuncRef> = HashMap::new();
 
         let mut func_ctx = FunctionBuilderContext::new();
         let mut builder = FunctionBuilder::new(func_ir, &mut func_ctx);
@@ -121,6 +122,7 @@ pub(crate) fn define_kata_action(
             module,
             ffi_refs: &ffi_refs,
             kata_refs: &kata_refs,
+            kata_refs_inner: &kata_refs_inner,
             ffi_ids,
             kata_ids: symbol_table,
             metadata: &mut metadata,

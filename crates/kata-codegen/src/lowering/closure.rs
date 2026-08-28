@@ -265,12 +265,19 @@ pub(crate) fn lower_closure(
                 // Call direto para função Kata nomeada.
                 // ABI A2: rt + arena_handle + box_ptr (dummy 0) sempre presentes.
                 if expr.tail_pos && !ctx.no_tail_calls {
+                    // Tail call: resolve para inner (TCO) se disponível,
+                    // senão para wrapper (approach atual).
+                    let tail_func_ref = ctx
+                        .kata_refs_inner
+                        .get(&key)
+                        .copied()
+                        .unwrap_or(func_ref);
                     let rt_val = ctx.rt.unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
                     let arena = caller_arena_handle(ctx);
                     let dummy_box = ctx.builder.ins().iconst(I64, 0);
                     let mut tail_args = vec![rt_val, arena, dummy_box];
                     tail_args.extend(arg_values.iter().copied());
-                    ctx.builder.ins().return_call(func_ref, &tail_args);
+                    ctx.builder.ins().return_call(tail_func_ref, &tail_args);
                     ctx.emitted_tail_call = true;
                     let dummy = ctx.builder.create_block();
                     ctx.builder.switch_to_block(dummy);

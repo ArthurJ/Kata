@@ -107,6 +107,10 @@ pub(crate) struct LowerCtx<'a, 'b> {
     pub module: &'a mut dyn ModuleBackend,
     pub ffi_refs: &'a HashMap<String, cranelift_codegen::ir::FuncRef>,
     pub kata_refs: &'a HashMap<FuncKey, cranelift_codegen::ir::FuncRef>,
+    /// FuncRefs das funções inner (wrapper/inner split). Default: HashMap vazio.
+    /// Tail calls no inner resolvem para aqui (TCO); non-tail calls resolvem
+    /// para `kata_refs` (wrapper, com cache/timer).
+    pub kata_refs_inner: &'a HashMap<FuncKey, cranelift_codegen::ir::FuncRef>,
     /// FuncIds globais (module-level) para re-declaração em lambdas anônimos.
     pub ffi_ids: &'a HashMap<String, cranelift_module::FuncId>,
     pub kata_ids: &'a HashMap<FuncKey, cranelift_module::FuncId>,

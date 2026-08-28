@@ -10,6 +10,7 @@ use cranelift_codegen::isa::CallConv;
 use cranelift_module::{Linkage, Module};
 use kata_core::ty::{PrimTy, Ty};
 use kata_inference::{TypedExpr, TypedExprKind};
+use std::collections::HashMap;
 
 use super::_match::lower_match;
 use super::LowerCtx;
@@ -21,6 +22,7 @@ use super::control_flow::lower_control_flow;
 use super::filter::lower_filter;
 use super::fused_stream::lower_fused_stream;
 use super::map::lower_map;
+use super::module::FuncKey;
 use crate::smi::{encode_smi, fits_smi, parse_int_literal};
 
 /// Lowera uma expressão TAST → valor CLIF.
@@ -503,6 +505,7 @@ pub(crate) fn lower_expr(
                 })?;
 
             // Compila o corpo usando o pipeline compartilhado.
+            let empty_inner: HashMap<FuncKey, cranelift_module::FuncId> = HashMap::new();
             crate::lowering::function_def::define_function_body(
                 &name,
                 param_types,
@@ -515,6 +518,7 @@ pub(crate) fn lower_expr(
                 ctx.module,
                 ctx.ffi_ids,
                 ctx.kata_ids,
+                &empty_inner,
                 ctx.string_table,
                 ctx.bytes_table,
                 ctx.struct_registry,

@@ -1,6 +1,6 @@
 # PRD — `@timer` diretiva + `now!()` action
 
-**Status:** Implementado (caso não-TCO stack slot + caso TCO canal buffer-1 Drop)
+**Status:** Implementado (wrapper/inner split — stack slot no wrapper para todos os casos)
 **Data:** 2026-07-29
 **Depende de:** Fio 14 ✅ (`@log` infra — publish/subscribe, tópicos), Fio 12 ✅ (`fn_id` canônico)
 **Não depende de:** `spawn!` (Fio 11), Fio 13, Fio 15
@@ -21,11 +21,11 @@ existente. Zero infra nova de canal para output.
 
 ### Princípio: TCO preservado
 
-`@timer` sozinho **não** desativa TCO. A medição usa um canal interno
-buffer-1 com policy drop para preservar o timestamp da chamada mais
-externa através da destruição de frames do `return_call`. `@cache` já
-desativa TCO por si — quando combinado com `@timer`, a estratégia muda
-para stack slot.
+`@timer` sozinho **não** desativa TCO. Com o wrapper/inner split (PRD-wrapper-inner-tco),
+a função vira duas: o **wrapper** (que executa o prólogo/epílogo com `start = timer_now()`
+num stack slot) e o **inner** (que executa o body com TCO ativo via `return_call`).
+O frame do wrapper sobrevive — o inner retorna para ele, que mede o delta completo da cadeia.
+Isso elimina a necessidade do canal buffer-1 Drop usado anteriormente.
 
 ## 2. Sintaxe
 
@@ -75,64 +75,64 @@ A interpolação usa o mesmo mecanismo do `@log` — o codegen resolve
 
 ## 4. Mecanismo
 
-### 4.1. Dois canais
-
-**Canal interno** (buffer-1, drop policy) — preserva `start_time` através
-da destruição de frames do TCO. Key = `fn_id` (hash FNV-1a canônico, já
-existente do `@cache`). É detalhe de implementação, invisível para o
-usuário.
+### 4.1. Canal de output
 
 **Canal de output** (`topic`) — onde o delta computado é publicado via
 `kata_rt_log_publish`. Key = `topic`, default = nome da função. É o que
 o usuário consome com `log_recv!("topic")`.
 
-### 4.2. Seleção de estratégia via `tail_pos`
+O antigo canal interno buffer-1 Drop foi eliminado pelo wrapper/inner split.
+O `start = timer_now()` vive no stack slot do wrapper, que sobrevive à cadeia
+de `return_call` do inner.
 
-A TAST já marca `tail_pos: true` em chamadas elegíveis para TCO. Antes
-de baixar a função, um walk na TAST responde: "este corpo tem `Closure
-{ tail_pos: true, ffi_symbol: None }`?"
+### 4.2. Wrapper/inner split — um único caminho
 
-Árvore de decisão:
+Com o wrapper/inner split (PRD-wrapper-inner-tco), toda função com `@timer` +
+tail calls usa o mesmo mecanismo: **stack slot no wrapper**. Não há mais
+seleção de estratégia — o wrapper sempre mede, o inner sempre faz TCO.
 
 ```
-@timer presente?
-├── @cache também presente?
-│   → no_tail_calls = true (já é assim)
-│   → sem return_call, frame sobrevive
-│   → stack slot + hit jumpa para epilogue
+@timer presente + body tem tail_pos call?
+├── Sim → wrapper/inner split
+│   → wrapper: start = timer_now() (stack slot)
+│   → wrapper: call inner(rt, arena, box, args...)
+│   → inner: return_call chain (TCO, frame reusado)
+│   → inner retorna para wrapper
+│   → wrapper: delta = timer_now() - start; publish
 │
-├── @timer sozinho, body tem tail_pos call?
-│   → TCO ativo, return_call destrói frame
-│   → canal interno buffer-1 drop (first-write-wins)
-│   → prólogo: timer_now() <! canal_interno
-│   → epílogo: start = !> canal_interno; delta = now - start; publish
-│
-└── @timer sozinho, body NÃO tem tail_pos call?
+└── Não → função única (approach atual)
     → sem return_call, frame sobrevive
     → stack slot (start no stack_slot do frame)
     → prólogo: start = timer_now()
     → epílogo: delta = timer_now() - start; publish
 ```
 
-### 4.3. Caso TCO — canal first-write-wins
+### 4.3. Caso TCO — wrapper/inner
 
 ```
-prólogo:
-  start = kata_rt_timer_now()
-  timer_chan_{fn_id} <! start        // send com drop policy
+wrapper:
+  prólogo:
+    start = kata_rt_timer_now()       // stack_slot do wrapper
+    [cache_lookup → hit? return cached]
+    call inner(rt, arena, box, args...)
 
-epílogo (só base case — return_call não chega aqui):
-  start = !> timer_chan_{fn_id}      // recebe o timestamp mais externo
-  delta = kata_rt_timer_now() - start
-  publish(topic, format_msg(name, delta))
+  epílogo:
+    result = block_param
+    [cache_insert(handle, key, result)]
+    delta = kata_rt_timer_now() - start
+    publish(topic, format_msg(name, delta))
+    return result
+
+inner (TCO ativo):
+  lambda 0 acc: return acc
+  lambda n acc: return_call inner(rt, arena, box, n-1, acc)
 ```
 
-Chamada 1 envia start₁ → canal tem start₁. Chamada 2 (`return_call`)
-envia start₂ → drop, canal mantém start₁. Caso base recebe start₁.
-Delta = cadeia inteira. Frame reusado não importa — o canal vive na
-heap, não no stack.
+O inner faz a cadeia de `return_call` (TCO, stack O(1)). O wrapper tem 1 frame
+que sobrevive — o delta mede a cadeia inteira (outer call → inner chain → base
+case → return → wrapper epílogue).
 
-### 4.4. Caso não-TCO — stack slot
+### 4.4. Caso não-TCO — função única (stack slot)
 
 ```
 prólogo:
@@ -145,7 +145,8 @@ epílogo:
 
 ### 4.5. Caso `@cache` + `@timer`
 
-`@cache` já desativa TCO (`no_tail_calls = true`). O hit block passa a
+Com o wrapper/inner split, `@cache` + `@timer` + tail calls coexistem no wrapper.
+O wrapper executa ambos os intrínsecos no prólogo/epílogo. O hit block passa a
 jumpar para o epilogue em vez de `return_` direto. O epilogue recebe
 `is_hit: i64` (0 ou 1):
 

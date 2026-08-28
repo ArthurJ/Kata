@@ -14,6 +14,7 @@ use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_module::{Linkage, Module};
 use kata_core::ty::Ty;
 use kata_inference::CacheSpec;
+use kata_inference::CacheStrategy;
 use kata_inference::TimerSpec;
 use kata_inference::{CaptureInfo, TypedFunction, TypedLambdaClause};
 
@@ -25,10 +26,20 @@ use super::clause::{
 };
 use super::module::{CodegenError, FuncKey, StringTable};
 use super::tail_call::has_tail_pos_call;
-use super::timer::{
-    inject_timer_start, inject_timer_start_channel, inject_timer_stop, inject_timer_stop_channel,
-};
+use super::timer::{inject_timer_start, inject_timer_stop};
 use crate::metadata::MetadataTable;
+
+/// Verifica se uma função precisa do wrapper/inner split.
+///
+/// O split ocorre quando a função tem **simultaneamente**:
+/// 1. Pelo menos uma intrínseca de epílogo (`@cache`, `@timer`)
+/// 2. Pelo menos uma self-call em tail position (`return_call`)
+///
+/// Funções sem intrínsecas, ou sem tail calls, geram uma função só.
+pub(crate) fn needs_split(func: &TypedFunction) -> bool {
+    let has_epilogue_intrinsics = func.cache_spec.is_some() || func.timer_spec.is_some();
+    has_epilogue_intrinsics && has_tail_pos_call(&func.clauses)
+}
 
 /// Bitcast na borda de retorno.
 ///
@@ -108,6 +119,7 @@ pub(crate) fn define_function_body(
     module: &mut dyn ModuleBackend,
     ffi_ids: &HashMap<String, cranelift_module::FuncId>,
     kata_ids: &HashMap<FuncKey, cranelift_module::FuncId>,
+    inner_kata_ids: &HashMap<FuncKey, cranelift_module::FuncId>,
     string_table: &mut StringTable,
     bytes_table: &mut Vec<Vec<u8>>,
     struct_registry: &kata_core::StructRegistry,
@@ -151,6 +163,13 @@ pub(crate) fn define_function_body(
             let func_ref = module.declare_func_in_func(fid, func_ir);
             kata_refs.insert(key.clone(), func_ref);
         }
+        // Inner refs: declara inner FuncIds no function e popula kata_refs_inner.
+        // Para funções sem split, inner_kata_ids é vazio → kata_refs_inner vazio.
+        let mut kata_refs_inner: HashMap<FuncKey, cranelift_codegen::ir::FuncRef> = HashMap::new();
+        for (key, &fid) in inner_kata_ids {
+            let func_ref = module.declare_func_in_func(fid, func_ir);
+            kata_refs_inner.insert(key.clone(), func_ref);
+        }
 
         let mut func_ctx = FunctionBuilderContext::new();
         let mut builder = FunctionBuilder::new(func_ir, &mut func_ctx);
@@ -167,6 +186,7 @@ pub(crate) fn define_function_body(
             module,
             ffi_refs: &ffi_refs,
             kata_refs: &kata_refs,
+            kata_refs_inner: &kata_refs_inner,
             ffi_ids,
             kata_ids,
             metadata: &mut metadata,
@@ -255,18 +275,13 @@ pub(crate) fn define_function_body(
         }
 
         // @timer start: injeta antes de tudo (PRD §4.7 ordem).
-        // Estratégia: se a função faz tail call (return_call) e não tem
-        // @cache, usa canal buffer-1 com policy Drop (first-write-wins)
-        // — o start vive na heap e sobrevive à destruição de frames do TCO.
-        // Caso contrário, usa stack slot (mais simples, sem overhead de canal).
-        let timer_use_channel =
-            timer_spec.is_some() && cache_spec.is_none() && has_tail_pos_call(clauses);
+        // Sempre usa stack slot. O caso TCO (@timer + tail calls sem @cache)
+        // era resolvido com canal buffer-1 Drop, mas agora usa wrapper/inner
+        // split (needs_split) — o wrapper tem stack slot e o inner faz TCO.
+        // Funções sem split não têm @timer + tail calls (needs_split = true
+        // nesse caso), então o stack slot é sempre seguro.
         let timer_start_val = if timer_spec.is_some() {
-            if timer_use_channel {
-                Some(inject_timer_start_channel(&mut lower)?)
-            } else {
-                Some(inject_timer_start(&mut lower)?)
-            }
+            Some(inject_timer_start(&mut lower)?)
         } else {
             None
         };
@@ -287,17 +302,26 @@ pub(crate) fn define_function_body(
             let fn_id = super::cache_key::canonical_fn_id(name, param_types, clauses);
             let fn_id_val = builder.ins().iconst(I64, fn_id);
 
-            // capacity: 256 entradas.
-            let cap_val = builder.ins().iconst(I64, 256);
+            // capacity: do CacheSpec (default 256).
+            let cap_val = builder.ins().iconst(I64, cache_spec.as_ref().map_or(256, |s| s.capacity));
 
-            // cache_get_or_create(arena, fn_id, capacity) → handle
+            // strategy_tag: 0=LRU, 1=FIFO, 2=MRU, 3=LFU.
+            let strategy_tag = cache_spec.as_ref().map_or(0i64, |s| match s.strategy {
+                CacheStrategy::LRU => 0,
+                CacheStrategy::FIFO => 1,
+                CacheStrategy::MRU => 2,
+                CacheStrategy::LFU => 3,
+            });
+            let strategy_tag_val = builder.ins().iconst(I64, strategy_tag);
+
+            // cache_get_or_create(arena, fn_id, capacity, strategy_tag) → handle
             let get_fn = lower
                 .ffi_refs
                 .get("kata_rt_cache_get_or_create")
                 .expect("kata_rt_cache_get_or_create registrado");
             let handle = builder
                 .ins()
-                .call(*get_fn, &[arena_handle, fn_id_val, cap_val]);
+                .call(*get_fn, &[arena_handle, fn_id_val, cap_val, strategy_tag_val]);
             let handle_val = builder.inst_results(handle)[0];
 
             // ── Serializa args via type descriptor ──
@@ -493,11 +517,7 @@ pub(crate) fn define_function_body(
             if let Some(ts) = timer_spec
                 && let Some(start) = timer_start_val
             {
-                if timer_use_channel {
-                    inject_timer_stop_channel(ts, name, start, &mut lower)?;
-                } else {
-                    inject_timer_stop(ts, name, start, &mut lower)?;
-                }
+                inject_timer_stop(ts, name, start, &mut lower)?;
             }
 
             let result = coerce_return(result, ret_ty, &mut lower);
@@ -521,10 +541,119 @@ pub(crate) fn define_function_body(
 }
 
 /// Define (compila o corpo de) uma função Kata nomeada.
+///
+/// Se `needs_split(func)` e há inner FuncId em `inner_table`, define duas
+/// funções: o inner (body puro com TCO) e o wrapper (prólogo/epílogo com
+/// intrínsecas, `call inner`).
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn define_kata_function(
     func: &TypedFunction,
     func_id: cranelift_module::FuncId,
+    module: &mut dyn ModuleBackend,
+    ffi_ids: &HashMap<String, cranelift_module::FuncId>,
+    symbol_table: &HashMap<FuncKey, cranelift_module::FuncId>,
+    inner_table: &HashMap<FuncKey, cranelift_module::FuncId>,
+    string_table: &mut StringTable,
+    bytes_table: &mut Vec<Vec<u8>>,
+    struct_registry: &kata_core::StructRegistry,
+    type_id_map: &HashMap<Ty, i64>,
+    dump_ir: bool,
+    ir_dump: &mut Vec<(String, String)>,
+) -> Result<(), CodegenError> {
+    let key = (
+        func.name.clone(),
+        func.param_types.clone(),
+        func.ret_ty.clone(),
+    );
+
+    if let Some(&inner_id) = inner_table.get(&key) {
+        // ── Wrapper/inner split ──
+        // 1. Definir inner: body puro com TCO, sem intrínsecas.
+        //    kata_ids = symbol_table (wrapper) → non-tail self-calls vão ao wrapper (cache).
+        //    inner_kata_ids = {key → inner_id} → tail self-calls vão ao inner (TCO).
+        let mut inner_ids_map = HashMap::new();
+        inner_ids_map.insert(key.clone(), inner_id);
+        define_function_body(
+            &func.name,
+            &func.param_types,
+            &func.ret_ty,
+            &func.clauses,
+            &[],
+            &None, // inner não tem cache
+            &None, // inner não tem timer
+            inner_id,
+            module,
+            ffi_ids,
+            symbol_table,
+            &inner_ids_map,
+            string_table,
+            bytes_table,
+            struct_registry,
+            type_id_map,
+            dump_ir,
+            ir_dump,
+        )?;
+
+        // 2. Definir wrapper: prólogo (intrínsecas) → call inner → epílogo.
+        define_wrapper(
+            func,
+            func_id,
+            inner_id,
+            module,
+            ffi_ids,
+            symbol_table,
+            string_table,
+            bytes_table,
+            struct_registry,
+            type_id_map,
+            dump_ir,
+            ir_dump,
+        )?;
+    } else {
+        // ── Sem split: approach atual ──
+        let empty_inner: HashMap<FuncKey, cranelift_module::FuncId> = HashMap::new();
+        define_function_body(
+            &func.name,
+            &func.param_types,
+            &func.ret_ty,
+            &func.clauses,
+            &[],
+            &func.cache_spec,
+            &func.timer_spec,
+            func_id,
+            module,
+            ffi_ids,
+            symbol_table,
+            &empty_inner,
+            string_table,
+            bytes_table,
+            struct_registry,
+            type_id_map,
+            dump_ir,
+            ir_dump,
+        )?;
+    }
+
+    Ok(())
+}
+
+/// Define o wrapper no wrapper/inner split.
+///
+/// O wrapper é uma função Cranelift com a mesma assinatura da original,
+/// mas o body é substituído por:
+/// 1. Bind params (todos Ident — padrão único)
+/// 2. Prólogo: @timer start → @cache lookup (hit? return cached)
+/// 3. `call inner(rt, arena, box_ptr, args...)` — call comum (não return_call)
+/// 4. Epílogo: @cache insert → @timer stop + publish
+/// 5. return result
+///
+/// O wrapper tem `no_tail_calls = true` mas só faz `call inner` (sem return_call).
+/// O frame do wrapper sobrevive — o epílogo executa normalmente.
+#[allow(clippy::too_many_arguments)]
+fn define_wrapper(
+    func: &TypedFunction,
+    func_id: cranelift_module::FuncId,
+    inner_id: cranelift_module::FuncId,
     module: &mut dyn ModuleBackend,
     ffi_ids: &HashMap<String, cranelift_module::FuncId>,
     symbol_table: &HashMap<FuncKey, cranelift_module::FuncId>,
@@ -535,25 +664,357 @@ pub(crate) fn define_kata_function(
     dump_ir: bool,
     ir_dump: &mut Vec<(String, String)>,
 ) -> Result<(), CodegenError> {
-    define_function_body(
-        &func.name,
-        &func.param_types,
-        &func.ret_ty,
-        &func.clauses,
-        &[], // funções nomeadas não têm capture
-        &func.cache_spec,
-        &func.timer_spec,
-        func_id,
-        module,
-        ffi_ids,
-        symbol_table,
-        string_table,
-        bytes_table,
-        struct_registry,
-        type_id_map,
-        dump_ir,
-        ir_dump,
-    )
+    let mut ctx = module.make_context();
+    let mut metadata = MetadataTable::new();
+
+    {
+        let func_ir = &mut ctx.func;
+        let mut sig = Signature::new(CallConv::Tail);
+        sig.params.push(AbiParam::new(I64)); // rt
+        sig.params.push(AbiParam::new(I64)); // arena_handle
+        sig.params.push(AbiParam::new(I64)); // box_ptr
+        for pt in &func.param_types {
+            sig.params
+                .push(AbiParam::new(super::resolve_clif_ty(pt, struct_registry)));
+        }
+        sig.returns.push(AbiParam::new(super::resolve_clif_ty(
+            &func.ret_ty,
+            struct_registry,
+        )));
+        func_ir.signature = sig;
+
+        // Declara FFI no function.
+        let mut ffi_refs: HashMap<String, cranelift_codegen::ir::FuncRef> = HashMap::new();
+        for (fname, &fid) in ffi_ids {
+            let func_ref = module.declare_func_in_func(fid, func_ir);
+            ffi_refs.insert(fname.clone(), func_ref);
+        }
+
+        // Declara funções Kata (symbol_table) no function — para cache lookup etc.
+        let mut kata_refs: HashMap<FuncKey, cranelift_codegen::ir::FuncRef> = HashMap::new();
+        for (key, &fid) in symbol_table {
+            let func_ref = module.declare_func_in_func(fid, func_ir);
+            kata_refs.insert(key.clone(), func_ref);
+        }
+
+        // Declara o inner no function — para o `call inner`.
+        let inner_ref = module.declare_func_in_func(inner_id, func_ir);
+
+        let mut kata_refs_inner: HashMap<FuncKey, cranelift_codegen::ir::FuncRef> = HashMap::new();
+        let key = (
+            func.name.clone(),
+            func.param_types.clone(),
+            func.ret_ty.clone(),
+        );
+        kata_refs_inner.insert(key, inner_ref);
+
+        let mut func_ctx = FunctionBuilderContext::new();
+        let mut builder = FunctionBuilder::new(func_ir, &mut func_ctx);
+
+        let entry_block = builder.create_block();
+        builder.append_block_params_for_function_params(entry_block);
+        builder.switch_to_block(entry_block);
+        builder.seal_block(entry_block);
+
+        let params: Vec<cranelift_codegen::ir::Value> = builder.block_params(entry_block).to_vec();
+
+        let mut lower = super::LowerCtx {
+            builder: &mut builder,
+            module,
+            ffi_refs: &ffi_refs,
+            kata_refs: &kata_refs,
+            kata_refs_inner: &kata_refs_inner,
+            ffi_ids,
+            kata_ids: symbol_table,
+            metadata: &mut metadata,
+            string_table,
+            bytes_table,
+            var_map: HashMap::new(),
+            anon_counter: 0,
+            emitted_tail_call: false,
+            emitted_terminator: false,
+            no_tail_calls: true, // wrapper nunca faz return_call
+            epilogue_block: None,
+            fiber_arena: None,
+            caller_arena: None,
+            scheduler_mode: false,
+            loop_break_block: None,
+            loop_continue_block: None,
+            io_handle_vars: Vec::new(),
+            struct_registry,
+            type_id_map,
+            ipc_broker_fid: None,
+            rt: None,
+            dump_ir,
+            ir_dump,
+        };
+
+        let rt_value = params[0];
+        let arena_handle = params[1];
+        let box_ptr = params[2];
+        let clause_params = params[3..].to_vec();
+
+        lower.rt = Some(rt_value);
+        lower.fiber_arena = Some(arena_handle);
+
+        // Bind patterns (todos Ident — padrão único na wrapper, que só repassa args).
+        if !func.clauses.is_empty()
+            && super::clause::all_patterns_are_ident(&func.clauses[0].patterns)
+        {
+            super::clause::bind_patterns_to_params(
+                &func.clauses[0].patterns,
+                &clause_params,
+                &mut lower,
+            );
+        }
+
+        // Registrar __param_{i} no var_map (mesmo que define_function_body).
+        for (i, val) in clause_params.iter().enumerate() {
+            let param_name = format!("__param_{i}");
+            let clif_ty = super::resolve_clif_ty(&func.param_types[i], struct_registry);
+            lower.new_var(&param_name, clif_ty);
+            let var = *lower
+                .var_map
+                .get(&param_name)
+                .expect("__param_{i} var must exist after new_var");
+            lower.builder.def_var(var, *val);
+        }
+
+        // ── Prólogo: @timer start ──
+        // Wrapper sempre usa stack slot (nunca canal — o frame sobrevive).
+        let timer_start_val = if func.timer_spec.is_some() {
+            Some(inject_timer_start(&mut lower)?)
+        } else {
+            None
+        };
+
+        let mut needs_epilogue = func.timer_spec.is_some();
+
+        // ── Prólogo: @cache lookup ──
+        let cache_handle_val = if func.cache_spec.is_some() && !clause_params.is_empty() {
+            let builder = &mut lower.builder;
+
+            let fn_id = super::cache_key::canonical_fn_id(
+                &func.name,
+                &func.param_types,
+                &func.clauses,
+            );
+            let fn_id_val = builder.ins().iconst(I64, fn_id);
+
+            let cap_val = builder
+                .ins()
+                .iconst(I64, func.cache_spec.as_ref().map_or(256, |s| s.capacity));
+
+            let strategy_tag = func.cache_spec.as_ref().map_or(0i64, |s| match s.strategy {
+                CacheStrategy::LRU => 0,
+                CacheStrategy::FIFO => 1,
+                CacheStrategy::MRU => 2,
+                CacheStrategy::LFU => 3,
+            });
+            let strategy_tag_val = builder.ins().iconst(I64, strategy_tag);
+
+            let get_fn = lower
+                .ffi_refs
+                .get("kata_rt_cache_get_or_create")
+                .expect("kata_rt_cache_get_or_create registrado");
+            let handle = builder
+                .ins()
+                .call(*get_fn, &[arena_handle, fn_id_val, cap_val, strategy_tag_val]);
+            let handle_val = builder.inst_results(handle)[0];
+
+            // Serializa args (mesmo que define_function_body).
+            let descriptors: Vec<Vec<u8>> = func
+                .param_types
+                .iter()
+                .map(|ty| super::cache_key::build_type_descriptor(ty, struct_registry))
+                .collect();
+
+            let key_cap = 4096i64;
+            let key_sslot = builder.func.create_sized_stack_slot(StackSlotData::new(
+                StackSlotKind::ExplicitSlot,
+                key_cap as u32,
+                8,
+            ));
+            let key_slot = builder.ins().stack_addr(I64, key_sslot, 0);
+
+            let serialize_fn = lower
+                .ffi_refs
+                .get("kata_rt_serialize_key")
+                .expect("kata_rt_serialize_key registrado");
+
+            let mut key_offset_val = builder.ins().iconst(I64, 0);
+
+            for (i, param) in clause_params.iter().enumerate() {
+                let desc = &descriptors[i];
+
+                let desc_sslot = builder.func.create_sized_stack_slot(StackSlotData::new(
+                    StackSlotKind::ExplicitSlot,
+                    desc.len() as u32,
+                    8,
+                ));
+                let desc_slot = builder.ins().stack_addr(I64, desc_sslot, 0);
+                for (j, &byte) in desc.iter().enumerate() {
+                    let byte_val = builder.ins().iconst(I64, byte as i64);
+                    builder
+                        .ins()
+                        .store(MemFlagsData::new(), byte_val, desc_slot, j as i32);
+                }
+
+                let desc_len_val = builder.ins().iconst(I64, desc.len() as i64);
+                let buf_ptr = builder.ins().iadd(key_slot, key_offset_val);
+                let cap_const = builder.ins().iconst(I64, key_cap);
+                let remaining = builder.ins().isub(cap_const, key_offset_val);
+
+                let param_ty = builder.func.dfg.value_type(*param);
+                let param_i64 = if param_ty != I64 {
+                    builder.ins().bitcast(I64, MemFlagsData::new(), *param)
+                } else {
+                    *param
+                };
+
+                let written = builder.ins().call(
+                    *serialize_fn,
+                    &[param_i64, desc_slot, desc_len_val, buf_ptr, remaining],
+                );
+                let written_val = builder.inst_results(written)[0];
+
+                key_offset_val = builder.ins().iadd(key_offset_val, written_val);
+            }
+
+            let key_len_val = key_offset_val;
+
+            let lookup_fn = lower
+                .ffi_refs
+                .get("kata_rt_cache_lookup")
+                .expect("kata_rt_cache_lookup registrado");
+            let lookup_call = builder
+                .ins()
+                .call(*lookup_fn, &[handle_val, key_slot, key_len_val]);
+            let lookup_result = builder.inst_results(lookup_call)[0];
+
+            // Branch: hit → return cached. miss → call inner.
+            let hit_block = builder.create_block();
+            let miss_block = builder.create_block();
+            let zero = builder.ins().iconst(I64, 0);
+            let is_hit = builder.ins().icmp(
+                cranelift_codegen::ir::condcodes::IntCC::NotEqual,
+                lookup_result,
+                zero,
+            );
+            builder.ins().brif(is_hit, hit_block, &[], miss_block, &[]);
+
+            // Hit block: return cached value.
+            builder.switch_to_block(hit_block);
+            builder.seal_block(hit_block);
+            let ret_clif_ty = super::resolve_clif_ty(&func.ret_ty, struct_registry);
+            let cached_val = if ret_clif_ty != I64 {
+                builder
+                    .ins()
+                    .bitcast(ret_clif_ty, MemFlagsData::new(), lookup_result)
+            } else {
+                lookup_result
+            };
+            builder.ins().return_(&[cached_val]);
+
+            // Miss block: continua para call inner.
+            builder.switch_to_block(miss_block);
+            builder.seal_block(miss_block);
+
+            needs_epilogue = true;
+            Some((handle_val, key_slot, key_len_val))
+        } else {
+            None
+        };
+
+        if needs_epilogue {
+            let ret_clif_ty = super::resolve_clif_ty(&func.ret_ty, struct_registry);
+            let epi = lower.builder.create_block();
+            lower.builder.append_block_param(epi, ret_clif_ty);
+            lower.epilogue_block = Some(epi);
+        }
+
+        // ── call inner(rt, arena, box_ptr, args...) ──
+        let rt_val = lower.rt.unwrap_or_else(|| lower.builder.ins().iconst(I64, 0));
+        let arena = lower
+            .fiber_arena
+            .or(lower.caller_arena)
+            .unwrap_or_else(|| lower.builder.ins().iconst(I64, 0));
+        let mut inner_call_args = vec![rt_val, arena, box_ptr];
+        inner_call_args.extend(clause_params.iter().copied());
+        let inner_call = lower.builder.ins().call(inner_ref, &inner_call_args);
+        let inner_result = lower.builder.inst_results(inner_call)[0];
+
+        // Jump para epilogue com o resultado.
+        if needs_epilogue {
+            let result = coerce_return(inner_result, &func.ret_ty, &mut lower);
+            lower.builder.ins().jump(
+                lower
+                    .epilogue_block
+                    .expect("epilogue_block definido quando needs_epilogue"),
+                &[cranelift_codegen::ir::BlockArg::Value(result)],
+            );
+        } else {
+            let result = coerce_return(inner_result, &func.ret_ty, &mut lower);
+            emit_close_io_handles(&mut lower);
+            lower.builder.ins().return_(&[result]);
+        }
+
+        // ── Epilogue block: cache_insert + timer_stop + return ──
+        if needs_epilogue {
+            let epi = lower
+                .epilogue_block
+                .expect("epilogue_block definido quando needs_epilogue");
+            lower.builder.switch_to_block(epi);
+            lower.builder.seal_block(epi);
+            let result = lower.builder.block_params(epi)[0];
+
+            emit_close_io_handles(&mut lower);
+
+            // @cache insert.
+            if let Some((handle_val, key_slot, key_len_val)) = &cache_handle_val {
+                let insert_fn = lower
+                    .ffi_refs
+                    .get("kata_rt_cache_insert")
+                    .expect("kata_rt_cache_insert registrado");
+                let result_ty = lower.builder.func.dfg.value_type(result);
+                let result_i64 = if result_ty != I64 {
+                    lower
+                        .builder
+                        .ins()
+                        .bitcast(I64, MemFlagsData::new(), result)
+                } else {
+                    result
+                };
+                lower.builder.ins().call(
+                    *insert_fn,
+                    &[*handle_val, *key_slot, *key_len_val, result_i64],
+                );
+            }
+
+            // @timer stop + publish.
+            if let Some(ts) = &func.timer_spec
+                && let Some(start) = timer_start_val
+            {
+                inject_timer_stop(ts, &func.name, start, &mut lower)?;
+            }
+
+            let result = coerce_return(result, &func.ret_ty, &mut lower);
+            lower.builder.ins().return_(&[result]);
+        }
+
+        builder.finalize();
+    }
+
+    module
+        .define_function(func_id, &mut ctx)
+        .map_err(|e| CodegenError::Cranelift {
+            reason: format!("define wrapper {}: {e}", func.name),
+        })?;
+    if dump_ir {
+        ir_dump.push((format!("{}__wrapper", func.name), format!("{}", ctx.func.display())));
+    }
+    module.clear_context(&mut ctx);
+    Ok(())
 }
 
 /// Emite close para cada variável em `io_handle_vars` no epílogo de uma

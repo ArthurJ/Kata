@@ -264,18 +264,11 @@ fn format_timer_msg(
 }
 
 // ── Caso TCO: canal buffer-1 com policy Drop ───────────────────────
+// REMOVIDO: O wrapper/inner split substitui o canal. O wrapper tem stack slot
+// e o inner faz TCO. Mantido como dead code para referência — remover quando
+// confirmado que não há mais nenhum path usando.
 
-/// Prólogo TCO: cria um canal buffer-1 com policy Drop (first-write-wins),
-/// chama `kata_rt_timer_now()` para obter start, e envia start via
-/// `kata_rt_channel_send`.
-///
-/// Retorna o **handle do canal** (não o start) — o epílogo precisa do
-/// canal para fazer `channel_recv` e obter o start da primeira chamada.
-///
-/// O canal vive na arena (heap), sobrevive à destruição de frames do
-/// `return_call`. Policy Drop garante que o primeiro send (start da
-/// chamada mais externa) é preservado — sends subsequentes encontram
-/// o buffer cheio e são descartados.
+#[allow(dead_code)]
 pub(crate) fn inject_timer_start_channel(
     lower: &mut LowerCtx,
 ) -> Result<cranelift_codegen::ir::Value, CodegenError> {
@@ -329,6 +322,7 @@ pub(crate) fn inject_timer_start_channel(
 /// formata mensagem e publica via `kata_rt_log_publish`.
 ///
 /// `chan` é o handle do canal (retornado por `inject_timer_start_channel`).
+#[allow(dead_code)]
 pub(crate) fn inject_timer_stop_channel(
     timer: &TimerSpec,
     func_name: &str,

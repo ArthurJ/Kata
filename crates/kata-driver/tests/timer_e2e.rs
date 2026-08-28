@@ -178,12 +178,13 @@ consumir!()"#,
     );
 }
 
-// ── 5. timer_tco — @timer em função tail-recursiva (canal buffer-1) ──
+// ── 5. timer_tco — @timer em função tail-recursiva (wrapper/inner) ──
 
-/// `@timer` em função tail-recursiva: o `return_call` destrói frames
-/// intermediários, mas o canal buffer-1 com policy Drop preserva o
-/// start da primeira chamada (first-write-wins). O delta deve ser
-/// significativo (cadeia de 5 chamadas), não ~0.
+/// `@timer` em função tail-recursiva: o wrapper/inner split preserva o
+/// frame do wrapper onde `start = timer_now()` é gravado. O inner faz
+/// TCO (return_call chain) e retorna para o wrapper, que mede o delta
+/// completo da cadeia. O delta deve ser significativo (cadeia de 5
+/// chamadas), não ~0.
 #[test]
 fn timer_tco() {
     let path = write_temp_kata(
@@ -212,8 +213,9 @@ consumir!()"#,
         stdout.contains("fatorial:") && stdout.contains("ns"),
         "deve imprimir 'fatorial: ...ns' — stdout: {stdout} | stderr: {stderr}"
     );
-    // O delta NÃO deve ser ~0 — o canal preserva o start da primeira chamada.
-    // Se fosse stack slot, o delta seria ~0 (última chamada, não primeira).
+    // O delta NÃO deve ser ~0 — o wrapper preserva o start da primeira chamada.
+    // O inner faz TCO (return_call chain), retorna para o wrapper, que mede
+    // delta = end - start da cadeia inteira.
     // Extraímos o número do delta da mensagem "fatorial: {delta}ns".
     let delta_str = stdout
         .lines()
@@ -226,10 +228,67 @@ consumir!()"#,
     if let Some(delta) = delta_str {
         // SMI-tagged: o valor real é delta >> 1. Comparamos o valor bruto.
         // Para uma cadeia de 5 chamadas, o delta deve ser > 0 (não ~0).
-        // Se fosse stack slot, o delta seria 0 ou 1 (última chamada).
+        // Se fosse stack slot sem wrapper, o delta seria 0 ou 1 (última chamada).
         assert!(
             delta > 1,
-            "delta deve ser significativo (canal preserva start da primeira chamada) \
+            "delta deve ser significativo (wrapper preserva start da primeira chamada) \
+             — delta bruto: {delta}, stdout: {stdout}"
+        );
+    }
+}
+
+// ── 6. timer_tco_large_n — @timer mede cadeia inteira de 100k chamadas ──
+
+/// `@timer` em `count_down 100000 0` (tail-recursivo, n grande).
+/// O wrapper mede o delta da cadeia inteira (outer call → inner TCO
+/// chain → base case → return → wrapper epílogue). Com n=100000, o
+/// delta deve ser significativamente > 0 — prova que o wrapper mede a
+/// cadeia completa, não só a última chamada.
+/// Usa `count_down` (O(1) por step) em vez de `fat_tail` (computa
+/// fatorial — resultado astronômico, demora infinito).
+#[test]
+fn timer_tco_large_n() {
+    let path = write_temp_kata(
+        "timer_tco_large_n",
+        r#"@timer
+count_down :: Int Int => Int
+lambda 0 acc: acc
+lambda n acc: count_down (- n 1) acc
+
+action chamar => Int
+    let r := count_down 100000 0
+    r
+
+action consumir => Int
+    let msg := log_recv!("count_down")
+    echo!(msg)
+    0
+
+fork!(chamar, ())
+consumir!()"#,
+    );
+
+    let (stdout, stderr, code) = run_kata(&path);
+    assert_eq!(code, 0, "exit 0 (TCO deve evitar stack overflow) — stderr: {stderr}");
+    assert!(
+        stdout.contains("count_down:") && stdout.contains("ns"),
+        "deve imprimir 'count_down: ...ns' — stdout: {stdout} | stderr: {stderr}"
+    );
+    // O delta deve ser significativo — 100k iterações, mesmo que rápidas,
+    // produzem um delta mensurável. Se fosse ~0, significaria que só a
+    // última chamada foi medida (bug no wrapper).
+    let delta_str = stdout
+        .lines()
+        .find(|l| l.contains("count_down:") && l.contains("ns"))
+        .and_then(|l| {
+            let start = l.find(':').map(|i| i + 1)?;
+            let end = l.rfind("ns").filter(|&e| e > start)?;
+            l[start..end].trim().parse::<i64>().ok()
+        });
+    if let Some(delta) = delta_str {
+        assert!(
+            delta > 1,
+            "delta deve ser significativo para 100k chamadas \
              — delta bruto: {delta}, stdout: {stdout}"
         );
     }
