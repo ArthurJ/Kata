@@ -654,12 +654,13 @@ len "hello"              # 5 — text (COUNTABLE dispatch, kata_rt_string_len)
         - :: Int Int => Int
     ```
   A ordem das diretivas importa (avaliação sequencial).
-- Catálogo: `@cache_strategy`, `@test`, `@log`, `@associative`, `@commutative`, `@ffi`, `@builtin`. (`spawn!` é special form, não diretiva — veja abaixo.) `@comptime` foi removido (Fase 5) — usar `constant` para bindings de módulo avaliados em compile-time.
+- Catálogo: `@cache` (strategy: LRU/FIFO/MRU/LFU, capacity configurável), `@timer` (topic, msg, medição de tempo via `kata_rt_timer_now`), `@test`, `@log`, `@associative`, `@commutative`, `@ffi`, `@builtin`. (`spawn!` é special form, não diretiva — veja abaixo.) `@comptime` foi removido (Fase 5) — usar `constant` para bindings de módulo avaliados em compile-time.
 - **Relações**:
   - `@test` → tree shaking remove em produção.
   - `@associative` + `@commutative` → habilitam TRMA.
   - `@ffi` → informa linker de símbolo externo.
   - `@builtin` → marca função para síntese de nó TAST especializado (map/filter/fold).
+  - `@cache` + `@timer` com tail calls → wrapper/inner split: wrapper executa intrínsecas (cache/timer), inner executa body com TCO. Stack O(1).
   - `spawn!` → special form que spawn processo OS separado (multiprocess). Aceita tupla (converte implicitamente) ou dict com `raw:`/`serialized:`. Não é diretiva — é operação ao lado de `fork!`.
   - `@log` → veja seção dedicada abaixo.
 

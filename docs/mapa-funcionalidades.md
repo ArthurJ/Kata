@@ -99,7 +99,8 @@ genérica de fallback (`T NUM`).
 
 Diretivas que entram aqui:
 - `@commutative` — dispatch tenta argumentos invertidos
-- `@cache_strategy` — memoização de funções puras
+- `@cache` — memoização de funções puras (strategy: LRU/FIFO/MRU/LFU, capacity configurável). Com tail calls, wrapper/inner split preserva TCO.
+- `@timer` — medição de tempo de execução (topic, msg). Com tail calls, wrapper/inner split preserva TCO.
 
 Dependencies: 2 (múltiplas cláusulas = dispatch), 4 (tipos concretos).
 

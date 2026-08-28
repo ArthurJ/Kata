@@ -645,7 +645,8 @@ em `kata-rt`, desacoplada do compilador. O runtime exporta ~220 funções
   `kata_rt_log_publish_full`, `kata_rt_log_publish_topic`, `kata_rt_log_recv`,
   `kata_rt_log_config`
 - **Comptime/Snapshots:** `kata_rt_load_snapshot`, `kata_rt_get_snapshot`,
-  `kata_rt_cache_lookup`, `kata_rt_cache_insert`, `kata_rt_cache_get_or_create`
+  `kata_rt_cache_get_or_create` (arena, fn_id, capacity, strategy_tag),
+  `kata_rt_cache_lookup`, `kata_rt_cache_insert`, `kata_rt_serialize_key`
 - **Timer:** `kata_rt_timer_now` (clock monotono em nanossegundos), `kata_rt_sleep`
 - **Hashing:** `kata_rt_hash_int`, `kata_rt_hash_text`, `kata_rt_hash_rational`
 - **Teoria dos Números:** `kata_rt_gcd`, `kata_rt_lcm`
@@ -2206,9 +2207,33 @@ módulo), sempre precedendo imediatamente o item que modificam.
   constant substitui a declaração anterior.
   (`@comptime` foi removido do parser na Fase 5 — usar `constant` para
   bindings de módulo e named functions para comportamento reutilizável.)
-* **`@cache{strategy: "LRU"}`**: Interceta invocações puras repetidas e
-  injeta pesquisas em Hash Table nativa (ex: `LRU` cache), efetuando
-  *memoização* automática.
+* **`@cache{strategy: "LRU", capacity: 256}`**: Memoiza invocações de funções
+  puras. Intercepta chamadas repetidas com os mesmos argumentos, retornando o
+  valor cacheado sem reexecutar o corpo. Estratégias de eviction: `"LRU"`
+  (Least Recently Used, default), `"FIFO"` (First In First Out), `"MRU"` (Most
+  Recently Used), `"LFU"` (Least Frequently Used). `capacity` define o número
+  máximo de entradas (default 256, deve ser > 0). `@cache` sem args ativa LRU
+  256. `@cache{}` (dict vazio) idem. String inválida em `strategy` é erro de
+  compilação. `capacity: 0` ou negativo é erro de compilação. O cache é
+  armazenado em TLS, indexado por `fn_id` (hash canônico de nome + tipos +
+  body). A chave de cache é serializada por conteúdo (TypeShape) — dois valores
+  estruturalmente iguais produzem a mesma key, independente de ponteiros.
+  Quando a função tem tail calls, o codegen aplica um **wrapper/inner split**:
+  o wrapper executa o prólogo (cache lookup) e epílogo (cache insert), e o
+  inner executa o body com TCO ativo. Self-calls em tail position resolvem
+  para o inner (TCO); self-calls em non-tail position resolvem para o wrapper
+  (cache). Stack total é O(1) — o wrapper tem 1 frame, o inner reusa via TCO.
+* **`@timer{topic: "perfil", msg: "{name}: {delta}ns"}`**: Mede o tempo de
+  execução de uma função pura. Injeta `kata_rt_timer_now()` no prólogo (start)
+  e epílogo (delta = end - start), publica via `kata_rt_log_publish` no tópico
+  (default: nome da função). `msg` é template compile-time com interpolação
+  `{name}` (nome da função) e `{delta}` (delta em nanossegundos). O consumidor
+  recebe via `log_recv!("topico")`. Quando a função tem tail calls, o codegen
+  aplica o mesmo **wrapper/inner split** de `@cache`: o wrapper mede o delta no
+  stack slot (frame sobrevive), o inner faz TCO via `return_call`. O delta
+  mede a cadeia inteira (outer call → inner chain → base case → return), não
+  cada chamada intermediária. `@timer` sem args usa tópico default e mensagem
+  default `"{name}: {delta}ns"`.
 * **`@test("descrição")`**: Marca um bloco para o *Test Runner*. A forma braced
   `@test{desc: "...", expects: "CompileError"}` marca um **teste negativo** —
   verifica que o código **não compila**.
