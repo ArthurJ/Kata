@@ -54,11 +54,19 @@ pub struct InterpCtx {
     pub(crate) arena: i64,
     /// TypedModule (Arc'd) — sobrevive durante toda a execução.
     pub(crate) module: Arc<TypedModule>,
+    /// Enum registry — para mapear tag → nome de variante em show_sum.
+    pub(crate) enum_registry: Arc<kata_core::EnumRegistry>,
 }
 
 impl InterpCtx {
-    /// Cria o contexto de execução a partir de um `TypedModule`.
-    pub fn new(module: TypedModule, rt_ptr: i64) -> Self {
+    /// Cria o contexto de execução a partir de um `TypedModule` com enum registry.
+    ///
+    /// Este é o construtor raiz — todos os outros delegam para este.
+    pub fn new_with_registry(
+        module: TypedModule,
+        rt_ptr: i64,
+        enum_registry: Arc<kata_core::EnumRegistry>,
+    ) -> Self {
         // Registrar rt_ptr em TLS — FFIs de coleção (list_cons, array_alloc,
         // dict_insert, etc.) lêem o Runtime via `rt_ptr()` (thread_local),
         // não via parâmetro. Sem isto, essas FFIs veem 0 → null deref.
@@ -70,20 +78,47 @@ impl InterpCtx {
             rt_ptr,
             arena,
             module: Arc::new(module),
+            enum_registry,
         }
+    }
+
+    /// Cria o contexto de execução com enum registry default (vazio).
+    ///
+    /// Mantido para compatibilidade — `interpret` e `interpret_with_env`
+    /// usam este quando não têm enum_registry disponível.
+    pub fn new(module: TypedModule, rt_ptr: i64) -> Self {
+        Self::new_with_registry(module, rt_ptr, Arc::new(kata_core::EnumRegistry::new()))
     }
 
     /// Cria o contexto reusando uma arena existente (para fibers do scheduler).
     ///
     /// O `arena` é o handle da arena criada pelo scheduler para o fiber.
     /// O `module` é compartilhado via Arc (clonado da tabela global).
-    pub fn new_with_arena(module: Arc<TypedModule>, rt_ptr: i64, arena: i64) -> Self {
+    pub fn new_with_arena_registry(
+        module: Arc<TypedModule>,
+        rt_ptr: i64,
+        arena: i64,
+        enum_registry: Arc<kata_core::EnumRegistry>,
+    ) -> Self {
         rt::set_rt_ptr(rt_ptr);
         InterpCtx {
             rt_ptr,
             arena,
             module,
+            enum_registry,
         }
+    }
+
+    /// Cria o contexto reusando uma arena existente com enum registry default.
+    ///
+    /// Compatibilidade — delega para `new_with_arena_registry` com registry vazio.
+    pub fn new_with_arena(module: Arc<TypedModule>, rt_ptr: i64, arena: i64) -> Self {
+        Self::new_with_arena_registry(
+            module,
+            rt_ptr,
+            arena,
+            Arc::new(kata_core::EnumRegistry::new()),
+        )
     }
 
     /// Avalia o entry point do módulo criando um Env novo.
@@ -185,7 +220,12 @@ fn eval_entry_scheduler_mode(
     };
 
     // 3. Registrar action na tabela global → action_id.
-    let action_id = crate::csp::register_action(callee, &ctx.module, arg_tys);
+    let action_id = crate::csp::register_action(
+        callee,
+        &ctx.module,
+        arg_tys,
+        ctx.enum_registry.clone(),
+    );
 
     // 4. Empacotar (action_id, args_ptr, n_args) na arena.
     let packed_ptr = rt::kata_rt_arena_alloc(ctx.rt_ptr, ctx.arena, 24);
@@ -325,7 +365,62 @@ pub fn eval(
         TypedExprKind::Grouping { inner } => eval(ctx, inner, env),
 
         // ── TypeAscription ───────────────────────────────────
-        TypedExprKind::TypeAscription { expr: inner, .. } => eval(ctx, inner, env),
+        // O typeck já validou a ascription. Em runtime, precisamos
+        // converter o valor quando o tipo alvo é diferente do tipo
+        // interno (ex: Int → Rational precisa chamar FFI).
+        TypedExprKind::TypeAscription {
+            expr: inner,
+            target_ty,
+            ..
+        } => {
+            let inner_ty = &inner.node.ty;
+            // Mesmo tipo — no-op.
+            if inner_ty == target_ty {
+                return eval(ctx, inner, env);
+            }
+            // IntLit → Float: reinterpretar como f64.
+            if let TypedExprKind::IntLit { ref text } = inner.node.kind {
+                if matches!(target_ty, Ty::Prim(PrimTy::Float)) {
+                    let val: f64 = text.parse().unwrap_or(f64::NAN);
+                    return Ok(f64_to_value(val));
+                }
+                // IntLit → Rational: chamar kata_rt_rat_literal.
+                if matches!(target_ty, Ty::Prim(PrimTy::Rational)) {
+                    let cstr = CString::new(text.as_str()).unwrap_or_else(|_| {
+                        CString::new("0").unwrap()
+                    });
+                    let ptr = cstr.as_ptr();
+                    let len = text.len() as i64;
+                    let result = unsafe { rt::kata_rt_rat_literal(ptr, len) };
+                    std::mem::forget(cstr); // não drop — ponteiro bruto
+                    return Ok(result as i64);
+                }
+            }
+            // FloatLit → Rational: chamar kata_rt_rat_literal.
+            if let TypedExprKind::FloatLit { ref text } = inner.node.kind
+                && matches!(target_ty, Ty::Prim(PrimTy::Rational))
+            {
+                let cstr =
+                    CString::new(text.as_str()).unwrap_or_else(|_| CString::new("0").unwrap());
+                let ptr = cstr.as_ptr();
+                let len = text.len() as i64;
+                let result = unsafe { rt::kata_rt_rat_literal(ptr, len) };
+                std::mem::forget(cstr);
+                return Ok(result as i64);
+            }
+            // Refined/alias ascription (Int → PositiveInt, etc.) — no-op.
+            // O typeck já validou os predicados. O valor em runtime é o mesmo.
+            if matches!(target_ty, Ty::Struct(_)) {
+                return eval(ctx, inner, env);
+            }
+            // Downcast refined → base (PositiveInt → Int, Altura → Float) —
+            // mesmos bits, no-op.
+            if matches!(inner_ty, Ty::Struct(_)) {
+                return eval(ctx, inner, env);
+            }
+            // Fallback: avaliar inner.
+            eval(ctx, inner, env)
+        }
 
         // ── Tuple / Struct ───────────────────────────────────
         TypedExprKind::Tuple { elements } => {
@@ -394,7 +489,8 @@ pub fn eval(
                 }
             } else {
                 // Chamada de função Kata pura
-                call_named_function(ctx, callee, &arg_vals, env)
+                let call_arg_tys: Vec<Ty> = args.iter().map(|a| a.node.ty.clone()).collect();
+                call_named_function(ctx, callee, &arg_vals, &call_arg_tys, env)
             }
         }
 
@@ -404,27 +500,30 @@ pub fn eval(
         } => {
             // Construir closure value na arena:
             // offset 0: tag CLOSURE_TAG
-            // offset 1: ptr para cláusulas (vec na heap Rust)
-            // offset 2: n_captures
-            // offset 3..: captures[]
-            let n_caps = captures.len() as i64;
-            let size = 24 + n_caps * 8; // 3 words + captures
+            // offset 1: ptr para cláusulas (Vec<TypedLambdaClause> na heap Rust)
+            // offset 2: ptr para captures (Vec<(String, Value)> na heap Rust)
+            let size = 24; // 3 words
             let ptr = rt::kata_rt_arena_alloc(ctx.rt_ptr, ctx.arena, size);
 
-            // Armazenar cláusulas num Arc na heap Rust
+            // Armazenar cláusulas num Box na heap Rust
             let clauses_box = Box::new(clauses.clone());
             let clauses_ptr = Box::into_raw(clauses_box) as i64;
+
+            // Armazenar captures (nome + valor) num Box na heap Rust
+            let mut cap_pairs: Vec<(String, Value)> = Vec::new();
+            for cap in captures.iter() {
+                let cap_val = env.lookup(&cap.name).ok_or_else(|| {
+                    InterpError::Runtime(format!("capture não encontrada: {}", cap.name))
+                })?;
+                cap_pairs.push((cap.name.clone(), cap_val));
+            }
+            let captures_box = Box::new(cap_pairs);
+            let captures_ptr = Box::into_raw(captures_box) as i64;
 
             unsafe {
                 std::ptr::write(ptr as *mut Value, CLOSURE_TAG);
                 std::ptr::write((ptr as *mut Value).add(1), clauses_ptr);
-                std::ptr::write((ptr as *mut Value).add(2), n_caps);
-                for (i, cap) in captures.iter().enumerate() {
-                    let cap_val = env.lookup(&cap.name).ok_or_else(|| {
-                        InterpError::Runtime(format!("capture não encontrada: {}", cap.name))
-                    })?;
-                    std::ptr::write((ptr as *mut Value).add(3 + i), cap_val);
-                }
+                std::ptr::write((ptr as *mut Value).add(2), captures_ptr);
             }
             Ok(ptr)
         }
@@ -1025,6 +1124,7 @@ fn call_named_function(
     ctx: &mut InterpCtx,
     callee: &Spanned<TypedExpr>,
     args: &[Value],
+    arg_tys: &[Ty],
     env: &mut Env,
 ) -> Result<Value, InterpError> {
     // Se o callee é um Ident, procurar na tabela de funções
@@ -1034,11 +1134,26 @@ fn call_named_function(
         // Procurar nas funções nomeadas do módulo.
         // Clonar Arc<TypedModule> para evitar borrow conflict.
         let module = ctx.module.clone();
-        for func in &module.functions {
-            if func.name == name {
-                let clauses = func.clauses.clone();
-                return call_typed_clauses(ctx, &clauses, args, env);
-            }
+        // Coletar todos os overloads com o nome e aridade correspondentes.
+        let n_args = args.len();
+        let func_candidates: Vec<_> = module
+            .functions
+            .iter()
+            .filter(|f| f.name == name && f.param_types.len() == n_args)
+            .collect();
+        if !func_candidates.is_empty() {
+            let best = if func_candidates.len() == 1 {
+                func_candidates[0]
+            } else {
+                // Despachar por tipo (overloads): melhor ty_compat_score.
+                func_candidates
+                    .iter()
+                    .max_by_key(|f| ty_compat_score(arg_tys, &f.param_types))
+                    .copied()
+                    .expect("func_candidates é não-vazio")
+            };
+            let clauses = best.clauses.clone();
+            return call_typed_clauses(ctx, &clauses, args.to_vec(), env);
         }
         // Procurar nas actions do módulo (despachar por aridade + tipo)
         let n_args = args.len();
@@ -1095,103 +1210,265 @@ fn call_closure_value(
         )));
     }
     let clauses_ptr = unsafe { std::ptr::read(ptr.add(1)) } as *mut Vec<TypedLambdaClause>;
-    let n_captures = unsafe { std::ptr::read(ptr.add(2)) };
+    let captures_ptr = unsafe { std::ptr::read(ptr.add(2)) } as *mut Vec<(String, Value)>;
 
-    // Ler captures
-    let mut captures = Vec::new();
-    for i in 0..n_captures {
-        let cap_val = unsafe { std::ptr::read(ptr.add(3 + i as usize)) };
-        captures.push(cap_val);
+    // Reconstruir cláusulas e captures.
+    let clauses = unsafe { &*clauses_ptr };
+    let captures = unsafe { &*captures_ptr };
+
+    // Empilhar escopo e definir captures com seus nomes.
+    env.push_scope();
+    for (name, val) in captures.iter() {
+        env.define(name, *val);
     }
 
-    // Reconstruir cláusulas
-    let clauses = unsafe { &*clauses_ptr };
-
-    // Empilhar escopo e definir captures
-    env.push_scope();
-    // As captures são definidas com os nomes do Lambda.captures
-    // Mas não temos acesso ao Lambda.captures aqui — os nomes das
-    // captures estão nas cláusulas? Não, estão no TypedExprKind::Lambda.
-    // Como resolver? O call_closure_value não tem acesso aos nomes.
-    //
-    // Alternativa: as captures são posicionais — a primeira cláusula
-    // deve saber quais nomes usar. Mas TypedLambdaClause não tem
-    // captures info. Precisamos de outra abordagem.
-    //
-    // Solução temporária: as captures são armazenadas como (nome, valor)
-    // no struct da closure. Vamos armazenar pares (nome_ptr, valor).
-    // Por enquanto, não definir captures (Fase 1 só precisa de lambdas
-    // sem captures para fatorial/fib).
-
-    let result = call_typed_clauses(ctx, clauses, args, env);
+    let result = call_typed_clauses(ctx, clauses, args.to_vec(), env);
     env.pop_scope();
     result
 }
 
+/// Resultado da avaliação em posição de cauda.
+///
+/// `Done(v)` — expressão produziu valor final.
+/// `TailCall(name, args)` — expressão é uma chamada de cauda direta para
+/// função Kata pura nomeada. O trampoline em `call_typed_clauses` faz
+/// loop com os novos argumentos em vez de recursar.
+enum TailResult {
+    Done(Value),
+    TailCall {
+        name: String,
+        args: Vec<Value>,
+    },
+}
+
+/// Avalia uma expressão em **posição de cauda**.
+///
+/// Idêntica a `eval` para todos os nós, exceto:
+/// - `Closure { callee: Ident, ffi_symbol: None }` → retorna `TailCall`
+///   em vez de chamar `call_named_function` recursivamente.
+/// - `Match` → chama `eval_tail` no body do arm matching (não `eval`).
+/// - `Block` → chama `eval_tail` na última expressão (não `eval`).
+///
+/// Isso permite que o trampoline em `call_typed_clauses` faça TCO:
+/// em vez de empilhar frames Rust para cada chamada de cauda, faz loop.
+fn eval_tail(
+    ctx: &mut InterpCtx,
+    expr: &Spanned<TypedExpr>,
+    env: &mut Env,
+) -> Result<TailResult, InterpError> {
+    match &expr.node.kind {
+        // ── Closure (chamada de função) em posição de cauda ──
+        TypedExprKind::Closure {
+            callee,
+            args,
+            ffi_symbol,
+        } => {
+            if ffi_symbol.is_none() {
+                // Chamada de função Kata pura — retornar TailCall.
+                if let TypedExprKind::Ident { name } = &callee.node.kind {
+                    let arg_vals: Vec<Value> = args
+                        .iter()
+                        .map(|a| eval(ctx, a, env))
+                        .collect::<Result<_, _>>()?;
+                    return Ok(TailResult::TailCall {
+                        name: name.clone(),
+                        args: arg_vals,
+                    });
+                }
+            }
+            // Fallback: não é chamada de cauda otimizável — avaliar normalmente.
+            let v = eval(ctx, expr, env)?;
+            Ok(TailResult::Done(v))
+        }
+
+        // ── Match em posição de cauda — propagar eval_tail para o arm ──
+        TypedExprKind::Match { scrutinee, arms } => {
+            let scrut_val = eval(ctx, scrutinee, env)?;
+            for arm in arms {
+                env.push_scope();
+                let matched = if let Some(ref pat) = arm.pattern {
+                    match_pattern(pat, scrut_val, env)
+                } else {
+                    true // otherwise
+                };
+                if matched {
+                    if let Some(ref guard) = arm.guard {
+                        let guard_val = eval(ctx, guard, env)?;
+                        if guard_val == 0 {
+                            env.pop_scope();
+                            continue;
+                        }
+                    }
+                    let result = eval_tail(ctx, &arm.body, env);
+                    env.pop_scope();
+                    return result;
+                }
+                env.pop_scope();
+            }
+            Err(InterpError::Runtime("match não-exaustivo".to_string()))
+        }
+
+        // ── Block em posição de cauda — propagar eval_tail para a última expr ──
+        TypedExprKind::Block { stmts } => {
+            if stmts.is_empty() {
+                return Ok(TailResult::Done(0));
+            }
+            env.push_scope();
+            let last = stmts.len() - 1;
+            for (i, stmt) in stmts.iter().enumerate() {
+                if i == last {
+                    let result = eval_tail(ctx, stmt, env);
+                    env.pop_scope();
+                    return result;
+                }
+                eval(ctx, stmt, env)?;
+            }
+            unreachable!()
+        }
+
+        // ── Demais nós — delegar para eval ──
+        _ => {
+            let v = eval(ctx, expr, env)?;
+            Ok(TailResult::Done(v))
+        }
+    }
+}
+
 /// Chama um conjunto de cláusulas tipadas com argumentos.
+///
+/// Implementa TCO via trampoline: quando o body da cláusula (ou guard body)
+/// é uma chamada de cauda direta (`eval_tail` retorna `TailCall`), faz loop
+/// com os novos argumentos em vez de recursar. Isso evita stack overflow
+/// em recursão de cauda (incluindo TRMA rewrite).
 fn call_typed_clauses(
     ctx: &mut InterpCtx,
     clauses: &[TypedLambdaClause],
-    args: &[Value],
+    mut args: Vec<Value>,
     env: &mut Env,
 ) -> Result<Value, InterpError> {
-    for clause in clauses {
-        env.push_scope();
+    // Trampoline: loop até produzir um valor final.
+    // Em cada iteração, avalia o body da cláusula matching com `eval_tail`.
+    // Se `eval_tail` retorna `TailCall`, resolve a função e faz loop
+    // com as novas cláusulas e argumentos — sem empilhar frames Rust.
+    let mut current_clauses: Vec<TypedLambdaClause> = clauses.to_vec();
 
-        // Ligar args como __param_{i} para que hooks (@log etc.) que
-        // referenciam __param_0 possam acessar os argumentos originais.
-        for (i, val) in args.iter().enumerate() {
-            env.define(&format!("__param_{i}"), *val);
-        }
+    loop {
+        // Avaliar cláusulas atuais. Se o body é uma chamada de cauda,
+        // `tail_call` recebe o nome e args para o próximo loop.
+        let mut tail_call: Option<(String, Vec<Value>)> = None;
 
-        // Pattern match dos argumentos (liga variáveis do pattern)
-        let mut all_match = true;
-        for (i, pat) in clause.patterns.iter().enumerate() {
-            if !match_pattern(pat, args[i], env) {
-                all_match = false;
-                break;
-            }
-        }
+        'clause_loop: for clause in &current_clauses {
+            env.push_scope();
 
-        if all_match {
-            // with bindings (avaliados depois do pattern match, que liga
-            // as variáveis do pattern; com_bindings podem referenciar essas variáveis)
-            for wb in &clause.with_bindings {
-                let v = eval(ctx, &wb.value, env)?;
-                env.define(&wb.name, v);
+            for (i, val) in args.iter().enumerate() {
+                env.define(&format!("__param_{i}"), *val);
             }
 
-            // Se há guards, testar
-            if !clause.guards.is_empty() {
-                for guard in &clause.guards {
-                    if let Some(ref cond) = guard.condition {
-                        let cond_val = eval(ctx, cond, env)?;
-                        if cond_val != 0 {
-                            let result = eval(ctx, &guard.body, env);
+            let mut all_match = true;
+            for (i, pat) in clause.patterns.iter().enumerate() {
+                if !match_pattern(pat, args[i], env) {
+                    all_match = false;
+                    break;
+                }
+            }
+
+            if all_match {
+                for wb in &clause.with_bindings {
+                    let v = eval(ctx, &wb.value, env)?;
+                    env.define(&wb.name, v);
+                }
+
+                if !clause.guards.is_empty() {
+                    for guard in &clause.guards {
+                        let matched = if let Some(ref cond) = guard.condition {
+                            eval(ctx, cond, env)? != 0
+                        } else {
+                            true // otherwise
+                        };
+                        if matched {
+                            let result = eval_tail(ctx, &guard.body, env);
                             env.pop_scope();
-                            return result;
+                            match result? {
+                                TailResult::Done(v) => return Ok(v),
+                                TailResult::TailCall { name, args: new_args } => {
+                                    tail_call = Some((name, new_args));
+                                    break 'clause_loop;
+                                }
+                            }
                         }
-                    } else {
-                        // otherwise
-                        let result = eval(ctx, &guard.body, env);
-                        env.pop_scope();
-                        return result;
+                    }
+                    // Nenhum guard passou — tentar próxima cláusula
+                    env.pop_scope();
+                    continue;
+                }
+
+                // Sem guards — avaliar body com eval_tail
+                let result = eval_tail(ctx, &clause.body, env);
+                env.pop_scope();
+                match result? {
+                    TailResult::Done(v) => return Ok(v),
+                    TailResult::TailCall { name, args: new_args } => {
+                        tail_call = Some((name, new_args));
+                        break 'clause_loop;
                     }
                 }
-                // Nenhum guard passou — tentar próxima cláusula
-                env.pop_scope();
-                continue;
             }
-            // Sem guards — avaliar body
-            let result = eval(ctx, &clause.body, env);
             env.pop_scope();
-            return result;
         }
-        env.pop_scope();
+
+        match tail_call {
+            Some((name, new_args)) => {
+                let (new_clauses, resolved_args) = resolve_tail_call(ctx, &name, new_args, env)?;
+                current_clauses = new_clauses;
+                args = resolved_args;
+            }
+            None => {
+                return Err(InterpError::Runtime(format!(
+                    "nenhuma cláusula匹配: args={args:?}"
+                )));
+            }
+        }
     }
-    Err(InterpError::Runtime(format!(
-        "nenhuma cláusula匹配: args={args:?}"
-    )))
+}
+
+/// Resolve um TailCall: encontra as cláusulas da função nomeada.
+///
+/// Retorna `(clauses, args)` para o trampoline continuar o loop.
+/// `eval_tail` só produz `TailCall` para `Closure { callee: Ident,
+/// ffi_symbol: None }` — ou seja, chamadas de função Kata pura nomeada.
+/// Actions (ActionCall) e closures anônimas (callee = Lambda) não
+/// produzem `TailCall` e são avaliadas recursivamente por `eval`.
+fn resolve_tail_call(
+    ctx: &mut InterpCtx,
+    name: &str,
+    args: Vec<Value>,
+    _env: &mut Env,
+) -> Result<(Vec<TypedLambdaClause>, Vec<Value>), InterpError> {
+    let module = ctx.module.clone();
+    let n_args = args.len();
+
+    let func_candidates: Vec<_> = module
+        .functions
+        .iter()
+        .filter(|f| f.name == name && f.param_types.len() == n_args)
+        .collect();
+    if func_candidates.is_empty() {
+        return Err(InterpError::Runtime(format!(
+            "resolve_tail_call: função não encontrada: {name}"
+        )));
+    }
+    let best = if func_candidates.len() == 1 {
+        func_candidates[0]
+    } else {
+        // Despachar por tipo (overloads): melhor ty_compat_score.
+        let arg_tys = func_candidates[0].param_types.clone();
+        func_candidates
+            .iter()
+            .max_by_key(|f| ty_compat_score(&arg_tys, &f.param_types))
+            .copied()
+            .expect("func_candidates é não-vazio")
+    };
+    Ok((best.clauses.clone(), args))
 }
 
 /// Chama um callback (closure lambda) com argumentos.
