@@ -160,7 +160,19 @@ fn collect_captures_in_expr(
     });
 }
 
+/// Coleta nomes ligados por `let` em uma lista de exprs synthetic.
+fn collect_let_bound_names(exprs: &[kata_ast::Spanned<TypedExpr>], out: &mut HashSet<String>) {
+    for expr in exprs {
+        if let TypedExprKind::Let { name, .. } = &expr.node.kind {
+            out.insert(name.clone());
+        }
+    }
+}
+
 /// Coleta free vars de uma cláusula lambda e adiciona à lista de captures.
+///
+/// `synthetic_pre`/`synthetic_post` são traversados com bindings expandidos
+/// (inclui let-bound names do synthetic). O body usa apenas bindings originais.
 fn collect_clause_free_vars(
     clause: &TypedLambdaClause,
     outer_env: &TypeEnv,
@@ -174,7 +186,21 @@ fn collect_clause_free_vars(
         local_bindings.insert(wb.name.clone());
     }
 
+    // Synthetic pre/post: let-bound names são locais ao escopo synthetic.
+    let mut synthetic_bindings = local_bindings.clone();
+    collect_let_bound_names(&clause.synthetic_pre, &mut synthetic_bindings);
+    collect_let_bound_names(&clause.synthetic_post, &mut synthetic_bindings);
+
     let mut free_vars = HashSet::new();
+    // Synthetic pre
+    for expr in &clause.synthetic_pre {
+        collect_free_vars(&expr.node, &synthetic_bindings, dispatch, &mut free_vars);
+    }
+    // Synthetic post
+    for expr in &clause.synthetic_post {
+        collect_free_vars(&expr.node, &synthetic_bindings, dispatch, &mut free_vars);
+    }
+    // Body e guards (bindings originais, sem synthetic)
     if clause.guards.is_empty() {
         collect_free_vars(&clause.body.node, &local_bindings, dispatch, &mut free_vars);
     } else {
@@ -210,12 +236,24 @@ fn collect_clause_free_vars(
 
 /// Percorre o corpo de uma cláusula lambda (segunda passada, mutável)
 /// para coletar captures de lambdas aninhados.
+///
+/// `synthetic_pre`/`synthetic_post` também são percorridos — podem conter
+/// lambdas aninhados (ex: filter dentro de um binding synthetic).
 fn collect_captures_in_lambda_clause(
     clause: &mut TypedLambdaClause,
     outer_env: &TypeEnv,
     local_tys: &HashMap<String, Ty>,
     dispatch: &kata_core::dispatch::DispatchTable,
 ) {
+    // Synthetic pre
+    for expr in &mut clause.synthetic_pre {
+        collect_captures_in_expr(&mut expr.node, outer_env, local_tys, dispatch);
+    }
+    // Synthetic post
+    for expr in &mut clause.synthetic_post {
+        collect_captures_in_expr(&mut expr.node, outer_env, local_tys, dispatch);
+    }
+    // Guards e body
     for guard in &mut clause.guards {
         if let Some(cond) = &mut guard.condition {
             collect_captures_in_expr(&mut cond.node, outer_env, local_tys, dispatch);

@@ -63,8 +63,23 @@ pub(crate) fn collect_free_vars(
     });
 }
 
+/// Coleta nomes ligados por `let` em uma lista de exprs synthetic.
+/// Usado para que bindings de `synthetic_pre`/`synthetic_post` (`_msg`, `_name`,
+/// etc.) não sejam contados como free vars.
+fn collect_let_bound_names(exprs: &[Spanned<TypedExpr>], out: &mut HashSet<String>) {
+    for expr in exprs {
+        if let TypedExprKind::Let { name, .. } = &expr.node.kind {
+            out.insert(name.clone());
+        }
+    }
+}
+
 /// Coleta free vars de uma cláusula lambda, considerando que os pattern
 /// binds e with bindings da cláusula são locais ao seu corpo.
+///
+/// `synthetic_pre`/`synthetic_post` são traversados com bindings expandidos
+/// (inclui let-bound names do synthetic), mas o body/guards usam apenas os
+/// bindings originais (synthetic não vaza para o body do usuário).
 fn collect_free_vars_lambda_clause(
     clause: &TypedLambdaClause,
     local_bindings: &HashSet<String>,
@@ -77,6 +92,19 @@ fn collect_free_vars_lambda_clause(
         inner_locals.insert(wb.name.clone());
     }
 
+    // Synthetic pre/post: let-bound names são locais ao escopo synthetic.
+    // O body do usuário não vê esses bindings.
+    let mut synthetic_locals = inner_locals.clone();
+    collect_let_bound_names(&clause.synthetic_pre, &mut synthetic_locals);
+    collect_let_bound_names(&clause.synthetic_post, &mut synthetic_locals);
+    for expr in &clause.synthetic_pre {
+        collect_free_vars(&expr.node, &synthetic_locals, dispatch, out);
+    }
+    for expr in &clause.synthetic_post {
+        collect_free_vars(&expr.node, &synthetic_locals, dispatch, out);
+    }
+
+    // Body e guards: bindings originais (sem synthetic)
     if clause.guards.is_empty() {
         collect_free_vars(&clause.body.node, &inner_locals, dispatch, out);
     } else {

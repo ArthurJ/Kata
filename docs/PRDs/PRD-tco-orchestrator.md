@@ -1,6 +1,6 @@
 # PRD — Generalização do wrapper/inner split: TCO como orquestrador + TAST estruturada para diretivas
 
-**Status:** Não implementado
+**Status:** Implementado (Fases 1-7, 28/28 DoDs ✅)
 **Data:** 2026-08-28
 **Depende de:** PRD-wrapper-inner-tco ✅ (Fases 1-5 implementadas — wrapper/inner split para `@cache`/`@timer`)
 **Não depende de:** Diretivas customizadas novas, Fio 13+
@@ -303,54 +303,54 @@ O desugar de actions (`action_hooks.rs`) continua reescrevendo o body. Actions n
 
 ## 10. DoDs (Definitions of Done)
 
-### Fase 1 — TAST estruturada
+### Fase 1 — TAST estruturada ✅
 
-1. `synthetic_pre` e `synthetic_post` adicionados a `TypedLambdaClause` com default `Vec::new()`.
-2. Todos os sites que constroem `TypedLambdaClause` inicializam os novos campos.
-3. `cargo test --workspace` passa (campos vazios = comportamento atual).
+1. ✅ `synthetic_pre` e `synthetic_post` adicionados a `TypedLambdaClause` com default `Vec::new()`.
+2. ✅ Todos os sites que constroem `TypedLambdaClause` inicializam os novos campos.
+3. ✅ `cargo test --workspace` passa (campos vazios = comportamento atual).
 
-### Fase 2 — Desugar anotativo
+### Fase 2 — Desugar anotativo ✅
 
-4. `apply_enter_to_lambda_body` popula `synthetic_pre` em vez de reescrever `body`.
-5. `apply_exit_to_lambda_body` popula `synthetic_post` em vez de reescrever `body`.
-6. `body` permanece inalterado após o desugar.
-7. Testes de `@log` (sem TCO) passam com o codegen/interp consumindo os novos campos.
+4. ✅ `apply_enter_to_lambda_body` popula `synthetic_pre` em vez de reescrever `body`.
+5. ✅ `apply_exit_to_lambda_body` popula `synthetic_post` em vez de reescrever `body`.
+6. ✅ `body` permanece inalterado após o desugar.
+7. ✅ Testes de `@log` (sem TCO) passam com o codegen/interp consumindo os novos campos.
 
-### Fase 3 — Codegen sem split
+### Fase 3 — Codegen sem split ✅
 
-8. `define_function_body` insere `synthetic_pre` antes do body quando não há split.
-9. `define_function_body` insere `synthetic_post` em cada retorno quando não há split.
-10. Testes de `@log` (sem TCO) passam no codegen.
+8. ✅ `define_function_body` insere `synthetic_pre` antes do body quando não há split.
+9. ✅ `define_function_body` insere `synthetic_post` em cada retorno quando não há split.
+10. ✅ Testes de `@log` (sem TCO) passam no codegen.
 
-### Fase 4 — Interpreter
+### Fase 4 — Interpreter ✅
 
-11. `eval_tail`/`call_typed_clauses` avalia `synthetic_pre` antes do body.
-12. `eval_tail`/`call_typed_clauses` avalia `synthetic_post` após o resultado.
-13. Testes de `@log` (sem TCO) passam no interpreter.
+11. ✅ `eval_tail`/`call_typed_clauses` avalia `synthetic_pre` antes do body.
+12. ✅ `eval_tail`/`call_typed_clauses` avalia `synthetic_post` após o resultado.
+13. ✅ Testes de `@log` (sem TCO) passam no interpreter.
 
-### Fase 5 — Split generalizado
+### Fase 5 — Split generalizado ✅
 
-14. `needs_split` usa `has_tail_pos_call && has_wrapper_content`.
-15. `has_wrapper_content` checa chumbadas + `synthetic_pre`/`synthetic_post` não-vazios.
-16. `define_wrapper` compõe `synthetic_pre` no prólogo e `synthetic_post` no epílogo.
-17. `@log{exit}` + TCO: split ativado, exit no wrapper, TCO no inner. Stack O(1).
-18. `@log{enter}` + TCO: split ativado, enter no wrapper (1 vez), TCO no inner.
-19. `@log{exit}` + `@cache` + TCO: ambos no wrapper, TCO no inner.
-20. Testes existentes de `@cache`/`@timer` + TCO continuam passando.
+14. ✅ `needs_split` usa `has_tail_pos_call && has_wrapper_content`.
+15. ✅ `has_wrapper_content` checa chumbadas + `synthetic_pre`/`synthetic_post` não-vazios.
+16. ✅ `define_wrapper` compõe `synthetic_pre` no prólogo e `synthetic_post` no epílogo.
+17. ✅ `@log{exit}` + TCO: split ativado, exit no wrapper, TCO no inner. Stack O(1).
+18. ✅ `@log{enter}` + TCO: split ativado, enter no wrapper (1 vez), TCO no inner.
+19. ✅ `@log{exit}` + `@cache` + TCO: ambos no wrapper, TCO no inner.
+20. ✅ Testes existentes de `@cache`/`@timer` + TCO continuam passando.
 
-### Fase 6 — Typeck e optimizer
+### Fase 6 — Typeck e optimizer ✅
 
-21. Typeck infere `synthetic_pre`/`synthetic_post` (tipos, bindings de reflexão).
-22. `_return` disponível no escopo de `synthetic_post`.
-23. Visitors (`walk/immut.rs`, `walk/mut_vis.rs`) percorrem novos campos.
-24. Free vars, captures corretos com `synthetic_pre`/`synthetic_post`.
+21. ✅ Typeck infere `synthetic_pre`/`synthetic_post` (tipos, bindings de reflexão).
+22. ✅ `_return` disponível no escopo de `synthetic_post`.
+23. ✅ Visitors (`walk/immut.rs`, `walk/mut_vis.rs`) percorrem novos campos.
+24. ✅ Free vars, captures corretos com `synthetic_pre`/`synthetic_post`.
 
-### Fase 7 — Regressão
+### Fase 7 — Regressão ✅
 
-25. 1872 testes existentes passam sem mudança.
-26. Teste E2E: `@log{exit}` + função tail-recursive + n=100000 — completa sem stack overflow.
-27. Teste E2E: `@log{enter}` + função tail-recursive + n=100000 — enter dispara 1 vez (não 100000).
-28. Teste E2E: `@log{exit}` + `@cache` + função tail-recursive — resultado correto, exit 1 vez, cache hit funciona.
+25. ✅ 1876 testes passam (1872 originais + 4 novos da Fase 5).
+26. ✅ Teste E2E: `@log{exit}` + função tail-recursive + n=100000 — completa sem stack overflow.
+27. ✅ Teste E2E: `@log{enter}` + função tail-recursive + n=100000 — enter dispara 1 vez (não 100000).
+28. ✅ Teste E2E: `@log{exit}` + `@cache` + função tail-recursive — resultado correto, exit 1 vez, cache hit funciona.
 
 ## 11. Cronograma
 

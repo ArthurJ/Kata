@@ -33,13 +33,22 @@ use crate::metadata::MetadataTable;
 /// Verifica se uma função precisa do wrapper/inner split.
 ///
 /// O split ocorre quando a função tem **simultaneamente**:
-/// 1. Pelo menos uma intrínseca de epílogo (`@cache`, `@timer`)
-/// 2. Pelo menos uma self-call em tail position (`return_call`)
+/// 1. Pelo menos uma self-call em tail position (`return_call`)
+/// 2. Conteúdo para o wrapper além de `call inner; return`:
+///    - Intrínsecas chumbadas (`@cache`, `@timer`)
+///    - `synthetic_pre`/`synthetic_post` não-vazios (diretivas customizadas)
 ///
-/// Funções sem intrínsecas, ou sem tail calls, geram uma função só.
+/// Funções sem tail calls, ou sem conteúdo para o wrapper, geram uma função só.
 pub(crate) fn needs_split(func: &TypedFunction) -> bool {
-    let has_epilogue_intrinsics = func.cache_spec.is_some() || func.timer_spec.is_some();
-    has_epilogue_intrinsics && has_tail_pos_call(&func.clauses)
+    if !has_tail_pos_call(&func.clauses) {
+        return false;
+    }
+    let has_chumbed = func.cache_spec.is_some() || func.timer_spec.is_some();
+    let has_custom = func
+        .clauses
+        .iter()
+        .any(|c| !c.synthetic_pre.is_empty() || !c.synthetic_post.is_empty());
+    has_chumbed || has_custom
 }
 
 /// Bitcast na borda de retorno.
@@ -319,7 +328,9 @@ pub(crate) fn define_function_body(
             let fn_id_val = builder.ins().iconst(I64, fn_id);
 
             // capacity: do CacheSpec (default 256).
-            let cap_val = builder.ins().iconst(I64, cache_spec.as_ref().map_or(256, |s| s.capacity));
+            let cap_val = builder
+                .ins()
+                .iconst(I64, cache_spec.as_ref().map_or(256, |s| s.capacity));
 
             // strategy_tag: 0=LRU, 1=FIFO, 2=MRU, 3=LFU.
             let strategy_tag = cache_spec.as_ref().map_or(0i64, |s| match s.strategy {
@@ -335,9 +346,10 @@ pub(crate) fn define_function_body(
                 .ffi_refs
                 .get("kata_rt_cache_get_or_create")
                 .expect("kata_rt_cache_get_or_create registrado");
-            let handle = builder
-                .ins()
-                .call(*get_fn, &[arena_handle, fn_id_val, cap_val, strategy_tag_val]);
+            let handle = builder.ins().call(
+                *get_fn,
+                &[arena_handle, fn_id_val, cap_val, strategy_tag_val],
+            );
             let handle_val = builder.inst_results(handle)[0];
 
             // ── Serializa args via type descriptor ──
@@ -601,16 +613,30 @@ pub(crate) fn define_kata_function(
 
     if let Some(&inner_id) = inner_table.get(&key) {
         // ── Wrapper/inner split ──
-        // 1. Definir inner: body puro com TCO, sem intrínsecas.
+        // 1. Definir inner: body puro com TCO, sem intrínsecas, sem synthetic.
         //    kata_ids = symbol_table (wrapper) → non-tail self-calls vão ao wrapper (cache).
         //    inner_kata_ids = {key → inner_id} → tail self-calls vão ao inner (TCO).
+        //    O inner recebe cláusulas com synthetic_pre/post vazios — o
+        //    synthetic é responsabilidade do wrapper, não do inner.
+        let inner_clauses: Vec<TypedLambdaClause> = func
+            .clauses
+            .iter()
+            .map(|c| TypedLambdaClause {
+                patterns: c.patterns.clone(),
+                body: c.body.clone(),
+                synthetic_pre: Vec::new(),
+                synthetic_post: Vec::new(),
+                guards: c.guards.clone(),
+                with_bindings: c.with_bindings.clone(),
+            })
+            .collect();
         let mut inner_ids_map = HashMap::new();
         inner_ids_map.insert(key.clone(), inner_id);
         define_function_body(
             &func.name,
             &func.param_types,
             &func.ret_ty,
-            &func.clauses,
+            &inner_clauses,
             &[],
             &None, // inner não tem cache
             &None, // inner não tem timer
@@ -813,6 +839,17 @@ fn define_wrapper(
             lower.builder.def_var(var, *val);
         }
 
+        // ── Prólogo: synthetic_pre (diretivas Enter customizadas) ──
+        // Lowera antes de timer/cache. Bindings (_name, _args, etc.) ficam
+        // disponíveis para todo o resto.
+        let has_synthetic_pre = func.clauses.iter().any(|c| !c.synthetic_pre.is_empty());
+        let has_synthetic_post = func.clauses.iter().any(|c| !c.synthetic_post.is_empty());
+        if has_synthetic_pre {
+            for pre_expr in &func.clauses[0].synthetic_pre {
+                lower_expr(&pre_expr.node, &mut lower)?;
+            }
+        }
+
         // ── Prólogo: @timer start ──
         // Wrapper sempre usa stack slot (nunca canal — o frame sobrevive).
         let timer_start_val = if func.timer_spec.is_some() {
@@ -821,17 +858,14 @@ fn define_wrapper(
             None
         };
 
-        let mut needs_epilogue = func.timer_spec.is_some();
+        let mut needs_epilogue = func.timer_spec.is_some() || has_synthetic_post;
 
         // ── Prólogo: @cache lookup ──
         let cache_handle_val = if func.cache_spec.is_some() && !clause_params.is_empty() {
             let builder = &mut lower.builder;
 
-            let fn_id = super::cache_key::canonical_fn_id(
-                &func.name,
-                &func.param_types,
-                &func.clauses,
-            );
+            let fn_id =
+                super::cache_key::canonical_fn_id(&func.name, &func.param_types, &func.clauses);
             let fn_id_val = builder.ins().iconst(I64, fn_id);
 
             let cap_val = builder
@@ -850,9 +884,10 @@ fn define_wrapper(
                 .ffi_refs
                 .get("kata_rt_cache_get_or_create")
                 .expect("kata_rt_cache_get_or_create registrado");
-            let handle = builder
-                .ins()
-                .call(*get_fn, &[arena_handle, fn_id_val, cap_val, strategy_tag_val]);
+            let handle = builder.ins().call(
+                *get_fn,
+                &[arena_handle, fn_id_val, cap_val, strategy_tag_val],
+            );
             let handle_val = builder.inst_results(handle)[0];
 
             // Serializa args (mesmo que define_function_body).
@@ -967,7 +1002,9 @@ fn define_wrapper(
         }
 
         // ── call inner(rt, arena, box_ptr, args...) ──
-        let rt_val = lower.rt.unwrap_or_else(|| lower.builder.ins().iconst(I64, 0));
+        let rt_val = lower
+            .rt
+            .unwrap_or_else(|| lower.builder.ins().iconst(I64, 0));
         let arena = lower
             .fiber_arena
             .or(lower.caller_arena)
@@ -1031,6 +1068,22 @@ fn define_wrapper(
                 inject_timer_stop(ts, &func.name, start, &mut lower)?;
             }
 
+            // synthetic_post (diretivas Exit customizadas): lowera após
+            // timer/cache no epílogo. _return é bindado ao result do inner.
+            if has_synthetic_post {
+                let ret_clif_ty = super::resolve_clif_ty(&func.ret_ty, lower.struct_registry);
+                lower.new_var("_return", ret_clif_ty);
+                let return_var = *lower
+                    .var_map
+                    .get("_return")
+                    .expect("_return var must exist after new_var");
+                lower.builder.def_var(return_var, result);
+
+                for post_expr in &func.clauses[0].synthetic_post {
+                    lower_expr(&post_expr.node, &mut lower)?;
+                }
+            }
+
             let result = coerce_return(result, &func.ret_ty, &mut lower);
             lower.builder.ins().return_(&[result]);
         }
@@ -1044,7 +1097,10 @@ fn define_wrapper(
             reason: format!("define wrapper {}: {e}", func.name),
         })?;
     if dump_ir {
-        ir_dump.push((format!("{}__wrapper", func.name), format!("{}", ctx.func.display())));
+        ir_dump.push((
+            format!("{}__wrapper", func.name),
+            format!("{}", ctx.func.display()),
+        ));
     }
     module.clear_context(&mut ctx);
     Ok(())
