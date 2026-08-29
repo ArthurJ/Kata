@@ -382,7 +382,18 @@ fn check_neutral_step(typed_step: &TypedExpr, span: &Span) -> InferResult<()> {
 
 // ── ForIn ────────────────────────────────────────────────────────────────
 
-/// `for x in colecao` → Unit. Define `x: A` no escopo do body.
+/// `for x in colecao` → Unit. O binding do laço tem semântica de `var`:
+///
+/// - Nome já é `var` do escopo envolvente → **reuso**: o laço reatribui
+///   `x := elemento` a cada iteração (o var persiste pós-laço com o
+///   último elemento). Tipo do elemento deve casar com o do var.
+/// - Nome é `let`/param → `DuplicateDecl` (imutável não é dirigível).
+/// - Nome é `constant` → `DuplicateConstant` (sagrada).
+/// - Nome fresco → binding próprio da iteração: mutável dentro do
+///   corpo (`x := ...` legal) e **evapora** no fim do laço (0 iterações
+///   possíveis — leitura pós-laço é `UnboundName`).
+///
+/// A action tem escopo único — o corpo NÃO abre escopo filho.
 pub(crate) fn infer_for_in(
     var_name: &str,
     iterable: &Spanned<Expr>,
@@ -397,9 +408,46 @@ pub(crate) fn infer_for_in(
     // Extrai A via InterfaceRegistry lookup.
     let var_ty = extract_iter_elem_ty(ctx, &typed_iterable.ty, span)?;
 
-    // Cria escopo filho para o body, define x: A.
-    let mut body_env = env.push_scope();
-    body_env.define(var_name, var_ty.clone(), "__local__");
+    // ── Colisão do nome do laço (escopo único da action) ──
+    let is_wildcard = var_name.starts_with('_');
+    let preexisting = env
+        .lookup(var_name)
+        .filter(|_| !is_wildcard)
+        .map(|ty| (ty.clone(), env.is_locally_mutable(var_name)));
+    match &preexisting {
+        Some((existing_ty, true)) => {
+            // Reuso: o laço dirige o var existente. Tipo do elemento
+            // deve casar com o tipo declarado do var.
+            if *existing_ty != var_ty {
+                return Err(MiddleError::TypeMismatch {
+                    expected: format!("{existing_ty:?} (tipo de `{var_name}`)"),
+                    found: format!("{} (tipo do elemento)", var_ty),
+                    span: (*span).into(),
+                });
+            }
+        }
+        Some((_, false)) => {
+            // Imutável (let/param): não é dirigível.
+            return Err(MiddleError::DuplicateDecl {
+                name: var_name.to_string(),
+                span: (*span).into(),
+            });
+        }
+        None => {}
+    }
+    // `constant` é sagrada — nem `for` a reusa/sombreia.
+    if !is_wildcard && env.is_constant(var_name) {
+        return Err(MiddleError::DuplicateConstant {
+            name: var_name.to_string(),
+            span: (*span).into(),
+        });
+    }
+
+    // ── Registra o binding do laço na action (escopo único) ──
+    // Reuso: re-binding sobre o var existente (mesmo tipo). Fresco:
+    // var novo que evapora no fim do laço (rollback abaixo).
+    let fresh = preexisting.is_none();
+    env.define_mutable(var_name, var_ty.clone(), "__local__");
 
     // ForIn é como loop — in_loop = true para break/continue.
     let loop_ctx = InferCtx {
@@ -420,8 +468,14 @@ pub(crate) fn infer_for_in(
 
     let mut typed_body = Vec::new();
     for expr in body {
-        let typed = infer_expr(&expr.node, &expr.span, &mut body_env, &loop_ctx, false)?;
+        let typed = infer_expr(&expr.node, &expr.span, env, &loop_ctx, false)?;
         typed_body.push(Spanned::new(typed, expr.span));
+    }
+
+    // Binding fresco do laço evapora: remove do escopo para que
+    // leituras pós-laço sejam UnboundName (0 iterações possíveis).
+    if fresh {
+        env.undefine(var_name);
     }
 
     let escape = if ctx.ret_ty.is_some() {

@@ -107,6 +107,14 @@ impl TypeEnv {
         self.mutables.insert(name.to_string());
     }
 
+    /// Remove um binding deste escopo (evaporação de binding de laço
+    /// fresco — leituras pós-laço viram `UnboundName`). Não toca em
+    /// bindings de escopos pai. No-op se o nome não existe localmente.
+    pub fn undefine(&mut self, name: &str) {
+        self.bindings.remove(name);
+        self.mutables.remove(name);
+    }
+
     /// Redefine a origin de um binding existente (ex: __local__ → __module__).
     /// Não muda o tipo nem fn_alias/param_names. No-op se o binding não existe.
     pub fn set_origin(&mut self, name: &str, origin: &str) {
