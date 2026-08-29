@@ -17,6 +17,7 @@ pub(crate) mod redundancy;
 pub(crate) mod typed;
 pub(crate) mod typed_module;
 pub(crate) mod typed_pattern;
+pub(crate) mod z3_translate;
 
 pub use infer::generics::{Substitutions, apply_subs, unify};
 pub use infer::infer_module;

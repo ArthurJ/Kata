@@ -1,0 +1,307 @@
+//! Tradutor unificado de `TypedExpr` → expressões Z3.
+//!
+//! Um único tradutor para os dois consumidores de Z3 do typeck:
+//! - `guard_completeness.rs` — prova de exaustividade de guards e
+//!   implicação entre cláusulas (redundância);
+//! - `path_conditions.rs` — prova de predicados refined dados facts
+//!   acumulados no escopo.
+//!
+//! Antes havia duas cópias (~185 linhas cada) com pequenas divergências:
+//! o `Z3PathTranslator` sabia inlinar funções puras (`InlineFnTable`),
+//! o `Z3Translator` de guards não sabia nada. Consolidar aqui garante que
+//! toda melhoria de tradução valha para os dois consumidores.
+//!
+//! Mapeamentos:
+//! - Literais Int → `Int::from_i64`
+//! - `> a b`, `< a b`, `>= a b`, `<= a b` → comparações Z3
+//! - `= a b`, `!= a b` → `=` Z3
+//! - `+ a b`, `- a b`, `* a b` → aritmética Z3
+//! - `and a b`, `or a b`, `not a` → lógica proposicional Z3
+//! - Variáveis (`x`) → `Int`/`Bool` const (reutilizadas via cache)
+//! - Qualquer outra → variável opaca fresca (fallback conservador)
+
+use std::collections::HashMap;
+
+use kata_ast::Spanned;
+
+use crate::typed::{TypedExpr, TypedExprKind};
+use crate::typed_pattern::TypedWithBinding;
+
+use crate::infer::{InlineFnTable, substitute_params};
+
+use kata_core::ty::Ty;
+
+use z3::ast::{Bool, Int};
+
+/// Var já criada no solver, por nome.
+enum VarKind {
+    Int(Int),
+    Bool(Bool),
+}
+
+/// Tradutor de `TypedExpr` para expressões Z3.
+pub(crate) struct Z3Translator {
+    /// Nomes de variáveis já criadas, para reutilizar.
+    var_cache: HashMap<String, VarKind>,
+    /// Contador para variáveis opacas frescas.
+    fresh_counter: u32,
+    /// Funções puras inlinable (opcional). `None` = sem inlining.
+    inline_fns: Option<InlineFnTable>,
+}
+
+impl Z3Translator {
+    /// Tradutor sem inlining de funções puras.
+    pub(crate) fn new() -> Self {
+        Z3Translator {
+            var_cache: HashMap::new(),
+            fresh_counter: 0,
+            inline_fns: None,
+        }
+    }
+
+    /// Tradutor com inlining de funções puras (usado por path conditions).
+    pub(crate) fn with_inline_fns(inline_fns: &InlineFnTable) -> Self {
+        Z3Translator {
+            var_cache: HashMap::new(),
+            fresh_counter: 0,
+            inline_fns: Some(inline_fns.clone()),
+        }
+    }
+
+    /// Traduz os bindings `with` da cláusula antes das condições dos guards.
+    ///
+    /// Cada binding é traduzido em ordem de declaração e o resultado é
+    /// memoizado em `var_cache` sob o nome do binding, **pelo seu tipo**:
+    /// - Boolean → `translate_bool` (guards o referenciam como condição);
+    /// - Int → `translate_int` (guards o comparam: `> doubled 10` vira
+    ///   `x*2 > 10` inlinado — mais forte que uma const livre).
+    ///
+    /// Assim:
+    /// - Guards que referenciam o binding reusam a MESMA variável Z3 —
+    ///   sem isso, cada referência receberia um Bool livre distinto e a
+    ///   disjunção deixaria de ser tautologia por artefato do tradutor.
+    /// - Bindings em cadeia (`b := and a_prev c_prev`) enxergam os
+    ///   bindings anteriores já memoizados.
+    ///
+    /// Fallback conservador: bindings que o tradutor não entende (chamada
+    /// de função não-inlinable, `mod`, Float) traduzem para variável
+    /// livre — mesma semântica de antes do fix. A prova fica não
+    /// provada (conservador), nunca errada.
+    pub(crate) fn seed_with_bindings(&mut self, with_bindings: &[TypedWithBinding]) {
+        for wb in with_bindings {
+            if wb.value.node.ty == Ty::boolean() {
+                let translated = self.translate_bool(&wb.value.node);
+                self.var_cache
+                    .insert(wb.name.clone(), VarKind::Bool(translated));
+            } else if let Some(i) = self.translate_int(&wb.value.node) {
+                self.var_cache.insert(wb.name.clone(), VarKind::Int(i));
+            } else {
+                // Tipo não-traduzível (Float, Text, ...) → Bool livre.
+                // Referências caem no fallback conservador.
+                let translated = self.fresh_bool();
+                self.var_cache
+                    .insert(wb.name.clone(), VarKind::Bool(translated));
+            }
+        }
+    }
+
+    /// Traduz uma expressão para um Z3 Bool.
+    pub(crate) fn translate_bool(&mut self, expr: &TypedExpr) -> Bool {
+        match &expr.kind {
+            TypedExprKind::Closure { callee, args, .. } => {
+                if let TypedExprKind::Ident { name } = &callee.node.kind {
+                    match name.as_str() {
+                        "and" => {
+                            if args.len() == 2 {
+                                let a = self.translate_bool(&args[0].node);
+                                let b = self.translate_bool(&args[1].node);
+                                Bool::and(&[a, b])
+                            } else {
+                                self.fresh_bool()
+                            }
+                        }
+                        "or" => {
+                            if args.len() == 2 {
+                                let a = self.translate_bool(&args[0].node);
+                                let b = self.translate_bool(&args[1].node);
+                                Bool::or(&[a, b])
+                            } else {
+                                self.fresh_bool()
+                            }
+                        }
+                        "not" => {
+                            if args.len() == 1 {
+                                let a = self.translate_bool(&args[0].node);
+                                a.not()
+                            } else {
+                                self.fresh_bool()
+                            }
+                        }
+                        ">" | "<" | ">=" | "<=" | "=" | "!=" => {
+                            self.translate_comparison(name, args)
+                        }
+                        _ => {
+                            // Tenta inlinar função pura (ex: zero). Se
+                            // inlinable, traduz o corpo; senão, opaca.
+                            if let Some(inlined) = self.try_inline(name, args) {
+                                self.translate_bool(&inlined)
+                            } else {
+                                self.fresh_bool()
+                            }
+                        }
+                    }
+                } else {
+                    self.fresh_bool()
+                }
+            }
+            TypedExprKind::Ident { name } => {
+                // Variável Boolean — cria ou reutiliza const bool.
+                if let Some(VarKind::Bool(b)) = self.var_cache.get(name) {
+                    b.clone()
+                } else {
+                    let b = Bool::new_const(name.as_str());
+                    self.var_cache
+                        .insert(name.clone(), VarKind::Bool(b.clone()));
+                    b
+                }
+            }
+            TypedExprKind::Grouping { inner } => self.translate_bool(&inner.node),
+            _ => self.fresh_bool(),
+        }
+    }
+
+    fn fresh_bool(&mut self) -> Bool {
+        let name = format!("__opaque_{}", self.fresh_counter);
+        self.fresh_counter += 1;
+        Bool::fresh_const(&name)
+    }
+
+    /// Tenta inlinar uma chamada de função pura. Se `name` está na
+    /// `inline_fns` table, substitui os params pelos args e retorna o
+    /// corpo tipado. O caller então traduz o corpo inlinado em vez da
+    /// chamada. Retorna `None` se a função não está na tabela, não é
+    /// inlinable, ou se a table não está disponível.
+    fn try_inline(&self, name: &str, args: &[Spanned<TypedExpr>]) -> Option<TypedExpr> {
+        let table = self.inline_fns.as_ref()?;
+        let arg_types: Vec<Ty> = args.iter().map(|a| a.node.ty.clone()).collect();
+        let fn_body = table.get(name, &arg_types)?;
+        let body = fn_body.body.as_ref()?;
+        Some(substitute_params(body, &fn_body.param_names, args))
+    }
+
+    /// Traduz uma comparação (`>`, `<`, `>=`, `<=`, `=`, `!=`).
+    fn translate_comparison(&mut self, op: &str, args: &[Spanned<TypedExpr>]) -> Bool {
+        if args.len() != 2 {
+            return self.fresh_bool();
+        }
+
+        // Tenta traduzir ambos os operandos como Int.
+        let lhs = self.translate_int(&args[0].node);
+        let rhs = self.translate_int(&args[1].node);
+
+        let (lhs, rhs) = match (lhs, rhs) {
+            (Some(a), Some(b)) => (a, b),
+            _ => return self.fresh_bool(),
+        };
+
+        match op {
+            ">" => lhs.gt(&rhs),
+            "<" => lhs.lt(&rhs),
+            ">=" => lhs.ge(&rhs),
+            "<=" => lhs.le(&rhs),
+            "=" => lhs.eq(&rhs),
+            "!=" => lhs.eq(&rhs).not(),
+            _ => self.fresh_bool(),
+        }
+    }
+
+    /// Traduz uma expressão para um Z3 Int (se possível).
+    fn translate_int(&mut self, expr: &TypedExpr) -> Option<Int> {
+        match &expr.kind {
+            TypedExprKind::IntLit { text } => {
+                // Parse o literal inteiro. Pode ser BigInt, mas Z3 usa i64.
+                text.parse::<i64>().ok().map(Int::from_i64)
+            }
+            TypedExprKind::Ident { name } => {
+                // Variável Int — cria ou reutiliza const.
+                if let Some(VarKind::Int(i)) = self.var_cache.get(name) {
+                    Some(i.clone())
+                } else {
+                    let i = Int::new_const(name.as_str());
+                    self.var_cache.insert(name.clone(), VarKind::Int(i.clone()));
+                    Some(i)
+                }
+            }
+            TypedExprKind::Closure { callee, args, .. } => {
+                if let TypedExprKind::Ident { name } = &callee.node.kind {
+                    match name.as_str() {
+                        "+" => {
+                            if args.len() == 2 {
+                                let a = self.translate_int(&args[0].node)?;
+                                let b = self.translate_int(&args[1].node)?;
+                                Some(&a + &b)
+                            } else {
+                                None
+                            }
+                        }
+                        "-" => {
+                            if args.len() == 2 {
+                                let a = self.translate_int(&args[0].node)?;
+                                let b = self.translate_int(&args[1].node)?;
+                                Some(&a - &b)
+                            } else {
+                                None
+                            }
+                        }
+                        "*" => {
+                            if args.len() == 2 {
+                                let a = self.translate_int(&args[0].node)?;
+                                let b = self.translate_int(&args[1].node)?;
+                                Some(&a * &b)
+                            } else {
+                                None
+                            }
+                        }
+                        _ => {
+                            // Tenta inlinar função pura (ex: zero). Se
+                            // inlinable, traduz o corpo; senão, None.
+                            if let Some(inlined) = self.try_inline(name, args) {
+                                self.translate_int(&inlined)
+                            } else {
+                                None
+                            }
+                        }
+                    }
+                } else {
+                    None
+                }
+            }
+            TypedExprKind::Grouping { inner } => self.translate_int(&inner.node),
+            _ => None,
+        }
+    }
+
+    /// Extrai o contra-exemplo do modelo Z3.
+    pub(crate) fn extract_counter_example(&self, model: &z3::Model) -> String {
+        let parts: Vec<String> = self
+            .var_cache
+            .iter()
+            .filter_map(|(name, var)| match var {
+                VarKind::Int(i) => {
+                    let val = model.eval(i, true);
+                    val.map(|v| format!("{name} = {v}"))
+                }
+                VarKind::Bool(b) => {
+                    let val = model.eval(b, true);
+                    val.map(|v| format!("{name} = {v}"))
+                }
+            })
+            .collect();
+
+        if parts.is_empty() {
+            "caso não coberto pelos guards".to_string()
+        } else {
+            parts.join(", ")
+        }
+    }
+}

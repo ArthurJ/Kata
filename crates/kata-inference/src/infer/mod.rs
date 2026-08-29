@@ -74,9 +74,11 @@ use crate::typed::{TypedAction, TypedExpr, TypedFunction, TypedModule};
 
 use self::expr::{InferCtx, infer_expr};
 use self::helpers::{item_span_or_synthetic, populate_dispatch_table};
-use self::post_conditions::{
-    InlineFnTable, PostCondTable, extract_inline_bodies, extract_post_conditions,
-};
+// Re-export para o tradutor Z3 unificado (z3_translate.rs) — o módulo
+// `post_conditions` é privado de `infer`, mas o tradutor precisa de
+// `InlineFnTable` (inlining de funções puras) e `substitute_params`.
+pub(crate) use self::post_conditions::{InlineFnTable, substitute_params};
+use self::post_conditions::{PostCondTable, extract_inline_bodies, extract_post_conditions};
 
 /// Infere o tipo de um módulo completo.
 ///
