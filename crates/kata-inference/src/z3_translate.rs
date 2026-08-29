@@ -105,6 +105,37 @@ impl Z3Translator {
         }
     }
 
+    /// Semear bindings `let` imutáveis do escopo em vigor (path
+    /// conditions) — mesma mecânica de `seed_with_bindings`: o termo
+    /// do VALOR é memoizado no `var_cache` sob o NOME do binding
+    /// (aliasing). `let d := x` faz o predicado `> d 0` traduzir como
+    /// `> x 0`, conectando o binding aos facts do escopo.
+    ///
+    /// Tipos:
+    /// - Boolean → `translate_bool` (guards o referenciam);
+    /// - Int-traduzível → `translate_int` (comparações inlinam o
+    ///   valor: `let d := * x 2` + `> d 0` vira `x*2 > 0`);
+    /// - não-traduzível (Float, Text, ...) → variável livre
+    ///   (fallback conservador — nunca falso erro).
+    ///
+    /// O caller (coleta em expr.rs) garante que só bindings IMUTÁVEIS
+    /// chegam aqui: `var` nunca é semeado (mutável, sem SSA —
+    /// seeding seria unsound).
+    pub(crate) fn seed_let_bindings(&mut self, bindings: &[(String, TypedExpr)]) {
+        for (name, value) in bindings {
+            if value.ty == Ty::boolean() {
+                let translated = self.translate_bool(value);
+                self.var_cache
+                    .insert(name.clone(), VarKind::Bool(translated));
+            } else if let Some(i) = self.translate_int(value) {
+                self.var_cache.insert(name.clone(), VarKind::Int(i));
+            } else {
+                let translated = self.fresh_bool();
+                self.var_cache.insert(name.clone(), VarKind::Bool(translated));
+            }
+        }
+    }
+
     /// Traduz uma expressão para um Z3 Bool.
     pub(crate) fn translate_bool(&mut self, expr: &TypedExpr) -> Bool {
         match &expr.kind {

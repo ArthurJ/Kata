@@ -176,22 +176,53 @@ test_match!()"#;
 
 // ── 3. Guard contradiz predicado → refutação compile-time ─────────
 
-/// `<= n 0` contradiz `> _ 0`. O Z3 prova que o predicado é refutado
-/// pelas path conditions. Deve ser erro compile-time.
+/// `<= n 0` contradiz `> _ 0` com n NÃO-LITERAL (param). O Z3 prova
+/// que o predicado é refutado pelas path conditions no braço True
+/// (fact `<= n 0` ∧ ¬`> n 0` é SAT). Deve ser erro compile-time.
+///
+/// NOTA (seeding de let-bindings): com `let n := <literal>`, o Z3
+/// sabe o valor e o braço contraditório vira dead code — a prova é
+/// vacuously true e o programa COMPILA (correto em runtime). A
+/// refutação genuína só aparece com valor não conhecido (param).
 #[test]
 fn t_guard_refuta_ascription_refined() {
     let src = r#"data (Int, > _ 0) as PositiveInt
 
-action test_refute => PositiveInt
-    let n := 5
+action test_refute (n::Int) => PositiveInt
     match (<= n 0)
         Boolean::True: n::PositiveInt
         Boolean::False: n::PositiveInt
-test_refute!()"#;
+test_refute!(5)"#;
     assert!(
         infer_fails(src),
         "guard <= n 0 contradiz > _ 0, deve falhar em compile-time"
     );
+}
+
+/// `let n := 5` (literal) + guard contraditório: o Z3 sabe `n = 5`,
+/// o fact `<= 5 0` é falso — braço True é INALCANÇÁVEL (dead code).
+/// A prova por vacuous truth é válida: o programa nunca viola o
+/// predicado em runtime (sempre cai no False, onde `5 > 0` prova).
+/// Comportamento novo do seeding de let-bindings (2026-08-29): onde
+/// antes o compilador rejeitava um programa correto (falso positivo),
+/// agora aceita com prova.
+#[test]
+fn t_guard_contraditorio_com_literal_e_dead_branch() {
+    let src = r#"data (Int, > _ 0) as PositiveInt
+
+action test_dead => PositiveInt
+    let n := 5
+    match (<= n 0)
+        Boolean::True: n::PositiveInt
+        Boolean::False: n::PositiveInt
+test_dead!()"#;
+    let (raw, ty) = eval_src(src);
+    assert_eq!(
+        ty,
+        Ty::Struct(StructKey::Plain("PositiveInt".into())),
+        "braço True é dead code (n=5 faz <= 5 0 falso); programa correto deve compilar"
+    );
+    assert_eq!(untag_smi(raw), 5);
 }
 
 // ── 4. Sem path conditions → rejeita não-literal (comportamento original) ─

@@ -548,6 +548,19 @@ pub(crate) fn infer_expr_hinted(
                 env.define(name, val_ty, "__local__");
             }
 
+            // Coleta para path conditions: `let` é imutável e único
+            // por escopo — a identidade `nome = valor` vale por todo
+            // o tempo de vida do binding. Semeada no Z3 como aliasing
+            // (try_prove_with_path_conditions), conecta o binding aos
+            // facts do escopo. `var` NÃO passa por aqui (caminho Var
+            // separado — mutável, seeding seria unsound).
+            // Exceções: `_`-prefixados são sintéticos de diretivas.
+            if !name.starts_with('_') {
+                ctx.path_conditions
+                    .borrow_mut()
+                    .add_let_binding(name, typed_value.clone());
+            }
+
             (
                 Ty::Unit,
                 TypedExprKind::Let {
@@ -626,6 +639,24 @@ pub(crate) fn infer_expr_hinted(
                         field_index: i as u32,
                     },
                 };
+
+                // Coleta para path conditions: sub-binding imutável do
+                // destructuring. O valor sembrado é o ELEMENTO i quando
+                // o valor destruturado é um literal de tupla (traduzível
+                // pelo Z3: `let (a, b) := (n, * n 2)` semeia `b = * n 2`);
+                // senão semeia o FieldAccess (não-traduzível, vira const
+                // livre — conservador).
+                let seeded_value = match &typed_value.kind {
+                    TypedExprKind::Tuple { elements } => match elements.get(i) {
+                        Some(elem) => elem.node.clone(),
+                        None => access.clone(),
+                    },
+                    _ => access.clone(),
+                };
+                ctx.path_conditions
+                    .borrow_mut()
+                    .add_let_binding(name, seeded_value);
+
                 field_bindings.push((name.clone(), Spanned::new(access, Span::synthetic())));
             }
 

@@ -27,14 +27,25 @@ use crate::z3_translate::Z3Translator;
 ///   `let`/`constant` são imutáveis: o conhecimento sobre um binding
 ///   é válido pelo seu tempo de vida.
 ///
-/// O Z3 vê `facts + learned_facts` concatenados via `facts()`.
-/// `checkpoint()`/`rollback_to(n)` gerenciam o escopo: grava-se o
-/// índice de `facts` antes do braço, trunca-se ao sair (preservando
-/// `learned_facts`).
+/// Mais uma loja de BINDINGS (não-facts):
+/// - `let_bindings`: identidades `nome = valor` de bindings imutáveis
+///   (`let`, params, sub-bindings de destructuring). Semeados no Z3
+///   como aliasing (o tradutor memoiza o termo do VALOR sob o NOME) —
+///   mais forte que asserir igualdade. Sound pelos mesmos motivos:
+///   `let` é imutável e único por escopo (shadowing same-scope é erro;
+///   sombreamento aninhado é last-wins com rollback do braço). `var`
+///   nunca entra aqui (mutável, sem SSA).
+///
+/// O Z3 vê `facts + learned_facts` concatenados via `facts()`; os
+/// bindings alimentam o tradutor ANTES da tradução (seeding).
+/// `checkpoint()`/`rollback_to(n)` gerenciam o escopo: grava-se os
+/// índices de `facts` e `let_bindings` antes do braço, truncam-se ao
+/// sair (preservando `learned_facts` e bindings nascidos fora).
 #[derive(Debug, Clone, Default)]
 pub(crate) struct PathConditionCtx {
     facts: Vec<TypedExpr>,
     learned_facts: Vec<TypedExpr>,
+    let_bindings: Vec<(String, TypedExpr)>,
 }
 
 impl PathConditionCtx {
@@ -57,21 +68,60 @@ impl PathConditionCtx {
     }
 
     /// True se não há facts nem learned_facts.
+    ///
+    /// NOTA: bindings `let` NÃO entram no gate. O gate decide se há
+    /// uma prova a tentar; bindings são definições, não restrições —
+    /// sem facts a conjunção seria `true` e `true ⟹ ¬pred` refutaria
+    /// qualquer predicado não-tautológico. O gate continua em facts.
     pub(crate) fn is_empty(&self) -> bool {
         self.facts.is_empty() && self.learned_facts.is_empty()
     }
 
-    /// Grava o índice atual de `facts` como checkpoint.
-    /// Usar antes de entrar num braço; `rollback_to` ao sair.
-    pub(crate) fn checkpoint(&self) -> usize {
-        self.facts.len()
+    /// Registra um binding imutável (`let`, sub-binding de
+    /// destructuring) para seeding no Z3.
+    ///
+    /// Append-only: sombreamento aninhado legal apenas empilha o novo
+    /// binding — o last-wins é resolvido no seeding (a ordem de inserção
+    /// no `var_cache` do tradutor dá last-wins naturalmente). Isto
+    /// preserva a semântica de checkpoint/rollback: truncar remove os
+    /// bindings do braço e o externo (empurrado antes do checkpoint)
+    /// continua na loja. Remover o antigo aqui (retain) quebraria o
+    /// rollback — a entrada externa teria sido apagada.
+    pub(crate) fn add_let_binding(&mut self, name: &str, value: TypedExpr) {
+        self.let_bindings.push((name.to_string(), value));
     }
 
-    /// Trunca `facts` de volta ao checkpoint, preservando `learned_facts`.
-    /// Usar ao sair de um braço para remover facts de guard.
-    pub(crate) fn rollback_to(&mut self, checkpoint: usize) {
-        self.facts.truncate(checkpoint);
+    /// Bindings imutáveis acumulados, em ordem de registro. Nomes
+    /// duplicados (sombreamento aninhado): o ÚLTIMO registro vence —
+    /// resolvido no seeding, não aqui.
+    pub(crate) fn let_bindings(&self) -> &[(String, TypedExpr)] {
+        &self.let_bindings
     }
+
+    /// Grava os índices atuais como checkpoint (antes de entrar num
+    /// braço). `rollback_to` ao sair trunca `facts` e `let_bindings`
+    /// de volta — bindings nascidos no braço morrem no braço; os de
+    /// fora sobrevivem (trans-escopo, como learned_facts).
+    pub(crate) fn checkpoint(&self) -> PathCheckPoint {
+        PathCheckPoint {
+            facts: self.facts.len(),
+            lets: self.let_bindings.len(),
+        }
+    }
+
+    /// Trunca `facts` e `let_bindings` de volta ao checkpoint,
+    /// preservando `learned_facts` e bindings anteriores ao braço.
+    pub(crate) fn rollback_to(&mut self, checkpoint: PathCheckPoint) {
+        self.facts.truncate(checkpoint.facts);
+        self.let_bindings.truncate(checkpoint.lets);
+    }
+}
+
+/// Índices de escopo gravados por `PathConditionCtx::checkpoint`.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct PathCheckPoint {
+    facts: usize,
+    lets: usize,
 }
 
 /// Configura Z3 com rlimit para determinismo de esforço.
@@ -109,6 +159,14 @@ pub(crate) fn try_prove_with_path_conditions(
     with_z3_config(&cfg, || {
         let solver = Solver::new();
         let mut translator = Z3Translator::with_inline_fns(inline_fns);
+
+        // Seeding: bindings `let` imutáveis do escopo em vigor viram
+        // aliasing no var_cache — o predicado `> d 0` traduz pelo termo
+        // do VALOR de `d` (ex: `> x 0`), conectando o binding aos
+        // facts. Bindings não-traduzíveis viram variável livre
+        // (fallback conservador). Sem isto, `d` é const livre e o Z3
+        // não conecta `d = x`.
+        translator.seed_let_bindings(path_conditions.let_bindings());
 
         // Traduz facts como conjunção.
         let z3_facts: Vec<Bool> = path_conditions
