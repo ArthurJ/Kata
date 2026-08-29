@@ -2246,6 +2246,12 @@ módulo), sempre precedendo imediatamente o item que modificam.
   de `import stdio`) ou variável `File`. Múltiplas diretivas `@log` são
   suportadas — cada uma injeta independentemente. Independente de `log!()` (action
   do stdlib para publicação explícita no corpo). Ver §20.
+  
+  **Interação com TCO:** Quando a função tem tail calls, o codegen aplica o
+  mesmo **wrapper/inner split** de `@cache`/`@timer`: os hooks de `@log`
+  executam no wrapper (1 frame, 1 execução), o inner faz TCO via
+  `return_call`. `when: "enter"` dispara 1 vez na chamada externa;
+  `when: "exit"` dispara 1 vez no retorno final. Stack O(1).
 * **`@associative(0)`**: Anota que a função é associativa, informando o elemento
   neutro. Permite que o otimizador TRMA converta recursões bloqueadas em
   recursão de cauda perfeita.
@@ -3016,6 +3022,19 @@ action processar (x::Int) => Int
   da função. Referenciar variável do corpo é erro compile-time.
 - `when: "exit"` → placeholders podem referenciar params e variáveis do corpo.
   O codegen injeta a publicação no epílogo (antes do retorno).
+
+**Interação com TCO (funções puras):**
+
+Quando uma função pura com `@log` tem tail calls, o codegen aplica o
+**wrapper/inner split** — a mesma estrutura de `@cache`/`@timer`:
+
+- O **wrapper** executa os hooks de `@log` (1 frame, 1 execução).
+- O **inner** faz TCO via `return_call` (stack O(1), frames reusados).
+- `when: "enter"` dispara **1 vez** na chamada externa (não a cada iteração).
+- `when: "exit"` dispara **1 vez** no retorno final (não a cada retorno intermediário).
+
+Sem tail calls, o comportamento é inline: hooks executam a cada chamada
+(normal, 1 frame por chamada no stack).
 
 ### 20.2. Action `log!()`
 

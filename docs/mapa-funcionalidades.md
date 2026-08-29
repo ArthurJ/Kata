@@ -101,6 +101,7 @@ Diretivas que entram aqui:
 - `@commutative` — dispatch tenta argumentos invertidos
 - `@cache` — memoização de funções puras (strategy: LRU/FIFO/MRU/LFU, capacity configurável). Com tail calls, wrapper/inner split preserva TCO.
 - `@timer` — medição de tempo de execução (topic, msg). Com tail calls, wrapper/inner split preserva TCO.
+- `@log` — telemetria via CSP (when: enter/exit). Com tail calls, wrapper/inner split preserva TCO. Enter e exit disparam 1 vez (wrapper), não a cada iteração.
 
 Dependencies: 2 (múltiplas cláusulas = dispatch), 4 (tipos concretos).
 

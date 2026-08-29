@@ -660,7 +660,7 @@ len "hello"              # 5 — text (COUNTABLE dispatch, kata_rt_string_len)
   - `@associative` + `@commutative` → habilitam TRMA.
   - `@ffi` → informa linker de símbolo externo.
   - `@builtin` → marca função para síntese de nó TAST especializado (map/filter/fold).
-  - `@cache` + `@timer` com tail calls → wrapper/inner split: wrapper executa intrínsecas (cache/timer), inner executa body com TCO. Stack O(1).
+  - `@cache` + `@timer` + `@log` com tail calls → wrapper/inner split: wrapper executa intrínsecas (cache/timer) e hooks de `@log` (enter/exit), inner executa body com TCO. Stack O(1). `@log{enter}` dispara 1 vez (wrapper); `@log{exit}` dispara 1 vez (epílogo do wrapper).
   - `spawn!` → special form que spawn processo OS separado (multiprocess). Aceita tupla (converte implicitamente) ou dict com `raw:`/`serialized:`. Não é diretiva — é operação ao lado de `fork!`.
   - `@log` → veja seção dedicada abaixo.
 
