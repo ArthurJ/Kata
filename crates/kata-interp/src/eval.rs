@@ -527,7 +527,11 @@ pub fn eval(
         TypedExprKind::Match { scrutinee, arms } => {
             let scrut_val = eval(ctx, scrutinee, env)?;
             for arm in arms {
-                env.push_scope();
+                // ── Escopo único da action (Impl D): braço NÃO abre
+                // escopo filho. Snapshot das chaves ANTES do pattern;
+                // bindings frescos do braço evaporam no fim (reuso
+                // de `var` externo persiste com o novo valor).
+                let keys = env.scope_keys();
                 let matched = if let Some(ref pat) = arm.pattern {
                     match_pattern(pat, scrut_val, env)
                 } else {
@@ -538,27 +542,29 @@ pub fn eval(
                     if let Some(ref guard) = arm.guard {
                         let guard_val = eval(ctx, guard, env)?;
                         if guard_val == 0 {
-                            env.pop_scope();
+                            env.evaporate(keys);
                             continue;
                         }
                     }
                     let result = eval(ctx, &arm.body, env);
-                    env.pop_scope();
+                    env.evaporate(keys);
                     return result;
                 }
-                env.pop_scope();
+                env.evaporate(keys);
             }
             Err(InterpError::Runtime("match não-exaustivo".to_string()))
         }
 
         // ── Block ────────────────────────────────────────────
+        // Escopo único da action: Block não abre escopo. Statements
+        // definem no escopo atual (typeck garante evaporação de
+        // bindings de braço via undefine; Block puro não tem
+        // bindings próprios além dos statements).
         TypedExprKind::Block { stmts } => {
-            env.push_scope();
             let mut result = 0i64;
             for stmt in stmts {
                 result = eval(ctx, stmt, env)?;
             }
-            env.pop_scope();
             Ok(result)
         }
 
@@ -637,7 +643,11 @@ pub fn eval(
         TypedExprKind::Continue => Err(InterpError::Continue),
 
         TypedExprKind::Loop { body } => loop {
-            env.push_scope();
+            // ── Escopo único da action (Impl D): iteração NÃO abre
+            // escopo. Snapshot ANTES do corpo; bindings frescos da
+            // iteração evaporam no fim dela (antes de processar
+            // Break/Continue — não vazam para a próxima iteração).
+            let keys = env.scope_keys();
             let mut result = 0i64;
             let mut early_exit: Option<Result<Value, InterpError>> = None;
             for stmt in body {
@@ -657,7 +667,7 @@ pub fn eval(
                     }
                 }
             }
-            env.pop_scope();
+            env.evaporate(keys);
             match early_exit {
                 Some(Err(InterpError::Break)) => return Ok(result),
                 Some(Err(InterpError::Continue)) => continue,
@@ -731,16 +741,20 @@ pub fn eval(
         } => {
             let coll_val = eval(ctx, iterable, env)?;
             // Iterar lista (Cons cells)
+            // ── Escopo único da action (Impl D): iteração NÃO abre
+            // escopo. O loop-var define no escopo da action — reuso
+            // (var externo prévio) persiste com o último elemento;
+            // fresco evapora no fim de CADA iteração.
             let mut current = coll_val;
             while current != 0 {
                 let head = rt::kata_rt_list_head(current);
                 let tail = rt::kata_rt_list_tail(current);
-                env.push_scope();
+                let keys = env.scope_keys();
                 env.define(var_name, head);
                 for stmt in body {
                     eval(ctx, stmt, env)?;
                 }
-                env.pop_scope();
+                env.evaporate(keys);
                 current = tail;
             }
             Ok(0)
@@ -1094,8 +1108,14 @@ fn eval_select(
                     "select: canal pronto mas recv falhou".to_string(),
                 ));
             }
+            // ── Escopo único da action (Impl D): braço de select define
+            // no escopo da action; binding fresco evapora no fim do
+            // braço (typeck rejeita leitura pós-select).
+            let keys = env.scope_keys();
             env.define(bind_name, val);
-            return eval(ctx, body, env);
+            let result = eval(ctx, body, env);
+            env.evaporate(keys);
+            return result;
         }
         return Err(InterpError::Runtime(
             "select: índice de braço inválido".to_string(),
@@ -1281,7 +1301,11 @@ fn eval_tail(
         TypedExprKind::Match { scrutinee, arms } => {
             let scrut_val = eval(ctx, scrutinee, env)?;
             for arm in arms {
-                env.push_scope();
+                // ── Escopo único da action (Impl D): braço NÃO abre
+                // escopo filho. Snapshot das chaves ANTES do pattern;
+                // bindings frescos do braço evaporam no fim (reuso
+                // de `var` externo persiste com o novo valor).
+                let keys = env.scope_keys();
                 let matched = if let Some(ref pat) = arm.pattern {
                     match_pattern(pat, scrut_val, env)
                 } else {
@@ -1291,35 +1315,34 @@ fn eval_tail(
                     if let Some(ref guard) = arm.guard {
                         let guard_val = eval(ctx, guard, env)?;
                         if guard_val == 0 {
-                            env.pop_scope();
+                            env.evaporate(keys);
                             continue;
                         }
                     }
                     let result = eval_tail(ctx, &arm.body, env);
-                    env.pop_scope();
+                    env.evaporate(keys);
                     return result;
                 }
-                env.pop_scope();
+                env.evaporate(keys);
             }
             Err(InterpError::Runtime("match não-exaustivo".to_string()))
         }
 
         // ── Block em posição de cauda — propagar eval_tail para a última expr ──
+        // Escopo único da action: sem push/pop.
         TypedExprKind::Block { stmts } => {
             if stmts.is_empty() {
                 return Ok(TailResult::Done(0));
             }
-            env.push_scope();
             let last = stmts.len() - 1;
             for (i, stmt) in stmts.iter().enumerate() {
                 if i == last {
                     let result = eval_tail(ctx, stmt, env);
-                    env.pop_scope();
                     return result;
                 }
                 eval(ctx, stmt, env)?;
             }
-            unreachable!()
+            unreachable!("loop sempre retorna no último stmt")
         }
 
         // ── Demais nós — delegar para eval ──
@@ -1772,9 +1795,7 @@ fn match_pattern(pat: &Spanned<TypedPattern>, value: Value, env: &mut Env) -> bo
 /// como i64 (para passar para kata_rt_dict_insert / kata_rt_set_insert).
 ///
 /// Espelha `dict_set_lit::hash_fn_name` / `eq_fn_name` do codegen.
-fn resolve_hash_eq(
-    ty: &Ty,
-) -> Result<(Box<dyn Fn(i64) -> i64>, i64), InterpError> {
+fn resolve_hash_eq(ty: &Ty) -> Result<(Box<dyn Fn(i64) -> i64>, i64), InterpError> {
     match ty {
         Ty::Prim(PrimTy::Int) => Ok((
             Box::new(|v| rt::kata_rt_hash_int(v)),

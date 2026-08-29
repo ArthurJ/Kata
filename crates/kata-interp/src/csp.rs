@@ -122,6 +122,26 @@ pub extern "C" fn interp_trampoline(
     env.define("__stdout__", kata_rt::kata_rt_stdout());
     env.define("__stderr__", kata_rt::kata_rt_stderr());
 
+    // Prólogo de constants (P26, Impl D): o env de action é fresco,
+    // mas constants do módulo são legíveis dentro de actions. O
+    // eval_entry_with_env avalia o prólogo no env top-level; o
+    // trampoline rodava a action sem ele → "variável não definida".
+    // Espelha o JIT: comptime pass substitui Ident por literal.
+    {
+        let module = entry.module.clone();
+        for c in &module.constants {
+            if let kata_inference::TypedExprKind::ConstantBinding { name, value } = &c.node.kind {
+                let v = crate::eval::eval(&mut ctx, value, &mut env)
+                    .map_err(|e| {
+                        eprintln!("interp_trampoline: erro avaliando constant '{name}': {e}");
+                        0
+                    })
+                    .unwrap_or(0);
+                env.define(name, v);
+            }
+        }
+    }
+
     let mut arg_vals: Vec<i64> = Vec::new();
 
     if args_ptr_real != 0 {

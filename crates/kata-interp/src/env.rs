@@ -68,4 +68,29 @@ impl Env {
         }
         Err(format!("variável não declarada: {name}"))
     }
+
+    /// Snapshot das chaves do escopo atual — para evaporação de
+    /// bindings frescos de construtos (escopo único da action,
+    /// 2026-08-30). Braços de match/select e corpos de for/loop
+    /// definem no escopo da action; o que já existia (reuso) fica,
+    /// o que nasceu no construto morre no fim dele.
+    pub fn scope_keys(&self) -> std::collections::HashSet<String> {
+        self.scopes
+            .last()
+            .expect("env sem escopos")
+            .keys()
+            .cloned()
+            .collect()
+    }
+
+    /// Evapora bindings frescos: remove do escopo atual todo binding
+    /// que NÃO estava no snapshot. Reuso (key no snapshot) persiste
+    /// com o valor escrito pelo construto — `var` externo re-binclado
+    /// por braço/for mantém o último valor escrito (P18/P19/P20).
+    pub fn evaporate(&mut self, snapshot: std::collections::HashSet<String>) {
+        self.scopes
+            .last_mut()
+            .expect("env sem escopos")
+            .retain(|k, _| snapshot.contains(k));
+    }
 }
