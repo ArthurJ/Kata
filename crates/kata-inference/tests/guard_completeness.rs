@@ -215,6 +215,122 @@ foo 5";
     );
 }
 
+/// Guards via `with` tautológicos sem otherwise: neg/zero/pos.
+///
+/// Regressão do bug "guards via with fazem a prova Z3 de exaustividade
+/// falhar sempre": `neg := < x 0` ficava `Ident("neg")` na condição e o
+/// tradutor criava um Bool livre no solver. Disjunção
+/// `neg ∨ zero ∨ pos` com bindings expandidos é tautologia.
+#[test]
+fn guard_with_bindings_tautology_ok() {
+    let src = "\
+sign :: Int => Int\n\
+lambda x:\n\
+\x20   neg: - 0 1\n\
+\x20   zero: 0\n\
+\x20   pos: 1\n\
+\x20   with\n\
+\x20       neg := < x 0\n\
+\x20       zero := = x 0\n\
+\x20       pos := > x 0\n\
+sign 5";
+    let tmod = infer_src(src);
+    let entry = entry_typed(&tmod);
+    assert_eq!(entry.ty, Ty::int());
+}
+
+/// Guards via `with` NÃO-tautológicos sem otherwise → NonExhaustiveMatch.
+///
+/// Só `neg := < x 0` não cobre `x >= 0` → Z3 encontra contra-exemplo.
+/// Regressão: o bug não só rejeitava programas válidos, como o Bool livre
+/// tornava QUALQUER conjunto de guards via with não-exaustivo — aqui
+/// verificamos que o contra-exemplo é real (não um artefato do bug).
+#[test]
+fn guard_with_bindings_non_exhaustive_error() {
+    let src = "\
+foo :: Int => Int\n\
+lambda x:\n\
+\x20   neg: 0\n\
+\x20   with\n\
+\x20       neg := < x 0\n\
+foo 5";
+    let err = infer_src_err(src);
+    assert!(
+        matches!(
+            err,
+            kata_diagnostics::MiddleError::NonExhaustiveMatch { .. }
+        ),
+        "esperava NonExhaustiveMatch, got {err:?}"
+    );
+}
+
+/// Guards via `with` em CADEIA: binding referencia binding anterior.
+///
+/// `pos := and nonneg (not zero)` precisa de `nonneg`/`zero` já
+/// traduzidos quando `pos` for — e `nonneg` referencia `neg`.
+/// Regressão: bindings não resolvidos viravam Bools livres.
+#[test]
+fn guard_with_bindings_chain_tautology_ok() {
+    let src = "\
+sign :: Int => Int\n\
+lambda x:\n\
+\x20   neg: - 0 1\n\
+\x20   zero: 0\n\
+\x20   pos: 1\n\
+\x20   with\n\
+\x20       neg := < x 0\n\
+\x20       zero := = x 0\n\
+\x20       nonneg := not neg\n\
+\x20       pos := and nonneg (not zero)\n\
+sign 5";
+    let tmod = infer_src(src);
+    let entry = entry_typed(&tmod);
+    assert_eq!(entry.ty, Ty::int());
+}
+
+/// Guards via `with` + `otherwise` — trivialmente exaustivo, Z3 nem roda.
+#[test]
+fn guard_with_bindings_and_otherwise_ok() {
+    let src = "\
+classify :: Int => Text\n\
+lambda x:\n\
+\x20   big: \"grande\"\n\
+\x20   otherwise: \"pequeno\"\n\
+\x20   with\n\
+\x20       big := > x 10\n\
+classify 3";
+    let tmod = infer_src(src);
+    let entry = entry_typed(&tmod);
+    assert_eq!(entry.ty, Ty::text());
+}
+
+/// Redundância via guards: duas CLÁUSULAS com guards idênticos via `with`.
+///
+/// `check_guard_implication` também precisa dos bindings resolvidos:
+/// qualquer input que satisfaça o guard da cláusula 2 (`pos := > x 0`)
+/// também satisfaz o da cláusula 1 (idêntico), que dispara primeiro →
+/// cláusula 2 inalcançável. Com o bug, os guards viravam Bools livres
+/// distintos e a implicação nunca era provada.
+#[test]
+fn guard_with_bindings_redundant_error() {
+    let src = "\
+foo :: Int => Int\n\
+lambda x:\n\
+\x20   pos: 1\n\
+\x20   with\n\
+\x20       pos := > x 0\n\
+lambda x:\n\
+\x20   pos: 2\n\
+\x20   with\n\
+\x20       pos := > x 0\n\
+foo 5";
+    let err = infer_src_err(src);
+    assert!(
+        matches!(err, kata_diagnostics::MiddleError::RedundantClause { .. }),
+        "esperava RedundantClause, got {err:?}"
+    );
+}
+
 /// Guards com `and` e `not` complementares: `and (> x 0) (< x 10)`
 /// e `not (and (> x 0) (< x 10))` → tautologia.
 #[test]

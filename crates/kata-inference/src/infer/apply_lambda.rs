@@ -185,7 +185,11 @@ fn build_lambda_apply(
     // Verifica completude de guards para lambda em aplicação.
     // (Movido de infer_lambda_body — ver function_infer.rs para funções nomeadas.)
     if !typed_guards.is_empty() {
-        crate::guard_completeness::check_guard_completeness(&typed_guards, &body.span)?;
+        crate::guard_completeness::check_guard_completeness(
+            &typed_guards,
+            &typed_with_bindings,
+            &body.span,
+        )?;
     }
 
     // Verifica o tipo de retorno se um esperado foi fornecido (caminho com hint).

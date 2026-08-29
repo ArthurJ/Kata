@@ -175,7 +175,11 @@ pub(crate) fn infer_named_function(
     // Movido de infer_lambda_body para cá (depois da redundância).
     for clause in &typed_clauses {
         if !clause.guards.is_empty() {
-            crate::guard_completeness::check_guard_completeness(&clause.guards, &clause.body.span)?;
+            crate::guard_completeness::check_guard_completeness(
+                &clause.guards,
+                &clause.with_bindings,
+                &clause.body.span,
+            )?;
         }
     }
 

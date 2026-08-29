@@ -81,7 +81,7 @@ pub(crate) fn check_redundant_clauses(clauses: &[TypedLambdaClause]) -> InferRes
                 // Se M sempre dispara (guards exaustivos), N é inalcançável.
                 (true, false) => {
                     let span = &clause_m.body.span;
-                    if guard_is_tautology(&clause_m.guards, span) {
+                    if guard_is_tautology(&clause_m.guards, &clause_m.with_bindings, span) {
                         return Err(MiddleError::RedundantClause {
                             span: clause_n.body.span.into(),
                             hint: Some(
@@ -99,7 +99,13 @@ pub(crate) fn check_redundant_clauses(clauses: &[TypedLambdaClause]) -> InferRes
                 // guards de M, M dispara antes de N → N redundante.
                 (true, true) => {
                     let span = &clause_n.body.span;
-                    if check_guard_implication(&clause_n.guards, &clause_m.guards, span) {
+                    if check_guard_implication(
+                        &clause_n.guards,
+                        &clause_m.guards,
+                        &clause_n.with_bindings,
+                        &clause_m.with_bindings,
+                        span,
+                    ) {
                         return Err(MiddleError::RedundantClause {
                             span: clause_n.body.span.into(),
                             hint: Some(
@@ -124,8 +130,15 @@ pub(crate) fn check_redundant_clauses(clauses: &[TypedLambdaClause]) -> InferRes
 /// (Z3 Unknown) como "não provado" — conservador, não reporta redundância.
 /// `Err(NonExhaustiveMatch)` (Z3 SAT — contra-exemplo existe) também é
 /// "não provado".
-fn guard_is_tautology(guards: &[crate::typed_pattern::TypedGuardClause], span: &Span) -> bool {
-    match check_guard_completeness(guards, span) {
+///
+/// `with_bindings` são os bindings `with` da cláusula dona dos guards —
+/// mesmos parâmetros de `check_guard_completeness`.
+fn guard_is_tautology(
+    guards: &[crate::typed_pattern::TypedGuardClause],
+    with_bindings: &[crate::typed_pattern::TypedWithBinding],
+    span: &Span,
+) -> bool {
+    match check_guard_completeness(guards, with_bindings, span) {
         Ok(()) => true,
         Err(_) => false,
     }

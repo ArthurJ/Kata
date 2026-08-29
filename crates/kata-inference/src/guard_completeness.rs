@@ -5,6 +5,10 @@
 //! 1. Se algum guard tem `condition: None` (`otherwise`) → trivialmente
 //!    exaustivo, Ok sem Z3.
 //! 2. Senão, traduzir cada condição `TypedExpr` → expressão Z3.
+//!    ANTES disso, semear os bindings do `with` da cláusula no tradutor
+//!    (`seed_with_bindings`) — sem isso, um guard `neg:` cujo valor vem de
+//!    `neg := < x 0` vira `Ident("neg")` → Bool livre no solver, e a
+//!    prova falha sempre (bug 2026-08-29).
 //! 3. Construir a disjunção de todas as condições.
 //! 4. Asserção: negação da disjunção.
 //! 5. `solver.check()`:
@@ -15,18 +19,14 @@
 //! Também oferece `check_guard_implication` para verificação de
 //! redundância de cláusulas: prova se `guards_N ⟹ guards_M`.
 
-use std::collections::HashMap;
-
 use kata_ast::Span;
 use kata_diagnostics::MiddleError;
 
-use crate::typed::{TypedExpr, TypedExprKind, TypedGuardClause};
+use crate::typed::{TypedExpr, TypedGuardClause};
+use crate::typed_pattern::TypedWithBinding;
+use crate::z3_translate::Z3Translator;
 
-use z3::{
-    Config, SatResult, Solver,
-    ast::{Bool, Int},
-    with_z3_config,
-};
+use z3::{Config, SatResult, Solver, ast::Bool, with_z3_config};
 
 /// Resultado da verificação de completude de guards.
 pub(crate) type GuardResult = Result<(), MiddleError>;
@@ -46,7 +46,16 @@ enum Ternary {
 ///
 /// Se algum guard tem `condition: None` (`otherwise`), trivialmente Ok.
 /// Senão, usa Z3 para provar que a disjunção das condições é tautologia.
-pub(crate) fn check_guard_completeness(guards: &[TypedGuardClause], span: &Span) -> GuardResult {
+///
+/// `with_bindings` são os bindings `with` da cláusula (`nome := expr`).
+/// São traduzidos primeiro e memoizados: guards que referenciam um
+/// binding (`neg: ...` com `neg := < x 0`) provam sobre o valor REAL,
+/// não sobre um Bool livre.
+pub(crate) fn check_guard_completeness(
+    guards: &[TypedGuardClause],
+    with_bindings: &[TypedWithBinding],
+    span: &Span,
+) -> GuardResult {
     // otherwise presente — trivialmente exaustivo.
     if guards.iter().any(|g| g.condition.is_none()) {
         return Ok(());
@@ -65,12 +74,12 @@ pub(crate) fn check_guard_completeness(guards: &[TypedGuardClause], span: &Span)
 
     let span_val = *span;
 
-    match prove_tautology(&conditions) {
+    match prove_tautology(&conditions, with_bindings) {
         Ternary::Proven => Ok(()),
         Ternary::Refuted => {
             // ¬(cond1 ∨ ... ∨ condN) é satisfazível → existe contra-exemplo.
             // Precisa reexecutar com modelo para extrair o contra-exemplo.
-            let counter_example = prove_tautology_with_model(&conditions);
+            let counter_example = prove_tautology_with_model(&conditions, with_bindings);
             Err(MiddleError::NonExhaustiveMatch {
                 missing: vec![counter_example],
                 span: span_val.into(),
@@ -94,12 +103,42 @@ pub(crate) fn check_guard_completeness(guards: &[TypedGuardClause], span: &Span)
 ///
 /// Prova: `guards_N ⟹ guards_M`, i.e., `guards_N ∧ ¬guards_M` é UNSAT.
 ///
+/// Cada cláusula tem seus PRÓPRIOS bindings `with` — `with_n` são os
+/// bindings da cláusula N, `with_m` os da cláusula M. A prova usa um
+/// tradutor por cláusula? NÃO — a implicação é sobre o MESMO input:
+/// bindings de N e M são avaliados sobre os mesmos params, então um
+/// único tradutor semeados com `with_n` + `with_m` seria INCORRETO se
+/// os nomes colidissem com semânticas diferentes.
+///
+/// Hmm — na verdade, cada cláusula de uma função multi-cláusula recebe
+/// os mesmos argumentos. Bindings do `with` são computações puras sobre
+/// os params; dois bindings com o mesmo nome em cláusulas diferentes
+/// computam o mesmo valor se as expressões forem iguais, mas podem ser
+/// expressões diferentes. O correto é não compartilhar: a implicação
+/// `guards_N ⟹ guards_M` quantifica sobre inputs onde AMBAS as
+/// cláusulas casam os patterns — e cada guarda é avaliada com seus
+/// próprios bindings.
+///
+/// Simplificação adotada (documentada): um único tradutor, semeado com
+/// os bindings de N seguidos dos bindings de M (M sobrescreve N em
+/// colisão de nome). Se N e M definem o mesmo nome com expressões
+/// diferentes, o valor de M vence — conservador? NÃO, é INCORRETO...
+///
+/// DECISÃO: dois tradutores separados, um por cláusula, e a prova
+/// conjuga as traduções. Como as condições de N referenciam bindings
+/// de N (e M os de M), traduzir cada conjunto com seu próprio tradutor
+/// e combinar as Bools resultantes é a única forma correta — as vars
+/// de params (x) são compartilhadas por NOME entre tradutores (mesma
+/// const Z3 "x"), e bindings de nomes distintos não colidem.
+///
 /// Retorna `true` se a implicação foi provada (N é redundante).
 /// Retorna `false` se refutada (SAT — contra-exemplo existe) ou se
 /// Z3 não decidiu (Unknown — conservador, assume não-redundante).
 pub(crate) fn check_guard_implication(
     guards_n: &[TypedGuardClause],
     guards_m: &[TypedGuardClause],
+    with_n: &[TypedWithBinding],
+    with_m: &[TypedWithBinding],
     _span: &Span,
 ) -> bool {
     // Se N tem otherwise (condition: None), disj_N é True.
@@ -125,7 +164,14 @@ pub(crate) fn check_guard_implication(
         return false;
     }
 
-    match prove_implication(&conditions_n, &conditions_m, guards_n, guards_m) {
+    match prove_implication(
+        &conditions_n,
+        &conditions_m,
+        guards_n.iter().any(|g| g.condition.is_none()),
+        guards_m.iter().any(|g| g.condition.is_none()),
+        with_n,
+        with_m,
+    ) {
         Ternary::Proven => true,
         Ternary::Refuted | Ternary::Unknown => false,
     }
@@ -143,12 +189,17 @@ fn z3_config() -> Config {
 /// Prova se a disjunção de `conditions` é tautologia.
 ///
 /// Verifica se `¬(cond1 ∨ ... ∨ condN)` é insatisfazível.
-fn prove_tautology(conditions: &[TypedExpr]) -> Ternary {
+fn prove_tautology(conditions: &[TypedExpr], with_bindings: &[TypedWithBinding]) -> Ternary {
     let cfg = z3_config();
 
     with_z3_config(&cfg, || {
         let solver = Solver::new();
         let mut translator = Z3Translator::new();
+
+        // Semear bindings do with ANTES das condições: guards via `with`
+        // referenciam os bindings, e a referência deve provar sobre o
+        // valor real (memoizado), não sobre um Bool livre.
+        translator.seed_with_bindings(with_bindings);
 
         let z3_conditions: Vec<Bool> = conditions
             .iter()
@@ -170,12 +221,16 @@ fn prove_tautology(conditions: &[TypedExpr]) -> Ternary {
 ///
 /// Usado quando `prove_tautology` retorna `Refuted` e precisamos do
 /// contra-exemplo para a mensagem de erro.
-fn prove_tautology_with_model(conditions: &[TypedExpr]) -> String {
+fn prove_tautology_with_model(
+    conditions: &[TypedExpr],
+    with_bindings: &[TypedWithBinding],
+) -> String {
     let cfg = z3_config();
 
     with_z3_config(&cfg, || {
         let solver = Solver::new();
         let mut translator = Z3Translator::new();
+        translator.seed_with_bindings(with_bindings);
 
         let z3_conditions: Vec<Bool> = conditions
             .iter()
@@ -200,22 +255,35 @@ fn prove_tautology_with_model(conditions: &[TypedExpr]) -> String {
 /// Constrói `disj_n ∧ ¬disj_m` e verifica satisfatibilidade.
 /// Se UNSAT, a implicação é provada.
 ///
-/// `guards_n`/`guards_m` são passados para detectar `otherwise`
-/// (condition: None), que faz a disjunção ser trivialmente `True`.
+/// Tradução por cláusula: N com um tradutor semeado com `with_n`, M com
+/// um tradutor semeado com `with_m`. Params (ex: `x`) são consts Z3 por
+/// nome — compartilhados naturalmente entre os dois tradutores, o que
+/// é correto: a implicação quantifica sobre o mesmo input. Bindings de
+/// `with` com o mesmo nome em N e M mas expressões diferentes recebem
+/// vars Z3 distintas por tradutor (sem vazamento entre cláusulas).
+///
+/// `otherwise` em N/M é detectado em `check_guard_implication` e passado
+/// aqui como `n_has_otherwise`/`m_has_otherwise` — otherwise faz a
+/// disjunção ser trivialmente `True`.
 fn prove_implication(
     conditions_n: &[TypedExpr],
     conditions_m: &[TypedExpr],
-    guards_n: &[TypedGuardClause],
-    guards_m: &[TypedGuardClause],
+    n_has_otherwise: bool,
+    m_has_otherwise: bool,
+    with_n: &[TypedWithBinding],
+    with_m: &[TypedWithBinding],
 ) -> Ternary {
     let cfg = z3_config();
 
     with_z3_config(&cfg, || {
         let solver = Solver::new();
-        let mut translator = Z3Translator::new();
+        let mut translator_n = Z3Translator::new();
+        translator_n.seed_with_bindings(with_n);
+        let mut translator_m = Z3Translator::new();
+        translator_m.seed_with_bindings(with_m);
 
-        // disj_N: se N tem otherwise, é True. Senão, disjunção das condições.
-        let n_has_otherwise = guards_n.iter().any(|g| g.condition.is_none());
+        // disj_N: se N tem otherwise, é True. Senão, disjunção das
+        // condições (tradutor próprio de N).
         let disj_n = if n_has_otherwise {
             Bool::from_bool(true)
         } else if conditions_n.is_empty() {
@@ -224,21 +292,22 @@ fn prove_implication(
         } else {
             let z3_conds: Vec<Bool> = conditions_n
                 .iter()
-                .map(|c| translator.translate_bool(c))
+                .map(|c| translator_n.translate_bool(c))
                 .collect();
             Bool::or(&z3_conds)
         };
 
-        // disj_M: se M tem otherwise, é True. Senão, disjunção das condições.
-        let m_has_otherwise = guards_m.iter().any(|g| g.condition.is_none());
+        // disj_M: se M tem otherwise, é True. Senão, disjunção das
+        // condições (tradutor próprio de M).
         let disj_m = if m_has_otherwise {
             Bool::from_bool(true)
         } else if conditions_m.is_empty() {
+            // Sem condições e sem otherwise — disjunção vazia = False.
             Bool::from_bool(false)
         } else {
             let z3_conds: Vec<Bool> = conditions_m
                 .iter()
-                .map(|c| translator.translate_bool(c))
+                .map(|c| translator_m.translate_bool(c))
                 .collect();
             Bool::or(&z3_conds)
         };
@@ -253,208 +322,4 @@ fn prove_implication(
             SatResult::Unknown => Ternary::Unknown,
         }
     })
-}
-
-// ── Tradutor TypedExpr → Z3 ──────────────────────────────────────────
-
-/// Tradutor de `TypedExpr` para expressões Z3.
-///
-/// Mapeia operações Kata5 para as teorias correspondentes do Z3:
-/// - Literais Int → `Int::from_i64`
-/// - `> a b`, `< a b`, `>= a b`, `<= a b` → operações Z3
-/// - `= a b`, `!= a b` → `=` Z3
-/// - `+ a b`, `- a b`, `* a b` → aritmética Z3
-/// - `and a b`, `or a b`, `not a` → lógica proposicional Z3
-/// - Variáveis (`x`) → `Int::new_const` (assume Int por padrão)
-/// - Qualquer outra → variável booleana opaca
-struct Z3Translator {
-    /// Nomes de variáveis já criadas, para reutilizar.
-    var_cache: HashMap<String, VarKind>,
-    /// Contador para variáveis opacas frescas.
-    fresh_counter: u32,
-}
-
-enum VarKind {
-    Int(Int),
-    Bool(Bool),
-}
-
-impl Z3Translator {
-    fn new() -> Self {
-        Z3Translator {
-            var_cache: HashMap::new(),
-            fresh_counter: 0,
-        }
-    }
-
-    fn fresh_bool(&mut self) -> Bool {
-        let name = format!("__opaque_{}", self.fresh_counter);
-        self.fresh_counter += 1;
-        Bool::fresh_const(&name)
-    }
-
-    /// Traduz uma expressão para um Z3 Bool.
-    fn translate_bool(&mut self, expr: &TypedExpr) -> Bool {
-        match &expr.kind {
-            TypedExprKind::Closure { callee, args, .. } => {
-                if let TypedExprKind::Ident { name } = &callee.node.kind {
-                    match name.as_str() {
-                        "and" => {
-                            if args.len() == 2 {
-                                let a = self.translate_bool(&args[0].node);
-                                let b = self.translate_bool(&args[1].node);
-                                Bool::and(&[a, b])
-                            } else {
-                                self.fresh_bool()
-                            }
-                        }
-                        "or" => {
-                            if args.len() == 2 {
-                                let a = self.translate_bool(&args[0].node);
-                                let b = self.translate_bool(&args[1].node);
-                                Bool::or(&[a, b])
-                            } else {
-                                self.fresh_bool()
-                            }
-                        }
-                        "not" => {
-                            if args.len() == 1 {
-                                let a = self.translate_bool(&args[0].node);
-                                a.not()
-                            } else {
-                                self.fresh_bool()
-                            }
-                        }
-                        ">" | "<" | ">=" | "<=" | "=" | "!=" => {
-                            self.translate_comparison(name, args)
-                        }
-                        _ => self.fresh_bool(),
-                    }
-                } else {
-                    self.fresh_bool()
-                }
-            }
-            TypedExprKind::Ident { name } => {
-                // Variável Boolean — cria ou reutiliza const bool.
-                if let Some(VarKind::Bool(b)) = self.var_cache.get(name) {
-                    b.clone()
-                } else {
-                    let b = Bool::new_const(name.as_str());
-                    self.var_cache
-                        .insert(name.clone(), VarKind::Bool(b.clone()));
-                    b
-                }
-            }
-            TypedExprKind::Grouping { inner } => self.translate_bool(&inner.node),
-            _ => self.fresh_bool(),
-        }
-    }
-
-    /// Traduz uma comparação (`>`, `<`, `>=`, `<=`, `=`, `!=`).
-    fn translate_comparison(&mut self, op: &str, args: &[kata_ast::Spanned<TypedExpr>]) -> Bool {
-        if args.len() != 2 {
-            return self.fresh_bool();
-        }
-
-        // Tenta traduzir ambos os operandos como Int.
-        let lhs = self.translate_int(&args[0].node);
-        let rhs = self.translate_int(&args[1].node);
-
-        let (lhs, rhs) = match (lhs, rhs) {
-            (Some(a), Some(b)) => (a, b),
-            _ => return self.fresh_bool(),
-        };
-
-        match op {
-            ">" => lhs.gt(&rhs),
-            "<" => lhs.lt(&rhs),
-            ">=" => lhs.ge(&rhs),
-            "<=" => lhs.le(&rhs),
-            "=" => lhs.eq(&rhs),
-            "!=" => lhs.eq(&rhs).not(),
-            _ => self.fresh_bool(),
-        }
-    }
-
-    /// Traduz uma expressão para um Z3 Int (se possível).
-    fn translate_int(&mut self, expr: &TypedExpr) -> Option<Int> {
-        match &expr.kind {
-            TypedExprKind::IntLit { text } => {
-                // Parse o literal inteiro. Pode ser BigInt, mas Z3 usa i64.
-                text.parse::<i64>().ok().map(Int::from_i64)
-            }
-            TypedExprKind::Ident { name } => {
-                // Variável Int — cria ou reutiliza const.
-                if let Some(VarKind::Int(i)) = self.var_cache.get(name) {
-                    Some(i.clone())
-                } else {
-                    let i = Int::new_const(name.as_str());
-                    self.var_cache.insert(name.clone(), VarKind::Int(i.clone()));
-                    Some(i)
-                }
-            }
-            TypedExprKind::Closure { callee, args, .. } => {
-                if let TypedExprKind::Ident { name } = &callee.node.kind {
-                    match name.as_str() {
-                        "+" => {
-                            if args.len() == 2 {
-                                let a = self.translate_int(&args[0].node)?;
-                                let b = self.translate_int(&args[1].node)?;
-                                Some(&a + &b)
-                            } else {
-                                None
-                            }
-                        }
-                        "-" => {
-                            if args.len() == 2 {
-                                let a = self.translate_int(&args[0].node)?;
-                                let b = self.translate_int(&args[1].node)?;
-                                Some(&a - &b)
-                            } else {
-                                None
-                            }
-                        }
-                        "*" => {
-                            if args.len() == 2 {
-                                let a = self.translate_int(&args[0].node)?;
-                                let b = self.translate_int(&args[1].node)?;
-                                Some(&a * &b)
-                            } else {
-                                None
-                            }
-                        }
-                        _ => None,
-                    }
-                } else {
-                    None
-                }
-            }
-            TypedExprKind::Grouping { inner } => self.translate_int(&inner.node),
-            _ => None,
-        }
-    }
-
-    /// Extrai o contra-exemplo do modelo Z3.
-    fn extract_counter_example(&self, model: &z3::Model) -> String {
-        let parts: Vec<String> = self
-            .var_cache
-            .iter()
-            .filter_map(|(name, var)| match var {
-                VarKind::Int(i) => {
-                    let val = model.eval(i, true);
-                    val.map(|v| format!("{name} = {v}"))
-                }
-                VarKind::Bool(b) => {
-                    let val = model.eval(b, true);
-                    val.map(|v| format!("{name} = {v}"))
-                }
-            })
-            .collect();
-
-        if parts.is_empty() {
-            "caso não coberto pelos guards".to_string()
-        } else {
-            parts.join(", ")
-        }
-    }
 }
