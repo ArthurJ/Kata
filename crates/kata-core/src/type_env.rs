@@ -177,6 +177,14 @@ impl TypeEnv {
         self.bindings.contains_key(name)
     }
 
+    /// Verifica se um nome foi declarado como mutável (`var`) NESTE escopo.
+    /// Diferente de `is_mutable` (que percorre a cadeia de pais): usado para
+    /// validar re-binding — `var` pode reusar nome mutável do mesmo escopo
+    /// (re-binding explícito), mas não imutável (`let`/param são únicos).
+    pub fn is_locally_mutable(&self, name: &str) -> bool {
+        self.mutables.contains(name)
+    }
+
     /// Verifica se um nome está marcado como ambíguo (conflito de origin
     /// entre imports). Percorre a cadeia de escopos.
     pub fn is_ambiguous(&self, name: &str) -> bool {

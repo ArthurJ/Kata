@@ -767,6 +767,21 @@ pub(crate) fn infer_expr_hinted(
         Expr::Var { name, value } => {
             let typed_value = infer_expr(&value.node, &value.span, env, ctx, false)?;
             let val_ty = typed_value.ty.clone();
+            // Re-binding: `var` só reusa nome mutável (`var`) deste escopo.
+            // Sobre imutável (`let`/param) é duplicate_decl — o mesmo check
+            // do caminho `Let`: `let` é único por escopo, e tornar às
+            // escondidas um binding imutável em mutável destrói a garantia
+            // de imutabilidade. `_`-prefixados são isentos (diretivas
+            // reutilizam nomes).
+            if !name.starts_with('_')
+                && env.is_locally_defined(name)
+                && !env.is_locally_mutable(name)
+            {
+                return Err(MiddleError::DuplicateDecl {
+                    name: name.clone(),
+                    span: (*span).into(),
+                });
+            }
             env.define_mutable(name, val_ty, "__local__");
             (
                 Ty::Unit,
