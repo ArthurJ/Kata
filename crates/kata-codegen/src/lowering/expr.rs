@@ -513,8 +513,11 @@ pub(crate) fn lower_expr(
                 clauses,
                 captures,
                 &None, // lambdas anônimas não têm @cache
-                &None, // lambdas anônimas não têm @timer
+                &None, // lambdas anônimos não têm @timer
+                crate::lowering::function_def::BodyKind::Clauses,
+                false, // lambdas anônimos: TCO ativo
                 func_id,
+                &name,
                 ctx.module,
                 ctx.ffi_ids,
                 ctx.kata_ids,
