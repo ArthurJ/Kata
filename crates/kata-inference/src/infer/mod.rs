@@ -340,6 +340,8 @@ pub fn infer_module(
             // Registrar no type_env com origin __module__.
             if name != "_" {
                 type_env.define(name, typed_value.ty.clone(), "__module__");
+                // Sagrada: nenhum binding local pode redefinir/sombrear.
+                type_env.define_constant(name);
             }
 
             constant_typed_values.push((name.clone(), Spanned::new(typed_value, value.span)));

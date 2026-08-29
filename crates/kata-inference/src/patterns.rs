@@ -43,6 +43,33 @@ pub(crate) fn check_pattern(
         &pat.span,
         iface_registry,
         struct_registry,
+        false,
+    )?;
+    Ok(Spanned::new(typed, pat.span))
+}
+
+/// Como `check_pattern`, mas valida colisão com `constant` de módulo.
+///
+/// Usado por `match` (pattern binding é binding implícito da action —
+/// constante é sagrada). Lambdas/functions NÃO usam: params têm
+/// namespace próprio (P17 — param sobre constant é idioma legal).
+pub(crate) fn check_pattern_in_action(
+    pat: &Spanned<Pattern>,
+    scrutinee_ty: &Ty,
+    enum_registry: &EnumRegistry,
+    env: &mut TypeEnv,
+    iface_registry: &kata_core::InterfaceRegistry,
+    struct_registry: &StructRegistry,
+) -> PatternResult<Spanned<TypedPattern>> {
+    let typed = check_pattern_inner(
+        &pat.node,
+        scrutinee_ty,
+        enum_registry,
+        env,
+        &pat.span,
+        iface_registry,
+        struct_registry,
+        true,
     )?;
     Ok(Spanned::new(typed, pat.span))
 }
@@ -55,6 +82,7 @@ fn check_pattern_inner(
     span: &Span,
     iface_registry: &kata_core::InterfaceRegistry,
     struct_registry: &StructRegistry,
+    check_constant: bool,
 ) -> PatternResult<TypedPattern> {
     match pat {
         // ── Ident: pode ser binding ou variante sem qualificação ──
@@ -76,6 +104,14 @@ fn check_pattern_inner(
                 });
             }
             // Caso contrário, é binding. Define no escopo.
+            // `constant` é sagrada: pattern de match não pode
+            // redefinir/sombrear (lambdas seguem isentos — namespace próprio).
+            if check_constant && env.is_constant(name) {
+                return Err(MiddleError::DuplicateConstant {
+                    name: name.clone(),
+                    span: (*span).into(),
+                });
+            }
             env.define(name, scrutinee_ty.clone(), "__local__");
             Ok(TypedPattern::Ident {
                 name: name.clone(),
@@ -233,6 +269,7 @@ fn check_pattern_inner(
                         &sub_pat.span,
                         iface_registry,
                         struct_registry,
+                        check_constant,
                     )?;
                     typed_subs.push(Spanned::new(typed, sub_pat.span));
                 }
@@ -289,6 +326,7 @@ fn check_pattern_inner(
                     &pat.span,
                     iface_registry,
                     struct_registry,
+                    check_constant,
                 )?;
                 typed_elements.push(Spanned::new(typed, pat.span));
             }
@@ -319,6 +357,7 @@ fn check_pattern_inner(
                 &head.span,
                 iface_registry,
                 struct_registry,
+                check_constant,
             )?;
             let tail_ty = Ty::List(Box::new(elem_ty));
             let typed_tail = check_pattern_inner(
@@ -329,6 +368,7 @@ fn check_pattern_inner(
                 &tail.span,
                 iface_registry,
                 struct_registry,
+                check_constant,
             )?;
             Ok(TypedPattern::Cons {
                 head: Box::new(Spanned::new(typed_head, head.span)),

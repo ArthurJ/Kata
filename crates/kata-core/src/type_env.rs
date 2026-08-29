@@ -38,6 +38,10 @@ pub struct TypeEnv {
     /// Necessário para validar reatribuição (`x := 42` só é válido se `x`
     /// foi declarado com `var`, não `let`).
     mutables: HashSet<String>,
+    /// Nomes declarados como `constant` de módulo. Sagrados: nenhum
+    /// binding local (`let`/`var`/`for`/pattern) pode redefini-los ou
+    /// sombreá-los. Registrados via `define_constant` no inference.
+    constants: HashSet<String>,
     /// Nomes com conflito de origin entre imports (ambiguidade).
     /// `resolve_type_expr` deve erroar ao usar estes sem qualificar.
     ambiguous: HashSet<String>,
@@ -49,6 +53,7 @@ impl TypeEnv {
             bindings: HashMap::new(),
             parent: None,
             mutables: HashSet::new(),
+            constants: HashSet::new(),
             ambiguous: HashSet::new(),
         }
     }
@@ -58,6 +63,7 @@ impl TypeEnv {
             bindings: HashMap::new(),
             parent: Some(Box::new(parent)),
             mutables: HashSet::new(),
+            constants: HashSet::new(),
             ambiguous: HashSet::new(),
         }
     }
@@ -130,6 +136,24 @@ impl TypeEnv {
             return true;
         }
         self.parent.as_deref().is_some_and(|p| p.is_mutable(name))
+    }
+
+    /// Define um nome como `constant` de módulo (sagrado).
+    ///
+    /// Deve ser chamado DEPOIS de `define` — registra o nome no conjunto
+    /// `constants` deste escopo. Nenhum binding local (`let`/`var`/`for`/
+    /// pattern) pode redefinir/sombrear o nome depois disto.
+    pub fn define_constant(&mut self, name: &str) {
+        self.constants.insert(name.to_string());
+    }
+
+    /// Verifica se um nome é uma `constant` de módulo (sagrada).
+    /// Percorre a cadeia de escopos.
+    pub fn is_constant(&self, name: &str) -> bool {
+        if self.constants.contains(name) {
+            return true;
+        }
+        self.parent.as_deref().is_some_and(|p| p.is_constant(name))
     }
 
     /// Procura um nome na cadeia de escopos.
@@ -221,6 +245,9 @@ impl TypeEnv {
         }
         for name in other.mutables.drain() {
             self.mutables.insert(name);
+        }
+        for name in other.constants.drain() {
+            self.constants.insert(name);
         }
         for name in other.ambiguous.drain() {
             self.ambiguous.insert(name);

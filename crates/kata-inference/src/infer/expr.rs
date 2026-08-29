@@ -369,6 +369,13 @@ pub(crate) fn infer_expr_hinted(
                     span: (*span).into(),
                 });
             }
+            // `constant` é sagrada: nenhum binding local redefine/sombreia.
+            if env.is_constant(name) {
+                return Err(MiddleError::DuplicateConstant {
+                    name: name.clone(),
+                    span: (*span).into(),
+                });
+            }
             // Tente inferir o valor. Se falha com LambdaInferenceFail e o
             // value é um lambda, deferre para use-site inference: guarda o
             // AST do lambda na side table e define o binding com InferVars.
@@ -809,6 +816,13 @@ pub(crate) fn infer_expr_hinted(
                 && !env.is_locally_mutable(name)
             {
                 return Err(MiddleError::DuplicateDecl {
+                    name: name.clone(),
+                    span: (*span).into(),
+                });
+            }
+            // `constant` é sagrada: nem `var` redefine/sombreia.
+            if env.is_constant(name) {
+                return Err(MiddleError::DuplicateConstant {
                     name: name.clone(),
                     span: (*span).into(),
                 });

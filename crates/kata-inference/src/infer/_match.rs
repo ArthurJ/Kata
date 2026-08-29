@@ -180,7 +180,7 @@ pub(crate) fn infer_match(
         let mut arm_env = env.push_scope();
 
         let typed_pattern = if let Some(pat) = &arm.pattern {
-            let typed_pat = patterns::check_pattern(
+            let typed_pat = patterns::check_pattern_in_action(
                 pat,
                 &scrutinee_ty,
                 ctx.enum_registry,
