@@ -1,8 +1,10 @@
 //! Testes das regras de re-binding de `var` — o que `var` pode reusar.
 //!
 //! Responsabilidade: cravar o contrato de nomes no MESMO escopo:
-//! - `let`/`var`/param são sombreáveis por bindings em escopo FILHO
-//!   (braço de match, for, pattern) — escopo fechado, sem leak
+//! - Action tem escopo ÚNICO (2026-08-30): braços de match e corpos
+//!   de for/loop são o MESMO namespace da action — `var`/`let` de
+//!   braço sobre binding externo é `DuplicateDecl` (o binding
+//!   externo pertence ao mesmo escopo)
 //! - `var` pode reusar nome de `var` existente no same-scope (re-binding
 //!   explícito, idioma de loop)
 //! - `var` NÃO pode reusar nome de imutável (`let`/param) no same-scope
@@ -19,7 +21,7 @@
 use kata_inference::infer_module;
 use kata_lexer::lex;
 use kata_parser::parse;
-use kata_resolution::{load_stdlib_for_tests, resolve, ResolvedModule};
+use kata_resolution::{ResolvedModule, load_stdlib_for_tests, resolve};
 
 // ── Helpers (duplicados de guard_completeness.rs para isolamento) ──
 
@@ -142,10 +144,13 @@ main!(5)";
     let _tmod = infer_src(src);
 }
 
-/// `var` em escopo FILHO sobre let/var/param externo continua LEGAL —
-/// escopo fechado, sem leak (probes P3b/P7b/P15/P16/P18/P19).
+/// `var` de braço sobre `let` externo → `DuplicateDecl` — action tem
+/// escopo ÚNICO (2026-08-30): o braço de match é o MESMO namespace da
+/// action; reusar nome de imutável no mesmo escopo é proibido.
+/// (Flip 2026-08-30: era "escopo filho legal, sem leak" — probes
+/// P3b/P7b/P16/P19; contrato invertido pelo modelo plano sancionado.)
 #[test]
-fn var_aninhado_sobre_externo_ok() {
+fn var_aninhado_sobre_externo_rejeitado() {
     let src = "\
 action main (n::Int)\n\
 \x20   let d := n\n\
@@ -157,7 +162,11 @@ action main (n::Int)\n\
 \x20   \x20   \x20   echo!(2)\n\
 \x20   echo!(d)\n\
 main!(5)";
-    let _tmod = infer_src(src);
+    let err = infer_src_err(src);
+    assert!(
+        matches!(err, kata_diagnostics::MiddleError::DuplicateDecl { ref name, .. } if name == "d"),
+        "esperava DuplicateDecl para `d`, obtive: {err:?}"
+    );
 }
 
 /// `_`-prefixados continuam isentos (diretivas reutilizam nomes).
