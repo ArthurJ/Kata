@@ -241,6 +241,12 @@ pub(crate) fn infer_type_ascription(
             inner.kind,
             TypedExprKind::IntLit { .. } | TypedExprKind::FloatLit { .. }
         );
+        // Gate conservador duplo (débito 1):
+        // (a) sem path conditions e não-literal → construtor;
+        // (b) não-literal que referencia `var` → construtor. O Z3 não
+        //     tem material sound sobre mutáveis: nem provar (var vira
+        //     variável livre e "prova" com valores arbitrários), nem
+        //     refutar (P28: fact stale rejeita ascription correta).
         if !is_literal && ctx.path_conditions.borrow().is_empty() {
             // Sem path conditions e não-literal: não há como provar em
             // compile-time. Usar construtor falível (ex: PositiveInt n).
@@ -248,6 +254,26 @@ pub(crate) fn infer_type_ascription(
                 expected: format!(
                     "literal para ascription refined {key_name} \
                      (use construtor para expr não-literal)",
+                    key_name = key.name(),
+                ),
+                found: format!("{:?}", inner.kind),
+                span: expr.span.into(),
+            });
+        }
+        if !is_literal
+            && ctx
+                .path_conditions
+                .borrow()
+                .references_mutable(&inner, ctx.table)
+        {
+            // Não-literal sobre `var`: conservadoramente rejeitada.
+            // Os facts do escopo podem até ser legítimos (sobre lets),
+            // mas o var não é semeado — provar ou refutar com ele como
+            // variável livre é insound nas duas direções.
+            return Err(MiddleError::TypeMismatch {
+                expected: format!(
+                    "literal para ascription refined {key_name} \
+                     (var é opaco ao Z3 — use construtor para expr sobre var)",
                     key_name = key.name(),
                 ),
                 found: format!("{:?}", inner.kind),

@@ -272,10 +272,12 @@ pub(crate) fn infer_lambda_body(
                 // Path conditions: guard é verdadeiro neste braço.
                 // Checkpoint/rollback: adiciona o fact no RefCell
                 // compartilhado e reverte ao sair do braço.
+                // Filtro de mutáveis (débito 1): facts sobre `var`
+                // fora do lambda são descartados (stale após reassign).
                 let guard_checkpoint = ctx.path_conditions.borrow().checkpoint();
                 ctx.path_conditions
                     .borrow_mut()
-                    .add_fact(cond_typed.clone());
+                    .add_fact(cond_typed.clone(), ctx.table);
                 let guard_ctx = InferCtx {
                     table: ctx.table,
                     enum_registry: ctx.enum_registry,

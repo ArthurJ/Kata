@@ -210,12 +210,21 @@ pub(crate) fn infer_select(
                     }
                 };
 
-                // Cria binding do braço num escopo filho.
-                let mut arm_env = env.push_scope();
-                arm_env.define(bind_name, recv_ty.clone(), "__local__");
+                // ── Escopo único da action: braço NÃO abre escopo filho ──
+                // Binding do braço vive na action e evapora no fim do braço
+                // (leitura pós-select de binding de braço é UnboundName).
+                let keys_before = env.local_keys();
+                env.define(bind_name, recv_ty.clone(), "__local__");
 
                 let typed_body =
-                    infer_expr_hinted(&body.node, &body.span, &mut arm_env, ctx, tail_pos, None)?;
+                    infer_expr_hinted(&body.node, &body.span, env, ctx, tail_pos, None)?;
+
+                // Evaporação dos bindings frescos do braço.
+                for key in env.local_keys() {
+                    if !keys_before.contains(&key) {
+                        env.undefine(&key);
+                    }
+                }
 
                 // Unifica tipo do BODY entre braços (não do binding).
                 if let Some(ref existing) = unified_ty {
@@ -292,12 +301,19 @@ pub(crate) fn infer_select(
                     }
                 };
 
-                // Cria binding do braço num escopo filho.
-                let mut arm_env = env.push_scope();
-                arm_env.define(bind_name, result_ty.clone(), "__local__");
+                // ── Escopo único da action: braço NÃO abre escopo filho ──
+                let keys_before = env.local_keys();
+                env.define(bind_name, result_ty.clone(), "__local__");
 
                 let typed_body =
-                    infer_expr_hinted(&body.node, &body.span, &mut arm_env, ctx, tail_pos, None)?;
+                    infer_expr_hinted(&body.node, &body.span, env, ctx, tail_pos, None)?;
+
+                // Evaporação dos bindings frescos do braço.
+                for key in env.local_keys() {
+                    if !keys_before.contains(&key) {
+                        env.undefine(&key);
+                    }
+                }
 
                 // Unifica tipo do BODY entre braços (não do binding).
                 if let Some(ref existing) = unified_ty {

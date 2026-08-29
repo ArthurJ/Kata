@@ -176,15 +176,18 @@ pub(crate) fn infer_match(
     let mut has_otherwise = false;
 
     for arm in arms {
-        // Cria escopo filho para bindings do pattern.
-        let mut arm_env = env.push_scope();
+        // ── Escopo único da action: o braço NÃO abre escopo filho ──
+        // Snapshot das chaves locais para evaporação dos bindings
+        // frescos do braço (leitura pós-match de binding nascido em
+        // braço é UnboundName — braço pode não rodar).
+        let keys_before = env.local_keys();
 
         let typed_pattern = if let Some(pat) = &arm.pattern {
             let typed_pat = patterns::check_pattern_in_action(
                 pat,
                 &scrutinee_ty,
                 ctx.enum_registry,
-                &mut arm_env,
+                env,
                 ctx.interface_registry,
                 ctx.struct_registry,
             )?;
@@ -216,8 +219,7 @@ pub(crate) fn infer_match(
 
         // Infere guard (se houver).
         let typed_guard = if let Some(guard_expr) = &arm.guard {
-            let guard_typed =
-                infer_expr(&guard_expr.node, &guard_expr.span, &mut arm_env, ctx, false)?;
+            let guard_typed = infer_expr(&guard_expr.node, &guard_expr.span, env, ctx, false)?;
             if guard_typed.ty != Ty::boolean() {
                 return Err(MiddleError::TypeMismatch {
                     expected: "Boolean".into(),
@@ -235,11 +237,12 @@ pub(crate) fn infer_match(
         // Match sobre Boolean: True → scrutinee é true; False → scrutinee é false.
         // Checkpoint/rollback: facts do braço são adicionados ao RefCell
         // compartilhado e revertidos ao sair (preservando learned_facts).
+        // Filtro de mutáveis (débito 1): facts sobre `var` são descartados.
         let arm_checkpoint = ctx.path_conditions.borrow().checkpoint();
         if let Some(ref guard_spanned) = typed_guard {
             ctx.path_conditions
                 .borrow_mut()
-                .add_fact(guard_spanned.node.clone());
+                .add_fact(guard_spanned.node.clone(), ctx.table);
         }
         if scrutinee_ty == Ty::boolean()
             && let Some(ref pat) = typed_pattern
@@ -254,7 +257,7 @@ pub(crate) fn infer_match(
                 "True" => {
                     ctx.path_conditions
                         .borrow_mut()
-                        .add_fact(typed_scrutinee.clone());
+                        .add_fact(typed_scrutinee.clone(), ctx.table);
                 }
                 "False" => {
                     // not(scrutinee) — constrói Closure { not, [scrutinee] }
@@ -280,7 +283,9 @@ pub(crate) fn infer_match(
                             ffi_symbol: None,
                         },
                     };
-                    ctx.path_conditions.borrow_mut().add_fact(not_scrut);
+                    ctx.path_conditions
+                        .borrow_mut()
+                        .add_fact(not_scrut, ctx.table);
                 }
                 _ => {}
             }
@@ -324,7 +329,9 @@ pub(crate) fn infer_match(
                             &pc.param_names,
                             args,
                         );
-                        ctx.path_conditions.borrow_mut().add_fact(substituted);
+                        ctx.path_conditions
+                            .borrow_mut()
+                            .add_fact(substituted, ctx.table);
 
                         // Conecta binding do pattern ao payload do variant.
                         // Se o pattern é `Ok n` e o payload (após substituição)
@@ -384,7 +391,9 @@ pub(crate) fn infer_match(
                                         ffi_symbol: None,
                                     },
                                 };
-                                ctx.path_conditions.borrow_mut().add_fact(eq_fact);
+                                ctx.path_conditions
+                                    .borrow_mut()
+                                    .add_fact(eq_fact, ctx.table);
                             }
                         }
                     }
@@ -415,13 +424,23 @@ pub(crate) fn infer_match(
         let typed_body = infer_expr_hinted(
             &arm.body.node,
             &arm.body.span,
-            &mut arm_env,
+            env,
             &arm_ctx,
             tail_pos,
             hint,
         )?;
         // Rollback: remove facts de guard do braço, preserva learned_facts.
         ctx.path_conditions.borrow_mut().rollback_to(arm_checkpoint);
+
+        // ── Evaporação: bindings frescos do braço morrem com ele ──
+        // Escopo único + braço condicional: leitura pós-match de
+        // binding nascido no braço é UnboundName (o braço pode não
+        // ter rodado). Reuso de var existente persiste (re-binding).
+        for key in env.local_keys() {
+            if !keys_before.contains(&key) {
+                env.undefine(&key);
+            }
+        }
 
         // Verifica que todos os braços retornam o mesmo tipo.
         // Unificação limitada — Ty::Var unifica com qualquer tipo concreto.

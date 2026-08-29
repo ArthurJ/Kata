@@ -8,6 +8,8 @@
 //!
 //! Nível 1 (PRD-refinement-propagation): guards locais apenas.
 
+use std::collections::HashSet;
+
 use crate::typed::TypedExpr;
 
 use z3::{Config, SatResult, Solver, ast::Bool, with_z3_config};
@@ -46,16 +48,75 @@ pub(crate) struct PathConditionCtx {
     facts: Vec<TypedExpr>,
     learned_facts: Vec<TypedExpr>,
     let_bindings: Vec<(String, TypedExpr)>,
+    /// Nomes declarados `var` (mutáveis) em vigor. Alimenta o filtro
+    /// conservador: facts que referenciam esses nomes são descartados
+    /// na coleta (o valor pode mudar depois — fact stale é insound em
+    /// ambas as direções: provar com ele aceita provas erradas, refutar
+    /// com ele rejeita programas corretos).
+    mutables: HashSet<String>,
 }
 
 impl PathConditionCtx {
+    /// Registra um nome declarado `var` (mutável) no escopo atual.
+    /// Alimenta o filtro da coleta: facts que referenciam `var` são
+    /// descartados — o valor pode mudar após a coleta (reassign),
+    /// tornando o fact stale. Conservador em ambas as direções: nunca
+    /// provar nem refutar com material sobre mutável.
+    pub(crate) fn add_mutable(&mut self, name: &str) {
+        self.mutables.insert(name.to_string());
+    }
+
     /// Adiciona um fact braço-específico (guard/Boolean).
     /// Rolled back ao sair do braço via `rollback_to`.
-    pub(crate) fn add_fact(&mut self, fact: TypedExpr) {
+    ///
+    /// **Filtro conservador (débito 1):** facts que referenciam
+    /// bindings mutáveis (`var`) são descartados. O value de um var
+    /// pode ser reatribuído depois da coleta; um fact stale prova
+    /// porções erradas (P4) e refuta ascriptions corretas (P28).
+    /// `dispatch` distingue free vars de nomes de função global
+    /// (funções não são bindings mutáveis).
+    pub(crate) fn add_fact(
+        &mut self,
+        fact: TypedExpr,
+        dispatch: &kata_core::dispatch::DispatchTable,
+    ) {
+        if self.fact_references_mutable(&fact, dispatch) {
+            return;
+        }
         self.facts.push(fact);
     }
 
-    /// Adiciona um fact trans-escopo (Direção B — aprendido via dispatch).
+    /// True se algum Ident da expressão é um binding mutável registrado.
+    ///
+    /// Varredura completa (não só top-level): `match (> (* d 2) 10)`
+    /// tem `d` aninhado em sub-expressões — o filtro precisa vê-lo.
+    /// Não desce em Lambdas: captures de lambda que referenciam var
+    /// são free vars do lambda, mas o corpo do lambda roda depois (o
+    /// fact sobre a chamada não é sobre o valor atual do var).
+    fn fact_references_mutable(
+        &self,
+        expr: &TypedExpr,
+        dispatch: &kata_core::dispatch::DispatchTable,
+    ) -> bool {
+        let mut free = HashSet::new();
+        let no_bindings = HashSet::new();
+        super::free_vars::collect_free_vars(expr, &no_bindings, dispatch, &mut free);
+        free.intersection(&self.mutables).next().is_some()
+    }
+
+    /// True se a expressão referencia algum binding mutável
+    /// (`var`) — o Z3 deve ignorá-la: nem provar, nem refutar.
+    /// Usado pelo gate de ascription (ascription sobre var é
+    /// conservadoramente rejeitada, como quando não há facts).
+    pub(crate) fn references_mutable(
+        &self,
+        expr: &TypedExpr,
+        dispatch: &kata_core::dispatch::DispatchTable,
+    ) -> bool {
+        self.fact_references_mutable(expr, dispatch)
+    }
+
+    /// Adiciona un fact trans-escopo (Direção B — aprendido via dispatch).
     /// Preservado ao sair do braço.
     pub(crate) fn add_learned_fact(&mut self, fact: TypedExpr) {
         self.learned_facts.push(fact);

@@ -827,7 +827,27 @@ pub(crate) fn infer_expr_hinted(
                     span: (*span).into(),
                 });
             }
+            // Re-binding sobre var existente: o tipo deve permanecer o
+            // mesmo. O re-binding dirige o var — mudar o tipo às escondidas
+            // deixaria o env pós-construto com tipo divergente do que o
+            // resto da action espera (join sound).
+            if !name.starts_with('_')
+                && let Some(existing_ty) = env.lookup(name)
+                && env.is_locally_mutable(name)
+                && *existing_ty != val_ty
+            {
+                return Err(MiddleError::TypeMismatch {
+                    expected: format!("{existing_ty:?} (tipo de `{name}`)"),
+                    found: format!("{} (re-binding divergente)", val_ty),
+                    span: (*span).into(),
+                });
+            }
             env.define_mutable(name, val_ty, "__local__");
+            // Path conditions: registra o mutável — facts sobre `var`
+            // são descartados na coleta (stale após reassign; débito 1).
+            if !name.starts_with('_') {
+                ctx.path_conditions.borrow_mut().add_mutable(name);
+            }
             (
                 Ty::Unit,
                 TypedExprKind::Var {
@@ -917,6 +937,10 @@ pub(crate) fn infer_expr_hinted(
                 post_conds: ctx.post_conds,
                 inline_fns: ctx.inline_fns,
             };
+            // ── Escopo único da action: bindings nascidos no corpo do
+            // loop evaporam no fim (snapshot antes, undefine diff depois).
+            // Reassign de var externo persiste (idioma correto de loop). ──
+            let keys_before = env.local_keys();
             let mut typed_body = Vec::new();
             for expr in body {
                 let typed = infer_expr(
@@ -924,6 +948,12 @@ pub(crate) fn infer_expr_hinted(
                     false, // body do loop nunca é tail_pos (loop retorna Unit)
                 )?;
                 typed_body.push(Spanned::new(typed, expr.span));
+            }
+            // Evaporação: bindings frescos do corpo morrem com o loop.
+            for key in env.local_keys() {
+                if !keys_before.contains(&key) {
+                    env.undefine(&key);
+                }
             }
             // Busca break recursivamente no body — pode estar dentro de match.
             let has_break = typed_body.iter().any(|s| contains_break(&s.node.kind));

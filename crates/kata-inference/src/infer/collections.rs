@@ -410,6 +410,14 @@ pub(crate) fn infer_for_in(
 
     // ── Colisão do nome do laço (escopo único da action) ──
     let is_wildcard = var_name.starts_with('_');
+    // `constant` é sagrada — check ANTES do reuso (senão dispara
+    // DuplicateDecl genérico via o define de módulo).
+    if !is_wildcard && env.is_constant(var_name) {
+        return Err(MiddleError::DuplicateConstant {
+            name: var_name.to_string(),
+            span: (*span).into(),
+        });
+    }
     let preexisting = env
         .lookup(var_name)
         .filter(|_| !is_wildcard)
@@ -435,19 +443,17 @@ pub(crate) fn infer_for_in(
         }
         None => {}
     }
-    // `constant` é sagrada — nem `for` a reusa/sombreia.
-    if !is_wildcard && env.is_constant(var_name) {
-        return Err(MiddleError::DuplicateConstant {
-            name: var_name.to_string(),
-            span: (*span).into(),
-        });
-    }
 
     // ── Registra o binding do laço na action (escopo único) ──
     // Reuso: re-binding sobre o var existente (mesmo tipo). Fresco:
     // var novo que evapora no fim do laço (rollback abaixo).
     let fresh = preexisting.is_none();
     env.define_mutable(var_name, var_ty.clone(), "__local__");
+    // Z3 ignora var (débito 1): o loop-var é reatribuído a cada
+    // iteração — facts sobre ele no corpo são stale por construção.
+    if !var_name.starts_with('_') {
+        ctx.path_conditions.borrow_mut().add_mutable(var_name);
+    }
 
     // ForIn é como loop — in_loop = true para break/continue.
     let loop_ctx = InferCtx {

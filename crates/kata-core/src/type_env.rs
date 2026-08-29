@@ -115,6 +115,13 @@ impl TypeEnv {
         self.mutables.remove(name);
     }
 
+    /// Chaves dos bindings deste escopo (não do parent). Usado para
+    /// evaporação de bindings frescos de braço/corpo no escopo único
+    /// da action: snapshot antes, diff+undefine depois.
+    pub fn local_keys(&self) -> HashSet<String> {
+        self.bindings.keys().cloned().collect()
+    }
+
     /// Redefine a origin de um binding existente (ex: __local__ → __module__).
     /// Não muda o tipo nem fn_alias/param_names. No-op se o binding não existe.
     pub fn set_origin(&mut self, name: &str, origin: &str) {

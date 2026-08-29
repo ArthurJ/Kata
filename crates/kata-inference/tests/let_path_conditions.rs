@@ -29,7 +29,7 @@
 use kata_inference::infer_module;
 use kata_lexer::lex;
 use kata_parser::parse;
-use kata_resolution::{load_stdlib_for_tests, resolve, ResolvedModule};
+use kata_resolution::{ResolvedModule, load_stdlib_for_tests, resolve};
 
 // ── Helpers (duplicados de guard_completeness.rs para isolamento) ──
 
@@ -175,55 +175,69 @@ main!(5)";
     let _tmod = infer_src(src);
 }
 
-// ── Caso 3: LAST-WINS — sombreamento aninhado usa binding novo ──
+// ── Caso 3: var é opaco ao Z3 — nem prova, nem refuta ──────────────
 
-/// Corpo: `let d := - 0 n` (d = -n, NÃO prova com n > 0).
-/// Braço: `let d := * n 2` (d = 2n, prova com n > 0) + ascription.
-/// Seeding LAST-WINS: o binding interno vence → prova → OK.
-/// First-wins (binding externo) ou sem seeding → refuta → erro.
-/// Crava que o sombreamento aninhado legal (let-let em escopo filho)
-/// usa o binding VISIBLE no ponto da ascription.
+/// Corpo: `var d := - 0 n`; braço True re-binca `var d := * n 2` +
+/// ascription `d::PosInt`. Sob a regra nova (Z3 ignora var, 2026-08-30),
+/// a ascription sobre var é CONSERVADORAMENTE rejeitada: o var não é
+/// semeado e facts sobre ele não são coletados — provar via last-wins
+/// seria unsound (o reassign mudaria o valor depois). O caminho sound
+/// para ascription sobre var é o construtor falível (`PosInt d`).
+/// (Flip 2026-08-30: era let-let em escopo filho provando via seeding
+/// last-wins — veículo morto pelo modelo plano + Z3-ignora-var.)
 #[test]
-fn let_sombreado_no_braco_usa_binding_novo() {
+fn var_rebinding_no_braco_ascription_rejeitada_conservadora() {
     let src = "\
 data (Int, > _ 0) as PosInt\n\
 \n\
 action main (n::Int)\n\
-\x20   let d := - 0 n\n\
+\x20   var d := - 0 n\n\
 \x20   match (> n 0)\n\
 \x20   \x20   Boolean::True:\n\
-\x20   \x20   \x20   let d := * n 2\n\
+\x20   \x20   \x20   var d := * n 2\n\
 \x20   \x20   \x20   echo!(show (d::PosInt))\n\
 \x20   \x20   Boolean::False: echo!(show (1::PosInt))\n\
 main!(5)";
-    let _tmod = infer_src(src);
+    let err = infer_src_err(src);
+    assert!(
+        err.to_string().contains("var é opaco ao Z3"),
+        "esperava rejeição conservadora (var opaco), obtive: {err:?}"
+    );
 }
 
 // ── Caso 4: rollback — binding de braço morre no braço ──────────
 
-/// Corpo: `let d := * n 2` (prova com n > 0). Match 1 braço True
-/// sombreia com `let d := - 0 n` (refutante, mas SEM ascription no
-/// braço — só declara). Match 2 braço True: ascription `d::PosInt`
-/// com fact `> n 0` — deve provar via binding EXTERNO d = 2n.
-/// Sem rollback, o binding refutante do match 1 venceria (last-wins)
-/// e refutaria falsamente. Crava o truncamento por checkpoint.
+/// Corpo: `var d := * n 2`. Match 1 braço True re-binca
+/// `var d := - 0 n` (SEM ascription no braço). Match 2 braço True:
+/// ascription `d::PosInt`. Sob Z3-ignora-var, a ascription sobre var
+/// é rejeitada conservadoramente INDEPENDENTE do estado da loja —
+/// crava que o rollback da loja de bindings não ressuscita provas
+/// sobre mutáveis: o gate (b) dispara ANTES do Z3, e o re-binding
+/// persistente do braço (escopo plano) já invalidaria qualquer
+/// last-wins sound de qualquer forma.
+/// (Flip 2026-08-30: era let-let em escopo filho; a prova via binding
+/// externo morreu com o Z3-ignora-var — var nunca é material de prova.)
 #[test]
-fn let_do_braco_morre_no_rollback() {
+fn var_do_braco_morre_no_rollback() {
     let src = "\
 data (Int, > _ 0) as PosInt\n\
 \n\
 action main (n::Int)\n\
-\x20   let d := * n 2\n\
+\x20   var d := * n 2\n\
 \x20   match (> n 0)\n\
 \x20   \x20   Boolean::True:\n\
-\x20   \x20   \x20   let d := - 0 n\n\
+\x20   \x20   \x20   var d := - 0 n\n\
 \x20   \x20   \x20   echo!(d)\n\
 \x20   \x20   Boolean::False: echo!(2)\n\
 \x20   match (> n 0)\n\
 \x20   \x20   Boolean::True: echo!(show (d::PosInt))\n\
 \x20   \x20   Boolean::False: echo!(2)\n\
 main!(5)";
-    let _tmod = infer_src(src);
+    let err = infer_src_err(src);
+    assert!(
+        err.to_string().contains("var é opaco ao Z3"),
+        "esperava rejeição conservadora (var opaco), obtive: {err:?}"
+    );
 }
 
 // ── Caso 5: gate continua em FACTS, não em bindings ─────────────

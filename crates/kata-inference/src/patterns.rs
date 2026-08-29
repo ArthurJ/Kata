@@ -74,6 +74,7 @@ pub(crate) fn check_pattern_in_action(
     Ok(Spanned::new(typed, pat.span))
 }
 
+#[allow(clippy::too_many_arguments)] // flag `check_constant` — braços de action
 fn check_pattern_inner(
     pat: &Pattern,
     scrutinee_ty: &Ty,
@@ -108,6 +109,16 @@ fn check_pattern_inner(
             // redefinir/sombrear (lambdas seguem isentos — namespace próprio).
             if check_constant && env.is_constant(name) {
                 return Err(MiddleError::DuplicateConstant {
+                    name: name.clone(),
+                    span: (*span).into(),
+                });
+            }
+            // Escopo único da action: pattern sobre binding imutável
+            // (let/param) da action é DuplicateDecl — o braço é o mesmo
+            // namespace. Sobre `var` existente é reuso (o braço dirige o
+            // var com o payload). Lambdas isentos (params próprios).
+            if check_constant && env.is_locally_defined(name) && !env.is_locally_mutable(name) {
+                return Err(MiddleError::DuplicateDecl {
                     name: name.clone(),
                     span: (*span).into(),
                 });
