@@ -984,25 +984,29 @@ pub fn eval(
             args,
         } => crate::csp::eval_spawn(ctx, action_name, args, env),
 
-        // ── Dict / Set (Fase 2 — stubs por enquanto) ─────────
-        TypedExprKind::DictLit { entries, .. } => {
-            // Fase 2: implementar via kata_rt_dict_empty + insert
-            let dict = rt::kata_rt_dict_empty(ctx.arena);
+        // ── Dict / Set literais ─────────────────────────────
+        TypedExprKind::DictLit {
+            entries,
+            key_ty,
+            value_ty: _,
+        } => {
+            let (hash_fn, eq_fn) = resolve_hash_eq(key_ty)?;
+            let mut dict = rt::kata_rt_dict_empty(ctx.arena);
             for (key_expr, val_expr) in entries {
                 let key_val = eval(ctx, key_expr, env)?;
                 let val_val = eval(ctx, val_expr, env)?;
-                // TODO: hash e eq_fn precisam do tipo
-                // Por enquanto, stub
-                let _ = (key_val, val_val);
+                let hash = hash_fn(key_val);
+                dict = rt::kata_rt_dict_insert(dict, key_val, val_val, hash, eq_fn, ctx.arena);
             }
             Ok(dict)
         }
-        TypedExprKind::SetLit { elements, .. } => {
-            let set = rt::kata_rt_set_empty(ctx.arena);
+        TypedExprKind::SetLit { elements, elem_ty } => {
+            let (hash_fn, eq_fn) = resolve_hash_eq(elem_ty)?;
+            let mut set = rt::kata_rt_set_empty(ctx.arena);
             for elem in elements {
                 let v = eval(ctx, elem, env)?;
-                // TODO: hash e eq_fn precisam do tipo
-                let _ = v;
+                let hash = hash_fn(v);
+                set = rt::kata_rt_set_insert(set, v, hash, eq_fn, ctx.arena);
             }
             Ok(set)
         }
@@ -1758,5 +1762,34 @@ fn match_pattern(pat: &Spanned<TypedPattern>, value: Value, env: &mut Env) -> bo
             }
             true
         }
+    }
+}
+
+/// Resolve hash_fn e eq_fn para um tipo de chave/elemento de Dict/Set.
+///
+/// Retorna (hash_fn, eq_fn_ptr) onde hash_fn é uma closure que chama a
+/// função FFI de hashing apropriada, e eq_fn_ptr é o ponteiro bruto
+/// como i64 (para passar para kata_rt_dict_insert / kata_rt_set_insert).
+///
+/// Espelha `dict_set_lit::hash_fn_name` / `eq_fn_name` do codegen.
+fn resolve_hash_eq(
+    ty: &Ty,
+) -> Result<(Box<dyn Fn(i64) -> i64>, i64), InterpError> {
+    match ty {
+        Ty::Prim(PrimTy::Int) => Ok((
+            Box::new(|v| rt::kata_rt_hash_int(v)),
+            rt::kata_rt_bi_eq as *const () as i64,
+        )),
+        Ty::Prim(PrimTy::Text) => Ok((
+            Box::new(|v| rt::kata_rt_hash_text(v)),
+            rt::kata_rt_string_eq as *const () as i64,
+        )),
+        Ty::Prim(PrimTy::Rational) => Ok((
+            Box::new(|v| rt::kata_rt_hash_rational(v)),
+            rt::kata_rt_bi_eq as *const () as i64,
+        )),
+        _ => Err(InterpError::Runtime(format!(
+            "Dict/Set literal: tipo não-hashable: {ty}"
+        ))),
     }
 }
