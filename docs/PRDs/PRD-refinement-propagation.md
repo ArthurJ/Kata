@@ -1062,6 +1062,52 @@ e `try_prove_with_path_conditions` (já implementado no Nível 1).
 A Direção A é tentada no dispatch quando há mismatch base→refined.
 A Direção B é aplicada após dispatch bem-sucedido.
 
+## 9a. Nível 4 — Seeding de let-bindings (2026-08-29, implementado)
+
+**Gap fechado:** ascription refined sobre `let` não-literal dentro de
+braço com fact. `let d := x` + fact `> x 0` + ascription `d::PosInt`
+refutava falsamente — o fact existia mas o Z3 não conectava `d` a `x`.
+
+**Mecanismo:** bindings `let` imutáveis são SEMEADOS no tradutor Z3
+antes de traduzir facts/predicado (`seed_let_bindings`), como aliasing
+no `var_cache`: o termo do VALOR é memoizado sob o NOME do binding.
+`let d := x` faz o predicado `> d 0` traduzir como `> x 0` — mais
+forte que asserir `d = x` como constraint (comparações inlinam:
+`let d := * x 2` + `> d 0` vira `x*2 > 0`).
+
+**Soundness:** mesma justificativa dos learned_facts — `let` é
+imutável e único por escopo, a identidade `nome = valor` vale por
+todo o tempo de vida do binding. Desde o fix `debca6c`, `var` não
+pode reusar nome de imutável no mesmo escopo (duplicate_decl), então
+não há reciclagem de nome imutável que invalidaria o aliasing.
+
+**Escopo da loja (`let_bindings` em `PathConditionCtx`):**
+- Append-only; last-wins resolvido no seeding (ordem de inserção no
+  `var_cache`), não por remoção — remoção quebraria o rollback
+- Checkpoint/rollback estendido a `{facts, lets}`: binding nascido
+  DENTRO do braço morre no rollback (braço é escopo fechado);
+  binding do corpo sobrevive (trans-escopo, como learned_facts)
+- Coleta no ponto do `env.define` (caminhos `Let` e `LetDestruct`);
+  LetDestruct semeia o ELEMENTO i quando o valor é tupla literal,
+  senão o FieldAccess (conservador, vira const livre)
+- `var` NUNCA semeado (mutável, sem SSA — insound); `_`-prefixados
+  (sintéticos de diretivas) isentos
+- Gate de tentativa de prova continua em FACTS (`is_empty` não conta
+  bindings): bindings são definições, não restrições — sem facts a
+  conjunção vazia seria `true` e refutaria qualquer não-tautologia
+
+**Mudança de comportamento (teste `t_guard_contraditorio_com_literal`):**
+`let n := 5` (literal) + guard contraditório agora COMPILA — o Z3
+conhece `n = 5`, o fact do braço True é falso, o braço é dead code e a
+prova por vacuous truth é sound (o programa nunca viola o predicado
+em runtime). Antes: falso positivo (programa correto rejeitado).
+A refutação genuína permanece com valor não-conhecido (param).
+
+**Débitos relacionados (não cobertos):** facts de guard sobre `var`
+reassignada são insound (pré-existente do mecanismo de facts);
+`examples/refined_types.kata` está quebrado no bloco 4 (`<` sobre
+PositiveInt sem overload — pré-existente).
+
 ## 10. Riscos
 
 ### 10.1. Performance Z3
