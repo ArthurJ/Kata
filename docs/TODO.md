@@ -41,8 +41,15 @@ Probes (2026-08-29, `main!(7)`, esperado `5/7`, JIT dá `5/5`):
 - P16 pattern binding sobre let externo (esperado `2 1`, JIT dá `2 2`)
 - P18 var sobre var aninhado, P19 pattern sobre var externo
 
-**Causa provável:** alocação de slot por NOME (não por escopo/decl) no
-codegen — braço e corpo compartilham o slot.
+**DECISÃO (Arthur, 2026-08-29):** duas camadas.
+1. **Mudança de linguagem:** `for` NÃO sombreia binding do escopo
+   envolvente — `for i` sobre `let i`/param/`var i` existente vira
+   `DuplicateDecl` (typeck, site `infer_for_in`). P15 deixa de ser bug
+   de codegen. A regra se estende a pattern bindings e lambda params?
+   Gate com Arthur.
+2. **Push/pop de `var_map`** (compile-time, clone/restore no lowering)
+   para o shadowing que permanece legal: braço de match, pattern
+   binding, `select`.
 
 **Prioridade:** média-alta — divergência JIT/interp em código legal;
 `scripts/diff_interp_jit.sh` pode transformar os probes em oráculo.
