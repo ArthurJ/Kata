@@ -470,7 +470,11 @@ main!()";
     let (stdout, stderr, code) = run_kata_run(src);
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     let lines: Vec<&str> = stdout.lines().collect();
-    assert_eq!(lines.len(), 10, "deve imprimir 10 linhas — stdout: {stdout}");
+    assert_eq!(
+        lines.len(),
+        10,
+        "deve imprimir 10 linhas — stdout: {stdout}"
+    );
     // f 1 → miss, count: k1=1
     // f 2 → miss, count: k2=1
     // f 3 → miss, count: k3=1
@@ -510,7 +514,11 @@ main!()";
     let (stdout, stderr, code) = run_kata_run(src);
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     let lines: Vec<&str> = stdout.lines().collect();
-    assert_eq!(lines.len(), 10, "deve imprimir 10 linhas — stdout: {stdout}");
+    assert_eq!(
+        lines.len(),
+        10,
+        "deve imprimir 10 linhas — stdout: {stdout}"
+    );
     // f 1 → miss, count: k1=1
     // f 2 → miss, count: k2=1
     // f 1 x5 → HIT, count: k1=6
@@ -611,7 +619,10 @@ count_down 1000000 1";
         "kata run deve exit 0 (TCO deve evitar stack overflow) — stderr: {stderr}"
     );
     let first = stdout.lines().next().unwrap_or("");
-    assert_eq!(first, "1", "count_down 1000000 1 deve ser 1 — stdout: {stdout}");
+    assert_eq!(
+        first, "1",
+        "count_down 1000000 1 deve ser 1 — stdout: {stdout}"
+    );
 }
 
 /// Função mista (tail + non-tail) com `@cache`.
@@ -657,7 +668,10 @@ action consumir => Int
 fork!(chamar, ())
 consumir!()";
     let (stdout, stderr, code) = run_kata_run(src);
-    assert_eq!(code, 0, "kata run deve exit 0 (TCO + cache + timer) — stderr: {stderr}");
+    assert_eq!(
+        code, 0,
+        "kata run deve exit 0 (TCO + cache + timer) — stderr: {stderr}"
+    );
     // Deve publicar no tópico "perfil" com delta > 0.
     assert!(
         stdout.contains("count_down:") && stdout.contains("ns"),

@@ -433,8 +433,8 @@ pub(crate) fn infer_expr_hinted(
                                 param_types: param_types.clone(),
                                 ret_ty: ret_ty.clone(),
                                 clauses: vec![crate::typed::TypedLambdaClause {
-                                        synthetic_pre: Vec::new(),
-                                        synthetic_post: Vec::new(),
+                                    synthetic_pre: Vec::new(),
+                                    synthetic_post: Vec::new(),
                                     patterns: typed_patterns,
                                     body: Spanned::new(
                                         TypedExpr {

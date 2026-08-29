@@ -220,12 +220,8 @@ fn eval_entry_scheduler_mode(
     };
 
     // 3. Registrar action na tabela global → action_id.
-    let action_id = crate::csp::register_action(
-        callee,
-        &ctx.module,
-        arg_tys,
-        ctx.enum_registry.clone(),
-    );
+    let action_id =
+        crate::csp::register_action(callee, &ctx.module, arg_tys, ctx.enum_registry.clone());
 
     // 4. Empacotar (action_id, args_ptr, n_args) na arena.
     let packed_ptr = rt::kata_rt_arena_alloc(ctx.rt_ptr, ctx.arena, 24);
@@ -386,9 +382,8 @@ pub fn eval(
                 }
                 // IntLit → Rational: chamar kata_rt_rat_literal.
                 if matches!(target_ty, Ty::Prim(PrimTy::Rational)) {
-                    let cstr = CString::new(text.as_str()).unwrap_or_else(|_| {
-                        CString::new("0").unwrap()
-                    });
+                    let cstr =
+                        CString::new(text.as_str()).unwrap_or_else(|_| CString::new("0").unwrap());
                     let ptr = cstr.as_ptr();
                     let len = text.len() as i64;
                     let result = unsafe { rt::kata_rt_rat_literal(ptr, len) };
@@ -1235,10 +1230,7 @@ fn call_closure_value(
 /// loop com os novos argumentos em vez de recursar.
 enum TailResult {
     Done(Value),
-    TailCall {
-        name: String,
-        args: Vec<Value>,
-    },
+    TailCall { name: String, args: Vec<Value> },
 }
 
 /// Avalia uma expressão em **posição de cauda**.
@@ -1406,7 +1398,10 @@ fn call_typed_clauses(
                             env.pop_scope();
                             match result? {
                                 TailResult::Done(v) => break 'trampoline Ok(v),
-                                TailResult::TailCall { name, args: new_args } => {
+                                TailResult::TailCall {
+                                    name,
+                                    args: new_args,
+                                } => {
                                     tail_call = Some((name, new_args));
                                     break 'clause_loop;
                                 }
@@ -1423,7 +1418,10 @@ fn call_typed_clauses(
                 env.pop_scope();
                 match result? {
                     TailResult::Done(v) => break 'trampoline Ok(v),
-                    TailResult::TailCall { name, args: new_args } => {
+                    TailResult::TailCall {
+                        name,
+                        args: new_args,
+                    } => {
                         tail_call = Some((name, new_args));
                         break 'clause_loop;
                     }

@@ -223,7 +223,10 @@ fn in_range_retorna_true() {
     let src = "6 in [0..2..10]";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::boolean(), "in deve retornar Boolean");
-    assert_eq!(raw, 1, "6 in [0..2..10] = true (6 é múltiplo de 2 a partir de 0)");
+    assert_eq!(
+        raw, 1,
+        "6 in [0..2..10] = true (6 é múltiplo de 2 a partir de 0)"
+    );
 }
 
 /// `5 in [0..2..10]` → `false` (5 está no intervalo [0, 10) mas não é múltiplo de step).

@@ -144,12 +144,7 @@ fn tree_shake_impl(typed: TypedModule, preserve_tests: bool) -> TypedModule {
                         );
                     }
                     for pre in &clause.synthetic_pre {
-                        collect_refs(
-                            &pre.node,
-                            &mut reached_fns,
-                            &mut reached_actions,
-                            &fn_names,
-                        );
+                        collect_refs(&pre.node, &mut reached_fns, &mut reached_actions, &fn_names);
                     }
                     for post in &clause.synthetic_post {
                         collect_refs(

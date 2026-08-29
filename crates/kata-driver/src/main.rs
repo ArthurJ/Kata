@@ -109,7 +109,11 @@ fn main_inner() -> miette::Result<()> {
             emit_ir,
             interp,
         } => cmd_run(&file, emit_ir, interp),
-        Command::Test { path, filter, interp } => cmd_test(&path, filter.as_deref(), interp),
+        Command::Test {
+            path,
+            filter,
+            interp,
+        } => cmd_test(&path, filter.as_deref(), interp),
         Command::Build {
             file,
             output,
@@ -587,7 +591,11 @@ fn run_test_interp(
 
     for action in &interp_module.inner.actions {
         for test_spec in &action.tests {
-            let desc = test_spec.desc.as_deref().unwrap_or("(sem desc)").to_string();
+            let desc = test_spec
+                .desc
+                .as_deref()
+                .unwrap_or("(sem desc)")
+                .to_string();
 
             // Filtro por substring na descrição.
             if let Some(f) = filter
@@ -615,7 +623,10 @@ fn run_test_interp(
                 let arg_val = match kata_interp::eval(&mut ctx, args_expr, &mut env) {
                     Ok(v) => v,
                     Err(e) => {
-                        results.push((desc, TestOutcome::Fail(format!("erro ao avaliar args: {e}"))));
+                        results.push((
+                            desc,
+                            TestOutcome::Fail(format!("erro ao avaliar args: {e}")),
+                        ));
                         continue;
                     }
                 };

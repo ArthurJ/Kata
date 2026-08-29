@@ -267,11 +267,7 @@ pub(crate) fn lower_closure(
                 if expr.tail_pos && !ctx.no_tail_calls {
                     // Tail call: resolve para inner (TCO) se disponível,
                     // senão para wrapper (approach atual).
-                    let tail_func_ref = ctx
-                        .kata_refs_inner
-                        .get(&key)
-                        .copied()
-                        .unwrap_or(func_ref);
+                    let tail_func_ref = ctx.kata_refs_inner.get(&key).copied().unwrap_or(func_ref);
                     let rt_val = ctx.rt.unwrap_or_else(|| ctx.builder.ins().iconst(I64, 0));
                     let arena = caller_arena_handle(ctx);
                     let dummy_box = ctx.builder.ins().iconst(I64, 0);

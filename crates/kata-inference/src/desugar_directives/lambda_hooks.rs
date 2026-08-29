@@ -8,8 +8,7 @@ use kata_ast::{Expr, LambdaClause, Spanned};
 use kata_resolution::{CustomDirectiveApp, DirectiveDef, DirectiveRegistry, Hook, Target};
 
 use super::reflection::{
-    ReflectionInfo, action_stmts_to_exprs, synthesize_args_binding,
-    synthesize_static_bindings,
+    ReflectionInfo, action_stmts_to_exprs, synthesize_args_binding, synthesize_static_bindings,
 };
 
 /// Aplica diretivas customizadas a uma `LambdaClause` de `Item::Sig`.

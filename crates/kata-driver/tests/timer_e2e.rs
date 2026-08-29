@@ -269,7 +269,10 @@ consumir!()"#,
     );
 
     let (stdout, stderr, code) = run_kata(&path);
-    assert_eq!(code, 0, "exit 0 (TCO deve evitar stack overflow) — stderr: {stderr}");
+    assert_eq!(
+        code, 0,
+        "exit 0 (TCO deve evitar stack overflow) — stderr: {stderr}"
+    );
     assert!(
         stdout.contains("count_down:") && stdout.contains("ns"),
         "deve imprimir 'count_down: ...ns' — stdout: {stdout} | stderr: {stderr}"
