@@ -104,22 +104,47 @@ do codegen.
 
 ### Patterns aninhados (Maranget + SMT)
 **Estado:** Ativo — `docs/PRDs/PRD-exaustividade-aninhada.md`
-(5 fases, revisado 2026-08-30). O buraco NÃO é o parser (match arms e
-cláusulas qualificadas já parseiam aninhado recursivo) — são os 3
-CHECKERS (`check_exhaustiveness`, `check_clause_exhaustiveness`,
-`pattern_covers`) que ignoram payload, mais um panic de aridade em
-`lambda Some True:` desqualificado e um falso-positivo de redundância.
-Bugs reproduzidos em `f64eff8`; Fase 1 é soundness (cobertura recursiva,
-bound-check, parser aridade-consciente), Fase 2 é o motor Maranget
-completo (redundância estendida a match arms com isenção de
-`otherwise`), Fase 3 Z3 na folha (fall-through de codegen como
-pré-requisito), Fase 4 refined Int/Float na folha, Fase 5 Rational
-(const-eval de `rational <lit>` + par (num, den) no Z3).
+(5 fases, revisado 2026-08-30, **Emenda 1** pousada). O buraco NÃO é o
+parser (match arms e cláusulas qualificadas já parseiam aninhado
+recursivo) — são os 3 CHECKERS (`check_exhaustiveness`,
+`check_clause_exhaustiveness`, `pattern_covers`) que ignoram payload,
+mais um panic de aridade em `lambda Some True:` desqualificado e um
+falso-positivo de redundância. Bugs reproduzidos em `f64eff8`;
+**Emenda 1:** F1 encolhe para Fundação (oráculos + bound-check +
+parser + fall-through de codegen como no-op provado); a cobertura
+recursiva ad-hoc foi REMOVIDA — F2 é motor antes dos consumidores
+(`maranget.rs` puro com trait de ambiente, depois 3 consumidores, um
+por commit). Fase 3 Z3 na folha, Fase 4 refined Int/Float na folha,
+Fase 5 Rational (const-eval de `rational <lit>` + par (num, den) no
+Z3). Oráculos adversariais K medidos em `b5e2d9e` (3 níveis, grade
+multi-param, arity-tuple).
 
 ### Codegen — `echo!(None)` (bug #2b)
 **Estado:** Pendente. `Closure` com callee não-Ident
 (`kata-codegen/src/lowering/closure.rs:349`) rejeita `echo!(None)`.
 Bug separado da classe de exaustividade — PRD próprio quando atacar.
+
+### Typeck — variante sem payload como argumento (#K-call)
+**Estado:** Pendente (medido em `b5e2d9e`, 2026-08-30). `foo None` e
+até `foo Optional::None` (qualificado) dão `type.no_overload` mesmo
+no 2º nível (`Optional::(Boolean)`). Variante sem payload é
+inexpressável como ARGUMENTO — só pattern. Consistente com
+ret-directed dispatch (`Expr::Ident` não consulta hint), mas limita
+a linguagem. Decisão de design, PRD quando atacar.
+
+### Typeck — enum user-defined como payload de genérico (#K-enum-payload)
+**Estado:** Pendente (medido em `b5e2d9e`). `Optional::(Encoding)` →
+`type.mismatch` esperado `Encoding`, encontrado `Sum(Encoding) or
+Generic(Encoding)` dentro do pattern; `Result::(Int, Encoding)` falha
+até sem match (`Err(E|Text)` com E enum). Ortogonal à exaustividade —
+provável elaboração de união/payload. PRD próprio quando atacar.
+
+### Parser — parêntese interno em braço de match (#K-paren)
+**Estado:** Pendente (medido em `b5e2d9e`). `Some (Some True):` →
+parse error; o greedy de braço só aceita a forma qualificada interna
+(`Some Optional::Some True:`). Limite sintático documentado
+(probeK_deep_paren); mudar o parser de pattern é decisão de
+linguagem.
 
 ---
 
