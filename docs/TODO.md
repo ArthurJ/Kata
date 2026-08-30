@@ -1,68 +1,67 @@
 # TODO — Kata-Lang
 
-Único arquivo de pendências. Atualizado 2026-08-29.
+Único arquivo de pendências. Atualizado 2026-08-30.
 
 Os docs `TODO-*.md` foram removidos (obsoletos ou resolvidos). Pendências vivem aqui.
+
+Resolvidos em 2026-08-29/30 (ver `git log`): escopo plano (typeck+interp),
+facts de path conditions sobre `var` (Z3 ignora var), `@cache` no interp,
+`refined_types.kata` bloco 4 (dual refines NUM+ORD), show de refined no
+interp, `Text implements EQ`.
 
 ---
 
 ## Débito Técnico
 
-### Facts de path conditions sobre `var` são insound (pré-existente)
+### Crashes do JIT em programas semanticamente inválidos (pré-existente)
 
-**Estado:** `PathConditionCtx` coleta facts de guard mesmo quando o
-scrutinee referencia variável `var` (mutável). `var d := n` + guard
-`> d 0` no braço + `d := 0` (reassign) + `d::PosInt`: o fact `> d 0`
-continua asserido e o Z3 "prova" `d::PosInt` quando `d` vale 0.
-Probe P4 (2026-08-29) compilou e imprimiu 0 — prova errada aceita.
+**Estado:** programas válidos sintaticamente mas rejeitados pelo typeck
+podem derrubar o compilador com SIGSEGV/null-deref em vez de erro
+gracioso. Reprodução conhecida: P19-like com `if` inválido → crash em
+`bigint.rs` (null-deref). Compile-time DEVE falhar graciosamente —
+nunca SIGSEGV/SIGILL — mesmo em input malformado que escapou do typeck.
 
-**Causa:** facts são TypedExprs que referenciam o NOME `d` em duas
-leituras (guard e ascription) mas o valor mudou entre elas. Sem SSA
-não há como conectar as duas leituras ao mesmo valor.
+**Causa provável:** janelas no codegen onde uma suposição do typeck
+(retorno sempre presente, tag sempre definida) é dereferenciada sem
+checagem. O crash some quando o programa é corrigido — a classe fica.
 
-**Correção provável:** ao coletar fact de guard, checar se o scrutinee
-referencia binding mutável (`env.is_mutable`) e descartar o fact
-(conservador) — a prova sobre mutáveis nunca é sound sem SSA.
+**Correção provável:** sweep de sites de deref em codegen que assumem
+invariantes do typeck; falhar com `codegen.unsupported`/erro interno
+gracioso quando a suposição não segura.
 
-**Prioridade:** média — o caso exige reassign do mesmo `var` entre
-guard e ascription, padrão raro, mas o resultado é aceite silenciosa
-de código errado (pior que falso negativo).
+**Prioridade:** alta — crash do compilador é a pior classe de falha.
 
-### Vazamento de binding em escopo filho no codegen JIT (pré-existente)
+### Paridade de cache: tipos compostos na key do interp
 
-**Estado:** o JIT aloca slots de variáveis como escopo PLANO — binding
-nascido em braço de match/for/pattern sobrescreve o slot do binding
-externo de mesmo nome, e o valor interno vaza para depois do braço.
-O interp (oráculo) está correto em todos os casos.
+**Estado:** o interp serializa a key de `@cache` por conteúdo apenas
+para primitivos (Int/Float/Text). List/Struct/Tuple/Sum caem em miss
+conservador PERMANENTE (executa + não insere) — o cache nunca aquece
+para esses tipos. O JIT cobre compostos via type descriptor completo
+(`cache_key.rs`).
 
-Probes (2026-08-29, `main!(7)`, esperado `5/7`, JIT dá `5/5`):
-- P3b let-let aninhado, P7b let externo + var interno
-- P15 for-binding sobre let externo (esperado `1 2 7`, JIT dá `1 2 2`)
-- P16 pattern binding sobre let externo (esperado `2 1`, JIT dá `2 2`)
-- P18 var sobre var aninhado, P19 pattern sobre var externo
+**Impacto:** baixo hoje (compostos em função `@cache` perdem memoização
+no interp, divergem do JIT só em custo, não em valor). Mas fib-like
+sobre List penduraria o interp e não o JIT.
 
-**DECISÃO (Arthur, 2026-08-29):** duas camadas.
-1. **Mudança de linguagem:** `for` NÃO sombreia binding do escopo
-   envolvente — `for i` sobre `let i`/param/`var i` existente vira
-   `DuplicateDecl` (typeck, site `infer_for_in`). P15 deixa de ser bug
-   de codegen. A regra se estende a pattern bindings e lambda params?
-   Gate com Arthur.
-2. **Push/pop de `var_map`** (compile-time, clone/restore no lowering)
-   para o shadowing que permanece legal: braço de match, pattern
-   binding, `select`.
+**Quando surgir caso de uso real:** estender `serialize_key_part` com o
+mesmo type descriptor do codegen — a serialização é struct-tag-value
+recursiva, sem dependência de codegen (dá para mover para crate
+compartilhada).
 
-**Prioridade:** média-alta — divergência JIT/interp em código legal;
-`scripts/diff_interp_jit.sh` pode transformar os probes em oráculo.
+**Prioridade:** média.
 
-### `examples/refined_types.kata` quebrado no bloco 4 (pré-existente)
+### Ascription refined de Text literal não const-avalia
 
-**Estado:** bloco 4 usa `< a b` sobre `PositiveInt` — não há overload
-de `<` para refined sem `refines ORD` (comportamento documentado:
-"`refines NUM` não dá comparadores"). O exemplo não compila desde a
-migração (47ee99d). Provavelmente o exemplo queria demonstrar downcast
-(`a::Int`) ou o bloco deve migrar para `refines ORD`.
+**Estado:** `"ola"::NonEmpty` (literal de Text em ascription refined)
+não const-avalia — o scanner de ascription refined cobre apenas
+literals numéricos (IntLit/FloatLit). Text exige o construtor falível
+(`NonEmpty "ola"` → `Ok`/`Err` com match).
 
-**Prioridade:** baixa — exemplo didático, não código de produção.
+**Impacto:** baixo — assimetria ergonômica entre Int e Text, não
+incorreção (o construtor é a via geral e é sound).
+
+**Prioridade:** baixa — unificar estenderia o const-eval para TextLit,
+avaliando o predicado em compile-time sobre o literal.
 
 ### Tree-shaking por instância de família polimórfica
 
@@ -113,12 +112,6 @@ com guards mistos. Corner case — avaliar quando houver demanda real.
 Itens coletados de comentários `TODO` no código-fonte. Ainda não
 triados — podem ser obsoletos, redundantes com itens acima, ou
 ação imediata. Reavaliar caso a caso.
-
-### kata-interp
-
-- (resolvido 2026-08-29) ~~`eval.rs:994/1004` — DictLit/SetLit stubs~~.
-  Interpretador agora insere keys/values com hash/eq_fn resolvidos por tipo,
-  espelhando o codegen.
 
 ### kata-rt
 
