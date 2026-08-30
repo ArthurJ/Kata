@@ -253,10 +253,11 @@ fn text_implements_iterable_countable_indexable_contains() {
     );
 
     let impls = resolved.interface_registry.get_impls_for_type("Text");
+    assert!(resolved.interface_registry.type_implements("Text", "EQ"));
     assert_eq!(
         impls.len(),
-        7,
-        "Text deve ter 7 implements entries (ITERABLE, COUNTABLE, INDEXABLE, CONTAINS, SHOW, HASHABLE, SLICEABLE)"
+        8,
+        "Text deve ter 8 implements entries (ITERABLE, COUNTABLE, INDEXABLE, CONTAINS, SHOW, HASHABLE, SLICEABLE, EQ)"
     );
 
     let contains_impl = impls

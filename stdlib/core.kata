@@ -401,6 +401,16 @@ Text implements SHOW
     show :: Text => Text
     lambda x: x
 
+Text implements EQ
+    @ffi("kata_rt_string_eq")
+    = :: Text Text => Boolean
+
+    != :: Text Text => Boolean
+    lambda a b:
+        match (= a b)
+            Boolean::True: Boolean::False
+            Boolean::False: Boolean::True
+
 # ── Unit ─────────────────────────────────────────────────────
 # Unit implementa SHOW: show sempre retorna "()".
 Unit implements SHOW
