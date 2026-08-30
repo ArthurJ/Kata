@@ -88,7 +88,15 @@ pub(crate) fn alloc_bigint(n: BigInt) -> i64 {
 ///
 /// # Safety
 /// `val` deve ser um ponteiro válido de `alloc_bigint` ainda não liberado.
+///
+/// Hardening do boundary FFI: `0` (null — slot não-inicializado que
+/// escapou do typeck) é recusado com panic **unwind** e mensagem
+/// clara. Antes: deref cego → SIGSEGV/SIGABRT (non-unwinding), matando
+/// o processo hospedeiro sem diagnóstico.
 unsafe fn deref_bigint<'a>(val: i64) -> &'a BigInt {
+    if val == 0 {
+        panic!("kata_rt bigint: deref de valor null (0) — slot não-inicializado escapou do typeck; isto é um bug do compilador, não do seu código");
+    }
     unsafe { &*(val as *const BigInt) }
 }
 
