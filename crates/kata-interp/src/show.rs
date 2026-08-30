@@ -34,19 +34,9 @@ pub fn show_value(val: Value, ty: &Ty, ctx: &InterpCtx) -> Value {
             rt::kata_rt_float_to_text(f) as i64
         }
         Ty::Prim(PrimTy::Text) => {
-            // show de Text cita com aspas: "texto"
-            // kata_rt_bi_show faz isso para nós (BigInt/Text compartilham o show FFI)
-            // Na verdade, show de Text envolve com aspas. O codegen usa kata_rt_bi_show
-            // que apenas retorna o texto. Precisamos envolver com aspas manualmente.
-            let raw = unsafe {
-                std::ffi::CStr::from_ptr(val as *const std::os::raw::c_char)
-                    .to_string_lossy()
-                    .into_owned()
-            };
-            let quoted = format!("\"{raw}\"");
-            CString::new(quoted)
-                .unwrap_or_else(|_| CString::new("\"\"").unwrap())
-                .into_raw() as i64
+            // show de Text é identidade (mesma regra de `Text implements
+            // SHOW` no stdlib: `lambda x: x`) — sem aspas.
+            val
         }
         Ty::Prim(PrimTy::Rational) => {
             let r = val as *const num_rational::BigRational;
@@ -182,11 +172,26 @@ fn show_struct(
     _ty: &Ty,
     ctx: &InterpCtx,
 ) -> Value {
-    // Precisamos dos nomes dos campos e tipos. O StructKey carrega o nome
-    // do tipo, mas os campos estão no TypedModule (ctx.module).
-    // Para uma implementação correta, precisaríamos acessar o schema do
-    // struct. Por enquanto, formatar como Tuple com o nome do tipo.
     let type_name = struct_key.name();
+
+    // Refined sem campos delega ao show do tipo base (mesma regra da
+    // síntese `__kata_show__{Refined}` do codegen — `build_refined_show_body`).
+    // Em runtime o refined tem layout idêntico ao base.
+    if let Some(info) = ctx.module.struct_registry.get(type_name) {
+        if info.alias_of.is_some() && info.predicates.is_some() && info.fields.is_empty() {
+            let base = info.alias_of.clone().expect("checado is_some acima");
+            let base_ty = match base.as_str() {
+                "Int" => Ty::Prim(PrimTy::Int),
+                "Float" => Ty::Prim(PrimTy::Float),
+                "Text" => Ty::Prim(PrimTy::Text),
+                "Rational" => Ty::Prim(PrimTy::Rational),
+                _ => Ty::Struct(kata_core::struct_registry::StructKey::Plain(base.clone())),
+            };
+            return show_value(val, &base_ty, ctx);
+        }
+    }
+
+    // Struct comum (não-refined): `Nome(v0, v1, ...)`.
     let n_fields = struct_field_count(struct_key);
 
     if n_fields == 0 {
