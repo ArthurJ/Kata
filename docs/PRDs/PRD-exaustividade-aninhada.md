@@ -2,7 +2,7 @@
 
 **Status:** 🔴 Pendente — Fase 1 não iniciada
 **Data:** 2026-08-30
-**Tipo:** Planejamento — PRD único, 4 fases sequenciais
+**Tipo:** Planejamento — PRD único, 5 fases sequenciais
 **Depende de:** `PRD-exaustividade.md` ✅ (guards via Z3, patterns de 1 nível)
 **Não depende de:** nenhum PRD pendente
 
@@ -26,7 +26,7 @@ Todos reproduzidos empiricamente em `f64eff8` (2026-08-30), binário
 | 1 | Exaustividade ignora payload: `Some True` + `None` aceito sem `Some False` — o caso faltante atravessa o compile-time | probeA compila e roda (exit 0); probeB, o mesmo código chamado com `Some False`, **SIGILL exit 132** — é o `trap user(1)` de `lower_clause_chain` (`kata-codegen/src/lowering/clause.rs:260`) |
 | 1b | Redundância ignora payload: cláusulas `lambda Optional::Some True:` seguida de `lambda Optional::Some False:` → a 2ª é rejeitada como `type.redundant_clause` | probeE2, exit 1 |
 | 2 | Panic do compilador: `lambda Some True:` (desqualificado) em função de 1 param parseia como 2 patterns → `index out of bounds` em `helpers.rs:104` (`param_tys[i]` sem bound-check). Viola o invariante de compile-time gracioso | probeE, exit 101, panic reproduzido |
-| 2b | Codegen rejeita `echo!(None)`: Closure com callee não-Ident (`closure.rs:349`) | probeC v1 — **fora deste PRD**, ver §9 |
+| 2b | Codegen rejeita `echo!(None)`: Closure com callee não-Ident (`closure.rs:349`) | probeC v1 — **fora deste PRD**, ver §10 |
 
 Diagnóstico estrutural: existem **3 checkers ortogonais** com lógica de
 cobertura parcialmente duplicada (`check_exhaustiveness` —
@@ -56,7 +56,9 @@ codegen de match.
    verificação de 2026-08-30 — ver §4.3): a ÚLTIMA posição do pattern
    de cláusula usa `parse_match_pattern`; as demais mantêm
    `parse_pattern`. A aridade vem da assinatura, parseada antes das
-   cláusulas nos 3 callers de `parse_sig_clauses`.
+   cláusulas nos 4 callers de `parse_sig_clauses` (`sig.rs:48`,
+   `interface_decl.rs:150`, `interface_decl.rs:378`,
+   `interface_decl.rs:501` — override de método em bloco `refines`).
 4. **3-A: composição motor→Z3 NA FOLHA (ratificada nesta sessão).** A
    composição tem DIREÇÃO: o motor Maranget especializa estruturalmente e
    emite queries Z3 escopadas por célula; o Z3 nunca enxerga estrutura de
@@ -69,6 +71,24 @@ codegen de match.
    de exclusão.
 6. **Panic #2 → diagnóstico `ArityMismatch`** na Fase 1 (bound-check).
 7. **Codegen `echo!(None)` (#2b) fora do PRD** — TODO.md com PRD próprio.
+8. **Redundância de match arms → ERRO, com isenção de `otherwise`
+   (Arthur, revisão de 2026-08-30).** Braço de match inútil
+   (usefulness = falso w.r.t. braços anteriores) que NÃO é
+   `otherwise` → `RedundantClause` (erro), estendendo o contrato
+   existente de cláusulas. `otherwise` inútil (defensivo pós-cobertura)
+   → silêncio: idioma sancionado pelo corpus
+   (`enum_refined_alias.kata:54-57`, `refined_types.kata:26-29`).
+   Supressão de diagnóstico (quando houver) é item separado no TODO —
+   sistema de supressão a projetar.
+9. **Rational na folha → Fase 5 (Arthur, revisão de 2026-08-30).**
+   Refined sobre Rational fica FORA da Fase 4: não há literal Rational
+   na linguagem (`rational 3` é Apply de FFI, não literal),
+   `const_eval_predicate` suporta apenas Int/Float, e o tradutor Z3
+   não conhece Rational (zero suporte em `z3_translate.rs`). A Fase 4
+   fica restrita a Int/Float — paridade REAL com a ascription
+   const-avaliável de hoje. A Fase 5 orça a extensão completa:
+   const-avaliação de `rational <lit>` + mapeamento Rational no Z3
+   como par (num, den) com invariantes.
 
 ## 4. Fase 1 — Soundness (cobertura estrutural recursiva)
 
@@ -89,6 +109,19 @@ Regra única, aplicada aos três consumidores:
 Sites: `check_exhaustiveness` (match, `patterns.rs:442`),
 `check_clause_exhaustiveness` (cláusulas, `function_infer.rs:250`),
 `pattern_covers` (redundância, `redundancy.rs:165`).
+
+**Semântica de dominância sob descida (redundância):** com o payload
+visível, `pattern_covers(covering, covered)` precisa da regra
+recursiva explícita: mesma variante (ou wildcard) e, para cada
+sub-pattern, `covering_sub` cobre `covered_sub` — `Ident`/`Wildcard`
+cobrem qualquer sub-pattern; literais cobrem só o mesmo literal.
+Efeito: `Some True` NÃO cobre `Some False` (mata o falso-positivo do
+probeE2); `Some x` cobre `Some True`; `Some _` cobre tudo de `Some`.
+
+Janela de regressão medida (2026-08-30, corpus inteiro): zero
+patterns `Ok/Some/Err <literal>` usados como pattern em
+stdlib/examples/book/testes — a ruptura 1-B e a descida de payload
+quebram apenas os probes (oráculos RED por design).
 
 DoD Fase 1:
 - probeA → `NonExhaustiveMatch` missing `["Some False"]` em compile-time
@@ -120,8 +153,9 @@ literalmente (todas as posições greedy), quebra `lambda True True:`
 
 Design correto:
 
-- `parse_sig_clauses` recebe a aridade da assinatura (disponível nos 3
-  callers: `sig.rs:48`, `interface_decl.rs:150`, `interface_decl.rs:378`).
+- `parse_sig_clauses` recebe a aridade da assinatura (disponível nos 4
+  callers: `sig.rs:48`, `interface_decl.rs:150`, `interface_decl.rs:378`,
+  `interface_decl.rs:501` — override de método em bloco `refines`).
 - `parse_lambda_clause` parseia exatamente `arity` patterns: as
   primeiras `arity-1` posições com `parse_pattern` (comportamento
   atual), a **última** com `parse_match_pattern`
@@ -156,6 +190,12 @@ ponte) por UM motor servindo os 3 consumidores:
   - Exaustividade: match exaustivo sse `_` NÃO é útil; o witness do `_`
     É o caso faltante (`missing: Some False`, `missing: Ok _`).
   - Redundância: braço/cláusula inútil = nenhum witness.
+- **Redundância estendida a match arms (decisão 8):** braço de match
+  inútil → `RedundantClause` (erro), exceto `otherwise` — o braço
+  `otherwise` (`MatchArm.pattern == None`) inútil é **isento** (idioma
+  defensivo sancionado pelo corpus). `Some True` duplicado e
+  `Some _` após `Some True` são erros; `otherwise` após `Ok v`+`Err _`
+  é silêncio.
 - **Fim das sentinelas-string `__ANY__`** nos 3 checkers.
 
 DoD Fase 2:
@@ -164,8 +204,10 @@ DoD Fase 2:
 - Witnesses legíveis nos três contextos (snapshots).
 - 1-B substituído: payload infinito → `NonExhaustiveMatch` com witness
   (`missing: Ok _`) em vez de `MissingOtherwise`.
-- Bônus mensurável: braço de `match` morto (`Some True` duplicado)
-  diagnosticado — hoje passa silencioso.
+- probeJ (braço de `match` morto, `Some True` duplicado) →
+  `RedundantClause` em compile-time (erro; hoje compila verde
+  silencioso — verificado). `otherwise` inútil continua silêncio
+  (`enum_refined_alias.kata` e `refined_types.kata` seguem verdes).
 - probeA/B: `NonExhaustiveMatch` missing `["Some False"]`; probe sobre
   `Result::(Int, Text)` parcial → `missing: ["Ok _"]`.
 
@@ -253,12 +295,16 @@ exatamente o domínio {1, 2} do predicado.
 
 ### 7.2. Escopo
 
-- Refined sobre base numérica (Int/Float/Rational) com predicado
-  const-avaliável — o mesmo conjunto que a ascription refined aceita
-  hoje.
+- Refined sobre base numérica **Int/Float** com predicado
+  const-avaliável — paridade REAL com a ascription refined de hoje:
+  `const_eval_predicate` (`infer/const_eval.rs`) reduz apenas
+  `IntLit`/`FloatLit`. Rational sai da Fase 4 (decisão 9) → Fase 5.
 - Outras bases (Text via construtor falível, Boolean, enum) fora — o
   construtor falível é a via geral e sound (manual §4.2.2).
-- Literal que viola o predicado → erro de compile (não runtime trap).
+- Literal que viola o predicado → `TypeMismatch` com a mensagem do
+  mecanismo de ascription ("predicado i de X falhou para valor",
+  `ascription.rs:308-312`) — reuso do diagnóstico existente, não
+  runtime trap.
 
 ### 7.3. DoD Fase 4
 
@@ -277,22 +323,76 @@ exatamente o domínio {1, 2} do predicado.
 Oráculos RED: probeF_match_refined.kata (Fase 4) e probeF2 (wildcard
 sobre refined — controle negativo, já verde hoje, continua verde).
 
-## 8. Estruturas afetadas
+## 8. Fase 5 — Racional na folha (decisão 9)
+
+A Fase 4 fecha refined Int/Float. A Fase 5 estende a MESMA premissa de
+folha a **Rational** — três lacunas medidas no estado atual:
+
+1. **Literal:** não há literal Rational na linguagem — `rational 3`
+   é `Apply` de função FFI, não literal do parser. O pattern em
+   posição de folha será `rational <IntLit>` (Apply const-avaliável)
+   ou ascription `<IntLit>::Rational`.
+2. **Const-eval:** `const_eval_predicate` reduz apenas
+   `IntLit`/`FloatLit`. Estender para avaliar `rational <IntLit>`
+   (conversão Int→Rational é total e const-avaliável por construção)
+   e predicados sobre o par (num, den).
+3. **Z3:** o tradutor não conhece Rational (zero suporte em
+   `z3_translate.rs`). Mapear como par (num, den) com invariante
+   `den > 0`, gcd irrelevante para predicados de comparação —
+   operações `<`/`>`/`=` sobre pares via cross-multiplication
+   (`num₁·den₂ ⋛ num₂·den₁`), sound para den > 0.
+
+Sem axiomatização de datatype — Rational entra na query de folha como
+UM PAR de Ints com premissa `den > 0`, na mesma direção motor→solver
+(Z3 nunca enxerga o refined, só o par).
+
+### 8.1. Escopo
+
+- Refined sobre Rational (`data (Rational, > _ (rational 0), ...) as Q`)
+  com pattern `rational <lit>` em folha.
+- Predicados const-avaliáveis sobre o par; comparações via
+  cross-multiplication no tradutor Z3.
+- Aritmética racional completa (adição/multiplicação de pares) no
+  tradutor fora do escopo — só o que os predicados de refined usam
+  (`=`, `!=`, `<`, `<=`, `>`, `>=`).
+
+### 8.2. DoD Fase 5
+
+- Oráculo RED verde (§8.3): `RatUmOuDois` com `rational 1:` /
+  `rational 2:` compila e produz output correto nos dois backends.
+- `rational 0:` fora do domínio → `TypeMismatch` com literal na
+  mensagem; wildcard sobre `RatUmOuDois` continua verde (controle).
+- Fase 4 sem regressão (probeF continua verde nos dois backends).
+- Critério negativo mantido: zero `datatype` Z3 (grep vazio).
+- A premissa `den > 0` entra em TODAS as queries de folha sobre
+  Rational (soundness da cross-multiplication).
+
+### 8.3. Testes
+
+Oráculo RED (Fase 5): `data (Rational, > _ (rational 0), < _ (rational 3)) as RatUmOuDois`
+— match com patterns `rational 1:` / `rational 2:` cobre {1, 2} exatos.
+Controles: wildcard sobre RatUmOuDois verde; `rational 0:` fora do
+domínio → TypeMismatch com literal na mensagem.
+
+## 9. Estruturas afetadas
 
 | Camada | Site | Fase |
 |--------|------|------|
-| Parser | `parse_sig_clauses`/`parse_lambda_clause` (`kata-parser/src/sig.rs`) — aridade + última posição `parse_match_pattern` | 1 |
+| Parser | `parse_sig_clauses`/`parse_lambda_clause` (`kata-parser/src/sig.rs`) + 4 callers (`sig.rs:48`, `interface_decl.rs:150/378/501`) — aridade + última posição `parse_match_pattern` | 1 |
 | Typeck | `check_patterns` (`infer/helpers.rs:92`) — bound-check | 1 |
 | Typeck | `check_exhaustiveness` (`patterns.rs:442`) — cobertura recursiva → motor | 1→2 |
 | Typeck | `check_clause_exhaustiveness` (`function_infer.rs:250`) — idem | 1→2 |
-| Typeck | `pattern_covers` (`redundancy.rs:165`) — idem | 1→2 |
-| Typeck | novo módulo do motor (matriz/usefulness/witness) | 2 |
+| Typeck | `pattern_covers` (`redundancy.rs:165`) — dominância recursiva → motor | 1→2 |
+| Typeck | redundância de match arms (novo consumidor; `MatchArm.pattern == None` isento) | 2 |
+| Typeck | novo módulo do motor (matriz/usefulness/witness) — `kata-inference/src/maranget.rs` | 2 |
 | Z3 | `guard_completeness.rs` + `z3_translate.rs` — queries de folha escopadas | 3 |
 | Typeck | `check_pattern` (`patterns.rs:285+`) — literal aceito contra refined (const-avaliação do predicado) | 4 |
 | Z3 | predicado do refined como premissa da query de folha | 4 |
+| Typeck | `const_eval.rs` — `rational <lit>` const-avaliável | 5 |
+| Z3 | `z3_translate.rs` — Rational como par (num, den), cross-multiplication, premissa `den > 0` | 5 |
 | Codegen | `lower_guards`/`lower_clause_chain` (`lowering/clause.rs`) — fall-through | 3 |
 
-## 9. Fora do escopo (registrar no TODO.md)
+## 10. Fora do escopo (registrar no TODO.md)
 
 - **#2b:** `echo!(None)` → `codegen.unsupported` Closure com callee
   não-Ident (`closure.rs:349`) — bug separado, PRD próprio.
@@ -301,7 +401,7 @@ sobre refined — controle negativo, já verde hoje, continua verde).
   imprime o erro mas sai com exit 0 (observado no probeB) — comportamento
   do driver, não da classe estrutural.
 
-## 10. Testes (TDD — oráculos RED primeiro)
+## 11. Testes (TDD — oráculos RED primeiro)
 
 Arquivos por responsabilidade: `nested_exhaustiveness_e2e.rs`,
 `nested_redundancy_e2e.rs` (copiar os probes como fontes EXATOS — probe →
@@ -316,22 +416,26 @@ teste é cópia mecânica, não reconstrução). Snapshots insta para witnesses.
 | probeE (`lambda Some True:` 1 param) | JIT | nunca panic: `ArityMismatch` pós-bound-check, verde pós-parser-fix |
 | probeE2 (cláusulas qualificado aninhado) | JIT | verde, sem falso `redundant_clause` |
 | probeG (guards na cláusula) | JIT+interp | verde (regressão) |
-| probeH (guards entre cláusulas) | JIT+interp | Fase 1/2: `NonExhaustiveMatch`; Fase 3: verde com output correto |
-| match `Result::(Int, Text)` parcial (`Ok 0`/`Err _`) | JIT | F1: `MissingOtherwise`; F2: `NonExhaustiveMatch` missing `["Ok _"]` |
+| probeH (guards entre cláusulas, inline) | JIT+interp | Fase 1/2: `NonExhaustiveMatch`; Fase 3: verde com output correto |
+| probeH_with (guards entre cláusulas via `with` — forma canônica) | JIT+interp | Fase 1/2: `NonExhaustiveMatch`; Fase 3: verde com output correto — falso verde por forma sintática exige as DUAS formas |
+| probeM (match `Result::(Int, Text)` parcial, `Ok 0`/`Err _`) | JIT | F1: `MissingOtherwise`; F2: `NonExhaustiveMatch` missing `["Ok _"]` |
 | probeF (match sobre refined `{1, 2}` com literais) | JIT+interp | F4: verde, output `um`/`dois` nos dois backends |
 | probeF2 (wildcard sobre refined) | JIT | controle: verde hoje, continua verde |
-| match sobre refined com literal fora do domínio (`0:` sobre `UmOuDois`) | JIT | F4: erro de compile com o literal na mensagem |
+| match sobre refined com literal fora do domínio (`0:` sobre `UmOuDois`) | JIT | F4: `TypeMismatch` com literal na mensagem |
 | match sobre refined cobertura parcial (só `1:`, sem `2:`) | JIT | F4: `NonExhaustiveMatch` missing `["2"]` — witness do model, dentro do domínio do predicado |
+| probeJ (match braço morto, `Some True` duplicado) | JIT | F2: `RedundantClause` (erro) — hoje verde silencioso |
+| probeJ2 (otherwise inútil pós-cobertura, `Ok v`+`Err _`+`otherwise`) | JIT | verde nas DUAS pontas: hoje e pós-F2 (isenção do otherwise) |
 | `lambda True True:` multi-param (10 testes) | — | verdes (regressão 2-A) |
-| match braço morto (`Some True` duplicado) | JIT | F2: redundante diagnosticado |
+| `RatUmOuDois` (`rational 1:`/`rational 2:` sobre Rational refined) | JIT+interp | F5: verde com output correto nos dois backends |
 
 Verificação entre fases: `cargo test --workspace --no-fail-fast` verde;
 `cargo clippy --workspace --all-targets -- -D warnings` vazio.
 
-## 11. Passos de implementação
+## 12. Passos de implementação
 
 **Fase 1 (ordem interna, menor → maior):**
-1. Oráculos E2E RED dos probes (copiar fontes exatos).
+1. Oráculos E2E RED dos probes (copiar fontes exatos — incluindo
+   probeM e probeJ criados na revisão de 2026-08-30).
 2. Bound-check `ArityMismatch` em `check_patterns`.
 3. Parser aridade-consciente (2-A) + teste `lambda True True:` regressão.
 4. Cobertura recursiva: match (`check_exhaustiveness`).
@@ -340,21 +444,28 @@ Verificação entre fases: `cargo test --workspace --no-fail-fast` verde;
 7. `cargo test` + clippy verdes; commits em camadas (bound-check; parser;
    cobertura match; cobertura clauses; redundância; PRD; TODO.md).
 
-**Fase 2:** motor matriz/usefulness → migrar 3 consumidores (um por
-commit) → remover `__ANY__` → witnesses (1-B substituído) → snapshots.
+**Fase 2:** motor matriz/usefulness (`maranget.rs`) → migrar 3
+consumidores (um por commit) → redundância de match arms (novo
+consumidor, isenção do otherwise) → remover `__ANY__` → witnesses
+(1-B substituído) → snapshots.
 
 **Fase 3:** fall-through codegen → queries de folha escopadas → probeH
-verde nos dois backends.
+E probeH_with verdes nos dois backends.
 
 **Fase 4:** coerção de literal em pattern sobre refined (7.1) → predicado
 como premissa da folha → probeF verde nos dois backends.
 
-## 12. Atualização de documentação ao concluir
+**Fase 5:** const-eval de `rational <lit>` → Rational no Z3 como par
+(num, den) com premissa `den > 0` → oráculo `RatUmOuDois` verde nos
+dois backends.
+
+## 13. Atualização de documentação ao concluir
 
 - Este PRD — status ✅ por fase.
 - `docs/TODO.md` — item "Patterns aninhados (Maranget + SMT)"
-  reescrito (bug ativo com PRD, não "avaliar"); entrada nova: #2b
-  (codegen `echo!(None)`).
+  reescrito (bug ativo com PRD, não "avaliar"); entradas novas: #2b
+  (codegen `echo!(None)`); sistema de supressão de diagnóstico
+  (braço redundante com isenção de `otherwise` — projeto a fazer).
 - `docs/Kata-lang-manual.md` §16 (Condicionais Puras: Guards e Pattern
   Matching) — contratos de exaustividade aninhada + witnesses; §4.2.2
   (Tipos Refinados) — literal em pattern sobre refined. Manual é
