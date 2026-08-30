@@ -1,8 +1,8 @@
-# PRD — Exaustividade Aninhada (Maranget + Z3 em Guards)
+# PRD — Exaustividade Aninhada (Maranget + Z3 em Guards + Refined)
 
 **Status:** 🔴 Pendente — Fase 1 não iniciada
 **Data:** 2026-08-30
-**Tipo:** Planejamento — PRD único, 3 fases sequenciais
+**Tipo:** Planejamento — PRD único, 4 fases sequenciais
 **Depende de:** `PRD-exaustividade.md` ✅ (guards via Z3, patterns de 1 nível)
 **Não depende de:** nenhum PRD pendente
 
@@ -12,8 +12,8 @@ Fechar a classe de bugs estruturais em que os 3 checkers de cobertura
 (exaustividade de `match`, exaustividade de cláusulas lambda, redundância
 de cláusulas) ignoram o **payload** de patterns compostos (`Variant`,
 `Cons`, `Tuple`), e unificar os três num motor único de usefulness
-(Maranget), com Z3 compondo nas folhas/guards — nunca substituindo o
-motor.
+(Maranget), com Z3 compondo nas folhas — guards e predicados de tipos
+refined — nunca substituindo o motor.
 
 ## 2. Motivação — 4 bugs da mesma classe estrutural
 
@@ -26,7 +26,7 @@ Todos reproduzidos empiricamente em `f64eff8` (2026-08-30), binário
 | 1 | Exaustividade ignora payload: `Some True` + `None` aceito sem `Some False` — o caso faltante atravessa o compile-time | probeA compila e roda (exit 0); probeB, o mesmo código chamado com `Some False`, **SIGILL exit 132** — é o `trap user(1)` de `lower_clause_chain` (`kata-codegen/src/lowering/clause.rs:260`) |
 | 1b | Redundância ignora payload: cláusulas `lambda Optional::Some True:` seguida de `lambda Optional::Some False:` → a 2ª é rejeitada como `type.redundant_clause` | probeE2, exit 1 |
 | 2 | Panic do compilador: `lambda Some True:` (desqualificado) em função de 1 param parseia como 2 patterns → `index out of bounds` em `helpers.rs:104` (`param_tys[i]` sem bound-check). Viola o invariante de compile-time gracioso | probeE, exit 101, panic reproduzido |
-| 2b | Codegen rejeita `echo!(None)`: Closure com callee não-Ident (`closure.rs:349`) | probeC v1 — **fora deste PRD**, ver §8 |
+| 2b | Codegen rejeita `echo!(None)`: Closure com callee não-Ident (`closure.rs:349`) | probeC v1 — **fora deste PRD**, ver §9 |
 
 Diagnóstico estrutural: existem **3 checkers ortogonais** com lógica de
 cobertura parcialmente duplicada (`check_exhaustiveness` —
@@ -53,18 +53,22 @@ codegen de match.
    ser o contrato final (`NonExhaustiveMatch` com witness) e 1-B é
    substituído.
 3. **2-A: parser de cláusulas aridade-consciente** (refinada na
-   verificação de 2026-08-30 — ver §3.1.3): a ÚLTIMA posição do pattern
+   verificação de 2026-08-30 — ver §4.3): a ÚLTIMA posição do pattern
    de cláusula usa `parse_match_pattern`; as demais mantêm
    `parse_pattern`. A aridade vem da assinatura, parseada antes das
    cláusulas nos 3 callers de `parse_sig_clauses`.
 4. **3-A: composição motor→Z3 NA FOLHA (ratificada nesta sessão).** A
    composição tem DIREÇÃO: o motor Maranget especializa estruturalmente e
    emite queries Z3 escopadas por célula; o Z3 nunca enxerga estrutura de
-   datatype. `Unknown` → `MissingOtherwise` local à folha. 3-B (Z3 prova
-   exaustividade sobre scrutinee refined) fica no TODO.md como extensão
-   de premissas da mesma folha — PRD futuro.
-5. **Panic #2 → diagnóstico `ArityMismatch`** na Fase 1 (bound-check).
-6. **Codegen `echo!(None)` (#2b) fora do PRD** — TODO.md com PRD próprio.
+   datatype. `Unknown` → `MissingOtherwise` local à folha.
+5. **3-B dentro do PRD como Fase 4 (Arthur, 2026-08-30): refined na
+   folha.** O predicado de um tipo refined é uma premissa a mais na
+   MESMA query de folha — mesmo mecanismo da Fase 3, sem motor novo.
+   O que parecia justificar adiamento (literal não coerzido a refined
+   em pattern, probe F) é pré-requisito interno da fase, não motivo
+   de exclusão.
+6. **Panic #2 → diagnóstico `ArityMismatch`** na Fase 1 (bound-check).
+7. **Codegen `echo!(None)` (#2b) fora do PRD** — TODO.md com PRD próprio.
 
 ## 4. Fase 1 — Soundness (cobertura estrutural recursiva)
 
@@ -165,7 +169,7 @@ DoD Fase 2:
 - probeA/B: `NonExhaustiveMatch` missing `["Some False"]`; probe sobre
   `Result::(Int, Text)` parcial → `missing: ["Ok _"]`.
 
-## 6. Fase 3 — Z3 na folha (composição motor→solver)
+## 6. Fase 3 — Z3 na folha (composição motor→solver, guards)
 
 ### 6.1. Contrato de direção (3-A ratificado)
 
@@ -219,7 +223,61 @@ DoD Fase 3: probeH compila E produz `positivo`/`zero ou negativo`
 corretos nos DOIS backends (interp e JIT — o teste E2E valida o
 fall-through, não só a aprovação do typeck).
 
-## 7. Estruturas afetadas
+## 7. Fase 4 — Refined na folha (3-B)
+
+A Fase 3 fecha cada folha com Z3 sobre os bindings do payload. A Fase 4
+estende a MESMA query de folha com uma premissa estrutural: quando o
+tipo da coluna é **refined**, o predicado do refined entra como
+premissa. Sem motor novo, sem datatype no Z3 — a Fase 4 é a vitrine
+completa da direção motor→solver: o splitting estrutural abre o bucket
+"resto" do tipo infinito, a folha fecha com o predicado.
+
+### 7.1. Pré-requisito: coerção de literal em posição de pattern (probe F)
+
+`match` sobre scrutinee refined com pattern literal falha hoje com
+`TypeMismatch` esperado `UmOuDois`, encontrado `Int` — o literal não é
+coerzido ao refined em posição de pattern. Sem esse fix, a folha da
+Fase 4 não tipa.
+
+Fix pelo mesmo caminho da ascription de literal (`5::NonZero`):
+`check_pattern` aceita `Literal` quando o tipo esperado é refined sobre
+a mesma base numérica do literal e o literal **satisfaz o predicado**
+(const-avaliação — mecanismo existente da ascription refined, manual
+§4.2.2); literal que viola o predicado → erro de compile. Com o
+predicado satisfeito, o literal já estreita a folha — o Z3 confirma com
+a premissa adicional.
+
+Probe F vira oráculo RED da Fase 4: `match n { 1: "um", 2: "dois" }`
+sobre `data (Int, > _ 0, < _ 3) as UmOuDois` — os dois braços cobrem
+exatamente o domínio {1, 2} do predicado.
+
+### 7.2. Escopo
+
+- Refined sobre base numérica (Int/Float/Rational) com predicado
+  const-avaliável — o mesmo conjunto que a ascription refined aceita
+  hoje.
+- Outras bases (Text via construtor falível, Boolean, enum) fora — o
+  construtor falível é a via geral e sound (manual §4.2.2).
+- Literal que viola o predicado → erro de compile (não runtime trap).
+
+### 7.3. DoD Fase 4
+
+- probe F compila E produz `um`/`dois` corretamente (verdade E2E, não
+  só aprovação de typeck — mesmo critério da Fase 3 para probeH).
+- Literal fora do domínio (`0: "zero"` sobre `UmOuDois`) → erro de
+  compile com o literal na mensagem.
+- `otherwise` sobre refined com cobertura provada: sem mudança de
+  contrato — continua legal e exaustivo por definição (tautologia).
+- Fase 3 sem regressão (probeH continua verde nos dois backends).
+- O predicado entra como premissa da folha — nenhum datatype no Z3
+  (critério negativo: grep vazio em `datatype` nos testes do tradutor).
+
+### 7.4. Testes
+
+Oráculos RED: probeF_match_refined.kata (Fase 4) e probeF2 (wildcard
+sobre refined — controle negativo, já verde hoje, continua verde).
+
+## 8. Estruturas afetadas
 
 | Camada | Site | Fase |
 |--------|------|------|
@@ -230,24 +288,20 @@ fall-through, não só a aprovação do typeck).
 | Typeck | `pattern_covers` (`redundancy.rs:165`) — idem | 1→2 |
 | Typeck | novo módulo do motor (matriz/usefulness/witness) | 2 |
 | Z3 | `guard_completeness.rs` + `z3_translate.rs` — queries de folha escopadas | 3 |
+| Typeck | `check_pattern` (`patterns.rs:285+`) — literal aceito contra refined (const-avaliação do predicado) | 4 |
+| Z3 | predicado do refined como premissa da query de folha | 4 |
 | Codegen | `lower_guards`/`lower_clause_chain` (`lowering/clause.rs`) — fall-through | 3 |
 
-## 8. Fora do escopo (registrar no TODO.md)
+## 9. Fora do escopo (registrar no TODO.md)
 
 - **#2b:** `echo!(None)` → `codegen.unsupported` Closure com callee
   não-Ident (`closure.rs:349`) — bug separado, PRD próprio.
-- **probe F:** match sobre scrutinee refined com literal falha
-  `TypeMismatch` (literal não coerzido a refined em posição de pattern).
-  Anotar independentemente da Fase 3.
-- **3-B:** Z3 prova exaustividade de `match` sobre refined via
-  predicado como premissa da folha — extensão natural do mecanismo da
-  Fase 3, PRD futuro.
 - **`arm.guard` em match arms** — sintaxe nova, exige decisão de Arthur.
 - **Interp exit code:** `kata run --interp` em erro de runtime da action
   imprime o erro mas sai com exit 0 (observado no probeB) — comportamento
   do driver, não da classe estrutural.
 
-## 9. Testes (TDD — oráculos RED primeiro)
+## 10. Testes (TDD — oráculos RED primeiro)
 
 Arquivos por responsabilidade: `nested_exhaustiveness_e2e.rs`,
 `nested_redundancy_e2e.rs` (copiar os probes como fontes EXATOS — probe →
@@ -264,13 +318,17 @@ teste é cópia mecânica, não reconstrução). Snapshots insta para witnesses.
 | probeG (guards na cláusula) | JIT+interp | verde (regressão) |
 | probeH (guards entre cláusulas) | JIT+interp | Fase 1/2: `NonExhaustiveMatch`; Fase 3: verde com output correto |
 | match `Result::(Int, Text)` parcial (`Ok 0`/`Err _`) | JIT | F1: `MissingOtherwise`; F2: `NonExhaustiveMatch` missing `["Ok _"]` |
+| probeF (match sobre refined `{1, 2}` com literais) | JIT+interp | F4: verde, output `um`/`dois` nos dois backends |
+| probeF2 (wildcard sobre refined) | JIT | controle: verde hoje, continua verde |
+| match sobre refined com literal fora do domínio (`0:` sobre `UmOuDois`) | JIT | F4: erro de compile com o literal na mensagem |
+| match sobre refined cobertura parcial (só `1:`, sem `2:`) | JIT | F4: `NonExhaustiveMatch` missing `["2"]` — witness do model, dentro do domínio do predicado |
 | `lambda True True:` multi-param (10 testes) | — | verdes (regressão 2-A) |
 | match braço morto (`Some True` duplicado) | JIT | F2: redundante diagnosticado |
 
 Verificação entre fases: `cargo test --workspace --no-fail-fast` verde;
 `cargo clippy --workspace --all-targets -- -D warnings` vazio.
 
-## 10. Passos de implementação
+## 11. Passos de implementação
 
 **Fase 1 (ordem interna, menor → maior):**
 1. Oráculos E2E RED dos probes (copiar fontes exatos).
@@ -288,14 +346,18 @@ commit) → remover `__ANY__` → witnesses (1-B substituído) → snapshots.
 **Fase 3:** fall-through codegen → queries de folha escopadas → probeH
 verde nos dois backends.
 
-## 11. Atualização de documentação ao concluir
+**Fase 4:** coerção de literal em pattern sobre refined (7.1) → predicado
+como premissa da folha → probeF verde nos dois backends.
+
+## 12. Atualização de documentação ao concluir
 
 - Este PRD — status ✅ por fase.
 - `docs/TODO.md` — item "Patterns aninhados (Maranget + SMT)"
-  reescrito (bug ativo com PRD, não "avaliar"); entradas novas: #2b,
-  probe F, 3-B.
+  reescrito (bug ativo com PRD, não "avaliar"); entrada nova: #2b
+  (codegen `echo!(None)`).
 - `docs/Kata-lang-manual.md` §16 (Condicionais Puras: Guards e Pattern
-  Matching) — contratos de exaustividade aninhada + witnesses. Manual é
+  Matching) — contratos de exaustividade aninhada + witnesses; §4.2.2
+  (Tipos Refinados) — literal em pattern sobre refined. Manual é
   contrato: **pedir permissão a Arthur**.
 - `docs/kata-book/06-*.md`, `10-*.md` — se comportamento visível ao
   iniciante mudar (match exaustivo aninhado dispensa otherwise).
