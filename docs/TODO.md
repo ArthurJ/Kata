@@ -96,14 +96,30 @@ do codegen.
 
 ## Futuro
 - Tensor/SIMD
+- **Sistema de supressão de diagnóstico** — braço de match redundante
+  agora é erro (decisão 8 do PRD-exaustividade-aninhada); `otherwise`
+  inútil é isento, mas patterns não-otherwise redundantes com
+  intenção documentada precisam de via de escape (`@allow redundant`?).
+  Projetar sintaxe e escopo de supressão.
 
 ### Patterns aninhados (Maranget + SMT)
-**Estado:** Avaliar. O PRD-exaustividade §9 exclui patterns aninhados.
-Hoje `Some(True)` não é verificado contra `Some(False)` — `Some` é tratado
-como átomo no produto cartesiano. O parser atual não suporta patterns
-profundamente aninhados. Se/when patterns aninhados forem suportados,
-o algoritmo de Maranget completo beneficia de SMT para decidir cobertura
-com guards mistos. Corner case — avaliar quando houver demanda real.
+**Estado:** Ativo — `docs/PRDs/PRD-exaustividade-aninhada.md`
+(5 fases, revisado 2026-08-30). O buraco NÃO é o parser (match arms e
+cláusulas qualificadas já parseiam aninhado recursivo) — são os 3
+CHECKERS (`check_exhaustiveness`, `check_clause_exhaustiveness`,
+`pattern_covers`) que ignoram payload, mais um panic de aridade em
+`lambda Some True:` desqualificado e um falso-positivo de redundância.
+Bugs reproduzidos em `f64eff8`; Fase 1 é soundness (cobertura recursiva,
+bound-check, parser aridade-consciente), Fase 2 é o motor Maranget
+completo (redundância estendida a match arms com isenção de
+`otherwise`), Fase 3 Z3 na folha (fall-through de codegen como
+pré-requisito), Fase 4 refined Int/Float na folha, Fase 5 Rational
+(const-eval de `rational <lit>` + par (num, den) no Z3).
+
+### Codegen — `echo!(None)` (bug #2b)
+**Estado:** Pendente. `Closure` com callee não-Ident
+(`kata-codegen/src/lowering/closure.rs:349`) rejeita `echo!(None)`.
+Bug separado da classe de exaustividade — PRD próprio quando atacar.
 
 ---
 
