@@ -1,7 +1,11 @@
 # PRD — Exaustividade Aninhada (Maranget + Z3 em Guards + Refined)
 
 **Status:** 🔴 Pendente — Fase 1 não iniciada
-**Data:** 2026-08-30
+**Data:** 2026-08-30 · **Emenda 1 (2026-08-30, Arthur):** F1 encolhe para
+Fundação — §4.1 (cobertura recursiva ad-hoc) REMOVIDO, mandato absorvido
+pela Fase 2; fall-through de codegen antecipado da F3 para a F1;
+oráculos adversariais K adicionados. Sem prazo externo, a ponte
+interina não se sustenta (ver §3 decisões 1–2, e §4).
 **Tipo:** Planejamento — PRD único, 5 fases sequenciais
 **Depende de:** `PRD-exaustividade.md` ✅ (guards via Z3, patterns de 1 nível)
 **Não depende de:** nenhum PRD pendente
@@ -43,15 +47,26 @@ codegen de match.
 
 1. **Maranget é o objetivo.** O motor da Fase 2 É o algoritmo de
    Maranget (matriz/usefulness, com witnesses como subproduto), não um
-   refactor de conveniência. A Fase 1 é a ponte de soundness, não o
-   destino final. Rota alternativa (tudo-Z3, axiomatizar datatypes)
-   rejeitada: queries gigantes → mais `Unknown` → mais `MissingOtherwise`
-   espúrios.
-2. **1-B: payload infinito na Fase 1 → `MissingOtherwise` (INTERINO).**
-   Ex.: `match r { Ok 0: ... Err _: ... }` sobre `Result::(Int, Text)` →
-   `MissingOtherwise`. Na Fase 2, com usefulness, o witness `Ok _` passa a
-   ser o contrato final (`NonExhaustiveMatch` com witness) e 1-B é
-   substituído.
+   refactor de conveniência. Rota alternativa (tudo-Z3, axiomatizar
+   datatypes) rejeitada: queries gigantes → mais `Unknown` → mais
+   `MissingOtherwise` espúrios.
+   **(Emenda 1)** A ponte ad-hoc de soundness que aqui ficava a cargo
+   da Fase 1 (§4.1 original) foi REMOVIDA: sem prazo externo, escrever
+   a recursão ad-hoc uma vez para descartá-la na Fase 2 não se
+   sustenta — o mandato "cobertura recursiva" é absorvido pela Fase 2
+   como **motor antes dos consumidores**: o motor puro aterrissa
+   primeiro (testes table-driven, sem typeck), depois os 3
+   consumidores migram, um por commit. A Fase 1 fica reduzida à
+   Fundação: oráculos RED, bound-check, parser 2-A e o fix de
+   fall-through de codegen (§4.4).
+2. **1-B (EMENDADO): o interino `MissingOtherwise` deixa de existir.**
+   Como a cobertura recursiva ad-hoc foi removida da Fase 1, o
+   `MissingOtherwise` interino para payload infinito nunca embarca:
+   `match r { Ok 0: ... Err _: ... }` sobre `Result::(Int, Text)`
+   permanece verde (estado atual, aceito por cegueira) até a Fase 2,
+   quando vira `NonExhaustiveMatch` com witness `missing: ["Ok _"]`.
+   Nenhuma snapshot é escrita duas vezes; nenhum contrato interino
+   precisa ser substituído depois.
 3. **2-A: parser de cláusulas aridade-consciente** (refinada na
    verificação de 2026-08-30 — ver §4.3): a ÚLTIMA posição do pattern
    de cláusula usa `parse_match_pattern`; as demais mantêm
@@ -90,51 +105,37 @@ codegen de match.
    const-avaliação de `rational <lit>` + mapeamento Rational no Z3
    como par (num, den) com invariantes.
 
-## 4. Fase 1 — Soundness (cobertura estrutural recursiva)
+## 4. Fase 1 — Fundação (oráculos + bound-check + parser + fall-through)
 
-### 4.1. Cobertura recursiva nos 3 checkers
+**(Emenda 1)** A cobertura recursiva ad-hoc desta fase (§4.1 original)
+foi REMOVIDA — o mandato "descer o payload" é absorvido pela Fase 2
+(motor antes dos consumidores). O que resta aqui é só o que o motor
+NÃO substitui:
 
-Regra única, aplicada aos três consumidores:
+### 4.1. Oráculos RED (probe → teste é cópia mecânica)
 
-- `Variant{v, sub}` com payload de tipo **finito** (enum, Boolean) →
-  desce: o sub-pattern participa da cobertura como coluna filha.
-- `Variant{v, sub}` com payload **infinito** (Int, Float, Text, Byte,
-  …) → exige `Ident`/`Wildcard` no payload; literal/pattern restrito →
-  `MissingOtherwise` (decisão 1-B, interino).
-- `Cons{h, t}` → `[]` cobre `Nil`; `[h:t]` cobre `Cons`; head com
-  literal → elemento infinito → regra do payload infinito acima.
-- `Tuple` → cada elemento é uma coluna recursiva.
-- `Literal` sobre tipo infinito nunca cobre o universo.
+Copiar para `tests/` os fontes EXATOS dos probes em
+`/tmp/kata5-probe-nested/` (incluindo os K, abaixo). Estados medidos
+em `b5e2d9e` (2026-08-30) são a linha de base dos oráculos:
 
-Sites: `check_exhaustiveness` (match, `patterns.rs:442`),
-`check_clause_exhaustiveness` (cláusulas, `function_infer.rs:250`),
-`pattern_covers` (redundância, `redundancy.rs:165`).
+- RED esperado na Fase 2 (hoje verdes por cegueira): probeA, probeB,
+  probeM, probeJ, probeK_deep_hole.
+- RED esperado na Fase 1 (hoje panic/verde): probeE (`ArityMismatch`),
+  probeK_arity_tuple (`ArityMismatch` — ver §4.2), probeE2 (hoje
+  falso-positivo `redundant_clause`).
+- Controles que devem permanecer verdes: probeC, probeD, probeF2,
+  probeG, probeJ2, probeK_deep (3 níveis completo), probeK_grid
+  (grade 2×2 completa), `lambda True True:` (10 testes existentes).
+- Parciais de fase: probeH/H_with — `non_exhaustive_match` até a
+  Fase 3 (verde com output correto depois), probeF — `type.mismatch`
+  até a Fase 4.
 
-**Semântica de dominância sob descida (redundância):** com o payload
-visível, `pattern_covers(covering, covered)` precisa da regra
-recursiva explícita: mesma variante (ou wildcard) e, para cada
-sub-pattern, `covering_sub` cobre `covered_sub` — `Ident`/`Wildcard`
-cobrem qualquer sub-pattern; literais cobrem só o mesmo literal.
-Efeito: `Some True` NÃO cobre `Some False` (mata o falso-positivo do
-probeE2); `Some x` cobre `Some True`; `Some _` cobre tudo de `Some`.
+Marcadores: oráculos cuja virada é F2+ carregam `#[ignore]` até a
+fase-alvo pousar (removido no slice da fase); nunca ficam sem o
+marcador fora da fase-alvo. Probe → teste é cópia mecânica, não
+reconstrução.
 
-Janela de regressão medida (2026-08-30, corpus inteiro): zero
-patterns `Ok/Some/Err <literal>` usados como pattern em
-stdlib/examples/book/testes — a ruptura 1-B e a descida de payload
-quebram apenas os probes (oráculos RED por design).
-
-DoD Fase 1:
-- probeA → `NonExhaustiveMatch` missing `["Some False"]` em compile-time
-  (nunca mais exit 0 com buraco).
-- probeB (mesmo fonte) → o mesmo erro de compile; nunca SIGILL.
-- probeE → nunca panic: após o bound-check, `ArityMismatch` (gracioso);
-  após o fix do parser (mesma fase), parseia aninhado e compila verde.
-- probeE2 → compila limpo; sem `type.redundant_clause` falso-positivo.
-- probeD, probeG → continuam verdes (regressão).
-- `lambda True True:` multi-param (10 testes existentes em
-  `lambda_match_inference.rs`) → continuam verdes (regressão do 2-A).
-
-### 4.2. Bound-check com `ArityMismatch`
+### 4.2. Bound-check com `ArityMismatch` — gatilho mais largo que o bug #2
 
 `check_patterns` (`infer/helpers.rs:92`): validar
 `patterns.len() == param_tys.len()` ANTES do loop; divergência →
@@ -142,6 +143,12 @@ DoD Fase 1:
 `kata-diagnostics/src/middleend.rs:72`). Defense-in-depth: mesmo com o
 parser aridade-consciente, o lambda anônimo não tem assinatura e pode
 produzir contagens divergentes por outros caminhos.
+
+**(Emenda 1)** Medição nova (`b5e2d9e`, probeK_arity_tuple): o panic
+NÃO exige pattern desqualificado — `lambda True True:` contra
+assinatura de 1 param **tupla** `(Boolean, Boolean) => Text` também
+panica em `helpers.rs:104` (2 patterns vs 1 param). O bound-check
+cobre as duas rotas; o parser 2-A cobre só a desqualificada.
 
 ### 4.3. Parser de cláusulas aridade-consciente (2-A refinado)
 
@@ -175,10 +182,32 @@ mata o bug #2 na raiz e alinha cláusulas com match arms.
 lambda anônimo), usar a forma qualificada (`lambda Optional::Some x:`) —
 que já parseia aninhado hoje.
 
+### 4.4. Fall-through de guards no codegen (antecipado da Fase 3 — Emenda 1)
+
+O fix do §6.2 pousa AQUI, na Fase 1, como commit isolado — não na
+Fase 3. Racional: hoje o caminho é morto (`check_guard_completeness`
+rejeita cláusulas com guards não-tautológicos sem otherwise), logo a
+suite inteira verde é prova medida de no-op; qualquer regressão futura
+de `check_guard_completeness` re-arma a mina de valor errado
+silencioso descrita no §6.2, e o fix custa pouco enquanto os dois
+lados são triviais de comparar. Quando a Fase 3 abrir o caminho, a
+metade runtime já está provada e uma falha de probeH isola na metade
+typeck. O `trap user(1)` final permanece como defesa de runtime.
+
+DoD do item (na Fase 1): commit isolado alterando
+`lower_guards`/`lower_clause_chain` (§6.2) + suite inteira verde
+(no-op provado) — NENHUM oráculo novo deve mudar de estado por causa
+deste fix.
+
 ## 5. Fase 2 — Motor unificado (Maranget)
 
-Substitui a cobertura recursiva ad-hoc da Fase 1 (que permanece como
-ponte) por UM motor servindo os 3 consumidores:
+**(Emenda 1)** Ordem interna invertida: **motor antes dos
+consumidores**. O motor puro aterrissa primeiro em
+`kata-inference/src/maranget.rs`, com testes table-driven próprios,
+sem typeck; depois os 3 consumidores migram, um por commit.
+
+Substitui a cobertura recursiva ad-hoc (removida da Fase 1 pela
+Emenda 1) por UM motor servindo os 3 consumidores:
 
 - **Matriz de pattern-tuples**: linhas = braços/cláusulas, colunas =
   parâmetros/payloads abertos.
@@ -196,20 +225,51 @@ ponte) por UM motor servindo os 3 consumidores:
   defensivo sancionado pelo corpus). `Some True` duplicado e
   `Some _` após `Some True` são erros; `otherwise` após `Ok v`+`Err _`
   é silêncio.
+- **Interface do motor (Emenda 1):** o motor recebe `Pattern` + um
+  trait pequeno de ambiente (`constructors_of`, `field_tys`,
+  `is_infinite`) — NÃO alcança `TypeEnv` da inference diretamente.
+  Puro, testável table-driven sem arrastar typeck, reutilizável pelo
+  futuro PRD de `arm.guard`.
 - **Fim das sentinelas-string `__ANY__`** nos 3 checkers.
+
+### 5.1. Oráculos adversariais K (adicionados na Emenda 1)
+
+Medidos em `b5e2d9e` (2026-08-30), probes em `/tmp/kata5-probe-nested/`:
+
+- **probeK_deep / probeK_deep_hole** — 3 níveis
+  (`Optional::(Optional::(Boolean))`): completo = verde hoje (cegueira)
+  e deve permanecer verde pós-F2; com buraco = **verde com buraco
+  hoje** — mesmo bug #1 em 3 níveis, o flagship do witness de matriz
+  (`missing: ["Some (Some False)"]`). Forma sintática: greedy com
+  qualificado interno (`Some Optional::Some True:`) — a única que o
+  parser de braço aceita hoje.
+- **probeK_grid / probeK_grid_partial** — grade multi-param 2×2
+  (`Boolean Boolean => Text`): completa = verde (regressão);
+  parcial (3 de 4 células) = **JÁ RED hoje** (`non_exhaustive_match`)
+  — o checker 1-nível multi-param já cobre colunas top-level
+  conjuntamente; o motor precisa IGUALAR antes de estender.
+- **probeK_arity_tuple** — ver §4.2 (RED F1: `ArityMismatch`).
+- **probeK_deep_paren** — parse error esperado; documenta o limite
+  sintático (parêntese interno não-greedy). Continua parse error
+  pós-F2 — mudar o parser de pattern é decisão de linguagem, fora do
+  escopo.
 
 DoD Fase 2:
 - 3 consumidores verdes (match, cláusulas, redundância) sobre o mesmo
   motor; zero chamadas a `__ANY__` (grep vazio).
 - Witnesses legíveis nos três contextos (snapshots).
-- 1-B substituído: payload infinito → `NonExhaustiveMatch` com witness
-  (`missing: Ok _`) em vez de `MissingOtherwise`.
+- Contrato final direto, sem interino: payload infinito →
+  `NonExhaustiveMatch` com witness (`missing: ["Ok _"]`) — o 1-B
+  nunca existiu (Emenda 1).
 - probeJ (braço de `match` morto, `Some True` duplicado) →
   `RedundantClause` em compile-time (erro; hoje compila verde
   silencioso — verificado). `otherwise` inútil continua silêncio
   (`enum_refined_alias.kata` e `refined_types.kata` seguem verdes).
 - probeA/B: `NonExhaustiveMatch` missing `["Some False"]`; probe sobre
   `Result::(Int, Text)` parcial → `missing: ["Ok _"]`.
+- probeK_deep_hole → `NonExhaustiveMatch` com witness de 3 níveis;
+  probeK_deep e probeK_grid permanecem verdes; probeK_grid_partial
+  continua `NonExhaustiveMatch` (agora via motor).
 
 ## 6. Fase 3 — Z3 na folha (composição motor→solver, guards)
 
@@ -245,10 +305,9 @@ Hoje o caminho é morto (`check_guard_completeness` rejeita cláusulas com
 guards não-tautológicos sem otherwise). A Fase 3 o abre: probeH aprovado
 no typeck chegaria ao JIT executando o body errado para `x <= 0`.
 
-Fix (na Fase 3, antes de aprovar probeH): `lower_clause_chain` passa um
-block de fall-through para `lower_clause_body`/`lower_guards`; guards
-esgotados sem `otherwise` pulam para a próxima cláusula (espelha o
-interp). O `trap user(1)` final permanece como defesa de runtime.
+**(Emenda 1)** O fix foi ANTECIPADO para a Fase 1 (§4.4) como commit
+isolado com no-op provado. O que resta nesta fase é apenas consumir:
+probeH verde E2E valida o fall-through já pousado.
 
 ### 6.3. Escopo
 
@@ -380,17 +439,18 @@ domínio → TypeMismatch com literal na mensagem.
 |--------|------|------|
 | Parser | `parse_sig_clauses`/`parse_lambda_clause` (`kata-parser/src/sig.rs`) + 4 callers (`sig.rs:48`, `interface_decl.rs:150/378/501`) — aridade + última posição `parse_match_pattern` | 1 |
 | Typeck | `check_patterns` (`infer/helpers.rs:92`) — bound-check | 1 |
-| Typeck | `check_exhaustiveness` (`patterns.rs:442`) — cobertura recursiva → motor | 1→2 |
-| Typeck | `check_clause_exhaustiveness` (`function_infer.rs:250`) — idem | 1→2 |
-| Typeck | `pattern_covers` (`redundancy.rs:165`) — dominância recursiva → motor | 1→2 |
+| Testes | oráculos RED copiados de `/tmp/kata5-probe-nested/` (incluindo K) | 1 |
+| Codegen | `lower_guards`/`lower_clause_chain` (`lowering/clause.rs`) — fall-through (no-op provado: suite verde) | 1 (antecipado da 3) |
+| Typeck | novo módulo do motor (matriz/usefulness/witness) — `kata-inference/src/maranget.rs`, com trait de ambiente (`constructors_of`, `field_tys`, `is_infinite`) | 2 |
+| Typeck | `check_exhaustiveness` (`patterns.rs:442`) — migram para o motor | 2 |
+| Typeck | `check_clause_exhaustiveness` (`function_infer.rs:250`) — idem | 2 |
+| Typeck | `pattern_covers` (`redundancy.rs:165`) — idem | 2 |
 | Typeck | redundância de match arms (novo consumidor; `MatchArm.pattern == None` isento) | 2 |
-| Typeck | novo módulo do motor (matriz/usefulness/witness) — `kata-inference/src/maranget.rs` | 2 |
 | Z3 | `guard_completeness.rs` + `z3_translate.rs` — queries de folha escopadas | 3 |
 | Typeck | `check_pattern` (`patterns.rs:285+`) — literal aceito contra refined (const-avaliação do predicado) | 4 |
 | Z3 | predicado do refined como premissa da query de folha | 4 |
 | Typeck | `const_eval.rs` — `rational <lit>` const-avaliável | 5 |
 | Z3 | `z3_translate.rs` — Rational como par (num, den), cross-multiplication, premissa `den > 0` | 5 |
-| Codegen | `lower_guards`/`lower_clause_chain` (`lowering/clause.rs`) — fall-through | 3 |
 
 ## 10. Fora do escopo (registrar no TODO.md)
 
@@ -400,6 +460,25 @@ domínio → TypeMismatch com literal na mensagem.
 - **Interp exit code:** `kata run --interp` em erro de runtime da action
   imprime o erro mas sai com exit 0 (observado no probeB) — comportamento
   do driver, não da classe estrutural.
+- **(Emenda 1, medidos em `b5e2d9e`):**
+  - **#K-call:** variante sem payload como ARGUMENTO não resolve
+    overload — `foo None` e até `foo Optional::None` (qualificado)
+    dão `type.no_overload` mesmo no 2º nível
+    (`Optional::(Boolean)`). Consistente com o design ret-directed
+    (`Expr::Ident` não consulta hint), mas torna a construção de
+    `None` inexpressável em chamada — só pattern. Item separado;
+    os probes K contornam chamando só células construíveis.
+  - **#K-enum-payload:** enum user-defined como payload de genérico
+    — `Optional::(Encoding)` → `type.mismatch` esperado `Encoding`,
+    encontrado `Sum(Encoding) or Generic(Encoding)` dentro do pattern;
+    `Result::(Int, Encoding)` falha até sem match (`Err(E|Text)`
+    com E enum + variante qualificada contra enum-nu). Ortogonal à
+    exaustividade — provável elaboração de união/payload, PRD próprio.
+  - **#K-paren:** parêntese interno em braço de match não parseia
+    (`Some (Some True):` → parse error) — o greedy de braço só aceita
+    a forma qualificada interna (`Some Optional::Some True:`).
+    Documentado como limite sintático (probeK_deep_paren); mudar o
+    parser de pattern é decisão de linguagem.
 
 ## 11. Testes (TDD — oráculos RED primeiro)
 
@@ -409,22 +488,28 @@ teste é cópia mecânica, não reconstrução). Snapshots insta para witnesses.
 
 | Oráculo | Backend | Esperado (final: Fase 2) |
 |---------|---------|--------------------------|
-| probeA (match `Some True`+`None`) | JIT | `NonExhaustiveMatch` missing `["Some False"]` |
-| probeB (idem, chamada `Some False`) | JIT+interp | mesmo erro de compile |
+| probeA (match `Some True`+`None`) | JIT | `NonExhaustiveMatch` missing `["Some False"]` — hoje verde por cegueira; RED virado na F2 |
+| probeB (idem, chamada `Some False`) | JIT+interp | mesmo erro de compile — hoje SIGILL 132; RED virado na F2 |
 | probeC (completo) | JIT+interp | verde, output correto |
 | probeD (match completo 3 braços) | JIT | verde |
-| probeE (`lambda Some True:` 1 param) | JIT | nunca panic: `ArityMismatch` pós-bound-check, verde pós-parser-fix |
-| probeE2 (cláusulas qualificado aninhado) | JIT | verde, sem falso `redundant_clause` |
+| probeE (`lambda Some True:` 1 param) | JIT | nunca panic: `ArityMismatch` pós-bound-check, verde pós-parser-fix — RED virado na F1 |
+| probeE2 (cláusulas qualificado aninhado) | JIT | verde, sem falso `redundant_clause` — RED virado na F2 (hoje falso-positivo exit 1) |
 | probeG (guards na cláusula) | JIT+interp | verde (regressão) |
-| probeH (guards entre cláusulas, inline) | JIT+interp | Fase 1/2: `NonExhaustiveMatch`; Fase 3: verde com output correto |
-| probeH_with (guards entre cláusulas via `with` — forma canônica) | JIT+interp | Fase 1/2: `NonExhaustiveMatch`; Fase 3: verde com output correto — falso verde por forma sintática exige as DUAS formas |
-| probeM (match `Result::(Int, Text)` parcial, `Ok 0`/`Err _`) | JIT | F1: `MissingOtherwise`; F2: `NonExhaustiveMatch` missing `["Ok _"]` |
-| probeF (match sobre refined `{1, 2}` com literais) | JIT+interp | F4: verde, output `um`/`dois` nos dois backends |
+| probeH (guards entre cláusulas, inline) | JIT+interp | F2: `NonExhaustiveMatch` (como hoje); F3: verde com output correto |
+| probeH_with (guards entre cláusulas via `with` — forma canônica) | JIT+interp | idem probeH — falso verde por forma sintática exige as DUAS formas |
+| probeM (match `Result::(Int, Text)` parcial, `Ok 0`/`Err _`) | JIT | hoje verde por cegueira (sem interino); F2: `NonExhaustiveMatch` missing `["Ok _"]` |
+| probeF (match sobre refined `{1, 2}` com literais) | JIT+interp | F4: verde, output `um`/`dois` nos dois backends (hoje `type.mismatch`) |
 | probeF2 (wildcard sobre refined) | JIT | controle: verde hoje, continua verde |
 | match sobre refined com literal fora do domínio (`0:` sobre `UmOuDois`) | JIT | F4: `TypeMismatch` com literal na mensagem |
 | match sobre refined cobertura parcial (só `1:`, sem `2:`) | JIT | F4: `NonExhaustiveMatch` missing `["2"]` — witness do model, dentro do domínio do predicado |
 | probeJ (match braço morto, `Some True` duplicado) | JIT | F2: `RedundantClause` (erro) — hoje verde silencioso |
 | probeJ2 (otherwise inútil pós-cobertura, `Ok v`+`Err _`+`otherwise`) | JIT | verde nas DUAS pontas: hoje e pós-F2 (isenção do otherwise) |
+| probeK_deep (3 níveis completo) | JIT | verde hoje (cegueira) e pós-F2 (verde provado) |
+| probeK_deep_hole (3 níveis com buraco) | JIT | hoje verde com buraco; F2: `NonExhaustiveMatch` missing `["Some (Some False)"]` |
+| probeK_deep_paren (parêntese interno) | JIT | parse error hoje e sempre (limite sintático, §10 #K-paren) |
+| probeK_grid (grade 2×2 completa) | JIT | verde hoje e pós-F2 (regressão multi-param) |
+| probeK_grid_partial (grade 3 de 4 células) | JIT | `NonExhaustiveMatch` hoje e pós-F2 (o motor IGUALA antes de estender) |
+| probeK_arity_tuple (2 patterns vs 1 param tupla) | JIT | hoje panic 101; F1: `ArityMismatch` gracioso |
 | `lambda True True:` multi-param (10 testes) | — | verdes (regressão 2-A) |
 | `RatUmOuDois` (`rational 1:`/`rational 2:` sobre Rational refined) | JIT+interp | F5: verde com output correto nos dois backends |
 
@@ -433,24 +518,31 @@ Verificação entre fases: `cargo test --workspace --no-fail-fast` verde;
 
 ## 12. Passos de implementação
 
-**Fase 1 (ordem interna, menor → maior):**
-1. Oráculos E2E RED dos probes (copiar fontes exatos — incluindo
-   probeM e probeJ criados na revisão de 2026-08-30).
-2. Bound-check `ArityMismatch` em `check_patterns`.
+**Fase 1 — Fundação (Emenda 1, ordem interna, menor → maior):**
+1. Oráculos E2E RED copiados de `/tmp/kata5-probe-nested/` (fontes
+   exatos, incluindo probeM, probeJ e a família K); oráculos de
+   virada F2+ entram `#[ignore]` até a fase-alvo.
+2. Bound-check `ArityMismatch` em `check_patterns` (cobre as DUAS
+   rotas: pattern desqualificado e tupla multi-pattern vs 1 param).
 3. Parser aridade-consciente (2-A) + teste `lambda True True:` regressão.
-4. Cobertura recursiva: match (`check_exhaustiveness`).
-5. Cobertura recursiva: cláusulas (`check_clause_exhaustiveness`).
-6. Cobertura recursiva: redundância (`pattern_covers`).
-7. `cargo test` + clippy verdes; commits em camadas (bound-check; parser;
-   cobertura match; cobertura clauses; redundância; PRD; TODO.md).
+4. Fall-through de codegen (§4.4/§6.2) como commit isolado — no-op
+   provado pela suite inteira verde.
+5. `cargo test` + clippy verdes; commits em camadas (oráculos;
+   bound-check; parser; fall-through; PRD; TODO.md).
 
-**Fase 2:** motor matriz/usefulness (`maranget.rs`) → migrar 3
-consumidores (um por commit) → redundância de match arms (novo
-consumidor, isenção do otherwise) → remover `__ANY__` → witnesses
-(1-B substituído) → snapshots.
+**Fase 2 — motor antes dos consumidores (Emenda 1):**
+1. `maranget.rs` puro (matriz/usefulness/witness, trait de ambiente)
+   + testes table-driven — SEM typeck.
+2. Migrar 3 consumidores, um por commit (match; cláusulas;
+   redundância) — cada commit derruba os `#[ignore]` do seu slice.
+3. Redundância de match arms (novo consumidor, isenção do otherwise).
+4. Remover `__ANY__` (grep vazio).
+5. Witnesses legíveis (1-B nunca existiu; probeM/probeK_deep_hole
+   viram o contrato final direto) → snapshots.
 
-**Fase 3:** fall-through codegen → queries de folha escopadas → probeH
-E probeH_with verdes nos dois backends.
+**Fase 3:** queries de folha escopadas → probeH E probeH_with verdes
+nos dois backends (fall-through já pousado na F1; falha de probeH
+isola na metade typeck).
 
 **Fase 4:** coerção de literal em pattern sobre refined (7.1) → predicado
 como premissa da folha → probeF verde nos dois backends.
@@ -464,7 +556,10 @@ dois backends.
 - Este PRD — status ✅ por fase.
 - `docs/TODO.md` — item "Patterns aninhados (Maranget + SMT)"
   reescrito (bug ativo com PRD, não "avaliar"); entradas novas: #2b
-  (codegen `echo!(None)`); sistema de supressão de diagnóstico
+  (codegen `echo!(None)`); #K-call (variante sem payload como
+  argumento → `no_overload`); #K-enum-payload (enum user-defined como
+  payload de genérico → `type.mismatch`); #K-paren (parêntese interno
+  em braço — limite sintático); sistema de supressão de diagnóstico
   (braço redundante com isenção de `otherwise` — projeto a fazer).
 - `docs/Kata-lang-manual.md` §16 (Condicionais Puras: Guards e Pattern
   Matching) — contratos de exaustividade aninhada + witnesses; §4.2.2
