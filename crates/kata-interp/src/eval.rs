@@ -11,8 +11,8 @@ use std::sync::Arc;
 use kata_ast::Spanned;
 use kata_core::ty::{PrimTy, Ty};
 use kata_inference::{
-    ChannelKind, TypedExpr, TypedExprKind, TypedLambdaClause, TypedModule, TypedPattern,
-    TypedSelectArm,
+    CacheStrategy, ChannelKind, TypedExpr, TypedExprKind, TypedLambdaClause, TypedModule,
+    TypedPattern, TypedSelectArm,
 };
 use kata_rt as rt;
 
@@ -1172,6 +1172,61 @@ fn call_named_function(
                     .expect("func_candidates é não-vazio")
             };
             let clauses = best.clauses.clone();
+            // ── @cache (deferred do escopo-plano): memoização no interp.
+            // Espelha o JIT — mesma API TLS do runtime. Hit retorna sem
+            // reexecutar o body; miss executa e insere.
+            if let Some(spec) = best.cache_spec.as_ref() {
+                // fn_id estável dentro do run: índice em module.functions
+                // (caches TLS são por-processo — não cruzam com o JIT).
+                let fn_id = module
+                    .functions
+                    .iter()
+                    .position(|f| f.name == best.name && f.param_types == best.param_types)
+                    .map(|i| i as i64)
+                    .unwrap_or_else(|| fnv1a(best.name.as_bytes()));
+                let handle = rt::kata_rt_cache_get_or_create(
+                    ctx.arena,
+                    fn_id,
+                    spec.capacity,
+                    match spec.strategy {
+                        CacheStrategy::LRU => 0,
+                        CacheStrategy::FIFO => 1,
+                        CacheStrategy::MRU => 2,
+                        CacheStrategy::LFU => 3,
+                    },
+                );
+                // Serializar args por conteúdo: Int → bits LE; Float → bits do
+                // f64; Text → bytes do C-string. Tipos compostos por hora não
+                // são cacheados (miss → executa, sem insert — conservador).
+                let mut key: Vec<u8> = Vec::with_capacity(64);
+                let mut cacheable = true;
+                for (ty, &val) in best.param_types.iter().zip(args.iter()) {
+                    serialize_key_part(ty, val, &mut key, &mut cacheable);
+                }
+                if cacheable && !key.is_empty() {
+                    let hit =
+                        rt::kata_rt_cache_lookup(handle, key.as_ptr() as i64, key.len() as i64);
+                    if hit != 0 {
+                        // Hit: synthetic_pre (diretivas Enter — @log{enter} etc.)
+                        // dispara MESMO em hit, espelhando o wrapper do JIT
+                        // (log roda antes do cache lookup). Body não roda.
+                        if !clauses.is_empty() && !clauses[0].synthetic_pre.is_empty() {
+                            env.push_scope();
+                            for (i, val) in args.iter().enumerate() {
+                                env.define(&format!("__param_{i}"), *val);
+                            }
+                            for pre_expr in &clauses[0].synthetic_pre {
+                                eval(ctx, pre_expr, env)?;
+                            }
+                            env.pop_scope();
+                        }
+                        return Ok(hit);
+                    }
+                    let result = call_typed_clauses(ctx, &clauses, args.to_vec(), env)?;
+                    rt::kata_rt_cache_insert(handle, key.as_ptr() as i64, key.len() as i64, result);
+                    return Ok(result);
+                }
+            }
             return call_typed_clauses(ctx, &clauses, args.to_vec(), env);
         }
         // Procurar nas actions do módulo (despachar por aridade + tipo)
@@ -1350,6 +1405,49 @@ fn eval_tail(
             let v = eval(ctx, expr, env)?;
             Ok(TailResult::Done(v))
         }
+    }
+}
+
+// ── @cache: serialização de key por conteúdo ──────────────────────
+
+/// FNV-1a — mesmo hash do `canonical_fn_id` do codegen.
+fn fnv1a(bytes: &[u8]) -> i64 {
+    let mut hash: u64 = 0xcbf29ce484222325;
+    for &b in bytes {
+        hash ^= b as u64;
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash as i64
+}
+
+/// Serializa um argumento da cache key por CONTEÚDO (não por ponteiro).
+///
+/// - Int: 8 bytes LE dos bits do valor
+/// - Float: 8 bytes dos bits do f64
+/// - Text: len (4 bytes LE) + bytes do C-string (terminador excluído)
+///
+/// Tipos compostos (List/Struct/Tuple/Sum) marcam `cacheable = false` —
+/// o interp executa sem insert (miss permanente, conservador). O JIT
+/// cobre via type descriptor; paridade futura.
+fn serialize_key_part(ty: &Ty, val: Value, key: &mut Vec<u8>, cacheable: &mut bool) {
+    match ty {
+        Ty::Prim(PrimTy::Int) | Ty::Prim(PrimTy::Rational) => {
+            key.extend_from_slice(&val.to_le_bytes());
+        }
+        Ty::Prim(PrimTy::Float) => {
+            key.extend_from_slice(&val.to_le_bytes());
+        }
+        Ty::Prim(PrimTy::Text) => {
+            if val == 0 {
+                key.extend_from_slice(&0u32.to_le_bytes());
+                return;
+            }
+            let cstr = unsafe { std::ffi::CStr::from_ptr(val as *const _) };
+            let bytes = cstr.to_bytes();
+            key.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+            key.extend_from_slice(bytes);
+        }
+        _ => *cacheable = false,
     }
 }
 
