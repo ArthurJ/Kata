@@ -886,6 +886,9 @@ A herança de super-traits propaga obrigações: implementar `NUM` exige
 implementar todas as funções de `NUM`, `ORD` e `EQ` de uma vez. Quando `Int`
 implementa `NUM`, as funções de `ORD` e `EQ` são fornecidas como parte do mesmo
 bloco `implements` — o tipo automaticamente satisfaz as três interfaces.
+`Text` implementa `EQ` diretamente (`=`/`!=` por conteúdo — a igualdade de
+C strings), sem passar por `NUM`. Refined sobre Text com predicado `= _ _`
+despacha pela mesma regra.
 
 **Interoperabilidade entre tipos da mesma interface**: Tipos que aderem
 diretamente a uma interface são interoperáveis. Cada função da interface (ex:
@@ -1387,7 +1390,8 @@ um interceptador explícito do usuário (`repr x`), não a função sintetizada.
 - Enums → sintetizado.
 - Refined (struct sem campos com `alias_of` e `predicates`) → sintetiza
   `show :: Refined => Text` chamando o show do tipo base (FFI direto, ex:
-  `kata_rt_bi_show` para base Int).
+  `kata_rt_bi_show` para base Int). O interpretador segue a mesma regra em
+  runtime (delegação ao show do base) — paridade com o codegen.
 - Struct sem campos não-refined → sintetiza `show :: Struct => Text` com
   body `TextLit("StructName")` (representação trivial).
 - Primitives (Int, Float, Text, Boolean, Rational) → `implements SHOW`
@@ -2744,9 +2748,25 @@ traversal stdlib.
   corrotina, nunca nos dados imutáveis da Arena.
 * **Reatribuição:** `nome := nova_expressão` (sem `let`/`var`) reatribui uma
   variável `var` existente. O typeck valida que a variável foi declarada com
-  `var` — reatribuir `let` é erro de tipo. `var` sempre cria novo binding:
-  `var i := + i 1` dentro de um loop faz **rebinding** (sombreia o `i` anterior),
-  não atualiza a variável original. Para atualizar, use `i := + i 1` (sem `var`).
+  `var` — reatribuir `let` é erro de tipo.
+* **`var` reusa binding:** `var i := + i 1` dentro de um loop **reusa** o
+  binding `var` existente quando o tipo casa — atualiza a mesma variável.
+  Reuso com tipo divergente do binding original é erro (`type.mismatch`).
+  Não há shadowing de `let`/`var`: redeclarar um binding existente
+  (`let` sobre `let`/`var`, `var` sobre `let`) é erro `type.duplicate_decl`.
+* **Escopo único da action:** match (braços), blocos, loops e `select` não
+  abrem escopo novo — bindings nascidos dentro deles vivem no escopo da
+  action e **evaporam** no fim do construto (chaves frescas são removidas).
+  Sobrevivência pós-construto só via reuso de `var` pré-declarado; ler
+  binding evaporado é erro `type.unbound_name`. Lambdas, closures e
+  ações chamadas mantêm escopo próprio.
+* **`for` é `var`:** a variável do `for` é mutável de verdade — reuso de
+  binding externo de mesmo nome (mesma regra de reuso/`DuplicateDecl`),
+  e o binding fresco (sem externo) evapora ao fim do loop.
+* **`constant` é sagrada:** uma `constant` não pode ser redefinida nem
+  sombreada — `let`/`var`/`for`/pattern sobre o nome de uma constant é
+  erro `type.duplicate_constant` (o check roda antes do lookup do nome;
+  parâmetros de lambda são isentos).
 * **`with`:** Bloco bottom-up no final de lambda. Computações prévias para Guards
   e restrições de genéricos (`T implements ORD`).
 
@@ -2991,7 +3011,7 @@ action processar (x::Int) -> Int
 
 | Campo | Tipo | Obrigatório | Descrição |
 |---|---|---|---|
-| `msg` | `Text` | sim | Template compile-time. `{expr}` interpola expressão do escopo (Ident ou `Ident.field`). `{{` escapa `{` literal; `}}` escapa `}`. Desugara para `format!{}` no body da diretiva. `{log_level}` não é mais suportado (ver §20.8). |
+| `msg` | `Text` | sim | Template compile-time. `{expr}` interpola expressão do escopo (Ident ou `Ident.field`). `{{` escapa `{` literal; `}}` escapa `}`. Desugara para `format!{}` no body da diretiva. `{log_level}` é inválido (ver §20.8). |
 | `when` | `Text` | sim | `"enter"` = loga no prólogo. `"exit"` = loga no epílogo. |
 | `level` | `LogLevel` | não | Variante do enum `LogLevel` (`Debug`/`Info`/`Warn`/`Error`). Default: `Info`. |
 | `topic` | `Text` | não | Nome do canal CSP. Default: herdado do fiber ancestral (ou `"default"`). Mutuamente exclusivo com `file`. |
@@ -3040,7 +3060,7 @@ Sem tail calls, o comportamento é inline: hooks executam a cada chamada
 
 Publicação explícita no corpo de actions. Dispara na execução da linha (não no
 wrapping como `@log`). `log!()` é uma **action normal do stdlib** com 4 overloads
-despachados pelo `DispatchTable` — não é mais interceptada no typeck. A mensagem
+despachados pelo `DispatchTable`. A mensagem
 (pos 1) é passada literal ao runtime, **sem interpolação**. Para interpolar
 valores, use `format!{}` ou `string_concat` antes de chamar `log!()`.
 
