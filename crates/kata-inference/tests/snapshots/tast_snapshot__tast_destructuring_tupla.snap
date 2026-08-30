@@ -1,6 +1,5 @@
 ---
 source: crates/kata-inference/tests/tast_snapshot.rs
-assertion_line: 157
 expression: tast_snapshot(src)
 ---
 === Entry ===
@@ -8,6 +7,7 @@ expression: tast_snapshot(src)
   kind: ActionCall { callee: "main", args: Spanned { node: TypedExpr { span: Span { offset: 69, line: 6, col: 6, len: 1 }, ty: Unit, tail_pos: false, escape: Caller, kind: Unit }, span: Span { offset: 69, line: 6, col: 6, len: 1 } }, caller_arena: 0, ffi_symbol: None, indirect_callee: None }
 
 === Functions ===
+  != :: [Prim(Text), Prim(Text)] => Sum("Boolean")
   * :: [Prim(Float), Prim(Int)] => Prim(Float)
   * :: [Prim(Float), Prim(Rational)] => Prim(Float)
   * :: [Prim(Rational), Prim(Int)] => Prim(Rational)

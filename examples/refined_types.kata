@@ -11,6 +11,8 @@ PositiveInt refines NUM
             Ok v: v
             otherwise: 1::PositiveInt
 
+PositiveInt refines ORD
+
 # Bloco 1 — Ascription literal + SHOW automático
 action bloco1 => Unit
     let x := 5::PositiveInt

@@ -2,14 +2,13 @@
 source: crates/kata-driver/tests/examples_snapshot.rs
 expression: output
 ---
---- stderr ---
-Error: type.no_overload
-
-  × nenhuma sobrecarga compatível para `<` com os argumentos fornecidos
-    ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/refined_types.kata:43:18]
- 42 │         Err _: echo!("soma invalida")
- 43 │     let menor := < a b
-    ·                  ──┬──
-    ·                    ╰── nenhuma sobrecarga compatível
- 44 │     echo!(menor)
-    ╰────
+5
+50
+42
+42
+8
+False
+5
+1
+7
+10
