@@ -20,6 +20,7 @@ thread_local! {
 
 /// Estratégia de eviction do cache.
 #[derive(Clone, Copy, PartialEq, Eq)]
+#[allow(clippy::upper_case_acronyms)]
 enum CacheStrategy {
     LRU = 0,
     FIFO = 1,
@@ -126,13 +127,14 @@ pub extern "C" fn kata_rt_cache_insert(handle: i64, key_ptr: i64, key_len: i64, 
         let mut caches = caches.borrow_mut();
         if let Some(table) = caches.get_mut(&handle) {
             // Eviction se cache cheio e key é nova.
-            if !table.entries.contains_key(&key) && table.entries.len() >= table.capacity {
-                if let Some(victim) = evict(table) {
-                    table.entries.remove(&victim);
-                    table.last_access.remove(&victim);
-                    table.insert_order.remove(&victim);
-                    table.access_count.remove(&victim);
-                }
+            if !table.entries.contains_key(&key)
+                && table.entries.len() >= table.capacity
+                && let Some(victim) = evict(table)
+            {
+                table.entries.remove(&victim);
+                table.last_access.remove(&victim);
+                table.insert_order.remove(&victim);
+                table.access_count.remove(&victim);
             }
             table.entries.insert(key.clone(), value);
             // Atualiza metadata conforme estratégia.
