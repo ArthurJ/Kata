@@ -557,9 +557,10 @@ fun 5";
 
 /// Guards de N NÃO implicam guards de M: x <= 5 não implica x > 0.
 /// N não é redundante — x = -1 satisfaz N mas não M.
-/// Neste caso, a exaustividade de guards dispara NonExhaustiveMatch
-/// para M (guards não-tautológicos sem otherwise), mas não dispara
-/// RedundantClause. Verificamos que o erro NÃO é RedundantClause.
+///
+/// Pós-Fase 3: os guards `> x 0` e `<= x 5` juntos cobrem todo Int
+/// (tautologia disjuntiva provada por Z3), então a função é exaustiva
+/// e não há erro de exaustividade nem RedundantClause.
 #[test]
 fn non_redundant_guard_no_implication() {
     let src = "\
@@ -569,13 +570,9 @@ lambda x:\n\
 lambda x:\n\
 \x20   <= x 5: 2\n\
 fun 5";
-    let err = infer_src_err(src);
-    // Pode ser NonExhaustiveMatch (M ou N não-tautológicos) ou
-    // MissingOtherwise, mas NÃO deve ser RedundantClause.
-    assert!(
-        !matches!(err, kata_diagnostics::MiddleError::RedundantClause { .. }),
-        "não esperava RedundantClause, got {err:?}"
-    );
+    // Pós-Fase 3: a função é exaustiva (guards disjuntivos cobrem Int).
+    // Não deve haver erro de inferência.
+    let _module = infer_src(src);
 }
 
 /// Guards idênticos: x > 0 ⟹ x > 0 (trivialmente verdadeiro).

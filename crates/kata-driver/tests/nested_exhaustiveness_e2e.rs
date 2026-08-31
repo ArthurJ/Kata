@@ -486,10 +486,8 @@ main!()"#,
 // ── Parciais de fase: F3 (guards entre cláusulas) ──────────────
 
 /// probeH: guards espalhados por cláusulas com o MESMO pattern.
-/// Hoje: non_exhaustive_match (per-cláusula exige otherwise).
 /// F3: verde com output correto.
 #[test]
-#[ignore = "F3: Z3 na folha — guards entre cláusulas sem otherwise"]
 fn probe_h_guards_entre_clausulas() {
     let path = write_temp_kata(
         "probeH",
@@ -514,7 +512,6 @@ main!()"#,
 
 /// probeH_with: igual ao probeH, mas guards via `with`.
 #[test]
-#[ignore = "F3: Z3 na folha — guards via with entre cláusulas"]
 fn probe_h_with_guards_entre_clausulas() {
     let path = write_temp_kata(
         "probeH_with",

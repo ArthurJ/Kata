@@ -171,24 +171,12 @@ pub(crate) fn infer_named_function(
     // ver cláusulas com guards não-tautológicos (sem otherwise).
     crate::redundancy::check_redundant_clauses(&typed_clauses, param_types, ctx.enum_registry)?;
 
-    // Verifica completude de guards: se há guards mas sem `otherwise`,
-    // usa Z3 para provar que a disjunção das condições é tautologia.
-    // Movido de infer_lambda_body para cá (depois da redundância).
-    for clause in &typed_clauses {
-        if !clause.guards.is_empty() {
-            crate::guard_completeness::check_guard_completeness(
-                &clause.guards,
-                &clause.with_bindings,
-                &clause.body.span,
-            )?;
-        }
-    }
-
-    // Verifica exaustividade das cláusulas lambda (pattern matching implícito).
-    // Múltiplas cláusulas lambda são equivalentes a um match sobre os params,
-    // mas a verificação de exaustividade só era aplicada em match explícito.
-    // Sem isto, cláusulas não-exaustivas (ex: quicksort sem `lambda []: []`)
-    // passam no typeck e crasham em runtime com SIGILL (trap de pattern falho).
+    // Verifica exaustividade de cláusulas lambda via motor Maranget + Z3.
+    // Múltiplas cláusulas lambda são semanticamente equivalentes a um `match`
+    // sobre os parâmetros. O motor Maranget desce payloads de variantes
+    // (Some True -> Some consome True como sub-pattern), e quando a estrutura
+    // cobre mas há guards, Z3 prova que a disjunção dos guards de todas as
+    // cláusulas que casam cada folha é tautologia (Fase 3).
     check_clause_exhaustiveness(&typed_clauses, param_types, ctx, &func_def.clauses)?;
 
     // Validação de @cache: suporta qualquer tipo — a serialização da cache
@@ -233,13 +221,13 @@ pub(crate) fn ty_name(ty: &Ty) -> &str {
     }
 }
 
-/// Verifica exaustividade de cláusulas lambda via motor Maranget.
+/// Verifica exaustividade de cláusulas lambda via motor Maranget + Z3.
 ///
 /// Múltiplas cláusulas lambda são semanticamente equivalentes a um `match`
 /// sobre os parâmetros. O motor Maranget desce payloads de variantes
-/// (Some True -> Some consome True como sub-pattern), onde o checker
-/// antigo operava por nomes de variantes de 1 nível com sentinela-string
-/// `__ANY__` e produto cartesiano de universos (substituído pelo motor Maranget).
+/// (Some True -> Some consome True como sub-pattern). Quando a estrutura
+/// cobre mas há guards, Z3 prova que a disjunção dos guards de todas as
+/// cláusulas que casam cada folha é tautologia (Fase 3).
 fn check_clause_exhaustiveness(
     typed_clauses: &[TypedLambdaClause],
     param_types: &[Ty],
@@ -250,11 +238,9 @@ fn check_clause_exhaustiveness(
         return Ok(());
     }
 
-    // Coleta patterns de cada cláusula e verifica se há otherwise.
-    let mut arm_patterns: Vec<Vec<TypedPattern>> = Vec::new();
+    // Verifica se há otherwise (pattern Ident/Wildcard em qualquer cláusula).
     let mut has_otherwise = false;
     for clause in typed_clauses {
-        // Ident/Wildcard em qualquer posição cobre tudo.
         if clause
             .patterns
             .iter()
@@ -262,18 +248,6 @@ fn check_clause_exhaustiveness(
         {
             has_otherwise = true;
         }
-        arm_patterns.push(clause.patterns.iter().map(|p| p.node.clone()).collect());
-    }
-
-    let result = crate::maranget::check_exhaustiveness_maranget(
-        &arm_patterns,
-        param_types,
-        has_otherwise,
-        ctx.enum_registry,
-    );
-
-    if result.exhaustive {
-        return Ok(());
     }
 
     // Span da primeira cláusula para a mensagem de erro.
@@ -282,13 +256,13 @@ fn check_clause_exhaustiveness(
         .map(|c| c.span)
         .unwrap_or(kata_ast::Span::zero());
 
-    Err(MiddleError::NonExhaustiveMatch {
-        missing: result.missing.clone(),
-        span: span.into(),
-        hint: Some(format!(
-            "combinações faltantes: {}. \
-             Adicione cláusulas para cada uma ou use `otherwise:` como fallback",
-            result.missing.join(", ")
-        )),
-    })
+    crate::maranget::check_exhaustiveness_with_guards(
+        typed_clauses,
+        param_types,
+        has_otherwise,
+        &span,
+        ctx.enum_registry,
+    )?;
+
+    Ok(())
 }

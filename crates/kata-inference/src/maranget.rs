@@ -29,6 +29,7 @@
 use kata_core::EnumRegistry;
 use kata_core::ty::Ty;
 
+use crate::typed_pattern::TypedLambdaClause;
 use crate::typed_pattern::TypedPattern;
 
 // ── Trait de ambiente ─────────────────────────────────────────────
@@ -543,6 +544,110 @@ fn collect_all_witnesses(
     all_witnesses
 }
 
+/// Folha coberta — um valor que pelo menos um braço casa.
+/// `arm_indices` são os índices dos braços que casam este valor.
+#[derive(Debug, Clone)]
+struct GuardLeaf {
+    arm_indices: Vec<usize>,
+}
+
+/// Percorre a árvore de especialização e coleta folhas cobertas.
+///
+/// Paralelo a `collect_all_witnesses`, mas em vez de coletar witnesses de
+/// valores faltantes, coleta os índices dos braços que cobrem cada folha.
+/// Usada pela Fase 3: para cada folha coberta por braços com guards,
+/// a camada chamadora emite query Z3 para verificar se a disjunção dos
+/// guards é tautologia.
+///
+/// Diferença de `collect_all_witnesses`: não usa linha wildcard `q` —
+/// percorre a árvore apenas com os construtores do tipo e das linhas.
+fn collect_guard_leaves(matrix: &PatternMatrix, env: &dyn PatternEnv) -> Vec<GuardLeaf> {
+    if matrix.column_tys.is_empty() {
+        // Caso base: 0 colunas. Toda linha restante casa o mesmo valor.
+        if matrix.rows.is_empty() {
+            // Folha não coberta — não é uma GuardLeaf.
+            return Vec::new();
+        }
+        // Folha coberta — coleta arm_indices das linhas.
+        let arm_indices: Vec<usize> = matrix.rows.iter().filter_map(|r| r.arm_index).collect();
+        return vec![GuardLeaf { arm_indices }];
+    }
+
+    let head_ty = &matrix.column_tys[0].clone();
+
+    // Coleta construtores que aparecem na primeira coluna.
+    let mut ctors_seen: Vec<Constructor> = Vec::new();
+    for row in &matrix.rows {
+        if let Some(ctor) = pattern_ctor(&row.patterns[0])
+            && !ctors_seen.contains(&ctor)
+        {
+            ctors_seen.push(ctor);
+        }
+    }
+
+    let type_ctors = env.constructors_of(head_ty);
+
+    let present_ctors: Vec<Constructor> = ctors_seen.clone();
+    let missing_ctors: Vec<Constructor> = type_ctors
+        .iter()
+        .filter(|c| !present_ctors.contains(c))
+        .cloned()
+        .collect();
+
+    let mut constructors_to_try: Vec<Constructor> = present_ctors.clone();
+    if env.is_infinite(head_ty) {
+        if !missing_ctors.is_empty() || constructors_to_try.is_empty() {
+            constructors_to_try.push(Constructor::Missing);
+        }
+    } else {
+        constructors_to_try.extend(missing_ctors);
+    }
+
+    if constructors_to_try.is_empty() {
+        // Sem construtores para tentar — se há linhas, é uma folha coberta.
+        if !matrix.rows.is_empty() {
+            let arm_indices: Vec<usize> = matrix.rows.iter().filter_map(|r| r.arm_index).collect();
+            return vec![GuardLeaf { arm_indices }];
+        }
+        return Vec::new();
+    }
+
+    let mut all_leaves: Vec<GuardLeaf> = Vec::new();
+
+    for ctor in &constructors_to_try {
+        let field_tys = env.field_tys(ctor, head_ty);
+        let n_fields = field_tys.len();
+
+        let mut sub_tys: Vec<Ty> = field_tys;
+        sub_tys.extend(matrix.column_tys[1..].iter().cloned());
+
+        let mut sub_matrix = PatternMatrix::new(sub_tys);
+
+        for row in &matrix.rows {
+            let row_ctor = pattern_ctor(&row.patterns[0]);
+            match &row_ctor {
+                Some(rc) if rc == ctor => {
+                    let expanded = expand_pattern(&row.patterns[0], ctor, n_fields);
+                    let mut new_patterns = expanded;
+                    new_patterns.extend(row.patterns[1..].iter().cloned());
+                    sub_matrix.add_row(new_patterns, row.arm_index);
+                }
+                None => {
+                    let expanded = expand_pattern(&row.patterns[0], ctor, n_fields);
+                    let mut new_patterns = expanded;
+                    new_patterns.extend(row.patterns[1..].iter().cloned());
+                    sub_matrix.add_row(new_patterns, row.arm_index);
+                }
+                _ => {}
+            }
+        }
+
+        all_leaves.extend(collect_guard_leaves(&sub_matrix, env));
+    }
+
+    all_leaves
+}
+
 /// Verifica se `q` é útil w.r.t. as linhas da matriz.
 ///
 /// `q` é uma linha com `arm_index: None` (linha wildcard para exaustividade)
@@ -802,6 +907,141 @@ pub(crate) fn check_exhaustiveness_maranget(
             }
         }
     }
+}
+
+/// Resultado da análise de exaustividade com guards (Fase 3).
+///
+/// Combina o motor Maranget (estrutural) com Z3 (guards na folha).
+/// O motor conduz até a folha; quando só resta decidir por guards,
+/// emite query Z3 escopada por célula com bindings semeados.
+///
+/// `clauses`: cláusulas lambda tipadas (com patterns, guards, with_bindings).
+/// `param_types`: tipos dos parâmetros (1 por coluna).
+/// `has_otherwise`: se alguma cláusula tem pattern Ident/Wildcard.
+/// `span`: span para mensagens de erro.
+///
+/// Fluxo:
+/// 1. Roda `check_exhaustiveness_maranget` (estrutural, sem guards).
+/// 2. Se não-exaustivo estruturalmente → `NonExhaustiveMatch` com witnesses.
+/// 3. Se exaustivo estruturalmente e sem guards → Ok (verde estrutural).
+/// 4. Se exaustivo estruturalmente com guards → `collect_guard_leaves`
+///    identifica quais braços casam cada folha. Para cada folha onde
+///    todos os braços têm guards, `check_guard_coverage` prova que a
+///    disjunção dos guards é tautologia.
+///    - `Proven` → Ok
+///    - `Refuted` → `NonExhaustiveMatch` com contra-exemplo
+///    - `Unknown` → `MissingOtherwise` local à folha
+pub(crate) fn check_exhaustiveness_with_guards(
+    clauses: &[TypedLambdaClause],
+    param_types: &[Ty],
+    has_otherwise: bool,
+    span: &kata_ast::Span,
+    enum_registry: &EnumRegistry,
+) -> Result<(), kata_diagnostics::MiddleError> {
+    // Coleta patterns de cada cláusula.
+    let arm_patterns: Vec<Vec<TypedPattern>> = clauses
+        .iter()
+        .map(|c| c.patterns.iter().map(|p| p.node.clone()).collect())
+        .collect();
+
+    // 1. Verificação estrutural (sem guards).
+    let struct_result =
+        check_exhaustiveness_maranget(&arm_patterns, param_types, has_otherwise, enum_registry);
+
+    if !struct_result.exhaustive {
+        return Err(kata_diagnostics::MiddleError::NonExhaustiveMatch {
+            missing: struct_result.missing.clone(),
+            span: (*span).into(),
+            hint: Some(format!(
+                "combinações faltantes: {}. \
+                 Adicione cláusulas para cada uma ou use `otherwise:` como fallback",
+                struct_result.missing.join(", ")
+            )),
+        });
+    }
+
+    // 2. Exaustivo estruturalmente. Verificar guards.
+    // Se nenhuma cláusula tem guards, está verde.
+    let any_has_guards = clauses.iter().any(|c| !c.guards.is_empty());
+    if !any_has_guards {
+        return Ok(());
+    }
+
+    // 3. Há cláusulas com guards. Percorrer folhas e verificar Z3.
+    // Se has_otherwise é true, o motor Maranget retornou exhaustive: true
+    // imediatamente (atalho wildcard). Mas o wildcard pode ter guards!
+    // Preciamo percorrer a árvore sem o atalho para identificar as folhas.
+    // Se has_otherwise é true e o braço wildcard não tem guards, toda folha
+    // é coberta pelo wildcard → Ok. Se o wildcard tem guards, precisamos
+    // verificar por folha.
+    //
+    // Simplificação: se has_otherwise é true e a cláusula wildcard não tem
+    // guards (ou tem otherwise), está verde. Senão, percorre folhas.
+    if has_otherwise {
+        // A cláusula com Ident/Wildcard cobre todas as folhas estruturalmente.
+        // Se ela não tem guards, está verde.
+        let wildcard_has_guards = clauses.iter().any(|c| {
+            !c.guards.is_empty()
+                && c.patterns
+                    .iter()
+                    .any(|p| matches!(p.node, TypedPattern::Ident { .. } | TypedPattern::Wildcard))
+        });
+        if !wildcard_has_guards {
+            return Ok(());
+        }
+        // Wildcard tem guards — cai para collect_guard_leaves.
+        // (Caso raro: `lambda x: > x 0: ...` sem otherwise.)
+    }
+
+    // Constrói a matriz para collect_guard_leaves (sem atalho has_otherwise).
+    let env = MarangetEnv::new(enum_registry);
+    let mut matrix = PatternMatrix::new(param_types.to_vec());
+    for (i, arm_patterns) in arm_patterns.iter().enumerate() {
+        matrix.add_row(arm_patterns.clone(), Some(i));
+    }
+
+    let leaves = collect_guard_leaves(&matrix, &env);
+
+    for leaf in &leaves {
+        // Coleta os braços que casam esta folha e têm guards.
+        let guard_arms: Vec<crate::guard_completeness::GuardArm> = leaf
+            .arm_indices
+            .iter()
+            .filter_map(|&idx| {
+                let clause = &clauses[idx];
+                if clause.guards.is_empty() {
+                    // Braço sem guards — cobre a folha trivialmente.
+                    // Se há um braço sem guards nesta folha, ela está coberta.
+                    return None;
+                }
+                Some(crate::guard_completeness::GuardArm {
+                    guards: &clause.guards,
+                    with_bindings: &clause.with_bindings,
+                })
+            })
+            .collect();
+
+        // Se algum braço sem guards está na folha, ela está coberta.
+        let has_bare_arm = leaf
+            .arm_indices
+            .iter()
+            .any(|&idx| clauses[idx].guards.is_empty());
+
+        if has_bare_arm {
+            continue;
+        }
+
+        // Todos os braços na folha têm guards. Verificar Z3.
+        if guard_arms.is_empty() {
+            // Folha sem braços?? Não deveria acontecer (GuardLeaf só é
+            // criada quando há linhas). Defensivo: Ok.
+            continue;
+        }
+
+        crate::guard_completeness::check_guard_coverage(&guard_arms, span)?;
+    }
+
+    Ok(())
 }
 
 /// Verifica se um braço é redundante (inútil) w.r.t. os braços anteriores.

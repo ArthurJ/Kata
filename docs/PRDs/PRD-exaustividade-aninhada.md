@@ -1,7 +1,7 @@
 # PRD — Exaustividade Aninhada (Maranget + Z3 em Guards + Refined)
 
-**Status:** 🟡 Fase 0 ✅ — Fase 1 ✅ (passos 1-4) — Fase 2 ✅ (passos 1-6) — Fase 3 não iniciada
-**Data:** 2026-08-30
+**Status:** 🟡 Fase 0 ✅ — Fase 1 ✅ (passos 1-4) — Fase 2 ✅ (passos 1-6) — Fase 3 ✅ — Fase 4 não iniciada
+**Data:** 2026-08-31
 **Tipo:** Planejamento — PRD único, 5 fases sequenciais
 **Depende de:** `PRD-exaustividade.md` ✅ (guards via Z3, patterns de 1 nível)
 
@@ -208,13 +208,23 @@ witnesses legíveis (snapshots); probeJ → `RedundantClause`; probeA/B →
 `NonExhaustiveMatch` `["Some False"]`; probeM → `missing: ["Ok _"]`;
 probeK_deep_hole → witness de 3 níveis; controles permanecem verdes.
 
-## 7. Fase 3 — Z3 na folha (guards)
+## 7. Fase 3 — Z3 na folha (guards) ✅
 
 O motor conduz até a folha; quando só resta decidir por guards, emite
 query Z3 escopada por célula com bindings semeados (`seed_with_bindings`).
 Query: `¬(g₁ ∨ … ∨ gₙ)` UNSAT → folha coberta; Sat → contraexemplo no
 witness; `Unknown` → `MissingOtherwise` local à folha. Z3 nunca enxerga
 datatype — só variáveis de payload e guards.
+
+Implementação: `collect_guard_leaves` percorre a árvore de especialização
+do motor Maranget e coleta, para cada folha coberta, os índices dos braços
+que a cobrem. `check_exhaustiveness_with_guards` compõe motor estrutural
++ Z3: se exaustivo estruturalmente e há guards, percorre as folhas e para
+cada uma onde todos os braços têm guards, `check_guard_coverage` prova a
+tautologia disjuntiva. Cada braço é traduzido por seu próprio tradutor Z3
+(semearado com seus `with_bindings`), evitando colisão de nomes entre
+bindings de cláusulas diferentes. Params são consts Z3 por nome —
+compartilhados naturalmente entre tradutores.
 
 Pré-requisito: fall-through de codegen (§5.4). probeH valida E2E nos dois
 backends: `Some x` com `> x 0` / `<= x 0` em cláusulas separadas, `None`
@@ -384,8 +394,17 @@ Verificação entre fases: `cargo test --workspace --no-fail-fast` verde;
 5. Witnesses legíveis → snapshots. ✅ `eb0d0a5` (oráculos F2 des-ignorados)
 6. Fix codegen: selar next_clause_block após body (probeG crash). ✅ `31fea5a`
 
-**Fase 3:** queries de folha escopadas → probeH E probeH_with verdes
-nos dois backends.
+**Fase 3** (implementada):
+- `collect_guard_leaves` em `maranget.rs` — percorre a árvore de especialização
+  e coleta folhas cobertas com arm_indices (paralelo a `collect_all_witnesses`).
+- `check_guard_coverage` + `prove_guard_coverage` em `guard_completeness.rs` —
+  prova disjunção de guards de múltiplos braços via Z3, com tradutor por braço.
+- `check_exhaustiveness_with_guards` em `maranget.rs` — compõe motor estrutural
+  + Z3 na folha. Remove loop por-cláusula em `function_infer.rs`.
+- Oráculos probeH e probeH_with des-ignorados — verdes nos dois backends.
+- Teste `non_redundant_guard_no_implication` atualizado: guards disjuntivos
+  `> x 0 ∨ <= x 5` agora provados como tautologia pela Fase 3.
+- Suite: 1983 passed, 0 failed, 5 ignored (3 F4, 2 F5).
 
 **Fase 4:** coerção de literal em pattern sobre refined → predicado
 como premissa da folha → probeF verde nos dois backends.

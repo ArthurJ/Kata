@@ -177,6 +177,181 @@ pub(crate) fn check_guard_implication(
     }
 }
 
+// ── Verificação de cobertura de guards entre múltiplas cláusulas ────
+
+/// Braço com guards para verificação de cobertura entre cláusulas.
+/// Cada braço contribui com seus guards e seus bindings `with`.
+pub(crate) struct GuardArm<'a> {
+    pub guards: &'a [TypedGuardClause],
+    pub with_bindings: &'a [TypedWithBinding],
+}
+
+/// Verifica se a disjunção dos guards de múltiplos braços cobre todos os casos.
+///
+/// Usada pela Fase 3: quando o motor Maranget confirma cobertura estrutural,
+/// esta função prova que os guards de todos os braços que casam uma folha
+/// específica formam uma tautologia disjuntiva.
+///
+/// Se algum braço tem `otherwise` (`condition: None`), a disjunção é
+/// trivialmente `True` — Ok sem Z3.
+///
+/// Cada braço é traduzido por seu PRÓPRIO tradutor Z3 (semearado com seus
+/// `with_bindings`), evitando colisão de nomes entre bindings de cláusulas
+/// diferentes. Params (ex: `x`) são consts Z3 por nome — compartilhados
+/// naturalmente entre tradutores, o que é correto: a prova quantifica sobre
+/// o mesmo input.
+pub(crate) fn check_guard_coverage(arms: &[GuardArm], span: &Span) -> GuardResult {
+    // Se algum braço tem otherwise, a disjunção é trivialmente True.
+    if arms
+        .iter()
+        .any(|a| a.guards.iter().any(|g| g.condition.is_none()))
+    {
+        return Ok(());
+    }
+
+    // Coleta todas as condições de todos os braços.
+    let all_conditions: Vec<TypedExpr> = arms
+        .iter()
+        .flat_map(|a| {
+            a.guards
+                .iter()
+                .filter_map(|g| g.condition.as_ref().map(|c| c.node.clone()))
+        })
+        .collect();
+
+    if all_conditions.is_empty() {
+        // Nenhum braço tem guards nem otherwise — nada a verificar.
+        // Isto não deveria acontecer se a função foi chamada corretamente
+        // (só é chamada quando há braços com guards), mas é defensivo.
+        return Ok(());
+    }
+
+    let span_val = *span;
+
+    match prove_guard_coverage(arms) {
+        Ternary::Proven => Ok(()),
+        Ternary::Refuted => {
+            let counter_example = prove_guard_coverage_with_model(arms);
+            Err(MiddleError::NonExhaustiveMatch {
+                missing: vec![counter_example],
+                span: span_val.into(),
+                hint: Some(
+                    "guards não cobrem todos os casos. \
+                     Adicione um guard ou use `otherwise:` como fallback"
+                        .to_string(),
+                ),
+            })
+        }
+        Ternary::Unknown => Err(MiddleError::MissingOtherwise {
+            span: span_val.into(),
+        }),
+    }
+}
+
+/// Prova se a disjunção dos guards de múltiplos braços é tautologia.
+///
+/// `¬(g₁ ∨ … ∨ gₙ)` UNSAT → tautologia provada.
+/// Cada braço traduz seus guards com seu próprio tradutor Z3.
+fn prove_guard_coverage(arms: &[GuardArm]) -> Ternary {
+    let cfg = z3_config();
+
+    with_z3_config(&cfg, || {
+        let solver = Solver::new();
+
+        let mut all_z3_conds: Vec<Bool> = Vec::new();
+
+        for arm in arms {
+            let conditions: Vec<TypedExpr> = arm
+                .guards
+                .iter()
+                .filter_map(|g| g.condition.as_ref().map(|c| c.node.clone()))
+                .collect();
+
+            if conditions.is_empty() {
+                continue;
+            }
+
+            let mut translator = Z3Translator::new();
+            translator.seed_with_bindings(arm.with_bindings);
+
+            let z3_conds: Vec<Bool> = conditions
+                .iter()
+                .map(|cond| translator.translate_bool(cond))
+                .collect();
+
+            all_z3_conds.extend(z3_conds);
+        }
+
+        if all_z3_conds.is_empty() {
+            // Sem condições — disjunção vazia = False, ¬False = True (SAT).
+            // Não é tautologia. Mas este caso é tratado por check_guard_coverage
+            // (otherwise ou vazio → Ok antes de chegar aqui).
+            return Ternary::Refuted;
+        }
+
+        let disjunction = Bool::or(&all_z3_conds);
+        solver.assert(disjunction.not());
+
+        match solver.check() {
+            SatResult::Unsat => Ternary::Proven,
+            SatResult::Sat => Ternary::Refuted,
+            SatResult::Unknown => Ternary::Unknown,
+        }
+    })
+}
+
+/// Reexecuta a prova de cobertura extraindo o contra-exemplo do modelo.
+fn prove_guard_coverage_with_model(arms: &[GuardArm]) -> String {
+    let cfg = z3_config();
+
+    with_z3_config(&cfg, || {
+        let solver = Solver::new();
+
+        let mut all_z3_conds: Vec<Bool> = Vec::new();
+        // Usa o último tradutor para extrair o contra-exemplo — params são
+        // compartilhados por nome entre tradutores, então qualquer um serve.
+        let mut last_translator = Z3Translator::new();
+
+        for arm in arms {
+            let conditions: Vec<TypedExpr> = arm
+                .guards
+                .iter()
+                .filter_map(|g| g.condition.as_ref().map(|c| c.node.clone()))
+                .collect();
+
+            if conditions.is_empty() {
+                continue;
+            }
+
+            let mut translator = Z3Translator::new();
+            translator.seed_with_bindings(arm.with_bindings);
+
+            let z3_conds: Vec<Bool> = conditions
+                .iter()
+                .map(|cond| translator.translate_bool(cond))
+                .collect();
+
+            all_z3_conds.extend(z3_conds);
+            last_translator = translator;
+        }
+
+        if all_z3_conds.is_empty() {
+            return "caso não coberto pelos guards".to_string();
+        }
+
+        let disjunction = Bool::or(&all_z3_conds);
+        solver.assert(disjunction.not());
+
+        if let SatResult::Sat = solver.check()
+            && let Some(model) = solver.get_model()
+        {
+            return last_translator.extract_counter_example(&model);
+        }
+
+        "caso não coberto pelos guards".to_string()
+    })
+}
+
 // ── Funções internas de prova Z3 ─────────────────────────────────────
 
 /// Configura Z3 com rlimit para determinismo de esforço.
