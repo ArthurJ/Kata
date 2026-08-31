@@ -26,8 +26,8 @@
 //! Na Fase 3, quando só resta decidir por guards, emite query Z3 escopada
 //! por célula. `Unknown` → `MissingOtherwise` local à folha.
 
-use kata_core::ty::Ty;
 use kata_core::EnumRegistry;
+use kata_core::ty::Ty;
 
 use crate::typed_pattern::TypedPattern;
 
@@ -180,18 +180,18 @@ impl<'a> PatternEnv for MarangetEnv<'a> {
                 // Busca o payload_ty da variante no EnumRegistry.
                 if let Some(variants) = self.enum_registry.all_variants(enum_name)
                     && let Some(info) = variants.iter().find(|v| v.name == *name)
-                        && let Some(payload) = &info.payload_ty {
-                            // Substitui type params pelo tipo concreto.
-                            // Para Ty::Generic("Optional", [Boolean]),
-                            // substitui T -> Boolean.
-                            let type_args: Vec<Ty> = match ty {
-                                Ty::Generic(_, args) => args.clone(),
-                                _ => Vec::new(),
-                            };
-                            let type_params =
-                                self.enum_registry.type_params_of(enum_name).unwrap_or(&[]);
-                            return vec![substitute_ty(payload, &type_args, type_params)];
-                        }
+                    && let Some(payload) = &info.payload_ty
+                {
+                    // Substitui type params pelo tipo concreto.
+                    // Para Ty::Generic("Optional", [Boolean]),
+                    // substitui T -> Boolean.
+                    let type_args: Vec<Ty> = match ty {
+                        Ty::Generic(_, args) => args.clone(),
+                        _ => Vec::new(),
+                    };
+                    let type_params = self.enum_registry.type_params_of(enum_name).unwrap_or(&[]);
+                    return vec![substitute_ty(payload, &type_args, type_params)];
+                }
                 Vec::new() // unitária ou não encontrada
             }
             (Constructor::Cons, Ty::List(elem_ty)) => {
@@ -434,14 +434,16 @@ fn collect_all_witnesses(
     let mut ctors_seen: Vec<Constructor> = Vec::new();
     for row in &matrix.rows {
         if let Some(ctor) = pattern_ctor(&row.patterns[0])
-            && !ctors_seen.contains(&ctor) {
-                ctors_seen.push(ctor);
-            }
-    }
-    if let Some(ctor) = pattern_ctor(&q.patterns[0])
-        && !ctors_seen.contains(&ctor) {
+            && !ctors_seen.contains(&ctor)
+        {
             ctors_seen.push(ctor);
         }
+    }
+    if let Some(ctor) = pattern_ctor(&q.patterns[0])
+        && !ctors_seen.contains(&ctor)
+    {
+        ctors_seen.push(ctor);
+    }
 
     let type_ctors = env.constructors_of(head_ty);
 
@@ -568,15 +570,17 @@ fn is_useful(matrix: &PatternMatrix, q: &MatrixRow, env: &dyn PatternEnv) -> Opt
     let mut ctors_seen: Vec<Constructor> = Vec::new();
     for row in &matrix.rows {
         if let Some(ctor) = pattern_ctor(&row.patterns[0])
-            && !ctors_seen.contains(&ctor) {
-                ctors_seen.push(ctor);
-            }
+            && !ctors_seen.contains(&ctor)
+        {
+            ctors_seen.push(ctor);
+        }
     }
     // Também do pattern q (a linha que estamos testando).
     if let Some(ctor) = pattern_ctor(&q.patterns[0])
-        && !ctors_seen.contains(&ctor) {
-            ctors_seen.push(ctor);
-        }
+        && !ctors_seen.contains(&ctor)
+    {
+        ctors_seen.push(ctor);
+    }
 
     // Construtores do tipo (universo).
     let type_ctors = env.constructors_of(head_ty);
