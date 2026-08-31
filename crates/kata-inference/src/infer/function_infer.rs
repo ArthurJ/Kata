@@ -239,7 +239,7 @@ pub(crate) fn ty_name(ty: &Ty) -> &str {
 /// sobre os parâmetros. O motor Maranget desce payloads de variantes
 /// (Some True -> Some consome True como sub-pattern), onde o checker
 /// antigo operava por nomes de variantes de 1 nível com sentinela-string
-/// `__ANY__` e produto cartesiano de universos.
+/// `__ANY__` e produto cartesiano de universos (substituído pelo motor Maranget).
 fn check_clause_exhaustiveness(
     typed_clauses: &[TypedLambdaClause],
     param_types: &[Ty],
