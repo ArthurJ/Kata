@@ -143,11 +143,17 @@ fn match_with_otherwise_is_exhaustive() {
 
 #[test]
 fn match_int_without_otherwise_errors() {
+    // Pela Fase 2 (motor Maranget), tipos infinitos sem otherwise
+    // produzem NonExhaustiveMatch com witness "_" (não MissingOtherwise).
+    // MissingOtherwise é reservado para guards sem otherwise (Fase 3).
     let err = infer_src_err("match 42\n    0: 1");
-    assert!(matches!(
-        err,
-        kata_diagnostics::MiddleError::MissingOtherwise { .. }
-    ));
+    assert!(
+        matches!(
+            err,
+            kata_diagnostics::MiddleError::NonExhaustiveMatch { .. }
+        ),
+        "esperava NonExhaustiveMatch, got {err:?}"
+    );
 }
 
 #[test]

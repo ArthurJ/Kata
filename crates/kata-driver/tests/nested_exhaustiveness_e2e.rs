@@ -204,6 +204,7 @@ main!()"#,
 }
 
 /// probeK_deep_paren: parêntese interno em braço — resolvido na Fase 0.
+/// Controle verde: aninhamento com parênteses + cobertura completa.
 #[test]
 fn probe_k_deep_paren_verde() {
     let path = write_temp_kata(
@@ -212,6 +213,8 @@ fn probe_k_deep_paren_verde() {
 lambda m:
     match m
         Some (Some True): "true dentro"
+        Some (Some False): "false dentro"
+        Some None: "sem dentro"
         None: "nada"
 
 action main
