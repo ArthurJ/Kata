@@ -2780,6 +2780,58 @@ Sem `if/else`, a Kata-Lang usa pattern matching estrutural e guards condicionais
   retorna.
 * **`otherwise:`** Fallback mandatário no fim de qualquer corrente de Guards. Sem guards, o body direto dispensa `otherwise`.
 
+### 16.0 Verificação de Exaustividade
+
+O compilador verifica exaustividade de `match` e cláusulas lambda estaticamente.
+O motor segue o algoritmo de Maranget (*Warnings for Pattern Matching*, JFP 2007)
+para análise estrutural, composto com Z3 nas folhas onde guards decidem.
+
+**Tipos finitos (enum, Boolean):** o motor enumera construtores ausentes
+individualmente. `match` sobre `Boolean` com apenas `Boolean::True:` →
+`NonExhaustiveMatch` indicando `Boolean::False` faltante.
+
+**Tipos infinitos (Int, Float, Text):** o motor agrupa construtores ausentes
+em um bucket `Missing`. Sem `otherwise` → `NonExhaustiveMatch` com witness `_`.
+
+**Refineds com domínio finito:** quando o scrutinee é um tipo refined sobre Int
+ou Rational com predicados que definem um intervalo finito (ex: `> _ 0` e
+`< _ 3` → domínio `{1, 2}`), o motor enumera o domínio e verifica cobertura
+sem precisar de `otherwise`. Literais fora do domínio são rejeitados com
+`TypeMismatch` em compile-time.
+
+```kata
+data (Int, > _ 0, < _ 3) as UmOuDois
+
+foo :: UmOuDois => Text
+lambda n:
+    match n
+        1: "um"
+        2: "dois"
+# exaustivo — domínio {1, 2} coberto, sem otherwise
+```
+
+Refineds sobre Rational funcionam da mesma forma:
+
+```kata
+data (Rational, > _ (rational 0), < _ (rational 3)) as RatUmOuDois
+
+foo :: RatUmOuDois => Text
+lambda n:
+    match n
+        rational 1: "um"
+        rational 2: "dois"
+# exaustivo — domínio {Rat(1,1), Rat(2,1)} coberto
+```
+
+**Guards entre cláusulas:** quando múltiplas cláusulas têm guards sobre o
+mesmo pattern, o motor prova disjunção via Z3 (a disjunção de todos os
+guards é tautologia → exaustivo). Se Z3 retorna `Unknown` →
+`MissingOtherwise` local à folha.
+
+**Redundância:** braços inúteis (cujos patterns são cobertos por braços
+anteriores) são reportados como erro. `otherwise` é isento — é sempre
+redundante por definição, mas permitido.
+
 ### 16.1 `with` Block — Computações Prévias
 
 `with` é um bloco de bindings nomeados que aparece **depois dos guards** no fim

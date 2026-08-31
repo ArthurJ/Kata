@@ -1012,6 +1012,35 @@ soma_positiva :: PositiveInt PositiveInt => PositiveInt?
 | `return` | Early return em Actions. Não existe em funções puras. |
 | `if` | **Não existe — invariante absoluta.** Lógica condicional é expressa via pattern matching (que garante exaustividade) e guards (que garantem fallback via `otherwise`). |
 
+## `match` — Verificação de Exaustividade
+
+O compilador verifica exaustividade estaticamente via algoritmo de Maranget
+composto com Z3 nas folhas de guards.
+
+- **Tipos finitos (enum, Boolean):** construtores ausentes enumerados
+  individualmente. `Boolean::True:` sem `Boolean::False:` → `NonExhaustiveMatch`.
+- **Tipos infinitos (Int, Float, Text):** sem `otherwise` →
+  `NonExhaustiveMatch` com witness `_`.
+- **Refineds com domínio finito (Int, Rational):** o motor extrai bounds dos
+  predicados (ex: `> _ 0` + `< _ 3` → `{1, 2}`), enumera o domínio, e verifica
+  cobertura. Se todos os valores do domínio têm um braço correspondente,
+  `otherwise` é dispensável. Literais fora do domínio → `TypeMismatch`.
+
+```kata
+data (Int, > _ 0, < _ 3) as UmOuDois
+# domínio finito {1, 2} — match sem otherwise é exaustivo
+
+data (Rational, > _ (rational 0), < _ (rational 3)) as RatUmOuDois
+# domínio finito {Rat(1,1), Rat(2,1)} — rational 1: / rational 2: cobrem
+```
+
+- **Guards entre cláusulas:** disjunção de todos os guards provada via Z3.
+  Tautologia → exaustivo. `Unknown` → `MissingOtherwise`.
+- **Redundância:** braços cobertos por braços anteriores → erro. `otherwise`
+  isento.
+- **Patterns aninhados:** suporta `Some(Some(True))`, `(a, b)`, `[h : t]`,
+  patterns de tupla e lista em qualquer nível de profundidade. Ver manual §16.
+
 ## Cláusulas Lambda Múltiplas
 
 ```kata
