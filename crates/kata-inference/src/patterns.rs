@@ -195,15 +195,15 @@ fn check_pattern_inner(
                 && struct_info.alias_of.is_some()
             {
                 // O base do refined é o alias_of. Verifica que o literal
-                // é do mesmo tipo base.
+                // é do mesmo tipo base. Generalização F5.3: em vez de
+                // matches! de 4 pares hard-coded, deriva PrimTy do nome
+                // base e compara com o PrimTy do literal.
                 let base_name = struct_info.alias_of.as_deref().unwrap_or("");
-                let base_matches = matches!(
-                    (&literal_ty, base_name),
-                    (Ty::Prim(PrimTy::Int), "Int")
-                        | (Ty::Prim(PrimTy::Float), "Float")
-                        | (Ty::Prim(PrimTy::Rational), "Rational")
-                        | (Ty::Prim(PrimTy::Text), "Text")
-                );
+                let base_prim = prim_ty_from_name(base_name);
+                let base_matches = match (&literal_ty, base_prim) {
+                    (Ty::Prim(lit_prim), Some(base_prim)) => *lit_prim == base_prim,
+                    _ => false,
+                };
                 if base_matches {
                     // Busca RefinedDeclInfo para os predicados como Spanned<Expr>.
                     if let Some(refined_decl) =
@@ -575,6 +575,18 @@ fn literal_to_typed_kind(expr: &kata_ast::Expr) -> TypedExprKind {
 /// (Int→Float) não se aplica em patterns — o literal deve ser do mesmo tipo.
 fn pattern_type_compatible(literal_ty: &Ty, scrutinee_ty: &Ty) -> bool {
     literal_ty == scrutinee_ty
+}
+
+/// Mapeia nome de tipo primitivo para `PrimTy`.
+/// Usado para verificar compatibilidade entre literal e tipo base de refined.
+fn prim_ty_from_name(name: &str) -> Option<PrimTy> {
+    match name {
+        "Int" => Some(PrimTy::Int),
+        "Float" => Some(PrimTy::Float),
+        "Text" => Some(PrimTy::Text),
+        "Rational" => Some(PrimTy::Rational),
+        _ => None,
+    }
 }
 
 /// F5.2: Tenta reconhecer uma função de conversão (`rational N`, `int N`,
