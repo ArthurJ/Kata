@@ -675,3 +675,40 @@ main!()"#,
     );
     assert_ne!(code, 0);
 }
+
+/// RatNota: refined sobre Rational com otherwise, 4 braços.
+/// F5.5: verde com output correto nos dois backends.
+#[test]
+fn rat_nota_with_otherwise_f5() {
+    let path = write_temp_kata(
+        "RatNota",
+        r#"data (Rational, > _ (rational 0), < _ (rational 10)) as Nota
+
+notaN :: Nota => Text
+lambda n:
+    match n
+        rational 1: "ruim"
+        rational 5: "médio"
+        rational 9: "ótimo"
+        otherwise: "outro"
+
+action main
+    match (Nota (rational 1))
+        Ok v: echo!(notaN v)
+        Err _: echo!("erro")
+    match (Nota (rational 5))
+        Ok v: echo!(notaN v)
+        Err _: echo!("erro")
+    match (Nota (rational 9))
+        Ok v: echo!(notaN v)
+        Err _: echo!("erro")
+    match (Nota (rational 3))
+        Ok v: echo!(notaN v)
+        Err _: echo!("erro")
+
+main!()"#,
+    );
+    let (stdout, stderr, code) = run_kata_file(&path);
+    assert_eq!(code, 0, "RatNota deve exit 0 — stderr: {stderr}");
+    assert_eq!(stdout, "ruim\nmédio\nótimo\noutro\n");
+}
