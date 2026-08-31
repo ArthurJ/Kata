@@ -240,9 +240,11 @@ pub(crate) fn lower_clause_chain(
             bind_patterns_to_params(&clause.patterns, params, lower);
             lower.builder.ins().jump(body_block, &[]);
         }
-        // Agora que os predecessores foram emitidos, selar.
-        lower.builder.seal_block(next_clause_block);
+        // Selar body_block — o único predecessor (brif ou jump) já foi emitido.
         lower.builder.seal_block(body_block);
+        // NÃO selar next_clause_block ainda — lower_clause_body pode precisar
+        // fazer jump(next_clause_block) como fall-through de guards sem otherwise.
+        // Selar APÓS o body ser lowerado.
 
         // Switch para body_block antes de lowerar (o block atual já tem terminador).
         lower.builder.switch_to_block(body_block);
@@ -262,6 +264,9 @@ pub(crate) fn lower_clause_chain(
         lower.emitted_tail_call = false;
         lower.emitted_terminator = false;
         let body_val = lower_clause_body(clause, lower, Some(next_clause_block))?;
+        // Agora que o body foi lowerado (e possivelmente emitiu jump para
+        // next_clause_block como fall-through de guards), selar.
+        lower.builder.seal_block(next_clause_block);
         if !lower.emitted_terminator && !lower.emitted_tail_call {
             if let Some(epi) = lower.epilogue_block {
                 lower
