@@ -9,6 +9,9 @@
 //! antes da avaliação. Retorna `None` se não consegue avaliar.
 
 use kata_ast::{Expr, Spanned};
+use kata_core::caps::ConstVal;
+
+use std::cmp::Ordering;
 
 /// Avalia um predicado sobre um valor literal.
 ///
@@ -60,16 +63,26 @@ fn eval_bool_expr(expr: &Spanned<Expr>) -> Option<bool> {
                 return None;
             }
 
-            let left = eval_numeric(&args[0])?;
-            let right = eval_numeric(&args[1])?;
+            let left = eval_const(&args[0])?;
+            let right = eval_const(&args[1])?;
 
+            // Compara via ConstVal::cmp (cross-multiplication para Rat).
+            // Para `=` e `!=`, usa PartialEq (estrutural). Para ordinais,
+            // usa cmp().
             match op {
                 "=" => Some(left == right),
                 "!=" => Some(left != right),
-                "<" => Some(left < right),
-                ">" => Some(left > right),
-                "<=" => Some(left <= right),
-                ">=" => Some(left >= right),
+                "<" | ">" | "<=" | ">=" => {
+                    let ord = left.compare(&right)?;
+                    let result = match op {
+                        "<" => ord == Ordering::Less,
+                        ">" => ord == Ordering::Greater,
+                        "<=" => ord != Ordering::Greater,
+                        ">=" => ord != Ordering::Less,
+                        _ => unreachable!(),
+                    };
+                    Some(result)
+                }
                 _ => None,
             }
         }
@@ -85,19 +98,55 @@ fn eval_bool_expr(expr: &Spanned<Expr>) -> Option<bool> {
     }
 }
 
-/// Extrai valor numérico (f64) de uma expressão literal.
+/// Extrai valor constante canônico (`ConstVal`) de uma expressão literal.
 ///
-/// IntLit e FloatLit são aceitos. Retorna `None` para outros tipos.
-/// Usa f64 para统一 comparação entre Int e Float (suficiente para predicados
-/// de ascription-refined).
-fn eval_numeric(expr: &Spanned<Expr>) -> Option<f64> {
+/// IntLit → `ConstVal::Int`, FloatLit → `ConstVal::Float`,
+/// TextLit → `ConstVal::Text`, Unit → `ConstVal::Unit`,
+/// `rational N` → `ConstVal::Rat(N, 1)`, Boolean True/False → `ConstVal::Bool`.
+/// Suporta literais negativos: `Apply { -, [IntLit] }` → `ConstVal::Int(-N)`.
+/// Retorna `None` para expressões não-literais.
+pub(crate) fn eval_const(expr: &Spanned<Expr>) -> Option<ConstVal> {
     match &expr.node {
-        Expr::IntLit { text } => text.parse::<f64>().ok(),
-        Expr::FloatLit { text } => text.parse::<f64>().ok(),
-        // Suporta literais negativos: o parser pode produzir Apply { -, [IntLit] }
-        // ou IntLit com texto negativo dependendo do contexto.
+        Expr::IntLit { text } => Some(ConstVal::Int(text.parse::<i64>().ok()?)),
+        Expr::FloatLit { text } => Some(ConstVal::Float(text.parse::<f64>().ok()?)),
+        Expr::TextLit { text } => Some(ConstVal::Text(text.clone())),
+        Expr::Unit => Some(ConstVal::Unit),
+        // `rational N` → ConstVal::Rat(N, 1)
+        Expr::Apply { callee, args }
+            if args.len() == 1
+                && matches!(&callee.node, Expr::Ident { name } if name == "rational") =>
+        {
+            let inner = eval_const(&args[0])?;
+            match inner {
+                ConstVal::Int(n) => Some(ConstVal::Rat(n, 1)),
+                ConstVal::Float(f) => {
+                    // Float → Rational: denom = 1, numer = f as i64 (truncado).
+                    // Para precisão total seria necessário fração, mas para
+                    // const-eval de predicados simples isto basta.
+                    Some(ConstVal::Rat(f as i64, 1))
+                }
+                _ => None,
+            }
+        }
+        // Suporta literais negativos: Apply { -, [IntLit] } ou Apply { -, [FloatLit] }
         Expr::Apply { callee, args } if args.len() == 1 => match &callee.node {
-            Expr::Ident { name } if name == "-" => eval_numeric(&args[0]).map(|v| -v),
+            Expr::Ident { name } if name == "-" => {
+                let inner = eval_const(&args[0])?;
+                match inner {
+                    ConstVal::Int(v) => Some(ConstVal::Int(-v)),
+                    ConstVal::Float(v) => Some(ConstVal::Float(-v)),
+                    ConstVal::Rat(n, d) => Some(ConstVal::Rat(-n, d)),
+                    _ => None,
+                }
+            }
+            _ => None,
+        },
+        // Boolean::True / Boolean::False
+        Expr::VariantQual {
+            enum_name, variant, ..
+        } if enum_name == "Boolean" => match variant.as_str() {
+            "True" => Some(ConstVal::Bool(true)),
+            "False" => Some(ConstVal::Bool(false)),
             _ => None,
         },
         _ => None,

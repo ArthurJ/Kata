@@ -268,6 +268,34 @@ fn check_pattern_inner(
             variant,
             payload,
         } => {
+            // F5.2: Reconhecer função de conversão (`rational N`, `int N`,
+            // `float N`) em pattern position sobre scrutinee refined.
+            // O parser produz `Variant { enum_name: "", variant: "rational",
+            // payload: Some([Literal(IntLit("1"))]) }` em match arms.
+            // Se o scrutinee é refined sobre o tipo base correspondente,
+            // redirecionar para o caminho de literal.
+            if enum_name.is_empty()
+                && let Some(refined_expr) = try_conversion_as_literal(
+                    variant,
+                    payload,
+                    scrutinee_ty,
+                    struct_registry,
+                    refined_decls,
+                )
+            {
+                return check_pattern_inner(
+                    &Pattern::Literal(Spanned::new(refined_expr, *span)),
+                    scrutinee_ty,
+                    enum_registry,
+                    env,
+                    span,
+                    iface_registry,
+                    struct_registry,
+                    check_constant,
+                    refined_decls,
+                );
+            }
+
             // Variant desqualificada (enum_name vazio, produzido por parse_match_pattern):
             // resolver o enum_name via EnumRegistry do scrutinee.
             // `Ok v` em match sobre Result → enum_name="Result".
@@ -483,6 +511,19 @@ fn literal_expr_ty(expr: &kata_ast::Expr, scrutinee_ty: &Ty) -> Ty {
         kata_ast::Expr::FloatLit { .. } => Ty::float(),
         kata_ast::Expr::TextLit { .. } => Ty::text(),
         kata_ast::Expr::Unit => Ty::Unit,
+        // F5.2: `rational N`, `int N`, `float N` como literais em pattern.
+        // Apply{Ident("rational"), [IntLit(N)]} → Ty::Prim(PrimTy::Rational).
+        kata_ast::Expr::Apply { callee, args }
+            if args.len() == 1
+                && matches!(&callee.node, kata_ast::Expr::Ident { name } if matches!(name.as_str(), "rational" | "int" | "float")) =>
+        {
+            match &callee.node {
+                kata_ast::Expr::Ident { name } if name == "rational" => Ty::Prim(PrimTy::Rational),
+                kata_ast::Expr::Ident { name } if name == "int" => Ty::int(),
+                kata_ast::Expr::Ident { name } if name == "float" => Ty::float(),
+                _ => scrutinee_ty.clone(),
+            }
+        }
         // Demais expressões em pattern literal não são esperadas.
         _ => scrutinee_ty.clone(),
     }
@@ -495,6 +536,36 @@ fn literal_to_typed_kind(expr: &kata_ast::Expr) -> TypedExprKind {
         kata_ast::Expr::FloatLit { text } => TypedExprKind::FloatLit { text: text.clone() },
         kata_ast::Expr::TextLit { text } => TypedExprKind::TextLit { text: text.clone() },
         kata_ast::Expr::Unit => TypedExprKind::Unit,
+        // F5.2: `rational N` como literal em pattern — preserva como
+        // Closure{Ident("rational"), [IntLit(N)]} para que o codegen/interp
+        // construa o valor Rational corretamente.
+        kata_ast::Expr::Apply { callee, args }
+            if args.len() == 1
+                && matches!(&callee.node, kata_ast::Expr::Ident { name } if name == "rational") =>
+        {
+            // Constrói TypedExpr wrappers (5 campos) para callee e arg.
+            let callee_typed = TypedExpr {
+                span: callee.span,
+                ty: Ty::rational(),
+                tail_pos: false,
+                escape: EscapeTarget::Local,
+                kind: TypedExprKind::Ident {
+                    name: "rational".to_string(),
+                },
+            };
+            let arg_typed = TypedExpr {
+                span: args[0].span,
+                ty: Ty::int(),
+                tail_pos: false,
+                escape: EscapeTarget::Local,
+                kind: literal_to_typed_kind(&args[0].node),
+            };
+            TypedExprKind::Closure {
+                callee: Box::new(Spanned::new(callee_typed, callee.span)),
+                args: vec![Spanned::new(arg_typed, args[0].span)],
+                ffi_symbol: None,
+            }
+        }
         _ => TypedExprKind::Unit, // fallback — não deveria acontecer
     }
 }
@@ -504,4 +575,85 @@ fn literal_to_typed_kind(expr: &kata_ast::Expr) -> TypedExprKind {
 /// (Int→Float) não se aplica em patterns — o literal deve ser do mesmo tipo.
 fn pattern_type_compatible(literal_ty: &Ty, scrutinee_ty: &Ty) -> bool {
     literal_ty == scrutinee_ty
+}
+
+/// F5.2: Tenta reconhecer uma função de conversão (`rational N`, `int N`,
+/// `float N`) em pattern position sobre um scrutinee refined.
+///
+/// O parser produz `Pattern::Variant { enum_name: "", variant: "rational",
+/// payload: Some([Literal(IntLit("1"))]) }` em match arms. Se o scrutinee
+/// é refined sobre o tipo base correspondente (Rational para "rational",
+/// Int para "int", Float para "float"), retorna a `Expr` equivalente
+/// (`Apply { Ident("rational"), [IntLit("1")] }`) para ser tratada como
+/// literal pattern.
+///
+/// Retorna `None` se não é uma conversão reconhecida ou o scrutinee não
+/// é refined sobre o tipo base correspondente.
+fn try_conversion_as_literal(
+    variant: &str,
+    payload: &Option<Vec<Spanned<Pattern>>>,
+    scrutinee_ty: &Ty,
+    struct_registry: &StructRegistry,
+    _refined_decls: &[RefinedDeclInfo],
+) -> Option<kata_ast::Expr> {
+    // Mapeia nome de conversão → tipo base esperado.
+    let base_name = match variant {
+        "rational" => "Rational",
+        "int" => "Int",
+        "float" => "Float",
+        _ => return None,
+    };
+
+    // Extrai o literal do payload (deve ser exatamente 1 Literal pattern).
+    let payload = payload.as_ref()?;
+    if payload.len() != 1 {
+        return None;
+    }
+    let inner_expr = match &payload[0].node {
+        Pattern::Literal(expr) => &expr.node,
+        _ => return None,
+    };
+
+    // Verifica que o scrutinee é refined (Ty::Struct com alias_of) sobre o
+    // tipo base correspondente. Pode ser refined direto (alias_of = base_name)
+    // ou refined de alias (segue a cadeia via alias_of).
+    let Ty::Struct(key) = scrutinee_ty else {
+        return None;
+    };
+    let struct_info = struct_registry.get(key.name())?;
+    let alias_of = struct_info.alias_of.as_deref()?;
+    // Aceita refined direto sobre o tipo base, OU refined sobre alias
+    // cujo tipo base eventual é o correspondente (1 nível — follow_alias
+    // completa na F5.3).
+    if alias_of == base_name {
+        // Refined direto — constrói Apply{Ident(variant), [inner_expr]}.
+        return Some(kata_ast::Expr::Apply {
+            callee: Box::new(Spanned::new(
+                kata_ast::Expr::Ident {
+                    name: variant.to_string(),
+                },
+                payload[0].span,
+            )),
+            args: vec![Spanned::new(inner_expr.clone(), payload[0].span)],
+        });
+    }
+
+    // Tenta refined sobre alias — verifica se o alias_of leva ao base_name.
+    // Por enquanto, 1 nível. F5.3 usa follow_alias + caps.num.
+    if let Some(alias_info) = struct_registry.get(alias_of)
+        && let Some(further) = alias_info.alias_of.as_deref()
+        && further == base_name
+    {
+        return Some(kata_ast::Expr::Apply {
+            callee: Box::new(Spanned::new(
+                kata_ast::Expr::Ident {
+                    name: variant.to_string(),
+                },
+                payload[0].span,
+            )),
+            args: vec![Spanned::new(inner_expr.clone(), payload[0].span)],
+        });
+    }
+
+    None
 }

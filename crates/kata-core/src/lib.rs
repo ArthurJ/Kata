@@ -24,7 +24,7 @@ pub mod ty;
 pub mod type_env;
 pub mod type_graph;
 
-pub use caps::{CapsIndex, Repr, TypeCaps};
+pub use caps::{CapsIndex, ConstVal, Repr, TypeCaps};
 pub use dispatch::{
     DispatchError, DispatchOutcome, DispatchTable, OverloadInfo, PartialDispatchResult, Score,
     match_score,

@@ -94,6 +94,96 @@ pub struct CapsIndex {
     caps: std::collections::HashMap<String, TypeCaps>,
 }
 
+/// Valor constante canônico — resultado de const-eval de uma expressão.
+///
+/// Corresponde a um `Repr`: `Repr::Int` → `ConstVal::Int(i64)`,
+/// `Repr::Float` → `ConstVal::Float(f64)`, etc.
+/// `Repr::Struct` → `ConstVal::Struct(Vec<ConstVal>)` (campos em ordem).
+#[derive(Debug, Clone, PartialEq)]
+pub enum ConstVal {
+    /// Inteiro de 64 bits.
+    Int(i64),
+    /// Ponto flutuante.
+    Float(f64),
+    /// Racional como par (numerador, denominador).
+    Rat(i64, i64),
+    /// Boolean.
+    Bool(bool),
+    /// Texto.
+    Text(String),
+    /// Unit.
+    Unit,
+    /// Struct com campos — cada campo é um `ConstVal`.
+    Struct(Vec<ConstVal>),
+}
+
+impl ConstVal {
+    /// Compara dois `ConstVal` para ordenação (usado por `extract_bound`
+    /// e `enum_refined_domain` quando o tipo implementa ORD).
+    ///
+    /// Float e Rat comparam por valor. Struct compara lexicograficamente.
+    /// Retorna `None` se os tipos são incomparáveis.
+    pub fn compare(&self, other: &ConstVal) -> Option<std::cmp::Ordering> {
+        use std::cmp::Ordering;
+        match (self, other) {
+            (ConstVal::Int(a), ConstVal::Int(b)) => Some(a.cmp(b)),
+            (ConstVal::Float(a), ConstVal::Float(b)) => a.partial_cmp(b),
+            (ConstVal::Rat(a_num, a_den), ConstVal::Rat(b_num, b_den)) => {
+                // Cross-multiplication: a_num/a_den < b_num/b_den
+                // sse a_num * b_den < b_num * a_den (assumindo dens > 0).
+                if *a_den <= 0 || *b_den <= 0 {
+                    return None;
+                }
+                let left = (*a_num as i128) * (*b_den as i128);
+                let right = (*b_num as i128) * (*a_den as i128);
+                Some(left.cmp(&right))
+            }
+            (ConstVal::Bool(a), ConstVal::Bool(b)) => Some(a.cmp(b)),
+            (ConstVal::Text(a), ConstVal::Text(b)) => Some(a.cmp(b)),
+            (ConstVal::Unit, ConstVal::Unit) => Some(Ordering::Equal),
+            (ConstVal::Struct(a), ConstVal::Struct(b)) => {
+                for (av, bv) in a.iter().zip(b.iter()) {
+                    match av.compare(bv)? {
+                        Ordering::Equal => continue,
+                        ord => return Some(ord),
+                    }
+                }
+                Some(a.len().cmp(&b.len()))
+            }
+            _ => None, // tipos diferentes
+        }
+    }
+
+    /// Serializa para string no formato de `Constructor::Literal`.
+    /// Round-trip com `pattern_ctor` → `literal_to_string`.
+    pub fn to_ctor_string(&self, repr: &Repr) -> String {
+        match (repr, self) {
+            (Repr::Int, ConstVal::Int(v)) => format!("Int:{}", v),
+            (Repr::Float, ConstVal::Float(v)) => format!("Float:{}", v),
+            (Repr::Rational, ConstVal::Rat(n, d)) => format!("Rat:{}|{}", n, d),
+            (Repr::Text, ConstVal::Text(s)) => format!("Text:{}", s),
+            (Repr::Bool, ConstVal::Bool(b)) => format!("Bool:{}", b),
+            (Repr::Unit, ConstVal::Unit) => "Unit:()".to_string(),
+            (Repr::Struct(_), ConstVal::Struct(fields)) => {
+                let inner: Vec<String> = fields
+                    .iter()
+                    .map(|v| match v {
+                        ConstVal::Int(v) => v.to_string(),
+                        ConstVal::Float(v) => v.to_string(),
+                        ConstVal::Rat(n, d) => format!("{}|{}", n, d),
+                        ConstVal::Bool(b) => b.to_string(),
+                        ConstVal::Text(s) => s.clone(),
+                        ConstVal::Unit => "()".to_string(),
+                        ConstVal::Struct(_) => format!("{:?}", v),
+                    })
+                    .collect();
+                format!("Struct:{}", inner.join("|"))
+            }
+            _ => format!("Other:{:?}", self),
+        }
+    }
+}
+
 impl CapsIndex {
     /// Constrói o índice a partir de `TypeGraph` e `StructRegistry`.
     ///
@@ -118,10 +208,16 @@ impl CapsIndex {
         let bool_caps = compute_caps(type_graph, "Boolean", None, struct_registry);
         caps.insert("Boolean".to_string(), bool_caps);
 
-        // Percorre todos os nós do TypeGraph para registrar tipos de usuário.
-        // TypeGraph não expõe iteração pública dos nós, então registramos
-        // apenas os primitivos + Boolean + os que aparecem em consultas.
-        // Tipos de usuário são resolvidos on-demand em `get_or_compute`.
+        // Pré-cacheia todos os tipos de usuário do StructRegistry.
+        // Isto garante que refineds/aliases como `UmOuDois` tenham suas
+        // caps computadas com resolução de alias via `follow_alias`.
+        for (_origin, key, _info) in struct_registry.iter_all() {
+            let name = key.name();
+            if !caps.contains_key(name) {
+                let c = compute_caps(type_graph, name, None, struct_registry);
+                caps.insert(name.to_string(), c);
+            }
+        }
 
         CapsIndex { caps }
     }
@@ -189,12 +285,17 @@ fn compute_caps(
     prim: Option<PrimTy>,
     struct_registry: &StructRegistry,
 ) -> TypeCaps {
-    // Capacidades via TypeGraph.
-    let ord = type_graph.type_implements(name, "ORD");
-    let eq = type_graph.type_implements(name, "EQ") || ord; // ORD implica EQ
-    let num = type_graph.type_implements(name, "NUM");
+    // Capacidades via TypeGraph. Para refineds/aliases, herda capacidades
+    // do tipo base (follow_alias resolve a cadeia).
+    let base = type_graph.follow_alias(name);
+    let caps_name = if base != name { &base } else { name };
+    let ord = type_graph.type_implements(caps_name, "ORD");
+    let eq = type_graph.type_implements(caps_name, "EQ") || ord; // ORD implica EQ
+    let num = type_graph.type_implements(caps_name, "NUM");
 
-    // Representação: PrimTy se primitivo, Struct se tem campos, Opaque caso contrário.
+    // Representação: PrimTy se primitivo, Bool se Boolean, Struct se tem
+    // campos, senão resolve alias via follow_alias para encontrar o tipo
+    // base e sua Repr.
     let repr = if let Some(p) = prim {
         match p {
             PrimTy::Int => Repr::Int,
@@ -206,8 +307,6 @@ fn compute_caps(
         Repr::Bool
     } else {
         // Tenta buscar campos no StructRegistry.
-        // Para refineds/aliases, os campos são os do tipo base.
-        // Por enquanto, structs de usuário com campos → Repr::Struct.
         let struct_info = struct_registry.get(name);
         if let Some(info) = struct_info
             && !info.fields.is_empty()
@@ -219,7 +318,28 @@ fn compute_caps(
                 .collect();
             Repr::Struct(field_reprs)
         } else {
-            Repr::Opaque
+            // Sem campos — pode ser refined/alias. Resolve alias via
+            // follow_alias para encontrar o tipo base e sua Repr.
+            let base = type_graph.follow_alias(name);
+            if base != name {
+                // É alias/refined — computa repr do tipo base.
+                let base_info = struct_registry.get(&base);
+                if let Some(info) = base_info
+                    && !info.fields.is_empty()
+                {
+                    let field_reprs = info
+                        .fields
+                        .iter()
+                        .map(|f| repr_of_ty(&f.ty, type_graph, struct_registry))
+                        .collect();
+                    Repr::Struct(field_reprs)
+                } else {
+                    // Base é primitivo — mapeia por nome.
+                    prim_repr_by_name(&base)
+                }
+            } else {
+                Repr::Opaque
+            }
         }
     };
 
