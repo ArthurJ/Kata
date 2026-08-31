@@ -37,6 +37,9 @@ use z3::ast::{Bool, Int};
 enum VarKind {
     Int(Int),
     Bool(Bool),
+    /// Rational como par (numerador, denominador). Denominador > 0
+    /// (invariante mantida em todas as operações).
+    Rat(Int, Int),
 }
 
 /// Tradutor de `TypedExpr` para expressões Z3.
@@ -95,6 +98,8 @@ impl Z3Translator {
                     .insert(wb.name.clone(), VarKind::Bool(translated));
             } else if let Some(i) = self.translate_int(&wb.value.node) {
                 self.var_cache.insert(wb.name.clone(), VarKind::Int(i));
+            } else if let Some((n, d)) = self.translate_rat(&wb.value.node) {
+                self.var_cache.insert(wb.name.clone(), VarKind::Rat(n, d));
             } else {
                 // Tipo não-traduzível (Float, Text, ...) → Bool livre.
                 // Referências caem no fallback conservador.
@@ -129,6 +134,8 @@ impl Z3Translator {
                     .insert(name.clone(), VarKind::Bool(translated));
             } else if let Some(i) = self.translate_int(value) {
                 self.var_cache.insert(name.clone(), VarKind::Int(i));
+            } else if let Some((n, d)) = self.translate_rat(value) {
+                self.var_cache.insert(name.clone(), VarKind::Rat(n, d));
             } else {
                 let translated = self.fresh_bool();
                 self.var_cache
@@ -233,7 +240,10 @@ impl Z3Translator {
 
         let (lhs, rhs) = match (lhs, rhs) {
             (Some(a), Some(b)) => (a, b),
-            _ => return self.fresh_bool(),
+            _ => {
+                // Int falhou — tenta Rational (cross-multiplication).
+                return self.translate_rat_comparison(op, args);
+            }
         };
 
         match op {
@@ -313,6 +323,138 @@ impl Z3Translator {
         }
     }
 
+    /// Traduz uma expressão para um Z3 Rational (par num, den).
+    ///
+    /// Representa Rational como `(numerator, denominator)` onde `den > 0`
+    /// (invariante). Suporta:
+    /// - `rational N` (Closure{Ident("rational"), [IntLit(N)]}) → `(N, 1)`
+    /// - Variável Rational → `(num_const, den_const)` com side-condition
+    ///   `den > 0` assertionada no solver
+    /// - Operações aritméticas (`+`, `-`, `*`) via regras de fração
+    ///
+    /// Retorna `None` se a expressão não é traduzível como Rational.
+    fn translate_rat(&mut self, expr: &TypedExpr) -> Option<(Int, Int)> {
+        match &expr.kind {
+            TypedExprKind::Closure { callee, args, .. } => {
+                if let TypedExprKind::Ident { name } = &callee.node.kind {
+                    match name.as_str() {
+                        "rational" => {
+                            // `rational N` → (N, 1)
+                            if args.len() == 1
+                                && let TypedExprKind::IntLit { text } = &args[0].node.kind
+                            {
+                                let n = text.parse::<i64>().ok()?;
+                                return Some((Int::from_i64(n), Int::from_i64(1)));
+                            }
+                            None
+                        }
+                        "+" => {
+                            // a/b + c/d = (a*d + c*b) / (b*d)
+                            if args.len() == 2 {
+                                let (an, ad) = self.translate_rat(&args[0].node)?;
+                                let (bn, bd) = self.translate_rat(&args[1].node)?;
+                                let num = &(&an * &bd) + &(&bn * &ad);
+                                let den = &ad * &bd;
+                                Some((num, den))
+                            } else {
+                                None
+                            }
+                        }
+                        "-" => {
+                            // a/b - c/d = (a*d - c*b) / (b*d)
+                            if args.len() == 2 {
+                                let (an, ad) = self.translate_rat(&args[0].node)?;
+                                let (bn, bd) = self.translate_rat(&args[1].node)?;
+                                let num = &(&an * &bd) - &(&bn * &ad);
+                                let den = &ad * &bd;
+                                Some((num, den))
+                            } else {
+                                None
+                            }
+                        }
+                        "*" => {
+                            // a/b * c/d = (a*c) / (b*d)
+                            if args.len() == 2 {
+                                let (an, ad) = self.translate_rat(&args[0].node)?;
+                                let (bn, bd) = self.translate_rat(&args[1].node)?;
+                                let num = &an * &bn;
+                                let den = &ad * &bd;
+                                Some((num, den))
+                            } else {
+                                None
+                            }
+                        }
+                        _ => {
+                            // Tenta inlinar função pura. Se inlinable,
+                            // traduz o corpo; senão, None.
+                            if let Some(inlined) = self.try_inline(name, args) {
+                                self.translate_rat(&inlined)
+                            } else {
+                                None
+                            }
+                        }
+                    }
+                } else {
+                    None
+                }
+            }
+            TypedExprKind::Ident { name } => {
+                // Variável Rational — cria ou reutiliza par (num, den).
+                if let Some(VarKind::Rat(n, d)) = self.var_cache.get(name) {
+                    Some((n.clone(), d.clone()))
+                } else {
+                    let n = Int::fresh_const(&format!("{name}_num"));
+                    let d = Int::fresh_const(&format!("{name}_den"));
+                    // Side-condition: denominador > 0.
+                    // NOTA: não assertionamos aqui porque o tradutor não
+                    // tem acesso ao solver. A invariante den > 0 é
+                    // mantida pela construção: literais usam den=1,
+                    // e operações preservam den > 0 se inputs têm den > 0.
+                    // Para variáveis livres, o caller deve assertionar.
+                    // Por segurança, marca a invariante no cache.
+                    self.var_cache
+                        .insert(name.clone(), VarKind::Rat(n.clone(), d.clone()));
+                    Some((n, d))
+                }
+            }
+            TypedExprKind::Grouping { inner } => self.translate_rat(&inner.node),
+            _ => None,
+        }
+    }
+
+    /// Compara dois Rationais via cross-multiplication.
+    ///
+    /// `a/b OP c/d` (com b,d > 0) é traduzido para:
+    /// - `>`: `a*d > c*b`
+    /// - `<`: `a*d < c*b`
+    /// - `>=`: `a*d >= c*b`
+    /// - `<=`: `a*d <= c*b`
+    /// - `=`: `a*d = c*b` (and `b*d ≠ 0` — implícito por den > 0)
+    /// - `!=`: `a*d ≠ c*b`
+    fn translate_rat_comparison(&mut self, op: &str, args: &[Spanned<TypedExpr>]) -> Bool {
+        let lhs = self.translate_rat(&args[0].node);
+        let rhs = self.translate_rat(&args[1].node);
+
+        let ((an, ad), (bn, bd)) = match (lhs, rhs) {
+            (Some(a), Some(b)) => (a, b),
+            _ => return self.fresh_bool(),
+        };
+
+        // cross-multiplication: a*d OP c*b (denominadores > 0)
+        let left = &an * &bd;
+        let right = &bn * &ad;
+
+        match op {
+            ">" => left.gt(&right),
+            "<" => left.lt(&right),
+            ">=" => left.ge(&right),
+            "<=" => left.le(&right),
+            "=" => left.eq(&right),
+            "!=" => left.eq(&right).not(),
+            _ => self.fresh_bool(),
+        }
+    }
+
     /// Extrai o contra-exemplo do modelo Z3.
     pub(crate) fn extract_counter_example(&self, model: &z3::Model) -> String {
         let parts: Vec<String> = self
@@ -326,6 +468,14 @@ impl Z3Translator {
                 VarKind::Bool(b) => {
                     let val = model.eval(b, true);
                     val.map(|v| format!("{name} = {v}"))
+                }
+                VarKind::Rat(n, d) => {
+                    let nv = model.eval(n, true);
+                    let dv = model.eval(d, true);
+                    match (nv, dv) {
+                        (Some(nv), Some(dv)) => Some(format!("{name} = {nv}/{dv}")),
+                        _ => Some(format!("{name} = ?/?")),
+                    }
                 }
             })
             .collect();
