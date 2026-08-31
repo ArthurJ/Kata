@@ -1,6 +1,6 @@
 # PRD — Exaustividade Aninhada (Maranget + Z3 em Guards + Refined)
 
-**Status:** 🟡 Fase 0 ✅ — Fase 1 não iniciada
+**Status:** 🟡 Fase 0 ✅ — Fase 1 ✅ (passos 1-4) — Fase 2 não iniciada
 **Data:** 2026-08-30
 **Tipo:** Planejamento — PRD único, 5 fases sequenciais
 **Depende de:** `PRD-exaustividade.md` ✅ (guards via Z3, patterns de 1 nível)
@@ -153,17 +153,20 @@ funciona na última posição de cláusulas com assinatura. Demais posições
 exigem forma qualificada (`lambda Optional::Some x:`) ou parênteses
 (`lambda Some(x):`).
 
-### 4.4. Fall-through de guards no codegen
+### 4.4. Fall-through de guards no codegen ✅
 
 - **Interp** (`eval.rs:1536-1538`): pattern casa, sem guard → próxima
   cláusula. Correto.
-- **Codegen** (`clause.rs:142-155`): pattern casa, sem guard, sem
-  `otherwise` → lowera `fallback_body` incondicionalmente. **Bug.**
+- **Codegen** (`clause.rs`): `lower_guards` recebe
+  `fallthrough_block: Option<Block>`. Com `Some` (multi-cláusula),
+  guards sem otherwise que não passam emitem `jump(fallthrough_block)`
+  — fall-through para a próxima cláusula. Com `None` (fast-path de
+  cláusula única), mantém fallback_body. **Corrigido (de88c41).**
 
 Hoje o caminho é morto (`check_guard_completeness` rejeita guards sem
-`otherwise`). O fix pousa na Fase 1 como commit isolado — no-op provado
-pela suite verde. Quando a Fase 3 abrir o caminho, a metade runtime já
-está provada. DoD: suite inteira verde, nenhum oráculo muda de estado.
+`otherwise`). O fix foi commit isolado — no-op provado pela suite verde.
+Quando a Fase 3 abrir o caminho, a metade runtime já está correta.
+DoD: suite inteira verde, nenhum oráculo muda de estado. ✅
 
 ## 6. Fase 2 — Motor unificado (Maranget)
 
@@ -361,13 +364,13 @@ Verificação entre fases: `cargo test --workspace --no-fail-fast` verde;
 3. Remoção do ramo morto `else if LParen` (linhas 83-101).
 4. `cargo test` + clippy verdes.
 
-**Fase 1** (menor → maior):
+**Fase 1** (implementada — passos 1-4):
 1. Oráculos E2E RED copiados de `tests/probe-nested/` (incluindo
-   família K); oráculos de virada F2+ entram `#[ignore]`.
-2. Bound-check `ArityMismatch` em `check_patterns`.
-3. Parser aridade-consciente + teste `lambda True True:` regressão.
-4. Fall-through de codegen (§5.4) como commit isolado — no-op provado.
-5. `cargo test` + clippy verdes; commits em camadas.
+   família K); oráculos de virada F2+ entram `#[ignore]`. ✅ b9cfba4
+2. Bound-check `ArityMismatch` em `check_patterns`. ✅ 274d7b5
+3. Parser aridade-consciente + teste `lambda True True:` regressão. ✅ 4750233
+4. Fall-through de codegen (§5.4) como commit isolado — no-op provado. ✅ de88c41
+5. `cargo test` + clippy verdes; commits em camadas. ✅
 
 **Fase 2** (motor antes dos consumidores):
 1. `maranget.rs` puro (matriz/usefulness/witness, trait de ambiente) +
