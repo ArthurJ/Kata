@@ -45,7 +45,7 @@ impl Parser {
             self.advance();
         }
         let body = if matches!(self.peek(), Token::Lambda) {
-            Some(self.parse_sig_clauses()?)
+            Some(self.parse_sig_clauses(params.len())?)
         } else {
             None
         };
@@ -92,6 +92,7 @@ impl Parser {
     /// em todas as cláusulas já parseadas.
     pub(crate) fn parse_sig_clauses(
         &mut self,
+        arity: usize,
     ) -> Result<Vec<Spanned<LambdaClause>>, FrontendError> {
         let mut clauses: Vec<Spanned<LambdaClause>> = Vec::new();
         loop {
@@ -131,7 +132,7 @@ impl Parser {
             }
 
             let clause_start = self.peek_span();
-            let clause = self.parse_lambda_clause()?;
+            let clause = self.parse_lambda_clause(arity)?;
             let span = clause_start.cover(clause.body.span);
             clauses.push(Spanned::new(clause, span));
         }
@@ -162,11 +163,19 @@ impl Parser {
     /// Parse uma cláusula lambda: `lambda <patterns>: <body>`.
     /// Body é expressão única (sem guards, sem with).
     /// Body pode ser bloco indentado com guards + with.
-    fn parse_lambda_clause(&mut self) -> Result<LambdaClause, FrontendError> {
+    fn parse_lambda_clause(
+        &mut self,
+        arity: usize,
+    ) -> Result<LambdaClause, FrontendError> {
         self.expect(&Token::Lambda, "`lambda`")?;
 
-        // Parse patterns (1 ou mais, separados por espaço)
-        let patterns = self.parse_patterns()?;
+        // Parse patterns (1 ou mais, separados por espaço).
+        // Aridade-consciente: primeiras `arity-1` posições usam parse_pattern,
+        // a última usa parse_match_pattern (permite variante desqualificada
+        // com payload: `lambda Some True:` em função de 1 param parseia como
+        // UM pattern Variant{Some, [True]}).
+        // PRD-exaustividade-aninhada §5.3.
+        let patterns = self.parse_patterns_arity(arity)?;
 
         // Expect `:`
         self.expect(&Token::Colon, "`:` após patterns da cláusula")?;

@@ -248,6 +248,43 @@ impl Parser {
         Ok(patterns)
     }
 
+    /// Parse `arity` patterns com aridade-consciência.
+    ///
+    /// Primeiras `arity-1` posições usam `parse_pattern` (não permite variante
+    /// desqualificada com payload — evita ambiguidade com múltiplos args).
+    /// A última posição usa `parse_match_pattern` (permite `Some True` como
+    /// UM pattern Variant{Some, [True]} — mesmo parser de match arms).
+    ///
+    /// PRD-exaustividade-aninhada §5.3: `lambda Some True:` em função de
+    /// 1 param (arity=1) parseia como UM pattern, não dois.
+    pub(crate) fn parse_patterns_arity(
+        &mut self,
+        arity: usize,
+    ) -> Result<Vec<Spanned<Pattern>>, FrontendError> {
+        let mut patterns = Vec::new();
+        if arity <= 1 {
+            // 0 ou 1 param: tudo na última posição → match_pattern
+            patterns.push(self.parse_match_pattern()?);
+            while self.can_start_pattern() {
+                // Se já parseamos arity patterns, extras são erro de aridade
+                // (caught by bound-check em check_patterns).
+                patterns.push(self.parse_match_pattern()?);
+            }
+        } else {
+            // Primeiras arity-1 com parse_pattern
+            for _ in 0..arity - 1 {
+                patterns.push(self.parse_pattern()?);
+            }
+            // Última com parse_match_pattern
+            patterns.push(self.parse_match_pattern()?);
+            // Extras (erro de aridade, caught por bound-check)
+            while self.can_start_pattern() {
+                patterns.push(self.parse_pattern()?);
+            }
+        }
+        Ok(patterns)
+    }
+
     /// Verifica se o token atual pode iniciar um pattern.
     pub(crate) fn can_start_pattern(&self) -> bool {
         matches!(

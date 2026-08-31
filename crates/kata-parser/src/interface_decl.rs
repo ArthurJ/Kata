@@ -147,7 +147,7 @@ impl Parser {
                 self.advance();
             }
             let default_body = if matches!(self.peek(), Token::Lambda) {
-                Some(self.parse_sig_clauses()?)
+                Some(self.parse_sig_clauses(params.len())?)
             } else {
                 None
             };
@@ -375,7 +375,7 @@ impl Parser {
                     self.advance();
                 }
                 let body = if matches!(self.peek(), Token::Lambda) {
-                    Some(self.parse_sig_clauses()?)
+                    Some(self.parse_sig_clauses(params.len())?)
                 } else {
                     None
                 };
@@ -498,7 +498,7 @@ impl Parser {
                     self.advance();
                 }
                 let body = if matches!(self.peek(), Token::Lambda) {
-                    Some(self.parse_sig_clauses()?)
+                    Some(self.parse_sig_clauses(params.len())?)
                 } else {
                     None
                 };
