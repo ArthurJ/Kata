@@ -62,7 +62,7 @@ action main => Unit
     let x := 5::PositiveInt
     echo!(x)
 main!()"#;
-    assert_both(&source, "5\n");
+    assert_both(source, "5\n");
 }
 
 /// Refined sobre Int com dois predicados (PositiveInt e Percentage no
@@ -78,7 +78,7 @@ action main => Unit
     echo!(x)
     echo!(p)
 main!()"#;
-    assert_both(&source, "5\n50\n");
+    assert_both(source, "5\n50\n");
 }
 
 /// Refined sobre Text: delega ao show de Text (aspas). Via construtor
@@ -92,7 +92,7 @@ action main => Unit
         Ok s: echo!(s)
         Err _: echo!("erro")
 main!()"#;
-    assert_both(&source, "ola\n");
+    assert_both(source, "ola\n");
 }
 
 /// Refined sobre Float: delega ao show de Float.
@@ -104,5 +104,5 @@ action main => Unit
     let f := 2.5::PosFloat
     echo!(f)
 main!()"#;
-    assert_both(&source, "2.5\n");
+    assert_both(source, "2.5\n");
 }

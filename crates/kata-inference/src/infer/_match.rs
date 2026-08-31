@@ -487,7 +487,7 @@ pub(crate) fn infer_match(
     // Verifica exaustividade via motor Maranget.
     let result = crate::maranget::check_exhaustiveness_maranget(
         &arm_patterns,
-        &[scrutinee_ty.clone()],
+        std::slice::from_ref(&scrutinee_ty),
         has_otherwise,
         ctx.enum_registry,
     );

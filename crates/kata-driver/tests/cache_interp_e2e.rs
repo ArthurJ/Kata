@@ -88,7 +88,7 @@ action main
     echo!(dobro 5)
     echo!(dobro 5)
 main!()"#;
-    run_interp(&source, "executou\n10\n10\n", "hit pula body");
+    run_interp(source, "executou\n10\n10\n", "hit pula body");
 }
 
 /// Sem `@cache`: body roda toda vez → 2 "executou" (controle).
@@ -104,7 +104,7 @@ action main
     echo!(dobro 5)
 main!()"#;
     run_interp(
-        &source,
+        source,
         "executou\n10\nexecutou\n10\n",
         "sem cache = 2× body",
     );
@@ -123,7 +123,7 @@ action main
     echo!(square 3.14)
     echo!(square 3.14)
 main!()"#;
-    run_interp(&source, "executou\n9.8596\n9.8596\n", "hit em Float key");
+    run_interp(source, "executou\n9.8596\n9.8596\n", "hit em Float key");
 }
 
 /// Text key: strings diferentes = keys diferentes (por conteúdo).
@@ -141,7 +141,7 @@ action main
     echo!(tag "bb")
 main!()"#;
     run_interp(
-        &source,
+        source,
         "executou\naaa\naaa\nexecutou\nbb\n",
         "hit em Text key",
     );
@@ -169,7 +169,7 @@ action main
     echo!(f 1.5)
 main!()"#;
     run_interp(
-        &source,
+        source,
         "exec_int\n2\n2\nexec_float\n3.0\n3.0\n",
         "caches independentes por overload",
     );
@@ -190,7 +190,7 @@ lambda n: + (fib (- n 1)) (fib (- n 2))
 action main
     echo!(fib 35)
 main!()"#;
-    assert_both(&source, "9227465\n");
+    assert_both(source, "9227465\n");
 }
 
 /// As 4 estratégias de eviction rodam nos dois backends (mesma API
@@ -230,5 +230,5 @@ action main
     echo!(sum 2 1)
     echo!(sum 1 2)
 main!()"#;
-    assert_both(&source, "-1\n1\n-1\n");
+    assert_both(source, "-1\n1\n-1\n");
 }

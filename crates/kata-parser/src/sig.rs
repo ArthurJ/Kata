@@ -163,10 +163,7 @@ impl Parser {
     /// Parse uma cláusula lambda: `lambda <patterns>: <body>`.
     /// Body é expressão única (sem guards, sem with).
     /// Body pode ser bloco indentado com guards + with.
-    fn parse_lambda_clause(
-        &mut self,
-        arity: usize,
-    ) -> Result<LambdaClause, FrontendError> {
+    fn parse_lambda_clause(&mut self, arity: usize) -> Result<LambdaClause, FrontendError> {
         self.expect(&Token::Lambda, "`lambda`")?;
 
         // Parse patterns (1 ou mais, separados por espaço).

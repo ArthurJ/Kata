@@ -102,7 +102,7 @@ action main (n::Int)
         Boolean::False: echo!(2)
     echo!(d)
 main!(7)";
-    assert_both(&source, "0\n0");
+    assert_both(source, "0\n0");
 }
 
 // ── P19: pattern sobre var externo reusa (não sombreia) ────────
@@ -121,7 +121,7 @@ action main (n::Int)
         None: echo!(0)
     echo!(v)
 main!(2)";
-    assert_both(&source, "2\n2");
+    assert_both(source, "2\n2");
 }
 
 // ── P20: for sobre var externo reusa o loop-var ────────────────
@@ -138,7 +138,7 @@ action main (n::Int)
         echo!(i)
     echo!(i)
 main!(0)";
-    assert_both(&source, "1\n2\n2");
+    assert_both(source, "1\n2\n2");
 }
 
 // ── P21: reassign do loop-var no corpo é legal ─────────────────
@@ -157,7 +157,7 @@ action main
         i := 99
         echo!(i)
 main!()";
-    assert_both(&source, "99\n99");
+    assert_both(source, "99\n99");
 }
 
 // ── P25: bindings frescos de construto NÃO vazam no interp ────
@@ -176,7 +176,7 @@ action main
     for i in [3..5]
         echo!(i)
 main!()";
-    assert_both(&source, "1\n2\n3\n4");
+    assert_both(source, "1\n2\n3\n4");
 }
 
 // ── P26: constants legíveis dentro de actions (interp) ────────
@@ -193,7 +193,7 @@ constant x := 5
 action main
     echo!(x)
 main!()";
-    assert_both(&source, "5");
+    assert_both(source, "5");
 }
 
 // ── P16-flip: pattern sobre let externo rejeitado em compile-time ─
@@ -213,13 +213,13 @@ action main (n::Int)
             echo!(d)
     echo!(d)
 main!(5)";
-    let (out_jit, err_jit, code_jit) = run_kata(&source, false);
+    let (out_jit, err_jit, code_jit) = run_kata(source, false);
     assert_ne!(code_jit, 0, "JIT deve rejeitar — stderr: {err_jit}");
     assert!(
         err_jit.contains("duplicate_decl"),
         "JIT esperava duplicate_decl — stderr: {err_jit} / stdout: {out_jit}"
     );
-    let (out_interp, err_interp, code_interp) = run_kata(&source, eval_interp());
+    let (out_interp, err_interp, code_interp) = run_kata(source, eval_interp());
     assert_ne!(
         code_interp, 0,
         "INTERP deve rejeitar — stderr: {err_interp}"
@@ -248,13 +248,13 @@ action main
     for k in [1..3]
         echo!(k)
 main!()";
-    let (out_jit, err_jit, code_jit) = run_kata(&source, false);
+    let (out_jit, err_jit, code_jit) = run_kata(source, false);
     assert_ne!(code_jit, 0, "JIT deve rejeitar — stderr: {err_jit}");
     assert!(
         err_jit.contains("duplicate_constant"),
         "JIT esperava duplicate_constant — stderr: {err_jit} / stdout: {out_jit}"
     );
-    let (out_interp, err_interp, code_interp) = run_kata(&source, true);
+    let (out_interp, err_interp, code_interp) = run_kata(source, true);
     assert_ne!(
         code_interp, 0,
         "INTERP deve rejeitar — stderr: {err_interp}"
@@ -288,7 +288,7 @@ main!(5)";
     // typeck rejeita a leitura pós-match (unbound_name) — compile
     // error em ambos backends. Crava que o interp não compila NEM
     // executa um programa que vaza binding de braço.
-    let (out_interp, err_interp, code_interp) = run_kata(&source, true);
+    let (out_interp, err_interp, code_interp) = run_kata(source, true);
     assert_ne!(
         code_interp, 0,
         "INTERP deve rejeitar leak de binding de braço — stderr: {err_interp}"
@@ -316,5 +316,5 @@ action main
             Boolean::False: continue
     echo!(count)
 main!()";
-    assert_both(&source, "0\n1\n2\n3");
+    assert_both(source, "0\n1\n2\n3");
 }

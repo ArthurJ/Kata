@@ -64,7 +64,7 @@ fn eq_text_iguais_e_diferentes() {
         Boolean::True: echo!("iguais")
         Boolean::False: echo!("diferentes")
 main!()"#;
-    assert_both(&source, "iguais\ndiferentes\n");
+    assert_both(source, "iguais\ndiferentes\n");
 }
 
 /// `!=` sobre Text (o outro método de EQ).
@@ -78,7 +78,7 @@ fn neq_text() {
         Boolean::True: echo!("diferentes")
         Boolean::False: echo!("iguais")
 main!()"#;
-    assert_both(&source, "iguais\ndiferentes\n");
+    assert_both(source, "iguais\ndiferentes\n");
 }
 
 /// Text com interpolação: dois literals com mesmo conteúdo são iguais
@@ -93,5 +93,5 @@ fn eq_text_completa_conteudo() {
         Boolean::True: echo!("conteudo_igual")
         Boolean::False: echo!("conteudo_diferente")
 main!()"#;
-    assert_both(&source, "conteudo_igual\n");
+    assert_both(source, "conteudo_igual\n");
 }
