@@ -197,7 +197,8 @@ pub(crate) struct GuardArm<'a> {
 
 /// Verifica se a disjunção dos guards de múltiplos braços cobre todos os casos.
 ///
-/// Usada pela Fase 3: quando o motor Maranget confirma cobertura estrutural,
+/// Usada na verificação de guards: quando o motor Maranget confirma cobertura
+/// estrutural,
 /// esta função prova que os guards de todos os braços que casam uma folha
 /// específica formam uma tautologia disjuntiva.
 ///
