@@ -27,9 +27,9 @@
 //! por célula. `Unknown` → `MissingOtherwise` local à folha.
 
 use kata_ast::{Expr, Span, Spanned};
-use kata_core::EnumRegistry;
 use kata_core::struct_registry::StructRegistry;
 use kata_core::ty::Ty;
+use kata_core::{CapsIndex, EnumRegistry};
 use kata_resolution::RefinedDeclInfo;
 
 use crate::infer::const_eval::const_eval_predicate;
@@ -185,6 +185,10 @@ pub(crate) struct MarangetEnv<'a> {
     enum_registry: &'a EnumRegistry,
     struct_registry: Option<&'a StructRegistry>,
     refined_decls: Option<&'a [RefinedDeclInfo]>,
+    /// Índice de capacidades de tipos (ORD, EQ, NUM, Repr).
+    /// Derivado de `TypeGraph` + `StructRegistry` via `CapsIndex`.
+    /// `None` em testes unitários do motor puro.
+    caps_index: Option<&'a CapsIndex>,
 }
 
 impl<'a> MarangetEnv<'a> {
@@ -193,6 +197,7 @@ impl<'a> MarangetEnv<'a> {
             enum_registry,
             struct_registry: None,
             refined_decls: None,
+            caps_index: None,
         }
     }
 
@@ -200,11 +205,13 @@ impl<'a> MarangetEnv<'a> {
         enum_registry: &'a EnumRegistry,
         struct_registry: &'a StructRegistry,
         refined_decls: &'a [RefinedDeclInfo],
+        caps_index: &'a CapsIndex,
     ) -> Self {
         Self {
             enum_registry,
             struct_registry: Some(struct_registry),
             refined_decls: Some(refined_decls),
+            caps_index: Some(caps_index),
         }
     }
 
@@ -1023,6 +1030,7 @@ pub(crate) fn check_exhaustiveness_maranget(
     enum_registry: &EnumRegistry,
     struct_registry: Option<&StructRegistry>,
     refined_decls: Option<&[RefinedDeclInfo]>,
+    caps_index: Option<&CapsIndex>,
 ) -> ExhaustivenessResult {
     if has_otherwise {
         return ExhaustivenessResult {
@@ -1038,8 +1046,8 @@ pub(crate) fn check_exhaustiveness_maranget(
         };
     }
 
-    let env = match (struct_registry, refined_decls) {
-        (Some(sr), Some(rd)) => MarangetEnv::with_refined(enum_registry, sr, rd),
+    let env = match (struct_registry, refined_decls, caps_index) {
+        (Some(sr), Some(rd), Some(ci)) => MarangetEnv::with_refined(enum_registry, sr, rd, ci),
         _ => MarangetEnv::new(enum_registry),
     };
 
@@ -1103,6 +1111,7 @@ pub(crate) fn check_exhaustiveness_maranget(
 ///    - `Proven` → Ok
 ///    - `Refuted` → `NonExhaustiveMatch` com contra-exemplo
 ///    - `Unknown` → `MissingOtherwise` local à folha
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn check_exhaustiveness_with_guards(
     clauses: &[TypedLambdaClause],
     param_types: &[Ty],
@@ -1111,6 +1120,7 @@ pub(crate) fn check_exhaustiveness_with_guards(
     enum_registry: &EnumRegistry,
     struct_registry: Option<&StructRegistry>,
     refined_decls: Option<&[RefinedDeclInfo]>,
+    caps_index: Option<&CapsIndex>,
 ) -> Result<(), kata_diagnostics::MiddleError> {
     // Coleta patterns de cada cláusula.
     let arm_patterns: Vec<Vec<TypedPattern>> = clauses
@@ -1126,6 +1136,7 @@ pub(crate) fn check_exhaustiveness_with_guards(
         enum_registry,
         struct_registry,
         refined_decls,
+        caps_index,
     );
 
     if !struct_result.exhaustive {
@@ -1174,8 +1185,8 @@ pub(crate) fn check_exhaustiveness_with_guards(
     }
 
     // Constrói a matriz para collect_guard_leaves (sem atalho has_otherwise).
-    let env = match (struct_registry, refined_decls) {
-        (Some(sr), Some(rd)) => MarangetEnv::with_refined(enum_registry, sr, rd),
+    let env = match (struct_registry, refined_decls, caps_index) {
+        (Some(sr), Some(rd), Some(ci)) => MarangetEnv::with_refined(enum_registry, sr, rd, ci),
         _ => MarangetEnv::new(enum_registry),
     };
     let mut matrix = PatternMatrix::new(param_types.to_vec());
@@ -1382,6 +1393,7 @@ mod tests {
             &reg,
             None,
             None,
+            None,
         );
         assert!(result.exhaustive, "True + False should be exhaustive");
     }
@@ -1395,6 +1407,7 @@ mod tests {
             &[Ty::Sum("Boolean".to_string())],
             false,
             &reg,
+            None,
             None,
             None,
         );
@@ -1411,6 +1424,7 @@ mod tests {
             &[Ty::Sum("Boolean".to_string())],
             false,
             &reg,
+            None,
             None,
             None,
         );
@@ -1431,6 +1445,7 @@ mod tests {
             &reg,
             None,
             None,
+            None,
         );
         assert!(
             result.exhaustive,
@@ -1448,6 +1463,7 @@ mod tests {
             &[Ty::Generic("Optional".to_string(), vec![])],
             false,
             &reg,
+            None,
             None,
             None,
         );
@@ -1489,6 +1505,7 @@ mod tests {
             &reg,
             None,
             None,
+            None,
         );
         assert!(
             !result.exhaustive,
@@ -1505,6 +1522,7 @@ mod tests {
             &[Ty::Prim(PrimTy::Int)],
             true,
             &reg,
+            None,
             None,
             None,
         );

@@ -10,6 +10,7 @@
 //! - [`DispatchTable`] — tabela de overloads com despacho por dominância
 //! - [`Score`] — score 4D (exact, alias, refined, iface) para seleção
 
+pub mod caps;
 pub mod dispatch;
 pub mod enum_registry;
 pub mod escape;
@@ -23,6 +24,7 @@ pub mod ty;
 pub mod type_env;
 pub mod type_graph;
 
+pub use caps::{CapsIndex, Repr, TypeCaps};
 pub use dispatch::{
     DispatchError, DispatchOutcome, DispatchTable, OverloadInfo, PartialDispatchResult, Score,
     match_score,

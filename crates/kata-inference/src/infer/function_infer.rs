@@ -257,6 +257,9 @@ fn check_clause_exhaustiveness(
         .map(|c| c.span)
         .unwrap_or(kata_ast::Span::zero());
 
+    // Constrói CapsIndex a partir de InferCtx para o motor Maranget.
+    let caps_index = kata_core::CapsIndex::new(ctx.type_graph, ctx.struct_registry);
+
     crate::maranget::check_exhaustiveness_with_guards(
         typed_clauses,
         param_types,
@@ -265,6 +268,7 @@ fn check_clause_exhaustiveness(
         ctx.enum_registry,
         Some(ctx.struct_registry),
         Some(ctx.refined_decls),
+        Some(&caps_index),
     )?;
 
     Ok(())

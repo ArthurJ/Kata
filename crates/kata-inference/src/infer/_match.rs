@@ -486,6 +486,7 @@ pub(crate) fn infer_match(
     }
 
     // Verifica exaustividade via motor Maranget.
+    let caps_index = kata_core::CapsIndex::new(ctx.type_graph, ctx.struct_registry);
     let result = crate::maranget::check_exhaustiveness_maranget(
         &arm_patterns,
         std::slice::from_ref(&scrutinee_ty),
@@ -493,6 +494,7 @@ pub(crate) fn infer_match(
         ctx.enum_registry,
         Some(ctx.struct_registry),
         Some(ctx.refined_decls),
+        Some(&caps_index),
     );
     if !result.exhaustive {
         return Err(MiddleError::NonExhaustiveMatch {
