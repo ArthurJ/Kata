@@ -1,442 +1,405 @@
 # PRD — Exaustividade Aninhada (Maranget + Z3 em Guards + Refined)
 
-**Status:** 🟡 Fase 0 ✅ — Fase 1 ✅ (passos 1-4) — Fase 2 ✅ (passos 1-6) — Fase 3 ✅ — Fase 4 ✅
-**Data:** 2026-08-31
+**Status:** Fase 0 ✅ — Fase 1 ✅ — Fase 2 ✅ — Fase 3 ✅ — Fase 4 ✅ (refatoração na Fase 5) — Fase 5 🟡
+**Data:** 2026-08-31 (atualizado 2026-08-31)
 **Tipo:** Planejamento — PRD único, 5 fases sequenciais
 **Depende de:** `PRD-exaustividade.md` ✅ (guards via Z3, patterns de 1 nível)
 
 ## 1. Objetivo
 
 Fechar a classe de bugs estruturais em que os 3 checkers de cobertura
-(exaustividade de `match`, exaustividade de cláusulas lambda, redundância
-de cláusulas) ignoram o **payload** de patterns compostos (`Variant`,
-`Cons`, `Tuple`), e unificar os três num motor único de usefulness
-(Maranget), com Z3 compondo nas folhas — guards e predicados de tipos
-refined — nunca substituindo o motor.
+ignoram o **payload** de patterns compostos, e unificar os três num motor
+único de usefulness (Maranget), com Z3 compondo nas folhas — guards e
+predicados de tipos refined — nunca substituindo o motor.
+
+A Fase 5 generaliza o motor para **todos os tipos** — não só numéricos
+built-in — derivando comportamento de capacidade (implementa ORD? EQ?
+NUM?) e transparência (dá pra const-eval/inline?) das registries que o
+compilador já constrói dinamicamente. Tipos definidos pelo usuário
+funcionam automaticamente, sem registry estático.
 
 ## 2. Motivação — 4 bugs da mesma classe estrutural
 
-Reproduzidos em `f64eff8` (2026-08-30), binário `target/debug/kata`,
-probes em `tests/probe-nested/` (oráculos in-repo):
+Reproduzidos em `f64eff8` (2026-08-30). Diagnóstico: 3 checkers
+ortogonais com cobertura duplicada, todos operando por nomes de
+variantes de 1 nível com sentinela-string `__ANY__`.
 
 | # | Achado | Evidência |
 |---|--------|-----------|
-| 1 | Exaustividade ignora payload: `Some True` + `None` aceito sem `Some False` | probeA compila (exit 0); probeB com `Some False` → **SIGILL exit 132** (`trap user(1)` de `lower_clause_chain`, `clause.rs:260`) |
-| 1b | Redundância ignora payload: `lambda Optional::Some True:` + `lambda Optional::Some False:` → 2ª rejeitada como `type.redundant_clause` | probeE2, exit 1 |
-| 2 | Panic: `lambda Some True:` (desqualificado) em função de 1 param parseia como 2 patterns → `index out of bounds` em `helpers.rs:104` | probeE, exit 101 |
-| 2b | Codegen rejeita `echo!(None)`: Closure com callee não-Ident | **fora deste PRD**, ver §11 |
-
-Diagnóstico: **3 checkers ortogonais** com cobertura duplicada
-(`check_exhaustiveness` — `patterns.rs:442`;
-`check_clause_exhaustiveness` — `function_infer.rs:250`;
-`pattern_covers` — `redundancy.rs:165`), todos operando por nomes de
-variantes de 1 nível com sentinela-string `__ANY__`. O runtime já está
-correto — o SIGILL do probeB é o trap de defesa disparando porque **o
-checker deixou passar**.
+| 1 | Exaustividade ignora payload: `Some True` + `None` aceito sem `Some False` | probeA compila; probeB → SIGILL exit 132 |
+| 1b | Redundância ignora payload: `Some True:`/`Some False:` → 2ª rejeitada como `redundant_clause` | probeE2 |
+| 2 | Panic: `lambda Some True:` parseia como 2 patterns → `index out of bounds` | probeE, exit 101 |
+| 2b | Codegen rejeita `echo!(None)` | fora deste PRD, §11 |
 
 ## 3. Decisões de design
 
-1. **Maranget é o objetivo.** Motor de matriz/usefulness com witnesses
-   como subproduto. Alternativa tudo-Z3 (axiomatizar datatypes) rejeitada:
-   queries gigantes → mais `Unknown` → mais `MissingOtherwise` espúrios.
+1. **Maranget é o objetivo.** Tudo-Z3 rejeitado: mais `Unknown` → mais
+   `MissingOtherwise` espúrios.
 2. **Sem contrato interino.** Payload infinito → `NonExhaustiveMatch`
-   com witness. `match r { Ok 0: ... Err _: ... }` sobre `Result::(Int, Text)`
-   permanece verde (aceito por cegueira) **até a Fase 2** — é o estado
-   interim, não permanente. A Fase 2 (motor Maranget) torna-o
-   `NonExhaustiveMatch missing: ["Ok _"]`.
-3. **Parser aridade-consciente.** Última posição da cláusula usa
-   `parse_match_pattern`; demais mantêm `parse_pattern`. Aridade vem da
-   assinatura nos 4 callers de `parse_sig_clauses` (`sig.rs:48`,
-   `interface_decl.rs:150/378/501`). Payload entre parênteses (`Ok(v)`)
-   funciona em qualquer posição — `(` é delimitador sintático, não
-   exige semântica (ver §5.3).
-4. **Composição motor→Z3 na folha.** Maranget especializa estruturalmente
-   e emite queries Z3 escopadas por célula; Z3 nunca enxerga datatype.
+   com witness.
+3. **Parser aridade-consciente.** Última posição usa
+   `parse_match_pattern`; demais `parse_pattern`. 4 callers de
+   `parse_sig_clauses`.
+4. **Composição motor→Z3 na folha.** Z3 nunca enxerga datatype.
    `Unknown` → `MissingOtherwise` local à folha.
-5. **Refined na folha como Fase 4.** Predicado do refined é premissa a
-   mais na mesma query de folha — mesmo mecanismo, sem motor novo.
-6. **Redundância de match arms → ERRO, com isenção de `otherwise`.**
-   Braço inútil → `RedundantClause`; `otherwise` inútil (defensivo
-   pós-cobertura) → silêncio (idioma sancionado pelo corpus:
-   `enum_refined_alias.kata:54-57`, `refined_types.kata:26-29`).
-7. **Rational → Fase 5.** Sem literal Rational na linguagem, sem suporte
-   no `const_eval_predicate` nem no `z3_translate.rs`. Fase 4 fica
-   restrita a Int/Float; Fase 5 orça a extensão completa.
-8. **Panic #2 → `ArityMismatch`** (bound-check na Fase 1).
-9. **Codegen `echo!(None)` (#2b) fora do PRD** — PRD próprio.
+5. **Capacidade vs transparência (Fase 5).** Capacidade = o que a
+   linguagem permite (ORD? EQ? NUM? — via `TypeGraph`, dinâmico).
+   Transparência = o que o compilador consegue provar (const-eval?
+   inline? — via `InlineFnTable`, dinâmico). Capacidade sem
+   transparência → fallback estrutural conservador, nunca erro falso.
+6. **Sem registry estático de tipos.** O motor deriva comportamento de
+   `TypeGraph`, `StructRegistry`, `InterfaceRegistry`, `InlineFnTable`
+   — todas populadas pelas declarações do usuário. Tipos de usuário
+   funcionam automaticamente.
+7. **Redundância de match arms → ERRO**, com isenção de `otherwise`.
+8. **Rational → Fase 5.** Fase 4 fica restrita a Int/Float; Fase 5
+   generaliza para todos os tipos via `TypeCaps`.
+9. **Panic #2 → `ArityMismatch`** (bound-check na Fase 1).
+10. **Codegen `echo!(None)` (#2b) fora do PRD.**
 
-## 4. Fase 0 — `parse_match_pattern` recursivo
+## 4. Fase 0 — Parser recursivo ✅
 
-Sub-patterns de variantes (linhas 82, 88, 129 de `patterns.rs`)
-chamam `self.parse_pattern()` (allow=false). Mudar para
-`self.parse_match_pattern()` quando `allow_unqualified_variant` for
-true. Efeito: `Some(Some(True))` em match arm parseia como
-`Variant{Some, [Variant{Some, [True]}]}` — aninhamento correto.
+`parse_match_pattern` recursivo em sub-patterns; desembrulhamento de
+`(p)` sem vírgula; remoção do ramo morto `else if LParen`.
 
-**Não quebra casos verdes.** Variant unitária seguida de token
-(`Some True False`) → typeck rejeita (unitária sem payload). Binding
-seguido de token (`x 42`) → typeck rejeita (não é variante). Apenas
-casos que eram parse error viram verde (aninhamento) ou typeck error
-(mensagem melhor).
+Commits: Fase 0 integrada nos commits da Fase 1.
 
-**Pré-requisito:** desembrulhamento de `(p)` sem vírgula em
-`parse_tuple_pattern` (já aplicado).
+## 5. Fase 1 — Fundação ✅
 
-**Cleanup:** o ramo `else if LParen` (linhas 83-101) é código morto
-— `can_start_pattern()` inclui `LParen`, captura `(` antes. Remover
-após Fase 0.
+Oráculos E2E RED copiados de `tests/probe-nested/` (família K);
+bound-check `ArityMismatch` em `check_patterns`; parser aridade-consciente
++ payload entre parênteses em qualquer posição; fall-through de codegen
+(`lower_guards` recebe `fallthrough_block`).
 
-DoD: `Some(Some(True))` compila e roda; suite verde; clippy limpo;
-ramo morto removido.
+Commits: `b9cfba4`, `274d7b5`, `4750233`, `de88c41`, `f8441a7`.
 
-## 5. Fase 1 — Fundação
+## 6. Fase 2 — Motor unificado (Maranget) ✅
 
-Tudo o que o motor da Fase 2 não substitui.
+Motor puro em `maranget.rs` (~1110 linhas). Trait `PatternEnv`
+(`constructors_of`, `field_tys`, `is_infinite`). `Constructor` enum:
+`Variant`, `Cons`, `Nil`, `Literal`, `Tuple`, `Missing`.
+`is_useful` (para na primeira witness — redundância) vs
+`collect_all_witnesses` (coleta todas — exaustividade). 3 consumidores
+migrados (match, lambda, redundância). Sentinelas `__ANY__` removidas.
 
-### 4.1. Oráculos RED (probe → teste é cópia mecânica)
-
-Copiar para `tests/` os fontes EXATOS dos probes em
-`tests/probe-nested/` (incluindo família K, §6.1). Estados medidos
-em `acb6099` (2026-08-30), baselines em
-`tests/probe-nested/results-acb6099/`:
-
-- **RED F2** (hoje verdes por cegueira): probeA, probeB, probeM, probeJ,
-  probeK_deep_hole.
-- **RED F1** (hoje panic/verde): probeE (`ArityMismatch`),
-  probeK_arity_tuple (`ArityMismatch`), probeE2 (falso-positivo
-  `redundant_clause`).
-- **Controles verdes**: probeC, probeD, probeF2, probeG, probeJ2,
-  probeK_deep, probeK_grid, `lambda True True:` (10 testes existentes).
-- **Pariais de fase**: probeH/H_with — `non_exhaustive_match` até F3;
-  probeF — `type.mismatch` até F4.
-
-Oráculos de virada F2+ carregam `#[ignore]` até a fase-alvo.
-
-### 4.2. Bound-check com `ArityMismatch`
-
-`check_patterns` (`infer/helpers.rs:92`): validar
-`patterns.len() == param_tys.len()` ANTES do loop; divergência →
-`ArityMismatch` (erro em `middleend.rs:72`). Defense-in-depth: o lambda
-anônimo não tem assinatura e pode divergir por outros caminhos.
-
-Medição (`b5e2d9e`): o panic NÃO exige pattern desqualificado —
-`lambda True True:` contra 1 param **tupla** `(Boolean, Boolean) => Text`
-também panica (2 patterns vs 1 param). O bound-check cobre as duas rotas.
-
-### 4.3. Parser aridade-consciente
-
-Aplicar `parse_match_pattern` em todas as posições quebra `lambda True True:`
-(`lambda_match_inference.rs:612-761`): engole `True True` como
-`Variant{True, [True]}` — Boolean com payload → falso `ArityMismatch`.
-
-Design: `parse_lambda_clause` parseia `arity` patterns — primeiras
-`arity-1` com `parse_pattern`, **última** com `parse_match_pattern`.
-Lambda anônimo mantém `parse_patterns` (sem assinatura).
-
-Efeito: `lambda Some True:` em função de 1 param parseia como UM pattern
-`Variant{Some, [Ident(True)]}` — alinha cláusulas com match arms.
-
-**Extensão: payload entre parênteses em qualquer posição.** O ramo
-desqualificado de `parse_pattern_inner` (linhas 128-140) hoje só trata
-sub-pattern sem parênteses. Estender para tratar `Ident(` como payload
-entre parênteses — exatamente como o ramo qualificado já faz (linhas
-83-101: `Result::Ok(v)` funciona em qualquer posição). `(` é
-delimitador sintático: não há ambiguidade com a próxima posição porque
-abre um escopo delimitado. Não invade semântica — o parser não precisa
-saber se `Ident` é unitário ou tem payload; o `(` é inequívoco.
-
-Regra de linguagem: payload desqualificado sem parênteses só na última
-posição (genuinamente ambíguo); com parênteses, qualquer posição.
-
-**Limitação:** pattern aninhado desqualificado sem parênteses só
-funciona na última posição de cláusulas com assinatura. Demais posições
-exigem forma qualificada (`lambda Optional::Some x:`) ou parênteses
-(`lambda Some(x):`).
-
-### 4.4. Fall-through de guards no codegen ✅
-
-- **Interp** (`eval.rs:1536-1538`): pattern casa, sem guard → próxima
-  cláusula. Correto.
-- **Codegen** (`clause.rs`): `lower_guards` recebe
-  `fallthrough_block: Option<Block>`. Com `Some` (multi-cláusula),
-  guards sem otherwise que não passam emitem `jump(fallthrough_block)`
-  — fall-through para a próxima cláusula. Com `None` (fast-path de
-  cláusula única), mantém fallback_body. **Corrigido (de88c41).**
-
-Hoje o caminho é morto (`check_guard_completeness` rejeita guards sem
-`otherwise`). O fix foi commit isolado — no-op provado pela suite verde.
-Quando a Fase 3 abrir o caminho, a metade runtime já está correta.
-DoD: suite inteira verde, nenhum oráculo muda de estado. ✅
-
-## 6. Fase 2 — Motor unificado (Maranget)
-
-Motor puro em `kata-inference/src/maranget.rs` com testes table-driven
-(sem typeck); depois 3 consumidores migram, um por commit.
-
-- **Matriz de pattern-tuples**: linhas = braços/cláusulas, colunas =
-  payloads abertos.
-- **Especialização por construtor**: descarta incompatíveis, abre campos
-  como novas colunas.
-- **Constructor splitting para tipos infinitos**: ausentes agrupados no
-  bucket `Missing` — não enumera Int.
-- **Usefulness**: exaustividade = `_` não é útil (witness = caso
-  faltante); redundância = nenhum witness.
-- **Redundância de match arms** (decisão 6): inútil → `RedundantClause`,
-  exceto `otherwise` (isento).
-- **Interface**: motor recebe `Pattern` + trait de ambiente
-  (`constructors_of`, `field_tys`, `is_infinite`) — não alcança `TypeEnv`.
-- **Fim das sentinelas `__ANY__`**.
-
-### 5.1. Oráculos adversariais K
-
-Medidos em `acb6099`, probes em `tests/probe-nested/`:
-
-- **probeK_deep / deep_hole** — 3 níveis (`Optional::(Optional::(Boolean))`):
-  completo = verde (regressão); com buraco = verde hoje por cegueira,
-  F2: `NonExhaustiveMatch` `missing: ["Some (Some False)"]`.
-- **probeK_grid / grid_partial** — grade 2×2 (`Boolean Boolean => Text`):
-  completa = verde (regressão); parcial (3 de 4) = já RED hoje — motor
-  precisa igualar antes de estender.
-- **probeK_arity_tuple** — ver §5.2.
-- **probeK_deep_paren** — `Some (Some True):` com parênteses internos.
-  **Resolvido pela Fase 0** (desembrulhamento + recursão). Era parse error;
-  agora compila e roda verde. Oráculo reclassificado de limite sintático
-  para controle verde.
-
-DoD: 3 consumidores verdes no mesmo motor; zero `__ANY__` (grep vazio);
-witnesses legíveis (snapshots); probeJ → `RedundantClause`; probeA/B →
-`NonExhaustiveMatch` `["Some False"]`; probeM → `missing: ["Ok _"]`;
-probeK_deep_hole → witness de 3 níveis; controles permanecem verdes.
+Commits: `f193635`, `32fab2f`, `503d717`, `6e27d39`, `a86c27d`,
+`eb0d0a5`, `31fea5a`.
 
 ## 7. Fase 3 — Z3 na folha (guards) ✅
 
-O motor conduz até a folha; quando só resta decidir por guards, emite
-query Z3 escopada por célula com bindings semeados (`seed_with_bindings`).
-Query: `¬(g₁ ∨ … ∨ gₙ)` UNSAT → folha coberta; Sat → contraexemplo no
-witness; `Unknown` → `MissingOtherwise` local à folha. Z3 nunca enxerga
-datatype — só variáveis de payload e guards.
+`collect_guard_leaves` + `check_guard_coverage` +
+`check_exhaustiveness_with_guards`. Guards entre cláusulas com mesmo
+pattern verificados por disjunção Z3. Tradutor por braço (semearado com
+`with_bindings`). probeH/probeH_with verdes nos dois backends.
 
-Implementação: `collect_guard_leaves` percorre a árvore de especialização
-do motor Maranget e coleta, para cada folha coberta, os índices dos braços
-que a cobrem. `check_exhaustiveness_with_guards` compõe motor estrutural
-+ Z3: se exaustivo estruturalmente e há guards, percorre as folhas e para
-cada uma onde todos os braços têm guards, `check_guard_coverage` prova a
-tautologia disjuntiva. Cada braço é traduzido por seu próprio tradutor Z3
-(semearado com seus `with_bindings`), evitando colisão de nomes entre
-bindings de cláusulas diferentes. Params são consts Z3 por nome —
-compartilhados naturalmente entre tradutores.
+Commits: `92c7dbe`.
 
-Pré-requisito: fall-through de codegen (§5.4). probeH valida E2E nos dois
-backends: `Some x` com `> x 0` / `<= x 0` em cláusulas separadas, `None`
-na terceira — sem `otherwise`.
+## 8. Fase 4 — Refined na folha ✅ (refatoração na Fase 5)
 
-`arm.guard` do `match` explícito (AST existe, parser nunca popula) fora
-do escopo — sintaxe nova, outro PRD.
+**Implementado:** coerção de literal em pattern sobre refined via
+`const_eval_predicate` (reuso); enumeração de domínio finito de refined
+sobre Int no motor Maranget (`enum_refined_domain`, `extract_bound`,
+`MarangetEnv::with_refined`). `refined_decls` threaded por 7 callers.
+probeF (3 testes) verdes.
 
-DoD: probeH E probeH_with verdes nos dois backends (interp e JIT).
+**Limitação a refatorar na Fase 5:** 6 sites hard-codam reconhecimento
+de tipo por nome:
 
-## 8. Fase 4 — Refined na folha
+| Site | Hard-code | Problema |
+|------|-----------|----------|
+| `literal_expr_ty` (patterns.rs:480) | Match em `IntLit`/`FloatLit` | `Apply` (rational 1) cai no fallback |
+| Ramo refined (patterns.rs:200-206) | `matches!` de 4 pares (nome, nome) | Só 1 nível de alias; `Peso→PositiveFloat→Float` falha |
+| `eval_numeric` (const_eval.rs:93) | `Option<f64>` — Int/Float só | Não representa Rational/Complex |
+| `extract_bound` (maranget.rs:146) | `(String, i64)` — IntLit só | `rational 0` é `Apply`, não reconhece |
+| `enum_refined_domain` (maranget.rs:217) | `alias_of != "Int"` | Só Int; usa `alias_of` string em vez de `base_ty: Ty` |
+| `z3_translate.rs` | `VarKind { Int, Bool }` | Sem Rat/Real; Float cai em `fresh_bool` |
 
-Predicado do refined entra como premissa na mesma query de folha. Sem
-motor novo, sem datatype no Z3.
+Commits: `cbff78c`.
 
-### 7.1. Coerção de literal em pattern sobre refined (probe F)
+## 9. Fase 5 — TypeCaps: generalização para todos os tipos
 
-`match` sobre scrutinee refined com literal falha hoje com `TypeMismatch`
-— o literal não é coerzido ao refined em posição de pattern.
+### 9.1. Princípio
 
-Fix pelo caminho da ascription (`5::NonZero`): `check_pattern` aceita
-`Literal` quando o tipo esperado é refined sobre a mesma base numérica e
-o literal satisfaz o predicado (const-avaliação, `const_eval.rs`); viola
-→ `TypeMismatch` com mensagem de ascription (`ascription.rs:308-312`).
+O motor deixa de match em nomes de tipo ("Int", "rational") e passa a
+consultar **capacidade** (implementa ORD? EQ? NUM? — via `TypeGraph`,
+já dinâmico) e **transparência** (dá pra const-eval/inline? — via
+`InlineFnTable`, já dinâmico) das registries que o compilador já
+constrói a partir das declarações do usuário.
 
-**Reuso, não path novo.** A ascription-refined já faz essa verificação
-em `ascription.rs:305` chamando `const_eval_predicate(pred, expr)`. A
-Fase 4 não cria um novo avaliador — estende `check_pattern_inner` (ramo
-`Pattern::Literal`, linhas 168-190) para, antes de rejeitar com
-`TypeMismatch`, se o scrutinee é refined sobre a mesma base do literal,
-extrair o predicado e chamar a **mesma** `const_eval_predicate`. Se
-`Some(true)`, aceitar; `Some(false)`, rejeitar; `None`, cair no
-`TypeMismatch` existente (predicado não-avaliável = fora do escopo).
-Novo caller para função existente, não novo código de avaliação.
+### 9.2. Núcleo: `TypeCaps`
 
-Oráculo: `match n { 1: "um", 2: "dois" }` sobre
-`data (Int, > _ 0, < _ 3) as UmOuDois` — cobre o domínio {1, 2}.
+```rust
+// kata-core/src/caps.rs (novo módulo, sem ciclo)
+pub struct TypeCaps {
+    base: Option<Ty>,       // follow_alias até o tipo base
+    repr: Repr,             // representação para const-eval/Z3
+    ord: bool,              // type_implements(name, "ORD")
+    eq: bool,               // type_implements(name, "EQ")
+    num: bool,              // type_implements(name, "NUM")
+    inlineable_ord: bool,   // método ORD tem corpo Kata puro
+    inlineable_eq: bool,    // método EQ tem corpo Kata puro
+}
+```
 
-### 7.2. Escopo
+`Repr` é automático para todo tipo — é representação de dados, não
+capacidade. `ord`/`eq` são ortogonais: dizem quais operações são
+válidas sobre a representação. Sem `ord`, `extract_bound` não tenta
+`> _ 0`. Sem `eq`, `Domain::Points` não se aplica.
 
-- Refined sobre **Int/Float** com predicado const-avaliável — paridade
-  com a ascription refined de hoje. Rational → Fase 5.
-- Outras bases (Text, Boolean, enum) fora — construtor falível é a via
-  geral (manual §4.2.2).
+```rust
+pub enum Repr {
+    Int, Float, Rat, Text, Bool, Unit,
+    Struct(Vec<Repr>),  // Ty::Struct com fields — recursivo em StructRegistry
+    Sum,                // enums — motor estrutural já cobre
+    Opaque,             // sem fields, sem representação conhecida
+}
+```
 
-DoD: probeF verde E2E nos dois backends; literal fora do domínio →
-`TypeMismatch` com literal na mensagem; `otherwise` sobre refined sem
-mudança; Fase 3 sem regressão; zero `datatype` Z3 (grep vazio).
+Derivação 100% dinâmica:
+- `repr`: `Ty::Prim` espelha a representação ABI. `Ty::Struct` consulta
+  `StructRegistry::fields` recursivamente — `data MyRat (num::Int den::Int)`
+  → `Repr::Struct([Int, Int])` automaticamente, independente de implements.
+- `ord`/`eq`/`num`: `TypeGraph::type_implements` com herança de
+  supertraits (ORD implementa EQ). Memoizados em `TypeCaps` para evitar
+  consultas repetidas em `constructors_of`/`is_infinite` (chamados por
+  coluna da matriz). Consulta direta em `TypeGraph` também é válida —
+  a memoização é otimização, não necessidade semântica.
+- `inlineable_*`: `InlineFnTable` já extrai corpos de funções puras.
 
-## 9. Fase 5 — Rational na folha
+`CapsIndex = HashMap<Ty, TypeCaps>` construído a partir de `InferCtx`
+no início de `infer_module` (InferCtx já tem `type_graph`,
+`interface_registry`, `struct_registry`, `refined_decls` — todas as
+fontes). `MarangetEnv` recebe `&CapsIndex` (struct de dados leve, não
+contexto de inferência) — preserva a separação entre motor puro e
+typeck. Motor permanece testável sem InferCtx (testes table-driven
+constroem `CapsIndex` leve).
 
-Estende a Fase 4 a Rational. Três lacunas:
+### 9.3. `ConstVal` substitui `f64` e `i64`
 
-1. **Literal:** `rational 3` é `Apply` de FFI, não literal do parser.
-   Pattern de folha será `rational <IntLit>` (Apply const-avaliável) ou
-   ascription `<IntLit>::Rational`.
-2. **Const-eval:** estender `const_eval_predicate` para avaliar
-   `rational <IntLit>` (conversão Int→Rational é total).
-3. **Z3:** mapear Rational como par (num, den) com invariante `den > 0`.
-   Comparações via cross-multiplication (`num₁·den₂ ⋛ num₂·den₁`).
-   Aritmética completa (soma/produto) fora do escopo.
+```rust
+pub enum ConstVal {
+    Int(i64), Float(f64), Rat(i64, i64),  // (num, den) com den > 0
+    Bool(bool), Text(String), Unit,
+    Struct(Vec<ConstVal>),
+}
+```
 
-Sem axiomatização de datatype — Rational entra como par de Ints com
-premissa `den > 0`.
+`ConstVal::cmp` exige `ord` (ou `eq` para `=`/`!=`). `Rat` compara por
+cross-multiplication exato em `i128`, nunca `f64`.
 
-Oráculo: `data (Rational, > _ (rational 0), < _ (rational 3)) as RatUmOuDois`
-com `rational 1:` / `rational 2:`. Controles: wildcard verde;
-`rational 0:` → `TypeMismatch`.
+### 9.4. `Domain` generaliza `enum_refined_domain`
 
-DoD: oráculo verde nos dois backends; Fase 4 sem regressão; premissa
-`den > 0` em todas as queries; zero `datatype` Z3.
+Um único processo — não dois modos. `Domain` é sempre `Vec<ConstVal>`:
+o conjunto de valores que satisfazem os predicados. O método de
+construí-lo varia conforme a representação:
+
+- Se `Repr` é discreta (Int-like) e há bounds (`> _ N`, `< _ M`),
+  enumera o intervalo `lo..=hi` e filtra por `const_eval_predicate`.
+- Se há predicados `= _ c` com `c` const-avaliável, coleta os pontos.
+- Se ambos, intersecta (enumera intervalo, filtra por `=`).
+
+O gate é `eq` (para `= _ c`) e `ord` (para bounds de intervalo). Sem
+nenhum dos dois, `Domain` é `None` (infinito/não-enumerável).
+
+Rational refined com `= _ (rational 1)` → `[Rat(1, 1)]`.
+Complex refined com `= _ (complex 1 2)` → `[Complex(1.0, 2.0)]`.
+`data MyRat (num::Int den::Int)` com `= _ (MyRat 1 2)` →
+`[Struct([Int(1), Int(2)])])`.
+
+### 9.5. Como os 6 sites mudam
+
+| Site | Hoje | Com TypeCaps |
+|------|------|-------------|
+| `literal_expr_ty` + ramo refined | `matches!` de 4 pares | `caps.base` via `follow_alias` + `caps.num` |
+| `eval_numeric` | `Option<f64>` | `Option<ConstVal>` parametrizado por `Repr` |
+| `extract_bound` | `(String, i64)` | `(BoundOp, ConstVal)` gated por `caps.ord` |
+| `enum_refined_domain` | `alias_of != "Int"` | `Domain: Vec<ConstVal>` — enumera intervalo (Repr discreta + ord) ou coleta pontos (eq + const-eval) |
+| `z3_translate` | `VarKind { Int, Bool }` | `VarKind { Int, Bool, Rat(Int, Int) }` — cross-multiplication; EQ inline |
+
+### 9.6. Z3 — Rational como par (num, den)
+
+`VarKind::Rat(Int, Int)` com side-condition `den > 0`. Comparações via
+cross-multiplication: `num₁·den₂ ⋛ num₂·den₁`. `Unknown` →
+`MissingOtherwise` local (conservador). Float fica opaco nesta fase.
+Tipos EQ-only com corpo inlinável (Complex) — `try_inline` formalizado
+como estratégia por capacidade. Invariante preservado: zero `datatype`
+Z3.
+
+### 9.7. Pontos a investigar na implementação
+
+**`TypedExprKind` para literais FFI (Ponto 4):** `literal_to_typed_kind`
+hoje produz `TypedExprKind::Unit` para `Apply` (perde tipo e valor).
+`literal_to_string` (maranget.rs:433) já tem fallback
+`format!("Other:{:?}", expr.ty)` que preserva o tipo — mas só funciona
+se o `TypedExprKind` produzido carregar `expr.ty`. Opções: (a)
+`Closure` (preserva `Apply`, `literal_to_string` usa fallback
+`"Other:{ty}"`), (b) `IntLit` (desembrulha `rational 1` → `IntLit("1")`,
+perde tipo mas round-trip com `"Int:1"` funciona), (c) variante nova
+`Const { val: ConstVal }` (genérica, round-trip com `serialize`).
+**Descoberta:** o oráculo F5 espera `type.unbound_name` hoje —
+`rational` é parseado como `Ident` e não resolve como pattern.
+Verificar empiricamente como o parser produz `rational 1` em pattern
+position antes de decidir.
+
+**`ConstVal::Struct` no Z3 (Ponto 5):** Descoberta empírica:
+- **Rational ORD é @ffi** (`kata_rt_rat_lt`, etc.) — `try_inline` NÃO
+  funciona. `VarKind::Rat(Int, Int)` é **necessário**.
+- **Complex EQ tem corpo puro** (`lambda a b: and (= a.re b.re) (= a.im
+  b.im)`) — `try_inline` funcionaria, **mas** `guard_completeness.rs`
+  usa `Z3Translator::new()` (sem `inline_fns`). Só
+  `path_conditions.rs` passa `with_inline_fns`. Para Complex EQ
+  funcionar em guards, precisa passar `inline_fns` para o tradutor de
+  guards.
+- **User type com corpo ORD puro:** `try_inline` funciona (mesmo caso
+  que Complex) — também precisa de `inline_fns` no tradutor de guards.
+- **User type com @ffi ORD:** fallback opaco (`fresh_bool` → Maranget
+  estrutural). Degrada com honestidade.
+- **Ação:** F5.4 precisa (a) adicionar `VarKind::Rat(Int, Int)` para
+  Rational, e (b) passar `inline_fns` para o tradutor de guards em
+  `guard_completeness.rs` (estende `GuardArm` ou
+  `check_guard_coverage` com `Option<&InlineFnTable>`).
+
+### 9.8. Tipos de usuário — funcionam automaticamente
+
+| Tipo | Capacidade | Transparência | Comportamento |
+|------|-----------|--------------|---------------|
+| `data MyRat (num::Int den::Int) implements ORD` (corpo puro) | ord, eq | inlineable | Z3 traduz cross-multiplication; refined com `=` e `>` funcionam |
+| `data MyRat () implements ORD` via `@ffi` | ord, eq | opaco | Maranget estrutural, `otherwise` exigido — degrada com honestidade |
+| `complex 1 2` (NUM+EQ, sem ORD) | eq | inlineable | `Domain::Points` via `=`; `<` não existe na linguagem |
+| `alias Peso as PositiveFloat` | num | — | `follow_alias` resolve cadeia; literal 80.5 aceito por `caps.num` |
+
+### 9.9. Escopo
+
+- **Dentro:** Rational refined (oráculo `RatUmOuDois`); refatoração dos
+  6 sites para `TypeCaps`; `Domain::Points` para tipos com EQ;
+  `VarKind::Rat` no Z3; tipos de usuário com fields + implements.
+- **Fora:** Aritmética Rational completa no Z3 (soma/produto);
+  Float como Z3 Real (IEEE 754 vs Real é decisão futura); `arm.guard`
+  explícito em match arms (sintaxe nova, outro PRD).
+
+### 9.10. Passos de implementação
+
+**F5.1 — `TypeCaps`/`CapsIndex` com paridade total (refatoração pura)**
+- Criar `kata-core/src/caps.rs` com `TypeCaps`, `Repr`, `CapsIndex`.
+- Derivar `TypeCaps` de `TypeGraph`, `StructRegistry`, `InterfaceRegistry`,
+  `InlineFnTable` — todas já existentes.
+- Memoizar `CapsIndex` no início de `infer_module`.
+- Migrar os 6 sites para consultar `TypeCaps` em vez de hard-codar.
+- **Paridade exata:** todos os tipos existentes mapeiam idêntico.
+  1986 testes permanecem verdes. Nenhum tipo novo ainda.
+- Verificar: `cargo test --workspace --no-fail-fast` verde.
+
+**F5.2 — `ConstVal` + `Domain` unificado + cache**
+- Substituir `eval_numeric → Option<f64>` por `eval_const → Option<ConstVal>`.
+- Substituir `extract_bound → (String, i64)` por `(BoundOp, ConstVal)`.
+- `enum_refined_domain` unificado: `Vec<ConstVal>` — enumera intervalo
+  (Repr discreta + ord) ou coleta pontos (eq + const-eval) ou ambos
+  (intersecta). Gate por `caps.ord` e `caps.eq`.
+- Cache do domínio por tipo (hoje `enum_refined_domain` roda 2x sem
+  memo em `constructors_of` e `is_infinite`).
+- `serialize(repr, val)` para `Constructor::Literal` — round-trip
+  consistente com `literal_to_string`/`pattern_ctor`. Formato por `Repr`:
+  `Int` → `"Int:1"`, `Rat` → `"Rat:1/1"`, `Struct` → `"Struct:1|2"`.
+- Verificar: `cargo test` verde; oráculo `RatUmOuDois` ainda `#[ignore]`.
+
+**F5.3 — `literal_expr_ty`/ramo refined via `follow_alias` + `caps.num`**
+- Substituir `matches!` de 4 pares por `caps.base` + `caps.num`.
+- `follow_alias` resolve cadeias de alias (Peso→PositiveFloat→Float).
+- Verificar: `cargo test` verde.
+
+**F5.4 — Z3 `Rat(Int, Int)` + EQ-capability inline + `inline_fns` em guards**
+- `VarKind::Rat(Int, Int)` com side-condition `den > 0`.
+- Comparações Rat por cross-multiplication.
+- Float opaco (mantém `fresh_bool`).
+- **Passar `inline_fns` para o tradutor de guards.** Hoje
+  `guard_completeness.rs` usa `Z3Translator::new()` (sem `inline_fns`).
+  Estender `GuardArm` ou `check_guard_coverage` com
+  `Option<&InlineFnTable>`. Sem isso, Complex EQ e user types com corpo
+  puro não funcionam em guards — `try_inline` não tem a tabela.
+- EQ-capability: antes de `fresh_bool` para `=` sobre tipo EQ, tentar
+  inline do método via `InlineFnTable` (agora disponível em guards).
+- Verificar: Complex implements EQ (corpo puro em `stdlib/complex.kata`)
+  funciona em guards após passar `inline_fns`.
+- Verificar: `cargo test` verde; zero `datatype` Z3 (grep vazio).
+
+**F5.5 — Oráculos F5 + testes e2e com user types**
+- Derrubar `#[ignore]` dos 2 oráculos F5 (`rat_um_ou_dois_f5`,
+  `rat_um_ou_dois_zero_f5`).
+- Adicionar teste e2e com user type: `data MyRat (num::Int den::Int)
+  implements ORD` com refined e match.
+- Verificar nos dois backends (JIT e interp).
+- `cargo fmt`, `cargo test`, `cargo clippy --workspace --all-targets -- -D warnings`.
 
 ## 10. Estruturas afetadas
 
 | Camada | Site | Fase |
 |--------|------|------|
-| Parser | `parse_tuple_pattern` — desembrulhar `(p)` sem vírgula | 0 ✅ |
-| Parser | `parse_pattern_inner` — recursão de `allow_unqualified_variant` | 0 ✅ |
-| Parser | `patterns.rs` — remoção do ramo morto `else if LParen` | 0 ✅ |
-| Parser | `parse_sig_clauses`/`parse_lambda_clause` (`sig.rs`) + 4 callers | 1 |
-| Typeck | `check_patterns` (`helpers.rs:92`) — bound-check | 1 |
-| Codegen | `lower_guards`/`lower_clause_chain` (`clause.rs`) — fall-through | 1 |
-| Typeck | `maranget.rs` (novo) — motor + trait de ambiente | 2 |
-| Typeck | `check_exhaustiveness` / `check_clause_exhaustiveness` / `pattern_covers` — migram ao motor | 2 |
-| Typeck | redundância de match arms (novo consumidor) | 2 |
-| Z3 | `guard_completeness.rs` + `z3_translate.rs` — queries de folha | 3 |
-| Typeck | `check_pattern` (`patterns.rs:285+`) — literal contra refined | 4 |
-| Z3 | predicado do refined como premissa da folha | 4 |
-| Typeck | `const_eval.rs` — `rational <lit>` const-avaliável | 5 |
-| Z3 | `z3_translate.rs` — Rational como par (num, den) | 5 |
+| Parser | `parse_match_pattern` recursivo, desembrulhar `(p)`, ramo morto | 0 ✅ |
+| Parser | `parse_sig_clauses`/`parse_lambda_clause` + 4 callers | 1 ✅ |
+| Typeck | `check_patterns` — bound-check `ArityMismatch` | 1 ✅ |
+| Codegen | `lower_guards`/`lower_clause_chain` — fall-through | 1 ✅ |
+| Typeck | `maranget.rs` — motor + trait `PatternEnv` | 2 ✅ |
+| Typeck | 3 consumidores migrados ao motor | 2 ✅ |
+| Z3 | `guard_completeness.rs` + `z3_translate.rs` — queries de folha | 3 ✅ |
+| Typeck | `check_pattern` — literal contra refined | 4 ✅ |
+| Z3 | predicado do refined como premissa da folha | 4 ✅ |
+| Typeck | `caps.rs` (novo) — `TypeCaps`, `Repr`, `CapsIndex` | 5 |
+| Typeck | `const_eval.rs` — `ConstVal` substitui `f64` | 5 |
+| Typeck | `maranget.rs` — `Domain::Interval`/`Points`, `extract_bound` generalizado | 5 |
+| Typeck | `patterns.rs` — ramo refined via `follow_alias` + `caps.num` | 5 |
+| Z3 | `z3_translate.rs` — `VarKind::Rat`, cross-multiplication | 5 |
 
 ## 11. Fora do escopo (registrar no TODO.md)
 
-- **#2b:** `echo!(None)` → `codegen.unsupported` (`closure.rs:349`) — PRD próprio.
+- **#2b:** `echo!(None)` → `codegen.unsupported` — PRD próprio.
 - **`arm.guard` em match arms** — sintaxe nova, exige decisão de Arthur.
-- **Interp exit code:** `kata run --interp` em erro de runtime imprime mas
-  sai exit 0 — comportamento do driver, não da classe estrutural.
-- **#K-call:** variante sem payload como argumento não resolve overload
-  (`foo None` → `type.no_overload`). Consistente com ret-directed, mas
-  `None` é inexpressável em chamada — só pattern.
+- **Interp exit code:** `kata run --interp` em erro de runtime sai exit 0.
+- **#K-call:** variante sem payload como argumento não resolve overload.
 - **#K-enum-payload:** enum user-defined como payload de genérico →
-  `type.mismatch` dentro do pattern. Ortogonal à exaustividade — PRD próprio.
-- **#K-paren:** parêntese interno em braço (`Some (Some True):`).
-  **Resolvido pela Fase 0** — desembrulhamento de `(p)` sem vírgula +
-  `parse_match_pattern` recursivo. Era limite de implementação (patterns
-  sem `Grouping`); agora alinha a gramática de patterns com a de
-  expressões. Sem mudança de linguagem.
+  `type.mismatch`. PRD próprio.
+- **Aritmética Rational completa no Z3** (soma/produto) — decisão futura.
+- **Float como Z3 Real** (IEEE 754 vs Real) — decisão futura.
 
-## 12. Testes (TDD — oráculos RED primeiro)
+## 12. Testes
 
-`nested_exhaustiveness_e2e.rs`, `nested_redundancy_e2e.rs` (probes como
-fontes EXATOS — cópia mecânica). Snapshots insta para witnesses.
+`nested_exhaustiveness_e2e.rs`, `nested_redundancy_e2e.rs`.
 
 | Oráculo | Backend | Esperado final |
 |---------|---------|----------------|
-| probeA (`Some True`+`None`) | JIT | F2: `NonExhaustiveMatch` `["Some False"]` |
-| probeB (idem, `Some False`) | JIT+interp | F2: mesmo erro (hoje SIGILL 132) |
-| probeC / probeD (completos) | JIT+interp | verde |
-| probeE (`lambda Some True:` 1 param) | JIT | F1: `ArityMismatch` (hoje panic 101) |
-| probeE2 (cláusulas aninhado) | JIT | F2: verde (hoje falso `redundant_clause`) |
-| probeG (guards na cláusula) | JIT+interp | verde (regressão) |
-| probeH / probeH_with (guards entre cláusulas) | JIT+interp | F3: verde com output correto |
-| probeM (`Result::(Int, Text)` parcial) | JIT | F2: `NonExhaustiveMatch` `["Ok _"]` |
-| probeF (refined `{1,2}`) | JIT+interp | F4: verde (hoje `type.mismatch`) |
-| probeF2 (wildcard sobre refined) | JIT | controle: verde |
-| refined literal fora do domínio | JIT | F4: `TypeMismatch` com literal |
-| refined cobertura parcial | JIT | F4: `NonExhaustiveMatch` `["2"]` |
-| probeJ (braço morto) | JIT | F2: `RedundantClause` (hoje verde silencioso) |
-| probeJ2 (otherwise inútil) | JIT | verde (isenção do otherwise) |
-| probeK_deep (3 níveis completo) | JIT | verde (regressão) |
-| probeK_deep_hole (3 níveis buraco) | JIT | F2: `NonExhaustiveMatch` `["Some (Some False)"]` |
-| probeK_deep_paren | JIT | F0: verde (era parse error) |
-| probeK_grid / grid_partial | JIT | completa: verde; parcial: `NonExhaustiveMatch` |
-| probeK_arity_tuple | JIT | F1: `ArityMismatch` (hoje panic 101) |
-| `lambda True True:` (10 testes) | — | verdes (regressão 2-A) |
+| probeA (`Some True`+`None`) | JIT | ✅ `NonExhaustiveMatch` `[\"Some False\"]` |
+| probeB (idem, `Some False`) | JIT+interp | ✅ mesmo erro |
+| probeC / probeD (completos) | JIT+interp | ✅ verde |
+| probeE (`lambda Some True:` 1 param) | JIT | ✅ `ArityMismatch` |
+| probeE2 (cláusulas aninhado) | JIT | ✅ verde |
+| probeG (guards na cláusula) | JIT+interp | ✅ verde |
+| probeH / probeH_with (guards entre cláusulas) | JIT+interp | ✅ verde |
+| probeM (`Result::(Int, Text)` parcial) | JIT | ✅ `NonExhaustiveMatch` `[\"Ok _\"]` |
+| probeF (refined `{1,2}`) | JIT+interp | ✅ verde |
+| probeF2 (wildcard sobre refined) | JIT | ✅ verde |
+| refined literal fora do domínio | JIT | ✅ `TypeMismatch` |
+| refined cobertura parcial | JIT | ✅ `NonExhaustiveMatch` |
+| probeJ (braço morto) | JIT | ✅ `RedundantClause` |
+| probeJ2 (otherwise inútil) | JIT | ✅ verde (isenção) |
+| probeK_deep (3 níveis completo) | JIT | ✅ verde |
+| probeK_deep_hole (3 níveis buraco) | JIT | ✅ `NonExhaustiveMatch` |
+| probeK_deep_paren | JIT | ✅ verde |
+| probeK_grid / grid_partial | JIT | ✅ completa: verde; parcial: `NonExhaustiveMatch` |
+| probeK_arity_tuple | JIT | ✅ `ArityMismatch` |
+| `lambda True True:` (10 testes) | — | ✅ verdes |
 | `RatUmOuDois` | JIT+interp | F5: verde com output correto |
+| `RatUmOuDois` zero fora domínio | JIT | F5: `TypeMismatch` |
+| User type `MyRat` refined | JIT+interp | F5: verde (teste novo) |
 
 Verificação entre fases: `cargo test --workspace --no-fail-fast` verde;
 `cargo clippy --workspace --all-targets -- -D warnings` vazio.
 
-## 13. Passos de implementação
-
-**Fase 0** (já implementada):
-1. Desembrulhamento de `(p)` sem vírgula em `parse_tuple_pattern`.
-2. `parse_match_pattern` recursivo (sub-patterns herdam
-   `allow_unqualified_variant`).
-3. Remoção do ramo morto `else if LParen` (linhas 83-101).
-4. `cargo test` + clippy verdes.
-
-**Fase 1** (implementada — passos 1-4):
-1. Oráculos E2E RED copiados de `tests/probe-nested/` (incluindo
-   família K); oráculos de virada F2+ entram `#[ignore]`. ✅ b9cfba4
-2. Bound-check `ArityMismatch` em `check_patterns`. ✅ 274d7b5
-3. Parser aridade-consciente + teste `lambda True True:` regressão. ✅ 4750233
-4. Fall-through de codegen (§5.4) como commit isolado — no-op provado. ✅ de88c41
-5. `cargo test` + clippy verdes; commits em camadas. ✅
-
-**Fase 2** (implementada — passos 1-6):
-1. `maranget.rs` puro (matriz/usefulness/witness, trait de ambiente) +
-   testes table-driven — sem typeck. ✅ `f193635`
-2. Migrar 3 consumidores, um por commit:
-   - Match (`_match.rs`): ✅ `32fab2f`
-   - Lambda (`function_infer.rs`): ✅ `503d817` (substitute_ty + collect_all_witnesses)
-   - Redundância (`redundancy.rs`): ✅ `6e27d39` (is_arm_redundant como gate estrutural)
-3. Redundância de match arms (novo consumidor, isenção do otherwise) — pendente Fase 3 (guards)
-4. Remover `__ANY__` (grep vazio). ✅ `a86c27d`
-5. Witnesses legíveis → snapshots. ✅ `eb0d0a5` (oráculos F2 des-ignorados)
-6. Fix codegen: selar next_clause_block após body (probeG crash). ✅ `31fea5a`
-
-**Fase 3** (implementada):
-- `collect_guard_leaves` em `maranget.rs` — percorre a árvore de especialização
-  e coleta folhas cobertas com arm_indices (paralelo a `collect_all_witnesses`).
-- `check_guard_coverage` + `prove_guard_coverage` em `guard_completeness.rs` —
-  prova disjunção de guards de múltiplos braços via Z3, com tradutor por braço.
-- `check_exhaustiveness_with_guards` em `maranget.rs` — compõe motor estrutural
-  + Z3 na folha. Remove loop por-cláusula em `function_infer.rs`.
-- Oráculos probeH e probeH_with des-ignorados — verdes nos dois backends.
-- Teste `non_redundant_guard_no_implication` atualizado: guards disjuntivos
-  `> x 0 ∨ <= x 5` agora provados como tautologia pela Fase 3.
-- Suite: 1983 passed, 0 failed, 5 ignored (3 F4, 2 F5).
-
-**Fase 4** (implementada):
-- `check_pattern_inner` ramo `Pattern::Literal` estendido em `patterns.rs` —
-  aceita literal sobre tipo refined quando a base é a mesma e o predicado
-  é satisfeito via `const_eval_predicate` (reuso, não novo avaliador).
-- `refined_decls: &[RefinedDeclInfo]` threaded por `check_pattern`,
-  `check_pattern_in_action`, `check_patterns`, e 7 callers.
-- `infer::const_eval` tornado `pub(crate)` para acesso de `patterns.rs` e
-  `maranget.rs`.
-- `MarangetEnv` estendido com `struct_registry` e `refined_decls` opcionais
-  (`with_refined`). `enum_refined_domain` enumera domínio finito de refined
-  sobre Int extraindo bounds dos predicados (`> _ N` → lo, `< _ M` → hi) e
-  filtrando por `const_eval_predicate`. `is_infinite` e `constructors_of`
-  tratam refined com domínio finito como tipo finito (literais como
-  construtores).
-- `check_exhaustiveness_maranget` e `check_exhaustiveness_with_guards`
-  estendidos com `Option<&StructRegistry>` e `Option<&[RefinedDeclInfo]>`.
-- Oráculos probeF (3 testes) des-ignorados — verdes nos dois backends.
-- Suite: 1986 passed, 0 failed, 2 ignored (2 F5).
-
-**Fase 5:** const-eval de `rational <lit>` → Rational no Z3 como par
-(num, den) com premissa `den > 0` → oráculo `RatUmOuDois` verde.
-
-## 14. Atualização de documentação ao concluir
+## 13. Atualização de documentação ao concluir
 
 - Este PRD — status ✅ por fase.
-- `docs/TODO.md` — item \"Patterns aninhados\" reescrito; entradas novas:
-  #2b, #K-call, #K-enum-payload, #K-paren, sistema de supressão de
-  diagnóstico.
+- `docs/TODO.md` — items atualizados.
 - `docs/Kata-lang-manual.md` §16 (exaustividade aninhada + witnesses);
   §4.2.2 (literal em pattern sobre refined). **Pedir permissão a Arthur.**
-- `docs/kata-book/06-*.md`, `10-*.md` — se comportamento visível ao
-  iniciante mudar.
-- Skill `kata-code-authoring` — tabela de Patterns se a Fase 2/3 mudar o
-  que se escreve.
+- `docs/kata-book/06-*.md`, `10-*.md` — se comportamento visível mudar.
+- Skill `kata-compiler` — atualizar `references/maranget-exhaustiveness.md`
+  com seção Fase 5.
+- Skill `kata-code-authoring` — tabela de Patterns se necessário.
