@@ -149,6 +149,8 @@ pub(crate) fn eval_const(expr: &Spanned<Expr>) -> Option<ConstVal> {
             "False" => Some(ConstVal::Bool(false)),
             _ => None,
         },
+        // Grouping: desembrulha recursivamente.
+        Expr::Grouping { inner } => eval_const(inner),
         _ => None,
     }
 }

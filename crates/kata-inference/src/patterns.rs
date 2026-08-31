@@ -563,7 +563,7 @@ fn literal_to_typed_kind(expr: &kata_ast::Expr) -> TypedExprKind {
             TypedExprKind::Closure {
                 callee: Box::new(Spanned::new(callee_typed, callee.span)),
                 args: vec![Spanned::new(arg_typed, args[0].span)],
-                ffi_symbol: None,
+                ffi_symbol: Some("kata_rt_int_to_rational".to_string()),
             }
         }
         _ => TypedExprKind::Unit, // fallback — não deveria acontecer

@@ -381,11 +381,12 @@ impl<'a> MarangetEnv<'a> {
         None
     }
 
-    /// Sucedor de um ConstVal discreto (Int: n+1, Bool: True→erro, Rat: não-discreto).
+    /// Sucedor de um ConstVal discreto (Int: n+1, Rat com den=1: n+1).
     fn succ(val: &ConstVal, repr: &Repr) -> Option<ConstVal> {
         match (repr, val) {
             (Repr::Int, ConstVal::Int(n)) => Some(ConstVal::Int(n + 1)),
-            _ => None, // Bool, Rational, Float, Text não têm sucessor discreto
+            (Repr::Rational, ConstVal::Rat(n, d)) if *d == 1 => Some(ConstVal::Rat(n + 1, 1)),
+            _ => None, // Bool, Rational com d≠1, Float, Text não têm sucessor discreto
         }
     }
 
@@ -393,6 +394,7 @@ impl<'a> MarangetEnv<'a> {
     fn pred(val: &ConstVal, repr: &Repr) -> Option<ConstVal> {
         match (repr, val) {
             (Repr::Int, ConstVal::Int(n)) => Some(ConstVal::Int(n - 1)),
+            (Repr::Rational, ConstVal::Rat(n, d)) if *d == 1 => Some(ConstVal::Rat(n - 1, 1)),
             _ => None,
         }
     }
@@ -401,6 +403,7 @@ impl<'a> MarangetEnv<'a> {
     fn domain_count(lo: &ConstVal, hi: &ConstVal, repr: &Repr) -> Option<i64> {
         match (repr, lo, hi) {
             (Repr::Int, ConstVal::Int(l), ConstVal::Int(h)) => Some(h - l + 1),
+            (Repr::Rational, ConstVal::Rat(l, 1), ConstVal::Rat(h, 1)) => Some(h - l + 1),
             _ => None, // Não-discreto: não enumera
         }
     }
@@ -413,6 +416,13 @@ impl<'a> MarangetEnv<'a> {
                     None
                 } else {
                     Some(ConstVal::Int(c + 1))
+                }
+            }
+            (Repr::Rational, ConstVal::Rat(c, 1), ConstVal::Rat(h, 1)) => {
+                if c >= h {
+                    None
+                } else {
+                    Some(ConstVal::Rat(c + 1, 1))
                 }
             }
             _ => None,
@@ -645,6 +655,17 @@ fn literal_to_string(expr: &crate::typed::TypedExpr) -> String {
         TypedExprKind::FloatLit { text } => format!("Float:{}", text),
         TypedExprKind::TextLit { text } => format!("Text:{}", text),
         TypedExprKind::Unit => "Unit".to_string(),
+        // `rational N` → Rat:N|1 (round-trip com ConstVal::to_ctor_string).
+        TypedExprKind::Closure { callee, args, .. } => {
+            if let TypedExprKind::Ident { name } = &callee.node.kind
+                && name == "rational"
+                && args.len() == 1
+                && let TypedExprKind::IntLit { text } = &args[0].node.kind
+            {
+                return format!("Rat:{}|1", text);
+            }
+            format!("Other:{:?}", expr.ty)
+        }
         _ => format!("Other:{:?}", expr.ty),
     }
 }
