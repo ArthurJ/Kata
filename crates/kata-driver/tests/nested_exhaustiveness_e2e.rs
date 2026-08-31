@@ -260,8 +260,9 @@ main!()"#,
 /// Pré-F1: panic 101 (helpers.rs:104, index out of bounds) — parseava como
 /// 2 patterns. Com parser aridade-consciente, parseia como 1 pattern
 /// Variant{Some, [True]}. Não há mais panic.
-/// Hoje (F1): falso-positivo `type.redundant_clause` (mesmo bug de probeE2).
-/// F2: verde, sem falso-positivo.
+/// F1: falso-positivo `type.redundant_clause` (mesmo bug de probeE2).
+/// F2: verde, sem falso-positivo — motor Maranget desce payloads,
+/// Some True e Some False não são redundantes.
 #[test]
 fn probe_e_nao_panic() {
     let path = write_temp_kata(
@@ -277,11 +278,13 @@ action main
 
 main!()"#,
     );
-    let (_stdout, stderr, code) = run_kata_file(&path);
+    let (stdout, stderr, code) = run_kata_file(&path);
 
-    // NÃO pode panicar (exit 101). Deve ser erro gracioso.
+    // NÃO pode panicar (exit 101).
     assert_ne!(code, 101, "probeE não deve panicar — stderr: {stderr}");
-    assert_ne!(code, 0, "probeE não deve ser verde — stderr: {stderr}");
+    // F2: verde — motor reconhece Some True / Some False como não-redundantes.
+    assert_eq!(code, 0, "probeE deve exit 0 — stderr: {stderr}");
+    assert_eq!(stdout, "tem true\ntem false\n");
 }
 
 /// probeK_arity_tuple: `lambda True True:` em função de 1 param tupla.

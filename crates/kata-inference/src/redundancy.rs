@@ -24,6 +24,8 @@
 //! conservadora: assume não-redundante.
 
 use kata_ast::Span;
+use kata_core::EnumRegistry;
+use kata_core::ty::Ty;
 use kata_diagnostics::MiddleError;
 
 use crate::guard_completeness::{check_guard_completeness, check_guard_implication};
@@ -37,24 +39,54 @@ use crate::typed_pattern::{TypedLambdaClause, TypedPattern};
 /// patterns "cobrem" todos os valores que a cláusula N casaria, e
 /// os guards de M sempre disparam para esses valores, a cláusula N
 /// é inalcançável → `RedundantClause`.
-pub(crate) fn check_redundant_clauses(clauses: &[TypedLambdaClause]) -> InferResult<()> {
+pub(crate) fn check_redundant_clauses(
+    clauses: &[TypedLambdaClause],
+    param_types: &[Ty],
+    enum_registry: &EnumRegistry,
+) -> InferResult<()> {
+    // Coleta patterns de cada cláusula para o motor Maranget.
+    let all_patterns: Vec<Vec<TypedPattern>> = clauses
+        .iter()
+        .map(|c| c.patterns.iter().map(|p| p.node.clone()).collect())
+        .collect();
+
     for (i, clause_n) in clauses.iter().enumerate().skip(1) {
-        let n_patterns: Vec<&TypedPattern> = clause_n.patterns.iter().map(|p| &p.node).collect();
         let n_has_guards = !clause_n.guards.is_empty();
 
+        // Passo 1 (estrutural): o motor Maranget decide se o braço i é
+        // útil w.r.t. os braços anteriores. Se NÃO é útil (is_arm_redundant
+        // retorna true), a cláusula é estruturalmente redundante — a menos
+        // que guards de M não sejam tautologia (M pode falhar e N ser
+        // alcançável).
+        let structurally_redundant =
+            crate::maranget::is_arm_redundant(&all_patterns, param_types, i, enum_registry);
+
+        if !structurally_redundant {
+            continue;
+        }
+
+        // Passo 2: decidir baseado em guards.
+        // Se M (cláusula anterior que cobre N) não tem guards, ela sempre
+        // dispara → N é redundante independente dos guards de N.
+        // Se M tem guards, precisamos verificar tautologia/implicação.
+        //
+        // Como is_arm_redundant testa contra TODOS os braços anteriores,
+        // precisamos encontrar QUAL braço M causa a redundância e se M
+        // tem guards. Se algum M sem guards cobre N, N é redundante.
         for clause_m in &clauses[..i] {
-            let m_patterns: Vec<&TypedPattern> =
-                clause_m.patterns.iter().map(|p| &p.node).collect();
             let m_has_guards = !clause_m.guards.is_empty();
 
-            // Passo 1: patterns de M devem cobrir patterns de N.
+            // Verifica se M cobre N estruturalmente.
+            let m_patterns: Vec<&TypedPattern> =
+                clause_m.patterns.iter().map(|p| &p.node).collect();
+            let n_patterns: Vec<&TypedPattern> =
+                clause_n.patterns.iter().map(|p| &p.node).collect();
+
             if !patterns_cover(&m_patterns, &n_patterns) {
                 continue;
             }
 
-            // Passo 2: decidir baseado em quem tem guards.
             match (m_has_guards, n_has_guards) {
-                // (false, false) — caso original: M sem guards sempre dispara.
                 (false, false) => {
                     return Err(MiddleError::RedundantClause {
                         span: clause_n.body.span.into(),
@@ -65,8 +97,6 @@ pub(crate) fn check_redundant_clauses(clauses: &[TypedLambdaClause]) -> InferRes
                         ),
                     });
                 }
-                // (false, true) — M sem guards sempre dispara sobre os patterns.
-                // Guards de N não importam: M captura o input antes de N.
                 (false, true) => {
                     return Err(MiddleError::RedundantClause {
                         span: clause_n.body.span.into(),
@@ -77,8 +107,6 @@ pub(crate) fn check_redundant_clauses(clauses: &[TypedLambdaClause]) -> InferRes
                         ),
                     });
                 }
-                // (true, false) — Fase 1: guards de M são tautologia?
-                // Se M sempre dispara (guards exaustivos), N é inalcançável.
                 (true, false) => {
                     let span = &clause_m.body.span;
                     if guard_is_tautology(&clause_m.guards, &clause_m.with_bindings, span) {
@@ -94,9 +122,6 @@ pub(crate) fn check_redundant_clauses(clauses: &[TypedLambdaClause]) -> InferRes
                     // Guards de M não são tautologia — M pode falhar e N
                     // ser alcançável. Não é redundante.
                 }
-                // (true, true) — Fase 2: guards_N ⟹ guards_M?
-                // Se todo input que satisfaz guards de N também satisfaz
-                // guards de M, M dispara antes de N → N redundante.
                 (true, true) => {
                     let span = &clause_n.body.span;
                     if check_guard_implication(
@@ -120,6 +145,10 @@ pub(crate) fn check_redundant_clauses(clauses: &[TypedLambdaClause]) -> InferRes
                 }
             }
         }
+
+        // Se o motor disse redundante mas nenhum M sem guards cobre N,
+        // e nenhum M com guards é tautologia/implicação, então guards
+        // de M podem falhar — N pode ser alcançável. Conservador: não reporta.
     }
     Ok(())
 }

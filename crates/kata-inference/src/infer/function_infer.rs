@@ -169,7 +169,7 @@ pub(crate) fn infer_named_function(
     // DoD 12: Verifica sobreposição de cláusulas (RedundantClause).
     // Roda ANTES da verificação de exaustividade de guards para poder
     // ver cláusulas com guards não-tautológicos (sem otherwise).
-    crate::redundancy::check_redundant_clauses(&typed_clauses)?;
+    crate::redundancy::check_redundant_clauses(&typed_clauses, param_types, ctx.enum_registry)?;
 
     // Verifica completude de guards: se há guards mas sem `otherwise`,
     // usa Z3 para provar que a disjunção das condições é tautologia.
