@@ -11,10 +11,11 @@ use kata_ast::{Pattern, Span, Spanned};
 use kata_core::enum_registry::EnumRegistry;
 use kata_core::escape::EscapeTarget;
 use kata_core::struct_registry::StructRegistry;
-use kata_core::ty::{Ty, TypeEnv};
+use kata_core::ty::{PrimTy, Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
-use kata_resolution::resolve_type_expr;
+use kata_resolution::{RefinedDeclInfo, resolve_type_expr};
 
+use crate::infer::const_eval::const_eval_predicate;
 use crate::typed::{TypedExpr, TypedExprKind, TypedPattern};
 
 /// Tipo de erro de inferência — alias para `Result<T, MiddleError>`.
@@ -34,6 +35,7 @@ pub(crate) fn check_pattern(
     env: &mut TypeEnv,
     iface_registry: &kata_core::InterfaceRegistry,
     struct_registry: &StructRegistry,
+    refined_decls: &[RefinedDeclInfo],
 ) -> PatternResult<Spanned<TypedPattern>> {
     let typed = check_pattern_inner(
         &pat.node,
@@ -44,6 +46,7 @@ pub(crate) fn check_pattern(
         iface_registry,
         struct_registry,
         false,
+        refined_decls,
     )?;
     Ok(Spanned::new(typed, pat.span))
 }
@@ -60,6 +63,7 @@ pub(crate) fn check_pattern_in_action(
     env: &mut TypeEnv,
     iface_registry: &kata_core::InterfaceRegistry,
     struct_registry: &StructRegistry,
+    refined_decls: &[RefinedDeclInfo],
 ) -> PatternResult<Spanned<TypedPattern>> {
     let typed = check_pattern_inner(
         &pat.node,
@@ -70,6 +74,7 @@ pub(crate) fn check_pattern_in_action(
         iface_registry,
         struct_registry,
         true,
+        refined_decls,
     )?;
     Ok(Spanned::new(typed, pat.span))
 }
@@ -84,6 +89,7 @@ fn check_pattern_inner(
     iface_registry: &kata_core::InterfaceRegistry,
     struct_registry: &StructRegistry,
     check_constant: bool,
+    refined_decls: &[RefinedDeclInfo],
 ) -> PatternResult<TypedPattern> {
     match pat {
         // ── Ident: pode ser binding ou variante sem qualificação ──
@@ -166,26 +172,93 @@ fn check_pattern_inner(
 
         // ── Literal: verifica tipo do literal contra scrutinee ──
         Pattern::Literal(expr) => {
-            // O literal precisa ser do mesmo tipo que o scrutinee.
-            // Inferimosos o tipo da expr literal e comparamos.
             let literal_ty = literal_expr_ty(&expr.node, scrutinee_ty);
-            if !pattern_type_compatible(&literal_ty, scrutinee_ty) {
-                return Err(MiddleError::TypeMismatch {
-                    expected: format!("{}", scrutinee_ty),
-                    found: format!("{}", literal_ty),
-                    span: (*span).into(),
+
+            // Caminho direto: igualdade estrita (caso comum — sem refined).
+            if pattern_type_compatible(&literal_ty, scrutinee_ty) {
+                let typed_expr = TypedExpr {
+                    span: expr.span,
+                    ty: literal_ty,
+                    tail_pos: false,
+                    escape: EscapeTarget::Local,
+                    kind: literal_to_typed_kind(&expr.node),
+                };
+                return Ok(TypedPattern::Literal {
+                    value: Spanned::new(typed_expr, expr.span),
                 });
             }
-            // Constrói TypedExpr para o literal.
-            let typed_expr = TypedExpr {
-                span: expr.span,
-                ty: literal_ty,
-                tail_pos: false,
-                escape: EscapeTarget::Local,
-                kind: literal_to_typed_kind(&expr.node),
-            };
-            Ok(TypedPattern::Literal {
-                value: Spanned::new(typed_expr, expr.span),
+
+            // Caminho refined: scrutinee é tipo refined sobre a mesma base
+            // numérica do literal. Valida predicados via const_eval_predicate.
+            if let Ty::Struct(key) = scrutinee_ty
+                && let Some(struct_info) = struct_registry.get(key.name())
+                && struct_info.alias_of.is_some()
+            {
+                // O base do refined é o alias_of. Verifica que o literal
+                // é do mesmo tipo base.
+                let base_name = struct_info.alias_of.as_deref().unwrap_or("");
+                let base_matches = matches!(
+                    (&literal_ty, base_name),
+                    (Ty::Prim(PrimTy::Int), "Int")
+                        | (Ty::Prim(PrimTy::Float), "Float")
+                        | (Ty::Prim(PrimTy::Rational), "Rational")
+                        | (Ty::Prim(PrimTy::Text), "Text")
+                );
+                if base_matches {
+                    // Busca RefinedDeclInfo para os predicados como Spanned<Expr>.
+                    if let Some(refined_decl) =
+                        refined_decls.iter().find(|rd| rd.name == key.name())
+                    {
+                        // Avalia cada predicado sobre o literal.
+                        for (i, pred) in refined_decl.predicates.iter().enumerate() {
+                            match const_eval_predicate(pred, expr) {
+                                Some(true) => {} // predicado satisfeito
+                                Some(false) => {
+                                    return Err(MiddleError::TypeMismatch {
+                                        expected: format!(
+                                            "predicado {i} de {} satisfeito",
+                                            key.name()
+                                        ),
+                                        found: "literal fora do domínio do refined".to_string(),
+                                        span: (*span).into(),
+                                    });
+                                }
+                                None => {
+                                    // Predicado não-avaliável — fora do escopo
+                                    // da Fase 4 (const-eval only). Cair no
+                                    // TypeMismatch existente.
+                                    return Err(MiddleError::TypeMismatch {
+                                        expected: format!(
+                                            "predicado {i} de {} avaliável",
+                                            key.name()
+                                        ),
+                                        found: "predicado não-avaliável por const-eval".to_string(),
+                                        span: (*span).into(),
+                                    });
+                                }
+                            }
+                        }
+                        // Todos os predicados satisfeitos — aceita o literal
+                        // com o tipo do scrutinee (refined).
+                        let typed_expr = TypedExpr {
+                            span: expr.span,
+                            ty: scrutinee_ty.clone(),
+                            tail_pos: false,
+                            escape: EscapeTarget::Local,
+                            kind: literal_to_typed_kind(&expr.node),
+                        };
+                        return Ok(TypedPattern::Literal {
+                            value: Spanned::new(typed_expr, expr.span),
+                        });
+                    }
+                }
+            }
+
+            // Falha: tipo incompatível e não é refined compatível.
+            Err(MiddleError::TypeMismatch {
+                expected: format!("{}", scrutinee_ty),
+                found: format!("{}", literal_ty),
+                span: (*span).into(),
             })
         }
 
@@ -281,6 +354,7 @@ fn check_pattern_inner(
                         iface_registry,
                         struct_registry,
                         check_constant,
+                        refined_decls,
                     )?;
                     typed_subs.push(Spanned::new(typed, sub_pat.span));
                 }
@@ -338,6 +412,7 @@ fn check_pattern_inner(
                     iface_registry,
                     struct_registry,
                     check_constant,
+                    refined_decls,
                 )?;
                 typed_elements.push(Spanned::new(typed, pat.span));
             }
@@ -369,6 +444,7 @@ fn check_pattern_inner(
                 iface_registry,
                 struct_registry,
                 check_constant,
+                refined_decls,
             )?;
             let tail_ty = Ty::List(Box::new(elem_ty));
             let typed_tail = check_pattern_inner(
@@ -380,6 +456,7 @@ fn check_pattern_inner(
                 iface_registry,
                 struct_registry,
                 check_constant,
+                refined_decls,
             )?;
             Ok(TypedPattern::Cons {
                 head: Box::new(Spanned::new(typed_head, head.span)),

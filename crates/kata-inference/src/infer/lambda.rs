@@ -205,6 +205,7 @@ pub(crate) fn infer_lambda(
         &mut lambda_env,
         ctx.interface_registry,
         ctx.struct_registry,
+        ctx.refined_decls,
     )?;
 
     // Processa with bindings (açúcar → let chain no escopo do lambda).

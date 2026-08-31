@@ -173,6 +173,7 @@ fn build_lambda_apply(
         &mut lambda_env,
         ctx.interface_registry,
         ctx.struct_registry,
+        ctx.refined_decls,
     )?;
 
     // Processa with bindings.

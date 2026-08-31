@@ -190,6 +190,7 @@ pub(crate) fn infer_match(
                 env,
                 ctx.interface_registry,
                 ctx.struct_registry,
+                ctx.refined_decls,
             )?;
             // Ident e Wildcard cobrem qualquer valor — contam como fallback.
             if matches!(
@@ -490,6 +491,8 @@ pub(crate) fn infer_match(
         std::slice::from_ref(&scrutinee_ty),
         has_otherwise,
         ctx.enum_registry,
+        Some(ctx.struct_registry),
+        Some(ctx.refined_decls),
     );
     if !result.exhaustive {
         return Err(MiddleError::NonExhaustiveMatch {

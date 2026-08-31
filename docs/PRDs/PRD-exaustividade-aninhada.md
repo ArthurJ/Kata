@@ -1,6 +1,6 @@
 # PRD — Exaustividade Aninhada (Maranget + Z3 em Guards + Refined)
 
-**Status:** 🟡 Fase 0 ✅ — Fase 1 ✅ (passos 1-4) — Fase 2 ✅ (passos 1-6) — Fase 3 ✅ — Fase 4 não iniciada
+**Status:** 🟡 Fase 0 ✅ — Fase 1 ✅ (passos 1-4) — Fase 2 ✅ (passos 1-6) — Fase 3 ✅ — Fase 4 ✅
 **Data:** 2026-08-31
 **Tipo:** Planejamento — PRD único, 5 fases sequenciais
 **Depende de:** `PRD-exaustividade.md` ✅ (guards via Z3, patterns de 1 nível)
@@ -406,8 +406,24 @@ Verificação entre fases: `cargo test --workspace --no-fail-fast` verde;
   `> x 0 ∨ <= x 5` agora provados como tautologia pela Fase 3.
 - Suite: 1983 passed, 0 failed, 5 ignored (3 F4, 2 F5).
 
-**Fase 4:** coerção de literal em pattern sobre refined → predicado
-como premissa da folha → probeF verde nos dois backends.
+**Fase 4** (implementada):
+- `check_pattern_inner` ramo `Pattern::Literal` estendido em `patterns.rs` —
+  aceita literal sobre tipo refined quando a base é a mesma e o predicado
+  é satisfeito via `const_eval_predicate` (reuso, não novo avaliador).
+- `refined_decls: &[RefinedDeclInfo]` threaded por `check_pattern`,
+  `check_pattern_in_action`, `check_patterns`, e 7 callers.
+- `infer::const_eval` tornado `pub(crate)` para acesso de `patterns.rs` e
+  `maranget.rs`.
+- `MarangetEnv` estendido com `struct_registry` e `refined_decls` opcionais
+  (`with_refined`). `enum_refined_domain` enumera domínio finito de refined
+  sobre Int extraindo bounds dos predicados (`> _ N` → lo, `< _ M` → hi) e
+  filtrando por `const_eval_predicate`. `is_infinite` e `constructors_of`
+  tratam refined com domínio finito como tipo finito (literais como
+  construtores).
+- `check_exhaustiveness_maranget` e `check_exhaustiveness_with_guards`
+  estendidos com `Option<&StructRegistry>` e `Option<&[RefinedDeclInfo]>`.
+- Oráculos probeF (3 testes) des-ignorados — verdes nos dois backends.
+- Suite: 1986 passed, 0 failed, 2 ignored (2 F5).
 
 **Fase 5:** const-eval de `rational <lit>` → Rational no Z3 como par
 (num, den) com premissa `den > 0` → oráculo `RatUmOuDois` verde.

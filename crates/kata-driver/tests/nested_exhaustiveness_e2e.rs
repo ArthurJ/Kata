@@ -541,10 +541,7 @@ main!()"#,
 // ── Parciais de fase: F4 (refined na folha) ───────────────────
 
 /// probeF: match sobre refined com literais cobrindo o domínio {1, 2}.
-/// Hoje: type.mismatch (literal não coerzido ao refined em pattern).
-/// F4: verde com output correto.
 #[test]
-#[ignore = "F4: refined na folha — coerção de literal em pattern"]
 fn probe_f_refined_folha() {
     let path = write_temp_kata(
         "probeF",
@@ -568,9 +565,7 @@ main!()"#,
 }
 
 /// probeF_fora_dominio: literal 0 fora do domínio {1, 2}.
-/// F4: TypeMismatch com o literal na mensagem.
 #[test]
-#[ignore = "F4: refined na folha — TypeMismatch com literal fora do domínio"]
 fn probe_f_fora_dominio() {
     let path = write_temp_kata(
         "probeF_fora_dominio",
@@ -597,9 +592,7 @@ main!()"#,
 }
 
 /// probeF_parcial: só `1:`, sem `2:` — buraco no domínio.
-/// F4: NonExhaustiveMatch missing ["2"].
 #[test]
-#[ignore = "F4: refined na folha — NonExhaustiveMatch [\"2\"]"]
 fn probe_f_parcial() {
     let path = write_temp_kata(
         "probeF_parcial",

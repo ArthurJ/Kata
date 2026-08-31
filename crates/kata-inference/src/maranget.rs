@@ -26,9 +26,13 @@
 //! Na Fase 3, quando só resta decidir por guards, emite query Z3 escopada
 //! por célula. `Unknown` → `MissingOtherwise` local à folha.
 
+use kata_ast::{Expr, Span, Spanned};
 use kata_core::EnumRegistry;
+use kata_core::struct_registry::StructRegistry;
 use kata_core::ty::Ty;
+use kata_resolution::RefinedDeclInfo;
 
+use crate::infer::const_eval::const_eval_predicate;
 use crate::typed_pattern::TypedLambdaClause;
 use crate::typed_pattern::TypedPattern;
 
@@ -134,14 +138,150 @@ fn substitute_ty(ty: &Ty, type_args: &[Ty], type_params: &[String]) -> Ty {
 
 // ── Implementação concreta do PatternEnv ───────────────────────────
 
+/// Extrai (operador, valor) de um predicado de bound: `> _ 5`, `< _ 3`, etc.
+///
+/// O predicado é `Apply { Ident(op), [Hole, IntLit(text)] }` ou
+/// `Apply { Ident(op), [IntLit(text), Hole] }` (ordem pode variar).
+/// Retorna `None` se não é um predicado de bound reconhecido.
+fn extract_bound(expr: &Expr) -> Option<(String, i64)> {
+    let Expr::Apply { callee, args } = expr else {
+        return None;
+    };
+    let Expr::Ident { name: op } = &callee.node else {
+        return None;
+    };
+    if args.len() != 2 {
+        return None;
+    }
+    // Um argumento é Hole, o outro é IntLit.
+    let (op_str, val): (String, i64) = match (&args[0].node, &args[1].node) {
+        (Expr::Hole, Expr::IntLit { text }) => (op.clone(), text.parse().ok()?),
+        (Expr::IntLit { text }, Expr::Hole) => {
+            // Ordem invertida — o valor vem antes do Hole.
+            // O parser produz `> _ N` (Hole primeiro), então este caso
+            // não deveria ocorrer. Defensivo: inverter a comparação.
+            let v: i64 = text.parse().ok()?;
+            match op.as_str() {
+                ">" => ("<".to_string(), v),
+                "<" => (">".to_string(), v),
+                ">=" => ("<=".to_string(), v),
+                "<=" => (">=".to_string(), v),
+                "=" => ("=".to_string(), v),
+                "!=" => ("!=".to_string(), v),
+                _ => return None,
+            }
+        }
+        _ => return None,
+    };
+    // Valida que é um operador de comparação.
+    match op_str.as_str() {
+        ">" | "<" | ">=" | "<=" | "=" | "!=" => Some((op_str, val)),
+        _ => None,
+    }
+}
+
 /// Implementação de `PatternEnv` usando `EnumRegistry`.
 pub(crate) struct MarangetEnv<'a> {
     enum_registry: &'a EnumRegistry,
+    struct_registry: Option<&'a StructRegistry>,
+    refined_decls: Option<&'a [RefinedDeclInfo]>,
 }
 
 impl<'a> MarangetEnv<'a> {
     pub(crate) fn new(enum_registry: &'a EnumRegistry) -> Self {
-        Self { enum_registry }
+        Self {
+            enum_registry,
+            struct_registry: None,
+            refined_decls: None,
+        }
+    }
+
+    pub(crate) fn with_refined(
+        enum_registry: &'a EnumRegistry,
+        struct_registry: &'a StructRegistry,
+        refined_decls: &'a [RefinedDeclInfo],
+    ) -> Self {
+        Self {
+            enum_registry,
+            struct_registry: Some(struct_registry),
+            refined_decls: Some(refined_decls),
+        }
+    }
+
+    /// Tenta enumerar o domínio finito de um tipo refined sobre Int.
+    ///
+    /// Se o refined é sobre Int com predicados const-avaliáveis que definem
+    /// um intervalo fechado `[lo, hi]` com `hi - lo <= 1000`, retorna os
+    /// valores do domínio. Caso contrário, retorna `None` (domínio infinito
+    /// ou não-enumerável).
+    fn enum_refined_domain(&self, name: &str) -> Option<Vec<i64>> {
+        let struct_registry = self.struct_registry?;
+        let refined_decls = self.refined_decls?;
+
+        // Verifica que é refined sobre Int.
+        let struct_info = struct_registry.get(name)?;
+        let alias_of = struct_info.alias_of.as_deref()?;
+        if alias_of != "Int" {
+            return None; // Só Int por enquanto (Fase 4).
+        }
+
+        // Busca RefinedDeclInfo para os predicados.
+        let refined_decl = refined_decls.iter().find(|rd| rd.name == name)?;
+        if refined_decl.predicates.is_empty() {
+            return None;
+        }
+
+        // Extrai bounds dos predicados: `> _ N` → lo = N+1, `< _ M` → hi = M-1,
+        // `>= _ N` → lo = N, `<= _ M` → hi = M.
+        let mut lo: Option<i64> = None;
+        let mut hi: Option<i64> = None;
+        for pred in &refined_decl.predicates {
+            let (op, val) = extract_bound(&pred.node)?;
+            match op.as_str() {
+                ">" => lo = Some(lo.map_or(val + 1, |l| l.max(val + 1))),
+                ">=" => lo = Some(lo.map_or(val, |l| l.max(val))),
+                "<" => hi = Some(hi.map_or(val - 1, |h| h.min(val - 1))),
+                "<=" => hi = Some(hi.map_or(val, |h| h.min(val))),
+                "=" => {
+                    lo = Some(lo.map_or(val, |l| l.max(val)));
+                    hi = Some(hi.map_or(val, |h| h.min(val)));
+                }
+                "!=" => {} // Não afeta bounds
+                _ => return None,
+            }
+        }
+
+        let lo = lo?;
+        let hi = hi?;
+
+        // Domínio finito e pequeno o suficiente para enumerar.
+        if hi < lo || hi - lo > 1000 {
+            return None;
+        }
+
+        // Enumera e filtra por const_eval_predicate (para predicados
+        // que não são simples bounds, como `!= _ N`).
+        let mut domain = Vec::new();
+        for v in lo..=hi {
+            let expr = Spanned::new(
+                Expr::IntLit {
+                    text: v.to_string(),
+                },
+                Span::zero(),
+            );
+            if refined_decl
+                .predicates
+                .iter()
+                .all(|pred| const_eval_predicate(pred, &expr) == Some(true))
+            {
+                domain.push(v);
+            }
+        }
+
+        // Se o domínio é vazio, ainda retorna Some(vec![]) — o refined
+        // tem domínio vazio (não deveria acontecer para refined válido,
+        // mas é semanticamente correto).
+        Some(domain)
     }
 }
 
@@ -167,6 +307,25 @@ impl<'a> PatternEnv for MarangetEnv<'a> {
                 vec![Constructor::Tuple {
                     arity: elem_tys.len(),
                 }]
+            }
+            // Refined com domínio finito enumerável (Int com predicados
+            // const-avaliáveis que definem intervalo fechado). Enumera os
+            // literais do domínio como construtores.
+            Ty::Struct(key) if self.struct_registry.is_some() && self.refined_decls.is_some() => {
+                if let Some(domain) = self.enum_refined_domain(key.name()) {
+                    // Domínio finito — literais como construtores.
+                    // Se o domínio é vazio, retorna Missing (não deveria
+                    // acontecer para refined válido).
+                    if domain.is_empty() {
+                        return vec![Constructor::Missing];
+                    }
+                    return domain
+                        .iter()
+                        .map(|v| Constructor::Literal(format!("Int:{}", v)))
+                        .collect();
+                }
+                // Refined sem domínio enumerável — trata como infinito.
+                vec![Constructor::Missing]
             }
             // Tipos infinitos, átomos, structs — o construtor
             // é determinado pelos patterns que aparecem, não pelo tipo.
@@ -207,6 +366,14 @@ impl<'a> PatternEnv for MarangetEnv<'a> {
     }
 
     fn is_infinite(&self, ty: &Ty) -> bool {
+        // Refined com domínio finito enumerável NÃO é infinito.
+        if let Ty::Struct(key) = ty
+            && self.struct_registry.is_some()
+            && self.refined_decls.is_some()
+            && self.enum_refined_domain(key.name()).is_some()
+        {
+            return false;
+        }
         matches!(
             ty,
             Ty::Prim(_)
@@ -854,6 +1021,8 @@ pub(crate) fn check_exhaustiveness_maranget(
     column_tys: &[Ty],
     has_otherwise: bool,
     enum_registry: &EnumRegistry,
+    struct_registry: Option<&StructRegistry>,
+    refined_decls: Option<&[RefinedDeclInfo]>,
 ) -> ExhaustivenessResult {
     if has_otherwise {
         return ExhaustivenessResult {
@@ -869,7 +1038,10 @@ pub(crate) fn check_exhaustiveness_maranget(
         };
     }
 
-    let env = MarangetEnv::new(enum_registry);
+    let env = match (struct_registry, refined_decls) {
+        (Some(sr), Some(rd)) => MarangetEnv::with_refined(enum_registry, sr, rd),
+        _ => MarangetEnv::new(enum_registry),
+    };
 
     // Constrói a matriz.
     let mut matrix = PatternMatrix::new(column_tys.to_vec());
@@ -937,6 +1109,8 @@ pub(crate) fn check_exhaustiveness_with_guards(
     has_otherwise: bool,
     span: &kata_ast::Span,
     enum_registry: &EnumRegistry,
+    struct_registry: Option<&StructRegistry>,
+    refined_decls: Option<&[RefinedDeclInfo]>,
 ) -> Result<(), kata_diagnostics::MiddleError> {
     // Coleta patterns de cada cláusula.
     let arm_patterns: Vec<Vec<TypedPattern>> = clauses
@@ -945,8 +1119,14 @@ pub(crate) fn check_exhaustiveness_with_guards(
         .collect();
 
     // 1. Verificação estrutural (sem guards).
-    let struct_result =
-        check_exhaustiveness_maranget(&arm_patterns, param_types, has_otherwise, enum_registry);
+    let struct_result = check_exhaustiveness_maranget(
+        &arm_patterns,
+        param_types,
+        has_otherwise,
+        enum_registry,
+        struct_registry,
+        refined_decls,
+    );
 
     if !struct_result.exhaustive {
         return Err(kata_diagnostics::MiddleError::NonExhaustiveMatch {
@@ -994,7 +1174,10 @@ pub(crate) fn check_exhaustiveness_with_guards(
     }
 
     // Constrói a matriz para collect_guard_leaves (sem atalho has_otherwise).
-    let env = MarangetEnv::new(enum_registry);
+    let env = match (struct_registry, refined_decls) {
+        (Some(sr), Some(rd)) => MarangetEnv::with_refined(enum_registry, sr, rd),
+        _ => MarangetEnv::new(enum_registry),
+    };
     let mut matrix = PatternMatrix::new(param_types.to_vec());
     for (i, arm_patterns) in arm_patterns.iter().enumerate() {
         matrix.add_row(arm_patterns.clone(), Some(i));
@@ -1197,6 +1380,8 @@ mod tests {
             &[Ty::Sum("Boolean".to_string())],
             false,
             &reg,
+            None,
+            None,
         );
         assert!(result.exhaustive, "True + False should be exhaustive");
     }
@@ -1210,6 +1395,8 @@ mod tests {
             &[Ty::Sum("Boolean".to_string())],
             false,
             &reg,
+            None,
+            None,
         );
         assert!(!result.exhaustive, "Only True should not be exhaustive");
         assert_eq!(result.missing, vec!["False"]);
@@ -1224,6 +1411,8 @@ mod tests {
             &[Ty::Sum("Boolean".to_string())],
             false,
             &reg,
+            None,
+            None,
         );
         assert!(result.exhaustive, "True + _ should be exhaustive");
     }
@@ -1240,6 +1429,8 @@ mod tests {
             &[Ty::Generic("Optional".to_string(), vec![])],
             false,
             &reg,
+            None,
+            None,
         );
         assert!(
             result.exhaustive,
@@ -1257,6 +1448,8 @@ mod tests {
             &[Ty::Generic("Optional".to_string(), vec![])],
             false,
             &reg,
+            None,
+            None,
         );
         assert!(!result.exhaustive, "Only None should not be exhaustive");
         assert_eq!(result.missing, vec!["Some (_)"]);
@@ -1289,8 +1482,14 @@ mod tests {
     fn test_int_requires_wildcard() {
         let reg = env_bool();
         let patterns = vec![vec![int_literal("0")]];
-        let result =
-            check_exhaustiveness_maranget(&patterns, &[Ty::Prim(PrimTy::Int)], false, &reg);
+        let result = check_exhaustiveness_maranget(
+            &patterns,
+            &[Ty::Prim(PrimTy::Int)],
+            false,
+            &reg,
+            None,
+            None,
+        );
         assert!(
             !result.exhaustive,
             "Single literal on Int should not be exhaustive"
@@ -1301,7 +1500,14 @@ mod tests {
     fn test_int_with_wildcard_exhaustive() {
         let reg = env_bool();
         let patterns = vec![vec![int_literal("0")], vec![wildcard()]];
-        let result = check_exhaustiveness_maranget(&patterns, &[Ty::Prim(PrimTy::Int)], true, &reg);
+        let result = check_exhaustiveness_maranget(
+            &patterns,
+            &[Ty::Prim(PrimTy::Int)],
+            true,
+            &reg,
+            None,
+            None,
+        );
         assert!(result.exhaustive, "literal + wildcard should be exhaustive");
     }
 }

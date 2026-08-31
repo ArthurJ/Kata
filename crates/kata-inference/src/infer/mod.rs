@@ -21,7 +21,7 @@ mod ascription;
 mod captures;
 mod collections;
 mod collections_hof;
-mod const_eval;
+pub(crate) mod const_eval;
 mod constness;
 mod constructors;
 mod constructors_enum_pred;

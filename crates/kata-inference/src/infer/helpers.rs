@@ -96,6 +96,7 @@ pub(crate) fn check_patterns(
     env: &mut TypeEnv,
     iface_registry: &kata_core::InterfaceRegistry,
     struct_registry: &kata_core::struct_registry::StructRegistry,
+    refined_decls: &[kata_resolution::RefinedDeclInfo],
 ) -> InferResult<Vec<Spanned<TypedPattern>>> {
     // Bound-check de aridade ANTES do loop — evita index out of bounds
     // quando o número de patterns diverge do número de parâmetros.
@@ -121,6 +122,7 @@ pub(crate) fn check_patterns(
             env,
             iface_registry,
             struct_registry,
+            refined_decls,
         )?;
         typed_patterns.push(typed_pat);
     }

@@ -69,6 +69,7 @@ pub(crate) fn infer_named_function(
             &mut clause_env,
             ctx.interface_registry,
             ctx.struct_registry,
+            ctx.refined_decls,
         )?;
 
         // Define `__param_{i}` no escopo da cláusula para que diretivas
@@ -262,6 +263,8 @@ fn check_clause_exhaustiveness(
         has_otherwise,
         &span,
         ctx.enum_registry,
+        Some(ctx.struct_registry),
+        Some(ctx.refined_decls),
     )?;
 
     Ok(())

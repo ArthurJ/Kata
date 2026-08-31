@@ -143,6 +143,7 @@ fn extract_for_function(
             &mut clause_env,
             ctx.interface_registry,
             ctx.struct_registry,
+            ctx.refined_decls,
         )
         .ok()?;
 
@@ -621,6 +622,7 @@ pub(crate) fn extract_inline_bodies(
             &mut clause_env,
             ctx.interface_registry,
             ctx.struct_registry,
+            ctx.refined_decls,
         )
         .is_err()
         {
