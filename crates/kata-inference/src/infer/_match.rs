@@ -172,7 +172,7 @@ pub(crate) fn infer_match(
     // Processa cada braço.
     let mut typed_arms: Vec<TypedMatchArm> = Vec::with_capacity(arms.len());
     let mut match_ret_ty: Option<Ty> = None;
-    let mut covered_variants: Vec<String> = Vec::new();
+    let mut arm_patterns: Vec<Vec<TypedPattern>> = Vec::new();
     let mut has_otherwise = false;
 
     for arm in arms {
@@ -191,18 +191,6 @@ pub(crate) fn infer_match(
                 ctx.interface_registry,
                 ctx.struct_registry,
             )?;
-            // Coleta variantes cobertas para exaustividade.
-            if let TypedPattern::Variant { variant, .. } = &typed_pat.node {
-                covered_variants.push(variant.clone());
-            }
-            // Cons e Nil são variantes virtuais de List — coletar para
-            // exaustividade (Cons + Nil = exaustivo, sem otherwise).
-            if let TypedPattern::Cons { .. } = &typed_pat.node {
-                covered_variants.push("Cons".to_string());
-            }
-            if let TypedPattern::Nil = &typed_pat.node {
-                covered_variants.push("Nil".to_string());
-            }
             // Ident e Wildcard cobrem qualquer valor — contam como fallback.
             if matches!(
                 &typed_pat.node,
@@ -210,10 +198,12 @@ pub(crate) fn infer_match(
             ) {
                 has_otherwise = true;
             }
+            arm_patterns.push(vec![typed_pat.node.clone()]);
             Some(typed_pat)
         } else {
             // otherwise — pattern None.
             has_otherwise = true;
+            arm_patterns.push(vec![TypedPattern::Wildcard]);
             None
         };
 
@@ -494,14 +484,23 @@ pub(crate) fn infer_match(
         arm.body.node.ty = new_ty;
     }
 
-    // Verifica exaustividade.
-    patterns::check_exhaustiveness(
-        &covered_variants,
-        &scrutinee_ty,
+    // Verifica exaustividade via motor Maranget.
+    let result = crate::maranget::check_exhaustiveness_maranget(
+        &arm_patterns,
+        &[scrutinee_ty.clone()],
         has_otherwise,
         ctx.enum_registry,
-        span,
-    )?;
+    );
+    if !result.exhaustive {
+        return Err(MiddleError::NonExhaustiveMatch {
+            missing: result.missing.clone(),
+            span: (*span).into(),
+            hint: Some(format!(
+                "variantes faltantes: {}. Adicione um caso para cada uma ou use `otherwise:` como fallback",
+                result.missing.join(", ")
+            )),
+        });
+    }
 
     Ok((
         ret_ty.clone(),
