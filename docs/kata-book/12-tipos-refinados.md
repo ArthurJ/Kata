@@ -256,6 +256,65 @@ main!()
 O downcast é um no-op em runtime — mesmos bits, sem custo. O typeck
 verifica que o alvo é o tipo base (ou um tipo na cadeia de `alias_of`).
 
+## Domínio finito — `match` sem `otherwise`
+
+Quando os predicados de um refinado definem um intervalo finito sobre um
+tipo discreto (Int, Rational, Boolean), o compilador **enumera o domínio**
+e verifica cobertura caso a caso. Se todos os valores possíveis têm um
+braço, o `otherwise` é dispensável:
+
+```kata
+data (Int, > _ 0, < _ 3) as UmOuDois
+
+describe :: UmOuDois => Text
+lambda n:
+    match n
+        1: "um"
+        2: "dois"
+
+action main
+    echo!(describe (1::UmOuDois))
+    echo!(describe (2::UmOuDois))
+main!()
+```
+
+```
+um
+dois
+```
+
+O tipo `UmOuDois` tem exatamente dois valores possíveis: `1` e `2`. Os dois
+braços cobrem o domínio inteiro e o `match` é exaustivo sem fallback.
+
+Literais fora do domínio são rejeitados em compile-time: `3::UmOuDois` é um
+erro de tipo, porque 3 viola `< _ 3`. O domínio existe sempre que os
+predicados são bounds com literais (`> _ N`, `< _ M`, `= _ K`) sobre Int,
+Rational ou Boolean.
+
+Refineds sobre Rational funcionam da mesma forma — os braços casam com
+literais racionais construídos via `rational`:
+
+```kata
+data (Rational, > _ (rational 0), < _ (rational 3)) as RatUmOuDois
+
+describe :: RatUmOuDois => Text
+lambda n:
+    match n
+        rational 1: "um"
+        rational 2: "dois"
+
+action main
+    let r := RatUmOuDois (rational 1)
+    match r
+        Ok v: echo!(describe v)
+        Err _: echo!("erro")
+main!()
+```
+
+```
+um
+```
+
 ## Próximo capítulo
 
 Tipos refinados e alias garantem invariantes em compile-time. O próximo

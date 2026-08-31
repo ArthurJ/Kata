@@ -61,6 +61,54 @@ echo!(abs (- 0 5))
 
 O primeiro guard `> x 0` testa se `x` é positivo. `otherwise` é o fallback obrigatório quando há guards — garante cobertura total.
 
+`otherwise` nem sempre é necessário. Quando a disjunção dos guards cobre
+todo o espaço de entrada de forma **provável**, o compilador aceita a
+função sem fallback:
+
+```kata
+sinal :: Int => Int
+lambda x:
+    > x 0: 1
+    < x 0: - 0 1
+    = x 0: 0
+
+action main
+    echo!(sinal 42)
+    echo!(sinal (- 0 7))
+    echo!(sinal 0)
+main!()
+```
+
+```
+1
+-1
+0
+```
+
+Todo Int é maior, menor ou igual a zero — a disjunção dos três guards é
+sempre verdadeira e o compilador prova isso estaticamente. Mas se faltar
+um caso:
+
+```kata
+sinal :: Int => Int
+lambda x:
+    > x 0: 1
+    < x 0: - 0 1
+```
+
+o compilador rejeita com `match não-exaustivo` — `0` não é coberto por
+nenhum guard. Adicione o caso que falta ou `otherwise:` como fallback.
+
+O compilador faz um esforço honesto para distinguir quando `otherwise` é
+necessário: prova o que consegue provar e só solicita o fallback ao
+desenvolvedor quando não consegue decidir — nunca aceita um `match`
+potencialmente incompleto, nunca exige um fallback sabidamente
+desnecessário.
+
+Cláusulas redundantes também são erro: se um braço anterior já cobre todos
+os valores de um braço posterior, o posterior é inalcançável e o
+compilador emite um erro, indicando qual cláusula o tornou redundante.
+
 ## `with` — computações prévias
 
 Às vezes um guard precisa de um valor intermediário. O bloco `with` declara bindings visíveis em todos os guards da cláusula:
