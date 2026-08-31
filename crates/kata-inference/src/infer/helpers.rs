@@ -97,6 +97,18 @@ pub(crate) fn check_patterns(
     iface_registry: &kata_core::InterfaceRegistry,
     struct_registry: &kata_core::struct_registry::StructRegistry,
 ) -> InferResult<Vec<Spanned<TypedPattern>>> {
+    // Bound-check de aridade ANTES do loop — evita index out of bounds
+    // quando o número de patterns diverge do número de parâmetros.
+    // PRD-exaustividade-aninhada §4.2 — panic #2 e #K-arity_tuple.
+    if patterns.len() != param_tys.len() {
+        let span = patterns.first().map(|p| p.span).unwrap_or(Span::new(0, 0, 0, 0));
+        return Err(MiddleError::ArityMismatch {
+            expected: param_tys.len(),
+            found: patterns.len(),
+            span: span.into(),
+            hint: None,
+        });
+    }
     let mut typed_patterns: Vec<Spanned<TypedPattern>> = Vec::with_capacity(patterns.len());
     for (i, pat) in patterns.iter().enumerate() {
         let typed_pat = patterns::check_pattern(
