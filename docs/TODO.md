@@ -140,11 +140,11 @@ até sem match (`Err(E|Text)` com E enum). Ortogonal à exaustividade —
 provável elaboração de união/payload. PRD próprio quando atacar.
 
 ### Parser — parêntese interno em braço de match (#K-paren)
-**Estado:** Pendente (medido em `b5e2d9e`). `Some (Some True):` →
-parse error; o greedy de braço só aceita a forma qualificada interna
-(`Some Optional::Some True:`). Limite sintático documentado
-(probeK_deep_paren); mudar o parser de pattern é decisão de
-linguagem.
+**Estado:** ✅ Resolvido (Fase 0 do PRD-exaustividade-aninhada).
+Desembrulhamento de `(p)` sem vírgula em `parse_tuple_pattern` +
+`parse_match_pattern` recursivo (sub-patterns herdam
+`allow_unqualified_variant`). `Some(Some(True))` e `Some (Some True)`
+agora funcionam. Ramo morto `else if LParen` (linhas 83-101) removido.
 
 ---
 
