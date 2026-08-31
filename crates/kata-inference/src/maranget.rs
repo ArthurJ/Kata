@@ -1329,6 +1329,7 @@ pub(crate) fn check_exhaustiveness_with_guards(
     struct_registry: Option<&StructRegistry>,
     refined_decls: Option<&[RefinedDeclInfo]>,
     caps_index: Option<&CapsIndex>,
+    inline_fns: Option<&crate::infer::InlineFnTable>,
 ) -> Result<(), kata_diagnostics::MiddleError> {
     // Coleta patterns de cada cláusula.
     let arm_patterns: Vec<Vec<TypedPattern>> = clauses
@@ -1419,6 +1420,7 @@ pub(crate) fn check_exhaustiveness_with_guards(
                 Some(crate::guard_completeness::GuardArm {
                     guards: &clause.guards,
                     with_bindings: &clause.with_bindings,
+                    inline_fns,
                 })
             })
             .collect();

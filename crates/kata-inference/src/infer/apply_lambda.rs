@@ -190,6 +190,7 @@ fn build_lambda_apply(
             &typed_guards,
             &typed_with_bindings,
             &body.span,
+            Some(ctx.inline_fns),
         )?;
     }
 

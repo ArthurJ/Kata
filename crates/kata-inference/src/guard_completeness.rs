@@ -22,6 +22,7 @@
 use kata_ast::Span;
 use kata_diagnostics::MiddleError;
 
+use crate::infer::InlineFnTable;
 use crate::typed::{TypedExpr, TypedGuardClause};
 use crate::typed_pattern::TypedWithBinding;
 use crate::z3_translate::Z3Translator;
@@ -55,6 +56,7 @@ pub(crate) fn check_guard_completeness(
     guards: &[TypedGuardClause],
     with_bindings: &[TypedWithBinding],
     span: &Span,
+    inline_fns: Option<&InlineFnTable>,
 ) -> GuardResult {
     // otherwise presente — trivialmente exaustivo.
     if guards.iter().any(|g| g.condition.is_none()) {
@@ -74,12 +76,13 @@ pub(crate) fn check_guard_completeness(
 
     let span_val = *span;
 
-    match prove_tautology(&conditions, with_bindings) {
+    match prove_tautology(&conditions, with_bindings, inline_fns) {
         Ternary::Proven => Ok(()),
         Ternary::Refuted => {
             // ¬(cond1 ∨ ... ∨ condN) é satisfazível → existe contra-exemplo.
             // Precisa reexecutar com modelo para extrair o contra-exemplo.
-            let counter_example = prove_tautology_with_model(&conditions, with_bindings);
+            let counter_example =
+                prove_tautology_with_model(&conditions, with_bindings, inline_fns);
             Err(MiddleError::NonExhaustiveMatch {
                 missing: vec![counter_example],
                 span: span_val.into(),
@@ -140,6 +143,7 @@ pub(crate) fn check_guard_implication(
     with_n: &[TypedWithBinding],
     with_m: &[TypedWithBinding],
     _span: &Span,
+    inline_fns: Option<&InlineFnTable>,
 ) -> bool {
     // Se N tem otherwise (condition: None), disj_N é True.
     // True ∧ ¬disj_M = ¬disj_M. Se disj_M é tautologia, UNSAT → true.
@@ -171,6 +175,7 @@ pub(crate) fn check_guard_implication(
         guards_m.iter().any(|g| g.condition.is_none()),
         with_n,
         with_m,
+        inline_fns,
     ) {
         Ternary::Proven => true,
         Ternary::Refuted | Ternary::Unknown => false,
@@ -184,6 +189,10 @@ pub(crate) fn check_guard_implication(
 pub(crate) struct GuardArm<'a> {
     pub guards: &'a [TypedGuardClause],
     pub with_bindings: &'a [TypedWithBinding],
+    /// Funções puras inlinable — quando disponível, o tradutor Z3
+    /// inlina chamadas a funções de corpo puro (ex: Complex EQ),
+    /// permitindo prova de guards sobre tipos de usuário.
+    pub inline_fns: Option<&'a InlineFnTable>,
 }
 
 /// Verifica se a disjunção dos guards de múltiplos braços cobre todos os casos.
@@ -271,7 +280,7 @@ fn prove_guard_coverage(arms: &[GuardArm]) -> Ternary {
                 continue;
             }
 
-            let mut translator = Z3Translator::new();
+            let mut translator = make_translator(arm.inline_fns);
             translator.seed_with_bindings(arm.with_bindings);
 
             let z3_conds: Vec<Bool> = conditions
@@ -323,7 +332,7 @@ fn prove_guard_coverage_with_model(arms: &[GuardArm]) -> String {
                 continue;
             }
 
-            let mut translator = Z3Translator::new();
+            let mut translator = make_translator(arm.inline_fns);
             translator.seed_with_bindings(arm.with_bindings);
 
             let z3_conds: Vec<Bool> = conditions
@@ -354,6 +363,14 @@ fn prove_guard_coverage_with_model(arms: &[GuardArm]) -> String {
 
 // ── Funções internas de prova Z3 ─────────────────────────────────────
 
+/// Cria um tradutor Z3 com ou sem inlining de funções puras.
+fn make_translator(inline_fns: Option<&InlineFnTable>) -> Z3Translator {
+    match inline_fns {
+        Some(table) => Z3Translator::with_inline_fns(table),
+        None => Z3Translator::new(),
+    }
+}
+
 /// Configura Z3 com rlimit para determinismo de esforço.
 fn z3_config() -> Config {
     let mut cfg = Config::new();
@@ -364,12 +381,16 @@ fn z3_config() -> Config {
 /// Prova se a disjunção de `conditions` é tautologia.
 ///
 /// Verifica se `¬(cond1 ∨ ... ∨ condN)` é insatisfazível.
-fn prove_tautology(conditions: &[TypedExpr], with_bindings: &[TypedWithBinding]) -> Ternary {
+fn prove_tautology(
+    conditions: &[TypedExpr],
+    with_bindings: &[TypedWithBinding],
+    inline_fns: Option<&InlineFnTable>,
+) -> Ternary {
     let cfg = z3_config();
 
     with_z3_config(&cfg, || {
         let solver = Solver::new();
-        let mut translator = Z3Translator::new();
+        let mut translator = make_translator(inline_fns);
 
         // Semear bindings do with ANTES das condições: guards via `with`
         // referenciam os bindings, e a referência deve provar sobre o
@@ -399,12 +420,13 @@ fn prove_tautology(conditions: &[TypedExpr], with_bindings: &[TypedWithBinding])
 fn prove_tautology_with_model(
     conditions: &[TypedExpr],
     with_bindings: &[TypedWithBinding],
+    inline_fns: Option<&InlineFnTable>,
 ) -> String {
     let cfg = z3_config();
 
     with_z3_config(&cfg, || {
         let solver = Solver::new();
-        let mut translator = Z3Translator::new();
+        let mut translator = make_translator(inline_fns);
         translator.seed_with_bindings(with_bindings);
 
         let z3_conditions: Vec<Bool> = conditions
@@ -447,14 +469,15 @@ fn prove_implication(
     m_has_otherwise: bool,
     with_n: &[TypedWithBinding],
     with_m: &[TypedWithBinding],
+    inline_fns: Option<&InlineFnTable>,
 ) -> Ternary {
     let cfg = z3_config();
 
     with_z3_config(&cfg, || {
         let solver = Solver::new();
-        let mut translator_n = Z3Translator::new();
+        let mut translator_n = make_translator(inline_fns);
         translator_n.seed_with_bindings(with_n);
-        let mut translator_m = Z3Translator::new();
+        let mut translator_m = make_translator(inline_fns);
         translator_m.seed_with_bindings(with_m);
 
         // disj_N: se N tem otherwise, é True. Senão, disjunção das

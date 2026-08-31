@@ -29,6 +29,7 @@ use kata_core::ty::Ty;
 use kata_diagnostics::MiddleError;
 
 use crate::guard_completeness::{check_guard_completeness, check_guard_implication};
+use crate::infer::InlineFnTable;
 use crate::infer::helpers::InferResult;
 use crate::typed::TypedExpr;
 use crate::typed_pattern::{TypedLambdaClause, TypedPattern};
@@ -43,6 +44,7 @@ pub(crate) fn check_redundant_clauses(
     clauses: &[TypedLambdaClause],
     param_types: &[Ty],
     enum_registry: &EnumRegistry,
+    inline_fns: Option<&InlineFnTable>,
 ) -> InferResult<()> {
     // Coleta patterns de cada cláusula para o motor Maranget.
     let all_patterns: Vec<Vec<TypedPattern>> = clauses
@@ -109,7 +111,12 @@ pub(crate) fn check_redundant_clauses(
                 }
                 (true, false) => {
                     let span = &clause_m.body.span;
-                    if guard_is_tautology(&clause_m.guards, &clause_m.with_bindings, span) {
+                    if guard_is_tautology(
+                        &clause_m.guards,
+                        &clause_m.with_bindings,
+                        span,
+                        inline_fns,
+                    ) {
                         return Err(MiddleError::RedundantClause {
                             span: clause_n.body.span.into(),
                             hint: Some(
@@ -130,6 +137,7 @@ pub(crate) fn check_redundant_clauses(
                         &clause_n.with_bindings,
                         &clause_m.with_bindings,
                         span,
+                        inline_fns,
                     ) {
                         return Err(MiddleError::RedundantClause {
                             span: clause_n.body.span.into(),
@@ -166,8 +174,9 @@ fn guard_is_tautology(
     guards: &[crate::typed_pattern::TypedGuardClause],
     with_bindings: &[crate::typed_pattern::TypedWithBinding],
     span: &Span,
+    inline_fns: Option<&InlineFnTable>,
 ) -> bool {
-    match check_guard_completeness(guards, with_bindings, span) {
+    match check_guard_completeness(guards, with_bindings, span, inline_fns) {
         Ok(()) => true,
         Err(_) => false,
     }

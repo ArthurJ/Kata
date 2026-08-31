@@ -170,7 +170,12 @@ pub(crate) fn infer_named_function(
     // DoD 12: Verifica sobreposição de cláusulas (RedundantClause).
     // Roda ANTES da verificação de exaustividade de guards para poder
     // ver cláusulas com guards não-tautológicos (sem otherwise).
-    crate::redundancy::check_redundant_clauses(&typed_clauses, param_types, ctx.enum_registry)?;
+    crate::redundancy::check_redundant_clauses(
+        &typed_clauses,
+        param_types,
+        ctx.enum_registry,
+        Some(ctx.inline_fns),
+    )?;
 
     // Verifica exaustividade de cláusulas lambda via motor Maranget + Z3.
     // Múltiplas cláusulas lambda são semanticamente equivalentes a um `match`
@@ -269,6 +274,7 @@ fn check_clause_exhaustiveness(
         Some(ctx.struct_registry),
         Some(ctx.refined_decls),
         Some(&caps_index),
+        Some(ctx.inline_fns),
     )?;
 
     Ok(())

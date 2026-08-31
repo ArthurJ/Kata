@@ -231,6 +231,7 @@ pub(crate) fn infer_lambda(
             &typed_guards,
             &typed_with_bindings,
             &body.span,
+            Some(ctx.inline_fns),
         )?;
     }
 
