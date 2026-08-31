@@ -68,7 +68,7 @@ use std::collections::HashMap;
 
 use crate::metadata::MetadataTable;
 use kata_core::StructKey;
-use kata_core::ty::Ty;
+use kata_core::ty::{PrimTy, Ty};
 use kata_inference::{TypedExpr, TypedExprKind};
 pub(crate) use module::FuncKey;
 
@@ -234,6 +234,32 @@ pub(crate) fn resolve_clif_ty(
         }
     }
     crate::ffi_sigs::ty_to_clif(ty)
+}
+
+/// Verifica se um `Ty` é Rational (direto ou via refined/alias).
+/// Refineds como `data (Rational, ...) as RatUmOuDois` têm `alias_of = "Rational"`
+/// no StructRegistry.
+pub(crate) fn is_rational_based(ty: &Ty, struct_registry: &kata_core::StructRegistry) -> bool {
+    match ty {
+        Ty::Prim(PrimTy::Rational) => true,
+        Ty::Struct(key) => {
+            let mut current = key.name().to_string();
+            while let Some(info) = struct_registry.get(&current) {
+                if let Some(base) = &info.alias_of {
+                    match base.as_str() {
+                        "Rational" => return true,
+                        _ => {
+                            current = base.clone();
+                            continue;
+                        }
+                    }
+                }
+                break;
+            }
+            false
+        }
+        _ => false,
+    }
 }
 
 impl<'a, 'b> LowerCtx<'a, 'b> {

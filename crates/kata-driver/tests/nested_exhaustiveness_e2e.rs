@@ -619,10 +619,8 @@ main!()"#,
 // ── F5: Rational na folha ──────────────────────────────────────
 
 /// RatUmOuDois: match sobre Rational refined com `rational 1:` / `rational 2:`.
-/// Hoje: type.unbound_name (rational não é pattern de folha).
 /// F5: verde com output correto nos dois backends.
 #[test]
-#[ignore = "F5: Rational na folha — const-eval de rational <lit> + par (num, den) no Z3"]
 fn rat_um_ou_dois_f5() {
     let path = write_temp_kata(
         "RatUmOuDois",
@@ -651,7 +649,6 @@ main!()"#,
 
 /// RatUmOuDois_zero: literal 0 fora do domínio — F5: TypeMismatch.
 #[test]
-#[ignore = "F5: Rational na folha — TypeMismatch com literal fora do domínio"]
 fn rat_um_ou_dois_zero_f5() {
     let path = write_temp_kata(
         "RatUmOuDois_zero",

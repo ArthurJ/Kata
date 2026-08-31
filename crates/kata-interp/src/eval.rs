@@ -1831,6 +1831,28 @@ fn match_pattern(pat: &Spanned<TypedPattern>, value: Value, env: &mut Env) -> bo
                     val_cstr.to_string_lossy() == *text
                 }
                 TypedExprKind::Unit => value == 0,
+                // F5.5: `rational N` em pattern — Closure com ffi_symbol
+                // "kata_rt_int_to_rational". Constrói o valor Rational e
+                // compara com kata_rt_rat_eq (comparação estrutural, não bitwise).
+                TypedExprKind::Closure {
+                    ffi_symbol, args, ..
+                } if ffi_symbol.as_deref() == Some("kata_rt_int_to_rational") => {
+                    // Extrai o Int do argumento (IntLit).
+                    let n = if let Some(TypedExprKind::IntLit { text }) =
+                        args.first().map(|a| &a.node.kind)
+                    {
+                        let cleaned = text.replace('_', "");
+                        cleaned.parse::<i64>().unwrap_or(0)
+                    } else {
+                        return false;
+                    };
+                    // kata_rt_int_to_rational espera SMI-tagged (faz is_smi
+                    // internamente).
+                    let lit_rat = unsafe { rt::kata_rt_int_to_rational(encode_smi(n)) }
+                        as *const num_rational::BigRational;
+                    let val_rat = value as *const num_rational::BigRational;
+                    unsafe { rt::kata_rt_rat_eq(val_rat, lit_rat) == 1 }
+                }
                 _ => false,
             }
         }

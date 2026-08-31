@@ -75,12 +75,43 @@ pub(crate) fn test_single_pattern(
         TypedPattern::Wildcard => Ok(None),
         TypedPattern::Literal { value } => {
             let lit_val = lower_expr(&value.node, lower)?;
-            let eq = lower.builder.ins().icmp(
-                cranelift_codegen::ir::condcodes::IntCC::Equal,
-                val,
-                lit_val,
-            );
-            Ok(Some(eq))
+
+            // Para tipos SMI (Int, Bool, Unit), icmp funciona — compara
+            // o valor bit a bit. Para tipos ponteiro (Rational, Text),
+            // icmp compara ponteiros, não valores — precisa de FFI de
+            // igualdade.
+            if super::is_rational_based(&value.node.ty, lower.struct_registry) {
+                // Rational (direto ou refined): usa kata_rt_rat_eq
+                // (comparação estrutural, não bitwise de ponteiros).
+                let eq_fn = lower
+                    .ffi_refs
+                    .get("kata_rt_rat_eq")
+                    .copied()
+                    .ok_or_else(|| super::CodegenError::FfiSymbolNotFound {
+                        symbol: "kata_rt_rat_eq".into(),
+                    })?;
+                // call direto com FuncRef (não call_indirect).
+                // kata_rt_rat_eq: (a: *const BigRational, b: *const BigRational) -> i64
+                let eq_call = lower.builder.ins().call(eq_fn, &[val, lit_val]);
+                let eq_result = lower.builder.inst_results(eq_call)[0];
+                // kata_rt_rat_eq retorna i64 (1=true, 0=false).
+                // Comparar com 1 (SMI true).
+                let one = lower.builder.ins().iconst(I64, 1);
+                let eq = lower.builder.ins().icmp(
+                    cranelift_codegen::ir::condcodes::IntCC::Equal,
+                    eq_result,
+                    one,
+                );
+                Ok(Some(eq))
+            } else {
+                // SMI e outros tipos: icmp direto.
+                let eq = lower.builder.ins().icmp(
+                    cranelift_codegen::ir::condcodes::IntCC::Equal,
+                    val,
+                    lit_val,
+                );
+                Ok(Some(eq))
+            }
         }
         TypedPattern::Variant {
             enum_name,
