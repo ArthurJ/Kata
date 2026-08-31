@@ -1,6 +1,6 @@
 # PRD — Exaustividade Aninhada (Maranget + Z3 em Guards + Refined)
 
-**Status:** Fase 0 ✅ — Fase 1 ✅ — Fase 2 ✅ — Fase 3 ✅ — Fase 4 ✅ (refatoração na Fase 5) — Fase 5 🟡
+**Status:** Fase 0 ✅ — Fase 1 ✅ — Fase 2 ✅ — Fase 3 ✅ — Fase 4 ✅ (refatoração na Fase 5) — Fase 5 ✅
 **Data:** 2026-08-31 (atualizado 2026-08-31)
 **Tipo:** Planejamento — PRD único, 5 fases sequenciais
 **Depende de:** `PRD-exaustividade.md` ✅ (guards via Z3, patterns de 1 nível)
@@ -328,13 +328,21 @@ position antes de decidir.
   funciona em guards após passar `inline_fns`.
 - Verificar: `cargo test` verde; zero `datatype` Z3 (grep vazio).
 
-**F5.5 — Oráculos F5 + testes e2e com user types**
-- Derrubar `#[ignore]` dos 2 oráculos F5 (`rat_um_ou_dois_f5`,
-  `rat_um_ou_dois_zero_f5`).
-- Adicionar teste e2e com user type: `data MyRat (num::Int den::Int)
-  implements ORD` com refined e match.
-- Verificar nos dois backends (JIT e interp).
-- `cargo fmt`, `cargo test`, `cargo clippy --workspace --all-targets -- -D warnings`.
+**F5.5 — Oráculos F5 + testes e2e com user types ✅**
+- `#[ignore]` removido dos 2 oráculos F5 (`rat_um_ou_dois_f5`,
+  `rat_um_ou_dois_zero_f5`). Ambos verdes.
+- Teste e2e adicional: `rat_nota_with_otherwise_f5` — refined `Nota`
+  sobre Rational (0,10) com 3 literais + otherwise, 4 valores de teste.
+- Codegen: `is_rational_based(ty, struct_registry)` percorre cadeia
+  `alias_of` para reconhecer refineds sobre Rational; `call` direto
+  com `FuncRef` para `kata_rt_rat_eq` (não `call_indirect`).
+- Interp: braço `Closure` em `match_pattern` para `rational N` —
+  extrai Int do arg, chama `kata_rt_int_to_rational` + `kata_rt_rat_eq`.
+- Verificado nos dois backends (JIT e interp).
+- `cargo fmt`, `cargo test` (1989 passed, 0 failed, 0 ignored),
+  `cargo clippy --workspace --all-targets -- -D warnings` limpo.
+
+Commits: `6fc2f33` (F5.5-A), `1643b70` (F5.5-B), `a9ad0f1` (teste e2e).
 
 ## 10. Estruturas afetadas
 
