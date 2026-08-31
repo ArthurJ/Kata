@@ -102,6 +102,7 @@ struct PrologueResult {
 /// Retorna os valores que o epílogo precisa (cache handle, timer start).
 /// `clauses_for_cache` é usado para `canonical_fn_id` — no wrapper, passa
 /// `func.clauses`; no inner, passa `inner_clauses` (mas inner não tem cache).
+#[allow(clippy::too_many_arguments)]
 fn lower_prologue(
     lower: &mut LowerCtx,
     name: &str,

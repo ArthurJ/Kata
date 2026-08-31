@@ -177,18 +177,20 @@ fn show_struct(
     // Refined sem campos delega ao show do tipo base (mesma regra da
     // síntese `__kata_show__{Refined}` do codegen — `build_refined_show_body`).
     // Em runtime o refined tem layout idêntico ao base.
-    if let Some(info) = ctx.module.struct_registry.get(type_name) {
-        if info.alias_of.is_some() && info.predicates.is_some() && info.fields.is_empty() {
-            let base = info.alias_of.clone().expect("checado is_some acima");
-            let base_ty = match base.as_str() {
-                "Int" => Ty::Prim(PrimTy::Int),
-                "Float" => Ty::Prim(PrimTy::Float),
-                "Text" => Ty::Prim(PrimTy::Text),
-                "Rational" => Ty::Prim(PrimTy::Rational),
-                _ => Ty::Struct(kata_core::struct_registry::StructKey::Plain(base.clone())),
-            };
-            return show_value(val, &base_ty, ctx);
-        }
+    if let Some(info) = ctx.module.struct_registry.get(type_name)
+        && info.alias_of.is_some()
+        && info.predicates.is_some()
+        && info.fields.is_empty()
+    {
+        let base = info.alias_of.clone().expect("checado is_some acima");
+        let base_ty = match base.as_str() {
+            "Int" => Ty::Prim(PrimTy::Int),
+            "Float" => Ty::Prim(PrimTy::Float),
+            "Text" => Ty::Prim(PrimTy::Text),
+            "Rational" => Ty::Prim(PrimTy::Rational),
+            _ => Ty::Struct(kata_core::struct_registry::StructKey::Plain(base.clone())),
+        };
+        return show_value(val, &base_ty, ctx);
     }
 
     // Struct comum (não-refined): `Nome(v0, v1, ...)`.

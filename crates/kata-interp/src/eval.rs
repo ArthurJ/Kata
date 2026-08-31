@@ -1893,6 +1893,7 @@ fn match_pattern(pat: &Spanned<TypedPattern>, value: Value, env: &mut Env) -> bo
 /// como i64 (para passar para kata_rt_dict_insert / kata_rt_set_insert).
 ///
 /// Espelha `dict_set_lit::hash_fn_name` / `eq_fn_name` do codegen.
+#[allow(clippy::type_complexity)]
 fn resolve_hash_eq(ty: &Ty) -> Result<(Box<dyn Fn(i64) -> i64>, i64), InterpError> {
     match ty {
         Ty::Prim(PrimTy::Int) => Ok((
