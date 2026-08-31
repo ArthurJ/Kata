@@ -1,0 +1,15 @@
+# Probe C (controle positivo): Some True + Some False + None —
+# cobertura completa do payload.
+
+foo :: Optional::(Boolean) => Text
+lambda m:
+    match m
+        Some True: "tem true"
+        Some False: "tem false"
+        None: "nada"
+
+action main
+    echo!(foo (Some True))
+    echo!(foo (Some False))
+
+main!()

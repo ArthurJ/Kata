@@ -1,0 +1,12 @@
+# Isolar: parêntese interno em braço — documentar o limite do parser
+# (contraste com a forma qualificada interna, que parseia).
+foo :: Optional::(Optional::(Boolean)) => Text
+lambda m:
+    match m
+        Some (Some True): "true dentro"
+        None: "nada"
+
+action main
+    echo!(foo (Some (Some True)))
+
+main!()

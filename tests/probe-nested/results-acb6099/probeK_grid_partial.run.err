@@ -1,0 +1,13 @@
+Error: type.non_exhaustive_match
+
+  × match não-exaustivo: nem todas as variantes estão cobertas
+    ╭─[/home/arthur/workspace/Kata5/tests/probe-nested/probeK_grid_partial.kata:9:1]
+  8 │ bar :: Boolean Boolean => Text
+  9 │ lambda True True: "vv"
+    · ───────────┬──────────
+    ·            ╰── match não-exaustivo
+ 10 │ lambda True False: "vf"
+    ╰────
+  help: combinações faltantes: (False, False). Adicione cláusulas para cada
+        uma ou use `otherwise:` como fallback
+

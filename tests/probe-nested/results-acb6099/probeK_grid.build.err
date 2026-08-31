@@ -1,0 +1,3 @@
+/usr/bin/ld: /tmp/kata-build-85547/kata_module.o: warning: relocation against `kata_rt_spawn' in read-only section `.text'
+/usr/bin/ld: warning: creating DT_TEXTREL in a PIE
+compilado: /home/arthur/workspace/Kata5/tests/probe-nested/probeK_grid.kata → /home/arthur/workspace/Kata5/tests/probe-nested/results-acb6099/probeK_grid.bin

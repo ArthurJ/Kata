@@ -1,0 +1,14 @@
+# Probe E: cláusulas lambda com patterns aninhados distintos.
+# Se pattern_covers do redundancy.rs ignora payload, a cláusula 2
+# (Some False) é falso-positivo de redundante.
+
+foo :: Optional::(Boolean) => Text
+lambda Some True: "tem true"
+lambda Some False: "tem false"
+lambda None: "nada"
+
+action main
+    echo!(foo (Some True))
+    echo!(foo (Some False))
+
+main!()

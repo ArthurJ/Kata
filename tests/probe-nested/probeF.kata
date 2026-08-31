@@ -1,0 +1,19 @@
+# Probe F: match sobre scrutinee REFINED com literais.
+# O predicado do refined estreita o domínio: (Int, > 0, < 3) = {1, 2}.
+# Os braços 1 e 2 cobrem EXATAMENTE o domínio — exaustivo sem otherwise.
+# Estrutural puro: Int é infinito → MissingOtherwise.
+# Z3 com o predicado como fact: provaria cobertura.
+
+data (Int, > _ 0, < _ 3) as UmOuDois
+
+foo :: UmOuDois => Text
+lambda n:
+    match n
+        1: "um"
+        2: "dois"
+
+action main
+    echo!(foo (1::UmOuDois))
+    echo!(foo (2::UmOuDois))
+
+main!()

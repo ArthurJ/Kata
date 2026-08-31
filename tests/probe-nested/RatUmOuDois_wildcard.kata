@@ -1,0 +1,19 @@
+# Probe RatUmOuDois-wildcard (PRD §8, controle): wildcard sobre Rational
+# refined — VERDE hoje e sempre (o wildcard não desce na folha).
+# Controle do oráculo RatUmOuDois (F5): se este quebrar quando a F5
+# abrir, o refined-na-folha regrediu o caso trivial.
+# Construção via construtor falível (única forma de Rational refined).
+
+data (Rational, > _ (rational 0), < _ (rational 3)) as RatUmOuDois
+
+foo :: RatUmOuDois => Text
+lambda n:
+    match n
+        _ : "algum"
+
+action main
+    match (RatUmOuDois (rational 1))
+        Ok v: echo!(foo v)
+        Err _: echo!("erro")
+
+main!()

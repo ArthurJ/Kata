@@ -1,0 +1,11 @@
+Error: type.mismatch
+
+  × tipo incompatível: esperado `UmOuDois`, encontrado `Int`
+    ╭─[/home/arthur/workspace/Kata5/tests/probe-nested/probeF.kata:12:9]
+ 11 │     match n
+ 12 │         1: "um"
+    ·         ┬
+    ·         ╰── tipos incompatíveis
+ 13 │         2: "dois"
+    ╰────
+

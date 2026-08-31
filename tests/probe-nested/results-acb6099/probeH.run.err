@@ -1,0 +1,13 @@
+Error: type.non_exhaustive_match
+
+  × match não-exaustivo: nem todas as variantes estão cobertas
+    ╭─[/home/arthur/workspace/Kata5/tests/probe-nested/probeH.kata:10:12]
+  9 │ lambda Optional::Some x:
+ 10 │     > x 0: "positivo"
+    ·            ─────┬────
+    ·                 ╰── match não-exaustivo
+ 11 │ lambda Optional::Some x:
+    ╰────
+  help: guards não cobrem todos os casos. Adicione um guard ou use
+        `otherwise:` como fallback
+

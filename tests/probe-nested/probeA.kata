@@ -1,0 +1,13 @@
+# Probe A: Some(True) + None, SEM Some(False) — se o checker trata
+# Some como átomo, aceita sem otherwise (buraco de soundness).
+
+foo :: Optional::(Boolean) => Text
+lambda m:
+    match m
+        Some True: "tem true"
+        None: "nada"
+
+action main
+    echo!(foo (Some True))
+
+main!()

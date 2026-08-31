@@ -1,0 +1,13 @@
+# Probe B: chama foo com o caso NÃO coberto — Some(False).
+# foo só tem braços Some True e None. O que acontece em runtime?
+
+foo :: Optional::(Boolean) => Text
+lambda m:
+    match m
+        Some True: "tem true"
+        None: "nada"
+
+action main
+    echo!(foo (Some False))
+
+main!()

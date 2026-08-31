@@ -1,0 +1,11 @@
+Error: type.no_overload
+
+  × nenhuma sobrecarga compatível para `foo` com os argumentos fornecidos
+    ╭─[/home/arthur/workspace/Kata5/tests/probe-nested/probeK_wide.kata:14:11]
+ 13 │ action main
+ 14 │     echo!(foo (Ok 5))
+    ·           ────┬────
+    ·               ╰── nenhuma sobrecarga compatível
+ 15 │     echo!(foo (Err Encoding::Utf8))
+    ╰────
+

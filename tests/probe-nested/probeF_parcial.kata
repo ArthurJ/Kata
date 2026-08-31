@@ -1,0 +1,17 @@
+# Probe F-parcial (PRD §11): cobertura PARCIAL sobre refined — só `1:`,
+# sem `2:`. O domínio {1, 2} fica com buraco.
+# F4: NonExhaustiveMatch missing ["2"] — witness do model, DENTRO do
+# domínio do predicado.
+# Hoje: type.mismatch (literal não coerzido — mesma rejeição do probeF).
+
+data (Int, > _ 0, < _ 3) as UmOuDois
+
+foo :: UmOuDois => Text
+lambda n:
+    match n
+        1: "um"
+
+action main
+    echo!(foo (1::UmOuDois))
+
+main!()

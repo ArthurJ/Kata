@@ -1,0 +1,15 @@
+# Probe D: redundância — Some True seguido de Some False.
+# Se pattern_covers do redundancy.rs ignora payload, o 2o braço
+# vira falso-positivo de redundante.
+
+foo :: Optional::(Boolean) => Text
+lambda m:
+    match m
+        Some True: "tem true"
+        Some False: "tem false"
+        None: "nada"
+
+action main
+    echo!(foo (Some True))
+
+main!()

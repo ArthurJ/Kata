@@ -1,0 +1,17 @@
+# Probe J2: otherwise INÚTIL pós-cobertura — o idioma defensivo.
+# Ok v + Err _ cobrem Result completamente; o otherwise final nunca
+# dispara. Contrato (decisão 8): otherwise inútil é ISENTO — silêncio.
+# Verde nas duas pontas: hoje e pós-Fase 2. Se este probe quebrar na
+# Fase 2, a isenção do otherwise não foi implementada.
+
+foo :: Result::(Int, Text) => Text
+lambda m:
+    match m
+        Ok v: "tem"
+        Err _: "erro"
+        otherwise: "impossivel"
+
+action main
+    echo!(foo (Ok 42))
+
+main!()

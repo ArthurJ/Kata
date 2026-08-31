@@ -1,0 +1,15 @@
+# Probe M: match parcial sobre Result::(Int, Text) — Ok 0 + Err _.
+# Int é infinito: Ok 0 não cobre Ok 1. Hoje o checker trata Some/Ok como
+# átomo → aceito. Âncora pré-1-B.
+# F1: MissingOtherwise (payload infinito, interino); F2: NonExhaustiveMatch missing ["Ok _"].
+
+foo :: Result::(Int, Text) => Text
+lambda m:
+    match m
+        Ok 0: "zero"
+        Err _: "erro"
+
+action main
+    echo!(foo (Ok 0))
+
+main!()

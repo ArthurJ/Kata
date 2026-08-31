@@ -1,0 +1,16 @@
+# Probe J: braço de match morto — Some True DUPLICADO.
+# Oráculo F2: "redundante diagnosticado" — hoje o braço duplicado passa
+# silencioso? Verificando.
+# Esperado hoje (pré-PRD): verde (duplicado silencioso).
+
+foo :: Optional::(Boolean) => Text
+lambda m:
+    match m
+        Some True: "tem true"
+        Some True: "duplicado"
+        None: "nada"
+
+action main
+    echo!(foo (Some True))
+
+main!()

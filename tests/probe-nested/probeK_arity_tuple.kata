@@ -1,0 +1,15 @@
+# Probe K-arity: cláusula com 2 patterns contra assinatura de
+# 1 param tupla (Boolean, Boolean) => Text. HOJE: panic 101
+# (helpers.rs:104, index out of bounds) — SEM nenhum pattern
+# desqualificado: bug #2 tem gatilho mais largo que o PRD
+# documentava (não exige lambda Some True desqualificado).
+# F1: ArityMismatch gracioso (bound-check §4.2).
+
+bar :: (Boolean, Boolean) => Text
+lambda True True: "vv"
+lambda True False: "vf"
+
+action main
+    echo!(bar (True, True))
+
+main!()

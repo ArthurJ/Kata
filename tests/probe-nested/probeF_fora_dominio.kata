@@ -1,0 +1,19 @@
+# Probe F-fora-domínio (PRD §11): literal FORA do domínio do refined em
+# braço de match — `0:` sobre UmOuDois (domínio {1, 2}).
+# F4: TypeMismatch com o literal na mensagem (viola o predicado > _ 0).
+# Hoje: type.mismatch genérico — literal nem é coerzido ao refined em
+# posição de pattern (mesma rejeição do probeF).
+
+data (Int, > _ 0, < _ 3) as UmOuDois
+
+foo :: UmOuDois => Text
+lambda n:
+    match n
+        1: "um"
+        2: "dois"
+        0: "zero"
+
+action main
+    echo!(foo (1::UmOuDois))
+
+main!()

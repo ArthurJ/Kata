@@ -1,0 +1,17 @@
+# Probe K-grid: 2 params Boolean Boolean — matriz 2×2, exemplo
+# canônico de Maranget. Grade COMPLETA (4 células), sintaxe
+# multi-param correta (espaço na assinatura).
+# Deve PERMANECER verde — o motor não pode perder o que o
+# checker 1-nível multi-param já cobria (regressão da migração).
+
+bar :: Boolean Boolean => Text
+lambda True True: "vv"
+lambda True False: "vf"
+lambda False True: "fv"
+lambda False False: "ff"
+
+action main
+    echo!(bar True True)
+    echo!(bar False False)
+
+main!()

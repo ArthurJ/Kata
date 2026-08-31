@@ -1,0 +1,16 @@
+# Probe K-deep-hole: 3 níveis COM BURACO — Some (Some False) removida.
+# HOJE: verde com buraco (checker 1-nível não vê 3 níveis) — o caso
+# faltante atravessa o compile-time como o probeA, só mais fundo.
+# F2: NonExhaustiveMatch com witness de 3 níveis ["Some (Some False)"].
+
+foo :: Optional::(Optional::(Boolean)) => Text
+lambda m:
+    match m
+        Some Optional::Some True: "true dentro"
+        Some Optional::None: "sem dentro"
+        None: "nada"
+
+action main
+    echo!(foo (Some (Some True)))
+
+main!()

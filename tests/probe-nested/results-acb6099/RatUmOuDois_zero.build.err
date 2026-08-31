@@ -1,0 +1,12 @@
+Error: type.unbound_name
+
+  × nome `variante desqualificada `rational` — scrutinee RatUmOuDois não tem
+  │ essa variante` não está no escopo
+    ╭─[/home/arthur/workspace/Kata5/tests/probe-nested/RatUmOuDois_zero.kata:12:9]
+ 11 │     match n
+ 12 │         rational 0: "zero"
+    ·         ─────┬────
+    ·              ╰── nome não vinculado
+ 13 │         rational 1: "um"
+    ╰────
+

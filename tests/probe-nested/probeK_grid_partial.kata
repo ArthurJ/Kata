@@ -1,0 +1,16 @@
+# Probe K-grid-partial: grade 2×2 com UMA célula faltando (False False).
+# O checker multi-param de HOJE reporta células faltantes conjuntas?
+# (lambda_match_inference.rs:655 diz que sim — NonExhaustiveMatch
+# missing.len()==2 no caso 3-células-de-4... na verdade aquele teste
+# tem 2 células de 4. Este tem 3 de 4: faltará exatamente 1.)
+# F2: mesmo erro, agora com witness de matriz. Deve ser RED hoje.
+
+bar :: Boolean Boolean => Text
+lambda True True: "vv"
+lambda True False: "vf"
+lambda False True: "fv"
+
+action main
+    echo!(bar True True)
+
+main!()

@@ -1,0 +1,25 @@
+# Probe K-deep: nesting PROFUNDO — 3 níveis via greedy com qualificado
+# interno (única forma que o parser de braço aceita hoje; parêntese
+# interno não é greedy — ver probeK_deep_paren, parse error).
+# Grade COMPLETA das 4 folhas: verde hoje (cegueira) e verde PROVADO
+# pós-F2 (regressão da matriz).
+
+foo :: Optional::(Optional::(Boolean)) => Text
+lambda m:
+    match m
+        Some Optional::Some True: "true dentro"
+        Some Optional::Some False: "false dentro"
+        Some Optional::None: "sem dentro"
+        None: "nada"
+
+# Nota: chamadas só com variants COM payload — `foo None` /
+# `foo (Some None)` hoje dão type.no_overload (variante bare como
+# argumento não resolve overload; bug separado, TODO #K-call).
+# A exaustividade é checada na declaração, independentemente das
+# chamadas — estas são só runtime smoke das células construíveis.
+
+action main
+    echo!(foo (Some (Some True)))
+    echo!(foo (Some (Some False)))
+
+main!()

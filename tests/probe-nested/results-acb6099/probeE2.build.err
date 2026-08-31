@@ -1,0 +1,12 @@
+Error: type.redundant_clause
+
+  × cláusula redundante: sombreada por cláusula anterior
+   ╭─[/home/arthur/workspace/Kata5/tests/probe-nested/probeE2.kata:6:30]
+ 5 │ lambda Optional::Some True: "tem true"
+ 6 │ lambda Optional::Some False: "tem false"
+   ·                              ─────┬─────
+   ·                                   ╰── cláusula redundante
+ 7 │ lambda Optional::None: "nada"
+   ╰────
+  help: a cláusula anterior já cobre todos os patterns desta cláusula
+

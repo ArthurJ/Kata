@@ -1,0 +1,17 @@
+# Probe K-wide: nesting LARGO — Result::(Int, Encoding) com payload
+# enum de 4 variantes. Ok _ é wildcard de payload → cobre Ok Utf8..Ascii.
+# Err e cobre Err Utf8..Err Ascii → match EXAUSTIVO com 2 braços.
+# Hoje: Err _ com payload wildcard é átomo → verde. F2: verde também,
+# mas agora PROVADO pela matriz, não aceito por cegueira de payload.
+
+foo :: Result::(Int, Encoding) => Text
+lambda m:
+    match m
+        Ok _: "ok"
+        Err _: "erro"
+
+action main
+    echo!(foo (Ok 5))
+    echo!(foo (Err Encoding::Utf8))
+
+main!()

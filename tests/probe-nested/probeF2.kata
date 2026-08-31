@@ -1,0 +1,14 @@
+# Probe F2: controle do F com ascription na posição de pattern
+# (se o parser/typeck aceitar UmOuDois::1 ou 1::UmOuDois como pattern).
+
+data (Int, > _ 0, < _ 3) as UmOuDois
+
+foo :: UmOuDois => Text
+lambda n:
+    match n
+        _ : "algum"
+
+action main
+    echo!(foo (1::UmOuDois))
+
+main!()

@@ -1,0 +1,26 @@
+# Probe RatUmOuDois: oráculo F5 — Rational na folha (PRD §8).
+# Refined sobre Rational: sem literal Rational no parser, o pattern de
+# folha é `rational <IntLit>` (Apply const-avaliável) — ainda sem
+# suporte no const_eval_predicate nem no z3_translate.
+# Hoje: RED (type.unbound_name — `rational` não é variante do scrutinee).
+# F5: verde com output correto nos dois backends.
+# Construção do scrutinee: construtor falível (ascription de non-literal
+# para refined não existe — ver skill kata-code-authoring).
+
+data (Rational, > _ (rational 0), < _ (rational 3)) as RatUmOuDois
+
+foo :: RatUmOuDois => Text
+lambda n:
+    match n
+        rational 1: "um"
+        rational 2: "dois"
+
+action main
+    match (RatUmOuDois (rational 1))
+        Ok v: echo!(foo v)
+        Err _: echo!("erro")
+    match (RatUmOuDois (rational 2))
+        Ok v: echo!(foo v)
+        Err _: echo!("erro")
+
+main!()

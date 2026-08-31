@@ -1,0 +1,21 @@
+# Probe RatUmOuDois-zero (PRD §8, controle): literal FORA do domínio em
+# pattern sobre Rational refined — `rational 0:` viola o predicado
+# `> _ (rational 0)`.
+# F5: TypeMismatch com o literal na mensagem (ascription-style).
+# Hoje: type.unbound_name — `rational` ainda não é pattern de folha.
+
+data (Rational, > _ (rational 0), < _ (rational 3)) as RatUmOuDois
+
+foo :: RatUmOuDois => Text
+lambda n:
+    match n
+        rational 0: "zero"
+        rational 1: "um"
+        rational 2: "dois"
+
+action main
+    match (RatUmOuDois (rational 1))
+        Ok v: echo!(foo v)
+        Err _: echo!("erro")
+
+main!()

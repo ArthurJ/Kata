@@ -1,0 +1,7 @@
+
+thread '<unnamed>' (85471) panicked at crates/kata-inference/src/infer/helpers.rs:104:14:
+index out of bounds: the len is 1 but the index is 1
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'main' (85470) panicked at crates/kata-driver/src/main.rs:94:19:
+thread main panicked: Any { .. }

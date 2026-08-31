@@ -1,0 +1,22 @@
+# Probe H-with: igual ao probeH, mas guards via `with` (forma canônica,
+# não inline). Guards ENTRE cláusulas com o MESMO pattern.
+# Falso verde por forma sintática: teste do tradutor entre-cláusulas
+# precisa cobrir as DUAS formas (inline = probeH, with = este).
+
+foo :: Optional::(Int) => Text
+lambda Optional::Some x:
+    positivo: "positivo"
+    with
+        positivo := > x 0
+lambda Optional::Some x:
+    nao_positivo: "zero ou negativo"
+    with
+        nao_positivo := <= x 0
+lambda Optional::None:
+    "nada"
+
+action main
+    echo!(foo (Some 5))
+    echo!(foo (Some (- 0 5)))
+
+main!()

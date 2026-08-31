@@ -1,0 +1,11 @@
+Error: parse.unexpected_token
+
+  × token inesperado: esperado ``)``, encontrado `True`
+   ╭─[/home/arthur/workspace/Kata5/tests/probe-nested/probeK_deep_paren.kata:6:20]
+ 5 │     match m
+ 6 │         Some (Some True): "true dentro"
+   ·                    ──┬─
+   ·                      ╰── token inesperado
+ 7 │         None: "nada"
+   ╰────
+

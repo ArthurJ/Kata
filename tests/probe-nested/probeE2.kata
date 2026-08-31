@@ -1,0 +1,13 @@
+# Probe E2: cláusula lambda com variant QUALIFICADO aninhado.
+# lambda Optional::Some True: — será que parseia como 1 pattern?
+
+foo :: Optional::(Boolean) => Text
+lambda Optional::Some True: "tem true"
+lambda Optional::Some False: "tem false"
+lambda Optional::None: "nada"
+
+action main
+    echo!(foo (Some True))
+    echo!(foo (Some False))
+
+main!()

@@ -1,0 +1,16 @@
+# Probe G: pattern aninhado QUALIFICADO + guards DENTRO da cláusula.
+# > x 0 ∨ <= x 0 é tautologia — Z3 per-cláusula (PRD-exaustividade) deve provar.
+# Patterns Some + None cruzando cláusulas: exaustivo estruturalmente.
+
+foo :: Optional::(Int) => Text
+lambda Optional::Some x:
+    > x 0: "positivo"
+    <= x 0: "zero ou negativo"
+lambda Optional::None:
+    "nada"
+
+action main
+    echo!(foo (Some 5))
+    echo!(foo (Some (- 0 5)))
+
+main!()
