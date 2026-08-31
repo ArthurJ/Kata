@@ -15,6 +15,7 @@ pub(crate) mod infer;
 pub(crate) mod maranget;
 pub(crate) mod patterns;
 pub(crate) mod redundancy;
+pub(crate) mod refined_domain;
 pub(crate) mod typed;
 pub(crate) mod typed_module;
 pub(crate) mod typed_pattern;

@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! Motor de usefulness (Maranget) para análise de exaustividade e redundância
 //! de patterns aninhados.
 //!
@@ -23,17 +22,15 @@
 //! ## Composição com Z3
 //!
 //! O motor conduz estruturalmente; Z3 nunca enxerga estrutura de datatype.
-//! Na Fase 3, quando só resta decidir por guards, emite query Z3 escopada
+//! Quando só resta decidir por guards, emite query Z3 escopada
 //! por célula. `Unknown` → `MissingOtherwise` local à folha.
 
-use kata_ast::{Expr, Span, Spanned};
 use kata_core::caps::{ConstVal, Repr};
 use kata_core::struct_registry::StructRegistry;
 use kata_core::ty::Ty;
 use kata_core::{CapsIndex, EnumRegistry};
 use kata_resolution::RefinedDeclInfo;
 
-use crate::infer::const_eval::{const_eval_predicate, eval_const};
 use crate::typed_pattern::TypedLambdaClause;
 use crate::typed_pattern::TypedPattern;
 
@@ -139,68 +136,6 @@ fn substitute_ty(ty: &Ty, type_args: &[Ty], type_params: &[String]) -> Ty {
 
 // ── Implementação concreta do PatternEnv ───────────────────────────
 
-/// Operador de bound extraído de predicado refined.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum BoundOp {
-    Gt,
-    Lt,
-    Ge,
-    Le,
-    Eq,
-    Ne,
-}
-
-/// Extrai (operador, valor) de um predicado de bound: `> _ 5`, `< _ 3`, etc.
-///
-/// O predicado é `Apply { Ident(op), [Hole, literal] }` ou
-/// `Apply { Ident(op), [literal, Hole] }` (ordem pode variar).
-/// Retorna `None` se não é um predicado de bound reconhecido.
-fn extract_bound(expr: &Expr) -> Option<(BoundOp, ConstVal)> {
-    let Expr::Apply { callee, args } = expr else {
-        return None;
-    };
-    let Expr::Ident { name: op } = &callee.node else {
-        return None;
-    };
-    if args.len() != 2 {
-        return None;
-    }
-    // Um argumento é Hole, o outro é literal.
-    let (bound_op, val): (BoundOp, ConstVal) = match (&args[0].node, &args[1].node) {
-        (Expr::Hole, _) => {
-            let v = eval_const(&args[1])?;
-            let bop = match op.as_str() {
-                ">" => BoundOp::Gt,
-                "<" => BoundOp::Lt,
-                ">=" => BoundOp::Ge,
-                "<=" => BoundOp::Le,
-                "=" => BoundOp::Eq,
-                "!=" => BoundOp::Ne,
-                _ => return None,
-            };
-            (bop, v)
-        }
-        (_, Expr::Hole) => {
-            // Ordem invertida — o valor vem antes do Hole.
-            // O parser produz `> _ N` (Hole primeiro), então este caso
-            // não deveria ocorrer. Defensivo: inverter a comparação.
-            let v = eval_const(&args[0])?;
-            let bop = match op.as_str() {
-                ">" => BoundOp::Lt,
-                "<" => BoundOp::Gt,
-                ">=" => BoundOp::Le,
-                "<=" => BoundOp::Ge,
-                "=" => BoundOp::Eq,
-                "!=" => BoundOp::Ne,
-                _ => return None,
-            };
-            (bop, v)
-        }
-        _ => return None,
-    };
-    Some((bound_op, val))
-}
-
 /// Implementação de `PatternEnv` usando `EnumRegistry`.
 pub(crate) struct MarangetEnv<'a> {
     enum_registry: &'a EnumRegistry,
@@ -238,269 +173,14 @@ impl<'a> MarangetEnv<'a> {
 
     /// Tenta enumerar o domínio finito de um tipo refined.
     ///
-    /// Domain unificado (F5.2): `Vec<ConstVal>`. Para tipos discretos com
-    /// `ord` (Int, Rational, Bool), enumera o intervalo `[lo, hi]`. Para
-    /// tipos com `eq` mas sem `ord`, coleta pontos de predicados `= _ N`.
-    /// Para tipos com ambos, intersecta intervalo com pontos.
-    ///
-    /// Retorna `None` se o domínio é infinito ou não-enumerável.
+    /// Delega a `refined_domain::enum_refined_domain` (fronteira extraída).
     fn enum_refined_domain(&self, name: &str) -> Option<Vec<ConstVal>> {
-        let _struct_registry = self.struct_registry?;
-        let refined_decls = self.refined_decls?;
-        let caps_index = self.caps_index?;
-
-        // Consulta Repr e TypeCaps via CapsIndex.
-        let caps = caps_index.get(name);
-        let repr = caps.repr.clone();
-
-        // Só enumera tipos discretos com ord (Int, Rational, Bool) ou
-        // tipos com eq (para coleta de pontos).
-        // Opaque e Struct (sem ord nem eq) não são enumeráveis.
-        if !caps.ord && !caps.eq {
-            return None;
-        }
-
-        // Busca RefinedDeclInfo para os predicados.
-        let refined_decl = refined_decls.iter().find(|rd| rd.name == name)?;
-        if refined_decl.predicates.is_empty() {
-            return None;
-        }
-
-        // Extrai bounds dos predicados.
-        // Para tipos com ord: `> _ N` → lo, `< _ M` → hi, etc.
-        // Para tipos com eq (sem ord): coleta pontos de `= _ N`.
-        let mut lo: Option<ConstVal> = None;
-        let mut hi: Option<ConstVal> = None;
-        let mut eq_points: Vec<ConstVal> = Vec::new();
-
-        for pred in &refined_decl.predicates {
-            let (op, val) = extract_bound(&pred.node)?;
-            match op {
-                BoundOp::Gt => {
-                    if !caps.ord {
-                        return None;
-                    }
-                    // lo = val + 1 (para Int); para outros tipos, usa cmp.
-                    lo = Some(Self::raise_lo(lo, Self::succ(&val, &repr)?, |a, b| {
-                        a.compare(b)
-                    }));
-                }
-                BoundOp::Ge => {
-                    if !caps.ord {
-                        return None;
-                    }
-                    lo = Some(Self::raise_lo(lo, val, |a, b| a.compare(b)));
-                }
-                BoundOp::Lt => {
-                    if !caps.ord {
-                        return None;
-                    }
-                    hi = Some(Self::lower_hi(hi, Self::pred(&val, &repr)?, |a, b| {
-                        a.compare(b)
-                    }));
-                }
-                BoundOp::Le => {
-                    if !caps.ord {
-                        return None;
-                    }
-                    hi = Some(Self::lower_hi(hi, val, |a, b| a.compare(b)));
-                }
-                BoundOp::Eq => {
-                    // `= _ N` — se temos ord, seta lo=hi=val.
-                    // Se não temos ord (só eq), coleta como ponto.
-                    if caps.ord {
-                        lo = Some(Self::raise_lo(lo, val.clone(), |a, b| a.compare(b)));
-                        hi = Some(Self::lower_hi(hi, val, |a, b| a.compare(b)));
-                    } else {
-                        eq_points.push(val);
-                    }
-                }
-                BoundOp::Ne => {
-                    // `!= _ N` — não afeta bounds, filtra depois.
-                }
-            }
-        }
-
-        // Caminho 1: tipo com ord — enumera intervalo.
-        if caps.ord {
-            let lo = lo?;
-            let hi = hi?;
-
-            // Verifica que hi >= lo.
-            match lo.compare(&hi) {
-                Some(std::cmp::Ordering::Greater) => return None,
-                None => return None, // tipos incomparáveis
-                _ => {}
-            }
-
-            // Domínio pequeno o suficiente para enumerar.
-            // Para Int, usa a contagem discreta. Para outros, limita em 1000.
-            let count = Self::domain_count(&lo, &hi, &repr)?;
-            if count > 1000 {
-                return None;
-            }
-
-            // Enumera e filtra por const_eval_predicate.
-            let mut domain = Vec::new();
-            let mut cur = lo.clone();
-            loop {
-                let expr = Self::const_val_to_expr(&cur, &repr);
-                if refined_decl
-                    .predicates
-                    .iter()
-                    .all(|pred| const_eval_predicate(pred, &expr) == Some(true))
-                {
-                    domain.push(cur.clone());
-                }
-                // Próximo valor.
-                match Self::next_in_domain(&cur, &hi, &repr) {
-                    Some(next) => cur = next,
-                    None => break,
-                }
-            }
-
-            return Some(domain);
-        }
-
-        // Caminho 2: tipo com eq mas sem ord — coleta pontos.
-        if caps.eq && !eq_points.is_empty() {
-            // Filtra pontos por todos os predicados.
-            let domain: Vec<ConstVal> = eq_points
-                .into_iter()
-                .filter(|val| {
-                    let expr = Self::const_val_to_expr(val, &repr);
-                    refined_decl
-                        .predicates
-                        .iter()
-                        .all(|pred| const_eval_predicate(pred, &expr) == Some(true))
-                })
-                .collect();
-            return Some(domain);
-        }
-
-        None
-    }
-
-    /// Sucedor de um ConstVal discreto (Int: n+1, Rat com den=1: n+1).
-    fn succ(val: &ConstVal, repr: &Repr) -> Option<ConstVal> {
-        match (repr, val) {
-            (Repr::Int, ConstVal::Int(n)) => Some(ConstVal::Int(n + 1)),
-            (Repr::Rational, ConstVal::Rat(n, d)) if *d == 1 => Some(ConstVal::Rat(n + 1, 1)),
-            _ => None, // Bool, Rational com d≠1, Float, Text não têm sucessor discreto
-        }
-    }
-
-    /// Predecessor de um ConstVal discreto.
-    fn pred(val: &ConstVal, repr: &Repr) -> Option<ConstVal> {
-        match (repr, val) {
-            (Repr::Int, ConstVal::Int(n)) => Some(ConstVal::Int(n - 1)),
-            (Repr::Rational, ConstVal::Rat(n, d)) if *d == 1 => Some(ConstVal::Rat(n - 1, 1)),
-            _ => None,
-        }
-    }
-
-    /// Conta elementos no intervalo [lo, hi] para tipos discretos.
-    fn domain_count(lo: &ConstVal, hi: &ConstVal, repr: &Repr) -> Option<i64> {
-        match (repr, lo, hi) {
-            (Repr::Int, ConstVal::Int(l), ConstVal::Int(h)) => Some(h - l + 1),
-            (Repr::Rational, ConstVal::Rat(l, 1), ConstVal::Rat(h, 1)) => Some(h - l + 1),
-            _ => None, // Não-discreto: não enumera
-        }
-    }
-
-    /// Próximo valor no domínio, ou None se chegou em hi.
-    fn next_in_domain(cur: &ConstVal, hi: &ConstVal, repr: &Repr) -> Option<ConstVal> {
-        match (repr, cur, hi) {
-            (Repr::Int, ConstVal::Int(c), ConstVal::Int(h)) => {
-                if c >= h {
-                    None
-                } else {
-                    Some(ConstVal::Int(c + 1))
-                }
-            }
-            (Repr::Rational, ConstVal::Rat(c, 1), ConstVal::Rat(h, 1)) => {
-                if c >= h {
-                    None
-                } else {
-                    Some(ConstVal::Rat(c + 1, 1))
-                }
-            }
-            _ => None,
-        }
-    }
-
-    /// Converte ConstVal para Expr (para const_eval_predicate).
-    fn const_val_to_expr(val: &ConstVal, _repr: &Repr) -> Spanned<Expr> {
-        match val {
-            ConstVal::Int(n) => Spanned::new(
-                Expr::IntLit {
-                    text: n.to_string(),
-                },
-                Span::zero(),
-            ),
-            ConstVal::Float(f) => Spanned::new(
-                Expr::FloatLit {
-                    text: f.to_string(),
-                },
-                Span::zero(),
-            ),
-            ConstVal::Rat(n, _d) => Spanned::new(
-                Expr::Apply {
-                    callee: Box::new(Spanned::new(
-                        Expr::Ident {
-                            name: "rational".to_string(),
-                        },
-                        Span::zero(),
-                    )),
-                    args: vec![Spanned::new(
-                        Expr::IntLit {
-                            text: n.to_string(),
-                        },
-                        Span::zero(),
-                    )],
-                },
-                Span::zero(),
-            ),
-            ConstVal::Bool(b) => Spanned::new(
-                Expr::VariantQual {
-                    enum_name: "Boolean".to_string(),
-                    variant: if *b { "True" } else { "False" }.to_string(),
-                    module_path: None,
-                },
-                Span::zero(),
-            ),
-            ConstVal::Text(s) => Spanned::new(Expr::TextLit { text: s.clone() }, Span::zero()),
-            ConstVal::Unit => Spanned::new(Expr::Unit, Span::zero()),
-            ConstVal::Struct(_) => Spanned::new(Expr::Unit, Span::zero()), // TODO
-        }
-    }
-
-    /// Raises lo: max(old_lo, candidate) via cmp.
-    fn raise_lo<F>(old: Option<ConstVal>, candidate: ConstVal, cmp_fn: F) -> ConstVal
-    where
-        F: Fn(&ConstVal, &ConstVal) -> Option<std::cmp::Ordering>,
-    {
-        match old {
-            None => candidate,
-            Some(old_val) => match cmp_fn(&old_val, &candidate) {
-                Some(std::cmp::Ordering::Greater) => old_val,
-                _ => candidate,
-            },
-        }
-    }
-
-    /// Lowers hi: min(old_hi, candidate) via cmp.
-    fn lower_hi<F>(old: Option<ConstVal>, candidate: ConstVal, cmp_fn: F) -> ConstVal
-    where
-        F: Fn(&ConstVal, &ConstVal) -> Option<std::cmp::Ordering>,
-    {
-        match old {
-            None => candidate,
-            Some(old_val) => match cmp_fn(&old_val, &candidate) {
-                Some(std::cmp::Ordering::Less) => old_val,
-                _ => candidate,
-            },
-        }
+        crate::refined_domain::enum_refined_domain(
+            self.struct_registry,
+            self.refined_decls,
+            self.caps_index,
+            name,
+        )
     }
 }
 
@@ -718,58 +398,6 @@ pub(crate) struct Witness {
     pub patterns: Vec<String>,
 }
 
-/// Formata um pattern do witness como string legível.
-fn pattern_witness_string(pattern: &TypedPattern) -> String {
-    match pattern {
-        TypedPattern::Wildcard => "_".to_string(),
-        TypedPattern::Ident { .. } => "_".to_string(),
-        TypedPattern::Variant {
-            variant,
-            sub_patterns,
-            ..
-        } => {
-            if let Some(subs) = sub_patterns {
-                if subs.is_empty() {
-                    variant.clone()
-                } else {
-                    let inner: Vec<String> = subs
-                        .iter()
-                        .map(|s| pattern_witness_string(&s.node))
-                        .collect();
-                    format!("{} ({})", variant, inner.join(" "))
-                }
-            } else {
-                variant.clone()
-            }
-        }
-        TypedPattern::Cons { head, tail } => {
-            format!(
-                "[{} : {}]",
-                pattern_witness_string(&head.node),
-                pattern_witness_string(&tail.node)
-            )
-        }
-        TypedPattern::Nil => "[]".to_string(),
-        TypedPattern::Literal { value } => {
-            use crate::typed::TypedExprKind;
-            match &value.node.kind {
-                TypedExprKind::IntLit { text } => text.clone(),
-                TypedExprKind::FloatLit { text } => text.clone(),
-                TypedExprKind::TextLit { text } => format!("\"{}\"", text),
-                TypedExprKind::Unit => "()".to_string(),
-                _ => "_".to_string(),
-            }
-        }
-        TypedPattern::Tuple { elements } => {
-            let inner: Vec<String> = elements
-                .iter()
-                .map(|e| pattern_witness_string(&e.node))
-                .collect();
-            format!("({})", inner.join(", "))
-        }
-    }
-}
-
 // ── Matriz de patterns ──────────────────────────────────────────────
 
 /// Uma linha da matriz de patterns — representa um braço/cláusula.
@@ -802,11 +430,6 @@ impl PatternMatrix {
             patterns,
             arm_index,
         });
-    }
-
-    /// Número de colunas (scrutinees).
-    fn width(&self) -> usize {
-        self.column_tys.len()
     }
 }
 
@@ -958,9 +581,9 @@ struct GuardLeaf {
 ///
 /// Paralelo a `collect_all_witnesses`, mas em vez de coletar witnesses de
 /// valores faltantes, coleta os índices dos braços que cobrem cada folha.
-/// Usada pela Fase 3: para cada folha coberta por braços com guards,
-/// a camada chamadora emite query Z3 para verificar se a disjunção dos
-/// guards é tautologia.
+/// Usada na verificação de guards: para cada folha coberta por braços com
+/// guards, a camada chamadora emite query Z3 para verificar se a disjunção
+/// dos guards é tautologia.
 ///
 /// Diferença de `collect_all_witnesses`: não usa linha wildcard `q` —
 /// percorre a árvore apenas com os construtores do tipo e das linhas.
@@ -1318,7 +941,7 @@ pub(crate) fn check_exhaustiveness_maranget(
     }
 }
 
-/// Resultado da análise de exaustividade com guards (Fase 3).
+/// Resultado da análise de exaustividade com guards.
 ///
 /// Combina o motor Maranget (estrutural) com Z3 (guards na folha).
 /// O motor conduz até a folha; quando só resta decidir por guards,
@@ -1501,22 +1124,6 @@ pub(crate) fn is_arm_redundant(
     };
 
     is_useful(&matrix, &q, &env).is_none()
-}
-
-/// Verifica redundância de todos os braços. Retorna índices dos braços
-/// redundantes.
-pub(crate) fn find_redundant_arms(
-    all_patterns: &[Vec<TypedPattern>],
-    column_tys: &[Ty],
-    enum_registry: &EnumRegistry,
-) -> Vec<usize> {
-    let mut redundant = Vec::new();
-    for i in 0..all_patterns.len() {
-        if is_arm_redundant(all_patterns, column_tys, i, enum_registry) {
-            redundant.push(i);
-        }
-    }
-    redundant
 }
 
 #[cfg(test)]
@@ -1710,8 +1317,10 @@ mod tests {
             vec![variant("Boolean", "False")],
             vec![variant("Boolean", "True")], // redundant
         ];
-        let redundant = find_redundant_arms(&patterns, &[Ty::Sum("Boolean".to_string())], &reg);
-        assert_eq!(redundant, vec![2]);
+        let col = [Ty::Sum("Boolean".to_string())];
+        assert!(!is_arm_redundant(&patterns, &col, 0, &reg));
+        assert!(!is_arm_redundant(&patterns, &col, 1, &reg));
+        assert!(is_arm_redundant(&patterns, &col, 2, &reg));
     }
 
     #[test]
@@ -1721,8 +1330,8 @@ mod tests {
             vec![variant("Boolean", "True")],
             vec![variant("Boolean", "False")],
         ];
-        let redundant = find_redundant_arms(&patterns, &[Ty::Sum("Boolean".to_string())], &reg);
-        assert!(redundant.is_empty());
+        let col = [Ty::Sum("Boolean".to_string())];
+        assert!(!is_arm_redundant(&patterns, &col, 1, &reg));
     }
 
     #[test]
