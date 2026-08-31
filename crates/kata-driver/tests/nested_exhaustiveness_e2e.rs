@@ -322,10 +322,10 @@ main!()"#,
 // ── RED F1: falso-positivo de redundância (probeE2) ────────────
 
 /// probeE2: cláusulas lambda com variant qualificado aninhado.
-/// Hoje: falso-positivo `type.redundant_clause` (a 2ª cláusula Some False
-/// é rejeitada como redundante). F2: verde, sem falso-positivo.
-/// F1 interim: o erro de redundância é aceitável enquanto o motor
-/// não migra, mas NÃO pode panicar.
+/// F1: falso-positivo `type.redundant_clause` (a 2ª cláusula Some False
+/// era rejeitada como redundante). F2: verde, sem falso-positivo —
+/// motor Maranget desce payloads e reconhece Some True / Some False
+/// como não-redundantes.
 #[test]
 fn probe_e2_nao_panic_redundancia() {
     let path = write_temp_kata(
@@ -341,11 +341,12 @@ action main
 
 main!()"#,
     );
-    let (_stdout, stderr, code) = run_kata_file(&path);
+    let (stdout, stderr, code) = run_kata_file(&path);
 
-    // Hoje é exit 1 com redundant_clause (falso-positivo). F2: verde.
-    // F1: não pode panicar (101).
+    // F2: verde — motor reconhece Some True / Some False como não-redundantes.
     assert_ne!(code, 101, "probeE2 não deve panicar — stderr: {stderr}");
+    assert_eq!(code, 0, "probeE2 deve exit 0 — stderr: {stderr}");
+    assert_eq!(stdout, "tem true\ntem false\n");
 }
 
 // ── RED F2: verdes por cegueira (oráculos #[ignore] até F2) ────
@@ -353,7 +354,6 @@ main!()"#,
 /// probeA: Some(True) + None, SEM Some(False) — checker aceita por cegueira.
 /// F2: NonExhaustiveMatch missing ["Some False"].
 #[test]
-#[ignore = "F2: motor Maranget — NonExhaustiveMatch [\"Some False\"]"]
 fn probe_a_non_exhaustive() {
     let path = write_temp_kata(
         "probeA",
@@ -374,8 +374,8 @@ main!()"#,
         "probeA deve dar NonExhaustiveMatch — stderr: {stderr}"
     );
     assert!(
-        stderr.contains("Some False"),
-        "witness deve ser Some False — stderr: {stderr}"
+        stderr.contains("Some (False)"),
+        "witness deve ser Some (False) — stderr: {stderr}"
     );
     assert_ne!(code, 0);
 }
@@ -383,7 +383,6 @@ main!()"#,
 /// probeB: chama foo com Some(False) — caso não coberto.
 /// Hoje: SIGILL (exit -4/132). F2: NonExhaustiveMatch em compile-time.
 #[test]
-#[ignore = "F2: motor Maranget — fim do SIGILL, NonExhaustiveMatch em compile"]
 fn probe_b_non_exhaustive_compile() {
     let path = write_temp_kata(
         "probeB",
@@ -410,7 +409,6 @@ main!()"#,
 /// probeM: match parcial sobre Result::(Int, Text) — Ok 0 + Err _.
 /// F2: NonExhaustiveMatch missing ["Ok _"].
 #[test]
-#[ignore = "F2: motor Maranget — NonExhaustiveMatch [\"Ok _\"]"]
 fn probe_m_non_exhaustive() {
     let path = write_temp_kata(
         "probeM",
@@ -436,7 +434,6 @@ main!()"#,
 /// probeK_deep_hole: 3 níveis com buraco — Some (Some False) removida.
 /// F2: NonExhaustiveMatch com witness de 3 níveis ["Some (Some False)"].
 #[test]
-#[ignore = "F2: motor Maranget — witness 3 níveis [\"Some (Some False)\"]"]
 fn probe_k_deep_hole_non_exhaustive() {
     let path = write_temp_kata(
         "probeK_deep_hole",
