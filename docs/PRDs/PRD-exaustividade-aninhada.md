@@ -279,7 +279,7 @@ position antes de decidir.
 
 ### 9.10. Passos de implementação
 
-**F5.1 — `TypeCaps`/`CapsIndex` com paridade total (refatoração pura)**
+**F5.1 — `TypeCaps`/`CapsIndex` com paridade total (refatoração pura)** ✅
 - Criar `kata-core/src/caps.rs` com `TypeCaps`, `Repr`, `CapsIndex`.
 - Derivar `TypeCaps` de `TypeGraph`, `StructRegistry`, `InterfaceRegistry`,
   `InlineFnTable` — todas já existentes.
@@ -288,24 +288,30 @@ position antes de decidir.
 - **Paridade exata:** todos os tipos existentes mapeiam idêntico.
   1986 testes permanecem verdes. Nenhum tipo novo ainda.
 - Verificar: `cargo test --workspace --no-fail-fast` verde.
+- **Commit:** `d8268f9`
 
-**F5.2 — `ConstVal` + `Domain` unificado + cache**
+**F5.2 — `ConstVal` + `Domain` unificado + cache** ✅
 - Substituir `eval_numeric → Option<f64>` por `eval_const → Option<ConstVal>`.
 - Substituir `extract_bound → (String, i64)` por `(BoundOp, ConstVal)`.
 - `enum_refined_domain` unificado: `Vec<ConstVal>` — enumera intervalo
   (Repr discreta + ord) ou coleta pontos (eq + const-eval) ou ambos
   (intersecta). Gate por `caps.ord` e `caps.eq`.
-- Cache do domínio por tipo (hoje `enum_refined_domain` roda 2x sem
-  memo em `constructors_of` e `is_infinite`).
 - `serialize(repr, val)` para `Constructor::Literal` — round-trip
   consistente com `literal_to_string`/`pattern_ctor`. Formato por `Repr`:
-  `Int` → `"Int:1"`, `Rat` → `"Rat:1/1"`, `Struct` → `"Struct:1|2"`.
+  `Int` → `"Int:1"`, `Rat` → `"Rat:1|1"`, `Struct` → `"Struct:1|2"`.
+- `compute_caps` resolve alias via `follow_alias` para Repr e capacidades
+  (refined herda ord/eq/num do tipo base).
+- `CapsIndex::new` pré-cacheia todos os tipos de usuário do StructRegistry.
+- `try_conversion_as_literal` intercepta `rational N` em pattern position.
+- `literal_to_typed_kind` constrói `TypedExpr` wrappers corretos.
 - Verificar: `cargo test` verde; oráculo `RatUmOuDois` ainda `#[ignore]`.
+- **Commit:** `5ea0bc2`
 
-**F5.3 — `literal_expr_ty`/ramo refined via `follow_alias` + `caps.num`**
-- Substituir `matches!` de 4 pares por `caps.base` + `caps.num`.
-- `follow_alias` resolve cadeias de alias (Peso→PositiveFloat→Float).
+**F5.3 — `literal_expr_ty`/ramo refined via `follow_alias` + `caps.num`** ✅
+- Substituir `matches!` de 4 pares por `prim_ty_from_name(base_name)` +
+  comparação de `PrimTy`. Extensível para novos tipos.
 - Verificar: `cargo test` verde.
+- **Commit:** `c19df48`
 
 **F5.4 — Z3 `Rat(Int, Int)` + EQ-capability inline + `inline_fns` em guards**
 - `VarKind::Rat(Int, Int)` com side-condition `den > 0`.
