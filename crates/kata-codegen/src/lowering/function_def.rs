@@ -560,7 +560,7 @@ pub(crate) fn define_function_body(
                     lower_with_bindings(&clause.with_bindings, &mut lower)?;
                     lower.emitted_tail_call = false;
                     lower.emitted_terminator = false;
-                    let result = lower_clause_body(clause, &mut lower)?;
+                    let result = lower_clause_body(clause, &mut lower, None)?;
                     if !lower.emitted_terminator && !lower.emitted_tail_call {
                         let result = coerce_return(result, ret_ty, &mut lower);
                         if needs_epilogue {

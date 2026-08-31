@@ -41,22 +41,34 @@ pub(crate) fn bind_patterns_to_params(
 }
 
 /// Lowera o body de uma cláusula (com ou sem guards).
+///
+/// `fallthrough_block`: quando `Some`, é o block da próxima cláusula no
+/// branch chain. Se a cláusula tem guards e nenhum passa (sem otherwise),
+/// o codegen emite `jump(fallthrough_block)` — fall-through para a
+/// próxima cláusula — em vez de lowerar o body da cláusula. Quando `None`
+/// (fast-path de cláusula única), mantém o comportamento de fallback.
 pub(crate) fn lower_clause_body(
     clause: &TypedLambdaClause,
     lower: &mut LowerCtx,
+    fallthrough_block: Option<cranelift_codegen::ir::Block>,
 ) -> Result<cranelift_codegen::ir::Value, super::CodegenError> {
     if clause.guards.is_empty() {
         lower_expr(&clause.body.node, lower)
     } else {
-        lower_guards(&clause.guards, &clause.body, lower)
+        lower_guards(&clause.guards, &clause.body, lower, fallthrough_block)
     }
 }
 
 /// Lowera guards como branch chain dentro de uma cláusula.
+///
+/// `fallthrough_block`: quando `Some`, é o block da próxima cláusula.
+/// Se nenhum guard passa e não há `otherwise`, emite `jump(fallthrough_block)`
+/// (fall-through). Quando `None`, lowera `fallback_body` como fallback.
 pub(crate) fn lower_guards(
     guards: &[TypedGuardClause],
     fallback_body: &Spanned<TypedExpr>,
     lower: &mut LowerCtx,
+    fallthrough_block: Option<cranelift_codegen::ir::Block>,
 ) -> Result<cranelift_codegen::ir::Value, super::CodegenError> {
     let ret_clif = super::resolve_clif_ty(&fallback_body.node.ty, lower.struct_registry);
 
@@ -139,19 +151,30 @@ pub(crate) fn lower_guards(
         }
     }
 
-    // Fallback: se nenhum guard passou e NÃO houve otherwise,
-    // lowera o body da cláusula como fallback.
-    // (Se houve otherwise, o next_test_block final já tem terminador.)
+    // Fallback: se nenhum guard passou e NÃO houve otherwise.
+    //
+    // Com fallthrough_block (multi-cláusula): jump para a próxima cláusula
+    // — fall-through correto, espelha o interp (eval.rs:1536-1538 `continue`).
+    //
+    // Sem fallthrough_block (cláusula única, fast-path): lowera o body da
+    // cláusula como fallback. Hoje é caminho morto (check_guard_completeness
+    // rejeita guards sem otherwise), mas o fix garante que quando a Fase 3
+    // abrir o caminho, a metade runtime já está correta.
     if !had_otherwise {
-        lower.builder.switch_to_block(next_test_block);
-        lower.emitted_tail_call = false;
-        lower.emitted_terminator = false;
-        let fallback_val = lower_expr(&fallback_body.node, lower)?;
-        if !lower.emitted_terminator && !lower.emitted_tail_call {
-            lower
-                .builder
-                .ins()
-                .jump(cont_block, &[BlockArg::Value(fallback_val)]);
+        if let Some(ft_block) = fallthrough_block {
+            lower.builder.switch_to_block(next_test_block);
+            lower.builder.ins().jump(ft_block, &[]);
+        } else {
+            lower.builder.switch_to_block(next_test_block);
+            lower.emitted_tail_call = false;
+            lower.emitted_terminator = false;
+            let fallback_val = lower_expr(&fallback_body.node, lower)?;
+            if !lower.emitted_terminator && !lower.emitted_tail_call {
+                lower
+                    .builder
+                    .ins()
+                    .jump(cont_block, &[BlockArg::Value(fallback_val)]);
+            }
         }
     }
     // next_test_block já foi selado dentro do loop (ou é o fallback block).
@@ -238,7 +261,7 @@ pub(crate) fn lower_clause_chain(
         // e seta emitted_tail_call — não emitir return_ depois.
         lower.emitted_tail_call = false;
         lower.emitted_terminator = false;
-        let body_val = lower_clause_body(clause, lower)?;
+        let body_val = lower_clause_body(clause, lower, Some(next_clause_block))?;
         if !lower.emitted_terminator && !lower.emitted_tail_call {
             if let Some(epi) = lower.epilogue_block {
                 lower
