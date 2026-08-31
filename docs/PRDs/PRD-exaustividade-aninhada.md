@@ -1,6 +1,6 @@
 # PRD — Exaustividade Aninhada (Maranget + Z3 em Guards + Refined)
 
-**Status:** 🟡 Fase 0 ✅ — Fase 1 ✅ (passos 1-4) — Fase 2 não iniciada
+**Status:** 🟡 Fase 0 ✅ — Fase 1 ✅ (passos 1-4) — Fase 2 ✅ (passos 1-6) — Fase 3 não iniciada
 **Data:** 2026-08-30
 **Tipo:** Planejamento — PRD único, 5 fases sequenciais
 **Depende de:** `PRD-exaustividade.md` ✅ (guards via Z3, patterns de 1 nível)
@@ -372,14 +372,17 @@ Verificação entre fases: `cargo test --workspace --no-fail-fast` verde;
 4. Fall-through de codegen (§5.4) como commit isolado — no-op provado. ✅ de88c41
 5. `cargo test` + clippy verdes; commits em camadas. ✅
 
-**Fase 2** (motor antes dos consumidores):
+**Fase 2** (implementada — passos 1-6):
 1. `maranget.rs` puro (matriz/usefulness/witness, trait de ambiente) +
-   testes table-driven — sem typeck.
-2. Migrar 3 consumidores, um por commit — cada commit derruba os
-   `#[ignore]` do seu slice.
-3. Redundância de match arms (novo consumidor, isenção do otherwise).
-4. Remover `__ANY__` (grep vazio).
-5. Witnesses legíveis → snapshots.
+   testes table-driven — sem typeck. ✅ `f193635`
+2. Migrar 3 consumidores, um por commit:
+   - Match (`_match.rs`): ✅ `32fab2f`
+   - Lambda (`function_infer.rs`): ✅ `503d817` (substitute_ty + collect_all_witnesses)
+   - Redundância (`redundancy.rs`): ✅ `6e27d39` (is_arm_redundant como gate estrutural)
+3. Redundância de match arms (novo consumidor, isenção do otherwise) — pendente Fase 3 (guards)
+4. Remover `__ANY__` (grep vazio). ✅ `a86c27d`
+5. Witnesses legíveis → snapshots. ✅ `eb0d0a5` (oráculos F2 des-ignorados)
+6. Fix codegen: selar next_clause_block após body (probeG crash). ✅ `31fea5a`
 
 **Fase 3:** queries de folha escopadas → probeH E probeH_with verdes
 nos dois backends.
