@@ -131,7 +131,8 @@ impl Z3Translator {
                 self.var_cache.insert(name.clone(), VarKind::Int(i));
             } else {
                 let translated = self.fresh_bool();
-                self.var_cache.insert(name.clone(), VarKind::Bool(translated));
+                self.var_cache
+                    .insert(name.clone(), VarKind::Bool(translated));
             }
         }
     }

@@ -95,7 +95,9 @@ pub(crate) fn alloc_bigint(n: BigInt) -> i64 {
 /// o processo hospedeiro sem diagnóstico.
 unsafe fn deref_bigint<'a>(val: i64) -> &'a BigInt {
     if val == 0 {
-        panic!("kata_rt bigint: deref de valor null (0) — slot não-inicializado escapou do typeck; isto é um bug do compilador, não do seu código");
+        panic!(
+            "kata_rt bigint: deref de valor null (0) — slot não-inicializado escapou do typeck; isto é um bug do compilador, não do seu código"
+        );
     }
     unsafe { &*(val as *const BigInt) }
 }
