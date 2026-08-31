@@ -77,25 +77,19 @@ impl Parser {
                     // `Result::Ok v` → Variant com payload sub-pattern.
                     // `Result::Ok(v)` → Variant com payload sub-pattern (entre parênteses).
                     // `Boolean::True` (sem sub-pattern) → Variant sem payload.
+                    //
+                    // Sub-patterns herdam `allow_unqualified_variant` do pai,
+                    // para que `Some(Some(True))` aninhe corretamente.
+                    //
+                    // `Result::Ok(v)` com parênteses é tratado pelo ramo
+                    // `can_start_pattern()` acima: `(` inicia pattern →
+                    // `parse_pattern_inner` → `parse_tuple_pattern` →
+                    // desembrulha `(v)` sem vírgula. O `else if LParen`
+                    // anterior era código morto (`can_start_pattern` captura
+                    // `(` antes) e foi removido.
                     let payload = if self.can_start_pattern() {
-                        // Sub-pattern sem parênteses: `Result::Ok v`
-                        Some(vec![self.parse_pattern()?])
-                    } else if matches!(self.peek(), Token::LParen) {
-                        // Sub-patterns entre parênteses: `Result::Ok(v)`
-                        self.advance(); // consume (
-                        let mut sub_pats = Vec::new();
-                        if !matches!(self.peek(), Token::RParen) {
-                            sub_pats.push(self.parse_pattern()?);
-                            while matches!(self.peek(), Token::Comma) {
-                                self.advance();
-                                if matches!(self.peek(), Token::RParen) {
-                                    break;
-                                }
-                                sub_pats.push(self.parse_pattern()?);
-                            }
-                        }
-                        self.expect(&Token::RParen, "`)` após sub-pattern do variant")?;
-                        Some(sub_pats)
+                        // Sub-pattern: `Result::Ok v` ou `Result::Ok(v)`
+                        Some(vec![self.parse_pattern_inner(allow_unqualified_variant)?])
                     } else {
                         None
                     };
@@ -126,7 +120,7 @@ impl Parser {
                 // Sem sub-pattern following, continua como Pattern::Ident —
                 // o typeck resolve variantes unitárias (True, False, None) via EnumRegistry.
                 if allow_unqualified_variant && self.can_start_pattern() {
-                    let sub_pat = self.parse_pattern()?;
+                    let sub_pat = self.parse_pattern_inner(allow_unqualified_variant)?;
                     let end_span = sub_pat.span;
                     let span = start.cover(end_span);
                     return Ok(Spanned::new(
@@ -163,7 +157,7 @@ impl Parser {
                 ))
             }
             // `()` → Unit literal pattern
-            Token::LParen => self.parse_tuple_pattern(start),
+            Token::LParen => self.parse_tuple_pattern(start, allow_unqualified_variant),
             // `[]` ou `[h : t]` → Cons pattern (stub )
             Token::LBracket => self.parse_cons_pattern(start),
             _ => Err(self.error("pattern")),
@@ -172,9 +166,12 @@ impl Parser {
 
     /// Parse `(p1, p2, ...)` → Tuple pattern.
     /// `()` → Tuple vazia (ou Unit — typeck decide).
+    /// `(p)` sem vírgula → desembrulhar (Grouping), igual a expressões.
+    /// `(p,)` com trailing comma → Tuple de 1 elemento.
     fn parse_tuple_pattern(
         &mut self,
         start: kata_ast::Span,
+        allow_unqualified_variant: bool,
     ) -> Result<Spanned<Pattern>, FrontendError> {
         self.expect(&Token::LParen, "`(`")?;
 
@@ -184,13 +181,15 @@ impl Parser {
             return Ok(Spanned::new(Pattern::Tuple(Vec::new()), start));
         }
 
-        let mut elements = vec![self.parse_pattern()?];
+        let mut elements = vec![self.parse_pattern_inner(allow_unqualified_variant)?];
+        let mut had_comma = false;
         while matches!(self.peek(), Token::Comma) {
+            had_comma = true;
             self.advance();
             if matches!(self.peek(), Token::RParen) {
                 break; // trailing comma
             }
-            elements.push(self.parse_pattern()?);
+            elements.push(self.parse_pattern_inner(allow_unqualified_variant)?);
         }
 
         self.expect(&Token::RParen, "`)`")?;
@@ -200,6 +199,13 @@ impl Parser {
             .map(|t| t.span)
             .unwrap_or(start);
         let span = start.cover(end_span);
+
+        // `(p)` sem vírgula → desembrulhar (Grouping).
+        // Parênteses só implicam em tupla quando há vírgula.
+        if elements.len() == 1 && !had_comma {
+            return Ok(Spanned::new(elements.pop().unwrap().node, span));
+        }
+
         Ok(Spanned::new(Pattern::Tuple(elements), span))
     }
 
