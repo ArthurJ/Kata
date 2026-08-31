@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Pattern checking e verificação de exaustividade.
 //!
 //! `check_pattern` converte um `Pattern` da AST em `TypedPattern`,

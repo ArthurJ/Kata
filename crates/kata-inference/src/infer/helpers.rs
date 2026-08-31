@@ -101,7 +101,10 @@ pub(crate) fn check_patterns(
     // quando o número de patterns diverge do número de parâmetros.
     // PRD-exaustividade-aninhada §4.2 — panic #2 e #K-arity_tuple.
     if patterns.len() != param_tys.len() {
-        let span = patterns.first().map(|p| p.span).unwrap_or(Span::new(0, 0, 0, 0));
+        let span = patterns
+            .first()
+            .map(|p| p.span)
+            .unwrap_or(Span::new(0, 0, 0, 0));
         return Err(MiddleError::ArityMismatch {
             expected: param_tys.len(),
             found: patterns.len(),

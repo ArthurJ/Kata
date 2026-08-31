@@ -10,6 +10,7 @@ use kata_diagnostics::MiddleError;
 use kata_resolution::FunctionDef;
 
 use crate::typed::{TypedExpr, TypedFunction, TypedLambdaClause};
+use crate::typed_pattern::TypedPattern;
 
 use super::apply_lambda::infer_lambda_body;
 use super::expr::{InferCtx, fits_return, infer_expr_hinted};
@@ -232,21 +233,13 @@ pub(crate) fn ty_name(ty: &Ty) -> &str {
     }
 }
 
-/// Verifica exaustividade de cláusulas lambda (pattern matching implícito).
+/// Verifica exaustividade de cláusulas lambda via motor Maranget.
 ///
 /// Múltiplas cláusulas lambda são semanticamente equivalentes a um `match`
-/// sobre os parâmetros. Esta função computa o produto cartesiano dos
-/// universos de cada parâmetro e verifica se alguma cláusula cobre cada
-/// célula do produto. Funciona para qualquer aridade (N parâmetros).
-///
-/// O universo de cada posição é determinado por `enum_universe`:
-/// - `Sum`/`Generic` → todas as variantes do enum.
-/// - `List` → `{Cons, Nil}`.
-/// - Tipos infinitos (Int, Float, Text, etc.) → `{__ANY__}`.
-/// - `Tuple`/`Struct`/`Unit` → `{__ANY__}` (átomo, não decompõe).
-///
-/// Uma cláusula cobre uma célula se, em todas as posições, o pattern da
-/// cláusula cobre a variante da célula (via `pattern_covers_variant`).
+/// sobre os parâmetros. O motor Maranget desce payloads de variantes
+/// (Some True -> Some consome True como sub-pattern), onde o checker
+/// antigo operava por nomes de variantes de 1 nível com sentinela-string
+/// `__ANY__` e produto cartesiano de universos.
 fn check_clause_exhaustiveness(
     typed_clauses: &[TypedLambdaClause],
     param_types: &[Ty],
@@ -257,44 +250,29 @@ fn check_clause_exhaustiveness(
         return Ok(());
     }
 
-    // Computa o universo de cada parâmetro.
-    let universes: Vec<Vec<String>> = param_types
-        .iter()
-        .map(|ty| crate::patterns::enum_universe(ty, ctx.enum_registry))
-        .collect();
-
-    // Produto cartesiano: todas as combinações de variantes.
-    // Começa com uma célula vazia e vai expandindo cada posição.
-    let mut product: Vec<Vec<String>> = vec![Vec::new()];
-    for universe in &universes {
-        let mut next = Vec::new();
-        for cell in &product {
-            for variant in universe {
-                let mut new_cell = cell.clone();
-                new_cell.push(variant.clone());
-                next.push(new_cell);
-            }
+    // Coleta patterns de cada cláusula e verifica se há otherwise.
+    let mut arm_patterns: Vec<Vec<TypedPattern>> = Vec::new();
+    let mut has_otherwise = false;
+    for clause in typed_clauses {
+        // Ident/Wildcard em qualquer posição cobre tudo.
+        if clause
+            .patterns
+            .iter()
+            .any(|p| matches!(p.node, TypedPattern::Ident { .. } | TypedPattern::Wildcard))
+        {
+            has_otherwise = true;
         }
-        product = next;
+        arm_patterns.push(clause.patterns.iter().map(|p| p.node.clone()).collect());
     }
 
-    // Para cada célula do produto, verifica se alguma cláusula a cobre.
-    let mut missing: Vec<Vec<String>> = Vec::new();
-    for cell in &product {
-        let covered = typed_clauses.iter().any(|clause| {
-            cell.iter().enumerate().all(|(i, variant)| {
-                clause
-                    .patterns
-                    .get(i)
-                    .is_some_and(|p| crate::patterns::pattern_covers_variant(&p.node, variant))
-            })
-        });
-        if !covered {
-            missing.push(cell.clone());
-        }
-    }
+    let result = crate::maranget::check_exhaustiveness_maranget(
+        &arm_patterns,
+        param_types,
+        has_otherwise,
+        ctx.enum_registry,
+    );
 
-    if missing.is_empty() {
+    if result.exhaustive {
         return Ok(());
     }
 
@@ -304,25 +282,13 @@ fn check_clause_exhaustiveness(
         .map(|c| c.span)
         .unwrap_or(kata_ast::Span::zero());
 
-    // Formata as células faltantes para a mensagem.
-    let missing_str: Vec<String> = missing
-        .iter()
-        .map(|cell| {
-            if cell.len() == 1 {
-                cell[0].clone()
-            } else {
-                format!("({})", cell.join(", "))
-            }
-        })
-        .collect();
-
     Err(MiddleError::NonExhaustiveMatch {
-        missing: missing_str.clone(),
+        missing: result.missing.clone(),
         span: span.into(),
         hint: Some(format!(
             "combinações faltantes: {}. \
              Adicione cláusulas para cada uma ou use `otherwise:` como fallback",
-            missing_str.join(", ")
+            result.missing.join(", ")
         )),
     })
 }

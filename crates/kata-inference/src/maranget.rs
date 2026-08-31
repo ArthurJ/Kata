@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Motor de usefulness (Maranget) para análise de exaustividade e redundância
 //! de patterns aninhados.
 //!
@@ -25,8 +26,8 @@
 //! Na Fase 3, quando só resta decidir por guards, emite query Z3 escopada
 //! por célula. `Unknown` → `MissingOtherwise` local à folha.
 
-use kata_core::EnumRegistry;
 use kata_core::ty::Ty;
+use kata_core::EnumRegistry;
 
 use crate::typed_pattern::TypedPattern;
 
@@ -71,6 +72,65 @@ pub(crate) enum Constructor {
     Missing,
 }
 
+// ── Substituição de type params ────────────────────────────────────
+
+/// Substitui `Ty::Var(name)` pelo tipo concreto correspondente em `type_args`.
+///
+/// `type_params` é a lista de nomes de parâmetros na ordem de declaração do
+/// enum (ex: `["T", "E"]` para `Result`). `type_args` são os argumentos
+/// concretos na mesma ordem (ex: `[Int, Text]` para `Result::(Int, Text)`).
+fn substitute_ty(ty: &Ty, type_args: &[Ty], type_params: &[String]) -> Ty {
+    match ty {
+        Ty::Var(name) => {
+            let idx = type_params.iter().position(|p| p == name);
+            match idx {
+                Some(i) if i < type_args.len() => type_args[i].clone(),
+                _ => ty.clone(),
+            }
+        }
+        Ty::Generic(name, args) => Ty::Generic(
+            name.clone(),
+            args.iter()
+                .map(|a| substitute_ty(a, type_args, type_params))
+                .collect(),
+        ),
+        Ty::List(inner) => Ty::List(Box::new(substitute_ty(inner, type_args, type_params))),
+        Ty::Tuple(elems) => Ty::Tuple(
+            elems
+                .iter()
+                .map(|e| substitute_ty(e, type_args, type_params))
+                .collect(),
+        ),
+        Ty::Function(params, ret) => Ty::Function(
+            params
+                .iter()
+                .map(|p| substitute_ty(p, type_args, type_params))
+                .collect(),
+            Box::new(substitute_ty(ret, type_args, type_params)),
+        ),
+        Ty::Action(params, ret) => Ty::Action(
+            params
+                .iter()
+                .map(|p| substitute_ty(p, type_args, type_params))
+                .collect(),
+            Box::new(substitute_ty(ret, type_args, type_params)),
+        ),
+        Ty::Dict(k, v) => Ty::Dict(
+            Box::new(substitute_ty(k, type_args, type_params)),
+            Box::new(substitute_ty(v, type_args, type_params)),
+        ),
+        Ty::Set(inner) => Ty::Set(Box::new(substitute_ty(inner, type_args, type_params))),
+        Ty::Array(inner) => Ty::Array(Box::new(substitute_ty(inner, type_args, type_params))),
+        Ty::Range(inner) => Ty::Range(Box::new(substitute_ty(inner, type_args, type_params))),
+        Ty::Sender(inner) => Ty::Sender(Box::new(substitute_ty(inner, type_args, type_params))),
+        Ty::Receiver(inner) => Ty::Receiver(Box::new(substitute_ty(inner, type_args, type_params))),
+        Ty::ReceiverFactory(inner) => {
+            Ty::ReceiverFactory(Box::new(substitute_ty(inner, type_args, type_params)))
+        }
+        other => other.clone(),
+    }
+}
+
 // ── Implementação concreta do PatternEnv ───────────────────────────
 
 /// Implementação de `PatternEnv` usando `EnumRegistry`.
@@ -102,7 +162,12 @@ impl<'a> PatternEnv for MarangetEnv<'a> {
                     .collect()
             }
             Ty::List(_) => vec![Constructor::Cons, Constructor::Nil],
-            // Tipos infinitos, átomos, tuplas, structs — o construtor
+            Ty::Tuple(elem_tys) => {
+                vec![Constructor::Tuple {
+                    arity: elem_tys.len(),
+                }]
+            }
+            // Tipos infinitos, átomos, structs — o construtor
             // é determinado pelos patterns que aparecem, não pelo tipo.
             // `Missing` cobre os ausentes.
             _ => vec![Constructor::Missing],
@@ -111,15 +176,22 @@ impl<'a> PatternEnv for MarangetEnv<'a> {
 
     fn field_tys(&self, ctor: &Constructor, ty: &Ty) -> Vec<Ty> {
         match (ctor, ty) {
-            (Constructor::Variant { enum_name, name }, _) => {
+            (Constructor::Variant { enum_name, name }, ty) => {
                 // Busca o payload_ty da variante no EnumRegistry.
-                if let Some(variants) = self.enum_registry.all_variants(enum_name) {
-                    if let Some(info) = variants.iter().find(|v| v.name == *name) {
-                        if let Some(payload) = &info.payload_ty {
-                            return vec![payload.clone()];
+                if let Some(variants) = self.enum_registry.all_variants(enum_name)
+                    && let Some(info) = variants.iter().find(|v| v.name == *name)
+                        && let Some(payload) = &info.payload_ty {
+                            // Substitui type params pelo tipo concreto.
+                            // Para Ty::Generic("Optional", [Boolean]),
+                            // substitui T -> Boolean.
+                            let type_args: Vec<Ty> = match ty {
+                                Ty::Generic(_, args) => args.clone(),
+                                _ => Vec::new(),
+                            };
+                            let type_params =
+                                self.enum_registry.type_params_of(enum_name).unwrap_or(&[]);
+                            return vec![substitute_ty(payload, &type_args, type_params)];
                         }
-                    }
-                }
                 Vec::new() // unitária ou não encontrada
             }
             (Constructor::Cons, Ty::List(elem_ty)) => {
@@ -202,7 +274,7 @@ fn literal_to_string(expr: &crate::typed::TypedExpr) -> String {
 /// Para `Wildcard`/`Ident` → wildcard expandido para o número de campos.
 fn expand_pattern(
     pattern: &TypedPattern,
-    ctor: &Constructor,
+    _ctor: &Constructor,
     n_fields: usize,
 ) -> Vec<TypedPattern> {
     match pattern {
@@ -336,6 +408,139 @@ impl PatternMatrix {
 
 // ── Algoritmo de usefulness ─────────────────────────────────────────
 
+/// Coleta TODAS as witnesses de não-exaustividade — cada pattern-tuple que
+/// casa um valor não coberto pelas linhas da matriz.
+///
+/// Diferente de `is_useful` (que para na primeira witness), esta função
+/// itera sobre TODOS os construtores em `constructors_to_try` e acumula
+/// as witnesses de cada um. Usada para exaustividade (reportar todos os
+/// casos faltantes); `is_useful` é usada para redundância (basta uma).
+fn collect_all_witnesses(
+    matrix: &PatternMatrix,
+    q: &MatrixRow,
+    env: &dyn PatternEnv,
+) -> Vec<Witness> {
+    if matrix.column_tys.is_empty() {
+        if matrix.rows.is_empty() {
+            return vec![Witness {
+                patterns: Vec::new(),
+            }];
+        }
+        return Vec::new();
+    }
+
+    let head_ty = &matrix.column_tys[0].clone();
+
+    let mut ctors_seen: Vec<Constructor> = Vec::new();
+    for row in &matrix.rows {
+        if let Some(ctor) = pattern_ctor(&row.patterns[0])
+            && !ctors_seen.contains(&ctor) {
+                ctors_seen.push(ctor);
+            }
+    }
+    if let Some(ctor) = pattern_ctor(&q.patterns[0])
+        && !ctors_seen.contains(&ctor) {
+            ctors_seen.push(ctor);
+        }
+
+    let type_ctors = env.constructors_of(head_ty);
+
+    let present_ctors: Vec<Constructor> = ctors_seen.clone();
+    let missing_ctors: Vec<Constructor> = type_ctors
+        .iter()
+        .filter(|c| !present_ctors.contains(c))
+        .cloned()
+        .collect();
+
+    let mut constructors_to_try: Vec<Constructor> = present_ctors.clone();
+    if env.is_infinite(head_ty) {
+        if !missing_ctors.is_empty() || constructors_to_try.is_empty() {
+            constructors_to_try.push(Constructor::Missing);
+        }
+    } else {
+        constructors_to_try.extend(missing_ctors);
+    }
+
+    if constructors_to_try.is_empty() {
+        if matrix.rows.is_empty() {
+            return vec![Witness {
+                patterns: vec!["_".to_string()],
+            }];
+        }
+        return Vec::new();
+    }
+
+    let mut all_witnesses: Vec<Witness> = Vec::new();
+
+    for ctor in &constructors_to_try {
+        let field_tys = env.field_tys(ctor, head_ty);
+        let n_fields = field_tys.len();
+
+        let mut sub_tys: Vec<Ty> = field_tys;
+        sub_tys.extend(matrix.column_tys[1..].iter().cloned());
+
+        let mut sub_matrix = PatternMatrix::new(sub_tys);
+
+        for row in &matrix.rows {
+            let row_ctor = pattern_ctor(&row.patterns[0]);
+            match &row_ctor {
+                Some(rc) if rc == ctor => {
+                    let expanded = expand_pattern(&row.patterns[0], ctor, n_fields);
+                    let mut new_patterns = expanded;
+                    new_patterns.extend(row.patterns[1..].iter().cloned());
+                    sub_matrix.add_row(new_patterns, row.arm_index);
+                }
+                None => {
+                    let expanded = expand_pattern(&row.patterns[0], ctor, n_fields);
+                    let mut new_patterns = expanded;
+                    new_patterns.extend(row.patterns[1..].iter().cloned());
+                    sub_matrix.add_row(new_patterns, row.arm_index);
+                }
+                _ => {}
+            }
+        }
+
+        let q_ctor = pattern_ctor(&q.patterns[0]);
+        let sub_q = match &q_ctor {
+            Some(qc) if qc == ctor => {
+                let expanded = expand_pattern(&q.patterns[0], ctor, n_fields);
+                let mut new_patterns = expanded;
+                new_patterns.extend(q.patterns[1..].iter().cloned());
+                MatrixRow {
+                    patterns: new_patterns,
+                    arm_index: q.arm_index,
+                }
+            }
+            None => {
+                let expanded = expand_pattern(&q.patterns[0], ctor, n_fields);
+                let mut new_patterns = expanded;
+                new_patterns.extend(q.patterns[1..].iter().cloned());
+                MatrixRow {
+                    patterns: new_patterns,
+                    arm_index: q.arm_index,
+                }
+            }
+            _ => continue,
+        };
+
+        let sub_witnesses = collect_all_witnesses(&sub_matrix, &sub_q, env);
+        for mut witness in sub_witnesses {
+            let prefix = if matches!(ctor, Constructor::Missing) {
+                "_".to_string()
+            } else {
+                witness_prefix_string(ctor, &witness.patterns)
+            };
+            let n_fields = env.field_tys(ctor, head_ty).len();
+            let remaining: Vec<String> = witness.patterns.drain(n_fields..).collect();
+            let mut result = vec![prefix];
+            result.extend(remaining);
+            all_witnesses.push(Witness { patterns: result });
+        }
+    }
+
+    all_witnesses
+}
+
 /// Verifica se `q` é útil w.r.t. as linhas da matriz.
 ///
 /// `q` é uma linha com `arm_index: None` (linha wildcard para exaustividade)
@@ -362,79 +567,35 @@ fn is_useful(matrix: &PatternMatrix, q: &MatrixRow, env: &dyn PatternEnv) -> Opt
     // Coleta construtores que aparecem na primeira coluna.
     let mut ctors_seen: Vec<Constructor> = Vec::new();
     for row in &matrix.rows {
-        if let Some(ctor) = pattern_ctor(&row.patterns[0]) {
-            if !ctors_seen.contains(&ctor) {
+        if let Some(ctor) = pattern_ctor(&row.patterns[0])
+            && !ctors_seen.contains(&ctor) {
                 ctors_seen.push(ctor);
             }
-        }
     }
     // Também do pattern q (a linha que estamos testando).
-    if let Some(ctor) = pattern_ctor(&q.patterns[0]) {
-        if !ctors_seen.contains(&ctor) {
+    if let Some(ctor) = pattern_ctor(&q.patterns[0])
+        && !ctors_seen.contains(&ctor) {
             ctors_seen.push(ctor);
         }
-    }
 
     // Construtores do tipo (universo).
     let type_ctors = env.constructors_of(head_ty);
 
-    // Determina se há wildcard/ident na primeira coluna de alguma linha.
-    let has_wildcard_head = matrix
-        .rows
-        .iter()
-        .any(|r| pattern_ctor(&r.patterns[0]).is_none())
-        || pattern_ctor(&q.patterns[0]).is_none();
-
     // ── Constructor splitting ──
-    //
-    // Se o tipo é finito (enum/list) e não há wildcard na primeira coluna,
-    // e nem todos os construtores do tipo aparecem, precisamos especializar
-    // para os presentes E para os ausentes (bucket Missing).
-    //
-    // Se há wildcard na primeira coluna, ou o tipo é infinito, ou todos
-    // os construtores aparecem, especializamos apenas para os presentes
-    // (mais o bucket Missing se infinito e não há wildcard cobrindo).
-
-    let mut constructors_to_try: Vec<Constructor> = Vec::new();
-
-    // Construtores que aparecem na matriz (e em q).
     let present_ctors: Vec<Constructor> = ctors_seen.clone();
-
-    // Construtores do tipo que não aparecem na matriz.
     let missing_ctors: Vec<Constructor> = type_ctors
         .iter()
         .filter(|c| !present_ctors.contains(c))
         .cloned()
         .collect();
 
-    if has_wildcard_head {
-        // Há wildcard na cabeça — cobre todos os construtores.
-        // Para tipos finitos, tentamos cada construtor ausente
-        // individualmente (para nomeá-lo no witness).
-        // Para tipos infinitos, usamos o bucket Missing.
-        constructors_to_try = present_ctors.clone();
-        if env.is_infinite(head_ty) {
-            if !missing_ctors.is_empty() || constructors_to_try.is_empty() {
-                constructors_to_try.push(Constructor::Missing);
-            }
-        } else {
-            // Tipo finito — cada construtor ausente é tentado individualmente.
-            constructors_to_try.extend(missing_ctors);
+    let mut constructors_to_try: Vec<Constructor> = present_ctors.clone();
+    if env.is_infinite(head_ty) {
+        if !missing_ctors.is_empty() || constructors_to_try.is_empty() {
+            constructors_to_try.push(Constructor::Missing);
         }
     } else {
-        // Sem wildcard na cabeça — construtores que aparecem mais os
-        // ausentes. Para tipos finitos (enum/list), tentamos cada
-        // construtor ausente individualmente (para nomeá-lo no witness).
-        // Para tipos infinitos, agrupamos no bucket Missing.
-        constructors_to_try = present_ctors.clone();
-        if env.is_infinite(head_ty) {
-            if !missing_ctors.is_empty() || constructors_to_try.is_empty() {
-                constructors_to_try.push(Constructor::Missing);
-            }
-        } else {
-            // Tipo finito — cada construtor ausente é tentado individualmente.
-            constructors_to_try.extend(missing_ctors);
-        }
+        constructors_to_try.extend(missing_ctors);
     }
 
     // Se não há construtores para tentar (tipo vazio sem construtores),
@@ -615,17 +776,22 @@ pub(crate) fn check_exhaustiveness_maranget(
         arm_index: None,
     };
 
-    match is_useful(&matrix, &wildcard_row, &env) {
-        None => ExhaustivenessResult {
+    match collect_all_witnesses(&matrix, &wildcard_row, &env) {
+        witnesses if witnesses.is_empty() => ExhaustivenessResult {
             exhaustive: true,
             missing: Vec::new(),
         },
-        Some(witness) => {
-            let missing_str = if witness.patterns.len() == 1 {
-                witness.patterns.clone()
-            } else {
-                vec![format!("({})", witness.patterns.join(", "))]
-            };
+        witnesses => {
+            let missing_str: Vec<String> = witnesses
+                .into_iter()
+                .map(|w| {
+                    if w.patterns.len() == 1 {
+                        w.patterns[0].clone()
+                    } else {
+                        format!("({})", w.patterns.join(", "))
+                    }
+                })
+                .collect();
             ExhaustivenessResult {
                 exhaustive: false,
                 missing: missing_str,
