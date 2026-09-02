@@ -377,11 +377,11 @@ warning, ou suprimir warnings de binding não-utilizado.
 ## Status (2026-09-01)
 
 - Fase 1 — Runtime + FFI: ✅
-- Fase 2 — Interpretador: ✅ (depth tracking implementado, testes E2E pendentes)
+- Fase 2 — Interpretador: ✅ (depth tracking + 5 testes E2E)
 - Fase 3 — Codegen: ✅
-- Fase 4 — Configuração (stdlib/config.kata): 🟡 (código usa `Int`, design exige `PositiveInt`)
+- Fase 4 — Configuração (stdlib/config.kata): ✅
 - Fase 5 — Propagação comptime→runtime: ✅
-- Fase 6 — Testes E2E (codegen): ✅ (8 testes, 1997 total)
+- Fase 6 — Testes E2E: ✅ (14 testes: 8 codegen + 5 interpretador + 1 cache_hit, 2003 total)
 - Fase 7 — Infrastructure do comptime JIT (Runtime completo): futuro
 - Fase 8 — Overhead medido: futuro
 
@@ -396,20 +396,16 @@ warning, ou suprimir warnings de binding não-utilizado.
 
 ## Testes
 
-### Interpretador (kata-interp/tests) — pendente
+### Interpretador (kata-interp/tests)
 
-O interpretador tem depth tracking implementado (`DepthGuard` + incremento
-em `call_typed_clauses` + reset em `eval_entry_with_env`), mas não há
-testes E2E específicos.
-
-- `recursion_limit_interp`: recursão não-de-cauda `soma N` com N > limite
+- `recursion_limit_interp`: recursão não-de-cauda `count N` com N > limite
   → erro gracioso, sem SIGSEGV
-- `recursion_limit_mutual`: is_even/is_odd com profundidade > limite
-  → erro gracioso
+- `recursion_limit_mutual`: is_even/is_odd (não-de-cauda via match) com
+  profundidade > limite → erro gracioso
 - `tco_not_limited`: `fat_tail 100000 1` executa com sucesso (não atinge
   limite)
 - `depth_resets`: após execução, `kata_rt_depth_get() == 0`
-- `configurable_limit`: `constant _ := config.set_recursion_limit(10)` +
+- `configurable_limit`: `constant _ := set_recursion_limit(10)` +
   recursão 20 falha; `set_recursion_limit(100)` + recursão 50 passa
 
 ### Codegen (kata-codegen/tests)
@@ -425,8 +421,8 @@ testes E2E específicos.
 - `tail_call_not_limited_codegen`: `fat_tail 100000 1` via JIT executa com
   sucesso (confirma que decremento antes de `return_call` mantém contador
   constante)
-- `cache_hit_not_counted` (pendente): função `@cache` com hit não incrementa
-  contador — `depth_get() == 0` após cache hit
+- `cache_hit_not_counted`: função `@cache` com hit não incrementa contador
+  — `depth_get() == 0` após cache hit
 - `recursion_limit_indirect`: `let g := fat; g 100000 1` (call_indirect,
   não-de-cauda) → erro gracioso (confirma que o contador cobre
   call_indirect, ao contrário do TCO)
