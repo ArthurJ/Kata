@@ -3927,3 +3927,40 @@ main!()
 
 **Nota sintática:** Kata usa notação prefixa. `pi / 2.0` (infix) não
 funciona — usar `(/ pi 2.0)` ou `pi |> / _ 2.0`.
+
+## 29. Configuração Compile-Time (`stdlib/config`)
+
+O módulo `stdlib/config` permite ajustar comportamentos do runtime em
+compile-time via `constant`. As configurações são avaliadas durante a
+compilação e aplicadas ao Runtime antes da execução. São per-module e
+imutáveis em runtime.
+
+### `set_recursion_limit`
+
+```kata
+import stdlib.config
+
+constant _ := config.set_recursion_limit(5000)
+```
+
+Configura o limite de profundidade de recursão. O limite default é **1000
+frames**. Quando recursão não-de-cauda excede o limite, a execução falha
+graciosamente com:
+
+```
+recursion depth exceeded: 1200 (limit: 1000)
+```
+
+Tail calls não incrementam o contador — TCO e TRMA continuam funcionando
+sem restrição. O contador é zerado no início de cada execução.
+
+`set_recursion_limit` recebe `PositiveInt` — o type system rejeita
+valores negativos ou zero em compile-time:
+
+```kata
+constant _ := config.set_recursion_limit(-5)   # erro de tipo
+```
+
+A configuração só funciona em `constant` (compile-time). Tentar usar
+`set_recursion_limit` em runtime é um erro — a FFI só está registrada
+no comptime.

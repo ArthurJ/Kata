@@ -903,6 +903,33 @@ action processar (x::Int) => Int
 
 ---
 
+## Módulo `config` — configuração compile-time do runtime
+
+Módulo opt-in que permite ajustar comportamentos do runtime em compile-time
+via `constant`. Configurações são per-module e imutáveis em runtime.
+
+```kata
+import stdlib.config
+```
+
+| Função | Assinatura | Descrição |
+|---|---|---|
+| `set_recursion_limit` | `PositiveInt => Unit` | Configura o limite de profundidade de recursão (default: 1000). Só funciona em `constant`. |
+
+Uso:
+
+```kata
+import stdlib.config
+
+constant _ := config.set_recursion_limit(5000)
+```
+
+`set_recursion_limit` recebe `PositiveInt` — o type system rejeita valores
+negativos ou zero em compile-time. A FFI só está registrada no comptime;
+tentar usar em runtime é erro.
+
+---
+
 ## Delimitadores de Coleções
 
 | Sintaxe | Tipo | Layout |

@@ -92,6 +92,32 @@ echo!(fatorial_10)
 
 O cálculo `fatorial 10` roda em compile-time. No binário, `fatorial_10` é o literal `3628800` — não há chamadas de função em runtime.
 
+## Limite de profundidade de recursão
+
+TCO e TRMA eliminam o crescimento da pilha em recursão de cauda. Mas recursão não-de-cauda ainda cresce a pilha — e sem proteção, recursão profunda estoura a pilha do processo (SIGSEGV sem mensagem).
+
+Kata tem um **contador de profundidade em software** que detecta recursão excessiva antes do SIGSEGV e produz uma falha graciosa com mensagem clara:
+
+```
+recursion depth exceeded: 1200 (limit: 1000)
+```
+
+O limite default é **1000 frames**. Tail calls não incrementam o contador — TCO continua funcionando. O limite é configurável em código Kata via `constant`:
+
+```kata
+import stdlib.config
+
+constant _ := config.set_recursion_limit(5000)
+
+soma :: Int => Int
+lambda 0: 0
+lambda n: + n (soma (- n 1))
+
+echo!(soma 3000)  # funciona — limite é 5000
+```
+
+`set_recursion_limit` recebe `PositiveInt` — o type system rejeita `set_recursion_limit(-5)` em compile-time. A configuração é per-module e imutável em runtime.
+
 ## Próximo capítulo
 
 Otimizações são automáticas. O próximo capítulo mostra o REPL interativo — explorar a linguagem sem criar arquivos. → [Capítulo 15](15-repl.md)
