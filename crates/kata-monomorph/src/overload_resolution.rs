@@ -9,6 +9,7 @@
 use std::collections::HashMap;
 
 use kata_ast::Spanned;
+use kata_core::dispatch::OverloadInfo;
 use kata_core::ty::Ty;
 use kata_inference::{Substitutions, TypedExpr, TypedExprKind, apply_subs, unify};
 
@@ -63,7 +64,22 @@ pub(crate) fn instantiate_generic_closure(
     ctx: &MonoCtx,
     acc: &mut RewriteAcc,
 ) -> bool {
-    let Some(overloads) = ctx.dispatch_table.get_overloads(name) else {
+    let overloads = ctx.dispatch_table.get_overloads(name);
+    let owned_overloads: Option<Vec<OverloadInfo>>;
+    let overloads = if overloads.is_some() {
+        overloads
+    } else {
+        // Nome não encontrado no dispatch — tentar resolver via ffi_symbol.
+        // O ffi_symbol pode ser o mangled de uma função genérica registrada
+        // sob outro nome (ex: "show" com ffi_symbol "__kata_show__List").
+        if let Some(ref mangled) = *ffi_symbol {
+            owned_overloads = find_overloads_by_ffi_symbol(ctx, mangled);
+            owned_overloads.as_ref()
+        } else {
+            None
+        }
+    };
+    let Some(overloads) = overloads else {
         return false;
     };
 
@@ -378,4 +394,29 @@ pub(crate) fn instantiate_overloadset_arg(
         name: instance_name,
     };
     arg.node.ty = Ty::Action(concrete_params, Box::new(concrete_ret));
+}
+
+/// Procura overloads genéricos no DispatchTable cujo `ffi_symbol` corresponde
+/// ao `mangled` dado. Isto é necessário quando uma função sintetizada (ex:
+/// show de um tipo refined) chama outra função sintetizada pelo mangled
+/// (ex: `__kata_show__List`) em vez do nome de dispatch (`"show"`).
+///
+/// Retorna um Vec com os overloads genéricos que têm `is_generic = true` e
+/// `ffi_symbol == Some(mangled)`.
+fn find_overloads_by_ffi_symbol(ctx: &MonoCtx, mangled: &str) -> Option<Vec<OverloadInfo>> {
+    let mut found = Vec::new();
+    for name in ctx.dispatch_table.all_names() {
+        if let Some(overloads) = ctx.dispatch_table.get_overloads(name) {
+            for oi in overloads {
+                if oi.is_generic && oi.ffi_symbol.as_deref() == Some(mangled) {
+                    found.push(oi.clone());
+                }
+            }
+        }
+    }
+    if found.is_empty() {
+        None
+    } else {
+        Some(found)
+    }
 }
