@@ -326,23 +326,23 @@ fn evaluate_constants(
         } = &value_clone.kind
         {
             // Só executar FFIs conhecidas com args comptime-available.
-            if args.iter().all(|a| is_comptime_available(&a.node, comptime_bindings)) {
-                if let Some(result) = try_exec_comptime_ffi(sym, callee, args, ctx) {
-                    let literal = result_to_literal(
-                        &result,
-                        &value_clone,
-                        snapshots,
-                        ctx.struct_registry,
-                        ctx.enum_registry,
-                    )?;
-                    if let TypedExprKind::ConstantBinding { value, .. } =
-                        &mut binding.node.kind
-                    {
-                        **value = Spanned::new(literal.clone(), value_span);
-                    }
-                    comptime_bindings.insert(name, literal);
-                    continue;
+            if args
+                .iter()
+                .all(|a| is_comptime_available(&a.node, comptime_bindings))
+                && let Some(result) = try_exec_comptime_ffi(sym, callee, args, ctx)
+            {
+                let literal = result_to_literal(
+                    &result,
+                    &value_clone,
+                    snapshots,
+                    ctx.struct_registry,
+                    ctx.enum_registry,
+                )?;
+                if let TypedExprKind::ConstantBinding { value, .. } = &mut binding.node.kind {
+                    **value = Spanned::new(literal.clone(), value_span);
                 }
+                comptime_bindings.insert(name, literal);
+                continue;
             }
         }
         if matches!(
