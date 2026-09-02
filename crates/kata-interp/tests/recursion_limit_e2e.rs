@@ -5,12 +5,12 @@
 
 use kata_core::ty::Ty;
 use kata_inference::infer_module;
-use kata_interp::{interpret_with_registry, InterpError};
+use kata_interp::{InterpError, interpret_with_registry};
 use kata_lexer::lex;
 use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
 use kata_parser::parse;
-use kata_resolution::{load_stdlib_for_tests, resolve, ResolvedModule};
+use kata_resolution::{ResolvedModule, load_stdlib_for_tests, resolve};
 use kata_rt::Runtime;
 
 fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModule {

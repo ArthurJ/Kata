@@ -625,7 +625,10 @@ pub(crate) fn define_function_body(
                 } else {
                     lower.builder.ins().iconst(I64, 1) // SMI 0
                 };
-                lower.builder.ins().jump(epi, &[cranelift_codegen::ir::BlockArg::Value(dummy)]);
+                lower
+                    .builder
+                    .ins()
+                    .jump(epi, &[cranelift_codegen::ir::BlockArg::Value(dummy)]);
             } else {
                 let ret_clif_ty = super::resolve_clif_ty(ret_ty, struct_registry);
                 let dummy = if ret_clif_ty == F64 {

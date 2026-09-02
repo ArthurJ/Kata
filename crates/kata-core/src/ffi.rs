@@ -925,7 +925,9 @@ impl FfiSymbol {
             // Recursion depth
             FfiSymbol::DepthInc | FfiSymbol::DepthGet | FfiSymbol::Overflowed => Ty::int(),
             FfiSymbol::DepthGetLimit => Ty::int(),
-            FfiSymbol::DepthDec | FfiSymbol::DepthSetLimit | FfiSymbol::SetOverflowed
+            FfiSymbol::DepthDec
+            | FfiSymbol::DepthSetLimit
+            | FfiSymbol::SetOverflowed
             | FfiSymbol::ResetDepth => Ty::Unit,
         }
     }

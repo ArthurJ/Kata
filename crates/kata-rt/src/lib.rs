@@ -150,8 +150,8 @@ pub use timer::kata_rt_timer_now;
 // Marshalling (to_bytes/from_bytes para spawn!)
 pub use marshal::{TypeShape, kata_rt_from_bytes, kata_rt_to_bytes, register_type_table};
 
-pub use runtime::Runtime;
 pub use runtime::DEFAULT_DEPTH_LIMIT;
+pub use runtime::Runtime;
 // Recursion depth FFIs
 pub use runtime::{
     kata_rt_depth_dec, kata_rt_depth_get, kata_rt_depth_get_limit, kata_rt_depth_inc,

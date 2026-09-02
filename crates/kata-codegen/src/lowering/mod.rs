@@ -53,9 +53,9 @@ pub use module::CodegenError;
 use module::StringTable;
 pub use test_runner::TestWrapper;
 
+use cranelift_codegen::ir::InstBuilder;
 use cranelift_codegen::ir::types::{F64, I64};
 use cranelift_codegen::ir::{Block, GlobalValue, Value};
-use cranelift_codegen::ir::InstBuilder;
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
 

@@ -163,9 +163,7 @@ pub fn jit_eval(
         // O module precisa sobreviver até aqui — dropping após execução.
         std::mem::forget(backend.into_inner());
         return Err(CodegenError::Runtime {
-            message: format!(
-                "recursion depth exceeded: {depth} (limit: {limit})"
-            ),
+            message: format!("recursion depth exceeded: {depth} (limit: {limit})"),
         });
     }
 

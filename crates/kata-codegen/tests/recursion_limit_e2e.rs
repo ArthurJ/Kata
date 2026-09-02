@@ -11,7 +11,7 @@ use kata_lexer::lex;
 use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
 use kata_parser::parse;
-use kata_resolution::{load_stdlib_for_tests, resolve, ResolvedModule};
+use kata_resolution::{ResolvedModule, load_stdlib_for_tests, resolve};
 use kata_tree_shaking::tree_shake;
 
 fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModule {
@@ -251,9 +251,8 @@ count 1500
     // Criar comptime Runtime e rodar comptime pass.
     let comptime_rt = Box::new(kata_rt::Runtime::new());
     let comptime_rt_ptr = Box::into_raw(comptime_rt) as i64;
-    let typed =
-        run_comptime_pass(typed.inner, &resolved.enum_registry, comptime_rt_ptr)
-            .expect("comptime deve succeed");
+    let typed = run_comptime_pass(typed.inner, &resolved.enum_registry, comptime_rt_ptr)
+        .expect("comptime deve succeed");
 
     // Ler depth_limit do comptime Runtime.
     let depth_limit = unsafe { (*(comptime_rt_ptr as *mut kata_rt::Runtime)).depth_limit() };
@@ -306,14 +305,15 @@ lambda n: * n 2
 
     let rt_ptr = leak_rt_ptr();
     let result = jit_eval(&typed, &Default::default(), &[], rt_ptr, false);
-    assert!(result.is_ok(), "dobro 5 + dobro 5 deve passar: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "dobro 5 + dobro 5 deve passar: {:?}",
+        result.err()
+    );
 
     // Após execução, depth deve ser 0 — o cache hit no segundo `dobro 5`
     // não chama o inner, então depth_inc não dispara. O primeiro `dobro 5`
     // (cache miss) chama o inner (depth_inc/dec), mas o dec equilibra.
     let depth = unsafe { (*(rt_ptr as *mut kata_rt::Runtime)).depth_get() };
-    assert_eq!(
-        depth, 0,
-        "depth deve ser 0 após execução com cache hit"
-    );
+    assert_eq!(depth, 0, "depth deve ser 0 após execução com cache hit");
 }

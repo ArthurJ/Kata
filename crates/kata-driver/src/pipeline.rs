@@ -534,9 +534,10 @@ impl Pipeline {
         let comptime_rt = Box::new(kata_rt::Runtime::new());
         let comptime_rt_ptr = Box::into_raw(comptime_rt) as i64;
 
-        let shaken = run_comptime_pass(mono.inner, &enum_registry, comptime_rt_ptr).map_err(|e| {
-            one_err(e.into_report_with_source(&self.source, self.file_path.as_deref()))
-        })?;
+        let shaken =
+            run_comptime_pass(mono.inner, &enum_registry, comptime_rt_ptr).map_err(|e| {
+                one_err(e.into_report_with_source(&self.source, self.file_path.as_deref()))
+            })?;
 
         // Ler depth_limit do comptime Runtime antes de droppá-lo.
         let depth_limit = {

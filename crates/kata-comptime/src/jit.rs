@@ -82,24 +82,18 @@ pub(crate) fn jit_execute_expr(
     let comptime_limit = kata_rt::kata_rt_depth_get_limit(ctx.rt_ptr);
     kata_rt::kata_rt_depth_set_limit(exec_rt_ptr, comptime_limit);
 
-    let result = kata_codegen::jit_eval(
-        &mini,
-        &Default::default(),
-        &[],
-        exec_rt_ptr,
-        false,
-    )
-    .map_err(|e| {
-        // Copiar depth_limit de volta mesmo em caso de erro —
-        // set_recursion_limit pode ter sido chamado antes do erro.
-        let exec_limit = kata_rt::kata_rt_depth_get_limit(exec_rt_ptr);
-        if exec_limit != comptime_limit {
-            kata_rt::kata_rt_depth_set_limit(ctx.rt_ptr, exec_limit);
-        }
-        ComptimeError::JitError {
-            reason: format!("{e}"),
-        }
-    })?;
+    let result = kata_codegen::jit_eval(&mini, &Default::default(), &[], exec_rt_ptr, false)
+        .map_err(|e| {
+            // Copiar depth_limit de volta mesmo em caso de erro —
+            // set_recursion_limit pode ter sido chamado antes do erro.
+            let exec_limit = kata_rt::kata_rt_depth_get_limit(exec_rt_ptr);
+            if exec_limit != comptime_limit {
+                kata_rt::kata_rt_depth_set_limit(ctx.rt_ptr, exec_limit);
+            }
+            ComptimeError::JitError {
+                reason: format!("{e}"),
+            }
+        })?;
 
     // Copiar depth_limit de volta para o comptime Runtime.
     // Se set_recursion_limit foi executado, o limite mudou.
