@@ -119,7 +119,9 @@ action main => Int
   let (tx, rx) := channel!()
   fork!(prod, (tx))
   rx !> lst
-  head lst
+  match lst
+    [h : _]: h
+    otherwise: 0
 main!()"#;
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::Prim(PrimTy::Int));
@@ -203,7 +205,9 @@ action main => Int
   rx !> a
   rx !> b
   rx !> c
-  head c
+  match c
+    [h : _]: h
+    otherwise: 0
 main!()"#;
     let (raw, _ty) = eval_src(src);
     assert_ne!(raw, DEADLOCK_SENTINEL, "não deve deadlockar");
@@ -257,7 +261,9 @@ action main => Int
   let (tx, rx) := channel!()
   fork!(worker, (tx))
   rx !> result
-  head result
+  match result
+    [h : _]: h
+    otherwise: 0
 main!()"#;
     let (raw, _ty) = eval_src(src);
     assert_ne!(raw, DEADLOCK_SENTINEL, "não deve deadlockar");

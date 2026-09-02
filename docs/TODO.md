@@ -174,19 +174,24 @@ pendentes, 5 altos, 8 médios, 3 baixos.
 
 #### A2. `head` de lista vazia → SIGSEGV/panic
 
-**Estado:** `head :: List::A => A` (não Result) retorna 0 para
-lista vazia (`list.rs:48-50`). `echo!(head [])` chama
-`kata_rt_bi_show(0)` → `deref_bigint(0)` → panic non-unwinding →
-SIGABRT. A assinatura mente: promete `A` mas retorna null.
+**Estado:** ✅ Resolvido. `head` e `tail` migrados de `List::A` para
+`NonEmpty::A` em `stdlib/core.kata`. `data (List::A, >= (len _) 1) as
+NonEmpty` é uma família polimórfica lazy que rejeita listas vazias em
+compile-time. `head []` agora retorna `type.mismatch` (nenhuma sobrecarga
+aceita `List(())`) em vez de SIGABRT. `head ([]::NonEmpty)` falha o
+predicado `>= (len _) 1` em compile-time.
 
-**Localização:** `crates/kata-rt/src/list.rs:48-50`,
-`crates/kata-rt/src/bigint.rs:96-99`, `stdlib/core.kata:652`.
+**Limitação pendente:** comptime JIT não suporta `constant x :=
+[1 2 3]::NonEmpty` — a ascription de NonEmpty em compile-time causa
+SIGABRT porque o JIT não avalia `TypeAscription` para tipos
+non-primitivos. Workaround: usar `head ([1 2 3]::NonEmpty)` diretamente
+como entry point (sem `constant`), ou `match` para extrair head de
+listas em runtime.
 
-**Reprodução:** `echo!(head ([] :: [Int]))` → exit -6 (SIGABRT) em
-ambos backends.
-
-**Prioridade:** crítica — typeck endossa assinatura que runtime
-não honra.
+**Localização:** `stdlib/core.kata` (NonEmpty + head/tail),
+`crates/kata-inference/src/infer/generics.rs` (unify Generic vs Instance),
+`crates/kata-inference/src/infer/ascription.rs` (is_family_target reconhece lazy),
+`crates/kata-inference/src/infer/show_synthesis.rs` (pular lazy families).
 
 #### A3b. Stack overflow em literals de lista profundamente aninhados
 

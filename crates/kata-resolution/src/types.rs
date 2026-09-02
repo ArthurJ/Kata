@@ -211,6 +211,10 @@ pub struct RefinedDeclInfo {
     pub base_ty: Ty,
     /// Predicados como `Spanned<Expr>` (com Hole como placeholder).
     pub predicates: Vec<Spanned<Expr>>,
+    /// Para famílias polimórficas lazy (sobre coleções parametrizadas):
+    /// nome do type parameter livre no base_ty (ex: "A" em `List::A`).
+    /// `None` para refined concreto ou família polimórfica eager (sobre interface).
+    pub lazy_type_param: Option<String>,
 }
 
 /// Informação de um enum com variantes predicadas.

@@ -1,0 +1,10 @@
+---
+source: crates/kata-driver/tests/examples_snapshot.rs
+assertion_line: 105
+expression: output
+---
+[1, 2, 3]
+hello
+{1, 2, 3}
+ok
+err

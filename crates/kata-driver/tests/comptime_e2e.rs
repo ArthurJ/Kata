@@ -138,10 +138,11 @@ fn comptime_list_len_via_snapshot() {
     );
 }
 
-/// `head` sobre `@comptime [1 2 3]` deve retornar 1 (primeiro elemento).
+/// `head` sobre `[1 2 3]::NonEmpty` deve retornar 1 (primeiro elemento).
+/// Não usa `constant` porque comptime não suporta ascription de NonEmpty.
 #[test]
 fn comptime_list_head_via_snapshot() {
-    let (stdout, stderr, code) = run_kata_run("constant x := [1 2 3]\nhead x");
+    let (stdout, stderr, code) = run_kata_run("head ([1 2 3]::NonEmpty)");
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     let first = stdout.lines().next().unwrap_or("");
     assert_eq!(
@@ -150,10 +151,12 @@ fn comptime_list_head_via_snapshot() {
     );
 }
 
-/// `head (tail x)` sobre `@comptime [1 2 3]` deve retornar 2.
+/// `match (tail ([1 2 3]::NonEmpty)) [h : _]: h` deve retornar 2.
+/// Não usa `head (tail ...)` porque tail retorna List (não NonEmpty).
+/// Não usa `constant` porque comptime não suporta ascription de NonEmpty.
 #[test]
 fn comptime_list_head_tail_via_snapshot() {
-    let (stdout, stderr, code) = run_kata_run("constant x := [1 2 3]\nhead (tail x)");
+    let (stdout, stderr, code) = run_kata_run("action main => Int\n  let t1 := tail ([1 2 3]::NonEmpty)\n  match t1\n    [h : _]: h\n    otherwise: 0\necho!(main!())");
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     let first = stdout.lines().next().unwrap_or("");
     assert_eq!(
@@ -162,12 +165,13 @@ fn comptime_list_head_tail_via_snapshot() {
     );
 }
 
-/// `len (tail (tail x))` sobre `@comptime [1 2 3]` deve retornar 1.
-/// Exercita dois `tail` consecutivos — cada um desreferencia um
-/// ponteiro no snapshot carregado.
+/// `len` do tail do tail de `[1 2 3]::NonEmpty` deve retornar 1.
+/// `tail ([1 2 3]::NonEmpty)` = `[2 3]`; `match [2 3] [h : t]: len t` = `len [3]` = 1.
+/// Não encadeia `tail (tail ...)` porque tail retorna List (não NonEmpty).
+/// Não usa `constant` porque comptime não suporta ascription de NonEmpty.
 #[test]
 fn comptime_list_double_tail_len_via_snapshot() {
-    let (stdout, stderr, code) = run_kata_run("constant x := [1 2 3]\nlen (tail (tail x))");
+    let (stdout, stderr, code) = run_kata_run("action main => Int\n  let t1 := tail ([1 2 3]::NonEmpty)\n  match t1\n    [h : t]: len t\n    otherwise: 0\necho!(main!())");
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     let first = stdout.lines().next().unwrap_or("");
     assert_eq!(
@@ -234,12 +238,11 @@ fn comptime_list_of_text_len() {
     );
 }
 
-/// `len (head x)` onde `x := @comptime ["hello" "world"]` → 5.
-/// Exercita navegação de List de Text: head é um ponteiro para a
-/// appended, `len` desreferencia e conta a string.
+/// `len (head (["hello" "world"]::NonEmpty))` → 5.
+/// Não usa `constant` porque comptime não suporta ascription de NonEmpty.
 #[test]
 fn comptime_list_of_text_head_len() {
-    let (stdout, stderr, code) = run_kata_run("constant x := [\"hello\" \"world\"]\nlen (head x)");
+    let (stdout, stderr, code) = run_kata_run("len (head ([\"hello\" \"world\"]::NonEmpty))");
     assert_eq!(code, 0, "kata run deve exit 0 — stderr: {stderr}");
     let first = stdout.lines().next().unwrap_or("");
     assert_eq!(

@@ -160,7 +160,7 @@ fn range_literal_produz_range_int() {
 
 #[test]
 fn head_de_list_soma_10() {
-    let src = "+ (head [1 2 3]) 10";
+    let src = "+ (head ([1 2 3]::NonEmpty)) 10";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::int(), "+ (head [1 2 3]) 10 deve retornar Int");
     assert_eq!(untag_smi(raw), 11, "head [1 2 3] + 10 = 11");
@@ -321,7 +321,7 @@ fn index_unwrap_em_array_retorna_1() {
 /// List é tipo infinito — exige `otherwise` para exaustividade.
 #[test]
 fn pattern_cons_extrai_head_e_tail() {
-    let src = "match [1 2 3]\n  [h : t]: + h (head t)\n  otherwise: 0";
+    let src = "match [1 2 3]\n  [h : t]: + h (head (t::NonEmpty))\n  otherwise: 0";
     let (raw, ty) = eval_src(src);
     assert_eq!(ty, Ty::int(), "match Cons deve retornar Int");
     assert_eq!(untag_smi(raw), 3, "match [1 2 3] [h:t]: + h (head t) = 3");

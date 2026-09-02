@@ -647,12 +647,18 @@ lambda a:
     a: False
     otherwise: True
 
+# NonEmpty: lista não-vazia. Família polimórfica lazy sobre List::A.
+# Garante que head/tail recebem apenas listas com pelo menos 1 elemento,
+# eliminando o crash de head [] em compile-time.
+data (List::A, >= (len _) 1) as NonEmpty
+
 # List head/tail (extrai primeiro elemento / resto da lista)
+# Assinatura exige NonEmpty — head [] é rejeitado em compile-time.
 @ffi("kata_rt_list_head")
-head :: List::A => A
+head :: NonEmpty::A => A
 
 @ffi("kata_rt_list_tail")
-tail :: List::A => List::A
+tail :: NonEmpty::A => List::A
 
 # List cons (construtor: prepend elemento na lista)
 @ffi("kata_rt_list_cons")

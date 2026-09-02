@@ -72,6 +72,19 @@ pub(crate) fn synthesize_show_functions(
             continue;
         }
 
+        // Famílias polimórficas lazy (ex: NonEmpty sobre List::A) não têm
+        // instâncias concretas no StructRegistry. O show sintetizado para
+        // elas referenciaria __kata_show__List (template genérico) que é
+        // removido pelo monomorphizador, causando ffi_not_found no codegen.
+        // Pular — o show de NonEmpty será resolvido por downcast ao tipo
+        // base (List) no dispatch do echo!.
+        let is_lazy_family = refined_decls.iter().any(|rd| {
+            rd.name == struct_name && rd.lazy_type_param.is_some()
+        });
+        if is_lazy_family {
+            continue;
+        }
+
         // Se o tipo já tem implementação manual do método `show` (via qualquer
         // interface, respeitando orphan rule — o impl está no mesmo módulo que o
         // tipo), não sintetiza. A implementação manual tem prioridade.

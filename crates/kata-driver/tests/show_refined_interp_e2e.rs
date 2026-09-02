@@ -85,10 +85,10 @@ main!()"#;
 /// (a const-eval de ascription refined cobre literals numéricos, não Text).
 #[test]
 fn show_refined_text_delega_ao_base() {
-    let source = r#"data (Text, = _ _) as NonEmpty
+    let source = r#"data (Text, = _ _) as NonEmptyText
 
 action main => Unit
-    match (NonEmpty "ola")
+    match (NonEmptyText "ola")
         Ok s: echo!(s)
         Err _: echo!("erro")
 main!()"#;

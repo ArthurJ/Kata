@@ -18,6 +18,7 @@
 use std::collections::HashMap;
 
 use kata_core::ty::Ty;
+use kata_core::{PrimTy, StructKey};
 use kata_diagnostics::MiddleError;
 
 /// Resultado de unificação — mapa de type param → tipo concreto.
@@ -145,6 +146,47 @@ fn unify_one(
                 unify_one(p, a, type_params, subs)?;
             }
             Ok(())
+        }
+
+        // Generic(family, [Var(param)]) vs Instance(family, concrete):
+        // A assinatura `head :: NonEmpty::A => A` resolve para
+        // Generic("NonEmpty", [Var("A")]) no DispatchTable. O argumento
+        // `[1 2 3]::NonEmpty` produz Struct(Instance("NonEmpty", "Int")).
+        // Este caso casa a família por nome e unifica Var("A") com o tipo
+        // concreto extraído do Instance.
+        (
+            Ty::Generic(fam_p, ps),
+            Ty::Struct(StructKey::Instance(fam_a, concrete_a)),
+        ) if fam_p == fam_a && ps.len() == 1 => {
+            let arg_inner = match concrete_a.as_str() {
+                "Int" => Ty::Prim(PrimTy::Int),
+                "Float" => Ty::Prim(PrimTy::Float),
+                "Rational" => Ty::Prim(PrimTy::Rational),
+                "Text" => Ty::Prim(PrimTy::Text),
+                other => Ty::Struct(StructKey::Plain(other.to_string())),
+            };
+            unify_one(&ps[0], &arg_inner, type_params, subs)
+        }
+
+        // Instance de família polimórfica com type var no concrete:
+        // Instance("NonEmpty", "A") (param) vs Instance("NonEmpty", "Int") (arg).
+        // Unifica o type var A → Int recursivamente.
+        (
+            Ty::Struct(StructKey::Instance(fam_p, concrete_p)),
+            Ty::Struct(StructKey::Instance(fam_a, concrete_a)),
+        ) if fam_p == fam_a => {
+            // concrete_p é o nome do type param (ex: "A").
+            // concrete_a é o nome do tipo concreto (ex: "Int").
+            // Constrói o Ty do tipo concreto e unifica com A.
+            let arg_inner = match concrete_a.as_str() {
+                "Int" => Ty::Prim(PrimTy::Int),
+                "Float" => Ty::Prim(PrimTy::Float),
+                "Rational" => Ty::Prim(PrimTy::Rational),
+                "Text" => Ty::Prim(PrimTy::Text),
+                other => Ty::Struct(StructKey::Plain(other.to_string())),
+            };
+            let param_inner = Ty::Var(concrete_p.clone());
+            unify_one(&param_inner, &arg_inner, type_params, subs)
         }
 
         // Match estrutural para tipos concretos

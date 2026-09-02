@@ -22,6 +22,26 @@ use crate::types::{
     EnumPredDeclInfo, EnumPredVariant, FunctionDef, RefinedDeclInfo, ResolveError, Signature,
 };
 
+/// Extrai o nome do type parameter livre de uma coleção parametrizada.
+///
+/// `Ty::List(Ty::Var("A"))` → `Some("A")` — família polimórfica lazy.
+/// `Ty::List(Ty::Prim(PrimTy::Int))` → `None` — refined concreto.
+/// `Ty::Array(Ty::Var("A"))` → `Some("A")`.
+/// `Ty::Set(Ty::Var("A"))` → `Some("A")`.
+/// Outros tipos → `None`.
+fn extract_lazy_type_param(base_ty: &Ty) -> Option<String> {
+    match base_ty {
+        Ty::List(inner) | Ty::Array(inner) | Ty::Set(inner) | Ty::Range(inner) => {
+            if let Ty::Var(name) = inner.as_ref() {
+                Some(name.clone())
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
 /// Substitui `Family(name)` por `Instance(name, concrete_type)` em um `Ty`,
 /// recursivamente, quando a instância existe no StructRegistry.
 ///
@@ -290,6 +310,7 @@ pub(crate) fn run_pass0(
                                     name: name.clone(),
                                     base_ty,
                                     predicates: refined_decl.predicates.clone(),
+                                    lazy_type_param: None,
                                 });
                             } else {
                                 // Registrar uma instância por tipo concreto.
@@ -314,6 +335,7 @@ pub(crate) fn run_pass0(
                                         name: name.clone(),
                                         base_ty: instance_base,
                                         predicates: refined_decl.predicates.clone(),
+                                        lazy_type_param: None,
                                     });
                                 }
                                 // Registrar o nome público no type_env como Family
@@ -326,34 +348,66 @@ pub(crate) fn run_pass0(
                             }
                         }
                         _ => {
-                            // Refined concreto: `data (Int, > _ 0) as PositiveInt`
-                            let base_ty_name = match &refined_decl.base_ty.node {
-                                TypeExpr::Named(n) => n.clone(),
-                                // `data ([Int], ...) as NonEmpty` →
-                                // TypeExpr::ParamApp { name: "List", ... }
-                                // Extrair o nome do tipo base.
-                                TypeExpr::ParamApp { name, .. } => name.clone(),
-                                _ => String::new(),
-                            };
-                            let pred_names: Vec<String> = (0..refined_decl.predicates.len())
-                                .map(|i| format!("__pred_{name}_{i}"))
-                                .collect();
-                            struct_registry.register_refined(
-                                origin,
-                                name,
-                                &base_ty_name,
-                                pred_names,
-                            );
-                            type_env.define(
-                                name,
-                                Ty::Struct(StructKey::Plain(name.clone())),
-                                origin,
-                            );
-                            refined_decls.push(RefinedDeclInfo {
-                                name: name.clone(),
-                                base_ty,
-                                predicates: refined_decl.predicates.clone(),
-                            });
+                            // Verificar se é família polimórfica lazy:
+                            // base é coleção parametrizada com type var livre.
+                            // Ex: `data (List::A, >= (len _) 1) as NonEmpty`
+                            // → base_ty = Ty::List(Ty::Var("A"))
+                            let lazy_param = extract_lazy_type_param(&base_ty);
+                            if lazy_param.is_some() {
+                                // Família polimórfica lazy: registrar como Family,
+                                // NÃO instanciar (instâncias criadas on-demand no call-site).
+                                let pred_names: Vec<String> =
+                                    (0..refined_decl.predicates.len())
+                                        .map(|i| format!("__pred_{name}_{i}"))
+                                        .collect();
+                                struct_registry.register_refined(
+                                    origin,
+                                    name,
+                                    "List",
+                                    pred_names,
+                                );
+                                type_env.define(
+                                    name,
+                                    Ty::Struct(StructKey::Family(name.clone())),
+                                    origin,
+                                );
+                                refined_decls.push(RefinedDeclInfo {
+                                    name: name.clone(),
+                                    base_ty,
+                                    predicates: refined_decl.predicates.clone(),
+                                    lazy_type_param: lazy_param,
+                                });
+                            } else {
+                                // Refined concreto: `data (Int, > _ 0) as PositiveInt`
+                                let base_ty_name = match &refined_decl.base_ty.node {
+                                    TypeExpr::Named(n) => n.clone(),
+                                    // `data ([Int], ...) as NonEmpty` →
+                                    // TypeExpr::ParamApp { name: "List", ... }
+                                    // Extrair o nome do tipo base.
+                                    TypeExpr::ParamApp { name, .. } => name.clone(),
+                                    _ => String::new(),
+                                };
+                                let pred_names: Vec<String> = (0..refined_decl.predicates.len())
+                                    .map(|i| format!("__pred_{name}_{i}"))
+                                    .collect();
+                                struct_registry.register_refined(
+                                    origin,
+                                    name,
+                                    &base_ty_name,
+                                    pred_names,
+                                );
+                                type_env.define(
+                                    name,
+                                    Ty::Struct(StructKey::Plain(name.clone())),
+                                    origin,
+                                );
+                                refined_decls.push(RefinedDeclInfo {
+                                    name: name.clone(),
+                                    base_ty,
+                                    predicates: refined_decl.predicates.clone(),
+                                    lazy_type_param: None,
+                                });
+                            }
                         }
                     }
                     continue;
@@ -433,6 +487,7 @@ pub(crate) fn run_pass0(
                             name: new_name.clone(),
                             base_ty: rd.base_ty.clone(),
                             predicates: rd.predicates.clone(),
+                            lazy_type_param: rd.lazy_type_param.clone(),
                         });
                     }
                 } else {

@@ -265,6 +265,16 @@ pub fn resolve_type_expr(
                                 concrete.to_string(),
                             ));
                         }
+                        // Se o param é type var (ex: NonEmpty::A em assinatura),
+                        // resolver para Instance com type var — o unify no
+                        // dispatch casa Instance("NonEmpty", "A") com
+                        // Instance("NonEmpty", "Int") e unifica A → Int.
+                        if let Ty::Var(var_name) = &resolved_params[0] {
+                            return Ty::Struct(StructKey::Instance(
+                                name.clone(),
+                                var_name.clone(),
+                            ));
+                        }
                     }
                     // Tenta resolver como Ty::Var se o param é um nome que não está no TypeEnv
                     // (ex: "T" em Result::(T, E) dentro de uma declaração de função genérica).
@@ -376,6 +386,13 @@ pub fn collect_type_params(param_types: &[Ty], return_type: &Ty) -> Vec<String> 
                     collect_into(p, result);
                 }
                 collect_into(ret, result);
+            }
+            // Instance de família polimórfica com type var no concrete:
+            // Instance("NonEmpty", "A") — coleta "A" como type param.
+            Ty::Struct(StructKey::Instance(_, concrete)) => {
+                if is_type_param_name(concrete) && !result.contains(concrete) {
+                    result.push(concrete.clone());
+                }
             }
             _ => {}
         }
