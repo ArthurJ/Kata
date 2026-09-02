@@ -1,13 +1,8 @@
 # TODO — Kata-Lang
 
-Único arquivo de pendências. Atualizado 2026-08-30.
+Único arquivo de pendências. Atualizado 2026-09-02.
 
 Os docs `TODO-*.md` foram removidos (obsoletos ou resolvidos). Pendências vivem aqui.
-
-Resolvidos em 2026-08-29/30 (ver `git log`): escopo plano (typeck+interp),
-facts de path conditions sobre `var` (Z3 ignora var), `@cache` no interp,
-`refined_types.kata` bloco 4 (dual refines NUM+ORD), show de refined no
-interp, `Text implements EQ`.
 
 ---
 
@@ -20,34 +15,16 @@ podem derrubar o compilador com SIGSEGV/null-deref em vez de erro
 gracioso. Compile-time DEVE falhar graciosamente — nunca SIGSEGV/SIGILL
 — mesmo em input malformado que escapou do typeck.
 
-**Diagnóstico (2026-09-02):** a claim anterior ("440 unwrap/expect em
-codegen", "P19-like com `if` inválido") estava imprecisa. `if` não é
-keyword em Kata. Os 37 `.expect()` em `kata-codegen/src/` são TODOS
-invariantes internas legítimas (FFI bootstrap, constantes Cranelift,
-pipeline AOT) — nenhum é explosível por input do usuário. A classe real
-de crash é **deref de ponteiro cru sem null-check** no runtime/codegen,
-não `unwrap/expect`. Mapeamento completo em src/: 122 `.unwrap()` +
-267 `.expect()` = 389 total (não 440; número original inflava com
-testes). Os 122 `.unwrap()` em src/ eram o alvo de limpeza.
+**Diagnóstico (2026-09-02):** `.unwrap()` em src/ limpo (27 sites
+convertidos para `.expect()`). `Err` com payload null corrigido (A1 —
+10 sites agora usam `err_with_msg`). A classe restante é **deref de
+ponteiro cru sem null-check** no codegen/runtime que assume invariantes
+do typeck.
 
-**Limpeza (2026-09-02):** dos 122 `.unwrap()` em src/, 95 estavam em
-`#[test]` inline (não-produtivo). 27 em código produtivo foram
-convertidos para `.expect("razão")` com invariante documentada em 12
-arquivos (eval.rs, show.rs, casing.rs, dispatch.rs, ffi_dispatch.rs,
-csp.rs, _match.rs, cache.rs, patterns.rs, lambda.rs, imports.rs,
-main.rs). Build limpo, 2003 testes, 0 falhas. **Zero `.unwrap()` em
-código produtivo em src/.**
-
-**Causa provável:** janelas no codegen/runtime onde uma suposição do
-typeck (retorno sempre presente, tag sempre definida, payload não-null)
-é dereferenciada sem checagem. O crash some quando o programa é
-corrigido — a classe fica.
-
-**Correção provável:** (1) limpar os 122 `.unwrap()` em src/ para
-`.expect()` com invariante explícita (zeladoria mecânica); (2) sweep de
-sites de deref de ponteiro cru sem null-check no codegen/runtime que
-assumem invariantes do typeck — substituir por checks que emitem
-`codegen.unsupported`/erro interno gracioso.
+**Correção pendente:** sweep de sites de deref de ponteiro cru sem
+null-check no codegen/runtime — substituir por checks que emitem
+`codegen.unsupported`/erro interno gracioso quando a suposição não
+segura.
 
 **Prioridade:** alta — crash do compilador é a pior classe de falha.
 
@@ -148,7 +125,7 @@ Bug separado da classe de exaustividade — PRD próprio quando atacar.
 **Estado:** Pendente (medido em `b5e2d9e`, 2026-08-30). `foo None` e
 até `foo Optional::None` (qualificado) dão `type.no_overload` mesmo
 no 2º nível (`Optional::(Boolean)`). Variante sem payload é
-inexpressável como ARGUMENTO — só pattern. Consistente com
+inexpressível como ARGUMENTO — só pattern. Consistente com
 ret-directed dispatch (`Expr::Ident` não consulta hint), mas limita
 a linguagem. Decisão de design, PRD quando atacar.
 
@@ -159,13 +136,6 @@ Generic(Encoding)` dentro do pattern; `Result::(Int, Encoding)` falha
 até sem match (`Err(E|Text)` com E enum). Ortogonal à exaustividade —
 provável elaboração de união/payload. PRD próprio quando atacar.
 
-### Parser — parêntese interno em braço de match (#K-paren)
-**Estado:** ✅ Resolvido (Fase 0 do PRD-exaustividade-aninhada).
-Desembrulhamento de `(p)` sem vírgula em `parse_tuple_pattern` +
-`parse_match_pattern` recursivo (sub-patterns herdam
-`allow_unqualified_variant`). `Some(Some(True))` e `Some (Some True)`
-agora funcionam. Ramo morto `else if LParen` (linhas 83-101) removido.
-
 ---
 
 ## Auditoria de completude — 2026-09-02
@@ -175,25 +145,14 @@ sub-agente kimi-k3:cloud) com probes reais. Cada item validado no
 código-fonte e, quando possível, executado em ambos backends (JIT
 e interpretador).
 
-**Resumo:** 19 achados (A1–A12 + A3b–A3g). 3 críticos (SIGSEGV em
-programas válidos), 5 altos (crash/discrepância de backend), 8
-médios (buracos funcionais), 3 baixos (assimetrias).
+**Resumo:** 19 achados (A1–A12 + A3b–A3g). A1 resolvido. 2 críticos
+pendentes, 5 altos, 8 médios, 3 baixos.
 
 ### 🔴 Crítico — SIGSEGV em programas válidos
 
-#### A1. `show` de `Result::Err` com payload null → SIGSEGV
-
-**Estado:** ✅ Resolvido (2026-09-02). 10 sites no runtime que
-retornavam `Err` com payload=0 (null) corrigidos para usar
-`err_with_msg(msg, arena)` — aloca C string com mensagem de erro
-como payload Text. Helper em `kata-rt/src/sum.rs`. Crash em
-`show_sum` (interp) e `kata_rt_string_concat` (JIT) eliminado
-porque o payload agora é ponteiro válido. A2 (head de lista vazia)
-é bug de assinatura diferente — escala para PRD próprio.
-
 #### A2. `head` de lista vazia → SIGSEGV/panic
 
-**Estado:** `head :: List::A =\u003e A` (não Result) retorna 0 para
+**Estado:** `head :: List::A => A` (não Result) retorna 0 para
 lista vazia (`list.rs:48-50`). `echo!(head [])` chama
 `kata_rt_bi_show(0)` → `deref_bigint(0)` → panic non-unwinding →
 SIGABRT. A assinatura mente: promete `A` mas retorna null.
@@ -223,6 +182,76 @@ ambos backends.
 
 **Prioridade:** alta — mesma classe do bug de recursão sem limitador,
 mas no parser em vez de runtime.
+
+### 🟠 Alto — gaps que travam ou bloqueiam uso real
+
+#### A3f. `len` em Text no interp retorna valor errado (double SMI tag)
+
+**Estado:** `len "abc"` retorna 3 no JIT (correto) mas 7 no interp.
+`kata_rt_text_len` em `slice.rs:49` retorna `tag_smi(count)` (já
+SMI-tagged), mas `ffi_dispatch.rs:328` chama `encode_smi()` sobre
+o resultado — double tagging. `encode_smi(3) = 7`.
+
+**Localização:** `crates/kata-interp/src/ffi_dispatch.rs:328`
+(`encode_smi` sobre valor já SMI-tagged),
+`crates/kata-rt/src/slice.rs:56` (`tag_smi(count)` no retorno).
+
+**Reprodução:** `echo!(len "abc")` → JIT: 3; interp: 7.
+
+**Prioridade:** alta — incorreção silenciosa: todo `len` de Text
+no interp retorna o dobro+1 do valor correto.
+
+#### A3g. Interp não valida ascription refined — aceita `0 :: NonZero`
+
+**Estado:** `let z := 0 :: NonZero::Int` no interp **passa
+silenciosamente** — o interp não executa const-eval de predicados
+refined. O JIT rejeita (comptime.jit_failure, embora com mensagem
+de erro interno em vez de erro de tipo gracioso). A consequência
+direta: `/ 10 z` com z=0::NonZero causa **panic de divisão por
+zero** no interp (bigint.rs:317, non-unwinding → SIGABRT).
+
+**Localização:** `crates/kata-interp/src/eval.rs` (sem
+const-eval de ascription refined),
+`crates/kata-rt/src/bigint.rs:317` (panic divisão por zero).
+
+**Reprodução:**
+```
+let z := 0 :: NonZero::Int
+echo!(/ 10 z)
+```
+JIT: exit 1 (comptime.jit_failure — erro interno, não type error);
+interp: SIGABRT (panic divisão por zero).
+
+**Prioridade:** alta — o interp aceita tipos inválidos que o JIT
+rejeita, e o resultado é crash. O JIT também falha: deveria ser
+`type.mismatch` gracioso, não `comptime.jit_failure` (erro interno).
+
+#### A4. `loop` infinito sem fuel no interpretador
+
+**Estado:** `loop { ... }` no interp é `loop {}` Rust cru — sem
+fuel, timeout, ou yield. O JIT tem `kata_rt_yield_check` no header
+do loop (cooperativo + timeout); o interp não tem nada. `loop`
+sem `break` trava o processo.
+
+**Localização:** `crates/kata-interp/src/eval.rs` —
+`TypedExprKind::Loop { body } => loop { ... }`.
+
+**Prioridade:** alta — mesma classe do bug de recursão sem limitador.
+
+#### A5. `echo!(None)` rejeitado pelo codegen JIT
+
+**Estado:** `Closure` com callee não-Ident não é suportado. O interp
+executa `echo!(None)` (exit 0); o JIT rejeita com
+`codegen.unsupported`. Discrepância de backend.
+
+**Localização:** `crates/kata-codegen/src/lowering/closure.rs:349-355`.
+
+**Reprodução:** `echo!(None)` → JIT: exit 1 (codegen.unsupported);
+interp: exit 0.
+
+**Prioridade:** alta — expressão válida rejeitada por um backend.
+
+### 🟡 Médio — buracos funcionais que limitam a linguagem
 
 #### A3c. `show Optional::None` → ffi_not_found no JIT / placeholder no interp
 
@@ -275,84 +304,6 @@ loop infinito (imprime `1` repetidamente até timeout/kill).
 **Prioridade:** média — typeck rejeita step literal 0, mas não
 step dinâmico 0. Runtime não tem guard.
 
-#### A3f. `len` em Text no interp retorna valor errado (double SMI tag)
-
-**Estado:** `len "abc"` retorna 3 no JIT (correto) mas 7 no interp.
-`kata_rt_text_len` em `slice.rs:49` retorna `tag_smi(count)` (já
-SMI-tagged), mas `ffi_dispatch.rs:328` chama `encode_smi()` sobre
-o resultado — double tagging. `encode_smi(3) = 7`.
-
-**Localização:** `crates/kata-interp/src/ffi_dispatch.rs:328`
-(`encode_smi` sobre valor já SMI-tagged),
-`crates/kata-rt/src/slice.rs:56` (`tag_smi(count)` no retorno).
-
-**Reprodução:** `echo!(len "abc")` → JIT: 3; interp: 7.
-
-**Prioridade:** alta — incorreção silenciosa: todo `len` de Text
-no interp retorna o dobro+1 do valor correto.
-
-#### A3g. Interp não valida ascription refined — aceita `0 :: NonZero`
-
-**Estado:** `let z := 0 :: NonZero::Int` no interp **passa
-silenciosamente** — o interp não executa const-eval de predicados
-refined. O JIT rejeita (comptime.jit_failure, embora com mensagem
-de erro interno em vez de erro de tipo gracioso). A consequência
-direta: `/ 10 z` com z=0::NonZero causa **panic de divisão por
-zero** no interp (bigint.rs:317, non-unwinding → SIGABRT).
-
-**Localização:** `crates/kata-interp/src/eval.rs` (sem
-const-eval de ascription refined),
-`crates/kata-rt/src/bigint.rs:317` (panic divisão por zero).
-
-**Reprodução:**
-```
-let z := 0 :: NonZero::Int
-echo!(/ 10 z)
-```
-JIT: exit 1 (comptime.jit_failure — erro interno, não type error);
-interp: SIGABRT (panic divisão por zero).
-
-**Prioridade:** alta — o interp aceita tipos inválidos que o JIT
-rejeita, e o resultado é crash. O JIT também falha: deveria ser
-`type.mismatch` gracioso, não `comptime.jit_failure` (erro interno).
-
-#### A3. Crashes do JIT em programas semanticamente inválidos
-
-**Estado:** (já documentado acima em "Débito Técnico"). 440
-`unwrap()/expect()` em codegen de produção assumem invariantes
-do typeck.
-
-**Prioridade:** alta — crash do compilador é a pior classe de falha.
-
-### 🟠 Alto — gaps que travam ou bloqueiam uso real
-
-#### A4. `loop` infinito sem fuel no interpretador
-
-**Estado:** `loop { ... }` no interp é `loop {}` Rust cru — sem
-fuel, timeout, ou yield. O JIT tem `kata_rt_yield_check` no header
-do loop (cooperativo + timeout); o interp não tem nada. `loop`
-sem `break` trava o processo.
-
-**Localização:** `crates/kata-interp/src/eval.rs` —
-`TypedExprKind::Loop { body } =\u003e loop { ... }`.
-
-**Prioridade:** alta — mesma classe do bug de recursão sem limitador.
-
-#### A5. `echo!(None)` rejeitado pelo codegen JIT
-
-**Estado:** `Closure` com callee não-Ident não é suportado. O interp
-executa `echo!(None)` (exit 0); o JIT rejeita com
-`codegen.unsupported`. Discrepância de backend.
-
-**Localização:** `crates/kata-codegen/src/lowering/closure.rs:349-355`.
-
-**Reprodução:** `echo!(None)` → JIT: exit 1 (codegen.unsupported);
-interp: exit 0.
-
-**Prioridade:** alta — expressão válida rejeitada por um backend.
-
-### 🟡 Médio — buracos funcionais que limitam a linguagem
-
 #### A6. `@cache` no interp: miss permanente para tipos compostos
 
 **Estado:** (já documentado acima em "Débito Técnico"). Interp só
@@ -398,7 +349,7 @@ literal não const-avalia").
 
 #### A12. `spawn!` no Windows é stub
 
-**Estado:** (já documentado acima em "TODOs esparsos — kata-rt").
+**Estado:** (já documentado abaixo em "TODOs esparsos — kata-rt").
 
 ---
 
