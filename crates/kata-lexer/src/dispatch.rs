@@ -88,7 +88,7 @@ pub(crate) fn lex_token(lex: &mut Lexer, had_space: bool) -> Result<TokenWithSpa
                 if lex.peek_n(peek_idx) == Some('>') {
                     let mut limit = String::new();
                     while lex.ch.is_some_and(|c| c.is_ascii_digit()) {
-                        limit.push(lex.ch.unwrap());
+                        limit.push(lex.ch.expect("ch is_some garantido pelo while"));
                         lex.advance();
                     }
                     lex.advance(); // consome >
@@ -115,7 +115,7 @@ pub(crate) fn lex_token(lex: &mut Lexer, had_space: bool) -> Result<TokenWithSpa
                     // É pipe limitado — consome o ident e o >.
                     let mut limit = String::new();
                     while lex.ch.is_some_and(|c| c.is_alphanumeric() || c == '_') {
-                        limit.push(lex.ch.unwrap());
+                        limit.push(lex.ch.expect("ch is_some garantido pelo while"));
                         lex.advance();
                     }
                     lex.advance(); // consome >

@@ -105,7 +105,10 @@ pub extern "C" fn kata_rt_cache_lookup(handle: i64, key_ptr: i64, key_len: i64) 
                     table.last_access.insert(key, table.access_counter);
                 }
                 CacheStrategy::LFU => {
-                    *table.access_count.get_mut(&key).unwrap() += 1;
+                    *table
+                        .access_count
+                        .get_mut(&key)
+                        .expect("key presente no access_count — inserido no cache miss") += 1;
                 }
                 CacheStrategy::FIFO => {}
             }

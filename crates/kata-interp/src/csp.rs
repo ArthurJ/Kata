@@ -49,7 +49,9 @@ pub(crate) fn register_action(
     arg_tys: Vec<kata_core::ty::Ty>,
     enum_registry: Arc<kata_core::EnumRegistry>,
 ) -> i64 {
-    let mut table = actions_table().lock().unwrap();
+    let mut table = actions_table()
+        .lock()
+        .expect("Mutex não envenenado — ações são síncronas");
     let id = table.len() as i64;
     table.push(InterpActionEntry {
         action_name: action_name.to_string(),
@@ -95,7 +97,9 @@ pub extern "C" fn interp_trampoline(
 
     // 2. Recuperar (action_name, module) da tabela global.
     let entry = {
-        let table = actions_table().lock().unwrap();
+        let table = actions_table()
+            .lock()
+            .expect("Mutex não envenenado — ações são síncronas");
         table.get(action_id as usize).cloned()
     };
 

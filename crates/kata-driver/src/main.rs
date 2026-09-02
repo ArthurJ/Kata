@@ -174,7 +174,10 @@ pub(crate) fn format_error_vec<E: std::fmt::Display>(errors: &[E]) -> String {
 ///   de resumo ("N erros encontrados").
 pub(crate) fn print_pipeline_errors(errors: Vec<miette::Report>) -> miette::Report {
     if errors.len() == 1 {
-        return errors.into_iter().next().unwrap();
+        return errors
+            .into_iter()
+            .next()
+            .expect("len == 1 garantido pelo if acima");
     }
     let n = errors.len();
     for report in &errors {

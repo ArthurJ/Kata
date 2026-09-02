@@ -17,17 +17,37 @@ interp, `Text implements EQ`.
 
 **Estado:** programas válidos sintaticamente mas rejeitados pelo typeck
 podem derrubar o compilador com SIGSEGV/null-deref em vez de erro
-gracioso. Reprodução conhecida: P19-like com `if` inválido → crash em
-`bigint.rs` (null-deref). Compile-time DEVE falhar graciosamente —
-nunca SIGSEGV/SIGILL — mesmo em input malformado que escapou do typeck.
+gracioso. Compile-time DEVE falhar graciosamente — nunca SIGSEGV/SIGILL
+— mesmo em input malformado que escapou do typeck.
 
-**Causa provável:** janelas no codegen onde uma suposição do typeck
-(retorno sempre presente, tag sempre definida) é dereferenciada sem
-checagem. O crash some quando o programa é corrigido — a classe fica.
+**Diagnóstico (2026-09-02):** a claim anterior ("440 unwrap/expect em
+codegen", "P19-like com `if` inválido") estava imprecisa. `if` não é
+keyword em Kata. Os 37 `.expect()` em `kata-codegen/src/` são TODOS
+invariantes internas legítimas (FFI bootstrap, constantes Cranelift,
+pipeline AOT) — nenhum é explosível por input do usuário. A classe real
+de crash é **deref de ponteiro cru sem null-check** no runtime/codegen,
+não `unwrap/expect`. Mapeamento completo em src/: 122 `.unwrap()` +
+267 `.expect()` = 389 total (não 440; número original inflava com
+testes). Os 122 `.unwrap()` em src/ eram o alvo de limpeza.
 
-**Correção provável:** sweep de sites de deref em codegen que assumem
-invariantes do typeck; falhar com `codegen.unsupported`/erro interno
-gracioso quando a suposição não segura.
+**Limpeza (2026-09-02):** dos 122 `.unwrap()` em src/, 95 estavam em
+`#[test]` inline (não-produtivo). 27 em código produtivo foram
+convertidos para `.expect("razão")` com invariante documentada em 12
+arquivos (eval.rs, show.rs, casing.rs, dispatch.rs, ffi_dispatch.rs,
+csp.rs, _match.rs, cache.rs, patterns.rs, lambda.rs, imports.rs,
+main.rs). Build limpo, 2003 testes, 0 falhas. **Zero `.unwrap()` em
+código produtivo em src/.**
+
+**Causa provável:** janelas no codegen/runtime onde uma suposição do
+typeck (retorno sempre presente, tag sempre definida, payload não-null)
+é dereferenciada sem checagem. O crash some quando o programa é
+corrigido — a classe fica.
+
+**Correção provável:** (1) limpar os 122 `.unwrap()` em src/ para
+`.expect()` com invariante explícita (zeladoria mecânica); (2) sweep de
+sites de deref de ponteiro cru sem null-check no codegen/runtime que
+assumem invariantes do typeck — substituir por checks que emitem
+`codegen.unsupported`/erro interno gracioso.
 
 **Prioridade:** alta — crash do compilador é a pior classe de falha.
 
@@ -145,6 +165,254 @@ Desembrulhamento de `(p)` sem vírgula em `parse_tuple_pattern` +
 `parse_match_pattern` recursivo (sub-patterns herdam
 `allow_unqualified_variant`). `Some(Some(True))` e `Some (Some True)`
 agora funcionam. Ramo morto `else if LParen` (linhas 83-101) removido.
+
+---
+
+## Auditoria de completude — 2026-09-02
+
+Análise conjunta (agente principal GLM-5.2 + sub-agente GLM-5.3 +
+sub-agente kimi-k3:cloud) com probes reais. Cada item validado no
+código-fonte e, quando possível, executado em ambos backends (JIT
+e interpretador).
+
+**Resumo:** 19 achados (A1–A12 + A3b–A3g). 3 críticos (SIGSEGV em
+programas válidos), 5 altos (crash/discrepância de backend), 8
+médios (buracos funcionais), 3 baixos (assimetrias).
+
+### 🔴 Crítico — SIGSEGV em programas válidos
+
+#### A1. `show` de `Result::Err` com payload null → SIGSEGV
+
+**Estado:** `at :: Text Int =\u003e Result::Text` retorna `Err` com
+payload=0 (null) para OOB. `show_sum` em `show.rs:71-86` lê o payload,
+checa `payload == 0 && payload_ty == Unit`, mas `Err` tem payload_ty=Text.
+Chama `show_value(0, Text)` → `CStr::from_ptr(0)` → SIGSEGV. Mesmo
+crash no JIT (string_concat recebe null). Afeta também `list_at` OOB
+(também retorna `store_sum_result(1, 0, 0)`).
+
+**Localização:** `crates/kata-rt/src/slice.rs:23,35` (text_at OOB),
+`crates/kata-interp/src/show.rs:71-86` (show_sum),
+`crates/kata-codegen/src/` (show synthesis para Result).
+
+**Reprodução:** `echo!(show (at \"abc\" 99))` → exit -11 (SIGSEGV)
+em ambos backends. GDB: `strlen(s=0x0)` ← `kata_rt_string_concat`.
+Também reproduzido com `at arr 10` (Array OOB) e `at d \"missing\"`
+(Dict key missing). **10 sites** no runtime retornam `Err` com
+payload null: slice.rs:23,35; list.rs:97; array.rs:82,86;
+dict/hamt.rs:574,583,597,618,894.
+
+**Prioridade:** crítica — viola contrato fundamental (graceful error).
+Classe inteira: toda operação `at` que retorna `Result` crasha no
+show do Err.
+
+#### A2. `head` de lista vazia → SIGSEGV/panic
+
+**Estado:** `head :: List::A =\u003e A` (não Result) retorna 0 para
+lista vazia (`list.rs:48-50`). `echo!(head [])` chama
+`kata_rt_bi_show(0)` → `deref_bigint(0)` → panic non-unwinding →
+SIGABRT. A assinatura mente: promete `A` mas retorna null.
+
+**Localização:** `crates/kata-rt/src/list.rs:48-50`,
+`crates/kata-rt/src/bigint.rs:96-99`, `stdlib/core.kata:652`.
+
+**Reprodução:** `echo!(head ([] :: [Int]))` → exit -6 (SIGABRT) em
+ambos backends.
+
+**Prioridade:** crítica — typeck endossa assinatura que runtime
+não honra.
+
+#### A3b. Stack overflow em literals de lista profundamente aninhados
+
+**Estado:** `[[[...[]...]]]` com ~800 níveis de aninhamento causa stack
+overflow no parser (recursive descent sem limite de profundidade). O
+crash ocorre em ambos backends (é frontend, não codegen). 400 níveis
+funciona; 800 não. Não há `max_depth` ou limitador no parser.
+
+**Localização:** `crates/kata-parser/src/expr_containers.rs:49`
+(`parse_list_or_range` — recursivo sem limite).
+
+**Reprodução:** `var x := [[[...800 níveis...[]...]]]` →
+"thread has overflowed its stack / stack overflow, aborting" em
+ambos backends.
+
+**Prioridade:** alta — mesma classe do bug de recursão sem limitador,
+mas no parser em vez de runtime.
+
+#### A3c. `show Optional::None` → ffi_not_found no JIT / placeholder no interp
+
+**Estado:** `show Optional::None` falha no JIT com
+`codegen.ffi_not_found: __kata_show__Optional` — o monomorphizador
+não instancia show quando o type param não é concreto (None não
+carrega tipo). No interp, retorna placeholder
+`<show:Generic("Optional", [Var("T")])>` em vez do nome da
+variante. `show (Some 0)` e `show (Ok 0)` funcionam normalmente.
+
+**Localização:** `crates/kata-monomorph/src/overload_resolution.rs`
+(não instancia show para Optional sem tipo concreto),
+`crates/kata-interp/src/show.rs:75` (placeholder para tipo não
+resolvido).
+
+**Reprodução:** `echo!(show Optional::None)` → JIT: exit 1
+(ffi_not_found); interp: `<show:Generic("Optional", [Var("T")])>`.
+
+**Prioridade:** média — `Optional::None` é o valor nulo de Kata;
+`show` dele deveria imprimir `None`.
+
+#### A3d. `len` em Range → ffi_not_found
+
+**Estado:** `len` despacha via COUNTABLE para Range, mas o codegen
+procura `range_len` FFI que não existe. O typeck aprova (COUNTABLE
+está implementado para Range), mas o codegen não tem o símbolo.
+
+**Localização:** `crates/kata-codegen/src/` (procura `range_len`,
+não registrado), `stdlib/core.kata` (Range implements COUNTABLE
+com `len`).
+
+**Reprodução:** `echo!(len [1..10])` → exit 1
+(`codegen.ffi_not_found: range_len`). Interp:
+`FFI não implementado no interpretador: range_len`.
+
+**Prioridade:** média — typeck aprova, codegen não executa.
+
+#### A3e. Range com step 0 dinâmico → loop infinito
+
+**Estado:** `check_neutral_step` só verifica step **literal** em
+compile-time. Step variável com valor 0 escapa e produz um range
+infinito no runtime (step 0 = próximo == atual → nunca termina).
+
+**Localização:** `crates/kata-inference/src/infer/collections.rs:350`
+(`check_neutral_step` — apenas literais).
+
+**Reprodução:** `let s := 0; for x in [1..s..10] echo!(x)` →
+loop infinito (imprime `1` repetidamente até timeout/kill).
+
+**Prioridade:** média — typeck rejeita step literal 0, mas não
+step dinâmico 0. Runtime não tem guard.
+
+#### A3f. `len` em Text no interp retorna valor errado (double SMI tag)
+
+**Estado:** `len "abc"` retorna 3 no JIT (correto) mas 7 no interp.
+`kata_rt_text_len` em `slice.rs:49` retorna `tag_smi(count)` (já
+SMI-tagged), mas `ffi_dispatch.rs:328` chama `encode_smi()` sobre
+o resultado — double tagging. `encode_smi(3) = 7`.
+
+**Localização:** `crates/kata-interp/src/ffi_dispatch.rs:328`
+(`encode_smi` sobre valor já SMI-tagged),
+`crates/kata-rt/src/slice.rs:56` (`tag_smi(count)` no retorno).
+
+**Reprodução:** `echo!(len "abc")` → JIT: 3; interp: 7.
+
+**Prioridade:** alta — incorreção silenciosa: todo `len` de Text
+no interp retorna o dobro+1 do valor correto.
+
+#### A3g. Interp não valida ascription refined — aceita `0 :: NonZero`
+
+**Estado:** `let z := 0 :: NonZero::Int` no interp **passa
+silenciosamente** — o interp não executa const-eval de predicados
+refined. O JIT rejeita (comptime.jit_failure, embora com mensagem
+de erro interno em vez de erro de tipo gracioso). A consequência
+direta: `/ 10 z` com z=0::NonZero causa **panic de divisão por
+zero** no interp (bigint.rs:317, non-unwinding → SIGABRT).
+
+**Localização:** `crates/kata-interp/src/eval.rs` (sem
+const-eval de ascription refined),
+`crates/kata-rt/src/bigint.rs:317` (panic divisão por zero).
+
+**Reprodução:**
+```
+let z := 0 :: NonZero::Int
+echo!(/ 10 z)
+```
+JIT: exit 1 (comptime.jit_failure — erro interno, não type error);
+interp: SIGABRT (panic divisão por zero).
+
+**Prioridade:** alta — o interp aceita tipos inválidos que o JIT
+rejeita, e o resultado é crash. O JIT também falha: deveria ser
+`type.mismatch` gracioso, não `comptime.jit_failure` (erro interno).
+
+#### A3. Crashes do JIT em programas semanticamente inválidos
+
+**Estado:** (já documentado acima em "Débito Técnico"). 440
+`unwrap()/expect()` em codegen de produção assumem invariantes
+do typeck.
+
+**Prioridade:** alta — crash do compilador é a pior classe de falha.
+
+### 🟠 Alto — gaps que travam ou bloqueiam uso real
+
+#### A4. `loop` infinito sem fuel no interpretador
+
+**Estado:** `loop { ... }` no interp é `loop {}` Rust cru — sem
+fuel, timeout, ou yield. O JIT tem `kata_rt_yield_check` no header
+do loop (cooperativo + timeout); o interp não tem nada. `loop`
+sem `break` trava o processo.
+
+**Localização:** `crates/kata-interp/src/eval.rs` —
+`TypedExprKind::Loop { body } =\u003e loop { ... }`.
+
+**Prioridade:** alta — mesma classe do bug de recursão sem limitador.
+
+#### A5. `echo!(None)` rejeitado pelo codegen JIT
+
+**Estado:** `Closure` com callee não-Ident não é suportado. O interp
+executa `echo!(None)` (exit 0); o JIT rejeita com
+`codegen.unsupported`. Discrepância de backend.
+
+**Localização:** `crates/kata-codegen/src/lowering/closure.rs:349-355`.
+
+**Reprodução:** `echo!(None)` → JIT: exit 1 (codegen.unsupported);
+interp: exit 0.
+
+**Prioridade:** alta — expressão válida rejeitada por um backend.
+
+### 🟡 Médio — buracos funcionais que limitam a linguagem
+
+#### A6. `@cache` no interp: miss permanente para tipos compostos
+
+**Estado:** (já documentado acima em "Débito Técnico"). Interp só
+serializa primitivos; compostos = miss conservador permanente.
+
+#### A7. Variante sem payload como argumento é inexpressível
+
+**Estado:** (já documentado acima em "Typeck — variante sem payload
+como argumento (#K-call)"). `foo None` e `foo Optional::None` dão
+`type.no_overload`.
+
+#### A8. `show` de Struct incompleto no interpretador
+
+**Estado:** `struct_field_count` retorna 0 — structs com campos têm
+show incompleto no interp (`show.rs:265-270`). Funciona no JIT via
+`show_synthesis`.
+
+**Localização:** `crates/kata-interp/src/show.rs:265-270`.
+
+**Prioridade:** média — `echo!(show minhaStruct)` não funciona no interp.
+
+#### A9. JIT depth tracking não cobre `BodyKind::CallInner`
+
+**Estado:** `depth_tracking: matches!(body_kind, BodyKind::Clauses)`
+— wrappers CallInner não incrementam depth. Wrappers "grátis"
+subestimam profundidade real.
+
+**Localização:** `crates/kata-codegen/src/lowering/function_def.rs:501`.
+
+**Prioridade:** média — stack pode exceder antes do contador.
+
+#### A10. Enum user-defined como payload de genérico falha no typeck
+
+**Estado:** (já documentado acima em "Typeck — enum user-defined
+como payload de genérico (#K-enum-payload)").
+
+### 🟢 Baixo-médio — assimetrias e gaps menores
+
+#### A11. Ascription refined de Text literal não const-avalia
+
+**Estado:** (já documentado acima em "Ascription refined de Text
+literal não const-avalia").
+
+#### A12. `spawn!` no Windows é stub
+
+**Estado:** (já documentado acima em "TODOs esparsos — kata-rt").
 
 ---
 

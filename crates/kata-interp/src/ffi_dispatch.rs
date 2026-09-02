@@ -337,7 +337,7 @@ pub(crate) fn ffi_dispatch(
             let den = decode_smi(args[1]);
             let text = format!("{num}/{den}");
             let len = text.len() as i64;
-            let cstr = CString::new(text).unwrap();
+            let cstr = CString::new(text).expect("formatado de SMI decodable — sem nul bytes");
             let ptr = cstr.into_raw();
             let result = unsafe { rt::kata_rt_rat_literal(ptr, len) };
             unsafe { drop(CString::from_raw(ptr)) };
@@ -500,8 +500,8 @@ pub(crate) fn ffi_dispatch(
         sym if sym.starts_with("__kata_show__") => {
             // Placeholder — o show real é interceptado em eval.rs
             // (ffi_dispatch não tem acesso ao Ty do valor)
-            let cstr =
-                CString::new(format!("<{}>", sym)).unwrap_or_else(|_| CString::new("?").unwrap());
+            let cstr = CString::new(format!("<{}>", sym))
+                .unwrap_or_else(|_| CString::new("?").expect("\"?\" é CString válida"));
             Ok(cstr.into_raw() as i64)
         }
 

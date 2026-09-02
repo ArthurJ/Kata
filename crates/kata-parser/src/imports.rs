@@ -290,7 +290,9 @@ impl Parser {
                 self.advance();
             }
 
-            let mod_name = path.pop().unwrap();
+            let mod_name = path
+                .pop()
+                .expect("path não vazio — export com módulo requer pelo menos um segmento");
             return Ok(Item::ExportDecl {
                 items: vec![ExportItem {
                     name: format!("{mod_name}.*"),

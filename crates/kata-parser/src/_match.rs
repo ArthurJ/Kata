@@ -119,7 +119,10 @@ impl Parser {
             // Se há apenas uma statement, retorná-la diretamente (sem Block).
             // Se há múltiplas, envolver em Block.
             if stmts.len() == 1 {
-                stmts.into_iter().next().unwrap()
+                stmts
+                    .into_iter()
+                    .next()
+                    .expect("len == 1 garantido pelo if acima")
             } else {
                 Spanned::new(Expr::Block { stmts }, arm_start)
             }
@@ -157,7 +160,10 @@ impl Parser {
                 }
 
                 if stmts.len() == 1 {
-                    stmts.into_iter().next().unwrap()
+                    stmts
+                        .into_iter()
+                        .next()
+                        .expect("len == 1 garantido pelo if acima")
                 } else {
                     Spanned::new(Expr::Block { stmts }, arm_start)
                 }

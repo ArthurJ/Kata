@@ -44,14 +44,20 @@ pub fn show_value(val: Value, ty: &Ty, ctx: &InterpCtx) -> Value {
         }
 
         // ── Unit ──────────────────────────────────────────────
-        Ty::Unit => CString::new("()").unwrap().into_raw() as i64,
+        Ty::Unit => CString::new("()")
+            .expect("\"()\" é CString válida")
+            .into_raw() as i64,
 
         // ── Boolean — i64 cru (1=True, 0=False) ───────────────
         Ty::Sum(name) if name == "Boolean" => {
             if val == 1 {
-                CString::new("True").unwrap().into_raw() as i64
+                CString::new("True")
+                    .expect("\"True\" é CString válida")
+                    .into_raw() as i64
             } else {
-                CString::new("False").unwrap().into_raw() as i64
+                CString::new("False")
+                    .expect("\"False\" é CString válida")
+                    .into_raw() as i64
             }
         }
 
@@ -74,7 +80,7 @@ pub fn show_value(val: Value, ty: &Ty, ctx: &InterpCtx) -> Value {
         _ => {
             let placeholder = format!("<show:{ty:?}>");
             CString::new(placeholder)
-                .unwrap_or_else(|_| CString::new("?").unwrap())
+                .unwrap_or_else(|_| CString::new("?").expect("\"?\" é CString válida"))
                 .into_raw() as i64
         }
     }
@@ -90,7 +96,7 @@ fn text_concat(a: i64, b: i64) -> i64 {
 /// Cria um Text literal a partir de uma string Rust.
 fn text_from_str(s: &str) -> Value {
     CString::new(s)
-        .unwrap_or_else(|_| CString::new("").unwrap())
+        .unwrap_or_else(|_| CString::new("").expect("string vazia é CString válida"))
         .into_raw() as i64
 }
 

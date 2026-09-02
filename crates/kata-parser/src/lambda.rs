@@ -173,7 +173,7 @@ impl Parser {
                 .unwrap_or(start);
             Spanned::new(Expr::Block { stmts: body_stmts }, span)
         } else if body_stmts.len() == 1 {
-            body_stmts.pop().unwrap()
+            body_stmts.pop().expect("len == 1 garantido pelo if acima")
         } else {
             Spanned::new(Expr::Unit, start)
         };

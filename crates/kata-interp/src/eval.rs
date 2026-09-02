@@ -302,7 +302,8 @@ pub fn eval(
                 Some(val) if fits_smi(val * sign) => Ok(encode_smi(val * sign)),
                 _ => {
                     // BigInt — usar tag_int_from_str do runtime
-                    let cstr = CString::new(text.as_str()).unwrap();
+                    let cstr = CString::new(text.as_str())
+                        .expect("IntLit text é ASCII válido para CString");
                     let val = rt::kata_rt_tag_int_from_str(cstr.as_ptr(), text.len() as i64);
                     Ok(val)
                 }
@@ -314,7 +315,8 @@ pub fn eval(
         }
         TypedExprKind::TextLit { text } => {
             // Alocar C string na heap ( CString::into_raw )
-            let cstr = CString::new(text.as_str()).unwrap_or_else(|_| CString::new("").unwrap());
+            let cstr = CString::new(text.as_str())
+                .unwrap_or_else(|_| CString::new("").expect("string vazia é CString válida"));
             Ok(cstr.into_raw() as i64)
         }
         TypedExprKind::BytesLit { bytes } => {
@@ -386,8 +388,8 @@ pub fn eval(
                 }
                 // IntLit → Rational: chamar kata_rt_rat_literal.
                 if matches!(target_ty, Ty::Prim(PrimTy::Rational)) {
-                    let cstr =
-                        CString::new(text.as_str()).unwrap_or_else(|_| CString::new("0").unwrap());
+                    let cstr = CString::new(text.as_str())
+                        .unwrap_or_else(|_| CString::new("0").expect("\"0\" é CString válida"));
                     let ptr = cstr.as_ptr();
                     let len = text.len() as i64;
                     let result = unsafe { rt::kata_rt_rat_literal(ptr, len) };
@@ -399,8 +401,8 @@ pub fn eval(
             if let TypedExprKind::FloatLit { ref text } = inner.node.kind
                 && matches!(target_ty, Ty::Prim(PrimTy::Rational))
             {
-                let cstr =
-                    CString::new(text.as_str()).unwrap_or_else(|_| CString::new("0").unwrap());
+                let cstr = CString::new(text.as_str())
+                    .unwrap_or_else(|_| CString::new("0").expect("\"0\" é CString válida"));
                 let ptr = cstr.as_ptr();
                 let len = text.len() as i64;
                 let result = unsafe { rt::kata_rt_rat_literal(ptr, len) };
@@ -615,7 +617,9 @@ pub fn eval(
                     }
                 }
                 return ffi_dispatch(
-                    ffi_symbol.as_ref().unwrap(),
+                    ffi_symbol
+                        .as_ref()
+                        .expect("ffi_symbol definido quando FFI dispatch é alcançado"),
                     &converted,
                     ctx.rt_ptr,
                     ctx.arena,
@@ -634,7 +638,8 @@ pub fn eval(
         // ── TypeOf ───────────────────────────────────────────
         TypedExprKind::TypeOf { expr: inner } => {
             let ty_str = format!("{}", inner.node.ty);
-            let cstr = CString::new(ty_str).unwrap_or_else(|_| CString::new("?").unwrap());
+            let cstr = CString::new(ty_str)
+                .unwrap_or_else(|_| CString::new("?").expect("\"?\" é CString válida"));
             Ok(cstr.into_raw() as i64)
         }
 

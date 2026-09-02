@@ -34,7 +34,7 @@ fn detect_casing(name: &str) -> &'static str {
     if name.is_empty() {
         return "vazio";
     }
-    let first = name.chars().next().unwrap();
+    let first = name.chars().next().expect("name não vazio (checado acima)");
     if first == '_' || first.is_lowercase() {
         "snake_case"
     } else if first.is_uppercase() {
@@ -53,7 +53,7 @@ fn is_pascal_case(name: &str) -> bool {
     if name.is_empty() {
         return false;
     }
-    let first = name.chars().next().unwrap();
+    let first = name.chars().next().expect("name não vazio (checado acima)");
     first.is_uppercase() && !name.contains('_')
 }
 
@@ -62,7 +62,7 @@ pub(crate) fn is_snake_case(name: &str) -> bool {
     if name.is_empty() {
         return false;
     }
-    let first = name.chars().next().unwrap();
+    let first = name.chars().next().expect("name não vazio (checado acima)");
     first.is_lowercase() || first == '_'
 }
 

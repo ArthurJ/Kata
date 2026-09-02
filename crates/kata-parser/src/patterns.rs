@@ -203,7 +203,13 @@ impl Parser {
         // `(p)` sem vírgula → desembrulhar (Grouping).
         // Parênteses só implicam em tupla quando há vírgula.
         if elements.len() == 1 && !had_comma {
-            return Ok(Spanned::new(elements.pop().unwrap().node, span));
+            return Ok(Spanned::new(
+                elements
+                    .pop()
+                    .expect("len == 1 garantido pelo if acima")
+                    .node,
+                span,
+            ));
         }
 
         Ok(Spanned::new(Pattern::Tuple(elements), span))
