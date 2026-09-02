@@ -239,7 +239,13 @@ pub(crate) fn infer_type_ascription(
         // podem provar o predicado sobre não-literais (refinement propagation).
         let is_literal = matches!(
             inner.kind,
-            TypedExprKind::IntLit { .. } | TypedExprKind::FloatLit { .. }
+            TypedExprKind::IntLit { .. }
+                | TypedExprKind::FloatLit { .. }
+                | TypedExprKind::TextLit { .. }
+                | TypedExprKind::ListLit { .. }
+                | TypedExprKind::ArrayLit { .. }
+                | TypedExprKind::SetLit { .. }
+                | TypedExprKind::DictLit { .. }
         );
         // Gate conservador duplo (débito 1):
         // (a) sem path conditions e não-literal → construtor;

@@ -111,6 +111,22 @@ pub(crate) fn eval_const(expr: &Spanned<Expr>) -> Option<ConstVal> {
         Expr::FloatLit { text } => Some(ConstVal::Float(text.parse::<f64>().ok()?)),
         Expr::TextLit { text } => Some(ConstVal::Text(text.clone())),
         Expr::Unit => Some(ConstVal::Unit),
+        // `len <literal>` → ConstVal::Int(n) — número de elementos.
+        // Suporta len sobre ListLit, ArrayLit, e TextLit.
+        Expr::Apply { callee, args }
+            if args.len() == 1
+                && matches!(&callee.node, Expr::Ident { name } if name == "len") =>
+        {
+            let arg = &args[0];
+            match &arg.node {
+                Expr::ListLit { elements }
+                | Expr::ArrayLit { elements }
+                | Expr::SetLit { elements } => Some(ConstVal::Int(elements.len() as i64)),
+                Expr::DictLit { entries } => Some(ConstVal::Int(entries.len() as i64)),
+                Expr::TextLit { text } => Some(ConstVal::Int(text.chars().count() as i64)),
+                _ => None,
+            }
+        }
         // `rational N` → ConstVal::Rat(N, 1)
         Expr::Apply { callee, args }
             if args.len() == 1
