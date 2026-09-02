@@ -115,23 +115,8 @@ pub(crate) fn build_result_err(
 ///
 /// Int → `kata_rt_bi_show`, Float → `kata_rt_float_to_text`, Rational → `kata_rt_rat_show`.
 fn build_show_call(var_name: &str, base_ty: &Ty) -> Spanned<TypedExpr> {
-    let (ffi_name, param_clif) = match base_ty {
-        Ty::Prim(PrimTy::Int) => ("kata_rt_bi_show", false),
-        Ty::Prim(PrimTy::Float) => ("kata_rt_float_to_text", true),
-        Ty::Prim(PrimTy::Rational) => ("kata_rt_rat_show", false),
-        _ => ("kata_rt_bi_show", false), // fallback defensivo
-    };
-    let _ = param_clif;
+    use super::show_synthesis_helpers::{ffi_call1, show_call};
 
-    let callee = TypedExpr {
-        span: Span::synthetic(),
-        ty: Ty::Function(vec![base_ty.clone()], Box::new(Ty::text())),
-        tail_pos: false,
-        escape: EscapeTarget::Local,
-        kind: TypedExprKind::Ident {
-            name: ffi_name.into(),
-        },
-    };
     let arg = TypedExpr {
         span: Span::synthetic(),
         ty: base_ty.clone(),
@@ -141,20 +126,33 @@ fn build_show_call(var_name: &str, base_ty: &Ty) -> Spanned<TypedExpr> {
             name: var_name.into(),
         },
     };
-    Spanned::new(
-        TypedExpr {
-            span: Span::synthetic(),
-            ty: Ty::text(),
-            tail_pos: false,
-            escape: EscapeTarget::Local,
-            kind: TypedExprKind::Closure {
-                callee: Box::new(Spanned::new(callee, Span::synthetic())),
-                args: vec![Spanned::new(arg, Span::synthetic())],
-                ffi_symbol: Some(ffi_name.into()),
-            },
-        },
-        Span::synthetic(),
-    )
+    let arg = Spanned::new(arg, Span::synthetic());
+
+    match base_ty {
+        Ty::Prim(PrimTy::Int) => ffi_call1("kata_rt_bi_show", arg, Ty::text()),
+        Ty::Prim(PrimTy::Float) => ffi_call1("kata_rt_float_to_text", arg, Ty::text()),
+        Ty::Prim(PrimTy::Rational) => ffi_call1("kata_rt_rat_show", arg, Ty::text()),
+        Ty::Prim(PrimTy::Text) => {
+            // show de Text é identidade (lambda x: x) — retorna o próprio valor.
+            arg.map(|inner| TypedExpr {
+                span: Span::synthetic(),
+                ty: Ty::text(),
+                tail_pos: false,
+                escape: EscapeTarget::Local,
+                kind: inner.kind,
+            })
+        }
+        Ty::Sum(name) => show_call(arg, name.clone(), base_ty),
+        Ty::Struct(key) => show_call(arg, key.name().to_string(), base_ty),
+        Ty::List(_) => show_call(arg, "List".to_string(), base_ty),
+        Ty::Array(_) => show_call(arg, "Array".to_string(), base_ty),
+        Ty::Set(_) => show_call(arg, "Set".to_string(), base_ty),
+        Ty::Dict(_, _) => show_call(arg, "Dict".to_string(), base_ty),
+        _ => {
+            // Fallback defensivo: int_to_text (mostra como número — melhor que crash).
+            ffi_call1("kata_rt_int_to_text", arg, Ty::text())
+        }
+    }
 }
 
 /// Constrói um match aninhado sobre os predicados.
