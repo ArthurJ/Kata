@@ -1,0 +1,22 @@
+# Refined types sobre coleções e Text — NonEmpty via predicado len.
+# O predicado >= (len _) 1 é const-avaliado em compile-time sobre literais.
+# Construtor falível retorna Result para valores não-literais.
+
+data ([Int], >= (len _) 1) as NonEmptyList
+data (Text, >= (len _) 1) as NonEmptyText
+data (Array::Int, >= (len _) 1) as NonEmptyArray
+
+# Ascription de literal — validada em compile-time
+echo!([1 2 3]::NonEmptyList)
+echo!("hello"::NonEmptyText)
+echo!({1 2 3}::NonEmptyArray)
+
+# Construtor falível para valores não-literais
+action main
+    match (NonEmptyList [10 20 30])
+        Ok v: echo!("ok")
+        Err _: echo!("err")
+    match (NonEmptyList ([] :: [Int]))
+        Ok v: echo!("ok")
+        Err _: echo!("err")
+main!()

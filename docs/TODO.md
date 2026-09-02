@@ -19,12 +19,34 @@ gracioso. Compile-time DEVE falhar graciosamente — nunca SIGSEGV/SIGILL
 convertidos para `.expect()`). `Err` com payload null corrigido (A1 —
 10 sites agora usam `err_with_msg`). A classe restante é **deref de
 ponteiro cru sem null-check** no codegen/runtime que assume invariantes
-do typeck.
+do typeck. Inventário completo em
+`kata-compiler/references/raw-ptr-null-check-audit.md`.
 
-**Correção pendente:** sweep de sites de deref de ponteiro cru sem
-null-check no codegen/runtime — substituir por checks que emitem
-`codegen.unsupported`/erro interno gracioso quando a suposição não
-segura.
+**Inventário (4 categorias):**
+
+- **Cat 1 — `&mut *(rt as *mut Runtime)` sem null-check (17 sites,
+  CRÍTICA):** `runtime.rs` (9 sites: `rt_ref`, `depth_inc/dec/get/
+  set_limit`, `reset_depth`, `yield_check`), `arena.rs` (7 sites:
+  `arena_create/create_tracked/alloc/dealloc/...`), `scheduler/ffi.rs`
+  (4 sites: `scheduler_init`, `spawn`, etc.), `marshal/mod.rs` (2
+  sites). Boundary FFI — `rt` vem do codegen/JIT driver.
+- **Cat 2 — `&*(val as *const T)` sem null-check (~15 sites,
+  ALTA):** `rational.rs` (`rat_add/sub/mul/div/eq/lt/gt/neq/le/ge/
+  show/to_float` — todas fazem `&*a` sem `is_null()`), `display.rs:58`
+  (`print_result` com `TYPE_RATIONAL`).
+- **Cat 3 — `read_unaligned(ptr as *const i64)` sem null-check
+  (MÉDIA):** `dict/mod.rs`, `dict/hamt.rs`, `cache.rs`,
+  `channel/ops.rs`, `channel/ipc.rs`. Ponteiros vêm de alocação
+  interna — risco menor.
+- **Cat 4 — Já protegidos:** `bigint.rs` (`deref_bigint` ✓),
+  `file.rs`, `socket/mod.rs`, `channel/ops.rs`, `channel/ipc.rs`.
+
+**Correção pendente:** criar helpers centralizados com null-check +
+panic **unwind** (modelo: `deref_bigint` em `bigint.rs:96`):
+`deref_runtime(rt) -> &mut Runtime`, `deref_rational(ptr) -> &BigRational`.
+Substituir os 17+15 sites bare deref. Cat 3 é prioridade inferior.
+Pré-requisito: verificar `panic` strategy do crate — se `panic = abort`,
+panic unwind não funciona (alternativa: retornar erro).
 
 **Prioridade:** alta — crash do compilador é a pior classe de falha.
 
