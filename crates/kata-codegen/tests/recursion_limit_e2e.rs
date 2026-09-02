@@ -278,3 +278,42 @@ count 1500
         result.err()
     );
 }
+
+/// DoD: `cache_hit_not_counted` — função `@cache` com hit não incrementa
+/// o contador de profundidade. Após executar uma função `@cache` duas vezes
+/// com o mesmo argumento, `depth_get() == 0` (o cache hit no wrapper
+/// retorna antes de chamar o inner, que é onde o depth_inc acontece).
+#[test]
+fn cache_hit_not_counted() {
+    let src = r#"
+@cache
+dobro :: Int => Int
+lambda n: * n 2
+
+# Primeira chamada: cache miss → inner executa → depth_inc/dec.
+# Segunda chamada: cache hit → wrapper retorna sem chamar inner.
++ (dobro 5) (dobro 5)
+"#;
+    let tokens = lex(src).expect("lex deve succeed");
+    let module = parse(tokens).expect("parse deve succeed");
+    let prelude = load_stdlib_for_tests().expect("prelude deve carregar");
+    let user = resolve(&module).expect("resolve deve succeed");
+    let resolved = merge_resolved(prelude, user);
+    let typed = infer_module(&module, &resolved).expect("infer deve succeed");
+    let typed = monomorphize(typed);
+    let typed = optimize(typed);
+    let typed = kata_monomorph::MonoModule::from(tree_shake(typed.inner));
+
+    let rt_ptr = leak_rt_ptr();
+    let result = jit_eval(&typed, &Default::default(), &[], rt_ptr, false);
+    assert!(result.is_ok(), "dobro 5 + dobro 5 deve passar: {:?}", result.err());
+
+    // Após execução, depth deve ser 0 — o cache hit no segundo `dobro 5`
+    // não chama o inner, então depth_inc não dispara. O primeiro `dobro 5`
+    // (cache miss) chama o inner (depth_inc/dec), mas o dec equilibra.
+    let depth = unsafe { (*(rt_ptr as *mut kata_rt::Runtime)).depth_get() };
+    assert_eq!(
+        depth, 0,
+        "depth deve ser 0 após execução com cache hit"
+    );
+}

@@ -505,6 +505,14 @@ pub(crate) fn ffi_dispatch(
             Ok(cstr.into_raw() as i64)
         }
 
+        // ── Recursion depth ──────────────────────────────────
+        "kata_rt_depth_set_limit" => {
+            // args[0] é SMI-tagged — decodificar antes de passar ao Runtime.
+            let limit = decode_smi(args[0]);
+            rt::kata_rt_depth_set_limit(rt_ptr, limit);
+            Ok(0) // Unit = SMI 0
+        }
+
         // ── Não implementado ─────────────────────────────────
         _ => Err(format!("FFI não implementado no interpretador: {sym}")),
     }

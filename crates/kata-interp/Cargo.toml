@@ -14,3 +14,11 @@ kata-monomorph.workspace = true
 thiserror.workspace = true
 miette.workspace = true
 num-rational.workspace = true
+
+[dev-dependencies]
+kata-lexer.workspace = true
+kata-parser.workspace = true
+kata-resolution.workspace = true
+kata-optimizer.workspace = true
+kata-tree-shaking.workspace = true
+kata-comptime.workspace = true

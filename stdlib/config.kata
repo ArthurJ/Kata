@@ -15,4 +15,4 @@ import core
 #   constant _ := config.set_recursion_limit(10000)
 
 @ffi("kata_rt_depth_set_limit")
-set_recursion_limit :: Int => Unit
+set_recursion_limit :: PositiveInt => Unit

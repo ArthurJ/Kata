@@ -423,6 +423,9 @@ fn is_already_evaluated(expr: &TypedExpr) -> bool {
 fn unwrap_grouping(expr: &TypedExpr) -> &TypedExpr {
     match &expr.kind {
         TypedExprKind::Grouping { inner } => unwrap_grouping(&inner.node),
+        // TypeAscription (ex: `10000::PositiveInt`) — o typeck já validou
+        // os predicados. O valor em runtime é o do expr inner.
+        TypedExprKind::TypeAscription { expr, .. } => unwrap_grouping(&expr.node),
         _ => expr,
     }
 }
@@ -444,8 +447,9 @@ fn try_exec_comptime_ffi(
 ) -> Option<ComptimeResult> {
     match sym {
         "kata_rt_depth_set_limit" => {
-            // set_recursion_limit(Int) => Unit
-            // Arg 0 é o limite (IntLit, possivelmente dentro de Grouping).
+            // set_recursion_limit(PositiveInt) => Unit
+            // Arg 0 é o limite (IntLit, possivelmente dentro de
+            // Grouping ou Ascription `Int::PositiveInt`).
             let arg = args.first()?;
             let inner = unwrap_grouping(&arg.node);
             let limit = match &inner.kind {
