@@ -1002,3 +1002,14 @@ Implementa interoperabilidade numérica via overloads cross-type explícitos
 no prelude (`+ :: Int Float => Float @commutative`). O partial dispatch
 ambíguo projeta as overloads compatíveis em `Ty::OverloadSet`, deferindo a
 seleção para o call site (ou HOF via hint). 6 fases, 1515 testes, 0 falhas.
+
+### Limite de Profundidade de Recursão ✅ (2026-09-01)
+
+PRD: `docs/PRDs/PRD-recursion-limit.md`
+
+Contador de profundidade em software (`Cell<u32>` em `Runtime`) que produz
+falha graciosa quando recursão não-de-cauda excede o limite (default 1000).
+Válido para interpretador e codegen JIT. Tail calls não incrementam (TCO
+preservado). Configurável via `constant` + `stdlib/config.kata`
+(`set_recursion_limit :: PositiveInt => Unit`). Propagação comptime→runtime.
+14 testes E2E (8 codegen + 5 interpretador + 1 cache_hit), 2003 total.
