@@ -229,6 +229,7 @@ pub(crate) fn lower_closure(
                 )));
                 let sig_ref = ctx.builder.func.import_signature(sig);
                 if expr.tail_pos && !ctx.no_tail_calls {
+                    ctx.emit_depth_dec();
                     ctx.builder
                         .ins()
                         .return_call_indirect(sig_ref, func_ptr, &call_args);
@@ -273,6 +274,7 @@ pub(crate) fn lower_closure(
                     let dummy_box = ctx.builder.ins().iconst(I64, 0);
                     let mut tail_args = vec![rt_val, arena, dummy_box];
                     tail_args.extend(arg_values.iter().copied());
+                    ctx.emit_depth_dec();
                     ctx.builder.ins().return_call(tail_func_ref, &tail_args);
                     ctx.emitted_tail_call = true;
                     let dummy = ctx.builder.create_block();
@@ -324,6 +326,7 @@ pub(crate) fn lower_closure(
                     )));
                     let sig_ref = ctx.builder.func.import_signature(sig);
                     if expr.tail_pos && !ctx.no_tail_calls {
+                        ctx.emit_depth_dec();
                         ctx.builder
                             .ins()
                             .return_call_indirect(sig_ref, func_ptr, &call_args);

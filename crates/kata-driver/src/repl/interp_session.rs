@@ -303,7 +303,7 @@ impl InterpReplSession {
         let typed = infer_module(module, &resolved).map_err(|e| format!("erro de tipo: {e}"))?;
 
         // Comptime pass: avalia constants.
-        let mut typed = kata_comptime::run_comptime_pass(typed, &resolved.enum_registry)
+        let mut typed = kata_comptime::run_comptime_pass(typed, &resolved.enum_registry, self.rt_ptr)
             .map_err(|e| format!("erro de comptime: {e}"))?;
 
         // Injetar constants importadas como ConstantBinding.

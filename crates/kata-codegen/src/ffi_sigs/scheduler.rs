@@ -77,6 +77,44 @@ pub(crate) fn sig_for(sym: FfiSymbol) -> Option<Signature> {
             sig.params.push(AbiParam::new(I64)); // args_ptr
             sig.params.push(AbiParam::new(I64)); // arena
         }
+        // ── Recursion depth ──
+        // depth_inc: (rt) -> i64 (nova profundidade)
+        FfiSymbol::DepthInc => {
+            sig.params.push(AbiParam::new(I64)); // rt
+            sig.returns.push(AbiParam::new(I64)); // depth
+        }
+        // depth_dec: (rt) -> void
+        FfiSymbol::DepthDec => {
+            sig.params.push(AbiParam::new(I64)); // rt
+        }
+        // depth_get: (rt) -> i64 (profundidade atual)
+        FfiSymbol::DepthGet => {
+            sig.params.push(AbiParam::new(I64)); // rt
+            sig.returns.push(AbiParam::new(I64)); // depth
+        }
+        // depth_set_limit: (rt, limit) -> void
+        FfiSymbol::DepthSetLimit => {
+            sig.params.push(AbiParam::new(I64)); // rt
+            sig.params.push(AbiParam::new(I64)); // limit
+        }
+        // set_overflowed: (rt) -> void
+        FfiSymbol::SetOverflowed => {
+            sig.params.push(AbiParam::new(I64)); // rt
+        }
+        // overflowed: (rt) -> i64 (1=overflow, 0=ok)
+        FfiSymbol::Overflowed => {
+            sig.params.push(AbiParam::new(I64)); // rt
+            sig.returns.push(AbiParam::new(I64)); // bool as i64
+        }
+        // depth_get_limit: (rt) -> i64 (limite)
+        FfiSymbol::DepthGetLimit => {
+            sig.params.push(AbiParam::new(I64)); // rt
+            sig.returns.push(AbiParam::new(I64)); // limit
+        }
+        // reset_depth: (rt) -> void
+        FfiSymbol::ResetDepth => {
+            sig.params.push(AbiParam::new(I64)); // rt
+        }
         _ => return None,
     }
     Some(sig)

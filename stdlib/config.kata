@@ -1,0 +1,18 @@
+# Config — configuração compile-time do runtime.
+# Permite ao usuário ajustar limites e comportamentos do runtime
+# via `constant` (avaliado em compile-time, aplicado ao Runtime).
+
+import core
+
+# ── Recursion depth limit ───────────────────────────────────────
+#
+# `set_recursion_limit` é uma FFI que seta o limite de profundidade
+# de recursão no Runtime. Só pode ser chamada em compile-time
+# (dentro de `constant`), pois a FFI só está registrada no comptime JIT.
+#
+# Uso:
+#   import stdlib.config
+#   constant _ := config.set_recursion_limit(10000)
+
+@ffi("kata_rt_depth_set_limit")
+set_recursion_limit :: Int => Unit

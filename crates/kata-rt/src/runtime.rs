@@ -13,9 +13,14 @@
 //!   não tem acesso ao `Runtime*`.
 //! - Log, snapshot, dict, cache — TLS periféricas, migram depois.
 
+use std::cell::Cell;
+
 use crate::arena::{Arena, ArenaKind, TrackedArena};
 use crate::marshal::TypeShape;
 use crate::scheduler::Scheduler;
+
+/// Default recursion depth limit for both backends.
+pub const DEFAULT_DEPTH_LIMIT: u32 = 1000;
 
 /// Runtime explícito — substitui TLS do scheduler, arenas, type table e yield.
 ///
@@ -31,6 +36,16 @@ pub struct Runtime {
     pub root_arena_handle: i64,
     /// Type shapes para marshalling. Antes em `TYPE_TABLE: RefCell<Vec<TypeShape>>` TLS.
     pub type_table: Vec<TypeShape>,
+    /// Contador de profundidade de recursão (incrementado no prólogo de cada
+    /// chamada não-de-cauda, decrementado no epílogo). `Cell` porque o Runtime
+    /// é single-threaded com scheduler cooperativo.
+    call_depth: Cell<u32>,
+    /// Limite de profundidade de recursão. Configurável via
+    /// `set_recursion_limit` em `stdlib/config.kata`. Default 1000.
+    depth_limit: Cell<u32>,
+    /// Flag de overflow — setada quando `call_depth` excede `depth_limit`.
+    /// O entry point checa após o retorno, em vez de comparar valor sentinela.
+    overflowed: Cell<bool>,
 }
 
 impl Runtime {
@@ -51,6 +66,9 @@ impl Runtime {
             arenas,
             root_arena_handle,
             type_table: Vec::new(),
+            call_depth: Cell::new(0),
+            depth_limit: Cell::new(DEFAULT_DEPTH_LIMIT),
+            overflowed: Cell::new(false),
         }
     }
 
@@ -160,6 +178,54 @@ impl Runtime {
     pub fn get_type_shape(&self, type_id: i64) -> Option<&TypeShape> {
         self.type_table.get(type_id as usize)
     }
+
+    // ── Recursion depth ──────────────────────────────────
+
+    /// Incrementa o contador de profundidade e retorna o novo valor.
+    pub fn depth_inc(&self) -> u32 {
+        let d = self.call_depth.get() + 1;
+        self.call_depth.set(d);
+        d
+    }
+
+    /// Decrementa o contador de profundidade.
+    /// Saturating sub — não faz underflow abaixo de 0.
+    pub fn depth_dec(&self) {
+        let cur = self.call_depth.get();
+        self.call_depth.set(cur.saturating_sub(1));
+    }
+
+    /// Retorna o contador de profundidade atual.
+    pub fn depth_get(&self) -> u32 {
+        self.call_depth.get()
+    }
+
+    /// Define o limite de profundidade de recursão.
+    pub fn depth_set_limit(&self, limit: u32) {
+        self.depth_limit.set(limit);
+    }
+
+    /// Retorna o limite de profundidade de recursão.
+    pub fn depth_limit(&self) -> u32 {
+        self.depth_limit.get()
+    }
+
+    /// Marca que houve overflow de profundidade.
+    pub fn set_overflowed(&self) {
+        self.overflowed.set(true);
+    }
+
+    /// Retorna se houve overflow de profundidade.
+    pub fn overflowed(&self) -> bool {
+        self.overflowed.get()
+    }
+
+    /// Reseta o estado de depth para uma nova execução.
+    /// Zera `call_depth` e limpa a flag `overflowed`.
+    pub fn reset_depth(&self) {
+        self.call_depth.set(0);
+        self.overflowed.set(false);
+    }
 }
 
 impl Default for Runtime {
@@ -190,4 +256,63 @@ pub(crate) unsafe fn rt_ref(rt: i64) -> &'static mut Runtime {
 pub extern "C" fn kata_rt_runtime_new() -> i64 {
     let rt = Box::new(Runtime::new());
     Box::into_raw(rt) as i64
+}
+
+// ── FFI: Recursion depth ────────────────────────────────────────────
+
+/// `kata_rt_depth_inc(rt: i64) -> i64` — incrementa profundidade, retorna novo valor.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_depth_inc(rt: i64) -> i64 {
+    let rt = unsafe { &*(rt as *const Runtime) };
+    rt.depth_inc() as i64
+}
+
+/// `kata_rt_depth_dec(rt: i64) -> ()` — decrementa profundidade.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_depth_dec(rt: i64) {
+    let rt = unsafe { &*(rt as *const Runtime) };
+    rt.depth_dec();
+}
+
+/// `kata_rt_depth_get(rt: i64) -> i64` — retorna profundidade atual.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_depth_get(rt: i64) -> i64 {
+    let rt = unsafe { &*(rt as *const Runtime) };
+    rt.depth_get() as i64
+}
+
+/// `kata_rt_depth_set_limit(rt: i64, limit: i64) -> ()` — define limite de profundidade.
+/// Chamada pela FFI `set_recursion_limit` em `stdlib/config.kata`.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_depth_set_limit(rt: i64, limit: i64) {
+    let rt = unsafe { &*(rt as *const Runtime) };
+    rt.depth_set_limit(limit as u32);
+}
+
+/// `kata_rt_set_overflowed(rt: i64) -> ()` — marca overflow de profundidade.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_set_overflowed(rt: i64) {
+    let rt = unsafe { &*(rt as *const Runtime) };
+    rt.set_overflowed();
+}
+
+/// `kata_rt_overflowed(rt: i64) -> i64` — retorna 1 se houve overflow, 0 caso contrário.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_overflowed(rt: i64) -> i64 {
+    let rt = unsafe { &*(rt as *const Runtime) };
+    if rt.overflowed() { 1 } else { 0 }
+}
+
+/// `kata_rt_depth_get_limit(rt: i64) -> i64` — retorna o limite de profundidade.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_depth_get_limit(rt: i64) -> i64 {
+    let rt = unsafe { &*(rt as *const Runtime) };
+    rt.depth_limit() as i64
+}
+
+/// `kata_rt_reset_depth(rt: i64) -> ()` — reseta depth e overflow para nova execução.
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_reset_depth(rt: i64) {
+    let rt = unsafe { &*(rt as *const Runtime) };
+    rt.reset_depth();
 }

@@ -24,7 +24,7 @@ fn eval_src(src: &str) -> (i64, Ty) {
     let typed = infer_module(&module, &resolved).expect("infer deve succeed");
     let typed = monomorphize(typed);
     let typed = optimize(typed);
-    let typed = run_comptime_pass(tree_shake(typed.inner), &resolved.enum_registry)
+    let typed = run_comptime_pass(tree_shake(typed.inner), &resolved.enum_registry, leak_rt_ptr())
         .expect("comptime deve succeed");
     let typed = kata_monomorph::MonoModule::from(typed);
     let jit = jit_eval(&typed, &Default::default(), &[], leak_rt_ptr(), false)

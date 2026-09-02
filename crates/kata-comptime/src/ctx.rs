@@ -20,6 +20,10 @@ pub(crate) struct ModuleCtx<'a> {
     pub actions: &'a [TypedAction],
     pub struct_registry: &'a StructRegistry,
     pub enum_registry: &'a EnumRegistry,
+    /// Ponteiro bruto do Runtime compartilhado entre comptime e execução
+    /// principal. Permite que `set_recursion_limit` executado em comptime
+    /// persista o `depth_limit` para o Runtime da execução principal.
+    pub rt_ptr: i64,
 }
 
 /// Resultado da execução comptime — valor bruto + tipo.

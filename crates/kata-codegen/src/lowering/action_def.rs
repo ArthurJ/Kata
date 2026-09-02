@@ -146,6 +146,7 @@ pub(crate) fn define_kata_action(
             rt: Some(rt_value),
             dump_ir,
             ir_dump,
+            depth_tracking: false,
         };
         // Lowera o corpo da Action.
         // O tipo do param é o tipo NATURAL do retorno (F64 para Float, I64 para resto).

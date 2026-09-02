@@ -107,6 +107,10 @@ pub struct CompiledModule {
     pub type_id_map: HashMap<Ty, i64>,
     /// A2: TypeShapes para registrar no Runtime antes da execução.
     pub type_shapes: Vec<kata_rt::TypeShape>,
+    /// Limite de profundidade propagado do comptime pass. Se `Some`,
+    /// o Runtime da execução principal deve usar este limite em vez
+    /// do default (1000). Vem de `set_recursion_limit` em `constant`.
+    pub depth_limit: Option<u32>,
     source: String,
     file_path: Option<String>,
 }
@@ -122,6 +126,12 @@ impl CompiledModule {
         // antes do drop (o raw é lido imediatamente neste escopo).
         let rt = Box::new(kata_rt::Runtime::new());
         let rt_ptr = Box::into_raw(rt) as i64;
+
+        // Propagar depth_limit do comptime pass (set_recursion_limit).
+        if let Some(limit) = self.depth_limit {
+            unsafe { (*(rt_ptr as *mut kata_rt::Runtime)).depth_set_limit(limit) };
+        }
+
         let result = kata_codegen::jit_eval(
             &self.mono,
             &self.type_id_map,
@@ -229,6 +239,11 @@ pub struct Pipeline {
     imports: Vec<kata_resolution::ImportedModule>,
     typed: Option<kata_inference::TypedModule>,
     mono: Option<MonoModule>,
+    /// Limite de profundidade propagado do comptime Runtime para o
+    /// Runtime da execução principal. `set_recursion_limit` em `constant`
+    /// seta o limite no comptime Runtime; este campo propaga o valor
+    /// para o Runtime principal criado em `jit_eval`/`interpret`.
+    depth_limit: Option<u32>,
 }
 
 impl Pipeline {
@@ -244,6 +259,7 @@ impl Pipeline {
             imports: Vec::new(),
             typed: None,
             mono: None,
+            depth_limit: None,
         }
     }
 
@@ -510,9 +526,31 @@ impl Pipeline {
             .enum_registry
             .clone();
 
-        let shaken = run_comptime_pass(mono.inner, &enum_registry).map_err(|e| {
+        // Criar comptime Runtime — o comptime pass usa este Runtime para
+        // JIT-executar constants. Se `set_recursion_limit` for chamado em
+        // comptime, o `depth_limit` fica neste Runtime. Após o pass,
+        // lemos o `depth_limit` e propagamos para o Runtime da execução
+        // principal (em `jit_eval`/`interpret`).
+        let comptime_rt = Box::new(kata_rt::Runtime::new());
+        let comptime_rt_ptr = Box::into_raw(comptime_rt) as i64;
+
+        let shaken = run_comptime_pass(mono.inner, &enum_registry, comptime_rt_ptr).map_err(|e| {
             one_err(e.into_report_with_source(&self.source, self.file_path.as_deref()))
         })?;
+
+        // Ler depth_limit do comptime Runtime antes de droppá-lo.
+        let depth_limit = {
+            let rt = unsafe { &*(comptime_rt_ptr as *const kata_rt::Runtime) };
+            let limit = rt.depth_limit();
+            unsafe { drop(Box::from_raw(comptime_rt_ptr as *mut kata_rt::Runtime)) };
+            limit
+        };
+        // Só propagar se diferente do default — evita mudar comportamento
+        // de programas sem `set_recursion_limit`.
+        if depth_limit != kata_rt::DEFAULT_DEPTH_LIMIT {
+            self.depth_limit = Some(depth_limit);
+        }
+
         self.mono = Some(MonoModule::from(shaken));
         Ok(self)
     }
@@ -562,6 +600,7 @@ impl Pipeline {
             mono,
             type_id_map,
             type_shapes,
+            depth_limit: self.depth_limit,
             source: self.source,
             file_path: self.file_path,
         })

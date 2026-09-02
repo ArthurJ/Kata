@@ -141,8 +141,15 @@ pub(crate) fn evaluate_imported_constants(
             .map_err(|e| e.into_report_with_source("", None))?;
 
         // Rodar comptime pass para avaliar constants.
-        let typed = run_comptime_pass(typed, &imported.resolved_unfiltered.enum_registry)
+        // O comptime Runtime é efêmero — se `set_recursion_limit` estiver
+        // num módulo importado, o limite não propaga para o módulo
+        // importador (caso edge: raro e sem caso de uso claro).
+        let comptime_rt = Box::new(kata_rt::Runtime::new());
+        let comptime_rt_ptr = Box::into_raw(comptime_rt) as i64;
+        let typed = run_comptime_pass(typed, &imported.resolved_unfiltered.enum_registry, comptime_rt_ptr)
             .map_err(|e| e.into_report_with_source("", None))?;
+        // Droppar o comptime Runtime — valores já foram consumidos.
+        unsafe { drop(Box::from_raw(comptime_rt_ptr as *mut kata_rt::Runtime)) };
 
         // Coletar nomes exportados do AST do módulo importado.
         let exported_names: std::collections::HashSet<String> = imported

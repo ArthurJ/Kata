@@ -476,7 +476,7 @@ impl ReplSession {
         // para que functions e actions definidas no REPL possam referenciar
         // constants — sem o fold, o var_map do FunctionBuilder delas não
         // tem acesso às constants (que só existem no var_map do entry point).
-        let mut typed = run_comptime_pass(typed, &resolved.enum_registry)
+        let mut typed = run_comptime_pass(typed, &resolved.enum_registry, self.rt_ptr)
             .map_err(|e| format!("erro de comptime: {e}"))?;
 
         // Injetar constants importadas como ConstantBinding no TypedModule.

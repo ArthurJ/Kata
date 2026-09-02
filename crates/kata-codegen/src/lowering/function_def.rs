@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use cranelift_codegen::ir::types::I64;
+use cranelift_codegen::ir::types::{F64, I64};
 use cranelift_codegen::ir::{
     AbiParam, InstBuilder, MemFlagsData, Signature, StackSlotData, StackSlotKind,
 };
@@ -250,6 +250,18 @@ fn lower_prologue(
         } else {
             lookup_result
         };
+        // Cache hit: depth_dec antes de return (o depth_inc já foi emitido
+        // no prólogo da função, antes de lower_prologue).
+        // Só emitir se depth_tracking está ativo (wrappers não trackeam).
+        if lower.depth_tracking {
+            let rt_val = lower.rt.unwrap_or_else(|| builder.ins().iconst(I64, 0));
+            let dec_fn = lower
+                .ffi_refs
+                .get("kata_rt_depth_dec")
+                .copied()
+                .expect("kata_rt_depth_dec registrado");
+            builder.ins().call(dec_fn, &[rt_val]);
+        }
         builder.ins().return_(&[cached_val]);
 
         // Miss block: continua para o body.
@@ -332,6 +344,7 @@ fn lower_epilogue(
     }
 
     let result = coerce_return(result, ret_ty, lower);
+    lower.emit_depth_dec();
     lower.builder.ins().return_(&[result]);
     Ok(())
 }
@@ -485,6 +498,7 @@ pub(crate) fn define_function_body(
             rt: None,
             dump_ir,
             ir_dump,
+            depth_tracking: matches!(body_kind, BodyKind::Clauses),
         };
 
         let rt_value = params[0];
@@ -552,6 +566,82 @@ pub(crate) fn define_function_body(
             lower.epilogue_block = Some(epi);
         }
 
+        // ── Depth tracking prólogo ──
+        // Inner functions e funções sem split incrementam depth no prólogo.
+        // Wrappers (CallInner) não trackeam — o inner faz isso.
+        // Emitido após a criação do epilogue_block para que o overflow_block
+        // possa jumpar para ele (garantindo coerce_return no valor dummy).
+        if lower.depth_tracking {
+            let inc_fn = lower
+                .ffi_refs
+                .get("kata_rt_depth_inc")
+                .copied()
+                .expect("kata_rt_depth_inc registrado");
+            let depth_call = lower.builder.ins().call(inc_fn, &[rt_value]);
+            let depth_val = lower.builder.inst_results(depth_call)[0];
+
+            let limit_fn = lower
+                .ffi_refs
+                .get("kata_rt_depth_get_limit")
+                .copied()
+                .expect("kata_rt_depth_get_limit registrado");
+            let limit_call = lower.builder.ins().call(limit_fn, &[rt_value]);
+            let limit_val = lower.builder.inst_results(limit_call)[0];
+
+            let overflow_block = lower.builder.create_block();
+            let cont_block = lower.builder.create_block();
+
+            let is_overflow = lower.builder.ins().icmp(
+                cranelift_codegen::ir::condcodes::IntCC::SignedGreaterThan,
+                depth_val,
+                limit_val,
+            );
+            lower
+                .builder
+                .ins()
+                .brif(is_overflow, overflow_block, &[], cont_block, &[]);
+
+            // overflow_block: set_overflowed + return
+            // depth_dec NÃO é emitido aqui quando jumpamos para o epilogue,
+            // porque o epilogue já faz emit_depth_dec.
+            lower.builder.switch_to_block(overflow_block);
+            lower.builder.seal_block(overflow_block);
+            let set_ovf_fn = lower
+                .ffi_refs
+                .get("kata_rt_set_overflowed")
+                .copied()
+                .expect("kata_rt_set_overflowed registrado");
+            lower.builder.ins().call(set_ovf_fn, &[rt_value]);
+
+            // Retornar pelo epilogue_block se existir (garante coerce_return),
+            // senão return_ direto com dummy do tipo correto.
+            // O dummy é SMI 0 (encode_smi(0) = 1) para Int, ou 0.0 para Float.
+            // SMI 0 é usado porque is_smi(1) = true e decode_smi(1) = 0.
+            // I64 0 (null) seria interpretado como BigInt pointer null → panic.
+            if let Some(epi) = lower.epilogue_block {
+                let ret_clif_ty = super::resolve_clif_ty(ret_ty, struct_registry);
+                let dummy = if ret_clif_ty == F64 {
+                    lower.builder.ins().f64const(0.0)
+                } else {
+                    lower.builder.ins().iconst(I64, 1) // SMI 0
+                };
+                lower.builder.ins().jump(epi, &[cranelift_codegen::ir::BlockArg::Value(dummy)]);
+            } else {
+                let ret_clif_ty = super::resolve_clif_ty(ret_ty, struct_registry);
+                let dummy = if ret_clif_ty == F64 {
+                    lower.builder.ins().f64const(0.0)
+                } else {
+                    lower.builder.ins().iconst(I64, 1) // SMI 0
+                };
+                lower.emit_depth_dec();
+                lower.builder.ins().return_(&[dummy]);
+            }
+
+            // cont_block: continua execução normal
+            lower.builder.switch_to_block(cont_block);
+            lower.builder.seal_block(cont_block);
+        }
+
         // ── Body ──
         match &body_kind {
             BodyKind::Clauses => {
@@ -572,6 +662,7 @@ pub(crate) fn define_function_body(
                             );
                         } else {
                             emit_close_io_handles(&mut lower);
+                            lower.emit_depth_dec();
                             lower.builder.ins().return_(&[result]);
                         }
                     }
@@ -605,6 +696,7 @@ pub(crate) fn define_function_body(
                 } else {
                     let result = coerce_return(inner_result, ret_ty, &mut lower);
                     emit_close_io_handles(&mut lower);
+                    lower.emit_depth_dec();
                     lower.builder.ins().return_(&[result]);
                 }
             }

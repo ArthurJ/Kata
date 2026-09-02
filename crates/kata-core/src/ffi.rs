@@ -424,6 +424,24 @@ pub enum FfiSymbol {
     Lcm,
     Pow,
     Signum,
+
+    // ── Recursion depth ───────────────────────────────────
+    /// `kata_rt_depth_inc(rt) -> i64` — incrementa profundidade.
+    DepthInc,
+    /// `kata_rt_depth_dec(rt) -> ()` — decrementa profundidade.
+    DepthDec,
+    /// `kata_rt_depth_get(rt) -> i64` — retorna profundidade atual.
+    DepthGet,
+    /// `kata_rt_depth_set_limit(rt, limit) -> ()` — define limite.
+    DepthSetLimit,
+    /// `kata_rt_set_overflowed(rt) -> ()` — marca overflow.
+    SetOverflowed,
+    /// `kata_rt_overflowed(rt) -> i64` — 1 se overflow, 0 caso contrário.
+    Overflowed,
+    /// `kata_rt_depth_get_limit(rt) -> i64` — retorna o limite de profundidade.
+    DepthGetLimit,
+    /// `kata_rt_reset_depth(rt) -> ()` — reseta depth e overflow.
+    ResetDepth,
 }
 
 impl FfiSymbol {
@@ -667,6 +685,15 @@ impl FfiSymbol {
             FfiSymbol::Lcm => "kata_rt_lcm",
             FfiSymbol::Pow => "kata_rt_pow",
             FfiSymbol::Signum => "kata_rt_signum",
+            // Recursion depth
+            FfiSymbol::DepthInc => "kata_rt_depth_inc",
+            FfiSymbol::DepthDec => "kata_rt_depth_dec",
+            FfiSymbol::DepthGet => "kata_rt_depth_get",
+            FfiSymbol::DepthSetLimit => "kata_rt_depth_set_limit",
+            FfiSymbol::SetOverflowed => "kata_rt_set_overflowed",
+            FfiSymbol::Overflowed => "kata_rt_overflowed",
+            FfiSymbol::DepthGetLimit => "kata_rt_depth_get_limit",
+            FfiSymbol::ResetDepth => "kata_rt_reset_depth",
         }
     }
 
@@ -895,6 +922,11 @@ impl FfiSymbol {
             | FfiSymbol::Lcm
             | FfiSymbol::Pow
             | FfiSymbol::Signum => Ty::int(),
+            // Recursion depth
+            FfiSymbol::DepthInc | FfiSymbol::DepthGet | FfiSymbol::Overflowed => Ty::int(),
+            FfiSymbol::DepthGetLimit => Ty::int(),
+            FfiSymbol::DepthDec | FfiSymbol::DepthSetLimit | FfiSymbol::SetOverflowed
+            | FfiSymbol::ResetDepth => Ty::Unit,
         }
     }
 
@@ -1138,6 +1170,15 @@ impl FfiSymbol {
             FfiSymbol::Lcm,
             FfiSymbol::Pow,
             FfiSymbol::Signum,
+            // Recursion depth
+            FfiSymbol::DepthInc,
+            FfiSymbol::DepthDec,
+            FfiSymbol::DepthGet,
+            FfiSymbol::DepthSetLimit,
+            FfiSymbol::SetOverflowed,
+            FfiSymbol::Overflowed,
+            FfiSymbol::DepthGetLimit,
+            FfiSymbol::ResetDepth,
         ];
         all.iter().copied().find(|s| s.symbol_name() == name)
     }

@@ -221,6 +221,7 @@ fn define_test_wrapper(
             rt: None,
             dump_ir: tctx.dump_ir,
             ir_dump: &mut *tctx.ir_dump,
+            depth_tracking: false,
         };
 
         // 1. scheduler_init(rt) → root_arena (igual ao entry point).

@@ -55,6 +55,7 @@ pub use test_runner::TestWrapper;
 
 use cranelift_codegen::ir::types::{F64, I64};
 use cranelift_codegen::ir::{Block, GlobalValue, Value};
+use cranelift_codegen::ir::InstBuilder;
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
 
@@ -177,6 +178,10 @@ pub(crate) struct LowerCtx<'a, 'b> {
     /// Coletor da CLIF capturada — `(nome, clif_text)`.
     /// Ponteiro para o vec de `lower_module`.
     pub ir_dump: &'a mut Vec<(String, String)>,
+    /// Se `true`, esta função faz tracking de profundidade de recursão.
+    /// Inner functions e funções sem split emitem depth_inc no prólogo e
+    /// depth_dec no epílogo. Wrappers e entry point não trackeam.
+    pub depth_tracking: bool,
 }
 
 /// Resolve o Cranelift type de um `Ty`, percorrendo a cadeia de `alias_of`
@@ -305,5 +310,23 @@ impl<'a, 'b> LowerCtx<'a, 'b> {
         let name = format!("__anon_{}", self.anon_counter);
         self.anon_counter += 1;
         name
+    }
+
+    /// Emite `call kata_rt_depth_dec(rt)` se depth_tracking está ativo.
+    /// Chamado antes de cada `return_` não-tail e antes de cada `return_call`.
+    pub(crate) fn emit_depth_dec(&mut self) {
+        if !self.depth_tracking {
+            return;
+        }
+        let rt_val = match self.rt {
+            Some(v) => v,
+            None => self.builder.ins().iconst(I64, 0),
+        };
+        let dec_fn = self
+            .ffi_refs
+            .get("kata_rt_depth_dec")
+            .copied()
+            .expect("kata_rt_depth_dec registrado");
+        self.builder.ins().call(dec_fn, &[rt_val]);
     }
 }

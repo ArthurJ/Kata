@@ -132,6 +132,8 @@ pub fn jit_eval(
             // SAFETY: `code` é ponteiro válido de Cranelift após finalize_definitions.
             // A assinatura da função foi construída com return type F64.
             let func: extern "C" fn(i64) -> f64 = unsafe { std::mem::transmute(code) };
+            // Resetar depth e overflow antes de cada execução.
+            kata_rt::kata_rt_reset_depth(rt_ptr);
             let f = func(rt_ptr);
             // Reinterpretar f64 como i64 para JitResult.raw.
             JitResult {
@@ -144,6 +146,8 @@ pub fn jit_eval(
             // SAFETY: `code` é ponteiro válido de Cranelift após finalize_definitions.
             // A assinatura da função foi construída com return type I64.
             let func: extern "C" fn(i64) -> i64 = unsafe { std::mem::transmute(code) };
+            // Resetar depth e overflow antes de cada execução.
+            kata_rt::kata_rt_reset_depth(rt_ptr);
             let val = func(rt_ptr);
             JitResult {
                 raw: val,
@@ -151,6 +155,19 @@ pub fn jit_eval(
             }
         }
     };
+
+    // Verificar overflow de recursão após a execução.
+    if kata_rt::kata_rt_overflowed(rt_ptr) != 0 {
+        let depth = kata_rt::kata_rt_depth_get(rt_ptr);
+        let limit = kata_rt::kata_rt_depth_get_limit(rt_ptr);
+        // O module precisa sobreviver até aqui — dropping após execução.
+        std::mem::forget(backend.into_inner());
+        return Err(CodegenError::Runtime {
+            message: format!(
+                "recursion depth exceeded: {depth} (limit: {limit})"
+            ),
+        });
+    }
 
     // O module precisa sobreviver até aqui — dropping após execução.
     // Cranelift JIT mantém as páginas de código mapeadas enquanto o module vive.
@@ -325,6 +342,7 @@ pub fn jit_eval_repl(
     let jit = match &ret_ty {
         Ty::Prim(PrimTy::Float) => {
             let func: extern "C" fn(i64) -> f64 = unsafe { std::mem::transmute(code) };
+            kata_rt::kata_rt_reset_depth(rt_ptr);
             let f = func(rt_ptr);
             JitResult {
                 raw: f.to_bits() as i64,
@@ -333,6 +351,7 @@ pub fn jit_eval_repl(
         }
         _ => {
             let func: extern "C" fn(i64) -> i64 = unsafe { std::mem::transmute(code) };
+            kata_rt::kata_rt_reset_depth(rt_ptr);
             let val = func(rt_ptr);
             JitResult {
                 raw: val,
@@ -340,6 +359,16 @@ pub fn jit_eval_repl(
             }
         }
     };
+
+    // Verificar overflow de recursão após a execução.
+    if kata_rt::kata_rt_overflowed(rt_ptr) != 0 {
+        let depth = kata_rt::kata_rt_depth_get(rt_ptr);
+        let limit = kata_rt::kata_rt_depth_get_limit(rt_ptr);
+        std::mem::forget(backend.into_inner());
+        return Err(CodegenError::Runtime {
+            message: format!("recursion depth exceeded: {depth} (limit: {limit})"),
+        });
+    }
 
     // Extrair function pointers das funções recém-compiladas (Export).
     let mut new_funcs = Vec::new();

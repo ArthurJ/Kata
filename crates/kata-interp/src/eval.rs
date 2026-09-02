@@ -132,6 +132,10 @@ impl InterpCtx {
     /// O Env deve conter bindings `let` acumulados de linhas anteriores.
     /// Constants e pre_entry são avaliados no env fornecido.
     pub fn eval_entry_with_env(&mut self, env: &mut Env) -> Result<Value, InterpError> {
+        // Resetar depth e overflow no início de cada execução.
+        // Após panic/erro, próxima execução começa limpa.
+        rt::kata_rt_reset_depth(self.rt_ptr);
+
         // Clonar Arc<TypedModule> para evitar borrow conflict: iteramos
         // sobre &module.* (imutável) enquanto chamamos eval(self, ...) (mutável).
         let module = self.module.clone();
@@ -1457,12 +1461,36 @@ fn serialize_key_part(ty: &Ty, val: Value, key: &mut Vec<u8>, cacheable: &mut bo
 /// é uma chamada de cauda direta (`eval_tail` retorna `TailCall`), faz loop
 /// com os novos argumentos em vez de recursar. Isso evita stack overflow
 /// em recursão de cauda (incluindo TRMA rewrite).
+/// Guard RAII para decrementar profundidade no drop.
+/// Garante decremento mesmo em early return/erro dentro do trampoline.
+struct DepthGuard {
+    rt_ptr: i64,
+}
+impl Drop for DepthGuard {
+    fn drop(&mut self) {
+        rt::kata_rt_depth_dec(self.rt_ptr);
+    }
+}
+
 fn call_typed_clauses(
     ctx: &mut InterpCtx,
     clauses: &[TypedLambdaClause],
     mut args: Vec<Value>,
     env: &mut Env,
 ) -> Result<Value, InterpError> {
+    // Incrementar profundidade de recursão. O trampoline faz TCO via loop
+    // (não recursa), então uma cadeia de N tail calls fica com contador = 1.
+    // Cache hits em call_named_function retornam sem chamar call_typed_clauses
+    // — não incrementam.
+    let depth = rt::kata_rt_depth_inc(ctx.rt_ptr);
+    let limit = rt::kata_rt_depth_get_limit(ctx.rt_ptr);
+    if depth > limit as i64 {
+        rt::kata_rt_depth_dec(ctx.rt_ptr);
+        return Err(InterpError::Runtime(format!(
+            "recursion depth exceeded: {depth} (limit: {limit})"
+        )));
+    }
+    let _guard = DepthGuard { rt_ptr: ctx.rt_ptr };
     // Trampoline: loop até produzir um valor final.
     // Em cada iteração, avalia o body da cláusula matching com `eval_tail`.
     // Se `eval_tail` retorna `TailCall`, resolve a função e faz loop

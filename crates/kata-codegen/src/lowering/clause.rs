@@ -188,6 +188,7 @@ pub(crate) fn lower_guards(
         // cont_block precisa de terminador — guards anteriores pulam para cá.
         lower.builder.switch_to_block(cont_block);
         let result = lower.builder.block_params(cont_block)[0];
+        lower.emit_depth_dec();
         lower.builder.ins().return_(&[result]);
         // Dummy block para o builder continuar (inalcançável).
         let dummy = lower.builder.create_block();
@@ -274,6 +275,7 @@ pub(crate) fn lower_clause_chain(
                     .ins()
                     .jump(epi, &[cranelift_codegen::ir::BlockArg::Value(body_val)]);
             } else {
+                lower.emit_depth_dec();
                 lower.builder.ins().return_(&[body_val]);
             }
         }

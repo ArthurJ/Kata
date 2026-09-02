@@ -71,16 +71,42 @@ pub(crate) fn jit_execute_expr(
         constants: Vec::new(),
     };
 
+    // Criar um Runtime efêmero para esta execução JIT. Não reusar
+    // ctx.rt_ptr diretamente porque a arena Bump acumula allocations
+    // entre execuções, causando interferência (ex: cbrt complex retorna
+    // NaN). O ctx.rt_ptr serve apenas como canal de propagação de
+    // depth_limit: copiamos o limite do comptime Runtime para este
+    // Runtime efêmero antes de executar, e copiamos de volta após.
+    let exec_rt_ptr = kata_codegen::leak_rt_ptr();
+    // Propagar depth_limit do comptime Runtime para o Runtime efêmero.
+    let comptime_limit = kata_rt::kata_rt_depth_get_limit(ctx.rt_ptr);
+    kata_rt::kata_rt_depth_set_limit(exec_rt_ptr, comptime_limit);
+
     let result = kata_codegen::jit_eval(
         &mini,
         &Default::default(),
         &[],
-        kata_codegen::leak_rt_ptr(),
+        exec_rt_ptr,
         false,
     )
-    .map_err(|e| ComptimeError::JitError {
-        reason: format!("{e}"),
+    .map_err(|e| {
+        // Copiar depth_limit de volta mesmo em caso de erro —
+        // set_recursion_limit pode ter sido chamado antes do erro.
+        let exec_limit = kata_rt::kata_rt_depth_get_limit(exec_rt_ptr);
+        if exec_limit != comptime_limit {
+            kata_rt::kata_rt_depth_set_limit(ctx.rt_ptr, exec_limit);
+        }
+        ComptimeError::JitError {
+            reason: format!("{e}"),
+        }
     })?;
+
+    // Copiar depth_limit de volta para o comptime Runtime.
+    // Se set_recursion_limit foi executado, o limite mudou.
+    let exec_limit = kata_rt::kata_rt_depth_get_limit(exec_rt_ptr);
+    if exec_limit != comptime_limit {
+        kata_rt::kata_rt_depth_set_limit(ctx.rt_ptr, exec_limit);
+    }
 
     Ok(ComptimeResult {
         raw: result.raw,

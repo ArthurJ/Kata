@@ -499,6 +499,24 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
     builder.symbol("kata_rt_lcm", rt::kata_rt_lcm as *const u8);
     builder.symbol("kata_rt_pow", rt::kata_rt_pow as *const u8);
     builder.symbol("kata_rt_signum", rt::kata_rt_signum as *const u8);
+    // Recursion depth
+    builder.symbol("kata_rt_depth_inc", rt::kata_rt_depth_inc as *const u8);
+    builder.symbol("kata_rt_depth_dec", rt::kata_rt_depth_dec as *const u8);
+    builder.symbol("kata_rt_depth_get", rt::kata_rt_depth_get as *const u8);
+    builder.symbol(
+        "kata_rt_depth_set_limit",
+        rt::kata_rt_depth_set_limit as *const u8,
+    );
+    builder.symbol(
+        "kata_rt_set_overflowed",
+        rt::kata_rt_set_overflowed as *const u8,
+    );
+    builder.symbol("kata_rt_overflowed", rt::kata_rt_overflowed as *const u8);
+    builder.symbol(
+        "kata_rt_depth_get_limit",
+        rt::kata_rt_depth_get_limit as *const u8,
+    );
+    builder.symbol("kata_rt_reset_depth", rt::kata_rt_reset_depth as *const u8);
 }
 
 /// Declara todos os símbolos FFI no module e retorna o mapa nome → FuncId.
@@ -775,5 +793,14 @@ fn all_ffi_symbols() -> Vec<FfiSymbol> {
         Lcm,
         Pow,
         Signum,
+        // Recursion depth
+        DepthInc,
+        DepthDec,
+        DepthGet,
+        DepthSetLimit,
+        SetOverflowed,
+        Overflowed,
+        DepthGetLimit,
+        ResetDepth,
     ]
 }

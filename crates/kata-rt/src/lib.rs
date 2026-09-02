@@ -151,6 +151,12 @@ pub use timer::kata_rt_timer_now;
 pub use marshal::{TypeShape, kata_rt_from_bytes, kata_rt_to_bytes, register_type_table};
 
 pub use runtime::Runtime;
+pub use runtime::DEFAULT_DEPTH_LIMIT;
+// Recursion depth FFIs
+pub use runtime::{
+    kata_rt_depth_dec, kata_rt_depth_get, kata_rt_depth_get_limit, kata_rt_depth_inc,
+    kata_rt_depth_set_limit, kata_rt_overflowed, kata_rt_reset_depth, kata_rt_set_overflowed,
+};
 // IPC (fork + pipe para spawn!)
 pub use ipc::kata_rt_spawn_process;
 // File I/O

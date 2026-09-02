@@ -19,6 +19,10 @@ data Text ()
 @ffi("kata_rt_rat")
 data Rational ()
 
+# ── Refined types ─────────────────────────────────────────────
+
+data (Int, > _ 0) as PositiveInt
+
 # ── Boolean ───────────────────────────────────────────────────
 
 enum Boolean

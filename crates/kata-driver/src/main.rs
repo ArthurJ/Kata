@@ -454,6 +454,7 @@ fn cmd_test(path: &str, filter: Option<&str>, interp: bool) -> miette::Result<()
             };
 
             let type_shapes = compiled.type_shapes.clone();
+            let depth_limit = compiled.depth_limit;
             let (jit_module, wrappers) = compiled.jit_tests()?;
 
             for w in &wrappers {
@@ -467,7 +468,7 @@ fn cmd_test(path: &str, filter: Option<&str>, interp: bool) -> miette::Result<()
                     continue;
                 }
 
-                let outcome = run_test_wrapper(&jit_module, w, &type_shapes);
+                let outcome = run_test_wrapper(&jit_module, w, &type_shapes, depth_limit);
 
                 match outcome {
                     TestOutcome::Pass => {
@@ -511,6 +512,7 @@ fn run_test_wrapper(
     module: &cranelift_jit::JITModule,
     w: &TestWrapper,
     type_shapes: &[kata_rt::TypeShape],
+    depth_limit: Option<u32>,
 ) -> TestOutcome {
     // Resetar estado global (timer + TLS periféricas) entre testes.
     rt::reset_scheduler();
@@ -524,6 +526,11 @@ fn run_test_wrapper(
     // A2: Alocar Runtime fresco para cada teste.
     let runtime = Box::new(rt::Runtime::new());
     let rt_ptr = Box::into_raw(runtime) as i64;
+
+    // Propagar depth_limit do comptime pass (set_recursion_limit).
+    if let Some(limit) = depth_limit {
+        unsafe { (*(rt_ptr as *mut rt::Runtime)).depth_set_limit(limit) };
+    }
 
     // A2: Registrar type_shapes no Runtime (marshalling to_bytes/from_bytes).
     if !type_shapes.is_empty() {

@@ -54,6 +54,10 @@ pub enum CodegenError {
         help = "verifique se o runtime foi linkado corretamente"
     )]
     FfiSymbolNotFound { symbol: String },
+
+    /// Erro de runtime Kata (ex: recursão excedeu limite de profundidade).
+    #[error("{message}")]
+    Runtime { message: String },
 }
 
 /// Tabela de strings literais — indexada por índice.
@@ -358,6 +362,7 @@ pub(crate) fn lower_module(
             rt: None,
             dump_ir,
             ir_dump: &mut ir_dump,
+            depth_tracking: false,
         };
 
         // Prólogo do entry point: inicializa scheduler (cria arena raiz internamente).

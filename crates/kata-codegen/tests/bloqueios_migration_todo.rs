@@ -88,7 +88,7 @@ fn eval_src(src: &str) -> (i64, Ty) {
     let typed = monomorphize(typed);
     let typed = optimize(typed);
     let typed =
-        run_comptime_pass(tree_shake(typed.inner), &resolved.enum_registry).expect("comptime");
+        run_comptime_pass(tree_shake(typed.inner), &resolved.enum_registry, leak_rt_ptr()).expect("comptime");
     let typed = kata_monomorph::MonoModule::from(typed);
     let jit =
         jit_eval(&typed, &Default::default(), &[], leak_rt_ptr(), false).expect("codegen+JIT");
@@ -104,7 +104,7 @@ fn try_eval(src: &str) -> Result<(i64, Ty), String> {
     let typed = infer_module(&module, &resolved).map_err(|e| format!("infer: {e:?}"))?;
     let typed = monomorphize(typed);
     let typed = optimize(typed);
-    let typed = run_comptime_pass(tree_shake(typed.inner), &resolved.enum_registry)
+    let typed = run_comptime_pass(tree_shake(typed.inner), &resolved.enum_registry, leak_rt_ptr())
         .map_err(|e| format!("comptime: {e:?}"))?;
     let typed = kata_monomorph::MonoModule::from(typed);
     let jit = jit_eval(&typed, &Default::default(), &[], leak_rt_ptr(), false)

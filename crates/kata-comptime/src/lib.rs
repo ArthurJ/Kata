@@ -43,11 +43,10 @@ use kata_core::EnumRegistry;
 use kata_inference::{TypedExpr, TypedExprKind, TypedModule};
 
 use constness::is_comptime_available;
-use ctx::ModuleCtx;
+use ctx::{ComptimeResult, ModuleCtx};
 use fold::fold_literal_calls;
 use jit::jit_execute_expr;
 use predicates::validate_pending_predicates;
-use pureza::check_purity;
 use result::result_to_literal;
 
 // Re-export da API pública.
@@ -73,6 +72,7 @@ pub fn serialize_value(
 pub fn run_comptime_pass(
     typed: TypedModule,
     enum_registry: &EnumRegistry,
+    rt_ptr: i64,
 ) -> Result<TypedModule, ComptimeError> {
     let mut current = typed;
     let mut snapshots: Vec<kata_core::snapshot::HeapSnapshotData> =
@@ -97,6 +97,7 @@ pub fn run_comptime_pass(
         actions: &actions_clone,
         struct_registry: &current.struct_registry,
         enum_registry,
+        rt_ptr,
     };
 
     // ── Fase 1: Avaliar constants (pre-pass linear, sem fixpoint) ──
@@ -197,6 +198,7 @@ pub fn run_comptime_pass(
             actions: &current.actions,
             struct_registry: &current.struct_registry,
             enum_registry,
+            rt_ptr,
         };
         for func in &mut current.functions {
             for clause in &mut func.clauses {
@@ -259,6 +261,7 @@ pub fn run_comptime_pass(
         actions: &actions_clone,
         struct_registry: &current.struct_registry,
         enum_registry,
+        rt_ptr,
     };
     for expr in &mut current.pre_entry {
         validate_pending_predicates(&mut expr.node, &ctx, &comptime_bindings)?;
@@ -310,7 +313,45 @@ fn evaluate_constants(
         // named function e 41 é literal). O passo de constants só
         // avalia expressões estruturais (ListLit, StructConstruct,
         // etc.), não chamadas de função.
-        if matches!(value_clone.kind, TypedExprKind::Closure { .. }) {
+        //
+        // EXCEÇÃO: Closures com `ffi_symbol: Some` e args literais são
+        // chamadas FFI diretas (ex: `set_recursion_limit(2000)`). Estas
+        // não são foldadas por fold_literal_calls (que pula ffi_symbol)
+        // e o JIT falha com Verifier errors ao tentar lowerar funções
+        // FFI sem corpo. Executamos a FFI diretamente via Rust.
+        if let TypedExprKind::Closure {
+            callee,
+            args,
+            ffi_symbol: Some(sym),
+        } = &value_clone.kind
+        {
+            // Só executar FFIs conhecidas com args comptime-available.
+            if args.iter().all(|a| is_comptime_available(&a.node, comptime_bindings)) {
+                if let Some(result) = try_exec_comptime_ffi(sym, callee, args, ctx) {
+                    let literal = result_to_literal(
+                        &result,
+                        &value_clone,
+                        snapshots,
+                        ctx.struct_registry,
+                        ctx.enum_registry,
+                    )?;
+                    if let TypedExprKind::ConstantBinding { value, .. } =
+                        &mut binding.node.kind
+                    {
+                        **value = Spanned::new(literal.clone(), value_span);
+                    }
+                    comptime_bindings.insert(name, literal);
+                    continue;
+                }
+            }
+        }
+        if matches!(
+            &value_clone.kind,
+            TypedExprKind::Closure {
+                ffi_symbol: None,
+                ..
+            }
+        ) {
             // Mas ainda precisamos registrar caso fold depois a avalie.
             // Usamos o value original — fold_literal_calls pode trocá-lo.
             comptime_bindings.insert(name, value_clone);
@@ -326,7 +367,6 @@ fn evaluate_constants(
                 reason: format!("constant {name} — expressão depende de valor runtime"),
             });
         }
-        check_purity(&value_clone)?;
 
         // Passar todas as funções e actions — constants podem ser
         // function references (`constant g := fat`) que precisam
@@ -377,4 +417,48 @@ fn is_already_evaluated(expr: &TypedExpr) -> bool {
             | TypedExprKind::HeapSnapshot { .. }
             | TypedExprKind::VariantQual { .. }
     )
+}
+
+/// Desembrulha `Grouping` recursivamente — retorna a expressão interna.
+fn unwrap_grouping(expr: &TypedExpr) -> &TypedExpr {
+    match &expr.kind {
+        TypedExprKind::Grouping { inner } => unwrap_grouping(&inner.node),
+        _ => expr,
+    }
+}
+
+/// Executa FFIs conhecidas diretamente via Rust (sem JIT) em comptime.
+///
+/// O JIT falha com Verifier errors ao tentar lowerar funções FFI sem corpo
+/// (zero cláusulas lambda). Para side-effects de configuração em `constant`
+/// (ex: `set_recursion_limit`), executamos a FFI diretamente no comptime
+/// Runtime (`ctx.rt_ptr`).
+///
+/// Retorna `None` se a FFI não é suportada (caller deve pular para o
+/// caminho normal de JIT ou registro sem avaliação).
+fn try_exec_comptime_ffi(
+    sym: &str,
+    _callee: &Spanned<TypedExpr>,
+    args: &[Spanned<TypedExpr>],
+    ctx: &ModuleCtx<'_>,
+) -> Option<ComptimeResult> {
+    match sym {
+        "kata_rt_depth_set_limit" => {
+            // set_recursion_limit(Int) => Unit
+            // Arg 0 é o limite (IntLit, possivelmente dentro de Grouping).
+            let arg = args.first()?;
+            let inner = unwrap_grouping(&arg.node);
+            let limit = match &inner.kind {
+                TypedExprKind::IntLit { text } => text.parse::<i64>().ok()?,
+                _ => return None,
+            };
+            // Chamar a FFI diretamente no comptime Runtime.
+            kata_rt::kata_rt_depth_set_limit(ctx.rt_ptr, limit);
+            Some(ComptimeResult {
+                raw: 1, // SMI 0 = Unit
+                ty: kata_core::ty::Ty::Unit,
+            })
+        }
+        _ => None,
+    }
 }
