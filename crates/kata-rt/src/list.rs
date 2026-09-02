@@ -93,8 +93,8 @@ pub extern "C" fn kata_rt_list_get_checked(ptr: i64, idx: i64) -> i64 {
         current = unsafe { std::ptr::read_unaligned((current as *const u8).add(8) as *const i64) };
     }
     if current == 0 || i < idx {
-        // Out of bounds — retorna Err (tag=1, payload=0)
-        return crate::sum::kata_rt_store_sum_result(1, 0, 0);
+        // Out of bounds — retorna Err com mensagem
+        return crate::sum::err_with_msg("at: índice fora dos limites", 0);
     }
     // Found — retorna Ok (tag=0, payload=head)
     let head = unsafe { std::ptr::read_unaligned(current as *const i64) };

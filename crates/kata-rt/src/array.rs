@@ -79,11 +79,11 @@ pub extern "C" fn kata_rt_array_get_checked(ptr: i64, idx: i64) -> i64 {
     // idx é SMI-tagged (vindo do codegen). Untag antes de usar.
     let idx = untag_smi(idx);
     if ptr == 0 {
-        return crate::sum::kata_rt_store_sum_result(1, 0, 0);
+        return crate::sum::err_with_msg("at: array nulo", 0);
     }
     let len = unsafe { std::ptr::read_unaligned(ptr as *const i64) };
     if idx < 0 || idx >= len {
-        return crate::sum::kata_rt_store_sum_result(1, 0, 0);
+        return crate::sum::err_with_msg("at: índice fora dos limites", 0);
     }
     let offset = 8 + idx * 8;
     let val =

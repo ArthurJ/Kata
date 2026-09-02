@@ -571,7 +571,7 @@ unsafe fn get_recursive(
             let value = unsafe { read_kvpair_value(leaf_ptr) };
             crate::sum::kata_rt_store_sum_result(0, value, arena)
         } else {
-            crate::sum::kata_rt_store_sum_result(1, 0, arena)
+            crate::sum::err_with_msg("at: chave não encontrada", arena)
         }
     } else {
         let bitmap = unsafe { read_bitmap(node_ptr) };
@@ -580,7 +580,7 @@ unsafe fn get_recursive(
 
         if bitmap & bit == 0 {
             // Not found.
-            crate::sum::kata_rt_store_sum_result(1, 0, arena)
+            crate::sum::err_with_msg("at: chave não encontrada", arena)
         } else {
             let pos = child_index(bitmap, idx);
             let child = unsafe { read_child(node_ptr, pos) };
@@ -594,7 +594,7 @@ unsafe fn get_recursive(
                     let value = unsafe { read_kvpair_value(leaf_ptr) };
                     crate::sum::kata_rt_store_sum_result(0, value, arena)
                 } else {
-                    crate::sum::kata_rt_store_sum_result(1, 0, arena)
+                    crate::sum::err_with_msg("at: chave não encontrada", arena)
                 }
             } else {
                 // Interior node — recurse.
@@ -615,7 +615,7 @@ unsafe fn get_collision(node_ptr: i64, key: i64, eq_fn: EqFn, arena: i64) -> i64
             return crate::sum::kata_rt_store_sum_result(0, value, arena);
         }
     }
-    crate::sum::kata_rt_store_sum_result(1, 0, arena)
+    crate::sum::err_with_msg("at: chave não encontrada", arena)
 }
 
 /// Recursive contains. Returns 1 or 0 (no Result box).
@@ -891,7 +891,7 @@ pub(super) unsafe fn make_kv_tuple(arr: i64, index: i64, arena_handle: i64) -> i
     // Allocate 16-byte tuple: key at 0, value at 8.
     let tuple = crate::arena::kata_rt_arena_alloc(crate::arena::rt_ptr(), arena_handle, 16);
     if tuple == 0 {
-        return crate::sum::kata_rt_store_sum_result(1, 0, arena_handle);
+        return crate::sum::err_with_msg("at: falha de alocação", arena_handle);
     }
     unsafe {
         std::ptr::write_unaligned(tuple as *mut i64, key);

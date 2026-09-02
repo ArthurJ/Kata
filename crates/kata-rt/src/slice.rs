@@ -20,7 +20,7 @@ use crate::bytes::{tag_smi, untag_smi};
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn kata_rt_text_at(text_ptr: i64, idx: i64, arena_handle: i64) -> i64 {
     if text_ptr == 0 {
-        return crate::sum::kata_rt_store_sum_result(1, 0, arena_handle);
+        return crate::sum::err_with_msg("at: texto nulo", arena_handle);
     }
     let cstr = unsafe { std::ffi::CStr::from_ptr(text_ptr as *const std::os::raw::c_char) };
     let s = cstr.to_str().unwrap_or("");
@@ -32,7 +32,7 @@ pub unsafe extern "C" fn kata_rt_text_at(text_ptr: i64, idx: i64, arena_handle: 
     // Suporte a índice negativo.
     let real_idx = if idx < 0 { len + idx } else { idx };
     if real_idx < 0 || real_idx >= len {
-        return crate::sum::kata_rt_store_sum_result(1, 0, arena_handle);
+        return crate::sum::err_with_msg("at: índice fora dos limites", arena_handle);
     }
     let c = codepoints[real_idx as usize];
     let cstr_ptr = CString::new(c.to_string())

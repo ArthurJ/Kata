@@ -10,6 +10,8 @@
 //! offset 8: payload (i64) — valor do payload (SMI, ptr, etc.)
 //! ```
 
+use std::ffi::CString;
+
 /// Aloca 16 bytes na arena especificada, armazena tag e payload, retorna ponteiro.
 ///
 /// Pré-11: `arena_handle` substitui o handle 0 hardcoded.
@@ -40,4 +42,20 @@ pub extern "C" fn kata_rt_sum_tag_int(val: i64) -> i64 {
         return 0;
     }
     unsafe { std::ptr::read_unaligned(val as *const i64) }
+}
+
+/// Constrói um `Err` com mensagem de erro Text. Aloca uma C string no
+/// heap (via `into_raw` — mesmo padrão de `Ok` payloads), armazena como
+/// payload do Sum box (tag=1). Garante que `Err` nunca tenha payload
+/// null — o contrato de `Err` exige um Text.
+///
+/// Usado por todas as operações de runtime que retornam `Result::Err`
+/// (at, list_get, array_get, dict_get, etc.) em vez de
+/// `store_sum_result(1, 0, arena)` que produzia payload null → SIGSEGV
+/// no `show`.
+pub(crate) fn err_with_msg(msg: &str, arena_handle: i64) -> i64 {
+    let cstr = CString::new(msg)
+        .unwrap_or_else(|_| CString::new("").expect("string vazia é CString válida"));
+    let ptr = cstr.into_raw();
+    kata_rt_store_sum_result(1, ptr as i64, arena_handle)
 }
