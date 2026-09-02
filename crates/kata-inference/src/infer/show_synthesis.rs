@@ -54,6 +54,7 @@ pub(crate) fn synthesize_show_functions(
     enum_registry: &EnumRegistry,
     dispatch_table: &mut DispatchTable,
     interface_registry: &mut InterfaceRegistry,
+    refined_decls: &[kata_resolution::RefinedDeclInfo],
 ) -> Vec<TypedFunction> {
     let mut show_functions = Vec::new();
 
@@ -129,7 +130,12 @@ pub(crate) fn synthesize_show_functions(
         // - Struct sem campos não-refined → TextLit("StructName")
         // - Struct com campos → string_concat aninhado (caso existente)
         let body = if is_refined && struct_info.fields.is_empty() {
-            build_refined_show_body(struct_name, struct_info, struct_registry)
+            // Busca o base_ty completo em refined_decls (tem type params).
+            let base_ty = refined_decls
+                .iter()
+                .find(|rd| rd.name == struct_name)
+                .map(|rd| rd.base_ty.clone());
+            build_refined_show_body(struct_name, struct_info, base_ty, struct_registry)
         } else if !is_refined && struct_info.fields.is_empty() {
             // Struct sem campos não-refined: TextLit("StructName")
             TypedExpr {
@@ -308,6 +314,7 @@ fn build_struct_show_body(
 fn build_refined_show_body(
     refined_name: &str,
     struct_info: &kata_core::struct_registry::StructInfo,
+    base_ty: Option<Ty>,
     _struct_registry: &StructRegistry,
 ) -> TypedExpr {
     let base_name = struct_info
@@ -318,9 +325,14 @@ fn build_refined_show_body(
     // `__self` é o valor do refined. Em runtime, é idêntico ao valor do base
     // (mesmo layout — o refined não adiciona campos). O show do base é chamado
     // diretamente sobre `__self`.
+    // Usa o base_ty completo (com type params) se disponível — isso permite
+    // que o monomorphizador instancie show de tipos genéricos (ex: List::Int).
+    let self_ty = base_ty
+        .clone()
+        .unwrap_or_else(|| Ty::Struct(StructKey::Plain(refined_name.to_string())));
     let self_expr = TypedExpr {
         span: Span::synthetic(),
-        ty: Ty::Struct(StructKey::Plain(refined_name.to_string())),
+        ty: self_ty.clone(),
         tail_pos: false,
         escape: EscapeTarget::Local,
         kind: TypedExprKind::Ident {
@@ -330,19 +342,18 @@ fn build_refined_show_body(
     let self_spanned = Spanned::new(self_expr, Span::synthetic());
 
     // Despacha para o show do tipo base. Para primitivos, o ffi_call1 usa
-    // a FFI direto. Para structs, show_call usa o mangled `__kata_show__{Base}`.
+    // a FFI direto. Para structs/coleções, show_call usa o mangled
+    // `__kata_show__{Base}` com o tipo completo (para monomorfização).
     let body = match base_name.as_str() {
         "Int" => ffi_call1("kata_rt_bi_show", self_spanned, Ty::text()),
         "Float" => ffi_call1("kata_rt_float_to_text", self_spanned, Ty::text()),
         "Rational" => ffi_call1("kata_rt_rat_show", self_spanned, Ty::text()),
         "Text" => self_spanned, // identity
         _ => {
-            // Base é struct ou outro tipo — chama `__kata_show__{Base}`.
-            show_call(
-                self_spanned,
-                base_name.clone(),
-                &Ty::Struct(StructKey::Plain(base_name.clone())),
-            )
+            // Base é struct/coleção — chama `__kata_show__{Base}`.
+            // Usa o base_ty completo para que o monomorphizador saiba
+            // o tipo concreto (ex: List::Int, não List genérico).
+            show_call(self_spanned, base_name.clone(), &self_ty)
         }
     };
 

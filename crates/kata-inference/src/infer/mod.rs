@@ -212,6 +212,7 @@ pub fn infer_module(
         &resolved.enum_registry,
         &mut dispatch_table,
         &mut interface_registry,
+        &resolved.refined_decls,
     );
 
     // 1e. sintetiza `show` para List::A — duas funções genéricas mutuamente

@@ -329,6 +329,10 @@ pub(crate) fn run_pass0(
                             // Refined concreto: `data (Int, > _ 0) as PositiveInt`
                             let base_ty_name = match &refined_decl.base_ty.node {
                                 TypeExpr::Named(n) => n.clone(),
+                                // `data ([Int], ...) as NonEmpty` →
+                                // TypeExpr::ParamApp { name: "List", ... }
+                                // Extrair o nome do tipo base.
+                                TypeExpr::ParamApp { name, .. } => name.clone(),
                                 _ => String::new(),
                             };
                             let pred_names: Vec<String> = (0..refined_decl.predicates.len())
