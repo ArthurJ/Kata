@@ -183,27 +183,13 @@ médios (buracos funcionais), 3 baixos (assimetrias).
 
 #### A1. `show` de `Result::Err` com payload null → SIGSEGV
 
-**Estado:** `at :: Text Int =\u003e Result::Text` retorna `Err` com
-payload=0 (null) para OOB. `show_sum` em `show.rs:71-86` lê o payload,
-checa `payload == 0 && payload_ty == Unit`, mas `Err` tem payload_ty=Text.
-Chama `show_value(0, Text)` → `CStr::from_ptr(0)` → SIGSEGV. Mesmo
-crash no JIT (string_concat recebe null). Afeta também `list_at` OOB
-(também retorna `store_sum_result(1, 0, 0)`).
-
-**Localização:** `crates/kata-rt/src/slice.rs:23,35` (text_at OOB),
-`crates/kata-interp/src/show.rs:71-86` (show_sum),
-`crates/kata-codegen/src/` (show synthesis para Result).
-
-**Reprodução:** `echo!(show (at \"abc\" 99))` → exit -11 (SIGSEGV)
-em ambos backends. GDB: `strlen(s=0x0)` ← `kata_rt_string_concat`.
-Também reproduzido com `at arr 10` (Array OOB) e `at d \"missing\"`
-(Dict key missing). **10 sites** no runtime retornam `Err` com
-payload null: slice.rs:23,35; list.rs:97; array.rs:82,86;
-dict/hamt.rs:574,583,597,618,894.
-
-**Prioridade:** crítica — viola contrato fundamental (graceful error).
-Classe inteira: toda operação `at` que retorna `Result` crasha no
-show do Err.
+**Estado:** ✅ Resolvido (2026-09-02). 10 sites no runtime que
+retornavam `Err` com payload=0 (null) corrigidos para usar
+`err_with_msg(msg, arena)` — aloca C string com mensagem de erro
+como payload Text. Helper em `kata-rt/src/sum.rs`. Crash em
+`show_sum` (interp) e `kata_rt_string_concat` (JIT) eliminado
+porque o payload agora é ponteiro válido. A2 (head de lista vazia)
+é bug de assinatura diferente — escala para PRD próprio.
 
 #### A2. `head` de lista vazia → SIGSEGV/panic
 
