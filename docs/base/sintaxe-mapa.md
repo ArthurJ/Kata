@@ -964,6 +964,56 @@ PositiveInt refines NUM
 
 ---
 
+## Famílias Polimórficas (Refined sobre Interface)
+
+```kata
+data (NUM, != _ (zero _), = _ _) as NonZero
+NonZero refines NUM
+```
+
+- **Declaração:** `data (INTERFACE, predicados...) as Nome`. Quando o tipo
+  base é uma interface (não um tipo concreto), o refined é uma **família
+  polimórfica**. O pass0 (`instantiate_family_for_concrete`) gera uma
+  instância para cada implementor conhecido da interface: `NonZero::Int`,
+  `NonZero::Float`, `NonZero::Rational`.
+- **Dois níveis de tipo:**
+  - `Family("NonZero")` — a família abstrata. Não é instanciada diretamente.
+  - `Instance("NonZero", "Int")` — a instância concreta. É o tipo que vive
+    no DispatchTable e no type system.
+- **Sintaxe `Família::Concreto`:** `NonZero::Int` referencia uma instância
+  específica. Produz `ParamApp { name: "NonZero", params: [Named("Int")] }`.
+  O `resolve_type_expr` resolve para `Instance("NonZero", "Int")`. Usado em
+  assinaturas dentro de `implements`: `/ :: Float NonZero::Int => Float`.
+- **Ascription de literal:** `3::NonZero` — o typeck vê `Family("NonZero")`
+  no destino, vê `Int` no literal, e promove para `Instance("NonZero",
+  "Int")` baseado no tipo primitivo do inner.
+- **Construtor falível:** `NonZero(3)` retorna `Result::(Instance("NonZero",
+  "Int"), Text)` — não `Result::(Family, Text)`. A instância concreta é
+  derivada do tipo do argumento (`NonZero(3)` → Int, `NonZero(3.0)` → Float,
+  `NonZero(rational 3)` → Rational).
+- **Dispatch:** `fits_return` aceita `Instance(family, _)` como compatível
+  com `Family(family)` — qualquer instância concreta satisfaz a família
+  abstrata como parâmetro. O inverso não vale: `Family` não casa com
+  `Instance` esperada.
+- **`refines` com família:** `NonZero refines NUM` delega as operações de
+  NUM para o tipo base de cada instância. `NonZero::Int` herda `+`, `-`, `*`
+  de Int; `NonZero::Float` herda de Float.
+- **Cross-type:** a qualificação explícita permite overloads entre tipos
+  numéricos distintos: `/ :: Float NonZero::Int => Float` (Float dividido
+  por Int não-zero, retorna Float). Sem famílias polimórficas, seria
+  necessário redeclarar NonZero três vezes (NonZeroInt, NonZeroFloat,
+  NonZeroRational) e perder a unificação no dispatch.
+- **Distinção conceitual:** interfaces classificam comportamento (NUM =
+  "sabe somar"); refineds classificam valores (NonZero = "não é zero").
+  Famílias polimórficas permitem que uma restrição sobre valores seja
+  paramétrica no tipo base, sem virar interface e sem ser redeclarada N
+  vezes.
+- **Referências:** Manual §4.2.9, §8.2, §22.1. Book capítulo 12 ("Famílias
+  polimórficas"). Prelude: `data (NUM, != _ (zero _), = _ _) as NonZero` em
+  `stdlib/core.kata`.
+
+---
+
 ## Açúcar `T?` (Tipo Falível)
 
 ```kata
@@ -996,7 +1046,7 @@ soma_positiva :: PositiveInt PositiveInt => PositiveInt?
 |---|---|
 | `lambda` / `λ` | Declara função anônima. Múltiplas cláusulas após assinatura: `lambda <padrões>: <corpo>` — a primeira que encaixa vence |
 | `action` | Declara Action com params nomeados. Duas formas: **posicional** `action nome (p::T, ...) => Ret` (açúcar para dict-template sem defaults) ou **dict-template** `action nome {p::T: _, q::T: 5} => Ret` onde `_` marca obrigatório e literal marca default. `=>` separa args de retorno. Sem params: `action greet` (retorna `Unit`) ou `action greet => Unit` (retorno explícito). |
-| `data` | Declara tipo produto |
+| `data` | Declara tipo produto. **Struct:** `data Pessoa (nome::Text, idade::Int)`. **Refined:** `data (Base, predicados...) as Nome`. **Família polimórfica:** `data (INTERFACE, predicados...) as Nome` — quando Base é interface, gera instâncias por implementor (ver "Famílias Polimórficas" abaixo) |
 | `enum` | Declara tipo soma |
 | `alias` | Cria Newtype |
 | `interface` | Declara contrato de tipo |

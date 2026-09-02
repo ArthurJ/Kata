@@ -70,11 +70,13 @@ Consequências:
 - Custo: tempo de compilação e tamanho de código crescem com o número de
   instâncias
 
-#### Propriedade: Dispatch por dominância — Score 4D
+#### Propriedade: Dispatch por dominância — Score 2D
 
 O `DispatchTable` resolve sobrecargas por pontuação, não por primeira
-correspondência. Cada par (arg, param) é classificado em quatro categorias:
-`exact` > `alias` > `refined` > `iface`, com tiebreak concreto > genérico.
+correspondência. Cada par (arg, param) é classificado em duas categorias:
+`exact` > `iface`, com tiebreak concreto > genérico. Alias→base e
+refined→base **não** são dimensões do Score — são resolvidos por fallback
+em `apply_dispatch.rs` quando o dispatch normal falha.
 
 Consequências:
 - Múltiplas sobrecargas coexistem sem ambiguidade na maioria dos casos
@@ -306,31 +308,30 @@ com `Vec<(*mut u8, Layout)>` e `swap_remove` para dealloc O(1). Header
 ARC de 24 bytes (fn_ptr + refcount + n_captures) permite que `decref → 0`
 saiba o tamanho do bloco para passar ao `dealloc`.
 
-### 5. Dispatch por dominância — Score 4D
+### 5. Dispatch por dominância — Score 2D
 
 O `DispatchTable` resolve sobrecargas por pontuação, não por primeira
 correspondência. Cada par (argumento, parâmetro) é classificado em uma de
-quatro categorias mutuamente exclusivas:
+**duas** categorias mutuamente exclusivas:
 
 ```
-Score = (exact, alias, refined, iface, is_generic_origin)
+Score = (exact, iface, is_generic_origin)
 ```
 
 - **exact**: tipo do argumento é idêntico ao tipo do parâmetro (`Int` vs `Int`)
-- **alias**: argumento é alias do parâmetro via `alias_registry` (`MyInt` é alias de `Int`)
-- **refined**: argumento é subtipo refinado do parâmetro (`PositiveInt` é refined de `Int`)
 - **iface**: parâmetro é interface e argumento a implementa (`Int` implementa `NUM`)
 
 Ordenação lexicográfica decrescente: mais `exact` vence; empate desempata
-por `alias`, depois `refined`, depois `iface`; empate total desempata por
-`is_generic_origin` (concreto vence genérico). Empate final é
-`AmbiguousDispatch` — erro, não chute.
+por `iface`; empate total desempata por `is_generic_origin` (concreto vence
+genérico). Empate final é `AmbiguousDispatch` — erro, não chute.
 
-A intuição é uma hierarquia de especificidade: match exato é mais
-específico que alias, que é mais específico que refined, que é mais
-específico que interface. O scoring nasce em Fio 1 mesmo com uma única
-overload — a estrutura já está pronta, só as dimensões `alias`/`refined`/
-`iface` ficam em zero até suas features existirem.
+Alias→base e refined→base **não** são dimensões do Score. O scoring
+original era 4D (`exact, alias, refined, iface`), mas as dimensões
+`alias` e `refined` eram sempre 0 — o mecanismo de fallback em
+`apply_dispatch.rs` já resolve refined→base e alias→base sem scoring.
+Foram removidas em 2026-08-20 (commits `ed4ea22` e `d2686fa`). O Score
+passou de 4D → 3D → 2D. Alias puro (sem `refines`) é nominalmente
+distinto do base e não interoperaciona sem downcast explícito — por design.
 
 ### 6. Tuplas fora do grupo de collections
 

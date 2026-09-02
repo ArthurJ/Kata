@@ -118,6 +118,22 @@ consome `Vec<T => Bool>` com estratégia de combinação:
 O typeck decide a estratégia pela forma da declaração: `data` com
 predicados → `All`; `enum` com predicados → `First`.
 
+**Famílias polimórficas:** quando o tipo base do refined é uma
+*interface* (não um tipo concreto), o refined é uma família
+polimórfica. `data (NUM, != _ (zero _)) as NonZero` declara NonZero
+sobre NUM — o pass0 instancia `NonZero::Int`, `NonZero::Float`,
+`NonZero::Rational` automaticamente, uma para cada implementor de
+NUM. A família (`Family("NonZero")`) é o tipo abstrato; cada instância
+(`Instance("NonZero", "Int")`) é o tipo concreto que vive no
+DispatchTable. Ascription de literal (`3::NonZero`) promove
+Family → Instance baseado no tipo do literal. Construtor falível
+(`NonZero(3)`) retorna `Instance`, não `Family`. Qualificação
+explícita (`NonZero::Int`) referencia uma instância específica em
+assinaturas. `fits_return` aceita `Instance(family, _)` como
+compatível com `Family(family)`. Permite overloads cross-type
+(`/ :: Float NonZero::Int => Float`) sem redeclarar o refined N vezes.
+Ver manual §4.2.9, book capítulo 12.
+
 Ascription `expr::Type`: três modos semânticos (ver manual §4.2.7):
 1. **Rebaixamento de literal** — texto bruto reinterpretado no tipo alvo
    desde o início (`42::Float`, `3.14::Rational`). Sem conversão em
