@@ -15,7 +15,7 @@
 //! thread OS timer não tem acesso ao `Runtime*`.
 
 use crate::fiber::{YieldReason, is_in_fiber, with_suspend};
-use crate::runtime::Runtime;
+use crate::runtime::deref_runtime;
 
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
@@ -91,7 +91,7 @@ pub fn reset_scheduler() {
 /// Retorna o handle da root arena para o codegen usar como `caller_arena`.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_scheduler_init(rt: i64) -> i64 {
-    let runtime = unsafe { &mut *(rt as *mut Runtime) };
+    let runtime = unsafe { deref_runtime(rt) };
     // Cache do ponteiro em TLS para FFIs periféricas (array, list, dict, etc.)
     crate::arena::set_rt_ptr(rt);
     runtime.root_arena_handle
@@ -111,7 +111,7 @@ pub extern "C" fn kata_rt_scheduler_init(rt: i64) -> i64 {
 /// será atribuído quando o scheduler drenar).
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_spawn(rt: i64, fn_ptr: i64, caller_arena: i64, args_ptr: i64) -> i64 {
-    let runtime = unsafe { &mut *(rt as *mut Runtime) };
+    let runtime = unsafe { deref_runtime(rt) };
     if is_in_fiber() {
         // Dentro de fiber — enfileirar em pending_spawns (campo do scheduler).
         runtime
@@ -145,7 +145,7 @@ pub extern "C" fn kata_rt_spawn(rt: i64, fn_ptr: i64, caller_arena: i64, args_pt
 /// verifica o valor de retorno.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_run(rt: i64) -> i64 {
-    let runtime = unsafe { &mut *(rt as *mut Runtime) };
+    let runtime = unsafe { deref_runtime(rt) };
     let result = runtime.scheduler.run(&mut runtime.arenas);
     match result {
         Ok(v) => v,
@@ -233,7 +233,7 @@ pub extern "C" fn kata_rt_yield() {
 /// caminhos — `with_suspend` não faz nada se não há `Suspend` ativo.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_yield_check(rt: i64) {
-    let runtime = unsafe { &mut *(rt as *mut Runtime) };
+    let runtime = unsafe { deref_runtime(rt) };
     runtime.scheduler.yield_counter -= 1;
     if runtime.scheduler.yield_counter > 0 {
         return;

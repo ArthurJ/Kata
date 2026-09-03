@@ -234,12 +234,37 @@ impl Default for Runtime {
     }
 }
 
-/// Helper: converte `rt: i64` (FFI) para `&mut Runtime`.
+/// Helper: converte `rt: i64` (FFI) para `&Runtime` (imutável) com null-check.
+///
+/// Para FFIs que só precisam de `&Runtime` (depth tracking usa `Cell`,
+/// não precisa de `&mut`). Mesmo hardening que `deref_runtime`.
 ///
 /// # Safety
 /// `rt` deve ser um ponteiro válido obtido de `Box::into_raw` ou similar.
-#[allow(dead_code)] // helper reservado para futuras FFIs que precisem de &mut Runtime
-pub(crate) unsafe fn rt_ref(rt: i64) -> &'static mut Runtime {
+pub(crate) unsafe fn deref_runtime_ref(rt: i64) -> &'static Runtime {
+    if rt == 0 {
+        panic!(
+            "kata_rt: deref de Runtime null (0) — ponteiro não-inicializado escapou do typeck; isto é um bug do compilador, não do seu código"
+        );
+    }
+    unsafe { &*(rt as *const Runtime) }
+}
+
+/// Helper: converte `rt: i64` (FFI) para `&mut Runtime` com null-check.
+///
+/// Hardening do boundary FFI: `0` (null — Runtime não-inicializado que
+/// escapou do typeck) é recusado com panic **unwind** e mensagem clara.
+/// Antes: deref cego → SIGSEGV (non-unwinding), matando o processo
+/// hospedeiro sem diagnóstico.
+///
+/// # Safety
+/// `rt` deve ser um ponteiro válido obtido de `Box::into_raw` ou similar.
+pub(crate) unsafe fn deref_runtime(rt: i64) -> &'static mut Runtime {
+    if rt == 0 {
+        panic!(
+            "kata_rt: deref de Runtime null (0) — ponteiro não-inicializado escapou do typeck; isto é um bug do compilador, não do seu código"
+        );
+    }
     unsafe { &mut *(rt as *mut Runtime) }
 }
 
@@ -263,21 +288,21 @@ pub extern "C" fn kata_rt_runtime_new() -> i64 {
 /// `kata_rt_depth_inc(rt: i64) -> i64` — incrementa profundidade, retorna novo valor.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_depth_inc(rt: i64) -> i64 {
-    let rt = unsafe { &*(rt as *const Runtime) };
+    let rt = unsafe { deref_runtime_ref(rt) };
     rt.depth_inc() as i64
 }
 
 /// `kata_rt_depth_dec(rt: i64) -> ()` — decrementa profundidade.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_depth_dec(rt: i64) {
-    let rt = unsafe { &*(rt as *const Runtime) };
+    let rt = unsafe { deref_runtime_ref(rt) };
     rt.depth_dec();
 }
 
 /// `kata_rt_depth_get(rt: i64) -> i64` — retorna profundidade atual.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_depth_get(rt: i64) -> i64 {
-    let rt = unsafe { &*(rt as *const Runtime) };
+    let rt = unsafe { deref_runtime_ref(rt) };
     rt.depth_get() as i64
 }
 
@@ -285,34 +310,38 @@ pub extern "C" fn kata_rt_depth_get(rt: i64) -> i64 {
 /// Chamada pela FFI `set_recursion_limit` em `stdlib/config.kata`.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_depth_set_limit(rt: i64, limit: i64) {
-    let rt = unsafe { &*(rt as *const Runtime) };
+    let rt = unsafe { deref_runtime_ref(rt) };
     rt.depth_set_limit(limit as u32);
 }
 
 /// `kata_rt_set_overflowed(rt: i64) -> ()` — marca overflow de profundidade.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_set_overflowed(rt: i64) {
-    let rt = unsafe { &*(rt as *const Runtime) };
+    let rt = unsafe { deref_runtime_ref(rt) };
     rt.set_overflowed();
 }
 
 /// `kata_rt_overflowed(rt: i64) -> i64` — retorna 1 se houve overflow, 0 caso contrário.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_overflowed(rt: i64) -> i64 {
-    let rt = unsafe { &*(rt as *const Runtime) };
-    if rt.overflowed() { 1 } else { 0 }
+    let rt = unsafe { deref_runtime_ref(rt) };
+    if rt.overflowed() {
+        1
+    } else {
+        0
+    }
 }
 
 /// `kata_rt_depth_get_limit(rt: i64) -> i64` — retorna o limite de profundidade.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_depth_get_limit(rt: i64) -> i64 {
-    let rt = unsafe { &*(rt as *const Runtime) };
+    let rt = unsafe { deref_runtime_ref(rt) };
     rt.depth_limit() as i64
 }
 
 /// `kata_rt_reset_depth(rt: i64) -> ()` — reseta depth e overflow para nova execução.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_reset_depth(rt: i64) {
-    let rt = unsafe { &*(rt as *const Runtime) };
+    let rt = unsafe { deref_runtime_ref(rt) };
     rt.reset_depth();
 }

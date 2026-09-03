@@ -17,7 +17,7 @@
 use bumpalo::Bump;
 use std::alloc::Layout;
 
-use crate::runtime::Runtime;
+use crate::runtime::deref_runtime;
 
 // ── TLS cache do ponteiro Runtime ativo ─────────────────────────────────
 //
@@ -159,14 +159,14 @@ pub(crate) enum ArenaKind {
 /// Cria uma nova arena Bump no pool e retorna um handle opaco (índice no Vec).
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_arena_create(rt: i64) -> i64 {
-    let runtime = unsafe { &mut *(rt as *mut Runtime) };
+    let runtime = unsafe { deref_runtime(rt) };
     runtime.arena_create()
 }
 
 /// Cria uma nova arena Tracked no pool e retorna um handle opaco.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_arena_create_tracked(rt: i64) -> i64 {
-    let runtime = unsafe { &mut *(rt as *mut Runtime) };
+    let runtime = unsafe { deref_runtime(rt) };
     runtime.arena_create_tracked()
 }
 
@@ -174,7 +174,7 @@ pub extern "C" fn kata_rt_arena_create_tracked(rt: i64) -> i64 {
 /// Retorna o ponteiro para o bloco alocado, ou 0 se falhar.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_arena_alloc(rt: i64, handle: i64, size: i64) -> i64 {
-    let runtime = unsafe { &mut *(rt as *mut Runtime) };
+    let runtime = unsafe { deref_runtime(rt) };
     runtime.arena_alloc(handle, size)
 }
 
@@ -182,21 +182,21 @@ pub extern "C" fn kata_rt_arena_alloc(rt: i64, handle: i64, size: i64) -> i64 {
 /// No-op para arenas Bump.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_arena_dealloc(rt: i64, handle: i64, ptr: i64, size: i64) {
-    let runtime = unsafe { &mut *(rt as *mut Runtime) };
+    let runtime = unsafe { deref_runtime(rt) };
     runtime.arena_dealloc(handle, ptr, size);
 }
 
 /// Reseta SÓ a arena do handle (libera a memória daquela arena).
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_arena_destroy(rt: i64, handle: i64) {
-    let runtime = unsafe { &mut *(rt as *mut Runtime) };
+    let runtime = unsafe { deref_runtime(rt) };
     runtime.arena_destroy(handle);
 }
 
 /// Retorna (alloc_count, dealloc_count) da arena Tracked do handle.
 #[unsafe(no_mangle)]
 pub(crate) extern "C" fn kata_rt_arena_stats(rt: i64, handle: i64) -> i64 {
-    let runtime = unsafe { &mut *(rt as *mut Runtime) };
+    let runtime = unsafe { deref_runtime(rt) };
     runtime.arena_stats(handle)
 }
 
@@ -206,6 +206,6 @@ pub(crate) extern "C" fn kata_rt_arena_stats(rt: i64, handle: i64) -> i64 {
 /// para obter o handle da root arena onde CaptureBoxes são alocados.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_get_root_arena_handle(rt: i64) -> i64 {
-    let runtime = unsafe { &mut *(rt as *mut Runtime) };
+    let runtime = unsafe { deref_runtime(rt) };
     runtime.root_arena_handle
 }
