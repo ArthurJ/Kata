@@ -326,6 +326,93 @@ literal não const-avalia").
 
 ---
 
+## Issues adjacentes descobertos ao resolver A3f/A3g (2026-09-03)
+
+Itens encontrados durante o fix de A3f e A3g que são bugs separados,
+fora do escopo da auditoria original.
+
+### Interp — trampoline do scheduler engole erros
+
+**Estado:** `interp_trampoline` (csp.rs:212-218) captura qualquer
+`InterpError` (exceto `Return`), imprime no stderr, e retorna `0`.
+O scheduler vê `0` como sucesso — o exit code do processo não reflete
+o erro. Toda validação de erro gracioso do interp (incluindo A3g)
+tem sua mensagem impressa mas não propagada como exit code não-zero.
+
+**Localização:** `crates/kata-interp/src/csp.rs:212-218`.
+
+**Impacto:** médio — qualquer erro runtime dentro de uma action no
+interp produz exit 0. Tests E2E não podem confiar em exit code para
+detectar falhas do interp (precisam inspecionar stderr).
+
+**Prioridade:** média — o trampoline retorna `i64` (não `Result`),
+alinhado à FFI do scheduler. Mudar para propagar erro requer
+reformular a interface trampoline/scheduler ou usar um canal lateral
+(e.g. célula `Mutex<Option<InterpError>>` no `InterpCtx`).
+
+### JIT — ascription refined inválida dá `comptime.jit_failure`
+
+**Estado:** `0 :: NonZero::Int` no JIT produz
+`comptime.jit_failure: predicado de ascription refined falhou`
+(erro interno) em vez de `type.mismatch` gracioso. O comptime pass
+(`predicates.rs:47`) retorna `ComptimeError::JitError` com mensagem
+de erro interno, e o driver o reporta como erro interno com help
+"abra uma issue".
+
+**Localização:** `crates/kata-comptime/src/predicates.rs:47-53`,
+`crates/kata-comptime/src/error.rs` (ComptimeError::JitError).
+
+**Impacto:** baixo-médio — o JIT rejeita corretamente (não executa),
+mas a mensagem confunde o usuário (parece bug do compilador, não erro
+de tipo do programa).
+
+**Prioridade:** baixa — mudar `ComptimeError::JitError` para um
+variant de type error gracioso com span e mensagem amigável.
+
+### Typeck — literal negativo não reconhecido como literal em ascription refined
+
+**Estado:** `(-5) :: NonZero::Int` é rejeitado pelo typeck com
+"literal para ascription refined NonZero (use construtor para expr
+não-literal)". O typeck tipa `-5` como `Closure { Ident("-"),
+[IntLit("5")] }`, e o check `is_literal` em `ascription.rs:331` só
+cobre `IntLit`/`FloatLit`/`TextLit`/`ListLit`/etc — não
+`Closure`. O `const_eval` (`eval_const`) suporta negativos
+(`Apply { -, [IntLit] }` → `ConstVal::Int(-N)`), mas o gate
+`is_literal` barra antes de chegar lá.
+
+**Localização:** `crates/kata-inference/src/infer/ascription.rs:331`
+(`is_literal` check), linha 347 (gate que rejeita não-literais sem
+path conditions).
+
+**Impacto:** baixo — `(-5) :: NonZero::Int` exige construtor
+(`NonZero (-5)`) em vez de ascription direta. Assimetria ergonômica
+com `5 :: NonZero::Int` que funciona.
+
+**Prioridade:** baixa — estender `is_literal` para reconhecer
+`Closure { Ident("-"), [IntLit/FloatLit] }` como literal negativo,
+ou usar `typed_expr_to_const_val` (que já suporta negativos) como
+gate em vez de `is_literal`.
+
+### JIT — `0::NonZero::Float` e `3.14::NonZero::Float` crasham no codegen
+
+**Estado:** `0::NonZero::Float` no JIT causa panic no Cranelift
+("declared type of variable var0 doesn't match type of value v6").
+`3.14::NonZero::Float` no JIT falha com `comptime.jit_failure`
+("construção não suportada no"). O interp rejeita `0::NonZero::Float`
+graciosamente (após fix A3g) e aceita `3.14::NonZero::Float`.
+
+**Localização:** `crates/kata-codegen/src/` (codegen de ascription
+refined sobre Float), `crates/kata-comptime/src/` (comptime eval de
+predicados sobre Float).
+
+**Impacto:** médio — ascription refined de Float não funciona no JIT
+em nenhum caso (válido ou inválido).
+
+**Prioridade:** média — PRD próprio quando atacar. Pode estar
+relacionado com o issue do comptime.jit_failure acima.
+
+---
+
 ## TODOs esparsos no código (pendentes de reavaliação)
 
 Itens coletados de comentários `TODO` no código-fonte. Ainda não
