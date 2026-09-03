@@ -14,6 +14,7 @@ mod guards;
 mod helpers;
 mod lambdas;
 mod match_tests;
+mod nesting_depth;
 mod pipe;
 mod qualified_variant;
 mod refined_decls;

@@ -8,6 +8,7 @@ use kata_ast::{Expr, Spanned, Token};
 use kata_diagnostics::FrontendError;
 
 use crate::Parser;
+use crate::MAX_EXPR_DEPTH;
 
 /// Parse an expression with greedy application.
 /// Free function — called from declarations and expressions.
@@ -16,6 +17,21 @@ use crate::Parser;
 /// `|>` has lower precedence than application and is left-associative.
 /// `a |> b |> c` = `(a |> b) |> c`.
 pub(crate) fn parse_expr(parser: &mut Parser) -> Result<Spanned<Expr>, FrontendError> {
+    if parser.depth > MAX_EXPR_DEPTH {
+        return Err(FrontendError::NestingTooDeep {
+            limit: MAX_EXPR_DEPTH,
+            span: kata_diagnostics::MietteSpan(parser.peek_span()),
+        });
+    }
+    parser.depth += 1;
+    let result = parse_expr_impl(parser);
+    parser.depth -= 1;
+    result
+}
+
+/// Corpo de `parse_expr` — separado para que o depth guard possa
+/// increment/decrementar sem condicionais no caminho feliz.
+fn parse_expr_impl(parser: &mut Parser) -> Result<Spanned<Expr>, FrontendError> {
     let mut lhs = parse_apply(parser)?;
 
     // `?` postfix — fail-fast operator.

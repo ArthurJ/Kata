@@ -48,7 +48,17 @@ pub(crate) struct Parser {
     /// Modo REPL: quando true, `let` no top level é aceito como EntryExpr
     /// (PRD §2.5 — o REPL não é top-level de módulo).
     pub(crate) repl_mode: bool,
+    /// Profundidade de aninhamento de expressão atual.
+    /// Incrementada em `parse_expr` a cada nível de recursão.
+    /// Limita aninhamento para evitar stack overflow no recursive descent.
+    pub(crate) depth: usize,
 }
+
+/// 256 níveis de aninhamento de estruturas (listas, parênteses, etc.).
+/// `parse_expr` incrementa depth a cada chamada; a chamada top-level
+/// (não-aninhada) é depth 0. Com `> MAX_EXPR_DEPTH`, 256 níveis de `[`
+/// geram depth 256 (aceito) e 257 níveis geram depth 257 (rejeitado).
+pub(crate) const MAX_EXPR_DEPTH: usize = 256;
 
 impl Parser {
     pub(crate) fn new(tokens: Vec<TokenWithSpan>) -> Self {
@@ -58,6 +68,7 @@ impl Parser {
             in_action_body: false,
             arities: None,
             repl_mode: false,
+            depth: 0,
         }
     }
 
@@ -72,6 +83,7 @@ impl Parser {
             in_action_body: false,
             arities: Some(arities),
             repl_mode: false,
+            depth: 0,
         }
     }
 

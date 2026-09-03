@@ -122,4 +122,12 @@ pub enum FrontendError {
         #[label("nome reservado")]
         span: MietteSpan,
     },
+
+    #[error("aninhamento excessivo: limite de {limit} níveis de aninhamento de expressão excedido")]
+    #[diagnostic(code = "parse.nesting_too_deep")]
+    NestingTooDeep {
+        limit: usize,
+        #[label("aninhamento excessivo")]
+        span: MietteSpan,
+    },
 }
