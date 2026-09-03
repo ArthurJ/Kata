@@ -1,6 +1,6 @@
 # TODO — Kata-Lang
 
-Único arquivo de pendências. Atualizado 2026-09-02.
+Único arquivo de pendências. Atualizado 2026-09-03.
 
 Os docs `TODO-*.md` foram removidos (obsoletos ou resolvidos). Pendências vivem aqui.
 
@@ -167,48 +167,8 @@ sub-agente kimi-k3:cloud) com probes reais. Cada item validado no
 código-fonte e, quando possível, executado em ambos backends (JIT
 e interpretador).
 
-**Resumo:** 19 achados (A1–A12 + A3b–A3g). A1 resolvido. 2 críticos
-pendentes, 5 altos, 8 médios, 3 baixos.
-
-### 🔴 Crítico — SIGSEGV em programas válidos
-
-#### A2. `head` de lista vazia → SIGSEGV/panic
-
-**Estado:** ✅ Resolvido. `head` e `tail` migrados de `List::A` para
-`NonEmpty::A` em `stdlib/core.kata`. `data (List::A, >= (len _) 1) as
-NonEmpty` é uma família polimórfica lazy que rejeita listas vazias em
-compile-time. `head []` agora retorna `type.mismatch` (nenhuma sobrecarga
-aceita `List(())`) em vez de SIGABRT. `head ([]::NonEmpty)` falha o
-predicado `>= (len _) 1` em compile-time.
-
-**Limitação pendente:** comptime JIT não suporta `constant x :=
-[1 2 3]::NonEmpty` — a ascription de NonEmpty em compile-time causa
-SIGABRT porque o JIT não avalia `TypeAscription` para tipos
-non-primitivos. Workaround: usar `head ([1 2 3]::NonEmpty)` diretamente
-como entry point (sem `constant`), ou `match` para extrair head de
-listas em runtime.
-
-**Localização:** `stdlib/core.kata` (NonEmpty + head/tail),
-`crates/kata-inference/src/infer/generics.rs` (unify Generic vs Instance),
-`crates/kata-inference/src/infer/ascription.rs` (is_family_target reconhece lazy),
-`crates/kata-inference/src/infer/show_synthesis.rs` (pular lazy families).
-
-#### A3b. Stack overflow em literals de lista profundamente aninhados
-
-**Estado:** `[[[...[]...]]]` com ~800 níveis de aninhamento causa stack
-overflow no parser (recursive descent sem limite de profundidade). O
-crash ocorre em ambos backends (é frontend, não codegen). 400 níveis
-funciona; 800 não. Não há `max_depth` ou limitador no parser.
-
-**Localização:** `crates/kata-parser/src/expr_containers.rs:49`
-(`parse_list_or_range` — recursivo sem limite).
-
-**Reprodução:** `var x := [[[...800 níveis...[]...]]]` →
-"thread has overflowed its stack / stack overflow, aborting" em
-ambos backends.
-
-**Prioridade:** alta — mesma classe do bug de recursão sem limitador,
-mas no parser em vez de runtime.
+**Resumo:** 19 achados (A1–A12 + A3b–A3g). A1, A2, A3b e A4 resolvidos.
+1 crítico pendente, 3 altos, 8 médios, 3 baixos.
 
 ### 🟠 Alto — gaps que travam ou bloqueiam uso real
 
@@ -252,18 +212,6 @@ interp: SIGABRT (panic divisão por zero).
 **Prioridade:** alta — o interp aceita tipos inválidos que o JIT
 rejeita, e o resultado é crash. O JIT também falha: deveria ser
 `type.mismatch` gracioso, não `comptime.jit_failure` (erro interno).
-
-#### A4. `loop` infinito sem fuel no interpretador
-
-**Estado:** `loop { ... }` no interp é `loop {}` Rust cru — sem
-fuel, timeout, ou yield. O JIT tem `kata_rt_yield_check` no header
-do loop (cooperativo + timeout); o interp não tem nada. `loop`
-sem `break` trava o processo.
-
-**Localização:** `crates/kata-interp/src/eval.rs` —
-`TypedExprKind::Loop { body } => loop { ... }`.
-
-**Prioridade:** alta — mesma classe do bug de recursão sem limitador.
 
 #### A5. `echo!(None)` rejeitado pelo codegen JIT
 
