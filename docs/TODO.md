@@ -8,36 +8,6 @@ Os docs `TODO-*.md` foram removidos (obsoletos ou resolvidos). Pendências vivem
 
 ## Débito Técnico
 
-### Crashes do JIT — `read_unaligned` sem null-check (Cat 3)
-
-**Estado:** programas válidos sintaticamente mas rejeitados pelo typeck
-podem derrubar o compilador com SIGSEGV/null-deref em vez de erro
-gracioso. Compile-time DEVE falhar graciosamente — nunca SIGSEGV/SIGILL
-— mesmo em input malformado que escapou do typeck.
-
-**Diagnóstico (2026-09-02):** `.unwrap()` em src/ limpo (27 sites
-convertidos para `.expect()`). `Err` com payload null corrigido (A1 —
-10 sites agora usam `err_with_msg`). Inventário completo em
-`kata-compiler/references/raw-ptr-null-check-audit.md`.
-
-**Resolvidos (2026-09-03):**
-- **Cat 1** — `&mut *(rt as *mut Runtime)` sem null-check (12 sites):
-  `runtime.rs` (8), `arena.rs` (7), `scheduler/ffi.rs` (4). Helpers
-  `deref_runtime` (→ `&mut Runtime`) e `deref_runtime_ref` (→ `&Runtime`)
-  com null-check + panic unwind. Commit `afb5e57`.
-- **Cat 2** — `&*(val as *const T)` sem null-check (15 sites):
-  `rational.rs` (14), `display.rs` (1). Helper `deref_rational` com
-  null-check + panic unwind. Commit `76dfaf6`.
-- **Cat 4** — Já protegidos: `bigint.rs` (`deref_bigint` ✓), `file.rs`,
-  `socket/mod.rs`, `channel/ops.rs`, `channel/ipc.rs`.
-
-**Pendente — Cat 3:** `read_unaligned(ptr as *const i64)` sem null-check
-(MÉDIA): `dict/mod.rs`, `dict/hamt.rs`, `cache.rs`, `channel/ops.rs`,
-`channel/ipc.rs`. Ponteiros vêm de alocação interna — risco menor.
-
-**Prioridade:** média — risk menor que Cat 1/2 (ponteiros internos,
-não boundary FFI), mas ainda pode crashar em input malformado.
-
 ### Paridade de cache: tipos compostos na key do interp
 
 **Estado:** o interp serializa a key de `@cache` por conteúdo apenas
@@ -160,8 +130,8 @@ e interpretador).
 
 **Resumo:** 19 achados (A1–A12 + A3b–A3g). Resolvidos: A1, A2, A3b,
 A3c, A3e, A3f, A3g, A5, e item adjacente #4 (JIT crash NonZero::Float).
-Cat 1 e Cat 2 do débito técnico (deref sem null-check) resolvidos.
-Pendentes: 1 médio (Cat 3 — read_unaligned), 5 médios, 3 baixos.
+Débito técnico de null-check (Cat 1, 2, 3) totalmente resolvido.
+Pendentes: 5 médios, 3 baixos.
 
 ### 🟡 Médio — buracos funcionais que limitam a linguagem
 
