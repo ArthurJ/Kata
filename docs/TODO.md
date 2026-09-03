@@ -72,9 +72,17 @@ compartilhada).
 ### Ascription refined de Text literal não const-avalia
 
 **Estado:** `"ola"::NonEmpty` (literal de Text em ascription refined)
-não const-avalia — o scanner de ascription refined cobre apenas
-literals numéricos (IntLit/FloatLit). Text exige o construtor falível
-(`NonEmpty "ola"` → `Ok`/`Err` com match).
+não const-avalia — o const_eval cobre TextLit mas o predicado
+`>= (len _) 1` não é reduzido pelo `eval_bool_expr` (só lida com
+operadores de comparação `= != < > <= >=` entre ConstVals). Text
+exige o construtor falível (`NonEmpty "ola"` → `Ok`/`Err` com match).
+
+**Nota (2026-09-03):** `is_literal` agora cobre `Grouping` recursivamente
+— `(5)::PositiveInt` e `((-5))::NonZero::Int` funcionavam antes por
+outros caminhos, mas o gate `is_literal` não reconhecia parênteses.
+Fix: helper `is_literal_expr` em `ascription.rs`, recursivo sobre
+`TypedExprKind::Grouping`, consistente com `eval_const` e
+`typed_expr_to_const_val`.
 
 **Impacto:** baixo — assimetria ergonômica entre Int e Text, não
 incorreção (o construtor é a via geral e é sound).
@@ -138,10 +146,10 @@ Fase 5 Rational (const-eval de `rational <lit>` + par (num, den) no
 Z3). Oráculos adversariais K medidos em `b5e2d9e` (3 níveis, grade
 multi-param, arity-tuple).
 
-### Codegen — `echo!(None)` (bug #2b)
-**Estado:** Pendente. `Closure` com callee não-Ident
-(`kata-codegen/src/lowering/closure.rs:349`) rejeita `echo!(None)`.
-Bug separado da classe de exaustividade — PRD próprio quando atacar.
+### Codegen — `echo!(None)` (bug #2b) — ✅ Resolvido (2026-09-03)
+**Estado:** Resolvido. Ver A5 na auditoria. Fix no monomorphizador
+(`overload_resolution.rs`): substitui `Var` por `Unit` no guard de
+`show` para instanciar com type params não-resolvidos.
 
 ### Typeck — variante sem payload como argumento (#K-call)
 **Estado:** Pendente (medido em `b5e2d9e`, 2026-08-30). `foo None` e
@@ -211,40 +219,36 @@ pass, não do interp.
 Testes E2E em `kata-driver/tests/refined_ascription_interp_e2e.rs`
 (4 casos: zero rejeitado, válido, unit, PositiveInt).
 
-#### A5. `echo!(None)` rejeitado pelo codegen JIT
+#### A5. `echo!(None)` rejeitado pelo codegen JIT — ✅ Resolvido (2026-09-03)
 
-**Estado:** `Closure` com callee não-Ident não é suportado. O interp
-executa `echo!(None)` (exit 0); o JIT rejeita com
-`codegen.unsupported`. Discrepância de backend.
+**Estado:** ✅ Resolvido. `echo!(None)` no JIT agora imprime `None` (exit 0).
+O root cause era que `show` de `Generic("Optional", [Var("T")])` não era
+instanciado pelo monomorphizador — o guard em `instantiate_generic_closure`
+(overload_resolution.rs:102) bloqueia quando type params mapeiam para
+`Ty::Var`. Fix: quando o callee é `show` e type params são `Var`,
+substituir `Var` por `Unit` e instanciar normalmente. O braço `None`
+do show (TextLit) não precisa de `T`; o braço `Some` nunca executa
+para `None`. O fallback `TextLit("?")` cobre `show` de `Var` dentro
+do body instanciado.
 
-**Localização:** `crates/kata-codegen/src/lowering/closure.rs:349-355`.
+**Também resolve A3c** (`show Optional::None` → ffi_not_found) pelo
+mesmo root cause.
 
-**Reprodução:** `echo!(None)` → JIT: exit 1 (codegen.unsupported);
-interp: exit 0.
+**Localização do fix:** `crates/kata-monomorph/src/overload_resolution.rs`
+(guard `instantiate_generic_closure` + helper `replace_var_with_unit`).
 
-**Prioridade:** alta — expressão válida rejeitada por um backend.
+**Testes E2E:** `crates/kata-driver/tests/echo_none_e2e.rs` (7 casos:
+echo!(None), show None, show Optional::None, show Some, show Ok, show
+Err, interp).
 
 ### 🟡 Médio — buracos funcionais que limitam a linguagem
 
-#### A3c. `show Optional::None` → ffi_not_found no JIT / placeholder no interp
+#### A3c. `show Optional::None` → ffi_not_found no JIT / placeholder no interp — ✅ Resolvido
 
-**Estado:** `show Optional::None` falha no JIT com
-`codegen.ffi_not_found: __kata_show__Optional` — o monomorphizador
-não instancia show quando o type param não é concreto (None não
-carrega tipo). No interp, retorna placeholder
-`<show:Generic("Optional", [Var("T")])>` em vez do nome da
-variante. `show (Some 0)` e `show (Ok 0)` funcionam normalmente.
-
-**Localização:** `crates/kata-monomorph/src/overload_resolution.rs`
-(não instancia show para Optional sem tipo concreto),
-`crates/kata-interp/src/show.rs:75` (placeholder para tipo não
-resolvido).
-
-**Reprodução:** `echo!(show Optional::None)` → JIT: exit 1
-(ffi_not_found); interp: `<show:Generic("Optional", [Var("T")])>`.
-
-**Prioridade:** média — `Optional::None` é o valor nulo de Kata;
-`show` dele deveria imprimir `None`.
+**Estado:** ✅ Resolvido (2026-09-03) pelo mesmo fix do A5. O root cause
+era o mesmo: monomorphizador não instanciava `show` para `Optional` sem
+tipo concreto. O fix do A5 (substituir `Var` por `Unit` no guard de
+`show`) resolve ambos.
 
 #### A3d. `len` em Range → ffi_not_found
 

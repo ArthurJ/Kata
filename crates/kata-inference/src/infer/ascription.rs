@@ -328,16 +328,10 @@ pub(crate) fn infer_type_ascription(
     {
         // Refined type — expr deve ser literal numérico OU path conditions
         // podem provar o predicado sobre não-literais (refinement propagation).
-        let is_literal = matches!(
-            inner.kind,
-            TypedExprKind::IntLit { .. }
-                | TypedExprKind::FloatLit { .. }
-                | TypedExprKind::TextLit { .. }
-                | TypedExprKind::ListLit { .. }
-                | TypedExprKind::ArrayLit { .. }
-                | TypedExprKind::SetLit { .. }
-                | TypedExprKind::DictLit { .. }
-        );
+        // Grouping é transparente: `(5)::NonZero` e `((-5))::NonZero` devem
+        // ser aceitos — const_eval e typed_expr_to_const_val já desembrulham
+        // Grouping recursivamente.
+        let is_literal = is_literal_expr(&inner);
         // Gate conservador duplo (débito 1):
         // (a) sem path conditions e não-literal → construtor;
         // (b) não-literal que referencia `var` → construtor. O Z3 não
@@ -584,4 +578,24 @@ pub(crate) fn infer_type_ascription(
             pending_predicates: Vec::new(),
         },
     })
+}
+
+/// Verifica se um `TypedExpr` é um literal (ou Grouping sobre literal).
+///
+/// Equivalente ao `matches!` anterior, mas recursivo sobre `Grouping` —
+/// `(5)::NonZero` e `((-5))::PositiveInt` são literais transparentemente
+/// embrulhados. Consistente com `eval_const` e `typed_expr_to_const_val`
+/// (ambos desembrulham Grouping).
+fn is_literal_expr(expr: &TypedExpr) -> bool {
+    match &expr.kind {
+        TypedExprKind::Grouping { inner } => is_literal_expr(&inner.node),
+        TypedExprKind::IntLit { .. }
+        | TypedExprKind::FloatLit { .. }
+        | TypedExprKind::TextLit { .. }
+        | TypedExprKind::ListLit { .. }
+        | TypedExprKind::ArrayLit { .. }
+        | TypedExprKind::SetLit { .. }
+        | TypedExprKind::DictLit { .. } => true,
+        _ => false,
+    }
 }
