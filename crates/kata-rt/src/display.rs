@@ -54,6 +54,11 @@ pub unsafe extern "C" fn kata_rt_print_result(raw: i64, type_tag: i32) {
         TYPE_RATIONAL => {
             // Rational: raw é ponteiro para BigRational.
             // SAFETY: caller garante ponteiro válido.
+            if raw == 0 {
+                panic!(
+                    "kata_rt display: deref de Rational null (0) — slot não-inicializado escapou do typeck; isto é um bug do compilador, não do seu código"
+                );
+            }
             unsafe {
                 let r = &*(raw as *const num_rational::BigRational);
                 let s = rat_to_string(r);

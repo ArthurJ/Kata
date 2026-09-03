@@ -39,6 +39,23 @@ pub(crate) fn rat_from_int(int_val: i64) -> BigRational {
     crate::bigint::to_rational(int_val)
 }
 
+/// Helper: deref de `*const BigRational` com null-check.
+///
+/// Hardening do boundary FFI: null (slot não-inicializado que escapou
+/// do typeck) é recusado com panic **unwind** e mensagem clara.
+///
+/// # Safety
+/// `ptr` deve ser um ponteiro válido para `BigRational` alocado por
+/// `Box::into_raw` ou `kata_rt_rat_*`.
+unsafe fn deref_rational<'a>(ptr: *const BigRational) -> &'a BigRational {
+    if ptr.is_null() {
+        panic!(
+            "kata_rt rational: deref de ponteiro null — slot não-inicializado escapou do typeck; isto é um bug do compilador, não do seu código"
+        );
+    }
+    unsafe { &*ptr }
+}
+
 /// # Safety
 ///
 /// `a` e `b` devem ser ponteiros válidos para `BigRational`.
@@ -48,8 +65,8 @@ pub unsafe extern "C" fn kata_rt_rat_add(
     b: *const BigRational,
 ) -> *mut BigRational {
     // SAFETY: caller (JIT codegen) garante ponteiros válidos.
-    let a = unsafe { &*a };
-    let b = unsafe { &*b };
+    let a = unsafe { deref_rational(a) };
+    let b = unsafe { deref_rational(b) };
     Box::into_raw(Box::new(a + b))
 }
 
@@ -62,8 +79,8 @@ pub unsafe extern "C" fn kata_rt_rat_sub(
     b: *const BigRational,
 ) -> *mut BigRational {
     // SAFETY: caller (JIT codegen) garante ponteiros válidos.
-    let a = unsafe { &*a };
-    let b = unsafe { &*b };
+    let a = unsafe { deref_rational(a) };
+    let b = unsafe { deref_rational(b) };
     Box::into_raw(Box::new(a - b))
 }
 
@@ -76,8 +93,8 @@ pub unsafe extern "C" fn kata_rt_rat_mul(
     b: *const BigRational,
 ) -> *mut BigRational {
     // SAFETY: caller (JIT codegen) garante ponteiros válidos.
-    let a = unsafe { &*a };
-    let b = unsafe { &*b };
+    let a = unsafe { deref_rational(a) };
+    let b = unsafe { deref_rational(b) };
     Box::into_raw(Box::new(a * b))
 }
 
@@ -90,8 +107,8 @@ pub unsafe extern "C" fn kata_rt_rat_div(
     b: *const BigRational,
 ) -> *mut BigRational {
     // SAFETY: caller (JIT codegen) garante ponteiros válidos.
-    let a = unsafe { &*a };
-    let b = unsafe { &*b };
+    let a = unsafe { deref_rational(a) };
+    let b = unsafe { deref_rational(b) };
     if b.is_zero() {
         panic!("divisão por zero em kata_rt_rat_div");
     }
@@ -104,8 +121,8 @@ pub unsafe extern "C" fn kata_rt_rat_div(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn kata_rt_rat_eq(a: *const BigRational, b: *const BigRational) -> i64 {
     // SAFETY: caller (JIT codegen) garante ponteiros válidos.
-    let a = unsafe { &*a };
-    let b = unsafe { &*b };
+    let a = unsafe { deref_rational(a) };
+    let b = unsafe { deref_rational(b) };
     if a == b { 1 } else { 0 }
 }
 
@@ -115,8 +132,8 @@ pub unsafe extern "C" fn kata_rt_rat_eq(a: *const BigRational, b: *const BigRati
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn kata_rt_rat_lt(a: *const BigRational, b: *const BigRational) -> i64 {
     // SAFETY: caller (JIT codegen) garante ponteiros válidos.
-    let a = unsafe { &*a };
-    let b = unsafe { &*b };
+    let a = unsafe { deref_rational(a) };
+    let b = unsafe { deref_rational(b) };
     if a < b { 1 } else { 0 }
 }
 
@@ -126,8 +143,8 @@ pub unsafe extern "C" fn kata_rt_rat_lt(a: *const BigRational, b: *const BigRati
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn kata_rt_rat_gt(a: *const BigRational, b: *const BigRational) -> i64 {
     // SAFETY: caller (JIT codegen) garante ponteiros válidos.
-    let a = unsafe { &*a };
-    let b = unsafe { &*b };
+    let a = unsafe { deref_rational(a) };
+    let b = unsafe { deref_rational(b) };
     if a > b { 1 } else { 0 }
 }
 
@@ -276,7 +293,7 @@ pub(crate) fn float_to_rat(f: f64) -> BigRational {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn kata_rt_rat_show(r: *const BigRational) -> *mut std::os::raw::c_char {
     // SAFETY: caller (JIT codegen) garante ponteiro válido.
-    let r = unsafe { &*r };
+    let r = unsafe { deref_rational(r) };
     let s = rat_to_string(r);
     std::ffi::CString::new(s)
         .unwrap_or_else(|_| std::ffi::CString::new("").expect("CString vazia sempre válida"))
@@ -305,7 +322,7 @@ pub(crate) unsafe extern "C" fn kata_rt_rat_show_raw(r_raw: i64) -> *mut std::os
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn kata_rt_rat_to_float(r: *const BigRational) -> f64 {
     // SAFETY: caller (JIT codegen) garante ponteiro válido.
-    let r = unsafe { &*r };
+    let r = unsafe { deref_rational(r) };
     rat_to_float(r)
 }
 
@@ -382,7 +399,7 @@ pub unsafe extern "C" fn kata_rt_rational_to_int(r: *const BigRational) -> i64 {
     use num_bigint::ToBigInt;
 
     // SAFETY: caller (codegen) garante ponteiro válido.
-    let r = unsafe { &*r };
+    let r = unsafe { deref_rational(r) };
 
     // Trunca em direção a zero: numerador / denominador (divisão inteira).
     let trunc = r.numer() / r.denom();
