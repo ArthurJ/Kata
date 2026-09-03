@@ -179,6 +179,71 @@ pub(crate) fn synthesize_show_functions(
         });
     }
 
+    // ── Famílias polimórficas — show por Instance concreta ───
+    // O loop de names() registra `show :: Plain("NonZero")` e impl SHOW
+    // — necessários para que o typeck resolva constraints SHOW para outros
+    // tipos. Aqui registramos ADICIONALMENTE `show :: Instance("NonZero",
+    // "Int")` para que o monomorphizador faça match exato.
+    for family_name in struct_registry.all_family_names() {
+        let is_lazy = refined_decls
+            .iter()
+            .any(|rd| rd.name == family_name && rd.lazy_type_param.is_some());
+        if is_lazy {
+            continue;
+        }
+
+        for (concrete_name, struct_info) in struct_registry.all_instances(&family_name) {
+            let instance_key =
+                StructKey::Instance(family_name.clone(), concrete_name.to_string());
+            let param_ty = Ty::Struct(instance_key.clone());
+            let ret_ty = Ty::text();
+            let mangled = format!("__kata_show__{family_name}__{concrete_name}");
+
+            dispatch_table.insert(OverloadInfo {
+                name: "show".to_string(),
+                params: vec![param_ty.clone()],
+                ret: ret_ty.clone(),
+                ffi_symbol: Some(mangled.clone()),
+                is_action: false,
+                is_generic: false,
+                is_constructor: false,
+                associative_neutral: None,
+                type_params: vec![],
+                substitutions: None,
+                param_names: vec![],
+                param_defaults: vec![],
+            });
+
+            let pattern = Spanned::new(
+                TypedPattern::Ident {
+                    name: "__self".to_string(),
+                    ty: param_ty.clone(),
+                },
+                Span::synthetic(),
+            );
+
+            let base_ty = prim_from_concrete(concrete_name);
+            let body =
+                build_refined_show_body(&family_name, struct_info, Some(base_ty), struct_registry);
+
+            show_functions.push(TypedFunction {
+                name: mangled,
+                param_types: vec![param_ty],
+                ret_ty,
+                clauses: vec![TypedLambdaClause {
+                    synthetic_pre: Vec::new(),
+                    synthetic_post: Vec::new(),
+                    patterns: vec![pattern],
+                    body: Spanned::new(body, Span::synthetic()),
+                    guards: Vec::new(),
+                    with_bindings: Vec::new(),
+                }],
+                cache_spec: None,
+                timer_spec: None,
+            });
+        }
+    }
+
     // ── Enums ───────────────────────────────────────────────
     for enum_name in enum_registry.names() {
         let variants = match enum_registry.all_variants(enum_name) {
@@ -279,6 +344,18 @@ pub(crate) fn synthesize_show_functions(
     }
 
     show_functions
+}
+
+/// Converte nome de tipo concreto ("Int", "Float", etc.) em Ty::Prim.
+/// Usado para derivar o base_ty do show de Instance de família polimórfica.
+fn prim_from_concrete(name: &str) -> Ty {
+    match name {
+        "Int" => Ty::Prim(PrimTy::Int),
+        "Float" => Ty::Prim(PrimTy::Float),
+        "Rational" => Ty::Prim(PrimTy::Rational),
+        "Text" => Ty::Prim(PrimTy::Text),
+        _ => Ty::Struct(StructKey::Plain(name.to_string())),
+    }
 }
 
 // ════════════════════════════════════════════════════════════════

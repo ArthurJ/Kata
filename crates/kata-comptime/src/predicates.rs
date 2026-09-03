@@ -38,7 +38,7 @@ pub(crate) fn validate_pending_predicates(
                 ctx,
                 comptime_bindings,
                 ctx.functions,
-                ctx.actions,
+                &[],
                 &[],
             )?;
             // Resultado deve ser Boolean::True (tag 1) ou Boolean::False (tag 0).

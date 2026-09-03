@@ -546,7 +546,10 @@ pub fn match_score(args: &[Ty], params: &[Ty], iface_reg: &InterfaceRegistry) ->
                     | (StructKey::Instance(..), StructKey::Family(..))
                     | (StructKey::Family(..), StructKey::Instance(..))
                     | (StructKey::Family(..), StructKey::Family(..)) => {
-                        exact += 1;
+                        // Instance ↔ Plain (mesma família): compatível mas
+                        // não é exact match exato — usa iface em vez de exact
+                        // para que um overload com Instance exato vença.
+                        iface += 1;
                     }
                     _ => return Score::incompatible(),
                 }

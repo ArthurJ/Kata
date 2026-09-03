@@ -168,7 +168,8 @@ código-fonte e, quando possível, executado em ambos backends (JIT
 e interpretador).
 
 **Resumo:** 19 achados (A1–A12 + A3b–A3g). A1, A2, A3b, A4, A3e, A3f, A3g resolvidos.
-1 crítico pendente, 1 alto, 7 médios, 3 baixos.
+Item adjacente #4 (JIT crash em NonZero::Float) resolvido.
+1 crítico pendente, 1 alto, 6 médios, 3 baixos.
 
 ### 🟠 Alto — gaps que travam ou bloqueiam uso real
 
@@ -393,23 +394,29 @@ com `5 :: NonZero::Int` que funciona.
 ou usar `typed_expr_to_const_val` (que já suporta negativos) como
 gate em vez de `is_literal`.
 
-### JIT — `0::NonZero::Float` e `3.14::NonZero::Float` crasham no codegen
+### ✅ JIT — `0::NonZero::Float` e `3.14::NonZero::Float` crasham no codegen
 
-**Estado:** `0::NonZero::Float` no JIT causa panic no Cranelift
-("declared type of variable var0 doesn't match type of value v6").
-`3.14::NonZero::Float` no JIT falha com `comptime.jit_failure`
-("construção não suportada no"). O interp rejeita `0::NonZero::Float`
-graciosamente (após fix A3g) e aceita `3.14::NonZero::Float`.
+**Estado:** ✅ Resolvido (2026-09-03). Três bugs corrigidos:
 
-**Localização:** `crates/kata-codegen/src/` (codegen de ascription
-refined sobre Float), `crates/kata-comptime/src/` (comptime eval de
-predicados sobre Float).
+1. **Comptime pass compilava actions desnecessariamente** —
+   `validate_pending_predicates` passava `ctx.actions` (TODAS as
+   actions do módulo) para `jit_execute_expr`, fazendo o codegen
+   compilar `echo!` (que chama `show` de Instance) ao validar
+   predicados. Predicados de refined só usam operadores e funções de
+   interface, nunca actions. Fix: `&[]` em `predicates.rs`.
 
-**Impacto:** médio — ascription refined de Float não funciona no JIT
-em nenhum caso (válido ou inválido).
+2. **Show synthesis não registrava show por Instance concreta** —
+   `show_synthesis` registrava `show :: Plain("NonZero") => Text`
+   mas valores têm tipo `Instance("NonZero", "Int")`. O
+   monomorphizador faz match exato e não encontrava. Fix: bloco
+   dedicado em `show_synthesis.rs` que registra
+   `show :: Instance(family, concrete) => Text` para cada Instance.
 
-**Prioridade:** média — PRD próprio quando atacar. Pode estar
-relacionado com o issue do comptime.jit_failure acima.
+3. **`match_score` tratava Instance↔Plain como exact match** —
+   `Instance("NonZero", "Int")` casava com `Plain("NonZero")` com
+   mesmo score que `Instance("NonZero", "Int")` exato, causando
+   `AmbiguousDispatch`. Fix: Instance↔Plain agora é `iface` (não
+   `exact`), dando prioridade ao match Instance↔Instance exato.
 
 ---
 
