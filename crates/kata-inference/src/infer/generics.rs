@@ -154,10 +154,9 @@ fn unify_one(
         // `[1 2 3]::NonEmpty` produz Struct(Instance("NonEmpty", "Int")).
         // Este caso casa a família por nome e unifica Var("A") com o tipo
         // concreto extraído do Instance.
-        (
-            Ty::Generic(fam_p, ps),
-            Ty::Struct(StructKey::Instance(fam_a, concrete_a)),
-        ) if fam_p == fam_a && ps.len() == 1 => {
+        (Ty::Generic(fam_p, ps), Ty::Struct(StructKey::Instance(fam_a, concrete_a)))
+            if fam_p == fam_a && ps.len() == 1 =>
+        {
             let arg_inner = match concrete_a.as_str() {
                 "Int" => Ty::Prim(PrimTy::Int),
                 "Float" => Ty::Prim(PrimTy::Float),

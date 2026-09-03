@@ -137,87 +137,86 @@ pub(crate) fn infer_type_ascription(
     // target_ty é Family("NonEmpty"), e há RefinedDeclInfo com lazy_type_param.
     // Extrai o tipo concreto do elemento do inner, cria Instance on-demand,
     // const-avalia o predicado sobre o literal.
-    if let Ty::Struct(StructKey::Family(family_name)) = &target_ty {
-        if let Some(refined_decl) = ctx.refined_decls.iter().find(|rd| {
-            rd.name == *family_name && rd.lazy_type_param.is_some()
-        }) {
-            // Extrai o tipo do elemento do inner.
-            // inner.ty deve ser Ty::List(elem) (ou Array/Set/Range).
-            let elem_ty = match &inner.ty {
-                Ty::List(e) | Ty::Array(e) | Ty::Set(e) | Ty::Range(e) => Some(e.as_ref()),
-                _ => None,
+    if let Ty::Struct(StructKey::Family(family_name)) = &target_ty
+        && let Some(refined_decl) = ctx
+            .refined_decls
+            .iter()
+            .find(|rd| rd.name == *family_name && rd.lazy_type_param.is_some())
+    {
+        // Extrai o tipo do elemento do inner.
+        // inner.ty deve ser Ty::List(elem) (ou Array/Set/Range).
+        let elem_ty = match &inner.ty {
+            Ty::List(e) | Ty::Array(e) | Ty::Set(e) | Ty::Range(e) => Some(e.as_ref()),
+            _ => None,
+        };
+        if let Some(elem) = elem_ty {
+            // Converte elem para nome de tipo concreto.
+            let concrete = match elem {
+                Ty::Prim(PrimTy::Int) => "Int",
+                Ty::Prim(PrimTy::Float) => "Float",
+                Ty::Prim(PrimTy::Rational) => "Rational",
+                Ty::Prim(PrimTy::Text) => "Text",
+                Ty::Struct(StructKey::Plain(n)) => n.as_str(),
+                _ => "",
             };
-            if let Some(elem) = elem_ty {
-                // Converte elem para nome de tipo concreto.
-                let concrete = match elem {
-                    Ty::Prim(PrimTy::Int) => "Int",
-                    Ty::Prim(PrimTy::Float) => "Float",
-                    Ty::Prim(PrimTy::Rational) => "Rational",
-                    Ty::Prim(PrimTy::Text) => "Text",
-                    Ty::Struct(StructKey::Plain(n)) => n.as_str(),
-                    _ => "",
-                };
-                if !concrete.is_empty() {
-                    // Produz Instance on-demand. O tipo Instance é compatível
-                    // com Family("NonEmpty") no match_score (casa por nome
-                    // da família). O registro no StructRegistry acontece
-                    // no pass0 quando a instância é efetivamente usada —
-                    // por enquanto, só precisamos do tipo.
-                    let instance_ty = Ty::Struct(StructKey::Instance(
-                        family_name.clone(),
-                        concrete.to_string(),
-                    ));
-                    // Const-avalia predicados sobre o literal (se aplicável).
-                    let is_literal = matches!(
-                        inner.kind,
-                        TypedExprKind::IntLit { .. }
-                            | TypedExprKind::FloatLit { .. }
-                            | TypedExprKind::TextLit { .. }
-                            | TypedExprKind::ListLit { .. }
-                            | TypedExprKind::ArrayLit { .. }
-                            | TypedExprKind::SetLit { .. }
-                            | TypedExprKind::DictLit { .. }
-                    );
-                    if is_literal {
-                        for (i, pred) in refined_decl.predicates.iter().enumerate() {
-                            match super::const_eval::const_eval_predicate(pred, expr) {
-                                Some(true) => {}
-                                Some(false) => {
-                                    return Err(MiddleError::TypeMismatch {
-                                        expected: format!(
-                                            "predicado {i} de {family_name} satisfeito"
-                                        ),
-                                        found: "predicado falhou para valor".to_string(),
-                                        span: expr.span.into(),
-                                    });
-                                }
-                                None => {
-                                    // Predicado complexo — pending para comptime.
-                                    // (implementação simplificada: aceita por enquanto)
-                                }
+            if !concrete.is_empty() {
+                // Produz Instance on-demand. O tipo Instance é compatível
+                // com Family("NonEmpty") no match_score (casa por nome
+                // da família). O registro no StructRegistry acontece
+                // no pass0 quando a instância é efetivamente usada —
+                // por enquanto, só precisamos do tipo.
+                let instance_ty = Ty::Struct(StructKey::Instance(
+                    family_name.clone(),
+                    concrete.to_string(),
+                ));
+                // Const-avalia predicados sobre o literal (se aplicável).
+                let is_literal = matches!(
+                    inner.kind,
+                    TypedExprKind::IntLit { .. }
+                        | TypedExprKind::FloatLit { .. }
+                        | TypedExprKind::TextLit { .. }
+                        | TypedExprKind::ListLit { .. }
+                        | TypedExprKind::ArrayLit { .. }
+                        | TypedExprKind::SetLit { .. }
+                        | TypedExprKind::DictLit { .. }
+                );
+                if is_literal {
+                    for (i, pred) in refined_decl.predicates.iter().enumerate() {
+                        match super::const_eval::const_eval_predicate(pred, expr) {
+                            Some(true) => {}
+                            Some(false) => {
+                                return Err(MiddleError::TypeMismatch {
+                                    expected: format!("predicado {i} de {family_name} satisfeito"),
+                                    found: "predicado falhou para valor".to_string(),
+                                    span: expr.span.into(),
+                                });
+                            }
+                            None => {
+                                // Predicado complexo — pending para comptime.
+                                // (implementação simplificada: aceita por enquanto)
                             }
                         }
                     }
-                    return Ok(TypedExpr {
-                        span: *span,
-                        ty: instance_ty.clone(),
-                        tail_pos,
-                        escape: if ctx.ret_ty.is_some() {
-                            if tail_pos {
-                                EscapeTarget::Caller
-                            } else {
-                                EscapeTarget::Local
-                            }
-                        } else {
-                            EscapeTarget::Caller
-                        },
-                        kind: TypedExprKind::TypeAscription {
-                            expr: Box::new(Spanned::new(inner, expr.span)),
-                            target_ty: instance_ty,
-                            pending_predicates: Vec::new(),
-                        },
-                    });
                 }
+                return Ok(TypedExpr {
+                    span: *span,
+                    ty: instance_ty.clone(),
+                    tail_pos,
+                    escape: if ctx.ret_ty.is_some() {
+                        if tail_pos {
+                            EscapeTarget::Caller
+                        } else {
+                            EscapeTarget::Local
+                        }
+                    } else {
+                        EscapeTarget::Caller
+                    },
+                    kind: TypedExprKind::TypeAscription {
+                        expr: Box::new(Spanned::new(inner, expr.span)),
+                        target_ty: instance_ty,
+                        pending_predicates: Vec::new(),
+                    },
+                });
             }
         }
     }

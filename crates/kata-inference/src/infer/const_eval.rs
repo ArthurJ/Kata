@@ -114,8 +114,7 @@ pub(crate) fn eval_const(expr: &Spanned<Expr>) -> Option<ConstVal> {
         // `len <literal>` → ConstVal::Int(n) — número de elementos.
         // Suporta len sobre ListLit, ArrayLit, e TextLit.
         Expr::Apply { callee, args }
-            if args.len() == 1
-                && matches!(&callee.node, Expr::Ident { name } if name == "len") =>
+            if args.len() == 1 && matches!(&callee.node, Expr::Ident { name } if name == "len") =>
         {
             let arg = &args[0];
             match &arg.node {

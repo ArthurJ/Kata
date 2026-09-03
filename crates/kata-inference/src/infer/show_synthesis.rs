@@ -78,9 +78,9 @@ pub(crate) fn synthesize_show_functions(
         // removido pelo monomorphizador, causando ffi_not_found no codegen.
         // Pular — o show de NonEmpty será resolvido por downcast ao tipo
         // base (List) no dispatch do echo!.
-        let is_lazy_family = refined_decls.iter().any(|rd| {
-            rd.name == struct_name && rd.lazy_type_param.is_some()
-        });
+        let is_lazy_family = refined_decls
+            .iter()
+            .any(|rd| rd.name == struct_name && rd.lazy_type_param.is_some());
         if is_lazy_family {
             continue;
         }

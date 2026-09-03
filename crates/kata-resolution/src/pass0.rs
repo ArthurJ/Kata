@@ -356,16 +356,10 @@ pub(crate) fn run_pass0(
                             if lazy_param.is_some() {
                                 // Família polimórfica lazy: registrar como Family,
                                 // NÃO instanciar (instâncias criadas on-demand no call-site).
-                                let pred_names: Vec<String> =
-                                    (0..refined_decl.predicates.len())
-                                        .map(|i| format!("__pred_{name}_{i}"))
-                                        .collect();
-                                struct_registry.register_refined(
-                                    origin,
-                                    name,
-                                    "List",
-                                    pred_names,
-                                );
+                                let pred_names: Vec<String> = (0..refined_decl.predicates.len())
+                                    .map(|i| format!("__pred_{name}_{i}"))
+                                    .collect();
+                                struct_registry.register_refined(origin, name, "List", pred_names);
                                 type_env.define(
                                     name,
                                     Ty::Struct(StructKey::Family(name.clone())),

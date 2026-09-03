@@ -414,9 +414,5 @@ fn find_overloads_by_ffi_symbol(ctx: &MonoCtx, mangled: &str) -> Option<Vec<Over
             }
         }
     }
-    if found.is_empty() {
-        None
-    } else {
-        Some(found)
-    }
+    if found.is_empty() { None } else { Some(found) }
 }
