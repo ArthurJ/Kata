@@ -652,6 +652,10 @@ pub fn eval(
         TypedExprKind::Continue => Err(InterpError::Continue),
 
         TypedExprKind::Loop { body } => loop {
+            // Yield cooperativo — cede para outras fibers a cada
+            // YIELD_INTERVAL iterações (espelha o codegen JIT).
+            // No-op quando não há scheduler ativo (sem Suspend em TLS).
+            rt::kata_rt_yield_check(ctx.rt_ptr);
             // ── Escopo único da action (Impl D): iteração NÃO abre
             // escopo. Snapshot ANTES do corpo; bindings frescos da
             // iteração evaporam no fim dela (antes de processar
@@ -756,6 +760,9 @@ pub fn eval(
             // fresco evapora no fim de CADA iteração.
             let mut current = coll_val;
             while current != 0 {
+                // Yield cooperativo — cede para outras fibers a cada
+                // YIELD_INTERVAL iterações (espelha o codegen JIT).
+                rt::kata_rt_yield_check(ctx.rt_ptr);
                 let head = rt::kata_rt_list_head(current);
                 let tail = rt::kata_rt_list_tail(current);
                 let keys = env.scope_keys();
