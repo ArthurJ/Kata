@@ -146,11 +146,6 @@ Fase 5 Rational (const-eval de `rational <lit>` + par (num, den) no
 Z3). Oráculos adversariais K medidos em `b5e2d9e` (3 níveis, grade
 multi-param, arity-tuple).
 
-### Codegen — `echo!(None)` (bug #2b) — ✅ Resolvido (2026-09-03)
-**Estado:** Resolvido. Ver A5 na auditoria. Fix no monomorphizador
-(`overload_resolution.rs`): substitui `Var` por `Unit` no guard de
-`show` para instanciar com type params não-resolvidos.
-
 ### Typeck — variante sem payload como argumento (#K-call)
 **Estado:** Pendente (medido em `b5e2d9e`, 2026-08-30). `foo None` e
 até `foo Optional::None` (qualificado) dão `type.no_overload` mesmo
@@ -175,80 +170,11 @@ sub-agente kimi-k3:cloud) com probes reais. Cada item validado no
 código-fonte e, quando possível, executado em ambos backends (JIT
 e interpretador).
 
-**Resumo:** 19 achados (A1–A12 + A3b–A3g). A1, A2, A3b, A4, A3e, A3f, A3g resolvidos.
-Item adjacente #4 (JIT crash em NonZero::Float) resolvido.
-1 crítico pendente, 1 alto, 6 médios, 3 baixos.
-
-### 🟠 Alto — gaps que travam ou bloqueiam uso real
-
-#### A3f. `len` em Text no interp retorna valor errado (double SMI tag)
-
-**Estado:** ✅ Resolvido (2026-09-03). `kata_rt_text_len` (slice.rs) já
-retorna `tag_smi(count)` — SMI-tagged. O dispatch do interp
-(`ffi_dispatch.rs:328`) aplicava `encode_smi` sobre o retorno,
-causando double tagging. Removido o `encode_smi` redundante.
-
-**Correção:** uma linha — `encode_smi(rt::kata_rt_text_len(args[0]))`
-→ `rt::kata_rt_text_len(args[0])`. Testes E2E em
-`kata-driver/tests/text_len_interp_e2e.rs` (5 casos: vazio, ASCII,
-acento, CJK, variável).
-
-#### A3g. Interp não valida ascription refined — aceita `0 :: NonZero`
-
-**Estado:** ✅ Resolvido (2026-09-03). O typeck produz
-`pending_predicates` quando o predicado é complexo (ex: `!= _ (zero _)`)
-— o comptime pass do JIT os valida via `jit_execute_expr`, mas o interp
-não tem comptime pass. O `eval` do interp agora valida
-`pending_predicates` no ponto de uso: avalia cada predicado com `eval`
-e verifica se retorna `Boolean::True` (tag 1). Se falhar, emite
-`InterpError::Runtime` gracioso em vez de SIGABRT.
-
-**Correção:** branch `TypeAscription` em `eval.rs` — capturar
-`pending_predicates` (antes descartado com `..`) e avaliar antes de
-prosseguir. Equivalente interp do `validate_pending_predicates` do
-comptime pass.
-
-**Nota:** o trampoline do scheduler (csp.rs:212-218) engole erros e
-retorna 0 — o exit code não reflete o erro (impresso no stderr). Bug
-separado do trampoline, não do A3g.
-
-**Restante (JIT):** o JIT ainda falha com `comptime.jit_failure` (erro
-interno) em vez de `type.mismatch` gracioso. Isso é um issue do comptime
-pass, não do interp.
-
-Testes E2E em `kata-driver/tests/refined_ascription_interp_e2e.rs`
-(4 casos: zero rejeitado, válido, unit, PositiveInt).
-
-#### A5. `echo!(None)` rejeitado pelo codegen JIT — ✅ Resolvido (2026-09-03)
-
-**Estado:** ✅ Resolvido. `echo!(None)` no JIT agora imprime `None` (exit 0).
-O root cause era que `show` de `Generic("Optional", [Var("T")])` não era
-instanciado pelo monomorphizador — o guard em `instantiate_generic_closure`
-(overload_resolution.rs:102) bloqueia quando type params mapeiam para
-`Ty::Var`. Fix: quando o callee é `show` e type params são `Var`,
-substituir `Var` por `Unit` e instanciar normalmente. O braço `None`
-do show (TextLit) não precisa de `T`; o braço `Some` nunca executa
-para `None`. O fallback `TextLit("?")` cobre `show` de `Var` dentro
-do body instanciado.
-
-**Também resolve A3c** (`show Optional::None` → ffi_not_found) pelo
-mesmo root cause.
-
-**Localização do fix:** `crates/kata-monomorph/src/overload_resolution.rs`
-(guard `instantiate_generic_closure` + helper `replace_var_with_unit`).
-
-**Testes E2E:** `crates/kata-driver/tests/echo_none_e2e.rs` (7 casos:
-echo!(None), show None, show Optional::None, show Some, show Ok, show
-Err, interp).
+**Resumo:** 19 achados (A1–A12 + A3b–A3g). Resolvidos: A1, A2, A3b,
+A3c, A3e, A3f, A3g, A5, e item adjacente #4 (JIT crash NonZero::Float).
+Pendentes: 1 crítico (deref sem null-check), 5 médios, 3 baixos.
 
 ### 🟡 Médio — buracos funcionais que limitam a linguagem
-
-#### A3c. `show Optional::None` → ffi_not_found no JIT / placeholder no interp — ✅ Resolvido
-
-**Estado:** ✅ Resolvido (2026-09-03) pelo mesmo fix do A5. O root cause
-era o mesmo: monomorphizador não instanciava `show` para `Optional` sem
-tipo concreto. O fix do A5 (substituir `Var` por `Unit` no guard de
-`show`) resolve ambos.
 
 #### A3d. `len` em Range → ffi_not_found
 
@@ -265,22 +191,6 @@ com `len`).
 `FFI não implementado no interpretador: range_len`.
 
 **Prioridade:** média — typeck aprova, codegen não executa.
-
-#### A3e. Range com step 0 dinâmico → loop infinito
-
-**Estado:** ✅ Resolvido. Defense in depth — compile-time + runtime.
-
-**Compile-time:** `check_neutral_step` generalizado via
-`ConstVal::zero_for_ty` (espelha a função `zero` da interface NUM).
-Cobre Int, Float, e Rational literals. Step literal 0 →
-`TypeMismatch` gracioso.
-
-**Runtime:** `range_check_step` inserido em 5 sites de iteração
-sobre Range (for_in, map, filter, fold, fused_stream). Step dinâmico
-0 → `kata_rt_panic` com mensagem clara.
-
-**Interp:** já era safe — `RangeLit` com step 0 produz lista vazia
-(não itera).
 
 #### A6. `@cache` no interp: miss permanente para tipos compostos
 
@@ -373,54 +283,6 @@ de tipo do programa).
 
 **Prioridade:** baixa — mudar `ComptimeError::JitError` para um
 variant de type error gracioso com span e mensagem amigável.
-
-### Typeck — literal negativo não reconhecido como literal em ascription refined
-
-**Estado:** `(-5) :: NonZero::Int` é rejeitado pelo typeck com
-"literal para ascription refined NonZero (use construtor para expr
-não-literal)". O typeck tipa `-5` como `Closure { Ident("-"),
-[IntLit("5")] }`, e o check `is_literal` em `ascription.rs:331` só
-cobre `IntLit`/`FloatLit`/`TextLit`/`ListLit`/etc — não
-`Closure`. O `const_eval` (`eval_const`) suporta negativos
-(`Apply { -, [IntLit] }` → `ConstVal::Int(-N)`), mas o gate
-`is_literal` barra antes de chegar lá.
-
-**Localização:** `crates/kata-inference/src/infer/ascription.rs:331`
-(`is_literal` check), linha 347 (gate que rejeita não-literais sem
-path conditions).
-
-**Impacto:** baixo — `(-5) :: NonZero::Int` exige construtor
-(`NonZero (-5)`) em vez de ascription direta. Assimetria ergonômica
-com `5 :: NonZero::Int` que funciona.
-
-**Prioridade:** baixa — estender `is_literal` para reconhecer
-`Closure { Ident("-"), [IntLit/FloatLit] }` como literal negativo,
-ou usar `typed_expr_to_const_val` (que já suporta negativos) como
-gate em vez de `is_literal`.
-
-### ✅ JIT — `0::NonZero::Float` e `3.14::NonZero::Float` crasham no codegen
-
-**Estado:** ✅ Resolvido (2026-09-03). Três bugs corrigidos:
-
-1. **Comptime pass compilava actions desnecessariamente** —
-   `validate_pending_predicates` passava `ctx.actions` (TODAS as
-   actions do módulo) para `jit_execute_expr`, fazendo o codegen
-   compilar `echo!` (que chama `show` de Instance) ao validar
-   predicados. Predicados de refined só usam operadores e funções de
-   interface, nunca actions. Fix: `&[]` em `predicates.rs`.
-
-2. **Show synthesis não registrava show por Instance concreta** —
-   `show_synthesis` registrava `show :: Plain("NonZero") => Text`
-   mas valores têm tipo `Instance("NonZero", "Int")`. O
-   monomorphizador faz match exato e não encontrava. Fix: bloco
-   dedicado em `show_synthesis.rs` que registra
-   `show :: Instance(family, concrete) => Text` para cada Instance.
-
-3. **`match_score` tratava Instance↔Plain como exact match** —
-   `Instance("NonZero", "Int")` casava com `Plain("NonZero")` com
-   mesmo score que `Instance("NonZero", "Int")` exato, causando
-   `AmbiguousDispatch`. Fix: Instance↔Plain agora é `iface` (não
-   `exact`), dando prioridade ao match Instance↔Instance exato.
 
 ---
 
