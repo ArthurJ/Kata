@@ -17,6 +17,39 @@ use crate::instantiate::{instantiate_action, instantiate_function};
 use crate::naming::canonicalize_subs;
 use crate::{MonoCtx, RewriteAcc};
 
+/// Substitui recursivamente `Ty::Var(_)` por `Ty::Unit` dentro de um tipo.
+/// Usado no fallback de `show` para instanciar com type params não-resolvidos.
+fn replace_var_with_unit(ty: &mut Ty) {
+    match ty {
+        Ty::Var(_) => *ty = Ty::Unit,
+        Ty::Generic(_, args) => {
+            for a in args.iter_mut() {
+                replace_var_with_unit(a);
+            }
+        }
+        Ty::Function(params, ret) => {
+            for p in params.iter_mut() {
+                replace_var_with_unit(p);
+            }
+            replace_var_with_unit(ret);
+        }
+        Ty::List(inner) | Ty::Array(inner) | Ty::Range(inner) | Ty::Set(inner)
+        | Ty::Sender(inner) | Ty::Receiver(inner) | Ty::ReceiverFactory(inner) => {
+            replace_var_with_unit(inner);
+        }
+        Ty::Tuple(elements) => {
+            for e in elements.iter_mut() {
+                replace_var_with_unit(e);
+            }
+        }
+        Ty::Dict(k, v) => {
+            replace_var_with_unit(k);
+            replace_var_with_unit(v);
+        }
+        _ => {}
+    }
+}
+
 /// Busca a overload genérica que casa com `arg_types` por `unify`.
 ///
 /// Itera por todas as overloads com `type_params` não-vazio e mesma aridade,
@@ -87,7 +120,7 @@ pub(crate) fn instantiate_generic_closure(
     // Tenta unify em cada candidata (pode haver múltiplas overloads genéricas
     // com mesma aridade — ex: show para Optional<T> e Result<T,E>).
     let arg_types: Vec<Ty> = args.iter().map(|a| a.node.ty.clone()).collect();
-    let Some((oi, subs)) = find_generic_overload(overloads, &arg_types) else {
+    let Some((oi, mut subs)) = find_generic_overload(overloads, &arg_types) else {
         return false;
     };
 
@@ -99,8 +132,23 @@ pub(crate) fn instantiate_generic_closure(
     // t :: List(Var("A"))). Neste caso, não instanciar — a instanciação
     // ocorrerá quando a função template for instanciada para um tipo
     // concreto e o body for reescrito com tipos resolvidos.
-    if subs.values().any(|ty| matches!(ty, Ty::Var(_))) {
-        return false;
+    //
+    // Exceção: se a Closure é `show` (síntese), instanciar com Ty::Unit
+    // como fallback para type params não-resolvidos. Isto resolve
+    // `echo!(None)` onde None :: Generic("Optional", [Var("T")]) — o
+    // braço None do show (TextLit) não precisa de T, e o braço Some
+    // nunca executa para None. O fallback TextLit("?") cobre show de
+    // Var dentro do body instanciado.
+    if subs.values().any(|ty| ty.contains_var()) {
+        if name == "show" {
+            // Substitui Var por Unit nas substituições — permite instanciar
+            // show de genéricos com type params não-resolvidos.
+            for ty in subs.values_mut() {
+                replace_var_with_unit(ty);
+            }
+        } else {
+            return false;
+        }
     }
 
     // Gera nome canônico da instância.
