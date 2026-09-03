@@ -1,6 +1,6 @@
 # TODO — Kata-Lang
 
-Único arquivo de pendências. Atualizado 2026-09-02.
+Único arquivo de pendências. Atualizado 2026-09-03.
 
 Os docs `TODO-*.md` foram removidos (obsoletos ou resolvidos). Pendências vivem aqui.
 
@@ -72,9 +72,17 @@ compartilhada).
 ### Ascription refined de Text literal não const-avalia
 
 **Estado:** `"ola"::NonEmpty` (literal de Text em ascription refined)
-não const-avalia — o scanner de ascription refined cobre apenas
-literals numéricos (IntLit/FloatLit). Text exige o construtor falível
-(`NonEmpty "ola"` → `Ok`/`Err` com match).
+não const-avalia — o const_eval cobre TextLit mas o predicado
+`>= (len _) 1` não é reduzido pelo `eval_bool_expr` (só lida com
+operadores de comparação `= != < > <= >=` entre ConstVals). Text
+exige o construtor falível (`NonEmpty "ola"` → `Ok`/`Err` com match).
+
+**Nota (2026-09-03):** `is_literal` agora cobre `Grouping` recursivamente
+— `(5)::PositiveInt` e `((-5))::NonZero::Int` funcionavam antes por
+outros caminhos, mas o gate `is_literal` não reconhecia parênteses.
+Fix: helper `is_literal_expr` em `ascription.rs`, recursivo sobre
+`TypedExprKind::Grouping`, consistente com `eval_const` e
+`typed_expr_to_const_val`.
 
 **Impacto:** baixo — assimetria ergonômica entre Int e Text, não
 incorreção (o construtor é a via geral e é sound).
@@ -262,14 +270,23 @@ sem `break` trava o processo.
 
 #### A5. `echo!(None)` rejeitado pelo codegen JIT
 
-**Estado:** `Closure` com callee não-Ident não é suportado. O interp
-executa `echo!(None)` (exit 0); o JIT rejeita com
-`codegen.unsupported`. Discrepância de backend.
+**Estado:** `echo!(None)` no JIT rejeita com `codegen.unsupported:
+Closure sem ffi_symbol e callee não-Ident: Ident { name: "show" }`.
+O interp executa `echo!(None)` (imprime `()`, exit 0). Discrepância
+de backend. O callee `show` é `Ident` — o erro diz "não-Ident" mas
+a mensagem mostra `Ident { name: "show" }`, indicando que o caminho
+do `show` sintetizado não registra ffi_symbol para `Optional::None`
+(variante sem payload, tipo não-concreto). Provavelmente o mesmo
+root cause do A3c (monomorphizador não instancia show para Optional
+sem tipo concreto).
 
-**Localização:** `crates/kata-codegen/src/lowering/closure.rs:349-355`.
+**Localização:** `crates/kata-codegen/src/lowering/closure.rs:350-355`
+(fallback UnsupportedNode), mas a causa raiz está upstream —
+monomorphização/show_synthesis não registra o overload de show para
+`Optional` sem tipo concreto.
 
 **Reprodução:** `echo!(None)` → JIT: exit 1 (codegen.unsupported);
-interp: exit 0.
+interp: exit 0, imprime `()`.
 
 **Prioridade:** alta — expressão válida rejeitada por um backend.
 

@@ -214,11 +214,69 @@ fn multiplos_predicados_falha_primeiro() {
 /// Múltiplos predicados: `150::Percentage` falha (`<= _ 100` não satisfeito).
 #[test]
 fn multiplos_predicados_falha_segundo() {
-    let src = "data (Int, > _ 0, <= _ 100) as Percentage\n150::Percentage";
+    let src = "data (Int, > _ 0, <= _ 100) as Percentage\\n150::Percentage";
     assert!(
         infer_fails(src),
         "150::Percentage deve falhar (predicado <= _ 100 não satisfeito)"
     );
+}
+
+// ── Grouping em ascription refined ──────────────────────────────────
+// Bug: `is_literal` não cobria `TypedExprKind::Grouping`. Qualquer
+// `(literal)::Refined` falhava com type.mismatch "use construtor para
+// expr não-literal" antes do fix. O parser produz `Grouping { IntLit }`
+// para `(literal)`, e o gate `is_literal` barrava antes de chegar ao
+// const_eval (que já desembrulha Grouping).
+
+/// `(5)::PositiveInt` — Grouping sobre literal positivo, predicado OK.
+#[test]
+fn grouping_sobre_literal_valida_predicado() {
+    let src = "data (Int, > _ 0) as PositiveInt\n(5)::PositiveInt";
+    let (raw, ty) = eval_src(src);
+    assert_eq!(ty, Ty::Struct(StructKey::Plain("PositiveInt".into())));
+    assert_eq!(untag_smi(raw), 5);
+}
+
+/// `(-5)::PositiveInt` — Grouping sobre literal negativo, predicado falha.
+/// Antes do fix, falhava com "não é literal" (motivo errado). Agora falha
+/// pelo predicado `> _ 0` (motivo correto).
+#[test]
+fn grouping_sobre_literal_negativo_predicado_falha() {
+    let src = "data (Int, > _ 0) as PositiveInt\n(-5)::PositiveInt";
+    assert!(
+        infer_fails(src),
+        "(-5)::PositiveInt deve falhar (predicado > _ 0 não satisfeito)"
+    );
+}
+
+/// `((-5))::PositiveInt` — Grouping duplo sobre literal negativo, predicado falha.
+#[test]
+fn grouping_duplo_sobre_literal_negativo_predicado_falha() {
+    let src = "data (Int, > _ 0) as PositiveInt\n((-5))::PositiveInt";
+    assert!(
+        infer_fails(src),
+        "((-5))::PositiveInt deve falhar (predicado > _ 0 não satisfeito)"
+    );
+}
+
+/// `(0)::PositiveInt` — Grouping sobre literal zero, predicado falha.
+#[test]
+fn grouping_sobre_zero_predicado_falha() {
+    let src = "data (Int, > _ 0) as PositiveInt\n(0)::PositiveInt";
+    assert!(
+        infer_fails(src),
+        "(0)::PositiveInt deve falhar (predicado > _ 0 não satisfeito)"
+    );
+}
+
+/// `((-5))::PositiveInt` deveria falhar pelo predicado, não por "não é literal".
+/// Este teste distingue os dois motivos: antes do fix, `(5)::PositiveInt`
+/// falhava com "não é literal" (Grouping não reconhecido). Agora passa.
+#[test]
+fn grouping_sobre_literal_positivo_passa() {
+    let src = "data (Int, > _ 0) as PositiveInt\n(5)::PositiveInt";
+    let (raw, _ty) = eval_src(src);
+    assert_eq!(untag_smi(raw), 5);
 }
 
 /// Ascription-refined exige literal — expr não-literal deve dar type error.
