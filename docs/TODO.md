@@ -8,7 +8,7 @@ Os docs `TODO-*.md` foram removidos (obsoletos ou resolvidos). Pendências vivem
 
 ## Débito Técnico
 
-### Crashes do JIT em programas semanticamente inválidos (pré-existente)
+### Crashes do JIT — `read_unaligned` sem null-check (Cat 3)
 
 **Estado:** programas válidos sintaticamente mas rejeitados pelo typeck
 podem derrubar o compilador com SIGSEGV/null-deref em vez de erro
@@ -17,38 +17,26 @@ gracioso. Compile-time DEVE falhar graciosamente — nunca SIGSEGV/SIGILL
 
 **Diagnóstico (2026-09-02):** `.unwrap()` em src/ limpo (27 sites
 convertidos para `.expect()`). `Err` com payload null corrigido (A1 —
-10 sites agora usam `err_with_msg`). A classe restante é **deref de
-ponteiro cru sem null-check** no codegen/runtime que assume invariantes
-do typeck. Inventário completo em
+10 sites agora usam `err_with_msg`). Inventário completo em
 `kata-compiler/references/raw-ptr-null-check-audit.md`.
 
-**Inventário (4 categorias):**
+**Resolvidos (2026-09-03):**
+- **Cat 1** — `&mut *(rt as *mut Runtime)` sem null-check (12 sites):
+  `runtime.rs` (8), `arena.rs` (7), `scheduler/ffi.rs` (4). Helpers
+  `deref_runtime` (→ `&mut Runtime`) e `deref_runtime_ref` (→ `&Runtime`)
+  com null-check + panic unwind. Commit `afb5e57`.
+- **Cat 2** — `&*(val as *const T)` sem null-check (15 sites):
+  `rational.rs` (14), `display.rs` (1). Helper `deref_rational` com
+  null-check + panic unwind. Commit `76dfaf6`.
+- **Cat 4** — Já protegidos: `bigint.rs` (`deref_bigint` ✓), `file.rs`,
+  `socket/mod.rs`, `channel/ops.rs`, `channel/ipc.rs`.
 
-- **Cat 1 — `&mut *(rt as *mut Runtime)` sem null-check (17 sites,
-  CRÍTICA):** `runtime.rs` (9 sites: `rt_ref`, `depth_inc/dec/get/
-  set_limit`, `reset_depth`, `yield_check`), `arena.rs` (7 sites:
-  `arena_create/create_tracked/alloc/dealloc/...`), `scheduler/ffi.rs`
-  (4 sites: `scheduler_init`, `spawn`, etc.), `marshal/mod.rs` (2
-  sites). Boundary FFI — `rt` vem do codegen/JIT driver.
-- **Cat 2 — `&*(val as *const T)` sem null-check (~15 sites,
-  ALTA):** `rational.rs` (`rat_add/sub/mul/div/eq/lt/gt/neq/le/ge/
-  show/to_float` — todas fazem `&*a` sem `is_null()`), `display.rs:58`
-  (`print_result` com `TYPE_RATIONAL`).
-- **Cat 3 — `read_unaligned(ptr as *const i64)` sem null-check
-  (MÉDIA):** `dict/mod.rs`, `dict/hamt.rs`, `cache.rs`,
-  `channel/ops.rs`, `channel/ipc.rs`. Ponteiros vêm de alocação
-  interna — risco menor.
-- **Cat 4 — Já protegidos:** `bigint.rs` (`deref_bigint` ✓),
-  `file.rs`, `socket/mod.rs`, `channel/ops.rs`, `channel/ipc.rs`.
+**Pendente — Cat 3:** `read_unaligned(ptr as *const i64)` sem null-check
+(MÉDIA): `dict/mod.rs`, `dict/hamt.rs`, `cache.rs`, `channel/ops.rs`,
+`channel/ipc.rs`. Ponteiros vêm de alocação interna — risco menor.
 
-**Correção pendente:** criar helpers centralizados com null-check +
-panic **unwind** (modelo: `deref_bigint` em `bigint.rs:96`):
-`deref_runtime(rt) -> &mut Runtime`, `deref_rational(ptr) -> &BigRational`.
-Substituir os 17+15 sites bare deref. Cat 3 é prioridade inferior.
-Pré-requisito: verificar `panic` strategy do crate — se `panic = abort`,
-panic unwind não funciona (alternativa: retornar erro).
-
-**Prioridade:** alta — crash do compilador é a pior classe de falha.
+**Prioridade:** média — risk menor que Cat 1/2 (ponteiros internos,
+não boundary FFI), mas ainda pode crashar em input malformado.
 
 ### Paridade de cache: tipos compostos na key do interp
 
@@ -172,7 +160,8 @@ e interpretador).
 
 **Resumo:** 19 achados (A1–A12 + A3b–A3g). Resolvidos: A1, A2, A3b,
 A3c, A3e, A3f, A3g, A5, e item adjacente #4 (JIT crash NonZero::Float).
-Pendentes: 1 crítico (deref sem null-check), 5 médios, 3 baixos.
+Cat 1 e Cat 2 do débito técnico (deref sem null-check) resolvidos.
+Pendentes: 1 médio (Cat 3 — read_unaligned), 5 médios, 3 baixos.
 
 ### 🟡 Médio — buracos funcionais que limitam a linguagem
 
