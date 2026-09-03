@@ -167,26 +167,22 @@ sub-agente kimi-k3:cloud) com probes reais. Cada item validado no
 código-fonte e, quando possível, executado em ambos backends (JIT
 e interpretador).
 
-**Resumo:** 19 achados (A1–A12 + A3b–A3g). A1, A2, A3b, A4 e A3e resolvidos.
-1 crítico pendente, 3 altos, 7 médios, 3 baixos.
+**Resumo:** 19 achados (A1–A12 + A3b–A3g). A1, A2, A3b, A4, A3e, A3f resolvidos.
+1 crítico pendente, 2 altos, 7 médios, 3 baixos.
 
 ### 🟠 Alto — gaps que travam ou bloqueiam uso real
 
 #### A3f. `len` em Text no interp retorna valor errado (double SMI tag)
 
-**Estado:** `len "abc"` retorna 3 no JIT (correto) mas 7 no interp.
-`kata_rt_text_len` em `slice.rs:49` retorna `tag_smi(count)` (já
-SMI-tagged), mas `ffi_dispatch.rs:328` chama `encode_smi()` sobre
-o resultado — double tagging. `encode_smi(3) = 7`.
+**Estado:** ✅ Resolvido (2026-09-03). `kata_rt_text_len` (slice.rs) já
+retorna `tag_smi(count)` — SMI-tagged. O dispatch do interp
+(`ffi_dispatch.rs:328`) aplicava `encode_smi` sobre o retorno,
+causando double tagging. Removido o `encode_smi` redundante.
 
-**Localização:** `crates/kata-interp/src/ffi_dispatch.rs:328`
-(`encode_smi` sobre valor já SMI-tagged),
-`crates/kata-rt/src/slice.rs:56` (`tag_smi(count)` no retorno).
-
-**Reprodução:** `echo!(len "abc")` → JIT: 3; interp: 7.
-
-**Prioridade:** alta — incorreção silenciosa: todo `len` de Text
-no interp retorna o dobro+1 do valor correto.
+**Correção:** uma linha — `encode_smi(rt::kata_rt_text_len(args[0]))`
+→ `rt::kata_rt_text_len(args[0])`. Testes E2E em
+`kata-driver/tests/text_len_interp_e2e.rs` (5 casos: vazio, ASCII,
+acento, CJK, variável).
 
 #### A3g. Interp não valida ascription refined — aceita `0 :: NonZero`
 

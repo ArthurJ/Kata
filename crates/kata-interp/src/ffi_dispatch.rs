@@ -325,7 +325,7 @@ pub(crate) fn ffi_dispatch(
         "kata_rt_int_to_byte" => Ok(rt::kata_rt_int_to_byte(args[0])),
 
         // ── Text slice ───────────────────────────────────────
-        "kata_rt_text_len" => Ok(encode_smi(unsafe { rt::kata_rt_text_len(args[0]) })),
+        "kata_rt_text_len" => Ok(unsafe { rt::kata_rt_text_len(args[0]) }),
         "kata_rt_text_at" => Ok(unsafe { rt::kata_rt_text_at(args[0], args[1], arena) }),
 
         // ── Rat literal (para ascription de Rational) ────────
