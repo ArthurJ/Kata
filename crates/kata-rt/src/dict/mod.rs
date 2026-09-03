@@ -78,6 +78,18 @@ thread_local! {
 // Public Dict API — 16-byte struct wrappers
 // ════════════════════════════════════════════════════════════════
 
+/// Helper: valida `dict_ptr` não-null antes de ler campos do Dict.
+///
+/// Hardening do boundary FFI: `0` (null — slot não-inicializado que
+/// escapou do typeck) é recusado com panic **unwind** e mensagem clara.
+fn check_dict_ptr(dict_ptr: i64, fn_name: &str) {
+    if dict_ptr == 0 {
+        panic!(
+            "kata_rt dict: {fn_name} chamado com dict_ptr null (0) — slot não-inicializado escapou do typeck; isto é um bug do compilador, não do seu código"
+        );
+    }
+}
+
 /// Dict is a 16-byte struct: (hamt_root, insert_log)
 /// offset 0: hamt_root, offset 8: insert_log (Cons list of KVPair ptrs)
 ///
@@ -111,6 +123,7 @@ pub extern "C" fn kata_rt_dict_insert(
     eq_fn: i64,
     arena_handle: i64,
 ) -> i64 {
+    check_dict_ptr(dict_ptr, "kata_rt_dict_insert");
     let hamt_root = unsafe { std::ptr::read_unaligned(dict_ptr as *const i64) };
     let old_log = unsafe { std::ptr::read_unaligned((dict_ptr as *const u8).add(8) as *const i64) };
 
@@ -153,6 +166,7 @@ pub extern "C" fn kata_rt_dict_get_checked(
     eq_fn: i64,
     arena_handle: i64,
 ) -> i64 {
+    check_dict_ptr(dict_ptr, "kata_rt_dict_get_checked");
     let hamt_root = unsafe { std::ptr::read_unaligned(dict_ptr as *const i64) };
     hamt_get_checked(hamt_root, key, hash, eq_fn, arena_handle)
 }
@@ -161,6 +175,7 @@ pub extern "C" fn kata_rt_dict_get_checked(
 /// Does NOT allocate a Result box — just returns 1 or 0 directly.
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_dict_contains(dict_ptr: i64, key: i64, hash: i64, eq_fn: i64) -> i64 {
+    check_dict_ptr(dict_ptr, "kata_rt_dict_contains");
     let hamt_root = unsafe { std::ptr::read_unaligned(dict_ptr as *const i64) };
     hamt_contains(hamt_root, key, hash, eq_fn)
 }
@@ -168,6 +183,7 @@ pub extern "C" fn kata_rt_dict_contains(dict_ptr: i64, key: i64, hash: i64, eq_f
 /// Count entries by traversing the HAMT. O(n).
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_dict_len(dict_ptr: i64) -> i64 {
+    check_dict_ptr(dict_ptr, "kata_rt_dict_len");
     let hamt_root = unsafe { std::ptr::read_unaligned(dict_ptr as *const i64) };
     let count = hamt_len(hamt_root);
     // SMI tag: (val << 1) | 1
@@ -186,6 +202,7 @@ pub extern "C" fn kata_rt_dict_remove(
     eq_fn: i64,
     arena_handle: i64,
 ) -> i64 {
+    check_dict_ptr(dict_ptr, "kata_rt_dict_remove");
     let hamt_root = unsafe { std::ptr::read_unaligned(dict_ptr as *const i64) };
     let old_log = unsafe { std::ptr::read_unaligned((dict_ptr as *const u8).add(8) as *const i64) };
 
@@ -221,6 +238,7 @@ pub extern "C" fn kata_rt_dict_remove(
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_dict_next(dict_ptr: i64, iter_state: i64, arena_handle: i64) -> i64 {
     if iter_state == 0 {
+        check_dict_ptr(dict_ptr, "kata_rt_dict_next");
         // Initialize: walk the Cons list, dedup, collect valid KVPair pointers.
         let hamt_root = unsafe { std::ptr::read_unaligned(dict_ptr as *const i64) };
         let insert_log =
@@ -366,6 +384,7 @@ pub extern "C" fn kata_rt_dict_next_smi(dict_ptr: i64, iter_state: i64, arena_ha
 /// Hash is read from the KVpair (stored at insert time).
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_dict_merge(a: i64, b: i64, eq_fn: i64, arena_handle: i64) -> i64 {
+    check_dict_ptr(b, "kata_rt_dict_merge");
     // Collect all KVPair pointers from b.
     let b_hamt = unsafe { std::ptr::read_unaligned(b as *const i64) };
     let (arr, count) = unsafe { collect_all_kvpairs(b_hamt, arena_handle) };
