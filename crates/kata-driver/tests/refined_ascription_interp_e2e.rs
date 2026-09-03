@@ -110,3 +110,54 @@ main!()"#;
     );
     assert_eq!(out, "42\n");
 }
+
+/// Ascription refined de Text literal: `>= (len _) 1` const-avalia sobre
+/// TextLit. O const_eval reduz `len "ola"` → 3, depois `>= 3 1` → true.
+/// Débito 2 do TODO — agora funciona em ambos backends.
+#[test]
+fn text_refined_literal_passa() {
+    let source = r#"data (Text, >= (len _) 1) as NonEmptyText
+
+action main => Unit
+    let s := "ola" :: NonEmptyText
+    echo!(s)
+main!()"#;
+    let path = write_temp("text_ok", source);
+    let (out, err, code) = run_kata(&path, true);
+    assert_eq!(
+        code, 0,
+        "interp deve aceitar \"ola\"::NonEmptyText — stderr: {err}"
+    );
+    assert_eq!(out, "ola\n");
+    let (out_j, err_j, code_j) = run_kata(&path, false);
+    assert_eq!(
+        code_j, 0,
+        "JIT deve aceitar \"ola\"::NonEmptyText — stderr: {err_j}"
+    );
+    assert_eq!(out_j, "ola\n");
+}
+
+/// Ascription refined de Text literal vazio: `>= (len _) 1` falha para
+/// `""` (len = 0). Deve ser rejeitado em compile-time por ambos backends.
+#[test]
+fn text_refined_literal_vazio_rejeitado() {
+    let source = r#"data (Text, >= (len _) 1) as NonEmptyText
+
+action main => Unit
+    let s := "" :: NonEmptyText
+    echo!(s)
+main!()"#;
+    let path = write_temp("text_empty", source);
+    // Interp: trampoline engole erro (exit 0), mas stderr tem a mensagem.
+    let (_out, err, _code) = run_kata(&path, true);
+    assert!(
+        err.contains("predicado") || err.contains("refined"),
+        "interp deve rejeitar \"\"::NonEmptyText — stderr: {err}"
+    );
+    // JIT: exit code não-zero.
+    let (_out_j, _err_j, code_j) = run_kata(&path, false);
+    assert_ne!(
+        code_j, 0,
+        "JIT deve rejeitar \"\"::NonEmptyText (exit não-zero)"
+    );
+}

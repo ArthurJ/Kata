@@ -81,8 +81,9 @@ main!()"#;
     assert_both(source, "5\n50\n");
 }
 
-/// Refined sobre Text: delega ao show de Text (aspas). Via construtor
-/// (a const-eval de ascription refined cobre literals numéricos, não Text).
+/// Refined sobre Text: delega ao show de Text (sem aspas). Via construtor
+/// (ascription refined de Text literal também const-avalia — ver teste
+/// `text_refined_literal_passa` em refined_ascription_interp_e2e.rs).
 #[test]
 fn show_refined_text_delega_ao_base() {
     let source = r#"data (Text, = _ _) as NonEmptyText

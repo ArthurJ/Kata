@@ -27,26 +27,7 @@ compartilhada).
 
 **Prioridade:** média.
 
-### Ascription refined de Text literal não const-avalia
-
-**Estado:** `"ola"::NonEmpty` (literal de Text em ascription refined)
-não const-avalia — o const_eval cobre TextLit mas o predicado
-`>= (len _) 1` não é reduzido pelo `eval_bool_expr` (só lida com
-operadores de comparação `= != < > <= >=` entre ConstVals). Text
-exige o construtor falível (`NonEmpty "ola"` → `Ok`/`Err` com match).
-
-**Nota (2026-09-03):** `is_literal` agora cobre `Grouping` recursivamente
-— `(5)::PositiveInt` e `((-5))::NonZero::Int` funcionavam antes por
-outros caminhos, mas o gate `is_literal` não reconhecia parênteses.
-Fix: helper `is_literal_expr` em `ascription.rs`, recursivo sobre
-`TypedExprKind::Grouping`, consistente com `eval_const` e
-`typed_expr_to_const_val`.
-
-**Impacto:** baixo — assimetria ergonômica entre Int e Text, não
-incorreção (o construtor é a via geral e é sound).
-
-**Prioridade:** baixa — unificar estenderia o const-eval para TextLit,
-avaliando o predicado em compile-time sobre o literal.
+---
 
 ### Tree-shaking por instância de família polimórfica
 
@@ -129,9 +110,9 @@ código-fonte e, quando possível, executado em ambos backends (JIT
 e interpretador).
 
 **Resumo:** 19 achados (A1–A12 + A3b–A3g). Resolvidos: A1, A2, A3b,
-A3c, A3e, A3f, A3g, A5, e item adjacente #4 (JIT crash NonZero::Float).
+A3c, A3e, A3f, A3g, A5, A11, e item adjacente #4 (JIT crash NonZero::Float).
 Débito técnico de null-check (Cat 1, 2, 3) totalmente resolvido.
-Pendentes: 5 médios, 3 baixos.
+Pendentes: 5 médios, 2 baixos.
 
 ### 🟡 Médio — buracos funcionais que limitam a linguagem
 
@@ -188,11 +169,6 @@ subestimam profundidade real.
 como payload de genérico (#K-enum-payload)").
 
 ### 🟢 Baixo-médio — assimetrias e gaps menores
-
-#### A11. Ascription refined de Text literal não const-avalia
-
-**Estado:** (já documentado acima em "Ascription refined de Text
-literal não const-avalia").
 
 #### A12. `spawn!` no Windows é stub
 
