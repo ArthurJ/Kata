@@ -167,8 +167,8 @@ sub-agente kimi-k3:cloud) com probes reais. Cada item validado no
 código-fonte e, quando possível, executado em ambos backends (JIT
 e interpretador).
 
-**Resumo:** 19 achados (A1–A12 + A3b–A3g). A1, A2, A3b e A4 resolvidos.
-1 crítico pendente, 3 altos, 8 médios, 3 baixos.
+**Resumo:** 19 achados (A1–A12 + A3b–A3g). A1, A2, A3b, A4 e A3e resolvidos.
+1 crítico pendente, 3 altos, 7 médios, 3 baixos.
 
 ### 🟠 Alto — gaps que travam ou bloqueiam uso real
 
@@ -266,18 +266,19 @@ com `len`).
 
 #### A3e. Range com step 0 dinâmico → loop infinito
 
-**Estado:** `check_neutral_step` só verifica step **literal** em
-compile-time. Step variável com valor 0 escapa e produz um range
-infinito no runtime (step 0 = próximo == atual → nunca termina).
+**Estado:** ✅ Resolvido. Defense in depth — compile-time + runtime.
 
-**Localização:** `crates/kata-inference/src/infer/collections.rs:350`
-(`check_neutral_step` — apenas literais).
+**Compile-time:** `check_neutral_step` generalizado via
+`ConstVal::zero_for_ty` (espelha a função `zero` da interface NUM).
+Cobre Int, Float, e Rational literals. Step literal 0 →
+`TypeMismatch` gracioso.
 
-**Reprodução:** `let s := 0; for x in [1..s..10] echo!(x)` →
-loop infinito (imprime `1` repetidamente até timeout/kill).
+**Runtime:** `range_check_step` inserido em 5 sites de iteração
+sobre Range (for_in, map, filter, fold, fused_stream). Step dinâmico
+0 → `kata_rt_panic` com mensagem clara.
 
-**Prioridade:** média — typeck rejeita step literal 0, mas não
-step dinâmico 0. Runtime não tem guard.
+**Interp:** já era safe — `RangeLit` com step 0 produz lista vazia
+(não itera).
 
 #### A6. `@cache` no interp: miss permanente para tipos compostos
 
