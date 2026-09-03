@@ -367,14 +367,31 @@ pub fn eval(
         TypedExprKind::Grouping { inner } => eval(ctx, inner, env),
 
         // ── TypeAscription ───────────────────────────────────
-        // O typeck já validou a ascription. Em runtime, precisamos
-        // converter o valor quando o tipo alvo é diferente do tipo
-        // interno (ex: Int → Rational precisa chamar FFI).
+        // O typeck validou predicados avaliáveis em compile-time.
+        // Predicados complexos (que const_eval não resolveu) ficam como
+        // `pending_predicates` — o comptime pass do JIT os valida via
+        // jit_execute_expr. O interp não tem comptime pass, então
+        // validamos aqui: avaliar cada predicado e verificar Boolean::True.
         TypedExprKind::TypeAscription {
             expr: inner,
             target_ty,
+            pending_predicates,
             ..
         } => {
+            // Validar predicados pendentes (equivalente interp do
+            // comptime pass `validate_pending_predicates`).
+            if !pending_predicates.is_empty() {
+                for pred in pending_predicates.iter() {
+                    let result = eval(ctx, pred, env)?;
+                    // Boolean no runtime: 1 = True, 0 = False.
+                    if result != 1 {
+                        return Err(InterpError::Runtime(format!(
+                            "predicado de ascription refined falhou: \
+                             esperava Boolean::True, obteve tag {result}"
+                        )));
+                    }
+                }
+            }
             let inner_ty = &inner.node.ty;
             // Mesmo tipo — no-op.
             if inner_ty == target_ty {

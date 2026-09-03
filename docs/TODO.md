@@ -167,8 +167,8 @@ sub-agente kimi-k3:cloud) com probes reais. Cada item validado no
 código-fonte e, quando possível, executado em ambos backends (JIT
 e interpretador).
 
-**Resumo:** 19 achados (A1–A12 + A3b–A3g). A1, A2, A3b, A4, A3e, A3f resolvidos.
-1 crítico pendente, 2 altos, 7 médios, 3 baixos.
+**Resumo:** 19 achados (A1–A12 + A3b–A3g). A1, A2, A3b, A4, A3e, A3f, A3g resolvidos.
+1 crítico pendente, 1 alto, 7 médios, 3 baixos.
 
 ### 🟠 Alto — gaps que travam ou bloqueiam uso real
 
@@ -186,28 +186,29 @@ acento, CJK, variável).
 
 #### A3g. Interp não valida ascription refined — aceita `0 :: NonZero`
 
-**Estado:** `let z := 0 :: NonZero::Int` no interp **passa
-silenciosamente** — o interp não executa const-eval de predicados
-refined. O JIT rejeita (comptime.jit_failure, embora com mensagem
-de erro interno em vez de erro de tipo gracioso). A consequência
-direta: `/ 10 z` com z=0::NonZero causa **panic de divisão por
-zero** no interp (bigint.rs:317, non-unwinding → SIGABRT).
+**Estado:** ✅ Resolvido (2026-09-03). O typeck produz
+`pending_predicates` quando o predicado é complexo (ex: `!= _ (zero _)`)
+— o comptime pass do JIT os valida via `jit_execute_expr`, mas o interp
+não tem comptime pass. O `eval` do interp agora valida
+`pending_predicates` no ponto de uso: avalia cada predicado com `eval`
+e verifica se retorna `Boolean::True` (tag 1). Se falhar, emite
+`InterpError::Runtime` gracioso em vez de SIGABRT.
 
-**Localização:** `crates/kata-interp/src/eval.rs` (sem
-const-eval de ascription refined),
-`crates/kata-rt/src/bigint.rs:317` (panic divisão por zero).
+**Correção:** branch `TypeAscription` em `eval.rs` — capturar
+`pending_predicates` (antes descartado com `..`) e avaliar antes de
+prosseguir. Equivalente interp do `validate_pending_predicates` do
+comptime pass.
 
-**Reprodução:**
-```
-let z := 0 :: NonZero::Int
-echo!(/ 10 z)
-```
-JIT: exit 1 (comptime.jit_failure — erro interno, não type error);
-interp: SIGABRT (panic divisão por zero).
+**Nota:** o trampoline do scheduler (csp.rs:212-218) engole erros e
+retorna 0 — o exit code não reflete o erro (impresso no stderr). Bug
+separado do trampoline, não do A3g.
 
-**Prioridade:** alta — o interp aceita tipos inválidos que o JIT
-rejeita, e o resultado é crash. O JIT também falha: deveria ser
-`type.mismatch` gracioso, não `comptime.jit_failure` (erro interno).
+**Restante (JIT):** o JIT ainda falha com `comptime.jit_failure` (erro
+interno) em vez de `type.mismatch` gracioso. Isso é um issue do comptime
+pass, não do interp.
+
+Testes E2E em `kata-driver/tests/refined_ascription_interp_e2e.rs`
+(4 casos: zero rejeitado, válido, unit, PositiveInt).
 
 #### A5. `echo!(None)` rejeitado pelo codegen JIT
 
