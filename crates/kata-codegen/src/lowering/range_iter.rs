@@ -20,6 +20,75 @@ use kata_core::ty::Ty;
 
 use super::LowerCtx;
 
+/// Guard de runtime: se step == 0, panic com mensagem graciosa.
+///
+/// Chamado uma vez antes de iniciar a iteração sobre um Range.
+/// O compile-time (check_neutral_step) já rejeita literais zero;
+/// este guard pega steps dinâmicos (variáveis) que escapam do typeck.
+///
+/// Para Int: step SMI == 1 (zero tagged). Para Float: bits == 0.0.
+pub(crate) fn range_check_step(coll_val: Value, elem_ty: &Ty, ctx: &mut LowerCtx) {
+    let flags = MemFlagsData::new();
+    let step_val = ctx.builder.ins().load(I64, flags, coll_val, 8);
+
+    if *elem_ty == Ty::float() {
+        // Float: bitcast para F64 e comparar com 0.0
+        let cast_flags = MemFlagsData::new();
+        let step_f = ctx.builder.ins().bitcast(F64, cast_flags, step_val);
+        let zero_f = ctx.builder.ins().f64const(0.0);
+        let is_zero = ctx.builder.ins().fcmp(FloatCC::Equal, step_f, zero_f);
+        // panic block
+        let panic_block = ctx.builder.create_block();
+        let ok_block = ctx.builder.create_block();
+        ctx.builder.ins().brif(is_zero, panic_block, &[], ok_block, &[]);
+        ctx.builder.switch_to_block(panic_block);
+        let panic_fn = ctx
+            .ffi_refs
+            .get("kata_rt_panic")
+            .copied()
+            .unwrap_or_else(|| panic!("kata_rt_panic not found in ffi_refs"));
+        let msg = ctx.builder.ins().iconst(I64, range_step_zero_msg_ptr());
+        ctx.builder.ins().call(panic_fn, &[msg]);
+        // kata_rt_panic diverges (!) — trap para satisfazer Cranelift.
+        ctx.builder.ins().trap(
+            cranelift_codegen::ir::TrapCode::user(1).expect("trap code 1 é sempre válido"),
+        );
+        ctx.builder.seal_block(panic_block);
+        ctx.builder.switch_to_block(ok_block);
+        ctx.builder.seal_block(ok_block);
+    } else {
+        // Int SMI: zero é tag 1 (val 0 << 1 | 1 = 1)
+        let zero_smi = ctx.builder.ins().iconst(I64, 1);
+        let is_zero = ctx.builder.ins().icmp(IntCC::Equal, step_val, zero_smi);
+        let panic_block = ctx.builder.create_block();
+        let ok_block = ctx.builder.create_block();
+        ctx.builder.ins().brif(is_zero, panic_block, &[], ok_block, &[]);
+        ctx.builder.switch_to_block(panic_block);
+        let panic_fn = ctx
+            .ffi_refs
+            .get("kata_rt_panic")
+            .copied()
+            .unwrap_or_else(|| panic!("kata_rt_panic not found in ffi_refs"));
+        let msg = ctx.builder.ins().iconst(I64, range_step_zero_msg_ptr());
+        ctx.builder.ins().call(panic_fn, &[msg]);
+        // kata_rt_panic diverges (!) — trap para satisfazer Cranelift.
+        ctx.builder.ins().trap(
+            cranelift_codegen::ir::TrapCode::user(1).expect("trap code 1 é sempre válido"),
+        );
+        ctx.builder.seal_block(panic_block);
+        ctx.builder.switch_to_block(ok_block);
+        ctx.builder.seal_block(ok_block);
+    }
+}
+
+/// Mensagem C string para panic de step zero.
+static RANGE_STEP_ZERO_MSG: &[u8] = b"range step zero - loop infinito evitado (use step != 0)\0";
+
+/// Ponteiro para a mensagem de panic (como i64 para o codegen).
+fn range_step_zero_msg_ptr() -> i64 {
+    RANGE_STEP_ZERO_MSG.as_ptr() as i64
+}
+
 /// Carrega os campos do Range e produz o valor `done` (boolean cranelift).
 ///
 /// Recebe `coll_val` (ponteiro para o struct Range) e `current` (valor

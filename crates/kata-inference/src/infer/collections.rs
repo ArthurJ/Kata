@@ -6,6 +6,7 @@
 
 use kata_ast::{Expr, Span, Spanned};
 use kata_core::escape::EscapeTarget;
+use kata_core::caps::ConstVal;
 use kata_core::interface_registry::ImplEntry;
 use kata_core::ty::{PrimTy, Ty, TypeEnv, ty_list_to_string};
 use kata_diagnostics::MiddleError;
@@ -288,8 +289,9 @@ pub(crate) fn infer_range_lit(
 
     // Check de neutralidade: se o step é um literal conhecido em compile-time,
     // verificar se é neutro (zero). Step neutro produz range degenerado (loop
-    // infinito). Step dinâmico (não literal) não pode ser verificado — aceitar.
-    check_neutral_step(&typed_step, &step.span)?;
+    // infinito). Step dinâmico (não literal) não pode ser verificado — aceitar
+    // (runtime guard no codegen protege).
+    check_neutral_step(&typed_step, &elem_ty, &step.span)?;
 
     let range_ty = Ty::Range(Box::new(elem_ty.clone()));
 
@@ -349,35 +351,28 @@ fn step_default_literal(elem_ty: &Ty, span: &Span) -> InferResult<TypedExpr> {
 
 /// Verifica se o step de um range é neutro (zero) em compile-time.
 ///
-/// Apenas literais conhecidos são verificados. Expressões dinâmicas
-/// (identificadores, chamadas) não podem ser avaliadas em compile-time
-/// e são aceitas sem check — o usuário assume a responsabilidade.
-fn check_neutral_step(typed_step: &TypedExpr, span: &Span) -> InferResult<()> {
-    match &typed_step.kind {
-        TypedExprKind::IntLit { text } => {
-            let val: i64 = text.parse().unwrap_or(0);
-            if val == 0 {
-                return Err(MiddleError::TypeMismatch {
-                    expected: "range step não-neutro (step ≠ 0)".into(),
-                    found: format!("step = {val} — range degenerado (loop infinito)"),
-                    span: (*span).into(),
-                });
-            }
-        }
-        TypedExprKind::FloatLit { text } => {
-            let val: f64 = text.parse().unwrap_or(0.0);
-            if val == 0.0 {
-                return Err(MiddleError::TypeMismatch {
-                    expected: "range step não-neutro (step ≠ 0.0)".into(),
-                    found: format!("step = {val} — range degenerado (loop infinito)"),
-                    span: (*span).into(),
-                });
-            }
-        }
+/// Usa `typed_expr_to_const_val` para extrair o valor do step e
+/// `ConstVal::zero_for_ty` para obter o zero do tipo (espelha a
+/// função `zero` da interface NUM). Cobre Int, Float, e Rational.
+/// Step dinâmico (não literal) não pode ser avaliado — aceito.
+fn check_neutral_step(typed_step: &TypedExpr, step_ty: &Ty, span: &Span) -> InferResult<()> {
+    let Some(step_val) = super::const_eval::typed_expr_to_const_val(typed_step) else {
         // Step dinâmico — não pode verificar em compile-time.
-        _ => {}
+        return Ok(());
+    };
+    let Some(zero) = ConstVal::zero_for_ty(step_ty) else {
+        // Tipo não-NUM — não há noção de zero.
+        return Ok(());
+    };
+    if step_val == zero {
+        Err(MiddleError::TypeMismatch {
+            expected: "range step não-neutro (step ≠ 0) — use NonZero ou step != 0".into(),
+            found: format!("step = {step_val:?} — range degenerado (loop infinito)"),
+            span: (*span).into(),
+        })
+    } else {
+        Ok(())
     }
-    Ok(())
 }
 
 // ── ForIn ────────────────────────────────────────────────────────────────

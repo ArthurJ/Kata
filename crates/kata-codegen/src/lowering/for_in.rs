@@ -164,6 +164,8 @@ pub(crate) fn lower_for_in(
             ctx.builder.seal_block(continue_block);
         }
         Ty::Range(_) => {
+            // Runtime guard: step == 0 → panic (loop infinito evitado).
+            super::range_iter::range_check_step(coll_val, var_ty, ctx);
             // Range: percorre current = start, current += step,
             // condição detecta step negativo e flag inclusive (offset 24).
             let flags = MemFlagsData::new();

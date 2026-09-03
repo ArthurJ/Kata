@@ -242,6 +242,8 @@ pub(crate) fn lower_fold(
             ctx.builder.seal_block(continue_block);
         }
         Ty::Range(_) => {
+            // Runtime guard: step == 0 → panic.
+            super::range_iter::range_check_step(coll_val, elem_ty, ctx);
             let flags = MemFlagsData::new();
             let start_val = ctx.builder.ins().load(I64, flags, coll_val, 0);
             let current_var = ctx.new_var("__fold_current", I64);

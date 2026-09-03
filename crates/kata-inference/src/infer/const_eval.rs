@@ -10,6 +10,7 @@
 
 use kata_ast::{Expr, Spanned};
 use kata_core::caps::ConstVal;
+use crate::typed::{TypedExpr, TypedExprKind};
 
 use std::cmp::Ordering;
 
@@ -166,6 +167,46 @@ pub(crate) fn eval_const(expr: &Spanned<Expr>) -> Option<ConstVal> {
         },
         // Grouping: desembrulha recursivamente.
         Expr::Grouping { inner } => eval_const(inner),
+        _ => None,
+    }
+}
+
+/// Extrai valor constante canônico (`ConstVal`) de um `TypedExpr`.
+///
+/// Equivalente a `eval_const` (que trabalha com `Expr`), mas para o
+/// TAST pós-inferência. Suporta IntLit, FloatLit, `rational N` (Closure
+/// com callee `Ident("rational")` e 1 arg), e Grouping. Retorna `None`
+/// para expressões não-literais.
+pub(crate) fn typed_expr_to_const_val(typed: &TypedExpr) -> Option<ConstVal> {
+    match &typed.kind {
+        TypedExprKind::IntLit { text } => Some(ConstVal::Int(text.parse::<i64>().ok()?)),
+        TypedExprKind::FloatLit { text } => Some(ConstVal::Float(text.parse::<f64>().ok()?)),
+        TypedExprKind::Grouping { inner } => typed_expr_to_const_val(&inner.node),
+        // `rational N` → ConstVal::Rat(N, 1)
+        TypedExprKind::Closure { callee, args, .. }
+            if args.len() == 1
+                && matches!(&callee.node.kind, TypedExprKind::Ident { name } if name == "rational") =>
+        {
+            let inner = typed_expr_to_const_val(&args[0].node)?;
+            match inner {
+                ConstVal::Int(n) => Some(ConstVal::Rat(n, 1)),
+                ConstVal::Float(f) => Some(ConstVal::Rat(f as i64, 1)),
+                _ => None,
+            }
+        }
+        // Literais negativos: Closure { Ident("-"), [lit] }
+        TypedExprKind::Closure { callee, args, .. }
+            if args.len() == 1
+                && matches!(&callee.node.kind, TypedExprKind::Ident { name } if name == "-") =>
+        {
+            let inner = typed_expr_to_const_val(&args[0].node)?;
+            match inner {
+                ConstVal::Int(v) => Some(ConstVal::Int(-v)),
+                ConstVal::Float(v) => Some(ConstVal::Float(-v)),
+                ConstVal::Rat(n, d) => Some(ConstVal::Rat(-n, d)),
+                _ => None,
+            }
+        }
         _ => None,
     }
 }

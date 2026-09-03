@@ -118,6 +118,20 @@ pub enum ConstVal {
 }
 
 impl ConstVal {
+    /// Retorna o valor zero para um tipo NUM (Int, Float, Rational).
+    ///
+    /// Espelha a função `zero` da interface NUM em stdlib/core.kata:
+    /// Int → 0, Float → 0.0, Rational → rational 0 (Rat(0, 1)).
+    /// Retorna `None` para tipos não-NUM.
+    pub fn zero_for_ty(ty: &Ty) -> Option<ConstVal> {
+        match ty {
+            Ty::Prim(PrimTy::Int) => Some(ConstVal::Int(0)),
+            Ty::Prim(PrimTy::Float) => Some(ConstVal::Float(0.0)),
+            Ty::Prim(PrimTy::Rational) => Some(ConstVal::Rat(0, 1)),
+            _ => None,
+        }
+    }
+
     /// Compara dois `ConstVal` para ordenação (usado por `extract_bound`
     /// e `enum_refined_domain` quando o tipo implementa ORD).
     ///
