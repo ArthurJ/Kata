@@ -3,6 +3,8 @@
 //! Extraído de `module.rs` para separar a responsabilidade de compilação
 //! de funções nomeadas (múltiplas cláusulas) da orquestração do entry point.
 
+mod epilogue;
+
 use std::collections::HashMap;
 
 use cranelift_codegen::ir::types::{F64, I64};
@@ -27,8 +29,10 @@ use super::clause::{
 use super::expr::lower_expr;
 use super::module::{CodegenError, FuncKey, StringTable};
 use super::tail_call::has_tail_pos_call;
-use super::timer::{inject_timer_start, inject_timer_stop};
+use super::timer::inject_timer_start;
 use crate::metadata::MetadataTable;
+
+use epilogue::{emit_close_io_handles, lower_epilogue};
 
 /// Verifica se uma função precisa do wrapper/inner split.
 ///
@@ -57,7 +61,7 @@ pub(crate) fn needs_split(func: &TypedFunction) -> bool {
 /// faz bitcast F64→I64. Necessário para construtores identity de alias
 /// de primitivos Float, onde o body retorna F64 mas a assinatura
 /// retorna I64 (`Ty::Struct` → I64).
-fn coerce_return(
+pub(super) fn coerce_return(
     result: cranelift_codegen::ir::Value,
     ret_ty: &Ty,
     lower: &mut LowerCtx,
@@ -84,17 +88,17 @@ pub(crate) enum BodyKind {
 }
 
 /// Resultado do prólogo: valores que o epílogo precisa.
-struct PrologueResult {
+pub(super) struct PrologueResult {
     /// (handle, key_slot, key_len) se @cache está ativo.
-    cache_handle: Option<(
+    pub(super) cache_handle: Option<(
         cranelift_codegen::ir::Value,
         cranelift_codegen::ir::Value,
         cranelift_codegen::ir::Value,
     )>,
     /// Valor de start do timer se @timer está ativo.
-    timer_start: Option<cranelift_codegen::ir::Value>,
+    pub(super) timer_start: Option<cranelift_codegen::ir::Value>,
     /// Se o epilogue_block foi criado (precisa de cache_insert/timer_stop/synthetic_post).
-    needs_epilogue: bool,
+    pub(super) needs_epilogue: bool,
 }
 
 /// Lowera o prólogo: synthetic_pre → timer start → cache lookup.
@@ -279,74 +283,6 @@ fn lower_prologue(
         timer_start,
         needs_epilogue,
     })
-}
-
-/// Lowera o epílogo: cache_insert → timer_stop → synthetic_post → return.
-fn lower_epilogue(
-    lower: &mut LowerCtx,
-    name: &str,
-    ret_ty: &Ty,
-    clauses: &[TypedLambdaClause],
-    timer_spec: &Option<TimerSpec>,
-    prologue: &PrologueResult,
-) -> Result<(), CodegenError> {
-    let epi = lower
-        .epilogue_block
-        .expect("epilogue_block definido quando needs_epilogue");
-    lower.builder.switch_to_block(epi);
-    lower.builder.seal_block(epi);
-    let result = lower.builder.block_params(epi)[0];
-
-    emit_close_io_handles(lower);
-
-    // @cache insert.
-    if let Some((handle_val, key_slot, key_len_val)) = &prologue.cache_handle {
-        let insert_fn = lower
-            .ffi_refs
-            .get("kata_rt_cache_insert")
-            .expect("kata_rt_cache_insert registrado");
-        let result_ty = lower.builder.func.dfg.value_type(result);
-        let result_i64 = if result_ty != I64 {
-            lower
-                .builder
-                .ins()
-                .bitcast(I64, MemFlagsData::new(), result)
-        } else {
-            result
-        };
-        lower.builder.ins().call(
-            *insert_fn,
-            &[*handle_val, *key_slot, *key_len_val, result_i64],
-        );
-    }
-
-    // @timer stop + publish.
-    if let Some(ts) = timer_spec
-        && let Some(start) = prologue.timer_start
-    {
-        inject_timer_stop(ts, name, start, lower)?;
-    }
-
-    // synthetic_post (diretivas Exit customizadas).
-    let has_synthetic_post = clauses.iter().any(|c| !c.synthetic_post.is_empty());
-    if has_synthetic_post {
-        let ret_clif_ty = super::resolve_clif_ty(ret_ty, lower.struct_registry);
-        lower.new_var("_return", ret_clif_ty);
-        let return_var = *lower
-            .var_map
-            .get("_return")
-            .expect("_return var must exist after new_var");
-        lower.builder.def_var(return_var, result);
-
-        for post_expr in &clauses[0].synthetic_post {
-            lower_expr(&post_expr.node, lower)?;
-        }
-    }
-
-    let result = coerce_return(result, ret_ty, lower);
-    lower.emit_depth_dec();
-    lower.builder.ins().return_(&[result]);
-    Ok(())
 }
 
 /// Declara uma função Kata nomeada no JITModule (sem definir ainda).
@@ -848,34 +784,4 @@ pub(crate) fn define_kata_function(
     }
 
     Ok(())
-}
-
-/// Emite close para cada variável em `io_handle_vars` no epílogo de uma
-/// função. I/O handles não fechados explicitamente pelo programador são
-/// fechados automaticamente antes do return.
-fn emit_close_io_handles(lower: &mut LowerCtx) {
-    if lower.io_handle_vars.is_empty() {
-        return;
-    }
-    let file_close_ref = lower
-        .ffi_refs
-        .get("kata_rt_file_close")
-        .copied()
-        .unwrap_or_else(|| panic!("kata_rt_file_close não encontrado em ffi_refs"));
-    let socket_close_ref = lower
-        .ffi_refs
-        .get("kata_rt_socket_close")
-        .copied()
-        .unwrap_or_else(|| panic!("kata_rt_socket_close não encontrado em ffi_refs"));
-    for (var, kind) in &lower.io_handle_vars {
-        let val = lower.builder.use_var(*var);
-        match kind {
-            super::IoHandleKind::File => {
-                lower.builder.ins().call(file_close_ref, &[val]);
-            }
-            super::IoHandleKind::Socket => {
-                lower.builder.ins().call(socket_close_ref, &[val]);
-            }
-        }
-    }
 }
