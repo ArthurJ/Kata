@@ -85,14 +85,6 @@ Fase 5 Rational (const-eval de `rational <lit>` + par (num, den) no
 Z3). Oráculos adversariais K medidos em `b5e2d9e` (3 níveis, grade
 multi-param, arity-tuple).
 
-### Typeck — variante sem payload como argumento (#K-call)
-**Estado:** Pendente (medido em `b5e2d9e`, 2026-08-30). `foo None` e
-até `foo Optional::None` (qualificado) dão `type.no_overload` mesmo
-no 2º nível (`Optional::(Boolean)`). Variante sem payload é
-inexpressível como ARGUMENTO — só pattern. Consistente com
-ret-directed dispatch (`Expr::Ident` não consulta hint), mas limita
-a linguagem. Decisão de design, PRD quando atacar.
-
 ### Typeck — enum user-defined como payload de genérico (#K-enum-payload)
 **Estado:** Pendente (medido em `b5e2d9e`). `Optional::(Encoding)` →
 `type.mismatch` esperado `Encoding`, encontrado `Sum(Encoding) or
@@ -110,9 +102,9 @@ código-fonte e, quando possível, executado em ambos backends (JIT
 e interpretador).
 
 **Resumo:** 19 achados (A1–A12 + A3b–A3g). Resolvidos: A1, A2, A3b,
-A3c, A3e, A3f, A3g, A5, A11, e item adjacente #4 (JIT crash NonZero::Float).
+A3c, A3e, A3f, A3g, A5, A7, A11, e item adjacente #4 (JIT crash NonZero::Float).
 Débito técnico de null-check (Cat 1, 2, 3) totalmente resolvido.
-Pendentes: 5 médios, 2 baixos.
+Pendentes: 4 médios, 2 baixos.
 
 ### 🟡 Médio — buracos funcionais que limitam a linguagem
 
@@ -139,9 +131,10 @@ serializa primitivos; compostos = miss conservador permanente.
 
 #### A7. Variante sem payload como argumento é inexpressível
 
-**Estado:** (já documentado acima em "Typeck — variante sem payload
-como argumento (#K-call)"). `foo None` e `foo Optional::None` dão
-`type.no_overload`.
+**Estado:** Resolvido (2026-09-04). `match_score` agora trata `Ty::Var`
+dentro de `Ty::Generic` como compatível (alinhado com `fits_return`).
+`resolve_with_swap` caminho Ok aplica `unify` + `apply_subs` em overloads
+genéricas. Ver `PRD-variant-as-argument.md`.
 
 #### A8. `show` de Struct incompleto no interpretador
 
