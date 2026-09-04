@@ -44,11 +44,9 @@ do scheduler. Mudar para propagar erro requer reformular a interface
 trampoline/scheduler ou usar um canal lateral (e.g. célula
 `Mutex<Option<InterpError>>` no `InterpCtx`).
 
-Descoberto ao resolver A3f/A3g (2026-09-03).
-
 ### 🟢 Baixo
 
-#### A12. `spawn!` no Windows é stub
+#### `spawn!` no Windows é stub
 
 `src/ipc.rs:157` — Implementar `spawn` no Windows. Ver
 `docs/PRDs/PRD-portability-windows.md`.
@@ -88,17 +86,3 @@ incompatíveis — decisão de design pendente.
 - **`select_arms_different_types`** — test placeholder em
   `kata-inference/tests/csp_typeck.rs:221`, depende de T0 unification.
   Corpo vazio, sem assertions.
-
----
-
-## Auditoria de completude — 2026-09-02
-
-Análise conjunta (agente principal GLM-5.2 + sub-agente GLM-5.3 +
-sub-agente kimi-k3:cloud) com probes reais. Cada item validado no
-código-fonte e, quando possível, executado em ambos backends (JIT e
-interpretador).
-
-19 achados (A1–A12 + A3b–A3g). Resolvidos: A1, A2, A3b, A3c, A3d, A3e,
-A3f, A3g, A5, A6, A7, A8, A9, A10, A11, e item adjacente #4 (JIT crash
-NonZero::Float). Débito técnico de null-check (Cat 1, 2, 3) totalmente
-resolvido. Pendente: A12 (baixo).
