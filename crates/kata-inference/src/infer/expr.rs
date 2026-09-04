@@ -151,10 +151,11 @@ pub(crate) fn infer_expr(
 
 /// Verifica se `actual` cabe em `declared` — direcional (não simétrica).
 /// `Var("T")` no actual significa "não-constrangido" e aceita o declarado.
+/// `Var("T")` no declared significa "genérico" e aceita qualquer actual.
 /// Recursiva dentro de `Generic`.
 pub(crate) fn fits_return(actual: &Ty, declared: &Ty) -> bool {
     match (actual, declared) {
-        (Ty::Var(_), _) => true,
+        (Ty::Var(_), _) | (_, Ty::Var(_)) => true,
         // `return Err(e)` from `?` desugar: Result with unresolved type param
         // is a bottom/divergent expression — accept regardless of declared return type.
         (Ty::Generic(n, args), _)
