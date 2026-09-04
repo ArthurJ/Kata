@@ -20,7 +20,7 @@ use super::apply_len_tuple::try_len_tuple;
 use super::apply_repr::try_repr;
 use super::apply_show_tuple::try_show_tuple;
 use super::collections_hof::{infer_filter, infer_fold, infer_map};
-use super::expr::{InferCtx, infer_expr};
+use super::expr::{InferCtx, infer_expr, infer_expr_hinted};
 use super::helpers::{InferResult, peel_grouping_expr};
 use super::iface_dispatch::try_iface_method_dispatch;
 use super::variant_construct::{VariantCall, infer_variant_construct};
@@ -201,12 +201,52 @@ pub(crate) fn infer_apply(
         return result;
     }
 
+    // ── Estratégia B: propagar param types como hint ao inferir args ──
+    //
+    // Se o callee está no DispatchTable e há exatamente uma overload com
+    // a aridade correta, os param types dela são usados como hint ao
+    // inferir cada argumento. Isso permite que construção de variants
+    // (ex: `Ok 5` como arg de `foo :: Result::(Int, Encoding) => Text`)
+    // receba o `expected_ty` correto, permitindo que `ty_var_compatible`
+    // resolva Vars não-preenchidos no dispatch em vez de defaults
+    // prematuros sobrescreverem-nos.
+    //
+    // Se há múltiplas overloads (ambíguo sem arg types), não propaga hint
+    // — deixa o fluxo original inferir args isoladamente e resolver o
+    // dispatch depois.
+    let param_hints: Vec<Option<Ty>> = if ctx.table.has_function(&func_name) {
+        if let Some(overloads) = ctx.table.get_overloads(&func_name) {
+            let arity_matches: Vec<&OverloadInfo> = overloads
+                .iter()
+                .filter(|oi| oi.params.len() == args.len())
+                .collect();
+            if arity_matches.len() == 1 {
+                arity_matches[0]
+                    .params
+                    .iter()
+                    .map(|p| Some(p.clone()))
+                    .collect()
+            } else {
+                vec![None; args.len()]
+            }
+        } else {
+            vec![None; args.len()]
+        }
+    } else {
+        vec![None; args.len()]
+    };
+
     // Infere tipos dos argumentos recursivamente (tail_pos = false para args).
+    // Se há param_hints (estratégia B), passa o hint correspondente.
     let mut typed_args: Vec<Spanned<TypedExpr>> = Vec::with_capacity(args.len());
     let mut arg_types: Vec<Ty> = Vec::with_capacity(args.len());
 
-    for arg in args {
-        let typed = infer_expr(&arg.node, &arg.span, env, ctx, false)?;
+    for (i, arg) in args.iter().enumerate() {
+        let typed = if let Some(hint_ty) = &param_hints.get(i).and_then(|h| h.as_ref()) {
+            infer_expr_hinted(&arg.node, &arg.span, env, ctx, false, Some(hint_ty))?
+        } else {
+            infer_expr(&arg.node, &arg.span, env, ctx, false)?
+        };
         arg_types.push(typed.ty.clone());
         typed_args.push(Spanned::new(typed, arg.span));
     }
