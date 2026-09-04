@@ -255,7 +255,25 @@ pub(crate) fn try_dispatch_table(
             {
                 return Some(Err(e));
             }
-            let expanded_ret = super::apply::expand_ret(&overload.ret, ctx);
+            // Se a overload tem type_params, unify com arg_types para resolver
+            // o tipo de retorno concreto (ex: T→Int a partir de Result::(T, E)).
+            let expanded_ret = if !overload.type_params.is_empty() {
+                let mut subs: super::generics::Substitutions = HashMap::new();
+                match super::generics::unify(
+                    &overload.params,
+                    arg_types,
+                    &overload.type_params,
+                    &mut subs,
+                ) {
+                    Ok(_) => {
+                        let concrete_ret = super::generics::apply_subs(&overload.ret, &subs);
+                        super::apply::expand_ret(&concrete_ret, ctx)
+                    }
+                    Err(_) => super::apply::expand_ret(&overload.ret, ctx),
+                }
+            } else {
+                super::apply::expand_ret(&overload.ret, ctx)
+            };
             let callee_ty = Ty::Function(overload.params.clone(), Box::new(expanded_ret.clone()));
             let callee_typed = TypedExpr {
                 span: callee.span,
