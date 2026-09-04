@@ -256,7 +256,7 @@ fn lower_prologue(
         };
         // Cache hit: depth_dec antes de return (o depth_inc já foi emitido
         // no prólogo da função, antes de lower_prologue).
-        // Só emitir se depth_tracking está ativo (wrappers não trackeam).
+        // Wrapper e inner ambos trackeiam (A9: depth_tracking cobre CallInner).
         if lower.depth_tracking {
             let rt_val = lower.rt.unwrap_or_else(|| builder.ins().iconst(I64, 0));
             let dec_fn = lower
@@ -318,7 +318,7 @@ pub(crate) fn declare_kata_function(
 
 /// Compila o corpo de uma função Kata (nomeada ou anônima).
 ///
-/// Pipeline unificado: prólogo (synthetic_pre + timer + cache) → body
+/// Pipeline unificado: prólogo (synthetic_pre + timer + cache + depth) → body
 /// (cláusulas ou `call inner`) → epílogo (cache_insert + timer_stop +
 /// synthetic_post + return).
 ///
@@ -328,6 +328,13 @@ pub(crate) fn declare_kata_function(
 ///
 /// `no_tail_calls`: wrapper do split usa `true` (nunca return_call); inner
 /// e funções sem split usam `false` (TCO ativo).
+///
+/// `depth_tracking`: se a função trackeia profundidade (depth_inc no
+/// prólogo, depth_dec antes de return). No split, **ambos** wrapper e
+/// inner trackeiam — cada frame na stack conta. Sem split, a própria
+/// função trackeia. TCO no inner não cresce stack: depth_inc seguido de
+/// depth_dec antes do return_call = net zero. Cache hit no wrapper:
+/// depth_inc → hit → depth_dec → return = net zero (inner nunca chamado).
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn define_function_body(
     name: &str,
@@ -339,6 +346,7 @@ pub(crate) fn define_function_body(
     timer_spec: &Option<TimerSpec>,
     body_kind: BodyKind,
     no_tail_calls: bool,
+    depth_tracking: bool,
     func_id: cranelift_module::FuncId,
     ir_name: &str,
     module: &mut dyn ModuleBackend,
@@ -434,7 +442,7 @@ pub(crate) fn define_function_body(
             rt: None,
             dump_ir,
             ir_dump,
-            depth_tracking: matches!(body_kind, BodyKind::Clauses),
+            depth_tracking,
         };
 
         let rt_value = params[0];
@@ -503,8 +511,9 @@ pub(crate) fn define_function_body(
         }
 
         // ── Depth tracking prólogo ──
-        // Inner functions e funções sem split incrementam depth no prólogo.
-        // Wrappers (CallInner) não trackeam — o inner faz isso.
+        // Tanto wrapper quanto inner trackeiam depth (A9: CallInner agora
+        // trackeia). Cada frame na stack conta. TCO no inner: depth_inc
+        // seguido de depth_dec antes do return_call = net zero.
         // Emitido após a criação do epilogue_block para que o overflow_block
         // possa jumpar para ele (garantindo coerce_return no valor dummy).
         if lower.depth_tracking {
@@ -716,6 +725,7 @@ pub(crate) fn define_kata_function(
             &None,
             BodyKind::Clauses,
             false, // inner: TCO ativo
+            true,  // inner: trackeia depth (cada frame conta)
             inner_id,
             &func.name,
             module,
@@ -742,6 +752,7 @@ pub(crate) fn define_kata_function(
             &func.timer_spec,
             BodyKind::CallInner { inner_id },
             true, // wrapper: nunca return_call
+            true, // wrapper: trackeia depth (a chamada lógica)
             func_id,
             &wrapper_ir_name,
             module,
@@ -768,6 +779,7 @@ pub(crate) fn define_kata_function(
             &func.timer_spec,
             BodyKind::Clauses,
             false,
+            true, // sem split: a própria função trackeia depth
             func_id,
             &func.name,
             module,

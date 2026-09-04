@@ -516,6 +516,7 @@ pub(crate) fn lower_expr(
                 &None, // lambdas anônimos não têm @timer
                 crate::lowering::function_def::BodyKind::Clauses,
                 false, // lambdas anônimos: TCO ativo
+                true,  // lambdas anônimos: trackeia depth
                 func_id,
                 &name,
                 ctx.module,

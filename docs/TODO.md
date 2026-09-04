@@ -104,9 +104,9 @@ código-fonte e, quando possível, executado em ambos backends (JIT
 e interpretador).
 
 **Resumo:** 19 achados (A1–A12 + A3b–A3g). Resolvidos: A1, A2, A3b,
-A3c, A3e, A3f, A3g, A5, A7, A11, e item adjacente #4 (JIT crash NonZero::Float).
+A3c, A3e, A3f, A3g, A5, A7, A9, A11, e item adjacente #4 (JIT crash NonZero::Float).
 Débito técnico de null-check (Cat 1, 2, 3) totalmente resolvido.
-Pendentes: 4 médios, 2 baixos.
+Pendentes: 3 médios, 1 baixo.
 
 ### 🟡 Médio — buracos funcionais que limitam a linguagem
 
@@ -143,13 +143,12 @@ show incompleto no interp (`show.rs:265-270`). Funciona no JIT via
 
 #### A9. JIT depth tracking não cobre `BodyKind::CallInner`
 
-**Estado:** `depth_tracking: matches!(body_kind, BodyKind::Clauses)`
-— wrappers CallInner não incrementam depth. Wrappers "grátis"
-subestimam profundidade real.
-
-**Localização:** `crates/kata-codegen/src/lowering/function_def.rs:501`.
-
-**Prioridade:** média — stack pode exceder antes do contador.
+**Estado:** Resolvido (2026-09-04). `depth_tracking` agora é parâmetro
+explícito de `define_function_body` em vez de derivado de `body_kind`.
+No split, **ambos** wrapper e inner trackeiam — cada frame na stack conta.
+Antes, o wrapper (`CallInner`) não trackeia, subestimando profundidade.
+TCO no inner: `depth_inc` + `depth_dec` antes do `return_call` = net zero.
+Cache hit no wrapper: `depth_inc` → hit → `depth_dec` → return = net zero.
 
 #### A10. Enum user-defined como payload de genérico falha no typeck
 
