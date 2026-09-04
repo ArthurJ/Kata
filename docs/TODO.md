@@ -1,31 +1,12 @@
 # TODO — Kata-Lang
 
-Único arquivo de pendências. Atualizado 2026-09-04.
+Único arquivo de pendências. Atualizado 2026-09-04 (A6 resolvido).
 
 Os docs `TODO-*.md` foram removidos (obsoletos ou resolvidos). Pendências vivem aqui.
 
 ---
 
 ## Débito Técnico
-
-### Paridade de cache: tipos compostos na key do interp
-
-**Estado:** o interp serializa a key de `@cache` por conteúdo apenas
-para primitivos (Int/Float/Text). List/Struct/Tuple/Sum caem em miss
-conservador PERMANENTE (executa + não insere) — o cache nunca aquece
-para esses tipos. O JIT cobre compostos via type descriptor completo
-(`cache_key.rs`).
-
-**Impacto:** baixo hoje (compostos em função `@cache` perdem memoização
-no interp, divergem do JIT só em custo, não em valor). Mas fib-like
-sobre List penduraria o interp e não o JIT.
-
-**Quando surgir caso de uso real:** estender `serialize_key_part` com o
-mesmo type descriptor do codegen — a serialização é struct-tag-value
-recursiva, sem dependência de codegen (dá para mover para crate
-compartilhada).
-
-**Prioridade:** média.
 
 ---
 
@@ -95,16 +76,20 @@ código-fonte e, quando possível, executado em ambos backends (JIT
 e interpretador).
 
 **Resumo:** 19 achados (A1–A12 + A3b–A3g). Resolvidos: A1, A2, A3b,
-A3c, A3d, A3e, A3f, A3g, A5, A7, A8, A9, A10, A11, e item adjacente #4 (JIT crash NonZero::Float).
+A3c, A3d, A3e, A3f, A3g, A5, A6, A7, A8, A9, A10, A11, e item adjacente #4 (JIT crash NonZero::Float).
 Débito técnico de null-check (Cat 1, 2, 3) totalmente resolvido.
-Pendentes: 1 médio, 1 baixo.
+Pendentes: 0 médios, 1 baixo.
 
 ### 🟡 Médio — buracos funcionais que limitam a linguagem
 
-#### A6. `@cache` no interp: miss permanente para tipos compostos
+#### A6. `@cache` no interp: miss permanente para tipos compostos — RESOLVIDO 2026-09-04
 
-**Estado:** (já documentado acima em "Débito Técnico"). Interp só
-serializa primitivos; compostos = miss conservador permanente.
+**Resolvido:** `serialize_key_part` agora serializa List, Tuple, Struct,
+Array, Sum e Unit recursivamente por conteúdo, espelhando
+`kata_rt_serialize_key` do runtime. `StructRegistry` passado como
+parâmetro adicional. Set/Dict permanecem miss conservador (JIT também
+não suporta). 8 testes E2E em `cache_interp_e2e.rs` com paridade
+interp↔JIT.
 
 #### A8. `show` de Struct incompleto no interpretador — RESOLVIDO 2026-09-04
 
