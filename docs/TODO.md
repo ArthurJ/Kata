@@ -95,9 +95,9 @@ código-fonte e, quando possível, executado em ambos backends (JIT
 e interpretador).
 
 **Resumo:** 19 achados (A1–A12 + A3b–A3g). Resolvidos: A1, A2, A3b,
-A3c, A3d, A3e, A3f, A3g, A5, A7, A9, A10, A11, e item adjacente #4 (JIT crash NonZero::Float).
+A3c, A3d, A3e, A3f, A3g, A5, A7, A8, A9, A10, A11, e item adjacente #4 (JIT crash NonZero::Float).
 Débito técnico de null-check (Cat 1, 2, 3) totalmente resolvido.
-Pendentes: 2 médios, 1 baixo.
+Pendentes: 1 médio, 1 baixo.
 
 ### 🟡 Médio — buracos funcionais que limitam a linguagem
 
@@ -106,15 +106,14 @@ Pendentes: 2 médios, 1 baixo.
 **Estado:** (já documentado acima em "Débito Técnico"). Interp só
 serializa primitivos; compostos = miss conservador permanente.
 
-#### A8. `show` de Struct incompleto no interpretador
+#### A8. `show` de Struct incompleto no interpretador — RESOLVIDO 2026-09-04
 
-**Estado:** `struct_field_count` retorna 0 — structs com campos têm
-show incompleto no interp (`show.rs:265-270`). Funciona no JIT via
-`show_synthesis`.
-
-**Localização:** `crates/kata-interp/src/show.rs:265-270`.
-
-**Prioridade:** média — `echo!(show minhaStruct)` não funciona no interp.
+**Resolvido:** `struct_field_count` removido; `show_struct` agora consulta o
+`StructInfo` real do `struct_registry` (campos com nome e tipo). Introduzido
+`repr_value` (quoteia Text dentro de containers) para paridade com
+`repr_expr` do codegen. Separadores de List/Array corrigidos de espaço
+para `, `. Testes E2E em `show_struct_interp_e2e.rs` (10 casos, paridade
+interp↔JIT).
 
 ### 🟢 Baixo-médio — assimetrias e gaps menores
 
