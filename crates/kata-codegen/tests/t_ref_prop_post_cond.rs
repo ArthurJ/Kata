@@ -37,27 +37,6 @@ fn eval_src(src: &str) -> (i64, Ty) {
     (jit.raw, jit.ty)
 }
 
-fn infer_src(src: &str) -> Result<kata_inference::TypedModule, kata_diagnostics::MiddleError> {
-    let tokens = lex(src).expect("lex deve succeed");
-    let module = parse(tokens).expect("parse deve succeed");
-    let prelude = load_stdlib_for_tests().expect("prelude deve carregar");
-    let user = resolve_with_prelude(
-        &module,
-        "__local__",
-        kata_resolution::DirectiveRegistry::new(),
-        &prelude.interface_registry,
-        &prelude.directive_registry,
-        Some(&prelude.type_graph),
-    )
-    .expect("resolve deve succeed");
-    let resolved = merge_resolved(prelude, user);
-    infer_module(&module, &resolved)
-}
-
-fn infer_fails(src: &str) -> bool {
-    infer_src(src).is_err()
-}
-
 fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModule {
     let mut signatures = prelude.signatures;
     signatures.extend(user.signatures);

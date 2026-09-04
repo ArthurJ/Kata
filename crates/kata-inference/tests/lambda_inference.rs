@@ -74,15 +74,6 @@ fn infer_src(src: &str) -> kata_inference::TypedModule {
     infer_module(&module, &resolved).expect("inferência deve succeed")
 }
 
-fn infer_src_err(src: &str) -> kata_diagnostics::MiddleError {
-    let tokens = lex(src).unwrap();
-    let module = parse(tokens).unwrap();
-    let prelude = load_stdlib_for_tests().unwrap();
-    let user = resolve(&module).unwrap();
-    let resolved = merge_resolved(prelude, user);
-    infer_module(&module, &resolved).expect_err("inferência deve falhar")
-}
-
 fn entry_typed(tmod: &kata_inference::TypedModule) -> &kata_inference::TypedExpr {
     &tmod.entry.node
 }
