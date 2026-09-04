@@ -900,22 +900,22 @@ recai sobre o tipo novo, não sobre os estabelecidos.
 #### 4.1.1. Interfaces Parametrizadas (Genéricas)
 
 Interfaces podem ter **type params** — parâmetros de tipo declarados entre
-parênteses após o nome. A interface `ITERABLE::A` é o exemplo canônico na stdlib:
+parênteses após o nome. A interface `INDEXABLE::A` é um exemplo da stdlib:
 
 ```kata
-interface ITERABLE::A
-    next :: Self => Optional::A
+interface INDEXABLE::A
+    at :: Self Int => Result::A
 ```
 
-O type param `A` representa o tipo do elemento iterado. Ao declarar `impl`, o
+O type param `A` representa o tipo do elemento acessado. Ao declarar `impl`, o
 tipo concreto vincula seus próprios type params ao pattern da interface:
 
 ```kata
-List::A implements ITERABLE::A
-    next :: List::A => Optional::A
+List::A implements INDEXABLE::A
+    at :: List::A Int => Result::A
 
-Array::A implements ITERABLE::A
-    next :: Array::A => Optional::A
+Array::A implements INDEXABLE::A
+    at :: Array::A Int => Result::A
 ```
 
 O motor do typeck registra cada `impl` como um `ImplEntry` contendo:
@@ -923,7 +923,7 @@ O motor do typeck registra cada `impl` como um `ImplEntry` contendo:
 - **`iface_params`** — os parâmetros da interface instanciados (ex: `A`)
 - **`type_params`** — os nomes dos type params do tipo (ex: `A`)
 
-Quando o dispatch encontra uma call sobre `ITERABLE::A`, ele unifica o
+Quando o dispatch encontra uma call sobre `INDEXABLE::A`, ele unifica o
 `type_pattern` do `ImplEntry` com o tipo concreto do receptor para instanciar o
 impl correto.
 
@@ -2285,7 +2285,7 @@ módulo), sempre precedendo imediatamente o item que modificam.
   qualquer função que o compilador precise interceptar — não adicionar
   interceptação ad hoc no typeck.
 
-## 8. Estruturas de Coleções e Iteração (A Interface `ITERABLE`)
+## 8. Estruturas de Coleções e Iteração
 
 A linguagem separa estritamente os tipos de dados básicos das coleções, e o
 *layout* de memória dessas coleções é ditado diretamente pelos delimitadores
@@ -2315,7 +2315,7 @@ sintáticos no momento da declaração.
   `[0..2..10]` (0 a 8 com step 2). Geram um descritor `Range` (struct com
   start, step, end) alocado na arena — os limites são materializados na
   criação, mas a sequência é virtual: cada elemento é computado sob demanda
-  durante a iteração. Implementa `ITERABLE`. Sintaxe: `start..end` (step
+  durante a iteração. Sintaxe: `start..end` (step
   default via `STEPPABLE`), `start..=end` (inclusivo, step default),
   `start..step..end` (step explícito, exclusivo), `start..step..=end`
   (step explícito, inclusivo). Range degenerado (step não progressivo)
@@ -2325,12 +2325,6 @@ sintáticos no momento da declaração.
 
 As coleções implementam interfaces parametrizadas que definem contratos
 uniformes para operações comuns:
-
-**`ITERABLE::A`** — Iteração:
-```kata
-interface ITERABLE::A
-    next :: Self => Optional::A
-```
 
 **`COUNTABLE`** — Tamanho:
 ```kata
@@ -2364,15 +2358,15 @@ Struct, Tuple, Sum) precisam de hash semântico que conhece o tipo. `Int`,
 
 Implementações na stdlib:
 
-| Tipo | ITERABLE | COUNTABLE | INDEXABLE | CONTAINS | HASHABLE |
-|---|---|---|---|---|---|
-| `Array::A` | ✅ | ✅ (`kata_rt_array_len`) | ✅ (`kata_rt_array_get_checked`) | ✅ | — |
-| `List::A` | ✅ | ✅ (traversal stdlib) | ✅ (traversal stdlib) | ✅ | — |
-| `Text` | ✅ | ✅ (`kata_rt_string_len`) | ✅ (`kata_rt_string_get_checked`) | ✅ | ✅ |
-| `Range` | ✅ | ✅ (compile-time) | — | — | — |
-| `Dict::(K, V)` | ✅ | ✅ (`kata_rt_dict_len`) | ✅ (`kata_rt_dict_get_checked`, chave) | ✅ (`kata_rt_dict_contains`) | K deve implementar |
-| `Set::T` | ✅ | ✅ (`kata_rt_set_len`) | — | ✅ (`kata_rt_set_contains`) | T deve implementar |
-| `Tuple` | — | special case (síntese) | special case (compile-time) | — | — |
+| Tipo | COUNTABLE | INDEXABLE | CONTAINS | HASHABLE |
+|---|---|---|---|---|
+| `Array::A` | ✅ (`kata_rt_array_len`) | ✅ (`kata_rt_array_get_checked`) | ✅ | — |
+| `List::A` | ✅ (traversal stdlib) | ✅ (traversal stdlib) | ✅ | — |
+| `Text` | ✅ (`kata_rt_string_len`) | ✅ (`kata_rt_string_get_checked`) | ✅ | ✅ |
+| `Range` | ✅ (compile-time) | — | — | — |
+| `Dict::(K, V)` | ✅ (`kata_rt_dict_len`) | ✅ (`kata_rt_dict_get_checked`, chave) | ✅ (`kata_rt_dict_contains`) | K deve implementar |
+| `Set::T` | ✅ (`kata_rt_set_len`) | — | ✅ (`kata_rt_set_contains`) | T deve implementar |
+| `Tuple` | special case (síntese) | special case (compile-time) | — | — |
 
 Tuple não implementa interfaces — é um tipo estrutural, não nominal. `len` e
 `.N` em Tuple são special cases do typeck (ver §14.3).

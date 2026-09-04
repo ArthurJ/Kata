@@ -120,7 +120,7 @@ Fio 1: Fundação + Aritmética + CLI
 │   │   Maquinaria: Ty::Sum com payload, :: em type params, match
 │   │              general case
 │   │
-│   └── Fio 8: Coleções, ITERABLE, Stream Fusion — ✅ Concluído
+│   └── Fio 8: Coleções, Stream Fusion — ✅ Concluído
 │       │   (List, Array, Range, map/filter/fold, .N, len, INDEXABLE,
 │       │    COUNTABLE, `for x in` iteration)
 │       │   Fases 1-9 ✅ (DoDs 1-60, 788 testes). Fio 8 Concluído.

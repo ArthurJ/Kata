@@ -171,7 +171,7 @@ main!()
 
 ## `for` — iteração em actions
 
-`for x in coleção` itera sobre qualquer coleção que implemente `ITERABLE`:
+`for x in coleção` itera sobre qualquer coleção builtin (List, Array, Range, Text, Dict, Set):
 
 ```kata
 action main

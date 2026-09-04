@@ -1,11 +1,17 @@
-# PRD — Fio 8: Coleções, ITERABLE, Stream Fusion
+# PRD — Fio 8: Coleções, Stream Fusion
 
 ## Visão
 
 Fio 8 introduz coleções (List, Array, Range), interfaces de coleção
-(ITERABLE, COUNTABLE, INDEXABLE, CONTAINS), iteração (`for x in`), operações
+(COUNTABLE, INDEXABLE, CONTAINS), iteração (`for x in`), operações
 high-order (`map`, `filter`, `fold` via `@builtin`), stream fusion, e
 operador de membership (`in`).
+
+> **Nota (2026-09-04):** A interface `ITERABLE` e o método `next` foram
+> removidos. `for in` é um compiler intrinsic com dispatch por tipo concreto
+> no codegen (List → Cons cells, Array → índices, Range → start/step/done).
+> O typeck extrai o elemento por match direto em `Ty`, não via InterfaceRegistry.
+> Tipos customizados não podem estender `for in` — não há protocolo de iteração.
 
 Constrói sobre Fio 7 (interfaces, generics, dispatch) e Fio 5 (Tuple
 para special case de `len` e `.N`).
@@ -38,7 +44,7 @@ interfaces que Kata usar para `+` e `>=`). O typeck valida isso estaticamente.
 
 | Keyword | Uso |
 |---|---|
-| `for` | `for x in colecao` — iteração via ITERABLE |
+| `for` | `for x in colecao` — iteração (compiler intrinsic por tipo) |
 
 ### Operadores novos
 
@@ -62,10 +68,14 @@ action soma_array (arr) -> Int
 # Funções puras iteram via map/filter/fold ou recursão.
 ```
 
-`for x in colecao` desugara para iteração via `ITERABLE::next`:
-- Chama `next colecao` → `Optional(A)`
-- `Some(v)` → bind `x := v`, executa body, repete
-- `None` → termina
+`for x in colecao` é um compiler intrinsic com dispatch por tipo concreto
+no codegen (não via interface):
+- `List` → percorre Cons cells (head/tail)
+- `Array` → percorre índices 0..len
+- `Range` → percorre start, current += step, condição done
+- `Text` → percorre codepoints
+- `Dict` → percorre pares (K,V) via HAMT
+- `Set` → percorre elementos via HAMT
 
 `break` e `continue` funcionam em `for` (mesmo que em `loop`).
 
@@ -161,9 +171,6 @@ pub enum Ty {
 Novas interfaces no prelude (`stdlib/core.kata`):
 
 ```kata
-interface ITERABLE(A)
-    next :: Self => Optional::(A)
-
 interface COUNTABLE
     len :: Self => Int
 
@@ -174,23 +181,24 @@ interface CONTAINS(A)
     contains :: Self A => Boolean
 ```
 
+> **Nota:** `ITERABLE` foi removido. `for in` é um compiler intrinsic.
+
 ### Implementações
 
-| Tipo | ITERABLE | COUNTABLE | INDEXABLE | CONTAINS |
-|---|---|---|---|---|
-| `Array(A)` | ✅ (kata_rt_array_next) | ✅ (kata_rt_array_len) | ✅ (kata_rt_array_get_checked) | ✅ (linear scan) |
-| `List(A)` | ✅ (kata_rt_list_next) | ✅ (kata_rt_list_len) | ✅ (kata_rt_list_get_checked) | ✅ (linear scan) |
-| `Text` | ✅ (kata_rt_string_next) | ✅ (kata_rt_string_len) | ✅ (kata_rt_string_get_checked) | ✅ (substring search) |
-| `Range(A)` | ✅ (codegen inline) | ✅ (compile-time) | — | ✅ (O(1) arithmetic) |
-| `Tuple` | — | special case (síntese) | special case (compile-time) | — |
+| Tipo | COUNTABLE | INDEXABLE | CONTAINS |
+|---|---|---|---|
+| `Array(A)` | ✅ (kata_rt_array_len) | ✅ (kata_rt_array_get_checked) | ✅ (linear scan) |
+| `List(A)` | ✅ (kata_rt_list_len) | ✅ (kata_rt_list_get_checked) | ✅ (linear scan) |
+| `Text` | ✅ (kata_rt_string_len) | ✅ (kata_rt_text_at) | ✅ (substring search) |
+| `Range(A)` | ✅ (compile-time) | — | ✅ (O(1) arithmetic) |
+| `Tuple` | special case (síntese) | special case (compile-time) | — |
 
 Tuple não implementa interfaces — é tipo estrutural, não nominal.
 
-**Extensibilidade via interface:** O typeck consulta o InterfaceRegistry
-para determinar se um tipo implementa ITERABLE, COUNTABLE, INDEXABLE, ou
-CONTAINS. Tipos definidos pelo usuário que implementam essas interfaces
-recebem `for x in`, `len`, `.N`, e `in` automaticamente — sem hardcoded
-pattern-match em variants de `Ty`.
+**Dispatch por tipo concreto:** O typeck extrai o elemento por match
+direto em `Ty` (List(A)→A, Array(A)→A, Range(A)→A, etc.). O codegen
+faz dispatch por tipo concreto no `lower_for_in`. Tipos definidos pelo
+usuário não funcionam com `for in` — não há protocolo de iteração extensível.
 
 ## AST — novos nós
 
@@ -430,11 +438,10 @@ Nós TAST especializados — não passam pelo dispatch normal.
 ```
 map f arr
 →
-loop com ITERABLE::next:
-    opt = next(arr)
-    match opt
-        Some(v) → f(v); cons na lista de saída
-        None    → retorna lista
+loop com dispatch por tipo:
+    List: percorre Cons cells, aplica f, cons na saída
+    Array: percorre índices, aplica f, array de saída
+    Range: percorre start..end, aplica f, lista de saída
 ```
 
 Stream fusion: `map f (filter g arr)` → único loop com ambos predicados.
@@ -474,20 +481,16 @@ type error caso contrário. Step é sempre explícito na sintaxe.
 for x in colecao
 →
 infer colecao: T
-consultar InterfaceRegistry: T implementa ITERABLE(A)? Qual é A?
+extrair elemento A por match direto em Ty:
+  List(A) → A, Array(A) → A, Range(A) → A,
+  Set(T) → T, Dict(K,V) → (K,V), Text → Text
 definir x: A no escopo do body
 infer body
 ```
 
-**O typeck extrai A consultando o InterfaceRegistry**, não fazendo
-pattern-match em variants de `Ty`. Isso permite que tipos definidos pelo
-usuário que implementam ITERABLE funcionem com `for x in`.
-
-Exemplos (ilustrativos, não exaustivos):
-- `List(A)` implementa `ITERABLE(A)` → A = elemento
-- `Array(A)` implementa `ITERABLE(A)` → A = elemento
-- `Range(A)` implementa `ITERABLE(A)` → A = tipo do range
-- `MinhaColecao(A) implements ITERABLE(A)` → A = elemento (tipo do usuário)
+**O typeck extrai A por match direto em `Ty`**, não consultando
+InterfaceRegistry. `for in` é um compiler intrinsic — só funciona
+em tipos builtin (List, Array, Range, Text, Dict, Set).
 
 ### Tipagem de `in` (membership)
 
