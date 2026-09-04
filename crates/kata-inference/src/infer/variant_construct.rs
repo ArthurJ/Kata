@@ -178,17 +178,26 @@ pub(crate) fn infer_variant_construct(
         // Preenche type params não-inferidos com defaults do EnumRegistry.
         // Ex: Result com default E|Text. Se E ainda é Var("E") após hint,
         // e o enum tem default para E, usa o default.
-        let defaults = if let Some(o) = origin {
-            ctx.enum_registry.defaults_of_with_origin(o, enum_name)
-        } else {
-            ctx.enum_registry.defaults_of(enum_name)
-        };
-        if let Some(defaults) = defaults {
-            for (i, arg) in type_args.iter_mut().enumerate() {
-                if matches!(arg, Ty::Var(_))
-                    && let Some(Some(default_ty)) = defaults.get(i)
-                {
-                    *arg = default_ty.clone();
+        //
+        // Estratégia C: defaults só quando não há expected_ty. Se o contexto
+        // forneceu expected_ty (assinatura, hint), ele já preencheu os params
+        // que conhece — mesmo que alguns permaneçam Var (params genéricos da
+        // função). Nesses casos, defaults seriam prematuros: sobrescreveriam
+        // Var("E") que é compatível via ty_var_compatible no dispatch.
+        // Sem expected_ty (Ok 42 isolado), defaults são a única fonte — aplica.
+        if expected_ty.is_none() {
+            let defaults = if let Some(o) = origin {
+                ctx.enum_registry.defaults_of_with_origin(o, enum_name)
+            } else {
+                ctx.enum_registry.defaults_of(enum_name)
+            };
+            if let Some(defaults) = defaults {
+                for (i, arg) in type_args.iter_mut().enumerate() {
+                    if matches!(arg, Ty::Var(_))
+                        && let Some(Some(default_ty)) = defaults.get(i)
+                    {
+                        *arg = default_ty.clone();
+                    }
                 }
             }
         }
