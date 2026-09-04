@@ -232,3 +232,142 @@ action main
 main!()"#;
     assert_both(source, "-1\n1\n-1\n");
 }
+
+// ── Tipos compostos: cache key por conteúdo (A6) ───────────────
+
+/// List de Int: `head_or_zero [42 1 2]` chamado 2× → hit na 2ª.
+/// O interp percorre cons cells e serializa cada head por conteúdo.
+#[test]
+fn cache_list_int_hit() {
+    let source = r#"@cache{strategy: "LRU"}
+head_or_zero :: List::Int => Int
+lambda []: 0
+lambda [h : t]: h
+
+action main
+    echo!(head_or_zero [42 1 2])
+    echo!(head_or_zero [42 1 2])
+main!()"#;
+    assert_both(source, "42\n42\n");
+}
+
+/// List de Int: listas diferentes = keys diferentes.
+/// `[1 2]` ≠ `[1 2 3]` — sem colisão.
+#[test]
+fn cache_list_int_keys_distintas() {
+    let source = r#"@cache{strategy: "LRU"}
+head_or_zero :: List::Int => Int
+lambda []: 0
+lambda [h : t]: h
+
+action main
+    echo!(head_or_zero [1 2])
+    echo!(head_or_zero [1 2 3])
+    echo!(head_or_zero [1 2])
+main!()"#;
+    assert_both(source, "1\n1\n1\n");
+}
+
+/// Struct com campos: `idade_pessoa p` chamado 2× com mesmo struct → hit.
+/// O interp consulta struct_registry, lê cada campo (8 bytes contíguos).
+#[test]
+fn cache_struct_hit() {
+    let source = r#"data Pessoa (nome::Text idade::Int)
+
+@cache{strategy: "LRU"}
+idade_pessoa :: Pessoa => Int
+lambda p: p.idade
+
+action main
+    let p := Pessoa "Alice" 30
+    echo!(idade_pessoa p)
+    echo!(idade_pessoa p)
+main!()"#;
+    assert_both(source, "30\n30\n");
+}
+
+/// Structs diferentes = keys diferentes.
+/// Pessoa "Alice" 30 ≠ Pessoa "Bob" 30 — nome difere no conteúdo.
+#[test]
+fn cache_struct_keys_distintas() {
+    let source = r#"data Pessoa (nome::Text idade::Int)
+
+@cache{strategy: "LRU"}
+idade_pessoa :: Pessoa => Int
+lambda p: p.idade
+
+action main
+    let a := Pessoa "Alice" 30
+    let b := Pessoa "Bob" 30
+    echo!(idade_pessoa a)
+    echo!(idade_pessoa b)
+    echo!(idade_pessoa a)
+main!()"#;
+    assert_both(source, "30\n30\n30\n");
+}
+
+/// Tuple de Int: `(soma_tupla (1 2))` chamado 2× → hit.
+/// O interp lê cada elemento do bloco contíguo (8 bytes cada).
+#[test]
+fn cache_tuple_int_hit() {
+    let source = r#"@cache{strategy: "LRU"}
+soma_tupla :: (Int, Int) => Int
+lambda t:
+    match t
+        (a, b): + a b
+
+action main
+    echo!(soma_tupla (1, 2))
+    echo!(soma_tupla (1, 2))
+main!()"#;
+    assert_both(source, "3\n3\n");
+}
+
+/// Array de Int: `tamanho {10 20 30}` chamado 2× → hit.
+/// O interp lê len do header + cada elemento do bloco contíguo.
+#[test]
+fn cache_array_int_hit() {
+    let source = r#"@cache{strategy: "LRU"}
+tamanho :: Array::Int => Int
+lambda arr: len arr
+
+action main
+    echo!(tamanho {10 20 30})
+    echo!(tamanho {10 20 30})
+main!()"#;
+    assert_both(source, "3\n3\n");
+}
+
+/// List de Float: `headf [3.14 2.71]` chamado 2× → hit.
+/// Testa recursão com elemento não-Int dentro de List.
+#[test]
+fn cache_list_float_hit() {
+    let source = r#"@cache{strategy: "LRU"}
+headf :: List::Float => Float
+lambda []: 0.0
+lambda [h : t]: h
+
+action main
+    echo!(headf [3.14 2.71])
+    echo!(headf [3.14 2.71])
+main!()"#;
+    assert_both(source, "3.14\n3.14\n");
+}
+
+/// Struct com campo List: composição de tipos compostos.
+/// `conta_pontos p` chamado 2× com mesmo struct → hit.
+#[test]
+fn cache_struct_com_list_hit() {
+    let source = r#"data Conjunto (nome::Text itens::List::Int)
+
+@cache{strategy: "LRU"}
+conta_pontos :: Conjunto => Int
+lambda c: len c.itens
+
+action main
+    let c := Conjunto "A" [1 2 3]
+    echo!(conta_pontos c)
+    echo!(conta_pontos c)
+main!()"#;
+    assert_both(source, "3\n3\n");
+}
