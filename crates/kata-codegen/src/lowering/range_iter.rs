@@ -38,11 +38,7 @@ use super::LowerCtx;
 /// Para Float: bitcast para F64, fdiv, floor via `kata_rt_floor` FFI (que
 /// retorna SMI-tagged), depois soma 1 (iadd_imm(-1) para manter SMI tag)
 /// se inclusive.
-pub(crate) fn range_len(
-    coll_val: Value,
-    elem_ty: &Ty,
-    ctx: &mut LowerCtx,
-) -> Value {
+pub(crate) fn range_len(coll_val: Value, elem_ty: &Ty, ctx: &mut LowerCtx) -> Value {
     let flags = MemFlagsData::new();
     let start = ctx.builder.ins().load(I64, flags, coll_val, 0);
     let step = ctx.builder.ins().load(I64, flags, coll_val, 8);
@@ -74,7 +70,10 @@ fn range_len_int(
 
     // diff = step > 0 ? (end - start) : (start - end)
     let zero = ctx.builder.ins().iconst(I64, 0);
-    let step_pos = ctx.builder.ins().icmp(IntCC::SignedGreaterThan, step_dec, zero);
+    let step_pos = ctx
+        .builder
+        .ins()
+        .icmp(IntCC::SignedGreaterThan, step_dec, zero);
     let diff_pos = ctx.builder.ins().isub(end_dec, start_dec);
     let diff_neg = ctx.builder.ins().isub(start_dec, end_dec);
     let diff = ctx.builder.ins().select(step_pos, diff_pos, diff_neg);
@@ -161,7 +160,10 @@ fn range_len_float(
     // exclusive: ceil = floor + (has_remainder ? 1 : 0)
     let one_smi = ctx.builder.ins().iconst(I64, 3); // SMI 1 = (1<<1)|1 = 3
     let zero_smi_raw = ctx.builder.ins().iconst(I64, 1); // SMI 0
-    let ceil_add = ctx.builder.ins().select(has_remainder, one_smi, zero_smi_raw);
+    let ceil_add = ctx
+        .builder
+        .ins()
+        .select(has_remainder, one_smi, zero_smi_raw);
     let ceil_smi = ctx.builder.ins().iadd(floor_smi, ceil_add);
     // Corrigir tag: iadd de dois SMIs = (a+b)<<1|2. Subtrair 1 para restaurar tag.
     let ceil_smi = ctx.builder.ins().iadd_imm(ceil_smi, -1);
@@ -184,11 +186,17 @@ fn range_len_float(
     // Guard: se abs_step == 0.0 (step zero), return SMI 0
     let is_zero_step = ctx.builder.ins().fcmp(FloatCC::Equal, abs_step, zero_f);
     let smi_zero = ctx.builder.ins().iconst(I64, 1); // SMI 0
-    let result = ctx.builder.ins().select(is_zero_step, smi_zero, count_final);
+    let result = ctx
+        .builder
+        .ins()
+        .select(is_zero_step, smi_zero, count_final);
 
     // clamp: se count < 0 (SMI signed), return SMI 0
     let zero_smi = ctx.builder.ins().iconst(I64, 1);
-    let is_neg = ctx.builder.ins().icmp(IntCC::SignedLessThan, result, zero_smi);
+    let is_neg = ctx
+        .builder
+        .ins()
+        .icmp(IntCC::SignedLessThan, result, zero_smi);
     ctx.builder.ins().select(is_neg, smi_zero, result)
 }
 
@@ -433,11 +441,7 @@ pub(crate) fn range_advance(
 /// do lower_expr também não trata Float em Range).
 ///
 /// Retorna i64 (0 ou 1) para compatibilidade com Boolean.
-pub(crate) fn range_contains(
-    coll_val: Value,
-    item_val: Value,
-    ctx: &mut LowerCtx,
-) -> Value {
+pub(crate) fn range_contains(coll_val: Value, item_val: Value, ctx: &mut LowerCtx) -> Value {
     let flags = MemFlagsData::new();
     let start = ctx.builder.ins().load(I64, flags, coll_val, 0);
     let step = ctx.builder.ins().load(I64, flags, coll_val, 8);
@@ -447,11 +451,10 @@ pub(crate) fn range_contains(
 
     // step < 0?
     let zero_smi = ctx.builder.ins().iconst(I64, 1);
-    let step_neg = ctx.builder.ins().icmp(
-        IntCC::SignedLessThan,
-        step,
-        zero_smi,
-    );
+    let step_neg = ctx
+        .builder
+        .ins()
+        .icmp(IntCC::SignedLessThan, step, zero_smi);
     // inclusive?
     let is_inclusive = ctx.builder.ins().icmp_imm(IntCC::NotEqual, incl_val, 0);
 
@@ -465,7 +468,10 @@ pub(crate) fn range_contains(
     let aligned = ctx.builder.ins().icmp_imm(IntCC::Equal, remainder, 0);
 
     // step >= 0: item >= start AND (item < end OR (inclusive AND item == end))
-    let ge_start = ctx.builder.ins().icmp(IntCC::SignedGreaterThanOrEqual, item_val, start);
+    let ge_start = ctx
+        .builder
+        .ins()
+        .icmp(IntCC::SignedGreaterThanOrEqual, item_val, start);
     let lt_end = ctx.builder.ins().icmp(IntCC::SignedLessThan, item_val, end);
     let eq_end = ctx.builder.ins().icmp(IntCC::Equal, item_val, end);
     let incl_ok = ctx.builder.ins().band(is_inclusive, eq_end);
@@ -474,8 +480,14 @@ pub(crate) fn range_contains(
     let result_pos = ctx.builder.ins().band(result_pos, aligned);
 
     // step < 0: item <= start AND (item > end OR (inclusive AND item == end))
-    let le_start = ctx.builder.ins().icmp(IntCC::SignedLessThanOrEqual, item_val, start);
-    let gt_end = ctx.builder.ins().icmp(IntCC::SignedGreaterThan, item_val, end);
+    let le_start = ctx
+        .builder
+        .ins()
+        .icmp(IntCC::SignedLessThanOrEqual, item_val, start);
+    let gt_end = ctx
+        .builder
+        .ins()
+        .icmp(IntCC::SignedGreaterThan, item_val, end);
     let in_neg = ctx.builder.ins().bor(gt_end, incl_ok);
     let result_neg = ctx.builder.ins().band(le_start, in_neg);
     let result_neg = ctx.builder.ins().band(result_neg, aligned);

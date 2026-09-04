@@ -238,7 +238,9 @@ pub(crate) fn lower_collections_literal(
                 }
                 Ty::Range(_) => {
                     // Range: O(1) aritmético — delegado para range_iter::range_contains.
-                    Ok(Some(super::range_iter::range_contains(coll_val, item_val, ctx)))
+                    Ok(Some(super::range_iter::range_contains(
+                        coll_val, item_val, ctx,
+                    )))
                 }
                 Ty::Dict(k, _) => {
                     // Dict: hash key, call kata_rt_dict_contains(dict, key, hash, eq_fn)

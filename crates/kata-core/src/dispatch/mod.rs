@@ -575,7 +575,10 @@ pub fn match_score(args: &[Ty], params: &[Ty], iface_reg: &InterfaceRegistry) ->
         } else if let (Ty::Generic(a_name, a_args), Ty::Generic(p_name, p_args)) = (arg, param)
             && a_name == p_name
             && a_args.len() == p_args.len()
-            && a_args.iter().zip(p_args).all(|(a, p)| ty_var_compatible(a, p))
+            && a_args
+                .iter()
+                .zip(p_args)
+                .all(|(a, p)| ty_var_compatible(a, p))
         {
             // Generic com Ty::Var não-resolvido em type args (ex: variant
             // construído sem hint do contexto). Var casa com qualquer tipo
@@ -602,9 +605,7 @@ pub fn match_score(args: &[Ty], params: &[Ty], iface_reg: &InterfaceRegistry) ->
 fn ty_var_compatible(a: &Ty, b: &Ty) -> bool {
     match (a, b) {
         (Ty::Var(_), _) | (_, Ty::Var(_)) => true,
-        (Ty::Generic(n1, a1), Ty::Generic(n2, a2))
-            if n1 == n2 && a1.len() == a2.len() =>
-        {
+        (Ty::Generic(n1, a1), Ty::Generic(n2, a2)) if n1 == n2 && a1.len() == a2.len() => {
             a1.iter().zip(a2).all(|(x, y)| ty_var_compatible(x, y))
         }
         _ => a == b,

@@ -32,7 +32,9 @@ pub enum ComptimeError {
 
     /// Predicado de ascription refined falhou — erro de tipo do usuário,
     /// não bug do compilador. O valor não satisfaz o predicado declarado.
-    #[error("ascription refined falhou: o valor não satisfaz o predicado\n  help: o predicado retornou Boolean::False — verifique se o valor está dentro do domínio declarado")]
+    #[error(
+        "ascription refined falhou: o valor não satisfaz o predicado\n  help: o predicado retornou Boolean::False — verifique se o valor está dentro do domínio declarado"
+    )]
     #[diagnostic(code = "type.refined_violation")]
     RefinedViolation {
         #[label("valor fora do domínio")]
