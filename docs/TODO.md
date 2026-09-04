@@ -95,27 +95,11 @@ código-fonte e, quando possível, executado em ambos backends (JIT
 e interpretador).
 
 **Resumo:** 19 achados (A1–A12 + A3b–A3g). Resolvidos: A1, A2, A3b,
-A3c, A3e, A3f, A3g, A5, A7, A9, A10, A11, e item adjacente #4 (JIT crash NonZero::Float).
+A3c, A3d, A3e, A3f, A3g, A5, A7, A9, A10, A11, e item adjacente #4 (JIT crash NonZero::Float).
 Débito técnico de null-check (Cat 1, 2, 3) totalmente resolvido.
-Pendentes: 3 médios, 1 baixo.
+Pendentes: 2 médios, 1 baixo.
 
 ### 🟡 Médio — buracos funcionais que limitam a linguagem
-
-#### A3d. `len` em Range → ffi_not_found
-
-**Estado:** `len` despacha via COUNTABLE para Range, mas o codegen
-procura `range_len` FFI que não existe. O typeck aprova (COUNTABLE
-está implementado para Range), mas o codegen não tem o símbolo.
-
-**Localização:** `crates/kata-codegen/src/` (procura `range_len`,
-não registrado), `stdlib/core.kata` (Range implements COUNTABLE
-com `len`).
-
-**Reprodução:** `echo!(len [1..10])` → exit 1
-(`codegen.ffi_not_found: range_len`). Interp:
-`FFI não implementado no interpretador: range_len`.
-
-**Prioridade:** média — typeck aprova, codegen não executa.
 
 #### A6. `@cache` no interp: miss permanente para tipos compostos
 
