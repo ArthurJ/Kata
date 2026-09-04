@@ -12,6 +12,7 @@ use crate::ctx::ModuleCtx;
 use crate::error::ComptimeError;
 use crate::jit::jit_execute_expr;
 use crate::walk::walk_mut;
+use kata_diagnostics::MietteSpan;
 
 /// Walk recursivo nos filhos de `expr` chamando `validate_pending_predicates`.
 /// Quando encontra `TypeAscription` com `pending_predicates` não-vazio,
@@ -38,12 +39,8 @@ pub(crate) fn validate_pending_predicates(
             // Resultado deve ser Boolean::True (tag 1) ou Boolean::False (tag 0).
             // O runtime representa Boolean como Sum com tag 0 (False) ou 1 (True).
             if result.raw != 1 {
-                return Err(ComptimeError::JitError {
-                    reason: format!(
-                        "predicado de ascription refined falhou: \
-                         esperava Boolean::True, obteve tag {}",
-                        result.raw
-                    ),
+                return Err(ComptimeError::RefinedViolation {
+                    span: MietteSpan(expr.span),
                 });
             }
         }

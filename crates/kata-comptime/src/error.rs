@@ -1,6 +1,7 @@
 //! Erros do comptime pass.
 
 use kata_core::ty::Ty;
+use kata_diagnostics::MietteSpan;
 use thiserror::Error;
 
 /// Erro do comptime pass — bug ou limitação do compilador, nunca do usuário.
@@ -28,6 +29,15 @@ pub enum ComptimeError {
     #[error("tipo não suportado em compile-time: {ty}")]
     #[diagnostic(code = "comptime.unsupported_type")]
     UnsupportedType { ty: Ty },
+
+    /// Predicado de ascription refined falhou — erro de tipo do usuário,
+    /// não bug do compilador. O valor não satisfaz o predicado declarado.
+    #[error("ascription refined falhou: o valor não satisfaz o predicado\n  help: o predicado retornou Boolean::False — verifique se o valor está dentro do domínio declarado")]
+    #[diagnostic(code = "type.refined_violation")]
+    RefinedViolation {
+        #[label("valor fora do domínio")]
+        span: MietteSpan,
+    },
 
     /// `constant` cujo value é uma lambda — Function não é serializável
     /// em compile-time (PRD §3.7). O usuário deve usar named function.

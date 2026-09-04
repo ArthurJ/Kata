@@ -11,5 +11,6 @@ kata-ast.workspace = true
 kata-inference.workspace = true
 kata-codegen.workspace = true
 kata-rt.workspace = true
+kata-diagnostics.workspace = true
 thiserror.workspace = true
 miette.workspace = true

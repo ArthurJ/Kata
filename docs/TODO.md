@@ -190,22 +190,10 @@ reformular a interface trampoline/scheduler ou usar um canal lateral
 
 ### JIT — ascription refined inválida dá `comptime.jit_failure`
 
-**Estado:** `0 :: NonZero::Int` no JIT produz
-`comptime.jit_failure: predicado de ascription refined falhou`
-(erro interno) em vez de `type.mismatch` gracioso. O comptime pass
-(`predicates.rs:47`) retorna `ComptimeError::JitError` com mensagem
-de erro interno, e o driver o reporta como erro interno com help
-"abra uma issue".
-
-**Localização:** `crates/kata-comptime/src/predicates.rs:47-53`,
-`crates/kata-comptime/src/error.rs` (ComptimeError::JitError).
-
-**Impacto:** baixo-médio — o JIT rejeita corretamente (não executa),
-mas a mensagem confunde o usuário (parece bug do compilador, não erro
-de tipo do programa).
-
-**Prioridade:** baixa — mudar `ComptimeError::JitError` para um
-variant de type error gracioso com span e mensagem amigável.
+**Estado:** Resolvido (2026-09-04). `0 :: NonZero::Int` no JIT agora produz
+`type.refined_violation` com span apontando para a ascription e mensagem
+graciosa. Adicionado `ComptimeError::RefinedViolation` (variant de type error
+com `MietteSpan`), substituindo o `JitError` em `predicates.rs`.
 
 ---
 
