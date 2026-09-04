@@ -98,10 +98,7 @@ fn show_err_nao_regride() {
 #[test]
 fn echo_none_interp_imprime_none() {
     let bin = kata_bin();
-    let tmp = std::env::temp_dir().join(format!(
-        "kata_a5_interp_{}.kata",
-        std::process::id()
-    ));
+    let tmp = std::env::temp_dir().join(format!("kata_a5_interp_{}.kata", std::process::id()));
     std::fs::write(&tmp, "echo!(None)").expect("escrever arquivo temporário");
 
     let output = Command::new(&bin)

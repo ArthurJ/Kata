@@ -13,7 +13,7 @@ use kata_lexer::lex;
 use kata_monomorph::monomorphize;
 use kata_optimizer::optimize;
 use kata_parser::parse;
-use kata_resolution::{load_stdlib_for_tests, resolve, ResolvedModule};
+use kata_resolution::{ResolvedModule, load_stdlib_for_tests, resolve};
 use kata_tree_shaking::tree_shake;
 
 fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModule {
@@ -83,7 +83,10 @@ fn step_literal_zero_int_rejected() {
     let user = resolve(&module).unwrap();
     let resolved = merge_resolved(prelude, user);
     let result = infer_module(&module, &resolved);
-    assert!(result.is_err(), "step literal 0 deve ser rejeitado pelo typeck");
+    assert!(
+        result.is_err(),
+        "step literal 0 deve ser rejeitado pelo typeck"
+    );
     let err = result.unwrap_err().to_string();
     assert!(
         err.contains("range step") && err.contains("neutro"),
