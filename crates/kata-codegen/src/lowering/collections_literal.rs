@@ -237,81 +237,8 @@ pub(crate) fn lower_collections_literal(
                     Ok(Some(ctx.builder.inst_results(call)[0]))
                 }
                 Ty::Range(_) => {
-                    // Range: O(1) aritmético.
-                    // Detecta step negativo e flag inclusive para decidir direção.
-                    let flags = MemFlagsData::new();
-                    let start = ctx.builder.ins().load(I64, flags, coll_val, 0);
-                    let step = ctx.builder.ins().load(I64, flags, coll_val, 8);
-                    let end = ctx.builder.ins().load(I64, flags, coll_val, 16);
-                    let incl_raw = ctx.builder.ins().load(I64, flags, coll_val, 24);
-                    let incl_val = ctx.builder.ins().ushr_imm(incl_raw, 1);
-
-                    // step < 0?
-                    let zero_smi = ctx.builder.ins().iconst(I64, 1);
-                    let step_neg = ctx.builder.ins().icmp(
-                        cranelift_codegen::ir::condcodes::IntCC::SignedLessThan,
-                        step,
-                        zero_smi,
-                    );
-                    // inclusive?
-                    let is_inclusive = ctx.builder.ins().icmp_imm(
-                        cranelift_codegen::ir::condcodes::IntCC::NotEqual,
-                        incl_val,
-                        0,
-                    );
-
-                    // Step alignment: (item - start) % step == 0.
-                    // Decodificar SMI (>>1) para aritmética com sinal.
-                    let item_dec = ctx.builder.ins().sshr_imm(item_val, 1);
-                    let start_dec = ctx.builder.ins().sshr_imm(start, 1);
-                    let step_dec = ctx.builder.ins().sshr_imm(step, 1);
-                    let diff = ctx.builder.ins().isub(item_dec, start_dec);
-                    let remainder = ctx.builder.ins().srem(diff, step_dec);
-                    let aligned = ctx.builder.ins().icmp_imm(
-                        cranelift_codegen::ir::condcodes::IntCC::Equal,
-                        remainder,
-                        0,
-                    );
-
-                    // step >= 0: item >= start AND (item < end OR (inclusive AND item == end))
-                    let ge_start = ctx.builder.ins().icmp(
-                        cranelift_codegen::ir::condcodes::IntCC::SignedGreaterThanOrEqual,
-                        item_val,
-                        start,
-                    );
-                    let lt_end = ctx.builder.ins().icmp(
-                        cranelift_codegen::ir::condcodes::IntCC::SignedLessThan,
-                        item_val,
-                        end,
-                    );
-                    let eq_end = ctx.builder.ins().icmp(
-                        cranelift_codegen::ir::condcodes::IntCC::Equal,
-                        item_val,
-                        end,
-                    );
-                    let incl_ok = ctx.builder.ins().band(is_inclusive, eq_end);
-                    let in_pos = ctx.builder.ins().bor(lt_end, incl_ok);
-                    let result_pos = ctx.builder.ins().band(ge_start, in_pos);
-                    let result_pos = ctx.builder.ins().band(result_pos, aligned);
-
-                    // step < 0: item <= start AND (item > end OR (inclusive AND item == end))
-                    let le_start = ctx.builder.ins().icmp(
-                        cranelift_codegen::ir::condcodes::IntCC::SignedLessThanOrEqual,
-                        item_val,
-                        start,
-                    );
-                    let gt_end = ctx.builder.ins().icmp(
-                        cranelift_codegen::ir::condcodes::IntCC::SignedGreaterThan,
-                        item_val,
-                        end,
-                    );
-                    let in_neg = ctx.builder.ins().bor(gt_end, incl_ok);
-                    let result_neg = ctx.builder.ins().band(le_start, in_neg);
-                    let result_neg = ctx.builder.ins().band(result_neg, aligned);
-
-                    // Seleciona baseado no sinal do step
-                    let result_i8 = ctx.builder.ins().select(step_neg, result_neg, result_pos);
-                    Ok(Some(ctx.builder.ins().uextend(I64, result_i8)))
+                    // Range: O(1) aritmético — delegado para range_iter::range_contains.
+                    Ok(Some(super::range_iter::range_contains(coll_val, item_val, ctx)))
                 }
                 Ty::Dict(k, _) => {
                     // Dict: hash key, call kata_rt_dict_contains(dict, key, hash, eq_fn)

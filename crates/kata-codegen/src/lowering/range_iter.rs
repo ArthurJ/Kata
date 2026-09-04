@@ -422,3 +422,65 @@ pub(crate) fn range_advance(
         ctx.builder.ins().iadd_imm(next_raw, -1)
     }
 }
+
+/// Verifica se `item_val` pertence ao Range `coll_val` — O(1) aritmético.
+///
+/// Para Int (SMI): decodifica start/step/item, verifica alinhamento
+/// ((item - start) % step == 0) e limites (dentro do intervalo,
+/// respeitando inclusive/exclusive e direção do step).
+///
+/// Para Float: ainda não suportado (bug pré-existente — o braço `In`
+/// do lower_expr também não trata Float em Range).
+///
+/// Retorna i64 (0 ou 1) para compatibilidade com Boolean.
+pub(crate) fn range_contains(
+    coll_val: Value,
+    item_val: Value,
+    ctx: &mut LowerCtx,
+) -> Value {
+    let flags = MemFlagsData::new();
+    let start = ctx.builder.ins().load(I64, flags, coll_val, 0);
+    let step = ctx.builder.ins().load(I64, flags, coll_val, 8);
+    let end = ctx.builder.ins().load(I64, flags, coll_val, 16);
+    let incl_raw = ctx.builder.ins().load(I64, flags, coll_val, 24);
+    let incl_val = ctx.builder.ins().ushr_imm(incl_raw, 1);
+
+    // step < 0?
+    let zero_smi = ctx.builder.ins().iconst(I64, 1);
+    let step_neg = ctx.builder.ins().icmp(
+        IntCC::SignedLessThan,
+        step,
+        zero_smi,
+    );
+    // inclusive?
+    let is_inclusive = ctx.builder.ins().icmp_imm(IntCC::NotEqual, incl_val, 0);
+
+    // Step alignment: (item - start) % step == 0.
+    // Decodificar SMI (>>1) para aritmética com sinal.
+    let item_dec = ctx.builder.ins().sshr_imm(item_val, 1);
+    let start_dec = ctx.builder.ins().sshr_imm(start, 1);
+    let step_dec = ctx.builder.ins().sshr_imm(step, 1);
+    let diff = ctx.builder.ins().isub(item_dec, start_dec);
+    let remainder = ctx.builder.ins().srem(diff, step_dec);
+    let aligned = ctx.builder.ins().icmp_imm(IntCC::Equal, remainder, 0);
+
+    // step >= 0: item >= start AND (item < end OR (inclusive AND item == end))
+    let ge_start = ctx.builder.ins().icmp(IntCC::SignedGreaterThanOrEqual, item_val, start);
+    let lt_end = ctx.builder.ins().icmp(IntCC::SignedLessThan, item_val, end);
+    let eq_end = ctx.builder.ins().icmp(IntCC::Equal, item_val, end);
+    let incl_ok = ctx.builder.ins().band(is_inclusive, eq_end);
+    let in_pos = ctx.builder.ins().bor(lt_end, incl_ok);
+    let result_pos = ctx.builder.ins().band(ge_start, in_pos);
+    let result_pos = ctx.builder.ins().band(result_pos, aligned);
+
+    // step < 0: item <= start AND (item > end OR (inclusive AND item == end))
+    let le_start = ctx.builder.ins().icmp(IntCC::SignedLessThanOrEqual, item_val, start);
+    let gt_end = ctx.builder.ins().icmp(IntCC::SignedGreaterThan, item_val, end);
+    let in_neg = ctx.builder.ins().bor(gt_end, incl_ok);
+    let result_neg = ctx.builder.ins().band(le_start, in_neg);
+    let result_neg = ctx.builder.ins().band(result_neg, aligned);
+
+    // Seleciona baseado no sinal do step
+    let result_i8 = ctx.builder.ins().select(step_neg, result_neg, result_pos);
+    ctx.builder.ins().uextend(I64, result_i8)
+}

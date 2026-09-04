@@ -52,6 +52,13 @@ pub(crate) fn lower_closure(
             };
             return Ok(super::range_iter::range_len(coll_val, &elem_ty, ctx));
         }
+        if sym_name == "range_contains" {
+            // contains :: Range::A A => Boolean — O(1) aritmético.
+            // args[0] = Range, args[1] = item.
+            let coll_val = arg_values[0];
+            let item_val = arg_values[1];
+            return Ok(super::range_iter::range_contains(coll_val, item_val, ctx));
+        }
 
         // Call FFI direto — FFI nunca é tail call (CallConv::SystemV).
         // Mas primeiro tenta kata_refs: funções Kata sintetizadas (ex: repr)

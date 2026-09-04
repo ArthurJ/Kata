@@ -443,6 +443,9 @@ pub(crate) fn ffi_dispatch(
         // `range_len` é @builtin (não FFI). O interp materializa Range como
         // List (cons cells), então len = list_len sobre o ponteiro.
         "range_len" => Ok(rt::kata_rt_list_len(args[0])),
+        // `range_contains` é @builtin (não FFI). O interp materializa Range
+        // como List (cons cells), então contains = list_contains.
+        "range_contains" => Ok(rt::kata_rt_list_contains(args[0], args[1])),
 
         // ── Snapshot ─────────────────────────────────────────
         "kata_rt_get_snapshot" => Ok(rt::kata_rt_get_snapshot(args[0])),
