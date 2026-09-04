@@ -39,12 +39,12 @@ fn interface_com_supertraits() {
 
 #[test]
 fn interface_com_type_params() {
-    let src = "interface ITERABLE::(A)\n    next :: Self => Optional::(A)";
+    let src = "interface CONTAINER::(A)\n    wrap :: Self A => Self";
     let resolved = resolve_src(src);
     let iface = resolved
         .interface_registry
-        .get_interface("ITERABLE")
-        .expect("ITERABLE deve estar no registry");
+        .get_interface("CONTAINER")
+        .expect("CONTAINER deve estar no registry");
     assert_eq!(iface.type_params, vec!["A"]);
 }
 
@@ -60,12 +60,12 @@ Int implements NUM\n    @ffi(\"kata_rt_bi_add\")\n    + :: Int Int => Int";
 #[test]
 fn implements_com_type_params() {
     let src = "\
-interface ITERABLE::(A)\n    next :: Self => Optional::(A)
-List implements ITERABLE::(A)\n    next :: List => Optional::(A)";
+interface CONTAINER::(A)\n    wrap :: Self A => Self
+Box implements CONTAINER::(A)\n    wrap :: Box A => Box";
     let resolved = resolve_src(src);
-    let impls = resolved.interface_registry.get_impls_for_type("List");
+    let impls = resolved.interface_registry.get_impls_for_type("Box");
     assert_eq!(impls.len(), 1);
-    assert_eq!(impls[0].interface_name, "ITERABLE");
+    assert_eq!(impls[0].interface_name, "CONTAINER");
     assert_eq!(impls[0].iface_params, vec!["A"]);
 }
 

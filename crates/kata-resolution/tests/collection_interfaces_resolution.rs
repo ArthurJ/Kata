@@ -1,7 +1,7 @@
 //! Resolution — interfaces de coleção no prelude.
 //!
 //! Verifica que:
-//! - As 4 interfaces (ITERABLE, COUNTABLE, INDEXABLE, CONTAINS) estão registradas
+//! - As 3 interfaces (COUNTABLE, INDEXABLE, CONTAINS) estão registradas
 //! - Array, List, Range, Text implementam as interfaces apropriadas
 //! - As signatures dos métodos chegam ao ResolvedModule (DispatchTable)
 //! - @builtin é extraído como símbolo (não apenas @ffi)
@@ -10,19 +10,12 @@
 use kata_core::Ty;
 use kata_resolution::load_stdlib_for_tests;
 
-/// Carrega o prelude e verifica as 4 interfaces de coleção.
+/// Carrega o prelude e verifica as 3 interfaces de coleção.
 #[test]
 fn prelude_has_collection_interfaces() {
     let resolved = load_stdlib_for_tests().expect("prelude deve resolver");
 
-    // DoD 17: ITERABLE(A), COUNTABLE, INDEXABLE(A), CONTAINS(A) registradas
-    assert!(
-        resolved
-            .interface_registry
-            .get_interface("ITERABLE")
-            .is_some(),
-        "ITERABLE deve estar no InterfaceRegistry"
-    );
+    // DoD 17: COUNTABLE, INDEXABLE(A), CONTAINS(A) registradas
     assert!(
         resolved
             .interface_registry
@@ -46,12 +39,6 @@ fn prelude_has_collection_interfaces() {
     );
 
     // Verifica type_params das interfaces
-    let iterable = resolved
-        .interface_registry
-        .get_interface("ITERABLE")
-        .expect("ITERABLE");
-    assert_eq!(iterable.type_params, vec!["A"]);
-
     let indexable = resolved
         .interface_registry
         .get_interface("INDEXABLE")
@@ -71,17 +58,12 @@ fn prelude_has_collection_interfaces() {
     assert!(countable.type_params.is_empty());
 }
 
-// ── DoD 18: Array implements ITERABLE ──────────────────────────
+// ── DoD 18: Array implements COUNTABLE, INDEXABLE, CONTAINS ─────
 
 #[test]
-fn array_implements_iterable_countable_indexable_contains() {
+fn array_implements_countable_indexable_contains() {
     let resolved = load_stdlib_for_tests().expect("prelude deve resolver");
 
-    assert!(
-        resolved
-            .interface_registry
-            .type_implements("Array", "ITERABLE")
-    );
     assert!(
         resolved
             .interface_registry
@@ -102,37 +84,17 @@ fn array_implements_iterable_countable_indexable_contains() {
     let impls = resolved.interface_registry.get_impls_for_type("Array");
     assert_eq!(
         impls.len(),
-        5,
-        "Array deve ter 5 implements entries (ITERABLE, COUNTABLE, INDEXABLE, CONTAINS, SLICEABLE)"
-    );
-
-    let iter_impl = impls
-        .iter()
-        .find(|i| i.interface_name == "ITERABLE")
-        .expect("Array implements ITERABLE");
-    let next_method = iter_impl
-        .methods
-        .iter()
-        .find(|m| m.name == "next")
-        .expect("next method");
-    assert_eq!(
-        next_method.ffi_symbol,
-        Some("kata_rt_array_next".to_string()),
-        "Array::next deve ter ffi_symbol kata_rt_array_next"
+        4,
+        "Array deve ter 4 implements entries (COUNTABLE, INDEXABLE, CONTAINS, SLICEABLE)"
     );
 }
 
-// ── DoD 19: List implements ITERABLE ────────────────────────────
+// ── DoD 19: List implements COUNTABLE, INDEXABLE, CONTAINS ──────
 
 #[test]
-fn list_implements_iterable_countable_indexable_contains() {
+fn list_implements_countable_indexable_contains() {
     let resolved = load_stdlib_for_tests().expect("prelude deve resolver");
 
-    assert!(
-        resolved
-            .interface_registry
-            .type_implements("List", "ITERABLE")
-    );
     assert!(
         resolved
             .interface_registry
@@ -152,37 +114,17 @@ fn list_implements_iterable_countable_indexable_contains() {
     let impls = resolved.interface_registry.get_impls_for_type("List");
     assert_eq!(
         impls.len(),
-        5,
-        "List deve ter 5 implements entries (ITERABLE, COUNTABLE, INDEXABLE, CONTAINS, SLICEABLE)"
-    );
-
-    let iter_impl = impls
-        .iter()
-        .find(|i| i.interface_name == "ITERABLE")
-        .expect("List implements ITERABLE");
-    let next_method = iter_impl
-        .methods
-        .iter()
-        .find(|m| m.name == "next")
-        .expect("next method");
-    assert_eq!(
-        next_method.ffi_symbol,
-        Some("kata_rt_list_next".to_string()),
-        "List::next deve ter ffi_symbol kata_rt_list_next"
+        4,
+        "List deve ter 4 implements entries (COUNTABLE, INDEXABLE, CONTAINS, SLICEABLE)"
     );
 }
 
-// ── DoD 20: Range implements ITERABLE ───────────────────────────
+// ── DoD 20: Range implements COUNTABLE, CONTAINS (não INDEXABLE) ─
 
 #[test]
-fn range_implements_iterable_countable_contains_not_indexable() {
+fn range_implements_countable_contains_not_indexable() {
     let resolved = load_stdlib_for_tests().expect("prelude deve resolver");
 
-    assert!(
-        resolved
-            .interface_registry
-            .type_implements("Range", "ITERABLE")
-    );
     assert!(
         resolved
             .interface_registry
@@ -204,38 +146,17 @@ fn range_implements_iterable_countable_contains_not_indexable() {
     let impls = resolved.interface_registry.get_impls_for_type("Range");
     assert_eq!(
         impls.len(),
-        3,
-        "Range deve ter 3 implements entries (sem INDEXABLE)"
-    );
-
-    // Range usa @builtin (não @ffi) — ffi_symbol deve ser Some("range_next")
-    let iter_impl = impls
-        .iter()
-        .find(|i| i.interface_name == "ITERABLE")
-        .expect("Range implements ITERABLE");
-    let next_method = iter_impl
-        .methods
-        .iter()
-        .find(|m| m.name == "next")
-        .expect("next method");
-    assert_eq!(
-        next_method.ffi_symbol,
-        Some("range_next".to_string()),
-        "Range::next deve ter símbolo builtin 'range_next'"
+        2,
+        "Range deve ter 2 implements entries (sem INDEXABLE)"
     );
 }
 
-// ── DoD 21: Text implements CONTAINS ─────────────────────────────
+// ── DoD 21: Text implements COUNTABLE, INDEXABLE, CONTAINS ──────
 
 #[test]
-fn text_implements_iterable_countable_indexable_contains() {
+fn text_implements_countable_indexable_contains() {
     let resolved = load_stdlib_for_tests().expect("prelude deve resolver");
 
-    assert!(
-        resolved
-            .interface_registry
-            .type_implements("Text", "ITERABLE")
-    );
     assert!(
         resolved
             .interface_registry
@@ -256,8 +177,8 @@ fn text_implements_iterable_countable_indexable_contains() {
     assert!(resolved.interface_registry.type_implements("Text", "EQ"));
     assert_eq!(
         impls.len(),
-        8,
-        "Text deve ter 8 implements entries (ITERABLE, COUNTABLE, INDEXABLE, CONTAINS, SHOW, HASHABLE, SLICEABLE, EQ)"
+        7,
+        "Text deve ter 7 implements entries (COUNTABLE, INDEXABLE, CONTAINS, SHOW, HASHABLE, SLICEABLE, EQ)"
     );
 
     let contains_impl = impls
@@ -284,17 +205,6 @@ fn signatures_dos_metodos_estao_no_resolved_module() {
 
     // As signatures dos métodos de implements devem estar em resolved.signatures
     // para que o DispatchTable as receba.
-    // Procura por "next" com param Array::(A)
-    let next_sigs: Vec<_> = resolved
-        .signatures
-        .iter()
-        .filter(|s| s.name == "next")
-        .collect();
-    assert!(
-        !next_sigs.is_empty(),
-        "Deve haver signatures para 'next' (ITERABLE)"
-    );
-
     // Procura por "len" (COUNTABLE)
     let len_sigs: Vec<_> = resolved
         .signatures
