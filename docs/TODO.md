@@ -85,15 +85,6 @@ Fase 5 Rational (const-eval de `rational <lit>` + par (num, den) no
 Z3). Oráculos adversariais K medidos em `b5e2d9e` (3 níveis, grade
 multi-param, arity-tuple).
 
-### Typeck — enum user-defined como payload de genérico (#K-enum-payload)
-**Estado:** Resolvido (2026-09-04, commits 9ce5bd2, 981d14b, 330265c + este).
-B (propagar param types como hint ao inferir args) + C (defaults só
-quando `expected_ty.is_none()`) + `fits_return` aceita Var no declared.
-Bug residual do import corrigido: `resolve_with_prelude` agora recebe
-`prelude_type_env` como parent do TypeEnv do usuário, permitindo que
-`resolve_type_expr` encontre tipos da stdlib (ex: `Encoding` →
-`Sum("Encoding")`) em anotações de tipo do usuário antes do merge.
-
 ---
 
 ## Auditoria de completude — 2026-09-02
@@ -104,7 +95,7 @@ código-fonte e, quando possível, executado em ambos backends (JIT
 e interpretador).
 
 **Resumo:** 19 achados (A1–A12 + A3b–A3g). Resolvidos: A1, A2, A3b,
-A3c, A3e, A3f, A3g, A5, A7, A9, A11, e item adjacente #4 (JIT crash NonZero::Float).
+A3c, A3e, A3f, A3g, A5, A7, A9, A10, A11, e item adjacente #4 (JIT crash NonZero::Float).
 Débito técnico de null-check (Cat 1, 2, 3) totalmente resolvido.
 Pendentes: 3 médios, 1 baixo.
 
@@ -141,20 +132,6 @@ show incompleto no interp (`show.rs:265-270`). Funciona no JIT via
 
 **Prioridade:** média — `echo!(show minhaStruct)` não funciona no interp.
 
-#### A9. JIT depth tracking não cobre `BodyKind::CallInner`
-
-**Estado:** Resolvido (2026-09-04). `depth_tracking` agora é parâmetro
-explícito de `define_function_body` em vez de derivado de `body_kind`.
-No split, **ambos** wrapper e inner trackeiam — cada frame na stack conta.
-Antes, o wrapper (`CallInner`) não trackeia, subestimando profundidade.
-TCO no inner: `depth_inc` + `depth_dec` antes do `return_call` = net zero.
-Cache hit no wrapper: `depth_inc` → hit → `depth_dec` → return = net zero.
-
-#### A10. Enum user-defined como payload de genérico falha no typeck
-
-**Estado:** Resolvido. Ver detalhes acima em "Typeck — enum user-defined
-como payload de genérico (#K-enum-payload)".
-
 ### 🟢 Baixo-médio — assimetrias e gaps menores
 
 #### A12. `spawn!` no Windows é stub
@@ -186,13 +163,6 @@ detectar falhas do interp (precisam inspecionar stderr).
 alinhado à FFI do scheduler. Mudar para propagar erro requer
 reformular a interface trampoline/scheduler ou usar um canal lateral
 (e.g. célula `Mutex<Option<InterpError>>` no `InterpCtx`).
-
-### JIT — ascription refined inválida dá `comptime.jit_failure`
-
-**Estado:** Resolvido (2026-09-04). `0 :: NonZero::Int` no JIT agora produz
-`type.refined_violation` com span apontando para a ascription e mensagem
-graciosa. Adicionado `ComptimeError::RefinedViolation` (variant de type error
-com `MietteSpan`), substituindo o `JitError` em `predicates.rs`.
 
 ---
 
