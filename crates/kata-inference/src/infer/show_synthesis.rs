@@ -491,6 +491,19 @@ fn field_show(
             // pelo monomorphizador para o tipo concreto do elemento).
             show_call(field_access, "List".to_string(), &field.ty)
         }
+        Ty::Array(_) => {
+            show_call(field_access, "Array".to_string(), &field.ty)
+        }
+        Ty::Set(_) => {
+            show_call(field_access, "Set".to_string(), &field.ty)
+        }
+        Ty::Dict(_, _) => {
+            show_call(field_access, "Dict".to_string(), &field.ty)
+        }
+        Ty::Tuple(_) => {
+            // Tuple — constrói show inline (mesma regra de show_expr).
+            repr_expr(field_access, &field.ty)
+        }
         _ => {
             // Fallback: int_to_text (mostra como número — melhor que crash)
             ffi_call1("kata_rt_int_to_text", field_access, Ty::text())
