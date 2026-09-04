@@ -103,17 +103,22 @@ fn struct_constructor_sintetizado() {
 }
 
 #[test]
-fn struct_sem_campos_nao_tem_constructor() {
-    // data Vazio () — tipo opaco, não ganha construtor
+fn struct_sem_campos_sem_ffi_eh_rejeitado() {
+    // data Vazio () sem @ffi — rejeitado em resolve() com empty_data_no_ffi
     let src = "data Vazio ()\nVazio";
-    let typed = infer_src(src);
+    let tokens = lex(src).unwrap();
+    let module = parse(tokens).unwrap();
+    let prelude = load_stdlib_for_tests().unwrap();
+    let user = resolve(&module);
     assert!(
-        !typed.dispatch_table.has_function("Vazio"),
-        "Vazio (sem campos) não deve ter smart constructor"
+        user.is_err(),
+        "data Vazio () sem @ffi deve falhar em resolve()"
     );
+    let err = user.unwrap_err();
     assert!(
-        !typed.functions.iter().any(|f| f.name == "Vazio"),
-        "Vazio não deve estar em typed.functions"
+        err.iter()
+            .any(|e| e.to_string().contains("requer diretiva @ffi")),
+        "erro deve mencionar @ffi: {err:?}"
     );
 }
 
