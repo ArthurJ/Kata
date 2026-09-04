@@ -1,6 +1,6 @@
 # TODO — Kata-Lang
 
-Único arquivo de pendências. Atualizado 2026-09-03.
+Único arquivo de pendências. Atualizado 2026-09-04.
 
 Os docs `TODO-*.md` foram removidos (obsoletos ou resolvidos). Pendências vivem aqui.
 
@@ -128,13 +128,6 @@ com `len`).
 
 **Estado:** (já documentado acima em "Débito Técnico"). Interp só
 serializa primitivos; compostos = miss conservador permanente.
-
-#### A7. Variante sem payload como argumento é inexpressível
-
-**Estado:** Resolvido (2026-09-04). `match_score` agora trata `Ty::Var`
-dentro de `Ty::Generic` como compatível (alinhado com `fits_return`).
-`resolve_with_swap` caminho Ok aplica `unify` + `apply_subs` em overloads
-genéricas. Ver `PRD-variant-as-argument.md`.
 
 #### A8. `show` de Struct incompleto no interpretador
 
