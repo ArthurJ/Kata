@@ -25,6 +25,7 @@
 //! - `kata_rt_socket_close(handle) -> ()` — fecha socket (idempotente)
 
 pub(crate) mod create;
+pub(crate) mod create_unix;
 pub(crate) mod io;
 pub(crate) mod select;
 
