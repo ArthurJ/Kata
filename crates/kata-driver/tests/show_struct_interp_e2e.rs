@@ -184,3 +184,27 @@ action main => Unit
 main!()"#;
     assert_both(source, "Rat(1)\n");
 }
+
+/// Struct com Tuple como campo: `Par((1, 2))`.
+#[test]
+fn show_struct_com_tuple() {
+    let source = r#"data Par (t::(Int, Int))
+
+action main => Unit
+    let p := Par ((1, 2))
+    echo!(p)
+main!()"#;
+    assert_both(source, "Par((1, 2))\n");
+}
+
+/// Struct com Tuple de Text: `Par(("x", 2))` — Text dentro de Tuple é quoteado.
+#[test]
+fn show_struct_com_tuple_text() {
+    let source = r#"data Par (t::(Text, Int))
+
+action main => Unit
+    let p := Par ("x", 2)
+    echo!(p)
+main!()"#;
+    assert_both(source, "Par((\"x\", 2))\n");
+}
