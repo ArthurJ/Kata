@@ -86,11 +86,13 @@ Z3). Oráculos adversariais K medidos em `b5e2d9e` (3 níveis, grade
 multi-param, arity-tuple).
 
 ### Typeck — enum user-defined como payload de genérico (#K-enum-payload)
-**Estado:** Pendente (medido em `b5e2d9e`). `Optional::(Encoding)` →
-`type.mismatch` esperado `Encoding`, encontrado `Sum(Encoding) or
-Generic(Encoding)` dentro do pattern; `Result::(Int, Encoding)` falha
-até sem match (`Err(E|Text)` com E enum). Ortogonal à exaustividade —
-provável elaboração de união/payload. PRD próprio quando atacar.
+**Estado:** Resolvido (2026-09-04, commits 9ce5bd2, 981d14b, 330265c + este).
+B (propagar param types como hint ao inferir args) + C (defaults só
+quando `expected_ty.is_none()`) + `fits_return` aceita Var no declared.
+Bug residual do import corrigido: `resolve_with_prelude` agora recebe
+`prelude_type_env` como parent do TypeEnv do usuário, permitindo que
+`resolve_type_expr` encontre tipos da stdlib (ex: `Encoding` →
+`Sum("Encoding")`) em anotações de tipo do usuário antes do merge.
 
 ---
 
@@ -151,8 +153,8 @@ subestimam profundidade real.
 
 #### A10. Enum user-defined como payload de genérico falha no typeck
 
-**Estado:** (já documentado acima em "Typeck — enum user-defined
-como payload de genérico (#K-enum-payload)").
+**Estado:** Resolvido. Ver detalhes acima em "Typeck — enum user-defined
+como payload de genérico (#K-enum-payload)".
 
 ### 🟢 Baixo-médio — assimetrias e gaps menores
 
