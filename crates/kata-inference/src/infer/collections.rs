@@ -8,13 +8,13 @@ use kata_ast::{Expr, Span, Spanned};
 use kata_core::caps::ConstVal;
 use kata_core::escape::EscapeTarget;
 use kata_core::interface_registry::ImplEntry;
-use kata_core::ty::{PrimTy, Ty, TypeEnv, ty_list_to_string};
+use kata_core::ty::{PrimTy, Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 
 use crate::typed::{TypedExpr, TypedExprKind};
 
 use super::expr::{InferCtx, infer_expr};
-use super::generics::{apply_subs, unify};
+use super::generics::unify;
 use super::helpers::InferResult;
 
 // ── Util: extrair nome do tipo para InterfaceRegistry lookup ─────────────
@@ -47,57 +47,29 @@ fn find_impl<'a>(ctx: &'a InferCtx, type_name: &str, iface_name: &str) -> Option
         .find(|e| e.type_name == type_name)
 }
 
-/// Extrai o tipo do elemento A de um tipo iterável, consultando ITERABLE.
+/// Extrai o tipo do elemento A de um tipo iterável por match direto em `Ty`.
 ///
-/// O método `next` de ITERABLE tem assinatura `Self => Optional(A)`.
-/// Unificando `iterable_ty` com `Self` (params[0]), obtemos `A` via substitution.
-/// Aplicando subs no retorno `Optional(A)`, extraímos `A`.
-fn extract_iter_elem_ty(ctx: &InferCtx, iterable_ty: &Ty, span: &Span) -> InferResult<Ty> {
-    let type_name = concrete_type_name(iterable_ty).ok_or_else(|| MiddleError::TypeMismatch {
-        expected: "tipo iterável (implementa ITERABLE)".into(),
-        found: format!("{iterable_ty}"),
-        span: (*span).into(),
-    })?;
-
-    let entry =
-        find_impl(ctx, &type_name, "ITERABLE").ok_or_else(|| MiddleError::TypeMismatch {
-            expected: format!("tipo que implementa ITERABLE ({type_name} não implementa)"),
-            found: format!("{iterable_ty}"),
-            span: (*span).into(),
-        })?;
-
-    // Método `next` tem params = [Self] e ret = Optional(A).
-    let next_method = entry
-        .methods
-        .iter()
-        .find(|m| m.name == "next")
-        .ok_or_else(|| MiddleError::TypeMismatch {
-            expected: "método `next` em ITERABLE".into(),
-            found: format!("{} implementa ITERABLE sem `next`", entry.type_name),
-            span: (*span).into(),
-        })?;
-
-    // Unifica iterable_ty com params[0] (Self) usando type_params do impl.
-    let mut subs = std::collections::HashMap::new();
-    unify(
-        &next_method.params,
-        std::slice::from_ref(iterable_ty),
-        &entry.type_params,
-        &mut subs,
-    )
-    .map_err(|_| MiddleError::TypeMismatch {
-        expected: ty_list_to_string(&next_method.params),
-        found: format!("{iterable_ty}"),
-        span: (*span).into(),
-    })?;
-
-    // Aplica subs no retorno (Optional(A)) e extrai A.
-    let concrete_ret = apply_subs(&next_method.ret, &subs);
-    match &concrete_ret {
-        Ty::Generic(name, args) if name == "Optional" && !args.is_empty() => Ok(args[0].clone()),
+/// `for in` é um compiler intrinsic — o codegen faz dispatch por tipo concreto
+/// (List → Cons cells, Array → índices, Range → start/step/done). Não há
+/// protocolo de iteração extensível, então a extração do elemento é direta:
+///
+/// - `List(A)` → `A`
+/// - `Array(A)` → `A`
+/// - `Range(A)` → `A`
+/// - `Dict(K, V)` → `(K, V)` (pares)
+/// - `Set(T)` → `T`
+/// - `Text` → `Text`
+fn extract_iter_elem_ty(_ctx: &InferCtx, iterable_ty: &Ty, span: &Span) -> InferResult<Ty> {
+    match iterable_ty {
+        Ty::List(elem) => Ok((**elem).clone()),
+        Ty::Array(elem) => Ok((**elem).clone()),
+        Ty::Range(elem) => Ok((**elem).clone()),
+        Ty::Set(elem) => Ok((**elem).clone()),
+        Ty::Dict(k, v) => Ok(Ty::Tuple(vec![(**k).clone(), (**v).clone()])),
+        Ty::Prim(PrimTy::Text) => Ok(Ty::Prim(PrimTy::Text)),
         _ => Err(MiddleError::TypeMismatch {
-            expected: "Optional(A) como retorno de next".into(),
-            found: format!("{concrete_ret}"),
+            expected: "tipo iterável (List, Array, Range, Dict, Set, Text)".into(),
+            found: format!("{iterable_ty}"),
             span: (*span).into(),
         }),
     }

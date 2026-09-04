@@ -82,9 +82,6 @@ interface SHOW
 
 # ── Interfaces de coleção (Fio 8) ──────────────────────────────
 
-interface ITERABLE::A
-    next :: Self => Optional::A
-
 interface COUNTABLE
     len :: Self => Int
 
@@ -460,11 +457,7 @@ Float implements STEPPABLE
 # As implementações usam @ffi para Array/List/Text e @builtin para
 # Range (operações inlined pelo codegen com base no tipo concreto).
 
-# Array implementa ITERABLE, COUNTABLE, INDEXABLE, CONTAINS
-Array::A implements ITERABLE::A
-    @ffi("kata_rt_array_next")
-    next :: Array::A => Optional::A
-
+# Array implementa COUNTABLE, INDEXABLE, CONTAINS
 Array::A implements COUNTABLE
     @ffi("kata_rt_array_len")
     len :: Array::A => Int
@@ -477,11 +470,7 @@ Array::A implements CONTAINS::A
     @ffi("kata_rt_array_contains")
     contains :: Array::A A => Boolean
 
-# List implementa ITERABLE, COUNTABLE, INDEXABLE, CONTAINS
-List::A implements ITERABLE::A
-    @ffi("kata_rt_list_next")
-    next :: List::A => Optional::A
-
+# List implementa COUNTABLE, INDEXABLE, CONTAINS
 List::A implements COUNTABLE
     @ffi("kata_rt_list_len")
     len :: List::A => Int
@@ -494,12 +483,8 @@ List::A implements CONTAINS::A
     @ffi("kata_rt_list_contains")
     contains :: List::A A => Boolean
 
-# Range implementa ITERABLE, COUNTABLE, CONTAINS (não INDEXABLE)
+# Range implementa COUNTABLE, CONTAINS (não INDEXABLE)
 # Range usa @builtin — codegen inlined com base no tipo concreto de A
-Range::A implements ITERABLE::A
-    @builtin("range_next")
-    next :: Range::A => Optional::A
-
 Range::A implements COUNTABLE
     @builtin("range_len")
     len :: Range::A => Int
@@ -508,11 +493,7 @@ Range::A implements CONTAINS::A
     @builtin("range_contains")
     contains :: Range::A A => Boolean
 
-# Text implementa ITERABLE, COUNTABLE, INDEXABLE, CONTAINS
-Text implements ITERABLE::Text
-    @ffi("kata_rt_string_next")
-    next :: Text => Optional::Text
-
+# Text implementa COUNTABLE, INDEXABLE, CONTAINS
 Text implements COUNTABLE
     @ffi("kata_rt_text_len")
     len :: Text => Int
@@ -547,10 +528,6 @@ List::A implements SLICEABLE::A
 
 # ── Dict (Fio 13) ───────────────────────────────────────────────
 
-Dict::(K, V) implements ITERABLE::(K, V)
-    @ffi("kata_rt_dict_next")
-    next :: Dict::(K, V) => Optional::(K, V)
-
 Dict::(K, V) implements COUNTABLE
     @ffi("kata_rt_dict_len")
     len :: Dict::(K, V) => Int
@@ -564,10 +541,6 @@ Dict::(K, V) implements CONTAINS::K
     contains :: Dict::(K, V) K => Boolean
 
 # ── Set (Fio 13) ────────────────────────────────────────────────
-
-Set::T implements ITERABLE::T
-    @ffi("kata_rt_set_next")
-    next :: Set::T => Optional::T
 
 Set::T implements COUNTABLE
     @ffi("kata_rt_set_len")
