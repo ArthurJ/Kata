@@ -440,6 +440,9 @@ pub(crate) fn ffi_dispatch(
 
         // ── Range ────────────────────────────────────────────
         "kata_rt_range_alloc" => Ok(rt::kata_rt_range_alloc(arena)),
+        // `range_len` é @builtin (não FFI). O interp materializa Range como
+        // List (cons cells), então len = list_len sobre o ponteiro.
+        "range_len" => Ok(rt::kata_rt_list_len(args[0])),
 
         // ── Snapshot ─────────────────────────────────────────
         "kata_rt_get_snapshot" => Ok(rt::kata_rt_get_snapshot(args[0])),

@@ -34,6 +34,25 @@ pub(crate) fn lower_closure(
     }
 
     if let Some(sym_name) = ffi_symbol {
+        // ── Range builtins inline ──
+        // `range_len`, `range_next`, `range_contains` são @builtin (não FFI).
+        // O codegen não tem símbolos FFI para eles — são computados inline
+        // a partir do struct Range (32 bytes: start/step/end/inclusive).
+        if sym_name == "range_len" {
+            // len :: Range::A => Int — O(1) aritmético.
+            // args[0] é o valor do Range (ponteiro para o struct).
+            let coll_val = arg_values[0];
+            let elem_ty = match &args[0].node.ty {
+                Ty::Range(inner) => inner.as_ref().clone(),
+                other => {
+                    return Err(super::CodegenError::UnsupportedNode {
+                        node: format!("range_len sobre tipo não-Range: {other}"),
+                    });
+                }
+            };
+            return Ok(super::range_iter::range_len(coll_val, &elem_ty, ctx));
+        }
+
         // Call FFI direto — FFI nunca é tail call (CallConv::SystemV).
         // Mas primeiro tenta kata_refs: funções Kata sintetizadas (ex: repr)
         // usam ffi_symbol para carregar o nome mangled da função.

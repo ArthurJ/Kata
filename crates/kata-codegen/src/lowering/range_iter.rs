@@ -20,6 +20,178 @@ use kata_core::ty::Ty;
 
 use super::LowerCtx;
 
+/// Computa `len` de um Range O(1) — aritmética sobre start/step/end/inclusive.
+///
+/// Recebe `coll_val` (ponteiro para o struct Range) e `elem_ty` (Int ou Float).
+/// Retorna SMI-tagged Int com a contagem de elementos.
+///
+/// Fórmula (após untag/decode):
+/// - diff = step > 0 ? (end - start) : (start - end)
+/// - abs_step = |step|
+/// - exclusive: count = floor(diff / abs_step)
+/// - inclusive: count = floor(diff / abs_step) + 1
+/// - clamp para 0 se count < 0 (range degenerado/vazio)
+///
+/// Para Int: aritmética SMI untagged via sshr_imm(1), sdiv, depois retag com
+/// ishl(1) + bor(1).
+///
+/// Para Float: bitcast para F64, fdiv, floor via `kata_rt_floor` FFI (que
+/// retorna SMI-tagged), depois soma 1 (iadd_imm(-1) para manter SMI tag)
+/// se inclusive.
+pub(crate) fn range_len(
+    coll_val: Value,
+    elem_ty: &Ty,
+    ctx: &mut LowerCtx,
+) -> Value {
+    let flags = MemFlagsData::new();
+    let start = ctx.builder.ins().load(I64, flags, coll_val, 0);
+    let step = ctx.builder.ins().load(I64, flags, coll_val, 8);
+    let end = ctx.builder.ins().load(I64, flags, coll_val, 16);
+    let incl_raw = ctx.builder.ins().load(I64, flags, coll_val, 24);
+    // SMI: inclusive = 3 (tag 1, value 1), exclusive = 1 (tag 1, value 0)
+    // Untag: >> 1 → 1 = inclusive, 0 = exclusive
+    let incl_val = ctx.builder.ins().ushr_imm(incl_raw, 1);
+
+    if *elem_ty == Ty::float() {
+        range_len_float(start, step, end, incl_val, ctx)
+    } else {
+        range_len_int(start, step, end, incl_val, ctx)
+    }
+}
+
+/// `len` para Range de Int — aritmética SMI inline.
+fn range_len_int(
+    start: Value,
+    step: Value,
+    end: Value,
+    incl_val: Value,
+    ctx: &mut LowerCtx,
+) -> Value {
+    // Decodificar SMI (>>1, signed shift) para aritmética com sinal.
+    let start_dec = ctx.builder.ins().sshr_imm(start, 1);
+    let step_dec = ctx.builder.ins().sshr_imm(step, 1);
+    let end_dec = ctx.builder.ins().sshr_imm(end, 1);
+
+    // diff = step > 0 ? (end - start) : (start - end)
+    let zero = ctx.builder.ins().iconst(I64, 0);
+    let step_pos = ctx.builder.ins().icmp(IntCC::SignedGreaterThan, step_dec, zero);
+    let diff_pos = ctx.builder.ins().isub(end_dec, start_dec);
+    let diff_neg = ctx.builder.ins().isub(start_dec, end_dec);
+    let diff = ctx.builder.ins().select(step_pos, diff_pos, diff_neg);
+
+    // abs_step = step > 0 ? step : -step
+    let neg_step = ctx.builder.ins().ineg(step_dec);
+    let abs_step = ctx.builder.ins().select(step_pos, step_dec, neg_step);
+
+    // count = ceil(diff / abs_step) (exclusive) ou floor(diff / abs_step)+1 (inclusive)
+    // sdiv trunca para zero = floor para operandos ≥ 0.
+    // ceil(a/b) = (a + b - 1) / b.
+    // Guard: se abs_step == 0, retornar 0.
+    let is_zero_step = ctx.builder.ins().icmp(IntCC::Equal, abs_step, zero);
+    let floor_div = ctx.builder.ins().sdiv(diff, abs_step);
+    let one = ctx.builder.ins().iconst(I64, 1);
+    let ceil_num = ctx.builder.ins().iadd(diff, abs_step);
+    let ceil_num = ctx.builder.ins().isub(ceil_num, one);
+    let ceil_div = ctx.builder.ins().sdiv(ceil_num, abs_step);
+
+    let is_inclusive = ctx.builder.ins().icmp_imm(IntCC::NotEqual, incl_val, 0);
+    let incl_count = ctx.builder.ins().iadd(floor_div, one);
+    let count = ctx.builder.ins().select(is_inclusive, incl_count, ceil_div);
+
+    // Se step == 0: return 0
+    let result = ctx.builder.ins().select(is_zero_step, zero, count);
+
+    // clamp negativo para 0
+    let is_neg = ctx.builder.ins().icmp(IntCC::SignedLessThan, result, zero);
+    let clamped = ctx.builder.ins().select(is_neg, zero, result);
+
+    // Retag como SMI: (val << 1) | 1
+    let shifted = ctx.builder.ins().ishl(clamped, one);
+    ctx.builder.ins().bor_imm(shifted, 1)
+}
+
+/// `len` para Range de Float — aritmética via F64 + kata_rt_ceil/floor.
+fn range_len_float(
+    start: Value,
+    step: Value,
+    end: Value,
+    incl_val: Value,
+    ctx: &mut LowerCtx,
+) -> Value {
+    let cast_flags = MemFlagsData::new();
+    let start_f = ctx.builder.ins().bitcast(F64, cast_flags, start);
+    let step_f = ctx.builder.ins().bitcast(F64, cast_flags, step);
+    let end_f = ctx.builder.ins().bitcast(F64, cast_flags, end);
+
+    // diff = step > 0 ? (end - start) : (start - end)
+    let zero_f = ctx.builder.ins().f64const(0.0);
+    let step_pos = ctx.builder.ins().fcmp(FloatCC::GreaterThan, step_f, zero_f);
+    let diff_pos = ctx.builder.ins().fsub(end_f, start_f);
+    let diff_neg = ctx.builder.ins().fsub(start_f, end_f);
+    let diff = ctx.builder.ins().select(step_pos, diff_pos, diff_neg);
+
+    // abs_step = step > 0 ? step : -step
+    let neg_step = ctx.builder.ins().fneg(step_f);
+    let abs_step = ctx.builder.ins().select(step_pos, step_f, neg_step);
+
+    // exclusive: count = ceil(ratio) = floor(ratio) + (diff > floor_div * abs_step ? 1 : 0)
+    // inclusive: count = floor(ratio) + 1
+    // Usa apenas kata_rt_floor (SMI-tagged). Verifica remainder aritmeticamente
+    // para evitar conversão SMI→Float.
+    let ratio = ctx.builder.ins().fdiv(diff, abs_step);
+    let floor_ref = ctx
+        .ffi_refs
+        .get("kata_rt_floor")
+        .copied()
+        .unwrap_or_else(|| panic!("kata_rt_floor not found in ffi_refs"));
+    let floor_call = ctx.builder.ins().call(floor_ref, &[ratio]);
+    let floor_smi = ctx.builder.inst_results(floor_call)[0]; // SMI-tagged Int
+
+    // Converter floor_smi (SMI-tagged I64) → F64 via kata_rt_int_to_float FFI.
+    // SMI untag não é suficiente — precisamos do valor Float para comparar com ratio.
+    let i2f_ref = ctx
+        .ffi_refs
+        .get("kata_rt_int_to_float")
+        .copied()
+        .unwrap_or_else(|| panic!("kata_rt_int_to_float not found in ffi_refs"));
+    let i2f_call = ctx.builder.ins().call(i2f_ref, &[floor_smi]);
+    let floor_f = ctx.builder.inst_results(i2f_call)[0]; // F64
+    let has_remainder = ctx.builder.ins().fcmp(FloatCC::GreaterThan, ratio, floor_f);
+
+    // exclusive: ceil = floor + (has_remainder ? 1 : 0)
+    let one_smi = ctx.builder.ins().iconst(I64, 3); // SMI 1 = (1<<1)|1 = 3
+    let zero_smi_raw = ctx.builder.ins().iconst(I64, 1); // SMI 0
+    let ceil_add = ctx.builder.ins().select(has_remainder, one_smi, zero_smi_raw);
+    let ceil_smi = ctx.builder.ins().iadd(floor_smi, ceil_add);
+    // Corrigir tag: iadd de dois SMIs = (a+b)<<1|2. Subtrair 1 para restaurar tag.
+    let ceil_smi = ctx.builder.ins().iadd_imm(ceil_smi, -1);
+
+    // inclusive: floor + 1 (SMI: iadd_imm(-1) inverte o tag — +1 real = -1 raw)
+    // Usar uma cópia independente do floor_smi para evitar reuso de SSA.
+    // NOTA: floor_smi já é usado no path exclusive acima. No Cranelift SSA,
+    // reuso de valor deveria ser seguro, mas há um crash neste exato path.
+    // Como workaround, não reusar floor_smi — re-calcular incl_count via
+    // select entre ceil_smi e floor_smi+1.
+    // Na verdade: inclusive = ceil_smi + (has_remainder ? 0 : 1) = floor + 1 sempre.
+    // Simplificando: inclusive = ceil_smi se has_remainder, senão ceil_smi + 1_smi.
+    // Mas isso é equivalente a floor_smi + 1 sempre.
+    // Vamos tentar: incl_count = iadd(floor_smi, one_smi) - 1 (tag fix).
+    let incl_count = ctx.builder.ins().iadd(floor_smi, one_smi);
+    let incl_count = ctx.builder.ins().iadd_imm(incl_count, -1);
+    let is_inclusive = ctx.builder.ins().icmp_imm(IntCC::NotEqual, incl_val, 0);
+    let count_final = ctx.builder.ins().select(is_inclusive, incl_count, ceil_smi);
+
+    // Guard: se abs_step == 0.0 (step zero), return SMI 0
+    let is_zero_step = ctx.builder.ins().fcmp(FloatCC::Equal, abs_step, zero_f);
+    let smi_zero = ctx.builder.ins().iconst(I64, 1); // SMI 0
+    let result = ctx.builder.ins().select(is_zero_step, smi_zero, count_final);
+
+    // clamp: se count < 0 (SMI signed), return SMI 0
+    let zero_smi = ctx.builder.ins().iconst(I64, 1);
+    let is_neg = ctx.builder.ins().icmp(IntCC::SignedLessThan, result, zero_smi);
+    ctx.builder.ins().select(is_neg, smi_zero, result)
+}
+
 /// Guard de runtime: se step == 0, panic com mensagem graciosa.
 ///
 /// Chamado uma vez antes de iniciar a iteração sobre um Range.
