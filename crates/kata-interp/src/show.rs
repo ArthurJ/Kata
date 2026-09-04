@@ -13,6 +13,23 @@ use kata_rt as rt;
 use crate::eval::InterpCtx;
 use crate::value::{Value, decode_smi, is_smi, value_to_f64};
 
+/// Like `show_value`, but Text is quoted with double-quotes.
+///
+/// Mirrors `repr_expr` in the codegen: used inside containers (struct,
+/// tuple, list, array, set, dict) so that nested Text is quoted at any
+/// depth. `show_value` (top-level) leaves Text unquoted (identity).
+fn repr_value(val: Value, ty: &Ty, ctx: &InterpCtx) -> Value {
+    match ty {
+        Ty::Prim(PrimTy::Text) => {
+            // Quote: `"` + val + `"`
+            let quote = text_from_str("\"");
+            text_concat(quote, text_concat(val, text_from_str("\"")))
+        }
+        // All other types delegate to show_value (same as repr_expr → show_expr).
+        _ => show_value(val, ty, ctx),
+    }
+}
+
 /// Formata um valor como Text (ponteiro C string), dado seu tipo.
 ///
 /// Retorna um `i64` que é um `*mut c_char` (Text ptr no runtime).
@@ -111,21 +128,21 @@ fn show_list(val: Value, elem_ty: &Ty, ctx: &InterpCtx) -> Value {
     while current != 0 {
         let head = rt::kata_rt_list_head(current);
         let tail = rt::kata_rt_list_tail(current);
-        parts.push(show_value(head, elem_ty, ctx));
+        parts.push(repr_value(head, elem_ty, ctx));
         current = tail;
     }
 
     let mut result = text_from_str("[");
     for (i, part) in parts.iter().enumerate() {
         if i > 0 {
-            result = text_concat(result, text_from_str(" "));
+            result = text_concat(result, text_from_str(", "));
         }
         result = text_concat(result, *part);
     }
     text_concat(result, text_from_str("]"))
 }
 
-/// show de um Array: `{a b c}` (espaço-separado, chaves).
+/// show de um Array: `{a, b, c}` (vírgula+espaço, chaves).
 fn show_array(val: Value, elem_ty: &Ty, ctx: &InterpCtx) -> Value {
     // kata_rt_array_len retorna SMI-encoded: (len << 1) | 1
     let len = decode_smi(rt::kata_rt_array_len(val));
@@ -136,13 +153,13 @@ fn show_array(val: Value, elem_ty: &Ty, ctx: &InterpCtx) -> Value {
     let mut parts = Vec::new();
     for i in 0..len {
         let elem = rt::kata_rt_array_get(val, i);
-        parts.push(show_value(elem, elem_ty, ctx));
+        parts.push(repr_value(elem, elem_ty, ctx));
     }
 
     let mut result = text_from_str("{");
     for (i, part) in parts.iter().enumerate() {
         if i > 0 {
-            result = text_concat(result, text_from_str(" "));
+            result = text_concat(result, text_from_str(", "));
         }
         result = text_concat(result, *part);
     }
@@ -158,7 +175,7 @@ fn show_tuple(val: Value, elem_tys: &[Ty], ctx: &InterpCtx) -> Value {
     let mut parts = Vec::new();
     for (i, elem_ty) in elem_tys.iter().enumerate() {
         let elem = unsafe { std::ptr::read((val as *const Value).add(i)) };
-        parts.push(show_value(elem, elem_ty, ctx));
+        parts.push(repr_value(elem, elem_ty, ctx));
     }
 
     let mut result = text_from_str("(");
@@ -171,7 +188,8 @@ fn show_tuple(val: Value, elem_tys: &[Ty], ctx: &InterpCtx) -> Value {
     text_concat(result, text_from_str(")"))
 }
 
-/// show de um Struct: `Nome(campo: v, campo: v)`.
+/// show de um Struct: `Nome(v0, v1, ...)` (vírgula+espaço, sem nomes —
+/// mesma regra do codegen em `build_struct_show_body`).
 fn show_struct(
     val: Value,
     struct_key: &kata_core::struct_registry::StructKey,
@@ -200,17 +218,24 @@ fn show_struct(
     }
 
     // Struct comum (não-refined): `Nome(v0, v1, ...)`.
-    let n_fields = struct_field_count(struct_key);
+    // Consulta o StructInfo real do struct_registry para obter os campos
+    // (FieldInfo com nome, tipo e offset) — espelha o build_struct_show_body
+    // do codegen, que itera os mesmos fields.
+    let fields = ctx
+        .module
+        .struct_registry
+        .get(type_name)
+        .map(|info| info.fields.clone())
+        .unwrap_or_default();
 
-    if n_fields == 0 {
+    if fields.is_empty() {
         return text_from_str(&format!("{type_name}()"));
     }
 
     let mut parts = Vec::new();
-    for i in 0..n_fields {
+    for (i, field) in fields.iter().enumerate() {
         let elem = unsafe { std::ptr::read((val as *const Value).add(i)) };
-        // Sem os nomes dos campos nem tipos aqui — usar show genérico
-        parts.push(show_value(elem, &Ty::Unit, ctx));
+        parts.push(repr_value(elem, &field.ty, ctx));
     }
 
     let mut result = text_from_str(&format!("{type_name}("));
@@ -244,7 +269,7 @@ fn show_sum(val: Value, name: &str, _ty: &Ty, ctx: &InterpCtx) -> Value {
                 // Variante unitária — sem payload.
                 text_from_str(&variant_name)
             } else {
-                let payload_str = show_value(payload, payload_ty, ctx);
+                let payload_str = repr_value(payload, payload_ty, ctx);
                 text_concat(
                     text_from_str(&format!("{variant_name}(")),
                     text_concat(payload_str, text_from_str(")")),
@@ -264,12 +289,4 @@ fn show_sum(val: Value, name: &str, _ty: &Ty, ctx: &InterpCtx) -> Value {
             }
         }
     }
-}
-
-/// Conta o número de campos de um StructKey.
-/// TODO: substituir por acesso ao schema real quando disponível.
-fn struct_field_count(_struct_key: &kata_core::struct_registry::StructKey) -> usize {
-    // Sem acesso ao schema real aqui. Retornamos 0 por enquanto —
-    // structs com campos terão show incompleto até termos o schema.
-    0
 }
