@@ -307,6 +307,12 @@ pub enum ResolveError {
     #[error("capacidade de cache inválida: {value} em `{item_name}` (deve ser > 0)")]
     #[diagnostic(code = "type.cache_capacity_invalid")]
     CacheCapacityInvalid { value: i64, item_name: String },
+
+    /// `data Foo ()` sem campos e sem `@ffi` — tipo produto vazio sem
+    /// construtor, show, ou layout. Sem significado na linguagem.
+    #[error("`data {name} ()` sem campos requer diretiva @ffi")]
+    #[diagnostic(code = "resolve.empty_data_no_ffi")]
+    EmptyDataNoFfi { name: String },
 }
 
 /// Formata um `Vec<ResolveError>` como string legível (erros separados por `; `).
