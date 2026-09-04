@@ -25,6 +25,7 @@ fn eval_src(src: &str) -> (i64, Ty) {
         &prelude.interface_registry,
         &prelude.directive_registry,
         Some(&prelude.type_graph),
+        Some(&prelude.type_env),
     )
     .expect("resolve deve succeed");
     let resolved = merge_resolved(prelude, user);

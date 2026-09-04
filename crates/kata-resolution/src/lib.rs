@@ -88,6 +88,7 @@ pub fn resolve_with_imports(
         kata_core::InterfaceRegistry::new(),
         &DirectiveRegistry::new(),
         None,
+        None,
     )
 }
 
@@ -111,6 +112,7 @@ pub fn resolve_with_prelude(
     prelude_iface_reg: &kata_core::InterfaceRegistry,
     prelude_directives: &DirectiveRegistry,
     prelude_type_graph: Option<&kata_core::TypeGraph>,
+    prelude_type_env: Option<&TypeEnv>,
 ) -> Result<ResolvedModule, Vec<ResolveError>> {
     resolve_inner(
         module,
@@ -119,6 +121,7 @@ pub fn resolve_with_prelude(
         prelude_iface_reg.clone(),
         prelude_directives,
         prelude_type_graph,
+        prelude_type_env,
     )
 }
 
@@ -129,8 +132,19 @@ fn resolve_inner(
     prelude_iface_reg: kata_core::InterfaceRegistry,
     prelude_directives: &DirectiveRegistry,
     prelude_type_graph: Option<&kata_core::TypeGraph>,
+    prelude_type_env: Option<&TypeEnv>,
 ) -> Result<ResolvedModule, Vec<ResolveError>> {
-    let mut type_env = TypeEnv::new();
+    // Se o prelude_type_env está disponível, usa-o como parent do TypeEnv
+    // do módulo do usuário. Isto permite que `resolve_type_expr` encontre
+    // tipos definidos na stdlib (ex: `Encoding` → `Sum("Encoding")`) em
+    // anotações de tipo do usuário, ANTES do merge_two que acontece depois.
+    // Sem isto, tipos da stdlib em assinaturas do usuário (ex:
+    // `foo :: Result::(Int, Encoding) => Text`) caem para `Struct(Plain(...))`
+    // porque o lookup no TypeEnv local retorna None.
+    let mut type_env = match prelude_type_env {
+        Some(parent) => TypeEnv::with_parent(parent.clone()),
+        None => TypeEnv::new(),
+    };
     // Unit é tipo primitivo da linguagem — sempre disponível no TypeEnv.
     type_env.define("Unit", Ty::Unit, origin);
     let mut signatures: Vec<Signature> = Vec::new();

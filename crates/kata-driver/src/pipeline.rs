@@ -379,6 +379,7 @@ impl Pipeline {
             &prelude.interface_registry,
             &prelude.directive_registry,
             Some(&prelude.type_graph),
+            Some(&prelude.type_env),
         )
         .map_err(|e| {
             e.into_iter()
@@ -648,6 +649,7 @@ fn quick_resolve(
         &prelude.interface_registry,
         &prelude.directive_registry,
         Some(&prelude.type_graph),
+        Some(&prelude.type_env),
     )
     .map_err(|e| {
         e.into_iter()
