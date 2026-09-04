@@ -40,7 +40,9 @@ pub(crate) fn range_check_step(coll_val: Value, elem_ty: &Ty, ctx: &mut LowerCtx
         // panic block
         let panic_block = ctx.builder.create_block();
         let ok_block = ctx.builder.create_block();
-        ctx.builder.ins().brif(is_zero, panic_block, &[], ok_block, &[]);
+        ctx.builder
+            .ins()
+            .brif(is_zero, panic_block, &[], ok_block, &[]);
         ctx.builder.switch_to_block(panic_block);
         let panic_fn = ctx
             .ffi_refs
@@ -50,9 +52,9 @@ pub(crate) fn range_check_step(coll_val: Value, elem_ty: &Ty, ctx: &mut LowerCtx
         let msg = ctx.builder.ins().iconst(I64, range_step_zero_msg_ptr());
         ctx.builder.ins().call(panic_fn, &[msg]);
         // kata_rt_panic diverges (!) — trap para satisfazer Cranelift.
-        ctx.builder.ins().trap(
-            cranelift_codegen::ir::TrapCode::user(1).expect("trap code 1 é sempre válido"),
-        );
+        ctx.builder
+            .ins()
+            .trap(cranelift_codegen::ir::TrapCode::user(1).expect("trap code 1 é sempre válido"));
         ctx.builder.seal_block(panic_block);
         ctx.builder.switch_to_block(ok_block);
         ctx.builder.seal_block(ok_block);
@@ -62,7 +64,9 @@ pub(crate) fn range_check_step(coll_val: Value, elem_ty: &Ty, ctx: &mut LowerCtx
         let is_zero = ctx.builder.ins().icmp(IntCC::Equal, step_val, zero_smi);
         let panic_block = ctx.builder.create_block();
         let ok_block = ctx.builder.create_block();
-        ctx.builder.ins().brif(is_zero, panic_block, &[], ok_block, &[]);
+        ctx.builder
+            .ins()
+            .brif(is_zero, panic_block, &[], ok_block, &[]);
         ctx.builder.switch_to_block(panic_block);
         let panic_fn = ctx
             .ffi_refs
@@ -72,9 +76,9 @@ pub(crate) fn range_check_step(coll_val: Value, elem_ty: &Ty, ctx: &mut LowerCtx
         let msg = ctx.builder.ins().iconst(I64, range_step_zero_msg_ptr());
         ctx.builder.ins().call(panic_fn, &[msg]);
         // kata_rt_panic diverges (!) — trap para satisfazer Cranelift.
-        ctx.builder.ins().trap(
-            cranelift_codegen::ir::TrapCode::user(1).expect("trap code 1 é sempre válido"),
-        );
+        ctx.builder
+            .ins()
+            .trap(cranelift_codegen::ir::TrapCode::user(1).expect("trap code 1 é sempre válido"));
         ctx.builder.seal_block(panic_block);
         ctx.builder.switch_to_block(ok_block);
         ctx.builder.seal_block(ok_block);

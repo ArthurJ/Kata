@@ -33,14 +33,8 @@ pub(crate) fn validate_pending_predicates(
         && !pending_predicates.is_empty()
     {
         for pred in pending_predicates.iter() {
-            let result = jit_execute_expr(
-                &pred.node,
-                ctx,
-                comptime_bindings,
-                ctx.functions,
-                &[],
-                &[],
-            )?;
+            let result =
+                jit_execute_expr(&pred.node, ctx, comptime_bindings, ctx.functions, &[], &[])?;
             // Resultado deve ser Boolean::True (tag 1) ou Boolean::False (tag 0).
             // O runtime representa Boolean como Sum com tag 0 (False) ou 1 (True).
             if result.raw != 1 {

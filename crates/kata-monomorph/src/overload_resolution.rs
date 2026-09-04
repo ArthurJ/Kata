@@ -33,8 +33,13 @@ fn replace_var_with_unit(ty: &mut Ty) {
             }
             replace_var_with_unit(ret);
         }
-        Ty::List(inner) | Ty::Array(inner) | Ty::Range(inner) | Ty::Set(inner)
-        | Ty::Sender(inner) | Ty::Receiver(inner) | Ty::ReceiverFactory(inner) => {
+        Ty::List(inner)
+        | Ty::Array(inner)
+        | Ty::Range(inner)
+        | Ty::Set(inner)
+        | Ty::Sender(inner)
+        | Ty::Receiver(inner)
+        | Ty::ReceiverFactory(inner) => {
             replace_var_with_unit(inner);
         }
         Ty::Tuple(elements) => {

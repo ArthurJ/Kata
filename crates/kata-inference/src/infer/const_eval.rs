@@ -8,9 +8,9 @@
 //! `<=`, `>=` com `IntLit` e `FloatLit`. `Hole` é substituído pelo valor
 //! antes da avaliação. Retorna `None` se não consegue avaliar.
 
+use crate::typed::{TypedExpr, TypedExprKind};
 use kata_ast::{Expr, Spanned};
 use kata_core::caps::ConstVal;
-use crate::typed::{TypedExpr, TypedExprKind};
 
 use std::cmp::Ordering;
 

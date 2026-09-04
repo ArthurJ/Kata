@@ -5,8 +5,8 @@
 //! despacha os arms `Expr::ListLit | ArrayLit | RangeLit | ForIn | In`.
 
 use kata_ast::{Expr, Span, Spanned};
-use kata_core::escape::EscapeTarget;
 use kata_core::caps::ConstVal;
+use kata_core::escape::EscapeTarget;
 use kata_core::interface_registry::ImplEntry;
 use kata_core::ty::{PrimTy, Ty, TypeEnv, ty_list_to_string};
 use kata_diagnostics::MiddleError;

@@ -193,8 +193,7 @@ pub(crate) fn synthesize_show_functions(
         }
 
         for (concrete_name, struct_info) in struct_registry.all_instances(&family_name) {
-            let instance_key =
-                StructKey::Instance(family_name.clone(), concrete_name.to_string());
+            let instance_key = StructKey::Instance(family_name.clone(), concrete_name.to_string());
             let param_ty = Ty::Struct(instance_key.clone());
             let ret_ty = Ty::text();
             let mangled = format!("__kata_show__{family_name}__{concrete_name}");

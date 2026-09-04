@@ -325,11 +325,7 @@ pub extern "C" fn kata_rt_set_overflowed(rt: i64) {
 #[unsafe(no_mangle)]
 pub extern "C" fn kata_rt_overflowed(rt: i64) -> i64 {
     let rt = unsafe { deref_runtime_ref(rt) };
-    if rt.overflowed() {
-        1
-    } else {
-        0
-    }
+    if rt.overflowed() { 1 } else { 0 }
 }
 
 /// `kata_rt_depth_get_limit(rt: i64) -> i64` — retorna o limite de profundidade.

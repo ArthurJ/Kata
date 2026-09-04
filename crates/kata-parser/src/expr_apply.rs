@@ -7,8 +7,8 @@
 use kata_ast::{Expr, Spanned, Token};
 use kata_diagnostics::FrontendError;
 
-use crate::Parser;
 use crate::MAX_EXPR_DEPTH;
+use crate::Parser;
 
 /// Parse an expression with greedy application.
 /// Free function — called from declarations and expressions.
