@@ -88,20 +88,14 @@ fn run_kata(path: &str, interp: bool) -> (String, String, i32) {
 /// e exit code 0.
 fn assert_both(path: &str, expected: &str) {
     let (out_jit, err_jit, code_jit) = run_kata(path, false);
-    assert_eq!(
-        code_jit, 0,
-        "JIT deve exit 0 — stderr: {err_jit}"
-    );
+    assert_eq!(code_jit, 0, "JIT deve exit 0 — stderr: {err_jit}");
     assert_eq!(
         out_jit.trim(),
         expected,
         "JIT: esperava `{expected}` — stdout: {out_jit}"
     );
     let (out_interp, err_interp, code_interp) = run_kata(path, true);
-    assert_eq!(
-        code_interp, 0,
-        "INTERP deve exit 0 — stderr: {err_interp}"
-    );
+    assert_eq!(code_interp, 0, "INTERP deve exit 0 — stderr: {err_interp}");
     assert_eq!(
         out_interp.trim(),
         expected,
@@ -114,10 +108,7 @@ fn assert_both(path: &str, expected: &str) {
 /// no interpretador.
 fn assert_jit_only(path: &str, expected: &str) {
     let (out_jit, err_jit, code_jit) = run_kata(path, false);
-    assert_eq!(
-        code_jit, 0,
-        "JIT deve exit 0 — stderr: {err_jit}"
-    );
+    assert_eq!(code_jit, 0, "JIT deve exit 0 — stderr: {err_jit}");
     assert_eq!(
         out_jit.trim(),
         expected,
@@ -295,9 +286,7 @@ fn embed_text_absolute_path() {
     let abs_fixture = dir.join("abs_test.txt");
     fs::write(&abs_fixture, "abs content").expect("escrever fixture");
     let abs_str = abs_fixture.to_string_lossy().to_string();
-    let kata_src = format!(
-        "constant x := @embed_text{{path: \"{abs_str}\"}}\necho!(x)\n"
-    );
+    let kata_src = format!("constant x := @embed_text{{path: \"{abs_str}\"}}\necho!(x)\n");
     let path = write_kata(&dir, "test", &kata_src);
     let (out_jit, err_jit, code_jit) = run_kata(&path, false);
     assert_eq!(code_jit, 0, "JIT deve exit 0 — stderr: {err_jit}");
@@ -308,7 +297,11 @@ fn embed_text_absolute_path() {
     );
     let (out_interp, err_interp, code_interp) = run_kata(&path, true);
     assert_eq!(code_interp, 0, "INTERP deve exit 0 — stderr: {err_interp}");
-    assert_eq!(out_interp.trim(), "abs content", "INTERP stdout: {out_interp}");
+    assert_eq!(
+        out_interp.trim(),
+        "abs content",
+        "INTERP stdout: {out_interp}"
+    );
     assert!(
         err_interp.contains("path absoluto"),
         "INTERP stderr deve ter warning de path absoluto — stderr: {err_interp}"
@@ -325,13 +318,15 @@ fn embed_bytes_absolute_path() {
     let abs_fixture = dir.join("abs_data.bin");
     fs::write(&abs_fixture, b"\x00\x01\x02").expect("escrever fixture");
     let abs_str = abs_fixture.to_string_lossy().to_string();
-    let kata_src = format!(
-        "constant x := @embed_bytes{{path: \"{abs_str}\"}}\necho!(len x)\n"
-    );
+    let kata_src = format!("constant x := @embed_bytes{{path: \"{abs_str}\"}}\necho!(len x)\n");
     let path = write_kata(&dir, "test", &kata_src);
     let (out_jit, err_jit, code_jit) = run_kata(&path, false);
     assert_eq!(code_jit, 0, "JIT deve exit 0 — stderr: {err_jit}");
-    assert_eq!(out_jit.trim(), "3", "JIT len deve ser 3 — stdout: {out_jit}");
+    assert_eq!(
+        out_jit.trim(),
+        "3",
+        "JIT len deve ser 3 — stdout: {out_jit}"
+    );
     assert!(
         err_jit.contains("path absoluto"),
         "JIT stderr deve ter warning — stderr: {err_jit}"
@@ -375,11 +370,7 @@ fn embed_text_in_imported_module() {
     )
     .expect("escrever mod.kata");
     fs::write(mod_dir.join("mod_data.txt"), "hello from module").expect("escrever fixture");
-    let path = write_kata(
-        &dir,
-        "test",
-        "import mymod.(greeting)\necho!(greeting)\n",
-    );
+    let path = write_kata(&dir, "test", "import mymod.(greeting)\necho!(greeting)\n");
     assert_both(&path, "hello from module");
 }
 

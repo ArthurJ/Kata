@@ -431,9 +431,7 @@ pub(crate) fn run_pass0(
                 // data sem campos e sem @ffi reconhecido é inválido:
                 // sem construtor, sem show, sem layout — não tem significado.
                 if fields.is_empty() && ffi_symbol.is_none() {
-                    errors.push(ResolveError::EmptyDataNoFfi {
-                        name: name.clone(),
-                    });
+                    errors.push(ResolveError::EmptyDataNoFfi { name: name.clone() });
                 }
 
                 // Se o DataDecl tem campos não-vazios, registra no StructRegistry.

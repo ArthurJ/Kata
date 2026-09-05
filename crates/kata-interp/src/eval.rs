@@ -9,8 +9,8 @@ use std::ffi::CString;
 use std::sync::Arc;
 
 use kata_ast::Spanned;
-use kata_core::ty::{PrimTy, Ty};
 use kata_core::StructKey;
+use kata_core::ty::{PrimTy, Ty};
 use kata_inference::{
     CacheStrategy, ChannelKind, TypedExpr, TypedExprKind, TypedLambdaClause, TypedModule,
     TypedPattern, TypedSelectArm,
@@ -1532,10 +1532,7 @@ fn serialize_key_part(
             // write_descriptor — Instance resolve para o concreto)
             let type_name = struct_key.name();
             if let Some(info) = struct_registry.get(type_name) {
-                if info.alias_of.is_some()
-                    && info.predicates.is_some()
-                    && info.fields.is_empty()
-                {
+                if info.alias_of.is_some() && info.predicates.is_some() && info.fields.is_empty() {
                     let base = info.alias_of.clone().expect("checado is_some acima");
                     let base_ty = match base.as_str() {
                         "Int" => Ty::Prim(PrimTy::Int),
@@ -1550,7 +1547,8 @@ fn serialize_key_part(
                 // Struct com campos: ler cada campo (8 bytes contíguos)
                 let ptr = val as *const u8;
                 for (i, field) in info.fields.iter().enumerate() {
-                    let field_val = unsafe { std::ptr::read_unaligned(ptr.add(i * 8) as *const i64) };
+                    let field_val =
+                        unsafe { std::ptr::read_unaligned(ptr.add(i * 8) as *const i64) };
                     serialize_key_part(&field.ty, field_val, key, cacheable, struct_registry);
                     if !*cacheable {
                         return;

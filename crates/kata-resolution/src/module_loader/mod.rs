@@ -333,15 +333,19 @@ impl ModuleLoader {
         // embeds com erro explícito). User modules usam o diretório do
         // arquivo como module_dir.
         let module = if is_stdlib_path(path) {
-            let (m, deps) = crate::embed::resolve_embeds_stdlib(module)
-                .map_err(|e| { self.loading.remove(path); LoadError::Embed(e) })?;
+            let (m, deps) = crate::embed::resolve_embeds_stdlib(module).map_err(|e| {
+                self.loading.remove(path);
+                LoadError::Embed(e)
+            })?;
             // Stdlib não deve ter embeds — deps deve ser vazio.
             let _ = deps;
             m
         } else {
             let module_dir = path.parent().unwrap_or(Path::new("."));
-            let (m, deps) = crate::embed::resolve_embeds(module, module_dir)
-                .map_err(|e| { self.loading.remove(path); LoadError::Embed(e) })?;
+            let (m, deps) = crate::embed::resolve_embeds(module, module_dir).map_err(|e| {
+                self.loading.remove(path);
+                LoadError::Embed(e)
+            })?;
             // deps será propagado para merged.embed_dependencies abaixo.
             // Por ora, armazenamos via uma closure lateral.
             self.pending_embed_deps.extend(deps);
@@ -369,7 +373,9 @@ impl ModuleLoader {
         };
 
         // Propagar embed deps do módulo atual para merged.
-        merged.embed_dependencies.extend(std::mem::take(&mut self.pending_embed_deps));
+        merged
+            .embed_dependencies
+            .extend(std::mem::take(&mut self.pending_embed_deps));
 
         // Carregar imports do módulo recursivamente e fazer merge.
         // Stdlib embedded usa diretório sintético; user modules usam

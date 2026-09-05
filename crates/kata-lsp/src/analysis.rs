@@ -64,9 +64,8 @@ pub fn run_frontend(
     let module_dir = file_path
         .and_then(|f| std::path::Path::new(f).parent())
         .unwrap_or(std::path::Path::new("."));
-    let (module, _embed_deps) =
-        kata_resolution::resolve_embeds(module, module_dir)
-            .map_err(|errors| vec![FrontendBatch::Embed(errors)])?;
+    let (module, _embed_deps) = kata_resolution::resolve_embeds(module, module_dir)
+        .map_err(|errors| vec![FrontendBatch::Embed(errors)])?;
 
     // 3. Resolve (prelude + módulo do usuário)
     let prelude = load_stdlib().map_err(|e| vec![FrontendBatch::Resolve(e)])?;

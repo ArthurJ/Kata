@@ -115,8 +115,7 @@ fn walk_item(item: Spanned<Item>, ctx: &mut EmbedCtx) -> Spanned<Item> {
             params,
             ret,
             directives,
-            body: body
-                .map(|clauses| clauses.into_iter().map(|c| walk_clause(c, ctx)).collect()),
+            body: body.map(|clauses| clauses.into_iter().map(|c| walk_clause(c, ctx)).collect()),
         },
 
         Item::ActionDecl {
@@ -210,9 +209,9 @@ fn walk_item(item: Spanned<Item>, ctx: &mut EmbedCtx) -> Spanned<Item> {
                     name: sig.name,
                     params: sig.params,
                     ret: sig.ret,
-                    default_body: sig.default_body.map(|clauses| {
-                        clauses.into_iter().map(|c| walk_clause(c, ctx)).collect()
-                    }),
+                    default_body: sig
+                        .default_body
+                        .map(|clauses| clauses.into_iter().map(|c| walk_clause(c, ctx)).collect()),
                 })
                 .collect();
             Item::InterfaceDecl {
@@ -237,9 +236,9 @@ fn walk_item(item: Spanned<Item>, ctx: &mut EmbedCtx) -> Spanned<Item> {
                     params: m.params,
                     ret: m.ret,
                     directives: m.directives,
-                    body: m.body.map(|clauses| {
-                        clauses.into_iter().map(|c| walk_clause(c, ctx)).collect()
-                    }),
+                    body: m
+                        .body
+                        .map(|clauses| clauses.into_iter().map(|c| walk_clause(c, ctx)).collect()),
                 })
                 .collect();
             Item::ImplementsDecl {
@@ -263,9 +262,9 @@ fn walk_item(item: Spanned<Item>, ctx: &mut EmbedCtx) -> Spanned<Item> {
                     params: m.params,
                     ret: m.ret,
                     directives: m.directives,
-                    body: m.body.map(|clauses| {
-                        clauses.into_iter().map(|c| walk_clause(c, ctx)).collect()
-                    }),
+                    body: m
+                        .body
+                        .map(|clauses| clauses.into_iter().map(|c| walk_clause(c, ctx)).collect()),
                 })
                 .collect();
             Item::RefinesDecl {
@@ -280,12 +279,10 @@ fn walk_item(item: Spanned<Item>, ctx: &mut EmbedCtx) -> Spanned<Item> {
                 .into_iter()
                 .map(|a| match a {
                     DirectiveArg::Expr(e) => DirectiveArg::Expr(Box::new(walk_expr(*e, ctx))),
-                    DirectiveArg::Named { key, value } => {
-                        DirectiveArg::Named {
-                            key,
-                            value: Box::new(walk_expr(*value, ctx)),
-                        }
-                    }
+                    DirectiveArg::Named { key, value } => DirectiveArg::Named {
+                        key,
+                        value: Box::new(walk_expr(*value, ctx)),
+                    },
                 })
                 .collect();
             let body = body
@@ -368,13 +365,20 @@ fn walk_expr(expr: Spanned<Expr>, ctx: &mut EmbedCtx) -> Spanned<Expr> {
                 ctx.errors.push(EmbedError::EmbeddedModule {
                     span: MietteSpan::from(span),
                 });
-                return Spanned::new(Expr::TextLit { text: String::new() }, span);
+                return Spanned::new(
+                    Expr::TextLit {
+                        text: String::new(),
+                    },
+                    span,
+                );
             }
             match read_file(&path, ctx.module_dir, &span, ctx) {
                 Ok(content) => Expr::TextLit { text: content },
                 Err(e) => {
                     ctx.errors.push(e);
-                    Expr::TextLit { text: String::new() }
+                    Expr::TextLit {
+                        text: String::new(),
+                    }
                 }
             }
         }
@@ -442,10 +446,7 @@ fn walk_expr(expr: Spanned<Expr>, ctx: &mut EmbedCtx) -> Spanned<Expr> {
             with_bindings,
         } => {
             // Patterns podem conter Pattern::Literal(Spanned<Expr>)
-            let patterns = patterns
-                .into_iter()
-                .map(|p| walk_pattern(p, ctx))
-                .collect();
+            let patterns = patterns.into_iter().map(|p| walk_pattern(p, ctx)).collect();
             Expr::Lambda {
                 patterns,
                 body: Box::new(walk_expr(*body, ctx)),
@@ -514,7 +515,11 @@ fn walk_expr(expr: Spanned<Expr>, ctx: &mut EmbedCtx) -> Spanned<Expr> {
 
         Expr::DotAccess { expr, index } => {
             let index = match index {
-                DotIndex::Range { start, end, inclusive } => DotIndex::Range {
+                DotIndex::Range {
+                    start,
+                    end,
+                    inclusive,
+                } => DotIndex::Range {
                     start: Box::new(walk_expr(*start, ctx)),
                     end: Box::new(walk_expr(*end, ctx)),
                     inclusive,
@@ -641,20 +646,17 @@ fn walk_pattern(pattern: Spanned<Pattern>, ctx: &mut EmbedCtx) -> Spanned<Patter
             variant,
             payload,
         } => {
-            let payload = payload.map(|subs| {
-                subs.into_iter()
-                    .map(|p| walk_pattern(p, ctx))
-                    .collect()
-            });
+            let payload =
+                payload.map(|subs| subs.into_iter().map(|p| walk_pattern(p, ctx)).collect());
             Pattern::Variant {
                 enum_name,
                 variant,
                 payload,
             }
         }
-        Pattern::Tuple(elements) => Pattern::Tuple(
-            elements.into_iter().map(|p| walk_pattern(p, ctx)).collect(),
-        ),
+        Pattern::Tuple(elements) => {
+            Pattern::Tuple(elements.into_iter().map(|p| walk_pattern(p, ctx)).collect())
+        }
         Pattern::Cons { head, tail } => Pattern::Cons {
             head: Box::new(walk_pattern(*head, ctx)),
             tail: Box::new(walk_pattern(*tail, ctx)),
@@ -686,7 +688,9 @@ fn read_file(
 ) -> Result<String, EmbedError> {
     let resolved = resolve_path(path, module_dir);
     if Path::new(path).is_absolute() {
-        eprintln!("[resolution] warning: @embed_text com path absoluto \"{path}\" — builds não-reprodutíveis");
+        eprintln!(
+            "[resolution] warning: @embed_text com path absoluto \"{path}\" — builds não-reprodutíveis"
+        );
     }
     match std::fs::read_to_string(&resolved) {
         Ok(content) => {
@@ -709,7 +713,9 @@ fn read_file_bytes(
 ) -> Result<Vec<u8>, EmbedError> {
     let resolved = resolve_path(path, module_dir);
     if Path::new(path).is_absolute() {
-        eprintln!("[resolution] warning: @embed_bytes com path absoluto \"{path}\" — builds não-reprodutíveis");
+        eprintln!(
+            "[resolution] warning: @embed_bytes com path absoluto \"{path}\" — builds não-reprodutíveis"
+        );
     }
     match std::fs::read(&resolved) {
         Ok(bytes) => {

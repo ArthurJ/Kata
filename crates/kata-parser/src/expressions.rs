@@ -547,9 +547,8 @@ fn extract_embed_path(
     parser: &Parser,
 ) -> Result<String, FrontendError> {
     if args.len() != 1 {
-        return Err(parser.error(
-            "`@embed_text`/`@embed_bytes` exige exatamente um argumento: `path: \"...\"`",
-        ));
+        return Err(parser
+            .error("`@embed_text`/`@embed_bytes` exige exatamente um argumento: `path: \"...\"`"));
     }
     match &args[0] {
         kata_ast::DirectiveArg::Named { key, value } if key == "path" => {

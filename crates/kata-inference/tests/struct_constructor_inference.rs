@@ -109,7 +109,7 @@ fn struct_sem_campos_sem_ffi_eh_rejeitado() {
     let src = "data Vazio ()\nVazio";
     let tokens = lex(src).unwrap();
     let module = parse(tokens).unwrap();
-    let prelude = load_stdlib_for_tests().unwrap();
+    let _prelude = load_stdlib_for_tests().unwrap();
     let user = resolve(&module);
     assert!(
         user.is_err(),

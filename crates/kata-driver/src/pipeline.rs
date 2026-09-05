@@ -376,12 +376,7 @@ impl Pipeline {
             .unwrap_or(std::path::Path::new("."));
         let (resolved_module, embed_deps) =
             kata_resolution::resolve_embeds(module.clone(), module_dir)
-                .map_err(|errors| {
-                    errors
-                        .into_iter()
-                        .map(|e| e.into())
-                        .collect::<Vec<_>>()
-                })?;
+                .map_err(|errors| errors.into_iter().map(|e| e.into()).collect::<Vec<_>>())?;
         self.module = Some(resolved_module);
         let module = self.module.as_ref().unwrap();
         self.embed_deps = embed_deps;
