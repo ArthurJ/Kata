@@ -56,6 +56,10 @@ pub struct ResolvedModule {
     pub actions: Vec<ActionDef>,
     /// Registro de diretivas customizadas declaradas no módulo.
     pub directive_registry: DirectiveRegistry,
+    /// Arquivos embutidos via @embed_text/@embed_bytes.
+    /// Para rastreamento de dependências (incremental compilation).
+    /// Concatenado em merge_two e merge_imports.
+    pub embed_dependencies: Vec<std::path::PathBuf>,
 }
 
 /// Assinatura de função coletada no Pass 1.

@@ -112,6 +112,8 @@ pub fn merge_imports(merged: &mut ResolvedModule, imports: &[ImportedModule]) {
                 merge_registries(merged, &imported.resolved);
             }
         }
+        // Concatenar embed_dependencies do módulo importado.
+        merged.embed_dependencies.extend(imported.resolved.embed_dependencies.iter().cloned());
     }
 }
 

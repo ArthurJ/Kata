@@ -62,6 +62,7 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
             acts
         },
         directive_registry: DirectiveRegistry::new(),
+        embed_dependencies: Vec::new(),
     }
 }
 

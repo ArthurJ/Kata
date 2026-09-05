@@ -27,6 +27,7 @@ fn make_module_with_type(name: &str, ty: Ty, origin: &str) -> ResolvedModule {
         functions: Vec::new(),
         actions: Vec::new(),
         directive_registry: kata_resolution::DirectiveRegistry::new(),
+        embed_dependencies: Vec::new(),
     }
 }
 

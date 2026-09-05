@@ -66,6 +66,8 @@ pub enum LoadError {
     ReservedName { name: String },
     /// Erro de I/O.
     Io(String),
+    /// Erro de @embed_text/@embed_bytes.
+    Embed(Vec<crate::embed::EmbedError>),
 }
 
 impl std::fmt::Display for LoadError {
@@ -91,6 +93,13 @@ impl std::fmt::Display for LoadError {
                 )
             }
             LoadError::Io(msg) => write!(f, "erro de I/O ao carregar módulo: {msg}"),
+            LoadError::Embed(errors) => {
+                write!(f, "erro de embed ao carregar módulo: ")?;
+                for e in errors {
+                    write!(f, "{e}; ")?;
+                }
+                Ok(())
+            }
         }
     }
 }

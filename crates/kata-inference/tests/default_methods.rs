@@ -66,6 +66,7 @@ fn merge_resolved(
             acts
         },
         directive_registry: kata_resolution::DirectiveRegistry::new(),
+        embed_dependencies: Vec::new(),
     }
 }
 

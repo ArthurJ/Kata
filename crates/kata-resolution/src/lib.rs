@@ -6,6 +6,7 @@
 //! Produz o `ResolvedModule` (imutável).
 
 mod directives;
+pub mod embed;
 pub(crate) mod ident_collector;
 pub(crate) mod merge_imports;
 pub(crate) mod module_loader;
@@ -13,6 +14,7 @@ mod pass0;
 mod type_resolve;
 mod types;
 
+pub use embed::{EmbedError, resolve_embeds, resolve_embeds_stdlib};
 pub use type_resolve::{collect_type_params, resolve_type_expr};
 pub use types::*;
 
@@ -554,6 +556,7 @@ fn resolve_inner(
         functions,
         actions,
         directive_registry,
+        embed_dependencies: Vec::new(),
     })
 }
 
@@ -648,6 +651,9 @@ pub fn merge_two(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModul
         eprintln!("[resolution] warning: {e}");
     }
 
+    let mut embed_dependencies = prelude.embed_dependencies;
+    embed_dependencies.extend(user.embed_dependencies);
+
     ResolvedModule {
         type_env,
         signatures,
@@ -662,6 +668,7 @@ pub fn merge_two(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModul
         functions,
         actions,
         directive_registry,
+        embed_dependencies,
     }
 }
 

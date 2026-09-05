@@ -70,6 +70,7 @@ fn merge_resolved(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModu
             acts
         },
         directive_registry: kata_resolution::DirectiveRegistry::new(),
+        embed_dependencies: Vec::new(),
     }
 }
 
