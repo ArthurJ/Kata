@@ -55,7 +55,9 @@ pub fn assert_no_holes(expr: &Spanned<Expr>) {
         | Expr::Unit
         | Expr::VariantQual { .. }
         | Expr::Break
-        | Expr::Continue => {}
+        | Expr::Continue
+        | Expr::EmbedText { .. }
+        | Expr::EmbedBytes { .. } => {}
         // Novos nós: recursão nos filhos
         Expr::ActionCall { args, .. } => assert_no_holes(args),
         Expr::Return(inner) => assert_no_holes(inner),
@@ -194,7 +196,9 @@ pub fn assert_no_pipes(expr: &Spanned<Expr>) {
         | Expr::Unit
         | Expr::VariantQual { .. }
         | Expr::Break
-        | Expr::Continue => {}
+        | Expr::Continue
+        | Expr::EmbedText { .. }
+        | Expr::EmbedBytes { .. } => {}
         // Novos nós: recursão nos filhos
         Expr::ActionCall { args, .. } => assert_no_pipes(args),
         Expr::Return(inner) => assert_no_pipes(inner),

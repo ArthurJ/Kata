@@ -159,7 +159,10 @@ fn collect_idents(expr: &Spanned<Expr>, out: &mut HashSet<String>) {
         | Expr::FloatLit { .. }
         | Expr::TextLit { .. }
         | Expr::BytesLit { .. }
-        | Expr::Unit => {}
+        | Expr::Unit
+        // Embed: path é literal, não contém idents.
+        | Expr::EmbedText { .. }
+        | Expr::EmbedBytes { .. } => {}
     }
 }
 

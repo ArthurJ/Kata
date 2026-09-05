@@ -260,6 +260,17 @@ pub enum Expr {
     /// O resultado é a última expressão; as anteriores são computações
     /// intermediárias (bindings `let`, etc.).
     Block { stmts: Vec<Spanned<Expr>> },
+
+    // ── Embed (efêmero: existe apenas entre parser e resolve_embeds) ──
+    /// `@embed_text{path: "..."}` — lê arquivo como Text.
+    /// Resolvido por `resolve_embeds` (antes da resolution de tipos):
+    /// substituído por `Expr::TextLit` com o conteúdo do arquivo.
+    EmbedText { path: String },
+
+    /// `@embed_bytes{path: "..."}` — lê arquivo como Bytes.
+    /// Resolvido por `resolve_embeds` (antes da resolution de tipos):
+    /// substituído por `Expr::BytesLit` com os bytes do arquivo.
+    EmbedBytes { path: String },
 }
 
 /// Índice de DotAccess — field nomeado, inteiro, ou range (slice).

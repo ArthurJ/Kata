@@ -216,6 +216,20 @@ pub(crate) fn infer_expr_hinted(
         ),
         Expr::Unit => (Ty::Unit, TypedExprKind::Unit),
 
+        // Embed: nós efêmeros — resolve_embeds os substitui antes da
+        // inference. Se chegaram aqui, um frontend esqueceu de chamar
+        // resolve_embeds. Erro gracioso com mensagem clara.
+        Expr::EmbedText { path } | Expr::EmbedBytes { path } => {
+            return Err(MiddleError::UnboundName {
+                name: format!(
+                    "@embed_text/@embed_bytes residual na inference (path: \"{path}\") — \
+                    resolve_embeds não foi chamado pelo frontend"
+                ),
+                span: (*span).into(),
+                suggestion: None,
+            });
+        }
+
         // ── Identificador ────────────────────────────────────
         Expr::Ident { name } => {
             // Caminho 1: variável local no TypeEnv.

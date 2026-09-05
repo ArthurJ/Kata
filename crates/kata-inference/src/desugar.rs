@@ -142,6 +142,9 @@ fn desugar_pipes(expr: &Spanned<Expr>) -> Spanned<Expr> {
         | Expr::Hole
         | Expr::VariantQual { .. }
         | Expr::Break
+        // Embed: terminal efêmero, sem sub-expressões.
+        | Expr::EmbedText { .. }
+        | Expr::EmbedBytes { .. }
         | Expr::Continue => expr.clone(),
 
         // ── Novos nós — recursão nos filhos ──────────

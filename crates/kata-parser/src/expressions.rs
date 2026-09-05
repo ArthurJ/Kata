@@ -310,16 +310,31 @@ impl Parser {
                 Ok(Spanned::new(Expr::Ident { name }, start))
             }
             Token::At => {
-                // `@comptime` foi removido da linguagem (PRD-constant ).
-                // Usar `constant` para declarações de módulo comptime.
+                // `@` em posição de expressão — novo em Kata5.
+                // Hoje: `@embed_text{path: "..."}` e `@embed_bytes{path: "..."}`.
+                // `@comptime` foi removido — usar `constant`.
                 self.advance(); // consume `@`
                 match self.peek() {
+                    Token::Ident(s) if s == "embed_text" || s == "embed_bytes" => {
+                        let is_text = s == "embed_text";
+                        self.advance(); // consume embed_text / embed_bytes
+                        let args = self.parse_directive_args()?;
+                        // Validar: exatamente uma key `path`, valor é TextLit.
+                        let path = extract_embed_path(&args, self)?;
+                        let span = start.cover(self.tokens[self.pos - 1].span);
+                        let expr = if is_text {
+                            Expr::EmbedText { path }
+                        } else {
+                            Expr::EmbedBytes { path }
+                        };
+                        Ok(Spanned::new(expr, span))
+                    }
                     Token::Ident(s) if s == "comptime" => {
                         Err(self.error(
                             "`@comptime` foi removido. Use `constant` para constantes de módulo, ou remova `@comptime` — o fold automático otimiza chamadas puras com args literais.",
                         ))
                     }
-                    _ => Err(self.error("diretiva desconhecida após `@`")),
+                    _ => Err(self.error("diretiva desconhecida após `@` em posição de expressão (use `@embed_text` ou `@embed_bytes`)")),
                 }
             }
             _ => Err(self.error("expression")),
@@ -520,6 +535,40 @@ impl Parser {
         let value = parse_expr(self)?;
         let span = start.cover(value.span);
         Ok(Spanned::new(Expr::Return(Box::new(value)), span))
+    }
+}
+
+/// Extrai o path de argumentos de `@embed_text`/`@embed_bytes`.
+///
+/// Valida: exatamente uma key `path`, valor é `Expr::TextLit`.
+/// Retorna o texto do path ou erro de parser.
+fn extract_embed_path(
+    args: &[kata_ast::DirectiveArg],
+    parser: &Parser,
+) -> Result<String, FrontendError> {
+    if args.len() != 1 {
+        return Err(parser.error(
+            "`@embed_text`/`@embed_bytes` exige exatamente um argumento: `path: \"...\"`",
+        ));
+    }
+    match &args[0] {
+        kata_ast::DirectiveArg::Named { key, value } if key == "path" => {
+            match &value.node {
+                Expr::TextLit { text } => Ok(text.clone()),
+                _ => Err(parser.error(
+                    "o valor de `path` em `@embed_text`/`@embed_bytes` deve ser um literal de texto (string)",
+                )),
+            }
+        }
+        kata_ast::DirectiveArg::Named { key, .. } => {
+            let msg = format!(
+                "chave desconhecida `{key}` — `@embed_text`/`@embed_bytes` só aceita `path`"
+            );
+            Err(parser.error(&msg))
+        }
+        kata_ast::DirectiveArg::Expr(_) => Err(parser.error(
+            "`@embed_text`/`@embed_bytes` exige argumento nomeado `path: \"...\"`, não posicional",
+        )),
     }
 }
 

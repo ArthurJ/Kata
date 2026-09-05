@@ -405,6 +405,9 @@ fn expr_uses_name(expr: &Spanned<Expr>, name: &str) -> bool {
         Expr::IntLit { .. }
         | Expr::FloatLit { .. }
         | Expr::TextLit { .. }
-        | Expr::BytesLit { .. } => false,
+        | Expr::BytesLit { .. }
+        // Embed: path é literal, não contém idents
+        | Expr::EmbedText { .. }
+        | Expr::EmbedBytes { .. } => false,
     }
 }

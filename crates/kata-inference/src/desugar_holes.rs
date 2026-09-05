@@ -175,6 +175,9 @@ pub(crate) fn desugar_holes(expr: &Spanned<Expr>) -> Spanned<Expr> {
         | Expr::Hole
         | Expr::VariantQual { .. }
         | Expr::Break
+        // Embed: terminal efêmero, sem sub-expressões.
+        | Expr::EmbedText { .. }
+        | Expr::EmbedBytes { .. }
         | Expr::Continue => expr.clone(),
         // Pipe não deve aparecer aqui (desugar_pipes roda primeiro)
         Expr::Pipe { .. } => expr.clone(),
