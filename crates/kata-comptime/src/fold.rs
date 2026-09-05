@@ -24,6 +24,7 @@ pub(crate) fn is_literal_expr(expr: &TypedExpr) -> bool {
         TypedExprKind::IntLit { .. }
             | TypedExprKind::FloatLit { .. }
             | TypedExprKind::TextLit { .. }
+            | TypedExprKind::BytesLit { .. }
             | TypedExprKind::Unit
             | TypedExprKind::HeapSnapshot { .. }
             | TypedExprKind::VariantQual { .. }

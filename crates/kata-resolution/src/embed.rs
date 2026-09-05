@@ -685,7 +685,7 @@ fn read_file(
     ctx: &mut EmbedCtx,
 ) -> Result<String, EmbedError> {
     let resolved = resolve_path(path, module_dir);
-    if resolved.is_absolute() {
+    if Path::new(path).is_absolute() {
         eprintln!("[resolution] warning: @embed_text com path absoluto \"{path}\" — builds não-reprodutíveis");
     }
     match std::fs::read_to_string(&resolved) {
@@ -708,7 +708,7 @@ fn read_file_bytes(
     ctx: &mut EmbedCtx,
 ) -> Result<Vec<u8>, EmbedError> {
     let resolved = resolve_path(path, module_dir);
-    if resolved.is_absolute() {
+    if Path::new(path).is_absolute() {
         eprintln!("[resolution] warning: @embed_bytes com path absoluto \"{path}\" — builds não-reprodutíveis");
     }
     match std::fs::read(&resolved) {

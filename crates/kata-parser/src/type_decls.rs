@@ -134,7 +134,7 @@ impl Parser {
     pub(crate) fn is_literal_start(&self) -> bool {
         matches!(
             self.peek(),
-            Token::IntLit(_) | Token::FloatLit(_) | Token::TextLit(_)
+            Token::IntLit(_) | Token::FloatLit(_) | Token::TextLit(_) | Token::At
         )
     }
 

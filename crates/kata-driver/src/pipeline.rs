@@ -408,7 +408,7 @@ impl Pipeline {
                 .collect::<Vec<_>>()
         })?;
         let mut resolved = merge_resolved(prelude, user);
-        resolved.embed_dependencies.extend(self.embed_deps.drain(..));
+        resolved.embed_dependencies.append(&mut self.embed_deps);
         kata_resolution::merge_imports(&mut resolved, &imports);
 
         self.imports = imports;

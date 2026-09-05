@@ -40,6 +40,7 @@ fn check(expr: &TypedExpr, comptime_bindings: &HashMap<String, TypedExpr>) -> bo
         TypedExprKind::IntLit { .. }
         | TypedExprKind::FloatLit { .. }
         | TypedExprKind::TextLit { .. }
+        | TypedExprKind::BytesLit { .. }
         | TypedExprKind::Unit
         | TypedExprKind::VariantQual { .. } => true,
 

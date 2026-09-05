@@ -160,6 +160,12 @@ impl Parser {
             Token::LParen => self.parse_tuple_pattern(start, allow_unqualified_variant),
             // `[]` ou `[h : t]` → Cons pattern (stub )
             Token::LBracket => self.parse_cons_pattern(start),
+            // `@embed_text{...}` / `@embed_bytes{...}` → Literal pattern
+            // (resolve_embeds substitui por TextLit/BytesLit antes da inference)
+            Token::At => {
+                let expr = self.parse_expr_atom()?;
+                Ok(Spanned::new(Pattern::Literal(expr), start))
+            }
             _ => Err(self.error("pattern")),
         }
     }
@@ -301,6 +307,7 @@ impl Parser {
                 | Token::TextLit(_)
                 | Token::LParen
                 | Token::LBracket
+                | Token::At
         )
     }
 }
