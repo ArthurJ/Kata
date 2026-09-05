@@ -243,34 +243,25 @@ Para lints/allow/warn, ver seção TODO abaixo.
 
 ### Pureza
 
-Constants não exigem pureza. O `check_purity` atual em `kata-comptime` é
-uma restrição que assume que o desenvolvedor não controla o ambiente de
-compilação. Mas compilação é o momento onde o desenvolvedor tem **mais**
-controle.
+`constant` é determinístico: dado o mesmo código-fonte, produz o mesmo
+TAST. I/O quebra essa propriedade. `check_purity` em `evaluate_constants`
+rejeita ActionCall/Fork/Channel/etc. com erro claro
+(`constant.io_forbidden`) sugerindo `@embed_text`/`@embed_bytes` como
+alternativas. Config FFIs (`set_recursion_limit`) são tratadas antes de
+`check_purity` (Closure com ffi_symbol).
 
-**Decisão:** remover `check_purity` para constants. O comptime JIT executa
-o que o desenvolvedor escreveu.
-
-Nota: `check_purity` pode continuar existindo como função utility se for
-usada em outros contextos (ex: `@comptime let` dentro de actions). O que
-muda é que `evaluate_constants` não a chama.
+**Decisão:** `check_purity` reativado (commit 7fc80c9). Resource embedding
+via `@embed_text{path: "..."}` / `@embed_bytes{path: "..."}` — diretivas
+em posição de expressão, resolvidas por `resolve_embeds` em
+`kata-resolution`, entre parse e resolution. Ver PRD-embed-directive.
 
 ### Infrastructure do comptime JIT
 
-O comptime JIT hoje cria um `Runtime::new()` vazio via `leak_rt_ptr()` —
-sem scheduler, sem fibers, sem I/O. Isso limita o que constants podem
-fazer: expressões que dependem dessa infrastructure falham.
-
-A solução é levantar a infrastructure completa no comptime JIT, igual ao
-que o driver faz para execução normal. Assim, `constant x :=
-read_file("config.txt")` funciona — lê o arquivo em compile-time e bakes
-o conteúdo no binário. É o mesmo padrão de `include_str!` em Rust,
-`@embedFile` em Zig, `#include` em C.
-
-Implementação: o comptime pass cria um `Runtime` completo (com scheduler
-init) uma vez por módulo, e o reutiliza para todas as constants. O
-`rt_ptr` passado para `jit_execute_expr` é o mesmo para todas as
-avaliações do módulo. O Runtime é destruído no fim do comptime pass.
+O comptime JIT cria um `Runtime::new()` vazio via `leak_rt_ptr()` —
+sem scheduler, sem fibers, sem I/O. `constant` não faz I/O — embedding
+de recursos é feito por `@embed_text`/`@embed_bytes`, que lê arquivos
+em `resolve_embeds` (antes da inference) e substitui por literais.
+O comptime JIT permanece enxuto (Runtime vazio + FFI de depth).
 
 **Propagação de config comptime→runtime:** o `constant` executa
 `set_recursion_limit(N)` no comptime Runtime, setando `depth_limit`. O
@@ -363,11 +354,9 @@ warning, ou suprimir warnings de binding não-utilizado.
    contador — diferença de tempo < 5%. Fora do escopo atual — é
    verificação de performance, não funcionalidade.
 
-8. **Comptime com infrastructure (futuro):** `constant` que usa I/O
-   (ex: `read_file`) executa em comptime com `Runtime` completo. O
-   valor é baked no binário. Falhas de infrastructure produzem
-   `ComptimeError` gracioso, não SIGSEGV. Fora do escopo atual — é
-   melhoria geral do comptime JIT, não específica do recursion limit.
+8. **~~Comptime com infrastructure~~:** REMOVIDO — `constant` não faz
+   I/O. Resource embedding via `@embed_text`/`@embed_bytes` (PRD-embed-directive).
+   `check_purity` rejeita I/O em `constant` com erro claro.
 
 9. **Propagação comptime→runtime:** `constant _ :=`
    config.set_recursion_limit(N)` seta o limite no comptime Runtime.
@@ -382,7 +371,7 @@ warning, ou suprimir warnings de binding não-utilizado.
 - Fase 4 — Configuração (stdlib/config.kata): ✅
 - Fase 5 — Propagação comptime→runtime: ✅
 - Fase 6 — Testes E2E: ✅ (14 testes: 8 codegen + 5 interpretador + 1 cache_hit, 2003 total)
-- Fase 7 — Infrastructure do comptime JIT (Runtime completo): futuro
+- Fase 7 — ~~Infrastructure do comptime JIT~~: REMOVIDO — tornada desnecessária por PRD-embed-directive (`@embed_text`/`@embed_bytes` resolve embedding sem I/O no comptime)
 - Fase 8 — Overhead medido: futuro
 
 ### Débito técnico
@@ -462,9 +451,7 @@ warning, ou suprimir warnings de binding não-utilizado.
   profundamente. Mitigação: limite configurável; usuário pode aumentar com
   `config.set_recursion_limit`.
 
-5. **Infrastructure do comptime JIT.** Levantar `Runtime` completo no
-   comptime pass significa que I/O em compile-time pode ter side-effects
-   no ambiente de compilação (escrever arquivos, abrir sockets). Isso é
-   intencional e esperado — é o mesmo contrato de build scripts em Rust.
-   O `catch_unwind` em `jit_execute_expr` garante que todo panic vira
-   `ComptimeError`, não abort.
+5. **~~Infrastructure do comptime JIT.~~** REMOVIDO — `constant` não faz
+   I/O. `@embed_text`/`@embed_bytes` resolve embedding de recursos sem
+   precisar de `Runtime` completo no comptime. `check_purity` rejeita
+   I/O com erro claro. Ver PRD-embed-directive.
