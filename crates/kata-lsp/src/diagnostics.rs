@@ -38,6 +38,16 @@ pub(crate) fn to_diagnostic(error: &FrontendBatch, text: &str) -> Diagnostic {
                 (None, "erro de resolução".to_string(), None)
             }
         }
+        FrontendBatch::Embed(errors) => {
+            if let Some(first) = errors.first() {
+                let code = miette::Diagnostic::code(first).map(|c| c.to_string());
+                let message = first.to_string();
+                let span = extract_span(first);
+                (code, message, span)
+            } else {
+                (None, "erro de embed".to_string(), None)
+            }
+        }
     };
 
     let range = span_to_range(text, span);

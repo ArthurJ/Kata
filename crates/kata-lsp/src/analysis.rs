@@ -38,6 +38,7 @@ pub enum FrontendBatch {
     Lex(kata_diagnostics::FrontendError),
     Parse(kata_diagnostics::FrontendError),
     Resolve(Vec<kata_resolution::ResolveError>),
+    Embed(Vec<kata_resolution::EmbedError>),
     Infer(kata_diagnostics::MiddleError),
 }
 
@@ -57,6 +58,15 @@ pub fn run_frontend(
         // para um resolve confiável (símbolos referenciados podem faltar).
         return Err(parse_errors.into_iter().map(FrontendBatch::Parse).collect());
     }
+
+    // 2b. Resolve @embed_text/@embed_bytes — substitui por literais antes
+    // da resolution. LSP usa o diretório do arquivo como module_dir.
+    let module_dir = file_path
+        .and_then(|f| std::path::Path::new(f).parent())
+        .unwrap_or(std::path::Path::new("."));
+    let (module, _embed_deps) =
+        kata_resolution::resolve_embeds(module, module_dir)
+            .map_err(|errors| vec![FrontendBatch::Embed(errors)])?;
 
     // 3. Resolve (prelude + módulo do usuário)
     let prelude = load_stdlib().map_err(|e| vec![FrontendBatch::Resolve(e)])?;

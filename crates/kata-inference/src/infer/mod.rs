@@ -88,6 +88,13 @@ pub fn infer_module(
     module: &Module,
     resolved: &ResolvedModule,
 ) -> Result<TypedModule, MiddleError> {
+    // Safety net: EmbedText/EmbedBytes são nós efêmeros que resolve_embeds
+    // deve substituir antes da inference. Se chegaram aqui, um frontend
+    // esqueceu de chamar resolve_embeds. Em debug, panic com mensagem clara.
+    // Em release, o match em infer_expr retorna erro gracioso.
+    #[cfg(debug_assertions)]
+    debug_assert_no_embed_residual(module);
+
     // Reseta o contador de type vars de canal — cada channel!() precisa
     // de um nome único para que a unificação não colida entre canais.
     csp_builtins::reset_channel_type_var_counter();
@@ -617,4 +624,44 @@ pub fn wrap_entry_with_show(typed: &mut TypedModule) {
         },
         entry_span,
     );
+}
+
+/// Verifica que nenhum `EmbedText`/`EmbedBytes` sobreviveu até `infer_module`.
+/// Se chegaram aqui, um frontend esqueceu de chamar `resolve_embeds`.
+#[cfg(debug_assertions)]
+fn debug_assert_no_embed_residual(module: &Module) {
+    use kata_ast::{Expr, Item};
+
+    fn check_expr(expr: &Spanned<Expr>) {
+        match &expr.node {
+            Expr::EmbedText { path } => {
+                panic!(
+                    "EmbedText residual em infer_module (path={path:?}) — \
+                     frontend esqueceu resolve_embeds"
+                );
+            }
+            Expr::EmbedBytes { path } => {
+                panic!(
+                    "EmbedBytes residual em infer_module (path={path:?}) — \
+                     frontend esqueceu resolve_embeds"
+                );
+            }
+            _ => {
+                // Recursão nos sub-expressions seria cara — o walker em
+                // embed.rs já faz isso na resolution. Aqui só verificamos
+                // top-level e values de constant/let, que são os usos
+                // mais comuns. Para cobertura completa, confiar no walker.
+            }
+        }
+    }
+
+    for item in &module.items {
+        match &item.node {
+            Item::ConstantDecl { value, .. } => {
+                check_expr(value);
+            }
+            Item::EntryExpr(expr) => check_expr(expr),
+            _ => {}
+        }
+    }
 }

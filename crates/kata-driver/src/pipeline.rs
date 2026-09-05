@@ -244,6 +244,8 @@ pub struct Pipeline {
     /// seta o limite no comptime Runtime; este campo propaga o valor
     /// para o Runtime principal criado em `jit_eval`/`interpret`.
     depth_limit: Option<u32>,
+    /// Arquivos embutidos via @embed_text/@embed_bytes (para dependências).
+    embed_deps: Vec<std::path::PathBuf>,
 }
 
 impl Pipeline {
@@ -260,6 +262,7 @@ impl Pipeline {
             typed: None,
             mono: None,
             depth_limit: None,
+            embed_deps: Vec::new(),
         }
     }
 
@@ -365,6 +368,24 @@ impl Pipeline {
             .as_ref()
             .ok_or_else(|| err("resolve chamado antes de parse"))?;
 
+        // resolve_embeds: substitui @embed_text/@embed_bytes por literais.
+        // Roda antes de resolve_with_prelude para que a resolution veja
+        // apenas TextLit/BytesLit. module_dir = diretório do arquivo-fonte.
+        let module_dir = file_path
+            .and_then(|f| std::path::Path::new(f).parent())
+            .unwrap_or(std::path::Path::new("."));
+        let (resolved_module, embed_deps) =
+            kata_resolution::resolve_embeds(module.clone(), module_dir)
+                .map_err(|errors| {
+                    errors
+                        .into_iter()
+                        .map(|e| e.into())
+                        .collect::<Vec<_>>()
+                })?;
+        self.module = Some(resolved_module);
+        let module = self.module.as_ref().unwrap();
+        self.embed_deps = embed_deps;
+
         let prelude = load_stdlib()?;
 
         let imports = match file_path {
@@ -387,6 +408,7 @@ impl Pipeline {
                 .collect::<Vec<_>>()
         })?;
         let mut resolved = merge_resolved(prelude, user);
+        resolved.embed_dependencies.extend(self.embed_deps.drain(..));
         kata_resolution::merge_imports(&mut resolved, &imports);
 
         self.imports = imports;
@@ -634,16 +656,25 @@ fn quick_resolve(
     module: &kata_ast::Module,
     file_path: Option<&str>,
 ) -> PipelineResult<ResolvedModule> {
+    // resolve_embeds no Pass 1: pass0 lê fixed_value/predicate de enum
+    // variants, que podem conter @embed_text. Sem isto, pass0 vê
+    // EmbedText cru e falha.
+    let module_dir = file_path
+        .and_then(|f| std::path::Path::new(f).parent())
+        .unwrap_or(std::path::Path::new("."));
+    let (module, _) = kata_resolution::resolve_embeds(module.clone(), module_dir)
+        .map_err(|errors| errors.into_iter().map(|e| e.into()).collect::<Vec<_>>())?;
+
     let prelude = load_stdlib()?;
 
     let imports = match file_path {
-        Some(file) => imports::load_module_imports(file, module).map_err(one_err)?,
+        Some(file) => imports::load_module_imports(file, &module).map_err(one_err)?,
         None => Vec::new(),
     };
     let imported_directives = imports::collect_imported_directives(&imports);
 
     let user = resolve_with_prelude(
-        module,
+        &module,
         "__local__",
         imported_directives,
         &prelude.interface_registry,

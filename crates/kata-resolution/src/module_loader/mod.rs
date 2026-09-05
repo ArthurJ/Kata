@@ -157,6 +157,8 @@ pub struct ModuleLoader {
     /// primitivos em user modules durante `load_path`. `None` no loader
     /// temporário interno de `load_stdlib_embedded`.
     stdlib: Option<Arc<ResolvedModule>>,
+    /// Embed deps pendentes do módulo sendo carregado em load_path.
+    pending_embed_deps: Vec<PathBuf>,
 }
 
 impl ModuleLoader {
@@ -171,6 +173,7 @@ impl ModuleLoader {
             loading: HashSet::new(),
             search_paths,
             stdlib,
+            pending_embed_deps: Vec::new(),
         }
     }
 
@@ -184,6 +187,7 @@ impl ModuleLoader {
             loading: HashSet::new(),
             search_paths: Vec::new(),
             stdlib: None,
+            pending_embed_deps: Vec::new(),
         };
         loader
             .load(&["stdlib".into(), "core".into()], Path::new(STDLIB_PREFIX))
@@ -323,6 +327,27 @@ impl ModuleLoader {
             .file_stem()
             .map(|s| s.to_string_lossy().to_string())
             .unwrap_or_default();
+
+        // resolve_embeds: substitui @embed_text/@embed_bytes por literais
+        // antes da resolution. Stdlib usa resolve_embeds_stdlib (rejeita
+        // embeds com erro explícito). User modules usam o diretório do
+        // arquivo como module_dir.
+        let module = if is_stdlib_path(path) {
+            let (m, deps) = crate::embed::resolve_embeds_stdlib(module)
+                .map_err(|e| { self.loading.remove(path); LoadError::Embed(e) })?;
+            // Stdlib não deve ter embeds — deps deve ser vazio.
+            let _ = deps;
+            m
+        } else {
+            let module_dir = path.parent().unwrap_or(Path::new("."));
+            let (m, deps) = crate::embed::resolve_embeds(module, module_dir)
+                .map_err(|e| { self.loading.remove(path); LoadError::Embed(e) })?;
+            // deps será propagado para merged.embed_dependencies abaixo.
+            // Por ora, armazenamos via uma closure lateral.
+            self.pending_embed_deps.extend(deps);
+            m
+        };
+
         let resolved = resolve_with_origin(&module, &module_name).map_err(|e| {
             self.loading.remove(path);
             LoadError::Resolve(e)
@@ -342,6 +367,9 @@ impl ModuleLoader {
             // stdlib não carregada (loader temporário) — sem injeção.
             resolved
         };
+
+        // Propagar embed deps do módulo atual para merged.
+        merged.embed_dependencies.extend(std::mem::take(&mut self.pending_embed_deps));
 
         // Carregar imports do módulo recursivamente e fazer merge.
         // Stdlib embedded usa diretório sintético; user modules usam

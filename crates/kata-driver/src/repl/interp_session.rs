@@ -245,15 +245,33 @@ impl InterpReplSession {
         }
     }
 
+    /// Resolve @embed_text/@embed_bytes no módulo, substituindo por literais.
+    /// REPL interp usa cwd como module_dir.
+    fn resolve_embeds(&self, module: &Module) -> Result<Module, String> {
+        let (m, _deps) = kata_resolution::resolve_embeds(module.clone(), std::path::Path::new("."))
+            .map_err(|errors| {
+                format!(
+                    "erro de embed: {}",
+                    errors
+                        .iter()
+                        .map(|e| e.to_string())
+                        .collect::<Vec<_>>()
+                        .join("; ")
+                )
+            })?;
+        Ok(m)
+    }
+
     /// Roda o pipeline até TypedModule (para validação de declarações).
     fn run_pipeline_typed(&self, module: &Module) -> Result<TypedModule, String> {
-        let user = resolve(module)
+        let module = self.resolve_embeds(module)?;
+        let user = resolve(&module)
             .map_err(|e| format!("erro de resolução: {}", crate::format_error_vec(&e)))?;
         let mut resolved = merge_resolved(self.prelude.clone(), user);
         if !self.imports.is_empty() {
             kata_resolution::merge_imports(&mut resolved, &self.imports);
         }
-        let typed = infer_module(module, &resolved).map_err(|e| format!("erro de tipo: {e}"))?;
+        let typed = infer_module(&module, &resolved).map_err(|e| format!("erro de tipo: {e}"))?;
         Ok(typed)
     }
 
@@ -281,7 +299,8 @@ impl InterpReplSession {
 
     /// Roda o pipeline completo até interpretação.
     fn run_pipeline_interp(&mut self, module: &Module) -> Result<crate::ExecResult, String> {
-        let user = resolve(module)
+        let module = self.resolve_embeds(module)?;
+        let user = resolve(&module)
             .map_err(|e| format!("erro de resolução: {}", crate::format_error_vec(&e)))?;
         let mut resolved = merge_resolved(self.prelude.clone(), user);
 
@@ -300,7 +319,7 @@ impl InterpReplSession {
             Vec::new()
         };
 
-        let typed = infer_module(module, &resolved).map_err(|e| format!("erro de tipo: {e}"))?;
+        let typed = infer_module(&module, &resolved).map_err(|e| format!("erro de tipo: {e}"))?;
 
         // Comptime pass: avalia constants.
         let mut typed =
