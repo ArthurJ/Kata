@@ -360,8 +360,15 @@ fn evaluate_constants(
 
         // Validações de constness:
         // - ConstantLambda já detectado na inferência (C3).
-        // - Pureza e comptime-availability continuam aqui (dependem do
-        //   contexto de avaliação do comptime pass).
+        // - Pureza: I/O proibido em constant — ActionCall, Fork, Channel,
+        //   etc. produziriam efeitos observáveis e quebram determinismo.
+        //   Roda antes de is_comptime_available para dar erro claro e
+        //   específico em vez do genérico "depende de valor runtime".
+        //   Config FFIs (set_recursion_limit) já foram tratadas acima
+        //   (Closure com ffi_symbol) e não chegam aqui.
+        if let Err(ComptimeError::Impure { reason }) = pureza::check_purity(&value_clone) {
+            return Err(ComptimeError::IoInConstant { name, reason });
+        }
         if !is_comptime_available(&value_clone, comptime_bindings) {
             return Err(ComptimeError::NotConsttime {
                 reason: format!("constant {name} — expressão depende de valor runtime"),

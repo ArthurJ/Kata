@@ -48,4 +48,14 @@ pub enum ComptimeError {
     )]
     #[diagnostic(code = "constant.lambda_not_serializable")]
     ConstantLambda { name: String, sig: String },
+
+    /// `constant` cujo value contém I/O (ActionCall, Fork, Channel, etc.).
+    /// `constant` é determinístico: dado o mesmo código-fonte, produz o
+    /// mesmo TAST. I/O quebra essa propriedade. Para embutir arquivos
+    /// externos, use `@embed_text{path: "..."}` / `@embed_bytes{path: "..."}`.
+    #[error(
+        "constant {name} — I/O proibido em constant: {reason}\n  help: `constant` é determinístico e não pode fazer I/O. Para embutir arquivos, use @embed_text{{path: \"...\"}} ou @embed_bytes{{path: \"...\"}}"
+    )]
+    #[diagnostic(code = "constant.io_forbidden")]
+    IoInConstant { name: String, reason: String },
 }
