@@ -152,6 +152,8 @@ fn monomorph_pass(
 
     // Snapshot do DispatchTable, functions e actions ANTES de mutar — evita borrow conflict.
     let dispatch_table = mono.dispatch_table.clone();
+    let refines_registry = mono.refines_registry.clone();
+    let interface_registry = mono.interface_registry.clone();
     let existing_names: std::collections::HashSet<String> = mono
         .functions
         .iter()
@@ -166,6 +168,8 @@ fn monomorph_pass(
         functions: &orig_functions,
         actions: &orig_actions,
         existing: &existing_names,
+        refines_registry: &refines_registry,
+        interface_registry: &interface_registry,
     };
 
     let mut acc = RewriteAcc {
@@ -211,6 +215,8 @@ pub(crate) struct MonoCtx<'a> {
     functions: &'a [TypedFunction],
     actions: &'a [TypedAction],
     existing: &'a std::collections::HashSet<String>,
+    refines_registry: &'a kata_core::RefinesRegistry,
+    interface_registry: &'a kata_core::InterfaceRegistry,
 }
 
 /// Acumulador mutable para a passada de monomorphização.

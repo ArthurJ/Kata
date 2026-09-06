@@ -51,6 +51,12 @@ pub struct TypedModule {
     /// (que envolvem chamada de função) são delegados ao comptime pass, que
     /// tem acesso a `jit_eval`. Populado por `infer_module`.
     pub refined_decls: Vec<RefinedDeclInfo>,
+    /// Catálogo de delegações `refines` — usado pelo monomorphizador
+    /// para normalizar args refined→base ao instanciar funções genéricas.
+    pub refines_registry: kata_core::RefinesRegistry,
+    /// Catálogo de interfaces e implementações — usado pelo monomorphizador
+    /// para normalizar args refined→base ao instanciar funções genéricas.
+    pub interface_registry: kata_core::InterfaceRegistry,
     /// Constantes de módulo — `constant nome := expr`. O comptime pass avalia
     /// cada `value` via JIT-and-execute e substitui por literal/HeapSnapshot.
     /// O codegen lowera no prólogo de `__kata_entry`. Acessível de actions,

@@ -68,6 +68,8 @@ pub(crate) fn jit_execute_expr(
         struct_registry: ctx.struct_registry.clone(),
         snapshots: snapshots.to_vec(),
         refined_decls: Vec::new(),
+        refines_registry: kata_core::RefinesRegistry::new(),
+        interface_registry: kata_core::InterfaceRegistry::new(),
         constants: Vec::new(),
     };
 

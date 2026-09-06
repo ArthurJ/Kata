@@ -55,6 +55,8 @@ fn tree_shake_impl(typed: TypedModule, preserve_tests: bool) -> TypedModule {
         struct_registry,
         snapshots,
         refined_decls,
+        refines_registry,
+        interface_registry,
         constants,
     } = typed;
 
@@ -206,6 +208,8 @@ fn tree_shake_impl(typed: TypedModule, preserve_tests: bool) -> TypedModule {
         struct_registry,
         snapshots,
         refined_decls,
+        refines_registry,
+        interface_registry,
         constants,
     }
 }
