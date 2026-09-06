@@ -75,8 +75,9 @@ Consequências:
 O `DispatchTable` resolve sobrecargas por pontuação, não por primeira
 correspondência. Cada par (arg, param) é classificado em duas categorias:
 `exact` > `iface`, com tiebreak concreto > genérico. Alias→base e
-refined→base **não** são dimensões do Score — são resolvidos por fallback
-em `apply_dispatch.rs` quando o dispatch normal falha.
+refined→base **não** são dimensões do Score — são resolvidos por
+`normalize_refined` no `unify_one` (normaliza antes do binding) e por
+fallback em `apply_dispatch.rs` quando o dispatch normal falha.
 
 Consequências:
 - Múltiplas sobrecargas coexistem sem ambiguidade na maioria dos casos
@@ -98,9 +99,12 @@ Consequências:
 #### Propriedade: Refined types via fallback no dispatch
 
 `refines` não cria overloads no DispatchTable nem registra no
-InterfaceRegistry. O typeck faz fallback: substitui refined por base,
-retenta dispatch, envolve retorno em construtor falível se o retorno
-implementa a interface.
+InterfaceRegistry. A interoperabilidade refined↔base em chamadas de
+função é garantida por dois mecanismos: (1) `normalize_refined` no
+`unify_one` — normaliza o arg refined ao tipo base durante a unificação,
+antes do binding do type param; (2) `try_refines_fallback` — substitui
+refined por base e retenta o dispatch quando o dispatch normal falha.
+O retorno é do tipo base diretamente (ex: `Int`).
 
 Consequências:
 - DispatchTable não é poluído com overloads sintetizados
@@ -116,7 +120,9 @@ implícito, não muda o operador `?` de runtime.
 
 Consequências:
 - `Int` não satisfaz `=> Int?` sem wrap explícito
-- Sem polimorfismo via interface para refined types
+- Polimorfismo via interface funciona para refined types: `soma :: NUM
+  NUM => NUM` aceita `PositiveInt` porque `normalize_refined` normaliza
+  ao tipo base (`Int`) antes de bindar `NUM`
 - Custo: o usuário desempacota explicitamente
 
 ### Memória
@@ -327,8 +333,9 @@ genérico). Empate final é `AmbiguousDispatch` — erro, não chute.
 
 Alias→base e refined→base **não** são dimensões do Score. O scoring
 original era 4D (`exact, alias, refined, iface`), mas as dimensões
-`alias` e `refined` eram sempre 0 — o mecanismo de fallback em
-`apply_dispatch.rs` já resolve refined→base e alias→base sem scoring.
+`alias` e `refined` eram sempre 0 — `normalize_refined` no `unify_one`
+normaliza refined→base antes do binding, e o fallback em
+`apply_dispatch.rs` resolve alias→base e casos residuais sem scoring.
 Foram removidas em 2026-08-20 (commits `ed4ea22` e `d2686fa`). O Score
 passou de 4D → 3D → 2D. Alias puro (sem `refines`) é nominalmente
 distinto do base e não interoperaciona sem downcast explícito — por design.
@@ -413,9 +420,9 @@ opt-in:
 - `@associative` — TRMA reescreve recursão com acumulador
 - `@builtin("map"/"filter"/"fold")` — typeck intercepta para stream fusion
   (única exceção que conhece nomes específicos, aceita por pragmatismo)
-- `refines` — typeck faz fallback no dispatch (substitui refined por base,
-  retenta, envolve retorno em construtor falível se retorno implementa a
-  interface)
+- `refines` — typeck normaliza refined→base no `unify_one` (antes do
+  binding do type param) e faz fallback no dispatch (substitui refined
+  por base, retenta). Retorno é do tipo base diretamente.
 
 `Int`, `Float`, `Text` são `data` opacos com `@ffi` no prelude. `Boolean`
 é `enum` no prelude. `PrimTy` é mapeamento de representação FFI (`i64`,
