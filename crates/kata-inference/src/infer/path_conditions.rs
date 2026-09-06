@@ -128,14 +128,16 @@ impl PathConditionCtx {
         self.facts.iter().chain(self.learned_facts.iter()).collect()
     }
 
-    /// True se não há facts nem learned_facts.
+    /// True se não há facts, learned_facts, NEM let_bindings.
     ///
-    /// NOTA: bindings `let` NÃO entram no gate. O gate decide se há
-    /// uma prova a tentar; bindings são definições, não restrições —
-    /// sem facts a conjunção seria `true` e `true ⟹ ¬pred` refutaria
-    /// qualquer predicado não-tautológico. O gate continua em facts.
+    /// `let_bindings` entram no gate porque o seeding pode conectar o
+    /// binding ao corpo de uma função inlinable, permitindo ao Z3 provar
+    /// o predicado sem facts explícitos — ex: `let r := + a b` onde `a`
+    /// e `b` são literais seedeados via `TypeAscription` translúcida.
+    /// Sem `let_bindings` no gate, o probe nunca é tentado e o seeding
+    /// nunca acontece.
     pub(crate) fn is_empty(&self) -> bool {
-        self.facts.is_empty() && self.learned_facts.is_empty()
+        self.facts.is_empty() && self.learned_facts.is_empty() && self.let_bindings.is_empty()
     }
 
     /// Registra um binding imutável (`let`, sub-binding de

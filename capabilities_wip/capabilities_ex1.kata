@@ -1,0 +1,3 @@
+# Exemplo 1 — Fase 1 DoD: refined polimórfico
+# head [1 2 3] deve compilar sem ::NonEmpty
+echo!(head [1 2 3])

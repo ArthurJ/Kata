@@ -15,7 +15,25 @@ use std::collections::HashMap;
 use crate::typed::{TypedExpr, TypedExprKind};
 
 use super::expr::InferCtx;
+use super::generics::{Substitutions, unify};
 use super::helpers::{InferResult, dispatch_to_middle_error};
+
+/// Verifica se o `base_ty` de um refined casa com o tipo do argumento,
+/// aceitando refineds polimórficos (ex: `NonEmptyList` sobre `List::A`).
+///
+/// Para refineds concretos (`lazy_type_param = None`), faz match estrutural
+/// (igualdade estrita via unificação sem type params).
+/// Para refineds polimórficos (`lazy_type_param = Some("A")`), unifica
+/// instanciando o type param (ex: `A → Int`), permitindo que
+/// `List::A` case com `List(Int)`.
+fn base_ty_matches(base_ty: &Ty, arg_ty: &Ty, lazy_type_param: &Option<String>) -> bool {
+    let type_params: Vec<String> = lazy_type_param
+        .as_ref()
+        .map(|s| vec![s.clone()])
+        .unwrap_or_default();
+    let mut subs = Substitutions::new();
+    unify(&[base_ty.clone()], &[arg_ty.clone()], &type_params, &mut subs).is_ok()
+}
 
 /// Tenta dispatch via DispatchTable (call direto para FFI ou função Kata
 /// nomeada). Retorna `Some(Ok(..))` se dispatch sucede, `Some(Err(..))` se
@@ -701,11 +719,6 @@ pub(crate) fn try_refined_precondition(
     env: &mut kata_core::ty::TypeEnv,
     ctx: &InferCtx,
 ) -> Option<InferResult<(Ty, TypedExprKind)>> {
-    // Sem path conditions, o Z3 não pode provar nada.
-    if ctx.path_conditions.borrow().is_empty() {
-        return None;
-    }
-
     // Procura overloads de func_name com aridade correta.
     let overloads = ctx.table.get_overloads(func_name)?;
     let candidates: Vec<&OverloadInfo> = overloads
@@ -722,10 +735,22 @@ pub(crate) fn try_refined_precondition(
     for oi in &candidates {
         let mut refined_positions: Vec<usize> = Vec::new();
         for (i, param) in oi.params.iter().enumerate() {
-            // O param é refined? (Family ou Instance de refined)
+            // O param é refined? (Family, Instance, Plain de refined concreto,
+            // ou Generic com nome de família refined como NonEmpty::A)
             let param_refined_name = match param {
-                Ty::Struct(StructKey::Family(name)) | Ty::Struct(StructKey::Instance(name, _)) => {
+                Ty::Struct(StructKey::Family(name))
+                | Ty::Struct(StructKey::Instance(name, _))
+                | Ty::Struct(StructKey::Plain(name)) => {
                     Some(name.clone())
+                }
+                Ty::Generic(name, _) => {
+                    // NonEmpty::A vira Generic("NonEmpty", [Var("A")])
+                    // Verifica se o nome é um refined declarado.
+                    if ctx.refined_decls.iter().any(|rd| rd.name == *name) {
+                        Some(name.clone())
+                    } else {
+                        None
+                    }
                 }
                 _ => None,
             };
@@ -738,11 +763,13 @@ pub(crate) fn try_refined_precondition(
                 continue;
             }
             // O arg é compatível com o base_ty do refined?
+            // Usa `base_ty_matches` em vez de `==` para aceitar
+            // refineds polimórficos (ex: NonEmptyList sobre List::A).
             let base_match = ctx
                 .refined_decls
                 .iter()
                 .filter(|rd| rd.name == rname)
-                .any(|rd| rd.base_ty == typed_args[i].node.ty);
+                .any(|rd| base_ty_matches(&rd.base_ty, &typed_args[i].node.ty, &rd.lazy_type_param));
             if !base_match {
                 continue;
             }
@@ -752,29 +779,46 @@ pub(crate) fn try_refined_precondition(
             continue;
         }
 
-        // Para cada posição refined, prova o predicado via Z3.
+        // Para cada posição refined, prova o predicado.
+        // Primeiro tenta const_eval (para literais como [1 2 3]),
+        // depois Z3 (para variáveis com path conditions).
         let mut all_proven = true;
         let mut any_refuted = false;
         for &i in &refined_positions {
             let rname = match &oi.params[i] {
-                Ty::Struct(StructKey::Family(name)) | Ty::Struct(StructKey::Instance(name, _)) => {
+                Ty::Struct(StructKey::Family(name))
+                | Ty::Struct(StructKey::Instance(name, _))
+                | Ty::Struct(StructKey::Plain(name)) => {
                     name.clone()
                 }
+                Ty::Generic(name, _) => name.clone(),
                 _ => unreachable!(),
             };
             // Pega os predicados do refined_decls cujo base_ty casa com o arg.
+            // Usa `base_ty_matches` para aceitar refineds polimórficos.
             let refined_decls: Vec<_> = ctx
                 .refined_decls
                 .iter()
-                .filter(|rd| rd.name == rname && rd.base_ty == typed_args[i].node.ty)
+                .filter(|rd| rd.name == rname && base_ty_matches(&rd.base_ty, &typed_args[i].node.ty, &rd.lazy_type_param))
                 .collect();
             if refined_decls.is_empty() {
                 all_proven = false;
                 break;
             }
-            // Para cada predicado, substitui Hole pelo arg e prova via Z3.
+            // Para cada predicado, tenta const_eval primeiro, depois Z3.
             for rd in &refined_decls {
                 for pred in &rd.predicates {
+                    // 1. Tenta const_eval (para literais: [1 2 3], 5, etc.)
+                    if let Some(proven) = super::const_eval::const_eval_predicate(pred, &args[i]) {
+                        if proven {
+                            continue; // predicado provado por const_eval
+                        } else {
+                            any_refuted = true;
+                            all_proven = false;
+                            break;
+                        }
+                    }
+                    // 2. const_eval falhou — tenta Z3 via path conditions.
                     let substituted = super::const_eval::substitute_hole(pred, &args[i]);
                     let typed_pred = match super::expr::infer_expr_hinted(
                         &substituted.node,

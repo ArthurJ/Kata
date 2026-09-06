@@ -221,11 +221,11 @@ test_dead!()"#;
     assert_eq!(untag_smi(raw), 5);
 }
 
-// ── 4. Sem path conditions → rejeita não-literal (comportamento original) ─
+// ── 4. Sem path conditions, let_binding prova via seeding ──────────
 
-/// Sem guard e sem match Boolean, path conditions estão vazias.
-/// `n::PositiveInt` onde n é Ident é rejeitado — exige literal ou
-/// construtor. Este é o comportamento original (pré-refinement-propagation).
+/// Com `let n := 5`, o gate considera `let_bindings` (Bug B do
+/// PRD-capabilities). O seeding conecta `n = 5`, e o Z3 prova `> 5 0`
+/// — a ascription `n::PositiveInt` sucede sem facts explícitos.
 #[test]
 fn t_sem_path_conditions_rejeita_nao_literal() {
     let src = r#"data (Int, > _ 0) as PositiveInt
@@ -234,10 +234,31 @@ action test_no_pc => PositiveInt
     let n := 5
     n::PositiveInt
 test_no_pc!()"#;
-    // Deve falhar — sem path conditions, não-literal é rejeitado.
+    let (raw, ty) = eval_src(src);
+    assert_eq!(
+        ty,
+        Ty::Struct(StructKey::Plain("PositiveInt".into())),
+        "ascription de não-literal prova via seeding de let_binding"
+    );
+    assert_eq!(untag_smi(raw), 5);
+}
+
+// ── 4b. Sem material para Z3 → ascription de variável livre falha ──
+
+/// `let n := input!()` — `n` é uma variável livre (não é literal, não há
+/// facts sobre ela). O Z3 não tem material para provar `> n 0`, e o
+/// gate não deve aceitar por fé. A ascription deve falhar em compile-time.
+#[test]
+fn t_sem_material_z3_falha_var_livre() {
+    let src = r#"data (Int, > _ 0) as PositiveInt
+
+action test_livre => PositiveInt
+    let n := int!(input!())
+    n::PositiveInt
+test_livre!()"#;
     assert!(
         infer_fails(src),
-        "sem path conditions, ascription de não-literal deve falhar"
+        "variável livre sem facts: Z3 não pode provar, ascription deve falhar"
     );
 }
 
