@@ -154,7 +154,11 @@ fn t_nivel3_direcao_a_sem_path_conditions_falha() {
     / 10 b
 test!()"#;
     let (raw, ty) = eval_src(src);
-    assert_eq!(ty, Ty::int(), "div com let_binding provado via seeding deve retornar Int");
+    assert_eq!(
+        ty,
+        Ty::int(),
+        "div com let_binding provado via seeding deve retornar Int"
+    );
     // 10 / 5 = 2
     assert_eq!(untag_smi(raw), 2);
 }

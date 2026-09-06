@@ -196,7 +196,11 @@ impl Z3Translator {
     /// Traduz uma expressão para um Z3 Bool.
     pub(crate) fn translate_bool(&mut self, expr: &TypedExpr) -> Bool {
         match &expr.kind {
-            TypedExprKind::Closure { callee, args, ffi_symbol } => {
+            TypedExprKind::Closure {
+                callee,
+                args,
+                ffi_symbol,
+            } => {
                 if let TypedExprKind::Ident { name } = &callee.node.kind {
                     // and/or/not são lógicos do Z3, não FFI do runtime.
                     match name.as_str() {
@@ -333,7 +337,11 @@ impl Z3Translator {
                     Some(i)
                 }
             }
-            TypedExprKind::Closure { callee, args, ffi_symbol } => {
+            TypedExprKind::Closure {
+                callee,
+                args,
+                ffi_symbol,
+            } => {
                 if let TypedExprKind::Ident { name } = &callee.node.kind {
                     // Mapeia por ffi_symbol (prova de origem).
                     // resolve_op aceita None (closure genérica) como
@@ -400,7 +408,11 @@ impl Z3Translator {
     /// Retorna `None` se a expressão não é traduzível como Rational.
     fn translate_rat(&mut self, expr: &TypedExpr) -> Option<(Int, Int)> {
         match &expr.kind {
-            TypedExprKind::Closure { callee, args, ffi_symbol } => {
+            TypedExprKind::Closure {
+                callee,
+                args,
+                ffi_symbol,
+            } => {
                 if let TypedExprKind::Ident { name } = &callee.node.kind {
                     // Mapeia por ffi_symbol (prova de origem).
                     // "rational" não tem ffi_symbol do runtime (é função
