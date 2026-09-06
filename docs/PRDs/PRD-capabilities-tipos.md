@@ -1,6 +1,6 @@
 # PRD — Capabilities de Tipos: Unificação com refines + Correções de Soundness
 
-**Status:** 🔴 Pendente
+**Status:** ✅ Implementado (Fase 1 + Fase 2)
 **Data:** 2026-09-06
 **Depende de:** `refines` ✅ (PRD-refines), Refinement Propagation ✅ (PRD-refinement-propagation), `RefinesRegistry` ✅, `InterfaceRegistry` ✅, `InlineFnTable` ✅
 **Não depende de:** Reorganização arquitetural (documento separado)
