@@ -897,6 +897,23 @@ tipo define cláusulas para os tipos já existentes mais uma cláusula genérica
 (`T NUM`) como fallback para tipos futuros. A responsabilidade de integração
 recai sobre o tipo novo, não sobre os estabelecidos.
 
+**Interfaces como type params de funções**: o nome de uma interface pode
+ser usado como type param em assinaturas de funções do usuário, não apenas
+em `implements`. A assinatura `soma :: NUM NUM => NUM` declara uma função
+polimórfica que aceita qualquer tipo que implemente `NUM`. No dispatch,
+o typeck unifica o type param `NUM` com o tipo concreto do argumento. Se o
+argumento é um tipo refined que delega a interface via `refines` (ex:
+`PositiveInt refines NUM`), o typeck normaliza o refined ao seu tipo base
+antes de bindar — `NUM` vincula com `Int`, não `PositiveInt` (§4.4.3).
+
+```kata
+soma :: NUM NUM => NUM
+    lambda a b:
+        + a b
+
+echo!(soma (10::PositiveInt) (20::PositiveInt))   # 30
+```
+
 #### 4.1.1. Interfaces Parametrizadas (Genéricas)
 
 Interfaces podem ter **type params** — parâmetros de tipo declarados entre
@@ -949,11 +966,20 @@ ordenadas lexicograficamente por prioridade:
 (`is_generic_origin: false > true`).
 
 Alias→base e refined→base **não** são dimensões do Score. São resolvidos
-por fallback em `apply_dispatch.rs`: quando o dispatch normal falha e algum
-arg é tipo refined (ou alias de refined) com delegação `refines`, o fallback
-substitui o arg pelo tipo base e retenta o dispatch. Alias puro (sem
-`refines`) é nominalmente distinto do base e não interoperaciona sem
-downcast explícito — por design.
+por dois mecanismos complementares em `apply_dispatch.rs`:
+
+1. **Normalização no unify** (`normalize_refined` em `unify_one`): quando
+   o type param da assinatura é uma interface (ex: `NUM`) e o arg é um
+   refined que delega a interface via `refines` (ex: `PositiveInt refines
+   NUM`), o typeck normaliza o arg ao tipo base **antes de bindar** — `NUM`
+   vincula com `Int`, não `PositiveInt`. Isto evita a falha de dispatch
+   antes que ela aconteça.
+2. **Fallback** (`try_refines_fallback`): quando o dispatch normal falha
+   e algum arg é tipo refined com delegação `refines`, o fallback substitui
+   o arg pelo tipo base e retenta o dispatch.
+
+Alias puro (sem `refines`) é nominalmente distinto do base e não
+interoperaciona sem downcast explícito — por design.
 
 #### Algoritmo de Resolução
 
@@ -1473,11 +1499,36 @@ no `InterfaceRegistry` e não cria overloads no `DispatchTable`.
 - Um tipo pode refinar múltiplas interfaces: `PositiveInt refines NUM` e
   `PositiveInt refines SHOW` (embora SHOW seja automático, §4.2.9).
 
-#### 4.4.3. Fallback no Dispatch
+#### 4.4.3. Refined no Dispatch — Normalização e Fallback
 
-`refines` não cria overloads no `DispatchTable`. O mecanismo é um fallback
-em `apply_dispatch.rs` (`try_refines_fallback`), executado quando o dispatch
-normal falha:
+`refines` não cria overloads no `DispatchTable`. A interoperabilidade entre
+refined e base em chamadas de função é garantida por dois mecanismos
+complementares:
+
+##### Normalização no unify (`normalize_refined`)
+
+Quando uma função polimórfica tem uma interface como type param (ex:
+`soma :: NUM NUM => NUM`) e recebe um argumento refined que delega a interface
+via `refines` (ex: `PositiveInt refines NUM`), o typeck normaliza o arg ao
+tipo base **durante a unificação**, antes de bindar o type param. `NUM`
+vincula com `Int` (tipo base), não `PositiveInt` (refined).
+
+Isto opera nos dois lados do pipeline:
+- **Typeck** (`unify_one` em `generics.rs`): consulta o `RefinesRegistry`
+  para encontrar delegações diretas. Se o arg é refined e delega a
+  interface, retorna o tipo base para o binding.
+- **Monomorfização** (`find_generic_overload` em `kata-monomorph`): ao
+  instanciar o corpo da função genérica, usa os mesmos registries para
+  normalizar os args, garantindo que as operações internas (ex: `+ a b`)
+  despachem com o tipo base correto.
+
+Consulta apenas delegações diretas. Supertraits (ex: `NUM implements EQ`)
+são resolvidos pelo fallback abaixo.
+
+##### Fallback no dispatch (`try_refines_fallback`)
+
+Quando o dispatch normal falha (nenhum overload compatível), o fallback
+substitui args refined pelos seus tipos base e retenta:
 
 1. Para cada arg, se é refined e tem `refines` declarado, substituir pelo
    tipo base (individualmente — cada arg é tratado de forma independente).
@@ -1492,6 +1543,32 @@ Exemplo: `+ a b` onde `a :: PositiveInt, b :: PositiveInt` com
 `PositiveInt refines NUM`:
 - Fallback substitui ambos por `Int` → encontra `+ :: Int Int => Int`
 - Retorna `Int` diretamente (não `Result::(PositiveInt, Text)`)
+
+##### Ascription implícita na fronteira de entrada (`try_refined_precondition`)
+
+Quando uma função exige um tipo refined como argumento (ex: `head ::
+NonEmpty::A => A`) e o argumento é do tipo base (ex: `[1 2 3]` ::
+`List::Int`), o typeck tenta provar que o argumento satisfaz o predicado
+do refined e, se a prova é bem-sucedida, insere uma ascription implícita
+(`[1 2 3]::NonEmpty`) e retenta o dispatch.
+
+A prova usa dois caminhos:
+1. **Avaliação const-eval** — predicados sobre literais (ex: `>= (len _)
+   1` sobre `[1 2 3]`) são avaliados diretamente, sem Z3.
+2. **Z3** — predicados que dependem de variáveis de caminho (ex:
+   `let_bindings` do escopo) são provados via SMT solver. O translator
+   mapeia operadores de runtime aos seus `ffi_symbol` correspondentes
+   para preservar a proveniência das operações.
+
+Se a prova falha, o dispatch falha normalmente — não há coerção
+implícita sem prova. O usuário pode fazer a ascription explícita
+(`[1 2 3]::NonEmpty`) para forçar a prova.
+
+Exemplo: `head [1 2 3]` onde `head :: NonEmpty::A => A`:
+- `try_refined_precondition` prova `>= (len [1 2 3]) 1` via const-eval
+- Insere ascription implícita `[1 2 3]::NonEmpty`
+- Retenta dispatch → encontra `head :: NonEmpty::A => A`
+- Resolve `A → Int`, retorna `Int`
 
 Para obter `PositiveInt` como resultado, o usuário envolve explicitamente:
 `PositiveInt (+ a b)` → `Result::(PositiveInt, Text)`.
