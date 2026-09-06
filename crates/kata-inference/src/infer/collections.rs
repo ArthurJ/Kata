@@ -527,6 +527,8 @@ pub(crate) fn infer_in(
         &[typed_collection.ty.clone(), typed_item.ty.clone()],
         &entry.type_params,
         &mut subs,
+        ctx.refines_registry,
+        ctx.interface_registry,
     )
     .map_err(|_| MiddleError::TypeMismatch {
         expected: format!("{}", contains_method.params[1]),

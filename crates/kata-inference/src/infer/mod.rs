@@ -541,6 +541,8 @@ pub fn infer_module(
         struct_registry: resolved.struct_registry.clone(),
         snapshots: Vec::new(),
         refined_decls: resolved.refined_decls.clone(),
+        refines_registry: resolved.refines_registry.clone(),
+        interface_registry: interface_registry.clone(),
         constants,
     };
 

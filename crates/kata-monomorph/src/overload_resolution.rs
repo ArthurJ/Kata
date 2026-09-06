@@ -68,13 +68,24 @@ fn replace_var_with_unit(ty: &mut Ty) {
 pub(crate) fn find_generic_overload<'a>(
     overloads: &'a [kata_core::dispatch::OverloadInfo],
     arg_types: &[Ty],
+    refines_registry: &kata_core::RefinesRegistry,
+    iface_registry: &kata_core::InterfaceRegistry,
 ) -> Option<(&'a kata_core::dispatch::OverloadInfo, Substitutions)> {
     for oi in overloads {
         if oi.type_params.is_empty() || oi.params.len() != arg_types.len() {
             continue;
         }
         let mut subs: Substitutions = HashMap::new();
-        if unify(&oi.params, arg_types, &oi.type_params, &mut subs).is_ok() {
+        if unify(
+            &oi.params,
+            arg_types,
+            &oi.type_params,
+            &mut subs,
+            refines_registry,
+            iface_registry,
+        )
+        .is_ok()
+        {
             return Some((oi, subs));
         }
     }
@@ -125,7 +136,12 @@ pub(crate) fn instantiate_generic_closure(
     // Tenta unify em cada candidata (pode haver múltiplas overloads genéricas
     // com mesma aridade — ex: show para Optional<T> e Result<T,E>).
     let arg_types: Vec<Ty> = args.iter().map(|a| a.node.ty.clone()).collect();
-    let Some((oi, mut subs)) = find_generic_overload(overloads, &arg_types) else {
+    let Some((oi, mut subs)) = find_generic_overload(
+        overloads,
+        &arg_types,
+        ctx.refines_registry,
+        ctx.interface_registry,
+    ) else {
         return false;
     };
 
@@ -294,7 +310,12 @@ pub(crate) fn instantiate_generic_action_call(
         TypedExprKind::Unit => Vec::new(),
         _ => vec![args.node.ty.clone()],
     };
-    let generic_overload = find_generic_overload(overloads, &arg_types);
+    let generic_overload = find_generic_overload(
+        overloads,
+        &arg_types,
+        ctx.refines_registry,
+        ctx.interface_registry,
+    );
 
     if let Some((oi, subs)) = generic_overload {
         // Guarda: se algum type_param mapeia para Ty::Var(_) ou Ty::Interface(_),
@@ -394,7 +415,12 @@ pub(crate) fn instantiate_overloadset_arg(
     let expected_action_params: Vec<Ty> = expected_params.to_vec();
 
     // Encontra o overload genérico que unifica com os tipos concretos.
-    let Some((oi, subs)) = find_generic_overload(overloads, &expected_action_params) else {
+    let Some((oi, subs)) = find_generic_overload(
+        overloads,
+        &expected_action_params,
+        ctx.refines_registry,
+        ctx.interface_registry,
+    ) else {
         return;
     };
 

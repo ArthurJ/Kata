@@ -36,6 +36,8 @@ pub(crate) fn run(typed_module: &mut TypedModule) {
         struct_registry: _,
         snapshots: _,
         refined_decls: _,
+        refines_registry: _,
+        interface_registry: _,
         constants,
     } = typed_module;
 

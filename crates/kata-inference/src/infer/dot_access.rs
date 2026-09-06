@@ -168,7 +168,16 @@ pub(crate) fn infer_dot_access(
                         oi.params.len() == arg_types.len() && !oi.type_params.is_empty()
                     }) {
                         let mut subs = std::collections::HashMap::new();
-                        if unify(&oi.params, &arg_types, &oi.type_params, &mut subs).is_ok() {
+                        if unify(
+                            &oi.params,
+                            &arg_types,
+                            &oi.type_params,
+                            &mut subs,
+                            ctx.refines_registry,
+                            ctx.interface_registry,
+                        )
+                        .is_ok()
+                        {
                             let concrete_ret = apply_subs(&oi.ret, &subs);
                             let expanded_ret = ctx.enum_registry.expand_defaults(&concrete_ret);
                             found = Some((expanded_ret, oi.ffi_symbol.clone(), oi.params.clone()));
@@ -241,6 +250,8 @@ pub(crate) fn infer_dot_access(
                     &[Ty::int()],
                     &[],
                     &mut subs,
+                    ctx.refines_registry,
+                    ctx.interface_registry,
                 )
                 .is_ok()
                 {
@@ -264,6 +275,8 @@ pub(crate) fn infer_dot_access(
                     &[Ty::int()],
                     &[],
                     &mut subs,
+                    ctx.refines_registry,
+                    ctx.interface_registry,
                 )
                 .is_ok()
                 {
@@ -341,7 +354,16 @@ pub(crate) fn infer_dot_access(
                         oi.params.len() == arg_types.len() && !oi.type_params.is_empty()
                     }) {
                         let mut subs = std::collections::HashMap::new();
-                        if unify(&oi.params, &arg_types, &oi.type_params, &mut subs).is_ok() {
+                        if unify(
+                            &oi.params,
+                            &arg_types,
+                            &oi.type_params,
+                            &mut subs,
+                            ctx.refines_registry,
+                            ctx.interface_registry,
+                        )
+                        .is_ok()
+                        {
                             let concrete_ret = apply_subs(&oi.ret, &subs);
                             let expanded_ret = ctx.enum_registry.expand_defaults(&concrete_ret);
                             found = Some((expanded_ret, oi.ffi_symbol.clone(), oi.params.clone()));

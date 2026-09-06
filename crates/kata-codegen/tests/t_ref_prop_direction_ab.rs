@@ -142,20 +142,25 @@ test!()"#;
     assert_eq!(untag_smi(raw), 2);
 }
 
-// ── 15. Direção A — sem path conditions, falha como antes ──────────
+// ── 15. Direção A — sem path conditions, let_binding prova via seeding ──
 
-/// Sem path conditions (b não é guardado), o Z3 não prova. Deve falhar
-/// em compile-time como antes — o usuário precisa de ascription explícita.
+/// Com `let b := 5`, o gate considera `let_bindings` (Bug B do PRD-capabilities).
+/// O seeding conecta `b = 5`, e o Z3 prova `!= 5 0` — o dispatch sucede
+/// sem ascription explícita e sem facts/learned_facts.
 #[test]
 fn t_nivel3_direcao_a_sem_path_conditions_falha() {
     let src = r#"action test => Int
     let b := 5
     / 10 b
 test!()"#;
-    assert!(
-        infer_fails(src),
-        "sem path conditions, dispatch deve falhar"
+    let (raw, ty) = eval_src(src);
+    assert_eq!(
+        ty,
+        Ty::int(),
+        "div com let_binding provado via seeding deve retornar Int"
     );
+    // 10 / 5 = 2
+    assert_eq!(untag_smi(raw), 2);
 }
 
 // ── 16. Direção A — path condition refuta predicado (b = 0) ─────────
@@ -228,21 +233,25 @@ test!()"#;
     assert_eq!(untag_smi(raw), 5);
 }
 
-// ── 19. Direção B — sem chamada prévia, ascription de não-literal falha ──
+// ── 19. Direção B — sem chamada prévia, ascription prova via seeding ──
 
-/// Sem chamada prévia que ensine o predicado, `b::NonZero` sobre
-/// não-literal continua falhando (comportamento original). A Direção B
-/// não introduz regressão — só aprende quando há dispatch bem-sucedido.
+/// Com `let b := 5`, o gate da ascription considera `let_bindings` (Bug B
+/// do PRD-capabilities). O seeding conecta `b = 5`, e o Z3 prova `!= 5 0`
+/// — a ascription `b::NonZero` sucede sem chamada prévia que ensine o
+/// predicado via Direção B.
 #[test]
 fn t_nivel3_direcao_b_sem_chamada_falha() {
     let src = r#"action test => NonZero::Int
     let b := 5
     b::NonZero
 test!()"#;
-    assert!(
-        infer_fails(src),
-        "sem chamada prévia, ascription de não-literal deve falhar"
+    let (raw, ty) = eval_src(src);
+    assert_eq!(
+        ty,
+        Ty::Struct(StructKey::Instance("NonZero".into(), "Int".into())),
+        "ascription de não-literal prova via seeding de let_binding"
     );
+    assert_eq!(untag_smi(raw), 5);
 }
 
 // ── 20. Direção B — arg não-Ident (literal) não propaga ───────────────

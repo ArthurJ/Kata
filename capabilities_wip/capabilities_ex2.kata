@@ -1,0 +1,14 @@
+# Exemplo 2 — Fase 1 DoD: path condition de operação pura
+# Z3 prova > r 0 via seeding + inlining
+data (Int, > _ 0) as PositiveInt
+PositiveInt refines NUM
+
+f :: PositiveInt => PositiveInt
+lambda x: x
+
+action main
+    let a := 5::PositiveInt
+    let b := 3::PositiveInt
+    let r := + a b
+    echo!(f r)
+main!()

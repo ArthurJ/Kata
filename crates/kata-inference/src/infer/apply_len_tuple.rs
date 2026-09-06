@@ -85,7 +85,16 @@ pub(crate) fn try_len_tuple(
             .filter(|oi| oi.params.len() == arg_types.len() && !oi.type_params.is_empty())
         {
             let mut subs: super::generics::Substitutions = HashMap::new();
-            if super::generics::unify(&oi.params, &arg_types, &oi.type_params, &mut subs).is_ok() {
+            if super::generics::unify(
+                &oi.params,
+                &arg_types,
+                &oi.type_params,
+                &mut subs,
+                ctx.refines_registry,
+                ctx.interface_registry,
+            )
+            .is_ok()
+            {
                 let concrete_ret = super::generics::apply_subs(&oi.ret, &subs);
                 let expanded_ret = super::apply::expand_ret(&concrete_ret, ctx);
                 let callee_ty = Ty::Function(oi.params.clone(), Box::new(expanded_ret.clone()));

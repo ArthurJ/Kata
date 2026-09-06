@@ -18,11 +18,35 @@
 use std::collections::HashMap;
 
 use kata_core::ty::Ty;
-use kata_core::{PrimTy, StructKey};
+use kata_core::{InterfaceRegistry, PrimTy, RefinesRegistry, StructKey};
 use kata_diagnostics::MiddleError;
 
 /// Resultado de unificação — mapa de type param → tipo concreto.
 pub type Substitutions = HashMap<String, Ty>;
+
+/// Normaliza um arg refined para o tipo base quando o refined delega
+/// a interface `interface_name` via `RefinesRegistry`.
+///
+/// Consulta delegações diretas apenas. Casos transitivos (supertraits)
+/// caem no `try_refines_fallback` existente.
+///
+/// Retorna o tipo base se o arg é refined que delega a interface,
+/// ou o arg inalterado caso contrário.
+fn normalize_refined(arg: &Ty, interface_name: &str, refines_registry: &RefinesRegistry) -> Ty {
+    // Extrai o nome do tipo do arg se é Ty::Struct.
+    let type_name = match arg {
+        Ty::Struct(key) => key.name(),
+        _ => return arg.clone(),
+    };
+    // Consulta delegações diretas no RefinesRegistry.
+    let entries = refines_registry.get(type_name);
+    for entry in entries {
+        if entry.interface_name == interface_name {
+            return entry.base_ty.clone();
+        }
+    }
+    arg.clone()
+}
 
 /// Unifica os tipos dos argumentos com os tipos dos parâmetros de uma
 /// assinatura genérica.
@@ -38,9 +62,18 @@ pub fn unify(
     args: &[Ty],
     type_params: &[String],
     subs: &mut Substitutions,
+    refines_registry: &RefinesRegistry,
+    iface_registry: &InterfaceRegistry,
 ) -> Result<(), MiddleError> {
     for (param, arg) in params.iter().zip(args) {
-        unify_one(param, arg, type_params, subs)?;
+        unify_one(
+            param,
+            arg,
+            type_params,
+            subs,
+            refines_registry,
+            iface_registry,
+        )?;
     }
     Ok(())
 }
@@ -51,6 +84,8 @@ fn unify_one(
     arg: &Ty,
     type_params: &[String],
     subs: &mut Substitutions,
+    refines_registry: &RefinesRegistry,
+    iface_registry: &InterfaceRegistry,
 ) -> Result<(), MiddleError> {
     match (param, arg) {
         // Type param: Ty::Var("T") onde "T" está em type_params
@@ -76,17 +111,33 @@ fn unify_one(
         // Habilita monomorfização de Actions/funções polimórficas por interface
         // (ex: `echo :: SHOW => Unit` instanciado para cada tipo concreto que
         // implementa SHOW).
+        //
+        // Antes de bindar, normaliza args refined: se o arg é um tipo refined
+        // que delega a interface via `refines`, binda com o tipo base (ex:
+        // PositiveInt refines NUM → binda NUM com Int, não PositiveInt).
+        // Se o arg não implementa a interface (direta nem via refines),
+        // retorna erro cedo ("Text não implementa NUM").
         (Ty::Interface(name), _) if type_params.contains(name) => {
+            let normalized = normalize_refined(arg, name, refines_registry);
+            let bind_ty = if normalized != *arg {
+                // Arg é refined que delega — bindar com tipo base.
+                normalized
+            } else {
+                // Arg não é refined que delega — bindar como antes.
+                // Diagnóstico de "não implementa interface" é feito pelo
+                // dispatch falhar naturalmente com mensagem de erro.
+                arg.clone()
+            };
             if let Some(existing) = subs.get(name) {
-                if existing != arg {
+                if existing != &bind_ty {
                     return Err(MiddleError::TypeMismatch {
                         expected: format!("{}", existing),
-                        found: format!("{}", arg),
+                        found: format!("{}", bind_ty),
                         span: kata_ast::Span::synthetic().into(),
                     });
                 }
             } else {
-                subs.insert(name.clone(), arg.clone());
+                subs.insert(name.clone(), bind_ty);
             }
             Ok(())
         }
@@ -94,7 +145,7 @@ fn unify_one(
         // Generic: unifica recursivamente os argumentos de tipo
         (Ty::Generic(n1, ps), Ty::Generic(n2, as_)) if n1 == n2 && ps.len() == as_.len() => {
             for (p, a) in ps.iter().zip(as_) {
-                unify_one(p, a, type_params, subs)?;
+                unify_one(p, a, type_params, subs, refines_registry, iface_registry)?;
             }
             Ok(())
         }
@@ -104,46 +155,98 @@ fn unify_one(
         (Ty::Var(_), _) => Ok(()),
 
         // List/Array/Range — unifica recursivamente o elem_ty.
-        (Ty::List(p), Ty::List(a)) => unify_one(p, a, type_params, subs),
-        (Ty::Array(p), Ty::Array(a)) => unify_one(p, a, type_params, subs),
-        (Ty::Range(p), Ty::Range(a)) => unify_one(p, a, type_params, subs),
+        (Ty::List(p), Ty::List(a)) => {
+            unify_one(p, a, type_params, subs, refines_registry, iface_registry)
+        }
+        (Ty::Array(p), Ty::Array(a)) => {
+            unify_one(p, a, type_params, subs, refines_registry, iface_registry)
+        }
+        (Ty::Range(p), Ty::Range(a)) => {
+            unify_one(p, a, type_params, subs, refines_registry, iface_registry)
+        }
         // Dict — unifica recursivamente K e V.
         (Ty::Dict(pk, pv), Ty::Dict(ak, av)) => {
-            unify_one(pk, ak, type_params, subs)?;
-            unify_one(pv, av, type_params, subs)
+            unify_one(pk, ak, type_params, subs, refines_registry, iface_registry)?;
+            unify_one(pv, av, type_params, subs, refines_registry, iface_registry)
         }
         // Set — unifica recursivamente o elem_ty.
-        (Ty::Set(p), Ty::Set(a)) => unify_one(p, a, type_params, subs),
+        (Ty::Set(p), Ty::Set(a)) => {
+            unify_one(p, a, type_params, subs, refines_registry, iface_registry)
+        }
         // Sender/Receiver/ReceiverFactory — unifica o tipo do canal.
-        (Ty::Sender(p), Ty::Sender(a)) => unify_one(p, a, type_params, subs),
-        (Ty::Receiver(p), Ty::Receiver(a)) => unify_one(p, a, type_params, subs),
-        (Ty::ReceiverFactory(p), Ty::ReceiverFactory(a)) => unify_one(p, a, type_params, subs),
+        (Ty::Sender(p), Ty::Sender(a)) => {
+            unify_one(p, a, type_params, subs, refines_registry, iface_registry)
+        }
+        (Ty::Receiver(p), Ty::Receiver(a)) => {
+            unify_one(p, a, type_params, subs, refines_registry, iface_registry)
+        }
+        (Ty::ReceiverFactory(p), Ty::ReceiverFactory(a)) => {
+            unify_one(p, a, type_params, subs, refines_registry, iface_registry)
+        }
 
         // Generic("Dict", [K, V]) unifica com Ty::Dict(ak, av):
         // O prelude usa `Dict::(K, V)` que vira Generic("Dict", [Var("K"), Var("V")]).
         // O typeck produz Ty::Dict(Text, Int). Precisamos casar structuralmente.
         (Ty::Generic(n, ps), Ty::Dict(ak, av)) if n == "Dict" && ps.len() == 2 => {
-            unify_one(&ps[0], ak, type_params, subs)?;
-            unify_one(&ps[1], av, type_params, subs)
+            unify_one(
+                &ps[0],
+                ak,
+                type_params,
+                subs,
+                refines_registry,
+                iface_registry,
+            )?;
+            unify_one(
+                &ps[1],
+                av,
+                type_params,
+                subs,
+                refines_registry,
+                iface_registry,
+            )
         }
         // Generic("Set", [T]) unifica com Ty::Set(a).
-        (Ty::Generic(n, ps), Ty::Set(a)) if n == "Set" && ps.len() == 1 => {
-            unify_one(&ps[0], a, type_params, subs)
-        }
+        (Ty::Generic(n, ps), Ty::Set(a)) if n == "Set" && ps.len() == 1 => unify_one(
+            &ps[0],
+            a,
+            type_params,
+            subs,
+            refines_registry,
+            iface_registry,
+        ),
         // Ty::Dict unifica com Generic("Dict", ...) — caminho reverso.
         (Ty::Dict(pk, pv), Ty::Generic(n, as_)) if n == "Dict" && as_.len() == 2 => {
-            unify_one(pk, &as_[0], type_params, subs)?;
-            unify_one(pv, &as_[1], type_params, subs)
+            unify_one(
+                pk,
+                &as_[0],
+                type_params,
+                subs,
+                refines_registry,
+                iface_registry,
+            )?;
+            unify_one(
+                pv,
+                &as_[1],
+                type_params,
+                subs,
+                refines_registry,
+                iface_registry,
+            )
         }
         // Ty::Set unifica com Generic("Set", ...) — caminho reverso.
-        (Ty::Set(p), Ty::Generic(n, as_)) if n == "Set" && as_.len() == 1 => {
-            unify_one(p, &as_[0], type_params, subs)
-        }
+        (Ty::Set(p), Ty::Generic(n, as_)) if n == "Set" && as_.len() == 1 => unify_one(
+            p,
+            &as_[0],
+            type_params,
+            subs,
+            refines_registry,
+            iface_registry,
+        ),
 
         // Tuple — unifica recursivamente cada elemento.
         (Ty::Tuple(ps), Ty::Tuple(as_)) if ps.len() == as_.len() => {
             for (p, a) in ps.iter().zip(as_) {
-                unify_one(p, a, type_params, subs)?;
+                unify_one(p, a, type_params, subs, refines_registry, iface_registry)?;
             }
             Ok(())
         }
@@ -164,7 +267,14 @@ fn unify_one(
                 "Text" => Ty::Prim(PrimTy::Text),
                 other => Ty::Struct(StructKey::Plain(other.to_string())),
             };
-            unify_one(&ps[0], &arg_inner, type_params, subs)
+            unify_one(
+                &ps[0],
+                &arg_inner,
+                type_params,
+                subs,
+                refines_registry,
+                iface_registry,
+            )
         }
 
         // Instance de família polimórfica com type var no concrete:
@@ -185,7 +295,14 @@ fn unify_one(
                 other => Ty::Struct(StructKey::Plain(other.to_string())),
             };
             let param_inner = Ty::Var(concrete_p.clone());
-            unify_one(&param_inner, &arg_inner, type_params, subs)
+            unify_one(
+                &param_inner,
+                &arg_inner,
+                type_params,
+                subs,
+                refines_registry,
+                iface_registry,
+            )
         }
 
         // Match estrutural para tipos concretos

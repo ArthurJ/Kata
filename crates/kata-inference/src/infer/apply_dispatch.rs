@@ -15,7 +15,53 @@ use std::collections::HashMap;
 use crate::typed::{TypedExpr, TypedExprKind};
 
 use super::expr::InferCtx;
+use super::generics::{Substitutions, unify};
 use super::helpers::{InferResult, dispatch_to_middle_error};
+
+/// Verifica se o `base_ty` de um refined casa com o tipo do argumento,
+/// aceitando refineds polimórficos (ex: `NonEmptyList` sobre `List::A`).
+///
+/// Para refineds concretos (`lazy_type_param = None`), faz match estrutural
+/// (igualdade estrita via unificação sem type params).
+/// Para refineds polimórficos (`lazy_type_param = Some("A")`), unifica
+/// instanciando o type param (ex: `A → Int`), permitindo que
+/// `List::A` case com `List(Int)`.
+fn base_ty_matches(base_ty: &Ty, arg_ty: &Ty, lazy_type_param: &Option<String>) -> bool {
+    base_ty_subs(base_ty, arg_ty, lazy_type_param).is_some()
+}
+
+/// Como `base_ty_matches` mas retorna as substitutions quando o match
+/// sucede. Permite que o caller reutilize o binding do type param
+/// (ex: A→Int) para resolver o tipo de retorno.
+fn base_ty_subs(
+    base_ty: &Ty,
+    arg_ty: &Ty,
+    lazy_type_param: &Option<String>,
+) -> Option<Substitutions> {
+    let type_params: Vec<String> = lazy_type_param
+        .as_ref()
+        .map(|s| vec![s.clone()])
+        .unwrap_or_default();
+    let mut subs = Substitutions::new();
+    // base_ty_subs unifica tipos concretos (base do refined vs arg). O ramo
+    // Ty::Interface não dispara aqui — passamos registries vazios.
+    let empty_refines = kata_core::RefinesRegistry::new();
+    let empty_ifaces = kata_core::InterfaceRegistry::new();
+    if unify(
+        &[base_ty.clone()],
+        &[arg_ty.clone()],
+        &type_params,
+        &mut subs,
+        &empty_refines,
+        &empty_ifaces,
+    )
+    .is_ok()
+    {
+        Some(subs)
+    } else {
+        None
+    }
+}
 
 /// Tenta dispatch via DispatchTable (call direto para FFI ou função Kata
 /// nomeada). Retorna `Some(Ok(..))` se dispatch sucede, `Some(Err(..))` se
@@ -205,6 +251,8 @@ pub(crate) fn try_dispatch_table(
                     arg_types,
                     &overload.type_params,
                     &mut subs,
+                    ctx.refines_registry,
+                    ctx.interface_registry,
                 ) {
                     Ok(_) => {
                         let concrete_ret = super::generics::apply_subs(&overload.ret, &subs);
@@ -264,6 +312,8 @@ pub(crate) fn try_dispatch_table(
                     arg_types,
                     &overload.type_params,
                     &mut subs,
+                    ctx.refines_registry,
+                    ctx.interface_registry,
                 ) {
                     Ok(_) => {
                         let concrete_ret = super::generics::apply_subs(&overload.ret, &subs);
@@ -320,8 +370,14 @@ pub(crate) fn try_dispatch_table(
                     }
                     arity_matched = true;
                     let mut subs: super::generics::Substitutions = HashMap::new();
-                    match super::generics::unify(&oi.params, arg_types, &oi.type_params, &mut subs)
-                    {
+                    match super::generics::unify(
+                        &oi.params,
+                        arg_types,
+                        &oi.type_params,
+                        &mut subs,
+                        ctx.refines_registry,
+                        ctx.interface_registry,
+                    ) {
                         Ok(_) => {
                             // Aplica substitutions no tipo de retorno.
                             let concrete_ret = super::generics::apply_subs(&oi.ret, &subs);
@@ -701,11 +757,6 @@ pub(crate) fn try_refined_precondition(
     env: &mut kata_core::ty::TypeEnv,
     ctx: &InferCtx,
 ) -> Option<InferResult<(Ty, TypedExprKind)>> {
-    // Sem path conditions, o Z3 não pode provar nada.
-    if ctx.path_conditions.borrow().is_empty() {
-        return None;
-    }
-
     // Procura overloads de func_name com aridade correta.
     let overloads = ctx.table.get_overloads(func_name)?;
     let candidates: Vec<&OverloadInfo> = overloads
@@ -721,11 +772,25 @@ pub(crate) fn try_refined_precondition(
     // provadas, aceita.
     for oi in &candidates {
         let mut refined_positions: Vec<usize> = Vec::new();
+        // Substitutions acumuladas das posições refined: mapeia type params
+        // do refined (ex: "A") para o tipo concreto do arg (ex: Int).
+        // Usadas para resolver o tipo de retorno quando o overload é genérico.
+        let mut refined_subs: super::generics::Substitutions = HashMap::new();
         for (i, param) in oi.params.iter().enumerate() {
-            // O param é refined? (Family ou Instance de refined)
+            // O param é refined? (Family, Instance, Plain de refined concreto,
+            // ou Generic com nome de família refined como NonEmpty::A)
             let param_refined_name = match param {
-                Ty::Struct(StructKey::Family(name)) | Ty::Struct(StructKey::Instance(name, _)) => {
-                    Some(name.clone())
+                Ty::Struct(StructKey::Family(name))
+                | Ty::Struct(StructKey::Instance(name, _))
+                | Ty::Struct(StructKey::Plain(name)) => Some(name.clone()),
+                Ty::Generic(name, _) => {
+                    // NonEmpty::A vira Generic("NonEmpty", [Var("A")])
+                    // Verifica se o nome é um refined declarado.
+                    if ctx.refined_decls.iter().any(|rd| rd.name == *name) {
+                        Some(name.clone())
+                    } else {
+                        None
+                    }
                 }
                 _ => None,
             };
@@ -738,13 +803,21 @@ pub(crate) fn try_refined_precondition(
                 continue;
             }
             // O arg é compatível com o base_ty do refined?
-            let base_match = ctx
+            // Usa `base_ty_subs` em vez de `base_ty_matches` para capturar
+            // as substitutions do type param (ex: A→Int).
+            let matched = ctx
                 .refined_decls
                 .iter()
                 .filter(|rd| rd.name == rname)
-                .any(|rd| rd.base_ty == typed_args[i].node.ty);
-            if !base_match {
+                .find_map(|rd| {
+                    base_ty_subs(&rd.base_ty, &typed_args[i].node.ty, &rd.lazy_type_param)
+                });
+            let Some(subs) = matched else {
                 continue;
+            };
+            // Acumula substitutions para resolver o retorno.
+            for (k, v) in &subs {
+                refined_subs.insert(k.clone(), v.clone());
             }
             refined_positions.push(i);
         }
@@ -752,29 +825,47 @@ pub(crate) fn try_refined_precondition(
             continue;
         }
 
-        // Para cada posição refined, prova o predicado via Z3.
+        // Para cada posição refined, prova o predicado.
+        // Primeiro tenta const_eval (para literais como [1 2 3]),
+        // depois Z3 (para variáveis com path conditions).
         let mut all_proven = true;
         let mut any_refuted = false;
         for &i in &refined_positions {
             let rname = match &oi.params[i] {
-                Ty::Struct(StructKey::Family(name)) | Ty::Struct(StructKey::Instance(name, _)) => {
-                    name.clone()
-                }
+                Ty::Struct(StructKey::Family(name))
+                | Ty::Struct(StructKey::Instance(name, _))
+                | Ty::Struct(StructKey::Plain(name)) => name.clone(),
+                Ty::Generic(name, _) => name.clone(),
                 _ => unreachable!(),
             };
             // Pega os predicados do refined_decls cujo base_ty casa com o arg.
+            // Usa `base_ty_matches` para aceitar refineds polimórficos.
             let refined_decls: Vec<_> = ctx
                 .refined_decls
                 .iter()
-                .filter(|rd| rd.name == rname && rd.base_ty == typed_args[i].node.ty)
+                .filter(|rd| {
+                    rd.name == rname
+                        && base_ty_matches(&rd.base_ty, &typed_args[i].node.ty, &rd.lazy_type_param)
+                })
                 .collect();
             if refined_decls.is_empty() {
                 all_proven = false;
                 break;
             }
-            // Para cada predicado, substitui Hole pelo arg e prova via Z3.
+            // Para cada predicado, tenta const_eval primeiro, depois Z3.
             for rd in &refined_decls {
                 for pred in &rd.predicates {
+                    // 1. Tenta const_eval (para literais: [1 2 3], 5, etc.)
+                    if let Some(proven) = super::const_eval::const_eval_predicate(pred, &args[i]) {
+                        if proven {
+                            continue; // predicado provado por const_eval
+                        } else {
+                            any_refuted = true;
+                            all_proven = false;
+                            break;
+                        }
+                    }
+                    // 2. const_eval falhou — tenta Z3 via path conditions.
                     let substituted = super::const_eval::substitute_hole(pred, &args[i]);
                     let typed_pred = match super::expr::infer_expr_hinted(
                         &substituted.node,
@@ -855,7 +946,44 @@ pub(crate) fn try_refined_precondition(
             .resolve_with_swap(func_name, &new_arg_types, ctx.interface_registry);
         if let Ok(outcome) = retry {
             let overload = outcome.overload;
-            let expanded_ret = super::apply::expand_ret(&overload.ret, ctx);
+            // Se o overload tem type_params, unify com new_arg_types para
+            // resolver o tipo de retorno concreto (ex: A→Int a partir de
+            // head :: NonEmpty::A => A). Sem isto, expand_ret recebe
+            // Var("A") não-resolvido e echo! falha com NoOverload.
+            let expanded_ret = if !overload.type_params.is_empty() {
+                let mut subs: super::generics::Substitutions = HashMap::new();
+                // Primeiro, semeia com as substitutions capturadas durante
+                // a identificação de posições refined (ex: A→Int a partir
+                // do base_ty do refined casando com o arg concreto).
+                subs.extend(refined_subs.clone());
+                // Depois, unify do overload com new_arg_types pode adicionar
+                // mais bindings ou confirmar os existentes.
+                match super::generics::unify(
+                    &overload.params,
+                    &new_arg_types,
+                    &overload.type_params,
+                    &mut subs,
+                    ctx.refines_registry,
+                    ctx.interface_registry,
+                ) {
+                    Ok(_) => {
+                        let concrete_ret = super::generics::apply_subs(&overload.ret, &subs);
+                        super::apply::expand_ret(&concrete_ret, ctx)
+                    }
+                    Err(_) => {
+                        // unify falhou — tenta só com refined_subs.
+                        if !refined_subs.is_empty() {
+                            let concrete_ret =
+                                super::generics::apply_subs(&overload.ret, &refined_subs);
+                            super::apply::expand_ret(&concrete_ret, ctx)
+                        } else {
+                            super::apply::expand_ret(&overload.ret, ctx)
+                        }
+                    }
+                }
+            } else {
+                super::apply::expand_ret(&overload.ret, ctx)
+            };
             let callee_ty = Ty::Function(overload.params.clone(), Box::new(expanded_ret.clone()));
             let callee_typed = TypedExpr {
                 span: callee.span,

@@ -273,7 +273,9 @@ pub(crate) fn lower_expr(
                 // o tipo refined é apenas anotação nominal. Lowerar inner.
                 // Só aplica quando inner NÃO é Struct (downcast é tratado abaixo)
                 // e NÃO é Tuple (construção de struct é tratada depois).
-                (inner_kind, Ty::Struct(_))
+                // Aplica para Ty::Struct (refined concreto/Instance) e
+                // Ty::Generic (família polimórfica lazy como NonEmpty::A).
+                (inner_kind, Ty::Struct(_)) | (inner_kind, Ty::Generic(..))
                     if !matches!(
                         inner_kind,
                         TypedExprKind::Tuple { .. } | TypedExprKind::StructConstruct { .. }

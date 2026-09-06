@@ -52,6 +52,55 @@ pub(crate) struct Z3Translator {
     inline_fns: Option<InlineFnTable>,
 }
 
+/// Mapeia `ffi_symbol` do runtime para o operador aritmético Z3.
+///
+/// O TAST carrega `ffi_symbol` em `TypedExprKind::Closure` — é a prova
+/// de origem. Se o usuário redefinir `+` com `@ffi("outro")`, o
+/// `ffi_symbol` não bate e o translator trata como opaco (correto).
+///
+/// Retorna:
+/// - `Some(op)` para símbolos conhecidos do runtime
+/// - `None` para FFI arbitrário do usuário ou `ffi_symbol: None`
+///   (closure genérica — fallback para nome)
+fn runtime_ffi_to_op(ffi_symbol: &Option<String>) -> Option<&'static str> {
+    match ffi_symbol.as_deref() {
+        Some("kata_rt_bi_add") => Some("+"),
+        Some("kata_rt_bi_sub") => Some("-"),
+        Some("kata_rt_bi_mul") => Some("*"),
+        Some("kata_rt_bi_div") => Some("/"),
+        Some("kata_rt_bi_eq") => Some("="),
+        Some("kata_rt_bi_neq") => Some("!="),
+        Some("kata_rt_bi_lt") => Some("<"),
+        Some("kata_rt_bi_gt") => Some(">"),
+        Some("kata_rt_bi_le") => Some("<="),
+        Some("kata_rt_bi_ge") => Some(">="),
+        _ => None,
+    }
+}
+
+/// Determina o operador a usar na tradução Z3.
+///
+/// Prioridade:
+/// 1. `ffi_symbol` mapeável (símbolo do runtime) — prova de origem
+/// 2. `ffi_symbol: None` — closure genérica, fallback para nome
+/// 3. `ffi_symbol: Some(unknown)` — redefinição do usuário, opaco
+///
+/// Retorna `Some(op)` se deve traduzir; `None` se deve tratar como opaco.
+fn resolve_op<'a>(name: &'a str, ffi_symbol: &'a Option<String>) -> Option<&'a str> {
+    if let Some(op) = runtime_ffi_to_op(ffi_symbol) {
+        return Some(op);
+    }
+    if ffi_symbol.is_none() {
+        // Closure genérica (ffi_symbol não resolvido) — fallback por nome.
+        return match name {
+            "+" | "-" | "*" | "/" | "=" | "!=" | "<" | ">" | "<=" | ">=" => Some(name),
+            _ => None,
+        };
+    }
+    // ffi_symbol é Some mas não mapeia — redefinição do usuário, opaco.
+    None
+}
+
 impl Z3Translator {
     /// Tradutor sem inlining de funções puras.
     pub(crate) fn new() -> Self {
@@ -147,8 +196,13 @@ impl Z3Translator {
     /// Traduz uma expressão para um Z3 Bool.
     pub(crate) fn translate_bool(&mut self, expr: &TypedExpr) -> Bool {
         match &expr.kind {
-            TypedExprKind::Closure { callee, args, .. } => {
+            TypedExprKind::Closure {
+                callee,
+                args,
+                ffi_symbol,
+            } => {
                 if let TypedExprKind::Ident { name } = &callee.node.kind {
+                    // and/or/not são lógicos do Z3, não FFI do runtime.
                     match name.as_str() {
                         "and" => {
                             if args.len() == 2 {
@@ -177,7 +231,14 @@ impl Z3Translator {
                             }
                         }
                         ">" | "<" | ">=" | "<=" | "=" | "!=" => {
-                            self.translate_comparison(name, args)
+                            // Mapeia por ffi_symbol (prova de origem).
+                            // resolve_op aceita None (closure genérica) como
+                            // fallback por nome; rejeita Some(unknown).
+                            if resolve_op(name, ffi_symbol).is_some() {
+                                self.translate_comparison(name, args)
+                            } else {
+                                self.fresh_bool()
+                            }
                         }
                         _ => {
                             // Tenta inlinar função pura (ex: zero). Se
@@ -205,6 +266,8 @@ impl Z3Translator {
                 }
             }
             TypedExprKind::Grouping { inner } => self.translate_bool(&inner.node),
+            // TypeAscription é translúcida — desembrulha e traduz o expr interno.
+            TypedExprKind::TypeAscription { expr, .. } => self.translate_bool(&expr.node),
             _ => self.fresh_bool(),
         }
     }
@@ -274,9 +337,17 @@ impl Z3Translator {
                     Some(i)
                 }
             }
-            TypedExprKind::Closure { callee, args, .. } => {
+            TypedExprKind::Closure {
+                callee,
+                args,
+                ffi_symbol,
+            } => {
                 if let TypedExprKind::Ident { name } = &callee.node.kind {
-                    match name.as_str() {
+                    // Mapeia por ffi_symbol (prova de origem).
+                    // resolve_op aceita None (closure genérica) como
+                    // fallback por nome; rejeita Some(unknown).
+                    let op = resolve_op(name, ffi_symbol);
+                    match op.unwrap_or(name.as_str()) {
                         "+" => {
                             if args.len() == 2 {
                                 let a = self.translate_int(&args[0].node)?;
@@ -319,6 +390,8 @@ impl Z3Translator {
                 }
             }
             TypedExprKind::Grouping { inner } => self.translate_int(&inner.node),
+            // TypeAscription é translúcida — desembrulha e traduz o expr interno.
+            TypedExprKind::TypeAscription { expr, .. } => self.translate_int(&expr.node),
             _ => None,
         }
     }
@@ -335,9 +408,17 @@ impl Z3Translator {
     /// Retorna `None` se a expressão não é traduzível como Rational.
     fn translate_rat(&mut self, expr: &TypedExpr) -> Option<(Int, Int)> {
         match &expr.kind {
-            TypedExprKind::Closure { callee, args, .. } => {
+            TypedExprKind::Closure {
+                callee,
+                args,
+                ffi_symbol,
+            } => {
                 if let TypedExprKind::Ident { name } = &callee.node.kind {
-                    match name.as_str() {
+                    // Mapeia por ffi_symbol (prova de origem).
+                    // "rational" não tem ffi_symbol do runtime (é função
+                    // pura Kata), cai no nome via resolve_op.
+                    let op = resolve_op(name, ffi_symbol);
+                    match op.unwrap_or(name.as_str()) {
                         "rational" => {
                             // `rational N` → (N, 1)
                             if args.len() == 1
@@ -418,6 +499,8 @@ impl Z3Translator {
                 }
             }
             TypedExprKind::Grouping { inner } => self.translate_rat(&inner.node),
+            // TypeAscription é translúcida — desembrulha e traduz o expr interno.
+            TypedExprKind::TypeAscription { expr, .. } => self.translate_rat(&expr.node),
             _ => None,
         }
     }

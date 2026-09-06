@@ -1,0 +1,9 @@
+# Exemplo Fase 2 — DoD: soma :: NUM NUM => NUM com PositiveInt
+data (Int, > _ 0) as PositiveInt
+PositiveInt refines NUM
+
+soma :: NUM NUM => NUM
+lambda a b: + a b
+
+echo!(soma (10::PositiveInt) (20::PositiveInt))
+# 30 — NUM binda com Int, + dispatcha em Int Int => Int
