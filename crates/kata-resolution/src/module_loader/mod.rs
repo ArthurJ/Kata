@@ -31,6 +31,7 @@ mod embedded {
     pub const MATH: &str = include_str!("../../../../stdlib/math.kata");
     pub const COMPLEX: &str = include_str!("../../../../stdlib/complex.kata");
     pub const STDIO: &str = include_str!("../../../../stdlib/stdio.kata");
+    pub const CONFIG: &str = include_str!("../../../../stdlib/config.kata");
 }
 
 /// Prefixo sintético para paths de stdlib embedded.
@@ -45,6 +46,7 @@ fn embedded_source(name: &str) -> Option<&'static str> {
         "math" => Some(embedded::MATH),
         "complex" => Some(embedded::COMPLEX),
         "stdio" => Some(embedded::STDIO),
+        "config" => Some(embedded::CONFIG),
         _ => None,
     }
 }

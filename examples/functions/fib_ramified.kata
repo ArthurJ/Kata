@@ -1,4 +1,9 @@
-# Fibonacci ramificado — recursão não-TCO (executa sem otimização)
+# Fibonacci ramificado — recursão não-TCO e não-TRMA
+
+#import config
+#constant _ := config.set_recursion_limit(10000)
+
+@cache
 fib :: Int => Int
 lambda 0: 0
 lambda 1: 1
@@ -6,7 +11,7 @@ lambda n:
     + (fib (- n 1)) (fib (- n 2))
 
 action main
-    let res := fib 10
+    let res := fib 1000
     echo!(res)
 
 main!()
