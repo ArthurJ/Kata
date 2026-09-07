@@ -132,6 +132,11 @@ pub struct StructRegistry {
     origins: HashMap<String, HashSet<String>>,
     /// Nomes ambíguos (definidos em múltiplas origins).
     ambiguous: HashSet<String>,
+    /// family_name → nome da interface sobre a qual a família é definida.
+    /// Ex: "NonZero" → "NUM". Populado em pass0 quando `data (IFACE, ...) as Fam`
+    /// é processado. Usado por `families_over_iface` para encontrar famílias
+    /// que precisam ser estendidas quando um novo implementor de IFACE aparece.
+    family_iface: HashMap<String, String>,
 }
 
 impl StructRegistry {
@@ -219,6 +224,30 @@ impl StructRegistry {
             },
         );
         self.track_origin(family_name, origin);
+    }
+
+    /// Registra o mapeamento family_name → interface_name.
+    /// Chamado em pass0 quando `data (IFACE, preds) as Fam` é processado,
+    /// para permitir que `extend_families_for_implementors` encontre famílias
+    /// sobre uma interface quando um novo implementor aparece.
+    pub fn register_family_iface(&mut self, family_name: &str, iface_name: &str) {
+        self.family_iface
+            .insert(family_name.to_string(), iface_name.to_string());
+    }
+
+    /// Lista famílias polimórficas sobre uma interface.
+    /// Retorna nomes de famílias cujo base (via `family_iface`) é a interface.
+    pub fn families_over_iface(&self, iface: &str) -> Vec<String> {
+        self.family_iface
+            .iter()
+            .filter(|(_, i)| *i == iface)
+            .map(|(f, _)| f.clone())
+            .collect()
+    }
+
+    /// true se `family::concrete` já foi registrada como instância.
+    pub fn has_instance(&self, family: &str, concrete: &str) -> bool {
+        self.get_instance(family, concrete).is_some()
     }
 
     /// Rastreia a origin de um struct e marca ambíguo se >1 origin.
@@ -329,13 +358,18 @@ impl StructRegistry {
         // Se há type hint e o nome tem instâncias, tentar resolver instância.
         if let Some(hint) = type_hint {
             let concrete = match hint {
-                Ty::Prim(crate::ty::PrimTy::Int) => "Int",
-                Ty::Prim(crate::ty::PrimTy::Float) => "Float",
-                Ty::Prim(crate::ty::PrimTy::Rational) => "Rational",
-                _ => return self.get(name),
+                Ty::Prim(crate::ty::PrimTy::Int) => Some("Int"),
+                Ty::Prim(crate::ty::PrimTy::Float) => Some("Float"),
+                Ty::Prim(crate::ty::PrimTy::Rational) => Some("Rational"),
+                Ty::Prim(crate::ty::PrimTy::Text) => Some("Text"),
+                Ty::Struct(crate::StructKey::Plain(n)) => Some(n.as_str()),
+                _ => None,
             };
-            if let Some(instance) = self.get_instance(name, concrete) {
-                return Some(instance);
+            #[allow(clippy::collapsible_if)]
+            if let Some(concrete) = concrete {
+                if let Some(instance) = self.get_instance(name, concrete) {
+                    return Some(instance);
+                }
             }
         }
         // Fallback: lookup como struct comum.
@@ -390,6 +424,8 @@ impl StructRegistry {
             self.structs.insert(k, info);
             self.track_origin(key.name(), &origin);
         }
+        // Mesclar family_iface — ambas as metades podem ter famílias.
+        self.family_iface.extend(other.family_iface);
     }
 
     /// Filtra structs mantendo apenas aqueles cujo nome está no `closure`

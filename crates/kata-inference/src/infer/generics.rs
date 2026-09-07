@@ -79,6 +79,7 @@ pub fn unify(
 }
 
 /// Unifica um único par (param, arg).
+#[allow(clippy::only_used_in_recursion)]
 fn unify_one(
     param: &Ty,
     arg: &Ty,

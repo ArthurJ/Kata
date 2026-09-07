@@ -85,8 +85,8 @@ fn base_ty_subs(
     let empty_refines = kata_core::RefinesRegistry::new();
     let empty_ifaces = kata_core::InterfaceRegistry::new();
     if unify(
-        &[base_ty.clone()],
-        &[arg_ty.clone()],
+        std::slice::from_ref(base_ty),
+        std::slice::from_ref(arg_ty),
         &type_params,
         &mut subs,
         &empty_refines,
