@@ -13,6 +13,7 @@ use kata_diagnostics::MiddleError;
 use crate::typed::{TypedExpr, TypedExprKind};
 
 use super::expr::{InferCtx, infer_expr_hinted};
+use super::apply_dispatch::format_pred_expr;
 use super::helpers::InferResult;
 use kata_resolution::resolve_type_expr;
 
@@ -181,13 +182,14 @@ pub(crate) fn infer_type_ascription(
                         | TypedExprKind::DictLit { .. }
                 );
                 if is_literal {
-                    for (i, pred) in refined_decl.predicates.iter().enumerate() {
+                    for pred in refined_decl.predicates.iter() {
                         match super::const_eval::const_eval_predicate(pred, expr) {
                             Some(true) => {}
                             Some(false) => {
+                                let pred_str = format_pred_expr(pred);
                                 return Err(MiddleError::TypeMismatch {
-                                    expected: format!("predicado {i} de {family_name} satisfeito"),
-                                    found: "predicado falhou para valor".to_string(),
+                                    expected: format!("`{family_name}` (predicado: {pred_str})"),
+                                    found: format!("valor não satisfaz o predicado de `{family_name}`"),
                                     span: expr.span.into(),
                                 });
                             }
@@ -392,13 +394,15 @@ pub(crate) fn infer_type_ascription(
 
         // Avalia cada predicado sobre o literal.
         let mut pending: Vec<Spanned<TypedExpr>> = Vec::new();
-        for (i, pred) in refined_decl.predicates.iter().enumerate() {
+        for pred in refined_decl.predicates.iter() {
             match super::const_eval::const_eval_predicate(pred, expr) {
                 Some(true) => {} // predicado satisfeito
                 Some(false) => {
+                    let pred_str = format_pred_expr(pred);
+                    let rname = key.name();
                     return Err(MiddleError::TypeMismatch {
-                        expected: format!("predicado {i} de {} satisfeito", key.name()),
-                        found: "predicado falhou para valor".to_string(),
+                        expected: format!("`{rname}` (predicado: {pred_str})"),
+                        found: format!("valor não satisfaz o predicado de `{rname}`"),
                         span: expr.span.into(),
                     });
                 }
@@ -425,9 +429,11 @@ pub(crate) fn infer_type_ascription(
                     ) {
                         Some(true) => {} // provado satisfeito pelas path conditions
                         Some(false) => {
+                            let pred_str = format_pred_expr(pred);
+                            let rname = key.name();
                             return Err(MiddleError::TypeMismatch {
-                                expected: format!("predicado {i} de {} satisfeito", key.name()),
-                                found: "predicado refutado pelas path conditions".to_string(),
+                                expected: format!("`{rname}` (predicado: {pred_str})"),
+                                found: format!("path conditions refutam o predicado de `{rname}`"),
                                 span: expr.span.into(),
                             });
                         }

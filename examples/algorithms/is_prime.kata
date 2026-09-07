@@ -1,0 +1,48 @@
+# Verificação de primalidade por divisão trial.
+
+# Verifica se x é divisível por y: resto da divisão = 0.
+# div x y retorna Result::(Int, Text); | desempacota o Ok (Int)
+# e fornece 0 no caso Err (y = 0, inalcançável: y ≥ 2 sempre).
+# resto = x - y * (x / y).
+check_divisor :: Int Int => Boolean
+lambda x y: = 0 (- x (* y (div x y | 0)))
+
+# Itera y de 2 até limit. Para ao encontrar divisor (eh_divisor = True)
+# ou ao ultrapassar limit (passou_limite = True → primo).
+is_prime_aux :: Int Int Int => Boolean
+lambda x y limit:
+    passou_limite: True
+    eh_divisor: False
+    otherwise: is_prime_aux x (+ y 1) limit
+    with
+        passou_limite := > y limit
+        eh_divisor := check_divisor x y
+
+is_prime :: Int => Boolean
+lambda x:
+    <= x 1: False
+    otherwise: is_prime_aux x 2 (- x 1)
+
+action main
+    echo!(is_prime 7)
+    echo!(is_prime 13)
+    echo!(is_prime 4)
+    echo!(is_prime 1)
+    echo!(is_prime 2)
+
+#main!()
+
+action main2
+    var l := 0
+    for i in [1..1000]
+        match is_prime i
+            True:
+                l:= + l 1
+                echo!{"msg":i, "end":", "}
+            False: ()
+        match (mod l 20)
+            0: echo!("")
+            _: ()
+    echo!("")
+
+main2!()

@@ -8,6 +8,7 @@ use kata_ast::{Expr, Span, Spanned};
 use kata_core::StructKey;
 use kata_core::dispatch::{OverloadInfo, Score, match_score};
 use kata_core::escape::EscapeTarget;
+use kata_core::struct_registry::StructRegistry;
 use kata_core::ty::{PrimTy, Ty};
 use kata_diagnostics::MiddleError;
 use std::collections::HashMap;
@@ -18,16 +19,38 @@ use super::expr::InferCtx;
 use super::generics::{Substitutions, unify};
 use super::helpers::{InferResult, dispatch_to_middle_error};
 
+/// Extrai o nome do tipo concreto de um `Ty` para consulta ao `StructRegistry`.
+/// Ex: `Ty::Prim(PrimTy::Int)` → `"Int"`, `Ty::Prim(PrimTy::Float)` → `"Float"`.
+fn concrete_type_name(ty: &Ty) -> Option<String> {
+    match ty {
+        Ty::Prim(PrimTy::Int) => Some("Int".into()),
+        Ty::Prim(PrimTy::Float) => Some("Float".into()),
+        Ty::Prim(PrimTy::Rational) => Some("Rational".into()),
+        Ty::Prim(PrimTy::Text) => Some("Text".into()),
+        Ty::Struct(StructKey::Plain(name)) => Some(name.clone()),
+        _ => None,
+    }
+}
+
 /// Verifica se o `base_ty` de um refined casa com o tipo do argumento,
 /// aceitando refineds polimórficos (ex: `NonEmptyList` sobre `List::A`).
 ///
-/// Para refineds concretos (`lazy_type_param = None`), faz match estrutural
-/// (igualdade estrita via unificação sem type params).
-/// Para refineds polimórficos (`lazy_type_param = Some("A")`), unifica
-/// instanciando o type param (ex: `A → Int`), permitindo que
+/// Para refineds concretos (`lazy_type_param = None`, base_ty concreto):
+/// faz match estrutural via unificação sem type params.
+/// Para refineds polimórficos lazy (`lazy_type_param = Some("A")`):
+/// unifica instanciando o type param (ex: `A → Int`), permitindo que
 /// `List::A` case com `List(Int)`.
-fn base_ty_matches(base_ty: &Ty, arg_ty: &Ty, lazy_type_param: &Option<String>) -> bool {
-    base_ty_subs(base_ty, arg_ty, lazy_type_param).is_some()
+/// Para famílias polimórficas eager (`lazy_type_param = None`, base_ty é
+/// interface como `NUM`): consulta o `StructRegistry` para verificar se
+/// o arg é uma instância concreta da família (ex: `NonZero` sobre `Int`).
+fn base_ty_matches(
+    base_ty: &Ty,
+    arg_ty: &Ty,
+    lazy_type_param: &Option<String>,
+    family_name: &str,
+    struct_registry: &StructRegistry,
+) -> bool {
+    base_ty_subs(base_ty, arg_ty, lazy_type_param, family_name, struct_registry).is_some()
 }
 
 /// Como `base_ty_matches` mas retorna as substitutions quando o match
@@ -37,14 +60,28 @@ fn base_ty_subs(
     base_ty: &Ty,
     arg_ty: &Ty,
     lazy_type_param: &Option<String>,
+    family_name: &str,
+    struct_registry: &StructRegistry,
 ) -> Option<Substitutions> {
+    // Família polimórfica eager: base_ty é interface (ex: NUM).
+    // Consulta o StructRegistry em vez de unify — o registry é a autoridade
+    // sobre quais instâncias concretas existem (ex: NonZero/Int, NonZero/Float).
+    if matches!(base_ty, Ty::Interface(_)) && lazy_type_param.is_none() {
+        let arg_concrete = concrete_type_name(arg_ty)?;
+        let instance = struct_registry.get_instance(family_name, &arg_concrete)?;
+        let _ = instance; // existe → o arg é instância concreta da família
+        let subs = Substitutions::new();
+        // Sem type param lazy para resolver; retorna subs vazias.
+        return Some(subs);
+    }
+
+    // Refined concreto ou polimórfico lazy: unify com registries vazios
+    // (base_ty é concreto, não interface — não precisa de InterfaceRegistry).
     let type_params: Vec<String> = lazy_type_param
         .as_ref()
         .map(|s| vec![s.clone()])
         .unwrap_or_default();
     let mut subs = Substitutions::new();
-    // base_ty_subs unifica tipos concretos (base do refined vs arg). O ramo
-    // Ty::Interface não dispara aqui — passamos registries vazios.
     let empty_refines = kata_core::RefinesRegistry::new();
     let empty_ifaces = kata_core::InterfaceRegistry::new();
     if unify(
@@ -810,7 +847,13 @@ pub(crate) fn try_refined_precondition(
                 .iter()
                 .filter(|rd| rd.name == rname)
                 .find_map(|rd| {
-                    base_ty_subs(&rd.base_ty, &typed_args[i].node.ty, &rd.lazy_type_param)
+                    base_ty_subs(
+                        &rd.base_ty,
+                        &typed_args[i].node.ty,
+                        &rd.lazy_type_param,
+                        &rd.name,
+                        ctx.struct_registry,
+                    )
                 });
             let Some(subs) = matched else {
                 continue;
@@ -830,6 +873,9 @@ pub(crate) fn try_refined_precondition(
         // depois Z3 (para variáveis com path conditions).
         let mut all_proven = true;
         let mut any_refuted = false;
+        let mut refuted_rname: Option<String> = None;
+        let mut refuted_pred: Option<Spanned<Expr>> = None;
+        let mut refuted_arg: Option<&Spanned<Expr>> = None;
         for &i in &refined_positions {
             let rname = match &oi.params[i] {
                 Ty::Struct(StructKey::Family(name))
@@ -845,7 +891,13 @@ pub(crate) fn try_refined_precondition(
                 .iter()
                 .filter(|rd| {
                     rd.name == rname
-                        && base_ty_matches(&rd.base_ty, &typed_args[i].node.ty, &rd.lazy_type_param)
+                        && base_ty_matches(
+                            &rd.base_ty,
+                            &typed_args[i].node.ty,
+                            &rd.lazy_type_param,
+                            &rd.name,
+                            ctx.struct_registry,
+                        )
                 })
                 .collect();
             if refined_decls.is_empty() {
@@ -861,6 +913,9 @@ pub(crate) fn try_refined_precondition(
                             continue; // predicado provado por const_eval
                         } else {
                             any_refuted = true;
+                            refuted_rname = Some(rname.clone());
+                            refuted_pred = Some(pred.clone());
+                            refuted_arg = Some(&args[i]);
                             all_proven = false;
                             break;
                         }
@@ -889,6 +944,9 @@ pub(crate) fn try_refined_precondition(
                         Some(true) => {}
                         Some(false) => {
                             any_refuted = true;
+                            refuted_rname = Some(rname.clone());
+                            refuted_pred = Some(pred.clone());
+                            refuted_arg = Some(&args[i]);
                             all_proven = false;
                             break;
                         }
@@ -908,10 +966,24 @@ pub(crate) fn try_refined_precondition(
         }
 
         if any_refuted {
+            let (expected, found) = match (&refuted_rname, &refuted_pred, refuted_arg) {
+                (Some(rname), Some(pred), Some(arg)) => {
+                    let pred_str = format_pred_expr(pred);
+                    let arg_str = format_pred_expr(arg);
+                    (
+                        format!("`{rname}` (predicado: {pred_str})"),
+                        format!("`{arg_str}` não satisfaz o predicado de `{rname}`"),
+                    )
+                }
+                _ => (
+                    "argumento satisfaz predicado do tipo refined (path conditions refutam)"
+                        .to_string(),
+                    "path conditions implicam negação do predicado".to_string(),
+                ),
+            };
             return Some(Err(MiddleError::TypeMismatch {
-                expected: "argumento satisfaz predicado do tipo refined (path conditions refutam)"
-                    .to_string(),
-                found: "path conditions implicem negação do predicado".to_string(),
+                expected,
+                found,
                 span: (*span).into(),
             }));
         }
@@ -1011,4 +1083,42 @@ pub(crate) fn try_refined_precondition(
     }
 
     None
+}
+
+/// Renderiza um `Spanned<Expr>` como string legível para mensagens de erro.
+/// Foco em predicados de tipos refined: `!= _ (zero _)` → "_ != zero _".
+/// Cobertura: literais, ident, hole, apply, variant qual, grouping.
+pub(crate) fn format_pred_expr(expr: &Spanned<Expr>) -> String {
+    fn render(e: &Expr) -> String {
+        match e {
+            Expr::IntLit { text } => text.clone(),
+            Expr::FloatLit { text } => text.clone(),
+            Expr::TextLit { text } => format!("\"{text}\""),
+            Expr::Unit => "()".to_string(),
+            Expr::Hole => "_".to_string(),
+            Expr::Ident { name } => name.clone(),
+            Expr::Apply { callee, args } => {
+                let callee_s = render(&callee.node);
+                let args_s: Vec<String> = args.iter().map(|a| render(&a.node)).collect();
+                // Operador com 2 args: infix-like para legibilidade
+                if args.len() == 2 && callee_s.len() <= 3 {
+                    format!("{} {} {}", args_s[0], callee_s, args_s[1])
+                } else {
+                    format!("{callee_s} {}", args_s.join(" "))
+                }
+            }
+            Expr::VariantQual {
+                enum_name,
+                variant,
+                ..
+            } => format!("{enum_name}::{variant}"),
+            Expr::Grouping { inner } => render(&inner.node),
+            Expr::Tuple { elements } => {
+                let parts: Vec<String> = elements.iter().map(|e| render(&e.node)).collect();
+                format!("({})", parts.join(", "))
+            }
+            _ => "<expr>".to_string(),
+        }
+    }
+    render(&expr.node)
 }

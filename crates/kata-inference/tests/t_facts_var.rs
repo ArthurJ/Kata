@@ -218,7 +218,7 @@ action main (n::Int)
 main!(5)",
     );
     assert!(
-        err.to_string().contains("refutado"),
+        err.to_string().contains("refut"),
         "esperava refutação legítima (let imutável), obtive: {err:?}"
     );
 }
