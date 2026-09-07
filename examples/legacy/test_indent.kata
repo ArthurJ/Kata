@@ -1,3 +1,0 @@
-foo :: Int => Int
-lambda x:
-    x

@@ -1,7 +1,0 @@
-dobrar :: Int => Int
-lambda x: + x x
-
-triplicar :: Int => Int
-lambda x: * x 3
-
-export dobrar triplicar

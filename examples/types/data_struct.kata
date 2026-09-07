@@ -1,0 +1,14 @@
+# data (struct) — construção, acesso a campos, SHOW sintetizado.
+# data declara um tipo produto com campos nomeados.
+# Construtor é posicional: Config "localhost" 8080.
+# Acesso a campos via ponto: c.host, c.port.
+# SHOW é sintetizado automaticamente pelo type checker.
+
+data Config (host::Text port::Int)
+
+action main => Unit
+    let c := Config "localhost" 8080
+    echo!(c.host)
+    echo!(c.port)
+    echo!(c)
+main!()

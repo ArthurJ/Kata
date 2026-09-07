@@ -1,0 +1,14 @@
+# Despacho multi-tipo: + tem sobrecargas para Int, Float, Text, e List.
+# O type checker seleciona a sobrecarga correta pelo tipo dos argumentos.
+# Nenhum dispatch dinâmico — tudo é resolvido em compile-time.
+
+action main => Unit
+    let i := + 1 2
+    let f := + 1.0 2.0
+    let s := + "foo" "bar"
+    let l := + [1 2] [3 4]
+    echo!(i)
+    echo!(f)
+    echo!(s)
+    echo!(l)
+main!()

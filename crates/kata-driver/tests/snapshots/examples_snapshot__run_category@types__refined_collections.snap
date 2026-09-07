@@ -1,0 +1,11 @@
+---
+source: crates/kata-driver/tests/examples_snapshot.rs
+expression: output
+---
+--- stderr ---
+Error: codegen.unsupported
+
+  × construção não suportada no codegen: Closure sem ffi_symbol e callee não-
+  │ Ident: Ident { name: "show_A_Int" }
+  │ isto é uma limitação do compilador, não um erro no seu código
+  help: abra uma issue descrevendo o que você estava tentando fazer

@@ -1,8 +1,13 @@
 //! Snapshot tests dos exemplos `.kata` — roda `kata run` e compara stdout.
 //!
-//! Cada exemplo em `examples/*.kata` (recursivo, incluindo subdiretórios)
-//! é executado via subprocesso `kata run`. O stdout é capturado e comparado
-//! com um snapshot insta.
+//! Cada exemplo em `examples/<categoria>/*.kata` é executado via subprocesso
+//! `kata run`. O stdout é capturado e comparado com um snapshot insta.
+//!
+//! Um `#[test]` por categoria permite rodar apenas um tema:
+//!   cargo test --test examples_snapshot -- types
+//!   cargo test --test examples_snapshot -- concurrency
+//!
+//! Sem filtro, `cargo test --test examples_snapshot` roda todas as categorias.
 //!
 //! Para aceitar mudanças: `cargo insta accept` (ou `INSTA_UPDATE=always cargo test`).
 
@@ -23,7 +28,6 @@ fn run_kata(file: &str) -> String {
         .output()
         .expect("executar kata run");
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    // Se houve erro (stderr não vazio), incluir para diagnóstico.
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
     if !stderr.is_empty()
         && !stderr.starts_with("    Finished")
@@ -35,27 +39,21 @@ fn run_kata(file: &str) -> String {
     }
 }
 
-/// Lista todos os arquivos `.kata` no diretório examples/ (recursivo).
+/// Lista todos os arquivos `.kata` num subdiretório de examples/.
 ///
-/// Arquivos em subdiretórios (ex: `examples/modules/mock_math.kata`) são
-/// incluídos. O nome do snapshot é o caminho relativo sem extensão
-/// (ex: `modules/imports`).
-///
+/// Retorna (snap_name, path_absoluto) para cada arquivo.
 /// Arquivos que não são entrypoints (sem `main!()` ou expressão top-level)
 /// são pulados se produzirem erro de `<entry point>`.
-fn example_files() -> Vec<(String, String)> {
-    // CARGO_MANIFEST_DIR aponta para crates/kata-driver/ durante os testes.
+fn category_files(category: &str) -> Vec<(String, String)> {
     let examples_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
+    let cat_dir = examples_dir.join(category);
     let mut files: Vec<(String, String)> = Vec::new();
-    collect_kata_recursive(&examples_dir, &examples_dir, &mut files);
+    collect_kata_recursive(&examples_dir, &cat_dir, &mut files);
     files.sort();
     files
 }
 
 /// Coleta arquivos `.kata` recursivamente.
-///
-/// `base` é o diretório raiz (examples/), `dir` é o diretório atual.
-/// O nome do snapshot é o caminho relativo a `base` sem extensão.
 fn collect_kata_recursive(
     base: &std::path::Path,
     dir: &std::path::Path,
@@ -67,14 +65,8 @@ fn collect_kata_recursive(
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_dir() {
-            // Pula subdiretório legacy/ — exemplos de Kata4 com sintaxe
-            // que não funciona em Kata5. Não são entrypoints válidos.
-            if path.file_name().is_some_and(|n| n == "legacy") {
-                continue;
-            }
             collect_kata_recursive(base, &path, out);
         } else if path.extension().is_some_and(|ext| ext == "kata") {
-            // Nome do snapshot: caminho relativo a examples/ sem extensão.
             let rel = path.strip_prefix(base).unwrap_or(&path).with_extension("");
             let snap_name = rel
                 .to_string_lossy()
@@ -84,18 +76,17 @@ fn collect_kata_recursive(
     }
 }
 
-#[test]
-fn snapshot_exemplos_kata() {
-    let files = example_files();
+/// Roda snapshot test para todos os arquivos de uma categoria.
+fn run_category(category: &str) {
+    let files = category_files(category);
     assert!(
         !files.is_empty(),
-        "deve encontrar pelo menos 1 exemplo .kata"
+        "deve encontrar pelo menos 1 exemplo .kata em {category}/"
     );
 
     for (name, file) in &files {
         let output = run_kata(file);
         // Pula arquivos que não são entrypoints (ex: módulos sem main!()).
-        // Esses produzem erro `<entry point>` — não são testáveis via snapshot.
         if output.contains("<entry point>") {
             continue;
         }
@@ -106,3 +97,33 @@ fn snapshot_exemplos_kata() {
         });
     }
 }
+
+#[test]
+fn snapshot_actions() { run_category("actions"); }
+
+#[test]
+fn snapshot_algorithms() { run_category("algorithms"); }
+
+#[test]
+fn snapshot_basics() { run_category("basics"); }
+
+#[test]
+fn snapshot_collections() { run_category("collections"); }
+
+#[test]
+fn snapshot_concurrency() { run_category("concurrency"); }
+
+#[test]
+fn snapshot_control_flow() { run_category("control_flow"); }
+
+#[test]
+fn snapshot_directives() { run_category("directives"); }
+
+#[test]
+fn snapshot_functions() { run_category("functions"); }
+
+#[test]
+fn snapshot_modules() { run_category("modules"); }
+
+#[test]
+fn snapshot_types() { run_category("types"); }

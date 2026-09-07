@@ -1,14 +1,16 @@
-# Teste do sistema de import/export.
-# Importa mock_math como módulo inteiro (acesso via mod.fn)
-# e seletivamente (triplicar no escopo direto).
+# Imports — sistema de módulos: import mod (módulo inteiro) e import mod.(item) (seletivo).
+# mock_math está em modules/mock_math.kata, exporta dobrar e triplicar.
 
-import mock_math
-import mock_math.(triplicar)
+import modules.mock_math
+import modules.mock_math.(triplicar)
 
-action main
-    let dobro := mock_math.dobrar 21
+action main => Unit
+    # WholeModule: acessar via prefixo do módulo
+    let resultado := mock_math.dobrar 21
+    # Selective: triplicar no escopo direto
     let triplo := triplicar 21
-    echo!(dobro)
+    echo!("Import OK")
+    echo!(resultado)
     echo!(triplo)
 
 main!()

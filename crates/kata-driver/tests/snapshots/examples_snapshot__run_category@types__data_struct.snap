@@ -1,0 +1,7 @@
+---
+source: crates/kata-driver/tests/examples_snapshot.rs
+expression: output
+---
+localhost
+8080
+Config("localhost", 8080)

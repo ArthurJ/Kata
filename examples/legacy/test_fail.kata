@@ -1,2 +1,0 @@
-@test("Teste") action main()
-    assert!(False "Forçando erro")

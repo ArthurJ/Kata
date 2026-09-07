@@ -1,0 +1,6 @@
+---
+source: crates/kata-driver/tests/examples_snapshot.rs
+expression: output
+---
+12.5
+12.5

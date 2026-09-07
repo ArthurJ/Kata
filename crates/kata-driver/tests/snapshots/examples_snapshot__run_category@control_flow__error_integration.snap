@@ -1,0 +1,16 @@
+---
+source: crates/kata-driver/tests/examples_snapshot.rs
+expression: output
+---
+1
+2
+4
+5
+Soma de impares:
+9
+Falhas:
+2
+Valor seguro (par):
+99
+Valor seguro (impar):
+3

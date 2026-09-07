@@ -1,0 +1,18 @@
+# @commutative + @associative — dispatch tenta args invertidos.
+# Quando a assinatura Int Float existe mas Float Int não,
+# @commutative faz o resolver tentar a versão invertida automaticamente.
+# @associative habilita TRMA (Tail Recursion Modulo Associativity).
+
+@commutative
+@associative(0.0)
+soma :: Int Float => Float
+lambda i f: + (float i) f
+
+action main => Unit
+    # Caso direto: Int + Float (bate com a assinatura)
+    let a := soma 10 2.5
+    # Caso inverso: Float + Int (não existe assinatura, @commutative salva)
+    let b := soma 2.5 10
+    echo!(a)
+    echo!(b)
+main!()

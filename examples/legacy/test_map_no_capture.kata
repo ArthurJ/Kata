@@ -1,4 +1,0 @@
-# Testa map sem closure
-action main
-    let resultado := map (lambda x: + x 1) [1 2 3]
-    echo!("ok")

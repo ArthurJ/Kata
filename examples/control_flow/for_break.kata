@@ -1,0 +1,13 @@
+# for com break — interrompe o laço baseado em condição.
+# break sai do for imediatamente. A condição é avaliada via match em Boolean.
+
+action main => Unit
+    let arr := [1 2 3 4 5]
+    var i := 0
+    for x in arr
+        match (> i 1)
+            True: break
+            False:
+                echo!(x)
+                i := + i 1
+main!()

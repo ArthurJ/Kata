@@ -1,5 +1,0 @@
-# Testa segfault - captura simples
-action main
-    let n := 42
-    let f := lambda x: + x n
-    echo!($(f 5))

@@ -1,0 +1,44 @@
+# Reprodução mínima do bug de família congelada.
+# Antes do fix: NonZero::MyNum nunca era registrada → / falha com type.no_overload.
+# Após o fix: extend_families_for_implementors registra NonZero::MyNum em merge_two.
+
+data MyNum (v::Int)
+
+MyNum implements NUM
+    + :: MyNum MyNum => MyNum
+    lambda a b: MyNum (+ a.v b.v)
+    - :: MyNum MyNum => MyNum
+    lambda a b: MyNum (- a.v b.v)
+    * :: MyNum MyNum => MyNum
+    lambda a b: MyNum (* a.v b.v)
+    div :: MyNum MyNum => Result::(MyNum, Text)
+    lambda a b: core.Result::Ok a
+    / :: MyNum NonZero => MyNum
+    lambda a b: a
+    // :: MyNum NonZero => Int
+    lambda a b: 0
+    zero :: MyNum => MyNum
+    lambda _: MyNum 0
+    abs :: MyNum => MyNum
+    lambda a: MyNum a.v
+
+MyNum implements EQ
+    = :: MyNum MyNum => Boolean
+    lambda a b: = a.v b.v
+    != :: MyNum MyNum => Boolean
+    lambda a b: not (= a b)
+
+MyNum implements SHOW
+    show :: MyNum => Text
+    lambda a: show a.v
+
+action main => Int
+    let a := MyNum 10
+    match NonZero (MyNum 3)
+        Ok nz:
+            let q := / a nz
+            echo!(show q)
+        Err _: echo!("erro")
+    0
+
+main!()

@@ -1,3 +1,0 @@
-action main
-    let arr := {1 2 3}
-    echo!(42)

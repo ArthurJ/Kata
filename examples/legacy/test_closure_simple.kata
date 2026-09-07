@@ -1,4 +1,0 @@
-action main
-    let n := 10
-    let f := lambda x: + x n
-    echo!(f 5)

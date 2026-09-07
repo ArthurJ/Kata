@@ -1,0 +1,40 @@
+# Integração: Result + loop + for + break + | (fallback).
+# Demonstra o fluxo de controle completo de Kata em um programa.
+
+checar_impar :: Int => Result::(Int, Text)
+lambda x:
+    = (mod x (2::NonZero)) 0: Err("Par")
+    otherwise: Ok(x)
+
+action main => Unit
+    # loop com match em Boolean — break e continue
+    var cont := 0
+    loop
+        cont := + cont 1
+        match (= cont 3)
+            True: continue
+            False: ()
+        match (> cont 5)
+            True: break
+            False: echo!(cont)
+
+    # for em List + match em Result
+    var soma := 0
+    var falhas := 0
+    for n in [1 2 3 4 5]
+        match (checar_impar n)
+            Ok val: soma := + soma val
+            Err e: falhas := + falhas 1
+    echo!("Soma de impares:")
+    echo!(soma)
+    echo!("Falhas:")
+    echo!(falhas)
+
+    # | (fallback): desempacota Ok ou usa o valor da direita
+    let seguro := checar_impar 2 | 99
+    echo!("Valor seguro (par):")
+    echo!(seguro)
+    let seguro2 := checar_impar 3 | 99
+    echo!("Valor seguro (impar):")
+    echo!(seguro2)
+main!()

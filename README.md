@@ -11,7 +11,7 @@ AOT para deploy. Sem interpretador, sem VM, sem runtime gerenciado.
 $ kata eval '+ 1 2'
 3
 
-$ kata run examples/fatorial.kata
+$ kata run examples/functions/fatorial.kata
 120
 ```
 
@@ -33,17 +33,17 @@ Requer Rust 1.85+ (edition 2024) e C linker (`cc`).
 kata eval '+ 1 2'
 
 # Executar um arquivo
-kata run examples/fizzbuzz.kata
+kata run examples/algorithms/fizzbuzz.kata
 
 # Compilar para executável nativo
-kata build examples/fatorial.kata
+kata build examples/functions/fatorial.kata
 ./fatorial
 
 # REPL interativo
 kata repl
 
 # Testes
-kata test examples/assertions.kata
+kata test examples/directives/assertions.kata
 ```
 
 ## A linguagem

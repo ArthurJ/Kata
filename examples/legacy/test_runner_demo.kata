@@ -1,5 +1,0 @@
-# Teste simples do test runner
-
-@test("Action básica")
-action test_basica
-    echo!("ok")

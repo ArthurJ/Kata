@@ -1,3 +1,0 @@
-action main
-    let v := 100
-    echo!(v)

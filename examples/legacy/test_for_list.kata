@@ -1,4 +1,0 @@
-action main
-    let lista := [10 20 30]
-    for x in lista
-        echo!(x)

@@ -1,3 +1,0 @@
-action main
-    let success_result := Ok(100)
-    echo!("ok")
