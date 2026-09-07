@@ -39,10 +39,10 @@ action main2
             True:
                 l:= + l 1
                 echo!{"msg":i, "end":", "}
+                match (mod l 20)
+                    0: echo!("")
+                    _: ()
             False: ()
-        match (mod l 20)
-            0: echo!("")
-            _: ()
     echo!("")
 
 main2!()
