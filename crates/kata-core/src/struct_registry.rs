@@ -11,7 +11,7 @@
 //! Análogo ao `EnumRegistry` — definido em `kata-core` para evitar dependência
 //! circular, populado no resolution, consumido no inference.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ty::Ty;
 
@@ -27,7 +27,7 @@ use crate::ty::Ty;
 ///
 /// `Ty::Struct` continua carregando o nome público (`"NonZero"`). A
 /// distinção família vs concreto é confinada ao `StructRegistry`.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum StructKey {
     /// Tipo comum: "Pessoa", "Float", "NonZero" (refined concreto).
     Plain(String),
@@ -127,16 +127,16 @@ pub struct StructRegistry {
     /// (origin, StructKey) → StructInfo.
     /// `StructKey::Plain(name)` para structs comuns e refined concretos.
     /// `StructKey::Instance(family, concrete)` para instâncias de família.
-    structs: HashMap<(String, StructKey), StructInfo>,
+    structs: BTreeMap<(String, StructKey), StructInfo>,
     /// struct_name → conjunto de origins que definem este struct.
-    origins: HashMap<String, HashSet<String>>,
+    origins: BTreeMap<String, BTreeSet<String>>,
     /// Nomes ambíguos (definidos em múltiplas origins).
-    ambiguous: HashSet<String>,
+    ambiguous: BTreeSet<String>,
     /// family_name → nome da interface sobre a qual a família é definida.
     /// Ex: "NonZero" → "NUM". Populado em pass0 quando `data (IFACE, ...) as Fam`
     /// é processado. Usado por `families_over_iface` para encontrar famílias
     /// que precisam ser estendidas quando um novo implementor de IFACE aparece.
-    family_iface: HashMap<String, String>,
+    family_iface: BTreeMap<String, String>,
 }
 
 impl StructRegistry {
@@ -403,7 +403,7 @@ impl StructRegistry {
     /// (`is_instance_of: Some`). Derivado dos `origins` — para cada nome,
     /// verifica se existe pelo menos uma entrada com `is_instance_of: Some`.
     pub fn all_family_names(&self) -> Vec<String> {
-        let mut families: HashSet<String> = HashSet::new();
+        let mut families: BTreeSet<String> = BTreeSet::new();
         for ((_, key), info) in &self.structs {
             if info.is_instance_of.is_some() {
                 families.insert(key.name().to_string());
