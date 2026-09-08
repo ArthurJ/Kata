@@ -79,18 +79,21 @@ pub(crate) fn infer_dot_access(
 
     match (&inner.ty, index) {
         (Ty::Struct(key), DotIndex::Field(field_name)) => {
-            let info =
-                ctx.struct_registry
-                    .get(key.name())
-                    .ok_or_else(|| MiddleError::UnboundName {
-                        suggestion: None,
-                        name: format!("struct `{}` não registrado no StructRegistry", key.name()),
-                        span: (*span).into(),
-                    })?;
+            // Para Instance(family, concrete), resolver campos do tipo
+            // concreto (ex: NonZero::MyNum → campos de MyNum).
+            let lookup_name = key.concrete_type().unwrap_or_else(|| key.name());
+            let info = ctx
+                .struct_registry
+                .get(lookup_name)
+                .ok_or_else(|| MiddleError::UnboundName {
+                    suggestion: None,
+                    name: format!("struct `{}` não registrado no StructRegistry", lookup_name),
+                    span: (*span).into(),
+                })?;
             let (field_index, field_info) =
                 info.find_field(field_name)
                     .ok_or_else(|| MiddleError::UnknownField {
-                        struct_name: key.name().to_string(),
+                        struct_name: lookup_name.to_string(),
                         field_name: field_name.clone(),
                         span: (*span).into(),
                     })?;
@@ -102,7 +105,7 @@ pub(crate) fn infer_dot_access(
                 escape: inner.escape,
                 kind: TypedExprKind::FieldAccess {
                     expr: inner_box,
-                    struct_name: key.name().to_string(),
+                    struct_name: lookup_name.to_string(),
                     field_name: field_name.clone(),
                     field_index,
                 },

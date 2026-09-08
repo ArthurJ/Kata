@@ -24,6 +24,12 @@ Complex implements NUM
             nr := + (* a.re b.re) (* a.im b.im)
             ni := - (* a.im b.re) (* a.re b.im)
 
+    zero :: Complex => Complex
+    lambda _: Complex 0.0 0.0
+
+    abs :: Complex => Complex
+    lambda a: Complex (sqrt (+ (* a.re a.re) (* a.im a.im))) 0.0
+
 Complex implements EQ
     = :: Complex Complex => Boolean
     lambda a b: and (= a.re b.re) (= a.im b.im)

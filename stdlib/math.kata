@@ -45,9 +45,7 @@ cosh :: Float => Float
 tanh :: Float => Float
 
 # ── Raiz e log (Float → Float) ──────────────────────────────────
-
-@ffi("kata_rt_sqrt")
-sqrt :: Float => Float
+# sqrt :: Float => Float vive em core.kata (evita ciclo complex↔math).
 
 @ffi("kata_rt_cbrt")
 cbrt :: Float => Float

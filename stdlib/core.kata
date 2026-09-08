@@ -264,6 +264,12 @@ Float implements SHOW
     @ffi("kata_rt_float_to_text")
     show :: Float => Text
 
+# sqrt :: Float => Float — raiz quadrada primitiva.
+# Vive em core (não em math) para evitar dependência circular:
+# complex.kata precisa de sqrt para abs, e math.kata importa complex.kata.
+@ffi("kata_rt_sqrt")
+sqrt :: Float => Float
+
 # ── Implementações para Rational ──────────────────────────────
 
 Rational implements NUM

@@ -105,6 +105,8 @@ fn eval_bool_expr(expr: &Spanned<Expr>) -> Option<bool> {
 /// TextLit → `ConstVal::Text`, Unit → `ConstVal::Unit`,
 /// `rational N` → `ConstVal::Rat(N, 1)`, Boolean True/False → `ConstVal::Bool`.
 /// Suporta literais negativos: `Apply { -, [IntLit] }` → `ConstVal::Int(-N)`.
+/// Reconhece `zero <literal>` → elemento neutro do tipo do argumento
+/// (0 para Int, 0.0 para Float, rational 0 para Rational).
 /// Retorna `None` para expressões não-literais.
 pub(crate) fn eval_const(expr: &Spanned<Expr>) -> Option<ConstVal> {
     match &expr.node {
@@ -112,6 +114,34 @@ pub(crate) fn eval_const(expr: &Spanned<Expr>) -> Option<ConstVal> {
         Expr::FloatLit { text } => Some(ConstVal::Float(text.parse::<f64>().ok()?)),
         Expr::TextLit { text } => Some(ConstVal::Text(text.clone())),
         Expr::Unit => Some(ConstVal::Unit),
+        // `zero <literal>` → elemento neutro do tipo do argumento.
+        // zero :: Int => Int retorna 0; zero :: Float => Float retorna 0.0;
+        // zero :: Rational => Rational retorna rational 0.
+        // O tipo é inferido do argumento literal — não precisa de InterfaceRegistry.
+        Expr::Apply { callee, args }
+            if args.len() == 1 && matches!(&callee.node, Expr::Ident { name } if name == "zero") =>
+        {
+            let arg = &args[0];
+            match &arg.node {
+                Expr::IntLit { .. } => Some(ConstVal::Int(0)),
+                Expr::FloatLit { .. } => Some(ConstVal::Float(0.0)),
+                Expr::Apply { callee, args }
+                    if args.len() == 1
+                        && matches!(&callee.node, Expr::Ident { name } if name == "rational") =>
+                {
+                    Some(ConstVal::Rat(0, 1))
+                }
+                // Grouping: desembrulha e recursa.
+                Expr::Grouping { inner } => eval_const(&Spanned::new(
+                    Expr::Apply {
+                        callee: callee.clone(),
+                        args: vec![*inner.clone()],
+                    },
+                    expr.span,
+                )),
+                _ => None,
+            }
+        }
         // `len <literal>` → ConstVal::Int(n) — número de elementos.
         // Suporta len sobre ListLit, ArrayLit, e TextLit.
         Expr::Apply { callee, args }
