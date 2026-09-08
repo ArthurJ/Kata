@@ -11,6 +11,51 @@ use crate::jit::jit_execute_expr;
 use crate::result::result_to_literal;
 use crate::walk::walk_mut;
 
+/// Verifica se uma função nomeada é recursiva (direta ou indiretamente).
+///
+/// Conservador: se `target` aparece como Ident em qualquer corpo de
+/// qualquer função do módulo, considera recursiva. Pode ter falsos
+/// positivos, mas é seguro — pular o fold de funções recursivas previne
+/// overflow em comptime.
+fn is_recursive(target: &str, functions: &[kata_inference::TypedFunction]) -> bool {
+    fn mentions_name(expr: &TypedExpr, name: &str) -> bool {
+        if let TypedExprKind::Ident { name: n } = &expr.kind {
+            return n == name;
+        }
+        // Recursão manual nos filhos (walk_mut não é recursivo)
+        match &expr.kind {
+            TypedExprKind::Closure { callee, args, .. } => {
+                if mentions_name(&callee.node, name) {
+                    return true;
+                }
+                args.iter().any(|a| mentions_name(&a.node, name))
+            }
+            TypedExprKind::Let { value, .. } | TypedExprKind::Var { value, .. } => {
+                mentions_name(&value.node, name)
+            }
+            TypedExprKind::Grouping { inner } => mentions_name(&inner.node, name),
+            TypedExprKind::Tuple { elements } => {
+                elements.iter().any(|e| mentions_name(&e.node, name))
+            }
+            TypedExprKind::StructConstruct { values, .. } => {
+                values.iter().any(|v| mentions_name(&v.node, name))
+            }
+            TypedExprKind::Match { scrutinee, arms } => {
+                if mentions_name(&scrutinee.node, name) {
+                    return true;
+                }
+                arms.iter().any(|a| mentions_name(&a.body.node, name))
+            }
+            _ => false,
+        }
+    }
+    functions.iter().any(|f| {
+        f.clauses
+            .iter()
+            .any(|c| mentions_name(&c.body.node, target))
+    })
+}
+
 /// Verifica se um `TypedExpr` é um literal "puro" — literal que não
 /// depende de execução e pode ser usado como argumento de fold.
 ///
@@ -65,6 +110,7 @@ pub(crate) fn fold_literal_calls(
             TypedExprKind::Ident { name } => {
                 matches!(&callee.node.ty, Ty::Function(..))
                     && ctx.functions.iter().any(|f| f.name == *name)
+                    && !is_recursive(name, ctx.functions)
             }
             // Lambdas anônimas também são puras por design, mas só
             // fazemos fold de lambdas com corpo direto (não recursivo).
