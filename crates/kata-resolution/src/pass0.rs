@@ -52,7 +52,7 @@ fn extract_lazy_type_param(base_ty: &Ty) -> Option<String> {
 /// `expand_family_signatures` expande cegamente para TODAS as instâncias
 /// (Int, Float, Rational), criando overloads espúrias que causam
 /// `AmbiguousDispatch` no call-site.
-fn instantiate_family_for_concrete(
+pub fn instantiate_family_for_concrete(
     ty: &Ty,
     concrete_type: &str,
     struct_reg: &StructRegistry,
@@ -292,6 +292,9 @@ pub(crate) fn run_pass0(
                     match &base_ty {
                         Ty::Interface(iface_name) => {
                             // Refined polimórfico: expandir em instâncias por tipo concreto.
+                            // Registrar o mapeamento family→iface para permitir
+                            // extensão quando novos implementors aparecerem.
+                            struct_registry.register_family_iface(name, iface_name);
                             let implementors = interface_registry.implementors_of(iface_name);
                             if implementors.is_empty() {
                                 // Ninguém implementa a interface — registrar como

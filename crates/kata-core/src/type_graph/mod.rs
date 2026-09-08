@@ -411,6 +411,31 @@ impl TypeGraph {
 
     // ── Merge ───────────────────────────────────────────
 
+    /// Adiciona uma instância a uma família existente no grafo.
+    /// Usado após `extend_families_for_implementors` para manter o grafo
+    /// sincronizado com o StructRegistry sem reconstruí-lo do zero.
+    ///
+    /// Se a família não existe ou a instância já está listada, é no-op.
+    pub fn add_family_instance(&mut self, family: &str, concrete: &str) {
+        let Some(node) = self.nodes.get_mut(family) else {
+            return;
+        };
+        let TypeKind::Family { instances } = &mut node.kind else {
+            return;
+        };
+        if instances.iter().any(|i| i == concrete) {
+            return;
+        }
+        instances.push(concrete.to_string());
+        self.add_edge(
+            family,
+            TypeEdge::Instance {
+                concrete: concrete.to_string(),
+            },
+            concrete,
+        );
+    }
+
     /// Merge de outro grafo (do prelude) neste.
     ///
     /// Nós do `other` que não existem localmente são adicionados.

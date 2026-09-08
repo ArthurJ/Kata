@@ -512,3 +512,21 @@ Ao concluir:
 - `docs/Kata-lang-manual.md` — §4.2.10 emendar: "mediante declaração explícita
   de `refines`, o compilador delega as operações da interface ao tipo base"
 - `docs/sintaxe-mapa.md` — adicionar `refines` e `T?` à lista de keywords
+
+## 11. Notas e mudanças
+
+### 2026-09-06 — Fallback retorna tipo base, não Result
+
+O passo 6 do §3.1 descrevia aplicação automática do construtor falível
+quando o retorno implementa a interface: `+ a b` onde `a, b :: PositiveInt`
+devolveria `Result::(PositiveInt, Err)`. A implementação não faz isto.
+O fallback devolve o tipo base (Int) diretamente.
+
+O construtor falível é chamado pelo usuário explicitamente
+(`PositiveInt (+ a b)`), não pelo typeck. A justificativa é
+composicionalidade: `+ 5 3` devolvendo `Result` implicitamente exigiria
+desempacotamento em toda operação aritmética com refined types.
+
+Verificado empiricamente: `+ a b` com `refines NUM` e `action => Int`
+compila e retorna o valor base. `action => Result::(PositiveInt, Text)`
+sem wrapper `PositiveInt(...)` é erro de tipo — `+` não retorna `Result`.
