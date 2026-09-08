@@ -406,6 +406,19 @@ impl Pipeline {
         resolved.embed_dependencies.append(&mut self.embed_deps);
         kata_resolution::merge_imports(&mut resolved, &imports);
 
+        // Gate 1: regra do órfão — validar após merge do prelude.
+        let orphan_errors = kata_resolution::validate_orphan_rule(
+            &resolved.interface_registry,
+            &resolved.struct_registry,
+            &resolved.enum_registry,
+        );
+        if !orphan_errors.is_empty() {
+            return Err(orphan_errors
+                .into_iter()
+                .map(|re| re.into_report_with_source(&self.source, self.file_path.as_deref()))
+                .collect());
+        }
+
         self.imports = imports;
         self.resolved = Some(resolved);
         Ok(self)

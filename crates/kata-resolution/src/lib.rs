@@ -863,14 +863,16 @@ fn extend_families_for_implementors(
     interface_registry: &kata_core::InterfaceRegistry,
     type_graph: &mut kata_core::TypeGraph,
 ) {
-    // Coletar todos os (type_name, iface_name) dos impls.
-    let impls: Vec<(String, String)> = interface_registry
+    // Coletar todos os (type_name, iface_name, span) dos impls.
+    // O span é necessário para produzir o diagnóstico
+    // `FamilyExtensionInvalid` no inference quando um predicado falha.
+    let impls: Vec<(String, String, kata_ast::Span)> = interface_registry
         .impls_view()
         .iter()
-        .map(|e| (e.type_name.clone(), e.interface_name.clone()))
+        .map(|e| (e.type_name.clone(), e.interface_name.clone(), e.span))
         .collect();
 
-    for (type_name, iface_name) in &impls {
+    for (type_name, iface_name, impl_span) in &impls {
         // Encontrar famílias sobre esta interface.
         let families = struct_registry.families_over_iface(iface_name);
         for family in &families {
@@ -933,6 +935,7 @@ fn extend_families_for_implementors(
                     base_ty: instance_base,
                     predicates: template.predicates.clone(),
                     lazy_type_param: None,
+                    extension_impl: Some((type_name.clone(), iface_name.clone(), *impl_span)),
                 });
             }
         }
@@ -1042,4 +1045,72 @@ pub fn expand_family_signatures(
         // para FFI, e encontra a Signature original (Family) para corpos
         // Kata via match_score (Family ↔ Instance = exact).
     }
+}
+
+/// Gate 1: regra do órfão.
+///
+/// Um `implements` é órfão quando nem o tipo nem a interface são
+/// definidos no mesmo módulo onde o implements foi declarado.
+/// Isto viola a regra do órfão (análoga à de Rust): ou o tipo OU
+/// a interface deve ser local ao módulo do implements.
+///
+/// Consulta `origins_of` em struct_registry, enum_registry e
+/// interface_registry para determinar as origins de cada lado.
+pub fn validate_orphan_rule(
+    interface_registry: &kata_core::InterfaceRegistry,
+    struct_registry: &kata_core::StructRegistry,
+    enum_registry: &kata_core::EnumRegistry,
+) -> Vec<ResolveError> {
+    let mut errors = Vec::new();
+
+    for entry in interface_registry.impls_view() {
+        // Impls sintéticos (show_synthesis, etc.) têm span synthetic e
+        // origin interna — não estão sujeitos à regra do órfão.
+        if entry.origin == "__synthetic__" || entry.origin == "core" {
+            continue;
+        }
+
+        // Origins onde o tipo é definido.
+        let type_origins: Vec<String> = struct_registry
+            .origins_of(&entry.type_name)
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect();
+
+        // Se o tipo não é struct, tentar enum.
+        let type_origins = if type_origins.is_empty() {
+            enum_registry
+                .origins_of(&entry.type_name)
+                .into_iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>()
+        } else {
+            type_origins
+        };
+
+        // Origins onde a interface é definida.
+        let iface_origins: Vec<String> = interface_registry
+            .origins_of(&entry.interface_name)
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect();
+
+        // Se o tipo OU a interface é local ao módulo do implements, OK.
+        let impl_origin = &entry.origin;
+        let type_is_local = type_origins.iter().any(|o| o == impl_origin);
+        let iface_is_local = iface_origins.iter().any(|o| o == impl_origin);
+
+        if !type_is_local && !iface_is_local {
+            errors.push(ResolveError::OrphanImpl {
+                type_name: entry.type_name.clone(),
+                interface_name: entry.interface_name.clone(),
+                impl_origin: impl_origin.clone(),
+                type_origin: type_origins.first().cloned().unwrap_or_default(),
+                iface_origin: iface_origins.first().cloned().unwrap_or_default(),
+                span: entry.span.into(),
+            });
+        }
+    }
+
+    errors
 }

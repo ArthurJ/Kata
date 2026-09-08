@@ -225,4 +225,22 @@ pub enum MiddleError {
         #[label("expressão impura")]
         span: MietteSpan,
     },
+
+    /// `T implements IFACE` estendeu uma família polimórfica, mas o predicado
+    /// da família não é sintetizável para `T` (ex: requer ORD mas T não
+    /// implementa ORD).
+    #[error(
+        "`{type_name} implements {iface_name}` estendeu a família `{family_name}`, mas o predicado da família não é válido para `{type_name}`"
+    )]
+    #[diagnostic(code = "type.family_extension_invalid")]
+    FamilyExtensionInvalid {
+        type_name: String,
+        iface_name: String,
+        family_name: String,
+        /// Interfaces que definem o método cujo dispatch falhou e que o
+        /// tipo não implementa (ex: `["ORD"]` se `>` falhou).
+        missing_ifaces: Vec<String>,
+        #[label("estende família inválida")]
+        span: MietteSpan,
+    },
 }

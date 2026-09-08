@@ -243,6 +243,7 @@ pub(crate) fn run_pass0(
                     interface_name: interface_name.clone(),
                     iface_params: iface_params.clone(),
                     methods: Vec::new(),
+                    span: item.span,
                 };
                 if let Err(e) = interface_registry.register_impl(entry) {
                     eprintln!("[resolution] warning: {e}");
@@ -314,6 +315,7 @@ pub(crate) fn run_pass0(
                                     base_ty,
                                     predicates: refined_decl.predicates.clone(),
                                     lazy_type_param: None,
+                                    extension_impl: None,
                                 });
                             } else {
                                 // Registrar uma instância por tipo concreto.
@@ -339,6 +341,7 @@ pub(crate) fn run_pass0(
                                         base_ty: instance_base,
                                         predicates: refined_decl.predicates.clone(),
                                         lazy_type_param: None,
+                                        extension_impl: None,
                                     });
                                 }
                                 // Registrar o nome público no type_env como Family
@@ -373,6 +376,7 @@ pub(crate) fn run_pass0(
                                     base_ty,
                                     predicates: refined_decl.predicates.clone(),
                                     lazy_type_param: lazy_param,
+                                    extension_impl: None,
                                 });
                             } else {
                                 // Refined concreto: `data (Int, > _ 0) as PositiveInt`
@@ -403,6 +407,7 @@ pub(crate) fn run_pass0(
                                     base_ty,
                                     predicates: refined_decl.predicates.clone(),
                                     lazy_type_param: None,
+                                    extension_impl: None,
                                 });
                             }
                         }
@@ -491,6 +496,7 @@ pub(crate) fn run_pass0(
                             base_ty: rd.base_ty.clone(),
                             predicates: rd.predicates.clone(),
                             lazy_type_param: rd.lazy_type_param.clone(),
+                            extension_impl: None,
                         });
                     }
                 } else {

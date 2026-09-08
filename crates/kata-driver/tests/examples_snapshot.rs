@@ -99,31 +99,51 @@ fn run_category(category: &str) {
 }
 
 #[test]
-fn snapshot_actions() { run_category("actions"); }
+fn snapshot_actions() {
+    run_category("actions");
+}
 
 #[test]
-fn snapshot_algorithms() { run_category("algorithms"); }
+fn snapshot_algorithms() {
+    run_category("algorithms");
+}
 
 #[test]
-fn snapshot_basics() { run_category("basics"); }
+fn snapshot_basics() {
+    run_category("basics");
+}
 
 #[test]
-fn snapshot_collections() { run_category("collections"); }
+fn snapshot_collections() {
+    run_category("collections");
+}
 
 #[test]
-fn snapshot_concurrency() { run_category("concurrency"); }
+fn snapshot_concurrency() {
+    run_category("concurrency");
+}
 
 #[test]
-fn snapshot_control_flow() { run_category("control_flow"); }
+fn snapshot_control_flow() {
+    run_category("control_flow");
+}
 
 #[test]
-fn snapshot_directives() { run_category("directives"); }
+fn snapshot_directives() {
+    run_category("directives");
+}
 
 #[test]
-fn snapshot_functions() { run_category("functions"); }
+fn snapshot_functions() {
+    run_category("functions");
+}
 
 #[test]
-fn snapshot_modules() { run_category("modules"); }
+fn snapshot_modules() {
+    run_category("modules");
+}
 
 #[test]
-fn snapshot_types() { run_category("types"); }
+fn snapshot_types() {
+    run_category("types");
+}

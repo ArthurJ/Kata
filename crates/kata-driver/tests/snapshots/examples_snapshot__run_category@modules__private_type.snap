@@ -3,7 +3,14 @@ source: crates/kata-driver/tests/examples_snapshot.rs
 expression: output
 ---
 --- stderr ---
-Error: type.no_overload
+Error: type.family_extension_invalid
 
-  × nenhuma sobrecarga compatível para `zero` com os argumentos fornecidos
-  [Failed to read contents for label `nenhuma sobrecarga compatível` (offset: 10965, length: 6): OutOfBounds]
+  × `Internal implements NUM` estendeu a família `NonZero`, mas o predicado da
+  │ família não é válido para `Internal`
+   ╭─[/home/arthur/workspace/Kata5/crates/kata-driver/../../examples/modules/private_type.kata:7:1]
+ 6 │ 
+ 7 │ Internal implements NUM
+   · ────┬───
+   ·     ╰── estende família inválida
+ 8 │     + :: Internal Internal => Internal
+   ╰────

@@ -56,7 +56,10 @@ lambda n: + (count (- n 1)) 1
 
 count 1200";
     let (stdout, stderr, code) = run_kata(src);
-    assert_ne!(code, 0, "overflow deve abortar com exit != 0 — code: {code}");
+    assert_ne!(
+        code, 0,
+        "overflow deve abortar com exit != 0 — code: {code}"
+    );
     assert!(
         stderr.contains("recursion depth exceeded"),
         "stderr deve mencionar recursion depth — stderr: {stderr}"

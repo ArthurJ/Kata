@@ -1,6 +1,6 @@
 # TODO — Kata-Lang
 
-Único arquivo de pendências. Atualizado 2026-09-07.
+Único arquivo de pendências. Atualizado 2026-09-08.
 
 ---
 
@@ -28,35 +28,6 @@ par (num, den) no Z3). Oráculos adversariais K medidos em `b5e2d9e`
 
 ### 🟡 Médio
 
-#### ~~Erros de runtime irrecuperáveis — depth limit retorna 0 em vez de panic~~ ✅ Resolvido
-
-`DEFAULT_DEPTH_LIMIT = 1000` (`kata-rt/src/runtime.rs:23`). Quando
-`call_depth` excede o limite, o runtime seta a flag `overflowed` e a
-chamada retorna **0 silenciosamente** — sem erro, sem mensagem, sem
-exit code não-zero. Reproduzido: `fib 1001` com `@cache` retorna `0`
-em vez de falhar.
-
-**Modelo de erros de runtime (decidido):**
-- **Recuperáveis** → `Result`/`Option`. O type system previne o máximo
-  possível (NonZero, no NaN/inf, PositiveInt, NonEmpty). O que escapa
-  da prevenção e é tratável vira `Result` (`div`, bounds check).
-- **Irrecuperáveis** → `panic`. Depth exceeded, OOM, stack overflow
-  real. Não há valor válido a produzir, não há `Result` para
-  desempacotar. A única resposta honesta é abortar.
-
-Não há meio-termo: se o programa pode continuar, é recuperável e
-deveria ser `Result`, não panic. O modelo é simples e já consistente
-com o que existe (`panic!`/`assert!` abortam; `div` retorna `Result`).
-
-**Resolvido (2026-09-07):** O `overflow_block` do codegen agora chama
-`kata_rt_overflow_panic(rt)` que imprime `recursion depth exceeded:
-{depth} (limit: {limit})` no stderr e faz `process::exit(1)`. O
-`trap(user(1))` Cranelift imediatamente após satisfaz o verificador
-(bloco é unreachable). O dummy 0 não é mais emitido — o `echo!` não
-tem oportunidade de imprimir valor espúrio. Testes E2E em
-`kata-driver/tests/recursion_limit_overflow_e2e.rs` validam via
-subprocess que stdout permanece vazio no overflow.
-
 #### Trampoline do scheduler engole erros (interp)
 
 `interp_trampoline` (`csp.rs:212-218`) captura qualquer `InterpError`
@@ -77,7 +48,7 @@ trampoline/scheduler ou usar um canal lateral (e.g. célula
 
 #### `spawn!` no Windows é stub
 
-`src/ipc.rs:157` — Implementar `spawn` no Windows. Ver
+`ipc.rs:155-161` — Implementar `spawn` no Windows. Ver
 `docs/PRDs/PRD-portability-windows.md`.
 
 #### Tree-shaking por instância de família polimórfica
@@ -106,30 +77,20 @@ elimina o grouping extra e abre caminho para widening de interface
 (`var l::NUM := 0`). Decisão: sintaxe de binding, não de valor — `::` ali
 é anotação do binding, não operação sobre RHS.
 
-#### Tensor (Cluster 3) — migração pendente
+#### `family_extension_invalid` + regra do órfão — gates de `implements`
 
-`test_tensor_math.kata` não migrado. Bug intencional de dot com shapes
-incompatíveis — decisão de design pendente.
+`docs/PRDs/PRD-implements-gates.md` (2 fases). Dois gates estruturais
+para `T implements IFACE` que hoje falham downstream com
+`type.no_overload`:
 
-#### `family_extension_invalid` — erro nomeado não implementado
-
-PRD-check-family-completeness T5 especifica erro nomeado
-`type.family_extension_invalid` quando a extensão de família falha
-porque o predicado exige interface não implementada (ex: `> _ 0`
-requer ORD). Hoje a rejeição acontece por falha de dispatch
-(`type.no_overload` na síntese do predicado), não por validação
-estrutural com mensagem orientada. Implementar o erro nomeado com
-diagnóstico que aponta qual interface falta.
-
-#### Regra do órfão — gate explícito não implementado
-
-PRD-check-family-completeness T7 assume que `Complex implements NUM`
-em módulo de usuário (tipo externo + interface externa) falha como
-violação da regra do órfão. Hoje não há gate que rejeite isso — o
-implements é aceito e o erro aparece downstream como
-`type.no_overload` em default methods. Implementar validação
-estrutural no pass0: rejeitar `T implements IFACE` quando nem `T`
-nem `IFACE` é declarado no módulo atual.
+1. **Regra do órfão** (`type.orphan_impl`): `T` e `IFACE` ambos externos
+   ao módulo. Validação em `validate_orphan_rule` pós-merge, consultando
+   `origins_of` em struct/enum/interface registries.
+2. **Extensão de família inválida** (`type.family_extension_invalid`):
+   `T implements IFACE` estende família cujos predicados não são
+   satisfeitos para `T`. `RefinedDeclInfo` ganha `extension_impl` para
+   marcar instâncias criadas por `extend_families_for_implementors`;
+   inference mapeia `NoOverload` → `FamilyExtensionInvalid`.
 
 ---
 
@@ -142,5 +103,5 @@ nem `IFACE` é declarado no módulo atual.
   documentada precisam de via de escape (`@allow redundant`?). Projetar
   sintaxe e escopo de supressão.
 - **`select_arms_different_types`** — test placeholder em
-  `kata-inference/tests/csp_typeck.rs:221`, depende de T0 unification.
+  `kata-inference/tests/csp_typeck.rs:215`, depende de T0 unification.
   Corpo vazio, sem assertions.

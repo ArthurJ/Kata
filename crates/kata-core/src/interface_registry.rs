@@ -20,6 +20,8 @@
 
 use std::collections::{HashMap, HashSet};
 
+use kata_ast::Span;
+
 use crate::ty::Ty;
 
 /// Interface registrada no InterfaceRegistry.
@@ -66,6 +68,9 @@ pub struct ImplEntry {
     pub iface_params: Vec<String>,
     /// Métodos do impl.
     pub methods: Vec<ImplMethodInfo>,
+    /// Span do `implements` no código-fonte.
+    /// `Span::synthetic()` para impls sintéticos (show_synthesis, etc.).
+    pub span: Span,
 }
 
 /// Método dentro de impl — tipos já resolvidos.
@@ -310,6 +315,25 @@ impl InterfaceRegistry {
         info.supertraits
             .iter()
             .any(|st| self.interface_has_method(st, method_name))
+    }
+
+    /// Constrói um mapa `method_name → Vec<iface_name>` listando quais
+    /// interfaces definem cada método (incluindo via supertraits).
+    /// Usado para produzir mensagens de erro orientadas quando um
+    /// predicado de família falha com `NoOverload` para um operador.
+    pub fn method_to_ifaces(&self) -> HashMap<String, Vec<String>> {
+        let mut map: HashMap<String, Vec<String>> = HashMap::new();
+        for key in self.interfaces.keys() {
+            let name = &key.1;
+            let info = match self.get_interface(name) {
+                Some(i) => i,
+                None => continue,
+            };
+            for sig in &info.signatures {
+                map.entry(sig.name.clone()).or_default().push(name.clone());
+            }
+        }
+        map
     }
 
     // ── Ciclo ─────────────────────────────────────────────

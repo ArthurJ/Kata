@@ -17,6 +17,7 @@ fn impl_entry(origin: &str, type_name: &str, iface_name: &str) -> ImplEntry {
         interface_name: iface_name.into(),
         iface_params: Vec::new(),
         methods: Vec::new(),
+        span: kata_ast::Span::synthetic(),
     }
 }
 

@@ -33,6 +33,7 @@ use crate::typed::{TypedExpr, TypedExprKind, TypedFunction, TypedLambdaClause, T
 use super::expr::{InferCtx, infer_expr};
 use super::helpers::InferResult;
 use super::refined_builders::{build_nested_match, build_result_err, build_result_ok};
+use kata_diagnostics::MiddleError;
 
 /// Sintetiza funções predicado e smart constructors falíveis para tipos refinados.
 ///
@@ -157,14 +158,40 @@ pub(crate) fn synthesize_refined(
             let mut pred_env = type_env.clone();
             pred_env.define("x", decl.base_ty.clone(), "__local__");
 
-            // Infere o body do predicado (despacha operadores via prelude)
-            let typed_body = infer_expr(
+            // Infere o body do predicado (despacha operadores via prelude).
+            // Se este RefinedDeclInfo foi criado por extensão de família e a
+            // inferência falha com NoOverload, mapeia para FamilyExtensionInvalid.
+            let typed_body = match infer_expr(
                 &desugared.node,
                 &desugared.span,
                 &mut pred_env,
                 &ctx,
                 true, // tail_pos
-            )?;
+            ) {
+                Ok(t) => t,
+                Err(ref e) if decl.extension_impl.is_some()
+                    && matches!(e, MiddleError::NoOverload { .. }) =>
+                {
+                    let (type_name, iface_name, impl_span) =
+                        decl.extension_impl.as_ref().unwrap();
+                    let method_map = interface_registry.method_to_ifaces();
+                    // Extrai o nome do método que falhou no dispatch.
+                    let method_name = match e {
+                        MiddleError::NoOverload { name, .. } => name.clone(),
+                        _ => String::new(),
+                    };
+                    let missing_ifaces =
+                        method_map.get(&method_name).cloned().unwrap_or_default();
+                    return Err(MiddleError::FamilyExtensionInvalid {
+                        type_name: type_name.clone(),
+                        iface_name: iface_name.clone(),
+                        family_name: decl.name.clone(),
+                        missing_ifaces,
+                        span: (*impl_span).into(),
+                    });
+                }
+                Err(e) => return Err(e),
+            };
 
             // Monta a TypedFunction do predicado
             let pattern = Spanned::new(

@@ -10,10 +10,11 @@
 //! - `EnumPredVariant`: variante de enum predicado
 //! - `ResolveError`: erro de resolution
 
-use kata_ast::{ActionStmt, Expr, LambdaClause, Spanned};
+use kata_ast::{ActionStmt, Expr, LambdaClause, Span, Spanned};
 use kata_core::{
     EnumRegistry, InterfaceRegistry, RefinesRegistry, StructRegistry, Ty, TypeEnv, TypeGraph,
 };
+use kata_diagnostics::MietteSpan;
 use std::collections::HashMap;
 use thiserror::Error;
 
@@ -225,6 +226,10 @@ pub struct RefinedDeclInfo {
     /// nome do type parameter livre no base_ty (ex: "A" em `List::A`).
     /// `None` para refined concreto ou família polimórfica eager (sobre interface).
     pub lazy_type_param: Option<String>,
+    /// Some((type_name, iface_name, span)) se esta instância foi criada por
+    /// extensão automática de família via `extend_families_for_implementors`.
+    /// None para instâncias originais (declaradas no pass0).
+    pub extension_impl: Option<(String, String, Span)>,
 }
 
 /// Informação de um enum com variantes predicadas.
@@ -323,6 +328,23 @@ pub enum ResolveError {
     #[error("`data {name} ()` sem campos requer diretiva @ffi")]
     #[diagnostic(code = "resolve.empty_data_no_ffi")]
     EmptyDataNoFfi { name: String },
+
+    /// `T implements IFACE` onde tanto `T` quanto `IFACE` são externos ao
+    /// módulo do implements — violação da regra do órfão.
+    #[error("`{type_name} implements {interface_name}` viola a regra do órfão")]
+    #[diagnostic(code = "type.orphan_impl")]
+    OrphanImpl {
+        type_name: String,
+        interface_name: String,
+        /// Origin do módulo onde o implements foi declarado.
+        impl_origin: String,
+        /// Origin onde o tipo é definido (ex: "core" para stdlib).
+        type_origin: String,
+        /// Origin onde a interface é definida.
+        iface_origin: String,
+        #[label("implements em módulo de usuário")]
+        span: MietteSpan,
+    },
 }
 
 /// Formata um `Vec<ResolveError>` como string legível (erros separados por `; `).
