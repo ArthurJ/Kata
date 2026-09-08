@@ -346,7 +346,7 @@ pub(crate) fn define_function_body(
     func_id: cranelift_module::FuncId,
     ir_name: &str,
     module: &mut dyn ModuleBackend,
-    ffi_ids: &HashMap<String, cranelift_module::FuncId>,
+    ffi_ids: &std::collections::BTreeMap<String, cranelift_module::FuncId>,
     kata_ids: &HashMap<FuncKey, cranelift_module::FuncId>,
     inner_kata_ids: &HashMap<FuncKey, cranelift_module::FuncId>,
     string_table: &mut StringTable,
@@ -376,7 +376,7 @@ pub(crate) fn define_function_body(
         func_ir.signature = sig;
 
         // Declara FFI e funções Kata no Function.
-        let mut ffi_refs: HashMap<String, cranelift_codegen::ir::FuncRef> = HashMap::new();
+        let mut ffi_refs: std::collections::BTreeMap<String, cranelift_codegen::ir::FuncRef> = std::collections::BTreeMap::new();
         for (fname, &fid) in ffi_ids {
             let func_ref = module.declare_func_in_func(fid, func_ir);
             ffi_refs.insert(fname.clone(), func_ref);
@@ -662,7 +662,7 @@ pub(crate) fn define_kata_function(
     func: &TypedFunction,
     func_id: cranelift_module::FuncId,
     module: &mut dyn ModuleBackend,
-    ffi_ids: &HashMap<String, cranelift_module::FuncId>,
+    ffi_ids: &std::collections::BTreeMap<String, cranelift_module::FuncId>,
     symbol_table: &HashMap<FuncKey, cranelift_module::FuncId>,
     inner_table: &HashMap<FuncKey, cranelift_module::FuncId>,
     string_table: &mut StringTable,

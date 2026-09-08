@@ -106,14 +106,14 @@ pub(crate) fn func_key_from_callee(
 pub(crate) struct LowerCtx<'a, 'b> {
     pub builder: &'a mut FunctionBuilder<'b>,
     pub module: &'a mut dyn ModuleBackend,
-    pub ffi_refs: &'a HashMap<String, cranelift_codegen::ir::FuncRef>,
+    pub ffi_refs: &'a std::collections::BTreeMap<String, cranelift_codegen::ir::FuncRef>,
     pub kata_refs: &'a HashMap<FuncKey, cranelift_codegen::ir::FuncRef>,
     /// FuncRefs das funções inner (wrapper/inner split). Default: HashMap vazio.
     /// Tail calls no inner resolvem para aqui (TCO); non-tail calls resolvem
     /// para `kata_refs` (wrapper, com cache/timer).
     pub kata_refs_inner: &'a HashMap<FuncKey, cranelift_codegen::ir::FuncRef>,
     /// FuncIds globais (module-level) para re-declaração em lambdas anônimos.
-    pub ffi_ids: &'a HashMap<String, cranelift_module::FuncId>,
+    pub ffi_ids: &'a std::collections::BTreeMap<String, cranelift_module::FuncId>,
     pub kata_ids: &'a HashMap<FuncKey, cranelift_module::FuncId>,
     #[allow(dead_code)]
     pub metadata: &'a mut MetadataTable,
@@ -220,6 +220,13 @@ pub(crate) fn resolve_clif_ty(
                     I64 // fallback: structs são ponteiros (I64)
                 }
             };
+        }
+        // Family: família polimórfica abstrata — não tem tipo base único.
+        // O alias_of no registry reflete a última instância registrada (ordem
+        // non-determinística por processo). Famílias são sempre representadas
+        // como I64 (ponteiro/boxed) no ABI do Cranelift.
+        if let StructKey::Family(_) = key {
+            return I64;
         }
         // Plain: percorre cadeia de alias_of no registry.
         let mut current = key.name().to_string();

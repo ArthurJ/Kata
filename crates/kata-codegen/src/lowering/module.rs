@@ -99,7 +99,7 @@ pub(crate) type LowerModuleResult = (
 pub(crate) fn lower_module(
     typed: &TypedModule,
     module: &mut dyn ModuleBackend,
-    ffi_ids: &HashMap<String, cranelift_module::FuncId>,
+    ffi_ids: &std::collections::BTreeMap<String, cranelift_module::FuncId>,
     struct_registry: &kata_core::StructRegistry,
     type_id_map: &HashMap<Ty, i64>,
     prev_funcs: &HashMap<i64, (String, *const u8)>,
@@ -307,7 +307,8 @@ pub(crate) fn lower_module(
         func.signature = sig.clone();
 
         // Declara cada FFI no Function e coleta os FuncRefs.
-        let mut ffi_refs: HashMap<String, cranelift_codegen::ir::FuncRef> = HashMap::new();
+        // BTreeMap para ordem determinística — ver declare_ffi_symbols.
+        let mut ffi_refs: std::collections::BTreeMap<String, cranelift_codegen::ir::FuncRef> = std::collections::BTreeMap::new();
         for (name, &fid) in ffi_ids {
             let func_ref = module.declare_func_in_func(fid, func);
             ffi_refs.insert(name.clone(), func_ref);
@@ -465,11 +466,11 @@ pub(crate) fn lower_module(
     }
 
     // Define a função no module usando o Context.
-    module
-        .define_function(entry_id, &mut ctx)
-        .map_err(|e| CodegenError::Cranelift {
+    if let Err(e) = module.define_function(entry_id, &mut ctx) {
+        return Err(CodegenError::Cranelift {
             reason: format!("define __kata_entry: {e}"),
-        })?;
+        });
+    }
     if dump_ir {
         ir_dump.push((
             "__kata_entry".to_string(),

@@ -1,7 +1,5 @@
 //! IPC Broker — síntese de Action JIT para Buffered cross-process.
 
-use std::collections::HashMap;
-
 use cranelift_codegen::ir::condcodes::IntCC;
 use cranelift_codegen::ir::types::I64;
 use cranelift_codegen::ir::{AbiParam, InstBuilder, MemFlagsData, Signature, Value};
@@ -76,7 +74,7 @@ pub(crate) fn synthesize_ipc_broker(
         func_ir.signature = sig;
 
         // Declara FFI no Function do broker (precisa dos FuncRefs locais).
-        let mut ffi_refs: HashMap<String, cranelift_codegen::ir::FuncRef> = HashMap::new();
+        let mut ffi_refs: std::collections::BTreeMap<String, cranelift_codegen::ir::FuncRef> = std::collections::BTreeMap::new();
         for (fname, &fid) in ctx.ffi_ids {
             let fref = ctx.module.declare_func_in_func(fid, func_ir);
             ffi_refs.insert(fname.clone(), fref);
@@ -205,7 +203,7 @@ pub(crate) fn synthesize_ipc_broker(
 /// tem seus próprios FuncRefs declarados no Function do broker, não no
 /// `ctx.ffi_refs` do caller).
 fn get_ffi_from(
-    ffi_refs: &HashMap<String, cranelift_codegen::ir::FuncRef>,
+    ffi_refs: &std::collections::BTreeMap<String, cranelift_codegen::ir::FuncRef>,
     name: &str,
 ) -> Result<cranelift_codegen::ir::FuncRef, super::super::CodegenError> {
     ffi_refs

@@ -4,8 +4,6 @@
 //! C do `kata-rt`. `declare_ffi_symbols` declara os imports no `JITModule`
 //! e retorna o mapa nome → FuncId.
 
-use std::collections::HashMap;
-
 use crate::call_conv::ffi_call_conv;
 use cranelift_codegen::ir::types::I64;
 use cranelift_codegen::ir::{AbiParam, Signature};
@@ -524,10 +522,15 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
 }
 
 /// Declara todos os símbolos FFI no module e retorna o mapa nome → FuncId.
+///
+/// Usa `BTreeMap` (ordem determinística) em vez de `HashMap` para que os
+/// `FuncRef`s sejam atribuídos na mesma ordem em todo run — a ordem do
+/// `HashMap` é randomizada por processo, o que tornava o IR non-determinístico
+/// e causava falhas intermitentes do Cranelift verifier.
 pub(crate) fn declare_ffi_symbols(
     module: &mut dyn ModuleBackend,
-) -> Result<HashMap<String, cranelift_module::FuncId>, CodegenError> {
-    let mut ffi_ids = HashMap::new();
+) -> Result<std::collections::BTreeMap<String, cranelift_module::FuncId>, CodegenError> {
+    let mut ffi_ids = std::collections::BTreeMap::new();
     for sym in all_ffi_symbols() {
         let name = sym.symbol_name();
         let sig = ffi_signature(sym);

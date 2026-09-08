@@ -48,7 +48,7 @@ pub struct TestWrapper {
 pub(crate) fn generate_test_wrappers(
     typed: &kata_inference::TypedModule,
     module: &mut dyn ModuleBackend,
-    ffi_ids: &HashMap<String, cranelift_module::FuncId>,
+    ffi_ids: &std::collections::BTreeMap<String, cranelift_module::FuncId>,
     symbol_table: &HashMap<FuncKey, cranelift_module::FuncId>,
     string_table: &mut StringTable,
     bytes_table: &mut Vec<Vec<u8>>,
@@ -133,7 +133,7 @@ fn declare_test_wrapper(
 /// Evita passar 5 parâmetros isolados — clippy::too_many_arguments.
 pub(crate) struct TestLowerCtx<'a> {
     pub module: &'a mut dyn ModuleBackend,
-    pub ffi_ids: &'a HashMap<String, cranelift_module::FuncId>,
+    pub ffi_ids: &'a std::collections::BTreeMap<String, cranelift_module::FuncId>,
     pub symbol_table: &'a HashMap<FuncKey, cranelift_module::FuncId>,
     pub string_table: &'a mut StringTable,
     pub bytes_table: &'a mut Vec<Vec<u8>>,
@@ -169,7 +169,7 @@ fn define_test_wrapper(
         func_ir.signature = sig;
 
         // Declara FFI e funções Kata no Function.
-        let mut ffi_refs: HashMap<String, cranelift_codegen::ir::FuncRef> = HashMap::new();
+        let mut ffi_refs: std::collections::BTreeMap<String, cranelift_codegen::ir::FuncRef> = std::collections::BTreeMap::new();
         for (fname, &fid) in tctx.ffi_ids {
             let func_ref = tctx.module.declare_func_in_func(fid, func_ir);
             ffi_refs.insert(fname.clone(), func_ref);
