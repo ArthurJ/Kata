@@ -77,21 +77,6 @@ elimina o grouping extra e abre caminho para widening de interface
 (`var l::NUM := 0`). Decisão: sintaxe de binding, não de valor — `::` ali
 é anotação do binding, não operação sobre RHS.
 
-#### `family_extension_invalid` + regra do órfão — gates de `implements`
-
-`docs/PRDs/PRD-implements-gates.md` (2 fases). Dois gates estruturais
-para `T implements IFACE` que hoje falham downstream com
-`type.no_overload`:
-
-1. **Regra do órfão** (`type.orphan_impl`): `T` e `IFACE` ambos externos
-   ao módulo. Validação em `validate_orphan_rule` pós-merge, consultando
-   `origins_of` em struct/enum/interface registries.
-2. **Extensão de família inválida** (`type.family_extension_invalid`):
-   `T implements IFACE` estende família cujos predicados não são
-   satisfeitos para `T`. `RefinedDeclInfo` ganha `extension_impl` para
-   marcar instâncias criadas por `extend_families_for_implementors`;
-   inference mapeia `NoOverload` → `FamilyExtensionInvalid`.
-
 ---
 
 ## Futuro
