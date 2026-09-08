@@ -114,6 +114,41 @@ pub(crate) fn show_call(
     )
 }
 
+/// Constrói chamada `show <arg>` genérica (dispatch normal via monomorphizador).
+///
+/// Diferente de `show_call`, não usa nome mangled — gera `Closure { callee:
+/// Ident("show"), ffi_symbol: None }`. Usado quando o type fornece `show`
+/// manual (síntese skipada) — o monomorphizador resolve o overload do user.
+pub(crate) fn show_call_generic(
+    arg: Spanned<TypedExpr>,
+    arg_ty: &Ty,
+) -> Spanned<TypedExpr> {
+    let callee = TypedExpr {
+        span: Span::synthetic(),
+        ty: Ty::Function(vec![arg_ty.clone()], Box::new(Ty::text())),
+        tail_pos: false,
+        escape: EscapeTarget::Local,
+        kind: TypedExprKind::Ident {
+            name: "show".to_string(),
+        },
+    };
+
+    Spanned::new(
+        TypedExpr {
+            span: Span::synthetic(),
+            ty: Ty::text(),
+            tail_pos: false,
+            escape: EscapeTarget::Caller,
+            kind: TypedExprKind::Closure {
+                callee: Box::new(Spanned::new(callee, Span::synthetic())),
+                args: vec![arg],
+                ffi_symbol: None,
+            },
+        },
+        Span::synthetic(),
+    )
+}
+
 /// Constrói `FieldAccess { expr: __self, field_index }`.
 pub(crate) fn field_access_expr(field_index: usize, field_ty: &Ty) -> Spanned<TypedExpr> {
     let self_expr = TypedExpr {

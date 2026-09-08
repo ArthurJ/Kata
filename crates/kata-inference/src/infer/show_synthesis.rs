@@ -30,7 +30,8 @@ use crate::typed::{
 };
 
 use super::show_synthesis_helpers::{
-    ffi_call1, field_access_expr, repr_expr, show_call, string_concat, text_lit,
+    ffi_call1, field_access_expr, repr_expr, show_call, string_concat,
+    text_lit,
 };
 
 /// Verifica se um tipo já tem implementação manual do método `show` (via
@@ -88,7 +89,8 @@ pub(crate) fn synthesize_show_functions(
         // Se o tipo já tem implementação manual do método `show` (via qualquer
         // interface, respeitando orphan rule — o impl está no mesmo módulo que o
         // tipo), não sintetiza. A implementação manual tem prioridade.
-        if has_manual_show(interface_registry, struct_name) {
+        let manual = has_manual_show(interface_registry, struct_name);
+        if manual {
             continue;
         }
 
@@ -439,10 +441,11 @@ fn build_refined_show_body(
         "Rational" => ffi_call1("kata_rt_rat_show", self_spanned, Ty::text()),
         "Text" => self_spanned, // identity
         _ => {
-            // Base é struct/coleção — chama `__kata_show__{Base}`.
-            // Usa o base_ty completo para que o monomorphizador saiba
-            // o tipo concreto (ex: List::Int, não List genérico).
-            show_call(self_spanned, base_name.clone(), &self_ty)
+            // Base é struct/coleção — chama `show __self` genérico.
+            // Usa show_call_generic (ffi_symbol: None) para que o monomorphizador
+            // resolva o overload correto (FFI, sintetizado, ou manual do user).
+            // show_call com mangled falha quando o type fornece show manual.
+            super::show_synthesis_helpers::show_call_generic(self_spanned, &self_ty)
         }
     };
 

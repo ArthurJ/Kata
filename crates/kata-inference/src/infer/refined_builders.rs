@@ -115,7 +115,7 @@ pub(crate) fn build_result_err(
 ///
 /// Int → `kata_rt_bi_show`, Float → `kata_rt_float_to_text`, Rational → `kata_rt_rat_show`.
 fn build_show_call(var_name: &str, base_ty: &Ty) -> Spanned<TypedExpr> {
-    use super::show_synthesis_helpers::{ffi_call1, show_call};
+    use super::show_synthesis_helpers::{ffi_call1, show_call, show_call_generic};
 
     let arg = TypedExpr {
         span: Span::synthetic(),
@@ -143,7 +143,7 @@ fn build_show_call(var_name: &str, base_ty: &Ty) -> Spanned<TypedExpr> {
             })
         }
         Ty::Sum(name) => show_call(arg, name.clone(), base_ty),
-        Ty::Struct(key) => show_call(arg, key.name().to_string(), base_ty),
+        Ty::Struct(_) => show_call_generic(arg, base_ty),
         Ty::List(_) => show_call(arg, "List".to_string(), base_ty),
         Ty::Array(_) => show_call(arg, "Array".to_string(), base_ty),
         Ty::Set(_) => show_call(arg, "Set".to_string(), base_ty),
