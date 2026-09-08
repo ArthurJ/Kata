@@ -38,8 +38,8 @@ pub(crate) fn populate_dispatch_table(signatures: &[Signature]) -> DispatchTable
             associative_neutral,
             type_params: sig.type_params.clone(),
             substitutions: None,
-            param_names: vec![],
-            param_defaults: vec![],
+            param_names: sig.param_names.clone(),
+            param_defaults: sig.param_defaults.clone(),
         });
 
         // Marca comutativa quando a assinatura tem @commutative.
@@ -184,11 +184,33 @@ pub(crate) fn reorder_dict_args_to_tuple(
         }
     })?;
 
-    // Encontra o overload com param_names não-vazios. Pode ser função pura
-    // ou action — o critério é ter nomes, não o flag is_action.
+    // Encontra o overload cujos param_names contêm todas as chaves do Dict.
+    // Quando há múltiplos overloads com param_names (ex: echo posicional +
+    // echo dict-template), seleciona aquele que aceita todas as chaves.
+    let dict_keys: std::collections::HashSet<&str> = entries
+        .iter()
+        .filter_map(|(k, _)| match &k.node.kind {
+            TypedExprKind::TextLit { text } => Some(text.as_str()),
+            _ => None,
+        })
+        .collect();
+
     let overload = overloads
         .iter()
-        .find(|o| !o.param_names.is_empty())
+        .filter(|o| !o.param_names.is_empty())
+        .find(|o| {
+            // Verifica se todas as chaves do Dict são params deste overload.
+            let names: std::collections::HashSet<&str> = o.param_names
+                .iter()
+                .filter_map(|n| n.as_deref())
+                .collect();
+            dict_keys.iter().all(|k| names.contains(*k))
+        })
+        .or_else(|| {
+            // Fallback: primeiro overload com param_names (compat com
+            // actions que têm um único overload nomeado).
+            overloads.iter().find(|o| !o.param_names.is_empty())
+        })
         .ok_or_else(|| kata_diagnostics::MiddleError::TypeMismatch {
             expected: format!("`{callee}` com params nomeados para chamada via Dict"),
             found: format!(

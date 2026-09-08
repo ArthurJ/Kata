@@ -683,6 +683,11 @@ action echo (msg::SHOW) => Unit
     let s := show msg
     _println!(s)
 
+action echo {msg::SHOW: _, end::Text: "\n"} => Unit
+    let s := show msg
+    _print!(s)
+    _print!(end)
+
 @ffi("kata_rt_panic")
 action panic (msg::Text) => Unit
 

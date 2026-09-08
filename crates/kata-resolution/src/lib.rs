@@ -403,6 +403,8 @@ fn resolve_inner(
                     is_action: false,
                     is_commutative,
                     type_params,
+                    param_names: vec![],
+                    param_defaults: vec![],
                 });
             }
             Item::ActionDecl {
@@ -515,6 +517,8 @@ fn resolve_inner(
                         is_action: true,
                         is_commutative: false,
                         type_params: vec![],
+                        param_names: param_names.clone(),
+                        param_defaults: param_defaults.clone(),
                     });
                 } else {
                     // Action com corpo Kata — produz ActionDef para o inference.
@@ -993,6 +997,8 @@ pub fn expand_family_signatures(
                     is_action: sig.is_action,
                     is_commutative: sig.is_commutative,
                     type_params: sig.type_params.clone(),
+                    param_names: sig.param_names.clone(),
+                    param_defaults: sig.param_defaults.clone(),
                 };
                 new_sigs.push(new_sig);
 

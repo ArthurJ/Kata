@@ -82,6 +82,12 @@ pub struct Signature {
     /// Vazio para funções não-genéricas. Coletado examinando os `Ty::Var` em
     /// param_types e return_type cujo nome é UPPER_CASE e não está no TypeEnv.
     pub type_params: Vec<String>,
+    /// Nomes dos params (para dict-template). `Some(nome)` para nomeados,
+    /// `None` para posicional. Vazio para funções puras sem nomes.
+    pub param_names: Vec<Option<String>>,
+    /// Defaults dos params. `None` = obrigatório, `Some(expr)` = default.
+    /// Paralelo a `param_names`.
+    pub param_defaults: Vec<Option<Spanned<Expr>>>,
 }
 
 /// Especificação de timer `@timer` anotada em função nomeada.
