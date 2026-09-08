@@ -7,7 +7,7 @@ mod epilogue;
 
 use std::collections::HashMap;
 
-use cranelift_codegen::ir::types::{F64, I64};
+use cranelift_codegen::ir::types::I64;
 use cranelift_codegen::ir::{
     AbiParam, InstBuilder, MemFlagsData, Signature, StackSlotData, StackSlotKind,
 };
@@ -254,18 +254,14 @@ fn lower_prologue(
         } else {
             lookup_result
         };
-        // Cache hit: depth_dec antes de return (o depth_inc já foi emitido
-        // no prólogo da função, antes de lower_prologue).
-        // Wrapper e inner ambos trackeiam (A9: depth_tracking cobre CallInner).
-        if lower.depth_tracking {
-            let rt_val = lower.rt.unwrap_or_else(|| builder.ins().iconst(I64, 0));
-            let dec_fn = lower
-                .ffi_refs
-                .get("kata_rt_depth_dec")
-                .copied()
-                .expect("kata_rt_depth_dec registrado");
-            builder.ins().call(dec_fn, &[rt_val]);
-        }
+        // Cache hit: return cached value.
+        // NÃO emitir depth_dec aqui — o depth_inc ainda não foi emitido
+        // para este call. O cache lookup (lower_prologue) acontece ANTES
+        // do depth_inc (que está em define_function_body, após lower_prologue).
+        // O comentário anterior ("depth_inc já foi emitido antes de
+        // lower_prologue") estava incorreto — a ordem é o oposto.
+        // Emitir depth_dec aqui decrementaria a profundidade de um nível
+        // ancestral, cancelando erroneamente o depth_inc desse ancestral.
         builder.ins().return_(&[cached_val]);
 
         // Miss block: continua para o body.
@@ -546,9 +542,12 @@ pub(crate) fn define_function_body(
                 .ins()
                 .brif(is_overflow, overflow_block, &[], cont_block, &[]);
 
-            // overflow_block: set_overflowed + return
-            // depth_dec NÃO é emitido aqui quando jumpamos para o epilogue,
-            // porque o epilogue já faz emit_depth_dec.
+            // overflow_block: set_overflowed + panic imediato
+            // O overflow de recursão é irrecuperável. Em vez de retornar um
+            // dummy 0 (que seria impresso pelo echo! antes da verificação
+            // post-execução), chamamos kata_rt_overflow_panic que aborta o
+            // processo com mensagem estruturada. O trap(user(1)) imediatamente
+            // após satisfaz o verificador do Cranelift (bloco é unreachable).
             lower.builder.switch_to_block(overflow_block);
             lower.builder.seal_block(overflow_block);
             let set_ovf_fn = lower
@@ -557,33 +556,17 @@ pub(crate) fn define_function_body(
                 .copied()
                 .expect("kata_rt_set_overflowed registrado");
             lower.builder.ins().call(set_ovf_fn, &[rt_value]);
-
-            // Retornar pelo epilogue_block se existir (garante coerce_return),
-            // senão return_ direto com dummy do tipo correto.
-            // O dummy é SMI 0 (encode_smi(0) = 1) para Int, ou 0.0 para Float.
-            // SMI 0 é usado porque is_smi(1) = true e decode_smi(1) = 0.
-            // I64 0 (null) seria interpretado como BigInt pointer null → panic.
-            if let Some(epi) = lower.epilogue_block {
-                let ret_clif_ty = super::resolve_clif_ty(ret_ty, struct_registry);
-                let dummy = if ret_clif_ty == F64 {
-                    lower.builder.ins().f64const(0.0)
-                } else {
-                    lower.builder.ins().iconst(I64, 1) // SMI 0
-                };
-                lower
-                    .builder
-                    .ins()
-                    .jump(epi, &[cranelift_codegen::ir::BlockArg::Value(dummy)]);
-            } else {
-                let ret_clif_ty = super::resolve_clif_ty(ret_ty, struct_registry);
-                let dummy = if ret_clif_ty == F64 {
-                    lower.builder.ins().f64const(0.0)
-                } else {
-                    lower.builder.ins().iconst(I64, 1) // SMI 0
-                };
-                lower.emit_depth_dec();
-                lower.builder.ins().return_(&[dummy]);
-            }
+            let overflow_panic_fn = lower
+                .ffi_refs
+                .get("kata_rt_overflow_panic")
+                .copied()
+                .expect("kata_rt_overflow_panic registrado");
+            lower.builder.ins().call(overflow_panic_fn, &[rt_value]);
+            // kata_rt_overflow_panic diverge (!) — trap para satisfazer Cranelift.
+            lower
+                .builder
+                .ins()
+                .trap(cranelift_codegen::ir::TrapCode::user(1).expect("trap code 1 é sempre válido"));
 
             // cont_block: continua execução normal
             lower.builder.switch_to_block(cont_block);

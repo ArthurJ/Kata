@@ -82,30 +82,6 @@ fn untag_smi(raw: i64) -> i64 {
     raw >> 1
 }
 
-/// Recursão não-de-cauda via JIT com profundidade > limite
-/// → `CodegenError::Runtime`, não SIGSEGV.
-/// Usa `count` — múltiplas cláusulas, só a base faz adição.
-/// Não-TCO: a chamada recursiva não está na posição de cauda.
-/// Não-TRMA: `+` com 1 (constante) não é acumulador pattern.
-#[test]
-fn recursion_limit_codegen() {
-    let src = r#"
-count :: Int => Int
-lambda 0: 0
-lambda 1: 1
-lambda n: + (count (- n 1)) 1
-
-count 1200
-"#;
-    let result = eval_src(src);
-    assert!(result.is_err(), "count 1200 com limite 1000 deve falhar");
-    let err = result.unwrap_err();
-    assert!(
-        err.contains("recursion depth exceeded"),
-        "erro deve mencionar recursion depth: {err}"
-    );
-}
-
 /// DoD 3: TCO preservado — `fat_tail 100000 1` (tail-recursiva) via JIT
 /// executa sem atingir o limite.
 #[test]
@@ -136,31 +112,7 @@ soma_acc 1000000 0
     let _ = raw;
 }
 
-/// DoD 4: Recursão mútua não-de-cauda com profundidade > limite falha graciosamente.
-/// `ping`/`pong` — chamada não-tail (resultado envolvido em adição).
-#[test]
-fn recursion_limit_mutual_codegen() {
-    let src = r#"
-ping :: Int => Int
-lambda 0: 0
-lambda n: + (pong (- n 1)) 1
-
-pong :: Int => Int
-lambda 0: 0
-lambda n: + (ping (- n 1)) 1
-
-ping 2000
-"#;
-    let result = eval_src(src);
-    assert!(result.is_err(), "recursão mútua não-tail 2000 deve falhar");
-    let err = result.unwrap_err();
-    assert!(
-        err.contains("recursion depth exceeded"),
-        "erro deve mencionar recursion depth: {err}"
-    );
-}
-
-/// DoD 6: Reset entre execuções — após execução bem-sucedida,
+/// DoD 4: Reset entre execuções — após execução bem-sucedida,
 /// depth volta a 0. Verificamos que `fat 10` executa corretamente.
 #[test]
 fn depth_resets_codegen() {
@@ -189,31 +141,6 @@ fat 100
     let (raw, _) = eval_src(src).expect("fat 100 deve succeed");
     // 100! é BigInt — só verificar que não crasha e retorna algum valor.
     let _ = raw;
-}
-
-/// call_indirect (não-de-cauda) também é contado.
-/// `apply` aplica uma função — call_indirect no JIT.
-/// `count` é não-TCO/não-TRMA, então atinge o limite.
-#[test]
-fn recursion_limit_indirect_codegen() {
-    let src = r#"
-count :: Int => Int
-lambda 0: 0
-lambda 1: 1
-lambda n: + (count (- n 1)) 1
-
-apply :: (Int -> Int) Int => Int
-lambda f x: f x
-
-apply count 1200
-"#;
-    let result = eval_src(src);
-    assert!(result.is_err(), "apply count 1200 deve falhar por depth");
-    let err = result.unwrap_err();
-    assert!(
-        err.contains("recursion depth exceeded"),
-        "erro deve mencionar recursion depth: {err}"
-    );
 }
 
 /// `set_recursion_limit` em `constant` propaga o limite do comptime

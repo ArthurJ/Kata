@@ -155,7 +155,8 @@ pub use runtime::Runtime;
 // Recursion depth FFIs
 pub use runtime::{
     kata_rt_depth_dec, kata_rt_depth_get, kata_rt_depth_get_limit, kata_rt_depth_inc,
-    kata_rt_depth_set_limit, kata_rt_overflowed, kata_rt_reset_depth, kata_rt_set_overflowed,
+    kata_rt_depth_set_limit, kata_rt_overflow_panic, kata_rt_overflowed, kata_rt_reset_depth,
+    kata_rt_set_overflowed,
 };
 // IPC (fork + pipe para spawn!)
 pub use ipc::kata_rt_spawn_process;

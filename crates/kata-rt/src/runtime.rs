@@ -341,3 +341,19 @@ pub extern "C" fn kata_rt_reset_depth(rt: i64) {
     let rt = unsafe { deref_runtime_ref(rt) };
     rt.reset_depth();
 }
+
+/// `kata_rt_overflow_panic(rt: i64) -> !` — aborta o processo com mensagem
+/// estruturada de overflow de recursão.
+///
+/// Lê depth e limit do Runtime, imprime no stderr, e faz `process::exit(1)`.
+/// O tipo de retorno é `!` (never) — esta função nunca retorna.
+/// O codegen emite `trap(user(1))` imediatamente após a call para satisfazer
+/// o verificador de tipos do Cranelift (o bloco é unreachable).
+#[unsafe(no_mangle)]
+pub extern "C" fn kata_rt_overflow_panic(rt: i64) -> ! {
+    let rt = unsafe { deref_runtime_ref(rt) };
+    let depth = rt.depth_get();
+    let limit = rt.depth_limit();
+    eprintln!("kata: recursion depth exceeded: {depth} (limit: {limit})");
+    std::process::exit(1);
+}

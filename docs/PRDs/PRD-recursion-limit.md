@@ -123,10 +123,15 @@ FFI, não wrapper):
 4. Corpo normal
 
 `overflow_block`:
-1. `call kata_rt_depth_dec` (equilibrar o inc)
-2. Setar flag de overflow no Runtime via FFI `kata_rt_set_overflowed()`
-3. `iconst i64 0` (valor dummy — o entry point checa a flag, não o valor)
-4. `return_ 0`
+1. `call kata_rt_set_overflowed(rt)` — seta flag no Runtime
+2. `call kata_rt_overflow_panic(rt)` — imprime `recursion depth exceeded:
+   {depth} (limit: {limit})` no stderr e faz `process::exit(1)`. Diverge
+   (`-> !`).
+3. `trap user(1)` — satisfaz o verificador do Cranelift (bloco é unreachable)
+
+O overflow de recursão é irrecuperável: não há valor válido a produzir.
+O processo aborta imediatamente — nenhum dummy é emitido, o `echo!` não
+tem oportunidade de imprimir valor espúrio.
 
 Epílogo (antes de cada `return_` não-tail e antes de cada `return_call`):
 1. `call kata_rt_depth_dec`
@@ -155,6 +160,7 @@ kata_rt_depth_set_limit  -> (rt, limit) -> ()
 kata_rt_set_overflowed   -> (rt) -> ()
 kata_rt_overflowed       -> (rt) -> i64
 kata_rt_reset_depth      -> (rt) -> ()
+kata_rt_overflow_panic   -> (rt) -> !  (process::exit(1))
 ```
 
 Todas recebem `rt: i64` (rt_ptr) como primeiro parâmetro.
@@ -376,12 +382,14 @@ warning, ou suprimir warnings de binding não-utilizado.
 
 ### Débito técnico
 
-1. **`stdlib/config.kata`**: mudar `set_recursion_limit :: Int => Unit` para
-   `PositiveInt => Unit`. O typeck e codegen já tratam refined types em
-   assinaturas FFI (ascription é no-op em runtime). Verificar se
-   `try_exec_comptime_ffi` desembrulha `Ascription` além de `Grouping`.
-2. **Testes do interpretador**: 5 testes E2E listados acima não existem.
-3. **`cache_hit_not_counted`** no codegen: teste listado não existe.
+1. ~~**`stdlib/config.kata`**: mudar `set_recursion_limit :: Int => Unit` para
+   `PositiveInt => Unit`.~~ ✅ Resolvido — já é `PositiveInt`.
+2. ~~**Testes do interpretador**: 5 testes E2E listados acima não existem.~~
+   ✅ Resolvido — 5 testes existem em `kata-interp/tests/recursion_limit_e2e.rs`
+   e passam.
+3. ~~**`cache_hit_not_counted`** no codegen: teste listado não existe.~~
+   ✅ Resolvido — existe em `kata-codegen/tests/recursion_limit_e2e.rs:287`
+   e passa.
 
 ## Testes
 

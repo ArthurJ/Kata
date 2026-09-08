@@ -517,6 +517,10 @@ pub(crate) fn register_ffi_symbols(builder: &mut cranelift_jit::JITBuilder) {
         rt::kata_rt_depth_get_limit as *const u8,
     );
     builder.symbol("kata_rt_reset_depth", rt::kata_rt_reset_depth as *const u8);
+    builder.symbol(
+        "kata_rt_overflow_panic",
+        rt::kata_rt_overflow_panic as *const u8,
+    );
 }
 
 /// Declara todos os símbolos FFI no module e retorna o mapa nome → FuncId.
@@ -549,6 +553,23 @@ pub(crate) fn declare_ffi_symbols(
             reason: format!("declare kata_rt_tag_int_from_str: {e}"),
         })?;
     ffi_ids.insert("kata_rt_tag_int_from_str".to_string(), tag_str_fid);
+
+    // Símbolo especial: kata_rt_overflow_panic (não está no FfiSymbol enum).
+    // Diverge (!) — o codegen emite trap(user(1)) após a call.
+    // Assinatura: (rt: i64) -> void (Cranelift não tem tipo never; o trap
+    // satisfaz o verificador).
+    let overflow_panic_sig = {
+        let mut sig = Signature::new(ffi_call_conv());
+        sig.params.push(AbiParam::new(I64)); // rt
+        sig
+    };
+    let overflow_panic_fid = module
+        .declare_function("kata_rt_overflow_panic", Linkage::Import, &overflow_panic_sig)
+        .map_err(|e| CodegenError::Cranelift {
+            reason: format!("declare kata_rt_overflow_panic: {e}"),
+        })?;
+    ffi_ids.insert("kata_rt_overflow_panic".to_string(), overflow_panic_fid);
+
     Ok(ffi_ids)
 }
 
