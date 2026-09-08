@@ -43,6 +43,19 @@ pub enum MiddleError {
         span: MietteSpan,
     },
 
+    #[error("nenhuma sobrecarga cross-type para `{name}` com tipos ({arg0}, {arg1})\n\
+Ambos implementam a interface `{iface}`, que define `{name}` apenas como `Self Self`. \
+Converta um argumento ou adicione uma sobrecarga cross-type.")]
+    #[diagnostic(code = "type.no_cross_type_overload")]
+    NoCrossTypeOverload {
+        name: String,
+        iface: String,
+        arg0: String,
+        arg1: String,
+        #[label("tipos diferentes — ambos implementam a interface")]
+        span: MietteSpan,
+    },
+
     #[error("tipo `{name}` já declarado")]
     #[diagnostic(code = "type.duplicate_decl")]
     DuplicateDecl {

@@ -16,7 +16,7 @@ use std::collections::HashMap;
 use crate::typed::{TypedExpr, TypedExprKind};
 
 use super::expr::InferCtx;
-use super::generics::{Substitutions, unify};
+use super::generics::{Substitutions, unify, ty_name_for_iface_check};
 use super::helpers::{InferResult, dispatch_to_middle_error};
 
 /// Extrai o nome do tipo concreto de um `Ty` para consulta ao `StructRegistry`.
@@ -512,10 +512,12 @@ pub(crate) fn try_dispatch_table(
                 }
 
                 if total_candidates > 1 {
-                    return Some(Err(MiddleError::NoOverload {
-                        name: func_name.to_string(),
-                        span: (*span).into(),
-                    }));
+                    return Some(Err(enrich_no_overload(
+                        func_name,
+                        arg_types,
+                        ctx,
+                        *span,
+                    )));
                 }
                 // 1 overload total: unify falhou → tipos inconsistentes.
                 // Constrói TypeMismatch com os tipos dos args conflitantes.
@@ -1139,4 +1141,68 @@ pub(crate) fn format_pred_expr(expr: &Spanned<Expr>) -> String {
         }
     }
     render(&expr.node)
+}
+
+/// Constrói `NoOverload` ou `NoCrossTypeOverload` dependendo do contexto.
+///
+/// Se ambos os argumentos são tipos concretos diferentes que implementam
+/// uma mesma interface que define o método chamado, enrich para
+/// `NoCrossTypeOverload` — mensagem orienta o usuário a converter ou
+/// adicionar sobrecarga cross-type. Caso contrário, `NoOverload` genérico.
+fn enrich_no_overload(
+    func_name: &str,
+    arg_types: &[Ty],
+    ctx: &InferCtx,
+    span: Span,
+) -> MiddleError {
+    // Precisa de ≥2 args concretos com tipos diferentes.
+    if arg_types.len() < 2 {
+        return MiddleError::NoOverload {
+            name: func_name.to_string(),
+            span: span.into(),
+        };
+    }
+    let name0 = ty_name_for_iface_check(&arg_types[0]);
+    let name1 = ty_name_for_iface_check(&arg_types[1]);
+    let (Some(n0), Some(n1)) = (name0, name1) else {
+        return MiddleError::NoOverload {
+            name: func_name.to_string(),
+            span: span.into(),
+        };
+    };
+    if n0 == n1 {
+        return MiddleError::NoOverload {
+            name: func_name.to_string(),
+            span: span.into(),
+        };
+    }
+
+    // Quais interfaces definem este método?
+    let method_ifaces = ctx.interface_registry.method_to_ifaces();
+    let Some(ifaces) = method_ifaces.get(func_name) else {
+        return MiddleError::NoOverload {
+            name: func_name.to_string(),
+            span: span.into(),
+        };
+    };
+
+    // Ambos implementam alguma interface comum que define este método?
+    for iface in ifaces {
+        if ctx.interface_registry.type_implements(&n0, iface)
+            && ctx.interface_registry.type_implements(&n1, iface)
+        {
+            return MiddleError::NoCrossTypeOverload {
+                name: func_name.to_string(),
+                iface: iface.clone(),
+                arg0: n0,
+                arg1: n1,
+                span: span.into(),
+            };
+        }
+    }
+
+    MiddleError::NoOverload {
+        name: func_name.to_string(),
+        span: span.into(),
+    }
 }

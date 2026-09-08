@@ -57,7 +57,7 @@ fn normalize_refined(arg: &Ty, interface_name: &str, refines_registry: &RefinesR
 /// - `Ty::Generic(name, _)` → `name` (família lazy como NonEmpty).
 /// - `Ty::List(_)` → `"List"`, etc.
 /// - Demais (`Ty::Var`, `Ty::Interface`, `Ty::Tuple`, ...) → `None`.
-fn ty_name_for_iface_check(ty: &Ty) -> Option<String> {
+pub(crate) fn ty_name_for_iface_check(ty: &Ty) -> Option<String> {
     match ty {
         Ty::Prim(PrimTy::Int) => Some("Int".into()),
         Ty::Prim(PrimTy::Float) => Some("Float".into()),
