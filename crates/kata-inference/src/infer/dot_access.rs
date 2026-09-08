@@ -82,14 +82,14 @@ pub(crate) fn infer_dot_access(
             // Para Instance(family, concrete), resolver campos do tipo
             // concreto (ex: NonZero::MyNum → campos de MyNum).
             let lookup_name = key.concrete_type().unwrap_or_else(|| key.name());
-            let info = ctx
-                .struct_registry
-                .get(lookup_name)
-                .ok_or_else(|| MiddleError::UnboundName {
-                    suggestion: None,
-                    name: format!("struct `{}` não registrado no StructRegistry", lookup_name),
-                    span: (*span).into(),
-                })?;
+            let info =
+                ctx.struct_registry
+                    .get(lookup_name)
+                    .ok_or_else(|| MiddleError::UnboundName {
+                        suggestion: None,
+                        name: format!("struct `{}` não registrado no StructRegistry", lookup_name),
+                        span: (*span).into(),
+                    })?;
             let (field_index, field_info) =
                 info.find_field(field_name)
                     .ok_or_else(|| MiddleError::UnknownField {

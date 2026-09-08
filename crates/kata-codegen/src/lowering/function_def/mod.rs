@@ -563,10 +563,9 @@ pub(crate) fn define_function_body(
                 .expect("kata_rt_overflow_panic registrado");
             lower.builder.ins().call(overflow_panic_fn, &[rt_value]);
             // kata_rt_overflow_panic diverge (!) — trap para satisfazer Cranelift.
-            lower
-                .builder
-                .ins()
-                .trap(cranelift_codegen::ir::TrapCode::user(1).expect("trap code 1 é sempre válido"));
+            lower.builder.ins().trap(
+                cranelift_codegen::ir::TrapCode::user(1).expect("trap code 1 é sempre válido"),
+            );
 
             // cont_block: continua execução normal
             lower.builder.switch_to_block(cont_block);

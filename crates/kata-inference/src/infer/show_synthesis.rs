@@ -30,8 +30,7 @@ use crate::typed::{
 };
 
 use super::show_synthesis_helpers::{
-    ffi_call1, field_access_expr, repr_expr, show_call, string_concat,
-    text_lit,
+    ffi_call1, field_access_expr, repr_expr, show_call, string_concat, text_lit,
 };
 
 /// Verifica se um tipo já tem implementação manual do método `show` (via
@@ -122,6 +121,7 @@ pub(crate) fn synthesize_show_functions(
                 type_params: vec![],
                 interface_name: "SHOW".to_string(),
                 iface_params: vec![],
+                span: Span::synthetic(),
                 methods: vec![ImplMethodInfo {
                     name: "show".to_string(),
                     params: vec![param_ty.clone()],
@@ -306,6 +306,7 @@ pub(crate) fn synthesize_show_functions(
                 type_params: type_params.clone(),
                 interface_name: "SHOW".to_string(),
                 iface_params: vec![],
+                span: Span::synthetic(),
                 methods: vec![ImplMethodInfo {
                     name: "show".to_string(),
                     params: vec![param_ty.clone()],

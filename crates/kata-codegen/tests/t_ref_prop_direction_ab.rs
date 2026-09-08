@@ -1,3 +1,4 @@
+#![allow(clippy::result_large_err)]
 //! E2E: Direção A (path condition prova arg) e Direção B (aprende predicado após dispatch).
 //! Grupo: propagação de learned_facts, rollback de guards, composição.
 //!

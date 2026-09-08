@@ -458,14 +458,13 @@ pub(crate) fn try_dispatch_table(
                             if let MiddleError::TypeMismatch {
                                 expected, found, ..
                             } = &e
+                                && found.contains("não implementa")
                             {
-                                if found.contains("não implementa") {
-                                    return Some(Err(MiddleError::TypeMismatch {
-                                        expected: expected.clone(),
-                                        found: found.clone(),
-                                        span: (*span).into(),
-                                    }));
-                                }
+                                return Some(Err(MiddleError::TypeMismatch {
+                                    expected: expected.clone(),
+                                    found: found.clone(),
+                                    span: (*span).into(),
+                                }));
                             }
                             unify_failed = true;
                         }

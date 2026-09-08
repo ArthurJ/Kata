@@ -362,18 +362,14 @@ pub(crate) fn instantiate_generic_action_call(
             // com 1 vs 2 params) fazem o `find` simples retornar a errada.
             // O `oi` (OverloadInfo selecionado por find_generic_overload) já
             // tem a aridade correta — usar oi.params.len() como filtro.
-            if let Some(orig_action) = ctx
-                .actions
-                .iter()
-                .find(|a| {
-                    a.name == *callee
-                        && a.param_types.len() == oi.params.len()
-                        && a.param_types
-                            .iter()
-                            .zip(oi.params.iter())
-                            .all(|(ap, op)| ap == op)
-                })
-            {
+            if let Some(orig_action) = ctx.actions.iter().find(|a| {
+                a.name == *callee
+                    && a.param_types.len() == oi.params.len()
+                    && a.param_types
+                        .iter()
+                        .zip(oi.params.iter())
+                        .all(|(ap, op)| ap == op)
+            }) {
                 let mono_action = instantiate_action(orig_action, &subs, &instance_name);
                 acc.new_actions.push(mono_action);
             }

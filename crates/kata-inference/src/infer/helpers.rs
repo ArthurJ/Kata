@@ -200,10 +200,8 @@ pub(crate) fn reorder_dict_args_to_tuple(
         .filter(|o| !o.param_names.is_empty())
         .find(|o| {
             // Verifica se todas as chaves do Dict são params deste overload.
-            let names: std::collections::HashSet<&str> = o.param_names
-                .iter()
-                .filter_map(|n| n.as_deref())
-                .collect();
+            let names: std::collections::HashSet<&str> =
+                o.param_names.iter().filter_map(|n| n.as_deref()).collect();
             dict_keys.iter().all(|k| names.contains(*k))
         })
         .or_else(|| {

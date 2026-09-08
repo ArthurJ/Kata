@@ -7,6 +7,8 @@
 //! Entry point: [`infer_module`] — consome `Module` (AST) + `ResolvedModule`
 //! e produz `TypedModule`.
 
+#![allow(clippy::result_large_err)]
+
 pub mod desugar;
 pub mod desugar_directives;
 pub(crate) mod desugar_holes;

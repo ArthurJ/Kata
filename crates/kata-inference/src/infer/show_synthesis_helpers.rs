@@ -119,10 +119,7 @@ pub(crate) fn show_call(
 /// Diferente de `show_call`, não usa nome mangled — gera `Closure { callee:
 /// Ident("show"), ffi_symbol: None }`. Usado quando o type fornece `show`
 /// manual (síntese skipada) — o monomorphizador resolve o overload do user.
-pub(crate) fn show_call_generic(
-    arg: Spanned<TypedExpr>,
-    arg_ty: &Ty,
-) -> Spanned<TypedExpr> {
+pub(crate) fn show_call_generic(arg: Spanned<TypedExpr>, arg_ty: &Ty) -> Spanned<TypedExpr> {
     let callee = TypedExpr {
         span: Span::synthetic(),
         ty: Ty::Function(vec![arg_ty.clone()], Box::new(Ty::text())),

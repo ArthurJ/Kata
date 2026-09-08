@@ -1,3 +1,4 @@
+#![allow(clippy::result_large_err)]
 //! E2E: path conditions provam ascriptions refinadas em compile-time.
 //! Grupo: guards diretos, match Boolean, refutação, match aninhado, lambdas.
 //!

@@ -200,14 +200,12 @@ fn prelude_eq_int_int_direct() {
 /// A comutatividade do prelude só é útil quando novos overloads são
 /// adicionados (ex: prelude em Kata, ou tipo Complex).
 #[test]
-fn prelude_eq_float_int_no_cross_type() {
+fn prelude_eq_float_int_cross_type() {
     let src = "= 3.14 42";
-    // Float Int → swap → Int Float → nenhum overload → falha
-    let err = infer_src_err(src);
-    assert!(
-        matches!(err, kata_diagnostics::MiddleError::NoOverload { .. }),
-        "esperado NoOverload, got {err:?}"
-    );
+    // Float Int → cross-type overload (lambda: = f (float i)) → Boolean
+    let tmod = infer_src(src);
+    let entry = entry_typed(&tmod);
+    assert_eq!(entry.ty, Ty::boolean());
 }
 
 // ── Prelude `+` é comutativo ────────────────────────────────────

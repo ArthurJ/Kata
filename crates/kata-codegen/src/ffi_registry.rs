@@ -564,7 +564,11 @@ pub(crate) fn declare_ffi_symbols(
         sig
     };
     let overflow_panic_fid = module
-        .declare_function("kata_rt_overflow_panic", Linkage::Import, &overflow_panic_sig)
+        .declare_function(
+            "kata_rt_overflow_panic",
+            Linkage::Import,
+            &overflow_panic_sig,
+        )
         .map_err(|e| CodegenError::Cranelift {
             reason: format!("declare kata_rt_overflow_panic: {e}"),
         })?;

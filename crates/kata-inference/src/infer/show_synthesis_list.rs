@@ -90,6 +90,7 @@ pub(crate) fn synthesize_list_show_functions(
             type_params: vec![type_param.to_string()],
             interface_name: "SHOW".to_string(),
             iface_params: vec![],
+            span: Span::synthetic(),
             methods: vec![ImplMethodInfo {
                 name: "show".to_string(),
                 params: vec![list_ty.clone()],

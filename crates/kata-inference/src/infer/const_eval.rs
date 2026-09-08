@@ -119,7 +119,8 @@ pub(crate) fn eval_const(expr: &Spanned<Expr>) -> Option<ConstVal> {
         // zero :: Rational => Rational retorna rational 0.
         // O tipo é inferido do argumento literal — não precisa de InterfaceRegistry.
         Expr::Apply { callee, args }
-            if args.len() == 1 && matches!(&callee.node, Expr::Ident { name } if name == "zero") =>
+            if args.len() == 1
+                && matches!(&callee.node, Expr::Ident { name } if name == "zero") =>
         {
             let arg = &args[0];
             match &arg.node {

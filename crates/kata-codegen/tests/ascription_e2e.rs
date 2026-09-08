@@ -1,3 +1,4 @@
+#![allow(clippy::result_large_err)]
 //! Testes E2E de codegen de ascription-construção.
 //!
 //! Pipeline completo: lex → parse → resolve → infer → optimize → codegen → JIT.

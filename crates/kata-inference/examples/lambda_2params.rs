@@ -1,3 +1,5 @@
+#![allow(clippy::result_large_err)]
+
 use kata_inference::infer_module;
 use kata_lexer::lex;
 use kata_parser::parse;

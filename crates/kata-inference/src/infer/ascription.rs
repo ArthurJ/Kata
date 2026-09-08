@@ -12,8 +12,8 @@ use kata_diagnostics::MiddleError;
 
 use crate::typed::{TypedExpr, TypedExprKind};
 
-use super::expr::{InferCtx, infer_expr_hinted};
 use super::apply_dispatch::format_pred_expr;
+use super::expr::{InferCtx, infer_expr_hinted};
 use super::helpers::InferResult;
 use kata_resolution::resolve_type_expr;
 
@@ -189,7 +189,9 @@ pub(crate) fn infer_type_ascription(
                                 let pred_str = format_pred_expr(pred);
                                 return Err(MiddleError::TypeMismatch {
                                     expected: format!("`{family_name}` (predicado: {pred_str})"),
-                                    found: format!("valor não satisfaz o predicado de `{family_name}`"),
+                                    found: format!(
+                                        "valor não satisfaz o predicado de `{family_name}`"
+                                    ),
                                     span: expr.span.into(),
                                 });
                             }

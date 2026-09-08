@@ -154,14 +154,14 @@ fn unify_one(
                 // parâmetro é uma interface — o arg deve implementá-la.
                 // Se não implementa, rejeitar cedo com mensagem clara
                 // ("Text não implementa NUM") em vez de bindar cegamente.
-                if let Some(type_name) = ty_name_for_iface_check(arg) {
-                    if !iface_registry.type_implements(&type_name, name) {
-                        return Err(MiddleError::TypeMismatch {
-                            expected: format!("{name}"),
-                            found: format!("{type_name} — {type_name} não implementa {name}"),
-                            span: kata_ast::Span::synthetic().into(),
-                        });
-                    }
+                if let Some(type_name) = ty_name_for_iface_check(arg)
+                    && !iface_registry.type_implements(&type_name, name)
+                {
+                    return Err(MiddleError::TypeMismatch {
+                        expected: name.to_string(),
+                        found: format!("{type_name} — {type_name} não implementa {name}"),
+                        span: kata_ast::Span::synthetic().into(),
+                    });
                 }
                 // Tipo implementa a interface — bindar.
                 arg.clone()

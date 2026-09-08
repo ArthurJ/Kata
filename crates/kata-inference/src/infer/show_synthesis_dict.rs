@@ -90,6 +90,7 @@ pub(crate) fn synthesize_dict_show_functions(
             type_params: vec![k_param.to_string(), v_param.to_string()],
             interface_name: "SHOW".to_string(),
             iface_params: vec![],
+            span: Span::synthetic(),
             methods: vec![ImplMethodInfo {
                 name: "show".to_string(),
                 params: vec![dict_ty.clone()],
