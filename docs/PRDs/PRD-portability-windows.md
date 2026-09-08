@@ -271,7 +271,7 @@ fn link_windows(/* ... */) -> Result<(), String> {
 
 Compilar e linkar um programa trivial no Windows:
 ```bash
-cargo run -p kata-driver -- build examples/soma.kata -o soma.exe
+cargo run -p kata-driver -- build examples/basics/arithmetic.kata -o soma.exe
 soma.exe
 ```
 

@@ -207,7 +207,7 @@ de `@log{file: stdout}`.
 - Atualizar snapshots (`cargo insta accept`).
 
 **Arquivos:**
-- `examples/quicksort.kata` — `file:stdout!()` → `file:__stdout__`
+- `examples/algorithms/quicksort.kata` — `file:stdout!()` → `file:__stdout__`
 - `crates/kata-driver/tests/` — testes E2E que usam `stdout!()`
 - `crates/kata-codegen/tests/` — testes E2E que usam `stdout!()`
 - Snapshots afetados

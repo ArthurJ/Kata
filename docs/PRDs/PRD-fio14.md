@@ -153,7 +153,7 @@ teste).
 ### 5.1. Formato
 
 ```
-Running tests from examples/test_assert.kata
+Running tests from examples/directives/assertions.kata
   ✓ test_foo: "descrição"
   ✗ test_bar: "espera pânico" — timeout após 5000ms
   ✓ test_baz: "espera erro de compilação" — CompileError match
@@ -425,7 +425,7 @@ retorna resultado normal (sem falso positivo da thread cancelada).
 - `cmd_test`: carrega módulo, roda pipeline, descobre `@test`, executa
   wrappers, reporta.
 
-**DoD Fase 5:** `kata test examples/test_assert.kata` roda testes e reporta.
+**DoD Fase 5:** `kata test examples/directives/assertions.kata` roda testes e reporta.
 
 ### Fase 6: Testes E2E ✅
 

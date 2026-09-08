@@ -131,7 +131,7 @@ fn aot_emit_expressão_simples_produz_object_file() {
 /// `aot_emit` de um programa com função nomeada + entry point também
 /// emite bytes válidos — verifica que o lowering de funções Kata
 /// (declare_kata_function + define_kata_function) funciona no AOT.
-/// Usa sintaxe de `examples/fatorial.kata` (recursão com TCO).
+/// Usa sintaxe de `examples/functions/fatorial.kata` (recursão com TCO).
 #[test]
 fn aot_emit_com_função_nomeada_emite_bytes() {
     let src = "\
@@ -151,7 +151,7 @@ fat 5 1";
 /// `aot_emit` de um programa com Action também emite bytes válidos —
 /// verifica que o lowering de Actions funciona no AOT
 /// (linkará contra libkata_rt que tem o scheduler).
-/// Usa sintaxe de `examples/hello_action.kata`.
+/// Usa sintaxe de `examples/basics/hello_action.kata`.
 #[test]
 fn aot_emit_com_action_emite_bytes() {
     let src = "\

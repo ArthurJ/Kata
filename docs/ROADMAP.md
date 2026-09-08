@@ -223,7 +223,7 @@ kata-rt, kata-driver.
 
 **Depende de:** nada (fundação)
 
-**DoD:** ✅ `kata eval '+ 1 2'` imprime `3`. `kata run examples/arithmetic.kata`
+**DoD:** ✅ `kata eval '+ 1 2'` imprime `3`. `kata run examples/basics/arithmetic.kata`
 executa e imprime resultado. Pipeline completo funciona end-to-end. DispatchTable
 faz scoring por dominância (mesmo que só tenha 1 candidato). `Boolean` é um
 `enum` no prelude, não primitivo do compilador. Commit `2aab7ba`. 289 testes.
@@ -764,7 +764,7 @@ contains/union/intersection funciona. Iteração via ITERABLE produz pares.
 
 **Depende de:** Fio 11 (CSP para @log), Fio 4 (Result para testes)
 
-**DoD:** `kata test examples/test_assert.kata` roda testes e reporta
+**DoD:** `kata test examples/directives/assertions.kata` roda testes e reporta
 pass/fail/error. Teste negativo que falha compilação = PASS. @log envia
 telemetria sem contaminar pureza.
 
@@ -790,7 +790,7 @@ telemetria sem contaminar pureza.
 
 **Depende de:** Fio 1-14 (todas as features precisam funcionar em AOT)
 
-**DoD:** `kata build examples/fatorial.kata` produz executável nativo que
+**DoD:** `kata build examples/functions/fatorial.kata` produz executável nativo que
 executa sem o compilador. `kata repl` mantém bindings entre expressões.
 
 **Progresso (2026-07-30):**

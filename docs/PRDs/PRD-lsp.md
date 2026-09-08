@@ -432,7 +432,7 @@ importados abertos no editor) é uma extensão futura.
 - Error recovery ✅: `parse_with_recovery` produz AST parcial + erros acumulados;
   o LSP publica diagnósticos de parse sem crashar (sem resolve/infer quando há erros de parse)
 - Performance ✅: benchmark criterion em `crates/kata-lsp/benches/frontend.rs`
-  - Arquivos reais: `stdlib/core.kata` (619 linhas), `examples/refined_types.kata` (73 linhas)
+  - Arquivos reais: `stdlib/core.kata` (619 linhas), `examples/types/refined_types.kata` (73 linhas)
   - Arquivos sintéticos: 50, 200, 500, 1000 linhas
   - Resultado: pior caso real 1.97ms (73 linhas); 500 linhas sintético = 0.83ms
   - DoD < 100ms amplamente satisfeito (50x de margem no pior caso real)

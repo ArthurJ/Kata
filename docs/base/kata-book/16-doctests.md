@@ -95,7 +95,7 @@ A primeira linha (`constant x := 42`) não tem output esperado. A segunda (`x`) 
 Doctests rodam automaticamente com `kata test`, antes dos testes `@test`:
 
 ```bash
-kata test examples/exemplo.kata
+kata test examples/directives/assertions.kata
 ```
 
 ```

@@ -1,4 +1,4 @@
-//! Inspeção da TAST do examples/trma.kata após optimize.
+//! Inspeção da TAST do examples/functions/trma.kata após optimize.
 //! Imprime as funções soma/soma_acc/fatorial/fatorial_acc para confirmar a reescrita TRMA.
 
 use kata_inference::{TypedExprKind, infer_module};
@@ -121,9 +121,9 @@ fn dump_expr(expr: &kata_ast::Spanned<kata_inference::TypedExpr>, depth: usize) 
 fn inspect_trma_kata_snapshot() {
     let src = std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../examples/trma.kata"
+        "/../../examples/functions/trma.kata"
     ))
-    .expect("não consegui ler examples/trma.kata");
+    .expect("não consegui ler examples/functions/trma.kata");
     let tokens = lex(&src).expect("lex");
     let module = parse(tokens).expect("parse");
     let prelude = load_stdlib_for_tests().expect("prelude");

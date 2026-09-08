@@ -815,7 +815,7 @@ Tudo else é aplicação prefixa greedy (já existe).
 ### Fatorial recursivo (TCO via Cranelift)
 
 ```kata
-# examples/fatorial.kata
+# examples/functions/fatorial.kata
 fat :: Int Int => Int
 lambda 0 acc: acc
 lambda n acc: fat (- n 1) (* n acc)
@@ -842,7 +842,7 @@ DoD: resultado `120`.
 ### Guards
 
 ```kata
-# examples/guards.kata
+# examples/control_flow/guards.kata
 abs :: Int => Int
 lambda x:
     > x 0: x
@@ -856,7 +856,7 @@ DoD: resultado `5`.
 ### Match em Boolean
 
 ```kata
-# examples/match_boolean.kata
+# examples/basics/match_boolean.kata
 match = 1 1
     True: "igual"
     False: "diferente"
@@ -868,7 +868,7 @@ resolvidos pelo typeck como variantes de `Boolean`.
 ### Hole (currying)
 
 ```kata
-# examples/hole.kata
+# examples/functions/hole.kata
 let soma_dez := + 10 _
 soma_dez 5
 ```
@@ -891,7 +891,7 @@ resolve `g` no TypeEnv (não no DispatchTable) e o codegen emite
 ### Pipeline
 
 ```kata
-# examples/pipeline.kata
+# examples/collections/pipeline.kata
 5 |> + 1 _ |> * 2 _
 ```
 
@@ -900,7 +900,7 @@ DoD: resultado `12`.
 ### with block
 
 ```kata
-# examples/with.kata
+# examples/control_flow/with.kata
 classify :: Int => Text
 lambda x:
     > doubled 10: "grande"
@@ -945,14 +945,14 @@ funções com corpo Kata, mas o prelude continua usando `@ffi` para tudo.
 
 ## Definition of Done
 
-1. `kata run examples/fatorial.kata` imprime `120` (fatorial recursivo com
+1. `kata run examples/functions/fatorial.kata` imprime `120` (fatorial recursivo com
    TCO).
-2. `kata run examples/guards.kata` imprime `5` (guards com `otherwise`).
-3. `kata run examples/match_boolean.kata` imprime `"igual"` (match exaustivo
+2. `kata run examples/control_flow/guards.kata` imprime `5` (guards com `otherwise`).
+3. `kata run examples/basics/match_boolean.kata` imprime `"igual"` (match exaustivo
    em Boolean).
-4. `kata run examples/hole.kata` imprime `15` (currying via Hole).
-5. `kata run examples/pipeline.kata` imprime `12` (pipeline `|>`).
-6. `kata run examples/with.kata` imprime `"pequeno"` (`with` block).
+4. `kata run examples/functions/hole.kata` imprime `15` (currying via Hole).
+5. `kata run examples/collections/pipeline.kata` imprime `12` (pipeline `|>`).
+6. `kata run examples/control_flow/with.kata` imprime `"pequeno"` (`with` block).
 7. Match não-exaustivo em Boolean produz `NonExhaustiveMatch` (erro
    compile-time, não runtime trap).
 8. `let soma_dez := + 10 _` gera closure de aridade 1. `soma_dez 5` imprime

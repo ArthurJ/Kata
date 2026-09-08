@@ -1,5 +1,7 @@
 # PRD — Fio 8: Coleções, Stream Fusion
 
+**Status:** ✅ Concluído (Fases 1-8, 60/60 DoDs ✅)
+
 ## Visão
 
 Fio 8 introduz coleções (List, Array, Range), interfaces de coleção

@@ -52,7 +52,7 @@ O binário `kata` tem vários subcomandos. Os mais usados:
 Compila e executa um arquivo `.kata` imediatamente:
 
 ```bash
-kata run examples/fatorial.kata
+kata run examples/functions/fatorial.kata
 ```
 
 ```
@@ -88,14 +88,14 @@ Inicia o REPL para experimentar expressões interativamente. Detalhado no [Capí
 Gera um executável standalone a partir de um arquivo `.kata`:
 
 ```bash
-kata build examples/fatorial.kata
+kata build examples/functions/fatorial.kata
 ./fatorial
 ```
 
 Por padrão, o runtime é linkado estaticamente. Use `--dynamic` para linkar dinamicamente (binário menor, mas depende da lib em runtime):
 
 ```bash
-kata build examples/fatorial.kata --dynamic
+kata build examples/functions/fatorial.kata --dynamic
 ```
 
 ### `kata test` — executar testes
@@ -106,7 +106,7 @@ Descobre e executa testes em um arquivo ou diretório. Há dois tipos:
 - **Doctests** — exemplos executáveis em comentários multilinha `#{ }#` com marcador `>>> `
 
 ```bash
-kata test examples/assertions.kata
+kata test examples/directives/assertions.kata
 ```
 
 Use `--filter` para rodar apenas testes `@test` que contenham uma substring:
@@ -122,8 +122,8 @@ Doctests sempre rodam (não são afetados por `--filter`). Veja o [Capítulo 16]
 Mostram os tokens e a AST de um arquivo, respectivamente. Úteis para entender como o compilador vê seu código:
 
 ```bash
-kata lex examples/hello.kata
-kata parse examples/hello.kata
+kata lex examples/basics/hello_action.kata
+kata parse examples/basics/hello_action.kata
 ```
 
 ### `kata lsp` — servidor de linguagem

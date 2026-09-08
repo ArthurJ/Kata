@@ -393,7 +393,7 @@ secção. O linker resolve os ponteiros absolutos.
   `b75f867`) — sem este fix, o snapshot continha ponteiros crus para a
   memória do JITModule, que seria desmapeada em AOT. O fix torna o snapshot
   auto-contido (strings e payloads copiados para o snapshot).
-- **DoD:** `kata build examples/comptime.kata` produz executável que executa
+- **DoD:** `kata build examples/directives/comptime.kata` produz executável que executa
   sem o compilador e usa snapshots em load-time. ✅
 - **Commit:** `e5c89b5`
 - **Implementação:** `cmd_build` em `aot.rs` agora chama `run_comptime_pass`

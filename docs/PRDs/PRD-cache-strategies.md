@@ -644,7 +644,7 @@ envolve `@cache` no modelo cebola.
 30. `Kata-lang-manual.md` §runtime FFI: atualizar assinatura de
     `kata_rt_cache_get_or_create` (4 params, `strategy_tag`).
 31. `mapa-funcionalidades.md`: corrigir `@cache_strategy` → `@cache`.
-32. `examples/cache.kata`: adicionar exemplos de FIFO, MRU, LFU, capacity.
+32. `examples/directives/cache.kata`: adicionar exemplos de FIFO, MRU, LFU, capacity.
 33. `sintaxe-mapa.md`: atualizar catálogo de diretivas com `@cache` (strategy +
     capacity).
 

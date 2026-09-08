@@ -1105,7 +1105,7 @@ A refutação genuína permanece com valor não-conhecido (param).
 
 **Débitos relacionados (não cobertos):** facts de guard sobre `var`
 reassignada são insound (pré-existente do mecanismo de facts);
-`examples/refined_types.kata` está quebrado no bloco 4 (`<` sobre
+`examples/types/refined_types.kata` está quebrado no bloco 4 (`<` sobre
 PositiveInt sem overload — pré-existente).
 
 ## 10. Riscos

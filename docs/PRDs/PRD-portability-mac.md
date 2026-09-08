@@ -267,7 +267,7 @@ causar erro, aplicar o `#[cfg]` acima.
 
 ```bash
 # Compilar um programa simples via AOT
-cargo run -p kata-driver -- build examples/soma.kata -o /tmp/soma_mac
+cargo run -p kata-driver -- build examples/basics/arithmetic.kata -o /tmp/soma_mac
 /tmp/soma_mac
 ```
 

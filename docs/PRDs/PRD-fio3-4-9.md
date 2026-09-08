@@ -989,7 +989,7 @@ genérico.
 ### Action básica com echo
 
 ```kata
-# examples/hello_action.kata
+# examples/basics/hello_action.kata
 action greet
     echo!("hello")
     echo!("world")
@@ -1002,7 +1002,7 @@ DoD: imprime "hello" e "world".
 ### Action com return e caller's arena
 
 ```kata
-# examples/action_return.kata
+# examples/actions/action_return.kata
 action make_tuple
     let x := 42
     let y := 99
@@ -1017,7 +1017,7 @@ DoD: imprime `42`. A tupla sobrevive à Action via caller's arena.
 ### Action com loop, var, break
 
 ```kata
-# examples/loop_action.kata
+# examples/control_flow/loop_action.kata
 action contador
     var i := 0
     loop
@@ -1080,7 +1080,7 @@ DoD: imprime `15`. `add_n` captura `n`.
 ### Closure que escapa (Arc<T>)
 
 ```kata
-# examples/closure_escape.kata
+# examples/functions/closure_escape.kata
 make_adder :: Int => (Int -> Int)
 lambda n:
     + _ n
@@ -1140,7 +1140,7 @@ não por fio. Cada fase depende apenas das anteriores.
 
 ### Fase 1 — Actions básicas ✅
 
-1. `kata run examples/hello_action.kata` imprime "hello" e "world". ✅
+1. `kata run examples/basics/hello_action.kata` imprime "hello" e "world". ✅
 2. `;` distingue computação local de retorno. Action com `;` no último
    statement retorna `Unit`. ✅
 3. `var` permite reatribuição. `let` em Action é imutável. ✅
@@ -1151,7 +1151,7 @@ não por fio. Cada fase depende apenas das anteriores.
 
 ### Fase 2 — return, var, ; semântica ✅
 
-7. `kata run examples/action_return.kata` imprime `42` (tupla retorna via
+7. `kata run examples/actions/action_return.kata` imprime `42` (tupla retorna via
    caller's arena sem use-after-free). ✅
 
 ### Fase 3 — Caller's Arena ✅
@@ -1162,11 +1162,11 @@ não por fio. Cada fase depende apenas das anteriores.
    local é liberada no epílogo. ✅
 10. Aninhamento: Action A chama Action B. B retorna valor na arena de A.
     A retorna valor na arena do caller de A. Sem use-after-free em nenhum
-    nível. ✅ (validado por `examples/action_stress.kata` — 3 Actions encadeadas)
+    nível. ✅ (validado por `examples/actions/action_stress.kata` — 3 Actions encadeadas)
 
 ### Fase 4 — loop, break, continue ✅
 
-11. `kata run examples/loop_action.kata` imprime 0-5 (loop com var, break). ✅
+11. `kata run examples/control_flow/loop_action.kata` imprime 0-5 (loop com var, break). ✅
 12. `break` sai de `loop`. `continue` próxima iteração. ✅
 13. `loop`/`break`/`continue` fora de Action produzem erro de parser. ✅
 

@@ -374,4 +374,4 @@ Ao concluir:
 - `docs/base/sintaxe-mapa.md` — adicionar `NonEmpty` e refined sobre coleções
   parametrizadas na seção de famílias polimórficas.
 - `stdlib/core.kata` — atualizar comentário de `head`/`tail`.
-- `examples/refined_collections.kata` — adicionar exemplo polimórfico.
+- `examples/types/refined_collections.kata` — adicionar exemplo polimórfico.

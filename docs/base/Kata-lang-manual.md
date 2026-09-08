@@ -273,21 +273,21 @@ O binário `kata` expõe os seguintes comandos:
 * **`lex <arquivo.kata>`**: Executa a análise léxica e imprime a lista de tokens
   com os respetivos *spans* no terminal. Útil para depuração do lexer.
   ```bash
-  kata lex examples/test_fizzbuzz.kata
+  kata lex examples/algorithms/fizzbuzz.kata
   ```
 * **`parse <arquivo.kata>`**: Executa a análise léxica e sintática e imprime a
   AST completa via `Debug` pretty-print. Útil para depuração do parser.
   ```bash
-  kata parse examples/test_enum.kata
+  kata parse examples/types/enums.kata
   ```
 * **`build <arquivo.kata>`**: Compila um ficheiro de entrada (*entrypoint*) para
   binário nativo (AOT). Pipeline completo: lex → parse → resolution → inference
   → monomorph → escape → tree shaking → comptime → lowering → CLIF → Cranelift
   AOT → object file → link → executável.
   ```bash
-  kata build examples/test_fatorial.kata
-  kata build examples/test_fatorial.kata --output meu_prog
-  kata build examples/test_fatorial.kata --dynamic
+  kata build examples/functions/fatorial.kata
+  kata build examples/functions/fatorial.kata --output meu_prog
+  kata build examples/functions/fatorial.kata --dynamic
   ```
   `--output <path>` define o path de saída (default: nome do arquivo sem
   extensão no cwd). `--dynamic` linka dinamicamente contra `libkata_rt.so`
@@ -297,8 +297,8 @@ O binário `kata` expõe os seguintes comandos:
   `__kata_entry`. Aceita a flag `--emit-ir` para imprimir a CLIF canônica antes
   da execução.
   ```bash
-  kata run examples/test_simple.kata
-  kata run --emit-ir examples/test_simple.kata
+  kata run examples/basics/hello_action.kata
+  kata run --emit-ir examples/basics/hello_action.kata
   ```
 * **`test <path>`**: Invoca o *Test Runner* nativo. `<path>` pode ser um arquivo
   `.kata` ou um diretório (recursivo em `*.kata`). Descobre diretivas
@@ -306,7 +306,7 @@ O binário `kata` expõe os seguintes comandos:
   cada teste em JIT isolado, e reporta contagem pass/fail/error com exit code
   apropriado. `--filter <substring>` filtra testes pela descrição.
   ```bash
-  kata test examples/test_assert.kata
+  kata test examples/directives/assertions.kata
   kata test tests/ --filter "fatorial"
   ```
 * **`repl`**: Inicia o REPL interativo com `TypeEnv` persistente e histórico
@@ -3709,7 +3709,7 @@ no REPL. `let` bindings, `data`, `enum`, `Sig`+`lambda`, `implements` entram
 na sessão. Se o arquivo contém `EntryExpr`, executa e mostra o resultado.
 
 ```
->>> :load examples/fatorial.kata
+>>> :load examples/functions/fatorial.kata
 120
 >>> fat 6 1
 720

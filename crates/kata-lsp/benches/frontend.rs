@@ -17,8 +17,8 @@ fn bench_frontend(c: &mut Criterion) {
         },
     );
 
-    // Arquivo real: examples/refined_types.kata (73 linhas)
-    let refined_source = include_str!("../../../examples/refined_types.kata");
+    // Arquivo real: examples/types/refined_types.kata (73 linhas)
+    let refined_source = include_str!("../../../examples/types/refined_types.kata");
     group.throughput(Throughput::Elements(refined_source.lines().count() as u64));
     group.bench_with_input(
         BenchmarkId::new("real", "refined_types.kata (73 lines)"),

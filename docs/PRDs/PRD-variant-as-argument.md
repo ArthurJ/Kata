@@ -1,5 +1,7 @@
 # PRD: Variante de Enum como Argumento — Unificação de Ty::Var em match_score
 
+**Status:** ✅ Concluído (11/11 DoDs ✅)
+
 ## Motivo
 
 Variantes de enum genérico como argumento de função falham em `type.no_overload`

@@ -546,8 +546,8 @@ mesma estrutura de `JitResult`.
 **Verificação:**
 - `kata eval --interp "+ 3 4"` → 7
 - `kata eval --interp "* 6 7"` → 42
-- `kata run --interp examples/fatorial.kata` → 120
-- `kata run --interp examples/fib_ramified.kata` → output correto
+- `kata run --interp examples/functions/fatorial.kata` → 120
+- `kata run --interp examples/functions/fib_ramified.kata` → output correto
 - `kata eval --interp "let x := 10 echo!(* x 2)"` → 20
 
 ### Fase 2 — Coleções + HOFs ✅ (exceto Dict/Set)
@@ -579,11 +579,11 @@ with bindings, e exemplos canônicos todos funcionando.
 6. Pattern matching para Cons, Tuple, StructDestruct
 
 **Verificação:**
-- `kata run --interp examples/map_filter_fold.kata` → output correto
+- `kata run --interp examples/collections/map_filter_fold.kata` → output correto
 - `kata eval --interp "fold (+) 0 [1 2 3 4 5]"` → 15
 - `kata eval --interp "map (* _ 2) [1 2 3]"` → [2, 4, 6]
 - `kata eval --interp "filter (lambda x: > x 2) [1 2 3 4]"` → [3, 4]
-- `kata run --interp examples/quicksort.kata` → output correto
+- `kata run --interp examples/algorithms/quicksort.kata` → output correto
 
 ### Fase 3 — Actions + controle de fluxo ✅
 
@@ -625,7 +625,7 @@ imperativo, echo!, input!, I/O.
 - `kata run --interp examples/guessing_game.kata` → funciona interativamente
 - `kata eval --interp "action main var i := 0 loop if ... echo!(i) ... main!()"` →
   loop funciona
-- `kata run --interp examples/is_prime.kata` → output correto
+- `kata run --interp examples/algorithms/is_prime.kata` → output correto
 
 ### Fase 4 — REPL interpretado ✅
 
@@ -656,8 +656,8 @@ imperativo, echo!, input!, I/O.
 - `fat :: Int Int => Int` / lambdas / `echo!(fat 5 1)` → 120 ✅
 - `let f := lambda n: * n 2` / `echo!(f 21)` → 42 ✅
 - `:reset` limpa env ✅
-- `:load examples/quicksort.kata` → [-1, 1, 2, 5, 5, 6, 9, 12] ✅
-- `:load examples/loop_action.kata` → 0 1 2 3 4 5 ✅
+- `:load examples/algorithms/quicksort.kata` → [-1, 1, 2, 5, 5, 6, 9, 12] ✅
+- `:load examples/control_flow/loop_action.kata` → 0 1 2 3 4 5 ✅
 - `:type x` → Int ✅
 - `:env` → x: Int ✅
 - `cargo test --workspace` → 1851 passed, 0 failed ✅
@@ -698,12 +698,12 @@ imperativo, echo!, input!, I/O.
   `kata_rt_log_config`.
 
 **Verificação Nível 1:**
-- `kata run --interp examples/broadcast.kata` → 42 ✅ (bate com JIT)
+- `kata run --interp examples/concurrency/broadcast.kata` → 42 ✅ (bate com JIT)
 - `cargo test --workspace` → 1851 passed, 0 failed ✅
 
 **Verificação Nível 2:**
-- `kata run --interp examples/select_queue.kata` → 2 linhas ✅ (bate com JIT)
-- `kata run --interp examples/log_telemetry.kata` → entrada (41) / resultado 42 /
+- `kata run --interp examples/concurrency/select_queue.kata` → 2 linhas ✅ (bate com JIT)
+- `kata run --interp examples/concurrency/log_telemetry.kata` → entrada (41) / resultado 42 /
   evento-manual / 0 ✅ (bate com JIT)
 - `cargo test --workspace` → 1851 passed, 0 failed ✅
 - 18/22 exemplos canônicos batem com JIT (4 divergências pré-existentes: rational,
@@ -785,9 +785,9 @@ imperativo, echo!, input!, I/O.
 ## 9. Critérios de Aceitação
 
 1. `kata eval --interp "+ 3 4"` → `7`
-2. `kata run --interp examples/fatorial.kata` → `120`
-3. `kata run --interp examples/quicksort.kata` → output correto
-4. `kata run --interp examples/map_filter_fold.kata` → output correto
+2. `kata run --interp examples/functions/fatorial.kata` → `120`
+3. `kata run --interp examples/algorithms/quicksort.kata` → output correto
+4. `kata run --interp examples/collections/map_filter_fold.kata` → output correto
 5. `kata run --interp examples/guessing_game.kata` → funciona interativamente
 6. REPL interpretado: `let x := 42` depois `echo!(x)` → `42`
 7. REPL interpretado: função nomeada persiste entre linhas

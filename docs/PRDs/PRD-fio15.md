@@ -577,11 +577,11 @@ executável imprime o mesmo resultado que `kata run` para o mesmo input.
 - Subcomando `Command::Build { file, output, dynamic }` no driver
 - Pipeline: lex → parse → resolve → infer → monomorph → optimize →
   tree_shake → aot_emit → link
-- Testes E2E: `kata build examples/fatorial.kata` produz `./fatorial`
+- Testes E2E: `kata build examples/functions/fatorial.kata` produz `./fatorial`
   que executa e imprime `120`
 
-**DoD Fase 5:** `kata build examples/fatorial.kata -o /tmp/fat` produz
-executável que imprime `120`. `kata build examples/hello_action.kata -o /tmp/hello`
+**DoD Fase 5:** `kata build examples/functions/fatorial.kata -o /tmp/fat` produz
+executável que imprime `120`. `kata build examples/basics/hello_action.kata -o /tmp/hello`
 produz executável que imprime `hello\nworld`.
 
 ### Fase 6: REPL — TypeEnv persistente + `:type`
@@ -608,7 +608,7 @@ silenciosamente binds, `+ x 5` imprime `15`, `:type + 1 2` imprime `Int`,
 - Testes E2E do REPL via subprocess: pipe de comandos para stdin, verifica
   stdout
 
-**DoD Fase 7:** `:load examples/fatorial.kata` carrega a função `fat` no
+**DoD Fase 7:** `:load examples/functions/fatorial.kata` carrega a função `fat` no
 REPL. `fat 5 1` imprime `120`. Multiline para `lambda n: ...` funciona.
 Testes E2E cobrem os 5 cenários básicos.
 
@@ -622,9 +622,9 @@ Testes E2E cobrem os 5 cenários básicos.
 
 ## 7. DoD (Definition of Done)
 
-1. `kata build examples/fatorial.kata -o /tmp/fat` produz executável nativo
+1. `kata build examples/functions/fatorial.kata -o /tmp/fat` produz executável nativo
    que imprime `120` ao executar `/tmp/fat`.
-2. `kata build examples/hello_action.kata -o /tmp/hello` produz executável
+2. `kata build examples/basics/hello_action.kata -o /tmp/hello` produz executável
    que imprime `hello\nworld`.
 3. `kata build --dynamic` produz executável que linka com `libkata_rt.so`.
 4. Tree shaking remove `@test` e funções não alcançadas do binário AOT.
@@ -633,7 +633,7 @@ Testes E2E cobrem os 5 cenários básicos.
 7. `let x := 10` no REPL permite `+ x 5` → `15` na próxima linha.
 8. `:type + 1 2` imprime `Int` sem executar.
 9. `:env` mostra bindings e tipos da sessão.
-10. `:load examples/fatorial.kata` carrega `fat` no REPL. `fat 5 1` → `120`.
+10. `:load examples/functions/fatorial.kata` carrega `fat` no REPL. `fat 5 1` → `120`.
 11. `:reset` limpa bindings, recarrega prelude.
 12. `:quit` sai do REPL.
 13. Multiline funciona para lambdas e actions.

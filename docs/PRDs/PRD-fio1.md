@@ -216,33 +216,33 @@ Conteúdo do prelude hardcoded:
 ## Exemplos
 
 ```kata
-# examples/arithmetic.kata
+# examples/basics/arithmetic.kata
 + 1 2
 
-# examples/float.kata
+# examples/basics/float.kata
 + 3.14 2.71
 
-# examples/rational.kata
+# examples/types/rational.kata
 show (1::Rational / 3::Rational)
 
-# examples/boolean.kata
+# examples/basics/boolean.kata
 = 1 1
 
-# examples/bigint.kata
+# examples/basics/bigint.kata
 * 99999999999999999999 99999999999999999999
 ```
 
 ## Definition of Done
 
 1. ✅ `kata eval '+ 1 2'` imprime `3`
-2. ✅ `kata run examples/arithmetic.kata` executa e imprime resultado
+2. ✅ `kata run examples/basics/arithmetic.kata` executa e imprime resultado
 3. ✅ `kata eval '* 99999999999999999999 99999999999999999999'` imprime resultado
    correto (BigInt, não overflow) — `9999999999999999999800000000000000000001`
 4. ✅ `kata eval '+ 3.14 2.71'` imprime `5.85`
 5. ✅ `kata eval 'show (/ 1::Rational 3::Rational)'` imprime `1/3`
 6. ✅ `kata eval '= 1 1'` imprime `True`
-7. ✅ `kata lex examples/arithmetic.kata` imprime tokens com spans
-8. ✅ `kata parse examples/arithmetic.kata` imprime AST
+7. ✅ `kata lex examples/basics/arithmetic.kata` imprime tokens com spans
+8. ✅ `kata parse examples/basics/arithmetic.kata` imprime AST
 9. ✅ Pipeline completo funciona end-to-end: source → lexer → parser → resolution
    → inference → codegen → CLIF → Cranelift JIT → runtime → resultado
 10. ✅ `DispatchTable` faz scoring por dominância (mesmo que só tenha 1 candidato
