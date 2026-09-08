@@ -6,22 +6,6 @@
 
 ## Ativo
 
-### Patterns aninhados (Maranget + SMT)
-
-`docs/PRDs/PRD-exaustividade-aninhada.md` (5 fases, revisado
-2026-08-30, **Emenda 1** pousada). O buraco NÃO é o parser — são os 3
-CHECKERS (`check_exhaustiveness`, `check_clause_exhaustiveness`,
-`pattern_covers`) que ignoram payload, mais um panic de aridade em
-`lambda Some True:` desqualificado e um falso-positivo de redundância.
-Bugs reproduzidos em `f64eff8`. **Emenda 1:** F1 encolha para Fundação
-(oráculos + bound-check + parser + fall-through de codegen como no-op
-provado); a cobertura recursiva ad-hoc foi REMOVIDA — F2 é motor antes
-dos consumidores (`maranget.rs` puro com trait de ambiente, depois 3
-consumidores, um por commit). Fase 3 Z3 na folha, Fase 4 refined
-Int/Float na folha, Fase 5 Rational (const-eval de `rational <lit>` +
-par (num, den) no Z3). Oráculos adversariais K medidos em `b5e2d9e`
-(3 níveis, grade multi-param, arity-tuple).
-
 ---
 
 ## Pendentes
