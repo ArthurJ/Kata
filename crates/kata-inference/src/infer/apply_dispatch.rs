@@ -50,7 +50,14 @@ fn base_ty_matches(
     family_name: &str,
     struct_registry: &StructRegistry,
 ) -> bool {
-    base_ty_subs(base_ty, arg_ty, lazy_type_param, family_name, struct_registry).is_some()
+    base_ty_subs(
+        base_ty,
+        arg_ty,
+        lazy_type_param,
+        family_name,
+        struct_registry,
+    )
+    .is_some()
 }
 
 /// Como `base_ty_matches` mas retorna as substitutions quando o match
@@ -445,7 +452,21 @@ pub(crate) fn try_dispatch_table(
                                 },
                             )));
                         }
-                        Err(_) => {
+                        Err(e) => {
+                            // Se o unify rejeitou por "não implementa interface",
+                            // propagar o erro com span correto da chamada.
+                            if let MiddleError::TypeMismatch {
+                                expected, found, ..
+                            } = &e
+                            {
+                                if found.contains("não implementa") {
+                                    return Some(Err(MiddleError::TypeMismatch {
+                                        expected: expected.clone(),
+                                        found: found.clone(),
+                                        span: (*span).into(),
+                                    }));
+                                }
+                            }
                             unify_failed = true;
                         }
                     }
@@ -1108,9 +1129,7 @@ pub(crate) fn format_pred_expr(expr: &Spanned<Expr>) -> String {
                 }
             }
             Expr::VariantQual {
-                enum_name,
-                variant,
-                ..
+                enum_name, variant, ..
             } => format!("{enum_name}::{variant}"),
             Expr::Grouping { inner } => render(&inner.node),
             Expr::Tuple { elements } => {

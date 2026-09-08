@@ -48,6 +48,32 @@ fn normalize_refined(arg: &Ty, interface_name: &str, refines_registry: &RefinesR
     arg.clone()
 }
 
+/// Extrai o nome de um tipo de `Ty` para consulta ao `InterfaceRegistry`.
+/// Necessário porque o registry indexa por nome (`"Int"`, `"List"`, etc.),
+/// não por `Ty` diretamente.
+///
+/// - `Ty::Prim(Int)` → `"Int"`, etc.
+/// - `Ty::Struct(key)` → `key.name()` (Plain, Family, Instance).
+/// - `Ty::Generic(name, _)` → `name` (família lazy como NonEmpty).
+/// - `Ty::List(_)` → `"List"`, etc.
+/// - Demais (`Ty::Var`, `Ty::Interface`, `Ty::Tuple`, ...) → `None`.
+fn ty_name_for_iface_check(ty: &Ty) -> Option<String> {
+    match ty {
+        Ty::Prim(PrimTy::Int) => Some("Int".into()),
+        Ty::Prim(PrimTy::Float) => Some("Float".into()),
+        Ty::Prim(PrimTy::Rational) => Some("Rational".into()),
+        Ty::Prim(PrimTy::Text) => Some("Text".into()),
+        Ty::Struct(key) => Some(key.name().to_string()),
+        Ty::Generic(name, _) => Some(name.clone()),
+        Ty::List(_) => Some("List".into()),
+        Ty::Array(_) => Some("Array".into()),
+        Ty::Range(_) => Some("Range".into()),
+        Ty::Dict(_, _) => Some("Dict".into()),
+        Ty::Set(_) => Some("Set".into()),
+        _ => None,
+    }
+}
+
 /// Unifica os tipos dos argumentos com os tipos dos parâmetros de uma
 /// assinatura genérica.
 ///
@@ -124,9 +150,20 @@ fn unify_one(
                 // Arg é refined que delega — bindar com tipo base.
                 normalized
             } else {
-                // Arg não é refined que delega — bindar como antes.
-                // Diagnóstico de "não implementa interface" é feito pelo
-                // dispatch falhar naturalmente com mensagem de erro.
+                // Arg não é refined que delega. A assinatura declara que o
+                // parâmetro é uma interface — o arg deve implementá-la.
+                // Se não implementa, rejeitar cedo com mensagem clara
+                // ("Text não implementa NUM") em vez de bindar cegamente.
+                if let Some(type_name) = ty_name_for_iface_check(arg) {
+                    if !iface_registry.type_implements(&type_name, name) {
+                        return Err(MiddleError::TypeMismatch {
+                            expected: format!("{name}"),
+                            found: format!("{type_name} — {type_name} não implementa {name}"),
+                            span: kata_ast::Span::synthetic().into(),
+                        });
+                    }
+                }
+                // Tipo implementa a interface — bindar.
                 arg.clone()
             };
             if let Some(existing) = subs.get(name) {
