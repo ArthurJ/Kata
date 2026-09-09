@@ -69,6 +69,10 @@ PRD: `docs/PRDs/PRD-doctests.md`. Book: `docs/kata-book/16-doctests.md`.
 let nome := expressão          # imutável
 var nome := expressão          # mutável (exclusivo de Actions)
 
+# Criação de binding com ascription de tipo:
+let nome::Tipo := expressão    # imutável, tipo anotado
+var nome::Tipo := expressão    # mutável, tipo anotado (widening se interface)
+
 # Reatribuição (só em var existente):
 nome := nova_expressão
 ```
@@ -77,6 +81,9 @@ nome := nova_expressão
 - **`var`**: Declara binding mutável (exclusivo de Actions). `var` sempre cria novo
   binding — `var i := + i 1` dentro de um loop faz **rebinding** (sombreia o `i` anterior),
   não atualiza a variável original.
+- **Ascription de binding** (`::Tipo` entre nome e `:=`): anota o tipo do binding,
+  substitui a inferência. `var z::NUM := 0` aceita qualquer tipo que implemente NUM
+  (widening de interface). Sem ascription, tipo é inferido e travado. Ver §15.1 do manual.
 - **Reatribuição**: `nome := nova_expressão` (sem `let`/`var`) atualiza uma variável
   `var` existente (gera `Expr::Reassign`). Só `var` pode ser reatribuído — reatribuir
   `let` é erro de tipo.

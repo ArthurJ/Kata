@@ -2841,6 +2841,63 @@ traversal stdlib.
 * **`with`:** Bloco bottom-up no final de lambda. Computações prévias para Guards
   e restrições de genéricos (`T implements ORD`).
 
+### 15.1. Ascription de Tipo em Bindings
+
+`let` e `var` aceitam ascription de tipo entre o nome e o `:=`:
+
+```kata
+let x::Int := 42          -- tipo concreto
+var y::Text := "hello"    -- tipo concreto
+var z::NUM := 0           -- interface (widening)
+```
+
+`::Tipo` é **sintaxe de binding** — anota o tipo do slot, não opera sobre o RHS.
+É o mesmo `::` usado em parâmetros (`action f (x::Int)`) e campos de struct
+(`data Pessoa (nome::Text)`). Contraste com `::` em expressão (`expr::Type`),
+que é uma **operação** sobre o valor (conversão, validação de predicado, construção).
+
+A ascription **substitui** a inferência: o tipo do binding é o anotado, não o
+inferido do RHS. O typeck verifica que o tipo do RHS é compatível com o tipo
+anotado. Se não for, erro compile-time.
+
+#### Widening de Interface
+
+Quando o tipo anotado é uma interface, o binding aceita qualquer valor cujo
+tipo **implementa** a interface:
+
+```kata
+var z::NUM := 0           -- OK: Int implementa NUM
+var z := 3.14             -- OK: Float implementa NUM (preserva interface)
+var z := "hello"          -- ERRO: Text não implementa NUM
+```
+
+Re-bindings sem ascription preservam a interface — `var z := 3.14` verifica
+`Float` contra `NUM`, não re-infere.
+
+Widening é **unidirecional**: concreto → interface, nunca interface → concreto.
+
+```kata
+let z::NUM := 0
+let n::Int := z           -- ERRO: NUM não é Int (sem downcast implícito)
+```
+
+#### Re-binding com Ascription
+
+Re-binding sem ascription preserva o tipo do binding original (seja inferido ou
+anotado). Re-binding com ascription **diferente** é erro:
+
+```kata
+var x::NUM := 0
+var x::Int := 42          -- ERRO: re-binding divergente (NUM ≠ Int)
+var x::NUM := 42          -- OK: mesma ascription (idempotente)
+```
+
+#### Sem Ascription = Sem Widening
+
+Sem ascription, o tipo é inferido e travado no primeiro binding. Não há
+widening implícito — para aceitar múltiplos tipos no mesmo binding, declare a
+interface explicitamente.
+
 ## 16. Condicionais Puras: Guards e Pattern Matching
 
 Sem `if/else`, a Kata-Lang usa pattern matching estrutural e guards condicionais.

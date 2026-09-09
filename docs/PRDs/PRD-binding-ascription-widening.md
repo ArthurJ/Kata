@@ -1,6 +1,6 @@
 # PRD — Ascription em Bindings `let`/`var` + Widening de Interface
 
-**Status:** 🔵 Proposto
+**Status:** ✅ Implementado
 **Data:** 2026-09-08
 **Depende de:** Interface system ✅ (`implements`/`refines`), TypeEnv ✅
 **Não depende de:** Tipos refinados (ortogonal), comptime (ortogonal)

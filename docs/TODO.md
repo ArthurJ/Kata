@@ -52,15 +52,6 @@ grandes (centenas de instâncias) e corpos pesados.
 tree-shaking para distinguir qual instância específica uma chamada
 refere-se a, permitindo remover overloads não-usadas antes do codegen.
 
-#### Ascription em binding de `var`
-
-`var l::Int := 0` rejeitado pelo parser (`parse.unexpected_token`, espera
-`:=` após nome). Hoje só é possível travar o tipo via ascription no valor:
-`var l := (0 :: Int)`. Adicionar `::Tipo` entre nome e `:=` no `var`
-elimina o grouping extra e abre caminho para widening de interface
-(`var l::NUM := 0`). Decisão: sintaxe de binding, não de valor — `::` ali
-é anotação do binding, não operação sobre RHS.
-
 ---
 
 ## Futuro
