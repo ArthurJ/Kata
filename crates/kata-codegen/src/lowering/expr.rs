@@ -583,13 +583,25 @@ pub(crate) fn lower_expr(
         // ── Reassign — def_var com novo valor (variável já existe) ──
         TypedExprKind::Reassign { name, value } => {
             let val = lower_expr(&value.node, ctx)?;
-            let var =
-                *ctx.var_map
+            let new_clif_ty = super::resolve_clif_ty(&value.node.ty, ctx.struct_registry);
+            // Se o tipo Cranelift mudou (widening: Int→Float), criar nova
+            // variable em vez de def_var na existente. Cranelift variables
+            // têm tipo fixo — def_var com tipo diferente panica.
+            let existing_ty = ctx.var_types.get(name).copied();
+            if existing_ty.is_some_and(|t| t != new_clif_ty) {
+                // Tipo mudou: criar nova variable (re-binding implícito).
+                let var = ctx.new_var(name, new_clif_ty);
+                ctx.builder.def_var(var, val);
+            } else {
+                // Mesmo tipo: def_var na variable existente.
+                let var = *ctx
+                    .var_map
                     .get(name)
                     .ok_or_else(|| super::CodegenError::UnsupportedNode {
                         node: format!("Reassign: variável `{name}` não encontrada no var_map"),
                     })?;
-            ctx.builder.def_var(var, val);
+                ctx.builder.def_var(var, val);
+            }
             // Reassign retorna Unit.
             Ok(ctx.builder.ins().iconst(I64, 0))
         }

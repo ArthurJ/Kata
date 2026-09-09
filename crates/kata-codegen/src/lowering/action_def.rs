@@ -130,6 +130,7 @@ pub(crate) fn define_kata_action(
             string_table,
             bytes_table,
             var_map: HashMap::new(),
+            var_types: HashMap::new(),
             anon_counter: 0,
             emitted_tail_call: false,
             emitted_terminator: false,
@@ -178,6 +179,7 @@ pub(crate) fn define_kata_action(
             // para a mesma Variable. O body referencia `x`, não `__param_N`.
             if let Some(Some(name)) = action.param_names.get(i) {
                 lower.var_map.insert(name.clone(), var);
+                lower.var_types.insert(name.clone(), clif_ty);
             }
         }
 

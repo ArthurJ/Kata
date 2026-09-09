@@ -120,6 +120,10 @@ pub(crate) struct LowerCtx<'a, 'b> {
     pub string_table: &'a mut StringTable,
     pub bytes_table: &'a mut Vec<Vec<u8>>,
     pub var_map: HashMap<String, cranelift_frontend::Variable>,
+    /// Tipos Cranelift das variáveis em `var_map`. Necessário para
+    /// decidir se Reassign pode fazer `def_var` (mesmo tipo) ou
+    /// precisa criar nova variable (tipo mudou — widening).
+    pub var_types: HashMap<String, cranelift_codegen::ir::Type>,
     pub anon_counter: u32,
     /// Flag: se `true`, o último `lower_expr` emitiu um `return_call` (tail call).
     /// O caller NÃO deve emitir `return_` depois — a função já terminou.
@@ -283,6 +287,7 @@ impl<'a, 'b> LowerCtx<'a, 'b> {
     ) -> cranelift_frontend::Variable {
         let var = self.builder.declare_var(ty);
         self.var_map.insert(name.to_string(), var);
+        self.var_types.insert(name.to_string(), ty);
         var
     }
 

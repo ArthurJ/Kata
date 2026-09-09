@@ -422,6 +422,7 @@ pub(crate) fn define_function_body(
             string_table,
             bytes_table,
             var_map: HashMap::new(),
+            var_types: HashMap::new(),
             anon_counter: 0,
             emitted_tail_call: false,
             emitted_terminator: false,

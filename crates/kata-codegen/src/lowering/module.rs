@@ -347,6 +347,7 @@ pub(crate) fn lower_module(
             string_table: &mut string_table,
             bytes_table: &mut bytes_table,
             var_map: HashMap::new(),
+            var_types: HashMap::new(),
             anon_counter: 0,
             emitted_tail_call: false,
             emitted_terminator: false,
