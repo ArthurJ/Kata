@@ -169,19 +169,18 @@ pub(crate) fn synthesize_refined(
                 true, // tail_pos
             ) {
                 Ok(t) => t,
-                Err(ref e) if decl.extension_impl.is_some()
-                    && matches!(e, MiddleError::NoOverload { .. }) =>
+                Err(ref e)
+                    if decl.extension_impl.is_some()
+                        && matches!(e, MiddleError::NoOverload { .. }) =>
                 {
-                    let (type_name, iface_name, impl_span) =
-                        decl.extension_impl.as_ref().unwrap();
+                    let (type_name, iface_name, impl_span) = decl.extension_impl.as_ref().unwrap();
                     let method_map = interface_registry.method_to_ifaces();
                     // Extrai o nome do método que falhou no dispatch.
                     let method_name = match e {
                         MiddleError::NoOverload { name, .. } => name.clone(),
                         _ => String::new(),
                     };
-                    let missing_ifaces =
-                        method_map.get(&method_name).cloned().unwrap_or_default();
+                    let missing_ifaces = method_map.get(&method_name).cloned().unwrap_or_default();
                     return Err(MiddleError::FamilyExtensionInvalid {
                         type_name: type_name.clone(),
                         iface_name: iface_name.clone(),

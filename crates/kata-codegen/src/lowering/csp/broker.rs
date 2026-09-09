@@ -74,7 +74,8 @@ pub(crate) fn synthesize_ipc_broker(
         func_ir.signature = sig;
 
         // Declara FFI no Function do broker (precisa dos FuncRefs locais).
-        let mut ffi_refs: std::collections::BTreeMap<String, cranelift_codegen::ir::FuncRef> = std::collections::BTreeMap::new();
+        let mut ffi_refs: std::collections::BTreeMap<String, cranelift_codegen::ir::FuncRef> =
+            std::collections::BTreeMap::new();
         for (fname, &fid) in ctx.ffi_ids {
             let fref = ctx.module.declare_func_in_func(fid, func_ir);
             ffi_refs.insert(fname.clone(), fref);

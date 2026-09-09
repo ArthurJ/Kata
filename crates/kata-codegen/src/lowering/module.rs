@@ -308,7 +308,8 @@ pub(crate) fn lower_module(
 
         // Declara cada FFI no Function e coleta os FuncRefs.
         // BTreeMap para ordem determinística — ver declare_ffi_symbols.
-        let mut ffi_refs: std::collections::BTreeMap<String, cranelift_codegen::ir::FuncRef> = std::collections::BTreeMap::new();
+        let mut ffi_refs: std::collections::BTreeMap<String, cranelift_codegen::ir::FuncRef> =
+            std::collections::BTreeMap::new();
         for (name, &fid) in ffi_ids {
             let func_ref = module.declare_func_in_func(fid, func);
             ffi_refs.insert(name.clone(), func_ref);

@@ -16,7 +16,7 @@ use std::collections::HashMap;
 use crate::typed::{TypedExpr, TypedExprKind};
 
 use super::expr::InferCtx;
-use super::generics::{Substitutions, unify, ty_name_for_iface_check};
+use super::generics::{Substitutions, ty_name_for_iface_check, unify};
 use super::helpers::{InferResult, dispatch_to_middle_error};
 
 /// Extrai o nome do tipo concreto de um `Ty` para consulta ao `StructRegistry`.
@@ -512,12 +512,7 @@ pub(crate) fn try_dispatch_table(
                 }
 
                 if total_candidates > 1 {
-                    return Some(Err(enrich_no_overload(
-                        func_name,
-                        arg_types,
-                        ctx,
-                        *span,
-                    )));
+                    return Some(Err(enrich_no_overload(func_name, arg_types, ctx, *span)));
                 }
                 // 1 overload total: unify falhou → tipos inconsistentes.
                 // Constrói TypeMismatch com os tipos dos args conflitantes.

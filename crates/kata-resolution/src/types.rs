@@ -416,6 +416,7 @@ impl DirectiveRegistry {
     }
 
     /// Insere uma diretiva. Retorna erro se (nome, when, on) já existe.
+    #[allow(clippy::result_large_err)]
     pub fn insert(&mut self, def: DirectiveDef) -> Result<(), ResolveError> {
         if self.entries.contains_key(&def.key) {
             return Err(ResolveError::DuplicateDirective {

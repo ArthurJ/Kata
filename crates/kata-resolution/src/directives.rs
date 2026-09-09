@@ -292,6 +292,7 @@ pub(crate) fn extract_timer_spec(
 /// `when` e `on` são obrigatórios e devem ser `Expr::VariantQual`
 /// referenciando `enum Hook` e `enum Target` do prelude.
 /// Retorna `Err` se os args são inválidos.
+#[allow(clippy::result_large_err)]
 pub(crate) fn extract_directive_spec(
     name: &str,
     args: &[kata_ast::DirectiveArg],

@@ -631,11 +631,11 @@ pub fn merge_two(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModul
     let mut functions = prelude.functions;
     // Remove prelude functions whose (name, param_types, return_type) key
     // is redefined by the user. Overloads with different param types coexist.
-    let user_fn_keys: std::collections::HashSet<(&str, &[Ty], &Ty)> =
-        user.functions
-            .iter()
-            .map(|f| (f.name.as_str(), f.param_types.as_slice(), &f.return_type))
-            .collect();
+    let user_fn_keys: std::collections::HashSet<(&str, &[Ty], &Ty)> = user
+        .functions
+        .iter()
+        .map(|f| (f.name.as_str(), f.param_types.as_slice(), &f.return_type))
+        .collect();
     functions.retain(|f| {
         !user_fn_keys.contains(&(f.name.as_str(), f.param_types.as_slice(), &f.return_type))
     });
@@ -717,8 +717,8 @@ pub fn merge_two(prelude: ResolvedModule, user: ResolvedModule) -> ResolvedModul
 /// nas signatures/functiondefs cujo nome é um método dessa interface e que
 /// ainda contêm `Family` nos param_types.
 fn reinstantiate_family_params(
-    signatures: &mut Vec<Signature>,
-    functions: &mut Vec<FunctionDef>,
+    signatures: &mut [Signature],
+    functions: &mut [FunctionDef],
     interface_registry: &kata_core::InterfaceRegistry,
     struct_registry: &kata_core::StructRegistry,
 ) {
@@ -791,9 +791,7 @@ fn reinstantiate_family_params(
         let new_params: Vec<Ty> = sig
             .param_types
             .iter()
-            .map(|ty| {
-                pass0::instantiate_family_for_concrete(ty, &concrete_type, struct_registry)
-            })
+            .map(|ty| pass0::instantiate_family_for_concrete(ty, &concrete_type, struct_registry))
             .collect();
         if new_params != sig.param_types {
             sig.param_types = new_params;
@@ -828,9 +826,7 @@ fn reinstantiate_family_params(
         let new_params: Vec<Ty> = func
             .param_types
             .iter()
-            .map(|ty| {
-                pass0::instantiate_family_for_concrete(ty, &concrete_type, struct_registry)
-            })
+            .map(|ty| pass0::instantiate_family_for_concrete(ty, &concrete_type, struct_registry))
             .collect();
         if new_params != func.param_types {
             func.param_types = new_params;

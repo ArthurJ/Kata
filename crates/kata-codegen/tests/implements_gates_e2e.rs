@@ -35,21 +35,15 @@ fn eval_src(src: &str) -> (i64, Ty) {
     let typed = monomorphize(typed);
     let typed = optimize(typed);
     let typed = kata_monomorph::MonoModule::from(tree_shake(typed.inner));
-    let jit = kata_codegen::jit_eval(&typed, &Default::default(), &[], kata_codegen::leak_rt_ptr(), false)
-        .expect("codegen+JIT deve succeed");
+    let jit = kata_codegen::jit_eval(
+        &typed,
+        &Default::default(),
+        &[],
+        kata_codegen::leak_rt_ptr(),
+        false,
+    )
+    .expect("codegen+JIT deve succeed");
     (jit.raw, jit.ty)
-}
-
-fn resolve_fails(src: &str) -> bool {
-    let tokens = match lex(src) {
-        Ok(t) => t,
-        Err(_) => return true,
-    };
-    let module = match parse(tokens) {
-        Ok(m) => m,
-        Err(_) => return true,
-    };
-    resolve(&module).is_err()
 }
 
 fn infer_fails(src: &str) -> bool {
@@ -152,7 +146,7 @@ MyNum implements ORD
 fn o1_complex_implements_num_orphan() {
     let src = "import core\nComplex implements NUM\n    + :: Complex Complex => Complex\n    lambda a b: a\n5";
     assert!(
-        orphan_fails(&src),
+        orphan_fails(src),
         "Complex implements NUM deve falhar como órfão"
     );
 }
@@ -160,10 +154,7 @@ fn o1_complex_implements_num_orphan() {
 /// O2: `data Local; Local implements NUM` → compila (tipo é local).
 #[test]
 fn o2_local_implements_num_ok() {
-    let src = format!(
-        "data MyNum (v::Int)\n{}\n5",
-        MYNUM_NUM_IMPL
-    );
+    let src = format!("data MyNum (v::Int)\n{}\n5", MYNUM_NUM_IMPL);
     let (_raw, _ty) = eval_src(&src);
 }
 

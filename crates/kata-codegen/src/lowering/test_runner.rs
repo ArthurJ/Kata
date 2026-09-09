@@ -169,7 +169,8 @@ fn define_test_wrapper(
         func_ir.signature = sig;
 
         // Declara FFI e funções Kata no Function.
-        let mut ffi_refs: std::collections::BTreeMap<String, cranelift_codegen::ir::FuncRef> = std::collections::BTreeMap::new();
+        let mut ffi_refs: std::collections::BTreeMap<String, cranelift_codegen::ir::FuncRef> =
+            std::collections::BTreeMap::new();
         for (fname, &fid) in tctx.ffi_ids {
             let func_ref = tctx.module.declare_func_in_func(fid, func_ir);
             ffi_refs.insert(fname.clone(), func_ref);
