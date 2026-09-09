@@ -77,6 +77,98 @@ main!()
 
 `var` é o mecanismo correto quando você precisa reusar um nome ou atualizar um valor dentro de um escopo. `let` é imutável e único; `var` é mutável e substituível.
 
+## Ascription de tipo em bindings
+
+Tanto `let` quanto `var` aceitam uma anotação de tipo entre o nome e o `:=`:
+
+```kata
+action main
+    let x::Int := 42
+    echo!(x)
+    var y::Text := "hello"
+    echo!(y)
+main!()
+```
+
+```
+42
+hello
+```
+
+A ascription de binding anota o **slot** — não converte o valor. O compilador verifica que o RHS é compatível com o tipo anotado.
+
+### Widening de interface em `var`
+
+Quando a ascription é uma interface (como `NUM`), `var` aceita qualquer tipo concreto que implemente a interface. O tipo concreto é preservado para despacho:
+
+```kata
+action main
+    var z::NUM := 0
+    echo!(+ z 1)
+    z := 3.14
+    echo!(+ z 1.0)
+main!()
+```
+
+```
+1
+4.140000000000001
+```
+
+`z::NUM` aceita `Int` (0), `Float` (3.14), `Rational` — qualquer tipo que implemente `NUM`. O despacho usa o tipo concreto: `+ z 1` chama `+ :: Int Int => Int`, e após `z := 3.14`, `+ z 1.0` chama `+ :: Float Float => Float`.
+
+### Re-binding preserva a interface
+
+Re-binding sem ascription valida contra a interface declarada, não contra o tipo concreto atual:
+
+```kata
+action main
+    var z::NUM := 0
+    var z := 3.14
+    echo!(z)
+main!()
+```
+
+```
+3.14
+```
+
+`var z := 3.14` é aceito porque `Float` implementa `NUM`. Mas `Text` não implementa `NUM`:
+
+```kata
+action main
+    var z::NUM := 0
+    var z := "hello"
+    echo!(z)
+main!()
+```
+
+```
+Error: type.mismatch
+
+  × tipo incompatível: esperado `NUM`, encontrado `Text`
+```
+
+### Sem ascription, sem widening
+
+Sem ascription de interface, `var` infere o tipo do RHS e o trava. Mudar para um tipo diferente é erro:
+
+```kata
+action main
+    var x := 0
+    var x := 3.14
+    echo!(x)
+main!()
+```
+
+```
+Error: type.mismatch
+
+  × tipo incompatível: esperado `Int`, encontrado `Float`
+```
+
+Para aceitar múltiplos tipos no mesmo binding, declarar a interface explicitamente com ascription.
+
 ## Tipos primitivos
 
 | Tipo | Descrição | Exemplo |
@@ -133,12 +225,13 @@ O texto bruto do literal é preservado — não há passagem por `f64`, então n
 
 ### Os outros papéis de `::`
 
-`::` aparece em quatro outros contextos em Kata. Cada um será explorado em seu capítulo:
+`::` aparece em cinco outros contextos em Kata. Cada um será explorado em seu capítulo:
 
 - **Assinatura de função** (cap 5): `dobrar :: Int => Int` etiqueta o nome com seu tipo
 - **Tipagem de campos e parâmetros** (caps 7, 10): `data Pessoa (nome::Text)`, `action jogar (alvo::Int)`
 - **Qualificação de variante** (cap 10): `Cor::Amarelo`, `Result::Ok` — acessa uma variante de enum pelo nome do tipo
 - **Tipos refinados** (cap 12): `5 :: PositiveInt` valida predicados em compile-time; `a :: Int` faz downcast de refinado para base
+- **Ascription de binding** (cap 4): `let x::Int := 42`, `var z::NUM := 0` — anota o tipo do binding, não opera sobre o valor
 
 Embora o token seja o mesmo, ascription (`valor :: Tipo`) e qualificação (`Tipo::Variante`) operam em direções opostas: a primeira vai do valor ao tipo, a segunda do tipo à variante.
 

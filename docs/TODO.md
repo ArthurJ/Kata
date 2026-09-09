@@ -1,6 +1,6 @@
 # TODO — Kata-Lang
 
-Único arquivo de pendências. Atualizado 2026-09-08.
+Único arquivo de pendências. Atualizado 2026-09-09.
 
 ---
 
