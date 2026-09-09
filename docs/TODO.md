@@ -6,27 +6,6 @@
 
 ## Ativo
 
-#### Codegen: reassign com widening panica no Cranelift
-
-`var z::NUM := 0; z := 3.14` passa no typeck (valida contra
-`declared_ty = NUM`), mas o codegen panica: Cranelift variables têm
-tipo fixo (`declared type of variable var0 doesn't match type of
-value v8`). Re-binding via `var z := 3.14` funciona (cria nova
-Cranelift variable), mas reassignment direto não.
-
-**Caminho preferido (opção 2):** reassignment vira re-binding
-automaticamente quando o tipo concreto muda (i.e., quando
-`declared_ty` está presente e o novo `val_ty != .ty` atual). Para
-mesmo tipo concreto, continua sendo `def_var` (eficiente para loops).
-A decisão fica no codegen — o typeck já atualiza `.ty` no TypeEnv,
-o codegen compara o tipo do novo valor com o tipo da Cranelift
-variable existente e decide entre `def_var` (mesmo tipo) ou
-`def_var` + nova variable (tipo diferente).
-
-Alternativa considerada: açúcar incondicional no desugar (opção 1) —
-simples, mas cria nova Cranelift variable a cada `z := + z 1` em
-loops, inviabilizando TCO e poluindo o SSA.
-
 #### Avaliar: interfaces não devem avançar além do widening no pipeline de dispatch
 
 No widening de binding (`var z::NUM := 0`), a interface `NUM` é
