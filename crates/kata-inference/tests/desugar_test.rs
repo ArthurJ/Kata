@@ -305,7 +305,7 @@ fn desugar_preserves_let() {
     assert_no_pipes(&result);
     // Deve ainda ter um Let
     match &result.node {
-        Expr::Let { name, value } => {
+        Expr::Let { name, value, .. } => {
             assert_eq!(name, "x");
             assert!(matches!(&value.node, Expr::IntLit { text } if text == "5"));
         }

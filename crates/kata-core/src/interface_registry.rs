@@ -288,7 +288,7 @@ impl InterfaceRegistry {
     }
 
     /// Verifica se `iface` herda (direta ou indiretamente) de `target`.
-    fn iface_inherits(&self, iface: &str, target: &str) -> bool {
+    pub fn iface_inherits(&self, iface: &str, target: &str) -> bool {
         let Some(info) = self.get_interface(iface) else {
             return false;
         };

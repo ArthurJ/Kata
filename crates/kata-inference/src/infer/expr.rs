@@ -18,6 +18,7 @@ use kata_core::struct_registry::StructRegistry;
 use kata_core::ty::{Ty, TypeEnv};
 use kata_diagnostics::MiddleError;
 use kata_resolution::RefinedDeclInfo;
+use kata_resolution::resolve_type_expr;
 
 use crate::typed::{TypedExpr, TypedExprKind};
 
@@ -27,6 +28,7 @@ use super::apply::infer_apply;
 use super::dot_access::infer_dot_access;
 use super::helpers::InferResult;
 use super::lambda::infer_lambda;
+use super::function_infer::ty_name;
 use super::sugar::{infer_pipe_fallback, infer_pipe_limit, infer_question};
 use super::variant::resolve_unqual_variant;
 
@@ -368,7 +370,7 @@ pub(crate) fn infer_expr_hinted(
         }
 
         // ── Let binding ──────────────────────────────────────
-        Expr::Let { name, value } => {
+        Expr::Let { name, ty, value } => {
             // `let` é imutável e único por escopo — re-declaração no mesmo
             // escopo é erro. Exceções:
             // - `_` (wildcard) — significa "descartar resultado".
@@ -391,13 +393,28 @@ pub(crate) fn infer_expr_hinted(
                     span: (*span).into(),
                 });
             }
+            // Ascription de binding: `let x::Type := expr`.
+            // Resolve o tipo anotado e usa como hint (ret-directed).
+            let binding_target_ty = if let Some(ty_expr) = ty {
+                let resolved = resolve_type_expr(
+                    &ty_expr.node,
+                    env,
+                    ctx.interface_registry,
+                    ctx.struct_registry,
+                    None,
+                );
+                Some(resolved)
+            } else {
+                None
+            };
+            let binding_hint = binding_target_ty.as_ref().map(|t| t).or(hint);
             // Tente inferir o valor. Se falha com LambdaInferenceFail e o
             // value é um lambda, deferre para use-site inference: guarda o
             // AST do lambda na side table e define o binding com InferVars.
             // Quando `f 5 3` for aplicado, infer_apply resgata o lambda e
             // re-inere com os arg types reais.
             let typed_value =
-                match infer_expr_hinted(&value.node, &value.span, env, ctx, false, hint) {
+                match infer_expr_hinted(&value.node, &value.span, env, ctx, false, binding_hint) {
                     Ok(tv) => tv,
                     Err(MiddleError::LambdaInferenceFail { .. })
                         if matches!(value.node, Expr::Lambda { .. }) =>
@@ -530,6 +547,21 @@ pub(crate) fn infer_expr_hinted(
 
             let val_ty = typed_value.ty.clone();
 
+            // Ascription de binding: verificar compatibilidade RHS ↔ tipo anotado
+            // e usar target_ty como tipo do binding (não val_ty do RHS).
+            let bind_ty = if let Some(ref target) = binding_target_ty {
+                if !binding_compatible(&val_ty, target, ctx) {
+                    return Err(MiddleError::TypeMismatch {
+                        expected: format!("{target:?} (tipo anotado no binding)"),
+                        found: format!("{val_ty} (tipo do RHS)"),
+                        span: (*span).into(),
+                    });
+                }
+                target.clone()
+            } else {
+                val_ty.clone()
+            };
+
             // Rastrear provenance: se `let g := soma` onde `soma` é Ident
             // apontando para função nomeada no DispatchTable, marcar o
             // binding com `fn_alias = Some("soma")`. Isto permite que a
@@ -565,9 +597,9 @@ pub(crate) fn infer_expr_hinted(
             };
 
             if fn_alias.is_some() {
-                env.define_with_alias(name, val_ty, "__local__", fn_alias);
+                env.define_with_alias(name, bind_ty.clone(), "__local__", fn_alias);
             } else {
-                env.define(name, val_ty, "__local__");
+                env.define(name, bind_ty.clone(), "__local__");
             }
 
             // Coleta para path conditions: `let` é imutável e único
@@ -817,9 +849,47 @@ pub(crate) fn infer_expr_hinted(
         }
 
         // ── Var — binding mutável (exclusivo de Actions) ──
-        Expr::Var { name, value } => {
-            let typed_value = infer_expr(&value.node, &value.span, env, ctx, false)?;
+        Expr::Var { name, ty, value } => {
+            // Ascription de binding: `var x::Type := expr`.
+            let binding_target_ty = if let Some(ty_expr) = ty {
+                let resolved = resolve_type_expr(
+                    &ty_expr.node,
+                    env,
+                    ctx.interface_registry,
+                    ctx.struct_registry,
+                    None,
+                );
+                Some(resolved)
+            } else {
+                None
+            };
+            let typed_value = match binding_target_ty.as_ref() {
+                Some(target) => infer_expr_hinted(
+                    &value.node,
+                    &value.span,
+                    env,
+                    ctx,
+                    false,
+                    Some(target),
+                )?,
+                None => infer_expr(&value.node, &value.span, env, ctx, false)?,
+            };
             let val_ty = typed_value.ty.clone();
+
+            // Verificar compatibilidade RHS ↔ tipo anotado.
+            let bind_ty = if let Some(ref target) = binding_target_ty {
+                if !binding_compatible(&val_ty, target, ctx) {
+                    return Err(MiddleError::TypeMismatch {
+                        expected: format!("{target:?} (tipo anotado no binding)"),
+                        found: format!("{val_ty} (tipo do RHS)"),
+                        span: (*span).into(),
+                    });
+                }
+                target.clone()
+            } else {
+                val_ty.clone()
+            };
+
             // Re-binding: `var` só reusa nome mutável (`var`) deste escopo.
             // Sobre imutável (`let`/param) é duplicate_decl — o mesmo check
             // do caminho `Let`: `let` é único por escopo, e tornar às
@@ -843,21 +913,36 @@ pub(crate) fn infer_expr_hinted(
                 });
             }
             // Re-binding sobre var existente: o tipo deve permanecer o
-            // mesmo. O re-binding dirige o var — mudar o tipo às escondidas
-            // deixaria o env pós-construto com tipo divergente do que o
-            // resto da action espera (join sound).
+            // mesmo (ou ser compatível via widening de interface).
+            // Se há ascription no re-binding, deve ser a mesma do binding
+            // original (idempotente). Se não há ascription, o tipo do valor
+            // deve ser compatível com o tipo do binding existente.
             if !name.starts_with('_')
                 && let Some(existing_ty) = env.lookup(name)
                 && env.is_locally_mutable(name)
-                && *existing_ty != val_ty
             {
-                return Err(MiddleError::TypeMismatch {
-                    expected: format!("{existing_ty:?} (tipo de `{name}`)"),
-                    found: format!("{} (re-binding divergente)", val_ty),
-                    span: (*span).into(),
-                });
+                if let Some(ref target) = binding_target_ty {
+                    // Re-binding com ascription: deve ser a mesma (idempotente).
+                    if target != existing_ty {
+                        return Err(MiddleError::TypeMismatch {
+                            expected: format!("{existing_ty:?} (tipo de `{name}`)"),
+                            found: format!("{target:?} (re-binding divergente)"),
+                            span: (*span).into(),
+                        });
+                    }
+                } else {
+                    // Re-binding sem ascription: tipo do valor deve ser
+                    // compatível com o tipo do binding existente.
+                    if !binding_compatible(&val_ty, existing_ty, ctx) {
+                        return Err(MiddleError::TypeMismatch {
+                            expected: format!("{existing_ty:?} (tipo de `{name}`)"),
+                            found: format!("{val_ty} (re-binding divergente)"),
+                            span: (*span).into(),
+                        });
+                    }
+                }
             }
-            env.define_mutable(name, val_ty, "__local__");
+            env.define_mutable(name, bind_ty, "__local__");
             // Path conditions: registra o mutável — facts sobre `var`
             // são descartados na coleta (stale após reassign; débito 1).
             if !name.starts_with('_') {
@@ -1242,4 +1327,40 @@ pub(super) fn suggest_similar<'a>(
                 .join(", ")
         ))
     }
+}
+
+/// Verifica compatibilidade entre o tipo do RHS e o tipo anotado no binding.
+///
+/// - Se `target_ty` é interface (`Ty::Interface`): verifica `type_implements`
+///   (direto + supertrait) e `refines_interfaces` (delegação de refined).
+/// - Se `target_ty` é concreto: igualdade estrutural (`==`).
+///
+/// Bug 1: `type_implements("Int", "Int")` retorna `false` — concrete target
+/// precisa de `==`, não `type_implements`.
+/// Bug 3: `type_implements` não cobre `refines` — checagem separada via
+/// `type_graph.refines_interfaces`.
+fn binding_compatible(val_ty: &Ty, target_ty: &Ty, ctx: &InferCtx) -> bool {
+    // Tipo concreto: igualdade estrutural.
+    if val_ty == target_ty {
+        return true;
+    }
+    // Interface: widening via type_implements + refines_interfaces.
+    if let Ty::Interface(iface_name) = target_ty {
+        let val_name = ty_name(val_ty);
+        if val_name.is_empty() {
+            return false;
+        }
+        // Caminho 1: implements direto + supertrait.
+        if ctx.interface_registry.type_implements(val_name, iface_name) {
+            return true;
+        }
+        // Caminho 2: refines (delegação de tipo refined).
+        let refines_ifaces = ctx.type_graph.refines_interfaces(val_name);
+        for ri in &refines_ifaces {
+            if ri == iface_name || ctx.interface_registry.iface_inherits(ri, iface_name) {
+                return true;
+            }
+        }
+    }
+    false
 }

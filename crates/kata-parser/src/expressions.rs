@@ -80,6 +80,7 @@ impl Parser {
         }
 
         // `let name := expr` — binding simples.
+        // `let name::Type := expr` — binding com ascription de tipo.
         let name = match self.peek() {
             Token::Ident(s) => {
                 let n = s.clone();
@@ -88,6 +89,12 @@ impl Parser {
             }
             _ => return Err(self.error("binding name after `let`")),
         };
+        let ty = if matches!(self.peek(), Token::DoubleColon) {
+            self.advance();
+            Some(self.parse_type_expr()?)
+        } else {
+            None
+        };
         self.expect(&Token::BindAssign, "`:=`")?;
         let value = parse_expr(self)?;
         // Cover span
@@ -95,6 +102,7 @@ impl Parser {
         Ok(Spanned::new(
             Expr::Let {
                 name,
+                ty,
                 value: Box::new(value),
             },
             span,
@@ -505,6 +513,7 @@ impl Parser {
     }
 
     /// Parse `var nome := expr` — binding mutável (exclusivo de Actions).
+    /// `var nome::Type := expr` — binding com ascription de tipo.
     pub(crate) fn parse_var(&mut self) -> Result<Spanned<Expr>, FrontendError> {
         let start = self.peek_span();
         self.expect(&Token::Var, "`var`")?;
@@ -516,12 +525,19 @@ impl Parser {
             }
             _ => return Err(self.error("binding name after `var`")),
         };
+        let ty = if matches!(self.peek(), Token::DoubleColon) {
+            self.advance();
+            Some(self.parse_type_expr()?)
+        } else {
+            None
+        };
         self.expect(&Token::BindAssign, "`:=`")?;
         let value = parse_expr(self)?;
         let span = start.cover(value.span);
         Ok(Spanned::new(
             Expr::Var {
                 name,
+                ty,
                 value: Box::new(value),
             },
             span,

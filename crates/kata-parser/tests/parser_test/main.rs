@@ -3,6 +3,7 @@
 //! These tests exercise the parser through the public `parse` API,
 //! lexing source strings and verifying the resulting AST structure.
 
+mod binding_ascription;
 mod action_type_syntax;
 mod actions;
 mod basics;

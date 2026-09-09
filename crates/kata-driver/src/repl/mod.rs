@@ -291,6 +291,7 @@ impl ReplSession {
                         && let Expr::Let {
                             ref name,
                             ref value,
+                            ..
                         } = expr.node
                     {
                         // Avaliar só o valor do let para obter tipo
@@ -630,6 +631,7 @@ impl ReplSession {
                 {
                     let new_expr = Expr::Let {
                         name: name.clone(),
+                        ty: None,
                         value: Box::new(Spanned::new(literal.clone(), Span::synthetic())),
                     };
                     return Spanned::new(

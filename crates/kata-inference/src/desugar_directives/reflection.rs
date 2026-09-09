@@ -87,6 +87,7 @@ pub(super) fn synthesize_static_bindings(refl: &ReflectionInfo) -> Vec<Spanned<E
         Spanned {
             node: Expr::Let {
                 name: "_name".into(),
+                ty: None,
                 value: Box::new(Spanned {
                     node: Expr::TextLit {
                         text: refl.name.clone(),
@@ -100,6 +101,7 @@ pub(super) fn synthesize_static_bindings(refl: &ReflectionInfo) -> Vec<Spanned<E
         Spanned {
             node: Expr::Let {
                 name: "_arity".into(),
+                ty: None,
                 value: Box::new(Spanned {
                     node: Expr::IntLit {
                         text: refl.arity.to_string(),
@@ -113,6 +115,7 @@ pub(super) fn synthesize_static_bindings(refl: &ReflectionInfo) -> Vec<Spanned<E
         Spanned {
             node: Expr::Let {
                 name: "_types".into(),
+                ty: None,
                 value: Box::new(Spanned {
                     node: Expr::ListLit {
                         elements: refl
@@ -133,6 +136,7 @@ pub(super) fn synthesize_static_bindings(refl: &ReflectionInfo) -> Vec<Spanned<E
         Spanned {
             node: Expr::Let {
                 name: "_return_type".into(),
+                ty: None,
                 value: Box::new(Spanned {
                     node: Expr::TextLit {
                         text: refl.return_type_string.clone(),
@@ -146,6 +150,7 @@ pub(super) fn synthesize_static_bindings(refl: &ReflectionInfo) -> Vec<Spanned<E
         Spanned {
             node: Expr::Let {
                 name: "_is_action".into(),
+                ty: None,
                 value: Box::new(Spanned {
                     node: Expr::VariantQual {
                         enum_name: "Boolean".into(),
@@ -168,6 +173,7 @@ pub(super) fn synthesize_args_binding(refl: &ReflectionInfo) -> Spanned<Expr> {
         return Spanned {
             node: Expr::Let {
                 name: "_args".into(),
+                ty: None,
                 value: Box::new(Spanned {
                     node: Expr::Unit,
                     span,
@@ -187,6 +193,7 @@ pub(super) fn synthesize_args_binding(refl: &ReflectionInfo) -> Spanned<Expr> {
     Spanned {
         node: Expr::Let {
             name: "_args".into(),
+            ty: None,
             value: Box::new(Spanned {
                 node: Expr::Tuple { elements },
                 span,
@@ -202,6 +209,7 @@ pub(super) fn synthesize_return_binding() -> Spanned<Expr> {
     Spanned {
         node: Expr::Let {
             name: "_return".into(),
+            ty: None,
             value: Box::new(Spanned {
                 node: Expr::Ident {
                     name: "__result".into(),

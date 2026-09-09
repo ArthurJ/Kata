@@ -59,9 +59,10 @@ fn desugar_pipes(expr: &Spanned<Expr>) -> Spanned<Expr> {
             },
             expr.span,
         ),
-        Expr::Let { name, value } => Spanned::new(
+        Expr::Let { name, ty, value } => Spanned::new(
             Expr::Let {
                 name: name.clone(),
+                ty: ty.clone(),
                 value: Box::new(desugar_pipes(value)),
             },
             expr.span,
@@ -164,9 +165,10 @@ fn desugar_pipes(expr: &Spanned<Expr>) -> Spanned<Expr> {
             },
             expr.span,
         ),
-        Expr::Var { name, value } => Spanned::new(
+        Expr::Var { name, ty, value } => Spanned::new(
             Expr::Var {
                 name: name.clone(),
+                ty: ty.clone(),
                 value: Box::new(desugar_pipes(value)),
             },
             expr.span,

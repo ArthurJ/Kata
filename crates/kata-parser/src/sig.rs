@@ -302,7 +302,7 @@ fn expr_uses_name(expr: &Spanned<Expr>, name: &str) -> bool {
         Expr::TypeAscription { expr, .. } => expr_uses_name(expr, name),
         Expr::Grouping { inner } => expr_uses_name(inner, name),
         Expr::Tuple { elements } => elements.iter().any(|e| expr_uses_name(e, name)),
-        Expr::Let { name: n, value } => n == name || expr_uses_name(value, name),
+        Expr::Let { name: n, value, .. } => n == name || expr_uses_name(value, name),
         Expr::LetDestruct { names, value } => {
             names.iter().any(|n| n == name) || expr_uses_name(value, name)
         }
@@ -343,7 +343,7 @@ fn expr_uses_name(expr: &Spanned<Expr>, name: &str) -> bool {
         Expr::Return(e) => expr_uses_name(e, name),
         Expr::Loop { body } => body.iter().any(|e| expr_uses_name(e, name)),
         Expr::Break | Expr::Continue | Expr::Unit => false,
-        Expr::Var { name: n, value } => n == name || expr_uses_name(value, name),
+        Expr::Var { name: n, value, .. } => n == name || expr_uses_name(value, name),
         Expr::Reassign { name: n, value } => n == name || expr_uses_name(value, name),
         Expr::Question(e) => expr_uses_name(e, name),
         Expr::DotAccess { expr, .. } => expr_uses_name(expr, name),

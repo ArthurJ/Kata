@@ -92,9 +92,10 @@ pub(crate) fn desugar_holes(expr: &Spanned<Expr>) -> Spanned<Expr> {
                 )
             }
         }
-        Expr::Let { name, value } => Spanned::new(
+        Expr::Let { name, ty, value } => Spanned::new(
             Expr::Let {
                 name: name.clone(),
+                ty: ty.clone(),
                 value: Box::new(desugar_holes(value)),
             },
             expr.span,
@@ -208,9 +209,10 @@ pub(crate) fn desugar_holes(expr: &Spanned<Expr>) -> Spanned<Expr> {
             },
             expr.span,
         ),
-        Expr::Var { name, value } => Spanned::new(
+        Expr::Var { name, ty, value } => Spanned::new(
             Expr::Var {
                 name: name.clone(),
+                ty: ty.clone(),
                 value: Box::new(desugar_holes(value)),
             },
             expr.span,

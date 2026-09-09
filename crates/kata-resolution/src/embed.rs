@@ -429,8 +429,9 @@ fn walk_expr(expr: Spanned<Expr>, ctx: &mut EmbedCtx) -> Spanned<Expr> {
             elements: elements.into_iter().map(|e| walk_expr(e, ctx)).collect(),
         },
 
-        Expr::Let { name, value } => Expr::Let {
+        Expr::Let { name, ty, value } => Expr::Let {
             name,
+            ty,
             value: Box::new(walk_expr(*value, ctx)),
         },
 
@@ -501,8 +502,9 @@ fn walk_expr(expr: Spanned<Expr>, ctx: &mut EmbedCtx) -> Spanned<Expr> {
             body: body.into_iter().map(|e| walk_expr(e, ctx)).collect(),
         },
 
-        Expr::Var { name, value } => Expr::Var {
+        Expr::Var { name, ty, value } => Expr::Var {
             name,
+            ty,
             value: Box::new(walk_expr(*value, ctx)),
         },
 

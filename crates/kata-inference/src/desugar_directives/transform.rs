@@ -76,6 +76,7 @@ fn wrap_transform_expr(
     stmts.push(Spanned {
         node: Expr::Let {
             name: "__result".into(),
+            ty: None,
             value: Box::new(Spanned {
                 node: expr.node.clone(),
                 span: expr.span,
@@ -119,12 +120,14 @@ where
             let wrapped = wrap(&inner);
             Expr::Return(Box::new(wrapped))
         }
-        Expr::Let { name, value } => Expr::Let {
+        Expr::Let { name, ty, value } => Expr::Let {
             name,
+            ty,
             value: Box::new(transform_spanned_expr(*value, wrap)),
         },
-        Expr::Var { name, value } => Expr::Var {
+        Expr::Var { name, ty, value } => Expr::Var {
             name,
+            ty,
             value: Box::new(transform_spanned_expr(*value, wrap)),
         },
         Expr::Reassign { name, value } => Expr::Reassign {

@@ -89,6 +89,7 @@ pub(super) fn synthesize_site_arg_bindings(app: &CustomDirectiveApp) -> Vec<Span
                 Some(Spanned {
                     node: Expr::Let {
                         name: format!("_{key}"),
+                        ty: None,
                         value: Box::new(Spanned {
                             node: value_expr,
                             span: value.span,
@@ -228,6 +229,7 @@ fn wrap_exit_expr(
     stmts.push(Spanned {
         node: Expr::Let {
             name: "__result".into(),
+            ty: None,
             value: Box::new(Spanned {
                 node: expr.node.clone(),
                 span: expr.span,
@@ -305,6 +307,7 @@ fn apply_shortcircuit_to_action_body(
         expr: Spanned {
             node: Expr::Let {
                 name: "__decision".into(),
+                ty: None,
                 value: Box::new(decision_expr),
             },
             span,

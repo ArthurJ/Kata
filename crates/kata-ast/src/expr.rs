@@ -56,8 +56,11 @@ pub enum Expr {
 
     // ── Bindings ────────────────────────────────────────
     /// `let nome := expr` — binding imutável.
+    /// `ty` é a ascription de tipo opcional entre o nome e o `:=`
+    /// (`let x::Int := 42`). `None` = comportamento atual (inferência do RHS).
     Let {
         name: String,
+        ty: Option<Spanned<TypeExpr>>,
         value: Box<Spanned<Expr>>,
     },
     /// `let (x, y, ...) := expr` — destructuring de tupla.
@@ -165,8 +168,11 @@ pub enum Expr {
     Continue,
 
     /// `var nome := expr` — binding mutável (exclusivo de Actions).
+    /// `ty` é a ascription de tipo opcional entre o nome e o `:=`
+    /// (`var x::Int := 0`). `None` = comportamento atual (inferência do RHS).
     Var {
         name: String,
+        ty: Option<Spanned<TypeExpr>>,
         value: Box<Spanned<Expr>>,
     },
 
