@@ -6,6 +6,33 @@
 
 ## Ativo
 
+#### Codegen: reassign com widening panica no Cranelift
+
+`var z::NUM := 0; z := 3.14` passa no typeck (valida contra
+`declared_ty = NUM`), mas o codegen panica: Cranelift variables têm
+tipo fixo (`declared type of variable var0 doesn't match type of
+value v8`). Re-binding via `var z := 3.14` funciona (cria nova
+Cranelift variable), mas reassignment direto não.
+
+**Caminho:** o codegen precisa usar representação uniforme (box/pointer)
+para variáveis `var` com `declared_ty` (widening), permitindo que o
+valor subjacente mude de tipo concreto. Alternativemente, gerar duas
+Cranelift variables (uma por tipo concreto) e fazer aliasing.
+
+#### Avaliar: interfaces não devem avançar além do widening no pipeline de dispatch
+
+No widening de binding (`var z::NUM := 0`), a interface `NUM` é
+preservada como `declared_ty` para validação de re-binding, mas o
+tipo concreto (`Int`) é usado como `.ty` para despacho. Isso resolve
+o problema na origem — a interface nunca chega ao `match_score`.
+
+Avaliar se há outros caminhos no pipeline onde uma interface pode
+chegar ao `match_score` como argumento sem ser normalizada para o
+tipo concreto. O `match_score` em `kata-core/src/dispatch/mod.rs:511`
+não tem ramo para `arg = Ty::Interface` contra `param = concreto` —
+se uma interface chega lá, é sempre `incompatible`. Isso deveria ser
+um invariant do pipeline, não um bug silencioso.
+
 ---
 
 ## Pendentes
