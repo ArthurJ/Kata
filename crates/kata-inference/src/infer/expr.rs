@@ -549,6 +549,8 @@ pub(crate) fn infer_expr_hinted(
 
             // Ascription de binding: verificar compatibilidade RHS ↔ tipo anotado
             // e usar target_ty como tipo do binding (não val_ty do RHS).
+            // `let` é imutável e único — widening de interface não se aplica
+            // (não há re-binding). O tipo anotado é o tipo do binding, ponto.
             let bind_ty = if let Some(ref target) = binding_target_ty {
                 if !binding_compatible(&val_ty, target, ctx) {
                     return Err(MiddleError::TypeMismatch {
@@ -877,7 +879,9 @@ pub(crate) fn infer_expr_hinted(
             let val_ty = typed_value.ty.clone();
 
             // Verificar compatibilidade RHS ↔ tipo anotado.
-            let bind_ty = if let Some(ref target) = binding_target_ty {
+            // Mesma lógica do Let: widening guarda concreto como .ty,
+            // interface como .declared_ty.
+            let (bind_ty, declared_ty) = if let Some(ref target) = binding_target_ty {
                 if !binding_compatible(&val_ty, target, ctx) {
                     return Err(MiddleError::TypeMismatch {
                         expected: format!("{target:?} (tipo anotado no binding)"),
@@ -885,9 +889,13 @@ pub(crate) fn infer_expr_hinted(
                         span: (*span).into(),
                     });
                 }
-                target.clone()
+                if matches!(target, Ty::Interface(_)) {
+                    (val_ty.clone(), Some(target.clone()))
+                } else {
+                    (target.clone(), None)
+                }
             } else {
-                val_ty.clone()
+                (val_ty.clone(), None)
             };
 
             // Re-binding: `var` só reusa nome mutável (`var`) deste escopo.
@@ -912,27 +920,39 @@ pub(crate) fn infer_expr_hinted(
                     span: (*span).into(),
                 });
             }
-            // Re-binding sobre var existente: o tipo deve permanecer o
-            // mesmo (ou ser compatível via widening de interface).
-            // Se há ascription no re-binding, deve ser a mesma do binding
-            // original (idempotente). Se não há ascription, o tipo do valor
-            // deve ser compatível com o tipo do binding existente.
+            // Re-binding sobre var existente: validar contra o tipo DECLARADO
+            // (interface se há ascription), não contra o tipo concreto (.ty).
+            // Sem ascription no binding original, declared_ty é None e a
+            // validação usa o tipo concreto existente (comportamento anterior).
             if !name.starts_with('_')
-                && let Some(existing_ty) = env.lookup(name)
                 && env.is_locally_mutable(name)
             {
+                let existing_declared = env.lookup_declared(name).cloned();
                 if let Some(ref target) = binding_target_ty {
-                    // Re-binding com ascription: deve ser a mesma (idempotente).
-                    if target != existing_ty {
+                    // Re-binding com ascription: deve ser a mesma do declarado.
+                    let check_ty = existing_declared.as_ref().or(env.lookup(name));
+                    if let Some(et) = check_ty
+                        && target != et
+                    {
                         return Err(MiddleError::TypeMismatch {
-                            expected: format!("{existing_ty:?} (tipo de `{name}`)"),
+                            expected: format!("{et:?} (tipo de `{name}`)"),
                             found: format!("{target:?} (re-binding divergente)"),
                             span: (*span).into(),
                         });
                     }
-                } else {
-                    // Re-binding sem ascription: tipo do valor deve ser
-                    // compatível com o tipo do binding existente.
+                } else if let Some(ref declared) = existing_declared {
+                    // Re-binding sem ascription, mas binding original tem
+                    // declared_ty (interface): validar contra a interface.
+                    if !binding_compatible(&val_ty, declared, ctx) {
+                        return Err(MiddleError::TypeMismatch {
+                            expected: format!("{declared:?} (tipo de `{name}`)"),
+                            found: format!("{val_ty} (re-binding divergente)"),
+                            span: (*span).into(),
+                        });
+                    }
+                } else if let Some(existing_ty) = env.lookup(name) {
+                    // Re-binding sem ascription, sem declared_ty: comportamento
+                    // anterior — validar contra tipo concreto existente.
                     if !binding_compatible(&val_ty, existing_ty, ctx) {
                         return Err(MiddleError::TypeMismatch {
                             expected: format!("{existing_ty:?} (tipo de `{name}`)"),
@@ -942,7 +962,11 @@ pub(crate) fn infer_expr_hinted(
                     }
                 }
             }
-            env.define_mutable(name, bind_ty, "__local__");
+            if let Some(ref dt) = declared_ty {
+                env.define_mutable_ascribed(name, bind_ty, dt.clone(), "__local__");
+            } else {
+                env.define_mutable(name, bind_ty, "__local__");
+            }
             // Path conditions: registra o mutável — facts sobre `var`
             // são descartados na coleta (stale após reassign; débito 1).
             if !name.starts_with('_') {
@@ -976,7 +1000,25 @@ pub(crate) fn infer_expr_hinted(
                 });
             }
             let typed_value = infer_expr(&value.node, &value.span, env, ctx, false)?;
-            if typed_value.ty != existing_ty {
+            // Se o binding tem declared_ty (widening), valida contra a
+            // interface declarada e atualiza o tipo concreto do binding.
+            let existing_declared = env.lookup_declared(name).cloned();
+            if let Some(ref declared) = existing_declared {
+                if !binding_compatible(&typed_value.ty, declared, ctx) {
+                    return Err(MiddleError::TypeMismatch {
+                        expected: format!("{declared:?} (tipo declarado de `{name}`)"),
+                        found: format!("{}", typed_value.ty),
+                        span: value.span.into(),
+                    });
+                }
+                // Atualiza o tipo concreto do binding para o novo valor.
+                env.define_mutable_ascribed(
+                    name,
+                    typed_value.ty.clone(),
+                    declared.clone(),
+                    "__local__",
+                );
+            } else if typed_value.ty != existing_ty {
                 return Err(MiddleError::TypeMismatch {
                     expected: format!("{existing_ty:?}"),
                     found: format!("{}", typed_value.ty),

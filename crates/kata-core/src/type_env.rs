@@ -24,6 +24,15 @@ pub struct TypeBinding {
     /// reflexão para distinguir alias de função nomeada (caso dinâmico escalar)
     /// de lambda com binding (caso estático lista).
     pub fn_alias: Option<String>,
+    /// Tipo **declarado** pelo usuário via ascription de binding (`var z::NUM := 0`).
+    ///
+    /// Quando presente, `ty` guarda o tipo **concreto** inferido do RHS (ex: `Int`),
+    /// usado para despacho de overloads. `declared_ty` guarda a **interface**
+    /// anotada (ex: `NUM`), usada para validar re-binding e narrowing.
+    ///
+    /// Sem ascription de interface, `declared_ty` é `None` e `ty` é o único tipo
+    /// do binding (comportamento inalterado).
+    pub declared_ty: Option<Ty>,
 }
 
 /// Árvore de escopos para name resolution.
@@ -76,6 +85,7 @@ impl TypeEnv {
                 ty,
                 origin: origin.to_string(),
                 fn_alias: None,
+                declared_ty: None,
             },
         );
     }
@@ -89,6 +99,22 @@ impl TypeEnv {
                 ty,
                 origin: origin.to_string(),
                 fn_alias: alias,
+                declared_ty: None,
+            },
+        );
+    }
+
+    /// Define um nome imutável com `declared_ty` (ascription de interface).
+    /// `ty` é o tipo concreto (para despacho), `declared_ty` é a interface
+    /// anotada (para validação de re-binding/narrowing).
+    pub fn define_ascribed(&mut self, name: &str, ty: Ty, declared_ty: Ty, origin: &str) {
+        self.bindings.insert(
+            name.to_string(),
+            TypeBinding {
+                ty,
+                origin: origin.to_string(),
+                fn_alias: None,
+                declared_ty: Some(declared_ty),
             },
         );
     }
@@ -102,6 +128,23 @@ impl TypeEnv {
                 ty,
                 origin: origin.to_string(),
                 fn_alias: None,
+                declared_ty: None,
+            },
+        );
+        self.mutables.insert(name.to_string());
+    }
+
+    /// Define um nome mutável com `declared_ty` (ascription de interface).
+    /// `ty` é o tipo concreto (para despacho), `declared_ty` é a interface
+    /// anotada (para validação de re-binding).
+    pub fn define_mutable_ascribed(&mut self, name: &str, ty: Ty, declared_ty: Ty, origin: &str) {
+        self.bindings.insert(
+            name.to_string(),
+            TypeBinding {
+                ty,
+                origin: origin.to_string(),
+                fn_alias: None,
+                declared_ty: Some(declared_ty),
             },
         );
         self.mutables.insert(name.to_string());
@@ -178,6 +221,16 @@ impl TypeEnv {
             return Some(&binding.ty);
         }
         self.parent.as_deref().and_then(|p| p.lookup(name))
+    }
+
+    /// Procura o `declared_ty` de um binding na cadeia de escopos.
+    /// Retorna `Some(ty)` apenas se o binding tem ascription de interface;
+    /// `None` caso contrário (binding sem ascription ou não encontrado).
+    pub fn lookup_declared(&self, name: &str) -> Option<&Ty> {
+        if let Some(binding) = self.bindings.get(name) {
+            return binding.declared_ty.as_ref();
+        }
+        self.parent.as_deref().and_then(|p| p.lookup_declared(name))
     }
 
     /// Procura um nome na cadeia de escopos, retornando o `TypeBinding`

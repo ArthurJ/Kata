@@ -185,3 +185,63 @@ fn var_ascription_num_rebinding_int_rejeitado() {
     let src = "action main\n    var x::NUM := 0\n    var x::Int := 42\n    echo!(x)\nmain!()";
     assert_type_mismatch(infer_src_err(src));
 }
+
+// ── Widening + despacho: tipo concreto preservado ─────────────
+// var z::NUM := 0 guarda Int como .ty (para despacho) e NUM como
+// .declared_ty (para validação de re-binding).
+
+#[test]
+fn var_ascription_num_dispatch_plus_ok() {
+    // + z 1 despacha via + :: Int Int => Int (concreto preservado)
+    let src = "action main\n    var z::NUM := 0\n    echo!(+ z 1)\nmain!()";
+    infer_src(src);
+}
+
+#[test]
+fn var_ascription_num_dispatch_echo_ok() {
+    // echo!(z) despacha via SHOW de Int (concreto preservado)
+    let src = "action main\n    var z::NUM := 0\n    echo!(z)\nmain!()";
+    infer_src(src);
+}
+
+#[test]
+fn var_ascription_num_dispatch_eq_ok() {
+    // = z 0 despacha via = :: Int Int => Boolean
+    let src = "action main\n    var z::NUM := 0\n    echo!(= z 0)\nmain!()";
+    infer_src(src);
+}
+
+#[test]
+fn var_ascription_num_rebinding_float_dispatch_ok() {
+    // Após re-binding com Float, despacho usa Float
+    let src = "action main\n    var z::NUM := 0\n    var z := 3.14\n    echo!(+ z 1.0)\nmain!()";
+    infer_src(src);
+}
+
+#[test]
+fn var_ascription_num_rebinding_text_rejeitado() {
+    // Re-binding sem ascription: Text não implementa NUM
+    let src = "action main\n    var z::NUM := 0\n    var z := \"hello\"\n    echo!(z)\nmain!()";
+    assert_type_mismatch(infer_src_err(src));
+}
+
+#[test]
+fn var_ascription_num_reassign_float_ok() {
+    // Reassign com widening: z := 3.14 valida contra NUM (declared)
+    let src = "action main\n    var z::NUM := 0\n    z := 3.14\n    echo!(\"ok\")\nmain!()";
+    infer_src(src);
+}
+
+#[test]
+fn var_ascription_num_reassign_text_rejeitado() {
+    // Reassign com widening: Text não implementa NUM
+    let src = "action main\n    var z::NUM := 0\n    z := \"hello\"\n    echo!(\"ok\")\nmain!()";
+    assert_type_mismatch(infer_src_err(src));
+}
+
+#[test]
+fn var_ascription_num_reassign_int_ok() {
+    // Reassign com mesmo tipo concreto: OK
+    let src = "action main\n    var z::NUM := 0\n    z := 42\n    echo!(\"ok\")\nmain!()";
+    infer_src(src);
+}
