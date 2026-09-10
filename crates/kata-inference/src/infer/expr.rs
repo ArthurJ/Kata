@@ -26,9 +26,9 @@ use super::_match::infer_match;
 use super::action_call::infer_action_call;
 use super::apply::infer_apply;
 use super::dot_access::infer_dot_access;
+use super::function_infer::ty_name;
 use super::helpers::InferResult;
 use super::lambda::infer_lambda;
-use super::function_infer::ty_name;
 use super::sugar::{infer_pipe_fallback, infer_pipe_limit, infer_question};
 use super::variant::resolve_unqual_variant;
 
@@ -407,7 +407,7 @@ pub(crate) fn infer_expr_hinted(
             } else {
                 None
             };
-            let binding_hint = binding_target_ty.as_ref().map(|t| t).or(hint);
+            let binding_hint = binding_target_ty.as_ref().or(hint);
             // Tente inferir o valor. Se falha com LambdaInferenceFail e o
             // value é um lambda, deferre para use-site inference: guarda o
             // AST do lambda na side table e define o binding com InferVars.
@@ -866,14 +866,9 @@ pub(crate) fn infer_expr_hinted(
                 None
             };
             let typed_value = match binding_target_ty.as_ref() {
-                Some(target) => infer_expr_hinted(
-                    &value.node,
-                    &value.span,
-                    env,
-                    ctx,
-                    false,
-                    Some(target),
-                )?,
+                Some(target) => {
+                    infer_expr_hinted(&value.node, &value.span, env, ctx, false, Some(target))?
+                }
                 None => infer_expr(&value.node, &value.span, env, ctx, false)?,
             };
             let val_ty = typed_value.ty.clone();
@@ -924,9 +919,7 @@ pub(crate) fn infer_expr_hinted(
             // (interface se há ascription), não contra o tipo concreto (.ty).
             // Sem ascription no binding original, declared_ty é None e a
             // validação usa o tipo concreto existente (comportamento anterior).
-            if !name.starts_with('_')
-                && env.is_locally_mutable(name)
-            {
+            if !name.starts_with('_') && env.is_locally_mutable(name) {
                 let existing_declared = env.lookup_declared(name).cloned();
                 if let Some(ref target) = binding_target_ty {
                     // Re-binding com ascription: deve ser a mesma do declarado.
