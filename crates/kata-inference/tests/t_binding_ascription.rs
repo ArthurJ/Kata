@@ -155,7 +155,26 @@ fn var_ascription_num_rebinding_mesma_ascription_ok() {
 
 #[test]
 fn let_ascription_num_sem_downcast() {
+    // `let z::NUM := 0` é rejeitado: `let` com interface não é permitido.
+    // (Antes: aceito, mas `let n::Int := z` falhava no downcast.)
     let src = "action main\n    let z::NUM := 0\n    let n::Int := z\n    echo!(n)\nmain!()";
+    assert_type_mismatch(infer_src_err(src));
+}
+
+#[test]
+fn let_ascription_interface_rejeitado() {
+    // `let` com tipo declarado `Ty::Interface` é erro de compilação.
+    // invariant: interface nunca deve chegar ao match_score como argumento.
+    // `let` é imutável — não há widening (concreto como .ty, interface como
+    // .declared_ty). Use `var` para widening.
+    let src = "action main\n    let z::NUM := 0\n    echo!(z)\nmain!()";
+    assert_type_mismatch(infer_src_err(src));
+}
+
+#[test]
+fn let_ascription_show_rejeitado() {
+    // Mesmo invariant com outra interface (SHOW).
+    let src = "action main\n    let s::SHOW := \"hi\"\n    echo!(s)\nmain!()";
     assert_type_mismatch(infer_src_err(src));
 }
 

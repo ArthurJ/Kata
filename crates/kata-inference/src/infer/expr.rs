@@ -551,7 +551,27 @@ pub(crate) fn infer_expr_hinted(
             // e usar target_ty como tipo do binding (não val_ty do RHS).
             // `let` é imutável e único — widening de interface não se aplica
             // (não há re-binding). O tipo anotado é o tipo do binding, ponto.
+            //
+            // invariant: `let` com tipo declarado `Ty::Interface` é rejeitado.
+            // O type system aceita (`.ty = Ty::Interface`), mas o codegen não
+            // consegue despachar sem type tagging — o tipo concreto do valor
+            // seria perdido e `Ty::Interface` vazaria para `match_score` como
+            // argumento, onde não há ramo para `arg = Ty::Interface` contra
+            // `param = concreto` (sempre `incompatible`). `var` com interface
+            // funciona porque widening guarda o concreto como `.ty` e a
+            // interface como `.declared_ty`; `let` é imutável e não tem esse
+            // caminho.
             let bind_ty = if let Some(ref target) = binding_target_ty {
+                if matches!(target, Ty::Interface(_)) {
+                    return Err(MiddleError::TypeMismatch {
+                        expected: format!(
+                            "tipo concreto (Int, Float, Text, ...) — \
+                             `let` com interface não é permitido (use `var` para widening)"
+                        ),
+                        found: format!("{target} (interface não pode ser tipo de `let`)"),
+                        span: (*span).into(),
+                    });
+                }
                 if !binding_compatible(&val_ty, target, ctx) {
                     return Err(MiddleError::TypeMismatch {
                         expected: format!("{target:?} (tipo anotado no binding)"),

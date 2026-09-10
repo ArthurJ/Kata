@@ -1,24 +1,33 @@
 # TODO — Kata-Lang
 
-Único arquivo de pendências. Atualizado 2026-09-09.
+Único arquivo de pendências. Atualizado 2026-09-10.
 
 ---
 
-## Ativo
+## Resolvido
 
-#### Avaliar: interfaces não devem avançar além do widening no pipeline de dispatch
+#### Invariant: interfaces não chegam ao `match_score` como argumento
 
-No widening de binding (`var z::NUM := 0`), a interface `NUM` é
-preservada como `declared_ty` para validação de re-binding, mas o
-tipo concreto (`Int`) é usado como `.ty` para despacho. Isso resolve
-o problema na origem — a interface nunca chega ao `match_score`.
+**Resolvido 2026-09-10.** Mapeamento completo dos caminhos onde
+`Ty::Interface` pode aparecer como `.ty` de valor:
 
-Avaliar se há outros caminhos no pipeline onde uma interface pode
-chegar ao `match_score` como argumento sem ser normalizada para o
-tipo concreto. O `match_score` em `kata-core/src/dispatch/mod.rs:511`
-não tem ramo para `arg = Ty::Interface` contra `param = concreto` —
-se uma interface chega lá, é sempre `incompatible`. Isso deveria ser
-um invariant do pipeline, não um bug silencioso.
+1. **`let x :: NUM := expr`** — ÚNICO caminho illegítimo. `let` é imutável,
+   não há widening: `.ty = Ty::Interface` (concreto perdido). Agora é **erro
+   de compilação** rejeitado no binder (`expr.rs`), antes de `.ty` ser
+   atribuído.
+2. **`var z :: NUM := expr`** — Widening: concreto como `.ty`, interface como
+   `.declared_ty`. Interface nunca chega ao `match_score`. ✓
+3. **`expr :: NUM`** (ascription) — Intencional, interceptada pelo Caminho 0
+   (`iface_dispatch`) antes do `match_score`. Se o Caminho 0 não intercepta
+   (func não é método da interface), `incompatible` é a resposta correta. ✓
+
+O `match_score` (`kata-core/src/dispatch/mod.rs`) ganhou comentário
+documentando o invariant: o fallback `incompatible` para `arg =
+Ty::Interface` é comportamento correto, não bug. `debug_assert!` foi
+considerado mas removido — `Ty::Interface` pode chegar legitimamente via
+ascription intencional quando o Caminho 0 não intercepta.
+
+**Commit:** `fix(typeck): proibir let com interface + documentar invariant do match_score`
 
 ---
 

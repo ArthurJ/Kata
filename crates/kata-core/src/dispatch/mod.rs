@@ -509,6 +509,19 @@ impl DispatchTable {
 /// `apply_dispatch.rs`, não por scoring. Se qualquer posição é
 /// incompatível, retorna `Score::incompatible()` (todos zero).
 pub fn match_score(args: &[Ty], params: &[Ty], iface_reg: &InterfaceRegistry) -> Score {
+    // invariant: `Ty::Interface` como argumento (não como parâmetro) é legítimo
+    // apenas em ascription intencional (`expr :: NUM`), que é interceptada pelo
+    // Caminho 0 (iface_dispatch) antes de chegar aqui. Se uma interface chega
+    // como arg e não casa com param == interface, cai no fallback `incompatible`
+    // — comportamento correto, não bug. O único caminho que produzia interface
+    // como `.ty` de valor illegitimamente era `let x :: NUM := ...`, agora erro
+    // de compilação. `var` com interface usa widening: concreto como `.ty`.
+    //
+    // Nota: `debug_assert!` foi considerado mas removido — Ty::Interface pode
+    // chegar aqui legitimamente via ascription intencional quando o Caminho 0
+    // não intercepta (func_name não é método da interface). O fallback
+    // `incompatible` é a resposta correta nesses casos.
+
     let mut exact = 0;
     let mut iface = 0;
 
