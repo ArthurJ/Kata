@@ -140,7 +140,8 @@ fn var_ascription_num_preserva_interface_rebinding() {
 
 #[test]
 fn var_ascription_num_rebinding_ord_rejeitado() {
-    let src = "action main\n    var z::NUM := 0\n    var z::ORD := \"hello\"\n    echo!(z)\nmain!()";
+    let src =
+        "action main\n    var z::NUM := 0\n    var z::ORD := \"hello\"\n    echo!(z)\nmain!()";
     assert_type_mismatch(infer_src_err(src));
 }
 

@@ -594,12 +594,12 @@ pub(crate) fn lower_expr(
                 ctx.builder.def_var(var, val);
             } else {
                 // Mesmo tipo: def_var na variable existente.
-                let var = *ctx
-                    .var_map
-                    .get(name)
-                    .ok_or_else(|| super::CodegenError::UnsupportedNode {
-                        node: format!("Reassign: variável `{name}` não encontrada no var_map"),
-                    })?;
+                let var =
+                    *ctx.var_map
+                        .get(name)
+                        .ok_or_else(|| super::CodegenError::UnsupportedNode {
+                            node: format!("Reassign: variável `{name}` não encontrada no var_map"),
+                        })?;
                 ctx.builder.def_var(var, val);
             }
             // Reassign retorna Unit.

@@ -13,20 +13,18 @@ fn let_ascription_int() {
     let m = parse_src(src);
     let item = first_item(&m);
     match item {
-        Item::ActionDecl { body, .. } => {
-            match &body[0].expr.node {
-                Expr::Let { name, ty, value } => {
-                    assert_eq!(name, "x");
-                    assert!(ty.is_some(), "ty deve ser Some");
-                    match &ty.as_ref().unwrap().node {
-                        TypeExpr::Named(n) => assert_eq!(n, "Int"),
-                        other => panic!("esperado TypeExpr::Named, got {other:?}"),
-                    }
-                    assert!(matches!(&value.node, Expr::IntLit { text } if text == "42"));
+        Item::ActionDecl { body, .. } => match &body[0].expr.node {
+            Expr::Let { name, ty, value } => {
+                assert_eq!(name, "x");
+                assert!(ty.is_some(), "ty deve ser Some");
+                match &ty.as_ref().unwrap().node {
+                    TypeExpr::Named(n) => assert_eq!(n, "Int"),
+                    other => panic!("esperado TypeExpr::Named, got {other:?}"),
                 }
-                other => panic!("esperado Let, got {other:?}"),
+                assert!(matches!(&value.node, Expr::IntLit { text } if text == "42"));
             }
-        }
+            other => panic!("esperado Let, got {other:?}"),
+        },
         other => panic!("esperado ActionDecl, got {other:?}"),
     }
 }
