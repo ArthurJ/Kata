@@ -236,7 +236,6 @@ fn infer_recv_flipped(
     let bind_name = match &typed_binding.kind {
         TypedExprKind::Ident { name } => name.clone(),
         _ => {
-            // Tentar extrair do span original.
             return Err(MiddleError::TypeMismatch {
                 expected: "identificador (nome do binding de recebimento)".into(),
                 found: format!("{:?}", typed_binding.kind),
@@ -245,7 +244,9 @@ fn infer_recv_flipped(
         }
     };
 
-    env.define(&bind_name, recv_ty.clone(), "__local__");
+    if bind_name != "_" {
+        env.define(&bind_name, recv_ty.clone(), "__local__");
+    }
 
     let escape = if ctx.ret_ty.is_some() {
         if tail_pos { EscapeTarget::Caller } else { EscapeTarget::Local }
@@ -398,9 +399,10 @@ fn infer_recv(
         _ => (*inner).clone(),
     };
 
-    // O dest deve ser um Ident (binding name).
+    // O dest deve ser um Ident (binding name). `_` (Hole) é aceito como descarte.
     let bind_name = match &dest_expr.node {
         Expr::Ident { name } => name.clone(),
+        Expr::Hole => "_".into(),
         _ => {
             return Err(MiddleError::TypeMismatch {
                 expected: "identificador (nome do binding de recebimento)".into(),
@@ -410,8 +412,10 @@ fn infer_recv(
         }
     };
 
-    // Criar binding no TypeEnv: bind_name := recv_ty.
-    env.define(&bind_name, recv_ty.clone(), "__local__");
+    // Criar binding no TypeEnv: bind_name := recv_ty. `_` não cria binding.
+    if bind_name != "_" {
+        env.define(&bind_name, recv_ty.clone(), "__local__");
+    }
 
     let escape = if ctx.ret_ty.is_some() {
         if tail_pos {
