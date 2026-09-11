@@ -24,6 +24,17 @@ do scheduler. Mudar para propagar erro requer reformular a interface
 trampoline/scheduler ou usar um canal lateral (e.g. célula
 `Mutex<Option<InterpError>>` no `InterpCtx`).
 
+#### `socket_tcp_echo_server` — hole em braço de select de socket
+
+`socket_tcp_basic.rs:25` — teste E2E falha com `TypeMismatch {
+expected: "identificador (nome do binding de recebimento)", found:
+"Hole" }`. O parser rejeita `_` como binding de recebimento em braço de
+`select` de socket (`rx !> _`), mas o teste usa essa sintaxe.
+
+**Caminho:** ou o parser aceita hole/wildcard como binding de
+recebimento (consistente com `let _ := expr`), ou o teste é corrigido
+para usar um nome concreto.
+
 ### 🟢 Baixo
 
 #### `spawn!` no Windows é stub
